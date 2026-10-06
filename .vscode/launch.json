@@ -1,0 +1,34 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Bridge: debug server",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/bridge/server.js",
+      "cwd": "${workspaceFolder}/bridge",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Mixer: debug page in Chrome (bridge must be running)",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:8765",
+      "webRoot": "${workspaceFolder}"
+    },
+    {
+      "name": "Mixer: debug page in Edge (bridge must be running)",
+      "type": "msedge",
+      "request": "launch",
+      "url": "http://localhost:8765",
+      "webRoot": "${workspaceFolder}"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Bridge + Mixer (Chrome)",
+      "configurations": ["Bridge: debug server", "Mixer: debug page in Chrome (bridge must be running)"],
+      "stopAll": true
+    }
+  ]
+}

@@ -30,3 +30,9 @@ found), and **WRITE** / **DUPLEX** stream the mixer's master output (Int16 stere
 `ws://localhost:8765/ws/output` WebSocket) to that device. While live, the browser's own output is muted
 and restored on stop. Without `naudiodon2` the page logs how to enable it and nothing else changes.
 Tested with a stubbed PortAudio; not yet verified on real ASIO hardware. Output only (no input capture).
+
+## VS Code
+Open the repo folder in VS Code (`.vscode/` is included):
+- **Terminal → Run Task**: `Bridge: npm install (ASIO / PortAudio)`, `Bridge: start`, `Bridge: test`.
+- **Run and Debug → "Bridge + Mixer (Chrome)"** starts the bridge with the debugger attached and opens
+  the mixer at http://localhost:8765 in Chrome (or pick the Edge entry).
