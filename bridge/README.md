@@ -20,8 +20,13 @@ Without the bridge it notifies that ASIO/VST status is unknown and tells you to 
 `GET /api/drivers` now includes `vst: { vst3: [...], vst2: [...] }`. The bridge only reports
 plugins; hosting them inside the browser is not possible.
 
-## Optional: real host-API listing (PortAudio)
-`npm i naudiodon2` inside `bridge/` (needs a native build toolchain) makes `/api/drivers` also
-return `portaudio: { hostApis, devices }` (ASIO / WASAPI / DirectSound devices with channel counts),
-and ASIO devices found this way count as installed ASIO drivers. Without it everything above still
-works. Not verified on real Windows hardware.
+## ASIO output through PortAudio
+    cd bridge && npm install      # installs naudiodon2 (PortAudio, native build; optional dependency)
+    node server.js
+
+With `naudiodon2` installed, `/api/drivers` also returns `portaudio: { hostApis, devices }`, the DRIVERS
+tab gets a "PORTAUDIO HOST API OUTPUTS" group in the output device list (ASIO is pre-selected when
+found), and **WRITE** / **DUPLEX** stream the mixer's master output (Int16 stereo over the
+`ws://localhost:8765/ws/output` WebSocket) to that device. While live, the browser's own output is muted
+and restored on stop. Without `naudiodon2` the page logs how to enable it and nothing else changes.
+Tested with a stubbed PortAudio; not yet verified on real ASIO hardware. Output only (no input capture).

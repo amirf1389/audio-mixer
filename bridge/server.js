@@ -8,6 +8,8 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const { detect } = require('./detect');
+const { accept } = require('./ws');
+const { createSession } = require('./output');
 
 const PORT = Number(process.env.BRIDGE_PORT) || 8765;
 const HOST = '127.0.0.1';
@@ -52,6 +54,15 @@ const server = http.createServer(async (req, res) => {
     if (err) return json(res, 404, { ok: false, error: 'not found' });
     send(res, 200, buf, { 'Content-Type': TYPES[path.extname(file)] || 'application/octet-stream' });
   });
+});
+
+// WebSocket /ws/output: page streams Int16 PCM, bridge plays it via PortAudio (ASIO when available).
+server.on('upgrade', (req, socket) => {
+  if (new URL(req.url, `http://${HOST}`).pathname !== '/ws/output' || !originAllowed(req.headers.origin)) { socket.destroy(); return; }
+  const handlers = {};
+  const conn = accept(req, socket, handlers);
+  if (!conn) return;
+  Object.assign(handlers, createSession(conn));
 });
 
 if (require.main === module) {

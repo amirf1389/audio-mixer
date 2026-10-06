@@ -108,7 +108,7 @@ function detectPortAudio() {
   try {
     const pa = require('naudiodon2');
     const apis = pa.getHostAPIs().HostAPIs.map(h => h.name);
-    const devices = pa.getDevices().map(d => ({ name: d.name, hostApi: d.hostAPIName, inputs: d.maxInputChannels, outputs: d.maxOutputChannels, sampleRate: d.defaultSampleRate }));
+    const devices = pa.getDevices().map(d => ({ id: d.id, name: d.name, hostApi: d.hostAPIName, inputs: d.maxInputChannels, outputs: d.maxOutputChannels, sampleRate: d.defaultSampleRate }));
     return { hostApis: apis, devices };
   } catch (_) { return null; }
 }
