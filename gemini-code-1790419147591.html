@@ -5544,6 +5544,25 @@ window.navTabs = [
                         <option value="wing">Behringer WING / X-USB 32-Ch ASIO</option>
                         <option value="ssl">Solid State Logic SSL 2+ / SSL 12 ASIO</option>
                         <option value="fl">FL Studio ASIO / WASAPI Exclusive Bridge</option>
+                        <optgroup label="WINDOWS NATIVE AUDIO APIS">
+                          <option value="wasapi-excl">WASAPI Exclusive (Event-Driven, Bit-Perfect)</option>
+                          <option value="wasapi-shared">WASAPI Shared (Windows Audio Engine)</option>
+                          <option value="wasapi-loop">WASAPI Loopback Capture (Render Endpoint)</option>
+                          <option value="directsound">DirectSound (DirectX Legacy / DSound)</option>
+                          <option value="wdmks">WDM-KS Kernel Streaming (Direct Kernel)</option>
+                          <option value="mme">MME / WaveOut (Legacy Compatibility)</option>
+                          <option value="flexasio">FlexASIO (ASIO over WASAPI / PortAudio)</option>
+                        </optgroup>
+                        <optgroup label="OTHER PLATFORM SDK DRIVERS">
+                          <option value="coreaudio">CoreAudio HAL (macOS / iOS)</option>
+                          <option value="alsa">ALSA Direct Hardware (Linux)</option>
+                          <option value="jack">JACK Audio Connection Kit (Linux / macOS)</option>
+                          <option value="pipewire">PipeWire Low-Latency Graph (Linux)</option>
+                          <option value="aaudio">AAudio / Oboe (Android)</option>
+                        </optgroup>
+                        <optgroup label="AUTO">
+                          <option value="auto">Auto-Detect Best Driver for This OS</option>
+                        </optgroup>
                       </select>
                       <div class="flex justify-between text-[7px] text-slate-400 pt-0.5">
                         <span>STATUS:</span>
@@ -12445,7 +12464,27 @@ window.navTabs = [
             motu: { name: "MOTU Pro Audio USB ASIO", vendor: "Mark of the Unicorn", ringbuffer: "0x7FFE_04A8_6000", comFree: true },
             wing: { name: "Behringer WING / X-USB 32-Ch ASIO", vendor: "Music Tribe / Behringer", ringbuffer: "0x7FFE_04A8_6800", comFree: true },
             ssl: { name: "Solid State Logic SSL 2+ ASIO", vendor: "Solid State Logic UK", ringbuffer: "0x7FFE_04A8_7000", comFree: true },
-            fl: { name: "FL Studio ASIO Exclusive Bridge", vendor: "Image-Line Software", ringbuffer: "0x7FFE_04A8_7800", comFree: false }
+            fl: { name: "FL Studio ASIO Exclusive Bridge", vendor: "Image-Line Software", ringbuffer: "0x7FFE_04A8_7800", comFree: false },
+            "wasapi-excl": { name: "WASAPI Exclusive Mode (Event-Driven)", vendor: "Microsoft Windows Core Audio", ringbuffer: "0x7FFE_04A8_8000", comFree: false },
+            "wasapi-shared": { name: "WASAPI Shared Mode (Audio Engine)", vendor: "Microsoft Windows Core Audio", ringbuffer: "0x7FFE_04A8_8800", comFree: false },
+            "wasapi-loop": { name: "WASAPI Loopback Capture", vendor: "Microsoft Windows Core Audio", ringbuffer: "0x7FFE_04A8_9000", comFree: false },
+            directsound: { name: "DirectSound (DirectX DSound)", vendor: "Microsoft DirectX", ringbuffer: "0x7FFE_04A8_9800", comFree: false },
+            wdmks: { name: "WDM Kernel Streaming (WDM-KS)", vendor: "Microsoft Windows Driver Model", ringbuffer: "0x7FFE_04A8_A000", comFree: true },
+            mme: { name: "MME / WaveOut Legacy", vendor: "Microsoft Multimedia Extensions", ringbuffer: "0x7FFE_04A8_A800", comFree: false },
+            flexasio: { name: "FlexASIO (PortAudio / WASAPI Bridge)", vendor: "Etienne Dechamps", ringbuffer: "0x7FFE_04A8_B000", comFree: true },
+            coreaudio: { name: "CoreAudio HAL", vendor: "Apple Inc.", ringbuffer: "0x7FFE_04A8_B800", comFree: true },
+            alsa: { name: "ALSA Direct Hardware (hw:)", vendor: "ALSA Project", ringbuffer: "0x7FFE_04A8_C000", comFree: true },
+            jack: { name: "JACK Audio Connection Kit", vendor: "JACK Audio", ringbuffer: "0x7FFE_04A8_C800", comFree: true },
+            pipewire: { name: "PipeWire Low-Latency Graph", vendor: "PipeWire Project", ringbuffer: "0x7FFE_04A8_D000", comFree: true },
+            aaudio: { name: "AAudio / Oboe Low-Latency", vendor: "Google Android", ringbuffer: "0x7FFE_04A8_D800", comFree: true }
+        },
+
+        detectBestDriver: function() {
+            const p = ((navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '') + ' ' + (navigator.userAgent || '');
+            if (/android/i.test(p)) return 'aaudio';
+            if (/iphone|ipad|ipod|mac/i.test(p)) return 'coreaudio';
+            if (/linux|x11/i.test(p)) return 'pipewire';
+            return 'wasapi-excl';
         },
 
         init: function() {
@@ -12466,6 +12505,10 @@ window.navTabs = [
         },
 
         selectDriver: function(driverKey) {
+            if (driverKey === 'auto') {
+                driverKey = this.detectBestDriver();
+                this.log(`Auto-detect selected best driver for this OS: ${driverKey}`, "info");
+            }
             if (this.drivers[driverKey]) {
                 this.currentDriver = driverKey;
                 const d = this.drivers[driverKey];
