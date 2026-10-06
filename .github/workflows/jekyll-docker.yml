@@ -13,8 +13,10 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - name: Build the site in the jekyll/builder container
+    - uses: ruby/setup-ruby@v1
+      with:
+        ruby-version: '3.3'
+    - name: Build the site with Jekyll
       run: |
-        docker run \
-        -v ${{ github.workspace }}:/srv/jekyll -v ${{ github.workspace }}/_site:/srv/jekyll/_site \
-        jekyll/builder:latest /bin/bash -c "chmod -R 777 /srv/jekyll && jekyll build --future"
+        gem install jekyll --no-document
+        jekyll build --future
