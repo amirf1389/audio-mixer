@@ -12490,6 +12490,7 @@ window.navTabs = [
         init: function() {
             this.updateLatency();
             this.scanDevices();
+            this.connectBridge();
             this.log("[ ASIO Universal SDK Engine initialized • 32 In / 32 Out ready ]", "success");
         },
 
@@ -12504,9 +12505,39 @@ window.navTabs = [
             logEl.scrollTop = logEl.scrollHeight;
         },
 
+        // Optional local Node.js sandbox (bridge/server.js): reports the real native drivers of this PC.
+        bridgeUrl: null,
+        bridgeInfo: null,
+        connectBridge: function() {
+            const self = this;
+            if (this._bridgeBusy) return;
+            this._bridgeBusy = true;
+            const bases = [];
+            if (/^https?:$/.test(location.protocol) && /^(localhost|127\.0\.0\.1)$/.test(location.hostname)) bases.push(location.origin);
+            bases.push('http://localhost:8765');
+            const tryNext = function(i) {
+                if (i >= bases.length) { self._bridgeBusy = false; return; }
+                fetch(bases[i] + '/api/drivers', { cache: 'no-store' }).then(r => r.json()).then(info => {
+                    if (!info || !info.ok) throw new Error('bad reply');
+                    self.bridgeUrl = bases[i];
+                    self.bridgeInfo = info;
+                    self._bridgeBusy = false;
+                    const sel = document.getElementById('asio-sdk-driver-select');
+                    if (sel) Array.from(sel.options).forEach(o => {
+                        if (info.drivers.indexOf(o.value) !== -1 && o.text.indexOf('[DETECTED]') === -1) o.text += ' [DETECTED]';
+                    });
+                    self.log(`Local bridge connected (${info.platform}): ${info.drivers.length} native drivers, ${info.devices.length} devices`, "success");
+                    info.asio.forEach(n => self.log(`Installed ASIO driver: ${n}`, "info"));
+                    info.devices.forEach(d => self.log(`Device: ${d.name}`, "info"));
+                    window.notify(`Local Audio Bridge Connected (${info.platform})`, "plug");
+                }).catch(() => tryNext(i + 1));
+            };
+            tryNext(0);
+        },
+
         selectDriver: function(driverKey) {
             if (driverKey === 'auto') {
-                driverKey = this.detectBestDriver();
+                driverKey = (this.bridgeInfo && this.bridgeInfo.recommended) || this.detectBestDriver();
                 this.log(`Auto-detect selected best driver for this OS: ${driverKey}`, "info");
             }
             if (this.drivers[driverKey]) {
