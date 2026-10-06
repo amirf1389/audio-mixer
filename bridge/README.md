@@ -19,3 +19,9 @@ On connect the page shows notifications and log lines for Web Audio API status, 
 Without the bridge it notifies that ASIO/VST status is unknown and tells you to start it.
 `GET /api/drivers` now includes `vst: { vst3: [...], vst2: [...] }`. The bridge only reports
 plugins; hosting them inside the browser is not possible.
+
+## Optional: real host-API listing (PortAudio)
+`npm i naudiodon2` inside `bridge/` (needs a native build toolchain) makes `/api/drivers` also
+return `portaudio: { hostApis, devices }` (ASIO / WASAPI / DirectSound devices with channel counts),
+and ASIO devices found this way count as installed ASIO drivers. Without it everything above still
+works. Not verified on real Windows hardware.
