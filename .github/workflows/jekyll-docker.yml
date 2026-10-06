@@ -1,0 +1,410 @@
+
+
+- name: Black Duck Security Scan
+  # You may pin to the exact commit or the version.
+  # uses: blackduck-inc/black-duck-security-scan@152247222aa9cd38124acd5c0cf60f4db71adc3f
+  uses: blackduck-inc/black-duck-security-scan@v2.11.0
+  with:
+    # Coverity url
+    coverity_url: # optional
+    # Coverity user name
+    coverity_user: # optional
+    # Coverity password
+    coverity_password: # optional
+    # Coverity password (deprecated, use coverity_password instead)
+    coverity_passphrase: # optional
+    # Coverity Project Name
+    coverity_project_name: # optional
+    # Coverity Stream Name
+    coverity_stream_name: # optional
+    # Coverity Install Directory
+    coverity_install_directory: # optional
+    # Coverity Policy View
+    coverity_policy_view: # optional
+    # Flag to enable/disable to run coverity scan locally.
+    coverity_local: # optional
+    # If provided, Black Duck Security Action will download specific version of coverity thin client to use.
+    coverity_version: # optional
+    # Flag to enable pull request comments for new issues found in the Coverity scan
+    coverity_prComment_enabled: # optional
+    # List of impacts for which the Coverity PR Comments should be created. Supported values: HIGH, MEDIUM, LOW, AUDIT
+    coverity_prComment_impacts: # optional
+    # Specifies if the workflow should wait for the analysis to complete. Default value: true. If set to false, post merge workflows like PR comment, Fix PR, SARIF etc will not be applicable.
+    coverity_waitForScan: # optional
+    # Build command for Coverity
+    coverity_build_command: # optional
+    # Clean command for Coverity
+    coverity_clean_command: # optional
+    # Coverity config file path (.yaml/.yml/.json)
+    coverity_config_path: # optional
+    # Additional Coverity Arguments separated by space
+    coverity_args: # optional
+    # If provided, Black Duck Security Action will download specific version of coverity thin client to use.
+    bridge_coverity_version: # optional
+    # Polaris Access Token
+    polaris_access_token: # optional
+    # Polaris Application Name
+    polaris_application_name: # optional
+    # Polaris Project Name
+    polaris_project_name: # optional
+    # Polaris Assess Types SAST/SCA
+    polaris_assessment_types: # optional
+    # Polaris Server URL
+    polaris_server_url: # optional
+    # Flag to enable pull request comments based on Polaris scan result
+    polaris_prComment_enabled: # optional
+    # List of severities for which the PR Comments should be created
+    polaris_prComment_severities: # optional
+    # Polaris Triage
+    polaris_triage: # optional
+    # Polaris branch name
+    polaris_branch_name: # optional
+    # Polaris parent branch name
+    polaris_branch_parent_name: # optional
+    # Polaris SCA test type (SCA-SIGNATURE, SCA-PACKAGE, SCA-BINARY)
+    polaris_test_sca_type: # optional
+    # Path to a binary/archive/container file to analyze. This is required when using SCA-BINARY or SCA-CONTAINER as the SCA Test Type.
+    polaris_artifactToUpload: # optional
+    # Container name for Polaris SCA Container scan. Required when polaris_test_sca_type is set to SCA-CONTAINER.
+    polaris_container_name: # optional
+    # Polaris test type to trigger sigma rapid scan or full scan
+    polaris_test_sast_type: # optional
+    # Polaris SCA test location
+    polaris_test_sca_location: # optional
+    # Polaris SAST test location
+    polaris_test_sast_location: # optional
+    # Flag to enable/disable Polaris SARIF report generation
+    polaris_reports_sarif_create: # optional
+    # File path including file name where Polaris SARIF report should be created
+    polaris_reports_sarif_file_path: # optional
+    # Indicates what SAST/SCA issues severity categories to include in Polaris SARIF file report
+    polaris_reports_sarif_severities: # optional
+    # Flag to enable/disable Component-Version grouping for SCA Issues in Polaris SARIF report rules section
+    polaris_reports_sarif_groupSCAIssues: # optional
+    # Enum to indicate which assessment issues type to include in Polaris SARIF file report
+    polaris_reports_sarif_issue_types: # optional
+    # Flag to enable/disable uploading of Polaris SARIF report to GitHub Advanced Security
+    polaris_upload_sarif_report: # optional
+    # Specifies if the workflow should wait for the analysis to complete. Default value: true. If set to false, post merge workflows like PR comment, Fix PR, SARIF etc will not be applicable.
+    polaris_waitForScan: # optional
+    # The test mode type of this scan
+    polaris_assessment_mode: # optional
+    # Polaris External Issues Create
+    polaris_externalIssues_create: # optional
+    # Polaris External Issues Types
+    polaris_externalIssues_types: # optional
+    # Polaris External Issues severities
+    polaris_externalIssues_severities: # optional
+    # Polaris External Issues groupSCAIssues
+    polaris_externalIssues_groupSCAIssues: # optional
+    # Polaris External Issues maxCount
+    polaris_externalIssues_maxCount: # optional
+    # The project source directory. Defaults to repository root directory. Set this to specify a custom folder that is other than repository root
+    project_directory: # optional
+    # The zipped source file path. It overrides the project directory setting
+    project_source_archive: # optional
+    # Flag indicating whether to preserve symlinks in the source zip
+    project_source_preserveSymLinks: # optional
+    # A list of git ignore pattern strings that indicate the files need to be excluded from the zip file
+    project_source_excludes: # optional
+    # Bridge CLI Install Directory
+    bridgecli_install_directory: # optional
+    # URL to download bridge from
+    bridgecli_download_url: # optional
+    # URL for blackduck hub
+    blackducksca_url: # optional
+    # API token to access blackduck
+    blackducksca_token: # optional
+    # Directory to find or install detect
+    detect_install_directory: # optional
+    # Scan Mode. (true for intelligent scan & false for rapid scan)
+    blackducksca_scan_full: # optional
+    # If provided, Black Duck will break the build if any issues produced match one of the given severities
+    blackducksca_scan_failure_severities: # optional
+    # If set as true, separate Fix PRs will be created if vulnerability is found after scan
+    blackducksca_fixpr_enabled: # optional
+    # Maximum number of Pull Requests to be created that violate policies
+    blackducksca_fixpr_maxCount: # optional
+    # If provided, Fix PRs will be created only for given severities
+    blackducksca_fixpr_filter_severities: # optional
+    # Flag to enable long term upgrade guidance
+    blackducksca_fixpr_useUpgradeGuidance: # optional
+    # If provided, Black Duck Security Action will configure the version of Bridge
+    bridgecli_download_version: # optional
+    # Flag to enable pull request comments for new issues found in the Black Duck scan
+    blackducksca_prComment_enabled: # optional
+    # Flag to enable/disable Black Duck SARIF report generation
+    blackducksca_reports_sarif_create: # optional
+    # File path including file name where Black Duck SARIF report should be created
+    blackducksca_reports_sarif_file_path: # optional
+    # Indicates what SAST/SCA issues severity categories to include in Black Duck SARIF file report
+    blackducksca_reports_sarif_severities: # optional
+    # Flag to enable/disable Component-Version grouping for SCA Issues in Black Duck SARIF report rules section
+    blackducksca_reports_sarif_groupSCAIssues: # optional
+    # Flag to enable/disable uploading of Black Duck SARIF report to GitHub Advanced Security
+    blackducksca_upload_sarif_report: # optional
+    # Specifies if the workflow should wait for the analysis to complete. Default value: true. If set to false, post merge workflows like PR comment, Fix PR, SARIF etc will not be applicable.
+    blackducksca_waitForScan: # optional
+    # Number indicating the search depth in the source directory
+    detect_search_depth: # optional
+    # Additional Black Duck Arguments separated by space
+    detect_args: # optional
+    # Black Duck config file path (.properties/.yml)
+    detect_config_path: # optional
+    # To enable creation of badges on the GitHub repository
+    blackducksca_policy_badges_create: # optional
+    # To limit number of badges to be displayed on the GitHub repository
+    blackducksca_policy_badges_maxCount: # optional
+    # Black Duck SCA External Issues Create
+    blackducksca_externalIssues_create: # optional
+    # Black Duck SCA External Issues severities
+    blackducksca_externalIssues_severities: # optional
+    # Black Duck SCA External Issues groupSCAIssues
+    blackducksca_externalIssues_groupSCAIssues: # optional
+    # Black Duck SCA External Issues maxCount
+    blackducksca_externalIssues_maxCount: # optional
+    # SRM Url
+    srm_url: # optional
+    # SRM Api Key
+    srm_apikey: # optional
+    # SRM Assessment Types
+    srm_assessment_types: # optional
+    # SRM project name
+    srm_project_name: # optional
+    # SRM branch name
+    srm_branch_name: # optional
+    # SRM branch Id
+    srm_project_id: # optional
+    # SRM branch parent
+    srm_branch_parent: # optional
+    # Specifies if the workflow should wait for the analysis to complete. Default value: true. If set to false, post merge workflows like PR comment, Fix PR, SARIF etc will not be applicable.
+    srm_waitForScan: # optional
+    # Coverity execution path
+    coverity_execution_path: # optional
+    # Black Duck execution path
+    detect_execution_path: # optional
+    # Github token to be used for git related rest operation
+    github_token: # optional
+    # To include diagnostics info and export as zip
+    include_diagnostics: # optional
+    # Number of days to keep the diagnostics files downloadable
+    diagnostics_retention_days: # optional
+    # If provided, Black Duck Security Action will be using local network to download and execute bridge .
+    bridge_network_airgap: # optional
+    # If provided, Black Duck Security Action will be using local network to download and execute bridge .
+    network_airgap: # optional
+    # To enable creation of badges on the GitHub repository for polaris
+    polaris_policy_badges_create: # optional
+    # To limit number of badges to be displayed on the GitHub repository for polaris
+    polaris_policy_badges_maxCount: # optional
+    # Enable automatic fix pull request creation for Polaris SCA vulnerabilities
+    polaris_fixpr_enabled: # optional
+    # Maximum number of fix PRs to create on a branch. Default: 5
+    polaris_fixpr_maxCount: # optional
+    # Upgrade guidance preference. Values: SHORT_TERM, LONG_TERM, or SHORT_TERM,LONG_TERM. Default: SHORT_TERM,LONG_TERM
+    polaris_fixpr_useUpgradeGuidance: # optional
+    # Comma-separated list of severities (CRITICAL, HIGH, MEDIUM, LOW). Default: CRITICAL,HIGH
+    polaris_fixpr_filter_severities: # optional
+    # Specify the build status if policy violating issues are found.
+    mark_build_status: # optional, default is failure
+    # File path to configure the HttpClient to accept a self-signed certificate.
+    network_ssl_cert_file: # optional
+    # Boolean value to trust all certificates.
+    network_ssl_trustAll: # optional
+- name: setup-atmos
+  # You may pin to the exact commit or the version.
+  # uses: cloudposse/github-action-setup-atmos@7137afeb830d41684b464f9677a13566d4bcb550
+  uses: cloudposse/github-action-setup-atmos@2.0.0
+  with:
+    # Version Spec of the version to use. Examples: 1.x, 10.15.1, >=10.15.0.
+    atmos-version: # optional, default is latest
+    # Flag to indicate if the wrapper script will be installed to wrap subsequent calls of the `atmos` binary and expose its STDOUT, STDERR, and exit code as outputs named `stdout`, `stderr`, and `exitcode` respectively. Defaults to `true`.
+    install-wrapper: # optional, default is true
+    # Used to pull atmos distributions from Cloud Posse's GitHub repository. Since there's a default, this is typically not supplied by the user. When running this action on github.com, the default value is sufficient. When running on GHES, you can pass a personal access token for github.com if you are experiencing rate limiting.
+    token: # optional, default is ${{ github.server_url == 'https://github.com' && github.token || '' }}
+- name: ServiceNow ITSM Actions
+  # You may pin to the exact commit or the version.
+  # uses: shundor/servicenow-actions@e61808a890f5eeae51a75fc433ed91842e46040c
+  uses: shundor/servicenow-actions@v1.0
+  with:
+    # ServiceNow instance host
+    sn_host: 
+    # ServiceNow username
+    sn_username: 
+    # ServiceNow password
+    sn_password: 
+    # ServiceNow client ID
+    sn_client_id: 
+    # ServiceNow client secret
+    sn_client_secret: 
+    # ServiceNow module name
+    sn_module: 
+    # ServiceNow module parameters
+    sn_module_params: 
+    # Enable debug mode
+    debug: # optional, default is false
+- name: Mondoo Action
+  # You may pin to the exact commit or the version.
+  # uses: mondoohq/actions@822db89c2386abf7f62c13468db208457507648f
+  uses: mondoohq/actions@v11.0.0
+  with:
+    # Additional arguments to pass to cnspec client.
+    args: # optional
+    # Sets the log level: error, warn, info, debug, trace (default "info")
+    log-level: # optional, default is info
+    # Base64 encoded service account credentials used to authenticate with Mondoo Platform
+    service-account-credentials: # optional
+- name: SDP CI Integration
+  # You may pin to the exact commit or the version.
+  # uses: opentext/sdp-github-actions-integration@70702e2f103ff12a4be0e02e09bade9760805725
+  uses: opentext/sdp-github-actions-integration@v26.4.0
+  with:
+    # Url of OpenText SDP / SDM instance
+    octaneUrl: 
+    # Shared Space ID
+    octaneSharedSpace: 
+    # Workspace ID
+    octaneWorkspace: 
+    # OpenText SDP / SDM API Access Client ID
+    octaneClientId: 
+    # OpenText SDP / SDM API Access Client Secret
+    octaneClientSecret: 
+    # GitHub PAT
+    gitHubToken: 
+    # URL of the organization/repository in GitHub
+    serverBaseUrl: 
+    # Pattern to build pipeline names
+    pipelineNamePattern: 
+    # Pattern to search unit test result report files in artifacts
+    unitTestResultsGlobPattern: # optional
+    # Pattern to search Gherkin test result report files in artifacts
+    gherkinTestResultsGlobPattern: # optional
+    # Testing framework to use for the test runner
+    testingFramework: # optional
+    # Sets the log level (1-5): 1-trace, 2-debug, 3-info, 4-warn, 5-error
+    logLevel: # optional, default is 3
+- name: Xanitizer Security Analysis
+  # You may pin to the exact commit or the version.
+  # uses: RIGS-IT/xanitizer-action@87d13138fb113b727cbe040c744a15a2b4fe5316
+  uses: RIGS-IT/xanitizer-action@v1.0.1
+  with:
+    # String which is used as input for a Xanitizer license file. Note: It is recommended to use a GitHub secret to store the license file content like XANITIZER_LICENSE and access the content in the configuration via the GitHub secret parameter. Please see https://docs.github.com/en/actions/configuring-and-managing-workflows/creating-and-storing-encrypted-secrets for details. Note: If the license is a floating license and a proxy server is used to access the license server, please specify the proxy server settings. If no settings are specified, the settings from the Xanitizer properties file will be used.
+    license: # optional
+    # Number of attempts to get a license token from the license server. Note: If the used Xanitizer license is a machine bound license, this parameter will be ignored. If the used Xanitizer license is a floating license it may happen that all tokens are in use or the connection to the license server is not available at startup. In such cases, no license token can be requested successfully from the license server to start Xanitizer and the headless process would terminate with a license error. When this parameter is set to a value greater than zero, Xanitizer attempts every minute to request a license token until the specified count has been reached. Setting this parameter to zero disables the repetition.
+    licenseServerRetryCount: # optional
+    # Relative path under $GITHUB_WORKSPACE where the project was checked out. Note: Please use the same value as for parameter `path` of the configured actions/checkout action (see https://github.com/actions/checkout#usage parameter `path`).
+    checkoutPath: # optional
+    # The output location of the overview report. This has to be either a list of files or the parameter has to be undefined or empty if no overview reports should be written. Allowed file extensions are: pdf, html, docx.
+    overviewReportOutputFile: # optional
+    # Comma separated list of output locations of the overview reports. This has to be either a list of files or the parameter has to be undefined or empty if no overview reports should be written. Allowed file extensions are: pdf, html, docx.
+    overviewReportOutputFiles: # optional
+    # The output location of the findings list report. This has to be either a list of files or the parameter has to be undefined or empty if no findings list reports should be written. Allowed file extensions are: pdf, html, docx, xml, csv, sarif.
+    findingsListReportOutputFile: # optional
+    # Comma separated list of output locations of the findings list reports. This has to be either a list of files or the parameter has to be undefined or empty if no findings list reports should be written. Allowed file extensions are: pdf, html, docx, xml, csv, sarif. Note: If no report file has been secified, i.e., neither an overview report nor a findings list report, both a Xanitizer-Findings-List.pdf and a Xanitizer-Findings-List.sarif report will be generated in the checkout directory specified by $GITHUB_WORKSPACE with the optional relative parameter `checkoutPath` as default.
+    findingsListReportOutputFiles: # optional
+    # Boolean flag specifying if only findings with problem classifications are written to the findings list report.
+    onlyProblemsInFindingsListReport: # optional, default is true
+    # Boolean flag specifying if all the details of a finding are written to the findings list report, e.g. if the output contains all steps of a path. Note: Only relevant if the file extension of the parameter `findingsListReportOutputFile` is xml, html, or sarif.
+    generateDetailsInFindingsListReport: # optional, default is true
+    # The path to the Xanitizer configuration file of the project that should be analyzed. Either this parameter or the parameter `rootDirectory` may be specified, but not both. Note: If neither the parameter `configFile` nor the parameter `rootDirectory` has been specified, the parameter `rootDirectory` is set to the checkout directory specified by $GITHUB_WORKSPACE with the optional relative parameter `checkoutPath`.
+    configFile: # optional
+    # The root directory, to be used for default set-ups. Either this parameter or the parameter `configFile` may be specified, but not both. Note: If neither the parameter `configFile` nor the parameter `rootDirectory` has been specified, the parameter `rootDirectory` is set to the checkout directory specified by $GITHUB_WORKSPACE with the optional relative parameter `checkoutPath`.
+    rootDirectory: # optional
+    # The project name that should be used. Only relevant if the parameter `rootDirectory` is specified. If not given, the simple name of the root directory is used.
+    projectName: # optional
+    # The directory where to put the generated configuration file. Only relevant if the parameter `rootDirectory` is specified. If not given, the configuration file is generated in the `rootDirectory`.
+    configFileDirectory: # optional
+    # Boolean flag specifying if an existing config file is to be overwritten. Only relevant if the parameter `rootDirectory` is specified.
+    overwriteConfigFile: # optional
+    # Boolean flag specifying whether Xanitizer uses NodeJS to compile Angular and TypeScript projects to JavaScript code itself or not. This could be a potential risk if someone has manipulated the external ng or the tsc script. If the code is already compiled to JavaScript, best with a source map, this option can be set to `false` true - enables the compilation of Angular and TypeScript code to JavaScript by Xanitizer itself false - disables the compilation of Angular and TypeScript code to JavaScript by Xanitizer itself and some Xanitizer workspace information will be generated if Angular or Typescript files are found in the project not set - if this option is not set and Angular or Typescript files are found in the project, a Xanitizer workspace error will be generated 
+    compileToJavaScript: # optional, default is true
+    # Boolean flag specifying if npm audit should be executed. The npm audit APIs can be used to report on known vulnerable node.js libraries. This requires an Internet connection and so has to be allowed explicitly. This is only relevant for NodeJS projects.
+    performNodeAudit: # optional, default is true
+    # Boolean flag specifying whether the task should fail if there are search paths configured that do not exist.
+    haltOnMissingSearchPaths: # optional
+    # A comma - separated list of issue groups that will let the task fail if for any of them, a Xanitizer error issue occurs. Possible values are ALL_ERRORS, WORKSPACE_ERRORS, CALL_GRAPH_ERRORS, ANALYSIS_ERRORS, MIGRATION_ERRORS. If the value is not set, this means that issues are not relevant for the success of the task.
+    haltOnIssues: # optional
+    # Boolean flag specifying whether the task should fail if there are findings with a rating equal or higher than the value defined for `findingsRatingThreshold`.
+    haltOnFindings: # optional
+    # A rating value. Only used if the parameter `haltOnFindings` is set.
+    findingsRatingThreshold: # optional
+    # Boolean flag specifying whether the OWASP Dependency Check repository should be updated or not. Note: The OWASP Dependency Check is based on vulnerability data stored in a local repository. It is recommended to update the local OWASP Dependency Check repository on a regular basis via remote access to the National Vulnerability Database (NIST). If a proxy server is used to access the internet, please specify the proxy server settings otherwise the settings from the Xanitizer properties file will be used.
+    updateOwaspDependencyCheckRepository: # optional
+    # The logging level to be used when running Xanitizer. Values: OFF, SEVERE, WARNING, INFO, CONFIG, FINE, FINER, FINEST, ALL.
+    logLevel: # optional
+    # Xanitizer`s project data directory, if it is not the default one in <HOME>/.Xanitizer.
+    projectDataDirectory: # optional
+    # Boolean flag specifying whether the task should fail if there are * NEW * findings with a rating equal or higher than the value defined for `newFindingsRating`.
+    haltOnNewFindings: # optional
+    # A rating value. Only used if the parameter `haltOnNewFindings` is set.
+    newFindingsRatingThreshold: # optional
+    # Optional path to the local Maven repository. Note: If no settings are specified, the settings from the Xanitizer properties file will be used.
+    mavenRepository: # optional
+    # Boolean flag specifying whether a snapshot should be created after parsing and analyzing the current version or not.
+    createSnapshot: # optional
+    # Optional comment added to the newly created snapshot. Only relevant if the parameter `createSnapshot` is true.
+    snapshotComment: # optional
+    # The output directory of the project export. Note: If the parameter is undefined or an empty string, the project is not exported.
+    exportDirectory: # optional
+    # Boolean flag specifying if snapshots should be exported or not. The parameter is only used if an export directory is set. If the parameter is not set or empty, no snapshots are exported.
+    exportSnapshots: # optional
+    # The passphrase for the project export. The parameter is only used if an export directory is set. If the parameter is not set or empty, the exported project is not encrypted. Note: It is recommended to use a GitHub secret to store the export like XANITIZER_EXPORT_PASSPHRASE and access the content in the configuration via the GitHub secret parameter. Please see https://docs.github.com/en/actions/configuring-and-managing-workflows/creating-and-storing-encrypted-secrets for details.
+    exportPassphrase: # optional
+    # The path to an exported Xanitizer project archive file. If specified, this project is merged into the current project. This means that all more recent user adaptations, findings and issues are migrated into the current project.
+    mergedProject: # optional
+    # The passphrase for the merged project. The parameter is only necessary if the parameter `mergedProject` is set and the merged project is encrypted. Note: It is recommended to use a GitHub secret to store the export passphrase like XANITIZER_EXPORT_PASSPHRASE. and access the content in the configuration via the GitHub secret parameter. Please see https://docs.github.com/en/actions/configuring-and-managing-workflows/creating-and-storing-encrypted-secrets for details.
+    importPassphrase: # optional
+    # Optional proxy server to access the internet to update the OWASP Dependency Check repository or to request a license token from the public license server in case of a floating license via a proxy. Note: If no settings are specified, the settings from the Xanitizer properties file will be used.
+    proxyServer: # optional
+    # Optional proxy server port.
+    proxyPort: # optional
+    # Optional proxy server user name.
+    proxyUser: # optional
+    # Optional proxy server user password.
+    proxyPassword: # optional
+- name: Setup .NET Core SDK
+  uses: actions/setup-dotnet@v6.0.0
+  with:
+    # Optional SDK version(s) to use. If not provided, will install global.json version when available. Examples: 2.2.104, 3.1, 3.1.x, 3.x, 6.0.2xx, latest
+    dotnet-version: # optional
+    # Optional quality of the build. The possible values are: daily, preview, ga.
+    dotnet-quality: # optional
+    # Optional channel for the installation. The possible values are: STS, LTS, A.B (e.g. 8.0), A.B.Cxx (e.g. 8.0.1xx, available since 5.0). To be used with "dotnet-version: latest".
+    dotnet-channel: # optional
+    # Optional global.json location, if your global.json isn't located in the root of the repo.
+    global-json-file: # optional
+    # Optional package source for which to set up authentication. Will consult any existing NuGet.config in the root of the repo and provide a temporary NuGet.config using the NUGET_AUTH_TOKEN environment variable as a ClearTextPassword
+    source-url: # optional
+    # Optional OWNER for using packages from GitHub Package Registry organizations/users other than the current repository's owner. Only used if a GPR URL is also provided in source-url
+    owner: # optional
+    # Optional NuGet.config location, if your NuGet.config isn't located in the root of the repo.
+    config-file: # optional
+    # Optional input to enable caching of the NuGet global-packages folder
+    cache: # optional
+    # Used to specify the path to a dependency file: packages.lock.json. Supports wildcards or a list of file names for caching multiple dependencies.
+    cache-dependency-path: # optional
+    # Optional SDK workloads to install for additional platform support. Examples: wasm-tools, maui, aspire.
+    workloads: # optional
+    # Optional architecture for the .NET install. Supported values: x64, x86, arm64, amd64, arm, s390x, ppc64le, riscv64. If not set, the installer auto-detects the current system architecture.
+    architecture: # optional
+
+name: Jekyll site CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Build the site in the jekyll/builder container
+      run: |
+        docker run \
+        -v ${{ github.workspace }}:/srv/jekyll -v ${{ github.workspace }}/_site:/srv/jekyll/_site \
+        jekyll/builder:latest /bin/bash -c "chmod -R 777 /srv/jekyll && jekyll build --future"
