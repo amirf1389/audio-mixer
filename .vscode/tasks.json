@@ -1,0 +1,48 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Bridge: npm install (ASIO / PortAudio)",
+      "type": "shell",
+      "command": "npm install",
+      "options": {
+        "cwd": "${workspaceFolder}/bridge"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Bridge: start",
+      "type": "shell",
+      "command": "node server.js",
+      "options": {
+        "cwd": "${workspaceFolder}/bridge"
+      },
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "bridge",
+        "pattern": {
+          "regexp": "^$"
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^$",
+          "endsPattern": "Audio Mixer bridge running"
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "Bridge: test",
+      "type": "shell",
+      "command": "npm test",
+      "options": {
+        "cwd": "${workspaceFolder}/bridge"
+      },
+      "group": "test",
+      "problemMatcher": []
+    }
+  ]
+}
