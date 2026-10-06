@@ -12,3 +12,10 @@ CoreAudio on macOS; ALSA / PipeWire / JACK on Linux).
   tag in the DRIVERS tab and "Auto-Detect" uses the bridge's recommendation. Without the bridge
   the page works exactly as before.
 - Endpoints: `GET /api/status`, `GET /api/drivers`. Tests: `npm test` in `bridge/`.
+
+## Web Audio ↔ ASIO and VST notifications
+On connect the page shows notifications and log lines for Web Audio API status, Web Audio ↔ ASIO
+(installed ASIO drivers) and VST compatibility (VST3/VST2 plugins found in the standard folders).
+Without the bridge it notifies that ASIO/VST status is unknown and tells you to start it.
+`GET /api/drivers` now includes `vst: { vst3: [...], vst2: [...] }`. The bridge only reports
+plugins; hosting them inside the browser is not possible.

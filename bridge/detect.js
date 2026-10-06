@@ -2,6 +2,8 @@
 // Native audio driver / device detection. Read-only; every probe is optional and fails soft.
 const { execFile } = require('node:child_process');
 const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 
 function run(cmd, args, timeout = 4000) {
   return new Promise(resolve => {
@@ -64,10 +66,46 @@ async function linux() {
   return { drivers: [...drivers], devices, asio: [], recommended: rec };
 }
 
+// VST2 / VST3 plugin scan (standard install folders, depth <= 2, capped).
+function vstDirs() {
+  const h = os.homedir();
+  if (process.platform === 'win32') {
+    const pf = process.env.ProgramFiles || 'C:\\Program Files';
+    const cf = process.env.CommonProgramFiles || path.join(pf, 'Common Files');
+    return { vst3: [path.join(cf, 'VST3')], vst2: [path.join(pf, 'VSTPlugins'), path.join(pf, 'Steinberg', 'VSTPlugins'), path.join(cf, 'VST2')] };
+  }
+  if (process.platform === 'darwin') {
+    return { vst3: ['/Library/Audio/Plug-Ins/VST3', path.join(h, 'Library/Audio/Plug-Ins/VST3')], vst2: ['/Library/Audio/Plug-Ins/VST', path.join(h, 'Library/Audio/Plug-Ins/VST')] };
+  }
+  return { vst3: [path.join(h, '.vst3'), '/usr/lib/vst3', '/usr/local/lib/vst3'], vst2: [path.join(h, '.vst'), '/usr/lib/vst', '/usr/local/lib/vst'] };
+}
+
+function scanVst(dirs, ext, max = 500) {
+  const found = [];
+  const walk = (dir, depth) => {
+    let entries = [];
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (_) { return; }
+    for (const e of entries) {
+      if (found.length >= max) return;
+      const p = path.join(dir, e.name);
+      if (e.name.toLowerCase().endsWith(ext)) found.push(e.name.slice(0, -ext.length));
+      else if (e.isDirectory() && depth < 2) walk(p, depth + 1);
+    }
+  };
+  dirs.forEach(d => walk(d, 0));
+  return found;
+}
+
+function detectVst() {
+  const d = vstDirs();
+  const v2ext = process.platform === 'win32' ? '.dll' : process.platform === 'darwin' ? '.vst' : '.so';
+  return { vst3: scanVst(d.vst3, '.vst3'), vst2: scanVst(d.vst2, v2ext) };
+}
+
 async function detect() {
   const p = process.platform;
   const r = p === 'win32' ? await windows() : p === 'darwin' ? await mac() : p === 'linux' ? await linux() : { drivers: [], devices: [], asio: [], recommended: null };
-  return { platform: p, arch: process.arch, node: process.version, ...r };
+  return { platform: p, arch: process.arch, node: process.version, ...r, vst: detectVst() };
 }
 
 module.exports = { detect };

@@ -12516,7 +12516,11 @@ window.navTabs = [
             if (/^https?:$/.test(location.protocol) && /^(localhost|127\.0\.0\.1)$/.test(location.hostname)) bases.push(location.origin);
             bases.push('http://localhost:8765');
             const tryNext = function(i) {
-                if (i >= bases.length) { self._bridgeBusy = false; return; }
+                if (i >= bases.length) {
+                    self._bridgeBusy = false;
+                    self.reportWebAudioCompat(null);
+                    return;
+                }
                 fetch(bases[i] + '/api/drivers', { cache: 'no-store' }).then(r => r.json()).then(info => {
                     if (!info || !info.ok) throw new Error('bad reply');
                     self.bridgeUrl = bases[i];
@@ -12530,9 +12534,46 @@ window.navTabs = [
                     info.asio.forEach(n => self.log(`Installed ASIO driver: ${n}`, "info"));
                     info.devices.forEach(d => self.log(`Device: ${d.name}`, "info"));
                     window.notify(`Local Audio Bridge Connected (${info.platform})`, "plug");
+                    self.reportWebAudioCompat(info);
                 }).catch(() => tryNext(i + 1));
             };
             tryNext(0);
+        },
+
+        // Notifies about Web Audio API <-> ASIO and VST compatibility (needs the local bridge for ASIO/VST facts).
+        reportWebAudioCompat: function(info) {
+            const ctx = window.state && window.state.ctx;
+            const AC = window.AudioContext || window.webkitAudioContext;
+            if (!AC) {
+                this.log("Web Audio API: NOT SUPPORTED in this browser", "error");
+                window.notify("Web Audio API not supported by this browser", "triangle-exclamation");
+                return;
+            }
+            const rate = ctx ? ctx.sampleRate : null;
+            const lat = ctx && ctx.baseLatency ? (ctx.baseLatency * 1000).toFixed(1) + ' ms' : 'n/a';
+            this.log(`Web Audio API: ACTIVE${rate ? ' @ ' + rate / 1000 + ' kHz' : ''} • base latency ${lat}`, "success");
+            window.notify("Web Audio API: Active", "wave-square");
+            if (!info) {
+                this.log("ASIO / VST compatibility: UNKNOWN — start the local bridge (node bridge/server.js) to detect ASIO drivers and VST plugins", "warn");
+                window.notify("ASIO & VST Compatibility: start local bridge (node bridge/server.js)", "plug-circle-exclamation");
+                return;
+            }
+            const asioN = info.asio.length;
+            if (asioN) {
+                this.log(`Web Audio API \u2194 ASIO: LINKED via local bridge • ${asioN} ASIO driver(s) installed`, "success");
+                window.notify(`Web Audio ↔ ASIO: Linked (${asioN} driver${asioN > 1 ? 's' : ''})`, "microchip");
+            } else {
+                this.log(info.platform === 'win32' ? "Web Audio API \u2194 ASIO: no ASIO driver installed (WASAPI / DirectSound available)" : "Web Audio API \u2194 ASIO: ASIO is Windows-only on this OS — using " + (info.recommended || 'system audio'), "warn");
+                window.notify("Web Audio ↔ ASIO: No ASIO driver found", "microchip");
+            }
+            const v3 = info.vst ? info.vst.vst3.length : 0, v2 = info.vst ? info.vst.vst2.length : 0;
+            if (v3 + v2) {
+                this.log(`VST compatibility: ${v3} VST3 / ${v2} VST2 plugin(s) detected`, "success");
+                window.notify(`VST Compatible: ${v3} VST3 / ${v2} VST2 plugins`, "puzzle-piece");
+            } else {
+                this.log("VST compatibility: no VST2/VST3 plugins found in standard folders", "warn");
+                window.notify("VST: no plugins found in standard folders", "puzzle-piece");
+            }
         },
 
         selectDriver: function(driverKey) {
