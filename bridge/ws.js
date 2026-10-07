@@ -17,35 +17,50 @@ function accept(req, socket, handlers) {
 
   const frame = (op, payload) => {
     const n = payload.length;
-    const head = n < 126 ? Buffer.from([0x80 | op, n]) : n < 65536 ? Buffer.from([0x80 | op, 126, n >> 8, n & 255]) : null;
-    return head ? Buffer.concat([head, payload]) : null;
+    let head;
+    if (n < 126) head = Buffer.from([0x80 | op, n]);
+    else if (n < 65536) head = Buffer.from([0x80 | op, 126, n >> 8, n & 255]);
+    else { head = Buffer.alloc(10); head[0] = 0x80 | op; head[1] = 127; head.writeBigUInt64BE(BigInt(n), 2); }
+    return Buffer.concat([head, payload]);
   };
+  const fail = () => { conn.close(); socket.destroy(); };
+  let fragSize = 0;
   const conn = {
     send(text) { if (!closed) { const f = frame(1, Buffer.from(String(text))); if (f) socket.write(f); } },
     close() { if (!closed) { closed = true; try { socket.end(frame(8, Buffer.alloc(0))); } catch (_) { /* gone */ } } },
   };
 
   socket.on('data', chunk => {
+    if (closed) return;
     buf = Buffer.concat([buf, chunk]);
     for (;;) {
-      if (buf.length < 2) return;
+      if (closed || buf.length < 2) return;
       const fin = (buf[0] & 0x80) !== 0, op = buf[0] & 0x0f, masked = (buf[1] & 0x80) !== 0;
+      if (buf[0] & 0x70) { fail(); return; }                         // RSV bits set: no extensions negotiated
+      if (op >= 8 && (!fin || (buf[1] & 0x7f) > 125)) { fail(); return; } // control frames: unfragmented, <=125 bytes
       let len = buf[1] & 0x7f, off = 2;
       if (len === 126) { if (buf.length < 4) return; len = buf.readUInt16BE(2); off = 4; }
       else if (len === 127) { if (buf.length < 10) return; len = Number(buf.readBigUInt64BE(2)); off = 10; }
-      if (!masked || len > MAX_PAYLOAD) { conn.close(); socket.destroy(); return; }
+      if (!masked || len > MAX_PAYLOAD) { fail(); return; }
       if (buf.length < off + 4 + len) return;
       const mask = buf.subarray(off, off + 4);
       const data = Buffer.from(buf.subarray(off + 4, off + 4 + len));
       for (let i = 0; i < data.length; i++) data[i] ^= mask[i & 3];
       buf = buf.subarray(off + 4 + len);
       if (op === 8) { conn.close(); return; }
-      if (op === 9) { if (!closed) socket.write(frame(10, data) || Buffer.alloc(0)); continue; }
+      if (op === 9) { if (!closed) socket.write(frame(10, data)); continue; }
       if (op === 10) continue;
-      if (op === 1 || op === 2) { frag = [data]; fragOp = op; } else if (op === 0) { frag.push(data); } else continue;
+      if (op === 1 || op === 2) {
+        if (frag.length) { fail(); return; }                         // new message while one is still open
+        frag = [data]; fragOp = op; fragSize = data.length;
+      } else if (op === 0) {
+        if (!frag.length) { fail(); return; }                        // continuation without a start frame
+        frag.push(data); fragSize += data.length;
+        if (fragSize > MAX_PAYLOAD) { fail(); return; }               // bound total message size, not just frames
+      } else { fail(); return; }                                      // unknown opcode
       if (fin) {
         const all = Buffer.concat(frag);
-        frag = [];
+        frag = []; fragSize = 0;
         if (fragOp === 1) handlers.onText && handlers.onText(all.toString('utf8'));
         else handlers.onBinary && handlers.onBinary(all);
       }

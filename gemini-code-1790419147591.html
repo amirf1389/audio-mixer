@@ -701,6 +701,7 @@ window.navTabs = [
             { id: 'media', text: 'STREAM & MEDIA', icon: 'fa-solid fa-play', color: 'text-cyan-400' },
             { id: 'ai', text: 'AI MIX', icon: 'fa-solid fa-brain', color: 'text-rose-400' },
             { id: 'io', text: 'PATCHBAY', icon: 'fa-solid fa-plug', color: 'text-indigo-400' },
+            { id: 'routing', text: 'ROUTING', icon: 'fa-solid fa-route', color: 'text-yellow-400' },
             { id: 'tools', text: 'TOOLS', icon: 'fa-solid fa-screwdriver-wrench', color: 'text-lime-400' },
             { id: 'asio', text: 'DRIVERS', icon: 'fa-solid fa-compact-disc', color: 'text-amber-400' },
             { id: 'bluetooth', text: 'BLUETOOTH', icon: 'fa-brands fa-bluetooth-b', color: 'text-blue-400' },
@@ -791,9 +792,16 @@ window.navTabs = [
             }
         };
 
+        // Escape untrusted text (device names, labels) before it goes into an HTML template.
+        window.escapeHtml = function(v) {
+            return String(v == null ? '' : v).replace(/[&<>"'`]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '`': '&#96;' }[c]));
+        };
+
         window.notify = function(m, i='info') {
             const d = document.createElement('div'); d.className='notification flex items-center gap-2';
-            d.innerHTML=`<i class="fa-solid fa-${i} text-amber-400"></i> <span>${m}</span>`;
+            const ico = document.createElement('i'); ico.className = `fa-solid fa-${String(i).replace(/[^a-z0-9-]/gi, '')} text-amber-400`;
+            const txt = document.createElement('span'); txt.textContent = String(m);
+            d.append(ico, ' ', txt);
             document.body.appendChild(d);
             setTimeout(() => { d.style.opacity = '0'; d.style.transform = 'translateY(-15px)'; d.style.transition = 'all 0.2s'; setTimeout(()=>d.remove(),200); }, 2200);
         };
@@ -1072,17 +1080,26 @@ window.navTabs = [
             setTimeout(() => document.getElementById('pin-input').focus(), 40); 
         };
         window.closePin = function() { document.getElementById('pin-modal').style.display = 'none'; };
+        window.pinFailures = 0; window.pinLockedUntil = 0;
         window.submitPin = function() { 
+            const now = Date.now();
+            if (now < window.pinLockedUntil) { window.notify(`PIN locked: try again in ${Math.ceil((window.pinLockedUntil - now) / 1000)}s`, 'lock'); return; }
             const val = document.getElementById('pin-input').value; 
             const savedPin = localStorage.getItem('halx_admin_pin') || DEFAULT_ADMIN_PIN; 
             if(val === savedPin) { 
+                window.pinFailures = 0;
                 window.closePin(); 
                 if(window.pinActionTarget === 'toggleKnox') window.executeKnoxToggle();
                 else if(window.pinActionTarget === 'switchRoleAdmin') {
                     window.setUserRole('Admin');
                 } else window.notify(window.pinActionTarget || "Unlocked", 'check');
             } else { 
-                window.notify('Invalid PIN', 'triangle-exclamation'); 
+                window.pinFailures++;
+                if (window.pinFailures >= 5) {
+                    // 30s after 5 misses, doubling each further miss (max 15 min)
+                    window.pinLockedUntil = Date.now() + Math.min(30000 * Math.pow(2, window.pinFailures - 5), 900000);
+                    window.notify('Too many wrong PINs: locked for ' + Math.round((window.pinLockedUntil - Date.now()) / 1000) + 's', 'lock');
+                } else window.notify('Invalid PIN', 'triangle-exclamation'); 
             } 
         };
         window.requestKnoxToggle = function() { if(!window.knoxEnabled) window.executeKnoxToggle(); else window.requestPin('toggleKnox'); };
@@ -1574,7 +1591,7 @@ window.navTabs = [
         };
 
         window.toggleBLEDevice = function(id) {
-            const dev = window.bleState.devices.find(d => d.id === id);
+            const dev = window.bleState.devices.find(d => d.id === id || String(d.id).replace(/[\\']/g, '') === id);
             if (!dev) return;
             dev.connected = !dev.connected;
             if (dev.connected) {
@@ -1641,13 +1658,13 @@ window.navTabs = [
                     <div class="flex items-center gap-2.5 min-w-0">
                         <div class="w-2.5 h-2.5 rounded-full flex-shrink-0 ${d.connected ? 'bg-emerald-400 shadow-[0_0_8px_#10b981] animate-pulse' : 'bg-slate-600'}"></div>
                         <div class="min-w-0">
-                            <span class="text-white font-bold block truncate text-[10px]">${d.name} ${d.simulated ? '<span class="text-[7.5px] text-amber-500/80 font-normal">[SIM]</span>' : '<span class="text-[7.5px] text-cyan-400 font-normal">[HW]</span>'}</span>
-                            <span class="text-slate-400 text-[8px]">${d.desc} • RSSI: ${d.rssi} • Batt: ${d.battery}</span>
+                            <span class="text-white font-bold block truncate text-[10px]">${window.escapeHtml(d.name)} ${d.simulated ? '<span class="text-[7.5px] text-amber-500/80 font-normal">[SIM]</span>' : '<span class="text-[7.5px] text-cyan-400 font-normal">[HW]</span>'}</span>
+                            <span class="text-slate-400 text-[8px]">${window.escapeHtml(d.desc)} • RSSI: ${window.escapeHtml(d.rssi)} • Batt: ${window.escapeHtml(d.battery)}</span>
                         </div>
                     </div>
                     <div class="flex items-center gap-1.5 flex-shrink-0">
                         ${d.connected ? `<span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-bold text-[8px] border border-emerald-500/40">AUDIO SINK ON</span>` : ''}
-                        <button onclick="window.toggleBLEDevice('${d.id}')" class="px-3 py-1 rounded font-bold uppercase text-[8.5px] transition-all ${d.connected ? 'bg-red-500/20 text-red-400 hover:bg-red-500 hover:text-black border border-red-500/40' : 'bg-cyan-400 text-black hover:bg-cyan-300 shadow-[0_0_8px_rgba(0,242,255,0.4)]'}">
+                        <button onclick="window.toggleBLEDevice('${window.escapeHtml(String(d.id).replace(/[\\']/g, ''))}')" class="px-3 py-1 rounded font-bold uppercase text-[8.5px] transition-all ${d.connected ? 'bg-red-500/20 text-red-400 hover:bg-red-500 hover:text-black border border-red-500/40' : 'bg-cyan-400 text-black hover:bg-cyan-300 shadow-[0_0_8px_rgba(0,242,255,0.4)]'}">
                             ${d.connected ? 'DISCONNECT' : 'PAIR'}
                         </button>
                     </div>
@@ -2669,7 +2686,7 @@ window.navTabs = [
                         html += `<optgroup label="DETECTED PHYSICAL AUDIO OUTPUTS (Web Audio API)">`;
                         outputs.forEach((dev, idx) => {
                             const label = dev.label || `Audio Output ${idx + 1} (${dev.deviceId ? dev.deviceId.slice(0, 8) : 'Sys'}...)`;
-                            html += `<option value="${dev.deviceId}">${label}</option>`;
+                            html += `<option value="${window.escapeHtml(dev.deviceId)}">${window.escapeHtml(label)}</option>`;
                         });
                         html += `</optgroup>`;
                     }
@@ -4865,10 +4882,75 @@ window.navTabs = [
                   </div>
                 </div>
 
+            </div>
             </div>`;
 
             // 15. STUDIO TOOLS & UTILITY SUITE (tab-tools)
             htmlString += `
+            <div id="tab-routing" class="tab-content tab-hidden">
+              <div class="page-scroll-inner w-full max-w-6xl mx-auto">
+                <div class="glass-panel p-3 md:p-4 rounded-xl wing-bezel flex flex-col gap-3 font-mono text-xs">
+                  <div class="flex flex-wrap justify-between items-center gap-2 pb-2.5 border-b border-white/10">
+                    <div class="flex items-center gap-2">
+                      <div class="w-7 h-7 rounded bg-yellow-500/20 border border-yellow-500/40 text-yellow-400 flex items-center justify-center text-sm"><i class="fa-solid fa-route"></i></div>
+                      <div>
+                        <h3 class="text-sm font-black text-yellow-400 font-wing tracking-wider">AUDIO ROUTING ENGINE</h3>
+                        <span class="text-[7.5px] text-slate-400">CH 1-32 → SUBGROUPS 1-8 → MAIN → COMP → EQ → LIMITER → OUTPUT (BROWSER / BRIDGE ASIO)</span>
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                      <span id="rt-status"></span>
+                      <button id="rt-reset" class="px-2 py-1 rounded bg-white/5 text-slate-300 border border-white/15 font-bold text-[8px] hover:bg-white/10">RESET</button>
+                    </div>
+                  </div>
+
+                  <div class="bg-black/40 p-2 rounded-lg border border-white/5 flex flex-col gap-2">
+                    <div class="flex flex-wrap items-center gap-1.5 text-[8px]">
+                      <span class="text-slate-400 font-bold uppercase"><i class="fa-solid fa-bolt text-amber-500"></i> BULK ROUTE CH</span>
+                      <input id="rt-bulk-from" type="number" min="1" max="32" value="1" class="w-12 bg-black border border-white/15 rounded p-1 text-slate-200" aria-label="From channel">
+                      <span class="text-slate-500">TO</span>
+                      <input id="rt-bulk-to" type="number" min="1" max="32" value="8" class="w-12 bg-black border border-white/15 rounded p-1 text-slate-200" aria-label="To channel">
+                      <span class="text-slate-500">→</span>
+                      <select id="rt-bulk-dest" class="bg-black border border-white/15 rounded p-1 text-slate-200 font-bold" aria-label="Destination"></select>
+                      <button id="rt-bulk-go" class="px-2.5 py-1 rounded bg-yellow-500 text-black font-black">APPLY</button>
+                    </div>
+                    <div id="rt-assign" class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-1"></div>
+                  </div>
+
+                  <div>
+                    <div class="text-[8px] text-slate-400 font-bold uppercase mb-1.5">SUBGROUP BUSES (summed into MAIN, real-time metering)</div>
+                    <div id="rt-buses" class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2"></div>
+                  </div>
+
+                  <div class="grid md:grid-cols-2 gap-3">
+                    <div class="bg-black/40 p-2 rounded-lg border border-cyan-500/20 flex flex-col gap-2">
+                      <div class="text-[8px] text-cyan-400 font-black uppercase"><i class="fa-solid fa-microphone"></i> LIVE INPUT PATCH (physical input → channel strip)</div>
+                      <div class="flex flex-wrap items-center gap-1.5 text-[8px]">
+                        <select id="rt-in-dev" class="flex-1 min-w-[140px] bg-black border border-white/15 rounded p-1 text-slate-200" aria-label="Input device"><option value="default">Default input</option></select>
+                        <button id="rt-in-refresh" class="px-2 py-1 rounded bg-white/5 border border-white/15 text-slate-300" title="Refresh device list"><i class="fa-solid fa-rotate"></i></button>
+                        <select id="rt-in-mode" class="bg-black border border-white/15 rounded p-1 text-slate-200" aria-label="Input channels"><option value="stereo">STEREO</option><option value="left">LEFT / IN 1</option><option value="right">RIGHT / IN 2</option></select>
+                        <span class="text-slate-500">→</span>
+                        <select id="rt-in-ch" class="bg-black border border-white/15 rounded p-1 text-slate-200" aria-label="Target channel"></select>
+                        <button id="rt-in-go" class="px-2.5 py-1 rounded bg-cyan-500 text-black font-black">PATCH</button>
+                      </div>
+                      <div id="rt-live-list" class="flex flex-col gap-1"></div>
+                      <div class="text-[7px] text-amber-400/80">Use headphones when patching a microphone, or speakers will feed back.</div>
+                    </div>
+                    <div class="bg-black/40 p-2 rounded-lg border border-emerald-500/20 flex flex-col gap-2">
+                      <div class="text-[8px] text-emerald-400 font-black uppercase"><i class="fa-solid fa-camera"></i> ROUTING SNAPSHOTS</div>
+                      <div class="flex flex-wrap items-center gap-1.5 text-[8px]">
+                        <input id="rt-snap-name" maxlength="24" placeholder="Snapshot name" class="flex-1 min-w-[120px] bg-black border border-white/15 rounded p-1 text-slate-200" aria-label="Snapshot name">
+                        <button id="rt-snap-save" class="px-2.5 py-1 rounded bg-emerald-500 text-black font-black">SAVE</button>
+                        <button id="rt-export" class="px-2 py-1 rounded bg-white/5 border border-white/15 text-slate-300 font-bold">EXPORT</button>
+                        <label class="px-2 py-1 rounded bg-white/5 border border-white/15 text-slate-300 font-bold cursor-pointer">IMPORT<input id="rt-import" type="file" accept="application/json,.json" class="hidden"></label>
+                      </div>
+                      <div id="rt-snaps" class="flex flex-col gap-1 max-h-40 overflow-y-auto"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div id="tab-tools" class="tab-content tab-hidden">
               <div class="page-scroll-inner page-card-center space-y-3">
                 
@@ -8190,14 +8272,22 @@ window.navTabs = [
                 return;
             }
             const db = parseFloat(val);
-            const linear = db <= -59 ? 0 : Math.pow(10, db / 20);
             const dbBadge = document.getElementById(`db-val-${channelIndex}`); if (dbBadge) { dbBadge.innerText = (db <= -59 ? "-INF" : ((db > 0 ? "+" : "") + db.toFixed(1) + "dB")); }
-            if (window.state.nodes.channelPostGains && window.state.nodes.channelPostGains[channelIndex] && window.state.ctx) {
-                try {
-                    window.state.nodes.channelPostGains[channelIndex].gain.setValueAtTime(linear, window.state.ctx.currentTime);
-                } catch(e){}
-            }
+            window.applyChannelGain(channelIndex, db);
         };
+
+        // Effective strip gain = fader, unless muted or another channel is soloed (solo-in-place).
+        window.applyChannelGain = function(channelIndex, faderDb) {
+            const node = window.state.nodes.channelPostGains && window.state.nodes.channelPostGains[channelIndex];
+            if (!node || !window.state.ctx) return;
+            let db = faderDb;
+            if (db === undefined) { const fader = document.getElementById(`ch-fader-${channelIndex}`); db = fader ? parseFloat(fader.value) : 0; }
+            const anySolo = window.state.channelSolos.some(Boolean);
+            const silenced = window.state.channelMutes[channelIndex] || (anySolo && !window.state.channelSolos[channelIndex]);
+            const linear = silenced || !(db > -59) ? 0 : Math.pow(10, db / 20);
+            try { node.gain.setTargetAtTime(linear, window.state.ctx.currentTime, 0.005); } catch(e){}
+        };
+        window.applyAllChannelGains = function() { for (let i = 0; i < CHANNELS; i++) window.applyChannelGain(i); };
 
         window.toggleChannelMute = function(channelIndex) {
             window.state.channelMutes[channelIndex] = !window.state.channelMutes[channelIndex];
@@ -8207,14 +8297,7 @@ window.navTabs = [
                 if (muted) btn.className = "text-[6.5px] font-black flex-1 py-1 bg-danger text-black rounded transition-all shadow-[0_0_8px_#ff2a5f]";
                 else btn.className = "text-[6.5px] font-black flex-1 py-1 bg-danger/10 border border-danger/30 text-danger rounded hover:bg-danger hover:text-black transition-all";
             }
-            if (window.state.nodes.channelPostGains && window.state.nodes.channelPostGains[channelIndex] && window.state.ctx) {
-                try {
-                    const fader = document.getElementById(`ch-fader-${channelIndex}`);
-                    const db = fader ? parseFloat(fader.value) : 0;
-                    const linear = muted ? 0 : (db <= -59 ? 0 : Math.pow(10, db / 20));
-                    window.state.nodes.channelPostGains[channelIndex].gain.setValueAtTime(linear, window.state.ctx.currentTime);
-                } catch(e){}
-            }
+            window.applyChannelGain(channelIndex);
             window.notify(`Channel ${channelIndex+1} ${muted ? 'MUTED' : 'UNMUTED'}`, muted ? 'volume-xmark' : 'volume-high');
         };
 
@@ -8226,6 +8309,7 @@ window.navTabs = [
                 if (soloed) btn.className = "text-[6.5px] font-black flex-1 py-1 bg-warn text-black rounded transition-all shadow-[0_0_8px_#ffb020]";
                 else btn.className = "text-[6.5px] font-black flex-1 py-1 bg-warn/10 border border-warn/30 text-warn rounded hover:bg-warn hover:text-black transition-all";
             }
+            window.applyAllChannelGains();
             window.notify(`Channel ${channelIndex+1} Solo ${soloed ? 'ARMED' : 'CLEARED'}`, 'headphones');
         };
 
@@ -8235,6 +8319,7 @@ window.navTabs = [
                 const btn = document.getElementById(`btn-solo-${i}`);
                 if (btn) btn.className = "text-[6.5px] font-black flex-1 py-1 bg-warn/10 border border-warn/30 text-warn rounded hover:bg-warn hover:text-black transition-all";
             }
+            window.applyAllChannelGains();
             window.notify('Solo Buses Cleared', 'check');
         };
 
@@ -13800,6 +13885,284 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 }
             }, 800);
         });
+    </script>
+    <script>
+    // ─── ROUTING ENGINE: real Web Audio channel → subgroup → main routing, live input patching, snapshots ───
+    (function() {
+        const N_CH = 32, N_BUS = 8, MAX_LIVE = 8;
+        const STATE_KEY = 'halx_routing_state', SNAP_KEY = 'halx_routing_snapshots';
+        const esc = v => window.escapeHtml(v);
+        const load = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch (e) { return d; } };
+        const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
+        const dbToLin = db => (db <= -59 ? 0 : Math.pow(10, db / 20));
+        const DESTS = ['main', ...Array.from({ length: N_BUS }, (_, b) => 'bus' + (b + 1))];
+
+        // Untrusted input (localStorage, imported files) is normalised here; anything unexpected falls back to defaults.
+        function sanitize(raw) {
+            const r = raw && typeof raw === 'object' ? raw : {};
+            const num = (v, lo, hi, d) => (typeof v === 'number' && isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d);
+            return {
+                assign: Array.from({ length: N_CH }, (_, i) => (Array.isArray(r.assign) && DESTS.includes(r.assign[i]) ? r.assign[i] : 'main')),
+                busDb: Array.from({ length: N_BUS }, (_, b) => num(Array.isArray(r.busDb) ? r.busDb[b] : 0, -60, 10, 0)),
+                busMute: Array.from({ length: N_BUS }, (_, b) => !!(Array.isArray(r.busMute) && r.busMute[b])),
+                busNames: Array.from({ length: N_BUS }, (_, b) => {
+                    const n = Array.isArray(r.busNames) && typeof r.busNames[b] === 'string' ? r.busNames[b].replace(/[^\w .&+\-]/g, '').slice(0, 16).trim() : '';
+                    return n || 'GRP ' + (b + 1);
+                })
+            };
+        }
+
+        const R = window.routingEngine = {
+            cfg: sanitize(load(STATE_KEY, null)),
+            busNodes: [], busAnalysers: [], built: false, live: [],
+
+            allowed() {
+                if (window.knoxEnabled) { window.notify('KNOX Active: Routing Locked', 'shield-halved'); return false; }
+                if (window.operatorState && window.operatorState.permissions && window.operatorState.permissions.routing === false) {
+                    window.notify('Routing changes are locked for this operator', 'lock'); return false;
+                }
+                return true;
+            },
+            persist() { save(STATE_KEY, this.cfg); },
+
+            // Builds the 8 subgroup buses once the audio engine exists, then applies the routing.
+            ensureGraph() {
+                const ctx = window.state.ctx, n = window.state.nodes;
+                if (!ctx || !n.masterGain || !n.channelPostGains.length) return false;
+                if (!this.built) {
+                    for (let b = 0; b < N_BUS; b++) {
+                        const g = ctx.createGain(), a = ctx.createAnalyser();
+                        a.fftSize = 256;
+                        g.connect(n.masterGain); g.connect(a);
+                        this.busNodes.push(g); this.busAnalysers.push(a);
+                    }
+                    this.built = true;
+                }
+                for (let i = 0; i < N_CH; i++) this.wireChannel(i);
+                for (let b = 0; b < N_BUS; b++) this.applyBus(b);
+                return true;
+            },
+            channelOut(i) { const n = window.state.nodes; return n.channelPanners[i] || n.channelPostGains[i]; },
+            wireChannel(i) {
+                const out = this.channelOut(i), n = window.state.nodes;
+                if (!out || !this.built) return;
+                try { out.disconnect(); } catch (e) {}
+                const d = this.cfg.assign[i];
+                out.connect(d === 'main' ? n.masterGain : this.busNodes[Number(d.slice(3)) - 1]);
+            },
+            applyBus(b) {
+                const g = this.busNodes[b]; if (!g) return;
+                g.gain.setTargetAtTime(this.cfg.busMute[b] ? 0 : dbToLin(this.cfg.busDb[b]), window.state.ctx.currentTime, 0.01);
+            },
+
+            assign(i, dest) {
+                if (!DESTS.includes(dest) || i < 0 || i >= N_CH || !this.allowed()) return this.render();
+                this.cfg.assign[i] = dest; this.persist(); this.wireChannel(i);
+                this.renderAssign();
+            },
+            bulkAssign(from, to, dest) {
+                from = Math.max(1, Math.min(N_CH, from | 0)); to = Math.max(from, Math.min(N_CH, to | 0));
+                if (!DESTS.includes(dest) || !this.allowed()) return;
+                for (let i = from - 1; i < to; i++) { this.cfg.assign[i] = dest; this.wireChannel(i); }
+                this.persist(); this.renderAssign();
+                window.notify(`CH ${from}-${to} routed to ${this.destName(dest)}`, 'diagram-project');
+            },
+            setBusDb(b, db) {
+                if (!this.allowed()) return this.render();
+                this.cfg.busDb[b] = Math.min(10, Math.max(-60, parseFloat(db) || 0)); this.persist(); this.applyBus(b);
+                const l = document.getElementById('rt-bus-db-' + b); if (l) l.textContent = this.fmtDb(this.cfg.busDb[b]);
+            },
+            toggleBusMute(b) {
+                if (!this.allowed()) return;
+                this.cfg.busMute[b] = !this.cfg.busMute[b]; this.persist(); this.applyBus(b); this.renderBuses();
+            },
+            renameBus(b, name) {
+                const c = sanitize({ ...this.cfg, busNames: this.cfg.busNames.map((n, k) => (k === b ? name : n)) });
+                this.cfg.busNames = c.busNames; this.persist(); this.renderAssign(); this.renderBuses();
+            },
+            resetAll() {
+                if (!this.allowed() || !confirm('Reset all routing to MAIN and clear subgroup settings?')) return;
+                this.cfg = sanitize(null); this.persist(); this.ensureGraph(); this.render();
+                window.notify('Routing reset: all channels → MAIN', 'rotate-left');
+            },
+            destName(d) { return d === 'main' ? 'MAIN L/R' : this.cfg.busNames[Number(d.slice(3)) - 1]; },
+            fmtDb(db) { return db <= -59 ? '-INF' : (db > 0 ? '+' : '') + db.toFixed(1) + ' dB'; },
+
+            // ── Live inputs: patch a physical input (mic / interface channel) into a channel strip ──
+            async listInputs() {
+                const sel = document.getElementById('rt-in-dev'); if (!sel || !navigator.mediaDevices) return;
+                try {
+                    const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audioinput');
+                    sel.innerHTML = '<option value="default">Default input</option>' + devs.filter(d => d.deviceId && d.deviceId !== 'default')
+                        .map((d, k) => `<option value="${esc(d.deviceId)}">${esc(d.label || 'Input ' + (k + 1))}</option>`).join('');
+                } catch (e) {}
+            },
+            async patchLive(ch, deviceId, mode) {
+                if (!this.allowed()) return;
+                ch = ch | 0;
+                if (ch < 0 || ch >= N_CH || !['stereo', 'left', 'right'].includes(mode)) return;
+                if (this.live.length >= MAX_LIVE) return window.notify(`Max ${MAX_LIVE} live inputs`, 'triangle-exclamation');
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return window.notify('Live input needs a secure page (https or localhost)', 'triangle-exclamation');
+                if (!window.state.ctx && typeof window.initAudioEngine === 'function') await window.initAudioEngine();
+                if (!this.ensureGraph()) return window.notify('Engage the audio engine first', 'power-off');
+                this.unpatchLive(ch, true);
+                let stream;
+                try {
+                    stream = await navigator.mediaDevices.getUserMedia({ audio: {
+                        deviceId: deviceId && deviceId !== 'default' ? { exact: deviceId } : undefined,
+                        echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: { ideal: 2 } } });
+                } catch (e) { return window.notify('Input access denied or unavailable', 'microphone-slash'); }
+                const ctx = window.state.ctx, src = ctx.createMediaStreamSource(stream), target = window.state.nodes.channelPostGains[ch];
+                let tap = src;
+                if (mode !== 'stereo') {
+                    const split = ctx.createChannelSplitter(2), pick = ctx.createGain();
+                    src.connect(split); split.connect(pick, mode === 'left' ? 0 : 1); tap = pick;
+                }
+                tap.connect(target);
+                const label = (stream.getAudioTracks()[0] || {}).label || 'Input';
+                this.live.push({ ch, stream, src, tap, label, mode });
+                if (window.setChannelPatch) window.setChannelPatch(ch, 'LIVE ' + (mode === 'stereo' ? 'ST' : mode[0].toUpperCase()));
+                this.renderLive();
+                window.notify(`Live input → CH ${ch + 1} (use headphones to avoid feedback)`, 'microphone');
+            },
+            unpatchLive(ch, quiet) {
+                const k = this.live.findIndex(l => l.ch === ch); if (k < 0) return;
+                const l = this.live[k];
+                try { l.tap.disconnect(); l.src.disconnect(); } catch (e) {}
+                l.stream.getTracks().forEach(t => t.stop());
+                this.live.splice(k, 1);
+                if (!quiet) { if (window.setChannelPatch) window.setChannelPatch(ch, `LOC ${ch + 1}`); window.notify(`Live input removed from CH ${ch + 1}`, 'plug-circle-xmark'); }
+                this.renderLive();
+            },
+
+            // ── Snapshots ──
+            snapshots() { const s = load(SNAP_KEY, []); return Array.isArray(s) ? s.filter(x => x && typeof x.name === 'string').slice(0, 50) : []; },
+            saveSnapshot(name) {
+                name = String(name || '').replace(/[^\w .&+\-]/g, '').trim().slice(0, 24);
+                if (!name) return window.notify('Enter a snapshot name', 'triangle-exclamation');
+                const list = this.snapshots().filter(s => s.name !== name);
+                list.unshift({ name, at: new Date().toISOString(), cfg: this.cfg });
+                save(SNAP_KEY, list.slice(0, 50)); this.renderSnapshots();
+                window.notify(`Routing snapshot saved: ${name}`, 'floppy-disk');
+            },
+            recallSnapshot(k) {
+                const s = this.snapshots()[k]; if (!s || !this.allowed()) return;
+                this.cfg = sanitize(s.cfg); this.persist(); this.ensureGraph(); this.render();
+                window.notify(`Routing snapshot recalled: ${s.name}`, 'clock-rotate-left');
+            },
+            deleteSnapshot(k) { const l = this.snapshots(); l.splice(k, 1); save(SNAP_KEY, l); this.renderSnapshots(); },
+            exportJson() {
+                const blob = new Blob([JSON.stringify({ format: 'audio-mixer-routing', version: 1, routing: this.cfg }, null, 2)], { type: 'application/json' });
+                const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'routing.json'; a.click();
+                setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+            },
+            importJson(file) {
+                if (!file || !this.allowed()) return;
+                if (file.size > 64 * 1024) return window.notify('Routing file too large', 'triangle-exclamation');
+                file.text().then(t => {
+                    const j = JSON.parse(t);
+                    if (!j || j.format !== 'audio-mixer-routing') throw new Error('format');
+                    this.cfg = sanitize(j.routing); this.persist(); this.ensureGraph(); this.render();
+                    window.notify('Routing imported', 'file-import');
+                }).catch(() => window.notify('Not a valid routing file', 'triangle-exclamation'));
+            },
+
+            // ── UI ──
+            render() { this.renderAssign(); this.renderBuses(); this.renderLive(); this.renderSnapshots(); this.renderStatus(); },
+            renderStatus() {
+                const el = document.getElementById('rt-status'); if (!el) return;
+                const ok = this.built;
+                el.className = 'px-2 py-0.5 rounded text-[7.5px] font-bold border ' + (ok ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40' : 'bg-amber-500/15 text-amber-400 border-amber-500/30');
+                el.textContent = ok ? 'GRAPH LIVE' : 'ENGINE OFF: ROUTING APPLIES ON ENGAGE';
+            },
+            renderAssign() {
+                const el = document.getElementById('rt-assign'); if (!el) return;
+                const opts = DESTS.map(d => `<option value="${d}">${esc(this.destName(d))}</option>`).join('');
+                el.innerHTML = Array.from({ length: N_CH }, (_, i) => {
+                    const d = this.cfg.assign[i], live = this.live.some(l => l.ch === i);
+                    return `<label class="flex items-center gap-1 bg-black/50 border ${d === 'main' ? 'border-white/10' : 'border-yellow-500/40'} rounded px-1.5 py-1">
+                        <span class="w-9 text-[8px] font-black ${live ? 'text-cyan-400' : 'text-amber-400'}" title="${esc((window.state.channelNames || [])[i] || '')}">CH${i + 1}${live ? '•' : ''}</span>
+                        <select data-ch="${i}" aria-label="Channel ${i + 1} destination" class="rt-assign-sel flex-1 min-w-0 bg-black text-slate-200 text-[8px] font-bold border border-white/15 rounded p-0.5">${opts}</select></label>`;
+                }).join('');
+                el.querySelectorAll('select').forEach(s => { s.value = this.cfg.assign[s.dataset.ch]; s.onchange = () => this.assign(Number(s.dataset.ch), s.value); });
+                const bd = document.getElementById('rt-bulk-dest'); if (bd) { const v = bd.value; bd.innerHTML = opts; bd.value = v || 'bus1'; }
+            },
+            renderBuses() {
+                const el = document.getElementById('rt-buses'); if (!el) return;
+                el.innerHTML = this.cfg.busNames.map((name, b) => {
+                    const members = this.cfg.assign.map((d, i) => (d === 'bus' + (b + 1) ? i + 1 : 0)).filter(Boolean);
+                    return `<div class="bg-black/60 border border-white/10 rounded-lg p-2 flex flex-col gap-1.5">
+                        <input data-b="${b}" class="rt-bus-name bg-transparent text-yellow-400 font-black text-[9px] uppercase outline-none border-b border-white/10 focus:border-yellow-400" value="${esc(name)}" maxlength="16" aria-label="Subgroup ${b + 1} name">
+                        <div class="h-1.5 bg-white/5 rounded overflow-hidden"><div id="rt-bus-meter-${b}" class="h-full bg-gradient-to-r from-emerald-500 via-yellow-400 to-red-500" style="width:0%"></div></div>
+                        <input type="range" min="-60" max="10" step="0.5" value="${this.cfg.busDb[b]}" data-b="${b}" class="rt-bus-fader accent-yellow-400 w-full" aria-label="Subgroup ${b + 1} level">
+                        <div class="flex items-center justify-between text-[7.5px]">
+                            <span id="rt-bus-db-${b}" class="text-slate-300 font-bold">${this.fmtDb(this.cfg.busDb[b])}</span>
+                            <button data-b="${b}" class="rt-bus-mute px-2 py-0.5 rounded font-black ${this.cfg.busMute[b] ? 'bg-red-500 text-black' : 'bg-red-500/10 text-red-400 border border-red-500/30'}">MUTE</button>
+                        </div>
+                        <div class="text-[7px] text-slate-500 truncate" title="${members.join(', ')}">${members.length ? 'CH ' + members.join(', ') : 'no channels'}</div></div>`;
+                }).join('');
+                el.querySelectorAll('.rt-bus-fader').forEach(f => (f.oninput = () => this.setBusDb(Number(f.dataset.b), f.value)));
+                el.querySelectorAll('.rt-bus-mute').forEach(m => (m.onclick = () => this.toggleBusMute(Number(m.dataset.b))));
+                el.querySelectorAll('.rt-bus-name').forEach(n => (n.onchange = () => this.renameBus(Number(n.dataset.b), n.value)));
+            },
+            renderLive() {
+                const el = document.getElementById('rt-live-list'); if (!el) return;
+                el.innerHTML = this.live.length ? this.live.map(l => `<div class="flex items-center justify-between gap-2 bg-black/50 border border-cyan-500/30 rounded px-2 py-1 text-[8px]">
+                    <span class="truncate"><b class="text-cyan-400">CH ${l.ch + 1}</b> ← ${esc(l.label)} (${l.mode.toUpperCase()})</span>
+                    <button data-ch="${l.ch}" class="rt-unpatch px-2 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/30 font-bold">REMOVE</button></div>`).join('')
+                    : '<div class="text-[8px] text-slate-500">No live inputs patched.</div>';
+                el.querySelectorAll('.rt-unpatch').forEach(b => (b.onclick = () => this.unpatchLive(Number(b.dataset.ch))));
+                this.renderAssign();
+            },
+            renderSnapshots() {
+                const el = document.getElementById('rt-snaps'); if (!el) return;
+                const list = this.snapshots();
+                el.innerHTML = list.length ? list.map((s, k) => `<div class="flex items-center justify-between gap-2 bg-black/50 border border-white/10 rounded px-2 py-1 text-[8px]">
+                    <span class="truncate"><b class="text-slate-200">${esc(s.name)}</b> <span class="text-slate-500">${esc(new Date(s.at).toLocaleString())}</span></span>
+                    <span class="flex gap-1"><button data-k="${k}" class="rt-recall px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-bold">RECALL</button>
+                    <button data-k="${k}" class="rt-del px-2 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/30 font-bold">DEL</button></span></div>`).join('')
+                    : '<div class="text-[8px] text-slate-500">No snapshots yet.</div>';
+                el.querySelectorAll('.rt-recall').forEach(b => (b.onclick = () => this.recallSnapshot(Number(b.dataset.k))));
+                el.querySelectorAll('.rt-del').forEach(b => (b.onclick = () => this.deleteSnapshot(Number(b.dataset.k))));
+            },
+            meterLoop() {
+                const tab = document.getElementById('tab-routing'), buf = new Float32Array(256);
+                const tick = () => {
+                    if (this.built && tab && !tab.classList.contains('tab-hidden')) {
+                        this.busAnalysers.forEach((a, b) => {
+                            a.getFloatTimeDomainData(buf);
+                            let sum = 0; for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+                            const db = 20 * Math.log10(Math.sqrt(sum / buf.length) || 1e-6);
+                            const m = document.getElementById('rt-bus-meter-' + b); if (m) m.style.width = Math.max(0, Math.min(100, (db + 60) / 60 * 100)) + '%';
+                        });
+                    }
+                    requestAnimationFrame(tick);
+                };
+                requestAnimationFrame(tick);
+            },
+            init() {
+                const $ = id => document.getElementById(id);
+                $('rt-bulk-go').onclick = () => this.bulkAssign(Number($('rt-bulk-from').value), Number($('rt-bulk-to').value), $('rt-bulk-dest').value);
+                $('rt-in-ch').innerHTML = Array.from({ length: N_CH }, (_, i) => `<option value="${i}">CH ${i + 1}</option>`).join('');
+                $('rt-in-go').onclick = () => this.patchLive(Number($('rt-in-ch').value), $('rt-in-dev').value, $('rt-in-mode').value);
+                $('rt-in-refresh').onclick = () => this.listInputs();
+                $('rt-snap-save').onclick = () => { this.saveSnapshot($('rt-snap-name').value); $('rt-snap-name').value = ''; };
+                $('rt-export').onclick = () => this.exportJson();
+                $('rt-import').onchange = e => { this.importJson(e.target.files[0]); e.target.value = ''; };
+                $('rt-reset').onclick = () => this.resetAll();
+                this.render(); this.listInputs(); this.meterLoop();
+            }
+        };
+
+        // Apply the saved routing as soon as the engine starts (and after any later re-init).
+        const origInit = window.initAudioEngine;
+        if (typeof origInit === 'function') {
+            window.initAudioEngine = async function() { const r = await origInit.apply(this, arguments); R.ensureGraph(); R.renderStatus(); return r; };
+        }
+        const origSwitch = window.switchTab;
+        window.switchTab = function(tabId) { const r = origSwitch.apply(this, arguments); if (tabId === 'routing') { R.ensureGraph(); R.render(); } return r; };
+        document.addEventListener('DOMContentLoaded', () => R.init());
+    })();
     </script>
 </body>
 </html>
