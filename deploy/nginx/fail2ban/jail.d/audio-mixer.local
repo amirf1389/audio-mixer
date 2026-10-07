@@ -1,0 +1,29 @@
+# Copy to /etc/fail2ban/jail.d/audio-mixer.local, then: sudo systemctl restart fail2ban
+[DEFAULT]
+ignoreip = 127.0.0.1/8 ::1
+# add your own LAN / admin addresses to ignoreip so you never lock yourself out
+
+[audio-mixer-bridge]
+enabled   = true
+filter    = audio-mixer-bridge
+port      = http,https
+logpath   = /var/log/nginx/audio-mixer.access.log
+maxretry  = 10
+findtime  = 10m
+bantime   = 1h
+bantime.increment = true
+bantime.factor    = 2
+bantime.maxtime   = 1w
+
+# Built-in nginx jails: wrong basic-auth passwords and limit_req hits in the error log
+[nginx-http-auth]
+enabled  = true
+port     = http,https
+logpath  = /var/log/nginx/error.log
+maxretry = 5
+
+[nginx-limit-req]
+enabled  = true
+port     = http,https
+logpath  = /var/log/nginx/error.log
+maxretry = 15

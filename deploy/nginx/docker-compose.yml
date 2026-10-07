@@ -9,3 +9,4 @@ services:
       - ../../gemini-code-1790419147591.html:/srv/audio-mixer/gemini-code-1790419147591.html:ro
       - ./certs:/etc/letsencrypt/live/mixer.example.com:ro   # fullchain.pem + privkey.pem
       - ./.htpasswd_mixer:/etc/nginx/.htpasswd_mixer:ro        # basic auth users for /api and /ws
+      - ./logs:/var/log/nginx                                  # lets host fail2ban / guard.sh read audio-mixer.access.log

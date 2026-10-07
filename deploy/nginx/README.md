@@ -26,6 +26,40 @@ Over plain HTTP basic auth is readable on the wire, so keep it behind the HTTPS 
 The first bridge request makes the browser ask for the login; if your browser does not reuse it for the
 WebSocket, open `https://your-host/api/status` once in the same tab and sign in, then reload the mixer.
 
+## Rate limiting and ban protection (fail2ban / guard)
+**Rate limits (already in `audio-mixer.conf`)**: `/api` and `/ws` 10 req/s per IP (burst 20 / 5), the page 20 req/s (burst 40),
+40 simultaneous connections per IP. Anything over the limit gets **HTTP 429**.
+
+**Bans**: clients that keep failing (wrong password 401, blocked 403, rate limited 429, or probing `/.git`, `/bridge/`,
+`/deploy/` with 404) are banned after 10 hits in 10 minutes for 1 hour (fail2ban doubles repeat offenders).
+Linux uses real **fail2ban** (`fail2ban/`). Everywhere fail2ban cannot run, `guard.sh` does the same job in plain shell by
+writing `deny <ip>;` to a file nginx includes. `setup.sh` picks the right one for the terminal you run it in:
+
+| Terminal | Command | Protection |
+| --- | --- | --- |
+| Linux (apt/dnf/yum/pacman/zypper/apk) | `sudo sh deploy/nginx/setup.sh` | fail2ban jails `audio-mixer-bridge`, `nginx-http-auth`, `nginx-limit-req` |
+| Windows with WSL2 (recommended) | `wsl --install`, then in the Linux terminal: `sudo sh deploy/nginx/setup.sh` | fail2ban (guard if WSL has no systemd) |
+| Windows Git Bash (native nginx) | `sh deploy/nginx/setup.sh` shows the exact `export` lines, then `sh deploy/nginx/guard.sh run` | guard |
+| macOS Terminal | `sh deploy/nginx/setup.sh` (needs Homebrew), then `sudo audio-mixer-guard run &` | guard |
+| Android (Termux) | `sh deploy/nginx/setup.sh`, then `termux-wake-lock; nohup audio-mixer-guard run >/dev/null 2>&1 &` | guard |
+| iOS (iSH) | `sh deploy/nginx/setup.sh`, then `audio-mixer-guard run &` (iOS suspends background apps: only active while iSH is open) | guard |
+
+`sh deploy/nginx/setup.sh --dry-run` prints what it would do without changing anything. The installed `audio-mixer.conf`
+uses your platform's nginx paths but is **not** activated: edit the `CHANGE ME` lines, include it from your `http { }`
+block, then `nginx -t && nginx -s reload`.
+
+Day to day:
+
+    sudo fail2ban-client status audio-mixer-bridge                 # Linux: who is banned
+    sudo fail2ban-client set audio-mixer-bridge unbanip 203.0.113.5
+    audio-mixer-guard list                                          # guard: active bans
+    audio-mixer-guard unban 203.0.113.5
+
+Tuning for guard: `GUARD_MAXRETRY` (10), `GUARD_FINDTIME` (600 s), `GUARD_BANTIME` (3600 s), `GUARD_IGNORE` (default
+`127.0.0.1 ::1`; add your admin addresses, never lock yourself out). For fail2ban edit `maxretry/findtime/bantime/ignoreip`
+in `/etc/fail2ban/jail.d/audio-mixer.local`. If another proxy or CDN sits in front of nginx, configure `real_ip_header`
+first, otherwise the proxy's address (not the visitor's) is what gets banned.
+
 ## Docker (Linux)
     docker compose -f deploy/nginx/docker-compose.yml up -d
 The compose file uses host networking so nginx can reach the bridge on `127.0.0.1:8765`.
@@ -55,4 +89,7 @@ For a remote bridge, put authentication (basic auth / mTLS / VPN) in front first
 ## Tested
 Validated with nginx 1.24 (`nginx -t`) against the real bridge: page 200 with HSTS / nosniff / X-Frame-Options /
 Permissions-Policy, gzip, HTTP→HTTPS redirect, 404 for `/bridge/*`, `/.git/*`, `/.github/*`, `*.md`, `*.json`,
-403 for POST and for foreign origins, basic auth on `/api` and `/ws/output` (401 without / with wrong credentials, 200 and WebSocket 101 with the right ones; the page itself stays public), `/api` rate limited (503 beyond the burst), WebSocket upgrade 101.
+403 for POST and for foreign origins, basic auth on `/api` and `/ws/output` (401 without / with wrong credentials, 200 and WebSocket 101 with the right ones; the page itself stays public), `/api` and the page rate limited (HTTP 429 beyond the burst), WebSocket upgrade 101.
+The fail2ban filter was checked with `fail2ban-regex` (matches 401/403/429 bridge hits, scanner 404s, IPv6 and logins with
+spaces; ignores 200s and ordinary 404s). `guard.sh` was run against real nginx: 6 bad requests → ban → nginx answers 403 →
+unban / expiry restore access; hostile "client addresses" (`;`, `$()`, backticks, `}`) are rejected before reaching the config.
