@@ -13,10 +13,23 @@ and no exposure of dotfiles, bridge sources or repo metadata.
 `BRIDGE_HOSTS` / `BRIDGE_ORIGINS` are needed on whichever machine runs the bridge behind nginx, because nginx
 forwards the public `Host` and the page's `Origin`; the bridge otherwise only accepts localhost.
 
+## Basic auth for the bridge
+`/api/` and `/ws/output` require a username and password **in addition to** the IP rule (`satisfy all`).
+Create the user file (nginx supports `openssl passwd -apr1`, or bcrypt via `htpasswd -B` from apache2-utils):
+
+    sudo sh -c 'echo "mixer:$(openssl passwd -apr1)" > /etc/nginx/.htpasswd_mixer'   # asks for the password
+    sudo chmod 640 /etc/nginx/.htpasswd_mixer && sudo chgrp www-data /etc/nginx/.htpasswd_mixer
+    sudo nginx -t && sudo nginx -s reload
+
+Add more users with `>>`. Credentials are not forwarded to the bridge, and repeated attempts hit the rate limit.
+Over plain HTTP basic auth is readable on the wire, so keep it behind the HTTPS server block.
+The first bridge request makes the browser ask for the login; if your browser does not reuse it for the
+WebSocket, open `https://your-host/api/status` once in the same tab and sign in, then reload the mixer.
+
 ## Docker (Linux)
     docker compose -f deploy/nginx/docker-compose.yml up -d
 The compose file uses host networking so nginx can reach the bridge on `127.0.0.1:8765`.
-Mount your certificates at `./certs` (`fullchain.pem`, `privkey.pem`) and adjust `server_name`.
+Put the auth file at `deploy/nginx/.htpasswd_mixer` (`echo "mixer:$(openssl passwd -apr1)" > deploy/nginx/.htpasswd_mixer`), mount your certificates at `./certs` (`fullchain.pem`, `privkey.pem`) and adjust `server_name`.
 
 ## How the page finds the bridge
 The page (`connectBridge()`) tries `location.origin` only when the hostname is `localhost` / `127.0.0.1`, then
@@ -42,4 +55,4 @@ For a remote bridge, put authentication (basic auth / mTLS / VPN) in front first
 ## Tested
 Validated with nginx 1.24 (`nginx -t`) against the real bridge: page 200 with HSTS / nosniff / X-Frame-Options /
 Permissions-Policy, gzip, HTTP→HTTPS redirect, 404 for `/bridge/*`, `/.git/*`, `/.github/*`, `*.md`, `*.json`,
-403 for POST and for foreign origins, `/api` rate limited (503 beyond the burst), WebSocket upgrade 101.
+403 for POST and for foreign origins, basic auth on `/api` and `/ws/output` (401 without / with wrong credentials, 200 and WebSocket 101 with the right ones; the page itself stays public), `/api` rate limited (503 beyond the burst), WebSocket upgrade 101.
