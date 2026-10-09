@@ -10,6 +10,7 @@ Core Audio / ALSA access, system volume, and a list of official audio drivers.
 2. Start it:
    - Windows: double-click `start-pc-mode.bat`
    - macOS / Linux: `./start-pc-mode.sh`
+   - Windows, server only (no browser window): double-click `start-local-server.bat`, then open `http://localhost:8765` yourself
    - or anywhere: `node client/cli.js` (same as `npm start`)
 
    The client starts the server on `http://localhost:8765` and opens the mixer in your browser. In the **DRIVERS** tab the *PC MODE*
