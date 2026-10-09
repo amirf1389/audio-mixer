@@ -59,6 +59,15 @@ files, shortcuts and autostart entry and leaves downloaded drivers in `%USERPROF
 The installer is not code-signed, so Windows SmartScreen shows a warning ("More info" -> "Run anyway") until you sign it with your own certificate.
 For ASIO / WASAPI audio run `npm run setup` once after installing (needs npm and a C++ toolchain); without it the server runs in web mode.
 
+### Windows verification scan
+`node client/cli.js verify [--scan]` (Start Menu: *Verify installation (security scan)*) checks an install: every file against `MANIFEST.sha256`
+(changed, missing and unlisted code files are reported), the Authenticode signature of the bundled Node.js runtime (must be the OpenJS Foundation),
+that the server listens on loopback only (not on any LAN address), and with `--scan` runs a Microsoft Defender custom scan of the folder.
+`node client/cli.js verify path\to\AudioMixer-Setup-1.2.0.exe [--scan]` checks a downloaded installer: PE/NSIS structure, its SHA-256 against the
+`.sha256` file next to it, signature and Defender. Exit code 0 = verified. Manual check in PowerShell:
+`Get-FileHash .\AudioMixer-Setup-1.2.0.exe -Algorithm SHA256` and `Get-AuthenticodeSignature .\AudioMixer-Setup-1.2.0.exe`.
+The installer in `releases/` is unsigned, so the signature check reports a warning, not a pass; the SHA-256 is the proof of integrity.
+
 ## Live sources, music / mic FFT and interface auto-scan (LIVE SOURCES tab)
 - **Now playing (API mode)**: with PC mode the server reads your operating system's media sessions and recognises **Spotify, YouTube, YouTube Music,
   TIDAL, Apple Music, Amazon Music, Deezer, SoundCloud, Qobuz, Pandora, VLC, foobar2000, MusicBee** and more (Windows: System Media Transport Controls,

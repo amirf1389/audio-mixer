@@ -6,6 +6,7 @@
 //   node client/cli.js drivers         list official drivers for this PC (installed / not found)
 //   node client/cli.js download <id>   save an official installer (e.g. flexasio); it is never run for you
 //   node client/cli.js doctor          check Node.js, ports, PortAudio, ASIO drivers, download folder
+//   node client/cli.js verify [installer.exe] [--scan]   verification scan: file hashes, signatures, loopback-only, Defender scan
 //   node client/cli.js setup           install the native audio module (PortAudio) for ASIO / WASAPI
 //   node client/cli.js service install|uninstall|status   start the server automatically when you log in
 const http = require('node:http');
@@ -23,6 +24,7 @@ function parseArgs(argv) {
     else if (a === '--help' || a === '-h') o.help = true;
     else if (a === '--port') o.port = Number(argv[++i]);
     else if (a.startsWith('--port=')) o.port = Number(a.slice(7));
+    else if (a.startsWith('--')) continue; // command flags (--scan, --pause) are read from argv by the command
     else rest.push(a);
   }
   if (rest[0]) o.cmd = rest[0];
@@ -122,6 +124,14 @@ function cmdSetup() {
   });
 }
 
+async function cmdVerify(o, argv) {
+  const verify = require('./verify');
+  const r = await verify.verify({ target: o.arg, scan: argv.includes('--scan'), port: o.port });
+  console.log(verify.format(r));
+  if (argv.includes('--pause')) { console.log('\nPress Enter to close.'); await new Promise(res => { process.stdin.resume(); process.stdin.once('data', res); }); }
+  return r.ok ? 0 : 1;
+}
+
 async function cmdService(action, port) {
   const svc = require('./service');
   try {
@@ -176,7 +186,8 @@ async function main(argv) {
   if (o.cmd === 'doctor') return cmdDoctor(o.port);
   if (o.cmd === 'service') return cmdService(o.arg, o.port);
   if (o.cmd === 'setup') return cmdSetup();
-  console.error(`Unknown command "${o.cmd}". Use: start | drivers | download <id> | doctor | setup | service install|uninstall|status`);
+  if (o.cmd === 'verify') return cmdVerify(o, argv);
+  console.error(`Unknown command "${o.cmd}". Use: start | drivers | download <id> | doctor | verify | setup | service install|uninstall|status`);
   return 2;
 }
 

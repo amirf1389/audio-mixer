@@ -104,6 +104,12 @@ async function buildInstaller({ out = path.join(ROOT, 'dist'), stageOnly = false
   fs.writeFileSync(path.join(stage, 'start-pc-mode.bat'), BAT_PC);
   fs.writeFileSync(path.join(stage, 'start-local-server.bat'), BAT_SERVER);
   fs.rmSync(path.join(stage, 'start-pc-mode.sh'), { force: true });
+  // the installer swaps launcher files, so the manifest must describe what is really installed
+  const crypto = require('node:crypto');
+  const mf = path.join(stage, 'MANIFEST.sha256');
+  const lines = fs.readFileSync(mf, 'utf8').split('\n').filter(Boolean).map(l => l.replace(/^([0-9a-f]{64})\s+/, '$1\t').split('\t')).filter(([, rel]) => fs.existsSync(path.join(stage, rel)))
+    .map(([, rel]) => `${crypto.createHash('sha256').update(fs.readFileSync(path.join(stage, rel))).digest('hex')}  ${rel}`);
+  fs.writeFileSync(mf, lines.join('\n') + '\n');
 
   const rt = await fetchNodeRuntime({ cache: path.join(outAbs, 'cache'), fetchImpl });
   fs.mkdirSync(path.join(stage, 'runtime'), { recursive: true });

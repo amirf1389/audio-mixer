@@ -503,3 +503,63 @@ test('endpoints: /api/nowplaying and /api/interfaces', async () => {
   server.closeAllConnections();
   server.close();
 });
+
+test('verify: manifest pass, tamper, missing and extra files', () => {
+  const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
+  const v = require('../client/verify');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vfy-'));
+  fs.mkdirSync(path.join(root, 'bridge'));
+  fs.writeFileSync(path.join(root, 'bridge', 'a.js'), 'x');
+  fs.writeFileSync(path.join(root, 'MANIFEST.sha256'), `${v.sha256(path.join(root, 'bridge', 'a.js'))}  bridge/a.js\n`);
+  assert.strictEqual(v.checkManifest(root)[0].level, 'PASS');
+  fs.writeFileSync(path.join(root, 'bridge', 'b.js'), 'evil');
+  assert.ok(v.checkManifest(root).some(r => r.level === 'WARN' && /b\.js/.test(r.detail)));
+  fs.writeFileSync(path.join(root, 'bridge', 'a.js'), 'changed');
+  assert.ok(v.checkManifest(root).some(r => r.level === 'FAIL' && r.title === 'File changed since it was built'));
+  fs.unlinkSync(path.join(root, 'bridge', 'a.js'));
+  assert.ok(v.checkManifest(root).some(r => r.title === 'File missing'));
+  fs.writeFileSync(path.join(root, 'MANIFEST.sha256'), `${'0'.repeat(64)}  ../x\n`);
+  assert.ok(v.checkManifest(root).some(r => /escapes/.test(r.title)));
+  fs.rmSync(root, { recursive: true });
+});
+
+test('verify: installer file checks and checksum sidecar', () => {
+  const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
+  const v = require('../client/verify');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vfy-')), f = path.join(dir, 'Setup.exe');
+  fs.writeFileSync(f, Buffer.concat([Buffer.from('MZ'), Buffer.from('Nullsoft Install System')]));
+  fs.writeFileSync(f + '.sha256', `${v.sha256(f)}  Setup.exe\n`);
+  assert.ok(v.checkInstallerFile(f).every(r => r.level === 'PASS'));
+  fs.writeFileSync(f + '.sha256', `${'1'.repeat(64)}  Setup.exe\n`);
+  assert.ok(v.checkInstallerFile(f).some(r => r.level === 'FAIL'));
+  fs.writeFileSync(f, 'not an exe');
+  assert.ok(v.checkInstallerFile(f).some(r => r.level === 'FAIL' && /executable/.test(r.title)));
+  fs.rmSync(dir, { recursive: true });
+});
+
+test('verify: parsers and injected PowerShell results', async () => {
+  const v = require('../client/verify');
+  assert.deepStrictEqual(v.parseSignature('Valid|CN=OpenJS Foundation'), { status: 'Valid', subject: 'CN=OpenJS Foundation' });
+  assert.strictEqual(v.parseDefender('CLEAN').state, 'clean');
+  assert.deepStrictEqual(v.parseDefender('THREAT|123,456'), { state: 'threat', ids: '123,456' });
+  assert.strictEqual(v.parseDefender('').state, 'unavailable');
+  const run = out => (cmd, args, opts, cb) => cb(null, out);
+  assert.strictEqual((await v.checkSignature('x', 'Runtime', { platform: 'win32', run: run('Valid|CN=OpenJS Foundation'), expect: /OpenJS/ }))[0].level, 'PASS');
+  assert.strictEqual((await v.checkSignature('x', 'Runtime', { platform: 'win32', run: run('Valid|CN=Someone Else'), expect: /OpenJS/ }))[0].level, 'WARN');
+  assert.strictEqual((await v.checkSignature('x', 'Installer', { platform: 'win32', run: run('NotSigned|') }))[0].level, 'WARN');
+  assert.strictEqual((await v.checkSignature('x', 'Installer', { platform: 'win32', run: run('HashMismatch|CN=x') }))[0].level, 'FAIL');
+  assert.strictEqual((await v.checkDefender('x', { platform: 'win32', run: run('CLEAN') }))[0].level, 'PASS');
+  assert.strictEqual((await v.checkDefender('x', { platform: 'win32', run: run('THREAT|9') }))[0].level, 'FAIL');
+  assert.strictEqual((await v.checkDefender('x', { platform: 'linux' }))[0].level, 'INFO');
+});
+
+test('verify: loopback-only check and cli flag parsing', async () => {
+  const v = require('../client/verify');
+  const srv = require('node:net').createServer().listen(0, '127.0.0.1');
+  await new Promise(r => srv.on('listening', r));
+  const r = await v.checkLoopbackOnly(srv.address().port);
+  assert.strictEqual(r[0].level, 'PASS');
+  srv.close();
+  const closed = await v.checkLoopbackOnly(1);
+  assert.strictEqual(closed[0].level, 'INFO');
+});
