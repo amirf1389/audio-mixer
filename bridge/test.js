@@ -196,7 +196,7 @@ test('catalog lists drivers for this OS and detects what is installed', () => {
   assert.strictEqual(by('pipewire').forThisPc, false);
   assert.strictEqual(by('pipewire').installed, null);                     // other system: not detectable here
   assert.ok(CATALOG.every(x => /^https:\/\//.test(x.url)), 'every official link is https');
-  assert.ok(CATALOG.filter(x => x.download).every(x => x.download.kind === 'github-release'));
+  assert.ok(CATALOG.filter(x => x.download).every(x => ['github-release', 'site-link'].includes(x.download.kind)));
   assert.strictEqual(by('flexasio').downloadable, true);
 });
 
@@ -211,7 +211,7 @@ test('downloader saves the official installer, checks the checksum and never run
   await assert.rejects(downloadDriver('flexasio', { fetchImpl: fakeFetch({ digestOk: false }), dir }), /checksum mismatch/);
   assert.deepStrictEqual(fsx.readdirSync(dir), ['FlexASIO-1.10.exe']);          // bad download discarded
   await assert.rejects(downloadDriver('flexasio', { fetchImpl: fakeFetch({ finalUrl: 'https://evil.example/a.exe' }), dir }), /untrusted host/);
-  await assert.rejects(downloadDriver('asio4all', { fetchImpl: fakeFetch(), dir }), /no automatic download/);
+  await assert.rejects(downloadDriver('focusrite', { fetchImpl: fakeFetch(), dir }), /no automatic download/);
   await assert.rejects(downloadDriver('../../etc/passwd', { fetchImpl: fakeFetch(), dir }), /no automatic download/);
   fsx.rmSync(dir, { recursive: true, force: true });
 });
@@ -234,7 +234,7 @@ test('catalog endpoints: GET list, POST needs the custom header, ids validated, 
   assert.strictEqual((await post({}, '{"id":"flexasio"}')).status, 400);                                    // no X-Mixer-Action
   assert.strictEqual((await post({ 'X-Mixer-Action': 'download' }, '{"id":"../x"}')).status, 400);          // bad id
   assert.strictEqual((await post({ 'X-Mixer-Action': 'download' }, 'nope')).status, 400);
-  assert.strictEqual((await post({ 'X-Mixer-Action': 'download' }, '{"id":"asio4all"}')).status, 400);      // no automatic download
+  assert.strictEqual((await post({ 'X-Mixer-Action': 'download' }, '{"id":"focusrite"}')).status, 400);      // no automatic download
   assert.strictEqual((await post({ 'X-Mixer-Action': 'download' }, '{"id":"flexasio"}', 'https://evil.example')).status, 403);
   assert.strictEqual((await post({ 'X-Mixer-Action': 'download' }, 'x'.repeat(5000))).status, 413);
   assert.strictEqual((await fetch(base + '/api/catalog', { method: 'DELETE' })).status, 405);
@@ -375,7 +375,7 @@ test('installer: stages the app with the bundled runtime and builds a Windows se
   const zip = makeZip([['node-v98.1.2-win-x64/LICENSE', Buffer.from('MIT')], ['node-v98.1.2-win-x64/node.exe', Buffer.from('MZ-fake-node')]]);
   const out = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'inst-'));
   const hasNsis = require('node:child_process').spawnSync('makensis', ['-VERSION']).status === 0;
-  const r = await bi.buildInstaller({ out, fetchImpl: fakeNodeFetch(zip), runMakensis: hasNsis });
+  const r = await bi.buildInstaller({ out, fetchImpl: fakeNodeFetch(zip), runMakensis: hasNsis, bundleAudify: false });
   assert.ok(fsx.existsSync(pathx.join(r.stage, 'runtime', 'node.exe')) && fsx.existsSync(pathx.join(r.stage, 'client', 'cli.js')));
   assert.ok(!fsx.existsSync(pathx.join(r.stage, 'start-pc-mode.sh')));
   assert.match(fsx.readFileSync(pathx.join(r.stage, 'start-pc-mode.bat'), 'utf8'), /runtime\\node\.exe/);
@@ -562,4 +562,213 @@ test('verify: loopback-only check and cli flag parsing', async () => {
   srv.close();
   const closed = await v.checkLoopbackOnly(1);
   assert.strictEqual(closed[0].level, 'INFO');
+});
+
+// ── Audify (RtAudio) engine ──
+function fakeAudify({ failSizes = [], driverSize = 192 } = {}) {
+  const opened = [], written = [];
+  class RtAudio {
+    constructor(api) { this.api = api; }
+    getApi() { return ({ 6: 'ASIO', 7: 'WASAPI', 3: 'JACK' })[this.api] || 'Dummy'; }
+    getDevices() {
+      return this.api === 6 ? [{ id: 0, name: 'Focusrite USB ASIO', inputChannels: 18, outputChannels: 20, sampleRates: [44100, 48000, 96000], preferredSampleRate: 48000, isDefaultInput: 1, isDefaultOutput: 1 }]
+        : this.api === 7 ? [{ id: 5, name: 'Speakers (Realtek)', inputChannels: 0, outputChannels: 2, sampleRates: [48000], preferredSampleRate: 48000, isDefaultInput: 0, isDefaultOutput: 1 }] : [];
+    }
+    openStream(out, inp, fmt, rate, frames, name, cb) {
+      if (failSizes.includes(frames)) throw new Error('bad buffer size');
+      opened.push({ api: this.api, out, inp, rate, frames }); this.cb = cb;
+      return frames === 0 ? driverSize : frames;
+    }
+    start() {} stop() {} closeStream() {} isStreamRunning() { return true; }
+    write(b) { written.push(b.length); }
+  }
+  return { RtAudio, RtAudioApi: { UNSPECIFIED: 0, MACOSX_CORE: 1, LINUX_ALSA: 2, UNIX_JACK: 3, LINUX_PULSE: 4, LINUX_OSS: 5, WINDOWS_ASIO: 6, WINDOWS_WASAPI: 7, WINDOWS_DS: 8, RTAUDIO_DUMMY: 9 },
+    RtAudioFormat: { RTAUDIO_SINT16: 2 }, RtAudioStreamFlags: { RTAUDIO_MINIMIZE_LATENCY: 2 }, opened, written };
+}
+
+test('audify: automatic frame size allocation', () => {
+  const a = require('./audify');
+  assert.strictEqual(a.recommendFrameSize({ api: 'ASIO', sampleRate: 48000 }).frames, 256);
+  assert.strictEqual(a.recommendFrameSize({ api: 'ASIO', sampleRate: 96000, channels: 2 }).frames, 512);
+  assert.strictEqual(a.recommendFrameSize({ api: 'Windows WASAPI', sampleRate: 48000 }).frames, 512);
+  assert.strictEqual(a.recommendFrameSize({ api: 'DirectSound', sampleRate: 48000 }).frames, 1024);
+  assert.ok(a.recommendFrameSize({ api: 'ASIO', sampleRate: 48000, channels: 32 }).frames > 256);   // wide interfaces get bigger blocks
+  assert.strictEqual(a.recommendFrameSize({ api: 'ASIO', sampleRate: 48000, latencyMs: 0.1 }).frames, 32);
+  assert.strictEqual(a.recommendFrameSize({ api: 'ASIO', sampleRate: 384000, latencyMs: 500 }).frames, 4096);
+  const c = a.frameCandidates(256);
+  assert.deepStrictEqual(c.slice(0, 3), [256, 512, 1024]); assert.ok(c.includes(128) && !c.includes(256 * 2 * 2 * 2 * 2 * 2));
+  assert.deepStrictEqual(a.plan('auto', { api: 'ASIO' }).candidates[0], 0);          // ASIO: ask the driver's own buffer size first
+  assert.notStrictEqual(a.plan('auto', { api: 'WASAPI' }).candidates[0], 0);
+  assert.deepStrictEqual(a.plan(128, { api: 'ASIO' }).candidates, [128]);
+  assert.throws(() => a.plan(100, {}), /power of two/);
+});
+
+test('audify: devices of every API, unique ids, substituted APIs skipped', () => {
+  const a = require('./audify');
+  const r = a.listDevices(() => fakeAudify());
+  assert.deepStrictEqual(r.devices.map(d => [d.id, d.hostAPIName]), [[1000, 'ASIO'], [1001, 'Windows WASAPI']]);
+  assert.strictEqual(a.detectAudify(() => fakeAudify()).devices[0].inputs, 18);
+  assert.strictEqual(a.listDevices(() => { throw new Error('missing'); }), null);
+  const d = a.describe(() => fakeAudify());
+  assert.strictEqual(d.installed, true); assert.strictEqual(d.devices[0].recommended.output.frames, 512);   // 20 ch -> doubled
+});
+
+test('audify: opens with the driver buffer, retries other sizes, aligns writes', () => {
+  const a = require('./audify');
+  const dev = a.listDevices(() => fakeAudify()).devices[0];
+  const f1 = fakeAudify();
+  const s1 = a.openStream({ mod: f1, dev, direction: 'output', channels: 2, sampleRate: 48000 });
+  assert.strictEqual(s1.frameSize, 192); assert.strictEqual(f1.opened[0].frames, 0); assert.strictEqual(s1.auto, true);
+  s1.write(Buffer.alloc(192 * 4 + 10)); s1.write(Buffer.alloc(200));                    // 778 bytes then 200 more: one whole block (768) so far
+  assert.deepStrictEqual(f1.written, [768]);
+  s1.write(Buffer.alloc(768)); assert.deepStrictEqual(f1.written, [768, 768]);
+  const f2 = fakeAudify({ failSizes: [0, 256] });
+  const s2 = a.openStream({ mod: f2, dev, direction: 'output', channels: 2, sampleRate: 48000 });
+  assert.strictEqual(s2.frameSize, 512); assert.deepStrictEqual(s2.tried, [0, 256, 512]);
+  assert.throws(() => a.openStream({ mod: fakeAudify({ failSizes: [128] }), dev, direction: 'output', channels: 2, sampleRate: 48000, frameSize: 128 }), /could not open/);
+  assert.throws(() => a.openStream({ mod: f1, dev, direction: 'output', channels: 2, sampleRate: 88200 }), /does not support 88200/);
+  assert.throws(() => a.openStream({ mod: f1, dev, direction: 'output', channels: 30, sampleRate: 48000 }), /only 20 output/);
+  const cap = a.openStream({ mod: f1, dev, direction: 'input', channels: 40, sampleRate: 48000, onData() {} });
+  assert.strictEqual(cap.channels, 18);
+});
+
+test('audify: output and input sessions, engine choice, ASIO lock', () => {
+  const { _owners } = require('./asio-lock'); _owners.clear();
+  const fa = fakeAudify();
+  const mk = (kind) => { const sent = [], bin = []; const conn = { send: m => sent.push(JSON.parse(m)), sendBinary: b => bin.push(b) };
+    const noPa = () => { throw new Error('no naudiodon2'); };
+    return { sent, bin, s: kind === 'out' ? require('./output').createSession(conn, noPa, () => fa) : require('./input').createInputSession(conn, noPa, () => fa) }; };
+  const out = mk('out');
+  out.s.onText(JSON.stringify({ type: 'start', channels: 2, sampleRate: 48000 }));        // no naudiodon2 -> Audify, ASIO preferred
+  assert.strictEqual(out.sent[0].type, 'started'); assert.strictEqual(out.sent[0].engine, 'audify');
+  assert.strictEqual(out.sent[0].hostApi, 'ASIO'); assert.strictEqual(out.sent[0].frameSize, 192); assert.strictEqual(out.sent[0].autoFrameSize, true);
+  const inp = mk('in');
+  inp.s.onText(JSON.stringify({ type: 'start', channels: 2, sampleRate: 48000, deviceId: 1001 }));   // WASAPI is not ASIO: no lock conflict
+  assert.strictEqual(inp.sent[0].type, 'error');                                          // speakers have no input channels
+  const inp2 = mk('in');
+  inp2.s.onText(JSON.stringify({ type: 'start', channels: 2, sampleRate: 48000, deviceId: 1000, frameSize: 'auto' }));
+  assert.strictEqual(inp2.sent[0].type, 'started'); assert.strictEqual(inp2.sent[0].channels, 2);
+  out.s.onClose(); inp2.s.onClose(); inp.s.onClose();
+  assert.strictEqual(_owners.size, 0);
+  const bad = mk('out');
+  bad.s.onText(JSON.stringify({ type: 'start', engine: 'naudiodon' }));
+  assert.match(bad.sent[0].message, /PortAudio not installed/);
+  const missing = mk('out');
+  missing.s.onText(JSON.stringify({ type: 'start', deviceId: 1099 }));
+  assert.strictEqual(missing.sent[0].message, 'device not found');
+});
+
+test('endpoints: /api/audify and /api/framesize', async () => {
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const au = await (await fetch(base + '/api/audify')).json();
+  assert.strictEqual(au.ok, true); assert.strictEqual(typeof au.installed, 'boolean'); assert.ok(Array.isArray(au.devices));
+  const fs1 = await (await fetch(base + '/api/framesize?api=ASIO&sampleRate=96000&channels=2')).json();
+  assert.strictEqual(fs1.ok, true); assert.strictEqual(fs1.frames, 512); assert.strictEqual(fs1.candidates[0], 0);
+  assert.strictEqual((await fetch(base + '/api/framesize?api=nope')).status, 400);
+  assert.strictEqual((await fetch(base + '/api/framesize?sampleRate=5')).status, 400);
+  assert.strictEqual((await fetch(base + '/api/framesize', { headers: { Origin: 'https://evil.example' } })).status, 403);
+  server.closeAllConnections(); server.close();
+});
+
+test('ASIO4ALL: newest installer is found on the vendor page and saved, never run', async () => {
+  const { downloadDriver } = require('./catalog');
+  const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'a4a-'));
+  const page = '<a href="/downloads_11/ASIO4ALL_2_14_English.exe">old</a><a href="/downloads_11/ASIO4ALL_2_15_English.exe">new</a>' +
+    '<a href="/downloads_11/ASIO4ALL_2_15_Deutsch.exe">de</a><a href="https://evil.example/ASIO4ALL_9_9.exe">bad</a><a href="http://www.asio4all.org/ASIO4ALL_9_8.exe">http</a>';
+  const mk = (html, finalUrl) => async (url) => {
+    if (/asio4all\.org\/?$/.test(url)) return { ok: true, status: 200, text: async () => html };
+    return { ok: true, status: 200, url: finalUrl || url, headers: { get: () => '3' }, body: (async function* () { yield Buffer.from('exe'); })() };
+  };
+  const r = await downloadDriver('asio4all', { fetchImpl: mk(page), dir });
+  assert.strictEqual(pathx.basename(r.file), 'ASIO4ALL_2_15_English.exe');       // highest version, English first, foreign hosts / http ignored
+  assert.strictEqual(r.source, 'https://www.asio4all.org/downloads_11/ASIO4ALL_2_15_English.exe');
+  assert.strictEqual(r.verified, false); assert.strictEqual(fsx.readFileSync(r.file).toString(), 'exe');
+  await assert.rejects(downloadDriver('asio4all', { fetchImpl: mk('<a href="https://evil.example/ASIO4ALL_9_9.exe">x</a>'), dir }), /no installer link/);
+  await assert.rejects(downloadDriver('asio4all', { fetchImpl: mk(page, 'https://evil.example/x.exe'), dir }), /untrusted host/);
+  fsx.rmSync(dir, { recursive: true, force: true });
+});
+
+// ── plugin system (VST3 / VST2 .vst3 / .dll) ──
+function fakePe({ machine = 0x8664, exports = [] } = {}) {
+  const b = Buffer.alloc(0x1000);
+  b.write('MZ', 0); b.writeUInt32LE(0x80, 0x3c);
+  b.write('PE\0\0', 0x80, 'latin1'); b.writeUInt16LE(machine, 0x84); b.writeUInt16LE(1, 0x86); b.writeUInt16LE(0xf0, 0x94); b.writeUInt16LE(0x2022, 0x96);
+  b.writeUInt16LE(0x20b, 0x98);                                   // PE32+
+  const dd = 0x98 + 112; b.writeUInt32LE(0x2000, dd);             // export directory RVA
+  const sec = 0x98 + 0xf0; b.write('.edata', sec); b.writeUInt32LE(0x1000, sec + 8); b.writeUInt32LE(0x2000, sec + 12); b.writeUInt32LE(0x1000, sec + 16); b.writeUInt32LE(0x400, sec + 20);
+  // section raw data at file offset 0x400 maps RVA 0x2000
+  const ed = 0x400; b.writeUInt32LE(exports.length, ed + 24); b.writeUInt32LE(0x2000 + 0x100, ed + 32);
+  let str = 0x400 + 0x200;
+  exports.forEach((n, i) => { b.writeUInt32LE(0x2000 + 0x200 + (str - 0x600), 0x400 + 0x100 + i * 4); b.write(n + '\0', str, 'latin1'); str += n.length + 1; });
+  return b;
+}
+
+test('plugin system: validates VST3 / VST2 binaries and rejects plain DLLs', () => {
+  const plugins = require('./plugins');
+  const root = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'plg-'));
+  const app = pathx.join(root, 'AudioMixerPlugins'); fsx.mkdirSync(pathx.join(app, 'sub'), { recursive: true });
+  fsx.writeFileSync(pathx.join(app, 'Comp.vst3'), fakePe({ exports: ['GetPluginFactory', 'InitDll'] }));
+  fsx.writeFileSync(pathx.join(app, 'sub', 'Verb.dll'), fakePe({ exports: ['VSTPluginMain'] }));
+  fsx.writeFileSync(pathx.join(app, 'Old32.dll'), fakePe({ machine: 0x14c, exports: ['main'] }));
+  fsx.writeFileSync(pathx.join(app, 'helper.dll'), fakePe({ exports: ['SomethingElse'] }));
+  fsx.writeFileSync(pathx.join(app, 'fake.vst3'), 'text file');
+  const r = plugins.scan({ platform: 'win32', env: { AUDIO_MIXER_PLUGINS: app, ProgramFiles: pathx.join(root, 'pf'), CommonProgramFiles: pathx.join(root, 'cf') }, home: root, hostArch: 'x64', hash: true });
+  const by = n => r.plugins.find(p => p.name === n);
+  assert.deepStrictEqual([by('Comp').format, by('Comp').valid, by('Comp').compatible, by('Comp').arch, by('Comp').entry], ['VST3', true, true, 'x64', 'GetPluginFactory']);
+  assert.deepStrictEqual([by('Verb').format, by('Verb').valid, by('Verb').entry], ['VST2', true, 'VSTPluginMain']);
+  assert.strictEqual(by('Old32').compatible, false); assert.match(by('Old32').reason, /x86 plugin cannot be loaded by a x64 host/);
+  assert.strictEqual(by('helper').valid, false); assert.match(by('helper').reason, /plain DLL/);
+  assert.strictEqual(by('fake').valid, false);
+  assert.strictEqual(r.counts.loadable, 2); assert.strictEqual(r.counts.rejected, 3);
+  assert.match(by('Comp').sha256, /^[0-9a-f]{64}$/); assert.strictEqual(r.appDirExists, true);
+  assert.strictEqual(plugins.inspectPe(pathx.join(root, 'missing.dll')), null);
+  fsx.rmSync(root, { recursive: true, force: true });
+});
+
+test('endpoint: /api/plugins', async () => {
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const j = await (await fetch(base + '/api/plugins')).json();
+  assert.strictEqual(j.ok, true); assert.ok(Array.isArray(j.plugins) && Array.isArray(j.dirs) && typeof j.counts.total === 'number');
+  assert.strictEqual((await fetch(base + '/api/plugins', { headers: { Origin: 'https://evil.example' } })).status, 403);
+  server.closeAllConnections(); server.close();
+});
+
+test('installer bundles Audify: pinned Windows binaries, copied into the stage and listed in the manifest', () => {
+  const bi = require('../scripts/build-installer');
+  const cache = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'au-'));
+  const mkRun = (content) => (cmd, args, opts) => {
+    const nm = pathx.join(opts.cwd.endsWith('audify') ? pathx.dirname(opts.cwd) : opts.cwd, opts.cwd.endsWith('audify') ? '' : 'node_modules');
+    if (!opts.cwd.endsWith('audify')) {
+      for (const [m, files] of [['audify', ['index.js', 'package.json']], ['bindings', ['bindings.js']], ['file-uri-to-path', ['index.js']], ['prebuild-install', ['bin.js']]]) {
+        fsx.mkdirSync(pathx.join(nm, m), { recursive: true }); files.forEach(f => fsx.writeFileSync(pathx.join(nm, m, f), '//'));
+      }
+    } else {
+      const rel = pathx.join(opts.cwd, 'build', 'Release'); fsx.mkdirSync(rel, { recursive: true });
+      Object.keys(bi.AUDIFY_WIN_SHA256).forEach(f => fsx.writeFileSync(pathx.join(rel, f), content));
+    }
+    return { status: 0 };
+  };
+  assert.throws(() => bi.fetchAudify({ cache, run: mkRun('tampered') }), /checksum mismatch/);   // a binary that is not the pinned build is refused and removed
+  const stage = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'st-'));
+  const fake = { version: 'x', nm: pathx.join(cache, 'audify-1.10.1', 'node_modules'), dirs: [['audify', ['index.js', 'build/Release']], ['bindings', ['bindings.js']], ['file-uri-to-path', ['index.js']]] };
+  fsx.mkdirSync(pathx.join(fake.nm, 'audify', 'build', 'Release'), { recursive: true }); fsx.writeFileSync(pathx.join(fake.nm, 'audify', 'build', 'Release', 'audify.node'), 'x');
+  bi.stageAudify(fake, stage);
+  assert.ok(fsx.existsSync(pathx.join(stage, 'bridge', 'node_modules', 'audify', 'build', 'Release', 'audify.node')));
+  assert.ok(fsx.existsSync(pathx.join(stage, 'bridge', 'node_modules', 'bindings', 'bindings.js')));
+  fsx.rmSync(cache, { recursive: true, force: true }); fsx.rmSync(stage, { recursive: true, force: true });
+});
+
+test('verify: native files under bridge/node_modules must be in the manifest', () => {
+  const v = require('../client/verify');
+  const root = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'vfy-'));
+  fsx.mkdirSync(pathx.join(root, 'bridge', 'node_modules', 'audify', 'build', 'Release'), { recursive: true });
+  const f = pathx.join(root, 'bridge', 'node_modules', 'audify', 'build', 'Release', 'audify.node'); fsx.writeFileSync(f, 'x');
+  fsx.writeFileSync(pathx.join(root, 'MANIFEST.sha256'), '\n');
+  assert.ok(v.checkManifest(root).some(r => r.level === 'WARN' && /audify\.node/.test(r.detail)));
+  fsx.writeFileSync(pathx.join(root, 'MANIFEST.sha256'), `${v.sha256(f)}  bridge/node_modules/audify/build/Release/audify.node\n`);
+  assert.strictEqual(v.checkManifest(root)[0].level, 'PASS');
+  assert.ok(!v.checkManifest(root).some(r => r.level === 'WARN'));
+  fsx.rmSync(root, { recursive: true, force: true });
 });

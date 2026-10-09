@@ -13,7 +13,7 @@ const ROOT = path.resolve(__dirname, '..');
 const FILES = [
   'gemini-code-1790419147591.html', 'README.md', 'LICENSE', 'package.json', 'start-pc-mode.bat', 'start-pc-mode.sh', 'start-local-server.bat',
   'client/cli.js', 'client/service.js', 'client/verify.js',
-  'bridge/server.js', 'bridge/detect.js', 'bridge/catalog.js', 'bridge/nowplaying.js', 'bridge/interfaces.js', 'bridge/asio-lock.js', 'bridge/input.js', 'bridge/output.js', 'bridge/volume.js', 'bridge/ws.js',
+  'bridge/server.js', 'bridge/detect.js', 'bridge/catalog.js', 'bridge/nowplaying.js', 'bridge/interfaces.js', 'bridge/asio-lock.js', 'bridge/audify.js', 'bridge/plugins.js', 'bridge/input.js', 'bridge/output.js', 'bridge/volume.js', 'bridge/ws.js',
   'bridge/package.json', 'bridge/README.md',
 ];
 

@@ -51,6 +51,10 @@ function checkManifest(root) {
   }
   // code that is not in the manifest would run with the server's rights
   const extra = [];
+  // native code anywhere under bridge/node_modules (the bundled Audify module) must be listed too
+  const nmDir = path.join(root, 'bridge', 'node_modules');
+  const walkNm = d => { let es = []; try { es = fs.readdirSync(d, { withFileTypes: true }); } catch (_) { return; } for (const e of es) { const p = path.join(d, e.name); if (e.isDirectory()) walkNm(p); else if (/\.(node|dll|exe)$/i.test(e.name)) { const rel = path.relative(root, p).split(path.sep).join('/'); if (!listed.has(rel)) extra.push(rel); } } };
+  walkNm(nmDir);
   for (const dir of ['bridge', 'client']) {
     const d = path.join(root, dir);
     if (!fs.existsSync(d)) continue;

@@ -1,4 +1,5 @@
 'use strict';
+const { detectAudify } = require('./audify');
 // Native audio driver / device detection. Read-only; every probe is optional and fails soft.
 const { execFile } = require('node:child_process');
 const fs = require('node:fs');
@@ -101,7 +102,10 @@ function scanVst(dirs, ext, max = 500) {
 function detectVst() {
   const d = vstDirs();
   const v2ext = process.platform === 'win32' ? '.dll' : process.platform === 'darwin' ? '.vst' : '.so';
-  return { vst3: scanVst(d.vst3, '.vst3'), vst2: scanVst(d.vst2, v2ext) };
+  const r = { vst3: scanVst(d.vst3, '.vst3'), vst2: scanVst(d.vst2, v2ext) };
+  // plugins dropped into the app's own plugin folder (AudioMixerPlugins) count once they pass the binary check
+  try { for (const p of require('./plugins').scan().plugins) if (p.source === 'app' && p.valid && p.compatible) { const l = p.format === 'VST3' ? r.vst3 : r.vst2; if (!l.includes(p.name)) l.push(p.name); } } catch (_) { /* optional */ }
+  return r;
 }
 
 // Optional: real host APIs / devices (ASIO, WASAPI, DirectSound, CoreAudio, ALSA) via PortAudio.
@@ -111,19 +115,22 @@ function detectPortAudio() {
     const pa = require('naudiodon2');
     const apis = pa.getHostAPIs().HostAPIs.map(h => h.name);
     const devices = pa.getDevices().map(d => ({ id: d.id, name: d.name, hostApi: d.hostAPIName, inputs: d.maxInputChannels, outputs: d.maxOutputChannels, sampleRate: d.defaultSampleRate }));
-    return { hostApis: apis, devices };
+    return { engine: 'naudiodon', hostApis: apis, devices };
   } catch (_) { return null; }
 }
 
 async function detect() {
   const p = process.platform;
   const r = p === 'win32' ? await windows() : p === 'darwin' ? await mac() : p === 'linux' ? await linux() : { drivers: [], devices: [], asio: [], recommended: null };
-  const portaudio = detectPortAudio();
+  const naudiodon = detectPortAudio();
+  const audifyInfo = detectAudify();
+  // `portaudio` is the primary native engine: naudiodon2 when installed, otherwise Audify (same shape, so the page works with either).
+  const portaudio = naudiodon || audifyInfo;
   if (portaudio) {
     portaudio.devices.filter(d => /asio/i.test(d.hostApi) && !r.asio.includes(d.name)).forEach(d => r.asio.push(d.name));
     if (r.asio.length && Array.isArray(r.drivers) && !r.drivers.includes('steinberg')) r.drivers.push('steinberg');
   }
-  return { platform: p, arch: process.arch, node: process.version, ...r, vst: detectVst(), portaudio };
+  return { platform: p, arch: process.arch, node: process.version, ...r, vst: detectVst(), portaudio, audify: audifyInfo, engines: { naudiodon: !!naudiodon, audify: !!audifyInfo } };
 }
 
 module.exports = { detect };

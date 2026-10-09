@@ -63,10 +63,21 @@ For ASIO / WASAPI audio run `npm run setup` once after installing (needs npm and
 `node client/cli.js verify [--scan]` (Start Menu: *Verify installation (security scan)*) checks an install: every file against `MANIFEST.sha256`
 (changed, missing and unlisted code files are reported), the Authenticode signature of the bundled Node.js runtime (must be the OpenJS Foundation),
 that the server listens on loopback only (not on any LAN address), and with `--scan` runs a Microsoft Defender custom scan of the folder.
-`node client/cli.js verify path\to\AudioMixer-Setup-1.2.0.exe [--scan]` checks a downloaded installer: PE/NSIS structure, its SHA-256 against the
+`node client/cli.js verify path\to\AudioMixer-Setup-1.3.0.exe [--scan]` checks a downloaded installer: PE/NSIS structure, its SHA-256 against the
 `.sha256` file next to it, signature and Defender. Exit code 0 = verified. Manual check in PowerShell:
-`Get-FileHash .\AudioMixer-Setup-1.2.0.exe -Algorithm SHA256` and `Get-AuthenticodeSignature .\AudioMixer-Setup-1.2.0.exe`.
+`Get-FileHash .\AudioMixer-Setup-1.3.0.exe -Algorithm SHA256` and `Get-AuthenticodeSignature .\AudioMixer-Setup-1.3.0.exe`.
 The installer in `releases/` is unsigned, so the signature check reports a warning, not a pass; the SHA-256 is the proof of integrity.
+
+### Audify, ASIO4ALL and the plugin system (installer 1.3.0)
+- **Audify (RtAudio)** is bundled in the installer with its official Windows x64 prebuilt binaries (ASIO, WASAPI, DirectSound; pinned by SHA-256 at
+  build time), so ASIO works without a compiler. From source run `npm run setup:audify` (`cd bridge && npm install audify`; `npm run setup` installs
+  Audify and naudiodon2). See `bridge/README.md` for the `/api/audify` and `/api/framesize` endpoints and the automatic ASIO buffer size.
+- **ASIO4ALL**: the driver list can now download it. The server reads the official asio4all.org page, takes the newest installer linked there
+  (https and asio4all.org only) and saves it to the downloads folder without running it. Check the file and run it yourself.
+- **Plugins (.vst3, .dll, .vst)**: the installer creates `%USERPROFILE%\AudioMixerPlugins` (kept when you uninstall; Start Menu: *Plugins folder*).
+  `GET /api/plugins` lists plugins from there and from the standard VST folders and checks every Windows binary (PE header and exports):
+  a real VST3 exports `GetPluginFactory`, a VST2 `VSTPluginMain` / `main`; plain DLLs and 32-bit plugins are reported as rejected with the reason.
+  The PLUGINS tab scanner shows the result when the server is connected. This lists and validates plugins; it does not run them yet.
 
 ## Live sources, music / mic FFT and interface auto-scan (LIVE SOURCES tab)
 - **Now playing (API mode)**: with PC mode the server reads your operating system's media sessions and recognises **Spotify, YouTube, YouTube Music,

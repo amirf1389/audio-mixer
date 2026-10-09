@@ -31,6 +31,20 @@ found), and **WRITE** / **DUPLEX** stream the mixer's master output (Int16 stere
 and restored on stop. Without `naudiodon2` the page logs how to enable it and nothing else changes.
 Tested with a stubbed PortAudio; not yet verified on real ASIO hardware. Output only (no input capture).
 
+## Audify (RtAudio) engine and automatic frame size
+`cd bridge && npm install` also installs the optional `audify` module (RtAudio: ASIO, WASAPI, DirectSound, Core Audio, JACK, ALSA, PulseAudio).
+It works next to `naudiodon2` or on its own: with only Audify installed, `/api/drivers` `portaudio` (and the page) use Audify's devices.
+Audify device ids start at 1000, so a `deviceId` alone selects the engine; `{ "engine": "audify" | "naudiodon" }` in a `start` message forces one.
+
+- `GET /api/audify`: `{ installed, hostApis, devices[] }` with every compiled API's devices, sample rates, and `recommended` frame size per direction.
+- `GET /api/framesize?api=ASIO&sampleRate=48000&channels=2[&latency=ms]`: the automatic buffer size and the order the bridge tries sizes in.
+- `GET /api/interfaces?engine=audify`: interface grouping from the Audify device list.
+- `start` messages accept `frameSize`: `"auto"` (default) or a power of two from 32 to 4096. Auto asks an ASIO / JACK driver for its own buffer size
+  (set in the driver's control panel) and otherwise uses the lowest safe size for the host API (about 4 ms ASIO, 10 ms WASAPI, 20 ms DirectSound,
+  doubled above 16 and 32 channels); a driver that refuses a size is retried with larger, then smaller sizes. `started` reports `engine`,
+  `frameSize`, `latencyMs` and `autoFrameSize`. The page has a buffer-size selector in the PC MODE panel.
+Tested with a stubbed RtAudio against its published API; not yet verified on real ASIO hardware.
+
 ## VS Code
 Open the repo folder in VS Code (`.vscode/` is included):
 - **Terminal → Run Task**: `Bridge: npm install (ASIO / PortAudio)`, `Bridge: start`, `Bridge: test`.

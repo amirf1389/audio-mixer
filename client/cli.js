@@ -100,7 +100,7 @@ async function cmdDoctor(port) {
   line(true, `Platform ${info.platform} ${info.arch}`);
   const running = await probe(port);
   line(true, running ? `Server already running on port ${port}` : `Port ${port} is free for the server`);
-  line(!!info.portaudio, info.portaudio ? `PortAudio module present (${info.portaudio.hostApis.join(', ')})` : 'PortAudio module missing: ASIO/WASAPI output needs "cd bridge && npm install"');
+  line(!!info.portaudio, info.portaudio ? `${info.portaudio.engine === 'audify' ? 'Audify (RtAudio)' : 'PortAudio'} module present (${info.portaudio.hostApis.join(', ')})${info.engines && info.engines.naudiodon && info.engines.audify ? ' + Audify' : ''}` : 'Audio engine missing: ASIO/WASAPI output needs "cd bridge && npm install" (naudiodon2 or audify)');
   console.log(`INFO ASIO drivers installed: ${info.asio.length ? info.asio.join(', ') : 'none'}`);
   console.log(`INFO Native stacks found: ${info.drivers.join(', ') || 'none'}`);
   try { fs.mkdirSync(dir, { recursive: true }); fs.accessSync(dir, fs.constants.W_OK); line(true, `Download folder writable: ${dir}`); } catch (_) { line(false, `Download folder not writable: ${dir}`); }
