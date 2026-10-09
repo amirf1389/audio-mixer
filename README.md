@@ -58,3 +58,19 @@ files, shortcuts and autostart entry and leaves downloaded drivers in `%USERPROF
 
 The installer is not code-signed, so Windows SmartScreen shows a warning ("More info" -> "Run anyway") until you sign it with your own certificate.
 For ASIO / WASAPI audio run `npm run setup` once after installing (needs npm and a C++ toolchain); without it the server runs in web mode.
+
+## Live sources, music / mic FFT and interface auto-scan (LIVE SOURCES tab)
+- **Now playing (API mode)**: with PC mode the server reads your operating system's media sessions and recognises **Spotify, YouTube, YouTube Music,
+  TIDAL, Apple Music, Amazon Music, Deezer, SoundCloud, Qobuz, Pandora, VLC, foobar2000, MusicBee** and more (Windows: System Media Transport Controls,
+  macOS: Spotify / Music apps and the active Chrome / Safari / Edge / Brave tab, Linux: MPRIS). No accounts, tokens or network access are used.
+- **FFT spectrum for music**: *Share system / tab audio* (browser) or, in PC mode, a loopback interface (Stereo Mix, monitor, virtual cable) is used
+  automatically when music starts. **FFT spectrum for mic / audio interface**: any interface that is detected is read and shown as soon as the audio
+  engine runs (browser microphones need the permission once).
+- **Audio interface auto-scan**: every 5 seconds and on plug / unplug the server lists each interface once, with all its host APIs (ASIO, WASAPI,
+  DirectSound, WDM-KS, MME, Core Audio, ALSA, JACK). New interfaces are enabled for **READ and WRITE** automatically (switchable), **ENABLE ALL ASIO**
+  turns on every ASIO interface. ASIO drivers are single-client, so when one is already open the next interface falls back to WASAPI / Core Audio / ALSA.
+  WRITE sends the master mix to each enabled interface; READ can pick any input pair of multichannel interfaces.
+- **Virtual mixer patch**: *Auto-patch live sources* puts each read interface on a stereo pair of channels from CH 1 and the music source on CH 31 / 32,
+  so everything runs through the BUS & MATRIX mixer, EQ, dynamics and the phase / level tools.
+- Endpoints: `GET /api/nowplaying`, `GET /api/interfaces` (see `bridge/README.md`). Not verified on real Windows / macOS hardware; the Linux path was
+  tested with a fake D-Bus and a stubbed PortAudio.

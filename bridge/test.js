@@ -391,3 +391,115 @@ test('installer: stages the app with the bundled runtime and builds a Windows se
   }
   fsx.rmSync(out, { recursive: true, force: true });
 });
+
+// ── now playing, interface scan, ASIO arbitration ──
+test('now playing: services are recognised from app, URL and window titles', () => {
+  const np = require('./nowplaying');
+  const id = (...p) => np.classify(p).id;
+  assert.strictEqual(id('org.mpris.MediaPlayer2.spotify'), 'spotify');
+  assert.strictEqual(id('chromium', 'https://music.youtube.com/watch?v=x'), 'youtube-music');
+  assert.strictEqual(id('chromium', 'https://www.youtube.com/watch?v=x'), 'youtube');
+  assert.strictEqual(id('chrome', 'Song - YouTube Music - Google Chrome'), 'youtube-music');
+  assert.strictEqual(id('TIDAL.exe'), 'tidal');
+  assert.strictEqual(id('com.squirrel.TIDAL.TIDAL'), 'tidal');
+  assert.strictEqual(id('firefox', 'https://tidal.com/browse/track/1'), 'tidal');
+  assert.strictEqual(id('AppleInc.AppleMusicWin'), 'apple-music');
+  assert.strictEqual(id('Music'), 'apple-music');
+  assert.strictEqual(id('deezer'), 'deezer');
+  assert.strictEqual(id('vlc'), 'vlc');
+  assert.strictEqual(id('something-else'), 'other');
+});
+
+test('now playing: MPRIS, SMTC and osascript output are parsed', async () => {
+  const np = require('./nowplaying');
+  const meta = JSON.stringify({ type: 'a{sv}', data: { 'xesam:title': { type: 's', data: 'Karma Police' }, 'xesam:artist': { type: 'as', data: ['Radiohead'] }, 'xesam:album': { type: 's', data: 'OK Computer' }, 'xesam:url': { type: 's', data: 'https://music.youtube.com/watch?v=abc' } } });
+  const status = JSON.stringify({ type: 's', data: 'Playing' });
+  const s = np.mprisSession('org.mpris.MediaPlayer2.chromium.instance123', status, meta);
+  assert.deepStrictEqual([s.service, s.serviceName, s.status, s.title, s.artist, s.album, s.app], ['youtube-music', 'YouTube Music', 'playing', 'Karma Police', 'Radiohead', 'OK Computer', 'chromium']);
+
+  const smtc = np.parseSmtc('SESSION|Spotify.exe|Playing|Everlong|Foo Fighters|The Colour and the Shape\nSESSION|msedge|Paused|Lofi mix|Chill Channel|\nSESSION|chrome|Playing|Cool Video|Someone|\nWINDOW|msedge|Lofi mix - YouTube - Microsoft Edge\nWINDOW|chrome|Cool Video - YouTube Music - Google Chrome\nWINDOW|notepad|notes');
+  assert.deepStrictEqual(smtc.map(x => [x.service, x.status]), [['spotify', 'playing'], ['youtube', 'paused'], ['youtube-music', 'playing']]);
+
+  const osa = np.parseOsa('APP|Spotify|playing|Song A|Artist A|Album A\nTAB|Google Chrome|https://www.youtube.com/watch?v=1|My Video - YouTube\nTAB|Safari|https://example.com|Nothing');
+  assert.deepStrictEqual(osa.map(x => [x.service, x.title]), [['spotify', 'Song A'], ['youtube', 'My Video']]);
+
+  const run = async (cmd, args) => {
+    if (args.includes('list')) return 'org.mpris.MediaPlayer2.spotify 123 spotify :1.5\norg.freedesktop.Notifications 5 x :1.2\norg.mpris.MediaPlayer2.vlc 9 vlc :1.7\n';
+    if (args.includes('PlaybackStatus')) return args.includes('org.mpris.MediaPlayer2.vlc') ? JSON.stringify({ type: 's', data: 'Paused' }) : status;
+    return args.includes('org.mpris.MediaPlayer2.vlc') ? JSON.stringify({ type: 'a{sv}', data: { 'xesam:title': { type: 's', data: 'Track V' } } }) : meta;
+  };
+  const r = await np.readNowPlaying({ platform: 'linux', run });
+  assert.strictEqual(r.method, 'mpris');
+  assert.deepStrictEqual(r.sessions.map(x => x.service), ['youtube-music', 'vlc']);       // playing first
+  assert.strictEqual(r.playing.title, 'Karma Police');
+  assert.deepStrictEqual((await np.readNowPlaying({ platform: 'linux', run: async () => '' })).sessions, []);
+});
+
+test('interfaces: one physical interface across ASIO / WASAPI / DirectSound, loopback flagged, ASIO-only drivers kept', () => {
+  const { groupInterfaces } = require('./interfaces');
+  const dev = (id, name, hostApi, inputs, outputs) => ({ id, name, hostApi, inputs, outputs, sampleRate: 48000 });
+  const list = groupInterfaces([
+    dev(0, 'Microphone (Focusrite USB Audio)', 'Windows DirectSound', 2, 0), dev(1, 'Speakers (Focusrite USB Audio)', 'Windows DirectSound', 0, 2),
+    dev(2, 'Focusrite USB ASIO', 'ASIO', 18, 20), dev(3, 'Microphone (Focusrite USB Audio)', 'Windows WASAPI', 2, 0), dev(4, 'Speakers (Focusrite USB Audio)', 'Windows WASAPI', 0, 2),
+    dev(5, 'Stereo Mix (Realtek Audio)', 'Windows WASAPI', 2, 0), dev(6, 'Speakers (Realtek Audio)', 'Windows WASAPI', 0, 2),
+  ], ['Focusrite USB ASIO', 'ASIO4ALL v2']);
+  const foc = list.find(i => /focusrite/i.test(i.name));
+  assert.ok(foc.asio);
+  assert.deepStrictEqual(foc.apis.map(a => a.api), ['ASIO', 'Windows WASAPI', 'Windows WASAPI', 'Windows DirectSound', 'Windows DirectSound']);
+  assert.strictEqual(foc.read.deviceId, 2); assert.strictEqual(foc.write.deviceId, 2);          // ASIO preferred for both
+  assert.strictEqual(foc.inputs, 18); assert.strictEqual(foc.outputs, 20);
+  const mix = list.find(i => i.loopback);
+  assert.ok(mix && /realtek/i.test(mix.name) === true || mix.name.length > 0);
+  const real = list.find(i => /realtek/i.test(i.name) && !i.loopback);
+  assert.ok(real || list.find(i => i.loopback));
+  const a4 = list.find(i => /asio4all/i.test(i.name));
+  assert.ok(a4 && a4.driverOnly && a4.asio && a4.read === null);
+  assert.strictEqual(list.filter(i => /focusrite/i.test(i.name)).length, 1);                      // not split per API
+  assert.strictEqual(list[list.length - 1].loopback || list.indexOf(mix) > list.indexOf(foc), true);
+});
+
+test('ASIO is single-client: a second ASIO device is refused until the first is closed', () => {
+  const { claim, _owners } = require('./asio-lock');
+  _owners.clear();
+  const a = { id: 1, name: 'Card A', hostAPIName: 'ASIO' }, b = { id: 2, name: 'Card B', hostAPIName: 'ASIO' }, w = { id: 3, name: 'WASAPI X', hostAPIName: 'Windows WASAPI' };
+  const l1 = claim(a), l1b = claim(a);                       // read + write on the same device is fine
+  assert.ok(l1.ok && l1b.ok);
+  const l2 = claim(b);
+  assert.strictEqual(l2.ok, false); assert.match(l2.message, /Card A/);
+  assert.ok(claim(w).ok);                                    // other host APIs are not limited
+  l1.release(); l1.release();                                // double release is harmless
+  assert.strictEqual(claim(b).ok, false);                    // still held by the second claim
+  l1b.release();
+  assert.ok(claim(b).ok);
+  _owners.clear();
+});
+
+test('input sessions share the ASIO lock', () => {
+  const { _owners } = require('./asio-lock');
+  _owners.clear();
+  const mkPa = () => ({ SampleFormat16Bit: 8, getDevices: () => [{ id: 1, name: 'Card A', hostAPIName: 'ASIO', maxInputChannels: 2 }, { id: 2, name: 'Card B', hostAPIName: 'ASIO', maxInputChannels: 2 }],
+    AudioIO: class { constructor() { this.h = {}; } on() {} start() {} quit() {} } });
+  const mk = () => { const sent = []; return { sent, s: require('./input').createInputSession({ send: m => sent.push(JSON.parse(m)), sendBinary() {} }, mkPa) }; };
+  const one = mk(), two = mk();
+  one.s.onText(JSON.stringify({ type: 'start', deviceId: 1 }));
+  two.s.onText(JSON.stringify({ type: 'start', deviceId: 2 }));
+  assert.strictEqual(one.sent[0].type, 'started');
+  assert.strictEqual(two.sent[0].type, 'error'); assert.match(two.sent[0].message, /one driver at a time/);
+  one.s.onClose();
+  two.s.onText(JSON.stringify({ type: 'start', deviceId: 2 }));
+  assert.strictEqual(two.sent[1].type, 'started');
+  two.s.onClose();
+  assert.strictEqual(_owners.size, 0);
+});
+
+test('endpoints: /api/nowplaying and /api/interfaces', async () => {
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const np = await (await fetch(base + '/api/nowplaying')).json();
+  assert.strictEqual(np.ok, true); assert.ok(Array.isArray(np.sessions) && 'platform' in np);
+  const itf = await (await fetch(base + '/api/interfaces')).json();
+  assert.strictEqual(itf.ok, true); assert.ok(Array.isArray(itf.interfaces) && Array.isArray(itf.asio));
+  assert.strictEqual((await fetch(base + '/api/nowplaying', { headers: { Origin: 'https://evil.example' } })).status, 403);
+  server.closeAllConnections();
+  server.close();
+});

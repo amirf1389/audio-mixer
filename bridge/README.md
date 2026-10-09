@@ -94,3 +94,11 @@ Real Web Audio graph, saved in the browser (localStorage) and respecting the KNO
   (200 MB cap, https and GitHub hosts only, redirects re-checked, SHA-256 verified against the release digest when published, never executed).
   Requires the `X-Mixer-Action: download` header (forces a CORS preflight, so foreign pages cannot trigger it). Everything else in the catalog
   links to the vendor's official site or shows the package-manager command. Not verified against real vendor sites from this sandbox.
+
+## Now playing and interface scan
+- `GET /api/nowplaying`: `{ method, sessions: [{ service, serviceName, app, status, title, artist, album }], playing }` from the OS media sessions
+  (Windows SMTC via PowerShell, macOS osascript, Linux MPRIS via `busctl`). Services: Spotify, YouTube, YouTube Music, TIDAL, Apple Music, Amazon Music,
+  Deezer, SoundCloud, Qobuz, Pandora, VLC, foobar2000, MusicBee, Winamp. Read-only; cached for 1.5 s.
+- `GET /api/interfaces`: PortAudio devices of every host API grouped into physical interfaces (`apis`, `read` / `write` best device, `asio`,
+  `loopback`, `driverOnly` for installed ASIO drivers PortAudio does not list).
+- ASIO is single-client: a second ASIO device is refused with a clear message while one is open (same device for read + write is fine).

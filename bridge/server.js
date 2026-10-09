@@ -7,6 +7,8 @@
 //   WS  /ws/output    -> page streams Int16 PCM out through PortAudio (ASIO / WASAPI)
 //   WS  /ws/input     -> bridge streams Int16 PCM captured from an ASIO / WASAPI input
 //   GET /api/catalog  -> official audio drivers / stacks for this OS, with install detection
+//   GET /api/nowplaying -> what Spotify / YouTube / YouTube Music / TIDAL / ... is playing (OS media sessions)
+//   GET /api/interfaces -> every audio interface grouped across ASIO / WASAPI / DirectSound / Core Audio / ALSA ...
 //   POST /api/catalog/download {id} -> saves the official installer (FlexASIO) to the download folder; never runs it
 //   GET /*            -> serves the mixer page from the repo root (same-origin use)
 const http = require('node:http');
@@ -18,7 +20,10 @@ const { createSession } = require('./output');
 const { createInputSession } = require('./input');
 const { readVolume } = require('./volume');
 const { listCatalog, downloadDriver, downloadDir } = require('./catalog');
+const { cachedNowPlaying } = require('./nowplaying');
+const { groupInterfaces } = require('./interfaces');
 
+const VERSION = (() => { try { return require('../package.json').version; } catch (_) { return '1.0.0'; } })();
 const PORT = Number(process.env.BRIDGE_PORT) || 8765;
 const HOST = '127.0.0.1';
 const ROOT = path.resolve(__dirname, '..');
@@ -63,10 +68,23 @@ async function handle(req, res) {
   const url = new URL(req.url, `http://${HOST}`);
   if (req.method === 'POST' && url.pathname === '/api/catalog/download') return handleDownload(req, res, cors);
   if (req.method !== 'GET') return json(res, 405, { ok: false, error: 'method not allowed' }, cors);
-  if (url.pathname === '/api/status') return json(res, 200, { ok: true, name: 'audio-mixer-bridge', version: '1.0.0' }, cors);
+  if (url.pathname === '/api/status') return json(res, 200, { ok: true, name: 'audio-mixer-bridge', version: VERSION }, cors);
   if (url.pathname === '/api/drivers') {
     try { return json(res, 200, { ok: true, ...(await detect()) }, cors); }
     catch (e) { return json(res, 500, { ok: false, error: e.message }, cors); }
+  }
+
+  if (url.pathname === '/api/nowplaying') {
+    try { return json(res, 200, { ok: true, ...(await cachedNowPlaying()) }, cors); }
+    catch (e) { return json(res, 500, { ok: false, error: e.message }, cors); }
+  }
+
+  if (url.pathname === '/api/interfaces') {
+    try {
+      const info = await detect();
+      const devices = info.portaudio ? info.portaudio.devices : [];
+      return json(res, 200, { ok: true, platform: info.platform, portaudio: !!info.portaudio, asio: info.asio, interfaces: groupInterfaces(devices, info.asio) }, cors);
+    } catch (e) { return json(res, 500, { ok: false, error: e.message }, cors); }
   }
 
   if (url.pathname === '/api/catalog') {
