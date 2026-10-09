@@ -107,6 +107,25 @@ test('input websocket and volume endpoint', async () => {
   server.close();
 });
 
+const http = require('node:http');
+const raw = (port, p, headers = {}) => new Promise(resolve => {
+  const req = http.request({ host: '127.0.0.1', port, path: p, headers }, res => { res.resume(); res.on('end', () => resolve(res)); });
+  req.on('error', () => resolve({ statusCode: 0 })); req.end();
+});
+
+test('hardening: rebinding, malformed URLs, dotfiles, headers', async () => {
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const port = server.address().port;
+  assert.strictEqual((await raw(port, '/api/drivers', { Host: 'attacker.example' })).statusCode, 403);
+  assert.strictEqual((await raw(port, '/%E0%A4%A')).statusCode, 400);
+  assert.strictEqual((await raw(port, '/api/status')).statusCode, 200);        // still alive after the bad request
+  for (const p of ['/.git/config', '/.gitignore', '/.vscode/launch.json', '/.github/workflows/codeql.yml']) assert.strictEqual((await raw(port, p)).statusCode, 404, p);
+  const st = await raw(port, '/api/status');
+  assert.strictEqual(st.headers['x-content-type-options'], 'nosniff');
+  server.closeAllConnections();
+  server.close();
+});
+
 test('websocket server frames large binary payloads (64-bit length)', () => {
   const EventEmitter = require('node:events');
   const sock = new EventEmitter();
@@ -123,4 +142,26 @@ test('websocket server frames large binary payloads (64-bit length)', () => {
   assert.strictEqual(f[1], 127);
   assert.strictEqual(Number(f.readBigUInt64BE(2)), 70000);
   assert.strictEqual(f.length, 10 + 70000);
+});
+
+test('output session validates sample rate and drops partial frames', () => {
+  const written = [];
+  let opened = null;
+  const fakePa = { SampleFormat16Bit: 8, getDevices: () => [], AudioIO: class { constructor(o) { opened = o; } on() {} start() {} write(b) { written.push(b.length); return true; } quit() {} } };
+  const s = require('./output').createSession({ send() {} }, () => fakePa);
+  s.onText(JSON.stringify({ type: 'start', channels: 2, sampleRate: 1e9 }));
+  assert.strictEqual(opened.outOptions.sampleRate, 48000);
+  s.onBinary(Buffer.alloc(6));                 // 1.5 stereo frames: dropped
+  s.onBinary(Buffer.alloc(8));
+  assert.deepStrictEqual(written, [8]);
+  s.onText('null');                            // must not throw
+});
+
+test('security audit reports no failures', async () => {
+  const { probe, scanPage } = require('./audit');
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const results = [...await probe(`http://127.0.0.1:${server.address().port}`), ...scanPage()];
+  server.closeAllConnections();
+  server.close();
+  assert.deepStrictEqual(results.filter(r => r.level === 'FAIL').map(r => r.title), []);
 });

@@ -47,3 +47,30 @@ Open the repo folder in VS Code (`.vscode/` is included):
 - Honest scope: this is a user-mode native engine (PortAudio -> ASIO / WASAPI host APIs). A signed kernel-mode Windows
   audio driver (WDM / KS miniport) needs the Windows Driver Kit and driver signing and is not part of this repo.
   The Windows volume reader and real ASIO / WASAPI hardware paths are not verified on a Windows machine yet.
+
+## Security
+- Loopback only; the `Host` header must be `localhost`, `127.0.0.1` or `[::1]` (blocks DNS-rebinding; add names with
+  `BRIDGE_HOSTS=`). Foreign `Origin`s are refused on the API and on `/ws/output`.
+- `Origin: null` (file:// pages) is accepted by default. Sandboxed iframes on any site also send `null`, so if you open
+  the mixer through `http://localhost:8765`, start with `BRIDGE_ALLOW_NULL_ORIGIN=0`.
+- Dotfiles (`.git`, `.github`, `.vscode`, `.env` ...) and `bridge/` sources are never served; malformed URLs get 400
+  instead of crashing the process; `nosniff` / `no-referrer` / `X-Frame-Options: SAMEORIGIN` headers are set.
+- WebSocket: RSV bits, oversized control frames, orphan continuation frames and messages over 1 MB (also when
+  fragmented) close the connection. PCM output accepts only whole frames and standard sample rates.
+
+### Vulnerability checker
+    node bridge/audit.js                          # starts the bridge in-process and probes it
+    node bridge/audit.js --url http://127.0.0.1:8765   # probes a running bridge
+    node bridge/audit.js --json                   # machine-readable; exit code 1 on any FAIL
+
+It checks origin/Host enforcement, path traversal, malformed URLs, hidden files, security headers, WebSocket origin
+and frame-size limits, and statically scans the mixer page (HTML injection in notifications / Bluetooth names, PIN
+lockout, third-party scripts without SRI, hard-coded PIN, `eval`). `npm test` fails if the audit reports a FAIL.
+
+## Routing tab (mixer page)
+**ROUTING** (after PATCHBAY) drives the real Web Audio graph:
+- Assign each of the 32 channels to MAIN or one of 8 subgroups (individually or in bulk); subgroups have fader, mute,
+  name and a live meter, and sum into MAIN before the master comp / EQ / limiter (so the bridge ASIO output follows).
+- **Live input patch**: put a physical input (mic / interface, stereo, left or right) onto any channel strip.
+- **Snapshots**: save / recall / delete, export and import as JSON (validated on import). Routing is restored on load.
+- Respects KNOX lock and the operator "PATCHBAY & MATRIX ROUTING" permission.
