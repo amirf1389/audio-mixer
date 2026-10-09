@@ -26,6 +26,7 @@ const { cachedNowPlaying } = require('./nowplaying');
 const { groupInterfaces } = require('./interfaces');
 const audifyEngine = require('./audify');
 const pluginScan = require('./plugins');
+const streamRegistry = require('./streams');
 
 const VERSION = (() => { try { return require('../package.json').version; } catch (_) { return '1.0.0'; } })();
 const PORT = Number(process.env.BRIDGE_PORT) || 8765;
@@ -72,7 +73,7 @@ async function handle(req, res) {
   const url = new URL(req.url, `http://${HOST}`);
   if (req.method === 'POST' && url.pathname === '/api/catalog/download') return handleDownload(req, res, cors);
   if (req.method !== 'GET') return json(res, 405, { ok: false, error: 'method not allowed' }, cors);
-  if (url.pathname === '/api/status') return json(res, 200, { ok: true, name: 'audio-mixer-bridge', version: VERSION }, cors);
+  if (url.pathname === '/api/status') return json(res, 200, { ok: true, name: 'audio-mixer-bridge', version: VERSION, node: process.version, pid: process.pid, uptimeSec: Math.round(process.uptime()), streams: streamRegistry.list(), time: Date.now() }, cors);
   if (url.pathname === '/api/drivers') {
     try { return json(res, 200, { ok: true, ...(await detect()) }, cors); }
     catch (e) { return json(res, 500, { ok: false, error: e.message }, cors); }

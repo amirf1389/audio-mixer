@@ -59,14 +59,38 @@ files, shortcuts and autostart entry and leaves downloaded drivers in `%USERPROF
 The installer is not code-signed, so Windows SmartScreen shows a warning ("More info" -> "Run anyway") until you sign it with your own certificate.
 For ASIO / WASAPI audio run `npm run setup` once after installing (needs npm and a C++ toolchain); without it the server runs in web mode.
 
+### Windows installer (.msi)
+`npm run build:msi` builds `dist/AudioMixer-<version>.msi` from the same files as the `.exe` (needs `wixl` from msitools: `apt install wixl` on Linux,
+`brew install msitools` on macOS). It is a per-user package (no administrator rights, installs to `%LOCALAPPDATA%\Programs\AudioMixer`) with the
+same content: server, client, bundled Node.js, Audify, Start Menu shortcuts (including *Verify installation* and *Plugins folder*) and the
+`%USERPROFILE%\AudioMixerPlugins` folder. Install with a double-click or `msiexec /i AudioMixer-1.4.0.msi`; silent: add `/qn`; remove with *Settings > Apps*
+or `msiexec /x`. Features: `Main`, `Shortcuts`, `Autostart` (start the server hidden at login) and `Desktop`; default is all but `Desktop`, e.g.
+`msiexec /i AudioMixer-1.4.0.msi ADDLOCAL=Main,Shortcuts,Desktop` leaves autostart off. A newer `.msi` upgrades an older one in place. It refuses to install
+over the `.exe` version (uninstall that first). Unsigned, like the `.exe`: check `AudioMixer-<version>.msi.sha256` or run `node client/cli.js verify <file>`.
+Built with wixl and checked by unpacking the package and comparing it to the staged files; not yet installed on a real Windows PC.
+
 ### Windows verification scan
 `node client/cli.js verify [--scan]` (Start Menu: *Verify installation (security scan)*) checks an install: every file against `MANIFEST.sha256`
 (changed, missing and unlisted code files are reported), the Authenticode signature of the bundled Node.js runtime (must be the OpenJS Foundation),
 that the server listens on loopback only (not on any LAN address), and with `--scan` runs a Microsoft Defender custom scan of the folder.
-`node client/cli.js verify path\to\AudioMixer-Setup-1.3.0.exe [--scan]` checks a downloaded installer: PE/NSIS structure, its SHA-256 against the
+`node client/cli.js verify path\to\AudioMixer-Setup-1.4.0.exe [--scan]` checks a downloaded installer: PE/NSIS structure, its SHA-256 against the
 `.sha256` file next to it, signature and Defender. Exit code 0 = verified. Manual check in PowerShell:
-`Get-FileHash .\AudioMixer-Setup-1.3.0.exe -Algorithm SHA256` and `Get-AuthenticodeSignature .\AudioMixer-Setup-1.3.0.exe`.
+`Get-FileHash .\AudioMixer-Setup-1.4.0.exe -Algorithm SHA256` and `Get-AuthenticodeSignature .\AudioMixer-Setup-1.4.0.exe`.
 The installer in `releases/` is unsigned, so the signature check reports a warning, not a pass; the SHA-256 is the proof of integrity.
+
+### Installers (.exe and .msi) and the live interface (1.4.0)
+`npm run build:installers` builds both `dist/AudioMixer-Setup-<version>.exe` (NSIS wizard) and `dist/AudioMixer-<version>.msi` from one staging folder;
+`build:installer` and `build:msi` build one each. The NSIS script `installer/audio-mixer.nsi` is only the recipe for the `.exe`; nothing needs it at install time.
+Either installer puts everything together: the mixer page, the Node.js server and client, the bundled official Node.js runtime, Audify (ASIO / WASAPI / DirectSound),
+the plugin folder, the verify scan and the Start Menu entries.
+
+Interface changes in the page:
+- **Smooth faders**: 20 ms gain glide (no zipper noise), 10x finer resolution once a fader is touched, `Shift` / `Alt` + wheel for fine moves (the plain wheel still scrolls the page),
+  arrow keys / PageUp / PageDown, double-click resets (channel faders to 0 dB). The EQ bands glide as well.
+- **EQ pages**: the custom user slots now show on every page, the list is unlimited (**+ NEW SLOT**, delete per slot) and scrolls, and the up / down buttons scroll the EQ page.
+- **Master limiter** (DYNAMICS tab): on / bypass, ceiling, release, attack, knee, quick presets and a live gain-reduction meter; saved in the browser and applied before every output (including ASIO).
+- **Live system strip** (PC MODE panel): server link round-trip time, Node.js version and uptime, Web Audio state / sample rate / latency, the open native streams (ASIO / WASAPI, engine, buffer size, latency)
+  from `GET /api/status`, and the limiter. It reconnects by itself when the server comes back.
 
 ### Audify, ASIO4ALL and the plugin system (installer 1.3.0)
 - **Audify (RtAudio)** is bundled in the installer with its official Windows x64 prebuilt binaries (ASIO, WASAPI, DirectSound; pinned by SHA-256 at
