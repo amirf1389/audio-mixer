@@ -6,6 +6,7 @@
 //   node client/cli.js drivers         list official drivers for this PC (installed / not found)
 //   node client/cli.js download <id>   save an official installer (e.g. flexasio); it is never run for you
 //   node client/cli.js doctor          check Node.js, ports, PortAudio, ASIO drivers, download folder
+//   node client/cli.js setup           install the native audio module (PortAudio) for ASIO / WASAPI
 //   node client/cli.js service install|uninstall|status   start the server automatically when you log in
 const http = require('node:http');
 const fs = require('node:fs');
@@ -105,6 +106,22 @@ async function cmdDoctor(port) {
   return bad ? 1 : 0;
 }
 
+// Installs bridge/ dependencies (naudiodon2 / PortAudio). Needs npm and a C++ build toolchain; failure is not fatal for web mode.
+function cmdSetup() {
+  const { spawn } = require('node:child_process');
+  const cwd = require('node:path').resolve(__dirname, '..', 'bridge');
+  console.log('Installing the PortAudio native module in bridge/ (this can take a minute) ...');
+  return new Promise(resolve => {
+    const c = process.platform === 'win32' ? spawn('cmd', ['/c', 'npm', 'install'], { cwd, stdio: 'inherit' }) : spawn('npm', ['install'], { cwd, stdio: 'inherit' });
+    c.on('error', e => { console.error('Cannot run npm: ' + e.message + ' (install Node.js from https://nodejs.org/)'); resolve(1); });
+    c.on('exit', code => {
+      if (code === 0) console.log('Done. Restart the server; "node client/cli.js doctor" shows the detected ASIO / WASAPI devices.');
+      else console.error('npm install failed. Web mode still works; for native audio install a C++ toolchain (Windows: Visual Studio Build Tools, macOS: Xcode CLT, Linux: build-essential) and retry.');
+      resolve(code === 0 ? 0 : 1);
+    });
+  });
+}
+
 async function cmdService(action, port) {
   const svc = require('./service');
   try {
@@ -158,7 +175,8 @@ async function main(argv) {
   if (o.cmd === 'download') return cmdDownload(o.arg);
   if (o.cmd === 'doctor') return cmdDoctor(o.port);
   if (o.cmd === 'service') return cmdService(o.arg, o.port);
-  console.error(`Unknown command "${o.cmd}". Use: start | drivers | download <id> | doctor | service install|uninstall|status`);
+  if (o.cmd === 'setup') return cmdSetup();
+  console.error(`Unknown command "${o.cmd}". Use: start | drivers | download <id> | doctor | setup | service install|uninstall|status`);
   return 2;
 }
 

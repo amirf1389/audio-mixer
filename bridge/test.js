@@ -287,3 +287,31 @@ test('autostart generates safe per-OS files and installs / removes them', async 
   await assert.rejects(svc.install({ ...base, platform: 'freebsd' }), /not supported/);
   fsx.rmSync(home, { recursive: true, force: true });
 });
+
+test('build produces a self-contained PC-mode package that serves the mixer', async () => {
+  const { build, FILES } = require('../scripts/build');
+  const out = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'dist-'));
+  const r = build({ out });
+  assert.strictEqual(r.dest, pathx.join(out, 'audio-mixer-pc'));
+  for (const f of FILES) assert.ok(fsx.existsSync(pathx.join(r.dest, f)), 'missing ' + f);
+  assert.ok(!fsx.existsSync(pathx.join(r.dest, 'bridge', 'test.js')) && !fsx.existsSync(pathx.join(r.dest, 'bridge', 'audit.js')));
+  const pkg = JSON.parse(fsx.readFileSync(pathx.join(r.dest, 'package.json'), 'utf8'));
+  assert.ok(!('test' in pkg.scripts) && pkg.scripts.start);
+  const manifest = fsx.readFileSync(pathx.join(r.dest, 'MANIFEST.sha256'), 'utf8').trim().split('\n');
+  assert.strictEqual(manifest.length, FILES.length);
+  for (const line of manifest) {
+    const [sum, rel] = line.split('  ');
+    assert.strictEqual(cryptox.createHash('sha256').update(fsx.readFileSync(pathx.join(r.dest, rel))).digest('hex'), sum);
+  }
+  const built = require(pathx.join(r.dest, 'bridge', 'server.js'));
+  const port = await built.start(0);
+  const page = await fetch(`http://127.0.0.1:${port}/`);
+  assert.strictEqual(page.status, 200);
+  assert.ok((await page.text()).length > 100000);
+  assert.strictEqual((await (await fetch(`http://127.0.0.1:${port}/api/catalog`)).json()).ok, true);
+  assert.strictEqual((await fetch(`http://127.0.0.1:${port}/bridge/server.js`)).status, 404);
+  built.server.closeAllConnections(); built.server.close();
+  const help = require('node:child_process').spawnSync(process.execPath, [pathx.join(r.dest, 'client', 'cli.js'), '--help'], { encoding: 'utf8' });
+  assert.match(help.stdout, /service install\|uninstall\|status/);
+  fsx.rmSync(out, { recursive: true, force: true });
+});

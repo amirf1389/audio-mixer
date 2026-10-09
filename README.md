@@ -28,3 +28,17 @@ Official drivers (DRIVERS tab or command line):
 WASAPI, DirectSound, WDM-KS, MME, Core Audio and AAudio are part of the operating system. ASIO drivers come from the hardware vendor,
 ASIO4ALL or FlexASIO; the list links to each official site. Installers are saved to `~/AudioMixerDrivers` (`BRIDGE_DOWNLOAD_DIR` to change)
 and are never started automatically. See `bridge/README.md` for the server's API and security settings.
+
+### Commands
+| Command | What it does |
+|---|---|
+| `npm start` / `node client/cli.js` | start the local system server and open the mixer |
+| `npm run server` | start only the server (`node bridge/server.js`) |
+| `npm run setup` | install the PortAudio native module for ASIO / WASAPI (needs npm + a C++ toolchain) |
+| `npm run drivers` / `doctor` | official drivers for this PC / health check |
+| `npm run service:install` / `service:uninstall` | start the server at login / remove it |
+| `npm run build` | build the portable package in `dist/audio-mixer-pc/` (page + server + client, SHA-256 manifest) |
+| `npm run build:archive` | same, plus `dist/audio-mixer-pc-<version>.tar.gz` to copy to another PC |
+| `npm test` | run the server tests |
+
+Copy the built folder (or the archive) to any PC with Node.js 18+ and run `start-pc-mode.bat` (Windows) or `./start-pc-mode.sh`.
