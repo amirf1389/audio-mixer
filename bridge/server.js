@@ -4,6 +4,7 @@
 //   GET /api/status   -> { ok, name, version }
 //   GET /api/drivers  -> native driver/device detection for this OS
 //   GET /api/volume   -> system output / input volume + mute
+//   GET /api/audify, /api/framesize -> Audify (RtAudio) engine devices and automatic frame size
 //   WS  /ws/output    -> page streams Int16 PCM out through PortAudio (ASIO / WASAPI)
 //   WS  /ws/input     -> bridge streams Int16 PCM captured from an ASIO / WASAPI input
 //   GET /api/catalog  -> official audio drivers / stacks for this OS, with install detection
@@ -22,6 +23,7 @@ const { readVolume } = require('./volume');
 const { listCatalog, downloadDriver, downloadDir } = require('./catalog');
 const { cachedNowPlaying } = require('./nowplaying');
 const { groupInterfaces } = require('./interfaces');
+const audifyEngine = require('./audify');
 
 const VERSION = (() => { try { return require('../package.json').version; } catch (_) { return '1.0.0'; } })();
 const PORT = Number(process.env.BRIDGE_PORT) || 8765;
@@ -82,9 +84,29 @@ async function handle(req, res) {
   if (url.pathname === '/api/interfaces') {
     try {
       const info = await detect();
-      const devices = info.portaudio ? info.portaudio.devices : [];
-      return json(res, 200, { ok: true, platform: info.platform, portaudio: !!info.portaudio, asio: info.asio, interfaces: groupInterfaces(devices, info.asio) }, cors);
+      const src = url.searchParams.get('engine') === 'audify' && info.audify ? info.audify : info.portaudio;
+      const devices = src ? src.devices : [];
+      return json(res, 200, { ok: true, platform: info.platform, portaudio: !!info.portaudio, engine: src ? src.engine : null, asio: info.asio, interfaces: groupInterfaces(devices, info.asio) }, cors);
     } catch (e) { return json(res, 500, { ok: false, error: e.message }, cors); }
+  }
+
+  // Audify (RtAudio) engine: every compiled host API with its devices and the automatic frame size for each.
+  if (url.pathname === '/api/audify') {
+    try { return json(res, 200, { ok: true, ...audifyEngine.describe() }, cors); }
+    catch (e) { return json(res, 500, { ok: false, error: e.message }, cors); }
+  }
+
+  // Automatic ASIO / host-API buffer size: /api/framesize?api=ASIO&sampleRate=48000&channels=2[&latency=ms]
+  if (url.pathname === '/api/framesize') {
+    const q = url.searchParams, num = (k, d) => (q.has(k) ? Number(q.get(k)) : d);
+    const sampleRate = num('sampleRate', 48000), channels = num('channels', 2), latencyMs = q.has('latency') ? Number(q.get('latency')) : undefined;
+    if (!(sampleRate >= 8000 && sampleRate <= 384000) || !(Number.isInteger(channels) && channels >= 1 && channels <= 128) || (latencyMs !== undefined && !(latencyMs > 0 && latencyMs <= 1000))) {
+      return json(res, 400, { ok: false, error: 'sampleRate (8000-384000), channels (1-128) or latency (ms) out of range' }, cors);
+    }
+    const api = q.get('api') || 'ASIO';
+    if (!audifyEngine.apiKey(api)) return json(res, 400, { ok: false, error: 'unknown api: use ASIO, WASAPI, DirectSound, CoreAudio, JACK, ALSA, Pulse or OSS' }, cors);
+    const p = audifyEngine.plan('auto', { api, sampleRate, channels, latencyMs });
+    return json(res, 200, { ok: true, ...p.recommended, candidates: p.candidates, min: audifyEngine.MIN_FRAMES, max: audifyEngine.MAX_FRAMES }, cors);
   }
 
   if (url.pathname === '/api/catalog') {

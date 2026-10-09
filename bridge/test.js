@@ -563,3 +563,110 @@ test('verify: loopback-only check and cli flag parsing', async () => {
   const closed = await v.checkLoopbackOnly(1);
   assert.strictEqual(closed[0].level, 'INFO');
 });
+
+// ── Audify (RtAudio) engine ──
+function fakeAudify({ failSizes = [], driverSize = 192 } = {}) {
+  const opened = [], written = [];
+  class RtAudio {
+    constructor(api) { this.api = api; }
+    getApi() { return ({ 6: 'ASIO', 7: 'WASAPI', 3: 'JACK' })[this.api] || 'Dummy'; }
+    getDevices() {
+      return this.api === 6 ? [{ id: 0, name: 'Focusrite USB ASIO', inputChannels: 18, outputChannels: 20, sampleRates: [44100, 48000, 96000], preferredSampleRate: 48000, isDefaultInput: 1, isDefaultOutput: 1 }]
+        : this.api === 7 ? [{ id: 5, name: 'Speakers (Realtek)', inputChannels: 0, outputChannels: 2, sampleRates: [48000], preferredSampleRate: 48000, isDefaultInput: 0, isDefaultOutput: 1 }] : [];
+    }
+    openStream(out, inp, fmt, rate, frames, name, cb) {
+      if (failSizes.includes(frames)) throw new Error('bad buffer size');
+      opened.push({ api: this.api, out, inp, rate, frames }); this.cb = cb;
+      return frames === 0 ? driverSize : frames;
+    }
+    start() {} stop() {} closeStream() {} isStreamRunning() { return true; }
+    write(b) { written.push(b.length); }
+  }
+  return { RtAudio, RtAudioApi: { UNSPECIFIED: 0, MACOSX_CORE: 1, LINUX_ALSA: 2, UNIX_JACK: 3, LINUX_PULSE: 4, LINUX_OSS: 5, WINDOWS_ASIO: 6, WINDOWS_WASAPI: 7, WINDOWS_DS: 8, RTAUDIO_DUMMY: 9 },
+    RtAudioFormat: { RTAUDIO_SINT16: 2 }, RtAudioStreamFlags: { RTAUDIO_MINIMIZE_LATENCY: 2 }, opened, written };
+}
+
+test('audify: automatic frame size allocation', () => {
+  const a = require('./audify');
+  assert.strictEqual(a.recommendFrameSize({ api: 'ASIO', sampleRate: 48000 }).frames, 256);
+  assert.strictEqual(a.recommendFrameSize({ api: 'ASIO', sampleRate: 96000, channels: 2 }).frames, 512);
+  assert.strictEqual(a.recommendFrameSize({ api: 'Windows WASAPI', sampleRate: 48000 }).frames, 512);
+  assert.strictEqual(a.recommendFrameSize({ api: 'DirectSound', sampleRate: 48000 }).frames, 1024);
+  assert.ok(a.recommendFrameSize({ api: 'ASIO', sampleRate: 48000, channels: 32 }).frames > 256);   // wide interfaces get bigger blocks
+  assert.strictEqual(a.recommendFrameSize({ api: 'ASIO', sampleRate: 48000, latencyMs: 0.1 }).frames, 32);
+  assert.strictEqual(a.recommendFrameSize({ api: 'ASIO', sampleRate: 384000, latencyMs: 500 }).frames, 4096);
+  const c = a.frameCandidates(256);
+  assert.deepStrictEqual(c.slice(0, 3), [256, 512, 1024]); assert.ok(c.includes(128) && !c.includes(256 * 2 * 2 * 2 * 2 * 2));
+  assert.deepStrictEqual(a.plan('auto', { api: 'ASIO' }).candidates[0], 0);          // ASIO: ask the driver's own buffer size first
+  assert.notStrictEqual(a.plan('auto', { api: 'WASAPI' }).candidates[0], 0);
+  assert.deepStrictEqual(a.plan(128, { api: 'ASIO' }).candidates, [128]);
+  assert.throws(() => a.plan(100, {}), /power of two/);
+});
+
+test('audify: devices of every API, unique ids, substituted APIs skipped', () => {
+  const a = require('./audify');
+  const r = a.listDevices(() => fakeAudify());
+  assert.deepStrictEqual(r.devices.map(d => [d.id, d.hostAPIName]), [[1000, 'ASIO'], [1001, 'Windows WASAPI']]);
+  assert.strictEqual(a.detectAudify(() => fakeAudify()).devices[0].inputs, 18);
+  assert.strictEqual(a.listDevices(() => { throw new Error('missing'); }), null);
+  const d = a.describe(() => fakeAudify());
+  assert.strictEqual(d.installed, true); assert.strictEqual(d.devices[0].recommended.output.frames, 512);   // 20 ch -> doubled
+});
+
+test('audify: opens with the driver buffer, retries other sizes, aligns writes', () => {
+  const a = require('./audify');
+  const dev = a.listDevices(() => fakeAudify()).devices[0];
+  const f1 = fakeAudify();
+  const s1 = a.openStream({ mod: f1, dev, direction: 'output', channels: 2, sampleRate: 48000 });
+  assert.strictEqual(s1.frameSize, 192); assert.strictEqual(f1.opened[0].frames, 0); assert.strictEqual(s1.auto, true);
+  s1.write(Buffer.alloc(192 * 4 + 10)); s1.write(Buffer.alloc(200));                    // 778 bytes then 200 more: one whole block (768) so far
+  assert.deepStrictEqual(f1.written, [768]);
+  s1.write(Buffer.alloc(768)); assert.deepStrictEqual(f1.written, [768, 768]);
+  const f2 = fakeAudify({ failSizes: [0, 256] });
+  const s2 = a.openStream({ mod: f2, dev, direction: 'output', channels: 2, sampleRate: 48000 });
+  assert.strictEqual(s2.frameSize, 512); assert.deepStrictEqual(s2.tried, [0, 256, 512]);
+  assert.throws(() => a.openStream({ mod: fakeAudify({ failSizes: [128] }), dev, direction: 'output', channels: 2, sampleRate: 48000, frameSize: 128 }), /could not open/);
+  assert.throws(() => a.openStream({ mod: f1, dev, direction: 'output', channels: 2, sampleRate: 88200 }), /does not support 88200/);
+  assert.throws(() => a.openStream({ mod: f1, dev, direction: 'output', channels: 30, sampleRate: 48000 }), /only 20 output/);
+  const cap = a.openStream({ mod: f1, dev, direction: 'input', channels: 40, sampleRate: 48000, onData() {} });
+  assert.strictEqual(cap.channels, 18);
+});
+
+test('audify: output and input sessions, engine choice, ASIO lock', () => {
+  const { _owners } = require('./asio-lock'); _owners.clear();
+  const fa = fakeAudify();
+  const mk = (kind) => { const sent = [], bin = []; const conn = { send: m => sent.push(JSON.parse(m)), sendBinary: b => bin.push(b) };
+    const noPa = () => { throw new Error('no naudiodon2'); };
+    return { sent, bin, s: kind === 'out' ? require('./output').createSession(conn, noPa, () => fa) : require('./input').createInputSession(conn, noPa, () => fa) }; };
+  const out = mk('out');
+  out.s.onText(JSON.stringify({ type: 'start', channels: 2, sampleRate: 48000 }));        // no naudiodon2 -> Audify, ASIO preferred
+  assert.strictEqual(out.sent[0].type, 'started'); assert.strictEqual(out.sent[0].engine, 'audify');
+  assert.strictEqual(out.sent[0].hostApi, 'ASIO'); assert.strictEqual(out.sent[0].frameSize, 192); assert.strictEqual(out.sent[0].autoFrameSize, true);
+  const inp = mk('in');
+  inp.s.onText(JSON.stringify({ type: 'start', channels: 2, sampleRate: 48000, deviceId: 1001 }));   // WASAPI is not ASIO: no lock conflict
+  assert.strictEqual(inp.sent[0].type, 'error');                                          // speakers have no input channels
+  const inp2 = mk('in');
+  inp2.s.onText(JSON.stringify({ type: 'start', channels: 2, sampleRate: 48000, deviceId: 1000, frameSize: 'auto' }));
+  assert.strictEqual(inp2.sent[0].type, 'started'); assert.strictEqual(inp2.sent[0].channels, 2);
+  out.s.onClose(); inp2.s.onClose(); inp.s.onClose();
+  assert.strictEqual(_owners.size, 0);
+  const bad = mk('out');
+  bad.s.onText(JSON.stringify({ type: 'start', engine: 'naudiodon' }));
+  assert.match(bad.sent[0].message, /PortAudio not installed/);
+  const missing = mk('out');
+  missing.s.onText(JSON.stringify({ type: 'start', deviceId: 1099 }));
+  assert.strictEqual(missing.sent[0].message, 'device not found');
+});
+
+test('endpoints: /api/audify and /api/framesize', async () => {
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const au = await (await fetch(base + '/api/audify')).json();
+  assert.strictEqual(au.ok, true); assert.strictEqual(typeof au.installed, 'boolean'); assert.ok(Array.isArray(au.devices));
+  const fs1 = await (await fetch(base + '/api/framesize?api=ASIO&sampleRate=96000&channels=2')).json();
+  assert.strictEqual(fs1.ok, true); assert.strictEqual(fs1.frames, 512); assert.strictEqual(fs1.candidates[0], 0);
+  assert.strictEqual((await fetch(base + '/api/framesize?api=nope')).status, 400);
+  assert.strictEqual((await fetch(base + '/api/framesize?sampleRate=5')).status, 400);
+  assert.strictEqual((await fetch(base + '/api/framesize', { headers: { Origin: 'https://evil.example' } })).status, 403);
+  server.closeAllConnections(); server.close();
+});

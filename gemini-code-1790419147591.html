@@ -5548,10 +5548,15 @@ window.navTabs = [
                   <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-[7.5px]">
                     <div class="bg-black/60 p-2 rounded border border-white/10"><span class="text-slate-500 block">SERVER</span><span id="pc-url" class="text-cyan-400 font-bold break-all">-</span></div>
                     <div class="bg-black/60 p-2 rounded border border-white/10"><span class="text-slate-500 block">THIS PC</span><span id="pc-platform" class="text-slate-200 font-bold">-</span></div>
-                    <div class="bg-black/60 p-2 rounded border border-white/10"><span class="text-slate-500 block">NATIVE AUDIO (PORTAUDIO)</span><span id="pc-native" class="text-slate-200 font-bold">-</span></div>
+                    <div class="bg-black/60 p-2 rounded border border-white/10"><span class="text-slate-500 block">NATIVE AUDIO (PORTAUDIO / AUDIFY)</span><span id="pc-native" class="text-slate-200 font-bold">-</span></div>
                     <div class="bg-black/60 p-2 rounded border border-white/10"><span class="text-slate-500 block">DOWNLOAD FOLDER</span><span id="pc-dir" class="text-slate-200 font-bold break-all">-</span></div>
                   </div>
                   <label class="flex items-center gap-2 text-[8px] text-slate-300 cursor-pointer"><input type="checkbox" id="pc-auto" class="accent-emerald-400" onchange="window.universalAsioSdk.setPcAuto(this.checked)"> CONNECT AUTOMATICALLY WHEN THIS PAGE OPENS</label>
+                  <label class="flex flex-wrap items-center gap-2 text-[8px] text-slate-300">AUDIO ENGINE BUFFER (ASIO FRAME SIZE)
+                    <select id="pc-framesize" onchange="window.universalAsioSdk.setFrameSize(this.value)" class="bg-black/70 border border-white/15 rounded px-1.5 py-0.5 text-[8px] text-cyan-300 font-bold">
+                      <option value="auto">AUTO (DRIVER / LOWEST SAFE LATENCY)</option><option value="64">64</option><option value="128">128</option><option value="256">256</option><option value="512">512</option><option value="1024">1024</option><option value="2048">2048</option>
+                    </select>
+                    <span id="pc-engine" class="text-slate-500">-</span></label>
                   <div id="pc-help" class="text-[7.5px] text-slate-300 leading-relaxed bg-black/50 border border-white/10 rounded p-2.5 space-y-1">
                     <div class="text-amber-400 font-bold">The local server is not running (web mode: browser audio only).</div>
                     <div>1. Install Node.js 18 or newer from <a href="https://nodejs.org/" target="_blank" rel="noopener noreferrer" class="text-cyan-400 underline">nodejs.org</a>.</div>
@@ -12881,6 +12886,9 @@ window.navTabs = [
         // ── PC mode: client (this page) <-> local system server ──
         catalog: null, catalogAll: false,
         pcAuto: function() { try { return localStorage.getItem('halx_pc_mode_auto') !== '0'; } catch (e) { return true; } },
+        // Buffer size sent to the bridge when a native stream opens: "auto" lets the bridge pick (the ASIO driver's own size, else the lowest safe one).
+        frameSizeSetting: function() { try { const v = localStorage.getItem('halx_frame_size'); return v && v !== 'auto' ? parseInt(v, 10) : 'auto'; } catch (e) { return 'auto'; } },
+        setFrameSize: function(v) { try { localStorage.setItem('halx_frame_size', String(v)); } catch (e) { /* ignore */ } },
         setPcAuto: function(on) { try { localStorage.setItem('halx_pc_mode_auto', on ? '1' : '0'); } catch (e) { /* ignore */ } },
         setCatalogFilter: function(all) {
             this.catalogAll = !!all;
@@ -12898,11 +12906,13 @@ window.navTabs = [
             st.textContent = on ? 'PC MODE: CONNECTED' : 'WEB MODE: SERVER NOT FOUND';
             $('pc-url').textContent = on ? this.bridgeUrl : '-';
             $('pc-platform').textContent = on && info ? `${info.platform} ${info.arch} \u2022 Node ${info.node}` : '-';
-            $('pc-native').textContent = on ? (info && info.portaudio ? 'READY: ' + info.portaudio.hostApis.join(', ') : 'NOT INSTALLED (cd bridge && npm install)') : '-';
+            $('pc-native').textContent = on ? (info && info.portaudio ? 'READY' + (info.portaudio.engine === 'audify' ? ' (AUDIFY)' : '') + ': ' + info.portaudio.hostApis.join(', ') : 'NOT INSTALLED (cd bridge && npm install)') : '-';
             $('pc-dir').textContent = on && this.catalog ? this.catalog.downloadDir : '-';
             $('pc-help').classList.toggle('hidden', on);
             $('pc-connect').textContent = on ? 'RECONNECT' : 'CONNECT';
             const auto = $('pc-auto'); if (auto) auto.checked = this.pcAuto();
+            const fsel = $('pc-framesize'); if (fsel) { fsel.value = String(this.frameSizeSetting()); if (fsel.value !== String(this.frameSizeSetting())) fsel.value = 'auto'; }
+            const eng = $('pc-engine'); if (eng) eng.textContent = on && info && info.engines ? 'ENGINES: ' + ([info.engines.naudiodon && 'PORTAUDIO (NAUDIODON2)', info.engines.audify && 'AUDIFY (RTAUDIO)'].filter(Boolean).join(' + ') || 'NONE INSTALLED') : '-';
         },
         loadCatalog: function() {
             const self = this;
@@ -13474,8 +13484,13 @@ window.navTabs = [
             const g = document.createElement('optgroup');
             g.label = 'PORTAUDIO HOST API INPUTS (via bridge)';
             g.setAttribute('data-pa', '1');
+            if (info.portaudio.engine === 'audify') g.label = 'AUDIFY (RTAUDIO) HOST API INPUTS (via bridge)';
             ins.forEach(d => { const o = document.createElement('option'); o.value = 'pa:' + d.id; o.text = `${d.hostApi}: ${d.name} (${d.inputs} ch)`; g.appendChild(o); });
             sel.insertBefore(g, sel.firstChild);
+            // both engines installed: Audify devices (ids from 1000) are offered as well
+            const au = info.audify && info.portaudio.engine !== 'audify' ? info.audify.devices.filter(d => d.inputs > 0) : [];
+            if (au.length) { const g2 = document.createElement('optgroup'); g2.label = 'AUDIFY (RTAUDIO) HOST API INPUTS (via bridge)'; g2.setAttribute('data-pa', '2');
+                au.forEach(d => { const o = document.createElement('option'); o.value = 'pa:' + d.id; o.text = `${d.hostApi}: ${d.name} (${d.inputs} ch)`; g2.appendChild(o); }); sel.insertBefore(g2, g.nextSibling); }
         },
         startPaInput: async function() {
             const self = this;
@@ -13498,7 +13513,7 @@ window.navTabs = [
             this.paInWs = ws;
             let ch = 2;
             const devSel = /^pa:(\d+)$/.exec(this.selectedInputDeviceId || '');
-            ws.onopen = function() { ws.send(JSON.stringify({ type: 'start', channels: 2, sampleRate: ctx.sampleRate, deviceId: devSel ? parseInt(devSel[1], 10) : undefined })); };
+            ws.onopen = function() { ws.send(JSON.stringify({ type: 'start', channels: 2, sampleRate: ctx.sampleRate, frameSize: window.universalAsioSdk.frameSizeSetting(), deviceId: devSel ? parseInt(devSel[1], 10) : undefined })); };
             ws.onmessage = function(ev) {
                 if (typeof ev.data !== 'string') {
                     if (!self.paInNode) return;
@@ -13518,7 +13533,7 @@ window.navTabs = [
                     self.paInNode.connect(self.readAnalyserNode);
                     self.readAnalyserNode.connect(self.paInMute);
                     self.paInMute.connect(ctx.destination);
-                    self.log(`PortAudio input LIVE: ${m.hostApi} / ${m.device} @ ${m.sampleRate / 1000} kHz, ${m.channels} ch`, "success");
+                    self.log(`${m.engine === 'audify' ? 'Audify' : 'PortAudio'} input LIVE: ${m.hostApi} / ${m.device} @ ${m.sampleRate / 1000} kHz, ${m.channels} ch${m.frameSize ? ', buffer ' + m.frameSize + ' frames (' + m.latencyMs + ' ms' + (m.autoFrameSize ? ', auto' : '') + ')' : ''}`, "success");
                     window.notify(`${/asio/i.test(m.hostApi) ? 'ASIO' : m.hostApi} Input Live: ${m.device}`, "microphone");
                 } else if (m.type === 'error') {
                     self.log(`PortAudio input error: ${m.message}`, "error");
@@ -13546,8 +13561,12 @@ window.navTabs = [
             const g = document.createElement('optgroup');
             g.label = 'PORTAUDIO HOST API OUTPUTS (via bridge)';
             g.setAttribute('data-pa', '1');
+            if (info.portaudio.engine === 'audify') g.label = 'AUDIFY (RTAUDIO) HOST API OUTPUTS (via bridge)';
             outs.forEach(d => { const o = document.createElement('option'); o.value = 'pa:' + d.id; o.text = `${d.hostApi}: ${d.name} (${d.outputs} ch)`; g.appendChild(o); });
             sel.insertBefore(g, sel.firstChild);
+            const au = info.audify && info.portaudio.engine !== 'audify' ? info.audify.devices.filter(d => d.outputs > 0) : [];
+            if (au.length) { const g2 = document.createElement('optgroup'); g2.label = 'AUDIFY (RTAUDIO) HOST API OUTPUTS (via bridge)'; g2.setAttribute('data-pa', '2');
+                au.forEach(d => { const o = document.createElement('option'); o.value = 'pa:' + d.id; o.text = `${d.hostApi}: ${d.name} (${d.outputs} ch)`; g2.appendChild(o); }); sel.insertBefore(g2, g.nextSibling); }
             const asio = outs.find(d => /asio/i.test(d.hostApi));
             if (asio) { sel.value = 'pa:' + asio.id; this.selectedOutputDeviceId = 'pa:' + asio.id; }
         },
@@ -13572,7 +13591,7 @@ window.navTabs = [
             ws.binaryType = 'arraybuffer';
             this.paWs = ws;
             const devSel = /^pa:(\d+)$/.exec(this.selectedOutputDeviceId || '');
-            ws.onopen = function() { ws.send(JSON.stringify({ type: 'start', channels: 2, sampleRate: ctx.sampleRate, deviceId: devSel ? parseInt(devSel[1], 10) : undefined })); };
+            ws.onopen = function() { ws.send(JSON.stringify({ type: 'start', channels: 2, sampleRate: ctx.sampleRate, frameSize: window.universalAsioSdk.frameSizeSetting(), deviceId: devSel ? parseInt(devSel[1], 10) : undefined })); };
             ws.onmessage = function(ev) {
                 let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
                 if (m.type === 'started') {
@@ -13590,7 +13609,7 @@ window.navTabs = [
                     tap.connect(node); node.connect(mute); mute.connect(ctx.destination);
                     try { window.state.nodes.musicAnalyser.disconnect(ctx.destination); } catch (e) { /* not connected */ }
                     self.paNode = node; self.paMute = mute; self.paReady = true;
-                    self.log(`PortAudio output LIVE: ${m.hostApi} / ${m.device} @ ${m.sampleRate / 1000} kHz, ${m.channels} ch`, "success");
+                    self.log(`${m.engine === 'audify' ? 'Audify' : 'PortAudio'} output LIVE: ${m.hostApi} / ${m.device} @ ${m.sampleRate / 1000} kHz, ${m.channels} ch${m.frameSize ? ', buffer ' + m.frameSize + ' frames (' + m.latencyMs + ' ms' + (m.autoFrameSize ? ', auto' : '') + ')' : ''}`, "success");
                     window.notify(`${/asio/i.test(m.hostApi) ? 'ASIO' : m.hostApi} Output Live: ${m.device}`, "volume-high");
                 } else if (m.type === 'error') {
                     self.log(`PortAudio output error: ${m.message}`, "error");
@@ -15445,7 +15464,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                         const ws = new WebSocket(self.wsUrl('/ws/input')); ws.binaryType = 'arraybuffer';
                         let node = null, ch = 2, done = false;
                         const fail = m => { if (!done) { done = true; try { ws.close(); } catch (e) { /* ignore */ } reject(new Error(m)); } };
-                        ws.onopen = () => ws.send(JSON.stringify({ type: 'start', channels: want, sampleRate: ctx.sampleRate, deviceId: a.deviceId }));
+                        ws.onopen = () => ws.send(JSON.stringify({ type: 'start', channels: want, sampleRate: ctx.sampleRate, frameSize: window.universalAsioSdk.frameSizeSetting(), deviceId: a.deviceId }));
                         ws.onerror = () => fail('local server connection failed');
                         ws.onclose = () => { if (!done) fail('closed'); else if (self.caps.get(i.key) && self.caps.get(i.key).ws === ws) self.stopRead(i.key); };
                         ws.onmessage = ev => {
@@ -15558,7 +15577,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                     const ws = new WebSocket(self.wsUrl('/ws/output')); ws.binaryType = 'arraybuffer';
                     let done = false;
                     const fail = m => { if (!done) { done = true; try { ws.close(); } catch (e) { /* ignore */ } reject(new Error(m)); } };
-                    ws.onopen = () => ws.send(JSON.stringify({ type: 'start', channels: 2, sampleRate: ctx.sampleRate, deviceId: a.deviceId }));
+                    ws.onopen = () => ws.send(JSON.stringify({ type: 'start', channels: 2, sampleRate: ctx.sampleRate, frameSize: window.universalAsioSdk.frameSizeSetting(), deviceId: a.deviceId }));
                     ws.onerror = () => fail('local server connection failed');
                     ws.onclose = () => { if (!done) fail('closed'); else self.writes.forEach((w, key) => { if (w.ws === ws) self.stopWrite(key); }); };
                     ws.onmessage = ev => {

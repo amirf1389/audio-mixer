@@ -1,6 +1,7 @@
 'use strict';
 // ASIO / WASAPI / host-API audio INPUT capture through PortAudio (naudiodon2), streamed to the page as Int16 PCM.
 const { claim } = require('./asio-lock');
+const audify = require('./audify');
 function loadPortAudio() { return require('naudiodon2'); }
 
 function pickInput(pa, wantedId, channels) {
@@ -11,7 +12,7 @@ function pickInput(pa, wantedId, channels) {
 
 const CHUNK = 16384; // bytes per WebSocket frame
 
-function createInputSession(conn, load = loadPortAudio) {
+function createInputSession(conn, load = loadPortAudio, loadA = audify.loadAudify) {
   let io = null;
   let lock = null;   // ASIO is single-client: see asio-lock.js
 
@@ -20,10 +21,38 @@ function createInputSession(conn, load = loadPortAudio) {
     if (lock) { lock.release(); lock = null; }
   };
 
+  // Audify (RtAudio) engine: chosen by an Audify device id (>= 1000), engine: "audify", or when PortAudio is not installed.
+  function startAudify(opts) {
+    let list;
+    try { list = audify.listDevices(loadA); } catch (_) { list = null; }
+    if (!list) return conn.send(JSON.stringify({ type: 'error', message: 'PortAudio not installed: run "npm install" in bridge/ (needs naudiodon2 or audify)' }));
+    const channels = Math.min(Math.max(parseInt(opts.channels, 10) || 2, 1), 32);
+    const sampleRate = parseInt(opts.sampleRate, 10) || 48000;
+    const wanted = Number.isInteger(opts.deviceId) ? opts.deviceId : null;
+    const dev = audify.pickAudifyDevice(list.devices, wanted, 'input', channels) || (wanted === null ? list.devices.find(d => d.isDefaultInput) : null);
+    if (!dev) return conn.send(JSON.stringify({ type: 'error', message: wanted !== null ? 'device not found' : 'no input device found' }));
+    lock = claim({ id: dev.id, name: dev.name, hostAPIName: dev.hostAPIName });
+    if (!lock.ok) { const msg = lock.message; lock = null; return conn.send(JSON.stringify({ type: 'error', message: msg })); }
+    try {
+      const st = audify.openStream({ mod: loadA(), dev, direction: 'input', channels, sampleRate, frameSize: opts.frameSize,
+        onData: chunk => { for (let i = 0; i < chunk.length; i += CHUNK) conn.sendBinary(chunk.subarray(i, i + CHUNK)); },
+        onError: e => { conn.send(JSON.stringify({ type: 'error', message: String(e && e.message || e) })); stop(); } });
+      io = { quit: () => st.close() };
+      conn.send(JSON.stringify({ type: 'started', engine: 'audify', device: dev.name, hostApi: dev.hostAPIName, sampleRate, channels: st.channels, frameSize: st.frameSize, latencyMs: st.latencyMs, autoFrameSize: st.auto }));
+    } catch (e) {
+      stop();
+      conn.send(JSON.stringify({ type: 'error', message: String(e && e.message || e) }));
+    }
+  }
+
   function start(opts) {
     stop();
-    let pa;
-    try { pa = load(); } catch (_) {
+    const id = Number.isInteger(opts.deviceId) ? opts.deviceId : null;
+    const forceAudify = opts.engine === 'audify' || (id !== null && id >= audify.AUDIFY_BASE);
+    let pa = null;
+    if (!forceAudify) { try { pa = load(); } catch (_) { pa = null; } }
+    if (!pa && opts.engine !== 'naudiodon' && (id === null || id >= audify.AUDIFY_BASE)) return startAudify(opts);
+    if (!pa) {
       return conn.send(JSON.stringify({ type: 'error', message: 'PortAudio not installed: run "npm install" in bridge/ (needs naudiodon2)' }));
     }
     const channels = Math.min(Math.max(parseInt(opts.channels, 10) || 2, 1), 32);
@@ -42,7 +71,7 @@ function createInputSession(conn, load = loadPortAudio) {
       io.on('error', e => { conn.send(JSON.stringify({ type: 'error', message: String(e && e.message || e) })); stop(); });
       io.on('data', chunk => { for (let i = 0; i < chunk.length; i += CHUNK) conn.sendBinary(chunk.subarray(i, i + CHUNK)); });
       io.start();
-      conn.send(JSON.stringify({ type: 'started', device: dev ? dev.name : 'default', hostApi: dev ? dev.hostAPIName : 'default', sampleRate, channels }));
+      conn.send(JSON.stringify({ type: 'started', engine: 'naudiodon', device: dev ? dev.name : 'default', hostApi: dev ? dev.hostAPIName : 'default', sampleRate, channels }));
     } catch (e) {
       stop();
       conn.send(JSON.stringify({ type: 'error', message: String(e && e.message || e) }));
