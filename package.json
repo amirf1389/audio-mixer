@@ -17,7 +17,9 @@
     "build": "node scripts/build.js",
     "build:archive": "node scripts/build.js --archive",
     "service:install": "node client/cli.js service install",
-    "service:uninstall": "node client/cli.js service uninstall"
+    "service:uninstall": "node client/cli.js service uninstall",
+    "pc": "node client/cli.js",
+    "pc:headless": "node client/cli.js --no-open"
   },
   "engines": {
     "node": ">=18"

@@ -32,7 +32,8 @@ and are never started automatically. See `bridge/README.md` for the server's API
 ### Commands
 | Command | What it does |
 |---|---|
-| `npm start` / `node client/cli.js` | start the local system server and open the mixer |
+| `npm start` (also `npm run pc`) / `node client/cli.js` | **PC mode**: start the local system server and open the mixer. Works from the project folder and from `bridge/` |
+| `npm run pc:headless` | PC mode without opening a browser window |
 | `npm run server` | start only the server (`node bridge/server.js`) |
 | `npm run setup` | install the PortAudio native module for ASIO / WASAPI (needs npm + a C++ toolchain) |
 | `npm run drivers` / `doctor` | official drivers for this PC / health check |
