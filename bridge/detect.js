@@ -59,10 +59,12 @@ async function linux() {
   cards.split('\n').forEach(l => { const m = l.match(/^\s*\d+\s+\[(\S+)\s*\]:\s*(.+)$/); if (m) devices.push({ name: m[2].trim(), vendor: '', status: 'OK' }); });
   if (cards.trim()) drivers.add('alsa');
   const pw = await run('pw-cli', ['info', '0']);
-  if (pw) drivers.add('pipewire');
+  const pa = await run('pactl', ['info']);
+  if (pw || /PipeWire/i.test(pa)) drivers.add('pipewire');
+  if (pa && !/PipeWire/i.test(pa)) drivers.add('pulseaudio');
   const jack = await run('jack_lsp', []);
   if (jack) drivers.add('jack');
-  const rec = drivers.has('pipewire') ? 'pipewire' : drivers.has('jack') ? 'jack' : drivers.has('alsa') ? 'alsa' : null;
+  const rec = drivers.has('pipewire') ? 'pipewire' : drivers.has('jack') ? 'jack' : drivers.has('pulseaudio') ? 'pulseaudio' : drivers.has('alsa') ? 'alsa' : null;
   return { drivers: [...drivers], devices, asio: [], recommended: rec };
 }
 

@@ -5367,7 +5367,7 @@ window.navTabs = [
                       <h4 class="text-xs font-black text-amber-400 font-wing tracking-wider uppercase flex items-center gap-2">
                         <i class="fa-solid fa-server"></i> CROSS-PLATFORM OS AUDIO DRIVERS (FFT RTA SOURCE)
                       </h4>
-                      <p class="text-[7.5px] text-slate-400">WINDOWS WASAPI/ASIO • macOS COREAUDIO • iOS AUDIOSESSION • LINUX ALSA/JACK • ANDROID AAUDIO</p>
+                      <p class="text-[7.5px] text-slate-400">USER-MODE + KERNEL / HAL STACKS: WINDOWS WASAPI/ASIO • macOS COREAUDIO • iOS AUDIOSESSION • LINUX ALSA/PIPEWIRE/JACK • ANDROID AAUDIO</p>
                     </div>
                     <span class="px-2 py-0.5 rounded text-[7.5px] bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 font-bold">5 OS ENGINES ACTIVE</span>
                   </div>
@@ -5385,6 +5385,12 @@ window.navTabs = [
                           <div class="flex justify-between"><span class="text-slate-500">CLOCK:</span><span class="text-amber-400">192 kHz / 24-bit PCM</span></div>
                           <div class="flex justify-between"><span class="text-slate-500">LATENCY:</span><span class="text-emerald-400 font-bold">0.67 ms (64 samples)</span></div>
                           <div class="flex justify-between"><span class="text-slate-500">DMA STREAM:</span><span class="text-cyan-400">32 IN / 32 OUT</span></div>
+                          <div class="pt-1 mt-1 border-t border-white/10 space-y-0.5 text-[7px] leading-snug">
+                            <div><span class="text-slate-500">USER-MODE:</span> WASAPI (Core Audio) &rarr; audio engine (audiodg.exe + APOs). WASAPI Exclusive and ASIO bypass the engine; ASIO is a vendor driver (Steinberg SDK), not a Microsoft API.</div>
+                            <div><span class="text-slate-500">KERNEL / HAL:</span> WDM port-miniport audio driver (WaveRT) on Kernel Streaming.</div>
+                            <div id="stack-live-windows" class="hidden text-emerald-400 font-bold"></div>
+                            <a href="https://learn.microsoft.com/windows-hardware/drivers/audio/" target="_blank" rel="noopener noreferrer" class="text-cyan-400 hover:underline">Microsoft Learn: Windows audio &nearr;</a>
+                          </div>
                         </div>
                       </div>
                       <button onclick="window.setRtaAudioDriver('windows')" class="w-full mt-1.5 py-1 rounded bg-cyan-500/20 hover:bg-cyan-500 hover:text-black border border-cyan-500/40 text-cyan-400 font-black text-[7.5px] uppercase transition flex items-center justify-center gap-1"><i class="fa-solid fa-bolt"></i>ROUTE WINDOWS TO RTA</button>
@@ -5402,6 +5408,12 @@ window.navTabs = [
                           <div class="flex justify-between"><span class="text-slate-500">CLOCK:</span><span class="text-amber-400">96.0 kHz / 32-bit Float</span></div>
                           <div class="flex justify-between"><span class="text-slate-500">LATENCY:</span><span class="text-emerald-400 font-bold">1.20 ms (64 samples)</span></div>
                           <div class="flex justify-between"><span class="text-slate-500">DMA STREAM:</span><span class="text-slate-300">Aggregate Loopback Tap</span></div>
+                          <div class="pt-1 mt-1 border-t border-white/10 space-y-0.5 text-[7px] leading-snug">
+                            <div><span class="text-slate-500">USER-MODE:</span> Core Audio HAL (coreaudiod) &rarr; AUHAL / Audio Units; Audio Server plug-ins for virtual devices.</div>
+                            <div><span class="text-slate-500">KERNEL / HAL:</span> AudioDriverKit (DriverKit, runs in user space); replaces the kernel IOAudioFamily kexts.</div>
+                            <div id="stack-live-macos" class="hidden text-emerald-400 font-bold"></div>
+                            <a href="https://developer.apple.com/documentation/audiodriverkit" target="_blank" rel="noopener noreferrer" class="text-cyan-400 hover:underline">Apple: AudioDriverKit &nearr;</a>
+                          </div>
                         </div>
                       </div>
                       <button onclick="window.setRtaAudioDriver('macos')" class="w-full mt-1.5 py-1 rounded bg-white/10 hover:bg-white hover:text-black border border-white/20 text-slate-200 font-black text-[7.5px] uppercase transition flex items-center justify-center gap-1"><i class="fa-solid fa-bolt"></i>ROUTE macOS TO RTA</button>
@@ -5419,6 +5431,12 @@ window.navTabs = [
                           <div class="flex justify-between"><span class="text-slate-500">CLOCK:</span><span class="text-amber-400">48.0 kHz / 24-bit PCM</span></div>
                           <div class="flex justify-between"><span class="text-slate-500">LATENCY:</span><span class="text-emerald-400 font-bold">2.67 ms (128 samples)</span></div>
                           <div class="flex justify-between"><span class="text-slate-500">DMA STREAM:</span><span class="text-purple-400">CoreAudio RemoteIO Tap</span></div>
+                          <div class="pt-1 mt-1 border-t border-white/10 space-y-0.5 text-[7px] leading-snug">
+                            <div><span class="text-slate-500">USER-MODE:</span> AVAudioSession + Audio Units (RemoteIO) through the system audio daemon.</div>
+                            <div><span class="text-slate-500">KERNEL / HAL:</span> Apple-controlled audio HAL and drivers; no third-party audio drivers.</div>
+                            <div id="stack-live-ios" class="hidden text-emerald-400 font-bold"></div>
+                            <a href="https://developer.apple.com/documentation/avfaudio/avaudiosession" target="_blank" rel="noopener noreferrer" class="text-cyan-400 hover:underline">Apple: AVAudioSession &nearr;</a>
+                          </div>
                         </div>
                       </div>
                       <button onclick="window.setRtaAudioDriver('ios')" class="w-full mt-1.5 py-1 rounded bg-purple-500/20 hover:bg-purple-500 hover:text-black border border-purple-500/40 text-purple-400 font-black text-[7.5px] uppercase transition flex items-center justify-center gap-1"><i class="fa-solid fa-bolt"></i>ROUTE iOS TO RTA</button>
@@ -5428,7 +5446,7 @@ window.navTabs = [
                     <div class="bg-black/70 p-2.5 rounded-lg border border-amber-500/40 space-y-1.5 flex flex-col justify-between">
                       <div>
                         <div class="flex justify-between items-center mb-1">
-                          <span class="text-amber-400 font-bold text-[8.5px] flex items-center gap-1.5"><i class="fa-brands fa-linux text-sm"></i> LINUX ALSA / JACK</span>
+                          <span class="text-amber-400 font-bold text-[8.5px] flex items-center gap-1.5"><i class="fa-brands fa-linux text-sm"></i> LINUX ALSA / PIPEWIRE / JACK</span>
                           <span id="driver-badge-linux" class="px-2 py-0.5 rounded bg-white/5 text-slate-500 border border-white/10 text-[7px]">STANDBY</span>
                         </div>
                         <div class="text-[7.5px] text-slate-300 space-y-0.5">
@@ -5436,6 +5454,12 @@ window.navTabs = [
                           <div class="flex justify-between"><span class="text-slate-500">CLOCK:</span><span class="text-amber-400">48.0 kHz / 32-bit Float</span></div>
                           <div class="flex justify-between"><span class="text-slate-500">LATENCY:</span><span class="text-emerald-400 font-bold">1.33 ms (64 samples)</span></div>
                           <div class="flex justify-between"><span class="text-slate-500">DMA STREAM:</span><span class="text-amber-400">JACK Monitor Bus Port</span></div>
+                          <div class="pt-1 mt-1 border-t border-white/10 space-y-0.5 text-[7px] leading-snug">
+                            <div><span class="text-slate-500">USER-MODE:</span> PipeWire (PulseAudio + JACK compatible) or PulseAudio / JACK &rarr; alsa-lib.</div>
+                            <div><span class="text-slate-500">KERNEL / HAL:</span> ALSA kernel drivers (snd core, ASoC) &rarr; sound hardware.</div>
+                            <div id="stack-live-linux" class="hidden text-emerald-400 font-bold"></div>
+                            <a href="https://docs.pipewire.org/" target="_blank" rel="noopener noreferrer" class="text-cyan-400 hover:underline">PipeWire docs &nearr;</a>
+                          </div>
                         </div>
                       </div>
                       <button onclick="window.setRtaAudioDriver('linux')" class="w-full mt-1.5 py-1 rounded bg-amber-500/20 hover:bg-amber-500 hover:text-black border border-amber-500/40 text-amber-400 font-black text-[7.5px] uppercase transition flex items-center justify-center gap-1"><i class="fa-solid fa-bolt"></i>ROUTE LINUX TO RTA</button>
@@ -5453,6 +5477,12 @@ window.navTabs = [
                           <div class="flex justify-between"><span class="text-slate-500">CLOCK:</span><span class="text-amber-400">48.0 kHz / 24-bit PCM</span></div>
                           <div class="flex justify-between"><span class="text-slate-500">LATENCY:</span><span class="text-emerald-400 font-bold">2.00 ms (96 samples)</span></div>
                           <div class="flex justify-between"><span class="text-slate-500">DMA STREAM:</span><span class="text-emerald-400">AAudioStream LowLatency In</span></div>
+                          <div class="pt-1 mt-1 border-t border-white/10 space-y-0.5 text-[7px] leading-snug">
+                            <div><span class="text-slate-500">USER-MODE:</span> AAudio / Oboe (NDK) &rarr; AudioFlinger (audioserver).</div>
+                            <div><span class="text-slate-500">KERNEL / HAL:</span> Audio HAL (HIDL / AIDL) &rarr; kernel ALSA / ASoC drivers (tinyalsa).</div>
+                            <div id="stack-live-android" class="hidden text-emerald-400 font-bold"></div>
+                            <a href="https://source.android.com/docs/core/audio" target="_blank" rel="noopener noreferrer" class="text-cyan-400 hover:underline">Android Open Source Project: Audio &nearr;</a>
+                          </div>
                         </div>
                       </div>
                       <button onclick="window.setRtaAudioDriver('android')" class="w-full mt-1.5 py-1 rounded bg-emerald-500/20 hover:bg-emerald-500 hover:text-black border border-emerald-500/40 text-emerald-400 font-black text-[7.5px] uppercase transition flex items-center justify-center gap-1"><i class="fa-solid fa-bolt"></i>ROUTE ANDROID TO RTA</button>
@@ -5618,6 +5648,7 @@ window.navTabs = [
                           <option value="alsa">ALSA Direct Hardware (Linux)</option>
                           <option value="jack">JACK Audio Connection Kit (Linux / macOS)</option>
                           <option value="pipewire">PipeWire Low-Latency Graph (Linux)</option>
+                          <option value="pulseaudio">PulseAudio Sound Server (Linux)</option>
                           <option value="aaudio">AAudio / Oboe (Android)</option>
                         </optgroup>
                         <optgroup label="AUTO">
@@ -12573,6 +12604,7 @@ window.navTabs = [
             alsa: { name: "ALSA Direct Hardware (hw:)", vendor: "ALSA Project", ringbuffer: "0x7FFE_04A8_C000", comFree: true },
             jack: { name: "JACK Audio Connection Kit", vendor: "JACK Audio", ringbuffer: "0x7FFE_04A8_C800", comFree: true },
             pipewire: { name: "PipeWire Low-Latency Graph", vendor: "PipeWire Project", ringbuffer: "0x7FFE_04A8_D000", comFree: true },
+            pulseaudio: { name: "PulseAudio Sound Server", vendor: "PulseAudio Project", ringbuffer: "0x7FFE_04A8_DC00", comFree: true },
             aaudio: { name: "AAudio / Oboe Low-Latency", vendor: "Google Android", ringbuffer: "0x7FFE_04A8_D800", comFree: true }
         },
 
@@ -12602,6 +12634,18 @@ window.navTabs = [
             line.innerText = `[${time}] ${msg}`;
             logEl.appendChild(line);
             logEl.scrollTop = logEl.scrollHeight;
+        },
+
+        // Fills the "detected on this PC" line of the matching OS architecture card from the bridge
+        showDetectedStack: function(info) {
+            const key = { win32: 'windows', darwin: 'macos', linux: 'linux' }[info.platform];
+            const el = key && document.getElementById('stack-live-' + key);
+            if (!el) return;
+            const names = { 'wasapi-shared': 'WASAPI', 'wasapi-excl': 'WASAPI Exclusive', directsound: 'DirectSound', wdmks: 'WDM-KS', mme: 'MME', coreaudio: 'CoreAudio', alsa: 'ALSA', pipewire: 'PipeWire', pulseaudio: 'PulseAudio', jack: 'JACK' };
+            const seen = {};
+            const list = info.drivers.map(d => names[d]).filter(n => n && !seen[n] && (seen[n] = 1));
+            el.innerText = 'DETECTED ON THIS PC: ' + (list.length ? list.join(', ') : 'no native audio stack found') + (info.asio.length ? ' \u2022 ASIO: ' + info.asio.join(', ') : '');
+            el.classList.remove('hidden');
         },
 
         // One-line truthful description of the active audio driver path (used by notifications and the start-up panel)
@@ -12644,6 +12688,7 @@ window.navTabs = [
                     self.addPortAudioOutputs();
                     self.addPortAudioInputs();
                     self.startVolumePolling();
+                    self.showDetectedStack(info);
                     const nd = document.getElementById('notif-usb-driver');
                     if (nd) nd.innerText = self.driverSummary().replace(/^[^:]+: /, '').toUpperCase();
                     self.reportWebAudioCompat(info);
