@@ -134,7 +134,7 @@ async function handle(req, res) {
   let rel;
   try { rel = decodeURIComponent(url.pathname); } catch (_) { return json(res, 400, { ok: false, error: 'bad request' }); }
   if (rel.includes('\0')) return json(res, 400, { ok: false, error: 'bad request' });
-  if (rel === '/') rel = '/gemini-code-1790419147591.html';
+  if (rel === '/') rel = '/index.html';
   const file = path.resolve(ROOT, '.' + rel);
   if (file !== ROOT && !file.startsWith(ROOT + path.sep)) return json(res, 403, { ok: false, error: 'forbidden' });
   // Never serve dotfiles/dirs (.git, .github, .vscode, .env ...) or the bridge's own sources.

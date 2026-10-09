@@ -57,7 +57,7 @@ function filesXml(stage, win64 = false) {
   return { xml: walk(stage, '', '            '), comps };
 }
 
-function wxs({ stage, version, vbs, arch = 'x64', scope = 'machine' }) {
+function wxs({ stage, version, arch = 'x64', scope = 'machine' }) {
   if (!['x64', 'x86'].includes(arch) || !['machine', 'user'].includes(scope)) throw new Error('bad arch / scope');
   const win64 = arch === 'x64', machine = scope === 'machine', root = machine ? 'HKLM' : 'HKCU';
   const { xml, comps } = filesXml(stage, win64);
@@ -88,11 +88,9 @@ ${installDirs}
     </Directory>
 
     <DirectoryRef Id="INSTALLDIR">
-      <Component Id="AutostartScript" Guid="${guid('autostart-vbs')}"${w64}>
-        <File Id="AutostartVbs" Name="start-server-hidden.vbs" Source="${esc(vbs)}" KeyPath="yes"/>
-      </Component>
+      <!-- start at login: the signed native launcher (AudioMixerServer.exe, part of the install) in a Run entry; no scripts are installed -->
       <Component Id="AutostartRun" Guid="${guid('autostart-run:' + scope)}"${w64}>
-        <RegistryValue Root="${root}" Key="Software\\Microsoft\\Windows\\CurrentVersion\\Run" Name="AudioMixer" Type="string" Value="wscript.exe //B //Nologo &quot;[INSTALLDIR]start-server-hidden.vbs&quot;" KeyPath="yes"/>
+        <RegistryValue Root="${root}" Key="Software\\Microsoft\\Windows\\CurrentVersion\\Run" Name="AudioMixer" Type="string" Value="&quot;[INSTALLDIR]AudioMixerServer.exe&quot;" KeyPath="yes"/>
       </Component>
       <Component Id="InstallKey" Guid="${guid('install-key:' + scope)}"${w64}>
         <RegistryValue Root="${root}" Key="Software\\Audio Mixer" Name="InstallDir" Type="string" Value="[INSTALLDIR]" KeyPath="yes"/>
@@ -101,8 +99,8 @@ ${installDirs}
 
     <DirectoryRef Id="MenuDir">
       <Component Id="MenuShortcuts" Guid="${guid('menu-shortcuts:' + scope)}"${w64}>
-${sc('ScPc', 'Audio Mixer (PC mode)', '"[INSTALLDIR]client\\cli.js"', 'Start the local server and open the mixer')}${sc('ScServer', 'Audio Mixer local server only', '"[INSTALLDIR]bridge\\server.js"', 'Local server without opening the browser')}${sc('ScVerify', 'Verify installation (security scan)', '"[INSTALLDIR]client\\cli.js" verify --scan --pause', 'Check the installed files and run a Defender scan')}        <!-- VST3 / VST2 (.vst3, .dll) plugins live in the user's own folder: the shortcut creates it on first use -->
-        <Shortcut Id="ScPlugins" Name="Plugins folder (VST3 and VST2)" Target="[SystemFolder]cmd.exe" Arguments="/c if not exist &quot;%USERPROFILE%\\AudioMixerPlugins&quot; mkdir &quot;%USERPROFILE%\\AudioMixerPlugins&quot; &amp; start &quot;&quot; &quot;%USERPROFILE%\\AudioMixerPlugins&quot;" Description="Drop .vst3 and VST2 .dll plugins here"/>
+${sc('ScPc', 'Audio Mixer (PC mode)', '"[INSTALLDIR]client\\cli.js"', 'Start the local server and open the mixer')}${sc('ScServer', 'Audio Mixer local server only', '"[INSTALLDIR]bridge\\server.js"', 'Local server without opening the browser')}${sc('ScVerify', 'Verify installation (security scan)', '"[INSTALLDIR]client\\cli.js" verify --scan --pause', 'Check the installed files and run a Defender scan')}        <!-- VST3 / VST2 (.vst3, .dll) plugins live in the user's own folder: the launcher creates and opens it -->
+        <Shortcut Id="ScPlugins" Name="Plugins folder (VST3 and VST2)" Target="[INSTALLDIR]AudioMixerServer.exe" Arguments="/plugins" Description="Drop .vst3 and VST2 .dll plugins here"/>
         <Shortcut Id="ScUninstall" Name="Uninstall Audio Mixer" Target="[SystemFolder]msiexec.exe" Arguments="/x ${code}" Description="Remove Audio Mixer (also in Settings > Apps)"/>
         <RemoveFolder Id="RmMenu" On="uninstall"/>
         <RegistryValue Root="${root}" Key="Software\\Audio Mixer" Name="StartMenu" Type="integer" Value="1" KeyPath="yes"/>
@@ -119,7 +117,7 @@ ${sc('ScDesk', 'Audio Mixer', '"[INSTALLDIR]client\\cli.js"', 'Start PC mode')} 
 ${comps.map(c => `      <ComponentRef Id="${c}"/>\n`).join('')}      <ComponentRef Id="InstallKey"/>
     </Feature>
     <Feature Id="Shortcuts" Title="Start Menu shortcuts" Level="1"><ComponentRef Id="MenuShortcuts"/></Feature>
-    <Feature Id="Autostart" Title="Start the local server when I log in" Level="1"><ComponentRef Id="AutostartScript"/><ComponentRef Id="AutostartRun"/></Feature>
+    <Feature Id="Autostart" Title="Start the local server when I log in" Level="1"><ComponentRef Id="AutostartRun"/></Feature>
     <Feature Id="Desktop" Title="Desktop shortcut" Level="2"><ComponentRef Id="DesktopShortcut"/></Feature>
 
     <UIRef Id="WixUI_Minimal"/>
@@ -133,14 +131,10 @@ async function buildMsi({ out = path.join(ROOT, 'dist'), arch = 'x64', scope = '
   const st = staged || await buildInstaller({ out, arch, ...stageOpts });
   const work = path.join(path.resolve(out), 'msi', `${arch}-${scope}`);
   fs.mkdirSync(work, { recursive: true });
-  const vbs = path.join(work, 'start-server-hidden.vbs');
-  fs.writeFileSync(vbs, `' Starts the Audio Mixer local server hidden at login (installed by the .msi "Start the local server when I log in" feature).\r\n` +
-    `Set fso = CreateObject("Scripting.FileSystemObject")\r\nd = fso.GetParentFolderName(WScript.ScriptFullName)\r\n` +
-    `CreateObject("WScript.Shell").Run """" & d & "\\runtime\\node.exe"" """ & d & "\\bridge\\server.js""", 0, False\r\n`);
   fs.writeFileSync(path.join(work, 'License.rtf'), rtf(fs.readFileSync(path.join(st.stage, 'LICENSE'), 'utf8')));   // the wixl UI reads License.rtf from the working directory
   const version = st.version.replace(/[^\d.]/g, '').split('.').slice(0, 3).join('.');
   const wxsPath = path.join(work, 'audio-mixer.wxs');
-  fs.writeFileSync(wxsPath, wxs({ stage: st.stage, version, vbs, arch, scope }));
+  fs.writeFileSync(wxsPath, wxs({ stage: st.stage, version, arch, scope }));
   const msi = path.join(path.resolve(out), `AudioMixer-${st.version}-${arch}${scope === 'user' ? '-user' : ''}.msi`);
   const result = { ...st, wxs: wxsPath, msi: null, scope, productCode: productCode(arch, scope, version) };
   if (!runWixl) return result;

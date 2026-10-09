@@ -11,10 +11,20 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { buildInstaller } = require('./build-installer');
 const { buildMsi } = require('./build-msi');
-const { buildExe } = require('./build-exe');
+const { buildExe, compileLauncher } = require('./build-exe');
 const { ensureSigningCert, signFile } = require('./sign');
 
 const sha = f => crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex');
+
+// The native launcher (starts the bundled Node.js server without a console window, opens the plugin folder) goes into the install tree,
+// signed, and is listed in MANIFEST.sha256 like every other installed file.
+function addLauncher(staged, { out, id, env }) {
+  const exe = compileLauncher({ work: path.join(out, 'launcher', staged.arch), version: staged.version, arch: staged.arch });
+  const target = path.join(staged.stage, 'AudioMixerServer.exe');
+  fs.copyFileSync(exe, target);
+  if (id) signFile(target, id, { env });
+  fs.appendFileSync(path.join(staged.stage, 'MANIFEST.sha256'), `${sha(target)}  AudioMixerServer.exe\n`);
+}
 
 async function buildInstallers({ out = path.join(__dirname, '..', 'dist'), archs = ['x64', 'x86'], sign = true, env = process.env } = {}) {
   const outAbs = path.resolve(out);
@@ -22,6 +32,7 @@ async function buildInstallers({ out = path.join(__dirname, '..', 'dist'), archs
   const result = { msi: {}, exe: null, signing: id };
   for (const arch of archs) {
     const staged = await buildInstaller({ out: outAbs, arch });
+    addLauncher(staged, { out: outAbs, id, env });
     const m = await buildMsi({ out: outAbs, arch, scope: 'machine', staged });
     if (id) signFile(m.msi, id, { env });
     m.sha256 = sha(m.msi);

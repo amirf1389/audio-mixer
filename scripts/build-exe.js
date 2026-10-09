@@ -49,23 +49,26 @@ function peDataEnd(buf) {
   return len && off && off < buf.length ? off : buf.length;
 }
 
-function compileStub({ work, version, arch = 'x64' }) {
+// Compiles one of the small native programs in installer/ (MinGW-w64). `name` = setup | launcher; the launcher is built for the
+// architecture of the install it goes into, the setup program is always 32-bit so it runs on both 32- and 64-bit Windows.
+function compileNative({ name, work, version, arch, defs = [], libs = [] }) {
   fs.mkdirSync(work, { recursive: true });
+  const triple = arch === 'x64' ? 'x86_64-w64-mingw32' : 'i686-w64-mingw32';
   const v4 = version4(version);
-  const rc = fs.readFileSync(path.join(ROOT, 'installer', 'setup.rc'), 'utf8').replace(/@VERSION4@/g, v4).replace(/@VERSION@/g, version);
-  fs.writeFileSync(path.join(work, 'setup.rc'), rc);
-  fs.copyFileSync(path.join(ROOT, 'installer', 'setup.manifest'), path.join(work, 'setup.manifest'));
-  const res = path.join(work, 'setup.res.o'), exe = path.join(work, `stub-${arch}.exe`);
-  let r = spawnSync('i686-w64-mingw32-windres', ['-i', 'setup.rc', '-o', res], { cwd: work, encoding: 'utf8' });
-  if (r.error && r.error.code === 'ENOENT') throw new Error('i686-w64-mingw32-windres not found (Linux: apt install binutils-mingw-w64-i686 gcc-mingw-w64-i686)');
+  const rc = fs.readFileSync(path.join(ROOT, 'installer', `${name}.rc`), 'utf8').replace(/@VERSION4@/g, v4).replace(/@VERSION@/g, version);
+  fs.writeFileSync(path.join(work, `${name}.rc`), rc);
+  fs.copyFileSync(path.join(ROOT, 'installer', `${name}.manifest`), path.join(work, `${name}.manifest`));
+  const res = path.join(work, `${name}.res.o`), exe = path.join(work, `${name}-${arch}.exe`);
+  let r = spawnSync(`${triple}-windres`, ['-i', `${name}.rc`, '-o', res], { cwd: work, encoding: 'utf8' });
+  if (r.error && r.error.code === 'ENOENT') throw new Error(`${triple}-windres not found (Linux: apt install mingw-w64)`);
   if (r.status !== 0) throw new Error('windres failed: ' + r.stderr);
-  const defs = arch === 'x64' ? ['-DREQUIRE_X64'] : [];
-  // a 32-bit program runs on both 32- and 64-bit Windows; it only starts msiexec, which installs the package for the right architecture
-  r = spawnSync('i686-w64-mingw32-gcc', ['-O2', '-s', '-mwindows', '-municode', '-Wall', ...defs, '-o', exe, path.join(ROOT, 'installer', 'setup-stub.c'), res, '-ladvapi32', '-lshell32', '-luser32', '-static-libgcc'], { encoding: 'utf8' });
-  if (r.error && r.error.code === 'ENOENT') throw new Error('i686-w64-mingw32-gcc not found (Linux: apt install gcc-mingw-w64-i686)');
-  if (r.status !== 0) throw new Error('compiling the setup program failed:\n' + r.stderr);
+  r = spawnSync(`${triple}-gcc`, ['-O2', '-s', '-mwindows', '-municode', '-Wall', ...defs, '-o', exe, path.join(ROOT, 'installer', name === 'setup' ? 'setup-stub.c' : `${name}.c`), res, ...libs, '-static-libgcc'], { encoding: 'utf8' });
+  if (r.error && r.error.code === 'ENOENT') throw new Error(`${triple}-gcc not found (Linux: apt install mingw-w64)`);
+  if (r.status !== 0) throw new Error(`compiling ${name} failed:\n` + r.stderr);
   return exe;
 }
+const compileStub = ({ work, version, arch = 'x64' }) => compileNative({ name: 'setup', work, version, arch: 'x86', defs: arch === 'x64' ? ['-DREQUIRE_X64'] : [], libs: ['-ladvapi32', '-lshell32', '-luser32'] });
+const compileLauncher = ({ work, version, arch }) => compileNative({ name: 'launcher', work, version, arch, libs: ['-lshell32', '-luser32'] });
 
 function buildExe({ msi, productCode, out, version, arch = 'x64', work, id }) {
   const { signFile } = require('./sign');
@@ -76,4 +79,4 @@ function buildExe({ msi, productCode, out, version, arch = 'x64', work, id }) {
   return { exe: out, sha256: crypto.createHash('sha256').update(fs.readFileSync(out)).digest('hex') };
 }
 
-module.exports = { buildExe, packPayload, readTrailer, peDataEnd, compileStub, TRAILER, version4 };
+module.exports = { buildExe, packPayload, readTrailer, peDataEnd, compileStub, compileLauncher, compileNative, TRAILER, version4 };

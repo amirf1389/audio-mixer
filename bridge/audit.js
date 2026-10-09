@@ -10,7 +10,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 
-const PAGE = path.resolve(__dirname, '..', 'gemini-code-1790419147591.html');
+const PAGE = path.resolve(__dirname, '..', 'index.html');
 
 function request(base, p, { method = 'GET', headers = {} } = {}) {
   const u = new URL(base);

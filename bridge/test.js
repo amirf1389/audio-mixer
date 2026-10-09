@@ -262,10 +262,20 @@ test('autostart generates safe per-OS files and installs / removes them', async 
   const exec = (cmd, args, o, cb) => { calls.push([cmd, ...args].join(' ')); cb(null); };
   const base = { home, env: { APPDATA: pathx.join(home, 'AppData') }, node: '/usr/bin/node', server: '/opt/audio mixer/bridge/server.js', exec };
 
-  const w = await svc.install({ ...base, platform: 'win32', node: 'C:\\Program Files\\nodejs\\node.exe', server: 'C:\\mixer\\bridge\\server.js' });
-  assert.ok(w.file.endsWith('AudioMixerServer.vbs') && w.file.includes('Startup'));
-  assert.match(fsx.readFileSync(w.file, 'utf8'), /sh\.Run """C:\\Program Files\\nodejs\\node\.exe"" ""C:\\mixer\\bridge\\server\.js""", 0, False/);
-  assert.ok(calls.some(c => c.startsWith('wscript //nologo ')));
+  // Windows: one registry Run value, no script file anywhere
+  const spawned = [];
+  const w = await svc.install({ ...base, platform: 'win32', node: 'C:\\Program Files\\nodejs\\node.exe', server: 'C:\\mixer\\bridge\\server.js', launcher: null, spawn: (c, a) => { spawned.push([c, ...a]); return { unref() {} }; } });
+  assert.strictEqual(w.installed, true); assert.strictEqual(w.command, '"C:\\Program Files\\nodejs\\node.exe" "C:\\mixer\\bridge\\server.js"');
+  assert.ok(calls.some(c => c.startsWith('reg add HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run /v AudioMixerServer /t REG_SZ /d ')));
+  assert.ok(!calls.some(c => /wscript/i.test(c)));
+  assert.deepStrictEqual(fsx.readdirSync(home), []);                                   // nothing was written into the profile
+  const wl = await svc.install({ ...base, platform: 'win32', server: 'C:\\Program Files\\Audio Mixer\\bridge\\server.js', launcher: 'C:\\Program Files\\Audio Mixer\\AudioMixerServer.exe', spawn: (c, a) => { spawned.push([c, ...a]); return { unref() {} }; } });
+  assert.strictEqual(wl.command, '"C:\\Program Files\\Audio Mixer\\AudioMixerServer.exe"');         // the signed native launcher when installed
+  assert.deepStrictEqual(spawned[1], ['C:\\Program Files\\Audio Mixer\\AudioMixerServer.exe']);
+  assert.strictEqual(svc.status({ ...base, platform: 'win32', reg: () => ({ status: 0 }) }).installed, true);
+  assert.strictEqual(svc.status({ ...base, platform: 'win32', reg: () => ({ status: 1 }) }).installed, false);
+  assert.strictEqual((await svc.uninstall({ ...base, platform: 'win32', reg: () => ({ status: 0 }) })).removed, true);
+  assert.ok(calls.some(c => c.startsWith('reg delete HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run /v AudioMixerServer /f')));
 
   const m = await svc.install({ ...base, platform: 'darwin' });
   assert.ok(m.file.endsWith('com.audiomixer.bridge.plist'));
@@ -808,19 +818,21 @@ test('msi: stable GUIDs, per-machine Program Files paths for x64 and x86, per-us
   assert.strictEqual(new Set(Object.values(m.UPGRADE_CODES)).size, 4);
   const stage = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'msi-'));
   fsx.mkdirSync(pathx.join(stage, 'bridge')); fsx.writeFileSync(pathx.join(stage, 'bridge', 'a & b.js'), 'x'); fsx.writeFileSync(pathx.join(stage, 'LICENSE'), 'MIT');
-  const x64 = m.wxs({ stage, version: '1.4.0', vbs: '/tmp/x.vbs', arch: 'x64' });
+  const x64 = m.wxs({ stage, version: '1.4.0', arch: 'x64' });
   assert.match(x64, /InstallScope="perMachine"/); assert.match(x64, /Directory Id="ProgramFiles64Folder"/); assert.match(x64, /Win64="yes"/);
   assert.match(x64, /Root="HKLM"/); assert.match(x64, /UpgradeCode="6F3C2B8E-5D41-4A7B-9C0E-2A1D7B64F3A9"/);
   assert.match(x64, /Name="a &amp; b\.js"/); assert.match(x64, /Feature Id="Autostart"/); assert.match(x64, /Feature Id="Desktop"[^>]*Level="2"/);
   assert.match(x64, /Id="ScUninstall"[^>]*msiexec\.exe" Arguments="\/x \{[0-9A-F-]{36}\}"/);          // Start Menu uninstall entry
   assert.match(x64, /ARPURLINFOABOUT/);                                                                  // Settings > Apps entry details
-  assert.match(x64, /AudioMixerPlugins/); assert.ok(!/NSIS/i.test(x64));
-  const x86 = m.wxs({ stage, version: '1.4.0', vbs: '/tmp/x.vbs', arch: 'x86' });
+  assert.match(x64, /Id="ScPlugins"[^>]*AudioMixerServer\.exe" Arguments="\/plugins"/);             // native launcher, no cmd one-liner
+  assert.match(x64, /Name="AudioMixer" Type="string" Value="&quot;\[INSTALLDIR\]AudioMixerServer\.exe&quot;"/);
+  assert.ok(!/vbs|wscript|cmd\.exe|NSIS/i.test(x64), 'no scripts, no shell one-liners');
+  const x86 = m.wxs({ stage, version: '1.4.0', arch: 'x86' });
   assert.match(x86, /Directory Id="ProgramFilesFolder"/); assert.ok(!/ProgramFiles64Folder/.test(x86)); assert.ok(!/Win64="yes"/.test(x86));
-  const user = m.wxs({ stage, version: '1.4.0', vbs: '/tmp/x.vbs', arch: 'x64', scope: 'user' });
+  const user = m.wxs({ stage, version: '1.4.0', arch: 'x64', scope: 'user' });
   assert.match(user, /InstallScope="perUser"/); assert.match(user, /LocalAppDataFolder/); assert.match(user, /Root="HKCU"/);
   assert.throws(() => m.wxs({ stage, version: '1', vbs: 'x', arch: 'arm64' }), /bad arch/);
-  assert.strictEqual((x64.match(/<File /g) || []).length, 3);                                           // 2 staged files + the hidden-start script
+  assert.strictEqual((x64.match(/<File /g) || []).length, 2);                                           // exactly the staged files
   assert.match(m.rtf('a\\b {c}\nü'), /^\{\\rtf1.*a\\\\b \\\{c\\\}\\par\n\\u252\?\}$/s);
   fsx.rmSync(stage, { recursive: true, force: true });
 });

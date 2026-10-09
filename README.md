@@ -16,7 +16,7 @@ Core Audio / ALSA access, system volume, and a list of official audio drivers.
    The client starts the server on `http://localhost:8765` and opens the mixer in your browser. In the **DRIVERS** tab the *PC MODE*
    panel turns green. Without the server the page keeps working in web mode (browser audio only).
    **Enable it at login** (so the page always finds the server): `node client/cli.js service install`; check with `service status`, remove
-   with `service uninstall`. It uses a Startup-folder script on Windows, a LaunchAgent on macOS and a systemd user service on Linux, needs no
+   with `service uninstall`. It uses a registry Run entry on Windows (no scripts; the installed signed launcher starts the server without a console window), a LaunchAgent on macOS and a systemd user service on Linux, needs no
    admin rights, and only starts `bridge/server.js` on `127.0.0.1`.
 3. For ASIO / WASAPI input and output run `cd bridge && npm install` once (installs the PortAudio module; needs a C++ build toolchain).
 
@@ -73,6 +73,12 @@ The installer technology is Windows Installer (MSI) built with wixl, not the com
 pin the publisher, but Windows still shows "unknown publisher" / SmartScreen until you trust the certificate (right-click the `.cer` > Install, "Trusted Root" and "Trusted Publishers") or
 sign with a commercial certificate (`SIGN_PFX=cert.pfx SIGN_PFX_PASSWORD=... npm run build:installers`; `SIGN_TIMESTAMP_URL=http://timestamp.digicert.com` adds a timestamp). Thumbprint of the
 published certificate: see `releases/AudioMixer-signing.cer`. The Linux and macOS packages are not signed.
+
+**Antivirus false positives.** Installers that unpack a payload and start `msiexec`, or programs that start another program in the background, are what heuristic scanners look at,
+and a self-signed file has no reputation yet. To keep the footprint plain: nothing installs a script (the old hidden `wscript` launcher and the `cmd /c` shortcut are gone), nothing is written
+to the Startup folder (autostart is one registry Run value that starts the signed native `AudioMixerServer.exe`), all files live under Program Files, the setup program only runs `msiexec` on its own
+checked payload, and every file is listed in `MANIFEST.sha256`. Source for both native programs is in `installer/`. If a scanner still flags a file, compare it with `verify`, then report it
+as a false positive to the vendor (Microsoft: https://www.microsoft.com/wdsi/filesubmission); a certificate from a public CA (`SIGN_PFX`) removes most of these warnings.
 
 ### Windows verification scan
 `node client/cli.js verify [--scan]` (Start Menu: *Verify installation (security scan)*) checks an install: every file against `MANIFEST.sha256` (changed, missing and unlisted code files, including
