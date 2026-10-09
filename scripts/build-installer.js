@@ -1,10 +1,9 @@
 #!/usr/bin/env node
 'use strict';
-// Builds the Windows installer (AudioMixer-Setup-<version>.exe) for the local system server with NSIS.
-//   node scripts/build-installer.js            -> dist/AudioMixer-Setup-<version>.exe
-//   node scripts/build-installer.js --stage    -> only prepare dist/installer/stage (no makensis needed)
-// Needs: NSIS (makensis) on PATH (Windows: https://nsis.sourceforge.io/ , Linux: apt install nsis, macOS: brew install makensis)
-// and internet access once, to fetch the official Node.js Windows runtime (checked against nodejs.org's SHASUMS256.txt).
+// Stages the Windows install tree (app files, official Node.js runtime, Audify with its Windows prebuilt binaries) for one architecture.
+// The installers themselves are built from that folder: build-msi.js (.msi), build-exe.js (signed setup .exe), see build-installers.js.
+//   node scripts/build-installer.js [--arch x64|x86]   -> dist/installer/stage-<arch>
+// Needs internet once, to fetch the official Node.js runtime (checked against nodejs.org's SHASUMS256.txt) and the Audify prebuilt binaries.
 const fs = require('node:fs');
 const path = require('node:path');
 const zlib = require('node:zlib');
@@ -55,17 +54,19 @@ function extractFromZip(buf, wanted) {
 
 async function getText(url, fetchImpl) { const r = await fetchImpl(url, { headers: { 'User-Agent': 'audio-mixer-build' } }); if (!r.ok) throw new Error(url + ' -> ' + r.status); return r.text(); }
 
-// Official Node.js runtime for Windows x64: latest LTS (or NODE_VERSION), verified against SHASUMS256.txt, cached in dist/cache.
-async function fetchNodeRuntime({ cache, fetchImpl = globalThis.fetch, version = process.env.NODE_VERSION } = {}) {
+// Official Node.js runtime for Windows (x64, or x86 from the newest LTS line that still ships one): latest LTS (or NODE_VERSION /
+// NODE_VERSION_X86), verified against SHASUMS256.txt, cached in dist/cache.
+async function fetchNodeRuntime({ cache, fetchImpl = globalThis.fetch, arch = 'x64', version = arch === 'x86' ? process.env.NODE_VERSION_X86 : process.env.NODE_VERSION } = {}) {
+  if (arch !== 'x64' && arch !== 'x86') throw new Error('unknown architecture: ' + arch);
   if (!version) {
     try {
       const idx = JSON.parse(await getText(`${DIST}/index.json`, fetchImpl));
-      const lts = idx.find(e => e.lts && Array.isArray(e.files) && e.files.includes('win-x64-zip'));
+      const lts = idx.find(e => e.lts && Array.isArray(e.files) && e.files.includes(`win-${arch}-zip`));
       if (!lts) throw new Error('no LTS Windows build found');
       version = lts.version;
     } catch (e) {
       // Offline: reuse the newest runtime that was downloaded and verified earlier.
-      const cached = fs.existsSync(cache) ? fs.readdirSync(cache).map(f => /^node-(v\d+\.\d+\.\d+)-win-x64\.exe$/.exec(f)).filter(Boolean).map(m => m[1]) : [];
+      const cached = fs.existsSync(cache) ? fs.readdirSync(cache).map(f => new RegExp(`^node-(v\\d+\\.\\d+\\.\\d+)-win-${arch}\\.exe$`).exec(f)).filter(Boolean).map(m => m[1]) : [];
       const num = v => v.slice(1).split('.').map(Number);
       cached.sort((a, b) => { const x = num(a), y = num(b); return (y[0] - x[0]) || (y[1] - x[1]) || (y[2] - x[2]); });
       if (!cached.length) throw e;
@@ -73,8 +74,8 @@ async function fetchNodeRuntime({ cache, fetchImpl = globalThis.fetch, version =
     }
   }
   if (!/^v\d+\.\d+\.\d+$/.test(version)) throw new Error('bad Node.js version: ' + version);
-  const zipName = `node-${version}-win-x64.zip`;
-  const exe = path.join(cache, `node-${version}-win-x64.exe`), lic = path.join(cache, `node-${version}-LICENSE.txt`);
+  const zipName = `node-${version}-win-${arch}.zip`;
+  const exe = path.join(cache, `node-${version}-win-${arch}.exe`), lic = path.join(cache, `node-${version}-LICENSE.txt`);
   if (fs.existsSync(exe) && fs.existsSync(lic)) return { version, exe, license: lic };
   const sums = parseShasums(await getText(`${DIST}/${version}/SHASUMS256.txt`, fetchImpl));
   if (!sums[zipName]) throw new Error('no checksum published for ' + zipName);
@@ -83,8 +84,8 @@ async function fetchNodeRuntime({ cache, fetchImpl = globalThis.fetch, version =
   const zip = Buffer.from(await r.arrayBuffer());
   const sum = crypto.createHash('sha256').update(zip).digest('hex');
   if (sum !== sums[zipName]) throw new Error('checksum mismatch for ' + zipName + ' (expected ' + sums[zipName] + ', got ' + sum + ')');
-  const node = extractFromZip(zip, n => n === `node-${version}-win-x64/node.exe`);
-  const license = extractFromZip(zip, n => n === `node-${version}-win-x64/LICENSE`);
+  const node = extractFromZip(zip, n => n === `node-${version}-win-${arch}/node.exe`);
+  const license = extractFromZip(zip, n => n === `node-${version}-win-${arch}/LICENSE`);
   if (!node) throw new Error('node.exe not found in ' + zipName);
   fs.mkdirSync(cache, { recursive: true });
   fs.writeFileSync(exe, node); if (license) fs.writeFileSync(lic, license); else fs.writeFileSync(lic, 'See https://github.com/nodejs/node/blob/main/LICENSE\n');
@@ -95,24 +96,33 @@ async function fetchNodeRuntime({ cache, fetchImpl = globalThis.fetch, version =
 // prebuilt binary (prebuild-install), so the target PC needs no compiler. Binaries are pinned by SHA-256.
 const AUDIFY_VERSION = '1.10.1';
 const AUDIFY_WIN_SHA256 = {
-  'audify.node': 'ba9be079733bf4fc5958bcc898124757d1342805d43fd9fdf1fdfb57c3bdc2b2',
-  'opus.dll': 'f89de06563f996693b3de3185939fb12fa61f02b1d33ab556cd774105d21c13d',
-  'rtaudio.dll': '0d5b3cf7c40dbcc6d4688977ed3e3f57b255a71e590fe750759516c7563d9b1d',
+  x64: {
+    'audify.node': 'ba9be079733bf4fc5958bcc898124757d1342805d43fd9fdf1fdfb57c3bdc2b2',
+    'opus.dll': 'f89de06563f996693b3de3185939fb12fa61f02b1d33ab556cd774105d21c13d',
+    'rtaudio.dll': '0d5b3cf7c40dbcc6d4688977ed3e3f57b255a71e590fe750759516c7563d9b1d',
+  },
+  x86: {
+    'audify.node': '4a20a710a8afe56d216f9b0b96c3c1b05006f39ebdbe383c1bffe24459f71b40',
+    'opus.dll': '510228086eb8d1abaed014b439b4e8b3d6a2840c3b6af3060a80f812cc8fb68d',
+    'rtaudio.dll': 'dcd94f75fca0f30beffdf462bf147fb54e9f938ec2f1214e2794d35099be5f7c',
+  },
 };
-function fetchAudify({ cache, version = AUDIFY_VERSION, run = spawnSync } = {}) {
-  const work = path.join(cache, `audify-${version}`), nm = path.join(work, 'node_modules');
+function fetchAudify({ cache, version = AUDIFY_VERSION, arch = 'x64', run = spawnSync } = {}) {
+  const pins = AUDIFY_WIN_SHA256[arch];
+  if (!pins) throw new Error('unknown architecture: ' + arch);
+  const work = path.join(cache, arch === 'x64' ? `audify-${version}` : `audify-${version}-${arch}`), nm = path.join(work, 'node_modules');
   const rel = path.join(nm, 'audify', 'build', 'Release');
   const sha = f => crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex');
-  const verified = () => Object.entries(AUDIFY_WIN_SHA256).every(([f, h]) => fs.existsSync(path.join(rel, f)) && sha(path.join(rel, f)) === h);
+  const verified = () => Object.entries(pins).every(([f, h]) => fs.existsSync(path.join(rel, f)) && sha(path.join(rel, f)) === h);
   if (!verified()) {
     fs.mkdirSync(work, { recursive: true });
     fs.writeFileSync(path.join(work, 'package.json'), JSON.stringify({ name: 'audify-bundle', private: true }));
     const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
     let r = run(npm, ['install', `audify@${version}`, '--ignore-scripts', '--no-audit', '--no-fund'], { cwd: work, encoding: 'utf8', shell: process.platform === 'win32' });
     if (r.status !== 0) throw new Error('npm install audify failed: ' + (r.stderr || r.error || ''));
-    r = run(process.execPath, [path.join(nm, 'prebuild-install', 'bin.js'), '--platform', 'win32', '--arch', 'x64', '--runtime', 'napi'], { cwd: path.join(nm, 'audify'), encoding: 'utf8' });
+    r = run(process.execPath, [path.join(nm, 'prebuild-install', 'bin.js'), '--platform', 'win32', '--arch', arch === 'x86' ? 'ia32' : 'x64', '--runtime', 'napi'], { cwd: path.join(nm, 'audify'), encoding: 'utf8' });
     if (r.status !== 0) throw new Error('downloading the Windows Audify binaries failed: ' + (r.stderr || r.error || ''));
-    for (const [f, h] of Object.entries(AUDIFY_WIN_SHA256)) {
+    for (const [f, h] of Object.entries(pins)) {
       if (!fs.existsSync(path.join(rel, f))) throw new Error('missing Audify binary ' + f);
       if (sha(path.join(rel, f)) !== h) { fs.rmSync(path.join(rel, f), { force: true }); throw new Error('checksum mismatch for Audify ' + f + ' (not the pinned build)'); }
     }
@@ -135,10 +145,10 @@ function stageAudify(a, stage) {
 const BAT_PC = '@echo off\r\nrem Audio Mixer PC mode: starts the local system server and opens the mixer (bundled Node.js).\r\ncd /d "%~dp0"\r\n"%~dp0runtime\\node.exe" client\\cli.js %*\r\npause\r\n';
 const BAT_SERVER = '@echo off\r\nrem Audio Mixer local system server only (bundled Node.js). Open http://localhost:8765 yourself.\r\ntitle Audio Mixer local server\r\ncd /d "%~dp0"\r\n"%~dp0runtime\\node.exe" bridge\\server.js\r\npause\r\n';
 
-async function buildInstaller({ out = path.join(ROOT, 'dist'), stageOnly = false, fetchImpl, runMakensis = true, bundleAudify = true, audifyRun } = {}) {
+async function buildInstaller({ out = path.join(ROOT, 'dist'), arch = 'x64', fetchImpl, bundleAudify = true, audifyRun } = {}) {
   const outAbs = path.resolve(out);
   const app = build({ out: outAbs });
-  const stage = path.join(outAbs, 'installer', 'stage');
+  const stage = path.join(outAbs, 'installer', `stage-${arch}`);
   fs.rmSync(stage, { recursive: true, force: true });
   fs.cpSync(app.dest, stage, { recursive: true });
   fs.writeFileSync(path.join(stage, 'start-pc-mode.bat'), BAT_PC);
@@ -147,7 +157,7 @@ async function buildInstaller({ out = path.join(ROOT, 'dist'), stageOnly = false
   // the installer swaps launcher files, so the manifest must describe what is really installed
   const crypto = require('node:crypto');
   const mf = path.join(stage, 'MANIFEST.sha256');
-  if (bundleAudify) stageAudify(fetchAudify({ cache: path.join(outAbs, 'cache'), run: audifyRun }), stage);
+  if (bundleAudify) stageAudify(fetchAudify({ cache: path.join(outAbs, 'cache'), arch, run: audifyRun }), stage);
   const lines = fs.readFileSync(mf, 'utf8').split('\n').filter(Boolean).map(l => l.replace(/^([0-9a-f]{64})\s+/, '$1\t').split('\t')).filter(([, rel]) => fs.existsSync(path.join(stage, rel)))
     .map(([, rel]) => `${crypto.createHash('sha256').update(fs.readFileSync(path.join(stage, rel))).digest('hex')}  ${rel}`);
   // the bundled Audify module is part of what is installed: list it so the verification scan covers it
@@ -157,28 +167,17 @@ async function buildInstaller({ out = path.join(ROOT, 'dist'), stageOnly = false
   for (const rel of bundled) lines.push(`${crypto.createHash('sha256').update(fs.readFileSync(path.join(stage, rel))).digest('hex')}  ${rel}`);
   fs.writeFileSync(mf, lines.join('\n') + '\n');
 
-  const rt = await fetchNodeRuntime({ cache: path.join(outAbs, 'cache'), fetchImpl });
+  const rt = await fetchNodeRuntime({ cache: path.join(outAbs, 'cache'), arch, fetchImpl });
   fs.mkdirSync(path.join(stage, 'runtime'), { recursive: true });
   fs.copyFileSync(rt.exe, path.join(stage, 'runtime', 'node.exe'));
   fs.copyFileSync(rt.license, path.join(stage, 'runtime', 'LICENSE-node.txt'));
-  const result = { stage, nodeVersion: rt.version, version: app.version, installer: null };
-  if (stageOnly) return result;
-
-  const installer = path.join(outAbs, `AudioMixer-Setup-${app.version}.exe`);
-  if (!runMakensis) return result;
-  const r = spawnSync('makensis', ['-V2', `-DVERSION=${app.version}`, `-DVERSION4=${version4(app.version)}`, `-DSTAGE=${stage}`, `-DOUTFILE=${installer}`, path.join(ROOT, 'installer', 'audio-mixer.nsi')], { encoding: 'utf8' });
-  if (r.error && r.error.code === 'ENOENT') throw new Error('makensis (NSIS) not found. Install NSIS (Windows: https://nsis.sourceforge.io/ , Linux: apt install nsis, macOS: brew install makensis); the staged files are in ' + stage);
-  if (r.status !== 0) throw new Error('makensis failed:\n' + r.stdout + r.stderr);
-  result.installer = installer;
-  result.sha256 = crypto.createHash('sha256').update(fs.readFileSync(installer)).digest('hex');
-  return result;
+  return { stage, arch, nodeVersion: rt.version, version: app.version };
 }
 
 if (require.main === module) {
-  const a = process.argv.slice(2), oi = a.indexOf('--out');
-  buildInstaller({ stageOnly: a.includes('--stage'), out: oi >= 0 ? a[oi + 1] : undefined }).then(r => {
-    console.log(`Staged ${r.stage} (app v${r.version}, bundled Node.js ${r.nodeVersion})`);
-    if (r.installer) console.log(`Installer: ${r.installer}\nSHA-256:   ${r.sha256}\nUnsigned: Windows SmartScreen will warn until it is code-signed.`);
-  }).catch(e => { console.error('Installer build failed: ' + e.message); process.exit(1); });
+  const a = process.argv.slice(2), oi = a.indexOf('--out'), ai = a.indexOf('--arch');
+  buildInstaller({ out: oi >= 0 ? a[oi + 1] : undefined, arch: ai >= 0 ? a[ai + 1] : 'x64' }).then(r => {
+    console.log(`Staged ${r.stage} (${r.arch}, app v${r.version}, bundled Node.js ${r.nodeVersion})`);
+  }).catch(e => { console.error('Staging failed: ' + e.message); process.exit(1); });
 }
 module.exports = { fetchAudify, stageAudify, AUDIFY_WIN_SHA256, buildInstaller, fetchNodeRuntime, parseShasums, extractFromZip, version4, BAT_PC, BAT_SERVER };

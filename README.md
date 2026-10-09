@@ -41,49 +41,48 @@ and are never started automatically. See `bridge/README.md` for the server's API
 | `npm run service:install` / `service:uninstall` | start the server at login / remove it |
 | `npm run build` | build the portable package in `dist/audio-mixer-pc/` (page + server + client, SHA-256 manifest) |
 | `npm run build:archive` | same, plus `dist/audio-mixer-pc-<version>.tar.gz` to copy to another PC |
-| `npm run build:installer` | build the Windows installer `dist/AudioMixer-Setup-<version>.exe` (see below) |
+| `npm run build:installers` | build and sign the Windows installers (`.exe`, x64 / x86 `.msi`), see "Installers" below |
+| `npm run build:unix` | build the Linux `.deb` and the macOS `.app` package |
 | `npm test` | run the server tests |
 
 Copy the built folder (or the archive) to any PC with Node.js 18+ and run `start-pc-mode.bat` (Windows) or `./start-pc-mode.sh`.
 
-### Windows installer (.exe)
-`npm run build:installer` builds `dist/AudioMixer-Setup-<version>.exe` with [NSIS](https://nsis.sourceforge.io/) (Windows: install NSIS; Linux: `apt install nsis`;
-macOS: `brew install makensis`). It needs internet once to fetch the official Node.js LTS runtime for Windows from nodejs.org (checked against its
-`SHASUMS256.txt`, cached in `dist/cache`; `NODE_VERSION=v22.x.y` pins a version).
+### Installers: Windows, Linux, macOS
+`npm run build:installers` builds the signed Windows installers into `dist/`; `npm run build:unix` builds the Linux and macOS packages. Prebuilt files are in `releases/`.
+Windows build needs `wixl` (`apt install wixl`), `gcc-mingw-w64-i686`, `osslsigncode` and internet once (official Node.js runtimes, checked against nodejs.org's `SHASUMS256.txt`,
+and the Audify prebuilt binaries, pinned by SHA-256).
 
-The installer is per-user (no administrator rights) and bundles that Node.js runtime, so the target PC needs nothing installed. It installs to
-`%LOCALAPPDATA%\Programs\AudioMixer` and offers: Start Menu shortcuts (*Audio Mixer (PC mode)* and *local server only*), an optional desktop
-shortcut, and *Start the local server when I log in* (the autostart from `service install`, using the bundled Node.js). The uninstaller removes the
-files, shortcuts and autostart entry and leaves downloaded drivers in `%USERPROFILE%\AudioMixerDrivers`. `/S` installs silently.
+| File | Installs to | Notes |
+|---|---|---|
+| `Audio Mixer-1.4.0.exe` | `C:\Program Files\Audio Mixer` | signed setup for 64-bit Windows; checks the embedded package's SHA-256, then runs Windows Installer. `/quiet` silent, `/passive`, `/scan` (run the verification scan after installing), `/uninstall`, `INSTALLDIR="D:\Audio Mixer"` |
+| `AudioMixer-1.4.0-x64.msi` | `C:\Program Files\Audio Mixer` | 64-bit Windows Installer package, all users (administrator), `msiexec /i ... /qn` |
+| `AudioMixer-1.4.0-x86.msi` | `C:\Program Files (x86)\Audio Mixer` | 32-bit package with 32-bit Node.js (v22 LTS, the last line with a 32-bit build) and 32-bit Audify, for 32-bit Windows or 32-bit audio hosts |
+| `audio-mixer_1.4.0_all.deb` | `/opt/audio-mixer`, `/usr/bin/audio-mixer`, `/usr/share/applications`, `/usr/lib/systemd/user` | Debian / Ubuntu / Mint; needs `nodejs` 18+; remove with `apt remove audio-mixer`; start at login: `systemctl --user enable --now audio-mixer` |
+| `AudioMixer-1.4.0-macos.tar.gz` | `/Applications/Audio Mixer.app` (or `~/Applications`), login item `~/Library/LaunchAgents` | double-click `install.command` / `uninstall.command`; needs Node.js 18+; not notarized |
 
-The installer is not code-signed, so Windows SmartScreen shows a warning ("More info" -> "Run anyway") until you sign it with your own certificate.
-For ASIO / WASAPI audio run `npm run setup` once after installing (needs npm and a C++ toolchain); without it the server runs in web mode.
+Every Windows installer carries the mixer page, the Node.js server and client, the bundled Node.js runtime, Audify (ASIO / WASAPI / DirectSound), the verify scan, Start Menu entries
+(*Audio Mixer (PC mode)*, *local server only*, *Verify installation*, *Plugins folder*, *Uninstall Audio Mixer*) and an entry in *Settings > Apps* (Add or remove programs) with a working Uninstall.
+Features (`ADDLOCAL=Main,Shortcuts,Autostart,Desktop`): the default is everything except the desktop shortcut; autostart runs the server hidden at login for all users. Uninstalling removes the
+program files, shortcuts and autostart entry; downloaded drivers (`%USERPROFILE%\AudioMixerDrivers`) and plugins (`%USERPROFILE%\AudioMixerPlugins`) stay. A newer package of the same kind upgrades an older one.
+The no-administrator flavour (`%LOCALAPPDATA%\Programs\AudioMixer`) is still available: `node scripts/build-msi.js --scope user`. Where other systems keep things: Linux app files are root-owned
+under `/opt`, user data stays in `~/AudioMixerDrivers`, `~/AudioMixerPlugins` and `~/.vst3`; macOS uses `/Applications`, `~/Library/LaunchAgents` and `~/Library/Audio/Plug-Ins/VST3`.
+The installer technology is Windows Installer (MSI) built with wixl, not the commercial InstallShield product, and the NSIS script is gone.
 
-### Windows installer (.msi)
-`npm run build:msi` builds `dist/AudioMixer-<version>.msi` from the same files as the `.exe` (needs `wixl` from msitools: `apt install wixl` on Linux,
-`brew install msitools` on macOS). It is a per-user package (no administrator rights, installs to `%LOCALAPPDATA%\Programs\AudioMixer`) with the
-same content: server, client, bundled Node.js, Audify, Start Menu shortcuts (including *Verify installation* and *Plugins folder*) and the
-`%USERPROFILE%\AudioMixerPlugins` folder. Install with a double-click or `msiexec /i AudioMixer-1.4.0.msi`; silent: add `/qn`; remove with *Settings > Apps*
-or `msiexec /x`. Features: `Main`, `Shortcuts`, `Autostart` (start the server hidden at login) and `Desktop`; default is all but `Desktop`, e.g.
-`msiexec /i AudioMixer-1.4.0.msi ADDLOCAL=Main,Shortcuts,Desktop` leaves autostart off. A newer `.msi` upgrades an older one in place. It refuses to install
-over the `.exe` version (uninstall that first). Unsigned, like the `.exe`: check `AudioMixer-<version>.msi.sha256` or run `node client/cli.js verify <file>`.
-Built with wixl and checked by unpacking the package and comparing it to the staged files; not yet installed on a real Windows PC.
+**Signing.** The Windows files are Authenticode-signed with `scripts/sign.js`. Without your own certificate the build creates a self-signed one ("Audio Mixer (self-signed)"; the key stays in
+`dist/cache/signing`, git-ignored) and publishes the public part as `releases/AudioMixer-signing.cer`. That proves the file was not changed after it was built and lets the verification scan
+pin the publisher, but Windows still shows "unknown publisher" / SmartScreen until you trust the certificate (right-click the `.cer` > Install, "Trusted Root" and "Trusted Publishers") or
+sign with a commercial certificate (`SIGN_PFX=cert.pfx SIGN_PFX_PASSWORD=... npm run build:installers`; `SIGN_TIMESTAMP_URL=http://timestamp.digicert.com` adds a timestamp). Thumbprint of the
+published certificate: see `releases/AudioMixer-signing.cer`. The Linux and macOS packages are not signed.
 
 ### Windows verification scan
-`node client/cli.js verify [--scan]` (Start Menu: *Verify installation (security scan)*) checks an install: every file against `MANIFEST.sha256`
-(changed, missing and unlisted code files are reported), the Authenticode signature of the bundled Node.js runtime (must be the OpenJS Foundation),
-that the server listens on loopback only (not on any LAN address), and with `--scan` runs a Microsoft Defender custom scan of the folder.
-`node client/cli.js verify path\to\AudioMixer-Setup-1.4.0.exe [--scan]` checks a downloaded installer: PE/NSIS structure, its SHA-256 against the
-`.sha256` file next to it, signature and Defender. Exit code 0 = verified. Manual check in PowerShell:
-`Get-FileHash .\AudioMixer-Setup-1.4.0.exe -Algorithm SHA256` and `Get-AuthenticodeSignature .\AudioMixer-Setup-1.4.0.exe`.
-The installer in `releases/` is unsigned, so the signature check reports a warning, not a pass; the SHA-256 is the proof of integrity.
+`node client/cli.js verify [--scan]` (Start Menu: *Verify installation (security scan)*) checks an install: every file against `MANIFEST.sha256` (changed, missing and unlisted code files, including
+native files under `bridge/node_modules`, are reported), the Authenticode signature of the bundled Node.js runtime (must be the OpenJS Foundation), that the server listens on loopback only, and with
+`--scan` runs a Microsoft Defender custom scan. `node client/cli.js verify "Audio Mixer-1.4.0.exe" [--scan]` (also `.msi`) checks a downloaded installer: PE structure, the embedded package and its SHA-256,
+the `.sha256` file next to it, the signature (a self-signed signature passes only when it matches `AudioMixer-signing.cer` next to the file, or `AUDIO_MIXER_SIGNING_CER`) and Defender. Exit code 0 = verified.
+Manual check in PowerShell: `Get-FileHash ".\Audio Mixer-1.4.0.exe" -Algorithm SHA256` and `Get-AuthenticodeSignature ".\Audio Mixer-1.4.0.exe"`.
+Tested on Linux (hashes, packaging, signature verification with osslsigncode); the Windows-only parts (running the setup, Authenticode and Defender checks, uninstall) are untested on a real PC.
 
-### Installers (.exe and .msi) and the live interface (1.4.0)
-`npm run build:installers` builds both `dist/AudioMixer-Setup-<version>.exe` (NSIS wizard) and `dist/AudioMixer-<version>.msi` from one staging folder;
-`build:installer` and `build:msi` build one each. The NSIS script `installer/audio-mixer.nsi` is only the recipe for the `.exe`; nothing needs it at install time.
-Either installer puts everything together: the mixer page, the Node.js server and client, the bundled official Node.js runtime, Audify (ASIO / WASAPI / DirectSound),
-the plugin folder, the verify scan and the Start Menu entries.
-
+### Live interface (1.4.0)
 Interface changes in the page:
 - **Smooth faders**: 20 ms gain glide (no zipper noise), 10x finer resolution once a fader is touched, `Shift` / `Alt` + wheel for fine moves (the plain wheel still scrolls the page),
   arrow keys / PageUp / PageDown, double-click resets (channel faders to 0 dB). The EQ bands glide as well.
