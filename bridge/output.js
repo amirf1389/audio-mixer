@@ -1,6 +1,7 @@
 'use strict';
 // ASIO / host-API audio output through PortAudio (naudiodon2). Receives interleaved Int16 PCM from the page.
 function loadPortAudio() { return require('naudiodon2'); }
+const SAMPLE_RATES = [44100, 48000, 88200, 96000, 176400, 192000];
 
 function pickDevice(pa, wantedId, channels) {
   const devices = pa.getDevices();
@@ -12,6 +13,7 @@ function pickDevice(pa, wantedId, channels) {
 function createSession(conn, load = loadPortAudio) {
   let io = null;
   let blocked = false;
+  let frameBytes = 4; // Int16 * channels; writes must be whole frames or channels swap
 
   const stop = () => {
     if (io) { try { io.quit(); } catch (_) { /* already closed */ } io = null; }
@@ -25,9 +27,10 @@ function createSession(conn, load = loadPortAudio) {
       return conn.send(JSON.stringify({ type: 'error', message: 'PortAudio not installed: run "npm install" in bridge/ (needs naudiodon2)' }));
     }
     const channels = Math.min(Math.max(parseInt(opts.channels, 10) || 2, 1), 32);
-    const sampleRate = parseInt(opts.sampleRate, 10) || 48000;
-    const dev = pickDevice(pa, Number.isInteger(opts.deviceId) ? opts.deviceId : null, channels);
-    if (!dev && Number.isInteger(opts.deviceId)) return conn.send(JSON.stringify({ type: 'error', message: 'device not found' }));
+    const sampleRate = SAMPLE_RATES.includes(Number(opts.sampleRate)) ? Number(opts.sampleRate) : 48000;
+    const wanted = Number.isInteger(opts.deviceId) && opts.deviceId >= 0 ? opts.deviceId : null;
+    const dev = pickDevice(pa, wanted, channels);
+    if (!dev && wanted !== null) return conn.send(JSON.stringify({ type: 'error', message: 'device not found' }));
     try {
       io = new pa.AudioIO({ outOptions: {
         channelCount: channels, sampleFormat: pa.SampleFormat16Bit, sampleRate,
@@ -36,6 +39,7 @@ function createSession(conn, load = loadPortAudio) {
       io.on('error', e => { conn.send(JSON.stringify({ type: 'error', message: String(e && e.message || e) })); stop(); });
       io.on('drain', () => { blocked = false; });
       io.start();
+      frameBytes = 2 * channels;
       conn.send(JSON.stringify({ type: 'started', device: dev ? dev.name : 'default', hostApi: dev ? dev.hostAPIName : 'default', sampleRate, channels }));
     } catch (e) {
       stop();
@@ -46,10 +50,12 @@ function createSession(conn, load = loadPortAudio) {
   return {
     onText(text) {
       let m; try { m = JSON.parse(text); } catch (_) { return; }
+      if (!m || typeof m !== 'object') return;
       if (m.type === 'start') start(m); else if (m.type === 'stop') { stop(); conn.send(JSON.stringify({ type: 'stopped' })); }
     },
     onBinary(buf) {
       if (!io || blocked) return;               // drop instead of queueing, keeps latency bounded
+      if (buf.length % frameBytes !== 0) return; // partial frame would misalign every later sample
       if (io.write(buf) === false) blocked = true;
     },
     onClose: stop,

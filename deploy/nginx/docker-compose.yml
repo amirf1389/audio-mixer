@@ -1,0 +1,12 @@
+# Linux only (host networking so nginx reaches the bridge on 127.0.0.1:8765).
+services:
+  nginx:
+    image: nginx:1.27-alpine
+    network_mode: host
+    restart: unless-stopped
+    volumes:
+      - ./audio-mixer.conf:/etc/nginx/conf.d/default.conf:ro
+      - ../../gemini-code-1790419147591.html:/srv/audio-mixer/gemini-code-1790419147591.html:ro
+      - ./certs:/etc/letsencrypt/live/mixer.example.com:ro   # fullchain.pem + privkey.pem
+      - ./.htpasswd_mixer:/etc/nginx/.htpasswd_mixer:ro        # basic auth users for /api and /ws
+      - ./logs:/var/log/nginx                                  # lets host fail2ban / guard.sh read audio-mixer.access.log
