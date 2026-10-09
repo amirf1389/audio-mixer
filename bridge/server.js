@@ -4,6 +4,7 @@
 //   GET /api/status   -> { ok, name, version }
 //   GET /api/drivers  -> native driver/device detection for this OS
 //   GET /api/volume   -> system output / input volume + mute
+//   GET /api/plugins -> VST3 / VST2 plugins (.vst3 / .dll / .vst) found and validated
 //   GET /api/audify, /api/framesize -> Audify (RtAudio) engine devices and automatic frame size
 //   WS  /ws/output    -> page streams Int16 PCM out through PortAudio (ASIO / WASAPI)
 //   WS  /ws/input     -> bridge streams Int16 PCM captured from an ASIO / WASAPI input
@@ -24,6 +25,7 @@ const { listCatalog, downloadDriver, downloadDir } = require('./catalog');
 const { cachedNowPlaying } = require('./nowplaying');
 const { groupInterfaces } = require('./interfaces');
 const audifyEngine = require('./audify');
+const pluginScan = require('./plugins');
 
 const VERSION = (() => { try { return require('../package.json').version; } catch (_) { return '1.0.0'; } })();
 const PORT = Number(process.env.BRIDGE_PORT) || 8765;
@@ -93,6 +95,12 @@ async function handle(req, res) {
   // Audify (RtAudio) engine: every compiled host API with its devices and the automatic frame size for each.
   if (url.pathname === '/api/audify') {
     try { return json(res, 200, { ok: true, ...audifyEngine.describe() }, cors); }
+    catch (e) { return json(res, 500, { ok: false, error: e.message }, cors); }
+  }
+
+  // Plugin system: VST3 / VST2 (.vst3, .dll, .vst) in the standard folders and the app's own plugin folder, each binary checked.
+  if (url.pathname === '/api/plugins') {
+    try { return json(res, 200, { ok: true, ...pluginScan.scan({ hash: url.searchParams.get('hash') === '1' }) }, cors); }
     catch (e) { return json(res, 500, { ok: false, error: e.message }, cors); }
   }
 

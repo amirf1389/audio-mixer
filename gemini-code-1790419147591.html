@@ -14476,7 +14476,13 @@ window.rebootSystem = function() { window.notify('Warm reboot initiated... DSP c
 window.factoryResetConsole = function() { if(confirm('FACTORY HARD RESET will erase all show data. Continue?')) window.notify('Factory reset in progress...', 'triangle-exclamation'); };
 
 // PLUGIN FUNCTIONS
-window.rescanPlugins = function() { window.notify('Scanning VST3/AAX/AU plugin directories...', 'magnifying-glass'); const r=document.getElementById('plugin-scan-results');if(r){r.innerHTML+='<div class=\"text-cyan-400\"><i class=\"fa-solid fa-rotate mr-1\"></i> Re-scan complete: '+new Date().toLocaleTimeString()+'</div>';r.scrollTop=r.scrollHeight;} };
+window.rescanPlugins = function() { window.notify('Scanning VST3/AAX/AU plugin directories...', 'magnifying-glass'); const sdk = window.universalAsioSdk; if (sdk && sdk.bridgeUrl) { fetch(sdk.bridgeUrl + '/api/plugins').then(function(r) { return r.json(); }).then(function(j) {
+        const box = document.getElementById('plugin-scan-results'); if (!box || !j || !j.ok) return;
+        const add = function(cls, text) { const d = document.createElement('div'); d.className = cls; d.textContent = text; box.appendChild(d); };
+        add('text-cyan-400', 'Local server scan: ' + j.counts.vst3 + ' VST3, ' + j.counts.vst2 + ' VST2, ' + j.counts.loadable + ' loadable, ' + j.counts.rejected + ' rejected. Plugin folder: ' + j.appDir);
+        j.plugins.slice(0, 200).forEach(function(p) { const ok = p.valid && p.compatible; add(ok ? 'text-emerald-400' : 'text-amber-400', '[' + p.format + '] ' + p.name + (p.arch ? ' (' + p.arch + ')' : '') + (ok ? ' - COMPATIBLE' : ' - ' + p.reason)); });
+        box.scrollTop = box.scrollHeight;
+      }).catch(function() { /* server not reachable: the built-in demo list stays */ }); } const r=document.getElementById('plugin-scan-results');if(r){r.innerHTML+='<div class=\"text-cyan-400\"><i class=\"fa-solid fa-rotate mr-1\"></i> Re-scan complete: '+new Date().toLocaleTimeString()+'</div>';r.scrollTop=r.scrollHeight;} };
 window.scanPluginStore = function() { window.notify('Checking for plugin updates on WING App Store...', 'puzzle-piece'); };
 window.togglePluginInstall = function(name) { const btn=document.getElementById('btn-plug-'+name);if(!btn)return;if(btn.textContent.trim()==='INSERT'){btn.textContent='ACTIVE';btn.className='px-2 py-0.5 rounded bg-emerald-500 text-black font-bold text-[7.5px] transition';window.notify(name.toUpperCase()+' plugin inserted into signal chain','puzzle-piece');}else{btn.textContent='INSERT';btn.className='px-2 py-0.5 rounded bg-amber-500 text-black font-bold text-[7.5px] transition';window.notify(name.toUpperCase()+' plugin bypassed','puzzle-piece');} };
 // BOOTSTRAP INITIALIZATION

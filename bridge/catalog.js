@@ -8,7 +8,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 
 const MAX_BYTES = 200 * 1024 * 1024;
-const ALLOWED_DOWNLOAD_HOSTS = ['api.github.com', 'github.com', 'objects.githubusercontent.com', 'release-assets.githubusercontent.com', 'github-releases.githubusercontent.com'];
+const ALLOWED_DOWNLOAD_HOSTS = ['api.github.com', 'github.com', 'objects.githubusercontent.com', 'release-assets.githubusercontent.com', 'github-releases.githubusercontent.com', 'www.asio4all.org', 'asio4all.org'];
 
 // kind: built-in | asio | sdk | vendor | virtual | package | native
 const CATALOG = [
@@ -24,8 +24,9 @@ const CATALOG = [
     url: 'https://github.com/dechamps/FlexASIO', detect: { drivers: ['flexasio'], asio: /flexasio/i },
     download: { kind: 'github-release', repo: 'dechamps/FlexASIO', pick: /^FlexASIO-[\w.\-]*\.exe$/i, skip: /debug|symbol|pdb/i } },
   { id: 'asio4all', os: ['win32'], kind: 'asio', name: 'ASIO4ALL', vendor: 'Michael Tippach',
-    note: 'Universal low-latency ASIO driver for WDM audio hardware. Download from the official site.',
-    url: 'https://www.asio4all.org/', detect: { drivers: ['asio4all'], asio: /asio4all/i } },
+    note: 'Universal low-latency ASIO driver for WDM audio hardware. The newest installer is looked up on the official site (asio4all.org) and saved, never run.',
+    url: 'https://www.asio4all.org/', detect: { drivers: ['asio4all'], asio: /asio4all/i },
+    download: { kind: 'site-link', page: 'https://www.asio4all.org/', pick: /ASIO4ALL[_\w.\-]*\.(?:exe|zip)$/i } },
   { id: 'steinberg-asio', os: ['win32', 'darwin'], kind: 'sdk', name: 'Steinberg ASIO (SDK and generic driver)', vendor: 'Steinberg Media Technologies',
     note: 'ASIO is a Steinberg specification; drivers are written by the hardware vendor.',
     url: 'https://www.steinberg.net/developers/', detect: { asioAny: true } },
@@ -105,20 +106,45 @@ function hostOk(u, hosts) {
 }
 
 // Downloads one catalog item. `fetchImpl` and `dir` are injectable for tests. Returns { ok, file, bytes, sha256, verified, source }.
-async function downloadDriver(id, { fetchImpl = globalThis.fetch, dir = downloadDir(), hosts = ALLOWED_DOWNLOAD_HOSTS } = {}) {
-  const item = CATALOG.find(x => x.id === id);
-  if (!item || !item.download) throw Object.assign(new Error('this driver has no automatic download; use the official site'), { status: 400 });
-  const dl = item.download;
+async function resolveGithubRelease(dl, fetchImpl, hosts, item) {
   const api = `https://api.github.com/repos/${dl.repo}/releases/latest`;
   const rel = await fetchImpl(api, { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'audio-mixer-bridge' } });
   if (!rel.ok) throw Object.assign(new Error('release lookup failed (' + rel.status + ')'), { status: 502 });
   const j = await rel.json();
   const asset = (Array.isArray(j.assets) ? j.assets : []).find(a => a && typeof a.name === 'string' && dl.pick.test(a.name) && !(dl.skip && dl.skip.test(a.name)));
   if (!asset || !hostOk(asset.browser_download_url, hosts)) throw Object.assign(new Error('no matching installer in the latest release; open ' + item.url), { status: 502 });
+  return { url: asset.browser_download_url, name: asset.name, digest: asset.digest };
+}
+
+// "ASIO4ALL_2_15_English.exe" -> [2, 15]; the highest version wins, English preferred on a tie.
+function versionOf(name) { const m = /(\d+)[_.](\d+)(?:[_.](\d+))?/.exec(name); return m ? [Number(m[1]), Number(m[2]), Number(m[3] || 0)] : [0, 0, 0]; }
+function cmpVersion(a, b) { for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] - b[i]; return 0; }
+
+// Finds the newest installer linked from the vendor's own page. Only https links on the allowed vendor hosts are accepted.
+async function resolveSiteLink(dl, fetchImpl, hosts, item) {
+  const page = await fetchImpl(dl.page, { headers: { 'User-Agent': 'audio-mixer-bridge' } });
+  if (!page.ok) throw Object.assign(new Error('vendor page lookup failed (' + page.status + '); open ' + item.url), { status: 502 });
+  const html = String(await page.text()).slice(0, 2 * 1024 * 1024);
+  const found = [];
+  for (const m of html.matchAll(/href\s*=\s*["']([^"']+)["']/gi)) {
+    let u; try { u = new URL(m[1].replace(/&amp;/g, '&'), dl.page); } catch (_) { continue; }
+    const file = decodeURIComponent(u.pathname.split('/').pop() || '');
+    if (u.protocol === 'https:' && hostOk(u.href, hosts) && dl.pick.test(file) && !found.some(f => f.url === u.href)) found.push({ url: u.href, name: file });
+  }
+  if (!found.length) throw Object.assign(new Error('no installer link found on the vendor page; open ' + item.url), { status: 502 });
+  found.sort((a, b) => cmpVersion(versionOf(b.name), versionOf(a.name)) || (/english/i.test(b.name) - /english/i.test(a.name)));
+  return found[0];
+}
+
+async function downloadDriver(id, { fetchImpl = globalThis.fetch, dir = downloadDir(), hosts = ALLOWED_DOWNLOAD_HOSTS } = {}) {
+  const item = CATALOG.find(x => x.id === id);
+  if (!item || !item.download) throw Object.assign(new Error('this driver has no automatic download; use the official site'), { status: 400 });
+  const dl = item.download;
+  const asset = dl.kind === 'site-link' ? await resolveSiteLink(dl, fetchImpl, hosts, item) : await resolveGithubRelease(dl, fetchImpl, hosts, item);
   const name = path.basename(asset.name).replace(/[^\w.\-]/g, '_');
   if (!name || name.startsWith('.')) throw Object.assign(new Error('unsafe file name'), { status: 502 });
 
-  const res = await fetchImpl(asset.browser_download_url, { redirect: 'follow', headers: { 'User-Agent': 'audio-mixer-bridge' } });
+  const res = await fetchImpl(asset.url, { redirect: 'follow', headers: { 'User-Agent': 'audio-mixer-bridge' } });
   if (!res.ok || !res.body) throw Object.assign(new Error('download failed (' + res.status + ')'), { status: 502 });
   if (res.url && !hostOk(res.url, hosts)) throw Object.assign(new Error('download redirected to an untrusted host'), { status: 502 });
   const len = Number(res.headers.get('content-length') || 0);
@@ -145,7 +171,7 @@ async function downloadDriver(id, { fetchImpl = globalThis.fetch, dir = download
   const expected = typeof asset.digest === 'string' && asset.digest.startsWith('sha256:') ? asset.digest.slice(7).toLowerCase() : null;
   if (expected && expected !== sha256) { try { fs.unlinkSync(part); } catch (_) { /* gone */ } throw Object.assign(new Error('checksum mismatch: download discarded'), { status: 502 }); }
   fs.renameSync(part, target);
-  return { ok: true, id, file: target, bytes, sha256, verified: !!expected, source: asset.browser_download_url, note: 'Saved only. Run the installer yourself after checking it.' };
+  return { ok: true, id, file: target, bytes, sha256, verified: !!expected, source: asset.url, note: 'Saved only. Run the installer yourself after checking it.' };
 }
 
 module.exports = { CATALOG, listCatalog, downloadDriver, downloadDir, isInstalled, ALLOWED_DOWNLOAD_HOSTS };

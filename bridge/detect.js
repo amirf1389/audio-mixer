@@ -102,7 +102,10 @@ function scanVst(dirs, ext, max = 500) {
 function detectVst() {
   const d = vstDirs();
   const v2ext = process.platform === 'win32' ? '.dll' : process.platform === 'darwin' ? '.vst' : '.so';
-  return { vst3: scanVst(d.vst3, '.vst3'), vst2: scanVst(d.vst2, v2ext) };
+  const r = { vst3: scanVst(d.vst3, '.vst3'), vst2: scanVst(d.vst2, v2ext) };
+  // plugins dropped into the app's own plugin folder (AudioMixerPlugins) count once they pass the binary check
+  try { for (const p of require('./plugins').scan().plugins) if (p.source === 'app' && p.valid && p.compatible) { const l = p.format === 'VST3' ? r.vst3 : r.vst2; if (!l.includes(p.name)) l.push(p.name); } } catch (_) { /* optional */ }
+  return r;
 }
 
 // Optional: real host APIs / devices (ASIO, WASAPI, DirectSound, CoreAudio, ALSA) via PortAudio.

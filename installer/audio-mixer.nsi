@@ -73,6 +73,9 @@ Section "Start Menu shortcuts" SecMenu
   CreateShortCut "$SMPROGRAMS\Audio Mixer\Audio Mixer (PC mode).lnk" "$INSTDIR\runtime\node.exe" '"$INSTDIR\client\cli.js"' "$INSTDIR\runtime\node.exe" 0
   CreateShortCut "$SMPROGRAMS\Audio Mixer\Audio Mixer local server only.lnk" "$INSTDIR\runtime\node.exe" '"$INSTDIR\bridge\server.js"' "$INSTDIR\runtime\node.exe" 0
   CreateShortCut "$SMPROGRAMS\Audio Mixer\Verify installation (security scan).lnk" "$INSTDIR\runtime\node.exe" '"$INSTDIR\client\cli.js" verify --scan --pause' "$INSTDIR\runtime\node.exe" 0
+  ; VST3 / VST2 (.vst3, .dll) plugin folder: lives outside the install folder, so uninstalling never deletes the user's plugins
+  CreateDirectory "$PROFILE\AudioMixerPlugins"
+  CreateShortCut "$SMPROGRAMS\Audio Mixer\Plugins folder (VST3 and VST2).lnk" "$PROFILE\AudioMixerPlugins"
   CreateShortCut "$SMPROGRAMS\Audio Mixer\Uninstall Audio Mixer.lnk" "$INSTDIR\Uninstall.exe"
 SectionEnd
 
@@ -104,6 +107,7 @@ Section "Uninstall"
   Delete "$SMPROGRAMS\Audio Mixer\Audio Mixer (PC mode).lnk"
   Delete "$SMPROGRAMS\Audio Mixer\Audio Mixer local server only.lnk"
   Delete "$SMPROGRAMS\Audio Mixer\Verify installation (security scan).lnk"
+  Delete "$SMPROGRAMS\Audio Mixer\Plugins folder (VST3 and VST2).lnk"
   Delete "$SMPROGRAMS\Audio Mixer\Uninstall Audio Mixer.lnk"
   RMDir "$SMPROGRAMS\Audio Mixer"
   Delete "$DESKTOP\Audio Mixer.lnk"
