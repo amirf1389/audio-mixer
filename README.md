@@ -14,6 +14,9 @@ Core Audio / ALSA access, system volume, and a list of official audio drivers.
 
    The client starts the server on `http://localhost:8765` and opens the mixer in your browser. In the **DRIVERS** tab the *PC MODE*
    panel turns green. Without the server the page keeps working in web mode (browser audio only).
+   **Enable it at login** (so the page always finds the server): `node client/cli.js service install`; check with `service status`, remove
+   with `service uninstall`. It uses a Startup-folder script on Windows, a LaunchAgent on macOS and a systemd user service on Linux, needs no
+   admin rights, and only starts `bridge/server.js` on `127.0.0.1`.
 3. For ASIO / WASAPI input and output run `cd bridge && npm install` once (installs the PortAudio module; needs a C++ build toolchain).
 
 Official drivers (DRIVERS tab or command line):

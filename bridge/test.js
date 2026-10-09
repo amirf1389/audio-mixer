@@ -254,3 +254,36 @@ test('client: argument parsing and the browser opener only accept localhost URLs
   assert.strictEqual(openCommand('linux', 'https://evil.example/'), null);
   assert.strictEqual(openCommand('win32', 'http://localhost:8765/ & calc'), null);
 });
+
+test('autostart generates safe per-OS files and installs / removes them', async () => {
+  const svc = require('../client/service');
+  const home = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'svc-'));
+  const calls = [];
+  const exec = (cmd, args, o, cb) => { calls.push([cmd, ...args].join(' ')); cb(null); };
+  const base = { home, env: { APPDATA: pathx.join(home, 'AppData') }, node: '/usr/bin/node', server: '/opt/audio mixer/bridge/server.js', exec };
+
+  const w = await svc.install({ ...base, platform: 'win32', node: 'C:\\Program Files\\nodejs\\node.exe', server: 'C:\\mixer\\bridge\\server.js' });
+  assert.ok(w.file.endsWith('AudioMixerServer.vbs') && w.file.includes('Startup'));
+  assert.match(fsx.readFileSync(w.file, 'utf8'), /sh\.Run """C:\\Program Files\\nodejs\\node\.exe"" ""C:\\mixer\\bridge\\server\.js""", 0, False/);
+  assert.ok(calls.some(c => c.startsWith('wscript //nologo ')));
+
+  const m = await svc.install({ ...base, platform: 'darwin' });
+  assert.ok(m.file.endsWith('com.audiomixer.bridge.plist'));
+  assert.match(fsx.readFileSync(m.file, 'utf8'), /<string>\/usr\/bin\/node<\/string><string>\/opt\/audio mixer\/bridge\/server\.js<\/string>[\s\S]*<key>RunAtLoad<\/key><true\/>/);
+  assert.ok(calls.some(c => c.startsWith('launchctl load -w ')));
+
+  const l = await svc.install({ ...base, platform: 'linux' });
+  assert.ok(l.file.endsWith(pathx.join('systemd', 'user', 'audio-mixer.service')));
+  assert.match(fsx.readFileSync(l.file, 'utf8'), /ExecStart="\/usr\/bin\/node" "\/opt\/audio mixer\/bridge\/server\.js"/);
+  assert.ok(calls.includes('systemctl --user enable --now audio-mixer.service'));
+  assert.strictEqual(svc.status({ ...base, platform: 'linux' }).installed, true);
+
+  assert.strictEqual((await svc.uninstall({ ...base, platform: 'linux' })).removed, true);
+  assert.strictEqual(svc.status({ ...base, platform: 'linux' }).installed, false);
+  assert.ok(calls.includes('systemctl --user disable --now audio-mixer.service'));
+
+  await assert.rejects(svc.install({ ...base, platform: 'linux', node: '/usr/bin/node" --evil "' }), /unsupported characters/);
+  await assert.rejects(svc.install({ ...base, platform: 'darwin', server: '/x/$(rm -rf ~)/server.js' }), /unsupported characters/);
+  await assert.rejects(svc.install({ ...base, platform: 'freebsd' }), /not supported/);
+  fsx.rmSync(home, { recursive: true, force: true });
+});

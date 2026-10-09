@@ -6,6 +6,7 @@
 //   node client/cli.js drivers         list official drivers for this PC (installed / not found)
 //   node client/cli.js download <id>   save an official installer (e.g. flexasio); it is never run for you
 //   node client/cli.js doctor          check Node.js, ports, PortAudio, ASIO drivers, download folder
+//   node client/cli.js service install|uninstall|status   start the server automatically when you log in
 const http = require('node:http');
 const fs = require('node:fs');
 const { execFile } = require('node:child_process');
@@ -104,6 +105,28 @@ async function cmdDoctor(port) {
   return bad ? 1 : 0;
 }
 
+async function cmdService(action, port) {
+  const svc = require('./service');
+  try {
+    if (action === 'install') {
+      const r = await svc.install();
+      console.log(`Autostart enabled: ${r.file}`);
+      console.log(r.started ? 'The local system server was started now and will start at every login.' : 'It will start at your next login (starting it now failed: run "node client/cli.js" or log in again).');
+      console.log(`The mixer finds it at http://localhost:${port}/ ; remove it with: node client/cli.js service uninstall`);
+      return 0;
+    }
+    if (action === 'uninstall') { const r = await svc.uninstall(); console.log(r.removed ? `Autostart removed: ${r.file}` : 'Autostart was not installed.'); return 0; }
+    if (action === 'status') {
+      const st = svc.status(), up = await probe(port);
+      console.log(`Autostart: ${st.installed ? 'ENABLED' : 'not enabled'} (${st.file})`);
+      console.log(`Server on port ${port}: ${up ? 'RUNNING' : 'not running'}`);
+      return 0;
+    }
+  } catch (e) { console.error('Service error: ' + e.message); return 1; }
+  console.error('usage: node client/cli.js service install|uninstall|status');
+  return 2;
+}
+
 async function cmdStart(o) {
   const server = require('../bridge/server');
   let port = o.port;
@@ -134,7 +157,8 @@ async function main(argv) {
   if (o.cmd === 'drivers') return (await cmdDrivers(), 0);
   if (o.cmd === 'download') return cmdDownload(o.arg);
   if (o.cmd === 'doctor') return cmdDoctor(o.port);
-  console.error(`Unknown command "${o.cmd}". Use: start | drivers | download <id> | doctor`);
+  if (o.cmd === 'service') return cmdService(o.arg, o.port);
+  console.error(`Unknown command "${o.cmd}". Use: start | drivers | download <id> | doctor | service install|uninstall|status`);
   return 2;
 }
 
