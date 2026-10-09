@@ -315,3 +315,79 @@ test('build produces a self-contained PC-mode package that serves the mixer', as
   assert.match(help.stdout, /service install\|uninstall\|status/);
   fsx.rmSync(out, { recursive: true, force: true });
 });
+
+// ── Windows installer build ──
+function makeZip(entries) {      // minimal zip writer (deflate) for tests
+  const zlibx = require('node:zlib'), parts = [], central = [];
+  let off = 0;
+  for (const [name, data] of entries) {
+    const nb = Buffer.from(name), comp = zlibx.deflateRawSync(data);
+    const lh = Buffer.alloc(30); lh.writeUInt32LE(0x04034b50, 0); lh.writeUInt16LE(20, 4); lh.writeUInt16LE(8, 8);
+    lh.writeUInt32LE(comp.length, 18); lh.writeUInt32LE(data.length, 22); lh.writeUInt16LE(nb.length, 26);
+    const ch = Buffer.alloc(46); ch.writeUInt32LE(0x02014b50, 0); ch.writeUInt16LE(20, 4); ch.writeUInt16LE(20, 6); ch.writeUInt16LE(8, 10);
+    ch.writeUInt32LE(comp.length, 20); ch.writeUInt32LE(data.length, 24); ch.writeUInt16LE(nb.length, 28); ch.writeUInt32LE(off, 42);
+    parts.push(lh, nb, comp); central.push(ch, nb); off += 30 + nb.length + comp.length;
+  }
+  const cd = Buffer.concat(central), eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0); eocd.writeUInt16LE(entries.length, 8); eocd.writeUInt16LE(entries.length, 10); eocd.writeUInt32LE(cd.length, 12); eocd.writeUInt32LE(off, 16);
+  return Buffer.concat([...parts, cd, eocd]);
+}
+
+function fakeNodeFetch(zip, { badSum = false } = {}) {
+  const sum = cryptox.createHash('sha256').update(zip).digest('hex');
+  return async url => {
+    if (url.endsWith('/index.json')) return new Response(JSON.stringify([{ version: 'v99.0.0', lts: false, files: ['win-x64-zip'] }, { version: 'v98.1.2', lts: 'Fake', files: ['linux-x64', 'win-x64-zip'] }]));
+    if (url.endsWith('/SHASUMS256.txt')) return new Response(`${badSum ? '0'.repeat(64) : sum}  node-v98.1.2-win-x64.zip\n${'1'.repeat(64)}  other.tar.gz\n`);
+    if (url.endsWith('node-v98.1.2-win-x64.zip')) return new Response(zip);
+    return new Response('', { status: 404 });
+  };
+}
+
+test('installer helpers: checksums, version, zip extraction', () => {
+  const bi = require('../scripts/build-installer');
+  assert.deepStrictEqual(bi.parseShasums(`${'a'.repeat(64)}  node-v1-win-x64.zip\ngarbage\n${'b'.repeat(64)} *x.msi`), { 'node-v1-win-x64.zip': 'a'.repeat(64), 'x.msi': 'b'.repeat(64) });
+  assert.strictEqual(bi.version4('1.2.3'), '1.2.3.0');
+  assert.strictEqual(bi.version4('1.2.3-beta.1'), '1.2.3.1');
+  const zip = makeZip([['node-v1/LICENSE', Buffer.from('lic')], ['node-v1/node.exe', Buffer.alloc(5000, 7)]]);
+  assert.strictEqual(bi.extractFromZip(zip, n => n.endsWith('/node.exe')).length, 5000);
+  assert.strictEqual(bi.extractFromZip(zip, n => n === 'nope'), null);
+  assert.throws(() => bi.extractFromZip(Buffer.from('not a zip at all, definitely'), () => true), /not a zip/);
+});
+
+test('installer: official Node.js runtime is fetched, checked and cached; a bad checksum is refused', async () => {
+  const bi = require('../scripts/build-installer');
+  const zip = makeZip([['node-v98.1.2-win-x64/LICENSE', Buffer.from('MIT')], ['node-v98.1.2-win-x64/node.exe', Buffer.from('MZ-fake-node')]]);
+  const cache = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'rt-'));
+  const r = await bi.fetchNodeRuntime({ cache, fetchImpl: fakeNodeFetch(zip) });
+  assert.strictEqual(r.version, 'v98.1.2');                                  // newest LTS, not the newer non-LTS
+  assert.strictEqual(fsx.readFileSync(r.exe).toString(), 'MZ-fake-node');
+  const again = await bi.fetchNodeRuntime({ cache, fetchImpl: async () => { throw new Error('should use the cache'); } });
+  assert.strictEqual(again.exe, r.exe);
+  const cache2 = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'rt-'));
+  await assert.rejects(bi.fetchNodeRuntime({ cache: cache2, fetchImpl: fakeNodeFetch(zip, { badSum: true }) }), /checksum mismatch/);
+  assert.deepStrictEqual(fsx.readdirSync(cache2), []);                       // nothing cached from a bad download
+  await assert.rejects(bi.fetchNodeRuntime({ cache: cache2, version: '../../x', fetchImpl: fakeNodeFetch(zip) }), /bad Node\.js version/);
+  fsx.rmSync(cache, { recursive: true, force: true }); fsx.rmSync(cache2, { recursive: true, force: true });
+});
+
+test('installer: stages the app with the bundled runtime and builds a Windows setup.exe when NSIS is available', async () => {
+  const bi = require('../scripts/build-installer');
+  const zip = makeZip([['node-v98.1.2-win-x64/LICENSE', Buffer.from('MIT')], ['node-v98.1.2-win-x64/node.exe', Buffer.from('MZ-fake-node')]]);
+  const out = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'inst-'));
+  const hasNsis = require('node:child_process').spawnSync('makensis', ['-VERSION']).status === 0;
+  const r = await bi.buildInstaller({ out, fetchImpl: fakeNodeFetch(zip), runMakensis: hasNsis });
+  assert.ok(fsx.existsSync(pathx.join(r.stage, 'runtime', 'node.exe')) && fsx.existsSync(pathx.join(r.stage, 'client', 'cli.js')));
+  assert.ok(!fsx.existsSync(pathx.join(r.stage, 'start-pc-mode.sh')));
+  assert.match(fsx.readFileSync(pathx.join(r.stage, 'start-pc-mode.bat'), 'utf8'), /runtime\\node\.exe/);
+  assert.match(fsx.readFileSync(pathx.join(r.stage, 'start-local-server.bat'), 'utf8'), /runtime\\node\.exe" bridge\\server\.js/);
+  const nsi = fsx.readFileSync(pathx.join(__dirname, '..', 'installer', 'audio-mixer.nsi'), 'utf8');
+  assert.match(nsi, /RequestExecutionLevel user/);                           // no administrator rights
+  assert.match(nsi, /service install/); assert.match(nsi, /service uninstall/);
+  if (hasNsis) {
+    assert.ok(r.installer && fsx.existsSync(r.installer));
+    const head = fsx.readFileSync(r.installer).subarray(0, 2).toString();
+    assert.strictEqual(head, 'MZ');                                          // a real Windows executable
+    assert.strictEqual(r.sha256.length, 64);
+  }
+  fsx.rmSync(out, { recursive: true, force: true });
+});

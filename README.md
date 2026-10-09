@@ -41,6 +41,20 @@ and are never started automatically. See `bridge/README.md` for the server's API
 | `npm run service:install` / `service:uninstall` | start the server at login / remove it |
 | `npm run build` | build the portable package in `dist/audio-mixer-pc/` (page + server + client, SHA-256 manifest) |
 | `npm run build:archive` | same, plus `dist/audio-mixer-pc-<version>.tar.gz` to copy to another PC |
+| `npm run build:installer` | build the Windows installer `dist/AudioMixer-Setup-<version>.exe` (see below) |
 | `npm test` | run the server tests |
 
 Copy the built folder (or the archive) to any PC with Node.js 18+ and run `start-pc-mode.bat` (Windows) or `./start-pc-mode.sh`.
+
+### Windows installer (.exe)
+`npm run build:installer` builds `dist/AudioMixer-Setup-<version>.exe` with [NSIS](https://nsis.sourceforge.io/) (Windows: install NSIS; Linux: `apt install nsis`;
+macOS: `brew install makensis`). It needs internet once to fetch the official Node.js LTS runtime for Windows from nodejs.org (checked against its
+`SHASUMS256.txt`, cached in `dist/cache`; `NODE_VERSION=v22.x.y` pins a version).
+
+The installer is per-user (no administrator rights) and bundles that Node.js runtime, so the target PC needs nothing installed. It installs to
+`%LOCALAPPDATA%\Programs\AudioMixer` and offers: Start Menu shortcuts (*Audio Mixer (PC mode)* and *local server only*), an optional desktop
+shortcut, and *Start the local server when I log in* (the autostart from `service install`, using the bundled Node.js). The uninstaller removes the
+files, shortcuts and autostart entry and leaves downloaded drivers in `%USERPROFILE%\AudioMixerDrivers`. `/S` installs silently.
+
+The installer is not code-signed, so Windows SmartScreen shows a warning ("More info" -> "Run anyway") until you sign it with your own certificate.
+For ASIO / WASAPI audio run `npm run setup` once after installing (needs npm and a C++ toolchain); without it the server runs in web mode.

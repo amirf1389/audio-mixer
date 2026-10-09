@@ -19,7 +19,8 @@
     "service:install": "node client/cli.js service install",
     "service:uninstall": "node client/cli.js service uninstall",
     "pc": "node client/cli.js",
-    "pc:headless": "node client/cli.js --no-open"
+    "pc:headless": "node client/cli.js --no-open",
+    "build:installer": "node scripts/build-installer.js"
   },
   "engines": {
     "node": ">=18"
