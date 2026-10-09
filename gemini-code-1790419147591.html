@@ -267,6 +267,11 @@ CRITICAL REVISIONS & ARCHITECTURAL UPGRADES:
         #quick-send-modal { position: fixed; bottom: 74px; right: 16px; z-index: 90000; display: none; }
         @media (max-width: 767px) { #quick-send-modal { bottom: 70px; left: 8px; right: 8px; } }
 
+        /* RTA toolbar: keep the button row inside the screen on phones (icons only; titles still describe them) */
+        @media (max-width: 640px) {
+            #btn-talkback > span, #btn-rta-freeze > span, #btn-page-flow-toggle > span { display: none; }
+            #btn-mic-toggle > span { max-width: 58px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: bottom; }
+        }
         #notify-stack { position: fixed; top: 3.8rem; right: 1.2rem; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; z-index: 120000; pointer-events: none; max-width: calc(100vw - 2.4rem); }
         #notify-stack .notification { position: static; max-width: 100%; }
         .notification { position: fixed; top: 3.8rem; right: 1.2rem; padding: 0.7rem 1.1rem; background: rgba(8,10,15,0.98); border: 1px solid var(--wing-orange); border-radius: 8px; font-size: 10px; font-weight: 800; color: white; z-index: 120000; box-shadow: 0 8px 32px rgba(0,0,0,0.9); }
@@ -5709,7 +5714,7 @@ window.navTabs = [
                         <span class="text-cyan-400 font-bold text-[8.5px] flex items-center gap-1.5">
                           <i class="fa-solid fa-microphone-lines"></i> 1. AUDIO INTERFACE HARDWARE READ ENGINE
                         </span>
-                        <span id="asio-read-rate-badge" class="px-1.5 py-0.5 rounded text-[6.5px] bg-cyan-500/20 text-cyan-300 font-bold">32-CH INGEST ACTIVE</span>
+                        <span id="asio-read-rate-badge" class="px-1.5 py-0.5 rounded text-[6.5px] bg-cyan-500/20 text-cyan-300 font-bold">INGEST IDLE</span>
                       </div>
 
                       <!-- Device selector -->
@@ -5787,7 +5792,7 @@ window.navTabs = [
                         <span class="text-amber-400 font-bold text-[8.5px] flex items-center gap-1.5">
                           <i class="fa-solid fa-volume-high"></i> 2. AUDIO INTERFACE HARDWARE WRITE ENGINE
                         </span>
-                        <span id="asio-write-rate-badge" class="px-1.5 py-0.5 rounded text-[6.5px] bg-amber-500/20 text-amber-300 font-bold">32-CH PLAYBACK ACTIVE</span>
+                        <span id="asio-write-rate-badge" class="px-1.5 py-0.5 rounded text-[6.5px] bg-amber-500/20 text-amber-300 font-bold">PLAYBACK IDLE</span>
                       </div>
 
                       <!-- Device selector -->
@@ -12910,9 +12915,12 @@ window.navTabs = [
             }
         },
 
+        setStreamBadge: function(id, text) { const el = document.getElementById(id); if (el) el.innerText = text; },
+
         startReadStream: function() {
             const self = this;
             self.isReadActive = true;
+            self.setStreamBadge('asio-read-rate-badge', 'INGEST ACTIVE');
             const led = document.getElementById('asio-read-indicator-led');
             const txt = document.getElementById('asio-read-status-txt');
             const btn = document.getElementById('asio-btn-read');
@@ -12968,6 +12976,7 @@ window.navTabs = [
 
         stopReadStream: function() {
             this.isReadActive = false;
+            this.setStreamBadge('asio-read-rate-badge', 'INGEST IDLE');
             this.stopPaInput();
             if (this.readAudioSourceNode) { try { this.readAudioSourceNode.disconnect(); } catch (e) { /* ignore */ } this.readAudioSourceNode = null; }
             this.readAnalyserNode = null;
@@ -13252,6 +13261,7 @@ window.navTabs = [
 
         startWriteStream: function() {
             this.isWriteActive = true;
+            this.setStreamBadge('asio-write-rate-badge', 'PLAYBACK ACTIVE');
             this.startPaOutput();
             const led = document.getElementById('asio-write-indicator-led');
             const txt = document.getElementById('asio-write-status-txt');
@@ -13267,6 +13277,7 @@ window.navTabs = [
 
         stopWriteStream: function() {
             this.isWriteActive = false;
+            this.setStreamBadge('asio-write-rate-badge', 'PLAYBACK IDLE');
             this.stopPaOutput();
             const led = document.getElementById('asio-write-indicator-led');
             const txt = document.getElementById('asio-write-status-txt');
