@@ -133,6 +133,10 @@ CRITICAL REVISIONS & ARCHITECTURAL UPGRADES:
         /* DIRECT PC NAVBAR (NO 3-DOTS) */
         #main-nav { background: linear-gradient(180deg, rgba(13,16,23,0.98) 0%, rgba(5,6,8,0.99) 100%); border-color: rgba(255,255,255,0.08); backdrop-filter: blur(12px); display: flex; z-index: 50; }
         .nav-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; transition: all 0.15s ease; cursor: pointer; border-radius: 8px; border: 1px solid transparent; flex-shrink: 0; position: relative; }
+        /* Navigation group labels (MIX / ROUTE / METER / SOURCE / DEVICE / SYSTEM) */
+        .nav-group { flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 6px; font-weight: 900; letter-spacing: 0.16em; color: #64748b; text-transform: uppercase; }
+        @media (max-width: 767px) { .nav-group { padding: 0 6px; margin-left: 2px; border-left: 1px solid rgba(255,255,255,0.14); } }
+        @media (min-width: 768px) { .nav-group { width: 100%; margin: 7px 0 2px; padding-top: 5px; border-top: 1px solid rgba(255,255,255,0.1); } #main-nav > .nav-group:first-child { margin-top: 0; border-top: 0; padding-top: 0; } }
         .nav-btn:hover { background: rgba(255,255,255,0.05); }
         .nav-btn.active-btn { background: rgba(255, 106, 0, 0.18); border: 1px solid rgba(255, 106, 0, 0.6); box-shadow: 0 3px 14px rgba(255, 106, 0, 0.25), inset 0 1px 4px rgba(255,255,255,0.15); color: var(--wing-orange) !important; }
 
@@ -694,36 +698,36 @@ CRITICAL REVISIONS & ARCHITECTURAL UPGRADES:
 
         // COMPLETE REFINED NAVIGATION TABS REGISTRY
 window.navTabs = [
-            { id: 'mixer', text: 'MIXER', icon: 'fa-solid fa-sliders', color: 'text-amber-500' },
-            { id: 'dsp', text: 'EQUALIZER', icon: 'fa-solid fa-chart-line', color: 'text-cyan-400' },
-            { id: 'dyn', text: 'DYNAMICS', icon: 'fa-solid fa-wave-square', color: 'text-emerald-400' },
-            { id: 'gate', text: 'GATE', icon: 'fa-solid fa-door-closed', color: 'text-pink-400' },
-            { id: 'fx', text: 'FX RACK', icon: 'fa-solid fa-wand-magic-sparkles', color: 'text-purple-400' },
-            { id: 'stereopan', text: '11.4.8 PAN', icon: 'fa-solid fa-arrows-left-right-to-line', color: 'text-blue-400' },
-            { id: 'bus', text: 'MIX BUSES', icon: 'fa-solid fa-diagram-project', color: 'text-yellow-400' },
-            { id: 'dca', text: 'DCA / VCA', icon: 'fa-solid fa-layer-group', color: 'text-orange-400' },
-            { id: 'meter', text: 'VU METERS', icon: 'fa-solid fa-chart-simple', color: 'text-green-400' },
-            { id: 'lufs', text: 'LUFS TRUE', icon: 'fa-solid fa-bullseye', color: 'text-emerald-400' },
-            { id: 'osc', text: 'SCOPE', icon: 'fa-solid fa-wave-square', color: 'text-lime-400' },
-            { id: 'media', text: 'STREAM & MEDIA', icon: 'fa-solid fa-play', color: 'text-cyan-400' },
-            { id: 'ai', text: 'AI MIX', icon: 'fa-solid fa-brain', color: 'text-rose-400' },
-            { id: 'io', text: 'PATCHBAY', icon: 'fa-solid fa-plug', color: 'text-indigo-400' },
-            { id: 'routing', text: 'ROUTING', icon: 'fa-solid fa-route', color: 'text-yellow-400' },
-            { id: 'tools', text: 'TOOLS', icon: 'fa-solid fa-screwdriver-wrench', color: 'text-lime-400' },
-            { id: 'asio', text: 'DRIVERS', icon: 'fa-solid fa-compact-disc', color: 'text-amber-400' },
-            { id: 'bluetooth', text: 'BLUETOOTH', icon: 'fa-brands fa-bluetooth-b', color: 'text-blue-400' },
-            { id: 'acct', text: 'OPERATOR', icon: 'fa-solid fa-user-shield', color: 'text-violet-400' },
-            { id: 'renew', text: 'LICENSE', icon: 'fa-solid fa-certificate', color: 'text-amber-400' },
-            { id: 'admin', text: 'ADMIN', icon: 'fa-solid fa-key', color: 'text-red-400' },
-            { id: 'sys', text: 'SYSTEM', icon: 'fa-solid fa-gear', color: 'text-slate-400' },
-            { id: 'plugins', text: 'PLUGINS', icon: 'fa-solid fa-puzzle-piece', color: 'text-purple-400' },
-            { id: 'phase', text: 'PHASE', icon: 'fa-solid fa-yin-yang', color: 'text-indigo-400' },
-            { id: 'access', text: 'ACCESS', icon: 'fa-solid fa-id-badge', color: 'text-rose-400' },
-            { id: 'network', text: 'NETWORK', icon: 'fa-solid fa-network-wired', color: 'text-cyan-400' },
-            { id: 'cloud', text: 'CLOUD', icon: 'fa-solid fa-cloud-arrow-up', color: 'text-sky-400' },
-            { id: 'cascade', text: 'CASCADE', icon: 'fa-solid fa-link', color: 'text-teal-400' },
-            { id: 'presets', text: 'PRESETS', icon: 'fa-solid fa-box-archive', color: 'text-amber-400' },
-            { id: 'boot', text: 'BOOT / RESET', icon: 'fa-solid fa-power-off', color: 'text-rose-500' }
+            { group: 'MIX', id: 'mixer', text: 'MIXER', icon: 'fa-solid fa-sliders', color: 'text-amber-500' },
+            { group: 'MIX', id: 'dsp', text: 'EQUALIZER', icon: 'fa-solid fa-chart-line', color: 'text-cyan-400' },
+            { group: 'MIX', id: 'dyn', text: 'DYNAMICS', icon: 'fa-solid fa-wave-square', color: 'text-emerald-400' },
+            { group: 'MIX', id: 'gate', text: 'GATE', icon: 'fa-solid fa-door-closed', color: 'text-pink-400' },
+            { group: 'MIX', id: 'fx', text: 'FX RACK', icon: 'fa-solid fa-wand-magic-sparkles', color: 'text-purple-400' },
+            { group: 'MIX', id: 'bus', text: 'BUS & MATRIX', icon: 'fa-solid fa-diagram-project', color: 'text-yellow-400' },
+            { group: 'MIX', id: 'dca', text: 'DCA / VCA', icon: 'fa-solid fa-layer-group', color: 'text-orange-400' },
+            { group: 'MIX', id: 'stereopan', text: '11.4.8 PAN', icon: 'fa-solid fa-arrows-left-right-to-line', color: 'text-blue-400' },
+            { group: 'ROUTE', id: 'io', text: 'PATCHBAY', icon: 'fa-solid fa-plug', color: 'text-indigo-400' },
+            { group: 'ROUTE', id: 'routing', text: 'ROUTING', icon: 'fa-solid fa-route', color: 'text-yellow-400' },
+            { group: 'METER', id: 'meter', text: 'VU METERS', icon: 'fa-solid fa-chart-simple', color: 'text-green-400' },
+            { group: 'METER', id: 'lufs', text: 'LUFS TRUE', icon: 'fa-solid fa-bullseye', color: 'text-emerald-400' },
+            { group: 'METER', id: 'osc', text: 'SCOPE', icon: 'fa-solid fa-wave-square', color: 'text-lime-400' },
+            { group: 'METER', id: 'phase', text: 'PHASE', icon: 'fa-solid fa-yin-yang', color: 'text-indigo-400' },
+            { group: 'SOURCE', id: 'media', text: 'STREAM & MEDIA', icon: 'fa-solid fa-play', color: 'text-cyan-400' },
+            { group: 'SOURCE', id: 'ai', text: 'AI MIX', icon: 'fa-solid fa-brain', color: 'text-rose-400' },
+            { group: 'SOURCE', id: 'tools', text: 'TOOLS', icon: 'fa-solid fa-screwdriver-wrench', color: 'text-lime-400' },
+            { group: 'SOURCE', id: 'plugins', text: 'PLUGINS', icon: 'fa-solid fa-puzzle-piece', color: 'text-purple-400' },
+            { group: 'DEVICE', id: 'asio', text: 'DRIVERS', icon: 'fa-solid fa-compact-disc', color: 'text-amber-400' },
+            { group: 'DEVICE', id: 'bluetooth', text: 'BLUETOOTH', icon: 'fa-brands fa-bluetooth-b', color: 'text-blue-400' },
+            { group: 'DEVICE', id: 'network', text: 'NETWORK', icon: 'fa-solid fa-network-wired', color: 'text-cyan-400' },
+            { group: 'DEVICE', id: 'cloud', text: 'CLOUD', icon: 'fa-solid fa-cloud-arrow-up', color: 'text-sky-400' },
+            { group: 'DEVICE', id: 'cascade', text: 'CASCADE', icon: 'fa-solid fa-link', color: 'text-teal-400' },
+            { group: 'SYSTEM', id: 'presets', text: 'PRESETS', icon: 'fa-solid fa-box-archive', color: 'text-amber-400' },
+            { group: 'SYSTEM', id: 'sys', text: 'SYSTEM', icon: 'fa-solid fa-gear', color: 'text-slate-400' },
+            { group: 'SYSTEM', id: 'acct', text: 'OPERATOR', icon: 'fa-solid fa-user-shield', color: 'text-violet-400' },
+            { group: 'SYSTEM', id: 'access', text: 'ACCESS', icon: 'fa-solid fa-id-badge', color: 'text-rose-400' },
+            { group: 'SYSTEM', id: 'renew', text: 'LICENSE', icon: 'fa-solid fa-certificate', color: 'text-amber-400' },
+            { group: 'SYSTEM', id: 'admin', text: 'ADMIN', icon: 'fa-solid fa-key', color: 'text-red-400' },
+            { group: 'SYSTEM', id: 'boot', text: 'BOOT / RESET', icon: 'fa-solid fa-power-off', color: 'text-rose-500' }
         ];
 
 
@@ -1014,24 +1018,39 @@ window.navTabs = [
             window.state.nodes.channelPostGains = [];
             window.state.nodes.channelPanners = [];
             window.state.nodes.channelPolarity = [];
+            window.state.nodes.channelFaders = [];
+            window.state.nodes.channelHpf = [];
+            window.state.nodes.channelTrim = [];
             for (let i = 0; i < CHANNELS; i++) {
+                // Input node: every source connects here (kept under the historic name channelPostGains).
                 const chGain = window.state.ctx.createGain();
                 chGain.gain.setValueAtTime(1.0, window.state.ctx.currentTime);
+                // Input stage: high-pass (10 Hz = off) -> trim -> polarity. Pre-fader sends tap after this stage.
+                const hpf = window.state.ctx.createBiquadFilter();
+                hpf.type = 'highpass'; hpf.frequency.setValueAtTime(10, window.state.ctx.currentTime); hpf.Q.setValueAtTime(0.707, window.state.ctx.currentTime);
+                const trim = window.state.ctx.createGain();
+                trim.gain.setValueAtTime(1.0, window.state.ctx.currentTime);
                 // Polarity (Ø) stage: +1 normal, -1 inverted 180°
                 const polarity = window.state.ctx.createGain();
                 polarity.gain.setValueAtTime(window.state.phaseInvert && window.state.phaseInvert[i] ? -1 : 1, window.state.ctx.currentTime);
-                chGain.connect(polarity);
+                // Fader / mute / solo stage
+                const fader = window.state.ctx.createGain();
+                fader.gain.setValueAtTime(1.0, window.state.ctx.currentTime);
+                chGain.connect(hpf); hpf.connect(trim); trim.connect(polarity); polarity.connect(fader);
 
                 let panner = null;
                 if (window.state.ctx.createStereoPanner) {
                     panner = window.state.ctx.createStereoPanner();
                     panner.pan.setValueAtTime(0, window.state.ctx.currentTime);
-                    polarity.connect(panner);
+                    fader.connect(panner);
                     panner.connect(masterGain);
                 } else {
-                    polarity.connect(masterGain);
+                    fader.connect(masterGain);
                 }
                 window.state.nodes.channelPolarity.push(polarity);
+                window.state.nodes.channelFaders.push(fader);
+                window.state.nodes.channelHpf.push(hpf);
+                window.state.nodes.channelTrim.push(trim);
                 window.state.nodes.channelPostGains.push(chGain);
                 window.state.nodes.channelPanners.push(panner);
             }
@@ -2709,9 +2728,9 @@ window.navTabs = [
                         ? "flex-1 py-1 rounded text-[7px] font-mono font-bold transition text-white bg-red-600 shadow-[0_0_8px_#ff2a5f]"
                         : "flex-1 py-1 rounded text-[7px] font-mono font-bold transition text-slate-400 bg-white/5 hover:bg-red-500/20 hover:text-red-400";
                 }
-                if (window.state.nodes.channelPostGains[ch] && window.state.ctx) {
+                if (window.stripFaderNode(ch) && window.state.ctx) {
                     const gain = mg.active ? 0 : Math.pow(10, window.state.channelLevels[ch] / 20);
-                    window.state.nodes.channelPostGains[ch].gain.setTargetAtTime(gain, window.state.ctx.currentTime, 0.01);
+                    window.stripFaderNode(ch).gain.setTargetAtTime(gain, window.state.ctx.currentTime, 0.01);
                 }
             });
             window.notify(`Mute Group ${groupIdx+1} (${mg.name}): ${mg.active ? 'MUTED' : 'LIVE'}`, 'volume-xmark');
@@ -2986,12 +3005,16 @@ window.navTabs = [
         window.initDOM = function() {
             const nav = document.getElementById('main-nav');
             if(nav) {
-                nav.innerHTML = window.navTabs.map(t => `
-                    <button onclick="window.switchTab('${t.id}')" id="nav-${t.id}" class="nav-btn ${t.color} ${t.id === 'mixer' ? 'active-btn' : ''}" title="${t.text}">
+                let lastGroup = null;
+                nav.innerHTML = window.navTabs.map(t => {
+                    const head = t.group !== lastGroup ? `<div class="nav-group" role="presentation"><span>${t.group}</span></div>` : '';
+                    lastGroup = t.group;
+                    return head + `
+                    <button onclick="window.switchTab('${t.id}')" id="nav-${t.id}" class="nav-btn ${t.color} ${t.id === 'mixer' ? 'active-btn' : ''}" title="${t.text}" aria-label="${t.text}">
                         <i class="${t.icon} text-xs md:text-base"></i>
                         <span class="text-[6px] md:text-[6.5px] font-black uppercase mt-0.5 tracking-wider">${t.text}</span>
-                    </button>
-                `).join('');
+                    </button>`;
+                }).join('');
             }
 
             const cArea = document.getElementById('content-area');
@@ -3798,99 +3821,93 @@ window.navTabs = [
             // 7. MIX BUS MASTERS & 16 AUX SENDS / OUTSEND MATRIX (tab-bus)
             htmlString += `
             <div id="tab-bus" class="tab-content tab-hidden">
-              <div class="page-scroll-inner w-full max-w-5xl mx-auto space-y-3 font-mono text-[8px]">
-                
-                <!-- Bus Header Bar -->
-                <div class="glass-panel p-3.5 rounded-xl wing-bezel flex flex-wrap justify-between items-center gap-2">
-                  <div class="flex items-center gap-2.5">
-                    <div class="w-8 h-8 rounded-lg bg-yellow-500/20 border border-yellow-500/40 flex items-center justify-center text-yellow-400 text-sm">
-                      <i class="fa-solid fa-diagram-project"></i>
+              <div class="page-scroll-inner w-full max-w-7xl mx-auto">
+                <div class="glass-panel p-3 md:p-4 rounded-xl wing-bezel flex flex-col gap-3 font-mono text-xs">
+
+                  <!-- Header -->
+                  <div class="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-white/10">
+                    <div class="flex items-center gap-2">
+                      <div class="w-8 h-8 rounded-lg bg-yellow-500/20 border border-yellow-500/40 flex items-center justify-center text-yellow-400"><i class="fa-solid fa-diagram-project"></i></div>
+                      <div>
+                        <h3 class="text-xs font-black text-white font-wing tracking-wider uppercase">BUS &amp; MATRIX MIXER</h3>
+                        <span class="text-[7.5px] text-slate-400">CH 1-32 &rarr; 16 MIX BUSES (PRE / POST SENDS) &rarr; 8 MATRIX OUTPUTS (DELAY &bull; POLARITY) &bull; LISTEN</span>
+                      </div>
                     </div>
+                    <div class="flex items-center gap-2">
+                      <button id="mx-listen-chip" class="hidden px-2 py-0.5 rounded bg-cyan-400 text-black text-[7.5px] font-black uppercase"></button>
+                      <span id="mx-status"></span>
+                      <button id="mx-reset" class="px-2 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/30 text-[7.5px] font-bold">RESET</button>
+                    </div>
+                  </div>
+
+                  <!-- Page selector -->
+                  <div id="mx-nav" role="tablist" aria-label="Bus and matrix pages" class="flex flex-wrap gap-1 text-[8px] font-black uppercase">
+                    <button role="tab" data-page="buses" class="mx-nav-btn px-3 py-1 rounded"><i class="fa-solid fa-sliders mr-1"></i>MIX BUSES (16)</button>
+                    <button role="tab" data-page="sends" class="mx-nav-btn px-3 py-1 rounded"><i class="fa-solid fa-share-nodes mr-1"></i>CHANNEL SENDS</button>
+                    <button role="tab" data-page="matrix" class="mx-nav-btn px-3 py-1 rounded"><i class="fa-solid fa-table-cells mr-1"></i>MATRIX (8)</button>
+                    <button role="tab" data-page="channels" class="mx-nav-btn px-3 py-1 rounded"><i class="fa-solid fa-wave-square mr-1"></i>CHANNEL INPUT</button>
+                    <button role="tab" data-page="scenes" class="mx-nav-btn px-3 py-1 rounded"><i class="fa-solid fa-box-archive mr-1"></i>SCENES</button>
+                  </div>
+
+                  <!-- 1. Mix buses -->
+                  <section id="mx-page-buses" class="mx-page">
+                    <div class="text-[8px] text-slate-400 font-bold uppercase mb-1.5">MIX BUS MASTERS &bull; sends tap PRE or POST fader &bull; LISTEN solos a bus on the browser output</div>
+                    <div id="mx-buses" class="flex flex-wrap gap-2 pb-2"></div>
+                  </section>
+
+                  <!-- 2. Channel sends -->
+                  <section id="mx-page-sends" class="mx-page hidden space-y-2">
+                    <div class="flex flex-wrap items-center gap-2">
+                      <span class="text-[8px] text-slate-400 font-bold uppercase">EDIT SENDS TO:</span>
+                      <div id="mx-send-bus" class="flex flex-wrap gap-1"></div>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2 text-[8px]">
+                      <span id="mx-send-info" class="text-yellow-400 font-bold"></span>
+                      <button id="mx-send-all0" class="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-bold">ALL 0 dB</button>
+                      <button id="mx-send-clear" class="px-2 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/30 font-bold">CLEAR</button>
+                      <span class="text-slate-500">COPY TO</span>
+                      <select id="mx-send-copy" aria-label="Copy sends to bus" class="bg-black text-slate-200 text-[8px] font-bold border border-white/15 rounded px-1 py-0.5"></select>
+                      <button id="mx-send-copy-go" class="px-2 py-0.5 rounded bg-white/10 text-slate-200 border border-white/20 font-bold">COPY</button>
+                    </div>
+                    <div id="mx-sends" class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-1.5"></div>
+                  </section>
+
+                  <!-- 3. Matrix -->
+                  <section id="mx-page-matrix" class="mx-page hidden space-y-3">
                     <div>
-                      <h3 class="text-xs font-black text-white font-wing tracking-wider uppercase">8 STEREO MIX BUSES &amp; 16 AUX SENDS</h3>
-                      <p class="text-[7.5px] font-mono text-slate-400">PRE/POST TAP SELECTION • DIRECT OUTS ROUTING • MATRIX DELAY ALIGNMENT</p>
+                      <div class="text-[8px] text-slate-400 font-bold uppercase mb-1.5">MATRIX OUTPUTS &bull; delay alignment (speed of sound 343 m/s) &bull; polarity &bull; LISTEN</div>
+                      <div id="mx-mtx" class="flex flex-wrap gap-2 pb-2"></div>
                     </div>
-                  </div>
-                  <span class="px-2 py-0.5 rounded text-[7.5px] bg-yellow-500/20 text-yellow-400 border border-yellow-500/40 font-bold">8 STEREO BUSES + 16 AUX</span>
-                </div>
-
-                <!-- 8 Stereo Mix Bus Masters -->
-                <div class="glass-panel p-3.5 rounded-xl wing-bezel space-y-2">
-                  <h4 class="text-[8.5px] font-black text-yellow-400 uppercase font-wing flex items-center gap-1.5">
-                    <i class="fa-solid fa-sliders"></i> STEREO MIX BUS MASTERS (1-8)
-                  </h4>
-                  <div class="grid grid-cols-4 sm:grid-cols-8 gap-2 h-48 bg-black/60 p-2 rounded-lg border border-white/5">
-                    ${Array.from({length: 8}, (_, i) => `
-                      <div class="flex flex-col items-center justify-between h-full bg-black/50 p-1 rounded border border-white/5">
-                        <span class="text-[7.5px] font-bold text-yellow-400">BUS ${i+1}</span>
-                        <div class="flex-1 w-full flex justify-center py-1 relative fader-track">
-                          <input type="range" orient="vertical" class="daw-fader" min="-60" max="10" step="0.5" value="0">
-                        </div>
-                        <div class="flex gap-1 w-full mt-0.5">
-                          <button class="flex-1 py-0.5 bg-rose-500/20 text-rose-400 rounded text-[6px] font-bold hover:bg-rose-500 hover:text-black">M</button>
-                          <button class="flex-1 py-0.5 bg-amber-500/20 text-amber-400 rounded text-[6px] font-bold hover:bg-amber-500 hover:text-black">S</button>
-                        </div>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                      <div>
+                        <div class="text-[8px] text-slate-400 font-bold uppercase mb-1.5">CROSSPOINTS &bull; click a cell to switch it on (0 dB) / off</div>
+                        <div id="mx-grid" class="max-h-[340px] overflow-auto border border-white/10 rounded bg-[#0b0e14]"></div>
                       </div>
-                    `).join('')}
-                  </div>
-                </div>
-
-                <!-- 16 Aux Sends with Pre/Post Taps -->
-                <div class="glass-panel p-3.5 rounded-xl wing-bezel space-y-2">
-                  <div class="flex justify-between items-center border-b border-white/10 pb-1.5">
-                    <h4 class="text-[8.5px] font-black text-cyan-400 uppercase font-wing flex items-center gap-1.5">
-                      <i class="fa-solid fa-paper-plane"></i> 16 AUX SENDS &amp; STAGE MONITOR OUTSENDS (PRE/POST TAPS)
-                    </h4>
-                    <span class="text-[7px] text-slate-400 font-mono">INDEPENDENT PRE/POST TAP PER AUX</span>
-                  </div>
-                  <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 text-[7px]">
-                    ${Array.from({length: 16}, (_, i) => `
-                      <div class="bg-black/60 p-2 rounded-lg border border-white/5 flex flex-col justify-between space-y-1">
-                        <div class="flex justify-between items-center">
-                          <span class="font-bold text-cyan-400">AUX ${i+1}</span>
-                          <button id="aux-tap-btn-${i+1}" onclick="window.toggleAuxPrePost(${i+1})" class="px-1.5 py-0.2 rounded ${i%2===0 ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40' : 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/40'} text-[6.5px] font-bold">
-                            ${i%2===0 ? 'POST' : 'PRE'}
-                          </button>
-                        </div>
-                        <input type="range" min="0" max="1" step="0.02" value="0.75" oninput="window.setAuxSendLevel(${i+1}, this.value)" class="w-full accent-cyan-400 cursor-pointer">
-                        <div class="flex justify-between text-[6.5px] text-slate-400 font-mono">
-                          <span>LEVEL</span>
-                          <span id="aux-send-val-${i+1}" class="text-white">-2.5 dB</span>
-                        </div>
+                      <div>
+                        <div id="mx-xp-title" class="text-[8px] text-yellow-400 font-bold uppercase mb-1.5"></div>
+                        <div id="mx-xp-edit" class="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-[340px] overflow-auto pr-1"></div>
                       </div>
-                    `).join('')}
-                  </div>
-                </div>
+                    </div>
+                  </section>
 
-                <!-- Matrix Master Delay Time Alignment -->
-                <div class="glass-panel p-3.5 rounded-xl wing-bezel space-y-2">
-                  <h4 class="text-[8.5px] font-black text-emerald-400 uppercase font-wing flex items-center gap-1.5">
-                    <i class="fa-solid fa-clock"></i> FOH MATRIX OUTPUT DELAY TIME ALIGNMENT
-                  </h4>
-                  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-[7px]">
-                    <div class="bg-black/60 p-2 rounded-lg border border-white/5 space-y-1">
-                      <span class="text-white font-bold block">1. MAIN PA L/R DELAY</span>
-                      <input type="range" min="0" max="100" step="0.5" value="0" oninput="window.setMatrixDelay(1, this.value)" class="w-full accent-emerald-400 cursor-pointer">
-                      <div class="text-slate-400 flex justify-between"><span>DISTANCE:</span><span id="matrix-delay-dist-1" class="text-emerald-400">0.0 m (0.0 ft)</span></div>
-                    </div>
-                    <div class="bg-black/60 p-2 rounded-lg border border-white/5 space-y-1">
-                      <span class="text-white font-bold block">2. FRONT FILLS CLUSTER</span>
-                      <input type="range" min="0" max="100" step="0.5" value="14.5" oninput="window.setMatrixDelay(2, this.value)" class="w-full accent-emerald-400 cursor-pointer">
-                      <div class="text-slate-400 flex justify-between"><span>DISTANCE:</span><span id="matrix-delay-dist-2" class="text-emerald-400">4.97 m (16.3 ft)</span></div>
-                    </div>
-                    <div class="bg-black/60 p-2 rounded-lg border border-white/5 space-y-1">
-                      <span class="text-white font-bold block">3. BALCONY DELAY ARRAY</span>
-                      <input type="range" min="0" max="100" step="0.5" value="38.2" oninput="window.setMatrixDelay(3, this.value)" class="w-full accent-emerald-400 cursor-pointer">
-                      <div class="text-slate-400 flex justify-between"><span>DISTANCE:</span><span id="matrix-delay-dist-3" class="text-emerald-400">13.10 m (43.0 ft)</span></div>
-                    </div>
-                    <div class="bg-black/60 p-2 rounded-lg border border-white/5 space-y-1">
-                      <span class="text-white font-bold block">4. SUBWOOFER ARRAY</span>
-                      <input type="range" min="0" max="100" step="0.5" value="5.8" oninput="window.setMatrixDelay(4, this.value)" class="w-full accent-emerald-400 cursor-pointer">
-                      <div class="text-slate-400 flex justify-between"><span>DISTANCE:</span><span id="matrix-delay-dist-4" class="text-emerald-400">1.99 m (6.5 ft)</span></div>
-                    </div>
-                  </div>
-                </div>
+                  <!-- 4. Channel input stage -->
+                  <section id="mx-page-channels" class="mx-page hidden space-y-1.5">
+                    <div class="text-[8px] text-slate-400 font-bold uppercase">CHANNEL INPUT STAGE &bull; high-pass filter, trim and polarity sit before the fader and before PRE sends</div>
+                    <div id="mx-ch" class="grid grid-cols-1 gap-1.5"></div>
+                  </section>
 
+                  <!-- 5. Scenes -->
+                  <section id="mx-page-scenes" class="mx-page hidden space-y-2">
+                    <div class="flex flex-wrap items-center gap-2 text-[8px]">
+                      <input id="mx-scene-name" maxlength="24" placeholder="Scene name" aria-label="Scene name" class="bg-black text-slate-200 border border-white/15 rounded px-2 py-1 text-[8px]">
+                      <button id="mx-scene-save" class="px-2 py-1 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-bold">SAVE</button>
+                      <button id="mx-export" class="px-2 py-1 rounded bg-white/10 text-slate-200 border border-white/20 font-bold">EXPORT</button>
+                      <label class="px-2 py-1 rounded bg-white/10 text-slate-200 border border-white/20 font-bold cursor-pointer">IMPORT<input id="mx-import" type="file" accept="application/json,.json" class="hidden"></label>
+                    </div>
+                    <div id="mx-scenes" class="space-y-1"></div>
+                  </section>
+
+                </div>
               </div>
             </div>`;
 
@@ -4955,7 +4972,7 @@ window.navTabs = [
                       <div class="w-7 h-7 rounded bg-yellow-500/20 border border-yellow-500/40 text-yellow-400 flex items-center justify-center text-sm"><i class="fa-solid fa-route"></i></div>
                       <div>
                         <h3 class="text-sm font-black text-yellow-400 font-wing tracking-wider">AUDIO ROUTING ENGINE</h3>
-                        <span class="text-[7.5px] text-slate-400">CH 1-32 → SUBGROUPS 1-8 → MAIN → COMP → EQ → LIMITER → OUTPUT (BROWSER / BRIDGE ASIO)</span>
+                        <span class="text-[7.5px] text-slate-400">CH 1-32 → SUBGROUPS 1-16 → MAIN → COMP → EQ → LIMITER → OUTPUT (BROWSER / BRIDGE ASIO)</span>
                       </div>
                     </div>
                     <div class="flex items-center gap-1.5">
@@ -8384,9 +8401,15 @@ window.navTabs = [
             window.applyChannelGain(channelIndex, db);
         };
 
+        // The strip's fader/mute/solo gain node (falls back to the input node on older graphs).
+        window.stripFaderNode = function(ch) {
+            const n = window.state.nodes;
+            return (n.channelFaders && n.channelFaders[ch]) || (n.channelPostGains && n.channelPostGains[ch]);
+        };
+
         // Effective strip gain = fader, unless muted or another channel is soloed (solo-in-place).
         window.applyChannelGain = function(channelIndex, faderDb) {
-            const node = window.state.nodes.channelPostGains && window.state.nodes.channelPostGains[channelIndex];
+            const node = window.stripFaderNode(channelIndex);
             if (!node || !window.state.ctx) return;
             let db = faderDb;
             if (db === undefined) { const fader = document.getElementById(`ch-fader-${channelIndex}`); db = fader ? parseFloat(fader.value) : 0; }
@@ -10772,9 +10795,9 @@ window.navTabs = [
             // 1. Audio Nodes Update
             if (window.state.nodes && window.state.nodes.channelPostGains) {
                 scene.channelLevels.forEach((lv, i) => {
-                    if (window.state.nodes.channelPostGains[i]) {
+                    if (window.stripFaderNode(i)) {
                         const gain = window.state.channelMutes[i] ? 0 : Math.pow(10, lv / 20);
-                        window.state.nodes.channelPostGains[i].gain.setTargetAtTime(gain, window.state.ctx ? window.state.ctx.currentTime : 0, 0.01);
+                        window.stripFaderNode(i).gain.setTargetAtTime(gain, window.state.ctx ? window.state.ctx.currentTime : 0, 0.01);
                     }
                 });
             }
@@ -14275,7 +14298,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
     <script>
     // ─── ROUTING ENGINE: real Web Audio channel → subgroup → main routing, live input patching, snapshots ───
     (function() {
-        const N_CH = 32, N_BUS = 8, MAX_LIVE = 8;
+        const N_CH = 32, N_BUS = 16, MAX_LIVE = 8;
         const STATE_KEY = 'halx_routing_state', SNAP_KEY = 'halx_routing_snapshots';
         const esc = v => window.escapeHtml(v);
         const load = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch (e) { return d; } };
@@ -14311,7 +14334,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             },
             persist() { save(STATE_KEY, this.cfg); },
 
-            // Builds the 8 subgroup buses once the audio engine exists, then applies the routing.
+            // Builds the 16 subgroup buses once the audio engine exists, then applies the routing.
             ensureGraph() {
                 const ctx = window.state.ctx, n = window.state.nodes;
                 if (!ctx || !n.masterGain || !n.channelPostGains.length) return false;
@@ -14328,7 +14351,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 for (let b = 0; b < N_BUS; b++) this.applyBus(b);
                 return true;
             },
-            channelOut(i) { const n = window.state.nodes; return n.channelPanners[i] || n.channelPostGains[i]; },
+            channelOut(i) { const n = window.state.nodes; return n.channelPanners[i] || (n.channelFaders && n.channelFaders[i]) || n.channelPostGains[i]; },
             wireChannel(i) {
                 const out = this.channelOut(i), n = window.state.nodes;
                 if (!out || !this.built) return;
@@ -14548,6 +14571,505 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
         const origSwitch = window.switchTab;
         window.switchTab = function(tabId) { const r = origSwitch.apply(this, arguments); if (tabId === 'routing') { R.ensureGraph(); R.render(); } return r; };
         document.addEventListener('DOMContentLoaded', () => R.init());
+    })();
+    </script>
+    <script>
+    // ─── BUS & MATRIX MIXER: 16 mix buses (pre/post sends), 8 matrix outputs, channel input stage, listen, scenes ───
+    // Real Web Audio graph. Strip chain (see initAudioEngine): input → HPF → trim → polarity → [PRE tap] → fader → [POST tap, before pan].
+    (function() {
+        const N_CH = 32, N_BUS = 16, N_MTX = 8, N_GRP = 16, OFF = -60;
+        const KEY = 'halx_mix_state', SCENE_KEY = 'halx_mix_scenes';
+        const esc = v => window.escapeHtml(v);
+        const load = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch (e) { return d; } };
+        const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
+        const dbToLin = db => (db <= OFF ? 0 : Math.pow(10, db / 20));
+        // 0 dB is a valid level; only non-numbers fall back to OFF
+        const clampDb = v => { const x = parseFloat(v); return Number.isFinite(x) ? Math.min(10, Math.max(OFF, x)) : OFF; };
+        const fmtDb = db => (db <= OFF ? '-INF' : (db > 0 ? '+' : '') + db.toFixed(1) + ' dB');
+        const SRC = ['main', ...Array.from({ length: N_BUS }, (_, i) => 'bus' + (i + 1)), ...Array.from({ length: N_GRP }, (_, i) => 'grp' + (i + 1))];
+        const MTX_DEFAULTS = [['MAIN PA', 0], ['FRONT FILLS', 14.5], ['BALCONY DELAY', 38.2], ['SUBWOOFERS', 5.8]];
+
+        function cleanName(v, fallback) {
+            const n = typeof v === 'string' ? v.replace(/[^\w .&+\-]/g, '').slice(0, 16).trim() : '';
+            return n || fallback;
+        }
+        function sanitize(raw) {
+            const r = raw && typeof raw === 'object' ? raw : {};
+            const num = (v, lo, hi, d) => (typeof v === 'number' && isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d);
+            const arr = (a, i) => (Array.isArray(a) ? a[i] : undefined);
+            return {
+                buses: Array.from({ length: N_BUS }, (_, b) => {
+                    const o = arr(r.buses, b) || {};
+                    return { name: cleanName(o.name, 'BUS ' + (b + 1)), db: num(o.db, OFF, 10, 0), mute: !!o.mute, tap: o.tap === 'pre' ? 'pre' : 'post' };
+                }),
+                sends: Array.from({ length: N_BUS }, (_, b) => Array.from({ length: N_CH }, (_, c) => num(arr(arr(r.sends, b), c), OFF, 10, OFF))),
+                mtx: Array.from({ length: N_MTX }, (_, m) => {
+                    const o = arr(r.mtx, m) || {}, d = MTX_DEFAULTS[m] || ['MTX ' + (m + 1), 0];
+                    return { name: cleanName(o.name, d[0]), db: num(o.db, OFF, 10, 0), mute: !!o.mute, pol: !!o.pol, delay: num(o.delay, 0, 500, r.mtx ? 0 : d[1]) };
+                }),
+                xp: Array.from({ length: N_MTX }, (_, m) => Array.from({ length: SRC.length }, (_, s) => num(arr(arr(r.xp, m), s), OFF, 10, r.xp ? OFF : (s === 0 && m < 4 ? 0 : OFF)))),
+                ch: Array.from({ length: N_CH }, (_, c) => {
+                    const o = arr(r.ch, c) || {};
+                    return { hpfOn: !!o.hpfOn, hpfHz: num(o.hpfHz, 20, 400, 80), trim: num(o.trim, -18, 18, 0) };
+                })
+            };
+        }
+
+        const M = window.mixEngine = {
+            cfg: sanitize(load(KEY, null)),
+            built: false, page: 'buses', selBus: 0, selMtx: 0, listening: null,
+            busIn: [], busFader: [], busAn: [], mtxIn: [], mtxDelay: [], mtxPol: [], mtxFader: [], mtxAn: [], listenGain: null,
+            sendNodes: new Map(), xpNodes: new Map(),
+
+            allowed() { return window.routingEngine && window.routingEngine.allowed ? window.routingEngine.allowed() : !window.knoxEnabled; },
+            persist() { save(KEY, this.cfg); },
+
+            // ── graph ──
+            ensureGraph() {
+                const ctx = window.state.ctx, n = window.state.nodes;
+                if (!ctx || !n.masterLimiter || !n.channelFaders || !n.channelFaders.length) return false;
+                if (window.routingEngine) window.routingEngine.ensureGraph();
+                if (!this.built) {
+                    // Silent sink keeps the otherwise-unconnected bus / matrix branches (and their meters) processing.
+                    const sink = ctx.createGain(); sink.gain.value = 0; sink.connect(ctx.destination);
+                    const an = () => { const a = ctx.createAnalyser(); a.fftSize = 512; a.connect(sink); return a; };
+                    for (let b = 0; b < N_BUS; b++) {
+                        const i = ctx.createGain(), f = ctx.createGain(), a = an();
+                        i.connect(f); f.connect(a);
+                        this.busIn.push(i); this.busFader.push(f); this.busAn.push(a);
+                    }
+                    for (let m = 0; m < N_MTX; m++) {
+                        const i = ctx.createGain(), d = ctx.createDelay(0.5), p = ctx.createGain(), f = ctx.createGain(), a = an();
+                        i.connect(d); d.connect(p); p.connect(f); f.connect(a);
+                        this.mtxIn.push(i); this.mtxDelay.push(d); this.mtxPol.push(p); this.mtxFader.push(f); this.mtxAn.push(a);
+                    }
+                    this.listenGain = ctx.createGain();
+                    this.built = true;
+                }
+                for (let b = 0; b < N_BUS; b++) this.applyBus(b);
+                for (let m = 0; m < N_MTX; m++) this.applyMtx(m);
+                for (let c = 0; c < N_CH; c++) this.applyCh(c);
+                this.rebuildLinks();
+                return true;
+            },
+            tapNode(c, tap) {
+                const n = window.state.nodes;
+                return tap === 'pre' ? n.channelPolarity[c] : n.channelFaders[c];
+            },
+            srcNode(key) {
+                if (key === 'main') return window.state.nodes.masterLimiter;
+                if (key.startsWith('bus')) return this.busFader[Number(key.slice(3)) - 1];
+                const R = window.routingEngine;
+                return R && R.busNodes ? R.busNodes[Number(key.slice(3)) - 1] : null;
+            },
+            // (re)creates only the sends / crosspoints that are on; everything at OFF has no node at all.
+            rebuildLinks() {
+                for (const [, v] of this.sendNodes) { try { v.g.disconnect(); v.src.disconnect(v.g); } catch (e) {} }
+                for (const [, v] of this.xpNodes) { try { v.g.disconnect(); v.src.disconnect(v.g); } catch (e) {} }
+                this.sendNodes.clear(); this.xpNodes.clear();
+                for (let b = 0; b < N_BUS; b++) for (let c = 0; c < N_CH; c++) this.applySend(b, c);
+                for (let m = 0; m < N_MTX; m++) for (let s = 0; s < SRC.length; s++) this.applyXp(m, s);
+            },
+            applySend(b, c) {
+                if (!this.built) return;
+                const key = b + ':' + c, db = this.cfg.sends[b][c], cur = this.sendNodes.get(key), tap = this.cfg.buses[b].tap;
+                if (db <= OFF) { if (cur) { try { cur.g.disconnect(); cur.src.disconnect(cur.g); } catch (e) {} this.sendNodes.delete(key); } return; }
+                const src = this.tapNode(c, tap);
+                if (!src) return;
+                if (cur && cur.src !== src) { try { cur.g.disconnect(); cur.src.disconnect(cur.g); } catch (e) {} this.sendNodes.delete(key); }
+                let node = this.sendNodes.get(key);
+                if (!node) {
+                    const g = window.state.ctx.createGain();
+                    src.connect(g); g.connect(this.busIn[b]);
+                    node = { g, src }; this.sendNodes.set(key, node);
+                }
+                node.g.gain.setTargetAtTime(dbToLin(db), window.state.ctx.currentTime, 0.01);
+            },
+            applyXp(m, s) {
+                if (!this.built) return;
+                const key = m + ':' + s, db = this.cfg.xp[m][s], cur = this.xpNodes.get(key);
+                if (db <= OFF) { if (cur) { try { cur.g.disconnect(); cur.src.disconnect(cur.g); } catch (e) {} this.xpNodes.delete(key); } return; }
+                const src = this.srcNode(SRC[s]);
+                if (!src) return;
+                if (cur && cur.src !== src) { try { cur.g.disconnect(); cur.src.disconnect(cur.g); } catch (e) {} this.xpNodes.delete(key); }
+                let node = this.xpNodes.get(key);
+                if (!node) {
+                    const g = window.state.ctx.createGain();
+                    src.connect(g); g.connect(this.mtxIn[m]);
+                    node = { g, src }; this.xpNodes.set(key, node);
+                }
+                node.g.gain.setTargetAtTime(dbToLin(db), window.state.ctx.currentTime, 0.01);
+            },
+            applyBus(b) {
+                const o = this.cfg.buses[b], f = this.busFader[b]; if (!f) return;
+                f.gain.setTargetAtTime(o.mute ? 0 : dbToLin(o.db), window.state.ctx.currentTime, 0.01);
+            },
+            applyMtx(m) {
+                const o = this.cfg.mtx[m], f = this.mtxFader[m]; if (!f) return;
+                const t = window.state.ctx.currentTime;
+                f.gain.setTargetAtTime(o.mute ? 0 : dbToLin(o.db), t, 0.01);
+                this.mtxPol[m].gain.setTargetAtTime(o.pol ? -1 : 1, t, 0.005);
+                this.mtxDelay[m].delayTime.setTargetAtTime(o.delay / 1000, t, 0.02);
+            },
+            applyCh(c) {
+                const n = window.state.nodes, o = this.cfg.ch[c]; if (!n.channelHpf || !n.channelHpf[c]) return;
+                const t = window.state.ctx.currentTime;
+                n.channelHpf[c].frequency.setTargetAtTime(o.hpfOn ? o.hpfHz : 10, t, 0.01);
+                n.channelTrim[c].gain.setTargetAtTime(Math.pow(10, o.trim / 20), t, 0.01);
+            },
+
+            // ── mutations (all go through allowed() so KNOX / operator permissions apply) ──
+            setSend(b, c, db) {
+                if (!this.allowed()) return this.render();
+                this.cfg.sends[b][c] = clampDb(db); this.persist(); this.applySend(b, c);
+                const l = document.getElementById('mx-send-db-' + c); if (l) l.textContent = fmtDb(this.cfg.sends[b][c]);
+                const info = document.getElementById('mx-send-info');
+                if (info) info.textContent = `${this.cfg.buses[b].name} • ${this.cfg.buses[b].tap.toUpperCase()}-FADER SENDS • ${this.cfg.sends[b].filter(v => v > OFF).length} OF 32 ACTIVE`;
+            },
+            setBus(b, patch) {
+                if (!this.allowed()) return this.render();
+                const o = this.cfg.buses[b];
+                if ('db' in patch) o.db = Math.min(10, Math.max(OFF, parseFloat(patch.db) || 0));
+                if ('mute' in patch) o.mute = !!patch.mute;
+                if ('name' in patch) o.name = cleanName(patch.name, 'BUS ' + (b + 1));
+                if ('tap' in patch && (patch.tap === 'pre' || patch.tap === 'post')) {
+                    o.tap = patch.tap;
+                    for (let c = 0; c < N_CH; c++) this.applySend(b, c);
+                }
+                this.persist(); this.applyBus(b); this.render();
+            },
+            setMtx(m, patch, quiet) {
+                if (!quiet && !this.allowed()) return this.render();
+                const o = this.cfg.mtx[m];
+                if ('db' in patch) o.db = Math.min(10, Math.max(OFF, parseFloat(patch.db) || 0));
+                if ('mute' in patch) o.mute = !!patch.mute;
+                if ('pol' in patch) o.pol = !!patch.pol;
+                if ('delay' in patch) o.delay = Math.min(500, Math.max(0, parseFloat(patch.delay) || 0));
+                if ('name' in patch) o.name = cleanName(patch.name, 'MTX ' + (m + 1));
+                this.persist(); this.applyMtx(m); this.render();
+            },
+            setXp(m, s, db) {
+                if (!this.allowed()) return this.render();
+                this.cfg.xp[m][s] = clampDb(db); this.persist(); this.applyXp(m, s);
+                const l = document.getElementById('mx-xp-db-' + s); if (l) l.textContent = fmtDb(this.cfg.xp[m][s]);
+                this.renderMatrixGrid();
+            },
+            setCh(c, patch) {
+                if (!this.allowed()) return this.render();
+                const o = this.cfg.ch[c];
+                if ('hpfOn' in patch) o.hpfOn = !!patch.hpfOn;
+                if ('hpfHz' in patch) o.hpfHz = Math.min(400, Math.max(20, parseFloat(patch.hpfHz) || 80));
+                if ('trim' in patch) o.trim = Math.min(18, Math.max(-18, parseFloat(patch.trim) || 0));
+                this.persist(); this.applyCh(c); this.renderChannels();
+            },
+            bulkSends(b, db) {
+                if (!this.allowed()) return;
+                for (let c = 0; c < N_CH; c++) { this.cfg.sends[b][c] = db; this.applySend(b, c); }
+                this.persist(); this.render();
+            },
+            copySends(from, to) {
+                if (!this.allowed() || from === to) return;
+                this.cfg.sends[to] = this.cfg.sends[from].slice();
+                for (let c = 0; c < N_CH; c++) this.applySend(to, c);
+                this.persist(); this.render();
+                window.notify(`Sends copied: ${this.cfg.buses[from].name} → ${this.cfg.buses[to].name}`, 'copy');
+            },
+            resetAll() {
+                if (!this.allowed() || !confirm('Reset all buses, sends, matrix and channel input settings?')) return;
+                this.releaseListen(true);
+                this.cfg = sanitize(null); this.persist(); this.ensureGraph(); this.render();
+                window.notify('Bus & matrix settings reset', 'rotate-left');
+            },
+
+            // ── listen (solo a bus or matrix output on the browser output; the bridge/ASIO program output is untouched) ──
+            toggleListen(kind, idx) {
+                if (!this.ensureGraph()) return window.notify('Engage the audio engine first', 'power-off');
+                const same = this.listening && this.listening.kind === kind && this.listening.idx === idx;
+                this.releaseListen(true);
+                if (same) return this.render();
+                const ctx = window.state.ctx, n = window.state.nodes;
+                const src = kind === 'bus' ? this.busFader[idx] : this.mtxFader[idx];
+                src.connect(this.listenGain); this.listenGain.connect(ctx.destination);
+                this.listenGain.gain.setValueAtTime(1, ctx.currentTime);
+                const paLive = window.universalAsioSdk && window.universalAsioSdk.paReady;
+                if (!paLive && n.musicAnalyser) { try { n.musicAnalyser.disconnect(ctx.destination); } catch (e) {} this._mainMuted = true; }
+                this.listening = { kind, idx };
+                this.render();
+                window.notify(`LISTEN: ${kind === 'bus' ? this.cfg.buses[idx].name : this.cfg.mtx[idx].name}`, 'headphones');
+            },
+            releaseListen(quiet) {
+                if (!this.listening) return;
+                const ctx = window.state.ctx, n = window.state.nodes, l = this.listening;
+                try { (l.kind === 'bus' ? this.busFader[l.idx] : this.mtxFader[l.idx]).disconnect(this.listenGain); this.listenGain.disconnect(); } catch (e) {}
+                if (this._mainMuted && n.musicAnalyser && ctx && !(window.universalAsioSdk && window.universalAsioSdk.paReady)) { try { n.musicAnalyser.connect(ctx.destination); } catch (e) {} }
+                this._mainMuted = false; this.listening = null;
+                if (!quiet) { this.render(); window.notify('LISTEN released: main output restored', 'headphones'); }
+            },
+
+            // ── scenes ──
+            scenes() { const s = load(SCENE_KEY, []); return Array.isArray(s) ? s.filter(x => x && typeof x.name === 'string').slice(0, 50) : []; },
+            saveScene(name) {
+                name = String(name || '').replace(/[^\w .&+\-]/g, '').trim().slice(0, 24);
+                if (!name) return window.notify('Enter a scene name', 'triangle-exclamation');
+                const list = this.scenes().filter(s => s.name !== name);
+                list.unshift({ name, at: new Date().toISOString(), cfg: this.cfg });
+                save(SCENE_KEY, list.slice(0, 50)); this.renderScenes();
+                window.notify(`Bus & matrix scene saved: ${name}`, 'floppy-disk');
+            },
+            recallScene(k) {
+                const s = this.scenes()[k]; if (!s || !this.allowed()) return;
+                this.releaseListen(true);
+                this.cfg = sanitize(s.cfg); this.persist(); this.ensureGraph(); this.render();
+                window.notify(`Bus & matrix scene recalled: ${s.name}`, 'clock-rotate-left');
+            },
+            deleteScene(k) { const l = this.scenes(); l.splice(k, 1); save(SCENE_KEY, l); this.renderScenes(); },
+            exportJson() {
+                const blob = new Blob([JSON.stringify({ format: 'audio-mixer-bus-matrix', version: 1, mix: this.cfg }, null, 2)], { type: 'application/json' });
+                const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'bus-matrix.json'; a.click();
+                setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+            },
+            importJson(file) {
+                if (!file || !this.allowed()) return;
+                if (file.size > 256 * 1024) return window.notify('Bus & matrix file too large', 'triangle-exclamation');
+                file.text().then(t => {
+                    const j = JSON.parse(t);
+                    if (!j || j.format !== 'audio-mixer-bus-matrix') throw new Error('format');
+                    this.releaseListen(true);
+                    this.cfg = sanitize(j.mix); this.persist(); this.ensureGraph(); this.render();
+                    window.notify('Bus & matrix settings imported', 'file-import');
+                }).catch(() => window.notify('Not a valid bus & matrix file', 'triangle-exclamation'));
+            },
+
+            // ── UI ──
+            setPage(p) {
+                this.page = p;
+                document.querySelectorAll('.mx-page').forEach(el => el.classList.toggle('hidden', el.id !== 'mx-page-' + p));
+                document.querySelectorAll('.mx-nav-btn').forEach(b => {
+                    const on = b.dataset.page === p;
+                    b.setAttribute('aria-selected', on ? 'true' : 'false');
+                    b.classList.toggle('bg-yellow-400', on); b.classList.toggle('text-black', on);
+                    b.classList.toggle('bg-white/5', !on); b.classList.toggle('text-slate-300', !on);
+                });
+                this.render();
+            },
+            render() {
+                this.renderStatus();
+                if (this.page === 'buses') this.renderBuses();
+                else if (this.page === 'sends') this.renderSends();
+                else if (this.page === 'matrix') { this.renderMatrixStrips(); this.renderMatrixGrid(); this.renderXpEditor(); }
+                else if (this.page === 'channels') this.renderChannels();
+                else if (this.page === 'scenes') this.renderScenes();
+            },
+            renderStatus() {
+                const st = document.getElementById('mx-status'), chip = document.getElementById('mx-listen-chip');
+                if (st) {
+                    st.className = 'px-2 py-0.5 rounded text-[7.5px] font-bold border ' + (this.built ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40' : 'bg-amber-500/15 text-amber-400 border-amber-500/40');
+                    st.textContent = this.built ? 'GRAPH LIVE' : 'ENGINE OFF: SETTINGS APPLY ON ENGAGE';
+                }
+                if (chip) {
+                    const l = this.listening;
+                    chip.classList.toggle('hidden', !l);
+                    if (l) chip.textContent = 'LISTENING: ' + (l.kind === 'bus' ? this.cfg.buses[l.idx].name : this.cfg.mtx[l.idx].name) + ' (click to release)';
+                }
+            },
+            fader(id, val, label) {
+                return `<div class="h-28 flex justify-center"><input type="range" orient="vertical" class="daw-fader" id="${id}" min="-60" max="10" step="0.5" value="${val}" aria-label="${esc(label)}"></div>`;
+            },
+            renderBuses() {
+                const el = document.getElementById('mx-buses'); if (!el) return;
+                el.innerHTML = this.cfg.buses.map((o, b) => {
+                    const n = this.cfg.sends[b].filter(v => v > OFF).length, lst = this.listening && this.listening.kind === 'bus' && this.listening.idx === b;
+                    return `<div class="bg-black/60 border ${lst ? 'border-cyan-400' : 'border-white/10'} rounded-lg p-2 flex flex-col gap-1.5 w-[84px] shrink-0">
+                        <input data-b="${b}" maxlength="16" aria-label="Bus ${b + 1} name" class="mx-bus-name bg-transparent text-yellow-400 font-black text-[8px] uppercase outline-none border-b border-white/10 focus:border-yellow-400 w-full" value="${esc(o.name)}">
+                        <div class="h-1.5 bg-white/5 rounded overflow-hidden"><div id="mx-bus-meter-${b}" class="h-full bg-gradient-to-r from-emerald-500 via-yellow-400 to-red-500" style="width:0%"></div></div>
+                        ${this.fader('mx-bus-fader-' + b, o.db, 'Bus ' + (b + 1) + ' level')}
+                        <div class="text-center text-[8px] font-bold text-slate-200" id="mx-bus-db-${b}">${fmtDb(o.db)}</div>
+                        <div class="grid grid-cols-2 gap-1 text-[7px] font-black">
+                            <button data-b="${b}" class="mx-bus-mute py-0.5 rounded ${o.mute ? 'bg-red-500 text-black' : 'bg-red-500/10 text-red-400 border border-red-500/30'}" aria-pressed="${o.mute}">MUTE</button>
+                            <button data-b="${b}" class="mx-bus-listen py-0.5 rounded ${lst ? 'bg-cyan-400 text-black' : 'bg-cyan-500/10 text-cyan-300 border border-cyan-500/30'}" aria-pressed="${lst}">LISTEN</button>
+                            <button data-b="${b}" class="mx-bus-tap col-span-2 py-0.5 rounded ${o.tap === 'pre' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40' : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'}" title="Send tap point: PRE = before fader, POST = after fader">${o.tap.toUpperCase()}-FADER</button>
+                            <button data-b="${b}" class="mx-bus-sends col-span-2 py-0.5 rounded bg-white/5 text-slate-300 border border-white/10" title="Edit channel sends">${n} SEND${n === 1 ? '' : 'S'}</button>
+                        </div></div>`;
+                }).join('');
+                el.querySelectorAll('input.daw-fader').forEach((f, b) => (f.oninput = () => {
+                    this.cfg.buses[b].db = parseFloat(f.value); this.persist(); this.applyBus(b);
+                    const l = document.getElementById('mx-bus-db-' + b); if (l) l.textContent = fmtDb(this.cfg.buses[b].db);
+                }));
+                el.querySelectorAll('.mx-bus-mute').forEach(x => (x.onclick = () => this.setBus(Number(x.dataset.b), { mute: !this.cfg.buses[x.dataset.b].mute })));
+                el.querySelectorAll('.mx-bus-listen').forEach(x => (x.onclick = () => this.toggleListen('bus', Number(x.dataset.b))));
+                el.querySelectorAll('.mx-bus-tap').forEach(x => (x.onclick = () => this.setBus(Number(x.dataset.b), { tap: this.cfg.buses[x.dataset.b].tap === 'pre' ? 'post' : 'pre' })));
+                el.querySelectorAll('.mx-bus-sends').forEach(x => (x.onclick = () => { this.selBus = Number(x.dataset.b); this.setPage('sends'); }));
+                el.querySelectorAll('.mx-bus-name').forEach(x => (x.onchange = () => this.setBus(Number(x.dataset.b), { name: x.value })));
+            },
+            renderSends() {
+                const pills = document.getElementById('mx-send-bus'), grid = document.getElementById('mx-sends'); if (!pills || !grid) return;
+                const b = this.selBus, o = this.cfg.buses[b];
+                pills.innerHTML = this.cfg.buses.map((x, i) => `<button data-b="${i}" class="mx-send-pick px-1.5 py-0.5 rounded text-[7.5px] font-black ${i === b ? 'bg-yellow-400 text-black' : 'bg-white/5 text-slate-300 border border-white/10'}" aria-pressed="${i === b}">${esc(x.name)}</button>`).join('');
+                pills.querySelectorAll('.mx-send-pick').forEach(x => (x.onclick = () => { this.selBus = Number(x.dataset.b); this.renderSends(); }));
+                const info = document.getElementById('mx-send-info');
+                if (info) info.textContent = `${o.name} • ${o.tap.toUpperCase()}-FADER SENDS • ${this.cfg.sends[b].filter(v => v > OFF).length} OF 32 ACTIVE`;
+                const names = window.state.channelNames || [];
+                grid.innerHTML = Array.from({ length: N_CH }, (_, c) => {
+                    const db = this.cfg.sends[b][c];
+                    return `<label class="flex flex-col gap-0.5 bg-black/50 border ${db > OFF ? 'border-yellow-500/40' : 'border-white/10'} rounded px-1.5 py-1">
+                        <span class="flex justify-between text-[7.5px]"><b class="text-amber-400">CH${c + 1}</b><span id="mx-send-db-${c}" class="text-slate-300 font-bold">${fmtDb(db)}</span></span>
+                        <span class="text-[6.5px] text-slate-500 truncate">${esc(this.chName(names, c)) || '&nbsp;'}</span>
+                        <input type="range" data-c="${c}" min="-60" max="10" step="0.5" value="${db}" class="mx-send-sl accent-yellow-400 w-full" aria-label="Channel ${c + 1} send to ${esc(o.name)}"></label>`;
+                }).join('');
+                grid.querySelectorAll('.mx-send-sl').forEach(x => (x.oninput = () => this.setSend(b, Number(x.dataset.c), x.value)));
+                const cp = document.getElementById('mx-send-copy');
+                if (cp) { const v = cp.value; cp.innerHTML = this.cfg.buses.map((x, i) => `<option value="${i}">${esc(x.name)}</option>`).join(''); cp.value = v && Number(v) !== b ? v : String((b + 1) % N_BUS); }
+            },
+            renderMatrixStrips() {
+                const el = document.getElementById('mx-mtx'); if (!el) return;
+                el.innerHTML = this.cfg.mtx.map((o, m) => {
+                    const lst = this.listening && this.listening.kind === 'mtx' && this.listening.idx === m, sel = m === this.selMtx;
+                    return `<div class="bg-black/60 border ${lst ? 'border-cyan-400' : sel ? 'border-yellow-400' : 'border-white/10'} rounded-lg p-2 flex flex-col gap-1.5 w-[104px] shrink-0">
+                        <input data-m="${m}" maxlength="16" aria-label="Matrix ${m + 1} name" class="mx-mtx-name bg-transparent text-yellow-400 font-black text-[8px] uppercase outline-none border-b border-white/10 focus:border-yellow-400 w-full" value="${esc(o.name)}">
+                        <div class="h-1.5 bg-white/5 rounded overflow-hidden"><div id="mx-mtx-meter-${m}" class="h-full bg-gradient-to-r from-emerald-500 via-yellow-400 to-red-500" style="width:0%"></div></div>
+                        ${this.fader('mx-mtx-fader-' + m, o.db, 'Matrix ' + (m + 1) + ' level')}
+                        <div class="text-center text-[8px] font-bold text-slate-200" id="mx-mtx-db-${m}">${fmtDb(o.db)}</div>
+                        <label class="text-[7px] text-slate-400 flex justify-between">DELAY <span id="mx-mtx-dly-${m}" class="text-emerald-400 font-bold">${o.delay.toFixed(1)} ms</span></label>
+                        <input type="range" data-m="${m}" min="0" max="100" step="0.5" value="${Math.min(100, o.delay)}" class="mx-mtx-delay accent-emerald-400 w-full" aria-label="Matrix ${m + 1} delay">
+                        <div id="mx-mtx-dist-${m}" class="text-[6.5px] text-slate-500 text-center">${(o.delay * 0.343).toFixed(2)} m (${(o.delay * 0.343 * 3.28084).toFixed(1)} ft)</div>
+                        <div class="grid grid-cols-2 gap-1 text-[7px] font-black">
+                            <button data-m="${m}" class="mx-mtx-mute py-0.5 rounded ${o.mute ? 'bg-red-500 text-black' : 'bg-red-500/10 text-red-400 border border-red-500/30'}" aria-pressed="${o.mute}">MUTE</button>
+                            <button data-m="${m}" class="mx-mtx-pol py-0.5 rounded ${o.pol ? 'bg-amber-500 text-black' : 'bg-white/5 text-slate-300 border border-white/10'}" aria-pressed="${o.pol}" title="Polarity invert (180°)">Ø</button>
+                            <button data-m="${m}" class="mx-mtx-listen py-0.5 rounded ${lst ? 'bg-cyan-400 text-black' : 'bg-cyan-500/10 text-cyan-300 border border-cyan-500/30'}" aria-pressed="${lst}">LISTEN</button>
+                            <button data-m="${m}" class="mx-mtx-pick py-0.5 rounded ${sel ? 'bg-yellow-400 text-black' : 'bg-white/5 text-slate-300 border border-white/10'}">INPUTS</button>
+                        </div></div>`;
+                }).join('');
+                el.querySelectorAll('input.daw-fader').forEach((f, m) => (f.oninput = () => {
+                    this.cfg.mtx[m].db = parseFloat(f.value); this.persist(); this.applyMtx(m);
+                    const l = document.getElementById('mx-mtx-db-' + m); if (l) l.textContent = fmtDb(this.cfg.mtx[m].db);
+                }));
+                el.querySelectorAll('.mx-mtx-delay').forEach(x => (x.oninput = () => {
+                    const m = Number(x.dataset.m); this.cfg.mtx[m].delay = parseFloat(x.value); this.persist(); this.applyMtx(m);
+                    const l = document.getElementById('mx-mtx-dly-' + m); if (l) l.textContent = this.cfg.mtx[m].delay.toFixed(1) + ' ms';
+                    const d = document.getElementById('mx-mtx-dist-' + m); if (d) d.textContent = `${(this.cfg.mtx[m].delay * 0.343).toFixed(2)} m (${(this.cfg.mtx[m].delay * 0.343 * 3.28084).toFixed(1)} ft)`;
+                }));
+                el.querySelectorAll('.mx-mtx-mute').forEach(x => (x.onclick = () => this.setMtx(Number(x.dataset.m), { mute: !this.cfg.mtx[x.dataset.m].mute })));
+                el.querySelectorAll('.mx-mtx-pol').forEach(x => (x.onclick = () => this.setMtx(Number(x.dataset.m), { pol: !this.cfg.mtx[x.dataset.m].pol })));
+                el.querySelectorAll('.mx-mtx-listen').forEach(x => (x.onclick = () => this.toggleListen('mtx', Number(x.dataset.m))));
+                el.querySelectorAll('.mx-mtx-pick').forEach(x => (x.onclick = () => { this.selMtx = Number(x.dataset.m); this.render(); }));
+                el.querySelectorAll('.mx-mtx-name').forEach(x => (x.onchange = () => this.setMtx(Number(x.dataset.m), { name: x.value })));
+            },
+            // custom channel name only (the default 'CH n' would just repeat the number)
+            chName(names, c) { const n = names[c]; return n && n !== 'CH ' + (c + 1) && n !== 'CH' + (c + 1) ? n : ''; },
+            srcLabel(s) {
+                const k = SRC[s];
+                if (k === 'main') return 'MAIN L/R';
+                if (k.startsWith('bus')) return this.cfg.buses[Number(k.slice(3)) - 1].name;
+                const R = window.routingEngine;
+                return 'GRP ' + k.slice(3) + (R && R.cfg ? ' ' + R.cfg.busNames[Number(k.slice(3)) - 1] : '');
+            },
+            renderMatrixGrid() {
+                const el = document.getElementById('mx-grid'); if (!el) return;
+                const head = `<tr><th class="p-1 text-left text-slate-500 sticky left-0 bg-[#0b0e14]">SOURCE \\ OUTPUT</th>${this.cfg.mtx.map((o, m) => `<th class="p-1 text-center ${m === this.selMtx ? 'text-yellow-400' : 'text-slate-400'}">${m + 1}</th>`).join('')}</tr>`;
+                const rows = SRC.map((k, s) => `<tr class="border-t border-white/5"><td class="p-1 text-slate-300 whitespace-nowrap sticky left-0 bg-[#0b0e14]">${esc(this.srcLabel(s))}</td>${this.cfg.mtx.map((o, m) => {
+                    const db = this.cfg.xp[m][s], on = db > OFF;
+                    return `<td class="p-0.5 text-center"><button data-m="${m}" data-s="${s}" class="mx-xp w-full min-w-[34px] py-0.5 rounded text-[7px] font-bold ${on ? 'bg-yellow-400/20 text-yellow-300 border border-yellow-500/50' : 'bg-white/[0.03] text-slate-600 border border-white/5'}" aria-label="${esc(this.srcLabel(s))} to matrix ${m + 1}: ${on ? fmtDb(db) : 'off'}" aria-pressed="${on}">${on ? (db === 0 ? '0' : db.toFixed(0)) : '·'}</button></td>`;
+                }).join('')}</tr>`).join('');
+                el.innerHTML = `<table class="w-full text-[7.5px] font-mono">${head}${rows}</table>`;
+                el.querySelectorAll('.mx-xp').forEach(x => (x.onclick = () => {
+                    const m = Number(x.dataset.m), s = Number(x.dataset.s); this.selMtx = m;
+                    this.setXp(m, s, this.cfg.xp[m][s] > OFF ? OFF : 0); this.render();
+                }));
+            },
+            renderXpEditor() {
+                const el = document.getElementById('mx-xp-edit'), t = document.getElementById('mx-xp-title'); if (!el) return;
+                const m = this.selMtx, o = this.cfg.mtx[m];
+                if (t) t.textContent = `INPUTS TO ${o.name} (MATRIX ${m + 1})`;
+                el.innerHTML = SRC.map((k, s) => {
+                    const db = this.cfg.xp[m][s];
+                    return `<label class="flex flex-col gap-0.5 bg-black/50 border ${db > OFF ? 'border-yellow-500/40' : 'border-white/10'} rounded px-1.5 py-1">
+                        <span class="flex justify-between text-[7.5px]"><b class="text-amber-400 truncate">${esc(this.srcLabel(s))}</b><span id="mx-xp-db-${s}" class="text-slate-300 font-bold">${fmtDb(db)}</span></span>
+                        <input type="range" data-s="${s}" min="-60" max="10" step="0.5" value="${db}" class="mx-xp-sl accent-yellow-400 w-full" aria-label="${esc(this.srcLabel(s))} into ${esc(o.name)}"></label>`;
+                }).join('');
+                el.querySelectorAll('.mx-xp-sl').forEach(x => (x.oninput = () => this.setXp(m, Number(x.dataset.s), x.value)));
+            },
+            renderChannels() {
+                const el = document.getElementById('mx-ch'); if (!el) return;
+                const names = window.state.channelNames || [], inv = window.state.phaseInvert || [];
+                el.innerHTML = Array.from({ length: N_CH }, (_, c) => {
+                    const o = this.cfg.ch[c];
+                    return `<div class="grid grid-cols-[52px_1fr_1fr_44px] items-center gap-2 bg-black/50 border ${o.hpfOn || o.trim ? 'border-yellow-500/30' : 'border-white/10'} rounded px-2 py-1 text-[7.5px]">
+                        <span class="truncate"><b class="text-amber-400">CH${c + 1}</b> <span class="text-slate-500">${esc(this.chName(names, c))}</span></span>
+                        <span class="flex items-center gap-1.5"><button data-c="${c}" class="mx-hpf-on px-1.5 py-0.5 rounded font-black ${o.hpfOn ? 'bg-emerald-500 text-black' : 'bg-white/5 text-slate-400 border border-white/10'}" aria-pressed="${o.hpfOn}">HPF</button>
+                            <input type="range" data-c="${c}" min="20" max="400" step="5" value="${o.hpfHz}" class="mx-hpf-hz accent-emerald-400 flex-1 min-w-0" aria-label="Channel ${c + 1} high-pass frequency"><span class="w-12 text-right text-slate-300">${Math.round(o.hpfHz)} Hz</span></span>
+                        <span class="flex items-center gap-1.5">TRIM <input type="range" data-c="${c}" min="-18" max="18" step="0.5" value="${o.trim}" class="mx-trim accent-cyan-400 flex-1 min-w-0" aria-label="Channel ${c + 1} trim"><span class="w-12 text-right text-slate-300">${(o.trim > 0 ? '+' : '') + o.trim.toFixed(1)} dB</span></span>
+                        <button data-c="${c}" class="mx-pol py-0.5 rounded font-black ${inv[c] ? 'bg-amber-500 text-black' : 'bg-white/5 text-slate-300 border border-white/10'}" aria-pressed="${!!inv[c]}" title="Polarity invert (180°)">Ø</button></div>`;
+                }).join('');
+                el.querySelectorAll('.mx-hpf-on').forEach(x => (x.onclick = () => this.setCh(Number(x.dataset.c), { hpfOn: !this.cfg.ch[x.dataset.c].hpfOn })));
+                // live while dragging (no re-render), saved on release
+                el.querySelectorAll('.mx-hpf-hz').forEach(x => {
+                    x.oninput = () => { if (!this.allowed()) return this.renderChannels(); const c = Number(x.dataset.c); this.cfg.ch[c].hpfHz = parseFloat(x.value); this.applyCh(c); x.nextElementSibling.textContent = Math.round(this.cfg.ch[c].hpfHz) + ' Hz'; };
+                    x.onchange = () => this.persist();
+                });
+                el.querySelectorAll('.mx-trim').forEach(x => {
+                    x.oninput = () => { if (!this.allowed()) return this.renderChannels(); const c = Number(x.dataset.c), v = parseFloat(x.value); this.cfg.ch[c].trim = v; this.applyCh(c); x.nextElementSibling.textContent = (v > 0 ? '+' : '') + v.toFixed(1) + ' dB'; };
+                    x.onchange = () => this.persist();
+                });
+                el.querySelectorAll('.mx-pol').forEach(x => (x.onclick = () => { if (window.togglePatchPhaseInvert) window.togglePatchPhaseInvert(Number(x.dataset.c)); this.renderChannels(); }));
+            },
+            renderScenes() {
+                const el = document.getElementById('mx-scenes'); if (!el) return;
+                const list = this.scenes();
+                el.innerHTML = list.length ? list.map((s, k) => `<div class="flex items-center justify-between gap-2 bg-black/50 border border-white/10 rounded px-2 py-1 text-[8px]">
+                    <span class="truncate"><b class="text-slate-200">${esc(s.name)}</b> <span class="text-slate-500">${esc(new Date(s.at).toLocaleString())}</span></span>
+                    <span class="flex gap-1"><button data-k="${k}" class="mx-recall px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-bold">RECALL</button>
+                    <button data-k="${k}" class="mx-del px-2 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/30 font-bold">DEL</button></span></div>`).join('')
+                    : '<div class="text-[8px] text-slate-500">No scenes yet.</div>';
+                el.querySelectorAll('.mx-recall').forEach(x => (x.onclick = () => this.recallScene(Number(x.dataset.k))));
+                el.querySelectorAll('.mx-del').forEach(x => (x.onclick = () => this.deleteScene(Number(x.dataset.k))));
+            },
+            meterLoop() {
+                const tab = document.getElementById('tab-bus'), buf = new Float32Array(512);
+                const level = (a, id) => {
+                    const el = document.getElementById(id); if (!el) return;
+                    a.getFloatTimeDomainData(buf);
+                    let sum = 0; for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+                    const db = 20 * Math.log10(Math.sqrt(sum / buf.length) || 1e-6);
+                    el.style.width = Math.max(0, Math.min(100, (db + 60) / 60 * 100)) + '%';
+                };
+                const tick = () => {
+                    if (this.built && tab && !tab.classList.contains('tab-hidden')) {
+                        if (this.page === 'buses') this.busAn.forEach((a, b) => level(a, 'mx-bus-meter-' + b));
+                        if (this.page === 'matrix') this.mtxAn.forEach((a, m) => level(a, 'mx-mtx-meter-' + m));
+                    }
+                    requestAnimationFrame(tick);
+                };
+                requestAnimationFrame(tick);
+            },
+            init() {
+                const $ = id => document.getElementById(id); if (!$('mx-nav')) return;
+                document.querySelectorAll('.mx-nav-btn').forEach(b => (b.onclick = () => this.setPage(b.dataset.page)));
+                $('mx-reset').onclick = () => this.resetAll();
+                $('mx-listen-chip').onclick = () => this.releaseListen();
+                $('mx-send-all0').onclick = () => this.bulkSends(this.selBus, 0);
+                $('mx-send-clear').onclick = () => this.bulkSends(this.selBus, OFF);
+                $('mx-send-copy-go').onclick = () => this.copySends(this.selBus, Number($('mx-send-copy').value));
+                $('mx-scene-save').onclick = () => { this.saveScene($('mx-scene-name').value); $('mx-scene-name').value = ''; };
+                $('mx-export').onclick = () => this.exportJson();
+                $('mx-import').onchange = e => { this.importJson(e.target.files[0]); e.target.value = ''; };
+                this.setPage('buses'); this.meterLoop();
+            }
+        };
+
+        // Legacy delay sliders / acoustic-delay calculator also drive the real matrix delays (MTX 1-8).
+        const origDelay = window.setMatrixDelay;
+        window.setMatrixDelay = function(id, ms) {
+            if (typeof origDelay === 'function') origDelay.apply(this, arguments);
+            if (id >= 1 && id <= N_MTX) M.setMtx(id - 1, { delay: ms }, true);
+        };
+
+        const origInit = window.initAudioEngine;
+        if (typeof origInit === 'function') {
+            window.initAudioEngine = async function() { const r = await origInit.apply(this, arguments); M.ensureGraph(); M.renderStatus(); return r; };
+        }
+        const origSwitch = window.switchTab;
+        window.switchTab = function(tabId) { const r = origSwitch.apply(this, arguments); if (tabId === 'bus') { M.ensureGraph(); M.render(); } return r; };
+        document.addEventListener('DOMContentLoaded', () => M.init());
     })();
     </script>
 </body>
