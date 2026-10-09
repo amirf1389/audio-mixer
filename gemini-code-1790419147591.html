@@ -267,6 +267,8 @@ CRITICAL REVISIONS & ARCHITECTURAL UPGRADES:
         #quick-send-modal { position: fixed; bottom: 74px; right: 16px; z-index: 90000; display: none; }
         @media (max-width: 767px) { #quick-send-modal { bottom: 70px; left: 8px; right: 8px; } }
 
+        #notify-stack { position: fixed; top: 3.8rem; right: 1.2rem; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; z-index: 120000; pointer-events: none; max-width: calc(100vw - 2.4rem); }
+        #notify-stack .notification { position: static; max-width: 100%; }
         .notification { position: fixed; top: 3.8rem; right: 1.2rem; padding: 0.7rem 1.1rem; background: rgba(8,10,15,0.98); border: 1px solid var(--wing-orange); border-radius: 8px; font-size: 10px; font-weight: 800; color: white; z-index: 120000; box-shadow: 0 8px 32px rgba(0,0,0,0.9); }
         .setup-wizard, .lock-modal, .boot-overlay, .audio-confirm-modal { position: fixed; inset: 0; background: rgba(4,5,8,0.98); backdrop-filter: blur(18px); z-index: 100000; display: none; flex-direction: column; align-items: center; justify-content: center; }
         #audio-api-banner { display: flex; position: fixed; top: 0; left: 0; right: 0; z-index: 150000; background: rgba(255, 106, 0, 0.95); backdrop-filter: blur(10px); padding: 8px 14px; justify-content: center; align-items: center; gap: 12px; color: black; font-weight: 900; text-transform: uppercase; letter-spacing: 1.5px; transform: translateY(-100%); transition: transform 0.35s ease; }
@@ -477,7 +479,7 @@ CRITICAL REVISIONS & ARCHITECTURAL UPGRADES:
                 <p class="text-[9.5px] font-mono text-slate-300 mb-3">Web Audio API low-latency DSP engine initialized with hardware drivers.</p>
                 <div class="bg-black/70 p-2.5 rounded border border-white/10 text-left font-mono text-[9px] space-y-1 text-slate-300 mb-4">
                     <div class="flex justify-between"><span>WEB AUDIO CLOCK:</span><span class="text-emerald-400 font-bold" id="notif-sample-rate">48.0 kHz LOW-LATENCY</span></div>
-                    <div class="flex justify-between"><span>USB ASIO DRIVER:</span><span class="text-cyan-400 font-bold" id="notif-usb-driver">WING LIVE USB 192k ONLINE</span></div>
+                    <div class="flex justify-between"><span>USB ASIO DRIVER:</span><span class="text-cyan-400 font-bold" id="notif-usb-driver">NOT DETECTED (START LOCAL BRIDGE)</span></div>
                     <div class="flex justify-between"><span>BLUETOOTH GATT:</span><span class="text-purple-400 font-bold" id="notif-ble-gatt">A2DP STEREO / GATT SINK READY</span></div>
                     <div class="flex justify-between"><span>MIC RTA PIPELINE:</span><span class="text-cyan-400 font-bold">LIVE FFT DUAL TRACE OK</span></div>
                     <div class="flex justify-between"><span>MIC BUS STATUS:</span><span class="text-emerald-400 font-bold">MONITORED (ZERO FEEDBACK)</span></div>
@@ -794,14 +796,17 @@ window.navTabs = [
         window.notify = function(m, i='info') {
             const d = document.createElement('div'); d.className='notification flex items-center gap-2';
             d.innerHTML=`<i class="fa-solid fa-${i} text-amber-400"></i> <span>${m}</span>`;
-            document.body.appendChild(d);
+            let stack = document.getElementById('notify-stack');
+            if (!stack) { stack = document.createElement('div'); stack.id = 'notify-stack'; document.body.appendChild(stack); }
+            while (stack.children.length >= 4) stack.removeChild(stack.firstChild);
+            stack.appendChild(d);
             setTimeout(() => { d.style.opacity = '0'; d.style.transform = 'translateY(-15px)'; d.style.transition = 'all 0.2s'; setTimeout(()=>d.remove(),200); }, 2200);
         };
 
         window.dismissAudioNotification = function() {
             document.getElementById('audio-confirm-modal').style.display = 'none';
             window.notify("Web Audio API DSP Engine Active (48.0 kHz)", "bolt");
-            setTimeout(() => window.notify("USB Driver: WING Live USB Audio ASIO Endpoint Bound", "microchip"), 250);
+            setTimeout(() => window.notify(window.universalAsioSdk ? window.universalAsioSdk.driverSummary() : "Audio Driver: browser Web Audio output", "microchip"), 250);
             setTimeout(() => window.notify("Bluetooth GATT: A2DP Audio Sink & Radio GATT Armed", "brands fa-bluetooth-b"), 500);
         };
 
@@ -3180,7 +3185,8 @@ window.navTabs = [
                         <div class="flex items-center gap-2">
                             <span class="text-[7.5px] text-slate-400">PRESETS:</span>
                             <select id="dyn-preset-select" onchange="window.studioDynamicsEngine.loadPreset(this.value)" class="bg-black border border-white/20 rounded px-2 py-1 text-emerald-400 outline-none text-[7.5px] font-mono cursor-pointer">
-                                <option value="master-glue" selected>Master Bus Glue (SSL Style)</option>
+                                <option value="manual" selected disabled>Manual Settings</option>
+                                    <option value="master-glue">Master Bus Glue (SSL Style)</option>
                                 <option value="drum-smack">Drum Bus Punch (VCA 160)</option>
                                 <option value="vocal-smooth">Smooth Lead Vocal (Opto LA-2A)</option>
                                 <option value="bass-leveler">Bass Anchor (FET 76 Fast)</option>
@@ -3333,7 +3339,8 @@ window.navTabs = [
                         <div class="flex items-center gap-2">
                             <span class="text-[7.5px] text-slate-400">PRESETS:</span>
                             <select id="gate-preset-select" onchange="window.precisionNoiseGateEngine.loadPreset(this.value)" class="bg-black border border-white/20 rounded px-2 py-1 text-pink-400 outline-none text-[7.5px] font-mono cursor-pointer">
-                                <option value="snare-bleed" selected>Snare Drum Bleed Cut</option>
+                                <option value="manual" selected disabled>Manual Settings</option>
+                                    <option value="snare-bleed">Snare Drum Bleed Cut</option>
                                 <option value="kick-tight">Kick Drum Tight Punch</option>
                                 <option value="vocal-denoise">Vocal Studio Silence</option>
                                 <option value="tom-gate">Tom Tom Fast Ring Cut</option>
@@ -4798,6 +4805,7 @@ window.navTabs = [
                   <div id="patch-view-matrix" class="patch-bank-view overflow-x-auto hidden">
                     ${window.renderPatchMatrixGrid()}
                   </div>
+                </div>
                 <!-- HARDWARE AUDIO INTERFACE READ & WRITE DIRECT DMA CONTROLLER -->
                 <div class="glass-panel p-3.5 rounded-xl wing-bezel space-y-2.5 mt-3">
                   <div class="flex flex-wrap justify-between items-center gap-2 pb-2 border-b border-white/10">
@@ -5758,6 +5766,19 @@ window.navTabs = [
                           <div id="asio-read-vu-bar" class="h-full bg-gradient-to-r from-emerald-500 via-amber-400 to-rose-500 transition-all duration-75" style="width: 0%;"></div>
                         </div>
                       </div>
+
+                      <!-- External source FFT spectrum line -->
+                      <div class="space-y-1 pt-1">
+                        <div class="flex justify-between text-[7px] text-slate-400">
+                          <span>EXTERNAL SOURCE FFT SPECTRUM (20 Hz - 20 kHz):</span>
+                          <span id="asio-read-fft-peak" class="text-cyan-400 font-bold">NO SIGNAL</span>
+                        </div>
+                        <canvas id="asio-read-fft-canvas" class="w-full bg-black rounded border border-white/10" style="height:96px;"></canvas>
+                      </div>
+                      <div class="flex justify-between text-[7px] text-slate-400 pt-1">
+                        <span>SYSTEM INPUT VOLUME:</span>
+                        <span id="asio-sys-in-vol" class="text-cyan-400 font-bold">BRIDGE OFFLINE</span>
+                      </div>
                     </div>
 
                     <!-- RIGHT: AUDIO INTERFACE HARDWARE WRITE ENGINE -->
@@ -5825,6 +5846,10 @@ window.navTabs = [
                         <div class="h-2 bg-black rounded-full overflow-hidden border border-white/10">
                           <div id="asio-write-vu-bar" class="h-full bg-gradient-to-r from-emerald-500 via-amber-400 to-rose-500 transition-all duration-75" style="width: 0%;"></div>
                         </div>
+                      </div>
+                      <div class="flex justify-between text-[7px] text-slate-400 pt-1">
+                        <span>SYSTEM OUTPUT VOLUME:</span>
+                        <span id="asio-sys-out-vol" class="text-amber-400 font-bold">BRIDGE OFFLINE</span>
                       </div>
                     </div>
                   </div>
@@ -7270,7 +7295,7 @@ window.navTabs = [
                     </div>
                     <canvas id="phase-goniometer-canvas" class="w-full" style="height:260px;"></canvas>
                     <div class="flex justify-between w-full mt-1.5 font-mono text-[7px] text-slate-500">
-                      <span>-L (OUT OF PHASE)</span><span>CENTER (MONO SUM)</span><span>+R (IN-PHASE)</span>
+                      <span>&larr; L ONLY (SIDE)</span><span>VERTICAL LINE = MONO / IN-PHASE</span><span>R ONLY (SIDE) &rarr;</span>
                     </div>
                   </div>
 
@@ -10188,7 +10213,7 @@ window.navTabs = [
             }
             const den = Math.sqrt(sLL * sRR);
             const corr = peak < 0.0005 || den === 0 ? 0 : Math.max(-1, Math.min(1, sLR / den));
-            return { l: L, r: R, corr: corr, peak: peak, silent: peak < 0.0005 };
+            return { l: L, r: R, corr: corr, peak: peak, silent: peak < 0.0005, rmsL: Math.sqrt(sLL / size), rmsR: Math.sqrt(sRR / size) };
         };
 
         // ─── STEREO PHASE CORRELATION & GONIOMETER ENGINE ─────────────────────────
@@ -10253,6 +10278,17 @@ window.navTabs = [
                     ctx.stroke();
                     ctx.shadowBlur = 0;
                     const correlationSum = rd ? rd.corr : 0;
+
+                    // Live L/R balance readout
+                    const balEl = document.getElementById('stereo-balance-val');
+                    if (balEl) {
+                        const tot = rd ? rd.rmsL + rd.rmsR : 0;
+                        if (!rd || rd.silent || tot === 0) balEl.textContent = 'NO SIGNAL';
+                        else {
+                            const rPct = Math.round(rd.rmsR / tot * 100);
+                            balEl.textContent = Math.abs(rPct - 50) <= 2 ? 'CENTER (50/50)' : `L ${100 - rPct}% / R ${rPct}%`;
+                        }
+                    }
 
                     // Update Correlation Meter Pointer
                     const corrNormalized = correlationSum;
@@ -12547,6 +12583,8 @@ window.navTabs = [
             this.updateLatency();
             this.scanDevices();
             this.connectBridge();
+            this.drawSpectrum();
+            this.startVolumePolling();
             this.log("[ ASIO Universal SDK Engine initialized • 32 In / 32 Out ready ]", "success");
         },
 
@@ -12559,6 +12597,14 @@ window.navTabs = [
             line.innerText = `[${time}] ${msg}`;
             logEl.appendChild(line);
             logEl.scrollTop = logEl.scrollHeight;
+        },
+
+        // One-line truthful description of the active audio driver path (used by notifications and the start-up panel)
+        driverSummary: function() {
+            const info = this.bridgeInfo;
+            if (!info) return "Audio Driver: browser Web Audio output (start the local bridge for ASIO / WASAPI)";
+            if (info.asio.length) return `ASIO Driver: ${info.asio[0]}${info.asio.length > 1 ? ' (+' + (info.asio.length - 1) + ' more)' : ''}`;
+            return `Audio Driver: ${info.recommended || 'system audio'} (no ASIO driver installed)`;
         },
 
         // Optional local Node.js sandbox (bridge/server.js): reports the real native drivers of this PC.
@@ -12591,6 +12637,10 @@ window.navTabs = [
                     info.devices.forEach(d => self.log(`Device: ${d.name}`, "info"));
                     window.notify(`Local Audio Bridge Connected (${info.platform})`, "plug");
                     self.addPortAudioOutputs();
+                    self.addPortAudioInputs();
+                    self.startVolumePolling();
+                    const nd = document.getElementById('notif-usb-driver');
+                    if (nd) nd.innerText = self.driverSummary().replace(/^[^:]+: /, '').toUpperCase();
                     self.reportWebAudioCompat(info);
                 }).catch(() => tryNext(i + 1));
             };
@@ -12705,6 +12755,7 @@ window.navTabs = [
                         outSelect.innerHTML = '<option value="default">Default System Audio Output (Speakers/DAC)</option>';
                     }
                     self.addPortAudioOutputs();
+                    self.addPortAudioInputs();
                     self.log(`Hardware endpoints re-scanned: ${inCount} Inputs, ${outCount} Outputs enumerated.`, "success");
                     window.notify(`Audio Interfaces Scanned: ${inCount} In / ${outCount} Out`, "plug");
                 }).catch(err => {
@@ -12715,6 +12766,7 @@ window.navTabs = [
 
         selectInputDevice: function(devId) {
             this.selectedInputDeviceId = devId;
+            if (/^pa:/.test(devId)) { this.log(`PortAudio input selected: ${devId}`, "info"); window.notify("PortAudio Input Selected", "microphone"); return; }
             this.log(`Hardware Input bound: Device ID ${devId.substring(0, 12)}...`, "info");
             window.notify("Hardware Input Endpoint Assigned", "microphone");
         },
@@ -12879,13 +12931,20 @@ window.navTabs = [
                 }
             };
 
+            if (/^pa:/.test(self.selectedInputDeviceId || '')) {
+                self.startPaInput().then(ok => { if (!ok) self.log("Falling back: no bridge input available for the selected endpoint", "warn"); });
+                self.startSpectrumLoop();
+                return;
+            }
+
             const handleSuccess = function(stream) {
                 self.readAudioStream = stream;
                 if (window.state && window.state.ctx) {
                     try {
                         self.readAudioSourceNode = window.state.ctx.createMediaStreamSource(stream);
                         self.readAnalyserNode = window.state.ctx.createAnalyser();
-                        self.readAnalyserNode.fftSize = 256;
+                        self.readAnalyserNode.fftSize = 4096;
+                        self.readAnalyserNode.smoothingTimeConstant = 0.6;
                         self.readAudioSourceNode.connect(self.readAnalyserNode);
                     } catch (e) {
                         self.log(`Web Audio Ingest Tap: ${e.message}`, "warn");
@@ -12893,6 +12952,7 @@ window.navTabs = [
                 }
                 self.log("Hardware Audio Interface READ STREAM Started (DMA Ingest Active)", "success");
                 window.notify("ASIO Read Stream Active", "microphone");
+                self.startSpectrumLoop();
             };
 
             if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
@@ -12908,6 +12968,10 @@ window.navTabs = [
 
         stopReadStream: function() {
             this.isReadActive = false;
+            this.stopPaInput();
+            if (this.readAudioSourceNode) { try { this.readAudioSourceNode.disconnect(); } catch (e) { /* ignore */ } this.readAudioSourceNode = null; }
+            this.readAnalyserNode = null;
+            this.drawSpectrum();
             if (this.readAudioStream) {
                 this.readAudioStream.getTracks().forEach(t => t.stop());
                 this.readAudioStream = null;
@@ -12934,6 +12998,179 @@ window.navTabs = [
             } else {
                 this.startWriteStream();
             }
+        },
+
+        // Real peak (0-100 %) of the mixer master L/R
+        masterPeakPct: function() {
+            const n = window.state && window.state.nodes;
+            if (!n || !n.phaseAnL || !n.phaseAnR) return 0;
+            if (!this._pkBuf || this._pkBuf.length !== n.phaseAnL.fftSize) this._pkBuf = new Float32Array(n.phaseAnL.fftSize);
+            let peak = 0;
+            [n.phaseAnL, n.phaseAnR].forEach(an => {
+                an.getFloatTimeDomainData(this._pkBuf);
+                for (let i = 0; i < this._pkBuf.length; i++) { const a = Math.abs(this._pkBuf[i]); if (a > peak) peak = a; }
+            });
+            return Math.min(100, peak * 100);
+        },
+
+        // ---- External source FFT spectrum line (log frequency, dBFS) ----
+        spectrumId: null, spectrumHold: null,
+        drawSpectrum: function() {
+            const cv = document.getElementById('asio-read-fft-canvas');
+            if (!cv) return;
+            const dpr = window.devicePixelRatio || 1;
+            const w = Math.max(40, Math.floor(cv.clientWidth * dpr)), h = Math.max(40, Math.floor(cv.clientHeight * dpr));
+            if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; this.spectrumHold = null; }
+            const g = cv.getContext('2d');
+            g.clearRect(0, 0, w, h);
+            const an = this.readAnalyserNode, DB_MIN = -100, DB_MAX = 0, F_MIN = 20;
+            const sr = an ? an.context.sampleRate : 48000, F_MAX = Math.min(20000, sr / 2);
+            const xOf = f => Math.log(f / F_MIN) / Math.log(F_MAX / F_MIN) * w;
+            const yOf = d => h - ((Math.max(DB_MIN, Math.min(DB_MAX, d)) - DB_MIN) / (DB_MAX - DB_MIN)) * h;
+            g.font = `${8 * dpr}px monospace`;
+            g.lineWidth = 1;
+            g.strokeStyle = 'rgba(255,255,255,0.08)';
+            g.fillStyle = '#64748b';
+            [-20, -40, -60, -80].forEach(d => { g.beginPath(); g.moveTo(0, yOf(d)); g.lineTo(w, yOf(d)); g.stroke(); g.fillText(d + ' dB', 2 * dpr, yOf(d) - 2 * dpr); });
+            [100, 1000, 10000].forEach(f => { if (f < F_MAX) { g.beginPath(); g.moveTo(xOf(f), 0); g.lineTo(xOf(f), h); g.stroke(); g.fillText(f >= 1000 ? (f / 1000) + 'k' : f, xOf(f) + 2 * dpr, h - 3 * dpr); } });
+            const peakEl = document.getElementById('asio-read-fft-peak');
+            if (!an || !this.isReadActive) {
+                g.fillStyle = '#94a3b8';
+                g.textAlign = 'center';
+                g.fillText('START READ STREAM FOR EXTERNAL SOURCE SPECTRUM', w / 2, h / 2);
+                g.textAlign = 'start';
+                if (peakEl) peakEl.innerText = 'NO SIGNAL';
+                return;
+            }
+            const N = an.frequencyBinCount;
+            if (!this._fftBuf || this._fftBuf.length !== N) this._fftBuf = new Float32Array(N);
+            an.getFloatFrequencyData(this._fftBuf);
+            const binHz = sr / an.fftSize;
+            if (!this.spectrumHold || this.spectrumHold.length !== w) this.spectrumHold = new Float32Array(w).fill(DB_MIN);
+            const line = new Float32Array(w);
+            let pkDb = DB_MIN, pkHz = 0;
+            for (let x = 0; x < w; x++) {
+                const f = F_MIN * Math.pow(F_MAX / F_MIN, x / (w - 1));
+                const b = f / binHz, i0 = Math.max(0, Math.floor(b)), i1 = Math.min(N - 1, i0 + 1), t = b - i0;
+                let d = this._fftBuf[i0] * (1 - t) + this._fftBuf[i1] * t;
+                if (!isFinite(d)) d = DB_MIN;
+                line[x] = d;
+                if (d > pkDb) { pkDb = d; pkHz = f; }
+                this.spectrumHold[x] = Math.max(d, this.spectrumHold[x] - 0.4);
+            }
+            g.strokeStyle = 'rgba(251,191,36,0.55)';
+            g.lineWidth = dpr;
+            g.beginPath();
+            for (let x = 0; x < w; x++) { const y = yOf(this.spectrumHold[x]); if (x === 0) g.moveTo(x, y); else g.lineTo(x, y); }
+            g.stroke();
+            g.strokeStyle = '#22d3ee';
+            g.lineWidth = 1.6 * dpr;
+            g.beginPath();
+            for (let x = 0; x < w; x++) { const y = yOf(line[x]); if (x === 0) g.moveTo(x, y); else g.lineTo(x, y); }
+            g.stroke();
+            if (peakEl) peakEl.innerText = pkDb <= -90 ? 'NO SIGNAL' : `PEAK ${pkHz >= 1000 ? (pkHz / 1000).toFixed(2) + ' kHz' : Math.round(pkHz) + ' Hz'} • ${pkDb.toFixed(1)} dB`;
+        },
+        startSpectrumLoop: function() {
+            const self = this;
+            if (self.spectrumId) return;
+            const tick = function() {
+                self.drawSpectrum();
+                const visible = document.getElementById('asio-read-fft-canvas');
+                self.spectrumId = (visible && (self.isReadActive || self._spectrumIdle)) ? requestAnimationFrame(tick) : null;
+            };
+            self.spectrumId = requestAnimationFrame(tick);
+        },
+
+        // ---- System volume (from the local bridge) ----
+        volTimer: null,
+        showVolume: function(v) {
+            const fmt = x => !x || x.volume == null ? 'N/A' : `${Math.round(x.volume * 100)}%${x.muted ? ' • MUTED' : ''}`;
+            const o = document.getElementById('asio-sys-out-vol'), i = document.getElementById('asio-sys-in-vol');
+            if (o) o.innerText = v ? fmt(v.output) : 'BRIDGE OFFLINE';
+            if (i) i.innerText = v ? fmt(v.input) : 'BRIDGE OFFLINE';
+        },
+        startVolumePolling: function() {
+            const self = this;
+            if (self.volTimer || !self.bridgeUrl) return;
+            let fails = 0;
+            const poll = function() {
+                fetch(self.bridgeUrl + '/api/volume', { cache: 'no-store' }).then(r => r.json()).then(v => { fails = 0; self.showVolume(v && v.ok ? v : null); })
+                    .catch(() => { if (++fails >= 3) { self.showVolume(null); clearInterval(self.volTimer); self.volTimer = null; } });
+            };
+            poll();
+            self.volTimer = setInterval(poll, 1500);
+        },
+
+        // ---- ASIO / WASAPI input through the local bridge (PortAudio) ----
+        paInWs: null, paInNode: null, paInMute: null,
+        addPortAudioInputs: function() {
+            const info = this.bridgeInfo, sel = document.getElementById('asio-hw-read-device');
+            if (!sel || !info || !info.portaudio || sel.querySelector('optgroup[data-pa]')) return;
+            const ins = info.portaudio.devices.filter(d => d.inputs > 0);
+            if (!ins.length) return;
+            const g = document.createElement('optgroup');
+            g.label = 'PORTAUDIO HOST API INPUTS (via bridge)';
+            g.setAttribute('data-pa', '1');
+            ins.forEach(d => { const o = document.createElement('option'); o.value = 'pa:' + d.id; o.text = `${d.hostApi}: ${d.name} (${d.inputs} ch)`; g.appendChild(o); });
+            sel.insertBefore(g, sel.firstChild);
+        },
+        startPaInput: async function() {
+            const self = this;
+            if (!this.bridgeUrl || this.paInWs) return false;
+            if (!this.bridgeInfo || !this.bridgeInfo.portaudio) {
+                this.log("PortAudio input unavailable: run 'npm install' in bridge/ (needs naudiodon2), then restart the bridge", "warn");
+                window.notify("ASIO Input: run npm install in bridge/ (naudiodon2)", "triangle-exclamation");
+                return false;
+            }
+            if (!(window.state && window.state.ctx) && typeof initAudioEngine === 'function') { try { await initAudioEngine(); } catch (e) { /* ignore */ } }
+            const ctx = window.state && window.state.ctx;
+            if (!ctx || !ctx.audioWorklet) { this.log("PortAudio input needs the audio engine running (AudioWorklet)", "warn"); return false; }
+            const code = "class R extends AudioWorkletProcessor{constructor(){super();this.q=[];this.o=0;this.n=0;this.port.onmessage=e=>{this.q.push(e.data);this.n+=e.data[0].length;while(this.n>24000){const d=this.q.shift();this.n-=d[0].length;this.o=0}}}" +
+                "process(i,o){const a=o[0][0],b=o[0][1]||o[0][0];for(let k=0;k<a.length;k++){if(!this.q.length){a[k]=0;b[k]=0;continue}const c=this.q[0];a[k]=c[0][this.o];b[k]=c[1][this.o];if(++this.o>=c[0].length){this.q.shift();this.n-=c[0].length;this.o=0}}return true}}" +
+                "registerProcessor('pa-in',R);";
+            const url = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
+            try { await ctx.audioWorklet.addModule(url); } catch (e) { this.log(`PortAudio input node failed: ${e.message}`, "error"); return false; } finally { URL.revokeObjectURL(url); }
+            const ws = new WebSocket(this.bridgeUrl.replace(/^http/, 'ws') + '/ws/input');
+            ws.binaryType = 'arraybuffer';
+            this.paInWs = ws;
+            let ch = 2;
+            const devSel = /^pa:(\d+)$/.exec(this.selectedInputDeviceId || '');
+            ws.onopen = function() { ws.send(JSON.stringify({ type: 'start', channels: 2, sampleRate: ctx.sampleRate, deviceId: devSel ? parseInt(devSel[1], 10) : undefined })); };
+            ws.onmessage = function(ev) {
+                if (typeof ev.data !== 'string') {
+                    if (!self.paInNode) return;
+                    const pcm = new Int16Array(ev.data), frames = Math.floor(pcm.length / ch), L = new Float32Array(frames), R = new Float32Array(frames);
+                    for (let k = 0; k < frames; k++) { L[k] = pcm[k * ch] / 32768; R[k] = pcm[k * ch + (ch > 1 ? 1 : 0)] / 32768; }
+                    self.paInNode.port.postMessage([L, R]);
+                    return;
+                }
+                let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+                if (m.type === 'started') {
+                    ch = m.channels;
+                    self.paInNode = new AudioWorkletNode(ctx, 'pa-in', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
+                    self.readAnalyserNode = ctx.createAnalyser();
+                    self.readAnalyserNode.fftSize = 4096;
+                    self.readAnalyserNode.smoothingTimeConstant = 0.6;
+                    self.paInMute = ctx.createGain(); self.paInMute.gain.value = 0;
+                    self.paInNode.connect(self.readAnalyserNode);
+                    self.readAnalyserNode.connect(self.paInMute);
+                    self.paInMute.connect(ctx.destination);
+                    self.log(`PortAudio input LIVE: ${m.hostApi} / ${m.device} @ ${m.sampleRate / 1000} kHz, ${m.channels} ch`, "success");
+                    window.notify(`${/asio/i.test(m.hostApi) ? 'ASIO' : m.hostApi} Input Live: ${m.device}`, "microphone");
+                } else if (m.type === 'error') {
+                    self.log(`PortAudio input error: ${m.message}`, "error");
+                    window.notify("PortAudio input error: " + m.message, "triangle-exclamation");
+                    self.stopPaInput();
+                }
+            };
+            ws.onclose = function() { if (self.paInWs === ws) self.stopPaInput(); };
+            return true;
+        },
+        stopPaInput: function() {
+            if (this.paInNode) { try { this.paInNode.disconnect(); } catch (e) { /* ignore */ } this.paInNode = null; }
+            if (this.paInMute) { try { this.paInMute.disconnect(); } catch (e) { /* ignore */ } this.paInMute = null; }
+            const ws = this.paInWs; this.paInWs = null;
+            if (ws) { try { ws.send(JSON.stringify({ type: 'stop' })); ws.close(); } catch (e) { /* ignore */ } }
         },
 
         // ASIO / host-API output through the local bridge (PortAudio). Taps the master limiter output.
@@ -13174,20 +13411,19 @@ window.navTabs = [
                             }
                             peakPct = (max / 128) * 100;
                         } else {
-                            peakPct = Math.random() * 45 + 15;
+                            peakPct = 0;
                         }
                         const bar = document.getElementById('asio-read-vu-bar');
                         if (bar) bar.style.width = Math.min(100, peakPct * 1.5) + '%';
                         const dbVal = document.getElementById('asio-read-db-val');
                         if (dbVal) {
-                            const db = (20 * Math.log10(Math.max(0.001, peakPct / 100))).toFixed(1);
-                            dbVal.innerText = `${db} dBFS`;
+                            dbVal.innerText = peakPct < 0.1 ? '-INF dBFS' : `${(20 * Math.log10(peakPct / 100)).toFixed(1)} dBFS`;
                         }
 
-                        // Matrix In LEDs
+                        // Matrix In LEDs: lit only for the channels actually carrying signal (the live stream is stereo)
                         for (let i = 1; i <= 16; i++) {
                             const inLed = document.getElementById(`asio-matrix-in-led-${i}`);
-                            if (inLed) inLed.className = Math.random() > 0.3 ? 'w-1.5 h-1.5 rounded-full bg-cyan-400' : 'w-1.5 h-1.5 rounded-full bg-slate-700';
+                            if (inLed) inLed.className = (i <= 2 && peakPct > 0.5) ? 'w-1.5 h-1.5 rounded-full bg-cyan-400' : 'w-1.5 h-1.5 rounded-full bg-slate-700';
                         }
                     }
 
@@ -13200,19 +13436,18 @@ window.navTabs = [
                         if (framesEl) framesEl.innerText = self.framesWritten.toLocaleString();
                         if (bytesEl) bytesEl.innerText = (self.bytesWritten / (1024 * 1024)).toFixed(2) + ' MB';
 
-                        const writePct = self.testToneActive ? 75 : Math.random() * 50 + 20;
+                        const writePct = self.testToneActive ? 75 : self.masterPeakPct();
                         const bar = document.getElementById('asio-write-vu-bar');
                         if (bar) bar.style.width = Math.min(100, writePct) + '%';
                         const dbVal = document.getElementById('asio-write-db-val');
                         if (dbVal) {
-                            const db = (20 * Math.log10(Math.max(0.001, writePct / 100))).toFixed(1);
-                            dbVal.innerText = `${db} dBFS`;
+                            dbVal.innerText = writePct < 0.1 ? '-INF dBFS' : `${(20 * Math.log10(writePct / 100)).toFixed(1)} dBFS`;
                         }
 
-                        // Matrix Out LEDs
+                        // Matrix Out LEDs: lit only for the master L/R pair actually carrying signal
                         for (let i = 1; i <= 16; i++) {
                             const outLed = document.getElementById(`asio-matrix-out-led-${i}`);
-                            if (outLed) outLed.className = Math.random() > 0.25 ? 'w-1.5 h-1.5 rounded-full bg-amber-400' : 'w-1.5 h-1.5 rounded-full bg-slate-700';
+                            if (outLed) outLed.className = (i <= 2 && writePct > 0.5) ? 'w-1.5 h-1.5 rounded-full bg-amber-400' : 'w-1.5 h-1.5 rounded-full bg-slate-700';
                         }
                     }
 
@@ -13650,6 +13885,25 @@ window.navTabs = [
             ctx.fill();
         }
     };
+
+    // Preset dropdowns show "Manual Settings" whenever a control is changed by hand, so the label never claims a preset that is no longer applied.
+    window.bindPresetLabel = function(engine, selectId, setters) {
+        const load = engine.loadPreset;
+        engine.loadPreset = function() {
+            this._loadingPreset = true;
+            try { return load.apply(this, arguments); } finally { this._loadingPreset = false; }
+        };
+        setters.forEach(function(name) {
+            const orig = engine[name];
+            if (typeof orig !== 'function') return;
+            engine[name] = function() {
+                if (!this._loadingPreset) { const sel = document.getElementById(selectId); if (sel) sel.value = 'manual'; }
+                return orig.apply(this, arguments);
+            };
+        });
+    };
+    window.bindPresetLabel(window.studioDynamicsEngine, 'dyn-preset-select', ['setModel', 'setThreshold', 'setRatio', 'setKnee', 'setAttack', 'setRelease', 'setSidechainHpf', 'setParallelMix']);
+    window.bindPresetLabel(window.precisionNoiseGateEngine, 'gate-preset-select', ['setMode', 'setThreshold', 'setRange', 'setHysteresis', 'setAttack', 'setHold', 'setRelease', 'setSidechainLow', 'setSidechainHigh']);
 
     window.renderGateCurve = function() {
         if (window.precisionNoiseGateEngine) window.precisionNoiseGateEngine.renderCurve();
