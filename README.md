@@ -59,6 +59,16 @@ files, shortcuts and autostart entry and leaves downloaded drivers in `%USERPROF
 The installer is not code-signed, so Windows SmartScreen shows a warning ("More info" -> "Run anyway") until you sign it with your own certificate.
 For ASIO / WASAPI audio run `npm run setup` once after installing (needs npm and a C++ toolchain); without it the server runs in web mode.
 
+### Windows installer (.msi)
+`npm run build:msi` builds `dist/AudioMixer-<version>.msi` from the same files as the `.exe` (needs `wixl` from msitools: `apt install wixl` on Linux,
+`brew install msitools` on macOS). It is a per-user package (no administrator rights, installs to `%LOCALAPPDATA%\Programs\AudioMixer`) with the
+same content: server, client, bundled Node.js, Audify, Start Menu shortcuts (including *Verify installation* and *Plugins folder*) and the
+`%USERPROFILE%\AudioMixerPlugins` folder. Install with a double-click or `msiexec /i AudioMixer-1.3.0.msi`; silent: add `/qn`; remove with *Settings > Apps*
+or `msiexec /x`. Features: `Main`, `Shortcuts`, `Autostart` (start the server hidden at login) and `Desktop`; default is all but `Desktop`, e.g.
+`msiexec /i AudioMixer-1.3.0.msi ADDLOCAL=Main,Shortcuts,Desktop` leaves autostart off. A newer `.msi` upgrades an older one in place. It refuses to install
+over the `.exe` version (uninstall that first). Unsigned, like the `.exe`: check `AudioMixer-<version>.msi.sha256` or run `node client/cli.js verify <file>`.
+Built with wixl and checked by unpacking the package and comparing it to the staged files; not yet installed on a real Windows PC.
+
 ### Windows verification scan
 `node client/cli.js verify [--scan]` (Start Menu: *Verify installation (security scan)*) checks an install: every file against `MANIFEST.sha256`
 (changed, missing and unlisted code files are reported), the Authenticode signature of the bundled Node.js runtime (must be the OpenJS Foundation),

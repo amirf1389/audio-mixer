@@ -68,8 +68,13 @@ function checkManifest(root) {
 function checkInstallerFile(file) {
   const res = [];
   const buf = fs.readFileSync(file);
-  res.push(buf.length > 2 && buf[0] === 0x4d && buf[1] === 0x5a ? { level: PASS, title: 'Windows executable (MZ header)', detail: path.basename(file) } : { level: FAIL, title: 'Not a Windows executable', detail: path.basename(file) });
-  res.push(buf.includes(Buffer.from('Nullsoft')) ? { level: PASS, title: 'NSIS installer structure found', detail: '' } : { level: WARN, title: 'Not recognised as an NSIS installer', detail: '' });
+  if (/\.msi$/i.test(file)) {
+    // Windows Installer packages are OLE compound files
+    res.push(buf.length > 8 && buf.subarray(0, 8).equals(Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1])) ? { level: PASS, title: 'Windows Installer package (.msi) structure', detail: path.basename(file) } : { level: FAIL, title: 'Not a Windows Installer package', detail: path.basename(file) });
+  } else {
+    res.push(buf.length > 2 && buf[0] === 0x4d && buf[1] === 0x5a ? { level: PASS, title: 'Windows executable (MZ header)', detail: path.basename(file) } : { level: FAIL, title: 'Not a Windows executable', detail: path.basename(file) });
+    res.push(buf.includes(Buffer.from('Nullsoft')) ? { level: PASS, title: 'NSIS installer structure found', detail: '' } : { level: WARN, title: 'Not recognised as an NSIS installer', detail: '' });
+  }
   const actual = sha256(file);
   const side = file + '.sha256';
   if (fs.existsSync(side)) {

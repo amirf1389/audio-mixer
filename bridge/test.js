@@ -772,3 +772,28 @@ test('verify: native files under bridge/node_modules must be in the manifest', (
   assert.ok(!v.checkManifest(root).some(r => r.level === 'WARN'));
   fsx.rmSync(root, { recursive: true, force: true });
 });
+
+test('msi: stable GUIDs, WiX source covers every staged file, per-user, features and upgrade code', () => {
+  const m = require('../scripts/build-msi');
+  assert.strictEqual(m.guid('a/b.js'), m.guid('a/b.js')); assert.notStrictEqual(m.guid('a/b.js'), m.guid('a/c.js'));
+  assert.match(m.guid('x'), /^[0-9A-F]{8}-[0-9A-F]{4}-5[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/);
+  const stage = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'msi-'));
+  fsx.mkdirSync(pathx.join(stage, 'bridge')); fsx.writeFileSync(pathx.join(stage, 'bridge', 'a & b.js'), 'x'); fsx.writeFileSync(pathx.join(stage, 'LICENSE'), 'MIT');
+  const x = m.wxs({ stage, version: '1.3.0', vbs: '/tmp/x.vbs' });
+  assert.match(x, /InstallScope="perUser"/); assert.match(x, /UpgradeCode="6F3C2B8E-5D41-4A7B-9C0E-2A1D7B64F3A9"/);
+  assert.match(x, /Name="a &amp; b\.js"/); assert.match(x, /Feature Id="Autostart"/); assert.match(x, /Feature Id="Desktop"[^>]*Level="2"/);
+  assert.match(x, /NOT NSISINSTALL/); assert.match(x, /\[%USERPROFILE\]\\AudioMixerPlugins/);
+  assert.strictEqual((x.match(/<File /g) || []).length, 3);                              // 2 staged files + the hidden-start script
+  assert.match(m.rtf('a\\b {c}\nü'), /^\{\\rtf1.*a\\\\b \\\{c\\\}\\par\n\\u252\?\}$/s);
+  fsx.rmSync(stage, { recursive: true, force: true });
+});
+
+test('verify: .msi installer file check', () => {
+  const v = require('../client/verify');
+  const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'vfy-')), f = pathx.join(dir, 'A.msi');
+  fsx.writeFileSync(f, Buffer.concat([Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]), Buffer.alloc(64)]));
+  assert.ok(v.checkInstallerFile(f).every(r => r.level !== 'FAIL' && r.level !== 'WARN'));
+  fsx.writeFileSync(f, 'MZ not an msi');
+  assert.ok(v.checkInstallerFile(f).some(r => r.level === 'FAIL'));
+  fsx.rmSync(dir, { recursive: true, force: true });
+});

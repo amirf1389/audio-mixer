@@ -22,7 +22,8 @@
     "pc:headless": "node client/cli.js --no-open",
     "build:installer": "node scripts/build-installer.js",
     "verify": "node client/cli.js verify",
-    "setup:audify": "cd bridge && npm install audify"
+    "setup:audify": "cd bridge && npm install audify",
+    "build:msi": "node scripts/build-msi.js"
   },
   "engines": {
     "node": ">=18"
