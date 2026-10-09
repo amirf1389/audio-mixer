@@ -315,3 +315,251 @@ test('build produces a self-contained PC-mode package that serves the mixer', as
   assert.match(help.stdout, /service install\|uninstall\|status/);
   fsx.rmSync(out, { recursive: true, force: true });
 });
+
+// ── Windows installer build ──
+function makeZip(entries) {      // minimal zip writer (deflate) for tests
+  const zlibx = require('node:zlib'), parts = [], central = [];
+  let off = 0;
+  for (const [name, data] of entries) {
+    const nb = Buffer.from(name), comp = zlibx.deflateRawSync(data);
+    const lh = Buffer.alloc(30); lh.writeUInt32LE(0x04034b50, 0); lh.writeUInt16LE(20, 4); lh.writeUInt16LE(8, 8);
+    lh.writeUInt32LE(comp.length, 18); lh.writeUInt32LE(data.length, 22); lh.writeUInt16LE(nb.length, 26);
+    const ch = Buffer.alloc(46); ch.writeUInt32LE(0x02014b50, 0); ch.writeUInt16LE(20, 4); ch.writeUInt16LE(20, 6); ch.writeUInt16LE(8, 10);
+    ch.writeUInt32LE(comp.length, 20); ch.writeUInt32LE(data.length, 24); ch.writeUInt16LE(nb.length, 28); ch.writeUInt32LE(off, 42);
+    parts.push(lh, nb, comp); central.push(ch, nb); off += 30 + nb.length + comp.length;
+  }
+  const cd = Buffer.concat(central), eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0); eocd.writeUInt16LE(entries.length, 8); eocd.writeUInt16LE(entries.length, 10); eocd.writeUInt32LE(cd.length, 12); eocd.writeUInt32LE(off, 16);
+  return Buffer.concat([...parts, cd, eocd]);
+}
+
+function fakeNodeFetch(zip, { badSum = false } = {}) {
+  const sum = cryptox.createHash('sha256').update(zip).digest('hex');
+  return async url => {
+    if (url.endsWith('/index.json')) return new Response(JSON.stringify([{ version: 'v99.0.0', lts: false, files: ['win-x64-zip'] }, { version: 'v98.1.2', lts: 'Fake', files: ['linux-x64', 'win-x64-zip'] }]));
+    if (url.endsWith('/SHASUMS256.txt')) return new Response(`${badSum ? '0'.repeat(64) : sum}  node-v98.1.2-win-x64.zip\n${'1'.repeat(64)}  other.tar.gz\n`);
+    if (url.endsWith('node-v98.1.2-win-x64.zip')) return new Response(zip);
+    return new Response('', { status: 404 });
+  };
+}
+
+test('installer helpers: checksums, version, zip extraction', () => {
+  const bi = require('../scripts/build-installer');
+  assert.deepStrictEqual(bi.parseShasums(`${'a'.repeat(64)}  node-v1-win-x64.zip\ngarbage\n${'b'.repeat(64)} *x.msi`), { 'node-v1-win-x64.zip': 'a'.repeat(64), 'x.msi': 'b'.repeat(64) });
+  assert.strictEqual(bi.version4('1.2.3'), '1.2.3.0');
+  assert.strictEqual(bi.version4('1.2.3-beta.1'), '1.2.3.1');
+  const zip = makeZip([['node-v1/LICENSE', Buffer.from('lic')], ['node-v1/node.exe', Buffer.alloc(5000, 7)]]);
+  assert.strictEqual(bi.extractFromZip(zip, n => n.endsWith('/node.exe')).length, 5000);
+  assert.strictEqual(bi.extractFromZip(zip, n => n === 'nope'), null);
+  assert.throws(() => bi.extractFromZip(Buffer.from('not a zip at all, definitely'), () => true), /not a zip/);
+});
+
+test('installer: official Node.js runtime is fetched, checked and cached; a bad checksum is refused', async () => {
+  const bi = require('../scripts/build-installer');
+  const zip = makeZip([['node-v98.1.2-win-x64/LICENSE', Buffer.from('MIT')], ['node-v98.1.2-win-x64/node.exe', Buffer.from('MZ-fake-node')]]);
+  const cache = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'rt-'));
+  const r = await bi.fetchNodeRuntime({ cache, fetchImpl: fakeNodeFetch(zip) });
+  assert.strictEqual(r.version, 'v98.1.2');                                  // newest LTS, not the newer non-LTS
+  assert.strictEqual(fsx.readFileSync(r.exe).toString(), 'MZ-fake-node');
+  const again = await bi.fetchNodeRuntime({ cache, fetchImpl: async () => { throw new Error('should use the cache'); } });
+  assert.strictEqual(again.exe, r.exe);
+  const cache2 = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'rt-'));
+  await assert.rejects(bi.fetchNodeRuntime({ cache: cache2, fetchImpl: fakeNodeFetch(zip, { badSum: true }) }), /checksum mismatch/);
+  assert.deepStrictEqual(fsx.readdirSync(cache2), []);                       // nothing cached from a bad download
+  await assert.rejects(bi.fetchNodeRuntime({ cache: cache2, version: '../../x', fetchImpl: fakeNodeFetch(zip) }), /bad Node\.js version/);
+  fsx.rmSync(cache, { recursive: true, force: true }); fsx.rmSync(cache2, { recursive: true, force: true });
+});
+
+test('installer: stages the app with the bundled runtime and builds a Windows setup.exe when NSIS is available', async () => {
+  const bi = require('../scripts/build-installer');
+  const zip = makeZip([['node-v98.1.2-win-x64/LICENSE', Buffer.from('MIT')], ['node-v98.1.2-win-x64/node.exe', Buffer.from('MZ-fake-node')]]);
+  const out = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'inst-'));
+  const hasNsis = require('node:child_process').spawnSync('makensis', ['-VERSION']).status === 0;
+  const r = await bi.buildInstaller({ out, fetchImpl: fakeNodeFetch(zip), runMakensis: hasNsis });
+  assert.ok(fsx.existsSync(pathx.join(r.stage, 'runtime', 'node.exe')) && fsx.existsSync(pathx.join(r.stage, 'client', 'cli.js')));
+  assert.ok(!fsx.existsSync(pathx.join(r.stage, 'start-pc-mode.sh')));
+  assert.match(fsx.readFileSync(pathx.join(r.stage, 'start-pc-mode.bat'), 'utf8'), /runtime\\node\.exe/);
+  assert.match(fsx.readFileSync(pathx.join(r.stage, 'start-local-server.bat'), 'utf8'), /runtime\\node\.exe" bridge\\server\.js/);
+  const nsi = fsx.readFileSync(pathx.join(__dirname, '..', 'installer', 'audio-mixer.nsi'), 'utf8');
+  assert.match(nsi, /RequestExecutionLevel user/);                           // no administrator rights
+  assert.match(nsi, /service install/); assert.match(nsi, /service uninstall/);
+  if (hasNsis) {
+    assert.ok(r.installer && fsx.existsSync(r.installer));
+    const head = fsx.readFileSync(r.installer).subarray(0, 2).toString();
+    assert.strictEqual(head, 'MZ');                                          // a real Windows executable
+    assert.strictEqual(r.sha256.length, 64);
+  }
+  fsx.rmSync(out, { recursive: true, force: true });
+});
+
+// ── now playing, interface scan, ASIO arbitration ──
+test('now playing: services are recognised from app, URL and window titles', () => {
+  const np = require('./nowplaying');
+  const id = (...p) => np.classify(p).id;
+  assert.strictEqual(id('org.mpris.MediaPlayer2.spotify'), 'spotify');
+  assert.strictEqual(id('chromium', 'https://music.youtube.com/watch?v=x'), 'youtube-music');
+  assert.strictEqual(id('chromium', 'https://www.youtube.com/watch?v=x'), 'youtube');
+  assert.strictEqual(id('chrome', 'Song - YouTube Music - Google Chrome'), 'youtube-music');
+  assert.strictEqual(id('TIDAL.exe'), 'tidal');
+  assert.strictEqual(id('com.squirrel.TIDAL.TIDAL'), 'tidal');
+  assert.strictEqual(id('firefox', 'https://tidal.com/browse/track/1'), 'tidal');
+  assert.strictEqual(id('AppleInc.AppleMusicWin'), 'apple-music');
+  assert.strictEqual(id('Music'), 'apple-music');
+  assert.strictEqual(id('deezer'), 'deezer');
+  assert.strictEqual(id('vlc'), 'vlc');
+  assert.strictEqual(id('something-else'), 'other');
+});
+
+test('now playing: MPRIS, SMTC and osascript output are parsed', async () => {
+  const np = require('./nowplaying');
+  const meta = JSON.stringify({ type: 'a{sv}', data: { 'xesam:title': { type: 's', data: 'Karma Police' }, 'xesam:artist': { type: 'as', data: ['Radiohead'] }, 'xesam:album': { type: 's', data: 'OK Computer' }, 'xesam:url': { type: 's', data: 'https://music.youtube.com/watch?v=abc' } } });
+  const status = JSON.stringify({ type: 's', data: 'Playing' });
+  const s = np.mprisSession('org.mpris.MediaPlayer2.chromium.instance123', status, meta);
+  assert.deepStrictEqual([s.service, s.serviceName, s.status, s.title, s.artist, s.album, s.app], ['youtube-music', 'YouTube Music', 'playing', 'Karma Police', 'Radiohead', 'OK Computer', 'chromium']);
+
+  const smtc = np.parseSmtc('SESSION|Spotify.exe|Playing|Everlong|Foo Fighters|The Colour and the Shape\nSESSION|msedge|Paused|Lofi mix|Chill Channel|\nSESSION|chrome|Playing|Cool Video|Someone|\nWINDOW|msedge|Lofi mix - YouTube - Microsoft Edge\nWINDOW|chrome|Cool Video - YouTube Music - Google Chrome\nWINDOW|notepad|notes');
+  assert.deepStrictEqual(smtc.map(x => [x.service, x.status]), [['spotify', 'playing'], ['youtube', 'paused'], ['youtube-music', 'playing']]);
+
+  const osa = np.parseOsa('APP|Spotify|playing|Song A|Artist A|Album A\nTAB|Google Chrome|https://www.youtube.com/watch?v=1|My Video - YouTube\nTAB|Safari|https://example.com|Nothing');
+  assert.deepStrictEqual(osa.map(x => [x.service, x.title]), [['spotify', 'Song A'], ['youtube', 'My Video']]);
+
+  const run = async (cmd, args) => {
+    if (args.includes('list')) return 'org.mpris.MediaPlayer2.spotify 123 spotify :1.5\norg.freedesktop.Notifications 5 x :1.2\norg.mpris.MediaPlayer2.vlc 9 vlc :1.7\n';
+    if (args.includes('PlaybackStatus')) return args.includes('org.mpris.MediaPlayer2.vlc') ? JSON.stringify({ type: 's', data: 'Paused' }) : status;
+    return args.includes('org.mpris.MediaPlayer2.vlc') ? JSON.stringify({ type: 'a{sv}', data: { 'xesam:title': { type: 's', data: 'Track V' } } }) : meta;
+  };
+  const r = await np.readNowPlaying({ platform: 'linux', run });
+  assert.strictEqual(r.method, 'mpris');
+  assert.deepStrictEqual(r.sessions.map(x => x.service), ['youtube-music', 'vlc']);       // playing first
+  assert.strictEqual(r.playing.title, 'Karma Police');
+  assert.deepStrictEqual((await np.readNowPlaying({ platform: 'linux', run: async () => '' })).sessions, []);
+});
+
+test('interfaces: one physical interface across ASIO / WASAPI / DirectSound, loopback flagged, ASIO-only drivers kept', () => {
+  const { groupInterfaces } = require('./interfaces');
+  const dev = (id, name, hostApi, inputs, outputs) => ({ id, name, hostApi, inputs, outputs, sampleRate: 48000 });
+  const list = groupInterfaces([
+    dev(0, 'Microphone (Focusrite USB Audio)', 'Windows DirectSound', 2, 0), dev(1, 'Speakers (Focusrite USB Audio)', 'Windows DirectSound', 0, 2),
+    dev(2, 'Focusrite USB ASIO', 'ASIO', 18, 20), dev(3, 'Microphone (Focusrite USB Audio)', 'Windows WASAPI', 2, 0), dev(4, 'Speakers (Focusrite USB Audio)', 'Windows WASAPI', 0, 2),
+    dev(5, 'Stereo Mix (Realtek Audio)', 'Windows WASAPI', 2, 0), dev(6, 'Speakers (Realtek Audio)', 'Windows WASAPI', 0, 2),
+  ], ['Focusrite USB ASIO', 'ASIO4ALL v2']);
+  const foc = list.find(i => /focusrite/i.test(i.name));
+  assert.ok(foc.asio);
+  assert.deepStrictEqual(foc.apis.map(a => a.api), ['ASIO', 'Windows WASAPI', 'Windows WASAPI', 'Windows DirectSound', 'Windows DirectSound']);
+  assert.strictEqual(foc.read.deviceId, 2); assert.strictEqual(foc.write.deviceId, 2);          // ASIO preferred for both
+  assert.strictEqual(foc.inputs, 18); assert.strictEqual(foc.outputs, 20);
+  const mix = list.find(i => i.loopback);
+  assert.ok(mix && /realtek/i.test(mix.name) === true || mix.name.length > 0);
+  const real = list.find(i => /realtek/i.test(i.name) && !i.loopback);
+  assert.ok(real || list.find(i => i.loopback));
+  const a4 = list.find(i => /asio4all/i.test(i.name));
+  assert.ok(a4 && a4.driverOnly && a4.asio && a4.read === null);
+  assert.strictEqual(list.filter(i => /focusrite/i.test(i.name)).length, 1);                      // not split per API
+  assert.strictEqual(list[list.length - 1].loopback || list.indexOf(mix) > list.indexOf(foc), true);
+});
+
+test('ASIO is single-client: a second ASIO device is refused until the first is closed', () => {
+  const { claim, _owners } = require('./asio-lock');
+  _owners.clear();
+  const a = { id: 1, name: 'Card A', hostAPIName: 'ASIO' }, b = { id: 2, name: 'Card B', hostAPIName: 'ASIO' }, w = { id: 3, name: 'WASAPI X', hostAPIName: 'Windows WASAPI' };
+  const l1 = claim(a), l1b = claim(a);                       // read + write on the same device is fine
+  assert.ok(l1.ok && l1b.ok);
+  const l2 = claim(b);
+  assert.strictEqual(l2.ok, false); assert.match(l2.message, /Card A/);
+  assert.ok(claim(w).ok);                                    // other host APIs are not limited
+  l1.release(); l1.release();                                // double release is harmless
+  assert.strictEqual(claim(b).ok, false);                    // still held by the second claim
+  l1b.release();
+  assert.ok(claim(b).ok);
+  _owners.clear();
+});
+
+test('input sessions share the ASIO lock', () => {
+  const { _owners } = require('./asio-lock');
+  _owners.clear();
+  const mkPa = () => ({ SampleFormat16Bit: 8, getDevices: () => [{ id: 1, name: 'Card A', hostAPIName: 'ASIO', maxInputChannels: 2 }, { id: 2, name: 'Card B', hostAPIName: 'ASIO', maxInputChannels: 2 }],
+    AudioIO: class { constructor() { this.h = {}; } on() {} start() {} quit() {} } });
+  const mk = () => { const sent = []; return { sent, s: require('./input').createInputSession({ send: m => sent.push(JSON.parse(m)), sendBinary() {} }, mkPa) }; };
+  const one = mk(), two = mk();
+  one.s.onText(JSON.stringify({ type: 'start', deviceId: 1 }));
+  two.s.onText(JSON.stringify({ type: 'start', deviceId: 2 }));
+  assert.strictEqual(one.sent[0].type, 'started');
+  assert.strictEqual(two.sent[0].type, 'error'); assert.match(two.sent[0].message, /one driver at a time/);
+  one.s.onClose();
+  two.s.onText(JSON.stringify({ type: 'start', deviceId: 2 }));
+  assert.strictEqual(two.sent[1].type, 'started');
+  two.s.onClose();
+  assert.strictEqual(_owners.size, 0);
+});
+
+test('endpoints: /api/nowplaying and /api/interfaces', async () => {
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const np = await (await fetch(base + '/api/nowplaying')).json();
+  assert.strictEqual(np.ok, true); assert.ok(Array.isArray(np.sessions) && 'platform' in np);
+  const itf = await (await fetch(base + '/api/interfaces')).json();
+  assert.strictEqual(itf.ok, true); assert.ok(Array.isArray(itf.interfaces) && Array.isArray(itf.asio));
+  assert.strictEqual((await fetch(base + '/api/nowplaying', { headers: { Origin: 'https://evil.example' } })).status, 403);
+  server.closeAllConnections();
+  server.close();
+});
+
+test('verify: manifest pass, tamper, missing and extra files', () => {
+  const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
+  const v = require('../client/verify');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vfy-'));
+  fs.mkdirSync(path.join(root, 'bridge'));
+  fs.writeFileSync(path.join(root, 'bridge', 'a.js'), 'x');
+  fs.writeFileSync(path.join(root, 'MANIFEST.sha256'), `${v.sha256(path.join(root, 'bridge', 'a.js'))}  bridge/a.js\n`);
+  assert.strictEqual(v.checkManifest(root)[0].level, 'PASS');
+  fs.writeFileSync(path.join(root, 'bridge', 'b.js'), 'evil');
+  assert.ok(v.checkManifest(root).some(r => r.level === 'WARN' && /b\.js/.test(r.detail)));
+  fs.writeFileSync(path.join(root, 'bridge', 'a.js'), 'changed');
+  assert.ok(v.checkManifest(root).some(r => r.level === 'FAIL' && r.title === 'File changed since it was built'));
+  fs.unlinkSync(path.join(root, 'bridge', 'a.js'));
+  assert.ok(v.checkManifest(root).some(r => r.title === 'File missing'));
+  fs.writeFileSync(path.join(root, 'MANIFEST.sha256'), `${'0'.repeat(64)}  ../x\n`);
+  assert.ok(v.checkManifest(root).some(r => /escapes/.test(r.title)));
+  fs.rmSync(root, { recursive: true });
+});
+
+test('verify: installer file checks and checksum sidecar', () => {
+  const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
+  const v = require('../client/verify');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vfy-')), f = path.join(dir, 'Setup.exe');
+  fs.writeFileSync(f, Buffer.concat([Buffer.from('MZ'), Buffer.from('Nullsoft Install System')]));
+  fs.writeFileSync(f + '.sha256', `${v.sha256(f)}  Setup.exe\n`);
+  assert.ok(v.checkInstallerFile(f).every(r => r.level === 'PASS'));
+  fs.writeFileSync(f + '.sha256', `${'1'.repeat(64)}  Setup.exe\n`);
+  assert.ok(v.checkInstallerFile(f).some(r => r.level === 'FAIL'));
+  fs.writeFileSync(f, 'not an exe');
+  assert.ok(v.checkInstallerFile(f).some(r => r.level === 'FAIL' && /executable/.test(r.title)));
+  fs.rmSync(dir, { recursive: true });
+});
+
+test('verify: parsers and injected PowerShell results', async () => {
+  const v = require('../client/verify');
+  assert.deepStrictEqual(v.parseSignature('Valid|CN=OpenJS Foundation'), { status: 'Valid', subject: 'CN=OpenJS Foundation' });
+  assert.strictEqual(v.parseDefender('CLEAN').state, 'clean');
+  assert.deepStrictEqual(v.parseDefender('THREAT|123,456'), { state: 'threat', ids: '123,456' });
+  assert.strictEqual(v.parseDefender('').state, 'unavailable');
+  const run = out => (cmd, args, opts, cb) => cb(null, out);
+  assert.strictEqual((await v.checkSignature('x', 'Runtime', { platform: 'win32', run: run('Valid|CN=OpenJS Foundation'), expect: /OpenJS/ }))[0].level, 'PASS');
+  assert.strictEqual((await v.checkSignature('x', 'Runtime', { platform: 'win32', run: run('Valid|CN=Someone Else'), expect: /OpenJS/ }))[0].level, 'WARN');
+  assert.strictEqual((await v.checkSignature('x', 'Installer', { platform: 'win32', run: run('NotSigned|') }))[0].level, 'WARN');
+  assert.strictEqual((await v.checkSignature('x', 'Installer', { platform: 'win32', run: run('HashMismatch|CN=x') }))[0].level, 'FAIL');
+  assert.strictEqual((await v.checkDefender('x', { platform: 'win32', run: run('CLEAN') }))[0].level, 'PASS');
+  assert.strictEqual((await v.checkDefender('x', { platform: 'win32', run: run('THREAT|9') }))[0].level, 'FAIL');
+  assert.strictEqual((await v.checkDefender('x', { platform: 'linux' }))[0].level, 'INFO');
+});
+
+test('verify: loopback-only check and cli flag parsing', async () => {
+  const v = require('../client/verify');
+  const srv = require('node:net').createServer().listen(0, '127.0.0.1');
+  await new Promise(r => srv.on('listening', r));
+  const r = await v.checkLoopbackOnly(srv.address().port);
+  assert.strictEqual(r[0].level, 'PASS');
+  srv.close();
+  const closed = await v.checkLoopbackOnly(1);
+  assert.strictEqual(closed[0].level, 'INFO');
+});

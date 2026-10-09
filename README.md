@@ -41,6 +41,45 @@ and are never started automatically. See `bridge/README.md` for the server's API
 | `npm run service:install` / `service:uninstall` | start the server at login / remove it |
 | `npm run build` | build the portable package in `dist/audio-mixer-pc/` (page + server + client, SHA-256 manifest) |
 | `npm run build:archive` | same, plus `dist/audio-mixer-pc-<version>.tar.gz` to copy to another PC |
+| `npm run build:installer` | build the Windows installer `dist/AudioMixer-Setup-<version>.exe` (see below) |
 | `npm test` | run the server tests |
 
 Copy the built folder (or the archive) to any PC with Node.js 18+ and run `start-pc-mode.bat` (Windows) or `./start-pc-mode.sh`.
+
+### Windows installer (.exe)
+`npm run build:installer` builds `dist/AudioMixer-Setup-<version>.exe` with [NSIS](https://nsis.sourceforge.io/) (Windows: install NSIS; Linux: `apt install nsis`;
+macOS: `brew install makensis`). It needs internet once to fetch the official Node.js LTS runtime for Windows from nodejs.org (checked against its
+`SHASUMS256.txt`, cached in `dist/cache`; `NODE_VERSION=v22.x.y` pins a version).
+
+The installer is per-user (no administrator rights) and bundles that Node.js runtime, so the target PC needs nothing installed. It installs to
+`%LOCALAPPDATA%\Programs\AudioMixer` and offers: Start Menu shortcuts (*Audio Mixer (PC mode)* and *local server only*), an optional desktop
+shortcut, and *Start the local server when I log in* (the autostart from `service install`, using the bundled Node.js). The uninstaller removes the
+files, shortcuts and autostart entry and leaves downloaded drivers in `%USERPROFILE%\AudioMixerDrivers`. `/S` installs silently.
+
+The installer is not code-signed, so Windows SmartScreen shows a warning ("More info" -> "Run anyway") until you sign it with your own certificate.
+For ASIO / WASAPI audio run `npm run setup` once after installing (needs npm and a C++ toolchain); without it the server runs in web mode.
+
+### Windows verification scan
+`node client/cli.js verify [--scan]` (Start Menu: *Verify installation (security scan)*) checks an install: every file against `MANIFEST.sha256`
+(changed, missing and unlisted code files are reported), the Authenticode signature of the bundled Node.js runtime (must be the OpenJS Foundation),
+that the server listens on loopback only (not on any LAN address), and with `--scan` runs a Microsoft Defender custom scan of the folder.
+`node client/cli.js verify path\to\AudioMixer-Setup-1.2.0.exe [--scan]` checks a downloaded installer: PE/NSIS structure, its SHA-256 against the
+`.sha256` file next to it, signature and Defender. Exit code 0 = verified. Manual check in PowerShell:
+`Get-FileHash .\AudioMixer-Setup-1.2.0.exe -Algorithm SHA256` and `Get-AuthenticodeSignature .\AudioMixer-Setup-1.2.0.exe`.
+The installer in `releases/` is unsigned, so the signature check reports a warning, not a pass; the SHA-256 is the proof of integrity.
+
+## Live sources, music / mic FFT and interface auto-scan (LIVE SOURCES tab)
+- **Now playing (API mode)**: with PC mode the server reads your operating system's media sessions and recognises **Spotify, YouTube, YouTube Music,
+  TIDAL, Apple Music, Amazon Music, Deezer, SoundCloud, Qobuz, Pandora, VLC, foobar2000, MusicBee** and more (Windows: System Media Transport Controls,
+  macOS: Spotify / Music apps and the active Chrome / Safari / Edge / Brave tab, Linux: MPRIS). No accounts, tokens or network access are used.
+- **FFT spectrum for music**: *Share system / tab audio* (browser) or, in PC mode, a loopback interface (Stereo Mix, monitor, virtual cable) is used
+  automatically when music starts. **FFT spectrum for mic / audio interface**: any interface that is detected is read and shown as soon as the audio
+  engine runs (browser microphones need the permission once).
+- **Audio interface auto-scan**: every 5 seconds and on plug / unplug the server lists each interface once, with all its host APIs (ASIO, WASAPI,
+  DirectSound, WDM-KS, MME, Core Audio, ALSA, JACK). New interfaces are enabled for **READ and WRITE** automatically (switchable), **ENABLE ALL ASIO**
+  turns on every ASIO interface. ASIO drivers are single-client, so when one is already open the next interface falls back to WASAPI / Core Audio / ALSA.
+  WRITE sends the master mix to each enabled interface; READ can pick any input pair of multichannel interfaces.
+- **Virtual mixer patch**: *Auto-patch live sources* puts each read interface on a stereo pair of channels from CH 1 and the music source on CH 31 / 32,
+  so everything runs through the BUS & MATRIX mixer, EQ, dynamics and the phase / level tools.
+- Endpoints: `GET /api/nowplaying`, `GET /api/interfaces` (see `bridge/README.md`). Not verified on real Windows / macOS hardware; the Linux path was
+  tested with a fake D-Bus and a stubbed PortAudio.

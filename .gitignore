@@ -77,3 +77,5 @@ deploy/nginx/logs/
 
 # PC-mode build output
 dist/
+
+!releases/*.exe

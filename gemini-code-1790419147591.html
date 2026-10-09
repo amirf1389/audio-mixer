@@ -713,6 +713,7 @@ window.navTabs = [
             { group: 'METER', id: 'osc', text: 'SCOPE', icon: 'fa-solid fa-wave-square', color: 'text-lime-400' },
             { group: 'METER', id: 'phase', text: 'PHASE', icon: 'fa-solid fa-yin-yang', color: 'text-indigo-400' },
             { group: 'SOURCE', id: 'media', text: 'STREAM & MEDIA', icon: 'fa-solid fa-play', color: 'text-cyan-400' },
+            { group: 'SOURCE', id: 'live', text: 'LIVE SOURCES', icon: 'fa-solid fa-satellite-dish', color: 'text-fuchsia-400' },
             { group: 'SOURCE', id: 'ai', text: 'AI MIX', icon: 'fa-solid fa-brain', color: 'text-rose-400' },
             { group: 'SOURCE', id: 'tools', text: 'TOOLS', icon: 'fa-solid fa-screwdriver-wrench', color: 'text-lime-400' },
             { group: 'SOURCE', id: 'plugins', text: 'PLUGINS', icon: 'fa-solid fa-puzzle-piece', color: 'text-purple-400' },
@@ -4960,6 +4961,76 @@ window.navTabs = [
                 </div>
 
             </div>
+            </div>`;
+
+            // 14b. LIVE SOURCES: now playing, music + mic FFT, audio-interface auto scan (tab-live)
+            htmlString += `
+            <div id="tab-live" class="tab-content tab-hidden">
+              <div class="page-scroll-inner w-full max-w-7xl mx-auto">
+                <div class="glass-panel p-3 md:p-4 rounded-xl wing-bezel flex flex-col gap-3 font-mono text-xs">
+
+                  <div class="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-white/10">
+                    <div class="flex items-center gap-2">
+                      <div class="w-8 h-8 rounded-lg bg-fuchsia-500/20 border border-fuchsia-500/40 flex items-center justify-center text-fuchsia-400"><i class="fa-solid fa-satellite-dish"></i></div>
+                      <div>
+                        <h3 class="text-xs font-black text-white font-wing tracking-wider uppercase">LIVE SOURCES &amp; AUDIO INTERFACES</h3>
+                        <span class="text-[7.5px] text-slate-400">NOW PLAYING (SPOTIFY &bull; YOUTUBE &bull; YOUTUBE MUSIC &bull; TIDAL &bull; MORE) &bull; MUSIC + MIC FFT &bull; AUTO-SCAN ASIO / WASAPI READ &amp; WRITE</span>
+                      </div>
+                    </div>
+                    <span id="ls-pc" class="px-2 py-0.5 rounded text-[7.5px] font-bold border bg-amber-500/15 text-amber-400 border-amber-500/40">WEB MODE</span>
+                  </div>
+
+                  <div class="grid grid-cols-1 xl:grid-cols-2 gap-3">
+                    <!-- Now playing -->
+                    <div class="bg-black/40 border border-white/10 rounded-lg p-2.5 space-y-2">
+                      <div class="flex items-center justify-between text-[8px]"><span class="font-black text-fuchsia-400 uppercase"><i class="fa-solid fa-music mr-1"></i>NOW PLAYING (API MODE)</span><span class="text-slate-500">OS MEDIA SESSIONS VIA LOCAL SERVER</span></div>
+                      <div id="ls-now" class="space-y-1"></div>
+                      <div id="ls-music-hint" class="hidden text-[7.5px] text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded px-2 py-1"></div>
+                      <div class="flex flex-wrap items-center gap-2 text-[7.5px]">
+                        <button id="ls-share" class="px-2.5 py-1 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 font-black uppercase hover:bg-emerald-500 hover:text-black transition">SHARE SYSTEM / TAB AUDIO</button>
+                        <button id="ls-music-stop" class="px-2.5 py-1 rounded bg-white/5 text-slate-300 border border-white/10 font-bold uppercase">STOP</button>
+                        <span id="ls-music-state" class="text-slate-400 font-bold">NO MUSIC SOURCE</span>
+                      </div>
+                    </div>
+                    <!-- FFT lines -->
+                    <div class="space-y-3">
+                      <div class="bg-black/40 border border-white/10 rounded-lg p-2.5 space-y-1">
+                        <div class="flex justify-between text-[8px]"><span class="font-black text-emerald-400 uppercase">FFT SPECTRUM: MUSIC</span><span id="ls-fft-music-peak" class="text-emerald-300 font-bold">NO SOURCE</span></div>
+                        <canvas id="ls-fft-music" class="w-full bg-black rounded border border-white/10" style="height:110px;"></canvas>
+                      </div>
+                      <div class="bg-black/40 border border-white/10 rounded-lg p-2.5 space-y-1">
+                        <div class="flex flex-wrap justify-between items-center gap-1 text-[8px]"><span class="font-black text-cyan-400 uppercase">FFT SPECTRUM: MIC / AUDIO INTERFACE</span>
+                          <span class="flex items-center gap-2"><select id="ls-mic-sel" aria-label="Interface for the FFT" class="bg-black text-slate-200 border border-white/15 rounded text-[7px] px-1 py-0.5 max-w-[190px]"></select><span id="ls-fft-mic-peak" class="text-cyan-300 font-bold">NO SOURCE</span></span></div>
+                        <canvas id="ls-fft-mic" class="w-full bg-black rounded border border-white/10" style="height:110px;"></canvas>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Interfaces -->
+                  <div class="bg-black/40 border border-white/10 rounded-lg p-2.5 space-y-2">
+                    <div class="flex flex-wrap items-center gap-2 text-[7.5px]">
+                      <span class="font-black text-amber-400 uppercase text-[8px]"><i class="fa-solid fa-plug mr-1"></i>AUDIO INTERFACES (AUTO-SCAN)</span>
+                      <button id="ls-scan-now" class="px-2 py-1 rounded bg-white/10 text-slate-200 border border-white/20 font-bold">SCAN NOW</button>
+                      <button id="ls-enable-asio" class="px-2 py-1 rounded bg-amber-400 text-black font-black">ENABLE ALL ASIO</button>
+                      <button id="ls-enable-all" class="px-2 py-1 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 font-bold">ENABLE ALL READ + WRITE</button>
+                      <label class="flex items-center gap-1 text-slate-300 cursor-pointer"><input type="checkbox" id="ls-scan" class="accent-amber-400"> SCAN EVERY 5 S</label>
+                      <label class="flex items-center gap-1 text-slate-300 cursor-pointer"><input type="checkbox" id="ls-auto" class="accent-emerald-400"> ENABLE NEW INTERFACES AUTOMATICALLY</label>
+                      <label class="flex items-center gap-1 text-slate-300 cursor-pointer"><input type="checkbox" id="ls-asio-only" class="accent-amber-400"> ASIO ONLY</label>
+                    </div>
+                    <div id="ls-ifaces" class="space-y-1"></div>
+                    <div class="text-[7px] text-slate-500 leading-relaxed">ASIO drivers allow one open device at a time: when an ASIO interface is busy, the next one is opened through WASAPI / Core Audio / ALSA instead. WRITE sends the master mix to each enabled interface. Reading and writing physical interfaces needs PC mode with the PortAudio module (<b>npm run setup</b>); microphones also work in the browser.</div>
+                  </div>
+
+                  <!-- Mixer patch -->
+                  <div class="bg-black/40 border border-white/10 rounded-lg p-2.5 flex flex-wrap items-center gap-2 text-[7.5px]">
+                    <span class="font-black text-cyan-400 uppercase text-[8px]"><i class="fa-solid fa-sliders mr-1"></i>VIRTUAL MIXER PATCH</span>
+                    <button id="ls-patch" class="px-2.5 py-1 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-black uppercase">AUTO-PATCH LIVE SOURCES</button>
+                    <button id="ls-unpatch" class="px-2.5 py-1 rounded bg-white/5 text-slate-300 border border-white/10 font-bold uppercase">UNPATCH</button>
+                    <span class="text-slate-500">Each read interface goes to a stereo pair of channels from CH 1; music goes to CH 31 / 32. Use headphones with microphones.</span>
+                  </div>
+
+                </div>
+              </div>
             </div>`;
 
             // 15. STUDIO TOOLS & UTILITY SUITE (tab-tools)
@@ -15200,6 +15271,503 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
         const origSwitch = window.switchTab;
         window.switchTab = function(tabId) { const r = origSwitch.apply(this, arguments); if (tabId === 'bus') { M.ensureGraph(); M.render(); } return r; };
         document.addEventListener('DOMContentLoaded', () => M.init());
+    })();
+    </script>
+    <script>
+    // ─── LIVE SOURCES: now playing (Spotify / YouTube / YouTube Music / TIDAL ...), music + mic/interface FFT, audio-interface auto scan with ASIO read / write ───
+    // Browser-only mode: microphones through Web Audio, system / tab audio through screen share.
+    // PC mode (local system server): OS media sessions, every ASIO / WASAPI / Core Audio / ALSA interface, loopback devices as music source.
+    (function() {
+        const KEY = 'halx_live_cfg';
+        const esc = v => window.escapeHtml(v);
+        const load = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch (e) { return d; } };
+        const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
+        const API_RANK = [/asio/i, /wasapi/i, /core ?audio/i, /jack/i, /alsa/i, /wdm|kernel/i, /direct ?sound/i, /mme/i];
+        const apiRank = a => { const i = API_RANK.findIndex(r => r.test(a || '')); return i < 0 ? API_RANK.length : i; };
+        const baseName = n => { const m = /^(?:microphone|speakers|headphones|headset|line in|line out|line|input|output|digital audio(?: \(s\/pdif\))?|stereo mix|analog|aux)\s*\((.+)\)\s*$/i.exec(String(n || '').trim()); return (m ? m[1] : String(n || '')).trim(); };
+        const keyOf = n => { const k = baseName(n).toLowerCase().replace(/\b(asio|wasapi|audio|driver|usb|input|output|microphone|speakers?|headphones?|line|in|out|device|class|compliant|\d+-?\d*)\b/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim(); return k || baseName(n).toLowerCase(); };
+        const LOOPBACK = /stereo mix|what u hear|wave out mix|monitor of|loopback|virtual cable|cable output|blackhole|soundflower|voicemeeter out/i;
+        const ICONS = { spotify: 'fa-brands fa-spotify', youtube: 'fa-brands fa-youtube', 'youtube-music': 'fa-brands fa-youtube', 'apple-music': 'fa-brands fa-apple', 'amazon-music': 'fa-brands fa-amazon', soundcloud: 'fa-brands fa-soundcloud' };
+
+        const L = window.liveSources = {
+            cfg: Object.assign({ auto: true, scan: true, asioOnly: false, enabled: {} }, load(KEY, {})),
+            bridgeUrl: null, interfaces: [], known: null, status: {}, caps: new Map(), writes: new Map(),
+            music: null, pair: {}, nowPlaying: [], lastPlayingKey: '', timers: [], sink: null, tapNode: null, tapReady: false, hold: {}, muteMain: false, patched: [],
+
+            persist() { save(KEY, this.cfg); },
+            async ensureCtx() {
+                if (!window.state.ctx && typeof initAudioEngine === 'function') { try { await initAudioEngine(); } catch (e) { /* ignore */ } }
+                const c = window.state.ctx;
+                if (c && c.state === 'suspended') { try { await c.resume(); } catch (e) { /* ignore */ } }
+                if (c && !this.sink) { this.sink = c.createGain(); this.sink.gain.value = 0; this.sink.connect(c.destination); }
+                return c;
+            },
+            wsUrl(p) { return this.bridgeUrl.replace(/^http/, 'ws') + p; },
+
+            // ── local system server ──
+            async findBridge() {
+                if (window.universalAsioSdk && window.universalAsioSdk.bridgeUrl) { this.bridgeUrl = window.universalAsioSdk.bridgeUrl; return this.bridgeUrl; }
+                const bases = [];
+                if (/^https?:$/.test(location.protocol) && /^(localhost|127\.0\.0\.1)$/.test(location.hostname)) bases.push(location.origin);
+                bases.push('http://localhost:8765');
+                for (const b of bases) {
+                    try { const r = await fetch(b + '/api/status', { cache: 'no-store' }); const j = await r.json(); if (j && j.name === 'audio-mixer-bridge') { this.bridgeUrl = b; return b; } } catch (e) { /* next */ }
+                }
+                this.bridgeUrl = null; return null;
+            },
+
+            // ── interface scan (browser devices + every host API on the PC) ──
+            async browserDevices() {
+                if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return [];
+                try { return await navigator.mediaDevices.enumerateDevices(); } catch (e) { return []; }
+            },
+            async scan() {
+                const found = new Map();
+                const bridge = await this.findBridge();
+                if (bridge) {
+                    try {
+                        const j = await (await fetch(bridge + '/api/interfaces', { cache: 'no-store' })).json();
+                        if (j && j.ok) (j.interfaces || []).forEach(i => found.set(i.key, Object.assign({}, i, { apiNames: i.apis.map(a => a.api) })));
+                        this.portaudio = !!(j && j.portaudio);
+                    } catch (e) { /* offline */ }
+                }
+                (await this.browserDevices()).forEach(d => {
+                    if (d.kind !== 'audioinput' && d.kind !== 'audiooutput') return;
+                    if (d.deviceId === 'default' || d.deviceId === 'communications') return;
+                    const label = d.label || '';
+                    const key = label ? keyOf(label) + (LOOPBACK.test(label) ? ':loopback' : '') : 'browser-' + String(d.deviceId).slice(0, 8);
+                    const it = found.get(key) || { key, name: baseName(label) || (d.kind === 'audioinput' ? 'Audio input (allow the microphone to see names)' : 'Audio output'), inputs: 0, outputs: 0, loopback: LOOPBACK.test(label), asio: false, apis: [], read: null, write: null, apiNames: [] };
+                    it.browser = it.browser || {};
+                    if (d.kind === 'audioinput') { it.browser.inId = d.deviceId; it.inputs = Math.max(it.inputs, 2); } else { it.browser.outId = d.deviceId; it.outputs = Math.max(it.outputs, 2); }
+                    if (it.apiNames.indexOf('Web Audio') < 0) it.apiNames.push('Web Audio');
+                    found.set(key, it);
+                });
+                const list = Array.from(found.values()).sort((a, b) => (a.loopback - b.loopback) || ((b.asio ? 1 : 0) - (a.asio ? 1 : 0)) || a.name.localeCompare(b.name));
+                // newly appeared interfaces (not on the first scan)
+                if (this.known) list.filter(i => !this.known.has(i.key)).forEach(i => { window.notify('Audio interface detected: ' + i.name + (i.asio ? ' (ASIO)' : ''), 'plug'); });
+                const goneKeys = this.known ? Array.from(this.known).filter(k => !found.has(k)) : [];
+                goneKeys.forEach(k => { if (this.caps.has(k)) this.stopRead(k); if (this.writes.has(k)) this.stopWrite(k); });
+                this.known = new Set(found.keys());
+                this.interfaces = list;
+                if (this.cfg.auto) this.autoEnable(); else this.applyEnabled();
+                this.render();
+            },
+            autoEnable() {
+                let changed = false;
+                this.interfaces.forEach(i => {
+                    if (this.cfg.enabled[i.key]) return;
+                    if (this.cfg.asioOnly && !i.asio) return;
+                    this.cfg.enabled[i.key] = { read: i.inputs > 0 || !!i.loopback, write: i.outputs > 0 && !i.loopback };
+                    changed = true;
+                });
+                if (changed) this.persist();
+                this.applyEnabled();
+            },
+            // opens / closes streams so they match the READ / WRITE switches
+            applyEnabled() {
+                this.interfaces.forEach(i => {
+                    const e = this.cfg.enabled[i.key] || {};
+                    if (i.loopback) { if (e.read && !this.caps.has(i.key) && !this.music && this.cfg.auto) this.startRead(i, { music: true }); }
+                    else if (e.read && !this.caps.has(i.key)) this.startRead(i);
+                    if (!e.read && this.caps.has(i.key)) this.stopRead(i.key);
+                    if (e.write && !this.writes.has(i.key) && i.write && this.bridgeUrl) this.startWrite(i);
+                    if (!e.write && this.writes.has(i.key)) this.stopWrite(i.key);
+                });
+            },
+            setEnabled(key, what, on) {
+                const e = this.cfg.enabled[key] || (this.cfg.enabled[key] = { read: false, write: false });
+                e[what] = !!on; this.persist(); this.applyEnabled(); this.render();
+            },
+            enableAll(asioOnly) {
+                this.interfaces.forEach(i => {
+                    if (asioOnly && !i.asio) return;
+                    this.cfg.enabled[i.key] = { read: i.inputs > 0 || !!i.loopback, write: i.outputs > 0 && !i.loopback };
+                });
+                this.persist(); this.applyEnabled(); this.render();
+                window.notify(asioOnly ? 'All ASIO interfaces enabled (read + write)' : 'All audio interfaces enabled (read + write)', 'plug-circle-check');
+            },
+
+            // ── capture (READ) ──
+            makeCap(i, node, how, extra) {
+                const c = window.state.ctx, an = c.createAnalyser();
+                an.fftSize = 4096; an.smoothingTimeConstant = 0.6;
+                node.connect(an); an.connect(this.sink);
+                return Object.assign({ key: i.key, name: i.name, node, analyser: an, how, stop() {} }, extra);
+            },
+            async startRead(i, opts) {
+                const o = opts || {};
+                const st0 = this.status[i.key];
+                if (this.caps.has(i.key) || (st0 && st0.busy)) return;
+                if (!o.userClick && st0 && st0.err && Date.now() - st0.at < 30000) return;   // do not hammer a device that just failed
+                if (!window.state.ctx && !o.userClick) return;                                // never start the engine behind the user's back
+                const ctx = await this.ensureCtx();
+                if (!ctx) return this.setStatus(i.key, 'Start the audio engine first', true);
+                this.setStatus(i.key, 'opening...', false, true);
+                let cap = null, lastErr = '';
+                // 1) every host API of the interface, best first (ASIO, WASAPI, Core Audio, ...); ASIO busy -> next API
+                if (this.bridgeUrl && this.portaudio && i.apis && i.apis.length) {
+                    const tries = i.apis.filter(a => a.inputs > 0).sort((a, b) => apiRank(a.api) - apiRank(b.api));
+                    for (const a of tries) {
+                        try { cap = await this.bridgeRead(i, a); break; } catch (e) { lastErr = e.message; }
+                    }
+                }
+                // 2) browser microphone (only without a prompt when permission is already granted; a click on READ may prompt)
+                if (!cap && i.browser && i.browser.inId) {
+                    let granted = o.userClick;
+                    try { if (!granted && navigator.permissions) granted = (await navigator.permissions.query({ name: 'microphone' })).state === 'granted'; } catch (e) { /* unsupported */ }
+                    if (granted) { try { cap = await this.browserRead(i); } catch (e) { lastErr = e.message; } }
+                    else lastErr = 'click READ to allow the microphone';
+                }
+                if (!cap) return this.setStatus(i.key, lastErr || 'no readable device', true);
+                cap.music = !!o.music;
+                this.caps.set(i.key, cap);
+                if (o.music) { this.music = cap; }
+                this.setStatus(i.key, 'READING via ' + cap.how, false);
+                // the FFT follows the best interface: ASIO first, then whatever opened first
+                if (!i.loopback) {
+                    const cur = this.mic && this.caps.get(this.mic);
+                    if (!cur || (/ASIO/.test(cap.how) && !/ASIO/.test(cur.how))) this.mic = i.key;
+                }
+                this.render();
+            },
+            async browserRead(i) {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: i.browser.inId }, echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: { ideal: 2 } } });
+                const src = window.state.ctx.createMediaStreamSource(stream);
+                const cap = this.makeCap(i, src, 'Web Audio', { stream });
+                cap.stop = () => { try { stream.getTracks().forEach(t => t.stop()); src.disconnect(); cap.analyser.disconnect(); } catch (e) { /* gone */ } };
+                return cap;
+            },
+            bridgeRead(i, a) {
+                const self = this, ctx = window.state.ctx;
+                return new Promise((resolve, reject) => {
+                    self.ensureInWorklet().then(() => {
+                        const pair = self.pair[i.key] || 0, want = Math.min(Math.max(pair * 2 + 2, 2), Math.max(2, a.inputs));
+                        const ws = new WebSocket(self.wsUrl('/ws/input')); ws.binaryType = 'arraybuffer';
+                        let node = null, ch = 2, done = false;
+                        const fail = m => { if (!done) { done = true; try { ws.close(); } catch (e) { /* ignore */ } reject(new Error(m)); } };
+                        ws.onopen = () => ws.send(JSON.stringify({ type: 'start', channels: want, sampleRate: ctx.sampleRate, deviceId: a.deviceId }));
+                        ws.onerror = () => fail('local server connection failed');
+                        ws.onclose = () => { if (!done) fail('closed'); else if (self.caps.get(i.key) && self.caps.get(i.key).ws === ws) self.stopRead(i.key); };
+                        ws.onmessage = ev => {
+                            if (typeof ev.data !== 'string') {
+                                if (!node) return;
+                                const pcm = new Int16Array(ev.data), frames = Math.floor(pcm.length / ch), L = new Float32Array(frames), R = new Float32Array(frames);
+                                const l0 = Math.min(pair * 2, ch - 1), r0 = Math.min(pair * 2 + 1, ch - 1);
+                                for (let k = 0; k < frames; k++) { L[k] = pcm[k * ch + l0] / 32768; R[k] = pcm[k * ch + r0] / 32768; }
+                                node.port.postMessage([L, R]);
+                                return;
+                            }
+                            let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+                            if (m.type === 'started' && !done) {
+                                done = true; ch = m.channels;
+                                node = new AudioWorkletNode(ctx, 'ls-in', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
+                                const cap = self.makeCap(i, node, (/asio/i.test(m.hostApi) ? 'ASIO' : m.hostApi) + (want > 2 ? ' CH ' + (pair * 2 + 1) + '-' + (pair * 2 + 2) : ''), { ws, bridge: true });
+                                cap.stop = () => { try { ws.send(JSON.stringify({ type: 'stop' })); ws.close(); node.disconnect(); cap.analyser.disconnect(); } catch (e) { /* gone */ } };
+                                resolve(cap);
+                            } else if (m.type === 'error') {
+                                if (!done) fail(m.message);
+                                else { window.notify('Interface read error: ' + m.message, 'triangle-exclamation'); self.stopRead(i.key); }
+                            }
+                        };
+                    }).catch(e => reject(e));
+                });
+            },
+            async ensureInWorklet() {
+                const c = window.state.ctx;
+                if (this._inReady === c) return;
+                const code = "class R extends AudioWorkletProcessor{constructor(){super();this.q=[];this.o=0;this.n=0;this.port.onmessage=e=>{this.q.push(e.data);this.n+=e.data[0].length;while(this.n>24000){const d=this.q.shift();this.n-=d[0].length;this.o=0}}}" +
+                    "process(i,o){const a=o[0][0],b=o[0][1]||o[0][0];for(let k=0;k<a.length;k++){if(!this.q.length){a[k]=0;b[k]=0;continue}const c=this.q[0];a[k]=c[0][this.o];b[k]=c[1][this.o];if(++this.o>=c[0].length){this.q.shift();this.n-=c[0].length;this.o=0}}return true}}" +
+                    "registerProcessor('ls-in',R);";
+                const url = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
+                try { await c.audioWorklet.addModule(url); } finally { URL.revokeObjectURL(url); }
+                this._inReady = c;
+            },
+            stopRead(key) {
+                const cap = this.caps.get(key); if (!cap) return;
+                this.unpatchCap(key);
+                cap.stop(); this.caps.delete(key);
+                if (this.music === cap) this.music = null;
+                if (this.mic === key) this.mic = Array.from(this.caps.keys()).find(k => !this.caps.get(k).music) || null;
+                this.setStatus(key, 'idle', false); this.render();
+            },
+
+            // ── music: system / tab audio ──
+            async shareMusic() {
+                const ctx = await this.ensureCtx();
+                if (!ctx || !navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) return window.notify('System / tab audio capture is not supported by this browser', 'triangle-exclamation');
+                try {
+                    const stream = await navigator.mediaDevices.getDisplayMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }, video: true });
+                    stream.getVideoTracks().forEach(t => t.stop());
+                    if (!stream.getAudioTracks().length) { stream.getTracks().forEach(t => t.stop()); return window.notify('No audio was shared: tick "Share system / tab audio" in the picker', 'triangle-exclamation'); }
+                    this.stopMusic();
+                    const src = ctx.createMediaStreamSource(new MediaStream(stream.getAudioTracks()));
+                    const an = ctx.createAnalyser(); an.fftSize = 4096; an.smoothingTimeConstant = 0.6;
+                    src.connect(an); an.connect(this.sink);
+                    this.music = { key: 'display', name: 'Shared system / tab audio', node: src, analyser: an, how: 'screen share', music: true, stop() { try { stream.getTracks().forEach(t => t.stop()); src.disconnect(); an.disconnect(); } catch (e) { /* gone */ } } };
+                    stream.getAudioTracks()[0].onended = () => this.stopMusic();
+                    window.notify('Music audio is being analysed', 'wave-square');
+                    this.render();
+                } catch (e) { window.notify('Audio sharing cancelled or blocked', 'triangle-exclamation'); }
+            },
+            stopMusic() {
+                const m = this.music; if (!m) return;
+                if (m.key !== 'display') { this.stopRead(m.key); return; }
+                this.unpatchCap('display'); m.stop(); this.music = null; this.render();
+            },
+
+            // ── write: master mix to every enabled interface (ASIO first, then other APIs) ──
+            async ensureTap() {
+                const ctx = await this.ensureCtx(), tap = window.state.nodes && window.state.nodes.masterLimiter;
+                if (!ctx || !tap || !ctx.audioWorklet) throw new Error('audio engine not running');
+                if (this.tapReady === ctx) return;
+                const code = "class T extends AudioWorkletProcessor{constructor(){super();this.l=new Float32Array(512);this.r=new Float32Array(512);this.n=0}" +
+                    "process(i){const c=i[0];if(!c||!c[0])return true;const a=c[0],b=c[1]||c[0];for(let k=0;k<a.length;k++){this.l[this.n]=a[k];this.r[this.n]=b[k];if(++this.n===512){this.port.postMessage([this.l.slice(),this.r.slice()]);this.n=0}}return true}}" +
+                    "registerProcessor('ls-tap',T);";
+                const url = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
+                try { await ctx.audioWorklet.addModule(url); } finally { URL.revokeObjectURL(url); }
+                const node = new AudioWorkletNode(ctx, 'ls-tap', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2] });
+                const self = this;
+                node.port.onmessage = e => {
+                    if (!self.writes.size) return;
+                    const l = e.data[0], r = e.data[1], out = new Int16Array(l.length * 2);
+                    for (let k = 0; k < l.length; k++) { out[2 * k] = Math.max(-1, Math.min(1, l[k])) * 32767; out[2 * k + 1] = Math.max(-1, Math.min(1, r[k])) * 32767; }
+                    self.writes.forEach(w => { if (w.ready && w.ws.readyState === 1 && w.ws.bufferedAmount < 65536) w.ws.send(out.buffer.slice(0)); });
+                };
+                tap.connect(node); node.connect(this.sink);
+                this.tapNode = node; this.tapReady = ctx;
+            },
+            async startWrite(i) {
+                const k = 'w:' + i.key;
+                const stw = this.status[k];
+                if (this.writes.has(i.key) || (stw && stw.busy)) return;
+                if (stw && stw.err && Date.now() - stw.at < 30000) return;
+                if (!window.state.ctx) return;
+                this.setStatus(k, 'opening...', false, true);
+                try { await this.ensureTap(); } catch (e) { return this.setStatus(k, e.message, true); }
+                const tries = (i.apis || []).filter(a => a.outputs > 0).sort((a, b) => apiRank(a.api) - apiRank(b.api));
+                let lastErr = 'no writable device';
+                for (const a of tries) {
+                    try { const w = await this.openWrite(a); this.writes.set(i.key, w); this.setStatus(k, 'WRITING via ' + w.how, false); this.updateMute(); this.render(); return; }
+                    catch (e) { lastErr = e.message; }
+                }
+                this.setStatus(k, lastErr, true);
+            },
+            openWrite(a) {
+                const ctx = window.state.ctx, self = this;
+                return new Promise((resolve, reject) => {
+                    const ws = new WebSocket(self.wsUrl('/ws/output')); ws.binaryType = 'arraybuffer';
+                    let done = false;
+                    const fail = m => { if (!done) { done = true; try { ws.close(); } catch (e) { /* ignore */ } reject(new Error(m)); } };
+                    ws.onopen = () => ws.send(JSON.stringify({ type: 'start', channels: 2, sampleRate: ctx.sampleRate, deviceId: a.deviceId }));
+                    ws.onerror = () => fail('local server connection failed');
+                    ws.onclose = () => { if (!done) fail('closed'); else self.writes.forEach((w, key) => { if (w.ws === ws) self.stopWrite(key); }); };
+                    ws.onmessage = ev => {
+                        let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+                        if (m.type === 'started' && !done) { done = true; resolve({ ws, ready: true, how: (/asio/i.test(m.hostApi) ? 'ASIO' : m.hostApi) + ' / ' + m.device }); }
+                        else if (m.type === 'error') { if (!done) fail(m.message); else window.notify('Interface write error: ' + m.message, 'triangle-exclamation'); }
+                    };
+                });
+            },
+            stopWrite(key) {
+                const w = this.writes.get(key); if (!w) return;
+                try { w.ws.send(JSON.stringify({ type: 'stop' })); w.ws.close(); } catch (e) { /* gone */ }
+                this.writes.delete(key); this.setStatus('w:' + key, 'idle', false); this.updateMute(); this.render();
+            },
+            // while a physical output plays the master, the browser's own output is muted (restored when none is left)
+            updateMute() {
+                const ctx = window.state.ctx, n = window.state.nodes; if (!ctx || !n.musicAnalyser) return;
+                const sdkLive = window.universalAsioSdk && window.universalAsioSdk.paReady;
+                const listening = window.mixEngine && window.mixEngine.listening;
+                if (this.writes.size && !this.muteMain) { try { n.musicAnalyser.disconnect(ctx.destination); } catch (e) { /* not connected */ } this.muteMain = true; }
+                else if (!this.writes.size && this.muteMain) { if (!sdkLive && !listening) { try { n.musicAnalyser.connect(ctx.destination); } catch (e) { /* ignore */ } } this.muteMain = false; }
+            },
+
+            // ── mixer channels: read interfaces -> CH 1.. (stereo pairs), music -> CH 31/32 ──
+            patchCap(cap, ch) {
+                const c = window.state.ctx, n = window.state.nodes; if (!c || !n.channelPostGains || ch + 1 >= n.channelPostGains.length) return false;
+                const split = c.createChannelSplitter(2);
+                cap.node.connect(split); split.connect(n.channelPostGains[ch], 0); split.connect(n.channelPostGains[ch + 1], 1);
+                this.patched.push({ key: cap.key, split, ch, node: cap.node });
+                if (window.setChannelPatch) { window.setChannelPatch(ch, 'LIVE ' + (cap.music ? 'MUSIC L' : 'L')); window.setChannelPatch(ch + 1, 'LIVE ' + (cap.music ? 'MUSIC R' : 'R')); }
+                return true;
+            },
+            unpatchCap(key) {
+                this.patched = this.patched.filter(p => {
+                    if (p.key !== key) return true;
+                    try { p.node.disconnect(p.split); p.split.disconnect(); } catch (e) { /* gone */ }
+                    if (window.setChannelPatch) { window.setChannelPatch(p.ch, 'LOC ' + (p.ch + 1)); window.setChannelPatch(p.ch + 1, 'LOC ' + (p.ch + 2)); }
+                    return false;
+                });
+            },
+            autoPatch() {
+                if (window.knoxEnabled) return window.notify('KNOX Active: patching locked', 'shield-halved');
+                this.unpatchAll();
+                let ch = 0, n = 0;
+                this.caps.forEach(cap => { if (cap.music) return; if (ch + 1 < 30 && this.patchCap(cap, ch)) { ch += 2; n++; } });
+                if (this.music && this.patchCap(this.music, 30)) n++;
+                window.notify(n ? `Auto-patched ${n} live source${n > 1 ? 's' : ''} to the mixer (use headphones to avoid feedback)` : 'Nothing to patch: enable READ on an interface first', 'microphone');
+                this.render();
+            },
+            unpatchAll() { Array.from(new Set(this.patched.map(p => p.key))).forEach(k => this.unpatchCap(k)); },
+
+            // ── now playing ──
+            async pollNowPlaying() {
+                if (!this.bridgeUrl) { this.nowPlaying = []; this.renderNow(); return; }
+                try {
+                    const j = await (await fetch(this.bridgeUrl + '/api/nowplaying', { cache: 'no-store' })).json();
+                    if (!j || !j.ok) throw new Error('bad reply');
+                    this.nowPlaying = j.sessions || []; this.npMethod = j.method;
+                    const p = j.playing, key = p ? p.service + '|' + p.title : '';
+                    if (key !== this.lastPlayingKey) {
+                        this.lastPlayingKey = key;
+                        if (p) window.notify(`Now playing on ${p.serviceName}: ${p.title}${p.artist ? ' - ' + p.artist : ''}`, 'music');
+                        if (p && !this.music && this.cfg.auto) this.autoMusic();
+                    }
+                } catch (e) { this.nowPlaying = []; }
+                this.renderNow();
+            },
+            // a playing service was detected: use a loopback interface (Stereo Mix, monitor, virtual cable) for the music FFT when there is one
+            autoMusic() {
+                const lb = this.interfaces.find(i => i.loopback && i.apis && i.apis.some(a => a.inputs > 0));
+                if (lb && this.bridgeUrl && this.portaudio) this.startRead(lb, { music: true });
+            },
+
+            setStatus(key, text, err, busy) { this.status[key] = { text, err: !!err, busy: !!busy, at: Date.now() }; this.renderRows(); },
+
+            // ── UI ──
+            render() { this.renderRows(); this.renderNow(); this.renderHeader(); this.renderSelectors(); },
+            renderHeader() {
+                const b = document.getElementById('ls-pc'); if (!b) return;
+                b.className = 'px-2 py-0.5 rounded text-[7.5px] font-bold border ' + (this.bridgeUrl ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40' : 'bg-amber-500/15 text-amber-400 border-amber-500/40');
+                b.textContent = this.bridgeUrl ? 'PC MODE: ' + (this.portaudio ? 'ASIO / WASAPI READY' : 'SERVER ON, NO PORTAUDIO') : 'WEB MODE';
+                const a = document.getElementById('ls-auto'), s = document.getElementById('ls-scan'), o = document.getElementById('ls-asio-only');
+                if (a) a.checked = !!this.cfg.auto; if (s) s.checked = !!this.cfg.scan; if (o) o.checked = !!this.cfg.asioOnly;
+                const m = document.getElementById('ls-music-state');
+                if (m) m.textContent = this.music ? 'ANALYSING: ' + (this.music.name || 'music') + ' (' + this.music.how + ')' : 'NO MUSIC SOURCE';
+                const hint = document.getElementById('ls-music-hint');
+                if (hint) {
+                    const p = this.nowPlaying.find(x => x.status === 'playing');
+                    hint.classList.toggle('hidden', !(p && !this.music));
+                    if (p && !this.music) hint.textContent = `${p.serviceName} is playing: click SHARE SYSTEM / TAB AUDIO to see its spectrum` + (this.interfaces.some(i => i.loopback) ? ' (or enable the loopback interface below)' : '');
+                }
+            },
+            renderSelectors() {
+                const sel = document.getElementById('ls-mic-sel'); if (!sel) return;
+                const keys = Array.from(this.caps.keys()).filter(k => !this.caps.get(k).music);
+                const cur = sel.value;
+                sel.innerHTML = keys.length ? keys.map(k => `<option value="${esc(k)}">${esc(this.caps.get(k).name)} (${esc(this.caps.get(k).how)})</option>`).join('') : '<option value="">no interface is being read</option>';
+                sel.value = keys.indexOf(this.mic) >= 0 ? this.mic : (keys.indexOf(cur) >= 0 ? cur : (keys[0] || ''));
+                this.mic = sel.value || null;
+            },
+            renderNow() {
+                const el = document.getElementById('ls-now'); if (!el) return;
+                if (!this.bridgeUrl) { el.innerHTML = '<div class="text-[8px] text-slate-400 leading-relaxed">Automatic detection of Spotify, YouTube, YouTube Music, TIDAL, Apple Music, Amazon Music, Deezer, SoundCloud, VLC and more needs <b class="text-white">PC mode</b> (the local system server reads your operating system\'s media sessions). Start it with <b class="text-white">npm start</b> or <b class="text-white">start-pc-mode.bat</b>.</div>'; return; }
+                el.innerHTML = this.nowPlaying.length ? this.nowPlaying.map(s => `<div class="flex items-center gap-2 bg-black/50 border ${s.status === 'playing' ? 'border-emerald-500/40' : 'border-white/10'} rounded px-2 py-1.5">
+                    <i class="${ICONS[s.service] || 'fa-solid fa-music'} text-[11px] ${s.status === 'playing' ? 'text-emerald-400' : 'text-slate-500'}"></i>
+                    <div class="min-w-0 flex-1"><div class="text-[8.5px] font-black text-white truncate">${esc(s.title || '(no title)')}</div><div class="text-[7.5px] text-slate-400 truncate">${esc(s.artist || '')}${s.album ? ' &bull; ' + esc(s.album) : ''}</div></div>
+                    <div class="text-right"><div class="text-[7.5px] font-bold ${s.status === 'playing' ? 'text-emerald-400' : 'text-slate-500'} uppercase">${esc(s.serviceName)}</div><div class="text-[6.5px] text-slate-500 uppercase">${esc(s.status)}</div></div></div>`).join('')
+                    : '<div class="text-[8px] text-slate-500">Nothing is playing. Start music in Spotify, YouTube, YouTube Music, TIDAL ... and it is detected automatically.</div>';
+            },
+            renderRows() {
+                const el = document.getElementById('ls-ifaces'); if (!el) return;
+                const asioOnly = this.cfg.asioOnly;
+                const rows = this.interfaces.filter(i => !asioOnly || i.asio);
+                el.innerHTML = rows.length ? rows.map(i => {
+                    const e = this.cfg.enabled[i.key] || {}, rs = this.status[i.key], ws = this.status['w:' + i.key], cap = this.caps.get(i.key);
+                    const chips = (i.apiNames || []).filter((a, k, arr) => arr.indexOf(a) === k).map(a => `<span class="px-1 py-0.5 rounded text-[6.5px] font-black ${/asio/i.test(a) ? 'bg-amber-400 text-black' : 'bg-white/10 text-slate-300'}">${esc(/wasapi/i.test(a) ? 'WASAPI' : /direct/i.test(a) ? 'DirectSound' : a)}</span>`).join(' ');
+                    const maxPair = i.read ? Math.floor(Math.max(...i.apis.map(a => a.inputs)) / 2) : 0;
+                    const pairSel = maxPair > 1 ? `<select data-k="${esc(i.key)}" aria-label="Input pair" class="ls-pair bg-black text-slate-200 border border-white/15 rounded text-[7px] px-1">${Array.from({ length: Math.min(maxPair, 16) }, (_, p) => `<option value="${p}" ${(this.pair[i.key] || 0) === p ? 'selected' : ''}>IN ${p * 2 + 1}-${p * 2 + 2}</option>`).join('')}</select>` : '';
+                    return `<div class="grid grid-cols-1 md:grid-cols-[1.6fr_auto_auto_1.4fr] items-center gap-2 bg-black/50 border ${cap ? 'border-emerald-500/30' : 'border-white/10'} rounded px-2 py-1.5 text-[7.5px]">
+                        <div class="min-w-0"><div class="font-black text-white truncate">${esc(i.name)} ${i.loopback ? '<span class="px-1 py-0.5 rounded bg-cyan-500/20 text-cyan-300 text-[6.5px]">LOOPBACK / MUSIC</span>' : ''} ${i.driverOnly ? '<span class="px-1 py-0.5 rounded bg-slate-600/40 text-slate-300 text-[6.5px]">ASIO DRIVER ONLY</span>' : ''}</div>
+                            <div class="text-slate-500">${i.inputs ? i.inputs + ' in' : 'no input'} &bull; ${i.outputs ? i.outputs + ' out' : 'no output'} ${chips}</div></div>
+                        <div class="flex items-center gap-1.5"><button data-k="${esc(i.key)}" data-w="read" class="ls-tog px-2 py-1 rounded font-black ${e.read ? 'bg-emerald-500 text-black' : 'bg-white/5 text-slate-300 border border-white/10'}" aria-pressed="${!!e.read}" ${i.inputs ? '' : 'disabled'}>READ</button>${pairSel}</div>
+                        <div><button data-k="${esc(i.key)}" data-w="write" class="ls-tog px-2 py-1 rounded font-black ${e.write ? 'bg-amber-400 text-black' : 'bg-white/5 text-slate-300 border border-white/10'}" aria-pressed="${!!e.write}" ${i.outputs && !i.loopback && this.bridgeUrl ? '' : 'disabled'} title="${this.bridgeUrl ? 'Send the master mix to this interface' : 'Writing to interfaces needs PC mode'}">WRITE</button></div>
+                        <div class="min-w-0"><div class="h-1.5 bg-white/5 rounded overflow-hidden"><div id="ls-lvl-${esc(i.key).replace(/[^a-z0-9]/gi, '_')}" class="h-full bg-gradient-to-r from-emerald-500 via-yellow-400 to-red-500" style="width:0%"></div></div>
+                            <div class="mt-0.5 truncate ${rs && rs.err ? 'text-rose-400' : 'text-slate-400'}">${esc(rs ? 'READ: ' + rs.text : 'READ: idle')}${ws ? ' &bull; ' + esc('WRITE: ' + ws.text) : ''}</div></div></div>`;
+                }).join('') : '<div class="text-[8px] text-slate-500">No audio interfaces found yet. Plug one in: it is detected automatically.</div>';
+                el.querySelectorAll('.ls-tog').forEach(b => (b.onclick = () => { const k = b.dataset.k, what = b.dataset.w, cur = (this.cfg.enabled[k] || {})[what]; if (what === 'read' && !cur) { const i = this.interfaces.find(x => x.key === k); this.cfg.enabled[k] = Object.assign({ read: false, write: false }, this.cfg.enabled[k], { read: true }); this.persist(); this.startRead(i, { userClick: true, music: !!(i && i.loopback) }); this.render(); } else this.setEnabled(k, what, !cur); }));
+                el.querySelectorAll('.ls-pair').forEach(s => (s.onchange = () => { this.pair[s.dataset.k] = Number(s.value); if (this.caps.has(s.dataset.k)) { this.stopRead(s.dataset.k); const i = this.interfaces.find(x => x.key === s.dataset.k); if (i) this.startRead(i, { userClick: true }); } }));
+            },
+
+            // ── spectrum lines ──
+            drawFft(canvasId, analyser, holdKey, title) {
+                const cv = document.getElementById(canvasId); if (!cv) return null;
+                const dpr = window.devicePixelRatio || 1, w = Math.max(40, Math.floor(cv.clientWidth * dpr)), h = Math.max(40, Math.floor(cv.clientHeight * dpr));
+                if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; this.hold[holdKey] = null; }
+                const g = cv.getContext('2d'); g.clearRect(0, 0, w, h);
+                const DB_MIN = -100, DB_MAX = 0, F_MIN = 20, sr = analyser ? analyser.context.sampleRate : 48000, F_MAX = Math.min(20000, sr / 2);
+                const xOf = f => Math.log(f / F_MIN) / Math.log(F_MAX / F_MIN) * w, yOf = d => h - ((Math.max(DB_MIN, Math.min(DB_MAX, d)) - DB_MIN) / (DB_MAX - DB_MIN)) * h;
+                g.font = `${8 * dpr}px monospace`; g.lineWidth = 1; g.strokeStyle = 'rgba(255,255,255,0.08)'; g.fillStyle = '#64748b';
+                [-20, -40, -60, -80].forEach(d => { g.beginPath(); g.moveTo(0, yOf(d)); g.lineTo(w, yOf(d)); g.stroke(); g.fillText(d + ' dB', 2 * dpr, yOf(d) - 2 * dpr); });
+                [100, 1000, 10000].forEach(f => { if (f < F_MAX) { g.beginPath(); g.moveTo(xOf(f), 0); g.lineTo(xOf(f), h); g.stroke(); g.fillText(f >= 1000 ? (f / 1000) + 'k' : f, xOf(f) + 2 * dpr, h - 3 * dpr); } });
+                if (!analyser) { g.fillStyle = '#94a3b8'; g.textAlign = 'center'; g.fillText(title, w / 2, h / 2); g.textAlign = 'start'; return null; }
+                const N = analyser.frequencyBinCount;
+                if (!this['_buf' + holdKey] || this['_buf' + holdKey].length !== N) this['_buf' + holdKey] = new Float32Array(N);
+                const buf = this['_buf' + holdKey]; analyser.getFloatFrequencyData(buf);
+                const binHz = sr / analyser.fftSize;
+                if (!this.hold[holdKey] || this.hold[holdKey].length !== w) this.hold[holdKey] = new Float32Array(w).fill(DB_MIN);
+                const hold = this.hold[holdKey], line = new Float32Array(w); let pkDb = DB_MIN, pkHz = 0;
+                for (let x = 0; x < w; x++) {
+                    const f = F_MIN * Math.pow(F_MAX / F_MIN, x / (w - 1)), b = f / binHz, i0 = Math.max(0, Math.floor(b)), i1 = Math.min(N - 1, i0 + 1), t = b - i0;
+                    let d = buf[i0] * (1 - t) + buf[i1] * t; if (!isFinite(d)) d = DB_MIN;
+                    line[x] = d; if (d > pkDb) { pkDb = d; pkHz = f; } hold[x] = Math.max(d, hold[x] - 0.4);
+                }
+                g.strokeStyle = 'rgba(251,191,36,0.55)'; g.lineWidth = dpr; g.beginPath();
+                for (let x = 0; x < w; x++) { const y = yOf(hold[x]); if (x === 0) g.moveTo(x, y); else g.lineTo(x, y); } g.stroke();
+                g.strokeStyle = holdKey === 'music' ? '#34d399' : '#22d3ee'; g.lineWidth = 1.6 * dpr; g.beginPath();
+                for (let x = 0; x < w; x++) { const y = yOf(line[x]); if (x === 0) g.moveTo(x, y); else g.lineTo(x, y); } g.stroke();
+                return { db: pkDb, hz: pkHz };
+            },
+            peakDb(an, bufKey) {
+                const buf = this['_t' + bufKey] && this['_t' + bufKey].length === an.fftSize ? this['_t' + bufKey] : (this['_t' + bufKey] = new Float32Array(an.fftSize));
+                an.getFloatTimeDomainData(buf); let p = 0; for (let i = 0; i < buf.length; i++) { const a = Math.abs(buf[i]); if (a > p) p = a; }
+                return p < 0.00003 ? -Infinity : 20 * Math.log10(p);
+            },
+            loop() {
+                const tab = document.getElementById('tab-live');
+                if (tab && !tab.classList.contains('tab-hidden')) {
+                    const txt = (id, t) => { const e = document.getElementById(id); if (e) e.textContent = t; };
+                    const fmt = r => (!r || r.db <= -90) ? 'NO SIGNAL' : `PEAK ${r.hz >= 1000 ? (r.hz / 1000).toFixed(2) + ' kHz' : Math.round(r.hz) + ' Hz'} • ${r.db.toFixed(1)} dB`;
+                    const m = this.drawFft('ls-fft-music', this.music ? this.music.analyser : null, 'music', 'MUSIC: SHARE SYSTEM / TAB AUDIO OR ENABLE A LOOPBACK INTERFACE');
+                    txt('ls-fft-music-peak', this.music ? fmt(m) : 'NO SOURCE');
+                    const mic = this.mic && this.caps.get(this.mic) ? this.caps.get(this.mic) : null;
+                    const r = this.drawFft('ls-fft-mic', mic ? mic.analyser : null, 'mic', 'ENABLE READ ON A MICROPHONE OR AUDIO INTERFACE');
+                    txt('ls-fft-mic-peak', mic ? fmt(r) : 'NO SOURCE');
+                    this.caps.forEach((cap, key) => { const e = document.getElementById('ls-lvl-' + String(key).replace(/[^a-z0-9]/gi, '_')); if (e) { const d = this.peakDb(cap.analyser, 'lv'); e.style.width = (isFinite(d) ? Math.max(0, Math.min(100, (d + 60) / 60 * 100)) : 0) + '%'; } });
+                }
+                requestAnimationFrame(() => this.loop());
+            },
+            startTimers() {
+                this.timers.forEach(clearInterval); this.timers = [];
+                if (this.cfg.scan) this.timers.push(setInterval(() => this.scan(), 5000));
+                this.timers.push(setInterval(() => this.pollNowPlaying(), 3000));
+            },
+            init() {
+                const $ = id => document.getElementById(id); if (!$('ls-ifaces')) return;
+                $('ls-scan-now').onclick = () => this.scan();
+                $('ls-enable-all').onclick = () => this.enableAll(false);
+                $('ls-enable-asio').onclick = () => this.enableAll(true);
+                $('ls-share').onclick = () => this.shareMusic();
+                $('ls-music-stop').onclick = () => this.stopMusic();
+                $('ls-patch').onclick = () => this.autoPatch();
+                $('ls-unpatch').onclick = () => { this.unpatchAll(); window.notify('Live sources unpatched', 'plug-circle-xmark'); this.render(); };
+                $('ls-auto').onchange = e => { this.cfg.auto = e.target.checked; this.persist(); if (this.cfg.auto) this.autoEnable(); };
+                $('ls-scan').onchange = e => { this.cfg.scan = e.target.checked; this.persist(); this.startTimers(); };
+                $('ls-asio-only').onchange = e => { this.cfg.asioOnly = e.target.checked; this.persist(); this.renderRows(); };
+                $('ls-mic-sel').onchange = e => { this.mic = e.target.value || null; };
+                if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) navigator.mediaDevices.addEventListener('devicechange', () => this.scan());
+                this.render(); this.scan().then(() => this.pollNowPlaying()); this.startTimers(); this.loop();
+            }
+        };
+
+        const origSwitch = window.switchTab;
+        window.switchTab = function(tabId) { const r = origSwitch.apply(this, arguments); if (tabId === 'live') { L.scan(); L.pollNowPlaying(); } return r; };
+        // once the audio engine is running, open everything that is enabled
+        const origInit = window.initAudioEngine;
+        if (typeof origInit === 'function') {
+            window.initAudioEngine = async function() { const r = await origInit.apply(this, arguments); setTimeout(() => L.applyEnabled(), 50); return r; };
+        }
+        document.addEventListener('DOMContentLoaded', () => L.init());
     })();
     </script>
 </body>

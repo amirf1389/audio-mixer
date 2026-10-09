@@ -1,5 +1,6 @@
 'use strict';
 // ASIO / host-API audio output through PortAudio (naudiodon2). Receives interleaved Int16 PCM from the page.
+const { claim } = require('./asio-lock');
 function loadPortAudio() { return require('naudiodon2'); }
 const SAMPLE_RATES = [44100, 48000, 88200, 96000, 176400, 192000];
 
@@ -12,11 +13,13 @@ function pickDevice(pa, wantedId, channels) {
 // One output session per WebSocket connection. `load` is injectable for tests.
 function createSession(conn, load = loadPortAudio) {
   let io = null;
+  let lock = null;   // ASIO is single-client: see asio-lock.js
   let blocked = false;
   let frameBytes = 4; // Int16 * channels; writes must be whole frames or channels swap
 
   const stop = () => {
     if (io) { try { io.quit(); } catch (_) { /* already closed */ } io = null; }
+    if (lock) { lock.release(); lock = null; }
     blocked = false;
   };
 
@@ -31,6 +34,10 @@ function createSession(conn, load = loadPortAudio) {
     const wanted = Number.isInteger(opts.deviceId) && opts.deviceId >= 0 ? opts.deviceId : null;
     const dev = pickDevice(pa, wanted, channels);
     if (!dev && wanted !== null) return conn.send(JSON.stringify({ type: 'error', message: 'device not found' }));
+    if (dev) {
+      lock = claim(dev);
+      if (!lock.ok) { const msg = lock.message; lock = null; return conn.send(JSON.stringify({ type: 'error', message: msg })); }
+    }
     try {
       io = new pa.AudioIO({ outOptions: {
         channelCount: channels, sampleFormat: pa.SampleFormat16Bit, sampleRate,
