@@ -69,8 +69,20 @@ lockout, third-party scripts without SRI, hard-coded PIN, `eval`). `npm test` fa
 
 ## Routing tab (mixer page)
 **ROUTING** (after PATCHBAY) drives the real Web Audio graph:
-- Assign each of the 32 channels to MAIN or one of 8 subgroups (individually or in bulk); subgroups have fader, mute,
+- Assign each of the 32 channels to MAIN or one of 16 subgroups (individually or in bulk); subgroups have fader, mute,
   name and a live meter, and sum into MAIN before the master comp / EQ / limiter (so the bridge ASIO output follows).
 - **Live input patch**: put a physical input (mic / interface, stereo, left or right) onto any channel strip.
 - **Snapshots**: save / recall / delete, export and import as JSON (validated on import). Routing is restored on load.
 - Respects KNOX lock and the operator "PATCHBAY & MATRIX ROUTING" permission.
+
+## BUS & MATRIX tab (mixer page)
+Real Web Audio graph, saved in the browser (localStorage) and respecting the KNOX lock / operator routing permission.
+- Channel strip: input -> HPF -> trim -> polarity -> **PRE tap** -> fader -> **POST tap** (before pan) -> pan -> MAIN.
+- **16 mix buses**: fader, mute, name, meter, **PRE / POST** send tap per bus, **LISTEN**, per-channel send levels (CHANNEL SENDS page, with ALL 0 dB / CLEAR / COPY).
+- **8 matrix outputs** (MAIN PA, FRONT FILLS, BALCONY DELAY, SUBWOOFERS, MTX 5-8): fader, mute, polarity, **delay 0-500 ms** (also driven by the
+  old delay sliders and the acoustic-delay calculator), and a crosspoint grid with levels from MAIN L/R, the 16 mix buses and the 16 routing subgroups.
+- **CHANNEL INPUT**: per-channel high-pass filter (20-400 Hz), trim (+/-18 dB) and polarity.
+- **LISTEN** solos a bus or matrix output on the browser output (the bridge ASIO/WASAPI program output is not affected). Matrix outputs are metered
+  and auditionable; they are not yet sent to separate physical outputs.
+- **SCENES**: save / recall / delete, JSON export and import (validated).
+- The ROUTING tab now has 16 subgroups (was 8); the sidebar is grouped (MIX / ROUTE / METER / SOURCE / DEVICE / SYSTEM).
