@@ -797,3 +797,21 @@ test('verify: .msi installer file check', () => {
   assert.ok(v.checkInstallerFile(f).some(r => r.level === 'FAIL'));
   fsx.rmSync(dir, { recursive: true, force: true });
 });
+
+test('live status: open native streams are listed in /api/status and removed on stop', async () => {
+  const fa = fakeAudify();
+  const sent = [];
+  const out = require('./output').createSession({ send: m => sent.push(JSON.parse(m)), sendBinary() {} }, () => { throw new Error('no pa'); }, () => fa);
+  const streams = require('./streams');
+  const base = streams.list().length;   // other tests may leave sessions open
+  require('./asio-lock')._owners.clear();
+  out.onText(JSON.stringify({ type: 'start', channels: 2, sampleRate: 48000 }));
+  const l = streams.list().filter(x => x.engine === 'audify');
+  assert.strictEqual(streams.list().length, base + 1); assert.strictEqual(l.length, 1); assert.strictEqual(l[0].hostApi, 'ASIO'); assert.strictEqual(l[0].frameSize, 192);
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const st = await (await fetch(`http://127.0.0.1:${server.address().port}/api/status`)).json();
+  assert.strictEqual(st.streams.length, base + 1); assert.strictEqual(st.node, process.version); assert.ok(st.uptimeSec >= 0 && st.time > 0);
+  server.closeAllConnections(); server.close();
+  out.onClose();
+  assert.strictEqual(streams.list().length, base);
+});

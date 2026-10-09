@@ -2,6 +2,7 @@
 // ASIO / host-API audio output through PortAudio (naudiodon2). Receives interleaved Int16 PCM from the page.
 const { claim } = require('./asio-lock');
 const audify = require('./audify');
+const streams = require('./streams');
 function loadPortAudio() { return require('naudiodon2'); }
 const SAMPLE_RATES = [44100, 48000, 88200, 96000, 176400, 192000];
 
@@ -16,11 +17,13 @@ function createSession(conn, load = loadPortAudio, loadA = audify.loadAudify) {
   let io = null;
   let lock = null;   // ASIO is single-client: see asio-lock.js
   let blocked = false;
+  let unreg = null;   // live status registry
   let frameBytes = 4; // Int16 * channels; writes must be whole frames or channels swap
 
   const stop = () => {
     if (io) { try { io.quit(); } catch (_) { /* already closed */ } io = null; }
     if (lock) { lock.release(); lock = null; }
+    if (unreg) { unreg(); unreg = null; }
     blocked = false;
   };
 
@@ -41,6 +44,7 @@ function createSession(conn, load = loadPortAudio, loadA = audify.loadAudify) {
         onError: e => { conn.send(JSON.stringify({ type: 'error', message: String(e && e.message || e) })); stop(); } });
       io = { quit: () => st.close(), write: b => st.write(b) };
       frameBytes = 2 * channels;
+      unreg = streams.add({ direction: 'output', engine: 'audify', device: dev.name, hostApi: dev.hostAPIName, sampleRate, channels: channels, frameSize: st.frameSize, latencyMs: st.latencyMs });
       conn.send(JSON.stringify({ type: 'started', engine: 'audify', device: dev.name, hostApi: dev.hostAPIName, sampleRate, channels, frameSize: st.frameSize, latencyMs: st.latencyMs, autoFrameSize: st.auto }));
     } catch (e) {
       stop();
@@ -76,6 +80,7 @@ function createSession(conn, load = loadPortAudio, loadA = audify.loadAudify) {
       io.on('drain', () => { blocked = false; });
       io.start();
       frameBytes = 2 * channels;
+      unreg = streams.add({ direction: 'output', engine: 'naudiodon', device: dev ? dev.name : 'default', hostApi: dev ? dev.hostAPIName : 'default', sampleRate, channels });
       conn.send(JSON.stringify({ type: 'started', engine: 'naudiodon', device: dev ? dev.name : 'default', hostApi: dev ? dev.hostAPIName : 'default', sampleRate, channels }));
     } catch (e) {
       stop();

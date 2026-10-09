@@ -1,6 +1,6 @@
 {
   "name": "audio-mixer",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Audio mixer web app with an optional local system server (PC mode) for ASIO / WASAPI / Core Audio / ALSA.",
   "private": true,
   "license": "MIT",
@@ -23,7 +23,8 @@
     "build:installer": "node scripts/build-installer.js",
     "verify": "node client/cli.js verify",
     "setup:audify": "cd bridge && npm install audify",
-    "build:msi": "node scripts/build-msi.js"
+    "build:msi": "node scripts/build-msi.js",
+    "build:installers": "node scripts/build-installers.js"
   },
   "engines": {
     "node": ">=18"

@@ -170,6 +170,20 @@ CRITICAL REVISIONS & ARCHITECTURAL UPGRADES:
             border: 1px solid #000; border-radius: 3px; cursor: grab; box-shadow: 0 4px 12px rgba(0,0,0,0.9); 
         }
         .daw-fader:active::-webkit-slider-thumb { cursor: grabbing; border-color: var(--wing-orange); }
+        /* smooth, precise faders: soft thumb feedback, Firefox thumb, focus ring, fine-adjust state */
+        .daw-fader::-webkit-slider-thumb { transition: box-shadow .15s ease, border-color .15s ease, filter .15s ease; }
+        .daw-fader:hover::-webkit-slider-thumb { filter: brightness(1.18); box-shadow: 0 4px 14px rgba(0,0,0,0.9), 0 0 8px rgba(255,106,0,0.35); }
+        .daw-fader:active::-webkit-slider-thumb { box-shadow: 0 2px 8px rgba(0,0,0,0.9), 0 0 14px rgba(255,106,0,0.6); }
+        .daw-fader::-moz-range-thumb { width: 26px; height: 36px; background: linear-gradient(180deg, #94a3b8 0%, #334155 35%, #0f172a 70%, #ff6a00 72%, #0f172a 75%); border: 1px solid #000; border-radius: 3px; cursor: grab; box-shadow: 0 4px 12px rgba(0,0,0,0.9); }
+        .daw-fader::-moz-range-track { background: transparent; }
+        .daw-fader:focus-visible { outline: 1px solid rgba(255,106,0,0.6); outline-offset: 2px; border-radius: 3px; }
+        .daw-fader.fine::-webkit-slider-thumb { border-color: #22d3ee; }
+        /* EQ pages: the page and the custom slot list scroll with the mouse wheel, touch and the scroll buttons */
+        #custom-eq-slots-grid { max-height: 9.5rem; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: rgba(255,106,0,0.35) rgba(0,0,0,0.4); padding-right: 2px; }
+        #custom-eq-slots-grid::-webkit-scrollbar { width: 5px; }
+        #custom-eq-slots-grid::-webkit-scrollbar-thumb { background: rgba(255,106,0,0.35); border-radius: 3px; }
+        /* master limiter */
+        .lim-gr-fill { transition: width .06s linear; }
 
         /* ROTARY POTENTIOMETERS */
         .rotary-knob { 
@@ -1006,6 +1020,7 @@ window.navTabs = [
             window.state.nodes.masterGain = masterGain;
             window.state.nodes.masterCompressor = masterCompressor;
             window.state.nodes.masterLimiter = masterLimiter;
+            if (window.masterLimiterCtl) window.masterLimiterCtl.apply();   // saved ceiling / release / attack / knee / on-off
             window.state.nodes.musicAnalyser = musicAnalyser;
             window.state.nodes.micAnalyser = micAnalyser;
             window.state.nodes.phones1Gain = phones1Gain;
@@ -1328,7 +1343,7 @@ window.navTabs = [
             if (label) label.innerText = `${num > 0 ? '+' : ''}${num.toFixed(1)}dB`;
             if (window.state.nodes.eqFilters && window.state.nodes.eqFilters[bandIndex] && window.state.ctx) {
                 try {
-                    window.state.nodes.eqFilters[bandIndex].gain.setValueAtTime(num, window.state.ctx.currentTime);
+                    window.state.nodes.eqFilters[bandIndex].gain.setTargetAtTime(num, window.state.ctx.currentTime, 0.015);
                 } catch(e){}
             }
             if (window.state.peqDiamondMode) {
@@ -1388,15 +1403,42 @@ window.navTabs = [
         window.refreshCustomEQButtons = function() {
             const container = document.getElementById('custom-eq-slots-grid');
             if (!container) return;
+            const esc = t => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
             container.innerHTML = window.customEQSlots.map((slot, i) => `
                 <div class="bg-black/60 p-1.5 rounded border border-white/10 flex justify-between items-center text-[8px] font-mono">
-                    <span class="truncate max-w-[80px] text-amber-400 font-bold">${slot.name}</span>
+                    <span class="truncate max-w-[80px] text-amber-400 font-bold" title="${esc(slot.name)}">${esc(slot.name)}</span>
                     <div class="flex gap-1">
                         <button onclick="window.loadCustomEQSlot(${i})" class="px-1.5 py-0.5 bg-white/10 hover:bg-white/20 rounded text-slate-200">LOAD</button>
                         <button onclick="window.saveCurrentToCustomSlot(${i})" class="px-1.5 py-0.5 bg-amber-500/20 text-amber-400 hover:bg-amber-500 hover:text-black rounded">SAVE</button>
+                        <button onclick="window.deleteCustomEQSlot(${i})" title="Delete this slot" class="px-1.5 py-0.5 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-black rounded"><i class="fa-solid fa-xmark"></i></button>
                     </div>
                 </div>
             `).join('');
+            const n = document.getElementById('custom-eq-count'); if (n) n.innerText = window.customEQSlots.length;
+        };
+
+        // User slots are unlimited: add one from the current curve, delete any, scroll the list. Stored in this browser.
+        window.persistCustomEQSlots = function() { try { localStorage.setItem('halx_custom_eq_slots', JSON.stringify(window.customEQSlots)); } catch (e) { /* storage blocked */ } };
+        window.addCustomEQSlot = function() {
+            const gains = [];
+            for (let i = 0; i < EQ_BANDS.length; i++) { const f = document.getElementById(`eq-fader-${i}`); gains.push(f ? parseFloat(f.value) : 0); }
+            const name = prompt("Name for the new custom EQ slot:", `Custom ${window.customEQSlots.length + 1}`);
+            if (!name || !name.trim()) return;
+            window.customEQSlots.push({ name: name.trim().slice(0, 40), gains });
+            window.persistCustomEQSlots(); window.refreshCustomEQButtons();
+            const g = document.getElementById('custom-eq-slots-grid'); if (g) g.scrollTop = g.scrollHeight;
+            window.notify(`Added slot ${window.customEQSlots.length}: ${name.trim()}`, 'plus');
+        };
+        window.deleteCustomEQSlot = function(i) {
+            const slot = window.customEQSlots[i]; if (!slot) return;
+            if (window.customEQSlots.length <= 1) { window.notify('Keep at least one custom slot', 'triangle-exclamation'); return; }
+            window.customEQSlots.splice(i, 1);
+            window.persistCustomEQSlots(); window.refreshCustomEQButtons();
+            window.notify(`Deleted slot: ${slot.name}`, 'trash');
+        };
+        window.scrollEQ = function(where) {
+            const tab = document.getElementById('tab-dsp'); if (!tab) return;
+            tab.scrollTo({ top: where === 'top' ? 0 : tab.scrollHeight, behavior: 'smooth' });
         };
 
         window.togglePEQDiamondMode = function() {
@@ -3200,8 +3242,13 @@ window.navTabs = [
     <!-- 3. Custom EQ User Slots Section -->
     <div id="custom-eq-slots-section" class="border-t border-white/10 pt-1.5">
       <div class="flex justify-between items-center mb-1">
-        <span class="text-[7.5px] font-mono text-slate-400">10 CUSTOM PRESET USER SLOTS:</span>
-        <span class="text-[6.5px] font-mono text-amber-400">CLICK TO LOAD &bull; HOLD TO STORE</span>
+        <span class="text-[7.5px] font-mono text-slate-400">CUSTOM PRESET USER SLOTS: <span id="custom-eq-count" class="text-amber-400 font-bold">10</span></span>
+        <div class="flex items-center gap-1 text-[6.5px] font-mono">
+          <button onclick="window.addCustomEQSlot()" class="px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 hover:bg-emerald-500 hover:text-black rounded font-bold uppercase">+ NEW SLOT</button>
+          <button onclick="window.scrollEQ('top')" title="Scroll the EQ page up" class="px-1.5 py-0.5 bg-white/10 text-slate-300 border border-white/20 hover:bg-white/20 rounded font-bold"><i class="fa-solid fa-chevron-up"></i></button>
+          <button onclick="window.scrollEQ('bottom')" title="Scroll the EQ page down" class="px-1.5 py-0.5 bg-white/10 text-slate-300 border border-white/20 hover:bg-white/20 rounded font-bold"><i class="fa-solid fa-chevron-down"></i></button>
+          <span class="text-amber-400">LOAD &bull; SAVE &bull; DELETE &bull; SCROLL THE LIST</span>
+        </div>
       </div>
       <div class="grid grid-cols-2 sm:grid-cols-5 gap-1.5" id="custom-eq-slots-grid"></div>
     </div>
@@ -3358,6 +3405,40 @@ window.navTabs = [
                                 </div>
                             </div>
 
+                        </div>
+                    </div>
+
+                    <!-- MASTER LIMITER: brick-wall protection on the main output (post EQ / dynamics, before every output) -->
+                    <div id="master-limiter-panel" class="bg-black/60 p-3 rounded-xl border border-rose-500/30 space-y-2.5">
+                        <div class="flex flex-wrap justify-between items-center gap-2 border-b border-white/10 pb-2">
+                            <div class="flex items-center gap-2">
+                                <span class="w-7 h-7 rounded-lg bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400 text-xs"><i class="fa-solid fa-shield-halved"></i></span>
+                                <div>
+                                    <h4 class="text-[10px] font-black text-rose-400 font-wing tracking-wider uppercase">MASTER LIMITER</h4>
+                                    <p class="text-[7px] text-slate-400">BRICK-WALL CEILING ON THE MAIN OUTPUT &bull; REAL-TIME GAIN REDUCTION</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span id="lim-led" class="w-2.5 h-2.5 rounded-full bg-slate-600 inline-block" title="Lights while the limiter is reducing gain"></span>
+                                <button id="lim-toggle" onclick="window.masterLimiterCtl.toggle()" class="px-2.5 py-1 rounded bg-emerald-500 text-black font-black text-[7.5px] uppercase border border-emerald-400">LIMITER: ON</button>
+                                <button onclick="window.masterLimiterCtl.reset()" class="px-2 py-1 rounded bg-white/5 border border-white/10 text-slate-300 text-[7.5px] font-bold uppercase hover:bg-white/10">RESET</button>
+                            </div>
+                        </div>
+                        <div class="space-y-1">
+                            <div class="flex justify-between text-[7.5px]"><span class="text-slate-300 font-bold">GAIN REDUCTION</span><span id="lim-gr-num" class="text-rose-400 font-bold font-mono">0.0 dB</span></div>
+                            <div class="h-2.5 bg-black rounded-full overflow-hidden border border-white/10"><div id="lim-gr-bar" class="lim-gr-fill h-full bg-gradient-to-r from-emerald-500 via-amber-400 to-rose-500" style="width:0%"></div></div>
+                        </div>
+                        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 text-[7.5px]">
+                            <div><div class="flex justify-between text-slate-300 mb-0.5"><span>CEILING</span><span id="lim-thr-val" class="text-amber-400 font-bold">-0.5 dB</span></div><input type="range" id="lim-thr" min="-24" max="0" step="0.1" value="-0.5" class="w-full accent-rose-400 cursor-pointer" aria-label="Limiter ceiling" oninput="window.masterLimiterCtl.set('threshold', this.value)"></div>
+                            <div><div class="flex justify-between text-slate-300 mb-0.5"><span>RELEASE</span><span id="lim-rel-val" class="text-amber-400 font-bold">250 ms</span></div><input type="range" id="lim-rel" min="10" max="1000" step="5" value="250" class="w-full accent-rose-400 cursor-pointer" aria-label="Limiter release" oninput="window.masterLimiterCtl.set('release', this.value)"></div>
+                            <div><div class="flex justify-between text-slate-300 mb-0.5"><span>ATTACK</span><span id="lim-att-val" class="text-amber-400 font-bold">3 ms</span></div><input type="range" id="lim-att" min="0" max="50" step="0.5" value="3" class="w-full accent-rose-400 cursor-pointer" aria-label="Limiter attack" oninput="window.masterLimiterCtl.set('attack', this.value)"></div>
+                            <div><div class="flex justify-between text-slate-300 mb-0.5"><span>KNEE</span><span id="lim-knee-val" class="text-amber-400 font-bold">30 dB</span></div><input type="range" id="lim-knee" min="0" max="40" step="1" value="30" class="w-full accent-rose-400 cursor-pointer" aria-label="Limiter knee" oninput="window.masterLimiterCtl.set('knee', this.value)"></div>
+                        </div>
+                        <div class="flex flex-wrap gap-1 text-[7px]">
+                            <span class="text-slate-500 self-center">QUICK:</span>
+                            <button onclick="window.masterLimiterCtl.preset('safe')" class="px-2 py-0.5 rounded bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10">SAFE -1 dB</button>
+                            <button onclick="window.masterLimiterCtl.preset('broadcast')" class="px-2 py-0.5 rounded bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10">BROADCAST -3 dB</button>
+                            <button onclick="window.masterLimiterCtl.preset('loud')" class="px-2 py-0.5 rounded bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10">LOUD -0.3 dB FAST</button>
                         </div>
                     </div>
                 </div>
@@ -5550,6 +5631,13 @@ window.navTabs = [
                     <div class="bg-black/60 p-2 rounded border border-white/10"><span class="text-slate-500 block">THIS PC</span><span id="pc-platform" class="text-slate-200 font-bold">-</span></div>
                     <div class="bg-black/60 p-2 rounded border border-white/10"><span class="text-slate-500 block">NATIVE AUDIO (PORTAUDIO / AUDIFY)</span><span id="pc-native" class="text-slate-200 font-bold">-</span></div>
                     <div class="bg-black/60 p-2 rounded border border-white/10"><span class="text-slate-500 block">DOWNLOAD FOLDER</span><span id="pc-dir" class="text-slate-200 font-bold break-all">-</span></div>
+                  </div>
+                  <div id="live-sys" class="grid grid-cols-2 md:grid-cols-5 gap-2 text-[7.5px]" aria-live="off">
+                    <div class="bg-black/60 p-2 rounded border border-white/10"><span class="text-slate-500 block">SERVER LINK (LIVE)</span><span id="ls-link" class="text-slate-200 font-bold">-</span></div>
+                    <div class="bg-black/60 p-2 rounded border border-white/10"><span class="text-slate-500 block">NODE.JS / UPTIME</span><span id="ls-node" class="text-slate-200 font-bold">-</span></div>
+                    <div class="bg-black/60 p-2 rounded border border-white/10"><span class="text-slate-500 block">WEB AUDIO ENGINE</span><span id="ls-ctx" class="text-slate-200 font-bold">-</span></div>
+                    <div class="bg-black/60 p-2 rounded border border-white/10"><span class="text-slate-500 block">NATIVE STREAMS (ASIO / WASAPI)</span><span id="ls-streams" class="text-slate-200 font-bold break-words">-</span></div>
+                    <div class="bg-black/60 p-2 rounded border border-white/10"><span class="text-slate-500 block">MASTER LIMITER</span><span id="ls-lim" class="text-slate-200 font-bold">-</span></div>
                   </div>
                   <label class="flex items-center gap-2 text-[8px] text-slate-300 cursor-pointer"><input type="checkbox" id="pc-auto" class="accent-emerald-400" onchange="window.universalAsioSdk.setPcAuto(this.checked)"> CONNECT AUTOMATICALLY WHEN THIS PAGE OPENS</label>
                   <label class="flex flex-wrap items-center gap-2 text-[8px] text-slate-300">AUDIO ENGINE BUFFER (ASIO FRAME SIZE)
@@ -8542,7 +8630,7 @@ window.navTabs = [
             const anySolo = window.state.channelSolos.some(Boolean);
             const silenced = window.state.channelMutes[channelIndex] || (anySolo && !window.state.channelSolos[channelIndex]);
             const linear = silenced || !(db > -59) ? 0 : Math.pow(10, db / 20);
-            try { node.gain.setTargetAtTime(linear, window.state.ctx.currentTime, 0.005); } catch(e){}
+            try { node.gain.setTargetAtTime(linear, window.state.ctx.currentTime, 0.02); } catch(e){}   // 20 ms glide: no zipper noise while dragging
         };
         window.applyAllChannelGains = function() { for (let i = 0; i < CHANNELS; i++) window.applyChannelGain(i); };
 
@@ -12267,7 +12355,7 @@ window.navTabs = [
             if (page === 'diamond') {
                 if (diamondView) { diamondView.classList.remove('hidden'); diamondView.style.height = '320px'; }
                 if (fadersView) fadersView.classList.add('hidden');
-                if (slotsSection) slotsSection.classList.add('hidden');
+                if (slotsSection) slotsSection.classList.remove('hidden');   // custom user slots stay available on every page
                 if (typeof renderDiamondCurve === 'function') renderDiamondCurve();
             } else if (page === 'faders') {
                 if (diamondView) diamondView.classList.add('hidden');
@@ -15793,6 +15881,176 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             window.initAudioEngine = async function() { const r = await origInit.apply(this, arguments); setTimeout(() => L.applyEnabled(), 50); return r; };
         }
         document.addEventListener('DOMContentLoaded', () => L.init());
+    })();
+    </script>
+    <script>
+    // UI RUNTIME: smooth faders, master limiter control, live system status (server link, Node.js, ASIO streams, limiter).
+    (function () {
+        'use strict';
+        const $ = id => document.getElementById(id);
+        const num = (v, d) => { const n = parseFloat(v); return Number.isFinite(n) ? n : d; };
+        const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+        // ── MASTER LIMITER ──
+        const KEY = 'halx_master_limiter';
+        const DEF = { on: true, threshold: -0.5, release: 250, attack: 3, knee: 30 };
+        const RANGE = { threshold: [-24, 0], release: [10, 1000], attack: [0, 50], knee: [0, 40] };
+        const PRESETS = {
+            safe: { threshold: -1, release: 250, attack: 3, knee: 30 },
+            broadcast: { threshold: -3, release: 200, attack: 2, knee: 20 },
+            loud: { threshold: -0.3, release: 60, attack: 0.5, knee: 6 },
+        };
+        const Lim = window.masterLimiterCtl = {
+            cfg: Object.assign({}, DEF),
+            load() {
+                try {
+                    const j = JSON.parse(localStorage.getItem(KEY) || 'null');
+                    if (j && typeof j === 'object') {
+                        if (typeof j.on === 'boolean') this.cfg.on = j.on;
+                        Object.keys(RANGE).forEach(k => { if (Number.isFinite(j[k])) this.cfg[k] = clamp(j[k], RANGE[k][0], RANGE[k][1]); });
+                    }
+                } catch (e) { /* storage blocked or corrupt: defaults */ }
+            },
+            save() { try { localStorage.setItem(KEY, JSON.stringify(this.cfg)); } catch (e) { /* storage blocked */ } },
+            node() { return window.state && window.state.nodes && window.state.nodes.masterLimiter; },
+            // Pushes the settings to the Web Audio compressor that sits before every output (glides, no clicks).
+            apply() {
+                this.ui();
+                const n = this.node(), ctx = window.state && window.state.ctx, c = this.cfg;
+                if (!n || !ctx) return;
+                const t = ctx.currentTime;
+                try {
+                    if (c.on) {
+                        n.threshold.setTargetAtTime(c.threshold, t, 0.02); n.knee.setTargetAtTime(c.knee, t, 0.02); n.ratio.setTargetAtTime(20, t, 0.02);
+                        n.attack.setTargetAtTime(c.attack / 1000, t, 0.02); n.release.setTargetAtTime(c.release / 1000, t, 0.02);
+                    } else {   // bypass: ratio 1 at 0 dB is transparent
+                        n.threshold.setTargetAtTime(0, t, 0.02); n.knee.setTargetAtTime(0, t, 0.02); n.ratio.setTargetAtTime(1, t, 0.02);
+                    }
+                } catch (e) { /* node gone while the engine restarts */ }
+            },
+            set(k, v) {
+                if (!RANGE[k]) return;
+                this.cfg[k] = clamp(num(v, DEF[k]), RANGE[k][0], RANGE[k][1]);
+                this.save(); this.apply();
+            },
+            toggle() {
+                this.cfg.on = !this.cfg.on; this.save(); this.apply();
+                if (window.notify) window.notify('Master limiter ' + (this.cfg.on ? 'ON' : 'BYPASSED'), this.cfg.on ? 'shield-halved' : 'ban');
+            },
+            reset() { this.cfg = Object.assign({}, DEF); this.save(); this.apply(); if (window.notify) window.notify('Master limiter reset', 'rotate-left'); },
+            preset(name) { if (!PRESETS[name]) return; Object.assign(this.cfg, PRESETS[name], { on: true }); this.save(); this.apply(); if (window.notify) window.notify('Limiter preset: ' + name.toUpperCase(), 'shield-halved'); },
+            ui() {
+                const c = this.cfg, set = (id, txt) => { const e = $(id); if (e) e.textContent = txt; }, val = (id, v) => { const e = $(id); if (e && document.activeElement !== e) e.value = v; };
+                val('lim-thr', c.threshold); val('lim-rel', c.release); val('lim-att', c.attack); val('lim-knee', c.knee);
+                set('lim-thr-val', c.threshold.toFixed(1) + ' dB'); set('lim-rel-val', Math.round(c.release) + ' ms'); set('lim-att-val', c.attack + ' ms'); set('lim-knee-val', Math.round(c.knee) + ' dB');
+                const b = $('lim-toggle');
+                if (b) { b.textContent = 'LIMITER: ' + (c.on ? 'ON' : 'BYPASS'); b.className = 'px-2.5 py-1 rounded font-black text-[7.5px] uppercase border ' + (c.on ? 'bg-emerald-500 text-black border-emerald-400' : 'bg-red-500/20 text-red-400 border-red-500/40'); }
+            },
+            gr() { const n = this.node(); return n && Number.isFinite(n.reduction) ? Math.max(0, -n.reduction) : 0; },
+        };
+        Lim.load();
+
+        // ── SMOOTH FADERS ──
+        // Finer resolution once a fader is touched (no dB stepping while dragging), Shift/Alt + wheel for fine moves
+        // (the plain wheel still scrolls the page), arrow keys, double-click to reset.
+        const refine = f => {
+            if (f.dataset.refined) return;
+            const step = parseFloat(f.step) || 1;
+            f.dataset.coarse = String(step);
+            f.step = String(Math.max(+(step / 10).toFixed(4), 0.001));
+            f.dataset.refined = '1';
+        };
+        const fire = f => f.dispatchEvent(new Event('input', { bubbles: true }));
+        const nudge = (f, amount) => {
+            refine(f);
+            const min = num(f.min, 0), max = num(f.max, 100);
+            f.value = String(clamp(num(f.value, 0) + amount, min, max));
+            f.classList.add('fine'); clearTimeout(f._fineT); f._fineT = setTimeout(() => f.classList.remove('fine'), 400);
+            fire(f);
+        };
+        const fader = e => (e.target && e.target.closest) ? e.target.closest('input.daw-fader') : null;
+        document.addEventListener('pointerdown', e => { const f = fader(e); if (f) refine(f); }, true);
+        document.addEventListener('pointerover', e => { const f = fader(e); if (f && !f.title) f.title = 'Drag  |  Shift or Alt + wheel: fine  |  Arrow keys  |  Double-click: reset'; }, true);
+        document.addEventListener('wheel', e => {
+            const f = fader(e);
+            if (!f || !(e.shiftKey || e.altKey)) return;     // plain wheel keeps scrolling the page
+            e.preventDefault();
+            const span = num(f.max, 100) - num(f.min, 0), dir = -Math.sign(e.deltaY || e.deltaX);
+            if (dir) nudge(f, dir * span / (e.altKey ? 1000 : 200));
+        }, { passive: false, capture: true });
+        document.addEventListener('dblclick', e => {
+            const f = fader(e); if (!f) return;
+            refine(f);
+            f.value = /^ch-fader-/.test(f.id) ? '0' : (f.defaultValue || '0');
+            fire(f);
+        }, true);
+        document.addEventListener('keydown', e => {
+            const f = fader(e); if (!f) return;
+            const k = { ArrowUp: 1, ArrowRight: 1, ArrowDown: -1, ArrowLeft: -1, PageUp: 10, PageDown: -10 }[e.key];
+            if (!k) return;
+            e.preventDefault();
+            const coarse = parseFloat(f.dataset.coarse || f.step) || 1;
+            nudge(f, k * coarse * (e.altKey ? 0.1 : e.shiftKey ? 4 : 1));
+        }, true);
+
+        // ── LIVE SYSTEM STATUS ──
+        let fails = 0, wasConnected = false, last = null, tick = 0;
+        const text = (id, t) => { const e = $(id); if (e && e.textContent !== t) e.textContent = t; };
+        function ctxLine() {
+            const c = window.state && window.state.ctx;
+            if (!c) return 'ENGINE OFF (start audio)';
+            const ms = (c.outputLatency || c.baseLatency || 0) * 1000;
+            return c.state.toUpperCase() + ' ' + (c.sampleRate / 1000) + ' kHz' + (ms ? ' ' + ms.toFixed(1) + ' ms' : '');
+        }
+        function render() {
+            const sdk = window.universalAsioSdk, on = !!(sdk && sdk.bridgeUrl);
+            text('ls-ctx', ctxLine());
+            if (!on) {
+                text('ls-link', wasConnected ? 'LINK LOST: reconnecting' : 'WEB MODE (no server)');
+                text('ls-node', '-'); text('ls-streams', '-');
+            } else if (last) {
+                text('ls-link', 'LIVE ' + last.rtt.toFixed(0) + ' ms');
+                text('ls-node', (last.j.node || '?') + ' / ' + Math.floor((last.j.uptimeSec || 0) / 60) + ' min');
+                const s = Array.isArray(last.j.streams) ? last.j.streams : [];
+                text('ls-streams', s.length ? s.slice(0, 3).map(x => (/asio/i.test(x.hostApi) ? 'ASIO' : x.hostApi) + ' ' + x.direction + ' ' + (x.frameSize ? x.frameSize + ' fr ' : '') + (x.latencyMs ? x.latencyMs + ' ms ' : '') + '(' + x.engine + ')').join(' | ') + (s.length > 3 ? ' | +' + (s.length - 3) + ' more' : '') : 'none open');
+            }
+            const gr = Lim.gr();
+            text('ls-lim', Lim.cfg.on ? (gr > 0.05 ? 'LIMITING -' + gr.toFixed(1) + ' dB' : 'ARMED ' + Lim.cfg.threshold.toFixed(1) + ' dB') : 'BYPASS');
+        }
+        function poll() {
+            const sdk = window.universalAsioSdk;
+            if (!sdk) return;
+            if (!sdk.bridgeUrl) {
+                // the server was there before and went away: keep looking for it
+                if (wasConnected && sdk.pcAuto && sdk.pcAuto() && tick % 5 === 0 && typeof sdk.connectBridge === 'function') sdk.connectBridge(false);
+                return;
+            }
+            wasConnected = true;
+            const t0 = performance.now();
+            fetch(sdk.bridgeUrl + '/api/status', { cache: 'no-store' }).then(r => r.json()).then(j => {
+                if (!j || !j.ok) throw new Error('bad reply');
+                fails = 0; last = { j, rtt: performance.now() - t0 };
+            }).catch(() => { if (++fails >= 3) { last = null; text('ls-link', 'LINK LOST: reconnecting'); if (typeof sdk.connectBridge === 'function') sdk.connectBridge(false); } });
+        }
+        // ~12 fps meter + readouts for the limiter, 2 s server heartbeat
+        let raf = 0, lastPaint = 0;
+        function frame(ts) {
+            raf = requestAnimationFrame(frame);
+            if (document.hidden || ts - lastPaint < 80) return;
+            lastPaint = ts;
+            const gr = Lim.gr();
+            const bar = $('lim-gr-bar'); if (bar) bar.style.width = Math.min(100, gr / 12 * 100).toFixed(1) + '%';
+            text('lim-gr-num', '-' + gr.toFixed(1) + ' dB');
+            const led = $('lim-led'); if (led) { const hot = gr > 0.05 && Lim.cfg.on; led.className = 'w-2.5 h-2.5 rounded-full inline-block ' + (hot ? 'bg-rose-500 shadow-[0_0_8px_#f43f5e]' : 'bg-slate-600'); }
+            render();
+        }
+        function start() {
+            Lim.ui();
+            raf = requestAnimationFrame(frame);
+            setInterval(() => { tick++; if (!document.hidden && tick % 2 === 0) poll(); }, 1000);
+            poll();
+        }
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
     })();
     </script>
 </body>

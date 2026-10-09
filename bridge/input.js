@@ -2,6 +2,7 @@
 // ASIO / WASAPI / host-API audio INPUT capture through PortAudio (naudiodon2), streamed to the page as Int16 PCM.
 const { claim } = require('./asio-lock');
 const audify = require('./audify');
+const streams = require('./streams');
 function loadPortAudio() { return require('naudiodon2'); }
 
 function pickInput(pa, wantedId, channels) {
@@ -15,10 +16,12 @@ const CHUNK = 16384; // bytes per WebSocket frame
 function createInputSession(conn, load = loadPortAudio, loadA = audify.loadAudify) {
   let io = null;
   let lock = null;   // ASIO is single-client: see asio-lock.js
+  let unreg = null;  // live status registry
 
   const stop = () => {
     if (io) { try { io.quit(); } catch (_) { /* already closed */ } io = null; }
     if (lock) { lock.release(); lock = null; }
+    if (unreg) { unreg(); unreg = null; }
   };
 
   // Audify (RtAudio) engine: chosen by an Audify device id (>= 1000), engine: "audify", or when PortAudio is not installed.
@@ -38,6 +41,7 @@ function createInputSession(conn, load = loadPortAudio, loadA = audify.loadAudif
         onData: chunk => { for (let i = 0; i < chunk.length; i += CHUNK) conn.sendBinary(chunk.subarray(i, i + CHUNK)); },
         onError: e => { conn.send(JSON.stringify({ type: 'error', message: String(e && e.message || e) })); stop(); } });
       io = { quit: () => st.close() };
+      unreg = streams.add({ direction: 'input', engine: 'audify', device: dev.name, hostApi: dev.hostAPIName, sampleRate, channels: st.channels, frameSize: st.frameSize, latencyMs: st.latencyMs });
       conn.send(JSON.stringify({ type: 'started', engine: 'audify', device: dev.name, hostApi: dev.hostAPIName, sampleRate, channels: st.channels, frameSize: st.frameSize, latencyMs: st.latencyMs, autoFrameSize: st.auto }));
     } catch (e) {
       stop();
@@ -71,6 +75,7 @@ function createInputSession(conn, load = loadPortAudio, loadA = audify.loadAudif
       io.on('error', e => { conn.send(JSON.stringify({ type: 'error', message: String(e && e.message || e) })); stop(); });
       io.on('data', chunk => { for (let i = 0; i < chunk.length; i += CHUNK) conn.sendBinary(chunk.subarray(i, i + CHUNK)); });
       io.start();
+      unreg = streams.add({ direction: 'input', engine: 'naudiodon', device: dev ? dev.name : 'default', hostApi: dev ? dev.hostAPIName : 'default', sampleRate, channels });
       conn.send(JSON.stringify({ type: 'started', engine: 'naudiodon', device: dev ? dev.name : 'default', hostApi: dev ? dev.hostAPIName : 'default', sampleRate, channels }));
     } catch (e) {
       stop();

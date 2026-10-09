@@ -124,8 +124,9 @@ ${comps.map(c => `      <ComponentRef Id="${c}"/>\n`).join('')}      <ComponentR
 `;
 }
 
-async function buildMsi({ out = path.join(ROOT, 'dist'), runWixl = true, stageOpts = {} } = {}) {
-  const st = await buildInstaller({ out, stageOnly: true, ...stageOpts });
+// `staged` = the result of buildInstaller (so the .exe and the .msi are built from one and the same staging folder)
+async function buildMsi({ out = path.join(ROOT, 'dist'), runWixl = true, stageOpts = {}, staged = null } = {}) {
+  const st = staged || await buildInstaller({ out, stageOnly: true, ...stageOpts });
   const work = path.join(path.resolve(out), 'msi');
   fs.mkdirSync(work, { recursive: true });
   const vbs = path.join(work, 'start-server-hidden.vbs');
