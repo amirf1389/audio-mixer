@@ -86,3 +86,11 @@ Real Web Audio graph, saved in the browser (localStorage) and respecting the KNO
   and auditionable; they are not yet sent to separate physical outputs.
 - **SCENES**: save / recall / delete, JSON export and import (validated).
 - The ROUTING tab now has 16 subgroups (was 8); the sidebar is grouped (MIX / ROUTE / METER / SOURCE / DEVICE / SYSTEM).
+
+## PC mode client and official driver catalog
+- `node client/cli.js` (see the root README) starts this server and opens the mixer; `drivers`, `download <id>` and `doctor` manage drivers.
+- `GET /api/catalog`: official drivers / stacks per OS with install detection (ASIO registry names, native stacks, PortAudio).
+- `POST /api/catalog/download {"id":"flexasio"}`: saves the installer from the project's official GitHub release to `~/AudioMixerDrivers`
+  (200 MB cap, https and GitHub hosts only, redirects re-checked, SHA-256 verified against the release digest when published, never executed).
+  Requires the `X-Mixer-Action: download` header (forces a CORS preflight, so foreign pages cannot trigger it). Everything else in the catalog
+  links to the vendor's official site or shows the package-manager command. Not verified against real vendor sites from this sandbox.

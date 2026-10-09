@@ -8,9 +8,10 @@
     "audio-mixer-bridge": "server.js"
   },
   "scripts": {
-    "start": "node server.js",
+    "start": "node ../client/cli.js",
     "test": "node --test --test-force-exit",
-    "audit:security": "node audit.js"
+    "audit:security": "node audit.js",
+    "server": "node server.js"
   },
   "engines": {
     "node": ">=18"

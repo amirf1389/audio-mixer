@@ -74,3 +74,6 @@ deploy/nginx/logs/
 # keep the fail2ban config dirs (the generic *.d rule above would hide them)
 !deploy/nginx/fail2ban/filter.d/
 !deploy/nginx/fail2ban/jail.d/
+
+# PC-mode build output
+dist/
