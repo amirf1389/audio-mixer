@@ -36,3 +36,14 @@ Open the repo folder in VS Code (`.vscode/` is included):
 - **Terminal → Run Task**: `Bridge: npm install (ASIO / PortAudio)`, `Bridge: start`, `Bridge: test`.
 - **Run and Debug → "Bridge + Mixer (Chrome)"** starts the bridge with the debugger attached and opens
   the mixer at http://localhost:8765 in Chrome (or pick the Edge entry).
+
+## Input, system volume and the external-source spectrum
+- `WS /ws/input`: the bridge captures an ASIO / WASAPI / other PortAudio input (ASIO preferred) and streams Int16 PCM
+  to the page. Pick a "PORTAUDIO HOST API INPUTS" device in DRIVERS -> READ ENGINE, then **READ STREAM**.
+- The READ ENGINE card shows a live **external source FFT spectrum line** (20 Hz - 20 kHz, dBFS, with peak hold) for the
+  selected input (browser microphone or bridge input), and real input / output peak meters (no simulated data).
+- `GET /api/volume`: system output / input volume and mute of the default devices (Windows: WASAPI endpoint volume via
+  PowerShell, macOS: `osascript`, Linux: `pactl`). Shown as SYSTEM INPUT / OUTPUT VOLUME in the DRIVERS tab.
+- Honest scope: this is a user-mode native engine (PortAudio -> ASIO / WASAPI host APIs). A signed kernel-mode Windows
+  audio driver (WDM / KS miniport) needs the Windows Driver Kit and driver signing and is not part of this repo.
+  The Windows volume reader and real ASIO / WASAPI hardware paths are not verified on a Windows machine yet.
