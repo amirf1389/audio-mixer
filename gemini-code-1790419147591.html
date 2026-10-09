@@ -5459,6 +5459,55 @@ window.navTabs = [
                   </div>
                 </div>
 
+                <!-- PC MODE: LOCAL SYSTEM SERVER + OFFICIAL DRIVERS -->
+                <div class="glass-panel p-3.5 rounded-xl wing-bezel font-mono space-y-3">
+                  <div class="flex flex-wrap justify-between items-center gap-2 pb-2 border-b border-white/10">
+                    <div class="flex items-center gap-2.5">
+                      <div class="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400"><i class="fa-solid fa-desktop"></i></div>
+                      <div>
+                        <h3 class="text-xs font-black text-white font-wing tracking-wider uppercase">PC MODE &bull; LOCAL SYSTEM SERVER</h3>
+                        <p class="text-[7.5px] text-slate-400">CLIENT (THIS PAGE) &harr; NODE.JS SERVER ON THIS PC &rarr; ASIO / WASAPI / CORE AUDIO / ALSA</p>
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <span id="pc-status" class="px-2 py-0.5 rounded text-[7.5px] font-bold border bg-amber-500/15 text-amber-400 border-amber-500/40">NOT CONNECTED</span>
+                      <button id="pc-connect" onclick="window.universalAsioSdk.connectBridge(true)" class="px-2.5 py-1 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[7.5px] font-black uppercase hover:bg-emerald-500 hover:text-black transition">CONNECT</button>
+                    </div>
+                  </div>
+                  <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-[7.5px]">
+                    <div class="bg-black/60 p-2 rounded border border-white/10"><span class="text-slate-500 block">SERVER</span><span id="pc-url" class="text-cyan-400 font-bold break-all">-</span></div>
+                    <div class="bg-black/60 p-2 rounded border border-white/10"><span class="text-slate-500 block">THIS PC</span><span id="pc-platform" class="text-slate-200 font-bold">-</span></div>
+                    <div class="bg-black/60 p-2 rounded border border-white/10"><span class="text-slate-500 block">NATIVE AUDIO (PORTAUDIO)</span><span id="pc-native" class="text-slate-200 font-bold">-</span></div>
+                    <div class="bg-black/60 p-2 rounded border border-white/10"><span class="text-slate-500 block">DOWNLOAD FOLDER</span><span id="pc-dir" class="text-slate-200 font-bold break-all">-</span></div>
+                  </div>
+                  <label class="flex items-center gap-2 text-[8px] text-slate-300 cursor-pointer"><input type="checkbox" id="pc-auto" class="accent-emerald-400" onchange="window.universalAsioSdk.setPcAuto(this.checked)"> CONNECT AUTOMATICALLY WHEN THIS PAGE OPENS</label>
+                  <div id="pc-help" class="text-[7.5px] text-slate-300 leading-relaxed bg-black/50 border border-white/10 rounded p-2.5 space-y-1">
+                    <div class="text-amber-400 font-bold">The local server is not running (web mode: browser audio only).</div>
+                    <div>1. Install Node.js 18 or newer from <a href="https://nodejs.org/" target="_blank" rel="noopener noreferrer" class="text-cyan-400 underline">nodejs.org</a>.</div>
+                    <div>2. Windows: double-click <b class="text-white">start-pc-mode.bat</b> &nbsp;&bull;&nbsp; macOS / Linux: run <b class="text-white">./start-pc-mode.sh</b> &nbsp;&bull;&nbsp; or run <b class="text-white">node client/cli.js</b> in the project folder.</div>
+                    <div>3. The mixer opens at <b class="text-white">http://localhost:8765</b> and this panel turns green. For ASIO / WASAPI output run <b class="text-white">cd bridge &amp;&amp; npm install</b> once.</div>
+                  </div>
+                </div>
+
+                <!-- OFFICIAL DRIVERS & DOWNLOADS -->
+                <div class="glass-panel p-3.5 rounded-xl wing-bezel font-mono space-y-2.5">
+                  <div class="flex flex-wrap justify-between items-center gap-2 pb-2 border-b border-white/10">
+                    <div class="flex items-center gap-2.5">
+                      <div class="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400"><i class="fa-solid fa-download"></i></div>
+                      <div>
+                        <h3 class="text-xs font-black text-white font-wing tracking-wider uppercase">OFFICIAL DRIVERS &amp; DOWNLOADS</h3>
+                        <p class="text-[7.5px] text-slate-400">ASIO &bull; WASAPI &bull; CORE AUDIO &bull; ALSA / PIPEWIRE / JACK &bull; VENDOR INTERFACES &bull; VIRTUAL DEVICES</p>
+                      </div>
+                    </div>
+                    <div class="flex gap-1 text-[7.5px] font-black uppercase">
+                      <button id="pc-f-pc" onclick="window.universalAsioSdk.setCatalogFilter(false)" class="px-2.5 py-1 rounded bg-amber-400 text-black">THIS PC</button>
+                      <button id="pc-f-all" onclick="window.universalAsioSdk.setCatalogFilter(true)" class="px-2.5 py-1 rounded bg-white/5 text-slate-300 border border-white/10">ALL SYSTEMS</button>
+                    </div>
+                  </div>
+                  <div id="pc-drivers" class="grid grid-cols-1 lg:grid-cols-2 gap-2"></div>
+                  <div class="text-[7px] text-slate-500 leading-relaxed">Links open the vendor's official site. Only open-source FlexASIO can be fetched here, from its official GitHub release; the installer is saved and checked (SHA-256) but never run automatically. Review it, then run it yourself.</div>
+                </div>
+
                 <!-- CROSS-PLATFORM OS AUDIO DRIVERS COMMAND DECK -->
                 <div class="glass-panel p-3.5 rounded-xl wing-bezel font-mono">
                   <div class="flex flex-wrap justify-between items-center gap-2 pb-2 border-b border-white/10 mb-3">
@@ -12727,7 +12776,8 @@ window.navTabs = [
         init: function() {
             this.updateLatency();
             this.scanDevices();
-            this.connectBridge();
+            this.renderPcMode(); this.setCatalogFilter(this.catalogAll);
+            if (this.pcAuto()) this.connectBridge();
             this.drawSpectrum();
             this.startVolumePolling();
             this.log("[ ASIO Universal SDK Engine initialized • 32 In / 32 Out ready ]", "success");
@@ -12756,6 +12806,81 @@ window.navTabs = [
             el.classList.remove('hidden');
         },
 
+        // ── PC mode: client (this page) <-> local system server ──
+        catalog: null, catalogAll: false,
+        pcAuto: function() { try { return localStorage.getItem('halx_pc_mode_auto') !== '0'; } catch (e) { return true; } },
+        setPcAuto: function(on) { try { localStorage.setItem('halx_pc_mode_auto', on ? '1' : '0'); } catch (e) { /* ignore */ } },
+        setCatalogFilter: function(all) {
+            this.catalogAll = !!all;
+            const a = document.getElementById('pc-f-pc'), b = document.getElementById('pc-f-all');
+            if (a && b) {
+                a.className = 'px-2.5 py-1 rounded ' + (all ? 'bg-white/5 text-slate-300 border border-white/10' : 'bg-amber-400 text-black');
+                b.className = 'px-2.5 py-1 rounded ' + (all ? 'bg-amber-400 text-black' : 'bg-white/5 text-slate-300 border border-white/10');
+            }
+            this.renderDrivers();
+        },
+        renderPcMode: function() {
+            const $ = id => document.getElementById(id), info = this.bridgeInfo, on = !!this.bridgeUrl;
+            const st = $('pc-status'); if (!st) return;
+            st.className = 'px-2 py-0.5 rounded text-[7.5px] font-bold border ' + (on ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40' : 'bg-amber-500/15 text-amber-400 border-amber-500/40');
+            st.textContent = on ? 'PC MODE: CONNECTED' : 'WEB MODE: SERVER NOT FOUND';
+            $('pc-url').textContent = on ? this.bridgeUrl : '-';
+            $('pc-platform').textContent = on && info ? `${info.platform} ${info.arch} \u2022 Node ${info.node}` : '-';
+            $('pc-native').textContent = on ? (info && info.portaudio ? 'READY: ' + info.portaudio.hostApis.join(', ') : 'NOT INSTALLED (cd bridge && npm install)') : '-';
+            $('pc-dir').textContent = on && this.catalog ? this.catalog.downloadDir : '-';
+            $('pc-help').classList.toggle('hidden', on);
+            $('pc-connect').textContent = on ? 'RECONNECT' : 'CONNECT';
+            const auto = $('pc-auto'); if (auto) auto.checked = this.pcAuto();
+        },
+        loadCatalog: function() {
+            const self = this;
+            if (!self.bridgeUrl) { self.catalog = null; self.renderDrivers(); return; }
+            fetch(self.bridgeUrl + '/api/catalog', { cache: 'no-store' }).then(r => r.json()).then(c => {
+                if (!c || !c.ok || !Array.isArray(c.items)) throw new Error('bad reply');
+                self.catalog = c; self.renderPcMode(); self.renderDrivers();
+            }).catch(() => { self.catalog = null; self.renderDrivers(); });
+        },
+        renderDrivers: function() {
+            const el = document.getElementById('pc-drivers'); if (!el) return;
+            const self = this, esc = window.escapeHtml;
+            const FALLBACK = [
+                { id: 'flexasio', name: 'FlexASIO', vendor: 'open source', kind: 'asio', url: 'https://github.com/dechamps/FlexASIO', note: 'ASIO for any sound card (Windows).' },
+                { id: 'asio4all', name: 'ASIO4ALL', vendor: 'Michael Tippach', kind: 'asio', url: 'https://www.asio4all.org/', note: 'Universal low-latency ASIO driver (Windows).' },
+                { id: 'steinberg-asio', name: 'Steinberg ASIO', vendor: 'Steinberg', kind: 'sdk', url: 'https://www.steinberg.net/developers/', note: 'ASIO specification and SDK.' },
+                { id: 'pipewire', name: 'PipeWire', vendor: 'PipeWire Project', kind: 'package', url: 'https://pipewire.org/', note: 'Linux audio server.' }
+            ];
+            const items = (self.catalog ? self.catalog.items.filter(i => self.catalogAll || i.forThisPc) : FALLBACK);
+            const badge = i => i.installed === true ? '<span class="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">INSTALLED</span>'
+                : i.installed === false ? '<span class="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 border border-amber-500/40">NOT FOUND</span>'
+                : '<span class="px-1.5 py-0.5 rounded bg-white/5 text-slate-400 border border-white/10">' + (!self.catalog ? 'START PC MODE TO DETECT' : i.forThisPc === false ? 'OTHER SYSTEM' : 'CANNOT DETECT') + '</span>';
+            el.innerHTML = items.map(i => {
+                const cmd = i.install ? Object.values(i.install)[0] : '';
+                return `<div class="bg-black/60 border border-white/10 rounded-lg p-2 flex flex-col gap-1.5 text-[7.5px]">
+                    <div class="flex justify-between items-start gap-2"><span class="text-white font-bold">${esc(i.name)}</span>${badge(i)}</div>
+                    <div class="text-slate-500">${esc(i.vendor || '')} &bull; ${esc((i.kind || '').toUpperCase())}</div>
+                    <div class="text-slate-300 leading-snug">${esc(i.note || '')}</div>
+                    ${cmd ? `<code class="block bg-black/70 border border-white/10 rounded px-1.5 py-1 text-emerald-300 break-all select-all">${esc(cmd)}</code>` : ''}
+                    <div class="flex flex-wrap gap-1.5 pt-0.5">
+                        <a href="${esc(i.url)}" target="_blank" rel="noopener noreferrer" class="px-2 py-0.5 rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 font-bold">OFFICIAL SITE</a>
+                        ${i.downloadable ? `<button data-dl="${esc(i.id)}" class="pc-dl px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold">DOWNLOAD INSTALLER</button>` : ''}
+                    </div></div>`;
+            }).join('') || '<div class="text-[8px] text-slate-500">No drivers listed for this system.</div>';
+            el.querySelectorAll('.pc-dl').forEach(b => (b.onclick = () => self.downloadDriver(b.dataset.dl, b)));
+        },
+        downloadDriver: function(id, btn) {
+            const self = this;
+            if (!self.bridgeUrl) return window.notify('Start PC mode first (local server not found)', 'triangle-exclamation');
+            if (window.knoxEnabled) return window.notify('KNOX Active: downloads locked', 'shield-halved');
+            if (btn) { btn.disabled = true; btn.textContent = 'DOWNLOADING...'; }
+            fetch(self.bridgeUrl + '/api/catalog/download', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Mixer-Action': 'download' }, body: JSON.stringify({ id }) })
+                .then(r => r.json().then(j => ({ ok: r.ok, j }))).then(({ ok, j }) => {
+                    if (!ok || !j.ok) throw new Error(j && j.error ? j.error : 'download failed');
+                    self.log(`Driver saved: ${j.file} (${(j.bytes / 1048576).toFixed(2)} MB) SHA-256 ${j.sha256}${j.verified ? ' (verified)' : ' (no published checksum)'}`, 'success');
+                    window.notify(`Installer saved to ${j.file}. Run it yourself after checking it.`, 'download');
+                }).catch(e => { self.log('Driver download failed: ' + e.message, 'error'); window.notify('Download failed: ' + e.message, 'triangle-exclamation'); })
+                .finally(() => { if (btn) { btn.disabled = false; btn.textContent = 'DOWNLOAD INSTALLER'; } });
+        },
+
         // One-line truthful description of the active audio driver path (used by notifications and the start-up panel)
         driverSummary: function() {
             const info = this.bridgeInfo;
@@ -12767,9 +12892,9 @@ window.navTabs = [
         // Optional local Node.js sandbox (bridge/server.js): reports the real native drivers of this PC.
         bridgeUrl: null,
         bridgeInfo: null,
-        connectBridge: function() {
+        connectBridge: function(force) {
             const self = this;
-            if (this._bridgeBusy) return;
+            if (this._bridgeBusy && !force) return;
             this._bridgeBusy = true;
             const bases = [];
             if (/^https?:$/.test(location.protocol) && /^(localhost|127\.0\.0\.1)$/.test(location.hostname)) bases.push(location.origin);
@@ -12777,7 +12902,10 @@ window.navTabs = [
             const tryNext = function(i) {
                 if (i >= bases.length) {
                     self._bridgeBusy = false;
-                    self.reportWebAudioCompat(null);
+                    self.bridgeUrl = null; self.bridgeInfo = null;
+                    self.renderPcMode(); self.loadCatalog();
+                    if (force) window.notify('Local server not found: start PC mode (see the panel above)', 'triangle-exclamation');
+                    else self.reportWebAudioCompat(null);
                     return;
                 }
                 fetch(bases[i] + '/api/drivers', { cache: 'no-store' }).then(r => r.json()).then(info => {
@@ -12797,6 +12925,7 @@ window.navTabs = [
                     self.addPortAudioInputs();
                     self.startVolumePolling();
                     self.showDetectedStack(info);
+                    self.renderPcMode(); self.loadCatalog();
                     const nd = document.getElementById('notif-usb-driver');
                     if (nd) nd.innerText = self.driverSummary().replace(/^[^:]+: /, '').toUpperCase();
                     self.reportWebAudioCompat(info);

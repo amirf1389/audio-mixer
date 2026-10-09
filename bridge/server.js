@@ -6,6 +6,8 @@
 //   GET /api/volume   -> system output / input volume + mute
 //   WS  /ws/output    -> page streams Int16 PCM out through PortAudio (ASIO / WASAPI)
 //   WS  /ws/input     -> bridge streams Int16 PCM captured from an ASIO / WASAPI input
+//   GET /api/catalog  -> official audio drivers / stacks for this OS, with install detection
+//   POST /api/catalog/download {id} -> saves the official installer (FlexASIO) to the download folder; never runs it
 //   GET /*            -> serves the mixer page from the repo root (same-origin use)
 const http = require('node:http');
 const fs = require('node:fs');
@@ -15,6 +17,7 @@ const { accept } = require('./ws');
 const { createSession } = require('./output');
 const { createInputSession } = require('./input');
 const { readVolume } = require('./volume');
+const { listCatalog, downloadDriver, downloadDir } = require('./catalog');
 
 const PORT = Number(process.env.BRIDGE_PORT) || 8765;
 const HOST = '127.0.0.1';
@@ -56,14 +59,21 @@ async function handle(req, res) {
   if (!hostAllowed(req.headers.host)) return json(res, 403, { ok: false, error: 'host not allowed' });
   if (!originAllowed(origin)) return json(res, 403, { ok: false, error: 'origin not allowed' });
   const cors = origin ? { 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin', 'Access-Control-Allow-Private-Network': 'true' } : {};
-  if (req.method === 'OPTIONS') return send(res, 204, '', { ...cors, 'Access-Control-Allow-Methods': 'GET', 'Access-Control-Allow-Headers': 'Content-Type' });
-  if (req.method !== 'GET') return json(res, 405, { ok: false, error: 'method not allowed' }, cors);
-
+  if (req.method === 'OPTIONS') return send(res, 204, '', { ...cors, 'Access-Control-Allow-Methods': 'GET, POST', 'Access-Control-Allow-Headers': 'Content-Type, X-Mixer-Action' });
   const url = new URL(req.url, `http://${HOST}`);
+  if (req.method === 'POST' && url.pathname === '/api/catalog/download') return handleDownload(req, res, cors);
+  if (req.method !== 'GET') return json(res, 405, { ok: false, error: 'method not allowed' }, cors);
   if (url.pathname === '/api/status') return json(res, 200, { ok: true, name: 'audio-mixer-bridge', version: '1.0.0' }, cors);
   if (url.pathname === '/api/drivers') {
     try { return json(res, 200, { ok: true, ...(await detect()) }, cors); }
     catch (e) { return json(res, 500, { ok: false, error: e.message }, cors); }
+  }
+
+  if (url.pathname === '/api/catalog') {
+    try {
+      const info = await detect();
+      return json(res, 200, { ok: true, platform: info.platform, downloadDir: downloadDir(), items: listCatalog(info) }, cors);
+    } catch (e) { return json(res, 500, { ok: false, error: e.message }, cors); }
   }
 
   if (url.pathname === '/api/volume') {
@@ -87,6 +97,24 @@ async function handle(req, res) {
   });
 }
 
+// Driver download: browsers must send a custom header (forces a CORS preflight, so foreign pages cannot trigger it).
+let downloading = false;
+async function handleDownload(req, res, cors) {
+  if (req.headers['x-mixer-action'] !== 'download' || !String(req.headers['content-type'] || '').startsWith('application/json')) {
+    return json(res, 400, { ok: false, error: 'missing X-Mixer-Action header or JSON body' }, cors);
+  }
+  let body = '';
+  for await (const chunk of req) { body += chunk; if (body.length > 1024) return json(res, 413, { ok: false, error: 'request too large' }, cors); }
+  let id;
+  try { id = JSON.parse(body).id; } catch (_) { return json(res, 400, { ok: false, error: 'invalid JSON' }, cors); }
+  if (typeof id !== 'string' || !/^[a-z0-9-]{1,32}$/.test(id)) return json(res, 400, { ok: false, error: 'invalid id' }, cors);
+  if (downloading) return json(res, 409, { ok: false, error: 'a download is already running' }, cors);
+  downloading = true;
+  try { return json(res, 200, await downloadDriver(id), cors); }
+  catch (e) { return json(res, e.status || 500, { ok: false, error: e.message }, cors); }
+  finally { downloading = false; }
+}
+
 // WebSocket /ws/output: page streams Int16 PCM, bridge plays it via PortAudio (ASIO when available).
 server.on('upgrade', (req, socket) => {
   let pathname = '';
@@ -98,7 +126,15 @@ server.on('upgrade', (req, socket) => {
   Object.assign(handlers, pathname === '/ws/input' ? createInputSession(conn) : createSession(conn));
 });
 
-if (require.main === module) {
-  server.listen(PORT, HOST, () => console.log(`Audio Mixer bridge running: http://localhost:${PORT}  (open this URL to use the mixer)`));
+// Starts listening (used by the client launcher); resolves with the port.
+function start(port = PORT) {
+  return new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(port, HOST, () => { server.removeListener('error', reject); resolve(server.address().port); });
+  });
 }
-module.exports = { server, originAllowed, hostAllowed, HOST };
+
+if (require.main === module) {
+  start().then(port => console.log(`Audio Mixer bridge running: http://localhost:${port}  (open this URL to use the mixer)`));
+}
+module.exports = { server, originAllowed, hostAllowed, HOST, PORT, start };

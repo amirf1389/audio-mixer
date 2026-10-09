@@ -1,0 +1,16 @@
+{
+  "name": "audio-mixer",
+  "version": "1.0.0",
+  "description": "Audio mixer web app with an optional local system server (PC mode) for ASIO / WASAPI / Core Audio / ALSA.",
+  "private": true,
+  "license": "MIT",
+  "bin": { "audio-mixer": "client/cli.js" },
+  "scripts": {
+    "start": "node client/cli.js",
+    "server": "node bridge/server.js",
+    "drivers": "node client/cli.js drivers",
+    "doctor": "node client/cli.js doctor",
+    "test": "cd bridge && npm test"
+  },
+  "engines": { "node": ">=18" }
+}

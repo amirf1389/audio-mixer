@@ -165,3 +165,92 @@ test('security audit reports no failures', async () => {
   server.close();
   assert.deepStrictEqual(results.filter(r => r.level === 'FAIL').map(r => r.title), []);
 });
+
+// ── official driver catalog, downloader and PC-mode client ──
+const fsx = require('node:fs'), osx = require('node:os'), pathx = require('node:path'), cryptox = require('node:crypto');
+
+function fakeFetch({ name = 'FlexASIO-1.10.exe', content = Buffer.from('installer-bytes'), digestOk = true, finalUrl = '' } = {}) {
+  const sha = cryptox.createHash('sha256').update(content).digest('hex');
+  const dl = `https://github.com/dechamps/FlexASIO/releases/download/v1.10/${name}`;
+  return async url => {
+    if (url.startsWith('https://api.github.com/repos/dechamps/FlexASIO/releases/latest')) {
+      return new Response(JSON.stringify({ assets: [
+        { name: 'FlexASIO-1.10-Debug.exe', browser_download_url: 'https://github.com/x/debug.exe' },
+        { name, browser_download_url: dl, digest: 'sha256:' + (digestOk ? sha : '0'.repeat(64)) },
+      ] }), { headers: { 'content-type': 'application/json' } });
+    }
+    const r = new Response(content, { headers: { 'content-length': String(content.length) } });
+    return finalUrl ? { ok: true, status: 200, body: r.body, url: finalUrl, headers: r.headers } : r;
+  };
+}
+
+test('catalog lists drivers for this OS and detects what is installed', () => {
+  const { listCatalog, CATALOG } = require('./catalog');
+  const win = listCatalog({ platform: 'win32', drivers: ['wasapi-shared', 'flexasio', 'steinberg'], asio: ['FlexASIO', 'Focusrite USB ASIO'], portaudio: null });
+  const by = id => win.find(x => x.id === id);
+  assert.strictEqual(by('flexasio').installed, true);
+  assert.strictEqual(by('focusrite').installed, true);
+  assert.strictEqual(by('asio4all').installed, false);
+  assert.strictEqual(by('wasapi').installed, true);
+  assert.strictEqual(by('naudiodon2').installed, false);
+  assert.strictEqual(by('pipewire').forThisPc, false);
+  assert.strictEqual(by('pipewire').installed, null);                     // other system: not detectable here
+  assert.ok(CATALOG.every(x => /^https:\/\//.test(x.url)), 'every official link is https');
+  assert.ok(CATALOG.filter(x => x.download).every(x => x.download.kind === 'github-release'));
+  assert.strictEqual(by('flexasio').downloadable, true);
+});
+
+test('downloader saves the official installer, checks the checksum and never runs it', async () => {
+  const { downloadDriver } = require('./catalog');
+  const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'drv-'));
+  const r = await downloadDriver('flexasio', { fetchImpl: fakeFetch(), dir });
+  assert.strictEqual(r.verified, true);
+  assert.strictEqual(pathx.dirname(r.file), dir);
+  assert.strictEqual(fsx.readFileSync(r.file).toString(), 'installer-bytes');
+  assert.deepStrictEqual(fsx.readdirSync(dir), ['FlexASIO-1.10.exe']);          // no .part left behind
+  await assert.rejects(downloadDriver('flexasio', { fetchImpl: fakeFetch({ digestOk: false }), dir }), /checksum mismatch/);
+  assert.deepStrictEqual(fsx.readdirSync(dir), ['FlexASIO-1.10.exe']);          // bad download discarded
+  await assert.rejects(downloadDriver('flexasio', { fetchImpl: fakeFetch({ finalUrl: 'https://evil.example/a.exe' }), dir }), /untrusted host/);
+  await assert.rejects(downloadDriver('asio4all', { fetchImpl: fakeFetch(), dir }), /no automatic download/);
+  await assert.rejects(downloadDriver('../../etc/passwd', { fetchImpl: fakeFetch(), dir }), /no automatic download/);
+  fsx.rmSync(dir, { recursive: true, force: true });
+});
+
+test('downloader neutralises hostile asset names', async () => {
+  const { downloadDriver } = require('./catalog');
+  const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'drv-'));
+  const r = await downloadDriver('flexasio', { fetchImpl: fakeFetch({ name: 'FlexASIO-9.exe' }), dir });
+  assert.ok(r.file.startsWith(dir + pathx.sep));
+  fsx.rmSync(dir, { recursive: true, force: true });
+});
+
+test('catalog endpoints: GET list, POST needs the custom header, ids validated, foreign origins refused', async () => {
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const port = server.address().port, base = `http://127.0.0.1:${port}`;
+  const cat = await (await fetch(base + '/api/catalog')).json();
+  assert.strictEqual(cat.ok, true);
+  assert.ok(Array.isArray(cat.items) && cat.items.length > 5 && cat.items.every(i => !('detect' in i) && !('download' in i)));
+  const post = (headers, body, origin) => fetch(base + '/api/catalog/download', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(origin ? { Origin: origin } : {}), ...headers }, body });
+  assert.strictEqual((await post({}, '{"id":"flexasio"}')).status, 400);                                    // no X-Mixer-Action
+  assert.strictEqual((await post({ 'X-Mixer-Action': 'download' }, '{"id":"../x"}')).status, 400);          // bad id
+  assert.strictEqual((await post({ 'X-Mixer-Action': 'download' }, 'nope')).status, 400);
+  assert.strictEqual((await post({ 'X-Mixer-Action': 'download' }, '{"id":"asio4all"}')).status, 400);      // no automatic download
+  assert.strictEqual((await post({ 'X-Mixer-Action': 'download' }, '{"id":"flexasio"}', 'https://evil.example')).status, 403);
+  assert.strictEqual((await post({ 'X-Mixer-Action': 'download' }, 'x'.repeat(5000))).status, 413);
+  assert.strictEqual((await fetch(base + '/api/catalog', { method: 'DELETE' })).status, 405);
+  server.closeAllConnections();
+  server.close();
+});
+
+test('client: argument parsing and the browser opener only accept localhost URLs', () => {
+  const { parseArgs, openCommand } = require('../client/cli');
+  assert.deepStrictEqual(parseArgs([]), { cmd: 'start', arg: null, port: 8765, open: true, help: false });
+  const a = parseArgs(['download', 'flexasio', '--port', '9000', '--no-open']);
+  assert.strictEqual(a.cmd, 'download'); assert.strictEqual(a.arg, 'flexasio'); assert.strictEqual(a.port, 9000); assert.strictEqual(a.open, false);
+  assert.strictEqual(parseArgs(['--port', '99999']).port, 8765);
+  assert.deepStrictEqual(openCommand('win32', 'http://localhost:8765/'), { cmd: 'rundll32', args: ['url.dll,FileProtocolHandler', 'http://localhost:8765/'] });
+  assert.strictEqual(openCommand('linux', 'http://localhost:8765/').cmd, 'xdg-open');
+  assert.strictEqual(openCommand('darwin', 'http://localhost:8765/').cmd, 'open');
+  assert.strictEqual(openCommand('linux', 'https://evil.example/'), null);
+  assert.strictEqual(openCommand('win32', 'http://localhost:8765/ & calc'), null);
+});
