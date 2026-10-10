@@ -791,7 +791,22 @@ window.navTabs = [
             "Loudness Smiley": [5.5, 4.5, 2.0, 0, -2.5, -1.5, 1.0, 3.5, 5.0, 6.0],
             "Mid Scoop": [4.0, 3.0, 1.0, -3.0, -4.5, -3.0, 0, 2.0, 4.0, 4.5],
             "Presence Crisp": [-1.0, -1.0, 0, 0, 1.0, 3.0, 5.0, 4.0, 3.0, 2.0],
-            "Low Cut / HPF": [-12.0, -8.0, -3.5, 0, 0, 0, 0, 0, 0, 0]
+            "Low Cut / HPF": [-12.0, -8.0, -3.5, 0, 0, 0, 0, 0, 0, 0],
+            "MIC • Male Vocal": [-12.0, -9.0, -3.0, -1.5, 0.0, 1.5, 2.5, 3.5, 2.0, 1.0],
+            "MIC • Female Vocal": [-12.0, -10.0, -4.0, -2.0, -1.0, 1.0, 2.5, 3.0, 3.0, 2.0],
+            "MIC • Live Singer / Karaoke": [-9.0, -5.0, -1.0, 0.0, 0.0, 1.5, 3.0, 4.0, 3.0, 2.0],
+            "MIC • Handheld Dynamic (SM58 style)": [-9.0, -6.0, -3.0, -2.0, 0.0, 1.0, 2.5, 3.0, 1.0, 0.5],
+            "MIC • Podcast / Voice-over": [-10.0, -6.0, -2.0, 1.5, 2.0, 1.0, 2.0, 2.5, 1.0, -1.0],
+            "MIC • Broadcast Radio": [-8.0, -5.0, 0.0, 2.5, 3.0, 1.0, 2.0, 3.0, 1.5, 0.0],
+            "MIC • Studio Condenser": [-6.0, -3.0, 0.0, -1.0, 0.0, 0.0, 1.0, 1.5, 3.0, 4.0],
+            "MIC • Headset / Lavalier": [-12.0, -10.0, -4.0, 0.0, 1.0, 2.0, 3.0, 3.0, 0.0, -3.0],
+            "MIC • Guitar Amp (SM57 style)": [-10.0, -6.0, -1.0, 1.0, 1.0, 1.0, 2.0, 3.0, -1.0, -4.0],
+            "MIC • Acoustic Guitar": [-8.0, -4.0, 0.0, -1.0, -2.0, 0.0, 1.0, 2.0, 3.0, 3.0],
+            "MIC • Kick Drum": [4.0, 5.0, 2.0, -3.0, -5.0, -1.0, 2.0, 3.0, 0.0, -2.0],
+            "MIC • Snare / Toms": [-4.0, -2.0, 1.0, 3.0, -2.0, 0.0, 2.0, 3.0, 2.0, 0.0],
+            "MIC • De-Mud & De-Box": [-6.0, -3.0, -1.0, -4.0, -3.0, 0.0, 1.0, 2.0, 2.0, 1.0],
+            "MIC • De-Ess": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0, -3.5, -5.0, -2.0],
+            "MIC • Feedback Safe (live stage)": [-12.0, -8.0, -2.0, -1.0, -1.0, 0.0, -1.0, -3.0, -2.0, -4.0]
         };
 
         // 10 CUSTOM SLOTS CACHE
@@ -3216,7 +3231,7 @@ window.navTabs = [
 
         <!-- Standard Presets Dropdown -->
         <select id="eq-preset-select" onchange="window.loadEQPreset(this.value)" class="bg-black border border-white/20 text-amber-400 font-mono text-[7.5px] px-1.5 py-1 rounded outline-none">
-          <option disabled selected>Standard Presets (15+)</option>
+          <option disabled selected>Standard + Mic Presets (30+)</option>
           <option value="Golden EQ (Amix by AMFB tuned)">&#9733; Golden EQ (Amix by AMFB tuned: +1,+5,+3,+3,+4,+2,+2,+3,+3,+1)</option>
           <option value="Custom EQ">&#9733; Custom EQ (User Profile)</option>
           <option value="Anix W Shape">Anix W Shape</option>
@@ -3234,6 +3249,23 @@ window.navTabs = [
           <option value="Loudness Smiley">Loudness Smiley</option>
           <option value="Mid Scoop">Mid Scoop</option>
           <option value="Presence Crisp">Presence Crisp</option>
+          <optgroup label="MICROPHONE PRESETS">
+          <option value="MIC • Male Vocal">MIC • Male Vocal</option>
+          <option value="MIC • Female Vocal">MIC • Female Vocal</option>
+          <option value="MIC • Live Singer / Karaoke">MIC • Live Singer / Karaoke</option>
+          <option value="MIC • Handheld Dynamic (SM58 style)">MIC • Handheld Dynamic (SM58 style)</option>
+          <option value="MIC • Podcast / Voice-over">MIC • Podcast / Voice-over</option>
+          <option value="MIC • Broadcast Radio">MIC • Broadcast Radio</option>
+          <option value="MIC • Studio Condenser">MIC • Studio Condenser</option>
+          <option value="MIC • Headset / Lavalier">MIC • Headset / Lavalier</option>
+          <option value="MIC • Guitar Amp (SM57 style)">MIC • Guitar Amp (SM57 style)</option>
+          <option value="MIC • Acoustic Guitar">MIC • Acoustic Guitar</option>
+          <option value="MIC • Kick Drum">MIC • Kick Drum</option>
+          <option value="MIC • Snare / Toms">MIC • Snare / Toms</option>
+          <option value="MIC • De-Mud & De-Box">MIC • De-Mud & De-Box</option>
+          <option value="MIC • De-Ess">MIC • De-Ess</option>
+          <option value="MIC • Feedback Safe (live stage)">MIC • Feedback Safe (live stage)</option>
+          </optgroup>
         </select>
 
         <button onclick="window.resetEQFlat()" class="px-2 py-1 bg-white/5 border border-white/10 text-slate-400 hover:text-white text-[7.5px] font-bold rounded uppercase">

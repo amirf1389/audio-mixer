@@ -32,7 +32,21 @@ function keyOf(n) {
   return k || baseName(n).toLowerCase();
 }
 
+// MME and DirectSound cut device names at 31 characters ("Microphone (Focusrite USB Audi"), so the same interface listed by WASAPI under its full
+// name ("Microphone (Focusrite USB Audio)") showed up a second time. A cut name is read as the longer name it is the start of.
+const CUT = 28;
+function untruncate(devices) {
+  const names = [...new Set(devices.map(d => String(d.name || '')))];
+  return devices.map(d => {
+    const n = String(d.name || '');
+    if (n.length < CUT || /\)\s*$/.test(n)) return d;
+    const full = names.filter(m => m.length > n.length && m.toLowerCase().startsWith(n.toLowerCase())).sort((a, b) => a.length - b.length)[0];
+    return full ? { ...d, name: full } : d;
+  });
+}
+
 function groupInterfaces(devices = [], asioNames = []) {
+  devices = untruncate(devices);
   const groups = new Map();
   const hfpBases = new Set(devices.filter(d => HFP.test(d.name || '')).map(d => btBase(d.name)));
   for (const d of devices) {
@@ -66,4 +80,4 @@ function groupInterfaces(devices = [], asioNames = []) {
   return out.sort((a, b) => (a.systemDefault - b.systemDefault) || (a.loopback - b.loopback) || (b.asio - a.asio) || a.name.localeCompare(b.name));
 }
 
-module.exports = { isBluetooth, btBase, isPrimary, groupInterfaces, keyOf, baseName, apiRank };
+module.exports = { untruncate, isBluetooth, btBase, isPrimary, groupInterfaces, keyOf, baseName, apiRank };

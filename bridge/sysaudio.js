@@ -6,6 +6,7 @@
 // Everything is read-only, runs without a shell and fails soft. Device ids are negative: listed, not openable (Audify / PortAudio open them).
 const { execFile } = require('node:child_process');
 const fs = require('node:fs');
+const path = require('node:path');
 
 function defaultRun(cmd, args, timeout = 5000) {
   return new Promise(resolve => {
@@ -67,7 +68,22 @@ async function listLinux({ run = defaultRun, readFile = p => fs.readFileSync(p, 
   return devices;
 }
 
-async function listMac({ run = defaultRun } = {}) {
+// Core Audio helper written in Swift (native/mac/AudioDevices.swift, built by install.command or `swiftc`): channels, sample rate, default device, transport
+const macHelper = () => path.join(__dirname, '..', 'native', 'mac', 'AudioDevices');
+function fromHelper(text) {
+  let j; try { j = JSON.parse(text); } catch (_) { return null; }
+  if (!j || !j.ok || !Array.isArray(j.devices)) return null;
+  const devices = [];
+  for (const d of j.devices) {
+    if (!d || !d.name) continue;
+    devices.push({ id: -(devices.length + 1), name: String(d.name), hostApi: 'Core Audio', native: true, isDefault: !!d.default, transport: d.transport || 'unknown',
+      inputs: d.kind === 'input' ? (d.channels | 0) : 0, outputs: d.kind === 'output' ? (d.channels | 0) : 0, sampleRate: d.sampleRate | 0 || 48000 });
+  }
+  return devices;
+}
+
+async function listMac({ run = defaultRun, exists = fs.existsSync, helper = macHelper() } = {}) {
+  if (exists(helper)) { const h = fromHelper(await run(helper, [])); if (h && h.length) return h; }
   const devices = [];
   for (const d of parseMac(await run('system_profiler', ['SPAudioDataType', '-json'], 15000))) {
     if (d.inputs) devices.push({ id: -(devices.length + 1), name: d.name, hostApi: 'Core Audio', native: true, isDefault: d.defaultIn, inputs: d.inputs, outputs: 0, sampleRate: d.sampleRate });
@@ -86,4 +102,4 @@ async function list(opts = {}) {
   return devices.length ? { engine, hostApis, devices } : null;
 }
 
-module.exports = { list, listLinux, listMac, parseAlsa, parsePactl, parseCards, parseMac };
+module.exports = { fromHelper, macHelper, list, listLinux, listMac, parseAlsa, parsePactl, parseCards, parseMac };

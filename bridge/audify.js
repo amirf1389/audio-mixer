@@ -137,6 +137,22 @@ function detectAudify(load = loadAudify) {
 // closest rate and the bridge converts (linear interpolation, state kept across chunks) so the page still gets / sends audio at the mixer's rate.
 const { isBluetooth } = require('./interfaces');
 function nearestRate(rates, want) { return rates.slice().sort((a, b) => Math.abs(a - want) - Math.abs(b - want) || b - a)[0]; }
+// RtAudio reports recoverable trouble (a buffer under- / overrun on DirectSound or WASAPI, a skipped block) through the SAME error callback as
+// fatal errors, with a warning type. Closing the stream on the first of them made every glitch end the audio: only real errors stop it.
+// RtAudio 5: WARNING = 0, DEBUG_WARNING = 1; RtAudio 6: NO_ERROR = 0, WARNING = 1.
+function isWarning(mod, type) {
+  if (typeof type === 'string') return /warning/i.test(type);
+  const e = (mod && (mod.RtAudioErrorType || mod.RtAudioError)) || {};
+  const names = Object.keys(e).filter(k => /WARNING|NO_ERROR/.test(k) && typeof e[k] === 'number').map(k => e[k]);
+  return names.length ? names.includes(type) : (type === 0 || type === 1);
+}
+function errorHandler(mod, onError, onWarning) {
+  return (type, msg) => {
+    if (isWarning(mod, type)) { if (onWarning) onWarning(new Error(String(msg || 'warning'))); return; }
+    if (onError) onError(new Error(String(msg || type)));
+  };
+}
+
 // Interleaved Int16: more channels -> fewer (channel c gets the average of the input channels i with i % to === c, so stereo -> mono is (L + R) / 2).
 function remapChannels(buf, from, to) {
   if (from === to) return buf;
@@ -177,7 +193,7 @@ function createResampler(inRate, outRate, channels) {
 }
 
 // Opens one RtAudio stream (output or input). Returns { frameSize, sampleRate, channels, write, close } or throws.
-function openStreamRaw({ mod, dev, direction, channels, sampleRate, frameSize, onData, onError }) {
+function openStreamRaw({ mod, dev, direction, channels, sampleRate, frameSize, onData, onError, onWarning }) {
   sampleRate = Number(sampleRate);
   const { RtAudio, RtAudioFormat = {}, RtAudioStreamFlags = {} } = mod, Api = apiEnum(mod);
   const out = direction === 'output';
@@ -203,10 +219,11 @@ function openStreamRaw({ mod, dev, direction, channels, sampleRate, frameSize, o
   let lastErr = null;
   for (const fs of p.candidates) {
     const rt = new RtAudio(Api[dev.api]);
+    let warnings = 0, lastWarning = '';
     try {
       const params = { deviceId: dev.rtId, nChannels: ch, firstChannel: 0 };
       const actual = rt.openStream(out ? params : null, out ? null : params, fmt, sampleRate, fs, 'Audio Mixer',
-        out ? null : (pcm => { if (!onData) return; const b = Buffer.from(pcm); onData(conv ? conv(b) : b); }), null, flags, (type, msg) => onError && onError(new Error(String(msg || type))));
+        out ? null : (pcm => { if (!onData) return; const b = Buffer.from(pcm); onData(conv ? conv(b) : b); }), null, flags, errorHandler(mod, e => onError && onError(e), e => { warnings++; lastWarning = e.message; if (onWarning) onWarning(e); }));
       rt.start();
       const used = Number.isInteger(actual) && actual > 0 ? actual : fs;
       if (!(used > 0)) throw new Error('the driver did not report its buffer size');
@@ -215,7 +232,7 @@ function openStreamRaw({ mod, dev, direction, channels, sampleRate, frameSize, o
       return {
         frameSize: used, sampleRate: wantRate, deviceRate: sampleRate, resampled: !!conv, channels: remap ? channels : ch, deviceChannels: ch, mixedDown: !!remap, auto: p.auto, tried: p.candidates.slice(0, p.candidates.indexOf(fs) + 1),
         latencyMs: Math.round(used / sampleRate * 10000) / 10,
-        get dropped() { return dropped; },
+        get dropped() { return dropped; }, get warnings() { return warnings; }, get lastWarning() { return lastWarning; },
         // RtAudio needs whole blocks of exactly frameSize frames.
         write(buf) {
           if (remap) buf = remap(buf);
@@ -239,7 +256,7 @@ function openStreamRaw({ mod, dev, direction, channels, sampleRate, frameSize, o
 
 // Opens ONE RtAudio stream that reads and writes the same device (ASIO drivers are single-client: one duplex stream, not two).
 // Returns { frameSize, sampleRate, inChannels, outChannels, write, close } or throws.
-function openDuplexRaw({ mod, dev, inChannels, outChannels, sampleRate, frameSize, onData, onError }) {
+function openDuplexRaw({ mod, dev, inChannels, outChannels, sampleRate, frameSize, onData, onError, onWarning }) {
   const { RtAudio, RtAudioFormat = {}, RtAudioStreamFlags = {} } = mod, Api = apiEnum(mod);
   if (!dev.maxInputChannels || !dev.maxOutputChannels) throw new Error(`${dev.name} cannot read and write at once`);
   if (outChannels > dev.maxOutputChannels) throw new Error(`${dev.name} has only ${dev.maxOutputChannels} output channel(s)`);
@@ -255,7 +272,7 @@ function openDuplexRaw({ mod, dev, inChannels, outChannels, sampleRate, frameSiz
     const rt = new RtAudio(Api[dev.api]);
     try {
       const actual = rt.openStream({ deviceId: dev.rtId, nChannels: outChannels, firstChannel: 0 }, { deviceId: dev.rtId, nChannels: ci, firstChannel: 0 },
-        fmt, sampleRate, fs, 'Audio Mixer', pcm => onData && onData(Buffer.from(pcm)), null, flags, (type, msg) => onError && onError(new Error(String(msg || type))));
+        fmt, sampleRate, fs, 'Audio Mixer', pcm => onData && onData(Buffer.from(pcm)), null, flags, errorHandler(mod, e => onError && onError(e), e => { if (onWarning) onWarning(e); }));
       rt.start();
       const used = Number.isInteger(actual) && actual > 0 ? actual : fs;
       if (!(used > 0)) throw new Error('the driver did not report its buffer size');
@@ -366,4 +383,4 @@ function describe(load = loadAudify) {
   };
 }
 
-module.exports = { remapChannels, _asioOf: asioOf, createResampler, nearestRate, loadAudify, loadProblem, API_NAMES, apiKey, recommendFrameSize, frameCandidates, plan, listDevices, detectAudify, openStream, openDuplex, pickAudifyDevice, describe, isPow2, AUDIFY_BASE, MIN_FRAMES, MAX_FRAMES };
+module.exports = { isWarning, remapChannels, _asioOf: asioOf, createResampler, nearestRate, loadAudify, loadProblem, API_NAMES, apiKey, recommendFrameSize, frameCandidates, plan, listDevices, detectAudify, openStream, openDuplex, pickAudifyDevice, describe, isPow2, AUDIFY_BASE, MIN_FRAMES, MAX_FRAMES };

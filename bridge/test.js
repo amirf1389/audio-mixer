@@ -1479,3 +1479,70 @@ test('android app: page transform, version code, launcher icon, sources', () => 
   const java = fsx.readFileSync(pathx.join(__dirname, '..', 'android', 'src', 'com', 'audiomixer', 'app', 'MainActivity.java'), 'utf8');
   assert.ok(java.includes('file:///android_asset/www/index.html') && java.includes('setAllowUniversalAccessFromFileURLs(false)') && java.includes('RESOURCE_AUDIO_CAPTURE'));
 });
+
+test('mic EQ presets: every menu entry has 10 sane bands and the mic group is present', () => {
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  const sel = /<select id="eq-preset-select"[\s\S]*?<\/select>/.exec(html)[0];
+  const values = [...sel.matchAll(/<option value="([^"]+)"/g)].map(m => m[1]);
+  const block = /window\.standardEQPresets = \{([\s\S]*?)\n        \};/.exec(html)[1];
+  const defs = {}; for (const m of block.matchAll(/"([^"]+)": \[([^\]]+)\]/g)) defs[m[1]] = m[2].split(',').map(Number);
+  assert.ok(/<optgroup label="MICROPHONE PRESETS">/.test(sel));
+  const mic = values.filter(v => v.startsWith('MIC • ')); assert.ok(mic.length >= 15);
+  for (const v of values) { assert.ok(defs[v], 'preset missing: ' + v); assert.strictEqual(defs[v].length, 10, v); assert.ok(defs[v].every(g => Number.isFinite(g) && g >= -12 && g <= 12), v); }
+  for (const v of mic) assert.ok(defs[v][0] <= 5, v);                                                         // no mic preset boosts the sub-bass hard except the kick
+  assert.ok(defs['MIC • Male Vocal'][0] <= -9 && defs['MIC • Feedback Safe (live stage)'].slice(0, 2).every(g => g <= -8));   // vocal presets roll off the rumble
+});
+
+test('RtAudio DirectSound / WASAPI / ASIO: warnings do not close the stream, cut 31-character names join their interface', () => {
+  const a = require('./audify'); const { groupInterfaces, untruncate } = require('./interfaces');
+  // RtAudio 5 (WARNING = 0) and 6 (WARNING = 1) both: a warning is not an error
+  assert.ok(a.isWarning({}, 0) && a.isWarning({}, 1) && !a.isWarning({}, 2) && !a.isWarning({}, 9));
+  assert.ok(a.isWarning({ RtAudioErrorType: { RTAUDIO_NO_ERROR: 0, RTAUDIO_WARNING: 1, RTAUDIO_UNKNOWN_ERROR: 2 } }, 1) && !a.isWarning({ RtAudioErrorType: { RTAUDIO_NO_ERROR: 0, RTAUDIO_WARNING: 1, RTAUDIO_UNKNOWN_ERROR: 2 } }, 2));
+  assert.ok(a.isWarning({}, 'RTAUDIO_WARNING') && !a.isWarning({}, 'RTAUDIO_DRIVER_ERROR'));
+  const fa = fakeAudify(); let errCb = null;
+  fa.RtAudio.prototype.openStream = function (out, inp, fmt, rate, frames, name, cb, fo, flags, onErr) { errCb = onErr; return frames === 0 ? 192 : frames; };
+  const ds = { id: 1300, rtId: 2, api: 'WINDOWS_DS', hostAPIName: 'Windows DirectSound', name: 'Speakers (Realtek)', maxInputChannels: 0, maxOutputChannels: 2, sampleRates: [44100, 48000] };
+  const errors = [], warns = [];
+  const st = a.openStream({ mod: fa, dev: ds, direction: 'output', channels: 2, sampleRate: 48000, onError: e => errors.push(e.message), onWarning: e => warns.push(e.message) });
+  errCb(1, 'RtApiDs: buffer underrun'); errCb(0, 'skipped');                                         // glitches: stream stays open
+  assert.deepStrictEqual(errors, []); assert.strictEqual(warns.length, 2); assert.strictEqual(st.warnings, 2); assert.match(st.lastWarning, /skipped/);
+  errCb(9, 'RtApiDs: device lost'); assert.deepStrictEqual(errors, ['RtApiDs: device lost']);       // a real error still ends it
+  // 31-character names of MME / DirectSound
+  const dev = (id, name, hostApi, inputs, outputs) => ({ id, name, hostApi, inputs, outputs, sampleRate: 48000 });
+  const full = 'Microphone (Focusrite USB Audio)', cut = full.slice(0, 31);
+  assert.strictEqual(cut.length, 31);
+  const list = groupInterfaces([dev(0, cut, 'MME', 2, 0), dev(1, 'Speakers (Focusrite USB Audio)'.slice(0, 31), 'Windows DirectSound', 0, 2), dev(2, full, 'Windows WASAPI', 2, 0), dev(3, 'Speakers (Focusrite USB Audio)', 'Windows WASAPI', 0, 2)]);
+  assert.strictEqual(list.length, 1); assert.strictEqual(list[0].name, 'Focusrite USB Audio'); assert.strictEqual(list[0].apis.length, 4);
+  assert.strictEqual(untruncate([dev(0, 'Short (Mic)', 'MME', 1, 0)])[0].name, 'Short (Mic)');                                                       // short names untouched
+  assert.strictEqual(groupInterfaces([dev(0, cut, 'MME', 2, 0)]).length, 1);                                                                           // nothing to join: kept
+});
+
+test('Swift Core Audio helper: its JSON is read by the bridge, the source is shipped', async () => {
+  const sa = require('./sysaudio');
+  const json = JSON.stringify({ ok: true, devices: [{ id: 'BuiltInMic', name: 'MacBook Pro Microphone', kind: 'input', channels: 1, sampleRate: 48000, default: true, transport: 'builtin' },
+    { id: 'Scarlett', name: 'Scarlett 2i2', kind: 'input', channels: 2, sampleRate: 44100, default: false, transport: 'usb' }, { id: 'Scarlett', name: 'Scarlett 2i2', kind: 'output', channels: 2, sampleRate: 44100, default: true, transport: 'usb' }] });
+  const calls = [];
+  const m = await sa.list({ platform: 'darwin', exists: () => true, helper: '/x/AudioDevices', run: async c => { calls.push(c); return json; } });
+  assert.deepStrictEqual(calls, ['/x/AudioDevices']); assert.strictEqual(m.engine, 'coreaudio-native'); assert.strictEqual(m.devices.length, 3);
+  assert.strictEqual(m.devices[1].transport, 'usb'); assert.ok(m.devices[0].isDefault && m.devices[0].inputs === 1 && m.devices[2].outputs === 2);
+  const gi = require('./interfaces').groupInterfaces(m.devices.map(d => ({ id: d.id, name: d.name, hostApi: d.hostApi, inputs: d.inputs, outputs: d.outputs })));
+  assert.ok(gi.some(i => i.name === 'Scarlett 2i2' && i.inputs === 2 && i.outputs === 2));
+  const fb = await sa.list({ platform: 'darwin', exists: () => true, helper: '/x/AudioDevices', run: async c => (c === '/x/AudioDevices' ? 'garbage' : JSON.stringify({ SPAudioDataType: [{ _items: [{ _name: 'Mic', coreaudio_device_input: 1 }] }] })) });
+  assert.strictEqual(fb.devices[0].name, 'Mic');                                                              // broken helper: system_profiler
+  assert.strictEqual(sa.fromHelper('{"ok":false}'), null);
+  const src = fsx.readFileSync(pathx.join(__dirname, '..', 'native', 'mac', 'AudioDevices.swift'), 'utf8');
+  assert.ok(src.includes('import CoreAudio') && src.includes('kAudioHardwarePropertyDevices') && src.includes('JSONSerialization'));
+});
+
+test('iOS app: Swift sources, XcodeGen spec, opaque icon, project bundle', async () => {
+  const ios = require('../scripts/build-ios'); const root = pathx.join(__dirname, '..', 'ios');
+  const tpl = fsx.readFileSync(pathx.join(root, 'project.yml.template'), 'utf8');
+  const yml = ios.projectYml(tpl, '1.11.0'); assert.ok(!yml.includes('@VERSION@') && !yml.includes('@BUILD@') && yml.includes('MARKETING_VERSION: "1.11.0"') && yml.includes('CURRENT_PROJECT_VERSION: "11100"'));
+  for (const k of ['NSMicrophoneUsageDescription', 'UIBackgroundModes: [audio]', 'NSAllowsLocalNetworking: true', 'PRODUCT_BUNDLE_IDENTIFIER: com.audiomixer.app', 'path: www']) assert.ok(yml.includes(k), k);
+  assert.ok(!/NSCameraUsageDescription|NSPhotoLibrary|NSLocation/.test(yml));
+  const app = fsx.readFileSync(pathx.join(root, 'AudioMixer', 'AudioMixerApp.swift'), 'utf8'), srv = fsx.readFileSync(pathx.join(root, 'AudioMixer', 'LocalServer.swift'), 'utf8');
+  assert.ok(app.includes('WKWebView') && app.includes('requestMediaCapturePermissionFor') && app.includes('.microphone') && app.includes('origin.host == "127.0.0.1"') && app.includes('AVAudioSession'));
+  assert.ok(srv.includes('requiredInterfaceType = .loopback') && srv.includes('NWListener') && srv.includes('path.contains("..")') && srv.includes('hasPrefix(root.path + "/")') && /method == "GET" \|\| method == "HEAD"/.test(srv));
+  for (const f of [app, srv]) { assert.strictEqual((f.match(/\{/g) || []).length, (f.match(/\}/g) || []).length, 'balanced braces'); assert.strictEqual((f.match(/\(/g) || []).length, (f.match(/\)/g) || []).length, 'balanced parentheses'); }
+  assert.deepStrictEqual(ios.iconPixelOpaque(0, 0).slice(3), [255]);                                          // no transparency in the App Store icon
+});

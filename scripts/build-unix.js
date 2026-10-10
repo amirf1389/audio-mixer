@@ -176,6 +176,10 @@ mkdir -p "$HOME/AudioMixerPlugins"
 echo "Audio Mixer installed in $DEST"
 APP="$DEST/Audio Mixer.app/Contents/Resources/app"
 . "$APP/ensure-node.sh"
+# Core Audio helper (Swift): lists the audio interfaces with channels and sample rates; optional, needs the Xcode command line tools
+if command -v swiftc >/dev/null 2>&1 && [ -f "$APP/native/mac/AudioDevices.swift" ]; then
+  swiftc -O -o "$APP/native/mac/AudioDevices" "$APP/native/mac/AudioDevices.swift" 2>/dev/null && echo "Core Audio helper built" || echo "Core Audio helper not built (system_profiler is used instead)"
+fi
 # Node.js 18+ and the native audio module are installed now if they are missing (official builds, checksum verified, no administrator rights)
 if am_ensure_node; then
   am_ensure_audio "$APP"
