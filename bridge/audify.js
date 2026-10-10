@@ -77,6 +77,23 @@ function apiEnum(mod) { return mod.RtAudioApi || mod.RtAudioApis || {}; }
 const registries = new WeakMap();   // per loaded module (in production there is exactly one)
 const asioOf = mod => { let m = registries.get(mod); if (!m) { m = new Map(); registries.set(mod, m); } return m; };
 
+// ASIO probe results are merged with what the last probes saw: a device that probes with channels is remembered (name -> info, order kept so the ids stay
+// the same); one that fails to probe is kept for ASIO_GRACE_MS (busy for a moment, driver panel open), then dropped (really unplugged).
+const ASIO_GRACE_MS = 20000;
+function mergeAsio(asio, fresh, now) {
+  const seen = asio.seen || (asio.seen = new Map()), order = asio.order || [];
+  const good = new Set(), unprobed = [];
+  for (const d of fresh) {
+    const name = String(d.name || '');
+    if ((d.inputChannels || 0) + (d.outputChannels || 0) > 0) { seen.set(name, { d, at: now }); good.add(name); } else unprobed.push(name);
+  }
+  const names = order.filter(n => seen.has(n) && (good.has(n) || now - seen.get(n).at < ASIO_GRACE_MS));
+  for (const n of good) if (!names.includes(n)) names.push(n);
+  for (const n of [...seen.keys()]) if (!names.includes(n)) seen.delete(n);
+  asio.order = names;
+  return { list: names.map(n => seen.get(n).d), unprobed, stale: names.filter(n => !good.has(n)) };
+}
+
 // Every compiled API (ASIO, WASAPI, ...) with its devices. Device ids are made unique across APIs (the bridge's `deviceId`).
 function listDevices(load = loadAudify) {
   let mod;
@@ -89,23 +106,30 @@ function listDevices(load = loadAudify) {
     if (Array.isArray(compiled)) apis = compiled.map(a => typeof a === 'number' ? byNumber.get(a) : String(a)).filter(Boolean);
   } catch (_) { /* fall back to probing */ }
   if (!apis.length) apis = Object.keys(API_NAMES).filter(k => typeof Api[k] === 'number');
-  const devices = [], hostApis = [];
+  const devices = [], hostApis = [], problems = [];
   let next = AUDIFY_BASE;
   for (const key of apis) {
     if (!API_NAMES[key]) continue;                      // skips the dummy API and unknown ones
     // An ASIO driver is single-client and process-wide: probing it (new RtAudio + getDevices) while a stream is open can stall or kill that stream,
     // and the page scans every few seconds. While an ASIO stream is open the last probed list is reused.
     const asio = asioOf(mod);
-    const cached = key === 'WINDOWS_ASIO' && asio.size > 0 && asio.list ? asio.list : null;
+    const isAsio = key === 'WINDOWS_ASIO';
+    const cached = isAsio && asio.size > 0 && asio.list ? asio.list : null;
     let rt = null;
-    let list = [];
+    let list = [], probeError = '';
     if (cached) list = cached;
     else {
-      try { rt = new RtAudio(Api[key]); } catch (_) { continue; }
+      try { rt = new RtAudio(Api[key]); } catch (e) { if (!isAsio) continue; probeError = String(e && e.message || e); }
       // RtAudio silently substitutes another API when the requested one is not compiled in: skip it instead of listing duplicates.
-      try { if (typeof rt.getApi === 'function' && apiKey(rt.getApi()) !== key) continue; } catch (_) { /* cannot tell: keep it */ }
-      try { list = rt.getDevices() || []; } catch (_) { /* API present but no devices */ }
-      if (key === 'WINDOWS_ASIO' && list.length) asio.list = list;
+      if (rt) try { if (typeof rt.getApi === 'function' && apiKey(rt.getApi()) !== key) continue; } catch (_) { /* cannot tell: keep it */ }
+      if (rt) try { list = rt.getDevices() || []; } catch (e) { probeError = String(e && e.message || e); /* API present but no devices */ }
+      if (isAsio) {
+        // RtApiAsio::probeDeviceInfo fails for a driver that another program has open or whose interface is unplugged: the driver then shows up with
+        // no channels (or the whole probe throws). Such a failure must not make the interface vanish and come back on every scan.
+        const m = mergeAsio(asio, list, Date.now());
+        list = m.list; asio.list = list.length ? list : asio.list;
+        if (probeError || m.unprobed.length || m.stale.length) problems.push({ api: 'ASIO', message: probeError || '', unprobed: m.unprobed, kept: m.stale });
+      }
     }
     if (!list.length) { hostApis.push(API_NAMES[key]); continue; }
     hostApis.push(API_NAMES[key]);
@@ -120,7 +144,7 @@ function listDevices(load = loadAudify) {
     }
     try { if (rt && typeof rt.closeStream === 'function') rt.closeStream(); } catch (_) { /* nothing open */ }
   }
-  return { hostApis, devices };
+  return { hostApis, devices, problems };
 }
 
 // Same shape as the PortAudio detection so the page, interface grouping and ASIO lock work with either engine.
@@ -373,8 +397,9 @@ function loadProblem(load = loadAudify, platform = process.platform) {
 function describe(load = loadAudify) {
   const r = listDevices(load);
   if (!r) return { installed: false, hostApis: [], devices: [], ...(loadProblem(load) || {}) };
+  const problems = (r.problems || []).map(p => ({ ...p, hint: 'An ASIO driver could not be queried (RtApiAsio::probeDeviceInfo): it is open in another program (DAW, the driver\'s control panel) or its interface is unplugged. Close the other program or replug the interface; the last known devices are kept for ' + ASIO_GRACE_MS / 1000 + ' s.' }));
   return {
-    installed: true, hostApis: r.hostApis,
+    installed: true, hostApis: r.hostApis, ...(problems.length ? { problems } : {}),
     devices: r.devices.map(d => ({ ...d, recommended: ['input', 'output'].reduce((o, k) => {
       const ch = k === 'input' ? d.maxInputChannels : d.maxOutputChannels;
       if (ch) o[k] = recommendFrameSize({ api: d.api, sampleRate: d.defaultSampleRate, channels: ch });
@@ -383,4 +408,4 @@ function describe(load = loadAudify) {
   };
 }
 
-module.exports = { isWarning, remapChannels, _asioOf: asioOf, createResampler, nearestRate, loadAudify, loadProblem, API_NAMES, apiKey, recommendFrameSize, frameCandidates, plan, listDevices, detectAudify, openStream, openDuplex, pickAudifyDevice, describe, isPow2, AUDIFY_BASE, MIN_FRAMES, MAX_FRAMES };
+module.exports = { mergeAsio, ASIO_GRACE_MS, isWarning, remapChannels, _asioOf: asioOf, createResampler, nearestRate, loadAudify, loadProblem, API_NAMES, apiKey, recommendFrameSize, frameCandidates, plan, listDevices, detectAudify, openStream, openDuplex, pickAudifyDevice, describe, isPow2, AUDIFY_BASE, MIN_FRAMES, MAX_FRAMES };
