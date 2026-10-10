@@ -133,4 +133,4 @@ async function detect() {
   return { platform: p, arch: process.arch, node: process.version, ...r, vst: detectVst(), portaudio, audify: audifyInfo, engines: { naudiodon: !!naudiodon, audify: !!audifyInfo } };
 }
 
-module.exports = { detect };
+module.exports = { detect, detectPortAudio };

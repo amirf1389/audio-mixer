@@ -175,10 +175,21 @@ function pickAudifyDevice(devices, wantedId, direction, channels) {
   return devices.find(d => /asio/i.test(d.hostAPIName) && d[key] >= channels) || null;
 }
 
+// Why the module did not load, with the fix: on Windows a "module could not be found" error nearly always means the Microsoft Visual C++ runtime is missing.
+function loadProblem(load = loadAudify, platform = process.platform) {
+  try { load(); return null; } catch (e) {
+    const msg = String(e && e.message || e).split('\n')[0].slice(0, 300);
+    let hint = 'Install it with: cd bridge && npm install audify  (or run the launcher again, it installs it for you)';
+    if (/Cannot find module/i.test(msg)) hint = 'The Audify module is not installed. Run the PC mode launcher again (it installs it), or: cd bridge && npm install audify';
+    else if (platform === 'win32' && /specified module could not be found|ERR_DLOPEN_FAILED|vcruntime|msvcp/i.test(msg)) hint = 'Install the Microsoft Visual C++ runtime: winget install Microsoft.VCRedist.2015+.x64  (https://aka.ms/vs/17/release/vc_redist.x64.exe)';
+    return { error: msg, hint };
+  }
+}
+
 // Data for GET /api/audify
 function describe(load = loadAudify) {
   const r = listDevices(load);
-  if (!r) return { installed: false, hostApis: [], devices: [] };
+  if (!r) return { installed: false, hostApis: [], devices: [], ...(loadProblem(load) || {}) };
   return {
     installed: true, hostApis: r.hostApis,
     devices: r.devices.map(d => ({ ...d, recommended: ['input', 'output'].reduce((o, k) => {
@@ -189,4 +200,4 @@ function describe(load = loadAudify) {
   };
 }
 
-module.exports = { loadAudify, API_NAMES, apiKey, recommendFrameSize, frameCandidates, plan, listDevices, detectAudify, openStream, pickAudifyDevice, describe, isPow2, AUDIFY_BASE, MIN_FRAMES, MAX_FRAMES };
+module.exports = { loadAudify, loadProblem, API_NAMES, apiKey, recommendFrameSize, frameCandidates, plan, listDevices, detectAudify, openStream, pickAudifyDevice, describe, isPow2, AUDIFY_BASE, MIN_FRAMES, MAX_FRAMES };

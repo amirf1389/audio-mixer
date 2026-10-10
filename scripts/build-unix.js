@@ -19,12 +19,13 @@ const HOMEPAGE = 'https://github.com/amirf1389/audio-mixer';
 
 const LAUNCHER_LINUX = `#!/bin/sh
 # Audio Mixer: starts the local server and opens the mixer in the browser (PC mode). Options are passed on, for example --no-open or --port 8800.
-NODE="\${AUDIO_MIXER_NODE:-node}"
-if ! command -v "$NODE" >/dev/null 2>&1; then
-  echo "Audio Mixer needs Node.js 18 or newer: https://nodejs.org/ (or your package manager)" >&2
-  exit 1
-fi
-exec "$NODE" /${OPT}/client/cli.js "$@"
+# Node.js 18+ is installed automatically from nodejs.org when missing (into ~/.local/share/audio-mixer, checksum verified, no administrator rights),
+# and the native audio module (Audify) is installed once. AUDIO_MIXER_YES=1 skips the questions, AUDIO_MIXER_NO_NATIVE=1 skips the audio module.
+APP=/${OPT}
+. "$APP/ensure-node.sh"
+am_ensure_node || exit 1
+am_ensure_audio "$APP"
+exec "$NODE" "$APP/client/cli.js" "$@"
 `;
 
 const desktopEntry = () => `[Desktop Entry]
@@ -56,8 +57,7 @@ Version: ${version}
 Section: sound
 Priority: optional
 Architecture: all
-Depends: nodejs (>= 18)
-Recommends: pipewire | jackd2 | alsa-utils
+Recommends: nodejs (>= 18), pipewire | jackd2 | alsa-utils
 Installed-Size: ${installedSizeKb}
 Maintainer: Audio Mixer <noreply@users.noreply.github.com>
 Homepage: ${HOMEPAGE}
@@ -66,6 +66,8 @@ Description: virtual mixing console with a local audio server
  server that connects it to ALSA, JACK and PipeWire audio, detects VST plugins
  and reads what Spotify, YouTube Music, TIDAL and others are playing.
  Start it with the "audio-mixer" command or from the application menu.
+ If Node.js 18+ is not installed, the command offers to download the official
+ build from nodejs.org (checksum verified, no administrator rights).
  To start it at login: systemctl --user enable --now audio-mixer
 `;
 }
@@ -134,17 +136,13 @@ function buildDeb({ out = path.join(ROOT, 'dist'), app = build({ out }) } = {}) 
 
 // ── macOS app bundle ──
 const MAC_LAUNCHER = `#!/bin/bash
-# Audio Mixer.app: finds Node.js, starts the local server and opens the mixer in the browser.
-APP="$(cd "$(dirname "$0")/.." && pwd)"
-for n in "$AUDIO_MIXER_NODE" /opt/homebrew/bin/node /usr/local/bin/node "$(command -v node 2>/dev/null)" "$HOME"/.nvm/versions/node/*/bin/node; do
-  [ -n "$n" ] && [ -x "$n" ] && NODE="$n" && break
-done
-if [ -z "$NODE" ]; then
-  osascript -e 'display dialog "Audio Mixer needs Node.js 18 or newer. The download page opens now; install it, then start Audio Mixer again." buttons {"OK"} with icon caution' >/dev/null 2>&1
-  open "https://nodejs.org/en/download" 2>/dev/null
-  exit 1
-fi
-exec "$NODE" "$APP/Resources/app/client/cli.js" "$@"
+# Audio Mixer.app: finds Node.js 18+ (or downloads the official build from nodejs.org after asking, checksum verified, no administrator rights),
+# installs the native audio module once, starts the local server and opens the mixer in the browser.
+APP="$(cd "$(dirname "$0")/.." && pwd)/Resources/app"
+. "$APP/ensure-node.sh"
+am_ensure_node || { osascript -e 'display dialog "Audio Mixer needs Node.js 18 or newer and it could not be installed automatically. Install it from nodejs.org, then start Audio Mixer again." buttons {"OK"} with icon caution' >/dev/null 2>&1; open "https://nodejs.org/en/download" 2>/dev/null; exit 1; }
+am_ensure_audio "$APP"
+exec "$NODE" "$APP/client/cli.js" "$@"
 `;
 
 const infoPlist = version => `<?xml version="1.0" encoding="UTF-8"?>
@@ -176,11 +174,15 @@ cp -R "Audio Mixer.app" "$DEST/" || { echo "Copy failed"; exit 1; }
 xattr -dr com.apple.quarantine "$DEST/Audio Mixer.app" 2>/dev/null   # the app is not notarized
 mkdir -p "$HOME/AudioMixerPlugins"
 echo "Audio Mixer installed in $DEST"
-NODE="$(command -v node 2>/dev/null || ls /opt/homebrew/bin/node /usr/local/bin/node 2>/dev/null | head -1)"
-if [ -z "$NODE" ]; then echo "Node.js 18+ is not installed yet: https://nodejs.org/en/download"; fi
-read -r -p "Start the local server when I log in? [y/N] " a
-if [ "$a" = "y" ] || [ "$a" = "Y" ]; then
-  [ -n "$NODE" ] && "$NODE" "$DEST/Audio Mixer.app/Contents/Resources/app/client/cli.js" service install
+APP="$DEST/Audio Mixer.app/Contents/Resources/app"
+. "$APP/ensure-node.sh"
+# Node.js 18+ and the native audio module are installed now if they are missing (official builds, checksum verified, no administrator rights)
+if am_ensure_node; then
+  am_ensure_audio "$APP"
+  read -r -p "Start the local server when I log in? [y/N] " a
+  if [ "$a" = "y" ] || [ "$a" = "Y" ]; then "$NODE" "$APP/client/cli.js" service install; fi
+else
+  echo "Node.js 18+ is not installed: https://nodejs.org/en/download (Audio Mixer asks again the first time it starts)."
 fi
 echo "Done. Open Audio Mixer from $DEST. Remove it later with uninstall.command."
 `;
@@ -190,12 +192,13 @@ const MAC_UNINSTALL = `#!/bin/bash
 for DEST in /Applications "$HOME/Applications"; do
   APP="$DEST/Audio Mixer.app"
   if [ -d "$APP" ]; then
-    NODE="$(command -v node 2>/dev/null || ls /opt/homebrew/bin/node /usr/local/bin/node 2>/dev/null | head -1)"
+    NODE="$(command -v node 2>/dev/null || ls "$HOME/.local/share/audio-mixer/node/bin/node" /opt/homebrew/bin/node /usr/local/bin/node 2>/dev/null | head -1)"
     [ -n "$NODE" ] && "$NODE" "$APP/Contents/Resources/app/client/cli.js" service uninstall
     rm -rf "$APP" && echo "Removed $APP"
   fi
 done
 rm -f "$HOME/Library/LaunchAgents/com.audiomixer.bridge.plist"
+rm -rf "$HOME/.local/share/audio-mixer"   # the private Node.js and audio module that Audio Mixer downloaded
 echo "Audio Mixer removed."
 `;
 

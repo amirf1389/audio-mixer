@@ -7,7 +7,7 @@
 //   node client/cli.js download <id>   save an official installer (e.g. flexasio); it is never run for you
 //   node client/cli.js doctor          check Node.js, ports, PortAudio, ASIO drivers, download folder
 //   node client/cli.js verify [installer.exe] [--scan]   verification scan: file hashes, signatures, loopback-only, Defender scan
-//   node client/cli.js setup           install the native audio module (PortAudio) for ASIO / WASAPI
+//   node client/cli.js setup [--user]  install the native audio modules (Audify, PortAudio) for ASIO / WASAPI; --user: Audify only, into your home folder
 //   node client/cli.js service install|uninstall|status   start the server automatically when you log in
 const http = require('node:http');
 const fs = require('node:fs');
@@ -101,6 +101,7 @@ async function cmdDoctor(port) {
   const running = await probe(port);
   line(true, running ? `Server already running on port ${port}` : `Port ${port} is free for the server`);
   line(!!info.portaudio, info.portaudio ? `${info.portaudio.engine === 'audify' ? 'Audify (RtAudio)' : 'PortAudio'} module present (${info.portaudio.hostApis.join(', ')})${info.engines && info.engines.naudiodon && info.engines.audify ? ' + Audify' : ''}` : 'Audio engine missing: ASIO/WASAPI output needs "cd bridge && npm install" (naudiodon2 or audify)');
+  if (!info.portaudio) { const pr = require('../bridge/audify').loadProblem(); if (pr) console.log(`HINT Audify: ${pr.error}\n     ${pr.hint}`); }
   console.log(`INFO ASIO drivers installed: ${info.asio.length ? info.asio.join(', ') : 'none'}`);
   console.log(`INFO Native stacks found: ${info.drivers.join(', ') || 'none'}`);
   try { fs.mkdirSync(dir, { recursive: true }); fs.accessSync(dir, fs.constants.W_OK); line(true, `Download folder writable: ${dir}`); } catch (_) { line(false, `Download folder not writable: ${dir}`); }
@@ -108,17 +109,25 @@ async function cmdDoctor(port) {
   return bad ? 1 : 0;
 }
 
-// Installs bridge/ dependencies (naudiodon2 / PortAudio). Needs npm and a C++ build toolchain; failure is not fatal for web mode.
-function cmdSetup() {
+// Installs the native audio modules. Default: bridge/ dependencies (Audify and naudiodon2). --user: only Audify (prebuilt binary, no compiler),
+// into ~/.local/share/audio-mixer/modules, which the launchers put on NODE_PATH (the app folder may be read-only, e.g. /opt/audio-mixer).
+function cmdSetup(argv = []) {
   const { spawn } = require('node:child_process');
-  const cwd = require('node:path').resolve(__dirname, '..', 'bridge');
-  console.log('Installing the PortAudio native module in bridge/ (this can take a minute) ...');
+  const path = require('node:path'), os = require('node:os');
+  let cwd = path.resolve(__dirname, '..', 'bridge'), args = ['install'];
+  if (argv.includes('--user')) {
+    cwd = path.join(process.env.AUDIO_MIXER_HOME || path.join(os.homedir(), '.local', 'share', 'audio-mixer'), 'modules');
+    fs.mkdirSync(cwd, { recursive: true });
+    if (!fs.existsSync(path.join(cwd, 'package.json'))) fs.writeFileSync(path.join(cwd, 'package.json'), '{"name":"audio-mixer-modules","private":true}\n');
+    args = ['install', '--no-audit', '--no-fund', 'audify'];
+    console.log(`Installing the Audify native audio module in ${cwd} ...`);
+  } else console.log('Installing the native audio modules (Audify, PortAudio) in bridge/ (this can take a minute) ...');
   return new Promise(resolve => {
-    const c = process.platform === 'win32' ? spawn('cmd', ['/c', 'npm', 'install'], { cwd, stdio: 'inherit' }) : spawn('npm', ['install'], { cwd, stdio: 'inherit' });
+    const c = process.platform === 'win32' ? spawn('cmd', ['/c', 'npm', ...args], { cwd, stdio: 'inherit' }) : spawn('npm', args, { cwd, stdio: 'inherit' });
     c.on('error', e => { console.error('Cannot run npm: ' + e.message + ' (install Node.js from https://nodejs.org/)'); resolve(1); });
     c.on('exit', code => {
       if (code === 0) console.log('Done. Restart the server; "node client/cli.js doctor" shows the detected ASIO / WASAPI devices.');
-      else console.error('npm install failed. Web mode still works; for native audio install a C++ toolchain (Windows: Visual Studio Build Tools, macOS: Xcode CLT, Linux: build-essential) and retry.');
+      else console.error('npm install failed. Web mode still works. Audify needs no compiler (prebuilt); PortAudio (naudiodon2) needs a C++ toolchain (Windows: Visual Studio Build Tools, macOS: Xcode CLT, Linux: build-essential).');
       resolve(code === 0 ? 0 : 1);
     });
   });
@@ -185,7 +194,7 @@ async function main(argv) {
   if (o.cmd === 'download') return cmdDownload(o.arg);
   if (o.cmd === 'doctor') return cmdDoctor(o.port);
   if (o.cmd === 'service') return cmdService(o.arg, o.port);
-  if (o.cmd === 'setup') return cmdSetup();
+  if (o.cmd === 'setup') return cmdSetup(argv);
   if (o.cmd === 'verify') return cmdVerify(o, argv);
   console.error(`Unknown command "${o.cmd}". Use: start | drivers | download <id> | doctor | verify | setup | service install|uninstall|status`);
   return 2;

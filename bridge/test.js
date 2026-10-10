@@ -903,10 +903,11 @@ test('setup program: compiled, packed, signed; hash trailer is still found after
 test('unix packages: Debian control + FHS layout, macOS bundle, scripts parse', () => {
   const u = require('../scripts/build-unix');
   const c = u.controlFile({ version: '1.4.0', installedSizeKb: 100 });
-  assert.match(c, /^Package: audio-mixer$/m); assert.match(c, /^Depends: nodejs \(>= 18\)$/m); assert.match(c, /^Architecture: all$/m);
+  assert.match(c, /^Package: audio-mixer$/m); assert.match(c, /^Recommends: nodejs \(>= 18\), pipewire/m); assert.ok(!/^Depends:/m.test(c));   // Node.js is installed on first start when apt cannot provide 18+ assert.match(c, /^Architecture: all$/m);
   assert.match(u.desktopEntry(), /^Exec=audio-mixer$/m); assert.match(u.desktopEntry(), /Categories=AudioVideo;Audio;Mixer;/);
   assert.match(u.systemdUserUnit(), /ExecStart=\/usr\/bin\/env node \/opt\/audio-mixer\/bridge\/server\.js/);
-  assert.match(u.LAUNCHER_LINUX, /exec "\$NODE" \/opt\/audio-mixer\/client\/cli\.js "\$@"/);
+  assert.match(u.LAUNCHER_LINUX, /\. "\$APP\/ensure-node\.sh"\nam_ensure_node \|\| exit 1\nam_ensure_audio "\$APP"\nexec "\$NODE" "\$APP\/client\/cli\.js" "\$@"/);
+  assert.match(u.MAC_LAUNCHER, /am_ensure_node/); assert.match(u.MAC_INSTALL, /am_ensure_audio/);
   assert.match(u.infoPlist('1.4.0'), /<key>CFBundleIdentifier<\/key><string>com\.audiomixer\.app<\/string>/);
   assert.match(u.MAC_UNINSTALL, /com\.audiomixer\.bridge\.plist/);                           // same label the service installer writes
   const cp = require('node:child_process');
@@ -925,10 +926,124 @@ test('unix packages: the .deb is built with files under /opt, /usr/bin and /usr/
   for (const want of ['./opt/audio-mixer/client/cli.js', './opt/audio-mixer/bridge/server.js', './usr/bin/audio-mixer', './usr/share/applications/audio-mixer.desktop', './usr/lib/systemd/user/audio-mixer.service', './usr/share/doc/audio-mixer/copyright']) assert.ok(list.includes(want), want);
   assert.ok(!/\.bat/.test(list));                                                              // no Windows launchers
   assert.match(list, /-rwxr-xr-x root\/root\s+\d+ \S+ \S+ \.\/usr\/bin\/audio-mixer/);
-  const info = cp.spawnSync('dpkg-deb', ['--field', r.deb, 'Depends'], { encoding: 'utf8' }).stdout.trim();
-  assert.strictEqual(info, 'nodejs (>= 18)');
+  assert.ok(list.includes('./opt/audio-mixer/ensure-node.sh'));                               // the launcher sources it
+  const info = cp.spawnSync('dpkg-deb', ['--field', r.deb, 'Recommends'], { encoding: 'utf8' }).stdout.trim();
+  assert.match(info, /^nodejs \(>= 18\)/);
   const m = u.buildMac({ out });
   const tl = cp.spawnSync('tar', ['tzf', m.tar], { encoding: 'utf8' }).stdout;
   for (const want of ['AudioMixer/Audio Mixer.app/Contents/Info.plist', 'AudioMixer/Audio Mixer.app/Contents/MacOS/AudioMixer', 'AudioMixer/install.command', 'AudioMixer/uninstall.command']) assert.ok(tl.includes(want), want);
   fsx.rmSync(out, { recursive: true, force: true });
+});
+
+
+// ── automatic Node.js install, levels, universal ASIO driver ──
+test('auto-install scripts: shell syntax, checksum verification, no network needed to parse', () => {
+  const cp = require('node:child_process');
+  for (const f of ['ensure-node.sh', 'start-pc-mode.sh']) assert.strictEqual(cp.spawnSync('sh', ['-n', pathx.join(__dirname, '..', f)]).status, 0, f);
+  const sh = fsx.readFileSync(pathx.join(__dirname, '..', 'ensure-node.sh'), 'utf8');
+  assert.match(sh, /SHASUMS256\.txt/); assert.match(sh, /does not match nodejs\.org's checksum/);   // refuses an unverified download
+  assert.match(sh, /--strip-components=1/); assert.ok(!/sudo|chmod 777|curl[^\n]*\|\s*(ba)?sh/.test(sh), 'no sudo, no pipe-to-shell');
+  // with a working Node.js on PATH nothing is downloaded
+  const r = cp.spawnSync('sh', ['-c', `. "${pathx.join(__dirname, '..', 'ensure-node.sh')}"; am_ensure_node && echo "$NODE"`], { encoding: 'utf8', env: { ...process.env, AUDIO_MIXER_NODE: process.execPath } });
+  assert.strictEqual(r.status, 0); assert.strictEqual(r.stdout.trim(), process.execPath);
+  // a too-old / broken Node.js is not accepted
+  const bad = pathx.join(osx.tmpdir(), 'amx-oldnode'); fsx.writeFileSync(bad, '#!/bin/sh\necho 12\n'); fsx.chmodSync(bad, 0o755);
+  const r2 = cp.spawnSync('sh', ['-c', `. "${pathx.join(__dirname, '..', 'ensure-node.sh')}"; am_node_ok "${bad}"; echo $?`], { encoding: 'utf8' });
+  assert.strictEqual(r2.stdout.trim(), '1'); fsx.unlinkSync(bad);
+  // Windows launcher: winget first, then the checksum-verified official zip, then the Visual C++ runtime for Audify
+  const bat = fsx.readFileSync(pathx.join(__dirname, '..', 'start-pc-mode.bat'), 'utf8');
+  for (const want of ['winget install --id OpenJS.NodeJS.LTS', 'SHASUMS256.txt', 'certutil -hashfile', 'Microsoft.VCRedist.2015+.x64', 'does not match nodejs.org']) assert.ok(bat.includes(want), want);
+  assert.ok(/\r\n/.test(bat));
+});
+
+test('audify load problems come with the fix (Visual C++ runtime on Windows)', () => {
+  const a = require('./audify');
+  assert.strictEqual(a.loadProblem(() => ({})), null);
+  const dll = a.loadProblem(() => { throw new Error('The specified module could not be found.\n\\?\\C:\\x\\audify.node'); }, 'win32');
+  assert.match(dll.hint, /VCRedist/); assert.ok(!/\n/.test(dll.error));
+  assert.match(a.loadProblem(() => { throw new Error("Cannot find module 'audify'"); }, 'linux').hint, /not installed/);
+  const d = a.describe(() => { throw new Error("Cannot find module 'audify'"); });
+  assert.strictEqual(d.installed, false); assert.ok(d.hint);
+});
+
+test('levels: peak / rms per channel in dBFS, clipping, reset after each report', () => {
+  const lv = require('./levels');
+  const m = new lv.Meter(2);
+  const buf = Buffer.alloc(8 * 4);                                   // 8 stereo frames
+  for (let i = 0; i < 8; i++) { buf.writeInt16LE(16384, i * 4); buf.writeInt16LE(i === 3 ? 32767 : 0, i * 4 + 2); }
+  m.push(buf);
+  const s = m.snapshot();
+  assert.strictEqual(s.peak[0], -6); assert.strictEqual(s.rms[0], -6);   // half scale = -6.0 dBFS
+  assert.ok(s.peak[1] > -0.1); assert.ok(s.rms[1] < -8.9 && s.rms[1] > -9.2); assert.strictEqual(s.clip, 1);
+  const again = m.snapshot();
+  assert.deepStrictEqual(again.peak, [lv.FLOOR, lv.FLOOR]); assert.strictEqual(again.clip, 0);
+  m.push(Buffer.alloc(3)); assert.strictEqual(m.snapshot().frames, 0);  // a partial frame is ignored
+  assert.strictEqual(lv.dbfs(0), lv.FLOOR);
+});
+
+test('levels: an open stream reports its levels to the page and stops when closed', async () => {
+  const { _owners } = require('./asio-lock'); _owners.clear();
+  const fa = fakeAudify();
+  const sent = [];
+  const conn = { send: m => sent.push(JSON.parse(m)), sendBinary() {} };
+  const out = require('./output').createSession(conn, () => { throw new Error('no pa'); }, () => fa);
+  out.onText(JSON.stringify({ type: 'start', channels: 2, sampleRate: 48000 }));
+  const pcm = Buffer.alloc(192 * 4 * 2);
+  for (let i = 0; i < pcm.length / 2; i++) pcm.writeInt16LE(8192, i * 2);
+  out.onBinary(pcm);
+  await new Promise(r => setTimeout(r, 200));
+  const lv = sent.filter(m => m.type === 'levels');
+  assert.ok(lv.length >= 1, 'levels were sent');
+  const first = lv.find(m => m.peak[0] > -90) || lv[0];
+  assert.strictEqual(first.direction, 'output'); assert.strictEqual(first.hostApi, 'ASIO'); assert.strictEqual(first.channels, 2); assert.strictEqual(first.frameSize, 192);
+  assert.ok(Math.abs(first.peak[0] - -12) < 0.2, 'quarter scale is -12 dBFS: ' + first.peak[0]);
+  out.onClose();
+  const n = sent.length; await new Promise(r => setTimeout(r, 250));
+  assert.strictEqual(sent.length, n, 'no reports after close');
+});
+
+test('universal ASIO driver: sources are ranked ASIO first, loopback last, duplex pairing, change id', () => {
+  const u = require('./universal');
+  const lists = [{ engine: 'naudiodon', devices: [
+    { id: 1, name: 'Speakers (Realtek)', hostApi: 'Windows WASAPI', inputs: 0, outputs: 2, sampleRate: 48000 },
+    { id: 2, name: 'Focusrite USB ASIO', hostApi: 'ASIO', inputs: 18, outputs: 20, sampleRate: 48000 },
+    { id: 3, name: 'Stereo Mix (Realtek)', hostApi: 'Windows WASAPI', inputs: 2, outputs: 0, sampleRate: 48000 },
+    { id: 4, name: 'Microphone (Realtek)', hostApi: 'MME', inputs: 2, outputs: 0, sampleRate: 44100 },
+    { id: 5, name: 'ASIO4ALL v2', hostApi: 'ASIO', inputs: 4, outputs: 4, sampleRate: 48000 }] }];
+  const r = u.detectSources(lists);
+  assert.strictEqual(r.best.input.name, 'Focusrite USB ASIO'); assert.strictEqual(r.best.output.name, 'Focusrite USB ASIO');
+  assert.deepStrictEqual(r.inputs.map(d => d.id), [2, 5, 4, 3]);                    // ASIO (more channels first), MME, loopback last
+  assert.strictEqual(r.inputs[3].loopback, true); assert.deepStrictEqual(r.apis.slice(0, 2), ['ASIO', 'Windows WASAPI']);
+  assert.strictEqual(r.asio.inputs, 2); assert.strictEqual(r.best.input.names.length, 18); assert.strictEqual(r.best.input.pairs[0], 'IN 1-2');
+  assert.strictEqual(u.detectSources(lists).changeId, r.changeId);
+  lists[0].devices.push({ id: 9, name: 'New Card ASIO', hostApi: 'ASIO', inputs: 2, outputs: 2, sampleRate: 48000 });
+  assert.notStrictEqual(u.detectSources(lists).changeId, r.changeId);                 // plugging in an interface changes the id
+  assert.deepStrictEqual(u.detectSources([]).best, { input: null, output: null });
+});
+
+test('universal ASIO driver: sessions open the best device on whichever engine has it', () => {
+  const { _owners } = require('./asio-lock'); _owners.clear();
+  const fa = fakeAudify();
+  const mkPa = () => ({ SampleFormat16Bit: 8, getDevices: () => [{ id: 3, name: 'Speakers', hostAPIName: 'Windows WASAPI', maxInputChannels: 0, maxOutputChannels: 2 }],
+    AudioIO: class { constructor() {} on() {} start() {} quit() {} write() { return true; } } });
+  const run = (kind, loadPa, opts) => { const sent = []; const conn = { send: m => sent.push(JSON.parse(m)), sendBinary() {} };
+    const s = kind === 'out' ? require('./output').createSession(conn, loadPa, () => fa) : require('./input').createInputSession(conn, loadPa, () => fa);
+    s.onText(JSON.stringify({ type: 'start', channels: 2, sampleRate: 48000, ...opts })); return { sent, s }; };
+  const a = run('out', mkPa, { deviceId: 'universal' });                                // PortAudio only has WASAPI, Audify has ASIO: ASIO wins
+  assert.strictEqual(a.sent[0].type, 'started'); assert.strictEqual(a.sent[0].universal, true); assert.strictEqual(a.sent[0].hostApi, 'ASIO'); assert.strictEqual(a.sent[0].engine, 'audify');
+  a.s.onClose();
+  const b = run('in', () => { throw new Error('none'); }, { universal: true });         // capture, Audify only
+  assert.strictEqual(b.sent[0].type, 'started'); assert.strictEqual(b.sent[0].universal, true); b.s.onClose();
+  const c = run('out', () => { throw new Error('none'); }, { deviceId: 'universal', engine: 'naudiodon' });
+  assert.match(c.sent[0].message, /Universal ASIO driver: no output device/);
+  assert.strictEqual(_owners.size, 0);
+});
+
+test('endpoint: /api/universal', async () => {
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const j = await (await fetch(base + '/api/universal')).json();
+  assert.strictEqual(j.ok, true); assert.ok(Array.isArray(j.inputs) && Array.isArray(j.outputs) && typeof j.changeId === 'string' && j.best && 'input' in j.best);
+  assert.strictEqual((await fetch(base + '/api/universal', { headers: { Origin: 'https://evil.example' } })).status, 403);
+  server.closeAllConnections(); server.close();
 });
