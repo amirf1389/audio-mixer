@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Audio Mixer for Android: the mixer page (index.html, WING TITAN STAGE theme) in a full-screen WebView, bundled offline in the app.
+     Web Audio, the microphone and the license / plans work as in the browser; PC-mode features (ASIO, WASAPI, plugins) need the PC. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.audiomixer.app">
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <uses-feature android:name="android.hardware.microphone" android:required="false"/>
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false"/>
+    <application android:label="Audio Mixer" android:icon="@mipmap/ic_launcher" android:allowBackup="false" android:usesCleartextTraffic="true" android:hardwareAccelerated="true">
+        <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTask"
+                  android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize|uiMode"
+                  android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

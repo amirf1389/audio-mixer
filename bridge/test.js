@@ -1463,3 +1463,19 @@ test('native plugin host: a real VST2 effect runs in its own process and process
   // the shipped Windows hosts are PE files of the right machine type
   for (const [f, m] of [['x64', 0x8664], ['x86', 0x14c]]) { const b = fsx.readFileSync(pathx.join(root, f, 'PluginHost.exe')); assert.strictEqual(b.readUInt16LE(0), 0x5a4d); assert.strictEqual(b.readUInt16LE(b.readUInt32LE(0x3c) + 4), m); }
 });
+
+test('android app: page transform, version code, launcher icon, sources', () => {
+  const apk = require('../scripts/build-apk');
+  assert.strictEqual(apk.versionCode('1.10.0'), 11000); assert.strictEqual(apk.versionCode('1.9.1'), 10901); assert.ok(apk.versionCode('2.0.0') > apk.versionCode('1.99.99'));
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  const out = apk.transformHtml(html);
+  assert.ok(!/src="https:\/\/cdn\.tailwindcss\.com"/.test(out) && !/cdnjs\.cloudflare\.com/.test(out) && !/fonts\.googleapis\.com/.test(out));   // everything the page needs is bundled
+  assert.ok(out.includes('href="tw.css"') && out.includes('href="fa/css/all.min.css"') && out.includes("@import url('fonts/fonts.css');"));
+  assert.strictEqual(out.length > html.length - 400 && out.length < html.length + 400, true);
+  const p = apk.png(48, apk.iconPixel); assert.strictEqual(p.subarray(0, 8).toString('hex'), '89504e470d0a1a0a'); assert.strictEqual(p.readUInt32BE(16), 48);
+  assert.deepStrictEqual(apk.iconPixel(0, 0), [0, 0, 0, 0]);                                         // rounded corner is transparent
+  const man = fsx.readFileSync(pathx.join(__dirname, '..', 'android', 'AndroidManifest.xml'), 'utf8');
+  assert.ok(/package="com\.audiomixer\.app"/.test(man) && /RECORD_AUDIO/.test(man) && /android:exported="true"/.test(man) && !/CAMERA|READ_EXTERNAL|WRITE_EXTERNAL|READ_CONTACTS/.test(man));
+  const java = fsx.readFileSync(pathx.join(__dirname, '..', 'android', 'src', 'com', 'audiomixer', 'app', 'MainActivity.java'), 'utf8');
+  assert.ok(java.includes('file:///android_asset/www/index.html') && java.includes('setAllowUniversalAccessFromFileURLs(false)') && java.includes('RESOURCE_AUDIO_CAPTURE'));
+});
