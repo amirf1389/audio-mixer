@@ -94,6 +94,17 @@ function mergeAsio(asio, fresh, now) {
   return { list: names.map(n => seen.get(n).d), unprobed, stale: names.filter(n => !good.has(n)) };
 }
 
+// A driver that failed to probe on the first try (waking up, the control panel just closed) often answers on a fresh RtAudio instance: take the probed
+// answer of the second try for every driver the first one could not read, and add the drivers the first one did not list at all.
+const probed = d => ((d && d.inputChannels) || 0) + ((d && d.outputChannels) || 0) > 0;
+function betterOf(first, again) {
+  const byName = new Map(again.map(d => [String(d.name || ''), d]));
+  const out = first.map(d => (probed(d) ? d : (byName.get(String(d.name || '')) && probed(byName.get(String(d.name || ''))) ? byName.get(String(d.name || '')) : d)));
+  const have = new Set(first.map(d => String(d.name || '')));
+  for (const d of again) if (!have.has(String(d.name || ''))) out.push(d);
+  return out;
+}
+
 // Every compiled API (ASIO, WASAPI, ...) with its devices. Device ids are made unique across APIs (the bridge's `deviceId`).
 function listDevices(load = loadAudify) {
   let mod;
@@ -114,21 +125,29 @@ function listDevices(load = loadAudify) {
     // and the page scans every few seconds. While an ASIO stream is open the last probed list is reused.
     const asio = asioOf(mod);
     const isAsio = key === 'WINDOWS_ASIO';
-    const cached = isAsio && asio.size > 0 && asio.list ? asio.list : null;
+    // a driver that is being opened right now counts as in use too: a scan in that moment probes the same single-client driver and makes BOTH fail
+    const inUse = isAsio && (asio.size > 0 || asio.opening > 0);
+    const cached = inUse && asio.list ? asio.list : null;
+    if (inUse && !cached) { hostApis.push(API_NAMES[key]); continue; }          // nothing known yet and the driver is busy: no probe now
     let rt = null;
-    let list = [], probeError = '';
+    let list = [], probeError = '', retried = false;
     if (cached) list = cached;
     else {
       try { rt = new RtAudio(Api[key]); } catch (e) { if (!isAsio) continue; probeError = String(e && e.message || e); }
       // RtAudio silently substitutes another API when the requested one is not compiled in: skip it instead of listing duplicates.
       if (rt) try { if (typeof rt.getApi === 'function' && apiKey(rt.getApi()) !== key) continue; } catch (_) { /* cannot tell: keep it */ }
       if (rt) try { list = rt.getDevices() || []; } catch (e) { probeError = String(e && e.message || e); /* API present but no devices */ }
+      if (isAsio && (probeError || list.some(d => !probed(d)))) {
+        // one more try on a fresh instance (a driver that was waking up or just released by another program answers the second time)
+        try { const again = new RtAudio(Api[key]).getDevices() || []; list = betterOf(list, again); if (list.length) probeError = ''; retried = true; }
+        catch (e) { if (!probeError) probeError = String(e && e.message || e); retried = true; }
+      }
       if (isAsio) {
         // RtApiAsio::probeDeviceInfo fails for a driver that another program has open or whose interface is unplugged: the driver then shows up with
         // no channels (or the whole probe throws). Such a failure must not make the interface vanish and come back on every scan.
         const m = mergeAsio(asio, list, Date.now());
         list = m.list; asio.list = list.length ? list : asio.list;
-        if (probeError || m.unprobed.length || m.stale.length) problems.push({ api: 'ASIO', message: probeError || '', unprobed: m.unprobed, kept: m.stale });
+        if (probeError || m.unprobed.length || m.stale.length) problems.push({ api: 'ASIO', message: probeError || '', unprobed: m.unprobed, kept: m.stale, retried });
       }
     }
     if (!list.length) { hostApis.push(API_NAMES[key]); continue; }
@@ -162,7 +181,7 @@ function detectAudify(load = loadAudify) {
   const r = listDevices(load);
   if (!r) return null;
   return {
-    engine: 'audify', hostApis: r.hostApis,
+    engine: 'audify', hostApis: r.hostApis, ...(r.problems && r.problems.length ? { problems: r.problems } : {}),
     devices: r.devices.map(d => ({ id: d.id, name: d.name, hostApi: d.hostAPIName, inputs: d.maxInputChannels, outputs: d.maxOutputChannels, sampleRate: d.defaultSampleRate, ...(d.probeFailed ? { probeFailed: true } : {}) })),
   };
 }
@@ -336,9 +355,14 @@ function openDuplexRaw({ mod, dev, inChannels, outChannels, sampleRate, frameSiz
 // ASIO: one stream per driver. A second direction on a device that is already open (the other direction) re-opens it as ONE duplex stream and
 // keeps the first user attached, instead of asking the single-client driver for a second stream (which fails or stalls the first).
 function openStream(o) {
-  const { dev, direction } = o;
+  const { dev } = o;
   if (!dev || dev.api !== 'WINDOWS_ASIO') return openStreamRaw(o);
   const asio = asioOf(o.mod);
+  asio.opening = (asio.opening || 0) + 1;                 // the scans leave the driver alone while it is being opened (see listDevices)
+  try { return openAsioStream(o, asio); } finally { asio.opening--; }
+}
+function openAsioStream(o, asio) {
+  const { dev, direction } = o;
   let e = asio.get(dev.id);
   if (e && e.exclusive) throw new Error(`${dev.name} is already open for reading and writing`);
   if (e && e.dirs[direction]) throw new Error(`${dev.name} is already open for ${direction === 'output' ? 'writing' : 'reading'}`);
@@ -380,7 +404,9 @@ function openDuplex(o) {
   if (!dev || dev.api !== 'WINDOWS_ASIO') return openDuplexRaw(o);
   const asio = asioOf(o.mod);
   if (asio.has(dev.id)) throw new Error(`${dev.name} is already open: close it first, or read and write it together from the same page`);
-  const st = openDuplexRaw(o), entry = { exclusive: true, dev, st, dirs: {} };
+  asio.opening = (asio.opening || 0) + 1;
+  let st; try { st = openDuplexRaw(o); } finally { asio.opening--; }
+  const entry = { exclusive: true, dev, st, dirs: {} };
   asio.set(dev.id, entry);
   const close = st.close;
   st.close = () => { try { close(); } finally { if (asio.get(dev.id) === entry) asio.delete(dev.id); } };

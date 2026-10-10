@@ -397,3 +397,12 @@ The OTA server keeps an **audit log** (`<data>/audit.jsonl`: append-only, hash-c
 **Qt project** (`android-qt/`): Qt 6 / Qt Quick shell with the same local server routes and Qt Multimedia device lists; **source only, not built here** (needs the Qt SDK and Android NDK). See `android-qt/README.md` for what it lacks compared with the Java app. Stage the page with `node scripts/prepare-qt.js`.
 
 Not tested here: the tile and native audio on a real phone (only compiled and the pure logic run on a JVM), a real Windows / Android / iOS device downloading from the smart links, the Qt project, and `releases/update.json` is not re-signed (publish with your vendor key).
+
+## ASIO devices the engine could not probe (1.5.1.0)
+
+`RtApiAsio::probeDeviceInfo` (the RtAudio call that asks an ASIO driver for its channels) kept failing in cases the 1.13.0 fix did not cover:
+- **A scan during the opening of a driver.** ASIO drivers are single-client. The mixer scans the interfaces every few seconds; a scan that ran while a stream was still being opened probed the same driver, and both the scan and the new stream failed. Scans now leave a driver alone while it is being opened (they show the remembered list meanwhile), as they already did once it was open.
+- **A driver that was not ready.** A driver that was waking up (USB interface just switched on) or just released by another program often failed once and answered a moment later. The scan now asks once more on a fresh RtAudio instance before it gives up on a driver; a driver that is readable the second time is listed with its channels like any other.
+- **Silence about the reason.** An installed ASIO driver (from the registry) that the engine still cannot read is shown as "ASIO DRIVER ONLY" with the error RtAudio gave and what to do (close the DAW / control panel that uses it, check the cable, power), and a **PROBE AGAIN** button that rescans with `?force=1`. `/api/interfaces` carries `probeError`, `probeNamed` (the error named this driver) and `probeRetried` on those entries; `/api/audify` reports `retried` in `problems`.
+
+Not tested here: a real ASIO driver (the tests use a fake RtAudio). If a driver still fails after PROBE AGAIN with the interface idle and plugged in, the error text in the row is what RtAudio reported; ASIO also needs the process to run in a single-threaded COM apartment, which the bridge cannot change from JavaScript.

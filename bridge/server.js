@@ -150,7 +150,7 @@ async function handle(req, res) {
       const info = await detectCached(url.searchParams.get('force') === '1');
       const src = url.searchParams.get('engine') === 'audify' && info.audify ? info.audify : info.portaudio;
       const devices = src ? src.devices : (info.native ? info.native.devices : []);
-      return json(res, 200, { ok: true, platform: info.platform, portaudio: !!info.portaudio, engine: src ? src.engine : (info.native ? info.native.engine : null), asio: info.asio, interfaces: groupInterfaces(devices, info.asio) }, cors);
+      return json(res, 200, { ok: true, platform: info.platform, portaudio: !!info.portaudio, engine: src ? src.engine : (info.native ? info.native.engine : null), asio: info.asio, interfaces: groupInterfaces(devices, info.asio, src && src.problems) }, cors);
     } catch (e) { return json(res, 500, { ok: false, error: e.message }, cors); }
   }
 

@@ -56,7 +56,19 @@ function inferProbeFailed(devices) {
   });
 }
 
-function groupInterfaces(devices = [], asioNames = []) {
+// Why an installed ASIO driver (registry) is not in the engine's list: the probe error RtAudio gave (RtApiAsio::probeDeviceInfo ...), when it named this driver
+// or failed as a whole; nothing when the engine simply does not list it (driver without a device, engine without ASIO).
+function probeReason(name, problems) {
+  const k = keyOf(name);
+  for (const p of problems || []) {
+    if (!p || !/asio/i.test(p.api || '')) continue;
+    const named = (p.unprobed || []).some(u => keyOf(u) === k) || (p.kept || []).some(u => keyOf(u) === k);
+    if (named || p.message) return { probeError: String(p.message || 'the driver answered with no channels').slice(0, 200), probeNamed: named, probeRetried: !!p.retried };
+  }
+  return {};
+}
+
+function groupInterfaces(devices = [], asioNames = [], problems = []) {
   devices = inferProbeFailed(untruncate(devices));
   const groups = new Map();
   const hfpBases = new Set(devices.filter(d => HFP.test(d.name || '')).map(d => btBase(d.name)));
@@ -86,9 +98,9 @@ function groupInterfaces(devices = [], asioNames = []) {
   // Installed ASIO drivers that PortAudio does not list (not installed yet, device unplugged, or PortAudio missing).
   for (const n of asioNames) {
     const k = keyOf(n);
-    if (!groups.has(k)) out.push({ key: k, name: baseName(n), inputs: 0, outputs: 0, loopback: false, asio: true, apis: [], read: null, write: null, driverOnly: true });
+    if (!groups.has(k)) out.push({ key: k, name: baseName(n), inputs: 0, outputs: 0, loopback: false, asio: true, apis: [], read: null, write: null, driverOnly: true, ...probeReason(n, problems) });
   }
   return out.sort((a, b) => (a.systemDefault - b.systemDefault) || (a.loopback - b.loopback) || (b.asio - a.asio) || a.name.localeCompare(b.name));
 }
 
-module.exports = { inferProbeFailed, untruncate, isBluetooth, btBase, isPrimary, groupInterfaces, keyOf, baseName, apiRank };
+module.exports = { probeReason, inferProbeFailed, untruncate, isBluetooth, btBase, isPrimary, groupInterfaces, keyOf, baseName, apiRank };
