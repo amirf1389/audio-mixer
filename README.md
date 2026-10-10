@@ -250,3 +250,22 @@ Running `Audio Mixer-<version>.exe` over an installed version upgrades it in pla
 
 - **Closing a stream.** The local server released an audio stream (and with it an ASIO driver, which serves one client) only when the TCP connection behind the WebSocket finally ended. A close frame from the page now frees the stream at once, exactly once, and a failing close handler can no longer leave the socket half open. A connection whose peer vanished without a close (cable pulled, computer asleep, browser crashed) used to hold the device until the operating system gave up; the server now pings every 15 seconds and ends a connection that shows no sign of life for 45 seconds.
 - **DAC / read-write mode detection.** Every interface in LIVE SOURCES now shows what it can do from its real channel counts: `READ + WRITE` (audio interface), `DAC / OUTPUT: WRITE ONLY` (DAC, speakers), `INPUT: READ ONLY` (microphone, loopback) or `NO CHANNELS YET`. A DAC is never opened for reading and an input-only device never for writing, whatever an older saved setting says. Automatic choices follow the device: a driver that was listed without channels (an ASIO probe that failed, a DAC that was waking up) is enabled as soon as its channels appear, and a READ / WRITE switch you set yourself is never changed.
+
+## Start-up (boot) screens for the apps (1.15.0)
+
+The console always played its power-on animation inside the page. The apps now also show a start-up screen of their own while they start, in the same look (power LED red / amber / green, the logo spelling in, TITAN OS / DSP CORE / AUDIO ENGINE / I/O / FADERS / CONSOLE ticking to OK, progress bar); the page's own power-on sequence follows.
+
+- **Windows:** `AudioMixerServer.exe /open` shows an animated window while the local server starts, then opens the mixer in the browser (if the server already runs, it just plays the screen). The Start Menu entry *Audio Mixer (PC mode)* and the desktop shortcut now use it. Click or Esc ends it; if the server does not answer within 25 s it says so. The login autostart is unchanged (no window).
+- **macOS and Linux:** the app / launcher opens `boot.html` in the browser at once, before Node.js and the audio module are checked or installed (the first start can take a minute), and the page switches to the mixer when the server answers. The launcher then does not open a second window. `AUDIO_MIXER_NO_SPLASH=1` turns it off; `--no-open` and `--port` are honoured; without a graphical session nothing is opened.
+- **Android:** a native start-up view (`BootView`) covers the page until it has loaded (at least 2.2 s, never longer than 12 s) and fades out.
+- **iOS:** a SwiftUI `BootView` does the same until the bundled page is served.
+- **Not verified:** `boot.html` and its hand-over to the server ran in Chromium (stays while the server is down, redirects when it answers) and the shell helper was tested with a stand-in browser opener. The Windows window compiles (x64 and x86) but was **not run** (no Windows here); the Android view compiles into the APK but was not run on a device; the iOS view could **not be compiled** (no Xcode here).
+
+## Mic FFT spectrum fix (1.15.1)
+
+The microphone trace of the header RTA (FFT RTA, 20 Hz - 20 kHz) had three faults, all fixed:
+1. **Wrong frequency axis.** Bars were taken from the FFT bins with a power curve that does not match the labels under the display: a 1 kHz tone was drawn at 17 % of the width, where the label says 250 Hz. Every bar now maps to the frequency of the label axis (20, 63, 125 ... 16k, 20k Hz, log between neighbours) and shows the loudest bin of its band, so a narrow tone is not skipped at the high end. A 1 kHz tone now lands on the 1kHz label.
+2. **Too coarse below 250 Hz.** The analyser used 512 points (94 Hz per bin). It now uses 4096 points (11.7 Hz per bin at 48 kHz).
+3. **Only the default browser microphone was shown.** Interfaces read in LIVE SOURCES (browser microphones, ASIO, WASAPI, DirectSound, Core Audio, ALSA, Android, anything arriving through the local server's Web Audio worklet) never reached it. The interface chosen in the FFT selector of LIVE SOURCES now feeds the header trace (the button reads `MIC: SOURCE (FFT ON)`); the header's own microphone toggle still works and both can run together.
+
+The music trace of the same display keeps its old bin mapping (not part of this fix). Checked in Chromium with a 1 kHz tone as the microphone and with the test engine's server-side interface.

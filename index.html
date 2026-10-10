@@ -1133,7 +1133,7 @@ window.navTabs = [
 
             // Mic Input FFT Analyser
             const micAnalyser = window.state.ctx.createAnalyser();
-            micAnalyser.fftSize = 512;
+            micAnalyser.fftSize = 4096;   // 11.7 Hz per bin at 48 kHz (512 points gave 94 Hz per bin: the low end of the 20 Hz - 20 kHz RTA was unreadable)
             micAnalyser.smoothingTimeConstant = 0.75;
 
             // Monitor & Headphones Gains
@@ -1234,6 +1234,7 @@ window.navTabs = [
                 window.state.micActive = false;
                 btn.className = "px-2 py-0.5 bg-white/5 hover:bg-cyan-500/20 text-slate-400 hover:text-cyan-400 border border-white/10 rounded font-mono text-[7.5px] font-black uppercase transition flex items-center gap-1";
                 txt.innerText = "MIC: STANDBY";
+                if (window.liveSources && window.liveSources.syncMicFeed) window.liveSources.syncMicFeed();
                 window.notify("Microphone RTA Feed Stopped", "microphone-slash");
             }
         };
@@ -9043,14 +9044,18 @@ window.navTabs = [
                 }
 
                 // 2. Live Mic FFT Trace (Neon Cyan)
-                if (window.state.micActive && window.state.nodes.micAnalyser && window.state.micData) {
+                if ((window.state.micActive || window.state.micFeeds) && window.state.nodes.micAnalyser && window.state.micData) {
                     if (!window.rtaState || !window.rtaState.frozen) { window.state.nodes.micAnalyser.getByteFrequencyData(window.state.micData); }
                     ctx.strokeStyle = '#00f2ff';
                     ctx.lineWidth = 1.5;
                     ctx.beginPath();
+                    // bar -> frequency on the axis of the labels under the RTA (20 Hz, 63, 125 ... 16 kHz, 20 kHz, evenly spaced, log between neighbours);
+                    // a bar shows the loudest bin of its band, so a narrow tone is never skipped at the high end
+                    const md = window.state.micData, an = window.state.nodes.micAnalyser, binHz = an.context.sampleRate / an.fftSize, AX = [20, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000, 20000];
+                    const hzAt = x => { const t = Math.min(1, Math.max(0, x)) * (AX.length - 1), k = Math.min(AX.length - 2, Math.floor(t)); return AX[k] * Math.pow(AX[k + 1] / AX[k], t - k); };
                     for (let i = 0; i < bars; i++) {
-                        const bin = Math.min(Math.floor(Math.pow(i / bars, 1.8) * window.state.micData.length), window.state.micData.length - 1);
-                        const val = window.state.micData[bin] || 0;
+                        const b0 = Math.min(md.length - 1, Math.max(0, Math.floor(hzAt(i / bars) / binHz))), b1 = Math.min(md.length - 1, Math.max(b0, Math.ceil(hzAt((i + 1) / bars) / binHz)));
+                        let val = 0; for (let bn = b0; bn <= b1; bn++) if (md[bn] > val) val = md[bn];
                         const h = Math.max(2, (val / 255) * canvas.height * 0.95);
                         const x = i * w + w / 2;
                         const y = canvas.height - h;
@@ -16078,7 +16083,17 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             setStatus(key, text, err, busy) { this.status[key] = { text, err: !!err, busy: !!busy, at: Date.now() }; this.renderRows(); },
 
             // ── UI ──
-            render() { this.renderRows(); this.renderNow(); this.renderHeader(); this.renderSelectors(); },
+            // the header's MIC FFT (RTA) shows the interface chosen in the FFT selector, whatever the source: browser microphone, ASIO, WASAPI, Core Audio, ALSA ...
+            syncMicFeed() {
+                const an = window.state && window.state.nodes && window.state.nodes.micAnalyser; if (!an) return;
+                const want = this.mic && this.caps.get(this.mic) ? this.caps.get(this.mic) : null;
+                if (this._feed && (this._feed !== want || this._feedCtx !== window.state.ctx)) { try { this._feed.node.disconnect(an); } catch (e) { /* already gone */ } this._feed = null; }
+                if (want && !this._feed) { try { want.node.connect(an); this._feed = want; this._feedCtx = window.state.ctx; } catch (e) { /* other audio context */ } }
+                window.state.micFeeds = this._feed ? 1 : 0;
+                const txt = document.getElementById('mic-status-text');
+                if (txt && !window.state.micActive) txt.innerText = this._feed ? 'MIC: SOURCE (FFT ON)' : 'MIC: STANDBY';
+            },
+            render() { this.syncMicFeed(); this.renderRows(); this.renderNow(); this.renderHeader(); this.renderSelectors(); this.syncMicFeed(); },
             renderHeader() {
                 const b = document.getElementById('ls-pc'); if (!b) return;
                 b.className = 'px-2 py-0.5 rounded text-[7.5px] font-bold border ' + (this.bridgeUrl ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40' : 'bg-amber-500/15 text-amber-400 border-amber-500/40');
@@ -16197,7 +16212,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 $('ls-auto').onchange = e => { this.cfg.auto = e.target.checked; this.persist(); if (this.cfg.auto) this.autoEnable(); };
                 $('ls-scan').onchange = e => { this.cfg.scan = e.target.checked; this.persist(); this.startTimers(); };
                 $('ls-asio-only').onchange = e => { this.cfg.asioOnly = e.target.checked; this.persist(); this.renderRows(); };
-                $('ls-mic-sel').onchange = e => { this.mic = e.target.value || null; };
+                $('ls-mic-sel').onchange = e => { this.mic = e.target.value || null; this.syncMicFeed(); };
                 if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) navigator.mediaDevices.addEventListener('devicechange', () => this.scan());
                 this.render(); this.scan().then(() => this.pollNowPlaying()); this.startTimers(); this.loop();
             }

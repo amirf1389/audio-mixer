@@ -88,3 +88,25 @@ am_ensure_audio() {
   if (cd "$AM_HOME/modules" && npm install --no-audit --no-fund audify); then echo "Native audio module installed."; else echo "Could not install the native audio module; continuing with browser audio." >&2; fi
   return 0
 }
+
+# Start-up screen: opens boot.html in the browser at once (the first start can spend a minute on Node.js and the audio module). The page switches to
+# the mixer when the server answers, so the launcher must not open a second window: AM_SPLASH_ARGS holds "--no-open" when the screen was opened.
+#   am_splash "$APP" "$@"     (arguments of the launcher: --no-open and --port are honoured; AUDIO_MIXER_NO_SPLASH=1 turns it off)
+am_splash() {
+  AM_SPLASH_ARGS=""
+  app="$1"; shift
+  [ -z "${AUDIO_MIXER_NO_SPLASH:-}" ] && [ -f "$app/boot.html" ] || return 0
+  port=8765; prev=""
+  for a in "$@"; do
+    [ "$a" = "--no-open" ] && return 0
+    [ "$prev" = "--port" ] && port="$a"
+    case "$a" in --port=*) port="${a#--port=}" ;; esac
+    prev="$a"
+  done
+  case "$port" in ''|*[!0-9]*) port=8765 ;; esac
+  url="file://$(printf '%s' "$app/boot.html" | sed 's/ /%20/g')#$port"
+  if [ "$(uname)" = "Darwin" ]; then open "$url" >/dev/null 2>&1 && AM_SPLASH_ARGS="--no-open"
+  elif [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] && command -v xdg-open >/dev/null 2>&1; then xdg-open "$url" >/dev/null 2>&1 && AM_SPLASH_ARGS="--no-open"
+  fi
+  return 0
+}

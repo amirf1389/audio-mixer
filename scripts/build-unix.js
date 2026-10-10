@@ -24,9 +24,10 @@ const LAUNCHER_LINUX = `#!/bin/sh
 # and the native audio module (Audify) is installed once. AUDIO_MIXER_YES=1 skips the questions, AUDIO_MIXER_NO_NATIVE=1 skips the audio module.
 APP=/${OPT}
 . "$APP/ensure-node.sh"
+am_splash "$APP" "$@"
 am_ensure_node || exit 1
 am_ensure_audio "$APP"
-exec "$NODE" "$APP/client/cli.js" "$@"
+exec "$NODE" "$APP/client/cli.js" $AM_SPLASH_ARGS "$@"
 `;
 
 const desktopEntry = () => `[Desktop Entry]
@@ -141,13 +142,14 @@ const MAC_LAUNCHER = `#!/bin/bash
 # installs the native audio module once, starts the local server and opens the mixer in the browser.
 APP="$(cd "$(dirname "$0")/.." && pwd)/Resources/app"
 . "$APP/ensure-node.sh"
+am_splash "$APP" "$@"
 am_ensure_node || { osascript -e 'display dialog "Audio Mixer needs Node.js 18 or newer and it could not be installed automatically. Install it from nodejs.org, then start Audio Mixer again." buttons {"OK"} with icon caution' >/dev/null 2>&1; open "https://nodejs.org/en/download" 2>/dev/null; exit 1; }
 am_ensure_audio "$APP"
 # Core Audio helper (Swift) for the interface list: built once when the Xcode command line tools are there (optional, runs in the background)
 if [ ! -x "$APP/native/mac/AudioDevices" ] && command -v swiftc >/dev/null 2>&1 && [ -f "$APP/native/mac/AudioDevices.swift" ]; then
   ( swiftc -O -o "$APP/native/mac/AudioDevices" "$APP/native/mac/AudioDevices.swift" >/dev/null 2>&1 ) &
 fi
-exec "$NODE" "$APP/client/cli.js" "$@"
+exec "$NODE" "$APP/client/cli.js" $AM_SPLASH_ARGS "$@"
 `;
 
 const infoPlist = version => `<?xml version="1.0" encoding="UTF-8"?>
