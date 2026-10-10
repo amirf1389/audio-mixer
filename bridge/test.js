@@ -144,6 +144,17 @@ test('websocket server frames large binary payloads (64-bit length)', () => {
   assert.strictEqual(f.length, 10 + 70000);
 });
 
+test('websocket: a close frame frees the stream at once, and only once (the TCP close afterwards does not release again)', () => {
+  const EventEmitter = require('node:events');
+  const sock = new EventEmitter();
+  sock.write = () => true; sock.end = () => {}; sock.setNoDelay = () => {}; sock.destroy = () => sock.emit('close'); sock.writableLength = 0;
+  let released = 0;
+  require('./ws').accept({ headers: { 'sec-websocket-key': 'dGhlIHNhbXBsZSBub25jZQ==', upgrade: 'websocket' } }, sock, { onClose: () => { released++; throw new Error('a failing handler must not break the socket'); } });
+  sock.emit('data', Buffer.from([0x88, 0x80, 1, 2, 3, 4]));          // masked, empty close frame from the peer
+  assert.strictEqual(released, 1);                                    // the driver is free before the peer closes TCP
+  sock.emit('close'); assert.strictEqual(released, 1);
+});
+
 test('output session validates sample rate and drops partial frames', () => {
   const written = [];
   let opened = null;
@@ -871,6 +882,14 @@ test('page: interfaces opened by LIVE SOURCES reach the mixer channels, and LIVE
   assert.match(html, /if \(this\.cfg\.auto && cap\.bridge\) this\.autoPatchOne\(cap\)/);        // a freshly read server interface is patched, browser microphones stay manual (feedback)
   assert.match(html, /autoPatchOne\(cap\) \{/); assert.match(html, /value="ls:\$\{esc\(i\.key\)\}"/);  // routing page offers the server interfaces
   assert.match(html, /\/\^ls:\/\.test\(String\(deviceId\)\)/); assert.match(html, /l\.shared/);        // shared capture nodes are branched, never closed by REMOVE
+});
+
+test('page: an interface knows whether it is a DAC (write only), an input (read only) or both, and automatic choices follow the device', () => {
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  assert.match(html, /label: read && write \? 'READ \+ WRITE' : write \? 'DAC \/ OUTPUT: WRITE ONLY'/);
+  assert.match(html, /if \(cur && !cur\.auto\) return;/);                                        // user choices are kept, automatic ones are refreshed
+  assert.match(html, /write: e0\.write && m\.write/);                                             // a DAC is never read, an input-only device never written
+  assert.match(html, /e\[what\] = !!on; e\.auto = false;/);
 });
 
 test('verify: .msi installer file check', () => {
