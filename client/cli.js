@@ -9,6 +9,10 @@
 //   node client/cli.js verify [installer.exe] [--scan]   verification scan: file hashes, signatures, loopback-only, Defender scan
 //   node client/cli.js setup [--user]  install the native audio modules (Audify, PortAudio) for ASIO / WASAPI; --user: Audify only, into your home folder
 //   node client/cli.js service install|uninstall|status   start the server automatically when you log in
+//   node client/cli.js npm <args>      run npm (the bundled one in the Windows install, else the system's) inside the app's bridge folder
+//   node client/cli.js uninstall [--yes]   stop the server, remove the autostart entry and run this installation's uninstaller
+//   node client/cli.js version         print the version
+//   (installed packages put these on your PATH as "audio-mixer": audio-mixer doctor, audio-mixer npm install audify ...)
 //   node client/cli.js license [status|activate <key>|deactivate]   show / activate / remove the license key (works offline)
 //   node client/cli.js plugins         list the VST3 / VST2 plugins found on this PC and the plugin folder
 //   node client/cli.js update [download]   check the signed update manifest; download saves the verified installer (never run for you)
@@ -153,7 +157,8 @@ function cmdSetup(argv = []) {
     console.log(`Installing the Audify native audio module in ${cwd} ...`);
   } else console.log('Installing the native audio modules (Audify, PortAudio) in bridge/ (this can take a minute) ...');
   return new Promise(resolve => {
-    const c = process.platform === 'win32' ? spawn('cmd', ['/c', 'npm', ...args], { cwd, stdio: 'inherit' }) : spawn('npm', args, { cwd, stdio: 'inherit' });
+    const n = findNpm(), env = { ...process.env, PATH: path.dirname(process.execPath) + path.delimiter + (process.env.PATH || '') };
+    const c = spawn(n.cmd, [...n.pre, ...args], { cwd, stdio: 'inherit', env });
     c.on('error', e => { console.error('Cannot run npm: ' + e.message + ' (install Node.js from https://nodejs.org/)'); resolve(1); });
     c.on('exit', code => {
       if (code === 0) console.log('Done. Restart the server; "node client/cli.js doctor" shows the detected ASIO / WASAPI devices.');
@@ -226,6 +231,61 @@ async function cmdUpdate(o, argv) {
   return code;
 }
 
+// npm: the one bundled next to the Windows runtime (runtime/node_modules/npm), else the system's npm.
+function findNpm() {
+  const path = require('node:path');
+  const bundled = path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
+  if (fs.existsSync(bundled)) return { cmd: process.execPath, pre: [bundled], bundled: true };
+  return process.platform === 'win32' ? { cmd: 'cmd', pre: ['/c', 'npm'], bundled: false } : { cmd: 'npm', pre: [], bundled: false };
+}
+
+function cmdNpm(argv) {
+  const { spawn } = require('node:child_process'), path = require('node:path');
+  const i = argv.indexOf('npm'), args = i >= 0 ? argv.slice(i + 1) : [];
+  const n = findNpm();
+  const env = { ...process.env, PATH: path.dirname(process.execPath) + path.delimiter + (process.env.PATH || '') };   // npm scripts find this Node.js first
+  return new Promise(resolve => {
+    const c = spawn(n.cmd, [...n.pre, ...(args.length ? args : ['--version'])], { cwd: path.resolve(__dirname, '..', 'bridge'), stdio: 'inherit', env });
+    c.on('error', e => { console.error('Cannot run npm: ' + e.message + ' (install Node.js from https://nodejs.org/)'); resolve(1); });
+    c.on('exit', code => resolve(code === null ? 1 : code));
+  });
+}
+
+// Uninstall: ends the running server and the autostart entry, then hands over to what installed this copy.
+async function cmdUninstall(o, argv) {
+  const { spawnSync, spawn } = require('node:child_process'), path = require('node:path'), readline = require('node:readline');
+  const root = path.resolve(__dirname, '..');
+  const yes = argv.includes('--yes') || argv.includes('-y');
+  const sh = (c, a) => { try { return spawnSync(c, a, { encoding: 'utf8', windowsHide: true }); } catch (_) { return { status: 1, stdout: '' }; } };
+  let step = null;
+  if (process.platform === 'win32') {
+    for (const hive of ['HKLM', 'HKCU']) {
+      const r = sh('reg', ['query', `${hive}\\Software\\Audio Mixer`, '/v', 'UninstallCode']);
+      const m = r.status === 0 && /UninstallCode\s+REG_SZ\s+(\{[0-9A-Fa-f-]{36}\})/.exec(r.stdout || '');
+      if (m) { step = { text: `Windows Installer removes Audio Mixer (${hive === 'HKLM' ? 'all users' : 'this user'})`, run: () => spawn('msiexec.exe', ['/x', m[1]], { detached: true, stdio: 'ignore' }).unref() }; break; }
+    }
+    if (!step) step = { text: 'Windows Settings opens: Apps > Installed apps > Audio Mixer > Uninstall', run: () => spawn('cmd', ['/c', 'start', '', 'ms-settings:appsfeatures'], { detached: true, stdio: 'ignore' }).unref() };
+  } else {
+    const script = ['uninstall.sh'].map(f => path.join(root, f)).find(f => fs.existsSync(f));
+    if (script) step = { text: `${script} removes the program, the menu entry and the command`, run: () => spawnSync('sh', [script], { stdio: 'inherit' }) };
+    else if (process.platform === 'linux' && sh('dpkg', ['-S', root]).status === 0) step = { text: 'this copy belongs to the Debian package audio-mixer: run  sudo apt remove audio-mixer', run: null };
+    else step = { text: `no uninstaller found for ${root}: delete that folder`, run: null };
+  }
+  console.log('Uninstalling Audio Mixer:\n  1. stop the local server on port ' + o.port + '\n  2. remove the start-at-login entry\n  3. ' + step.text);
+  console.log('Your downloaded drivers (~/AudioMixerDrivers), plugins (~/AudioMixerPlugins) and license key stay.');
+  if (!yes) {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    const a = await new Promise(res => { rl.once('close', () => res('')); rl.question('Continue? [y/N] ', res); });   // input that ends without an answer is a no
+    rl.close(); if (!process.stdin.isTTY) console.log();
+    if (!/^y/i.test(String(a).trim())) { console.log('Nothing was changed.'); return 0; }
+  }
+  const info = await serverInfo(o.port);
+  if (info && Number.isInteger(info.pid) && info.pid > 1 && info.pid !== process.pid) { try { process.kill(info.pid); console.log('Server stopped.'); } catch (_) { console.log('Could not stop the server: end it in Task Manager / Activity Monitor.'); } }
+  try { const r = await require('./service').uninstall(); if (r.removed) console.log('Start-at-login entry removed.'); } catch (_) { /* none */ }
+  if (step.run) { step.run(); console.log('Started the uninstaller.'); } else console.log(step.text);
+  return 0;
+}
+
 async function cmdService(action, port) {
   const svc = require('./service');
   try {
@@ -277,7 +337,7 @@ async function main(argv) {
   const o = parseArgs(argv);
   const major = Number(process.versions.node.split('.')[0]);
   if (major < MIN_NODE) { console.error(`Node.js ${MIN_NODE}+ is required (you have ${process.versions.node}). Download it from https://nodejs.org/`); return 1; }
-  if (o.help) { const head = []; for (const l of fs.readFileSync(__filename, 'utf8').split('\n').slice(2)) { if (!l.startsWith('//')) break; head.push(l.slice(3)); } console.log(head.join('\n')); return 0; }
+  if (o.help && o.cmd !== 'npm') { const head = []; for (const l of fs.readFileSync(__filename, 'utf8').split('\n').slice(2)) { if (!l.startsWith('//')) break; head.push(l.slice(3)); } console.log(head.join('\n')); return 0; }
   if (o.cmd === 'start') return cmdStart(o, argv);
   if (o.cmd === 'drivers') return (await cmdDrivers(), await pause(argv), 0);
   if (o.cmd === 'license') return cmdLicense(o, argv);
@@ -287,8 +347,11 @@ async function main(argv) {
   if (o.cmd === 'doctor') { const c = await cmdDoctor(o.port); await pause(argv); return c; }
   if (o.cmd === 'service') return cmdService(o.arg, o.port);
   if (o.cmd === 'setup') return cmdSetup(argv);
+  if (o.cmd === 'npm') return cmdNpm(argv);
+  if (o.cmd === 'uninstall') return cmdUninstall(o, argv);
+  if (o.cmd === 'version') return (console.log(require('../package.json').version), 0);
   if (o.cmd === 'verify') return cmdVerify(o, argv);
-  console.error(`Unknown command "${o.cmd}". Use: start | drivers | download <id> | doctor | verify | setup | service install|uninstall|status | license | plugins | update`);
+  console.error(`Unknown command "${o.cmd}". Use: start | drivers | download <id> | doctor | verify | setup | service install|uninstall|status | license | plugins | update | npm | uninstall | version`);
   return 2;
 }
 

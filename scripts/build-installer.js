@@ -54,6 +54,53 @@ function extractFromZip(buf, wanted) {
 
 async function getText(url, fetchImpl) { const r = await fetchImpl(url, { headers: { 'User-Agent': 'audio-mixer-build' } }); if (!r.ok) throw new Error(url + ' -> ' + r.status); return r.text(); }
 
+// Extracts every entry under `prefix` of a zip into destDir (names relative to the prefix); returns the number of files.
+function extractTreeFromZip(buf, prefix, destDir) {
+  let eocd = -1;
+  for (let i = buf.length - 22; i >= Math.max(0, buf.length - 65557); i--) if (buf.readUInt32LE(i) === 0x06054b50) { eocd = i; break; }
+  if (eocd < 0) throw new Error('not a zip file');
+  const count = buf.readUInt16LE(eocd + 10);
+  let p = buf.readUInt32LE(eocd + 16), n = 0;
+  for (let k = 0; k < count; k++) {
+    if (buf.readUInt32LE(p) !== 0x02014b50) throw new Error('corrupt zip directory');
+    const method = buf.readUInt16LE(p + 10), csize = buf.readUInt32LE(p + 20), usize = buf.readUInt32LE(p + 24);
+    const nlen = buf.readUInt16LE(p + 28), xlen = buf.readUInt16LE(p + 30), clen = buf.readUInt16LE(p + 32), lho = buf.readUInt32LE(p + 42);
+    const name = buf.toString('utf8', p + 46, p + 46 + nlen);
+    p += 46 + nlen + xlen + clen;
+    if (!name.startsWith(prefix) || name.endsWith('/')) continue;
+    const rel = name.slice(prefix.length);
+    if (!rel || rel.split('/').some(x => x === '..' || x === '')) throw new Error('unsafe path in zip: ' + name);
+    const start = lho + 30 + buf.readUInt16LE(lho + 26) + buf.readUInt16LE(lho + 28);
+    const raw = buf.subarray(start, start + csize);
+    const data = method === 0 ? Buffer.from(raw) : method === 8 ? zlib.inflateRawSync(raw) : null;
+    if (!data || data.length !== usize) throw new Error('bad zip entry ' + name);
+    const to = path.join(destDir, ...rel.split('/'));
+    fs.mkdirSync(path.dirname(to), { recursive: true }); fs.writeFileSync(to, data); n++;
+  }
+  return n;
+}
+
+// npm of the official Node.js release for Windows (node_modules/npm of the same zip, SHA-256 checked against SHASUMS256.txt): the installed runtime then
+// has npm too, so "audio-mixer npm install ..." works on a PC without Node.js. Cached in dist/cache/npm-<version>-<arch>.
+async function fetchNpm({ cache, version, arch = 'x64', fetchImpl = globalThis.fetch } = {}) {
+  if (!/^v\d+\.\d+\.\d+$/.test(version)) throw new Error('bad Node.js version: ' + version);
+  const dir = path.join(cache, `npm-${version}-${arch}`), mark = path.join(dir, '.complete');
+  if (fs.existsSync(mark) && fs.existsSync(path.join(dir, 'bin', 'npm-cli.js'))) return { dir, version };
+  const zipName = `node-${version}-win-${arch}.zip`;
+  const sums = parseShasums(await getText(`${DIST}/${version}/SHASUMS256.txt`, fetchImpl));
+  if (!sums[zipName]) throw new Error('no checksum published for ' + zipName);
+  const r = await fetchImpl(`${DIST}/${version}/${zipName}`, { headers: { 'User-Agent': 'audio-mixer-build' } });
+  if (!r.ok) throw new Error(zipName + ' -> ' + r.status);
+  const zip = Buffer.from(await r.arrayBuffer());
+  const sum = crypto.createHash('sha256').update(zip).digest('hex');
+  if (sum !== sums[zipName]) throw new Error('checksum mismatch for ' + zipName + ' (expected ' + sums[zipName] + ', got ' + sum + ')');
+  fs.rmSync(dir, { recursive: true, force: true });
+  const n = extractTreeFromZip(zip, `node-${version}-win-${arch}/node_modules/npm/`, dir);
+  if (!n || !fs.existsSync(path.join(dir, 'bin', 'npm-cli.js'))) throw new Error('npm not found in ' + zipName);
+  fs.writeFileSync(mark, String(n));
+  return { dir, version, files: n };
+}
+
 // Official Node.js runtime for Windows (x64, or x86 from the newest LTS line that still ships one): latest LTS (or NODE_VERSION /
 // NODE_VERSION_X86), verified against SHASUMS256.txt, cached in dist/cache.
 async function fetchNodeRuntime({ cache, fetchImpl = globalThis.fetch, arch = 'x64', version = arch === 'x86' ? process.env.NODE_VERSION_X86 : process.env.NODE_VERSION } = {}) {
@@ -145,7 +192,7 @@ function stageAudify(a, stage) {
 const BAT_PC = '@echo off\r\nrem Audio Mixer PC mode: starts the local system server and opens the mixer (bundled Node.js).\r\ncd /d "%~dp0"\r\n"%~dp0runtime\\node.exe" client\\cli.js %*\r\npause\r\n';
 const BAT_SERVER = '@echo off\r\nrem Audio Mixer local system server only (bundled Node.js). Open http://localhost:8765 yourself.\r\ntitle Audio Mixer local server\r\ncd /d "%~dp0"\r\n"%~dp0runtime\\node.exe" bridge\\server.js\r\npause\r\n';
 
-async function buildInstaller({ out = path.join(ROOT, 'dist'), arch = 'x64', fetchImpl, bundleAudify = true, audifyRun } = {}) {
+async function buildInstaller({ out = path.join(ROOT, 'dist'), arch = 'x64', fetchImpl, bundleAudify = true, bundleNpm = true, audifyRun } = {}) {
   const outAbs = path.resolve(out);
   const app = build({ out: outAbs });
   const stage = path.join(outAbs, 'installer', `stage-${arch}`);
@@ -172,7 +219,14 @@ async function buildInstaller({ out = path.join(ROOT, 'dist'), arch = 'x64', fet
   fs.mkdirSync(path.join(stage, 'runtime'), { recursive: true });
   fs.copyFileSync(rt.exe, path.join(stage, 'runtime', 'node.exe'));
   fs.copyFileSync(rt.license, path.join(stage, 'runtime', 'LICENSE-node.txt'));
-  return { stage, arch, nodeVersion: rt.version, version: app.version };
+  let npmFiles = 0;
+  if (bundleNpm) {   // runtime/node_modules/npm next to runtime/node.exe: where Node.js's own layout puts it
+    const npm = await fetchNpm({ cache: path.join(outAbs, 'cache'), version: rt.version, arch, fetchImpl });
+    fs.cpSync(npm.dir, path.join(stage, 'runtime', 'node_modules', 'npm'), { recursive: true, filter: src => path.basename(src) !== '.complete' });
+    const walkNpm = d => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const f = path.join(d, e.name); if (e.isDirectory()) walkNpm(f); else { npmFiles++; fs.appendFileSync(mf, `${crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex')}  ${path.relative(stage, f).split(path.sep).join('/')}\n`); } } };
+    walkNpm(path.join(stage, 'runtime', 'node_modules', 'npm'));
+  }
+  return { stage, arch, nodeVersion: rt.version, version: app.version, npmFiles };
 }
 
 if (require.main === module) {
@@ -181,4 +235,4 @@ if (require.main === module) {
     console.log(`Staged ${r.stage} (${r.arch}, app v${r.version}, bundled Node.js ${r.nodeVersion})`);
   }).catch(e => { console.error('Staging failed: ' + e.message); process.exit(1); });
 }
-module.exports = { fetchAudify, stageAudify, AUDIFY_WIN_SHA256, buildInstaller, fetchNodeRuntime, parseShasums, extractFromZip, version4, BAT_PC, BAT_SERVER };
+module.exports = { fetchNpm, extractTreeFromZip, fetchAudify, stageAudify, AUDIFY_WIN_SHA256, buildInstaller, fetchNodeRuntime, parseShasums, extractFromZip, version4, BAT_PC, BAT_SERVER };

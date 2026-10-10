@@ -30,6 +30,20 @@ am_ensure_audio "$APP"
 exec "$NODE" "$APP/client/cli.js" $AM_SPLASH_ARGS "$@"
 `;
 
+// The "audio-mixer" command of the tarball / macOS installs: lives in the app folder, is linked onto PATH, finds the app folder through the link.
+// Any command goes to the client: audio-mixer doctor | drivers | license | plugins | update | npm install audify | uninstall | ... ; without one it starts the mixer.
+const LAUNCHER_PORTABLE = `#!/bin/sh
+# Audio Mixer command line. "audio-mixer" starts the mixer; "audio-mixer <command>" runs a client command (doctor, drivers, setup, npm, uninstall ...).
+SELF="$0"
+while [ -h "$SELF" ]; do L="$(readlink "$SELF")"; case "$L" in /*) SELF="$L" ;; *) SELF="$(dirname "$SELF")/$L" ;; esac; done
+APP="$(cd "$(dirname "$SELF")" && pwd)"
+. "$APP/ensure-node.sh"
+am_splash "$APP" "$@"
+am_ensure_node || exit 1
+case "\${1:-}" in ''|-*|start) am_ensure_audio "$APP" ;; esac
+exec "$NODE" "$APP/client/cli.js" $AM_SPLASH_ARGS "$@"
+`;
+
 const desktopEntry = () => `[Desktop Entry]
 Type=Application
 Name=Audio Mixer
@@ -207,7 +221,11 @@ if am_ensure_node; then
 else
   echo "Node.js 18+ is not installed: https://nodejs.org/en/download (Audio Mixer asks again the first time it starts)."
 fi
-echo "Done. Open Audio Mixer from $DEST. Remove it later with uninstall.command."
+# the "audio-mixer" command (doctor, drivers, npm, setup, uninstall ...) on PATH
+BINDIR=/usr/local/bin; [ -w "$BINDIR" ] || BINDIR="$HOME/.local/bin"
+mkdir -p "$BINDIR" && ln -sf "$APP/audio-mixer" "$BINDIR/audio-mixer" && echo "Command line: $BINDIR/audio-mixer" || echo "Could not link the audio-mixer command."
+case ":$PATH:" in *":$BINDIR:"*) ;; *) echo "Add $BINDIR to your PATH to use it:  echo 'export PATH=\"$BINDIR:\$PATH\"' >> ~/.zshrc" ;; esac
+echo "Done. Open Audio Mixer from $DEST. Remove it later with uninstall.command (or: audio-mixer uninstall)."
 `;
 
 const MAC_UNINSTALL = `#!/bin/bash
@@ -220,9 +238,23 @@ for DEST in /Applications "$HOME/Applications"; do
     rm -rf "$APP" && echo "Removed $APP"
   fi
 done
+for L in /usr/local/bin/audio-mixer "$HOME/.local/bin/audio-mixer"; do   # the command line link, when it points into the app
+  [ -L "$L" ] && case "$(readlink "$L")" in *"Audio Mixer.app"*) rm -f "$L" && echo "Removed $L" ;; esac
+done
 rm -f "$HOME/Library/LaunchAgents/com.audiomixer.bridge.plist"
 rm -rf "$HOME/.local/share/audio-mixer"   # the private Node.js and audio module that Audio Mixer downloaded
 echo "Audio Mixer removed."
+`;
+
+// For the disk image (the app is dragged to Applications): puts the audio-mixer command on PATH, finding the app where it was dragged.
+const MAC_COMMAND = `#!/bin/bash
+# Puts the "audio-mixer" command (doctor, drivers, npm, setup, uninstall ...) on your PATH. Double-click this file in Finder after dragging Audio Mixer to Applications.
+for DEST in /Applications "$HOME/Applications"; do [ -d "$DEST/Audio Mixer.app" ] && break; done
+APP="$DEST/Audio Mixer.app/Contents/Resources/app"
+[ -x "$APP/audio-mixer" ] || { echo "Audio Mixer is not in Applications yet: drag it there first."; exit 1; }
+BINDIR=/usr/local/bin; [ -w "$BINDIR" ] || BINDIR="$HOME/.local/bin"
+mkdir -p "$BINDIR" && ln -sf "$APP/audio-mixer" "$BINDIR/audio-mixer" && echo "Command line: $BINDIR/audio-mixer"
+case ":$PATH:" in *":$BINDIR:"*) ;; *) echo "Add $BINDIR to your PATH to use it:  echo 'export PATH=\"$BINDIR:\$PATH\"' >> ~/.zshrc" ;; esac
 `;
 
 function buildMac({ out = path.join(ROOT, 'dist'), app = build({ out }) } = {}) {
@@ -238,6 +270,8 @@ function buildMac({ out = path.join(ROOT, 'dist'), app = build({ out }) } = {}) 
   put('Audio Mixer.app/Contents/MacOS/AudioMixer', MAC_LAUNCHER, 0o755);
   fs.mkdirSync(path.join(bundle, 'Contents', 'Resources'), { recursive: true });
   fs.writeFileSync(path.join(bundle, 'Contents', 'Resources', 'AppIcon.icns'), icns());
+  put('Audio Mixer.app/Contents/Resources/app/audio-mixer', LAUNCHER_PORTABLE, 0o755);   // the command line (linked onto PATH by install.command)
+  put('Audio Mixer.app/Contents/Resources/app/uninstall.sh', MAC_UNINSTALL, 0o755);       // "audio-mixer uninstall" runs it
   put('install.command', MAC_INSTALL, 0o755);
   put('uninstall.command', MAC_UNINSTALL, 0o755);
   put('README.txt', `Audio Mixer ${version} for macOS\n\n1. Install Node.js 18 or newer if you do not have it: https://nodejs.org/en/download\n2. Double-click install.command (copies the app to /Applications, or ~/Applications).\n   The app is not notarized: if macOS blocks it, right-click > Open once, or run: xattr -dr com.apple.quarantine "/Applications/Audio Mixer.app"\n3. Start "Audio Mixer": the mixer opens in your browser. Start at login: answer y in install.command, or run the app's client with: service install\n\nFiles: app in /Applications/Audio Mixer.app, login item in ~/Library/LaunchAgents, downloaded drivers in ~/AudioMixerDrivers,\nVST plugins are read from /Library/Audio/Plug-Ins/VST3 and ~/Library/Audio/Plug-Ins/VST3 (and ~/AudioMixerPlugins).\nRemove everything with uninstall.command.\n`, 0o644);
@@ -248,9 +282,88 @@ function buildMac({ out = path.join(ROOT, 'dist'), app = build({ out }) } = {}) 
   return { tar: file, version, root, bundle, sha256: crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex') };
 }
 
+const LINUX_INSTALL = `#!/bin/sh
+# Installs Audio Mixer on any Linux distribution: as root into /opt/audio-mixer (command in /usr/local/bin, menu entry for everyone), otherwise into
+# ~/.local/share/audio-mixer-app (command in ~/.local/bin, menu entry for you). Node.js 18+ with npm is downloaded when missing (official build from
+# nodejs.org, checksum verified, into ~/.local/share/audio-mixer, no administrator rights) and the native audio module (Audify) is installed.
+#   sh install.sh [--yes]        --yes: no questions (also AUDIO_MIXER_YES=1);  AUDIO_MIXER_NO_NATIVE=1 skips the audio module
+set -e
+cd "$(dirname "$0")"
+[ "\${1:-}" = "--yes" ] && export AUDIO_MIXER_YES=1
+if [ "$(id -u)" = 0 ]; then DEST=/opt/audio-mixer; BIN=/usr/local/bin; APPS=/usr/share/applications
+else DEST="$HOME/.local/share/audio-mixer-app"; BIN="$HOME/.local/bin"; APPS="$HOME/.local/share/applications"; fi
+rm -rf "$DEST"; mkdir -p "$DEST" "$BIN" "$APPS"
+cp -R app/. "$DEST/"
+chmod 755 "$DEST/audio-mixer" "$DEST/uninstall.sh" "$DEST/client/cli.js" "$DEST/bridge/server.js"
+ln -sf "$DEST/audio-mixer" "$BIN/audio-mixer"
+cat > "$APPS/audio-mixer.desktop" <<DESK
+[Desktop Entry]
+Type=Application
+Name=Audio Mixer
+Comment=Virtual mixing console with a local server for ASIO, ALSA, JACK and PipeWire audio
+Exec=$DEST/audio-mixer
+Icon=audio-card
+Terminal=false
+Categories=AudioVideo;Audio;Mixer;
+Keywords=mixer;audio;asio;jack;pipewire;
+DESK
+mkdir -p "$HOME/AudioMixerPlugins"
+echo "Audio Mixer installed in $DEST  (command: $BIN/audio-mixer)"
+. "$DEST/ensure-node.sh"
+if am_ensure_node; then
+  am_ensure_audio "$DEST"
+  if am_ask "Start the local server when I log in?"; then "$NODE" "$DEST/client/cli.js" service install || true; fi
+else
+  echo "Node.js 18+ is not installed: https://nodejs.org/en/download (Audio Mixer asks again the first time it starts)."
+fi
+case ":$PATH:" in *":$BIN:"*) ;; *) echo "Add $BIN to your PATH to use the command:  echo 'export PATH=\"$BIN:\$PATH\"' >> ~/.profile" ;; esac
+echo "Start it with: audio-mixer    Commands: audio-mixer doctor | drivers | npm | uninstall    Remove it with: sh $DEST/uninstall.sh"
+`;
+
+const LINUX_UNINSTALL = `#!/bin/sh
+# Removes Audio Mixer that install.sh put in place (run it as the same user): the program, the command, the menu entry and the start-at-login entry.
+# Downloaded drivers (~/AudioMixerDrivers), plugins (~/AudioMixerPlugins) and the license key stay. --purge also removes the private Node.js and audio
+# module that Audio Mixer downloaded into ~/.local/share/audio-mixer.
+HERE="$(cd "$(dirname "$0")" && pwd)"
+NODE="$(command -v node 2>/dev/null || ls "$HOME/.local/share/audio-mixer/node/bin/node" 2>/dev/null | head -1)"
+[ -n "$NODE" ] && [ -f "$HERE/client/cli.js" ] && "$NODE" "$HERE/client/cli.js" service uninstall >/dev/null 2>&1
+for B in /usr/local/bin/audio-mixer "$HOME/.local/bin/audio-mixer"; do
+  [ -L "$B" ] && case "$(readlink "$B")" in "$HERE"/*) rm -f "$B" && echo "Removed $B" ;; esac
+done
+rm -f /usr/share/applications/audio-mixer.desktop "$HOME/.local/share/applications/audio-mixer.desktop" 2>/dev/null
+[ "\${1:-}" = "--purge" ] && rm -rf "$HOME/.local/share/audio-mixer" && echo "Removed the downloaded Node.js and audio module."
+case "$HERE" in
+  /opt/audio-mixer|"$HOME"/.local/share/audio-mixer-app) cd / && rm -rf "$HERE" && echo "Removed $HERE" ;;
+  *) echo "Not removed (not an install.sh location): $HERE" ;;
+esac
+echo "Audio Mixer removed."
+`;
+
+// AudioMixer-<version>-linux.tar.gz: install.sh / uninstall.sh for every distribution (the .deb is for Debian / Ubuntu)
+function buildLinuxTar({ out = path.join(ROOT, 'dist'), app = build({ out }) } = {}) {
+  const outAbs = path.resolve(out), version = app.version;
+  const base = path.join(outAbs, 'unix', 'linux'), root = path.join(base, `audio-mixer-${version}`);
+  fs.rmSync(base, { recursive: true, force: true });
+  const dest = path.join(root, 'app');
+  fs.cpSync(app.dest, dest, { recursive: true });
+  for (const f of ['start-pc-mode.bat', 'start-local-server.bat', 'start-pc-mode.sh']) fs.rmSync(path.join(dest, f), { force: true });
+  const put = (rel, text, mode) => { const f = path.join(root, rel); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, text); fs.chmodSync(f, mode); };
+  put('app/audio-mixer', LAUNCHER_PORTABLE, 0o755);
+  put('app/uninstall.sh', LINUX_UNINSTALL, 0o755);
+  put('install.sh', LINUX_INSTALL, 0o755);
+  put('uninstall.sh', LINUX_UNINSTALL.replace('HERE="$(cd "$(dirname "$0")" && pwd)"', 'HERE="\${AUDIO_MIXER_APP:-/opt/audio-mixer}"; [ -d "$HERE" ] || HERE="$HOME/.local/share/audio-mixer-app"'), 0o755);   // from the unpacked folder: removes the installed copy
+  put('README.txt', `Audio Mixer ${version} for Linux (any distribution)\n\n1. Unpack:   tar xzf AudioMixer-${version}-linux.tar.gz && cd audio-mixer-${version}\n2. Install:  sh install.sh        (as root: /opt/audio-mixer + /usr/local/bin; as a user: ~/.local/share/audio-mixer-app + ~/.local/bin)\n   It downloads Node.js 18+ with npm when missing (official build, checksum verified, no administrator rights) and installs the native audio module.\n3. Start:    audio-mixer           Commands: audio-mixer doctor | drivers | license | plugins | update | npm install audify | service install | uninstall\n4. Remove:   audio-mixer uninstall   (or: sh uninstall.sh, run as the same user; --purge also removes the downloaded Node.js)\n\nDebian / Ubuntu: use the audio-mixer_${version}_all.deb package instead (apt install ./audio-mixer_${version}_all.deb, remove with apt remove audio-mixer).\nDownloaded drivers (~/AudioMixerDrivers), plugins (~/AudioMixerPlugins) and the license key are left in place.\n`, 0o644);
+  fs.chmodSync(path.join(dest, 'client', 'cli.js'), 0o755);
+  const file = path.join(outAbs, `AudioMixer-${version}-linux.tar.gz`);
+  const r = spawnSync('tar', ['--owner=0', '--group=0', '--numeric-owner', '-czf', file, '-C', base, `audio-mixer-${version}`], { encoding: 'utf8' });
+  if (r.status !== 0) throw new Error('tar failed: ' + (r.stderr || r.error));
+  return { tar: file, version, root, sha256: crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex') };
+}
+
 if (require.main === module) {
   const app = build({ out: path.join(ROOT, 'dist') });
-  const d = buildDeb({ app }), m = buildMac({ app });
+  const d = buildDeb({ app }), m = buildMac({ app }), l = buildLinuxTar({ app });
+  console.log(`Linux: ${l.tar}\n     SHA-256 ${l.sha256}`);
   console.log(`DEB: ${d.deb}\n     SHA-256 ${d.sha256}\nmacOS: ${m.tar}\n     SHA-256 ${m.sha256}\nNeither package is signed or notarized.`);
 }
-module.exports = { icns, buildDeb, buildMac, controlFile, desktopEntry, systemdUserUnit, infoPlist, LAUNCHER_LINUX, MAC_LAUNCHER, MAC_INSTALL, MAC_UNINSTALL };
+module.exports = { icns, buildDeb, buildMac, controlFile, desktopEntry, systemdUserUnit, infoPlist, LAUNCHER_LINUX, MAC_LAUNCHER, MAC_INSTALL, MAC_UNINSTALL, MAC_COMMAND, LAUNCHER_PORTABLE, LINUX_INSTALL, LINUX_UNINSTALL, buildLinuxTar };

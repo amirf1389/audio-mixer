@@ -290,3 +290,25 @@ An audio endpoint whose channel count Windows cannot report (device busy or in e
 - the device is probed once more on a fresh engine instance; if it still fails it is flagged (`probeFailed` in `/api/interfaces`);
 - the interface listing takes the mode of a flagged device from the operating system's endpoint of the same name (output only: a DAC / speakers, input only: a microphone, both: an interface), so READ / WRITE are offered on the engine device that can actually be opened;
 - opening such a device tries a stereo stream instead of refusing with "has no input / output channels" (a real 0 channel device still refuses; RtAudio's own message follows if the stream cannot open). With no operating-system entry to learn from the mode stays unknown (`MODE UNKNOWN: DEVICE NOT READABLE`): nothing is guessed.
+
+## Installers with Node.js, npm, a command line and uninstallers on every system (1.16.0)
+
+One command, `audio-mixer`, on Windows, macOS and Linux (it is the `npm run` of the installed app, and needs no project folder):
+`audio-mixer` (start the mixer) · `audio-mixer doctor` · `drivers` · `verify --scan` · `license` · `plugins` · `update` · `service install|uninstall|status` · `setup` · **`npm <args>`** (npm inside the app's `bridge` folder, e.g. `audio-mixer npm install audify`) · **`uninstall [--yes]`** · `version`. A command never opens the start-up screen; only a start does.
+
+| | Windows (`.exe` / `.msi`) | macOS (`.dmg`, `.app.zip`, `.tar.gz`) | Linux (`.tar.gz`, `.deb`) |
+|---|---|---|---|
+| **Node.js** | bundled (24.21.0 x64 / 22.23.3 x86, checksum verified at build) | found, else downloaded on first start (official build, checksum verified, no administrator rights) | found, else downloaded by `install.sh` / first start (same) |
+| **npm** | bundled next to `node.exe` (`runtime\node_modules\npm`, 1900 files, listed in `MANIFEST.sha256`) | comes with the Node.js download / your Node.js | comes with the Node.js download / your Node.js |
+| **audio module** | Audify prebuilt, bundled | `npm install audify` once (asked) | `npm install audify` once (asked) |
+| **command** | `audio-mixer.exe` (signed console program) on **PATH** (feature `CommandLine`, setup switch `/nopath`) | `audio-mixer` linked onto PATH by `install.command` or `Add audio-mixer command.command` (in the `.dmg`) | `audio-mixer` in `/usr/local/bin` (root) or `~/.local/bin` (user) by `install.sh`; `/usr/bin/audio-mixer` by the `.deb` |
+| **install** | `Audio Mixer-<v>.exe`, `AudioMixer-<v>-x64/x86.msi` | drag to Applications, or `install.command` | `sh install.sh` from `AudioMixer-<v>-linux.tar.gz` (any distribution), or `apt install ./audio-mixer_<v>_all.deb` |
+| **uninstall** | Settings > Apps, Start Menu entry, `Audio Mixer-<v>.exe /uninstall`, or `audio-mixer uninstall` (finds the package by the `UninstallCode` registry value); PATH entry and server are removed with it | `Uninstall Audio Mixer.command` (in the `.dmg`) or `uninstall.command`, or `audio-mixer uninstall` | `sh uninstall.sh [--purge]` / `audio-mixer uninstall`, or `apt remove audio-mixer` |
+
+- The Windows PATH entry is an `Environment` table row written into the package after `wixl` (which has no `<Environment>`): `=*PATH` / `[~];[INSTALLDIR]`, owned by the `CommandLine` feature's component, with the standard `WriteEnvironmentStrings` / `RemoveEnvironmentStrings` actions. It follows the feature on install and uninstall; open a new terminal after installing.
+- Uninstallers stop the local server, remove the start-at-login entry, the menu entry and the command. Your drivers (`~/AudioMixerDrivers`), plugins (`~/AudioMixerPlugins`) and license key are left; `--purge` (Linux) also removes the Node.js and audio module Audio Mixer downloaded.
+- **Verified here:** the Linux tarball installs, runs `audio-mixer version | npm | doctor`, sets up and removes the start-at-login entry, and uninstalls (run as an unprivileged user); every shell script parses (`sh -n` / `bash -n`); the Windows packages verify, the MSI holds the `Environment` row, the two actions, the `CommandLine` feature, the `UninstallCode` value, `audio-mixer.exe` and the npm tree. **Not run:** the Windows installer / `audio-mixer.exe` / PATH change on a real PC, and the macOS scripts on a Mac (none available here); the `=*PATH` row follows the Windows Installer documentation but was not applied by a real Windows Installer.
+
+## Version 1.1.1.0
+
+The version is now `1.1.1.0` (four parts, in `package.json` and `bridge/package.json`; file names, the Windows file / product version (`1.1.1.0`), the Debian package version and the in-app version badge all show it). Things that follow from a lower number than 1.16.0: Windows Installer compares only the first three parts (`1.1.1`) and **refuses to install it over an installed 1.16.0** ("a newer version is already installed": uninstall that first); the Android `versionCode` is 10101, lower than 1.16.0's 11600, so Android will not update an installed 1.16.0 in place (uninstall first); the app's update check treats 1.16.0 as newer; and a running 1.16.0 server is not replaced by this version's start (a newer server is never replaced).

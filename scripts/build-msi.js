@@ -5,7 +5,8 @@
 //   user:              %LOCALAPPDATA%\Programs\AudioMixer, no administrator rights, current user
 // Needs wixl (msitools): Linux "apt install wixl". Packages are signed by build-installers.js / sign.js.
 // Install:  msiexec /i AudioMixer-1.4.0-x64.msi   (silent: /qn)   Uninstall: Settings > Apps > Audio Mixer, or msiexec /x <ProductCode>
-// Features: ADDLOCAL=Main,Shortcuts,Tools,PluginHost,WinHelpers,Autostart,Desktop  (default: all but Desktop)
+// Features: ADDLOCAL=Main,Shortcuts,Tools,CommandLine,PluginHost,WinHelpers,Autostart,Desktop  (default: all but Desktop)
+//   CommandLine: audio-mixer.exe on PATH (system PATH for the all-users package, the user's PATH for the per-user one)
 //   PluginHost: native VST host (native/host), WinHelpers: native Windows audio device helpers (native/win); Tools: Start Menu shortcuts for license, plugins, drivers, update, doctor
 const fs = require('node:fs');
 const path = require('node:path');
@@ -100,6 +101,11 @@ ${installDirs}
       </Component>
       <Component Id="InstallKey" Guid="${guid('install-key:' + scope)}"${w64}>
         <RegistryValue Root="${root}" Key="Software\\Audio Mixer" Name="InstallDir" Type="string" Value="[INSTALLDIR]" KeyPath="yes"/>
+        <RegistryValue Root="${root}" Key="Software\\Audio Mixer" Name="UninstallCode" Type="string" Value="[ProductCode]"/>   <!-- "audio-mixer uninstall" finds the package with it -->
+      </Component>
+      <!-- the "audio-mixer" command (audio-mixer.exe in the install folder) on PATH: the Environment table row is added after wixl (see addPathEntry) -->
+      <Component Id="CommandPath" Guid="${guid('command-path:' + scope)}"${w64}>
+        <RegistryValue Root="${root}" Key="Software\\Audio Mixer" Name="CommandLine" Type="integer" Value="1" KeyPath="yes"/>
       </Component>
     </DirectoryRef>
 
@@ -135,6 +141,7 @@ ${comps.map(c => `      <ComponentRef Id="${c}"/>\n`).join('')}      <ComponentR
 ${groups.PluginHost.map(c => `      <ComponentRef Id="${c}"/>\n`).join('')}    </Feature>
     <Feature Id="WinHelpers" Title="Native Windows audio device helpers" Level="1">
 ${groups.WinHelpers.map(c => `      <ComponentRef Id="${c}"/>\n`).join('')}    </Feature>
+    <Feature Id="CommandLine" Title="audio-mixer command on PATH (doctor, npm, setup, uninstall ...)" Level="1"><ComponentRef Id="CommandPath"/></Feature>
     <Feature Id="Autostart" Title="Start the local server when I log in" Level="1"><ComponentRef Id="AutostartRun"/></Feature>
     <Feature Id="Desktop" Title="Desktop shortcut" Level="2"><ComponentRef Id="DesktopShortcut"/></Feature>
 
@@ -142,6 +149,21 @@ ${groups.WinHelpers.map(c => `      <ComponentRef Id="${c}"/>\n`).join('')}    <
   </Product>
 </Wix>
 `;
+}
+
+// wixl has no <Environment>: the PATH entry for audio-mixer.exe is written into the finished package (Environment table, owned by component
+// CommandPath, so it follows the CommandLine feature; "=*" = set on install, remove on uninstall; "[~];dir" appends to the existing PATH) together with the
+// two standard actions that apply it. Needs msidump / msibuild (msitools, installed with wixl).
+function addPathEntry(msi, work, component = 'CommandPath') {
+  const dir = path.join(work, 'env'); fs.rmSync(dir, { recursive: true, force: true }); fs.mkdirSync(dir, { recursive: true });
+  const run = (cmd, args) => { const r = spawnSync(cmd, args, { encoding: 'utf8', cwd: dir }); if (r.error && r.error.code === 'ENOENT') throw new Error(cmd + ' not found (msitools)'); if (r.status !== 0) throw new Error(cmd + ' failed:\n' + r.stdout + r.stderr); };
+  run('msidump', ['-t', msi]);
+  const seqFile = path.join(dir, 'InstallExecuteSequence.idt');
+  let seq = fs.readFileSync(seqFile, 'utf8').replace(/\r?\n$/, '');
+  if (!/^WriteEnvironmentStrings\t/m.test(seq)) seq += '\nRemoveEnvironmentStrings\t\t3300\nWriteEnvironmentStrings\t\t5200';
+  fs.writeFileSync(seqFile, seq + '\n');
+  fs.writeFileSync(path.join(dir, 'Environment.idt'), 'Environment\tName\tValue\tComponent_\ns72\tl255\tL255\ts72\nEnvironment\tEnvironment\nPathAudioMixer\t=*PATH\t[~];[INSTALLDIR]\t' + component + '\n');
+  run('msibuild', [msi, '-i', 'InstallExecuteSequence.idt', 'Environment.idt']);
 }
 
 // `staged` = result of buildInstaller (so several installers can share one staging folder)
@@ -159,6 +181,7 @@ async function buildMsi({ out = path.join(ROOT, 'dist'), arch = 'x64', scope = '
   const r = spawnSync('wixl', ['-v', '--arch', arch, '--ext', 'ui', '-o', msi, wxsPath], { encoding: 'utf8', cwd: work });
   if (r.error && r.error.code === 'ENOENT') throw new Error('wixl not found. Install msitools/wixl (Linux: apt install wixl; macOS: brew install msitools); the WiX source is in ' + wxsPath);
   if (r.status !== 0) throw new Error('wixl failed:\n' + r.stdout + r.stderr);
+  addPathEntry(msi, work);
   result.msi = msi;
   result.sha256 = crypto.createHash('sha256').update(fs.readFileSync(msi)).digest('hex');
   return result;
@@ -170,4 +193,4 @@ if (require.main === module) {
     console.log(`MSI: ${r.msi}\nProduct code: ${r.productCode}\nSHA-256: ${r.sha256}\nUnsigned (see build-installers.js for signing).`);
   }).catch(e => { console.error('MSI build failed: ' + e.message); process.exit(1); });
 }
-module.exports = { buildMsi, wxs, guid, rtf, filesXml, productCode, UPGRADE_CODES };
+module.exports = { addPathEntry, buildMsi, wxs, guid, rtf, filesXml, productCode, UPGRADE_CODES };

@@ -10,6 +10,7 @@
  *   Audio Mixer-1.4.0.exe /scan        after installing, run the verification scan (file hashes, signature, Microsoft Defender)
  *   Audio Mixer-1.4.0.exe /novcredist  do not install the Microsoft Visual C++ runtime that the native audio module needs (see below)
  *   Audio Mixer-1.4.0.exe /noplugins  do not install the VST plugin host;  /nohelpers  skip the native Windows device helpers
+ *   Audio Mixer-1.4.0.exe /nopath      do not put the audio-mixer command (audio-mixer.exe) on PATH
  *   Audio Mixer-1.4.0.exe /notools     no Start Menu tool shortcuts (license, plugins, drivers, update, diagnostics)
  *   Audio Mixer-1.4.0.exe /noshortcuts no Start Menu shortcuts at all;  /desktop  add the desktop shortcut;  /noautostart  do not start at login
  *   An upgrade over an installed version ends the old local server first (so no restart is needed) and starts the new one afterwards.
@@ -144,7 +145,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int show) {
   (void)inst; (void)prev; (void)cmd; (void)show;
   int argc = 0; wchar_t **argv = CommandLineToArgvW(GetCommandLineW(), &argc);
   int quiet = 0, passive = 0, scan = 0, uninstall = 0, novc = 0;
-  int noplug = 0, nohelp = 0, notools = 0, noshort = 0, desktop = 0, noauto = 0;
+  int noplug = 0, nohelp = 0, notools = 0, noshort = 0, desktop = 0, noauto = 0, nopath = 0;
   wchar_t extra[2048] = L"";
   for (int i = 1; argv && i < argc; i++) {
     if (!_wcsicmp(argv[i], L"/quiet") || !_wcsicmp(argv[i], L"/S") || !_wcsicmp(argv[i], L"/qn") || !_wcsicmp(argv[i], L"-quiet")) quiet = 1;
@@ -157,9 +158,10 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int show) {
     else if (!_wcsicmp(argv[i], L"/noshortcuts")) noshort = 1;
     else if (!_wcsicmp(argv[i], L"/desktop")) desktop = 1;
     else if (!_wcsicmp(argv[i], L"/noautostart")) noauto = 1;
+    else if (!_wcsicmp(argv[i], L"/nopath")) nopath = 1;
     else if (!_wcsicmp(argv[i], L"/uninstall") || !_wcsicmp(argv[i], L"/remove")) uninstall = 1;
     else if (!wcscmp(argv[i], L"/?") || !_wcsicmp(argv[i], L"/help")) {
-      message(L"Audio Mixer setup\n\n/quiet  silent install\n/passive  progress only\n/uninstall  remove Audio Mixer\n/scan  run the verification scan after installing\n/novcredist  skip the Visual C++ runtime check\n/noplugins  no VST plugin host\n/nohelpers  no native device helpers\n/notools  no tool shortcuts\n/noshortcuts  no Start Menu shortcuts\n/desktop  add a desktop shortcut\n/noautostart  do not start at login\nPROPERTY=value  passed to Windows Installer (for example INSTALLDIR=\"D:\\Audio Mixer\")", MB_ICONINFORMATION);
+      message(L"Audio Mixer setup\n\n/quiet  silent install\n/passive  progress only\n/uninstall  remove Audio Mixer\n/scan  run the verification scan after installing\n/novcredist  skip the Visual C++ runtime check\n/noplugins  no VST plugin host\n/nohelpers  no native device helpers\n/notools  no tool shortcuts\n/noshortcuts  no Start Menu shortcuts\n/desktop  add a desktop shortcut\n/noautostart  do not start at login\n/nopath  do not put the audio-mixer command on PATH\nPROPERTY=value  passed to Windows Installer (for example INSTALLDIR=\"D:\\Audio Mixer\")", MB_ICONINFORMATION);
       return 0;
     } else {
       /* quote property values that contain spaces: NAME=value with spaces -> NAME="value" */
@@ -172,10 +174,11 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int show) {
   }
 
   /* feature switches -> ADDLOCAL (only when one was used; the default install keeps the MSI defaults) */
-  if (noplug || nohelp || notools || noshort || desktop || noauto) {
+  if (noplug || nohelp || notools || noshort || desktop || noauto || nopath) {
     wchar_t add[300] = L" ADDLOCAL=Main";
     if (!noshort) wcscat(add, L",Shortcuts");
     if (!noshort && !notools) wcscat(add, L",Tools");
+    if (!nopath) wcscat(add, L",CommandLine");
     if (!noplug) wcscat(add, L",PluginHost");
     if (!nohelp) wcscat(add, L",WinHelpers");
     if (!noauto) wcscat(add, L",Autostart");
