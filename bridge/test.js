@@ -920,6 +920,28 @@ test('page: the header mic FFT follows the RTA axis and is fed by every LIVE SOU
   assert.match(html, /\$\('ls-mic-sel'\)\.onchange = e => \{ this\.mic = e\.target\.value \|\| null; this\.syncMicFeed\(\); \};/);
 });
 
+test('upgrade: an older server on the port is replaced instead of reused (CLI) and the Windows launcher waits for the current version', async () => {
+  const http = require('node:http');
+  const cli = pathx.join(__dirname, '..', 'client', 'cli.js');
+  const src = fsx.readFileSync(cli, 'utf8');
+  assert.match(src, /async function replaceStaleServer/); assert.match(src, /upd\.cmpVersion\(info\.version, own\) > 0\) return 'newer'/);   // never replaces a newer one
+  assert.match(src, /argv\.includes\('--ensure'\)/);
+  const l = fsx.readFileSync(pathx.join(__dirname, '..', 'installer', 'launcher.c'), 'utf8');
+  assert.match(l, /server_current\(void\)/); assert.match(l, /AMIX_VERSION/); assert.match(l, /cli\.js\\" --no-open --ensure/);
+  assert.ok(fsx.readFileSync(pathx.join(__dirname, '..', 'scripts', 'build-exe.js'), 'utf8').includes('-DAMIX_VERSION='));
+  // run it for real: a fake OLD server answers /api/status, the client ends it (pid from the status) and starts the current one on that port
+  const { spawn } = require('node:child_process');
+  const port = 20000 + Math.floor(Math.random() * 20000);
+  const old = spawn(process.execPath, ['-e', `require('http').createServer((q,r)=>{r.setHeader('Content-Type','application/json');r.end(JSON.stringify({ok:true,name:'audio-mixer-bridge',version:'1.0.0',pid:process.pid}))}).listen(${port},'127.0.0.1')`], { stdio: 'ignore' });
+  const get = () => new Promise(res => http.get({ host: '127.0.0.1', port, path: '/api/status', timeout: 1500 }, r => { let b = ''; r.on('data', d => { b += d; }); r.on('end', () => { try { res(JSON.parse(b)); } catch (_) { res(null); } }); }).on('error', () => res(null)));
+  for (let i = 0; i < 40 && !(await get()); i++) await new Promise(r => setTimeout(r, 100));
+  assert.strictEqual((await get()).version, '1.0.0');
+  const cl = spawn(process.execPath, [cli, '--no-open', '--port', String(port)], { stdio: 'ignore', env: { ...process.env, BRIDGE_UPDATE_URL: '' } });
+  let st = null; for (let i = 0; i < 80; i++) { await new Promise(r => setTimeout(r, 150)); st = await get(); if (st && st.version !== '1.0.0') break; }
+  cl.kill(); old.kill();
+  assert.ok(st && st.version === require('../package.json').version, 'the current server runs on the port');
+});
+
 test('verify: .msi installer file check', () => {
   const v = require('../client/verify');
   const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'vfy-')), f = pathx.join(dir, 'A.msi');

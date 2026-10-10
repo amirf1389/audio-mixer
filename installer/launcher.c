@@ -13,6 +13,10 @@
 #include <wchar.h>
 #include <string.h>
 
+#ifndef AMIX_VERSION
+#define AMIX_VERSION ""        /* set by scripts/build-exe.js: the version this launcher belongs to */
+#endif
+
 /* ---- start-up screen (/open) ---- */
 #define PORT 8765
 #define MIN_MS 2800          /* the animation is always seen, even when the server is already running */
@@ -27,6 +31,27 @@ static int server_up(void) {             /* does something listen on 127.0.0.1:P
   connect(s, (struct sockaddr *)&a, sizeof a);
   fd_set w; FD_ZERO(&w); FD_SET(s, &w); struct timeval tv = { 0, 40000 };
   int ok = select(0, NULL, &w, NULL, &tv) > 0;
+  closesocket(s);
+  return ok;
+}
+
+/* Is the server on PORT *this* version? An older server (started at login before an upgrade) answers too and would show the old page. */
+static int server_current(void) {
+  if (!AMIX_VERSION[0]) return server_up();
+  SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+  if (s == INVALID_SOCKET) return 0;
+  struct sockaddr_in a; ZeroMemory(&a, sizeof a); a.sin_family = AF_INET; a.sin_port = htons(PORT); a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+  DWORD tmo = 300; setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (const char *)&tmo, sizeof tmo); setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, (const char *)&tmo, sizeof tmo);
+  int ok = 0;
+  if (connect(s, (struct sockaddr *)&a, sizeof a) == 0) {
+    const char *req = "GET /api/status HTTP/1.0\r\nHost: localhost:8765\r\nConnection: close\r\n\r\n";
+    char buf[2048]; int n, got = 0;
+    if (send(s, req, (int)strlen(req), 0) > 0) {
+      while (got < (int)sizeof buf - 1 && (n = recv(s, buf + got, (int)sizeof buf - 1 - got, 0)) > 0) got += n;
+      buf[got] = 0;
+      ok = strstr(buf, "\"version\":\"" AMIX_VERSION "\"") != NULL;
+    }
+  }
   closesocket(s);
   return ok;
 }
@@ -84,7 +109,7 @@ static LRESULT CALLBACK splash_proc(HWND h, UINT m, WPARAM w, LPARAM l) {
   if (m == WM_ERASEBKGND) return 1;
   if (m == WM_TIMER) {
     DWORD ms = GetTickCount() - g_t0;
-    if (!g_up && !g_failed && ms - g_poll >= 150) { g_poll = ms; if (server_up()) g_up = 1; }   /* poll every 150 ms: the check itself waits up to 40 ms */
+    if (!g_up && !g_failed && ms - g_poll >= 150) { g_poll = ms; if (server_current()) g_up = 1; }   /* poll every 150 ms: the check waits up to ~300 ms */
     if (!g_up && ms > MAX_MS) g_failed = 1;
     InvalidateRect(h, NULL, FALSE);
     if (g_failed && ms > MAX_MS + 3500) DestroyWindow(h);
@@ -133,13 +158,16 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int show) {
 
   int open = cmd && wcsstr(cmd, L"/open") != NULL;              /* start-up screen, then the browser */
   WSADATA wsa; if (open) WSAStartup(MAKEWORD(2, 2), &wsa);
-  HANDLE once = CreateMutexW(NULL, FALSE, L"Local\\AudioMixerServerLauncher");
-  int already = once && GetLastError() == ERROR_ALREADY_EXISTS;  /* already started in this session */
-  if (already && !open) return 0;
-  if (open && (already || server_up())) { finish_open(inst); return 0; }
-
+  HANDLE once = NULL;
+  if (!open) {                                                   /* login autostart: once per session, no window */
+    once = CreateMutexW(NULL, FALSE, L"Local\\AudioMixerServerLauncher");
+    if (once && GetLastError() == ERROR_ALREADY_EXISTS) return 0;
+  }
   wchar_t line[MAX_PATH * 4 + 16];
-  _snwprintf(line, MAX_PATH * 4 + 16, L"\"%lsruntime\\node.exe\" \"%lsbridge\\server.js\"", dir, dir);
+  /* /open runs the client: it ends an OLDER server still running on the port (which would show the old page), starts the current one, and exits
+   * when a current one already runs (--ensure). The login autostart starts the server directly. */
+  if (open) _snwprintf(line, MAX_PATH * 4 + 16, L"\"%lsruntime\\node.exe\" \"%lsclient\\cli.js\" --no-open --ensure", dir, dir);
+  else _snwprintf(line, MAX_PATH * 4 + 16, L"\"%lsruntime\\node.exe\" \"%lsbridge\\server.js\"", dir, dir);
   line[MAX_PATH * 4 + 15] = 0;
   STARTUPINFOW si; PROCESS_INFORMATION pi;
   ZeroMemory(&si, sizeof si); si.cb = sizeof si;

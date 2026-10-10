@@ -2,7 +2,7 @@
 'use strict';
 // Audio Mixer PC-mode client: starts the local system server (bridge), opens the mixer in your browser,
 // and manages the official audio drivers. Zero dependencies, needs Node.js 18+.
-//   node client/cli.js                 start the server and open the mixer
+//   node client/cli.js                 start the server and open the mixer (an older Audio Mixer server still running on the port is ended first)
 //   node client/cli.js drivers         list official drivers for this PC (installed / not found)
 //   node client/cli.js download <id>   save an official installer (e.g. flexasio); it is never run for you
 //   node client/cli.js doctor          check Node.js, ports, PortAudio, ASIO drivers, download folder
@@ -58,6 +58,32 @@ function probe(port) {
     });
     req.on('error', () => resolve(false)); req.on('timeout', () => { req.destroy(); resolve(false); });
   });
+}
+
+// The Audio Mixer server on this port, or null: { name, version, pid } from /api/status.
+function serverInfo(port) {
+  return new Promise(resolve => {
+    const req = http.get({ host: '127.0.0.1', port, path: '/api/status', timeout: 1500 }, res => {
+      let b = ''; res.on('data', d => { b += d; }); res.on('end', () => { try { const j = JSON.parse(b); resolve(j && j.name === 'audio-mixer-bridge' ? j : null); } catch (_) { resolve(null); } });
+    });
+    req.on('error', () => resolve(null)); req.on('timeout', () => { req.destroy(); resolve(null); });
+  });
+}
+
+// An OLDER Audio Mixer server still running (started before an upgrade, or at login) keeps serving its old page and code: whoever starts the new version
+// would just reuse it and show no change. It is verified as an Audio Mixer server on this PC's loopback (name + pid from /api/status), then ended.
+async function replaceStaleServer(port, log = console.log) {
+  const info = await serverInfo(port);
+  if (!info) return 'none';
+  const own = require('../package.json').version, upd = require('../bridge/update');
+  if (info.version === own) return 'current';
+  if (upd.cmpVersion(info.version, own) > 0) return 'newer';     // never replace a newer one (a downgrade is the user's decision)
+  if (!Number.isInteger(info.pid) || info.pid <= 1 || info.pid === process.pid) return 'stale';
+  try { process.kill(info.pid); } catch (e) { log(`An older Audio Mixer server (${info.version}, pid ${info.pid}) is still running on port ${port} and could not be ended (${e.code || e.message}). End "node.exe" in Task Manager, then start Audio Mixer again.`); return 'stale'; }
+  for (let i = 0; i < 40 && await serverInfo(port); i++) await new Promise(r => setTimeout(r, 150));
+  if (await serverInfo(port)) { log(`The older server (${info.version}) did not stop: end "node.exe" in Task Manager, then start Audio Mixer again.`); return 'stale'; }
+  log(`Replaced the older Audio Mixer server (${info.version}) with ${own}.`);
+  return 'replaced';
 }
 
 function status(installed) { return installed === true ? 'INSTALLED' : installed === false ? 'NOT FOUND' : 'n/a'; }
@@ -222,12 +248,16 @@ async function cmdService(action, port) {
   return 2;
 }
 
-async function cmdStart(o) {
+async function cmdStart(o, argv = []) {
   const server = require('../bridge/server');
   let port = o.port;
+  const stale = await replaceStaleServer(o.port);
   try { port = await server.start(o.port); }
   catch (e) {
-    if (e.code === 'EADDRINUSE' && await probe(o.port)) console.log(`The system server is already running on port ${o.port}; reusing it.`);
+    if (e.code === 'EADDRINUSE' && await probe(o.port)) {
+      console.log(`The system server is already running on port ${o.port}${stale === 'newer' ? ' (a newer version than this one)' : stale === 'stale' ? ' (an OLDER version: you see its old page)' : ''}; reusing it.`);
+      if (argv.includes('--ensure')) return 0;   // the Windows launcher only wants a current server running
+    }
     else { console.error(`Cannot start the server on port ${o.port}: ${e.message}`); return 1; }
   }
   const url = `http://localhost:${port}/`;
@@ -248,7 +278,7 @@ async function main(argv) {
   const major = Number(process.versions.node.split('.')[0]);
   if (major < MIN_NODE) { console.error(`Node.js ${MIN_NODE}+ is required (you have ${process.versions.node}). Download it from https://nodejs.org/`); return 1; }
   if (o.help) { const head = []; for (const l of fs.readFileSync(__filename, 'utf8').split('\n').slice(2)) { if (!l.startsWith('//')) break; head.push(l.slice(3)); } console.log(head.join('\n')); return 0; }
-  if (o.cmd === 'start') return cmdStart(o);
+  if (o.cmd === 'start') return cmdStart(o, argv);
   if (o.cmd === 'drivers') return (await cmdDrivers(), await pause(argv), 0);
   if (o.cmd === 'license') return cmdLicense(o, argv);
   if (o.cmd === 'plugins') return cmdPlugins(argv);
