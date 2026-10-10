@@ -312,3 +312,14 @@ One command, `audio-mixer`, on Windows, macOS and Linux (it is the `npm run` of 
 ## Version 1.1.1.0
 
 The version is now `1.1.1.0` (four parts, in `package.json` and `bridge/package.json`; file names, the Windows file / product version (`1.1.1.0`), the Debian package version and the in-app version badge all show it). Things that follow from a lower number than 1.16.0: Windows Installer compares only the first three parts (`1.1.1`) and **refuses to install it over an installed 1.16.0** ("a newer version is already installed": uninstall that first); the Android `versionCode` is 10101, lower than 1.16.0's 11600, so Android will not update an installed 1.16.0 in place (uninstall first); the app's update check treats 1.16.0 as newer; and a running 1.16.0 server is not replaced by this version's start (a newer server is never replaced).
+
+## Notification fixes for ASIO / WASAPI interfaces (1.1.2.0)
+
+The pop-up notifications of the mixer had five faults that showed up with real ASIO / WASAPI interfaces; only the notifications changed:
+1. **A failing interface filled the screen.** The same message (for example a read error that is retried every 30 s) stacked up and pushed everything else out. Identical messages on screen are merged into one with a count (`... x3`).
+2. **Errors vanished before they could be read.** Every notice lasted 2.2 s; warnings and errors now stay 5 to 9 s (by length), plain info notices stay 2.2 s.
+3. **Repeated device notices.** A device that flaps (an ASIO driver that is busy for a moment) or keeps failing reported again and again. A notice per interface and text is shown at most once a minute.
+4. **Two notices for one plug event.** Plugging in an interface gave "Audio devices changed: ..." and "Audio interface detected: ...". The generic one is gone; unplugging now gives "Audio interface removed: ...".
+5. **Raw driver errors.** `RtApiAsio::probeDeviceInfo ...`, `-9985` / device unavailable, "has no input channels", "not found" are now said in words (in use by another program: close it, then SCAN NOW / the device is gone: plug it in again), in the notice and in the interface's status line; messages that already say what to do (a sample rate the driver does not support) are kept. Write errors now name the interface too, and the write path gives the same "could not be probed" advice as read.
+
+The page security check (`bridge/audit.js`) still requires notices to be written as text, never HTML; its pattern was widened for the new function.
