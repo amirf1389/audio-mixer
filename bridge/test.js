@@ -1546,3 +1546,43 @@ test('iOS app: Swift sources, XcodeGen spec, opaque icon, project bundle', async
   for (const f of [app, srv]) { assert.strictEqual((f.match(/\{/g) || []).length, (f.match(/\}/g) || []).length, 'balanced braces'); assert.strictEqual((f.match(/\(/g) || []).length, (f.match(/\)/g) || []).length, 'balanced parentheses'); }
   assert.deepStrictEqual(ios.iconPixelOpaque(0, 0).slice(3), [255]);                                          // no transparency in the App Store icon
 });
+
+test('macOS: .dmg writer (UDIF) round-trips, app icon and Info.plist are valid, the disk image holds the app', () => {
+  const { makeDmg } = require('../scripts/mkdmg'); const zl = require('node:zlib');
+  // a disk image with data, a zero run (stored as nothing) and incompressible bytes, not a multiple of the 1 MiB chunk
+  const raw = Buffer.concat([Buffer.from('ISO-like volume '.repeat(90000)), Buffer.alloc(1500000), cryptox.randomBytes(1048576 + 700)]);
+  const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'dmg-')), src = pathx.join(dir, 'a.img'), dst = pathx.join(dir, 'a.dmg');
+  fsx.writeFileSync(src, raw);
+  const info = makeDmg(src, dst);
+  const f = fsx.readFileSync(dst), k = f.subarray(f.length - 512);
+  assert.strictEqual(k.toString('latin1', 0, 4), 'koly'); assert.strictEqual(k.readUInt32BE(4), 4); assert.strictEqual(k.readUInt32BE(8), 512);
+  const xmlOff = Number(k.readBigUInt64BE(216)), xmlLen = Number(k.readBigUInt64BE(224)), dataLen = Number(k.readBigUInt64BE(32));
+  assert.strictEqual(xmlOff, dataLen); assert.strictEqual(xmlOff + xmlLen + 512, f.length); assert.strictEqual(Number(k.readBigUInt64BE(492)), Math.ceil(raw.length / 512)); assert.strictEqual(info.sectors, Math.ceil(raw.length / 512));
+  const xml = f.subarray(xmlOff, xmlOff + xmlLen).toString('utf8');
+  assert.ok(xml.startsWith('<?xml') && xml.includes('<key>blkx</key>'));
+  const m = Buffer.from(/<data>([\s\S]*?)<\/data>/.exec(xml)[1].replace(/\s+/g, ''), 'base64');
+  assert.strictEqual(m.toString('latin1', 0, 4), 'mish'); assert.strictEqual(Number(m.readBigUInt64BE(16)), info.sectors);
+  const n = m.readUInt32BE(200); const out = Buffer.alloc(info.sectors * 512); let last = null;
+  for (let i = 0; i < n; i++) {
+    const o = 204 + 40 * i, type = m.readUInt32BE(o), start = Number(m.readBigUInt64BE(o + 8)), cnt = Number(m.readBigUInt64BE(o + 16)), off = Number(m.readBigUInt64BE(o + 24)), len = Number(m.readBigUInt64BE(o + 32));
+    if (type === 0xffffffff) { last = start; break; }
+    if (type === 0x80000005) zl.inflateSync(f.subarray(off, off + len)).copy(out, start * 512); else if (type === 1) f.copy(out, start * 512, off, off + len);   // 2 = zeros
+    assert.ok(cnt > 0 && cnt <= 2048);
+  }
+  assert.strictEqual(last, info.sectors); assert.ok(out.subarray(0, raw.length).equals(raw)); assert.ok(f.length < raw.length);        // lossless, smaller
+  // icon and Info.plist
+  const u = require('../scripts/build-unix'); const ic = u.icns();
+  assert.strictEqual(ic.toString('latin1', 0, 4), 'icns'); assert.strictEqual(ic.readUInt32BE(4), ic.length);
+  let p = 8; const types = []; while (p < ic.length) { types.push(ic.toString('latin1', p, p + 4)); const len = ic.readUInt32BE(p + 4); assert.strictEqual(ic.subarray(p + 8, p + 16).toString('hex'), '89504e470d0a1a0a'); p += len; }
+  assert.deepStrictEqual(types, ['ic07', 'ic08', 'ic09', 'ic10']); assert.strictEqual(p, ic.length);
+  const plist = u.infoPlist('1.12.0'); for (const kx of ['CFBundleIconFile</key><string>AppIcon', 'LSApplicationCategoryType', 'NSMicrophoneUsageDescription', 'LSMinimumSystemVersion</key><string>11.0', 'CFBundleExecutable</key><string>AudioMixer']) assert.ok(plist.includes(kx), kx);
+  assert.match(u.MAC_LAUNCHER, /swiftc/);
+  // the full build (needs genisoimage / xorriso and zip; skipped without them)
+  const mac = require('../scripts/build-macos');
+  if (mac.isoTool()) {
+    const outd = pathx.join(dir, 'rel'); const r = mac.buildMacApp({ out: outd });
+    assert.ok(fsx.statSync(r.dmg).size > 100000 && fsx.existsSync(r.dmg + '.sha256') && fsx.existsSync(r.zip));
+    const kk = fsx.readFileSync(r.dmg); assert.strictEqual(kk.toString('latin1', kk.length - 512, kk.length - 508), 'koly');
+    assert.match(mac.readme('1.12.0'), /Applications/);
+  }
+});
