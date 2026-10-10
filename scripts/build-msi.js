@@ -66,6 +66,8 @@ function wxs({ stage, version, arch = 'x64', scope = 'machine' }) {
   const win64 = arch === 'x64', machine = scope === 'machine', root = machine ? 'HKLM' : 'HKCU';
   const { xml, comps, groups } = filesXml(stage, win64);
   const w64 = win64 ? ' Win64="yes"' : '';
+  // start-up screen: the signed native launcher shows the boot animation while the server starts, then opens the mixer in the browser
+  const scBoot = (id, name, desc) => `        <Shortcut Id="${id}" Name="${esc(name)}" Target="[INSTALLDIR]AudioMixerServer.exe" Arguments="/open" WorkingDirectory="INSTALLDIR" Description="${esc(desc)}"/>\n`;
   const sc = (id, name, args, desc) => `        <Shortcut Id="${id}" Name="${esc(name)}" Target="[INSTALLDIR]runtime\\node.exe" Arguments="${esc(args)}" WorkingDirectory="INSTALLDIR" Description="${esc(desc)}"/>\n`;
   const code = productCode(arch, scope, version);
   // Program Files (64-bit) for x64, Program Files (x86) for x86; or the user's own folder for the no-administrator flavour
@@ -103,7 +105,7 @@ ${installDirs}
 
     <DirectoryRef Id="MenuDir">
       <Component Id="MenuShortcuts" Guid="${guid('menu-shortcuts:' + scope)}"${w64}>
-${sc('ScPc', 'Audio Mixer (PC mode)', '"[INSTALLDIR]client\\cli.js"', 'Start the local server and open the mixer')}${sc('ScServer', 'Audio Mixer local server only', '"[INSTALLDIR]bridge\\server.js"', 'Local server without opening the browser')}${sc('ScVerify', 'Verify installation (security scan)', '"[INSTALLDIR]client\\cli.js" verify --scan --pause', 'Check the installed files and run a Defender scan')}        <!-- VST3 / VST2 (.vst3, .dll) plugins live in the user's own folder: the launcher creates and opens it -->
+${scBoot('ScPc', 'Audio Mixer (PC mode)', 'Start the local server (boot screen) and open the mixer')}${sc('ScServer', 'Audio Mixer local server only', '"[INSTALLDIR]bridge\\server.js"', 'Local server without opening the browser')}${sc('ScVerify', 'Verify installation (security scan)', '"[INSTALLDIR]client\\cli.js" verify --scan --pause', 'Check the installed files and run a Defender scan')}        <!-- VST3 / VST2 (.vst3, .dll) plugins live in the user's own folder: the launcher creates and opens it -->
         <Shortcut Id="ScPlugins" Name="Plugins folder (VST3 and VST2)" Target="[INSTALLDIR]AudioMixerServer.exe" Arguments="/plugins" Description="Drop .vst3 and VST2 .dll plugins here"/>
         <Shortcut Id="ScUninstall" Name="Uninstall Audio Mixer" Target="[SystemFolder]msiexec.exe" Arguments="/x ${code}" Description="Remove Audio Mixer (also in Settings > Apps)"/>
         <RemoveFolder Id="RmMenu" On="uninstall"/>
@@ -120,7 +122,7 @@ ${sc('ScLicense', 'License key and machine ID', '"[INSTALLDIR]client\\cli.js" li
 
     <DirectoryRef Id="DesktopFolder">
       <Component Id="DesktopShortcut" Guid="${guid('desktop-shortcut:' + scope)}"${w64}>
-${sc('ScDesk', 'Audio Mixer', '"[INSTALLDIR]client\\cli.js"', 'Start PC mode')}        <RegistryValue Root="${root}" Key="Software\\Audio Mixer" Name="Desktop" Type="integer" Value="1" KeyPath="yes"/>
+${scBoot('ScDesk', 'Audio Mixer', 'Start PC mode (boot screen)')}        <RegistryValue Root="${root}" Key="Software\\Audio Mixer" Name="Desktop" Type="integer" Value="1" KeyPath="yes"/>
       </Component>
     </DirectoryRef>
 

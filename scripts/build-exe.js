@@ -68,7 +68,7 @@ function compileNative({ name, work, version, arch, defs = [], libs = [] }) {
   return exe;
 }
 const compileStub = ({ work, version, arch = 'x64' }) => compileNative({ name: 'setup', work, version, arch: 'x86', defs: arch === 'x64' ? ['-DREQUIRE_X64'] : [], libs: ['-ladvapi32', '-lshell32', '-luser32'] });
-const compileLauncher = ({ work, version, arch }) => compileNative({ name: 'launcher', work, version, arch, libs: ['-lshell32', '-luser32'] });
+const compileLauncher = ({ work, version, arch }) => compileNative({ name: 'launcher', work, version, arch, libs: ['-lshell32', '-luser32', '-lgdi32', '-lws2_32'] });
 
 function buildExe({ msi, productCode, out, version, arch = 'x64', work, id }) {
   const { signFile } = require('./sign');

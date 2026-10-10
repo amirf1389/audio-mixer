@@ -838,6 +838,7 @@ test('msi: stable GUIDs, per-machine Program Files paths for x64 and x86, per-us
   assert.match(x64, /Name="a &amp; b\.js"/); assert.match(x64, /Feature Id="Autostart"/); assert.match(x64, /Feature Id="Desktop"[^>]*Level="2"/);
   assert.match(x64, /Id="ScUninstall"[^>]*msiexec\.exe" Arguments="\/x \{[0-9A-F-]{36}\}"/);          // Start Menu uninstall entry
   assert.match(x64, /ARPURLINFOABOUT/);                                                                  // Settings > Apps entry details
+  assert.match(x64, /Id="ScPc"[^>]*AudioMixerServer\.exe" Arguments="\/open"/);                     // main shortcut: start-up screen, then the browser
   assert.match(x64, /Id="ScPlugins"[^>]*AudioMixerServer\.exe" Arguments="\/plugins"/);             // native launcher, no cmd one-liner
   assert.match(x64, /Name="AudioMixer" Type="string" Value="&quot;\[INSTALLDIR\]AudioMixerServer\.exe&quot;"/);
   assert.ok(!/vbs|wscript|cmd\.exe|NSIS/i.test(x64), 'no scripts, no shell one-liners');
@@ -890,6 +891,24 @@ test('page: an interface knows whether it is a DAC (write only), an input (read 
   assert.match(html, /if \(cur && !cur\.auto\) return;/);                                        // user choices are kept, automatic ones are refreshed
   assert.match(html, /write: e0\.write && m\.write/);                                             // a DAC is never read, an input-only device never written
   assert.match(html, /e\[what\] = !!on; e\.auto = false;/);
+});
+
+test('boot screens: browser page + launcher helper (macOS / Linux), native Windows splash, Android and iOS start-up views', () => {
+  const rd = (...a) => fsx.readFileSync(pathx.join(__dirname, '..', ...a), 'utf8');
+  const boot = rd('boot.html');
+  assert.match(boot, /api\/status/); assert.match(boot, /location\.replace\(url\)/); assert.ok(!/<script[^>]+src=/.test(boot) && !/https?:\/\/(?!localhost)/.test(boot.replace(/'http:\/\/localhost:'/g, '')), 'self-contained');
+  const en = rd('ensure-node.sh');
+  assert.match(en, /am_splash\(\)/); assert.match(en, /AM_SPLASH_ARGS="--no-open"/); assert.match(en, /AUDIO_MIXER_NO_SPLASH/);
+  const unix = rd('scripts', 'build-unix.js');
+  assert.strictEqual((unix.match(/am_splash "\$APP" "\$@"/g) || []).length, 2);                       // Linux launcher and macOS app
+  assert.strictEqual((unix.match(/cli\.js" \$AM_SPLASH_ARGS "\$@"/g) || []).length, 2);              // no second browser window when the screen is open
+  assert.ok(rd('scripts', 'build.js').includes("'boot.html'"));
+  const l = rd('installer', 'launcher.c');
+  assert.match(l, /\/open/); assert.match(l, /AudioMixerBoot/); assert.match(l, /server_up\(\)/);
+  assert.ok(rd('scripts', 'build-exe.js').includes("'-lgdi32', '-lws2_32'"));
+  assert.match(rd('android', 'src', 'com', 'audiomixer', 'app', 'MainActivity.java'), /new BootView\(this\)/);
+  assert.match(rd('android', 'src', 'com', 'audiomixer', 'app', 'BootView.java'), /TITAN OS/);
+  assert.match(rd('ios', 'AudioMixer', 'AudioMixerApp.swift'), /struct BootView: View/);
 });
 
 test('verify: .msi installer file check', () => {
@@ -961,7 +980,7 @@ test('unix packages: Debian control + FHS layout, macOS bundle, scripts parse', 
   assert.match(c, /^Package: audio-mixer$/m); assert.match(c, /^Recommends: nodejs \(>= 18\), pipewire/m); assert.ok(!/^Depends:/m.test(c));   // Node.js is installed on first start when apt cannot provide 18+ assert.match(c, /^Architecture: all$/m);
   assert.match(u.desktopEntry(), /^Exec=audio-mixer$/m); assert.match(u.desktopEntry(), /Categories=AudioVideo;Audio;Mixer;/);
   assert.match(u.systemdUserUnit(), /ExecStart=\/usr\/bin\/env node \/opt\/audio-mixer\/bridge\/server\.js/);
-  assert.match(u.LAUNCHER_LINUX, /\. "\$APP\/ensure-node\.sh"\nam_ensure_node \|\| exit 1\nam_ensure_audio "\$APP"\nexec "\$NODE" "\$APP\/client\/cli\.js" "\$@"/);
+  assert.match(u.LAUNCHER_LINUX, /\. "\$APP\/ensure-node\.sh"\nam_splash "\$APP" "\$@"\nam_ensure_node \|\| exit 1\nam_ensure_audio "\$APP"\nexec "\$NODE" "\$APP\/client\/cli\.js" \$AM_SPLASH_ARGS "\$@"/);
   assert.match(u.MAC_LAUNCHER, /am_ensure_node/); assert.match(u.MAC_INSTALL, /am_ensure_audio/);
   assert.match(u.infoPlist('1.4.0'), /<key>CFBundleIdentifier<\/key><string>com\.audiomixer\.app<\/string>/);
   assert.match(u.MAC_UNINSTALL, /com\.audiomixer\.bridge\.plist/);                           // same label the service installer writes

@@ -10,7 +10,9 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.WindowManager;
+import android.widget.FrameLayout;
 import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
@@ -23,6 +25,8 @@ public class MainActivity extends Activity {
     private static final String START_URL = "file:///android_asset/www/index.html";
     private static final int REQ_AUDIO = 7, REQ_ENGINE_AUDIO = 8;
     private WebView web;
+    private BootView boot;                                   // start-up screen over the page until the page is loaded (see BootView)
+    private long bootStart;
     private PermissionRequest pendingMic;
 
     @Override
@@ -31,7 +35,15 @@ public class MainActivity extends Activity {
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);   // a mixer on stage must not go to sleep
         web = new WebView(this);
         web.setBackgroundColor(Color.BLACK);
-        setContentView(web);
+        FrameLayout root = new FrameLayout(this);
+        root.setBackgroundColor(Color.BLACK);
+        root.addView(web, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        if (state == null) {                                   // not after a rotation / restore: the page is already there
+            boot = new BootView(this);
+            bootStart = System.currentTimeMillis();
+            root.addView(boot, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        }
+        setContentView(root);
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);                          // localStorage: scenes, settings, license key
@@ -44,6 +56,9 @@ public class MainActivity extends Activity {
         s.setBuiltInZoomControls(false);
         s.setUserAgentString(s.getUserAgentString() + " AudioMixerAndroid/" + version());
         web.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onPageFinished(WebView v, String url) { hideBoot(); }
+
             // (API 24+; no @Override because the build compiles against the API 23 android.jar from the distribution packages)
             public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest r) {
                 Uri u = r.getUrl();
@@ -69,9 +84,23 @@ public class MainActivity extends Activity {
         });
         startEngine();
         loadMixer(state);
+        if (boot != null) web.postDelayed(new Runnable() { public void run() { if (web != null) hideBoot(); } }, 12000);   // never stay on the screen if the page cannot load
     }
 
     private int attempts;
+
+    /** Removes the start-up screen once the page has loaded and the animation had its minimum time (the page then plays its own power-on sequence). */
+    private void hideBoot() {
+        final BootView b = boot;
+        if (b == null) return;
+        boot = null;
+        long wait = Math.max(300, 2200 - (System.currentTimeMillis() - bootStart));
+        b.postDelayed(new Runnable() {
+            public void run() {
+                b.animate().alpha(0f).setDuration(450).withEndAction(new Runnable() { public void run() { b.stop(); ((ViewGroup) b.getParent()).removeView(b); } }).start();
+            }
+        }, wait);
+    }
 
     /**
      * The mixer page comes from the engine's own server (http://localhost:<port>/): a page from file:// has an opaque origin, where AudioWorklet modules

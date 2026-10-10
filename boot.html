@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Audio Mixer</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; background: #000; color: #e2e8f0; overflow: hidden; font-family: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace; }
+  main { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; padding: 0 16px; box-sizing: border-box; }
+  #led { width: 14px; height: 14px; border-radius: 50%; background: #7f1d1d; box-shadow: 0 0 14px #ef4444; animation: led 2.4s steps(1, end) forwards; }
+  @keyframes led { 0% { background: #ef4444; box-shadow: 0 0 14px #ef4444; } 30% { background: #f59e0b; box-shadow: 0 0 14px #f59e0b; } 60% { background: #22c55e; box-shadow: 0 0 16px #22c55e; } 100% { background: #22c55e; box-shadow: 0 0 16px #22c55e; } }
+  h1 { margin: 0; font-size: clamp(22px, 5vw, 34px); font-weight: 900; letter-spacing: .38em; padding-left: .38em; color: #fff; opacity: 0; animation: in .8s .6s ease forwards; }
+  h1 small { display: block; margin-top: 6px; font-size: .34em; letter-spacing: .5em; color: #64748b; }
+  @keyframes in { to { opacity: 1; } }
+  ul { list-style: none; margin: 0; padding: 0; width: min(300px, 86vw); font-size: 11px; letter-spacing: .08em; }
+  li { display: flex; justify-content: space-between; padding: 2px 0; opacity: 0; animation: in .25s ease forwards; color: #94a3b8; }
+  li b { color: #22c55e; font-weight: 900; }
+  li:nth-child(1) { animation-delay: 1.0s } li:nth-child(2) { animation-delay: 1.3s } li:nth-child(3) { animation-delay: 1.6s }
+  li:nth-child(4) { animation-delay: 1.9s } li:nth-child(5) { animation-delay: 2.2s } li:nth-child(6) { animation-delay: 2.5s }
+  #bar { width: min(300px, 86vw); height: 3px; background: #0f172a; border-radius: 2px; overflow: hidden; }
+  #bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #22c55e, #fbbf24); transition: width .4s ease; }
+  #msg { min-height: 2.6em; max-width: 440px; text-align: center; font-size: 10px; letter-spacing: .06em; color: #64748b; line-height: 1.5; }
+  #msg.warn { color: #fbbf24; }
+  @media (prefers-reduced-motion: reduce) { * { animation-duration: .01s !important; animation-delay: 0s !important; } }
+</style>
+</head>
+<body>
+<main>
+  <div id="led" aria-hidden="true"></div>
+  <h1>AUDIO MIXER<small>TITAN STAGE</small></h1>
+  <ul aria-hidden="true">
+    <li>TITAN OS <b>OK</b></li><li>DSP CORE <b>OK</b></li><li>AUDIO ENGINE <b>OK</b></li><li>I/O <b>OK</b></li><li>FADERS <b>OK</b></li><li>CONSOLE <b>OK</b></li>
+  </ul>
+  <div id="bar"><i></i></div>
+  <div id="msg" role="status">Starting the local server ...</div>
+</main>
+<script>
+/* Start-up screen of the macOS app and the Linux launcher: opened at once, while Node.js and the audio module are checked / installed on the first start.
+   It switches to the mixer as soon as the local server answers (port in the address after #, default 8765). */
+(function () {
+  'use strict';
+  var port = parseInt((location.hash || '').slice(1), 10);
+  if (!(port >= 1 && port <= 65535)) port = 8765;
+  var url = 'http://localhost:' + port + '/', t0 = Date.now(), MIN = 3000, bar = document.querySelector('#bar i'), msg = document.getElementById('msg'), done = false;
+  function tick() {
+    var e = Date.now() - t0;
+    bar.style.width = Math.min(92, e / MIN * 70 + (e > MIN ? Math.min(22, (e - MIN) / 2000) : 0)) + '%';
+    if (e > 12000) msg.textContent = 'First start: Audio Mixer is checking Node.js and installing the audio module. This can take a minute ...';
+    if (e > 90000) { msg.textContent = 'This takes longer than expected. Look at the terminal window (Linux) or run "node client/cli.js doctor". The page continues when the server is up.'; msg.className = 'warn'; }
+  }
+  function probe() {
+    if (done) return;
+    tick();
+    fetch(url + 'api/status', { mode: 'no-cors', cache: 'no-store' }).then(function () {
+      if (Date.now() - t0 < MIN) return setTimeout(probe, 300);
+      done = true; bar.style.width = '100%'; msg.textContent = 'Opening the mixer ...';
+      setTimeout(function () { location.replace(url); }, 250);
+    }, function () { setTimeout(probe, 500); });
+  }
+  probe();
+})();
+</script>
+</body>
+</html>
