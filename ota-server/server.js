@@ -11,6 +11,11 @@
 //   DELETE /admin/files/<file>           remove a file that no published manifest lists
 //   PUT  /admin/manifest/<channel>       publish a manifest envelope (signed by the vendor, see scripts/ota.js)
 //   GET  /admin/stats                    manifest checks and downloads per day
+//   GET  /admin/config                   public URL, public key, limits (for the dashboard)
+//   GET  /admin/history/<channel>        every manifest ever published on the channel (newest first);  /admin/history/<channel>/<version> the signed envelope
+//   DELETE /admin/manifest/<channel>     unpublish the channel (the apps get 404; the history stays, a roll back publishes an old version again)
+//   GET  /admin/verify                   hashes every file on disk again and reports damage
+//   GET  /admin/  (+ app.js, style.css)  the vendor web dashboard (ota-server/dashboard/): needs OTA_ADMIN_TOKEN, the token is typed into the page and used as the Bearer token
 //
 // The server never holds the vendor PRIVATE key: manifests are signed on the vendor's machine. A manifest is accepted only when its signature
 // verifies with the Audio Mixer public key, every file it lists is here with the same size and SHA-256, its version is newer than the published
@@ -153,17 +158,43 @@ function createOta({ dataDir, token = '', publicUrl = '', jwk, rate = 120, trust
     send(res, 200, { ok: true, channel: ch, version: m.version, previous: cur, files: Object.keys(m.files) });
   }
 
+  // ── vendor dashboard (static files; the page itself holds no secret, every API call carries the token) ──
+  const DASH = { '/admin/': ['index.html', 'text/html; charset=utf-8'], '/admin/app.js': ['app.js', 'text/javascript; charset=utf-8'], '/admin/style.css': ['style.css', 'text/css; charset=utf-8'] };
+  const CSP = "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+  function serveDashboard(req, res, p) {
+    const [file, type] = DASH[p], body = fs.readFileSync(path.join(__dirname, 'dashboard', file));
+    send(res, 200, req.method === 'HEAD' ? '' : body, { 'Content-Type': type, 'Content-Length': body.length, 'Content-Security-Policy': CSP, 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer', 'Cache-Control': 'no-cache' });
+  }
+  function history(ch) {
+    return fs.readdirSync(dirs.history).filter(n => n.startsWith(ch + '-') && n.endsWith('.json')).map(n => {
+      const env = readJson(path.join(dirs.history, n), null), v = env && update.verifyManifest(env, jwk);
+      if (!v || !v.ok || v.manifest.channel !== ch && v.manifest.channel) return null;
+      const m = v.manifest; return { version: m.version, released: m.released || null, notes: Array.isArray(m.notes) ? m.notes.map(String) : [], files: Object.keys(m.files), current: versionOf(ch) === m.version };
+    }).filter(Boolean).sort((a, b) => update.cmpVersion(b.version, a.version));
+  }
+  async function verifyDisk() {
+    const out = [];
+    for (const [name, f] of Object.entries(index)) {
+      const file = path.join(dirs.releases, name); let actual = null;
+      try { actual = fs.statSync(file).size === f.size ? await sha256File(file) : 'size differs'; } catch (_) { actual = 'missing'; }
+      out.push({ name, ok: actual === f.sha256, expected: f.sha256, actual });
+    }
+    return out;
+  }
+
   async function handler(req, res) {
     const t0 = Date.now(), url = new URL(req.url, 'http://x'), p = url.pathname, ip = addr(req);
     res.on('finish', () => log({ ip, method: req.method, path: p, status: res.statusCode, ms: Date.now() - t0 }));
     try {
+      if (p === '/admin' && token) return send(res, 301, '', { Location: '/admin/' });
+      if (DASH[p] && token && (req.method === 'GET' || req.method === 'HEAD')) return serveDashboard(req, res, p);
       if (p.startsWith('/admin/')) {
         if (!token) return fail(res, 404, 'not found');
         const lim = limiter.allow('a:' + ip, 60); if (!lim.ok) return send(res, 429, { ok: false, error: 'too many requests' }, { 'Retry-After': lim.retryAfter });
         if (!authed(req)) { const bad = limiter.allow('bad:' + ip, 10); return send(res, bad.ok ? 401 : 429, { ok: false, error: 'a valid admin token is required' }, bad.ok ? { 'WWW-Authenticate': 'Bearer' } : { 'Retry-After': bad.retryAfter }); }
         let m;
         if ((m = /^\/admin\/files\/([^/]+)$/.exec(p))) {
-          const name = decodeURIComponent(m[1]);
+          let name; try { name = decodeURIComponent(m[1]); } catch (_) { return fail(res, 400, 'bad file name'); }
           if (req.method === 'PUT') return await putFile(req, res, name, url.searchParams);
           if (req.method === 'DELETE') {
             if (!NAME.test(name) || !index[name]) return fail(res, 404, 'no such file');
@@ -173,6 +204,17 @@ function createOta({ dataDir, token = '', publicUrl = '', jwk, rate = 120, trust
         }
         if (p === '/admin/files' && req.method === 'GET') return send(res, 200, { ok: true, files: Object.entries(index).map(([name, f]) => ({ name, size: f.size, sha256: f.sha256, referencedBy: referencedBy(name) })) });
         if ((m = /^\/admin\/manifest\/([^/]+)$/.exec(p)) && req.method === 'PUT') return await putManifest(req, res, m[1], url.searchParams);
+        if ((m = /^\/admin\/manifest\/([^/]+)$/.exec(p)) && req.method === 'DELETE') {
+          if (!CHANNEL.test(m[1]) || !fs.existsSync(manifestFile(m[1]))) return fail(res, 404, 'nothing is published on that channel');
+          const was = versionOf(m[1]); fs.unlinkSync(manifestFile(m[1])); log({ event: 'unpublish', channel: m[1], version: was }); return send(res, 200, { ok: true, channel: m[1], unpublished: was });
+        }
+        if (p === '/admin/config' && req.method === 'GET') return send(res, 200, { ok: true, publicUrl: publicUrl.replace(/\/+$/, ''), jwk, maxFile: MAX_FILE, allowHttp, channels: Object.fromEntries(channels().map(c => [c, versionOf(c)])) });
+        if ((m = /^\/admin\/history\/([a-z0-9-]+)(?:\/(\d+(?:\.\d+){1,3}))?$/.exec(p)) && req.method === 'GET' && CHANNEL.test(m[1])) {
+          if (!m[2]) return send(res, 200, { ok: true, channel: m[1], versions: history(m[1]) });
+          const f = path.join(dirs.history, m[1] + '-' + m[2] + '.json'); if (!fs.existsSync(f)) return fail(res, 404, 'no such version');
+          return send(res, 200, fs.readFileSync(f), { 'Content-Type': 'application/json; charset=utf-8' });
+        }
+        if (p === '/admin/verify' && req.method === 'GET') { const r = await verifyDisk(); return send(res, 200, { ok: true, allGood: r.every(x => x.ok), files: r }); }
         if (p === '/admin/stats' && req.method === 'GET') { flush(); return send(res, 200, { ok: true, days: stats.days }); }
         return fail(res, 404, 'not found');
       }
