@@ -15709,7 +15709,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             // loopback (music) has inputs only (READ only), an audio interface does both
             ioMode(i) {
                 const read = i.inputs > 0 || !!i.loopback, write = i.outputs > 0 && !i.loopback;
-                return { read, write, label: read && write ? 'READ + WRITE' : write ? 'DAC / OUTPUT: WRITE ONLY' : read ? 'INPUT: READ ONLY' : 'NO CHANNELS YET' };
+                return { read, write, label: read && write ? 'READ + WRITE' : write ? 'DAC / OUTPUT: WRITE ONLY' : read ? 'INPUT: READ ONLY' : (i.driverOnly ? 'DRIVER ONLY: CLOSE THE OTHER PROGRAM / REPLUG' : 'MODE UNKNOWN: DEVICE NOT READABLE') };
             },
             autoEnable() {
                 let changed = false;
@@ -15782,7 +15782,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 }
                 if (!cap && this.bridgeUrl && this.portaudio && i.apis && i.apis.length) {
                     const tries = i.apis.filter(a => a.inputs > 0 && a.deviceId >= 0).sort((a, b) => apiRank(a.api) - apiRank(b.api));   // negative ids are devices the OS lists but no engine can open
-                    if (!tries.length && i.apis.some(a => a.inputs > 0)) lastErr = 'listed only: install Audify or PortAudio (npm install in bridge/) to open it';
+                    if (!tries.length && i.apis.some(a => a.inputs > 0)) lastErr = 'listed only: the audio engine could not probe this device (in use by another program, exclusive mode or unplugged): close the other program, then SCAN NOW';
                     for (const a of tries) {
                         try { cap = await this.bridgeRead(i, a); break; } catch (e) { lastErr = e.message; }
                     }

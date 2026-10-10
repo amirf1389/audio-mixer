@@ -77,7 +77,7 @@ function fromHelper(text) {
   for (const d of j.devices) {
     if (!d || !d.name) continue;
     devices.push({ id: -(devices.length + 1), name: String(d.name), hostApi: 'Core Audio', native: true, isDefault: !!d.default, transport: d.transport || 'unknown',
-      inputs: d.kind === 'input' ? (d.channels | 0) : 0, outputs: d.kind === 'output' ? (d.channels | 0) : 0, sampleRate: d.sampleRate | 0 || 48000 });
+      inputs: d.kind === 'input' ? ((d.channels | 0) > 0 ? d.channels | 0 : 2) : 0, outputs: d.kind === 'output' ? ((d.channels | 0) > 0 ? d.channels | 0 : 2) : 0, sampleRate: d.sampleRate | 0 || 48000 });   // direction known, channel count unknown: stereo
   }
   return devices;
 }

@@ -277,3 +277,9 @@ After installing a new version the mixer could still show the old page and featu
 - The Windows start-up screen (`AudioMixerServer.exe /open`) now starts the client in `--ensure` mode (starts or replaces, exits when a current server already runs) and only opens the browser when the server answers **with this version**. If an older server cannot be ended (for example it runs as another user) it says so: end `node.exe` in Task Manager and start again.
 - The setup `.exe` from 1.14.2 on already ends the old server before installing; the `.msi` alone does not (Windows Installer may then ask for a restart: do it, or end `node.exe` first).
 - The bundled Node.js is the current LTS (x64: 24.21.0, x86: 22.23.3, checked against nodejs.org's SHASUMS256.txt when the installer is built).
+
+## Interface read / write mode not readable (1.15.3)
+
+An audio endpoint whose channel count Windows cannot report (device busy or in exclusive use by another program, some Bluetooth endpoints, a DAC that is waking up) came back from the native helper with 0 channels, although its direction (capture / render) was known. The interface then showed "no input • no output" with READ and WRITE switched off, so its mode could not be read or used. Now:
+- the direction decides the mode and an unknown channel count is taken as stereo, on Windows (`AudioDevices.exe` listing), macOS (Core Audio helper) and wherever the helper gives a direction without a count; a reported count is always kept. A DAC / speaker therefore shows `DAC / OUTPUT: WRITE ONLY`, a microphone `INPUT: READ ONLY`.
+- an interface with no readable mode says why: `DRIVER ONLY: CLOSE THE OTHER PROGRAM / REPLUG` (ASIO driver that did not probe) or `MODE UNKNOWN: DEVICE NOT READABLE`; and a device the audio engine could not probe says to close the other program and press SCAN NOW instead of the wrong advice to install an audio module.

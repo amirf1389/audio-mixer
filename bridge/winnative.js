@@ -14,6 +14,8 @@ function defaultRun(cmd, args, timeout = 6000) {
     execFile(cmd, args, { timeout, windowsHide: true, maxBuffer: 2 * 1024 * 1024 }, (err, stdout) => resolve(err ? '' : String(stdout)));
   });
 }
+// channel count of an endpoint whose direction is known: the reported one, else stereo
+const chans = n => ((n | 0) > 0 ? n | 0 : 2);
 function parse(text) {
   try { const j = JSON.parse(String(text).replace(/^﻿/, '').trim()); return j && j.ok && Array.isArray(j.devices) ? j.devices : null; } catch (_) { return null; }
 }
@@ -27,7 +29,9 @@ async function listEndpoints({ run = defaultRun, platform = process.platform, ar
   if (!list) return null;
   const devices = list.filter(d => d && d.name).map((d, i) => ({
     id: -(i + 1), name: String(d.name), hostApi: 'Windows WASAPI', native: true, endpointId: String(d.id || ''), isDefault: !!d.default,
-    inputs: d.kind === 'input' ? (d.channels | 0) : 0, outputs: d.kind === 'output' ? (d.channels | 0) : 0, sampleRate: d.sampleRate | 0 || 48000,
+    // The endpoint kind (capture / render) is known even when Windows cannot give its mix format (device busy or in exclusive use, some Bluetooth
+    // endpoints): the helper then reports 0 channels, which showed the interface as "no input, no output" with READ and WRITE switched off.
+    inputs: d.kind === 'input' ? chans(d.channels) : 0, outputs: d.kind === 'output' ? chans(d.channels) : 0, sampleRate: d.sampleRate | 0 || 48000,
   }));
   return { engine: 'wasapi-native', hostApis: ['Windows WASAPI'], devices };
 }
@@ -39,4 +43,4 @@ async function listWmi({ run = defaultRun, platform = process.platform, exists =
   return (list || []).filter(d => d && d.name).map(d => ({ name: String(d.name), vendor: String(d.vendor || ''), status: String(d.status || '') }));
 }
 
-module.exports = { listEndpoints, listWmi, exePath, vbsPath, parse };
+module.exports = { listEndpoints, listWmi, exePath, vbsPath, parse, chans };

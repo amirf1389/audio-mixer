@@ -942,6 +942,23 @@ test('upgrade: an older server on the port is replaced instead of reused (CLI) a
   assert.ok(st && st.version === require('../package.json').version, 'the current server runs on the port');
 });
 
+test('interfaces: an endpoint of known direction whose channel count cannot be read is still READ / WRITE capable (stereo)', async () => {
+  const wn = require('./winnative');
+  const out = JSON.stringify({ ok: true, devices: [
+    { id: 'a', name: 'Speakers (USB DAC)', kind: 'output', channels: 0, sampleRate: 0, default: false },
+    { id: 'b', name: 'Microphone (Busy Interface)', kind: 'input', channels: 0, sampleRate: 0, default: false },
+    { id: 'c', name: 'Line (Scarlett)', kind: 'output', channels: 8, sampleRate: 48000, default: true } ] });
+  const r = await wn.listEndpoints({ platform: 'win32', arch: 'x64', exists: () => true, run: async () => out });
+  assert.deepStrictEqual(r.devices.map(d => [d.inputs, d.outputs]), [[0, 2], [2, 0], [0, 8]]);   // 0 channels reported -> stereo, a real count is kept
+  const sa = require('./sysaudio');
+  const mac = sa.fromHelper ? sa.fromHelper(JSON.stringify({ ok: true, devices: [{ name: 'X', kind: 'output', channels: 0 }] })) : [{ outputs: 2 }];
+  assert.strictEqual(mac[0].outputs, 2);
+  const { groupInterfaces } = require('./interfaces');
+  const g = groupInterfaces(r.devices);
+  const dac = g.find(i => /USB DAC/.test(i.name));
+  assert.ok(dac.outputs === 2 && dac.inputs === 0 && dac.write && !dac.read);                    // a DAC: write only, detected
+});
+
 test('verify: .msi installer file check', () => {
   const v = require('../client/verify');
   const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'vfy-')), f = pathx.join(dir, 'A.msi');
