@@ -269,3 +269,11 @@ The microphone trace of the header RTA (FFT RTA, 20 Hz - 20 kHz) had three fault
 3. **Only the default browser microphone was shown.** Interfaces read in LIVE SOURCES (browser microphones, ASIO, WASAPI, DirectSound, Core Audio, ALSA, Android, anything arriving through the local server's Web Audio worklet) never reached it. The interface chosen in the FFT selector of LIVE SOURCES now feeds the header trace (the button reads `MIC: SOURCE (FFT ON)`); the header's own microphone toggle still works and both can run together.
 
 The music trace of the same display keeps its old bin mapping (not part of this fix). Checked in Chromium with a 1 kHz tone as the microphone and with the test engine's server-side interface.
+
+## Old server kept the old page after an upgrade (1.15.2)
+
+After installing a new version the mixer could still show the old page and features: an **older Audio Mixer server was still running** on port 8765 (started at login or by an earlier launch; Windows also keeps its files locked) and every start just reused it. Now:
+- `node client/cli.js` (and the Start Menu / desktop *Audio Mixer* entry) checks the running server's version through `/api/status`; an **older** one (verified by name and process id on this PC's loopback) is ended and the current server is started in its place, with a message. A **newer** one is never replaced.
+- The Windows start-up screen (`AudioMixerServer.exe /open`) now starts the client in `--ensure` mode (starts or replaces, exits when a current server already runs) and only opens the browser when the server answers **with this version**. If an older server cannot be ended (for example it runs as another user) it says so: end `node.exe` in Task Manager and start again.
+- The setup `.exe` from 1.14.2 on already ends the old server before installing; the `.msi` alone does not (Windows Installer may then ask for a restart: do it, or end `node.exe` first).
+- The bundled Node.js is the current LTS (x64: 24.21.0, x86: 22.23.3, checked against nodejs.org's SHASUMS256.txt when the installer is built).
