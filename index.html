@@ -3652,6 +3652,9 @@ window.navTabs = [
                   <span class="px-2 py-0.5 rounded text-[7.5px] bg-purple-500/20 text-purple-400 border border-purple-500/40 font-bold">64-BIT SIMD DSP ENGINE</span>
                 </div>
 
+                <!-- PLUGIN INSERTS (read / write): scanned .vst3 / .dll / .vst per slot, kept by the local server -->
+                <div id="ins-fx" data-ins="fx" class="glass-panel p-3 rounded-xl wing-bezel font-mono text-[7.5px] space-y-1.5"></div>
+
                 <!-- Primary FX Slots (1 to 4) -->
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
                   <!-- FX 1: Vintage Plate Reverb -->
@@ -7713,6 +7716,9 @@ window.navTabs = [
                     <span id="phase-status-badge" class="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-bold">+0.94 IN-PHASE MONO OK</span>
                   </div>
                 </div>
+
+                <!-- PLUGIN INSERTS (read / write): scanned .vst3 / .dll / .vst per slot, kept by the local server -->
+                <div id="ins-phase" data-ins="phase" class="glass-panel p-3 rounded-xl wing-bezel font-mono text-[7.5px] space-y-1.5"></div>
 
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <!-- Goniometer Vector Scope Canvas -->
@@ -16496,7 +16502,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             async scan() {
                 if (!bridge()) { this.data = null; return this.render(); }
                 try { const j = await (await fetch(bridge() + '/api/plugins', { cache: 'no-store' })).json(); this.data = j && j.ok ? j : null; } catch (e) { this.data = null; }
-                this.render();
+                this.render(); racks.render();
             },
             render() {
                 const list = $('plg-list'); if (!list) return;
@@ -16517,6 +16523,58 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                     const fmt = document.createElement('span'); fmt.className = 'text-purple-300'; fmt.textContent = p.format + (p.arch ? ' ' + p.arch : '');
                     const st = document.createElement('span'); st.className = ok ? 'text-emerald-400' : 'text-amber-400'; st.textContent = ok ? 'VALID' : (p.reason || 'REJECTED').toUpperCase();
                     row.append(cb, name, fmt, st); list.appendChild(row);
+                });
+            },
+        };
+
+        // ── plugin inserts of the PHASE and FX pages (read / write through the local server: GET / POST /api/inserts) ──
+        const RACKS = { phase: { title: 'PHASE PLUGIN INSERTS', sub: 'POLARITY, ALIGNMENT AND STEREO TOOLS', slots: ['a', 'b', 'c', 'd'], label: s => 'PHASE ' + s.toUpperCase() },
+                        fx: { title: 'FX PLUGIN INSERTS', sub: 'REVERB, DELAY, DYNAMICS AND MORE', slots: ['1', '2', '3', '4', '5', '6', '7', '8'], label: s => 'FX ' + s } };
+        const racks = {
+            state: {}, busy: false,
+            async load() {
+                if (!bridge()) { this.state = {}; return this.render(); }
+                try { const j = await (await fetch(bridge() + '/api/inserts', { cache: 'no-store' })).json(); this.state = j && j.ok ? j.slots || {} : {}; } catch (e) { this.state = {}; }
+                this.render();
+            },
+            async write(slot, body) {
+                if (!bridge()) return notify('Plugin inserts need PC mode (the local server)', 'plug-circle-exclamation');
+                if (!L.has('plugins')) return notify('Plugin inserts are part of the PRO and STUDIO plans', 'lock');
+                this.busy = true;
+                try {
+                    const r = await post('/api/inserts', 'inserts', Object.assign({ slot }, body));
+                    if (r.json && r.json.ok) this.state = r.json.slots || {}; else notify((r.json && r.json.error) || 'Could not save the insert', 'triangle-exclamation');
+                } catch (e) { notify('The local server is not reachable', 'triangle-exclamation'); }
+                this.busy = false; this.render();
+            },
+            render() {
+                const allowed = L.has('plugins'), list = (plugins.data && plugins.data.plugins || []).filter(p => p.valid && p.compatible);
+                Object.keys(RACKS).forEach(kind => {
+                    const box = $('ins-' + kind); if (!box) return;
+                    const R = RACKS[kind];
+                    box.textContent = '';
+                    const head = document.createElement('div'); head.className = 'flex flex-wrap items-center justify-between gap-2';
+                    const t = document.createElement('div'); t.className = 'font-black text-purple-400 uppercase text-[8px]'; t.textContent = R.title + ' \u2022 .VST3 \u2022 .DLL \u2022 .VST';
+                    const sub = document.createElement('div'); sub.className = 'text-slate-500';
+                    sub.textContent = !bridge() ? 'START PC MODE TO READ AND WRITE INSERTS' : !allowed ? 'PRO AND STUDIO PLANS' : list.length + ' LOADABLE PLUGINS FOUND \u2022 ' + R.sub;
+                    head.append(t, sub); box.appendChild(head);
+                    const grid = document.createElement('div'); grid.className = 'grid grid-cols-1 sm:grid-cols-2 gap-1.5'; box.appendChild(grid);
+                    R.slots.forEach(s => {
+                        const key = kind + ':' + s, cur = this.state[key];
+                        const row = document.createElement('div'); row.className = 'flex items-center gap-1.5 bg-black/50 border border-white/5 rounded px-2 py-1';
+                        const lab = document.createElement('span'); lab.className = 'w-14 shrink-0 font-bold text-slate-300'; lab.textContent = R.label(s);
+                        const sel = document.createElement('select'); sel.className = 'flex-1 min-w-0 bg-black text-slate-200 border border-white/15 rounded px-1 py-0.5'; sel.setAttribute('aria-label', R.label(s) + ' plugin'); sel.disabled = !allowed || !bridge() || this.busy;
+                        const none = document.createElement('option'); none.value = ''; none.textContent = '\u2014 EMPTY \u2014'; sel.appendChild(none);
+                        const names = new Set();
+                        list.forEach(p => { const o = document.createElement('option'); o.value = p.format + '|' + p.name; o.textContent = p.name + ' (' + p.format + ')'; sel.appendChild(o); names.add(o.value); });
+                        if (cur && !names.has(cur.format + '|' + cur.plugin)) { const o = document.createElement('option'); o.value = cur.format + '|' + cur.plugin; o.textContent = cur.plugin + ' (' + cur.format + ', not found)'; sel.appendChild(o); }
+                        sel.value = cur ? cur.format + '|' + cur.plugin : '';
+                        sel.addEventListener('change', () => { if (!sel.value) this.write(key, { plugin: null }); else { const i = sel.value.indexOf('|'); this.write(key, { plugin: sel.value.slice(i + 1), format: sel.value.slice(0, i) }); } });
+                        const by = document.createElement('button'); by.type = 'button'; by.disabled = !cur || !allowed || this.busy; by.setAttribute('aria-pressed', String(!!(cur && cur.bypass)));
+                        by.className = 'px-1.5 py-0.5 rounded font-black border ' + (cur && cur.bypass ? 'bg-amber-400 text-black border-amber-400' : 'bg-white/5 text-slate-300 border-white/10'); by.textContent = 'BYPASS';
+                        by.addEventListener('click', () => this.write(key, { bypass: !(cur && cur.bypass) }));
+                        row.append(lab, sel, by); grid.appendChild(row);
+                    });
                 });
             },
         };
@@ -16611,9 +16669,11 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                         if (window.currentRole !== 'Admin' && ADMIN_TABS.indexOf(tabId) >= 0) { notify('That page is part of the administrator edition (see LICENSE > Admin mode)', 'lock'); return; }
                         const r = origSwitch.apply(this, arguments);
                         if (tabId === 'plugins') plugins.scan();
+                        if (tabId === 'phase' || tabId === 'fx') plugins.scan().then(() => racks.load());
                         return r;
                     };
-                    editions.apply(); L.set('basic', 'basic'); L.init();
+                    document.addEventListener('licensechange', () => racks.render());
+                    editions.apply(); L.set('basic', 'basic'); L.init(); racks.render();
                 }
             }, 100);
         }

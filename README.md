@@ -54,11 +54,11 @@ and the Audify prebuilt binaries, pinned by SHA-256).
 
 | File | Installs to | Notes |
 |---|---|---|
-| `Audio Mixer-1.7.3.exe` | `C:\Program Files\Audio Mixer` | signed setup for 64-bit Windows; checks the embedded package's SHA-256, then runs Windows Installer. `/quiet` silent, `/passive`, `/scan` (run the verification scan after installing), `/uninstall`, `INSTALLDIR="D:\Audio Mixer"` |
-| `AudioMixer-1.7.3-x64.msi` | `C:\Program Files\Audio Mixer` | 64-bit Windows Installer package, all users (administrator), `msiexec /i ... /qn` |
-| `AudioMixer-1.7.3-x86.msi` | `C:\Program Files (x86)\Audio Mixer` | 32-bit package with 32-bit Node.js (v22 LTS, the last line with a 32-bit build) and 32-bit Audify, for 32-bit Windows or 32-bit audio hosts |
-| `audio-mixer_1.7.3_all.deb` | `/opt/audio-mixer`, `/usr/bin/audio-mixer`, `/usr/share/applications`, `/usr/lib/systemd/user` | Debian / Ubuntu / Mint; installs Node.js 18+ on first start when it is missing; remove with `apt remove audio-mixer`; start at login: `systemctl --user enable --now audio-mixer` |
-| `AudioMixer-1.7.3-macos.tar.gz` | `/Applications/Audio Mixer.app` (or `~/Applications`), login item `~/Library/LaunchAgents` | double-click `install.command` / `uninstall.command`; installs Node.js 18+ when it is missing; not notarized |
+| `Audio Mixer-1.8.0.exe` | `C:\Program Files\Audio Mixer` | signed setup for 64-bit Windows; checks the embedded package's SHA-256, then runs Windows Installer. `/quiet` silent, `/passive`, `/scan` (run the verification scan after installing), `/uninstall`, `INSTALLDIR="D:\Audio Mixer"` |
+| `AudioMixer-1.8.0-x64.msi` | `C:\Program Files\Audio Mixer` | 64-bit Windows Installer package, all users (administrator), `msiexec /i ... /qn` |
+| `AudioMixer-1.8.0-x86.msi` | `C:\Program Files (x86)\Audio Mixer` | 32-bit package with 32-bit Node.js (v22 LTS, the last line with a 32-bit build) and 32-bit Audify, for 32-bit Windows or 32-bit audio hosts |
+| `audio-mixer_1.8.0_all.deb` | `/opt/audio-mixer`, `/usr/bin/audio-mixer`, `/usr/share/applications`, `/usr/lib/systemd/user` | Debian / Ubuntu / Mint; installs Node.js 18+ on first start when it is missing; remove with `apt remove audio-mixer`; start at login: `systemctl --user enable --now audio-mixer` |
+| `AudioMixer-1.8.0-macos.tar.gz` | `/Applications/Audio Mixer.app` (or `~/Applications`), login item `~/Library/LaunchAgents` | double-click `install.command` / `uninstall.command`; installs Node.js 18+ when it is missing; not notarized |
 
 Every Windows installer carries the mixer page, the Node.js server and client, the bundled Node.js runtime, Audify (ASIO / WASAPI / DirectSound), the verify scan, Start Menu entries
 (*Audio Mixer (PC mode)*, *local server only*, *Verify installation*, *Plugins folder*, *Uninstall Audio Mixer*) and an entry in *Settings > Apps* (Add or remove programs) with a working Uninstall.
@@ -74,7 +74,7 @@ pin the publisher, but Windows still shows "unknown publisher" / SmartScreen unt
 sign with a commercial certificate (`SIGN_PFX=cert.pfx SIGN_PFX_PASSWORD=... npm run build:installers`; `SIGN_TIMESTAMP_URL=http://timestamp.digicert.com` adds a timestamp). Thumbprint of the
 published certificate: see `releases/AudioMixer-signing.cer`. The Linux and macOS packages are not signed.
 
-**Layout fixes (1.7.3).** The EQ band faders and the DCA / VCA master faders no longer grow to the height of the page and spill out of their cards (the slider now fills its own track). On phones the 10 EQ faders get a usable height and the RTA badge no longer overlaps the curve title, the mixer toolbar wraps instead of scrolling sideways, and the ASIO DRIVER strip can be folded to one line with its chevron button (remembered; folded by default on screens shorter than 700 px).
+**Layout fixes (1.8.0).** The EQ band faders and the DCA / VCA master faders no longer grow to the height of the page and spill out of their cards (the slider now fills its own track). On phones the 10 EQ faders get a usable height and the RTA badge no longer overlaps the curve title, the mixer toolbar wraps instead of scrolling sideways, and the ASIO DRIVER strip can be folded to one line with its chevron button (remembered; folded by default on screens shorter than 700 px).
 
 **Automatic installation of Node.js and the audio runtime.** The Windows `.exe` / `.msi` already contain Node.js. Everywhere else a missing prerequisite is installed for you, after asking
 (`AUDIO_MIXER_YES=1` skips the questions):
@@ -100,9 +100,9 @@ as a false positive to the vendor (Microsoft: https://www.microsoft.com/wdsi/fil
 ### Windows verification scan
 `node client/cli.js verify [--scan]` (Start Menu: *Verify installation (security scan)*) checks an install: every file against `MANIFEST.sha256` (changed, missing and unlisted code files, including
 native files under `bridge/node_modules`, are reported), the Authenticode signature of the bundled Node.js runtime (must be the OpenJS Foundation), that the server listens on loopback only, and with
-`--scan` runs a Microsoft Defender custom scan. `node client/cli.js verify "Audio Mixer-1.7.3.exe" [--scan]` (also `.msi`) checks a downloaded installer: PE structure, the embedded package and its SHA-256,
+`--scan` runs a Microsoft Defender custom scan. `node client/cli.js verify "Audio Mixer-1.8.0.exe" [--scan]` (also `.msi`) checks a downloaded installer: PE structure, the embedded package and its SHA-256,
 the `.sha256` file next to it, the signature (a self-signed signature passes only when it matches `AudioMixer-signing.cer` next to the file, or `AUDIO_MIXER_SIGNING_CER`) and Defender. Exit code 0 = verified.
-Manual check in PowerShell: `Get-FileHash ".\Audio Mixer-1.7.3.exe" -Algorithm SHA256` and `Get-AuthenticodeSignature ".\Audio Mixer-1.7.3.exe"`.
+Manual check in PowerShell: `Get-FileHash ".\Audio Mixer-1.8.0.exe" -Algorithm SHA256` and `Get-AuthenticodeSignature ".\Audio Mixer-1.8.0.exe"`.
 Tested on Linux (hashes, packaging, signature verification with osslsigncode); the Windows-only parts (running the setup, Authenticode and Defender checks, uninstall) are untested on a real PC.
 
 ### Live interface (1.4.0 and 1.5.0)
@@ -141,7 +141,7 @@ Interface changes in the page:
 - Endpoints: `GET /api/nowplaying`, `GET /api/interfaces` (see `bridge/README.md`). Not verified on real Windows / macOS hardware; the Linux path was
   tested with a fake D-Bus and a stubbed PortAudio.
 
-## Consumer edition: license keys, plans, plugins and OTA updates (1.7.3)
+## Consumer edition: license keys, plans, plugins and OTA updates (1.8.0)
 
 - **Plans.** Without a key the app runs as **BASIC (8 channels)**. **PRO** unlocks 16 channels, the plugin manager and OTA downloads; **STUDIO** unlocks all 32 channels. Channels above the plan are hidden and silent; the bank buttons, the LIVE SOURCES auto-patch and the plan chip (next to the FOH button) follow the plan.
 - **Activation.** LICENSE tab → paste the key (`AMIX1.…`) → ACTIVATE. Keys are signed offline (ECDSA P-256); the page checks the signature with WebCrypto and the local server re-checks it with Node `crypto`, then stores the key in `~/.audio-mixer/license.json` (`BRIDGE_LICENSE_FILE` overrides). A key can be bound to one computer with the machine code shown in the LICENSE tab, and can expire. Endpoints: `GET /api/license`, `POST /api/license/activate|deactivate`.
@@ -150,21 +150,26 @@ Interface changes in the page:
 - **OTA updates.** `GET /api/update` fetches `releases/update.json` (signed manifest; default `https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/update.json`, override with `BRIDGE_UPDATE_URL`, extra hosts with `BRIDGE_UPDATE_HOSTS`). `POST /api/update/download` (PRO / STUDIO) saves the installer for this platform to the downloads folder after its SHA-256 matches the manifest; it is never run automatically. Publish with `node scripts/make-update.js --dir <vendor dir>`.
 - Limits: the plan is enforced in the client, so it stops forged keys, not someone who edits the code.
 
-## Read + write on one interface, C++ and VBScript helpers for Windows, security hardening (1.7.3)
+## Read + write on one interface, C++ and VBScript helpers for Windows, security hardening (1.8.0)
 
 - **READ + WRITE (duplex).** An ASIO driver serves one client, so reading and writing the same interface with two streams failed. With both switches on, the page now opens one duplex stream (`WS /ws/duplex`, `bridge/duplex.js`; PortAudio and Audify): the interface shows "READING via ASIO duplex" and "WRITING via ASIO duplex". Switching one side off reopens the other on its own. Other host APIs (WASAPI, Core Audio, ALSA) keep separate streams.
 - **C++ (Windows).** `native/win/src/AudioDevices.cpp` is a small WASAPI endpoint lister (`native/win/x64/AudioDevices.exe` and `native/win/x86/AudioDevices.exe` are built from it with MinGW, see the header of the file). When neither PortAudio nor Audify is installed, `GET /api/interfaces` still lists the Windows inputs and outputs through it (`engine: "wasapi-native"`; listing only, opening streams still needs Audify / PortAudio).
 - **VBScript (Windows).** `Audio Mixer.vbs` is a double-click launcher that opens `start-pc-mode.bat` in a normal visible window. `native/win/vbs/audio-devices.vbs` (WMI) supplies the sound device names when PowerShell is blocked. Windows 11 24H2+ may have VBScript turned off (optional feature): use `start-pc-mode.bat` then.
 - **Security.** See `SECURITY.md`: response headers, static file allow-list, rate and size limits, WebSocket caps, per-hop redirect checks for downloads.
 
-**Primary Sound driver (1.7.3).** DirectSound's *Primary Sound Capture Driver* / *Primary Sound Driver* are Windows' default-device mappers, not hardware: they duplicate the real default device and often failed to open, which showed as an error on the interface list. They are now listed last as *System default input / output*, and ENABLE ALL and automatic enabling skip them (you can still switch them on by hand).
+**Primary Sound driver (1.8.0).** DirectSound's *Primary Sound Capture Driver* / *Primary Sound Driver* are Windows' default-device mappers, not hardware: they duplicate the real default device and often failed to open, which showed as an error on the interface list. They are now listed last as *System default input / output*, and ENABLE ALL and automatic enabling skip them (you can still switch them on by hand).
 
-## Install layout, Bluetooth audio (1.7.3)
+## Install layout, Bluetooth audio (1.8.0)
 
 - **Program Files layout.** The Windows installers put `bridge\`, `client\`, `scripts\`, `deploy\` and `native\` next to `index.html` in `C:\Program Files\Audio Mixer`. `native\win\` is arranged by purpose: `x64\` and `x86\` (`AudioDevices.exe`), `src\` (C++ source), `vbs\` (VBScript). `scripts\` carries the license and update tools (`license.js`, `make-update.js`), `deploy\` the nginx / fail2ban hosting files. Editor and VCS folders (`.vscode`, `.git`, `.github`, any dotfile) are never installed: the build stops if one would be included, and a test checks it.
 - **Bluetooth headsets (RtAudio).** Windows lists a headset twice: *Headphones (X Stereo)* (A2DP) and *Headset (X Hands-Free AG Audio)* (hands-free microphone, 8 / 16 kHz). They are now one interface "X": WRITE goes to the A2DP stereo endpoint, READ to the hands-free microphone, which is not opened automatically (it drops the headset to phone quality). RtAudio refused the mixer's 48 kHz on a hands-free device ("does not support 48000 Hz"); Bluetooth devices now run at their own closest rate and the bridge converts to and from the mixer's rate.
 
-## RtAudio ASIO fixes (1.7.3)
+## RtAudio ASIO fixes (1.8.0)
 
 - **One stream per driver.** An ASIO driver serves a single client, but the page (UNIVERSAL ASIO tab, LIVE SOURCES) opens reading and writing as two separate streams, which stalled or failed the first one. The bridge now keeps one registry of open ASIO devices: when the other direction of an open device is requested, the device is reopened as ONE duplex stream and the first user stays attached (same sample rate required; closing one side keeps the other running). A second request for the same direction, or any request on a device owned by `/ws/duplex`, gets a clear "already open" message.
 - **No probing of a driver in use.** The page rescans every 5 s and every scan probed all APIs, including the ASIO driver that was streaming (`new RtAudio` + `getDevices`), which can glitch or kill that stream. While an ASIO stream is open the last probed device list is reused.
+
+## Interfaces on every OS, plugin inserts for PHASE and FX (1.8.0)
+
+- **Interface list on every OS.** Without Audify / PortAudio, `GET /api/interfaces` read nothing on macOS and Linux. The bridge now reads the interfaces from the OS itself (`bridge/sysaudio.js`): Linux from `arecord -l` / `aplay -l` (ALSA), `pactl` (PulseAudio / PipeWire) and `/proc/asound/cards`; macOS from `system_profiler SPAudioDataType -json` (Core Audio); Windows from the C++ WASAPI helper. If all of that fails, the sound devices the OS reported are listed by name. These entries are listed, not openable (`engine` says `alsa-native`, `coreaudio-native`, `wasapi-native` or `os-devices`); opening streams still needs Audify or PortAudio.
+- **Plugin inserts (read / write).** The PHASE and FX pages have a PLUGIN INSERTS card (4 phase slots, 8 FX slots): pick a scanned `.vst3` / `.dll` / `.vst` per slot and bypass it. The choice is written to and read back from the local server (`GET /api/inserts`, `POST /api/inserts` with `X-Mixer-Action: inserts`, stored in `~/.audio-mixer/inserts.json`, `BRIDGE_INSERTS_FILE` overrides), so every page and every restart sees the same racks. Only plugins that passed the binary check can be chosen; writing needs the PRO or STUDIO plan. **The bridge does not run plugin audio yet**: the slots are the routing record that a plugin host will read.

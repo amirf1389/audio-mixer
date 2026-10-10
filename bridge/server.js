@@ -10,6 +10,7 @@
 //   GET /api/plugins -> VST3 / VST2 plugins (.vst3 / .dll / .vst) found and validated
 //   GET /api/audify, /api/framesize -> Audify (RtAudio) engine devices and automatic frame size
 //   WS  /ws/output    -> page streams Int16 PCM out through PortAudio (ASIO / WASAPI)
+//   GET /api/inserts, POST /api/inserts (X-Mixer-Action: inserts) -> plugin insert slots of the PHASE and FX pages
 //   WS  /ws/duplex    -> read AND write one interface through a single native stream
 //   WS  /ws/input     -> bridge streams Int16 PCM captured from an ASIO / WASAPI input
 //   GET /api/catalog  -> official audio drivers / stacks for this OS, with install detection
@@ -36,6 +37,7 @@ const license = require('./license');
 const updater = require('./update');
 const streamRegistry = require('./streams');
 const security = require('./security');
+const inserts = require('./inserts');
 
 const VERSION = (() => { try { return require('../package.json').version; } catch (_) { return '1.0.0'; } })();
 const PORT = Number(process.env.BRIDGE_PORT) || 8765;
@@ -98,9 +100,14 @@ async function handle(req, res) {
     if (!license.hasFeature(license.status(), 'ota')) return [402, { ok: false, needs: 'ota', error: 'Downloading updates needs the PRO or STUDIO plan. You can still check for updates.' }];
     return [200, await updater.download({ current: VERSION })];
   }, false);
+  if (req.method === 'POST' && url.pathname === '/api/inserts') return handleAction(req, res, cors, 'inserts', async body => {
+    if (!license.hasFeature(license.status(), 'plugins')) return [402, { ok: false, error: 'Plugin inserts need the PRO or STUDIO plan', needs: 'plugins' }];
+    return [200, { ok: true, ...inserts.set(body) }];
+  });
   if (req.method !== 'GET') return json(res, 405, { ok: false, error: 'method not allowed' }, cors);
   if (url.pathname === '/api/status') return json(res, 200, { ok: true, name: 'audio-mixer-bridge', version: VERSION, node: process.version, pid: process.pid, uptimeSec: Math.round(process.uptime()), streams: streamRegistry.list(), time: Date.now() }, cors);
   // Consumer licensing: the plan this copy runs as, this computer's machine code, and the stored key's state
+  if (url.pathname === '/api/inserts') return json(res, 200, { ok: true, ...inserts.read() }, cors);
   if (url.pathname === '/api/license') return json(res, 200, { ok: true, version: VERSION, ...license.status() }, cors);
 
   // OTA updates: is a newer, signed version published? (cached for 5 minutes, ?force=1 asks again)

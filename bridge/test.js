@@ -1349,3 +1349,53 @@ test('ASIO (RtAudio): one stream per driver. Reading and writing a device share 
   assert.throws(() => a.openStream({ mod: fa, dev, direction: 'input', channels: 2, sampleRate: 48000 }), /already open for reading and writing/);
   d.close(); assert.strictEqual(a._asioOf(fa).size, 0);
 });
+
+test('system audio: interfaces are read from the OS on Linux, macOS and Windows without an audio engine', async () => {
+  const sa = require('./sysaudio');
+  const alsa = 'card 1: USB [Scarlett 2i2 USB], device 0: USB Audio [USB Audio]\ncard 0: PCH [HDA Intel PCH], device 0: ALC [ALC3246 Analog]\n';
+  const pactl = '1\talsa_input.usb-Scarlett.analog-stereo\tmodule-alsa-card.c\ts16le 2ch 48000Hz\tRUNNING\n2\talsa_output.usb.monitor\tmodule\ts16le 2ch 44100Hz\tIDLE\n';
+  const run = async (cmd, args) => (cmd === 'arecord' ? alsa : cmd === 'aplay' ? alsa : cmd === 'pactl' ? (args[2] === 'sources' ? pactl : '1\talsa_output.usb.analog-stereo\tm\ts16le 2ch 44100Hz\tIDLE\n') : '');
+  const l = await sa.list({ platform: 'linux', run });
+  assert.strictEqual(l.engine, 'alsa-native'); assert.ok(l.devices.every(d => d.id < 0 && d.native));
+  assert.ok(l.devices.some(d => d.name.startsWith('Scarlett') && d.inputs === 2) && l.devices.some(d => d.name.startsWith('Scarlett') && d.outputs === 2));
+  assert.ok(l.devices.some(d => d.hostApi === 'PulseAudio' && /^Monitor of/.test(d.name)));
+  const gi = require('./interfaces').groupInterfaces(l.devices.map(d => ({ id: d.id, name: d.name, hostApi: d.hostApi, inputs: d.inputs, outputs: d.outputs })));
+  assert.ok(gi.some(i => /Scarlett/.test(i.name) && i.inputs && i.outputs));
+  const proc = await sa.list({ platform: 'linux', run: async () => '', readFile: () => ' 0 [PCH            ]: HDA-Intel - HDA Intel PCH\n                      HDA Intel PCH at 0x1\n' });
+  assert.ok(proc && proc.devices.length === 2);                                                    // /proc/asound/cards fallback: input + output
+  const mac = JSON.stringify({ SPAudioDataType: [{ _items: [{ _name: 'MacBook Pro Microphone', coreaudio_device_input: 1, coreaudio_default_audio_input_device: 'spaudio_yes', coreaudio_device_srate: 48000 },
+    { _name: 'MacBook Pro Speakers', coreaudio_device_output: 2, coreaudio_default_audio_output_device: 'spaudio_yes' }, { _name: 'Scarlett 2i2', coreaudio_device_input: 2, coreaudio_device_output: 2 }] }] });
+  const m = await sa.list({ platform: 'darwin', run: async () => mac });
+  assert.strictEqual(m.engine, 'coreaudio-native'); assert.strictEqual(m.devices.length, 4); assert.ok(m.devices[0].isDefault);
+  assert.strictEqual(await sa.list({ platform: 'darwin', run: async () => 'garbage' }), null);
+  assert.strictEqual(await sa.list({ platform: 'win32' }), null);
+  // the real detection fills `native` when no engine is installed (this machine has none) and /api/interfaces serves it
+  const info = await require('./detect').detect();
+  if (!info.portaudio) assert.ok(info.native === null || Array.isArray(info.native.devices));
+});
+
+test('plugin inserts (PHASE / FX slots): read, write, validate, plan gate', async () => {
+  const ins = require('./inserts');
+  const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'ins-')), file = pathx.join(dir, 'inserts.json');
+  const scan = () => ({ plugins: [{ name: 'Pultec', format: 'VST3', valid: true, compatible: true }, { name: 'Old', format: 'VST2', valid: true, compatible: true }, { name: 'Plain', format: 'VST2', valid: false, compatible: false, reason: 'a plain DLL, not a VST2 plugin' }] });
+  assert.deepStrictEqual(ins.read(file), { slots: {} });
+  let st = ins.set({ slot: 'phase:ch1', plugin: 'Pultec' }, { file, scan }); assert.deepStrictEqual(st.slots['phase:ch1'], { plugin: 'Pultec', format: 'VST3', bypass: false });
+  st = ins.set({ slot: 'phase:ch1', bypass: true }, { file, scan }); assert.strictEqual(st.slots['phase:ch1'].bypass, true);
+  st = ins.set({ slot: 'fx:1', plugin: 'Old', format: 'VST2' }, { file, scan });
+  assert.deepStrictEqual(Object.keys(ins.read(file).slots).sort(), ['fx:1', 'phase:ch1']);                       // read back from disk
+  assert.strictEqual(ins.set({ slot: 'fx:1', plugin: null }, { file, scan }).slots['fx:1'], undefined);
+  for (const [b, code] of [[{ slot: '../x', plugin: 'Pultec' }, 400], [{ slot: 'fx:1', plugin: 'Nope' }, 404], [{ slot: 'fx:2', plugin: 'Plain' }, 409], [{ slot: 'fx:9', bypass: true }, 404], [{ slot: 'fx:1', plugin: 'x'.repeat(200) }, 400]]) {
+    assert.throws(() => ins.set(b, { file, scan }), e => e.status === code, JSON.stringify(b));
+  }
+  assert.strictEqual(fsx.statSync(file).mode & 0o077, 0);
+  // endpoints: GET open, POST needs the header and the PRO plan
+  process.env.BRIDGE_INSERTS_FILE = file; process.env.BRIDGE_LICENSE_FILE = pathx.join(dir, 'license.json');
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const g = await (await fetch(base + '/api/inserts')).json(); assert.strictEqual(g.ok, true); assert.ok(g.slots['phase:ch1']);
+  const post = h => fetch(base + '/api/inserts', { method: 'POST', headers: { 'Content-Type': 'application/json', ...h }, body: JSON.stringify({ slot: 'fx:3', plugin: null }) });
+  assert.strictEqual((await post({})).status, 400);                                                               // header required
+  const r = await post({ 'X-Mixer-Action': 'inserts' }); assert.strictEqual(r.status, 402); assert.strictEqual((await r.json()).needs, 'plugins');   // BASIC plan
+  server.closeAllConnections(); server.close();
+  delete process.env.BRIDGE_INSERTS_FILE; delete process.env.BRIDGE_LICENSE_FILE;
+});
