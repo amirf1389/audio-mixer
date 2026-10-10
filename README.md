@@ -350,3 +350,9 @@ The BLUETOOTH page has a **BLUETOOTH INPUT stereo return strip**, like the USB /
 - The codec list, "SNR" line and the demo device cards of that page are unchanged: the operating system negotiates the codec and the page cannot change it.
 
 Not tested here: a real phone / headset (checked in Chromium with a generated stereo source, and the tests in `bridge/test.js`). Windows cannot receive music from a phone as an input without a Bluetooth audio receiver (the page says so).
+
+## Bus sends and ducker for the Bluetooth input (1.4.0.0)
+
+The Bluetooth input strip (BLUETOOTH page) has two more console sections:
+- **BUS SENDS:** a send level (-60 dB = off .. +10 dB) from the strip to each of the 16 mix buses of the BUS & MATRIX page (bus names follow that page). The send is taken after trim, mute and ducker, so muting the strip or a duck is heard on the buses too. It works for every assignment (channel pair, master, cue, matrix); with the strip on a channel pair, the channel's own sends on the BUS page add to these. ALL OFF clears them. Nothing is connected to a bus until its send is above off.
+- **DUCKER:** the Bluetooth input goes down by DEPTH (0 - 40 dB) while the trigger is above THRESHOLD, then comes back. Trigger: ALL LIVE SOURCES (every live source except the loopback / music ones, so a microphone) or one chosen source. ATTACK 1 - 500 ms, HOLD 0 - 2000 ms, RELEASE 20 - 3000 ms; the detector closes 3 dB below the threshold (hysteresis). The page shows the trigger level, the real gain reduction and the state (OFF / ARMED / DUCKING). The detector reads the sources about 30 times a second and moves the gain smoothly, so very short attacks are limited by that rate. Settings are saved in the browser.

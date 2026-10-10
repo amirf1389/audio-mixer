@@ -17792,7 +17792,8 @@ registerProcessor('am-lufs',P)`;
    The audio comes from a real input device of this system that carries the Bluetooth link (a phone or tablet playing to this PC, a headset microphone;
    BlueZ / PipeWire "bluez_input", Windows hands-free, Core Audio, or the browser's own Bluetooth microphones) through LIVE SOURCES.
    Strip: source select, trim, polarity, mono sum, balance, delay (lines up the wireless latency), mute, assign (channel pair / master / cue / matrix 1 & 2),
-   real meters in and out, link state (paired / connected / battery). TRANSMITTER mode writes the mix to a Bluetooth output (wireless headphones).
+   real meters in and out, link state (paired / connected / battery), SENDS to the 16 mix buses of the BUS & MATRIX page, and a DUCKER (the Bluetooth input goes down while
+   a microphone / chosen source is loud). TRANSMITTER mode writes the mix to a Bluetooth output (wireless headphones).
    Nothing is inserted into the audio path of a source until BT INPUT is switched on for it. */
 (function () {
     'use strict';
@@ -17813,7 +17814,7 @@ registerProcessor('am-lufs',P)`;
     const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
     const B = window.btInput = {
-        cfg: Object.assign({ sel: '', on: false, route: 'ch', pair: 30, trim: 0, pol: false, mono: false, bal: 0, delay: 0, mute: false, tx: false }, store.get('halx_btin_v1', {})),
+        cfg: Object.assign({ sel: '', on: false, route: 'ch', pair: 30, trim: 0, pol: false, mono: false, bal: 0, delay: 0, mute: false, tx: false, sends: {}, duck: {} }, store.get('halx_btin_v1', {})),
         save() { store.set('halx_btin_v1', this.cfg); },
         paired() { const r = RT(); return (r && r.bt && r.bt.data && r.bt.data.devices) || []; },
         // an input device that carries a Bluetooth link: flagged by the server, named like one, or named like a paired / connected Bluetooth device
@@ -17841,11 +17842,11 @@ registerProcessor('am-lufs',P)`;
             S.inn = c.createGain(); S.inn.channelCount = 2; S.inn.channelCountMode = 'explicit'; S.inn.channelInterpretation = 'speakers';   // a mono headset microphone is heard on both sides
             S.trim = c.createGain(); S.pol = c.createGain(); S.split = c.createChannelSplitter(2); S.merge = c.createChannelMerger(2);
             S.g00 = c.createGain(); S.g10 = c.createGain(); S.g01 = c.createGain(); S.g11 = c.createGain();
-            S.delay = c.createDelay(0.5); S.mute = c.createGain(); S.out = c.createGain();
+            S.delay = c.createDelay(0.5); S.mute = c.createGain(); S.duck = c.createGain(); S.out = c.createGain(); S.sendNodes = new Map(); S.duckDb = 0; S.duckOpen = false; S.holdUntil = 0;
             S.inn.connect(S.trim); S.trim.connect(S.pol); S.pol.connect(S.split);
             S.split.connect(S.g00, 0); S.split.connect(S.g01, 0); S.split.connect(S.g10, 1); S.split.connect(S.g11, 1);
             S.g00.connect(S.merge, 0, 0); S.g10.connect(S.merge, 0, 0); S.g01.connect(S.merge, 0, 1); S.g11.connect(S.merge, 0, 1);
-            S.merge.connect(S.delay); S.delay.connect(S.mute); S.mute.connect(S.out);
+            S.merge.connect(S.delay); S.delay.connect(S.mute); S.mute.connect(S.duck); S.duck.connect(S.out);
             const l = LS(); if (l) l.unpatchCap(cap.key);                                  // the strips are fed again by ASSIGN below
             cap.node.connect(S.inn);
             if (cap._eq && cap._eq.ctx === c) { try { cap.node.disconnect(cap._eq.hpf); } catch (e) { /* not connected */ } S.out.connect(cap._eq.hpf); }   // Mic EQ follows the strip
@@ -17879,6 +17880,7 @@ registerProcessor('am-lufs',P)`;
         teardown(cap) {
             const S = cap && cap._bt, l = LS(); if (!S) return;
             S.links.forEach(f => { try { f(); } catch (e) { /* already gone */ } }); S.links = [];
+            S.sendNodes.forEach(g => { try { g.disconnect(); } catch (e) { /* gone */ } }); S.sendNodes.clear();
             if (l) l.unpatchCap(cap.key);
             try { cap.node.disconnect(S.inn); } catch (e) { /* gone */ }
             try { S.out.disconnect(); } catch (e) { /* gone */ }
@@ -17887,11 +17889,57 @@ registerProcessor('am-lufs',P)`;
             if (l) l.render();
         },
         // every frame: build / follow the source (plug, unplug, Mic EQ added later)
-        ensure() {
+        ensure(now) {
             const c = window.state && window.state.ctx, cap = this.cap(); if (!c || !this.cfg.on || !cap || cap.node.context !== c) return;
             if (!cap._bt || cap._bt.ctx !== c) { this.build(cap); this.route(cap); return; }
             const S = cap._bt;
             if (S.routedOut !== (cap.out || S.out) || S.routeSig !== this.cfg.route + ':' + this.cfg.pair) this.route(cap);
+            this.applySends(cap); this.duckRun(cap, now || performance.now());
+        },
+
+        // ── bus sends: the strip feeds the 16 mix buses of the BUS & MATRIX page (after trim, mute and ducker) ──
+        OFF: -60,
+        setSend(b, db) { if (db > this.OFF) this.cfg.sends[b] = db; else delete this.cfg.sends[b]; this.save(); const cap = this.cap(); if (cap && cap._bt) cap._bt.sendSig = ''; },
+        applySends(cap) {
+            const S = cap._bt, M = window.mixEngine, c = S.ctx; if (!M) return;
+            const sig = JSON.stringify(this.cfg.sends); if (S.sendSig === sig) return;
+            const want = Object.keys(this.cfg.sends).filter(b => this.cfg.sends[b] > this.OFF);
+            if (want.length && !M.built && !M.ensureGraph()) return;                       // the audio engine is not running yet: try again next frame
+            S.sendNodes.forEach((g, b) => { if (want.indexOf(String(b)) < 0) { try { g.disconnect(); } catch (e) { /* gone */ } S.sendNodes.delete(b); } });
+            want.forEach(k => {
+                const b = Number(k); if (!M.busIn || !M.busIn[b]) return;
+                let g = S.sendNodes.get(b); if (!g) { g = c.createGain(); g.gain.value = 0; S.out.connect(g); g.connect(M.busIn[b]); S.sendNodes.set(b, g); }
+                g.gain.setTargetAtTime(Math.pow(10, this.cfg.sends[k] / 20), c.currentTime, 0.01);
+            });
+            S.sendSig = sig;
+        },
+
+        // ── ducker: the Bluetooth input goes down while the trigger (microphones, or one chosen source) is loud ──
+        duckCfg() { return Object.assign({ on: false, src: 'all', thr: -40, depth: 12, attack: 20, hold: 400, release: 800 }, this.cfg.duck); },
+        // one detector decision: opens above the threshold, closes 3 dB below it once the hold time has passed; returns the wanted reduction in dB (0 or -depth)
+        duckStep(d, st, lvlDb, now) {
+            if (lvlDb > d.thr) { st.duckOpen = true; st.holdUntil = now + d.hold; }
+            else if (st.duckOpen && lvlDb < d.thr - 3 && now > st.holdUntil) st.duckOpen = false;
+            return d.on && st.duckOpen ? -d.depth : 0;
+        },
+        trigLevel(d) {
+            const r = RT(); let pk = 0;
+            r.sources().forEach(s => {
+                if (s.key === this.cfg.sel) return;
+                if (d.src === 'all' ? s.music : s.key !== d.src) return;                  // ALL = every live source except the loopback / music ones
+                try { const v = s.an ? r.read(s.an) : (() => { const t = r.tap(s.node), a = r.read(t.l), b = r.read(t.r); return { pk: Math.max(a.pk, b.pk) }; })(); if (v.pk > pk) pk = v.pk; } catch (e) { /* source closed */ }
+            });
+            return pk > 0 ? 20 * Math.log10(pk) : -Infinity;
+        },
+        duckRun(cap, now) {
+            const S = cap._bt, d = this.duckCfg(); if (!S) return;
+            S.trig = d.on ? this.trigLevel(d) : -Infinity;
+            const target = d.on ? this.duckStep(d, S, S.trig, now) : (S.duckOpen = false, 0);
+            if (target !== S.duckTarget) {
+                S.duckTarget = target;
+                const tau = Math.max(1, target < 0 ? d.attack : d.release) / 3000;           // seconds: 95 % of the way after the attack / release time
+                S.duck.gain.setTargetAtTime(Math.pow(10, target / 20), S.ctx.currentTime, tau);
+            }
         },
 
         // ── user actions ──
@@ -17964,6 +18012,25 @@ registerProcessor('am-lufs',P)`;
                 <div class="flex flex-wrap items-center justify-between gap-2 text-[7.5px]">
                   <div id="bti-where" class="text-slate-400"></div>
                   <button id="bti-eq" class="px-2.5 py-1 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-black uppercase hover:bg-cyan-500 hover:text-black">EQ THIS INPUT ▸ MIC EQ</button>
+                </div>
+                <div class="border-t border-white/10 pt-2 space-y-1.5">
+                  <div class="flex flex-wrap items-center justify-between gap-2"><span class="text-[8px] font-black text-amber-400 uppercase font-wing tracking-wider"><i class="fa-solid fa-share-nodes mr-1"></i>BUS SENDS</span>
+                    <span class="text-[7px] text-slate-400">TO THE 16 MIX BUSES OF THE BUS &amp; MATRIX PAGE &bull; AFTER TRIM / MUTE / DUCKER</span>
+                    <button id="bti-sends-off" class="px-2 py-0.5 rounded bg-white/5 border border-white/10 text-slate-300 text-[7px] font-bold uppercase hover:bg-white/10">ALL OFF</button></div>
+                  <div id="bti-sends" class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-1.5"></div>
+                </div>
+                <div class="border-t border-white/10 pt-2 space-y-1.5">
+                  <div class="flex flex-wrap items-center justify-between gap-2"><span class="text-[8px] font-black text-rose-400 uppercase font-wing tracking-wider"><i class="fa-solid fa-arrow-down-wide-short mr-1"></i>DUCKER</span>
+                    <span class="flex items-center gap-2 text-[7.5px]"><span id="bti-dlvl" class="text-slate-400">TRIGGER -INF</span><span id="bti-dgr" class="text-rose-400 font-bold">0.0 dB</span><span id="bti-dstate" class="px-1.5 py-0.5 rounded font-black bg-white/5 text-slate-400">OFF</span>
+                    <button id="bti-don" class="px-2.5 py-1 rounded font-black uppercase bg-white/10 text-slate-200 border border-white/15 hover:bg-white/20">DUCKER: OFF</button></span></div>
+                  <div class="grid grid-cols-2 md:grid-cols-6 gap-2 text-[7.5px]">
+                    <div class="col-span-2 md:col-span-1"><div class="text-slate-400">TRIGGER</div><select id="bti-dsrc" aria-label="Ducker trigger" class="w-full bg-black border border-white/20 rounded px-1 py-1 text-slate-200 text-[8px] font-bold"></select></div>
+                    <div><div class="flex justify-between text-slate-400"><span>THRESHOLD</span><span id="bti-dthr-v" class="text-white font-bold"></span></div><input id="bti-dthr" type="range" min="-80" max="0" step="1" class="w-full accent-rose-400" aria-label="Ducker threshold"></div>
+                    <div><div class="flex justify-between text-slate-400"><span>DEPTH</span><span id="bti-ddep-v" class="text-white font-bold"></span></div><input id="bti-ddep" type="range" min="0" max="40" step="1" class="w-full accent-rose-400" aria-label="Ducker depth"></div>
+                    <div><div class="flex justify-between text-slate-400"><span>ATTACK</span><span id="bti-datk-v" class="text-white font-bold"></span></div><input id="bti-datk" type="range" min="1" max="500" step="1" class="w-full accent-rose-400" aria-label="Ducker attack"></div>
+                    <div><div class="flex justify-between text-slate-400"><span>HOLD</span><span id="bti-dhld-v" class="text-white font-bold"></span></div><input id="bti-dhld" type="range" min="0" max="2000" step="10" class="w-full accent-rose-400" aria-label="Ducker hold"></div>
+                    <div><div class="flex justify-between text-slate-400"><span>RELEASE</span><span id="bti-drel-v" class="text-white font-bold"></span></div><input id="bti-drel" type="range" min="20" max="3000" step="10" class="w-full accent-rose-400" aria-label="Ducker release"></div>
+                  </div>
                 </div>`;
             const grid = host.querySelector('.grid.md\\:grid-cols-2');
             host.insertBefore(d, grid || host.children[1] || null);
@@ -17975,10 +18042,40 @@ registerProcessor('am-lufs',P)`;
             $('bti-delay').oninput = e => this.set('delay', parseInt(e.target.value, 10));
             const ps = $('bti-pair'); ps.innerHTML = Array.from({ length: 16 }, (_, p) => `<option value="${p * 2}">CH ${p * 2 + 1} / ${p * 2 + 2}</option>`).join('');
             ps.onchange = e => { this.cfg.route = 'ch'; this.set('pair', parseInt(e.target.value, 10)); };
+            $('bti-sends-off').onclick = () => { this.cfg.sends = {}; this.save(); const cap = this.cap(); if (cap && cap._bt) cap._bt.sendSig = ''; };
+            const dk = (id, key) => { $(id).oninput = e => { this.cfg.duck = Object.assign(this.duckCfg(), { [key]: parseFloat(e.target.value) }); this.save(); }; };
+            dk('bti-dthr', 'thr'); dk('bti-ddep', 'depth'); dk('bti-datk', 'attack'); dk('bti-dhld', 'hold'); dk('bti-drel', 'release');
+            $('bti-don').onclick = () => { const d = this.duckCfg(); this.cfg.duck = Object.assign(d, { on: !d.on }); this.save(); window.notify('Ducker ' + (this.cfg.duck.on ? 'ON: the Bluetooth input goes down ' + d.depth + ' dB while the trigger is above ' + d.thr + ' dB' : 'OFF'), 'arrow-down-wide-short'); };
+            $('bti-dsrc').onchange = e => { this.cfg.duck = Object.assign(this.duckCfg(), { src: e.target.value }); this.save(); };
             $('bti-eq').onclick = () => { const k = this.cfg.sel; if (!k) return; const m = window.micEq; if (m && m.cfg) { m.cfg.sel = k; m.save && m.save(); } window.switchTab('miceq'); };
             return (this.el = d);
         },
         refresh() { this.sig = ''; },
+        renderExtra(cap) {
+            const put = (id, t) => { const e = $(id); if (e && e.textContent !== t) e.textContent = t; }, val = (id, v) => { const e = $(id); if (e && document.activeElement !== e && e.value !== String(v)) e.value = v; };
+            const M = window.mixEngine, buses = (M && M.cfg && M.cfg.buses) || [], host = $('bti-sends'), r = RT(), d = this.duckCfg();
+            if (host) {
+                const nsig = buses.map(b => b && b.name).join('|');
+                if (host._sig !== nsig) {
+                    host._sig = nsig;
+                    host.innerHTML = Array.from({ length: 16 }, (_, b) => `<div class="bg-black/60 rounded p-1 border border-white/10"><div class="flex justify-between text-[6.5px] gap-1"><span class="truncate text-slate-300" title="${esc(buses[b] ? buses[b].name : 'BUS ' + (b + 1))}">${b + 1} ${esc(buses[b] ? buses[b].name : '')}</span><span id="bti-sv${b}" class="text-slate-400 shrink-0">OFF</span></div><input id="bti-s${b}" data-b="${b}" type="range" min="-60" max="10" step="0.5" value="-60" class="w-full accent-amber-400" aria-label="Send to bus ${b + 1}"></div>`).join('');
+                    host.querySelectorAll('input').forEach(i => { i.oninput = e => { const b = parseInt(i.dataset.b, 10), v = parseFloat(e.target.value); this.setSend(b, v); put('bti-sv' + b, v > this.OFF ? (v > 0 ? '+' : '') + v.toFixed(1) : 'OFF'); }; });
+                }
+                for (let b = 0; b < 16; b++) { const v = this.cfg.sends[b] > this.OFF ? this.cfg.sends[b] : this.OFF; val('bti-s' + b, v); put('bti-sv' + b, v > this.OFF ? (v > 0 ? '+' : '') + v.toFixed(1) : 'OFF'); }
+            }
+            val('bti-dthr', d.thr); val('bti-ddep', d.depth); val('bti-datk', d.attack); val('bti-dhld', d.hold); val('bti-drel', d.release);
+            put('bti-dthr-v', d.thr + ' dB'); put('bti-ddep-v', '-' + d.depth + ' dB'); put('bti-datk-v', d.attack + ' ms'); put('bti-dhld-v', d.hold + ' ms'); put('bti-drel-v', d.release + ' ms');
+            const don = $('bti-don'); if (don) { put('bti-don', 'DUCKER: ' + (d.on ? 'ON' : 'OFF')); don.className = 'px-2.5 py-1 rounded font-black uppercase border ' + (d.on ? 'bg-rose-500 text-white border-rose-400' : 'bg-white/10 text-slate-200 border-white/15 hover:bg-white/20'); }
+            const ds = $('bti-dsrc');
+            if (ds && r) {
+                const keys = Object.keys(r.st).filter(k => k !== this.cfg.sel), sig = keys.map(k => k + r.st[k].name).join('|') + '#' + d.src;
+                if (ds._sig !== sig) { ds._sig = sig; ds.innerHTML = '<option value="all">ALL LIVE SOURCES (microphones)</option>' + keys.map(k => `<option value="${esc(k)}">${esc(r.st[k].name)}</option>`).join(''); ds.value = d.src; if (ds.value !== d.src) ds.value = 'all'; }
+            }
+            const S = cap && cap._bt, gr = S ? -20 * Math.log10(Math.max(0.0001, S.duck.gain.value)) : 0;
+            put('bti-dgr', (gr < 0.05 ? '' : '-') + gr.toFixed(1) + ' dB');
+            put('bti-dlvl', 'TRIGGER ' + (S && d.on && isFinite(S.trig) ? S.trig.toFixed(1) + ' dB' : '-INF'));
+            const st = $('bti-dstate'); if (st) { const t = !d.on ? 'OFF' : S && S.duckOpen ? 'DUCKING' : 'ARMED'; put('bti-dstate', t); st.className = 'px-1.5 py-0.5 rounded font-black ' + (t === 'DUCKING' ? 'bg-rose-500 text-white' : t === 'ARMED' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-white/5 text-slate-400'); }
+        },
         render(now) {
             const el = this.ensureUi(); if (!el) return;
             const l = LS(), c = window.state && window.state.ctx, k = this.select(), cap = this.cap(), cfg = this.cfg, i = this.iface();
@@ -18019,6 +18116,7 @@ registerProcessor('am-lufs',P)`;
             fill('bti-il', this.mL); fill('bti-ir', this.mR); fill('bti-ol', this.oL); fill('bti-or', this.oR);
             const db = m => { const v = dbOf(Math.max(m.L ? m.L.hold : m.pk, m.R ? m.R.hold : 0)); return isFinite(v) ? v.toFixed(1) + ' dB' : '-INF'; };
             const t1 = $('bti-idb'), t2 = $('bti-odb'); if (t1) t1.textContent = db({ L: this.mL, R: this.mR }); if (t2) t2.textContent = db({ L: this.oL, R: this.oR });
+            this.renderExtra(cap);
             // latency: what is really known (the strip delay and the engine); the Bluetooth link adds its own, not measurable from here
             const lat = $('bt-latency-val');
             if (lat) { const eng = ((c.baseLatency || 0) + (c.outputLatency || 0)) * 1000, tt = (cfg.on ? cfg.delay : 0) + eng; const txt = tt.toFixed(1) + ' ms (strip ' + (cfg.on ? cfg.delay : 0) + ' + engine ' + eng.toFixed(1) + '; the link adds its own: use DELAY)'; if (lat.textContent !== txt) lat.textContent = txt; }
@@ -18038,7 +18136,7 @@ registerProcessor('am-lufs',P)`;
 
     const wait = setInterval(() => {
         if (!RT() || !LS()) return; clearInterval(wait);
-        RT().on(now => { try { B.ensure(); if (visible('bluetooth') || !B.el) B.render(now); } catch (e) { /* page not ready */ } });
+        RT().on(now => { try { B.ensure(now); if (visible('bluetooth') || !B.el) B.render(now); } catch (e) { /* page not ready */ } });
     }, 250);
 })();
     </script>
