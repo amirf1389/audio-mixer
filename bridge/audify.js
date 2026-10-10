@@ -120,17 +120,51 @@ function detectAudify(load = loadAudify) {
   };
 }
 
+// Bluetooth hands-free (HFP) endpoints only run at 8 / 16 kHz (and A2DP at 44.1 / 48 kHz): when the mixer's rate is not offered, the device runs at its own
+// closest rate and the bridge converts (linear interpolation, state kept across chunks) so the page still gets / sends audio at the mixer's rate.
+const { isBluetooth } = require('./interfaces');
+function nearestRate(rates, want) { return rates.slice().sort((a, b) => Math.abs(a - want) - Math.abs(b - want) || b - a)[0]; }
+function createResampler(inRate, outRate, channels) {
+  if (!(inRate > 0) || !(outRate > 0) || inRate === outRate) return null;
+  const step = inRate / outRate;
+  let pos = 0, prev = null;
+  return function convert(buf) {
+    const n = Math.floor(buf.length / 2 / channels);
+    if (!n) return Buffer.alloc(0);
+    const src = new Int16Array(n * channels);
+    for (let i = 0; i < src.length; i++) src[i] = buf.readInt16LE(i * 2);
+    if (!prev) prev = src.slice(0, channels);
+    const out = [];
+    const at = (f, c) => (f < 0 ? prev[c] : src[f * channels + c]);   // frame -1 is the last frame of the previous chunk
+    let p = pos;
+    while (p < n - 1) {
+      const i0 = Math.floor(p), t = p - i0;
+      for (let c = 0; c < channels; c++) out.push(Math.round(at(i0, c) * (1 - t) + at(i0 + 1, c) * t));
+      p += step;
+    }
+    pos = p - n;
+    prev = src.slice((n - 1) * channels, n * channels);
+    const o = Buffer.alloc(out.length * 2);
+    for (let i = 0; i < out.length; i++) o.writeInt16LE(Math.max(-32768, Math.min(32767, out[i])), i * 2);
+    return o;
+  };
+}
+
 // Opens one RtAudio stream (output or input). Returns { frameSize, sampleRate, channels, write, close } or throws.
 function openStream({ mod, dev, direction, channels, sampleRate, frameSize, onData, onError }) {
+  sampleRate = Number(sampleRate);
   const { RtAudio, RtAudioFormat = {}, RtAudioStreamFlags = {} } = mod, Api = apiEnum(mod);
   const out = direction === 'output';
   const maxCh = out ? dev.maxOutputChannels : dev.maxInputChannels;
   if (!maxCh) throw new Error(`${dev.name} has no ${out ? 'output' : 'input'} channels`);
   if (out && channels > maxCh) throw new Error(`${dev.name} has only ${maxCh} output channel(s)`);
   const ch = out ? channels : Math.min(channels, maxCh);   // a capture simply delivers fewer channels
+  const wantRate = sampleRate;
   if (dev.sampleRates && dev.sampleRates.length && !dev.sampleRates.includes(sampleRate)) {
-    throw new Error(`${dev.name} does not support ${sampleRate} Hz (supports ${dev.sampleRates.join(', ')})`);
+    if (!(isBluetooth(dev.name) || /\(.*\bstereo\)\s*$/i.test(dev.name) && !/mix/i.test(dev.name))) throw new Error(`${dev.name} does not support ${sampleRate} Hz (supports ${dev.sampleRates.join(', ')})`);
+    sampleRate = nearestRate(dev.sampleRates, sampleRate);       // Bluetooth: run at the device's own rate, convert below
   }
+  const conv = createResampler(out ? wantRate : sampleRate, out ? sampleRate : wantRate, ch);   // output: mixer -> device, input: device -> mixer
   const p = plan(frameSize, { api: dev.api, sampleRate, channels: ch });
   const fmt = RtAudioFormat.RTAUDIO_SINT16 !== undefined ? RtAudioFormat.RTAUDIO_SINT16 : 2;
   const flags = RtAudioStreamFlags.RTAUDIO_MINIMIZE_LATENCY || 0;
@@ -140,18 +174,19 @@ function openStream({ mod, dev, direction, channels, sampleRate, frameSize, onDa
     try {
       const params = { deviceId: dev.rtId, nChannels: ch, firstChannel: 0 };
       const actual = rt.openStream(out ? params : null, out ? null : params, fmt, sampleRate, fs, 'Audio Mixer',
-        out ? null : (pcm => onData && onData(Buffer.from(pcm))), null, flags, (type, msg) => onError && onError(new Error(String(msg || type))));
+        out ? null : (pcm => { if (!onData) return; const b = Buffer.from(pcm); onData(conv ? conv(b) : b); }), null, flags, (type, msg) => onError && onError(new Error(String(msg || type))));
       rt.start();
       const used = Number.isInteger(actual) && actual > 0 ? actual : fs;
       if (!(used > 0)) throw new Error('the driver did not report its buffer size');
       const frameBytes = used * ch * 2;
       let pending = Buffer.alloc(0), dropped = 0;
       return {
-        frameSize: used, sampleRate, channels: ch, auto: p.auto, tried: p.candidates.slice(0, p.candidates.indexOf(fs) + 1),
+        frameSize: used, sampleRate: wantRate, deviceRate: sampleRate, resampled: !!conv, channels: ch, auto: p.auto, tried: p.candidates.slice(0, p.candidates.indexOf(fs) + 1),
         latencyMs: Math.round(used / sampleRate * 10000) / 10,
         get dropped() { return dropped; },
         // RtAudio needs whole blocks of exactly frameSize frames.
         write(buf) {
+          if (conv) buf = conv(buf);
           pending = pending.length ? Buffer.concat([pending, buf]) : buf;
           if (pending.length > frameBytes * 16) { dropped += pending.length - frameBytes * 16; pending = pending.subarray(pending.length - frameBytes * 16); }
           while (pending.length >= frameBytes) { rt.write(Buffer.from(pending.subarray(0, frameBytes))); pending = pending.subarray(frameBytes); }
@@ -244,4 +279,4 @@ function describe(load = loadAudify) {
   };
 }
 
-module.exports = { loadAudify, loadProblem, API_NAMES, apiKey, recommendFrameSize, frameCandidates, plan, listDevices, detectAudify, openStream, openDuplex, pickAudifyDevice, describe, isPow2, AUDIFY_BASE, MIN_FRAMES, MAX_FRAMES };
+module.exports = { createResampler, nearestRate, loadAudify, loadProblem, API_NAMES, apiKey, recommendFrameSize, frameCandidates, plan, listDevices, detectAudify, openStream, openDuplex, pickAudifyDevice, describe, isPow2, AUDIFY_BASE, MIN_FRAMES, MAX_FRAMES };

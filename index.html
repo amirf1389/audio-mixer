@@ -15554,7 +15554,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                     if (this.cfg.enabled[i.key]) return;
                     if (this.cfg.asioOnly && !i.asio) return;
                     if (i.systemDefault) return;   // Windows default mapper (Primary Sound driver): duplicates the real device and often fails
-                    this.cfg.enabled[i.key] = { read: i.inputs > 0 || !!i.loopback, write: i.outputs > 0 && !i.loopback };
+                    this.cfg.enabled[i.key] = { read: (i.inputs > 0 && !i.bluetooth) || !!i.loopback, write: i.outputs > 0 && !i.loopback };   // Bluetooth: the hands-free microphone is only opened on request (it drops the headset to phone quality)
                     changed = true;
                 });
                 if (changed) this.persist();
@@ -15579,7 +15579,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 this.interfaces.forEach(i => {
                     if (asioOnly && !i.asio) return;
                     if (i.systemDefault) return;
-                    this.cfg.enabled[i.key] = { read: i.inputs > 0 || !!i.loopback, write: i.outputs > 0 && !i.loopback };
+                    this.cfg.enabled[i.key] = { read: (i.inputs > 0 && !i.bluetooth) || !!i.loopback, write: i.outputs > 0 && !i.loopback };   // Bluetooth: the hands-free microphone is only opened on request (it drops the headset to phone quality)
                 });
                 this.persist(); this.applyEnabled(); this.render();
                 window.notify(asioOnly ? 'All ASIO interfaces enabled (read + write)' : 'All audio interfaces enabled (read + write)', 'plug-circle-check');
