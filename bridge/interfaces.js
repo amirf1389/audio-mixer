@@ -13,7 +13,7 @@ const isPrimary = n => PRIMARY.test(String(n || '').trim());
 // Bluetooth headsets show up as TWO Windows devices: "Headphones (X Stereo)" (A2DP, stereo output) and "Headset (X Hands-Free AG Audio)"
 // (HFP, mono 8 / 16 kHz microphone + speaker). They are one physical device: group them, write through A2DP, read through the HFP microphone.
 const HFP = /hands[- ]?free|\bhfp\b|\bag audio\b/i;
-const BT_HINT = /bluetooth|\ba2dp\b/i;
+const BT_HINT = /bluetooth|\ba2dp\b|\bbluez/i;
 const btBase = (n, keepCase) => {
   const m = /\(([^()]+)\)\s*$/.exec(String(n || '').trim());
   const b = (m ? m[1] : String(n || '')).replace(/\s*(hands[- ]?free(\s+ag(\s+audio)?)?|ag audio|hfp|a2dp|stereo|bluetooth)\s*$/i, '').trim();

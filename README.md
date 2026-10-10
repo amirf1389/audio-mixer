@@ -338,3 +338,15 @@ Several pages showed fixed numbers or drawings that nothing wrote to (they looke
 - Pages that were already live (EQ RTA, scope, phase, bus meters, LIVE SOURCES) are unchanged.
 
 Not tested here: a real Bluetooth adapter, real ASIO / WASAPI hardware and a real Windows install (checked in Chromium with a generated signal, with fake adapters / PnP / system_profiler output, and the tests in `bridge/test.js`). The AudioWorklet that feeds the loudness meter needs the page to be opened from `http://localhost` (the PC-mode server); from a `file://` page it uses a script processor instead.
+
+## Bluetooth input source, console style (1.3.0.0)
+
+The BLUETOOTH page has a **BLUETOOTH INPUT stereo return strip**, like the USB / Bluetooth return of a digital mixer. The audio comes from a real input device of this system that carries the Bluetooth link, read by LIVE SOURCES: a phone or tablet playing to this computer (Linux: a `bluez` input in PipeWire / PulseAudio), a headset microphone (Windows hands-free, Core Audio) or the browser's own Bluetooth microphones. A Bluetooth device is recognised by the server's flag (`bluez`, `Bluetooth`, `A2DP`, hands-free), by its name, or by the name of a paired / connected device on the Bluetooth page.
+- **Strip:** source select (Bluetooth inputs first, then every other input: a receiver can appear as Line In), **trim** (-24 .. +6 dB), **polarity**, **mono sum**, **balance**, **delay** 0 - 500 ms (lines up the wireless latency with the room), **mute**, in / out **meters**, link state (paired / connected, battery, signal), the real latency known to the page.
+- **Assign** (the DESTINATION CHANNEL list, which used to do nothing): a **channel pair** (default CH 31 / 32, inside the plan's channel limit; every console feature of the channel follows: HPF, EQ, dynamics, sends, buses), **direct to master L/R**, **cue / monitor** (heard on the monitor output, not in the mix) or **matrix 1 & 2**. The trim and mute buttons of that block now control the strip.
+- **Mic EQ** works on the strip (the button opens the MIC EQ page on this input). With BT INPUT off, nothing is inserted into the source's path.
+- **Transmitter mode** (TRANSMITTER (IEM TX)) writes the mix to a connected Bluetooth output (wireless headphones / speaker) through LIVE SOURCES WRITE; with no Bluetooth output it says so.
+- Bluetooth inputs are tagged **BT** on the SOURCE INPUTS strip of the mixer, **BLUETOOTH** in LIVE SOURCES and have their own group in the routing page's live input list. `bridge/interfaces.js` now also groups `bluez_*` devices as Bluetooth.
+- The codec list, "SNR" line and the demo device cards of that page are unchanged: the operating system negotiates the codec and the page cannot change it.
+
+Not tested here: a real phone / headset (checked in Chromium with a generated stereo source, and the tests in `bridge/test.js`). Windows cannot receive music from a phone as an input without a Bluetooth audio receiver (the page says so).
