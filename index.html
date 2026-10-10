@@ -15601,7 +15601,15 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 this.setStatus(i.key, 'opening...', false, true);
                 let cap = null, lastErr = '';
                 // 1) every host API of the interface, best first (ASIO, WASAPI, Core Audio, ...); ASIO busy -> next API
-                if (this.bridgeUrl && this.portaudio && i.apis && i.apis.length) {
+                const wantWrite = !!(this.cfg.enabled[i.key] || {}).write, dxa = wantWrite && !i.loopback && !o.music ? this.duplexApi(i) : null;
+                if (dxa && this.bridgeUrl && this.portaudio && !this.writes.has(i.key)) {
+                    try {
+                        await this.ensureTap();
+                        const r = await this.bridgeDuplex(i, dxa);
+                        cap = r.cap; this.writes.set(i.key, r.w); this.setStatus('w:' + i.key, 'WRITING via ' + r.w.how, false); this.updateMute();
+                    } catch (e) { lastErr = e.message; cap = null; }
+                }
+                if (!cap && this.bridgeUrl && this.portaudio && i.apis && i.apis.length) {
                     const tries = i.apis.filter(a => a.inputs > 0).sort((a, b) => apiRank(a.api) - apiRank(b.api));
                     for (const a of tries) {
                         try { cap = await this.bridgeRead(i, a); break; } catch (e) { lastErr = e.message; }
@@ -15669,6 +15677,53 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                     }).catch(e => reject(e));
                 });
             },
+            // ASIO drivers serve one client: reading and writing the same interface go through ONE duplex stream
+            duplexApi(i) { return (i.apis || []).filter(a => /asio/i.test(a.api) && a.inputs > 0 && a.outputs > 0)[0] || null; },
+            bridgeDuplex(i, a) {
+                const self = this, ctx = window.state.ctx;
+                return new Promise((resolve, reject) => {
+                    Promise.all([self.ensureInWorklet(), self.ensureTap()]).then(() => {
+                        const pair = self.pair[i.key] || 0, want = Math.min(Math.max(pair * 2 + 2, 2), Math.max(2, a.inputs));
+                        const ws = new WebSocket(self.wsUrl('/ws/duplex')); ws.binaryType = 'arraybuffer';
+                        let node = null, ch = 2, done = false;
+                        const fail = m => { if (!done) { done = true; try { ws.close(); } catch (e) { /* ignore */ } reject(new Error(m)); } };
+                        ws.onopen = () => ws.send(JSON.stringify({ type: 'start', inChannels: want, channels: 2, sampleRate: ctx.sampleRate, frameSize: window.universalAsioSdk.frameSizeSetting(), deviceId: a.deviceId }));
+                        ws.onerror = () => fail('local server connection failed');
+                        ws.onclose = () => { if (!done) fail('closed'); else self.dropDuplex(i.key, ws); };
+                        ws.onmessage = ev => {
+                            if (typeof ev.data !== 'string') {
+                                if (!node) return;
+                                const pcm = new Int16Array(ev.data), frames = Math.floor(pcm.length / ch), L = new Float32Array(frames), R = new Float32Array(frames);
+                                const l0 = Math.min(pair * 2, ch - 1), r0 = Math.min(pair * 2 + 1, ch - 1);
+                                for (let k = 0; k < frames; k++) { L[k] = pcm[k * ch + l0] / 32768; R[k] = pcm[k * ch + r0] / 32768; }
+                                node.port.postMessage([L, R]);
+                                return;
+                            }
+                            let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+                            if (m.type === 'levels') { if (window.asioMeters) window.asioMeters.push(m); return; }
+                            if (m.type === 'started' && !done) {
+                                done = true; ch = m.inChannels;
+                                node = new AudioWorkletNode(ctx, 'ls-in', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
+                                const cap = self.makeCap(i, node, 'ASIO duplex' + (want > 2 ? ' CH ' + (pair * 2 + 1) + '-' + (pair * 2 + 2) : ''), { ws, bridge: true, duplex: true });
+                                cap.stop = () => { try { node.disconnect(); cap.analyser.disconnect(); } catch (e) { /* gone */ } };
+                                resolve({ cap, w: { ws, ready: true, duplex: true, how: 'ASIO duplex / ' + m.device } });
+                            } else if (m.type === 'error') {
+                                if (!done) fail(m.message);
+                                else { window.notify('Interface read / write error: ' + m.message, 'triangle-exclamation'); self.dropDuplex(i.key, ws); }
+                            }
+                        };
+                    }).catch(e => reject(e));
+                });
+            },
+            // a duplex stream ended (closed or stopped): both halves go, whatever is still switched on is reopened
+            dropDuplex(key, ws) {
+                const cap = this.caps.get(key), w = this.writes.get(key);
+                if (!(cap && cap.ws === ws) && !(w && w.ws === ws)) return;
+                try { ws.send(JSON.stringify({ type: 'stop' })); ws.close(); } catch (e) { /* gone */ }
+                if (cap && cap.ws === ws) { this.unpatchCap(key); cap.stop(); this.caps.delete(key); if (this.mic === key) this.mic = Array.from(this.caps.keys()).find(k => !this.caps.get(k).music) || null; this.setStatus(key, 'idle', false); }
+                if (w && w.ws === ws) { this.writes.delete(key); this.setStatus('w:' + key, 'idle', false); this.updateMute(); }
+                this.render(); setTimeout(() => this.applyEnabled(), 400);
+            },
             async ensureInWorklet() {
                 const c = window.state.ctx;
                 if (this._inReady === c) return;
@@ -15681,6 +15736,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             },
             stopRead(key) {
                 const cap = this.caps.get(key); if (!cap) return;
+                if (cap.duplex) return this.dropDuplex(key, cap.ws);
                 this.unpatchCap(key);
                 cap.stop(); this.caps.delete(key);
                 if (this.music === cap) this.music = null;
@@ -15739,6 +15795,10 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 if (this.writes.has(i.key) || (stw && stw.busy)) return;
                 if (stw && stw.err && Date.now() - stw.at < 30000) return;
                 if (!window.state.ctx) return;
+                const rc = this.caps.get(i.key);
+                const rs0 = this.status[i.key];
+                if (!rc && (this.cfg.enabled[i.key] || {}).read && !i.loopback && this.duplexApi(i) && !(rs0 && rs0.err)) return;   // the READ side opens the duplex stream
+                if (rc && rc.bridge && !rc.duplex && this.duplexApi(i)) { this.stopRead(i.key); return this.startRead(i, { userClick: true }); }
                 this.setStatus(k, 'opening...', false, true);
                 try { await this.ensureTap(); } catch (e) { return this.setStatus(k, e.message, true); }
                 const tries = (i.apis || []).filter(a => a.outputs > 0).sort((a, b) => apiRank(a.api) - apiRank(b.api));
@@ -15768,6 +15828,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             },
             stopWrite(key) {
                 const w = this.writes.get(key); if (!w) return;
+                if (w.duplex) return this.dropDuplex(key, w.ws);
                 try { w.ws.send(JSON.stringify({ type: 'stop' })); w.ws.close(); } catch (e) { /* gone */ }
                 this.writes.delete(key); this.setStatus('w:' + key, 'idle', false); this.updateMute(); this.render();
             },

@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const { fetchChecked } = require('./security');
 
 const MAX_BYTES = 200 * 1024 * 1024;
 const ALLOWED_DOWNLOAD_HOSTS = ['api.github.com', 'github.com', 'objects.githubusercontent.com', 'release-assets.githubusercontent.com', 'github-releases.githubusercontent.com', 'www.asio4all.org', 'asio4all.org'];
@@ -144,7 +145,7 @@ async function downloadDriver(id, { fetchImpl = globalThis.fetch, dir = download
   const name = path.basename(asset.name).replace(/[^\w.\-]/g, '_');
   if (!name || name.startsWith('.')) throw Object.assign(new Error('unsafe file name'), { status: 502 });
 
-  const res = await fetchImpl(asset.url, { redirect: 'follow', headers: { 'User-Agent': 'audio-mixer-bridge' } });
+  const res = await fetchChecked(fetchImpl, asset.url, { headers: { 'User-Agent': 'audio-mixer-bridge' } }, u => hostOk(u, hosts));
   if (!res.ok || !res.body) throw Object.assign(new Error('download failed (' + res.status + ')'), { status: 502 });
   if (res.url && !hostOk(res.url, hosts)) throw Object.assign(new Error('download redirected to an untrusted host'), { status: 502 });
   const len = Number(res.headers.get('content-length') || 0);

@@ -1206,3 +1206,71 @@ test('endpoints: /api/license (BASIC by default), activation needs a valid key, 
     assert.strictEqual((await fetch(base + '/api/license', { headers: { Origin: 'https://evil.example' } })).status, 403);
   } finally { server.closeAllConnections(); server.close(); delete process.env.BRIDGE_LICENSE_FILE; }
 });
+
+test('duplex: one native stream reads and writes the same interface', () => {
+  const { _owners } = require('./asio-lock'); _owners.clear();
+  const { createDuplexSession } = require('./duplex');
+  const fa = fakeAudify();
+  const dev = require('./audify').listDevices(() => fa).devices.find(d => /ASIO/.test(d.hostAPIName));
+  const sent = [], bin = [];
+  const conn = { send: m => sent.push(JSON.parse(m)), sendBinary: b => bin.push(b.length) };
+  const s = createDuplexSession(conn, () => { throw new Error('no pa'); }, () => fa);
+  s.onText(JSON.stringify({ type: 'start', deviceId: dev.id, inChannels: 2, channels: 2, sampleRate: 48000 }));
+  assert.strictEqual(sent[0].type, 'started'); assert.strictEqual(sent[0].duplex, true); assert.strictEqual(sent[0].inChannels, 2);
+  assert.strictEqual(fa.opened.length, 1); assert.ok(fa.opened[0].out && fa.opened[0].inp);                 // ONE stream with both directions
+  const frame = Buffer.alloc(sent[0].frameSize * 4);
+  s.onBinary(frame); assert.strictEqual(fa.written.length, 1);                                               // page audio reaches the device
+  s.onBinary(Buffer.alloc(3)); assert.strictEqual(fa.written.length, 1);                                     // partial frame dropped
+  assert.strictEqual(_owners.size, 1);
+  s.onText(JSON.stringify({ type: 'stop' })); assert.strictEqual(sent[sent.length - 1].type, 'stopped'); assert.strictEqual(_owners.size, 0);
+  const e = [];  const s2 = createDuplexSession({ send: m => e.push(JSON.parse(m)), sendBinary() {} }, () => { throw new Error('x'); }, () => fa);
+  s2.onText(JSON.stringify({ type: 'start', deviceId: 5000 })); assert.match(e[0].message, /device not found/);
+  const wasapi = require('./audify').listDevices(() => fa).devices.find(d => /WASAPI/.test(d.hostAPIName));
+  s2.onText(JSON.stringify({ type: 'start', deviceId: wasapi.id })); assert.match(e[1].message, /cannot read and write|device not found|could not/);
+  s.onClose(); s2.onClose();
+});
+
+test('security: headers, static allow-list, limiter, redirect checks', async () => {
+  const sec = require('./security');
+  const root = pathx.resolve(__dirname, '..');
+  assert.ok(sec.staticAllowed(root, pathx.join(root, 'index.html')));
+  for (const f of ['client/cli.js', 'scripts/license.js', 'native/win/AudioDevices-x64.exe', 'package.json.bak', 'bridge/license.js', '.git/config', 'dist/x.json', 'releases/update.json']) assert.ok(!sec.staticAllowed(root, pathx.join(root, f)), f);
+  assert.ok(!sec.staticAllowed(root, pathx.resolve(root, '..', 'index.html')));
+  let t = 0; const lim = sec.createLimiter({ now: () => t });
+  for (let i = 0; i < 3; i++) assert.ok(lim.allow('k', 3, 1000).ok);
+  const blocked = lim.allow('k', 3, 1000); assert.strictEqual(blocked.ok, false); assert.ok(blocked.retryAfter >= 1);
+  t = 1500; assert.ok(lim.allow('k', 3, 1000).ok);
+  // every redirect hop is checked before it is requested
+  const hit = [];
+  const fi = async (u, o) => { hit.push([u, o.redirect]); return u.includes('github.com') ? { status: 302, headers: new Map([['location', 'https://evil.example/x.exe']]) } : { status: 200, headers: new Map() }; };
+  await assert.rejects(sec.fetchChecked(fi, 'https://github.com/a', {}, u => new URL(u).hostname === 'github.com'), /untrusted host/);
+  assert.deepStrictEqual(hit, [['https://github.com/a', 'manual']]);                       // evil.example was never contacted
+  const ok = await sec.fetchChecked(async () => ({ status: 200, headers: new Map() }), 'https://github.com/a', {}, () => true); assert.strictEqual(ok.status, 200);
+  // live server
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const idx = await fetch(base + '/');
+  assert.strictEqual(idx.status, 200); assert.match(idx.headers.get('content-security-policy'), /frame-ancestors 'self'/); assert.match(idx.headers.get('permissions-policy'), /geolocation=\(\)/); assert.strictEqual(idx.headers.get('cross-origin-opener-policy'), 'same-origin');
+  for (const p of ['/client/cli.js', '/scripts/license.js', '/native/win/AudioDevices-x64.exe', '/bridge/server.js', '/%2e%2e/etc/passwd']) assert.notStrictEqual((await fetch(base + p)).status, 200, p);
+  server.closeAllConnections(); server.close();
+});
+
+test('windows native helpers: AudioDevices.exe output and the VBScript fallback', async () => {
+  const wn = require('./winnative');
+  const json = JSON.stringify({ ok: true, devices: [{ id: '{a}', name: 'Microphone (Focusrite USB)', kind: 'input', channels: 2, sampleRate: 48000, default: true }, { id: '{b}', name: 'Speakers (Focusrite USB)', kind: 'output', channels: 2, sampleRate: 48000, default: false }] });
+  const calls = [];
+  const r = await wn.listEndpoints({ platform: 'win32', arch: 'x64', exists: () => true, run: async (c, a) => { calls.push(c); return '﻿' + json; } });
+  assert.match(calls[0], /AudioDevices-x64\.exe$/); assert.strictEqual(r.engine, 'wasapi-native');
+  assert.strictEqual(r.devices[0].inputs, 2); assert.strictEqual(r.devices[0].outputs, 0); assert.strictEqual(r.devices[1].outputs, 2); assert.ok(r.devices.every(d => d.id < 0 && d.native));
+  assert.strictEqual(require('./interfaces').groupInterfaces(r.devices.map(d => ({ id: d.id, name: d.name, hostApi: d.hostApi, inputs: d.inputs, outputs: d.outputs })))[0].name, 'Focusrite USB');
+  assert.match(wn.exePath('ia32'), /AudioDevices-x86\.exe$/);
+  assert.strictEqual(await wn.listEndpoints({ platform: 'linux' }), null);
+  assert.strictEqual(await wn.listEndpoints({ platform: 'win32', exists: () => false }), null);
+  assert.strictEqual(await wn.listEndpoints({ platform: 'win32', exists: () => true, run: async () => 'garbage' }), null);
+  const w = await wn.listWmi({ platform: 'win32', exists: () => true, run: async (c, a) => { assert.strictEqual(c, 'cscript'); assert.strictEqual(a[0], '//nologo'); return '{"ok":true,"devices":[{"name":"Realtek Audio","vendor":"Realtek","status":"OK"}]}'; } });
+  assert.deepStrictEqual(w, [{ name: 'Realtek Audio', vendor: 'Realtek', status: 'OK' }]);
+  // the shipped sources and binaries exist, and the binaries are Windows PE files of the right machine type
+  const dir = pathx.join(__dirname, '..', 'native', 'win');
+  for (const f of ['AudioDevices.cpp', 'audio-devices.vbs']) assert.ok(require('node:fs').existsSync(pathx.join(dir, f)), f);
+  for (const [f, m] of [['AudioDevices-x64.exe', 0x8664], ['AudioDevices-x86.exe', 0x14c]]) { const b = require('node:fs').readFileSync(pathx.join(dir, f)); assert.strictEqual(b.readUInt16LE(0), 0x5a4d); assert.strictEqual(b.readUInt16LE(b.readUInt32LE(0x3c) + 4), m); }
+});

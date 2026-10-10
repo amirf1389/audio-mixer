@@ -1,21 +1,20 @@
 # Security Policy
 
-## Supported Versions
+## Supported versions
 
-Use this section to tell people about which versions of your project are
-currently being supported with security updates.
+Only the latest release receives security fixes (currently 1.7.x). Update from the LICENSE / OTA card or download the newest installer from `releases/`.
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 5.1.x   | :white_check_mark: |
-| 5.0.x   | :x:                |
-| 4.0.x   | :white_check_mark: |
-| < 4.0   | :x:                |
+## Reporting a vulnerability
 
-## Reporting a Vulnerability
+Open a private security advisory on the GitHub repository (Security tab → Report a vulnerability) or contact the maintainer by e-mail. Please include the version, the steps to reproduce and the impact. You can expect an answer within a few days; accepted reports are fixed in the next release and credited unless you prefer otherwise.
 
-Use this section to tell people how to report a vulnerability.
+## What the local server does to stay safe (1.7.0)
 
-Tell them where to go, how often they can expect to get an update on a
-reported vulnerability, what to expect if the vulnerability is accepted or
-declined, etc.
+- Listens on 127.0.0.1 only; checks the `Host` header (DNS rebinding) and the `Origin` header (only local pages).
+- Sends CSP `frame-ancestors`, `Permissions-Policy`, COOP / CORP, `nosniff`, `no-referrer` and `X-Frame-Options` on every response.
+- Serves only the page and its assets (html / js / css / json / png / svg): never `bridge/`, `client/`, `scripts/`, `native/`, `installer/`, `dist/`, `releases/`, `node_modules/` or dotfiles.
+- Rate limits (`/api` reads 900/min, actions 40/min, WebSocket 120/min, 24 open audio sockets); header, request and body size limits. `BRIDGE_RATE_LIMIT=0` turns the limits off for testing.
+- Actions (license, update, driver download) need a custom `X-Mixer-Action` header, which forces a CORS preflight.
+- Downloads: HTTPS only, host allow-list, every redirect hop is checked before it is requested, SHA-256 verified, never run automatically. Updates also need a publisher signature.
+- License keys and the update manifest are verified with ECDSA P-256; the vendor private key is never shipped.
+- The Windows helpers (`AudioDevices.exe`, `audio-devices.vbs`, `Audio Mixer.vbs`) are read-only or launch the visible `start-pc-mode.bat`; nothing runs hidden.

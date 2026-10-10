@@ -10,6 +10,7 @@
 //   GET /api/plugins -> VST3 / VST2 plugins (.vst3 / .dll / .vst) found and validated
 //   GET /api/audify, /api/framesize -> Audify (RtAudio) engine devices and automatic frame size
 //   WS  /ws/output    -> page streams Int16 PCM out through PortAudio (ASIO / WASAPI)
+//   WS  /ws/duplex    -> read AND write one interface through a single native stream
 //   WS  /ws/input     -> bridge streams Int16 PCM captured from an ASIO / WASAPI input
 //   GET /api/catalog  -> official audio drivers / stacks for this OS, with install detection
 //   GET /api/nowplaying -> what Spotify / YouTube / YouTube Music / TIDAL / ... is playing (OS media sessions)
@@ -23,6 +24,7 @@ const { detect, detectPortAudio } = require('./detect');
 const { accept } = require('./ws');
 const { createSession } = require('./output');
 const { createInputSession } = require('./input');
+const { createDuplexSession } = require('./duplex');
 const { readVolume } = require('./volume');
 const { listCatalog, downloadDriver, downloadDir } = require('./catalog');
 const { cachedNowPlaying } = require('./nowplaying');
@@ -33,6 +35,7 @@ const universalDriver = require('./universal');
 const license = require('./license');
 const updater = require('./update');
 const streamRegistry = require('./streams');
+const security = require('./security');
 
 const VERSION = (() => { try { return require('../package.json').version; } catch (_) { return '1.0.0'; } })();
 const PORT = Number(process.env.BRIDGE_PORT) || 8765;
@@ -41,7 +44,11 @@ const ROOT = path.resolve(__dirname, '..');
 const EXTRA_ORIGINS = (process.env.BRIDGE_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
 const EXTRA_HOSTS = (process.env.BRIDGE_HOSTS || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
 const ALLOW_NULL_ORIGIN = process.env.BRIDGE_ALLOW_NULL_ORIGIN !== '0'; // file:// pages send "null"; set 0 to refuse
-const SECURITY_HEADERS = { 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' };
+const SECURITY_HEADERS = security.HEADERS;
+const RATE = process.env.BRIDGE_RATE_LIMIT === '0' ? 0 : 1;   // 0 turns the request limits off
+const limiter = security.createLimiter();
+const MAX_SOCKETS = 24;                                         // open audio WebSockets at the same time
+let openSockets = 0;
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml' };
 
 // Only local pages (and file:// pages, which send "null") may read the API.
@@ -74,6 +81,10 @@ async function handle(req, res) {
   const origin = req.headers.origin;
   if (!hostAllowed(req.headers.host)) return json(res, 403, { ok: false, error: 'host not allowed' });
   if (!originAllowed(origin)) return json(res, 403, { ok: false, error: 'origin not allowed' });
+  if (RATE && req.url.startsWith('/api/')) {   // per page origin: reads 900/min, actions (POST) 40/min
+    const post = req.method === 'POST', r = limiter.allow((post ? 'p:' : 'g:') + (origin || 'local'), post ? 40 : 900);
+    if (!r.ok) return json(res, 429, { ok: false, error: 'too many requests, retry in ' + r.retryAfter + ' s' }, { 'Retry-After': String(r.retryAfter) });
+  }
   const cors = origin ? { 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin', 'Access-Control-Allow-Private-Network': 'true' } : {};
   if (req.method === 'OPTIONS') return send(res, 204, '', { ...cors, 'Access-Control-Allow-Methods': 'GET, POST', 'Access-Control-Allow-Headers': 'Content-Type, X-Mixer-Action' });
   const url = new URL(req.url, `http://${HOST}`);
@@ -115,8 +126,8 @@ async function handle(req, res) {
     try {
       const info = await detect();
       const src = url.searchParams.get('engine') === 'audify' && info.audify ? info.audify : info.portaudio;
-      const devices = src ? src.devices : [];
-      return json(res, 200, { ok: true, platform: info.platform, portaudio: !!info.portaudio, engine: src ? src.engine : null, asio: info.asio, interfaces: groupInterfaces(devices, info.asio) }, cors);
+      const devices = src ? src.devices : (info.native ? info.native.devices : []);
+      return json(res, 200, { ok: true, platform: info.platform, portaudio: !!info.portaudio, engine: src ? src.engine : (info.native ? info.native.engine : null), asio: info.asio, interfaces: groupInterfaces(devices, info.asio) }, cors);
     } catch (e) { return json(res, 500, { ok: false, error: e.message }, cors); }
   }
 
@@ -176,11 +187,11 @@ async function handle(req, res) {
   const file = path.resolve(ROOT, '.' + rel);
   if (file !== ROOT && !file.startsWith(ROOT + path.sep)) return json(res, 403, { ok: false, error: 'forbidden' });
   // Never serve dotfiles/dirs (.git, .github, .vscode, .env ...) or the bridge's own sources.
-  if (path.relative(ROOT, file).split(path.sep).some(p => p.startsWith('.')) || file.startsWith(__dirname + path.sep)) return json(res, 404, { ok: false, error: 'not found' });
+  if (path.relative(ROOT, file).split(path.sep).some(p => p.startsWith('.')) || file.startsWith(__dirname + path.sep) || !security.staticAllowed(ROOT, file)) return json(res, 404, { ok: false, error: 'not found' });
   fs.readFile(file, (err, buf) => {
     if (err) return json(res, 404, { ok: false, error: 'not found' });
-    const type = TYPES[path.extname(file)] || 'application/octet-stream';
-    send(res, 200, buf, { 'Content-Type': type, ...(type.startsWith('text/html') ? { 'X-Frame-Options': 'SAMEORIGIN' } : {}) });
+    const type = TYPES[path.extname(file).toLowerCase()] || 'application/octet-stream';
+    send(res, 200, buf, { 'Content-Type': type });
   });
 }
 
@@ -221,12 +232,17 @@ async function handleDownload(req, res, cors) {
 server.on('upgrade', (req, socket) => {
   let pathname = '';
   try { pathname = new URL(req.url, `http://${HOST}`).pathname; } catch (_) { /* rejected below */ }
-  if ((pathname !== '/ws/output' && pathname !== '/ws/input') || !hostAllowed(req.headers.host) || !originAllowed(req.headers.origin)) { socket.destroy(); return; }
+  if ((pathname !== '/ws/output' && pathname !== '/ws/input' && pathname !== '/ws/duplex') || !hostAllowed(req.headers.host) || !originAllowed(req.headers.origin)) { socket.destroy(); return; }
+  if (openSockets >= MAX_SOCKETS || (RATE && !limiter.allow('ws', 120).ok)) { socket.end('HTTP/1.1 429 Too Many Requests\r\nConnection: close\r\n\r\n'); return; }
   const handlers = {};
   const conn = accept(req, socket, handlers);
   if (!conn) return;
-  Object.assign(handlers, pathname === '/ws/input' ? createInputSession(conn) : createSession(conn));
+  openSockets++; socket.once('close', () => { openSockets--; });
+  Object.assign(handlers, pathname === '/ws/input' ? createInputSession(conn) : pathname === '/ws/duplex' ? createDuplexSession(conn) : createSession(conn));
 });
+
+server.headersTimeout = 15000; server.requestTimeout = 60000; server.maxHeadersCount = 64; server.keepAliveTimeout = 5000;
+server.on('clientError', (_, socket) => { try { socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n'); } catch (_) { /* gone */ } });
 
 // Starts listening (used by the client launcher); resolves with the port.
 function start(port = PORT) {

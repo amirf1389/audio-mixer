@@ -10,6 +10,7 @@ const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const lic = require('./license');
+const { fetchChecked } = require('./security');
 
 const DEFAULT_URL = 'https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/update.json';
 const BASE_HOSTS = ['raw.githubusercontent.com', 'github.com', 'objects.githubusercontent.com', 'release-assets.githubusercontent.com', 'githubusercontent.com'];
@@ -61,7 +62,7 @@ function platformFile(manifest, { platform = process.platform, arch = process.ar
 }
 
 async function fetchJson(fetchImpl, url) {
-  const r = await fetchImpl(url, { headers: { 'User-Agent': 'audio-mixer-update', Accept: 'application/json', 'Cache-Control': 'no-cache' } });
+  const r = await fetchChecked(fetchImpl, url, { headers: { 'User-Agent': 'audio-mixer-update', Accept: 'application/json', 'Cache-Control': 'no-cache' } }, u => hostOk(u));
   if (!r.ok) throw Object.assign(new Error('update server answered ' + r.status), { status: 502 });
   return r.json();
 }
@@ -92,7 +93,7 @@ async function download({ current, fetchImpl = globalThis.fetch, url, dir = upda
   if (!hostOk(entry.url)) throw Object.assign(new Error('the update file host is not allowed'), { status: 502 });
   const name = path.basename(String(entry.name || '')).replace(/[^\w.\- ]/g, '_');
   if (!name || name.startsWith('.')) throw Object.assign(new Error('unsafe file name'), { status: 502 });
-  const res = await fetchImpl(entry.url, { redirect: 'follow', headers: { 'User-Agent': 'audio-mixer-update' } });
+  const res = await fetchChecked(fetchImpl, entry.url, { headers: { 'User-Agent': 'audio-mixer-update' } }, u => hostOk(u));
   if (!res.ok || !res.body) throw Object.assign(new Error('download failed (' + res.status + ')'), { status: 502 });
   if (res.url && !hostOk(res.url)) throw Object.assign(new Error('download redirected to an untrusted host'), { status: 502 });
   if (Number(res.headers.get('content-length') || 0) > MAX_BYTES) throw Object.assign(new Error('file too large'), { status: 502 });
