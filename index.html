@@ -836,6 +836,7 @@ window.navTabs = [
             { group: 'METER', id: 'phase', text: 'PHASE', icon: 'fa-solid fa-yin-yang', color: 'text-indigo-400' },
             { group: 'SOURCE', id: 'media', text: 'STREAM & MEDIA', icon: 'fa-solid fa-play', color: 'text-cyan-400' },
             { group: 'SOURCE', id: 'live', text: 'LIVE SOURCES', icon: 'fa-solid fa-satellite-dish', color: 'text-fuchsia-400' },
+            { group: 'SOURCE', id: 'miceq', text: 'MIC EQ', icon: 'fa-solid fa-microphone-lines', color: 'text-cyan-400' },
             { group: 'SOURCE', id: 'ai', text: 'AI MIX', icon: 'fa-solid fa-brain', color: 'text-rose-400' },
             { group: 'SOURCE', id: 'tools', text: 'TOOLS', icon: 'fa-solid fa-screwdriver-wrench', color: 'text-lime-400' },
             { group: 'SOURCE', id: 'plugins', text: 'PLUGINS', icon: 'fa-solid fa-puzzle-piece', color: 'text-purple-400' },
@@ -2931,13 +2932,7 @@ window.navTabs = [
 
                 if (dacSelect) {
                     let currentVal = dacSelect.value;
-                    let html = `
-                        <optgroup label="HARDWARE ASIO & COREAUDIO DRIVERS">
-                            <option value="wing-direct">WING Live USB Audio ASIO (192kHz Direct)</option>
-                            <option value="webusb-bulk">WebUSB Raw Bulk DAC</option>
-                            <option value="coreaudio">CoreAudio Low Latency</option>
-                        </optgroup>
-                    `;
+                    let html = `<option value="default">Default system audio output</option>`;
                     if (outputs.length > 0) {
                         html += `<optgroup label="DETECTED PHYSICAL AUDIO OUTPUTS (Web Audio API)">`;
                         outputs.forEach((dev, idx) => {
@@ -4418,24 +4413,24 @@ window.navTabs = [
 
                 <!-- True Volume Readings Grid -->
                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                  <div class="bg-black/70 p-3 rounded-xl border border-amber-500/30 text-center space-y-1">
+                  <div id="lufs-card-int" title="Click to reset the loudness measurement" class="bg-black/70 p-3 rounded-xl border border-amber-500/30 text-center space-y-1 cursor-pointer">
                     <span class="text-[7px] text-slate-400 uppercase font-bold block">INTEGRATED (I)</span>
-                    <div class="text-2xl sm:text-3xl font-black text-amber-400 font-mono" id="lufs-live-val">-14.2 LUFS</div>
-                    <span class="text-[6.5px] text-slate-500 block">PROGRAM TARGET: -14.0 LUFS</span>
+                    <div class="text-2xl sm:text-3xl font-black text-amber-400 font-mono" id="lufs-live-val">-- LUFS</div>
+                    <span id="lufs-target-disp" class="text-[6.5px] text-slate-500 block">PROGRAM TARGET: -14.0 LUFS</span>
                   </div>
                   <div class="bg-black/70 p-3 rounded-xl border border-cyan-500/30 text-center space-y-1">
                     <span class="text-[7px] text-slate-400 uppercase font-bold block">SHORT-TERM (S)</span>
-                    <div class="text-2xl sm:text-3xl font-black text-cyan-400 font-mono" id="lufs-short-term">-13.8 LUFS</div>
+                    <div class="text-2xl sm:text-3xl font-black text-cyan-400 font-mono" id="lufs-short-term">-INF LUFS</div>
                     <span class="text-[6.5px] text-slate-500 block">3-SECOND SLIDING WINDOW</span>
                   </div>
                   <div class="bg-black/70 p-3 rounded-xl border border-purple-500/30 text-center space-y-1">
                     <span class="text-[7px] text-slate-400 uppercase font-bold block">MOMENTARY (M)</span>
-                    <div class="text-2xl sm:text-3xl font-black text-purple-400 font-mono" id="lufs-momentary">-13.5 LUFS</div>
+                    <div class="text-2xl sm:text-3xl font-black text-purple-400 font-mono" id="lufs-momentary">-INF LUFS</div>
                     <span class="text-[6.5px] text-slate-500 block">400ms UNGATED SPEED</span>
                   </div>
                   <div class="bg-black/70 p-3 rounded-xl border border-rose-500/30 text-center space-y-1">
                     <span class="text-[7px] text-slate-400 uppercase font-bold block">TRUE PEAK (dBTP)</span>
-                    <div class="text-2xl sm:text-3xl font-black text-rose-400 font-mono" id="lufs-true-peak">-0.8 dBTP</div>
+                    <div class="text-2xl sm:text-3xl font-black text-rose-400 font-mono" id="lufs-true-peak">-INF dBTP</div>
                     <span class="text-[6.5px] text-slate-500 block">4x ISP OVERSAMPLED</span>
                   </div>
                 </div>
@@ -4446,7 +4441,7 @@ window.navTabs = [
                     <h4 class="text-[8.5px] font-black text-emerald-400 uppercase font-wing flex items-center gap-1.5">
                       <i class="fa-solid fa-shield-halved"></i> TRUE PEAK LIMITATION AUTOMATION &amp; CEILING STABILIZER
                     </h4>
-                    <span class="text-[7px] text-slate-400 font-mono">5ms LOOKAHEAD • ZERO-CLIP PROTECTION</span>
+                    <span id="lufs-engine-note" class="text-[7px] text-slate-400 font-mono">WAITING FOR AUDIO ENGINE</span>
                   </div>
                   <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                     <div class="bg-black/60 p-2.5 rounded-lg border border-white/10 space-y-1">
@@ -4458,12 +4453,12 @@ window.navTabs = [
                     </div>
                     <div class="bg-black/60 p-2.5 rounded-lg border border-white/10 space-y-1">
                       <span class="text-slate-400 block text-[7px]">LOUDNESS RANGE (LRA):</span>
-                      <div class="text-lg font-bold text-slate-200">5.4 LU <span class="text-[7px] text-emerald-400 font-normal">(Dynamic Master)</span></div>
+                      <div class="text-lg font-bold text-slate-200"><span id="lufs-lra-val">0.0 LU</span> <span id="lufs-lra-note" class="text-[7px] text-emerald-400 font-normal">(measuring)</span></div>
                     </div>
                     <div class="bg-black/60 p-2.5 rounded-lg border border-white/10 space-y-1">
-                      <span class="text-slate-400 block text-[7px]">AUTO-GAIN REDUCTION:</span>
+                      <span class="text-slate-400 block text-[7px]">AUTO-GAIN REDUCTION: <span id="lufs-gr-val" class="text-rose-400 font-bold">0.0 dB</span></span>
                       <div class="w-full bg-slate-800 rounded h-3 overflow-hidden border border-white/10 flex items-center px-1">
-                        <div class="h-1.5 bg-rose-500 rounded w-[15%] transition-all"></div>
+                        <div id="lufs-gr-bar" class="h-1.5 bg-rose-500 rounded transition-all" style="width:0%"></div>
                       </div>
                     </div>
                   </div>
@@ -5285,6 +5280,53 @@ window.navTabs = [
 
             // 15. STUDIO TOOLS & UTILITY SUITE (tab-tools)
             htmlString += `
+            <!-- MIC EQ: per-source equalizer (real time) -->
+            <div id="tab-miceq" class="tab-content tab-hidden">
+              <div class="page-scroll-inner page-card-center space-y-3 font-mono">
+                <div class="glass-panel p-3.5 rounded-xl wing-bezel">
+                  <div class="flex flex-wrap justify-between items-center gap-2 pb-2 border-b border-white/10 mb-3">
+                    <div class="flex items-center gap-2.5">
+                      <div class="w-8 h-8 rounded-lg bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400"><i class="fa-solid fa-microphone-lines"></i></div>
+                      <div>
+                        <h3 class="text-xs font-black text-white font-wing tracking-wider uppercase">MIC EQ &bull; PER-SOURCE EQUALIZER</h3>
+                        <p class="text-[7.5px] text-slate-400">10-BAND EQ + HIGH-PASS FOR EVERY SOURCE INPUT (MICROPHONE, ASIO / WASAPI INTERFACE, ...) &bull; LIVE SPECTRUM BEFORE / AFTER &bull; REAL-TIME METERS</p>
+                      </div>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                      <select id="meq-src" aria-label="Source" class="bg-black text-cyan-300 border border-white/15 rounded text-[8px] px-1.5 py-1 max-w-[260px]"><option value="">no source is being read</option></select>
+                      <button id="meq-on" class="px-2.5 py-1 rounded font-black text-[8px] uppercase bg-white/10 text-slate-300 border border-white/10">BYPASSED</button>
+                      <button id="meq-reset" class="px-2.5 py-1 rounded bg-white/5 text-slate-300 border border-white/10 font-bold text-[8px] uppercase hover:bg-white/10">RESET</button>
+                      <button id="meq-copy" class="px-2.5 py-1 rounded bg-white/5 text-slate-300 border border-white/10 font-bold text-[8px] uppercase hover:bg-white/10" title="Copy these settings to every source">COPY TO ALL</button>
+                    </div>
+                  </div>
+                  <div id="meq-none" class="text-[8px] text-amber-400 mb-2">No source is being read yet. Open LIVE SOURCES and enable READ on a microphone or audio interface (or press ENABLE ALL SOURCES on the mixer page): it appears here at once.</div>
+                  <div class="grid grid-cols-1 lg:grid-cols-[1fr_230px] gap-3">
+                    <div class="space-y-2">
+                      <canvas id="meq-spec" class="w-full bg-black rounded border border-white/10" style="height:190px;"></canvas>
+                      <div class="text-[7px] text-slate-500 flex flex-wrap gap-3"><span><b class="text-slate-400">GREY</b> source before the EQ</span><span><b class="text-cyan-400">CYAN</b> after the EQ</span><span><b class="text-amber-400">AMBER</b> what the EQ does</span></div>
+                      <div id="meq-bands" class="flex justify-between items-end bg-black/40 border border-white/10 rounded p-2"></div>
+                      <label class="flex flex-wrap items-center gap-2 text-[8px] text-slate-300">HIGH-PASS (cut rumble / handling noise)
+                        <input id="meq-hpf" type="range" min="0" max="400" step="5" value="0" class="flex-1 min-w-[140px] accent-cyan-400" aria-label="High-pass frequency"><span id="meq-hpf-t" class="w-14 text-cyan-300 font-bold">OFF</span></label>
+                    </div>
+                    <div class="space-y-2">
+                      <div class="bg-black/50 border border-white/10 rounded p-2">
+                        <div class="text-[7px] font-black text-slate-500 uppercase tracking-widest mb-1">LEVELS (REAL TIME)</div>
+                        <div class="flex items-end gap-2 h-24">
+                          <div class="flex flex-col items-center gap-1 h-full"><div class="w-3 flex-1 bg-white/5 rounded overflow-hidden flex items-end"><i id="meq-vu-l" class="block w-full" style="height:0%"></i></div><span class="text-[6px] text-slate-500">L</span></div>
+                          <div class="flex flex-col items-center gap-1 h-full"><div class="w-3 flex-1 bg-white/5 rounded overflow-hidden flex items-end"><i id="meq-vu-r" class="block w-full" style="height:0%"></i></div><span class="text-[6px] text-slate-500">R</span></div>
+                          <div class="flex flex-col items-center gap-1 h-full"><div class="w-3 flex-1 bg-white/5 rounded overflow-hidden flex items-end"><i id="meq-vu-o" class="block w-full" style="height:0%"></i></div><span class="text-[6px] text-cyan-400">OUT</span></div>
+                          <div class="text-[7px] text-slate-300 leading-relaxed"><div id="meq-vu-t">IN -INF</div><div id="meq-vu-ot">OUT -INF</div></div>
+                        </div>
+                        <div id="meq-status" class="text-[7px] text-slate-400 mt-1.5 leading-snug"></div>
+                      </div>
+                      <div class="text-[7px] font-black text-slate-500 uppercase tracking-widest">MIC PRESETS</div>
+                      <div id="meq-presets" class="grid grid-cols-1 gap-1 max-h-[300px] overflow-y-auto pr-1"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div id="tab-routing" class="tab-content tab-hidden">
               <div class="page-scroll-inner w-full max-w-6xl mx-auto">
                 <div class="glass-panel p-3 md:p-4 rounded-xl wing-bezel flex flex-col gap-3 font-mono text-xs">
@@ -5764,9 +5806,7 @@ window.navTabs = [
                     <div class="bg-black/60 p-3 rounded border border-white/10 space-y-1.5 font-mono">
                       <span class="text-[8.5px] text-slate-400 block font-bold">PHYSICAL DAC ENDPOINT (Web Audio / ASIO)</span>
                       <select id="asio-dac-select" onchange="window.handleAudioDeviceSelect(this.value)" class="bg-black border border-white/10 p-1.5 rounded text-cyan-400 outline-none w-full text-xs font-mono">
-                        <option value="wing-direct">WING Live USB Audio ASIO (192kHz Direct)</option>
-                        <option value="webusb-bulk">WebUSB Raw Bulk DAC</option>
-                        <option value="coreaudio">CoreAudio Low Latency</option>
+                        <option value="default">Default system audio output</option>
                       </select>
                     </div>
                     <div class="bg-black/60 p-3 rounded border border-white/10 space-y-1.5 font-mono">
@@ -8893,8 +8933,9 @@ window.navTabs = [
         function startMeterLoop() {
             function updateMeters() {
                 for (let i = 0; i < CHANNELS; i++) {
-                    const level = window.state.channelLevels[i] || 0;
-                    window.state.channelLevels[i] = Math.max(0, level * 0.92);
+                    const raw = window.state.channelLevels[i] || 0;
+                    window.state.channelLevels[i] = Math.max(0, raw * 0.92);
+                    const level = Math.max(raw, window.rtEngine ? window.rtEngine.chLevel(i) : 0);   // real level of the audio in the strip
 
                     const laneMeter = document.getElementById(`lane-meter-${i}`);
                     if (laneMeter) {
@@ -9003,10 +9044,6 @@ window.navTabs = [
                         const bin = Math.min(Math.floor(Math.pow(i / bars, 1.7) * window.state.musicData.length), window.state.musicData.length - 1);
                         let val = window.state.musicData[bin] || 0;
 
-                        // Standby animation if engine active but silence
-                        if (val === 0 && window.state.active) {
-                            val = Math.max(3, (Math.sin(Date.now() * 0.004 + i * 0.18) * 0.5 + 0.5) * 20);
-                        }
 
                         const h = Math.max(2, (val / 255) * canvas.height * 0.92);
 
@@ -9048,12 +9085,6 @@ window.navTabs = [
                             ctx.fillStyle = '#ffffff';
                             ctx.fillRect(i * w, canvas.height - peakH, w - 1, 1.5);
                         }
-                    }
-                } else if (window.state.active) {
-                    for (let i = 0; i < bars; i++) {
-                        const h = Math.sin(Date.now() * 0.005 + i * 0.15) * (canvas.height * 0.35) + (canvas.height * 0.4);
-                        ctx.fillStyle = 'rgba(255, 106, 0, 0.85)';
-                        ctx.fillRect(i * w, canvas.height - h, w - 1, h);
                     }
                 }
 
@@ -9220,6 +9251,7 @@ window.navTabs = [
                 'lufs': 'LUFS TRUE VOLUME RADAR & LIMITATION AUTOMATION',
                 'osc': 'DUAL-TRACE REAL-TIME OSCILLOSCOPE',
                 'media': 'MEDIA PLAYER, TIDAL & YOUTUBE STREAM APIS',
+                'miceq': 'MIC EQ: 10-BAND EQUALIZER + HIGH-PASS FOR EVERY SOURCE INPUT',
                 'ai': 'AI AUTO-MIXER & FEEDBACK NOTCH',
                 'io': '32x32 SYSTEM I/O PATCHBAY & INTERFACE DMA CONTROLLER',
                 'tools': 'STUDIO TOOLS — TAP TEMPO & SNAPSHOTS',
@@ -10136,22 +10168,13 @@ window.navTabs = [
                 const w = canvas.width / 2;
                 const h = canvas.height;
 
-                // Read live level from musicAnalyser or fallback
+                // Real level of the master bus, left and right (RMS of the audio itself): silence reads as silence
                 let dbL = -60;
                 let dbR = -60;
-                if (window.state.active && window.state.nodes.musicAnalyser && window.state.musicData) {
-                    let sumL = 0;
-                    let sumR = 0;
-                    const half = Math.floor(window.state.musicData.length / 2);
-                    for (let i = 0; i < half; i++) sumL += window.state.musicData[i];
-                    for (let i = half; i < window.state.musicData.length; i++) sumR += window.state.musicData[i];
-                    const avgL = sumL / (half * 255);
-                    const avgR = sumR / (half * 255);
-                    dbL = avgL > 0.001 ? 20 * Math.log10(avgL) : -60;
-                    dbR = avgR > 0.001 ? 20 * Math.log10(avgR) : -60;
-                } else if (window.state.active) {
-                    dbL = -12 + Math.sin(Date.now() * 0.003) * 6;
-                    dbR = -14 + Math.cos(Date.now() * 0.003) * 6;
+                const rtm = window.rtEngine && window.rtEngine.master;
+                if (rtm) {
+                    dbL = rtm.L.rms > 0.00003 ? Math.max(-60, 20 * Math.log10(rtm.L.rms)) : -60;
+                    dbR = rtm.R.rms > 0.00003 ? Math.max(-60, 20 * Math.log10(rtm.R.rms)) : -60;
                 }
 
                 // VU target is dBFS relative to refLevel (0 VU = refLevel)
@@ -15692,7 +15715,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                     let ok = false;
                     try {
                         const j = await (await fetch(bridge + '/api/interfaces', { cache: 'no-store' })).json();
-                        if (j && j.ok) { ok = true; (j.interfaces || []).forEach(i => found.set(i.key, Object.assign({}, i, { apiNames: i.apis.map(a => a.api) }))); this.portaudio = !!j.portaudio; }
+                        if (j && j.ok) { ok = true; this.bridgePlatform = j.platform; (j.interfaces || []).forEach(i => found.set(i.key, Object.assign({}, i, { apiNames: i.apis.map(a => a.api) }))); this.portaudio = !!j.portaudio; }
                     } catch (e) { /* busy or offline */ }
                     // a failed or rejected scan (server busy, rate limit) says nothing about the interfaces: keep the last list instead of closing every open stream
                     if (!ok && this.interfaces) this.interfaces.filter(i => i.apis && i.apis.length).forEach(i => found.set(i.key, i));
@@ -15817,7 +15840,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 this.caps.set(i.key, cap);
                 if (o.music) { this.music = cap; }
                 this.setStatus(i.key, 'READING via ' + cap.how, false);
-                if (this.cfg.auto && cap.bridge) this.autoPatchOne(cap);   // reading an interface now also feeds the mixer channels (browser microphones stay manual: feedback)
+                if (this.cfg.auto && !(this.cfg.noAutoPatch && this.cfg.noAutoPatch[cap.key])) this.autoPatchOne(cap);   // reading an interface (also a browser microphone) feeds the mixer channels; a feedback howl takes it out again (rtEngine guard)
                 // the FFT follows the best interface: ASIO first, then whatever opened first
                 if (!i.loopback) {
                     const cur = this.mic && this.caps.get(this.mic);
@@ -16037,9 +16060,9 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             // ── mixer channels: read interfaces -> CH 1.. (stereo pairs), music -> CH 31/32 ──
             patchCap(cap, ch) {
                 const c = window.state.ctx, n = window.state.nodes; if (!c || !n.channelPostGains || ch + 1 >= n.channelPostGains.length) return false;
-                const split = c.createChannelSplitter(2);
-                cap.node.connect(split); split.connect(n.channelPostGains[ch], 0); split.connect(n.channelPostGains[ch + 1], 1);
-                this.patched.push({ key: cap.key, split, ch, node: cap.node });
+                const split = c.createChannelSplitter(2), src = cap.out || cap.node;   // cap.out: the Mic EQ output (see MIC EQ page)
+                src.connect(split); split.connect(n.channelPostGains[ch], 0); split.connect(n.channelPostGains[ch + 1], 1);
+                this.patched.push({ key: cap.key, split, ch, node: src });
                 if (window.setChannelPatch) { window.setChannelPatch(ch, 'LIVE ' + (cap.music ? 'MUSIC L' : 'L')); window.setChannelPatch(ch + 1, 'LIVE ' + (cap.music ? 'MUSIC R' : 'R')); }
                 return true;
             },
@@ -16053,6 +16076,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             },
             autoPatch() {
                 if (window.knoxEnabled) return window.notify('KNOX Active: patching locked', 'shield-halved');
+                this.cfg.noAutoPatch = {}; this.persist();
                 this.unpatchAll();
                 let ch = 0, n = 0;
                 const lim = window.licenseChannels || 32, top = lim >= 32 ? 30 : Math.max(2, lim - 2);   // the plan's channel limit: music goes to the last pair of the plan
@@ -16997,6 +17021,770 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
         }
         if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
     })();
+    </script>
+    <script id="rt-engine">
+/* REAL-TIME ENGINE: one level engine for every page, plus the pages that were static.
+   - rtEngine: peak / RMS of every source input (LIVE SOURCES interfaces, the page microphone, patched live inputs), of the 32 channel inputs and of the master L/R, read from
+     Web Audio analysers about 30 times a second while a page that shows them is open.
+   - MIXER page: a meter for every source input device (L / R, peak dB, clip), and real channel VU meters (they used to read a value no real audio ever wrote).
+   - MIC EQ page: 10-band equalizer + high-pass per source, presets, live spectrum before / after, meters.
+   - DRIVERS page: DAC and OS driver sources as they are right now (enabled / reading / writing / level), updated live.
+   - BLUETOOTH page: paired devices of this PC in real time and airwaves discovery (local server + Web Bluetooth).
+   Nothing here touches the audio path of a source unless its Mic EQ is switched on. */
+(function () {
+    'use strict';
+    const $ = id => document.getElementById(id);
+    const esc = v => (window.escapeHtml ? window.escapeHtml(v) : String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])));
+    const LS = () => window.liveSources;
+    const EQ_F = [31, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
+    const store = {
+        get(k, d) { try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch (e) { return d; } },
+        set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* storage blocked */ } },
+    };
+    const visible = id => { const t = $('tab-' + id); return !!t && !t.classList.contains('tab-hidden'); };
+    const dbOf = v => (v < 0.00003 ? -Infinity : 20 * Math.log10(v));
+    const pct = db => (isFinite(db) ? Math.max(0, Math.min(100, (db + 60) / 60 * 100)) : 0);          // -60 dBFS .. 0 dBFS -> 0 .. 100 %
+    const fmtDb = db => (isFinite(db) ? (db > -0.05 ? '0.0' : db.toFixed(1)) + ' dB' : '-INF');
+
+    // ───────────────────────── level engine ─────────────────────────
+    const rt = window.rtEngine = {
+        subs: [], st: {}, ch: [], chAn: [], ctxFor: null, last: 0, frames: 0, hz: 0,
+        sink() { const l = LS(); if (l && l.sink && l.sink.context === window.state.ctx) return l.sink; const c = window.state.ctx; if (!this._sink || this._sinkCtx !== c) { this._sink = c.createGain(); this._sink.gain.value = 0; this._sink.connect(c.destination); this._sinkCtx = c; } return this._sink; },
+        // stereo analysers on a node (a mono source shows the same level on both sides)
+        tap(node) {
+            const c = window.state.ctx;
+            if (node._rtTap && node._rtTap.ctx === c) return node._rtTap;
+            const split = c.createChannelSplitter(2), l = c.createAnalyser(), r = c.createAnalyser();
+            l.fftSize = r.fftSize = 512; l.smoothingTimeConstant = r.smoothingTimeConstant = 0;
+            node.connect(split); split.connect(l, 0); split.connect(r, 1);
+            l.connect(this.sink()); r.connect(this.sink());
+            return (node._rtTap = { ctx: c, split, l, r });
+        },
+        read(an) {
+            const b = an._rtBuf && an._rtBuf.length === an.fftSize ? an._rtBuf : (an._rtBuf = new Float32Array(an.fftSize));
+            an.getFloatTimeDomainData(b);
+            let pk = 0, ss = 0;
+            for (let i = 0; i < b.length; i++) { const a = b[i] < 0 ? -b[i] : b[i]; if (a > pk) pk = a; ss += b[i] * b[i]; }
+            return { pk, rms: Math.sqrt(ss / b.length) };
+        },
+        // smoothed meter state of one reading: fast attack, slow release, peak hold, clip hold
+        smooth(s, v, now) {
+            s.pk = v.pk >= s.pk ? v.pk : s.pk * 0.9 + v.pk * 0.1;
+            s.rms = v.rms >= s.rms ? v.rms : s.rms * 0.9 + v.rms * 0.1;
+            if (v.pk >= s.hold || now - s.holdAt > 1400) { s.hold = v.pk; s.holdAt = now; }
+            if (v.pk >= 0.97) s.clipAt = now;
+            return s;
+        },
+        meter() { return { pk: 0, rms: 0, hold: 0, holdAt: 0, clipAt: 0 }; },
+        // every source input that exists right now
+        sources() {
+            const out = [], l = LS(), c = window.state && window.state.ctx;
+            if (!c) return out;
+            if (l) l.caps.forEach((cap, key) => { if (cap && cap.node && cap.node.context === c) out.push({ key, name: cap.name || key, how: cap.how || '', node: cap.node, cap, music: !!cap.music }); });
+            const n = window.state.nodes || {};
+            if (window.state.micActive && n.micAnalyser) out.push({ key: 'mic:default', name: 'Default microphone', how: 'Web Audio', an: n.micAnalyser });
+            const R = window.routingEngine;
+            if (R && Array.isArray(R.live)) R.live.forEach(x => { if (x && x.src && !x.shared && x.src.context === c) out.push({ key: 'live:' + x.ch, name: x.label + ' (CH ' + (x.ch + 1) + ')', how: 'Live input patch', node: x.src }); });
+            return out;
+        },
+        // the channel strips: level at the strip's input (where a patched source enters)
+        chLevel(i) { const s = this.ch[i]; return s ? pct(dbOf(s.pk)) / 100 : 0; },
+        frame(now) {
+            requestAnimationFrame(t => rt.frame(t));
+            if (now - this.last < 30) return;
+            this.hz = this.hz * 0.9 + (1000 / Math.max(1, now - this.last)) * 0.1; this.last = now; this.frames++;
+            const c = window.state && window.state.ctx, n = (window.state && window.state.nodes) || {};
+            if (!c) { this.subs.forEach(f => { try { f(now); } catch (e) { /* a page failed: the others go on */ } }); return; }
+            // sources
+            const seen = {};
+            this.sources().forEach(s => {
+                seen[s.key] = 1;
+                const m = this.st[s.key] || (this.st[s.key] = { L: this.meter(), R: this.meter() });
+                m.name = s.name; m.how = s.how; m.music = s.music; m.cap = s.cap;
+                try {
+                    if (s.an) { const v = this.read(s.an); this.smooth(m.L, v, now); this.smooth(m.R, v, now); }
+                    else { const t = this.tap(s.node), a = this.read(t.l), b = this.read(t.r); this.smooth(m.L, a, now); this.smooth(m.R, (b.pk === 0 && a.pk > 0) ? a : b, now); }
+                } catch (e) { /* node closed */ }
+            });
+            Object.keys(this.st).forEach(k => { if (!seen[k]) delete this.st[k]; });
+            // channel strips and master: only while a page that shows them is open (cheap, but no reason to spend it otherwise)
+            const needCh = visible('mixer') || visible('meter') || visible('bus') || this.guardNeeded;
+            if (needCh && n.channelPostGains) {
+                for (let i = 0; i < n.channelPostGains.length; i++) {
+                    if (!this.chAn[i] || this.chAn[i].ctx !== c) { const a = c.createAnalyser(); a.fftSize = 256; a.smoothingTimeConstant = 0; n.channelPostGains[i].connect(a); a.connect(this.sink()); a.ctx = c; this.chAn[i] = a; this.ch[i] = this.meter(); }
+                    this.smooth(this.ch[i], this.read(this.chAn[i]), now);
+                }
+            }
+            if (n.phaseAnL && n.phaseAnR) {
+                const a = this.read(n.phaseAnL), b = this.read(n.phaseAnR);
+                this.master = this.master || { L: this.meter(), R: this.meter() };
+                this.smooth(this.master.L, a, now); this.smooth(this.master.R, b, now);
+            }
+            this.subs.forEach(f => { try { f(now); } catch (e) { /* a page failed: the others go on */ } });
+        },
+        on(f) { this.subs.push(f); },
+        start() { if (!this.started) { this.started = true; requestAnimationFrame(t => rt.frame(t)); } },
+    };
+    rt.start();
+
+    // ───────────────────────── MIXER page: source meters + real channel VU ─────────────────────────
+    const strip = { el: null, sig: '' };
+    function ensureStrip() {
+        if (strip.el && strip.el.isConnected) return strip.el;
+        const anchor = $('asio-meter-strip') || document.querySelector('#tab-mixer > div > div');
+        if (!anchor || !anchor.parentNode) return null;
+        const d = document.createElement('div');
+        d.id = 'src-meter-strip';
+        d.className = 'glass-panel px-2.5 py-1 rounded-lg shrink-0 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[7px]';
+        anchor.parentNode.insertBefore(d, anchor.nextSibling);
+        return (strip.el = d);
+    }
+    function renderStrip(now) {
+        if (!visible('mixer')) return;
+        const el = ensureStrip(); if (!el) return;
+        const keys = Object.keys(rt.st), sig = keys.join('|');
+        if (sig !== strip.sig) {
+            strip.sig = sig;
+            const head = '<span class="text-[8px] font-black text-cyan-400 uppercase tracking-widest font-wing whitespace-nowrap"><i class="fa-solid fa-microphone-lines mr-1"></i>SOURCE INPUTS</span>';
+            if (!keys.length) {
+                el.innerHTML = head + '<span class="text-slate-400">No source is being read yet.</span><button id="src-enable-all" class="px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-black text-[7px] uppercase hover:bg-cyan-500 hover:text-black">ENABLE ALL SOURCES</button>';
+                const b = $('src-enable-all'); if (b) b.onclick = () => { const l = LS(); if (l) { l.ensureCtx().then(() => { l.enableAll(false); l.scan(); }); } };
+            } else {
+                el.innerHTML = head + keys.map((k, i) => `<div class="flex items-center gap-1.5 min-w-[150px] flex-1" data-k="${i}">
+                    <span class="truncate max-w-[120px] text-slate-200 font-bold" title="${esc(rt.st[k].name)}">${esc(rt.st[k].name)}</span>
+                    <span class="px-1 rounded bg-white/10 text-slate-400 text-[6px]">${esc(rt.st[k].how)}</span>
+                    <span class="flex flex-col gap-[2px] w-24"><span class="h-[4px] bg-white/5 rounded overflow-hidden"><i class="block h-full rt-l"></i></span><span class="h-[4px] bg-white/5 rounded overflow-hidden"><i class="block h-full rt-r"></i></span></span>
+                    <span class="w-12 text-right text-slate-300 rt-db">-INF</span><span class="px-1 rounded text-[6px] font-black rt-clip bg-white/5 text-slate-600">CLIP</span></div>`).join('');
+            }
+        }
+        const items = el.querySelectorAll('[data-k]');
+        items.forEach((it, i) => {
+            const m = rt.st[keys[i]]; if (!m) return;
+            const fill = (q, mm) => { const e = it.querySelector(q); if (e) { e.style.width = pct(dbOf(mm.pk)) + '%'; e.style.background = mm.pk > 0.89 ? '#ef4444' : mm.pk > 0.5 ? '#fbbf24' : '#10b981'; } };
+            fill('.rt-l', m.L); fill('.rt-r', m.R);
+            const pk = Math.max(m.L.hold, m.R.hold), db = it.querySelector('.rt-db'); if (db) db.textContent = fmtDb(dbOf(pk));
+            const cl = it.querySelector('.rt-clip'); if (cl) cl.className = 'px-1 rounded text-[6px] font-black rt-clip ' + (now - Math.max(m.L.clipAt, m.R.clipAt) < 1500 ? 'bg-red-500 text-white' : 'bg-white/5 text-slate-600');
+        });
+    }
+    rt.on(renderStrip);
+
+    // ───────────────────────── feedback guard (a microphone patched into the strips + open speakers) ─────────────────────────
+    const guard = { over: {} };
+    rt.on(now => {
+        const l = LS(); if (!l || !l.patched || !l.patched.length) { rt.guardNeeded = false; return; }
+        const browser = l.patched.filter(p => { const cap = l.caps.get(p.key); return cap && cap.how === 'Web Audio' && !cap.music; });
+        rt.guardNeeded = browser.length > 0;
+        browser.forEach(p => {
+            const s = rt.ch[p.ch]; if (!s) return;
+            if (s.pk > 0.97) { guard.over[p.key] = (guard.over[p.key] || 0) + 1; } else guard.over[p.key] = 0;
+            if (guard.over[p.key] > 45) {                       // ~1.5 s at full scale: a howl
+                guard.over[p.key] = 0;
+                const cap = l.caps.get(p.key); l.unpatchCap(p.key);
+                if (l.cfg) { l.cfg.noAutoPatch = l.cfg.noAutoPatch || {}; l.cfg.noAutoPatch[p.key] = true; l.persist(); }
+                window.notify('Feedback detected: ' + (cap ? cap.name : p.key) + ' was taken out of the mixer. Use headphones, then press PATCH on LIVE SOURCES.', 'triangle-exclamation');
+            }
+        });
+    });
+
+    // ───────────────────────── MIC EQ page ─────────────────────────
+    const meq = {
+        cfg: store.get('halx_miceq_v1', { sel: '', src: {} }), sig: '', built: false,
+        get(key) { return this.cfg.src[key] || (this.cfg.src[key] = { on: false, hpf: 0, gains: EQ_F.map(() => 0), preset: '' }); },
+        save() { store.set('halx_miceq_v1', this.cfg); },
+        presets() { const p = window.standardEQPresets || {}; return Object.keys(p).filter(k => /^MIC /.test(k)).concat(['Flat']).filter(k => p[k]); },
+        capFor(key) { const l = LS(); return l && l.caps.get(key) || null; },
+        ensureEq(cap) {
+            const c = window.state.ctx;
+            if (cap._eq && cap._eq.ctx === c) return cap._eq;
+            const hpf = c.createBiquadFilter(); hpf.type = 'highpass'; hpf.frequency.value = 1; hpf.Q.value = 0.707;
+            const f = EQ_F.map(fr => { const b = c.createBiquadFilter(); b.type = 'peaking'; b.frequency.value = fr; b.Q.value = 1.4; b.gain.value = 0; return b; });
+            const out = c.createGain();
+            hpf.connect(f[0]); for (let i = 0; i < f.length - 1; i++) f[i].connect(f[i + 1]); f[f.length - 1].connect(out);
+            const an = c.createAnalyser(); an.fftSize = 4096; an.smoothingTimeConstant = 0.6; out.connect(an); an.connect(rt.sink());
+            cap.node.connect(hpf);
+            cap._eq = { ctx: c, hpf, f, out, an }; cap.out = out;
+            const l = LS();                                       // strips that are fed from this source now take the equalized signal
+            if (l && l.patched) l.patched.filter(p => p.key === cap.key).forEach(p => { try { p.node.disconnect(p.split); } catch (e) { /* not connected */ } out.connect(p.split); p.node = out; });
+            return cap._eq;
+        },
+        // apply the saved settings of every open source (also after a source was closed and opened again)
+        sync() {
+            const c = window.state && window.state.ctx, l = LS(); if (!c || !l) return;
+            l.caps.forEach((cap, key) => {
+                const s = this.cfg.src[key];
+                if (!s || !(s.on || cap._eq)) return;
+                if (cap.node.context !== c) return;
+                const e = this.ensureEq(cap), t = c.currentTime;
+                e.hpf.frequency.setTargetAtTime(s.on && s.hpf > 0 ? s.hpf : 1, t, 0.02);
+                e.f.forEach((b, i) => b.gain.setTargetAtTime(s.on ? s.gains[i] : 0, t, 0.02));
+            });
+        },
+        build() {
+            const host = $('meq-bands'); if (!host || this.built) return;
+            this.built = true;
+            host.innerHTML = EQ_F.map((f, i) => `<div class="flex flex-col items-center gap-1" style="width:9%">
+                <span id="meq-g${i}" class="text-[7px] text-cyan-300 font-bold">0.0</span>
+                <input type="range" orient="vertical" min="-12" max="12" step="0.5" value="0" id="meq-b${i}" class="daw-fader" aria-label="EQ band ${f} Hz" style="height:110px">
+                <span class="text-[6.5px] text-slate-400">${f >= 1000 ? (f / 1000) + 'k' : f}</span></div>`).join('');
+            EQ_F.forEach((f, i) => { $('meq-b' + i).oninput = e => this.setBand(i, parseFloat(e.target.value)); });
+            const sel = $('meq-src'); if (sel) sel.onchange = () => { this.cfg.sel = sel.value; this.save(); this.refreshUi(); };
+            const on = $('meq-on'); if (on) on.onclick = () => { const k = this.key(); if (!k) return; const s = this.get(k); s.on = !s.on; this.save(); this.sync(); this.refreshUi(); window.notify('Mic EQ ' + (s.on ? 'ON' : 'bypassed') + ': ' + (rt.st[k] ? rt.st[k].name : k), 'sliders'); };
+            const rs = $('meq-reset'); if (rs) rs.onclick = () => { const k = this.key(); if (!k) return; const s = this.get(k); s.gains = EQ_F.map(() => 0); s.hpf = 0; s.preset = ''; this.save(); this.sync(); this.refreshUi(); };
+            const h = $('meq-hpf'); if (h) h.oninput = e => { const k = this.key(); if (!k) return; const s = this.get(k); s.hpf = parseFloat(e.target.value); s.on = true; this.save(); this.sync(); this.refreshUi(true); };
+            const all = $('meq-copy'); if (all) all.onclick = () => { const k = this.key(); if (!k) return; const src = this.get(k); Object.keys(rt.st).forEach(o => { if (o === k) return; const s = this.get(o); s.on = src.on; s.hpf = src.hpf; s.gains = src.gains.slice(); s.preset = src.preset; }); this.save(); this.sync(); window.notify('Mic EQ copied to all sources', 'copy'); };
+            const pl = $('meq-presets');
+            if (pl) pl.innerHTML = this.presets().map(n => `<button data-p="${esc(n)}" class="meq-preset px-2 py-1 rounded bg-white/5 border border-white/10 text-slate-200 hover:bg-cyan-500 hover:text-black text-[7px] font-bold text-left truncate">${esc(n.replace(/^MIC • /, ''))}</button>`).join('');
+            if (pl) pl.querySelectorAll('.meq-preset').forEach(b => { b.onclick = () => this.applyPreset(b.dataset.p); });
+        },
+        key() { const keys = Object.keys(rt.st); if (!keys.length) return ''; return keys.indexOf(this.cfg.sel) >= 0 ? this.cfg.sel : keys[0]; },
+        setBand(i, db) { const k = this.key(); if (!k) return; const s = this.get(k); s.gains[i] = db; s.on = true; s.preset = ''; this.save(); this.sync(); this.refreshUi(true); },
+        applyPreset(name) { const k = this.key(); if (!k) return window.notify('No source to equalize: enable READ on an interface (LIVE SOURCES)', 'triangle-exclamation'); const p = window.standardEQPresets[name]; if (!p) return; const s = this.get(k); s.gains = p.slice(0, 10).map(v => Math.max(-12, Math.min(12, v))); s.on = true; s.preset = name; this.save(); this.sync(); this.refreshUi(); window.notify('Mic EQ preset: ' + name.replace(/^MIC • /, ''), 'sliders'); },
+        refreshUi(light) {
+            const k = this.key(), s = k ? this.get(k) : null;
+            const on = $('meq-on'); if (on) { on.textContent = s && s.on ? 'EQ ON' : 'BYPASSED'; on.className = 'px-2.5 py-1 rounded font-black text-[8px] uppercase ' + (s && s.on ? 'bg-cyan-400 text-black' : 'bg-white/10 text-slate-300 border border-white/10'); }
+            EQ_F.forEach((f, i) => { const g = s ? s.gains[i] : 0, el = $('meq-b' + i), t = $('meq-g' + i); if (el && !(light && document.activeElement === el)) el.value = g; if (t) t.textContent = (g > 0 ? '+' : '') + g.toFixed(1); });
+            const h = $('meq-hpf'); if (h && !(light && document.activeElement === h)) h.value = s ? s.hpf : 0;
+            const ht = $('meq-hpf-t'); if (ht) ht.textContent = s && s.hpf > 0 ? Math.round(s.hpf) + ' Hz' : 'OFF';
+            document.querySelectorAll('.meq-preset').forEach(b => { b.className = 'meq-preset px-2 py-1 rounded border text-[7px] font-bold text-left truncate ' + (s && s.preset === b.dataset.p ? 'bg-cyan-400 text-black border-cyan-300' : 'bg-white/5 border-white/10 text-slate-200 hover:bg-cyan-500 hover:text-black'); });
+        },
+        drawCurve(cv, s, cap) {
+            const g = cv.getContext('2d'), w = cv.width, h = cv.height, c = window.state.ctx;
+            g.clearRect(0, 0, w, h);
+            const F0 = 20, F1 = 20000, xOf = f => Math.log(f / F0) / Math.log(F1 / F0) * w, yDb = d => h - ((Math.max(-100, Math.min(0, d)) + 100) / 100) * h;
+            g.font = (8 * (window.devicePixelRatio || 1)) + 'px monospace'; g.fillStyle = '#64748b'; g.strokeStyle = 'rgba(255,255,255,0.07)'; g.lineWidth = 1;
+            [-20, -40, -60, -80].forEach(d => { g.beginPath(); g.moveTo(0, yDb(d)); g.lineTo(w, yDb(d)); g.stroke(); g.fillText(d + ' dB', 3, yDb(d) - 3); });
+            [100, 1000, 10000].forEach(f => { g.beginPath(); g.moveTo(xOf(f), 0); g.lineTo(xOf(f), h); g.stroke(); g.fillText(f >= 1000 ? (f / 1000) + 'k' : f, xOf(f) + 3, h - 4); });
+            const sr = c.sampleRate;
+            const spec = (an, color, fill) => {
+                if (!an) return;
+                const N = an.frequencyBinCount, b = an._sp && an._sp.length === N ? an._sp : (an._sp = new Float32Array(N)); an.getFloatFrequencyData(b);
+                g.beginPath();
+                for (let x = 0; x < w; x++) {
+                    const f = F0 * Math.pow(F1 / F0, x / (w - 1)), bin = Math.min(N - 1, Math.round(f / (sr / an.fftSize))); let d = b[bin]; if (!isFinite(d)) d = -100;
+                    if (x === 0) g.moveTo(x, yDb(d)); else g.lineTo(x, yDb(d));
+                }
+                g.strokeStyle = color; g.lineWidth = 1.4; g.stroke();
+                if (fill) { g.lineTo(w, h); g.lineTo(0, h); g.closePath(); g.fillStyle = fill; g.fill(); }
+            };
+            spec(cap && cap.analyser, 'rgba(148,163,184,0.7)', 'rgba(148,163,184,0.08)');
+            spec(cap && cap._eq && cap._eq.an, '#22d3ee', 'rgba(34,211,238,0.10)');
+            // the response of the chain (what the equalizer does), drawn around the 0 dB line at the top third
+            if (cap && cap._eq && s) {
+                const fr = new Float32Array(Math.min(w, 256)), mag = new Float32Array(fr.length), ph = new Float32Array(fr.length), tot = new Float32Array(fr.length).fill(1);
+                for (let i = 0; i < fr.length; i++) fr[i] = F0 * Math.pow(F1 / F0, i / (fr.length - 1));
+                [cap._eq.hpf].concat(cap._eq.f).forEach(f => { f.getFrequencyResponse(fr, mag, ph); for (let i = 0; i < fr.length; i++) tot[i] *= mag[i]; });
+                g.beginPath();
+                for (let i = 0; i < fr.length; i++) { const x = i / (fr.length - 1) * w, y = h * 0.22 - (20 * Math.log10(Math.max(tot[i], 1e-4))) * (h * 0.012); if (i === 0) g.moveTo(x, y); else g.lineTo(x, y); }
+                g.strokeStyle = '#fbbf24'; g.lineWidth = 1.8; g.stroke();
+                g.fillStyle = '#fbbf24'; g.fillText('EQ CURVE', w - 62, 12);
+            }
+        },
+        frame() {
+            if (!visible('miceq')) return;
+            this.build();
+            const keys = Object.keys(rt.st), sig = keys.map(k => k + ':' + rt.st[k].name).join('|');
+            if (sig !== this.sig) {
+                this.sig = sig;
+                const sel = $('meq-src');
+                if (sel) sel.innerHTML = keys.length ? keys.map(k => `<option value="${esc(k)}">${esc(rt.st[k].name)} (${esc(rt.st[k].how)})</option>`).join('') : '<option value="">no source is being read</option>';
+                const k = this.key(); if (sel && k) sel.value = k;
+                const none = $('meq-none'); if (none) none.classList.toggle('hidden', keys.length > 0);
+                this.refreshUi();
+            }
+            const k = this.key(), m = k && rt.st[k], cap = m && m.cap, s = k ? this.get(k) : null;
+            const cv = $('meq-spec');
+            if (cv && cap) {
+                const dpr = window.devicePixelRatio || 1, w = Math.max(200, Math.floor(cv.clientWidth * dpr)), h = Math.max(120, Math.floor(cv.clientHeight * dpr));
+                if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+                this.drawCurve(cv, s, cap);
+            } else if (cv) { const g = cv.getContext('2d'); g.clearRect(0, 0, cv.width, cv.height); g.fillStyle = '#94a3b8'; g.font = '10px monospace'; g.fillText('ENABLE READ ON A MICROPHONE OR AUDIO INTERFACE (LIVE SOURCES) TO EQUALIZE IT', 12, 24); }
+            if (m) {
+                const set = (id, mm) => { const e = $(id); if (e) { e.style.height = pct(dbOf(mm.pk)) + '%'; e.style.background = mm.pk > 0.89 ? '#ef4444' : mm.pk > 0.5 ? '#fbbf24' : '#10b981'; } };
+                set('meq-vu-l', m.L); set('meq-vu-r', m.R);
+                const t = $('meq-vu-t'); if (t) t.textContent = 'IN ' + fmtDb(dbOf(Math.max(m.L.hold, m.R.hold)));
+                const eqs = cap && cap._eq ? rt.tap(cap._eq.out) : null;
+                if (eqs) { const a = rt.read(eqs.l), b = rt.read(eqs.r), o = Math.max(a.pk, b.pk); const e = $('meq-vu-o'); if (e) { e.style.height = pct(dbOf(o)) + '%'; e.style.background = o > 0.89 ? '#ef4444' : o > 0.5 ? '#fbbf24' : '#22d3ee'; } const tt = $('meq-vu-ot'); if (tt) tt.textContent = 'OUT ' + fmtDb(dbOf(o)); }
+                const st = $('meq-status'); if (st) st.textContent = (s && s.on ? 'EQ ON' : 'BYPASSED') + ' • ' + m.how + (cap && l_patchedCh(k) !== null ? ' • CH ' + (l_patchedCh(k) + 1) : ' • not patched to a channel (LIVE SOURCES > PATCH)');
+            }
+        },
+    };
+    function l_patchedCh(key) { const l = LS(); const p = l && l.patched && l.patched.find(x => x.key === key); return p ? p.ch : null; }
+    window.micEq = meq;
+    rt.on(() => { try { meq.frame(); } catch (e) { /* page not ready */ } });
+    setInterval(() => { try { meq.sync(); } catch (e) { /* engine not ready */ } }, 400);
+
+    // ───────────────────────── DRIVERS page: DAC and OS driver sources in real time ─────────────────────────
+    const drv = { sig: '', el: null };
+    function ensureDrv() {
+        if (drv.el && drv.el.isConnected) return drv.el;
+        const host = document.querySelector('#tab-asio .page-scroll-inner'); if (!host) return null;
+        const d = document.createElement('div');
+        d.id = 'rt-drivers-live'; d.className = 'glass-panel p-3.5 rounded-xl wing-bezel font-mono space-y-2';
+        d.innerHTML = `<div class="flex flex-wrap justify-between items-center gap-2 pb-2 border-b border-white/10">
+            <div class="flex items-center gap-2.5"><div class="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400"><i class="fa-solid fa-tower-broadcast"></i></div>
+            <div><h3 class="text-xs font-black text-white font-wing tracking-wider uppercase">DAC &amp; OS DRIVER SOURCES &bull; REAL TIME</h3>
+            <p class="text-[7.5px] text-slate-400">EVERY AUDIO DEVICE OF THIS COMPUTER AS IT IS NOW: ENABLED / READING / WRITING, LEVEL, DRIVER</p></div></div>
+            <div class="flex items-center gap-2"><span id="rt-drv-pill" class="px-2 py-0.5 rounded text-[7.5px] font-bold border bg-emerald-500/15 text-emerald-400 border-emerald-500/40">LIVE</span>
+            <button id="rt-drv-scan" class="px-2.5 py-1 rounded bg-amber-500/20 text-amber-400 border border-amber-500/40 text-[7.5px] font-black uppercase hover:bg-amber-500 hover:text-black">SCAN NOW</button>
+            <button id="rt-drv-all" class="px-2.5 py-1 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[7.5px] font-black uppercase hover:bg-emerald-500 hover:text-black">ENABLE ALL</button></div></div>
+            <div id="rt-drv-rows" class="space-y-1"></div>`;
+        host.insertBefore(d, host.firstChild);
+        $('rt-drv-scan').onclick = () => { const l = LS(); if (l) l.scan(); };
+        $('rt-drv-all').onclick = () => { const l = LS(); if (l) l.ensureCtx().then(() => { l.enableAll(false); }); };
+        return (drv.el = d);
+    }
+    function drvKey(i) { const l = LS(), e = (l && l.cfg.enabled[i.key]) || {}, m = l.ioMode(i), st = l.status[i.key] || {}, ws = l.status['w:' + i.key] || {}; return [i.key, i.name, !!e.read, !!e.write, m.label, st.text, st.err, ws.text, ws.err, l.caps.has(i.key), l.writes.has(i.key)].join('~'); }
+    function renderDrv(now) {
+        if (!visible('asio')) return;
+        const el = ensureDrv(), l = LS(); if (!el || !l) return;
+        const rows = $('rt-drv-rows'), list = l.interfaces || [];
+        const sig = list.map(drvKey).join('|');
+        if (sig !== drv.sig) {
+            drv.sig = sig;
+            rows.innerHTML = list.length ? list.map((i, n) => {
+                const e = l.cfg.enabled[i.key] || {}, m = l.ioMode(i), rs = l.status[i.key], ws = l.status['w:' + i.key];
+                const chips = (i.apiNames || []).filter((a, k, arr) => arr.indexOf(a) === k).map(a => `<span class="px-1 py-0.5 rounded text-[6.5px] font-black ${/asio/i.test(a) ? 'bg-amber-400 text-black' : 'bg-white/10 text-slate-300'}">${esc(/wasapi/i.test(a) ? 'WASAPI' : /direct/i.test(a) ? 'DirectSound' : a)}</span>`).join(' ');
+                const mode = m.write && !m.read ? 'bg-purple-500/20 text-purple-300' : m.read && !m.write ? 'bg-cyan-500/20 text-cyan-300' : 'bg-emerald-500/20 text-emerald-300';
+                const tg = (what, on, ok) => `<button data-i="${n}" data-w="${what}" ${ok ? '' : 'disabled'} class="rt-drv-tog px-2 py-0.5 rounded font-black text-[7px] ${on ? (what === 'read' ? 'bg-emerald-500 text-black' : 'bg-amber-400 text-black') : 'bg-white/5 text-slate-400 border border-white/10'} ${ok ? '' : 'opacity-30'}" aria-pressed="${!!on}">${what === 'read' ? 'READ' : 'WRITE'} ${on ? 'ON' : 'OFF'}</button>`;
+                return `<div class="grid grid-cols-1 md:grid-cols-[1.5fr_auto_1.1fr_1fr] items-center gap-2 bg-black/50 border border-white/10 rounded px-2 py-1.5 text-[7.5px]" data-n="${n}">
+                    <div class="min-w-0"><div class="font-black text-white truncate">${esc(i.name)}</div><div class="text-slate-500">${chips} <span class="px-1 py-0.5 rounded text-[6.5px] font-black ${mode}">${esc(m.label)}</span> ${i.inputs ? i.inputs + ' in' : ''} ${i.outputs ? i.outputs + ' out' : ''}</div></div>
+                    <div class="flex gap-1">${tg('read', e.read, m.read)}${tg('write', e.write, m.write && !!l.bridgeUrl)}</div>
+                    <div class="min-w-0 truncate ${(rs && rs.err) || (ws && ws.err) ? 'text-rose-400' : 'text-slate-300'}">${esc(rs ? 'READ: ' + rs.text : 'READ: idle')}${ws ? ' • ' + esc('WRITE: ' + ws.text) : ''}</div>
+                    <div class="flex items-center gap-1.5"><span class="h-[6px] flex-1 bg-white/5 rounded overflow-hidden"><i class="block h-full rt-dl"></i></span><span class="w-14 text-right rt-dd text-slate-300">-INF</span></div></div>`;
+            }).join('') : '<div class="text-[8px] text-slate-500">No audio device found yet. It is detected automatically when you plug one in.</div>';
+            rows.querySelectorAll('.rt-drv-tog').forEach(b => { b.onclick = () => { const i = list[Number(b.dataset.i)], what = b.dataset.w; if (!i) return; const cur = (l.cfg.enabled[i.key] || {})[what]; if (what === 'read' && !cur) { l.cfg.enabled[i.key] = Object.assign({ read: false, write: false }, l.cfg.enabled[i.key], { read: true, auto: false }); l.persist(); l.ensureCtx().then(() => l.startRead(i, { userClick: true, music: !!i.loopback })); l.render(); } else l.setEnabled(i.key, what, !cur); }; });
+        }
+        // levels: what the device sends in (read) or, for an output / DAC, the master mix it receives (write)
+        const mst = rt.master, pill = $('rt-drv-pill');
+        if (pill) { pill.textContent = 'LIVE • ' + (l.bridgeUrl ? 'SERVER' : 'BROWSER') + ' • ' + list.length + ' DEVICE' + (list.length === 1 ? '' : 'S'); }
+        rows.querySelectorAll('[data-n]').forEach(r => {
+            const i = list[Number(r.dataset.n)]; if (!i) return;
+            let lv = 0;
+            const m = rt.st[i.key];
+            if (m) lv = Math.max(m.L.pk, m.R.pk); else if (l.writes.has(i.key) && mst) lv = Math.max(mst.L.pk, mst.R.pk);
+            const bar = r.querySelector('.rt-dl'), tx = r.querySelector('.rt-dd');
+            if (bar) { bar.style.width = pct(dbOf(lv)) + '%'; bar.style.background = lv > 0.89 ? '#ef4444' : lv > 0.5 ? '#fbbf24' : '#10b981'; }
+            if (tx) tx.textContent = fmtDb(dbOf(lv));
+        });
+        osCards();
+    }
+    // the OS cards used to show invented numbers (192 kHz, 0.67 ms, 32 IN / 32 OUT): the card of this PC shows the real ones, the others say so
+    function osCards() {
+        const c = window.state && window.state.ctx, l = LS(); if (!c) return;
+        const plat = (l && l.bridgePlatform) || (/Win/i.test(navigator.platform) ? 'win32' : /Mac/i.test(navigator.platform) ? (navigator.maxTouchPoints > 1 ? 'ios' : 'darwin') : /Android/i.test(navigator.userAgent) ? 'android' : /Linux/i.test(navigator.platform) ? 'linux' : '');
+        const card = { win32: 'WINDOWS DRIVER', darwin: 'macOS COREAUDIO', ios: 'iOS AUDIOSESSION', linux: 'LINUX ALSA', android: 'ANDROID' };
+        const ins = l ? l.interfaces.filter(i => i.inputs > 0).length : 0, outs = l ? l.interfaces.filter(i => i.outputs > 0).length : 0, open = l ? l.caps.size + l.writes.size : 0;
+        const lat = ((c.baseLatency || 0) + (c.outputLatency || 0)) * 1000;
+        document.querySelectorAll('#tab-asio .bg-black\\/70').forEach(cardEl => {
+            const t = (cardEl.textContent || '').toUpperCase();
+            const mine = Object.keys(card).find(k => t.indexOf(card[k].toUpperCase()) >= 0); if (!mine) return;
+            const here = mine === plat;
+            cardEl.querySelectorAll('.flex.justify-between').forEach(row => {
+                const spans = row.querySelectorAll('span'); if (spans.length < 2) return;
+                const lab = spans[0].textContent.trim(), val = spans[1];
+                const set = txt => { if (val.textContent !== txt) val.textContent = txt; };
+                if (lab === 'CLOCK:') set(here ? (c.sampleRate / 1000) + ' kHz • Web Audio (32-bit float)' : 'not this computer');
+                else if (lab === 'LATENCY:') set(here ? (lat > 0 ? lat.toFixed(1) + ' ms (Web Audio output)' : (c.baseLatency * 1000).toFixed(1) + ' ms (engine)') : 'not this computer');
+                else if (lab === 'DMA STREAM:') set(here ? ins + ' IN / ' + outs + ' OUT devices • ' + open + ' stream' + (open === 1 ? '' : 's') + ' open' : 'not this computer');
+            });
+        });
+    }
+    rt.on(renderDrv);
+    // the DAC list: real outputs of this computer instead of invented "WING Live USB ASIO 192 kHz" entries
+    function fixDacList() {
+        const sel = $('asio-dac-select'), l = LS(); if (!sel || !l) return;
+        const outs = (l.interfaces || []).filter(i => i.outputs > 0 && !i.loopback);
+        const sig = outs.map(i => i.key + i.name).join('|');
+        if (sel._rtSig === sig && (sel.querySelector('optgroup[data-rt]') || !outs.length)) return; sel._rtSig = sig;
+                sel.querySelectorAll('optgroup[data-rt]').forEach(x => x.remove());
+        if (outs.length) {
+            const og = document.createElement('optgroup'); og.label = 'DAC & OS DRIVER OUTPUTS (this computer, live)'; og.setAttribute('data-rt', '1');
+            outs.forEach(i => { const o = document.createElement('option'); o.value = 'os:' + i.key; o.textContent = i.name + ' • ' + (i.apiNames || []).filter((a, k, arr) => arr.indexOf(a) === k).join(' / '); og.appendChild(o); });
+            sel.insertBefore(og, sel.firstChild);
+        }
+    }
+    const origDev = window.handleAudioDeviceSelect;
+    window.handleAudioDeviceSelect = async function (id) {
+        if (typeof id === 'string' && id.indexOf('os:') === 0) {
+            const l = LS(), key = id.slice(3), i = l && l.interfaces.find(x => x.key === key);
+            if (!i) return;
+            await l.ensureCtx(); l.setEnabled(key, 'write', true);
+            const b = $('hw-soundcard-text'); if (b) b.textContent = i.name.length > 20 ? i.name.slice(0, 18) + '...' : i.name;
+            return window.notify('Output: ' + i.name + ' (WRITE enabled)', 'headphones');
+        }
+        return origDev ? origDev.apply(this, arguments) : undefined;
+    };
+    // "scan peripherals" announced a USB driver and a Bluetooth device that did not exist: it now scans for real
+    window.scanHardwarePeripherals = async function () {
+        const l = LS();
+        if (l) await l.scan();
+        let bt = null; try { bt = await btLoad(true); } catch (e) { /* no server */ }
+        const n = l ? l.interfaces.length : 0, nb = bt && bt.devices ? bt.devices.filter(d => d.connected).length : 0;
+        window.notify('Scanned: ' + n + ' audio device' + (n === 1 ? '' : 's') + (bt ? ', ' + nb + ' Bluetooth connected' : ''), 'microchip');
+    };
+    rt.on(() => { try { fixDacList(); } catch (e) { /* not ready */ } });
+    // LIVE SOURCES rebuilds its rows when anything changes: the drivers page follows at once
+    (function hook() { const l = LS(); if (!l) return setTimeout(hook, 300); if (l.renderRows && !l._rtHook) { l._rtHook = true; const o = l.renderRows; l.renderRows = function () { const r = o.apply(this, arguments); drv.sig = ''; return r; }; } })();
+
+    // ───────────────────────── BLUETOOTH page: paired devices and airwaves discovery, for real ─────────────────────────
+    const bt = { data: null, at: 0, scanning: false, near: [], web: [], err: '', sig: '', el: null };
+    const bridgeUrl = () => { const l = LS(); return l && l.bridgeUrl; };
+    async function btLoad(force) {
+        const b = bridgeUrl(); if (!b) { bt.data = null; return null; }
+        const r = await fetch(b + '/api/bluetooth' + (force ? '?force=1' : ''), { cache: 'no-store' });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        bt.data = await r.json(); bt.at = Date.now(); return bt.data;
+    }
+    async function btAct(body) {
+        const b = bridgeUrl(); if (!b) throw new Error('start PC mode (local server) for this');
+        const r = await fetch(b + '/api/bluetooth', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Mixer-Action': 'bluetooth' }, body: JSON.stringify(body) });
+        const j = await r.json().catch(() => ({})); if (!r.ok || j.ok === false) throw new Error(j.error || ('HTTP ' + r.status)); return j;
+    }
+    function ensureBt() {
+        if (bt.el && bt.el.isConnected) return bt.el;
+        const host = document.querySelector('#tab-bluetooth .page-scroll-inner'); if (!host) return null;
+        const d = document.createElement('div');
+        d.id = 'rt-bt-live'; d.className = 'glass-panel p-3.5 rounded-xl wing-bezel space-y-2';
+        d.innerHTML = `<div class="flex flex-wrap justify-between items-center gap-2 pb-2 border-b border-white/10">
+            <div class="flex items-center gap-2.5"><div class="w-8 h-8 rounded-lg bg-blue-500/20 border border-blue-500/40 flex items-center justify-center text-blue-400"><i class="fa-brands fa-bluetooth-b"></i></div>
+            <div><h3 class="text-xs font-black text-white font-wing tracking-wider uppercase">PAIRED DEVICES &amp; AIRWAVES DISCOVERY &bull; REAL TIME</h3>
+            <p id="rt-bt-sub" class="text-[7.5px] text-slate-400">READING THE BLUETOOTH STACK OF THIS COMPUTER ...</p></div></div>
+            <div class="flex flex-wrap items-center gap-2"><span id="rt-bt-pill" class="px-2 py-0.5 rounded text-[7.5px] font-bold border bg-amber-500/15 text-amber-400 border-amber-500/40">...</span>
+            <button id="rt-bt-scan" class="px-2.5 py-1 rounded bg-cyan-400 text-black font-black text-[7.5px] uppercase hover:bg-cyan-300"><i class="fa-solid fa-satellite-dish mr-1"></i>DISCOVER AIRWAVES</button>
+            <button id="rt-bt-web" class="px-2.5 py-1 rounded bg-purple-500/20 text-purple-300 border border-purple-500/40 font-black text-[7.5px] uppercase hover:bg-purple-500 hover:text-black">DISCOVER IN BROWSER</button>
+            <button id="rt-bt-set" class="hidden px-2.5 py-1 rounded bg-white/10 text-slate-200 border border-white/15 font-black text-[7.5px] uppercase hover:bg-white/20">OPEN BLUETOOTH SETTINGS</button></div></div>
+            <div class="text-[7px] font-black text-slate-500 uppercase tracking-widest">PAIRED / CONNECTED</div><div id="rt-bt-paired" class="grid grid-cols-1 lg:grid-cols-2 gap-1.5"></div>
+            <div class="text-[7px] font-black text-slate-500 uppercase tracking-widest pt-1">NEARBY (AIRWAVES)</div><div id="rt-bt-near" class="grid grid-cols-1 lg:grid-cols-2 gap-1.5"></div>
+            <div id="rt-bt-msg" class="text-[7.5px] text-slate-400"></div>`;
+        host.insertBefore(d, host.children[1] || null);
+        $('rt-bt-scan').onclick = () => btScan();
+        $('rt-bt-web').onclick = () => btWeb();
+        $('rt-bt-set').onclick = () => btAct({ action: 'settings' }).then(() => window.notify('Bluetooth settings opened', 'bluetooth')).catch(e => window.notify(e.message, 'triangle-exclamation'));
+        return (bt.el = d);
+    }
+    function btRow(d, nearby) {
+        const dot = d.connected ? 'bg-emerald-400 shadow-[0_0_8px_#10b981] animate-pulse' : d.paired ? 'bg-blue-400' : 'bg-slate-600';
+        const rssi = d.rssi != null ? ` • ${d.rssi} dBm` : '', batt = d.battery != null ? ` • ${d.battery}%` : '';
+        const can = bt.data && bt.data.pairSupported && /^[0-9A-F:]{17}$/i.test(d.address || '');
+        const btn = can ? `<button data-a="${esc(d.address)}" data-act="${d.connected ? 'disconnect' : (d.paired ? 'connect' : 'pair')}" class="rt-bt-act px-2.5 py-1 rounded font-black text-[7.5px] uppercase ${d.connected ? 'bg-red-500/20 text-red-300 border border-red-500/40' : 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'}">${d.connected ? 'DISCONNECT' : (d.paired ? 'CONNECT' : 'PAIR')}</button>` : '';
+        return `<div class="bg-black/60 p-2 rounded border ${d.connected ? 'border-cyan-500/60' : 'border-white/10'} flex items-center justify-between gap-2 text-[8px]"><div class="flex items-center gap-2 min-w-0"><span class="w-2.5 h-2.5 rounded-full shrink-0 ${dot}"></span><div class="min-w-0"><span class="text-white font-bold block truncate text-[9px]">${esc(d.name || d.address)}${d.audio ? ' <i class="fa-solid fa-headphones text-cyan-400"></i>' : ''}</span><span class="text-slate-400">${d.connected ? 'CONNECTED' : d.paired ? 'PAIRED' : 'IN RANGE'}${esc(rssi + batt)}${d.address ? ' • ' + esc(d.address) : ''}${d.src ? ' • ' + esc(d.src) : ''}</span></div></div>${btn}</div>`;
+    }
+    function btRender() {
+        if (!visible('bluetooth')) return;
+        const el = ensureBt(); if (!el) return;
+        const l = LS(), d = bt.data;
+        // audio endpoints that the OS audio list shows as Bluetooth (A2DP / hands-free): connected right now, with their own level
+        const eps = (l && l.interfaces || []).filter(i => i.bluetooth);
+        const paired = d ? d.devices.filter(x => x.paired || x.connected) : [];
+        const near = (d ? d.devices.filter(x => !x.paired && !x.connected) : []).concat(bt.web.filter(w => !(d && d.devices.some(x => x.name === w.name))));
+        const sig = JSON.stringify([d && d.adapter, paired.map(x => [x.address, x.connected, x.rssi, x.battery]), near.map(x => [x.address || x.name, x.rssi]), eps.map(e => e.key), bt.scanning, bt.err, !!bridgeUrl()]);
+        if (sig !== bt.sig) {
+            bt.sig = sig;
+            const pill = $('rt-bt-pill'), sub = $('rt-bt-sub');
+            if (!bridgeUrl()) { pill.textContent = 'WEB MODE'; pill.className = 'px-2 py-0.5 rounded text-[7.5px] font-bold border bg-amber-500/15 text-amber-400 border-amber-500/40'; sub.textContent = 'START PC MODE TO LIST THE PAIRED DEVICES OF THIS COMPUTER • "DISCOVER IN BROWSER" WORKS IN CHROME / EDGE'; }
+            else if (d && d.adapter && d.adapter.present) { pill.textContent = d.adapter.powered ? 'ADAPTER ON • ' + d.method.toUpperCase() : 'ADAPTER OFF'; pill.className = 'px-2 py-0.5 rounded text-[7.5px] font-bold border ' + (d.adapter.powered ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/40' : 'bg-rose-500/15 text-rose-400 border-rose-500/40'); sub.textContent = paired.filter(x => x.connected).length + ' CONNECTED • ' + paired.length + ' PAIRED • ' + near.length + ' IN RANGE • UPDATED LIVE'; }
+            else { pill.textContent = 'NO ADAPTER'; pill.className = 'px-2 py-0.5 rounded text-[7.5px] font-bold border bg-rose-500/15 text-rose-400 border-rose-500/40'; sub.textContent = 'NO BLUETOOTH ADAPTER WAS FOUND ON THIS COMPUTER (OR IT IS TURNED OFF)'; }
+            $('rt-bt-set').classList.toggle('hidden', !(d && d.settingsSupported));
+            const sc = $('rt-bt-scan'); sc.innerHTML = bt.scanning ? '<i class="fa-solid fa-spinner fa-spin mr-1"></i>SCANNING ...' : '<i class="fa-solid fa-satellite-dish mr-1"></i>DISCOVER AIRWAVES'; sc.disabled = bt.scanning;
+            $('rt-bt-paired').innerHTML = paired.length ? paired.map(x => btRow(x)).join('') + eps.filter(e => !paired.some(p => p.name && e.name && e.name.toLowerCase().indexOf(p.name.toLowerCase()) >= 0)).map(e => btRow({ name: e.name, connected: true, paired: true, audio: true, src: 'audio endpoint' })).join('') : (eps.length ? eps.map(e => btRow({ name: e.name, connected: true, paired: true, audio: true, src: 'audio endpoint' })).join('') : '<div class="text-slate-500 text-[8px]">No paired device found.</div>');
+            $('rt-bt-near').innerHTML = near.length ? near.map(x => btRow(x, true)).join('') : '<div class="text-slate-500 text-[8px]">Nothing found yet: press DISCOVER AIRWAVES.</div>';
+            $('rt-bt-msg').textContent = bt.err || '';
+            el.querySelectorAll('.rt-bt-act').forEach(b => { b.onclick = () => btDo(b.dataset.act, b.dataset.a, b); });
+            // the simulated device list of the old page is replaced by the real one
+            const old = $('ble-device-list');
+            if (old) { window.bleState.devices = paired.concat(near).map(x => ({ id: x.address || x.name, name: x.name || x.address, desc: (x.connected ? 'CONNECTED' : x.paired ? 'PAIRED' : 'IN RANGE'), rssi: x.rssi != null ? x.rssi + 'dBm' : 'n/a', battery: x.battery != null ? x.battery + '%' : 'n/a', connected: !!x.connected, simulated: false })); if (window.renderBLEDeviceList) window.renderBLEDeviceList(); }
+        }
+    }
+    async function btDo(act, address, btn) {
+        if (btn) btn.disabled = true;
+        try { const r = await btAct({ action: act, address }); window.notify((act === 'disconnect' ? 'Disconnected ' : act === 'pair' ? 'Paired ' : 'Connected ') + address + (r.connected ? ' (connected)' : ''), 'bluetooth'); }
+        catch (e) { bt.err = e.message; window.notify('Bluetooth: ' + e.message, 'triangle-exclamation'); }
+        await btLoad(true).catch(() => {}); bt.sig = '';
+    }
+    async function btScan() {
+        if (bt.scanning) return;
+        bt.scanning = true; bt.err = ''; bt.sig = '';
+        try {
+            if (!bridgeUrl()) throw new Error('start PC mode (the local server) to scan from the computer, or use DISCOVER IN BROWSER');
+            const r = await btAct({ action: 'scan', seconds: 6 });
+            if (r.supported === false) { bt.err = r.hint; window.notify('Scanning is not available from the local server on this system', 'bluetooth'); }
+            else { bt.data = r; window.notify('Airwaves scanned: ' + (r.nearby || 0) + ' device' + (r.nearby === 1 ? '' : 's') + ' in range', 'bluetooth'); }
+        } catch (e) { bt.err = e.message; window.notify('Bluetooth: ' + e.message, 'triangle-exclamation'); }
+        bt.scanning = false; bt.sig = '';
+    }
+    async function btWeb() {
+        if (!navigator.bluetooth) { bt.err = 'This browser has no Web Bluetooth (use Chrome or Edge on https / localhost).'; bt.sig = ''; return window.notify(bt.err, 'triangle-exclamation'); }
+        try {
+            const dev = await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: ['battery_service'] });
+            const rec = { name: dev.name || dev.id, address: '', paired: false, connected: !!(dev.gatt && dev.gatt.connected), rssi: null, battery: null, audio: false, src: 'browser' };
+            bt.web = bt.web.filter(w => w.name !== rec.name).concat([rec]);
+            if (typeof dev.watchAdvertisements === 'function') {        // real-time signal strength of the chosen device
+                dev.addEventListener('advertisementreceived', ev => { rec.rssi = ev.rssi; bt.sig = ''; });
+                dev.watchAdvertisements().catch(() => {});
+            }
+            window.notify('Found by the browser: ' + rec.name, 'bluetooth');
+        } catch (e) { bt.err = e.name === 'NotFoundError' ? 'No device was chosen.' : e.message; window.notify('Web Bluetooth: ' + bt.err, 'bluetooth'); }
+        bt.sig = '';
+    }
+    window.scanBluetoothAirwaves = btScan;
+    window.scanBluetoothDevices = btScan;
+    window.pairHardwareBluetooth = btWeb;
+    window.toggleBLEDevice = function (id) { const d = (bt.data && bt.data.devices || []).find(x => x.address === id || x.name === id); if (d && /^[0-9A-F:]{17}$/i.test(d.address)) btDo(d.connected ? 'disconnect' : (d.paired ? 'connect' : 'pair'), d.address); else window.notify('Pairing is done in the system Bluetooth settings on this computer', 'bluetooth'); };
+    window.bleState = window.bleState || { devices: [], scanning: false };
+    window.bleState.devices = [];           // no simulated devices
+    document.addEventListener('DOMContentLoaded', () => { if (window.renderBLEDeviceList) window.renderBLEDeviceList(); });
+    if (document.readyState !== 'loading' && window.renderBLEDeviceList) window.renderBLEDeviceList();
+    rt.on(btRender);
+    // paired devices are polled while the page is open (every 3 s) and once a minute otherwise
+    let btBusy = false;
+    setInterval(async () => {
+        if (btBusy || document.hidden) return;
+        if (!(visible('bluetooth') || Date.now() - bt.at > 60000)) return;
+        if (!bridgeUrl() || (visible('bluetooth') && Date.now() - bt.at < 2800)) return;
+        btBusy = true; try { await btLoad(false); } catch (e) { /* server busy */ } btBusy = false;
+    }, 1000);
+    document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('#nav-bluetooth'); if (b) bt.at = 0; });
+})();
+
+    </script>
+    <script id="rt-lufs">
+/* REAL LOUDNESS METER (LUFS page): ITU-R BS.1770-4 / EBU R128 measured on the real master output (after the master limiter).
+   K-weighting (high shelf + high-pass, any sample rate), momentary 400 ms, short-term 3 s, gated integrated (-70 LUFS absolute / -10 LU relative),
+   loudness range (-70 / -20 LU gates, 10th..95th percentile), 4x oversampled true peak, and the real gain reduction of the master limiter.
+   The LUFS page used to show fixed numbers; every value here is computed from the audio that leaves the mixer. */
+(function () {
+    'use strict';
+    const $ = id => document.getElementById(id);
+    const rt = () => window.rtEngine;
+    const L = window.lufsMeter = {
+        fs: 48000, ctx: null, node: null, mode: '',
+        momentary: -Infinity, shortTerm: -Infinity, integrated: -Infinity, lra: 0, truePeak: -Infinity, samplePeak: -Infinity,
+        blocks: [], shorts: [], sub: [], blockSum: 0, subFill: 0, subAcc: 0, subN: 0, subSize: 4800, since: 0, running: false, samples: 0,
+    };
+    const lk = ms => (ms > 0 ? -0.691 + 10 * Math.log10(ms) : -Infinity);
+    const meanLoud = a => { let s = 0; for (let i = 0; i < a.length; i++) s += a[i]; return a.length ? lk(s / a.length) : -Infinity; };
+    L.setRate = function (fs) {
+        L.fs = fs; L.subSize = Math.round(fs * 0.1);
+        const pre = (f0, G, Q) => { const K = Math.tan(Math.PI * f0 / fs), Vh = Math.pow(10, G / 20), Vb = Math.pow(Vh, 0.4996667741545416), a0 = 1 + K / Q + K * K;
+            return { b0: (Vh + Vb * K / Q + K * K) / a0, b1: 2 * (K * K - Vh) / a0, b2: (Vh - Vb * K / Q + K * K) / a0, a1: 2 * (K * K - 1) / a0, a2: (1 - K / Q + K * K) / a0 }; };
+        const hp = (f0, Q) => { const K = Math.tan(Math.PI * f0 / fs), a0 = 1 + K / Q + K * K; return { b0: 1, b1: -2, b2: 1, a1: 2 * (K * K - 1) / a0, a2: (1 - K / Q + K * K) / a0 }; };
+        L.c1 = pre(1681.974450955533, 3.999843853973347, 0.7071752369554196);
+        L.c2 = hp(38.13547087602444, 0.5003270373238773);
+        L.z = [0, 0, 0, 0, 0, 0, 0, 0];                       // two channels x (two stages x two states)
+        L.h = [new Float32Array(11), new Float32Array(11)];   // true-peak history per channel
+    };
+    // 4x oversampling: 12-tap windowed sinc, phases 1/4, 2/4, 3/4 (phase 0 is the sample itself)
+    L.tp = [1, 2, 3].map(p => {
+        const f = p / 4, c = [];
+        for (let k = -5; k <= 6; k++) { const t = f - k, s = t === 0 ? 1 : Math.sin(Math.PI * t) / (Math.PI * t), w = 0.5 + 0.5 * Math.cos(Math.PI * t / 6); c.push(s * w); }
+        const sum = c.reduce((a, b) => a + b, 0);
+        return c.map(v => v / sum);
+    });
+    L.reset = function () {
+        L.blocks = []; L.shorts = []; L.integrated = -Infinity; L.lra = 0; L.truePeak = -Infinity; L.samplePeak = -Infinity;
+    };
+    // one block of master audio (left / right) -> K-weighted energy per 100 ms
+    L.feed = function (l, r) {
+        const n = l.length, ch = [l, r], c1 = L.c1, c2 = L.c2, z = L.z;
+        let e = 0, pk = 0;
+        for (let c = 0; c < 2; c++) {
+            const x = ch[c], o = c * 4, h = L.h[c], buf = new Float32Array(11 + n);
+            buf.set(h); buf.set(x, 11);
+            // true peak: original samples + 3 interpolated phases
+            for (let m = 5; m + 6 < buf.length; m++) {
+                const a = buf[m] < 0 ? -buf[m] : buf[m]; if (a > pk) pk = a;
+                for (let p = 0; p < 3; p++) { const k = L.tp[p]; let s = 0; for (let j = 0; j < 12; j++) s += buf[m - 5 + j] * k[j]; if (s < 0) s = -s; if (s > pk) pk = s; }
+            }
+            h.set(buf.subarray(buf.length - 11));
+            // K-weighting (direct form II transposed)
+            let a1s = z[o], a2s = z[o + 1], b1s = z[o + 2], b2s = z[o + 3], sub = 0;
+            for (let i = 0; i < n; i++) {
+                const v = x[i];
+                const y1 = c1.b0 * v + a1s; a1s = c1.b1 * v - c1.a1 * y1 + a2s; a2s = c1.b2 * v - c1.a2 * y1;
+                const y2 = c2.b0 * y1 + b1s; b1s = c2.b1 * y1 - c2.a1 * y2 + b2s; b2s = c2.b2 * y1 - c2.a2 * y2;
+                e += y2 * y2;
+            }
+            z[o] = a1s; z[o + 1] = a2s; z[o + 2] = b1s; z[o + 3] = b2s; void sub;
+        }
+        // distribute the energy of this block into 100 ms sub-blocks (blocks are shorter than a sub-block in practice)
+        L.subAcc += e; L.subN += n; L.samples += n;
+        const tpDb = pk > 0 ? 20 * Math.log10(pk) : -Infinity;
+        if (tpDb > L.truePeak) L.truePeak = tpDb;
+        if (L.subN >= L.subSize) {
+            const ms = L.subAcc / L.subN;                      // L + R, both with weight 1.0
+            L.subAcc = 0; L.subN = 0;
+            L.sub.push(ms); if (L.sub.length > 30) L.sub.shift();
+            if (L.sub.length >= 4) {
+                const last4 = L.sub.slice(-4), m = last4.reduce((a, b) => a + b, 0) / 4;
+                L.momentary = lk(m);
+                L.blocks.push(m); if (L.blocks.length > 216000) L.blocks.shift();     // 6 hours
+            } else L.momentary = lk(ms);
+            if (L.sub.length >= 30) {
+                const s = L.sub.reduce((a, b) => a + b, 0) / 30;
+                L.shortTerm = lk(s); L.shorts.push(L.shortTerm); if (L.shorts.length > 216000) L.shorts.shift();
+            } else L.shortTerm = meanLoud(L.sub);
+            L.gate();
+        }
+    };
+    L.gate = function () {
+        // integrated: absolute gate -70, then relative gate -10 LU below the mean of the blocks that passed
+        const abs = L.blocks.filter(b => lk(b) > -70);
+        if (!abs.length) { L.integrated = -Infinity; }
+        else {
+            const rel = meanLoud(abs) - 10, pass = abs.filter(b => lk(b) > rel);
+            L.integrated = pass.length ? meanLoud(pass) : -Infinity;
+        }
+        // loudness range from the short-term values (absolute gate -70, relative gate -20, 10th..95th percentile)
+        const sa = L.shorts.filter(v => v > -70);
+        if (sa.length > 1) {
+            let s = 0; sa.forEach(v => { s += Math.pow(10, (v + 0.691) / 10); });
+            const rel = -0.691 + 10 * Math.log10(s / sa.length) - 20, v = sa.filter(x => x > rel).sort((a, b) => a - b);
+            L.lra = v.length > 1 ? Math.max(0, v[Math.min(v.length - 1, Math.floor(0.95 * (v.length - 1) + 0.5))] - v[Math.floor(0.10 * (v.length - 1) + 0.5)]) : 0;
+        } else L.lra = 0;
+    };
+    // tap the master output
+    const WORKLET = `class P extends AudioWorkletProcessor{constructor(){super();this.l=new Float32Array(2048);this.r=new Float32Array(2048);this.n=0}
+process(i){const x=i[0];if(!x||!x[0])return true;const a=x[0],b=x[1]||x[0];for(let k=0;k<a.length;k++){this.l[this.n]=a[k];this.r[this.n]=b[k];if(++this.n===2048){this.port.postMessage({l:this.l,r:this.r});this.l=new Float32Array(2048);this.r=new Float32Array(2048);this.n=0}}return true}}
+registerProcessor('am-lufs',P)`;
+    async function attach() {
+        const st = window.state, c = st && st.ctx, n = st && st.nodes, lim = n && n.masterLimiter;
+        if (!c || !lim || !rt()) return;
+        if (L.ctx === c && L.src === lim) return;
+        if (L.pending === c) return;
+        L.ctx = c; L.src = lim; L.setRate(c.sampleRate); L.sub = []; L.subAcc = 0; L.subN = 0;
+        try { if (L.node) { L.node.disconnect(); if (L.node.port) L.node.port.onmessage = null; } } catch (e) { /* already gone */ }
+        L.node = null; L.mode = '';
+        const sink = rt().sink();
+        try {
+            if (c.audioWorklet && window.isSecureContext !== false) {
+                L.pending = c;
+                const url = URL.createObjectURL(new Blob([WORKLET], { type: 'application/javascript' }));
+                try { await c.audioWorklet.addModule(url); } finally { URL.revokeObjectURL(url); }
+                L.pending = null;
+                if (L.ctx !== c) return;
+                const w = new AudioWorkletNode(c, 'am-lufs', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1], channelCount: 2, channelCountMode: 'explicit' });
+                w.port.onmessage = e => L.feed(e.data.l, e.data.r);
+                lim.connect(w); w.connect(sink); L.node = w; L.mode = 'worklet';
+                return;
+            }
+        } catch (e) { L.pending = null; /* no worklet here: use the script processor below */ }
+        try {
+            const sp = c.createScriptProcessor(4096, 2, 2);
+            sp.onaudioprocess = e => L.feed(new Float32Array(e.inputBuffer.getChannelData(0)), new Float32Array(e.inputBuffer.getChannelData(e.inputBuffer.numberOfChannels > 1 ? 1 : 0)));
+            lim.connect(sp); sp.connect(sink); L.node = sp; L.mode = 'script';
+        } catch (e) { L.mode = 'none'; }
+    }
+    const fmt = (v, u) => (isFinite(v) && v > -90 ? v.toFixed(1) + ' ' + u : '-INF ' + u);
+    function paint() {
+        const set = (id, t) => { const e = $(id); if (e && e.textContent !== t) e.textContent = t; };
+        const tab = $('tab-lufs'); if (!tab || tab.classList.contains('tab-hidden')) return;
+        set('lufs-live-val', isFinite(L.integrated) ? L.integrated.toFixed(1) + ' LUFS' : '-- LUFS');
+        set('lufs-short-term', fmt(L.shortTerm, 'LUFS'));
+        set('lufs-momentary', fmt(L.momentary, 'LUFS'));
+        set('lufs-true-peak', fmt(L.truePeak, 'dBTP'));
+        set('lufs-lra-val', L.lra.toFixed(1) + ' LU');
+        const tg = window.state && window.state.lufsTarget != null ? window.state.lufsTarget : -14;
+        set('lufs-target-disp', 'PROGRAM TARGET: ' + tg.toFixed(1) + ' LUFS' + (isFinite(L.integrated) ? ' (' + (L.integrated - tg >= 0 ? '+' : '') + (L.integrated - tg).toFixed(1) + ' LU)' : ''));
+        const note = $('lufs-lra-note');
+        if (note) set('lufs-lra-note', !isFinite(L.integrated) ? '(measuring)' : L.lra < 3 ? '(Very compressed)' : L.lra < 8 ? '(Dynamic Master)' : L.lra < 14 ? '(Wide)' : '(Very wide)');
+        const red = window.state && window.state.nodes && window.state.nodes.masterLimiter ? -window.state.nodes.masterLimiter.reduction : 0;
+        const bar = $('lufs-gr-bar'); if (bar) bar.style.width = Math.max(0, Math.min(100, (red || 0) / 12 * 100)).toFixed(1) + '%';
+        set('lufs-gr-val', (red > 0.05 ? '-' + red.toFixed(1) : '0.0') + ' dB');
+        const eng = window.lufsEngine;
+        if (eng) { eng.integrated = L.integrated; eng.shortTerm = L.shortTerm; eng.momentary = L.momentary; eng.lra = L.lra; eng.truePeakDbTp = L.truePeak; eng.gainReduction = red || 0; }
+        const tp = $('lufs-true-peak'); if (tp) tp.style.color = L.truePeak > -1 ? '#f43f5e' : '';
+        set('lufs-engine-note', L.mode === 'none' ? 'METER UNAVAILABLE (no audio engine)' : L.samples ? 'LIVE • ' + (L.fs / 1000).toFixed(1) + ' kHz' : 'WAITING FOR AUDIO ENGINE');
+    }
+    const wait = setInterval(() => { if (window.rtEngine) { clearInterval(wait); rt().on(() => { attach(); paint(); }); } }, 200);
+    document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('#lufs-card-int'); if (b) { L.reset(); if (window.notify) window.notify('Loudness meter reset (integrated, range, true peak)', 'rotate-left'); } });
+})();
+    </script>
+    <script id="rt-dyn">
+/* DYNAMICS and GATE pages in real time.
+   - COMPRESSOR: the page controls (threshold, ratio, knee, attack, release) now drive the master compressor of the audio path, the gain reduction meter shows its real
+     reduction, and the transfer curve carries a live dot at the real input level.
+   - GATE / EXPANDER: live detector on the master mix: input level, open / hold / closed state with hysteresis, hold and release, attenuation of the selected mode, and a
+     live level marker on the transfer curve. */
+(function () {
+    'use strict';
+    const $ = id => document.getElementById(id);
+    const visible = id => { const t = $('tab-' + id); return !!t && !t.classList.contains('tab-hidden'); };
+    const dbOf = v => (v < 0.00001 ? -Infinity : 20 * Math.log10(v));
+    const set = (id, t) => { const e = $(id); if (e && e.textContent !== t) e.textContent = t; };
+    function boot() {
+        const D = window.studioDynamicsEngine, G = window.precisionNoiseGateEngine;
+        if (!window.rtEngine || !D || !G) return setTimeout(boot, 300);
+        const rt = window.rtEngine;
+
+        // the page controls reach the audio path
+        const map = { setThreshold: ['threshold', v => v], setRatio: ['ratio', v => v], setKnee: ['knee', v => v], setAttack: ['attack', v => v / 1000], setRelease: ['release', v => v / 1000] };
+        Object.keys(map).forEach(name => {
+            const orig = D[name]; if (typeof orig !== 'function') return;
+            D[name] = function () {
+                const r = orig.apply(this, arguments);
+                try {
+                    const c = window.state && window.state.nodes && window.state.nodes.masterCompressor, t = c && c[map[name][0]];
+                    const val = map[name][1](parseFloat(arguments[0]));
+                    if (t && isFinite(val)) t.setTargetAtTime(Math.max(t.minValue, Math.min(t.maxValue, val)), window.state.ctx.currentTime, 0.01);
+                } catch (e) { /* audio engine not started yet: the node takes the value on the next change */ }
+                return r;
+            };
+        });
+
+        // detector state
+        const g = { open: true, holdUntil: 0, atten: 0, lvl: -Infinity, inDb: -Infinity, grPrev: -1, key: '' };
+        const dot = (id, x, y, col) => { const cv = $(id); if (!cv) return; const c = cv.getContext('2d'); c.fillStyle = col; c.shadowColor = col; c.shadowBlur = 8; c.beginPath(); c.arc(x, y, 4, 0, 7); c.fill(); c.shadowBlur = 0; };
+
+        rt.on(now => {
+            const st = window.state, n = st && st.nodes;
+            if (!st || !st.ctx || !n || !n.masterGain) return;
+            const dyn = visible('dyn'), gate = visible('gate');
+            if (!dyn && !gate) return;
+            const tp = rt.tap(n.masterGain), a = rt.read(tp.l), b = rt.read(tp.r), pk = Math.max(a.pk, b.pk);
+            g.inDb = dbOf(pk);
+            if (dyn) {
+                const gr = n.masterCompressor ? Math.max(0, -n.masterCompressor.reduction) : 0;
+                D.gainReductionDb = gr;
+                set('comp-gr-num', (gr < 0.05 ? '' : '-') + gr.toFixed(1) + ' dB');
+                const m = $('comp-gr-meter'); if (m) m.style.width = Math.min(100, gr / 24 * 100).toFixed(1) + '%';
+                const key = (isFinite(g.inDb) ? Math.round(g.inDb * 2) : 'x') + '/' + Math.round(gr * 2) + '/' + D.threshold + D.ratio + D.knee;
+                if (key !== g.key) {
+                    g.key = key; D.renderCurve();
+                    if (isFinite(g.inDb)) { const w = $('comp-curve-canvas').width, h = $('comp-curve-canvas').height, i = Math.max(-60, g.inDb), o = Math.max(-60, i - gr); dot('comp-curve-canvas', (i + 60) / 60 * w, h - (o + 60) / 60 * h, '#38bdf8'); }
+                }
+            }
+            if (gate) {
+                const thr = G.threshold, floor = Math.abs(G.range), hyst = G.hysteresis || 0, lvl = g.inDb;
+                const openAt = lvl > thr, closeAt = lvl < thr - hyst;
+                if (G.mode === 'duck') g.open = !(lvl > thr);
+                else if (openAt) { g.open = true; g.holdUntil = now + (G.hold || 0); }
+                else if (closeAt && now > g.holdUntil) g.open = false;
+                let target = 0;
+                if (G.mode === 'gate') target = g.open ? 0 : floor;
+                else if (G.mode === 'exp2') target = lvl < thr ? Math.min(floor, thr - (isFinite(lvl) ? lvl : -80)) : 0;
+                else if (G.mode === 'exp4') target = lvl < thr ? Math.min(floor, 3 * (thr - (isFinite(lvl) ? lvl : -80))) : 0;
+                else if (G.mode === 'duck') target = lvl > thr ? floor : 0;
+                const rel = Math.max(10, G.release || 120), k = target > g.atten ? Math.min(1, 30 / Math.max(1, (G.attack || 0.2) + 30)) : Math.min(1, 30 / rel);
+                g.atten += (target - g.atten) * k;
+                G.attenuationDb = -g.atten; G.isOpen = g.atten < 3;
+                set('gate-attenuation-num', (g.atten < 0.05 ? '' : '-') + g.atten.toFixed(1) + ' dB');
+                const m = $('gate-attenuation-meter'); if (m) m.style.width = Math.min(100, g.atten / 80 * 100).toFixed(1) + '%';
+                const holding = G.mode === 'gate' && !openAt && g.open && now <= g.holdUntil;
+                const txt = G.mode === 'duck' ? (lvl > thr ? 'DUCKING (SIGNAL ABOVE THRESHOLD)' : 'OPEN (NO DUCK)') : holding ? 'HOLD (SIGNAL JUST DROPPED)' : g.atten < 3 ? 'OPEN (SIGNAL PASS)' : 'CLOSED (BELOW THRESHOLD)';
+                set('gate-state-badge', txt);
+                const bd = $('gate-state-badge'); if (bd) bd.className = (g.atten < 3 ? 'text-emerald-400' : 'text-rose-400') + ' font-bold';
+                const led = $('gate-status-led'); if (led) led.className = 'w-2 h-2 rounded-full inline-block ' + (g.atten < 3 ? 'bg-emerald-400' : 'bg-rose-500');
+                set('gate-hold-readout', 'LEVEL: ' + (isFinite(lvl) ? lvl.toFixed(1) : '-INF') + ' dB • HOLD: ' + (G.hold || 0) + 'ms');
+                const key = 'g' + (isFinite(lvl) ? Math.round(lvl) : 'x') + '/' + Math.round(g.atten) + G.threshold + G.range + G.mode;
+                if (key !== g.gkey) {
+                    g.gkey = key; G.renderCurve();
+                    if (isFinite(lvl)) { const cv = $('gate-curve-canvas'), w = cv.width, h = cv.height, i = Math.max(-80, lvl), o = Math.max(-80, i - g.atten); dot('gate-curve-canvas', (i + 80) / 80 * w, h - (o + 80) / 80 * h, '#38bdf8'); }
+                }
+            }
+        });
+    }
+    boot();
+})();
     </script>
 </body>
 </html>
