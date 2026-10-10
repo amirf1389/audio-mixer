@@ -1274,3 +1274,13 @@ test('windows native helpers: AudioDevices.exe output and the VBScript fallback'
   for (const f of ['AudioDevices.cpp', 'audio-devices.vbs']) assert.ok(require('node:fs').existsSync(pathx.join(dir, f)), f);
   for (const [f, m] of [['AudioDevices-x64.exe', 0x8664], ['AudioDevices-x86.exe', 0x14c]]) { const b = require('node:fs').readFileSync(pathx.join(dir, f)); assert.strictEqual(b.readUInt16LE(0), 0x5a4d); assert.strictEqual(b.readUInt16LE(b.readUInt32LE(0x3c) + 4), m); }
 });
+
+test('interfaces: DirectSound "Primary Sound" default mappers are flagged, sorted last and not mistaken for hardware', () => {
+  const { groupInterfaces, isPrimary } = require('./interfaces');
+  const dev = (id, name, inputs, outputs) => ({ id, name, hostApi: 'Windows DirectSound', inputs, outputs, sampleRate: 48000 });
+  const list = groupInterfaces([dev(0, 'Primary Sound Capture Driver', 2, 0), dev(1, 'Primary Sound Driver', 0, 2), dev(2, 'Microphone (USB Mic)', 1, 0)]);
+  assert.ok(isPrimary('Primary Sound Capture Driver') && isPrimary('Primary Sound Driver') && !isPrimary('Microphone (USB Mic)'));
+  assert.strictEqual(list[0].name, 'USB Mic'); assert.ok(!list[0].systemDefault);
+  const prim = list.filter(i => i.systemDefault); assert.strictEqual(prim.length, 2);
+  assert.ok(prim.some(i => /^System default input/.test(i.name)) && prim.some(i => /^System default output/.test(i.name)));
+});
