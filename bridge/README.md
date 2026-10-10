@@ -116,3 +116,10 @@ Real Web Audio graph, saved in the browser (localStorage) and respecting the KNO
 - `GET /api/interfaces`: PortAudio devices of every host API grouped into physical interfaces (`apis`, `read` / `write` best device, `asio`,
   `loopback`, `driverOnly` for installed ASIO drivers PortAudio does not list).
 - ASIO is single-client: a second ASIO device is refused with a clear message while one is open (same device for read + write is fine).
+
+## Universal ASIO driver, levels, auto-install (1.5.0)
+- `GET /api/universal`: `{ engines, inputs[], outputs[], apis[], best: { input, output }, asio: { inputs, outputs }, changeId }`: every source on both engines, best first (ASIO > WASAPI > Core Audio > JACK > ALSA > WDM-KS > DirectSound > MME, loopback last).
+- `start` with `deviceId: "universal"` (or `universal: true`) picks the best device that has enough channels; `started` carries `universal: true`.
+- Every open stream sends `{ type: "levels", id, direction, device, hostApi, engine, frameSize, latencyMs, sampleRate, channels, peak[], rms[], clip }` (dBFS per channel, about 12 per second) measured on the PCM that is really written / read.
+- `GET /api/audify` also returns `error` and `hint` when the module did not load (on Windows usually the missing Visual C++ runtime).
+- `../ensure-node.sh` (sourced by `start-pc-mode.sh`, the Linux launcher and the macOS app) finds or installs Node.js 18+ and the Audify module without administrator rights.

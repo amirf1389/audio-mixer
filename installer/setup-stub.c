@@ -8,6 +8,7 @@
  *   Audio Mixer-1.4.0.exe /quiet       silent install (also /S, /qn), /passive shows progress only
  *   Audio Mixer-1.4.0.exe /uninstall   remove Audio Mixer (same as Settings > Apps > Audio Mixer > Uninstall)
  *   Audio Mixer-1.4.0.exe /scan        after installing, run the verification scan (file hashes, signature, Microsoft Defender)
+ *   Audio Mixer-1.4.0.exe /novcredist  do not install the Microsoft Visual C++ runtime that the native audio module needs (see below)
  *   Anything else (for example INSTALLDIR="D:\Audio Mixer") is passed on to msiexec.
  * Build: x86_64-w64-mingw32-gcc / i686-w64-mingw32-gcc, see scripts/build-exe.js.
  */
@@ -76,6 +77,33 @@ static int install_dir(wchar_t *dir, DWORD cap) {
   return r == ERROR_SUCCESS && type == REG_SZ;
 }
 
+static int file_exists(const wchar_t *path) { DWORD a = GetFileAttributesW(path); return a != INVALID_FILE_ATTRIBUTES && !(a & FILE_ATTRIBUTE_DIRECTORY); }
+
+static int run(wchar_t *cmdline, int newConsole, DWORD *code);
+
+/* The native audio module (Audify: ASIO / WASAPI) is built with Visual C++ and needs the Microsoft Visual C++ runtime. When it is missing,
+ * install it with winget (Microsoft's own package manager, package Microsoft.VCRedist.2015+.x64 / .x86). A failure is not fatal: the mixer still
+ * runs with browser audio, and the installer says where to get the runtime. */
+static void ensure_vc_runtime(void) {
+  wchar_t sys[MAX_PATH], dll[MAX_PATH + 40], line[512];
+  if (!GetWindowsDirectoryW(sys, MAX_PATH)) return;
+#ifdef REQUIRE_X64
+  /* a 32-bit program sees System32 redirected: Sysnative is the real 64-bit folder */
+  _snwprintf(dll, MAX_PATH + 40, L"%ls\\Sysnative\\vcruntime140_1.dll", sys);
+  const wchar_t *id = L"Microsoft.VCRedist.2015+.x64";
+#else
+  _snwprintf(dll, MAX_PATH + 40, L"%ls\\System32\\vcruntime140.dll", sys);   /* 32-bit Windows: native; on 64-bit the x86 runtime sits in SysWOW64, which a 32-bit program sees as System32 */
+  const wchar_t *id = L"Microsoft.VCRedist.2015+.x86";
+#endif
+  dll[MAX_PATH + 39] = 0;
+  if (file_exists(dll)) return;
+  _snwprintf(line, 512, L"winget.exe install --id %ls -e --silent --accept-package-agreements --accept-source-agreements", id);
+  line[511] = 0;
+  DWORD code = 0;
+  if (!run(line, 0, &code) || code != 0)
+    message(L"The Microsoft Visual C++ runtime that the native audio module (ASIO) needs could not be installed automatically.\n\nAudio Mixer is installed and works with browser audio. For ASIO / WASAPI audio install it from https://aka.ms/vs/17/release/vc_redist.x64.exe (x86: vc_redist.x86.exe).", MB_ICONINFORMATION);
+}
+
 static int run(wchar_t *cmdline, int newConsole, DWORD *code) {
   STARTUPINFOW si; PROCESS_INFORMATION pi;
   ZeroMemory(&si, sizeof si); si.cb = sizeof si;
@@ -88,15 +116,16 @@ static int run(wchar_t *cmdline, int newConsole, DWORD *code) {
 int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int show) {
   (void)inst; (void)prev; (void)cmd; (void)show;
   int argc = 0; wchar_t **argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-  int quiet = 0, passive = 0, scan = 0, uninstall = 0;
+  int quiet = 0, passive = 0, scan = 0, uninstall = 0, novc = 0;
   wchar_t extra[2048] = L"";
   for (int i = 1; argv && i < argc; i++) {
     if (!_wcsicmp(argv[i], L"/quiet") || !_wcsicmp(argv[i], L"/S") || !_wcsicmp(argv[i], L"/qn") || !_wcsicmp(argv[i], L"-quiet")) quiet = 1;
     else if (!_wcsicmp(argv[i], L"/passive")) passive = 1;
     else if (!_wcsicmp(argv[i], L"/scan")) scan = 1;
+    else if (!_wcsicmp(argv[i], L"/novcredist")) novc = 1;
     else if (!_wcsicmp(argv[i], L"/uninstall") || !_wcsicmp(argv[i], L"/remove")) uninstall = 1;
     else if (!wcscmp(argv[i], L"/?") || !_wcsicmp(argv[i], L"/help")) {
-      message(L"Audio Mixer setup\n\n/quiet  silent install\n/passive  progress only\n/uninstall  remove Audio Mixer\n/scan  run the verification scan after installing\nPROPERTY=value  passed to Windows Installer (for example INSTALLDIR=\"D:\\Audio Mixer\")", MB_ICONINFORMATION);
+      message(L"Audio Mixer setup\n\n/quiet  silent install\n/passive  progress only\n/uninstall  remove Audio Mixer\n/scan  run the verification scan after installing\n/novcredist  skip the Visual C++ runtime check\nPROPERTY=value  passed to Windows Installer (for example INSTALLDIR=\"D:\\Audio Mixer\")", MB_ICONINFORMATION);
       return 0;
     } else {
       /* quote property values that contain spaces: NAME=value with spaces -> NAME="value" */
@@ -149,6 +178,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int show) {
   CloseHandle(out); CloseHandle(f);
   if (!ok) { DeleteFileW(msi); message(L"The installer package failed its SHA-256 check: the file is damaged or was changed. Download it again from the official release and compare its SHA-256.", MB_ICONERROR); return 1; }
 
+  if (!novc) ensure_vc_runtime();
   _snwprintf(line, 4096, L"msiexec.exe /i \"%ls\"%ls%ls", msi, quiet ? L" /qn" : passive ? L" /passive" : L"", extra);
   line[4095] = 0;
   if (!run(line, 0, &exitCode)) { DeleteFileW(msi); message(L"Cannot start Windows Installer (msiexec).", MB_ICONERROR); return 1; }

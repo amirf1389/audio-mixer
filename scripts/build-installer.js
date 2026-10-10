@@ -154,6 +154,7 @@ async function buildInstaller({ out = path.join(ROOT, 'dist'), arch = 'x64', fet
   fs.writeFileSync(path.join(stage, 'start-pc-mode.bat'), BAT_PC);
   fs.writeFileSync(path.join(stage, 'start-local-server.bat'), BAT_SERVER);
   fs.rmSync(path.join(stage, 'start-pc-mode.sh'), { force: true });
+  fs.rmSync(path.join(stage, 'ensure-node.sh'), { force: true });   // Windows packages carry their own Node.js
   // the installer swaps launcher files, so the manifest must describe what is really installed
   const crypto = require('node:crypto');
   const mf = path.join(stage, 'MANIFEST.sha256');

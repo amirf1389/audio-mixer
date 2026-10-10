@@ -3095,6 +3095,15 @@ window.navTabs = [
       </div>
     </div>
 
+    <!-- ASIO DRIVER METERS: real peak / RMS of the audio that goes through the native (ASIO / WASAPI ...) streams, plus the universal driver's detection -->
+    <div id="asio-meter-strip" class="glass-panel px-2.5 py-1 rounded-lg shrink-0 flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[7px]">
+      <div class="flex items-center gap-1.5 min-w-0 w-full">
+        <span class="text-[8px] font-black text-emerald-400 uppercase tracking-widest font-wing whitespace-nowrap"><i class="fa-solid fa-wave-square mr-1"></i>ASIO DRIVER</span>
+        <span id="asio-universal" class="block truncate min-w-0 flex-1 text-slate-400" title="Universal ASIO driver: every input / output source detected on this PC, best driver picked automatically">UNIVERSAL: start PC mode to detect sources</span>
+      </div>
+      <div id="asio-meter-rows" class="flex flex-wrap items-center gap-x-4 gap-y-0.5 w-full min-w-0"><span data-idle="1" class="text-slate-500">NO NATIVE STREAM OPEN (connect an interface in LIVE SOURCES or the ASIO page)</span></div>
+    </div>
+
     <!-- Mixer Lanes + Monitor Dock -->
     <div class="flex-1 flex gap-1.5 min-h-0 overflow-hidden">
       <!-- 32 Channel Lanes Container -->
@@ -13575,6 +13584,7 @@ window.navTabs = [
             if (info.portaudio.engine === 'audify') g.label = 'AUDIFY (RTAUDIO) HOST API INPUTS (via bridge)';
             ins.forEach(d => { const o = document.createElement('option'); o.value = 'pa:' + d.id; o.text = `${d.hostApi}: ${d.name} (${d.inputs} ch)`; g.appendChild(o); });
             sel.insertBefore(g, sel.firstChild);
+            const uo = document.createElement('option'); uo.value = 'pa:auto'; uo.text = 'UNIVERSAL ASIO DRIVER: auto-detect, best input (ASIO first)'; g.insertBefore(uo, g.firstChild);
             // both engines installed: Audify devices (ids from 1000) are offered as well
             const au = info.audify && info.portaudio.engine !== 'audify' ? info.audify.devices.filter(d => d.inputs > 0) : [];
             if (au.length) { const g2 = document.createElement('optgroup'); g2.label = 'AUDIFY (RTAUDIO) HOST API INPUTS (via bridge)'; g2.setAttribute('data-pa', '2');
@@ -13601,7 +13611,7 @@ window.navTabs = [
             this.paInWs = ws;
             let ch = 2;
             const devSel = /^pa:(\d+)$/.exec(this.selectedInputDeviceId || '');
-            ws.onopen = function() { ws.send(JSON.stringify({ type: 'start', channels: 2, sampleRate: ctx.sampleRate, frameSize: window.universalAsioSdk.frameSizeSetting(), deviceId: devSel ? parseInt(devSel[1], 10) : undefined })); };
+            ws.onopen = function() { ws.send(JSON.stringify({ type: 'start', channels: 2, sampleRate: ctx.sampleRate, frameSize: window.universalAsioSdk.frameSizeSetting(), deviceId: devSel ? parseInt(devSel[1], 10) : ((self.selectedInputDeviceId || '') === 'pa:auto' ? 'universal' : undefined) })); };
             ws.onmessage = function(ev) {
                 if (typeof ev.data !== 'string') {
                     if (!self.paInNode) return;
@@ -13611,6 +13621,7 @@ window.navTabs = [
                     return;
                 }
                 let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+                if (m.type === 'levels') { if (window.asioMeters) window.asioMeters.push(m); return; }
                 if (m.type === 'started') {
                     ch = m.channels;
                     self.paInNode = new AudioWorkletNode(ctx, 'pa-in', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
@@ -13652,11 +13663,12 @@ window.navTabs = [
             if (info.portaudio.engine === 'audify') g.label = 'AUDIFY (RTAUDIO) HOST API OUTPUTS (via bridge)';
             outs.forEach(d => { const o = document.createElement('option'); o.value = 'pa:' + d.id; o.text = `${d.hostApi}: ${d.name} (${d.outputs} ch)`; g.appendChild(o); });
             sel.insertBefore(g, sel.firstChild);
+            const uo = document.createElement('option'); uo.value = 'pa:auto'; uo.text = 'UNIVERSAL ASIO DRIVER: auto-detect, best output (ASIO first)'; g.insertBefore(uo, g.firstChild);
             const au = info.audify && info.portaudio.engine !== 'audify' ? info.audify.devices.filter(d => d.outputs > 0) : [];
             if (au.length) { const g2 = document.createElement('optgroup'); g2.label = 'AUDIFY (RTAUDIO) HOST API OUTPUTS (via bridge)'; g2.setAttribute('data-pa', '2');
                 au.forEach(d => { const o = document.createElement('option'); o.value = 'pa:' + d.id; o.text = `${d.hostApi}: ${d.name} (${d.outputs} ch)`; g2.appendChild(o); }); sel.insertBefore(g2, g.nextSibling); }
             const asio = outs.find(d => /asio/i.test(d.hostApi));
-            if (asio) { sel.value = 'pa:' + asio.id; this.selectedOutputDeviceId = 'pa:' + asio.id; }
+            if (asio) { sel.value = 'pa:auto'; this.selectedOutputDeviceId = 'pa:auto'; }   // the universal driver picks the ASIO device (and falls back by itself)
         },
 
         startPaOutput: async function() {
@@ -13679,9 +13691,10 @@ window.navTabs = [
             ws.binaryType = 'arraybuffer';
             this.paWs = ws;
             const devSel = /^pa:(\d+)$/.exec(this.selectedOutputDeviceId || '');
-            ws.onopen = function() { ws.send(JSON.stringify({ type: 'start', channels: 2, sampleRate: ctx.sampleRate, frameSize: window.universalAsioSdk.frameSizeSetting(), deviceId: devSel ? parseInt(devSel[1], 10) : undefined })); };
+            ws.onopen = function() { ws.send(JSON.stringify({ type: 'start', channels: 2, sampleRate: ctx.sampleRate, frameSize: window.universalAsioSdk.frameSizeSetting(), deviceId: devSel ? parseInt(devSel[1], 10) : ((self.selectedOutputDeviceId || '') === 'pa:auto' ? 'universal' : undefined) })); };
             ws.onmessage = function(ev) {
                 let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+                if (m.type === 'levels') { if (window.asioMeters) window.asioMeters.push(m); return; }
                 if (m.type === 'started') {
                     const node = new AudioWorkletNode(ctx, 'pa-tap', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2] });
                     const mute = ctx.createGain(); mute.gain.value = 0;
@@ -15571,6 +15584,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                                 return;
                             }
                             let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+                            if (m.type === 'levels') { if (window.asioMeters) window.asioMeters.push(m); return; }
                             if (m.type === 'started' && !done) {
                                 done = true; ch = m.channels;
                                 node = new AudioWorkletNode(ctx, 'ls-in', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
@@ -15676,6 +15690,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                     ws.onclose = () => { if (!done) fail('closed'); else self.writes.forEach((w, key) => { if (w.ws === ws) self.stopWrite(key); }); };
                     ws.onmessage = ev => {
                         let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+                        if (m.type === 'levels') { if (window.asioMeters) window.asioMeters.push(m); return; }
                         if (m.type === 'started' && !done) { done = true; resolve({ ws, ready: true, how: (/asio/i.test(m.hostApi) ? 'ASIO' : m.hostApi) + ' / ' + m.device }); }
                         else if (m.type === 'error') { if (!done) fail(m.message); else window.notify('Interface write error: ' + m.message, 'triangle-exclamation'); }
                     };
@@ -16049,6 +16064,108 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             raf = requestAnimationFrame(frame);
             setInterval(() => { tick++; if (!document.hidden && tick % 2 === 0) poll(); }, 1000);
             poll();
+        }
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
+    })();
+
+    (function () {
+        'use strict';
+        // ASIO DRIVER METERS and the universal driver's source detection (mixer page strip).
+        const $ = id => document.getElementById(id);
+        const MIN_DB = -60, MAX_ROWS = 4, MAX_BARS = 16, STALE_MS = 1500;
+        const rows = new Map();   // stream id -> { el, bars[], hold[], clipUntil, last, msg }
+        const pct = db => Math.max(0, Math.min(100, (db - MIN_DB) / -MIN_DB * 100));
+        const mk = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
+
+        function makeRow(m) {
+            const el = mk('div', 'flex items-center gap-1.5 min-w-0');
+            const asio = /asio/i.test(m.hostApi || '');
+            el.appendChild(mk('span', 'font-black whitespace-nowrap ' + (m.direction === 'input' ? 'text-cyan-400' : 'text-amber-400'), (m.direction === 'input' ? 'IN ' : 'OUT ') + (asio ? 'ASIO' : String(m.hostApi || '').toUpperCase())));
+            const label = mk('span', 'text-slate-400 truncate max-w-[16rem]'); el.appendChild(label);
+            const barsWrap = mk('div', 'flex items-end gap-[2px] shrink-0');
+            const bars = [];
+            const n = Math.min(m.channels || 2, MAX_BARS);
+            for (let i = 0; i < n; i++) {
+                const bar = mk('div', 'relative overflow-hidden rounded-[1px]');
+                bar.style.cssText = 'width:5px;height:20px;background:linear-gradient(to top,#10b981 0%,#10b981 62%,#f59e0b 82%,#ef4444 100%)';
+                const cover = mk('div'); cover.style.cssText = 'position:absolute;left:0;right:0;top:0;height:100%;background:rgba(2,6,12,0.88)';
+                const holdLine = mk('div'); holdLine.style.cssText = 'position:absolute;left:0;right:0;height:1px;background:#e2e8f0;bottom:0';
+                bar.title = (m.direction === 'input' ? 'IN ' : 'OUT ') + (i + 1);
+                bar.appendChild(cover); bar.appendChild(holdLine); barsWrap.appendChild(bar);
+                bars.push({ cover, holdLine });
+            }
+            el.appendChild(barsWrap);
+            if ((m.channels || 2) > MAX_BARS) el.appendChild(mk('span', 'text-slate-500', '+' + (m.channels - MAX_BARS)));
+            const peak = mk('span', 'font-bold text-slate-200 w-14 text-right'); el.appendChild(peak);
+            const clip = mk('span', 'w-2 h-2 rounded-full bg-slate-700 inline-block'); clip.title = 'Clip: lights when a sample reaches full scale'; el.appendChild(clip);
+            return { el, label, bars, peak, clip, hold: new Array(n).fill(MIN_DB), holdAt: new Array(n).fill(0), clipUntil: 0, last: 0, msg: m };
+        }
+
+        const meters = window.asioMeters = {
+            // called for every { type: 'levels' } message of a native stream
+            push(m) {
+                if (!m || !Array.isArray(m.peak)) return;
+                let r = rows.get(m.id);
+                if (!r) {
+                    if (rows.size >= MAX_ROWS) return;
+                    r = makeRow(m); rows.set(m.id, r);
+                    const host = $('asio-meter-rows'); if (host) { const idle = host.querySelector('[data-idle]'); if (idle) idle.remove(); host.appendChild(r.el); }
+                }
+                r.msg = m; r.last = performance.now();
+            },
+            rows,
+        };
+
+        let lastPaint = 0;
+        function frame(ts) {
+            requestAnimationFrame(frame);
+            if (document.hidden || ts - lastPaint < 66) return;
+            lastPaint = ts;
+            const now = performance.now(), host = $('asio-meter-rows');
+            for (const [id, r] of rows) {
+                if (now - r.last > STALE_MS) { r.el.remove(); rows.delete(id); continue; }   // stream closed
+                const m = r.msg, dt = Math.min(0.2, (ts - (r.t || ts)) / 1000); r.t = ts;
+                r.label.textContent = (m.device || '') + (m.frameSize ? ' | ' + m.frameSize + ' fr' : '') + (m.latencyMs ? ' ' + m.latencyMs + ' ms' : '') + ' | ' + (m.sampleRate / 1000) + ' kHz';
+                let top = MIN_DB;
+                r.bars.forEach((b, i) => {
+                    const rms = m.rms[i], pk = m.peak[i];
+                    b.cover.style.height = (100 - pct(rms)) + '%';   // bar = RMS level (VU), tick = peak hold
+                    r.hold[i] = pk >= r.hold[i] ? pk : Math.max(MIN_DB, r.hold[i] - 24 * dt);        // peak hold falls 24 dB / s
+                    b.holdLine.style.bottom = pct(r.hold[i]) + '%';
+                    if (pk > top) top = pk;
+                });
+                r.peak.textContent = top <= MIN_DB ? '-INF' : (top > 0 ? '+' : '') + top.toFixed(1) + ' dB';
+                if (m.clip > 0) r.clipUntil = now + 1500;
+                r.clip.className = 'w-2 h-2 rounded-full inline-block ' + (now < r.clipUntil ? 'bg-rose-500 shadow-[0_0_6px_#f43f5e]' : 'bg-slate-700');
+            }
+            if (host && !rows.size && !host.querySelector('[data-idle]')) { const idle = mk('span', 'text-slate-500', 'NO NATIVE STREAM OPEN (connect an interface in LIVE SOURCES or the ASIO page)'); idle.setAttribute('data-idle', '1'); host.appendChild(idle); }
+        }
+
+        // ── universal ASIO driver: every input / output source on this PC, refreshed while the page is open ──
+        let changeId = null, polling = false;
+        const brief = d => d ? `${d.name} (${/asio/i.test(d.hostApi) ? 'ASIO' : d.hostApi}, ${d.channels} ch)` : 'none';
+        async function refreshUniversal() {
+            const sdk = window.universalAsioSdk, el = $('asio-universal');
+            if (!el) return;
+            if (!sdk || !sdk.bridgeUrl) { el.textContent = 'UNIVERSAL: start PC mode to detect sources'; changeId = null; return; }
+            if (polling) return; polling = true;
+            try {
+                const j = await (await fetch(sdk.bridgeUrl + '/api/universal', { cache: 'no-store' })).json();
+                if (!j || !j.ok) return;
+                el.textContent = `UNIVERSAL: IN ${brief(j.best.input)}  /  OUT ${brief(j.best.output)}  |  ${j.inputs.length} in, ${j.outputs.length} out, ${j.asio.inputs + j.asio.outputs} ASIO`;
+                if (changeId && j.changeId !== changeId) {            // an interface was plugged in or removed
+                    if (window.notify) window.notify(`Audio devices changed: ${j.inputs.length} inputs / ${j.outputs.length} outputs`, 'plug');
+                    if (window.liveSources && typeof window.liveSources.scan === 'function') window.liveSources.scan();
+                }
+                changeId = j.changeId;
+            } catch (e) { /* server not reachable: the live strip shows that */ } finally { polling = false; }
+        }
+
+        function start() {
+            requestAnimationFrame(frame);
+            setInterval(() => { if (!document.hidden) refreshUniversal(); }, 5000);
+            setTimeout(refreshUniversal, 1500);
+            window.refreshUniversalDriver = refreshUniversal;
         }
         if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
     })();

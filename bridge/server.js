@@ -4,6 +4,7 @@
 //   GET /api/status   -> { ok, name, version }
 //   GET /api/drivers  -> native driver/device detection for this OS
 //   GET /api/volume   -> system output / input volume + mute
+//   GET /api/universal -> universal ASIO driver: all input / output sources, ranked, with the automatic pick
 //   GET /api/plugins -> VST3 / VST2 plugins (.vst3 / .dll / .vst) found and validated
 //   GET /api/audify, /api/framesize -> Audify (RtAudio) engine devices and automatic frame size
 //   WS  /ws/output    -> page streams Int16 PCM out through PortAudio (ASIO / WASAPI)
@@ -16,7 +17,7 @@
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
-const { detect } = require('./detect');
+const { detect, detectPortAudio } = require('./detect');
 const { accept } = require('./ws');
 const { createSession } = require('./output');
 const { createInputSession } = require('./input');
@@ -26,6 +27,7 @@ const { cachedNowPlaying } = require('./nowplaying');
 const { groupInterfaces } = require('./interfaces');
 const audifyEngine = require('./audify');
 const pluginScan = require('./plugins');
+const universalDriver = require('./universal');
 const streamRegistry = require('./streams');
 
 const VERSION = (() => { try { return require('../package.json').version; } catch (_) { return '1.0.0'; } })();
@@ -97,6 +99,17 @@ async function handle(req, res) {
   if (url.pathname === '/api/audify') {
     try { return json(res, 200, { ok: true, ...audifyEngine.describe() }, cors); }
     catch (e) { return json(res, 500, { ok: false, error: e.message }, cors); }
+  }
+
+  // Universal ASIO driver: every input and output source on this PC (PortAudio + Audify, all host APIs), best first, with the automatic pick
+  if (url.pathname === '/api/universal') {
+    try {
+      const pa = detectPortAudio(), au = audifyEngine.detectAudify();
+      const lists = [];
+      if (pa) lists.push({ engine: 'naudiodon', devices: pa.devices });
+      if (au) lists.push({ engine: 'audify', devices: au.devices });
+      return json(res, 200, { ok: true, engines: { naudiodon: !!pa, audify: !!au }, ...universalDriver.detectSources(lists), time: Date.now() }, cors);
+    } catch (e) { return json(res, 500, { ok: false, error: e.message }, cors); }
   }
 
   // Plugin system: VST3 / VST2 (.vst3, .dll, .vst) in the standard folders and the app's own plugin folder, each binary checked.

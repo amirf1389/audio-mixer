@@ -54,11 +54,11 @@ and the Audify prebuilt binaries, pinned by SHA-256).
 
 | File | Installs to | Notes |
 |---|---|---|
-| `Audio Mixer-1.4.0.exe` | `C:\Program Files\Audio Mixer` | signed setup for 64-bit Windows; checks the embedded package's SHA-256, then runs Windows Installer. `/quiet` silent, `/passive`, `/scan` (run the verification scan after installing), `/uninstall`, `INSTALLDIR="D:\Audio Mixer"` |
-| `AudioMixer-1.4.0-x64.msi` | `C:\Program Files\Audio Mixer` | 64-bit Windows Installer package, all users (administrator), `msiexec /i ... /qn` |
-| `AudioMixer-1.4.0-x86.msi` | `C:\Program Files (x86)\Audio Mixer` | 32-bit package with 32-bit Node.js (v22 LTS, the last line with a 32-bit build) and 32-bit Audify, for 32-bit Windows or 32-bit audio hosts |
-| `audio-mixer_1.4.0_all.deb` | `/opt/audio-mixer`, `/usr/bin/audio-mixer`, `/usr/share/applications`, `/usr/lib/systemd/user` | Debian / Ubuntu / Mint; needs `nodejs` 18+; remove with `apt remove audio-mixer`; start at login: `systemctl --user enable --now audio-mixer` |
-| `AudioMixer-1.4.0-macos.tar.gz` | `/Applications/Audio Mixer.app` (or `~/Applications`), login item `~/Library/LaunchAgents` | double-click `install.command` / `uninstall.command`; needs Node.js 18+; not notarized |
+| `Audio Mixer-1.5.0.exe` | `C:\Program Files\Audio Mixer` | signed setup for 64-bit Windows; checks the embedded package's SHA-256, then runs Windows Installer. `/quiet` silent, `/passive`, `/scan` (run the verification scan after installing), `/uninstall`, `INSTALLDIR="D:\Audio Mixer"` |
+| `AudioMixer-1.5.0-x64.msi` | `C:\Program Files\Audio Mixer` | 64-bit Windows Installer package, all users (administrator), `msiexec /i ... /qn` |
+| `AudioMixer-1.5.0-x86.msi` | `C:\Program Files (x86)\Audio Mixer` | 32-bit package with 32-bit Node.js (v22 LTS, the last line with a 32-bit build) and 32-bit Audify, for 32-bit Windows or 32-bit audio hosts |
+| `audio-mixer_1.5.0_all.deb` | `/opt/audio-mixer`, `/usr/bin/audio-mixer`, `/usr/share/applications`, `/usr/lib/systemd/user` | Debian / Ubuntu / Mint; installs Node.js 18+ on first start when it is missing; remove with `apt remove audio-mixer`; start at login: `systemctl --user enable --now audio-mixer` |
+| `AudioMixer-1.5.0-macos.tar.gz` | `/Applications/Audio Mixer.app` (or `~/Applications`), login item `~/Library/LaunchAgents` | double-click `install.command` / `uninstall.command`; installs Node.js 18+ when it is missing; not notarized |
 
 Every Windows installer carries the mixer page, the Node.js server and client, the bundled Node.js runtime, Audify (ASIO / WASAPI / DirectSound), the verify scan, Start Menu entries
 (*Audio Mixer (PC mode)*, *local server only*, *Verify installation*, *Plugins folder*, *Uninstall Audio Mixer*) and an entry in *Settings > Apps* (Add or remove programs) with a working Uninstall.
@@ -74,6 +74,21 @@ pin the publisher, but Windows still shows "unknown publisher" / SmartScreen unt
 sign with a commercial certificate (`SIGN_PFX=cert.pfx SIGN_PFX_PASSWORD=... npm run build:installers`; `SIGN_TIMESTAMP_URL=http://timestamp.digicert.com` adds a timestamp). Thumbprint of the
 published certificate: see `releases/AudioMixer-signing.cer`. The Linux and macOS packages are not signed.
 
+**Automatic installation of Node.js and the audio runtime.** The Windows `.exe` / `.msi` already contain Node.js. Everywhere else a missing prerequisite is installed for you, after asking
+(`AUDIO_MIXER_YES=1` skips the questions):
+- Linux `audio-mixer`, macOS `Audio Mixer.app` and `./start-pc-mode.sh` (`ensure-node.sh`): when Node.js 18+ is missing they download the official Node.js 22 build from nodejs.org, check its SHA-256
+  against nodejs.org's `SHASUMS256.txt` (a mismatch installs nothing) and unpack it into `~/.local/share/audio-mixer/node`; no administrator rights, nothing outside your home folder. The Audify native
+  audio module (prebuilt, no compiler) is installed once into `~/.local/share/audio-mixer/modules`; `AUDIO_MIXER_NO_NATIVE=1` skips it.
+- Windows `start-pc-mode.bat` (portable folder): installs the official Node.js LTS with `winget`, or the checksum-verified zip from nodejs.org into `%LOCALAPPDATA%\AudioMixer\node`.
+- Windows setup `.exe`: installs the Microsoft Visual C++ runtime (needed by Audify, ASIO / WASAPI) with `winget` when it is missing (`/novcredist` skips it); if that fails the mixer still works with browser audio
+  and the message says where to get it. `node client/cli.js doctor` explains why the audio module did not load; `node client/cli.js setup --user` installs Audify by hand.
+
+**Universal ASIO driver and driver meters (1.5.0).** `GET /api/universal` lists every input and output source on the PC across ASIO, WASAPI, Core Audio, JACK, ALSA ... (PortAudio and Audify), ranked ASIO first with
+loopback devices last, per-channel labels (`IN 1-2` ...), the automatic best input / output (a duplex interface is kept together), and a `changeId` that changes when an interface is plugged in or removed.
+`deviceId: "universal"` (or `universal: true`) in a stream `start` message opens the best device on whichever engine has it; the page offers it first in the input / output lists and uses it by default.
+The mixer page has an **ASIO DRIVER** strip above the channels: the universal driver's detection (refreshed every 5 s; a new interface triggers a re-scan) and, for every open native stream, per-channel RMS bars,
+a peak-hold tick, the peak in dBFS, a clip light and the driver / buffer size / latency. The levels are measured by the server on the audio that is really written to, or read from, the driver (`{type:"levels"}` on the stream's WebSocket, about 12 per second).
+
 **Antivirus false positives.** Installers that unpack a payload and start `msiexec`, or programs that start another program in the background, are what heuristic scanners look at,
 and a self-signed file has no reputation yet. To keep the footprint plain: nothing installs a script (the old hidden `wscript` launcher and the `cmd /c` shortcut are gone), nothing is written
 to the Startup folder (autostart is one registry Run value that starts the signed native `AudioMixerServer.exe`), all files live under Program Files, the setup program only runs `msiexec` on its own
@@ -83,12 +98,12 @@ as a false positive to the vendor (Microsoft: https://www.microsoft.com/wdsi/fil
 ### Windows verification scan
 `node client/cli.js verify [--scan]` (Start Menu: *Verify installation (security scan)*) checks an install: every file against `MANIFEST.sha256` (changed, missing and unlisted code files, including
 native files under `bridge/node_modules`, are reported), the Authenticode signature of the bundled Node.js runtime (must be the OpenJS Foundation), that the server listens on loopback only, and with
-`--scan` runs a Microsoft Defender custom scan. `node client/cli.js verify "Audio Mixer-1.4.0.exe" [--scan]` (also `.msi`) checks a downloaded installer: PE structure, the embedded package and its SHA-256,
+`--scan` runs a Microsoft Defender custom scan. `node client/cli.js verify "Audio Mixer-1.5.0.exe" [--scan]` (also `.msi`) checks a downloaded installer: PE structure, the embedded package and its SHA-256,
 the `.sha256` file next to it, the signature (a self-signed signature passes only when it matches `AudioMixer-signing.cer` next to the file, or `AUDIO_MIXER_SIGNING_CER`) and Defender. Exit code 0 = verified.
-Manual check in PowerShell: `Get-FileHash ".\Audio Mixer-1.4.0.exe" -Algorithm SHA256` and `Get-AuthenticodeSignature ".\Audio Mixer-1.4.0.exe"`.
+Manual check in PowerShell: `Get-FileHash ".\Audio Mixer-1.5.0.exe" -Algorithm SHA256` and `Get-AuthenticodeSignature ".\Audio Mixer-1.5.0.exe"`.
 Tested on Linux (hashes, packaging, signature verification with osslsigncode); the Windows-only parts (running the setup, Authenticode and Defender checks, uninstall) are untested on a real PC.
 
-### Live interface (1.4.0)
+### Live interface (1.4.0 and 1.5.0)
 Interface changes in the page:
 - **Smooth faders**: 20 ms gain glide (no zipper noise), 10x finer resolution once a fader is touched, `Shift` / `Alt` + wheel for fine moves (the plain wheel still scrolls the page),
   arrow keys / PageUp / PageDown, double-click resets (channel faders to 0 dB). The EQ bands glide as well.
