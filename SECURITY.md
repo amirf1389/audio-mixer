@@ -18,3 +18,4 @@ Open a private security advisory on the GitHub repository (Security tab → Repo
 - Downloads: HTTPS only, host allow-list, every redirect hop is checked before it is requested, SHA-256 verified, never run automatically. Updates also need a publisher signature.
 - License keys and the update manifest are verified with ECDSA P-256; the vendor private key is never shipped.
 - The Windows helpers (`AudioDevices.exe`, `audio-devices.vbs`, `Audio Mixer.vbs`) are read-only or launch the visible `start-pc-mode.bat`; nothing runs hidden.
+- Plugins run in a separate `PluginHost` process (not inside the server), started without a shell and with a minimal environment, only for plugins the bridge's own scan found, only with the PRO / STUDIO plan, at most 12 at a time; a crashing plugin ends that process only.

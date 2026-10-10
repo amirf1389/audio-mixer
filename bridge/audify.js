@@ -137,6 +137,19 @@ function detectAudify(load = loadAudify) {
 // closest rate and the bridge converts (linear interpolation, state kept across chunks) so the page still gets / sends audio at the mixer's rate.
 const { isBluetooth } = require('./interfaces');
 function nearestRate(rates, want) { return rates.slice().sort((a, b) => Math.abs(a - want) - Math.abs(b - want) || b - a)[0]; }
+// Interleaved Int16: more channels -> fewer (channel c gets the average of the input channels i with i % to === c, so stereo -> mono is (L + R) / 2).
+function remapChannels(buf, from, to) {
+  if (from === to) return buf;
+  const n = Math.floor(buf.length / 2 / from), out = Buffer.alloc(n * to * 2);
+  for (let f = 0; f < n; f++) {
+    for (let c = 0; c < to; c++) {
+      let sum = 0, cnt = 0;
+      for (let i = c; i < from; i += to) { sum += buf.readInt16LE((f * from + i) * 2); cnt++; }
+      out.writeInt16LE(Math.round(sum / cnt), (f * to + c) * 2);
+    }
+  }
+  return out;
+}
 function createResampler(inRate, outRate, channels) {
   if (!(inRate > 0) || !(outRate > 0) || inRate === outRate) return null;
   const step = inRate / outRate;
@@ -170,12 +183,18 @@ function openStreamRaw({ mod, dev, direction, channels, sampleRate, frameSize, o
   const out = direction === 'output';
   const maxCh = out ? dev.maxOutputChannels : dev.maxInputChannels;
   if (!maxCh) throw new Error(`${dev.name} has no ${out ? 'output' : 'input'} channels`);
-  if (out && channels > maxCh) throw new Error(`${dev.name} has only ${maxCh} output channel(s)`);
-  const ch = out ? channels : Math.min(channels, maxCh);   // a capture simply delivers fewer channels
+  const asioDev = dev.api === 'WINDOWS_ASIO';
+  // ASIO outputs are fixed hardware channels: refuse. WASAPI / DirectSound / Core Audio / ALSA devices often have fewer channels than the mixer's
+  // stereo master (a mono headset, a mono USB speaker): open the device's own count and mix down instead of failing.
+  if (out && channels > maxCh && asioDev) throw new Error(`${dev.name} has only ${maxCh} output channel(s)`);
+  const ch = Math.min(channels, maxCh);                   // a capture simply delivers fewer channels
+  const remap = out && channels > ch ? buf => remapChannels(buf, channels, ch) : null;
   const wantRate = sampleRate;
   if (dev.sampleRates && dev.sampleRates.length && !dev.sampleRates.includes(sampleRate)) {
-    if (!(isBluetooth(dev.name) || /\(.*\bstereo\)\s*$/i.test(dev.name) && !/mix/i.test(dev.name))) throw new Error(`${dev.name} does not support ${sampleRate} Hz (supports ${dev.sampleRates.join(', ')})`);
-    sampleRate = nearestRate(dev.sampleRates, sampleRate);       // Bluetooth: run at the device's own rate, convert below
+    // An ASIO driver runs at the clock set in its control panel (or by the DAW / word clock): say so. Every other host API (WASAPI shared mode
+    // only offers the Windows mix rate, Bluetooth only 8 / 16 kHz) runs at the device's closest rate and the bridge converts.
+    if (asioDev) throw new Error(`${dev.name} does not support ${sampleRate} Hz (supports ${dev.sampleRates.join(', ')}): set the sample rate in the ASIO driver's control panel or change the mixer's rate`);
+    sampleRate = nearestRate(dev.sampleRates, sampleRate);
   }
   const conv = createResampler(out ? wantRate : sampleRate, out ? sampleRate : wantRate, ch);   // output: mixer -> device, input: device -> mixer
   const p = plan(frameSize, { api: dev.api, sampleRate, channels: ch });
@@ -194,11 +213,12 @@ function openStreamRaw({ mod, dev, direction, channels, sampleRate, frameSize, o
       const frameBytes = used * ch * 2;
       let pending = Buffer.alloc(0), dropped = 0;
       return {
-        frameSize: used, sampleRate: wantRate, deviceRate: sampleRate, resampled: !!conv, channels: ch, auto: p.auto, tried: p.candidates.slice(0, p.candidates.indexOf(fs) + 1),
+        frameSize: used, sampleRate: wantRate, deviceRate: sampleRate, resampled: !!conv, channels: remap ? channels : ch, deviceChannels: ch, mixedDown: !!remap, auto: p.auto, tried: p.candidates.slice(0, p.candidates.indexOf(fs) + 1),
         latencyMs: Math.round(used / sampleRate * 10000) / 10,
         get dropped() { return dropped; },
         // RtAudio needs whole blocks of exactly frameSize frames.
         write(buf) {
+          if (remap) buf = remap(buf);
           if (conv) buf = conv(buf);
           pending = pending.length ? Buffer.concat([pending, buf]) : buf;
           if (pending.length > frameBytes * 16) { dropped += pending.length - frameBytes * 16; pending = pending.subarray(pending.length - frameBytes * 16); }
@@ -346,4 +366,4 @@ function describe(load = loadAudify) {
   };
 }
 
-module.exports = { _asioOf: asioOf, createResampler, nearestRate, loadAudify, loadProblem, API_NAMES, apiKey, recommendFrameSize, frameCandidates, plan, listDevices, detectAudify, openStream, openDuplex, pickAudifyDevice, describe, isPow2, AUDIFY_BASE, MIN_FRAMES, MAX_FRAMES };
+module.exports = { remapChannels, _asioOf: asioOf, createResampler, nearestRate, loadAudify, loadProblem, API_NAMES, apiKey, recommendFrameSize, frameCandidates, plan, listDevices, detectAudify, openStream, openDuplex, pickAudifyDevice, describe, isPow2, AUDIFY_BASE, MIN_FRAMES, MAX_FRAMES };

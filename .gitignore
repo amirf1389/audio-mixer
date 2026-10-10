@@ -81,4 +81,4 @@ dist/
 !releases/*.exe
 
 # Windows helper binaries built from native/win/src (kept in the repository, the installers ship them)
-!native/win/**/*.exe
+!native/**/*.exe

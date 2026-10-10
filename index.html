@@ -16534,8 +16534,8 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             state: {}, busy: false,
             async load() {
                 if (!bridge()) { this.state = {}; return this.render(); }
-                try { const j = await (await fetch(bridge() + '/api/inserts', { cache: 'no-store' })).json(); this.state = j && j.ok ? j.slots || {} : {}; } catch (e) { this.state = {}; }
-                this.render();
+                try { const j = await (await fetch(bridge() + '/api/inserts', { cache: 'no-store' })).json(); this.state = j && j.ok ? j.slots || {} : {}; this.host = j && j.host; } catch (e) { this.state = {}; }
+                this.loaded = true; this.render(); chain.sync();
             },
             async write(slot, body) {
                 if (!bridge()) return notify('Plugin inserts need PC mode (the local server)', 'plug-circle-exclamation');
@@ -16545,7 +16545,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                     const r = await post('/api/inserts', 'inserts', Object.assign({ slot }, body));
                     if (r.json && r.json.ok) this.state = r.json.slots || {}; else notify((r.json && r.json.error) || 'Could not save the insert', 'triangle-exclamation');
                 } catch (e) { notify('The local server is not reachable', 'triangle-exclamation'); }
-                this.busy = false; this.render();
+                this.busy = false; this.render(); chain.sync();
             },
             render() {
                 const allowed = L.has('plugins'), list = (plugins.data && plugins.data.plugins || []).filter(p => p.valid && p.compatible);
@@ -16573,10 +16573,107 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                         const by = document.createElement('button'); by.type = 'button'; by.disabled = !cur || !allowed || this.busy; by.setAttribute('aria-pressed', String(!!(cur && cur.bypass)));
                         by.className = 'px-1.5 py-0.5 rounded font-black border ' + (cur && cur.bypass ? 'bg-amber-400 text-black border-amber-400' : 'bg-white/5 text-slate-300 border-white/10'); by.textContent = 'BYPASS';
                         by.addEventListener('click', () => this.write(key, { bypass: !(cur && cur.bypass) }));
-                        row.append(lab, sel, by); grid.appendChild(row);
+                        row.append(lab, sel, by);
+                        const cell = document.createElement('div'); cell.className = 'space-y-1'; cell.appendChild(row);
+                        const stt = chain.status[key];
+                        if (cur && stt) { const t2 = document.createElement('div'); t2.className = 'px-1 truncate ' + (/^ERROR|NOT SUPPORTED/.test(stt) ? 'text-rose-400' : /^RUNNING/.test(stt) ? 'text-emerald-400' : 'text-slate-400'); t2.textContent = stt; cell.appendChild(t2); }
+                        const pl = chain.params[key];
+                        if (cur && pl && pl.length && chain.runs[key]) {
+                            const det = document.createElement('details'); det.className = 'px-1'; const sm = document.createElement('summary'); sm.className = 'cursor-pointer text-purple-300'; sm.textContent = 'PARAMETERS (' + pl.length + ')'; det.appendChild(sm);
+                            pl.slice(0, 16).forEach(p => {
+                                const pr = document.createElement('label'); pr.className = 'flex items-center gap-1.5 text-slate-300'; const nm = document.createElement('span'); nm.className = 'w-24 truncate'; nm.textContent = p.name || ('Param ' + p.i);
+                                const rg = document.createElement('input'); rg.type = 'range'; rg.min = '0'; rg.max = '1'; rg.step = '0.001'; rg.value = String(p.value); rg.className = 'flex-1'; rg.setAttribute('aria-label', (p.name || 'Param') + ' of ' + R.label(s));
+                                rg.addEventListener('input', () => chain.setParam(key, p.i, Number(rg.value))); pr.append(nm, rg); det.appendChild(pr);
+                            });
+                            cell.appendChild(det);
+                        }
+                        grid.appendChild(cell);
                     });
                 });
             },
+        };
+
+        // ── insert chain: the master mix runs through the plugins of the PHASE and FX slots (native plugin host, WS /ws/insert) ──
+        const chain = {
+            sig: '', runs: {}, status: {}, order: ['fx:1', 'fx:2', 'fx:3', 'fx:4', 'fx:5', 'fx:6', 'fx:7', 'fx:8', 'phase:a', 'phase:b', 'phase:c', 'phase:d'], params: {}, workletFor: null, hostOk: false,
+            async ensureWorklet(ctx) {
+                if (this.workletFor === ctx) return;
+                const code = "class P extends AudioWorkletProcessor{constructor(){super();this.l=new Float32Array(512);this.r=new Float32Array(512);this.n=0;this.q=[];this.o=0;this.qn=0;this.dry=false;" +
+                    "this.port.onmessage=e=>{if(e.data&&e.data.bypass!==undefined){this.dry=e.data.bypass;return}this.q.push(e.data);this.qn+=e.data[0].length;while(this.qn>6144){const d=this.q.shift();this.qn-=d[0].length;this.o=0}}}" +
+                    "process(i,o){const c=i[0],a=c&&c[0],b=(c&&c[1])||a,x=o[0][0],y=o[0][1]||o[0][0];" +
+                    "for(let k=0;k<x.length;k++){const il=a?a[k]:0,ir=b?b[k]:0;this.l[this.n]=il;this.r[this.n]=ir;if(++this.n===512){this.port.postMessage([this.l.slice(),this.r.slice()]);this.n=0}" +
+                    "if(this.dry||!this.q.length){x[k]=this.dry?il:0;y[k]=this.dry?ir:0;continue}const d=this.q[0];x[k]=d[0][this.o];y[k]=d[1][this.o];if(++this.o>=d[0].length){this.q.shift();this.qn-=d[0].length;this.o=0}}return true}}" +
+                    "registerProcessor('ins-io',P);";
+                const url = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
+                try { await ctx.audioWorklet.addModule(url); } finally { URL.revokeObjectURL(url); }
+                this.workletFor = ctx;
+            },
+            wsUrl() { return bridge().replace(/^http/, 'ws') + '/ws/insert'; },
+            async openSlot(key, ctx) {
+                await this.ensureWorklet(ctx);
+                const node = new AudioWorkletNode(ctx, 'ins-io', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2] });
+                const run = { key, node, ws: new WebSocket(this.wsUrl()), ready: false, ctx };
+                run.ws.binaryType = 'arraybuffer';
+                run.ws.onopen = () => run.ws.send(JSON.stringify({ type: 'start', slot: key, sampleRate: ctx.sampleRate }));
+                node.port.onmessage = e => {
+                    if (!run.ready || run.ws.readyState !== 1 || run.ws.bufferedAmount > 65536) return;
+                    const l = e.data[0], r = e.data[1], f = new Float32Array(l.length * 2);
+                    for (let k = 0; k < l.length; k++) { f[2 * k] = l[k]; f[2 * k + 1] = r[k]; }
+                    run.ws.send(f.buffer);
+                };
+                run.ws.onmessage = ev => {
+                    if (typeof ev.data !== 'string') {
+                        const f = new Float32Array(ev.data), n = f.length >> 1, l = new Float32Array(n), r = new Float32Array(n);
+                        for (let k = 0; k < n; k++) { l[k] = f[2 * k]; r[k] = f[2 * k + 1]; }
+                        node.port.postMessage([l, r]); return;
+                    }
+                    let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+                    if (m.type === 'started') { run.ready = true; run.info = m; this.status[key] = 'RUNNING \u2022 ' + (m.name || '') + (m.params ? ' \u2022 ' + m.params + ' PARAMS' : ''); node.port.postMessage({ bypass: !!m.bypass }); this.rewire(); this.askParams(key); racks.render(); }
+                    else if (m.type === 'params') { this.params[key] = m.list || []; racks.render(); }
+                    else if (m.type === 'error') { this.status[key] = 'ERROR \u2022 ' + m.message; this.closeSlot(key); racks.render(); }
+                };
+                run.ws.onclose = () => { if (this.runs[key] === run) { if (!/^ERROR/.test(this.status[key] || '')) this.status[key] = 'STOPPED'; this.closeSlot(key); racks.render(); } };
+                run.ws.onerror = () => { this.status[key] = 'ERROR \u2022 local server connection failed'; };
+                this.runs[key] = run;
+            },
+            closeSlot(key) {
+                const run = this.runs[key]; if (!run) return;
+                delete this.runs[key]; run.ready = false;
+                try { run.ws.close(); } catch (e) { /* gone */ }
+                try { run.node.disconnect(); } catch (e) { /* gone */ }
+                this.rewire();
+            },
+            // master limiter -> [plugin 1 -> plugin 2 ...] -> analyser / browser output; the physical-output tap follows the end of the chain
+            rewire() {
+                const st = window.state, n = st && st.nodes, ctx = st && st.ctx; if (!ctx || !n || !n.masterLimiter || !n.musicAnalyser) return;
+                const live = this.order.map(k => this.runs[k]).filter(r => r && r.ready && r.ctx === ctx);
+                try { n.masterLimiter.disconnect(n.musicAnalyser); } catch (e) { /* not connected */ }
+                this.order.forEach(k => { const r = this.runs[k]; if (r) try { r.node.disconnect(); } catch (e) { /* none */ } });
+                let prev = n.masterLimiter;
+                live.forEach(r => { prev.connect(r.node); prev = r.node; });
+                prev.connect(n.musicAnalyser);
+                const tap = window.liveSources && window.liveSources.tapNode;
+                if (tap) { try { n.masterLimiter.disconnect(tap); } catch (e) { /* none */ } try { prev.disconnect(tap); } catch (e) { /* none */ } prev.connect(tap); }
+                this.tail = prev;
+            },
+            async sync() {
+                const ctx = window.state && window.state.ctx, n = window.state && window.state.nodes;
+                if (!bridge() || !ctx || !n || !n.masterLimiter || !L.has('plugins')) { if (Object.keys(this.runs).length && !L.has('plugins')) Object.keys(this.runs).forEach(k => this.closeSlot(k)); return; }
+                const want = {}; this.order.forEach(k => { const s = racks.state[k]; if (s && s.format === 'VST2') want[k] = s; });
+                const sig = JSON.stringify([want, ctx.sampleRate, Object.keys(this.runs).sort(), Object.keys(this.runs).filter(k => this.runs[k].ctx !== ctx)]);
+                if (sig === this.sig) return; this.sig = sig;
+                Object.keys(this.runs).forEach(k => { const r = this.runs[k], s = want[k]; if (!s || r.ctx !== ctx || r.info && r.info.name && racks.state[k] && racks.state[k].plugin !== r.plugin) this.closeSlot(k); });
+                for (const k of Object.keys(want)) {
+                    const r = this.runs[k];
+                    if (r) { r.plugin = want[k].plugin; try { r.node.port.postMessage({ bypass: !!want[k].bypass }); } catch (e) { /* gone */ } try { if (r.ws.readyState === 1) r.ws.send(JSON.stringify({ type: 'bypass', on: !!want[k].bypass })); } catch (e) { /* gone */ } continue; }
+                    this.status[k] = 'STARTING...';
+                    try { await this.openSlot(k, ctx); this.runs[k].plugin = want[k].plugin; } catch (e) { this.status[k] = 'ERROR \u2022 ' + e.message; }
+                }
+                Object.keys(racks.state).forEach(k => { if (racks.state[k].format === 'VST3') this.status[k] = 'VST3 \u2022 NOT SUPPORTED BY THE NATIVE HOST YET (VST2 .DLL / .VST ONLY)'; });
+                racks.render();
+            },
+            setParam(key, i, v) { const r = this.runs[key]; if (r && r.ready && r.ws.readyState === 1) r.ws.send(JSON.stringify({ type: 'param', i, v })); },
+            askParams(key) { const r = this.runs[key]; if (r && r.ready && r.ws.readyState === 1) r.ws.send(JSON.stringify({ type: 'params' })); },
         };
 
         // ── OTA updates (real: signed manifest, SHA-256 verified download) ──
@@ -16672,7 +16769,9 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                         if (tabId === 'phase' || tabId === 'fx') plugins.scan().then(() => racks.load());
                         return r;
                     };
-                    document.addEventListener('licensechange', () => racks.render());
+                    document.addEventListener('licensechange', () => { racks.render(); chain.sig = ''; chain.sync(); });
+                    setInterval(() => { if (!racks.loaded && bridge()) racks.load(); else if (racks.loaded) chain.sync(); }, 2000);
+                    if (window.liveSources && typeof window.liveSources.ensureTap === 'function') { const et = window.liveSources.ensureTap; window.liveSources.ensureTap = async function () { const r = await et.apply(this, arguments); chain.rewire(); return r; }; }
                     editions.apply(); L.set('basic', 'basic'); L.init(); racks.render();
                 }
             }, 100);

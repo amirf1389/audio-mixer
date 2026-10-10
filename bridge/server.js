@@ -11,6 +11,7 @@
 //   GET /api/audify, /api/framesize -> Audify (RtAudio) engine devices and automatic frame size
 //   WS  /ws/output    -> page streams Int16 PCM out through PortAudio (ASIO / WASAPI)
 //   GET /api/inserts, POST /api/inserts (X-Mixer-Action: inserts) -> plugin insert slots of the PHASE and FX pages
+//   WS  /ws/insert    -> audio through a plugin of an insert slot (native plugin host, VST2 .dll / .vst)
 //   WS  /ws/duplex    -> read AND write one interface through a single native stream
 //   WS  /ws/input     -> bridge streams Int16 PCM captured from an ASIO / WASAPI input
 //   GET /api/catalog  -> official audio drivers / stacks for this OS, with install detection
@@ -38,6 +39,7 @@ const updater = require('./update');
 const streamRegistry = require('./streams');
 const security = require('./security');
 const inserts = require('./inserts');
+const pluginHost = require('./pluginhost');
 
 const VERSION = (() => { try { return require('../package.json').version; } catch (_) { return '1.0.0'; } })();
 const PORT = Number(process.env.BRIDGE_PORT) || 8765;
@@ -107,7 +109,7 @@ async function handle(req, res) {
   if (req.method !== 'GET') return json(res, 405, { ok: false, error: 'method not allowed' }, cors);
   if (url.pathname === '/api/status') return json(res, 200, { ok: true, name: 'audio-mixer-bridge', version: VERSION, node: process.version, pid: process.pid, uptimeSec: Math.round(process.uptime()), streams: streamRegistry.list(), time: Date.now() }, cors);
   // Consumer licensing: the plan this copy runs as, this computer's machine code, and the stored key's state
-  if (url.pathname === '/api/inserts') return json(res, 200, { ok: true, ...inserts.read() }, cors);
+  if (url.pathname === '/api/inserts') return json(res, 200, { ok: true, host: { available: !!pluginHost.hostPath(), formats: ['VST2'] }, ...inserts.read() }, cors);
   if (url.pathname === '/api/license') return json(res, 200, { ok: true, version: VERSION, ...license.status() }, cors);
 
   // OTA updates: is a newer, signed version published? (cached for 5 minutes, ?force=1 asks again)
@@ -239,13 +241,13 @@ async function handleDownload(req, res, cors) {
 server.on('upgrade', (req, socket) => {
   let pathname = '';
   try { pathname = new URL(req.url, `http://${HOST}`).pathname; } catch (_) { /* rejected below */ }
-  if ((pathname !== '/ws/output' && pathname !== '/ws/input' && pathname !== '/ws/duplex') || !hostAllowed(req.headers.host) || !originAllowed(req.headers.origin)) { socket.destroy(); return; }
+  if ((pathname !== '/ws/output' && pathname !== '/ws/input' && pathname !== '/ws/duplex' && pathname !== '/ws/insert') || !hostAllowed(req.headers.host) || !originAllowed(req.headers.origin)) { socket.destroy(); return; }
   if (openSockets >= MAX_SOCKETS || (RATE && !limiter.allow('ws', 120).ok)) { socket.end('HTTP/1.1 429 Too Many Requests\r\nConnection: close\r\n\r\n'); return; }
   const handlers = {};
   const conn = accept(req, socket, handlers);
   if (!conn) return;
   openSockets++; socket.once('close', () => { openSockets--; });
-  Object.assign(handlers, pathname === '/ws/input' ? createInputSession(conn) : pathname === '/ws/duplex' ? createDuplexSession(conn) : createSession(conn));
+  Object.assign(handlers, pathname === '/ws/input' ? createInputSession(conn) : pathname === '/ws/duplex' ? createDuplexSession(conn) : pathname === '/ws/insert' ? pluginHost.createInsertSession(conn) : createSession(conn));
 });
 
 server.headersTimeout = 15000; server.requestTimeout = 60000; server.maxHeadersCount = 64; server.keepAliveTimeout = 5000;
