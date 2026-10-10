@@ -2090,3 +2090,93 @@ test('Windows installer: the app is visible after the install (icons, Start Menu
   const lau = rd('installer', 'launcher.c');
   assert.match(lau, /static void open_page\(void\)/); assert.match(lau, /> 32\) return;[\s\S]*explorer\.exe[\s\S]*cmd\.exe \/c start[\s\S]*http:\/\/localhost:8765\//); assert.match(lau, /if \(show_splash\(inst\)\) open_page\(\)/);
 });
+
+test('OTA server: signed manifests only, uploads are checksum-verified, the real update client checks and downloads from it, Range / HEAD / limits / auth', async () => {
+  const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), http = require('node:http'), crypto = require('node:crypto');
+  const { createOta } = require('../ota-server/server'), update = require('./update'), lic = require('../scripts/license');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ota-')), keys = path.join(tmp, 'vendor');
+  lic.initKeys(keys); const jwk = lic.loadPublic(keys), priv = lic.loadPrivate(keys);
+  const logs = [], ota = createOta({ dataDir: path.join(tmp, 'data'), token: 'secret-token', jwk, rate: 1000, allowHttp: true, publicUrl: 'https://ota.test', log: o => logs.push(o) });
+  await ota.reindex();
+  const srv = http.createServer(ota.handler); await new Promise(r => srv.listen(0, '127.0.0.1', r));
+  const base = 'http://127.0.0.1:' + srv.address().port, auth = { Authorization: 'Bearer secret-token' };
+  const sha = b => crypto.createHash('sha256').update(b).digest('hex');
+  const exe = Buffer.from('MZ' + 'x'.repeat(5000)), exe2 = Buffer.from('MZ' + 'y'.repeat(7000));
+  const put = (n, body, h = {}) => fetch(base + '/admin/files/' + encodeURIComponent(n) + (h.q || ''), { method: 'PUT', headers: { ...auth, 'X-SHA256': sha(body), ...h.headers }, body });
+  const man = (version, files, extra = {}) => ({ product: 'audio-mixer', version, channel: 'stable', released: '2026-10-10', notes: ['a'], files: Object.fromEntries(Object.entries(files).map(([k, [name, buf]]) => [k, { name, url: 'https://ota.test/releases/' + encodeURIComponent(name), size: buf.length, sha256: sha(buf) }])), ...extra });
+  const publish = (m, q = '', key = priv) => fetch(base + '/admin/manifest/stable' + q, { method: 'PUT', headers: auth, body: JSON.stringify(update.signManifest(m, key)) });
+  let srv3 = null;
+  try {
+    // admin: closed without the token, nothing published yet
+    assert.strictEqual((await fetch(base + '/admin/files')).status, 401);
+    assert.strictEqual((await fetch(base + '/admin/files', { headers: { Authorization: 'Bearer nope' } })).status, 401);
+    assert.strictEqual((await fetch(base + '/update.json')).status, 404);
+    assert.deepStrictEqual((await (await fetch(base + '/healthz')).json()).channels, {});
+    // uploads: the checksum is required and checked, files are not replaced silently
+    assert.strictEqual((await fetch(base + '/admin/files/a.exe', { method: 'PUT', headers: auth, body: exe })).status, 400);
+    const bad = await put('Audio Mixer-9.9.9.exe', exe, { headers: { 'X-SHA256': sha(exe2) } }); assert.strictEqual(bad.status, 400); assert.match((await bad.json()).error, /checksum mismatch/);
+    assert.ok(!fs.existsSync(path.join(ota.dirs.releases, 'Audio Mixer-9.9.9.exe')) && !fs.existsSync(path.join(ota.dirs.releases, 'Audio Mixer-9.9.9.exe.part')));
+    assert.strictEqual((await put('../evil.exe', exe)).status, 400);
+    assert.strictEqual((await put('Audio Mixer-9.9.9.exe', exe)).status, 201);
+    assert.strictEqual((await (await put('Audio Mixer-9.9.9.exe', exe)).json()).unchanged, true);                       // same file again: fine
+    assert.strictEqual((await put('Audio Mixer-9.9.9.exe', exe2)).status, 409);                                          // other content under a published name: refused
+    // manifests: unsigned, foreign key, missing file, changed file, wrong host, http url
+    const m1 = man('9.9.9', { 'win-x64-exe': ['Audio Mixer-9.9.9.exe', exe] });
+    const other = lic.initKeys(path.join(tmp, 'other')) && lic.loadPrivate(path.join(tmp, 'other'));
+    assert.strictEqual((await publish(m1, '', other)).status, 400);
+    assert.strictEqual((await fetch(base + '/admin/manifest/stable', { method: 'PUT', headers: auth, body: JSON.stringify({ payload: JSON.stringify(m1), signature: 'AAAA' }) })).status, 400);
+    const missing = await publish(man('9.9.9', { 'win-x64-exe': ['Audio Mixer-9.9.9.exe', exe], 'linux-deb': ['audio-mixer_9.9.9_all.deb', exe2] })); assert.strictEqual(missing.status, 400); assert.match(JSON.stringify(await missing.json()), /has not been uploaded/);
+    const changed = man('9.9.9', { 'win-x64-exe': ['Audio Mixer-9.9.9.exe', exe] }); changed.files['win-x64-exe'].sha256 = sha(exe2); assert.match(JSON.stringify(await (await publish(changed)).json()), /differs from the uploaded file/);
+    const wrongHost = man('9.9.9', { 'win-x64-exe': ['Audio Mixer-9.9.9.exe', exe] }); wrongHost.files['win-x64-exe'].url = 'https://evil.example/releases/x.exe'; assert.match(JSON.stringify(await (await publish(wrongHost)).json()), /not under https:\/\/ota\.test/);
+    // publish, then serve exactly what was published
+    const ok = await publish(m1); assert.strictEqual(ok.status, 200); assert.strictEqual((await ok.json()).version, '9.9.9');
+    const served = await fetch(base + '/update.json'), env = await served.json();
+    assert.ok(update.verifyManifest(env, jwk).ok && served.headers.get('etag'));
+    assert.strictEqual((await fetch(base + '/update.json', { headers: { 'If-None-Match': served.headers.get('etag') } })).status, 304);
+    assert.strictEqual((await publish(m1)).status, 200);                                                               // the same manifest again: unchanged
+    const old = await publish(man('9.9.8', { 'win-x64-exe': ['Audio Mixer-9.9.9.exe', exe] })); assert.strictEqual(old.status, 409);   // no downgrade
+    assert.strictEqual((await (await fetch(base + '/healthz')).json()).channels.stable, '9.9.9');
+    // the real update client, against this server (https name routed to the local port)
+    process.env.BRIDGE_UPDATE_HOSTS = 'ota.test';
+    const route = async (u, o) => { const r = await fetch(String(u).replace('https://ota.test', base), o); return { ok: r.ok, status: r.status, headers: r.headers, body: r.body, url: String(u), redirected: false, json: () => r.json(), text: () => r.text(), arrayBuffer: () => r.arrayBuffer() }; };
+    const info = await update.check({ current: '1.0.0', fetchImpl: route, url: 'https://ota.test/update.json', platform: 'win32', arch: 'x64', jwk });
+    assert.ok(info.updateAvailable && info.latest === '9.9.9' && info.signed && info.file.name === 'Audio Mixer-9.9.9.exe' && info.file.sha256 === sha(exe));
+    const dl = await update.download({ current: '1.0.0', fetchImpl: route, url: 'https://ota.test/update.json', dir: path.join(tmp, 'dl'), platform: 'win32', arch: 'x64', jwk });
+    assert.ok(dl.verified && fs.readFileSync(dl.file).equals(exe));
+    assert.rejects(update.check({ current: '1.0.0', fetchImpl: (u, o) => route(u, o).then(r => { throw new Error('no network'); }), url: 'https://ota.test/update.json' }));
+    // files: HEAD, Range, resume, unknown, traversal
+    const head = await fetch(base + '/releases/' + encodeURIComponent('Audio Mixer-9.9.9.exe'), { method: 'HEAD' }); assert.strictEqual(head.headers.get('content-length'), String(exe.length)); assert.strictEqual(head.headers.get('accept-ranges'), 'bytes');
+    const part = await fetch(base + '/releases/' + encodeURIComponent('Audio Mixer-9.9.9.exe'), { headers: { Range: 'bytes=10-19' } }); assert.strictEqual(part.status, 206); assert.strictEqual(part.headers.get('content-range'), `bytes 10-19/${exe.length}`); assert.ok(Buffer.from(await part.arrayBuffer()).equals(exe.subarray(10, 20)));
+    const tail = await fetch(base + '/releases/' + encodeURIComponent('Audio Mixer-9.9.9.exe'), { headers: { Range: 'bytes=-5' } }); assert.ok(Buffer.from(await tail.arrayBuffer()).equals(exe.subarray(exe.length - 5)));
+    assert.strictEqual((await fetch(base + '/releases/' + encodeURIComponent('Audio Mixer-9.9.9.exe'), { headers: { Range: 'bytes=99999-' } })).status, 416);
+    assert.strictEqual((await fetch(base + '/releases/nothing.exe')).status, 404);
+    for (const p of ['/releases/..%2F..%2Fetc%2Fpasswd', '/releases/%2e%2e', '/releases/a/b']) assert.ok([400, 404].includes((await fetch(base + p)).status), p);
+    assert.strictEqual((await fetch(base + '/update.json', { method: 'POST' })).status, 405);
+    // a file a manifest lists cannot be deleted; an unlisted one can; stats count the downloads
+    assert.strictEqual((await fetch(base + '/admin/files/' + encodeURIComponent('Audio Mixer-9.9.9.exe'), { method: 'DELETE', headers: auth })).status, 409);
+    assert.strictEqual((await put('spare.msi', exe2)).status, 201); assert.strictEqual((await fetch(base + '/admin/files/spare.msi', { method: 'DELETE', headers: auth })).status, 200);
+    const files = (await (await fetch(base + '/admin/files', { headers: auth })).json()).files; assert.deepStrictEqual(files.map(f => [f.name, f.referencedBy]), [['Audio Mixer-9.9.9.exe', ['stable']]]);
+    const st = await (await fetch(base + '/admin/stats', { headers: auth })).json(), d = Object.values(st.days)[0]; assert.ok(d.manifest.stable >= 3 && d.download['Audio Mixer-9.9.9.exe'] === 1);
+    // a restart keeps everything (index, manifests), files added by hand are noticed
+    fs.writeFileSync(path.join(ota.dirs.releases, 'by-hand.msi'), exe2); await ota.reindex(); assert.ok(ota.index()['by-hand.msi'] && ota.index()['by-hand.msi'].sha256 === sha(exe2));
+    // channels are separate
+    assert.strictEqual((await fetch(base + '/beta/update.json')).status, 404);
+    const beta = await fetch(base + '/admin/manifest/beta', { method: 'PUT', headers: auth, body: JSON.stringify(update.signManifest(man('10.0.0', { 'win-x64-exe': ['Audio Mixer-9.9.9.exe', exe] }, { channel: 'beta' }), priv)) }); assert.strictEqual(beta.status, 200);
+    assert.strictEqual((await (await fetch(base + '/beta/update.json')).json()).payload.includes('10.0.0'), true);
+    // the publish tool: signs here, uploads what the server lacks, publishes (plain http only for localhost)
+    // (a server without OTA_PUBLIC_URL, because the tool puts the server address into the file URLs)
+    const ota3 = createOta({ dataDir: path.join(tmp, 'd3'), token: 'secret-token', jwk, allowHttp: true }), s3 = http.createServer(ota3.handler); await new Promise(r => s3.listen(0, '127.0.0.1', r)); await ota3.reindex();
+    const base3 = 'http://127.0.0.1:' + s3.address().port; srv3 = s3;
+    const rel = path.join(tmp, 'rel'), ver = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8')).version;
+    fs.mkdirSync(rel); fs.writeFileSync(path.join(rel, `AudioMixer-${ver}-x64.msi`), Buffer.from('msi-' + 'z'.repeat(3000)));
+    const out = await new Promise((res, rej) => require('node:child_process').execFile('node', [path.join(__dirname, '..', 'scripts', 'ota.js'), 'publish', '--server', base3, '--token', 'secret-token', '--dir', keys, '--releases', rel, '--channel', 'beta', '--notes', 'x|y'], { env: { ...process.env, OTA_ALLOW_HTTP: '' } }, (e, so, se) => (e ? rej(new Error(se + so)) : res(so))));
+    assert.match(out, /upload AudioMixer-.*-x64\.msi/); assert.match(out, new RegExp('published beta ' + ver.replace(/\./g, '\\.')));
+    assert.ok(update.verifyManifest(await (await fetch(base3 + '/beta/update.json')).json(), jwk).manifest.version === ver);
+    await assert.rejects(new Promise((res, rej) => require('node:child_process').execFile('node', [path.join(__dirname, '..', 'scripts', 'ota.js'), 'status', '--server', 'http://ota.example.com', '--token', 'x'], (e, so, se) => (e ? rej(new Error(se)) : res(so)))), /must be https/);
+    assert.ok(logs.some(l => l.event === 'publish'));
+  } finally { srv.closeAllConnections(); srv.close(); if (srv3) { srv3.closeAllConnections(); srv3.close(); } delete process.env.BRIDGE_UPDATE_HOSTS; }
+  // admin routes do not exist without a token; the rate limit answers 429
+  const ota2 = createOta({ dataDir: path.join(tmp, 'd2'), jwk, rate: 3 }), s2 = http.createServer(ota2.handler); await new Promise(r => s2.listen(0, '127.0.0.1', r));
+  try { const b2 = 'http://127.0.0.1:' + s2.address().port; assert.strictEqual((await fetch(b2 + '/admin/files')).status, 404); const codes = []; for (let i = 0; i < 5; i++) codes.push((await fetch(b2 + '/update.json')).status); assert.deepStrictEqual(codes, [404, 404, 404, 429, 429]); }
+  finally { s2.closeAllConnections(); s2.close(); }
+});
