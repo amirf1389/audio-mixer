@@ -16,7 +16,7 @@ const FILES = [
   'bridge/server.js', 'bridge/detect.js', 'bridge/catalog.js', 'bridge/nowplaying.js', 'bridge/interfaces.js', 'bridge/asio-lock.js', 'bridge/audify.js', 'bridge/plugins.js', 'bridge/streams.js', 'bridge/levels.js', 'bridge/universal.js', 'bridge/license.js', 'bridge/license-public.json', 'bridge/update.js', 'bridge/duplex.js', 'bridge/winnative.js', 'bridge/security.js', 'bridge/sysaudio.js', 'bridge/inserts.js', 'bridge/pluginhost.js', 'bridge/input.js', 'bridge/output.js', 'bridge/volume.js', 'bridge/ws.js',
   'bridge/package.json', 'bridge/README.md',
   'Audio Mixer.vbs', 'native/win/src/AudioDevices.cpp', 'native/win/x64/AudioDevices.exe', 'native/win/x86/AudioDevices.exe', 'native/win/vbs/audio-devices.vbs',
-  'native/host/src/PluginHost.cpp', 'native/host/test/GainPlugin.cpp', 'native/host/x64/PluginHost.exe', 'native/host/x86/PluginHost.exe',
+  'native/mac/AudioDevices.swift', 'native/host/src/PluginHost.cpp', 'native/host/test/GainPlugin.cpp', 'native/host/x64/PluginHost.exe', 'native/host/x86/PluginHost.exe',
   'scripts/license.js', 'scripts/make-update.js',
 ];
 

@@ -176,4 +176,4 @@ if (require.main === module) {
     if (!r.fonts) console.log('Warning: the web fonts could not be bundled (' + r.warning + '); the app uses system fonts.');
   }).catch(e => { console.error('APK build failed: ' + e.message); process.exit(1); });
 }
-module.exports = { build, versionCode, transformHtml, png, iconPixel, findTools };
+module.exports = { build, versionCode, transformHtml, png, iconPixel, findTools, prepareWeb, which };
