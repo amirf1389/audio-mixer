@@ -946,16 +946,30 @@ window.navTabs = [
             return String(v == null ? '' : v).replace(/[&<>"'`]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '`': '&#96;' }[c]));
         };
 
+        // Identical messages within a few seconds are merged into one ("x2") instead of filling the stack (a failing interface reports again and again);
+        // warnings and errors stay long enough to be read (a short info toast: 2.2 s).
+        const NOTIFY_SLOW = /^(triangle-exclamation|microphone-slash|plug-circle-exclamation|plug-circle-xmark|circle-exclamation|bug)$/;
         window.notify = function(m, i='info') {
-            const d = document.createElement('div'); d.className='notification flex items-center gap-2';
-            const ico = document.createElement('i'); ico.className = `fa-solid fa-${String(i).replace(/[^a-z0-9-]/gi, '')} text-amber-400`;
-            const txt = document.createElement('span'); txt.textContent = String(m);
-            d.append(ico, ' ', txt);
+            const text = String(m), icon = String(i).replace(/[^a-z0-9-]/gi, '');
             let stack = document.getElementById('notify-stack');
             if (!stack) { stack = document.createElement('div'); stack.id = 'notify-stack'; document.body.appendChild(stack); }
+            const ms = NOTIFY_SLOW.test(icon) ? Math.min(9000, 5000 + text.length * 25) : 2200;
+            const hide = d => { d._t = setTimeout(() => { d.style.opacity = '0'; d.style.transform = 'translateY(-15px)'; d.style.transition = 'all 0.2s'; setTimeout(() => d.remove(), 200); }, ms); };
+            const same = Array.from(stack.children).find(c => c._msg === text && c.isConnected);
+            if (same) {                                        // already on screen: count it and keep it a little longer
+                same._n = (same._n || 1) + 1; same._count.textContent = ' x' + same._n;
+                clearTimeout(same._t); same.style.opacity = ''; same.style.transform = ''; hide(same);
+                return;
+            }
+            const d = document.createElement('div'); d.className='notification flex items-center gap-2';
+            const ico = document.createElement('i'); ico.className = `fa-solid fa-${icon} text-amber-400`;
+            const txt = document.createElement('span'); txt.textContent = text;
+            const cnt = document.createElement('span'); cnt.className = 'text-amber-400 font-bold';
+            d._msg = text; d._count = cnt;
+            d.append(ico, ' ', txt, cnt);
             while (stack.children.length >= 4) stack.removeChild(stack.firstChild);
             stack.appendChild(d);
-            setTimeout(() => { d.style.opacity = '0'; d.style.transform = 'translateY(-15px)'; d.style.transition = 'all 0.2s'; setTimeout(()=>d.remove(),200); }, 2200);
+            hide(d);
         };
 
         window.dismissAudioNotification = function() {
@@ -15696,9 +15710,13 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 });
                 const list = Array.from(found.values()).sort((a, b) => (a.loopback - b.loopback) || ((b.asio ? 1 : 0) - (a.asio ? 1 : 0)) || a.name.localeCompare(b.name));
                 // newly appeared interfaces (not on the first scan)
-                if (this.known) list.filter(i => !this.known.has(i.key)).forEach(i => { window.notify('Audio interface detected: ' + i.name + (i.asio ? ' (ASIO)' : ''), 'plug'); });
+                if (this.known) list.filter(i => !this.known.has(i.key)).forEach(i => { if (this.once('d:' + i.key)) window.notify('Audio interface detected: ' + i.name + (i.asio ? ' (ASIO)' : ''), 'plug'); });
                 const goneKeys = this.known ? Array.from(this.known).filter(k => !found.has(k)) : [];
-                goneKeys.forEach(k => { if (this.caps.has(k)) this.stopRead(k); if (this.writes.has(k)) this.stopWrite(k); });
+                goneKeys.forEach(k => {
+                    const gone = this.interfaces.find(x => x.key === k);
+                    if (gone && this.once('g:' + k)) window.notify('Audio interface removed: ' + gone.name, 'plug-circle-xmark');
+                    if (this.caps.has(k)) this.stopRead(k); if (this.writes.has(k)) this.stopWrite(k);
+                });
                 this.known = new Set(found.keys());
                 this.interfaces = list;
                 if (this.cfg.auto) this.autoEnable(); else this.applyEnabled();
@@ -15844,7 +15862,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                                 resolve(cap);
                             } else if (m.type === 'error') {
                                 if (!done) fail(m.message);
-                                else { window.notify('Interface read error: ' + m.message, 'triangle-exclamation'); self.stopRead(i.key); }
+                                else { self.warn(i.key, i.name + ': ' + self.friendly(m.message)); self.stopRead(i.key); }
                             }
                         };
                     }).catch(e => reject(e));
@@ -15884,7 +15902,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                                 resolve({ cap, w: { ws, ready: true, duplex: true, how: 'ASIO duplex / ' + m.device } });
                             } else if (m.type === 'error') {
                                 if (!done) fail(m.message);
-                                else { window.notify('Interface read / write error: ' + m.message, 'triangle-exclamation'); self.dropDuplex(i.key, ws); }
+                                else { self.warn(i.key, i.name + ': ' + self.friendly(m.message)); self.dropDuplex(i.key, ws); }
                             }
                         };
                     }).catch(e => reject(e));
@@ -15977,14 +15995,14 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 this.setStatus(k, 'opening...', false, true);
                 try { await this.ensureTap(); } catch (e) { return this.setStatus(k, e.message, true); }
                 const tries = (i.apis || []).filter(a => a.outputs > 0 && a.deviceId >= 0).sort((a, b) => apiRank(a.api) - apiRank(b.api));
-                let lastErr = (i.apis || []).some(a => a.outputs > 0 && a.deviceId < 0) ? 'listed only: install Audify or PortAudio (npm install in bridge/) to open it' : 'no writable device';
+                let lastErr = (i.apis || []).some(a => a.outputs > 0 && a.deviceId < 0) ? (this.portaudio ? 'listed only: the audio engine could not probe this device (in use by another program, exclusive mode or unplugged): close the other program, then SCAN NOW' : 'listed only: install Audify or PortAudio (npm install in bridge/) to open it') : 'no writable device';
                 for (const a of tries) {
-                    try { const w = await this.openWrite(a); this.writes.set(i.key, w); this.setStatus(k, 'WRITING via ' + w.how, false); this.updateMute(); this.render(); return; }
+                    try { const w = await this.openWrite(a, i.name); this.writes.set(i.key, w); this.setStatus(k, 'WRITING via ' + w.how, false); this.updateMute(); this.render(); return; }
                     catch (e) { lastErr = e.message; }
                 }
                 this.setStatus(k, lastErr, true);
             },
-            openWrite(a) {
+            openWrite(a, name) {
                 const ctx = window.state.ctx, self = this;
                 return new Promise((resolve, reject) => {
                     const ws = new WebSocket(self.wsUrl('/ws/output')); ws.binaryType = 'arraybuffer';
@@ -15997,7 +16015,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                         let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
                         if (m.type === 'levels') { if (window.asioMeters) window.asioMeters.push(m); return; }
                         if (m.type === 'started' && !done) { done = true; resolve({ ws, ready: true, how: (/asio/i.test(m.hostApi) ? 'ASIO' : m.hostApi) + ' / ' + m.device }); }
-                        else if (m.type === 'error') { if (!done) fail(m.message); else window.notify('Interface write error: ' + m.message, 'triangle-exclamation'); }
+                        else if (m.type === 'error') { if (!done) fail(m.message); else self.warn('w:' + a.deviceId, (name || 'Audio output') + ': ' + self.friendly(m.message)); }
                     };
                 });
             },
@@ -16080,7 +16098,19 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 if (lb && this.bridgeUrl && this.portaudio) this.startRead(lb, { music: true });
             },
 
-            setStatus(key, text, err, busy) { this.status[key] = { text, err: !!err, busy: !!busy, at: Date.now() }; this.renderRows(); },
+            // RtAudio / PortAudio / driver errors in words a musician can act on (the original text follows in the status line when it is short)
+            friendly(msg) {
+                const m = String(msg || '');
+                if (/probeDeviceInfo|already open|in use|unavailable|-9985|busy|exclusive|could not be opened|device is being used|AUDCLNT_E_DEVICE_IN_USE/i.test(m)) return 'In use by another program (DAW, the driver\'s control panel, exclusive mode): close it, then SCAN NOW';
+                if (/no (input|output) channels/i.test(m)) return 'This device has no ' + (/input/i.test(m) ? 'input' : 'output') + ' channels or could not be probed: close the other program, then SCAN NOW';
+                if (/does not support \d+ ?Hz/i.test(m)) return m;                      // already says what to do (set the rate in the driver's panel)
+                if (/not found|no such device|unplugged|disconnected/i.test(m)) return 'The device is gone: plug it in again, then SCAN NOW';
+                return m;
+            },
+            // a notice per key and text at most once per minute: a device that keeps failing (retried every 30 s) or flapping must not repeat itself
+            once(key, ms) { const t = this._notified || (this._notified = {}), now = Date.now(); if (t[key] && now - t[key] < (ms === undefined ? 60000 : ms)) return false; t[key] = now; return true; },
+            warn(key, text) { if (this.once('w:' + key + ':' + text)) window.notify(text, 'triangle-exclamation'); },
+            setStatus(key, text, err, busy) { this.status[key] = { text: err ? this.friendly(text) : text, err: !!err, busy: !!busy, at: Date.now() }; this.renderRows(); },
 
             // ── UI ──
             // the header's MIC FFT (RTA) shows the interface chosen in the FFT selector, whatever the source: browser microphone, ASIO, WASAPI, Core Audio, ALSA ...
@@ -16484,7 +16514,6 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 if (!j || !j.ok) return;
                 el.textContent = `UNIVERSAL: IN ${brief(j.best.input)}  /  OUT ${brief(j.best.output)}  |  ${j.inputs.length} in, ${j.outputs.length} out, ${j.asio.inputs + j.asio.outputs} ASIO`;
                 if (changeId && j.changeId !== changeId) {            // an interface was plugged in or removed
-                    if (window.notify) window.notify(`Audio devices changed: ${j.inputs.length} inputs / ${j.outputs.length} outputs`, 'plug');
                     if (window.liveSources && typeof window.liveSources.scan === 'function') window.liveSources.scan();
                 }
                 changeId = j.changeId;

@@ -1021,6 +1021,25 @@ test('installers: audio-mixer command (Windows .exe on PATH, mac / Linux link), 
   fsx.rmSync(stage, { recursive: true, force: true });
 });
 
+test('notifications: identical messages merge, errors stay readable, driver errors are friendly, device notices are not repeated', () => {
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  assert.match(html, /const same = Array\.from\(stack\.children\)\.find\(c => c\._msg === text/);            // x2 instead of a full stack
+  assert.match(html, /NOTIFY_SLOW = \/\^\(triangle-exclamation\|microphone-slash/); assert.match(html, /Math\.min\(9000, 5000 \+ text\.length \* 25\)/);
+  assert.match(html, /friendly\(msg\) \{/); assert.match(html, /probeDeviceInfo\|already open\|in use\|unavailable\|-9985/);
+  assert.match(html, /once\(key, ms\) \{/); assert.match(html, /warn\(key, text\) \{/);
+  assert.match(html, /self\.warn\(i\.key, i\.name \+ ': ' \+ self\.friendly\(m\.message\)\)/);          // read, duplex ...
+  assert.match(html, /self\.warn\('w:' \+ a\.deviceId, \(name \|\| 'Audio output'\)/);                    // ... and write errors
+  assert.match(html, /window\.notify\('Audio interface removed: ' \+ gone\.name, 'plug-circle-xmark'\)/);
+  assert.ok(!/Audio devices changed:/.test(html), 'one plug event, one notice (detected / removed), not two');
+  // the friendly() and once() logic itself, run on its own
+  const st = html.indexOf('friendly(msg) {'), en = html.indexOf('// a notice per key', st);
+  const fr = new Function('return {' + html.slice(st, en).trim().replace(/,\s*$/, '') + '}')();
+  assert.match(fr.friendly('RtApiAsio::probeDeviceInfo: error (-1) initializing driver'), /In use by another program/);
+  assert.match(fr.friendly('Foo has no input channels'), /no input channels/);
+  assert.strictEqual(fr.friendly('X does not support 44100 Hz (supports 48000)'), 'X does not support 44100 Hz (supports 48000)');
+  assert.match(fr.friendly('device not found'), /plug it in again/); assert.strictEqual(fr.friendly('weird'), 'weird');
+});
+
 test('verify: .msi installer file check', () => {
   const v = require('../client/verify');
   const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'vfy-')), f = pathx.join(dir, 'A.msi');
