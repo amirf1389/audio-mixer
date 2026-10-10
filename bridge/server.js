@@ -4,6 +4,8 @@
 //   GET /api/status   -> { ok, name, version }
 //   GET /api/drivers  -> native driver/device detection for this OS
 //   GET /api/volume   -> system output / input volume + mute
+//   GET /api/license, POST /api/license/activate|deactivate -> consumer license (plan, machine code)
+//   GET /api/update, POST /api/update/download -> OTA updates (signed manifest, checksum-verified download)
 //   GET /api/universal -> universal ASIO driver: all input / output sources, ranked, with the automatic pick
 //   GET /api/plugins -> VST3 / VST2 plugins (.vst3 / .dll / .vst) found and validated
 //   GET /api/audify, /api/framesize -> Audify (RtAudio) engine devices and automatic frame size
@@ -28,6 +30,8 @@ const { groupInterfaces } = require('./interfaces');
 const audifyEngine = require('./audify');
 const pluginScan = require('./plugins');
 const universalDriver = require('./universal');
+const license = require('./license');
+const updater = require('./update');
 const streamRegistry = require('./streams');
 
 const VERSION = (() => { try { return require('../package.json').version; } catch (_) { return '1.0.0'; } })();
@@ -74,8 +78,29 @@ async function handle(req, res) {
   if (req.method === 'OPTIONS') return send(res, 204, '', { ...cors, 'Access-Control-Allow-Methods': 'GET, POST', 'Access-Control-Allow-Headers': 'Content-Type, X-Mixer-Action' });
   const url = new URL(req.url, `http://${HOST}`);
   if (req.method === 'POST' && url.pathname === '/api/catalog/download') return handleDownload(req, res, cors);
+  if (req.method === 'POST' && url.pathname === '/api/license/activate') return handleAction(req, res, cors, 'license', async body => {
+    const r = license.activate(body.key);
+    return r.ok ? [200, r] : [400, r];
+  });
+  if (req.method === 'POST' && url.pathname === '/api/license/deactivate') return handleAction(req, res, cors, 'license', async () => [200, license.deactivate()], false);
+  if (req.method === 'POST' && url.pathname === '/api/update/download') return handleAction(req, res, cors, 'update', async () => {
+    if (!license.hasFeature(license.status(), 'ota')) return [402, { ok: false, needs: 'ota', error: 'Downloading updates needs the PRO or STUDIO plan. You can still check for updates.' }];
+    return [200, await updater.download({ current: VERSION })];
+  }, false);
   if (req.method !== 'GET') return json(res, 405, { ok: false, error: 'method not allowed' }, cors);
   if (url.pathname === '/api/status') return json(res, 200, { ok: true, name: 'audio-mixer-bridge', version: VERSION, node: process.version, pid: process.pid, uptimeSec: Math.round(process.uptime()), streams: streamRegistry.list(), time: Date.now() }, cors);
+  // Consumer licensing: the plan this copy runs as, this computer's machine code, and the stored key's state
+  if (url.pathname === '/api/license') return json(res, 200, { ok: true, version: VERSION, ...license.status() }, cors);
+
+  // OTA updates: is a newer, signed version published? (cached for 5 minutes, ?force=1 asks again)
+  if (url.pathname === '/api/update') {
+    try {
+      const force = url.searchParams.get('force') === '1';
+      if (force || !updateCache || Date.now() - updateCache.at > 300000) updateCache = { at: Date.now(), data: await updater.check({ current: VERSION }) };
+      return json(res, 200, updateCache.data, cors);
+    } catch (e) { return json(res, e.status || 502, { ok: false, current: VERSION, error: e.message }, cors); }
+  }
+
   if (url.pathname === '/api/drivers') {
     try { return json(res, 200, { ok: true, ...(await detect()) }, cors); }
     catch (e) { return json(res, 500, { ok: false, error: e.message }, cors); }
@@ -157,6 +182,21 @@ async function handle(req, res) {
     const type = TYPES[path.extname(file)] || 'application/octet-stream';
     send(res, 200, buf, { 'Content-Type': type, ...(type.startsWith('text/html') ? { 'X-Frame-Options': 'SAMEORIGIN' } : {}) });
   });
+}
+
+let updateCache = null;
+// JSON POST actions (license, updates): the custom header forces a CORS preflight, so foreign pages cannot trigger them.
+async function handleAction(req, res, cors, action, fn, wantBody = true) {
+  if (req.headers['x-mixer-action'] !== action) return json(res, 400, { ok: false, error: 'missing X-Mixer-Action: ' + action }, cors);
+  let body = {};
+  if (wantBody) {
+    if (!String(req.headers['content-type'] || '').startsWith('application/json')) return json(res, 400, { ok: false, error: 'JSON body required' }, cors);
+    let raw = '';
+    for await (const chunk of req) { raw += chunk; if (raw.length > 8192) return json(res, 413, { ok: false, error: 'request too large' }, cors); }
+    try { body = JSON.parse(raw || '{}'); } catch (_) { return json(res, 400, { ok: false, error: 'invalid JSON' }, cors); }
+  } else { for await (const _ of req) { /* drain */ } }
+  try { const [code, data] = await fn(body); return json(res, code, data, cors); }
+  catch (e) { return json(res, e.status || 500, { ok: false, error: e.message }, cors); }
 }
 
 // Driver download: browsers must send a custom header (forces a CORS preflight, so foreign pages cannot trigger it).

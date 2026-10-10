@@ -196,6 +196,10 @@ CRITICAL REVISIONS & ARCHITECTURAL UPGRADES:
             #tab-mixer > div > .glass-panel:first-child { flex-wrap: wrap; row-gap: 4px; }
             #tab-mixer > div > .glass-panel:first-child > div { flex-wrap: wrap; }
         }
+        /* consumer edition / plans: channels above the plan are hidden on the mixer page, admin cards are hidden for consumers */
+        .mixer-lane.lane-locked { display: none !important; }
+        #tab-renew.role-user .page-scroll-inner > :not([data-consumer]) { display: none !important; }
+        #lic-plan-grid [data-plan].active-plan { border-color: rgba(255,106,0,0.8); box-shadow: 0 0 10px rgba(255,106,0,0.25); }
         /* master limiter */
         .lim-gr-fill { transition: width .06s linear; }
 
@@ -721,8 +725,10 @@ CRITICAL REVISIONS & ARCHITECTURAL UPGRADES:
         window.editModeUnlocked = true;
         window.wakeLockSentinel = null;
         window.selectedChannel = 0;
-        window.currentRole = localStorage.getItem('halx_role') || 'Admin';
+        window.currentRole = localStorage.getItem('halx_role') || 'User';   // consumer edition by default; Admin needs the PIN (see LICENSE page)
         const DEFAULT_ADMIN_PIN = "1XF2OO*";
+        // Vendor public key for license keys and update manifests (written by scripts/license.js; the private key never ships)
+        window.LICENSE_PUBLIC_JWK = /*LICENSE_PUBLIC_JWK*/{"kty":"EC","crv":"P-256","x":"pKAM0LhW8NOz1NZacnAlaVmfs0zH_RzIKAwp0BUtLHk","y":"j5Ww_94MXhBoPCjUXTrG7qKFoQBIA5TqIve4zDMB90A"}/*END_LICENSE_PUBLIC_JWK*/;
 
         // COMPLETE REFINED NAVIGATION TABS REGISTRY
 window.navTabs = [
@@ -6649,6 +6655,45 @@ window.navTabs = [
             htmlString += `
             <div id="tab-renew" class="tab-content tab-hidden">
               <div class="page-scroll-inner w-full max-w-4xl mx-auto space-y-3 font-mono text-[8px]">
+
+                <!-- CONSUMER LICENSE ACTIVATION: plan, machine code, license key -->
+                <div data-consumer="1" class="glass-panel p-3.5 rounded-xl wing-bezel space-y-3">
+                  <div class="flex flex-wrap items-center justify-between gap-2">
+                    <div class="flex items-center gap-2.5">
+                      <div class="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 text-sm"><i class="fa-solid fa-key"></i></div>
+                      <div>
+                        <h3 class="text-xs font-black text-white font-wing tracking-wider uppercase">YOUR LICENSE</h3>
+                        <p class="text-[7.5px] text-slate-400">ACTIVATE A LICENSE KEY TO UNLOCK MORE CHANNELS AND FEATURES</p>
+                      </div>
+                    </div>
+                    <span id="lic-plan-badge" class="px-2 py-0.5 rounded text-[7.5px] bg-slate-500/20 text-slate-300 border border-slate-500/40 font-bold">PLAN: BASIC &bull; 8 CH</span>
+                  </div>
+                  <div id="lic-status" class="text-slate-300 text-[8px]">No license key activated: the free BASIC plan with 8 channels.</div>
+                  <div class="grid grid-cols-1 sm:grid-cols-3 gap-2" id="lic-plan-grid">
+                    <div data-plan="basic" class="bg-black/60 p-2.5 rounded-lg border border-white/10 space-y-1"><div class="text-slate-200 font-black text-[9px]">BASIC</div><div class="text-amber-400 font-bold text-[8px]">8 CHANNELS</div><div class="text-slate-400 text-[7px] leading-relaxed">Mixer, EQ, dynamics, limiter, FX, buses, ASIO / WASAPI through the local server, update check. Free, no key.</div></div>
+                    <div data-plan="pro" class="bg-black/60 p-2.5 rounded-lg border border-white/10 space-y-1"><div class="text-cyan-400 font-black text-[9px]">PRO</div><div class="text-amber-400 font-bold text-[8px]">16 CHANNELS</div><div class="text-slate-400 text-[7px] leading-relaxed">Everything in BASIC plus the VST3 / VST2 plugin manager and update downloads (OTA).</div></div>
+                    <div data-plan="studio" class="bg-black/60 p-2.5 rounded-lg border border-white/10 space-y-1"><div class="text-fuchsia-400 font-black text-[9px]">STUDIO</div><div class="text-amber-400 font-bold text-[8px]">32 CHANNELS</div><div class="text-slate-400 text-[7px] leading-relaxed">Everything in PRO with the full 32-channel console.</div></div>
+                  </div>
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                    <div class="bg-black/60 p-2.5 rounded-lg border border-white/10 space-y-1.5">
+                      <span class="text-slate-400 block text-[7px] font-bold">THIS COMPUTER'S MACHINE CODE (SEND IT WITH YOUR ORDER FOR A KEY BOUND TO THIS PC)</span>
+                      <div class="flex gap-1.5 items-center"><code id="lic-machine" class="flex-1 bg-black border border-white/10 rounded px-2 py-1 text-cyan-400 text-[9px] text-center select-all">-</code><button id="lic-copy-machine" type="button" class="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-slate-200 font-bold uppercase text-[7px]">COPY</button></div>
+                      <span class="text-slate-500 block text-[6.5px]" id="lic-machine-note">Start PC mode (the local server) to read the machine code.</span>
+                    </div>
+                    <div class="bg-black/60 p-2.5 rounded-lg border border-white/10 space-y-1.5">
+                      <span class="text-slate-400 block text-[7px] font-bold">LICENSE KEY</span>
+                      <textarea id="lic-key-input" rows="3" spellcheck="false" autocomplete="off" placeholder="Paste your license key (AMIX1.…)" class="w-full bg-black border border-white/10 rounded p-1.5 text-emerald-400 font-mono text-[8px] outline-none resize-none break-all"></textarea>
+                      <div class="flex gap-1.5"><button id="lic-activate" type="button" class="flex-1 py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-black uppercase rounded text-[8px] transition">ACTIVATE</button><button id="lic-deactivate" type="button" class="px-3 py-1.5 bg-white/10 hover:bg-rose-500 hover:text-black text-slate-300 font-bold uppercase rounded text-[8px] transition">DEACTIVATE</button></div>
+                    </div>
+                  </div>
+                  <div id="lic-msg" class="text-[7.5px] min-h-[10px]" role="status" aria-live="polite"></div>
+                </div>
+
+                <!-- CONSUMER EDITION / ADMIN MODE -->
+                <div data-consumer="1" class="glass-panel p-3 rounded-xl wing-bezel flex flex-wrap items-center justify-between gap-2">
+                  <div><span class="text-[8px] font-black text-white font-wing tracking-wider uppercase">EDITION: <span id="edition-name" class="text-amber-400">CONSUMER</span></span><p class="text-[7px] text-slate-400">The consumer edition hides the operator, access, admin and boot / reset pages. Administrators switch with the admin PIN.</p></div>
+                  <button id="edition-switch" type="button" class="px-2.5 py-1 rounded bg-white/10 hover:bg-amber-500 hover:text-black text-slate-200 font-bold uppercase text-[7.5px] transition">ADMIN MODE (PIN)</button>
+                </div>
                 
                 <!-- License Header -->
                 <div class="glass-panel p-3.5 rounded-xl wing-bezel flex flex-wrap justify-between items-center gap-2">
@@ -7478,6 +7523,16 @@ window.navTabs = [
             htmlString += `
             <div id="tab-plugins" class="tab-content tab-hidden">
               <div class="page-scroll-inner w-full max-w-6xl mx-auto space-y-3">
+                <!-- PLUGIN MANAGER: real VST3 / VST2 (.vst3, .dll, .vst) found on this PC by the local server -->
+                <div id="plg-manager" class="glass-panel p-3.5 rounded-xl wing-bezel space-y-2">
+                  <div class="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-2">
+                    <div class="flex items-center gap-2.5"><div class="w-8 h-8 rounded-lg bg-purple-500/20 border border-purple-500/40 flex items-center justify-center text-purple-400 text-sm"><i class="fa-solid fa-plug"></i></div>
+                      <div><h3 class="text-xs font-black text-white font-wing tracking-wider uppercase">PLUGIN MANAGER &bull; VST3 / VST2 (.vst3 &bull; .dll &bull; .vst)</h3><p id="plg-sub" class="text-[7.5px] text-slate-400 font-mono">START PC MODE TO SCAN THIS COMPUTER</p></div></div>
+                    <div class="flex items-center gap-1.5"><span id="plg-lock" class="hidden px-2 py-0.5 rounded text-[7px] bg-amber-500/20 text-amber-400 border border-amber-500/40 font-bold">PRO FEATURE</span><button id="plg-scan" type="button" class="px-2 py-1 rounded bg-purple-500/20 hover:bg-purple-500 hover:text-black text-purple-300 border border-purple-500/40 font-bold uppercase text-[7px] transition">SCAN</button></div>
+                  </div>
+                  <div id="plg-list" class="space-y-1 max-h-56 overflow-y-auto font-mono text-[7.5px]" style="scrollbar-width:thin"><div class="text-slate-500">No scan yet.</div></div>
+                  <p class="text-[6.5px] text-slate-500 font-mono">Each Windows binary is checked (PE header and exports). Put plugins in the folder shown above (Start Menu: Plugins folder) or in the standard VST folders. Selected plugins are remembered for the rack; running them inside the mixer's signal path needs a VST host, which this release does not include.</p>
+                </div>
                 <div class="glass-panel p-3.5 rounded-xl wing-bezel flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                   <div class="flex items-center gap-2.5">
                     <div class="w-8 h-8 rounded-lg bg-purple-500/20 border border-purple-500/40 flex items-center justify-center text-purple-400 text-sm">
@@ -8652,7 +8707,7 @@ window.navTabs = [
             let db = faderDb;
             if (db === undefined) { const fader = document.getElementById(`ch-fader-${channelIndex}`); db = fader ? parseFloat(fader.value) : 0; }
             const anySolo = window.state.channelSolos.some(Boolean);
-            const silenced = window.state.channelMutes[channelIndex] || (anySolo && !window.state.channelSolos[channelIndex]);
+            const silenced = window.state.channelMutes[channelIndex] || (anySolo && !window.state.channelSolos[channelIndex]) || channelIndex >= (window.licenseChannels || CHANNELS);   // channels above the plan stay silent
             const linear = silenced || !(db > -59) ? 0 : Math.pow(10, db / 20);
             try { node.gain.setTargetAtTime(linear, window.state.ctx.currentTime, 0.02); } catch(e){}   // 20 ms glide: no zipper noise while dragging
         };
@@ -15746,8 +15801,9 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 if (window.knoxEnabled) return window.notify('KNOX Active: patching locked', 'shield-halved');
                 this.unpatchAll();
                 let ch = 0, n = 0;
-                this.caps.forEach(cap => { if (cap.music) return; if (ch + 1 < 30 && this.patchCap(cap, ch)) { ch += 2; n++; } });
-                if (this.music && this.patchCap(this.music, 30)) n++;
+                const lim = window.licenseChannels || 32, top = lim >= 32 ? 30 : Math.max(2, lim - 2);   // the plan's channel limit: music goes to the last pair of the plan
+                this.caps.forEach(cap => { if (cap.music) return; if (ch + 1 < top && this.patchCap(cap, ch)) { ch += 2; n++; } });
+                if (this.music && this.patchCap(this.music, top)) n++;
                 window.notify(n ? `Auto-patched ${n} live source${n > 1 ? 's' : ''} to the mixer (use headphones to avoid feedback)` : 'Nothing to patch: enable READ on an interface first', 'microphone');
                 this.render();
             },
@@ -16196,6 +16252,307 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             setInterval(() => { if (!document.hidden) refreshUniversal(); }, 5000);
             setTimeout(refreshUniversal, 1500);
             window.refreshUniversalDriver = refreshUniversal;
+        }
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
+    })();
+
+    (function () {
+        'use strict';
+        // CONSUMER EDITION: roles, license activation (plans), channel limits, plugin manager, real OTA updates.
+        // The license key is verified here with WebCrypto against the vendor public key (LICENSE_PUBLIC_JWK); the local server verifies it too and
+        // stores it for the installed app. Without a valid key the BASIC plan runs: 8 channels.
+        const $ = id => document.getElementById(id);
+        const PLANS = {
+            basic: { id: 'basic', name: 'BASIC', channels: 8, features: ['core'] },
+            pro: { id: 'pro', name: 'PRO', channels: 16, features: ['core', 'plugins', 'ota'] },
+            studio: { id: 'studio', name: 'STUDIO', channels: 32, features: ['core', 'plugins', 'ota', 'studio'] },
+        };
+        const ADMIN_TABS = ['acct', 'access', 'admin', 'boot'];
+        const KEY_STORE = 'halx_license';
+        const notify = (m, i) => { try { if (window.notify) window.notify(m, i || 'key'); } catch (e) { /* ignore */ } };
+        const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* storage blocked */ } }, del(k) { try { localStorage.removeItem(k); } catch (e) { /* ignore */ } } };
+        const bridge = () => (window.universalAsioSdk && window.universalAsioSdk.bridgeUrl) || null;
+        const unb64u = s => { const b = atob(String(s).replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((String(s).length + 3) % 4)); return Uint8Array.from(b, c => c.charCodeAt(0)); };
+        const text = (id, t) => { const e = $(id); if (e && e.textContent !== t) e.textContent = t; };
+
+        async function post(path, headerValue, body) {
+            const r = await fetch(bridge() + path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Mixer-Action': headerValue }, body: body === undefined ? undefined : JSON.stringify(body) });
+            return { status: r.status, json: await r.json().catch(() => ({})) };
+        }
+
+        // ── license key verification in the page ──
+        async function verifyKey(key, machine) {
+            const parts = String(key || '').trim().replace(/\s+/g, '').split('.');
+            if (parts.length !== 3 || parts[0] !== 'AMIX1') return { ok: false, reason: 'malformed', message: 'This is not an Audio Mixer license key.' };
+            const jwk = window.LICENSE_PUBLIC_JWK;
+            if (!jwk || jwk.x === 'placeholder') return { ok: false, reason: 'unconfigured', message: 'This build has no vendor key: license keys cannot be checked.' };
+            try {
+                if (!(window.crypto && window.crypto.subtle)) throw new Error('nosubtle');
+                const pub = await crypto.subtle.importKey('jwk', jwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
+                const ok = await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, pub, unb64u(parts[2]), new TextEncoder().encode(parts[1]));
+                if (!ok) return { ok: false, reason: 'bad-signature', message: 'The license key is not valid (signature check failed).' };
+            } catch (e) { return { ok: false, reason: e.message === 'nosubtle' ? 'nosubtle' : 'bad-signature', message: e.message === 'nosubtle' ? 'This browser cannot check keys here; use PC mode (the local server).' : 'The license key is not valid (signature check failed).' }; }
+            let p;
+            try { p = JSON.parse(new TextDecoder().decode(unb64u(parts[1]))); } catch (e) { return { ok: false, reason: 'malformed', message: 'This is not an Audio Mixer license key.' }; }
+            if (!p || p.v !== 1 || !PLANS[p.plan]) return { ok: false, reason: 'unknown-plan', message: 'The license key is for an unknown plan.' };
+            const now = Date.now();
+            if (p.issued && p.issued > now + 86400000) return { ok: false, reason: 'not-yet-valid', message: 'The license key is not valid yet (check the date of this computer).' };
+            if (p.expires && p.expires < now) return { ok: false, reason: 'expired', message: 'The license key expired on ' + new Date(p.expires).toISOString().slice(0, 10) + '.' };
+            if (p.mid) {
+                if (!machine) return { ok: false, reason: 'needs-server', message: 'This key is bound to one computer: start PC mode (the local server) so it can be checked against this PC.' };
+                if (String(p.mid).replace(/-/g, '') !== String(machine).replace(/-/g, '')) return { ok: false, reason: 'wrong-machine', message: 'This license key was issued for a different computer.' };
+            }
+            return { ok: true, payload: p, plan: PLANS[p.plan] };
+        }
+
+        const L = window.license = {
+            plan: PLANS.basic, state: 'basic', info: null, machineId: null, version: null,
+            has(feature) { return this.plan.features.indexOf(feature) >= 0; },
+
+            // Applies a plan: channel limit, mixer banks, plan chip, the license page.
+            set(planId, state, info, message) {
+                this.plan = PLANS[planId] || PLANS.basic; this.state = state; this.info = info || null; this.message = message || '';
+                window.licenseChannels = this.plan.channels;
+                this.limits(); this.render();
+                try { if (typeof window.applyAllChannelGains === 'function' && window.state && window.state.ctx) window.applyAllChannelGains(); } catch (e) { /* engine not started */ }
+                if (window.state && window.state.selectedChannel >= this.plan.channels && typeof window.selectChannel === 'function') { /* keep selection inside the plan */ window.selectChannel(0); }
+                document.dispatchEvent(new CustomEvent('licensechange', { detail: this.plan }));
+            },
+            limits() {
+                const n = this.plan.channels;
+                document.querySelectorAll('.mixer-lane').forEach((lane, i) => lane.classList.toggle('lane-locked', i >= n));
+                const btns = document.querySelectorAll('.bank-btn');
+                btns.forEach(b => {
+                    const m = /'([^']+)'/.exec(b.getAttribute('onclick') || '');
+                    const bank = m && m[1];
+                    if (bank === '1-16') b.textContent = n >= 32 ? 'PAGE 1: CH 01-16' : 'PAGE 1: CH 01-' + String(n).padStart(2, '0');
+                    else if (bank === '17-32' || bank === 'all') b.style.display = n >= 32 ? '' : 'none';
+                });
+                if (n < 32 && typeof window.switchMixLayer === 'function' && btns[0]) window.switchMixLayer('1-16', btns[0]);
+                // plan chip next to the FOH button of the mixer toolbar
+                let chip = $('plan-chip');
+                if (!chip) {
+                    const anchor = $('foh-mode-toggle-btn');
+                    if (anchor && anchor.parentNode) {
+                        chip = document.createElement('button'); chip.id = 'plan-chip'; chip.type = 'button';
+                        chip.addEventListener('click', () => window.switchTab && window.switchTab('renew'));
+                        anchor.parentNode.appendChild(chip);
+                    }
+                }
+                if (chip) {
+                    chip.textContent = 'PLAN: ' + this.plan.name + ' • ' + n + ' CH' + (n < 32 ? ' • UPGRADE' : '');
+                    chip.title = 'Open the license page';
+                    chip.className = 'px-2 py-1 rounded font-black text-[7.5px] border ' + (n >= 32 ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/40' : 'bg-amber-500/15 text-amber-400 border-amber-500/40 hover:bg-amber-500 hover:text-black transition');
+                }
+            },
+            render() {
+                const badge = $('lic-plan-badge');
+                if (badge) { badge.textContent = 'PLAN: ' + this.plan.name + ' • ' + this.plan.channels + ' CH'; badge.className = 'px-2 py-0.5 rounded text-[7.5px] border font-bold ' + (this.plan.id === 'basic' ? 'bg-slate-500/20 text-slate-300 border-slate-500/40' : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'); }
+                const st = $('lic-status'), i = this.info;
+                if (st) {
+                    if (this.state === 'active' && i) st.textContent = 'Activated for ' + (i.name || 'this customer') + ' • ' + this.plan.name + ' • ' + (i.expires ? 'valid until ' + new Date(i.expires).toISOString().slice(0, 10) : 'no expiry') + (i.boundToThisPc ? ' • bound to this computer' : '');
+                    else if (this.state === 'expired') st.textContent = 'Your license expired' + (i && i.expires ? ' on ' + new Date(i.expires).toISOString().slice(0, 10) : '') + ': running the free BASIC plan (8 channels). Activate a new key to continue.';
+                    else if (this.state === 'invalid') st.textContent = (this.message || 'The stored license key is not valid') + ' Running the free BASIC plan (8 channels).';
+                    else st.textContent = 'No license key activated: the free BASIC plan with 8 channels.';
+                }
+                document.querySelectorAll('#lic-plan-grid [data-plan]').forEach(c => c.classList.toggle('active-plan', c.getAttribute('data-plan') === this.plan.id));
+                if (this.machineId) { text('lic-machine', this.machineId); text('lic-machine-note', 'Keys can be bound to this computer with this code.'); }
+                else { text('lic-machine', '-'); text('lic-machine-note', 'Start PC mode (the local server) to read the machine code.'); }
+                const d = $('lic-deactivate'); if (d) d.disabled = this.state === 'basic';
+                plugins.render(); ota.render();
+            },
+            // Reads the stored key (browser) and, when the local server is connected, the server's own verified status.
+            async init() {
+                const key = store.get(KEY_STORE);
+                if (key) { const v = await verifyKey(key, this.machineId); if (v.ok) this.set(v.payload.plan, 'active', { name: v.payload.name, expires: v.payload.expires, boundToThisPc: !!v.payload.mid }); else if (v.reason !== 'needs-server') { store.del(KEY_STORE); this.set('basic', v.reason === 'expired' ? 'expired' : 'invalid', null, v.message); } }
+                else this.set('basic', 'basic');
+                this.watchBridge();
+            },
+            // Once the local server answers: its status is authoritative; a key held only by the page is handed over so the installed app agrees.
+            async syncBridge() {
+                if (!bridge()) return false;
+                try {
+                    const j = await (await fetch(bridge() + '/api/license', { cache: 'no-store' })).json();
+                    if (!j || !j.ok) return false;
+                    this.machineId = j.machineId; this.version = j.version;
+                    const key = store.get(KEY_STORE);
+                    if (j.state === 'active') this.set(j.plan.id, 'active', j.license);
+                    else if (key) {
+                        const v = await verifyKey(key, this.machineId);
+                        if (v.ok) { const r = await post('/api/license/activate', 'license', { key }); if (r.json && r.json.ok) this.set(r.json.plan.id, 'active', r.json.license); else this.set(v.payload.plan, 'active', { name: v.payload.name, expires: v.payload.expires, boundToThisPc: !!v.payload.mid }); }
+                        else { store.del(KEY_STORE); this.set('basic', v.reason === 'expired' ? 'expired' : 'invalid', null, v.message); }
+                    } else this.set('basic', j.state === 'basic' ? 'basic' : j.state, j.license, j.message);
+                    this.render(); return true;
+                } catch (e) { return false; }
+            },
+            watchBridge() {
+                let tries = 0;
+                const t = setInterval(async () => { if (++tries > 40) clearInterval(t); else if (bridge() && await this.syncBridge()) { clearInterval(t); ota.autoCheck(); plugins.scan(); } }, 1000);
+            },
+            async activate() {
+                const input = $('lic-key-input'), msg = $('lic-msg'), say = (t, ok) => { if (msg) { msg.textContent = t; msg.className = 'text-[7.5px] min-h-[10px] ' + (ok ? 'text-emerald-400' : 'text-rose-400'); } };
+                const key = (input && input.value || '').trim().replace(/\s+/g, '');
+                if (!key) return say('Paste your license key first.', false);
+                if (bridge() && !this.machineId) await this.syncBridge();
+                const v = await verifyKey(key, this.machineId);
+                if (!v.ok) { say(v.message, false); notify('License not activated: ' + v.message, 'triangle-exclamation'); return; }
+                if (bridge()) {
+                    const r = await post('/api/license/activate', 'license', { key });
+                    if (!(r.json && r.json.ok)) { say((r.json && r.json.message) || (r.json && r.json.error) || 'The local server refused the key.', false); return; }
+                }
+                store.set(KEY_STORE, key);
+                this.set(v.payload.plan, 'active', { name: v.payload.name, expires: v.payload.expires, boundToThisPc: !!v.payload.mid });
+                if (input) input.value = '';
+                say('License activated: ' + this.plan.name + ' plan, ' + this.plan.channels + ' channels.', true);
+                notify('License activated: ' + this.plan.name + ' (' + this.plan.channels + ' channels)', 'circle-check');
+            },
+            async deactivate() {
+                store.del(KEY_STORE);
+                if (bridge()) { try { await post('/api/license/deactivate', 'license'); } catch (e) { /* server gone */ } }
+                this.set('basic', 'basic');
+                const msg = $('lic-msg'); if (msg) { msg.textContent = 'License removed from this computer: BASIC plan.'; msg.className = 'text-[7.5px] min-h-[10px] text-slate-300'; }
+                notify('License deactivated: BASIC plan (8 channels)', 'key');
+            },
+        };
+
+        // ── roles: the consumer edition hides the administrator pages ──
+        const editions = {
+            apply() {
+                const consumer = window.currentRole !== 'Admin';
+                ADMIN_TABS.forEach(id => { const b = $('nav-' + id); if (b) b.style.display = consumer ? 'none' : ''; });
+                const tab = $('tab-renew'); if (tab) tab.classList.toggle('role-user', consumer);
+                text('edition-name', consumer ? 'CONSUMER' : 'ADMIN');
+                const sw = $('edition-switch'); if (sw) sw.textContent = consumer ? 'ADMIN MODE (PIN)' : 'BACK TO CONSUMER';
+                const b = $('header-user-badge'); if (b) b.textContent = 'ROLE: ' + (consumer ? 'CONSUMER' : 'ADMIN');
+            },
+        };
+
+        // ── plugin manager (real VST3 / VST2 files found by the local server) ──
+        const plugins = {
+            data: null, enabled: (() => { try { return new Set(JSON.parse(store.get('halx_plugins_enabled') || '[]')); } catch (e) { return new Set(); } })(),
+            async scan() {
+                if (!bridge()) { this.data = null; return this.render(); }
+                try { const j = await (await fetch(bridge() + '/api/plugins', { cache: 'no-store' })).json(); this.data = j && j.ok ? j : null; } catch (e) { this.data = null; }
+                this.render();
+            },
+            render() {
+                const list = $('plg-list'); if (!list) return;
+                const allowed = L.has('plugins');
+                const lock = $('plg-lock'); if (lock) lock.classList.toggle('hidden', allowed);
+                const d = this.data;
+                text('plg-sub', !bridge() ? 'START PC MODE TO SCAN THIS COMPUTER' : !d ? 'SCAN FAILED' : d.counts.total + ' FOUND • ' + d.counts.loadable + ' VALID • ' + d.counts.rejected + ' REJECTED • FOLDER: ' + d.appDir);
+                list.textContent = '';
+                if (!d) { const e = document.createElement('div'); e.className = 'text-slate-500'; e.textContent = bridge() ? 'Could not scan.' : 'The local server is not running.'; list.appendChild(e); return; }
+                if (!allowed) { const e = document.createElement('div'); e.className = 'text-amber-400'; e.textContent = 'The plugin manager is part of the PRO and STUDIO plans. The scan result below is read-only.'; list.appendChild(e); }
+                if (!d.plugins.length) { const e = document.createElement('div'); e.className = 'text-slate-500'; e.textContent = 'No plugins found. Copy .vst3 / .dll plugins into ' + d.appDir + ' and scan again.'; list.appendChild(e); }
+                d.plugins.slice(0, 300).forEach(p => {
+                    const id = p.format + ':' + p.name + ':' + p.arch, ok = p.valid && p.compatible;
+                    const row = document.createElement('label'); row.className = 'flex items-center gap-2 bg-black/50 border border-white/5 rounded px-2 py-1 ' + (ok ? 'text-slate-200' : 'text-slate-500');
+                    const cb = document.createElement('input'); cb.type = 'checkbox'; cb.className = 'accent-purple-400'; cb.checked = ok && this.enabled.has(id); cb.disabled = !ok || !allowed;
+                    cb.addEventListener('change', () => { if (cb.checked) this.enabled.add(id); else this.enabled.delete(id); store.set('halx_plugins_enabled', JSON.stringify([...this.enabled])); });
+                    const name = document.createElement('span'); name.className = 'flex-1 truncate font-bold'; name.textContent = p.name;
+                    const fmt = document.createElement('span'); fmt.className = 'text-purple-300'; fmt.textContent = p.format + (p.arch ? ' ' + p.arch : '');
+                    const st = document.createElement('span'); st.className = ok ? 'text-emerald-400' : 'text-amber-400'; st.textContent = ok ? 'VALID' : (p.reason || 'REJECTED').toUpperCase();
+                    row.append(cb, name, fmt, st); list.appendChild(row);
+                });
+            },
+        };
+
+        // ── OTA updates (real: signed manifest, SHA-256 verified download) ──
+        const ota = {
+            info: null, saved: null,
+            async check(user) {
+                const badge = $('ota-status-badge'), btn = $('ota-check-btn');
+                if (!bridge()) { if (user) notify('Updates need PC mode (the local server)', 'cloud'); this.info = null; return this.render(); }
+                if (btn) { btn.disabled = true; btn.textContent = 'CHECKING...'; }
+                if (badge) badge.textContent = 'QUERYING THE UPDATE SERVER...';
+                try {
+                    const r = await fetch(bridge() + '/api/update?force=1', { cache: 'no-store' });
+                    this.info = await r.json();
+                } catch (e) { this.info = { ok: false, error: 'update server not reachable' }; }
+                if (btn) { btn.disabled = false; btn.textContent = 'CHECK AGAIN'; }
+                store.set('halx_ota_checked', String(Date.now()));
+                this.render();
+                if (user) notify(this.info.ok ? (this.info.updateAvailable ? 'Update available: v' + this.info.latest : 'Audio Mixer is up to date (v' + this.info.current + ')') : 'Update check failed: ' + this.info.error, 'cloud-arrow-down');
+            },
+            autoCheck() { const last = Number(store.get('halx_ota_checked') || 0); if (Date.now() - last > 86400000) this.check(false); else this.check(false); },
+            render() {
+                const i = this.info, cur = L.version || (i && i.current) || null;
+                if (window.state && window.state.ota && cur) window.state.ota.currentVersion = cur;
+                const hdr = $('hdr-ota-badge');
+                if (hdr) { hdr.textContent = 'OTA: v' + (cur || '-') + (i && i.ok && i.updateAvailable ? ' → v' + i.latest : ''); if (hdr.parentElement) hdr.parentElement.style.cursor = 'pointer'; }
+                const badge = $('ota-status-badge');
+                if (badge) {
+                    if (!bridge()) { badge.textContent = 'START PC MODE TO CHECK FOR UPDATES'; badge.className = 'px-2 py-0.5 rounded text-[7.5px] font-mono bg-slate-500/20 text-slate-300 border border-slate-500/40 font-bold'; }
+                    else if (!i) { badge.textContent = 'CURRENT: v' + (cur || '-'); }
+                    else if (!i.ok) { badge.textContent = 'UPDATE CHECK FAILED: ' + i.error; badge.className = 'px-2 py-0.5 rounded text-[7.5px] font-mono bg-rose-500/20 text-rose-400 border border-rose-500/40 font-bold'; }
+                    else if (i.updateAvailable) { badge.textContent = 'UPDATE AVAILABLE: v' + i.latest; badge.className = 'px-2 py-0.5 rounded text-[7.5px] font-mono bg-amber-500/20 text-amber-400 border border-amber-500/40 font-bold'; }
+                    else { badge.textContent = 'UP TO DATE: v' + i.current; badge.className = 'px-2 py-0.5 rounded text-[7.5px] font-mono bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 font-bold'; }
+                }
+                if (i && i.ok) {
+                    text('ota-cloud-ver', 'v' + i.latest); text('ota-cloud-date', i.released || '-'); text('ota-cloud-size', i.file && i.file.size ? (i.file.size / 1048576).toFixed(1) + ' MB' : '-');
+                    const ul = $('ota-notes-list'); if (ul) { ul.textContent = ''; (i.notes || []).forEach(n => { const li = document.createElement('li'); li.className = 'flex items-start gap-1.5'; const ic = document.createElement('i'); ic.className = 'fa-solid fa-check text-cyan-400 text-[8px] mt-0.5'; const sp = document.createElement('span'); sp.textContent = n; li.append(ic, sp); ul.appendChild(li); }); }
+                }
+                const dl = $('ota-admin-download-btn');
+                if (dl) {
+                    const can = i && i.ok && i.updateAvailable && i.file;
+                    dl.classList.toggle('hidden', !can);
+                    if (can) { dl.disabled = false; dl.textContent = L.has('ota') ? 'DOWNLOAD & VERIFY' : 'DOWNLOAD (PRO PLAN)'; dl.onclick = () => ota.download(); }
+                }
+                if (this.saved) { const sp = $('ota-download-speed'); if (sp) sp.textContent = this.saved; }
+            },
+            async download() {
+                if (!L.has('ota')) { notify('Downloading updates needs the PRO or STUDIO plan', 'lock'); window.switchTab && window.switchTab('renew'); return; }
+                const bar = $('ota-progress-bar'), pct = $('ota-progress-pct'), box = $('ota-progress-container'), dl = $('ota-admin-download-btn');
+                if (box) box.classList.remove('hidden'); if (bar) bar.style.width = '35%'; if (pct) pct.textContent = '...';
+                if (dl) { dl.disabled = true; dl.textContent = 'DOWNLOADING...'; }
+                try {
+                    const r = await post('/api/update/download', 'update');
+                    if (!(r.json && r.json.ok)) throw new Error((r.json && r.json.error) || 'download failed');
+                    if (bar) bar.style.width = '100%'; if (pct) pct.textContent = '100%';
+                    this.saved = 'Saved and checksum-verified: ' + r.json.file + ' (' + (r.json.bytes / 1048576).toFixed(1) + ' MB). ' + r.json.how;
+                    const badge = $('ota-status-badge'); if (badge) { badge.textContent = 'DOWNLOADED & VERIFIED: v' + r.json.version; badge.className = 'px-2 py-0.5 rounded text-[7.5px] font-mono bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 font-bold'; }
+                    if (dl) { dl.disabled = false; dl.textContent = 'SHOW HOW TO INSTALL'; dl.onclick = () => notify(r.json.how, 'circle-info'); }
+                    notify('Update downloaded and verified. ' + r.json.how, 'circle-check');
+                    const sp = $('ota-download-speed'); if (sp) sp.textContent = this.saved;
+                } catch (e) { if (bar) bar.style.width = '0%'; if (pct) pct.textContent = 'FAILED'; if (dl) { dl.disabled = false; dl.textContent = 'TRY AGAIN'; } notify('Update download failed: ' + e.message, 'triangle-exclamation'); }
+            },
+        };
+        // the page's firmware simulation is replaced by the real updater (same buttons, same labels)
+        window.checkForOtaUpdates = user => ota.check(user !== false);
+        window.downloadOtaFirmware = () => ota.download();
+        window.verifyOtaIntegrity = () => notify('The download was already verified (SHA-256 from the signed manifest).', 'shield-halved');
+        window.otaUpdater = ota; window.pluginManager = plugins;
+
+        function wire() {
+            const on = (id, fn) => { const e = $(id); if (e && !e.dataset.wired) { e.dataset.wired = '1'; e.addEventListener('click', fn); } };
+            on('lic-activate', () => L.activate());
+            on('lic-deactivate', () => L.deactivate());
+            on('lic-copy-machine', () => { const m = L.machineId; if (m && navigator.clipboard) navigator.clipboard.writeText(m).then(() => notify('Machine code copied', 'copy')); });
+            on('edition-switch', () => { if (window.currentRole === 'Admin') window.setUserRole('User'); else window.requestRoleSwitch('Admin'); });
+            on('plg-scan', () => plugins.scan());
+            const hdr = $('hdr-ota-badge'); if (hdr && hdr.parentElement && !hdr.parentElement.dataset.wired) { hdr.parentElement.dataset.wired = '1'; hdr.parentElement.addEventListener('click', () => { window.switchTab && window.switchTab('renew'); setTimeout(() => ota.check(true), 50); }); }
+        }
+
+        function start() {
+            // wait for the console markup (built on load), then apply edition + plan
+            let tries = 0;
+            const t = setInterval(() => {
+                if (document.querySelector('.mixer-lane') && $('lic-activate') || ++tries > 80) {
+                    clearInterval(t);
+                    wire();
+                    const origRole = window.setUserRole;
+                    if (typeof origRole === 'function') window.setUserRole = function () { const r = origRole.apply(this, arguments); editions.apply(); return r; };
+                    const origSwitch = window.switchTab;
+                    window.switchTab = function (tabId) {
+                        if (window.currentRole !== 'Admin' && ADMIN_TABS.indexOf(tabId) >= 0) { notify('That page is part of the administrator edition (see LICENSE > Admin mode)', 'lock'); return; }
+                        const r = origSwitch.apply(this, arguments);
+                        if (tabId === 'plugins') plugins.scan();
+                        return r;
+                    };
+                    editions.apply(); L.set('basic', 'basic'); L.init();
+                }
+            }, 100);
         }
         if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
     })();

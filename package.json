@@ -1,6 +1,6 @@
 {
   "name": "audio-mixer",
-  "version": "1.5.1",
+  "version": "1.6.0",
   "description": "Audio mixer web app with an optional local system server (PC mode) for ASIO / WASAPI / Core Audio / ALSA.",
   "private": true,
   "license": "MIT",
@@ -15,6 +15,8 @@
     "test": "cd bridge && npm test",
     "setup": "node client/cli.js setup",
     "build": "node scripts/build.js",
+    "license": "node scripts/license.js",
+    "make-update": "node scripts/make-update.js",
     "build:archive": "node scripts/build.js --archive",
     "service:install": "node client/cli.js service install",
     "service:uninstall": "node client/cli.js service uninstall",
