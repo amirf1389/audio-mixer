@@ -1,10 +1,10 @@
 'use strict';
 // Autostart ("enable") for the local system server: starts bridge/server.js when you log in, no admin rights needed.
-//   Windows: Startup-folder script (hidden window)   macOS: LaunchAgent   Linux: systemd user service
+//   Windows: a Run entry in the registry (HKCU, no scripts and nothing written to the Startup folder)   macOS: LaunchAgent   Linux: systemd user service
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { execFile } = require('node:child_process');
+const { execFile, spawn, spawnSync } = require('node:child_process');
 
 const NAME = 'audio-mixer';
 const SERVER = path.resolve(__dirname, '..', 'bridge', 'server.js');
@@ -16,9 +16,12 @@ function safePath(p) {
 }
 const xml = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]));
 
-function windowsScript(node, server) {
-  return `' Starts the Audio Mixer local system server at login (hidden). Remove with: node client/cli.js service uninstall\r\n` +
-    `Set sh = CreateObject("WScript.Shell")\r\nsh.Run """${safePath(node)}"" ""${safePath(server)}""", 0, False\r\n`;
+// Windows autostart is one registry value. With the installed native launcher (AudioMixerServer.exe, next to runtime\\ and bridge\\) the server starts
+// without a console window; a plain Node.js checkout starts node.exe directly (its console window is visible: nothing is hidden).
+const WIN_RUN_KEY = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run';
+const WIN_VALUE = 'AudioMixerServer';
+function windowsCommand(node, server, launcher) {
+  return launcher ? `"${safePath(launcher)}"` : `"${safePath(node)}" "${safePath(server)}"`;
 }
 function macPlist(node, server, log) {
   return `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n` +
@@ -31,8 +34,7 @@ function systemdUnit(node, server) {
 
 function targets(platform = process.platform, env = process.env, home = os.homedir()) {
   if (platform === 'win32') {
-    const appdata = env.APPDATA || path.join(home, 'AppData', 'Roaming');
-    return { platform, file: path.join(appdata, 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup', 'AudioMixerServer.vbs') };
+    return { platform, key: WIN_RUN_KEY, value: WIN_VALUE, file: WIN_RUN_KEY + '\\' + WIN_VALUE };
   }
   if (platform === 'darwin') return { platform, file: path.join(home, 'Library', 'LaunchAgents', 'com.audiomixer.bridge.plist'), log: path.join(home, 'Library', 'Logs', 'audio-mixer.log') };
   if (platform === 'linux') return { platform, file: path.join((env.XDG_CONFIG_HOME || path.join(home, '.config')), 'systemd', 'user', NAME + '.service') };
@@ -41,22 +43,36 @@ function targets(platform = process.platform, env = process.env, home = os.homed
 
 const run = (exec, cmd, args) => new Promise(res => exec(cmd, args, { windowsHide: true }, err => res(!err)));
 
-// `opts` is injectable for tests: { platform, env, home, node, server, exec }
+// `opts` is injectable for tests: { platform, env, home, node, server, launcher, exec, spawn, reg }
 async function install(opts = {}) {
   const node = opts.node || process.execPath, server = opts.server || SERVER, exec = opts.exec || execFile;
   const t = targets(opts.platform, opts.env, opts.home);
-  const content = t.platform === 'win32' ? windowsScript(node, server) : t.platform === 'darwin' ? macPlist(node, server, t.log) : systemdUnit(node, server);
+  if (t.platform === 'win32') {
+    const launcher = opts.launcher !== undefined ? opts.launcher : (fs.existsSync(path.join(path.dirname(server), '..', 'AudioMixerServer.exe')) ? path.resolve(path.dirname(server), '..', 'AudioMixerServer.exe') : null);
+    const command = windowsCommand(node, server, launcher);
+    const added = await run(exec, 'reg', ['add', t.key, '/v', t.value, '/t', 'REG_SZ', '/d', command, '/f']);
+    let started = false;
+    if (added) {
+      try { (opts.spawn || spawn)(launcher || node, launcher ? [] : [server], { detached: true, stdio: 'ignore', windowsHide: true }).unref(); started = true; } catch (_) { /* starts at the next login */ }
+    }
+    return { file: t.file, started, installed: added, command };
+  }
+  const content = t.platform === 'darwin' ? macPlist(node, server, t.log) : systemdUnit(node, server);
   fs.mkdirSync(path.dirname(t.file), { recursive: true });
   fs.writeFileSync(t.file, content, { mode: 0o644 });
   let started;
   if (t.platform === 'darwin') started = await run(exec, 'launchctl', ['load', '-w', t.file]);
-  else if (t.platform === 'linux') { await run(exec, 'systemctl', ['--user', 'daemon-reload']); started = await run(exec, 'systemctl', ['--user', 'enable', '--now', NAME + '.service']); }
-  else started = await run(exec, 'wscript', ['//nologo', t.file]);
+  else { await run(exec, 'systemctl', ['--user', 'daemon-reload']); started = await run(exec, 'systemctl', ['--user', 'enable', '--now', NAME + '.service']); }
   return { file: t.file, started };
 }
 
 async function uninstall(opts = {}) {
   const exec = opts.exec || execFile, t = targets(opts.platform, opts.env, opts.home);
+  if (t.platform === 'win32') {
+    const existed = status(opts).installed;
+    await run(exec, 'reg', ['delete', t.key, '/v', t.value, '/f']);
+    return { file: t.file, removed: existed };
+  }
   if (t.platform === 'darwin') await run(exec, 'launchctl', ['unload', '-w', t.file]);
   else if (t.platform === 'linux') await run(exec, 'systemctl', ['--user', 'disable', '--now', NAME + '.service']);
   const existed = fs.existsSync(t.file);
@@ -65,6 +81,13 @@ async function uninstall(opts = {}) {
   return { file: t.file, removed: existed };
 }
 
-function status(opts = {}) { const t = targets(opts.platform, opts.env, opts.home); return { file: t.file, installed: fs.existsSync(t.file) }; }
+function status(opts = {}) {
+  const t = targets(opts.platform, opts.env, opts.home);
+  if (t.platform === 'win32') {
+    const q = (opts.reg || ((args) => spawnSync('reg', args, { windowsHide: true })))(['query', t.key, '/v', t.value]);
+    return { file: t.file, installed: !!q && q.status === 0 };
+  }
+  return { file: t.file, installed: fs.existsSync(t.file) };
+}
 
-module.exports = { install, uninstall, status, targets, windowsScript, macPlist, systemdUnit, safePath };
+module.exports = { install, uninstall, status, targets, windowsCommand, macPlist, systemdUnit, safePath };

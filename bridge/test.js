@@ -262,10 +262,20 @@ test('autostart generates safe per-OS files and installs / removes them', async 
   const exec = (cmd, args, o, cb) => { calls.push([cmd, ...args].join(' ')); cb(null); };
   const base = { home, env: { APPDATA: pathx.join(home, 'AppData') }, node: '/usr/bin/node', server: '/opt/audio mixer/bridge/server.js', exec };
 
-  const w = await svc.install({ ...base, platform: 'win32', node: 'C:\\Program Files\\nodejs\\node.exe', server: 'C:\\mixer\\bridge\\server.js' });
-  assert.ok(w.file.endsWith('AudioMixerServer.vbs') && w.file.includes('Startup'));
-  assert.match(fsx.readFileSync(w.file, 'utf8'), /sh\.Run """C:\\Program Files\\nodejs\\node\.exe"" ""C:\\mixer\\bridge\\server\.js""", 0, False/);
-  assert.ok(calls.some(c => c.startsWith('wscript //nologo ')));
+  // Windows: one registry Run value, no script file anywhere
+  const spawned = [];
+  const w = await svc.install({ ...base, platform: 'win32', node: 'C:\\Program Files\\nodejs\\node.exe', server: 'C:\\mixer\\bridge\\server.js', launcher: null, spawn: (c, a) => { spawned.push([c, ...a]); return { unref() {} }; } });
+  assert.strictEqual(w.installed, true); assert.strictEqual(w.command, '"C:\\Program Files\\nodejs\\node.exe" "C:\\mixer\\bridge\\server.js"');
+  assert.ok(calls.some(c => c.startsWith('reg add HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run /v AudioMixerServer /t REG_SZ /d ')));
+  assert.ok(!calls.some(c => /wscript/i.test(c)));
+  assert.deepStrictEqual(fsx.readdirSync(home), []);                                   // nothing was written into the profile
+  const wl = await svc.install({ ...base, platform: 'win32', server: 'C:\\Program Files\\Audio Mixer\\bridge\\server.js', launcher: 'C:\\Program Files\\Audio Mixer\\AudioMixerServer.exe', spawn: (c, a) => { spawned.push([c, ...a]); return { unref() {} }; } });
+  assert.strictEqual(wl.command, '"C:\\Program Files\\Audio Mixer\\AudioMixerServer.exe"');         // the signed native launcher when installed
+  assert.deepStrictEqual(spawned[1], ['C:\\Program Files\\Audio Mixer\\AudioMixerServer.exe']);
+  assert.strictEqual(svc.status({ ...base, platform: 'win32', reg: () => ({ status: 0 }) }).installed, true);
+  assert.strictEqual(svc.status({ ...base, platform: 'win32', reg: () => ({ status: 1 }) }).installed, false);
+  assert.strictEqual((await svc.uninstall({ ...base, platform: 'win32', reg: () => ({ status: 0 }) })).removed, true);
+  assert.ok(calls.some(c => c.startsWith('reg delete HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run /v AudioMixerServer /f')));
 
   const m = await svc.install({ ...base, platform: 'darwin' });
   assert.ok(m.file.endsWith('com.audiomixer.bridge.plist'));
@@ -333,12 +343,12 @@ function makeZip(entries) {      // minimal zip writer (deflate) for tests
   return Buffer.concat([...parts, cd, eocd]);
 }
 
-function fakeNodeFetch(zip, { badSum = false } = {}) {
+function fakeNodeFetch(zip, { badSum = false, arch = 'x64' } = {}) {
   const sum = cryptox.createHash('sha256').update(zip).digest('hex');
   return async url => {
-    if (url.endsWith('/index.json')) return new Response(JSON.stringify([{ version: 'v99.0.0', lts: false, files: ['win-x64-zip'] }, { version: 'v98.1.2', lts: 'Fake', files: ['linux-x64', 'win-x64-zip'] }]));
-    if (url.endsWith('/SHASUMS256.txt')) return new Response(`${badSum ? '0'.repeat(64) : sum}  node-v98.1.2-win-x64.zip\n${'1'.repeat(64)}  other.tar.gz\n`);
-    if (url.endsWith('node-v98.1.2-win-x64.zip')) return new Response(zip);
+    if (url.endsWith('/index.json')) return new Response(JSON.stringify([{ version: 'v99.0.0', lts: false, files: [`win-${arch}-zip`] }, { version: 'v98.1.2', lts: 'Fake', files: ['linux-x64', `win-${arch}-zip`] }, { version: 'v97.0.0', lts: 'Old', files: ['linux-x64'] }]));
+    if (url.endsWith('/SHASUMS256.txt')) return new Response(`${badSum ? '0'.repeat(64) : sum}  node-v98.1.2-win-${arch}.zip\n${'1'.repeat(64)}  other.tar.gz\n`);
+    if (url.endsWith(`node-v98.1.2-win-${arch}.zip`)) return new Response(zip);
     return new Response('', { status: 404 });
   };
 }
@@ -370,26 +380,22 @@ test('installer: official Node.js runtime is fetched, checked and cached; a bad 
   fsx.rmSync(cache, { recursive: true, force: true }); fsx.rmSync(cache2, { recursive: true, force: true });
 });
 
-test('installer: stages the app with the bundled runtime and builds a Windows setup.exe when NSIS is available', async () => {
+test('installer: stages the app with the bundled runtime for x64 and x86 (no NSIS involved)', async () => {
   const bi = require('../scripts/build-installer');
-  const zip = makeZip([['node-v98.1.2-win-x64/LICENSE', Buffer.from('MIT')], ['node-v98.1.2-win-x64/node.exe', Buffer.from('MZ-fake-node')]]);
-  const out = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'inst-'));
-  const hasNsis = require('node:child_process').spawnSync('makensis', ['-VERSION']).status === 0;
-  const r = await bi.buildInstaller({ out, fetchImpl: fakeNodeFetch(zip), runMakensis: hasNsis, bundleAudify: false });
-  assert.ok(fsx.existsSync(pathx.join(r.stage, 'runtime', 'node.exe')) && fsx.existsSync(pathx.join(r.stage, 'client', 'cli.js')));
-  assert.ok(!fsx.existsSync(pathx.join(r.stage, 'start-pc-mode.sh')));
-  assert.match(fsx.readFileSync(pathx.join(r.stage, 'start-pc-mode.bat'), 'utf8'), /runtime\\node\.exe/);
-  assert.match(fsx.readFileSync(pathx.join(r.stage, 'start-local-server.bat'), 'utf8'), /runtime\\node\.exe" bridge\\server\.js/);
-  const nsi = fsx.readFileSync(pathx.join(__dirname, '..', 'installer', 'audio-mixer.nsi'), 'utf8');
-  assert.match(nsi, /RequestExecutionLevel user/);                           // no administrator rights
-  assert.match(nsi, /service install/); assert.match(nsi, /service uninstall/);
-  if (hasNsis) {
-    assert.ok(r.installer && fsx.existsSync(r.installer));
-    const head = fsx.readFileSync(r.installer).subarray(0, 2).toString();
-    assert.strictEqual(head, 'MZ');                                          // a real Windows executable
-    assert.strictEqual(r.sha256.length, 64);
+  for (const arch of ['x64', 'x86']) {
+    const zip = makeZip([[`node-v98.1.2-win-${arch}/LICENSE`, Buffer.from('MIT')], [`node-v98.1.2-win-${arch}/node.exe`, Buffer.from('MZ-fake-node-' + arch)]]);
+    const out = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'inst-'));
+    const r = await bi.buildInstaller({ out, arch, fetchImpl: fakeNodeFetch(zip, { arch }), bundleAudify: false });
+    assert.strictEqual(pathx.basename(r.stage), `stage-${arch}`);
+    assert.strictEqual(fsx.readFileSync(pathx.join(r.stage, 'runtime', 'node.exe')).toString(), 'MZ-fake-node-' + arch);
+    assert.ok(fsx.existsSync(pathx.join(r.stage, 'client', 'cli.js')) && fsx.existsSync(pathx.join(r.stage, 'MANIFEST.sha256')));
+    assert.ok(!fsx.existsSync(pathx.join(r.stage, 'start-pc-mode.sh')));
+    assert.match(fsx.readFileSync(pathx.join(r.stage, 'start-pc-mode.bat'), 'utf8'), /runtime\\node\.exe/);
+    assert.match(fsx.readFileSync(pathx.join(r.stage, 'start-local-server.bat'), 'utf8'), /runtime\\node\.exe" bridge\\server\.js/);
+    fsx.rmSync(out, { recursive: true, force: true });
   }
-  fsx.rmSync(out, { recursive: true, force: true });
+  assert.ok(!fsx.existsSync(pathx.join(__dirname, '..', 'installer', 'audio-mixer.nsi')), 'the NSIS script is gone');
+  await assert.rejects(bi.fetchNodeRuntime({ cache: osx.tmpdir(), arch: 'arm64', fetchImpl: async () => { throw new Error('x'); } }), /unknown architecture/);
 });
 
 // ── now playing, interface scan, ASIO arbitration ──
@@ -523,23 +529,53 @@ test('verify: manifest pass, tamper, missing and extra files', () => {
   fs.rmSync(root, { recursive: true });
 });
 
-test('verify: installer file checks and checksum sidecar', () => {
+test('verify: setup .exe (embedded package + hash trailer, also after a signature is appended) and checksum sidecar', () => {
   const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
-  const v = require('../client/verify');
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vfy-')), f = path.join(dir, 'Setup.exe');
-  fs.writeFileSync(f, Buffer.concat([Buffer.from('MZ'), Buffer.from('Nullsoft Install System')]));
-  fs.writeFileSync(f + '.sha256', `${v.sha256(f)}  Setup.exe\n`);
+  const v = require('../client/verify'), be = require('../scripts/build-exe');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vfy-')), f = path.join(dir, 'Audio Mixer-1.exe');
+  const msi = Buffer.concat([Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]), Buffer.alloc(500, 3)]);
+  const code = '{87FE9B11-C8D7-5DEA-97C2-5C2ABE8BED40}';
+  fs.writeFileSync(f, be.packPayload(Buffer.concat([Buffer.from('MZ'), Buffer.alloc(300)]), msi, code));
+  fs.writeFileSync(f + '.sha256', `${v.sha256(f)}  Audio Mixer-1.exe\n`);
   assert.ok(v.checkInstallerFile(f).every(r => r.level === 'PASS'));
-  fs.writeFileSync(f + '.sha256', `${'1'.repeat(64)}  Setup.exe\n`);
-  assert.ok(v.checkInstallerFile(f).some(r => r.level === 'FAIL'));
+  const t = be.readTrailer(fs.readFileSync(f), fs.readFileSync(f).length);
+  assert.strictEqual(t.productCode, code); assert.ok(t.payload.equals(msi));
+  fs.writeFileSync(f + '.sha256', `${'1'.repeat(64)}  x\n`);
+  assert.ok(v.checkInstallerFile(f).some(r => r.level === 'FAIL' && /does NOT match/.test(r.title)));
+  const bad = fs.readFileSync(f); bad[400] ^= 0xff;                          // flip a payload byte
+  fs.writeFileSync(f, bad); fs.unlinkSync(f + '.sha256');
+  assert.ok(v.checkInstallerFile(f).some(r => r.level === 'FAIL' && /changed after the build/.test(r.title)));
   fs.writeFileSync(f, 'not an exe');
   assert.ok(v.checkInstallerFile(f).some(r => r.level === 'FAIL' && /executable/.test(r.title)));
-  fs.rmSync(dir, { recursive: true });
+  assert.throws(() => be.packPayload(Buffer.alloc(4), msi, 'not-a-guid'), /bad product code/);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('verify: pinned self-signed certificate is accepted only when it is the published one', async () => {
+  const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
+  const v = require('../client/verify');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vfy-'));
+  const der = crypto.randomBytes(300); fs.writeFileSync(path.join(dir, 'AudioMixer-signing.cer'), der);
+  const pin = crypto.createHash('sha1').update(der).digest('hex').toUpperCase();
+  assert.strictEqual(v.pinnedThumbprint(path.join(dir, 'x.exe'), {}), pin);
+  fs.writeFileSync(path.join(dir, 'pem.cer'), '-----BEGIN CERTIFICATE-----\n' + der.toString('base64') + '\n-----END CERTIFICATE-----\n');
+  assert.strictEqual(v.pinnedThumbprint('x', { AUDIO_MIXER_SIGNING_CER: path.join(dir, 'pem.cer') }), pin);
+  assert.strictEqual(v.pinnedThumbprint(path.join(os.tmpdir(), 'nothing-here', 'x.exe'), {}), null);
+  const run = out => (cmd, args, opts, cb) => cb(null, out);
+  const sig = (out, pinned) => v.checkSignature('x', 'Installer', { platform: 'win32', run: run(out), pinned });
+  assert.strictEqual((await sig(`UnknownError|CN=Audio Mixer (self-signed)|${pin}`, pin))[0].level, 'PASS');       // untrusted root, but the published certificate
+  assert.strictEqual((await sig(`UnknownError|CN=Someone|${'AB'.repeat(20)}`, pin))[0].level, 'FAIL');            // some other self-signed certificate
+  assert.strictEqual((await sig(`Valid|CN=Someone|${'AB'.repeat(20)}`, pin))[0].level, 'WARN');                   // trusted, but not ours
+  assert.strictEqual((await sig(`Valid|CN=Audio Mixer|${pin}`, pin))[0].level, 'PASS');
+  assert.strictEqual((await sig(`HashMismatch|CN=Audio Mixer|${pin}`, pin))[0].level, 'FAIL');                    // changed after signing
+  assert.strictEqual((await sig('NotSigned||', pin))[0].level, 'WARN');
+  fs.rmSync(dir, { recursive: true, force: true });
 });
 
 test('verify: parsers and injected PowerShell results', async () => {
   const v = require('../client/verify');
-  assert.deepStrictEqual(v.parseSignature('Valid|CN=OpenJS Foundation'), { status: 'Valid', subject: 'CN=OpenJS Foundation' });
+  assert.deepStrictEqual(v.parseSignature('Valid|CN=OpenJS Foundation'), { status: 'Valid', subject: 'CN=OpenJS Foundation', thumbprint: '' });
+  assert.deepStrictEqual(v.parseSignature('UnknownError|CN=A, O=B|ab12'), { status: 'UnknownError', subject: 'CN=A, O=B', thumbprint: 'AB12' });
   assert.strictEqual(v.parseDefender('CLEAN').state, 'clean');
   assert.deepStrictEqual(v.parseDefender('THREAT|123,456'), { state: 'threat', ids: '123,456' });
   assert.strictEqual(v.parseDefender('').state, 'unavailable');
@@ -746,7 +782,7 @@ test('installer bundles Audify: pinned Windows binaries, copied into the stage a
       }
     } else {
       const rel = pathx.join(opts.cwd, 'build', 'Release'); fsx.mkdirSync(rel, { recursive: true });
-      Object.keys(bi.AUDIFY_WIN_SHA256).forEach(f => fsx.writeFileSync(pathx.join(rel, f), content));
+      Object.keys(bi.AUDIFY_WIN_SHA256.x64).forEach(f => fsx.writeFileSync(pathx.join(rel, f), content));
     }
     return { status: 0 };
   };
@@ -773,17 +809,30 @@ test('verify: native files under bridge/node_modules must be in the manifest', (
   fsx.rmSync(root, { recursive: true, force: true });
 });
 
-test('msi: stable GUIDs, WiX source covers every staged file, per-user, features and upgrade code', () => {
+test('msi: stable GUIDs, per-machine Program Files paths for x64 and x86, per-user flavour, uninstall entries', () => {
   const m = require('../scripts/build-msi');
   assert.strictEqual(m.guid('a/b.js'), m.guid('a/b.js')); assert.notStrictEqual(m.guid('a/b.js'), m.guid('a/c.js'));
   assert.match(m.guid('x'), /^[0-9A-F]{8}-[0-9A-F]{4}-5[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/);
+  assert.strictEqual(m.productCode('x64', 'machine', '1.4.0'), m.productCode('x64', 'machine', '1.4.0'));
+  assert.notStrictEqual(m.productCode('x64', 'machine', '1.4.0'), m.productCode('x86', 'machine', '1.4.0'));
+  assert.strictEqual(new Set(Object.values(m.UPGRADE_CODES)).size, 4);
   const stage = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'msi-'));
   fsx.mkdirSync(pathx.join(stage, 'bridge')); fsx.writeFileSync(pathx.join(stage, 'bridge', 'a & b.js'), 'x'); fsx.writeFileSync(pathx.join(stage, 'LICENSE'), 'MIT');
-  const x = m.wxs({ stage, version: '1.3.0', vbs: '/tmp/x.vbs' });
-  assert.match(x, /InstallScope="perUser"/); assert.match(x, /UpgradeCode="6F3C2B8E-5D41-4A7B-9C0E-2A1D7B64F3A9"/);
-  assert.match(x, /Name="a &amp; b\.js"/); assert.match(x, /Feature Id="Autostart"/); assert.match(x, /Feature Id="Desktop"[^>]*Level="2"/);
-  assert.match(x, /NOT NSISINSTALL/); assert.match(x, /\[%USERPROFILE\]\\AudioMixerPlugins/);
-  assert.strictEqual((x.match(/<File /g) || []).length, 3);                              // 2 staged files + the hidden-start script
+  const x64 = m.wxs({ stage, version: '1.4.0', arch: 'x64' });
+  assert.match(x64, /InstallScope="perMachine"/); assert.match(x64, /Directory Id="ProgramFiles64Folder"/); assert.match(x64, /Win64="yes"/);
+  assert.match(x64, /Root="HKLM"/); assert.match(x64, /UpgradeCode="6F3C2B8E-5D41-4A7B-9C0E-2A1D7B64F3A9"/);
+  assert.match(x64, /Name="a &amp; b\.js"/); assert.match(x64, /Feature Id="Autostart"/); assert.match(x64, /Feature Id="Desktop"[^>]*Level="2"/);
+  assert.match(x64, /Id="ScUninstall"[^>]*msiexec\.exe" Arguments="\/x \{[0-9A-F-]{36}\}"/);          // Start Menu uninstall entry
+  assert.match(x64, /ARPURLINFOABOUT/);                                                                  // Settings > Apps entry details
+  assert.match(x64, /Id="ScPlugins"[^>]*AudioMixerServer\.exe" Arguments="\/plugins"/);             // native launcher, no cmd one-liner
+  assert.match(x64, /Name="AudioMixer" Type="string" Value="&quot;\[INSTALLDIR\]AudioMixerServer\.exe&quot;"/);
+  assert.ok(!/vbs|wscript|cmd\.exe|NSIS/i.test(x64), 'no scripts, no shell one-liners');
+  const x86 = m.wxs({ stage, version: '1.4.0', arch: 'x86' });
+  assert.match(x86, /Directory Id="ProgramFilesFolder"/); assert.ok(!/ProgramFiles64Folder/.test(x86)); assert.ok(!/Win64="yes"/.test(x86));
+  const user = m.wxs({ stage, version: '1.4.0', arch: 'x64', scope: 'user' });
+  assert.match(user, /InstallScope="perUser"/); assert.match(user, /LocalAppDataFolder/); assert.match(user, /Root="HKCU"/);
+  assert.throws(() => m.wxs({ stage, version: '1', vbs: 'x', arch: 'arm64' }), /bad arch/);
+  assert.strictEqual((x64.match(/<File /g) || []).length, 2);                                           // exactly the staged files
   assert.match(m.rtf('a\\b {c}\nü'), /^\{\\rtf1.*a\\\\b \\\{c\\\}\\par\n\\u252\?\}$/s);
   fsx.rmSync(stage, { recursive: true, force: true });
 });
@@ -814,4 +863,72 @@ test('live status: open native streams are listed in /api/status and removed on 
   server.closeAllConnections(); server.close();
   out.onClose();
   assert.strictEqual(streams.list().length, base);
+});
+
+// ── signing and the setup program ──
+const toolOk = (cmd, args) => { try { return require('node:child_process').spawnSync(cmd, args, { encoding: 'utf8' }).status !== null; } catch (_) { return false; } };
+
+test('signing: certificate handling and thumbprint', () => {
+  const sg = require('../scripts/sign');
+  assert.strictEqual(sg.thumbprint(Buffer.from('abc')), 'A9993E364706816ABA3E25717850C26C9CD0D89D');
+  assert.throws(() => sg.ensureSigningCert({ dir: osx.tmpdir(), env: { SIGN_PFX: '/nonexistent/file.pfx' } }), /SIGN_PFX file not found/);
+  const id = sg.ensureSigningCert({ dir: osx.tmpdir(), env: { SIGN_PFX: __filename, SIGN_PFX_PASSWORD: 'x' } });
+  assert.deepStrictEqual([id.mode, id.selfSigned], ['pfx', false]);
+});
+
+test('setup program: compiled, packed, signed; hash trailer is still found after the signature is appended', { skip: !(toolOk('i686-w64-mingw32-gcc', ['--version']) && toolOk('osslsigncode', ['--version']) && toolOk('openssl', ['version'])) }, () => {
+  const be = require('../scripts/build-exe'), sg = require('../scripts/sign'), v = require('../client/verify');
+  const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'exe-'));
+  const msi = pathx.join(dir, 'a.msi');
+  fsx.writeFileSync(msi, Buffer.concat([Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]), cryptox.randomBytes(4000)]));
+  const id = sg.ensureSigningCert({ dir: pathx.join(dir, 'sign'), env: {} });
+  assert.strictEqual(id.selfSigned, true); assert.match(id.thumbprint, /^[0-9A-F]{40}$/);
+  const out = pathx.join(dir, 'Audio Mixer-1.0.0.exe');
+  be.buildExe({ msi, productCode: '{87FE9B11-C8D7-5DEA-97C2-5C2ABE8BED40}', out, version: '1.0.0', arch: 'x64', work: pathx.join(dir, 'w'), id });
+  const buf = fsx.readFileSync(out);
+  assert.strictEqual(buf.subarray(0, 2).toString(), 'MZ');
+  assert.ok(sg.verifySignature(out, id));                                                   // Authenticode signature verifies against the certificate
+  assert.ok(be.peDataEnd(buf) < buf.length);                                                // a certificate table now follows the image
+  const t = be.readTrailer(buf, be.peDataEnd(buf));
+  assert.ok(t && t.payload.equals(fsx.readFileSync(msi)) && t.productCode === '{87FE9B11-C8D7-5DEA-97C2-5C2ABE8BED40}');
+  assert.ok(v.checkInstallerFile(out).filter(r => r.level !== 'INFO').every(r => r.level === 'PASS'));
+  buf[buf.length - 3000] ^= 0xff;                                                           // tamper inside the signed data (the payload)
+  fsx.writeFileSync(out, buf);
+  assert.ok(v.checkInstallerFile(out).some(r => r.level === 'FAIL'));
+  assert.throws(() => sg.verifySignature(out, id), /signature check failed/);
+  fsx.rmSync(dir, { recursive: true, force: true });
+});
+
+// ── Linux / macOS packages ──
+test('unix packages: Debian control + FHS layout, macOS bundle, scripts parse', () => {
+  const u = require('../scripts/build-unix');
+  const c = u.controlFile({ version: '1.4.0', installedSizeKb: 100 });
+  assert.match(c, /^Package: audio-mixer$/m); assert.match(c, /^Depends: nodejs \(>= 18\)$/m); assert.match(c, /^Architecture: all$/m);
+  assert.match(u.desktopEntry(), /^Exec=audio-mixer$/m); assert.match(u.desktopEntry(), /Categories=AudioVideo;Audio;Mixer;/);
+  assert.match(u.systemdUserUnit(), /ExecStart=\/usr\/bin\/env node \/opt\/audio-mixer\/bridge\/server\.js/);
+  assert.match(u.LAUNCHER_LINUX, /exec "\$NODE" \/opt\/audio-mixer\/client\/cli\.js "\$@"/);
+  assert.match(u.infoPlist('1.4.0'), /<key>CFBundleIdentifier<\/key><string>com\.audiomixer\.app<\/string>/);
+  assert.match(u.MAC_UNINSTALL, /com\.audiomixer\.bridge\.plist/);                           // same label the service installer writes
+  const cp = require('node:child_process');
+  for (const [name, text, sh] of [['install', u.MAC_INSTALL, 'bash'], ['uninstall', u.MAC_UNINSTALL, 'bash'], ['launcher', u.MAC_LAUNCHER, 'bash'], ['linux', u.LAUNCHER_LINUX, 'sh']]) {
+    const f = pathx.join(osx.tmpdir(), `amx-${name}.sh`); fsx.writeFileSync(f, text);
+    assert.strictEqual(cp.spawnSync(sh, ['-n', f]).status, 0, name + ' script has a syntax error');
+    fsx.unlinkSync(f);
+  }
+});
+
+test('unix packages: the .deb is built with files under /opt, /usr/bin and /usr/share (needs dpkg-deb)', { skip: !toolOk('dpkg-deb', ['--version']) }, () => {
+  const u = require('../scripts/build-unix'), cp = require('node:child_process');
+  const out = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'deb-'));
+  const r = u.buildDeb({ out });
+  const list = cp.spawnSync('dpkg-deb', ['--contents', r.deb], { encoding: 'utf8' }).stdout;
+  for (const want of ['./opt/audio-mixer/client/cli.js', './opt/audio-mixer/bridge/server.js', './usr/bin/audio-mixer', './usr/share/applications/audio-mixer.desktop', './usr/lib/systemd/user/audio-mixer.service', './usr/share/doc/audio-mixer/copyright']) assert.ok(list.includes(want), want);
+  assert.ok(!/\.bat/.test(list));                                                              // no Windows launchers
+  assert.match(list, /-rwxr-xr-x root\/root\s+\d+ \S+ \S+ \.\/usr\/bin\/audio-mixer/);
+  const info = cp.spawnSync('dpkg-deb', ['--field', r.deb, 'Depends'], { encoding: 'utf8' }).stdout.trim();
+  assert.strictEqual(info, 'nodejs (>= 18)');
+  const m = u.buildMac({ out });
+  const tl = cp.spawnSync('tar', ['tzf', m.tar], { encoding: 'utf8' }).stdout;
+  for (const want of ['AudioMixer/Audio Mixer.app/Contents/Info.plist', 'AudioMixer/Audio Mixer.app/Contents/MacOS/AudioMixer', 'AudioMixer/install.command', 'AudioMixer/uninstall.command']) assert.ok(tl.includes(want), want);
+  fsx.rmSync(out, { recursive: true, force: true });
 });

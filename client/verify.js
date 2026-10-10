@@ -20,9 +20,25 @@ function ps(script, env, run = execFile, timeout = 600000) {
 
 // ── parsers (pure, unit-tested) ──
 function parseSignature(out) {
-  const [status, subject] = String(out || '').trim().split('|');
-  if (!status) return { status: 'Unknown', subject: '' };
-  return { status, subject: subject || '' };
+  const parts = String(out || '').trim().split('|');
+  if (!parts[0]) return { status: 'Unknown', subject: '', thumbprint: '' };
+  // "Status|Subject|Thumbprint" (a subject never ends in a bare hex string, so the last field is the thumbprint when there are three)
+  if (parts.length >= 3) return { status: parts[0], subject: parts.slice(1, -1).join('|'), thumbprint: parts[parts.length - 1].toUpperCase() };
+  return { status: parts[0], subject: parts[1] || '', thumbprint: '' };
+}
+
+// Thumbprint (SHA-1 of the DER certificate) of the published AudioMixer-signing.cer: next to the file, or AUDIO_MIXER_SIGNING_CER.
+function pinnedThumbprint(file, env = process.env) {
+  const candidates = [env.AUDIO_MIXER_SIGNING_CER, file && path.join(path.dirname(file), 'AudioMixer-signing.cer')].filter(Boolean);
+  for (const c of candidates) {
+    try {
+      let der = fs.readFileSync(c);
+      const pem = /-----BEGIN CERTIFICATE-----([\s\S]+?)-----END CERTIFICATE-----/.exec(der.toString('latin1'));
+      if (pem) der = Buffer.from(pem[1].replace(/\s+/g, ''), 'base64');
+      return crypto.createHash('sha1').update(der).digest('hex').toUpperCase();
+    } catch (_) { /* try the next one */ }
+  }
+  return null;
 }
 function parseDefender(out) {
   const t = String(out || '').trim();
@@ -65,6 +81,30 @@ function checkManifest(root) {
   return res;
 }
 
+// The setup .exe carries the .msi plus a trailer with the payload SHA-256 (see installer/setup-stub.c). Signatures are appended after
+// the PE image, so the trailer is located from the end of the image data, not the end of the file.
+function peDataEnd(buf) {
+  if (buf.length < 0x100 || buf.readUInt16LE(0) !== 0x5a4d) return buf.length;
+  const pe = buf.readUInt32LE(0x3c);
+  if (pe + 0x100 > buf.length || buf.readUInt32LE(pe) !== 0x4550) return buf.length;
+  const opt = pe + 24, dd = opt + (buf.readUInt16LE(opt) === 0x20b ? 112 : 96);
+  const off = buf.readUInt32LE(dd + 32), len = buf.readUInt32LE(dd + 36);
+  return len && off && off < buf.length ? off : buf.length;
+}
+function checkSetupPayload(buf) {
+  const end = peDataEnd(buf), magic = Buffer.alloc(16); magic.write('AMIXSETUPv1');
+  if (end < 96 || !buf.subarray(end - 96, end - 80).equals(magic)) return [{ level: WARN, title: 'No embedded installer package found', detail: 'not an Audio Mixer setup program' }];
+  const size = Number(buf.readBigUInt64LE(end - 96 + 16)), start = end - 96 - size;
+  if (start < 0) return [{ level: FAIL, title: 'Embedded installer package is truncated', detail: '' }];
+  const payload = buf.subarray(start, end - 96), want = buf.subarray(end - 96 + 24, end - 96 + 56).toString('hex');
+  const got = crypto.createHash('sha256').update(payload).digest('hex');
+  const ole = payload.subarray(0, 8).equals(Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]));
+  return [
+    ole ? { level: PASS, title: 'Embedded Windows Installer package (.msi)', detail: `${(size / 1048576).toFixed(1)} MB, ${buf.subarray(end - 96 + 56, end - 96 + 96).toString('ascii').replace(/\0+$/, '')}` } : { level: FAIL, title: 'Embedded payload is not an .msi', detail: '' },
+    got === want ? { level: PASS, title: 'Embedded package SHA-256 matches the value stored at build time', detail: got } : { level: FAIL, title: 'Embedded package was changed after the build', detail: `expected ${want} got ${got}` },
+  ];
+}
+
 function checkInstallerFile(file) {
   const res = [];
   const buf = fs.readFileSync(file);
@@ -73,7 +113,7 @@ function checkInstallerFile(file) {
     res.push(buf.length > 8 && buf.subarray(0, 8).equals(Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1])) ? { level: PASS, title: 'Windows Installer package (.msi) structure', detail: path.basename(file) } : { level: FAIL, title: 'Not a Windows Installer package', detail: path.basename(file) });
   } else {
     res.push(buf.length > 2 && buf[0] === 0x4d && buf[1] === 0x5a ? { level: PASS, title: 'Windows executable (MZ header)', detail: path.basename(file) } : { level: FAIL, title: 'Not a Windows executable', detail: path.basename(file) });
-    res.push(buf.includes(Buffer.from('Nullsoft')) ? { level: PASS, title: 'NSIS installer structure found', detail: '' } : { level: WARN, title: 'Not recognised as an NSIS installer', detail: '' });
+    res.push(...checkSetupPayload(buf));
   }
   const actual = sha256(file);
   const side = file + '.sha256';
@@ -84,14 +124,21 @@ function checkInstallerFile(file) {
   return res;
 }
 
-async function checkSignature(file, label, { platform = process.platform, run, expect } = {}) {
+async function checkSignature(file, label, { platform = process.platform, run, expect, pinned } = {}) {
   if (platform !== 'win32') return [{ level: INFO, title: `${label} signature`, detail: 'Authenticode is checked on Windows only' }];
-  const sig = parseSignature(await ps('$s = Get-AuthenticodeSignature -FilePath $env:VERIFY_PATH; "$($s.Status)|$($s.SignerCertificate.Subject)"', { VERIFY_PATH: file }, run, 60000));
+  const sig = parseSignature(await ps('$s = Get-AuthenticodeSignature -FilePath $env:VERIFY_PATH; "$($s.Status)|$($s.SignerCertificate.Subject)|$($s.SignerCertificate.Thumbprint)"', { VERIFY_PATH: file }, run, 60000));
+  const ours = pinned && sig.thumbprint && sig.thumbprint === String(pinned).toUpperCase();
   if (sig.status === 'Valid') {
-    if (expect && !expect.test(sig.subject)) return [{ level: WARN, title: `${label} is signed by an unexpected publisher`, detail: sig.subject }];
+    if (pinned && !ours) return [{ level: WARN, title: `${label} is signed by a different certificate than AudioMixer-signing.cer`, detail: sig.subject }];
+    if (!pinned && expect && !expect.test(sig.subject)) return [{ level: WARN, title: `${label} is signed by an unexpected publisher`, detail: sig.subject }];
     return [{ level: PASS, title: `${label} signature is valid`, detail: sig.subject }];
   }
+  // A self-signed certificate is reported as not trusted by Windows. It still proves the file is unchanged when it is the published one.
+  if (ours && /^(UnknownError|NotTrusted|UntrustedRoot|Incompatible)$/i.test(sig.status)) {
+    return [{ level: PASS, title: `${label} is signed with the published Audio Mixer certificate and is unchanged`, detail: `${sig.subject} (self-signed: Windows does not trust the publisher until you import AudioMixer-signing.cer)` }];
+  }
   if (sig.status === 'NotSigned') return [{ level: WARN, title: `${label} is not code-signed`, detail: 'Windows SmartScreen will warn; verify the SHA-256 instead' }];
+  if (sig.status === 'HashMismatch') return [{ level: FAIL, title: `${label} was changed after it was signed`, detail: 'the signature no longer matches the file' }];
   return [{ level: FAIL, title: `${label} signature problem`, detail: sig.status }];
 }
 
@@ -121,7 +168,7 @@ if ($t) { 'THREAT|' + (($t | ForEach-Object { $_.ThreatID }) -join ',') } else {
 async function verify({ target, root, scan = false, port = 8765, platform = process.platform, run } = {}) {
   const results = [];
   if (target && fs.existsSync(target) && fs.statSync(target).isFile()) {
-    results.push(...checkInstallerFile(target), ...await checkSignature(target, 'Installer', { platform, run }));
+    results.push(...checkInstallerFile(target), ...await checkSignature(target, 'Installer', { platform, run, pinned: pinnedThumbprint(target) }));
     if (scan) results.push(...await checkDefender(target, { platform, run }));
   } else {
     const dir = path.resolve(target || root || path.join(__dirname, '..'));
@@ -141,4 +188,4 @@ function format(r) {
   return r.results.map(x => `${mark[x.level]} ${x.title}${x.detail ? ': ' + x.detail : ''}`).join('\n') + `\n\nResult: ${r.ok ? 'VERIFIED' : 'NOT VERIFIED'} (${r.failed} failed, ${r.warned} warnings)`;
 }
 
-module.exports = { verify, format, checkManifest, checkInstallerFile, checkSignature, checkLoopbackOnly, checkDefender, parseSignature, parseDefender, sha256 };
+module.exports = { verify, format, checkManifest, checkInstallerFile, checkSetupPayload, pinnedThumbprint, peDataEnd, checkSignature, checkLoopbackOnly, checkDefender, parseSignature, parseDefender, sha256 };
