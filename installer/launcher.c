@@ -99,9 +99,20 @@ static void paint(HWND h) {
 }
 
 static int show_splash(HINSTANCE inst);
+/* opens the mixer page: the default browser, then Explorer, then "start"; when none works the address is shown (the server itself is running) */
+static void open_page(void) {
+  const wchar_t *url = L"http://localhost:8765/";
+  if ((INT_PTR)ShellExecuteW(NULL, L"open", url, NULL, NULL, SW_SHOWNORMAL) > 32) return;
+  if ((INT_PTR)ShellExecuteW(NULL, L"open", L"explorer.exe", url, NULL, SW_SHOWNORMAL) > 32) return;
+  wchar_t line[128]; STARTUPINFOW si; PROCESS_INFORMATION pi;
+  ZeroMemory(&si, sizeof si); si.cb = sizeof si;
+  _snwprintf(line, 128, L"cmd.exe /c start \"\" %ls", url); line[127] = 0;
+  if (CreateProcessW(NULL, line, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi)) { CloseHandle(pi.hThread); CloseHandle(pi.hProcess); return; }
+  MessageBoxW(NULL, L"Audio Mixer is running, but no web browser could be opened.\n\nOpen http://localhost:8765/ in your browser.", L"Audio Mixer", MB_ICONINFORMATION | MB_OK);
+}
 static void finish_open(HINSTANCE inst) {
-  if (show_splash(inst)) ShellExecuteW(NULL, L"open", L"http://localhost:8765/", NULL, NULL, SW_SHOWNORMAL);
-  else MessageBoxW(NULL, L"The local server did not answer. Run \"Audio Mixer diagnostics\" from the Start Menu.", L"Audio Mixer", MB_ICONWARNING | MB_OK);
+  if (show_splash(inst)) open_page();
+  else MessageBoxW(NULL, L"The local server did not answer in time.\n\nAnother program may be using port 8765, or the Visual C++ runtime is missing. Run \"Audio Mixer diagnostics\" from the Start Menu and try again.", L"Audio Mixer", MB_ICONWARNING | MB_OK);
 }
 
 static LRESULT CALLBACK splash_proc(HWND h, UINT m, WPARAM w, LPARAM l) {

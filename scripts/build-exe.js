@@ -49,6 +49,17 @@ function peDataEnd(buf) {
   return len && off && off < buf.length ? off : buf.length;
 }
 
+// The application icon (the mixer: dark rounded tile with three amber faders, as on Android / iOS / macOS) as a .ico with PNG frames, written next to the
+// resource script. Without it every program, shortcut and the Settings > Apps entry shows the plain default icon.
+function icoFile(sizes = [16, 24, 32, 48, 64, 128, 256]) {
+  const apk = require('./build-apk');
+  const frames = sizes.map(n => apk.png(n, apk.iconPixel));
+  const head = Buffer.alloc(6 + 16 * sizes.length); head.writeUInt16LE(1, 2); head.writeUInt16LE(sizes.length, 4);
+  let off = head.length;
+  sizes.forEach((n, i) => { const e = 6 + 16 * i; head[e] = n >= 256 ? 0 : n; head[e + 1] = n >= 256 ? 0 : n; head.writeUInt16LE(1, e + 4); head.writeUInt16LE(32, e + 6); head.writeUInt32LE(frames[i].length, e + 8); head.writeUInt32LE(off, e + 12); off += frames[i].length; });
+  return Buffer.concat([head, ...frames]);
+}
+
 // Compiles one of the small native programs in installer/ (MinGW-w64). `name` = setup | launcher; the launcher is built for the
 // architecture of the install it goes into, the setup program is always 32-bit so it runs on both 32- and 64-bit Windows.
 function compileNative({ name, work, version, arch, defs = [], libs = [], console: isConsole = false }) {
@@ -58,6 +69,7 @@ function compileNative({ name, work, version, arch, defs = [], libs = [], consol
   const rc = fs.readFileSync(path.join(ROOT, 'installer', `${name}.rc`), 'utf8').replace(/@VERSION4@/g, v4).replace(/@VERSION@/g, version);
   fs.writeFileSync(path.join(work, `${name}.rc`), rc);
   fs.copyFileSync(path.join(ROOT, 'installer', `${name}.manifest`), path.join(work, `${name}.manifest`));
+  fs.writeFileSync(path.join(work, 'AudioMixer.ico'), icoFile());
   const res = path.join(work, `${name}.res.o`), exe = path.join(work, `${name}-${arch}.exe`);
   let r = spawnSync(`${triple}-windres`, ['-i', `${name}.rc`, '-o', res], { cwd: work, encoding: 'utf8' });
   if (r.error && r.error.code === 'ENOENT') throw new Error(`${triple}-windres not found (Linux: apt install mingw-w64)`);
@@ -80,4 +92,4 @@ function buildExe({ msi, productCode, out, version, arch = 'x64', work, id }) {
 }
 
 const compileCli = ({ work, version, arch }) => compileNative({ name: 'audio-mixer', work, version, arch, console: true });   // audio-mixer.exe: the command line (console program)
-module.exports = { compileCli, buildExe, packPayload, readTrailer, peDataEnd, compileStub, compileLauncher, compileNative, TRAILER, version4 };
+module.exports = { icoFile, compileCli, buildExe, packPayload, readTrailer, peDataEnd, compileStub, compileLauncher, compileNative, TRAILER, version4 };

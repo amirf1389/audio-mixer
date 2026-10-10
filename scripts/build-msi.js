@@ -5,7 +5,7 @@
 //   user:              %LOCALAPPDATA%\Programs\AudioMixer, no administrator rights, current user
 // Needs wixl (msitools): Linux "apt install wixl". Packages are signed by build-installers.js / sign.js.
 // Install:  msiexec /i AudioMixer-1.4.0-x64.msi   (silent: /qn)   Uninstall: Settings > Apps > Audio Mixer, or msiexec /x <ProductCode>
-// Features: ADDLOCAL=Main,Shortcuts,Tools,CommandLine,PluginHost,WinHelpers,Autostart,Desktop  (default: all but Desktop)
+// Features: ADDLOCAL=Main,Shortcuts,Tools,CommandLine,PluginHost,WinHelpers,Autostart,Desktop  (default: all, the desktop shortcut too; the setup program has /nodesktop)
 //   CommandLine: audio-mixer.exe on PATH (system PATH for the all-users package, the user's PATH for the per-user one)
 //   PluginHost: native VST host (native/host), WinHelpers: native Windows audio device helpers (native/win); Tools: Start Menu shortcuts for license, plugins, drivers, update, doctor
 const fs = require('node:fs');
@@ -68,7 +68,8 @@ function wxs({ stage, version, arch = 'x64', scope = 'machine' }) {
   const { xml, comps, groups } = filesXml(stage, win64);
   const w64 = win64 ? ' Win64="yes"' : '';
   // start-up screen: the signed native launcher shows the boot animation while the server starts, then opens the mixer in the browser
-  const scBoot = (id, name, desc) => `        <Shortcut Id="${id}" Name="${esc(name)}" Target="[INSTALLDIR]AudioMixerServer.exe" Arguments="/open" WorkingDirectory="INSTALLDIR" Description="${esc(desc)}"/>\n`;
+  const hasIcon = fs.existsSync(path.join(stage, 'AudioMixerServer.exe'));   // the launcher carries the application icon
+  const scBoot = (id, name, desc) => `        <Shortcut Id="${id}" Name="${esc(name)}" Target="[INSTALLDIR]AudioMixerServer.exe" Arguments="/open" WorkingDirectory="INSTALLDIR" Description="${esc(desc)}"${hasIcon ? ' Icon="AudioMixer.exe"' : ''}/>\n`;
   const sc = (id, name, args, desc) => `        <Shortcut Id="${id}" Name="${esc(name)}" Target="[INSTALLDIR]runtime\\node.exe" Arguments="${esc(args)}" WorkingDirectory="INSTALLDIR" Description="${esc(desc)}"/>\n`;
   const code = productCode(arch, scope, version);
   // Program Files (64-bit) for x64, Program Files (x86) for x86; or the user's own folder for the no-administrator flavour
@@ -82,7 +83,7 @@ function wxs({ stage, version, arch = 'x64', scope = 'machine' }) {
     <MajorUpgrade DowngradeErrorMessage="A newer version of Audio Mixer is already installed."/>
     <Media Id="1" Cabinet="audiomixer.cab" EmbedCab="yes"/>
     <!-- Settings > Apps (Add or remove programs) entry: name, version, publisher and a working Uninstall button come with the package -->
-    <Property Id="ARPCOMMENTS" Value="Virtual mixing console with a local Node.js server for ASIO / WASAPI audio"/>
+${hasIcon ? `    <Icon Id="AudioMixer.exe" SourceFile="${esc(path.join(stage, 'AudioMixerServer.exe'))}"/>\n    <Property Id="ARPPRODUCTICON" Value="AudioMixer.exe"/>   <!-- the icon of the entry in Settings > Apps -->\n` : ''}    <Property Id="ARPCOMMENTS" Value="Virtual mixing console with a local Node.js server for ASIO / WASAPI audio"/>
     <Property Id="ARPURLINFOABOUT" Value="https://github.com/amirf1389/audio-mixer"/>
     <Property Id="ARPHELPLINK" Value="https://github.com/amirf1389/audio-mixer/issues"/>
 
@@ -119,6 +120,13 @@ ${scBoot('ScPc', 'Audio Mixer (PC mode)', 'Start the local server (boot screen) 
       </Component>
     </DirectoryRef>
 
+    <!-- "Audio Mixer" itself in the Start Menu list and in the Start search (the folder below holds the tools) -->
+    <DirectoryRef Id="ProgramMenuFolder">
+      <Component Id="StartRootShortcut" Guid="${guid('start-root:' + scope)}"${w64}>
+${scBoot('ScStart', 'Audio Mixer', 'Start Audio Mixer (boot screen, then the mixer in your browser)')}        <RegistryValue Root="${root}" Key="Software\\Audio Mixer" Name="StartRoot" Type="integer" Value="1" KeyPath="yes"/>
+      </Component>
+    </DirectoryRef>
+
     <DirectoryRef Id="MenuDir">
       <Component Id="ToolShortcuts" Guid="${guid('tool-shortcuts:' + scope)}"${w64}>
 ${sc('ScLicense', 'License key and machine ID', '"[INSTALLDIR]client\\cli.js" license --pause', 'Show the license plan and this PC\'s machine ID; activate with: license activate KEY')}${sc('ScPluginList', 'List installed plugins', '"[INSTALLDIR]client\\cli.js" plugins --pause', 'List the VST3 and VST2 plugins the mixer finds')}${sc('ScDrivers', 'Audio drivers (ASIO, WASAPI)', '"[INSTALLDIR]client\\cli.js" drivers --pause', 'List the official audio drivers for this PC')}${sc('ScUpdate', 'Check for updates', '"[INSTALLDIR]client\\cli.js" update --pause', 'Check the signed update manifest (nothing is installed automatically)')}${sc('ScDoctor', 'Audio Mixer diagnostics', '"[INSTALLDIR]client\\cli.js" doctor --pause', 'Check Node.js, ports, audio engine and ASIO drivers')}        <RemoveFolder Id="RmMenuTools" On="uninstall"/>
@@ -135,7 +143,7 @@ ${scBoot('ScDesk', 'Audio Mixer', 'Start PC mode (boot screen)')}        <Regist
     <Feature Id="Main" Title="Audio Mixer and local server" Level="1" Absent="disallow">
 ${comps.map(c => `      <ComponentRef Id="${c}"/>\n`).join('')}      <ComponentRef Id="InstallKey"/>
     </Feature>
-    <Feature Id="Shortcuts" Title="Start Menu shortcuts" Level="1"><ComponentRef Id="MenuShortcuts"/></Feature>
+    <Feature Id="Shortcuts" Title="Start Menu shortcuts" Level="1"><ComponentRef Id="MenuShortcuts"/><ComponentRef Id="StartRootShortcut"/></Feature>
     <Feature Id="Tools" Title="Start Menu tools (license, plugins, drivers, update, diagnostics)" Level="1"><ComponentRef Id="ToolShortcuts"/></Feature>
     <Feature Id="PluginHost" Title="VST3 / VST2 plugin host (insert effects)" Level="1">
 ${groups.PluginHost.map(c => `      <ComponentRef Id="${c}"/>\n`).join('')}    </Feature>
@@ -143,7 +151,7 @@ ${groups.PluginHost.map(c => `      <ComponentRef Id="${c}"/>\n`).join('')}    <
 ${groups.WinHelpers.map(c => `      <ComponentRef Id="${c}"/>\n`).join('')}    </Feature>
     <Feature Id="CommandLine" Title="audio-mixer command on PATH (doctor, npm, setup, uninstall ...)" Level="1"><ComponentRef Id="CommandPath"/></Feature>
     <Feature Id="Autostart" Title="Start the local server when I log in" Level="1"><ComponentRef Id="AutostartRun"/></Feature>
-    <Feature Id="Desktop" Title="Desktop shortcut" Level="2"><ComponentRef Id="DesktopShortcut"/></Feature>
+    <Feature Id="Desktop" Title="Desktop shortcut" Level="1"><ComponentRef Id="DesktopShortcut"/></Feature>
 
     <UIRef Id="WixUI_Minimal"/>
   </Product>

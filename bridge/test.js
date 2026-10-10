@@ -837,7 +837,7 @@ test('msi: stable GUIDs, per-machine Program Files paths for x64 and x86, per-us
   const x64 = m.wxs({ stage, version: '1.4.0', arch: 'x64' });
   assert.match(x64, /InstallScope="perMachine"/); assert.match(x64, /Directory Id="ProgramFiles64Folder"/); assert.match(x64, /Win64="yes"/);
   assert.match(x64, /Root="HKLM"/); assert.match(x64, /UpgradeCode="6F3C2B8E-5D41-4A7B-9C0E-2A1D7B64F3A9"/);
-  assert.match(x64, /Name="a &amp; b\.js"/); assert.match(x64, /Feature Id="Autostart"/); assert.match(x64, /Feature Id="Desktop"[^>]*Level="2"/);
+  assert.match(x64, /Name="a &amp; b\.js"/); assert.match(x64, /Feature Id="Autostart"/); assert.match(x64, /Feature Id="Desktop"[^>]*Level="1"/);
   assert.match(x64, /Id="ScUninstall"[^>]*msiexec\.exe" Arguments="\/x \{[0-9A-F-]{36}\}"/);          // Start Menu uninstall entry
   assert.match(x64, /ARPURLINFOABOUT/);                                                                  // Settings > Apps entry details
   assert.match(x64, /Id="ScPc"[^>]*AudioMixerServer\.exe" Arguments="\/open"/);                     // main shortcut: start-up screen, then the browser
@@ -875,7 +875,7 @@ test('cli: license / plugins / update commands exist and the stub has the featur
   const cli = fsx.readFileSync(pathx.join(__dirname, '..', 'client', 'cli.js'), 'utf8');
   for (const c of ["'license'", "'plugins'", "'update'"]) assert.ok(cli.includes(`o.cmd === ${c}`));
   const stub = fsx.readFileSync(pathx.join(__dirname, '..', 'installer', 'setup-stub.c'), 'utf8');
-  for (const sw of ['/noplugins', '/nohelpers', '/notools', '/noshortcuts', '/desktop', '/noautostart']) assert.ok(stub.includes(`L"${sw}"`), sw);
+  for (const sw of ['/noplugins', '/nohelpers', '/notools', '/noshortcuts', '/desktop', '/nodesktop', '/noautostart']) assert.ok(stub.includes(`L"${sw}"`), sw);
   assert.match(stub, /ADDLOCAL=Main/);
   assert.match(stub, /stop_old_server\(old\)/); assert.match(stub, /_wcsnicmp\(path, dir, n\)/);   // upgrade ends only processes that run from the install folder
 });
@@ -2061,4 +2061,32 @@ test('Bluetooth input strip: a Bluetooth input device is found by flag, name or 
   for (const id of ['bti-sends', 'bti-dsrc', 'bti-dthr', 'bti-ddep', 'bti-datk', 'bti-dhld', 'bti-drel', 'bti-don', 'bti-dgr']) assert.ok(html.includes('id="' + id + '"'), id);
   assert.ok(/M\.busIn\[b\]/.test(m[1]) && /S\.duck\.gain\.setTargetAtTime|S\.duck\.gain/.test(m[1]) && /S\.mute\.connect\(S\.duck\); S\.duck\.connect\(S\.out\)/.test(m[1]) && /sendNodes/.test(m[1]));
   assert.ok(html.includes('<optgroup label="Bluetooth inputs">') && html.includes('>BLUETOOTH</span>') && html.includes("rt.st[k].bt ?"));
+});
+
+test('Windows installer: the app is visible after the install (icons, Start Menu entry, desktop shortcut, start now), the launcher opens a browser the robust way', () => {
+  const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
+  const rd = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
+  // every native program carries the application icon (they showed the plain default icon before)
+  for (const n of ['launcher', 'setup', 'audio-mixer']) assert.match(rd('installer', n + '.rc'), /^1 ICON "AudioMixer\.ico"$/m, n);
+  const ico = require('../scripts/build-exe').icoFile();
+  assert.strictEqual(ico.readUInt16LE(2), 1); assert.strictEqual(ico.readUInt16LE(4), 7);                    // type icon, 7 sizes
+  for (let i = 0; i < 7; i++) { const off = ico.readUInt32LE(6 + 16 * i + 12), len = ico.readUInt32LE(6 + 16 * i + 8); assert.strictEqual(ico.subarray(off + 1, off + 4).toString(), 'PNG'); assert.ok(off + len <= ico.length); }
+  assert.strictEqual(ico[6], 16); assert.strictEqual(ico[6 + 16 * 6], 0);                                    // 16 px ... 256 px (stored as 0)
+  // MSI: "Audio Mixer" in the Start Menu list, the desktop shortcut on by default, icons on the shortcuts and in Settings > Apps
+  const m = require('../scripts/build-msi'), d = fs.mkdtempSync(path.join(os.tmpdir(), 'amx-'));
+  fs.writeFileSync(path.join(d, 'index.html'), 'x'); fs.writeFileSync(path.join(d, 'AudioMixerServer.exe'), 'MZ');
+  for (const [arch, scope] of [['x64', 'machine'], ['x86', 'machine'], ['x64', 'user']]) {
+    const x = m.wxs({ stage: d, version: '1.4.1', arch, scope });
+    assert.match(x, /<DirectoryRef Id="ProgramMenuFolder">\s*<Component Id="StartRootShortcut"[\s\S]*?Name="Audio Mixer" Target="\[INSTALLDIR\]AudioMixerServer\.exe" Arguments="\/open"/);
+    assert.match(x, /Feature Id="Shortcuts"[^>]*>.*ComponentRef Id="StartRootShortcut"/); assert.match(x, /Feature Id="Desktop"[^>]*Level="1"/);
+    assert.match(x, /<Icon Id="AudioMixer\.exe" SourceFile=/); assert.match(x, /Property Id="ARPPRODUCTICON" Value="AudioMixer\.exe"/); assert.match(x, /Id="ScDesk"[^>]*Icon="AudioMixer\.exe"/);
+  }
+  assert.doesNotMatch(m.wxs({ stage: fs.mkdtempSync(path.join(os.tmpdir(), 'amy-')), version: '1.4.1' }), /ARPPRODUCTICON/);   // no launcher in the tree: no icon reference
+  // setup program: desktop shortcut by default (/nodesktop removes it), done message and start-now offer after an interactive install, started without admin rights
+  const stub = rd('installer', 'setup-stub.c');
+  assert.match(stub, /desktop = 1, noauto = 0/); assert.ok(stub.includes('L"/nodesktop"') && stub.includes('!desktop'));
+  assert.match(stub, /Audio Mixer is installed\./); assert.match(stub, /!quiet && !passive/); assert.match(stub, /Audio Mixer\.lnk/); assert.match(stub, /explorer\.exe/); assert.match(stub, /CSIDL_COMMON_PROGRAMS/);
+  // launcher: default browser, then Explorer, then "start", then the address in a message
+  const lau = rd('installer', 'launcher.c');
+  assert.match(lau, /static void open_page\(void\)/); assert.match(lau, /> 32\) return;[\s\S]*explorer\.exe[\s\S]*cmd\.exe \/c start[\s\S]*http:\/\/localhost:8765\//); assert.match(lau, /if \(show_splash\(inst\)\) open_page\(\)/);
 });
