@@ -1317,7 +1317,7 @@ test('bluetooth: A2DP + hands-free endpoints are one device, written through A2D
   assert.strictEqual(fa.opened[fa.opened.length - 1].rate, 16000);
   const out = a.openStream({ mod: fa, dev: { ...btDev, name: 'Headphones (Galaxy Buds2 Pro Stereo)', maxOutputChannels: 2, sampleRates: [44100, 48000] }, direction: 'output', channels: 2, sampleRate: 96000 });
   assert.strictEqual(out.deviceRate, 48000); st.close(); out.close();
-  assert.throws(() => a.openStream({ mod: fa, dev: { ...btDev, name: 'Focusrite USB ASIO', maxOutputChannels: 2 }, direction: 'output', channels: 2, sampleRate: 48000 }), /does not support 48000/);
+  assert.throws(() => a.openStream({ mod: fa, dev: { ...btDev, api: 'WINDOWS_ASIO', hostAPIName: 'ASIO', name: 'Focusrite USB ASIO', maxOutputChannels: 2 }, direction: 'output', channels: 2, sampleRate: 48000 }), /does not support 48000.*control panel/);
   void orig;
 });
 
@@ -1398,4 +1398,68 @@ test('plugin inserts (PHASE / FX slots): read, write, validate, plan gate', asyn
   const r = await post({ 'X-Mixer-Action': 'inserts' }); assert.strictEqual(r.status, 402); assert.strictEqual((await r.json()).needs, 'plugins');   // BASIC plan
   server.closeAllConnections(); server.close();
   delete process.env.BRIDGE_INSERTS_FILE; delete process.env.BRIDGE_LICENSE_FILE;
+});
+
+test('RtAudio WASAPI: closest device rate + converter, mono devices get a mixdown, ASIO keeps its explicit errors', () => {
+  const a = require('./audify');
+  const fa = fakeAudify();
+  const wasapi = { id: 1200, rtId: 5, api: 'WINDOWS_WASAPI', hostAPIName: 'Windows WASAPI', name: 'Speakers (USB Mono)', maxInputChannels: 0, maxOutputChannels: 1, sampleRates: [48000] };
+  const s = a.openStream({ mod: fa, dev: wasapi, direction: 'output', channels: 2, sampleRate: 44100 });          // mixer at 44.1 kHz stereo, device 48 kHz mono
+  assert.strictEqual(s.deviceRate, 48000); assert.strictEqual(s.resampled, true); assert.strictEqual(s.mixedDown, true); assert.strictEqual(s.channels, 2); assert.strictEqual(s.deviceChannels, 1);
+  const o = fa.opened[fa.opened.length - 1]; assert.strictEqual(o.out.nChannels, 1); assert.strictEqual(o.rate, 48000);
+  s.write(Buffer.alloc(s.frameSize * 4)); s.close();
+  const st = Buffer.alloc(8); st.writeInt16LE(1000, 0); st.writeInt16LE(3000, 2); st.writeInt16LE(-200, 4); st.writeInt16LE(-400, 6);
+  const mono = a.remapChannels(st, 2, 1); assert.deepStrictEqual([mono.readInt16LE(0), mono.readInt16LE(2)], [2000, -300]);
+  assert.strictEqual(a.remapChannels(st, 2, 2), st);
+  const asio = { id: 1000, rtId: 0, api: 'WINDOWS_ASIO', hostAPIName: 'ASIO', name: 'Focusrite USB ASIO', maxInputChannels: 18, maxOutputChannels: 2, sampleRates: [44100, 48000] };
+  assert.throws(() => a.openStream({ mod: fakeAudify(), dev: asio, direction: 'output', channels: 8, sampleRate: 48000 }), /only 2 output/);
+  assert.throws(() => a.openStream({ mod: fakeAudify(), dev: asio, direction: 'output', channels: 2, sampleRate: 96000 }), /control panel/);
+});
+
+test('native plugin host: a real VST2 effect runs in its own process and processes audio, parameters and errors', async () => {
+  const { spawnSync } = require('node:child_process');
+  const ph = require('./pluginhost');
+  const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'host-'));
+  const root = pathx.join(__dirname, '..', 'native', 'host');
+  const hostBin = pathx.join(dir, 'PluginHost'), plug = pathx.join(dir, 'gain.vst');
+  const c1 = spawnSync('g++', ['-O2', '-std=c++11', '-o', hostBin, pathx.join(root, 'src', 'PluginHost.cpp'), '-ldl']);
+  const c2 = spawnSync('g++', ['-shared', '-fPIC', '-std=c++11', '-o', plug, pathx.join(root, 'test', 'GainPlugin.cpp')]);
+  if (process.platform === 'win32' || c1.status !== 0 || c2.status !== 0) return;              // needs a C++ compiler (Windows ships the .exe)
+  const h = new ph.PluginHostProcess({ host: hostBin, plugin: plug, sampleRate: 48000, blockSize: 256 });
+  const info = await h.start();
+  assert.strictEqual(info.name, 'Test Gain'); assert.strictEqual(info.inputs, 2); assert.strictEqual(info.params, 1);
+  const blk = Buffer.alloc(700 * 8); for (let i = 0; i < 1400; i++) blk.writeFloatLE(i % 2 ? -0.1 : 0.1, i * 4);      // 700 frames: several host blocks
+  let out = await h.process(blk); assert.strictEqual(out.length, blk.length); assert.ok(Math.abs(out.readFloatLE(0) - 0.1) < 1e-6 && Math.abs(out.readFloatLE(out.length - 4) + 0.1) < 1e-6);   // unity at 0.5
+  h.setParam(0, 1); out = await h.process(blk); assert.ok(Math.abs(out.readFloatLE(0) - 0.2) < 1e-6);                  // +6 dB
+  const ps = await h.params(); assert.strictEqual(ps[0].name, 'Gain'); assert.ok(Math.abs(ps[0].value - 1) < 1e-6);
+  h.stop(); await new Promise(r => h.child.once('close', r));
+  // refusals come back as clear errors, never a crash of the bridge
+  for (const [file, re] of [[pathx.join(dir, 'missing.vst'), /could not load/], [pathx.join(dir, 'x.vst3'), /VST3 plugins are not supported/], [hostBin, /could not load|not a VST2/]]) {
+    await assert.rejects(new ph.PluginHostProcess({ host: hostBin, plugin: file }).start(), re);
+  }
+  await assert.rejects(new ph.PluginHostProcess({ host: pathx.join(dir, 'nope'), plugin: plug }).start(), /cannot start the plugin host/);
+  // the WebSocket session: plan gate, slot lookup, processing, bypass, parameters, stop
+  const sent = [], bin = []; const conn = { send: m => sent.push(JSON.parse(m)), sendBinary: b => bin.push(b) };
+  const store = { slots: { 'fx:1': { plugin: 'gain', format: 'VST2', bypass: false } } };
+  const scan = () => ({ plugins: [{ name: 'gain', format: 'VST2', file: plug, valid: true, compatible: true }] });
+  const mk = (over = {}) => ph.createInsertSession(conn, { scan, read: () => store, status: () => ({ plan: { features: ['core', 'plugins'] } }), hostFile: () => hostBin, ...over });
+  const wait = async f => { for (let i = 0; i < 100 && !f(); i++) await new Promise(r => setTimeout(r, 30)); };
+  let s = mk({ status: () => ({ plan: { features: ['core'] } }) }); s.onText(JSON.stringify({ type: 'start', slot: 'fx:1' })); await wait(() => sent.length); assert.match(sent.pop().message, /PRO or STUDIO/);
+  s = mk(); s.onText(JSON.stringify({ type: 'start', slot: 'fx:7' })); await wait(() => sent.length); assert.match(sent.pop().message, /slot is empty/);
+  s = mk({ hostFile: () => null }); s.onText(JSON.stringify({ type: 'start', slot: 'fx:1' })); await wait(() => sent.length); assert.match(sent.pop().message, /not installed/);
+  s = mk(); s.onText(JSON.stringify({ type: 'start', slot: 'fx:1', sampleRate: 48000 })); await wait(() => sent.length);
+  assert.strictEqual(sent[0].type, 'started'); assert.strictEqual(sent[0].name, 'Test Gain'); sent.length = 0;
+  s.onBinary(blk); await wait(() => bin.length); assert.ok(Math.abs(bin[0].readFloatLE(0) - 0.1) < 1e-6);
+  s.onText(JSON.stringify({ type: 'param', i: 0, v: 1 })); s.onBinary(blk); await wait(() => bin.length > 1); assert.ok(Math.abs(bin[1].readFloatLE(0) - 0.2) < 1e-6);
+  s.onText(JSON.stringify({ type: 'params' })); await wait(() => sent.length); assert.strictEqual(sent[0].list[0].name, 'Gain'); sent.length = 0;
+  s.onText(JSON.stringify({ type: 'bypass', on: true })); s.onBinary(blk); assert.strictEqual(bin[2].readFloatLE(0), blk.readFloatLE(0));   // dry
+  s.onBinary(Buffer.alloc(5)); assert.strictEqual(bin.length, 3);                                                               // partial frame ignored
+  s.onText(JSON.stringify({ type: 'stop' })); assert.strictEqual(sent[sent.length - 1].type, 'stopped'); s.onClose();
+  store.slots['fx:1'].format = 'VST3'; scan.v3 = true;
+  s = mk({ scan: () => ({ plugins: [{ name: 'gain', format: 'VST3', file: plug, valid: true, compatible: true }] }) }); s.onText(JSON.stringify({ type: 'start', slot: 'fx:1' })); await wait(() => sent.length); assert.match(sent.pop().message, /VST3/);
+  assert.ok(ph.hostPath({ platform: 'win32', arch: 'x64', env: {}, exists: () => true }).endsWith(pathx.join('x64', 'PluginHost.exe')));
+  assert.ok(ph.hostPath({ platform: 'win32', arch: 'ia32', env: {}, exists: () => true }).endsWith(pathx.join('x86', 'PluginHost.exe')));
+  assert.strictEqual(ph.hostPath({ platform: 'linux', env: {}, exists: () => false }), null);
+  // the shipped Windows hosts are PE files of the right machine type
+  for (const [f, m] of [['x64', 0x8664], ['x86', 0x14c]]) { const b = fsx.readFileSync(pathx.join(root, f, 'PluginHost.exe')); assert.strictEqual(b.readUInt16LE(0), 0x5a4d); assert.strictEqual(b.readUInt16LE(b.readUInt32LE(0x3c) + 4), m); }
 });
