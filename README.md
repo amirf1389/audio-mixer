@@ -62,7 +62,7 @@ and the Audify prebuilt binaries, pinned by SHA-256).
 
 Every Windows installer carries the mixer page, the Node.js server and client, the bundled Node.js runtime, Audify (ASIO / WASAPI / DirectSound), the verify scan, Start Menu entries
 (*Audio Mixer (PC mode)*, *local server only*, *Verify installation*, *Plugins folder*, *Uninstall Audio Mixer*) and an entry in *Settings > Apps* (Add or remove programs) with a working Uninstall.
-Features (`ADDLOCAL=Main,Shortcuts,Autostart,Desktop`): the default is everything except the desktop shortcut; autostart runs the server hidden at login for all users. Uninstalling removes the
+Features (`ADDLOCAL=Main,Shortcuts,Autostart,Desktop`): the default is everything, the desktop shortcut too (1.4.1.0; the setup program has `/nodesktop`); autostart runs the server hidden at login for all users. Uninstalling removes the
 program files, shortcuts and autostart entry; downloaded drivers (`%USERPROFILE%\AudioMixerDrivers`) and plugins (`%USERPROFILE%\AudioMixerPlugins`) stay. A newer package of the same kind upgrades an older one.
 The no-administrator flavour (`%LOCALAPPDATA%\Programs\AudioMixer`) is still available: `node scripts/build-msi.js --scope user`. Where other systems keep things: Linux app files are root-owned
 under `/opt`, user data stays in `~/AudioMixerDrivers`, `~/AudioMixerPlugins` and `~/.vst3`; macOS uses `/Applications`, `~/Library/LaunchAgents` and `~/Library/Audio/Plug-Ins/VST3`.
@@ -234,7 +234,7 @@ An audit of the LIVE SOURCES page (READ / WRITE per interface, ASIO, WASAPI, Dir
 
 - **New Start Menu shortcuts** (feature *Tools*): *License key and machine ID*, *List installed plugins*, *Audio drivers (ASIO, WASAPI)*, *Check for updates* and *Audio Mixer diagnostics*. Each opens a console that waits for Enter. They run new commands of the client: `node client/cli.js license [status|activate <key>|deactivate]`, `plugins`, `update [download]` (checks the signed manifest; the download is verified and never run for you), and `--pause` is now accepted by `drivers`, `doctor`, `license`, `plugins` and `update`.
 - **Optional MSI features:** `Main` (always), `Shortcuts`, `Tools`, `PluginHost` (native VST host, `native/host`), `WinHelpers` (native Windows device helpers, `native/win`), `Autostart`, `Desktop` (off by default). Use `ADDLOCAL=Main,Shortcuts,PluginHost` with msiexec, or the wizard's feature tree.
-- **Setup `.exe` switches:** `/noplugins`, `/nohelpers`, `/notools`, `/noshortcuts`, `/noautostart`, `/desktop` (they are turned into `ADDLOCAL`; without them the installer keeps its defaults). `/?` lists all switches.
+- **Setup `.exe` switches:** `/noplugins`, `/nohelpers`, `/notools`, `/noshortcuts`, `/noautostart`, `/nodesktop` (`/desktop` is still accepted; they are turned into `ADDLOCAL`; without them the installer keeps its defaults). `/?` lists all switches.
 - Without the plugin host the mixer still works; VST insert slots then report that the host is missing.
 
 ## Sources reach the mixer channels (1.14.1)
@@ -356,3 +356,13 @@ Not tested here: a real phone / headset (checked in Chromium with a generated st
 The Bluetooth input strip (BLUETOOTH page) has two more console sections:
 - **BUS SENDS:** a send level (-60 dB = off .. +10 dB) from the strip to each of the 16 mix buses of the BUS & MATRIX page (bus names follow that page). The send is taken after trim, mute and ducker, so muting the strip or a duck is heard on the buses too. It works for every assignment (channel pair, master, cue, matrix); with the strip on a channel pair, the channel's own sends on the BUS page add to these. ALL OFF clears them. Nothing is connected to a bus until its send is above off.
 - **DUCKER:** the Bluetooth input goes down by DEPTH (0 - 40 dB) while the trigger is above THRESHOLD, then comes back. Trigger: ALL LIVE SOURCES (every live source except the loopback / music ones, so a microphone) or one chosen source. ATTACK 1 - 500 ms, HOLD 0 - 2000 ms, RELEASE 20 - 3000 ms; the detector closes 3 dB below the threshold (hysteresis). The page shows the trigger level, the real gain reduction and the state (OFF / ARMED / DUCKING). The detector reads the sources about 30 times a second and moves the gain smoothly, so very short attacks are limited by that rate. Settings are saved in the browser.
+
+## The app did not appear after installing (1.4.1.0)
+
+Reasons found in the Windows installer and fixed:
+1. **No icon anywhere.** None of the programs (setup `.exe`, `AudioMixerServer.exe`, `audio-mixer.exe`) carried an icon, so the setup file, the Start Menu and desktop shortcuts and the entry in Settings > Apps all showed the plain default icon. All three now carry the mixer icon (dark tile with three amber faders; `scripts/build-exe.js` writes `AudioMixer.ico` with PNG frames 16 - 256 px), the shortcuts name it and the package sets `ARPPRODUCTICON` for Settings > Apps.
+2. **No obvious "Audio Mixer" entry.** The only main entry was "Audio Mixer (PC mode)" inside a Start Menu folder. There is now an **"Audio Mixer"** entry in the Start Menu list itself (and so in the Start search), next to the folder with the tools, and the **desktop shortcut is on by default** (`/nodesktop` removes it).
+3. **Nothing happened after the install.** The setup ended silently. After an interactive install it now says "Audio Mixer is installed" and asks **Start Audio Mixer now?**; Yes starts it through the Start Menu shortcut by Explorer, so it runs with normal rights, not as administrator (not with `/quiet` or `/passive`).
+4. **The browser did not open.** The launcher asked Windows once to open `http://localhost:8765/` and ignored a failure (no default browser set, blocked). It now tries the default browser, then Explorer, then `cmd /c start`, and finally shows the address in a message; when the server does not answer in time the message names the usual causes (port 8765 used by another program, missing Visual C++ runtime) and the diagnostics shortcut.
+
+Not found: a fault that would keep audio interfaces, Bluetooth devices or plugins out of the mixer's lists after a correct install; if they are still missing, run **Audio Mixer diagnostics** (Start Menu) or `audio-mixer doctor` and look at the DRIVERS page (it says why a list is empty). Not tested on a real Windows machine.
