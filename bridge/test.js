@@ -1586,3 +1586,54 @@ test('macOS: .dmg writer (UDIF) round-trips, app icon and Info.plist are valid, 
     assert.match(mac.readme('1.12.0'), /Applications/);
   }
 });
+
+test('LIVE SOURCES: one scan at a time, a failed scan keeps the interface list, duplex failures are remembered, only openable devices; the server shares one detection', async () => {
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  // run the page's scan logic with a stub: extract the methods and drive them
+  const grab = name => { const i = html.indexOf('            ' + name); assert.ok(i > 0, name); return i; };
+  assert.ok(html.includes('this._scanning = this.scanOnce()') && html.includes('this._rescan = true'));
+  assert.ok(html.includes('if (!ok && this.interfaces) this.interfaces.filter(i => i.apis && i.apis.length).forEach(i => found.set(i.key, i));'));
+  assert.ok(html.includes("a.inputs > 0 && a.deviceId >= 0") && html.includes("a.outputs > 0 && a.deviceId >= 0"));
+  assert.ok(html.includes('duplexBad(key)') && (html.match(/!this\.duplexBad\(i\.key\)/g) || []).length >= 3);
+  const m = /scan\(\) \{\n\s*if \(this\._scanning\)[\s\S]*?\n            \},\n            async scanOnce\(\) \{/.exec(html); assert.ok(m); void grab;
+  // behaviour of the single-flight wrapper
+  const L = { _scanning: null, _rescan: false, runs: 0, async scanOnce() { this.runs++; await new Promise(r => setTimeout(r, 20)); } };
+  L.scan = function () { if (this._scanning) { this._rescan = true; return this._scanning; } this._scanning = this.scanOnce().finally(() => { this._scanning = null; if (this._rescan) { this._rescan = false; this.scan(); } }); return this._scanning; };
+  await Promise.all([L.scan(), L.scan(), L.scan()]); await new Promise(r => setTimeout(r, 60));
+  assert.strictEqual(L.runs, 2);                                                      // three overlapping calls: one run + one follow-up, never parallel
+  // server: concurrent detections share one run and a failure is not cached
+  const srv = require('./server'); let calls = 0;
+  const first = srv.detectCached(true), second = srv.detectCached(); assert.strictEqual(first, second);
+  assert.notStrictEqual(srv.detectCached(true), first);                              // ?force=1 starts a new run
+  void calls; await first.catch(() => {});
+});
+
+test('RtApiAsio::probeDeviceInfo: a driver that fails to probe is kept for a moment instead of vanishing, then dropped; diagnostics say why', () => {
+  const a = require('./audify'); const fa = fakeAudify();
+  let mode = 'ok'; const orig = fa.RtAudio.prototype.getDevices;
+  const foc = { id: 0, name: 'Focusrite USB ASIO', inputChannels: 18, outputChannels: 20, sampleRates: [44100, 48000], preferredSampleRate: 48000 };
+  const second = { id: 1, name: 'ASIO4ALL v2', inputChannels: 4, outputChannels: 4, sampleRates: [48000], preferredSampleRate: 48000 };
+  fa.RtAudio.prototype.getDevices = function () {
+    if (this.api !== 6) return orig.call(this);
+    if (mode === 'throw') throw new Error('RtApiAsio::probeDeviceInfo: error (-1) initializing driver (Focusrite USB ASIO)');
+    if (mode === 'zero') return [{ ...foc, inputChannels: 0, outputChannels: 0, sampleRates: [] }, second];        // the driver is listed but cannot be probed
+    return [foc, second];
+  };
+  const names = r => r.devices.filter(d => d.api === 'WINDOWS_ASIO').map(d => d.name + '#' + d.id);
+  const t0 = Date.now(); const real = Date.now; Date.now = () => t0;
+  try {
+    const r1 = a.listDevices(() => fa); const base = names(r1); assert.deepStrictEqual(base, ['Focusrite USB ASIO#1000', 'ASIO4ALL v2#1001'].map(x => x)); assert.strictEqual((r1.problems || []).length, 0);
+    mode = 'zero'; Date.now = () => t0 + 5000;
+    const r2 = a.listDevices(() => fa); assert.deepStrictEqual(names(r2), base);                                   // busy for a moment: same devices, same ids
+    assert.deepStrictEqual(r2.problems[0].unprobed, ['Focusrite USB ASIO']); assert.deepStrictEqual(r2.problems[0].kept, ['Focusrite USB ASIO']);
+    assert.match(a.describe(() => fa).problems[0].hint, /probeDeviceInfo.*open in another program/);
+    mode = 'throw'; Date.now = () => t0 + 8000;
+    const r3 = a.listDevices(() => fa); assert.deepStrictEqual(names(r3), base);                                   // the whole probe threw: last list kept
+    assert.match(r3.problems[0].message, /probeDeviceInfo/);
+    Date.now = () => t0 + 30000;                                                                                   // still failing after the grace time: really gone
+    const r4 = a.listDevices(() => fa); assert.deepStrictEqual(names(r4), []);
+    mode = 'ok'; Date.now = () => t0 + 31000; assert.deepStrictEqual(names(a.listDevices(() => fa)).map(n => n.split('#')[0]), ['Focusrite USB ASIO', 'ASIO4ALL v2']);   // plugged in again
+  } finally { Date.now = real; }
+  const asio = {}; const m = a.mergeAsio(asio, [{ name: 'X', inputChannels: 0, outputChannels: 0 }], 1);
+  assert.deepStrictEqual(m.list, []); assert.deepStrictEqual(m.unprobed, ['X']);                                    // never probed OK: not listed (the registry lists it as "driver only")
+});

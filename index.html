@@ -15555,15 +15555,23 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return [];
                 try { return await navigator.mediaDevices.enumerateDevices(); } catch (e) { return []; }
             },
-            async scan() {
+            // one scan at a time (the timer, the device-change event and the SCAN NOW button used to overlap and overwrite each other)
+            scan() {
+                if (this._scanning) { this._rescan = true; return this._scanning; }
+                this._scanning = this.scanOnce().finally(() => { this._scanning = null; if (this._rescan) { this._rescan = false; this.scan(); } });
+                return this._scanning;
+            },
+            async scanOnce() {
                 const found = new Map();
                 const bridge = await this.findBridge();
                 if (bridge) {
+                    let ok = false;
                     try {
                         const j = await (await fetch(bridge + '/api/interfaces', { cache: 'no-store' })).json();
-                        if (j && j.ok) (j.interfaces || []).forEach(i => found.set(i.key, Object.assign({}, i, { apiNames: i.apis.map(a => a.api) })));
-                        this.portaudio = !!(j && j.portaudio);
-                    } catch (e) { /* offline */ }
+                        if (j && j.ok) { ok = true; (j.interfaces || []).forEach(i => found.set(i.key, Object.assign({}, i, { apiNames: i.apis.map(a => a.api) }))); this.portaudio = !!j.portaudio; }
+                    } catch (e) { /* busy or offline */ }
+                    // a failed or rejected scan (server busy, rate limit) says nothing about the interfaces: keep the last list instead of closing every open stream
+                    if (!ok && this.interfaces) this.interfaces.filter(i => i.apis && i.apis.length).forEach(i => found.set(i.key, i));
                 }
                 (await this.browserDevices()).forEach(d => {
                     if (d.kind !== 'audioinput' && d.kind !== 'audiooutput') return;
@@ -15642,15 +15650,16 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 let cap = null, lastErr = '';
                 // 1) every host API of the interface, best first (ASIO, WASAPI, Core Audio, ...); ASIO busy -> next API
                 const wantWrite = !!(this.cfg.enabled[i.key] || {}).write, dxa = wantWrite && !i.loopback && !o.music ? this.duplexApi(i) : null;
-                if (dxa && this.bridgeUrl && this.portaudio && !this.writes.has(i.key)) {
+                if (dxa && this.bridgeUrl && this.portaudio && !this.writes.has(i.key) && !this.duplexBad(i.key)) {
                     try {
                         await this.ensureTap();
                         const r = await this.bridgeDuplex(i, dxa);
                         cap = r.cap; this.writes.set(i.key, r.w); this.setStatus('w:' + i.key, 'WRITING via ' + r.w.how, false); this.updateMute();
-                    } catch (e) { lastErr = e.message; cap = null; }
+                    } catch (e) { lastErr = e.message; cap = null; (this.dxFail || (this.dxFail = {}))[i.key] = Date.now(); }   // remember: no endless retry
                 }
                 if (!cap && this.bridgeUrl && this.portaudio && i.apis && i.apis.length) {
-                    const tries = i.apis.filter(a => a.inputs > 0).sort((a, b) => apiRank(a.api) - apiRank(b.api));
+                    const tries = i.apis.filter(a => a.inputs > 0 && a.deviceId >= 0).sort((a, b) => apiRank(a.api) - apiRank(b.api));   // negative ids are devices the OS lists but no engine can open
+                    if (!tries.length && i.apis.some(a => a.inputs > 0)) lastErr = 'listed only: install Audify or PortAudio (npm install in bridge/) to open it';
                     for (const a of tries) {
                         try { cap = await this.bridgeRead(i, a); break; } catch (e) { lastErr = e.message; }
                     }
@@ -15718,6 +15727,8 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 });
             },
             // ASIO drivers serve one client: reading and writing the same interface go through ONE duplex stream
+            // a duplex stream that just failed is not tried again for a minute (read and write then use separate streams)
+            duplexBad(key) { return !!(this.dxFail && this.dxFail[key] && Date.now() - this.dxFail[key] < 60000); },
             duplexApi(i) { return (i.apis || []).filter(a => /asio/i.test(a.api) && a.inputs > 0 && a.outputs > 0)[0] || null; },
             bridgeDuplex(i, a) {
                 const self = this, ctx = window.state.ctx;
@@ -15837,12 +15848,12 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 if (!window.state.ctx) return;
                 const rc = this.caps.get(i.key);
                 const rs0 = this.status[i.key];
-                if (!rc && (this.cfg.enabled[i.key] || {}).read && !i.loopback && this.duplexApi(i) && !(rs0 && rs0.err)) return;   // the READ side opens the duplex stream
-                if (rc && rc.bridge && !rc.duplex && this.duplexApi(i)) { this.stopRead(i.key); return this.startRead(i, { userClick: true }); }
+                if (!rc && (this.cfg.enabled[i.key] || {}).read && !i.loopback && this.duplexApi(i) && !this.duplexBad(i.key) && !(rs0 && rs0.err)) return;   // the READ side opens the duplex stream
+                if (rc && rc.bridge && !rc.duplex && this.duplexApi(i) && !this.duplexBad(i.key)) { this.stopRead(i.key); return this.startRead(i, { userClick: true }); }
                 this.setStatus(k, 'opening...', false, true);
                 try { await this.ensureTap(); } catch (e) { return this.setStatus(k, e.message, true); }
-                const tries = (i.apis || []).filter(a => a.outputs > 0).sort((a, b) => apiRank(a.api) - apiRank(b.api));
-                let lastErr = 'no writable device';
+                const tries = (i.apis || []).filter(a => a.outputs > 0 && a.deviceId >= 0).sort((a, b) => apiRank(a.api) - apiRank(b.api));
+                let lastErr = (i.apis || []).some(a => a.outputs > 0 && a.deviceId < 0) ? 'listed only: install Audify or PortAudio (npm install in bridge/) to open it' : 'no writable device';
                 for (const a of tries) {
                     try { const w = await this.openWrite(a); this.writes.set(i.key, w); this.setStatus(k, 'WRITING via ' + w.how, false); this.updateMute(); this.render(); return; }
                     catch (e) { lastErr = e.message; }

@@ -122,7 +122,7 @@ async function handle(req, res) {
   }
 
   if (url.pathname === '/api/drivers') {
-    try { return json(res, 200, { ok: true, ...(await detect()) }, cors); }
+    try { return json(res, 200, { ok: true, ...(await detectCached(url.searchParams.get('force') === '1')) }, cors); }
     catch (e) { return json(res, 500, { ok: false, error: e.message }, cors); }
   }
 
@@ -133,7 +133,7 @@ async function handle(req, res) {
 
   if (url.pathname === '/api/interfaces') {
     try {
-      const info = await detect();
+      const info = await detectCached(url.searchParams.get('force') === '1');
       const src = url.searchParams.get('engine') === 'audify' && info.audify ? info.audify : info.portaudio;
       const devices = src ? src.devices : (info.native ? info.native.devices : []);
       return json(res, 200, { ok: true, platform: info.platform, portaudio: !!info.portaudio, engine: src ? src.engine : (info.native ? info.native.engine : null), asio: info.asio, interfaces: groupInterfaces(devices, info.asio) }, cors);
@@ -204,6 +204,17 @@ async function handle(req, res) {
   });
 }
 
+// Device detection runs PowerShell / reg / RtAudio probes: the page rescans every few seconds and several pages ask, so concurrent and repeated requests
+// share one run for a few seconds (?force=1 bypasses it). A failed run is not kept.
+let detectCache = null;
+function detectCached(force = false, maxAgeMs = 3000) {
+  const now = Date.now();
+  if (!force && detectCache && now - detectCache.at < maxAgeMs) return detectCache.promise;
+  const promise = detect(); detectCache = { at: now, promise };
+  promise.catch(() => { if (detectCache && detectCache.promise === promise) detectCache = null; });
+  return promise;
+}
+
 let updateCache = null;
 // JSON POST actions (license, updates): the custom header forces a CORS preflight, so foreign pages cannot trigger them.
 async function handleAction(req, res, cors, action, fn, wantBody = true) {
@@ -264,4 +275,4 @@ function start(port = PORT) {
 if (require.main === module) {
   start().then(port => console.log(`Audio Mixer bridge running: http://localhost:${port}  (open this URL to use the mixer)`));
 }
-module.exports = { server, originAllowed, hostAllowed, HOST, PORT, start };
+module.exports = { detectCached, server, originAllowed, hostAllowed, HOST, PORT, start };
