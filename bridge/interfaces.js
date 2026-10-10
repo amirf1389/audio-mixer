@@ -45,8 +45,19 @@ function untruncate(devices) {
   });
 }
 
+// An engine device (id >= 0) that could not be probed has no channels; the operating system's endpoint list knows the same device by name together with
+// its direction and channel count: take the mode from there, so READ / WRITE are offered instead of "no input, no output".
+function inferProbeFailed(devices) {
+  return devices.map(d => {
+    if (!d.probeFailed || d.inputs || d.outputs) return d;
+    const n = String(d.name || '').toLowerCase();
+    const e = devices.find(x => x !== d && !x.probeFailed && (x.inputs || x.outputs) && String(x.name || '').toLowerCase() === n);
+    return e ? { ...d, inputs: e.inputs, outputs: e.outputs, inferred: true } : d;
+  });
+}
+
 function groupInterfaces(devices = [], asioNames = []) {
-  devices = untruncate(devices);
+  devices = inferProbeFailed(untruncate(devices));
   const groups = new Map();
   const hfpBases = new Set(devices.filter(d => HFP.test(d.name || '')).map(d => btBase(d.name)));
   for (const d of devices) {
@@ -80,4 +91,4 @@ function groupInterfaces(devices = [], asioNames = []) {
   return out.sort((a, b) => (a.systemDefault - b.systemDefault) || (a.loopback - b.loopback) || (b.asio - a.asio) || a.name.localeCompare(b.name));
 }
 
-module.exports = { untruncate, isBluetooth, btBase, isPrimary, groupInterfaces, keyOf, baseName, apiRank };
+module.exports = { inferProbeFailed, untruncate, isBluetooth, btBase, isPrimary, groupInterfaces, keyOf, baseName, apiRank };
