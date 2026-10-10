@@ -33,6 +33,7 @@ With `OTA_ADMIN_TOKEN` set, open `https://ota.example.com/admin/` and sign in wi
 - **Files:** drag in the release files: the SHA-256 is computed in the browser, the upload shows progress and the server checks the hash again; list with "listed by" badges, Delete (not for files a manifest lists).
 - **Publish:** the version and the file for each platform are filled in from the file names; add notes, choose your `private.pem`, preview the manifest, **Sign and publish**. The key is imported as a non-extractable WebCrypto key and **signs in the browser; it is never uploaded**. The server and the apps verify the signature like any other.
 - **History:** every manifest ever published per channel, with **Roll back to this** (publishes the older, already signed manifest again).
+- **Audit:** every upload, delete, publish, roll back, unpublish and file check, refused sign-ins, rate-limit hits and dashboard openings: when, from where (address, browser), with which token (the first 8 hex characters of its SHA-256, never the token) and what the server answered (ok / rejected with the reason / denied / error). Filter by action and result, search, load older entries, **Verify the log**, **Download (JSON lines)**.
 - **Stats:** update checks and downloads per day, downloads per file. **Health:** re-hash every file on the disk and report damage or missing files.
 The dashboard files are served from the same origin under a strict Content-Security-Policy (no external scripts or styles, no inline code, not framable); it writes server data as text only. Keep `/admin/` behind your IP allow-list in nginx (see `nginx.conf`) as well.
 
@@ -59,6 +60,11 @@ Without them the app asks the project's GitHub `releases/update.json`.
 | `DELETE /admin/manifest/<channel>` | unpublish (history stays) |
 | `GET /admin/verify` | hash every file on disk again |
 | `GET /admin/` | the dashboard |
+| `GET /admin/audit?limit=&before=&action=&result=` | audit log, newest first (`action` exact or a prefix ending in `.`, `result` ok / rejected / denied / error) |
+| `GET /admin/audit/verify`, `GET /admin/audit/export` | check the hash chain; the whole log as JSON lines (the export is logged too) |
 
 Admin routes answer 404 without `OTA_ADMIN_TOKEN`, 401 with a wrong token (10 wrong tries a minute per address, then 429). The data folder holds
 `releases/`, `manifests/` (and `manifests/history/`), `index.json` and `stats.json`; back it up with the vendor key.
+
+## Audit log
+`<data>/audit.jsonl` is an append-only JSON-lines file, one entry per line: `seq`, `t` (UTC), `actor` (`fp` = first 8 hex characters of the SHA-256 of the admin token used, `ip`, `ua`), `action`, `target`, `detail`, `status`, `result`, `prev`, `hash`. Each `hash` covers the entry and the hash before it, so an edited, removed or inserted line is found by `GET /admin/audit/verify` (or "Verify the log" in the dashboard), which names the entry where the chain breaks; the file also stops being believable if someone with access to the disk rewrites it **and** every line after the change, so copy it off the server now and then (`/admin/audit/export`) if that matters to you. Actions: `file.upload`, `file.delete`, `manifest.publish`, `manifest.rollback` (a publish of an older version), `manifest.unpublish`, `files.verify`, `audit.export`, `session.open` (once per token and address per 30 minutes), `auth.denied` (at most 20 per address and minute), `admin.rate_limited` (at most 5). A refused attempt never stores the token it offered. Reads (files, stats, history, the audit log itself) are not logged. To rotate, move the file away: the next entry starts a new chain. The server has one admin token, so the log tells tokens apart by that fingerprint and people by address.

@@ -15,6 +15,8 @@
 //   GET  /admin/history/<channel>        every manifest ever published on the channel (newest first);  /admin/history/<channel>/<version> the signed envelope
 //   DELETE /admin/manifest/<channel>     unpublish the channel (the apps get 404; the history stays, a roll back publishes an old version again)
 //   GET  /admin/verify                   hashes every file on disk again and reports damage
+//   GET  /admin/audit?limit=&before=&action=&result=   audit log, newest first (<data>/audit.jsonl: append-only, hash-chained, see ota-server/audit.js)
+//   GET  /admin/audit/verify             checks the hash chain of the audit log;  GET /admin/audit/export  the whole log as JSON lines
 //   GET  /admin/  (+ app.js, style.css)  the vendor web dashboard (ota-server/dashboard/): needs OTA_ADMIN_TOKEN, the token is typed into the page and used as the Bearer token
 //
 // The server never holds the vendor PRIVATE key: manifests are signed on the vendor's machine. A manifest is accepted only when its signature
@@ -33,6 +35,7 @@ const https = require('node:https');
 const crypto = require('node:crypto');
 const update = require('../bridge/update');
 const { createLimiter } = require('../bridge/security');
+const { createAudit } = require('./audit');
 
 const MAX_FILE = 400 * 1024 * 1024;                 // the app refuses larger downloads
 const NAME = /^[A-Za-z0-9][A-Za-z0-9._ \-]{0,119}$/;
@@ -47,6 +50,16 @@ function createOta({ dataDir, token = '', publicUrl = '', jwk, rate = 120, trust
   const readJson = (f, d) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch (_) { return d; } };
   const writeAtomic = (f, text) => { const t = f + '.' + process.pid + '.tmp'; fs.writeFileSync(t, text, { mode: 0o640 }); fs.renameSync(t, f); };
   const limiter = createLimiter();
+  const audit = createAudit({ file: path.join(dataDir, 'audit.jsonl'), now });
+  const fpOf = t => crypto.createHash('sha256').update(String(t)).digest('hex').slice(0, 8);
+  const sessions = new Map();                                // who opened the dashboard / API lately (one "session.open" entry per token and address per 30 minutes)
+  // every request that sets req.audit = { action, target, detail } is written to the audit log when it is answered; the outcome comes from the status
+  function auditFinish(req, res, ip) {
+    const a = req.audit; if (!a) return;
+    const st = res.statusCode, result = st < 400 ? 'ok' : st === 401 || st === 403 || st === 429 ? 'denied' : st >= 500 ? 'error' : 'rejected';
+    const detail = Object.assign({}, a.detail || {}); if (res.auditNote) detail.error = res.auditNote;
+    try { audit.record({ actor: { fp: req.fp || '', ip, ua: req.headers['user-agent'] || '' }, action: a.action, target: a.target || '', detail: Object.keys(detail).length ? detail : null, status: st, result }); } catch (e) { log({ event: 'audit-error', message: String(e && e.message) }); }
+  }
   let index = readJson(indexFile, {}), stats = readJson(statsFile, { days: {} }), statsDirty = false;
   const sha256File = f => new Promise((res, rej) => { const h = crypto.createHash('sha256'); fs.createReadStream(f).on('data', c => h.update(c)).on('end', () => res(h.digest('hex'))).on('error', rej); });
 
@@ -71,7 +84,7 @@ function createOta({ dataDir, token = '', publicUrl = '', jwk, rate = 120, trust
   function count(kind, key) { const d = stats.days[day()] || (stats.days[day()] = { manifest: {}, download: {} }); d[kind][key] = (d[kind][key] || 0) + 1; statsDirty = true; }
   const flush = () => { if (statsDirty) { statsDirty = false; writeAtomic(statsFile, JSON.stringify(stats)); } };
 
-  const send = (res, code, body, headers = {}) => { const t = typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body); res.writeHead(code, { 'Content-Type': typeof body === 'object' && !Buffer.isBuffer(body) ? 'application/json; charset=utf-8' : 'text/plain; charset=utf-8', 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store', ...headers }); res.end(t); };
+  const send = (res, code, body, headers = {}) => { if (code >= 400 && body && typeof body === 'object' && !Buffer.isBuffer(body)) res.auditNote = String(body.error || '') + (body.problems ? ': ' + body.problems.join('; ') : ''); const t = typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body); res.writeHead(code, { 'Content-Type': typeof body === 'object' && !Buffer.isBuffer(body) ? 'application/json; charset=utf-8' : 'text/plain; charset=utf-8', 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store', ...headers }); res.end(t); };
   const fail = (res, code, error) => send(res, code, { ok: false, error });
   const addr = req => (trustProxy && String(req.headers['x-forwarded-for'] || '').split(',')[0].trim()) || req.socket.remoteAddress || '?';
   const authed = req => { const m = /^Bearer (.+)$/.exec(String(req.headers.authorization || '')); if (!m || !token) return false; const a = crypto.createHash('sha256').update(m[1]).digest(), b = crypto.createHash('sha256').update(token).digest(); return crypto.timingSafeEqual(a, b); };
@@ -111,13 +124,14 @@ function createOta({ dataDir, token = '', publicUrl = '', jwk, rate = 120, trust
 
   // ── administration ──
   async function putFile(req, res, name, query) {
+    req.audit = { action: 'file.upload', target: name, detail: {} };
     if (!NAME.test(name) || name.endsWith('.part')) return fail(res, 400, 'bad file name');
     const want = String(req.headers['x-sha256'] || '').toLowerCase();
     if (!HEX.test(want)) return fail(res, 400, 'header X-SHA256 (64 hex characters) is required');
     if (Number(req.headers['content-length'] || 0) > MAX_FILE) return fail(res, 413, 'file too large (limit 400 MB)');
     const target = path.join(dirs.releases, name);
     if (fs.existsSync(target) && query.get('overwrite') !== '1') {
-      if (index[name] && index[name].sha256 === want) return send(res, 200, { ok: true, name, size: index[name].size, sha256: want, unchanged: true });
+      if (index[name] && index[name].sha256 === want) { req.audit.detail = { unchanged: true, sha256: want.slice(0, 16) }; return send(res, 200, { ok: true, name, size: index[name].size, sha256: want, unchanged: true }); }
       return fail(res, 409, name + ' exists with other content (use ?overwrite=1; published versions should get a new file name)');
     }
     const part = target + '.part', out = fs.createWriteStream(part, { mode: 0o640 }), h = crypto.createHash('sha256'); let n = 0;
@@ -129,14 +143,17 @@ function createOta({ dataDir, token = '', publicUrl = '', jwk, rate = 120, trust
     if (got !== want) { fs.unlinkSync(part); return fail(res, 400, 'checksum mismatch: the upload is damaged (server computed ' + got + ')'); }
     fs.renameSync(part, target);
     const st = fs.statSync(target); index[name] = { size: st.size, mtime: st.mtimeMs, sha256: got }; writeAtomic(indexFile, JSON.stringify(index, null, 1));
+    req.audit.detail = { size: n, sha256: got.slice(0, 16), overwrite: query.get('overwrite') === '1' };
     send(res, 201, { ok: true, name, size: n, sha256: got });
   }
   async function putManifest(req, res, ch, query) {
+    req.audit = { action: 'manifest.publish', target: ch, detail: {} };
     if (!CHANNEL.test(ch)) return fail(res, 400, 'bad channel name');
     let env; try { env = JSON.parse((await readBody(req, 200 * 1024)).toString('utf8')); } catch (e) { return fail(res, e.status || 400, e.status ? e.message : 'the body is not JSON'); }
     const v = update.verifyManifest(env, jwk);
     if (!v.ok) return fail(res, 400, 'rejected: ' + v.error);
     const m = v.manifest, problems = [];
+    req.audit.detail = { version: m.version, files: Object.keys(m.files), forced: query.get('force') === '1' };
     if (m.channel && m.channel !== ch) problems.push('the manifest says channel "' + m.channel + '", published as "' + ch + '"');
     if (!/^\d+(\.\d+){1,3}$/.test(m.version)) problems.push('bad version ' + m.version);
     for (const [key, f] of Object.entries(m.files)) {
@@ -150,7 +167,8 @@ function createOta({ dataDir, token = '', publicUrl = '', jwk, rate = 120, trust
     }
     if (problems.length) return send(res, 400, { ok: false, error: 'rejected', problems });
     const cur = versionOf(ch), stored = readEnvelope(ch), same = !!stored && stored.payload === env.payload;      // signatures differ every time: the signed text decides
-    if (same) return send(res, 200, { ok: true, channel: ch, version: m.version, unchanged: true });
+    req.audit.detail.previous = cur; if (cur && update.cmpVersion(m.version, cur) < 0) req.audit.action = 'manifest.rollback';
+    if (same) { req.audit.detail.unchanged = true; return send(res, 200, { ok: true, channel: ch, version: m.version, unchanged: true }); }
     if (cur && update.cmpVersion(m.version, cur) <= 0 && query.get('force') !== '1') return fail(res, 409, 'version ' + m.version + ' is not newer than the published ' + cur + ' (use ?force=1 to replace it)');
     const text = JSON.stringify(env, null, 2) + '\n';
     writeAtomic(path.join(dirs.history, ch + '-' + m.version + '.json'), text); writeAtomic(manifestFile(ch), text);
@@ -184,20 +202,26 @@ function createOta({ dataDir, token = '', publicUrl = '', jwk, rate = 120, trust
 
   async function handler(req, res) {
     const t0 = Date.now(), url = new URL(req.url, 'http://x'), p = url.pathname, ip = addr(req);
-    res.on('finish', () => log({ ip, method: req.method, path: p, status: res.statusCode, ms: Date.now() - t0 }));
+    res.on('finish', () => { log({ ip, method: req.method, path: p, status: res.statusCode, ms: Date.now() - t0 }); auditFinish(req, res, ip); });
     try {
       if (p === '/admin' && token) return send(res, 301, '', { Location: '/admin/' });
       if (DASH[p] && token && (req.method === 'GET' || req.method === 'HEAD')) return serveDashboard(req, res, p);
       if (p.startsWith('/admin/')) {
         if (!token) return fail(res, 404, 'not found');
-        const lim = limiter.allow('a:' + ip, 60); if (!lim.ok) return send(res, 429, { ok: false, error: 'too many requests' }, { 'Retry-After': lim.retryAfter });
-        if (!authed(req)) { const bad = limiter.allow('bad:' + ip, 10); return send(res, bad.ok ? 401 : 429, { ok: false, error: 'a valid admin token is required' }, bad.ok ? { 'WWW-Authenticate': 'Bearer' } : { 'Retry-After': bad.retryAfter }); }
+        const lim = limiter.allow('a:' + ip, 60); if (!lim.ok) { if (limiter.allow('auditrl:' + ip, 5).ok) req.audit = { action: 'admin.rate_limited', target: p }; return send(res, 429, { ok: false, error: 'too many requests' }, { 'Retry-After': lim.retryAfter }); }
+        if (!authed(req)) {
+          const bad = limiter.allow('bad:' + ip, 10);
+          if (limiter.allow('auditbad:' + ip, 20).ok) req.audit = { action: 'auth.denied', target: req.method + ' ' + p };      // no token, wrong token or too many tries: who, where from, what for (never the token)
+          return send(res, bad.ok ? 401 : 429, { ok: false, error: 'a valid admin token is required' }, bad.ok ? { 'WWW-Authenticate': 'Bearer' } : { 'Retry-After': bad.retryAfter });
+        }
+        req.fp = fpOf(token);
         let m;
         if ((m = /^\/admin\/files\/([^/]+)$/.exec(p))) {
           let name; try { name = decodeURIComponent(m[1]); } catch (_) { return fail(res, 400, 'bad file name'); }
           if (req.method === 'PUT') return await putFile(req, res, name, url.searchParams);
           if (req.method === 'DELETE') {
             if (!NAME.test(name) || !index[name]) return fail(res, 404, 'no such file');
+            req.audit = { action: 'file.delete', target: name };
             const used = referencedBy(name); if (used.length) return fail(res, 409, name + ' is listed by the ' + used.join(', ') + ' manifest');
             fs.unlinkSync(path.join(dirs.releases, name)); delete index[name]; writeAtomic(indexFile, JSON.stringify(index, null, 1)); return send(res, 200, { ok: true, deleted: name });
           }
@@ -206,7 +230,10 @@ function createOta({ dataDir, token = '', publicUrl = '', jwk, rate = 120, trust
         if ((m = /^\/admin\/manifest\/([^/]+)$/.exec(p)) && req.method === 'PUT') return await putManifest(req, res, m[1], url.searchParams);
         if ((m = /^\/admin\/manifest\/([^/]+)$/.exec(p)) && req.method === 'DELETE') {
           if (!CHANNEL.test(m[1]) || !fs.existsSync(manifestFile(m[1]))) return fail(res, 404, 'nothing is published on that channel');
-          const was = versionOf(m[1]); fs.unlinkSync(manifestFile(m[1])); log({ event: 'unpublish', channel: m[1], version: was }); return send(res, 200, { ok: true, channel: m[1], unpublished: was });
+          const was = versionOf(m[1]); req.audit = { action: 'manifest.unpublish', target: m[1], detail: { version: was } }; fs.unlinkSync(manifestFile(m[1])); log({ event: 'unpublish', channel: m[1], version: was }); return send(res, 200, { ok: true, channel: m[1], unpublished: was });
+        }
+        if (p === '/admin/config' && req.method === 'GET') {
+          const k = req.fp + '|' + ip, t = Date.now(); if (!sessions.has(k) || t - sessions.get(k) > 30 * 60000) { sessions.set(k, t); req.audit = { action: 'session.open', target: '' }; }
         }
         if (p === '/admin/config' && req.method === 'GET') return send(res, 200, { ok: true, publicUrl: publicUrl.replace(/\/+$/, ''), jwk, maxFile: MAX_FILE, allowHttp, channels: Object.fromEntries(channels().map(c => [c, versionOf(c)])) });
         if ((m = /^\/admin\/history\/([a-z0-9-]+)(?:\/(\d+(?:\.\d+){1,3}))?$/.exec(p)) && req.method === 'GET' && CHANNEL.test(m[1])) {
@@ -214,7 +241,10 @@ function createOta({ dataDir, token = '', publicUrl = '', jwk, rate = 120, trust
           const f = path.join(dirs.history, m[1] + '-' + m[2] + '.json'); if (!fs.existsSync(f)) return fail(res, 404, 'no such version');
           return send(res, 200, fs.readFileSync(f), { 'Content-Type': 'application/json; charset=utf-8' });
         }
-        if (p === '/admin/verify' && req.method === 'GET') { const r = await verifyDisk(); return send(res, 200, { ok: true, allGood: r.every(x => x.ok), files: r }); }
+        if (p === '/admin/verify' && req.method === 'GET') { const r = await verifyDisk(); req.audit = { action: 'files.verify', target: '', detail: { files: r.length, damaged: r.filter(x => !x.ok).map(x => x.name) } }; return send(res, 200, { ok: true, allGood: r.every(x => x.ok), files: r }); }
+        if (p === '/admin/audit' && req.method === 'GET') { const q = url.searchParams, r = audit.list({ limit: q.get('limit'), before: q.get('before'), action: String(q.get('action') || '').slice(0, 60), result: String(q.get('result') || '').slice(0, 12) }); return send(res, 200, { ok: true, ...r, chain: audit.count() }); }
+        if (p === '/admin/audit/verify' && req.method === 'GET') return send(res, 200, { ok: true, ...audit.verify() });
+        if (p === '/admin/audit/export' && req.method === 'GET') { req.audit = { action: 'audit.export', target: '', detail: { entries: audit.count() } }; return send(res, 200, audit.exportText(), { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Content-Disposition': 'attachment; filename="audit.jsonl"' }); }
         if (p === '/admin/stats' && req.method === 'GET') { flush(); return send(res, 200, { ok: true, days: stats.days }); }
         return fail(res, 404, 'not found');
       }
@@ -230,7 +260,7 @@ function createOta({ dataDir, token = '', publicUrl = '', jwk, rate = 120, trust
   }
 
   const timer = setInterval(flush, 30000); timer.unref();
-  return { handler, reindex, flush, channels, versionOf, dirs, jwk, index: () => index };
+  return { handler, reindex, flush, channels, versionOf, dirs, jwk, audit, index: () => index };
 }
 
 // Takes a releases/ folder (files + a signed update.json) into the data folder. The manifest is checked like an uploaded one.
