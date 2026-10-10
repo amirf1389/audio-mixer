@@ -5,7 +5,8 @@
 //   user:              %LOCALAPPDATA%\Programs\AudioMixer, no administrator rights, current user
 // Needs wixl (msitools): Linux "apt install wixl". Packages are signed by build-installers.js / sign.js.
 // Install:  msiexec /i AudioMixer-1.4.0-x64.msi   (silent: /qn)   Uninstall: Settings > Apps > Audio Mixer, or msiexec /x <ProductCode>
-// Features: ADDLOCAL=Main,Shortcuts,Autostart,Desktop  (default: Main,Shortcuts,Autostart)
+// Features: ADDLOCAL=Main,Shortcuts,Tools,PluginHost,WinHelpers,Autostart,Desktop  (default: all but Desktop)
+//   PluginHost: native VST host (native/host), WinHelpers: native Windows audio device helpers (native/win); Tools: Start Menu shortcuts for license, plugins, drivers, update, doctor
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
@@ -37,8 +38,10 @@ function rtf(text) {
 }
 
 // Directory tree + one component per file, all in feature Main.
+// Component ids whose relative path starts with one of the prefixes go to `groups[name]` instead of Main.
+const FEATURE_PATHS = { PluginHost: 'native/host/', WinHelpers: 'native/win/' };
 function filesXml(stage, win64 = false) {
-  const comps = [];
+  const comps = [], groups = { PluginHost: [], WinHelpers: [] };
   const walk = (dir, rel, indent) => {
     let out = '';
     const entries = fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name));
@@ -48,19 +51,20 @@ function filesXml(stage, win64 = false) {
         out += `${indent}<Directory Id="${idOf('d', r)}" Name="${esc(e.name)}">\n${walk(full, r, indent + '  ')}${indent}</Directory>\n`;
       } else {
         const cid = idOf('c', r);
-        comps.push(cid);
+        const g = Object.keys(FEATURE_PATHS).find(k => r.startsWith(FEATURE_PATHS[k]));
+        (g ? groups[g] : comps).push(cid);
         out += `${indent}<Component Id="${cid}" Guid="${guid(r)}"${win64 ? ' Win64="yes"' : ''}>\n${indent}  <File Id="${idOf('f', r)}" Name="${esc(e.name)}" Source="${esc(full)}" KeyPath="yes"/>\n${indent}</Component>\n`;
       }
     }
     return out;
   };
-  return { xml: walk(stage, '', '            '), comps };
+  return { xml: walk(stage, '', '            '), comps, groups };
 }
 
 function wxs({ stage, version, arch = 'x64', scope = 'machine' }) {
   if (!['x64', 'x86'].includes(arch) || !['machine', 'user'].includes(scope)) throw new Error('bad arch / scope');
   const win64 = arch === 'x64', machine = scope === 'machine', root = machine ? 'HKLM' : 'HKCU';
-  const { xml, comps } = filesXml(stage, win64);
+  const { xml, comps, groups } = filesXml(stage, win64);
   const w64 = win64 ? ' Win64="yes"' : '';
   const sc = (id, name, args, desc) => `        <Shortcut Id="${id}" Name="${esc(name)}" Target="[INSTALLDIR]runtime\\node.exe" Arguments="${esc(args)}" WorkingDirectory="INSTALLDIR" Description="${esc(desc)}"/>\n`;
   const code = productCode(arch, scope, version);
@@ -107,6 +111,13 @@ ${sc('ScPc', 'Audio Mixer (PC mode)', '"[INSTALLDIR]client\\cli.js"', 'Start the
       </Component>
     </DirectoryRef>
 
+    <DirectoryRef Id="MenuDir">
+      <Component Id="ToolShortcuts" Guid="${guid('tool-shortcuts:' + scope)}"${w64}>
+${sc('ScLicense', 'License key and machine ID', '"[INSTALLDIR]client\\cli.js" license --pause', 'Show the license plan and this PC\'s machine ID; activate with: license activate KEY')}${sc('ScPluginList', 'List installed plugins', '"[INSTALLDIR]client\\cli.js" plugins --pause', 'List the VST3 and VST2 plugins the mixer finds')}${sc('ScDrivers', 'Audio drivers (ASIO, WASAPI)', '"[INSTALLDIR]client\\cli.js" drivers --pause', 'List the official audio drivers for this PC')}${sc('ScUpdate', 'Check for updates', '"[INSTALLDIR]client\\cli.js" update --pause', 'Check the signed update manifest (nothing is installed automatically)')}${sc('ScDoctor', 'Audio Mixer diagnostics', '"[INSTALLDIR]client\\cli.js" doctor --pause', 'Check Node.js, ports, audio engine and ASIO drivers')}        <RemoveFolder Id="RmMenuTools" On="uninstall"/>
+        <RegistryValue Root="${root}" Key="Software\\Audio Mixer" Name="ToolShortcuts" Type="integer" Value="1" KeyPath="yes"/>
+      </Component>
+    </DirectoryRef>
+
     <DirectoryRef Id="DesktopFolder">
       <Component Id="DesktopShortcut" Guid="${guid('desktop-shortcut:' + scope)}"${w64}>
 ${sc('ScDesk', 'Audio Mixer', '"[INSTALLDIR]client\\cli.js"', 'Start PC mode')}        <RegistryValue Root="${root}" Key="Software\\Audio Mixer" Name="Desktop" Type="integer" Value="1" KeyPath="yes"/>
@@ -117,6 +128,11 @@ ${sc('ScDesk', 'Audio Mixer', '"[INSTALLDIR]client\\cli.js"', 'Start PC mode')} 
 ${comps.map(c => `      <ComponentRef Id="${c}"/>\n`).join('')}      <ComponentRef Id="InstallKey"/>
     </Feature>
     <Feature Id="Shortcuts" Title="Start Menu shortcuts" Level="1"><ComponentRef Id="MenuShortcuts"/></Feature>
+    <Feature Id="Tools" Title="Start Menu tools (license, plugins, drivers, update, diagnostics)" Level="1"><ComponentRef Id="ToolShortcuts"/></Feature>
+    <Feature Id="PluginHost" Title="VST3 / VST2 plugin host (insert effects)" Level="1">
+${groups.PluginHost.map(c => `      <ComponentRef Id="${c}"/>\n`).join('')}    </Feature>
+    <Feature Id="WinHelpers" Title="Native Windows audio device helpers" Level="1">
+${groups.WinHelpers.map(c => `      <ComponentRef Id="${c}"/>\n`).join('')}    </Feature>
     <Feature Id="Autostart" Title="Start the local server when I log in" Level="1"><ComponentRef Id="AutostartRun"/></Feature>
     <Feature Id="Desktop" Title="Desktop shortcut" Level="2"><ComponentRef Id="DesktopShortcut"/></Feature>
 

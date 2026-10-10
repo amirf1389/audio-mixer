@@ -840,6 +840,31 @@ test('msi: stable GUIDs, per-machine Program Files paths for x64 and x86, per-us
   fsx.rmSync(stage, { recursive: true, force: true });
 });
 
+test('msi: Start Menu tool shortcuts and optional features (plugin host, helpers) split by path', () => {
+  const m = require('../scripts/build-msi');
+  const stage = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'msi-'));
+  for (const d of ['native/host/x64', 'native/win/x64', 'client']) fsx.mkdirSync(pathx.join(stage, d), { recursive: true });
+  fsx.writeFileSync(pathx.join(stage, 'native/host/x64/PluginHost.exe'), 'x'); fsx.writeFileSync(pathx.join(stage, 'native/win/x64/AudioDevices.exe'), 'x'); fsx.writeFileSync(pathx.join(stage, 'client/cli.js'), 'x');
+  const w = m.wxs({ stage, version: '1.14.0', arch: 'x64' });
+  for (const id of ['ScLicense', 'ScPluginList', 'ScDrivers', 'ScUpdate', 'ScDoctor']) assert.match(w, new RegExp(`Id="${id}"`));
+  assert.match(w, /cli\.js&quot; license --pause/); assert.match(w, /cli\.js&quot; update --pause/);
+  const feat = id => (w.match(new RegExp(`<Feature Id="${id}"[\\s\\S]*?</Feature>`)) || [''])[0];
+  assert.match(feat('PluginHost'), /PluginHost_exe|PluginHost\.exe/i); assert.match(feat('WinHelpers'), /AudioDevices/i);
+  assert.ok(!/PluginHost|AudioDevices/i.test(feat('Main')), 'optional files are not in Main');
+  assert.match(feat('Main'), /ComponentRef Id="c_client_cli_js"|cli_js/);
+  assert.match(feat('Tools'), /ToolShortcuts/);
+  const f = m.filesXml(stage, true); assert.strictEqual(f.groups.PluginHost.length, 1); assert.strictEqual(f.groups.WinHelpers.length, 1); assert.strictEqual(f.comps.length, 1);
+  fsx.rmSync(stage, { recursive: true, force: true });
+});
+
+test('cli: license / plugins / update commands exist and the stub has the feature switches', () => {
+  const cli = fsx.readFileSync(pathx.join(__dirname, '..', 'client', 'cli.js'), 'utf8');
+  for (const c of ["'license'", "'plugins'", "'update'"]) assert.ok(cli.includes(`o.cmd === ${c}`));
+  const stub = fsx.readFileSync(pathx.join(__dirname, '..', 'installer', 'setup-stub.c'), 'utf8');
+  for (const sw of ['/noplugins', '/nohelpers', '/notools', '/noshortcuts', '/desktop', '/noautostart']) assert.ok(stub.includes(`L"${sw}"`), sw);
+  assert.match(stub, /ADDLOCAL=Main/);
+});
+
 test('verify: .msi installer file check', () => {
   const v = require('../client/verify');
   const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'vfy-')), f = pathx.join(dir, 'A.msi');
