@@ -6,7 +6,7 @@
 //   node client/cli.js drivers         list official drivers for this PC (installed / not found)
 //   node client/cli.js download <id>   save an official installer (e.g. flexasio); it is never run for you
 //   node client/cli.js doctor          check Node.js, ports, PortAudio, ASIO drivers, download folder
-//   node client/cli.js verify [installer.exe] [--scan]   verification scan: file hashes, signatures, loopback-only, Defender scan
+//   node client/cli.js verify [installer.exe]   verification: file hashes, signatures, loopback-only
 //   node client/cli.js setup [--user]  install the native audio modules (Audify, PortAudio) for ASIO / WASAPI; --user: Audify only, into your home folder
 //   node client/cli.js service install|uninstall|status   start the server automatically when you log in
 //   node client/cli.js npm <args>      run npm (the bundled one in the Windows install, else the system's) inside the app's bridge folder
@@ -32,7 +32,7 @@ function parseArgs(argv) {
     else if (a === '--help' || a === '-h') o.help = true;
     else if (a === '--port') o.port = Number(argv[++i]);
     else if (a.startsWith('--port=')) o.port = Number(a.slice(7));
-    else if (a.startsWith('--')) continue; // command flags (--scan, --pause) are read from argv by the command
+    else if (a.startsWith('--')) continue; // command flags (--pause) are read from argv by the command
     else rest.push(a);
   }
   if (rest[0]) o.cmd = rest[0];
@@ -170,8 +170,9 @@ function cmdSetup(argv = []) {
 
 async function cmdVerify(o, argv) {
   const verify = require('./verify');
-  const r = await verify.verify({ target: o.arg, scan: argv.includes('--scan'), port: o.port });
+  const r = await verify.verify({ target: o.arg, port: o.port });
   console.log(verify.format(r));
+  if (argv.includes('--scan')) console.log('\nNote: --scan was removed from this command. Nothing else changed.');
   await pause(argv);
   return r.ok ? 0 : 1;
 }

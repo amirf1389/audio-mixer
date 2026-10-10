@@ -1,9 +1,10 @@
 'use strict';
 // Verification scan for the installed app and for the installer .exe.
-//   node client/cli.js verify [--scan]            check the installed / built app folder
-//   node client/cli.js verify <installer.exe> [--scan]   check a downloaded installer
+//   node client/cli.js verify                     check the installed / built app folder
+//   node client/cli.js verify <installer.exe>     check a downloaded installer
 // Checks: file hashes against MANIFEST.sha256, Authenticode signature of the bundled Node.js runtime and of the installer,
-// that the server is not reachable from the network (loopback only), the autostart entry, and (--scan) a Microsoft Defender scan.
+// that the server is not reachable from the network (loopback only), the autostart entry.
+// (The optional antivirus scan that this command used to start with --scan was removed.)
 const fs = require('node:fs');
 const os = require('node:os');
 const net = require('node:net');
@@ -40,15 +41,6 @@ function pinnedThumbprint(file, env = process.env) {
   }
   return null;
 }
-function parseDefender(out) {
-  const t = String(out || '').trim();
-  if (!t) return { state: 'unavailable' };
-  if (/^CLEAN/m.test(t)) return { state: 'clean' };
-  const m = /^THREAT\|(.*)$/m.exec(t);
-  if (m) return { state: 'threat', ids: m[1] };
-  return { state: 'unavailable' };
-}
-
 // ── checks ──
 function checkManifest(root) {
   const mf = path.join(root, 'MANIFEST.sha256'), res = [];
@@ -153,23 +145,10 @@ async function checkLoopbackOnly(port) {
   return open.length ? [{ level: FAIL, title: 'The server is reachable from the network', detail: open.join(', ') }] : [{ level: PASS, title: 'The server listens on this PC only (loopback)', detail: `127.0.0.1:${port}${lan.length ? ', not on ' + lan.join(', ') : ''}` }];
 }
 
-async function checkDefender(target, { platform = process.platform, run } = {}) {
-  if (platform !== 'win32') return [{ level: INFO, title: 'Microsoft Defender scan', detail: 'available on Windows only' }];
-  const out = await ps(`$ErrorActionPreference='Stop'; try { Start-MpScan -ScanType CustomScan -ScanPath $env:VERIFY_PATH } catch { return }
-$since = (Get-Date).AddMinutes(-15)
-$t = Get-MpThreatDetection | Where-Object { $_.InitialDetectionTime -gt $since -and ($_.Resources -join ' ') -like ('*' + $env:VERIFY_PATH + '*') }
-if ($t) { 'THREAT|' + (($t | ForEach-Object { $_.ThreatID }) -join ',') } else { 'CLEAN' }`, { VERIFY_PATH: target }, run, 900000);
-  const d = parseDefender(out);
-  if (d.state === 'clean') return [{ level: PASS, title: 'Microsoft Defender scan: no threats found', detail: target }];
-  if (d.state === 'threat') return [{ level: FAIL, title: 'Microsoft Defender reported a threat', detail: 'threat id ' + d.ids }];
-  return [{ level: WARN, title: 'Microsoft Defender scan could not run', detail: 'Defender is off, managed by another antivirus, or needs administrator rights' }];
-}
-
-async function verify({ target, root, scan = false, port = 8765, platform = process.platform, run } = {}) {
+async function verify({ target, root, port = 8765, platform = process.platform, run } = {}) {
   const results = [];
   if (target && fs.existsSync(target) && fs.statSync(target).isFile()) {
     results.push(...checkInstallerFile(target), ...await checkSignature(target, 'Installer', { platform, run, pinned: pinnedThumbprint(target) }));
-    if (scan) results.push(...await checkDefender(target, { platform, run }));
   } else {
     const dir = path.resolve(target || root || path.join(__dirname, '..'));
     results.push(...checkManifest(dir));
@@ -177,7 +156,6 @@ async function verify({ target, root, scan = false, port = 8765, platform = proc
     if (fs.existsSync(node)) results.push(...await checkSignature(node, 'Bundled Node.js runtime', { platform, run, expect: /OpenJS Foundation|Node\.js/i }));
     results.push(...await checkLoopbackOnly(port));
     try { const st = require('./service').status(); results.push({ level: INFO, title: 'Start at login', detail: st.installed ? 'enabled' : 'not enabled' }); } catch (_) { /* unsupported OS */ }
-    if (scan) results.push(...await checkDefender(dir, { platform, run }));
   }
   const failed = results.filter(r => r.level === FAIL).length, warned = results.filter(r => r.level === WARN).length;
   return { results, failed, warned, ok: failed === 0 };
@@ -188,4 +166,4 @@ function format(r) {
   return r.results.map(x => `${mark[x.level]} ${x.title}${x.detail ? ': ' + x.detail : ''}`).join('\n') + `\n\nResult: ${r.ok ? 'VERIFIED' : 'NOT VERIFIED'} (${r.failed} failed, ${r.warned} warnings)`;
 }
 
-module.exports = { verify, format, checkManifest, checkInstallerFile, checkSetupPayload, pinnedThumbprint, peDataEnd, checkSignature, checkLoopbackOnly, checkDefender, parseSignature, parseDefender, sha256 };
+module.exports = { verify, format, checkManifest, checkInstallerFile, checkSetupPayload, pinnedThumbprint, peDataEnd, checkSignature, checkLoopbackOnly, parseSignature, sha256 };

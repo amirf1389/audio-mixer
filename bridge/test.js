@@ -592,17 +592,11 @@ test('verify: parsers and injected PowerShell results', async () => {
   const v = require('../client/verify');
   assert.deepStrictEqual(v.parseSignature('Valid|CN=OpenJS Foundation'), { status: 'Valid', subject: 'CN=OpenJS Foundation', thumbprint: '' });
   assert.deepStrictEqual(v.parseSignature('UnknownError|CN=A, O=B|ab12'), { status: 'UnknownError', subject: 'CN=A, O=B', thumbprint: 'AB12' });
-  assert.strictEqual(v.parseDefender('CLEAN').state, 'clean');
-  assert.deepStrictEqual(v.parseDefender('THREAT|123,456'), { state: 'threat', ids: '123,456' });
-  assert.strictEqual(v.parseDefender('').state, 'unavailable');
   const run = out => (cmd, args, opts, cb) => cb(null, out);
   assert.strictEqual((await v.checkSignature('x', 'Runtime', { platform: 'win32', run: run('Valid|CN=OpenJS Foundation'), expect: /OpenJS/ }))[0].level, 'PASS');
   assert.strictEqual((await v.checkSignature('x', 'Runtime', { platform: 'win32', run: run('Valid|CN=Someone Else'), expect: /OpenJS/ }))[0].level, 'WARN');
   assert.strictEqual((await v.checkSignature('x', 'Installer', { platform: 'win32', run: run('NotSigned|') }))[0].level, 'WARN');
   assert.strictEqual((await v.checkSignature('x', 'Installer', { platform: 'win32', run: run('HashMismatch|CN=x') }))[0].level, 'FAIL');
-  assert.strictEqual((await v.checkDefender('x', { platform: 'win32', run: run('CLEAN') }))[0].level, 'PASS');
-  assert.strictEqual((await v.checkDefender('x', { platform: 'win32', run: run('THREAT|9') }))[0].level, 'FAIL');
-  assert.strictEqual((await v.checkDefender('x', { platform: 'linux' }))[0].level, 'INFO');
 });
 
 test('verify: loopback-only check and cli flag parsing', async () => {
@@ -2309,4 +2303,22 @@ test('OTA audit log: every admin action is recorded with who / what / result, ha
   assert.ok(/audit: \['Audit', auditView\]/.test(src) && src.includes("'/admin/audit/verify'") && src.includes("'/admin/audit/export'") && !/innerHTML/.test(src));
   assert.strictEqual(dash.fmtDetail({ version: '2.0.0.0', files: ['a', 'b'], forced: true, previous: null, ok: false }), 'version 2.0.0.0 • files a, b • forced'); assert.strictEqual(dash.fmtDetail(null), ''); assert.ok(dash.fmtDetail({ x: 'y'.repeat(500) }).length <= 220);
   for (const k of ['file.upload', 'manifest.rollback', 'auth.denied', 'session.open']) assert.ok(dash.ACTIONS[k], k);
+});
+
+test('no Windows Defender scanner: the verify command, the setup program and the Start Menu shortcut no longer start a Defender scan (a false PUP detection trigger); the file / signature checks stay', async () => {
+  const fs = require('node:fs'), path = require('node:path'), rd = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
+  const v = require('../client/verify');
+  assert.ok(!('checkDefender' in v) && !('parseDefender' in v) && typeof v.checkManifest === 'function' && typeof v.checkSignature === 'function' && typeof v.checkLoopbackOnly === 'function');
+  // nothing that ships can call Defender: no PowerShell Defender cmdlets, no MpCmdRun, in the client, the bridge, the installers or the MSI definition
+  const code = ['client/verify.js', 'client/cli.js', 'client/service.js', 'installer/setup-stub.c', 'installer/launcher.c', 'installer/audio-mixer.c', 'scripts/build-msi.js'].map(f => rd(...f.split('/'))).join('\n') + fs.readdirSync(path.join(__dirname)).filter(f => /\.js$/.test(f) && f !== 'test.js').map(f => rd('bridge', f)).join('\n');
+  assert.ok(!/Start-MpScan|Get-MpThreat|MpCmdRun|Add-MpPreference|Set-MpPreference|Get-MpComputerStatus|Update-MpSignature/i.test(code), 'no Defender cmdlet or tool is called');
+  assert.ok(!/Defender/.test(rd('scripts', 'build-msi.js')) && !/verify --scan/.test(rd('scripts', 'build-msi.js')));
+  assert.match(rd('scripts', 'build-msi.js'), /Verify installation \(file check\)[^\n]*verify --pause/);
+  // the setup program: no scan after the install; /scan from an old command line is accepted and not passed on to Windows Installer
+  const stub = rd('installer', 'setup-stub.c');
+  assert.ok(!/scan = 1|&& scan\)|verify --scan/.test(stub) && /L"\/scan"\)\) continue;/.test(stub));
+  // the command line: --scan is ignored with a note, the file checks still run
+  const { execFileSync } = require('node:child_process');
+  const out = execFileSync('node', [path.join(__dirname, '..', 'client', 'cli.js'), 'verify', '--scan'], { encoding: 'utf8' });
+  assert.match(out, /Result: VERIFIED/); assert.match(out, /--scan was removed/); assert.ok(!/Defender/.test(out));
 });

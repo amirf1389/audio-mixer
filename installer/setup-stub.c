@@ -7,7 +7,7 @@
  *   Audio Mixer-1.4.0.exe              install (shows the Windows Installer wizard)
  *   Audio Mixer-1.4.0.exe /quiet       silent install (also /S, /qn), /passive shows progress only
  *   Audio Mixer-1.4.0.exe /uninstall   remove Audio Mixer (same as Settings > Apps > Audio Mixer > Uninstall)
- *   Audio Mixer-1.4.0.exe /scan        after installing, run the verification scan (file hashes, signature, Microsoft Defender)
+ *   (/scan, which started an antivirus scan after the install, was removed in 1.4.3.0; the switch is still accepted and ignored.)
  *   Audio Mixer-1.4.0.exe /novcredist  do not install the Microsoft Visual C++ runtime that the native audio module needs (see below)
  *   Audio Mixer-1.4.0.exe /noplugins  do not install the VST plugin host;  /nohelpers  skip the native Windows device helpers
  *   Audio Mixer-1.4.0.exe /nopath      do not put the audio-mixer command (audio-mixer.exe) on PATH
@@ -163,13 +163,13 @@ static void start_app(const wchar_t *dir) {
 int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int show) {
   (void)inst; (void)prev; (void)cmd; (void)show;
   int argc = 0; wchar_t **argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-  int quiet = 0, passive = 0, scan = 0, uninstall = 0, novc = 0;
+  int quiet = 0, passive = 0, uninstall = 0, novc = 0;
   int noplug = 0, nohelp = 0, notools = 0, noshort = 0, desktop = 1, noauto = 0, nopath = 0;
   wchar_t extra[2048] = L"";
   for (int i = 1; argv && i < argc; i++) {
     if (!_wcsicmp(argv[i], L"/quiet") || !_wcsicmp(argv[i], L"/S") || !_wcsicmp(argv[i], L"/qn") || !_wcsicmp(argv[i], L"-quiet")) quiet = 1;
     else if (!_wcsicmp(argv[i], L"/passive")) passive = 1;
-    else if (!_wcsicmp(argv[i], L"/scan")) scan = 1;
+    else if (!_wcsicmp(argv[i], L"/scan")) continue;                     /* removed (it started an antivirus scan): accepted and ignored */
     else if (!_wcsicmp(argv[i], L"/novcredist")) novc = 1;
     else if (!_wcsicmp(argv[i], L"/noplugins")) noplug = 1;
     else if (!_wcsicmp(argv[i], L"/nohelpers")) nohelp = 1;
@@ -181,7 +181,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int show) {
     else if (!_wcsicmp(argv[i], L"/nopath")) nopath = 1;
     else if (!_wcsicmp(argv[i], L"/uninstall") || !_wcsicmp(argv[i], L"/remove")) uninstall = 1;
     else if (!wcscmp(argv[i], L"/?") || !_wcsicmp(argv[i], L"/help")) {
-      message(L"Audio Mixer setup\n\n/quiet  silent install\n/passive  progress only\n/uninstall  remove Audio Mixer\n/scan  run the verification scan after installing\n/novcredist  skip the Visual C++ runtime check\n/noplugins  no VST plugin host\n/nohelpers  no native device helpers\n/notools  no tool shortcuts\n/noshortcuts  no Start Menu shortcuts\n/nodesktop  no desktop shortcut\n/noautostart  do not start at login\n/nopath  do not put the audio-mixer command on PATH\nPROPERTY=value  passed to Windows Installer (for example INSTALLDIR=\"D:\\Audio Mixer\")", MB_ICONINFORMATION);
+      message(L"Audio Mixer setup\n\n/quiet  silent install\n/passive  progress only\n/uninstall  remove Audio Mixer\n/novcredist  skip the Visual C++ runtime check\n/noplugins  no VST plugin host\n/nohelpers  no native device helpers\n/notools  no tool shortcuts\n/noshortcuts  no Start Menu shortcuts\n/nodesktop  no desktop shortcut\n/noautostart  do not start at login\n/nopath  do not put the audio-mixer command on PATH\nPROPERTY=value  passed to Windows Installer (for example INSTALLDIR=\"D:\\Audio Mixer\")", MB_ICONINFORMATION);
       return 0;
     } else {
       /* quote property values that contain spaces: NAME=value with spaces -> NAME="value" */
@@ -258,14 +258,6 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int show) {
   if (restart && (exitCode == 0 || exitCode == 3010)) {   /* the server was running before the upgrade: start the new one */
     wchar_t dir[MAX_PATH];
     if (install_dir(dir, MAX_PATH)) { _snwprintf(line, 4096, L"\"%lsAudioMixerServer.exe\"", dir); line[4095] = 0; run(line, 0, NULL); }
-  }
-  if ((exitCode == 0 || exitCode == 3010) && scan) {
-    wchar_t dir[MAX_PATH];
-    if (install_dir(dir, MAX_PATH)) {
-      _snwprintf(line, 4096, L"\"%lsruntime\\node.exe\" \"%lsclient\\cli.js\" verify --scan --pause", dir, dir);
-      line[4095] = 0;
-      run(line, 1, NULL);
-    }
   }
   if ((exitCode == 0 || exitCode == 3010) && !quiet && !passive) {          /* interactive install: say it is done and offer to start the app */
     wchar_t dir[MAX_PATH];

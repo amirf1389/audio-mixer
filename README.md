@@ -54,7 +54,7 @@ and the Audify prebuilt binaries, pinned by SHA-256).
 
 | File | Installs to | Notes |
 |---|---|---|
-| `Audio Mixer-1.13.0.exe` | `C:\Program Files\Audio Mixer` | signed setup for 64-bit Windows; checks the embedded package's SHA-256, then runs Windows Installer. `/quiet` silent, `/passive`, `/scan` (run the verification scan after installing), `/uninstall`, `INSTALLDIR="D:\Audio Mixer"` |
+| `Audio Mixer-1.13.0.exe` | `C:\Program Files\Audio Mixer` | signed setup for 64-bit Windows; checks the embedded package's SHA-256, then runs Windows Installer. `/quiet` silent, `/passive`, `/uninstall`, `INSTALLDIR="D:\Audio Mixer"` |
 | `AudioMixer-1.13.0-x64.msi` | `C:\Program Files\Audio Mixer` | 64-bit Windows Installer package, all users (administrator), `msiexec /i ... /qn` |
 | `AudioMixer-1.13.0-x86.msi` | `C:\Program Files (x86)\Audio Mixer` | 32-bit package with 32-bit Node.js (v22 LTS, the last line with a 32-bit build) and 32-bit Audify, for 32-bit Windows or 32-bit audio hosts |
 | `audio-mixer_1.13.0_all.deb` | `/opt/audio-mixer`, `/usr/bin/audio-mixer`, `/usr/share/applications`, `/usr/lib/systemd/user` | Debian / Ubuntu / Mint; installs Node.js 18+ on first start when it is missing; remove with `apt remove audio-mixer`; start at login: `systemctl --user enable --now audio-mixer` |
@@ -97,13 +97,13 @@ to the Startup folder (autostart is one registry Run value that starts the signe
 checked payload, and every file is listed in `MANIFEST.sha256`. Source for both native programs is in `installer/`. If a scanner still flags a file, compare it with `verify`, then report it
 as a false positive to the vendor (Microsoft: https://www.microsoft.com/wdsi/filesubmission); a certificate from a public CA (`SIGN_PFX`) removes most of these warnings.
 
-### Windows verification scan
-`node client/cli.js verify [--scan]` (Start Menu: *Verify installation (security scan)*) checks an install: every file against `MANIFEST.sha256` (changed, missing and unlisted code files, including
-native files under `bridge/node_modules`, are reported), the Authenticode signature of the bundled Node.js runtime (must be the OpenJS Foundation), that the server listens on loopback only, and with
-`--scan` runs a Microsoft Defender custom scan. `node client/cli.js verify "Audio Mixer-1.13.0.exe" [--scan]` (also `.msi`) checks a downloaded installer: PE structure, the embedded package and its SHA-256,
-the `.sha256` file next to it, the signature (a self-signed signature passes only when it matches `AudioMixer-signing.cer` next to the file, or `AUDIO_MIXER_SIGNING_CER`) and Defender. Exit code 0 = verified.
+### Windows verification
+`node client/cli.js verify` (Start Menu: *Verify installation (file check)*) checks an install: every file against `MANIFEST.sha256` (changed, missing and unlisted code files, including
+native files under `bridge/node_modules`, are reported), the Authenticode signature of the bundled Node.js runtime (must be the OpenJS Foundation) and that the server listens on loopback only.
+`node client/cli.js verify "Audio Mixer-<version>.exe"` (also `.msi`) checks a downloaded installer: PE structure, the embedded package and its SHA-256,
+the `.sha256` file next to it and the signature (a self-signed signature passes only when it matches `AudioMixer-signing.cer` next to the file, or `AUDIO_MIXER_SIGNING_CER`). Exit code 0 = verified.
 Manual check in PowerShell: `Get-FileHash ".\Audio Mixer-1.13.0.exe" -Algorithm SHA256` and `Get-AuthenticodeSignature ".\Audio Mixer-1.13.0.exe"`.
-Tested on Linux (hashes, packaging, signature verification with osslsigncode); the Windows-only parts (running the setup, Authenticode and Defender checks, uninstall) are untested on a real PC.
+Tested on Linux (hashes, packaging, signature verification with osslsigncode); the Windows-only parts (running the setup, Authenticode checks, uninstall) are untested on a real PC.
 
 ### Live interface (1.4.0 and 1.5.0)
 Interface changes in the page:
@@ -294,7 +294,7 @@ An audio endpoint whose channel count Windows cannot report (device busy or in e
 ## Installers with Node.js, npm, a command line and uninstallers on every system (1.16.0)
 
 One command, `audio-mixer`, on Windows, macOS and Linux (it is the `npm run` of the installed app, and needs no project folder):
-`audio-mixer` (start the mixer) · `audio-mixer doctor` · `drivers` · `verify --scan` · `license` · `plugins` · `update` · `service install|uninstall|status` · `setup` · **`npm <args>`** (npm inside the app's `bridge` folder, e.g. `audio-mixer npm install audify`) · **`uninstall [--yes]`** · `version`. A command never opens the start-up screen; only a start does.
+`audio-mixer` (start the mixer) · `audio-mixer doctor` · `drivers` · `verify` · `license` · `plugins` · `update` · `service install|uninstall|status` · `setup` · **`npm <args>`** (npm inside the app's `bridge` folder, e.g. `audio-mixer npm install audify`) · **`uninstall [--yes]`** · `version`. A command never opens the start-up screen; only a start does.
 
 | | Windows (`.exe` / `.msi`) | macOS (`.dmg`, `.app.zip`, `.tar.gz`) | Linux (`.tar.gz`, `.deb`) |
 |---|---|---|---|

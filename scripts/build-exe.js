@@ -1,6 +1,6 @@
 'use strict';
 // Builds the signed setup program "Audio Mixer-<version>.exe": a small bootstrapper (installer/setup-stub.c, compiled with MinGW-w64)
-// that carries the .msi as payload, checks its SHA-256 before running it, and understands /quiet /passive /scan /uninstall.
+// that carries the .msi as payload, checks its SHA-256 before running it, and understands /quiet /passive /uninstall.
 //   node scripts/build-exe.js <package.msi> <productCode> <out.exe>
 // Signing: see scripts/sign.js. Needs: x86 MinGW-w64 (Linux: apt install gcc-mingw-w64-i686) and osslsigncode.
 const fs = require('node:fs');
