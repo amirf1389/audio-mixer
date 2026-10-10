@@ -665,8 +665,8 @@ test('audify: opens with the driver buffer, retries other sizes, aligns writes',
   const s2 = a.openStream({ mod: f2, dev, direction: 'output', channels: 2, sampleRate: 48000 });
   assert.strictEqual(s2.frameSize, 512); assert.deepStrictEqual(s2.tried, [0, 256, 512]);
   assert.throws(() => a.openStream({ mod: fakeAudify({ failSizes: [128] }), dev, direction: 'output', channels: 2, sampleRate: 48000, frameSize: 128 }), /could not open/);
-  assert.throws(() => a.openStream({ mod: f1, dev, direction: 'output', channels: 2, sampleRate: 88200 }), /does not support 88200/);
-  assert.throws(() => a.openStream({ mod: f1, dev, direction: 'output', channels: 30, sampleRate: 48000 }), /only 20 output/);
+  assert.throws(() => a.openStream({ mod: fakeAudify(), dev, direction: 'output', channels: 2, sampleRate: 88200 }), /does not support 88200/);
+  assert.throws(() => a.openStream({ mod: fakeAudify(), dev, direction: 'output', channels: 30, sampleRate: 48000 }), /only 20 output/);
   const cap = a.openStream({ mod: f1, dev, direction: 'input', channels: 40, sampleRate: 48000, onData() {} });
   assert.strictEqual(cap.channels, 18);
 });
@@ -1319,4 +1319,33 @@ test('bluetooth: A2DP + hands-free endpoints are one device, written through A2D
   assert.strictEqual(out.deviceRate, 48000); st.close(); out.close();
   assert.throws(() => a.openStream({ mod: fa, dev: { ...btDev, name: 'Focusrite USB ASIO', maxOutputChannels: 2 }, direction: 'output', channels: 2, sampleRate: 48000 }), /does not support 48000/);
   void orig;
+});
+
+test('ASIO (RtAudio): one stream per driver. Reading and writing a device share a duplex stream, probing never touches an open driver', () => {
+  const a = require('./audify');
+  const fa = fakeAudify();
+  const dev = a.listDevices(() => fa).devices.find(d => d.api === 'WINDOWS_ASIO');
+  let probes = 0; const origGet = fa.RtAudio.prototype.getDevices;
+  fa.RtAudio.prototype.getDevices = function () { if (this.api === 6) probes++; return origGet.call(this); };
+  const got = [];
+  const out = a.openStream({ mod: fa, dev, direction: 'output', channels: 2, sampleRate: 48000 });
+  assert.strictEqual(fa.opened.length, 1); assert.ok(fa.opened[0].out && !fa.opened[0].inp);
+  const before = probes; const again = a.listDevices(() => fa);                                      // page scan while the driver is open
+  assert.strictEqual(probes, before); assert.ok(again.devices.some(d => d.api === 'WINDOWS_ASIO' && d.id === dev.id));   // list kept, driver not probed
+  const inp = a.openStream({ mod: fa, dev, direction: 'input', channels: 2, sampleRate: 48000, onData: b => got.push(b.length) });
+  assert.strictEqual(fa.opened.length, 2); assert.ok(fa.opened[1].out && fa.opened[1].inp);          // re-opened as ONE duplex stream
+  assert.strictEqual(inp.channels, 2); assert.strictEqual(out.channels, 2);
+  out.write(Buffer.alloc(out.frameSize * 4)); assert.strictEqual(fa.written.length, 1);              // the first user is still attached
+  assert.throws(() => a.openStream({ mod: fa, dev, direction: 'input', channels: 2, sampleRate: 48000 }), /already open for reading/);
+  inp.close(); out.write(Buffer.alloc(out.frameSize * 4)); assert.strictEqual(fa.written.length, 2);  // closing one side keeps the other running
+  out.close(); assert.strictEqual(a._asioOf(fa).size, 0);
+  const afterClose = probes; a.listDevices(() => fa); assert.ok(probes > afterClose);                 // free again: probed again
+  // a different sample rate cannot share the stream, and the first user keeps its stream
+  const o2 = a.openStream({ mod: fa, dev, direction: 'output', channels: 2, sampleRate: 48000 });
+  assert.throws(() => a.openStream({ mod: fa, dev, direction: 'input', channels: 2, sampleRate: 44100 }), /same sample rate/);
+  o2.write(Buffer.alloc(o2.frameSize * 4)); o2.close();
+  // the duplex endpoint owns the driver
+  const d = a.openDuplex({ mod: fa, dev, inChannels: 2, outChannels: 2, sampleRate: 48000 });
+  assert.throws(() => a.openStream({ mod: fa, dev, direction: 'input', channels: 2, sampleRate: 48000 }), /already open for reading and writing/);
+  d.close(); assert.strictEqual(a._asioOf(fa).size, 0);
 });
