@@ -13,8 +13,9 @@ const ROOT = path.resolve(__dirname, '..');
 const FILES = [
   'index.html', 'README.md', 'LICENSE', 'package.json', 'start-pc-mode.bat', 'start-pc-mode.sh', 'ensure-node.sh', 'start-local-server.bat',
   'client/cli.js', 'client/service.js', 'client/verify.js',
-  'bridge/server.js', 'bridge/detect.js', 'bridge/catalog.js', 'bridge/nowplaying.js', 'bridge/interfaces.js', 'bridge/asio-lock.js', 'bridge/audify.js', 'bridge/plugins.js', 'bridge/streams.js', 'bridge/levels.js', 'bridge/universal.js', 'bridge/input.js', 'bridge/output.js', 'bridge/volume.js', 'bridge/ws.js',
+  'bridge/server.js', 'bridge/detect.js', 'bridge/catalog.js', 'bridge/nowplaying.js', 'bridge/interfaces.js', 'bridge/asio-lock.js', 'bridge/audify.js', 'bridge/plugins.js', 'bridge/streams.js', 'bridge/levels.js', 'bridge/universal.js', 'bridge/license.js', 'bridge/license-public.json', 'bridge/update.js', 'bridge/duplex.js', 'bridge/winnative.js', 'bridge/security.js', 'bridge/input.js', 'bridge/output.js', 'bridge/volume.js', 'bridge/ws.js',
   'bridge/package.json', 'bridge/README.md',
+  'Audio Mixer.vbs', 'native/win/AudioDevices.cpp', 'native/win/AudioDevices-x64.exe', 'native/win/AudioDevices-x86.exe', 'native/win/audio-devices.vbs',
 ];
 
 function sha256(file) { return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex'); }

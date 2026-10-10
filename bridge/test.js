@@ -1047,3 +1047,240 @@ test('endpoint: /api/universal', async () => {
   assert.strictEqual((await fetch(base + '/api/universal', { headers: { Origin: 'https://evil.example' } })).status, 403);
   server.closeAllConnections(); server.close();
 });
+
+// ── consumer licensing and OTA updates ──
+function vendorKeys() {
+  const { publicKey, privateKey } = cryptox.generateKeyPairSync('ec', { namedCurve: 'P-256' });
+  const j = publicKey.export({ format: 'jwk' });
+  return { privateKey, jwk: { kty: j.kty, crv: j.crv, x: j.x, y: j.y } };
+}
+
+test('license: signed keys verify, tampering / expiry / wrong computer are refused', () => {
+  const lic = require('./license'), { privateKey, jwk } = vendorKeys();
+  const now = Date.now();
+  const mk = (over = {}) => lic.signKey({ v: 1, id: 'T1', plan: 'pro', name: 'Jane', issued: now - 1000, expires: now + 86400000, seats: 1, ...over }, privateKey);
+  const ok = lic.verifyKey(mk(), { jwk, now });
+  assert.strictEqual(ok.ok, true); assert.strictEqual(ok.plan.channels, 16); assert.ok(ok.plan.features.includes('plugins'));
+  assert.strictEqual(lic.verifyKey(mk({ plan: 'studio', expires: null }), { jwk, now }).plan.channels, 32);
+  assert.strictEqual(lic.PLANS.basic.channels, 8);
+  // another vendor's key, a flipped payload, junk
+  assert.strictEqual(lic.verifyKey(mk(), { jwk: vendorKeys().jwk, now }).reason, 'bad-signature');
+  const k = mk(), parts = k.split('.');
+  const forged = [parts[0], lic.b64u(Buffer.from(JSON.stringify({ v: 1, plan: 'studio', name: 'x' }))), parts[2]].join('.');
+  assert.strictEqual(lic.verifyKey(forged, { jwk, now }).reason, 'bad-signature');
+  assert.strictEqual(lic.verifyKey('nonsense', { jwk }).reason, 'malformed');
+  assert.strictEqual(lic.verifyKey(mk(), { jwk, now: now + 3 * 86400000 }).reason, 'expired');
+  assert.strictEqual(lic.verifyKey(mk({ plan: 'platinum' }), { jwk, now }).reason, 'unknown-plan');
+  assert.strictEqual(lic.verifyKey(mk({ issued: now + 10 * 86400000 }), { jwk, now }).reason, 'not-yet-valid');
+  // bound to a computer
+  const bound = mk({ mid: 'AAAA-BBBB-CCCC-DDDD-EEEE' });
+  assert.strictEqual(lic.verifyKey(bound, { jwk, now, machine: 'AAAA-BBBB-CCCC-DDDD-EEEE' }).ok, true);
+  assert.strictEqual(lic.verifyKey(bound, { jwk, now, machine: '1111-2222-3333-4444-5555' }).reason, 'wrong-machine');
+  assert.match(lic.machineId(), /^[0-9A-F]{4}(-[0-9A-F]{4}){4}$/);
+  assert.strictEqual(lic.machineId(), lic.machineId());
+});
+
+test('license: activation is stored per user, status falls back to BASIC when expired or invalid', () => {
+  const lic = require('./license'), { privateKey, jwk } = vendorKeys();
+  const file = pathx.join(fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'lic-')), 'sub', 'license.json');
+  const now = Date.now();
+  const key = lic.signKey({ v: 1, id: 'A1', plan: 'pro', name: 'Jane', issued: now, expires: now + 1000 * 60, seats: 1 }, privateKey);
+  assert.strictEqual(lic.activate('junk', { file, jwk }).ok, false); assert.ok(!fsx.existsSync(file));
+  assert.strictEqual(lic.activate(key, { file, jwk, machine: 'X' }).ok, true);
+  assert.strictEqual(JSON.parse(fsx.readFileSync(file, 'utf8')).key, key);
+  if (process.platform !== 'win32') assert.strictEqual(fsx.statSync(file).mode & 0o077, 0);         // private to the user
+  process.env.BRIDGE_LICENSE_FILE = file;
+  try {
+    const st = lic.status({ jwk, now });
+    assert.strictEqual(st.state, 'active'); assert.strictEqual(st.plan.id, 'pro'); assert.strictEqual(st.license.name, 'Jane');
+    const late = lic.status({ jwk, now: now + 3600000 });
+    assert.strictEqual(late.state, 'expired'); assert.strictEqual(late.plan.id, 'basic'); assert.strictEqual(late.plan.channels, 8);
+    assert.strictEqual(lic.status({ jwk: vendorKeys().jwk, now }).state, 'invalid');                 // key of another vendor never raises the plan
+    assert.strictEqual(lic.deactivate({ file }).removed, true); assert.strictEqual(lic.status({ jwk }).state, 'basic');
+    assert.strictEqual(lic.hasFeature(lic.status({ key: key, jwk, now }), 'ota'), true);
+    assert.strictEqual(lic.hasFeature(lic.status({ key: null }), 'ota'), false);
+  } finally { delete process.env.BRIDGE_LICENSE_FILE; }
+});
+
+test('vendor tool: key pair, issue and embed into a copy of the project', () => {
+  const v = require('../scripts/license'), lic = require('./license');
+  const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'vend-'));
+  const r = v.initKeys(dir);
+  assert.ok(fsx.existsSync(r.priv) && fsx.existsSync(r.pub));
+  assert.throws(() => v.initKeys(dir), /already exists/);                                               // never overwrites a key
+  const jwk = v.loadPublic(dir);
+  const { key, payload } = v.issue({ dir, plan: 'studio', name: 'Studio One', days: 365, machine: 'AAAA-BBBB-CCCC-DDDD-EEEE' });
+  assert.strictEqual(lic.verifyKey(key, { jwk, machine: 'AAAA-BBBB-CCCC-DDDD-EEEE' }).plan.id, 'studio'); assert.ok(payload.expires > Date.now());
+  assert.throws(() => v.issue({ dir, plan: 'gold', name: 'x' }), /plan must be/);
+  assert.throws(() => v.issue({ dir, plan: 'pro' }), /--name/);
+  const copy = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'proj-')); fsx.mkdirSync(pathx.join(copy, 'bridge'));
+  fsx.writeFileSync(pathx.join(copy, 'index.html'), `x ${v.MARK_A}{"old":1}${v.MARK_B} y`);
+  v.embedPublic(jwk, copy);
+  assert.deepStrictEqual(JSON.parse(fsx.readFileSync(pathx.join(copy, 'bridge', 'license-public.json'), 'utf8')), jwk);
+  assert.ok(fsx.readFileSync(pathx.join(copy, 'index.html'), 'utf8').includes(JSON.stringify(jwk)));
+  // the shipped page and bridge carry the same public key
+  const page = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  const m = new RegExp(v.MARK_A.replace(/\*/g, '\\*') + '(.*?)' + v.MARK_B.replace(/\*/g, '\\*')).exec(page);
+  assert.deepStrictEqual(JSON.parse(m[1]), lic.PUBLIC_JWK);
+});
+
+function fakeUpdateServer({ version = '9.9.9', tamper = false, badHost = false, privateKey, jwk } = {}) {
+  const up = require('./update');
+  const bytes = Buffer.from('installer-bytes');
+  const sha = cryptox.createHash('sha256').update(bytes).digest('hex');
+  const manifest = { product: 'audio-mixer', version, released: '2026-10-10', notes: ['Smooth faders', 'OTA updates'], files: {
+    'win-x64-exe': { name: 'Audio Mixer-9.9.9.exe', url: badHost ? 'https://evil.example/a.exe' : 'https://raw.githubusercontent.com/o/r/main/releases/Audio%20Mixer-9.9.9.exe', size: bytes.length, sha256: sha },
+    'linux-deb': { name: 'audio-mixer_9.9.9_all.deb', url: 'https://raw.githubusercontent.com/o/r/main/releases/audio-mixer_9.9.9_all.deb', sha256: sha } } };
+  const env = up.signManifest(manifest, privateKey);
+  if (tamper) env.payload = env.payload.replace('9.9.9', '0.0.1');
+  return async (url) => {
+    if (/update\.json$/.test(url)) return { ok: true, status: 200, json: async () => env };
+    return { ok: true, status: 200, url, headers: { get: () => String(bytes.length) }, body: (async function* () { yield bytes.subarray(0, 5); yield bytes.subarray(5); })() };
+  };
+}
+
+test('OTA: versions compare, manifests must be signed, files are matched to the system', async () => {
+  const up = require('./update'), lic = require('./license');
+  const { privateKey } = vendorKeys();
+  assert.strictEqual(up.cmpVersion('1.10.0', '1.9.9'), 1); assert.strictEqual(up.cmpVersion('1.5.1', '1.5.1'), 0); assert.strictEqual(up.cmpVersion('1.5.1', '1.6.0'), -1);
+  assert.strictEqual(up.hostOk('https://raw.githubusercontent.com/x'), true); assert.strictEqual(up.hostOk('http://raw.githubusercontent.com/x'), false); assert.strictEqual(up.hostOk('https://evil.example/x'), false);
+  // the real check uses the embedded public key: a manifest signed by anyone else is ignored
+  const fetchImpl = fakeUpdateServer({ privateKey });
+  await assert.rejects(up.check({ current: '1.5.1', fetchImpl, url: 'https://raw.githubusercontent.com/o/r/main/releases/update.json' }), /not signed by the Audio Mixer publisher/);
+  const env = up.signManifest({ product: 'audio-mixer', version: '2.0.0', files: { 'macos': { name: 'a.tar.gz', url: 'https://github.com/a', sha256: 'x' } } }, privateKey);
+  assert.strictEqual(up.verifyManifest(env, vendorKeys().jwk).ok, false);
+  const { privateKey: pk2, jwk: jwk2 } = vendorKeys();
+  const ok = up.verifyManifest(up.signManifest({ product: 'audio-mixer', version: '2.0.0', files: {} }, pk2), jwk2);
+  assert.strictEqual(ok.ok, true);
+  assert.strictEqual(up.verifyManifest({ payload: ok.manifest, signature: 'x' }, jwk2).ok, false);
+  const m = { files: { 'win-x64-exe': { name: 'a.exe' }, 'win-x86-msi': { name: 'b.msi' }, 'linux-deb': { name: 'c.deb' }, macos: { name: 'd.tgz' } } };
+  assert.strictEqual(up.platformFile(m, { platform: 'win32', arch: 'x64' }).key, 'win-x64-exe');
+  assert.strictEqual(up.platformFile(m, { platform: 'win32', arch: 'ia32' }).key, 'win-x86-msi');
+  assert.strictEqual(up.platformFile(m, { platform: 'linux', debian: true }).key, 'linux-deb');
+  assert.strictEqual(up.platformFile(m, { platform: 'linux', debian: false }), null);
+  assert.strictEqual(up.platformFile(m, { platform: 'darwin' }).key, 'macos');
+});
+
+test('OTA: check and download with the embedded vendor key replaced by a test key (checksum verified, never run)', async () => {
+  // run the real code path against a manifest signed with a key we hold: swap the embedded public key for this test only
+  const lic = require('./license'), up = require('./update');
+  const { privateKey, jwk } = vendorKeys();
+  const saved = { ...lic.PUBLIC_JWK }; Object.assign(lic.PUBLIC_JWK, jwk);
+  const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'ota-'));
+  const url = 'https://raw.githubusercontent.com/o/r/main/releases/update.json';
+  try {
+    const info = await up.check({ current: '1.5.1', fetchImpl: fakeUpdateServer({ privateKey }), url, platform: 'win32', arch: 'x64' });
+    assert.strictEqual(info.updateAvailable, true); assert.strictEqual(info.latest, '9.9.9'); assert.strictEqual(info.file.key, 'win-x64-exe'); assert.deepStrictEqual(info.notes, ['Smooth faders', 'OTA updates']);
+    assert.strictEqual((await up.check({ current: '9.9.9', fetchImpl: fakeUpdateServer({ privateKey }), url, platform: 'win32' })).updateAvailable, false);
+    const r = await up.download({ current: '1.5.1', fetchImpl: fakeUpdateServer({ privateKey }), url, dir, platform: 'win32', arch: 'x64' });
+    assert.strictEqual(r.verified, true); assert.strictEqual(pathx.basename(r.file), 'Audio Mixer-9.9.9.exe'); assert.strictEqual(fsx.readFileSync(r.file).toString(), 'installer-bytes');
+    assert.deepStrictEqual(fsx.readdirSync(dir), ['Audio Mixer-9.9.9.exe']);                         // no .part left behind
+    await assert.rejects(up.download({ current: '9.9.9', fetchImpl: fakeUpdateServer({ privateKey }), url, dir, platform: 'win32' }), /up to date/);
+    await assert.rejects(up.download({ current: '1.5.1', fetchImpl: fakeUpdateServer({ privateKey, badHost: true }), url, dir, platform: 'win32', arch: 'x64' }), /host is not allowed/);
+    await assert.rejects(up.check({ current: '1.5.1', fetchImpl: fakeUpdateServer({ privateKey, tamper: true }), url }), /not signed/);
+    await assert.rejects(up.check({ current: '1.5.1', fetchImpl: fakeUpdateServer({ privateKey }), url: 'https://evil.example/update.json' }), /host is not allowed/);
+    // a corrupted file is discarded
+    const bad = async (u) => /update\.json$/.test(u) ? fakeUpdateServer({ privateKey })(u) : { ok: true, status: 200, url: u, headers: { get: () => '3' }, body: (async function* () { yield Buffer.from('xyz'); })() };
+    await assert.rejects(up.download({ current: '1.5.1', fetchImpl: bad, url, dir: pathx.join(dir, 'b'), platform: 'win32', arch: 'x64' }), /checksum mismatch/);
+    assert.deepStrictEqual(fsx.readdirSync(pathx.join(dir, 'b')), []);
+  } finally { Object.assign(lic.PUBLIC_JWK, saved); }
+});
+
+test('endpoints: /api/license (BASIC by default), activation needs a valid key, updates need PRO', async () => {
+  process.env.BRIDGE_LICENSE_FILE = pathx.join(fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'lep-')), 'license.json');
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const post = (p, headers = {}, body) => fetch(base + p, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body });
+  try {
+    const st = await (await fetch(base + '/api/license')).json();
+    assert.strictEqual(st.ok, true); assert.strictEqual(st.state, 'basic'); assert.strictEqual(st.plan.channels, 8); assert.match(st.machineId, /^[0-9A-F]{4}(-[0-9A-F]{4}){4}$/);
+    assert.strictEqual((await post('/api/license/activate', {}, '{"key":"x"}')).status, 400);                         // custom header required
+    const bad = await post('/api/license/activate', { 'X-Mixer-Action': 'license' }, '{"key":"AMIX1.abc.def"}');
+    assert.strictEqual(bad.status, 400); assert.strictEqual((await bad.json()).reason, 'bad-signature');
+    assert.strictEqual((await post('/api/license/activate', { 'X-Mixer-Action': 'license' }, 'not json')).status, 400);
+    assert.strictEqual((await post('/api/license/activate', { 'X-Mixer-Action': 'license', 'Content-Type': 'text/plain' }, '{}')).status, 400);
+    assert.strictEqual((await post('/api/license/deactivate', { 'X-Mixer-Action': 'license' })).status, 200);
+    const dl = await post('/api/update/download', { 'X-Mixer-Action': 'update' });
+    assert.strictEqual(dl.status, 402); assert.strictEqual((await dl.json()).needs, 'ota');                           // BASIC: can check, cannot download
+    assert.strictEqual((await post('/api/update/download', {})).status, 400);
+    assert.strictEqual((await fetch(base + '/api/license', { headers: { Origin: 'https://evil.example' } })).status, 403);
+  } finally { server.closeAllConnections(); server.close(); delete process.env.BRIDGE_LICENSE_FILE; }
+});
+
+test('duplex: one native stream reads and writes the same interface', () => {
+  const { _owners } = require('./asio-lock'); _owners.clear();
+  const { createDuplexSession } = require('./duplex');
+  const fa = fakeAudify();
+  const dev = require('./audify').listDevices(() => fa).devices.find(d => /ASIO/.test(d.hostAPIName));
+  const sent = [], bin = [];
+  const conn = { send: m => sent.push(JSON.parse(m)), sendBinary: b => bin.push(b.length) };
+  const s = createDuplexSession(conn, () => { throw new Error('no pa'); }, () => fa);
+  s.onText(JSON.stringify({ type: 'start', deviceId: dev.id, inChannels: 2, channels: 2, sampleRate: 48000 }));
+  assert.strictEqual(sent[0].type, 'started'); assert.strictEqual(sent[0].duplex, true); assert.strictEqual(sent[0].inChannels, 2);
+  assert.strictEqual(fa.opened.length, 1); assert.ok(fa.opened[0].out && fa.opened[0].inp);                 // ONE stream with both directions
+  const frame = Buffer.alloc(sent[0].frameSize * 4);
+  s.onBinary(frame); assert.strictEqual(fa.written.length, 1);                                               // page audio reaches the device
+  s.onBinary(Buffer.alloc(3)); assert.strictEqual(fa.written.length, 1);                                     // partial frame dropped
+  assert.strictEqual(_owners.size, 1);
+  s.onText(JSON.stringify({ type: 'stop' })); assert.strictEqual(sent[sent.length - 1].type, 'stopped'); assert.strictEqual(_owners.size, 0);
+  const e = [];  const s2 = createDuplexSession({ send: m => e.push(JSON.parse(m)), sendBinary() {} }, () => { throw new Error('x'); }, () => fa);
+  s2.onText(JSON.stringify({ type: 'start', deviceId: 5000 })); assert.match(e[0].message, /device not found/);
+  const wasapi = require('./audify').listDevices(() => fa).devices.find(d => /WASAPI/.test(d.hostAPIName));
+  s2.onText(JSON.stringify({ type: 'start', deviceId: wasapi.id })); assert.match(e[1].message, /cannot read and write|device not found|could not/);
+  s.onClose(); s2.onClose();
+});
+
+test('security: headers, static allow-list, limiter, redirect checks', async () => {
+  const sec = require('./security');
+  const root = pathx.resolve(__dirname, '..');
+  assert.ok(sec.staticAllowed(root, pathx.join(root, 'index.html')));
+  for (const f of ['client/cli.js', 'scripts/license.js', 'native/win/AudioDevices-x64.exe', 'package.json.bak', 'bridge/license.js', '.git/config', 'dist/x.json', 'releases/update.json']) assert.ok(!sec.staticAllowed(root, pathx.join(root, f)), f);
+  assert.ok(!sec.staticAllowed(root, pathx.resolve(root, '..', 'index.html')));
+  let t = 0; const lim = sec.createLimiter({ now: () => t });
+  for (let i = 0; i < 3; i++) assert.ok(lim.allow('k', 3, 1000).ok);
+  const blocked = lim.allow('k', 3, 1000); assert.strictEqual(blocked.ok, false); assert.ok(blocked.retryAfter >= 1);
+  t = 1500; assert.ok(lim.allow('k', 3, 1000).ok);
+  // every redirect hop is checked before it is requested
+  const hit = [];
+  const fi = async (u, o) => { hit.push([u, o.redirect]); return u.includes('github.com') ? { status: 302, headers: new Map([['location', 'https://evil.example/x.exe']]) } : { status: 200, headers: new Map() }; };
+  await assert.rejects(sec.fetchChecked(fi, 'https://github.com/a', {}, u => new URL(u).hostname === 'github.com'), /untrusted host/);
+  assert.deepStrictEqual(hit, [['https://github.com/a', 'manual']]);                       // evil.example was never contacted
+  const ok = await sec.fetchChecked(async () => ({ status: 200, headers: new Map() }), 'https://github.com/a', {}, () => true); assert.strictEqual(ok.status, 200);
+  // live server
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const idx = await fetch(base + '/');
+  assert.strictEqual(idx.status, 200); assert.match(idx.headers.get('content-security-policy'), /frame-ancestors 'self'/); assert.match(idx.headers.get('permissions-policy'), /geolocation=\(\)/); assert.strictEqual(idx.headers.get('cross-origin-opener-policy'), 'same-origin');
+  for (const p of ['/client/cli.js', '/scripts/license.js', '/native/win/AudioDevices-x64.exe', '/bridge/server.js', '/%2e%2e/etc/passwd']) assert.notStrictEqual((await fetch(base + p)).status, 200, p);
+  server.closeAllConnections(); server.close();
+});
+
+test('windows native helpers: AudioDevices.exe output and the VBScript fallback', async () => {
+  const wn = require('./winnative');
+  const json = JSON.stringify({ ok: true, devices: [{ id: '{a}', name: 'Microphone (Focusrite USB)', kind: 'input', channels: 2, sampleRate: 48000, default: true }, { id: '{b}', name: 'Speakers (Focusrite USB)', kind: 'output', channels: 2, sampleRate: 48000, default: false }] });
+  const calls = [];
+  const r = await wn.listEndpoints({ platform: 'win32', arch: 'x64', exists: () => true, run: async (c, a) => { calls.push(c); return '﻿' + json; } });
+  assert.match(calls[0], /AudioDevices-x64\.exe$/); assert.strictEqual(r.engine, 'wasapi-native');
+  assert.strictEqual(r.devices[0].inputs, 2); assert.strictEqual(r.devices[0].outputs, 0); assert.strictEqual(r.devices[1].outputs, 2); assert.ok(r.devices.every(d => d.id < 0 && d.native));
+  assert.strictEqual(require('./interfaces').groupInterfaces(r.devices.map(d => ({ id: d.id, name: d.name, hostApi: d.hostApi, inputs: d.inputs, outputs: d.outputs })))[0].name, 'Focusrite USB');
+  assert.match(wn.exePath('ia32'), /AudioDevices-x86\.exe$/);
+  assert.strictEqual(await wn.listEndpoints({ platform: 'linux' }), null);
+  assert.strictEqual(await wn.listEndpoints({ platform: 'win32', exists: () => false }), null);
+  assert.strictEqual(await wn.listEndpoints({ platform: 'win32', exists: () => true, run: async () => 'garbage' }), null);
+  const w = await wn.listWmi({ platform: 'win32', exists: () => true, run: async (c, a) => { assert.strictEqual(c, 'cscript'); assert.strictEqual(a[0], '//nologo'); return '{"ok":true,"devices":[{"name":"Realtek Audio","vendor":"Realtek","status":"OK"}]}'; } });
+  assert.deepStrictEqual(w, [{ name: 'Realtek Audio', vendor: 'Realtek', status: 'OK' }]);
+  // the shipped sources and binaries exist, and the binaries are Windows PE files of the right machine type
+  const dir = pathx.join(__dirname, '..', 'native', 'win');
+  for (const f of ['AudioDevices.cpp', 'audio-devices.vbs']) assert.ok(require('node:fs').existsSync(pathx.join(dir, f)), f);
+  for (const [f, m] of [['AudioDevices-x64.exe', 0x8664], ['AudioDevices-x86.exe', 0x14c]]) { const b = require('node:fs').readFileSync(pathx.join(dir, f)); assert.strictEqual(b.readUInt16LE(0), 0x5a4d); assert.strictEqual(b.readUInt16LE(b.readUInt32LE(0x3c) + 4), m); }
+});
+
+test('interfaces: DirectSound "Primary Sound" default mappers are flagged, sorted last and not mistaken for hardware', () => {
+  const { groupInterfaces, isPrimary } = require('./interfaces');
+  const dev = (id, name, inputs, outputs) => ({ id, name, hostApi: 'Windows DirectSound', inputs, outputs, sampleRate: 48000 });
+  const list = groupInterfaces([dev(0, 'Primary Sound Capture Driver', 2, 0), dev(1, 'Primary Sound Driver', 0, 2), dev(2, 'Microphone (USB Mic)', 1, 0)]);
+  assert.ok(isPrimary('Primary Sound Capture Driver') && isPrimary('Primary Sound Driver') && !isPrimary('Microphone (USB Mic)'));
+  assert.strictEqual(list[0].name, 'USB Mic'); assert.ok(!list[0].systemDefault);
+  const prim = list.filter(i => i.systemDefault); assert.strictEqual(prim.length, 2);
+  assert.ok(prim.some(i => /^System default input/.test(i.name)) && prim.some(i => /^System default output/.test(i.name)));
+});

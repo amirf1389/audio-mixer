@@ -169,6 +169,50 @@ function openStream({ mod, dev, direction, channels, sampleRate, frameSize, onDa
   throw new Error(`could not open ${dev.name} (${dev.hostAPIName}) with frame sizes ${p.candidates.map(n => n || 'driver').join(', ')}: ${lastErr && lastErr.message || lastErr}`);
 }
 
+// Opens ONE RtAudio stream that reads and writes the same device (ASIO drivers are single-client: one duplex stream, not two).
+// Returns { frameSize, sampleRate, inChannels, outChannels, write, close } or throws.
+function openDuplex({ mod, dev, inChannels, outChannels, sampleRate, frameSize, onData, onError }) {
+  const { RtAudio, RtAudioFormat = {}, RtAudioStreamFlags = {} } = mod, Api = apiEnum(mod);
+  if (!dev.maxInputChannels || !dev.maxOutputChannels) throw new Error(`${dev.name} cannot read and write at once`);
+  if (outChannels > dev.maxOutputChannels) throw new Error(`${dev.name} has only ${dev.maxOutputChannels} output channel(s)`);
+  const ci = Math.min(inChannels, dev.maxInputChannels);
+  if (dev.sampleRates && dev.sampleRates.length && !dev.sampleRates.includes(sampleRate)) {
+    throw new Error(`${dev.name} does not support ${sampleRate} Hz (supports ${dev.sampleRates.join(', ')})`);
+  }
+  const p = plan(frameSize, { api: dev.api, sampleRate, channels: Math.max(ci, outChannels) });
+  const fmt = RtAudioFormat.RTAUDIO_SINT16 !== undefined ? RtAudioFormat.RTAUDIO_SINT16 : 2;
+  const flags = RtAudioStreamFlags.RTAUDIO_MINIMIZE_LATENCY || 0;
+  let lastErr = null;
+  for (const fs of p.candidates) {
+    const rt = new RtAudio(Api[dev.api]);
+    try {
+      const actual = rt.openStream({ deviceId: dev.rtId, nChannels: outChannels, firstChannel: 0 }, { deviceId: dev.rtId, nChannels: ci, firstChannel: 0 },
+        fmt, sampleRate, fs, 'Audio Mixer', pcm => onData && onData(Buffer.from(pcm)), null, flags, (type, msg) => onError && onError(new Error(String(msg || type))));
+      rt.start();
+      const used = Number.isInteger(actual) && actual > 0 ? actual : fs;
+      if (!(used > 0)) throw new Error('the driver did not report its buffer size');
+      const frameBytes = used * outChannels * 2;
+      let pending = Buffer.alloc(0);
+      return {
+        frameSize: used, sampleRate, inChannels: ci, outChannels, latencyMs: Math.round(used / sampleRate * 10000) / 10,
+        write(buf) {
+          pending = pending.length ? Buffer.concat([pending, buf]) : buf;
+          if (pending.length > frameBytes * 16) pending = pending.subarray(pending.length - frameBytes * 16);
+          while (pending.length >= frameBytes) { rt.write(Buffer.from(pending.subarray(0, frameBytes))); pending = pending.subarray(frameBytes); }
+        },
+        close() {
+          try { if (typeof rt.isStreamRunning === 'function' ? rt.isStreamRunning() : true) rt.stop(); } catch (_) { /* already stopped */ }
+          try { rt.closeStream(); } catch (_) { /* already closed */ }
+        },
+      };
+    } catch (e) {
+      lastErr = e;
+      try { rt.closeStream(); } catch (_) { /* nothing open */ }
+    }
+  }
+  throw new Error(`could not open ${dev.name} (${dev.hostAPIName}) for reading and writing: ${lastErr && lastErr.message || lastErr}`);
+}
+
 function pickAudifyDevice(devices, wantedId, direction, channels) {
   if (Number.isInteger(wantedId)) return devices.find(d => d.id === wantedId) || null;
   const key = direction === 'output' ? 'maxOutputChannels' : 'maxInputChannels';
@@ -200,4 +244,4 @@ function describe(load = loadAudify) {
   };
 }
 
-module.exports = { loadAudify, loadProblem, API_NAMES, apiKey, recommendFrameSize, frameCandidates, plan, listDevices, detectAudify, openStream, pickAudifyDevice, describe, isPow2, AUDIFY_BASE, MIN_FRAMES, MAX_FRAMES };
+module.exports = { loadAudify, loadProblem, API_NAMES, apiKey, recommendFrameSize, frameCandidates, plan, listDevices, detectAudify, openStream, openDuplex, pickAudifyDevice, describe, isPow2, AUDIFY_BASE, MIN_FRAMES, MAX_FRAMES };
