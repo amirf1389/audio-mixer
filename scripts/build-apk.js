@@ -3,7 +3,8 @@
 // Builds the Android app (.apk): the mixer page in a full-screen WebView, bundled offline (Tailwind CSS, Font Awesome and the fonts are
 // packed into the app instead of loaded from CDNs). Web Audio, the microphone, scenes and the license / plans work as in the browser;
 // PC-mode features (ASIO / WASAPI interfaces, plugins, OTA) need the PC.
-//   node scripts/build-apk.js [--out releases]      -> AudioMixer-<version>-android.apk (+ .sha256)
+//   node scripts/build-apk.js [--out releases] [--kotlin]   -> AudioMixer-<version>-android.apk (+ .sha256)
+//   The background engine (android/src: MiniBridge, AndroidAudio, ...) is Java; --kotlin builds the foreground service from android/kotlin/EngineService.kt (needs kotlinc).
 // Tools (any Android SDK, or the Debian / Ubuntu packages aapt apksigner zipalign dalvik-exchange libandroid-23-java):
 //   javac (JDK 8+), aapt, zipalign, apksigner, d8 or dalvik-exchange (dx), android.jar (ANDROID_JAR, ANDROID_HOME/platforms, or /usr/lib/android-sdk)
 // Needs internet once for the cache in dist/cache/android: npm packages tailwindcss 3 and @fortawesome/fontawesome-free (version pinned) and the Google fonts.
@@ -135,7 +136,14 @@ function keystore(env = process.env, t) {
   return { file, pass: fs.readFileSync(passFile, 'utf8').trim(), alias: 'audiomixer', real: false };
 }
 
-async function build({ out = path.join(ROOT, 'releases') } = {}) {
+function listFiles(dir, ext) {
+  const out = [];
+  const walk = d => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) walk(p); else if (p.endsWith(ext)) out.push(p); } };
+  walk(dir);
+  return out.sort();
+}
+
+async function build({ out = path.join(ROOT, 'releases'), kotlin = false } = {}) {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
   const { tools: t, missing } = findTools();
   if (missing.length) throw new Error('missing tools: ' + missing.join(', ') + '. Install the Android SDK build-tools, or on Debian / Ubuntu: apt install aapt apksigner zipalign dalvik-exchange libandroid-23-java default-jdk');
@@ -146,15 +154,26 @@ async function build({ out = path.join(ROOT, 'releases') } = {}) {
   for (const [dir, size] of [['mipmap-mdpi', 48], ['mipmap-hdpi', 72], ['mipmap-xhdpi', 96], ['mipmap-xxhdpi', 144], ['mipmap-xxxhdpi', 192]]) {
     fs.mkdirSync(path.join(work, 'res', dir), { recursive: true }); fs.writeFileSync(path.join(work, 'res', dir, 'ic_launcher.png'), png(size, iconPixel));
   }
-  // Java -> classes -> dex
+  // Java (and optionally Kotlin) -> classes -> dex. The engine (MiniBridge, AndroidAudio, protocol classes) is Java; with --kotlin the service is the Kotlin one.
   const cls = path.join(work, 'classes'); fs.mkdirSync(cls);
-  run(t.javac, ['--release', '8', '-Xlint:-options', '-cp', t.jar, '-d', cls, path.join(ROOT, 'android', 'src', 'com', 'audiomixer', 'app', 'MainActivity.java')]);
-  if (t.d8) run(t.d8, ['--min-api', '24', '--lib', t.jar, '--output', work, ...fs.readdirSync(path.join(cls, 'com', 'audiomixer', 'app')).map(f => path.join(cls, 'com', 'audiomixer', 'app', f))]);
-  else run(t.dx, ['--dex', '--output=' + path.join(work, 'classes.dex'), cls]);
+  const srcDir = path.join(ROOT, 'android', 'src');
+  const javaFiles = listFiles(srcDir, '.java').filter(f => !(kotlin && /EngineService\.java$/.test(f)));
+  run(t.javac, ['--release', '8', '-Xlint:-options', '-cp', t.jar, '-d', cls, ...javaFiles]);
+  const extra = [];
+  if (kotlin) {
+    const kc = which('kotlinc'); if (!kc) throw new Error('--kotlin needs kotlinc (https://kotlinlang.org/docs/command-line.html)');
+    const stdlib = [process.env.KOTLIN_HOME && path.join(process.env.KOTLIN_HOME, 'lib', 'kotlin-stdlib.jar'), '/usr/share/java/kotlin-stdlib.jar', path.join(path.dirname(path.dirname(fs.realpathSync(kc))), 'lib', 'kotlin-stdlib.jar')].find(f => f && fs.existsSync(f));
+    if (!stdlib) throw new Error('kotlin-stdlib.jar not found (set KOTLIN_HOME)');
+    run(kc, ['-jvm-target', '1.8', '-no-stdlib', '-cp', [t.jar, cls, stdlib].join(path.delimiter), '-d', cls, path.join(ROOT, 'android', 'kotlin', 'EngineService.kt')]);
+    extra.push(stdlib);
+  }
+  const classFiles = listFiles(cls, '.class');
+  if (t.d8) run(t.d8, ['--min-api', '24', '--lib', t.jar, '--output', work, ...classFiles, ...extra]);
+  else run(t.dx, ['--dex', '--output=' + path.join(work, 'classes.dex'), cls, ...extra]);
   // resources + manifest -> apk (resources.arsc stored uncompressed, as Android 11+ requires), then the dex, alignment, signature
   const unsigned = path.join(work, 'unsigned.apk'), aligned = path.join(work, 'aligned.apk');
   run(t.aapt, ['package', '-f', '-M', path.join(ROOT, 'android', 'AndroidManifest.xml'), '-S', path.join(work, 'res'), '-A', path.join(work, 'assets'), '-I', t.jar,
-    '-F', unsigned, '--min-sdk-version', '24', '--target-sdk-version', '33', '--version-code', String(versionCode(pkg.version)), '--version-name', pkg.version, '-0', 'arsc']);
+    '-F', unsigned, '--min-sdk-version', '24', '--target-sdk-version', '29', '--version-code', String(versionCode(pkg.version)), '--version-name', pkg.version, '-0', 'arsc']);
   run(t.aapt, ['add', unsigned, 'classes.dex'], { cwd: work });
   run(t.zipalign, ['-p', '-f', '4', unsigned, aligned]);
   const ks = keystore(process.env, t);
@@ -170,10 +189,10 @@ async function build({ out = path.join(ROOT, 'releases') } = {}) {
 
 if (require.main === module) {
   const a = process.argv.slice(2), oi = a.indexOf('--out');
-  build({ out: oi >= 0 ? a[oi + 1] : undefined }).then(r => {
+  build({ out: oi >= 0 ? a[oi + 1] : undefined, kotlin: a.includes('--kotlin') }).then(r => {
     console.log(`APK: ${r.dest}  (${(r.size / 1048576).toFixed(1)} MB, versionCode ${r.versionCode})\n     SHA-256 ${r.sha256}`);
     if (r.selfSigned) console.log('Signed with a self-generated key (dist/cache/signing). Set ANDROID_KEYSTORE for your own; keep the key: updates must be signed with the same one.');
     if (!r.fonts) console.log('Warning: the web fonts could not be bundled (' + r.warning + '); the app uses system fonts.');
   }).catch(e => { console.error('APK build failed: ' + e.message); process.exit(1); });
 }
-module.exports = { build, versionCode, transformHtml, png, iconPixel, findTools, prepareWeb, which };
+module.exports = { listFiles, build, versionCode, transformHtml, png, iconPixel, findTools, prepareWeb, which };

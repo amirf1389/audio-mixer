@@ -2,6 +2,7 @@ package com.audiomixer.app;
 
 import android.Manifest;
 import android.app.Activity;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
@@ -20,7 +21,7 @@ import android.webkit.WebViewClient;
 /** Full-screen WebView that runs the bundled mixer page (assets/www/index.html). Nothing else is loaded into the WebView: other links open in the browser. */
 public class MainActivity extends Activity {
     private static final String START_URL = "file:///android_asset/www/index.html";
-    private static final int REQ_AUDIO = 7;
+    private static final int REQ_AUDIO = 7, REQ_ENGINE_AUDIO = 8;
     private WebView web;
     private PermissionRequest pendingMic;
 
@@ -47,6 +48,7 @@ public class MainActivity extends Activity {
             public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest r) {
                 Uri u = r.getUrl();
                 if ("file".equals(u.getScheme()) && u.toString().startsWith("file:///android_asset/")) return false;
+                if ("http".equals(u.getScheme()) && ("localhost".equals(u.getHost()) || "127.0.0.1".equals(u.getHost())) && u.getPort() == EngineService.port) return false;   // the engine's own page
                 try { startActivity(new Intent(Intent.ACTION_VIEW, u)); } catch (Exception e) { /* no app can open it */ }
                 return true;                                   // never navigate the mixer away from the bundled page
             }
@@ -65,7 +67,39 @@ public class MainActivity extends Activity {
                 }
             }
         });
-        if (state != null) web.restoreState(state); else web.loadUrl(START_URL);
+        startEngine();
+        loadMixer(state);
+    }
+
+    private int attempts;
+
+    /**
+     * The mixer page comes from the engine's own server (http://localhost:<port>/): a page from file:// has an opaque origin, where AudioWorklet modules
+     * cannot be loaded. Waits briefly for the engine; without it (it could not start) the bundled file is the fallback.
+     */
+    private void loadMixer(final Bundle state) {
+        final int port = EngineService.port;
+        if (port > 0) {
+            web.getSettings().setAllowFileAccess(false);        // nothing is read from files while the page comes from the engine
+            if (state != null && web.restoreState(state) != null) return;
+            web.loadUrl("http://localhost:" + port + "/index.html");
+        } else if (++attempts < 25) {
+            web.postDelayed(new Runnable() { public void run() { if (web != null) loadMixer(state); } }, 120);
+        } else {
+            web.getSettings().setAllowFileAccess(true);
+            if (state != null) web.restoreState(state); else web.loadUrl(START_URL);
+        }
+    }
+
+    /** The background engine (EngineService): audio interfaces for the page and audio that keeps running when the app is in the background. */
+    private void startEngine() {
+        if (Build.VERSION.SDK_INT >= 23 && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED)
+            requestPermissions(new String[] { Manifest.permission.RECORD_AUDIO }, REQ_ENGINE_AUDIO);
+        Intent i = new Intent(this, EngineService.class);
+        try {
+            if (Build.VERSION.SDK_INT >= 26) Context.class.getMethod("startForegroundService", Intent.class).invoke(this, i);   // API 26, reached by reflection (API 23 android.jar)
+            else startService(i);
+        } catch (Exception e) { /* the page still works without the engine */ }
     }
 
     @Override

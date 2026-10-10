@@ -7,6 +7,7 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-feature android:name="android.hardware.microphone" android:required="false"/>
     <uses-feature android:name="android.hardware.touchscreen" android:required="false"/>
     <application android:label="Audio Mixer" android:icon="@mipmap/ic_launcher" android:allowBackup="false" android:usesCleartextTraffic="true" android:hardwareAccelerated="true">
@@ -18,5 +19,7 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- the background audio engine (EngineService): keeps the mixer's audio interfaces and processing running with the screen off or the app in the background -->
+        <service android:name=".EngineService" android:exported="false"/>
     </application>
 </manifest>
