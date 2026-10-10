@@ -2049,5 +2049,16 @@ test('Bluetooth input strip: a Bluetooth input device is found by flag, name or 
   assert.ok(/createDelay\(0\.5\)/.test(m[1]) && /createChannelMerger\(2\)/.test(m[1]) && /patchCap/.test(m[1]) && /mtxIn/.test(m[1]) && /masterGain/.test(m[1]) && /channelInterpretation = 'speakers'/.test(m[1]));
   for (const f of ['setBluetoothRoute', 'setBluetoothTrim', 'toggleBluetoothMute', 'setBtTransceiverMode']) assert.ok(m[1].includes('window.' + f + ' = function'), f);   // the old, silent controls drive the strip now
   assert.ok(html.includes("(cap._bt && cap._bt.ctx === c ? cap._bt.out : cap.node).connect(hpf)"));                   // Mic EQ follows the strip
+  // ducker decisions (pure): opens above the threshold, holds, closes 3 dB below it after the hold, depth when open, nothing when off
+  const d = { on: true, thr: -30, depth: 12, hold: 300 }, st = { duckOpen: false, holdUntil: 0 };
+  assert.strictEqual(B.duckStep(d, st, -50, 0), 0);
+  assert.strictEqual(B.duckStep(d, st, -20, 100), -12);
+  assert.strictEqual(B.duckStep(d, st, -50, 200), -12, 'held for 300 ms after the last loud moment');
+  assert.strictEqual(B.duckStep(d, st, -31, 500), -12, 'inside the 3 dB hysteresis it stays open');
+  assert.strictEqual(B.duckStep(d, st, -50, 500), 0, 'below the hysteresis after the hold: released');
+  assert.strictEqual(B.duckStep(Object.assign({}, d, { on: false }), { duckOpen: true, holdUntil: 0 }, -10, 0), 0);
+  assert.deepStrictEqual(Object.keys(B.duckCfg()).sort(), ['attack', 'depth', 'hold', 'on', 'release', 'src', 'thr']);
+  for (const id of ['bti-sends', 'bti-dsrc', 'bti-dthr', 'bti-ddep', 'bti-datk', 'bti-dhld', 'bti-drel', 'bti-don', 'bti-dgr']) assert.ok(html.includes('id="' + id + '"'), id);
+  assert.ok(/M\.busIn\[b\]/.test(m[1]) && /S\.duck\.gain\.setTargetAtTime|S\.duck\.gain/.test(m[1]) && /S\.mute\.connect\(S\.duck\); S\.duck\.connect\(S\.out\)/.test(m[1]) && /sendNodes/.test(m[1]));
   assert.ok(html.includes('<optgroup label="Bluetooth inputs">') && html.includes('>BLUETOOTH</span>') && html.includes("rt.st[k].bt ?"));
 });
