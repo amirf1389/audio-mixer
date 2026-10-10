@@ -12,6 +12,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
 const { build } = require('./build');
+const { png, iconPixel } = require('./build-apk');
 
 const ROOT = path.resolve(__dirname, '..');
 const OPT = 'opt/audio-mixer';
@@ -142,6 +143,10 @@ APP="$(cd "$(dirname "$0")/.." && pwd)/Resources/app"
 . "$APP/ensure-node.sh"
 am_ensure_node || { osascript -e 'display dialog "Audio Mixer needs Node.js 18 or newer and it could not be installed automatically. Install it from nodejs.org, then start Audio Mixer again." buttons {"OK"} with icon caution' >/dev/null 2>&1; open "https://nodejs.org/en/download" 2>/dev/null; exit 1; }
 am_ensure_audio "$APP"
+# Core Audio helper (Swift) for the interface list: built once when the Xcode command line tools are there (optional, runs in the background)
+if [ ! -x "$APP/native/mac/AudioDevices" ] && command -v swiftc >/dev/null 2>&1 && [ -f "$APP/native/mac/AudioDevices.swift" ]; then
+  ( swiftc -O -o "$APP/native/mac/AudioDevices" "$APP/native/mac/AudioDevices.swift" >/dev/null 2>&1 ) &
+fi
 exec "$NODE" "$APP/client/cli.js" "$@"
 `;
 
@@ -156,12 +161,24 @@ const infoPlist = version => `<?xml version="1.0" encoding="UTF-8"?>
   <key>CFBundleShortVersionString</key><string>${version}</string>
   <key>CFBundleExecutable</key><string>AudioMixer</string>
   <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
+  <key>LSApplicationCategoryType</key><string>public.app-category.music</string>
   <key>LSMinimumSystemVersion</key><string>11.0</string>
   <key>NSMicrophoneUsageDescription</key><string>Audio Mixer reads your audio interface and microphone as mixer inputs.</string>
   <key>NSHighResolutionCapable</key><true/>
 </dict>
 </plist>
 `;
+
+// AppIcon.icns: PNG entries ic07 (128), ic08 (256), ic09 (512), ic10 (1024); the same mixer-fader tile as the Android icon
+function icns() {
+  const parts = [['ic07', 128], ['ic08', 256], ['ic09', 512], ['ic10', 1024]].map(([type, size]) => {
+    const data = png(size, iconPixel), h = Buffer.alloc(8); h.write(type, 0, 'latin1'); h.writeUInt32BE(data.length + 8, 4); return Buffer.concat([h, data]);
+  });
+  const total = 8 + parts.reduce((n, p) => n + p.length, 0), head = Buffer.alloc(8); head.write('icns', 0, 'latin1'); head.writeUInt32BE(total, 4);
+  return Buffer.concat([head, ...parts]);
+}
 
 const MAC_INSTALL = `#!/bin/bash
 # Installs Audio Mixer: /Applications (or ~/Applications when you cannot write there). Double-click this file in Finder.
@@ -217,6 +234,8 @@ function buildMac({ out = path.join(ROOT, 'dist'), app = build({ out }) } = {}) 
   const put = (rel, text, mode) => { const f = path.join(root, rel); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, text); fs.chmodSync(f, mode); };
   put('Audio Mixer.app/Contents/Info.plist', infoPlist(version), 0o644);
   put('Audio Mixer.app/Contents/MacOS/AudioMixer', MAC_LAUNCHER, 0o755);
+  fs.mkdirSync(path.join(bundle, 'Contents', 'Resources'), { recursive: true });
+  fs.writeFileSync(path.join(bundle, 'Contents', 'Resources', 'AppIcon.icns'), icns());
   put('install.command', MAC_INSTALL, 0o755);
   put('uninstall.command', MAC_UNINSTALL, 0o755);
   put('README.txt', `Audio Mixer ${version} for macOS\n\n1. Install Node.js 18 or newer if you do not have it: https://nodejs.org/en/download\n2. Double-click install.command (copies the app to /Applications, or ~/Applications).\n   The app is not notarized: if macOS blocks it, right-click > Open once, or run: xattr -dr com.apple.quarantine "/Applications/Audio Mixer.app"\n3. Start "Audio Mixer": the mixer opens in your browser. Start at login: answer y in install.command, or run the app's client with: service install\n\nFiles: app in /Applications/Audio Mixer.app, login item in ~/Library/LaunchAgents, downloaded drivers in ~/AudioMixerDrivers,\nVST plugins are read from /Library/Audio/Plug-Ins/VST3 and ~/Library/Audio/Plug-Ins/VST3 (and ~/AudioMixerPlugins).\nRemove everything with uninstall.command.\n`, 0o644);
@@ -224,7 +243,7 @@ function buildMac({ out = path.join(ROOT, 'dist'), app = build({ out }) } = {}) 
   const file = path.join(outAbs, `AudioMixer-${version}-macos.tar.gz`);
   const r = spawnSync('tar', ['--owner=0', '--group=0', '--numeric-owner', '-czf', file, '-C', path.dirname(root), 'AudioMixer'], { encoding: 'utf8' });
   if (r.status !== 0) throw new Error('tar failed: ' + (r.stderr || r.error));
-  return { tar: file, version, sha256: crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex') };
+  return { tar: file, version, root, bundle, sha256: crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex') };
 }
 
 if (require.main === module) {
@@ -232,4 +251,4 @@ if (require.main === module) {
   const d = buildDeb({ app }), m = buildMac({ app });
   console.log(`DEB: ${d.deb}\n     SHA-256 ${d.sha256}\nmacOS: ${m.tar}\n     SHA-256 ${m.sha256}\nNeither package is signed or notarized.`);
 }
-module.exports = { buildDeb, buildMac, controlFile, desktopEntry, systemdUserUnit, infoPlist, LAUNCHER_LINUX, MAC_LAUNCHER, MAC_INSTALL, MAC_UNINSTALL };
+module.exports = { icns, buildDeb, buildMac, controlFile, desktopEntry, systemdUserUnit, infoPlist, LAUNCHER_LINUX, MAC_LAUNCHER, MAC_INSTALL, MAC_UNINSTALL };
