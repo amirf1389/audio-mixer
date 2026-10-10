@@ -15700,14 +15700,25 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 this.render();
                 if (window.routingEngine && window.routingEngine.listInputs) window.routingEngine.listInputs();
             },
+            // what an interface can do, from its real channel counts: a DAC / speaker has outputs only (WRITE only), an input-only device or a
+            // loopback (music) has inputs only (READ only), an audio interface does both
+            ioMode(i) {
+                const read = i.inputs > 0 || !!i.loopback, write = i.outputs > 0 && !i.loopback;
+                return { read, write, label: read && write ? 'READ + WRITE' : write ? 'DAC / OUTPUT: WRITE ONLY' : read ? 'INPUT: READ ONLY' : 'NO CHANNELS YET' };
+            },
             autoEnable() {
                 let changed = false;
                 this.interfaces.forEach(i => {
-                    if (this.cfg.enabled[i.key]) return;
+                    const cur = this.cfg.enabled[i.key];
+                    if (cur && !cur.auto) return;   // chosen by the user (or saved by an older version): left alone
                     if (this.cfg.asioOnly && !i.asio) return;
                     if (i.systemDefault) return;   // Windows default mapper (Primary Sound driver): duplicates the real device and often fails
-                    this.cfg.enabled[i.key] = { read: (i.inputs > 0 && !i.bluetooth) || !!i.loopback, write: i.outputs > 0 && !i.loopback };   // Bluetooth: the hands-free microphone is only opened on request (it drops the headset to phone quality)
-                    changed = true;
+                    const m = this.ioMode(i);
+                    // Bluetooth: the hands-free microphone is only opened on request (it drops the headset to phone quality)
+                    const e = { read: m.read && !i.bluetooth, write: m.write, auto: true };
+                    // an automatic choice follows the device: a driver that only listed its channels later (ASIO probe, DAC waking up) is detected again
+                    if (cur && cur.read === e.read && cur.write === e.write) return;
+                    this.cfg.enabled[i.key] = e; changed = true;
                 });
                 if (changed) this.persist();
                 this.applyEnabled();
@@ -15715,7 +15726,8 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             // opens / closes streams so they match the READ / WRITE switches
             applyEnabled() {
                 this.interfaces.forEach(i => {
-                    const e = this.cfg.enabled[i.key] || {};
+                    const e0 = this.cfg.enabled[i.key] || {}, m = this.ioMode(i);
+                    const e = { read: e0.read && m.read, write: e0.write && m.write };   // never READ a DAC or WRITE an input-only device, whatever an older setting says
                     if (i.loopback) { if (e.read && !this.caps.has(i.key) && !this.music && this.cfg.auto) this.startRead(i, { music: true }); }
                     else if (e.read && !this.caps.has(i.key)) this.startRead(i);
                     if (!e.read && this.caps.has(i.key)) this.stopRead(i.key);
@@ -15725,7 +15737,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             },
             setEnabled(key, what, on) {
                 const e = this.cfg.enabled[key] || (this.cfg.enabled[key] = { read: false, write: false });
-                e[what] = !!on; this.persist(); this.applyEnabled(); this.render();
+                e[what] = !!on; e.auto = false; this.persist(); this.applyEnabled(); this.render();
             },
             enableAll(asioOnly) {
                 this.interfaces.forEach(i => {
@@ -16110,13 +16122,13 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                     const pairSel = maxPair > 1 ? `<select data-k="${esc(i.key)}" aria-label="Input pair" class="ls-pair bg-black text-slate-200 border border-white/15 rounded text-[7px] px-1">${Array.from({ length: Math.min(maxPair, 16) }, (_, p) => `<option value="${p}" ${(this.pair[i.key] || 0) === p ? 'selected' : ''}>IN ${p * 2 + 1}-${p * 2 + 2}</option>`).join('')}</select>` : '';
                     return `<div class="grid grid-cols-1 md:grid-cols-[1.6fr_auto_auto_1.4fr] items-center gap-2 bg-black/50 border ${cap ? 'border-emerald-500/30' : 'border-white/10'} rounded px-2 py-1.5 text-[7.5px]">
                         <div class="min-w-0"><div class="font-black text-white truncate">${esc(i.name)} ${i.loopback ? '<span class="px-1 py-0.5 rounded bg-cyan-500/20 text-cyan-300 text-[6.5px]">LOOPBACK / MUSIC</span>' : ''} ${i.driverOnly ? '<span class="px-1 py-0.5 rounded bg-slate-600/40 text-slate-300 text-[6.5px]">ASIO DRIVER ONLY</span>' : ''}</div>
-                            <div class="text-slate-500">${i.inputs ? i.inputs + ' in' : 'no input'} &bull; ${i.outputs ? i.outputs + ' out' : 'no output'} ${chips}</div></div>
+                            <div class="text-slate-500">${i.inputs ? i.inputs + ' in' : 'no input'} &bull; ${i.outputs ? i.outputs + ' out' : 'no output'} ${chips} <span class="px-1 py-0.5 rounded bg-white/10 text-slate-200 text-[6.5px] font-black">${esc(this.ioMode(i).label)}</span></div></div>
                         <div class="flex items-center gap-1.5"><button data-k="${esc(i.key)}" data-w="read" class="ls-tog px-2 py-1 rounded font-black ${e.read ? 'bg-emerald-500 text-black' : 'bg-white/5 text-slate-300 border border-white/10'}" aria-pressed="${!!e.read}" ${i.inputs ? '' : 'disabled'}>READ</button>${pairSel}</div>
                         <div><button data-k="${esc(i.key)}" data-w="write" class="ls-tog px-2 py-1 rounded font-black ${e.write ? 'bg-amber-400 text-black' : 'bg-white/5 text-slate-300 border border-white/10'}" aria-pressed="${!!e.write}" ${i.outputs && !i.loopback && this.bridgeUrl ? '' : 'disabled'} title="${this.bridgeUrl ? 'Send the master mix to this interface' : 'Writing to interfaces needs PC mode'}">WRITE</button></div>
                         <div class="min-w-0"><div class="h-1.5 bg-white/5 rounded overflow-hidden"><div id="ls-lvl-${esc(i.key).replace(/[^a-z0-9]/gi, '_')}" class="h-full bg-gradient-to-r from-emerald-500 via-yellow-400 to-red-500" style="width:0%"></div></div>
                             <div class="mt-0.5 truncate ${rs && rs.err ? 'text-rose-400' : 'text-slate-400'}">${esc(rs ? 'READ: ' + rs.text : 'READ: idle')}${ws ? ' &bull; ' + esc('WRITE: ' + ws.text) : ''}</div></div></div>`;
                 }).join('') : '<div class="text-[8px] text-slate-500">No audio interfaces found yet. Plug one in: it is detected automatically.</div>';
-                el.querySelectorAll('.ls-tog').forEach(b => (b.onclick = () => { const k = b.dataset.k, what = b.dataset.w, cur = (this.cfg.enabled[k] || {})[what]; if (what === 'read' && !cur) { const i = this.interfaces.find(x => x.key === k); this.cfg.enabled[k] = Object.assign({ read: false, write: false }, this.cfg.enabled[k], { read: true }); this.persist(); this.startRead(i, { userClick: true, music: !!(i && i.loopback) }); this.render(); } else this.setEnabled(k, what, !cur); }));
+                el.querySelectorAll('.ls-tog').forEach(b => (b.onclick = () => { const k = b.dataset.k, what = b.dataset.w, cur = (this.cfg.enabled[k] || {})[what]; if (what === 'read' && !cur) { const i = this.interfaces.find(x => x.key === k); this.cfg.enabled[k] = Object.assign({ read: false, write: false }, this.cfg.enabled[k], { read: true, auto: false }); this.persist(); this.startRead(i, { userClick: true, music: !!(i && i.loopback) }); this.render(); } else this.setEnabled(k, what, !cur); }));
                 el.querySelectorAll('.ls-pair').forEach(s => (s.onchange = () => { this.pair[s.dataset.k] = Number(s.value); if (this.caps.has(s.dataset.k)) { this.stopRead(s.dataset.k); const i = this.interfaces.find(x => x.key === s.dataset.k); if (i) this.startRead(i, { userClick: true }); } }));
             },
 

@@ -48,7 +48,7 @@ function accept(req, socket, handlers) {
       const data = Buffer.from(buf.subarray(off + 4, off + 4 + len));
       for (let i = 0; i < data.length; i++) data[i] ^= mask[i & 3];
       buf = buf.subarray(off + 4 + len);
-      if (op === 8) { conn.close(); return; }
+      if (op === 8) { conn.close(); release(); return; }   // close frame: free the stream now
       if (op === 9) { if (!closed) socket.write(frame(10, data)); continue; }
       if (op === 10) continue;
       if (op === 1 || op === 2) {
@@ -67,8 +67,21 @@ function accept(req, socket, handlers) {
       }
     }
   });
-  const done = () => { if (!closed) closed = true; handlers.onClose && handlers.onClose(); };
-  socket.on('close', done);
+  // The stream behind the connection (an ASIO driver is single-client) must be released as soon as the peer says close or disappears,
+  // not only when the TCP connection finally ends: once, whichever comes first.
+  let released = false;
+  const release = () => { if (released) return; released = true; clearInterval(beat); closed = true; try { handlers.onClose && handlers.onClose(); } catch (_) { /* never leave the socket half open */ } };
+  // a peer that vanished without a close (cable, sleep, crashed browser) is detected by a ping every 15 s: no sign of life for 45 s ends the connection
+  let seen = Date.now();
+  const beat = setInterval(() => {
+    if (closed) return;
+    if (Date.now() - seen > 45000) { fail(); return; }
+    try { socket.write(frame(9, Buffer.alloc(0))); } catch (_) { /* gone */ }
+  }, 15000);
+  if (beat.unref) beat.unref();
+  socket.on('data', () => { seen = Date.now(); });
+  conn.release = release;
+  socket.on('close', release);
   socket.on('error', () => socket.destroy());
   return conn;
 }
