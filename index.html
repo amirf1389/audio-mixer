@@ -14972,7 +14972,8 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                     const ls = ((window.liveSources && window.liveSources.interfaces) || []).filter(i => i.inputs > 0 && i.apis && i.apis.some(a => a.inputs > 0 && a.deviceId >= 0));
                     const html = '<option value="default">Default input</option>' + devs.filter(d => d.deviceId && d.deviceId !== 'default')
                         .map((d, k) => `<option value="${esc(d.deviceId)}">${esc(d.label || 'Input ' + (k + 1))}</option>`).join('')
-                        + (ls.length ? '<optgroup label="Local server (ASIO / WASAPI)">' + ls.map(i => `<option value="ls:${esc(i.key)}">${esc(i.name)}${i.asio ? ' (ASIO)' : ''}</option>`).join('') + '</optgroup>' : '');
+                        + (ls.filter(i => i.bluetooth).length ? '<optgroup label="Bluetooth inputs">' + ls.filter(i => i.bluetooth).map(i => `<option value="ls:${esc(i.key)}">${esc(i.name)}</option>`).join('') + '</optgroup>' : '')
+                        + (ls.filter(i => !i.bluetooth).length ? '<optgroup label="Local server (ASIO / WASAPI)">' + ls.filter(i => !i.bluetooth).map(i => `<option value="ls:${esc(i.key)}">${esc(i.name)}${i.asio ? ' (ASIO)' : ''}</option>`).join('') + '</optgroup>' : '');
                     if (sel.dataset.sig === html) return;   // unchanged: do not close a dropdown the user has open
                     const keep = sel.value; sel.dataset.sig = html; sel.innerHTML = html;
                     if (keep && Array.from(sel.options).some(o => o.value === keep)) sel.value = keep;
@@ -16190,7 +16191,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                     const maxPair = i.read ? Math.floor(Math.max(...i.apis.map(a => a.inputs)) / 2) : 0;
                     const pairSel = maxPair > 1 ? `<select data-k="${esc(i.key)}" aria-label="Input pair" class="ls-pair bg-black text-slate-200 border border-white/15 rounded text-[7px] px-1">${Array.from({ length: Math.min(maxPair, 16) }, (_, p) => `<option value="${p}" ${(this.pair[i.key] || 0) === p ? 'selected' : ''}>IN ${p * 2 + 1}-${p * 2 + 2}</option>`).join('')}</select>` : '';
                     return `<div class="grid grid-cols-1 md:grid-cols-[1.6fr_auto_auto_1.4fr] items-center gap-2 bg-black/50 border ${cap ? 'border-emerald-500/30' : 'border-white/10'} rounded px-2 py-1.5 text-[7.5px]">
-                        <div class="min-w-0"><div class="font-black text-white truncate">${esc(i.name)} ${i.loopback ? '<span class="px-1 py-0.5 rounded bg-cyan-500/20 text-cyan-300 text-[6.5px]">LOOPBACK / MUSIC</span>' : ''} ${i.driverOnly ? '<span class="px-1 py-0.5 rounded bg-slate-600/40 text-slate-300 text-[6.5px]">ASIO DRIVER ONLY</span>' : ''}</div>
+                        <div class="min-w-0"><div class="font-black text-white truncate">${esc(i.name)} ${window.btInput && window.btInput.isBt(i) ? '<span class="px-1 py-0.5 rounded bg-blue-500/30 text-blue-300 text-[6.5px]">BLUETOOTH</span>' : ''} ${i.loopback ? '<span class="px-1 py-0.5 rounded bg-cyan-500/20 text-cyan-300 text-[6.5px]">LOOPBACK / MUSIC</span>' : ''} ${i.driverOnly ? '<span class="px-1 py-0.5 rounded bg-slate-600/40 text-slate-300 text-[6.5px]">ASIO DRIVER ONLY</span>' : ''}</div>
                             <div class="text-slate-500">${i.inputs ? i.inputs + ' in' : 'no input'} &bull; ${i.outputs ? i.outputs + ' out' : 'no output'} ${chips} <span class="px-1 py-0.5 rounded bg-white/10 text-slate-200 text-[6.5px] font-black">${esc(this.ioMode(i).label)}</span></div></div>
                         <div class="flex items-center gap-1.5"><button data-k="${esc(i.key)}" data-w="read" class="ls-tog px-2 py-1 rounded font-black ${e.read ? 'bg-emerald-500 text-black' : 'bg-white/5 text-slate-300 border border-white/10'}" aria-pressed="${!!e.read}" ${i.inputs ? '' : 'disabled'}>READ</button>${pairSel}</div>
                         <div><button data-k="${esc(i.key)}" data-w="write" class="ls-tog px-2 py-1 rounded font-black ${e.write ? 'bg-amber-400 text-black' : 'bg-white/5 text-slate-300 border border-white/10'}" aria-pressed="${!!e.write}" ${i.outputs && !i.loopback && this.bridgeUrl ? '' : 'disabled'} title="${this.bridgeUrl ? 'Send the master mix to this interface' : 'Writing to interfaces needs PC mode'}">WRITE</button></div>
@@ -17100,7 +17101,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             this.sources().forEach(s => {
                 seen[s.key] = 1;
                 const m = this.st[s.key] || (this.st[s.key] = { L: this.meter(), R: this.meter() });
-                m.name = s.name; m.how = s.how; m.music = s.music; m.cap = s.cap;
+                m.name = s.name; m.how = s.how; m.music = s.music; m.cap = s.cap; m.bt = !!(window.btInput && window.btInput.isBtKey(s.key));
                 try {
                     if (s.an) { const v = this.read(s.an); this.smooth(m.L, v, now); this.smooth(m.R, v, now); }
                     else { const t = this.tap(s.node), a = this.read(t.l), b = this.read(t.r); this.smooth(m.L, a, now); this.smooth(m.R, (b.pk === 0 && a.pk > 0) ? a : b, now); }
@@ -17152,7 +17153,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             } else {
                 el.innerHTML = head + keys.map((k, i) => `<div class="flex items-center gap-1.5 min-w-[150px] flex-1" data-k="${i}">
                     <span class="truncate max-w-[120px] text-slate-200 font-bold" title="${esc(rt.st[k].name)}">${esc(rt.st[k].name)}</span>
-                    <span class="px-1 rounded bg-white/10 text-slate-400 text-[6px]">${esc(rt.st[k].how)}</span>
+                    <span class="px-1 rounded bg-white/10 text-slate-400 text-[6px]">${esc(rt.st[k].how)}</span>${rt.st[k].bt ? '<span class="px-1 rounded bg-blue-500/30 text-blue-300 text-[6px] font-black">BT</span>' : ''}
                     <span class="flex flex-col gap-[2px] w-24"><span class="h-[4px] bg-white/5 rounded overflow-hidden"><i class="block h-full rt-l"></i></span><span class="h-[4px] bg-white/5 rounded overflow-hidden"><i class="block h-full rt-r"></i></span></span>
                     <span class="w-12 text-right text-slate-300 rt-db">-INF</span><span class="px-1 rounded text-[6px] font-black rt-clip bg-white/5 text-slate-600">CLIP</span></div>`).join('');
             }
@@ -17201,7 +17202,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             const out = c.createGain();
             hpf.connect(f[0]); for (let i = 0; i < f.length - 1; i++) f[i].connect(f[i + 1]); f[f.length - 1].connect(out);
             const an = c.createAnalyser(); an.fftSize = 4096; an.smoothingTimeConstant = 0.6; out.connect(an); an.connect(rt.sink());
-            cap.node.connect(hpf);
+            (cap._bt && cap._bt.ctx === c ? cap._bt.out : cap.node).connect(hpf);          // after the Bluetooth input strip when BT INPUT is on for this source
             cap._eq = { ctx: c, hpf, f, out, an }; cap.out = out;
             const l = LS();                                       // strips that are fed from this source now take the equalized signal
             if (l && l.patched) l.patched.filter(p => p.key === cap.key).forEach(p => { try { p.node.disconnect(p.split); } catch (e) { /* not connected */ } out.connect(p.split); p.node = out; });
@@ -17427,7 +17428,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
     (function hook() { const l = LS(); if (!l) return setTimeout(hook, 300); if (l.renderRows && !l._rtHook) { l._rtHook = true; const o = l.renderRows; l.renderRows = function () { const r = o.apply(this, arguments); drv.sig = ''; return r; }; } })();
 
     // ───────────────────────── BLUETOOTH page: paired devices and airwaves discovery, for real ─────────────────────────
-    const bt = { data: null, at: 0, scanning: false, near: [], web: [], err: '', sig: '', el: null };
+    const bt = rt.bt = { data: null, at: 0, scanning: false, near: [], web: [], err: '', sig: '', el: null };
     const bridgeUrl = () => { const l = LS(); return l && l.bridgeUrl; };
     async function btLoad(force) {
         const b = bridgeUrl(); if (!b) { bt.data = null; return null; }
@@ -17784,6 +17785,261 @@ registerProcessor('am-lufs',P)`;
         });
     }
     boot();
+})();
+    </script>
+    <script id="rt-btin">
+/* BLUETOOTH INPUT: a stereo input source of the console, the way a digital mixer has one (USB / BT return).
+   The audio comes from a real input device of this system that carries the Bluetooth link (a phone or tablet playing to this PC, a headset microphone;
+   BlueZ / PipeWire "bluez_input", Windows hands-free, Core Audio, or the browser's own Bluetooth microphones) through LIVE SOURCES.
+   Strip: source select, trim, polarity, mono sum, balance, delay (lines up the wireless latency), mute, assign (channel pair / master / cue / matrix 1 & 2),
+   real meters in and out, link state (paired / connected / battery). TRANSMITTER mode writes the mix to a Bluetooth output (wireless headphones).
+   Nothing is inserted into the audio path of a source until BT INPUT is switched on for it. */
+(function () {
+    'use strict';
+    const $ = id => document.getElementById(id);
+    const esc = v => (window.escapeHtml ? window.escapeHtml(v) : String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])));
+    const LS = () => window.liveSources;
+    const RT = () => window.rtEngine;
+    const visible = id => { const t = $('tab-' + id); return !!t && !t.classList.contains('tab-hidden'); };
+    const dbOf = v => (v < 0.00003 ? -Infinity : 20 * Math.log10(v));
+    const pct = db => (isFinite(db) ? Math.max(0, Math.min(100, (db + 60) / 60 * 100)) : 0);
+    const store = {
+        get(k, d) { try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch (e) { return d; } },
+        set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* storage blocked */ } },
+    };
+    const BT_RE = /bluez|bluetooth|\ba2dp\b|hands[- ]?free|\bhfp\b|airpods|\bbt[ _-]/i;
+    const ROUTES = { ch: 'CH', master: 'DIRECT TO MASTER L/R', cue: 'CUE / MONITOR (NOT IN THE MIX)', matrix: 'MATRIX 1 & 2' };
+    const top = () => { const lim = window.licenseChannels || 32; return lim >= 32 ? 30 : Math.max(2, lim - 2); };
+    const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+    const B = window.btInput = {
+        cfg: Object.assign({ sel: '', on: false, route: 'ch', pair: 30, trim: 0, pol: false, mono: false, bal: 0, delay: 0, mute: false, tx: false }, store.get('halx_btin_v1', {})),
+        save() { store.set('halx_btin_v1', this.cfg); },
+        paired() { const r = RT(); return (r && r.bt && r.bt.data && r.bt.data.devices) || []; },
+        // an input device that carries a Bluetooth link: flagged by the server, named like one, or named like a paired / connected Bluetooth device
+        isBt(i) {
+            if (!i) return false;
+            if (i.bluetooth || BT_RE.test(i.name || '')) return true;
+            const n = norm(i.name);
+            return n.length >= 4 && this.paired().some(d => { const m = norm(d.name); return m.length >= 4 && (n.indexOf(m) >= 0 || m.indexOf(n) >= 0); });
+        },
+        isBtKey(k) { const l = LS(); return !!l && this.isBt((l.interfaces || []).find(i => i.key === k)); },
+        inputs() { const l = LS(); return l ? (l.interfaces || []).filter(i => (i.inputs > 0 || i.loopback) && !i.systemDefault) : []; },
+        iface() { const l = LS(); return l ? (l.interfaces || []).find(i => i.key === this.cfg.sel) || null : null; },
+        cap() { const l = LS(); return l && l.caps.get(this.cfg.sel) || null; },
+        link(i) { const n = norm(i && i.name); return n ? this.paired().find(d => { const m = norm(d.name); return m && (n.indexOf(m) >= 0 || m.indexOf(n) >= 0); }) || null : null; },
+        select() {                                           // keep the selection valid; default: the first Bluetooth input
+            const list = this.inputs();
+            if (this.cfg.sel && list.some(i => i.key === this.cfg.sel)) return this.cfg.sel;
+            if (this.cfg.on && this.cfg.sel) return this.cfg.sel;                      // the device is unplugged for a moment: keep it, it comes back
+            const bt = list.find(i => this.isBt(i)); this.cfg.sel = bt ? bt.key : ''; return this.cfg.sel;
+        },
+
+        // ── the audio stage (built when BT INPUT is on and the source is read) ──
+        build(cap) {
+            const c = window.state.ctx, S = { ctx: c, links: [] };
+            S.inn = c.createGain(); S.inn.channelCount = 2; S.inn.channelCountMode = 'explicit'; S.inn.channelInterpretation = 'speakers';   // a mono headset microphone is heard on both sides
+            S.trim = c.createGain(); S.pol = c.createGain(); S.split = c.createChannelSplitter(2); S.merge = c.createChannelMerger(2);
+            S.g00 = c.createGain(); S.g10 = c.createGain(); S.g01 = c.createGain(); S.g11 = c.createGain();
+            S.delay = c.createDelay(0.5); S.mute = c.createGain(); S.out = c.createGain();
+            S.inn.connect(S.trim); S.trim.connect(S.pol); S.pol.connect(S.split);
+            S.split.connect(S.g00, 0); S.split.connect(S.g01, 0); S.split.connect(S.g10, 1); S.split.connect(S.g11, 1);
+            S.g00.connect(S.merge, 0, 0); S.g10.connect(S.merge, 0, 0); S.g01.connect(S.merge, 0, 1); S.g11.connect(S.merge, 0, 1);
+            S.merge.connect(S.delay); S.delay.connect(S.mute); S.mute.connect(S.out);
+            const l = LS(); if (l) l.unpatchCap(cap.key);                                  // the strips are fed again by ASSIGN below
+            cap.node.connect(S.inn);
+            if (cap._eq && cap._eq.ctx === c) { try { cap.node.disconnect(cap._eq.hpf); } catch (e) { /* not connected */ } S.out.connect(cap._eq.hpf); }   // Mic EQ follows the strip
+            else cap.out = S.out;
+            cap._bt = S; this.apply(cap);
+            return S;
+        },
+        apply(cap) {
+            const S = cap && cap._bt; if (!S) return;
+            const c = window.state.ctx, t = c.currentTime, k = this.cfg, set = (p, v) => p.setTargetAtTime(v, t, 0.015);
+            set(S.trim.gain, Math.pow(10, k.trim / 20)); set(S.pol.gain, k.pol ? -1 : 1);
+            const a = k.mono ? 0.5 : 1, b = k.mono ? 0.5 : 0, bl = k.bal > 0 ? 1 - k.bal / 100 : 1, br = k.bal < 0 ? 1 + k.bal / 100 : 1;
+            set(S.g00.gain, a * bl); set(S.g10.gain, b * bl); set(S.g01.gain, b * br); set(S.g11.gain, a * br);
+            set(S.delay.delayTime, Math.max(0, Math.min(500, k.delay)) / 1000); set(S.mute.gain, k.mute ? 0 : 1);
+        },
+        route(cap) {
+            const S = cap && cap._bt, l = LS(), c = window.state.ctx, n = window.state.nodes; if (!S || !l) return;
+            S.links.forEach(f => { try { f(); } catch (e) { /* already gone */ } }); S.links = [];
+            l.unpatchCap(cap.key);
+            const out = cap.out || S.out, r = this.cfg.route;
+            if (r === 'ch') { let ch = Math.min(this.cfg.pair, top()); ch -= ch % 2; l.patchCap(cap, ch); }
+            else if (r === 'master' && n.masterGain) { out.connect(n.masterGain); S.links.push(() => out.disconnect(n.masterGain)); }
+            else if (r === 'cue') { out.connect(c.destination); S.links.push(() => out.disconnect(c.destination)); }
+            else if (r === 'matrix') {
+                const M = window.mixEngine;
+                if (M && M.ensureGraph() && M.mtxIn && M.mtxIn[1]) { const sp = c.createChannelSplitter(2); out.connect(sp); sp.connect(M.mtxIn[0], 0); sp.connect(M.mtxIn[1], 1); S.links.push(() => { out.disconnect(sp); sp.disconnect(); }); }
+                else window.notify('Matrix needs the audio engine running', 'power-off');
+            }
+            S.routedOut = out; S.routeSig = r + ':' + this.cfg.pair; l.render();
+        },
+        teardown(cap) {
+            const S = cap && cap._bt, l = LS(); if (!S) return;
+            S.links.forEach(f => { try { f(); } catch (e) { /* already gone */ } }); S.links = [];
+            if (l) l.unpatchCap(cap.key);
+            try { cap.node.disconnect(S.inn); } catch (e) { /* gone */ }
+            try { S.out.disconnect(); } catch (e) { /* gone */ }
+            if (cap._eq && cap._eq.ctx === S.ctx) { try { cap.node.connect(cap._eq.hpf); } catch (e) { /* gone */ } } else delete cap.out;
+            delete cap._bt;
+            if (l) l.render();
+        },
+        // every frame: build / follow the source (plug, unplug, Mic EQ added later)
+        ensure() {
+            const c = window.state && window.state.ctx, cap = this.cap(); if (!c || !this.cfg.on || !cap || cap.node.context !== c) return;
+            if (!cap._bt || cap._bt.ctx !== c) { this.build(cap); this.route(cap); return; }
+            const S = cap._bt;
+            if (S.routedOut !== (cap.out || S.out) || S.routeSig !== this.cfg.route + ':' + this.cfg.pair) this.route(cap);
+        },
+
+        // ── user actions ──
+        async setOn(on) {
+            const l = LS(), k = this.select(); if (!l || !k) return window.notify('No Bluetooth input device found: connect a phone / headset to this computer first', 'bluetooth');
+            this.cfg.on = !!on; this.save();
+            if (on) {
+                await l.ensureCtx();
+                l.cfg.noAutoPatch = l.cfg.noAutoPatch || {}; l.cfg.noAutoPatch[k] = true; l.persist();
+                const i = this.iface();
+                l.cfg.enabled[k] = Object.assign({ read: false, write: false }, l.cfg.enabled[k], { read: true, auto: false }); l.persist();
+                if (i && !l.caps.has(k)) { try { await l.startRead(i, { userClick: true }); } catch (e) { /* the status of the device says why */ } } l.render();   // a click: the browser may ask for the microphone
+                window.notify('BT INPUT on: ' + (i ? i.name : k) + ' → ' + this.routeName(), 'bluetooth');
+            } else {
+                const cap = this.cap(); if (cap) this.teardown(cap);
+                if (l.cfg.noAutoPatch) delete l.cfg.noAutoPatch[k]; l.persist();
+                l.setEnabled(k, 'read', false);
+                window.notify('BT INPUT off', 'bluetooth');
+            }
+            this.refresh();
+        },
+        routeName() { const r = this.cfg.route; if (r === 'ch') { let ch = Math.min(this.cfg.pair, top()); ch -= ch % 2; return 'CH ' + (ch + 1) + ' / ' + (ch + 2); } return ROUTES[r]; },
+        set(key, val) { this.cfg[key] = val; this.save(); const cap = this.cap(); if (cap && cap._bt) { this.apply(cap); if (key === 'route' || key === 'pair') this.route(cap); } this.refresh(); },
+        txKey() {
+            const l = LS(); if (!l) return '';
+            const i = this.iface(); if (i && i.outputs > 0) return i.key;
+            const o = (l.interfaces || []).find(x => x.outputs > 0 && !x.loopback && this.isBt(x)); return o ? o.key : '';
+        },
+        async setTx(on) {
+            const l = LS(); if (!l) return;
+            const k = this.txKey();
+            if (on && !k) { window.notify('No Bluetooth output (headphones / speaker) is connected to this computer', 'triangle-exclamation'); this.cfg.tx = false; this.save(); return this.refresh(); }
+            this.cfg.tx = !!on; this.save();
+            if (on) { await l.ensureCtx(); l.setEnabled(k, 'write', true); window.notify('Transmitter: the mix is sent to ' + ((l.interfaces.find(x => x.key === k) || {}).name || k), 'headphones'); }
+            else if (k) { l.setEnabled(k, 'write', false); window.notify('Transmitter off', 'headphones'); }
+            this.refresh();
+        },
+
+        // ── page ──
+        el: null, sig: '', mL: null, mR: null, oL: null, oR: null,
+        ensureUi() {
+            if (this.el && this.el.isConnected) return this.el;
+            const host = document.querySelector('#tab-bluetooth .page-scroll-inner'); if (!host) return null;
+            const d = document.createElement('div');
+            d.id = 'bti-panel'; d.className = 'glass-panel p-3.5 rounded-xl wing-bezel space-y-2.5';
+            d.innerHTML = `<div class="flex flex-wrap justify-between items-center gap-2 pb-2 border-b border-white/10">
+                <div class="flex items-center gap-2.5"><div class="w-8 h-8 rounded-lg bg-blue-500/20 border border-blue-500/40 flex items-center justify-center text-blue-400"><i class="fa-brands fa-bluetooth-b"></i></div>
+                <div><h3 class="text-xs font-black text-white font-wing tracking-wider uppercase">BLUETOOTH INPUT &bull; STEREO RETURN STRIP</h3>
+                <p class="text-[7.5px] text-slate-400">PHONE / TABLET / HEADSET → TRIM • Ø • MONO • BALANCE • DELAY • MUTE → CHANNEL PAIR / MASTER / CUE / MATRIX</p></div></div>
+                <div class="flex items-center gap-2"><span id="bti-pill" class="px-2 py-0.5 rounded text-[7.5px] font-bold border bg-slate-500/15 text-slate-300 border-slate-500/40">OFF</span>
+                <button id="bti-on" class="px-3 py-1 rounded font-black text-[8px] uppercase bg-white/10 text-slate-200 border border-white/15 hover:bg-white/20">BT INPUT: OFF</button></div></div>
+                <div class="grid grid-cols-1 md:grid-cols-[1.4fr_1fr] gap-2.5">
+                  <div class="bg-black/60 p-2.5 rounded-lg border border-white/10 space-y-1.5">
+                    <div class="flex items-center gap-2"><span class="text-[7.5px] text-slate-300 whitespace-nowrap">INPUT SOURCE:</span><select id="bti-src" aria-label="Bluetooth input source" class="flex-1 min-w-0 bg-black border border-white/20 rounded px-1.5 py-1 text-slate-200 text-[8px] font-bold"></select></div>
+                    <div id="bti-link" class="text-[7.5px] text-slate-400"></div>
+                    <div id="bti-hint" class="text-[7px] text-amber-300/90"></div>
+                  </div>
+                  <div class="bg-black/60 p-2.5 rounded-lg border border-white/10 space-y-1">
+                    <div class="flex items-center gap-1.5 text-[7px]"><span class="w-6 text-slate-400">IN</span><span class="flex-1 flex flex-col gap-[2px]" style="flex:1;display:flex;flex-direction:column;min-width:0"><span class="h-[5px] bg-white/5 rounded overflow-hidden" style="display:block;height:5px;background:rgba(255,255,255,.06);overflow:hidden"><i id="bti-il" class="block h-full" style="display:block;height:100%;width:0"></i></span><span class="h-[5px] bg-white/5 rounded overflow-hidden" style="display:block;height:5px;background:rgba(255,255,255,.06);overflow:hidden"><i id="bti-ir" class="block h-full" style="display:block;height:100%;width:0"></i></span></span><span id="bti-idb" class="w-12 text-right text-slate-300">-INF</span></div>
+                    <div class="flex items-center gap-1.5 text-[7px]"><span class="w-6 text-slate-400">OUT</span><span class="flex-1 flex flex-col gap-[2px]" style="flex:1;display:flex;flex-direction:column;min-width:0"><span class="h-[5px] bg-white/5 rounded overflow-hidden" style="display:block;height:5px;background:rgba(255,255,255,.06);overflow:hidden"><i id="bti-ol" class="block h-full" style="display:block;height:100%;width:0"></i></span><span class="h-[5px] bg-white/5 rounded overflow-hidden" style="display:block;height:5px;background:rgba(255,255,255,.06);overflow:hidden"><i id="bti-or" class="block h-full" style="display:block;height:100%;width:0"></i></span></span><span id="bti-odb" class="w-12 text-right text-slate-300">-INF</span></div>
+                  </div>
+                </div>
+                <div class="grid grid-cols-2 md:grid-cols-5 gap-2 text-[7.5px]">
+                  <button id="bti-pol" class="py-1.5 rounded bg-white/5 border border-white/10 text-slate-300 font-bold uppercase" aria-pressed="false">Ø POLARITY</button>
+                  <button id="bti-mono" class="py-1.5 rounded bg-white/5 border border-white/10 text-slate-300 font-bold uppercase" aria-pressed="false">MONO (L+R)</button>
+                  <div class="col-span-2 md:col-span-1"><div class="flex justify-between text-slate-400"><span>BALANCE</span><span id="bti-bal-v" class="text-white font-bold">C</span></div><input id="bti-bal" type="range" min="-100" max="100" step="1" value="0" class="w-full accent-cyan-400" aria-label="Balance"></div>
+                  <div class="col-span-2 md:col-span-1"><div class="flex justify-between text-slate-400"><span>DELAY</span><span id="bti-delay-v" class="text-white font-bold">0 ms</span></div><input id="bti-delay" type="range" min="0" max="500" step="1" value="0" class="w-full accent-amber-400" aria-label="Delay"></div>
+                  <div><div class="text-slate-400">CHANNEL PAIR</div><select id="bti-pair" aria-label="Channel pair" class="w-full bg-black border border-white/20 rounded px-1 py-1 text-slate-200 text-[8px] font-bold"></select></div>
+                </div>
+                <div class="flex flex-wrap items-center justify-between gap-2 text-[7.5px]">
+                  <div id="bti-where" class="text-slate-400"></div>
+                  <button id="bti-eq" class="px-2.5 py-1 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-black uppercase hover:bg-cyan-500 hover:text-black">EQ THIS INPUT ▸ MIC EQ</button>
+                </div>`;
+            const grid = host.querySelector('.grid.md\\:grid-cols-2');
+            host.insertBefore(d, grid || host.children[1] || null);
+            $('bti-on').onclick = () => this.setOn(!this.cfg.on);
+            $('bti-src').onchange = e => { const was = this.cfg.on, cap = this.cap(); if (was && cap) { this.teardown(cap); const l = LS(); if (l && l.cfg.noAutoPatch) delete l.cfg.noAutoPatch[this.cfg.sel]; if (l) l.setEnabled(this.cfg.sel, 'read', false); } this.cfg.sel = e.target.value; this.save(); if (was) { this.cfg.on = false; this.setOn(true); } else this.refresh(); };
+            $('bti-pol').onclick = () => this.set('pol', !this.cfg.pol);
+            $('bti-mono').onclick = () => this.set('mono', !this.cfg.mono);
+            $('bti-bal').oninput = e => this.set('bal', parseInt(e.target.value, 10));
+            $('bti-delay').oninput = e => this.set('delay', parseInt(e.target.value, 10));
+            const ps = $('bti-pair'); ps.innerHTML = Array.from({ length: 16 }, (_, p) => `<option value="${p * 2}">CH ${p * 2 + 1} / ${p * 2 + 2}</option>`).join('');
+            ps.onchange = e => { this.cfg.route = 'ch'; this.set('pair', parseInt(e.target.value, 10)); };
+            $('bti-eq').onclick = () => { const k = this.cfg.sel; if (!k) return; const m = window.micEq; if (m && m.cfg) { m.cfg.sel = k; m.save && m.save(); } window.switchTab('miceq'); };
+            return (this.el = d);
+        },
+        refresh() { this.sig = ''; },
+        render(now) {
+            const el = this.ensureUi(); if (!el) return;
+            const l = LS(), c = window.state && window.state.ctx, k = this.select(), cap = this.cap(), cfg = this.cfg, i = this.iface();
+            // source list: Bluetooth devices first, then every other input
+            const list = this.inputs(), sig = list.map(x => x.key + (this.isBt(x) ? '*' : '')).join('|') + '#' + k + '#' + JSON.stringify(cfg) + '#' + (cap ? 1 : 0) + (cap && cap._bt ? 1 : 0) + '#' + (this.link(i) ? this.link(i).connected : '') + '#' + (l ? (l.status[k] || {}).text : '') + '#' + (l && l.bridgePlatform);
+            if (sig !== this.sig) {
+                this.sig = sig;
+                const opt = x => `<option value="${esc(x.key)}" ${x.key === k ? 'selected' : ''}>${esc(x.name)}</option>`;
+                const bt = list.filter(x => this.isBt(x)), other = list.filter(x => !this.isBt(x));
+                $('bti-src').innerHTML = (bt.length ? '<optgroup label="BLUETOOTH INPUTS">' + bt.map(opt).join('') + '</optgroup>' : '') + (other.length ? '<optgroup label="OTHER INPUT DEVICES (a Bluetooth receiver can appear here as Line In)">' + other.map(opt).join('') + '</optgroup>' : '') + (list.length ? '' : '<option value="">No input device found</option>');
+                const on = $('bti-on'); on.textContent = 'BT INPUT: ' + (cfg.on ? 'ON' : 'OFF'); on.className = 'px-3 py-1 rounded font-black text-[8px] uppercase border ' + (cfg.on ? 'bg-blue-500 text-white border-blue-400' : 'bg-white/10 text-slate-200 border-white/15 hover:bg-white/20');
+                const flag = (id, v) => { const e = $(id); if (e) { e.setAttribute('aria-pressed', String(!!v)); e.className = 'py-1.5 rounded font-bold uppercase border ' + (v ? 'bg-amber-400 text-black border-amber-300' : 'bg-white/5 border-white/10 text-slate-300'); } };
+                flag('bti-pol', cfg.pol); flag('bti-mono', cfg.mono);
+                $('bti-bal').value = cfg.bal; $('bti-bal-v').textContent = cfg.bal === 0 ? 'C' : (cfg.bal < 0 ? 'L ' + (-cfg.bal) : 'R ' + cfg.bal);
+                $('bti-delay').value = cfg.delay; $('bti-delay-v').textContent = cfg.delay + ' ms';
+                $('bti-pair').value = String(Math.min(cfg.pair, top() - (top() % 2))); $('bti-pair').disabled = cfg.route !== 'ch';
+                const d = this.link(i), st = l && l.status[k];
+                $('bti-link').innerHTML = i ? (d ? `<span class="text-${d.connected ? 'emerald' : 'blue'}-400 font-bold">${d.connected ? 'CONNECTED' : 'PAIRED'}</span> ${esc(d.name)}${d.battery != null ? ' • battery ' + d.battery + '%' : ''}${d.rssi != null ? ' • ' + d.rssi + ' dBm' : ''}` : (this.isBt(i) ? '<span class="text-blue-400 font-bold">BLUETOOTH DEVICE</span> ' + esc(i.name) : esc(i.name))) + (st ? ' • ' + esc(st.text) : '') : 'Pair and connect a phone, tablet or headset to this computer (Bluetooth page, PAIRED DEVICES), then choose it here.';
+                const plat = l && l.bridgePlatform;
+                $('bti-hint').textContent = bt.length ? '' : plat === 'win32' ? 'Windows lists a Bluetooth headset microphone here; to hear a phone, use a Bluetooth audio receiver app / adapter that appears as an input device.' : plat === 'linux' ? 'On Linux a connected phone appears as a "bluez" input once it plays to this computer (PipeWire / PulseAudio).' : 'No Bluetooth input device is listed by this system yet: connect one, it appears here at once.';
+                $('bti-where').textContent = cfg.on ? 'ASSIGNED TO: ' + this.routeName() + (cap && cap._bt ? '' : ' (waiting for the device to deliver audio)') : 'Choose the route in CONSOLE AUDIO ROUTING below; switch BT INPUT on to start.';
+                const rs = $('bt-route-select'); if (rs) rs.value = cfg.route === 'ch' ? 'ch3132' : cfg.route === 'matrix' ? 'matrix12' : cfg.route;
+                const rl = $('bt-route-label'); if (rl) rl.textContent = cfg.route === 'ch' ? this.routeName() : ROUTES[cfg.route];
+                const ts = $('bt-trim-slider'); if (ts && document.activeElement !== ts) ts.value = cfg.trim; const tv = $('bt-trim-val'); if (tv) tv.textContent = (cfg.trim > 0 ? '+' : '') + cfg.trim.toFixed(1) + ' dB';
+                const mb = $('bt-mute-btn'); if (mb) { mb.classList.toggle('bg-rose-500', !!cfg.mute); mb.classList.toggle('text-white', !!cfg.mute); }
+                const tx = $('bt-mode-tx'), rx = $('bt-mode-rx');
+                if (tx && rx) { tx.className = 'px-2 py-0.5 font-bold rounded text-[7px] uppercase ' + (cfg.tx ? 'bg-blue-500 text-white' : 'bg-white/10 text-slate-400 hover:text-white'); rx.className = 'px-2 py-0.5 font-bold rounded text-[7px] uppercase ' + (cfg.tx ? 'bg-white/10 text-slate-400 hover:text-white' : 'bg-blue-500 text-white'); }
+            }
+            const pill = $('bti-pill');
+            if (pill) { const live = !!(cap && cap._bt), t = !cfg.on ? 'OFF' : live ? 'LIVE' : 'WAITING'; if (pill.textContent !== t) { pill.textContent = t; pill.className = 'px-2 py-0.5 rounded text-[7.5px] font-bold border ' + (t === 'LIVE' ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/40' : t === 'WAITING' ? 'bg-amber-500/15 text-amber-400 border-amber-500/40' : 'bg-slate-500/15 text-slate-300 border-slate-500/40'); } }
+            // meters: what the device delivers, and what leaves the strip
+            const r = RT(); if (!r || !c) return;
+            this.mL = this.mL || r.meter(); this.mR = this.mR || r.meter(); this.oL = this.oL || r.meter(); this.oR = this.oR || r.meter();
+            const fill = (id, m) => { const e = $(id); if (e) { e.style.width = pct(dbOf(m.pk)) + '%'; e.style.background = m.pk > 0.89 ? '#ef4444' : m.pk > 0.5 ? '#fbbf24' : '#10b981'; } };
+            const inM = r.st[k];
+            if (inM) { this.mL = inM.L; this.mR = inM.R; } else { this.mL.pk *= 0.8; this.mR.pk *= 0.8; }
+            if (cap && cap._bt) { const t = r.tap(cap._bt.out), a = r.read(t.l), b = r.read(t.r); r.smooth(this.oL, a, now); r.smooth(this.oR, b, now); } else { this.oL.pk *= 0.8; this.oR.pk *= 0.8; }
+            fill('bti-il', this.mL); fill('bti-ir', this.mR); fill('bti-ol', this.oL); fill('bti-or', this.oR);
+            const db = m => { const v = dbOf(Math.max(m.L ? m.L.hold : m.pk, m.R ? m.R.hold : 0)); return isFinite(v) ? v.toFixed(1) + ' dB' : '-INF'; };
+            const t1 = $('bti-idb'), t2 = $('bti-odb'); if (t1) t1.textContent = db({ L: this.mL, R: this.mR }); if (t2) t2.textContent = db({ L: this.oL, R: this.oR });
+            // latency: what is really known (the strip delay and the engine); the Bluetooth link adds its own, not measurable from here
+            const lat = $('bt-latency-val');
+            if (lat) { const eng = ((c.baseLatency || 0) + (c.outputLatency || 0)) * 1000, tt = (cfg.on ? cfg.delay : 0) + eng; const txt = tt.toFixed(1) + ' ms (strip ' + (cfg.on ? cfg.delay : 0) + ' + engine ' + eng.toFixed(1) + '; the link adds its own: use DELAY)'; if (lat.textContent !== txt) lat.textContent = txt; }
+        },
+    };
+
+    // the existing controls of the page now drive the real strip
+    window.setBluetoothRoute = function (route) {
+        const m = { ch3132: 'ch', cue: 'cue', master: 'master', matrix12: 'matrix' };
+        if (route === 'ch3132') B.cfg.pair = 30;
+        B.set('route', m[route] || 'ch');
+        window.notify('Bluetooth input assigned to: ' + B.routeName(), 'check');
+    };
+    window.setBluetoothTrim = function (val) { B.set('trim', parseFloat(val) || 0); };
+    window.toggleBluetoothMute = function () { B.set('mute', !B.cfg.mute); window.notify('Bluetooth input ' + (B.cfg.mute ? 'muted' : 'unmuted'), 'check'); };
+    window.setBtTransceiverMode = function (mode) { B.setTx(mode === 'tx'); };
+
+    const wait = setInterval(() => {
+        if (!RT() || !LS()) return; clearInterval(wait);
+        RT().on(now => { try { B.ensure(); if (visible('bluetooth') || !B.el) B.render(now); } catch (e) { /* page not ready */ } });
+    }, 250);
 })();
     </script>
 </body>

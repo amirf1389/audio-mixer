@@ -2023,3 +2023,31 @@ test('real-time pages: LUFS is a real BS.1770 meter, dynamics / gate / mic EQ / 
   assert.ok(/window\.rtEngine \? window\.rtEngine\.chLevel\(i\) : 0/.test(html));                      // channel VU reads the engine
   assert.ok(!/Default system audio output<\/option>\s*<optgroup/.test(html) && !/Behringer UMC|Focusrite Scarlett 2i2 \(Driver/.test(html.split('<script id="rt-engine">')[0].slice(html.indexOf('asio-dac-select'), html.indexOf('asio-dac-select') + 800)));
 });
+
+test('Bluetooth input strip: a Bluetooth input device is found by flag, name or paired device, bluez devices group as Bluetooth, the strip is wired into the page', () => {
+  const vm = require('node:vm'), fs = require('node:fs'), path = require('node:path');
+  const gi = require('./interfaces').groupInterfaces([{ id: -3, name: 'bluez_input.AA_BB_CC_DD_EE_01.a2dp-source', hostApi: 'PulseAudio', inputs: 2, outputs: 0 }, { id: -4, name: 'alsa_input.usb-Scarlett', hostApi: 'ALSA', inputs: 2, outputs: 0 }]);
+  assert.ok(gi.find(i => /bluez/.test(i.name)).bluetooth && !gi.find(i => /Scarlett/.test(i.name)).bluetooth);
+  const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const m = /<script id="rt-btin">([\s\S]*?)<\/script>/.exec(html); assert.ok(m);
+  const l = { interfaces: [{ key: 'usb', name: 'Scarlett 2i2', inputs: 2 }, { key: 'k1', name: 'Pixel 8 (Bluetooth A2DP)', inputs: 2 }, { key: 'k2', name: 'WH-1000XM4 Line', inputs: 1 }, { key: 'k3', name: 'Speakers', inputs: 0, outputs: 2 }, { key: 'k4', name: 'Hands-Free AG Audio', inputs: 1 }], caps: new Map(), status: {} };
+  const rt = { bt: { data: { devices: [{ name: 'WH-1000XM4', connected: true, paired: true, battery: 80 }] } }, on() {}, meter() { return {}; } };
+  const win = { liveSources: l, rtEngine: rt, licenseChannels: 8 };
+  const store = {}; const ctx = { window: win, document: { getElementById: () => null, querySelector: () => null }, localStorage: { getItem: k => store[k] || null, setItem: (k, v) => { store[k] = v; } }, setInterval: () => 0, clearInterval() {}, Math, JSON, Array, Object, String };
+  vm.runInNewContext(m[1], ctx);
+  const B = win.btInput;
+  assert.ok(B.isBt(l.interfaces[1]) && B.isBt(l.interfaces[2]) && B.isBt(l.interfaces[4]) && !B.isBt(l.interfaces[0]), 'by name or by the paired device');
+  assert.ok(B.isBt({ key: 'x', name: 'Whatever', bluetooth: true }), 'by the server flag');
+  assert.strictEqual(B.select(), 'k1', 'defaults to the first Bluetooth input, outputs are not inputs');
+  assert.deepStrictEqual(B.inputs().map(i => i.key), ['usb', 'k1', 'k2', 'k4']);
+  assert.strictEqual(B.link(l.interfaces[2]).battery, 80);
+  assert.strictEqual(B.routeName(), 'CH 7 / 8', 'the plan limit (8 channels) keeps the pair inside the plan');
+  win.licenseChannels = 32; assert.strictEqual(B.routeName(), 'CH 31 / 32');
+  B.cfg.route = 'matrix'; assert.strictEqual(B.routeName(), 'MATRIX 1 & 2');
+  // page wiring
+  for (const id of ['bti-panel', 'bti-src', 'bti-on', 'bti-pol', 'bti-mono', 'bti-bal', 'bti-delay', 'bti-pair', 'bti-il', 'bti-ol']) assert.ok(m[1].includes(id), id);
+  assert.ok(/createDelay\(0\.5\)/.test(m[1]) && /createChannelMerger\(2\)/.test(m[1]) && /patchCap/.test(m[1]) && /mtxIn/.test(m[1]) && /masterGain/.test(m[1]) && /channelInterpretation = 'speakers'/.test(m[1]));
+  for (const f of ['setBluetoothRoute', 'setBluetoothTrim', 'toggleBluetoothMute', 'setBtTransceiverMode']) assert.ok(m[1].includes('window.' + f + ' = function'), f);   // the old, silent controls drive the strip now
+  assert.ok(html.includes("(cap._bt && cap._bt.ctx === c ? cap._bt.out : cap.node).connect(hpf)"));                   // Mic EQ follows the strip
+  assert.ok(html.includes('<optgroup label="Bluetooth inputs">') && html.includes('>BLUETOOTH</span>') && html.includes("rt.st[k].bt ?"));
+});
