@@ -6,8 +6,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const DIR = path.resolve(__dirname, '..', 'native', 'win');
-const exePath = (arch = process.arch) => path.join(DIR, arch === 'ia32' ? 'AudioDevices-x86.exe' : 'AudioDevices-x64.exe');
-const vbsPath = () => path.join(DIR, 'audio-devices.vbs');
+const exePath = (arch = process.arch) => path.join(DIR, arch === 'ia32' ? 'x86' : 'x64', 'AudioDevices.exe');   // native/win/<arch>/AudioDevices.exe
+const vbsPath = () => path.join(DIR, 'vbs', 'audio-devices.vbs');                                         // native/win/vbs/audio-devices.vbs
 
 function defaultRun(cmd, args, timeout = 6000) {
   return new Promise(resolve => {

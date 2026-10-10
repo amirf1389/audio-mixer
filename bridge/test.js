@@ -299,7 +299,7 @@ test('autostart generates safe per-OS files and installs / removes them', async 
 });
 
 test('build produces a self-contained PC-mode package that serves the mixer', async () => {
-  const { build, FILES } = require('../scripts/build');
+  const { build, FILES, DIRS, listDir } = require('../scripts/build');
   const out = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'dist-'));
   const r = build({ out });
   assert.strictEqual(r.dest, pathx.join(out, 'audio-mixer-pc'));
@@ -308,7 +308,10 @@ test('build produces a self-contained PC-mode package that serves the mixer', as
   const pkg = JSON.parse(fsx.readFileSync(pathx.join(r.dest, 'package.json'), 'utf8'));
   assert.ok(!('test' in pkg.scripts) && pkg.scripts.start);
   const manifest = fsx.readFileSync(pathx.join(r.dest, 'MANIFEST.sha256'), 'utf8').trim().split('\n');
-  assert.strictEqual(manifest.length, FILES.length);
+  assert.strictEqual(manifest.length, FILES.length + DIRS.flatMap(listDir).length);
+  for (const d of ['bridge', 'client', 'scripts', 'deploy', 'native']) assert.ok(fsx.existsSync(pathx.join(r.dest, d)), d);          // folders that go to Program Files
+  const walkAll = d => fsx.readdirSync(d, { withFileTypes: true }).flatMap(e => [e.name, ...(e.isDirectory() ? walkAll(pathx.join(d, e.name)) : [])]);
+  assert.ok(!walkAll(r.dest).some(n => n.startsWith('.')), 'no .vscode / dotfiles in the installed tree');
   for (const line of manifest) {
     const [sum, rel] = line.split('  ');
     assert.strictEqual(cryptox.createHash('sha256').update(fsx.readFileSync(pathx.join(r.dest, rel))).digest('hex'), sum);
@@ -1234,7 +1237,7 @@ test('security: headers, static allow-list, limiter, redirect checks', async () 
   const sec = require('./security');
   const root = pathx.resolve(__dirname, '..');
   assert.ok(sec.staticAllowed(root, pathx.join(root, 'index.html')));
-  for (const f of ['client/cli.js', 'scripts/license.js', 'native/win/AudioDevices-x64.exe', 'package.json.bak', 'bridge/license.js', '.git/config', 'dist/x.json', 'releases/update.json']) assert.ok(!sec.staticAllowed(root, pathx.join(root, f)), f);
+  for (const f of ['client/cli.js', 'scripts/license.js', 'native/win/x64/AudioDevices.exe', 'package.json.bak', 'bridge/license.js', '.git/config', 'dist/x.json', 'releases/update.json']) assert.ok(!sec.staticAllowed(root, pathx.join(root, f)), f);
   assert.ok(!sec.staticAllowed(root, pathx.resolve(root, '..', 'index.html')));
   let t = 0; const lim = sec.createLimiter({ now: () => t });
   for (let i = 0; i < 3; i++) assert.ok(lim.allow('k', 3, 1000).ok);
@@ -1251,7 +1254,7 @@ test('security: headers, static allow-list, limiter, redirect checks', async () 
   const base = `http://127.0.0.1:${server.address().port}`;
   const idx = await fetch(base + '/');
   assert.strictEqual(idx.status, 200); assert.match(idx.headers.get('content-security-policy'), /frame-ancestors 'self'/); assert.match(idx.headers.get('permissions-policy'), /geolocation=\(\)/); assert.strictEqual(idx.headers.get('cross-origin-opener-policy'), 'same-origin');
-  for (const p of ['/client/cli.js', '/scripts/license.js', '/native/win/AudioDevices-x64.exe', '/bridge/server.js', '/%2e%2e/etc/passwd']) assert.notStrictEqual((await fetch(base + p)).status, 200, p);
+  for (const p of ['/client/cli.js', '/scripts/license.js', '/native/win/x64/AudioDevices.exe', '/bridge/server.js', '/%2e%2e/etc/passwd']) assert.notStrictEqual((await fetch(base + p)).status, 200, p);
   server.closeAllConnections(); server.close();
 });
 
@@ -1260,10 +1263,10 @@ test('windows native helpers: AudioDevices.exe output and the VBScript fallback'
   const json = JSON.stringify({ ok: true, devices: [{ id: '{a}', name: 'Microphone (Focusrite USB)', kind: 'input', channels: 2, sampleRate: 48000, default: true }, { id: '{b}', name: 'Speakers (Focusrite USB)', kind: 'output', channels: 2, sampleRate: 48000, default: false }] });
   const calls = [];
   const r = await wn.listEndpoints({ platform: 'win32', arch: 'x64', exists: () => true, run: async (c, a) => { calls.push(c); return '﻿' + json; } });
-  assert.match(calls[0], /AudioDevices-x64\.exe$/); assert.strictEqual(r.engine, 'wasapi-native');
+  assert.match(calls[0], /x64[\\/]AudioDevices\.exe$/); assert.strictEqual(r.engine, 'wasapi-native');
   assert.strictEqual(r.devices[0].inputs, 2); assert.strictEqual(r.devices[0].outputs, 0); assert.strictEqual(r.devices[1].outputs, 2); assert.ok(r.devices.every(d => d.id < 0 && d.native));
   assert.strictEqual(require('./interfaces').groupInterfaces(r.devices.map(d => ({ id: d.id, name: d.name, hostApi: d.hostApi, inputs: d.inputs, outputs: d.outputs })))[0].name, 'Focusrite USB');
-  assert.match(wn.exePath('ia32'), /AudioDevices-x86\.exe$/);
+  assert.match(wn.exePath('ia32'), /x86[\\/]AudioDevices\.exe$/);
   assert.strictEqual(await wn.listEndpoints({ platform: 'linux' }), null);
   assert.strictEqual(await wn.listEndpoints({ platform: 'win32', exists: () => false }), null);
   assert.strictEqual(await wn.listEndpoints({ platform: 'win32', exists: () => true, run: async () => 'garbage' }), null);
@@ -1271,8 +1274,8 @@ test('windows native helpers: AudioDevices.exe output and the VBScript fallback'
   assert.deepStrictEqual(w, [{ name: 'Realtek Audio', vendor: 'Realtek', status: 'OK' }]);
   // the shipped sources and binaries exist, and the binaries are Windows PE files of the right machine type
   const dir = pathx.join(__dirname, '..', 'native', 'win');
-  for (const f of ['AudioDevices.cpp', 'audio-devices.vbs']) assert.ok(require('node:fs').existsSync(pathx.join(dir, f)), f);
-  for (const [f, m] of [['AudioDevices-x64.exe', 0x8664], ['AudioDevices-x86.exe', 0x14c]]) { const b = require('node:fs').readFileSync(pathx.join(dir, f)); assert.strictEqual(b.readUInt16LE(0), 0x5a4d); assert.strictEqual(b.readUInt16LE(b.readUInt32LE(0x3c) + 4), m); }
+  for (const f of ['src/AudioDevices.cpp', 'vbs/audio-devices.vbs']) assert.ok(require('node:fs').existsSync(pathx.join(dir, f)), f);
+  for (const [f, m] of [['x64/AudioDevices.exe', 0x8664], ['x86/AudioDevices.exe', 0x14c]]) { const b = require('node:fs').readFileSync(pathx.join(dir, f)); assert.strictEqual(b.readUInt16LE(0), 0x5a4d); assert.strictEqual(b.readUInt16LE(b.readUInt32LE(0x3c) + 4), m); }
 });
 
 test('interfaces: DirectSound "Primary Sound" default mappers are flagged, sorted last and not mistaken for hardware', () => {
@@ -1283,4 +1286,37 @@ test('interfaces: DirectSound "Primary Sound" default mappers are flagged, sorte
   assert.strictEqual(list[0].name, 'USB Mic'); assert.ok(!list[0].systemDefault);
   const prim = list.filter(i => i.systemDefault); assert.strictEqual(prim.length, 2);
   assert.ok(prim.some(i => /^System default input/.test(i.name)) && prim.some(i => /^System default output/.test(i.name)));
+});
+
+test('bluetooth: A2DP + hands-free endpoints are one device, written through A2DP; RtAudio converts the hands-free rate', () => {
+  const { groupInterfaces, isBluetooth } = require('./interfaces');
+  const dev = (id, name, inputs, outputs) => ({ id, name, hostApi: 'Windows WASAPI', inputs, outputs, sampleRate: 48000 });
+  const list = groupInterfaces([
+    dev(0, 'Headset (Galaxy Buds2 Pro Hands-Free AG Audio)', 1, 1), dev(1, 'Headphones (Galaxy Buds2 Pro Stereo)', 0, 2),
+    dev(2, 'Speakers (Realtek Audio)', 0, 2), dev(3, 'Stereo Mix (Realtek Audio)', 2, 0),
+  ]);
+  const bt = list.filter(i => i.bluetooth); assert.strictEqual(bt.length, 1);
+  assert.strictEqual(bt[0].name, 'Galaxy Buds2 Pro'); assert.strictEqual(bt[0].read.deviceId, 0);        // microphone: hands-free
+  assert.strictEqual(bt[0].write.deviceId, 1); assert.strictEqual(bt[0].write.profile, 'a2dp');          // playback: A2DP stereo, not the phone-quality endpoint
+  assert.strictEqual(list.filter(i => !i.bluetooth && !i.loopback).length, 1);                             // Realtek stays separate
+  assert.ok(isBluetooth('Headset (X Hands-Free AG Audio)') && !isBluetooth('Speakers (Realtek Audio)'));
+  // resampler: 16 kHz -> 48 kHz triples the frames, continuous across chunks
+  const a = require('./audify');
+  const rs = a.createResampler(16000, 48000, 1);
+  const chunk = n0 => { const b = Buffer.alloc(8 * 2); for (let i = 0; i < 8; i++) b.writeInt16LE(n0 + i * 100, i * 2); return b; };
+  const o1 = rs(chunk(0)), o2 = rs(chunk(800));
+  const tot = (o1.length + o2.length) / 2; assert.ok(tot >= 44 && tot <= 48, 'frames ' + tot);
+  const all = []; for (const o of [o1, o2]) for (let i = 0; i < o.length; i += 2) all.push(o.readInt16LE(i));
+  assert.ok(all.every((v, i) => i === 0 || v >= all[i - 1]), 'monotonic ramp stays smooth over the chunk edge');
+  assert.strictEqual(a.createResampler(48000, 48000, 2), null);
+  // RtAudio: a hands-free device that only offers 16 kHz opens at 16 kHz and still delivers the mixer's rate; other devices still refuse
+  const fa = fakeAudify(); const { RtAudio } = fa; const orig = RtAudio.prototype.getDevices;
+  const btDev = { id: 1100, rtId: 9, api: 'WINDOWS_WASAPI', hostAPIName: 'Windows WASAPI', name: 'Headset (Galaxy Buds2 Pro Hands-Free AG Audio)', maxInputChannels: 1, maxOutputChannels: 1, sampleRates: [8000, 16000] };
+  const got = []; const st = a.openStream({ mod: fa, dev: btDev, direction: 'input', channels: 2, sampleRate: 48000, onData: b => got.push(b.length) });
+  assert.strictEqual(st.resampled, true); assert.strictEqual(st.deviceRate, 16000); assert.strictEqual(st.sampleRate, 48000); assert.strictEqual(st.channels, 1);
+  assert.strictEqual(fa.opened[fa.opened.length - 1].rate, 16000);
+  const out = a.openStream({ mod: fa, dev: { ...btDev, name: 'Headphones (Galaxy Buds2 Pro Stereo)', maxOutputChannels: 2, sampleRates: [44100, 48000] }, direction: 'output', channels: 2, sampleRate: 96000 });
+  assert.strictEqual(out.deviceRate, 48000); st.close(); out.close();
+  assert.throws(() => a.openStream({ mod: fa, dev: { ...btDev, name: 'Focusrite USB ASIO', maxOutputChannels: 2 }, direction: 'output', channels: 2, sampleRate: 48000 }), /does not support 48000/);
+  void orig;
 });

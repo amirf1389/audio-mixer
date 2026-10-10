@@ -15,8 +15,24 @@ const FILES = [
   'client/cli.js', 'client/service.js', 'client/verify.js',
   'bridge/server.js', 'bridge/detect.js', 'bridge/catalog.js', 'bridge/nowplaying.js', 'bridge/interfaces.js', 'bridge/asio-lock.js', 'bridge/audify.js', 'bridge/plugins.js', 'bridge/streams.js', 'bridge/levels.js', 'bridge/universal.js', 'bridge/license.js', 'bridge/license-public.json', 'bridge/update.js', 'bridge/duplex.js', 'bridge/winnative.js', 'bridge/security.js', 'bridge/input.js', 'bridge/output.js', 'bridge/volume.js', 'bridge/ws.js',
   'bridge/package.json', 'bridge/README.md',
-  'Audio Mixer.vbs', 'native/win/AudioDevices.cpp', 'native/win/AudioDevices-x64.exe', 'native/win/AudioDevices-x86.exe', 'native/win/audio-devices.vbs',
+  'Audio Mixer.vbs', 'native/win/src/AudioDevices.cpp', 'native/win/x64/AudioDevices.exe', 'native/win/x86/AudioDevices.exe', 'native/win/vbs/audio-devices.vbs',
+  'scripts/license.js', 'scripts/make-update.js',
 ];
+
+// Whole folders that ship with the app (deploy/ = nginx / fail2ban hosting files). Never dotfiles or folders (.vscode, .git, .github ...).
+const DIRS = ['deploy'];
+function listDir(rel) {
+  const out = [];
+  const walk = r => {
+    for (const e of fs.readdirSync(path.join(ROOT, r), { withFileTypes: true })) {
+      if (e.name.startsWith('.') || e.name === 'node_modules') continue;
+      const q = r + '/' + e.name;
+      if (e.isDirectory()) walk(q); else out.push(q);
+    }
+  };
+  walk(rel);
+  return out.sort();
+}
 
 function sha256(file) { return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex'); }
 
@@ -25,8 +41,9 @@ function build({ out = path.join(ROOT, 'dist'), archive = false } = {}) {
   const dest = path.join(path.resolve(out), 'audio-mixer-pc');
   if (path.basename(dest) !== 'audio-mixer-pc') throw new Error('refusing to clean an unexpected folder: ' + dest);
   fs.rmSync(dest, { recursive: true, force: true });
+  const ALL = [...FILES, ...DIRS.flatMap(listDir)];
 
-  for (const rel of FILES) {
+  for (const rel of ALL) {
     const from = path.join(ROOT, rel), to = path.join(dest, rel);
     if (!fs.existsSync(from)) throw new Error('missing build input: ' + rel);
     fs.mkdirSync(path.dirname(to), { recursive: true });
@@ -39,11 +56,14 @@ function build({ out = path.join(ROOT, 'dist'), archive = false } = {}) {
     j.scripts = Object.fromEntries(Object.entries(j.scripts || {}).filter(([k]) => !/^(test|audit)/.test(k)));
     fs.writeFileSync(p, JSON.stringify(j, null, 2) + '\n');
   }
-  for (const rel of FILES.filter(f => f.endsWith('.js'))) {
+  for (const rel of ALL.filter(f => f.endsWith('.js'))) {
     const r = spawnSync(process.execPath, ['--check', path.join(dest, rel)], { encoding: 'utf8' });
     if (r.status !== 0) throw new Error('syntax check failed for ' + rel + ': ' + r.stderr);
   }
-  const manifest = [...FILES].sort().map(rel => `${sha256(path.join(dest, rel))}  ${rel}`).join('\n') + '\n';
+  // The installed tree must never carry editor / VCS folders (.vscode, .git, .github ...).
+  const stray = ALL.filter(f => f.split('/').some(p => p.startsWith('.')));
+  if (stray.length) throw new Error('dotfiles must not be installed: ' + stray.join(', '));
+  const manifest = [...ALL].sort().map(rel => `${sha256(path.join(dest, rel))}  ${rel}`).join('\n') + '\n';
   fs.writeFileSync(path.join(dest, 'MANIFEST.sha256'), manifest);
 
   let archivePath = null;
@@ -52,7 +72,7 @@ function build({ out = path.join(ROOT, 'dist'), archive = false } = {}) {
     const r = spawnSync('tar', ['-czf', archivePath, '-C', path.resolve(out), 'audio-mixer-pc'], { encoding: 'utf8' });
     if (r.status !== 0) throw new Error('tar failed: ' + (r.stderr || r.error));
   }
-  return { dest, files: FILES.length + 1, archive: archivePath, version: pkg.version };
+  return { dest, files: ALL.length + 1, archive: archivePath, version: pkg.version };
 }
 
 if (require.main === module) {
@@ -63,4 +83,4 @@ if (require.main === module) {
     console.log('On the target PC (Node.js 18+): start-pc-mode.bat (Windows) or ./start-pc-mode.sh (macOS / Linux)');
   } catch (e) { console.error('Build failed: ' + e.message); process.exit(1); }
 }
-module.exports = { build, FILES };
+module.exports = { build, FILES, DIRS, listDir };
