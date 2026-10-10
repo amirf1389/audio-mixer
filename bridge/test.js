@@ -2239,3 +2239,74 @@ test('OTA dashboard: served only with the admin token configured, strict CSP, hi
     assert.strictEqual((await fetch(b + '/admin/files/%E0%A4%A', { method: 'DELETE', headers: auth })).status, 400);              // broken % escape: 400, not a crash
   });
 });
+
+test('OTA audit log: every admin action is recorded with who / what / result, hash-chained, tampering is found, refused attempts never store a token, the dashboard shows it', async () => {
+  const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), http = require('node:http'), crypto = require('node:crypto');
+  const { createAudit } = require('../ota-server/audit'), { createOta } = require('../ota-server/server'), update = require('./update'), lic = require('../scripts/license'), dash = require('../ota-server/dashboard/app.js');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'aud-'));
+  // the log itself: chain, restart, filters, paging, sanitising, tamper detection
+  const f = path.join(tmp, 'a.jsonl'); let a = createAudit({ file: f });
+  for (let i = 0; i < 6; i++) a.record({ action: i % 2 ? 'file.upload' : 'manifest.publish', actor: { fp: 'abcd1234', ip: '10.0.0.' + i, ua: 'x\u0000y\nz' }, target: 'n' + i, detail: { i, long: 'x'.repeat(1000), nested: { deep: { deeper: { deepest: 1 } } } }, status: 200, result: i === 3 ? 'rejected' : 'ok' });
+  assert.deepStrictEqual(a.verify(), { chainOk: true, entries: 6, brokenAt: null, reason: '' });
+  const e0 = a.list({ limit: 1 }).entries[0]; assert.ok(e0.seq === 6 && /^[0-9a-f]{64}$/.test(e0.hash) && e0.actor.ua === 'x y z' && e0.detail.long.length === 300 && !JSON.stringify(e0.detail).includes('deepest'));
+  assert.deepStrictEqual(a.list({ limit: 2 }).entries.map(e => e.seq), [6, 5]); assert.deepStrictEqual(a.list({ limit: 2, before: 5 }).entries.map(e => e.seq), [4, 3]);
+  assert.strictEqual(a.list({ action: 'file.' }).total, 3); assert.strictEqual(a.list({ result: 'rejected' }).total, 1); assert.strictEqual(a.list({ limit: 2 }).hasMore, true); assert.strictEqual(a.list({ limit: 500 }).hasMore, false);
+  a = createAudit({ file: f }); assert.strictEqual(a.record({ action: 'x' }).seq, 7); assert.ok(a.verify().chainOk);                    // a restart continues the chain
+  const lines = fs.readFileSync(f, 'utf8').split('\n'), edit = fn => { const c = lines.slice(); fn(c); fs.writeFileSync(f, c.join('\n')); return createAudit({ file: f }).verify(); };
+  assert.match(edit(c => { c[2] = c[2].replace('"ok"', '"error"'); }).reason, /entry 3 was changed/);
+  assert.match(edit(c => { c.splice(2, 1); }).reason, /does not follow|jump/);
+  assert.match(edit(c => { c[1] = 'garbage'; }).reason, /not a valid entry/);
+  fs.writeFileSync(f, lines.join('\n')); assert.ok(createAudit({ file: f }).verify().chainOk);
+  // the server: actions, outcomes, actors
+  const keys = path.join(tmp, 'vendor'); lic.initKeys(keys); const jwk = lic.loadPublic(keys), priv = lic.loadPrivate(keys);
+  const ota = createOta({ dataDir: path.join(tmp, 'data'), token: 'audit-secret-token', jwk, allowHttp: true, trustProxy: true }); await ota.reindex();
+  const srv = http.createServer(ota.handler); await new Promise(r => srv.listen(0, '127.0.0.1', r));
+  const b = 'http://127.0.0.1:' + srv.address().port, auth = { Authorization: 'Bearer audit-secret-token', 'User-Agent': 'TestAgent/1.0' }, sha = x => crypto.createHash('sha256').update(x).digest('hex');
+  try {
+    const exe = Buffer.from('MZ' + 'e'.repeat(800)), put = (n, buf, h = {}) => fetch(b + '/admin/files/' + encodeURIComponent(n), { method: 'PUT', headers: { ...auth, 'X-SHA256': sha(buf), ...h }, body: buf });
+    const man = (v, name, buf) => ({ product: 'audio-mixer', version: v, channel: 'stable', released: '2026-10-10', notes: [], files: { 'win-x64-exe': { name, url: 'https://x.test/releases/' + encodeURIComponent(name), size: buf.length, sha256: sha(buf) } } });
+    const pub = (m, q = '', key = priv) => fetch(b + '/admin/manifest/stable' + q, { method: 'PUT', headers: auth, body: JSON.stringify(update.signManifest(m, key)) });
+    assert.strictEqual((await fetch(b + '/admin/config', { headers: auth })).status, 200); await fetch(b + '/admin/config', { headers: auth });          // dashboard opened (once per 30 minutes)
+    assert.strictEqual((await put('Audio Mixer-1.0.0.0.exe', exe)).status, 201); assert.strictEqual((await put('Audio Mixer-1.0.0.0.exe', exe)).status, 200);
+    assert.strictEqual((await put('bad.exe', exe, { 'X-SHA256': sha('other') })).status, 400);
+    assert.strictEqual((await pub(man('1.0.0.0', 'Audio Mixer-1.0.0.0.exe', exe), '', lic.initKeys(path.join(tmp, 'o')) && lic.loadPrivate(path.join(tmp, 'o')))).status, 400);   // foreign signature
+    assert.strictEqual((await pub(man('1.0.0.0', 'Audio Mixer-1.0.0.0.exe', exe))).status, 200);
+    assert.strictEqual((await put('Audio Mixer-1.1.0.0.exe', Buffer.from('MZ-new' + 'n'.repeat(400)))).status, 201); const exe2 = Buffer.from('MZ-new' + 'n'.repeat(400));
+    assert.strictEqual((await pub(man('1.1.0.0', 'Audio Mixer-1.1.0.0.exe', exe2))).status, 200);
+    assert.strictEqual((await pub(man('1.0.0.0', 'Audio Mixer-1.0.0.0.exe', exe), '?force=1')).status, 200);                                            // roll back
+    assert.strictEqual((await fetch(b + '/admin/files/' + encodeURIComponent('Audio Mixer-1.0.0.0.exe'), { method: 'DELETE', headers: auth })).status, 409);
+    assert.strictEqual((await fetch(b + '/admin/files/' + encodeURIComponent('Audio Mixer-1.1.0.0.exe'), { method: 'DELETE', headers: auth })).status, 200);
+    assert.strictEqual((await fetch(b + '/admin/verify', { headers: auth })).status, 200);
+    assert.strictEqual((await fetch(b + '/admin/manifest/stable', { method: 'DELETE', headers: auth })).status, 200);
+    assert.strictEqual((await fetch(b + '/admin/files', { headers: { Authorization: 'Bearer wrong-token-xyz', 'User-Agent': 'Intruder/9' } })).status, 401);
+    assert.strictEqual((await fetch(b + '/admin/audit')).status, 401); assert.strictEqual((await fetch(b + '/admin/audit/export')).status, 401);
+    const j = await (await fetch(b + '/admin/audit?limit=500', { headers: auth })).json(), by = (act, res) => j.entries.filter(e => e.action === act && (!res || e.result === res));
+    assert.ok(j.ok && j.entries.every(e => e.hash && e.prev) && j.entries[0].seq > j.entries[j.entries.length - 1].seq, 'newest first');
+    assert.strictEqual(by('session.open').length, 1);                                                                                    // two config calls, one session entry
+    assert.deepStrictEqual(by('file.upload').map(e => [e.target, e.result, e.status]).reverse(), [['Audio Mixer-1.0.0.0.exe', 'ok', 201], ['Audio Mixer-1.0.0.0.exe', 'ok', 200], ['bad.exe', 'rejected', 400], ['Audio Mixer-1.1.0.0.exe', 'ok', 201]]);
+    assert.match(by('file.upload', 'rejected')[0].detail.error, /checksum mismatch/); assert.strictEqual(by('file.upload')[2].detail.unchanged, true);
+    assert.deepStrictEqual(by('manifest.publish').map(e => [e.result, e.detail.version]).reverse(), [['rejected', undefined], ['ok', '1.0.0.0'], ['ok', '1.1.0.0']]);   // an unsigned manifest is not trusted: no version is recorded from it
+    assert.match(by('manifest.publish', 'rejected')[0].detail.error, /not signed by the Audio Mixer publisher/);
+    const rb = by('manifest.rollback'); assert.strictEqual(rb.length, 1); assert.ok(rb[0].detail.forced && rb[0].detail.previous === '1.1.0.0' && rb[0].detail.version === '1.0.0.0');
+    assert.deepStrictEqual(by('file.delete').map(e => [e.target, e.result]).reverse(), [['Audio Mixer-1.0.0.0.exe', 'rejected'], ['Audio Mixer-1.1.0.0.exe', 'ok']]);
+    assert.strictEqual(by('manifest.unpublish')[0].detail.version, '1.0.0.0'); assert.deepStrictEqual(by('files.verify')[0].detail, { files: 1, damaged: [] });
+    const denied = by('auth.denied'); assert.strictEqual(denied.length, 3);                                                         // wrong token, and the two calls without any token
+    const intr = denied.find(e => e.actor.ua === 'Intruder/9'); assert.ok(intr.result === 'denied' && intr.actor.fp === '' && intr.actor.ip === '127.0.0.1' && intr.target === 'GET /admin/files' && intr.status === 401);
+    assert.ok(by('manifest.publish', 'ok')[0].actor.fp === crypto.createHash('sha256').update('audit-secret-token').digest('hex').slice(0, 8) && by('manifest.publish')[0].actor.ua === 'TestAgent/1.0');
+    const raw = fs.readFileSync(path.join(ota.dirs.releases, '..', 'audit.jsonl'), 'utf8'); assert.ok(!raw.includes('audit-secret-token') && !raw.includes('wrong-token-xyz'), 'no token, right or wrong, is ever written to the log');
+    assert.deepStrictEqual((await (await fetch(b + '/admin/audit?action=file.&result=rejected', { headers: auth })).json()).entries.map(e => e.target), ['Audio Mixer-1.0.0.0.exe', 'bad.exe']);
+    const v = await (await fetch(b + '/admin/audit/verify', { headers: auth })).json(); assert.ok(v.chainOk && v.entries === j.chain);
+    const ex = await fetch(b + '/admin/audit/export', { headers: auth }); assert.match(ex.headers.get('content-disposition'), /audit\.jsonl/); assert.ok((await ex.text()).trim().split('\n').length >= j.chain);
+    assert.strictEqual((await (await fetch(b + '/admin/audit?action=audit.', { headers: auth })).json()).entries[0].action, 'audit.export');                // exporting is logged
+    // flooding with wrong tokens does not flood the log
+    const before = (await (await fetch(b + '/admin/audit?limit=1', { headers: auth })).json()).chain;
+    for (let i = 0; i < 150; i++) await fetch(b + '/admin/files', { headers: { Authorization: 'Bearer x' + i, 'X-Forwarded-For': '203.0.113.9' } });      // a guessing attack from one address
+    const after = await (await fetch(b + '/admin/audit?limit=500&action=auth.', { headers: auth })).json(), rl = await (await fetch(b + '/admin/audit?action=admin.', { headers: auth })).json();
+    assert.ok(after.entries.filter(e => e.actor.ip === '203.0.113.9').length === 20 && rl.total === 5 && (await (await fetch(b + '/admin/audit?limit=1', { headers: auth })).json()).chain - before === 25, 'at most 20 refused sign-ins and 5 rate-limit notes per address and minute');
+  } finally { srv.closeAllConnections(); srv.close(); }
+  // dashboard: the Audit view, readable summaries
+  const src = fs.readFileSync(path.join(__dirname, '..', 'ota-server', 'dashboard', 'app.js'), 'utf8');
+  assert.ok(/audit: \['Audit', auditView\]/.test(src) && src.includes("'/admin/audit/verify'") && src.includes("'/admin/audit/export'") && !/innerHTML/.test(src));
+  assert.strictEqual(dash.fmtDetail({ version: '2.0.0.0', files: ['a', 'b'], forced: true, previous: null, ok: false }), 'version 2.0.0.0 • files a, b • forced'); assert.strictEqual(dash.fmtDetail(null), ''); assert.ok(dash.fmtDetail({ x: 'y'.repeat(500) }).length <= 220);
+  for (const k of ['file.upload', 'manifest.rollback', 'auth.denied', 'session.open']) assert.ok(dash.ACTIONS[k], k);
+});

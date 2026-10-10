@@ -52,7 +52,15 @@
     for (const [key, name] of Object.entries(map)) { const f = byName[name]; if (name && f) out[key] = { name, url: base.replace(/\/+$/, '') + '/releases/' + encodeURIComponent(name), size: f.size, sha256: f.sha256 }; }
     return { product: 'audio-mixer', version, channel, released, notes: notes.map(s => s.trim()).filter(Boolean), files: out };
   }
-  const pure = { sha256Hex, importPrivate, signManifest, verifyEnvelope, guess, buildManifest, cmpVersion, b64u, unb64u, PLATFORMS };
+  // audit log: readable names and a one-line summary of the details of an entry
+  const ACTIONS = { 'file.upload': 'Upload file', 'file.delete': 'Delete file', 'manifest.publish': 'Publish', 'manifest.rollback': 'Roll back', 'manifest.unpublish': 'Unpublish', 'files.verify': 'Verify files', 'auth.denied': 'Sign-in refused', 'admin.rate_limited': 'Rate limited', 'session.open': 'Dashboard opened', 'audit.export': 'Audit exported' };
+  const fmtDetail = d => {
+    if (d == null || typeof d !== 'object') return d == null ? '' : String(d);
+    const one = v => (Array.isArray(v) ? v.map(one).join(', ') : v && typeof v === 'object' ? JSON.stringify(v) : String(v));
+    const t = Object.entries(d).filter(([, v]) => v !== null && v !== false && !(Array.isArray(v) && !v.length)).map(([k, v]) => (v === true ? k : k + ' ' + one(v))).join(' • ');
+    return t.length > 220 ? t.slice(0, 219) + '…' : t;
+  };
+  const pure = { ACTIONS, fmtDetail, sha256Hex, importPrivate, signManifest, verifyEnvelope, guess, buildManifest, cmpVersion, b64u, unb64u, PLATFORMS };
   if (typeof module !== 'undefined' && module.exports) { module.exports = pure; return; }
   if (typeof document === 'undefined') return;
 
@@ -213,7 +221,37 @@
       h('p', { class: 'dim' }, 'The server holds only the public key. Your private key is used in this browser to sign manifests and is never uploaded.'), btn, out);
   }
 
-  const VIEWS = { overview: ['Overview', overview], files: ['Files', files], publish: ['Publish', publish], history: ['History', historyView], stats: ['Stats', statsView], health: ['Health', health] };
+  function auditView() {
+    const act = h('select', { 'aria-label': 'Action' }, [['', 'All actions'], ['file.', 'Files'], ['manifest.', 'Publish / roll back / unpublish'], ['files.verify', 'File checks'], ['auth.', 'Refused sign-ins'], ['admin.', 'Rate limits'], ['session.', 'Dashboard opened'], ['audit.', 'Audit exports']].map(([v, l]) => h('option', { value: v }, l)));
+    const res = h('select', { 'aria-label': 'Result' }, [['', 'Any result'], ['ok', 'ok'], ['rejected', 'rejected by the server'], ['denied', 'denied'], ['error', 'error']].map(([v, l]) => h('option', { value: v }, l)));
+    const find = h('input', { type: 'text', placeholder: 'Search the rows shown', 'aria-label': 'Search' });
+    const body = h('tbody'), info = h('p', { class: 'dim' }), more = h('button', { class: 'btn', hidden: true }, 'Load older entries'), chain = h('span');
+    let rows = [], last = 0;
+    const paint = () => {
+      const q = find.value.trim().toLowerCase();
+      body.replaceChildren(...rows.filter(e => !q || JSON.stringify(e).toLowerCase().includes(q)).map(e => h('tr', null,
+        h('td', { class: 'mono', title: e.t + ' (UTC)' }, new Date(e.t).toLocaleString()), h('td', { class: 'mono', title: e.actor.ua || '' }, (e.actor.fp ? 'token ' + e.actor.fp : 'no valid token'), h('br'), h('span', { class: 'dim' }, e.actor.ip)),
+        h('td', null, ACTIONS[e.action] || e.action), h('td', { class: 'mono' }, e.target), h('td', { class: 'dim' }, fmtDetail(e.detail)),
+        h('td', null, pill(e.result + (e.status ? ' ' + e.status : ''), e.result === 'ok' ? 'ok' : e.result === 'rejected' ? 'warn' : 'bad')))));
+    };
+    const load = async older => {
+      try {
+        const r = await api('GET', '/admin/audit?limit=100' + (older && last ? '&before=' + last : '') + '&action=' + encodeURIComponent(act.value) + '&result=' + encodeURIComponent(res.value));
+        rows = older ? rows.concat(r.entries) : r.entries; last = rows.length ? rows[rows.length - 1].seq : 0;
+        info.textContent = r.total + ' matching entries (' + r.chain + ' in the log), newest first.'; more.hidden = !r.hasMore; paint();
+      } catch (e) { info.textContent = e.message; info.className = 'err'; }
+    };
+    more.addEventListener('click', () => load(true)); act.addEventListener('change', () => load(false)); res.addEventListener('change', () => load(false)); find.addEventListener('input', paint);
+    const verifyBtn = h('button', { class: 'btn', onclick: async () => { try { const r = await api('GET', '/admin/audit/verify'); chain.replaceChildren(r.chainOk ? pill('chain intact: ' + r.entries + ' entries', 'ok') : pill('CHAIN BROKEN: ' + r.reason, 'bad')); } catch (e) { chain.textContent = e.message; } } }, 'Verify the log');
+    const exportBtn = h('button', { class: 'btn', onclick: async () => { try { const r = await api('GET', '/admin/audit/export', { raw: true }); if (!r.ok) throw new Error('HTTP ' + r.status); const a = h('a', { href: URL.createObjectURL(await r.blob()), download: 'audit.jsonl' }); document.body.append(a); a.click(); a.remove(); } catch (e) { say(e.message, true); } } }, 'Download (JSON lines)');
+    load(false);
+    return h('div', { class: 'card', style: 'display:grid;gap:10px' }, h('h2', null, 'Audit log'),
+      h('p', { class: 'dim' }, 'Every upload, delete, publish, roll back, unpublish and file check, refused sign-ins and dashboard openings: when, from where, with which token (first 8 characters of its SHA-256, never the token) and what the server answered. Append-only and hash-chained: a changed or removed line is found by "Verify the log".'),
+      h('div', { class: 'grid' }, h('label', null, 'Action', act), h('label', null, 'Result', res), h('label', null, 'Search', find)), h('div', { class: 'row' }, info, h('span', null, chain, ' ', verifyBtn, ' ', exportBtn)),
+      h('div', { class: 'tbl' }, h('table', null, h('thead', null, h('tr', null, ['When', 'Who', 'Action', 'Target', 'Details', 'Result'].map(x => h('th', null, x)))), body)), more);
+  }
+
+  const VIEWS = { overview: ['Overview', overview], files: ['Files', files], publish: ['Publish', publish], history: ['History', historyView], audit: ['Audit', auditView], stats: ['Stats', statsView], health: ['Health', health] };
   function render() {
     if (!S.token) { $app.replaceChildren(login()); return; }
     const nav = h('nav', null, Object.entries(VIEWS).map(([k, [label]]) => h('button', { 'aria-current': k === S.view ? 'page' : null, onclick: () => { S.view = k; say(null); render(); } }, label)));

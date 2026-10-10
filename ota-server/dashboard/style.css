@@ -20,7 +20,7 @@ main{max-width:1100px;margin:0 auto;padding:16px;display:grid;gap:14px}
 .grid{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
 .mono{font-family:var(--mono)}
 .dim{color:var(--dim)}
-.pill{display:inline-block;padding:1px 8px;border-radius:99px;font:700 10px var(--mono);letter-spacing:.06em;border:1px solid var(--line);background:var(--panel2)}
+.pill{white-space:nowrap;display:inline-block;padding:1px 8px;border-radius:99px;font:700 10px var(--mono);letter-spacing:.06em;border:1px solid var(--line);background:var(--panel2)}
 .pill.ok{color:var(--green);border-color:var(--green)}.pill.bad{color:var(--red);border-color:var(--red)}.pill.warn{color:var(--amber);border-color:var(--amber)}
 table{width:100%;border-collapse:collapse;font-size:13px}
 th{font:700 10px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--dim);text-align:left}
