@@ -9,6 +9,10 @@
 //   node client/cli.js verify [installer.exe] [--scan]   verification scan: file hashes, signatures, loopback-only, Defender scan
 //   node client/cli.js setup [--user]  install the native audio modules (Audify, PortAudio) for ASIO / WASAPI; --user: Audify only, into your home folder
 //   node client/cli.js service install|uninstall|status   start the server automatically when you log in
+//   node client/cli.js license [status|activate <key>|deactivate]   show / activate / remove the license key (works offline)
+//   node client/cli.js plugins         list the VST3 / VST2 plugins found on this PC and the plugin folder
+//   node client/cli.js update [download]   check the signed update manifest; download saves the verified installer (never run for you)
+//   (drivers, verify, license, plugins and update accept --pause: wait for Enter before closing, used by the Start Menu shortcuts)
 const http = require('node:http');
 const fs = require('node:fs');
 const { execFile } = require('node:child_process');
@@ -137,8 +141,63 @@ async function cmdVerify(o, argv) {
   const verify = require('./verify');
   const r = await verify.verify({ target: o.arg, scan: argv.includes('--scan'), port: o.port });
   console.log(verify.format(r));
-  if (argv.includes('--pause')) { console.log('\nPress Enter to close.'); await new Promise(res => { process.stdin.resume(); process.stdin.once('data', res); }); }
+  await pause(argv);
   return r.ok ? 0 : 1;
+}
+
+async function pause(argv) {
+  if (!argv.includes('--pause')) return;
+  console.log('\nPress Enter to close.');
+  await new Promise(res => { process.stdin.resume(); process.stdin.once('data', res); });
+}
+
+async function cmdLicense(o, argv) {
+  const lic = require('../bridge/license');
+  const key = argv.filter(a => !a.startsWith('--'));   // [license, activate, <key>]
+  let code = 0;
+  if (o.arg === 'activate') {
+    if (!key[2]) { console.error('usage: node client/cli.js license activate <key>'); code = 2; }
+    else { const r = lic.activate(key.slice(2).join('')); if (r.ok) console.log(`License activated: plan ${r.plan.name || r.plan.id || ''}`); else { console.error(`Key refused: ${r.message || r.reason}`); code = 1; } }
+  } else if (o.arg === 'deactivate') { const r = lic.deactivate(); console.log(r.removed ? 'License removed; Audio Mixer runs as BASIC (8 channels).' : 'No license was stored.'); }
+  else if (o.arg && o.arg !== 'status') { console.error('usage: node client/cli.js license [status|activate <key>|deactivate]'); code = 2; }
+  if (code === 0) {
+    const st = lic.status();
+    console.log(`License: ${st.state.toUpperCase()}   plan: ${st.plan.name || st.plan.id || 'basic'}   channels: ${st.plan.channels}`);
+    console.log(`Machine ID: ${st.machineId}  (give it to the seller for a key bound to this PC)`);
+    if (st.license && st.license.expires) console.log(`Expires: ${new Date(st.license.expires).toISOString().slice(0, 10)}`);
+    if (st.message) console.log(st.message);
+  }
+  await pause(argv);
+  return code;
+}
+
+async function cmdPlugins(argv) {
+  const pl = require('../bridge/plugins');
+  let r;
+  try { r = pl.scan(); } catch (e) { console.error('Plugin scan failed: ' + e.message); await pause(argv); return 1; }
+  console.log(`Plugin folder: ${r.appDir}${r.appDirExists ? '' : ' (not created yet)'}`);
+  const list = r.plugins || [];
+  console.log(list.length ? `${list.length} plugin(s) found:` : 'No VST3 / VST2 plugins found. Copy .vst3 files or VST2 .dll files into the plugin folder.');
+  for (const p of list) console.log(`  ${(p.format || p.ext || '').toString().toUpperCase().padEnd(5)} ${p.name || p.file}  ${p.file}`);
+  await pause(argv);
+  return 0;
+}
+
+async function cmdUpdate(o, argv) {
+  const upd = require('../bridge/update');
+  const current = require('../package.json').version;
+  let code = 0;
+  try {
+    if (o.arg === 'download') { const r = await upd.download({ current }); console.log(`Saved and verified ${r.version}: ${r.file}\nSHA-256 ${r.sha256}\n${r.note}`); }
+    else {
+      const r = await upd.check({ current });
+      console.log(`Installed ${current}   latest ${r.latest}   ${r.updateAvailable ? 'UPDATE AVAILABLE' : 'up to date'}   (signed manifest)`);
+      for (const n of r.notes) console.log('  - ' + n);
+      if (r.updateAvailable) console.log('Download it with: node client/cli.js update download');
+    }
+  } catch (e) { console.error('Update: ' + e.message); code = 1; }
+  await pause(argv);
+  return code;
 }
 
 async function cmdService(action, port) {
@@ -190,13 +249,16 @@ async function main(argv) {
   if (major < MIN_NODE) { console.error(`Node.js ${MIN_NODE}+ is required (you have ${process.versions.node}). Download it from https://nodejs.org/`); return 1; }
   if (o.help) { const head = []; for (const l of fs.readFileSync(__filename, 'utf8').split('\n').slice(2)) { if (!l.startsWith('//')) break; head.push(l.slice(3)); } console.log(head.join('\n')); return 0; }
   if (o.cmd === 'start') return cmdStart(o);
-  if (o.cmd === 'drivers') return (await cmdDrivers(), 0);
+  if (o.cmd === 'drivers') return (await cmdDrivers(), await pause(argv), 0);
+  if (o.cmd === 'license') return cmdLicense(o, argv);
+  if (o.cmd === 'plugins') return cmdPlugins(argv);
+  if (o.cmd === 'update') return cmdUpdate(o, argv);
   if (o.cmd === 'download') return cmdDownload(o.arg);
-  if (o.cmd === 'doctor') return cmdDoctor(o.port);
+  if (o.cmd === 'doctor') { const c = await cmdDoctor(o.port); await pause(argv); return c; }
   if (o.cmd === 'service') return cmdService(o.arg, o.port);
   if (o.cmd === 'setup') return cmdSetup(argv);
   if (o.cmd === 'verify') return cmdVerify(o, argv);
-  console.error(`Unknown command "${o.cmd}". Use: start | drivers | download <id> | doctor | verify | setup | service install|uninstall|status`);
+  console.error(`Unknown command "${o.cmd}". Use: start | drivers | download <id> | doctor | verify | setup | service install|uninstall|status | license | plugins | update`);
   return 2;
 }
 

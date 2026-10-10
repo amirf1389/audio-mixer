@@ -9,6 +9,9 @@
  *   Audio Mixer-1.4.0.exe /uninstall   remove Audio Mixer (same as Settings > Apps > Audio Mixer > Uninstall)
  *   Audio Mixer-1.4.0.exe /scan        after installing, run the verification scan (file hashes, signature, Microsoft Defender)
  *   Audio Mixer-1.4.0.exe /novcredist  do not install the Microsoft Visual C++ runtime that the native audio module needs (see below)
+ *   Audio Mixer-1.4.0.exe /noplugins  do not install the VST plugin host;  /nohelpers  skip the native Windows device helpers
+ *   Audio Mixer-1.4.0.exe /notools     no Start Menu tool shortcuts (license, plugins, drivers, update, diagnostics)
+ *   Audio Mixer-1.4.0.exe /noshortcuts no Start Menu shortcuts at all;  /desktop  add the desktop shortcut;  /noautostart  do not start at login
  *   Anything else (for example INSTALLDIR="D:\Audio Mixer") is passed on to msiexec.
  * Build: x86_64-w64-mingw32-gcc / i686-w64-mingw32-gcc, see scripts/build-exe.js.
  */
@@ -117,15 +120,22 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int show) {
   (void)inst; (void)prev; (void)cmd; (void)show;
   int argc = 0; wchar_t **argv = CommandLineToArgvW(GetCommandLineW(), &argc);
   int quiet = 0, passive = 0, scan = 0, uninstall = 0, novc = 0;
+  int noplug = 0, nohelp = 0, notools = 0, noshort = 0, desktop = 0, noauto = 0;
   wchar_t extra[2048] = L"";
   for (int i = 1; argv && i < argc; i++) {
     if (!_wcsicmp(argv[i], L"/quiet") || !_wcsicmp(argv[i], L"/S") || !_wcsicmp(argv[i], L"/qn") || !_wcsicmp(argv[i], L"-quiet")) quiet = 1;
     else if (!_wcsicmp(argv[i], L"/passive")) passive = 1;
     else if (!_wcsicmp(argv[i], L"/scan")) scan = 1;
     else if (!_wcsicmp(argv[i], L"/novcredist")) novc = 1;
+    else if (!_wcsicmp(argv[i], L"/noplugins")) noplug = 1;
+    else if (!_wcsicmp(argv[i], L"/nohelpers")) nohelp = 1;
+    else if (!_wcsicmp(argv[i], L"/notools")) notools = 1;
+    else if (!_wcsicmp(argv[i], L"/noshortcuts")) noshort = 1;
+    else if (!_wcsicmp(argv[i], L"/desktop")) desktop = 1;
+    else if (!_wcsicmp(argv[i], L"/noautostart")) noauto = 1;
     else if (!_wcsicmp(argv[i], L"/uninstall") || !_wcsicmp(argv[i], L"/remove")) uninstall = 1;
     else if (!wcscmp(argv[i], L"/?") || !_wcsicmp(argv[i], L"/help")) {
-      message(L"Audio Mixer setup\n\n/quiet  silent install\n/passive  progress only\n/uninstall  remove Audio Mixer\n/scan  run the verification scan after installing\n/novcredist  skip the Visual C++ runtime check\nPROPERTY=value  passed to Windows Installer (for example INSTALLDIR=\"D:\\Audio Mixer\")", MB_ICONINFORMATION);
+      message(L"Audio Mixer setup\n\n/quiet  silent install\n/passive  progress only\n/uninstall  remove Audio Mixer\n/scan  run the verification scan after installing\n/novcredist  skip the Visual C++ runtime check\n/noplugins  no VST plugin host\n/nohelpers  no native device helpers\n/notools  no tool shortcuts\n/noshortcuts  no Start Menu shortcuts\n/desktop  add a desktop shortcut\n/noautostart  do not start at login\nPROPERTY=value  passed to Windows Installer (for example INSTALLDIR=\"D:\\Audio Mixer\")", MB_ICONINFORMATION);
       return 0;
     } else {
       /* quote property values that contain spaces: NAME=value with spaces -> NAME="value" */
@@ -135,6 +145,18 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int show) {
       item[599] = 0;
       if (wcslen(extra) + wcslen(item) < 2000) wcscat(extra, item);
     }
+  }
+
+  /* feature switches -> ADDLOCAL (only when one was used; the default install keeps the MSI defaults) */
+  if (noplug || nohelp || notools || noshort || desktop || noauto) {
+    wchar_t add[300] = L" ADDLOCAL=Main";
+    if (!noshort) wcscat(add, L",Shortcuts");
+    if (!noshort && !notools) wcscat(add, L",Tools");
+    if (!noplug) wcscat(add, L",PluginHost");
+    if (!nohelp) wcscat(add, L",WinHelpers");
+    if (!noauto) wcscat(add, L",Autostart");
+    if (desktop) wcscat(add, L",Desktop");
+    if (!wcsstr(extra, L"ADDLOCAL=") && wcslen(extra) + wcslen(add) < 2000) wcscat(extra, add);
   }
 
   /* open ourselves and find the payload */
