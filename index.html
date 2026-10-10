@@ -182,6 +182,20 @@ CRITICAL REVISIONS & ARCHITECTURAL UPGRADES:
         #custom-eq-slots-grid { max-height: 9.5rem; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: rgba(255,106,0,0.35) rgba(0,0,0,0.4); padding-right: 2px; }
         #custom-eq-slots-grid::-webkit-scrollbar { width: 5px; }
         #custom-eq-slots-grid::-webkit-scrollbar-thumb { background: rgba(255,106,0,0.35); border-radius: 3px; }
+        /* faders in fixed-height cards (EQ bands, DCA / VCA masters): the slider fills its own track instead of sizing itself,
+           otherwise the native vertical slider grows to the height of the page and spills out of the card */
+        #eq-faders-view > div, #tab-dca .grid > div { min-height: 0; }
+        #eq-faders-view .fader-track, #tab-dca .fader-track { min-height: 0; overflow: hidden; }
+        #eq-faders-view .daw-fader, #tab-dca .daw-fader { position: absolute; left: 50%; top: 4px; height: calc(100% - 8px); transform: translateX(-50%); }
+        /* phones: the 10 EQ faders sit in two rows and each gets a usable height; the RTA badge no longer overlaps the curve title; the mixer toolbar wraps instead of scrolling sideways */
+        @media (max-width: 639px) {
+            #eq-faders-view { height: auto !important; grid-auto-rows: 150px; }
+            #eq-diamond-view > .absolute.right-2 { display: none; }
+        }
+        @media (max-width: 767px) {
+            #tab-mixer > div > .glass-panel:first-child { flex-wrap: wrap; row-gap: 4px; }
+            #tab-mixer > div > .glass-panel:first-child > div { flex-wrap: wrap; }
+        }
         /* master limiter */
         .lim-gr-fill { transition: width .06s linear; }
 
@@ -3099,6 +3113,7 @@ window.navTabs = [
     <div id="asio-meter-strip" class="glass-panel px-2.5 py-1 rounded-lg shrink-0 flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[7px]">
       <div class="flex items-center gap-1.5 min-w-0 w-full">
         <span class="text-[8px] font-black text-emerald-400 uppercase tracking-widest font-wing whitespace-nowrap"><i class="fa-solid fa-wave-square mr-1"></i>ASIO DRIVER</span>
+        <button id="asio-meter-toggle" type="button" aria-expanded="true" title="Collapse / expand the ASIO driver meters" class="order-last ml-auto px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10"><i class="fa-solid fa-chevron-up"></i></button>
         <span id="asio-universal" class="block truncate min-w-0 flex-1 text-slate-400" title="Universal ASIO driver: every input / output source detected on this PC, best driver picked automatically">UNIVERSAL: start PC mode to detect sources</span>
       </div>
       <div id="asio-meter-rows" class="flex flex-wrap items-center gap-x-4 gap-y-0.5 w-full min-w-0"><span data-idle="1" class="text-slate-500">NO NATIVE STREAM OPEN (connect an interface in LIVE SOURCES or the ASIO page)</span></div>
@@ -16161,7 +16176,22 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             } catch (e) { /* server not reachable: the live strip shows that */ } finally { polling = false; }
         }
 
+        // the strip can be folded to one line to give the channels the room (remembered; folded by default on short screens)
+        function setupToggle() {
+            const btn = $('asio-meter-toggle'), rowsEl = $('asio-meter-rows');
+            if (!btn || !rowsEl) return;
+            let saved = null; try { saved = localStorage.getItem('halx_asio_strip'); } catch (e) { /* storage blocked */ }
+            const apply = open => {
+                rowsEl.style.display = open ? '' : 'none';
+                btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+                btn.firstElementChild.className = 'fa-solid fa-chevron-' + (open ? 'up' : 'down');
+                try { localStorage.setItem('halx_asio_strip', open ? 'open' : 'folded'); } catch (e) { /* ignore */ }
+            };
+            apply(saved ? saved === 'open' : window.innerHeight >= 700);
+            btn.addEventListener('click', () => apply(rowsEl.style.display === 'none'));
+        }
         function start() {
+            setupToggle();
             requestAnimationFrame(frame);
             setInterval(() => { if (!document.hidden) refreshUniversal(); }, 5000);
             setTimeout(refreshUniversal, 1500);

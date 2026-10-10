@@ -54,11 +54,11 @@ and the Audify prebuilt binaries, pinned by SHA-256).
 
 | File | Installs to | Notes |
 |---|---|---|
-| `Audio Mixer-1.5.0.exe` | `C:\Program Files\Audio Mixer` | signed setup for 64-bit Windows; checks the embedded package's SHA-256, then runs Windows Installer. `/quiet` silent, `/passive`, `/scan` (run the verification scan after installing), `/uninstall`, `INSTALLDIR="D:\Audio Mixer"` |
-| `AudioMixer-1.5.0-x64.msi` | `C:\Program Files\Audio Mixer` | 64-bit Windows Installer package, all users (administrator), `msiexec /i ... /qn` |
-| `AudioMixer-1.5.0-x86.msi` | `C:\Program Files (x86)\Audio Mixer` | 32-bit package with 32-bit Node.js (v22 LTS, the last line with a 32-bit build) and 32-bit Audify, for 32-bit Windows or 32-bit audio hosts |
-| `audio-mixer_1.5.0_all.deb` | `/opt/audio-mixer`, `/usr/bin/audio-mixer`, `/usr/share/applications`, `/usr/lib/systemd/user` | Debian / Ubuntu / Mint; installs Node.js 18+ on first start when it is missing; remove with `apt remove audio-mixer`; start at login: `systemctl --user enable --now audio-mixer` |
-| `AudioMixer-1.5.0-macos.tar.gz` | `/Applications/Audio Mixer.app` (or `~/Applications`), login item `~/Library/LaunchAgents` | double-click `install.command` / `uninstall.command`; installs Node.js 18+ when it is missing; not notarized |
+| `Audio Mixer-1.5.1.exe` | `C:\Program Files\Audio Mixer` | signed setup for 64-bit Windows; checks the embedded package's SHA-256, then runs Windows Installer. `/quiet` silent, `/passive`, `/scan` (run the verification scan after installing), `/uninstall`, `INSTALLDIR="D:\Audio Mixer"` |
+| `AudioMixer-1.5.1-x64.msi` | `C:\Program Files\Audio Mixer` | 64-bit Windows Installer package, all users (administrator), `msiexec /i ... /qn` |
+| `AudioMixer-1.5.1-x86.msi` | `C:\Program Files (x86)\Audio Mixer` | 32-bit package with 32-bit Node.js (v22 LTS, the last line with a 32-bit build) and 32-bit Audify, for 32-bit Windows or 32-bit audio hosts |
+| `audio-mixer_1.5.1_all.deb` | `/opt/audio-mixer`, `/usr/bin/audio-mixer`, `/usr/share/applications`, `/usr/lib/systemd/user` | Debian / Ubuntu / Mint; installs Node.js 18+ on first start when it is missing; remove with `apt remove audio-mixer`; start at login: `systemctl --user enable --now audio-mixer` |
+| `AudioMixer-1.5.1-macos.tar.gz` | `/Applications/Audio Mixer.app` (or `~/Applications`), login item `~/Library/LaunchAgents` | double-click `install.command` / `uninstall.command`; installs Node.js 18+ when it is missing; not notarized |
 
 Every Windows installer carries the mixer page, the Node.js server and client, the bundled Node.js runtime, Audify (ASIO / WASAPI / DirectSound), the verify scan, Start Menu entries
 (*Audio Mixer (PC mode)*, *local server only*, *Verify installation*, *Plugins folder*, *Uninstall Audio Mixer*) and an entry in *Settings > Apps* (Add or remove programs) with a working Uninstall.
@@ -73,6 +73,8 @@ The installer technology is Windows Installer (MSI) built with wixl, not the com
 pin the publisher, but Windows still shows "unknown publisher" / SmartScreen until you trust the certificate (right-click the `.cer` > Install, "Trusted Root" and "Trusted Publishers") or
 sign with a commercial certificate (`SIGN_PFX=cert.pfx SIGN_PFX_PASSWORD=... npm run build:installers`; `SIGN_TIMESTAMP_URL=http://timestamp.digicert.com` adds a timestamp). Thumbprint of the
 published certificate: see `releases/AudioMixer-signing.cer`. The Linux and macOS packages are not signed.
+
+**Layout fixes (1.5.1).** The EQ band faders and the DCA / VCA master faders no longer grow to the height of the page and spill out of their cards (the slider now fills its own track). On phones the 10 EQ faders get a usable height and the RTA badge no longer overlaps the curve title, the mixer toolbar wraps instead of scrolling sideways, and the ASIO DRIVER strip can be folded to one line with its chevron button (remembered; folded by default on screens shorter than 700 px).
 
 **Automatic installation of Node.js and the audio runtime.** The Windows `.exe` / `.msi` already contain Node.js. Everywhere else a missing prerequisite is installed for you, after asking
 (`AUDIO_MIXER_YES=1` skips the questions):
@@ -98,9 +100,9 @@ as a false positive to the vendor (Microsoft: https://www.microsoft.com/wdsi/fil
 ### Windows verification scan
 `node client/cli.js verify [--scan]` (Start Menu: *Verify installation (security scan)*) checks an install: every file against `MANIFEST.sha256` (changed, missing and unlisted code files, including
 native files under `bridge/node_modules`, are reported), the Authenticode signature of the bundled Node.js runtime (must be the OpenJS Foundation), that the server listens on loopback only, and with
-`--scan` runs a Microsoft Defender custom scan. `node client/cli.js verify "Audio Mixer-1.5.0.exe" [--scan]` (also `.msi`) checks a downloaded installer: PE structure, the embedded package and its SHA-256,
+`--scan` runs a Microsoft Defender custom scan. `node client/cli.js verify "Audio Mixer-1.5.1.exe" [--scan]` (also `.msi`) checks a downloaded installer: PE structure, the embedded package and its SHA-256,
 the `.sha256` file next to it, the signature (a self-signed signature passes only when it matches `AudioMixer-signing.cer` next to the file, or `AUDIO_MIXER_SIGNING_CER`) and Defender. Exit code 0 = verified.
-Manual check in PowerShell: `Get-FileHash ".\Audio Mixer-1.5.0.exe" -Algorithm SHA256` and `Get-AuthenticodeSignature ".\Audio Mixer-1.5.0.exe"`.
+Manual check in PowerShell: `Get-FileHash ".\Audio Mixer-1.5.1.exe" -Algorithm SHA256` and `Get-AuthenticodeSignature ".\Audio Mixer-1.5.1.exe"`.
 Tested on Linux (hashes, packaging, signature verification with osslsigncode); the Windows-only parts (running the setup, Authenticode and Defender checks, uninstall) are untested on a real PC.
 
 ### Live interface (1.4.0 and 1.5.0)
