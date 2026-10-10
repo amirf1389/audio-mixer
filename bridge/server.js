@@ -10,6 +10,7 @@
 //   GET /api/plugins -> VST3 / VST2 plugins (.vst3 / .dll / .vst) found and validated
 //   GET /api/audify, /api/framesize -> Audify (RtAudio) engine devices and automatic frame size
 //   WS  /ws/output    -> page streams Int16 PCM out through PortAudio (ASIO / WASAPI)
+//   GET /api/bluetooth, POST /api/bluetooth (X-Mixer-Action: bluetooth) -> paired / connected devices, airwaves scan, connect / pair / disconnect
 //   GET /api/inserts, POST /api/inserts (X-Mixer-Action: inserts) -> plugin insert slots of the PHASE and FX pages
 //   WS  /ws/insert    -> audio through a plugin of an insert slot (native plugin host, VST2 .dll / .vst)
 //   WS  /ws/duplex    -> read AND write one interface through a single native stream
@@ -34,6 +35,8 @@ const { groupInterfaces } = require('./interfaces');
 const audifyEngine = require('./audify');
 const pluginScan = require('./plugins');
 const universalDriver = require('./universal');
+const bluetooth = require('./bluetooth');
+let btCache = null;
 const license = require('./license');
 const updater = require('./update');
 const streamRegistry = require('./streams');
@@ -102,6 +105,13 @@ async function handle(req, res) {
     if (!license.hasFeature(license.status(), 'ota')) return [402, { ok: false, needs: 'ota', error: 'Downloading updates needs the PRO or STUDIO plan. You can still check for updates.' }];
     return [200, await updater.download({ current: VERSION })];
   }, false);
+  if (req.method === 'POST' && url.pathname === '/api/bluetooth') return handleAction(req, res, cors, 'bluetooth', async body => {
+    try {
+      if (body.action === 'scan') { btCache = null; return [200, await bluetooth.scan({ seconds: body.seconds })]; }
+      if (body.action === 'settings') return [200, bluetooth.openSettings()];
+      btCache = null; return [200, await bluetooth.act(String(body.action || ''), body.address)];
+    } catch (e) { return [e.status || 500, { ok: false, error: e.message }]; }
+  });
   if (req.method === 'POST' && url.pathname === '/api/inserts') return handleAction(req, res, cors, 'inserts', async body => {
     if (!license.hasFeature(license.status(), 'plugins')) return [402, { ok: false, error: 'Plugin inserts need the PRO or STUDIO plan', needs: 'plugins' }];
     return [200, { ok: true, ...inserts.set(body) }];
@@ -109,6 +119,10 @@ async function handle(req, res) {
   if (req.method !== 'GET') return json(res, 405, { ok: false, error: 'method not allowed' }, cors);
   if (url.pathname === '/api/status') return json(res, 200, { ok: true, name: 'audio-mixer-bridge', version: VERSION, node: process.version, pid: process.pid, uptimeSec: Math.round(process.uptime()), streams: streamRegistry.list(), time: Date.now() }, cors);
   // Consumer licensing: the plan this copy runs as, this computer's machine code, and the stored key's state
+  if (url.pathname === '/api/bluetooth') {   // paired / connected devices of this computer (shared for 2 s: the page polls)
+    if (!btCache || Date.now() - btCache.at > 2000 || url.searchParams.get('force') === '1') btCache = { at: Date.now(), promise: bluetooth.list() };
+    return json(res, 200, await btCache.promise, cors);
+  }
   if (url.pathname === '/api/inserts') return json(res, 200, { ok: true, host: { available: !!pluginHost.hostPath(), formats: ['VST2'] }, ...inserts.read() }, cors);
   if (url.pathname === '/api/license') return json(res, 200, { ok: true, version: VERSION, ...license.status() }, cors);
 

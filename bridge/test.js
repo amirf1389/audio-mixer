@@ -882,7 +882,7 @@ test('cli: license / plugins / update commands exist and the stub has the featur
 
 test('page: interfaces opened by LIVE SOURCES reach the mixer channels, and LIVE INPUT PATCH lists them', () => {
   const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
-  assert.match(html, /if \(this\.cfg\.auto && cap\.bridge\) this\.autoPatchOne\(cap\)/);        // a freshly read server interface is patched, browser microphones stay manual (feedback)
+  assert.match(html, /if \(this\.cfg\.auto && !\(this\.cfg\.noAutoPatch && this\.cfg\.noAutoPatch\[cap\.key\]\)\) this\.autoPatchOne\(cap\)/);        // a freshly read interface (and the browser microphone, guarded against feedback by the real-time engine) is patched unless the user unpatched it
   assert.match(html, /autoPatchOne\(cap\) \{/); assert.match(html, /value="ls:\$\{esc\(i\.key\)\}"/);  // routing page offers the server interfaces
   assert.match(html, /\/\^ls:\/\.test\(String\(deviceId\)\)/); assert.match(html, /l\.shared/);        // shared capture nodes are branched, never closed by REMOVE
 });
@@ -1947,4 +1947,79 @@ test('Android background engine + power-on animation: manifest, service (Java an
   assert.ok(html.includes("if (window.dismissPowerOn) window.dismissPowerOn(true);"));                                   // fastBoot ends the sequence at once
   for (const k of ['po-glow', 'po-line', 'po-led', 'po-fade-up', 'po-seg', 'po-letter', 'po-draw', 'po-bar']) assert.ok(html.includes('@keyframes ' + k) || html.includes(k), k);
   assert.ok(html.indexOf('<script id="poweron-boot">') < html.indexOf('id="setup-wizard"'));                             // plays before the console markup
+});
+
+test('Bluetooth: paired devices and discovery are read from BlueZ / Windows PnP / macOS, only valid addresses are acted on, the routes exist', async () => {
+  const fs = require('node:fs'), path = require('node:path');
+  const bt = require('./bluetooth');
+  const devs = 'Device AA:BB:CC:DD:EE:01 WH-1000XM4\nDevice 11:22:33:44:55:66 Keyboard K380\nnoise\n';
+  const info = { 'AA:BB:CC:DD:EE:01': 'Paired: yes\nConnected: yes\nTrusted: yes\nIcon: audio-headset\nRSSI: -52\nBattery Percentage: 0x5a (90)\nUUID: Audio Sink', '11:22:33:44:55:66': 'Paired: no\nConnected: no\nIcon: input-keyboard\nRSSI: 0xffffffc4 (-60)' };
+  const calls = [];
+  const linux = async (cmd, args) => { calls.push(args.join(' ')); return args[0] === 'show' ? 'Controller 00:11:22:33:44:55 (public)\n\tPowered: yes\n\tDiscovering: no' : args[0] === 'devices' ? devs : args[0] === 'info' ? (info[args[1]] || '') : ''; };
+  const l = await bt.list({ platform: 'linux', run: linux });
+  assert.ok(l.ok && l.adapter.present && l.adapter.powered && l.scanSupported && l.pairSupported);
+  assert.strictEqual(l.devices.length, 2);
+  assert.strictEqual(l.devices[0].name, 'WH-1000XM4');                                   // connected audio device first
+  assert.ok(l.devices[0].paired && l.devices[0].connected && l.devices[0].audio && l.devices[0].battery === 90 && l.devices[0].rssi === -52);
+  assert.ok(!l.devices[1].paired && l.devices[1].rssi === -60);
+  const sc = await bt.scan({ seconds: 99, platform: 'linux', run: linux });
+  assert.ok(sc.supported && sc.scannedSeconds === 15 && sc.nearby === 1 && calls.some(c => c === '--timeout 15 scan on'));
+  assert.strictEqual((await bt.scan({ platform: 'win32' })).supported, false);
+  const act = await bt.act('connect', 'aa:bb:cc:dd:ee:01', { platform: 'linux', run: linux });
+  assert.ok(act.ok && act.connected && act.address === 'AA:BB:CC:DD:EE:01');
+  await assert.rejects(bt.act('connect', 'not-an-address; rm -rf /', { platform: 'linux', run: linux }), /address/);
+  await assert.rejects(bt.act('format', 'AA:BB:CC:DD:EE:01', { platform: 'linux', run: linux }), /unknown action/);
+  await assert.rejects(bt.act('pair', 'AA:BB:CC:DD:EE:01', { platform: 'win32', run: linux }), /settings/);
+  const down = await bt.list({ platform: 'linux', run: async () => '' });
+  assert.ok(down.ok && !down.adapter.present && down.devices.length === 0);
+  const pnp = JSON.stringify([{ FriendlyName: 'Bose QC35', Status: 'OK', InstanceId: 'BTHENUM\\DEV_0016942AC001\\7&1' }, { FriendlyName: 'Intel(R) Wireless Bluetooth(R)', Status: 'OK', InstanceId: 'USB\\VID_8087&PID_0A2B\\5' }, { FriendlyName: 'Old Mouse', Status: 'Unknown', InstanceId: 'BTHLE\\DEV_AABBCCDDEEFF\\2' }]);
+  const w = await bt.list({ platform: 'win32', run: async () => pnp });
+  assert.ok(w.adapter.present && w.adapter.powered && w.settingsSupported && !w.pairSupported);
+  assert.deepStrictEqual(w.devices.map(d => [d.name, d.address, d.connected]), [['Bose QC35', '00:16:94:2A:C0:01', true], ['Old Mouse', 'AA:BB:CC:DD:EE:FF', false]]);
+  const mac = JSON.stringify({ SPBluetoothDataType: [{ controller_properties: { controller_state: 'attrib_on' }, device_connected: [{ 'AirPods Pro': { device_address: 'A0-B1-C2-D3-E4-F5', device_minorType: 'Headphones', device_batteryLevelMain: '80%' } }], device_not_connected: [{ 'MX Keys': { device_address: '00-11-22-33-44-55', device_minorType: 'Keyboard' } }] }] });
+  const m = await bt.list({ platform: 'darwin', run: async () => mac });
+  assert.deepStrictEqual(m.devices.map(d => [d.name, d.address, d.connected, d.audio, d.battery]), [['AirPods Pro', 'A0:B1:C2:D3:E4:F5', true, true, 80], ['MX Keys', '00:11:22:33:44:55', false, false, null]]);
+  assert.strictEqual(bt.openSettings({ platform: 'linux' }).ok, false);
+  let started = null; assert.ok(bt.openSettings({ platform: 'win32', spawn: (c, a) => { started = [c, a]; } }).ok && started[1].includes('ms-settings:bluetooth'));
+  // routes and packaging
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const j = await (await fetch(base + '/api/bluetooth?force=1')).json();
+  assert.ok(j.ok && Array.isArray(j.devices) && j.adapter);
+  assert.strictEqual((await fetch(base + '/api/bluetooth', { method: 'POST', body: '{}' })).status, 400);   // POST needs the action header
+  const bad = await fetch(base + '/api/bluetooth', { method: 'POST', headers: { 'X-Mixer-Action': 'bluetooth', 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'connect', address: 'zz' }) });
+  assert.strictEqual(bad.status, 400);
+  server.closeAllConnections(); server.close();
+  assert.ok(fs.readFileSync(path.join(__dirname, '..', 'scripts', 'build.js'), 'utf8').includes("'bridge/bluetooth.js'"));
+});
+
+test('real-time pages: LUFS is a real BS.1770 meter, dynamics / gate / mic EQ / drivers / Bluetooth read live data, no page keeps invented numbers', () => {
+  const vm = require('node:vm'), fs = require('node:fs'), path = require('node:path');
+  const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const script = id => { const m = new RegExp('<script id="' + id + '">([\\s\\S]*?)</script>').exec(html); assert.ok(m, id); return m[1]; };
+  // the LUFS engine runs here against known signals (EBU Tech 3341 style): -23 dBFS 997 Hz in both channels reads -23 LUFS
+  const win = { isSecureContext: false }; const ctx = { window: win, document: { getElementById: () => null, addEventListener() {} }, setInterval: () => 0, clearInterval() {}, Math, Float32Array, URL, Blob: class {} };
+  vm.runInNewContext(script('rt-lufs'), ctx);
+  const L = win.lufsMeter, tone = (fs, db, secs, fn) => { L.setRate(fs); L.reset(); L.sub = []; L.subAcc = 0; L.subN = 0; for (let n = 0; n < fs * secs; n += 2048) { const l = new Float32Array(2048); for (let i = 0; i < 2048; i++) l[i] = fn ? fn(n + i, fs) : Math.pow(10, db / 20) * Math.sin(2 * Math.PI * 997 * (n + i) / fs); L.feed(l, l); } };
+  tone(48000, -23, 6); assert.ok(Math.abs(L.integrated + 23) < 0.1 && Math.abs(L.momentary + 23) < 0.1 && Math.abs(L.shortTerm + 23) < 0.1 && Math.abs(L.truePeak + 23) < 0.2, JSON.stringify([L.integrated, L.momentary, L.shortTerm, L.truePeak]));
+  tone(44100, -14, 6); assert.ok(Math.abs(L.integrated + 14) < 0.1, 'any sample rate');
+  tone(48000, 0, 4, (i, fs) => Math.sin(2 * Math.PI * (fs / 4) * i / fs + Math.PI / 4));            // samples at 0.707, real peak 1.0
+  assert.ok(L.truePeak > -0.1 && L.truePeak < 0.3, 'true peak sees the peak between the samples: ' + L.truePeak);
+  tone(48000, 0, 5, () => 0); assert.ok(!isFinite(L.integrated) && !isFinite(L.momentary), 'silence is -INF, not a number from a table');
+  tone(48000, 0, 20, (i, fs) => (i < fs * 10 ? 0.0316 : 0.1) * Math.sin(2 * Math.PI * 997 * i / fs));   // -30 then -20 dBFS
+  assert.ok(Math.abs(L.lra - 10) < 0.5 && L.integrated < -20 && L.integrated > -30, 'loudness range of a two-level programme: ' + L.lra);
+  // the page values are written from the meter, the fixed numbers are gone
+  assert.ok(!/id="lufs-live-val">-14\.2|id="lufs-short-term">-13\.8|id="lufs-momentary">-13\.5|id="lufs-true-peak">-0\.8|5\.4 LU|w-\[15%\]/.test(html));
+  for (const id of ['lufs-lra-val', 'lufs-gr-bar', 'lufs-gr-val', 'lufs-engine-note', 'lufs-card-int']) assert.ok(html.includes('id="' + id + '"'), id);
+  assert.ok(/masterLimiter\.reduction/.test(script('rt-lufs')) && /createScriptProcessor/.test(script('rt-lufs')) && /AudioWorkletNode/.test(script('rt-lufs')));
+  // dynamics: sliders reach the audio path, gain reduction is the real one; gate: live detector
+  const dyn = script('rt-dyn');
+  assert.ok(/masterCompressor/.test(dyn) && /\.reduction/.test(dyn) && /setTargetAtTime/.test(dyn) && /comp-gr-meter/.test(dyn) && /gate-state-badge/.test(dyn) && /gate-attenuation-meter/.test(dyn));
+  // rt engine: pages and navigation
+  const rt = script('rt-engine');
+  assert.ok(html.includes("id: 'miceq', text: 'MIC EQ'") && html.includes("'miceq': 'MIC EQ"));
+  for (const id of ['tab-miceq', 'meq-bands', 'meq-spec', 'rt-drivers-live', 'rt-bt-live', 'src-meter-strip']) assert.ok(html.includes('id="' + id + '"') || rt.includes(id), id);
+  assert.ok(/window\.rtEngine\s*=/.test(rt) && /window\.micEq\s*=/.test(rt) && /\/api\/bluetooth/.test(rt) && /navigator\.bluetooth/.test(rt));
+  assert.ok(/window\.rtEngine \? window\.rtEngine\.chLevel\(i\) : 0/.test(html));                      // channel VU reads the engine
+  assert.ok(!/Default system audio output<\/option>\s*<optgroup/.test(html) && !/Behringer UMC|Focusrite Scarlett 2i2 \(Driver/.test(html.split('<script id="rt-engine">')[0].slice(html.indexOf('asio-dac-select'), html.indexOf('asio-dac-select') + 800)));
 });
