@@ -863,6 +863,7 @@ test('cli: license / plugins / update commands exist and the stub has the featur
   const stub = fsx.readFileSync(pathx.join(__dirname, '..', 'installer', 'setup-stub.c'), 'utf8');
   for (const sw of ['/noplugins', '/nohelpers', '/notools', '/noshortcuts', '/desktop', '/noautostart']) assert.ok(stub.includes(`L"${sw}"`), sw);
   assert.match(stub, /ADDLOCAL=Main/);
+  assert.match(stub, /stop_old_server\(old\)/); assert.match(stub, /_wcsnicmp\(path, dir, n\)/);   // upgrade ends only processes that run from the install folder
 });
 
 test('page: interfaces opened by LIVE SOURCES reach the mixer channels, and LIVE INPUT PATCH lists them', () => {
