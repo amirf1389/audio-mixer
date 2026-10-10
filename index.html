@@ -495,6 +495,94 @@ CRITICAL REVISIONS & ARCHITECTURAL UPGRADES:
 </style>
 </head>
 <body>
+<script id="poweron-boot">
+/* Power-on sequence of the console (logo, LED, screen-on line, motorised fader test, meter sweep, OS boot lines). Plays once per browser session / app start;
+   click, tap or Esc skips it; fastBoot() and prefers-reduced-motion shorten or skip it. */
+(function () {
+    'use strict';
+    try { if (sessionStorage.getItem('halx_poweron') === '1') return; } catch (e) { /* storage blocked: play it */ }
+    var reduce = false; try { reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { /* old browser */ }
+    var S = reduce ? 0.3 : 1;                                      // time scale of the whole sequence
+    var css = document.createElement('style');
+    css.id = 'poweron-css';
+    css.textContent =
+        '#poweron{position:fixed;inset:0;z-index:2147483000;background:#000;color:#e2e8f0;overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:"JetBrains Mono",ui-monospace,monospace;opacity:1;transition:opacity ' + (0.55 * S) + 's ease;cursor:pointer;-webkit-tap-highlight-color:transparent}' +
+        '#poweron.po-out{opacity:0;pointer-events:none}' +
+        '#poweron .po-glow{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 46%,rgba(251,191,36,.20),rgba(251,191,36,.05) 38%,transparent 66%);opacity:0;animation:po-glow ' + (1.6 * S) + 's ease ' + (0.55 * S) + 's forwards}' +
+        '#poweron .po-scan{position:absolute;inset:0;background:repeating-linear-gradient(to bottom,rgba(255,255,255,.035) 0,rgba(255,255,255,.035) 1px,transparent 1px,transparent 3px);opacity:0;animation:po-fade ' + (0.5 * S) + 's ease ' + (0.6 * S) + 's forwards;pointer-events:none}' +
+        '#poweron .po-line{position:absolute;left:50%;top:46%;height:2px;width:100%;background:linear-gradient(90deg,transparent,#fde68a,#fff,#fde68a,transparent);transform:translate(-50%,-50%) scaleX(0);opacity:0;animation:po-line ' + (0.7 * S) + 's cubic-bezier(.2,.8,.2,1) ' + (0.25 * S) + 's forwards}' +
+        '#poweron .po-led{position:absolute;bottom:8px;left:50%;width:9px;height:9px;margin-left:-4.5px;border-radius:50%;background:#450a0a;box-shadow:0 0 0 1px rgba(255,255,255,.08);animation:po-led ' + (2.6 * S) + 's steps(1,end) forwards}' +
+        '#poweron .po-logo{position:relative;width:min(34vw,150px);height:min(34vw,150px);opacity:0;animation:po-fade ' + (0.4 * S) + 's ease ' + (0.9 * S) + 's forwards}' +
+        '#poweron .po-logo path,#poweron .po-logo rect.po-trk{stroke:#fbbf24;stroke-width:2.2;fill:none;stroke-linecap:round;stroke-dasharray:240;stroke-dashoffset:240;animation:po-draw ' + (0.9 * S) + 's ease ' + (0.95 * S) + 's forwards}' +
+        '#poweron .po-cap{fill:#fbbf24;filter:drop-shadow(0 0 6px rgba(251,191,36,.9));animation:po-cap ' + (1.1 * S) + 's cubic-bezier(.3,1.4,.5,1) ' + (1.5 * S) + 's forwards}' +
+        '#poweron .po-title{margin-top:14px;font-family:Orbitron,Inter,sans-serif;font-weight:900;font-size:clamp(18px,5.2vw,34px);letter-spacing:.34em;padding-left:.34em;color:#fff;text-shadow:0 0 18px rgba(251,191,36,.55);white-space:nowrap}' +
+        '#poweron .po-title span{opacity:0;display:inline-block;transform:translateY(8px);filter:blur(5px);animation:po-letter ' + (0.5 * S) + 's ease forwards}' +
+        '#poweron .po-sub{margin-top:6px;font-size:clamp(7px,1.9vw,10px);letter-spacing:.3em;color:#fbbf24;opacity:0;animation:po-fade ' + (0.5 * S) + 's ease ' + (2.0 * S) + 's forwards}' +
+        '#poweron .po-bank{position:relative;display:flex;gap:clamp(3px,.9vw,8px);margin-top:20px;height:64px;align-items:flex-end;opacity:0;animation:po-fade ' + (0.3 * S) + 's ease ' + (1.9 * S) + 's forwards}' +
+        '#poweron .po-f{position:relative;width:clamp(5px,1.3vw,10px);height:100%;background:rgba(255,255,255,.07);border-radius:3px}' +
+        '#poweron .po-f i{position:absolute;left:-2px;right:-2px;height:9px;border-radius:2px;background:linear-gradient(#fde68a,#d97706);box-shadow:0 0 6px rgba(251,191,36,.6);bottom:0;animation:po-fade-up ' + (1.25 * S) + 's cubic-bezier(.45,.05,.4,1) calc(' + (1.95 * S) + 's + var(--i) * ' + (0.035 * S) + 's) forwards}' +
+        '#poweron .po-m{position:relative;display:flex;flex-direction:column-reverse;gap:2px;margin-left:clamp(8px,2vw,18px)}' +
+        '#poweron .po-m b{display:block;width:clamp(10px,2.4vw,18px);height:3px;background:rgba(255,255,255,.08);border-radius:1px;animation:po-seg ' + (1.1 * S) + 's ease calc(' + (2.0 * S) + 's + var(--i) * ' + (0.045 * S) + 's) forwards}' +
+        '#poweron .po-term{margin-top:18px;min-height:78px;font-size:clamp(7px,1.9vw,9px);line-height:1.55;color:#94a3b8;width:min(86vw,360px)}' +
+        '#poweron .po-term div{display:flex;justify-content:space-between;opacity:0;animation:po-fade .15s ease forwards}' +
+        '#poweron .po-term em{font-style:normal;color:#34d399;font-weight:800}' +
+        '#poweron .po-bar{margin-top:8px;width:min(86vw,360px);height:2px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden}' +
+        '#poweron .po-bar u{display:block;height:100%;width:0;background:linear-gradient(90deg,#f59e0b,#22d3ee);animation:po-bar ' + (3.1 * S) + 's cubic-bezier(.4,0,.2,1) ' + (0.6 * S) + 's forwards}' +
+        '#poweron .po-skip{position:absolute;right:14px;top:12px;font-size:8px;letter-spacing:.2em;color:#64748b;opacity:0;animation:po-fade .4s ease ' + (1.2 * S) + 's forwards}' +
+        '@keyframes po-fade{to{opacity:1}}@keyframes po-glow{0%{opacity:0}60%{opacity:1}100%{opacity:.85}}' +
+        '@keyframes po-line{0%{transform:translate(-50%,-50%) scaleX(0);opacity:1}60%{transform:translate(-50%,-50%) scaleX(1);opacity:1}100%{transform:translate(-50%,-50%) scaleX(1);opacity:0}}' +
+        '@keyframes po-draw{to{stroke-dashoffset:0}}@keyframes po-cap{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}' +
+        '@keyframes po-letter{to{opacity:1;transform:none;filter:none}}' +
+        '@keyframes po-fade-up{0%{bottom:0}38%{bottom:calc(100% - 9px)}72%{bottom:12%}100%{bottom:52%}}' +
+        '@keyframes po-seg{0%{background:rgba(255,255,255,.08)}35%{background:#22c55e}70%{background:#f59e0b}85%{background:#ef4444}100%{background:rgba(34,197,94,.45)}}' +
+        '@keyframes po-bar{to{width:100%}}' +
+        '@keyframes po-led{0%{background:#450a0a;box-shadow:0 0 0 1px rgba(255,255,255,.08)}8%{background:#ef4444;box-shadow:0 0 10px 2px rgba(239,68,68,.8)}38%{background:#f59e0b;box-shadow:0 0 10px 2px rgba(245,158,11,.8)}78%{background:#22c55e;box-shadow:0 0 12px 3px rgba(34,197,94,.9)}100%{background:#22c55e;box-shadow:0 0 12px 3px rgba(34,197,94,.9)}}';
+    document.head.appendChild(css);
+
+    var el = document.createElement('div');
+    el.id = 'poweron'; el.setAttribute('role', 'presentation');
+    var bank = '', meters = '', i, j;
+    for (i = 0; i < 20; i++) bank += '<div class="po-f"><i style="--i:' + i + '"></i></div>';
+    for (j = 0; j < 4; j++) { meters += '<div class="po-m">'; for (i = 0; i < 12; i++) meters += '<b style="--i:' + (i + j * 2) + '"></b>'; meters += '</div>'; }
+    el.innerHTML =
+        '<div class="po-glow"></div><div class="po-scan"></div><div class="po-line"></div><div class="po-skip">TAP TO SKIP</div>' +
+        '<svg class="po-logo" viewBox="0 0 120 120" aria-hidden="true">' +
+        '<path d="M14 14 H106 V106 H14 Z" style="stroke-dasharray:420;stroke-dashoffset:420"/>' +
+        '<rect class="po-trk" x="34" y="26" width="0.1" height="68"/><rect class="po-trk" x="60" y="26" width="0.1" height="68"/><rect class="po-trk" x="86" y="26" width="0.1" height="68"/>' +
+        '<rect class="po-cap" x="26" y="62" width="16" height="9" rx="2"/><rect class="po-cap" x="52" y="36" width="16" height="9" rx="2" style="animation-delay:' + (1.65 * S) + 's"/><rect class="po-cap" x="78" y="52" width="16" height="9" rx="2" style="animation-delay:' + (1.8 * S) + 's"/></svg>' +
+        '<div class="po-title" aria-hidden="true"></div><div class="po-sub">WING TITAN STAGE &bull; OS</div>' +
+        '<div class="po-bank" aria-hidden="true">' + bank + meters + '</div>' +
+        '<div class="po-term" aria-hidden="true"></div><div class="po-bar"><u></u></div><div class="po-led"></div>';
+    document.body.appendChild(el);
+
+    var title = el.querySelector('.po-title'), word = 'AUDIO MIXER';
+    for (i = 0; i < word.length; i++) { var sp = document.createElement('span'); sp.textContent = word[i] === ' ' ? ' ' : word[i]; sp.style.animationDelay = (1.15 * S + i * 0.055 * S) + 's'; title.appendChild(sp); }
+
+    var lines = [['TITAN OS 1 .............. BOOT', 'OK'], ['DSP CORE  64-BIT ........ INIT', 'OK'], ['AUDIO ENGINE ............. READY', 'OK'], ['I/O  USB • ASIO • BLE ...... SCAN', 'OK'], ['MOTORISED FADERS ......... ALIGN', 'OK'], ['CONSOLE .................. ONLINE', 'READY']];
+    var term = el.querySelector('.po-term'), timers = [], done = false;
+    lines.forEach(function (l, k) {
+        timers.push(setTimeout(function () {
+            if (done) return;
+            var d = document.createElement('div'); d.innerHTML = '<span>' + l[0] + '</span><em>' + l[1] + '</em>'; term.appendChild(d);
+        }, (1.35 + k * 0.42) * 1000 * S));
+    });
+
+    function finish(now) {
+        if (done) return; done = true;
+        timers.forEach(clearTimeout);
+        try { sessionStorage.setItem('halx_poweron', '1'); } catch (e) { /* storage blocked */ }
+        document.removeEventListener('keydown', onKey, true);
+        if (now) { if (el.parentNode) el.parentNode.removeChild(el); if (css.parentNode) css.parentNode.removeChild(css); return; }
+        el.classList.add('po-out');
+        setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); if (css.parentNode) css.parentNode.removeChild(css); }, 650 * S + 50);
+    }
+    function onKey(e) { if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); finish(false); } }
+    el.addEventListener('click', function () { finish(false); });
+    document.addEventListener('keydown', onKey, true);
+    timers.push(setTimeout(function () { finish(false); }, 4300 * S));
+    window.dismissPowerOn = finish;                                 // fastBoot() and the app shell can end it at once
+})();
+</script>
 
     <div id="app-chassis">
         <!-- AUDIO INITIALIZATION BANNER -->
@@ -878,6 +966,7 @@ window.navTabs = [
         };
 
         window.fastBoot = function() {
+            if (window.dismissPowerOn) window.dismissPowerOn(true);   // the power-on sequence ends at once
             localStorage.setItem(TUNED_STORAGE_KEY, 'true');
             sessionStorage.setItem('halx_booted', '1');
             const wizard = document.getElementById('setup-wizard');
@@ -16508,7 +16597,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 if (bridge() && !this.machineId) await this.syncBridge();
                 const v = await verifyKey(key, this.machineId);
                 if (!v.ok) { say(v.message, false); notify('License not activated: ' + v.message, 'triangle-exclamation'); return; }
-                if (bridge()) {
+                if (bridge() && this.machineId) {   // only when the server answered /api/license (the Android engine does not: the key is checked in the page)
                     const r = await post('/api/license/activate', 'license', { key });
                     if (!(r.json && r.json.ok)) { say((r.json && r.json.message) || (r.json && r.json.error) || 'The local server refused the key.', false); return; }
                 }

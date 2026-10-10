@@ -1637,3 +1637,86 @@ test('RtApiAsio::probeDeviceInfo: a driver that fails to probe is kept for a mom
   const asio = {}; const m = a.mergeAsio(asio, [{ name: 'X', inputChannels: 0, outputChannels: 0 }], 1);
   assert.deepStrictEqual(m.list, []); assert.deepStrictEqual(m.unprobed, ['X']);                                    // never probed OK: not listed (the registry lists it as "driver only")
 });
+
+test('Android engine (Java): the bridge protocol runs on a plain JVM with a fake backend: HTTP, origin / host checks, WebSocket input and output, interfaces grouping', async () => {
+  const { spawnSync, spawn } = require('node:child_process');
+  const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'jv-')), src = pathx.join(__dirname, '..', 'android');
+  const files = ['Json', 'Ws', 'AudioBackend', 'Assets', 'Interfaces', 'MiniBridge'].map(n => pathx.join(src, 'src', 'com', 'audiomixer', 'app', n + '.java')).concat(pathx.join(src, 'test', 'com', 'audiomixer', 'app', 'BridgeHarness.java'));
+  const c = spawnSync('javac', ['--release', '8', '-Xlint:-options', '-d', dir, ...files], { encoding: 'utf8' });
+  if (c.error || c.status !== 0) return;                                                      // needs a JDK (the build of the APK needs one as well)
+  const www = pathx.join(dir, 'www'); fsx.mkdirSync(pathx.join(www, 'fonts'), { recursive: true }); fsx.writeFileSync(pathx.join(www, 'index.html'), '<html>mixer</html>'); fsx.writeFileSync(pathx.join(www, 'fonts', 'a.woff2'), Buffer.from([1, 2, 3])); fsx.writeFileSync(pathx.join(dir, 'secret.txt'), 'outside');
+  const jv = spawn('java', ['-cp', dir, 'com.audiomixer.app.BridgeHarness', '0', www], { stdio: ['pipe', 'pipe', 'inherit'] });
+  try {
+    const port = await new Promise((res, rej) => { let b = ''; jv.stdout.on('data', d => { b += d; const m = /PORT (\d+)/.exec(b); if (m) res(Number(m[1])); }); jv.on('error', rej); setTimeout(() => rej(new Error('no port')), 8000); });
+    const base = `http://127.0.0.1:${port}`;
+    const st = await (await fetch(base + '/api/status')).json(); assert.strictEqual(st.ok, true); assert.strictEqual(st.name, 'audio-mixer-bridge'); assert.strictEqual(st.engine, 'android');
+    const ifs = await (await fetch(base + '/api/interfaces')).json(); assert.strictEqual(ifs.ok, true); assert.strictEqual(ifs.portaudio, true);
+    const by = n => ifs.interfaces.find(i => i.name === n);
+    assert.ok(by('Scarlett 2i2 USB').usb && by('Scarlett 2i2 USB').inputs === 2 && by('Scarlett 2i2 USB').outputs === 2 && by('Scarlett 2i2 USB').read.deviceId === 7 && by('Scarlett 2i2 USB').write.deviceId === 8);   // one interface, both directions
+    assert.ok(by('This device (built-in microphone and speaker)') && by('Galaxy Buds2').bluetooth && by('Galaxy Buds2').apis.length === 2);
+    const drv = await (await fetch(base + '/api/drivers')).json(); assert.ok(drv.ok && drv.drivers.includes('aaudio') && drv.portaudio.devices.length === 6 && Array.isArray(drv.asio) && drv.vst.vst3.length === 0);
+    assert.strictEqual((await (await fetch(base + '/api/license')).json()).ok, false);
+    assert.strictEqual((await fetch(base + '/api/nope')).status, 404);
+    // the bundled page is served from the engine (a real http origin for AudioWorklet, localStorage, the microphone): only files of www/
+    const page = await fetch(base + '/'); assert.strictEqual(page.status, 200); assert.match(page.headers.get('content-type'), /text\/html/); assert.strictEqual(await page.text(), '<html>mixer</html>');
+    const fnt = await fetch(base + '/fonts/a.woff2'); assert.strictEqual(fnt.headers.get('content-type'), 'font/woff2'); assert.deepStrictEqual([...new Uint8Array(await fnt.arrayBuffer())], [1, 2, 3]);
+    assert.strictEqual((await fetch(base + '/nothing.html')).status, 404);
+    for (const raw of ['/../secret.txt', '/%2e%2e/secret.txt', '/fonts/..%2fsecret.txt', '/..%5csecret.txt']) {
+      const s = await new Promise(res => { const c = require('node:net').connect(port, '127.0.0.1', () => c.write(`GET ${raw} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n`)); let d = ''; c.on('data', x => d += x); c.on('close', () => res(d)); });
+      assert.ok(!s.includes('outside') && /^HTTP\/1\.1 (403|404)/.test(s), raw);
+    }
+    // origin / host checks
+    assert.strictEqual((await fetch(base + '/api/status', { headers: { Origin: 'https://evil.example' } })).status, 403);
+    const nul = await fetch(base + '/api/status', { headers: { Origin: 'null' } }); assert.strictEqual(nul.status, 200); assert.strictEqual(nul.headers.get('access-control-allow-origin'), 'null');
+    assert.strictEqual((await fetch(base + '/api/status', { headers: { Origin: 'http://localhost:8765' } })).status, 200);
+    const pre = await fetch(base + '/api/status', { method: 'OPTIONS', headers: { Origin: 'null' } }); assert.strictEqual(pre.status, 204);
+    assert.strictEqual((await fetch(base + '/api/status', { method: 'POST' })).status, 405);
+    const raw = await new Promise(res => { const s = require('node:net').connect(port, '127.0.0.1', () => s.write('GET /api/status HTTP/1.1\r\nHost: evil.example\r\nConnection: close\r\n\r\n')); let d = ''; s.on('data', x => d += x); s.on('close', () => res(d)); });
+    assert.match(raw, /^HTTP\/1\.1 403/);                                                         // DNS-rebinding guard
+    // WebSocket input: started, PCM frames, stop
+    const wsOpen = path => new Promise((res, rej) => { const w = new WebSocket(`ws://127.0.0.1:${port}${path}`); w.binaryType = 'arraybuffer'; w.onopen = () => res(w); w.onerror = () => rej(new Error('ws failed')); });
+    const next = (w, pred) => new Promise(res => { const h = ev => { if (pred(ev.data)) { w.removeEventListener('message', h); res(ev.data); } }; w.addEventListener('message', h); });
+    let w = await wsOpen('/ws/input');
+    w.send(JSON.stringify({ type: 'start', channels: 2, sampleRate: 48000, frameSize: 'auto', deviceId: 7 }));
+    const started = JSON.parse(await next(w, d => typeof d === 'string')); assert.strictEqual(started.type, 'started'); assert.strictEqual(started.engine, 'android'); assert.strictEqual(started.channels, 2); assert.strictEqual(started.sampleRate, 48000);
+    const pcm = await next(w, d => typeof d !== 'string'); assert.strictEqual(pcm.byteLength, 480 * 2 * 2);
+    const i16 = new Int16Array(pcm); assert.ok(Math.max(...i16) > 8000 && Math.min(...i16) < -8000);                                            // the 440 Hz sine arrives intact
+    const live = await (await fetch(base + '/api/status')).json(); assert.strictEqual(live.streams.length, 1); assert.strictEqual(live.streams[0].direction, 'input');
+    w.send(JSON.stringify({ type: 'stop' })); assert.strictEqual(JSON.parse(await next(w, d => typeof d === 'string')).type, 'stopped'); w.close();
+    // WebSocket input with a failing device: a clear error, the socket stays usable
+    w = await wsOpen('/ws/input'); w.send(JSON.stringify({ type: 'start', deviceId: 99 }));
+    assert.match(JSON.parse(await next(w, d => typeof d === 'string')).message, /microphone permission/); w.close();
+    // WebSocket output: started, PCM in, counted by the status endpoint
+    w = await wsOpen('/ws/output'); w.send(JSON.stringify({ type: 'start', channels: 2, sampleRate: 44100, deviceId: 8 }));
+    const so = JSON.parse(await next(w, d => typeof d === 'string')); assert.strictEqual(so.type, 'started'); assert.strictEqual(so.sampleRate, 44100);
+    w.send(new Int16Array(960).buffer); w.send(new Int16Array(960).buffer); w.send(new Uint8Array(3).buffer);                                       // two whole blocks, one odd-sized junk frame
+    await new Promise(r => setTimeout(r, 300));
+    const o = (await (await fetch(base + '/api/status')).json()).streams.find(s => s.direction === 'output'); assert.strictEqual(o.bytes, 2 * 1920);
+    w.close();
+    // a plain HTTP request to a WebSocket path, and unknown WebSocket paths, are refused
+    assert.strictEqual((await fetch(base + '/ws/input')).status, 404);
+    await assert.rejects(wsOpen('/ws/other'));
+  } finally { jv.stdin.end(); jv.kill(); }
+});
+
+test('Android background engine + power-on animation: manifest, service (Java and Kotlin twin), build wiring, page hooks', () => {
+  const root = pathx.join(__dirname, '..'), rd = f => fsx.readFileSync(pathx.join(root, f), 'utf8');
+  const man = rd('android/AndroidManifest.xml');
+  assert.ok(man.includes('android.permission.FOREGROUND_SERVICE') && man.includes('<service android:name=".EngineService" android:exported="false"/>') && /RECORD_AUDIO/.test(man) && !/ACCESS_FINE_LOCATION|CAMERA|READ_EXTERNAL/.test(man));
+  const java = rd('android/src/com/audiomixer/app/EngineService.java'), kt = rd('android/kotlin/EngineService.kt');
+  for (const src of [java, kt]) { assert.ok(src.includes('8765') && src.includes('MiniBridge') && src.includes('PARTIAL_WAKE_LOCK') && src.includes('STOP') && src.includes('NotificationChannel') && src.includes('START_STICKY')); }
+  assert.ok(java.includes('b.start(8765, 10)') && kt.includes('b.start(8765, 10)') && java.includes('AndroidAssets') && kt.includes('AndroidAssets'));                                  // both twins look for the page's port first
+  const act = rd('android/src/com/audiomixer/app/MainActivity.java'); assert.ok(act.includes('loadMixer(state)') && act.includes('"http://localhost:" + port + "/index.html"') && act.includes('startEngine()') && act.includes('startForegroundService') && act.includes('EngineService.class'));
+  const aa = rd('android/src/com/audiomixer/app/AndroidAudio.java'); assert.ok(aa.includes('AudioRecord') && aa.includes('AudioTrack') && aa.includes('setPreferredDevice') && aa.includes('RECORD_AUDIO') && aa.includes('THREAD_PRIORITY_URGENT_AUDIO'));
+  const apk = require('../scripts/build-apk'); const files = apk.listFiles(pathx.join(root, 'android', 'src'), '.java').map(f => pathx.basename(f));
+  for (const n of ['MiniBridge.java', 'AndroidAudio.java', 'EngineService.java', 'MainActivity.java', 'Ws.java', 'Json.java', 'Interfaces.java', 'AudioBackend.java']) assert.ok(files.includes(n), n);
+  assert.ok(!files.includes('BridgeHarness.java'));                                                                     // test code is not in the app
+  const bs = rd('scripts/build-apk.js'); assert.ok(bs.includes("'--target-sdk-version', '29'") && bs.includes('--kotlin') && bs.includes('kotlin-stdlib.jar'));
+  // the page: no server-side license step without a license endpoint, power-on sequence
+  const html = rd('index.html');
+  assert.ok(html.includes("if (bridge() && this.machineId) {"));
+  assert.ok(html.includes('<script id="poweron-boot">') && html.includes('window.dismissPowerOn = finish') && html.includes('prefers-reduced-motion') && html.includes("sessionStorage.getItem('halx_poweron')"));
+  assert.ok(html.includes("if (window.dismissPowerOn) window.dismissPowerOn(true);"));                                   // fastBoot ends the sequence at once
+  for (const k of ['po-glow', 'po-line', 'po-led', 'po-fade-up', 'po-seg', 'po-letter', 'po-draw', 'po-bar']) assert.ok(html.includes('@keyframes ' + k) || html.includes(k), k);
+  assert.ok(html.indexOf('<script id="poweron-boot">') < html.indexOf('id="setup-wizard"'));                             // plays before the console markup
+});
