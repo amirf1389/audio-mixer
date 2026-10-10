@@ -397,11 +397,13 @@ test('installer: official Node.js runtime is fetched, checked and cached; a bad 
 test('installer: stages the app with the bundled runtime for x64 and x86 (no NSIS involved)', async () => {
   const bi = require('../scripts/build-installer');
   for (const arch of ['x64', 'x86']) {
-    const zip = makeZip([[`node-v98.1.2-win-${arch}/LICENSE`, Buffer.from('MIT')], [`node-v98.1.2-win-${arch}/node.exe`, Buffer.from('MZ-fake-node-' + arch)]]);
+    const zip = makeZip([[`node-v98.1.2-win-${arch}/LICENSE`, Buffer.from('MIT')], [`node-v98.1.2-win-${arch}/node.exe`, Buffer.from('MZ-fake-node-' + arch)], [`node-v98.1.2-win-${arch}/node_modules/npm/bin/npm-cli.js`, Buffer.from('// npm')], [`node-v98.1.2-win-${arch}/node_modules/npm/package.json`, Buffer.from('{}')]]);
     const out = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'inst-'));
     const r = await bi.buildInstaller({ out, arch, fetchImpl: fakeNodeFetch(zip, { arch }), bundleAudify: false });
     assert.strictEqual(pathx.basename(r.stage), `stage-${arch}`);
     assert.strictEqual(fsx.readFileSync(pathx.join(r.stage, 'runtime', 'node.exe')).toString(), 'MZ-fake-node-' + arch);
+    assert.strictEqual(fsx.readFileSync(pathx.join(r.stage, 'runtime', 'node_modules', 'npm', 'bin', 'npm-cli.js'), 'utf8'), '// npm');   // npm travels with the runtime
+    assert.ok(fsx.readFileSync(pathx.join(r.stage, 'MANIFEST.sha256'), 'utf8').includes('  runtime/node_modules/npm/bin/npm-cli.js'));   // and is covered by the verification scan
     assert.ok(fsx.existsSync(pathx.join(r.stage, 'client', 'cli.js')) && fsx.existsSync(pathx.join(r.stage, 'MANIFEST.sha256')));
     assert.ok(!fsx.existsSync(pathx.join(r.stage, 'start-pc-mode.sh')));
     assert.match(fsx.readFileSync(pathx.join(r.stage, 'start-pc-mode.bat'), 'utf8'), /runtime\\node\.exe/);
@@ -900,8 +902,8 @@ test('boot screens: browser page + launcher helper (macOS / Linux), native Windo
   const en = rd('ensure-node.sh');
   assert.match(en, /am_splash\(\)/); assert.match(en, /AM_SPLASH_ARGS="--no-open"/); assert.match(en, /AUDIO_MIXER_NO_SPLASH/);
   const unix = rd('scripts', 'build-unix.js');
-  assert.strictEqual((unix.match(/am_splash "\$APP" "\$@"/g) || []).length, 2);                       // Linux launcher and macOS app
-  assert.strictEqual((unix.match(/cli\.js" \$AM_SPLASH_ARGS "\$@"/g) || []).length, 2);              // no second browser window when the screen is open
+  assert.strictEqual((unix.match(/am_splash "\$APP" "\$@"/g) || []).length, 3);                       // Linux .deb launcher, macOS app, portable command
+  assert.strictEqual((unix.match(/cli\.js" \$AM_SPLASH_ARGS "\$@"/g) || []).length, 3);              // no second browser window when the screen is open
   assert.ok(rd('scripts', 'build.js').includes("'boot.html'"));
   const l = rd('installer', 'launcher.c');
   assert.match(l, /\/open/); assert.match(l, /AudioMixerBoot/); assert.match(l, /server_up\(\)/);
@@ -957,6 +959,66 @@ test('interfaces: an endpoint of known direction whose channel count cannot be r
   const g = groupInterfaces(r.devices);
   const dac = g.find(i => /USB DAC/.test(i.name));
   assert.ok(dac.outputs === 2 && dac.inputs === 0 && dac.write && !dac.read);                    // a DAC: write only, detected
+});
+
+test('installers: audio-mixer command (Windows .exe on PATH, mac / Linux link), bundled npm, install + uninstall paths on all three systems', async () => {
+  const { spawnSync } = require('node:child_process');
+  const root = pathx.join(__dirname, '..'), rd = (...a) => fsx.readFileSync(pathx.join(root, ...a), 'utf8');
+  // client commands
+  const cli = pathx.join(root, 'client', 'cli.js');
+  assert.strictEqual(spawnSync(process.execPath, [cli, 'version'], { encoding: 'utf8' }).stdout.trim(), require('../package.json').version);
+  assert.match(spawnSync(process.execPath, [cli, 'npm', '--version'], { encoding: 'utf8' }).stdout, /^\d+\.\d+\.\d+/);          // npm through the client
+  const un = spawnSync(process.execPath, [cli, 'uninstall'], { encoding: 'utf8', input: '' });                                  // no "y": nothing is changed
+  assert.match(un.stdout, /Uninstalling Audio Mixer/); assert.match(un.stdout, /Nothing was changed/);
+  // Windows: console program, stub switch, MSI feature / PATH row / uninstall code
+  const c = rd('installer', 'audio-mixer.c');
+  assert.match(c, /wmain\(void\)/); assert.match(c, /runtime\\\\node\.exe/); assert.match(c, /client\\\\cli\.js/);
+  assert.ok(rd('scripts', 'build-exe.js').includes("-mconsole"));
+  assert.match(rd('installer', 'setup-stub.c'), /L"\/nopath"/); assert.match(rd('installer', 'setup-stub.c'), /L",CommandLine"/);
+  const m = require('../scripts/build-msi');
+  const stage = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'cl-')); fsx.writeFileSync(pathx.join(stage, 'LICENSE'), 'MIT'); fsx.writeFileSync(pathx.join(stage, 'audio-mixer.exe'), 'x');
+  const w = m.wxs({ stage, version: '1.16.0', arch: 'x64' });
+  assert.match(w, /Feature Id="CommandLine"/); assert.match(w, /Component Id="CommandPath"/); assert.match(w, /Name="UninstallCode" Type="string" Value="\[ProductCode\]"/);
+  if (spawnSync('wixl', ['--version']).status === 0 && spawnSync('msibuild', ['-h']).status !== null) {   // the PATH row is written into a real package
+    const wk = pathx.join(stage, 'w'); fsx.mkdirSync(wk); fsx.writeFileSync(pathx.join(wk, 'License.rtf'), m.rtf('MIT')); fsx.writeFileSync(pathx.join(wk, 'a.wxs'), w);
+    assert.strictEqual(spawnSync('wixl', ['--arch', 'x64', '--ext', 'ui', '-o', pathx.join(wk, 'a.msi'), pathx.join(wk, 'a.wxs')], { cwd: wk }).status, 0);
+    m.addPathEntry(pathx.join(wk, 'a.msi'), wk);
+    const q = pathx.join(wk, 'q'); fsx.mkdirSync(q); spawnSync('msidump', ['-t', pathx.join(wk, 'a.msi')], { cwd: q });
+    assert.match(fsx.readFileSync(pathx.join(q, 'Environment.idt'), 'utf8'), /PathAudioMixer\t=\*PATH\t\[~\];\[INSTALLDIR\]\tCommandPath/);
+    const seq = fsx.readFileSync(pathx.join(q, 'InstallExecuteSequence.idt'), 'utf8'); assert.match(seq, /WriteEnvironmentStrings\t\t5200/); assert.match(seq, /RemoveEnvironmentStrings\t\t3300/);
+  }
+  // npm of the official zip: whole tree extracted, unsafe names refused
+  const bi = require('../scripts/build-installer'), zlib = require('node:zlib');
+  const zipOf = entries => {
+    const loc = [], cen = []; let off = 0;
+    for (const [name, data] of entries) {
+      const nb = Buffer.from(name), raw = zlib.deflateRawSync(Buffer.from(data));
+      const h = Buffer.alloc(30); h.writeUInt32LE(0x04034b50, 0); h.writeUInt16LE(20, 4); h.writeUInt16LE(8, 8); h.writeUInt32LE(raw.length, 18); h.writeUInt32LE(Buffer.byteLength(data), 22); h.writeUInt16LE(nb.length, 26);
+      const ch = Buffer.alloc(46); ch.writeUInt32LE(0x02014b50, 0); ch.writeUInt16LE(20, 4); ch.writeUInt16LE(20, 6); ch.writeUInt16LE(8, 10); ch.writeUInt32LE(raw.length, 20); ch.writeUInt32LE(Buffer.byteLength(data), 24); ch.writeUInt16LE(nb.length, 28); ch.writeUInt32LE(off, 42);
+      loc.push(h, nb, raw); cen.push(ch, nb); off += 30 + nb.length + raw.length;
+    }
+    const cd = Buffer.concat(cen), e = Buffer.alloc(22); e.writeUInt32LE(0x06054b50, 0); e.writeUInt16LE(entries.length, 8); e.writeUInt16LE(entries.length, 10); e.writeUInt32LE(cd.length, 12); e.writeUInt32LE(off, 16);
+    return Buffer.concat([...loc, cd, e]);
+  };
+  const dst = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'npmz-'));
+  const n = bi.extractTreeFromZip(zipOf([['node-v1.0.0-win-x64/node.exe', 'N'], ['node-v1.0.0-win-x64/node_modules/npm/bin/npm-cli.js', 'cli'], ['node-v1.0.0-win-x64/node_modules/npm/lib/a/b.js', 'b']]), 'node-v1.0.0-win-x64/node_modules/npm/', dst);
+  assert.strictEqual(n, 2); assert.strictEqual(fsx.readFileSync(pathx.join(dst, 'lib', 'a', 'b.js'), 'utf8'), 'b'); assert.ok(!fsx.existsSync(pathx.join(dst, 'node.exe')));
+  assert.throws(() => bi.extractTreeFromZip(zipOf([['p/node_modules/npm/../../evil.js', 'x']]), 'p/node_modules/npm/', dst), /unsafe path/);
+  // Linux tarball + macOS: install / uninstall scripts parse, the command resolves its own link, the dmg gets the command files
+  const u = require('../scripts/build-unix');
+  for (const [name, text] of [['LINUX_INSTALL', u.LINUX_INSTALL], ['LINUX_UNINSTALL', u.LINUX_UNINSTALL], ['LAUNCHER_PORTABLE', u.LAUNCHER_PORTABLE]]) {
+    const f = pathx.join(stage, name + '.sh'); fsx.writeFileSync(f, text); assert.strictEqual(spawnSync('sh', ['-n', f]).status, 0, name + ' parses');
+  }
+  for (const [name, text] of [['MAC_INSTALL', u.MAC_INSTALL], ['MAC_UNINSTALL', u.MAC_UNINSTALL], ['MAC_COMMAND', u.MAC_COMMAND]]) {
+    const f = pathx.join(stage, name + '.sh'); fsx.writeFileSync(f, text); assert.strictEqual(spawnSync('bash', ['-n', f]).status, 0, name + ' parses');
+  }
+  assert.match(u.LAUNCHER_PORTABLE, /while \[ -h "\$SELF" \]/); assert.match(u.LINUX_INSTALL, /ln -sf "\$DEST\/audio-mixer" "\$BIN\/audio-mixer"/); assert.match(u.LINUX_UNINSTALL, /--purge/);
+  assert.match(u.MAC_INSTALL, /ln -sf "\$APP\/audio-mixer" "\$BINDIR\/audio-mixer"/); assert.match(u.MAC_UNINSTALL, /readlink "\$L"/);
+  assert.match(rd('scripts', 'build-macos.js'), /Add audio-mixer command\.command/); assert.match(rd('scripts', 'build-macos.js'), /Uninstall Audio Mixer\.command/);
+  // a command is not a start: no start-up screen for "audio-mixer doctor"
+  const sh = pathx.join(stage, 'sp.sh'); fsx.writeFileSync(sh, `. "${pathx.join(root, 'ensure-node.sh')}"\nmkdir -p "${stage}/bin"; printf '#!/bin/sh\\ntouch "${stage}/opened"\\n' > "${stage}/bin/xdg-open"; chmod +x "${stage}/bin/xdg-open"\nPATH="${stage}/bin:$PATH" DISPLAY=:0 am_splash "${root}" doctor; echo "[$AM_SPLASH_ARGS]"\nPATH="${stage}/bin:$PATH" DISPLAY=:0 am_splash "${root}" --port 8800; echo "[$AM_SPLASH_ARGS]"\n`);
+  const sp = spawnSync('sh', [sh], { encoding: 'utf8' }).stdout.trim().split('\n'); assert.deepStrictEqual(sp, ['[]', '[--no-open]']);
+  fsx.rmSync(stage, { recursive: true, force: true });
 });
 
 test('verify: .msi installer file check', () => {

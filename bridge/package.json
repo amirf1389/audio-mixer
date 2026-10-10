@@ -1,6 +1,6 @@
 {
   "name": "audio-mixer-bridge",
-  "version": "1.15.4",
+  "version": "1.16.0",
   "description": "Local zero-dependency Node.js sandbox that detects native audio drivers (WASAPI, DirectSound, ASIO, CoreAudio, ALSA, ...) and serves them to the mixer page.",
   "private": true,
   "license": "MIT",

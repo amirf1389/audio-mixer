@@ -11,7 +11,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { buildInstaller } = require('./build-installer');
 const { buildMsi } = require('./build-msi');
-const { buildExe, compileLauncher } = require('./build-exe');
+const { buildExe, compileLauncher, compileCli } = require('./build-exe');
 const { ensureSigningCert, signFile } = require('./sign');
 
 const sha = f => crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex');
@@ -24,6 +24,12 @@ function addLauncher(staged, { out, id, env }) {
   fs.copyFileSync(exe, target);
   if (id) signFile(target, id, { env });
   fs.appendFileSync(path.join(staged.stage, 'MANIFEST.sha256'), `${sha(target)}  AudioMixerServer.exe\n`);
+  // the command line: audio-mixer.exe (console program, put on PATH by the installer's CommandLine feature)
+  const cli = compileCli({ work: path.join(out, 'cli', staged.arch), version: staged.version, arch: staged.arch });
+  const cliTarget = path.join(staged.stage, 'audio-mixer.exe');
+  fs.copyFileSync(cli, cliTarget);
+  if (id) signFile(cliTarget, id, { env });
+  fs.appendFileSync(path.join(staged.stage, 'MANIFEST.sha256'), `${sha(cliTarget)}  audio-mixer.exe\n`);
 }
 
 async function buildInstallers({ out = path.join(__dirname, '..', 'dist'), archs = ['x64', 'x86'], sign = true, env = process.env } = {}) {

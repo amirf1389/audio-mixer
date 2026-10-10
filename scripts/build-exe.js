@@ -51,7 +51,7 @@ function peDataEnd(buf) {
 
 // Compiles one of the small native programs in installer/ (MinGW-w64). `name` = setup | launcher; the launcher is built for the
 // architecture of the install it goes into, the setup program is always 32-bit so it runs on both 32- and 64-bit Windows.
-function compileNative({ name, work, version, arch, defs = [], libs = [] }) {
+function compileNative({ name, work, version, arch, defs = [], libs = [], console: isConsole = false }) {
   fs.mkdirSync(work, { recursive: true });
   const triple = arch === 'x64' ? 'x86_64-w64-mingw32' : 'i686-w64-mingw32';
   const v4 = version4(version);
@@ -62,7 +62,7 @@ function compileNative({ name, work, version, arch, defs = [], libs = [] }) {
   let r = spawnSync(`${triple}-windres`, ['-i', `${name}.rc`, '-o', res], { cwd: work, encoding: 'utf8' });
   if (r.error && r.error.code === 'ENOENT') throw new Error(`${triple}-windres not found (Linux: apt install mingw-w64)`);
   if (r.status !== 0) throw new Error('windres failed: ' + r.stderr);
-  r = spawnSync(`${triple}-gcc`, ['-O2', '-s', '-mwindows', '-municode', '-Wall', ...defs, '-o', exe, path.join(ROOT, 'installer', name === 'setup' ? 'setup-stub.c' : `${name}.c`), res, ...libs, '-static-libgcc'], { encoding: 'utf8' });
+  r = spawnSync(`${triple}-gcc`, ['-O2', '-s', isConsole ? '-mconsole' : '-mwindows', '-municode', '-Wall', ...defs, '-o', exe, path.join(ROOT, 'installer', name === 'setup' ? 'setup-stub.c' : `${name}.c`), res, ...libs, '-static-libgcc'], { encoding: 'utf8' });
   if (r.error && r.error.code === 'ENOENT') throw new Error(`${triple}-gcc not found (Linux: apt install mingw-w64)`);
   if (r.status !== 0) throw new Error(`compiling ${name} failed:\n` + r.stderr);
   return exe;
@@ -79,4 +79,5 @@ function buildExe({ msi, productCode, out, version, arch = 'x64', work, id }) {
   return { exe: out, sha256: crypto.createHash('sha256').update(fs.readFileSync(out)).digest('hex') };
 }
 
-module.exports = { buildExe, packPayload, readTrailer, peDataEnd, compileStub, compileLauncher, compileNative, TRAILER, version4 };
+const compileCli = ({ work, version, arch }) => compileNative({ name: 'audio-mixer', work, version, arch, console: true });   // audio-mixer.exe: the command line (console program)
+module.exports = { compileCli, buildExe, packPayload, readTrailer, peDataEnd, compileStub, compileLauncher, compileNative, TRAILER, version4 };

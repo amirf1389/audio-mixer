@@ -95,6 +95,7 @@ am_ensure_audio() {
 am_splash() {
   AM_SPLASH_ARGS=""
   app="$1"; shift
+  case "${1:-}" in ''|-*) ;; start) ;; *) return 0 ;; esac   # a command (doctor, drivers, npm ...) is not a start: no start-up screen
   [ -z "${AUDIO_MIXER_NO_SPLASH:-}" ] && [ -f "$app/boot.html" ] || return 0
   port=8765; prev=""
   for a in "$@"; do

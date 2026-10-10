@@ -30,7 +30,11 @@ const readme = version => `Audio Mixer ${version} for macOS
    no administrator rights); install it yourself from https://nodejs.org if you prefer. The first start also installs the native audio module.
 4. The mixer opens in your browser. Plugins (VST3 / .vst) are read from /Library/Audio/Plug-Ins/VST3, ~/Library/Audio/Plug-Ins/VST3 and ~/AudioMixerPlugins.
 
-Remove it: drag the app to the Bin; the private Node.js and audio module live in ~/.local/share/audio-mixer.
+5. Command line (optional): double-click "Add audio-mixer command.command" once. Then in Terminal: audio-mixer (start), audio-mixer doctor,
+   audio-mixer drivers, audio-mixer npm install audify, audio-mixer uninstall ...
+
+Remove it: double-click "Uninstall Audio Mixer.command" (removes the app, the start-at-login entry and the command; your drivers, plugins and
+license stay), or drag the app to the Bin. The private Node.js and audio module live in ~/.local/share/audio-mixer.
 `;
 
 function isoTool() {
@@ -58,6 +62,11 @@ function buildMacApp({ out = path.join(ROOT, 'releases') } = {}) {
   fs.cpSync(m.bundle, path.join(stage, 'Audio Mixer.app'), { recursive: true, verbatimSymlinks: true });
   fs.symlinkSync('/Applications', path.join(stage, 'Applications'));
   fs.writeFileSync(path.join(stage, 'Read me first.txt'), readme(version));
+  // after dragging the app to Applications: the audio-mixer command on PATH, and the uninstaller (removes the app, the login item and the command)
+  const { MAC_COMMAND, MAC_UNINSTALL } = require('./build-unix');
+  fs.writeFileSync(path.join(stage, 'Add audio-mixer command.command'), MAC_COMMAND, { mode: 0o755 });
+  fs.writeFileSync(path.join(stage, 'Uninstall Audio Mixer.command'), MAC_UNINSTALL, { mode: 0o755 });
+  for (const f of ['Add audio-mixer command.command', 'Uninstall Audio Mixer.command']) fs.chmodSync(path.join(stage, f), 0o755);   // double-clickable in Finder
   const iso = path.join(work, 'audio-mixer.iso');
   const r = spawnSync(tool.cmd, [...tool.args, '-V', `Audio Mixer ${version}`.slice(0, 32), '-D', '-R', '-J', '-joliet-long', '-no-pad', '-o', iso, stage], { encoding: 'utf8' });
   if (r.status !== 0) throw new Error(tool.cmd + ' failed: ' + (r.stderr || r.stdout));
