@@ -29,7 +29,9 @@
     "setup:audify": "cd bridge && npm install audify",
     "build:msi": "node scripts/build-msi.js",
     "build:installers": "node scripts/build-installers.js",
-    "build:unix": "node scripts/build-unix.js"
+    "build:unix": "node scripts/build-unix.js",
+    "ota-server": "node ota-server/server.js",
+    "ota": "node scripts/ota.js"
   },
   "engines": {
     "node": ">=18"

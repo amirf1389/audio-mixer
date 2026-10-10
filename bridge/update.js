@@ -68,10 +68,10 @@ async function fetchJson(fetchImpl, url) {
 }
 
 // Is a newer version published?
-async function check({ current, fetchImpl = globalThis.fetch, url = process.env.BRIDGE_UPDATE_URL || DEFAULT_URL, platform, arch } = {}) {
+async function check({ current, fetchImpl = globalThis.fetch, url = process.env.BRIDGE_UPDATE_URL || DEFAULT_URL, platform, arch, jwk = lic.PUBLIC_JWK } = {}) {
   if (!hostOk(url)) throw Object.assign(new Error('the update server host is not allowed'), { status: 400 });
   const env = await fetchJson(fetchImpl, url);
-  const v = verifyManifest(env);
+  const v = verifyManifest(env, jwk);
   if (!v.ok) throw Object.assign(new Error(v.error), { status: 502 });
   const m = v.manifest, file = platformFile(m, { platform, arch });
   return {
@@ -84,12 +84,12 @@ async function check({ current, fetchImpl = globalThis.fetch, url = process.env.
 const updateDir = () => path.join(process.env.BRIDGE_DOWNLOAD_DIR || path.join(os.homedir(), 'AudioMixerDrivers'), 'updates');
 
 // Saves the installer for this computer and checks its SHA-256 against the signed manifest. Nothing is run.
-async function download({ current, fetchImpl = globalThis.fetch, url, dir = updateDir(), platform, arch } = {}) {
-  const info = await check({ current, fetchImpl, url, platform, arch });
+async function download({ current, fetchImpl = globalThis.fetch, url, dir = updateDir(), platform, arch, jwk = lic.PUBLIC_JWK } = {}) {
+  const info = await check({ current, fetchImpl, url, platform, arch, jwk });
   if (!info.updateAvailable) throw Object.assign(new Error('Audio Mixer is up to date (' + current + ')'), { status: 409 });
   if (!info.file) throw Object.assign(new Error('no update file for this system'), { status: 404 });
   const env = await fetchJson(fetchImpl, url || process.env.BRIDGE_UPDATE_URL || DEFAULT_URL);
-  const entry = verifyManifest(env).manifest.files[info.file.key];
+  const entry = verifyManifest(env, jwk).manifest.files[info.file.key];
   if (!hostOk(entry.url)) throw Object.assign(new Error('the update file host is not allowed'), { status: 502 });
   const name = path.basename(String(entry.name || '')).replace(/[^\w.\- ]/g, '_');
   if (!name || name.startsWith('.')) throw Object.assign(new Error('unsafe file name'), { status: 502 });
