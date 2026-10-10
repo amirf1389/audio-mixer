@@ -133,9 +133,19 @@ function listDevices(load = loadAudify) {
     }
     if (!list.length) { hostApis.push(API_NAMES[key]); continue; }
     hostApis.push(API_NAMES[key]);
+    // A WASAPI / DirectSound / Core Audio device that RtAudio could not probe (in use by another program, exclusive mode, just plugged in) comes back
+    // with no channels at all, so it showed up as "no input, no output". One more probe on a fresh instance often succeeds; if not, the device is
+    // flagged so that the page can take its mode from the operating system's own endpoint list (interfaces.js) and a stream can still be tried.
+    if (!isAsio && !cached && list.some(d => !((d.inputChannels || 0) + (d.outputChannels || 0)))) {
+      try {
+        const again = new RtAudio(Api[key]).getDevices() || [];
+        list = list.map(d => { if ((d.inputChannels || 0) + (d.outputChannels || 0)) return d; const n = again.find(x => x.id === d.id && String(x.name || '') === String(d.name || '')); return n && (n.inputChannels || 0) + (n.outputChannels || 0) ? n : d; });
+      } catch (_) { /* keep the first answer */ }
+    }
     for (const d of list) {
       devices.push({
         id: next++, rtId: d.id, api: key, hostAPIName: API_NAMES[key], name: String(d.name || ''),
+        ...(!isAsio && !((d.inputChannels || 0) + (d.outputChannels || 0)) ? { probeFailed: true } : {}),
         maxInputChannels: d.inputChannels || 0, maxOutputChannels: d.outputChannels || 0,
         defaultSampleRate: d.preferredSampleRate || (d.sampleRates && d.sampleRates[0]) || 48000,
         sampleRates: Array.isArray(d.sampleRates) ? d.sampleRates : [],
@@ -153,7 +163,7 @@ function detectAudify(load = loadAudify) {
   if (!r) return null;
   return {
     engine: 'audify', hostApis: r.hostApis,
-    devices: r.devices.map(d => ({ id: d.id, name: d.name, hostApi: d.hostAPIName, inputs: d.maxInputChannels, outputs: d.maxOutputChannels, sampleRate: d.defaultSampleRate })),
+    devices: r.devices.map(d => ({ id: d.id, name: d.name, hostApi: d.hostAPIName, inputs: d.maxInputChannels, outputs: d.maxOutputChannels, sampleRate: d.defaultSampleRate, ...(d.probeFailed ? { probeFailed: true } : {}) })),
   };
 }
 
@@ -221,7 +231,8 @@ function openStreamRaw({ mod, dev, direction, channels, sampleRate, frameSize, o
   sampleRate = Number(sampleRate);
   const { RtAudio, RtAudioFormat = {}, RtAudioStreamFlags = {} } = mod, Api = apiEnum(mod);
   const out = direction === 'output';
-  const maxCh = out ? dev.maxOutputChannels : dev.maxInputChannels;
+  // a device whose probe failed has no known channel count: the operating system listed it with this direction, so a stereo stream is tried (RtAudio's own error follows if it cannot open)
+  const maxCh = (out ? dev.maxOutputChannels : dev.maxInputChannels) || (dev.probeFailed ? 2 : 0);
   if (!maxCh) throw new Error(`${dev.name} has no ${out ? 'output' : 'input'} channels`);
   const asioDev = dev.api === 'WINDOWS_ASIO';
   // ASIO outputs are fixed hardware channels: refuse. WASAPI / DirectSound / Core Audio / ALSA devices often have fewer channels than the mixer's

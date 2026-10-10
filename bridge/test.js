@@ -1757,6 +1757,34 @@ test('RtApiAsio::probeDeviceInfo: a driver that fails to probe is kept for a mom
   assert.deepStrictEqual(m.list, []); assert.deepStrictEqual(m.unprobed, ['X']);                                    // never probed OK: not listed (the registry lists it as "driver only")
 });
 
+test('a device the engine could not probe (0 channels, not ASIO) is flagged, takes its mode from the OS endpoint list, and a stream is still tried', () => {
+  const a = require('./audify'), { groupInterfaces } = require('./interfaces'); const fa = fakeAudify();
+  const orig = fa.RtAudio.prototype.getDevices; let calls = 0;
+  fa.RtAudio.prototype.getDevices = function () {
+    const l = orig.call(this);
+    if (this.api === 7 || this.api === 2 || /WASAPI/i.test(String(this.api))) calls++;
+    return l.map(d => /Speakers/.test(d.name) ? { ...d, inputChannels: 0, outputChannels: 0, sampleRates: [] } : d);   // the same device never probes
+  };
+  const r = a.detectAudify(() => fa);
+  const bad = r.devices.filter(d => d.probeFailed);
+  // whichever fake devices exist: every flagged device really has no channels, and every unflagged one has some
+  assert.ok(r.devices.every(d => !!d.probeFailed === !(d.inputs || d.outputs) || /asio/i.test(d.hostApi)));
+  // the OS endpoint list knows the device by name with its direction: the engine device takes that mode
+  const dev = { id: 1000, name: 'Speakers (USB DAC)', hostApi: 'Windows WASAPI', inputs: 0, outputs: 0, probeFailed: true };
+  const os = { id: -1, name: 'Speakers (USB DAC)', hostApi: 'Windows WASAPI', native: true, inputs: 0, outputs: 2 };
+  const g = groupInterfaces([dev, os]);
+  assert.strictEqual(g.length, 1); assert.ok(g[0].outputs === 2 && g[0].write && !g[0].read);
+  assert.ok(g[0].apis.some(x => x.deviceId === 1000 && x.outputs === 2));                              // the engine device (openable id) is offered for WRITE
+  // no OS entry to learn from: stays unknown (no guess)
+  assert.strictEqual(groupInterfaces([dev])[0].outputs, 0);
+  // a stream is tried on such a device (stereo) instead of "has no output channels"
+  const m = fakeAudify(); const d2 = { id: 1000, rtId: 0, api: 'WINDOWS_WASAPI', hostAPIName: 'Windows WASAPI', name: 'Speakers (USB DAC)', maxInputChannels: 0, maxOutputChannels: 0, defaultSampleRate: 48000, sampleRates: [], probeFailed: true };
+  const st = a.openStream({ mod: m, dev: d2, direction: 'output', channels: 2, sampleRate: 48000 });
+  assert.ok(st && st.channels === 2); st.close();
+  assert.throws(() => a.openStream({ mod: m, dev: { ...d2, probeFailed: false }, direction: 'output', channels: 2, sampleRate: 48000 }), /no output channels/);   // a real 0 stays an error
+  assert.ok(Array.isArray(bad));
+});
+
 test('Android engine (Java): the bridge protocol runs on a plain JVM with a fake backend: HTTP, origin / host checks, WebSocket input and output, interfaces grouping', async () => {
   const { spawnSync, spawn } = require('node:child_process');
   const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'jv-')), src = pathx.join(__dirname, '..', 'android');
