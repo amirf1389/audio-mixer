@@ -5,6 +5,9 @@
 //   GET  /update.json                    signed manifest of the stable channel   (GET /<channel>/update.json for other channels, e.g. beta)
 //   GET  /releases/<file>                installer / package, HEAD and Range (resume) supported
 //   GET  /healthz                        { ok, channels: { stable: "1.4.1.0" } }
+//   GET  /latest  (or /download)         the right file for the system that asks: a 302 to the installer of its OS (Windows .exe / .msi, Debian .deb or Linux archive, macOS .dmg,
+//                                        Android .apk, iOS project), found from ?os=&arch=&distro=&channel=, Client Hints or the User-Agent (bridge/osdetect.js)
+//   GET  /api/latest                     the same as JSON for apps: { os, arch, detected, version, notes, file: { key, label, name, url, size, sha256, how }, others: [...] }
 //   --- administration, only with OTA_ADMIN_TOKEN set (Authorization: Bearer <token>) ---
 //   PUT  /admin/files/<file>             upload a release file; header X-SHA256 (hex) is required and checked; an existing file is not replaced (?overwrite=1)
 //   GET  /admin/files                    files held: name, size, sha256, referenced by which manifests
@@ -36,6 +39,7 @@ const crypto = require('node:crypto');
 const update = require('../bridge/update');
 const { createLimiter } = require('../bridge/security');
 const { createAudit } = require('./audit');
+const osdetect = require('../bridge/osdetect');
 
 const MAX_FILE = 400 * 1024 * 1024;                 // the app refuses larger downloads
 const NAME = /^[A-Za-z0-9][A-Za-z0-9._ \-]{0,119}$/;
@@ -81,7 +85,7 @@ function createOta({ dataDir, token = '', publicUrl = '', jwk, rate = 120, trust
   const referencedBy = name => channels().filter(c => { const e = readEnvelope(c), v = e && update.verifyManifest(e, jwk); return v && v.ok && Object.values(v.manifest.files).some(f => f.name === name); });
 
   const day = () => now().toISOString().slice(0, 10);
-  function count(kind, key) { const d = stats.days[day()] || (stats.days[day()] = { manifest: {}, download: {} }); d[kind][key] = (d[kind][key] || 0) + 1; statsDirty = true; }
+  function count(kind, key) { const d = stats.days[day()] || (stats.days[day()] = { manifest: {}, download: {}, detect: {} }); d[kind] = d[kind] || {}; d[kind][key] = (d[kind][key] || 0) + 1; statsDirty = true; }
   const flush = () => { if (statsDirty) { statsDirty = false; writeAtomic(statsFile, JSON.stringify(stats)); } };
 
   const send = (res, code, body, headers = {}) => { if (code >= 400 && body && typeof body === 'object' && !Buffer.isBuffer(body)) res.auditNote = String(body.error || '') + (body.problems ? ': ' + body.problems.join('; ') : ''); const t = typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body); res.writeHead(code, { 'Content-Type': typeof body === 'object' && !Buffer.isBuffer(body) ? 'application/json; charset=utf-8' : 'text/plain; charset=utf-8', 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store', ...headers }); res.end(t); };
@@ -95,6 +99,22 @@ function createOta({ dataDir, token = '', publicUrl = '', jwk, rate = 120, trust
     return Buffer.concat(chunks);
   }
 
+  // ── smart links: the file of the newest version for the system that asks ──
+  const manifestOf = ch => { const e = readEnvelope(ch), v = e && update.verifyManifest(e, jwk); return v && v.ok ? v.manifest : null; };
+  function smart(req, url) {
+    const ch = url.searchParams.get('channel') || 'stable';
+    if (!CHANNEL.test(ch)) return { code: 400, body: { ok: false, error: 'bad channel name' } };
+    const m = manifestOf(ch); if (!m) return { code: 404, body: { ok: false, error: 'no update is published on the ' + ch + ' channel' } };
+    const q = {}; for (const k of ['os', 'arch', 'distro']) if (url.searchParams.get(k)) q[k] = url.searchParams.get(k);
+    const det = osdetect.fromHeaders(req.headers, q), file = osdetect.pick(m, det);
+    count('detect', det.os || 'unknown');
+    const body = { ok: true, channel: ch, version: m.version, released: m.released || null, notes: Array.isArray(m.notes) ? m.notes.slice(0, 12).map(String) : [], os: det.os, arch: det.arch, detected: det.source,
+      file: file ? { key: file.key, label: file.label, name: file.name, url: file.url, size: file.size || null, sha256: file.sha256, how: file.how } : null,
+      others: osdetect.others(m, file && file.key), manifest: (publicUrl ? publicUrl.replace(/\/+$/, '') : '') + (ch === 'stable' ? '' : '/' + ch) + '/update.json' };
+    return { code: 200, body, file };
+  }
+  const CORS = { 'Access-Control-Allow-Origin': '*', 'Vary': 'User-Agent, Sec-CH-UA-Platform, Sec-CH-UA-Arch', 'Accept-CH': 'Sec-CH-UA-Platform, Sec-CH-UA-Arch' };   // public, read-only, signed data: any page or app may read it
+
   // ── public routes ──
   function serveManifest(req, res, ch) {
     const f = manifestFile(ch);
@@ -102,7 +122,7 @@ function createOta({ dataDir, token = '', publicUrl = '', jwk, rate = 120, trust
     const body = fs.readFileSync(f), etag = '"' + crypto.createHash('sha256').update(body).digest('hex').slice(0, 32) + '"';
     count('manifest', ch);
     if (req.headers['if-none-match'] === etag) return send(res, 304, '', { ETag: etag, 'Cache-Control': 'no-cache' });
-    send(res, 200, req.method === 'HEAD' ? '' : body, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': body.length, ETag: etag, 'Cache-Control': 'no-cache' });
+    send(res, 200, req.method === 'HEAD' ? '' : body, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': body.length, ETag: etag, 'Cache-Control': 'no-cache', 'Access-Control-Allow-Origin': '*' });
   }
   function serveFile(req, res, name) {
     if (!NAME.test(name) || !index[name]) return fail(res, 404, 'no such file');
@@ -248,10 +268,18 @@ function createOta({ dataDir, token = '', publicUrl = '', jwk, rate = 120, trust
         if (p === '/admin/stats' && req.method === 'GET') { flush(); return send(res, 200, { ok: true, days: stats.days }); }
         return fail(res, 404, 'not found');
       }
+      if (req.method === 'OPTIONS') return send(res, 204, '', { ...CORS, 'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Max-Age': '600' });
       if (req.method !== 'GET' && req.method !== 'HEAD') return fail(res, 405, 'method not allowed');
       if (p === '/healthz') return send(res, 200, { ok: true, channels: Object.fromEntries(channels().map(c => [c, versionOf(c)])) });
       const lim = limiter.allow('d:' + ip, rate); if (!lim.ok) return send(res, 429, { ok: false, error: 'too many requests' }, { 'Retry-After': lim.retryAfter });
       let m;
+      if (p === '/api/latest' || p === '/latest' || p === '/download') {
+        const r = smart(req, url);
+        if (p === '/api/latest') return send(res, r.code, r.body, CORS);
+        if (r.code !== 200) return send(res, r.code, r.body, CORS);
+        if (!r.file) return send(res, 404, { ok: false, error: 'no download for this system' + (r.body.os ? ' (' + r.body.os + ')' : ' (the system could not be detected: add ?os=windows|macos|linux|android|ios)'), os: r.body.os, others: r.body.others }, CORS);
+        return send(res, 302, '', { ...CORS, Location: r.file.url, 'Cache-Control': 'no-store' });
+      }
       if (p === '/update.json') return serveManifest(req, res, 'stable');
       if ((m = /^\/([a-z0-9-]+)\/update\.json$/.exec(p)) && CHANNEL.test(m[1])) return serveManifest(req, res, m[1]);
       if ((m = /^\/releases\/([^/]+)$/.exec(p))) { let name; try { name = decodeURIComponent(m[1]); } catch (_) { return fail(res, 400, 'bad name'); } return serveFile(req, res, name); }

@@ -30,8 +30,7 @@ final class AndroidAudio implements AudioBackend {
     private List<Interfaces.Dev> devices() {
         List<Interfaces.Dev> out = new ArrayList<Interfaces.Dev>();
         for (AudioDeviceInfo d : am.getDevices(AudioManager.GET_DEVICES_ALL)) {
-            int ch = 0, rate = 0;
-            for (int c : d.getChannelCounts()) ch = Math.max(ch, c);
+            int ch = Interfaces.maxChannels(d.getChannelCounts(), d.getChannelIndexMasks()), rate = 0;               // a multi-channel USB interface lists its channels as index masks
             for (int r : d.getSampleRates()) rate = Math.max(rate, r);
             if (ch == 0) ch = d.getType() == AudioDeviceInfo.TYPE_BUILTIN_MIC || d.getType() == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ? 1 : 2;
             out.add(new Interfaces.Dev(d.getId(), String.valueOf(d.getProductName()), d.getType(), d.isSource(), d.isSink(), ch, rate > 0 && rate <= 192000 ? rate : 48000));
@@ -43,6 +42,15 @@ final class AndroidAudio implements AudioBackend {
 
     public String devicesJson() { return Interfaces.devicesJson(devices()); }
 
+    private int nativeProp(String name) { try { return Integer.parseInt(String.valueOf(am.getProperty(name))); } catch (Exception e) { return 0; } }
+
+    /** What the hardware itself does best: the output sample rate and burst size Android reports, low latency / pro audio / USB host features. */
+    public String nativeJson() {
+        PackageManager pm = ctx.getPackageManager();
+        return Interfaces.nativeJson(nativeProp(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE), nativeProp(AudioManager.PROPERTY_OUTPUT_FRAMES_PER_BUFFER),
+            pm.hasSystemFeature("android.hardware.audio.low_latency"), pm.hasSystemFeature("android.hardware.audio.pro"), pm.hasSystemFeature("android.hardware.usb.host"));
+    }
+
     private AudioDeviceInfo find(int id, boolean source) {
         if (id < 0) return null;
         for (AudioDeviceInfo d : am.getDevices(source ? AudioManager.GET_DEVICES_INPUTS : AudioManager.GET_DEVICES_OUTPUTS)) if (d.getId() == id) return d;
@@ -51,11 +59,8 @@ final class AndroidAudio implements AudioBackend {
 
     private static int clamp(int v, int lo, int hi) { return Math.max(lo, Math.min(hi, v)); }
 
-    private static int frames(Map<String, Object> o, int rate) {
-        Object f = o.get("frameSize");
-        int n = f instanceof Double ? (int) Math.round((Double) f) : 0;
-        if (n < 32 || n > 4096) n = Math.max(64, (rate / 100) / 64 * 64);                 // "auto": about 10 ms
-        return n;
+    private int frames(Map<String, Object> o, int rate) {
+        return Interfaces.autoFrames(o.get("frameSize"), rate, nativeProp(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE), nativeProp(AudioManager.PROPERTY_OUTPUT_FRAMES_PER_BUFFER));   // "auto": two bursts of the device's own buffer
     }
 
     private static Map<String, Object> info(String device, String api, int rate, int ch, int frames) {
@@ -71,7 +76,7 @@ final class AndroidAudio implements AudioBackend {
         int rate = clamp(Json.intOf(o, "sampleRate", 48000), 8000, 192000);
         AudioDeviceInfo dev = find(Json.intOf(o, "deviceId", -1), true);
         int maxCh = 2;
-        if (dev != null) { int m = 0; for (int c : dev.getChannelCounts()) m = Math.max(m, c); if (m > 0) maxCh = m; }
+        if (dev != null) { int m = Interfaces.maxChannels(dev.getChannelCounts(), dev.getChannelIndexMasks()); if (m > 0) maxCh = m; }
         final int ch = clamp(Json.intOf(o, "channels", 2), 1, Math.min(maxCh, 8));
         final int fr = frames(o, rate);
         AudioFormat.Builder fb = new AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(rate);

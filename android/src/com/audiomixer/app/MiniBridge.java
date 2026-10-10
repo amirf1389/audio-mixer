@@ -126,9 +126,9 @@ final class MiniBridge {
 
     private void route(OutputStream out, String path, Map<String, String> cors) throws IOException {
         if (path.equals("/api/status")) {
-            send(out, 200, "{\"ok\":true,\"name\":\"audio-mixer-bridge\",\"version\":" + Json.str(version) + ",\"engine\":\"android\",\"node\":\"android\",\"pid\":0,\"streams\":" + streamsJson() + ",\"time\":" + System.currentTimeMillis() + "}", cors);
+            send(out, 200, "{\"ok\":true,\"name\":\"audio-mixer-bridge\",\"version\":" + Json.str(version) + ",\"engine\":\"android\",\"node\":\"android\",\"pid\":0,\"streams\":" + streamsJson() + ",\"native\":" + audio.nativeJson() + ",\"time\":" + System.currentTimeMillis() + "}", cors);
         } else if (path.equals("/api/interfaces")) {
-            send(out, 200, audio.interfacesJson(), cors);
+            send(out, 200, Interfaces.withNative(audio.interfacesJson(), audio.nativeJson()), cors);
         } else if (path.equals("/api/drivers")) {
             String dev = audio.devicesJson();
             send(out, 200, "{\"ok\":true,\"platform\":\"android\",\"arch\":\"arm\",\"node\":\"android\",\"drivers\":[\"aaudio\"],\"devices\":[],\"asio\":[],\"recommended\":\"aaudio\",\"vst\":{\"vst3\":[],\"vst2\":[]},"

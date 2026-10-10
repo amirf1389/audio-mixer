@@ -37,7 +37,11 @@
     { key: 'win-x64-msi', label: 'Windows 64-bit package (.msi)', re: /^AudioMixer-(\d+(?:\.\d+){1,3})-x64\.msi$/ },
     { key: 'win-x86-msi', label: 'Windows 32-bit package (.msi)', re: /^AudioMixer-(\d+(?:\.\d+){1,3})-x86\.msi$/ },
     { key: 'linux-deb', label: 'Debian / Ubuntu (.deb)', re: /^audio-mixer_(\d+(?:\.\d+){1,3})_all\.deb$/ },
-    { key: 'macos', label: 'macOS (.tar.gz)', re: /^AudioMixer-(\d+(?:\.\d+){1,3})-macos\.tar\.gz$/ },
+    { key: 'linux-tar', label: 'Linux archive (.tar.gz)', re: /^AudioMixer-(\d+(?:\.\d+){1,3})-linux\.tar\.gz$/ },
+    { key: 'macos-dmg', label: 'macOS disk image (.dmg)', re: /^AudioMixer-(\d+(?:\.\d+){1,3})-macos\.dmg$/ },
+    { key: 'macos', label: 'macOS archive (.tar.gz)', re: /^AudioMixer-(\d+(?:\.\d+){1,3})-macos\.tar\.gz$/ },
+    { key: 'android-apk', label: 'Android app (.apk)', re: /^AudioMixer-(\d+(?:\.\d+){1,3})-android\.apk$/ },
+    { key: 'ios-project', label: 'iOS Xcode project (.tar.gz)', re: /^AudioMixer-(\d+(?:\.\d+){1,3})-ios-xcode-project\.tar\.gz$/ },
   ];
   const cmpVersion = (a, b) => { const p = v => String(v).split('.').map(n => parseInt(n, 10) || 0); const x = p(a), y = p(b); for (let i = 0; i < Math.max(x.length, y.length); i++) { const d = (x[i] || 0) - (y[i] || 0); if (d) return d < 0 ? -1 : 1; } return 0; };
   // which uploaded files belong to which platform, for the newest version found in the file names
@@ -207,8 +211,10 @@
       if (i % Math.ceil(days.length / 8) === 0) { const t = el('text', { x: x + 2, y: H + 14 }); t.textContent = d.slice(5); svg.append(t); }
     });
     const per = {}; Object.values(S.stats).forEach(d => Object.entries(d.download).forEach(([n, c]) => { per[n] = (per[n] || 0) + c; }));
+    const det = {}; Object.values(S.stats).forEach(d => Object.entries(d.detect || {}).forEach(([n, c]) => { det[n] = (det[n] || 0) + c; }));
     return h('div', { class: 'card', style: 'display:grid;gap:10px' }, h('h2', null, 'Last ' + days.length + ' days'), days.length ? svg : h('p', { class: 'dim' }, 'No requests counted yet.'),
       h('div', null, pill('update checks ' + checks.reduce((a, b) => a + b, 0)), ' ', pill('downloads ' + dls.reduce((a, b) => a + b, 0), 'warn'), ' ', h('span', { class: 'dim' }, 'cyan = update checks, amber = downloads (a download is counted when it starts from byte 0)')),
+      Object.keys(det).length ? h('div', null, h('span', { class: 'dim' }, 'Smart links (/latest, /api/latest) by detected system: '), Object.entries(det).sort((a, b) => b[1] - a[1]).map(([n, c]) => [pill(n + ' ' + c, n === 'unknown' ? 'warn' : ''), ' '])) : null,
       Object.keys(per).length ? h('div', { class: 'tbl' }, h('table', null, h('thead', null, h('tr', null, h('th', null, 'File'), h('th', null, 'Downloads'))), h('tbody', null, Object.entries(per).sort((a, b) => b[1] - a[1]).map(([n, c]) => h('tr', null, h('td', null, n), h('td', { class: 'num' }, c)))))) : null);
   }
   function health() {

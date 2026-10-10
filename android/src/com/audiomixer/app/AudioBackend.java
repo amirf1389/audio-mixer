@@ -10,6 +10,9 @@ interface AudioBackend {
     /** Devices as the bridge's PortAudio-shaped list, for GET /api/drivers: JSON array of {id,name,hostApi,inputs,outputs,sampleRate}. */
     String devicesJson();
 
+    /** The hardware's own figures as a JSON object (see Interfaces.nativeJson): native sample rate and burst size, low latency / pro audio. */
+    String nativeJson();
+
     Input openInput(Map<String, Object> opts, Listener listener) throws Exception;
 
     Output openOutput(Map<String, Object> opts) throws Exception;

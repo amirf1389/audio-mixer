@@ -19,6 +19,7 @@ public final class BridgeHarness {
         }
         public String interfacesJson() { return Interfaces.toJson(devs); }
         public String devicesJson() { return Interfaces.devicesJson(devs); }
+        public String nativeJson() { return Interfaces.nativeJson(48000, 192, true, false, true); }
         public Input openInput(Map<String, Object> o, final Listener l) throws Exception {
             final int id = Json.intOf(o, "deviceId", -1), ch = Math.max(1, Math.min(2, Json.intOf(o, "channels", 2))), rate = Json.intOf(o, "sampleRate", 48000);
             if (id == 99) throw new Exception("microphone permission is missing");

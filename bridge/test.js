@@ -1921,6 +1921,50 @@ test('Android engine (Java): the bridge protocol runs on a plain JVM with a fake
   } finally { jv.stdin.end(); jv.kill(); }
 });
 
+test('Qt Android project (source only): files, CMake wiring, the routes of its server match the page\'s needs, version follows package.json', () => {
+  const root = pathx.join(__dirname, '..'), rd = f => fsx.readFileSync(pathx.join(root, f), 'utf8');
+  for (const f of ['CMakeLists.txt', 'version.txt', 'README.md', 'src/main.cpp', 'src/MixerServer.cpp', 'src/MixerServer.h', 'src/AudioDevices.cpp', 'src/AudioDevices.h', 'qml/Main.qml', 'android/AndroidManifest.xml']) assert.ok(fsx.existsSync(pathx.join(root, 'android-qt', f)), f);
+  const cm = rd('android-qt/CMakeLists.txt');
+  for (const s of ['find_package(Qt6 6.5 REQUIRED COMPONENTS', 'WebView', 'Multimedia', 'qt_add_qml_module', 'QT_ANDROID_PACKAGE_SOURCE_DIR', 'src/MixerServer.cpp', 'src/AudioDevices.cpp', 'qml/Main.qml']) assert.ok(cm.includes(s), s);
+  for (const f of ['src/MixerServer.cpp', 'src/AudioDevices.cpp', 'src/main.cpp']) assert.ok(cm.includes(f), f);                      // every source is built
+  const srv = rd('android-qt/src/MixerServer.cpp');
+  assert.ok(srv.includes('"/api/status"') && srv.includes('"/api/interfaces"') && srv.includes('assets:/www') && srv.includes('path.contains("..")'));   // routes of the Java app; no way out of the page folder
+  assert.ok(rd('android-qt/src/main.cpp').includes('start(8765, 10)') && rd('android-qt/src/main.cpp').includes('QMicrophonePermission') && rd('android-qt/src/main.cpp').includes('QtWebView::initialize()'));
+  assert.ok(rd('android-qt/qml/Main.qml').includes('"http://localhost:" + mixerPort + "/index.html"'));
+  const man = rd('android-qt/android/AndroidManifest.xml'); assert.ok(man.includes('RECORD_AUDIO') && man.includes('QtActivity') && !/ACCESS_FINE_LOCATION|CAMERA/.test(man));
+  assert.strictEqual(rd('android-qt/version.txt').trim(), JSON.parse(rd('package.json')).version);                                       // `node scripts/prepare-qt.js` keeps it in step
+  assert.match(rd('android-qt/README.md'), /source only, not built or run/);                                                               // the limit is stated
+  const prep = require('../scripts/prepare-qt'); assert.strictEqual(typeof prep.main, 'function');
+  assert.ok(/android-qt\/assets\//.test(rd('.gitignore')));
+});
+
+test('Android native audio helpers (channel counts, buffer sizes, native info) and the Quick Settings tile: JVM self-test, manifest, build wiring', () => {
+  const { spawnSync } = require('node:child_process');
+  const root = pathx.join(__dirname, '..'), rd = f => fsx.readFileSync(pathx.join(root, f), 'utf8'), dir = fsx.mkdtempSync(pathx.join(require('node:os').tmpdir(), 'st-'));
+  const src = n => pathx.join(root, 'android', 'src', 'com', 'audiomixer', 'app', n + '.java');
+  const c = spawnSync('javac', ['--release', '8', '-Xlint:-options', '-d', dir, src('Json'), src('Interfaces'), pathx.join(root, 'android', 'test', 'com', 'audiomixer', 'app', 'Selftest.java')], { encoding: 'utf8' });
+  assert.strictEqual(c.status, 0, c.stderr);
+  const r = spawnSync('java', ['-cp', dir, 'com.audiomixer.app.Selftest'], { encoding: 'utf8' }); assert.strictEqual(r.status, 0, r.stderr);
+  const o = Object.fromEntries(r.stdout.split('\n').filter(l => /^[\w.]+=/.test(l)).map(l => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1)]));
+  assert.strictEqual(o['maxChannels.counts'], '2'); assert.strictEqual(o['maxChannels.usb8'], '8'); assert.strictEqual(o['maxChannels.none'], '0');
+  assert.strictEqual(o['frames.requested'], '256');                                                                                     // an explicit size is kept
+  assert.ok(+o['frames.tooSmall'] === +o['frames.auto'] && +o['frames.auto'] === 384);                                                  // out of range = automatic = two device bursts
+  assert.ok(+o['frames.autoOdd'] % 32 === 0 && +o['frames.huge'] <= 2048 && +o['frames.noNative'] > 0);
+  const nat = JSON.parse(o.native); assert.deepStrictEqual([nat.sampleRate, nat.framesPerBuffer, nat.lowLatency, nat.pro, nat.usbHost], [48000, 192, true, false, true]); assert.strictEqual(nat.burstMs, 4);
+  assert.strictEqual(JSON.parse(o['native.none']).sampleRate, 0);
+  const w = JSON.parse(o.with); assert.ok(w.ok === true && Array.isArray(w.interfaces) && w.native.pro === true);                      // /api/interfaces carries the native block
+  // the tile: declared with the system permission and intent, compiled against stubs that never go into the app
+  const man = rd('android/AndroidManifest.xml');
+  assert.ok(man.includes('android:name=".EngineTileService"') && man.includes('android.permission.BIND_QUICK_SETTINGS_TILE') && man.includes('android.service.quicksettings.action.QS_TILE') && man.includes('ACTIVE_TILE'));
+  const tile = rd('android/src/com/audiomixer/app/EngineTileService.java'); assert.ok(tile.includes('extends TileService') && tile.includes('EngineService.ACTION_STOP') && tile.includes('startForegroundService') && tile.includes('startActivityAndCollapse'));
+  for (const f of ['android/src/com/audiomixer/app/EngineService.java', 'android/kotlin/EngineService.kt']) assert.ok(rd(f).includes('EngineState.running'), f);
+  const apk = require('../scripts/build-apk'), files = apk.listFiles(pathx.join(root, 'android', 'src'), '.java').map(f => pathx.basename(f));
+  assert.ok(files.includes('EngineTileService.java') && files.includes('EngineState.java') && !files.includes('TileService.java') && !files.includes('Selftest.java'));
+  assert.ok(fsx.existsSync(pathx.join(root, 'android/stubs/android/service/quicksettings/TileService.java')));
+  const bs = rd('scripts/build-apk.js'); assert.ok(bs.includes('stubs') && bs.includes('--classpath'));
+  const mb = rd('android/src/com/audiomixer/app/MiniBridge.java'); assert.ok(mb.includes('nativeJson()') && mb.includes('withNative'));
+});
+
 test('Android background engine + power-on animation: manifest, service (Java and Kotlin twin), build wiring, page hooks', () => {
   const root = pathx.join(__dirname, '..'), rd = f => fsx.readFileSync(pathx.join(root, f), 'utf8');
   const man = rd('android/AndroidManifest.xml');
@@ -2321,4 +2365,98 @@ test('no Windows Defender scanner: the verify command, the setup program and the
   const { execFileSync } = require('node:child_process');
   const out = execFileSync('node', [path.join(__dirname, '..', 'client', 'cli.js'), 'verify', '--scan'], { encoding: 'utf8' });
   assert.match(out, /Result: VERIFIED/); assert.match(out, /--scan was removed/); assert.ok(!/Defender/.test(out));
+});
+
+test('OS detection for update links: user agents, Client Hints, explicit choice, system; the right release file per system; the OTA server\'s /latest (302) and /api/latest (JSON, CORS), stats by detected system', async () => {
+  const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), http = require('node:http'), crypto = require('node:crypto');
+  const od = require('./osdetect'), update = require('./update'), lic = require('../scripts/license');
+  const { createOta } = require('../ota-server/server');
+  const d = (ua, extra = {}) => { const r = od.detectOs({ userAgent: ua, ...extra }); return [r.os, r.arch, r.distro, r.source].join('|'); };
+  const WIN = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
+  assert.strictEqual(d(WIN), 'windows|x64||user-agent');
+  assert.strictEqual(d('Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; rv:11.0) like Gecko'), 'windows|x64||user-agent');
+  assert.strictEqual(d('Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 Chrome/49.0 Safari/537.36'), 'windows|x86||user-agent');
+  assert.strictEqual(d('Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36'), 'android|||user-agent');            // "Linux" in an Android user agent is not Linux
+  assert.strictEqual(d('Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1'), 'ios|arm64||user-agent'); // "Mac OS X" in an iPhone one is not macOS
+  assert.strictEqual(d('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15'), 'macos|||user-agent');
+  assert.strictEqual(d('Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0'), 'linux|x64|debian|user-agent');
+  assert.strictEqual(d('Mozilla/5.0 (X11; Fedora; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0'), 'linux|x64|other|user-agent');
+  assert.strictEqual(d('Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 Chrome/126.0 Safari/537.36'), '|||none');                                              // Chrome OS: no package
+  for (const ua of ['curl/8.5.0', 'audio-mixer-update', '', undefined]) assert.strictEqual(d(ua), '|||none', String(ua));
+  assert.strictEqual(d('curl/8', { platformHint: '"Android"' }), 'android|||client-hints'); assert.strictEqual(d('', { platformHint: '"macOS"', archHint: '"arm"' }), 'macos|arm64||client-hints'); assert.strictEqual(d('', { platformHint: '"Windows"', archHint: '"x86"' }), 'windows|x64||client-hints');
+  assert.strictEqual(d(WIN, { os: 'android' }), 'android|||param'); assert.strictEqual(d(WIN, { os: 'win', arch: 'ia32' }), 'windows|x86||param'); assert.strictEqual(d('', { os: 'ubuntu' }), '|||none');
+  assert.strictEqual(d(WIN, { os: 'linux', distro: 'Ubuntu' }), 'linux||debian|param');
+  assert.deepStrictEqual(od.detectOs({ node: { platform: 'win32', arch: 'ia32' } }), { os: 'windows', arch: 'x86', distro: 'other', source: 'system' });
+  assert.deepStrictEqual(od.detectOs({ node: { platform: 'linux', arch: 'arm64', debian: true } }), { os: 'linux', arch: 'arm64', distro: 'debian', source: 'system' });
+  // which key per system, best first
+  const keys = (os, arch, distro) => od.keysFor({ os, arch, distro });
+  assert.deepStrictEqual(keys('windows', 'x64'), ['win-x64-exe', 'win-x64-msi']); assert.deepStrictEqual(keys('windows', 'x86'), ['win-x86-msi']); assert.deepStrictEqual(keys('linux', 'x64', 'debian'), ['linux-deb', 'linux-tar']);
+  assert.deepStrictEqual(keys('linux', 'x64', null), ['linux-tar', 'linux-deb']); assert.deepStrictEqual(keys('linux', 'x64', 'other'), ['linux-tar']); assert.deepStrictEqual(keys('macos'), ['macos-dmg', 'macos']); assert.deepStrictEqual(keys('android'), ['android-apk']); assert.deepStrictEqual(keys('ios'), ['ios-project']); assert.deepStrictEqual(keys(null), []);
+  // the update client picks by the same rules (a Debian box without a .deb in the manifest gets the archive; Android gets the .apk)
+  const man = { files: Object.fromEntries(Object.keys(od.FILES).map(k => [k, { name: k + '.bin', url: 'https://x.test/' + k, size: 1, sha256: 'a'.repeat(64) }])) }, pf = (platform, arch, debian) => (update.platformFile(man, { platform, arch, debian }) || {}).key;
+  assert.deepStrictEqual([pf('win32', 'x64'), pf('win32', 'ia32'), pf('linux', 'x64', true), pf('linux', 'x64', false), pf('darwin', 'arm64'), pf('android', 'arm64')], ['win-x64-exe', 'win-x86-msi', 'linux-deb', 'linux-tar', 'macos-dmg', 'android-apk']);
+  delete man.files['macos-dmg']; delete man.files['linux-deb']; assert.deepStrictEqual([pf('darwin', 'x64'), pf('linux', 'x64', true)], ['macos', 'linux-tar']); assert.strictEqual(update.platformFile({ files: {} }, { platform: 'win32', arch: 'x64' }), null);
+  assert.ok(require('../scripts/make-update').build.toString().includes("'android-apk'") && require('../scripts/make-update').build.toString().includes("'ios-project'"));
+  // the OTA server
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ol-')), keysDir = path.join(tmp, 'v'); lic.initKeys(keysDir); const jwk = lic.loadPublic(keysDir), priv = lic.loadPrivate(keysDir);
+  const ota = createOta({ dataDir: path.join(tmp, 'data'), token: 'tk', jwk, publicUrl: 'https://ota.test', rate: 1000 }); await ota.reindex();
+  const srv = http.createServer(ota.handler); await new Promise(r => srv.listen(0, '127.0.0.1', r));
+  const b = 'http://127.0.0.1:' + srv.address().port, auth = { Authorization: 'Bearer tk' }, sha = x => crypto.createHash('sha256').update(x).digest('hex');
+  try {
+    assert.strictEqual((await fetch(b + '/latest')).status, 404); assert.strictEqual((await (await fetch(b + '/api/latest')).json()).ok, false);                          // nothing published yet
+    const names = { 'win-x64-exe': 'Audio Mixer-7.0.0.0.exe', 'win-x64-msi': 'AudioMixer-7.0.0.0-x64.msi', 'win-x86-msi': 'AudioMixer-7.0.0.0-x86.msi', 'linux-deb': 'audio-mixer_7.0.0.0_all.deb', 'linux-tar': 'AudioMixer-7.0.0.0-linux.tar.gz', 'macos-dmg': 'AudioMixer-7.0.0.0-macos.dmg', 'android-apk': 'AudioMixer-7.0.0.0-android.apk' };
+    const files = {};
+    for (const [k, n] of Object.entries(names)) { const buf = Buffer.from(k + '-content-' + 'x'.repeat(50)); assert.strictEqual((await fetch(b + '/admin/files/' + encodeURIComponent(n), { method: 'PUT', headers: { ...auth, 'X-SHA256': sha(buf) }, body: buf })).status, 201); files[k] = { name: n, url: 'https://ota.test/releases/' + encodeURIComponent(n), size: buf.length, sha256: sha(buf) }; }
+    const manifest = { product: 'audio-mixer', version: '7.0.0.0', channel: 'stable', released: '2026-10-11', notes: ['smart links'], files };
+    assert.strictEqual((await fetch(b + '/admin/manifest/stable', { method: 'PUT', headers: auth, body: JSON.stringify(update.signManifest(manifest, priv)) })).status, 200);
+    const UA = { win: WIN, android: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/126.0 Mobile Safari/537.36', mac: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Safari/605.1.15', ubuntu: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:128.0) Firefox/128.0', fedora: 'Mozilla/5.0 (X11; Fedora; Linux x86_64; rv:128.0) Firefox/128.0', iphone: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1' };
+    const go = async (p, ua, h = {}) => fetch(b + p, { redirect: 'manual', headers: { 'User-Agent': ua || 'x', ...h } });
+    const loc = async (p, ua, h) => { const r = await go(p, ua, h); return [r.status, r.headers.get('location')]; };
+    const u = k => files[k].url;
+    assert.deepStrictEqual(await loc('/latest', UA.win), [302, u('win-x64-exe')]); assert.deepStrictEqual(await loc('/download', UA.android), [302, u('android-apk')]); assert.deepStrictEqual(await loc('/latest', UA.mac), [302, u('macos-dmg')]);
+    assert.deepStrictEqual(await loc('/latest', UA.ubuntu), [302, u('linux-deb')]); assert.deepStrictEqual(await loc('/latest', UA.fedora), [302, u('linux-tar')]);
+    assert.deepStrictEqual(await loc('/latest?os=windows&arch=x86', UA.android), [302, u('win-x86-msi')]);                                                       // an explicit choice wins over the user agent
+    assert.deepStrictEqual(await loc('/latest', 'curl/8', { 'Sec-CH-UA-Platform': '"Android"' }), [302, u('android-apk')]);
+    const ios = await go('/latest', UA.iphone); assert.strictEqual(ios.status, 404); assert.match((await ios.json()).error, /no download for this system \(ios\)/);                                 // no iOS file in this manifest
+    const unk = await go('/latest', 'curl/8'); assert.strictEqual(unk.status, 404); const ub = await unk.json(); assert.match(ub.error, /could not be detected/); assert.ok(ub.others.length === 7);
+    assert.strictEqual((await go('/latest?channel=Bad!', UA.win)).status, 400); assert.strictEqual((await go('/latest?channel=beta', UA.win)).status, 404);
+    // the JSON for apps: detected system, version, notes, the file with how-to, the others, CORS
+    const r = await go('/api/latest', UA.android), j = await r.json();
+    assert.strictEqual(r.headers.get('access-control-allow-origin'), '*'); assert.match(r.headers.get('vary'), /User-Agent/); assert.match(r.headers.get('accept-ch'), /Sec-CH-UA-Platform/);
+    assert.ok(j.ok && j.os === 'android' && j.detected === 'user-agent' && j.version === '7.0.0.0' && j.notes[0] === 'smart links' && j.file.key === 'android-apk' && j.file.url === u('android-apk') && j.file.sha256 === files['android-apk'].sha256 && /Open the downloaded \.apk/.test(j.file.how) && j.others.length === 6 && !j.others.some(o => o.key === 'android-apk') && j.manifest === 'https://ota.test/update.json');
+    const jw = await (await go('/api/latest?arch=x86', UA.win)).json(); assert.ok(jw.file.key === 'win-x86-msi' && jw.arch === 'x86' && jw.detected === 'user-agent');
+    const ji = await (await go('/api/latest', UA.iphone)).json(); assert.ok(ji.ok && ji.os === 'ios' && ji.file === null && ji.others.length === 7);
+    assert.strictEqual((await go('/update.json', 'x')).headers.get('access-control-allow-origin'), '*');
+    const pre = await fetch(b + '/api/latest', { method: 'OPTIONS', headers: { Origin: 'https://app.example' } }); assert.strictEqual(pre.status, 204); assert.match(pre.headers.get('access-control-allow-methods'), /GET/);
+    assert.strictEqual((await fetch(b + '/latest', { method: 'POST' })).status, 405);
+    const st = await (await fetch(b + '/admin/stats', { headers: auth })).json(), det = Object.values(st.days)[0].detect; assert.ok(det.android >= 3 && det.windows >= 3 && det.macos === 1 && det.linux === 2 && det.unknown >= 1 && det.ios >= 2, JSON.stringify(det));
+  } finally { srv.closeAllConnections(); srv.close(); }
+});
+
+test('the page\'s OS detection (index.html otaDetectOs / otaPick) gives the same answers as bridge/osdetect.js', () => {
+  const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm'), od = require('./osdetect');
+  const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const a = html.indexOf('const OTA_FILES = {'), b = html.indexOf('const otaOthers = ');
+  assert.ok(a > 0 && b > a, 'the page carries its detector');
+  const ctx = vm.createContext({}); vm.runInContext(html.slice(a, b) + '\nthis.detect = otaDetectOs; this.pick = otaPick; this.keys = otaKeysFor; this.FILES = OTA_FILES;', ctx);
+  const clone = x => JSON.parse(JSON.stringify(x));
+  const UAS = [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126.0.0.0 Safari/537.36', 'Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; rv:11.0) like Gecko', 'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 Chrome/49.0 Safari/537.36',
+    'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/126.0.0.0 Mobile Safari/537.36', 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 Version/17.5 Mobile/15E148 Safari/604.1',
+    'Mozilla/5.0 (iPad; CPU OS 17_5 like Mac OS X) AppleWebKit/605.1.15', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Safari/605.1.15', 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0',
+    'Mozilla/5.0 (X11; Fedora; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0', 'Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 Chrome/126.0', 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/126.0',
+    'Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 Chrome/126.0 Safari/537.36', 'curl/8.5.0', '', undefined,
+  ];
+  const extras = [{}, { os: 'android' }, { os: 'win', arch: 'ia32' }, { os: 'linux', distro: 'Ubuntu' }, { os: 'ubuntu' }, { platformHint: '"Android"' }, { platformHint: '"macOS"', archHint: '"arm"' }, { platformHint: '"Windows"', archHint: '"x86"' }, { platformHint: '"Linux"' }, { platformHint: '"Chrome OS"' }];
+  for (const userAgent of UAS) for (const e of extras) {
+    const o = { userAgent, ...e };
+    assert.deepStrictEqual(clone(ctx.detect(o)), od.detectOs(o), JSON.stringify(o));
+    const det = od.detectOs(o); assert.deepStrictEqual(clone(ctx.keys(det)), od.keysFor(det));
+  }
+  assert.deepStrictEqual(clone(ctx.FILES), od.FILES);
+  const man = { files: Object.fromEntries(Object.keys(od.FILES).map(k => [k, { name: k + '.bin', url: 'https://x.test/' + k, size: 1, sha256: 'a'.repeat(64) }])) };
+  for (const os of od.OSES) for (const arch of ['x64', 'x86', 'arm64', null]) for (const distro of ['debian', 'other', null]) {
+    const det = { os, arch, distro }, x = ctx.pick(man, det), y = od.pick(man, det);
+    assert.deepStrictEqual(clone(x), y);
+  }
 });
