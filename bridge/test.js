@@ -865,6 +865,13 @@ test('cli: license / plugins / update commands exist and the stub has the featur
   assert.match(stub, /ADDLOCAL=Main/);
 });
 
+test('page: interfaces opened by LIVE SOURCES reach the mixer channels, and LIVE INPUT PATCH lists them', () => {
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  assert.match(html, /if \(this\.cfg\.auto && cap\.bridge\) this\.autoPatchOne\(cap\)/);        // a freshly read server interface is patched, browser microphones stay manual (feedback)
+  assert.match(html, /autoPatchOne\(cap\) \{/); assert.match(html, /value="ls:\$\{esc\(i\.key\)\}"/);  // routing page offers the server interfaces
+  assert.match(html, /\/\^ls:\/\.test\(String\(deviceId\)\)/); assert.match(html, /l\.shared/);        // shared capture nodes are branched, never closed by REMOVE
+});
+
 test('verify: .msi installer file check', () => {
   const v = require('../client/verify');
   const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'vfy-')), f = pathx.join(dir, 'A.msi');

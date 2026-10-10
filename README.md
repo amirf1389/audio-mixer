@@ -236,3 +236,8 @@ An audit of the LIVE SOURCES page (READ / WRITE per interface, ASIO, WASAPI, Dir
 - **Optional MSI features:** `Main` (always), `Shortcuts`, `Tools`, `PluginHost` (native VST host, `native/host`), `WinHelpers` (native Windows device helpers, `native/win`), `Autostart`, `Desktop` (off by default). Use `ADDLOCAL=Main,Shortcuts,PluginHost` with msiexec, or the wizard's feature tree.
 - **Setup `.exe` switches:** `/noplugins`, `/nohelpers`, `/notools`, `/noshortcuts`, `/noautostart`, `/desktop` (they are turned into `ADDLOCAL`; without them the installer keeps its defaults). `/?` lists all switches.
 - Without the plugin host the mixer still works; VST insert slots then report that the host is missing.
+
+## Sources reach the mixer channels (1.14.1)
+
+- **Interfaces that were read did not feed the mixer.** Opening an interface in LIVE SOURCES (ASIO, WASAPI, DirectSound, Core Audio, ALSA, Android) only fed its meter until the PATCH button was pressed, so the channel strips showed no input. With auto mode on, a server interface that opens is now patched to the next free channel pair (CH 1/2, 3/4, ... within the license's channel limit; loopback / music goes to the last pair) and a notice reminds you to use headphones. Browser microphones are still not patched automatically (speaker feedback): use LIVE INPUT PATCH.
+- **LIVE INPUT PATCH only offered browser microphones.** The device list on the routing page now also lists the interfaces of the local system server ("Local server (ASIO / WASAPI)"), opens one on demand and patches it (stereo, left or right) into any channel. The capture is shared with LIVE SOURCES: REMOVE only disconnects the channel, the READ stream keeps running. The list refreshes after every scan without closing an open dropdown.
