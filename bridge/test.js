@@ -911,6 +911,15 @@ test('boot screens: browser page + launcher helper (macOS / Linux), native Windo
   assert.match(rd('ios', 'AudioMixer', 'AudioMixerApp.swift'), /struct BootView: View/);
 });
 
+test('page: the header mic FFT follows the RTA axis and is fed by every LIVE SOURCES interface', () => {
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  assert.match(html, /micAnalyser\.fftSize = 4096/);                                                  // 512 points: 94 Hz per bin, nothing readable below ~250 Hz
+  assert.match(html, /AX = \[20, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000, 20000\]/);         // the labels under the RTA
+  assert.ok(!/Math\.pow\(i \/ bars, 1\.8\)/.test(html), 'the old power-curve bin mapping is gone');
+  assert.match(html, /syncMicFeed\(\) \{/); assert.match(html, /\(window\.state\.micActive \|\| window\.state\.micFeeds\)/);
+  assert.match(html, /\$\('ls-mic-sel'\)\.onchange = e => \{ this\.mic = e\.target\.value \|\| null; this\.syncMicFeed\(\); \};/);
+});
+
 test('verify: .msi installer file check', () => {
   const v = require('../client/verify');
   const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'vfy-')), f = pathx.join(dir, 'A.msi');

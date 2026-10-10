@@ -260,3 +260,12 @@ The console always played its power-on animation inside the page. The apps now a
 - **Android:** a native start-up view (`BootView`) covers the page until it has loaded (at least 2.2 s, never longer than 12 s) and fades out.
 - **iOS:** a SwiftUI `BootView` does the same until the bundled page is served.
 - **Not verified:** `boot.html` and its hand-over to the server ran in Chromium (stays while the server is down, redirects when it answers) and the shell helper was tested with a stand-in browser opener. The Windows window compiles (x64 and x86) but was **not run** (no Windows here); the Android view compiles into the APK but was not run on a device; the iOS view could **not be compiled** (no Xcode here).
+
+## Mic FFT spectrum fix (1.15.1)
+
+The microphone trace of the header RTA (FFT RTA, 20 Hz - 20 kHz) had three faults, all fixed:
+1. **Wrong frequency axis.** Bars were taken from the FFT bins with a power curve that does not match the labels under the display: a 1 kHz tone was drawn at 17 % of the width, where the label says 250 Hz. Every bar now maps to the frequency of the label axis (20, 63, 125 ... 16k, 20k Hz, log between neighbours) and shows the loudest bin of its band, so a narrow tone is not skipped at the high end. A 1 kHz tone now lands on the 1kHz label.
+2. **Too coarse below 250 Hz.** The analyser used 512 points (94 Hz per bin). It now uses 4096 points (11.7 Hz per bin at 48 kHz).
+3. **Only the default browser microphone was shown.** Interfaces read in LIVE SOURCES (browser microphones, ASIO, WASAPI, DirectSound, Core Audio, ALSA, Android, anything arriving through the local server's Web Audio worklet) never reached it. The interface chosen in the FFT selector of LIVE SOURCES now feeds the header trace (the button reads `MIC: SOURCE (FFT ON)`); the header's own microphone toggle still works and both can run together.
+
+The music trace of the same display keeps its old bin mapping (not part of this fix). Checked in Chromium with a 1 kHz tone as the microphone and with the test engine's server-side interface.
