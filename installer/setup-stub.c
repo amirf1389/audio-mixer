@@ -12,6 +12,7 @@
  *   Audio Mixer-1.4.0.exe /noplugins  do not install the VST plugin host;  /nohelpers  skip the native Windows device helpers
  *   Audio Mixer-1.4.0.exe /notools     no Start Menu tool shortcuts (license, plugins, drivers, update, diagnostics)
  *   Audio Mixer-1.4.0.exe /noshortcuts no Start Menu shortcuts at all;  /desktop  add the desktop shortcut;  /noautostart  do not start at login
+ *   An upgrade over an installed version ends the old local server first (so no restart is needed) and starts the new one afterwards.
  *   Anything else (for example INSTALLDIR="D:\Audio Mixer") is passed on to msiexec.
  * Build: x86_64-w64-mingw32-gcc / i686-w64-mingw32-gcc, see scripts/build-exe.js.
  */
@@ -20,6 +21,7 @@
 #include <windows.h>
 #include <wincrypt.h>
 #include <shellapi.h>
+#include <tlhelp32.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -116,6 +118,28 @@ static int run(wchar_t *cmdline, int newConsole, DWORD *code) {
   return 1;
 }
 
+/* Upgrade: the running local server (node.exe from the install folder, AudioMixerServer.exe) keeps its files locked, so Windows Installer would
+ * ask for a restart. Ends only processes whose program file lives inside `dir` (the current install folder); returns how many were ended. */
+static int stop_old_server(const wchar_t *dir) {
+  size_t n = wcslen(dir); int ended = 0;
+  if (!n) return 0;
+  HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+  if (snap == INVALID_HANDLE_VALUE) return 0;
+  PROCESSENTRY32W pe; pe.dwSize = sizeof pe;
+  for (BOOL more = Process32FirstW(snap, &pe); more; more = Process32NextW(snap, &pe)) {
+    if (_wcsicmp(pe.szExeFile, L"node.exe") && _wcsicmp(pe.szExeFile, L"AudioMixerServer.exe")) continue;
+    HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_TERMINATE | SYNCHRONIZE, FALSE, pe.th32ProcessID);
+    if (!h) continue;
+    wchar_t path[MAX_PATH * 2]; DWORD len = MAX_PATH * 2;
+    if (QueryFullProcessImageNameW(h, 0, path, &len) && len > n && !_wcsnicmp(path, dir, n)) {
+      if (TerminateProcess(h, 0)) { WaitForSingleObject(h, 5000); ended++; }
+    }
+    CloseHandle(h);
+  }
+  CloseHandle(snap);
+  return ended;
+}
+
 int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int show) {
   (void)inst; (void)prev; (void)cmd; (void)show;
   int argc = 0; wchar_t **argv = CommandLineToArgvW(GetCommandLineW(), &argc);
@@ -177,6 +201,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int show) {
   DWORD exitCode = 0; wchar_t line[4096];
   if (uninstall) {
     CloseHandle(f);
+    { wchar_t old[MAX_PATH]; if (install_dir(old, MAX_PATH)) stop_old_server(old); }
     _snwprintf(line, 4096, L"msiexec.exe /x %ls%ls%ls", code, quiet ? L" /qn" : passive ? L" /passive" : L" /qb", extra);
     line[4095] = 0;
     if (!run(line, 0, &exitCode)) { message(L"Cannot start Windows Installer (msiexec).", MB_ICONERROR); return 1; }
@@ -201,10 +226,16 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int show) {
   if (!ok) { DeleteFileW(msi); message(L"The installer package failed its SHA-256 check: the file is damaged or was changed. Download it again from the official release and compare its SHA-256.", MB_ICONERROR); return 1; }
 
   if (!novc) ensure_vc_runtime();
+  int restart = 0;
+  { wchar_t old[MAX_PATH]; if (install_dir(old, MAX_PATH)) restart = stop_old_server(old) > 0; }   /* upgrade: free the locked files */
   _snwprintf(line, 4096, L"msiexec.exe /i \"%ls\"%ls%ls", msi, quiet ? L" /qn" : passive ? L" /passive" : L"", extra);
   line[4095] = 0;
   if (!run(line, 0, &exitCode)) { DeleteFileW(msi); message(L"Cannot start Windows Installer (msiexec).", MB_ICONERROR); return 1; }
   DeleteFileW(msi);
+  if (restart && (exitCode == 0 || exitCode == 3010)) {   /* the server was running before the upgrade: start the new one */
+    wchar_t dir[MAX_PATH];
+    if (install_dir(dir, MAX_PATH)) { _snwprintf(line, 4096, L"\"%lsAudioMixerServer.exe\"", dir); line[4095] = 0; run(line, 0, NULL); }
+  }
   if ((exitCode == 0 || exitCode == 3010) && scan) {
     wchar_t dir[MAX_PATH];
     if (install_dir(dir, MAX_PATH)) {
