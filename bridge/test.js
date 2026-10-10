@@ -2180,3 +2180,62 @@ test('OTA server: signed manifests only, uploads are checksum-verified, the real
   try { const b2 = 'http://127.0.0.1:' + s2.address().port; assert.strictEqual((await fetch(b2 + '/admin/files')).status, 404); const codes = []; for (let i = 0; i < 5; i++) codes.push((await fetch(b2 + '/update.json')).status); assert.deepStrictEqual(codes, [404, 404, 404, 429, 429]); }
   finally { s2.closeAllConnections(); s2.close(); }
 });
+
+test('OTA dashboard: served only with the admin token configured, strict CSP, history / roll back / unpublish / verify / config API, browser-side signing is accepted by the server and the app', async () => {
+  const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), http = require('node:http'), crypto = require('node:crypto');
+  const { createOta } = require('../ota-server/server'), update = require('./update'), lic = require('../scripts/license');
+  const dash = require('../ota-server/dashboard/app.js');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dash-')), keys = path.join(tmp, 'vendor'); lic.initKeys(keys); const jwk = lic.loadPublic(keys);
+  const ota = createOta({ dataDir: path.join(tmp, 'data'), token: 'tk', jwk, publicUrl: 'https://ota.test' }); await ota.reindex();
+  const noTok = createOta({ dataDir: path.join(tmp, 'd0'), jwk });
+  const run = async (o, f) => { const s = http.createServer(o.handler); await new Promise(r => s.listen(0, '127.0.0.1', r)); try { await f('http://127.0.0.1:' + s.address().port); } finally { s.closeAllConnections(); s.close(); } };
+  await run(noTok, async b => { for (const p of ['/admin/', '/admin', '/admin/app.js', '/admin/config']) assert.strictEqual((await fetch(b + p, { redirect: 'manual' })).status, 404, p); });
+  await run(ota, async b => {
+    const auth = { Authorization: 'Bearer tk' }, sha = buf => crypto.createHash('sha256').update(buf).digest('hex');
+    // static dashboard: public files, nothing from outside, no inline script / style, locked down
+    const page = await fetch(b + '/admin/'), html = await page.text(), csp = page.headers.get('content-security-policy');
+    assert.strictEqual(page.status, 200); assert.match(csp, /default-src 'none'/); assert.match(csp, /script-src 'self'/); assert.match(csp, /frame-ancestors 'none'/); assert.strictEqual(page.headers.get('x-frame-options'), 'DENY');
+    assert.ok(!/<script(?![^>]*\bsrc=)/.test(html) && !/\sstyle=|\son\w+=/.test(html) && !/https?:\/\//.test(html.replace(/<!doctype html>/i, '')));
+    assert.strictEqual((await fetch(b + '/admin', { redirect: 'manual' })).status, 301);
+    assert.match(await (await fetch(b + '/admin/app.js')).text(), /Audio Mixer OTA server: vendor dashboard/); assert.strictEqual((await fetch(b + '/admin/style.css')).headers.get('content-type'), 'text/css; charset=utf-8');
+    assert.strictEqual((await fetch(b + '/admin/app.js', { method: 'POST' })).status, 401);                     // anything but GET / HEAD on /admin/* needs the token
+    const src = fs.readFileSync(path.join(__dirname, '..', 'ota-server', 'dashboard', 'app.js'), 'utf8');
+    assert.ok(!/innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(|new Function|setAttribute\('style'/.test(src), 'server data is only ever written as text');
+    assert.strictEqual((await fetch(b + '/admin/config')).status, 401);
+    const cfg = await (await fetch(b + '/admin/config', { headers: auth })).json(); assert.deepStrictEqual(cfg.jwk, jwk); assert.strictEqual(cfg.publicUrl, 'https://ota.test'); assert.strictEqual(cfg.maxFile, 400 * 1024 * 1024);
+    // the pure helpers of the page: file-name matching, manifest shape, signing with the private key in the "browser" (WebCrypto), verification
+    const exe = Buffer.from('MZ-exe-' + 'a'.repeat(500)), msi = Buffer.from('msi-' + 'b'.repeat(600)), old = Buffer.from('MZ-old-' + 'c'.repeat(300));
+    const names = { 'Audio Mixer-3.0.0.0.exe': exe, 'AudioMixer-3.0.0.0-x64.msi': msi, 'Audio Mixer-2.9.0.0.exe': old };
+    for (const [n, buf] of Object.entries(names)) assert.strictEqual((await fetch(b + '/admin/files/' + encodeURIComponent(n), { method: 'PUT', headers: { ...auth, 'X-SHA256': sha(buf) }, body: buf })).status, 201);
+    const files = (await (await fetch(b + '/admin/files', { headers: auth })).json()).files, g = dash.guess(files);
+    assert.strictEqual(g.version, '3.0.0.0'); assert.deepStrictEqual(g.map, { 'win-x64-exe': 'Audio Mixer-3.0.0.0.exe', 'win-x64-msi': 'AudioMixer-3.0.0.0-x64.msi' });
+    assert.strictEqual(await dash.sha256Hex(exe), sha(exe));
+    const mk = (version, map) => dash.buildManifest({ version, channel: 'stable', notes: ['  a  ', '', 'b'], map, files, base: cfg.publicUrl + '/', released: '2026-10-10' });
+    const m3 = mk('3.0.0.0', g.map); assert.deepStrictEqual(m3.notes, ['a', 'b']); assert.strictEqual(m3.files['win-x64-exe'].url, 'https://ota.test/releases/Audio%20Mixer-3.0.0.0.exe'); assert.strictEqual(m3.files['win-x64-exe'].sha256, sha(exe));
+    assert.deepStrictEqual(Object.keys(require('../scripts/make-update').build({ releases: (() => { const d = fs.mkdtempSync(path.join(tmp, 'r')); fs.writeFileSync(path.join(d, 'Audio Mixer-3.0.0.0.exe'), exe); return d; })(), version: '3.0.0.0', base: 'https://ota.test/releases' })).sort(), Object.keys(m3).sort());   // same manifest shape as the command-line tool
+    const key = await dash.importPrivate(fs.readFileSync(path.join(keys, 'private.pem'), 'utf8')), env3 = await dash.signManifest(m3, key);
+    assert.ok(update.verifyManifest(env3, jwk).ok, 'the app\'s verifier accepts a signature made in the browser'); assert.ok(await dash.verifyEnvelope(env3, jwk));
+    assert.ok(!(await dash.verifyEnvelope({ ...env3, payload: env3.payload.replace('3.0.0.0', '3.0.0.1') }, jwk)));
+    await assert.rejects(dash.importPrivate('not a key'), /PKCS#8/);
+    assert.ok(update.verifyManifest(update.signManifest(m3, lic.loadPrivate(keys)), jwk).ok && await dash.verifyEnvelope(update.signManifest(m3, lic.loadPrivate(keys)), jwk));   // and the other way round
+    const put = (env, ch = 'stable', q = '') => fetch(b + '/admin/manifest/' + ch + q, { method: 'PUT', headers: auth, body: JSON.stringify(env) });
+    // publish 2.9.0.0, then 3.0.0.0; history lists both newest first; a roll back publishes the old signed manifest again
+    assert.strictEqual((await put(await dash.signManifest(mk('2.9.0.0', { 'win-x64-exe': 'Audio Mixer-2.9.0.0.exe' }), key))).status, 200);
+    assert.strictEqual((await put(env3)).status, 200);
+    let hist = (await (await fetch(b + '/admin/history/stable', { headers: auth })).json()).versions; assert.deepStrictEqual(hist.map(v => [v.version, v.current, v.notes]), [['3.0.0.0', true, ['a', 'b']], ['2.9.0.0', false, ['a', 'b']]]);
+    const oldEnv = await (await fetch(b + '/admin/history/stable/2.9.0.0', { headers: auth })).json(); assert.ok(update.verifyManifest(oldEnv, jwk).ok);
+    assert.strictEqual((await put(oldEnv)).status, 409); const back = await put(oldEnv, 'stable', '?force=1'); assert.strictEqual(back.status, 200);
+    assert.strictEqual((await (await fetch(b + '/healthz')).json()).channels.stable, '2.9.0.0');
+    assert.strictEqual((await fetch(b + '/admin/history/stable/9.9.9', { headers: auth })).status, 404); assert.strictEqual((await fetch(b + '/admin/history/..%2Fx', { headers: auth })).status, 404);
+    assert.deepStrictEqual((await (await fetch(b + '/admin/history/beta', { headers: auth })).json()).versions, []);
+    // verify: damaged / missing files are reported
+    assert.strictEqual((await (await fetch(b + '/admin/verify', { headers: auth })).json()).allGood, true);
+    fs.appendFileSync(path.join(ota.dirs.releases, 'Audio Mixer-3.0.0.0.exe'), 'x'); fs.unlinkSync(path.join(ota.dirs.releases, 'AudioMixer-3.0.0.0-x64.msi'));
+    const v = await (await fetch(b + '/admin/verify', { headers: auth })).json(); assert.strictEqual(v.allGood, false); assert.deepStrictEqual(v.files.filter(f => !f.ok).map(f => [f.name, f.actual]).sort(), [['Audio Mixer-3.0.0.0.exe', 'size differs'], ['AudioMixer-3.0.0.0-x64.msi', 'missing']]);
+    // unpublish: the apps get 404, the history stays, a bad channel is refused
+    assert.strictEqual((await fetch(b + '/admin/manifest/stable', { method: 'DELETE', headers: auth })).status, 200); assert.strictEqual((await fetch(b + '/update.json')).status, 404);
+    assert.strictEqual((await fetch(b + '/admin/manifest/stable', { method: 'DELETE', headers: auth })).status, 404);
+    hist = (await (await fetch(b + '/admin/history/stable', { headers: auth })).json()).versions; assert.strictEqual(hist.length, 2);
+    assert.strictEqual((await fetch(b + '/admin/files/%E0%A4%A', { method: 'DELETE', headers: auth })).status, 400);              // broken % escape: 400, not a crash
+  });
+});

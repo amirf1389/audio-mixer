@@ -27,6 +27,15 @@ Everything: `ota-server.service` (systemd), `docker-compose.yml` + `Dockerfile` 
 `publish` builds the manifest of the version in `package.json` from `releases/`, signs it, uploads the files the server does not have, then
 publishes the manifest. `--channel beta` publishes to `/beta/update.json`; `--force` replaces a version that is already published.
 
+## Web dashboard
+With `OTA_ADMIN_TOKEN` set, open `https://ota.example.com/admin/` and sign in with the token (kept in the tab's memory only; "remember in this tab" uses `sessionStorage`).
+- **Overview:** every channel: version, release date, notes, files per platform, a "signature valid" check done in the browser against the public key, the `BRIDGE_UPDATE_URL` to give the apps, Unpublish.
+- **Files:** drag in the release files: the SHA-256 is computed in the browser, the upload shows progress and the server checks the hash again; list with "listed by" badges, Delete (not for files a manifest lists).
+- **Publish:** the version and the file for each platform are filled in from the file names; add notes, choose your `private.pem`, preview the manifest, **Sign and publish**. The key is imported as a non-extractable WebCrypto key and **signs in the browser; it is never uploaded**. The server and the apps verify the signature like any other.
+- **History:** every manifest ever published per channel, with **Roll back to this** (publishes the older, already signed manifest again).
+- **Stats:** update checks and downloads per day, downloads per file. **Health:** re-hash every file on the disk and report damage or missing files.
+The dashboard files are served from the same origin under a strict Content-Security-Policy (no external scripts or styles, no inline code, not framable); it writes server data as text only. Keep `/admin/` behind your IP allow-list in nginx (see `nginx.conf`) as well.
+
 ## Point the apps at it
     BRIDGE_UPDATE_URL=https://ota.example.com/update.json
     BRIDGE_UPDATE_HOSTS=ota.example.com
@@ -45,6 +54,11 @@ Without them the app asks the project's GitHub `releases/update.json`.
 | `DELETE /admin/files/<file>` | only files no manifest lists |
 | `PUT /admin/manifest/<channel>` | publish a signed manifest (`?force=1` for same / older versions) |
 | `GET /admin/stats` | update checks and downloads per day |
+| `GET /admin/config` | public URL, public key, limits |
+| `GET /admin/history/<channel>`, `/<version>` | published versions (newest first); the signed envelope of one |
+| `DELETE /admin/manifest/<channel>` | unpublish (history stays) |
+| `GET /admin/verify` | hash every file on disk again |
+| `GET /admin/` | the dashboard |
 
 Admin routes answer 404 without `OTA_ADMIN_TOKEN`, 401 with a wrong token (10 wrong tries a minute per address, then 429). The data folder holds
 `releases/`, `manifests/` (and `manifests/history/`), `index.json` and `stats.json`; back it up with the vendor key.
