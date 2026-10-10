@@ -21,5 +21,10 @@
         </activity>
         <!-- the background audio engine (EngineService): keeps the mixer's audio interfaces and processing running with the screen off or the app in the background -->
         <service android:name=".EngineService" android:exported="false"/>
+        <!-- Quick Settings tile "Mixer engine": starts / stops the engine from the notification shade (API 24+; the tile is bound only when the engine state changes: ACTIVE_TILE) -->
+        <service android:name=".EngineTileService" android:label="Mixer engine" android:icon="@mipmap/ic_launcher" android:exported="true" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter>
+            <meta-data android:name="android.service.quicksettings.ACTIVE_TILE" android:value="true"/>
+        </service>
     </application>
 </manifest>

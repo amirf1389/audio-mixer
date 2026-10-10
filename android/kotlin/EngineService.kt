@@ -25,11 +25,15 @@ class EngineService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
+            EngineState.running = false
+            EngineState.changed(this)
             stopForeground(true)
             stopSelf()
             return START_NOT_STICKY
         }
         startForeground(NOTIFICATION_ID, notification("Starting the audio engine..."))
+        EngineState.running = true                                  // the Quick Settings tile lights up
+        EngineState.changed(this)
         if (bridge == null) {
             try {
                 val b = MiniBridge(AndroidAudio(this), AndroidAssets(this), version())
@@ -56,6 +60,8 @@ class EngineService : Service() {
         bridge?.stop()
         bridge = null
         Companion.port = 0
+        EngineState.running = false
+        EngineState.changed(this)
         wake?.takeIf { it.isHeld }?.release()
         super.onDestroy()
     }

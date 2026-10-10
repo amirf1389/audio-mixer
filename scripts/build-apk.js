@@ -158,7 +158,10 @@ async function build({ out = path.join(ROOT, 'releases'), kotlin = false } = {})
   const cls = path.join(work, 'classes'); fs.mkdirSync(cls);
   const srcDir = path.join(ROOT, 'android', 'src');
   const javaFiles = listFiles(srcDir, '.java').filter(f => !(kotlin && /EngineService\.java$/.test(f)));
-  run(t.javac, ['--release', '8', '-Xlint:-options', '-cp', t.jar, '-d', cls, ...javaFiles]);
+  // framework classes newer than the API 23 android.jar (the Quick Settings tile, API 24) are compiled against stubs (android/stubs); the stubs are NOT packaged, the phone's own classes are used
+  const stubs = path.join(work, 'stubs'); fs.mkdirSync(stubs);
+  run(t.javac, ['--release', '8', '-Xlint:-options', '-cp', t.jar, '-d', stubs, ...listFiles(path.join(ROOT, 'android', 'stubs'), '.java')]);
+  run(t.javac, ['--release', '8', '-Xlint:-options', '-cp', [t.jar, stubs].join(path.delimiter), '-d', cls, ...javaFiles]);
   const extra = [];
   if (kotlin) {
     const kc = which('kotlinc'); if (!kc) throw new Error('--kotlin needs kotlinc (https://kotlinlang.org/docs/command-line.html)');
@@ -168,7 +171,7 @@ async function build({ out = path.join(ROOT, 'releases'), kotlin = false } = {})
     extra.push(stdlib);
   }
   const classFiles = listFiles(cls, '.class');
-  if (t.d8) run(t.d8, ['--min-api', '24', '--lib', t.jar, '--output', work, ...classFiles, ...extra]);
+  if (t.d8) run(t.d8, ['--min-api', '24', '--lib', t.jar, '--classpath', stubs, '--output', work, ...classFiles, ...extra]);
   else run(t.dx, ['--dex', '--output=' + path.join(work, 'classes.dex'), cls, ...extra]);
   // resources + manifest -> apk (resources.arsc stored uncompressed, as Android 11+ requires), then the dex, alignment, signature
   const unsigned = path.join(work, 'unsigned.apk'), aligned = path.join(work, 'aligned.apk');

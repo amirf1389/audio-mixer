@@ -30,8 +30,9 @@ public class EngineService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        if (intent != null && ACTION_STOP.equals(intent.getAction())) { stopForegroundCompat(); stopSelf(); return START_NOT_STICKY; }
+        if (intent != null && ACTION_STOP.equals(intent.getAction())) { EngineState.running = false; EngineState.changed(this); stopForegroundCompat(); stopSelf(); return START_NOT_STICKY; }
         startForeground(NOTIFICATION_ID, notification("Starting the audio engine..."));
+        EngineState.running = true; EngineState.changed(this);                  // the Quick Settings tile lights up
         if (bridge == null) {
             try {
                 MiniBridge b = new MiniBridge(new AndroidAudio(this), new AndroidAssets(this), version());
@@ -56,6 +57,7 @@ public class EngineService extends Service {
     public void onDestroy() {
         if (bridge != null) { bridge.stop(); bridge = null; }
         port = 0;
+        EngineState.running = false; EngineState.changed(this);
         if (wake != null && wake.isHeld()) wake.release();
         super.onDestroy();
     }

@@ -82,3 +82,7 @@ dist/
 
 # Windows helper binaries built from native/win/src (kept in the repository, the installers ship them)
 !native/**/*.exe
+
+# Qt Android project: staged page and build output
+android-qt/assets/
+android-qt/build/

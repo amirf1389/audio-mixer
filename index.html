@@ -7396,11 +7396,11 @@ window.navTabs = [
                   <div class="grid grid-cols-1 md:grid-cols-2 gap-2.5">
                     <div class="bg-black/60 p-2.5 rounded-lg border border-white/10 space-y-1.5">
                       <div class="flex justify-between items-center text-[7.5px]">
-                        <span class="text-slate-400">INSTALLED FIRMWARE:</span>
-                        <span class="text-white font-bold">v4.8.2-rt (Kernel Linux 6.8 RT)</span>
+                        <span class="text-slate-400">THIS APP / DEVICE:</span>
+                        <span id="ota-installed" class="text-white font-bold">checking ...</span>
                       </div>
                       <div class="flex justify-between items-center text-[7.5px]">
-                        <span class="text-slate-400">CLOUD MANIFEST:</span>
+                        <span class="text-slate-400">LATEST VERSION:</span>
                         <span id="ota-cloud-ver" class="text-cyan-400 font-bold">v5.2.0-lts ("Quantum DSP Matrix")</span>
                       </div>
                       <div class="flex justify-between items-center text-[7.5px]">
@@ -7409,7 +7409,7 @@ window.navTabs = [
                       </div>
                       <div class="flex justify-between items-center text-[7px] text-slate-500 pt-1 border-t border-white/5">
                         <span>SHA-256 DIGEST:</span>
-                        <span class="font-mono text-emerald-400 truncate max-w-[200px]">e3b0c44298fc1c149afbf4c89...</span>
+                        <span id="ota-sha" class="font-mono text-emerald-400 truncate max-w-[200px]">-</span>
                       </div>
                     </div>
 
@@ -7429,10 +7429,18 @@ window.navTabs = [
                           <label for="ota-auto-schedule" class="cursor-pointer">Auto-Update Window: 03:00-05:00 AM</label>
                         </div>
                         <button id="ota-admin-download-btn" onclick="window.downloadOtaFirmware()" class="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-black font-black uppercase rounded text-[7.5px] transition flex items-center gap-1">
-                          <i class="fa-solid fa-download"></i> DOWNLOAD &amp; STAGE
+                          <i class="fa-solid fa-download"></i> <span id="ota-dl-label">DOWNLOAD FOR THIS DEVICE</span>
                         </button>
                       </div>
                     </div>
+                  </div>
+
+                  <!-- Real update source: which system this is, the download link for it, the other systems, where the manifest comes from -->
+                  <div id="ota-real" class="bg-black/60 p-2.5 rounded-lg border border-cyan-500/20 space-y-1.5 text-[7.5px]">
+                    <div class="flex flex-wrap justify-between items-center gap-1"><span class="text-slate-400">DETECTED SYSTEM:</span><span id="ota-os-line" class="text-cyan-400 font-bold">...</span></div>
+                    <div id="ota-links" class="space-y-1"></div>
+                    <div class="flex items-center gap-1.5 pt-1 border-t border-white/5"><span class="text-slate-400 whitespace-nowrap">UPDATE SOURCE:</span><input id="ota-src" type="text" aria-label="Update manifest URL" placeholder="https://ota.example.com/update.json (empty = the project's releases)" class="flex-1 min-w-0 bg-black border border-white/10 rounded px-1.5 py-0.5 text-slate-200 text-[7.5px] font-mono"><button id="ota-src-save" class="px-2 py-0.5 rounded bg-white/10 hover:bg-white/20 text-slate-200 font-bold uppercase text-[7px]">SAVE</button></div>
+                    <div id="ota-src-note" class="text-[7px] text-slate-500"></div>
                   </div>
 
                   <!-- Live OTA Download Progress Bar (Hidden by default) -->
@@ -16920,70 +16928,215 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             askParams(key) { const r = this.runs[key]; if (r && r.ready && r.ws.readyState === 1) r.ws.send(JSON.stringify({ type: 'params' })); },
         };
 
-        // ── OTA updates (real: signed manifest, SHA-256 verified download) ──
+        // ── OTA updates (real: signed manifest, SHA-256 verified download, link for the system that asks) ──
+        // Which system is this? Same rules as bridge/osdetect.js (bridge/test.js runs both on one table of user agents):
+        // an explicit choice > Client Hints > the user agent. The iPhone user agent says "Mac OS X", the Android one says "Linux": the order matters.
+        const OTA_FILES = {
+            'win-x64-exe': 'Windows 64-bit setup (.exe)', 'win-x64-msi': 'Windows 64-bit package (.msi)', 'win-x86-msi': 'Windows 32-bit package (.msi)',
+            'linux-deb': 'Debian / Ubuntu package (.deb)', 'linux-tar': 'Linux archive (.tar.gz)', 'macos-dmg': 'macOS disk image (.dmg)', 'macos': 'macOS archive (.tar.gz)',
+            'android-apk': 'Android app (.apk)', 'ios-project': 'iOS Xcode project (.tar.gz)',
+        };
+        const OTA_HOW = {
+            windows: 'Close Audio Mixer, then double-click the downloaded file. Windows asks for administrator permission, and the installer replaces the old version.',
+            macos: 'Open the disk image (or unpack the archive) and double-click install.command.',
+            linux: 'Debian / Ubuntu: sudo apt install ./<file>. Other systems: unpack the archive and run install.sh.',
+            android: 'Open the downloaded .apk on the phone (allow installing apps from this source when Android asks). It updates the installed app when it is signed with the same key.',
+            ios: 'iOS apps are built with Xcode on a Mac: unpack the archive, run xcodegen generate, open the project, choose your team and run it on the device.',
+        };
+        const OTA_OS_NAMES = { windows: 'Windows', macos: 'macOS', linux: 'Linux', android: 'Android', ios: 'iOS / iPadOS' };
+        function otaDetectOs(o) {
+            o = o || {};
+            const hintOf = p => { p = String(p == null ? '' : p).replace(/^"|"$/g, '').toLowerCase(); return p === 'windows' ? 'windows' : p === 'macos' ? 'macos' : p === 'android' ? 'android' : p === 'ios' ? 'ios' : p === 'linux' ? 'linux' : null; };
+            const archOf = a => ({ x64: 'x64', amd64: 'x64', x86_64: 'x64', x86: 'x86', ia32: 'x86', i386: 'x86', arm64: 'arm64', aarch64: 'arm64' }[String(a || '').toLowerCase()] || null);
+            const distroOf = d => (/^(debian|ubuntu|deb|mint)$/i.test(String(d || '')) ? 'debian' : /^(other|fedora|rpm|arch|suse|redhat|rhel|centos)$/i.test(String(d || '')) ? 'other' : null);
+            const fromUa = ua => {
+                ua = String(ua || '');
+                if (/Android/i.test(ua)) return { os: 'android', arch: /arm64|aarch64|armv8/i.test(ua) ? 'arm64' : null, distro: null };
+                if (/iPhone|iPad|iPod/i.test(ua)) return { os: 'ios', arch: 'arm64', distro: null };
+                if (/Windows NT|Win64|WOW64|Windows/i.test(ua)) return { os: 'windows', arch: /Win64|x64|WOW64|ARM64|amd64/i.test(ua) ? 'x64' : 'x86', distro: null };
+                if (/CrOS/.test(ua)) return { os: null, arch: null, distro: null };
+                if (/Macintosh|Mac OS X|Darwin/i.test(ua)) return { os: 'macos', arch: /arm64|aarch64/i.test(ua) ? 'arm64' : null, distro: null };
+                if (/Linux|X11|Ubuntu|Debian|Fedora/i.test(ua)) return { os: 'linux', arch: /aarch64|arm64/i.test(ua) ? 'arm64' : /x86_64|amd64|x64/i.test(ua) ? 'x64' : null, distro: /Ubuntu|Debian|Mint|Pop!_OS|Kali/i.test(ua) ? 'debian' : /Fedora|Red Hat|CentOS|SUSE|Arch|Gentoo|Manjaro|NixOS/i.test(ua) ? 'other' : null };
+                return { os: null, arch: null, distro: null };
+            };
+            const choice = String(o.os || '').toLowerCase();
+            const alias = { win: 'windows', win32: 'windows', mac: 'macos', darwin: 'macos', osx: 'macos', apk: 'android', iphone: 'ios', ipad: 'ios' }[choice] || choice;
+            if (OTA_OS_NAMES[alias]) return { os: alias, arch: archOf(o.arch), distro: distroOf(o.distro), source: 'param' };
+            const hint = hintOf(o.platformHint), ua = fromUa(o.userAgent);
+            if (hint) {
+                const same = ua.os === hint, h = String(o.archHint == null ? '' : o.archHint).replace(/^"|"$/g, '').toLowerCase();
+                return { os: hint, arch: archOf(o.arch) || (same && ua.arch) || (h === 'arm' ? 'arm64' : h === 'x86' ? 'x64' : null), distro: same ? ua.distro : null, source: 'client-hints' };
+            }
+            if (ua.os) return { os: ua.os, arch: archOf(o.arch) || ua.arch, distro: distroOf(o.distro) || ua.distro, source: 'user-agent' };
+            return { os: null, arch: null, distro: null, source: 'none' };
+        }
+        function otaKeysFor(det) {
+            if (!det || !det.os) return [];
+            switch (det.os) {
+                case 'windows': return det.arch === 'x86' ? ['win-x86-msi'] : ['win-x64-exe', 'win-x64-msi'];
+                case 'macos': return ['macos-dmg', 'macos'];
+                case 'linux': return det.distro === 'debian' ? ['linux-deb', 'linux-tar'] : det.distro === 'other' ? ['linux-tar'] : ['linux-tar', 'linux-deb'];
+                case 'android': return ['android-apk'];
+                case 'ios': return ['ios-project'];
+                default: return [];
+            }
+        }
+        function otaPick(manifest, det) {
+            const files = (manifest && manifest.files) || {};
+            for (const key of otaKeysFor(det)) if (files[key]) return { key, label: OTA_FILES[key] || key, how: OTA_HOW[det.os] || '', name: files[key].name, url: files[key].url, size: files[key].size || null, sha256: files[key].sha256 };
+            return null;
+        }
+        const otaOthers = (manifest, exceptKey) => Object.entries((manifest && manifest.files) || {}).filter(([k]) => k !== exceptKey).map(([key, f]) => ({ key, label: OTA_FILES[key] || key, name: f.name, url: f.url, size: f.size || null }));
+        const OTA_DEFAULT_URL = 'https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/update.json';
+        const otaCmp = (a, b) => { const p = v => String(v).split(/[-+]/)[0].split('.').map(n => parseInt(n, 10) || 0); const x = p(a), y = p(b); for (let i = 0; i < Math.max(x.length, y.length, 3); i++) { const d = (x[i] || 0) - (y[i] || 0); if (d) return d < 0 ? -1 : 1; } return 0; };
+        const httpsUrl = u => { try { const x = new URL(u, location.href); return (x.protocol === 'https:' || (x.protocol === 'http:' && /^(localhost|127\.0\.0\.1)$/.test(x.hostname))) ? x.href : null; } catch (e) { return null; } };
+        const BADGE = { ok: 'px-2 py-0.5 rounded text-[7.5px] font-mono bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 font-bold', warn: 'px-2 py-0.5 rounded text-[7.5px] font-mono bg-amber-500/20 text-amber-400 border border-amber-500/40 font-bold', bad: 'px-2 py-0.5 rounded text-[7.5px] font-mono bg-rose-500/20 text-rose-400 border border-rose-500/40 font-bold', idle: 'px-2 py-0.5 rounded text-[7.5px] font-mono bg-slate-500/20 text-slate-300 border border-slate-500/40 font-bold' };
+        // the manifest straight from an update server (no PC mode): verified here with the vendor public key, like the local server does
+        async function otaFetchManifest(url) {
+            const r = await fetch(url, { cache: 'no-store' });
+            if (!r.ok) throw new Error('the update server answered ' + r.status);
+            const env = await r.json();
+            const jwk = window.LICENSE_PUBLIC_JWK;
+            if (!env || typeof env.payload !== 'string' || typeof env.signature !== 'string') throw new Error('the update information is not signed and was ignored');
+            if (!jwk || jwk.x === 'placeholder') throw new Error('this build has no vendor key: updates cannot be checked');
+            if (!(window.crypto && window.crypto.subtle)) throw new Error('this browser cannot check signatures here; use PC mode');
+            const pub = await crypto.subtle.importKey('jwk', jwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
+            if (!(await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, pub, unb64u(env.signature), new TextEncoder().encode(env.payload)))) throw new Error('the update information is not signed by the Audio Mixer publisher and was ignored');
+            const m = JSON.parse(env.payload);
+            if (m.product !== 'audio-mixer' || typeof m.version !== 'string' || !m.files || typeof m.files !== 'object') throw new Error('the update information is not valid');
+            return m;
+        }
         const ota = {
             info: null, saved: null,
+            source() { return store.get('halx_ota_url') || ''; },
+            // this device: the browser's Client Hints (exact) with the user agent
+            device() {
+                const n = navigator, d = n.userAgentData || {}, q = new URLSearchParams(location.search);
+                return otaDetectOs({ os: q.get('os'), arch: q.get('arch'), userAgent: n.userAgent, platformHint: d.platform });
+            },
             async check(user) {
                 const badge = $('ota-status-badge'), btn = $('ota-check-btn');
-                if (!bridge()) { if (user) notify('Updates need PC mode (the local server)', 'cloud'); this.info = null; return this.render(); }
                 if (btn) { btn.disabled = true; btn.textContent = 'CHECKING...'; }
                 if (badge) badge.textContent = 'QUERYING THE UPDATE SERVER...';
-                try {
-                    const r = await fetch(bridge() + '/api/update?force=1', { cache: 'no-store' });
-                    this.info = await r.json();
-                } catch (e) { this.info = { ok: false, error: 'update server not reachable' }; }
+                let info = null;
+                if (bridge()) {
+                    try {                                                                        // the installed PC app asks for itself (it knows its own system and version)
+                        const r = await fetch(bridge() + '/api/update?force=1', { cache: 'no-store' }), j = await r.json();
+                        if (j && (j.ok || j.error)) info = j;
+                    } catch (e) { /* not a PC bridge: ask the server directly */ }
+                }
+                if (!info) {
+                    try {
+                        const own = this.source(), ch = store.get('halx_ota_channel') || 'stable';
+                        const url = httpsUrl(own ? (ch !== 'stable' ? own.replace(/\/update\.json$/, '/' + ch + '/update.json') : own) : OTA_DEFAULT_URL);
+                        if (!url) throw new Error('the update source is not a valid https address');
+                        const m = await otaFetchManifest(url), det = this.device(), f = otaPick(m, det);
+                        let cur = L.version || null;
+                        if (!cur && bridge()) { try { const s = await (await fetch(bridge() + '/api/status')).json(); cur = s && s.version || null; } catch (e) { /* none */ } }
+                        info = { ok: true, current: cur, os: det.os, arch: det.arch, detected: det.source, latest: m.version, released: m.released || null, channel: m.channel || 'stable', notes: Array.isArray(m.notes) ? m.notes.map(String).slice(0, 12) : [],
+                            updateAvailable: cur ? otaCmp(m.version, cur) > 0 : true, unknownCurrent: !cur, signed: true, direct: true, source: url,
+                            file: f ? { key: f.key, name: f.name, url: f.url, size: f.size, sha256: f.sha256, how: f.how, label: f.label } : null, others: otaOthers(m, f && f.key) };
+                    } catch (e) { info = { ok: false, error: e.message || 'update server not reachable' }; }
+                }
+                this.info = info;
                 if (btn) { btn.disabled = false; btn.textContent = 'CHECK AGAIN'; }
                 store.set('halx_ota_checked', String(Date.now()));
                 this.render();
-                if (user) notify(this.info.ok ? (this.info.updateAvailable ? 'Update available: v' + this.info.latest : 'Audio Mixer is up to date (v' + this.info.current + ')') : 'Update check failed: ' + this.info.error, 'cloud-arrow-down');
+                if (user) notify(info.ok ? (info.updateAvailable ? 'Update available: v' + info.latest : 'Audio Mixer is up to date (v' + info.current + ')') : 'Update check failed: ' + info.error, 'cloud-arrow-down');
             },
-            autoCheck() { const last = Number(store.get('halx_ota_checked') || 0); if (Date.now() - last > 86400000) this.check(false); else this.check(false); },
+            autoCheck() { this.check(false); },
+            links() {
+                const box = $('ota-links'); if (!box) return;
+                box.textContent = '';
+                const i = this.info; if (!i || !i.ok) return;
+                const add = (f, primary) => {
+                    const url = httpsUrl(f.url); if (!url) return;
+                    const row = document.createElement('div'); row.className = 'flex items-center justify-between gap-2';
+                    const a = document.createElement('a'); a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.textContent = (primary ? '⬇ ' : '') + (f.label || OTA_FILES[f.key] || f.name);
+                    a.className = primary ? 'text-amber-400 font-bold underline' : 'text-slate-300 underline';
+                    const sz = document.createElement('span'); sz.className = 'text-slate-500 font-mono'; sz.textContent = f.size ? (f.size / 1048576).toFixed(1) + ' MB' : '';
+                    row.append(a, sz); box.appendChild(row);
+                };
+                if (i.file) add({ ...i.file, label: i.file.label || OTA_FILES[i.file.key] }, true);
+                (i.others || []).forEach(o => add(o, false));
+            },
             render() {
-                const i = this.info, cur = L.version || (i && i.current) || null;
+                const i = this.info, cur = (i && i.current) || L.version || null;
                 if (window.state && window.state.ota && cur) window.state.ota.currentVersion = cur;
+                const det = (i && i.os) ? { os: i.os, arch: i.arch } : this.device();
                 const hdr = $('hdr-ota-badge');
                 if (hdr) { hdr.textContent = 'OTA: v' + (cur || '-') + (i && i.ok && i.updateAvailable ? ' → v' + i.latest : ''); if (hdr.parentElement) hdr.parentElement.style.cursor = 'pointer'; }
+                text('ota-installed', cur ? 'v' + cur : 'not known');
+                text('ota-os-line', (det.os ? OTA_OS_NAMES[det.os] + (det.arch ? ' • ' + det.arch : '') : 'not recognized') + (i && i.direct ? ' (this browser/app)' : (i && i.ok ? ' (this computer)' : '')));
                 const badge = $('ota-status-badge');
-                if (badge) {
-                    if (!bridge()) { badge.textContent = 'START PC MODE TO CHECK FOR UPDATES'; badge.className = 'px-2 py-0.5 rounded text-[7.5px] font-mono bg-slate-500/20 text-slate-300 border border-slate-500/40 font-bold'; }
-                    else if (!i) { badge.textContent = 'CURRENT: v' + (cur || '-'); }
-                    else if (!i.ok) { badge.textContent = 'UPDATE CHECK FAILED: ' + i.error; badge.className = 'px-2 py-0.5 rounded text-[7.5px] font-mono bg-rose-500/20 text-rose-400 border border-rose-500/40 font-bold'; }
-                    else if (i.updateAvailable) { badge.textContent = 'UPDATE AVAILABLE: v' + i.latest; badge.className = 'px-2 py-0.5 rounded text-[7.5px] font-mono bg-amber-500/20 text-amber-400 border border-amber-500/40 font-bold'; }
-                    else { badge.textContent = 'UP TO DATE: v' + i.current; badge.className = 'px-2 py-0.5 rounded text-[7.5px] font-mono bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 font-bold'; }
-                }
+                const bset = (t, k) => { if (badge) { badge.textContent = t; badge.className = BADGE[k]; } };
+                if (!i) bset('CURRENT: v' + (cur || '-'), 'ok');
+                else if (!i.ok) bset('UPDATE CHECK FAILED: ' + i.error, 'bad');
+                else if (i.updateAvailable) bset(i.unknownCurrent ? 'LATEST: v' + i.latest : 'UPDATE AVAILABLE: v' + i.latest, 'warn');
+                else bset('UP TO DATE: v' + i.current, 'ok');
                 if (i && i.ok) {
                     text('ota-cloud-ver', 'v' + i.latest); text('ota-cloud-date', i.released || '-'); text('ota-cloud-size', i.file && i.file.size ? (i.file.size / 1048576).toFixed(1) + ' MB' : '-');
+                    text('ota-sha', i.file && i.file.sha256 ? i.file.sha256.slice(0, 16) + '…' : '-');
                     const ul = $('ota-notes-list'); if (ul) { ul.textContent = ''; (i.notes || []).forEach(n => { const li = document.createElement('li'); li.className = 'flex items-start gap-1.5'; const ic = document.createElement('i'); ic.className = 'fa-solid fa-check text-cyan-400 text-[8px] mt-0.5'; const sp = document.createElement('span'); sp.textContent = n; li.append(ic, sp); ul.appendChild(li); }); }
                 }
+                this.links();
+                const src = $('ota-src'); if (src && !src.dataset.set) { src.dataset.set = '1'; src.value = this.source(); }
+                const note = $('ota-src-note'); if (note) note.textContent = i && i.ok ? 'Checked: ' + i.source + (i.direct ? ' (signature verified in this browser)' : ' (signature verified by the PC app)') + (i.file && i.file.how ? '. ' + i.file.how : '') : '';
                 const dl = $('ota-admin-download-btn');
                 if (dl) {
                     const can = i && i.ok && i.updateAvailable && i.file;
                     dl.classList.toggle('hidden', !can);
-                    if (can) { dl.disabled = false; dl.textContent = L.has('ota') ? 'DOWNLOAD & VERIFY' : 'DOWNLOAD (PRO PLAN)'; dl.onclick = () => ota.download(); }
+                    if (can) {
+                        dl.disabled = false;
+                        const pc = !!bridge() && !i.direct;
+                        const lab = $('ota-dl-label'); if (lab) lab.textContent = pc ? (L.has('ota') ? 'DOWNLOAD & VERIFY' : 'DOWNLOAD (PRO PLAN)') : 'DOWNLOAD FOR THIS DEVICE';
+                        dl.onclick = () => ota.download();
+                    }
                 }
                 if (this.saved) { const sp = $('ota-download-speed'); if (sp) sp.textContent = this.saved; }
             },
             async download() {
-                if (!L.has('ota')) { notify('Downloading updates needs the PRO or STUDIO plan', 'lock'); window.switchTab && window.switchTab('renew'); return; }
+                const i = this.info;
                 const bar = $('ota-progress-bar'), pct = $('ota-progress-pct'), box = $('ota-progress-container'), dl = $('ota-admin-download-btn');
+                if ((i && i.direct) || !bridge()) {                                             // phone / browser: the browser or app downloads the file itself (the link comes from the signed manifest)
+                    const url = i && i.file && httpsUrl(i.file.url);
+                    if (!url) { notify('No download for this system in the update', 'triangle-exclamation'); return; }
+                    const a = document.createElement('a'); a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.download = i.file.name || ''; document.body.appendChild(a); a.click(); a.remove();
+                    this.saved = 'Download started: ' + i.file.name + (i.file.sha256 ? ' (SHA-256 ' + i.file.sha256.slice(0, 16) + '…)' : '') + '. ' + (i.file.how || '');
+                    if (box) box.classList.remove('hidden'); if (bar) bar.style.width = '100%'; if (pct) pct.textContent = 'STARTED';
+                    const sp = $('ota-download-speed'); if (sp) sp.textContent = this.saved;
+                    notify(this.saved, 'cloud-arrow-down');
+                    return;
+                }
+                if (!L.has('ota')) { notify('Downloading updates needs the PRO or STUDIO plan', 'lock'); window.switchTab && window.switchTab('renew'); return; }
                 if (box) box.classList.remove('hidden'); if (bar) bar.style.width = '35%'; if (pct) pct.textContent = '...';
-                if (dl) { dl.disabled = true; dl.textContent = 'DOWNLOADING...'; }
+                if (dl) dl.disabled = true;
+                const lab = $('ota-dl-label'); if (lab) lab.textContent = 'DOWNLOADING...';
                 try {
                     const r = await post('/api/update/download', 'update');
                     if (!(r.json && r.json.ok)) throw new Error((r.json && r.json.error) || 'download failed');
                     if (bar) bar.style.width = '100%'; if (pct) pct.textContent = '100%';
                     this.saved = 'Saved and checksum-verified: ' + r.json.file + ' (' + (r.json.bytes / 1048576).toFixed(1) + ' MB). ' + r.json.how;
-                    const badge = $('ota-status-badge'); if (badge) { badge.textContent = 'DOWNLOADED & VERIFIED: v' + r.json.version; badge.className = 'px-2 py-0.5 rounded text-[7.5px] font-mono bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 font-bold'; }
-                    if (dl) { dl.disabled = false; dl.textContent = 'SHOW HOW TO INSTALL'; dl.onclick = () => notify(r.json.how, 'circle-info'); }
+                    const badge = $('ota-status-badge'); if (badge) { badge.textContent = 'DOWNLOADED & VERIFIED: v' + r.json.version; badge.className = BADGE.ok; }
+                    if (dl) { dl.disabled = false; if (lab) lab.textContent = 'SHOW HOW TO INSTALL'; dl.onclick = () => notify(r.json.how, 'circle-info'); }
                     notify('Update downloaded and verified. ' + r.json.how, 'circle-check');
                     const sp = $('ota-download-speed'); if (sp) sp.textContent = this.saved;
-                } catch (e) { if (bar) bar.style.width = '0%'; if (pct) pct.textContent = 'FAILED'; if (dl) { dl.disabled = false; dl.textContent = 'TRY AGAIN'; } notify('Update download failed: ' + e.message, 'triangle-exclamation'); }
+                } catch (e) { if (bar) bar.style.width = '0%'; if (pct) pct.textContent = 'FAILED'; if (dl) dl.disabled = false; if (lab) lab.textContent = 'TRY AGAIN'; notify('Update download failed: ' + e.message, 'triangle-exclamation'); }
+            },
+            saveSource() {
+                const el = $('ota-src'); if (!el) return;
+                const v = el.value.trim();
+                if (v && !httpsUrl(v)) { notify('The update source must be an https address', 'triangle-exclamation'); return; }
+                if (v) store.set('halx_ota_url', v); else store.del('halx_ota_url');
+                notify(v ? 'Update source saved' : 'Using the default update source', 'cloud'); this.check(true);
             },
         };
+        window.otaDetect = otaDetectOs; window.otaPick = otaPick;
         // the page's firmware simulation is replaced by the real updater (same buttons, same labels)
         window.checkForOtaUpdates = user => ota.check(user !== false);
         window.downloadOtaFirmware = () => ota.download();
         window.verifyOtaIntegrity = () => notify('The download was already verified (SHA-256 from the signed manifest).', 'shield-halved');
+        window.setOtaChannel = ch => { store.set('halx_ota_channel', String(ch || 'stable').replace(/[^a-z]/g, '')); ota.check(true); };
         window.otaUpdater = ota; window.pluginManager = plugins;
 
         function wire() {
@@ -16993,6 +17146,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             on('lic-copy-machine', () => { const m = L.machineId; if (m && navigator.clipboard) navigator.clipboard.writeText(m).then(() => notify('Machine code copied', 'copy')); });
             on('edition-switch', () => { if (window.currentRole === 'Admin') window.setUserRole('User'); else window.requestRoleSwitch('Admin'); });
             on('plg-scan', () => plugins.scan());
+            on('ota-src-save', () => ota.saveSource());
             const hdr = $('hdr-ota-badge'); if (hdr && hdr.parentElement && !hdr.parentElement.dataset.wired) { hdr.parentElement.dataset.wired = '1'; hdr.parentElement.addEventListener('click', () => { window.switchTab && window.switchTab('renew'); setTimeout(() => ota.check(true), 50); }); }
         }
 

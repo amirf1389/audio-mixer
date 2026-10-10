@@ -44,6 +44,40 @@ final class Interfaces {
         String key, name, transport; int inputs, outputs; final List<Dev> devs = new ArrayList<Dev>();
     }
 
+    /** Most channels a device offers: its channel counts (positional masks) and its channel index masks (multi-channel USB interfaces list those, one bit per channel). */
+    static int maxChannels(int[] counts, int[] indexMasks) {
+        int m = 0;
+        if (counts != null) for (int c : counts) m = Math.max(m, c);
+        if (indexMasks != null) for (int k : indexMasks) m = Math.max(m, Integer.bitCount(k));
+        return m;
+    }
+
+    /**
+     * Frames per block. A requested size in 32..4096 is used as it is. "auto": two bursts of the device's own buffer size (what low-latency apps use: one burst is
+     * the least the hardware moves at a time, two keep it from running dry), scaled when the stream rate is not the native rate; without native values about 10 ms.
+     */
+    static int autoFrames(Object requested, int rate, int nativeRate, int nativeFrames) {
+        int n = requested instanceof Double ? (int) Math.round((Double) requested) : 0;
+        if (n >= 32 && n <= 4096) return n;
+        if (nativeFrames >= 16 && nativeFrames <= 4096 && nativeRate >= 8000) {
+            long burst = Math.round(nativeFrames * (double) rate / nativeRate);
+            return (int) Math.max(64, Math.min(2048, (burst + 31) / 32 * 32 * 2));
+        }
+        return Math.max(64, (rate / 100) / 64 * 64);
+    }
+
+    /** The audio engine's own figures (GET /api/interfaces and /api/status): native rate and burst size, low latency / pro audio features, USB host. */
+    static String nativeJson(int rate, int frames, boolean lowLatency, boolean pro, boolean usbHost) {
+        return "{\"sampleRate\":" + Math.max(0, rate) + ",\"framesPerBuffer\":" + Math.max(0, frames) + ",\"lowLatency\":" + lowLatency + ",\"pro\":" + pro + ",\"usbHost\":" + usbHost
+            + ",\"burstMs\":" + (rate > 0 && frames > 0 ? Math.round(frames * 10000.0 / rate) / 10.0 : 0) + "}";
+    }
+
+    /** Adds "native":{...} to a JSON object body. */
+    static String withNative(String json, String nativeJson) {
+        int end = json.lastIndexOf('}');
+        return end < 0 || nativeJson == null ? json : json.substring(0, end) + ",\"native\":" + nativeJson + "}";
+    }
+
     /** Body of GET /api/interfaces. */
     static String toJson(List<Dev> devices) {
         Map<String, Group> groups = new LinkedHashMap<String, Group>();

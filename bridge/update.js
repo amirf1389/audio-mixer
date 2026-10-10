@@ -11,6 +11,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const lic = require('./license');
 const { fetchChecked } = require('./security');
+const osdetect = require('./osdetect');
 
 const DEFAULT_URL = 'https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/update.json';
 const BASE_HOSTS = ['raw.githubusercontent.com', 'github.com', 'objects.githubusercontent.com', 'release-assets.githubusercontent.com', 'githubusercontent.com'];
@@ -44,21 +45,13 @@ function signManifest(manifest, privateKey) {
 }
 
 // Which file of the manifest fits this computer, and how to install it.
-function platformFile(manifest, { platform = process.platform, arch = process.arch, debian = fs.existsSync('/etc/debian_version') } = {}) {
-  const f = manifest.files || {};
-  let key = null, how = '';
-  if (platform === 'win32') {
-    key = arch === 'ia32' ? 'win-x86-msi' : 'win-x64-exe';
-    how = 'Close Audio Mixer, then double-click the downloaded file. Windows asks for administrator permission, and the installer replaces the old version.';
-  } else if (platform === 'linux') {
-    key = debian ? 'linux-deb' : null;
-    how = debian ? 'Install it with: sudo apt install ./<file>' : 'No package for this Linux distribution: download the new project files instead.';
-  } else if (platform === 'darwin') {
-    key = 'macos';
-    how = 'Unpack the archive and double-click install.command.';
-  }
-  const e = key && f[key];
-  return e ? { key, ...e, how } : null;
+function platformFile(manifest, { platform = process.platform, arch = process.arch, debian = platform === 'linux' && fs.existsSync('/etc/debian_version') } = {}) {
+  // the system is detected as the OTA server does it (bridge/osdetect.js): Windows setup .exe / .msi, Debian .deb or the Linux archive, macOS .dmg or archive, Android .apk
+  const det = osdetect.detectOs({ node: { platform, arch, debian } });
+  const p = osdetect.pick(manifest, det);
+  if (!p) return null;
+  const how = det.os === 'linux' ? (p.key === 'linux-deb' ? 'Install it with: sudo apt install ./<file>' : 'Unpack the archive and run install.sh.') : p.how;
+  return { key: p.key, name: p.name, url: p.url, size: p.size, sha256: p.sha256, how };
 }
 
 async function fetchJson(fetchImpl, url) {
@@ -73,11 +66,11 @@ async function check({ current, fetchImpl = globalThis.fetch, url = process.env.
   const env = await fetchJson(fetchImpl, url);
   const v = verifyManifest(env, jwk);
   if (!v.ok) throw Object.assign(new Error(v.error), { status: 502 });
-  const m = v.manifest, file = platformFile(m, { platform, arch });
+  const m = v.manifest, file = platformFile(m, { platform, arch }), det = osdetect.detectOs({ node: { platform: platform || process.platform, arch: arch || process.arch } });
   return {
-    ok: true, current, latest: m.version, released: m.released || null, channel: m.channel || 'stable', notes: Array.isArray(m.notes) ? m.notes.slice(0, 12).map(String) : [],
+    ok: true, current, os: det.os, arch: det.arch, others: osdetect.others(m, file && file.key).map(o => ({ key: o.key, label: o.label, name: o.name, url: o.url, size: o.size })), latest: m.version, released: m.released || null, channel: m.channel || 'stable', notes: Array.isArray(m.notes) ? m.notes.slice(0, 12).map(String) : [],
     updateAvailable: cmpVersion(m.version, current) > 0, signed: true,
-    file: file ? { key: file.key, name: file.name, size: file.size || null, sha256: file.sha256, how: file.how } : null, source: url,
+    file: file ? { key: file.key, name: file.name, url: file.url, size: file.size || null, sha256: file.sha256, how: file.how } : null, source: url,
   };
 }
 
