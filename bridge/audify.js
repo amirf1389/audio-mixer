@@ -72,6 +72,11 @@ function plan(want, ctx) {
 
 function apiEnum(mod) { return mod.RtAudioApi || mod.RtAudioApis || {}; }
 
+// Open ASIO devices (device id -> entry). ASIO drivers are single-client: one RtAudio stream per driver, so reading AND writing the same
+// device share one duplex stream (see openStream / openDuplex); the same registry tells listDevices not to probe a driver that is in use.
+const registries = new WeakMap();   // per loaded module (in production there is exactly one)
+const asioOf = mod => { let m = registries.get(mod); if (!m) { m = new Map(); registries.set(mod, m); } return m; };
+
 // Every compiled API (ASIO, WASAPI, ...) with its devices. Device ids are made unique across APIs (the bridge's `deviceId`).
 function listDevices(load = loadAudify) {
   let mod;
@@ -88,12 +93,20 @@ function listDevices(load = loadAudify) {
   let next = AUDIFY_BASE;
   for (const key of apis) {
     if (!API_NAMES[key]) continue;                      // skips the dummy API and unknown ones
-    let rt;
-    try { rt = new RtAudio(Api[key]); } catch (_) { continue; }
-    // RtAudio silently substitutes another API when the requested one is not compiled in: skip it instead of listing duplicates.
-    try { if (typeof rt.getApi === 'function' && apiKey(rt.getApi()) !== key) continue; } catch (_) { /* cannot tell: keep it */ }
+    // An ASIO driver is single-client and process-wide: probing it (new RtAudio + getDevices) while a stream is open can stall or kill that stream,
+    // and the page scans every few seconds. While an ASIO stream is open the last probed list is reused.
+    const asio = asioOf(mod);
+    const cached = key === 'WINDOWS_ASIO' && asio.size > 0 && asio.list ? asio.list : null;
+    let rt = null;
     let list = [];
-    try { list = rt.getDevices() || []; } catch (_) { /* API present but no devices */ }
+    if (cached) list = cached;
+    else {
+      try { rt = new RtAudio(Api[key]); } catch (_) { continue; }
+      // RtAudio silently substitutes another API when the requested one is not compiled in: skip it instead of listing duplicates.
+      try { if (typeof rt.getApi === 'function' && apiKey(rt.getApi()) !== key) continue; } catch (_) { /* cannot tell: keep it */ }
+      try { list = rt.getDevices() || []; } catch (_) { /* API present but no devices */ }
+      if (key === 'WINDOWS_ASIO' && list.length) asio.list = list;
+    }
     if (!list.length) { hostApis.push(API_NAMES[key]); continue; }
     hostApis.push(API_NAMES[key]);
     for (const d of list) {
@@ -105,7 +118,7 @@ function listDevices(load = loadAudify) {
         isDefaultInput: !!d.isDefaultInput, isDefaultOutput: !!d.isDefaultOutput,
       });
     }
-    try { if (typeof rt.closeStream === 'function') rt.closeStream(); } catch (_) { /* nothing open */ }
+    try { if (rt && typeof rt.closeStream === 'function') rt.closeStream(); } catch (_) { /* nothing open */ }
   }
   return { hostApis, devices };
 }
@@ -151,7 +164,7 @@ function createResampler(inRate, outRate, channels) {
 }
 
 // Opens one RtAudio stream (output or input). Returns { frameSize, sampleRate, channels, write, close } or throws.
-function openStream({ mod, dev, direction, channels, sampleRate, frameSize, onData, onError }) {
+function openStreamRaw({ mod, dev, direction, channels, sampleRate, frameSize, onData, onError }) {
   sampleRate = Number(sampleRate);
   const { RtAudio, RtAudioFormat = {}, RtAudioStreamFlags = {} } = mod, Api = apiEnum(mod);
   const out = direction === 'output';
@@ -206,7 +219,7 @@ function openStream({ mod, dev, direction, channels, sampleRate, frameSize, onDa
 
 // Opens ONE RtAudio stream that reads and writes the same device (ASIO drivers are single-client: one duplex stream, not two).
 // Returns { frameSize, sampleRate, inChannels, outChannels, write, close } or throws.
-function openDuplex({ mod, dev, inChannels, outChannels, sampleRate, frameSize, onData, onError }) {
+function openDuplexRaw({ mod, dev, inChannels, outChannels, sampleRate, frameSize, onData, onError }) {
   const { RtAudio, RtAudioFormat = {}, RtAudioStreamFlags = {} } = mod, Api = apiEnum(mod);
   if (!dev.maxInputChannels || !dev.maxOutputChannels) throw new Error(`${dev.name} cannot read and write at once`);
   if (outChannels > dev.maxOutputChannels) throw new Error(`${dev.name} has only ${dev.maxOutputChannels} output channel(s)`);
@@ -248,6 +261,60 @@ function openDuplex({ mod, dev, inChannels, outChannels, sampleRate, frameSize, 
   throw new Error(`could not open ${dev.name} (${dev.hostAPIName}) for reading and writing: ${lastErr && lastErr.message || lastErr}`);
 }
 
+// ASIO: one stream per driver. A second direction on a device that is already open (the other direction) re-opens it as ONE duplex stream and
+// keeps the first user attached, instead of asking the single-client driver for a second stream (which fails or stalls the first).
+function openStream(o) {
+  const { dev, direction } = o;
+  if (!dev || dev.api !== 'WINDOWS_ASIO') return openStreamRaw(o);
+  const asio = asioOf(o.mod);
+  let e = asio.get(dev.id);
+  if (e && e.exclusive) throw new Error(`${dev.name} is already open for reading and writing`);
+  if (e && e.dirs[direction]) throw new Error(`${dev.name} is already open for ${direction === 'output' ? 'writing' : 'reading'}`);
+  const user = { onData: o.onData, onError: o.onError, channels: Number(o.channels) };
+  if (!e) {
+    e = { dev, mod: o.mod, sampleRate: Number(o.sampleRate), frameSize: o.frameSize, first: o, dirs: {}, st: null };
+    e.onData = b => { const d = e.dirs.input; if (d && d.onData) d.onData(b); };
+    e.onError = err => Object.values(e.dirs).forEach(d => d.onError && d.onError(err));
+    e.st = openStreamRaw({ ...o, onData: e.onData, onError: e.onError });
+    asio.set(dev.id, e);
+  } else {
+    if (Number(o.sampleRate) !== e.sampleRate) throw new Error(`${dev.name} is already open at ${e.sampleRate} Hz: reading and writing it together needs the same sample rate`);
+    const inCh = direction === 'input' ? user.channels : e.dirs.input.channels, outCh = direction === 'output' ? user.channels : e.dirs.output.channels;
+    e.st.close();
+    try {
+      e.st = openDuplexRaw({ mod: o.mod, dev, inChannels: inCh, outChannels: outCh, sampleRate: e.sampleRate, frameSize: o.frameSize !== undefined ? o.frameSize : e.frameSize, onData: e.onData, onError: e.onError });
+    } catch (err) {
+      try { e.st = openStreamRaw({ ...e.first, onData: e.onData, onError: e.onError }); } catch (_) { asio.delete(dev.id); }   // give the first user its stream back
+      throw err;
+    }
+  }
+  e.dirs[direction] = user;
+  const entry = e, out = direction === 'output';
+  return {
+    get frameSize() { return entry.st.frameSize; }, get sampleRate() { return entry.st.sampleRate; }, get latencyMs() { return entry.st.latencyMs; }, get auto() { return entry.st.auto; }, get tried() { return entry.st.tried; }, get deviceRate() { return entry.st.deviceRate; }, get resampled() { return entry.st.resampled; },
+    get channels() { return out ? (entry.st.outChannels || entry.st.channels) : (entry.st.inChannels || entry.st.channels); }, duplex: !!entry.st.inChannels,
+    write(buf) { return entry.st.write ? entry.st.write(buf) : undefined; },
+    close() {
+      if (entry.dirs[direction] !== user) return;
+      delete entry.dirs[direction];
+      if (!Object.keys(entry.dirs).length) { try { entry.st.close(); } finally { if (asio.get(dev.id) === entry) asio.delete(dev.id); } }
+    },
+  };
+}
+
+// One duplex stream (the /ws/duplex endpoint). On ASIO it owns the driver: any other stream on that device is refused until it closes.
+function openDuplex(o) {
+  const { dev } = o;
+  if (!dev || dev.api !== 'WINDOWS_ASIO') return openDuplexRaw(o);
+  const asio = asioOf(o.mod);
+  if (asio.has(dev.id)) throw new Error(`${dev.name} is already open: close it first, or read and write it together from the same page`);
+  const st = openDuplexRaw(o), entry = { exclusive: true, dev, st, dirs: {} };
+  asio.set(dev.id, entry);
+  const close = st.close;
+  st.close = () => { try { close(); } finally { if (asio.get(dev.id) === entry) asio.delete(dev.id); } };
+  return st;
+}
+
 function pickAudifyDevice(devices, wantedId, direction, channels) {
   if (Number.isInteger(wantedId)) return devices.find(d => d.id === wantedId) || null;
   const key = direction === 'output' ? 'maxOutputChannels' : 'maxInputChannels';
@@ -279,4 +346,4 @@ function describe(load = loadAudify) {
   };
 }
 
-module.exports = { createResampler, nearestRate, loadAudify, loadProblem, API_NAMES, apiKey, recommendFrameSize, frameCandidates, plan, listDevices, detectAudify, openStream, openDuplex, pickAudifyDevice, describe, isPow2, AUDIFY_BASE, MIN_FRAMES, MAX_FRAMES };
+module.exports = { _asioOf: asioOf, createResampler, nearestRate, loadAudify, loadProblem, API_NAMES, apiKey, recommendFrameSize, frameCandidates, plan, listDevices, detectAudify, openStream, openDuplex, pickAudifyDevice, describe, isPow2, AUDIFY_BASE, MIN_FRAMES, MAX_FRAMES };
