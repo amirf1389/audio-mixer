@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const winnative = require('./winnative');
+const sysaudio = require('./sysaudio');
 
 function run(cmd, args, timeout = 4000) {
   return new Promise(resolve => {
@@ -132,7 +133,10 @@ async function detect() {
     portaudio.devices.filter(d => /asio/i.test(d.hostApi) && !r.asio.includes(d.name)).forEach(d => r.asio.push(d.name));
     if (r.asio.length && Array.isArray(r.drivers) && !r.drivers.includes('steinberg')) r.drivers.push('steinberg');
   }
-  const native = !portaudio && p === 'win32' ? await winnative.listEndpoints() : null;   // C++ helper: lists WASAPI endpoints when no audio engine is installed
+  // No audio engine installed: read the interfaces from the OS itself (Windows: C++ WASAPI helper, macOS: Core Audio, Linux: ALSA / Pulse)
+  let native = portaudio ? null : p === 'win32' ? await winnative.listEndpoints() : await sysaudio.list();
+  // last resort: the sound devices the OS reported (names only, direction unknown)
+  if (!portaudio && !native && r.devices.length) native = { engine: 'os-devices', hostApis: [], devices: r.devices.map((d, i) => ({ id: -(i + 1), name: d.name, hostApi: p === 'win32' ? 'Windows' : p === 'darwin' ? 'Core Audio' : 'ALSA', native: true, listedOnly: true, inputs: 2, outputs: 2, sampleRate: 48000 })) };
   return { platform: p, arch: process.arch, node: process.version, ...r, vst: detectVst(), portaudio, audify: audifyInfo, native, engines: { naudiodon: !!naudiodon, audify: !!audifyInfo } };
 }
 
