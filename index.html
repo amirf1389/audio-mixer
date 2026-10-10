@@ -14926,8 +14926,14 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 const sel = document.getElementById('rt-in-dev'); if (!sel || !navigator.mediaDevices) return;
                 try {
                     const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audioinput');
-                    sel.innerHTML = '<option value="default">Default input</option>' + devs.filter(d => d.deviceId && d.deviceId !== 'default')
-                        .map((d, k) => `<option value="${esc(d.deviceId)}">${esc(d.label || 'Input ' + (k + 1))}</option>`).join('');
+                    // interfaces of the local system server (ASIO, WASAPI, ...) that the browser cannot open itself
+                    const ls = ((window.liveSources && window.liveSources.interfaces) || []).filter(i => i.inputs > 0 && i.apis && i.apis.some(a => a.inputs > 0 && a.deviceId >= 0));
+                    const html = '<option value="default">Default input</option>' + devs.filter(d => d.deviceId && d.deviceId !== 'default')
+                        .map((d, k) => `<option value="${esc(d.deviceId)}">${esc(d.label || 'Input ' + (k + 1))}</option>`).join('')
+                        + (ls.length ? '<optgroup label="Local server (ASIO / WASAPI)">' + ls.map(i => `<option value="ls:${esc(i.key)}">${esc(i.name)}${i.asio ? ' (ASIO)' : ''}</option>`).join('') + '</optgroup>' : '');
+                    if (sel.dataset.sig === html) return;   // unchanged: do not close a dropdown the user has open
+                    const keep = sel.value; sel.dataset.sig = html; sel.innerHTML = html;
+                    if (keep && Array.from(sel.options).some(o => o.value === keep)) sel.value = keep;
                 } catch (e) {}
             },
             async patchLive(ch, deviceId, mode) {
@@ -14939,21 +14945,31 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 if (!window.state.ctx && typeof window.initAudioEngine === 'function') await window.initAudioEngine();
                 if (!this.ensureGraph()) return window.notify('Engage the audio engine first', 'power-off');
                 this.unpatchLive(ch, true);
-                let stream;
-                try {
-                    stream = await navigator.mediaDevices.getUserMedia({ audio: {
-                        deviceId: deviceId && deviceId !== 'default' ? { exact: deviceId } : undefined,
-                        echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: { ideal: 2 } } });
-                } catch (e) { return window.notify('Input access denied or unavailable', 'microphone-slash'); }
-                const ctx = window.state.ctx, src = ctx.createMediaStreamSource(stream), target = window.state.nodes.channelPostGains[ch];
-                let tap = src;
+                let stream = null, shared = null, label = 'Input';
+                if (/^ls:/.test(String(deviceId))) {
+                    // an interface of the local system server: its capture node is shared with LIVE SOURCES (meters), so it is only branched, never closed here
+                    const L = window.liveSources, key = String(deviceId).slice(3), it = L && L.interfaces.find(i => i.key === key);
+                    if (!it) return window.notify('Interface not found: press refresh', 'triangle-exclamation');
+                    if (!L.caps.has(key)) { try { await L.startRead(it, { userClick: true }); } catch (e) { /* status below */ } }
+                    shared = L.caps.get(key);
+                    if (!shared) return window.notify('Cannot read ' + it.name + ': ' + ((L.status[key] && L.status[key].text) || 'no readable device'), 'triangle-exclamation');
+                    label = it.name;
+                } else {
+                    try {
+                        stream = await navigator.mediaDevices.getUserMedia({ audio: {
+                            deviceId: deviceId && deviceId !== 'default' ? { exact: deviceId } : undefined,
+                            echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: { ideal: 2 } } });
+                    } catch (e) { return window.notify('Input access denied or unavailable', 'microphone-slash'); }
+                    label = (stream.getAudioTracks()[0] || {}).label || 'Input';
+                }
+                const ctx = window.state.ctx, src = shared ? shared.node : ctx.createMediaStreamSource(stream), target = window.state.nodes.channelPostGains[ch];
+                let tap = src, head = null;
                 if (mode !== 'stereo') {
                     const split = ctx.createChannelSplitter(2), pick = ctx.createGain();
-                    src.connect(split); split.connect(pick, mode === 'left' ? 0 : 1); tap = pick;
-                }
+                    src.connect(split); split.connect(pick, mode === 'left' ? 0 : 1); tap = pick; head = split;
+                } else if (shared) { head = ctx.createGain(); src.connect(head); tap = head; }
                 tap.connect(target);
-                const label = (stream.getAudioTracks()[0] || {}).label || 'Input';
-                this.live.push({ ch, stream, src, tap, label, mode });
+                this.live.push({ ch, stream, src, tap, head, shared: !!shared, label, mode });
                 if (window.setChannelPatch) window.setChannelPatch(ch, 'LIVE ' + (mode === 'stereo' ? 'ST' : mode[0].toUpperCase()));
                 this.renderLive();
                 window.notify(`Live input → CH ${ch + 1} (use headphones to avoid feedback)`, 'microphone');
@@ -14961,8 +14977,8 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             unpatchLive(ch, quiet) {
                 const k = this.live.findIndex(l => l.ch === ch); if (k < 0) return;
                 const l = this.live[k];
-                try { l.tap.disconnect(); l.src.disconnect(); } catch (e) {}
-                l.stream.getTracks().forEach(t => t.stop());
+                try { l.tap.disconnect(); if (l.shared) { if (l.head) l.src.disconnect(l.head); } else l.src.disconnect(); } catch (e) {}
+                if (l.stream) l.stream.getTracks().forEach(t => t.stop());
                 this.live.splice(k, 1);
                 if (!quiet) { if (window.setChannelPatch) window.setChannelPatch(ch, `LOC ${ch + 1}`); window.notify(`Live input removed from CH ${ch + 1}`, 'plug-circle-xmark'); }
                 this.renderLive();
@@ -15682,6 +15698,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 this.interfaces = list;
                 if (this.cfg.auto) this.autoEnable(); else this.applyEnabled();
                 this.render();
+                if (window.routingEngine && window.routingEngine.listInputs) window.routingEngine.listInputs();
             },
             autoEnable() {
                 let changed = false;
@@ -15765,6 +15782,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 this.caps.set(i.key, cap);
                 if (o.music) { this.music = cap; }
                 this.setStatus(i.key, 'READING via ' + cap.how, false);
+                if (this.cfg.auto && cap.bridge) this.autoPatchOne(cap);   // reading an interface now also feeds the mixer channels (browser microphones stay manual: feedback)
                 // the FFT follows the best interface: ASIO first, then whatever opened first
                 if (!i.loopback) {
                     const cur = this.mic && this.caps.get(this.mic);
@@ -16009,6 +16027,19 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 this.render();
             },
             unpatchAll() { Array.from(new Set(this.patched.map(p => p.key))).forEach(k => this.unpatchCap(k)); },
+            // one source that just opened goes to the next free channel pair (music: the last pair of the plan); the PATCH button still does all of them at once
+            autoPatchOne(cap) {
+                if (window.knoxEnabled || this.patched.some(p => p.key === cap.key)) return;
+                const lim = window.licenseChannels || 32, top = lim >= 32 ? 30 : Math.max(2, lim - 2);
+                if (cap.music) { if (this.patchCap(cap, top)) this.render(); return; }
+                const used = new Set(); this.patched.forEach(p => { used.add(p.ch); used.add(p.ch + 1); });
+                ((window.routingEngine && window.routingEngine.live) || []).forEach(l => used.add(l.ch));
+                for (let ch = 0; ch + 1 < top; ch += 2) {
+                    if (used.has(ch) || used.has(ch + 1)) continue;
+                    if (this.patchCap(cap, ch)) { window.notify(`${cap.name} → CH ${ch + 1}/${ch + 2} (use headphones to avoid feedback)`, 'microphone'); this.render(); }
+                    return;
+                }
+            },
 
             // ── now playing ──
             async pollNowPlaying() {
