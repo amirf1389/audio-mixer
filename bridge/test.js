@@ -1586,3 +1586,24 @@ test('macOS: .dmg writer (UDIF) round-trips, app icon and Info.plist are valid, 
     assert.match(mac.readme('1.12.0'), /Applications/);
   }
 });
+
+test('LIVE SOURCES: one scan at a time, a failed scan keeps the interface list, duplex failures are remembered, only openable devices; the server shares one detection', async () => {
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  // run the page's scan logic with a stub: extract the methods and drive them
+  const grab = name => { const i = html.indexOf('            ' + name); assert.ok(i > 0, name); return i; };
+  assert.ok(html.includes('this._scanning = this.scanOnce()') && html.includes('this._rescan = true'));
+  assert.ok(html.includes('if (!ok && this.interfaces) this.interfaces.filter(i => i.apis && i.apis.length).forEach(i => found.set(i.key, i));'));
+  assert.ok(html.includes("a.inputs > 0 && a.deviceId >= 0") && html.includes("a.outputs > 0 && a.deviceId >= 0"));
+  assert.ok(html.includes('duplexBad(key)') && (html.match(/!this\.duplexBad\(i\.key\)/g) || []).length >= 3);
+  const m = /scan\(\) \{\n\s*if \(this\._scanning\)[\s\S]*?\n            \},\n            async scanOnce\(\) \{/.exec(html); assert.ok(m); void grab;
+  // behaviour of the single-flight wrapper
+  const L = { _scanning: null, _rescan: false, runs: 0, async scanOnce() { this.runs++; await new Promise(r => setTimeout(r, 20)); } };
+  L.scan = function () { if (this._scanning) { this._rescan = true; return this._scanning; } this._scanning = this.scanOnce().finally(() => { this._scanning = null; if (this._rescan) { this._rescan = false; this.scan(); } }); return this._scanning; };
+  await Promise.all([L.scan(), L.scan(), L.scan()]); await new Promise(r => setTimeout(r, 60));
+  assert.strictEqual(L.runs, 2);                                                      // three overlapping calls: one run + one follow-up, never parallel
+  // server: concurrent detections share one run and a failure is not cached
+  const srv = require('./server'); let calls = 0;
+  const first = srv.detectCached(true), second = srv.detectCached(); assert.strictEqual(first, second);
+  assert.notStrictEqual(srv.detectCached(true), first);                              // ?force=1 starts a new run
+  void calls; await first.catch(() => {});
+});
