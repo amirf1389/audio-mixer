@@ -3,7 +3,7 @@
  * A console program that runs <install folder>\runtime\node.exe <install folder>\client\cli.js with the arguments it was given, in the same console,
  * and returns its exit code. It is the Windows form of "npm run": no Node.js or npm has to be installed on the PC, the installed runtime is used.
  *   audio-mixer                     start the local server and open the mixer
- *   audio-mixer doctor | drivers | verify --scan | license | plugins | update | service install|uninstall|status
+ *   audio-mixer doctor | drivers | verify | license | plugins | update | service install|uninstall|status
  *   audio-mixer npm install audify  the bundled npm, inside the app's bridge folder
  *   audio-mixer uninstall           stop the server and remove Audio Mixer
  * Build: x86_64-w64-mingw32-gcc / i686-w64-mingw32-gcc -mconsole -municode, see scripts/build-exe.js.

@@ -112,7 +112,7 @@ ${installDirs}
 
     <DirectoryRef Id="MenuDir">
       <Component Id="MenuShortcuts" Guid="${guid('menu-shortcuts:' + scope)}"${w64}>
-${scBoot('ScPc', 'Audio Mixer (PC mode)', 'Start the local server (boot screen) and open the mixer')}${sc('ScServer', 'Audio Mixer local server only', '"[INSTALLDIR]bridge\\server.js"', 'Local server without opening the browser')}${sc('ScVerify', 'Verify installation (security scan)', '"[INSTALLDIR]client\\cli.js" verify --scan --pause', 'Check the installed files and run a Defender scan')}        <!-- VST3 / VST2 (.vst3, .dll) plugins live in the user's own folder: the launcher creates and opens it -->
+${scBoot('ScPc', 'Audio Mixer (PC mode)', 'Start the local server (boot screen) and open the mixer')}${sc('ScServer', 'Audio Mixer local server only', '"[INSTALLDIR]bridge\\server.js"', 'Local server without opening the browser')}${sc('ScVerify', 'Verify installation (file check)', '"[INSTALLDIR]client\\cli.js" verify --pause', 'Check the installed files against their recorded SHA-256 hashes')}        <!-- VST3 / VST2 (.vst3, .dll) plugins live in the user's own folder: the launcher creates and opens it -->
         <Shortcut Id="ScPlugins" Name="Plugins folder (VST3 and VST2)" Target="[INSTALLDIR]AudioMixerServer.exe" Arguments="/plugins" Description="Drop .vst3 and VST2 .dll plugins here"/>
         <Shortcut Id="ScUninstall" Name="Uninstall Audio Mixer" Target="[SystemFolder]msiexec.exe" Arguments="/x ${code}" Description="Remove Audio Mixer (also in Settings > Apps)"/>
         <RemoveFolder Id="RmMenu" On="uninstall"/>

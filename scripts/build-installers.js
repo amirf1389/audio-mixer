@@ -2,7 +2,7 @@
 // Builds every Windows installer from the staged install trees and signs them:
 //   dist/AudioMixer-<version>-x64.msi   Windows Installer package, 64-bit, installs to C:\Program Files\Audio Mixer (administrator)
 //   dist/AudioMixer-<version>-x86.msi   Windows Installer package, 32-bit, installs to C:\Program Files (x86)\Audio Mixer (administrator)
-//   dist/Audio Mixer-<version>.exe      signed setup program (64-bit Windows): checks the package SHA-256, then installs it; /quiet /uninstall /scan
+//   dist/Audio Mixer-<version>.exe      signed setup program (64-bit Windows): checks the package SHA-256, then installs it; /quiet /uninstall
 //   dist/AudioMixer-signing.cer         the public certificate the files are signed with (see scripts/sign.js)
 // Each installer contains the mixer page, the Node.js server and client, the bundled official Node.js runtime, Audify (ASIO / WASAPI / DirectSound),
 // the verify scan, Start Menu entries and an uninstall entry in Settings > Apps. Linux (.deb) and macOS (.app) packages: build-unix.js.
