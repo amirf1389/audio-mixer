@@ -5,7 +5,7 @@
 //   dist/Audio Mixer-<version>.exe      signed setup program (64-bit Windows): checks the package SHA-256, then installs it; /quiet /uninstall
 //   dist/AudioMixer-signing.cer         the public certificate the files are signed with (see scripts/sign.js)
 // Each installer contains the mixer page, the Node.js server and client, the bundled official Node.js runtime, Audify (ASIO / WASAPI / DirectSound),
-// the Audio Mixer ASIO driver files (asio-driver\; registering them is the optional AsioDriver feature, off by default),
+// the Audio Mixer ASIO driver files (asio-driver\; registering them is the optional AsioDriver feature, off by default), the single-file server (AudioMixer-single.exe),
 // the verify scan, Start Menu entries and an uninstall entry in Settings > Apps. Linux (.deb) and macOS (.app) packages: build-unix.js.
 const fs = require('node:fs');
 const path = require('node:path');
@@ -46,6 +46,18 @@ function addAsioDriver(staged, { out, id, env }) {
   return files;
 }
 
+// The single-file server (scripts/build-single.js: server, command line and page in one executable) goes into the install tree too, signed and listed in MANIFEST.sha256:
+// AudioMixer-single.exe runs without anything else next to it (copy it anywhere); the launcher and the shortcuts keep using the files of the install folder.
+async function addSingleFile(staged, { out, id, env }) {
+  const { build } = require('./build-single');
+  const [made] = await build({ targets: ['windows-' + staged.arch], out: path.join(out, 'single'), cache: path.join(out, 'cache') });
+  const target = path.join(staged.stage, 'AudioMixer-single.exe');
+  fs.copyFileSync(made.file, target);
+  if (id) signFile(target, id, { env });
+  fs.appendFileSync(path.join(staged.stage, 'MANIFEST.sha256'), `${sha(target)}  AudioMixer-single.exe\n`);
+  return target;
+}
+
 async function buildInstallers({ out = path.join(__dirname, '..', 'dist'), archs = ['x64', 'x86'], sign = true, env = process.env } = {}) {
   const outAbs = path.resolve(out);
   const id = sign ? ensureSigningCert({ dir: path.join(outAbs, 'cache', 'signing'), env }) : null;
@@ -54,6 +66,7 @@ async function buildInstallers({ out = path.join(__dirname, '..', 'dist'), archs
     const staged = await buildInstaller({ out: outAbs, arch });
     addLauncher(staged, { out: outAbs, id, env });
     addAsioDriver(staged, { out: outAbs, id, env });
+    await addSingleFile(staged, { out: outAbs, id, env });
     const m = await buildMsi({ out: outAbs, arch, scope: 'machine', staged });
     if (id) signFile(m.msi, id, { env });
     m.sha256 = sha(m.msi);
@@ -78,4 +91,4 @@ if (require.main === module) {
       : 'Signed with the certificate from SIGN_PFX.');
   }).catch(e => { console.error('Installer build failed: ' + e.message); process.exit(1); });
 }
-module.exports = { buildInstallers, addAsioDriver };
+module.exports = { buildInstallers, addAsioDriver, addSingleFile };

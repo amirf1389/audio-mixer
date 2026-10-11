@@ -223,6 +223,8 @@ async function handle(req, res) {
   try { rel = decodeURIComponent(url.pathname); } catch (_) { return json(res, 400, { ok: false, error: 'bad request' }); }
   if (rel.includes('\0')) return json(res, 400, { ok: false, error: 'bad request' });
   if (rel === '/') rel = '/index.html';
+  const embedded = global.__AM_ASSETS && Object.prototype.hasOwnProperty.call(global.__AM_ASSETS, rel) ? global.__AM_ASSETS[rel] : null;   // the single-file build (scripts/build-single.js) carries the page inside
+  if (embedded) return send(res, 200, embedded, { 'Content-Type': TYPES[path.extname(rel).toLowerCase()] || 'application/octet-stream' });
   const file = path.resolve(ROOT, '.' + rel);
   if (file !== ROOT && !file.startsWith(ROOT + path.sep)) return json(res, 403, { ok: false, error: 'forbidden' });
   // Never serve dotfiles/dirs (.git, .github, .vscode, .env ...) or the bridge's own sources.

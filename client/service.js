@@ -19,13 +19,14 @@ const xml = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;'
 // The Run entry that older Windows versions wrote (only read and deleted now).
 const WIN_RUN_KEY = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run';
 const WIN_VALUE = 'AudioMixerServer';
+const args = server => [].concat(server);
 function macPlist(node, server, log) {
   return `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n` +
-    `  <key>Label</key><string>com.audiomixer.bridge</string>\n  <key>ProgramArguments</key>\n  <array><string>${xml(safePath(node))}</string><string>${xml(safePath(server))}</string></array>\n` +
+    `  <key>Label</key><string>com.audiomixer.bridge</string>\n  <key>ProgramArguments</key>\n  <array><string>${xml(safePath(node))}</string>${args(server).map(a => `<string>${xml(safePath(a))}</string>`).join('')}</array>\n` +
     `  <key>RunAtLoad</key><true/>\n  <key>KeepAlive</key><true/>\n  <key>StandardOutPath</key><string>${xml(safePath(log))}</string>\n  <key>StandardErrorPath</key><string>${xml(safePath(log))}</string>\n</dict>\n</plist>\n`;
 }
 function systemdUnit(node, server) {
-  return `[Unit]\nDescription=Audio Mixer local system server\nAfter=network.target\n\n[Service]\nExecStart="${safePath(node)}" "${safePath(server)}"\nRestart=on-failure\n\n[Install]\nWantedBy=default.target\n`;
+  return `[Unit]\nDescription=Audio Mixer local system server\nAfter=network.target\n\n[Service]\nExecStart="${safePath(node)}" ${args(server).map(a => `"${safePath(a)}"`).join(' ')}\nRestart=on-failure\n\n[Install]\nWantedBy=default.target\n`;
 }
 
 function targets(platform = process.platform, env = process.env, home = os.homedir()) {
@@ -41,7 +42,9 @@ const run = (exec, cmd, args) => new Promise(res => exec(cmd, args, { windowsHid
 
 // `opts` is injectable for tests: { platform, env, home, node, server, launcher, exec, spawn, reg }
 async function install(opts = {}) {
-  const node = opts.node || process.execPath, server = opts.server || SERVER, exec = opts.exec || execFile;
+  // single-file build (scripts/build-single.js): the executable (or the bundle run by node) is the server; --no-open keeps the browser closed at login
+  const me = global.__AM_SELF && !opts.node && !opts.server ? global.__AM_SELF : null;
+  const node = opts.node || process.execPath, server = opts.server || (me ? [...(me.script ? [me.script] : []), '--no-open'] : SERVER), exec = opts.exec || execFile;
   const t = targets(opts.platform, opts.env, opts.home);
   if (t.platform === 'win32') {
     // Start at login was removed on Windows (a Run-key entry that starts a program is one of the things antivirus heuristics flag): uninstall / status still

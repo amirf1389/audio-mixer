@@ -324,7 +324,7 @@ async function cmdOpen(o) {
   if (t.kind === 'file') { try { scenes = readScenes(t.file); } catch (e) { console.error('open: ' + e.message); return 1; } query = '?page=scenes&scene=1'; }
   if (!await probe(o.port)) {   // start the server (detached, no window) and wait for it
     const { spawn } = require('node:child_process');
-    try { spawn(process.execPath, [__filename, '--no-open', '--port', String(o.port)], { detached: true, stdio: 'ignore', windowsHide: true }).unref(); } catch (e) { console.error('open: cannot start the server: ' + e.message); return 1; }
+    try { spawn(process.execPath, [...(global.__AM_SELF ? (global.__AM_SELF.script ? [global.__AM_SELF.script] : []) : [__filename]), '--no-open', '--port', String(o.port)], { detached: true, stdio: 'ignore', windowsHide: true }).unref(); } catch (e) { console.error('open: cannot start the server: ' + e.message); return 1; }
     for (let i = 0; i < 50 && !await probe(o.port); i++) await new Promise(r => setTimeout(r, 200));
     if (!await probe(o.port)) { console.error('open: the local server did not start (run "audio-mixer doctor")'); return 1; }
   }
@@ -384,7 +384,7 @@ async function main(argv) {
   const o = parseArgs(argv);
   const major = Number(process.versions.node.split('.')[0]);
   if (major < MIN_NODE) { console.error(`Node.js ${MIN_NODE}+ is required (you have ${process.versions.node}). Download it from https://nodejs.org/`); return 1; }
-  if (o.help && o.cmd !== 'npm') { const head = []; for (const l of fs.readFileSync(__filename, 'utf8').split('\n').slice(2)) { if (!l.startsWith('//')) break; head.push(l.slice(3)); } console.log(head.join('\n')); return 0; }
+  if (o.help && o.cmd !== 'npm') { const head = []; for (const l of (global.__AM_CLI_HELP !== undefined ? global.__AM_CLI_HELP : fs.readFileSync(__filename, 'utf8')).split('\n').slice(2)) { if (!l.startsWith('//')) break; head.push(l.slice(3)); } console.log(head.join('\n')); return 0; }
   if (o.cmd === 'start') return cmdStart(o, argv);
   if (o.cmd === 'drivers') return (await cmdDrivers(), await pause(argv), 0);
   if (o.cmd === 'license') return cmdLicense(o, argv);
