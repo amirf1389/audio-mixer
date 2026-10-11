@@ -5,7 +5,7 @@
 //   user:              %LOCALAPPDATA%\Programs\AudioMixer, no administrator rights, current user
 // Needs wixl (msitools): Linux "apt install wixl". Packages are signed by build-installers.js / sign.js.
 // Install:  msiexec /i AudioMixer-1.4.0-x64.msi   (silent: /qn)   Uninstall: Settings > Apps > Audio Mixer, or msiexec /x <ProductCode>
-// Features: ADDLOCAL=Main,Shortcuts,Tools,CommandLine,PluginHost,WinHelpers,Autostart,Desktop  (default: all, the desktop shortcut too; the setup program has /nodesktop)
+// Features: ADDLOCAL=Main,Shortcuts,Tools,CommandLine,PluginHost,WinHelpers,Desktop  (default: all, the desktop shortcut too; the setup program has /nodesktop)
 //   CommandLine: audio-mixer.exe on PATH (system PATH for the all-users package, the user's PATH for the per-user one)
 //   PluginHost: native VST host (native/host), WinHelpers: native Windows audio device helpers (native/win); Tools: Start Menu shortcuts for license, plugins, drivers, update, doctor
 const fs = require('node:fs');
@@ -96,10 +96,6 @@ ${installDirs}
     </Directory>
 
     <DirectoryRef Id="INSTALLDIR">
-      <!-- start at login: the signed native launcher (AudioMixerServer.exe, part of the install) in a Run entry; no scripts are installed -->
-      <Component Id="AutostartRun" Guid="${guid('autostart-run:' + scope)}"${w64}>
-        <RegistryValue Root="${root}" Key="Software\\Microsoft\\Windows\\CurrentVersion\\Run" Name="AudioMixer" Type="string" Value="&quot;[INSTALLDIR]AudioMixerServer.exe&quot;" KeyPath="yes"/>
-      </Component>
       <Component Id="InstallKey" Guid="${guid('install-key:' + scope)}"${w64}>
         <RegistryValue Root="${root}" Key="Software\\Audio Mixer" Name="InstallDir" Type="string" Value="[INSTALLDIR]" KeyPath="yes"/>
         <RegistryValue Root="${root}" Key="Software\\Audio Mixer" Name="UninstallCode" Type="string" Value="[ProductCode]"/>   <!-- "audio-mixer uninstall" finds the package with it -->
@@ -150,7 +146,6 @@ ${groups.PluginHost.map(c => `      <ComponentRef Id="${c}"/>\n`).join('')}    <
     <Feature Id="WinHelpers" Title="Native Windows audio device helpers" Level="1">
 ${groups.WinHelpers.map(c => `      <ComponentRef Id="${c}"/>\n`).join('')}    </Feature>
     <Feature Id="CommandLine" Title="audio-mixer command on PATH (doctor, npm, setup, uninstall ...)" Level="1"><ComponentRef Id="CommandPath"/></Feature>
-    <Feature Id="Autostart" Title="Start the local server when I log in" Level="1"><ComponentRef Id="AutostartRun"/></Feature>
     <Feature Id="Desktop" Title="Desktop shortcut" Level="1"><ComponentRef Id="DesktopShortcut"/></Feature>
 
     <UIRef Id="WixUI_Minimal"/>

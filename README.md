@@ -27,7 +27,7 @@ Official drivers (DRIVERS tab or command line):
     node client/cli.js doctor           # checks Node.js, port, PortAudio, ASIO drivers, download folder
 
 WASAPI, DirectSound, WDM-KS, MME, Core Audio and AAudio are part of the operating system. ASIO drivers come from the hardware vendor,
-ASIO4ALL or FlexASIO; the list links to each official site. Installers are saved to `~/AudioMixerDrivers` (`BRIDGE_DOWNLOAD_DIR` to change)
+ASIO4ALL or FlexASIO; the list links to each official site (from 1.5.2.0 Audio Mixer no longer downloads drivers; update downloads still go to `~/AudioMixerDrivers/updates`, `BRIDGE_DOWNLOAD_DIR` to change)
 and are never started automatically. See `bridge/README.md` for the server's API and security settings.
 
 ### Commands
@@ -62,8 +62,8 @@ and the Audify prebuilt binaries, pinned by SHA-256).
 
 Every Windows installer carries the mixer page, the Node.js server and client, the bundled Node.js runtime, Audify (ASIO / WASAPI / DirectSound), the verify scan, Start Menu entries
 (*Audio Mixer (PC mode)*, *local server only*, *Verify installation*, *Plugins folder*, *Uninstall Audio Mixer*) and an entry in *Settings > Apps* (Add or remove programs) with a working Uninstall.
-Features (`ADDLOCAL=Main,Shortcuts,Autostart,Desktop`): the default is everything, the desktop shortcut too (1.4.1.0; the setup program has `/nodesktop`); autostart runs the server hidden at login for all users. Uninstalling removes the
-program files, shortcuts and autostart entry; downloaded drivers (`%USERPROFILE%\AudioMixerDrivers`) and plugins (`%USERPROFILE%\AudioMixerPlugins`) stay. A newer package of the same kind upgrades an older one.
+Features (`ADDLOCAL=Main,Shortcuts,Desktop`; there is no start at login since 1.5.2.0): the default is everything, the desktop shortcut too (1.4.1.0; the setup program has `/nodesktop`); autostart runs the server hidden at login for all users. Uninstalling removes the
+program files and shortcuts (and the start-at-login entry of an older version); downloaded drivers (`%USERPROFILE%\AudioMixerDrivers`) and plugins (`%USERPROFILE%\AudioMixerPlugins`) stay. A newer package of the same kind upgrades an older one.
 The no-administrator flavour (`%LOCALAPPDATA%\Programs\AudioMixer`) is still available: `node scripts/build-msi.js --scope user`. Where other systems keep things: Linux app files are root-owned
 under `/opt`, user data stays in `~/AudioMixerDrivers`, `~/AudioMixerPlugins` and `~/.vst3`; macOS uses `/Applications`, `~/Library/LaunchAgents` and `~/Library/Audio/Plug-Ins/VST3`.
 The installer technology is Windows Installer (MSI) built with wixl, not the commercial InstallShield product, and the NSIS script is gone.
@@ -77,7 +77,7 @@ published certificate: see `releases/AudioMixer-signing.cer`. The Linux and macO
 **Layout fixes (1.13.0).** The EQ band faders and the DCA / VCA master faders no longer grow to the height of the page and spill out of their cards (the slider now fills its own track). On phones the 10 EQ faders get a usable height and the RTA badge no longer overlaps the curve title, the mixer toolbar wraps instead of scrolling sideways, and the ASIO DRIVER strip can be folded to one line with its chevron button (remembered; folded by default on screens shorter than 700 px).
 
 **Automatic installation of Node.js and the audio runtime.** The Windows `.exe` / `.msi` already contain Node.js. Everywhere else a missing prerequisite is installed for you, after asking
-(`AUDIO_MIXER_YES=1` skips the questions):
+(`AUDIO_MIXER_YES=1` skips the questions on Linux / macOS; the Windows `start-pc-mode.bat` always asks and treats no answer as No since 1.5.2.0):
 - Linux `audio-mixer`, macOS `Audio Mixer.app` and `./start-pc-mode.sh` (`ensure-node.sh`): when Node.js 18+ is missing they download the official Node.js 22 build from nodejs.org, check its SHA-256
   against nodejs.org's `SHASUMS256.txt` (a mismatch installs nothing) and unpack it into `~/.local/share/audio-mixer/node`; no administrator rights, nothing outside your home folder. The Audify native
   audio module (prebuilt, no compiler) is installed once into `~/.local/share/audio-mixer/modules`; `AUDIO_MIXER_NO_NATIVE=1` skips it.
@@ -234,7 +234,7 @@ An audit of the LIVE SOURCES page (READ / WRITE per interface, ASIO, WASAPI, Dir
 
 - **New Start Menu shortcuts** (feature *Tools*): *License key and machine ID*, *List installed plugins*, *Audio drivers (ASIO, WASAPI)*, *Check for updates* and *Audio Mixer diagnostics*. Each opens a console that waits for Enter. They run new commands of the client: `node client/cli.js license [status|activate <key>|deactivate]`, `plugins`, `update [download]` (checks the signed manifest; the download is verified and never run for you), and `--pause` is now accepted by `drivers`, `doctor`, `license`, `plugins` and `update`.
 - **Optional MSI features:** `Main` (always), `Shortcuts`, `Tools`, `PluginHost` (native VST host, `native/host`), `WinHelpers` (native Windows device helpers, `native/win`), `Autostart`, `Desktop` (off by default). Use `ADDLOCAL=Main,Shortcuts,PluginHost` with msiexec, or the wizard's feature tree.
-- **Setup `.exe` switches:** `/noplugins`, `/nohelpers`, `/notools`, `/noshortcuts`, `/noautostart`, `/nodesktop` (`/desktop` is still accepted; they are turned into `ADDLOCAL`; without them the installer keeps its defaults). `/?` lists all switches.
+- **Setup `.exe` switches:** `/noplugins`, `/nohelpers`, `/notools`, `/noshortcuts`, `/noautostart` (accepted and ignored since 1.5.2.0), `/vcredist`, `/nodesktop` (`/desktop` is still accepted; they are turned into `ADDLOCAL`; without them the installer keeps its defaults). `/?` lists all switches.
 - Without the plugin host the mixer still works; VST insert slots then report that the host is missing.
 
 ## Sources reach the mixer channels (1.14.1)
@@ -406,3 +406,12 @@ Not tested here: the tile and native audio on a real phone (only compiled and th
 - **Silence about the reason.** An installed ASIO driver (from the registry) that the engine still cannot read is shown as "ASIO DRIVER ONLY" with the error RtAudio gave and what to do (close the DAW / control panel that uses it, check the cable, power), and a **PROBE AGAIN** button that rescans with `?force=1`. `/api/interfaces` carries `probeError`, `probeNamed` (the error named this driver) and `probeRetried` on those entries; `/api/audify` reports `retried` in `problems`.
 
 Not tested here: a real ASIO driver (the tests use a fake RtAudio). If a driver still fails after PROBE AGAIN with the interface idle and plugged in, the error text in the row is what RtAudio reported; ASIO also needs the process to run in a single-threaded COM apartment, which the bridge cannot change from JavaScript.
+
+## No start at login, no driver downloader, no silent installs on Windows (1.5.2.0)
+
+Things that antivirus heuristics flag in an installer ("potentially unwanted program") were taken out of the Windows edition:
+- **No start at login.** The MSI no longer writes a `Run` registry entry (`Software\Microsoft\Windows\CurrentVersion\Run`), so nothing starts by itself when you log in; start Audio Mixer from its Start Menu or desktop shortcut. `audio-mixer service install` refuses on Windows; `audio-mixer service uninstall` (and the normal uninstall) still remove an entry that an older version wrote. The setup switch `/noautostart` is accepted and ignored. Linux (systemd user service) and macOS (LaunchAgent) keep their optional start at login.
+- **No driver downloader.** `POST /api/catalog/download`, `audio-mixer download <id>` and the "DOWNLOAD INSTALLER" buttons are gone. The DRIVERS list still detects what is installed and links to each official site (ASIO4ALL, FlexASIO, Focusrite ...); you install a driver from the vendor's page yourself. The OTA update download of Audio Mixer itself is a separate feature and stays.
+- **Nothing is installed behind your back.** The Windows setup used to install the Microsoft Visual C++ runtime with `winget` without asking; it now asks first (Yes / No). A `/quiet` install installs nothing unless `/vcredist` is given. The Windows installer already contains Node.js, so none is installed; the portable `start-pc-mode.bat` asks before installing Node.js or the runtime and treats "no answer in 60 seconds" as No (`AUDIO_MIXER_YES` no longer applies to it).
+
+Not tested here: the setup program on a real Windows PC or against a real Defender (the setup is compiled and its logic checked from the source, the MSI is inspected).

@@ -1,8 +1,9 @@
 @echo off
 rem Audio Mixer PC mode (Windows): starts the local system server and opens the mixer.
-rem If Node.js 18+ is missing it is installed first, after asking: with winget (official Node.js LTS) when available, otherwise the official zip
-rem from nodejs.org (SHA-256 checked, into %LOCALAPPDATA%\AudioMixer\node, no administrator rights). Set AUDIO_MIXER_YES=1 to skip the questions.
-rem The Microsoft Visual C++ runtime that the native audio module (Audify) needs is installed with winget when it is missing.
+rem If Node.js 18+ is missing, the script ASKS whether to install it: with winget (official Node.js LTS) when available, otherwise the official zip
+rem from nodejs.org (SHA-256 checked, into %LOCALAPPDATA%\AudioMixer\node, no administrator rights). Nothing is installed without an answer:
+rem no answer within a minute means No, and there is no switch that answers for you.
+rem The Microsoft Visual C++ runtime that the native audio module (Audify) needs is offered the same way (winget) when it is missing.
 setlocal EnableDelayedExpansion
 cd /d "%~dp0"
 set "AM_NODE_DIR=%LOCALAPPDATA%\AudioMixer\node"
@@ -32,9 +33,8 @@ if exist "%AM_NODE_DIR%\node.exe" (
 exit /b 0
 
 :ask
-rem %~1 = question; returns 0 for yes
-if "%AUDIO_MIXER_YES%"=="1" exit /b 0
-choice /c YN /d Y /t 60 /m "%~1"
+rem %~1 = question; returns 0 for yes. Default (no answer in 60 seconds, or no console to answer on) is No.
+choice /c YN /d N /t 60 /m "%~1"
 if errorlevel 2 exit /b 1
 exit /b 0
 

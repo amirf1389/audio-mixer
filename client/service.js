@@ -1,6 +1,6 @@
 'use strict';
 // Autostart ("enable") for the local system server: starts bridge/server.js when you log in, no admin rights needed.
-//   Windows: a Run entry in the registry (HKCU, no scripts and nothing written to the Startup folder)   macOS: LaunchAgent   Linux: systemd user service
+//   macOS: LaunchAgent   Linux: systemd user service   Windows: not offered any more (status / uninstall still find and remove the Run entry of older versions)
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -16,13 +16,9 @@ function safePath(p) {
 }
 const xml = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]));
 
-// Windows autostart is one registry value. With the installed native launcher (AudioMixerServer.exe, next to runtime\\ and bridge\\) the server starts
-// without a console window; a plain Node.js checkout starts node.exe directly (its console window is visible: nothing is hidden).
+// The Run entry that older Windows versions wrote (only read and deleted now).
 const WIN_RUN_KEY = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run';
 const WIN_VALUE = 'AudioMixerServer';
-function windowsCommand(node, server, launcher) {
-  return launcher ? `"${safePath(launcher)}"` : `"${safePath(node)}" "${safePath(server)}"`;
-}
 function macPlist(node, server, log) {
   return `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n` +
     `  <key>Label</key><string>com.audiomixer.bridge</string>\n  <key>ProgramArguments</key>\n  <array><string>${xml(safePath(node))}</string><string>${xml(safePath(server))}</string></array>\n` +
@@ -48,14 +44,9 @@ async function install(opts = {}) {
   const node = opts.node || process.execPath, server = opts.server || SERVER, exec = opts.exec || execFile;
   const t = targets(opts.platform, opts.env, opts.home);
   if (t.platform === 'win32') {
-    const launcher = opts.launcher !== undefined ? opts.launcher : (fs.existsSync(path.join(path.dirname(server), '..', 'AudioMixerServer.exe')) ? path.resolve(path.dirname(server), '..', 'AudioMixerServer.exe') : null);
-    const command = windowsCommand(node, server, launcher);
-    const added = await run(exec, 'reg', ['add', t.key, '/v', t.value, '/t', 'REG_SZ', '/d', command, '/f']);
-    let started = false;
-    if (added) {
-      try { (opts.spawn || spawn)(launcher || node, launcher ? [] : [server], { detached: true, stdio: 'ignore', windowsHide: true }).unref(); started = true; } catch (_) { /* starts at the next login */ }
-    }
-    return { file: t.file, started, installed: added, command };
+    // Start at login was removed on Windows (a Run-key entry that starts a program is one of the things antivirus heuristics flag): uninstall / status still
+    // remove and report an entry left by an older version, and the setup program no longer writes one.
+    throw new Error('Start at login is not offered on Windows any more. Start Audio Mixer from its Start Menu shortcut. To remove an entry left by an older version: audio-mixer service uninstall');
   }
   const content = t.platform === 'darwin' ? macPlist(node, server, t.log) : systemdUnit(node, server);
   fs.mkdirSync(path.dirname(t.file), { recursive: true });
@@ -90,4 +81,4 @@ function status(opts = {}) {
   return { file: t.file, installed: fs.existsSync(t.file) };
 }
 
-module.exports = { install, uninstall, status, targets, windowsCommand, macPlist, systemdUnit, safePath };
+module.exports = { install, uninstall, status, targets, macPlist, systemdUnit, safePath };
