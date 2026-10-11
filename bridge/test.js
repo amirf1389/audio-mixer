@@ -1323,8 +1323,8 @@ test('repository layout: one folder per system with its sources and release file
   const lay = require('../scripts/layout'), mk = require('../scripts/make-update'), root = pathx.join(__dirname, '..');
   const top = fsx.readdirSync(root, { withFileTypes: true }).filter(e => !e.name.startsWith('.') && e.name !== 'node_modules' && e.name !== 'dist');
   const dirs = top.filter(e => e.isDirectory()).map(e => e.name).sort(), files = top.filter(e => e.isFile()).map(e => e.name).sort();
-  assert.deepStrictEqual(dirs, ['android', 'bridge', 'client', 'deploy', 'drivers', 'ios', 'linux', 'macos', 'npm-installer', 'ota-server', 'releases', 'scripts', 'windows'], 'the top level is minimal: systems + shared code');
-  assert.deepStrictEqual(files, ['Additional Terms & Conditions', 'LICENSE', 'README.md', 'SECURITY.md', 'boot.html', 'index.html', 'package.json'], 'only the web app and the project papers at the root');
+  assert.deepStrictEqual(dirs, ['android', 'bridge', 'client', 'deploy', 'drivers', 'engine', 'ios', 'linux', 'macos', 'npm-installer', 'ota-server', 'releases', 'scripts', 'windows'], 'the top level is minimal: systems + shared code');
+  assert.deepStrictEqual(files, ['ASIO-SDK-README.md', 'Additional Terms & Conditions', 'LICENSE', 'LICENSE.txt', 'README.md', 'SECURITY.md', 'Steinberg ASIO Licensing Agreement.pdf', 'Steinberg ASIO SDK 2.3.pdf', 'Steinberg ASIO Usage Guidelines.pdf', 'boot.html', 'changes.txt', 'index.html', 'package.json'], 'only the web app, the project papers and the Steinberg ASIO SDK papers at the root');
   assert.deepStrictEqual(fsx.readdirSync(pathx.join(root, 'releases')), ['update.json'], 'releases/ holds only the manifest that installed apps fetch');
   for (const os of lay.OSES) assert.ok(fsx.statSync(pathx.join(root, os, 'releases')).isDirectory(), os + '/releases');
   // every file that goes into a package exists where the layout says; the package keeps its own paths
@@ -2839,6 +2839,95 @@ test('METER SOURCE: the VU, LUFS, scope and phase pages follow one chosen source
   assert.ok(Math.abs(calc(wave(60, 0.3, Math.sin), A, fs, { timebase: 10 }).freq - 60) < 0.5, 'low frequencies too');
 });
 
+test('native engine: the embedded C core, the C++ engine, the Rust crate, the device runtime and the Apple wrappers are held to the same vectors (49 cases, 397 numbers)', (tc) => {
+  const be = require('../scripts/build-engine');
+  const steps = { 'embedded C core': be.buildC(), 'C++ engine': be.buildCpp(), 'Rust crate': be.buildRust(), 'device runtime': be.buildIo(), 'Apple wrappers': be.checkApple() };
+  let ran = 0;
+  for (const [name, r] of Object.entries(steps)) { if (r.skipped) continue; ran++; assert.strictEqual(r.ok, true, name + ': ' + r.detail); }
+  if (!ran) return tc.skip('no compiler on this machine');
+  for (const [name, re] of [['embedded C core', /49 cases, 397 numbers checked, 0 failed/], ['C++ engine', /49 cases, 397 numbers checked, 0 failed/], ['Rust crate', /49 cases, 397 numbers checked, 0 failed/]]) if (!steps[name].skipped) assert.match(steps[name].detail, re, name);
+  if (!steps['device runtime'].skipped) assert.match(steps['device runtime'].detail, /runtime: all good/);
+  // the vectors are what the reference code gives today: a change in the page's loudness / meter / scope code or in the bridge's meter shows up here
+  const fsx = require('node:fs'), pathx = require('node:path'), osx = require('node:os'), cp = require('node:child_process');
+  const tmp = pathx.join(fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'vec-')), 'v.txt'), root = pathx.join(__dirname, '..', 'engine', 'tests');
+  try {
+    const g = cp.spawnSync(process.execPath, [pathx.join(root, 'gen-vectors.js'), tmp], { encoding: 'utf8' }); assert.strictEqual(g.status, 0, g.stderr);
+    assert.strictEqual(fsx.readFileSync(tmp, 'utf8'), fsx.readFileSync(pathx.join(root, 'vectors.txt'), 'utf8'), 'engine/tests/vectors.txt is what the reference code gives (node engine/tests/gen-vectors.js rewrites it)');
+  } finally { fsx.rmSync(pathx.dirname(tmp), { recursive: true, force: true }); }
+});
+
+test('native engine in the page: the WebAssembly build is embedded, imports nothing, runs the loudness and scope vectors, replaces the JavaScript meters behind the same objects', async () => {
+  const fsx = require('node:fs'), pathx = require('node:path'), vm = require('node:vm'), crypto = require('node:crypto');
+  const root = pathx.join(__dirname, '..'), html = fsx.readFileSync(pathx.join(root, 'index.html'), 'utf8');
+  const { parse } = require('../engine/tests/vectors'), { gen } = require('../engine/tests/signals');
+  const m = /<script id="engine-wasm">([\s\S]*?)<\/script>/.exec(html); assert.ok(m, 'the engine-wasm script is in the page');
+  const b64 = /AM_WASM_B64:BEGIN\*\/'([A-Za-z0-9+/=]+)'\/\*AM_WASM_B64:END/.exec(m[1]); assert.ok(b64, 'the binary is embedded');
+  const bytes = Buffer.from(b64[1], 'base64'); assert.ok(bytes.length > 5000 && bytes.length < 100000, 'size ' + bytes.length);
+  assert.ok(bytes.equals(fsx.readFileSync(pathx.join(root, 'engine', 'wasm', 'am_core.wasm'))), 'the page carries engine/wasm/am_core.wasm (node scripts/build-engine.js --wasm re-embeds it)');
+  const mod = new WebAssembly.Module(bytes); assert.strictEqual(WebAssembly.Module.imports(mod).length, 0, 'freestanding: no imports');
+  // run the script of the page: the loudness object and the scope function behind it
+  const calls = []; const win = { lufsMeter: { fs: 48000, samples: 0, momentary: -Infinity, feed() { calls.push('js-feed'); }, setRate() { calls.push('js-rate'); }, reset() { calls.push('js-reset'); } }, meterSource: { scopeCalc() { return 'js'; } } };
+  vm.runInNewContext(m[1], { window: win, WebAssembly, atob: s => Buffer.from(s, 'base64').toString('binary'), Float32Array, Uint8Array, Math });
+  for (let i = 0; i < 100 && !win.amEngine.ready; i++) await new Promise(r => setTimeout(r, 20));
+  const E = win.amEngine; assert.ok(E.ready && E.version === 1 && E.source === 'webassembly');
+  assert.strictEqual(win.lufsMeter.engine, 'webassembly');
+  // the vectors the page's engine must give
+  let n = 0;
+  for (const c of parse()) {
+    if (c.kind === 'lufs') {
+      const fsHz = Number(c.head[2]), block = Number(c.head[3]), len = Math.round(fsHz * Number(c.head[4])), l = gen(c.head[5], fsHz, len, 0), r = gen(c.head[5], fsHz, len, 1);
+      E.lufs.init(fsHz); for (let i = 0; i < len; i += block) E.lufs.feed(l.subarray(i, i + block), r.subarray(i, i + block));
+      const v = E.lufs.read(), want = c.expect; n++;
+      for (const [k, w, tol] of [['momentary', want[0], 0.02], ['shortTerm', want[1], 0.02], ['integrated', want[2], 0.02], ['lra', want[3], 0.02], ['truePeak', want[4], 0.01]]) assert.ok(w === -Infinity ? v[k] === -Infinity : Math.abs(v[k] - w) <= tol, `${c.id} ${k}: ${v[k]} vs ${w}`);
+    } else if (c.kind === 'scope') {
+      const fsHz = Number(c.head[2]), size = Number(c.head[3]), A = gen(c.head[7], fsHz, size, 0), r = E.scopeCalc(A, fsHz, { timebase: Number(c.head[4]), triggerLevel: Number(c.head[5]), triggerEdge: c.head[6] === '1' ? 'rise' : 'fall' }), w = c.expect; n++;
+      assert.ok(r.N === w[0] && r.start === w[1] && r.triggered === (w[2] === 1), c.id + ' sweep'); for (const [k, x, tol] of [['p2p', w[3], 1e-6], ['rms', w[4], 1e-6], ['crest', w[5], 1e-4], ['freq', w[6], 1e-6]]) assert.ok(Math.abs(r[k] - x) <= tol * Math.max(1, Math.abs(x)), `${c.id} ${k}: ${r[k]} vs ${x}`);
+    }
+  }
+  assert.ok(n >= 20, 'loudness and scope vectors run in the page engine: ' + n);
+  // the page's objects use it: feed -> the fields the page paints
+  const left = gen('sine:1000:0.5', 48000, 4800 * 4, 0); win.lufsMeter.setRate(48000); win.lufsMeter.feed(left.subarray(0, 9600), left.subarray(0, 9600)); win.lufsMeter.feed(left.subarray(9600, 19200), left.subarray(9600, 19200));
+  assert.ok(win.lufsMeter.samples === 19200 && Math.abs(win.lufsMeter.momentary + 6.01) < 0.05 && Math.abs(win.lufsMeter.truePeak + 6.02) < 0.05, 'the LUFS object follows the engine: ' + win.lufsMeter.momentary);
+  assert.ok(!calls.includes('js-feed'), 'the JavaScript loudness code does not run when the engine is there');
+  const sc = win.meterSource.scopeCalc(gen('sine:440:0.5', 48000, 32768, 0), null, 48000, { timebase: 1, triggerLevel: -12, triggerEdge: 'rise' }); assert.ok(Math.abs(sc.freq - 440) < 0.1, 'meterSource.scopeCalc uses the engine');
+  assert.strictEqual(win.meterSource.scopeCalc(new Float32Array(40000), null, 48000, { timebase: 1 }), 'js', 'a block the engine cannot take falls back to JavaScript');
+  // without WebAssembly (or with a damaged binary) nothing changes
+  const win2 = { lufsMeter: { feed() { return 'js'; } }, meterSource: { scopeCalc() { return 'js'; } } };
+  vm.runInNewContext(m[1], { window: win2, WebAssembly: undefined, atob: s => Buffer.from(s, 'base64').toString('binary'), Float32Array, Uint8Array, Math }); assert.strictEqual(win2.amEngine.ready, false); assert.strictEqual(win2.lufsMeter.feed(), 'js');
+  const win3 = { lufsMeter: { feed() { return 'js'; } }, meterSource: { scopeCalc() { return 'js'; } } };
+  vm.runInNewContext(m[1].replace(b64[1], 'AAAA'), { window: win3, WebAssembly, atob: s => Buffer.from(s, 'base64').toString('binary'), Float32Array, Uint8Array, Math }); await new Promise(r => setTimeout(r, 100)); assert.strictEqual(win3.amEngine.ready, false); assert.strictEqual(win3.lufsMeter.feed(), 'js');
+  void crypto;
+});
+
+test('native engine in the bridge: the Node addon (C++) gives the numbers of the JavaScript meter, the loudness meter and the scope of the vectors', (tc) => {
+  const be = require('../scripts/build-engine'), r = be.buildNode();
+  if (r.skipped) return tc.skip(r.skipped); assert.strictEqual(r.ok, true, r.detail);
+  const native = require(r.file), lv = require('./levels.js'), { parse } = require('../engine/tests/vectors'), { gen, genS16 } = require('../engine/tests/signals');
+  // the bridge's Int16 meter: the same snapshots as the JavaScript class, block by block, and with a changed clip threshold
+  for (const [spec, ch, db] of [['clipsine:440:1.4', 2, -0.1], ['sine:300:0.9', 1, -3], ['noise:11:0.99', 6, -0.1], ['sine:1000:0.1', 2, -0.1]]) {
+    lv.setClipDb(db); const x = genS16(spec, 48000, 4800, ch), buf = Buffer.from(x.buffer), a = new lv.Meter(ch), b = new native.Meter(ch, db);
+    for (let i = 0; i < 4; i++) { const part = buf.subarray(i * buf.length / 4, (i + 1) * buf.length / 4); a.push(part); b.push(part); const sa = a.snapshot(), sb = b.snapshot(); sb.clipDb = db; assert.deepStrictEqual(sb, sa, spec + ' block ' + i); }
+  }
+  lv.setClipDb(-0.1); const odd = Buffer.alloc(401); odd.writeInt16LE(32767, 1); const m1 = new native.Meter(1, -0.1); m1.push(odd.subarray(1, 399)); assert.strictEqual(m1.snapshot().frames, 199, 'a Buffer at an odd address, a partial last sample ignored');
+  assert.throws(() => m1.push('nope'), /Buffer/);
+  // loudness and scope of the vectors
+  let n = 0;
+  for (const c of parse()) {
+    if (c.kind === 'lufs') { const fsHz = Number(c.head[2]), len = Math.round(fsHz * Number(c.head[4])), l = gen(c.head[5], fsHz, len, 0), rr = gen(c.head[5], fsHz, len, 1), m = new native.Loudness(fsHz); for (let i = 0; i < len; i += 2048) m.feed(l.subarray(i, i + 2048), rr.subarray(i, i + 2048)); const v = m.values(); n++;
+      [v.momentary, v.shortTerm, v.integrated, v.lra].forEach((x, k) => assert.ok(c.expect[k] === -Infinity ? x === -Infinity : Math.abs(x - c.expect[k]) <= 0.02, c.id + ' ' + k)); assert.ok(Math.abs(v.truePeak - c.expect[4]) <= 0.01 || v.truePeak === c.expect[4], c.id + ' true peak'); }
+    if (c.kind === 'scope') { const fsHz = Number(c.head[2]), A = gen(c.head[7], fsHz, Number(c.head[3]), 0), s = native.scope(A, fsHz, { timebase: Number(c.head[4]), triggerLevel: Number(c.head[5]), triggerEdge: c.head[6] === '1' ? 'rise' : 'fall' }); n++; assert.ok(s.N === c.expect[0] && s.start === c.expect[1] && s.triggered === (c.expect[2] === 1) && Math.abs(s.freq - c.expect[6]) <= 1e-6 * Math.max(1, c.expect[6]), c.id); }
+  }
+  assert.ok(n >= 20); assert.throws(() => native.scope(new Float64Array(10), 48000, {}), /Float32Array/);
+  // the mixer
+  const mx = new native.Mixer(2, 48000); mx.setStrip(0, { gainDb: -6, pan: -1 }); mx.setStrip(1, { mute: true }); mx.setMaster({ gainDb: 0, limiter: false });
+  const x = gen('sine:440:0.5', 48000, 4096, 0), ol = new Float32Array(4096), orr = new Float32Array(4096); mx.process([x, x], ol, orr); const st = mx.state();
+  assert.ok(Math.abs(Math.max(...ol.map(Math.abs)) - 0.25) < 0.005 && Math.max(...orr.map(Math.abs)) < 0.001 && Math.abs(st.strips[0].pk - 0.25) < 0.005 && st.strips.length === 2 && st.master.length === 2, 'strip gain, pan and the state');
+  assert.throws(() => mx.process([x], ol, orr), /one Float32Array per strip/);
+  // the bridge uses it when it is there, and the loader reports it
+  const node = require('../engine/node'); assert.strictEqual(node.available, true); assert.ok(lv.native(), 'bridge/levels.js picked the addon up');
+  assert.strictEqual(new (require('./levels.js').NativeMeter)(2).ch, 2);
+});
+
 test('npm installer (npm-installer/): per-system choice of file and own installation, signed manifest + SHA-256 checked before anything runs, Windows ASIO registration only on request', async () => {
   const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), http = require('node:http'), crypto = require('node:crypto');
   const root = path.join(__dirname, '..', 'npm-installer'), det = require(path.join(root, 'lib', 'detect')), mf = require(path.join(root, 'lib', 'manifest')), { main, parseArgs } = require(path.join(root, 'lib', 'cli'));
@@ -2931,4 +3020,103 @@ test('the page\'s OS detection (index.html otaDetectOs / otaPick) gives the same
     const det = { os, arch, distro }, x = ctx.pick(man, det), y = od.pick(man, det);
     assert.deepStrictEqual(clone(x), y);
   }
+});
+
+test('Windows registry and environment: variables, App Paths, version keys, .amix + audiomixer:// handlers, optional tools PATH; setup switches', async () => {
+  const { spawnSync } = require('node:child_process');
+  const root = pathx.join(__dirname, '..'), m = require('../scripts/build-msi');
+  const stage = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'rg-')); fsx.writeFileSync(pathx.join(stage, 'LICENSE'), 'MIT');
+  for (const f of ['audio-mixer.exe', 'AudioMixerServer.exe']) fsx.writeFileSync(pathx.join(stage, f), 'x');
+  fsx.mkdirSync(pathx.join(stage, 'asio-driver')); for (const f of ['AudioMixerASIO32.dll', 'AudioMixerASIO64.dll', 'register.bat']) fsx.writeFileSync(pathx.join(stage, 'asio-driver', f), 'x');
+  for (const [arch, scope] of [['x64', 'machine'], ['x86', 'machine'], ['x64', 'user']]) {
+    const w = m.wxs({ stage, version: '1.10.0', arch, scope }), hive = scope === 'user' ? 'HKCU' : 'HKLM';
+    assert.match(w, /<Feature Id="Registry"[^>]*Level="1"/); assert.match(w, /<Feature Id="FileTypes"[^>]*Level="1"/); assert.match(w, /<Feature Id="ToolsPath"[^>]*Level="3"/);   // tools PATH is off unless asked
+    assert.ok(w.includes(`Root="${hive}" Key="Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\audio-mixer.exe"`));
+    assert.ok(w.includes('Name="Version" Type="string" Value="1.10.0"') && w.includes(`Name="Arch" Type="string" Value="${arch}"`) && w.includes('Name="DriverDir"'));
+    assert.ok(w.includes('Key="Software\\Classes\\.amix"') && w.includes('Name="URL Protocol"') && w.includes('Key="Software\\Classes\\audiomixer\\shell\\open\\command"'));
+    assert.ok(w.includes('Value="&quot;[INSTALLDIR]audio-mixer.exe&quot; open &quot;%1&quot;"'));       // the argument is quoted, and only "open" is run
+    if (spawnSync('wixl', ['--version']).status !== 0 || spawnSync('msibuild', ['-h']).status === null) continue;
+    const wk = pathx.join(stage, 'w-' + arch + scope); fsx.mkdirSync(wk); fsx.writeFileSync(pathx.join(wk, 'License.rtf'), m.rtf('MIT')); fsx.writeFileSync(pathx.join(wk, 'a.wxs'), w);
+    assert.strictEqual(spawnSync('wixl', ['--arch', arch, '--ext', 'ui', '-o', pathx.join(wk, 'a.msi'), pathx.join(wk, 'a.wxs')], { cwd: wk }).status, 0);
+    m.addEnvironment(pathx.join(wk, 'a.msi'), wk, m.environmentRows({ stage }));
+    const q = pathx.join(wk, 'q'); fsx.mkdirSync(q); spawnSync('msidump', ['-t', pathx.join(wk, 'a.msi')], { cwd: q });
+    const env = fsx.readFileSync(pathx.join(q, 'Environment.idt'), 'utf8');
+    assert.match(env, /PathAudioMixer\t=\*PATH\t\[~\];\[INSTALLDIR\]\tCommandPath/);                             // unchanged: audio-mixer.exe on PATH
+    assert.match(env, /EnvAudioMixerDir\t=\*AUDIO_MIXER_DIR\t\[INSTALLDIR\]\tRegistryKeys/);                  // "=" set, "*" removed on uninstall
+    assert.match(env, /EnvAudioMixerAsio\t=\*AUDIO_MIXER_ASIO\t\[INSTALLDIR\]asio-driver\tRegistryKeys/);
+    assert.match(env, /PathAudioMixerTools\t=\*PATH\t\[~\];\[INSTALLDIR\]asio-driver\tToolsPathKey/);          // follows the (off by default) ToolsPath feature
+    const feat = fsx.readFileSync(pathx.join(q, 'Feature.idt'), 'utf8'), fc = fsx.readFileSync(pathx.join(q, 'FeatureComponents.idt'), 'utf8');
+    assert.match(feat, /^ToolsPath\t.*\t3\t/m); assert.match(fc, /^ToolsPath\tToolsPathKey/m); assert.match(fc, /^Registry\tRegistryKeys/m); assert.match(fc, /^FileTypes\tFileTypeKeys/m);
+  }
+  // AUDIO_MIXER_HOME already means "the private data folder" on Linux / macOS (ensure-node.sh): the install folder variable has another name
+  assert.ok(!fsx.readFileSync(pathx.join(root, 'scripts', 'build-msi.js'), 'utf8').includes("=*AUDIO_MIXER_HOME"));
+  const stub = fsx.readFileSync(pathx.join(root, 'windows', 'installer', 'setup-stub.c'), 'utf8');
+  for (const t of ['/noregistry', '/nofiletypes', '/toolspath', ',Registry', ',FileTypes', ',ToolsPath']) assert.ok(stub.includes(t), t);
+  const gcc = spawnSync('x86_64-w64-mingw32-gcc', ['-fsyntax-only', '-municode', '-Wall', '-Werror', pathx.join(root, 'windows', 'installer', 'setup-stub.c')]);
+  if (!gcc.error) assert.strictEqual(gcc.status, 0, String(gcc.stderr));
+});
+
+test('audio-mixer open: only .amix files and audiomixer://page/<tab> links; a scene file reaches the page once through /api/handoff', async () => {
+  const cli = require('../client/cli.js');
+  assert.deepStrictEqual(cli.parseOpenTarget('audiomixer://page/Mixer'), { kind: 'link', query: '?page=mixer' });
+  assert.deepStrictEqual(cli.parseOpenTarget('audiomixer://'), { kind: 'link', query: '' });
+  for (const bad of ['audiomixer://page/../x', 'audiomixer://page/a;calc', 'audiomixer://page/' + 'a'.repeat(17), 'audiomixer://run/calc', 'notes.txt', 'x.amix.exe', '', 'file://evil/x.amix', 'file:///etc/passwd']) assert.ok(cli.parseOpenTarget(bad).error, bad);
+  assert.strictEqual(cli.parseOpenTarget('file:///tmp/a%20b.amix').file, '/tmp/a b.amix');
+  assert.ok(cli.openCommand('linux', 'http://localhost:8765/?page=scenes&scene=1') && !cli.openCommand('linux', 'http://localhost:8765/?page=a;calc') && !cli.openCommand('linux', 'http://localhost:8765/?x=1&y=%0a'));
+  const d = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'op-'));
+  const put = (n, t) => { const f = pathx.join(d, n); fsx.writeFileSync(f, t); return f; };
+  assert.deepStrictEqual(cli.readScenes(put('ok.amix', '[null,{"name":"a"}]')), [null, { name: 'a' }]);
+  for (const t of ['{"a":1}', '[1,2]', '[[]]', 'not json', JSON.stringify(Array(17).fill(null))]) assert.throws(() => cli.readScenes(put('bad.amix', t)), /scene file/);
+  assert.throws(() => cli.readScenes(put('big.amix', '[' + '{"a":"' + 'x'.repeat(1 << 20) + '"}]')), /larger than 1 MB/);
+  assert.throws(() => cli.readScenes(pathx.join(d, 'missing.amix')), /cannot read/);
+  // the server: needs the header, JSON and a valid archive; the page takes it once
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${server.address().port}`, post = (body, hdr = { 'X-Mixer-Action': 'handoff' }) => fetch(base + '/api/handoff', { method: 'POST', headers: { 'Content-Type': 'application/json', ...hdr }, body: JSON.stringify(body) });
+  assert.strictEqual((await post({ scenes: [null] }, {})).status, 400);                           // no X-Mixer-Action: a foreign page cannot trigger it
+  assert.strictEqual((await post({ scenes: 'x' })).status, 400); assert.strictEqual((await post({ scenes: [[1]] })).status, 400); assert.strictEqual((await post({ scenes: [1] })).status, 400);
+  assert.strictEqual((await (await fetch(base + '/api/handoff')).json()).ok, false);              // nothing waiting
+  const big = { scenes: [{ name: 'x'.repeat(100000) }] };                                          // above the 8 KB of other actions, below 1 MB
+  assert.strictEqual((await post(big)).status, 200);
+  const got = await (await fetch(base + '/api/handoff')).json();
+  assert.strictEqual(got.ok, true); assert.strictEqual(got.scenes[0].name.length, 100000);
+  assert.strictEqual((await (await fetch(base + '/api/handoff')).json()).ok, false);              // taken once
+  assert.strictEqual((await post({ scenes: [null] }, { 'X-Mixer-Action': 'handoff', Origin: 'https://evil.example' })).status, 403);
+  server.closeAllConnections(); server.close();
+  // the page: ?page= must name a tab that exists, ?scene=1 asks before it replaces the scene slots
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  assert.match(html, /getElementById\('nav-' \+ page\)/); assert.match(html, /confirm\('Import the scene file you opened/);
+});
+
+test('Linux and macOS own mechanisms: profile.d / environment.d, mime type + desktop handler, paths.d + launchd; kernel module and am-pump', async () => {
+  const { spawnSync } = require('node:child_process');
+  const root = pathx.join(__dirname, '..'), u = require('../scripts/build-unix');
+  assert.match(u.MIME_XML, /<glob pattern="\*\.amix"\/>/); assert.match(u.MIME_XML, /application\/x-audio-mixer-scene/);
+  const open = u.openDesktopEntry('audio-mixer');
+  assert.match(open, /^Exec=audio-mixer open %u$/m); assert.match(open, /^MimeType=application\/x-audio-mixer-scene;x-scheme-handler\/audiomixer;$/m); assert.match(open, /^NoDisplay=true$/m);
+  assert.strictEqual(u.profileSh('/opt/audio-mixer'), '# Audio Mixer: where it is installed (read by login shells)\n[ -d /opt/audio-mixer ] && export AUDIO_MIXER_DIR=/opt/audio-mixer\n');
+  assert.strictEqual(u.environmentConf('/opt/audio-mixer'), 'AUDIO_MIXER_DIR=/opt/audio-mixer\n');
+  // the .deb carries them in the system's places and refreshes the caches
+  const out = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'dbx-')), d = u.buildDeb({ out });
+  const lst = spawnSync('dpkg-deb', ['-c', d.deb], { encoding: 'utf8' });
+  if (!lst.error) {
+    for (const f of ['./etc/profile.d/audio-mixer.sh', './usr/lib/environment.d/60-audio-mixer.conf', './usr/share/mime/packages/audio-mixer.xml', './usr/share/applications/audio-mixer-open.desktop']) assert.ok(lst.stdout.includes(f), f);
+    const ctl = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'dbc-')); spawnSync('dpkg-deb', ['-e', d.deb, ctl]);
+    assert.match(fsx.readFileSync(pathx.join(ctl, 'postinst'), 'utf8'), /update-mime-database \/usr\/share\/mime/); assert.match(fsx.readFileSync(pathx.join(ctl, 'postrm'), 'utf8'), /update-desktop-database/);
+  }
+  // tarball installer: user level (~/.config/environment.d, ~/.local/share/mime) or root level; uninstall removes both
+  assert.match(u.LINUX_INSTALL, /\.config\/environment\.d/); assert.match(u.LINUX_INSTALL, /\/etc\/profile\.d\/audio-mixer\.sh/); assert.match(u.LINUX_INSTALL, /audio-mixer-open\.desktop/);
+  assert.match(u.LINUX_UNINSTALL, /60-audio-mixer\.conf/); assert.match(u.LINUX_UNINSTALL, /audio-mixer\.xml/);
+  for (const [n, t] of [['install', u.LINUX_INSTALL], ['uninstall', u.LINUX_UNINSTALL]]) { const f = pathx.join(out, n + '.sh'); fsx.writeFileSync(f, t); assert.strictEqual(spawnSync('sh', ['-n', f]).status, 0, n); }
+  // macOS: launchd environment + /etc/paths.d (asked, needs a password); no document type is claimed because a shell-script app cannot receive Apple events
+  assert.match(u.MAC_INSTALL, /com\.audiomixer\.env/); assert.match(u.MAC_INSTALL, /launchctl setenv AUDIO_MIXER_DIR/); assert.match(u.MAC_INSTALL, /\/etc\/paths\.d\/audio-mixer/);
+  assert.match(u.MAC_UNINSTALL, /com\.audiomixer\.env/); assert.match(u.MAC_UNINSTALL, /\/etc\/paths\.d\/audio-mixer/);
+  assert.ok(!/CFBundleDocumentTypes|CFBundleURLTypes/.test(u.infoPlist('1.0.0')));
+  for (const [n, t] of [['mi', u.MAC_INSTALL], ['mu', u.MAC_UNINSTALL], ['mc', u.MAC_COMMAND]]) { const f = pathx.join(out, n + '.sh'); fsx.writeFileSync(f, t); assert.strictEqual(spawnSync('bash', ['-n', f]).status, 0, n); }
+  // kernel module: source only (this machine has no kernel headers); am-pump is plain C and is built here
+  const km = pathx.join(root, 'linux', 'kernel-module'), ko = fsx.readFileSync(pathx.join(km, 'snd-audiomixer.c'), 'utf8');
+  for (const t of ['snd_card_new', 'snd_pcm_new', 'snd_pcm_period_elapsed', 'misc_register', 'MODULE_LICENSE("GPL")', 'MISC_DYNAMIC_MINOR']) assert.ok(ko.includes(t), t);
+  assert.match(ko, /NOT compiled or loaded/);
+  assert.match(fsx.readFileSync(pathx.join(km, 'dkms.conf'), 'utf8'), new RegExp('PACKAGE_VERSION="' + require('../package.json').version.replace(/\.0$/, '').replace(/\./g, '\\.') + '"'));
+  const pump = pathx.join(out, 'am-pump'), cc = spawnSync('gcc', ['-std=gnu99', '-Wall', '-Wextra', '-Werror', '-O2', '-o', pump, pathx.join(km, 'am_pump.c'), pathx.join(root, 'drivers', 'common', 'am_link.c'), '-lpthread'], { encoding: 'utf8' });
+  if (!cc.error) assert.strictEqual(cc.status, 0, cc.stderr);
 });

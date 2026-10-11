@@ -10,6 +10,7 @@
 //   node client/cli.js service install|uninstall|status   start the server automatically when you log in
 //   node client/cli.js npm <args>      run npm (the bundled one in the Windows install, else the system's) inside the app's bridge folder
 //   node client/cli.js uninstall [--yes]   stop the server, remove the autostart entry and run this installation's uninstaller
+//   node client/cli.js open <file.amix|audiomixer://page/<tab>>   what the operating system runs for a scene file or an audiomixer:// link (starts the server if needed)
 //   node client/cli.js version         print the version
 //   (installed packages put these on your PATH as "audio-mixer": audio-mixer doctor, audio-mixer npm install audify ...)
 //   node client/cli.js license [status|activate <key>|deactivate]   show / activate / remove the license key (works offline)
@@ -42,7 +43,7 @@ function parseArgs(argv) {
 
 // Never passes anything but a localhost URL to the OS opener.
 function openCommand(platform, url) {
-  if (!/^http:\/\/localhost:\d{1,5}\/?$/.test(url)) return null;
+  if (!/^http:\/\/localhost:\d{1,5}\/?(\?[a-z0-9=&]{0,40})?$/.test(url)) return null;
   if (platform === 'win32') return { cmd: 'rundll32', args: ['url.dll,FileProtocolHandler', url] };
   if (platform === 'darwin') return { cmd: 'open', args: [url] };
   return { cmd: 'xdg-open', args: [url] };
@@ -273,6 +274,65 @@ async function cmdUninstall(o, argv) {
   return 0;
 }
 
+// "open": what the operating system runs for an .amix scene file or an audiomixer:// link. Nothing in the file or the link is ever executed or passed to a shell:
+//   audiomixer://page/<tab>  (tab = 1 to 16 lower-case letters)  ->  the mixer, on that tab (the page ignores a tab it does not have)
+//   <name>.amix              ->  a scene archive (the JSON that SCENES > EXPORT writes: an array of up to 16 snapshots, at most 1 MB); it is checked here, handed to
+//                                the local server and the page asks you before importing it
+function parseOpenTarget(target) {
+  const t = String(target || '').trim();
+  let m;
+  if (/^audiomixer:/i.test(t)) {
+    if (/^audiomixer:\/\/?$/i.test(t) || /^audiomixer:\/\/open\/?$/i.test(t)) return { kind: 'link', query: '' };
+    m = /^audiomixer:\/\/page\/([a-z]{1,16})\/?$/i.exec(t);
+    return m ? { kind: 'link', query: '?page=' + m[1].toLowerCase() } : { error: 'unsupported link (use audiomixer://page/<tab>)' };
+  }
+  let file = t;
+  if (/^file:/i.test(t)) {   // Linux file managers hand over file:///path/x.amix (only this computer's own files)
+    try { const u = new URL(t); if (u.host && u.host !== 'localhost') return { error: 'not a file on this computer' }; file = require('node:url').fileURLToPath(u); } catch (_) { return { error: 'bad file link' }; }
+  }
+  if (!/\.amix$/i.test(file)) return { error: 'not an .amix file or an audiomixer:// link' };
+  return { kind: 'file', file };
+}
+
+function readScenes(file) {
+  let st;
+  try { st = fs.statSync(file); } catch (_) { throw new Error('cannot read ' + file); }
+  if (!st.isFile()) throw new Error(file + ' is not a file');
+  if (st.size > (1 << 20)) throw new Error('scene file is larger than 1 MB');
+  let d;
+  try { d = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_) { throw new Error('scene file is not valid JSON'); }
+  if (!Array.isArray(d) || d.length > 16 || !d.every(x => x === null || (x && typeof x === 'object' && !Array.isArray(x)))) throw new Error('scene file must hold up to 16 scene snapshots');
+  return d;
+}
+
+function postJson(port, path, action, body) {
+  return new Promise((resolve, reject) => {
+    const data = JSON.stringify(body);
+    const req = http.request({ host: '127.0.0.1', port, path, method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data), 'X-Mixer-Action': action }, timeout: 5000 }, res => {
+      let b = ''; res.on('data', d => { b += d; }); res.on('end', () => { try { const j = JSON.parse(b); res.statusCode === 200 && j.ok ? resolve(j) : reject(new Error(j.error || 'refused')); } catch (_) { reject(new Error('bad answer')); } });
+    });
+    req.on('error', reject); req.on('timeout', () => { req.destroy(new Error('timeout')); });
+    req.end(data);
+  });
+}
+
+async function cmdOpen(o) {
+  const t = parseOpenTarget(o.arg);
+  if (t.error) { console.error('open: ' + t.error); return 2; }
+  let query = t.query || '';
+  let scenes = null;
+  if (t.kind === 'file') { try { scenes = readScenes(t.file); } catch (e) { console.error('open: ' + e.message); return 1; } query = '?page=scenes&scene=1'; }
+  if (!await probe(o.port)) {   // start the server (detached, no window) and wait for it
+    const { spawn } = require('node:child_process');
+    try { spawn(process.execPath, [__filename, '--no-open', '--port', String(o.port)], { detached: true, stdio: 'ignore', windowsHide: true }).unref(); } catch (e) { console.error('open: cannot start the server: ' + e.message); return 1; }
+    for (let i = 0; i < 50 && !await probe(o.port); i++) await new Promise(r => setTimeout(r, 200));
+    if (!await probe(o.port)) { console.error('open: the local server did not start (run "audio-mixer doctor")'); return 1; }
+  }
+  if (scenes) { try { await postJson(o.port, '/api/handoff', 'handoff', { scenes }); } catch (e) { console.error('open: the server refused the scene file: ' + e.message); return 1; } }
+  if (!openBrowser(`http://localhost:${o.port}/${query}`)) { console.error('open: cannot open the browser'); return 1; }
+  return 0;
+}
+
 async function cmdService(action, port) {
   const svc = require('./service');
   try {
@@ -335,11 +395,12 @@ async function main(argv) {
   if (o.cmd === 'setup') return cmdSetup(argv);
   if (o.cmd === 'npm') return cmdNpm(argv);
   if (o.cmd === 'uninstall') return cmdUninstall(o, argv);
+  if (o.cmd === 'open') return cmdOpen(o);
   if (o.cmd === 'version') return (console.log(require('../package.json').version), 0);
   if (o.cmd === 'verify') return cmdVerify(o, argv);
-  console.error(`Unknown command "${o.cmd}". Use: start | drivers | doctor | verify | setup | service install|uninstall|status | license | plugins | update | npm | uninstall | version`);
+  console.error(`Unknown command "${o.cmd}". Use: start | drivers | doctor | verify | setup | service install|uninstall|status | license | plugins | update | npm | uninstall | open | version`);
   return 2;
 }
 
 if (require.main === module) main(process.argv.slice(2)).then(code => process.exit(code), e => { console.error(e.message); process.exit(1); });
-module.exports = { parseArgs, openCommand, formatDrivers, probe, main };
+module.exports = { parseArgs, openCommand, parseOpenTarget, readScenes, formatDrivers, probe, main };

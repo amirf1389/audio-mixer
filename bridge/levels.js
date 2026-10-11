@@ -49,9 +49,20 @@ class Meter {
   }
 }
 
+// The same meter in the C++ engine (engine/node, built with: node scripts/build-engine.js --node): used when the addon is there, the JavaScript Meter above otherwise.
+// engine/tests holds both to the same numbers. AUDIO_MIXER_NATIVE=0 turns it off.
+let native = null;
+try { const n = require('../engine/node'); native = n.available ? n : null; } catch (_) { native = null; /* not part of this install */ }
+class NativeMeter {
+  constructor(channels) { this.ch = Math.max(1, Math.min(channels | 0, 64)); this.clipDb = config.clipDb; this.m = new native.Meter(this.ch, config.clipDb); }
+  push(buf) { if (this.clipDb !== config.clipDb) { this.clipDb = config.clipDb; this.m.setClipDb(config.clipDb); } this.m.push(buf); }
+  snapshot() { const s = this.m.snapshot(); s.clipDb = config.clipDb; return s; }
+}
+const newMeter = channels => (native ? new NativeMeter(channels) : new Meter(channels));
+
 // Starts reporting for one open stream. `info` = what streams.add() got (direction, device, hostApi, engine, frameSize, latencyMs, sampleRate, channels).
 function attach(conn, info, { interval = 80 } = {}) {
-  const meter = new Meter(info.channels || 2);
+  const meter = newMeter(info.channels || 2);
   const id = `${info.sid || 0}:${info.direction}:${info.hostApi}:${info.device}`;   // one id per open stream
   const timer = setInterval(() => {
     try { conn.send(JSON.stringify({ type: 'levels', id, direction: info.direction, device: info.device, hostApi: info.hostApi, engine: info.engine, frameSize: info.frameSize || null, latencyMs: info.latencyMs || null, sampleRate: info.sampleRate, channels: meter.ch, ...meter.snapshot() })); } catch (_) { /* connection closing */ }
@@ -60,4 +71,4 @@ function attach(conn, info, { interval = 80 } = {}) {
   return { push: buf => meter.push(buf), stop: () => clearInterval(timer), meter };
 }
 
-module.exports = { Meter, attach, dbfs, FLOOR, CLIP_RUN, config, setClipDb, limitOf };
+module.exports = { Meter, NativeMeter, native: () => native, attach, dbfs, FLOOR, CLIP_RUN, config, setClipDb, limitOf };

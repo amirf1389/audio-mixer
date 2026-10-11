@@ -8,6 +8,7 @@
 //   GET /api/update, POST /api/update/download -> OTA updates (signed manifest, checksum-verified download)
 //   GET /api/universal -> universal ASIO driver: all input / output sources, ranked, with the automatic pick
 //   GET /api/plugins -> VST3 / VST2 plugins (.vst3 / .dll / .vst) found and validated
+//   POST /api/handoff {scenes}, GET /api/handoff -> one scene archive (.amix) from "audio-mixer open" waiting for the page (taken once)
 //   GET /api/meters, POST /api/meters {clipDb} -> clip threshold (dBFS) of the level meters of native streams
 //   WS  /ws/virtual, GET /api/virtual -> virtual audio devices of the operating-system drivers (drivers/); they appear in /api/interfaces and open like any interface
 //   GET /api/audify, /api/framesize -> Audify (RtAudio) engine devices and automatic frame size
@@ -107,6 +108,12 @@ async function handle(req, res) {
     if (!license.hasFeature(license.status(), 'ota')) return [402, { ok: false, needs: 'ota', error: 'Downloading updates needs the PRO or STUDIO plan. You can still check for updates.' }];
     return [200, await updater.download({ current: VERSION })];
   }, false);
+  if (req.method === 'POST' && url.pathname === '/api/handoff') return handleAction(req, res, cors, 'handoff', async body => {   // "audio-mixer open file.amix": one scene archive waits here for the page
+    const d = body && body.scenes;
+    if (!Array.isArray(d) || d.length > 16 || !d.every(x => x === null || (x && typeof x === 'object' && !Array.isArray(x)))) return [400, { ok: false, error: 'scenes must be an array of up to 16 snapshots' }];
+    handoff = { scenes: d, at: Date.now() };
+    return [200, { ok: true, snapshots: d.filter(Boolean).length }];
+  }, true, 1 << 20);
   if (req.method === 'POST' && url.pathname === '/api/meters') return handleAction(req, res, cors, 'meters', async body => [200, { ok: true, clipDb: levels.setClipDb(body.clipDb) }]);
   if (req.method === 'POST' && url.pathname === '/api/bluetooth') return handleAction(req, res, cors, 'bluetooth', async body => {
     try {
@@ -120,6 +127,10 @@ async function handle(req, res) {
     return [200, { ok: true, ...inserts.set(body) }];
   });
   if (req.method !== 'GET') return json(res, 405, { ok: false, error: 'method not allowed' }, cors);
+  if (url.pathname === '/api/handoff') {   // the page takes the waiting scene archive once (it is dropped after 2 minutes)
+    const h = handoff && Date.now() - handoff.at < 120000 ? handoff : null; handoff = null;
+    return json(res, 200, h ? { ok: true, scenes: h.scenes } : { ok: false }, cors);
+  }
   if (url.pathname === '/api/status') return json(res, 200, { ok: true, name: 'audio-mixer-bridge', version: VERSION, node: process.version, pid: process.pid, uptimeSec: Math.round(process.uptime()), streams: streamRegistry.list(), time: Date.now() }, cors);
   // Consumer licensing: the plan this copy runs as, this computer's machine code, and the stored key's state
   if (url.pathname === '/api/bluetooth') {   // paired / connected devices of this computer (shared for 2 s: the page polls)
@@ -235,14 +246,15 @@ function detectCached(force = false, maxAgeMs = 3000) {
 }
 
 let updateCache = null;
+let handoff = null;
 // JSON POST actions (license, updates): the custom header forces a CORS preflight, so foreign pages cannot trigger them.
-async function handleAction(req, res, cors, action, fn, wantBody = true) {
+async function handleAction(req, res, cors, action, fn, wantBody = true, maxBody = 8192) {
   if (req.headers['x-mixer-action'] !== action) return json(res, 400, { ok: false, error: 'missing X-Mixer-Action: ' + action }, cors);
   let body = {};
   if (wantBody) {
     if (!String(req.headers['content-type'] || '').startsWith('application/json')) return json(res, 400, { ok: false, error: 'JSON body required' }, cors);
     let raw = '';
-    for await (const chunk of req) { raw += chunk; if (raw.length > 8192) return json(res, 413, { ok: false, error: 'request too large' }, cors); }
+    for await (const chunk of req) { raw += chunk; if (raw.length > maxBody) return json(res, 413, { ok: false, error: 'request too large' }, cors); }
     try { body = JSON.parse(raw || '{}'); } catch (_) { return json(res, 400, { ok: false, error: 'invalid JSON' }, cors); }
   } else { for await (const _ of req) { /* drain */ } }
   try { const [code, data] = await fn(body); return json(res, code, data, cors); }
