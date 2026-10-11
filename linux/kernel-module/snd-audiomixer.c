@@ -6,7 +6,7 @@
  *
  * The card keeps its own clock (a high-resolution timer), so applications never block when the mixer is not running: the played audio is dropped
  * and the recorded audio is silence. Only plain read / write / poll are offered (no mmap). Written against the kernel sound API of Linux 5.10 to 6.x;
- * it was NOT compiled or loaded on a real kernel where this file was written (no kernel headers there): build it with `make` on the target machine. */
+ * compiled without warnings (W=1) against the headers of Linux 6.8, 6.14, 6.17 and 7.0, but NOT loaded or run on a real kernel: build it with `make` on the target machine. */
 #include <linux/module.h>
 #include <linux/version.h>
 #include <linux/platform_device.h>
@@ -208,7 +208,7 @@ static __poll_t am_dev_poll(struct file *f, poll_table *wait)
 }
 
 static const struct file_operations am_fops = {
-	.owner = THIS_MODULE, .read = am_dev_read, .write = am_dev_write, .poll = am_dev_poll, .llseek = no_llseek,
+	.owner = THIS_MODULE, .read = am_dev_read, .write = am_dev_write, .poll = am_dev_poll, .llseek = noop_llseek,
 };
 
 static struct miscdevice am_misc = { .minor = MISC_DYNAMIC_MINOR, .name = "audiomixer", .fops = &am_fops, .mode = 0660 };
