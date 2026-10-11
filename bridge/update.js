@@ -68,9 +68,10 @@ async function check({ current, fetchImpl = globalThis.fetch, url = process.env.
   if (!v.ok) throw Object.assign(new Error(v.error), { status: 502 });
   const m = v.manifest, file = platformFile(m, { platform, arch }), det = osdetect.detectOs({ node: { platform: platform || process.platform, arch: arch || process.arch } });
   return {
-    ok: true, current, os: det.os, arch: det.arch, others: osdetect.others(m, file && file.key).map(o => ({ key: o.key, label: o.label, name: o.name, url: o.url, size: o.size })), latest: m.version, released: m.released || null, channel: m.channel || 'stable', notes: Array.isArray(m.notes) ? m.notes.slice(0, 12).map(String) : [],
+    ok: true, current, os: det.os, arch: det.arch, others: osdetect.others(m, [file && file.key, (osdetect.driverFor(m, det) || {}).key]).map(o => ({ key: o.key, label: o.label, name: o.name, url: o.url, size: o.size })), latest: m.version, released: m.released || null, channel: m.channel || 'stable', notes: Array.isArray(m.notes) ? m.notes.slice(0, 12).map(String) : [],
     updateAvailable: cmpVersion(m.version, current) > 0, signed: true,
     file: file ? { key: file.key, name: file.name, url: file.url, size: file.size || null, sha256: file.sha256, how: file.how } : null, source: url,
+    driver: (d => d ? { key: d.key, label: d.label, name: d.name, url: d.url, size: d.size || null, sha256: d.sha256, how: d.how } : null)(osdetect.driverFor(m, det)),
   };
 }
 

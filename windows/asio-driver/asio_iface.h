@@ -31,28 +31,36 @@ struct ASIOCallbacks {
   ASIOTime *(*bufferSwitchTimeInfo)(ASIOTime *params, long doubleBufferIndex, ASIOBool directProcess);
 };
 
+/* 32-bit hosts built with Visual C++ call the IASIO methods with `thiscall` (the object in ECX, the callee removes the arguments); GCC/MinGW would
+ * otherwise pass the object on the stack and the host crashes at the first call. 64-bit Windows has one calling convention. */
+#if defined(__GNUC__) && !defined(__x86_64__) && !defined(_WIN64) && (defined(__i386__) || defined(_M_IX86))
+#define ASIO_CALL __attribute__((thiscall))
+#else
+#define ASIO_CALL
+#endif
+
 struct IASIO : public IUnknown {
-  virtual ASIOBool init(void *sysHandle) = 0;
-  virtual void getDriverName(char *name) = 0;                 /* up to 32 bytes with the terminating zero */
-  virtual long getDriverVersion() = 0;
-  virtual void getErrorMessage(char *string) = 0;             /* up to 124 bytes */
-  virtual ASIOError start() = 0;
-  virtual ASIOError stop() = 0;
-  virtual ASIOError getChannels(long *numInputChannels, long *numOutputChannels) = 0;
-  virtual ASIOError getLatencies(long *inputLatency, long *outputLatency) = 0;
-  virtual ASIOError getBufferSize(long *minSize, long *maxSize, long *preferredSize, long *granularity) = 0;
-  virtual ASIOError canSampleRate(ASIOSampleRate sampleRate) = 0;
-  virtual ASIOError getSampleRate(ASIOSampleRate *sampleRate) = 0;
-  virtual ASIOError setSampleRate(ASIOSampleRate sampleRate) = 0;
-  virtual ASIOError getClockSources(ASIOClockSource *clocks, long *numSources) = 0;
-  virtual ASIOError setClockSource(long reference) = 0;
-  virtual ASIOError getSamplePosition(ASIOSamples *sPos, ASIOTimeStamp *tStamp) = 0;
-  virtual ASIOError getChannelInfo(ASIOChannelInfo *info) = 0;
-  virtual ASIOError createBuffers(ASIOBufferInfo *bufferInfos, long numChannels, long bufferSize, ASIOCallbacks *callbacks) = 0;
-  virtual ASIOError disposeBuffers() = 0;
-  virtual ASIOError controlPanel() = 0;
-  virtual ASIOError future(long selector, void *opt) = 0;
-  virtual ASIOError outputReady() = 0;
+  virtual ASIOBool ASIO_CALL init(void *sysHandle) = 0;
+  virtual void ASIO_CALL getDriverName(char *name) = 0;                 /* up to 32 bytes with the terminating zero */
+  virtual long ASIO_CALL getDriverVersion() = 0;
+  virtual void ASIO_CALL getErrorMessage(char *string) = 0;             /* up to 124 bytes */
+  virtual ASIOError ASIO_CALL start() = 0;
+  virtual ASIOError ASIO_CALL stop() = 0;
+  virtual ASIOError ASIO_CALL getChannels(long *numInputChannels, long *numOutputChannels) = 0;
+  virtual ASIOError ASIO_CALL getLatencies(long *inputLatency, long *outputLatency) = 0;
+  virtual ASIOError ASIO_CALL getBufferSize(long *minSize, long *maxSize, long *preferredSize, long *granularity) = 0;
+  virtual ASIOError ASIO_CALL canSampleRate(ASIOSampleRate sampleRate) = 0;
+  virtual ASIOError ASIO_CALL getSampleRate(ASIOSampleRate *sampleRate) = 0;
+  virtual ASIOError ASIO_CALL setSampleRate(ASIOSampleRate sampleRate) = 0;
+  virtual ASIOError ASIO_CALL getClockSources(ASIOClockSource *clocks, long *numSources) = 0;
+  virtual ASIOError ASIO_CALL setClockSource(long reference) = 0;
+  virtual ASIOError ASIO_CALL getSamplePosition(ASIOSamples *sPos, ASIOTimeStamp *tStamp) = 0;
+  virtual ASIOError ASIO_CALL getChannelInfo(ASIOChannelInfo *info) = 0;
+  virtual ASIOError ASIO_CALL createBuffers(ASIOBufferInfo *bufferInfos, long numChannels, long bufferSize, ASIOCallbacks *callbacks) = 0;
+  virtual ASIOError ASIO_CALL disposeBuffers() = 0;
+  virtual ASIOError ASIO_CALL controlPanel() = 0;
+  virtual ASIOError ASIO_CALL future(long selector, void *opt) = 0;
+  virtual ASIOError ASIO_CALL outputReady() = 0;
 };
 
 /* the layout the hosts were built against */

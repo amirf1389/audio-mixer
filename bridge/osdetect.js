@@ -9,6 +9,7 @@ const FILES = {
   'win-x64-exe': 'Windows 64-bit setup (.exe)', 'win-x64-msi': 'Windows 64-bit package (.msi)', 'win-x86-msi': 'Windows 32-bit package (.msi)',
   'linux-deb': 'Debian / Ubuntu package (.deb)', 'linux-tar': 'Linux archive (.tar.gz)', 'macos-dmg': 'macOS disk image (.dmg)', 'macos': 'macOS archive (.tar.gz)',
   'android-apk': 'Android app (.apk)', 'ios-project': 'iOS Xcode project (.tar.gz)',
+  'win-asio-driver': 'Windows ASIO driver (.zip)',                                                                       // a system driver, not an app installer: see driverFor
 };
 const OSES = ['windows', 'macos', 'linux', 'android', 'ios'];
 const NODE_OS = { win32: 'windows', darwin: 'macos', linux: 'linux', android: 'android' };
@@ -61,6 +62,11 @@ function keysFor(det) {
   }
 }
 
+// the driver files of a manifest per system (drivers/ and windows/asio-driver/): offered next to the app, never instead of it. Linux, macOS and Android drivers are source
+// code (drivers/README.md) and are not published as files.
+const DRIVER_KEYS = { windows: ['win-asio-driver'] };
+const DRIVER_HOW = { windows: 'Unpack the zip somewhere permanent and run register.bat as administrator (unregister.bat removes it). The driver is not installed by the app setup.' };
+
 const HOW = {
   windows: 'Close Audio Mixer, then double-click the downloaded file. Windows asks for administrator permission, and the installer replaces the old version.',
   macos: 'Open the disk image (or unpack the archive) and double-click install.command.',
@@ -75,11 +81,18 @@ function pick(manifest, det) {
   for (const key of keysFor(det)) if (files[key]) return { key, label: FILES[key] || key, how: HOW[det.os] || '', ...files[key] };
   return null;
 }
-// every other file of the manifest, for "other systems"
+// the driver file of a manifest for this system: { key, label, how, ...entry } or null
+function driverFor(manifest, det) {
+  const files = (manifest && manifest.files) || {};
+  for (const key of (det && DRIVER_KEYS[det.os]) || []) if (files[key]) return { key, label: FILES[key] || key, how: DRIVER_HOW[det.os] || '', ...files[key] };
+  return null;
+}
+// every other file of the manifest, for "other systems" (`exceptKey`: one key or a list of keys)
 function others(manifest, exceptKey) {
-  return Object.entries((manifest && manifest.files) || {}).filter(([k]) => k !== exceptKey).map(([key, f]) => ({ key, label: FILES[key] || key, name: f.name, url: f.url, size: f.size || null, sha256: f.sha256 }));
+  const skip = [].concat(exceptKey || []);
+  return Object.entries((manifest && manifest.files) || {}).filter(([k]) => !skip.includes(k)).map(([key, f]) => ({ key, label: FILES[key] || key, name: f.name, url: f.url, size: f.size || null, sha256: f.sha256 }));
 }
 // request headers (lower-case names, as Node gives them) -> detection
 const fromHeaders = (h, q = {}) => detectOs({ os: q.os, arch: q.arch, distro: q.distro, userAgent: h['user-agent'], platformHint: h['sec-ch-ua-platform'], archHint: h['sec-ch-ua-arch'] });
 
-module.exports = { detectOs, keysFor, pick, others, fromHeaders, FILES, HOW, OSES };
+module.exports = { detectOs, keysFor, pick, driverFor, others, fromHeaders, FILES, HOW, OSES };

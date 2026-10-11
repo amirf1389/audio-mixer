@@ -22,6 +22,7 @@ static void am_sleep_ms(int ms) { Sleep((DWORD)ms); }
 #else
 #include <arpa/inet.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <pthread.h>
@@ -191,28 +192,84 @@ static void *reader(void *arg)
 /* ───────────── connect ───────────── */
 static const char B64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-static am_sock connect_port(int port) {
-  struct sockaddr_in a; am_sock s;
-  s = socket(AF_INET, SOCK_STREAM, 0);
-  if (s == AM_BAD_SOCK) return AM_BAD_SOCK;
-  memset(&a, 0, sizeof a);
-  a.sin_family = AF_INET; a.sin_port = htons((unsigned short)port); a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);   /* only this computer */
-  if (connect(s, (struct sockaddr *)&a, sizeof a) != 0) { am_close_sock(s); return AM_BAD_SOCK; }
-  { int one = 1; setsockopt(s, IPPROTO_TCP, TCP_NODELAY, (const char *)&one, sizeof one); }
+#define AM_CONNECT_MS 300     /* a loopback connection is immediate; Windows waits 1-2 s on a closed port, so never wait longer than this per port */
+#define AM_HANDSHAKE_MS 800   /* a program on the port that does not speak WebSocket must not hold the caller */
+
+static void set_nonblocking(am_sock s, int on) {
 #ifdef _WIN32
-  { DWORD ms = 2000; setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (const char *)&ms, sizeof ms); }
+  u_long v = on ? 1 : 0; ioctlsocket(s, FIONBIO, &v);
 #else
-  { struct timeval tv; tv.tv_sec = 2; tv.tv_usec = 0; setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv); }
+  int f = fcntl(s, F_GETFL, 0); fcntl(s, F_SETFL, on ? (f | O_NONBLOCK) : (f & ~O_NONBLOCK));
 #endif
-  return s;
 }
 
-static void clear_timeout(am_sock s) {   /* the handshake times out after 2 s; the reader thread then waits for audio as long as it takes */
+#define AM_MAX_PORTS 16
+#define AM_SEND_MS 100        /* a mixer that stopped reading must not hold the audio thread that plays into it */
+
+static void set_timeouts(am_sock s, int recv_ms, int send_ms) {
 #ifdef _WIN32
-  DWORD ms = 0; setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (const char *)&ms, sizeof ms);
+  DWORD r = (DWORD)recv_ms, w = (DWORD)send_ms;
+  setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (const char *)&r, sizeof r); setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, (const char *)&w, sizeof w);
 #else
-  struct timeval tv; tv.tv_sec = 0; tv.tv_usec = 0; setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv);
+  struct timeval r, w;
+  r.tv_sec = recv_ms / 1000; r.tv_usec = (recv_ms % 1000) * 1000; w.tv_sec = send_ms / 1000; w.tv_usec = (send_ms % 1000) * 1000;
+  setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &r, sizeof r); setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &w, sizeof w);
 #endif
+}
+
+/* Starts a connection to every port first..last at once and waits at most AM_CONNECT_MS for all of them: a closed loopback port takes 1 to 2 s to fail
+ * on Windows, so trying the ports one after the other (10 ports) stalled the caller for many seconds when the mixer was not running.
+ * Returns the connected sockets in port order (blocking mode, TCP_NODELAY); ports[i] is the port of out[i]. */
+static int connect_ports(int first, int last, am_sock *out, int *ports) {
+  am_sock s[AM_MAX_PORTS]; int pending[AM_MAX_PORTS]; int n = 0, left = 0, found = 0, i;
+  struct timeval tv; fd_set w, e; am_sock maxfd = 0;
+  struct sockaddr_in a;
+  if (last - first + 1 > AM_MAX_PORTS) last = first + AM_MAX_PORTS - 1;
+  for (int port = first; port <= last; port++, n++) {
+    int rc;
+    s[n] = socket(AF_INET, SOCK_STREAM, 0); pending[n] = 0;
+    if (s[n] == AM_BAD_SOCK) continue;
+    memset(&a, 0, sizeof a);
+    a.sin_family = AF_INET; a.sin_port = htons((unsigned short)port); a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);   /* only this computer */
+    set_nonblocking(s[n], 1);
+    rc = connect(s[n], (struct sockaddr *)&a, sizeof a);
+    if (rc == 0) { pending[n] = 2; found++; continue; }                                   /* already connected */
+#ifdef _WIN32
+    if (WSAGetLastError() == WSAEWOULDBLOCK) { pending[n] = 1; left++; }
+#else
+    if (errno == EINPROGRESS) { pending[n] = 1; left++; }
+#endif
+    else { am_close_sock(s[n]); s[n] = AM_BAD_SOCK; }
+  }
+  tv.tv_sec = 0; tv.tv_usec = AM_CONNECT_MS * 1000;
+  while (left > 0) {
+    FD_ZERO(&w); FD_ZERO(&e);
+    for (i = 0; i < n; i++) if (pending[i] == 1) { FD_SET(s[i], &w); FD_SET(s[i], &e); if (s[i] > maxfd) maxfd = s[i]; }
+    if (select((int)maxfd + 1, NULL, &w, &e, &tv) <= 0) break;                            /* timed out (tv holds the time left on Linux, the full time elsewhere: one more round at most) */
+    for (i = 0; i < n; i++) {
+      int err = 0; socklen_t len = sizeof err;
+      if (pending[i] != 1 || !(FD_ISSET(s[i], &w) || FD_ISSET(s[i], &e))) continue;
+      left--;
+      if (getsockopt(s[i], SOL_SOCKET, SO_ERROR, (char *)&err, &len) == 0 && err == 0 && !FD_ISSET(s[i], &e)) { pending[i] = 2; found++; }
+      else { am_close_sock(s[i]); s[i] = AM_BAD_SOCK; pending[i] = 0; }
+    }
+#ifdef _WIN32
+    break;   /* select does not report the time left: one round is enough (the refused ports are reported as errors at once or after the 300 ms) */
+#endif
+  }
+  for (i = 0, found = 0; i < n; i++) {
+    if (s[i] == AM_BAD_SOCK) continue;
+    if (pending[i] != 2) { am_close_sock(s[i]); continue; }                               /* still connecting: nobody answers there */
+    set_nonblocking(s[i], 0);
+    { int one = 1; setsockopt(s[i], IPPROTO_TCP, TCP_NODELAY, (const char *)&one, sizeof one); }
+    set_timeouts(s[i], AM_HANDSHAKE_MS, AM_SEND_MS);
+    out[found] = s[i]; ports[found] = first + i; found++;
+  }
+  return found;
+}
+
+static void clear_timeout(am_sock s) {   /* the handshake is over: the reader thread waits for audio as long as it takes, sending still has its limit */
+  set_timeouts(s, 0, AM_SEND_MS);
 }
 
 static int upgrade(am_link *l, int port) {
@@ -236,7 +293,7 @@ static int upgrade(am_link *l, int port) {
 }
 
 am_link *am_link_open(const am_link_config *cfg, char *err, size_t errlen) {
-  am_link *l; char hello[256]; const char *name; int channels, rate, first, last, port;
+  am_link *l; char hello[256]; const char *name; int channels, rate, first, last;
 #ifdef _WIN32
   WSADATA wsa; WSAStartup(MAKEWORD(2, 2), &wsa);
 #endif
@@ -254,11 +311,13 @@ am_link *am_link_open(const am_link_config *cfg, char *err, size_t errlen) {
   l->mask_state = (uint32_t)time(NULL) ^ 0x5bd1e995u ^ (uint32_t)(size_t)l;
   am_mutex_init(&l->send_lock);
   l->sock = AM_BAD_SOCK;
-  for (port = first; port <= last; port++) {
-    l->sock = connect_port(port);
-    if (l->sock == AM_BAD_SOCK) continue;
-    if (upgrade(l, port) == 0) { clear_timeout(l->sock); break; }   /* a program on that port that is not the mixer fails the handshake */
-    am_close_sock(l->sock); l->sock = AM_BAD_SOCK;
+  { am_sock cand[AM_MAX_PORTS]; int cport[AM_MAX_PORTS]; int found = connect_ports(first, last, cand, cport);
+    for (int i = 0; i < found; i++) {
+      if (l->sock != AM_BAD_SOCK) { am_close_sock(cand[i]); continue; }
+      l->sock = cand[i];
+      if (upgrade(l, cport[i]) == 0) { clear_timeout(l->sock); continue; }   /* a program on that port that is not the mixer fails the handshake */
+      am_close_sock(l->sock); l->sock = AM_BAD_SOCK;
+    }
   }
   if (l->sock == AM_BAD_SOCK) { set_err(err, errlen, "the Audio Mixer program is not running (start it first, then open the device again)"); goto fail; }
   snprintf(hello, sizeof hello, "{\"type\":\"hello\",\"name\":\"%s\",\"channels\":%d,\"rate\":%d}", name, channels, rate);
@@ -283,7 +342,14 @@ fail:
 
 int am_link_play(am_link *l, const int16_t *frames, size_t nframes) {
   if (!l || !l->alive || !l->ready) return -1;
-  return ws_send(l, 2, (const uint8_t *)frames, nframes * 2u * (size_t)l->channels);
+  if (ws_send(l, 2, (const uint8_t *)frames, nframes * 2u * (size_t)l->channels) == 0) return 0;
+  l->alive = 0;                       /* a failed or timed-out send may have left half a frame on the wire: the link cannot be used again */
+#ifdef _WIN32
+  shutdown(l->sock, SD_BOTH);
+#else
+  shutdown(l->sock, SHUT_RDWR);
+#endif
+  return -1;
 }
 
 int am_link_alive(const am_link *l) { return l && l->alive && l->ready; }

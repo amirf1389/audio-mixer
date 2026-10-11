@@ -7,7 +7,8 @@
 //   GET  /healthz                        { ok, channels: { stable: "1.4.1.0" } }
 //   GET  /latest  (or /download)         the right file for the system that asks: a 302 to the installer of its OS (Windows .exe / .msi, Debian .deb or Linux archive, macOS .dmg,
 //                                        Android .apk, iOS project), found from ?os=&arch=&distro=&channel=, Client Hints or the User-Agent (bridge/osdetect.js)
-//   GET  /api/latest                     the same as JSON for apps: { os, arch, detected, version, notes, file: { key, label, name, url, size, sha256, how }, others: [...] }
+//   GET  /api/latest                     the same as JSON for apps: { os, arch, detected, version, notes, file: { key, label, name, url, size, sha256, how }, driver: { ... } | null, others: [...] }
+//   GET  /driver                         the system driver for the system that asks (Windows: the ASIO driver .zip), a 302 like /latest; 404 where no driver file is published
 //   --- administration, only with OTA_ADMIN_TOKEN set (Authorization: Bearer <token>) ---
 //   PUT  /admin/files/<file>             upload a release file; header X-SHA256 (hex) is required and checked; an existing file is not replaced (?overwrite=1)
 //   GET  /admin/files                    files held: name, size, sha256, referenced by which manifests
@@ -106,12 +107,13 @@ function createOta({ dataDir, token = '', publicUrl = '', jwk, rate = 120, trust
     if (!CHANNEL.test(ch)) return { code: 400, body: { ok: false, error: 'bad channel name' } };
     const m = manifestOf(ch); if (!m) return { code: 404, body: { ok: false, error: 'no update is published on the ' + ch + ' channel' } };
     const q = {}; for (const k of ['os', 'arch', 'distro']) if (url.searchParams.get(k)) q[k] = url.searchParams.get(k);
-    const det = osdetect.fromHeaders(req.headers, q), file = osdetect.pick(m, det);
+    const det = osdetect.fromHeaders(req.headers, q), file = osdetect.pick(m, det), driver = osdetect.driverFor(m, det);
     count('detect', det.os || 'unknown');
     const body = { ok: true, channel: ch, version: m.version, released: m.released || null, notes: Array.isArray(m.notes) ? m.notes.slice(0, 12).map(String) : [], os: det.os, arch: det.arch, detected: det.source,
       file: file ? { key: file.key, label: file.label, name: file.name, url: file.url, size: file.size || null, sha256: file.sha256, how: file.how } : null,
-      others: osdetect.others(m, file && file.key), manifest: (publicUrl ? publicUrl.replace(/\/+$/, '') : '') + (ch === 'stable' ? '' : '/' + ch) + '/update.json' };
-    return { code: 200, body, file };
+      driver: driver ? { key: driver.key, label: driver.label, name: driver.name, url: driver.url, size: driver.size || null, sha256: driver.sha256, how: driver.how } : null,
+      others: osdetect.others(m, [file && file.key, driver && driver.key]), manifest: (publicUrl ? publicUrl.replace(/\/+$/, '') : '') + (ch === 'stable' ? '' : '/' + ch) + '/update.json' };
+    return { code: 200, body, file, driver };
   }
   const CORS = { 'Access-Control-Allow-Origin': '*', 'Vary': 'User-Agent, Sec-CH-UA-Platform, Sec-CH-UA-Arch', 'Accept-CH': 'Sec-CH-UA-Platform, Sec-CH-UA-Arch' };   // public, read-only, signed data: any page or app may read it
 
@@ -279,6 +281,12 @@ function createOta({ dataDir, token = '', publicUrl = '', jwk, rate = 120, trust
         if (r.code !== 200) return send(res, r.code, r.body, CORS);
         if (!r.file) return send(res, 404, { ok: false, error: 'no download for this system' + (r.body.os ? ' (' + r.body.os + ')' : ' (the system could not be detected: add ?os=windows|macos|linux|android|ios)'), os: r.body.os, others: r.body.others }, CORS);
         return send(res, 302, '', { ...CORS, Location: r.file.url, 'Cache-Control': 'no-store' });
+      }
+      if (p === '/driver') {
+        const r = smart(req, url);
+        if (r.code !== 200) return send(res, r.code, r.body, CORS);
+        if (!r.driver) return send(res, 404, { ok: false, error: 'no driver file is published for this system' + (r.body.os ? ' (' + r.body.os + ')' : ' (the system could not be detected: add ?os=windows)'), os: r.body.os }, CORS);
+        return send(res, 302, '', { ...CORS, Location: r.driver.url, 'Cache-Control': 'no-store' });
       }
       if (p === '/update.json') return serveManifest(req, res, 'stable');
       if ((m = /^\/([a-z0-9-]+)\/update\.json$/.exec(p)) && CHANNEL.test(m[1])) return serveManifest(req, res, m[1]);

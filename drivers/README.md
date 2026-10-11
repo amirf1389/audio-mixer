@@ -28,7 +28,7 @@ All drivers use `drivers/common/am_link.c`, which speaks the **virtual device pr
 
 The device then shows up like any interface: `GET /api/virtual` lists the connected drivers, `GET /api/interfaces` contains it (id from 9000, API "Audio Mixer Virtual"), and LIVE SOURCES opens it with READ / WRITE. The connection is loopback only: `/ws/virtual` refuses any request that carries an `Origin` header (a web page cannot pose as a driver), and the `Host` check of every bridge route applies.
 
-Real-time rules the drivers follow: no network work in the audio callback (the link has its own thread), no blocking when the mixer is not running (the device keeps its clock and is silent; the driver reconnects about once a second).
+Real-time rules the drivers follow: no network work in the audio callback (the link has its own thread), no blocking when the mixer is not running (the device keeps its clock and is silent; the driver reconnects about once a second). The connection is bounded: all mixer ports are tried at once for 300 ms at most, the handshake takes 800 ms at most and a send 100 ms; the Windows driver connects on its own thread.
 
 ## Install (each one is a deliberate step; the Audio Mixer setup programs install no driver)
 
