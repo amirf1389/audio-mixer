@@ -408,6 +408,38 @@ test('now playing: MPRIS, SMTC and osascript output are parsed', async () => {
   assert.deepStrictEqual((await np.readNowPlaying({ platform: 'linux', run: async () => '' })).sessions, []);
 });
 
+test('now playing: every OS has a path (playerctl, BSD, Android media sessions, Windows window titles)', async () => {
+  const np = require('./nowplaying');
+  const pc = await np.readNowPlaying({ platform: 'linux', run: async cmd => cmd === 'playerctl' ? 'spotify|Playing|Song|Artist|Album|https://open.spotify.com/x\nvlc|Paused|Clip|||' : '' });
+  assert.strictEqual(pc.method, 'playerctl');
+  assert.deepStrictEqual(pc.sessions.map(x => [x.service, x.status, x.title]), [['spotify', 'playing', 'Song'], ['vlc', 'paused', 'Clip']]);
+  assert.strictEqual((await np.readNowPlaying({ platform: 'freebsd', run: async () => '' })).method, 'playerctl');
+  const dump = 'Sessions Stack - have 2 sessions:\n    package=com.spotify.music\n      state=PlaybackState {state=3, position=10}\n      metadata: size=5, description=Karma Police, Radiohead, OK Computer\n'
+    + '    package=com.google.android.apps.youtube.music\n      state=PlaybackState {state=2, position=1}\n      metadata: size=3, description=Lofi, Chill\n';
+  const an = await np.readNowPlaying({ platform: 'android', run: async (cmd, args) => (cmd === 'dumpsys' && args[0] === 'media_session' ? dump : '') });
+  assert.strictEqual(an.method, 'media-session');
+  assert.deepStrictEqual(an.sessions.map(x => [x.service, x.status, x.title, x.artist]), [['spotify', 'playing', 'Karma Police', 'Radiohead'], ['youtube-music', 'paused', 'Lofi', 'Chill']]);
+  assert.strictEqual(an.playing.album, 'OK Computer');
+  const wins = 'WINDOW|Spotify|Radiohead - Karma Police\nWINDOW|Spotify|Spotify Premium\nWINDOW|chrome|Lofi mix - YouTube - Google Chrome\nWINDOW|notepad|notes';
+  const w = await np.readNowPlaying({ platform: 'win32', run: async () => wins });       // no media sessions API (Windows 7 / 8)
+  assert.strictEqual(w.method, 'window-titles');
+  assert.deepStrictEqual(w.sessions.map(x => [x.service, x.title, x.artist]), [['spotify', 'Karma Police', 'Radiohead'], ['youtube', 'Lofi mix', '']]);
+  assert.strictEqual((await np.readNowPlaying({ platform: 'win32', run: async () => 'SMTC|ok\n' + wins })).method, 'smtc');   // sessions API works, nothing playing: no guessing
+  assert.deepStrictEqual((await np.readNowPlaying({ platform: 'win32', run: async () => 'SMTC|ok\n' + wins })).sessions, []);
+});
+
+test('now playing on iOS and Qt Android: the routes exist, the permissions are declared, the Java classes are staged', () => {
+  const root = pathx.join(__dirname, '..'), rd = f => fsx.readFileSync(pathx.join(root, f), 'utf8');
+  const sw = rd('ios/AudioMixer/LocalServer.swift');
+  assert.ok(sw.includes('"/api/nowplaying"') && sw.includes('MPMusicPlayerController.systemMusicPlayer') && sw.includes('MPMediaLibrary.authorizationStatus()') && sw.includes('"access"'));
+  assert.ok(rd('ios/project.yml.template').includes('NSAppleMusicUsageDescription'));
+  const cpp = rd('android/qt/src/MixerServer.cpp');
+  assert.ok(cpp.includes('"/api/nowplaying"') && cpp.includes('com/audiomixer/app/AndroidNowPlaying'));
+  assert.ok(rd('android/qt/android/AndroidManifest.xml').includes('BIND_NOTIFICATION_LISTENER_SERVICE') && rd('android/qt/android/AndroidManifest.xml').includes('com.audiomixer.app.NowPlayingListener'));
+  const prep = rd('scripts/prepare-qt.js'); for (const f of ['Json', 'NowPlaying', 'AndroidNowPlaying', 'NowPlayingListener']) { assert.ok(prep.includes("'" + f + "'"), f); assert.ok(fsx.existsSync(pathx.join(root, 'android/src/com/audiomixer/app', f + '.java')), f); }
+  assert.ok(/android\/qt\/android\/src\//.test(rd('.gitignore')));
+});
+
 test('interfaces: one physical interface across ASIO / WASAPI / DirectSound, loopback flagged, ASIO-only drivers kept', () => {
   const { groupInterfaces } = require('./interfaces');
   const dev = (id, name, hostApi, inputs, outputs) => ({ id, name, hostApi, inputs, outputs, sampleRate: 48000 });
@@ -2125,7 +2157,7 @@ test('a device the engine could not probe (0 channels, not ASIO) is flagged, tak
 test('Android engine (Java): the bridge protocol runs on a plain JVM with a fake backend: HTTP, origin / host checks, WebSocket input and output, interfaces grouping', async () => {
   const { spawnSync, spawn } = require('node:child_process');
   const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'jv-')), src = pathx.join(__dirname, '..', 'android');
-  const files = ['Json', 'Ws', 'AudioBackend', 'Assets', 'Interfaces', 'VirtualHub', 'MiniBridge'].map(n => pathx.join(src, 'src', 'com', 'audiomixer', 'app', n + '.java')).concat(pathx.join(src, 'test', 'com', 'audiomixer', 'app', 'BridgeHarness.java'));
+  const files = ['Json', 'Ws', 'AudioBackend', 'Assets', 'Interfaces', 'VirtualHub', 'NowPlaying', 'MiniBridge'].map(n => pathx.join(src, 'src', 'com', 'audiomixer', 'app', n + '.java')).concat(pathx.join(src, 'test', 'com', 'audiomixer', 'app', 'BridgeHarness.java'));
   const c = spawnSync('javac', ['--release', '8', '-Xlint:-options', '-d', dir, ...files], { encoding: 'utf8' });
   if (c.error || c.status !== 0) return;                                                      // needs a JDK (the build of the APK needs one as well)
   const www = pathx.join(dir, 'www'); fsx.mkdirSync(pathx.join(www, 'fonts'), { recursive: true }); fsx.writeFileSync(pathx.join(www, 'index.html'), '<html>mixer</html>'); fsx.writeFileSync(pathx.join(www, 'fonts', 'a.woff2'), Buffer.from([1, 2, 3])); fsx.writeFileSync(pathx.join(dir, 'secret.txt'), 'outside');
@@ -2204,7 +2236,7 @@ test('Android native audio helpers (channel counts, buffer sizes, native info) a
   const { spawnSync } = require('node:child_process');
   const root = pathx.join(__dirname, '..'), rd = f => fsx.readFileSync(pathx.join(root, f), 'utf8'), dir = fsx.mkdtempSync(pathx.join(require('node:os').tmpdir(), 'st-'));
   const src = n => pathx.join(root, 'android', 'src', 'com', 'audiomixer', 'app', n + '.java');
-  const c = spawnSync('javac', ['--release', '8', '-Xlint:-options', '-d', dir, src('Json'), src('Interfaces'), pathx.join(root, 'android', 'test', 'com', 'audiomixer', 'app', 'Selftest.java')], { encoding: 'utf8' });
+  const c = spawnSync('javac', ['--release', '8', '-Xlint:-options', '-d', dir, src('Json'), src('Interfaces'), src('NowPlaying'), pathx.join(root, 'android', 'test', 'com', 'audiomixer', 'app', 'Selftest.java')], { encoding: 'utf8' });
   assert.strictEqual(c.status, 0, c.stderr);
   const r = spawnSync('java', ['-cp', dir, 'com.audiomixer.app.Selftest'], { encoding: 'utf8' }); assert.strictEqual(r.status, 0, r.stderr);
   const o = Object.fromEntries(r.stdout.split('\n').filter(l => /^[\w.]+=/.test(l)).map(l => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1)]));
@@ -2215,6 +2247,12 @@ test('Android native audio helpers (channel counts, buffer sizes, native info) a
   const nat = JSON.parse(o.native); assert.deepStrictEqual([nat.sampleRate, nat.framesPerBuffer, nat.lowLatency, nat.pro, nat.usbHost], [48000, 192, true, false, true]); assert.strictEqual(nat.burstMs, 4);
   assert.strictEqual(JSON.parse(o['native.none']).sampleRate, 0);
   const w = JSON.parse(o.with); assert.ok(w.ok === true && Array.isArray(w.interfaces) && w.native.pro === true);                      // /api/interfaces carries the native block
+  // /api/nowplaying of the app: same shape as the PC bridge; classified like bridge/nowplaying.js, playing first; without the listener access it says so
+  const npj = JSON.parse(o.nowplaying); assert.deepStrictEqual(npj.sessions.map(x => [x.service, x.serviceName, x.status, x.title, x.artist]), [['spotify', 'Spotify', 'playing', 'Karma Police', 'Radiohead'], ['youtube-music', 'YouTube Music', 'paused', 'Lofi', 'Chill'], ['other', 'player', 'stopped', 'Local file', '']]);
+  assert.ok(npj.ok === true && npj.access === true && npj.method === 'media-session' && npj.playing.service === 'spotify' && npj.platform === 'android');
+  const npn = JSON.parse(o['nowplaying.none']); assert.ok(npn.access === false && npn.playing === null && npn.sessions.length === 0 && /Notifications/.test(npn.hint));
+  assert.ok(rd('android/AndroidManifest.xml').includes('BIND_NOTIFICATION_LISTENER_SERVICE') && rd('android/AndroidManifest.xml').includes('.NowPlayingListener'));
+  assert.ok(rd('android/src/com/audiomixer/app/AndroidNowPlaying.java').includes('getActiveSessions(new ComponentName(ctx, NowPlayingListener.class))'));
   // the tile: declared with the system permission and intent, compiled against stubs that never go into the app
   const man = rd('android/AndroidManifest.xml');
   assert.ok(man.includes('android:name=".EngineTileService"') && man.includes('android.permission.BIND_QUICK_SETTINGS_TILE') && man.includes('android.service.quicksettings.action.QS_TILE') && man.includes('ACTIVE_TILE'));
@@ -2230,7 +2268,7 @@ test('Android native audio helpers (channel counts, buffer sizes, native info) a
 test('Android engine (Java): virtual devices for the audio HAL - /ws/virtual, /api/virtual, the device in /api/interfaces, input and output with its id', async (tc) => {
   const { spawnSync, spawn } = require('node:child_process');
   const root = pathx.join(__dirname, '..', 'android'), dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'avh-'));
-  const files = ['Json', 'Ws', 'AudioBackend', 'Assets', 'Interfaces', 'VirtualHub', 'MiniBridge'].map(n => pathx.join(root, 'src', 'com', 'audiomixer', 'app', n + '.java')).concat(pathx.join(root, 'test', 'com', 'audiomixer', 'app', 'BridgeHarness.java'));
+  const files = ['Json', 'Ws', 'AudioBackend', 'Assets', 'Interfaces', 'VirtualHub', 'NowPlaying', 'MiniBridge'].map(n => pathx.join(root, 'src', 'com', 'audiomixer', 'app', n + '.java')).concat(pathx.join(root, 'test', 'com', 'audiomixer', 'app', 'BridgeHarness.java'));
   const c = spawnSync('javac', ['--release', '8', '-Xlint:-options', '-d', dir, ...files], { encoding: 'utf8' });
   if (c.error) return tc.skip('no JDK');
   assert.strictEqual(c.status, 0, c.stderr);
@@ -2239,6 +2277,7 @@ test('Android engine (Java): virtual devices for the audio HAL - /ws/virtual, /a
   try {
     const port = await new Promise((res, rej) => { let b = ''; jv.stdout.on('data', d => { b += d; const m = /PORT (\d+)/.exec(b); if (m) res(Number(m[1])); }); jv.on('error', rej); setTimeout(() => rej(new Error('no port')), 8000); });
     const base = `http://127.0.0.1:${port}`, open = (path) => new Promise((res, rej) => { const ws = new WebSocket(`ws://127.0.0.1:${port}${path}`); ws.binaryType = 'arraybuffer'; ws.msgs = []; ws.bins = []; ws.onmessage = e => (typeof e.data === 'string' ? ws.msgs.push(JSON.parse(e.data)) : ws.bins.push(Buffer.from(e.data))); ws.onopen = () => res(ws); ws.onerror = () => rej(new Error('connect')); });
+    const npa = await (await fetch(base + '/api/nowplaying')).json(); assert.ok(npa.ok === true && npa.access === false && npa.playing === null);      // the fake backend has no media sessions
     assert.deepStrictEqual(await (await fetch(base + '/api/virtual')).json(), { ok: true, devices: [] });
     const before = await (await fetch(base + '/api/interfaces')).json(); assert.ok(!before.interfaces.some(i => i.transport === 'virtual'));
     const drv = await open('/ws/virtual'); sock.push(drv);

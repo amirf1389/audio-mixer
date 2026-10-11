@@ -133,6 +133,8 @@ final class MiniBridge {
             send(out, 200, "{\"ok\":true,\"name\":\"audio-mixer-bridge\",\"version\":" + Json.str(version) + ",\"engine\":\"android\",\"node\":\"android\",\"pid\":0,\"streams\":" + streamsJson() + ",\"native\":" + audio.nativeJson() + ",\"time\":" + System.currentTimeMillis() + "}", cors);
         } else if (path.equals("/api/interfaces")) {
             send(out, 200, Interfaces.withNative(hub.interfacesJson(audio.interfacesJson()), audio.nativeJson()), cors);
+        } else if (path.equals("/api/nowplaying")) {
+            send(out, 200, audio.nowPlayingJson(), cors);
         } else if (path.equals("/api/virtual")) {
             send(out, 200, hub.json(), cors);
         } else if (path.equals("/api/drivers")) {

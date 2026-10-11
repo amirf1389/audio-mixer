@@ -108,7 +108,11 @@ Real Web Audio graph, saved in the browser (localStorage) and respecting the KNO
 
 ## Now playing and interface scan
 - `GET /api/nowplaying`: `{ method, sessions: [{ service, serviceName, app, status, title, artist, album }], playing }` from the OS media sessions
-  (Windows SMTC via PowerShell, macOS osascript, Linux MPRIS via `busctl`). Services: Spotify, YouTube, YouTube Music, TIDAL, Apple Music, Amazon Music,
+  (Windows SMTC via PowerShell, with the window titles of the music apps and browser tabs when SMTC is missing (Windows 7 / 8); macOS osascript;
+  Linux, the BSDs and other desktops MPRIS via `busctl`, or `playerctl` without systemd; Android `dumpsys media_session` when the server runs in Termux /
+  `adb shell`). The Android app (`MediaSessionManager`, needs the notification-listener switch in the Android settings; reads no notification), the Qt
+  Android project (same Java classes) and the iOS app (the Music app's player, after the Media & Apple Music permission) serve the same route themselves;
+  `access: false` plus a `hint` tells the page that the permission is missing. Services: Spotify, YouTube, YouTube Music, TIDAL, Apple Music, Amazon Music,
   Deezer, SoundCloud, Qobuz, Pandora, VLC, foobar2000, MusicBee, Winamp. Read-only; cached for 1.5 s.
 - `GET /api/interfaces`: PortAudio devices of every host API grouped into physical interfaces (`apis`, `read` / `write` best device, `asio`,
   `loopback`, `driverOnly` for installed ASIO drivers PortAudio does not list).

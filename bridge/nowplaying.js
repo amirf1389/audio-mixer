@@ -2,13 +2,16 @@
 // "What is playing?": reads the operating system's media sessions and recognises the music service.
 //   Windows: System Media Transport Controls (SMTC) via PowerShell + browser window titles
 //   macOS:   Spotify / Music apps and the active tab of Chrome / Safari / Edge / Brave via osascript
-//   Linux:   MPRIS over D-Bus (busctl): Spotify, TIDAL, YouTube / YouTube Music in Chrome, Firefox, VLC, ...
+//   Linux:   MPRIS over D-Bus (busctl, playerctl as the fallback): Spotify, TIDAL, YouTube / YouTube Music in Chrome, Firefox, VLC, ...
+//            (FreeBSD, OpenBSD, NetBSD and other desktops with MPRIS use the same path)
+//   Android: media sessions of `dumpsys media_session` (Node.js in Termux or `adb shell`); the Android app reads them itself (MediaSessionManager)
+//   iOS:     the iOS app reads the Music app itself (MPMusicPlayerController)
 // Read-only. No accounts, tokens or network access are used.
 const { execFile } = require('node:child_process');
 
 // Order matters: the first match wins (YouTube Music before YouTube).
 const SERVICES = [
-  { id: 'youtube-music', name: 'YouTube Music', test: /music\.youtube\.com|youtube music|youtubemusic|youtube-music/i },
+  { id: 'youtube-music', name: 'YouTube Music', test: /music\.youtube\.com|youtube music|youtubemusic|youtube[-.]music/i },
   { id: 'youtube', name: 'YouTube', test: /youtube\.com|youtu\.be|\byoutube\b/i },
   { id: 'spotify', name: 'Spotify', test: /spotify/i },
   { id: 'tidal', name: 'TIDAL', test: /tidal/i },
@@ -83,6 +86,51 @@ function parseOsa(text) {
   return out;
 }
 
+// playerctl --all-players metadata --format '{{playerName}}|{{status}}|{{title}}|{{artist}}|{{album}}|{{xesam:url}}'
+function parsePlayerctl(text) {
+  const out = [];
+  for (const line of String(text || '').split(/\r?\n/)) {
+    const p = line.split('|');
+    if (p.length >= 6 && p[0]) out.push(mk(p[0], p[1], p[2], p[3], p[4], [p.slice(5).join('|')]));
+  }
+  return out;
+}
+
+// `dumpsys media_session`: one block per session with "package=", "state=PlaybackState {state=N, ..." (3 playing, 2 paused, 1 stopped)
+// and "metadata: size=N, description=Title, Artist, Album" (Android 5 - 15).
+function parseDumpsys(text) {
+  const out = [];
+  let cur = null;
+  const flush = () => { if (cur && (cur.title || cur.state)) out.push(mk(cur.pkg, cur.state, cur.title, cur.artist, cur.album)); cur = null; };
+  for (const line of String(text || '').split(/\r?\n/)) {
+    let m;
+    if ((m = /^\s*package=([\w.]+)/.exec(line))) { flush(); cur = { pkg: m[1], state: '', title: '', artist: '', album: '' }; continue; }
+    if (!cur) continue;
+    if ((m = /state=PlaybackState \{state=(\d+)/.exec(line))) cur.state = { 3: 'playing', 6: 'playing', 8: 'playing', 2: 'paused', 1: 'stopped', 0: 'stopped' }[m[1]] || 'unknown';
+    else if ((m = /metadata:.*description=(.*)$/.exec(line))) { const d = m[1].split(/, (?=\S)/); cur.title = d[0] || ''; cur.artist = d[1] || ''; cur.album = d[2] || ''; }
+  }
+  flush();
+  return out;
+}
+
+// Windows without media sessions (Windows 7 / 8, or PowerShell blocked): the music apps and browser tabs are recognised by their window titles.
+function parseWindows(text) {
+  const out = [];
+  for (const line of String(text || '').split(/\r?\n/)) {
+    const p = line.split('|');
+    if (p[0] !== 'WINDOW' || p.length < 3) continue;
+    const proc = p[1], title = p.slice(2).join('|');
+    const isBrowser = BROWSER.test(proc);
+    const svc = classify(isBrowser ? [title] : [proc]);
+    if (svc.id === 'other' || svc.id === 'vlc' && /^vlc media player$/i.test(title)) continue;
+    const clean = title.replace(/\s*[-|–]\s*(YouTube Music|YouTube|Spotify|TIDAL|Deezer|SoundCloud|Amazon Music|Google Chrome|Microsoft.? Edge|Mozilla Firefox|Brave|Opera|Vivaldi)\b.*$/i, '');
+    if (!clean || /^(spotify( premium| free)?|tidal|deezer|winamp|musicbee|foobar2000.*)$/i.test(clean)) continue;     // idle window: nothing is playing
+    const sp = /^spotify/i.test(proc) ? clean.split(' - ') : null;
+    out.push(mk(proc, sp ? 'playing' : 'unknown', sp ? sp.slice(1).join(' - ') || sp[0] : clean, sp && sp.length > 1 ? sp[0] : '', '', isBrowser ? [title] : []));
+  }
+  return out;
+}
+
 const SMTC_PS = `
 $ErrorActionPreference = 'SilentlyContinue'
 Add-Type -AssemblyName System.Runtime.WindowsRuntime
@@ -90,6 +138,7 @@ $asTask = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object {
 function Await($op, $type) { $t = $asTask.MakeGenericMethod($type).Invoke($null, @($op)); $t.Wait(-1) | Out-Null; $t.Result }
 [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager, Windows.Media.Control, ContentType = WindowsRuntime] | Out-Null
 $mgr = Await ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]::RequestAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager])
+if ($mgr) { "SMTC|ok" }
 foreach ($s in $mgr.GetSessions()) {
   $p = Await ($s.TryGetMediaPropertiesAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties])
   $st = $s.GetPlaybackInfo().PlaybackStatus
@@ -130,6 +179,10 @@ function runCmd(cmd, args, timeout = 4000) {
 async function readLinux(run) {
   const list = await run('busctl', ['--user', '--no-legend', 'list']);
   const names = list.split('\n').map(l => l.split(/\s+/)[0]).filter(n => /^org\.mpris\.MediaPlayer2\./.test(n)).slice(0, 8);
+  if (!list) {        // no busctl (no systemd: Alpine, Void, the BSDs): playerctl speaks MPRIS too
+    const fmt = '{{playerName}}|{{status}}|{{title}}|{{artist}}|{{album}}|{{xesam:url}}';
+    return { method: 'playerctl', sessions: parsePlayerctl(await run('playerctl', ['--all-players', 'metadata', '--format', fmt])) };
+  }
   const out = [];
   for (const n of names) {
     const base = ['--user', '--json=short', 'get-property', n, '/org/mpris/MediaPlayer2', 'org.mpris.MediaPlayer2.Player'];
@@ -141,9 +194,14 @@ async function readLinux(run) {
 
 async function readNowPlaying({ platform = process.platform, run = runCmd } = {}) {
   let r;
-  if (platform === 'linux') r = await readLinux(run);
+  if (platform === 'linux' || /bsd$|^(sunos|aix|dragonfly)$/.test(platform)) r = await readLinux(run);
+  else if (platform === 'android') r = { method: 'media-session', sessions: parseDumpsys(await run('dumpsys', ['media_session'], 6000)) };
   else if (platform === 'darwin') r = { method: 'osascript', sessions: parseOsa(await run('osascript', ['-e', OSA], 6000)) };
-  else if (platform === 'win32') r = { method: 'smtc', sessions: parseSmtc(await run('powershell', ['-NoProfile', '-Command', SMTC_PS], 9000)) };
+  else if (platform === 'win32') {
+    const text = await run('powershell', ['-NoProfile', '-Command', SMTC_PS], 9000);
+    const sessions = parseSmtc(text);
+    r = sessions.length || /^SMTC\|ok/m.test(text) ? { method: 'smtc', sessions } : { method: 'window-titles', sessions: parseWindows(text) };
+  }
   else r = { method: 'unsupported', sessions: [] };
   const rank = s => (s.status === 'playing' ? 0 : s.status === 'paused' ? 1 : 2);
   r.sessions = r.sessions.filter(s => s.title || s.service !== 'other').sort((a, b) => rank(a) - rank(b));
@@ -158,4 +216,4 @@ async function cachedNowPlaying(opts) {
   return v;
 }
 
-module.exports = { SERVICES, classify, parseBusctlValue, mprisSession, parseSmtc, parseOsa, readNowPlaying, cachedNowPlaying, SMTC_PS, OSA };
+module.exports = { SERVICES, classify, parseBusctlValue, mprisSession, parseSmtc, parseOsa, parsePlayerctl, parseDumpsys, parseWindows, readNowPlaying, cachedNowPlaying, SMTC_PS, OSA };
