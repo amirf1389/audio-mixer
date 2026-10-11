@@ -86,6 +86,7 @@ dist/
 
 # Qt Android project: staged page and build output
 android/qt/assets/
+android/qt/android/src/
 android/qt/build/
 
 # the driver Makefiles are source, not build output
@@ -99,3 +100,4 @@ engine/embedded-c/build/
 engine/cpp/build/
 engine/node/build/
 !engine/**/Makefile
+bridge/license-sandbox-public.json

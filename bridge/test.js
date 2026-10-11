@@ -408,6 +408,38 @@ test('now playing: MPRIS, SMTC and osascript output are parsed', async () => {
   assert.deepStrictEqual((await np.readNowPlaying({ platform: 'linux', run: async () => '' })).sessions, []);
 });
 
+test('now playing: every OS has a path (playerctl, BSD, Android media sessions, Windows window titles)', async () => {
+  const np = require('./nowplaying');
+  const pc = await np.readNowPlaying({ platform: 'linux', run: async cmd => cmd === 'playerctl' ? 'spotify|Playing|Song|Artist|Album|https://open.spotify.com/x\nvlc|Paused|Clip|||' : '' });
+  assert.strictEqual(pc.method, 'playerctl');
+  assert.deepStrictEqual(pc.sessions.map(x => [x.service, x.status, x.title]), [['spotify', 'playing', 'Song'], ['vlc', 'paused', 'Clip']]);
+  assert.strictEqual((await np.readNowPlaying({ platform: 'freebsd', run: async () => '' })).method, 'playerctl');
+  const dump = 'Sessions Stack - have 2 sessions:\n    package=com.spotify.music\n      state=PlaybackState {state=3, position=10}\n      metadata: size=5, description=Karma Police, Radiohead, OK Computer\n'
+    + '    package=com.google.android.apps.youtube.music\n      state=PlaybackState {state=2, position=1}\n      metadata: size=3, description=Lofi, Chill\n';
+  const an = await np.readNowPlaying({ platform: 'android', run: async (cmd, args) => (cmd === 'dumpsys' && args[0] === 'media_session' ? dump : '') });
+  assert.strictEqual(an.method, 'media-session');
+  assert.deepStrictEqual(an.sessions.map(x => [x.service, x.status, x.title, x.artist]), [['spotify', 'playing', 'Karma Police', 'Radiohead'], ['youtube-music', 'paused', 'Lofi', 'Chill']]);
+  assert.strictEqual(an.playing.album, 'OK Computer');
+  const wins = 'WINDOW|Spotify|Radiohead - Karma Police\nWINDOW|Spotify|Spotify Premium\nWINDOW|chrome|Lofi mix - YouTube - Google Chrome\nWINDOW|notepad|notes';
+  const w = await np.readNowPlaying({ platform: 'win32', run: async () => wins });       // no media sessions API (Windows 7 / 8)
+  assert.strictEqual(w.method, 'window-titles');
+  assert.deepStrictEqual(w.sessions.map(x => [x.service, x.title, x.artist]), [['spotify', 'Karma Police', 'Radiohead'], ['youtube', 'Lofi mix', '']]);
+  assert.strictEqual((await np.readNowPlaying({ platform: 'win32', run: async () => 'SMTC|ok\n' + wins })).method, 'smtc');   // sessions API works, nothing playing: no guessing
+  assert.deepStrictEqual((await np.readNowPlaying({ platform: 'win32', run: async () => 'SMTC|ok\n' + wins })).sessions, []);
+});
+
+test('now playing on iOS and Qt Android: the routes exist, the permissions are declared, the Java classes are staged', () => {
+  const root = pathx.join(__dirname, '..'), rd = f => fsx.readFileSync(pathx.join(root, f), 'utf8');
+  const sw = rd('ios/AudioMixer/LocalServer.swift');
+  assert.ok(sw.includes('"/api/nowplaying"') && sw.includes('MPMusicPlayerController.systemMusicPlayer') && sw.includes('MPMediaLibrary.authorizationStatus()') && sw.includes('"access"'));
+  assert.ok(rd('ios/project.yml.template').includes('NSAppleMusicUsageDescription'));
+  const cpp = rd('android/qt/src/MixerServer.cpp');
+  assert.ok(cpp.includes('"/api/nowplaying"') && cpp.includes('com/audiomixer/app/AndroidNowPlaying'));
+  assert.ok(rd('android/qt/android/AndroidManifest.xml').includes('BIND_NOTIFICATION_LISTENER_SERVICE') && rd('android/qt/android/AndroidManifest.xml').includes('com.audiomixer.app.NowPlayingListener'));
+  const prep = rd('scripts/prepare-qt.js'); for (const f of ['Json', 'NowPlaying', 'AndroidNowPlaying', 'NowPlayingListener']) { assert.ok(prep.includes("'" + f + "'"), f); assert.ok(fsx.existsSync(pathx.join(root, 'android/src/com/audiomixer/app', f + '.java')), f); }
+  assert.ok(/android\/qt\/android\/src\//.test(rd('.gitignore')));
+});
+
 test('interfaces: one physical interface across ASIO / WASAPI / DirectSound, loopback flagged, ASIO-only drivers kept', () => {
   const { groupInterfaces } = require('./interfaces');
   const dev = (id, name, hostApi, inputs, outputs) => ({ id, name, hostApi, inputs, outputs, sampleRate: 48000 });
@@ -1849,7 +1881,7 @@ test('native plugin host: a real VST2 effect runs in its own process and process
   const ps = await h.params(); assert.strictEqual(ps[0].name, 'Gain'); assert.ok(Math.abs(ps[0].value - 1) < 1e-6);
   h.stop(); await new Promise(r => h.child.once('close', r));
   // refusals come back as clear errors, never a crash of the bridge
-  for (const [file, re] of [[pathx.join(dir, 'missing.vst'), /could not load/], [pathx.join(dir, 'x.vst3'), /VST3 plugins are not supported/], [hostBin, /could not load|not a VST2/]]) {
+  for (const [file, re] of [[pathx.join(dir, 'missing.vst'), /could not load/], [pathx.join(dir, 'x.vst3'), /could not load/], [hostBin, /could not load|not a VST2/]]) {
     await assert.rejects(new ph.PluginHostProcess({ host: hostBin, plugin: file }).start(), re);
   }
   await assert.rejects(new ph.PluginHostProcess({ host: pathx.join(dir, 'nope'), plugin: plug }).start(), /cannot start the plugin host/);
@@ -1870,8 +1902,35 @@ test('native plugin host: a real VST2 effect runs in its own process and process
   s.onText(JSON.stringify({ type: 'bypass', on: true })); s.onBinary(blk); assert.strictEqual(bin[2].readFloatLE(0), blk.readFloatLE(0));   // dry
   s.onBinary(Buffer.alloc(5)); assert.strictEqual(bin.length, 3);                                                               // partial frame ignored
   s.onText(JSON.stringify({ type: 'stop' })); assert.strictEqual(sent[sent.length - 1].type, 'stopped'); s.onClose();
-  store.slots['fx:1'].format = 'VST3'; scan.v3 = true;
-  s = mk({ scan: () => ({ plugins: [{ name: 'gain', format: 'VST3', file: plug, valid: true, compatible: true }] }) }); s.onText(JSON.stringify({ type: 'start', slot: 'fx:1' })); await wait(() => sent.length); assert.match(sent.pop().message, /VST3/);
+  // VST 3: the same session runs a real VST3 effect (a test plugin written against the public interface layout), picked by class name from a bundle
+  const v3 = pathx.join(dir, 'gain3.so'), bundle = pathx.join(dir, 'gain3.vst3'), c3 = spawnSync('g++', ['-shared', '-fPIC', '-std=c++11', '-o', v3, pathx.join(root, 'test', 'Gain3Plugin.cpp')]);
+  if (c3.status === 0 && process.platform === 'linux') {
+    const arch = { x64: 'x86_64', arm64: 'aarch64', ia32: 'i386' }[process.arch];
+    if (arch) { fsx.mkdirSync(pathx.join(bundle, 'Contents', arch + '-linux'), { recursive: true }); fsx.copyFileSync(v3, pathx.join(bundle, 'Contents', arch + '-linux', 'gain3.so')); }
+    const flat = pathx.join(dir, 'flat.vst3'); fsx.copyFileSync(v3, flat);                                                                                  // a bare module file works as well as a bundle
+    for (const file of arch ? [flat, bundle] : [flat]) {
+      const h3 = new ph.PluginHostProcess({ host: hostBin, plugin: file, className: 'Test Gain 3' }), i3 = await h3.start();
+      assert.deepStrictEqual([i3.name, i3.format, i3.inputs, i3.outputs, i3.params, i3.vendor], ['Test Gain 3', 'VST3', 2, 2, 1, 'Audio Mixer tests']);
+      let o3 = await h3.process(blk); assert.ok(Math.abs(o3.readFloatLE(0) - 0.1) < 1e-6 && Math.abs(o3.readFloatLE(o3.length - 4) + 0.1) < 1e-6);        // unity at 0.5
+      h3.setParam(0, 1); o3 = await h3.process(blk); assert.ok(Math.abs(o3.readFloatLE(0) - 0.2) < 1e-6);                                                   // +6 dB, through the process call's parameter changes
+      const p3 = await h3.params(); assert.deepStrictEqual([p3[0].name, p3[0].label, p3[0].display], ['Gain', 'x', '2.00']); assert.ok(Math.abs(p3[0].value - 1) < 1e-6);
+      h3.stop(); await new Promise(r => h3.child.once('close', r));
+    }
+    const first = new ph.PluginHostProcess({ host: hostBin, plugin: flat }); assert.strictEqual((await first.start()).name, 'Test Gain 3');                  // the instrument class is skipped without a name
+    first.stop(); await new Promise(r => first.child.once('close', r));
+    await assert.rejects(new ph.PluginHostProcess({ host: hostBin, plugin: flat, className: 'Nope' }).start(), /no audio class named "Nope"/);
+    store.slots['fx:1'].format = 'VST3';
+    s = mk({ scan: () => ({ plugins: [{ name: 'gain3', format: 'VST3', file: flat, className: 'Test Gain 3', valid: true, compatible: true }] }) }); store.slots['fx:1'].plugin = 'gain3';
+    sent.length = 0; bin.length = 0; s.onText(JSON.stringify({ type: 'start', slot: 'fx:1' })); await wait(() => sent.length); assert.strictEqual(sent[0].type, 'started'); assert.strictEqual(sent[0].name, 'Test Gain 3');
+    s.onBinary(blk); await wait(() => bin.length); assert.ok(Math.abs(bin[0].readFloatLE(0) - 0.1) < 1e-6); s.onClose();
+  }
+  await assert.rejects(new ph.PluginHostProcess({ host: hostBin, plugin: pathx.join(dir, 'missing.vst3') }).start(), /could not load|no binary/);
+  // bundles with many plugins: one entry per effect class, read from moduleinfo.json (the instruments are left out)
+  const pl = require('./plugins'), mb = pathx.join(dir, 'Pack.vst3'); fsx.mkdirSync(pathx.join(mb, 'Contents', 'Resources'), { recursive: true });
+  fsx.writeFileSync(pathx.join(mb, 'Contents', 'Resources', 'moduleinfo.json'), JSON.stringify({ Classes: [{ Name: 'Comp', Catetory: 'Audio Module Class', 'Sub Categories': ['Fx'] }, { Name: 'Verb', Category: 'Audio Module Class', 'Sub Categories': ['Fx', 'Reverb'] }, { Name: 'Synth', Category: 'Audio Module Class', 'Sub Categories': ['Instrument'] }, { Name: 'Ctl', Category: 'Component Controller Class' }] }));
+  assert.deepStrictEqual(pl.bundleClasses(mb), ['Comp', 'Verb']);
+  const sc = pl.scan({ platform: 'linux', env: { AUDIO_MIXER_PLUGINS: dir }, home: dir, hostArch: process.arch });
+  assert.deepStrictEqual(sc.plugins.filter(p => /^Pack/.test(p.name)).map(p => [p.name, p.className]), [['Pack: Comp', 'Comp'], ['Pack: Verb', 'Verb']]);
   assert.ok(ph.hostPath({ platform: 'win32', arch: 'x64', env: {}, exists: () => true }).endsWith(pathx.join('x64', 'PluginHost.exe')));
   assert.ok(ph.hostPath({ platform: 'win32', arch: 'ia32', env: {}, exists: () => true }).endsWith(pathx.join('x86', 'PluginHost.exe')));
   assert.strictEqual(ph.hostPath({ platform: 'linux', env: {}, exists: () => false }), null);
@@ -2125,7 +2184,7 @@ test('a device the engine could not probe (0 channels, not ASIO) is flagged, tak
 test('Android engine (Java): the bridge protocol runs on a plain JVM with a fake backend: HTTP, origin / host checks, WebSocket input and output, interfaces grouping', async () => {
   const { spawnSync, spawn } = require('node:child_process');
   const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'jv-')), src = pathx.join(__dirname, '..', 'android');
-  const files = ['Json', 'Ws', 'AudioBackend', 'Assets', 'Interfaces', 'VirtualHub', 'MiniBridge'].map(n => pathx.join(src, 'src', 'com', 'audiomixer', 'app', n + '.java')).concat(pathx.join(src, 'test', 'com', 'audiomixer', 'app', 'BridgeHarness.java'));
+  const files = ['Json', 'Ws', 'AudioBackend', 'Assets', 'Interfaces', 'VirtualHub', 'NowPlaying', 'MiniBridge'].map(n => pathx.join(src, 'src', 'com', 'audiomixer', 'app', n + '.java')).concat(pathx.join(src, 'test', 'com', 'audiomixer', 'app', 'BridgeHarness.java'));
   const c = spawnSync('javac', ['--release', '8', '-Xlint:-options', '-d', dir, ...files], { encoding: 'utf8' });
   if (c.error || c.status !== 0) return;                                                      // needs a JDK (the build of the APK needs one as well)
   const www = pathx.join(dir, 'www'); fsx.mkdirSync(pathx.join(www, 'fonts'), { recursive: true }); fsx.writeFileSync(pathx.join(www, 'index.html'), '<html>mixer</html>'); fsx.writeFileSync(pathx.join(www, 'fonts', 'a.woff2'), Buffer.from([1, 2, 3])); fsx.writeFileSync(pathx.join(dir, 'secret.txt'), 'outside');
@@ -2204,7 +2263,7 @@ test('Android native audio helpers (channel counts, buffer sizes, native info) a
   const { spawnSync } = require('node:child_process');
   const root = pathx.join(__dirname, '..'), rd = f => fsx.readFileSync(pathx.join(root, f), 'utf8'), dir = fsx.mkdtempSync(pathx.join(require('node:os').tmpdir(), 'st-'));
   const src = n => pathx.join(root, 'android', 'src', 'com', 'audiomixer', 'app', n + '.java');
-  const c = spawnSync('javac', ['--release', '8', '-Xlint:-options', '-d', dir, src('Json'), src('Interfaces'), pathx.join(root, 'android', 'test', 'com', 'audiomixer', 'app', 'Selftest.java')], { encoding: 'utf8' });
+  const c = spawnSync('javac', ['--release', '8', '-Xlint:-options', '-d', dir, src('Json'), src('Interfaces'), src('NowPlaying'), pathx.join(root, 'android', 'test', 'com', 'audiomixer', 'app', 'Selftest.java')], { encoding: 'utf8' });
   assert.strictEqual(c.status, 0, c.stderr);
   const r = spawnSync('java', ['-cp', dir, 'com.audiomixer.app.Selftest'], { encoding: 'utf8' }); assert.strictEqual(r.status, 0, r.stderr);
   const o = Object.fromEntries(r.stdout.split('\n').filter(l => /^[\w.]+=/.test(l)).map(l => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1)]));
@@ -2215,6 +2274,12 @@ test('Android native audio helpers (channel counts, buffer sizes, native info) a
   const nat = JSON.parse(o.native); assert.deepStrictEqual([nat.sampleRate, nat.framesPerBuffer, nat.lowLatency, nat.pro, nat.usbHost], [48000, 192, true, false, true]); assert.strictEqual(nat.burstMs, 4);
   assert.strictEqual(JSON.parse(o['native.none']).sampleRate, 0);
   const w = JSON.parse(o.with); assert.ok(w.ok === true && Array.isArray(w.interfaces) && w.native.pro === true);                      // /api/interfaces carries the native block
+  // /api/nowplaying of the app: same shape as the PC bridge; classified like bridge/nowplaying.js, playing first; without the listener access it says so
+  const npj = JSON.parse(o.nowplaying); assert.deepStrictEqual(npj.sessions.map(x => [x.service, x.serviceName, x.status, x.title, x.artist]), [['spotify', 'Spotify', 'playing', 'Karma Police', 'Radiohead'], ['youtube-music', 'YouTube Music', 'paused', 'Lofi', 'Chill'], ['other', 'player', 'stopped', 'Local file', '']]);
+  assert.ok(npj.ok === true && npj.access === true && npj.method === 'media-session' && npj.playing.service === 'spotify' && npj.platform === 'android');
+  const npn = JSON.parse(o['nowplaying.none']); assert.ok(npn.access === false && npn.playing === null && npn.sessions.length === 0 && /Notifications/.test(npn.hint));
+  assert.ok(rd('android/AndroidManifest.xml').includes('BIND_NOTIFICATION_LISTENER_SERVICE') && rd('android/AndroidManifest.xml').includes('.NowPlayingListener'));
+  assert.ok(rd('android/src/com/audiomixer/app/AndroidNowPlaying.java').includes('getActiveSessions(new ComponentName(ctx, NowPlayingListener.class))'));
   // the tile: declared with the system permission and intent, compiled against stubs that never go into the app
   const man = rd('android/AndroidManifest.xml');
   assert.ok(man.includes('android:name=".EngineTileService"') && man.includes('android.permission.BIND_QUICK_SETTINGS_TILE') && man.includes('android.service.quicksettings.action.QS_TILE') && man.includes('ACTIVE_TILE'));
@@ -2230,7 +2295,7 @@ test('Android native audio helpers (channel counts, buffer sizes, native info) a
 test('Android engine (Java): virtual devices for the audio HAL - /ws/virtual, /api/virtual, the device in /api/interfaces, input and output with its id', async (tc) => {
   const { spawnSync, spawn } = require('node:child_process');
   const root = pathx.join(__dirname, '..', 'android'), dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'avh-'));
-  const files = ['Json', 'Ws', 'AudioBackend', 'Assets', 'Interfaces', 'VirtualHub', 'MiniBridge'].map(n => pathx.join(root, 'src', 'com', 'audiomixer', 'app', n + '.java')).concat(pathx.join(root, 'test', 'com', 'audiomixer', 'app', 'BridgeHarness.java'));
+  const files = ['Json', 'Ws', 'AudioBackend', 'Assets', 'Interfaces', 'VirtualHub', 'NowPlaying', 'MiniBridge'].map(n => pathx.join(root, 'src', 'com', 'audiomixer', 'app', n + '.java')).concat(pathx.join(root, 'test', 'com', 'audiomixer', 'app', 'BridgeHarness.java'));
   const c = spawnSync('javac', ['--release', '8', '-Xlint:-options', '-d', dir, ...files], { encoding: 'utf8' });
   if (c.error) return tc.skip('no JDK');
   assert.strictEqual(c.status, 0, c.stderr);
@@ -2239,6 +2304,7 @@ test('Android engine (Java): virtual devices for the audio HAL - /ws/virtual, /a
   try {
     const port = await new Promise((res, rej) => { let b = ''; jv.stdout.on('data', d => { b += d; const m = /PORT (\d+)/.exec(b); if (m) res(Number(m[1])); }); jv.on('error', rej); setTimeout(() => rej(new Error('no port')), 8000); });
     const base = `http://127.0.0.1:${port}`, open = (path) => new Promise((res, rej) => { const ws = new WebSocket(`ws://127.0.0.1:${port}${path}`); ws.binaryType = 'arraybuffer'; ws.msgs = []; ws.bins = []; ws.onmessage = e => (typeof e.data === 'string' ? ws.msgs.push(JSON.parse(e.data)) : ws.bins.push(Buffer.from(e.data))); ws.onopen = () => res(ws); ws.onerror = () => rej(new Error('connect')); });
+    const npa = await (await fetch(base + '/api/nowplaying')).json(); assert.ok(npa.ok === true && npa.access === false && npa.playing === null);      // the fake backend has no media sessions
     assert.deepStrictEqual(await (await fetch(base + '/api/virtual')).json(), { ok: true, devices: [] });
     const before = await (await fetch(base + '/api/interfaces')).json(); assert.ok(!before.interfaces.some(i => i.transport === 'virtual'));
     const drv = await open('/ws/virtual'); sock.push(drv);
@@ -3277,4 +3343,119 @@ test('single-file server: the page, the command line and the server in one file 
     assert.strictEqual(cp.spawnSync(process.execPath, [b.file, 'open', pathx.join(out, 's.amix'), '--port', String(port)], { cwd: out, env }).status, 0);
     assert.deepStrictEqual((await (await fetch(`http://127.0.0.1:${port}/api/handoff`)).json()).scenes, [null, { name: 'x' }]);
   } finally { srv.kill(); }
+});
+
+test('reboot system: restart the server for real, reboot the computer only on request (dry run), commands per OS', async () => {
+  const power = require('./power'), { spawn } = require('node:child_process');
+  assert.strictEqual(power.rebootCommand('win32').cmd, 'shutdown.exe'); assert.ok(power.rebootCommand('win32').args.includes('/t'));          // 10 s to cancel
+  assert.deepStrictEqual(power.cancelCommand('win32').args, ['/a']);
+  assert.strictEqual(power.rebootCommand('linux').cmd, 'systemctl'); assert.strictEqual(power.rebootCommand('darwin').cmd, 'osascript');
+  assert.strictEqual(power.rebootCommand('android'), null); assert.strictEqual(power.capabilities({ platform: 'ios' }).reboot, false);
+  await assert.rejects(power.rebootOs({ platform: 'android' }), /cannot be rebooted/);
+  const calls = [];
+  const r = await power.rebootOs({ platform: 'linux', dry: false, run: async (c, a) => { calls.push(c); return c === 'systemctl' ? { ok: false, err: 'denied' } : { ok: true }; } });
+  assert.deepStrictEqual(calls, ['systemctl', 'shutdown']); assert.ok(r.ok);                                                                    // falls back to shutdown -r now
+  await assert.rejects(power.rebootOs({ platform: 'win32', dry: false, run: async () => ({ ok: false, err: 'Access is denied' }) }), /administrator/);
+  assert.match((await power.rebootOs({ platform: 'win32', dry: true })).command, /^shutdown\.exe \/r \/t 10/);
+  // the copy that replaces the server: same program, same arguments, no browser
+  assert.deepStrictEqual(power.relaunch({ execPath: '/n', execArgv: [], argv: ['/n', '/a/server.js'], self: undefined }), { cmd: '/n', args: ['/a/server.js', '--no-open'] });
+  assert.deepStrictEqual(power.relaunch({ execPath: '/x/am', execArgv: [], argv: ['/x/am', '/x/am', '--port', '9'], self: { sea: true, script: null } }), { cmd: '/x/am', args: ['--port', '9', '--no-open'] });
+  // restartSelf: the port is closed first, then the copy is started, then this process exits
+  const order = []; const fakeServer = { close(cb) { order.push('close'); setImmediate(cb); }, closeAllConnections() { order.push('drop'); } };
+  await new Promise(res => power.restartSelf({ server: fakeServer, sockets: new Set([{ destroy() { order.push('sock'); } }]), plan: { cmd: 'x', args: ['y'] }, dry: false, delay: 1, spawnImpl: (c, a) => { order.push('spawn ' + c + ' ' + a); return { unref() {} }; }, exit: code => { order.push('exit ' + code); res(); } }));
+  assert.deepStrictEqual(order, ['close', 'sock', 'drop', 'spawn x y', 'exit 0']);
+  // the real thing, over HTTP: a server on its own port starts a new process of itself; the dry run of the OS reboot reports the command and needs the word REBOOT
+  const port = 20000 + Math.floor(Math.random() * 20000), base = `http://127.0.0.1:${port}`, kids = [];
+  const env = { ...process.env, BRIDGE_PORT: String(port), BRIDGE_POWER_DRY_RUN: '1' };
+  const child = spawn(process.execPath, [pathx.join(__dirname, 'server.js')], { env, stdio: 'ignore' }); kids.push(child);
+  const up = async (not) => { for (let i = 0; i < 100; i++) { try { const j = await (await fetch(base + '/api/power')).json(); if (j.ok && j.pid !== not) return j; } catch (_) { /* not yet */ } await new Promise(r => setTimeout(r, 100)); } throw new Error('server not up'); };
+  try {
+    const p1 = await up(-1); assert.strictEqual(p1.restart, true);
+    const act = (path, action, body) => fetch(base + path, { method: 'POST', headers: { 'X-Mixer-Action': action, 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+    assert.strictEqual((await act('/api/reboot', 'reboot', {})).status, 400);                                                                    // no word, no reboot
+    assert.strictEqual((await fetch(base + '/api/reboot', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"confirm":"REBOOT"}' })).status, 400);   // header required
+    assert.strictEqual((await fetch(base + '/api/reboot', { method: 'POST', headers: { 'X-Mixer-Action': 'reboot', 'Content-Type': 'application/json', Origin: 'https://evil.example' }, body: '{"confirm":"REBOOT"}' })).status, 403);
+    const dry = await (await act('/api/reboot', 'reboot', { confirm: 'REBOOT' })).json(); assert.ok(dry.ok && dry.dry === true && /shutdown|systemctl|osascript/.test(dry.command));
+    const rs = await (await act('/api/restart', 'restart')).json(); assert.ok(rs.ok && rs.dry === true);                                         // dry run: nothing restarts
+    assert.strictEqual((await up(-1)).pid, p1.pid);
+  } finally { for (const k of kids) k.kill(); }
+  const port2 = port + 1, base2 = `http://127.0.0.1:${port2}`, env2 = { ...process.env, BRIDGE_PORT: String(port2) };
+  const child2 = spawn(process.execPath, [pathx.join(__dirname, 'server.js')], { env: env2, stdio: 'ignore' });
+  let newPid = 0;
+  try {
+    let p1 = null; for (let i = 0; i < 100 && !p1; i++) { try { p1 = await (await fetch(base2 + '/api/power')).json(); } catch (_) { await new Promise(r => setTimeout(r, 100)); } }
+    assert.ok(p1);
+    const rs = await (await fetch(base2 + '/api/restart', { method: 'POST', headers: { 'X-Mixer-Action': 'restart' } })).json(); assert.ok(rs.ok && rs.restarting && rs.dry === false);
+    for (let i = 0; i < 120 && !newPid; i++) { await new Promise(r => setTimeout(r, 100)); try { const j = await (await fetch(base2 + '/api/power')).json(); if (j.pid !== p1.pid) newPid = j.pid; } catch (_) { /* restarting */ } }
+    assert.ok(newPid && newPid !== p1.pid, 'a new process answers on the same port');
+  } finally { child2.kill(); if (newPid) { try { process.kill(newPid); } catch (_) { /* gone */ } } }
+});
+
+test('page: REBOOT chooser, real factory reset, CALIBRATE page (measurements, loudness log, session snapshots) are wired', () => {
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  const sc = html.slice(html.indexOf('<script id="system-control">'), html.indexOf('<script id="system-calibration">')), cal = html.slice(html.indexOf('<script id="system-calibration">'));
+  assert.ok(sc.length > 1000 && cal.length > 1000);
+  for (const s of ["'/api/restart'", "'/api/reboot'", "confirm: 'REBOOT'", "'/api/inserts'", 'window.factoryResetConsole = factory', 'window.rebootSystem = function (mode)', 'systemControl = { run, engine, server, page, computer', 'location.reload()']) assert.ok(sc.includes(s), s);
+  for (const s of ["'/ws/duplex'", 'function correlate', 'function chirp', 'measureClock', 'measureNoise', 'logCsv', 'restoreSnapshot', 'halx_snapshots', 'halx_session_open', 'testHardwareLoopback', 'calibrateDuganAmbient', "window.sessionTools"]) assert.ok(cal.includes(s), s);
+  assert.ok(html.includes("id: 'calib'") && html.includes('id="tab-calib"') && html.includes('id="calib-root"'));
+  assert.ok(!/LOOPBACK PASS/.test(cal));                                      // no pass is printed without a measurement
+  assert.ok(html.includes('window.insertChain = chain'));
+  // the inserts of the server are cleared by a factory reset, on any plan
+  const srv = fsx.readFileSync(pathx.join(__dirname, 'server.js'), 'utf8'); assert.ok(srv.includes('body.clear === true') && srv.indexOf('body.clear === true') < srv.indexOf("hasFeature(license.status(), 'plugins')"));
+});
+
+test('KNOX PIN lock: default code 1XF300#, Enter / Escape, the lock survives a reload, wrong tries are remembered, available on the phone layout', () => {
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  assert.ok(html.includes('const DEFAULT_ADMIN_PIN = "1XF300#";') && html.includes('Default PIN: 1XF300#') && !html.includes('1XF2OO'));
+  for (const s of ["e.key === 'Enter'", "e.key === 'Escape'", "'halx_knox'", "'halx_pin_fail'", 'Number(f.until)', 'autocapitalize="off"', 'enter the PIN first']) assert.ok(html.includes(s), s);
+  assert.ok(!/html\.phone-ui #btn-knox-toggle/.test(html));                                    // the lock button is shown on phones and tablets too
+});
+
+test('license sandbox: request file, sandbox issuer with its own key, accepted only in sandbox mode, never packaged, vendor key untouched', async () => {
+  const lic = require('./license'), sb = require('../scripts/license-sandbox'), crypto2 = require('node:crypto');
+  const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'sbx-')), pubFile = pathx.join(dir, 'pub.json');
+  sb.init(dir, pubFile);
+  const jwk = JSON.parse(fsx.readFileSync(pubFile, 'utf8'));
+  assert.notDeepStrictEqual(jwk, lic.PUBLIC_JWK);                                                                   // a key pair of its own
+  assert.strictEqual(lic.sandboxJwk({ env: {}, file: pubFile }), null);                                             // off without AUDIO_MIXER_SANDBOX=1
+  assert.strictEqual(lic.sandboxJwk({ env: { AUDIO_MIXER_SANDBOX: '1' }, file: pathx.join(dir, 'none.json') }), null);   // off without the file
+  assert.deepStrictEqual(lic.sandboxJwk({ env: { AUDIO_MIXER_SANDBOX: '1' }, file: pubFile }), jwk);
+  // the request file the page and the server make
+  const req = lic.request({ plan: 'studio', name: 'Jane <b>Doe</b>', email: 'j@example.com', machine: 'AAAA-BBBB-CCCC-DDDD-EEEE', now: 1 });
+  assert.deepStrictEqual([req.app, req.kind, req.plan, req.machineId, req.name], ['audio-mixer', 'license-request', 'studio', 'AAAA-BBBB-CCCC-DDDD-EEEE', 'Jane bDoe/b']);
+  assert.throws(() => lic.request({ plan: 'gold' }), /plan must be/);
+  // issue for the request: bound to its machine, sandbox mark, the sandbox key verifies it, the vendor key does not
+  const r = sb.issue({ dir, request: req, days: 5, now: Date.now() });
+  assert.ok(r.payload.sandbox && r.payload.mid === 'AAAA-BBBB-CCCC-DDDD-EEEE' && r.payload.plan === 'studio');
+  assert.ok(lic.verifyKey(r.key, { jwk, machine: 'AAAA-BBBB-CCCC-DDDD-EEEE' }).ok);
+  assert.strictEqual(lic.verifyKey(r.key, { machine: 'AAAA-BBBB-CCCC-DDDD-EEEE' }).reason, 'bad-signature');            // a normal build refuses it
+  assert.strictEqual(lic.verifyKey(r.key, { jwk, machine: 'ZZZZ-BBBB-CCCC-DDDD-EEEE' }).reason, 'wrong-machine');
+  assert.throws(() => sb.issue({ dir, request: { kind: 'other' } }), /not an Audio Mixer license request/);
+  // the real server: the request route, no sandbox without the environment variable
+  const started = !server.listening, port = server.listening ? server.address().port : await require('./server').start(0), base = `http://127.0.0.1:${port}`;
+  const j = await (await fetch(base + '/api/license/request?plan=pro&name=Test')).json(); assert.ok(j.ok && j.request.plan === 'pro' && j.request.machineId === lic.machineId());
+  assert.strictEqual((await fetch(base + '/api/license/request?plan=gold')).status, 400);
+  const st = await (await fetch(base + '/api/license')).json(); assert.strictEqual(st.sandbox, false);
+  if (started) await new Promise(r => server.close(r));
+  // not in the packages, not in the repository
+  const build = fsx.readFileSync(pathx.join(__dirname, '..', 'scripts', 'build.js'), 'utf8'); assert.ok(!/license-sandbox/.test(build));
+  assert.ok(/license-sandbox-public\.json/.test(fsx.readFileSync(pathx.join(__dirname, '..', '.gitignore'), 'utf8')));
+  const page = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8'); for (const s of ['lic-req-file', 'lic-req-copy', 'LICENSE_SANDBOX_JWK', "'/api/license/request?plan='"]) assert.ok(page.includes(s), s);
+  fsx.rmSync(dir, { recursive: true, force: true });
+});
+
+test('bus & matrix outputs: out sends to a real interface, speaker processor, amp calculator, mic protector, aux / FX returns, send regulator are wired', () => {
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  const sc = html.slice(html.indexOf('<script id="bus-outs">'), html.indexOf('<script id="rt-engine">'));
+  assert.ok(sc.length > 5000);
+  for (const s of ["'/ws/output'", "registerProcessor('mx-out'", 'createChannelMerger', 'ampCalc', 'scanFeedback', 'applyAdvice', 'regulate', 'applyFx', 'createConvolver', 'createDynamicsCompressor', "'halx_mix_outs'", 'M.render = function', 'M.ensureGraph = function']) assert.ok(sc.includes(s), s);
+  for (const id of ['data-page="aux"', 'data-page="outs"', 'data-page="reg"', 'id="mx-page-aux"', 'id="mx-page-outs"', 'id="mx-page-reg"']) assert.ok(html.includes(id), id);
+  // the calculator, run on its own
+  const src = sc.slice(sc.indexOf('function ampCalc(o) {'), sc.indexOf('// ── graph ──')), ampCalc = new Function(src + '\nreturn ampCalc;')();
+  const r = ampCalc({ ampW: 1000, ampOhm: 8, spkW: 300, spkOhm: 8, count: 1, sens: 100, dist: 10 });
+  assert.ok(Math.abs(r.vmax - 89.44) < 0.01 && Math.abs(r.limDb + 5.23) < 0.01 && Math.abs(r.spl1m - 124.77) < 0.01 && Math.abs(r.splAt - 104.77) < 0.01, JSON.stringify(r));
+  const two = ampCalc({ ampW: 500, ampOhm: 8, spkW: 300, spkOhm: 8, count: 2, sens: 98, dist: 1 });                     // two speakers in parallel: 4 ohm, the amp's voltage gives 1000 W, 500 W each
+  assert.ok(Math.abs(two.load - 4) < 1e-9 && Math.abs(two.pLoad - 1000) < 1e-6 && Math.abs(two.pEach - 500) < 1e-6 && two.limDb < 0 && two.warn === 'The amp can give each speaker 500 W: use the protection limiter.', JSON.stringify(two));
+  const safe = ampCalc({ ampW: 100, ampOhm: 8, spkW: 300, spkOhm: 8, count: 1, sens: 96, dist: 1 });
+  assert.strictEqual(safe.limDb, 0); assert.ok(safe.headroom > 4.7 && safe.warn === '');                                  // a small amp cannot hurt the speaker: no limiter needed
 });

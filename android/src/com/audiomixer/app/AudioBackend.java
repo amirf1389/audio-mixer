@@ -13,6 +13,9 @@ interface AudioBackend {
     /** The hardware's own figures as a JSON object (see Interfaces.nativeJson): native sample rate and burst size, low latency / pro audio. */
     String nativeJson();
 
+    /** Body of GET /api/nowplaying (see NowPlaying.toJson). Backends without media sessions report none. */
+    default String nowPlayingJson() { return NowPlaying.toJson(new java.util.ArrayList<NowPlaying.Session>(), false, null); }
+
     Input openInput(Map<String, Object> opts, Listener listener) throws Exception;
 
     Output openOutput(Map<String, Object> opts) throws Exception;

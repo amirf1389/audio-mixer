@@ -1,5 +1,5 @@
 'use strict';
-// Native plugin host: runs a VST 2.x effect (.dll / .vst) in its own process (windows/plugin-host/src/PluginHost.cpp) and moves audio through it.
+// Native plugin host: runs a VST 2.x (.dll / .vst) or VST 3 (.vst3) effect in its own process (windows/plugin-host/src/PluginHost.cpp) and moves audio through it.
 // A plugin that crashes takes down only that process. Only plugins found by the bridge's own scan are ever started (see createInsertSession).
 const { spawn } = require('node:child_process');
 const fs = require('node:fs');
@@ -25,7 +25,7 @@ function hostPath({ platform = process.platform, arch = process.arch, env = proc
 }
 
 class PluginHostProcess {
-  constructor({ host, plugin, sampleRate = 48000, blockSize = 512, spawnImpl = spawn, timeoutMs = 4000 }) { Object.assign(this, { host, plugin, sampleRate, blockSize, spawnImpl, timeoutMs }); this.buf = Buffer.alloc(0); this.q = { A: [], G: [] }; this.dead = false; this.err = ''; }
+  constructor({ host, plugin, className = '', sampleRate = 48000, blockSize = 512, spawnImpl = spawn, timeoutMs = 4000 }) { Object.assign(this, { host, plugin, className, sampleRate, blockSize, spawnImpl, timeoutMs }); this.buf = Buffer.alloc(0); this.q = { A: [], G: [] }; this.dead = false; this.err = ''; }
 
   start() {
     return new Promise((resolve, reject) => {
@@ -33,7 +33,7 @@ class PluginHostProcess {
       const finish = (fn, v) => { if (!done) { done = true; clearTimeout(timer); fn(v); } };
       const timer = setTimeout(() => { finish(reject, new Error('the plugin host did not answer')); this.stop(); }, this.timeoutMs);
       // no shell, no inherited secrets: the plugin is third-party native code
-      this.child = this.spawnImpl(this.host, [this.plugin, String(this.sampleRate), String(this.blockSize)], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, env: { PATH: process.env.PATH || '', SystemRoot: process.env.SystemRoot || '' } });
+      this.child = this.spawnImpl(this.host, [this.plugin, String(this.sampleRate), String(this.blockSize), ...(this.className ? [this.className] : [])], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, env: { PATH: process.env.PATH || '', SystemRoot: process.env.SystemRoot || '' } });
       this.child.stdin.on('error', () => { /* the host already exited: reported by 'close' */ });
       this.child.on('error', e => { this.dead = true; finish(reject, new Error('cannot start the plugin host: ' + e.message)); });
       this.child.stderr.on('data', d => { this.err = (this.err + d).slice(-400); });
@@ -103,10 +103,9 @@ function createInsertSession(conn, { scan = () => plugins.scan(), read = () => i
     const file = hostFile(); if (!file) return err('the native plugin host is not installed on this system (windows/plugin-host: build PluginHost, or set BRIDGE_PLUGIN_HOST)');
     const found = scan().plugins.find(p => p.name === slot.plugin && p.format === slot.format);
     if (!found || !found.valid || !found.compatible) return err('the plugin is not available any more: scan again');
-    if (found.format === 'VST3') return err('VST3 plugins are not supported by the native host yet (VST2 .dll / .vst only)');
     if (running >= MAX_HOSTS) return err('too many plugins are running');
     running++; counted = true; bypass = !!slot.bypass;
-    const h = new PluginHostProcess({ host: file, plugin: found.file, sampleRate: Number(m.sampleRate) || 48000, blockSize: 512, spawnImpl });
+    const h = new PluginHostProcess({ host: file, plugin: found.file, className: found.className || '', sampleRate: Number(m.sampleRate) || 48000, blockSize: 512, spawnImpl });
     host = h;
     h.onExit = e => { if (host === h) { err('The plugin stopped: ' + e.message); stop(); } };
     try {

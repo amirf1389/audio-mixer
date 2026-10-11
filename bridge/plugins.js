@@ -1,7 +1,7 @@
 'use strict';
 // Plugin system: finds VST3 (.vst3), VST2 (.dll / .vst) plugins in the standard folders and in the app's own plugin folder,
 // and checks each Windows binary (PE header + export table) so the mixer can tell a real, loadable VST from any other DLL.
-// This lists and validates plugins; it does not run them (a VST host process is a separate piece of work).
+// This lists and validates plugins; running them is bridge/pluginhost.js (the native plugin host process).
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -81,6 +81,17 @@ function classify(file, ext, platform, hostArch) {
   return info;
 }
 
+// A .vst3 bundle can hold many plugins (Linux Studio Plugins: 350 in one bundle). Its Contents/Resources/moduleinfo.json (VST 3.7.5+) lists the classes:
+// every effect class (audio, not an instrument) becomes one entry named "<bundle>: <class>" that the host opens by class name.
+function bundleClasses(file, readFile = fs.readFileSync) {
+  try {
+    const j = JSON.parse(readFile(path.join(file, 'Contents', 'Resources', 'moduleinfo.json'), 'utf8'));
+    return (Array.isArray(j.Classes) ? j.Classes : [])
+      .filter(c => c && typeof c.Name === 'string' && c.Name && (c.Category || c.Catetory) === 'Audio Module Class' && !(Array.isArray(c['Sub Categories']) ? c['Sub Categories'] : []).includes('Instrument'))
+      .map(c => c.Name.slice(0, 64)).slice(0, 400);
+  } catch (_) { return []; }
+}
+
 function walk(dir, exts, max, depth = 0, out = []) {
   let entries = [];
   try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (_) { return out; }
@@ -93,7 +104,7 @@ function walk(dir, exts, max, depth = 0, out = []) {
   return out;
 }
 
-function scan({ platform = process.platform, env = process.env, home = os.homedir(), hostArch = process.arch, max = 500, hash = false } = {}) {
+function scan({ platform = process.platform, env = process.env, home = os.homedir(), hostArch = process.arch, max = 1000, hash = false } = {}) {
   const dirs = pluginDirs({ platform, env, home });
   const exts = platform === 'win32' ? ['.vst3', '.dll'] : ['.vst3', '.vst'];
   const seen = new Set(), plugins = [];
@@ -107,6 +118,9 @@ function scan({ platform = process.platform, env = process.env, home = os.homedi
       if (!p) continue;
       p.source = isApp ? 'app' : 'system';
       if (hash && isApp && p.size && p.size < 256 * 1024 * 1024 && !p.bundle) p.sha256 = crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+      const classes = p.bundle && p.format === 'VST3' ? bundleClasses(file) : [];
+      if (classes.length > 1) { for (const c of classes) { if (plugins.length < max) plugins.push({ ...p, name: p.name + ': ' + c, className: c }); } continue; }     // one entry per effect of a multi-plugin bundle
+      if (classes.length === 1) p.className = classes[0];
       plugins.push(p);
     }
   }
@@ -117,4 +131,4 @@ function scan({ platform = process.platform, env = process.env, home = os.homedi
   };
 }
 
-module.exports = { scan, inspectPe, classify, pluginDirs, appPluginDir };
+module.exports = { scan, inspectPe, classify, pluginDirs, appPluginDir, bundleClasses };

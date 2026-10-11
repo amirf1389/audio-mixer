@@ -42,6 +42,10 @@ final class AndroidAudio implements AudioBackend {
 
     public String devicesJson() { return Interfaces.devicesJson(devices()); }
 
+    private AndroidNowPlaying nowPlaying;
+
+    public synchronized String nowPlayingJson() { if (nowPlaying == null) nowPlaying = new AndroidNowPlaying(ctx); return nowPlaying.json(); }
+
     private int nativeProp(String name) { try { return Integer.parseInt(String.valueOf(am.getProperty(name))); } catch (Exception e) { return 0; } }
 
     /** What the hardware itself does best: the output sample rate and burst size Android reports, low latency / pro audio / USB host features. */

@@ -35,6 +35,7 @@ targets:
         UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight, UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown]
         UIBackgroundModes: [audio]
         NSMicrophoneUsageDescription: Audio Mixer reads your microphone or audio interface as mixer inputs.
+        NSAppleMusicUsageDescription: Audio Mixer shows what the Music app is playing (Now Playing).
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
     settings:

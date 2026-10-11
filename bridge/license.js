@@ -13,6 +13,14 @@ const { execFileSync } = require('node:child_process');
 
 const PUBLIC_JWK = require('./license-public.json');
 
+// SANDBOX (development only): with AUDIO_MIXER_SANDBOX=1 and a bridge/license-sandbox-public.json made by `node scripts/license-sandbox.js init`, keys signed with the
+// sandbox key are accepted as well as vendor keys, so the whole key request -> issue -> activate flow can be tried without the vendor key. That file is never committed or
+// packaged (it is not in scripts/build.js), so installed copies cannot enter sandbox mode.
+function sandboxJwk({ env = process.env, file = path.join(__dirname, 'license-sandbox-public.json') } = {}) {
+  if (env.AUDIO_MIXER_SANDBOX !== '1') return null;
+  try { const j = JSON.parse(fs.readFileSync(file, 'utf8')); return j && j.kty === 'EC' && j.crv === 'P-256' && j.x && j.y ? { kty: j.kty, crv: j.crv, x: j.x, y: j.y } : null; } catch (_) { return null; }
+}
+
 // One table drives everything: the mixer page, the bridge and the vendor tool.
 const PLANS = {
   basic:  { id: 'basic',  name: 'BASIC',  channels: 8,  features: ['core'] },
@@ -34,12 +42,13 @@ function signKey(payload, privateKey) {
 }
 
 // Checks a key: shape, signature, plan, validity dates and (when the key is bound) the machine code.
-function verifyKey(key, { now = Date.now(), machine = null, jwk = PUBLIC_JWK } = {}) {
+function verifyKey(key, { now = Date.now(), machine = null, jwk = null } = {}) {
   const parts = String(key || '').trim().replace(/\s+/g, '').split('.');
   if (parts.length !== 3 || parts[0] !== PREFIX) return { ok: false, reason: 'malformed', message: 'This is not an Audio Mixer license key.' };
   let payload;
   try {
-    if (!crypto.verify('sha256', Buffer.from(parts[1]), { key: publicKey(jwk), dsaEncoding: 'ieee-p1363' }, unb64u(parts[2]))) throw new Error('bad');
+    const keys = jwk ? [jwk] : [PUBLIC_JWK, sandboxJwk()].filter(Boolean);                       // the vendor key; in the sandbox the sandbox key too
+    if (!keys.some(k => crypto.verify('sha256', Buffer.from(parts[1]), { key: publicKey(k), dsaEncoding: 'ieee-p1363' }, unb64u(parts[2])))) throw new Error('bad');
     payload = JSON.parse(unb64u(parts[1]).toString('utf8'));
   } catch (_) { return { ok: false, reason: 'bad-signature', message: 'The license key is not valid (signature check failed).' }; }
   if (!payload || payload.v !== 1 || !PLANS[payload.plan]) return { ok: false, reason: 'unknown-plan', message: 'The license key is for an unknown plan.' };
@@ -75,7 +84,7 @@ function readStored() {
 function status(opts = {}) {
   const machine = opts.machine || machineId();
   const stored = opts.key !== undefined ? { key: opts.key } : readStored();
-  const base = { machineId: machine, plans: PLANS };
+  const base = { machineId: machine, plans: PLANS, sandbox: !!sandboxJwk() };
   if (!stored || !stored.key) return { ...base, state: 'basic', plan: PLANS.basic, license: null };
   const v = verifyKey(stored.key, { now: opts.now, machine, jwk: opts.jwk });
   if (v.ok) {
@@ -84,6 +93,14 @@ function status(opts = {}) {
   }
   // an expired / invalid stored key never raises the plan
   return { ...base, state: v.reason === 'expired' ? 'expired' : 'invalid', plan: PLANS.basic, license: v.payload ? { id: v.payload.id || null, plan: v.payload.plan, name: v.payload.name || '', expires: v.payload.expires || null } : null, message: v.message };
+}
+
+// What the customer sends to the vendor to get a key: the machine code, the plan wanted and who it is for. Nothing secret.
+function request({ plan = 'pro', name = '', email = '', now = Date.now(), machine = machineId() } = {}) {
+  if (!PLANS[plan]) { const e = new Error('plan must be one of: ' + Object.keys(PLANS).join(', ')); e.status = 400; throw e; }
+  const clean = (v, n) => String(v || '').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, n);
+  let version = '1.0.0'; try { version = require('../package.json').version; } catch (_) { /* packaged without it */ }
+  return { app: 'audio-mixer', kind: 'license-request', v: 1, machineId: machine, plan, name: clean(name, 80), email: clean(email, 120), platform: os.platform(), arch: os.arch(), version, at: now, sandbox: !!sandboxJwk() };
 }
 
 function activate(key, opts = {}) {
@@ -104,4 +121,4 @@ function deactivate(opts = {}) {
 
 const hasFeature = (st, f) => !!(st && st.plan && st.plan.features.includes(f));
 
-module.exports = { PLANS, PREFIX, PUBLIC_JWK, publicKeyOf: publicKey, signKey, verifyKey, machineId, status, activate, deactivate, hasFeature, readStored, storeFile, b64u, unb64u };
+module.exports = { PLANS, PREFIX, PUBLIC_JWK, sandboxJwk, request, publicKeyOf: publicKey, signKey, verifyKey, machineId, status, activate, deactivate, hasFeature, readStored, storeFile, b64u, unb64u };

@@ -12,6 +12,19 @@
 #include "AudioDevices.h"
 
 #ifdef Q_OS_ANDROID
+#include <QJniObject>
+// the media sessions of the phone: AndroidNowPlaying.java (copied from android/src by scripts/prepare-qt.js) builds the JSON of GET /api/nowplaying
+static QByteArray nowPlayingJson()
+{
+    QJniObject ctx = QNativeInterface::QAndroidApplication::context();
+    QJniObject np("com/audiomixer/app/AndroidNowPlaying", "(Landroid/content/Context;)V", ctx.object<jobject>());
+    return np.callObjectMethod<jstring>("json").toString().toUtf8();
+}
+#else
+static QByteArray nowPlayingJson() { return R"({"ok":true,"platform":"desktop","method":"unsupported","access":false,"sessions":[],"playing":null})"; }    // desktop test runs
+#endif
+
+#ifdef Q_OS_ANDROID
 static const QString kRoot = QStringLiteral("assets:/www");
 #else
 static const QString kRoot = QStringLiteral("assets/www");    // desktop test runs: android/qt/assets/www next to the binary
@@ -52,6 +65,7 @@ void MixerServer::answer(QTcpSocket *s, const QByteArray &request)
         o["native"] = QJsonDocument::fromJson(m_devices->nativeJson()).object();
         return send(s, 200, "application/json", QJsonDocument(o).toJson(QJsonDocument::Compact));
     }
+    if (path == "/api/nowplaying") return send(s, 200, "application/json", nowPlayingJson());
     if (path == "/api/interfaces") return send(s, 200, "application/json", m_devices->interfacesJson());
     if (path == "/") path = "/index.html";
     QFile f(kRoot + path);

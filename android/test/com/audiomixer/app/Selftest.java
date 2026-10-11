@@ -16,5 +16,12 @@ public final class Selftest {
         System.out.println("native=" + Interfaces.nativeJson(48000, 192, true, false, true));
         System.out.println("native.none=" + Interfaces.nativeJson(0, 0, false, false, false));
         System.out.println("with=" + Interfaces.withNative("{\"ok\":true,\"interfaces\":[]}", Interfaces.nativeJson(48000, 192, true, true, false)));
+        java.util.List<NowPlaying.Session> l = new java.util.ArrayList<NowPlaying.Session>();
+        l.add(new NowPlaying.Session("com.google.android.apps.youtube.music", NowPlaying.status(2), "Lofi", "Chill", ""));
+        l.add(new NowPlaying.Session("com.example.player", NowPlaying.status(1), "Local file", "", ""));
+        l.add(new NowPlaying.Session("com.spotify.music", NowPlaying.status(3), "Karma Police", "Radiohead", "OK Computer"));
+        l.add(new NowPlaying.Session("com.example.blank", "stopped", "", "", ""));                                           // no title, unknown service: left out
+        System.out.println("nowplaying=" + NowPlaying.toJson(l, true, null));
+        System.out.println("nowplaying.none=" + NowPlaying.toJson(new java.util.ArrayList<NowPlaying.Session>(), false, "Settings > Notifications > Device & app notifications > Audio Mixer"));
     }
 }

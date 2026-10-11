@@ -108,7 +108,11 @@ Real Web Audio graph, saved in the browser (localStorage) and respecting the KNO
 
 ## Now playing and interface scan
 - `GET /api/nowplaying`: `{ method, sessions: [{ service, serviceName, app, status, title, artist, album }], playing }` from the OS media sessions
-  (Windows SMTC via PowerShell, macOS osascript, Linux MPRIS via `busctl`). Services: Spotify, YouTube, YouTube Music, TIDAL, Apple Music, Amazon Music,
+  (Windows SMTC via PowerShell, with the window titles of the music apps and browser tabs when SMTC is missing (Windows 7 / 8); macOS osascript;
+  Linux, the BSDs and other desktops MPRIS via `busctl`, or `playerctl` without systemd; Android `dumpsys media_session` when the server runs in Termux /
+  `adb shell`). The Android app (`MediaSessionManager`, needs the notification-listener switch in the Android settings; reads no notification), the Qt
+  Android project (same Java classes) and the iOS app (the Music app's player, after the Media & Apple Music permission) serve the same route themselves;
+  `access: false` plus a `hint` tells the page that the permission is missing. Services: Spotify, YouTube, YouTube Music, TIDAL, Apple Music, Amazon Music,
   Deezer, SoundCloud, Qobuz, Pandora, VLC, foobar2000, MusicBee, Winamp. Read-only; cached for 1.5 s.
 - `GET /api/interfaces`: PortAudio devices of every host API grouped into physical interfaces (`apis`, `read` / `write` best device, `asio`,
   `loopback`, `driverOnly` for installed ASIO drivers PortAudio does not list).
@@ -120,3 +124,6 @@ Real Web Audio graph, saved in the browser (localStorage) and respecting the KNO
 - Every open stream sends `{ type: "levels", id, direction, device, hostApi, engine, frameSize, latencyMs, sampleRate, channels, peak[], rms[], clip }` (dBFS per channel, about 12 per second) measured on the PCM that is really written / read.
 - `GET /api/audify` also returns `error` and `hint` when the module did not load (on Windows usually the missing Visual C++ runtime).
 - `../linux/ensure-node.sh` (sourced by `linux/start-pc-mode.sh`, the Linux launcher and the macOS app) finds or installs Node.js 18+ and the Audify module without administrator rights.
+- `GET /api/power` (`{ restart, reboot, cancelReboot, platform, pid }`), `POST /api/restart` (header `X-Mixer-Action: restart`: the server restarts itself), `POST /api/reboot` (header `X-Mixer-Action: reboot`, body `{"confirm":"REBOOT"}` or `{"cancel":true}`: reboots / cancels the reboot of the computer, Windows waits 10 s). `BRIDGE_POWER_DRY_RUN=1` reports the command without running it.
+- `POST /api/inserts` with `{"clear":true}` empties every plugin slot (any plan). `GET /api/plugins` lists a multi-plugin `.vst3` bundle as one entry per effect class (`className`); the native host opens VST 2 (`.dll` / `.vst`) and VST 3 (`.vst3`) plugins.
+- `GET /api/license/request?plan=pro&name=..&email=..` returns `{ ok, request }`, the file a customer sends to get a key; `GET /api/license` also reports `sandbox` (and `sandboxKey`, the sandbox public key) when the server runs with `AUDIO_MIXER_SANDBOX=1` and `bridge/license-sandbox-public.json` exists (development only, see `scripts/license-sandbox.js`).

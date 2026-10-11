@@ -1,7 +1,8 @@
 import Foundation
 import Network
+import MediaPlayer
 
-/// Serves the bundled mixer page (the `www` folder of the app) on http://127.0.0.1:<port>/ and nothing else.
+/// Serves the bundled mixer page (the `www` folder of the app) on http://127.0.0.1:<port>/ and GET /api/nowplaying (what the Music app is playing).
 /// WebKit treats 127.0.0.1 as a secure context, so Web Audio worklets, the microphone and WebCrypto (license keys) work; a file:// page would not get them.
 /// Only GET / HEAD, only files inside `root`, only reachable from this device (loopback interface).
 final class LocalServer {
@@ -77,12 +78,46 @@ final class LocalServer {
         path = path.removingPercentEncoding ?? path
         if path == "/" { path = "/index.html" }
         if path.contains("..") || path.contains("\0") || !path.hasPrefix("/") { return send(c, 403, "Forbidden", Data(), "text/plain", head: false) }
+        if path == "/api/nowplaying" { return send(c, 200, "OK", LocalServer.nowPlayingJSON(), "application/json", head: method == "HEAD") }
         let file = root.appendingPathComponent(String(path.dropFirst())).standardizedFileURL
         guard file.path.hasPrefix(root.path + "/"), let body = try? Data(contentsOf: file) else {
             return send(c, 404, "Not Found", Data("not found".utf8), "text/plain", head: method == "HEAD")
         }
         let type = LocalServer.types[file.pathExtension.lowercased()] ?? "application/octet-stream"
         send(c, 200, "OK", body, type, head: method == "HEAD")
+    }
+
+    /// Body of GET /api/nowplaying, same shape as the PC bridge. iOS lets an app read only the Music app's player (Apple Music and the music library), after the user allows
+    /// access to Media & Apple Music; other apps' sessions (Spotify, YouTube) are not readable on iOS.
+    static func nowPlayingJSON() -> Data {
+        var out: [String: Any] = ["ok": true, "platform": "ios", "method": "music-player", "access": true, "sessions": [Any](), "playing": NSNull()]
+        switch MPMediaLibrary.authorizationStatus() {
+        case .authorized:
+            DispatchQueue.main.sync {
+                let player = MPMusicPlayerController.systemMusicPlayer
+                guard let item = player.nowPlayingItem else { return }
+                let state: String
+                switch player.playbackState {
+                case .playing, .seekingForward, .seekingBackward: state = "playing"
+                case .paused: state = "paused"
+                default: state = "stopped"
+                }
+                let session: [String: Any] = [
+                    "service": "apple-music", "serviceName": "Apple Music", "app": "Music", "status": state,
+                    "title": String((item.title ?? "").prefix(200)), "artist": String((item.artist ?? "").prefix(200)), "album": String((item.albumTitle ?? "").prefix(200)),
+                ]
+                out["sessions"] = [session]
+                if state == "playing" { out["playing"] = session }
+            }
+        case .notDetermined:
+            out["access"] = false
+            out["hint"] = "Allow Audio Mixer to see what is playing: answer the Media & Apple Music question."
+            DispatchQueue.main.async { MPMediaLibrary.requestAuthorization { _ in } }
+        default:
+            out["access"] = false
+            out["hint"] = "Allow Audio Mixer to see what is playing: iOS Settings > Audio Mixer > Media & Apple Music."
+        }
+        return (try? JSONSerialization.data(withJSONObject: out)) ?? Data("{\"ok\":false}".utf8)
     }
 
     private func send(_ c: NWConnection, _ code: Int, _ text: String, _ body: Data, _ type: String, head: Bool) {

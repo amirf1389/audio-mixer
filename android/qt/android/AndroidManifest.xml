@@ -17,5 +17,10 @@
             <meta-data android:name="android.app.lib_name" android:value="AudioMixerQt"/>
             <meta-data android:name="android.app.arguments" android:value=""/>
         </activity>
+        <!-- what Spotify / YouTube Music / ... is playing (GET /api/nowplaying): the user switches it on in the Android settings; no notification is read.
+             The Java classes are copied from android/src by `node scripts/prepare-qt.js` -->
+        <service android:name="com.audiomixer.app.NowPlayingListener" android:label="Audio Mixer (Qt)" android:exported="true" android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter><action android:name="android.service.notification.NotificationListenerService"/></intent-filter>
+        </service>
     </application>
 </manifest>

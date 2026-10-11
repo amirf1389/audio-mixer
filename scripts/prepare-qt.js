@@ -18,6 +18,11 @@ async function main() {
   const t = { ...findTools().tools, npm: which('npm') };
   const r = await prepareWeb(www, t);
   fs.writeFileSync(path.join(QT, 'version.txt'), version + '\n');
+  // the media-session classes of the Java app (GET /api/nowplaying) go into the Qt package source dir, which Gradle compiles with the activity
+  const jsrc = path.join(ROOT, 'android', 'src', 'com', 'audiomixer', 'app'), jdst = path.join(QT, 'android', 'src', 'com', 'audiomixer', 'app');
+  fs.rmSync(path.join(QT, 'android', 'src'), { recursive: true, force: true });
+  fs.mkdirSync(jdst, { recursive: true });
+  for (const f of ['Json', 'NowPlaying', 'AndroidNowPlaying', 'NowPlayingListener']) fs.copyFileSync(path.join(jsrc, f + '.java'), path.join(jdst, f + '.java'));
   console.log(`staged ${path.relative(ROOT, www)} (version ${version})` + (r && r.warning ? ' - ' + r.warning : ''));
 }
 

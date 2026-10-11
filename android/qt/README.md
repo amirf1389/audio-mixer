@@ -12,7 +12,7 @@ Audio devices come from **Qt Multimedia** (`QMediaDevices`) instead of `AudioMan
 
 | Part | File | |
 |---|---|---|
-| Page server | `src/MixerServer.*` | static files from `assets:/www`, `GET /api/status`, `GET /api/interfaces` (same JSON shape as the PC bridge and the Java app, `"engine":"qt"`) |
+| Page server | `src/MixerServer.*` | static files from `assets:/www`, `GET /api/status`, `GET /api/interfaces`, `GET /api/nowplaying` (same JSON shape as the PC bridge and the Java app, `"engine":"qt"`) |
 | Devices | `src/AudioDevices.*` | inputs and outputs with channel counts and sample-rate range, plus a `native` block (rate, channel limits) |
 | Shell | `qml/Main.qml`, `src/main.cpp` | `WebView` on the page; asks for the microphone permission (`QMicrophonePermission`) |
 | Android | `android/AndroidManifest.xml` | `RECORD_AUDIO`, `MODIFY_AUDIO_SETTINGS`, low-latency / USB host features (not required) |

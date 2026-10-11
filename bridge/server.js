@@ -4,11 +4,12 @@
 //   GET /api/status   -> { ok, name, version }
 //   GET /api/drivers  -> native driver/device detection for this OS
 //   GET /api/volume   -> system output / input volume + mute
-//   GET /api/license, POST /api/license/activate|deactivate -> consumer license (plan, machine code)
+//   GET /api/license, GET /api/license/request (the key request file), POST /api/license/activate|deactivate -> consumer license (plan, machine code)
 //   GET /api/update, POST /api/update/download -> OTA updates (signed manifest, checksum-verified download)
 //   GET /api/universal -> universal ASIO driver: all input / output sources, ranked, with the automatic pick
 //   GET /api/plugins -> VST3 / VST2 plugins (.vst3 / .dll / .vst) found and validated
 //   POST /api/handoff {scenes}, GET /api/handoff -> one scene archive (.amix) from "audio-mixer open" waiting for the page (taken once)
+//   GET /api/power, POST /api/restart (X-Mixer-Action: restart) -> restart this server; POST /api/reboot (X-Mixer-Action: reboot, {confirm:'REBOOT'}) -> reboot the computer
 //   GET /api/meters, POST /api/meters {clipDb} -> clip threshold (dBFS) of the level meters of native streams
 //   WS  /ws/virtual, GET /api/virtual -> virtual audio devices of the operating-system drivers (drivers/); they appear in /api/interfaces and open like any interface
 //   GET /api/audify, /api/framesize -> Audify (RtAudio) engine devices and automatic frame size
@@ -47,6 +48,8 @@ const streamRegistry = require('./streams');
 const security = require('./security');
 const inserts = require('./inserts');
 const pluginHost = require('./pluginhost');
+const power = require('./power');
+const openSockets_ = new Set();
 
 const VERSION = (() => { try { return require('../package.json').version; } catch (_) { return '1.0.0'; } })();
 const PORT = Number(process.env.BRIDGE_PORT) || 8765;
@@ -114,6 +117,12 @@ async function handle(req, res) {
     handoff = { scenes: d, at: Date.now() };
     return [200, { ok: true, snapshots: d.filter(Boolean).length }];
   }, true, 1 << 20);
+  if (req.method === 'POST' && url.pathname === '/api/restart') return handleAction(req, res, cors, 'restart', async () => [200, { ok: true, restarting: true, ...power.restartSelf({ server, sockets: openSockets_ }) }], false);
+  if (req.method === 'POST' && url.pathname === '/api/reboot') return handleAction(req, res, cors, 'reboot', async body => {     // the computer itself: only with the word REBOOT in the request
+    if (body.cancel === true) return [200, await power.rebootOs({ cancel: true })];
+    if (body.confirm !== 'REBOOT') return [400, { ok: false, error: 'send {"confirm":"REBOOT"} to reboot the computer' }];
+    return [200, await power.rebootOs()];
+  });
   if (req.method === 'POST' && url.pathname === '/api/meters') return handleAction(req, res, cors, 'meters', async body => [200, { ok: true, clipDb: levels.setClipDb(body.clipDb) }]);
   if (req.method === 'POST' && url.pathname === '/api/bluetooth') return handleAction(req, res, cors, 'bluetooth', async body => {
     try {
@@ -123,6 +132,7 @@ async function handle(req, res) {
     } catch (e) { return [e.status || 500, { ok: false, error: e.message }]; }
   });
   if (req.method === 'POST' && url.pathname === '/api/inserts') return handleAction(req, res, cors, 'inserts', async body => {
+    if (body.clear === true) { inserts.write({ slots: {} }); return [200, { ok: true, slots: {} }]; }      // factory reset: every slot empty, on any plan
     if (!license.hasFeature(license.status(), 'plugins')) return [402, { ok: false, error: 'Plugin inserts need the PRO or STUDIO plan', needs: 'plugins' }];
     return [200, { ok: true, ...inserts.set(body) }];
   });
@@ -137,10 +147,15 @@ async function handle(req, res) {
     if (!btCache || Date.now() - btCache.at > 2000 || url.searchParams.get('force') === '1') btCache = { at: Date.now(), promise: bluetooth.list() };
     return json(res, 200, await btCache.promise, cors);
   }
-  if (url.pathname === '/api/inserts') return json(res, 200, { ok: true, host: { available: !!pluginHost.hostPath(), formats: ['VST2'] }, ...inserts.read() }, cors);
+  if (url.pathname === '/api/inserts') return json(res, 200, { ok: true, host: { available: !!pluginHost.hostPath(), formats: ['VST2', 'VST3'] }, ...inserts.read() }, cors);
   if (url.pathname === '/api/virtual') return json(res, 200, { ok: true, devices: virtualHub.list() }, cors);
+  if (url.pathname === '/api/power') return json(res, 200, { ok: true, pid: process.pid, ...power.capabilities() }, cors);
   if (url.pathname === '/api/meters') return json(res, 200, { ok: true, clipDb: levels.config.clipDb, clipRun: levels.CLIP_RUN }, cors);   // clip threshold of the native streams' meters
-  if (url.pathname === '/api/license') return json(res, 200, { ok: true, version: VERSION, ...license.status() }, cors);
+  if (url.pathname === '/api/license/request') {            // the request file for a key (machine code, plan, name): GET /api/license/request?plan=pro&name=Jane&email=jane@example.com
+    try { return json(res, 200, { ok: true, request: license.request({ plan: url.searchParams.get('plan') || 'pro', name: url.searchParams.get('name'), email: url.searchParams.get('email') }) }, cors); }
+    catch (e) { return json(res, e.status || 500, { ok: false, error: e.message }, cors); }
+  }
+  if (url.pathname === '/api/license') return json(res, 200, { ok: true, version: VERSION, ...license.status(), sandboxKey: license.sandboxJwk() }, cors);
 
   // OTA updates: is a newer, signed version published? (cached for 5 minutes, ?force=1 asks again)
   if (url.pathname === '/api/update') {
@@ -277,6 +292,7 @@ server.on('upgrade', (req, socket) => {
   Object.assign(handlers, pathname === '/ws/input' ? createInputSession(conn) : pathname === '/ws/duplex' ? createDuplexSession(conn) : pathname === '/ws/insert' ? pluginHost.createInsertSession(conn) : pathname === '/ws/virtual' ? virtualHub.session(conn) : createSession(conn));
 });
 
+server.on('connection', s => { openSockets_.add(s); s.once('close', () => openSockets_.delete(s)); });
 server.headersTimeout = 15000; server.requestTimeout = 60000; server.maxHeadersCount = 64; server.keepAliveTimeout = 5000;
 server.on('clientError', (_, socket) => { try { socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n'); } catch (_) { /* gone */ } });
 
