@@ -1,6 +1,6 @@
 'use strict';
 // Where things live in the repository. One folder per operating system holds everything of that system: its source, its drivers and its release files;
-// code shared by all systems stays in bridge/, client/, ota-server/, scripts/, deploy/ and drivers/common/ (the web app is index.html + boot.html at the root,
+// code shared by all systems stays in bridge/, client/, ota-server/, npm-installer/, scripts/, deploy/ and drivers/common/ (the web app is index.html + boot.html at the root,
 // because GitHub Pages serves it from there).
 //
 //   android/   app (src, kotlin, stubs), qt/ (Qt project), hal/ (audio HAL), releases/*.apk

@@ -1,0 +1,27 @@
+{
+  "name": "audio-mixer-installer",
+  "version": "1.7.0",
+  "description": "Installs Audio Mixer for this operating system (Windows setup / MSI, macOS app, Debian package or Linux archive) from a signed release manifest; checks the signature and the SHA-256 before anything runs.",
+  "license": "MIT",
+  "bin": {
+    "audio-mixer-install": "bin/audio-mixer-install.js"
+  },
+  "files": [
+    "bin",
+    "lib",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/amirf1389/audio-mixer.git",
+    "directory": "npm-installer"
+  },
+  "keywords": [
+    "audio-mixer",
+    "installer",
+    "asio"
+  ]
+}

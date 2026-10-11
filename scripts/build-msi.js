@@ -6,6 +6,7 @@
 // Needs wixl (msitools): Linux "apt install wixl". Packages are signed by build-installers.js / sign.js.
 // Install:  msiexec /i AudioMixer-1.4.0-x64.msi   (silent: /qn)   Uninstall: Settings > Apps > Audio Mixer, or msiexec /x <ProductCode>
 // Features: ADDLOCAL=Main,Shortcuts,Tools,CommandLine,PluginHost,WinHelpers,Desktop  (default: all, the desktop shortcut too; the setup program has /nodesktop)
+//   AsioDriver (off by default, add it to ADDLOCAL or use the setup program's /asio): registers the ASIO driver whose files are always in <install folder>\asio-driver
 //   CommandLine: audio-mixer.exe on PATH (system PATH for the all-users package, the user's PATH for the per-user one)
 //   PluginHost: native VST host (native/host), WinHelpers: native Windows audio device helpers (native/win); Tools: Start Menu shortcuts for license, plugins, drivers, update, doctor
 const fs = require('node:fs');
@@ -62,11 +63,37 @@ function filesXml(stage, win64 = false) {
   return { xml: walk(stage, '', '            '), comps, groups };
 }
 
+// The ASIO driver (stage/asio-driver/, see build-installers.js) is registered by the optional feature AsioDriver (Level 3 = off unless ADDLOCAL names it, the setup
+// program's /asio, or the question it asks): the same keys that regsvr32 writes (DllRegisterServer of the DLL), as MSI registry rows, so uninstalling removes them.
+// The 64-bit package registers the 64-bit DLL in the 64-bit registry and the 32-bit DLL in the 32-bit view (WOW6432Node); the 32-bit package only the 32-bit one.
+const ASIO_CLSID = '{C1893F2F-1AD5-4344-9806-DCFD242C0D48}';
+function asioXml({ stage, arch, scope }) {
+  const has = n => fs.existsSync(path.join(stage, 'asio-driver', n));
+  if (scope !== 'machine' || !has('AudioMixerASIO32.dll')) return { components: '', feature: '' };       // HKLM\SOFTWARE\ASIO is where hosts look: per-machine only
+  const comp = (id, dll, win64) => {
+    const clsid = `SOFTWARE\\Classes\\CLSID\\${ASIO_CLSID}`;
+    return `      <Component Id="${id}" Guid="${guid('asio:' + id)}"${win64 ? ' Win64="yes"' : ' Win64="no"'}>
+        <RegistryValue Root="HKLM" Key="${clsid}" Type="string" Value="Audio Mixer ASIO" KeyPath="yes"/>
+        <RegistryValue Root="HKLM" Key="${clsid}\\InprocServer32" Type="string" Value="[INSTALLDIR]asio-driver\\${dll}"/>
+        <RegistryValue Root="HKLM" Key="${clsid}\\InprocServer32" Name="ThreadingModel" Type="string" Value="Apartment"/>
+        <RegistryValue Root="HKLM" Key="SOFTWARE\\ASIO\\Audio Mixer" Name="CLSID" Type="string" Value="${ASIO_CLSID}"/>
+        <RegistryValue Root="HKLM" Key="SOFTWARE\\ASIO\\Audio Mixer" Name="Description" Type="string" Value="Audio Mixer"/>
+      </Component>\n`;
+  };
+  const ids = [];
+  let components = '    <DirectoryRef Id="INSTALLDIR">\n';
+  if (arch === 'x64' && has('AudioMixerASIO64.dll')) { components += comp('AsioReg64', 'AudioMixerASIO64.dll', true); ids.push('AsioReg64'); }
+  components += comp('AsioReg32', 'AudioMixerASIO32.dll', false); ids.push('AsioReg32');
+  components += '    </DirectoryRef>\n';
+  return { components, feature: `    <Feature Id="AsioDriver" Title="Register the Audio Mixer ASIO driver (appears in ASIO hosts: DAWs, OBS ...)" Level="3">${ids.map(i => `<ComponentRef Id="${i}"/>`).join('')}</Feature>\n` };
+}
+
 function wxs({ stage, version, arch = 'x64', scope = 'machine' }) {
   if (!['x64', 'x86'].includes(arch) || !['machine', 'user'].includes(scope)) throw new Error('bad arch / scope');
   const win64 = arch === 'x64', machine = scope === 'machine', root = machine ? 'HKLM' : 'HKCU';
   const { xml, comps, groups } = filesXml(stage, win64);
   const w64 = win64 ? ' Win64="yes"' : '';
+  const asio = asioXml({ stage, arch, scope });
   // start-up screen: the signed native launcher shows the boot animation while the server starts, then opens the mixer in the browser
   const hasIcon = fs.existsSync(path.join(stage, 'AudioMixerServer.exe'));   // the launcher carries the application icon
   const scBoot = (id, name, desc) => `        <Shortcut Id="${id}" Name="${esc(name)}" Target="[INSTALLDIR]AudioMixerServer.exe" Arguments="/open" WorkingDirectory="INSTALLDIR" Description="${esc(desc)}"${hasIcon ? ' Icon="AudioMixer.exe"' : ''}/>\n`;
@@ -136,7 +163,7 @@ ${scBoot('ScDesk', 'Audio Mixer', 'Start PC mode (boot screen)')}        <Regist
       </Component>
     </DirectoryRef>
 
-    <Feature Id="Main" Title="Audio Mixer and local server" Level="1" Absent="disallow">
+${asio.components}    <Feature Id="Main" Title="Audio Mixer and local server" Level="1" Absent="disallow">
 ${comps.map(c => `      <ComponentRef Id="${c}"/>\n`).join('')}      <ComponentRef Id="InstallKey"/>
     </Feature>
     <Feature Id="Shortcuts" Title="Start Menu shortcuts" Level="1"><ComponentRef Id="MenuShortcuts"/><ComponentRef Id="StartRootShortcut"/></Feature>
@@ -147,7 +174,7 @@ ${groups.PluginHost.map(c => `      <ComponentRef Id="${c}"/>\n`).join('')}    <
 ${groups.WinHelpers.map(c => `      <ComponentRef Id="${c}"/>\n`).join('')}    </Feature>
     <Feature Id="CommandLine" Title="audio-mixer command on PATH (doctor, npm, setup, uninstall ...)" Level="1"><ComponentRef Id="CommandPath"/></Feature>
     <Feature Id="Desktop" Title="Desktop shortcut" Level="1"><ComponentRef Id="DesktopShortcut"/></Feature>
-
+${asio.feature}
     <UIRef Id="WixUI_Minimal"/>
   </Product>
 </Wix>
@@ -196,4 +223,4 @@ if (require.main === module) {
     console.log(`MSI: ${r.msi}\nProduct code: ${r.productCode}\nSHA-256: ${r.sha256}\nUnsigned (see build-installers.js for signing).`);
   }).catch(e => { console.error('MSI build failed: ' + e.message); process.exit(1); });
 }
-module.exports = { addPathEntry, buildMsi, wxs, guid, rtf, filesXml, productCode, UPGRADE_CODES };
+module.exports = { asioXml, addPathEntry, buildMsi, wxs, guid, rtf, filesXml, productCode, UPGRADE_CODES };

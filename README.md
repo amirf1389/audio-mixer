@@ -19,6 +19,7 @@ linux/      alsa-plugin/, start-pc-mode.sh, ensure-node.sh, releases/  *.deb *.t
 bridge/     the local server (Node.js)             client/      the launcher / command line
 ota-server/ the update server                      deploy/      hosting files (nginx, fail2ban, OTA server)
 scripts/    build and release tools                drivers/     what the system drivers share (common/am_link) and their README
+npm-installer/  the npm package audio-mixer-installer: installs Audio Mixer the way each system does it
 releases/   update.json: the signed update manifest that installed apps fetch (its file URLs point into the <os>/releases/ folders)
 ```
 
@@ -471,3 +472,19 @@ The OTA server now also serves the **system driver** next to the app, from the s
 - **`GET /driver`** redirects (302) to the driver file for the system that asks, found like `/latest` (`?os=`, Client Hints, user agent; `?channel=`). Systems without a published driver file get 404 (the Linux ALSA plugin, the macOS plug-in and the Android HAL are source code, see `drivers/README.md`).
 - **`GET /api/latest`** has a new `driver` field (`{ key, label, name, url, size, sha256, how }` or `null`); the driver is not repeated in `others`. The app's `GET /api/update` result has the same `driver` field. `/latest` and the app's installer download are unchanged: the driver never replaces the installer, and the app setup never installs a driver (`how` says: unpack the zip, run `register.bat` as administrator).
 - Checked in `bridge/test.js` against the real server and the real update client. Not tested: a public host, and the driver in a real ASIO host.
+
+## Windows installers with the ASIO driver, npm installer, phone layout (1.7.0.0)
+
+**Windows: system files for Program Files and Program Files (x86), including the ASIO driver.**
+- `AudioMixer-<version>-x64.msi` installs to `C:\Program Files\Audio Mixer`, `AudioMixer-<version>-x86.msi` to `C:\Program Files (x86)\Audio Mixer`; the setup `.exe` carries the 64-bit package. Both now contain the **ASIO driver files** in the `asio-driver\` folder of the install folder: `AudioMixerASIO32.dll`, and `AudioMixerASIO64.dll` in the 64-bit package (64-bit Windows runs 32-bit and 64-bit hosts), `register.bat`, `unregister.bat`. The DLLs are signed and listed in `MANIFEST.sha256` (the verify scan covers them).
+- **Registering the driver is optional and off by default** (it is the MSI feature `AsioDriver`, the registry rows of `HKLM\SOFTWARE\ASIO\Audio Mixer`; the 64-bit package writes both registry views). The setup program asks once in an interactive install (default answer **No**); `/asio` registers it, `/noasio` skips the question, `/quiet` never registers it unless `/asio` is given. With `msiexec`: `ADDLOCAL=Main,Shortcuts,Tools,CommandLine,PluginHost,WinHelpers,Desktop,AsioDriver`. Uninstalling removes the registry rows the feature wrote. If you registered the driver by hand with `register.bat`, run `unregister.bat` before uninstalling (the MSI cannot know about it).
+- Checked: the packages were built and their tables inspected (feature level 3, both registry views, the files under Program Files / Program Files (x86)). Not tested: installing on a real Windows PC and the driver in a real ASIO host.
+
+**npm installer (`npm-installer/`, package `audio-mixer-installer`).** `npx audio-mixer-install` (or `node npm-installer/bin/audio-mixer-install.js` from a checkout) picks the file for the system it runs on from the signed release manifest and runs that system's own installation: Windows 64-bit the setup `.exe` (UAC prompt), Windows 32-bit the `.msi`, macOS `install.command` from the archive, Debian / Ubuntu `apt install` of the `.deb`, other Linux `install.sh`; Android / iOS files are only downloaded (with how-to). The manifest must carry the Audio Mixer signature and a file must match its SHA-256 before anything runs. `--dry-run` shows the steps, `--yes` asks nothing, `--asio` registers the Windows driver, `--dir <releases folder>` / `--file` install without a network, `--server` uses your OTA server, `uninstall` removes. No dependencies, nothing is installed by merely installing the package. Not published to npm by this repository; `releases/update.json` must be signed for the version you want (the committed one is old).
+
+**Phone layout (Android app, iOS app, phone browsers).** On a narrow touch screen (width up to 700 px with a coarse pointer; `?phone=1` / `?phone=0` force it on / off) the page switches to a phone layout; tablets, laptops and desktops are unchanged (the element geometry of the page was compared with the previous page at 1280 px, 820 px touch and 390 px mouse: identical):
+- a **bottom bar** (Mixer, Sources, Meters, FX rack, All pages) instead of the strip of 30 small buttons; **All pages** opens a sheet with every page as a big tile in the old groups, plus the header actions that no longer fit (Knox, reboot, fit screen, admin vault);
+- the mixer: a shorter header and tool rows, **wider channel strips with a big fader and readable text** (was 5 to 7 px), 40 px mute / solo buttons, snapping scroll, and the **Monitor** section opens from a button instead of taking a fifth of the width;
+- one compact message instead of a stack of notifications over the page, smaller page titles, 34 px minimum touch targets, safe areas for the notch and home indicator.
+Checked in Chromium with a phone viewport and touch (mixer, monitor, page sheet, Sources, EQ, Bus pages). Not tested: on a real phone or in the iOS / Android shells; landscape phones keep the previous layout.
+

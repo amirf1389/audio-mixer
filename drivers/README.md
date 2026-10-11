@@ -30,10 +30,10 @@ The device then shows up like any interface: `GET /api/virtual` lists the connec
 
 Real-time rules the drivers follow: no network work in the audio callback (the link has its own thread), no blocking when the mixer is not running (the device keeps its clock and is silent; the driver reconnects about once a second). The connection is bounded: all mixer ports are tried at once for 300 ms at most, the handshake takes 800 ms at most and a send 100 ms; the Windows driver connects on its own thread.
 
-## Install (each one is a deliberate step; the Audio Mixer setup programs install no driver)
+## Install (each one is a deliberate step; the Audio Mixer setup programs only register the ASIO driver when you ask them to)
 
 ### Windows: ASIO driver
-Get `AudioMixer-<version>-asio-driver-windows.zip` (built by `node scripts/build-drivers.js`), unpack it somewhere permanent, run `register.bat` as administrator (it runs `regsvr32` on the DLLs), start Audio Mixer, and choose **Audio Mixer** as the ASIO driver in your program. `unregister.bat` removes it. Details in the zip's `README.txt`. The interface was implemented from its published description; no Steinberg SDK file is included ("ASIO" is a trademark of Steinberg Media Technologies GmbH).
+The Windows installers (`.msi`, setup `.exe`) already contain the driver files in the `asio-driver` folder of the install folder (Program Files, or Program Files (x86)); the setup asks whether to register it (default No; `/asio` yes), see README.md (1.7.0.0). Or get `AudioMixer-<version>-asio-driver-windows.zip` (built by `node scripts/build-drivers.js`), unpack it somewhere permanent, run `register.bat` as administrator (it runs `regsvr32` on the DLLs), start Audio Mixer, and choose **Audio Mixer** as the ASIO driver in your program. `unregister.bat` removes it. Details in the zip's `README.txt`. The interface was implemented from its published description; no Steinberg SDK file is included ("ASIO" is a trademark of Steinberg Media Technologies GmbH).
 
 ### Linux: ALSA plugin
 ```

@@ -493,6 +493,82 @@ CRITICAL REVISIONS & ARCHITECTURAL UPGRADES:
             will-change: transform, opacity;
         }
 </style>
+    <!-- PHONE LAYOUT: only on narrow touch screens (the Android app, the iOS app, a phone browser): html.phone-ui is set by the script at the end of the page.
+         Nothing here applies to tablets, laptops or desktops; ?phone=1 / ?phone=0 force it on / off. -->
+    <style id="phone-ui-css">
+        #phone-bar, #phone-sheet, #phone-mon-btn { display: none; }
+        #phone-mon-btn.floating { position: fixed; right: 10px; bottom: calc(var(--pb-h) + env(safe-area-inset-bottom) + 10px); z-index: 70001; box-shadow: 0 4px 16px rgba(0,0,0,0.7); }
+        html.phone-ui { --pb-h: 58px; }
+        /* safe areas (notch, home indicator) and no accidental text selection / zoom while playing the faders */
+        html.phone-ui body { padding: 0 !important; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; }
+        html.phone-ui input, html.phone-ui textarea, html.phone-ui [contenteditable] { -webkit-user-select: text; user-select: text; }
+        html.phone-ui #app-chassis { padding-top: env(safe-area-inset-top); height: 100dvh; }
+        /* the header: the few controls a hand reaches for; the rest is in "All pages" */
+        html.phone-ui #app-chassis > header { height: 46px; padding: 0 8px; }
+        html.phone-ui #app-chassis > header button[onclick*="rebootSystem"], html.phone-ui #btn-knox-toggle, html.phone-ui #btn-screen-toggle, html.phone-ui #app-chassis > header button[onclick*="'admin'"] { display: none !important; }
+        html.phone-ui #app-chassis > header button { min-width: 40px; min-height: 36px; }
+        html.phone-ui #header-groove-btn { padding: 4px 10px; font-size: 10px; }
+        /* the old horizontal page strip is replaced by the bottom bar and the page sheet (the strip stays in the page: the sheet reads it) */
+        html.phone-ui #main-nav { display: none !important; }
+        html.phone-ui #phone-bar { display: flex; order: 3; flex: 0 0 auto; height: calc(var(--pb-h) + env(safe-area-inset-bottom)); padding: 0 4px env(safe-area-inset-bottom); background: linear-gradient(180deg, rgba(13,16,23,0.98), rgba(5,6,8,0.99)); border-top: 1px solid rgba(255,255,255,0.1); z-index: 60; }
+        html.phone-ui .tab-content { padding-bottom: 0.75rem; }
+        #phone-bar button { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; background: none; border: 0; color: #94a3b8; font: 800 9.5px/1 ui-monospace, monospace; letter-spacing: .06em; text-transform: uppercase; position: relative; }
+        #phone-bar button:focus, #phone-sheet button:focus { outline: none; }
+        #phone-bar button:focus-visible, #phone-sheet button:focus-visible { outline: 2px solid var(--wing-orange); outline-offset: -3px; }
+        #phone-bar button i { font-size: 18px; }
+        #phone-bar button.on { color: var(--wing-orange); }
+        #phone-bar button.on::before { content: ''; position: absolute; top: 0; left: 22%; right: 22%; height: 3px; border-radius: 0 0 3px 3px; background: var(--wing-orange); box-shadow: 0 0 10px var(--wing-orange-glow); }
+        #phone-bar button small { font-size: 7.5px; color: #64748b; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
+        /* all pages: a sheet from the bottom, grouped like the old strip, big tiles */
+        html.phone-ui #phone-sheet { display: block; position: fixed; inset: 0; z-index: 130000; visibility: hidden; pointer-events: none; }
+        #phone-sheet .scrim { position: absolute; inset: 0; background: rgba(0,0,0,0.6); opacity: 0; transition: opacity .18s; }
+        #phone-sheet .panel { position: absolute; left: 0; right: 0; bottom: 0; max-height: 84dvh; display: flex; flex-direction: column; background: #0b0e15; border-top: 1px solid rgba(255,106,0,0.45); border-radius: 18px 18px 0 0; transform: translateY(100%); transition: transform .2s ease-out; padding-bottom: env(safe-area-inset-bottom); box-shadow: 0 -12px 40px rgba(0,0,0,0.7); }
+        html.phone-ui #phone-sheet.open { visibility: visible; pointer-events: auto; }
+        #phone-sheet.open .scrim { opacity: 1; } #phone-sheet.open .panel { transform: none; }
+        #phone-sheet .grab { width: 40px; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.25); margin: 8px auto 2px; }
+        #phone-sheet .head { display: flex; align-items: center; justify-content: space-between; padding: 6px 14px 8px; font: 900 12px/1 ui-monospace, monospace; letter-spacing: .14em; color: #e2e8f0; }
+        #phone-sheet .head button { width: 40px; height: 36px; border-radius: 8px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); color: #cbd5e1; font-size: 16px; }
+        #phone-sheet .body { overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0 12px 14px; overscroll-behavior: contain; }
+        #phone-sheet h4 { margin: 12px 2px 6px; font: 900 9px/1 ui-monospace, monospace; letter-spacing: .18em; color: #64748b; text-transform: uppercase; }
+        #phone-sheet .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+        #phone-sheet .tile { min-height: 64px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 8px 4px; border-radius: 12px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.09); color: #cbd5e1; font: 800 9.5px/1.15 ui-monospace, monospace; letter-spacing: .04em; text-align: center; text-transform: uppercase; }
+        #phone-sheet .tile i { font-size: 19px; }
+        #phone-sheet .tile.on { background: rgba(255,106,0,0.16); border-color: rgba(255,106,0,0.7); color: var(--wing-orange); }
+        #phone-sheet .tile:active { transform: scale(.97); }
+        #phone-sheet .quick .tile { min-height: 52px; flex-direction: row; gap: 8px; font-size: 10px; }
+        /* notifications: one compact message under the header instead of a stack that covers the page */
+        html.phone-ui #notify-stack { top: calc(env(safe-area-inset-top) + 50px); left: 10px; right: 10px; max-width: none; align-items: center; }
+        html.phone-ui #notify-stack > .notification:not(:last-child) { display: none; }
+        html.phone-ui #notify-stack .notification { padding: 8px 14px; font-size: 11px; border-radius: 999px; max-width: 100%; }
+        html.phone-ui #quick-send-modal { bottom: calc(var(--pb-h) + env(safe-area-inset-bottom) + 8px); }
+        /* page titles and their sub-lines: smaller, so the controls come first */
+        html.phone-ui .tab-content h1, html.phone-ui .tab-content h2 { font-size: 15px !important; line-height: 1.25 !important; letter-spacing: .02em; }
+        html.phone-ui .tab-content h2 + p, html.phone-ui .tab-content h1 + p { font-size: 9px !important; line-height: 1.45 !important; }
+        /* touch targets */
+        html.phone-ui .tab-content button, html.phone-ui .tab-content select { min-height: 34px; }
+        html.phone-ui .tab-content input[type="checkbox"] { width: 20px; height: 20px; }
+        /* the mixer: strips use the whole width, bigger text, a big fader; the monitor section opens from a button */
+        html.phone-ui #tab-mixer > div > .glass-panel:first-child { padding: 6px 8px; }
+        html.phone-ui #asio-meter-strip { padding-top: 3px; padding-bottom: 3px; }
+        html.phone-ui #asio-meter-rows { display: none; }
+        html.phone-ui #mixer-lanes-container { scroll-snap-type: x proximity; scroll-padding: 0 6px; padding-bottom: 2px; flex: 1 1 100%; }
+        html.phone-ui #mixer-lanes-container + div { display: none; position: fixed; left: 8px; right: 8px; bottom: calc(var(--pb-h) + env(safe-area-inset-bottom) + 8px); width: auto; max-height: 56dvh; overflow-y: auto; z-index: 70000; background: #0b0e15; box-shadow: 0 10px 40px rgba(0,0,0,0.85); }
+        html.phone-ui.mon-open #mixer-lanes-container + div { display: flex; }
+        html.phone-ui #mixer-lanes-container .mixer-lane { min-width: 100px; max-width: 100px; scroll-snap-align: start; padding: 6px 5px; }
+        html.phone-ui .mixer-lane span, html.phone-ui .mixer-lane button { font-size: 9.5px !important; }
+        html.phone-ui .mixer-lane .db-scale span { font-size: 8px !important; }
+        html.phone-ui .mixer-lane [id^="db-val-"] { font-size: 10px !important; }
+        html.phone-ui .mixer-lane .ch-clip-led { font-size: 7.5px !important; }
+        html.phone-ui .mixer-lane [id^="btn-mute-"], html.phone-ui .mixer-lane [id^="btn-solo-"] { min-height: 40px; font-size: 12px !important; }
+        html.phone-ui .mixer-lane [id^="ch-src-btn-"], html.phone-ui .mixer-lane .grid button { min-height: 28px; }
+        html.phone-ui .mixer-lane .daw-fader { width: 34px; }
+        html.phone-ui .mixer-lane .daw-fader::-webkit-slider-thumb { width: 36px; height: 50px; }
+        html.phone-ui .mixer-lane .daw-fader::-moz-range-thumb { width: 36px; height: 50px; }
+        html.phone-ui .mixer-lane > .flex-1 { min-height: 190px; max-height: none; }
+        html.phone-ui #phone-mon-btn { display: flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; margin-left: auto; border-radius: 999px; background: rgba(15,18,27,0.95); border: 1px solid rgba(255,106,0,0.6); color: var(--wing-orange); font: 900 10px/1 ui-monospace, monospace; letter-spacing: .1em; }
+        html.phone-ui:not(.on-mixer) #phone-mon-btn { display: none; }
+        html.phone-ui.mon-open #phone-mon-btn { background: var(--wing-orange); color: #000; }
+    </style>
 </head>
 <body>
 <script id="poweron-boot">
@@ -18380,6 +18456,96 @@ registerProcessor('am-lufs',P)`;
         RT().on(now => { try { B.ensure(now); if (visible('bluetooth') || !B.el) B.render(now); } catch (e) { /* page not ready */ } });
     }, 250);
 })();
+    </script>
+    <script id="phone-ui-js">
+    /* PHONE LAYOUT (see #phone-ui-css): the bottom bar (Mixer, Sources, Meters, FX rack, All pages), the page sheet and the monitor button of the mixer.
+       Everything calls the page's own functions and reads the page strip (#main-nav), so plans, locked pages and new pages are followed automatically. */
+    (function () {
+        const root = document.documentElement;
+        const mq = window.matchMedia('(max-width: 700px) and (pointer: coarse)');
+        const forced = () => { try { if (/[?&]phone=0\b/.test(location.search) || localStorage.getItem('am-phone-ui') === '0') return 0; if (/[?&]phone=1\b/.test(location.search) || localStorage.getItem('am-phone-ui') === '1') return 1; } catch (_) { /* storage blocked */ } return null; };
+        const decide = () => { const f = forced(); return f === null ? mq.matches : f === 1; };
+        const PRIMARY = [['mixer', 'Mixer', 'fa-sliders'], ['live', 'Sources', 'fa-tower-broadcast'], ['meter', 'Meters', 'fa-chart-simple'], ['fx', 'FX rack', 'fa-wand-magic-sparkles']];
+        let bar, sheet, mon;
+        const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
+        const nav = () => document.getElementById('main-nav');
+        const buttons = () => [...(nav() ? nav().querySelectorAll('.nav-btn') : [])].filter(b => !b.classList.contains('hidden') && b.style.display !== 'none');
+        const activeBtn = () => nav() && nav().querySelector('.nav-btn.active-btn');
+        const labelOf = b => { const s = b.querySelector('span'); return (s ? s.textContent : b.textContent).trim(); };
+
+        function closeSheet() { if (sheet) sheet.classList.remove('open'); }
+        function openSheet() {
+            const body = sheet.querySelector('.body'), act = activeBtn();
+            body.innerHTML = '';
+            let grid = null;
+            for (const c of nav() ? [...nav().children] : []) {
+                if (c.classList.contains('nav-group')) { body.appendChild(el('h4', '', c.textContent.trim())); grid = body.appendChild(el('div', 'grid')); continue; }
+                if (!c.classList.contains('nav-btn') || c.classList.contains('hidden') || c.style.display === 'none') continue;
+                if (!grid) grid = body.appendChild(el('div', 'grid'));
+                const i = c.querySelector('i'), t = el('button', 'tile' + (c === act ? ' on' : ''), (i ? '<i class="' + i.className + '"></i>' : '') + '<span></span>');
+                t.querySelector('span').textContent = labelOf(c);
+                t.onclick = () => { closeSheet(); c.click(); };
+                grid.appendChild(t);
+            }
+            // what the header showed on larger screens
+            const q = el('div', 'quick'); q.appendChild(el('h4', '', 'Quick actions')); const g = q.appendChild(el('div', 'grid'));
+            const add = (icon, text, fn) => { if (typeof fn !== 'function') return; const t = el('button', 'tile', '<i class="fa-solid ' + icon + '"></i><span></span>'); t.querySelector('span').textContent = text; t.onclick = () => { closeSheet(); fn(); }; g.appendChild(t); };
+            const knox = document.getElementById('knox-text');
+            add('fa-shield-halved', knox ? knox.textContent.trim() : 'Knox', window.requestKnoxToggle);
+            add('fa-rotate', 'Reboot console', window.rebootSystem);
+            add('fa-expand', 'Fit / full screen', window.toggleScreenFit);
+            add('fa-lock', 'Admin vault', () => window.switchTab && window.switchTab('admin'));
+            body.insertBefore(q, body.firstChild);
+            sheet.classList.add('open');
+        }
+
+        function placeMon() {   // the mixer's toolbar: the button sits in its second row
+            if (!mon || !mon.classList.contains('floating')) return;
+            const tools = document.querySelector('#tab-mixer .glass-panel'), row = tools && tools.children[1];
+            if (row) { row.appendChild(mon); mon.classList.remove('floating'); }
+        }
+
+        function sync() {
+            if (!bar) return;
+            placeMon();
+            const act = activeBtn(), id = act ? act.id.replace(/^nav-/, '') : '';
+            bar.querySelectorAll('button[data-tab]').forEach(b => b.classList.toggle('on', b.dataset.tab === id));
+            const more = bar.querySelector('button[data-more]'), primary = PRIMARY.some(p => p[0] === id);
+            more.classList.toggle('on', !!act && !primary); more.querySelector('small').textContent = act && !primary ? labelOf(act) : '';
+            const onMixer = id === 'mixer';
+            if (root.classList.contains('on-mixer') !== onMixer) root.classList.toggle('on-mixer', onMixer);
+            if (!onMixer) root.classList.remove('mon-open');
+        }
+
+        function build() {
+            if (bar) return;
+            const wrap = nav() && nav().parentElement; if (!wrap) return;
+            bar = el('div'); bar.id = 'phone-bar'; bar.setAttribute('role', 'tablist');
+            for (const [tab, text, icon] of PRIMARY) {
+                const b = el('button', '', '<i class="fa-solid ' + icon + '"></i><span>' + text + '</span>'); b.dataset.tab = tab; b.setAttribute('role', 'tab');
+                b.onclick = () => { closeSheet(); if (window.switchTab) window.switchTab(tab); };
+                bar.appendChild(b);
+            }
+            const more = el('button', '', '<i class="fa-solid fa-grip"></i><span>All pages</span><small></small>'); more.dataset.more = '1';
+            more.onclick = () => (sheet.classList.contains('open') ? closeSheet() : openSheet());
+            bar.appendChild(more); wrap.appendChild(bar);
+            sheet = el('div'); sheet.id = 'phone-sheet';
+            sheet.innerHTML = '<div class="scrim"></div><div class="panel" role="dialog" aria-label="All pages"><div class="grab"></div><div class="head"><span>ALL PAGES</span><button type="button" aria-label="Close">✕</button></div><div class="body"></div></div>';
+            sheet.querySelector('.scrim').onclick = closeSheet; sheet.querySelector('.head button').onclick = closeSheet;
+            document.body.appendChild(sheet);
+            mon = el('button', '', '<i class="fa-solid fa-headphones"></i><span>MONITOR</span>'); mon.id = 'phone-mon-btn'; mon.type = 'button';
+            mon.onclick = () => root.classList.toggle('mon-open');
+            document.body.appendChild(mon); mon.classList.add('floating');   // moved into the mixer's toolbar as soon as that exists (placeMon)
+            document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeSheet(); root.classList.remove('mon-open'); } });
+            new MutationObserver(() => { sync(); closeSheet(); }).observe(nav(), { subtree: true, childList: true, attributes: true, attributeFilter: ['class'] });
+            sync();
+        }
+
+        function apply() { const on = decide(); root.classList.toggle('phone-ui', on); if (on) build(); if (!on) { closeSheet(); root.classList.remove('mon-open', 'on-mixer'); } else sync(); }
+        apply(); document.addEventListener('DOMContentLoaded', apply);
+        (mq.addEventListener ? mq.addEventListener('change', apply) : mq.addListener(apply));
+        window.addEventListener('load', apply);
+    })();
     </script>
 </body>
 </html>
