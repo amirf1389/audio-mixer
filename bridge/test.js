@@ -3215,3 +3215,23 @@ test('exclusive access: ASIO is exclusive by nature, the hog flag is asked of Co
   assert.match(html, /nativeInput\(i\) \{ return !!\(this\.bridgeUrl && this\.portaudio && \(i\.apis \|\| \[\]\)\.some\(a => a\.inputs > 0\)\); \}/);
   assert.match(html, /this\.preferNative\(sel, ins\.concat\(au\), 'selectedInputDeviceId'\)/); assert.match(html, /this\.preferNative\(sel, outs\.concat\(au\), 'selectedOutputDeviceId'\)/);
 });
+
+test('music FFT spectrum: the RTA music trace and the PEQ overlay use a 4096-point analyser on the labelled frequency axis; MIC ONLY / MUSIC ONLY / DUAL work; the Live Sources music feeds the RTA', () => {
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  // a dedicated analyser: the 512-point program bus analyser stays for the scope
+  assert.match(html, /const musicFftAnalyser = window\.state\.ctx\.createAnalyser\(\);\s*musicFftAnalyser\.fftSize = 4096;/);
+  assert.match(html, /masterLimiter\.connect\(musicFftAnalyser\);\s*window\.state\.nodes\.musicFftAnalyser = musicFftAnalyser;/);
+  assert.match(html, /musicAnalyser\.fftSize = 512;/);
+  // the RTA: one source (Live Sources music, else the program bus while powered on), the mode, the same band axis as the mic trace
+  assert.match(html, /const rtaMode = \(window\.musicRtaEngine && window\.musicRtaEngine\.mode\) \|\| 'dual';/);
+  assert.match(html, /const extMusic = window\.liveSources && window\.liveSources\.music && window\.liveSources\.music\.analyser;/);
+  assert.match(html, /const musicAn = extMusic \|\| \(window\.state\.active \? window\.state\.nodes\.musicFftAnalyser : null\);/);
+  assert.match(html, /if \(rtaMode !== 'mic' && musicAn\) \{/); assert.match(html, /if \(rtaMode !== 'music' && \(window\.state\.micActive \|\| window\.state\.micFeeds\)/);
+  assert.ok(!/Math\.pow\(i \/ bars, 1\.7\)/.test(html) && !/Math\.pow\(i \/ bars, 1\.6\)/.test(html), 'the old power-law bin mapping (it did not match the labels) is gone');
+  // the PEQ overlay follows the curve's own axis (band k at x = step * (k + 1))
+  assert.match(html, /const hzAtX = x => \{ const t = x \/ eqStep - 1, k = Math\.max\(0, Math\.min\(EQ_BANDS\.length - 2, Math\.floor\(t\)\)\);/);
+  // the same band axis, run for real: a tone must land on the bar of its label
+  const AX = [20, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000, 20000], hzAt = x => { const t = Math.min(1, Math.max(0, x)) * (AX.length - 1), k = Math.min(AX.length - 2, Math.floor(t)); return AX[k] * Math.pow(AX[k + 1] / AX[k], t - k); };
+  const barOf = hz => { for (let i = 0; i < 64; i++) if (hz >= hzAt(i / 64) && hz < hzAt((i + 1) / 64)) return i; return -1; };
+  assert.deepStrictEqual([250, 1000, 4000, 8000].map(barOf), [19, 32, 44, 51]);
+});

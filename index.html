@@ -1208,6 +1208,12 @@ window.navTabs = [
             musicAnalyser.smoothingTimeConstant = 0.8;
             masterLimiter.connect(musicAnalyser);
             musicAnalyser.connect(window.state.ctx.destination);
+            // Program bus spectrum (RTA): 4096 points like the mic analyser (11.7 Hz per bin at 48 kHz). musicAnalyser stays at 512 points for the scope and the PEQ overlay.
+            const musicFftAnalyser = window.state.ctx.createAnalyser();
+            musicFftAnalyser.fftSize = 4096;
+            musicFftAnalyser.smoothingTimeConstant = 0.8;
+            masterLimiter.connect(musicFftAnalyser);
+            window.state.nodes.musicFftAnalyser = musicFftAnalyser;
 
             // Stereo tap for the phase scope / correlation meter (post-limiter L and R)
             const phaseSplit = window.state.ctx.createChannelSplitter(2);
@@ -9119,20 +9125,27 @@ window.navTabs = [
                 }
 
                 const driverKey = window.state.selectedAudioDriver || 'windows';
+                const rtaMode = (window.musicRtaEngine && window.musicRtaEngine.mode) || 'dual';   // DUAL / MIC ONLY / MUSIC ONLY (window.musicRtaEngine.setMode)
 
-                // 1. Program Bus / Multi-OS Audio Driver FFT Trace
-                if (window.state.active && window.state.nodes.musicAnalyser && window.state.musicData) {
+                // 1. Music FFT Trace: the music of LIVE SOURCES (Now Playing capture, loopback interface, shared system / tab audio) when there is one, else the program bus
+                //    (while the console is powered on). Bars sit on the labelled axis (20 Hz, 63, 125 ... 20 kHz) like the mic trace; a bar shows the loudest bin of its band.
+                const extMusic = window.liveSources && window.liveSources.music && window.liveSources.music.analyser;
+                const musicAn = extMusic || (window.state.active ? window.state.nodes.musicFftAnalyser : null);
+                if (rtaMode !== 'mic' && musicAn) {
+                    if (!window.state.musicFftData || window.state.musicFftData.length !== musicAn.frequencyBinCount) window.state.musicFftData = new Uint8Array(musicAn.frequencyBinCount);
                     if (!window.rtaState || !window.rtaState.frozen) { 
-                        window.state.nodes.musicAnalyser.getByteFrequencyData(window.state.musicData); 
+                        musicAn.getByteFrequencyData(window.state.musicFftData); 
                     }
+                    const mfd = window.state.musicFftData, mBinHz = musicAn.context.sampleRate / musicAn.fftSize, MAX = [20, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000, 20000];
+                    const mHzAt = x => { const t = Math.min(1, Math.max(0, x)) * (MAX.length - 1), k = Math.min(MAX.length - 2, Math.floor(t)); return MAX[k] * Math.pow(MAX[k + 1] / MAX[k], t - k); };
                     if (!window.rtaState) window.rtaState = { frozen: false, peaks: new Float32Array(bars) };
                     if (!window.rtaState.peaks || window.rtaState.peaks.length !== bars) {
                         window.rtaState.peaks = new Float32Array(bars);
                     }
 
                     for (let i = 0; i < bars; i++) {
-                        const bin = Math.min(Math.floor(Math.pow(i / bars, 1.7) * window.state.musicData.length), window.state.musicData.length - 1);
-                        let val = window.state.musicData[bin] || 0;
+                        const b0 = Math.min(mfd.length - 1, Math.max(0, Math.floor(mHzAt(i / bars) / mBinHz))), b1 = Math.min(mfd.length - 1, Math.max(b0, Math.ceil(mHzAt((i + 1) / bars) / mBinHz)));
+                        let val = 0; for (let bn = b0; bn <= b1; bn++) if (mfd[bn] > val) val = mfd[bn];
 
 
                         const h = Math.max(2, (val / 255) * canvas.height * 0.92);
@@ -9179,7 +9192,7 @@ window.navTabs = [
                 }
 
                 // 2. Live Mic FFT Trace (Neon Cyan)
-                if ((window.state.micActive || window.state.micFeeds) && window.state.nodes.micAnalyser && window.state.micData) {
+                if (rtaMode !== 'music' && (window.state.micActive || window.state.micFeeds) && window.state.nodes.micAnalyser && window.state.micData) {
                     if (!window.rtaState || !window.rtaState.frozen) { window.state.nodes.micAnalyser.getByteFrequencyData(window.state.micData); }
                     ctx.strokeStyle = '#00f2ff';
                     ctx.lineWidth = 1.5;
@@ -11063,11 +11076,16 @@ window.navTabs = [
                 const bars = 64;
                 const barW = canvas.width / bars;
 
-                if (window.state.active && window.state.nodes.musicAnalyser && window.state.musicData) {
-                    window.state.nodes.musicAnalyser.getByteFrequencyData(window.state.musicData);
+                const fftAn = window.state.nodes.musicFftAnalyser;
+                if (window.state.active && fftAn) {
+                    // 4096-point program bus analyser; the bars sit on the curve's own frequency axis (band k of the 10 bands at x = step * (k + 1)), the loudest bin of a bar's band is shown
+                    if (!window.state.musicFftData || window.state.musicFftData.length !== fftAn.frequencyBinCount) window.state.musicFftData = new Uint8Array(fftAn.frequencyBinCount);
+                    fftAn.getByteFrequencyData(window.state.musicFftData);
+                    const fd = window.state.musicFftData, fBinHz = fftAn.context.sampleRate / fftAn.fftSize, eqStep = canvas.width / (EQ_BANDS.length + 1);
+                    const hzAtX = x => { const t = x / eqStep - 1, k = Math.max(0, Math.min(EQ_BANDS.length - 2, Math.floor(t))); return EQ_BANDS[k] * Math.pow(EQ_BANDS[k + 1] / EQ_BANDS[k], t - k); };
                     for (let i = 0; i < bars; i++) {
-                        const bin = Math.min(Math.floor(Math.pow(i / bars, 1.6) * window.state.musicData.length), window.state.musicData.length - 1);
-                        const val = window.state.musicData[bin] || 0;
+                        const f0 = Math.min(fd.length - 1, Math.max(0, Math.floor(hzAtX(i * barW) / fBinHz))), f1 = Math.min(fd.length - 1, Math.max(f0, Math.ceil(hzAtX((i + 1) * barW) / fBinHz)));
+                        let val = 0; for (let bn = f0; bn <= f1; bn++) if (fd[bn] > val) val = fd[bn];
                         const h = (val / 255) * canvas.height * 0.85;
 
                         // Gradient translucent bars behind curve
