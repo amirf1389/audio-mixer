@@ -3111,10 +3111,10 @@ test('Linux and macOS own mechanisms: profile.d / environment.d, mime type + des
   assert.match(u.MAC_UNINSTALL, /com\.audiomixer\.env/); assert.match(u.MAC_UNINSTALL, /\/etc\/paths\.d\/audio-mixer/);
   assert.ok(!/CFBundleDocumentTypes|CFBundleURLTypes/.test(u.infoPlist('1.0.0')));
   for (const [n, t] of [['mi', u.MAC_INSTALL], ['mu', u.MAC_UNINSTALL], ['mc', u.MAC_COMMAND]]) { const f = pathx.join(out, n + '.sh'); fsx.writeFileSync(f, t); assert.strictEqual(spawnSync('bash', ['-n', f]).status, 0, n); }
-  // kernel module: source only (this machine has no kernel headers); am-pump is plain C and is built here
+  // kernel module: compiled against kernel headers where they are installed (below), never loaded here; am-pump is plain C and is built here
   const km = pathx.join(root, 'linux', 'kernel-module'), ko = fsx.readFileSync(pathx.join(km, 'snd-audiomixer.c'), 'utf8');
   for (const t of ['snd_card_new', 'snd_pcm_new', 'snd_pcm_period_elapsed', 'misc_register', 'MODULE_LICENSE("GPL")', 'MISC_DYNAMIC_MINOR']) assert.ok(ko.includes(t), t);
-  assert.match(ko, /NOT compiled or loaded/);
+  assert.match(ko, /NOT loaded or run/); assert.ok(!ko.includes('no_llseek'), 'no_llseek was removed from newer kernels: noop_llseek works on all');
   assert.match(fsx.readFileSync(pathx.join(km, 'dkms.conf'), 'utf8'), new RegExp('PACKAGE_VERSION="' + require('../package.json').version.replace(/\.0$/, '').replace(/\./g, '\\.') + '"'));
   const pump = pathx.join(out, 'am-pump'), cc = spawnSync('gcc', ['-std=gnu99', '-Wall', '-Wextra', '-Werror', '-O2', '-o', pump, pathx.join(km, 'am_pump.c'), pathx.join(root, 'drivers', 'common', 'am_link.c'), '-lpthread'], { encoding: 'utf8' });
   if (!cc.error) assert.strictEqual(cc.status, 0, cc.stderr);

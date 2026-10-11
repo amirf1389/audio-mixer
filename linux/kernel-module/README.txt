@@ -10,4 +10,4 @@ The card then shows up in aplay -l / arecord -l / PipeWire / PulseAudio as "Audi
 nothing blocks while the mixer is not running: played audio is dropped, recorded audio is silence. /dev/audiomixer is mode 0660, root only until you add a udev rule.
 
 Status: am-pump is built and tested against the real Audio Mixer server. The kernel module was written against the sound API of Linux 5.10 to 6.x
-but was NOT compiled or loaded where it was written (no kernel headers there). Unload with: sudo rmmod snd-audiomixer.
+and compiles without warnings (W=1) against the kernel headers of Linux 6.8, 6.14, 6.17 and 7.0, but it was NOT loaded or run on a real kernel. Unload with: sudo rmmod snd-audiomixer.
