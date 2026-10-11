@@ -8,6 +8,8 @@
 //   GET /api/update, POST /api/update/download -> OTA updates (signed manifest, checksum-verified download)
 //   GET /api/universal -> universal ASIO driver: all input / output sources, ranked, with the automatic pick
 //   GET /api/plugins -> VST3 / VST2 plugins (.vst3 / .dll / .vst) found and validated
+//   GET /api/meters, POST /api/meters {clipDb} -> clip threshold (dBFS) of the level meters of native streams
+//   WS  /ws/virtual, GET /api/virtual -> virtual audio devices of the operating-system drivers (drivers/); they appear in /api/interfaces and open like any interface
 //   GET /api/audify, /api/framesize -> Audify (RtAudio) engine devices and automatic frame size
 //   WS  /ws/output    -> page streams Int16 PCM out through PortAudio (ASIO / WASAPI)
 //   GET /api/bluetooth, POST /api/bluetooth (X-Mixer-Action: bluetooth) -> paired / connected devices, airwaves scan, connect / pair / disconnect
@@ -29,6 +31,8 @@ const { createInputSession } = require('./input');
 const { createDuplexSession } = require('./duplex');
 const { readVolume } = require('./volume');
 const { listCatalog } = require('./catalog');
+const levels = require('./levels');
+const virtualHub = require('./virtual').hub;
 const { cachedNowPlaying } = require('./nowplaying');
 const { groupInterfaces } = require('./interfaces');
 const audifyEngine = require('./audify');
@@ -103,6 +107,7 @@ async function handle(req, res) {
     if (!license.hasFeature(license.status(), 'ota')) return [402, { ok: false, needs: 'ota', error: 'Downloading updates needs the PRO or STUDIO plan. You can still check for updates.' }];
     return [200, await updater.download({ current: VERSION })];
   }, false);
+  if (req.method === 'POST' && url.pathname === '/api/meters') return handleAction(req, res, cors, 'meters', async body => [200, { ok: true, clipDb: levels.setClipDb(body.clipDb) }]);
   if (req.method === 'POST' && url.pathname === '/api/bluetooth') return handleAction(req, res, cors, 'bluetooth', async body => {
     try {
       if (body.action === 'scan') { btCache = null; return [200, await bluetooth.scan({ seconds: body.seconds })]; }
@@ -122,6 +127,8 @@ async function handle(req, res) {
     return json(res, 200, await btCache.promise, cors);
   }
   if (url.pathname === '/api/inserts') return json(res, 200, { ok: true, host: { available: !!pluginHost.hostPath(), formats: ['VST2'] }, ...inserts.read() }, cors);
+  if (url.pathname === '/api/virtual') return json(res, 200, { ok: true, devices: virtualHub.list() }, cors);
+  if (url.pathname === '/api/meters') return json(res, 200, { ok: true, clipDb: levels.config.clipDb, clipRun: levels.CLIP_RUN }, cors);   // clip threshold of the native streams' meters
   if (url.pathname === '/api/license') return json(res, 200, { ok: true, version: VERSION, ...license.status() }, cors);
 
   // OTA updates: is a newer, signed version published? (cached for 5 minutes, ?force=1 asks again)
@@ -148,7 +155,7 @@ async function handle(req, res) {
       const info = await detectCached(url.searchParams.get('force') === '1');
       const src = url.searchParams.get('engine') === 'audify' && info.audify ? info.audify : info.portaudio;
       const devices = src ? src.devices : (info.native ? info.native.devices : []);
-      return json(res, 200, { ok: true, platform: info.platform, portaudio: !!info.portaudio, engine: src ? src.engine : (info.native ? info.native.engine : null), asio: info.asio, interfaces: groupInterfaces(devices, info.asio, src && src.problems) }, cors);
+      return json(res, 200, { ok: true, platform: info.platform, portaudio: !!info.portaudio || virtualHub.list().length > 0, engine: src ? src.engine : (info.native ? info.native.engine : null), asio: info.asio, interfaces: groupInterfaces(devices.concat(virtualHub.list().map(v => ({ id: v.id, name: v.name, hostApi: 'Audio Mixer Virtual', inputs: v.channels, outputs: v.channels, sampleRate: v.rate }))), info.asio, src && src.problems) }, cors);
     } catch (e) { return json(res, 500, { ok: false, error: e.message }, cors); }
   }
 
@@ -246,13 +253,14 @@ async function handleAction(req, res, cors, action, fn, wantBody = true) {
 server.on('upgrade', (req, socket) => {
   let pathname = '';
   try { pathname = new URL(req.url, `http://${HOST}`).pathname; } catch (_) { /* rejected below */ }
-  if ((pathname !== '/ws/output' && pathname !== '/ws/input' && pathname !== '/ws/duplex' && pathname !== '/ws/insert') || !hostAllowed(req.headers.host) || !originAllowed(req.headers.origin)) { socket.destroy(); return; }
+  if ((pathname !== '/ws/output' && pathname !== '/ws/input' && pathname !== '/ws/duplex' && pathname !== '/ws/insert' && pathname !== '/ws/virtual') || !hostAllowed(req.headers.host) || !originAllowed(req.headers.origin)) { socket.destroy(); return; }
+  if (pathname === '/ws/virtual' && req.headers.origin) { socket.destroy(); return; }     // drivers are native programs: a web page has no business here
   if (openSockets >= MAX_SOCKETS || (RATE && !limiter.allow('ws', 120).ok)) { socket.end('HTTP/1.1 429 Too Many Requests\r\nConnection: close\r\n\r\n'); return; }
   const handlers = {};
   const conn = accept(req, socket, handlers);
   if (!conn) return;
   openSockets++; socket.once('close', () => { openSockets--; });
-  Object.assign(handlers, pathname === '/ws/input' ? createInputSession(conn) : pathname === '/ws/duplex' ? createDuplexSession(conn) : pathname === '/ws/insert' ? pluginHost.createInsertSession(conn) : createSession(conn));
+  Object.assign(handlers, pathname === '/ws/input' ? createInputSession(conn) : pathname === '/ws/duplex' ? createDuplexSession(conn) : pathname === '/ws/insert' ? pluginHost.createInsertSession(conn) : pathname === '/ws/virtual' ? virtualHub.session(conn) : createSession(conn));
 });
 
 server.headersTimeout = 15000; server.requestTimeout = 60000; server.maxHeadersCount = 64; server.keepAliveTimeout = 5000;

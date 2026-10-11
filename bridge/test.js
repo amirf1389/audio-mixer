@@ -1123,6 +1123,236 @@ test('levels: peak / rms per channel in dBFS, clipping, reset after each report'
   assert.strictEqual(lv.dbfs(0), lv.FLOOR);
 });
 
+test('virtual audio devices: a driver connects to /ws/virtual, the mixer reads what applications play and writes what they record; listed as an interface', async () => {
+  const { createHub } = require('./virtual');
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const port = server.address().port, base = `http://127.0.0.1:${port}`;
+  const open = (path) => new Promise((res, rej) => { const ws = new WebSocket(`ws://127.0.0.1:${port}${path}`); ws.binaryType = 'arraybuffer'; ws.msgs = []; ws.bins = []; ws.onmessage = e => (typeof e.data === 'string' ? ws.msgs.push(JSON.parse(e.data)) : ws.bins.push(Buffer.from(e.data))); ws.onopen = () => res(ws); ws.onerror = () => rej(new Error('connect')); });
+  const until = async (f, ms = 3000) => { const t0 = Date.now(); while (!f()) { if (Date.now() - t0 > ms) throw new Error('timeout'); await new Promise(r => setTimeout(r, 10)); } };
+  const sock = [];
+  try {
+    assert.deepStrictEqual(await (await fetch(base + '/api/virtual')).json(), { ok: true, devices: [] });
+    // the driver says hello (a bad hello is refused, a second driver of the same name too)
+    const drv = await open('/ws/virtual'); sock.push(drv);
+    drv.send(JSON.stringify({ type: 'hello', name: 'Audio Mixer', channels: 99, rate: 48000 })); await until(() => drv.msgs.length === 1); assert.match(drv.msgs[0].message, /channels/);
+    drv.send(JSON.stringify({ type: 'hello', name: 'Audio Mixer', channels: 2, rate: 48000 })); await until(() => drv.msgs.length === 2);
+    assert.deepStrictEqual([drv.msgs[1].type, drv.msgs[1].id], ['ready', 9000]);
+    const dup = await open('/ws/virtual'); sock.push(dup); dup.send(JSON.stringify({ type: 'hello', name: 'Audio Mixer', channels: 2, rate: 48000 })); await until(() => dup.msgs.length === 1); assert.match(dup.msgs[0].message, /already connected/);
+    const list = (await (await fetch(base + '/api/virtual')).json()).devices; assert.deepStrictEqual([list.length, list[0].id, list[0].channels, list[0].rate], [1, 9000, 2, 48000]);
+    // it shows up as an interface that can be read and written
+    const ifs = (await (await fetch(base + '/api/interfaces')).json()).interfaces.find(i => /Audio Mixer/.test(i.name) && i.apis.some(a => a.api === 'Audio Mixer Virtual'));
+    assert.ok(ifs && ifs.inputs === 2 && ifs.outputs === 2 && ifs.read && ifs.write && ifs.apis[0].deviceId === 9000, JSON.stringify(ifs));
+    // the mixer reads the device: 2 stereo frames played by an application reach the page; a half frame is ignored
+    const inp = await open('/ws/input'); sock.push(inp); inp.send(JSON.stringify({ type: 'start', deviceId: 9000, channels: 2, sampleRate: 48000 }));
+    await until(() => inp.msgs.some(m => m.type === 'started')); const st = inp.msgs.find(m => m.type === 'started'); assert.deepStrictEqual([st.engine, st.device, st.hostApi, st.sampleRate, st.channels], ['virtual', 'Audio Mixer', 'Audio Mixer Virtual', 48000, 2]);
+    const pcm = Buffer.alloc(16); [100, -100, 200, -200, 300, -300, 400, -400].forEach((v, i) => pcm.writeInt16LE(v, i * 2));
+    drv.send(pcm.subarray(0, 6)); drv.send(pcm); await until(() => inp.bins.length >= 1);
+    assert.ok(Buffer.concat(inp.bins).equals(pcm), 'the frames arrive unchanged');
+    assert.strictEqual((await (await fetch(base + '/api/virtual')).json()).devices[0].capturing, true);
+    // the mixer writes the device: what the page sends is delivered to the driver
+    const out = await open('/ws/output'); sock.push(out); out.send(JSON.stringify({ type: 'start', deviceId: 9000, channels: 2, sampleRate: 48000 }));
+    await until(() => out.msgs.some(m => m.type === 'started')); out.send(pcm); await until(() => drv.bins.length >= 1); assert.ok(drv.bins[0].equals(pcm));
+    // channel and rate conversion: a mono page reading a stereo device gets the mix-down
+    const mono = await open('/ws/input'); sock.push(mono); mono.send(JSON.stringify({ type: 'start', deviceId: 9000, channels: 1, sampleRate: 48000 }));
+    await until(() => mono.msgs.some(m => m.type === 'started')); drv.send(pcm); await until(() => mono.bins.length >= 1); assert.strictEqual(mono.bins[0].readInt16LE(0), 0); assert.strictEqual(mono.bins[0].length, 8);   // (100 - 100) / 2 ...
+    // levels of the virtual stream are reported like any other
+    await until(() => inp.msgs.some(m => m.type === 'levels' && m.hostApi === 'Audio Mixer Virtual'));
+    // the driver goes away: the readers are told, the device disappears from the lists
+    drv.close(); await until(() => inp.msgs.some(m => m.type === 'error' && /disconnected/.test(m.message)));
+    await until(async () => true); await new Promise(r => setTimeout(r, 100));
+    assert.deepStrictEqual((await (await fetch(base + '/api/virtual')).json()).devices, []);
+    const gone = await open('/ws/input'); sock.push(gone); gone.send(JSON.stringify({ type: 'start', deviceId: 9000 })); await until(() => gone.msgs.some(m => m.type === 'error')); assert.match(gone.msgs.at(-1).message, /not connected/);
+    // a web page cannot pose as a driver: a connection with an Origin header is refused
+    const net = require('node:net');
+    const refused = await new Promise(res => { const s = net.connect(port, '127.0.0.1', () => s.write(`GET /ws/virtual HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\nOrigin: http://localhost:3000\r\n\r\n`)); let got = ''; s.on('data', d => { got += d; }); s.on('close', () => res(!/101/.test(got))); setTimeout(() => { s.destroy(); }, 600); });
+    assert.strictEqual(refused, true);
+    // the hub on its own: ids are stable per name
+    const h = createHub(); assert.strictEqual(h.isVirtualId(9000), true); assert.strictEqual(h.isVirtualId(1000), false); assert.strictEqual(h.get(9000), null);
+  } finally { sock.forEach(s => { try { s.close(); } catch (_) { /* closed */ } }); server.closeAllConnections(); server.close(); }
+});
+
+test('driver link library (drivers/common/am_link.c, C): a real native client connects to the bridge, plays PCM to the mixer and records what the mixer sends', async (tc) => {
+  const cp = require('node:child_process'), root = pathx.join(__dirname, '..', 'drivers', 'common'), exe = pathx.join(osx.tmpdir(), 'am_link_test_' + process.pid);
+  const cc = cp.spawnSync('gcc', ['-std=gnu99', '-Wall', '-Wextra', '-Werror', '-O1', '-o', exe, pathx.join(root, 'am_link.c'), pathx.join(root, 'test', 'link_test.c'), '-lpthread'], { encoding: 'utf8' });
+  if (cc.error) return tc.skip('no C compiler on this machine');
+  assert.strictEqual(cc.status, 0, cc.stderr);                                                           // no warnings either
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const port = server.address().port, base = `http://127.0.0.1:${port}`, sock = [];
+  const open = (path) => new Promise((res, rej) => { const ws = new WebSocket(`ws://127.0.0.1:${port}${path}`); ws.binaryType = 'arraybuffer'; ws.msgs = []; ws.bins = []; ws.onmessage = e => (typeof e.data === 'string' ? ws.msgs.push(JSON.parse(e.data)) : ws.bins.push(Buffer.from(e.data))); ws.onopen = () => res(ws); ws.onerror = () => rej(new Error('connect')); });
+  const until = async (f, ms = 5000) => { const t0 = Date.now(); while (!(await f())) { if (Date.now() - t0 > ms) throw new Error('timeout'); await new Promise(r => setTimeout(r, 10)); } };
+  try {
+    // 1. the mixer is not there: the library says so instead of hanging
+    const none = cp.spawnSync(exe, [], { encoding: 'utf8', env: { ...process.env, AUDIO_MIXER_PORT: '1' }, timeout: 8000 });
+    assert.strictEqual(none.status, 2); assert.match(none.stdout, /open failed: the Audio Mixer program is not running/);
+    // 2. the mixer runs: the native client says hello, plays 25 blocks of 480 stereo frames, and records what the page writes
+    let out = ''; const child = cp.spawn(exe, ['Link Test'], { env: { ...process.env, AUDIO_MIXER_PORT: String(port) } }); child.stdout.on('data', d => { out += d; });
+    const done = new Promise(res => child.on('close', code => res(code)));
+    await until(async () => (await (await fetch(base + '/api/virtual')).json()).devices.length === 1);
+    const dev = (await (await fetch(base + '/api/virtual')).json()).devices[0]; assert.deepStrictEqual([dev.name, dev.id >= 9000, dev.channels, dev.rate], ['Link Test', true, 2, 48000]);       // the hub numbers devices by name for the life of the process
+    const inp = await open('/ws/input'); sock.push(inp); inp.send(JSON.stringify({ type: 'start', deviceId: dev.id, channels: 2, sampleRate: 48000 }));
+    const outp = await open('/ws/output'); sock.push(outp); outp.send(JSON.stringify({ type: 'start', deviceId: dev.id, channels: 2, sampleRate: 48000 }));
+    await until(() => inp.msgs.some(m => m.type === 'started') && outp.msgs.some(m => m.type === 'started'));
+    const back = Buffer.alloc(480 * 4); for (let i = 0; i < 480; i++) { back.writeInt16LE(7, i * 4); back.writeInt16LE(-7, i * 4 + 2); }
+    const feed = setInterval(() => { if (outp.readyState === 1) outp.send(back); }, 20);
+    const code = await done; clearInterval(feed);
+    assert.strictEqual(code, 0, out);
+    const pcm = Buffer.concat(inp.bins);
+    assert.ok(pcm.length >= 480 * 4 * 20, 'the mixer received the played audio: ' + pcm.length);               // 25 blocks sent, the first may have been sent before the reader attached
+    assert.strictEqual(pcm.readInt16LE(0), 1000); assert.strictEqual(pcm.readInt16LE(2), -1000); assert.strictEqual(pcm.readInt16LE(4), 1001);   // frames arrive intact and in order
+    assert.match(out, new RegExp('ready id=' + dev.id)); assert.match(out, /played=25/);
+    const rec = /recorded=(\d+) first=(-?\d+) alive=(\d)/.exec(out); assert.ok(rec && Number(rec[1]) >= 960 && Number(rec[2]) === 7 && rec[3] === '1', out);   // what the mixer sent was recorded by the driver
+    assert.match(out, /closed/);
+    await until(async () => (await (await fetch(base + '/api/virtual')).json()).devices.length === 0);          // closing the link removes the device
+  } finally { sock.forEach(s => { try { s.close(); } catch (_) { /* closed */ } }); server.closeAllConnections(); server.close(); try { fsx.unlinkSync(exe); } catch (_) { /* none */ } }
+});
+
+test('Linux ALSA plugin (drivers/linux-alsa): aplay plays into the mixer and arecord records what the mixer sends, in real time', async (tc) => {
+  const cp = require('node:child_process'), dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'alsa-')), src = pathx.join(__dirname, '..', 'drivers');
+  const so = pathx.join(dir, 'libasound_module_pcm_audiomixer.so');
+  const cc = cp.spawnSync('gcc', ['-std=gnu99', '-Wall', '-Wextra', '-Werror', '-O1', '-fPIC', '-DPIC', '-shared', '-o', so, pathx.join(src, 'linux-alsa', 'pcm_audiomixer.c'), pathx.join(src, 'common', 'am_link.c'), '-lasound', '-lpthread'], { encoding: 'utf8' });
+  if (cc.error || /asoundlib\.h|pcm_external\.h/.test(cc.stderr)) { fsx.rmSync(dir, { recursive: true, force: true }); return tc.skip('no C compiler or no ALSA development files (libasound2-dev) on this machine'); }
+  assert.strictEqual(cc.status, 0, cc.stderr);
+  const have = n => !cp.spawnSync('which', [n]).status;
+  if (!have('aplay') || !have('arecord')) { fsx.rmSync(dir, { recursive: true, force: true }); return tc.skip('aplay / arecord (alsa-utils) are not installed'); }
+  fsx.writeFileSync(pathx.join(dir, '.asoundrc'), `pcm_type.audiomixer { lib "${so}" }\npcm.audiomixer { type audiomixer name "ALSA Test" channels 2 rate 48000 }\n`);
+  const ramp = Buffer.alloc(44 + 48000 * 2 * 2 * 2); ramp.write('RIFF', 0); ramp.writeUInt32LE(ramp.length - 8, 4); ramp.write('WAVEfmt ', 8); ramp.writeUInt32LE(16, 16); ramp.writeUInt16LE(1, 20); ramp.writeUInt16LE(2, 22); ramp.writeUInt32LE(48000, 24); ramp.writeUInt32LE(192000, 28); ramp.writeUInt16LE(4, 32); ramp.writeUInt16LE(16, 34); ramp.write('data', 36); ramp.writeUInt32LE(ramp.length - 44, 40);
+  for (let i = 0; i < 96000; i++) { ramp.writeInt16LE((i % 2000) + 1, 44 + i * 4); ramp.writeInt16LE(-((i % 2000) + 1), 46 + i * 4); }      // two seconds of a ramp: (v, -v)
+  fsx.writeFileSync(pathx.join(dir, 'ramp.wav'), ramp);
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const port = server.address().port, base = `http://127.0.0.1:${port}`, env = { ...process.env, HOME: dir, AUDIO_MIXER_PORT: String(port) }, sock = [];
+  const open = (path) => new Promise((res, rej) => { const ws = new WebSocket(`ws://127.0.0.1:${port}${path}`); ws.binaryType = 'arraybuffer'; ws.msgs = []; ws.bins = []; ws.onmessage = e => (typeof e.data === 'string' ? ws.msgs.push(JSON.parse(e.data)) : ws.bins.push(Buffer.from(e.data))); ws.onopen = () => res(ws); ws.onerror = () => rej(new Error('connect')); });
+  const until = async (f, ms = 8000) => { const t0 = Date.now(); while (!(await f())) { if (Date.now() - t0 > ms) throw new Error('timeout'); await new Promise(r => setTimeout(r, 10)); } };
+  const device = async () => (await (await fetch(base + '/api/virtual')).json()).devices[0];
+  try {
+    // playback: aplay -> the device appears in the mixer, its audio arrives intact and in order, and the stream runs at real time
+    const t0 = Date.now(); const ap = cp.spawn('aplay', ['-q', '-D', 'audiomixer', pathx.join(dir, 'ramp.wav')], { env }); let aerr = ''; ap.stderr.on('data', d => { aerr += d; });
+    const aDone = new Promise(r => ap.on('close', c => r(c)));
+    await until(async () => !!(await device()));
+    const dev = await device(); assert.deepStrictEqual([dev.name, dev.channels, dev.rate], ['ALSA Test', 2, 48000]);
+    const inp = await open('/ws/input'); sock.push(inp); inp.send(JSON.stringify({ type: 'start', deviceId: dev.id, channels: 2, sampleRate: 48000 }));
+    assert.strictEqual(await aDone, 0, aerr);
+    const secs = (Date.now() - t0) / 1000; assert.ok(secs > 1.7 && secs < 4.5, 'two seconds of audio take about two seconds: ' + secs);
+    await new Promise(r => setTimeout(r, 150));
+    const pcm = Buffer.concat(inp.bins); assert.ok(pcm.length / 4 >= 48000, 'the mixer received at least a second: ' + pcm.length / 4);
+    let prev = null, gaps = 0, mism = 0; for (let i = 0; i + 4 <= pcm.length; i += 4) { const l = pcm.readInt16LE(i); if (pcm.readInt16LE(i + 2) !== -l) mism++; if (prev !== null && l !== (prev % 2000) + 1) gaps++; prev = l; }
+    assert.strictEqual(mism, 0); assert.strictEqual(gaps, 0, 'no gaps or reordering');
+    await until(async () => !(await device()));                                                          // aplay ended: the device is gone
+    // capture: arecord <- what the page sends to the device
+    const wavPath = pathx.join(dir, 'rec.wav'); const ar = cp.spawn('arecord', ['-q', '-D', 'audiomixer', '-d', '2', '-f', 'S16_LE', '-r', '48000', '-c', '2', '-t', 'wav', wavPath], { env }); let rerr = ''; ar.stderr.on('data', d => { rerr += d; });
+    const rDone = new Promise(r => ar.on('close', c => r(c)));
+    await until(async () => !!(await device()));
+    const out = await open('/ws/output'); sock.push(out); out.send(JSON.stringify({ type: 'start', deviceId: (await device()).id, channels: 2, sampleRate: 48000 }));
+    const blk = Buffer.alloc(480 * 4); for (let i = 0; i < 480; i++) { blk.writeInt16LE(7, i * 4); blk.writeInt16LE(-7, i * 4 + 2); }
+    const feed = setInterval(() => { if (out.readyState === 1) out.send(blk); }, 10);
+    const rcode = await rDone; clearInterval(feed); assert.strictEqual(rcode, 0, rerr);
+    const rec = fsx.readFileSync(wavPath).subarray(44); let sevens = 0; for (let i = 0; i + 4 <= rec.length; i += 4) if (rec.readInt16LE(i) === 7 && rec.readInt16LE(i + 2) === -7) sevens++;
+    assert.ok(rec.length / 4 >= 90000, 'two seconds were recorded: ' + rec.length / 4); assert.ok(sevens >= 60000, 'the mixer\'s audio was recorded: ' + sevens);
+  } finally { sock.forEach(s => { try { s.close(); } catch (_) { /* closed */ } }); server.closeAllConnections(); server.close(); fsx.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('Windows ASIO driver (drivers/windows-asio): cross-compiled for x64 and x86 with -Werror, COM exports, system DLLs only, the GUID agrees everywhere', (tc) => {
+  const cp = require('node:child_process'), drv = require('../scripts/build-drivers');
+  if (!['x86_64-w64-mingw32-g++', 'i686-w64-mingw32-g++'].every(n => !cp.spawnSync('which', [n]).status)) return tc.skip('mingw-w64 is not installed');
+  const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'asio-')), root = pathx.join(__dirname, '..', 'drivers', 'windows-asio');
+  try {
+    for (const [arch, machine] of [['x64', 0x8664], ['x86', 0x14c]]) {
+      const dll = drv.buildAsio(arch, dir), b = fsx.readFileSync(dll);
+      assert.strictEqual(b.toString('latin1', 0, 2), 'MZ'); const pe = b.readUInt32LE(0x3c); assert.strictEqual(b.toString('latin1', pe, pe + 4), 'PE\0\0'); assert.strictEqual(b.readUInt16LE(pe + 4), machine); assert.ok(b.readUInt16LE(pe + 22) & 0x2000, 'a DLL');
+      const dump = cp.spawnSync(arch === 'x64' ? 'x86_64-w64-mingw32-objdump' : 'i686-w64-mingw32-objdump', ['-p', dll], { encoding: 'utf8' }).stdout;
+      for (const e of ['DllGetClassObject', 'DllCanUnloadNow', 'DllRegisterServer', 'DllUnregisterServer']) assert.match(dump, new RegExp('\\] ' + e + '\\b'), arch + ' exports ' + e);   // undecorated names on both
+      const imports = [...dump.matchAll(/DLL Name: (\S+)/g)].map(m => m[1].toLowerCase());
+      assert.ok(imports.length && imports.every(n => ['kernel32.dll', 'user32.dll', 'advapi32.dll', 'ws2_32.dll', 'winmm.dll', 'msvcrt.dll', 'ole32.dll', 'oleaut32.dll'].includes(n)), arch + ' imports only Windows DLLs: ' + imports);   // no libstdc++ / libgcc / winpthread DLL to ship
+    }
+    // one class id: the source, the README texts and the registration use the same GUID
+    const cpp = fsx.readFileSync(pathx.join(root, 'audiomixer_asio.cpp'), 'utf8'), guid = /\{C1893F2F-1AD5-4344-9806-DCFD242C0D48\}/i;
+    assert.match(cpp, guid); assert.ok(cpp.includes('0xc1893f2f, 0x1ad5, 0x4344, { 0x98, 0x06, 0xdc, 0xfd, 0x24, 0x2c, 0x0d, 0x48 }')); assert.match(drv.README_WINDOWS('1'), guid);
+    // the registration scripts: administrator only, regsvr32 on the DLLs that exist, CRLF; nothing else (no run key, no service, no network)
+    for (const f of ['register.bat', 'unregister.bat']) { const s = fsx.readFileSync(pathx.join(root, f), 'utf8'); assert.match(s, /\r\n/); assert.match(s, /net session/); assert.match(s, /regsvr32/); assert.ok(!/reg add|schtasks|sc create|curl|powershell|Invoke-/i.test(s), f); }
+    assert.ok(!/CurrentVersion\\Run/.test(cpp) && !/CreateService/.test(cpp), 'the driver installs nothing that starts by itself');
+    // the interface the hosts call: the method order of IASIO is the binary contract
+    const iface = fsx.readFileSync(pathx.join(root, 'asio_iface.h'), 'utf8'), order = ['init', 'getDriverName', 'getDriverVersion', 'getErrorMessage', 'start', 'stop', 'getChannels', 'getLatencies', 'getBufferSize', 'canSampleRate', 'getSampleRate', 'setSampleRate', 'getClockSources', 'setClockSource', 'getSamplePosition', 'getChannelInfo', 'createBuffers', 'disposeBuffers', 'controlPanel', 'future', 'outputReady'];
+    const at = order.map(n => iface.indexOf(' ' + n + '('));
+    assert.ok(at.every((x, i) => x > 0 && (i === 0 || x > at[i - 1])), 'IASIO methods in the order of the ASIO interface: ' + at);
+  } finally { fsx.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('driver sources and packaging: macOS plug-in, Android HAL, the build script packs the ASIO zip and the source archive', (tc) => {
+  const cp = require('node:child_process'), root = pathx.join(__dirname, '..', 'drivers'), rd = f => fsx.readFileSync(pathx.join(root, f), 'utf8');
+  // macOS: the factory id in Info.plist belongs to the factory function and to the type id of Apple's AudioServerPlugIn
+  const plist = rd('macos-coreaudio/Info.plist'), c = rd('macos-coreaudio/AudioMixerDriver.c');
+  assert.match(plist, /443ABAB8-E7B3-491A-B985-BEB9187030DB/); assert.match(plist, /<string>AudioMixerDriverFactory<\/string>/); assert.match(c, /void \*AudioMixerDriverFactory\(/); assert.match(c, /visibility\("default"\)/);
+  assert.ok(c.includes('kAudioServerPlugInTypeUUID') && c.includes('am_link_play') && c.includes('on_record = onRecord') || c.includes('c.on_record = onRecord'));
+  // every interface function of the driver table is defined (the table is the contract with coreaudiod)
+  const table = /gInterface = \{\s*NULL, ([^}]+)\}/.exec(c)[1].split(',').map(s => s.trim()).filter(Boolean);
+  assert.strictEqual(table.length, 22); for (const fn of table) assert.match(c, new RegExp('\\b' + fn + '\\(')); 
+  // Android HAL: the module symbol, the streams, the build file and the policy
+  const hal = rd('android-hal/audio_hw.c');
+  for (const s of ['HAL_MODULE_INFO_SYM', 'AUDIO_HARDWARE_MODULE_ID', 'open_output_stream', 'open_input_stream', 'am_link_open', 'am_link_play', 'out_write', 'in_read']) assert.ok(hal.includes(s), s);
+  assert.match(rd('android-hal/Android.bp'), /audio\.audiomixer\.default/); assert.match(rd('android-hal/audio_policy_configuration_audiomixer.xml'), /AUDIO_DEVICE_OUT_BUS/); assert.match(rd('android-hal/sepolicy/hal_audio_audiomixer.te'), /hal_audio_default/);
+  for (const f of ['README.md']) { const s = rd(f); assert.match(s, /Not compiled or run|not compiled or run|NOT compiled/i); assert.match(s, /\/ws\/virtual/); }       // the limits are stated
+  assert.ok(/STATUS:[^\n]*NOT compiled/.test(c) && /STATUS:[^\n]*NOT compiled/.test(hal));
+  // packaging
+  if (!['x86_64-w64-mingw32-g++', 'i686-w64-mingw32-g++', 'zip', 'tar'].every(n => !cp.spawnSync('which', [n]).status)) return tc.skip('mingw-w64 / zip / tar are not installed');
+  const out = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'drvpack-'));
+  try {
+    const r = require('../scripts/build-drivers').buildAll({ out }), v = r.version;
+    const zip = cp.spawnSync('unzip', ['-Z1', pathx.join(out, `AudioMixer-${v}-asio-driver-windows.zip`)], { encoding: 'utf8' }).stdout.split('\n').filter(Boolean);
+    for (const f of ['AudioMixerASIO64.dll', 'AudioMixerASIO32.dll', 'register.bat', 'unregister.bat', 'README.txt']) assert.ok(zip.includes(`AudioMixer-ASIO-${v}/${f}`), f);
+    const tar = cp.spawnSync('tar', ['tzf', pathx.join(out, `AudioMixer-${v}-drivers-source.tar.gz`)], { encoding: 'utf8' }).stdout.split('\n');
+    for (const f of ['common/am_link.c', 'windows-asio/audiomixer_asio.cpp', 'linux-alsa/pcm_audiomixer.c', 'macos-coreaudio/AudioMixerDriver.c', 'android-hal/audio_hw.c', 'README.md']) assert.ok(tar.includes(`audio-mixer-drivers-${v}/${f}`), f);
+    assert.ok(!tar.some(f => /\.(dll|so|o)$/.test(f)), 'no binaries in the source archive');
+    for (const f of fsx.readdirSync(out).filter(x => x.endsWith('.sha256'))) { const [h, n] = fsx.readFileSync(pathx.join(out, f), 'utf8').trim().split(/\s+/); assert.strictEqual(h, require('node:crypto').createHash('sha256').update(fsx.readFileSync(pathx.join(out, n))).digest('hex')); }
+  } finally { fsx.rmSync(out, { recursive: true, force: true }); }
+});
+
+test('clip detection (native streams): threshold, runs of samples, full scale, per channel, runs carried across blocks, the threshold is settable', async () => {
+  const lv = require('./levels');
+  const stereo = (l, r) => { const b = Buffer.alloc(l.length * 4); l.forEach((v, i) => { b.writeInt16LE(v, i * 4); b.writeInt16LE(r[i], i * 4 + 2); }); return b; };
+  const quiet = n => new Array(n).fill(1000);
+  try {
+    assert.strictEqual(lv.config.clipDb, -0.1); assert.strictEqual(lv.limitOf(-0.1), 32393);
+    // a flat top (4 samples at 32500, over -0.1 dBFS) clips channel 0; a lone full-scale sample clips channel 1; a lone peak under full scale does not clip
+    const m = new lv.Meter(3);
+    const b = Buffer.alloc(16 * 6);
+    for (let i = 0; i < 16; i++) { b.writeInt16LE(i >= 4 && i < 8 ? 32500 : 1000, i * 6); b.writeInt16LE(i === 9 ? 32767 : 500, i * 6 + 2); b.writeInt16LE(i === 3 ? 32500 : 500, i * 6 + 4); }
+    m.push(b); const s = m.snapshot();
+    assert.deepStrictEqual(s.clipCh, [true, true, false]); assert.strictEqual(s.clipping, true); assert.strictEqual(s.clipRuns, 1); assert.strictEqual(s.clip, 6); assert.strictEqual(s.clipDb, -0.1);
+    const q = new lv.Meter(2); q.push(stereo(quiet(32), quiet(32))); const sq = q.snapshot(); assert.strictEqual(sq.clipping, false); assert.deepStrictEqual(sq.clipCh, [false, false]); assert.strictEqual(sq.clip, 0);
+    // a run is carried from one block to the next
+    const c = new lv.Meter(2); c.push(stereo([1000, 1000, 32500, 32500], quiet(4))); assert.strictEqual(c.snapshot().clipping, false);   // 2 in a row so far
+    c.push(stereo([32500, 1000, 1000, 1000], quiet(4))); assert.strictEqual(c.snapshot().clipping, true);                        // the third continues the run (snapshot() resets the counts, not the run)
+    // the threshold decides what counts as "over"
+    assert.strictEqual(lv.setClipDb(-3), -3); assert.strictEqual(lv.limitOf(-3), 23198);
+    const t3 = new lv.Meter(2); t3.push(stereo([24000, 24000, 24000, 0], quiet(4))); const s3 = t3.snapshot(); assert.deepStrictEqual(s3.clipCh, [true, false]); assert.strictEqual(s3.clipDb, -3);
+    assert.throws(() => lv.setClipDb(1), /clipDb/); assert.throws(() => lv.setClipDb('x'), /clipDb/); assert.throws(() => lv.setClipDb(-40), /clipDb/); assert.strictEqual(lv.config.clipDb, -3);
+    // the bridge route: GET reads, POST needs the custom header, validates, and is refused for foreign origins
+    await new Promise(r => server.listen(0, '127.0.0.1', r));
+    const base = `http://127.0.0.1:${server.address().port}`, post = (body, headers = { 'X-Mixer-Action': 'meters' }, origin) => fetch(base + '/api/meters', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(origin ? { Origin: origin } : {}), ...headers }, body: JSON.stringify(body) });
+    assert.deepStrictEqual(await (await fetch(base + '/api/meters')).json(), { ok: true, clipDb: -3, clipRun: 3 });
+    assert.strictEqual((await post({ clipDb: -1 })).status, 200); assert.strictEqual(lv.config.clipDb, -1);
+    assert.strictEqual((await post({ clipDb: -1 }, {})).status, 400); assert.strictEqual((await post({ clipDb: 5 })).status, 400); assert.strictEqual((await post({ clipDb: -1 }, undefined, 'https://evil.example')).status, 403);
+    assert.strictEqual(lv.config.clipDb, -1);
+  } finally { lv.setClipDb(-0.1); server.closeAllConnections(); server.close(); }
+});
+
+test('clip detection in the page: every meter (sources, channel strips, master, native streams) uses one detector with a real, saved threshold and a latched, clearable LED', () => {
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  for (const s of ['detect(s, v, now)', 'v.run >= this.RUN || v.pk >= 1', 'clearAll()', "halx_clip_db", 'id="clip-thr"', 'rt.clip.clear(m.L)', 'cs.clipLatched', 'clearClips()', "'/api/meters'", 'clipView.sent'])
+    assert.ok(html.includes(s), s);
+  assert.ok(!/v\.pk >= 0\.97\) s\.clipAt/.test(html), 'the old level rule is gone from the source meters');
+  assert.match(html, /window\.setClipThreshold = function\(v\) \{\s*const r = window\.rtEngine/);                    // no longer a notification only
+  assert.ok(!/window\.setClipThreshold = function\(v\) \{ window\.notify/.test(html));
+  // the page's detector, run on its own source text: the rules of the bridge (3 in a row at the threshold, or one at / over full scale; events closer than 250 ms are one)
+  const a = html.indexOf('clip: {\n            RUN: 3'), b = html.indexOf('lit(s, now)', a);
+  assert.ok(a > 0 && b > a);
+  const clip = new Function('return {' + html.slice(a, b).replace(/^clip: \{/, '').replace(/,\s*$/, '') + '}')();      // RUN, HOLD_MS, db, lin, detect
+  const s = { clipAt: 0, clipN: 0, clipLatched: false, clipPk: 0 };
+  clip.detect(s, { run: 2, pk: 0.99 }, 1000); assert.strictEqual(s.clipN, 0);                                           // 2 samples in a row: not a clip
+  clip.detect(s, { run: 3, pk: 0.99 }, 1100); assert.strictEqual(s.clipN, 1); assert.strictEqual(s.clipLatched, true);
+  clip.detect(s, { run: 5, pk: 1.0 }, 1200); assert.strictEqual(s.clipN, 1);                                            // within 250 ms: the same event
+  clip.detect(s, { run: 1, pk: 1.3 }, 1500); assert.strictEqual(s.clipN, 2); assert.strictEqual(s.clipPk, 1.3);          // over full scale is always a clip
+});
+
 test('levels: an open stream reports its levels to the page and stops when closed', async () => {
   const { _owners } = require('./asio-lock'); _owners.clear();
   const fa = fakeAudify();
@@ -1849,7 +2079,7 @@ test('a device the engine could not probe (0 channels, not ASIO) is flagged, tak
 test('Android engine (Java): the bridge protocol runs on a plain JVM with a fake backend: HTTP, origin / host checks, WebSocket input and output, interfaces grouping', async () => {
   const { spawnSync, spawn } = require('node:child_process');
   const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'jv-')), src = pathx.join(__dirname, '..', 'android');
-  const files = ['Json', 'Ws', 'AudioBackend', 'Assets', 'Interfaces', 'MiniBridge'].map(n => pathx.join(src, 'src', 'com', 'audiomixer', 'app', n + '.java')).concat(pathx.join(src, 'test', 'com', 'audiomixer', 'app', 'BridgeHarness.java'));
+  const files = ['Json', 'Ws', 'AudioBackend', 'Assets', 'Interfaces', 'VirtualHub', 'MiniBridge'].map(n => pathx.join(src, 'src', 'com', 'audiomixer', 'app', n + '.java')).concat(pathx.join(src, 'test', 'com', 'audiomixer', 'app', 'BridgeHarness.java'));
   const c = spawnSync('javac', ['--release', '8', '-Xlint:-options', '-d', dir, ...files], { encoding: 'utf8' });
   if (c.error || c.status !== 0) return;                                                      // needs a JDK (the build of the APK needs one as well)
   const www = pathx.join(dir, 'www'); fsx.mkdirSync(pathx.join(www, 'fonts'), { recursive: true }); fsx.writeFileSync(pathx.join(www, 'index.html'), '<html>mixer</html>'); fsx.writeFileSync(pathx.join(www, 'fonts', 'a.woff2'), Buffer.from([1, 2, 3])); fsx.writeFileSync(pathx.join(dir, 'secret.txt'), 'outside');
@@ -1949,6 +2179,46 @@ test('Android native audio helpers (channel counts, buffer sizes, native info) a
   assert.ok(fsx.existsSync(pathx.join(root, 'android/stubs/android/service/quicksettings/TileService.java')));
   const bs = rd('scripts/build-apk.js'); assert.ok(bs.includes('stubs') && bs.includes('--classpath'));
   const mb = rd('android/src/com/audiomixer/app/MiniBridge.java'); assert.ok(mb.includes('nativeJson()') && mb.includes('withNative'));
+});
+
+test('Android engine (Java): virtual devices for the audio HAL - /ws/virtual, /api/virtual, the device in /api/interfaces, input and output with its id', async (tc) => {
+  const { spawnSync, spawn } = require('node:child_process');
+  const root = pathx.join(__dirname, '..', 'android'), dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'avh-'));
+  const files = ['Json', 'Ws', 'AudioBackend', 'Assets', 'Interfaces', 'VirtualHub', 'MiniBridge'].map(n => pathx.join(root, 'src', 'com', 'audiomixer', 'app', n + '.java')).concat(pathx.join(root, 'test', 'com', 'audiomixer', 'app', 'BridgeHarness.java'));
+  const c = spawnSync('javac', ['--release', '8', '-Xlint:-options', '-d', dir, ...files], { encoding: 'utf8' });
+  if (c.error) return tc.skip('no JDK');
+  assert.strictEqual(c.status, 0, c.stderr);
+  const jv = spawn('java', ['-cp', dir, 'com.audiomixer.app.BridgeHarness', '0'], { stdio: ['pipe', 'pipe', 'inherit'] }), sock = [];
+  const until = async (f, ms = 5000) => { const t0 = Date.now(); while (!(await f())) { if (Date.now() - t0 > ms) throw new Error('timeout'); await new Promise(r => setTimeout(r, 10)); } };
+  try {
+    const port = await new Promise((res, rej) => { let b = ''; jv.stdout.on('data', d => { b += d; const m = /PORT (\d+)/.exec(b); if (m) res(Number(m[1])); }); jv.on('error', rej); setTimeout(() => rej(new Error('no port')), 8000); });
+    const base = `http://127.0.0.1:${port}`, open = (path) => new Promise((res, rej) => { const ws = new WebSocket(`ws://127.0.0.1:${port}${path}`); ws.binaryType = 'arraybuffer'; ws.msgs = []; ws.bins = []; ws.onmessage = e => (typeof e.data === 'string' ? ws.msgs.push(JSON.parse(e.data)) : ws.bins.push(Buffer.from(e.data))); ws.onopen = () => res(ws); ws.onerror = () => rej(new Error('connect')); });
+    assert.deepStrictEqual(await (await fetch(base + '/api/virtual')).json(), { ok: true, devices: [] });
+    const before = await (await fetch(base + '/api/interfaces')).json(); assert.ok(!before.interfaces.some(i => i.transport === 'virtual'));
+    const drv = await open('/ws/virtual'); sock.push(drv);
+    drv.send(JSON.stringify({ type: 'hello', name: 'Android HAL', channels: 40, rate: 48000 })); await until(() => drv.msgs.length === 1); assert.match(drv.msgs[0].message, /channels/);
+    drv.send(JSON.stringify({ type: 'hello', name: 'Android HAL', channels: 2, rate: 48000 })); await until(() => drv.msgs.length === 2); assert.deepStrictEqual([drv.msgs[1].type, drv.msgs[1].id], ['ready', 9000]);
+    const dup = await open('/ws/virtual'); sock.push(dup); dup.send(JSON.stringify({ type: 'hello', name: 'Android HAL', channels: 2, rate: 48000 })); await until(() => dup.msgs.length === 1); assert.match(dup.msgs[0].message, /already connected/);
+    const ifs = (await (await fetch(base + '/api/interfaces')).json()).interfaces.find(i => i.transport === 'virtual');
+    assert.ok(ifs && ifs.name === 'Android HAL' && ifs.inputs === 2 && ifs.outputs === 2 && ifs.read.deviceId === 9000 && ifs.write.deviceId === 9000, JSON.stringify(ifs));
+    assert.ok((await (await fetch(base + '/api/interfaces')).json()).interfaces.some(i => i.name === 'Scarlett 2i2 USB'), 'the hardware interfaces are still listed');
+    // what apps play reaches the page; a half frame is ignored
+    const inp = await open('/ws/input'); sock.push(inp); inp.send(JSON.stringify({ type: 'start', deviceId: 9000, channels: 2, sampleRate: 48000 }));
+    await until(() => inp.msgs.some(m => m.type === 'started')); const st = inp.msgs.find(m => m.type === 'started'); assert.deepStrictEqual([st.device, st.hostApi, st.sampleRate, st.channels], ['Android HAL', 'Audio Mixer Virtual', 48000, 2]);
+    const pcm = Buffer.alloc(16); [100, -100, 200, -200, 300, -300, 400, -400].forEach((v, i) => pcm.writeInt16LE(v, i * 2));
+    drv.send(pcm.subarray(0, 6)); drv.send(pcm); await until(() => inp.bins.length >= 1); assert.ok(Buffer.concat(inp.bins).equals(pcm));
+    // what the page sends reaches the HAL
+    const out = await open('/ws/output'); sock.push(out); out.send(JSON.stringify({ type: 'start', deviceId: 9000, channels: 2, sampleRate: 48000 }));
+    await until(() => out.msgs.some(m => m.type === 'started')); out.send(pcm); await until(() => drv.bins.length >= 1); assert.ok(drv.bins[0].equals(pcm));
+    assert.strictEqual((await (await fetch(base + '/api/virtual')).json()).devices[0].capturing, true);
+    // the HAL goes away: readers are told, the device disappears
+    drv.close(); await until(() => inp.msgs.some(m => m.type === 'error' && /disconnected/.test(m.message)));
+    await until(async () => (await (await fetch(base + '/api/virtual')).json()).devices.length === 0);
+    const gone = await open('/ws/input'); sock.push(gone); gone.send(JSON.stringify({ type: 'start', deviceId: 9000 })); await until(() => gone.msgs.some(m => m.type === 'error')); assert.match(gone.msgs.at(-1).message, /not connected/);
+    // a web page cannot pose as a HAL: a connection with an Origin header is refused
+    const refused = await new Promise(res => { const s = require('node:net').connect(port, '127.0.0.1', () => s.write(`GET /ws/virtual HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\nOrigin: http://localhost:3000\r\n\r\n`)); let got = ''; s.on('data', d => { got += d; }); s.on('close', () => res(!/ 101 /.test(got))); setTimeout(() => s.destroy(), 800); });
+    assert.strictEqual(refused, true);
+  } finally { sock.forEach(s => { try { s.close(); } catch (_) { /* closed */ } }); jv.stdin.end(); jv.kill(); fsx.rmSync(dir, { recursive: true, force: true }); }
 });
 
 test('Android background engine + power-on animation: manifest, service (Java and Kotlin twin), build wiring, page hooks', () => {

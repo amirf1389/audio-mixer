@@ -5,6 +5,7 @@ const audify = require('./audify');
 const streams = require('./streams');
 const levels = require('./levels');
 const universal = require('./universal');
+const virtual = require('./virtual');
 function loadPortAudio() { return require('naudiodon2'); }
 const SAMPLE_RATES = [44100, 48000, 88200, 96000, 176400, 192000];
 
@@ -57,8 +58,24 @@ function createSession(conn, load = loadPortAudio, loadA = audify.loadAudify) {
     }
   }
 
+  // A virtual device of an operating-system driver (drivers/, see virtual.js): what the mixer sends is what applications record from it.
+  function startVirtual(opts) {
+    const dev = virtual.hub.get(opts.deviceId), write = dev && virtual.hub.render(dev.id);
+    if (!dev || !write) return conn.send(JSON.stringify({ type: 'error', message: 'The Audio Mixer driver is not connected: install and enable it (see drivers/README.md).' }));
+    const channels = Math.min(Math.max(parseInt(opts.channels, 10) || dev.channels, 1), 32);
+    const sampleRate = parseInt(opts.sampleRate, 10) || dev.rate;
+    const remap = channels !== dev.channels ? b => audify.remapChannels(b, channels, dev.channels) : null;
+    const conv = audify.createResampler(sampleRate, dev.rate, dev.channels);
+    frameBytes = 2 * channels;
+    const si = { direction: 'output', engine: 'virtual', device: dev.name, hostApi: 'Audio Mixer Virtual', sampleRate, channels };
+    unreg = streams.add(si); meter = levels.attach(conn, { ...si, sid: unreg.id });
+    io = { write: buf => { if (remap) buf = remap(buf); if (conv) buf = conv(buf); return write(buf) !== false; }, quit: () => {} };
+    conn.send(JSON.stringify({ type: 'started', engine: 'virtual', device: dev.name, hostApi: 'Audio Mixer Virtual', sampleRate, channels, frameSize: null, latencyMs: null }));
+  }
+
   function start(opts) {
     stop();
+    if (virtual.hub.isVirtualId(opts.deviceId)) return startVirtual(opts);
     // "Universal ASIO driver": detect every device on both engines and open the best one (ASIO first), see universal.js
     if (opts.universal === true || opts.deviceId === 'universal') {
       const choice = universal.resolve({ direction: 'output', channels: opts.channels, engine: opts.engine }, load, loadA, audify);

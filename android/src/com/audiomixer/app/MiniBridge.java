@@ -33,6 +33,7 @@ final class MiniBridge {
     private final ExecutorService pool;
     private final AtomicInteger open = new AtomicInteger();
     private final List<Session> sessions = new ArrayList<Session>();
+    private final VirtualHub hub = new VirtualHub();
     private ServerSocket server;
     private volatile boolean running;
     private int port;
@@ -118,7 +119,10 @@ final class MiniBridge {
             Map<String, String> cors = new HashMap<String, String>();
             if (origin != null) { cors.put("Access-Control-Allow-Origin", origin); cors.put("Vary", "Origin"); cors.put("Access-Control-Allow-Private-Network", "true"); }
             if (method.equals("OPTIONS")) { cors.put("Access-Control-Allow-Methods", "GET, POST"); cors.put("Access-Control-Allow-Headers", "Content-Type, X-Mixer-Action"); sendRaw(out, 204, "", "text/plain", cors); return; }
-            if ("websocket".equalsIgnoreCase(h.get("upgrade"))) { websocket(s, raw, out, path, h.get("sec-websocket-key")); return; }
+            if ("websocket".equalsIgnoreCase(h.get("upgrade"))) {
+                if (path.equals("/ws/virtual")) { if (origin != null) { send(out, 403, "{\"ok\":false,\"error\":\"drivers are native programs\"}", null); return; } virtualDriver(s, raw, out, h.get("sec-websocket-key")); return; }     // a web page cannot pose as a driver
+                websocket(s, raw, out, path, h.get("sec-websocket-key")); return;
+            }
             if (!method.equals("GET")) { send(out, 405, "{\"ok\":false,\"error\":\"method not allowed\"}", cors); return; }
             route(out, path, cors);
         } catch (Exception e) { /* connection ended */ }
@@ -128,7 +132,9 @@ final class MiniBridge {
         if (path.equals("/api/status")) {
             send(out, 200, "{\"ok\":true,\"name\":\"audio-mixer-bridge\",\"version\":" + Json.str(version) + ",\"engine\":\"android\",\"node\":\"android\",\"pid\":0,\"streams\":" + streamsJson() + ",\"native\":" + audio.nativeJson() + ",\"time\":" + System.currentTimeMillis() + "}", cors);
         } else if (path.equals("/api/interfaces")) {
-            send(out, 200, Interfaces.withNative(audio.interfacesJson(), audio.nativeJson()), cors);
+            send(out, 200, Interfaces.withNative(hub.interfacesJson(audio.interfacesJson()), audio.nativeJson()), cors);
+        } else if (path.equals("/api/virtual")) {
+            send(out, 200, hub.json(), cors);
         } else if (path.equals("/api/drivers")) {
             String dev = audio.devicesJson();
             send(out, 200, "{\"ok\":true,\"platform\":\"android\",\"arch\":\"arm\",\"node\":\"android\",\"drivers\":[\"aaudio\"],\"devices\":[],\"asio\":[],\"recommended\":\"aaudio\",\"vst\":{\"vst3\":[],\"vst2\":[]},"
@@ -202,7 +208,7 @@ final class MiniBridge {
             out.flush();
         }
         s.setSoTimeout(0);
-        Session session = new Session(out, input);
+        Session session = new Session(out, input, hub);
         synchronized (sessions) { sessions.add(session); }
         DataInputStream in = new DataInputStream(raw);
         try {
@@ -216,13 +222,47 @@ final class MiniBridge {
         finally { session.close(); synchronized (sessions) { sessions.remove(session); } }
     }
 
+    /** WS /ws/virtual: the audio HAL (a native program) registers a virtual device; see VirtualHub. */
+    private void virtualDriver(Socket s, InputStream raw, final OutputStream out, String key) throws Exception {
+        if (key == null) { send(out, 404, "{\"ok\":false,\"error\":\"not found\"}", null); return; }
+        synchronized (out) {
+            out.write(("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: " + Ws.accept(key) + "\r\n\r\n").getBytes("ISO-8859-1"));
+            out.flush();
+        }
+        s.setSoTimeout(0);
+        DataInputStream in = new DataInputStream(raw);
+        VirtualHub.Device dev = null;
+        try {
+            while (true) {
+                Ws.Message m = Ws.read(in, out);
+                if (m == null) break;
+                if (m.op == Ws.OP_TEXT && dev == null) {
+                    Map<String, Object> hello = Json.parse(new String(m.data, "UTF-8"));
+                    if (!"hello".equals(hello.get("type"))) continue;
+                    try {
+                        dev = hub.register(String.valueOf(hello.get("name")), Json.intOf(hello, "channels", 0), Json.intOf(hello, "rate", 0), new VirtualHub.Sink() {
+                            public void write(byte[] pcm, int off, int len) { try { synchronized (out) { out.write(Ws.frame(Ws.OP_BIN, pcm, off, len)); out.flush(); } } catch (IOException e) { /* the driver is gone */ } }
+                        });
+                        byte[] ready = ("{\"type\":\"ready\",\"id\":" + dev.id + ",\"name\":" + Json.str(dev.name) + "}").getBytes("UTF-8");
+                        synchronized (out) { out.write(Ws.frame(Ws.OP_TEXT, ready, 0, ready.length)); out.flush(); }
+                    } catch (IllegalArgumentException e) {
+                        byte[] err = ("{\"type\":\"error\",\"message\":" + Json.str(e.getMessage()) + "}").getBytes("UTF-8");
+                        synchronized (out) { out.write(Ws.frame(Ws.OP_TEXT, err, 0, err.length)); out.flush(); }
+                    }
+                } else if (m.op == Ws.OP_BIN && dev != null) hub.frames(dev, m.data, m.data.length);
+            }
+        } catch (IOException e) { /* protocol violation or closed */ }
+        finally { if (dev != null) hub.unregister(dev); try { out.close(); } catch (IOException e) { /* closed */ } }
+    }
+
     /** One WebSocket: at most one open input or output stream. */
     private final class Session {
         private final OutputStream out; private final boolean input;
         private AudioBackend.Input in; private AudioBackend.Output outStream; private volatile long bytes;
         private Map<String, Object> info;
 
-        Session(OutputStream out, boolean input) { this.out = out; this.input = input; }
+        private final VirtualHub hub; private Runnable stopVirtual;
+        Session(OutputStream out, boolean input, VirtualHub hub) { this.out = out; this.input = input; this.hub = hub; }
 
         void text(String json) { byte[] b; try { b = json.getBytes("UTF-8"); } catch (Exception e) { return; } write(Ws.frame(Ws.OP_TEXT, b, 0, b.length)); }
 
@@ -238,6 +278,7 @@ final class MiniBridge {
         void start(Map<String, Object> opts) {
             closeStream();
             try {
+                if (VirtualHub.isVirtualId(Json.intOf(opts, "deviceId", -1))) { startVirtual(opts); return; }
                 if (input) in = audio.openInput(opts, new AudioBackend.Listener() {
                     public void onData(byte[] pcm, int len) { bytes += len; for (int i = 0; i < len; i += 16384) { int n = Math.min(16384, len - i); write(Ws.frame(Ws.OP_BIN, pcm, i, n)); } }
                     public void onError(String message) { text("{\"type\":\"error\",\"message\":" + Json.str(message) + "}"); }
@@ -251,6 +292,25 @@ final class MiniBridge {
             }
         }
 
+        /** A virtual device of the Audio Mixer audio HAL: input = what apps play to it, output = what apps record from it. */
+        void startVirtual(Map<String, Object> opts) {
+            final VirtualHub.Device d = hub.byId(Json.intOf(opts, "deviceId", -1));
+            if (d == null) { text("{\"type\":\"error\",\"message\":\"The Audio Mixer audio HAL is not connected: install it and start an app that uses it (see drivers/README.md).\"}"); return; }
+            Map<String, Object> i = new HashMap<String, Object>();
+            i.put("device", d.name); i.put("hostApi", "Audio Mixer Virtual"); i.put("sampleRate", d.rate); i.put("channels", d.channels); i.put("frameSize", null); i.put("latencyMs", null);
+            if (input) {
+                stopVirtual = hub.capture(d, new VirtualHub.Reader() {
+                    public void onFrames(byte[] pcm, int len) { bytes += len; for (int o = 0; o < len; o += 16384) { int n = Math.min(16384, len - o); write(Ws.frame(Ws.OP_BIN, pcm, o, n)); } }
+                    public void onGone() { text("{\"type\":\"error\",\"message\":\"The Audio Mixer audio HAL disconnected\"}"); }
+                });
+                in = new AudioBackend.Input() { public Map<String, Object> info() { return null; } public void close() { } };
+            } else {
+                outStream = new AudioBackend.Output() { public Map<String, Object> info() { return null; } public void close() { } public void write(byte[] p, int off, int len) { d.toDriver.write(p, off, len); } };
+            }
+            info = i;
+            text(startedJson(info));
+        }
+
         synchronized void onBinary(byte[] data) {
             if (outStream == null || data.length % 2 != 0) return;      // whole Int16 samples only
             bytes += data.length;
@@ -258,6 +318,7 @@ final class MiniBridge {
         }
 
         synchronized void closeStream() {
+            if (stopVirtual != null) { stopVirtual.run(); stopVirtual = null; }
             if (in != null) { in.close(); in = null; }
             if (outStream != null) { outStream.close(); outStream = null; }
             info = null;

@@ -86,3 +86,6 @@ dist/
 # Qt Android project: staged page and build output
 android-qt/assets/
 android-qt/build/
+
+# the driver Makefiles are source, not build output
+!drivers/**/Makefile

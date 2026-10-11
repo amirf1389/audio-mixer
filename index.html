@@ -4352,7 +4352,7 @@ window.navTabs = [
                     </div>
                     <div class="bg-black/60 p-2 rounded-lg border border-white/10 space-y-1">
                       <span class="text-slate-400 block font-bold">CLIP THRESHOLD:</span>
-                      <select onchange="window.setClipThreshold(this.value)" class="w-full bg-black border border-white/10 rounded px-1.5 py-0.5 text-rose-400 outline-none text-[7px]">
+                      <select id="clip-thr" onchange="window.setClipThreshold(this.value)" class="w-full bg-black border border-white/10 rounded px-1.5 py-0.5 text-rose-400 outline-none text-[7px]">
                         <option value="-0.1" selected>-0.1 dBFS (Pro)</option>
                         <option value="-0.3">-0.3 dBFS (Safe)</option>
                         <option value="-1.0">-1.0 dBFS (Broadcast)</option>
@@ -8968,8 +8968,14 @@ window.navTabs = [
                         }
                         const clipLed = document.getElementById(`ch-vu-clip-${i}`);
                         if (clipLed) {
-                            if (pct >= 95) clipLed.classList.add('active');
-                            else clipLed.classList.remove('active');
+                            // real clip detection (see rtEngine.clip): latched until it is cleared; a click on the LED clears it. Without an audio engine the old level rule is kept.
+                            const cs = window.rtEngine && window.rtEngine.ch && window.rtEngine.ch[i];
+                            const on = cs ? cs.clipLatched : pct >= 95;
+                            clipLed.classList.toggle('active', !!on);
+                            if (cs) {
+                                clipLed.title = cs.clipN ? 'Clipped ' + cs.clipN + ' time' + (cs.clipN > 1 ? 's' : '') + '. Click to clear.' : 'No clipping';
+                                if (!clipLed.onclick) clipLed.onclick = () => window.rtEngine.clip.clear(window.rtEngine.ch[i]);
+                            }
                         }
                     }
                     const bridgeMeter = document.getElementById(`bridge-meter-${i}`);
@@ -14779,9 +14785,18 @@ window.navTabs = [
 // METER BRIDGE FUNCTIONS
 window.setMeterBallistics = function(mode) { window.notify('Meter ballistics: ' + mode.toUpperCase(), 'gauge'); };
 window.setPeakHoldTime = function(t) { window.notify('Peak hold: ' + t + (t === 'inf' ? '' : 's'), 'clock'); };
-window.setClipThreshold = function(v) { window.notify('Clip threshold set: ' + v + ' dBFS', 'triangle-exclamation'); };
+window.setClipThreshold = function(v) {
+    const r = window.rtEngine, db = r ? r.clip.set(v) : Number(v);
+    try { const b = window.universalAsioSdk && window.universalAsioSdk.bridgeUrl; if (b) fetch(b + '/api/meters', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Mixer-Action': 'meters' }, body: JSON.stringify({ clipDb: db }) }).catch(() => {}); } catch (e) { /* no bridge */ }
+    window.notify('Clip threshold set: ' + db + ' dBFS (every source, channel strip, master and native stream)', 'triangle-exclamation');
+};
 window.resetAllPeakHolds = function() { for(let i=0;i<32;i++){const el=document.getElementById('bridge-meter-'+i);if(el)el.style.height='10%';} window.notify('All peak holds reset', 'gauge'); };
-window.resetAllClipLEDs = function() { for(let i=0;i<32;i++){const d=document.getElementById('clip-dot-'+i);if(d){d.style.background='rgba(16,185,129,0.3)';}} const c=document.getElementById('clip-alert-count');if(c)c.textContent='0 CLIPS DETECTED'; window.notify('All clip LEDs cleared', 'check'); };
+window.resetAllClipLEDs = function() {
+    if (window.rtEngine) window.rtEngine.clip.clearAll();
+    for (let i = 0; i < 32; i++) { const d = document.getElementById('clip-dot-' + i); if (d) d.style.background = 'rgba(16,185,129,0.3)'; }
+    const c = document.getElementById('clip-alert-count'); if (c) c.textContent = '0 CLIPS DETECTED';
+    window.notify('All clip LEDs cleared', 'check');
+};
 
 // PHASE ANALYSIS FUNCTIONS
 window.setPhaseDelayComp = function(v) { const el=document.getElementById('phase-delay-comp-val');if(el)el.textContent=parseFloat(v).toFixed(2)+' ms'; };
@@ -16476,8 +16491,9 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             el.appendChild(barsWrap);
             if ((m.channels || 2) > MAX_BARS) el.appendChild(mk('span', 'text-slate-500', '+' + (m.channels - MAX_BARS)));
             const peak = mk('span', 'font-bold text-slate-200 w-14 text-right'); el.appendChild(peak);
-            const clip = mk('span', 'w-2 h-2 rounded-full bg-slate-700 inline-block'); clip.title = 'Clip: lights when a sample reaches full scale'; el.appendChild(clip);
-            return { el, label, bars, peak, clip, hold: new Array(n).fill(MIN_DB), holdAt: new Array(n).fill(0), clipUntil: 0, last: 0, msg: m };
+            const clip = mk('span', 'w-2 h-2 rounded-full bg-slate-700 inline-block'); clip.title = 'Clip: lights when the signal clips (3 samples in a row over the threshold, or one at full scale)'; el.appendChild(clip);
+            clip.style.cursor = 'pointer';
+            return { el, label, bars, peak, clip, hold: new Array(n).fill(MIN_DB), holdAt: new Array(n).fill(0), clipUntil: 0, clipN: 0, clipLatched: false, chClip: new Array(n).fill(false), last: 0, msg: m };
         }
 
         const meters = window.asioMeters = {
@@ -16491,7 +16507,14 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                     const host = $('asio-meter-rows'); if (host) { const idle = host.querySelector('[data-idle]'); if (idle) idle.remove(); host.appendChild(r.el); }
                 }
                 r.msg = m; r.last = performance.now();
+                // clip detection is done by the bridge on the real samples (threshold set with POST /api/meters): count the events, keep the channels that clipped
+                const hit = m.clipping === true || (m.clipping === undefined && m.clip > 0);
+                if (hit) {
+                    r.clipN += Math.max(1, m.clipRuns || 0); r.clipUntil = r.last + 1500; r.clipLatched = true;
+                    if (Array.isArray(m.clipCh)) m.clipCh.forEach((x, i) => { if (x && i < r.chClip.length) r.chClip[i] = true; });
+                }
             },
+            clearClips() { rows.forEach(r => { r.clipN = 0; r.clipLatched = false; r.clipUntil = 0; r.chClip.fill(false); }); },
             rows,
         };
 
@@ -16511,11 +16534,13 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                     b.cover.style.height = (100 - pct(rms)) + '%';   // bar = RMS level (VU), tick = peak hold
                     r.hold[i] = pk >= r.hold[i] ? pk : Math.max(MIN_DB, r.hold[i] - 24 * dt);        // peak hold falls 24 dB / s
                     b.holdLine.style.bottom = pct(r.hold[i]) + '%';
+                    b.holdLine.style.background = r.chClip[i] ? '#ef4444' : '#e2e8f0';             // the peak line of a channel that clipped stays red until cleared
                     if (pk > top) top = pk;
                 });
                 r.peak.textContent = top <= MIN_DB ? '-INF' : (top > 0 ? '+' : '') + top.toFixed(1) + ' dB';
-                if (m.clip > 0) r.clipUntil = now + 1500;
-                r.clip.className = 'w-2 h-2 rounded-full inline-block ' + (now < r.clipUntil ? 'bg-rose-500 shadow-[0_0_6px_#f43f5e]' : 'bg-slate-700');
+                r.clip.className = 'w-2 h-2 rounded-full inline-block ' + (now < r.clipUntil ? 'bg-rose-500 shadow-[0_0_6px_#f43f5e]' : r.clipLatched ? 'bg-rose-800' : 'bg-slate-700');
+                r.clip.title = r.clipN ? 'Clipped ' + r.clipN + ' time' + (r.clipN > 1 ? 's' : '') + '. Click to clear.' : 'No clipping';
+                r.clip.onclick = () => { r.clipN = 0; r.clipLatched = false; r.clipUntil = 0; r.chClip.fill(false); };
             }
             if (host && !rows.size && !host.querySelector('[data-idle]')) { const idle = mk('span', 'text-slate-500', 'NO NATIVE STREAM OPEN (connect an interface in LIVE SOURCES or the ASIO page)'); idle.setAttribute('data-idle', '1'); host.appendChild(idle); }
         }
@@ -17204,19 +17229,58 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
         read(an) {
             const b = an._rtBuf && an._rtBuf.length === an.fftSize ? an._rtBuf : (an._rtBuf = new Float32Array(an.fftSize));
             an.getFloatTimeDomainData(b);
-            let pk = 0, ss = 0;
-            for (let i = 0; i < b.length; i++) { const a = b[i] < 0 ? -b[i] : b[i]; if (a > pk) pk = a; ss += b[i] * b[i]; }
-            return { pk, rms: Math.sqrt(ss / b.length) };
+            // clip detection: samples at / over the clip threshold, and the longest run of them in a row (a flat-topped wave clips, a lone peak does not)
+            let pk = 0, ss = 0, run = 0, maxRun = 0, over = 0;
+            const lin = this.clip.lin;
+            for (let i = 0; i < b.length; i++) {
+                const a = b[i] < 0 ? -b[i] : b[i];
+                if (a > pk) pk = a;
+                ss += b[i] * b[i];
+                if (a >= lin) { over++; if (++run > maxRun) maxRun = run; } else run = 0;
+            }
+            return { pk, rms: Math.sqrt(ss / b.length), run: maxRun, over };
         },
         // smoothed meter state of one reading: fast attack, slow release, peak hold, clip hold
         smooth(s, v, now) {
             s.pk = v.pk >= s.pk ? v.pk : s.pk * 0.9 + v.pk * 0.1;
             s.rms = v.rms >= s.rms ? v.rms : s.rms * 0.9 + v.rms * 0.1;
             if (v.pk >= s.hold || now - s.holdAt > 1400) { s.hold = v.pk; s.holdAt = now; }
-            if (v.pk >= 0.97) s.clipAt = now;
+            this.clip.detect(s, v, now);
             return s;
         },
-        meter() { return { pk: 0, rms: 0, hold: 0, holdAt: 0, clipAt: 0 }; },
+        meter() { return { pk: 0, rms: 0, hold: 0, holdAt: 0, clipAt: 0, clipN: 0, clipLatched: false, clipPk: 0 }; },
+        // ── clip detection for every meter (sources, channel strips, master) ──
+        // A reading CLIPS when CLIP_RUN samples in a row reach the threshold, or one sample reaches digital full scale (>= 1.0).
+        // Each clip is counted (events closer than 250 ms are one event), stays latched until it is cleared, and lights the CLIP badge for 1.5 s.
+        clip: {
+            RUN: 3, HOLD_MS: 1500, db: -0.1, lin: Math.pow(10, -0.1 / 20),
+            detect(s, v, now) {
+                if (v.run >= this.RUN || v.pk >= 1) {
+                    if (now - s.clipAt > 250) s.clipN++;
+                    s.clipAt = now; s.clipLatched = true;
+                    if (v.pk > s.clipPk) s.clipPk = v.pk;
+                }
+            },
+            lit(s, now) { return !!s && now - s.clipAt < this.HOLD_MS; },
+            clear(s) { if (s) { s.clipN = 0; s.clipLatched = false; s.clipPk = 0; s.clipAt = 0; } },
+            set(db) {
+                const n = Math.max(-12, Math.min(0, Number(db)));
+                if (!isFinite(n)) return this.db;
+                this.db = n; this.lin = Math.pow(10, n / 20);
+                try { localStorage.setItem('halx_clip_db', String(n)); } catch (e) { /* storage blocked */ }
+                return n;
+            },
+            // every meter state that exists: [label, state]
+            all() {
+                const out = [], r = window.rtEngine;
+                Object.keys(r.st).forEach(k => { out.push([r.st[k].name + ' L', r.st[k].L]); out.push([r.st[k].name + ' R', r.st[k].R]); });
+                r.ch.forEach((s, i) => { if (s) out.push(['CH ' + (i + 1), s]); });
+                if (r.master) { out.push(['MASTER L', r.master.L]); out.push(['MASTER R', r.master.R]); }
+                return out;
+            },
+            total() { return this.all().reduce((n, x) => n + x[1].clipN, 0); },
+            clearAll() { this.all().forEach(x => this.clear(x[1])); if (window.asioMeters && window.asioMeters.clearClips) window.asioMeters.clearClips(); },
+        },
         // every source input that exists right now
         sources() {
             const out = [], l = LS(), c = window.state && window.state.ctx;
@@ -17266,6 +17330,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
         on(f) { this.subs.push(f); },
         start() { if (!this.started) { this.started = true; requestAnimationFrame(t => rt.frame(t)); } },
     };
+    try { const s = localStorage.getItem('halx_clip_db'); if (s !== null && isFinite(Number(s))) rt.clip.db = Math.max(-12, Math.min(0, Number(s))), rt.clip.lin = Math.pow(10, rt.clip.db / 20); } catch (e) { /* storage blocked */ }
     rt.start();
 
     // ───────────────────────── MIXER page: source meters + real channel VU ─────────────────────────
@@ -17304,10 +17369,46 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             const fill = (q, mm) => { const e = it.querySelector(q); if (e) { e.style.width = pct(dbOf(mm.pk)) + '%'; e.style.background = mm.pk > 0.89 ? '#ef4444' : mm.pk > 0.5 ? '#fbbf24' : '#10b981'; } };
             fill('.rt-l', m.L); fill('.rt-r', m.R);
             const pk = Math.max(m.L.hold, m.R.hold), db = it.querySelector('.rt-db'); if (db) db.textContent = fmtDb(dbOf(pk));
-            const cl = it.querySelector('.rt-clip'); if (cl) cl.className = 'px-1 rounded text-[6px] font-black rt-clip ' + (now - Math.max(m.L.clipAt, m.R.clipAt) < 1500 ? 'bg-red-500 text-white' : 'bg-white/5 text-slate-600');
+            const cl = it.querySelector('.rt-clip');
+            if (cl) {
+                const lit = rt.clip.lit(m.L, now) || rt.clip.lit(m.R, now), n = m.L.clipN + m.R.clipN;
+                cl.className = 'px-1 rounded text-[6px] font-black rt-clip cursor-pointer ' + (lit ? 'bg-red-500 text-white' : n ? 'bg-red-900/70 text-red-300' : 'bg-white/5 text-slate-600');
+                const txt = n ? 'CLIP \u00d7' + n : 'CLIP'; if (cl.textContent !== txt) cl.textContent = txt;
+                cl.title = n ? 'Clipped ' + n + ' time' + (n > 1 ? 's' : '') + ' (peak ' + fmtDb(dbOf(Math.max(m.L.clipPk, m.R.clipPk))) + ' dBFS, threshold ' + rt.clip.db + ' dBFS). Click to clear.' : 'No clipping (threshold ' + rt.clip.db + ' dBFS)';
+                cl.onclick = () => { rt.clip.clear(m.L); rt.clip.clear(m.R); };
+            }
         });
     }
     rt.on(renderStrip);
+
+    // ───────────────────────── clip overview (CLIP ALERT page) + clip threshold sync ─────────────────────────
+    const clipView = { sent: '' };
+    rt.on(now => {
+        const sel = $('clip-thr');
+        if (sel && sel.dataset.set !== '1') { sel.dataset.set = '1'; Array.from(sel.options).forEach(o => { if (Number(o.value) === rt.clip.db) sel.value = o.value; }); }
+        const b = window.universalAsioSdk && window.universalAsioSdk.bridgeUrl;                      // native streams measure their own clipping: same threshold
+        if (b && clipView.sent !== b + '|' + rt.clip.db) {
+            clipView.sent = b + '|' + rt.clip.db;
+            try { fetch(b + '/api/meters', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Mixer-Action': 'meters' }, body: JSON.stringify({ clipDb: rt.clip.db }) }).catch(() => {}); } catch (e) { /* no bridge */ }
+        }
+        if (!$('clip-alert-grid') || !visible('meter')) return;
+        for (let i = 0; i < 32; i++) {
+            const d = $('clip-dot-' + i), s = rt.ch[i]; if (!d) continue;
+            const lit = rt.clip.lit(s, now), latched = !!(s && s.clipLatched);
+            d.className = 'w-2 h-2 rounded-full mx-auto mb-0.5 cursor-pointer ' + (lit ? 'bg-rose-500 shadow-[0_0_6px_#f43f5e]' : latched ? 'bg-rose-800' : 'bg-emerald-500/30');
+            d.style.background = '';
+            d.title = s && s.clipN ? 'CH ' + (i + 1) + ' clipped ' + s.clipN + ' time' + (s.clipN > 1 ? 's' : '') + '. Click to clear.' : 'CH ' + (i + 1) + ': no clipping';
+            if (!d.onclick) d.onclick = () => rt.clip.clear(rt.ch[i]);
+        }
+        const n = rt.clip.total(), c = $('clip-alert-count');
+        if (c) {
+            const txt = n + ' CLIP' + (n === 1 ? '' : 'S') + ' DETECTED';
+            if (c.textContent !== txt) c.textContent = txt;
+            c.className = 'px-2 py-0.5 rounded border text-[7px] font-bold cursor-pointer ' + (n ? 'bg-rose-500/15 text-rose-400 border-rose-500/40' : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30');
+            c.title = n ? 'Sources, channel strips and master together (threshold ' + rt.clip.db + ' dBFS). Click to clear all.' : 'No clipping (threshold ' + rt.clip.db + ' dBFS)';
+            c.onclick = () => rt.clip.clearAll();
+        }
+    });
 
     // ───────────────────────── feedback guard (a microphone patched into the strips + open speakers) ─────────────────────────
     const guard = { over: {} };

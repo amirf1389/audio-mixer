@@ -415,3 +415,17 @@ Things that antivirus heuristics flag in an installer ("potentially unwanted pro
 - **Nothing is installed behind your back.** The Windows setup used to install the Microsoft Visual C++ runtime with `winget` without asking; it now asks first (Yes / No). A `/quiet` install installs nothing unless `/vcredist` is given. The Windows installer already contains Node.js, so none is installed; the portable `start-pc-mode.bat` asks before installing Node.js or the runtime and treats "no answer in 60 seconds" as No (`AUDIO_MIXER_YES` no longer applies to it).
 
 Not tested here: the setup program on a real Windows PC or against a real Defender (the setup is compiled and its logic checked from the source, the MSI is inspected).
+
+## Clip detection for every meter, and virtual audio drivers for every OS (1.6.0.0)
+
+**Clip detection on all sources.** Every level meter now uses one detector (before, the meters used different rules, the threshold list was a dead menu and the CLEAR CLIPS button did not reset the real state):
+- A signal **clips** when 3 samples in a row reach the clip threshold, or one sample reaches digital full scale (a flat-topped wave is clipping, a single peak is not). Events closer than 250 ms count as one.
+- It applies to the **source inputs** (every LIVE SOURCES input, the microphone, patched live inputs), the **32 channel strips**, the **master L / R** and **native streams** (ASIO / WASAPI / Core Audio / ALSA / virtual devices: the bridge measures the real samples and reports `clipping`, `clipCh`, `clipRuns`).
+- A clip **latches**: the CLIP badge lights for 1.5 s, then stays dark red with the count ("CLIP ×3") until you click it (or the strip's LED, or the CLIP ALERT counter), or press CLEAR CLIPS. The CLIP ALERT page now shows the real channel state and the total.
+- The **CLIP THRESHOLD** menu (-0.1 / -0.3 / -1.0 / -3.0 dBFS) is real: it is saved in the browser and sent to the bridge (`POST /api/meters {"clipDb":-1}`, `GET /api/meters`).
+
+**Virtual audio drivers** (`drivers/`, see `drivers/README.md`): a virtual device called "Audio Mixer" for each system's audio architecture, so other programs can play into the mixer (LIVE SOURCES: READ) and record the mixer's output (WRITE).
+- **Windows: an ASIO driver** (`AudioMixerASIO64.dll` / `AudioMixerASIO32.dll`, in `AudioMixer-<version>-asio-driver-windows.zip`; registered by `register.bat` as administrator, never by the setup program).
+- **Linux: an ALSA plugin** (`aplay -D audiomixer`, `arecord -D audiomixer`; PulseAudio / PipeWire through the ALSA bridge). **macOS: a Core Audio plug-in. Android: an audio HAL** (for device makers). The last two are sources (`AudioMixer-<version>-drivers-source.tar.gz`), not built here.
+- The drivers connect over loopback to the mixer's new `/ws/virtual` endpoint (Node bridge and the Android app's engine); the device appears in `/api/interfaces`.
+- Tested here: the connection library and the Linux plugin against the real bridge (a native client, `aplay`, `arecord`, in real time), the bridge and the Android engine's hub, the Windows DLLs cross-compiled and inspected, and the page end to end in Chromium (the device in LIVE SOURCES, READ shows the level, WRITE reaches the driver). **Not tested: the ASIO driver in a real DAW, the macOS plug-in, the Android HAL.** The installers contain no driver.
