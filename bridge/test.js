@@ -1323,7 +1323,7 @@ test('repository layout: one folder per system with its sources and release file
   const lay = require('../scripts/layout'), mk = require('../scripts/make-update'), root = pathx.join(__dirname, '..');
   const top = fsx.readdirSync(root, { withFileTypes: true }).filter(e => !e.name.startsWith('.') && e.name !== 'node_modules' && e.name !== 'dist');
   const dirs = top.filter(e => e.isDirectory()).map(e => e.name).sort(), files = top.filter(e => e.isFile()).map(e => e.name).sort();
-  assert.deepStrictEqual(dirs, ['android', 'bridge', 'client', 'deploy', 'drivers', 'ios', 'linux', 'macos', 'npm-installer', 'ota-server', 'releases', 'scripts', 'windows'], 'the top level is minimal: systems + shared code');
+  assert.deepStrictEqual(dirs, ['android', 'bridge', 'client', 'deploy', 'drivers', 'engine', 'ios', 'linux', 'macos', 'npm-installer', 'ota-server', 'releases', 'scripts', 'windows'], 'the top level is minimal: systems + shared code');
   assert.deepStrictEqual(files, ['Additional Terms & Conditions', 'LICENSE', 'README.md', 'SECURITY.md', 'boot.html', 'index.html', 'package.json'], 'only the web app and the project papers at the root');
   assert.deepStrictEqual(fsx.readdirSync(pathx.join(root, 'releases')), ['update.json'], 'releases/ holds only the manifest that installed apps fetch');
   for (const os of lay.OSES) assert.ok(fsx.statSync(pathx.join(root, os, 'releases')).isDirectory(), os + '/releases');
@@ -2837,6 +2837,95 @@ test('METER SOURCE: the VU, LUFS, scope and phase pages follow one chosen source
   r = calc(wave(1000, 0.8, x => (Math.sin(x) >= 0 ? 1 : -1)), A, fs, { timebase: 0.5, triggerLevel: -6, triggerEdge: 'rise' }); assert.ok(Math.abs(r.freq - 1000) < 2 && Math.abs(r.p2p - 1.6) < 0.01, JSON.stringify(r));
   const q = calc(new Float32Array(size), A, fs, { timebase: 1, triggerLevel: -12 }); assert.ok(!q.triggered && q.start === size - q.N && q.freq === 0 && q.p2p === 0 && q.crest === 0, 'silence: no trigger, no frequency');
   assert.ok(Math.abs(calc(wave(60, 0.3, Math.sin), A, fs, { timebase: 10 }).freq - 60) < 0.5, 'low frequencies too');
+});
+
+test('native engine: the embedded C core, the C++ engine, the Rust crate, the device runtime and the Apple wrappers are held to the same vectors (49 cases, 397 numbers)', (tc) => {
+  const be = require('../scripts/build-engine');
+  const steps = { 'embedded C core': be.buildC(), 'C++ engine': be.buildCpp(), 'Rust crate': be.buildRust(), 'device runtime': be.buildIo(), 'Apple wrappers': be.checkApple() };
+  let ran = 0;
+  for (const [name, r] of Object.entries(steps)) { if (r.skipped) continue; ran++; assert.strictEqual(r.ok, true, name + ': ' + r.detail); }
+  if (!ran) return tc.skip('no compiler on this machine');
+  for (const [name, re] of [['embedded C core', /49 cases, 397 numbers checked, 0 failed/], ['C++ engine', /49 cases, 397 numbers checked, 0 failed/], ['Rust crate', /49 cases, 397 numbers checked, 0 failed/]]) if (!steps[name].skipped) assert.match(steps[name].detail, re, name);
+  if (!steps['device runtime'].skipped) assert.match(steps['device runtime'].detail, /runtime: all good/);
+  // the vectors are what the reference code gives today: a change in the page's loudness / meter / scope code or in the bridge's meter shows up here
+  const fsx = require('node:fs'), pathx = require('node:path'), osx = require('node:os'), cp = require('node:child_process');
+  const tmp = pathx.join(fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'vec-')), 'v.txt'), root = pathx.join(__dirname, '..', 'engine', 'tests');
+  try {
+    const g = cp.spawnSync(process.execPath, [pathx.join(root, 'gen-vectors.js'), tmp], { encoding: 'utf8' }); assert.strictEqual(g.status, 0, g.stderr);
+    assert.strictEqual(fsx.readFileSync(tmp, 'utf8'), fsx.readFileSync(pathx.join(root, 'vectors.txt'), 'utf8'), 'engine/tests/vectors.txt is what the reference code gives (node engine/tests/gen-vectors.js rewrites it)');
+  } finally { fsx.rmSync(pathx.dirname(tmp), { recursive: true, force: true }); }
+});
+
+test('native engine in the page: the WebAssembly build is embedded, imports nothing, runs the loudness and scope vectors, replaces the JavaScript meters behind the same objects', async () => {
+  const fsx = require('node:fs'), pathx = require('node:path'), vm = require('node:vm'), crypto = require('node:crypto');
+  const root = pathx.join(__dirname, '..'), html = fsx.readFileSync(pathx.join(root, 'index.html'), 'utf8');
+  const { parse } = require('../engine/tests/vectors'), { gen } = require('../engine/tests/signals');
+  const m = /<script id="engine-wasm">([\s\S]*?)<\/script>/.exec(html); assert.ok(m, 'the engine-wasm script is in the page');
+  const b64 = /AM_WASM_B64:BEGIN\*\/'([A-Za-z0-9+/=]+)'\/\*AM_WASM_B64:END/.exec(m[1]); assert.ok(b64, 'the binary is embedded');
+  const bytes = Buffer.from(b64[1], 'base64'); assert.ok(bytes.length > 5000 && bytes.length < 100000, 'size ' + bytes.length);
+  assert.ok(bytes.equals(fsx.readFileSync(pathx.join(root, 'engine', 'wasm', 'am_core.wasm'))), 'the page carries engine/wasm/am_core.wasm (node scripts/build-engine.js --wasm re-embeds it)');
+  const mod = new WebAssembly.Module(bytes); assert.strictEqual(WebAssembly.Module.imports(mod).length, 0, 'freestanding: no imports');
+  // run the script of the page: the loudness object and the scope function behind it
+  const calls = []; const win = { lufsMeter: { fs: 48000, samples: 0, momentary: -Infinity, feed() { calls.push('js-feed'); }, setRate() { calls.push('js-rate'); }, reset() { calls.push('js-reset'); } }, meterSource: { scopeCalc() { return 'js'; } } };
+  vm.runInNewContext(m[1], { window: win, WebAssembly, atob: s => Buffer.from(s, 'base64').toString('binary'), Float32Array, Uint8Array, Math });
+  for (let i = 0; i < 100 && !win.amEngine.ready; i++) await new Promise(r => setTimeout(r, 20));
+  const E = win.amEngine; assert.ok(E.ready && E.version === 1 && E.source === 'webassembly');
+  assert.strictEqual(win.lufsMeter.engine, 'webassembly');
+  // the vectors the page's engine must give
+  let n = 0;
+  for (const c of parse()) {
+    if (c.kind === 'lufs') {
+      const fsHz = Number(c.head[2]), block = Number(c.head[3]), len = Math.round(fsHz * Number(c.head[4])), l = gen(c.head[5], fsHz, len, 0), r = gen(c.head[5], fsHz, len, 1);
+      E.lufs.init(fsHz); for (let i = 0; i < len; i += block) E.lufs.feed(l.subarray(i, i + block), r.subarray(i, i + block));
+      const v = E.lufs.read(), want = c.expect; n++;
+      for (const [k, w, tol] of [['momentary', want[0], 0.02], ['shortTerm', want[1], 0.02], ['integrated', want[2], 0.02], ['lra', want[3], 0.02], ['truePeak', want[4], 0.01]]) assert.ok(w === -Infinity ? v[k] === -Infinity : Math.abs(v[k] - w) <= tol, `${c.id} ${k}: ${v[k]} vs ${w}`);
+    } else if (c.kind === 'scope') {
+      const fsHz = Number(c.head[2]), size = Number(c.head[3]), A = gen(c.head[7], fsHz, size, 0), r = E.scopeCalc(A, fsHz, { timebase: Number(c.head[4]), triggerLevel: Number(c.head[5]), triggerEdge: c.head[6] === '1' ? 'rise' : 'fall' }), w = c.expect; n++;
+      assert.ok(r.N === w[0] && r.start === w[1] && r.triggered === (w[2] === 1), c.id + ' sweep'); for (const [k, x, tol] of [['p2p', w[3], 1e-6], ['rms', w[4], 1e-6], ['crest', w[5], 1e-4], ['freq', w[6], 1e-6]]) assert.ok(Math.abs(r[k] - x) <= tol * Math.max(1, Math.abs(x)), `${c.id} ${k}: ${r[k]} vs ${x}`);
+    }
+  }
+  assert.ok(n >= 20, 'loudness and scope vectors run in the page engine: ' + n);
+  // the page's objects use it: feed -> the fields the page paints
+  const left = gen('sine:1000:0.5', 48000, 4800 * 4, 0); win.lufsMeter.setRate(48000); win.lufsMeter.feed(left.subarray(0, 9600), left.subarray(0, 9600)); win.lufsMeter.feed(left.subarray(9600, 19200), left.subarray(9600, 19200));
+  assert.ok(win.lufsMeter.samples === 19200 && Math.abs(win.lufsMeter.momentary + 6.01) < 0.05 && Math.abs(win.lufsMeter.truePeak + 6.02) < 0.05, 'the LUFS object follows the engine: ' + win.lufsMeter.momentary);
+  assert.ok(!calls.includes('js-feed'), 'the JavaScript loudness code does not run when the engine is there');
+  const sc = win.meterSource.scopeCalc(gen('sine:440:0.5', 48000, 32768, 0), null, 48000, { timebase: 1, triggerLevel: -12, triggerEdge: 'rise' }); assert.ok(Math.abs(sc.freq - 440) < 0.1, 'meterSource.scopeCalc uses the engine');
+  assert.strictEqual(win.meterSource.scopeCalc(new Float32Array(40000), null, 48000, { timebase: 1 }), 'js', 'a block the engine cannot take falls back to JavaScript');
+  // without WebAssembly (or with a damaged binary) nothing changes
+  const win2 = { lufsMeter: { feed() { return 'js'; } }, meterSource: { scopeCalc() { return 'js'; } } };
+  vm.runInNewContext(m[1], { window: win2, WebAssembly: undefined, atob: s => Buffer.from(s, 'base64').toString('binary'), Float32Array, Uint8Array, Math }); assert.strictEqual(win2.amEngine.ready, false); assert.strictEqual(win2.lufsMeter.feed(), 'js');
+  const win3 = { lufsMeter: { feed() { return 'js'; } }, meterSource: { scopeCalc() { return 'js'; } } };
+  vm.runInNewContext(m[1].replace(b64[1], 'AAAA'), { window: win3, WebAssembly, atob: s => Buffer.from(s, 'base64').toString('binary'), Float32Array, Uint8Array, Math }); await new Promise(r => setTimeout(r, 100)); assert.strictEqual(win3.amEngine.ready, false); assert.strictEqual(win3.lufsMeter.feed(), 'js');
+  void crypto;
+});
+
+test('native engine in the bridge: the Node addon (C++) gives the numbers of the JavaScript meter, the loudness meter and the scope of the vectors', (tc) => {
+  const be = require('../scripts/build-engine'), r = be.buildNode();
+  if (r.skipped) return tc.skip(r.skipped); assert.strictEqual(r.ok, true, r.detail);
+  const native = require(r.file), lv = require('./levels.js'), { parse } = require('../engine/tests/vectors'), { gen, genS16 } = require('../engine/tests/signals');
+  // the bridge's Int16 meter: the same snapshots as the JavaScript class, block by block, and with a changed clip threshold
+  for (const [spec, ch, db] of [['clipsine:440:1.4', 2, -0.1], ['sine:300:0.9', 1, -3], ['noise:11:0.99', 6, -0.1], ['sine:1000:0.1', 2, -0.1]]) {
+    lv.setClipDb(db); const x = genS16(spec, 48000, 4800, ch), buf = Buffer.from(x.buffer), a = new lv.Meter(ch), b = new native.Meter(ch, db);
+    for (let i = 0; i < 4; i++) { const part = buf.subarray(i * buf.length / 4, (i + 1) * buf.length / 4); a.push(part); b.push(part); const sa = a.snapshot(), sb = b.snapshot(); sb.clipDb = db; assert.deepStrictEqual(sb, sa, spec + ' block ' + i); }
+  }
+  lv.setClipDb(-0.1); const odd = Buffer.alloc(401); odd.writeInt16LE(32767, 1); const m1 = new native.Meter(1, -0.1); m1.push(odd.subarray(1, 399)); assert.strictEqual(m1.snapshot().frames, 199, 'a Buffer at an odd address, a partial last sample ignored');
+  assert.throws(() => m1.push('nope'), /Buffer/);
+  // loudness and scope of the vectors
+  let n = 0;
+  for (const c of parse()) {
+    if (c.kind === 'lufs') { const fsHz = Number(c.head[2]), len = Math.round(fsHz * Number(c.head[4])), l = gen(c.head[5], fsHz, len, 0), rr = gen(c.head[5], fsHz, len, 1), m = new native.Loudness(fsHz); for (let i = 0; i < len; i += 2048) m.feed(l.subarray(i, i + 2048), rr.subarray(i, i + 2048)); const v = m.values(); n++;
+      [v.momentary, v.shortTerm, v.integrated, v.lra].forEach((x, k) => assert.ok(c.expect[k] === -Infinity ? x === -Infinity : Math.abs(x - c.expect[k]) <= 0.02, c.id + ' ' + k)); assert.ok(Math.abs(v.truePeak - c.expect[4]) <= 0.01 || v.truePeak === c.expect[4], c.id + ' true peak'); }
+    if (c.kind === 'scope') { const fsHz = Number(c.head[2]), A = gen(c.head[7], fsHz, Number(c.head[3]), 0), s = native.scope(A, fsHz, { timebase: Number(c.head[4]), triggerLevel: Number(c.head[5]), triggerEdge: c.head[6] === '1' ? 'rise' : 'fall' }); n++; assert.ok(s.N === c.expect[0] && s.start === c.expect[1] && s.triggered === (c.expect[2] === 1) && Math.abs(s.freq - c.expect[6]) <= 1e-6 * Math.max(1, c.expect[6]), c.id); }
+  }
+  assert.ok(n >= 20); assert.throws(() => native.scope(new Float64Array(10), 48000, {}), /Float32Array/);
+  // the mixer
+  const mx = new native.Mixer(2, 48000); mx.setStrip(0, { gainDb: -6, pan: -1 }); mx.setStrip(1, { mute: true }); mx.setMaster({ gainDb: 0, limiter: false });
+  const x = gen('sine:440:0.5', 48000, 4096, 0), ol = new Float32Array(4096), orr = new Float32Array(4096); mx.process([x, x], ol, orr); const st = mx.state();
+  assert.ok(Math.abs(Math.max(...ol.map(Math.abs)) - 0.25) < 0.005 && Math.max(...orr.map(Math.abs)) < 0.001 && Math.abs(st.strips[0].pk - 0.25) < 0.005 && st.strips.length === 2 && st.master.length === 2, 'strip gain, pan and the state');
+  assert.throws(() => mx.process([x], ol, orr), /one Float32Array per strip/);
+  // the bridge uses it when it is there, and the loader reports it
+  const node = require('../engine/node'); assert.strictEqual(node.available, true); assert.ok(lv.native(), 'bridge/levels.js picked the addon up');
+  assert.strictEqual(new (require('./levels.js').NativeMeter)(2).ch, 2);
 });
 
 test('npm installer (npm-installer/): per-system choice of file and own installation, signed manifest + SHA-256 checked before anything runs, Windows ASIO registration only on request', async () => {

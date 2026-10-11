@@ -1,0 +1,13 @@
+[package]
+name = "audiomixer-engine"
+version = "1.9.0"
+edition = "2021"
+description = "Audio Mixer engine: meters with clip detection, BS.1770 loudness, phase, scope, VU, Int16 meter and a 32-strip mixer; the same numbers as the page, the C++ engine and the embedded C core."
+license = "MIT"
+repository = "https://github.com/amirf1389/audio-mixer"
+
+[lib]
+name = "audiomixer_engine"
+path = "src/lib.rs"
+
+[dependencies]

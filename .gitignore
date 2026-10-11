@@ -92,3 +92,10 @@ android/qt/build/
 !drivers/**/Makefile
 !linux/alsa-plugin/Makefile
 !macos/coreaudio-driver/Makefile
+
+# engine build output (node scripts/build-engine.js)
+engine/rust/target/
+engine/embedded-c/build/
+engine/cpp/build/
+engine/node/build/
+!engine/**/Makefile
