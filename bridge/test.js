@@ -3317,3 +3317,62 @@ test('single-file server: the page, the command line and the server in one file 
     assert.deepStrictEqual((await (await fetch(`http://127.0.0.1:${port}/api/handoff`)).json()).scenes, [null, { name: 'x' }]);
   } finally { srv.kill(); }
 });
+
+test('reboot system: restart the server for real, reboot the computer only on request (dry run), commands per OS', async () => {
+  const power = require('./power'), { spawn } = require('node:child_process');
+  assert.strictEqual(power.rebootCommand('win32').cmd, 'shutdown.exe'); assert.ok(power.rebootCommand('win32').args.includes('/t'));          // 10 s to cancel
+  assert.deepStrictEqual(power.cancelCommand('win32').args, ['/a']);
+  assert.strictEqual(power.rebootCommand('linux').cmd, 'systemctl'); assert.strictEqual(power.rebootCommand('darwin').cmd, 'osascript');
+  assert.strictEqual(power.rebootCommand('android'), null); assert.strictEqual(power.capabilities({ platform: 'ios' }).reboot, false);
+  await assert.rejects(power.rebootOs({ platform: 'android' }), /cannot be rebooted/);
+  const calls = [];
+  const r = await power.rebootOs({ platform: 'linux', dry: false, run: async (c, a) => { calls.push(c); return c === 'systemctl' ? { ok: false, err: 'denied' } : { ok: true }; } });
+  assert.deepStrictEqual(calls, ['systemctl', 'shutdown']); assert.ok(r.ok);                                                                    // falls back to shutdown -r now
+  await assert.rejects(power.rebootOs({ platform: 'win32', dry: false, run: async () => ({ ok: false, err: 'Access is denied' }) }), /administrator/);
+  assert.match((await power.rebootOs({ platform: 'win32', dry: true })).command, /^shutdown\.exe \/r \/t 10/);
+  // the copy that replaces the server: same program, same arguments, no browser
+  assert.deepStrictEqual(power.relaunch({ execPath: '/n', execArgv: [], argv: ['/n', '/a/server.js'], self: undefined }), { cmd: '/n', args: ['/a/server.js', '--no-open'] });
+  assert.deepStrictEqual(power.relaunch({ execPath: '/x/am', execArgv: [], argv: ['/x/am', '/x/am', '--port', '9'], self: { sea: true, script: null } }), { cmd: '/x/am', args: ['--port', '9', '--no-open'] });
+  // restartSelf: the port is closed first, then the copy is started, then this process exits
+  const order = []; const fakeServer = { close(cb) { order.push('close'); setImmediate(cb); }, closeAllConnections() { order.push('drop'); } };
+  await new Promise(res => power.restartSelf({ server: fakeServer, sockets: new Set([{ destroy() { order.push('sock'); } }]), plan: { cmd: 'x', args: ['y'] }, dry: false, delay: 1, spawnImpl: (c, a) => { order.push('spawn ' + c + ' ' + a); return { unref() {} }; }, exit: code => { order.push('exit ' + code); res(); } }));
+  assert.deepStrictEqual(order, ['close', 'sock', 'drop', 'spawn x y', 'exit 0']);
+  // the real thing, over HTTP: a server on its own port starts a new process of itself; the dry run of the OS reboot reports the command and needs the word REBOOT
+  const port = 20000 + Math.floor(Math.random() * 20000), base = `http://127.0.0.1:${port}`, kids = [];
+  const env = { ...process.env, BRIDGE_PORT: String(port), BRIDGE_POWER_DRY_RUN: '1' };
+  const child = spawn(process.execPath, [pathx.join(__dirname, 'server.js')], { env, stdio: 'ignore' }); kids.push(child);
+  const up = async (not) => { for (let i = 0; i < 100; i++) { try { const j = await (await fetch(base + '/api/power')).json(); if (j.ok && j.pid !== not) return j; } catch (_) { /* not yet */ } await new Promise(r => setTimeout(r, 100)); } throw new Error('server not up'); };
+  try {
+    const p1 = await up(-1); assert.strictEqual(p1.restart, true);
+    const act = (path, action, body) => fetch(base + path, { method: 'POST', headers: { 'X-Mixer-Action': action, 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+    assert.strictEqual((await act('/api/reboot', 'reboot', {})).status, 400);                                                                    // no word, no reboot
+    assert.strictEqual((await fetch(base + '/api/reboot', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"confirm":"REBOOT"}' })).status, 400);   // header required
+    assert.strictEqual((await fetch(base + '/api/reboot', { method: 'POST', headers: { 'X-Mixer-Action': 'reboot', 'Content-Type': 'application/json', Origin: 'https://evil.example' }, body: '{"confirm":"REBOOT"}' })).status, 403);
+    const dry = await (await act('/api/reboot', 'reboot', { confirm: 'REBOOT' })).json(); assert.ok(dry.ok && dry.dry === true && /shutdown|systemctl|osascript/.test(dry.command));
+    const rs = await (await act('/api/restart', 'restart')).json(); assert.ok(rs.ok && rs.dry === true);                                         // dry run: nothing restarts
+    assert.strictEqual((await up(-1)).pid, p1.pid);
+  } finally { for (const k of kids) k.kill(); }
+  const port2 = port + 1, base2 = `http://127.0.0.1:${port2}`, env2 = { ...process.env, BRIDGE_PORT: String(port2) };
+  const child2 = spawn(process.execPath, [pathx.join(__dirname, 'server.js')], { env: env2, stdio: 'ignore' });
+  let newPid = 0;
+  try {
+    let p1 = null; for (let i = 0; i < 100 && !p1; i++) { try { p1 = await (await fetch(base2 + '/api/power')).json(); } catch (_) { await new Promise(r => setTimeout(r, 100)); } }
+    assert.ok(p1);
+    const rs = await (await fetch(base2 + '/api/restart', { method: 'POST', headers: { 'X-Mixer-Action': 'restart' } })).json(); assert.ok(rs.ok && rs.restarting && rs.dry === false);
+    for (let i = 0; i < 120 && !newPid; i++) { await new Promise(r => setTimeout(r, 100)); try { const j = await (await fetch(base2 + '/api/power')).json(); if (j.pid !== p1.pid) newPid = j.pid; } catch (_) { /* restarting */ } }
+    assert.ok(newPid && newPid !== p1.pid, 'a new process answers on the same port');
+  } finally { child2.kill(); if (newPid) { try { process.kill(newPid); } catch (_) { /* gone */ } } }
+});
+
+test('page: REBOOT chooser, real factory reset, CALIBRATE page (measurements, loudness log, session snapshots) are wired', () => {
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  const sc = html.slice(html.indexOf('<script id="system-control">'), html.indexOf('<script id="system-calibration">')), cal = html.slice(html.indexOf('<script id="system-calibration">'));
+  assert.ok(sc.length > 1000 && cal.length > 1000);
+  for (const s of ["'/api/restart'", "'/api/reboot'", "confirm: 'REBOOT'", "'/api/inserts'", 'window.factoryResetConsole = factory', 'window.rebootSystem = function (mode)', 'systemControl = { run, engine, server, page, computer', 'location.reload()']) assert.ok(sc.includes(s), s);
+  for (const s of ["'/ws/duplex'", 'function correlate', 'function chirp', 'measureClock', 'measureNoise', 'logCsv', 'restoreSnapshot', 'halx_snapshots', 'halx_session_open', 'testHardwareLoopback', 'calibrateDuganAmbient', "window.sessionTools"]) assert.ok(cal.includes(s), s);
+  assert.ok(html.includes("id: 'calib'") && html.includes('id="tab-calib"') && html.includes('id="calib-root"'));
+  assert.ok(!/LOOPBACK PASS/.test(cal));                                      // no pass is printed without a measurement
+  assert.ok(html.includes('window.insertChain = chain'));
+  // the inserts of the server are cleared by a factory reset, on any plan
+  const srv = fsx.readFileSync(pathx.join(__dirname, 'server.js'), 'utf8'); assert.ok(srv.includes('body.clear === true') && srv.indexOf('body.clear === true') < srv.indexOf("hasFeature(license.status(), 'plugins')"));
+});

@@ -927,6 +927,7 @@ window.navTabs = [
             { group: 'SYSTEM', id: 'access', text: 'ACCESS', icon: 'fa-solid fa-id-badge', color: 'text-rose-400' },
             { group: 'SYSTEM', id: 'renew', text: 'LICENSE', icon: 'fa-solid fa-certificate', color: 'text-amber-400' },
             { group: 'SYSTEM', id: 'admin', text: 'ADMIN', icon: 'fa-solid fa-key', color: 'text-red-400' },
+            { group: 'SYSTEM', id: 'calib', text: 'CALIBRATE', icon: 'fa-solid fa-ruler-combined', color: 'text-amber-400' },
             { group: 'SYSTEM', id: 'boot', text: 'BOOT / RESET', icon: 'fa-solid fa-power-off', color: 'text-rose-500' }
         ];
 
@@ -8861,6 +8862,8 @@ window.navTabs = [
 
               </div>
             </div>`;
+
+            htmlString += `<div id="tab-calib" class="tab-content tab-hidden"><div id="calib-root"></div></div>`;     // CALIBRATE: filled by the system-calibration script
 
             cArea.innerHTML = htmlString;
 
@@ -17042,6 +17045,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             setParam(key, i, v) { const r = this.runs[key]; if (r && r.ready && r.ws.readyState === 1) r.ws.send(JSON.stringify({ type: 'param', i, v })); },
             askParams(key) { const r = this.runs[key]; if (r && r.ready && r.ws.readyState === 1) r.ws.send(JSON.stringify({ type: 'params' })); },
         };
+        window.insertChain = chain;      // used by SYSTEM CONTROL (restart audio engine closes and reopens the plugin hosts)
 
         // ── OTA updates (real: signed manifest, SHA-256 verified download, link for the system that asks) ──
         // Which system is this? Same rules as bridge/osdetect.js (bridge/test.js runs both on one table of user agents):
@@ -18807,6 +18811,476 @@ registerProcessor('am-lufs',P)`;
         apply(); document.addEventListener('DOMContentLoaded', apply);
         (mq.addEventListener ? mq.addEventListener('change', apply) : mq.addListener(apply));
         window.addEventListener('load', apply);
+    })();
+    </script>
+    <script id="system-control">
+    /* SYSTEM CONTROL: REBOOT and FACTORY RESET that really do what they say (they used to play an animation / show a notice).
+       REBOOT asks what to restart:  ENGINE (every audio stream, the plugin hosts, the meters and the server link are closed and opened again; the page and the mix stay),
+       SERVER (the local system server restarts itself, POST /api/restart), PAGE (the page reloads, scenes and settings stay), COMPUTER (the operating system reboots,
+       POST /api/reboot, only after typing REBOOT; Windows waits 10 s and can be cancelled).  FACTORY RESET erases everything this page saved (scenes, routing, settings,
+       live-source choices, plugin inserts of the server) and starts clean.  Nothing here touches the audio path while it is not used. */
+    (function () {
+        const $ = id => document.getElementById(id);
+        const wait = ms => new Promise(r => setTimeout(r, ms));
+        const L = () => window.liveSources;
+        let busy = false, bridge = null;
+
+        async function findBridge() {
+            const l = L();
+            if (l && l.bridgeUrl) return (bridge = l.bridgeUrl);
+            if (l && l.findBridge) { try { bridge = await l.findBridge(); } catch (e) { bridge = null; } return bridge; }
+            return (bridge = null);
+        }
+        async function post(path, action, body) {
+            const base = await findBridge(); if (!base) throw new Error('the local system server is not running (PC mode)');
+            const r = await fetch(base + path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Mixer-Action': action }, body: JSON.stringify(body || {}) });
+            const j = await r.json().catch(() => ({}));
+            if (!r.ok || j.ok === false) throw new Error(j.error || ('HTTP ' + r.status));
+            return j;
+        }
+
+        // the boot overlay doubles as a progress log with real steps
+        const log = { open(title) { const o = $('boot-overlay'), t = $('boot-terminal'); if (!o || !t) return; o.style.display = 'flex'; t.innerHTML = '<div class="text-amber-500 font-bold">' + title + '</div>'; this.bar(0); },
+            line(text, cls) { const t = $('boot-terminal'); if (!t) return; const d = document.createElement('div'); d.textContent = '> ' + text; if (cls) d.className = cls; t.appendChild(d); t.scrollTop = t.scrollHeight; },
+            bar(p) { const b = $('boot-progress'); if (b) b.style.width = Math.max(0, Math.min(100, p)) + '%'; },
+            close(ms) { setTimeout(() => { if (window.dismissBootOverlay) window.dismissBootOverlay(); }, ms || 600); } };
+
+        // ── 1. audio engine ──
+        async function engine(opts) {
+            opts = opts || {};
+            const steps = [], did = (t, ok) => { steps.push([t, ok !== false]); log.line(t, ok === false ? 'text-rose-400' : ''); };
+            const l = L(), sdk = window.universalAsioSdk, st = window.state || {};
+            log.line('Closing every audio stream (ASIO / WASAPI / Core Audio / ALSA / virtual / microphone)...');
+            const reading = l ? Array.from(l.caps.keys()) : [], writing = l ? Array.from(l.writes.keys()) : [];
+            try { if (sdk && sdk.stopAllStreams) sdk.stopAllStreams(); } catch (e) { /* none open */ }
+            if (l) { reading.forEach(k => { try { l.stopRead(k); } catch (e) { /* gone */ } }); writing.forEach(k => { try { l.stopWrite(k); } catch (e) { /* gone */ } }); if (l.music && l.stopMusic) { try { l.stopMusic(); } catch (e) { /* gone */ } } }
+            did(reading.length + writing.length + ' stream(s) closed, devices released'); log.bar(25); await wait(120);
+            const chain = window.insertChain;
+            if (chain) {
+                const keys = Object.keys(chain.runs || {});
+                keys.forEach(k => { try { chain.closeSlot(k); } catch (e) { /* gone */ } });
+                chain.sig = '';
+                did(keys.length + ' plugin host(s) stopped');
+            }
+            log.bar(45);
+            const c = st.ctx;
+            if (c && c.state !== 'closed') {
+                try { await c.suspend(); did('Web Audio engine paused (' + (c.sampleRate / 1000) + ' kHz)'); await wait(80); await c.resume(); did('Web Audio engine running'); } catch (e) { did('Web Audio engine: ' + e.message, false); }
+            } else did('Web Audio engine not started yet (it starts with the first sound)');
+            log.bar(65);
+            try { if (window.rtEngine && window.rtEngine.reset) window.rtEngine.reset(); } catch (e) { /* none */ }
+            document.querySelectorAll('#lufs-card-int').forEach(e => e.click());                                                  // loudness measurement starts again
+            did('meters, loudness and spectrum restarted'); log.bar(80);
+            bridge = null; if (l) l.bridgeUrl = null;
+            const url = await findBridge();
+            if (url && l) {
+                did('system server found at ' + url);
+                try { l.known = null; await l.scan(); did(((l.interfaces || []).length) + ' audio interface(s) scanned'); } catch (e) { did('interface scan: ' + e.message, false); }
+                if (chain) { try { await chain.sync(); } catch (e) { /* no plugins */ } }
+            } else did('no system server: browser audio only (PC mode adds ASIO / WASAPI)');
+            log.bar(100);
+            if (!opts.quiet) { log.line('AUDIO ENGINE RESTARTED', 'text-emerald-400 font-bold'); log.close(900); if (window.notify) window.notify('Audio engine restarted', 'rotate-right'); }
+            return steps;
+        }
+
+        // ── 2. system server ──
+        async function server() {
+            log.open('Restarting the system server...');
+            let before;
+            try { before = await fetch((await findBridge()) + '/api/power', { cache: 'no-store' }).then(r => r.json()); } catch (e) { before = null; }
+            if (!before) { log.line('the local system server is not running (PC mode): nothing to restart', 'text-rose-400'); log.close(1800); return false; }
+            try { await post('/api/restart', 'restart'); } catch (e) { log.line('refused: ' + e.message, 'text-rose-400'); log.close(2200); return false; }
+            log.line('restart requested (process ' + before.pid + ')'); log.bar(20);
+            let again = null;
+            for (let i = 0; i < 80 && !again; i++) {
+                await wait(300); log.bar(20 + i);
+                try { const j = await fetch(bridge + '/api/power', { cache: 'no-store' }).then(r => r.json()); if (j && j.ok && j.pid !== before.pid) again = j; } catch (e) { /* down for a moment */ }
+            }
+            if (!again) { log.line('the server did not come back: start it again by hand (audio-mixer)', 'text-rose-400'); return false; }
+            log.line('server running again (process ' + again.pid + ')', 'text-emerald-400');
+            await engine({ quiet: true });
+            log.line('SYSTEM SERVER RESTARTED', 'text-emerald-400 font-bold'); log.close(900);
+            if (window.notify) window.notify('System server restarted', 'server');
+            return true;
+        }
+
+        // ── 3. page ──
+        function page() { log.open('Reloading the page...'); log.line('scenes and settings are kept'); setTimeout(() => location.reload(), 350); }
+
+        // ── 4. computer ──
+        async function computer() {
+            const base = await findBridge();
+            if (!base) { if (window.notify) window.notify('Rebooting the computer needs the system server (PC mode)', 'triangle-exclamation'); return false; }
+            let caps = null; try { caps = await fetch(base + '/api/power', { cache: 'no-store' }).then(r => r.json()); } catch (e) { /* below */ }
+            if (!caps || !caps.reboot) { if (window.notify) window.notify('This system cannot be rebooted from the app (' + ((caps && caps.platform) || 'unknown') + ')', 'triangle-exclamation'); return false; }
+            const word = window.prompt('REBOOT THE COMPUTER?\n\nEvery program on this computer closes. Save your work first.\nType REBOOT to continue.');
+            if (word !== 'REBOOT') { if (window.notify) window.notify('Computer reboot cancelled', 'ban'); return false; }
+            try { const r = await post('/api/reboot', 'reboot', { confirm: 'REBOOT' }); if (window.notify) window.notify('The computer reboots' + (caps.platform === 'win32' ? ' in 10 seconds (open REBOOT and choose CANCEL to stop it)' : ' now'), 'power-off'); return r; }
+            catch (e) { if (window.notify) window.notify('Reboot refused: ' + e.message, 'triangle-exclamation'); return false; }
+        }
+        async function cancelComputer() {
+            try { await post('/api/reboot', 'reboot', { cancel: true }); if (window.notify) window.notify('Computer reboot cancelled', 'ban'); return true; }
+            catch (e) { if (window.notify) window.notify('Nothing to cancel: ' + e.message, 'circle-info'); return false; }
+        }
+
+        // ── chooser ──
+        function menu() {
+            let m = $('sys-reboot-menu'); if (m) m.remove();
+            m = document.createElement('div'); m.id = 'sys-reboot-menu';
+            m.style.cssText = 'position:fixed;inset:0;z-index:100001;background:rgba(4,5,8,.86);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;padding:16px';
+            const items = [
+                ['engine', 'fa-wave-square', 'AUDIO ENGINE', 'Close and reopen every stream, plugin host, meter and the server link (releases a stuck ASIO / WASAPI device)'],
+                ['server', 'fa-server', 'SYSTEM SERVER', 'The local server restarts itself (PC mode)'],
+                ['page', 'fa-rotate-right', 'RELOAD PAGE', 'Warm reload, scenes and settings stay'],
+                ['computer', 'fa-power-off', 'COMPUTER', 'Reboots the operating system (asks you to type REBOOT)'],
+            ];
+            m.innerHTML = '<div style="max-width:420px;width:100%;background:#0b0e14;border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:16px">'
+                + '<div style="font:700 12px/1.2 monospace;letter-spacing:.2em;color:#f59e0b;margin-bottom:10px">REBOOT - WHAT TO RESTART?</div>'
+                + items.map(i => '<button data-m="' + i[0] + '" style="display:flex;gap:10px;align-items:flex-start;width:100%;text-align:left;margin:6px 0;padding:10px;border-radius:10px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);color:#e2e8f0;cursor:pointer"><i class="fa-solid ' + i[1] + '" style="color:#f59e0b;margin-top:2px"></i><span><b style="font:700 11px monospace;letter-spacing:.1em">' + i[2] + '</b><br><span style="font-size:10px;color:#94a3b8">' + i[3] + '</span></span></button>').join('')
+                + '<div style="display:flex;gap:8px;margin-top:8px"><button data-m="cancel-os" style="flex:1;padding:7px;border-radius:8px;background:transparent;border:1px solid rgba(255,255,255,.12);color:#94a3b8;font:700 10px monospace;cursor:pointer">CANCEL A PENDING COMPUTER REBOOT</button>'
+                + '<button data-m="close" style="flex:1;padding:7px;border-radius:8px;background:transparent;border:1px solid rgba(255,255,255,.12);color:#e2e8f0;font:700 10px monospace;cursor:pointer">CLOSE</button></div></div>';
+            m.onclick = e => { const b = e.target.closest('button[data-m]'); if (e.target === m) return m.remove(); if (!b) return; m.remove(); run(b.dataset.m); };
+            document.body.appendChild(m);
+        }
+
+        async function run(mode) {
+            if (busy) return false; busy = true;
+            try {
+                if (mode === 'engine') { log.open('Restarting the audio engine...'); return await engine(); }
+                if (mode === 'server') return await server();
+                if (mode === 'page') return page();
+                if (mode === 'computer') return await computer();
+                if (mode === 'cancel-os') return await cancelComputer();
+                if (mode === 'close') return false;
+                return menu();
+            } finally { busy = false; }
+        }
+        window.systemControl = { run, engine, server, page, computer, cancelComputer, menu };
+        window.rebootSystem = function (mode) { return typeof mode === 'string' ? run(mode) : menu(); };
+
+        // ── factory reset ──
+        async function factory() {
+            if (!confirm('FACTORY RESET\n\nErases everything this mixer saved on this device: scenes, routing, EQ, settings, live-source choices and the plugin inserts of the system server. One snapshot of the current state is kept so CALIBRATE > SESSION can undo it (delete it there).\n\nContinue?')) return false;
+            if (window.prompt('Type RESET to erase all show data.') !== 'RESET') { if (window.notify) window.notify('Factory reset cancelled', 'ban'); return false; }
+            log.open('FACTORY RESET'); log.line('closing audio streams...');
+            try { await engine({ quiet: true }); } catch (e) { /* continue */ }
+            log.bar(60);
+            let n = 0; try { n = localStorage.length; } catch (e) { /* storage blocked */ }
+            let keep = null;
+            try { if (window.sessionTools) { window.sessionTools.snapshot('before factory reset'); keep = localStorage.getItem('halx_snapshots'); } } catch (e) { /* no undo */ }
+            try { localStorage.clear(); } catch (e) { /* storage blocked */ }
+            try { if (keep) localStorage.setItem('halx_snapshots', keep); } catch (e) { /* no undo */ }
+            try { sessionStorage.clear(); } catch (e) { /* storage blocked */ }
+            log.line(n + ' saved setting(s) erased');
+            try { if (window.indexedDB && indexedDB.databases) for (const d of await indexedDB.databases()) if (d && d.name) indexedDB.deleteDatabase(d.name); } catch (e) { /* none */ }
+            try { if (window.caches) for (const k of await caches.keys()) await caches.delete(k); } catch (e) { /* none */ }
+            if (await findBridge()) { try { await post('/api/inserts', 'inserts', { clear: true }); log.line('plugin inserts of the system server cleared'); } catch (e) { log.line('plugin inserts: ' + e.message, 'text-amber-400'); } }
+            log.bar(100); log.line('FACTORY STATE - reloading', 'text-emerald-400 font-bold');
+            setTimeout(() => location.reload(), 700);
+            return true;
+        }
+        window.factoryResetConsole = factory;
+    })();
+    </script>
+    <script id="system-calibration">
+    /* CALIBRATE: real measurements and tools for the whole system, in the SYSTEM group.
+       CLOCK      the Web Audio engine against the computer's clock (drift in ppm), sample rate, base and output latency.
+       LATENCY    round trip of the audio path: Web Audio (speaker or cable from the output to the microphone / line input) or an ASIO / WASAPI / Core Audio / ALSA interface
+                  (its output looped back to its input by a cable or the driver's loopback): a chirp goes out, the same chirp is searched in what comes back (cross-correlation).
+                  A weak or missing echo is reported as such: no number is made up.
+       NOISE      room / input noise floor from the microphone (RMS and peak, dBFS).
+       LOUDNESS   a log of momentary / short-term / integrated LUFS, LRA and true peak, once per second, with peak hold and a CSV export.
+       SESSION    automatic snapshots of everything the page saved (scenes, routing, settings), a backup file, restore with undo, and crash recovery. */
+    (function () {
+        const $ = id => document.getElementById(id);
+        const esc = v => (window.escapeHtml ? window.escapeHtml(String(v)) : String(v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])));
+        const wait = ms => new Promise(r => setTimeout(r, ms));
+        const CAL = 'halx_calibration', SNAPS = 'halx_snapshots', OPEN = 'halx_session_open';
+        const lsGet = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+        const lsSet = (k, v) => { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } };
+        const lsDel = k => { try { localStorage.removeItem(k); } catch (e) { /* blocked */ } };
+        const json = (k, d) => { try { const v = JSON.parse(lsGet(k)); return v == null ? d : v; } catch (e) { return d; } };
+        const note = (m, i) => { if (window.notify) window.notify(m, i || 'sliders'); };
+        const db = v => (v > 1e-9 ? 20 * Math.log10(v) : -Infinity);
+        const fdb = v => (isFinite(v) ? v.toFixed(1) : '-INF');
+        const median = a => { const s = a.slice().sort((x, y) => x - y); return s.length ? s[s.length >> 1] : NaN; };
+
+        // ── measuring signal and the search for it ──
+        // 20 ms linear chirp 500 Hz .. 9 kHz with a Hann window: sharp correlation peak, little energy, survives a speaker and a microphone
+        function chirp(sr, ms, f0, f1) {
+            const n = Math.round(sr * (ms || 20) / 1000), out = new Float32Array(n), a = f0 || 500, b = f1 || 9000, T = n / sr;
+            for (let i = 0; i < n; i++) { const t = i / sr, ph = 2 * Math.PI * (a * t + (b - a) * t * t / (2 * T)); out[i] = 0.6 * Math.sin(ph) * (0.5 - 0.5 * Math.cos(2 * Math.PI * i / (n - 1))); }
+            return out;
+        }
+        // where does `ref` sit in `sig` between the lags `from` and `to`? r is the normalised correlation (1 = identical shape, ~0 = nothing there)
+        function correlate(sig, ref, from, to) {
+            from = Math.max(0, from | 0); to = Math.min(sig.length - ref.length, to == null ? sig.length : to | 0);
+            const m = ref.length; let er = 0; for (let i = 0; i < m; i++) er += ref[i] * ref[i];
+            if (to < from || er === 0) return { lag: -1, r: 0 };
+            let es = 0; for (let i = 0; i < m; i++) es += sig[from + i] * sig[from + i];
+            let best = -1, bestR = 0;
+            for (let lag = from; lag <= to; lag++) {
+                if (lag > from) { const o = sig[lag - 1], n = sig[lag + m - 1]; es += n * n - o * o; }
+                let c = 0; for (let i = 0; i < m; i++) c += sig[lag + i] * ref[i];
+                const r = es > 1e-12 ? c / Math.sqrt(es * er) : 0;
+                if (r > bestR) { bestR = r; best = lag; }
+            }
+            return { lag: best, r: bestR };
+        }
+
+        // ── 1. clock and engine ──
+        function engineInfo() {
+            const c = window.state && window.state.ctx; if (!c) return null;
+            return { rate: c.sampleRate, base: (c.baseLatency || 0) * 1000, out: (c.outputLatency || 0) * 1000, state: c.state };
+        }
+        async function measureClock(seconds) {
+            const c = window.state && window.state.ctx; if (!c) throw new Error('the audio engine is not running yet: start any sound first');
+            if (c.state === 'suspended') await c.resume();
+            const pair = () => { if (c.getOutputTimestamp) { const t = c.getOutputTimestamp(); if (t && t.performanceTime > 0 && t.contextTime > 0) return [t.contextTime, t.performanceTime / 1000]; } return [c.currentTime, performance.now() / 1000]; };
+            const a = pair(); await wait((seconds || 8) * 1000); const b = pair();
+            const ratio = (b[0] - a[0]) / (b[1] - a[1]);
+            return { ppm: (ratio - 1) * 1e6, seconds: b[1] - a[1], ratio };
+        }
+
+        // ── 2. round trip ──
+        function capStore(extra) { const s = json(CAL, {}); Object.assign(s, extra); lsSet(CAL, JSON.stringify(s)); return s; }
+        async function measureWebAudio() {
+            if (!window.liveSources || !window.liveSources.ensureCtx) throw new Error('the audio engine is not available');
+            const c = await window.liveSources.ensureCtx(); if (!c) throw new Error('the audio engine is not running');
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('this browser gives no microphone access');
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+            const sr = c.sampleRate, ref = chirp(sr), chunks = [];
+            let rec = null;
+            try {
+                const code = "class R extends AudioWorkletProcessor{process(i){const x=i[0]&&i[0][0];if(x)this.port.postMessage({f:currentFrame,d:x.slice()});return true}}registerProcessor('cal-rec',R);";
+                const url = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
+                try { await c.audioWorklet.addModule(url); } finally { URL.revokeObjectURL(url); }
+                rec = new AudioWorkletNode(c, 'cal-rec', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1] });
+                rec.port.onmessage = e => chunks.push(e.data);
+                const src = c.createMediaStreamSource(stream), sink = c.createGain(); sink.gain.value = 0;
+                src.connect(rec); rec.connect(sink); sink.connect(c.destination);
+                const buf = c.createBuffer(1, ref.length, sr); buf.getChannelData(0).set(ref);
+                const t0 = c.currentTime + 0.4, starts = [0, 1, 2].map(k => Math.round((t0 + k * 0.4) * sr));
+                for (let k = 0; k < 3; k++) { const s = c.createBufferSource(); s.buffer = buf; s.connect(c.destination); s.start(starts[k] / sr); }
+                await wait(2200);
+                try { src.disconnect(); rec.disconnect(); } catch (e) { /* gone */ }
+                if (!chunks.length) throw new Error('no audio came from the microphone');
+                const f0 = chunks[0].f, total = chunks[chunks.length - 1].f + chunks[chunks.length - 1].d.length - f0, sig = new Float32Array(total);
+                chunks.forEach(ch => sig.set(ch.d, ch.f - f0));
+                const res = starts.map(s => { const from = s - f0 - Math.round(0.01 * sr), r = correlate(sig, ref, Math.max(0, from), from + Math.round(0.3 * sr)); return { lag: r.lag - (s - f0), r: r.r }; });
+                const good = res.filter(x => x.r >= 0.3 && x.lag >= 0);
+                const spread = good.length ? Math.max(...good.map(x => x.lag)) - Math.min(...good.map(x => x.lag)) : 0;
+                const ok = good.length >= 2 && spread < sr * 0.004;
+                const lag = median(good.map(x => x.lag));
+                return { ok, path: 'Web Audio (speaker or cable to the microphone)', ms: ok ? lag / sr * 1000 : null, samples: ok ? lag : null, sampleRate: sr, confidence: Math.max(0, ...res.map(x => x.r)), hits: good.length, spreadMs: spread / sr * 1000,
+                    reason: ok ? '' : good.length ? 'the three echoes disagree: noise in the room' : 'the chirp did not come back: connect the output to the input with a cable, or turn the speaker up' };
+            } finally { stream.getTracks().forEach(t => t.stop()); }
+        }
+        function duplexCandidates() {
+            const L = window.liveSources; if (!L || !L.interfaces) return [];
+            const out = [];
+            for (const i of L.interfaces) for (const a of (i.apis || [])) if (a.inputs > 0 && a.outputs > 0 && a.deviceId >= 0) out.push({ key: i.key + '|' + a.deviceId, label: i.name + ' - ' + a.api, iface: i, api: a });
+            return out;
+        }
+        async function measureDuplex(c) {
+            const L = window.liveSources, base = L && L.bridgeUrl; if (!base) throw new Error('the local system server is not running (PC mode)');
+            const sr = 48000, ref = chirp(sr), ws = new WebSocket(base.replace(/^http/, 'ws') + '/ws/duplex'); ws.binaryType = 'arraybuffer';
+            const chunks = []; let started = null, err = null;
+            ws.onmessage = ev => {
+                if (typeof ev.data !== 'string') { const p = new Int16Array(ev.data), ch = started ? started.inChannels : 2, n = Math.floor(p.length / ch), d = new Float32Array(n); for (let k = 0; k < n; k++) d[k] = p[k * ch] / 32768; chunks.push({ t: performance.now(), d }); return; }
+                let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+                if (m.type === 'started') started = m; else if (m.type === 'error') err = m.message;
+            };
+            await new Promise((res, rej) => { ws.onopen = res; ws.onerror = () => rej(new Error('local server connection failed')); });
+            const fs = window.universalAsioSdk && window.universalAsioSdk.frameSizeSetting ? window.universalAsioSdk.frameSizeSetting() : 'auto';
+            ws.send(JSON.stringify({ type: 'start', inChannels: 2, channels: 2, sampleRate: sr, frameSize: fs, exclusive: false, deviceId: c.api.deviceId }));
+            for (let i = 0; i < 50 && !started && !err; i++) await wait(100);
+            try {
+                if (err || !started) throw new Error(err || 'the interface did not start');
+                const rate = started.sampleRate || sr, ref2 = rate === sr ? ref : chirp(rate);
+                const oc = started.channels || 2, fr = started.frameSize > 0 ? started.frameSize : 512;
+                // a steady stream at real-time pace (a driver that is fed now and then underruns and stops), the chirp three times inside it, in whole driver buffers
+                const at = [0.6, 1.2, 1.8].map(t => Math.round(t * rate / fr) * fr), sends = [];
+                const t0 = performance.now(); let sent = 0, ci = 0;
+                while (sent < Math.round(2.4 * rate)) {
+                    const due = Math.floor((performance.now() - t0) / 1000 * rate);
+                    if (sent + fr > due) { await wait(3); continue; }
+                    const blk = new Int16Array(fr * oc);
+                    for (let i = 0; i < fr; i++) { const k = sent + i - at[Math.min(ci, 2)]; if (ci < 3 && k >= 0 && k < ref2.length) for (let c2 = 0; c2 < oc; c2++) blk[i * oc + c2] = Math.round(ref2[k] * 32767); }
+                    if (ci < 3 && at[ci] >= sent && at[ci] < sent + fr) sends.push(performance.now());
+                    ws.send(blk.buffer);
+                    sent += fr; if (ci < 3 && sent >= at[ci] + ref2.length) ci++;
+                }
+                await wait(500);
+                if (!chunks.length) throw new Error('no audio came from the interface input');
+                // one signal from all chunks; the time of each sample comes from the arrival of its chunk
+                let total = 0; chunks.forEach(ch => { ch.i0 = total; total += ch.d.length; });
+                const sig = new Float32Array(total); chunks.forEach(ch => sig.set(ch.d, ch.i0));
+                const timeOf = idx => { let ch = chunks[0]; for (const x of chunks) { if (x.i0 <= idx) ch = x; else break; } return ch.t - (ch.d.length - (idx - ch.i0)) / rate * 1000; };
+                const res = sends.map(ts => {
+                    let i0 = chunks.findIndex(x => x.t >= ts); if (i0 < 0) i0 = chunks.length - 1;
+                    const from = Math.max(0, chunks[i0].i0 - Math.round(rate * 0.02)), r = correlate(sig, ref2, from, from + Math.round(rate * 0.45));
+                    return { ms: r.lag >= 0 ? timeOf(r.lag) - ts : null, r: r.r };
+                });
+                const good = res.filter(x => x.r >= 0.3 && x.ms != null && x.ms > 0);
+                const spread = good.length ? Math.max(...good.map(x => x.ms)) - Math.min(...good.map(x => x.ms)) : 0;
+                const ok = good.length >= 2 && spread < 25;
+                const ms = median(good.map(x => x.ms));
+                return { ok, path: c.label, echoes: res.map(x => ({ ms: x.ms, r: +x.r.toFixed(2) })), ms: ok ? ms : null, samples: ok ? Math.round(ms * rate / 1000) : null, sampleRate: rate, confidence: Math.max(0, ...res.map(x => x.r)), hits: good.length, spreadMs: spread,
+                    reason: ok ? '' : good.length ? 'the three echoes disagree' : 'the chirp did not come back: loop this interface\'s output to its input (cable, or the driver\'s loopback)' };
+            } finally { try { ws.send(JSON.stringify({ type: 'stop' })); ws.close(); } catch (e) { /* gone */ } }
+        }
+        async function measureLatency(key) {
+            const r = key && key !== 'webaudio' ? await measureDuplex(duplexCandidates().find(x => x.key === key) || (() => { throw new Error('that interface is not listed any more: scan again'); })()) : await measureWebAudio();
+            r.at = Date.now(); const s = json(CAL, {}); s.latency = Object.assign(s.latency || {}, { [r.path]: { ms: r.ms, samples: r.samples, sampleRate: r.sampleRate, at: r.at, ok: r.ok } }); lsSet(CAL, JSON.stringify(s));
+            return r;
+        }
+
+        // ── 3. noise floor ──
+        async function measureNoise(seconds) {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('this browser gives no microphone access');
+            const c = window.liveSources && window.liveSources.ensureCtx ? await window.liveSources.ensureCtx() : window.state.ctx; if (!c) throw new Error('the audio engine is not running');
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+            try {
+                const src = c.createMediaStreamSource(stream), an = c.createAnalyser(); an.fftSize = 2048; src.connect(an);
+                const buf = new Float32Array(an.fftSize); let pw = 0, n = 0, pk = 0; const end = performance.now() + (seconds || 3) * 1000;
+                while (performance.now() < end) { await wait(50); an.getFloatTimeDomainData(buf); let s = 0; for (let i = 0; i < buf.length; i++) { s += buf[i] * buf[i]; pk = Math.max(pk, Math.abs(buf[i])); } pw += s / buf.length; n++; }
+                try { src.disconnect(); } catch (e) { /* gone */ }
+                const r = { rmsDb: db(Math.sqrt(pw / Math.max(1, n))), peakDb: db(pk), at: Date.now() };
+                const s = json(CAL, {}); s.noise = r; lsSet(CAL, JSON.stringify(s));
+                return r;
+            } finally { stream.getTracks().forEach(t => t.stop()); }
+        }
+
+        // ── 4. loudness log ──
+        const LOG = { on: false, rows: [], t0: 0, timer: null, maxM: -Infinity, maxTP: -Infinity };
+        function logTick() {
+            const e = window.lufsEngine; if (!e) return;
+            const row = [((Date.now() - LOG.t0) / 1000), e.momentary, e.shortTerm, e.integrated, e.lra, e.truePeakDbTp];
+            LOG.rows.push(row); if (LOG.rows.length > 21600) LOG.rows.shift();
+            if (isFinite(row[1])) LOG.maxM = Math.max(LOG.maxM, row[1]);
+            if (isFinite(row[5])) LOG.maxTP = Math.max(LOG.maxTP, row[5]);
+        }
+        function logStart() { if (LOG.on) return; LOG.on = true; LOG.t0 = Date.now(); LOG.rows = []; LOG.maxM = LOG.maxTP = -Infinity; LOG.timer = setInterval(() => { logTick(); paintLog(); }, 1000); logTick(); }
+        function logStop() { LOG.on = false; clearInterval(LOG.timer); LOG.timer = null; }
+        function logCsv() {
+            const f = v => (isFinite(v) ? v.toFixed(2) : '');
+            return 'seconds,momentary_LUFS,short_term_LUFS,integrated_LUFS,LRA_LU,true_peak_dBTP\n' + LOG.rows.map(r => [r[0].toFixed(0), f(r[1]), f(r[2]), f(r[3]), f(r[4]), f(r[5])].join(',')).join('\n') + '\n';
+        }
+        function download(name, text, type) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: type || 'text/plain' })); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500); }
+
+        // ── 5. session: snapshots, backup, restore, crash recovery ──
+        const mine = k => /^(halx_|am-)/.test(k) && k !== SNAPS && k !== OPEN;
+        function collect() { const d = {}; try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (mine(k)) d[k] = localStorage.getItem(k); } } catch (e) { /* blocked */ } return d; }
+        function snapshot(label) {
+            const data = collect(), text = JSON.stringify(data);
+            if (text.length > 2500000) return null;                                    // would not fit the browser's storage
+            const list = json(SNAPS, []);
+            if (label === 'auto' && list.length && list[0].label === 'auto' && JSON.stringify(list[0].data) === text) return list[0];
+            const s = { t: Date.now(), label: label || 'manual', size: text.length, data };
+            list.unshift(s);
+            while (list.length > 4 || JSON.stringify(list).length > 4000000) { if (list.length <= 1) break; list.pop(); }
+            if (!lsSet(SNAPS, JSON.stringify(list))) { list.length = Math.min(list.length, 1); lsSet(SNAPS, JSON.stringify(list)); }
+            return s;
+        }
+        function restoreData(data, label) {
+            if (!data || typeof data !== 'object') throw new Error('this is not an Audio Mixer backup');
+            const keys = Object.keys(data).filter(k => mine(k) && typeof data[k] === 'string');
+            if (!keys.length) throw new Error('the backup holds no mixer settings');
+            snapshot(label || 'before restore');                                       // the undo
+            for (const k of Object.keys(collect())) lsDel(k);
+            keys.forEach(k => lsSet(k, data[k]));
+            lsDel(OPEN);
+            return keys.length;
+        }
+        function restoreSnapshot(i) { const s = json(SNAPS, [])[i]; if (!s) throw new Error('that snapshot is gone'); const n = restoreData(s.data, 'before restore'); setTimeout(() => location.reload(), 400); return n; }
+        function backupFile() { download('audio-mixer-backup-' + new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) + '.json', JSON.stringify({ app: 'audio-mixer-backup', version: 1, t: Date.now(), data: collect() }), 'application/json'); }
+        async function restoreFile(file) { const j = JSON.parse(await file.text()); if (!j || j.app !== 'audio-mixer-backup') throw new Error('this is not an Audio Mixer backup file'); const n = restoreData(j.data, 'before restore'); setTimeout(() => location.reload(), 400); return n; }
+        let crashed = false;
+        (function sessionStart() {
+            const prev = lsGet(OPEN); crashed = !!prev; lsSet(OPEN, String(Date.now()));
+            const clean = () => lsDel(OPEN); window.addEventListener('pagehide', clean); window.addEventListener('beforeunload', clean);
+            setInterval(() => snapshot('auto'), 60000);
+            setTimeout(() => { if (crashed) note('The last session ended unexpectedly. CALIBRATE > SESSION can restore the last autosave.', 'life-ring'); }, 4000);
+        })();
+
+        // ── page ──
+        const B = 'px-2.5 py-1 rounded font-bold uppercase text-[7.5px] transition border ';
+        const btn = (id, text, tone) => '<button id="' + id + '" class="' + B + (tone === 'rose' ? 'bg-rose-500/20 hover:bg-rose-500 text-rose-300 border-rose-500/40' : 'bg-amber-500/20 hover:bg-amber-500 text-amber-400 border-amber-500/40') + ' hover:text-black">' + text + '</button>';
+        const card = (title, icon, body) => '<div class="glass-panel p-3.5 rounded-xl wing-bezel space-y-2"><div class="flex items-center gap-2"><i class="fa-solid ' + icon + ' text-amber-400 text-xs"></i><h3 class="text-xs font-black text-amber-400 font-wing tracking-wider uppercase">' + title + '</h3></div>' + body + '</div>';
+        const ago = t => { const s = Math.max(0, (Date.now() - t) / 1000); return s < 90 ? Math.round(s) + ' s ago' : s < 5400 ? Math.round(s / 60) + ' min ago' : new Date(t).toLocaleString(); };
+        function build() {
+            const root = $('calib-root'); if (!root || root.dataset.built) return; root.dataset.built = '1';
+            root.innerHTML = '<div class="page-scroll-inner page-card-center space-y-3">'
+                + '<div class="text-[8px] font-mono text-slate-400">SYSTEM CALIBRATION &bull; every number below is measured now, nothing is simulated</div>'
+                + card('Clock &amp; engine', 'fa-clock', '<div id="cal-engine" class="text-[8px] font-mono text-slate-300 grid grid-cols-2 gap-1"></div><div class="flex items-center gap-2">' + btn('cal-clock-btn', 'Measure clock drift (8 s)') + '<span id="cal-clock-out" class="text-[8px] font-mono text-slate-300"></span></div>')
+                + card('Round-trip latency', 'fa-stopwatch', '<p class="text-[7.5px] text-slate-400">A chirp goes out and is searched in what comes back. Web Audio: connect the output to the microphone / line input (cable) or hold the microphone near the speaker. Interface: loop its output to its input.</p>'
+                    + '<div class="flex flex-wrap items-center gap-2"><select id="cal-lat-src" class="bg-black border border-white/10 rounded px-2 py-0.5 text-amber-400 outline-none text-[7.5px]"></select>' + btn('cal-lat-btn', 'Measure') + '</div><div id="cal-lat-out" class="text-[8px] font-mono text-slate-300"></div><div id="cal-lat-saved" class="text-[7.5px] font-mono text-slate-500"></div>')
+                + card('Noise floor', 'fa-microphone-lines', '<div class="flex items-center gap-2">' + btn('cal-noise-btn', 'Measure the room (3 s)') + '<span id="cal-noise-out" class="text-[8px] font-mono text-slate-300"></span></div>')
+                + card('Loudness log', 'fa-bullseye', '<div class="flex flex-wrap items-center gap-2">' + btn('cal-log-btn', 'Start log') + btn('cal-log-csv', 'Export CSV') + btn('cal-log-reset', 'Clear', 'rose') + '</div><div id="cal-log-out" class="text-[8px] font-mono text-slate-300"></div>')
+                + card('Session', 'fa-life-ring', '<div id="cal-crash" class="text-[8px] font-mono text-amber-300"></div><div class="flex flex-wrap items-center gap-2">' + btn('cal-snap-btn', 'Snapshot now') + btn('cal-backup-btn', 'Backup file') + '<label class="' + B + 'bg-amber-500/20 hover:bg-amber-500 text-amber-400 border-amber-500/40 hover:text-black cursor-pointer">Restore from file<input id="cal-restore-file" type="file" accept=".json,application/json" class="hidden"></label>' + btn('cal-snap-del', 'Delete snapshots', 'rose') + '</div><div id="cal-snaps" class="space-y-1"></div>')
+                + '</div>';
+            $('cal-clock-btn').onclick = async () => { const o = $('cal-clock-out'); o.textContent = 'measuring...'; try { const r = await measureClock(8); o.textContent = (r.ppm >= 0 ? '+' : '') + r.ppm.toFixed(1) + ' ppm over ' + r.seconds.toFixed(1) + ' s'; } catch (e) { o.textContent = e.message; } };
+            $('cal-lat-btn').onclick = async () => { const o = $('cal-lat-out'); o.textContent = 'measuring...'; try { const r = await measureLatency($('cal-lat-src').value); o.innerHTML = r.ok ? '<span class="text-emerald-400">' + r.ms.toFixed(1) + ' ms (' + r.samples + ' samples @ ' + r.sampleRate / 1000 + ' kHz)</span> via ' + esc(r.path) + ' &bull; match ' + (r.confidence * 100).toFixed(0) + '%' : '<span class="text-rose-400">no result: ' + esc(r.reason) + '</span>'; } catch (e) { o.innerHTML = '<span class="text-rose-400">' + esc(e.message) + '</span>'; } paint(); };
+            $('cal-noise-btn').onclick = async () => { const o = $('cal-noise-out'); o.textContent = 'listening...'; try { const r = await measureNoise(3); o.textContent = 'noise floor ' + fdb(r.rmsDb) + ' dBFS RMS, peak ' + fdb(r.peakDb) + ' dBFS'; } catch (e) { o.textContent = e.message; } };
+            $('cal-log-btn').onclick = () => { if (LOG.on) logStop(); else logStart(); paintLog(); };
+            $('cal-log-csv').onclick = () => { if (LOG.rows.length) download('loudness-log.csv', logCsv(), 'text/csv'); else note('The loudness log is empty: start it first', 'circle-info'); };
+            $('cal-log-reset').onclick = () => { LOG.rows = []; LOG.maxM = LOG.maxTP = -Infinity; paintLog(); };
+            $('cal-snap-btn').onclick = () => { const s = snapshot('manual'); note(s ? 'Snapshot saved' : 'Too much data for a snapshot: use the backup file', 'life-ring'); paintSnaps(); };
+            $('cal-backup-btn').onclick = backupFile;
+            $('cal-snap-del').onclick = () => { lsDel(SNAPS); paintSnaps(); };
+            $('cal-restore-file').onchange = async e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; try { const n = await restoreFile(f); note('Backup restored (' + n + ' settings): reloading', 'life-ring'); } catch (err) { note(err.message, 'triangle-exclamation'); } };
+            $('cal-snaps').onclick = e => { const b = e.target.closest('button[data-i]'); if (!b) return; try { const n = restoreSnapshot(Number(b.dataset.i)); note('Restored ' + n + ' settings: reloading', 'life-ring'); } catch (err) { note(err.message, 'triangle-exclamation'); } };
+            paint();
+        }
+        function paintLog() {
+            const o = $('cal-log-out'), b = $('cal-log-btn'); if (!o) return;
+            b.textContent = LOG.on ? 'Stop log' : 'Start log';
+            o.textContent = (LOG.on ? 'LOGGING ' : 'stopped ') + LOG.rows.length + ' s • peak hold: momentary ' + fdb(LOG.maxM) + ' LUFS, true peak ' + fdb(LOG.maxTP) + ' dBTP' + (LOG.rows.length ? ' • last I ' + fdb(LOG.rows[LOG.rows.length - 1][3]) + ' LUFS, LRA ' + fdb(LOG.rows[LOG.rows.length - 1][4]) + ' LU' : '');
+        }
+        function paintSnaps() {
+            const el = $('cal-snaps'); if (!el) return; const list = json(SNAPS, []);
+            el.innerHTML = list.length ? list.map((s, i) => '<div class="flex items-center gap-2 text-[8px] font-mono text-slate-300"><span class="flex-1">' + esc(s.label) + ' • ' + esc(ago(s.t)) + ' • ' + Math.max(1, Math.round(s.size / 1024)) + ' KB • ' + Object.keys(s.data).length + ' settings</span>' + btn('cal-r' + i, 'Restore').replace('<button ', '<button data-i="' + i + '" ') + '</div>').join('') : '<div class="text-[8px] font-mono text-slate-500">no snapshots yet (one is taken every minute when something changed)</div>';
+            const cr = $('cal-crash'); if (cr) cr.textContent = crashed ? 'The previous session ended unexpectedly. The newest autosave below is its last state.' : '';
+        }
+        function paint() {
+            const e = engineInfo(), el = $('cal-engine');
+            if (el) el.innerHTML = e ? '<span>Sample rate</span><span>' + e.rate + ' Hz</span><span>Base latency</span><span>' + e.base.toFixed(1) + ' ms</span><span>Output latency</span><span>' + e.out.toFixed(1) + ' ms</span><span>State</span><span>' + esc(e.state) + '</span>' : '<span class="col-span-2 text-slate-500">The audio engine starts with the first sound.</span>';
+            const sel = $('cal-lat-src');
+            if (sel) { const cur = sel.value, c = duplexCandidates(); sel.innerHTML = '<option value="webaudio">Web Audio (output to microphone)</option>' + c.map(x => '<option value="' + esc(x.key) + '">' + esc(x.label) + '</option>').join(''); if ([...sel.options].some(o => o.value === cur)) sel.value = cur; }
+            const saved = json(CAL, {}).latency, sv = $('cal-lat-saved');
+            if (sv) sv.textContent = saved ? 'Saved: ' + Object.entries(saved).map(([k, v]) => k + ' ' + (v.ok ? v.ms.toFixed(1) + ' ms' : 'no echo') + ' (' + ago(v.at) + ')').join(' • ') : '';
+            paintLog(); paintSnaps();
+        }
+
+        // the old test buttons now measure instead of printing a pass
+        const hook = () => {
+            const sdk = window.universalAsioSdk;
+            if (sdk && !sdk.__calHooked) {
+                sdk.__calHooked = true;
+                sdk.testHardwareLoopback = async function () {
+                    const badge = document.getElementById('asio-loopback-badge'); if (badge) { badge.className = 'px-2 py-0.5 rounded bg-white/10 text-slate-300 border border-white/10 font-bold'; badge.innerText = 'MEASURING...'; }
+                    const c = duplexCandidates().find(x => /asio/i.test(x.api.api)) || duplexCandidates()[0];
+                    try {
+                        const r = await measureLatency(c ? c.key : 'webaudio');
+                        if (badge) { badge.className = 'px-2 py-0.5 rounded border font-bold ' + (r.ok ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40' : 'bg-rose-500/20 text-rose-400 border-rose-500/40'); badge.innerText = r.ok ? 'LOOPBACK MEASURED: ' + r.ms.toFixed(1) + ' ms' : 'NO LOOPBACK: ' + r.reason; }
+                        this.log(r.ok ? 'Loopback measured: ' + r.ms.toFixed(1) + ' ms round trip via ' + r.path : 'Loopback not found: ' + r.reason, r.ok ? 'success' : 'warn');
+                        return r.ok;
+                    } catch (e) { if (badge) { badge.className = 'px-2 py-0.5 rounded bg-rose-500/20 text-rose-400 border border-rose-500/40 font-bold'; badge.innerText = 'LOOPBACK FAILED: ' + e.message; } return false; }
+                };
+            }
+        };
+        window.calibrateDuganAmbient = async function () {
+            note('Measuring the ambient noise floor (3 s)...', 'microphone');
+            try { const r = await measureNoise(3); note('Ambient noise floor: ' + fdb(r.rmsDb) + ' dBFS (peak ' + fdb(r.peakDb) + ' dBFS)', 'check'); return r; } catch (e) { note('Noise floor: ' + e.message, 'triangle-exclamation'); return null; }
+        };
+
+        window.sysCal = { chirp, correlate, measureClock, measureLatency, measureWebAudio, measureNoise, duplexCandidates, log: LOG, logStart, logStop, logCsv, snapshot, collect, restoreData, restoreSnapshot, backupFile, wasCrash: () => crashed };
+        window.sessionTools = { snapshot, restoreData, collect };
+        const orig = window.switchTab;
+        window.switchTab = function (tabId) { const r = orig.apply(this, arguments); if (tabId === 'calib') { build(); paint(); } hook(); return r; };
+        setInterval(() => { const t = $('tab-calib'); if (t && !t.classList.contains('tab-hidden')) { const e = engineInfo(), el = $('cal-engine'); if (el && e) paint(); } }, 2000);
+        document.addEventListener('DOMContentLoaded', hook); setTimeout(hook, 2000);
     })();
     </script>
 </body>
