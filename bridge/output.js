@@ -3,6 +3,9 @@
 const { claim } = require('./asio-lock');
 const audify = require('./audify');
 const streams = require('./streams');
+const levels = require('./levels');
+const universal = require('./universal');
+const virtual = require('./virtual');
 function loadPortAudio() { return require('naudiodon2'); }
 const SAMPLE_RATES = [44100, 48000, 88200, 96000, 176400, 192000];
 
@@ -17,6 +20,7 @@ function createSession(conn, load = loadPortAudio, loadA = audify.loadAudify) {
   let io = null;
   let lock = null;   // ASIO is single-client: see asio-lock.js
   let blocked = false;
+  let meter = null;   // level metering of this stream
   let unreg = null;   // live status registry
   let frameBytes = 4; // Int16 * channels; writes must be whole frames or channels swap
 
@@ -24,6 +28,7 @@ function createSession(conn, load = loadPortAudio, loadA = audify.loadAudify) {
     if (io) { try { io.quit(); } catch (_) { /* already closed */ } io = null; }
     if (lock) { lock.release(); lock = null; }
     if (unreg) { unreg(); unreg = null; }
+    if (meter) { meter.stop(); meter = null; }
     blocked = false;
   };
 
@@ -44,16 +49,39 @@ function createSession(conn, load = loadPortAudio, loadA = audify.loadAudify) {
         onError: e => { conn.send(JSON.stringify({ type: 'error', message: String(e && e.message || e) })); stop(); } });
       io = { quit: () => st.close(), write: b => st.write(b) };
       frameBytes = 2 * channels;
-      unreg = streams.add({ direction: 'output', engine: 'audify', device: dev.name, hostApi: dev.hostAPIName, sampleRate, channels: channels, frameSize: st.frameSize, latencyMs: st.latencyMs });
-      conn.send(JSON.stringify({ type: 'started', engine: 'audify', device: dev.name, hostApi: dev.hostAPIName, sampleRate, channels, frameSize: st.frameSize, latencyMs: st.latencyMs, autoFrameSize: st.auto }));
+      const si = { direction: 'output', engine: 'audify', device: dev.name, hostApi: dev.hostAPIName, sampleRate, channels: channels, frameSize: st.frameSize, latencyMs: st.latencyMs };
+      unreg = streams.add(si); meter = levels.attach(conn, { ...si, sid: unreg.id });
+      conn.send(JSON.stringify({ type: 'started', ...(opts.universal ? { universal: true } : {}), engine: 'audify', device: dev.name, hostApi: dev.hostAPIName, sampleRate, channels, frameSize: st.frameSize, latencyMs: st.latencyMs, autoFrameSize: st.auto }));
     } catch (e) {
       stop();
       conn.send(JSON.stringify({ type: 'error', message: String(e && e.message || e) }));
     }
   }
 
+  // A virtual device of an operating-system driver (drivers/, see virtual.js): what the mixer sends is what applications record from it.
+  function startVirtual(opts) {
+    const dev = virtual.hub.get(opts.deviceId), write = dev && virtual.hub.render(dev.id);
+    if (!dev || !write) return conn.send(JSON.stringify({ type: 'error', message: 'The Audio Mixer driver is not connected: install and enable it (see drivers/README.md).' }));
+    const channels = Math.min(Math.max(parseInt(opts.channels, 10) || dev.channels, 1), 32);
+    const sampleRate = parseInt(opts.sampleRate, 10) || dev.rate;
+    const remap = channels !== dev.channels ? b => audify.remapChannels(b, channels, dev.channels) : null;
+    const conv = audify.createResampler(sampleRate, dev.rate, dev.channels);
+    frameBytes = 2 * channels;
+    const si = { direction: 'output', engine: 'virtual', device: dev.name, hostApi: 'Audio Mixer Virtual', sampleRate, channels };
+    unreg = streams.add(si); meter = levels.attach(conn, { ...si, sid: unreg.id });
+    io = { write: buf => { if (remap) buf = remap(buf); if (conv) buf = conv(buf); return write(buf) !== false; }, quit: () => {} };
+    conn.send(JSON.stringify({ type: 'started', engine: 'virtual', device: dev.name, hostApi: 'Audio Mixer Virtual', sampleRate, channels, frameSize: null, latencyMs: null }));
+  }
+
   function start(opts) {
     stop();
+    if (virtual.hub.isVirtualId(opts.deviceId)) return startVirtual(opts);
+    // "Universal ASIO driver": detect every device on both engines and open the best one (ASIO first), see universal.js
+    if (opts.universal === true || opts.deviceId === 'universal') {
+      const choice = universal.resolve({ direction: 'output', channels: opts.channels, engine: opts.engine }, load, loadA, audify);
+      if (!choice) return conn.send(JSON.stringify({ type: 'error', message: 'Universal ASIO driver: no output device was found' }));
+      opts = { ...opts, deviceId: choice.id, engine: choice.engine, universal: true };
+    }
     const id = Number.isInteger(opts.deviceId) ? opts.deviceId : null;
     const forceAudify = opts.engine === 'audify' || (id !== null && id >= audify.AUDIFY_BASE);
     let pa = null;
@@ -80,8 +108,9 @@ function createSession(conn, load = loadPortAudio, loadA = audify.loadAudify) {
       io.on('drain', () => { blocked = false; });
       io.start();
       frameBytes = 2 * channels;
-      unreg = streams.add({ direction: 'output', engine: 'naudiodon', device: dev ? dev.name : 'default', hostApi: dev ? dev.hostAPIName : 'default', sampleRate, channels });
-      conn.send(JSON.stringify({ type: 'started', engine: 'naudiodon', device: dev ? dev.name : 'default', hostApi: dev ? dev.hostAPIName : 'default', sampleRate, channels }));
+      const si = { direction: 'output', engine: 'naudiodon', device: dev ? dev.name : 'default', hostApi: dev ? dev.hostAPIName : 'default', sampleRate, channels };
+      unreg = streams.add(si); meter = levels.attach(conn, { ...si, sid: unreg.id });
+      conn.send(JSON.stringify({ type: 'started', ...(opts.universal ? { universal: true } : {}), engine: 'naudiodon', device: dev ? dev.name : 'default', hostApi: dev ? dev.hostAPIName : 'default', sampleRate, channels }));
     } catch (e) {
       stop();
       conn.send(JSON.stringify({ type: 'error', message: String(e && e.message || e) }));
@@ -97,6 +126,7 @@ function createSession(conn, load = loadPortAudio, loadA = audify.loadAudify) {
     onBinary(buf) {
       if (!io || blocked) return;               // drop instead of queueing, keeps latency bounded
       if (buf.length % frameBytes !== 0) return; // partial frame would misalign every later sample
+      if (meter) meter.push(buf);                  // levels of what is really sent to the driver
       if (io.write(buf) === false) blocked = true;
     },
     onClose: stop,

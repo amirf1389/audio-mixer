@@ -6,7 +6,9 @@ let next = 1;
 function add(info) {
   const id = next++;
   streams.set(id, { id, since: Date.now(), ...info });
-  return () => streams.delete(id);
+  const remove = () => streams.delete(id);
+  remove.id = id;
+  return remove;
 }
 function list() { return [...streams.values()].map(s => ({ ...s, uptimeSec: Math.round((Date.now() - s.since) / 1000) })); }
 

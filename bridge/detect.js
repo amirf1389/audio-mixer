@@ -5,6 +5,8 @@ const { execFile } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const winnative = require('./winnative');
+const sysaudio = require('./sysaudio');
 
 function run(cmd, args, timeout = 4000) {
   return new Promise(resolve => {
@@ -23,6 +25,7 @@ async function windows() {
     const j = JSON.parse(ps || '[]');
     (Array.isArray(j) ? j : [j]).forEach(d => d && d.Name && devices.push({ name: d.Name, vendor: d.Manufacturer || '', status: d.Status || '' }));
   } catch (_) { /* ignore */ }
+  if (!devices.length) (await winnative.listWmi()).forEach(d => devices.push(d));   // PowerShell blocked: VBScript + WMI
   const reg = await run('reg', ['query', 'HKLM\\SOFTWARE\\ASIO']);
   reg.split(/\r?\n/).forEach(line => {
     const m = line.match(/HKEY_LOCAL_MACHINE\\SOFTWARE\\ASIO\\(.+)$/i);
@@ -130,7 +133,11 @@ async function detect() {
     portaudio.devices.filter(d => /asio/i.test(d.hostApi) && !r.asio.includes(d.name)).forEach(d => r.asio.push(d.name));
     if (r.asio.length && Array.isArray(r.drivers) && !r.drivers.includes('steinberg')) r.drivers.push('steinberg');
   }
-  return { platform: p, arch: process.arch, node: process.version, ...r, vst: detectVst(), portaudio, audify: audifyInfo, engines: { naudiodon: !!naudiodon, audify: !!audifyInfo } };
+  // No audio engine installed: read the interfaces from the OS itself (Windows: C++ WASAPI helper, macOS: Core Audio, Linux: ALSA / Pulse)
+  let native = portaudio ? null : p === 'win32' ? await winnative.listEndpoints() : await sysaudio.list();
+  // last resort: the sound devices the OS reported (names only, direction unknown)
+  if (!portaudio && !native && r.devices.length) native = { engine: 'os-devices', hostApis: [], devices: r.devices.map((d, i) => ({ id: -(i + 1), name: d.name, hostApi: p === 'win32' ? 'Windows' : p === 'darwin' ? 'Core Audio' : 'ALSA', native: true, listedOnly: true, inputs: 2, outputs: 2, sampleRate: 48000 })) };
+  return { platform: p, arch: process.arch, node: process.version, ...r, vst: detectVst(), portaudio, audify: audifyInfo, native, engines: { naudiodon: !!naudiodon, audify: !!audifyInfo } };
 }
 
-module.exports = { detect };
+module.exports = { detect, detectPortAudio };

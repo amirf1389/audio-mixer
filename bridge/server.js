@@ -4,29 +4,48 @@
 //   GET /api/status   -> { ok, name, version }
 //   GET /api/drivers  -> native driver/device detection for this OS
 //   GET /api/volume   -> system output / input volume + mute
+//   GET /api/license, POST /api/license/activate|deactivate -> consumer license (plan, machine code)
+//   GET /api/update, POST /api/update/download -> OTA updates (signed manifest, checksum-verified download)
+//   GET /api/universal -> universal ASIO driver: all input / output sources, ranked, with the automatic pick
 //   GET /api/plugins -> VST3 / VST2 plugins (.vst3 / .dll / .vst) found and validated
+//   GET /api/meters, POST /api/meters {clipDb} -> clip threshold (dBFS) of the level meters of native streams
+//   WS  /ws/virtual, GET /api/virtual -> virtual audio devices of the operating-system drivers (drivers/); they appear in /api/interfaces and open like any interface
 //   GET /api/audify, /api/framesize -> Audify (RtAudio) engine devices and automatic frame size
 //   WS  /ws/output    -> page streams Int16 PCM out through PortAudio (ASIO / WASAPI)
+//   GET /api/bluetooth, POST /api/bluetooth (X-Mixer-Action: bluetooth) -> paired / connected devices, airwaves scan, connect / pair / disconnect
+//   GET /api/inserts, POST /api/inserts (X-Mixer-Action: inserts) -> plugin insert slots of the PHASE and FX pages
+//   WS  /ws/insert    -> audio through a plugin of an insert slot (native plugin host, VST2 .dll / .vst)
+//   WS  /ws/duplex    -> read AND write one interface through a single native stream
 //   WS  /ws/input     -> bridge streams Int16 PCM captured from an ASIO / WASAPI input
 //   GET /api/catalog  -> official audio drivers / stacks for this OS, with install detection
 //   GET /api/nowplaying -> what Spotify / YouTube / YouTube Music / TIDAL / ... is playing (OS media sessions)
 //   GET /api/interfaces -> every audio interface grouped across ASIO / WASAPI / DirectSound / Core Audio / ALSA ...
-//   POST /api/catalog/download {id} -> saves the official installer (FlexASIO) to the download folder; never runs it
 //   GET /*            -> serves the mixer page from the repo root (same-origin use)
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
-const { detect } = require('./detect');
+const { detect, detectPortAudio } = require('./detect');
 const { accept } = require('./ws');
 const { createSession } = require('./output');
 const { createInputSession } = require('./input');
+const { createDuplexSession } = require('./duplex');
 const { readVolume } = require('./volume');
-const { listCatalog, downloadDriver, downloadDir } = require('./catalog');
+const { listCatalog } = require('./catalog');
+const levels = require('./levels');
+const virtualHub = require('./virtual').hub;
 const { cachedNowPlaying } = require('./nowplaying');
 const { groupInterfaces } = require('./interfaces');
 const audifyEngine = require('./audify');
 const pluginScan = require('./plugins');
+const universalDriver = require('./universal');
+const bluetooth = require('./bluetooth');
+let btCache = null;
+const license = require('./license');
+const updater = require('./update');
 const streamRegistry = require('./streams');
+const security = require('./security');
+const inserts = require('./inserts');
+const pluginHost = require('./pluginhost');
 
 const VERSION = (() => { try { return require('../package.json').version; } catch (_) { return '1.0.0'; } })();
 const PORT = Number(process.env.BRIDGE_PORT) || 8765;
@@ -35,7 +54,11 @@ const ROOT = path.resolve(__dirname, '..');
 const EXTRA_ORIGINS = (process.env.BRIDGE_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
 const EXTRA_HOSTS = (process.env.BRIDGE_HOSTS || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
 const ALLOW_NULL_ORIGIN = process.env.BRIDGE_ALLOW_NULL_ORIGIN !== '0'; // file:// pages send "null"; set 0 to refuse
-const SECURITY_HEADERS = { 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' };
+const SECURITY_HEADERS = security.HEADERS;
+const RATE = process.env.BRIDGE_RATE_LIMIT === '0' ? 0 : 1;   // 0 turns the request limits off
+const limiter = security.createLimiter();
+const MAX_SOCKETS = 24;                                         // open audio WebSockets at the same time
+let openSockets = 0;
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml' };
 
 // Only local pages (and file:// pages, which send "null") may read the API.
@@ -68,14 +91,57 @@ async function handle(req, res) {
   const origin = req.headers.origin;
   if (!hostAllowed(req.headers.host)) return json(res, 403, { ok: false, error: 'host not allowed' });
   if (!originAllowed(origin)) return json(res, 403, { ok: false, error: 'origin not allowed' });
+  if (RATE && req.url.startsWith('/api/')) {   // per page origin: reads 900/min, actions (POST) 40/min
+    const post = req.method === 'POST', r = limiter.allow((post ? 'p:' : 'g:') + (origin || 'local'), post ? 40 : 900);
+    if (!r.ok) return json(res, 429, { ok: false, error: 'too many requests, retry in ' + r.retryAfter + ' s' }, { 'Retry-After': String(r.retryAfter) });
+  }
   const cors = origin ? { 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin', 'Access-Control-Allow-Private-Network': 'true' } : {};
   if (req.method === 'OPTIONS') return send(res, 204, '', { ...cors, 'Access-Control-Allow-Methods': 'GET, POST', 'Access-Control-Allow-Headers': 'Content-Type, X-Mixer-Action' });
   const url = new URL(req.url, `http://${HOST}`);
-  if (req.method === 'POST' && url.pathname === '/api/catalog/download') return handleDownload(req, res, cors);
+  if (req.method === 'POST' && url.pathname === '/api/license/activate') return handleAction(req, res, cors, 'license', async body => {
+    const r = license.activate(body.key);
+    return r.ok ? [200, r] : [400, r];
+  });
+  if (req.method === 'POST' && url.pathname === '/api/license/deactivate') return handleAction(req, res, cors, 'license', async () => [200, license.deactivate()], false);
+  if (req.method === 'POST' && url.pathname === '/api/update/download') return handleAction(req, res, cors, 'update', async () => {
+    if (!license.hasFeature(license.status(), 'ota')) return [402, { ok: false, needs: 'ota', error: 'Downloading updates needs the PRO or STUDIO plan. You can still check for updates.' }];
+    return [200, await updater.download({ current: VERSION })];
+  }, false);
+  if (req.method === 'POST' && url.pathname === '/api/meters') return handleAction(req, res, cors, 'meters', async body => [200, { ok: true, clipDb: levels.setClipDb(body.clipDb) }]);
+  if (req.method === 'POST' && url.pathname === '/api/bluetooth') return handleAction(req, res, cors, 'bluetooth', async body => {
+    try {
+      if (body.action === 'scan') { btCache = null; return [200, await bluetooth.scan({ seconds: body.seconds })]; }
+      if (body.action === 'settings') return [200, bluetooth.openSettings()];
+      btCache = null; return [200, await bluetooth.act(String(body.action || ''), body.address)];
+    } catch (e) { return [e.status || 500, { ok: false, error: e.message }]; }
+  });
+  if (req.method === 'POST' && url.pathname === '/api/inserts') return handleAction(req, res, cors, 'inserts', async body => {
+    if (!license.hasFeature(license.status(), 'plugins')) return [402, { ok: false, error: 'Plugin inserts need the PRO or STUDIO plan', needs: 'plugins' }];
+    return [200, { ok: true, ...inserts.set(body) }];
+  });
   if (req.method !== 'GET') return json(res, 405, { ok: false, error: 'method not allowed' }, cors);
   if (url.pathname === '/api/status') return json(res, 200, { ok: true, name: 'audio-mixer-bridge', version: VERSION, node: process.version, pid: process.pid, uptimeSec: Math.round(process.uptime()), streams: streamRegistry.list(), time: Date.now() }, cors);
+  // Consumer licensing: the plan this copy runs as, this computer's machine code, and the stored key's state
+  if (url.pathname === '/api/bluetooth') {   // paired / connected devices of this computer (shared for 2 s: the page polls)
+    if (!btCache || Date.now() - btCache.at > 2000 || url.searchParams.get('force') === '1') btCache = { at: Date.now(), promise: bluetooth.list() };
+    return json(res, 200, await btCache.promise, cors);
+  }
+  if (url.pathname === '/api/inserts') return json(res, 200, { ok: true, host: { available: !!pluginHost.hostPath(), formats: ['VST2'] }, ...inserts.read() }, cors);
+  if (url.pathname === '/api/virtual') return json(res, 200, { ok: true, devices: virtualHub.list() }, cors);
+  if (url.pathname === '/api/meters') return json(res, 200, { ok: true, clipDb: levels.config.clipDb, clipRun: levels.CLIP_RUN }, cors);   // clip threshold of the native streams' meters
+  if (url.pathname === '/api/license') return json(res, 200, { ok: true, version: VERSION, ...license.status() }, cors);
+
+  // OTA updates: is a newer, signed version published? (cached for 5 minutes, ?force=1 asks again)
+  if (url.pathname === '/api/update') {
+    try {
+      const force = url.searchParams.get('force') === '1';
+      if (force || !updateCache || Date.now() - updateCache.at > 300000) updateCache = { at: Date.now(), data: await updater.check({ current: VERSION }) };
+      return json(res, 200, updateCache.data, cors);
+    } catch (e) { return json(res, e.status || 502, { ok: false, current: VERSION, error: e.message }, cors); }
+  }
+
   if (url.pathname === '/api/drivers') {
-    try { return json(res, 200, { ok: true, ...(await detect()) }, cors); }
+    try { return json(res, 200, { ok: true, ...(await detectCached(url.searchParams.get('force') === '1')) }, cors); }
     catch (e) { return json(res, 500, { ok: false, error: e.message }, cors); }
   }
 
@@ -86,10 +152,10 @@ async function handle(req, res) {
 
   if (url.pathname === '/api/interfaces') {
     try {
-      const info = await detect();
+      const info = await detectCached(url.searchParams.get('force') === '1');
       const src = url.searchParams.get('engine') === 'audify' && info.audify ? info.audify : info.portaudio;
-      const devices = src ? src.devices : [];
-      return json(res, 200, { ok: true, platform: info.platform, portaudio: !!info.portaudio, engine: src ? src.engine : null, asio: info.asio, interfaces: groupInterfaces(devices, info.asio) }, cors);
+      const devices = src ? src.devices : (info.native ? info.native.devices : []);
+      return json(res, 200, { ok: true, platform: info.platform, portaudio: !!info.portaudio || virtualHub.list().length > 0, engine: src ? src.engine : (info.native ? info.native.engine : null), asio: info.asio, interfaces: groupInterfaces(devices.concat(virtualHub.list().map(v => ({ id: v.id, name: v.name, hostApi: 'Audio Mixer Virtual', inputs: v.channels, outputs: v.channels, sampleRate: v.rate }))), info.asio, src && src.problems) }, cors);
     } catch (e) { return json(res, 500, { ok: false, error: e.message }, cors); }
   }
 
@@ -97,6 +163,17 @@ async function handle(req, res) {
   if (url.pathname === '/api/audify') {
     try { return json(res, 200, { ok: true, ...audifyEngine.describe() }, cors); }
     catch (e) { return json(res, 500, { ok: false, error: e.message }, cors); }
+  }
+
+  // Universal ASIO driver: every input and output source on this PC (PortAudio + Audify, all host APIs), best first, with the automatic pick
+  if (url.pathname === '/api/universal') {
+    try {
+      const pa = detectPortAudio(), au = audifyEngine.detectAudify();
+      const lists = [];
+      if (pa) lists.push({ engine: 'naudiodon', devices: pa.devices });
+      if (au) lists.push({ engine: 'audify', devices: au.devices });
+      return json(res, 200, { ok: true, engines: { naudiodon: !!pa, audify: !!au }, ...universalDriver.detectSources(lists), time: Date.now() }, cors);
+    } catch (e) { return json(res, 500, { ok: false, error: e.message }, cors); }
   }
 
   // Plugin system: VST3 / VST2 (.vst3, .dll, .vst) in the standard folders and the app's own plugin folder, each binary checked.
@@ -121,7 +198,7 @@ async function handle(req, res) {
   if (url.pathname === '/api/catalog') {
     try {
       const info = await detect();
-      return json(res, 200, { ok: true, platform: info.platform, downloadDir: downloadDir(), items: listCatalog(info) }, cors);
+      return json(res, 200, { ok: true, platform: info.platform, items: listCatalog(info) }, cors);
     } catch (e) { return json(res, 500, { ok: false, error: e.message }, cors); }
   }
 
@@ -134,46 +211,60 @@ async function handle(req, res) {
   let rel;
   try { rel = decodeURIComponent(url.pathname); } catch (_) { return json(res, 400, { ok: false, error: 'bad request' }); }
   if (rel.includes('\0')) return json(res, 400, { ok: false, error: 'bad request' });
-  if (rel === '/') rel = '/gemini-code-1790419147591.html';
+  if (rel === '/') rel = '/index.html';
   const file = path.resolve(ROOT, '.' + rel);
   if (file !== ROOT && !file.startsWith(ROOT + path.sep)) return json(res, 403, { ok: false, error: 'forbidden' });
   // Never serve dotfiles/dirs (.git, .github, .vscode, .env ...) or the bridge's own sources.
-  if (path.relative(ROOT, file).split(path.sep).some(p => p.startsWith('.')) || file.startsWith(__dirname + path.sep)) return json(res, 404, { ok: false, error: 'not found' });
+  if (path.relative(ROOT, file).split(path.sep).some(p => p.startsWith('.')) || file.startsWith(__dirname + path.sep) || !security.staticAllowed(ROOT, file)) return json(res, 404, { ok: false, error: 'not found' });
   fs.readFile(file, (err, buf) => {
     if (err) return json(res, 404, { ok: false, error: 'not found' });
-    const type = TYPES[path.extname(file)] || 'application/octet-stream';
-    send(res, 200, buf, { 'Content-Type': type, ...(type.startsWith('text/html') ? { 'X-Frame-Options': 'SAMEORIGIN' } : {}) });
+    const type = TYPES[path.extname(file).toLowerCase()] || 'application/octet-stream';
+    send(res, 200, buf, { 'Content-Type': type });
   });
 }
 
-// Driver download: browsers must send a custom header (forces a CORS preflight, so foreign pages cannot trigger it).
-let downloading = false;
-async function handleDownload(req, res, cors) {
-  if (req.headers['x-mixer-action'] !== 'download' || !String(req.headers['content-type'] || '').startsWith('application/json')) {
-    return json(res, 400, { ok: false, error: 'missing X-Mixer-Action header or JSON body' }, cors);
-  }
-  let body = '';
-  for await (const chunk of req) { body += chunk; if (body.length > 1024) return json(res, 413, { ok: false, error: 'request too large' }, cors); }
-  let id;
-  try { id = JSON.parse(body).id; } catch (_) { return json(res, 400, { ok: false, error: 'invalid JSON' }, cors); }
-  if (typeof id !== 'string' || !/^[a-z0-9-]{1,32}$/.test(id)) return json(res, 400, { ok: false, error: 'invalid id' }, cors);
-  if (downloading) return json(res, 409, { ok: false, error: 'a download is already running' }, cors);
-  downloading = true;
-  try { return json(res, 200, await downloadDriver(id), cors); }
+// Device detection runs PowerShell / reg / RtAudio probes: the page rescans every few seconds and several pages ask, so concurrent and repeated requests
+// share one run for a few seconds (?force=1 bypasses it). A failed run is not kept.
+let detectCache = null;
+function detectCached(force = false, maxAgeMs = 3000) {
+  const now = Date.now();
+  if (!force && detectCache && now - detectCache.at < maxAgeMs) return detectCache.promise;
+  const promise = detect(); detectCache = { at: now, promise };
+  promise.catch(() => { if (detectCache && detectCache.promise === promise) detectCache = null; });
+  return promise;
+}
+
+let updateCache = null;
+// JSON POST actions (license, updates): the custom header forces a CORS preflight, so foreign pages cannot trigger them.
+async function handleAction(req, res, cors, action, fn, wantBody = true) {
+  if (req.headers['x-mixer-action'] !== action) return json(res, 400, { ok: false, error: 'missing X-Mixer-Action: ' + action }, cors);
+  let body = {};
+  if (wantBody) {
+    if (!String(req.headers['content-type'] || '').startsWith('application/json')) return json(res, 400, { ok: false, error: 'JSON body required' }, cors);
+    let raw = '';
+    for await (const chunk of req) { raw += chunk; if (raw.length > 8192) return json(res, 413, { ok: false, error: 'request too large' }, cors); }
+    try { body = JSON.parse(raw || '{}'); } catch (_) { return json(res, 400, { ok: false, error: 'invalid JSON' }, cors); }
+  } else { for await (const _ of req) { /* drain */ } }
+  try { const [code, data] = await fn(body); return json(res, code, data, cors); }
   catch (e) { return json(res, e.status || 500, { ok: false, error: e.message }, cors); }
-  finally { downloading = false; }
 }
 
 // WebSocket /ws/output: page streams Int16 PCM, bridge plays it via PortAudio (ASIO when available).
 server.on('upgrade', (req, socket) => {
   let pathname = '';
   try { pathname = new URL(req.url, `http://${HOST}`).pathname; } catch (_) { /* rejected below */ }
-  if ((pathname !== '/ws/output' && pathname !== '/ws/input') || !hostAllowed(req.headers.host) || !originAllowed(req.headers.origin)) { socket.destroy(); return; }
+  if ((pathname !== '/ws/output' && pathname !== '/ws/input' && pathname !== '/ws/duplex' && pathname !== '/ws/insert' && pathname !== '/ws/virtual') || !hostAllowed(req.headers.host) || !originAllowed(req.headers.origin)) { socket.destroy(); return; }
+  if (pathname === '/ws/virtual' && req.headers.origin) { socket.destroy(); return; }     // drivers are native programs: a web page has no business here
+  if (openSockets >= MAX_SOCKETS || (RATE && !limiter.allow('ws', 120).ok)) { socket.end('HTTP/1.1 429 Too Many Requests\r\nConnection: close\r\n\r\n'); return; }
   const handlers = {};
   const conn = accept(req, socket, handlers);
   if (!conn) return;
-  Object.assign(handlers, pathname === '/ws/input' ? createInputSession(conn) : createSession(conn));
+  openSockets++; socket.once('close', () => { openSockets--; });
+  Object.assign(handlers, pathname === '/ws/input' ? createInputSession(conn) : pathname === '/ws/duplex' ? createDuplexSession(conn) : pathname === '/ws/insert' ? pluginHost.createInsertSession(conn) : pathname === '/ws/virtual' ? virtualHub.session(conn) : createSession(conn));
 });
+
+server.headersTimeout = 15000; server.requestTimeout = 60000; server.maxHeadersCount = 64; server.keepAliveTimeout = 5000;
+server.on('clientError', (_, socket) => { try { socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n'); } catch (_) { /* gone */ } });
 
 // Starts listening (used by the client launcher); resolves with the port.
 function start(port = PORT) {
@@ -186,4 +277,4 @@ function start(port = PORT) {
 if (require.main === module) {
   start().then(port => console.log(`Audio Mixer bridge running: http://localhost:${port}  (open this URL to use the mixer)`));
 }
-module.exports = { server, originAllowed, hostAllowed, HOST, PORT, start };
+module.exports = { detectCached, server, originAllowed, hostAllowed, HOST, PORT, start };

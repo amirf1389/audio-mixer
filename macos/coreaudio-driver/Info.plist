@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleDevelopmentRegion</key><string>English</string>
+  <key>CFBundleExecutable</key><string>AudioMixer</string>
+  <key>CFBundleIdentifier</key><string>org.audiomixer.driver</string>
+  <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+  <key>CFBundleName</key><string>Audio Mixer</string>
+  <key>CFBundlePackageType</key><string>BNDL</string>
+  <key>CFBundleShortVersionString</key><string>1.0</string>
+  <key>CFBundleVersion</key><string>1</string>
+  <key>CFPlugInFactories</key>
+  <dict>
+    <key>8C5C2B6A-2D53-4F0A-9B7E-6E1A3C2D4F90</key><string>AudioMixerDriverFactory</string>
+  </dict>
+  <key>CFPlugInTypes</key>
+  <dict>
+    <key>443ABAB8-E7B3-491A-B985-BEB9187030DB</key>
+    <array><string>8C5C2B6A-2D53-4F0A-9B7E-6E1A3C2D4F90</string></array>
+  </dict>
+</dict>
+</plist>

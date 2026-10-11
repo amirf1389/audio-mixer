@@ -102,12 +102,9 @@ Real Web Audio graph, saved in the browser (localStorage) and respecting the KNO
 - The ROUTING tab now has 16 subgroups (was 8); the sidebar is grouped (MIX / ROUTE / METER / SOURCE / DEVICE / SYSTEM).
 
 ## PC mode client and official driver catalog
-- `node client/cli.js` (see the root README) starts this server and opens the mixer; `drivers`, `download <id>` and `doctor` manage drivers.
+- `node client/cli.js` (see the root README) starts this server and opens the mixer; `drivers` (links to each official driver site, with install detection) and `doctor` check the drivers. Audio Mixer does not download drivers.
 - `GET /api/catalog`: official drivers / stacks per OS with install detection (ASIO registry names, native stacks, PortAudio).
-- `POST /api/catalog/download {"id":"flexasio"}`: saves the installer from the project's official GitHub release to `~/AudioMixerDrivers`
-  (200 MB cap, https and GitHub hosts only, redirects re-checked, SHA-256 verified against the release digest when published, never executed).
-  Requires the `X-Mixer-Action: download` header (forces a CORS preflight, so foreign pages cannot trigger it). Everything else in the catalog
-  links to the vendor's official site or shows the package-manager command. Not verified against real vendor sites from this sandbox.
+  Every entry links to the vendor's official site or shows the package-manager command; nothing is downloaded by the app. Not verified against real vendor sites from this sandbox.
 
 ## Now playing and interface scan
 - `GET /api/nowplaying`: `{ method, sessions: [{ service, serviceName, app, status, title, artist, album }], playing }` from the OS media sessions
@@ -116,3 +113,10 @@ Real Web Audio graph, saved in the browser (localStorage) and respecting the KNO
 - `GET /api/interfaces`: PortAudio devices of every host API grouped into physical interfaces (`apis`, `read` / `write` best device, `asio`,
   `loopback`, `driverOnly` for installed ASIO drivers PortAudio does not list).
 - ASIO is single-client: a second ASIO device is refused with a clear message while one is open (same device for read + write is fine).
+
+## Universal ASIO driver, levels, auto-install (1.5.0)
+- `GET /api/universal`: `{ engines, inputs[], outputs[], apis[], best: { input, output }, asio: { inputs, outputs }, changeId }`: every source on both engines, best first (ASIO > WASAPI > Core Audio > JACK > ALSA > WDM-KS > DirectSound > MME, loopback last).
+- `start` with `deviceId: "universal"` (or `universal: true`) picks the best device that has enough channels; `started` carries `universal: true`.
+- Every open stream sends `{ type: "levels", id, direction, device, hostApi, engine, frameSize, latencyMs, sampleRate, channels, peak[], rms[], clip }` (dBFS per channel, about 12 per second) measured on the PCM that is really written / read.
+- `GET /api/audify` also returns `error` and `hint` when the module did not load (on Windows usually the missing Visual C++ runtime).
+- `../linux/ensure-node.sh` (sourced by `linux/start-pc-mode.sh`, the Linux launcher and the macOS app) finds or installs Node.js 18+ and the Audify module without administrator rights.

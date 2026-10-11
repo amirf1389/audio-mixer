@@ -1,0 +1,47 @@
+# XcodeGen spec for Audio Mixer for iOS. scripts/build-ios.js writes project.yml from this file (version numbers) and stages www/.
+#   brew install xcodegen && cd ios && xcodegen generate && open AudioMixer.xcodeproj
+name: AudioMixer
+options:
+  bundleIdPrefix: com.audiomixer
+  deploymentTarget:
+    iOS: "15.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "@VERSION@"
+    CURRENT_PROJECT_VERSION: "@BUILD@"
+targets:
+  AudioMixer:
+    type: application
+    platform: iOS
+    sources:
+      - path: AudioMixer
+      - path: www
+        type: folder
+        buildPhase: resources
+      - path: Assets.xcassets
+    info:
+      path: AudioMixer/Info.plist
+      properties:
+        CFBundleDisplayName: Audio Mixer
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        UILaunchScreen: {}
+        UIRequiresFullScreen: true
+        UIStatusBarHidden: true
+        UIViewControllerBasedStatusBarAppearance: true
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight, UIInterfaceOrientationPortrait]
+        UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight, UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown]
+        UIBackgroundModes: [audio]
+        NSMicrophoneUsageDescription: Audio Mixer reads your microphone or audio interface as mixer inputs.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.audiomixer.app
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GENERATE_INFOPLIST_FILE: NO
+        ENABLE_BITCODE: NO
+        DEVELOPMENT_TEAM: ""

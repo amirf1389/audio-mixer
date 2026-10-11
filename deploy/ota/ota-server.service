@@ -1,0 +1,21 @@
+# systemd unit: sudo cp deploy/ota/ota-server.service /etc/systemd/system/ && sudo systemctl enable --now ota-server
+# Put the settings in /etc/audio-mixer-ota.env (chmod 600):
+#   OTA_ADMIN_TOKEN=...   OTA_PUBLIC_URL=https://ota.example.com   OTA_TRUST_PROXY=1
+[Unit]
+Description=Audio Mixer OTA server
+After=network.target
+
+[Service]
+EnvironmentFile=/etc/audio-mixer-ota.env
+WorkingDirectory=/opt/audio-mixer
+ExecStart=/usr/bin/node ota-server/server.js --host 127.0.0.1 --port 8780 --data /var/lib/audio-mixer-ota
+Restart=on-failure
+DynamicUser=yes
+StateDirectory=audio-mixer-ota
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

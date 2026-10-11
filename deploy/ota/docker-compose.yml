@@ -1,0 +1,15 @@
+# From the repository root:  OTA_ADMIN_TOKEN=... docker compose -f deploy/ota/docker-compose.yml up -d
+# Port 8780 is for nginx / Caddy on the same host (TLS there); do not publish it to the internet without TLS.
+services:
+  ota:
+    build: { context: ../.., dockerfile: deploy/ota/Dockerfile }
+    restart: unless-stopped
+    ports: ["127.0.0.1:8780:8780"]
+    environment:
+      OTA_ADMIN_TOKEN: ${OTA_ADMIN_TOKEN:?set OTA_ADMIN_TOKEN}
+      OTA_PUBLIC_URL: ${OTA_PUBLIC_URL:-https://ota.example.com}
+      OTA_TRUST_PROXY: "1"
+    volumes:
+      - ota-data:/data
+volumes:
+  ota-data:

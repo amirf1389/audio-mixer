@@ -1,0 +1,8 @@
+# Caddy gets and renews the certificate by itself:  caddy run --config deploy/ota/Caddyfile
+# Run the server with OTA_TRUST_PROXY=1 OTA_PUBLIC_URL=https://ota.example.com
+ota.example.com {
+  reverse_proxy 127.0.0.1:8780
+  request_body {
+    max_size 450MB
+  }
+}
