@@ -164,7 +164,7 @@ function buildDeb({ out = path.join(ROOT, 'dist'), app = build({ out }) } = {}) 
   put('usr/share/applications/audio-mixer-open.desktop', openDesktopEntry('audio-mixer'));
   const lic = path.join(ROOT, 'LICENSE');
   put('usr/share/doc/audio-mixer/copyright', `Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/\nUpstream-Name: audio-mixer\nSource: ${HOMEPAGE}\nLicense: MIT\n\n` + (fs.existsSync(lic) ? fs.readFileSync(lic, 'utf8') : 'MIT License\n'));
-  put('usr/share/doc/audio-mixer/README', fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8'));
+  put('usr/share/doc/audio-mixer/README', fs.readFileSync(path.join(ROOT, 'PROJECT-README.md'), 'utf8'));
   // directories 755, files 644, the launcher and the entry scripts executable
   const modeTree = d => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const f = path.join(d, e.name); if (e.isDirectory()) { fs.chmodSync(f, 0o755); modeTree(f); } else if (!f.endsWith('/usr/bin/audio-mixer')) fs.chmodSync(f, 0o644); } };
   modeTree(root);

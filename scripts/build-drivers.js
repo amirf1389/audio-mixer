@@ -2,7 +2,7 @@
 'use strict';
 // Builds the operating-system drivers (windows/asio-driver, linux/alsa-plugin, macos/coreaudio-driver, android/hal, shared code in drivers/common) that this machine can build, and packs them:
 //   node scripts/build-drivers.js [--out windows/releases] [--source]
-//   AudioMixer-<version>-asio-driver-windows.zip     AudioMixerASIO64.dll, AudioMixerASIO32.dll (cross-compiled with mingw-w64), register.bat, unregister.bat, README.txt
+//   AudioMixer-<version>-asio-driver-windows.zip     AudioMixerASIO64.dll, AudioMixerASIO32.dll (cross-compiled with mingw-w64), README.txt
 //   AudioMixer-<version>-drivers-source.tar.gz       (only with --source) all driver sources: ASIO (Windows), ALSA plugin (Linux), Core Audio plug-in (macOS), audio HAL (Android)
 // The macOS plug-in and the Android HAL need their own SDKs (Xcode, AOSP) and are shipped as source. The ALSA plugin is built on the target Linux PC (make).
 const fs = require('node:fs');
@@ -42,10 +42,10 @@ An ASIO driver (a DLL) that makes "Audio Mixer" appear in the ASIO driver list o
 
 Install (deliberately a separate step: the Audio Mixer setup program never installs a driver):
   1. Unpack this folder somewhere permanent (for example C:\\Program Files\\Audio Mixer ASIO). The DLLs are registered where they are.
-  2. Right-click register.bat > Run as administrator. (It runs  regsvr32  on the DLLs: it writes HKLM\\SOFTWARE\\Classes\\CLSID\\{C1893F2F-1AD5-4344-9806-DCFD242C0D48}
-     and HKLM\\SOFTWARE\\ASIO\\Audio Mixer, nothing else.)
+  2. Open a Command Prompt as administrator and run  regsvr32 "<folder>\\AudioMixerASIO64.dll"  (and the same for AudioMixerASIO32.dll). It writes
+     HKLM\\SOFTWARE\\Classes\\CLSID\\{C1893F2F-1AD5-4344-9806-DCFD242C0D48} and HKLM\\SOFTWARE\\ASIO\\Audio Mixer, nothing else.
   3. Start Audio Mixer, then choose "Audio Mixer" as the ASIO driver in your program. Its control panel button shows whether the mixer is connected.
-Remove: unregister.bat as administrator, then delete the folder.
+Remove: the same commands with  regsvr32 /u  as administrator, then delete the folder.
 
 The 64-bit DLL is for 64-bit programs, the 32-bit DLL for 32-bit programs; register both if you use both.
 Not signed. Windows may warn when a DLL from the internet is registered; check the SHA-256 in the release.
@@ -61,7 +61,6 @@ function buildAll({ out = path.join(ROOT, 'windows', 'releases'), source = false
   fs.mkdirSync(pack);
   try {
     buildAsio('x64', pack); buildAsio('x86', pack);
-    for (const f of ['register.bat', 'unregister.bat']) fs.copyFileSync(path.join(ASIO, f), path.join(pack, f));
     fs.writeFileSync(path.join(pack, 'README.txt'), README_WINDOWS(version).replace(/\r?\n/g, '\r\n'));
     const zip = path.join(out, `AudioMixer-${version}-asio-driver-windows.zip`); fs.rmSync(zip, { force: true });
     run('zip', ['-qr', zip, path.basename(pack)], { cwd: stage });

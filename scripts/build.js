@@ -11,7 +11,7 @@ const { spawnSync } = require('node:child_process');
 
 const { ROOT, repoPath } = require('./layout');   // package paths (native/win ...) differ from the repository folders (windows/native ...): see layout.js
 const FILES = [
-  'index.html', 'boot.html', 'README.md', 'LICENSE', 'package.json', 'start-pc-mode.bat', 'start-pc-mode.sh', 'ensure-node.sh', 'start-local-server.bat',
+  'index.html', 'boot.html', 'PROJECT-README.md', 'LICENSE', 'package.json', 'start-pc-mode.bat', 'start-pc-mode.sh', 'ensure-node.sh', 'start-local-server.bat',
   'client/cli.js', 'client/service.js', 'client/verify.js',
   'bridge/server.js', 'bridge/osdetect.js', 'bridge/virtual.js', 'bridge/detect.js', 'bridge/catalog.js', 'bridge/nowplaying.js', 'bridge/interfaces.js', 'bridge/asio-lock.js', 'bridge/audify.js', 'bridge/plugins.js', 'bridge/streams.js', 'bridge/levels.js', 'bridge/universal.js', 'bridge/license.js', 'bridge/license-public.json', 'bridge/update.js', 'bridge/duplex.js', 'bridge/winnative.js', 'bridge/security.js', 'bridge/sysaudio.js', 'bridge/inserts.js', 'bridge/pluginhost.js', 'bridge/bluetooth.js', 'bridge/input.js', 'bridge/output.js', 'bridge/volume.js', 'bridge/ws.js',
   'bridge/package.json', 'bridge/README.md',

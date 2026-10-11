@@ -11,7 +11,7 @@
 //   Registry (on): system environment variables AUDIO_MIXER_DIR (install folder) and AUDIO_MIXER_ASIO (driver folder), the App Paths entries of audio-mixer.exe and
 //     AudioMixerServer.exe (Win+R / Start find them by name) and Version / Arch / DriverDir under HKLM\Software\Audio Mixer; all removed on uninstall
 //   FileTypes (on): the .amix scene file type and the audiomixer:// link handler, both run  audio-mixer.exe open "%1"  (see "open" in client/cli.js)
-//   ToolsPath (off by default, ADDLOCAL=...,ToolsPath or the setup program's /toolspath): the driver tools folder (asio-driver: register.bat, unregister.bat, the driver DLLs) on PATH
+//   ToolsPath (off by default, ADDLOCAL=...,ToolsPath or the setup program's /toolspath): the driver tools folder (asio-driver: the driver DLLs) on PATH
 //   PluginHost: native VST host (native/host), WinHelpers: native Windows audio device helpers (native/win); Tools: Start Menu shortcuts for license, plugins, drivers, update, doctor
 const fs = require('node:fs');
 const path = require('node:path');

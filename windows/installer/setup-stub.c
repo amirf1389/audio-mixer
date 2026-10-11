@@ -250,7 +250,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int show) {
 
   if (!novc) ensure_vc_runtime(quiet, vcyes);
   /* the ASIO driver: its files are installed anyway; registering it (HKLM\SOFTWARE\ASIO) is asked about in an interactive install, the default answer is No */
-  if (!asio && !noasio && !quiet && !passive && MessageBoxW(NULL, L"Register the Audio Mixer ASIO driver?\n\nIt makes \"Audio Mixer\" appear in the ASIO driver list of DAWs, OBS and other ASIO programs, so they can play into the mixer and record from it.\n\nThe driver files are installed in any case (folder asio-driver). Choose No to leave the driver unregistered: you can register it later with register.bat in that folder, as administrator.", TITLE, MB_YESNO | MB_DEFBUTTON2 | MB_ICONQUESTION | MB_SETFOREGROUND) == IDYES) asio = 1;
+  if (!asio && !noasio && !quiet && !passive && MessageBoxW(NULL, L"Register the Audio Mixer ASIO driver?\n\nIt makes \"Audio Mixer\" appear in the ASIO driver list of DAWs, OBS and other ASIO programs, so they can play into the mixer and record from it.\n\nThe driver files are installed in any case (folder asio-driver). Choose No to leave the driver unregistered: you can register it later with regsvr32 on the DLLs in that folder, as administrator.", TITLE, MB_YESNO | MB_DEFBUTTON2 | MB_ICONQUESTION | MB_SETFOREGROUND) == IDYES) asio = 1;
   /* feature switches -> ADDLOCAL (only when one was used; the default install keeps the MSI defaults) */
   if (noplug || nohelp || notools || noshort || !desktop || nopath || asio || noreg || nofiletypes || toolspath) {
     wchar_t add[400] = L" ADDLOCAL=Main";
