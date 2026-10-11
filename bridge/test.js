@@ -1182,8 +1182,13 @@ test('driver link library (drivers/common/am_link.c, C): a real native client co
   const until = async (f, ms = 5000) => { const t0 = Date.now(); while (!(await f())) { if (Date.now() - t0 > ms) throw new Error('timeout'); await new Promise(r => setTimeout(r, 10)); } };
   try {
     // 1. the mixer is not there: the library says so instead of hanging
-    const none = cp.spawnSync(exe, [], { encoding: 'utf8', env: { ...process.env, AUDIO_MIXER_PORT: '1' }, timeout: 8000 });
+    const t0 = Date.now(), none = cp.spawnSync(exe, [], { encoding: 'utf8', env: { ...process.env, AUDIO_MIXER_PORT: '1' }, timeout: 8000 });
     assert.strictEqual(none.status, 2); assert.match(none.stdout, /open failed: the Audio Mixer program is not running/);
+    assert.ok(Date.now() - t0 < 1500, 'a missing mixer is reported at once, not after the 1 to 2 s that Windows takes to refuse a connection: ' + (Date.now() - t0) + ' ms');
+    // a program on the mixer's port that never answers the WebSocket handshake does not hold the caller either
+    const mute = require('node:net').createServer(() => {}); await new Promise(r => mute.listen(0, '127.0.0.1', r));
+    const t1 = Date.now(), stuck = cp.spawnSync(exe, [], { encoding: 'utf8', env: { ...process.env, AUDIO_MIXER_PORT: String(mute.address().port) }, timeout: 8000 });
+    mute.close(); assert.strictEqual(stuck.status, 2); assert.ok(Date.now() - t1 < 2500, 'handshake limit: ' + (Date.now() - t1) + ' ms');
     // 2. the mixer runs: the native client says hello, plays 25 blocks of 480 stereo frames, and records what the page writes
     let out = ''; const child = cp.spawn(exe, ['Link Test'], { env: { ...process.env, AUDIO_MIXER_PORT: String(port) } }); child.stdout.on('data', d => { out += d; });
     const done = new Promise(res => child.on('close', code => res(code)));
@@ -1273,6 +1278,15 @@ test('Windows ASIO driver (windows/asio-driver): cross-compiled for x64 and x86 
     const iface = fsx.readFileSync(pathx.join(root, 'asio_iface.h'), 'utf8'), order = ['init', 'getDriverName', 'getDriverVersion', 'getErrorMessage', 'start', 'stop', 'getChannels', 'getLatencies', 'getBufferSize', 'canSampleRate', 'getSampleRate', 'setSampleRate', 'getClockSources', 'setClockSource', 'getSamplePosition', 'getChannelInfo', 'createBuffers', 'disposeBuffers', 'controlPanel', 'future', 'outputReady'];
     const at = order.map(n => iface.indexOf(' ' + n + '('));
     assert.ok(at.every((x, i) => x > 0 && (i === 0 || x > at[i - 1])), 'IASIO methods in the order of the ASIO interface: ' + at);
+    // 32-bit hosts call IASIO with thiscall (the callee removes the arguments): the x86 object must return with `ret $8` from getChannels(two pointers); cdecl would be a plain `ret`
+    const o32 = pathx.join(dir, 'asio32.o'), cc32 = cp.spawnSync('i686-w64-mingw32-g++', ['-std=gnu++14', '-O2', '-c', pathx.join(root, 'audiomixer_asio.cpp'), '-o', o32], { encoding: 'utf8' });
+    assert.strictEqual(cc32.status, 0, cc32.stderr);
+    const asm = cp.spawnSync('i686-w64-mingw32-objdump', ['-d', '-C', o32], { encoding: 'utf8', maxBuffer: 1 << 26 }).stdout;
+    const body = asm.split(/\n(?=[0-9a-f]+ <)/).find(x => /^[0-9a-f]+ <AudioMixerAsio::getChannels\(/.test(x)) || ''; assert.match(body, /ret\s+\$0x8\b/, 'getChannels is thiscall on x86');
+    assert.match(iface, /ASIO_CALL __attribute__\(\(thiscall\)\)/); assert.strictEqual((iface.match(/virtual \w+ ASIO_CALL /g) || []).length, order.length);
+    // the audio thread never connects, allocates or waits for the network: the connector thread does that
+    const cyc = cpp.slice(cpp.indexOf('void cycle()'), cpp.indexOf('void run()'));
+    assert.ok(!/am_link_open|am_link_close|alloc\(|Sleep\(/.test(cyc), 'cycle() (the audio thread) has no connect, close, allocation or sleep'); assert.match(cpp, /connectorMain/);
   } finally { fsx.rmSync(dir, { recursive: true, force: true }); }
 });
 

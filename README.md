@@ -452,3 +452,14 @@ Not tested here: the setup program on a real Windows PC or against a real Defend
 - **Linux: an ALSA plugin** (`aplay -D audiomixer`, `arecord -D audiomixer`; PulseAudio / PipeWire through the ALSA bridge). **macOS: a Core Audio plug-in. Android: an audio HAL** (for device makers). The last two are sources (`AudioMixer-<version>-drivers-source.tar.gz`), not built here.
 - The drivers connect over loopback to the mixer's new `/ws/virtual` endpoint (Node bridge and the Android app's engine); the device appears in `/api/interfaces`.
 - Tested here: the connection library and the Linux plugin against the real bridge (a native client, `aplay`, `arecord`, in real time), the bridge and the Android engine's hub, the Windows DLLs cross-compiled and inspected, and the page end to end in Chromium (the device in LIVE SOURCES, READ shows the level, WRITE reaches the driver). **Not tested: the ASIO driver in a real DAW, the macOS plug-in, the Android HAL.** The installers contain no driver.
+
+## ASIO driver fix (1.6.1.0)
+
+The Windows ASIO driver stalled or crashed hosts. Causes found in the code and fixed, nothing else changed:
+- **The audio thread connected to the mixer.** Every second without a mixer it ran the connection (on Windows a closed loopback port takes 1 to 2 s to refuse, and the ten ports were tried one after the other), so buffer switches stopped. A separate **connector thread** (started in `start()`, ended in `stop()`) now keeps the link; the audio thread only plays into it.
+- **Bounded connection** (`drivers/common/am_link.c`): all mixer ports are tried at once and wait 300 ms at most, the handshake 800 ms, and a send 100 ms; a link whose send failed is dropped and reopened. A program on the port that does not speak WebSocket no longer holds the caller. (The ALSA plugin, macOS plug-in and Android HAL use the same library, so they get the bounded connect too.)
+- **32-bit hosts crashed at the first call.** Visual C++ hosts call the IASIO methods with `thiscall`; the MinGW build used another convention. The x86 build now declares `thiscall` (`ASIO_CALL` in `asio_iface.h`); a test checks the compiled `getChannels` returns with `ret $8`.
+- **`stop()`** waited at most 3 s and then freed the thread handle while it was still running, and deadlocked when a host stopped the driver from inside its `bufferSwitch` callback. It now waits for the thread (not for itself), and the driver thread leaves at once if the host stopped it in the callback.
+- **No allocation on the audio thread**: the buffer for the host's outputs is allocated in `createBuffers`.
+
+Not tested: the driver in a real ASIO host (a DAW) on Windows, in either architecture; the checks are the cross-compile with `-Werror`, the inspection of the DLLs and x86 code, and the connection library against the real bridge (including a missing mixer and a mute program on the port).
