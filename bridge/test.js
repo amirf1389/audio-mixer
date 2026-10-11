@@ -3403,3 +3403,10 @@ test('page: REBOOT chooser, real factory reset, CALIBRATE page (measurements, lo
   // the inserts of the server are cleared by a factory reset, on any plan
   const srv = fsx.readFileSync(pathx.join(__dirname, 'server.js'), 'utf8'); assert.ok(srv.includes('body.clear === true') && srv.indexOf('body.clear === true') < srv.indexOf("hasFeature(license.status(), 'plugins')"));
 });
+
+test('KNOX PIN lock: default code 1XF300#, Enter / Escape, the lock survives a reload, wrong tries are remembered, available on the phone layout', () => {
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  assert.ok(html.includes('const DEFAULT_ADMIN_PIN = "1XF300#";') && html.includes('Default PIN: 1XF300#') && !html.includes('1XF2OO'));
+  for (const s of ["e.key === 'Enter'", "e.key === 'Escape'", "'halx_knox'", "'halx_pin_fail'", 'Number(f.until)', 'autocapitalize="off"', 'enter the PIN first']) assert.ok(html.includes(s), s);
+  assert.ok(!/html\.phone-ui #btn-knox-toggle/.test(html));                                    // the lock button is shown on phones and tablets too
+});
