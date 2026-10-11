@@ -2811,6 +2811,34 @@ test('phone layout: every rule is scoped to html.phone-ui (or its own #phone- el
   for (const id of ['mixer', 'live', 'meter', 'fx']) assert.ok(html.includes(`id="nav-${id}"`) || html.includes(`'nav-${id}'`) || html.includes(`"nav-" + `) || html.includes('nav-'), id);
 });
 
+test('METER SOURCE: the VU, LUFS, scope and phase pages follow one chosen source; the scope shows the real samples (trigger, timebase, frequency) and Now Playing can be captured into the meters', () => {
+  const fsx = require('node:fs'), pathx = require('node:path'), vm = require('node:vm');
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  const mod = /<script id="meter-source">([\s\S]*?)<\/script>/.exec(html); assert.ok(mod, 'the meter-source script is in the page');
+  assert.ok(!/Math\.random\(\)[^\n]*(osc-vpp|osc-freq)|osc-vrms-val'\);\s*\n\s*if \(vrmsEl\)/.test(html), 'no simulated scope readings');
+  const scopeFn = html.slice(html.indexOf('function renderOscFrame'), html.indexOf('window.toggleOscRun = function'));
+  assert.ok(!/Math\.sin|Math\.random/.test(scopeFn) && scopeFn.includes('window.meterSource.drawScope'), 'the scope draws the chosen source, not simulated waves');
+  // the pages read the chosen source (and still the master by default)
+  assert.match(html, /window\.meterSource \? window\.meterSource\.vu\(\)/); assert.match(html, /window\.meterSource \? window\.meterSource\.analysers\(\)/); assert.match(html, /const want = \(window\.meterSource && window\.meterSource\.node\(\)\) \|\| lim/);
+  assert.match(mod[1], /PAGES = \['meter', 'lufs', 'osc', 'phase'\]/); assert.match(mod[1], /window\.setOscSource = function \(val\) \{ ms\.set\(val\)/);
+  // Now Playing -> capture: loopback interface or the system / tab audio picker, tagged with service and title, selected in the meters
+  for (const s of ['captureNowPlaying', 'tagMusic', 'ls-np-cap', 'IN THE METERS']) assert.ok(html.includes(s), s);
+  // the arithmetic of the scope, run on real sample blocks
+  const win = { addEventListener() {}, localStorage: undefined }, doc = { getElementById: () => null, addEventListener() {}, querySelector: () => null, querySelectorAll: () => [] };
+  vm.runInNewContext(mod[1], { window: win, document: doc, setInterval() { return 0; }, clearInterval() {}, performance: { now: () => 0 }, CustomEvent: function () {} });
+  const calc = win.meterSource.scopeCalc, fs = 48000, size = 32768;
+  const wave = (f, amp, fn) => { const A = new Float32Array(size); for (let i = 0; i < size; i++) A[i] = amp * fn(2 * Math.PI * f * i / fs); return A; };
+  let A = wave(440, 0.5, Math.sin), r = calc(A, A, fs, { timebase: 1, triggerLevel: -12, triggerEdge: 'rise' });
+  assert.ok(r.triggered && r.N === 480 && r.start + r.N <= size, JSON.stringify(r)); assert.ok(Math.abs(r.freq - 440) < 1 && Math.abs(r.p2p - 1) < 0.01 && Math.abs(r.rms - 0.3536) < 0.01 && Math.abs(r.crest - 3.01) < 0.1, JSON.stringify(r));
+  assert.ok(A[r.start - 1] < 0.25 && A[r.start] >= 0.25, 'the sweep starts at a rising crossing of the trigger level (-12 dB = 0.25)');
+  r = calc(A, A, fs, { timebase: 1, triggerLevel: -12, triggerEdge: 'fall' }); assert.ok(r.triggered && A[r.start - 1] > -0.25 && A[r.start] <= -0.25, 'falling edge');
+  assert.strictEqual(calc(A, A, fs, { timebase: 25 }).N, 12000, '25 ms/div = 250 ms of samples');
+  assert.ok(calc(A, A, fs, { timebase: 1000 }).N <= size / 2, 'never longer than half the buffer');
+  r = calc(wave(1000, 0.8, x => (Math.sin(x) >= 0 ? 1 : -1)), A, fs, { timebase: 0.5, triggerLevel: -6, triggerEdge: 'rise' }); assert.ok(Math.abs(r.freq - 1000) < 2 && Math.abs(r.p2p - 1.6) < 0.01, JSON.stringify(r));
+  const q = calc(new Float32Array(size), A, fs, { timebase: 1, triggerLevel: -12 }); assert.ok(!q.triggered && q.start === size - q.N && q.freq === 0 && q.p2p === 0 && q.crest === 0, 'silence: no trigger, no frequency');
+  assert.ok(Math.abs(calc(wave(60, 0.3, Math.sin), A, fs, { timebase: 10 }).freq - 60) < 0.5, 'low frequencies too');
+});
+
 test('npm installer (npm-installer/): per-system choice of file and own installation, signed manifest + SHA-256 checked before anything runs, Windows ASIO registration only on request', async () => {
   const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), http = require('node:http'), crypto = require('node:crypto');
   const root = path.join(__dirname, '..', 'npm-installer'), det = require(path.join(root, 'lib', 'detect')), mf = require(path.join(root, 'lib', 'manifest')), { main, parseArgs } = require(path.join(root, 'lib', 'cli'));

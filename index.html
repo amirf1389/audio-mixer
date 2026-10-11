@@ -4630,7 +4630,7 @@ window.navTabs = [
             <option value="10.0">10.0 ms/div (Sub / Bass Sweep)</option>
             <option value="25.0">25.0 ms/div (Macro Envelope)</option>
           </select>
-          <div class="text-[7px] text-slate-500">Sample window: 1024 points @ 48kHz</div>
+          <div class="text-[7px] text-slate-500">Sweep: 10 divisions of the real signal (up to 32768 samples)</div>
         </div>
 
         <!-- Control 2: Vertical Voltage Sensitivity -->
@@ -10261,7 +10261,7 @@ window.navTabs = [
                 // Real level of the master bus, left and right (RMS of the audio itself): silence reads as silence
                 let dbL = -60;
                 let dbR = -60;
-                const rtm = window.rtEngine && window.rtEngine.master;
+                const rtm = window.meterSource ? window.meterSource.vu() : (window.rtEngine && window.rtEngine.master);   // the master, or the source chosen in METER SOURCE
                 if (rtm) {
                     dbL = rtm.L.rms > 0.00003 ? Math.max(-60, 20 * Math.log10(rtm.L.rms)) : -60;
                     dbR = rtm.R.rms > 0.00003 ? Math.max(-60, 20 * Math.log10(rtm.R.rms)) : -60;
@@ -10284,8 +10284,8 @@ window.navTabs = [
                 window.vuMeterState.peakLeftLed = targetVuL >= 0.5;
                 window.vuMeterState.peakRightLed = targetVuR >= 0.5;
 
-                drawSingleVu(ctx, 0, 0, w - 2, h, window.vuMeterState.needleLeft, "CH 1 / LEFT", window.vuMeterState.peakLeftLed);
-                drawSingleVu(ctx, w + 2, 0, w - 2, h, window.vuMeterState.needleRight, "CH 2 / RIGHT", window.vuMeterState.peakRightLed);
+                drawSingleVu(ctx, 0, 0, w - 2, h, window.vuMeterState.needleLeft, (window.meterSource && window.meterSource.vuLabel("L")) || "CH 1 / LEFT", window.vuMeterState.peakLeftLed);
+                drawSingleVu(ctx, w + 2, 0, w - 2, h, window.vuMeterState.needleRight, (window.meterSource && window.meterSource.vuLabel("R")) || "CH 2 / RIGHT", window.vuMeterState.peakRightLed);
 
                 requestAnimationFrame(render);
             }
@@ -10885,15 +10885,16 @@ window.navTabs = [
         // Reads the live post-limiter L/R block and returns samples (monitor inverts + width applied) with a true Pearson correlation.
         window.readStereoPhase = function() {
             const n = window.state && window.state.nodes;
-            if (!n || !n.phaseAnL || !n.phaseAnR) return null;
-            const size = n.phaseAnL.fftSize;
+            const an = window.meterSource ? window.meterSource.analysers() : (n && n.phaseAnL ? { L: n.phaseAnL, R: n.phaseAnR } : null);   // the master, or the source chosen in METER SOURCE
+            if (!an) return null;
+            const size = an.L.fftSize;
             if (!window._phaseBufL || window._phaseBufL.length !== size) {
                 window._phaseBufL = new Float32Array(size);
                 window._phaseBufR = new Float32Array(size);
             }
             const L = window._phaseBufL, R = window._phaseBufR;
-            n.phaseAnL.getFloatTimeDomainData(L);
-            n.phaseAnR.getFloatTimeDomainData(R);
+            an.L.getFloatTimeDomainData(L);
+            an.R.getFloatTimeDomainData(R);
             const ps = window.phaseScopeState || {};
             const width = (ps.stereoWidth == null ? 100 : ps.stereoWidth) / 100;
             let sLR = 0, sLL = 0, sRR = 0, peak = 0;
@@ -12076,74 +12077,8 @@ window.navTabs = [
             ctx.stroke();
         }
 
-        // Trace Data Acquisition
-        window.oscState.phaseOffset += 0.08 * (1.0 / window.oscState.timebase);
-        const points = 512;
-        const cy = h / 2;
-        const scaleY = (h / 2.5) / (window.oscState.voltageScale === 'auto' ? 1.0 : parseFloat(window.oscState.voltageScale));
-
-        // Trace A: Amber (Master / Program)
-        ctx.beginPath();
-        ctx.lineWidth = 1.8;
-        ctx.strokeStyle = '#f59e0b';
-        ctx.shadowColor = '#f59e0b';
-        ctx.shadowBlur = window.oscState.displayMode === 'phosphor' ? 8 : 4;
-
-        for (let i = 0; i < points; i++) {
-            const t = (i / points) * Math.PI * 4 * window.oscState.timebase + window.oscState.phaseOffset;
-            let sample = Math.sin(t) * 0.7 + Math.sin(t * 2.3) * 0.2;
-            const x = (w / points) * i;
-            const y = cy - (sample * scaleY);
-            if (i === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
-        }
-        ctx.stroke();
-
-        // Trace B: Cyan (Mic / Input)
-        if (window.oscState.displayMode === 'dual' || window.oscState.displayMode === 'phosphor') {
-            ctx.beginPath();
-            ctx.lineWidth = 1.5;
-            ctx.strokeStyle = '#06b6d4';
-            ctx.shadowColor = '#06b6d4';
-            ctx.shadowBlur = window.oscState.displayMode === 'phosphor' ? 8 : 3;
-
-            for (let i = 0; i < points; i++) {
-                const t = (i / points) * Math.PI * 4 * window.oscState.timebase + (window.oscState.phaseOffset * 1.3);
-                let sample = Math.sin(t * 1.5) * 0.5 + Math.cos(t * 3.1) * 0.15;
-                const x = (w / points) * i;
-                const y = cy - (sample * scaleY);
-                if (i === 0) ctx.moveTo(x, y);
-                else ctx.lineTo(x, y);
-            }
-            ctx.stroke();
-        } else if (window.oscState.displayMode === 'xy') {
-            // Lissajous Phase Plot
-            ctx.beginPath();
-            ctx.lineWidth = 1.8;
-            ctx.strokeStyle = '#a855f7';
-            ctx.shadowColor = '#a855f7';
-            ctx.shadowBlur = 6;
-            for (let i = 0; i < points; i++) {
-                const t = (i / points) * Math.PI * 6 + window.oscState.phaseOffset;
-                const x = (w / 2) + (Math.sin(t) * (scaleY * 0.9));
-                const y = cy - (Math.cos(t * 1.01 + 0.3) * (scaleY * 0.9));
-                if (i === 0) ctx.moveTo(x, y);
-                else ctx.lineTo(x, y);
-            }
-            ctx.stroke();
-        }
-
-        ctx.shadowBlur = 0; // reset blur
-
-        // Update Live Telemetry Counters periodically
-        if (Math.random() < 0.1) {
-            const vppEl = document.getElementById('osc-vpp-val');
-            if (vppEl) vppEl.textContent = (1.38 + Math.random() * 0.08).toFixed(2) + ' V';
-            const vrmsEl = document.getElementById('osc-vrms-val');
-            if (vrmsEl) vrmsEl.textContent = (0.48 + Math.random() * 0.04).toFixed(2) + ' V';
-            const freqEl = document.getElementById('osc-freq-val');
-            if (freqEl) freqEl.textContent = (998.5 + Math.random() * 3.0).toFixed(1) + ' Hz';
-        }
+        // the real samples of the source chosen in METER SOURCE (see the meter-source script)
+        if (window.meterSource) window.meterSource.drawScope(ctx, w, h, window.oscState);
     }
 
     window.toggleOscRun = function() {
@@ -12179,6 +12114,7 @@ window.navTabs = [
 
     window.setOscTriggerMode = function(val) {
         window.oscState.triggerMode = val;
+        window.oscState._frozen = null; window.oscState._last = null;     // SINGLE arms again, NORM waits for a new trigger
         const el = document.getElementById('osc-trig-mode-text');
         if (el) el.textContent = val.toUpperCase();
         const stat = document.getElementById('osc-trig-status');
@@ -16196,6 +16132,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                         this.lastPlayingKey = key;
                         if (p) window.notify(`Now playing on ${p.serviceName}: ${p.title}${p.artist ? ' - ' + p.artist : ''}`, 'music');
                         if (p && !this.music && this.cfg.auto) this.autoMusic();
+                        else if (p) this.tagMusic(p);
                     }
                 } catch (e) { this.nowPlaying = []; }
                 this.renderNow();
@@ -16203,7 +16140,27 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             // a playing service was detected: use a loopback interface (Stereo Mix, monitor, virtual cable) for the music FFT when there is one
             autoMusic() {
                 const lb = this.interfaces.find(i => i.loopback && i.apis && i.apis.some(a => a.inputs > 0));
-                if (lb && this.bridgeUrl && this.portaudio) this.startRead(lb, { music: true });
+                if (lb && this.bridgeUrl && this.portaudio) Promise.resolve(this.startRead(lb, { music: true })).then(() => { this.tagMusic(null, true); this.render(); });
+            },
+            // the music source carries the name of what Now Playing detected (Spotify: title), so the meters and the scope show it; `auto`: the meters follow it
+            // unless another source was chosen on purpose
+            tagMusic(p, auto) {
+                const m = this.music; if (!m) return;
+                p = p || this.nowPlaying.find(x => x.status === 'playing'); if (!p) return;
+                if (!m.baseName) m.baseName = m.name;
+                m.name = p.serviceName + (p.title ? ': ' + p.title : '');
+                m.service = p.service;
+                if (window.meterSource && (!auto || window.meterSource.key === 'master')) window.meterSource.set(m.key || 'display', !!auto);
+            },
+            // CAPTURE on a playing Now Playing row: the loopback interface of the PC server when there is one, else the browser's system / tab audio picker (the click is the permission it needs)
+            async captureNowPlaying() {
+                const p = this.nowPlaying.find(x => x.status === 'playing') || this.nowPlaying[0];
+                if (!this.music) {
+                    const lb = this.interfaces.find(i => i.loopback && i.apis && i.apis.some(a => a.inputs > 0));
+                    if (lb && this.bridgeUrl && this.portaudio) { try { await this.startRead(lb, { music: true, userClick: true }); } catch (e) { /* fall back to the picker */ } }
+                    if (!this.music) await this.shareMusic();
+                }
+                if (this.music) { this.tagMusic(p, false); window.notify((p ? p.serviceName + ' is ' : 'The music is ') + 'in the meters (VU, LUFS, scope, phase follow it)', 'wave-square'); this.render(); }
             },
 
             // RtAudio / PortAudio / driver errors in words a musician can act on (the original text follows in the status line when it is short)
@@ -16244,7 +16201,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 if (hint) {
                     const p = this.nowPlaying.find(x => x.status === 'playing');
                     hint.classList.toggle('hidden', !(p && !this.music));
-                    if (p && !this.music) hint.textContent = `${p.serviceName} is playing: click SHARE SYSTEM / TAB AUDIO to see its spectrum` + (this.interfaces.some(i => i.loopback) ? ' (or enable the loopback interface below)' : '');
+                    if (p && !this.music) hint.textContent = `${p.serviceName} is playing: click CAPTURE above (or SHARE SYSTEM / TAB AUDIO) to put it in the meters and the spectrum` + (this.interfaces.some(i => i.loopback) ? ' (or enable the loopback interface below)' : '');
                 }
             },
             renderSelectors() {
@@ -16261,8 +16218,9 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 el.innerHTML = this.nowPlaying.length ? this.nowPlaying.map(s => `<div class="flex items-center gap-2 bg-black/50 border ${s.status === 'playing' ? 'border-emerald-500/40' : 'border-white/10'} rounded px-2 py-1.5">
                     <i class="${ICONS[s.service] || 'fa-solid fa-music'} text-[11px] ${s.status === 'playing' ? 'text-emerald-400' : 'text-slate-500'}"></i>
                     <div class="min-w-0 flex-1"><div class="text-[8.5px] font-black text-white truncate">${esc(s.title || '(no title)')}</div><div class="text-[7.5px] text-slate-400 truncate">${esc(s.artist || '')}${s.album ? ' &bull; ' + esc(s.album) : ''}</div></div>
-                    <div class="text-right"><div class="text-[7.5px] font-bold ${s.status === 'playing' ? 'text-emerald-400' : 'text-slate-500'} uppercase">${esc(s.serviceName)}</div><div class="text-[6.5px] text-slate-500 uppercase">${esc(s.status)}</div></div></div>`).join('')
+                    <div class="text-right"><div class="text-[7.5px] font-bold ${s.status === 'playing' ? 'text-emerald-400' : 'text-slate-500'} uppercase">${esc(s.serviceName)}</div><div class="text-[6.5px] text-slate-500 uppercase">${esc(s.status)}</div>${s.status === 'playing' ? (this.music ? '<div class="text-[6.5px] font-black text-cyan-300 uppercase">IN THE METERS</div>' : '<button class="ls-np-cap mt-0.5 px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-black text-[6.5px] uppercase hover:bg-emerald-500 hover:text-black">CAPTURE</button>') : ''}</div></div>`).join('')
                     : '<div class="text-[8px] text-slate-500">Nothing is playing. Start music in Spotify, YouTube, YouTube Music, TIDAL ... and it is detected automatically.</div>';
+                el.querySelectorAll('.ls-np-cap').forEach(b => (b.onclick = () => this.captureNowPlaying()));
             },
             renderRows() {
                 const el = document.getElementById('ls-ifaces'); if (!el) return;
@@ -17967,9 +17925,15 @@ registerProcessor('am-lufs',P)`;
     async function attach() {
         const st = window.state, c = st && st.ctx, n = st && st.nodes, lim = n && n.masterLimiter;
         if (!c || !lim || !rt()) return;
-        if (L.ctx === c && L.src === lim) return;
+        const want = (window.meterSource && window.meterSource.node()) || lim;           // the master, or the source chosen in METER SOURCE
+        if (L.ctx === c && L.src === want) return;
         if (L.pending === c) return;
-        L.ctx = c; L.src = lim; L.setRate(c.sampleRate); L.sub = []; L.subAcc = 0; L.subN = 0;
+        if (L.ctx === c && L.node && L.src) {                                              // only the source changes: same meter, new input, measurement restarted
+            try { L.src.disconnect(L.node); } catch (e) { /* already gone */ }
+            try { want.connect(L.node); L.src = want; L.reset(); } catch (e) { L.src = null; }
+            return;
+        }
+        L.ctx = c; L.src = want; L.setRate(c.sampleRate); L.sub = []; L.subAcc = 0; L.subN = 0;
         try { if (L.node) { L.node.disconnect(); if (L.node.port) L.node.port.onmessage = null; } } catch (e) { /* already gone */ }
         L.node = null; L.mode = '';
         const sink = rt().sink();
@@ -17982,14 +17946,14 @@ registerProcessor('am-lufs',P)`;
                 if (L.ctx !== c) return;
                 const w = new AudioWorkletNode(c, 'am-lufs', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1], channelCount: 2, channelCountMode: 'explicit' });
                 w.port.onmessage = e => L.feed(e.data.l, e.data.r);
-                lim.connect(w); w.connect(sink); L.node = w; L.mode = 'worklet';
+                want.connect(w); w.connect(sink); L.node = w; L.mode = 'worklet';
                 return;
             }
         } catch (e) { L.pending = null; /* no worklet here: use the script processor below */ }
         try {
             const sp = c.createScriptProcessor(4096, 2, 2);
             sp.onaudioprocess = e => L.feed(new Float32Array(e.inputBuffer.getChannelData(0)), new Float32Array(e.inputBuffer.getChannelData(e.inputBuffer.numberOfChannels > 1 ? 1 : 0)));
-            lim.connect(sp); sp.connect(sink); L.node = sp; L.mode = 'script';
+            want.connect(sp); sp.connect(sink); L.node = sp; L.mode = 'script';
         } catch (e) { L.mode = 'none'; }
     }
     const fmt = (v, u) => (isFinite(v) && v > -90 ? v.toFixed(1) + ' ' + u : '-INF ' + u);
@@ -18015,6 +17979,192 @@ registerProcessor('am-lufs',P)`;
     }
     const wait = setInterval(() => { if (window.rtEngine) { clearInterval(wait); rt().on(() => { attach(); paint(); }); } }, 200);
     document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('#lufs-card-int'); if (b) { L.reset(); if (window.notify) window.notify('Loudness meter reset (integrated, range, true peak)', 'rotate-left'); } });
+})();
+    </script>
+    <script id="meter-source">
+/* METER SOURCE: the VU, LUFS, SCOPE and PHASE pages measure the source you choose, in real time: the mixer master (as before), a channel strip, any LIVE SOURCES
+   interface (ASIO / WASAPI / Core Audio / ALSA / virtual drivers / Bluetooth), the microphone, a patched live input, or the music (loopback interface or shared system /
+   tab audio: what Now Playing detected). The choice is saved and shared by the four pages; a source that is not there (an unplugged interface) is measured as the master
+   until it returns. The SCOPE page used to draw simulated waves: it now draws the real samples (trigger, timebase, scale, X-Y and wave + FFT all act on them).
+   Nothing here changes the audio path: the measuring nodes only listen (a silent sink keeps them running). */
+(function () {
+    'use strict';
+    const $ = id => document.getElementById(id);
+    const KEY = 'halx_meter_src', PAGES = ['meter', 'lufs', 'osc', 'phase'];
+    const LS = () => window.liveSources, RT = () => window.rtEngine;
+    const esc = v => (window.escapeHtml ? window.escapeHtml(v) : String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])));
+    const store = {
+        get(k, d) { try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch (e) { return d; } },
+        set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* storage blocked */ } },
+    };
+    const visible = id => { const t = $('tab-' + id); return !!t && !t.classList.contains('tab-hidden'); };
+
+    // L / R analysers on a node (a mono source is up-mixed, so both sides show it)
+    function makeTap(node, ctx, fft, sink) {
+        const pre = ctx.createGain(); pre.channelCount = 2; pre.channelCountMode = 'explicit'; pre.channelInterpretation = 'speakers';
+        const split = ctx.createChannelSplitter(2), l = ctx.createAnalyser(), r = ctx.createAnalyser();
+        l.fftSize = r.fftSize = fft; l.smoothingTimeConstant = r.smoothingTimeConstant = 0;
+        node.connect(pre); pre.connect(split); split.connect(l, 0); split.connect(r, 1); l.connect(sink); r.connect(sink);
+        return { node, ctx, l, r, drop() { try { node.disconnect(pre); } catch (e) { /* gone */ } try { pre.disconnect(); split.disconnect(); l.disconnect(); r.disconnect(); } catch (e) { /* gone */ } } };
+    }
+
+    // The scope arithmetic on two blocks of samples (pure: bin/test.js runs it): where the sweep starts (trigger), its length, and the readings.
+    //   A, B: the newest samples (the last element is the newest); st: oscState; returns { N, start, triggered, p2p, rms, crest, freq }
+    function scopeCalc(A, B, fs, st) {
+        const size = A.length, N = Math.max(64, Math.min(size >> 1, Math.round(fs * (st.timebase || 1) * 10 / 1000)));        // 10 divisions
+        const lvl = Math.pow(10, (st.triggerLevel == null ? -12 : st.triggerLevel) / 20), rise = st.triggerEdge !== 'fall';
+        let start = size - N, triggered = false;
+        for (let i = size - 2 * N + 1; i < size - N; i++) {                      // the newest sweep that begins with a crossing and still has N samples after it
+            if (i < 1) continue;
+            if (rise ? (A[i - 1] < lvl && A[i] >= lvl) : (A[i - 1] > -lvl && A[i] <= -lvl)) { start = i; triggered = true; }
+        }
+        let mn = Infinity, mx = -Infinity, ss = 0, pk = 0;
+        for (let i = start; i < start + N; i++) { const v = A[i]; if (v < mn) mn = v; if (v > mx) mx = v; ss += v * v; const a = v < 0 ? -v : v; if (a > pk) pk = a; }
+        const rms = Math.sqrt(ss / N);
+        // frequency from rising zero crossings over the newest 8192 samples (with a little hysteresis against noise)
+        const from = Math.max(1, size - 8192), hy = Math.max(0.002, pk * 0.05); let first = -1, last = -1, n = 0, armed = false;
+        for (let i = from; i < size; i++) {
+            if (A[i] < -hy) armed = true;
+            else if (armed && A[i - 1] < 0 && A[i] >= 0) { const t = i - 1 + (-A[i - 1]) / (A[i] - A[i - 1] || 1); if (first < 0) first = t; last = t; n++; armed = false; }
+        }
+        return { N, start, triggered, p2p: isFinite(mx - mn) ? mx - mn : 0, rms, crest: rms > 1e-6 ? 20 * Math.log10(pk / rms) : 0, freq: n >= 2 ? (n - 1) * fs / (last - first) : 0 };
+    }
+
+    const ms = window.meterSource = {
+        key: store.get(KEY, 'master'), eff: 'master', tapA: null, tapS: null, sel: null, sig: '', scopeScratch: null,
+        scopeCalc,
+        // everything that can be measured right now
+        entries() {
+            const out = [], st = window.state, c = st && st.ctx, n = (st && st.nodes) || {}, rt = RT(), l = LS();
+            if (!c) return out;
+            if (n.masterLimiter) out.push({ key: 'master', group: 'Mixer', name: 'Master (mix bus)', node: n.masterLimiter });
+            const gains = n.channelPostGains || [];
+            for (let i = 0; i < gains.length; i++) { const lane = $('mixer-lane-' + i); if (lane && lane.classList.contains('lane-locked')) continue; out.push({ key: 'ch:' + i, group: 'Mixer', name: 'CH ' + (i + 1) + ' (channel strip)', node: gains[i] }); }
+            if (rt) rt.sources().forEach(s => { const node = s.node || s.an; if (node) out.push({ key: s.key, group: 'Sources', name: (s.music ? '♫ ' : '') + s.name, how: s.how, node, music: !!s.music }); });
+            if (l && l.music && l.music.node && l.music.node.context === c && !out.some(e => e.key === l.music.key)) out.push({ key: l.music.key, group: 'Sources', name: '♫ ' + (l.music.name || 'Music'), how: l.music.how, node: l.music.node, music: true });
+            return out;
+        },
+        entry() { const e = this.entries(); return e.find(x => x.key === this.key) || e.find(x => x.key === 'master') || null; },
+        node() { const e = this.entry(); return e ? e.node : null; },       // the node the LUFS meter listens to
+        isMaster() { const e = this.entry(); return !e || e.key === 'master'; },
+        name() { const e = this.entry(); return e ? e.name : 'Master (mix bus)'; },
+        set(key, quiet) {
+            if (key === this.key) return;
+            this.key = key; store.set(KEY, key);
+            this.tick(performance.now());
+            if (!quiet && window.notify) window.notify('Meters follow: ' + this.name(), 'gauge');
+        },
+        // L / R analysers of the chosen source for the phase page and the VU meter (the master keeps its own)
+        analysers() {
+            const n = window.state && window.state.nodes;
+            if (this.isMaster() || !this.tapA) return n && n.phaseAnL ? { L: n.phaseAnL, R: n.phaseAnR } : null;
+            return { L: this.tapA.l, R: this.tapA.r };
+        },
+        // smoothed meter state for the VU page
+        vu() { const rt = RT(); return this.isMaster() || !this.sel ? (rt && rt.master) : this.sel; },
+        vuLabel(side) { if (this.isMaster()) return null; const nm = this.name().replace(/^♫\s*/, ''); return (nm.length > 16 ? nm.slice(0, 15) + '…' : nm) + ' / ' + side; },
+        // the scope listens with longer analysers (32768 samples)
+        scopeTap() {
+            const c = window.state && window.state.ctx, e = this.entry(), rt = RT(); if (!c || !e || !rt) return null;
+            if (this.tapS && (this.tapS.ctx !== c || this.tapS.node !== e.node)) { this.tapS.drop(); this.tapS = null; }
+            if (!this.tapS) { try { this.tapS = makeTap(e.node, c, 32768, rt.sink()); } catch (err) { this.tapS = null; } }
+            return this.tapS;
+        },
+        rewire() {
+            if (this.tapA) { this.tapA.drop(); this.tapA = null; }
+            if (this.tapS) { this.tapS.drop(); this.tapS = null; }
+            this.sel = null;
+            const c = window.state && window.state.ctx, e = this.entry(), rt = RT();
+            if (!c || !e || !rt || e.key === 'master') return;
+            try { this.tapA = makeTap(e.node, c, 2048, rt.sink()); this.sel = { L: rt.meter(), R: rt.meter() }; } catch (err) { this.tapA = null; }
+        },
+        tick(now) {
+            const e = this.entry(), eff = e ? e.key : 'master', c = window.state && window.state.ctx, rt = RT();
+            if (eff !== this.eff || (this.tapA && this.tapA.ctx !== c)) { this.eff = eff; this.rewire(); document.dispatchEvent(new CustomEvent('metersourcechange', { detail: { key: eff, name: this.name() } })); }
+            if (this.tapA && this.sel && rt) { try { rt.smooth(this.sel.L, rt.read(this.tapA.l), now); rt.smooth(this.sel.R, rt.read(this.tapA.r), now); } catch (err) { /* node closed */ } }
+            this.ui();
+        },
+        // the source row on each page and the select of the scope
+        ui() {
+            if (!PAGES.some(visible)) return;
+            const list = this.entries(), sig = list.map(e => e.key + '|' + e.name).join(';') + '#' + this.key + '#' + this.eff;
+            PAGES.forEach(id => {
+                const inner = document.querySelector('#tab-' + id + ' .page-scroll-inner');
+                if (!inner || inner.querySelector('.meter-src-row')) return;
+                const row = document.createElement('div');
+                row.className = 'meter-src-row glass-panel px-3 py-2 rounded-xl flex flex-wrap items-center gap-2 text-[8px] font-mono';
+                row.innerHTML = '<span class="text-cyan-400 font-black uppercase tracking-widest whitespace-nowrap"><i class="fa-solid fa-diagram-project mr-1"></i>METER SOURCE</span><select class="meter-src-sel flex-1 min-w-[160px] bg-black text-slate-200 border border-white/20 rounded px-1.5 py-1 text-[8px] font-bold" aria-label="Meter source"></select><span class="meter-src-note text-slate-400"></span>';
+                row.querySelector('select').onchange = ev => ms.set(ev.target.value);
+                const first = inner.querySelector(':scope > .glass-panel'); inner.insertBefore(row, first || null);
+                this.sig = '';
+            });
+            const sels = [...document.querySelectorAll('.meter-src-sel'), $('osc-source-sel')].filter(Boolean);
+            if (sig !== this.sig || sels.some(s => !s.options.length)) {
+                this.sig = sig;
+                const group = g => { const items = list.filter(e => e.group === g); return items.length ? '<optgroup label="' + g + '">' + items.map(e => '<option value="' + esc(e.key) + '">' + esc(e.name) + (e.how ? ' (' + esc(e.how) + ')' : '') + '</option>').join('') + '</optgroup>' : ''; };
+                const missing = !list.some(e => e.key === this.key) ? '<option value="' + esc(this.key) + '" disabled>' + esc(this.key) + ' (not available now: measuring the master)</option>' : '';
+                const html = missing + group('Mixer') + group('Sources');
+                sels.forEach(s => { s.innerHTML = html; s.value = this.key; });
+                document.querySelectorAll('.meter-src-note').forEach(n => { n.textContent = list.length > 1 ? list.length - 1 + ' to choose from' : 'start the audio engine'; });
+            }
+            sels.forEach(s => { if (s.value !== this.key && s !== document.activeElement) s.value = this.key; });
+        },
+
+        // ── SCOPE: real traces ──
+        drawScope(ctx, w, h, st) {
+            const c = window.state && window.state.ctx, say = t => { ctx.fillStyle = '#84cc16'; ctx.font = '12px monospace'; ctx.textAlign = 'center'; ctx.fillText(t, w / 2, h / 2); ctx.textAlign = 'left'; };
+            const tap = c ? this.scopeTap() : null;
+            if (!tap) return say('AUDIO ENGINE OFF: start it to see the real signal');
+            const fs = c.sampleRate, size = tap.l.fftSize, sc = this.scopeScratch && this.scopeScratch.A.length === size ? this.scopeScratch : (this.scopeScratch = { A: new Float32Array(size), B: new Float32Array(size), F: new Float32Array(size >> 1) });
+            tap.l.getFloatTimeDomainData(sc.A); tap.r.getFloatTimeDomainData(sc.B);
+            let f = st._frozen, calc;
+            if (f && st.triggerMode === 'single') { calc = f.calc; sc.A.set(f.A); sc.B.set(f.B); }                       // SINGLE: the captured sweep stays
+            else {
+                calc = scopeCalc(sc.A, sc.B, fs, st);
+                if (st.triggerMode === 'norm' && !calc.triggered) { if (st._last) { calc = st._last.calc; sc.A.set(st._last.A); sc.B.set(st._last.B); } else return say('WAITING FOR TRIGGER'); }   // NORM: wait for a trigger, keep the last sweep
+                else if (st.triggerMode === 'single') { if (!calc.triggered) return say('ARMED: WAITING FOR TRIGGER'); st._frozen = { calc, A: sc.A.slice(), B: sc.B.slice() }; }
+                else if (st.triggerMode === 'norm') st._last = { calc, A: sc.A.slice(), B: sc.B.slice() };   // calc.triggered here
+            }
+            const { N, start } = calc, cy = h / 2, volts = st.voltageScale === 'auto' ? Math.max(0.02, calc.p2p / 2 / 0.9) : parseFloat(st.voltageScale) || 1, pxFs = (h / 2) * 0.9 / volts;
+            const glow = st.displayMode === 'phosphor' ? 8 : 3;
+            const trace = (arr, col, lw) => {
+                ctx.beginPath(); ctx.lineWidth = lw; ctx.strokeStyle = col; ctx.shadowColor = col; ctx.shadowBlur = glow;
+                const per = N / w;
+                if (per > 2) { for (let x = 0; x < w; x++) { let lo = Infinity, hi = -Infinity; const a = start + Math.floor(x * per), b = Math.min(start + N, start + Math.floor((x + 1) * per) + 1); for (let i = a; i < b; i++) { const v = arr[i]; if (v < lo) lo = v; if (v > hi) hi = v; } if (lo <= hi) { ctx.moveTo(x, cy - hi * pxFs); ctx.lineTo(x, cy - lo * pxFs); } } }
+                else for (let i = 0; i < N; i++) { const x = i / (N - 1) * w, y = cy - arr[start + i] * pxFs; if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); }
+                ctx.stroke();
+            };
+            if (st.displayMode === 'xy') {                                                                                // Lissajous: L against R
+                ctx.beginPath(); ctx.lineWidth = 1.2; ctx.strokeStyle = '#a855f7'; ctx.shadowColor = '#a855f7'; ctx.shadowBlur = 6;
+                const m = Math.min(N, 4096), k = Math.min(w, h) / 2 * 0.9 / volts;
+                for (let i = 0; i < m; i++) { const x = w / 2 + sc.A[start + i] * k, y = cy - sc.B[start + i] * k; if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); }
+                ctx.stroke();
+            } else {
+                trace(sc.A, '#f59e0b', 1.6); trace(sc.B, '#06b6d4', 1.3);
+                if (st.displayMode === 'fft') {                                                                              // wave + the real spectrum of the left side
+                    tap.l.getFloatFrequencyData(sc.F);
+                    ctx.beginPath(); ctx.lineWidth = 1; ctx.strokeStyle = '#a3e635'; ctx.shadowBlur = 0;
+                    const fmin = 20, fmax = Math.min(20000, fs / 2), bin = fs / size;
+                    for (let x = 0; x < w; x++) { const fr = fmin * Math.pow(fmax / fmin, x / (w - 1)), v = sc.F[Math.min(sc.F.length - 1, Math.round(fr / bin))], y = h - Math.max(0, Math.min(1, (v + 100) / 100)) * h * 0.5; if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); }
+                    ctx.stroke();
+                }
+            }
+            ctx.shadowBlur = 0;
+            const set = (id, t) => { const e = $(id); if (e && e.textContent !== t) e.textContent = t; };
+            const nm = this.name().replace(/^♫\s*/, '');
+            set('osc-ch-a-label', nm + ' L'); set('osc-ch-b-label', nm + ' R');
+            const now = performance.now();
+            if (!st._tel || now - st._tel > 150) {                                                                            // readings 6 times a second: readable
+                st._tel = now;
+                set('osc-vpp-val', calc.p2p.toFixed(2) + ' FS'); set('osc-vrms-val', calc.rms.toFixed(3) + ' FS');
+                set('osc-freq-val', calc.freq ? (calc.freq >= 1000 ? (calc.freq / 1000).toFixed(2) + ' kHz' : calc.freq.toFixed(1) + ' Hz') : '-- Hz'); set('osc-crest-val', calc.rms > 1e-6 ? calc.crest.toFixed(1) + ' dB' : '-- dB');
+                set('osc-trig-status', st.triggerMode.toUpperCase() + (calc.triggered ? ' (LOCKED)' : st.triggerMode === 'auto' ? ' (FREE RUN)' : ' (WAITING)'));
+            }
+            return true;
+        },
+    };
+    window.setOscSource = function (val) { ms.set(val); };                         // the scope's own select: the same choice as the other pages
+    const waitRt = setInterval(() => { if (window.rtEngine) { clearInterval(waitRt); window.rtEngine.on(now => { try { ms.tick(now); } catch (e) { /* a page failed: the others go on */ } }); } }, 200);
 })();
     </script>
     <script id="rt-dyn">
