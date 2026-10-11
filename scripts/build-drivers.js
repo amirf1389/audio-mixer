@@ -8,7 +8,6 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
 
 const { ROOT } = require('./layout');
@@ -16,7 +15,6 @@ const COMMON = path.join(ROOT, 'drivers', 'common'), ASIO = path.join(ROOT, 'win
 const SOURCE_DIRS = ['drivers', 'windows/asio-driver', 'linux/alsa-plugin', 'macos/coreaudio-driver', 'android/hal'];
 const which = n => { for (const d of (process.env.PATH || '').split(path.delimiter)) { const p = path.join(d, n); if (fs.existsSync(p)) return p; } return null; };
 const run = (cmd, args, opts = {}) => { const r = spawnSync(cmd, args, { encoding: 'utf8', ...opts }); if (r.status !== 0) throw new Error(`${path.basename(cmd)} ${args.slice(0, 3).join(' ')} failed: ${(r.stderr || r.error || '').toString().slice(0, 1500)}`); return r; };
-const sha = f => crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex');
 
 // the ASIO driver as a DLL for one architecture; returns the file or throws
 function buildAsio(arch, outDir) {
@@ -67,14 +65,14 @@ function buildAll({ out = path.join(ROOT, 'windows', 'releases'), source = false
     fs.writeFileSync(path.join(pack, 'README.txt'), README_WINDOWS(version).replace(/\r?\n/g, '\r\n'));
     const zip = path.join(out, `AudioMixer-${version}-asio-driver-windows.zip`); fs.rmSync(zip, { force: true });
     run('zip', ['-qr', zip, path.basename(pack)], { cwd: stage });
-    fs.writeFileSync(zip + '.sha256', `${sha(zip)}  ${path.basename(zip)}\n`); made.push(zip);
+    made.push(zip);
   } finally { fs.rmSync(stage, { recursive: true, force: true }); }
   // all driver sources (the repository's own folders, below one version folder; Makefiles keep working because the relative paths stay the same)
   if (source) {
     const tar = path.join(out, `AudioMixer-${version}-drivers-source.tar.gz`); fs.rmSync(tar, { force: true });
     run('tar', ['--sort=name', '--mtime=@0', '--owner=0', '--group=0', '--numeric-owner', '--exclude=*.so', '--exclude=*.dll', '--exclude=*.o', '--exclude=*.driver',
       '-czf', tar, '--transform', `s,^,audio-mixer-drivers-${version}/,`, '-C', ROOT, ...SOURCE_DIRS]);
-    fs.writeFileSync(tar + '.sha256', `${sha(tar)}  ${path.basename(tar)}\n`); made.push(tar);
+    made.push(tar);
   }
   return { version, files: made };
 }

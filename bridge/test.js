@@ -1315,7 +1315,7 @@ test('driver sources and packaging: macOS plug-in, Android HAL, the build script
     const tar = cp.spawnSync('tar', ['tzf', pathx.join(out, `AudioMixer-${v}-drivers-source.tar.gz`)], { encoding: 'utf8' }).stdout.split('\n');
     for (const f of ['drivers/common/am_link.c', 'windows/asio-driver/audiomixer_asio.cpp', 'linux/alsa-plugin/pcm_audiomixer.c', 'macos/coreaudio-driver/AudioMixerDriver.c', 'android/hal/audio_hw.c', 'drivers/README.md']) assert.ok(tar.includes(`audio-mixer-drivers-${v}/${f}`), f);
     assert.ok(!tar.some(f => /\.(dll|so|o)$/.test(f)), 'no binaries in the source archive');
-    for (const f of fsx.readdirSync(out).filter(x => x.endsWith('.sha256'))) { const [h, n] = fsx.readFileSync(pathx.join(out, f), 'utf8').trim().split(/\s+/); assert.strictEqual(h, require('node:crypto').createHash('sha256').update(fsx.readFileSync(pathx.join(out, n))).digest('hex')); }
+    assert.ok(!fsx.readdirSync(out).some(x => x.endsWith('.sha256')), 'no .sha256 files next to the release files');
   } finally { fsx.rmSync(out, { recursive: true, force: true }); }
 });
 
@@ -1997,7 +1997,7 @@ test('macOS: .dmg writer (UDIF) round-trips, app icon and Info.plist are valid, 
   const mac = require('../scripts/build-macos');
   if (mac.isoTool()) {
     const outd = pathx.join(dir, 'rel'); const r = mac.buildMacApp({ out: outd });
-    assert.ok(fsx.statSync(r.dmg).size > 100000 && fsx.existsSync(r.dmg + '.sha256') && fsx.existsSync(r.zip));
+    assert.ok(fsx.statSync(r.dmg).size > 100000 && !fsx.existsSync(r.dmg + '.sha256') && fsx.existsSync(r.zip));
     const kk = fsx.readFileSync(r.dmg); assert.strictEqual(kk.toString('latin1', kk.length - 512, kk.length - 508), 'koly');
     assert.match(mac.readme('1.12.0'), /Applications/);
   }
