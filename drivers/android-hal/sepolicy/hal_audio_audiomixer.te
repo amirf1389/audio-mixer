@@ -1,0 +1,5 @@
+# SELinux additions (vendor policy) so that the audio HAL process may open a loopback TCP connection to the Audio Mixer app's engine.
+# Android does not allow this by default; the exact domain name depends on the device (hal_audio_default on most). Review with your security team before shipping.
+allow hal_audio_default self:tcp_socket { create connect read write getattr setopt shutdown };
+allow hal_audio_default node:tcp_socket node_bind;
+allow hal_audio_default port:tcp_socket name_connect;

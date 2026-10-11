@@ -5,6 +5,7 @@ const audify = require('./audify');
 const streams = require('./streams');
 const levels = require('./levels');
 const universal = require('./universal');
+const virtual = require('./virtual');
 function loadPortAudio() { return require('naudiodon2'); }
 
 function pickInput(pa, wantedId, channels) {
@@ -54,8 +55,31 @@ function createInputSession(conn, load = loadPortAudio, loadA = audify.loadAudif
     }
   }
 
+  // A virtual device of an operating-system driver (drivers/, see virtual.js): the audio that applications play to it is the input of the mixer.
+  function startVirtual(opts) {
+    const dev = virtual.hub.get(opts.deviceId);
+    if (!dev) return conn.send(JSON.stringify({ type: 'error', message: 'The Audio Mixer driver is not connected: install and enable it (see drivers/README.md) and start an application that uses it.' }));
+    const channels = Math.min(Math.max(parseInt(opts.channels, 10) || dev.channels, 1), 32);
+    const sampleRate = parseInt(opts.sampleRate, 10) || dev.rate;
+    const remap = channels !== dev.channels ? b => audify.remapChannels(b, dev.channels, channels) : null;
+    const conv = audify.createResampler(dev.rate, sampleRate, channels);
+    const si = { direction: 'input', engine: 'virtual', device: dev.name, hostApi: 'Audio Mixer Virtual', sampleRate, channels };
+    unreg = streams.add(si); meter = levels.attach(conn, { ...si, sid: unreg.id });
+    const off = virtual.hub.capture(dev.id, buf => {
+      if (buf === null) { conn.send(JSON.stringify({ type: 'error', message: 'The Audio Mixer driver disconnected' })); stop(); return; }
+      let chunk = Buffer.from(buf);
+      if (remap) chunk = remap(chunk);
+      if (conv) chunk = conv(chunk);
+      if (meter) meter.push(chunk);
+      for (let i = 0; i < chunk.length; i += CHUNK) conn.sendBinary(chunk.subarray(i, i + CHUNK));
+    });
+    io = { quit: off };
+    conn.send(JSON.stringify({ type: 'started', engine: 'virtual', device: dev.name, hostApi: 'Audio Mixer Virtual', sampleRate, channels, frameSize: null, latencyMs: null }));
+  }
+
   function start(opts) {
     stop();
+    if (virtual.hub.isVirtualId(opts.deviceId)) return startVirtual(opts);
     // "Universal ASIO driver": detect every device on both engines and open the best one (ASIO first), see universal.js
     if (opts.universal === true || opts.deviceId === 'universal') {
       const choice = universal.resolve({ direction: 'input', channels: opts.channels, engine: opts.engine }, load, loadA, audify);
