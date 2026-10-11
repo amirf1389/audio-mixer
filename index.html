@@ -5839,7 +5839,7 @@ window.navTabs = [
                     <div class="bg-black/60 p-2 rounded border border-white/10"><span class="text-slate-500 block">SERVER</span><span id="pc-url" class="text-cyan-400 font-bold break-all">-</span></div>
                     <div class="bg-black/60 p-2 rounded border border-white/10"><span class="text-slate-500 block">THIS PC</span><span id="pc-platform" class="text-slate-200 font-bold">-</span></div>
                     <div class="bg-black/60 p-2 rounded border border-white/10"><span class="text-slate-500 block">NATIVE AUDIO (PORTAUDIO / AUDIFY)</span><span id="pc-native" class="text-slate-200 font-bold">-</span></div>
-                    <div class="bg-black/60 p-2 rounded border border-white/10"><span class="text-slate-500 block">DOWNLOAD FOLDER</span><span id="pc-dir" class="text-slate-200 font-bold break-all">-</span></div>
+                    <div class="bg-black/60 p-2 rounded border border-white/10"><span class="text-slate-500 block">DRIVERS</span><span id="pc-dir" class="text-slate-200 font-bold break-all">INSTALL FROM THE OFFICIAL SITES BELOW</span></div>
                   </div>
                   <div id="live-sys" class="grid grid-cols-2 md:grid-cols-5 gap-2 text-[7.5px]" aria-live="off">
                     <div class="bg-black/60 p-2 rounded border border-white/10"><span class="text-slate-500 block">SERVER LINK (LIVE)</span><span id="ls-link" class="text-slate-200 font-bold">-</span></div>
@@ -13251,7 +13251,6 @@ window.navTabs = [
             $('pc-url').textContent = on ? this.bridgeUrl : '-';
             $('pc-platform').textContent = on && info ? `${info.platform} ${info.arch} \u2022 Node ${info.node}` : '-';
             $('pc-native').textContent = on ? (info && info.portaudio ? 'READY' + (info.portaudio.engine === 'audify' ? ' (AUDIFY)' : '') + ': ' + info.portaudio.hostApis.join(', ') : 'NOT INSTALLED (cd bridge && npm install)') : '-';
-            $('pc-dir').textContent = on && this.catalog ? this.catalog.downloadDir : '-';
             $('pc-help').classList.toggle('hidden', on);
             $('pc-connect').textContent = on ? 'RECONNECT' : 'CONNECT';
             const auto = $('pc-auto'); if (auto) auto.checked = this.pcAuto();
@@ -13288,25 +13287,9 @@ window.navTabs = [
                     ${cmd ? `<code class="block bg-black/70 border border-white/10 rounded px-1.5 py-1 text-emerald-300 break-all select-all">${esc(cmd)}</code>` : ''}
                     <div class="flex flex-wrap gap-1.5 pt-0.5">
                         <a href="${esc(i.url)}" target="_blank" rel="noopener noreferrer" class="px-2 py-0.5 rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 font-bold">OFFICIAL SITE</a>
-                        ${i.downloadable ? `<button data-dl="${esc(i.id)}" class="pc-dl px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold">DOWNLOAD INSTALLER</button>` : ''}
                     </div></div>`;
             }).join('') || '<div class="text-[8px] text-slate-500">No drivers listed for this system.</div>';
-            el.querySelectorAll('.pc-dl').forEach(b => (b.onclick = () => self.downloadDriver(b.dataset.dl, b)));
         },
-        downloadDriver: function(id, btn) {
-            const self = this;
-            if (!self.bridgeUrl) return window.notify('Start PC mode first (local server not found)', 'triangle-exclamation');
-            if (window.knoxEnabled) return window.notify('KNOX Active: downloads locked', 'shield-halved');
-            if (btn) { btn.disabled = true; btn.textContent = 'DOWNLOADING...'; }
-            fetch(self.bridgeUrl + '/api/catalog/download', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Mixer-Action': 'download' }, body: JSON.stringify({ id }) })
-                .then(r => r.json().then(j => ({ ok: r.ok, j }))).then(({ ok, j }) => {
-                    if (!ok || !j.ok) throw new Error(j && j.error ? j.error : 'download failed');
-                    self.log(`Driver saved: ${j.file} (${(j.bytes / 1048576).toFixed(2)} MB) SHA-256 ${j.sha256}${j.verified ? ' (verified)' : ' (no published checksum)'}`, 'success');
-                    window.notify(`Installer saved to ${j.file}. Run it yourself after checking it.`, 'download');
-                }).catch(e => { self.log('Driver download failed: ' + e.message, 'error'); window.notify('Download failed: ' + e.message, 'triangle-exclamation'); })
-                .finally(() => { if (btn) { btn.disabled = false; btn.textContent = 'DOWNLOAD INSTALLER'; } });
-        },
-
         // One-line truthful description of the active audio driver path (used by notifications and the start-up panel)
         driverSummary: function() {
             const info = this.bridgeInfo;

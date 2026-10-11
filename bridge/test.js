@@ -180,21 +180,6 @@ test('security audit reports no failures', async () => {
 // ── official driver catalog, downloader and PC-mode client ──
 const fsx = require('node:fs'), osx = require('node:os'), pathx = require('node:path'), cryptox = require('node:crypto');
 
-function fakeFetch({ name = 'FlexASIO-1.10.exe', content = Buffer.from('installer-bytes'), digestOk = true, finalUrl = '' } = {}) {
-  const sha = cryptox.createHash('sha256').update(content).digest('hex');
-  const dl = `https://github.com/dechamps/FlexASIO/releases/download/v1.10/${name}`;
-  return async url => {
-    if (url.startsWith('https://api.github.com/repos/dechamps/FlexASIO/releases/latest')) {
-      return new Response(JSON.stringify({ assets: [
-        { name: 'FlexASIO-1.10-Debug.exe', browser_download_url: 'https://github.com/x/debug.exe' },
-        { name, browser_download_url: dl, digest: 'sha256:' + (digestOk ? sha : '0'.repeat(64)) },
-      ] }), { headers: { 'content-type': 'application/json' } });
-    }
-    const r = new Response(content, { headers: { 'content-length': String(content.length) } });
-    return finalUrl ? { ok: true, status: 200, body: r.body, url: finalUrl, headers: r.headers } : r;
-  };
-}
-
 test('catalog lists drivers for this OS and detects what is installed', () => {
   const { listCatalog, CATALOG } = require('./catalog');
   const win = listCatalog({ platform: 'win32', drivers: ['wasapi-shared', 'flexasio', 'steinberg'], asio: ['FlexASIO', 'Focusrite USB ASIO'], portaudio: null });
@@ -207,47 +192,19 @@ test('catalog lists drivers for this OS and detects what is installed', () => {
   assert.strictEqual(by('pipewire').forThisPc, false);
   assert.strictEqual(by('pipewire').installed, null);                     // other system: not detectable here
   assert.ok(CATALOG.every(x => /^https:\/\//.test(x.url)), 'every official link is https');
-  assert.ok(CATALOG.filter(x => x.download).every(x => ['github-release', 'site-link'].includes(x.download.kind)));
-  assert.strictEqual(by('flexasio').downloadable, true);
+  assert.ok(CATALOG.every(x => !('download' in x)) && win.every(x => !('downloadable' in x)), 'no entry offers a download any more');
+  const cat = require('./catalog'); assert.deepStrictEqual(Object.keys(cat).sort(), ['CATALOG', 'isInstalled', 'listCatalog']);   // no downloader in the module
 });
 
-test('downloader saves the official installer, checks the checksum and never runs it', async () => {
-  const { downloadDriver } = require('./catalog');
-  const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'drv-'));
-  const r = await downloadDriver('flexasio', { fetchImpl: fakeFetch(), dir });
-  assert.strictEqual(r.verified, true);
-  assert.strictEqual(pathx.dirname(r.file), dir);
-  assert.strictEqual(fsx.readFileSync(r.file).toString(), 'installer-bytes');
-  assert.deepStrictEqual(fsx.readdirSync(dir), ['FlexASIO-1.10.exe']);          // no .part left behind
-  await assert.rejects(downloadDriver('flexasio', { fetchImpl: fakeFetch({ digestOk: false }), dir }), /checksum mismatch/);
-  assert.deepStrictEqual(fsx.readdirSync(dir), ['FlexASIO-1.10.exe']);          // bad download discarded
-  await assert.rejects(downloadDriver('flexasio', { fetchImpl: fakeFetch({ finalUrl: 'https://evil.example/a.exe' }), dir }), /untrusted host/);
-  await assert.rejects(downloadDriver('focusrite', { fetchImpl: fakeFetch(), dir }), /no automatic download/);
-  await assert.rejects(downloadDriver('../../etc/passwd', { fetchImpl: fakeFetch(), dir }), /no automatic download/);
-  fsx.rmSync(dir, { recursive: true, force: true });
-});
-
-test('downloader neutralises hostile asset names', async () => {
-  const { downloadDriver } = require('./catalog');
-  const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'drv-'));
-  const r = await downloadDriver('flexasio', { fetchImpl: fakeFetch({ name: 'FlexASIO-9.exe' }), dir });
-  assert.ok(r.file.startsWith(dir + pathx.sep));
-  fsx.rmSync(dir, { recursive: true, force: true });
-});
-
-test('catalog endpoints: GET list, POST needs the custom header, ids validated, foreign origins refused', async () => {
+test('catalog endpoints: GET list only; the driver download route is gone', async () => {
   await new Promise(r => server.listen(0, '127.0.0.1', r));
   const port = server.address().port, base = `http://127.0.0.1:${port}`;
   const cat = await (await fetch(base + '/api/catalog')).json();
   assert.strictEqual(cat.ok, true);
-  assert.ok(Array.isArray(cat.items) && cat.items.length > 5 && cat.items.every(i => !('detect' in i) && !('download' in i)));
+  assert.ok(Array.isArray(cat.items) && cat.items.length > 5 && cat.items.every(i => !('detect' in i) && !('download' in i) && !('downloadable' in i)) && !('downloadDir' in cat));
   const post = (headers, body, origin) => fetch(base + '/api/catalog/download', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(origin ? { Origin: origin } : {}), ...headers }, body });
-  assert.strictEqual((await post({}, '{"id":"flexasio"}')).status, 400);                                    // no X-Mixer-Action
-  assert.strictEqual((await post({ 'X-Mixer-Action': 'download' }, '{"id":"../x"}')).status, 400);          // bad id
-  assert.strictEqual((await post({ 'X-Mixer-Action': 'download' }, 'nope')).status, 400);
-  assert.strictEqual((await post({ 'X-Mixer-Action': 'download' }, '{"id":"focusrite"}')).status, 400);      // no automatic download
+  for (const id of ['flexasio', 'asio4all', 'focusrite']) assert.strictEqual((await post({ 'X-Mixer-Action': 'download' }, JSON.stringify({ id }))).status, 405, id);   // nothing downloads a driver
   assert.strictEqual((await post({ 'X-Mixer-Action': 'download' }, '{"id":"flexasio"}', 'https://evil.example')).status, 403);
-  assert.strictEqual((await post({ 'X-Mixer-Action': 'download' }, 'x'.repeat(5000))).status, 413);
   assert.strictEqual((await fetch(base + '/api/catalog', { method: 'DELETE' })).status, 405);
   server.closeAllConnections();
   server.close();
@@ -256,8 +213,8 @@ test('catalog endpoints: GET list, POST needs the custom header, ids validated, 
 test('client: argument parsing and the browser opener only accept localhost URLs', () => {
   const { parseArgs, openCommand } = require('../client/cli');
   assert.deepStrictEqual(parseArgs([]), { cmd: 'start', arg: null, port: 8765, open: true, help: false });
-  const a = parseArgs(['download', 'flexasio', '--port', '9000', '--no-open']);
-  assert.strictEqual(a.cmd, 'download'); assert.strictEqual(a.arg, 'flexasio'); assert.strictEqual(a.port, 9000); assert.strictEqual(a.open, false);
+  const a = parseArgs(['service', 'status', '--port', '9000', '--no-open']);
+  assert.strictEqual(a.cmd, 'service'); assert.strictEqual(a.arg, 'status'); assert.strictEqual(a.port, 9000); assert.strictEqual(a.open, false);
   assert.strictEqual(parseArgs(['--port', '99999']).port, 8765);
   assert.deepStrictEqual(openCommand('win32', 'http://localhost:8765/'), { cmd: 'rundll32', args: ['url.dll,FileProtocolHandler', 'http://localhost:8765/'] });
   assert.strictEqual(openCommand('linux', 'http://localhost:8765/').cmd, 'xdg-open');
@@ -273,16 +230,10 @@ test('autostart generates safe per-OS files and installs / removes them', async 
   const exec = (cmd, args, o, cb) => { calls.push([cmd, ...args].join(' ')); cb(null); };
   const base = { home, env: { APPDATA: pathx.join(home, 'AppData') }, node: '/usr/bin/node', server: '/opt/audio mixer/bridge/server.js', exec };
 
-  // Windows: one registry Run value, no script file anywhere
-  const spawned = [];
-  const w = await svc.install({ ...base, platform: 'win32', node: 'C:\\Program Files\\nodejs\\node.exe', server: 'C:\\mixer\\bridge\\server.js', launcher: null, spawn: (c, a) => { spawned.push([c, ...a]); return { unref() {} }; } });
-  assert.strictEqual(w.installed, true); assert.strictEqual(w.command, '"C:\\Program Files\\nodejs\\node.exe" "C:\\mixer\\bridge\\server.js"');
-  assert.ok(calls.some(c => c.startsWith('reg add HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run /v AudioMixerServer /t REG_SZ /d ')));
-  assert.ok(!calls.some(c => /wscript/i.test(c)));
+  // Windows: there is no start at login any more: install refuses and writes nothing; an entry left by an older version is still found and removed
+  await assert.rejects(svc.install({ ...base, platform: 'win32', launcher: null }), /not offered on Windows any more/);
+  assert.ok(!calls.some(c => /^reg add/.test(c)) && !calls.some(c => /wscript/i.test(c)));
   assert.deepStrictEqual(fsx.readdirSync(home), []);                                   // nothing was written into the profile
-  const wl = await svc.install({ ...base, platform: 'win32', server: 'C:\\Program Files\\Audio Mixer\\bridge\\server.js', launcher: 'C:\\Program Files\\Audio Mixer\\AudioMixerServer.exe', spawn: (c, a) => { spawned.push([c, ...a]); return { unref() {} }; } });
-  assert.strictEqual(wl.command, '"C:\\Program Files\\Audio Mixer\\AudioMixerServer.exe"');         // the signed native launcher when installed
-  assert.deepStrictEqual(spawned[1], ['C:\\Program Files\\Audio Mixer\\AudioMixerServer.exe']);
   assert.strictEqual(svc.status({ ...base, platform: 'win32', reg: () => ({ status: 0 }) }).installed, true);
   assert.strictEqual(svc.status({ ...base, platform: 'win32', reg: () => ({ status: 1 }) }).installed, false);
   assert.strictEqual((await svc.uninstall({ ...base, platform: 'win32', reg: () => ({ status: 0 }) })).removed, true);
@@ -717,24 +668,6 @@ test('endpoints: /api/audify and /api/framesize', async () => {
   server.closeAllConnections(); server.close();
 });
 
-test('ASIO4ALL: newest installer is found on the vendor page and saved, never run', async () => {
-  const { downloadDriver } = require('./catalog');
-  const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'a4a-'));
-  const page = '<a href="/downloads_11/ASIO4ALL_2_14_English.exe">old</a><a href="/downloads_11/ASIO4ALL_2_15_English.exe">new</a>' +
-    '<a href="/downloads_11/ASIO4ALL_2_15_Deutsch.exe">de</a><a href="https://evil.example/ASIO4ALL_9_9.exe">bad</a><a href="http://www.asio4all.org/ASIO4ALL_9_8.exe">http</a>';
-  const mk = (html, finalUrl) => async (url) => {
-    if (/asio4all\.org\/?$/.test(url)) return { ok: true, status: 200, text: async () => html };
-    return { ok: true, status: 200, url: finalUrl || url, headers: { get: () => '3' }, body: (async function* () { yield Buffer.from('exe'); })() };
-  };
-  const r = await downloadDriver('asio4all', { fetchImpl: mk(page), dir });
-  assert.strictEqual(pathx.basename(r.file), 'ASIO4ALL_2_15_English.exe');       // highest version, English first, foreign hosts / http ignored
-  assert.strictEqual(r.source, 'https://www.asio4all.org/downloads_11/ASIO4ALL_2_15_English.exe');
-  assert.strictEqual(r.verified, false); assert.strictEqual(fsx.readFileSync(r.file).toString(), 'exe');
-  await assert.rejects(downloadDriver('asio4all', { fetchImpl: mk('<a href="https://evil.example/ASIO4ALL_9_9.exe">x</a>'), dir }), /no installer link/);
-  await assert.rejects(downloadDriver('asio4all', { fetchImpl: mk(page, 'https://evil.example/x.exe'), dir }), /untrusted host/);
-  fsx.rmSync(dir, { recursive: true, force: true });
-});
-
 // ── plugin system (VST3 / VST2 .vst3 / .dll) ──
 function fakePe({ machine = 0x8664, exports = [] } = {}) {
   const b = Buffer.alloc(0x1000);
@@ -831,12 +764,12 @@ test('msi: stable GUIDs, per-machine Program Files paths for x64 and x86, per-us
   const x64 = m.wxs({ stage, version: '1.4.0', arch: 'x64' });
   assert.match(x64, /InstallScope="perMachine"/); assert.match(x64, /Directory Id="ProgramFiles64Folder"/); assert.match(x64, /Win64="yes"/);
   assert.match(x64, /Root="HKLM"/); assert.match(x64, /UpgradeCode="6F3C2B8E-5D41-4A7B-9C0E-2A1D7B64F3A9"/);
-  assert.match(x64, /Name="a &amp; b\.js"/); assert.match(x64, /Feature Id="Autostart"/); assert.match(x64, /Feature Id="Desktop"[^>]*Level="1"/);
+  assert.match(x64, /Name="a &amp; b\.js"/); assert.ok(!/Feature Id="Autostart"|AutostartRun|CurrentVersion\\Run/.test(x64), 'no start at login in the package'); assert.match(x64, /Feature Id="Desktop"[^>]*Level="1"/);
   assert.match(x64, /Id="ScUninstall"[^>]*msiexec\.exe" Arguments="\/x \{[0-9A-F-]{36}\}"/);          // Start Menu uninstall entry
   assert.match(x64, /ARPURLINFOABOUT/);                                                                  // Settings > Apps entry details
   assert.match(x64, /Id="ScPc"[^>]*AudioMixerServer\.exe" Arguments="\/open"/);                     // main shortcut: start-up screen, then the browser
   assert.match(x64, /Id="ScPlugins"[^>]*AudioMixerServer\.exe" Arguments="\/plugins"/);             // native launcher, no cmd one-liner
-  assert.match(x64, /Name="AudioMixer" Type="string" Value="&quot;\[INSTALLDIR\]AudioMixerServer\.exe&quot;"/);
+  assert.ok(!/CurrentVersion\\Run|Name="AudioMixer" Type="string" Value="&quot;/.test(x64), 'no Run entry: the package does not start anything at login');
   assert.ok(!/vbs|wscript|cmd\.exe|NSIS/i.test(x64), 'no scripts, no shell one-liners');
   const x86 = m.wxs({ stage, version: '1.4.0', arch: 'x86' });
   assert.match(x86, /Directory Id="ProgramFilesFolder"/); assert.ok(!/ProgramFiles64Folder/.test(x86)); assert.ok(!/Win64="yes"/.test(x86));
@@ -1151,6 +1084,18 @@ test('auto-install scripts: shell syntax, checksum verification, no network need
   const bat = fsx.readFileSync(pathx.join(__dirname, '..', 'start-pc-mode.bat'), 'utf8');
   for (const want of ['winget install --id OpenJS.NodeJS.LTS', 'SHASUMS256.txt', 'certutil -hashfile', 'Microsoft.VCRedist.2015+.x64', 'does not match nodejs.org']) assert.ok(bat.includes(want), want);
   assert.ok(/\r\n/.test(bat));
+  // nothing is installed without an answer: the question defaults to No after the timeout and no environment switch answers for the user
+  assert.match(bat, /choice \/c YN \/d N \/t 60/); assert.ok(!/AUDIO_MIXER_YES/.test(bat) && !/choice \/c YN \/d Y/.test(bat));
+});
+
+test('Windows setup installs nothing behind the user\'s back: the Visual C++ runtime is asked for (silent installs install nothing), no start at login', () => {
+  const stub = fsx.readFileSync(pathx.join(__dirname, '..', 'installer', 'setup-stub.c'), 'utf8');
+  assert.match(stub, /static void ensure_vc_runtime\(int quiet, int optin\)/); assert.match(stub, /if \(quiet && !optin\) return;/);              // /quiet: no questions, so no install
+  assert.ok(stub.indexOf('MB_YESNO') < stub.indexOf('winget.exe install'));
+  assert.ok(stub.includes('ensure_vc_runtime(quiet, vcyes)') && stub.includes('L"/vcredist"'));                                           // explicit opt-in for scripted installs
+  assert.ok(stub.includes('L"/noautostart")) continue;') && !/Autostart"/.test(stub) && !/\bnoauto\b/.test(stub));                          // the old switch is accepted and ignored
+  for (const f of ['scripts/build-msi.js', 'installer/launcher.c', 'installer/setup-stub.c']) assert.ok(!/RegistryValue[^\n]*CurrentVersion\\+Run/.test(fsx.readFileSync(pathx.join(__dirname, '..', f), 'utf8')), f);
+  const svc = fsx.readFileSync(pathx.join(__dirname, '..', 'client', 'service.js'), 'utf8'); assert.ok(!/reg['"], \['add'/.test(svc) && svc.includes('not offered on Windows any more'));
 });
 
 test('audify load problems come with the fix (Visual C++ runtime on Windows)', () => {
@@ -2163,7 +2108,7 @@ test('Windows installer: the app is visible after the install (icons, Start Menu
   assert.doesNotMatch(m.wxs({ stage: fs.mkdtempSync(path.join(os.tmpdir(), 'amy-')), version: '1.4.1' }), /ARPPRODUCTICON/);   // no launcher in the tree: no icon reference
   // setup program: desktop shortcut by default (/nodesktop removes it), done message and start-now offer after an interactive install, started without admin rights
   const stub = rd('installer', 'setup-stub.c');
-  assert.match(stub, /desktop = 1, noauto = 0/); assert.ok(stub.includes('L"/nodesktop"') && stub.includes('!desktop'));
+  assert.match(stub, /desktop = 1, nopath = 0/); assert.ok(stub.includes('L"/nodesktop"') && stub.includes('!desktop'));
   assert.match(stub, /Audio Mixer is installed\./); assert.match(stub, /!quiet && !passive/); assert.match(stub, /Audio Mixer\.lnk/); assert.match(stub, /explorer\.exe/); assert.match(stub, /CSIDL_COMMON_PROGRAMS/);
   // launcher: default browser, then Explorer, then "start", then the address in a message
   const lau = rd('installer', 'launcher.c');

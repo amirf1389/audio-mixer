@@ -4,7 +4,6 @@
 // and manages the official audio drivers. Zero dependencies, needs Node.js 18+.
 //   node client/cli.js                 start the server and open the mixer (an older Audio Mixer server still running on the port is ended first)
 //   node client/cli.js drivers         list official drivers for this PC (installed / not found)
-//   node client/cli.js download <id>   save an official installer (e.g. flexasio); it is never run for you
 //   node client/cli.js doctor          check Node.js, ports, PortAudio, ASIO drivers, download folder
 //   node client/cli.js verify [installer.exe]   verification: file hashes, signatures, loopback-only
 //   node client/cli.js setup [--user]  install the native audio modules (Audify, PortAudio) for ASIO / WASAPI; --user: Audify only, into your home folder
@@ -95,34 +94,21 @@ function status(installed) { return installed === true ? 'INSTALLED' : installed
 function formatDrivers(items, all) {
   const rows = items.filter(i => all || i.forThisPc);
   const w = Math.max(...rows.map(r => r.id.length), 2);
-  return rows.map(r => `${r.id.padEnd(w)}  ${status(r.installed).padEnd(9)}  ${r.name}\n${' '.repeat(w + 2)}${r.downloadable ? 'download: node client/cli.js download ' + r.id + '\n' + ' '.repeat(w + 2) : ''}${r.url}${r.install ? '\n' + ' '.repeat(w + 2) + 'install: ' + Object.values(r.install)[0] : ''}`).join('\n');
+  return rows.map(r => `${r.id.padEnd(w)}  ${status(r.installed).padEnd(9)}  ${r.name}\n${' '.repeat(w + 2)}${r.url}${r.install ? '\n' + ' '.repeat(w + 2) + 'install: ' + Object.values(r.install)[0] : ''}`).join('\n');
 }
 
 async function catalogForThisPc() {
   const { detect } = require('../bridge/detect');
-  const { listCatalog, downloadDir } = require('../bridge/catalog');
+  const { listCatalog } = require('../bridge/catalog');
   const info = await detect();
-  return { info, items: listCatalog(info), dir: downloadDir() };
+  return { info, items: listCatalog(info) };
 }
 
 async function cmdDrivers() {
-  const { info, items, dir } = await catalogForThisPc();
+  const { info, items } = await catalogForThisPc();
   console.log(`Official audio drivers for this PC (${info.platform}):\n`);
   console.log(formatDrivers(items, false));
-  console.log(`\nDownloads are saved to ${dir} and are never run automatically.`);
-}
-
-async function cmdDownload(id) {
-  if (!id) { console.error('usage: node client/cli.js download <id>   (see: node client/cli.js drivers)'); return 2; }
-  const { downloadDriver } = require('../bridge/catalog');
-  try {
-    console.log(`Downloading ${id} from its official release ...`);
-    const r = await downloadDriver(id);
-    console.log(`Saved ${r.file} (${(r.bytes / 1048576).toFixed(2)} MB)`);
-    console.log(`SHA-256 ${r.sha256} ${r.verified ? '(matches the release checksum)' : '(no checksum published; compare it yourself)'}`);
-    console.log('Run the installer yourself after checking it.');
-    return 0;
-  } catch (e) { console.error('Download failed: ' + e.message); return 1; }
+  console.log('\nEach driver is installed from its official site (the link is shown above); Audio Mixer does not download drivers.');
 }
 
 async function cmdDoctor(port) {
@@ -130,7 +116,7 @@ async function cmdDoctor(port) {
   const line = (ok, msg) => { if (!ok) bad++; console.log(`${ok ? 'OK  ' : 'FAIL'} ${msg}`); };
   const major = Number(process.versions.node.split('.')[0]);
   line(major >= MIN_NODE, `Node.js ${process.versions.node} (need ${MIN_NODE}+; get it from https://nodejs.org/)`);
-  const { info, items, dir } = await catalogForThisPc();
+  const { info, items } = await catalogForThisPc();
   line(true, `Platform ${info.platform} ${info.arch}`);
   const running = await probe(port);
   line(true, running ? `Server already running on port ${port}` : `Port ${port} is free for the server`);
@@ -344,7 +330,6 @@ async function main(argv) {
   if (o.cmd === 'license') return cmdLicense(o, argv);
   if (o.cmd === 'plugins') return cmdPlugins(argv);
   if (o.cmd === 'update') return cmdUpdate(o, argv);
-  if (o.cmd === 'download') return cmdDownload(o.arg);
   if (o.cmd === 'doctor') { const c = await cmdDoctor(o.port); await pause(argv); return c; }
   if (o.cmd === 'service') return cmdService(o.arg, o.port);
   if (o.cmd === 'setup') return cmdSetup(argv);
@@ -352,7 +337,7 @@ async function main(argv) {
   if (o.cmd === 'uninstall') return cmdUninstall(o, argv);
   if (o.cmd === 'version') return (console.log(require('../package.json').version), 0);
   if (o.cmd === 'verify') return cmdVerify(o, argv);
-  console.error(`Unknown command "${o.cmd}". Use: start | drivers | download <id> | doctor | verify | setup | service install|uninstall|status | license | plugins | update | npm | uninstall | version`);
+  console.error(`Unknown command "${o.cmd}". Use: start | drivers | doctor | verify | setup | service install|uninstall|status | license | plugins | update | npm | uninstall | version`);
   return 2;
 }
 

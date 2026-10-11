@@ -8,11 +8,11 @@
  *   Audio Mixer-1.4.0.exe /quiet       silent install (also /S, /qn), /passive shows progress only
  *   Audio Mixer-1.4.0.exe /uninstall   remove Audio Mixer (same as Settings > Apps > Audio Mixer > Uninstall)
  *   (/scan, which started an antivirus scan after the install, was removed in 1.4.3.0; the switch is still accepted and ignored.)
- *   Audio Mixer-1.4.0.exe /novcredist  do not install the Microsoft Visual C++ runtime that the native audio module needs (see below)
+ *   Audio Mixer-1.4.0.exe /novcredist  do not offer the Microsoft Visual C++ runtime that the native audio module needs;  /vcredist  install it without asking (see below)
  *   Audio Mixer-1.4.0.exe /noplugins  do not install the VST plugin host;  /nohelpers  skip the native Windows device helpers
  *   Audio Mixer-1.4.0.exe /nopath      do not put the audio-mixer command (audio-mixer.exe) on PATH
  *   Audio Mixer-1.4.0.exe /notools     no Start Menu tool shortcuts (license, plugins, drivers, update, diagnostics)
- *   Audio Mixer-1.4.0.exe /noshortcuts no Start Menu shortcuts at all;  /nodesktop  no desktop shortcut (it is on by default);  /noautostart  do not start at login
+ *   Audio Mixer-1.4.0.exe /noshortcuts no Start Menu shortcuts at all;  /nodesktop  no desktop shortcut (it is on by default);  /noautostart  accepted and ignored (there is no start at login any more)
  *   After an interactive install the setup says it is done and offers to start Audio Mixer at once (not with /quiet or /passive).
  *   An upgrade over an installed version ends the old local server first (so no restart is needed) and starts the new one afterwards.
  *   Anything else (for example INSTALLDIR="D:\Audio Mixer") is passed on to msiexec.
@@ -89,10 +89,11 @@ static int file_exists(const wchar_t *path) { DWORD a = GetFileAttributesW(path)
 
 static int run(wchar_t *cmdline, int newConsole, DWORD *code);
 
-/* The native audio module (Audify: ASIO / WASAPI) is built with Visual C++ and needs the Microsoft Visual C++ runtime. When it is missing,
- * install it with winget (Microsoft's own package manager, package Microsoft.VCRedist.2015+.x64 / .x86). A failure is not fatal: the mixer still
- * runs with browser audio, and the installer says where to get the runtime. */
-static void ensure_vc_runtime(void) {
+/* The native audio module (Audify: ASIO / WASAPI) is built with Visual C++ and needs the Microsoft Visual C++ runtime. When it is missing, the
+ * setup ASKS whether to install it with winget (Microsoft's own package manager, package Microsoft.VCRedist.2015+.x64 / .x86). Nothing is installed
+ * behind the user's back: a /quiet install installs nothing unless /vcredist is given. A "No" or a failure is not fatal: the mixer still runs with
+ * browser audio, and the setup says where to get the runtime. */
+static void ensure_vc_runtime(int quiet, int optin) {
   wchar_t sys[MAX_PATH], dll[MAX_PATH + 40], line[512];
   if (!GetWindowsDirectoryW(sys, MAX_PATH)) return;
 #ifdef REQUIRE_X64
@@ -105,6 +106,8 @@ static void ensure_vc_runtime(void) {
 #endif
   dll[MAX_PATH + 39] = 0;
   if (file_exists(dll)) return;
+  if (quiet && !optin) return;                               /* silent: no questions, so no install */
+  if (!optin && MessageBoxW(NULL, L"The native audio module (ASIO / WASAPI) needs the Microsoft Visual C++ runtime, which is not installed on this PC.\n\nInstall it now with Windows Package Manager (winget, Microsoft's own tool)?\n\nChoose No to skip it: Audio Mixer still works with browser audio. You can install the runtime later from https://aka.ms/vs/17/release/vc_redist.x64.exe (x86: vc_redist.x86.exe).", TITLE, MB_YESNO | MB_ICONQUESTION | MB_SETFOREGROUND) != IDYES) return;
   _snwprintf(line, 512, L"winget.exe install --id %ls -e --silent --accept-package-agreements --accept-source-agreements", id);
   line[511] = 0;
   DWORD code = 0;
@@ -163,25 +166,26 @@ static void start_app(const wchar_t *dir) {
 int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int show) {
   (void)inst; (void)prev; (void)cmd; (void)show;
   int argc = 0; wchar_t **argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-  int quiet = 0, passive = 0, uninstall = 0, novc = 0;
-  int noplug = 0, nohelp = 0, notools = 0, noshort = 0, desktop = 1, noauto = 0, nopath = 0;
+  int quiet = 0, passive = 0, uninstall = 0, novc = 0, vcyes = 0;
+  int noplug = 0, nohelp = 0, notools = 0, noshort = 0, desktop = 1, nopath = 0;
   wchar_t extra[2048] = L"";
   for (int i = 1; argv && i < argc; i++) {
     if (!_wcsicmp(argv[i], L"/quiet") || !_wcsicmp(argv[i], L"/S") || !_wcsicmp(argv[i], L"/qn") || !_wcsicmp(argv[i], L"-quiet")) quiet = 1;
     else if (!_wcsicmp(argv[i], L"/passive")) passive = 1;
     else if (!_wcsicmp(argv[i], L"/scan")) continue;                     /* removed (it started an antivirus scan): accepted and ignored */
     else if (!_wcsicmp(argv[i], L"/novcredist")) novc = 1;
+    else if (!_wcsicmp(argv[i], L"/vcredist")) vcyes = 1;                /* install the Visual C++ runtime without asking (also with /quiet) */
     else if (!_wcsicmp(argv[i], L"/noplugins")) noplug = 1;
     else if (!_wcsicmp(argv[i], L"/nohelpers")) nohelp = 1;
     else if (!_wcsicmp(argv[i], L"/notools")) notools = 1;
     else if (!_wcsicmp(argv[i], L"/noshortcuts")) noshort = 1;
     else if (!_wcsicmp(argv[i], L"/desktop")) desktop = 1;                 /* the desktop shortcut is on by default: kept for old command lines */
     else if (!_wcsicmp(argv[i], L"/nodesktop")) desktop = 0;
-    else if (!_wcsicmp(argv[i], L"/noautostart")) noauto = 1;
+    else if (!_wcsicmp(argv[i], L"/noautostart")) continue;               /* there is no start at login any more: accepted and ignored */
     else if (!_wcsicmp(argv[i], L"/nopath")) nopath = 1;
     else if (!_wcsicmp(argv[i], L"/uninstall") || !_wcsicmp(argv[i], L"/remove")) uninstall = 1;
     else if (!wcscmp(argv[i], L"/?") || !_wcsicmp(argv[i], L"/help")) {
-      message(L"Audio Mixer setup\n\n/quiet  silent install\n/passive  progress only\n/uninstall  remove Audio Mixer\n/novcredist  skip the Visual C++ runtime check\n/noplugins  no VST plugin host\n/nohelpers  no native device helpers\n/notools  no tool shortcuts\n/noshortcuts  no Start Menu shortcuts\n/nodesktop  no desktop shortcut\n/noautostart  do not start at login\n/nopath  do not put the audio-mixer command on PATH\nPROPERTY=value  passed to Windows Installer (for example INSTALLDIR=\"D:\\Audio Mixer\")", MB_ICONINFORMATION);
+      message(L"Audio Mixer setup\n\n/quiet  silent install\n/passive  progress only\n/uninstall  remove Audio Mixer\n/novcredist  do not offer the Visual C++ runtime\n/vcredist  install the Visual C++ runtime without asking\n/noplugins  no VST plugin host\n/nohelpers  no native device helpers\n/notools  no tool shortcuts\n/noshortcuts  no Start Menu shortcuts\n/nodesktop  no desktop shortcut\n/noautostart  accepted and ignored (no start at login any more)\n/nopath  do not put the audio-mixer command on PATH\nPROPERTY=value  passed to Windows Installer (for example INSTALLDIR=\"D:\\Audio Mixer\")", MB_ICONINFORMATION);
       return 0;
     } else {
       /* quote property values that contain spaces: NAME=value with spaces -> NAME="value" */
@@ -194,14 +198,13 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int show) {
   }
 
   /* feature switches -> ADDLOCAL (only when one was used; the default install keeps the MSI defaults) */
-  if (noplug || nohelp || notools || noshort || !desktop || noauto || nopath) {
+  if (noplug || nohelp || notools || noshort || !desktop || nopath) {
     wchar_t add[300] = L" ADDLOCAL=Main";
     if (!noshort) wcscat(add, L",Shortcuts");
     if (!noshort && !notools) wcscat(add, L",Tools");
     if (!nopath) wcscat(add, L",CommandLine");
     if (!noplug) wcscat(add, L",PluginHost");
     if (!nohelp) wcscat(add, L",WinHelpers");
-    if (!noauto) wcscat(add, L",Autostart");
     if (desktop) wcscat(add, L",Desktop");
     if (!wcsstr(extra, L"ADDLOCAL=") && wcslen(extra) + wcslen(add) < 2000) wcscat(extra, add);
   }
@@ -248,7 +251,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int show) {
   CloseHandle(out); CloseHandle(f);
   if (!ok) { DeleteFileW(msi); message(L"The installer package failed its SHA-256 check: the file is damaged or was changed. Download it again from the official release and compare its SHA-256.", MB_ICONERROR); return 1; }
 
-  if (!novc) ensure_vc_runtime();
+  if (!novc) ensure_vc_runtime(quiet, vcyes);
   int restart = 0;
   { wchar_t old[MAX_PATH]; if (install_dir(old, MAX_PATH)) restart = stop_old_server(old) > 0; }   /* upgrade: free the locked files */
   _snwprintf(line, 4096, L"msiexec.exe /i \"%ls\"%ls%ls", msi, quiet ? L" /qn" : passive ? L" /passive" : L"", extra);
