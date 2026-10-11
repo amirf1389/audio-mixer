@@ -20,11 +20,11 @@ Everything: `ota-server.service` (systemd), `docker-compose.yml` + `Dockerfile` 
 
 ## Publish a version (on the machine that has the vendor key)
     node scripts/license.js init                          # once: creates the vendor key (private.pem stays on this machine)
-    npm run build:installers && npm run build:unix        # produce the files in releases/ (see the main README)
+    npm run build:installers && npm run build:unix        # produce the files in the `<os>/releases/` folders (see the main README)
     node scripts/ota.js publish --server https://ota.example.com --token "$OTA_ADMIN_TOKEN" --notes "What is new|Another note"
     node scripts/ota.js status  --server https://ota.example.com --token "$OTA_ADMIN_TOKEN"
 
-`publish` builds the manifest of the version in `package.json` from `releases/`, signs it, uploads the files the server does not have, then
+`publish` builds the manifest of the version in `package.json` from the `<os>/releases/` folders (`--releases <folder>` takes one flat folder instead), signs it, uploads the files the server does not have, then
 publishes the manifest. `--channel beta` publishes to `/beta/update.json`; `--force` replaces a version that is already published.
 
 ## Web dashboard

@@ -17,7 +17,7 @@
 #include <stdatomic.h>
 #include <string.h>
 
-#include "../common/am_link.h"
+#include "../../drivers/common/am_link.h"
 
 #define kPlugIn_BundleID "org.audiomixer.driver"
 #define kDevice_UID "AudioMixerDevice_UID"

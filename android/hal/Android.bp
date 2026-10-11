@@ -1,10 +1,10 @@
-// Audio Mixer audio HAL (legacy audio_hw_device API). Put this folder, together with ../common, in your AOSP tree (for example device/<vendor>/<board>/audiomixer/)
+// Audio Mixer audio HAL (legacy audio_hw_device API). Put this folder, together with drivers/common (from the Audio Mixer repository), in your AOSP tree (for example device/<vendor>/<board>/audiomixer/)
 // and add  audio.audiomixer.default  to PRODUCT_PACKAGES. Not built or tested in the Audio Mixer repository.
 cc_library_shared {
     name: "audio.audiomixer.default",
     relative_install_path: "hw",
     proprietary: true,
-    srcs: ["audio_hw.c", "../common/am_link.c"],
+    srcs: ["audio_hw.c", "../../drivers/common/am_link.c"],
     cflags: ["-Wall", "-Wextra", "-Werror"],
     header_libs: ["libhardware_headers", "libsystem_headers"],
     shared_libs: ["liblog", "libcutils"],

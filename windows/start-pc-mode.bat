@@ -6,6 +6,8 @@ rem no answer within a minute means No, and there is no switch that answers for 
 rem The Microsoft Visual C++ runtime that the native audio module (Audify) needs is offered the same way (winget) when it is missing.
 setlocal EnableDelayedExpansion
 cd /d "%~dp0"
+if not exist client\cli.js if exist ..\client\cli.js cd /d ..
+rem (in the repository this file sits in windows\, the app one folder up; in an installed package they are the same folder)
 set "AM_NODE_DIR=%LOCALAPPDATA%\AudioMixer\node"
 call :find_node
 if not defined NODE_OK (

@@ -30,7 +30,7 @@ function createLimiter({ now = Date.now } = {}) {
 
 // Only these folders/files of the install are ever served; sources, scripts, the installer, native helpers and dependencies are not.
 const SERVED_TYPES = new Set(['.html', '.js', '.css', '.json', '.png', '.svg']);
-const BLOCKED_TOP = new Set(['bridge', 'client', 'scripts', 'installer', 'deploy', 'native', 'node_modules', 'dist', 'releases']);
+const BLOCKED_TOP = new Set(['bridge', 'client', 'scripts', 'installer', 'deploy', 'native', 'node_modules', 'dist', 'releases', 'android', 'ios', 'windows', 'macos', 'linux', 'drivers', 'ota-server']);
 function staticAllowed(root, file) {
   const rel = path.relative(root, file);
   if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return false;

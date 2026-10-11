@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 // macOS packages: the app bundle and a disk image.
-//   node scripts/build-macos.js [--out releases]
+//   node scripts/build-macos.js [--out macos/releases]
 //   AudioMixer-<version>-macos.dmg          disk image (UDIF, zlib): "Audio Mixer.app", an Applications shortcut and a read-me. Drag the app onto Applications.
 //   AudioMixer-<version>-macos-app.zip      the same "Audio Mixer.app" zipped (permissions kept)
 //   AudioMixer-<version>-macos.tar.gz       app + install.command / uninstall.command (build-unix.js)
@@ -44,7 +44,7 @@ function isoTool() {
   return null;
 }
 
-function buildMacApp({ out = path.join(ROOT, 'releases') } = {}) {
+function buildMacApp({ out = path.join(ROOT, 'macos', 'releases') } = {}) {
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'macos-'));
   const app = build({ out: work });
   const m = buildMac({ out: work, app });

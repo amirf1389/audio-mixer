@@ -1,5 +1,5 @@
 'use strict';
-// Native plugin host: runs a VST 2.x effect (.dll / .vst) in its own process (native/host/src/PluginHost.cpp) and moves audio through it.
+// Native plugin host: runs a VST 2.x effect (.dll / .vst) in its own process (windows/plugin-host/src/PluginHost.cpp) and moves audio through it.
 // A plugin that crashes takes down only that process. Only plugins found by the bridge's own scan are ever started (see createInsertSession).
 const { spawn } = require('node:child_process');
 const fs = require('node:fs');
@@ -13,12 +13,15 @@ const MAX_HOSTS = 12;                 // plugin processes at the same time
 const MAX_PENDING = 3;                // audio blocks in flight per plugin: more are dropped, which keeps latency bounded
 let running = 0;
 
-// Windows ships PluginHost.exe for both architectures; macOS / Linux build it (native/host/src/PluginHost.cpp) or point BRIDGE_PLUGIN_HOST at it.
+// Windows ships PluginHost.exe for both architectures; macOS / Linux build it (windows/plugin-host/src/PluginHost.cpp) or point BRIDGE_PLUGIN_HOST at it.
 function hostPath({ platform = process.platform, arch = process.arch, env = process.env, exists = fs.existsSync } = {}) {
   if (env.BRIDGE_PLUGIN_HOST) return exists(env.BRIDGE_PLUGIN_HOST) ? env.BRIDGE_PLUGIN_HOST : null;
-  const dir = path.join(ROOT, 'native', 'host');
-  const p = platform === 'win32' ? path.join(dir, arch === 'ia32' ? 'x86' : 'x64', 'PluginHost.exe') : path.join(dir, `${platform}-${arch}`, 'PluginHost');
-  return exists(p) ? p : null;
+  // an installed package keeps the host in native/host, the repository in windows/plugin-host
+  for (const dir of [path.join(ROOT, 'native', 'host'), path.join(ROOT, 'windows', 'plugin-host')]) {
+    const p = platform === 'win32' ? path.join(dir, arch === 'ia32' ? 'x86' : 'x64', 'PluginHost.exe') : path.join(dir, `${platform}-${arch}`, 'PluginHost');
+    if (exists(p)) return p;
+  }
+  return null;
 }
 
 class PluginHostProcess {
@@ -97,7 +100,7 @@ function createInsertSession(conn, { scan = () => plugins.scan(), read = () => i
     if (!license.hasFeature(status(), 'plugins')) return err('Plugin inserts need the PRO or STUDIO plan');
     const slot = read().slots[m && m.slot];
     if (!slot) return err('that slot is empty');
-    const file = hostFile(); if (!file) return err('the native plugin host is not installed on this system (native/host: build PluginHost, or set BRIDGE_PLUGIN_HOST)');
+    const file = hostFile(); if (!file) return err('the native plugin host is not installed on this system (windows/plugin-host: build PluginHost, or set BRIDGE_PLUGIN_HOST)');
     const found = scan().plugins.find(p => p.name === slot.plugin && p.format === slot.format);
     if (!found || !found.valid || !found.compatible) return err('the plugin is not available any more: scan again');
     if (found.format === 'VST3') return err('VST3 plugins are not supported by the native host yet (VST2 .dll / .vst only)');

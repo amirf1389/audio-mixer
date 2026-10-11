@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 'use strict';
-// Stages the mixer page for the Qt Android project (android-qt/): the same offline page the Java APK carries (Tailwind CSS built from the page,
-// Font Awesome, fonts) goes to android-qt/assets/www, and android-qt/version.txt gets the version of package.json.
-//   node scripts/prepare-qt.js          then build android-qt/ with Qt Creator or CMake (see android-qt/README.md)
+// Stages the mixer page for the Qt Android project (android/qt/): the same offline page the Java APK carries (Tailwind CSS built from the page,
+// Font Awesome, fonts) goes to android/qt/assets/www, and android/qt/version.txt gets the version of package.json.
+//   node scripts/prepare-qt.js          then build android/qt/ with Qt Creator or CMake (see android/qt/README.md)
 // The Qt project itself is NOT built by this repository's tests: it needs the Qt 6.5+ SDK and the Android NDK.
 const fs = require('node:fs');
 const path = require('node:path');
 const { prepareWeb, findTools, which } = require('./build-apk');
 
-const ROOT = path.resolve(__dirname, '..'), QT = path.join(ROOT, 'android-qt');
+const ROOT = path.resolve(__dirname, '..'), QT = path.join(ROOT, 'android', 'qt');
 
 async function main() {
   const version = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version;

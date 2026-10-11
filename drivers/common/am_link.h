@@ -7,7 +7,7 @@
  *   on_record callback  PCM that the mixer sends to the virtual device      <- applications record it from the virtual device
  *
  * PCM is interleaved signed 16-bit little-endian, `channels` per frame, at the rate given to am_link_open (the mixer converts other rates).
- * C99, no dependencies: Winsock on Windows, POSIX sockets and pthreads elsewhere. Used by drivers/windows-asio, linux-alsa, macos-coreaudio, android-hal.
+ * C99, no dependencies: Winsock on Windows, POSIX sockets and pthreads elsewhere. Used by windows/asio-driver, linux/alsa-plugin, macos/coreaudio-driver, android/hal.
  */
 #ifndef AM_LINK_H
 #define AM_LINK_H

@@ -9,6 +9,7 @@ if errorlevel 1 (
   exit /b 1
 )
 cd /d "%~dp0"
+if not exist bridge\server.js if exist ..\bridge\server.js cd /d ..
 echo Starting the Audio Mixer local server on http://localhost:8765  (Ctrl+C to stop)
 node bridge\server.js
 echo.
