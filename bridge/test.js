@@ -1272,7 +1272,6 @@ test('Windows ASIO driver (windows/asio-driver): cross-compiled for x64 and x86 
     const cpp = fsx.readFileSync(pathx.join(root, 'audiomixer_asio.cpp'), 'utf8'), guid = /\{C1893F2F-1AD5-4344-9806-DCFD242C0D48\}/i;
     assert.match(cpp, guid); assert.ok(cpp.includes('0xc1893f2f, 0x1ad5, 0x4344, { 0x98, 0x06, 0xdc, 0xfd, 0x24, 0x2c, 0x0d, 0x48 }')); assert.match(drv.README_WINDOWS('1'), guid);
     // the registration scripts: administrator only, regsvr32 on the DLLs that exist, CRLF; nothing else (no run key, no service, no network)
-    for (const f of ['register.bat', 'unregister.bat']) { const s = fsx.readFileSync(pathx.join(root, f), 'utf8'); assert.match(s, /\r\n/); assert.match(s, /net session/); assert.match(s, /regsvr32/); assert.ok(!/reg add|schtasks|sc create|curl|powershell|Invoke-/i.test(s), f); }
     assert.ok(!/CurrentVersion\\Run/.test(cpp) && !/CreateService/.test(cpp), 'the driver installs nothing that starts by itself');
     // the interface the hosts call: the method order of IASIO is the binary contract
     const iface = fsx.readFileSync(pathx.join(root, 'asio_iface.h'), 'utf8'), order = ['init', 'getDriverName', 'getDriverVersion', 'getErrorMessage', 'start', 'stop', 'getChannels', 'getLatencies', 'getBufferSize', 'canSampleRate', 'getSampleRate', 'setSampleRate', 'getClockSources', 'setClockSource', 'getSamplePosition', 'getChannelInfo', 'createBuffers', 'disposeBuffers', 'controlPanel', 'future', 'outputReady'];
@@ -1311,7 +1310,7 @@ test('driver sources and packaging: macOS plug-in, Android HAL, the build script
   try {
     const r = require('../scripts/build-drivers').buildAll({ out, source: true }), v = r.version;
     const zip = cp.spawnSync('unzip', ['-Z1', pathx.join(out, `AudioMixer-${v}-asio-driver-windows.zip`)], { encoding: 'utf8' }).stdout.split('\n').filter(Boolean);
-    for (const f of ['AudioMixerASIO64.dll', 'AudioMixerASIO32.dll', 'register.bat', 'unregister.bat', 'README.txt']) assert.ok(zip.includes(`AudioMixer-ASIO-${v}/${f}`), f);
+    for (const f of ['AudioMixerASIO64.dll', 'AudioMixerASIO32.dll', 'README.txt']) assert.ok(zip.includes(`AudioMixer-ASIO-${v}/${f}`), f);
     const tar = cp.spawnSync('tar', ['tzf', pathx.join(out, `AudioMixer-${v}-drivers-source.tar.gz`)], { encoding: 'utf8' }).stdout.split('\n');
     for (const f of ['drivers/common/am_link.c', 'windows/asio-driver/audiomixer_asio.cpp', 'linux/alsa-plugin/pcm_audiomixer.c', 'macos/coreaudio-driver/AudioMixerDriver.c', 'android/hal/audio_hw.c', 'drivers/README.md']) assert.ok(tar.includes(`audio-mixer-drivers-${v}/${f}`), f);
     assert.ok(!tar.some(f => /\.(dll|so|o)$/.test(f)), 'no binaries in the source archive');
@@ -1324,7 +1323,7 @@ test('repository layout: one folder per system with its sources and release file
   const top = fsx.readdirSync(root, { withFileTypes: true }).filter(e => !e.name.startsWith('.') && e.name !== 'node_modules' && e.name !== 'dist');
   const dirs = top.filter(e => e.isDirectory()).map(e => e.name).sort(), files = top.filter(e => e.isFile()).map(e => e.name).sort();
   assert.deepStrictEqual(dirs, ['android', 'bridge', 'client', 'deploy', 'drivers', 'engine', 'ios', 'linux', 'macos', 'npm-installer', 'ota-server', 'releases', 'scripts', 'windows'], 'the top level is minimal: systems + shared code');
-  assert.deepStrictEqual(files, ['ASIO-SDK-README.md', 'Additional Terms & Conditions', 'LICENSE', 'LICENSE.txt', 'README.md', 'SECURITY.md', 'Steinberg ASIO Licensing Agreement.pdf', 'Steinberg ASIO SDK 2.3.pdf', 'Steinberg ASIO Usage Guidelines.pdf', 'boot.html', 'changes.txt', 'index.html', 'package.json'], 'only the web app, the project papers and the Steinberg ASIO SDK papers at the root');
+  assert.deepStrictEqual(files, ['Additional Terms & Conditions', 'LICENSE', 'LICENSE.txt', 'PROJECT-README.md', 'README.md', 'SECURITY.md', 'Steinberg ASIO Licensing Agreement.pdf', 'Steinberg ASIO SDK 2.3.pdf', 'Steinberg ASIO Usage Guidelines.pdf', 'boot.html', 'changes.txt', 'index.html', 'package.json'], 'only the web app, the project papers and the Steinberg ASIO SDK papers at the root');
   assert.deepStrictEqual(fsx.readdirSync(pathx.join(root, 'releases')), ['update.json'], 'releases/ holds only the manifest that installed apps fetch');
   for (const os of lay.OSES) assert.ok(fsx.statSync(pathx.join(root, os, 'releases')).isDirectory(), os + '/releases');
   // every file that goes into a package exists where the layout says; the package keeps its own paths
@@ -2755,7 +2754,7 @@ test('OTA server: the system driver (Windows ASIO zip) is published in the manif
     const go = (p, ua) => fetch(b + p, { redirect: 'manual', headers: { 'User-Agent': ua } });
     const w = await (await go('/api/latest', WIN)).json();
     assert.strictEqual(w.file.key, 'win-x64-exe');                                                              // the installer is still what /latest gives
-    assert.ok(w.driver && w.driver.key === 'win-asio-driver' && w.driver.url === files['win-asio-driver'].url && w.driver.sha256 === files['win-asio-driver'].sha256 && /register\.bat/.test(w.driver.how));
+    assert.ok(w.driver && w.driver.key === 'win-asio-driver' && w.driver.url === files['win-asio-driver'].url && w.driver.sha256 === files['win-asio-driver'].sha256 && /regsvr32/.test(w.driver.how));
     assert.deepStrictEqual(w.others.map(o => o.key), ['linux-tar']);                                           // the driver is not listed twice
     const l = await (await go('/api/latest', LIN)).json(); assert.strictEqual(l.driver, null); assert.deepStrictEqual(l.others.map(o => o.key).sort(), ['win-asio-driver', 'win-x64-exe']);
     const d = await go('/driver', WIN); assert.strictEqual(d.status, 302); assert.strictEqual(d.headers.get('location'), files['win-asio-driver'].url);
@@ -2777,7 +2776,7 @@ test('Windows installers carry the ASIO driver files (Program Files / Program Fi
   const m = require('../scripts/build-msi'), root = pathx.join(__dirname, '..');
   const stage = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'asiostage-')); fsx.mkdirSync(pathx.join(stage, 'asio-driver'), { recursive: true }); fsx.writeFileSync(pathx.join(stage, 'LICENSE'), 'x');
   try {
-    for (const f of ['AudioMixerASIO32.dll', 'AudioMixerASIO64.dll', 'register.bat']) fsx.writeFileSync(pathx.join(stage, 'asio-driver', f), 'x');
+    for (const f of ['AudioMixerASIO32.dll', 'AudioMixerASIO64.dll']) fsx.writeFileSync(pathx.join(stage, 'asio-driver', f), 'x');
     const x64 = m.wxs({ stage, version: '9.0.0', arch: 'x64' }), x86 = m.wxs({ stage, version: '9.0.0', arch: 'x86' });
     const feature = w => /<Feature Id="AsioDriver"[^>]*Level="3"[^>]*>(.*?)<\/Feature>/.exec(w);          // Level 3: off unless ADDLOCAL names it
     assert.ok(feature(x64) && /AsioReg64/.test(feature(x64)[1]) && /AsioReg32/.test(feature(x64)[1]));
@@ -3027,7 +3026,7 @@ test('Windows registry and environment: variables, App Paths, version keys, .ami
   const root = pathx.join(__dirname, '..'), m = require('../scripts/build-msi');
   const stage = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'rg-')); fsx.writeFileSync(pathx.join(stage, 'LICENSE'), 'MIT');
   for (const f of ['audio-mixer.exe', 'AudioMixerServer.exe']) fsx.writeFileSync(pathx.join(stage, f), 'x');
-  fsx.mkdirSync(pathx.join(stage, 'asio-driver')); for (const f of ['AudioMixerASIO32.dll', 'AudioMixerASIO64.dll', 'register.bat']) fsx.writeFileSync(pathx.join(stage, 'asio-driver', f), 'x');
+  fsx.mkdirSync(pathx.join(stage, 'asio-driver')); for (const f of ['AudioMixerASIO32.dll', 'AudioMixerASIO64.dll']) fsx.writeFileSync(pathx.join(stage, 'asio-driver', f), 'x');
   for (const [arch, scope] of [['x64', 'machine'], ['x86', 'machine'], ['x64', 'user']]) {
     const w = m.wxs({ stage, version: '1.10.0', arch, scope }), hive = scope === 'user' ? 'HKCU' : 'HKLM';
     assert.match(w, /<Feature Id="Registry"[^>]*Level="1"/); assert.match(w, /<Feature Id="FileTypes"[^>]*Level="1"/); assert.match(w, /<Feature Id="ToolsPath"[^>]*Level="3"/);   // tools PATH is off unless asked

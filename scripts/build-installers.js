@@ -35,14 +35,13 @@ function addLauncher(staged, { out, id, env }) {
 }
 
 // The ASIO driver goes into the install tree as files (asio-driver\): AudioMixerASIO32.dll, and for the 64-bit package AudioMixerASIO64.dll too (64-bit Windows runs
-// 32-bit and 64-bit hosts), register.bat / unregister.bat, signed and listed in MANIFEST.sha256. Registering it is the optional MSI feature AsioDriver (see build-msi.js).
+// 32-bit and 64-bit hosts), signed and listed in MANIFEST.sha256. Registering it is the optional MSI feature AsioDriver (see build-msi.js).
 function addAsioDriver(staged, { out, id, env }) {
   const dir = path.join(staged.stage, 'asio-driver'), work = path.join(out, 'asio', staged.arch);
   fs.rmSync(dir, { recursive: true, force: true }); fs.mkdirSync(dir, { recursive: true }); fs.mkdirSync(work, { recursive: true });
   const files = [];
   for (const arch of staged.arch === 'x64' ? ['x64', 'x86'] : ['x86']) files.push(path.basename(buildAsio(arch, work)));
   for (const f of files) { fs.copyFileSync(path.join(work, f), path.join(dir, f)); if (id) signFile(path.join(dir, f), id, { env }); }
-  for (const f of ['register.bat', 'unregister.bat']) { fs.copyFileSync(path.join(__dirname, '..', 'windows', 'asio-driver', f), path.join(dir, f)); files.push(f); }
   fs.appendFileSync(path.join(staged.stage, 'MANIFEST.sha256'), files.map(f => `${sha(path.join(dir, f))}  asio-driver/${f}\n`).join(''));
   return files;
 }

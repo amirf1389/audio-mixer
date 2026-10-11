@@ -65,7 +65,7 @@ function keysFor(det) {
 // the driver files of a manifest per system (drivers/ and windows/asio-driver/): offered next to the app, never instead of it. Linux, macOS and Android drivers are source
 // code (drivers/README.md) and are not published as files.
 const DRIVER_KEYS = { windows: ['win-asio-driver'] };
-const DRIVER_HOW = { windows: 'Unpack the zip somewhere permanent and run register.bat as administrator (unregister.bat removes it). The driver is not installed by the app setup.' };
+const DRIVER_HOW = { windows: 'Unpack the zip somewhere permanent and register the DLLs with regsvr32 as administrator (regsvr32 /u removes them). The driver is not installed by the app setup.' };
 
 const HOW = {
   windows: 'Close Audio Mixer, then double-click the downloaded file. Windows asks for administrator permission, and the installer replaces the old version.',
