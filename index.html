@@ -13849,6 +13849,23 @@ window.navTabs = [
 
         // ---- ASIO / WASAPI input through the local bridge (PortAudio) ----
         paInWs: null, paInNode: null, paInMute: null,
+        // A browser (Web Audio) entry for a device the local server also lists is replaced by the server's native entry: picking an interface can no longer
+        // land on the browser's shared copy of it. When the removed entry was the selected one, the best native API of that device (ASIO first) is selected.
+        preferNative: function(sel, devs, prop) {
+            const norm = t => String(t || '').toLowerCase().replace(/^(default|communications) - /, '').replace(/^[a-z ]+\((.*?)\)?\s*$/, '$1').replace(/[^a-z0-9]+/g, ' ').trim();
+            const rank = a => { const i = [/asio/i, /wasapi/i, /core ?audio/i, /jack/i, /alsa/i, /wdm|kernel/i, /direct ?sound/i, /mme/i].findIndex(r => r.test(a || '')); return i < 0 ? 99 : i; };
+            const natives = devs.map(d => ({ d, k: norm(d.name) })).filter(x => x.k.length >= 4);
+            let pick = null;
+            Array.from(sel.children).forEach(o => {
+                if (o.tagName !== 'OPTION' || /^pa:/.test(o.value)) return;
+                const k = norm(o.text); if (k.length < 4) return;
+                const twins = natives.filter(x => x.k === k || x.k.includes(k) || k.includes(x.k));
+                if (!twins.length) return;
+                if (sel.value === o.value) pick = twins.sort((a, b) => rank(a.d.hostApi) - rank(b.d.hostApi))[0].d;
+                o.remove();
+            });
+            if (pick) { sel.value = 'pa:' + pick.id; this[prop] = sel.value; }
+        },
         addPortAudioInputs: function() {
             const info = this.bridgeInfo, sel = document.getElementById('asio-hw-read-device');
             if (!sel || !info || !info.portaudio || sel.querySelector('optgroup[data-pa]')) return;
@@ -13865,6 +13882,7 @@ window.navTabs = [
             const au = info.audify && info.portaudio.engine !== 'audify' ? info.audify.devices.filter(d => d.inputs > 0) : [];
             if (au.length) { const g2 = document.createElement('optgroup'); g2.label = 'AUDIFY (RTAUDIO) HOST API INPUTS (via bridge)'; g2.setAttribute('data-pa', '2');
                 au.forEach(d => { const o = document.createElement('option'); o.value = 'pa:' + d.id; o.text = `${d.hostApi}: ${d.name} (${d.inputs} ch)`; g2.appendChild(o); }); sel.insertBefore(g2, g.nextSibling); }
+            this.preferNative(sel, ins.concat(au), 'selectedInputDeviceId');
         },
         startPaInput: async function() {
             const self = this;
@@ -13887,7 +13905,7 @@ window.navTabs = [
             this.paInWs = ws;
             let ch = 2;
             const devSel = /^pa:(\d+)$/.exec(this.selectedInputDeviceId || '');
-            ws.onopen = function() { ws.send(JSON.stringify({ type: 'start', channels: 2, sampleRate: ctx.sampleRate, frameSize: window.universalAsioSdk.frameSizeSetting(), deviceId: devSel ? parseInt(devSel[1], 10) : ((self.selectedInputDeviceId || '') === 'pa:auto' ? 'universal' : undefined) })); };
+            ws.onopen = function() { ws.send(JSON.stringify({ type: 'start', channels: 2, sampleRate: ctx.sampleRate, frameSize: window.universalAsioSdk.frameSizeSetting(), exclusive: true, deviceId: devSel ? parseInt(devSel[1], 10) : ((self.selectedInputDeviceId || '') === 'pa:auto' ? 'universal' : undefined) })); };
             ws.onmessage = function(ev) {
                 if (typeof ev.data !== 'string') {
                     if (!self.paInNode) return;
@@ -13943,6 +13961,7 @@ window.navTabs = [
             const au = info.audify && info.portaudio.engine !== 'audify' ? info.audify.devices.filter(d => d.outputs > 0) : [];
             if (au.length) { const g2 = document.createElement('optgroup'); g2.label = 'AUDIFY (RTAUDIO) HOST API OUTPUTS (via bridge)'; g2.setAttribute('data-pa', '2');
                 au.forEach(d => { const o = document.createElement('option'); o.value = 'pa:' + d.id; o.text = `${d.hostApi}: ${d.name} (${d.outputs} ch)`; g2.appendChild(o); }); sel.insertBefore(g2, g.nextSibling); }
+            this.preferNative(sel, outs.concat(au), 'selectedOutputDeviceId');
             const asio = outs.find(d => /asio/i.test(d.hostApi));
             if (asio) { sel.value = 'pa:auto'; this.selectedOutputDeviceId = 'pa:auto'; }   // the universal driver picks the ASIO device (and falls back by itself)
         },
@@ -13967,7 +13986,7 @@ window.navTabs = [
             ws.binaryType = 'arraybuffer';
             this.paWs = ws;
             const devSel = /^pa:(\d+)$/.exec(this.selectedOutputDeviceId || '');
-            ws.onopen = function() { ws.send(JSON.stringify({ type: 'start', channels: 2, sampleRate: ctx.sampleRate, frameSize: window.universalAsioSdk.frameSizeSetting(), deviceId: devSel ? parseInt(devSel[1], 10) : ((self.selectedOutputDeviceId || '') === 'pa:auto' ? 'universal' : undefined) })); };
+            ws.onopen = function() { ws.send(JSON.stringify({ type: 'start', channels: 2, sampleRate: ctx.sampleRate, frameSize: window.universalAsioSdk.frameSizeSetting(), exclusive: true, deviceId: devSel ? parseInt(devSel[1], 10) : ((self.selectedOutputDeviceId || '') === 'pa:auto' ? 'universal' : undefined) })); };
             ws.onmessage = function(ev) {
                 let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
                 if (m.type === 'levels') { if (window.asioMeters) window.asioMeters.push(m); return; }
@@ -15876,8 +15895,9 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                         try { cap = await this.bridgeRead(i, a); break; } catch (e) { lastErr = e.message; }
                     }
                 }
-                // 2) browser microphone (only without a prompt when permission is already granted; a click on READ may prompt)
-                if (!cap && i.browser && i.browser.inId) {
+                // 2) browser microphone (Web Audio, shared, the browser's own device): ONLY for an interface the local server cannot open at all. When the server
+                //    has a native (exclusive) route for it, a failure is shown instead of quietly reading the browser's copy of the device.
+                if (!cap && i.browser && i.browser.inId && !this.nativeInput(i)) {
                     let granted = o.userClick;
                     try { if (!granted && navigator.permissions) granted = (await navigator.permissions.query({ name: 'microphone' })).state === 'granted'; } catch (e) { /* unsupported */ }
                     if (granted) { try { cap = await this.browserRead(i); } catch (e) { lastErr = e.message; } }
@@ -15896,6 +15916,10 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 }
                 this.render();
             },
+            // the local server has an engine and a native route for this interface's inputs
+            nativeInput(i) { return !!(this.bridgeUrl && this.portaudio && (i.apis || []).some(a => a.inputs > 0)); },
+            // how a stream is held, from the server's "started" message: ASIO drivers are exclusive by nature; other APIs only when the OS honours the request
+            lockNote(m) { return /asio/i.test(m.hostApi) ? '' : (m.exclusive ? ' (exclusive)' : ' (shared)'); },
             async browserRead(i) {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: i.browser.inId }, echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: { ideal: 2 } } });
                 const src = window.state.ctx.createMediaStreamSource(stream);
@@ -15911,7 +15935,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                         const ws = new WebSocket(self.wsUrl('/ws/input')); ws.binaryType = 'arraybuffer';
                         let node = null, ch = 2, done = false;
                         const fail = m => { if (!done) { done = true; try { ws.close(); } catch (e) { /* ignore */ } reject(new Error(m)); } };
-                        ws.onopen = () => ws.send(JSON.stringify({ type: 'start', channels: want, sampleRate: ctx.sampleRate, frameSize: window.universalAsioSdk.frameSizeSetting(), deviceId: a.deviceId }));
+                        ws.onopen = () => ws.send(JSON.stringify({ type: 'start', channels: want, sampleRate: ctx.sampleRate, frameSize: window.universalAsioSdk.frameSizeSetting(), exclusive: self.cfg.exclusive !== false, deviceId: a.deviceId }));
                         ws.onerror = () => fail('local server connection failed');
                         ws.onclose = () => { if (!done) fail('closed'); else if (self.caps.get(i.key) && self.caps.get(i.key).ws === ws) self.stopRead(i.key); };
                         ws.onmessage = ev => {
@@ -15928,7 +15952,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                             if (m.type === 'started' && !done) {
                                 done = true; ch = m.channels;
                                 node = new AudioWorkletNode(ctx, 'ls-in', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
-                                const cap = self.makeCap(i, node, (/asio/i.test(m.hostApi) ? 'ASIO' : m.hostApi) + (want > 2 ? ' CH ' + (pair * 2 + 1) + '-' + (pair * 2 + 2) : ''), { ws, bridge: true });
+                                const cap = self.makeCap(i, node, (/asio/i.test(m.hostApi) ? 'ASIO' : m.hostApi) + self.lockNote(m) + (want > 2 ? ' CH ' + (pair * 2 + 1) + '-' + (pair * 2 + 2) : ''), { ws, bridge: true });
                                 cap.stop = () => { try { ws.send(JSON.stringify({ type: 'stop' })); ws.close(); node.disconnect(); cap.analyser.disconnect(); } catch (e) { /* gone */ } };
                                 resolve(cap);
                             } else if (m.type === 'error') {
@@ -15951,7 +15975,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                         const ws = new WebSocket(self.wsUrl('/ws/duplex')); ws.binaryType = 'arraybuffer';
                         let node = null, ch = 2, done = false;
                         const fail = m => { if (!done) { done = true; try { ws.close(); } catch (e) { /* ignore */ } reject(new Error(m)); } };
-                        ws.onopen = () => ws.send(JSON.stringify({ type: 'start', inChannels: want, channels: 2, sampleRate: ctx.sampleRate, frameSize: window.universalAsioSdk.frameSizeSetting(), deviceId: a.deviceId }));
+                        ws.onopen = () => ws.send(JSON.stringify({ type: 'start', inChannels: want, channels: 2, sampleRate: ctx.sampleRate, frameSize: window.universalAsioSdk.frameSizeSetting(), exclusive: self.cfg.exclusive !== false, deviceId: a.deviceId }));
                         ws.onerror = () => fail('local server connection failed');
                         ws.onclose = () => { if (!done) fail('closed'); else self.dropDuplex(i.key, ws); };
                         ws.onmessage = ev => {
@@ -16079,13 +16103,13 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                     const ws = new WebSocket(self.wsUrl('/ws/output')); ws.binaryType = 'arraybuffer';
                     let done = false;
                     const fail = m => { if (!done) { done = true; try { ws.close(); } catch (e) { /* ignore */ } reject(new Error(m)); } };
-                    ws.onopen = () => ws.send(JSON.stringify({ type: 'start', channels: 2, sampleRate: ctx.sampleRate, frameSize: window.universalAsioSdk.frameSizeSetting(), deviceId: a.deviceId }));
+                    ws.onopen = () => ws.send(JSON.stringify({ type: 'start', channels: 2, sampleRate: ctx.sampleRate, frameSize: window.universalAsioSdk.frameSizeSetting(), exclusive: self.cfg.exclusive !== false, deviceId: a.deviceId }));
                     ws.onerror = () => fail('local server connection failed');
                     ws.onclose = () => { if (!done) fail('closed'); else self.writes.forEach((w, key) => { if (w.ws === ws) self.stopWrite(key); }); };
                     ws.onmessage = ev => {
                         let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
                         if (m.type === 'levels') { if (window.asioMeters) window.asioMeters.push(m); return; }
-                        if (m.type === 'started' && !done) { done = true; resolve({ ws, ready: true, how: (/asio/i.test(m.hostApi) ? 'ASIO' : m.hostApi) + ' / ' + m.device }); }
+                        if (m.type === 'started' && !done) { done = true; resolve({ ws, ready: true, how: (/asio/i.test(m.hostApi) ? 'ASIO' : m.hostApi) + self.lockNote(m) + ' / ' + m.device }); }
                         else if (m.type === 'error') { if (!done) fail(m.message); else self.warn('w:' + a.deviceId, (name || 'Audio output') + ': ' + self.friendly(m.message)); }
                     };
                 });

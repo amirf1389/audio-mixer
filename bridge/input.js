@@ -42,13 +42,13 @@ function createInputSession(conn, load = loadPortAudio, loadA = audify.loadAudif
     lock = claim({ id: dev.id, name: dev.name, hostAPIName: dev.hostAPIName });
     if (!lock.ok) { const msg = lock.message; lock = null; return conn.send(JSON.stringify({ type: 'error', message: msg })); }
     try {
-      const st = audify.openStream({ mod: loadA(), dev, direction: 'input', channels, sampleRate, frameSize: opts.frameSize,
+      const st = audify.openStream({ mod: loadA(), dev, direction: 'input', channels, sampleRate, frameSize: opts.frameSize, exclusive: opts.exclusive === true,
         onData: chunk => { if (meter) meter.push(chunk); for (let i = 0; i < chunk.length; i += CHUNK) conn.sendBinary(chunk.subarray(i, i + CHUNK)); },
         onError: e => { conn.send(JSON.stringify({ type: 'error', message: String(e && e.message || e) })); stop(); } });
       io = { quit: () => st.close() };
       const si = { direction: 'input', engine: 'audify', device: dev.name, hostApi: dev.hostAPIName, sampleRate, channels: st.channels, frameSize: st.frameSize, latencyMs: st.latencyMs };
       unreg = streams.add(si); meter = levels.attach(conn, { ...si, sid: unreg.id });
-      conn.send(JSON.stringify({ type: 'started', ...(opts.universal ? { universal: true } : {}), engine: 'audify', device: dev.name, hostApi: dev.hostAPIName, sampleRate, channels: st.channels, frameSize: st.frameSize, latencyMs: st.latencyMs, autoFrameSize: st.auto }));
+      conn.send(JSON.stringify({ type: 'started', ...(opts.universal ? { universal: true } : {}), engine: 'audify', device: dev.name, hostApi: dev.hostAPIName, sampleRate, channels: st.channels, frameSize: st.frameSize, latencyMs: st.latencyMs, autoFrameSize: st.auto, exclusive: st.exclusive }));
     } catch (e) {
       stop();
       conn.send(JSON.stringify({ type: 'error', message: String(e && e.message || e) }));

@@ -3183,3 +3183,35 @@ test('audify WASAPI output: the queue of blocks waiting for the device is bounde
   // input streams never use it
   t = mk(); a.openStream({ mod: t.f, dev: { ...wasapi, maxInputChannels: 2, maxOutputChannels: 0 }, direction: 'input', channels: 2, sampleRate: 48000 }); assert.strictEqual(t.st.frameCb, null);
 });
+
+test('exclusive access: ASIO is exclusive by nature, the hog flag is asked of Core Audio / OSS only, everything else says it stays shared; the page never falls back to Web Audio for an interface the server can open', () => {
+  const a = require('./audify');
+  const mod = { RtAudioStreamFlags: { RTAUDIO_MINIMIZE_LATENCY: 2, RTAUDIO_HOG_DEVICE: 4 } };
+  assert.deepStrictEqual(a.streamFlags(mod, { api: 'WINDOWS_ASIO' }, false), { flags: 2, exclusive: true });
+  assert.deepStrictEqual(a.streamFlags(mod, { api: 'MACOSX_CORE' }, true), { flags: 6, exclusive: true });
+  assert.deepStrictEqual(a.streamFlags(mod, { api: 'LINUX_OSS' }, true), { flags: 6, exclusive: true });
+  assert.deepStrictEqual(a.streamFlags(mod, { api: 'MACOSX_CORE' }, false), { flags: 2, exclusive: false });          // only when asked
+  for (const api of ['WINDOWS_WASAPI', 'WINDOWS_DS', 'LINUX_ALSA', 'LINUX_PULSE', 'UNIX_JACK']) assert.deepStrictEqual(a.streamFlags(mod, { api }, true), { flags: 2, exclusive: false }, api + ' stays shared and says so');
+  assert.deepStrictEqual(a.streamFlags({ RtAudioStreamFlags: { RTAUDIO_MINIMIZE_LATENCY: 2 } }, { api: 'MACOSX_CORE' }, true), { flags: 2, exclusive: false }, 'a build without the flag');
+  // through a stream: the flags reach RtAudio, the stream reports what was applied
+  const seen = [];
+  const f = fakeAudify(); const Base = f.RtAudio;
+  f.RtAudio = class extends Base { openStream(o, i, fm, r, fr, n, cb, fcb, flags) { seen.push(flags); return super.openStream(o, i, fm, r, fr, n, cb); } };
+  f.RtAudioStreamFlags = { RTAUDIO_MINIMIZE_LATENCY: 2, RTAUDIO_HOG_DEVICE: 4 };
+  const core = { id: 1000, rtId: 1, api: 'MACOSX_CORE', hostAPIName: 'Core Audio', name: 'USB Interface', maxOutputChannels: 2, maxInputChannels: 2, sampleRates: [44100, 48000] };
+  assert.strictEqual(a.openStream({ mod: f, dev: core, direction: 'output', channels: 2, sampleRate: 48000, exclusive: true }).exclusive, true);
+  assert.strictEqual(a.openStream({ mod: f, dev: core, direction: 'output', channels: 2, sampleRate: 48000 }).exclusive, false);
+  assert.deepStrictEqual(seen, [6, 2]);
+  const asio = { id: 1001, rtId: 0, api: 'WINDOWS_ASIO', hostAPIName: 'ASIO', name: 'Focusrite USB ASIO', maxOutputChannels: 20, maxInputChannels: 18, sampleRates: [44100, 48000, 96000] };
+  assert.strictEqual(a.openStream({ mod: fakeAudify(), dev: asio, direction: 'output', channels: 2, sampleRate: 48000, frameSize: 128 }).exclusive, true);
+  // the sessions ask for it and report it
+  const root = pathx.join(__dirname, '..'), rd = f2 => fsx.readFileSync(pathx.join(root, f2), 'utf8');
+  for (const f2 of ['bridge/output.js', 'bridge/input.js', 'bridge/duplex.js']) { const s = rd(f2); assert.match(s, /exclusive: opts\.exclusive === true/); assert.match(s, /exclusive: st\.exclusive/); }
+  // the page: interface streams ask for exclusive access and show shared / exclusive; no silent browser fallback when the server has a native route; browser twins are replaced
+  const html = rd('index.html');
+  assert.strictEqual((html.match(/exclusive: self\.cfg\.exclusive !== false/g) || []).length, 3);
+  assert.match(html, /exclusive: true, deviceId: devSel/); assert.match(html, /lockNote\(m\) \{ return \/asio\/i\.test\(m\.hostApi\)/);
+  assert.match(html, /if \(!cap && i\.browser && i\.browser\.inId && !this\.nativeInput\(i\)\)/);
+  assert.match(html, /nativeInput\(i\) \{ return !!\(this\.bridgeUrl && this\.portaudio && \(i\.apis \|\| \[\]\)\.some\(a => a\.inputs > 0\)\); \}/);
+  assert.match(html, /this\.preferNative\(sel, ins\.concat\(au\), 'selectedInputDeviceId'\)/); assert.match(html, /this\.preferNative\(sel, outs\.concat\(au\), 'selectedOutputDeviceId'\)/);
+});
