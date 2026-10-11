@@ -1881,7 +1881,7 @@ test('native plugin host: a real VST2 effect runs in its own process and process
   const ps = await h.params(); assert.strictEqual(ps[0].name, 'Gain'); assert.ok(Math.abs(ps[0].value - 1) < 1e-6);
   h.stop(); await new Promise(r => h.child.once('close', r));
   // refusals come back as clear errors, never a crash of the bridge
-  for (const [file, re] of [[pathx.join(dir, 'missing.vst'), /could not load/], [pathx.join(dir, 'x.vst3'), /VST3 plugins are not supported/], [hostBin, /could not load|not a VST2/]]) {
+  for (const [file, re] of [[pathx.join(dir, 'missing.vst'), /could not load/], [pathx.join(dir, 'x.vst3'), /could not load/], [hostBin, /could not load|not a VST2/]]) {
     await assert.rejects(new ph.PluginHostProcess({ host: hostBin, plugin: file }).start(), re);
   }
   await assert.rejects(new ph.PluginHostProcess({ host: pathx.join(dir, 'nope'), plugin: plug }).start(), /cannot start the plugin host/);
@@ -1902,8 +1902,35 @@ test('native plugin host: a real VST2 effect runs in its own process and process
   s.onText(JSON.stringify({ type: 'bypass', on: true })); s.onBinary(blk); assert.strictEqual(bin[2].readFloatLE(0), blk.readFloatLE(0));   // dry
   s.onBinary(Buffer.alloc(5)); assert.strictEqual(bin.length, 3);                                                               // partial frame ignored
   s.onText(JSON.stringify({ type: 'stop' })); assert.strictEqual(sent[sent.length - 1].type, 'stopped'); s.onClose();
-  store.slots['fx:1'].format = 'VST3'; scan.v3 = true;
-  s = mk({ scan: () => ({ plugins: [{ name: 'gain', format: 'VST3', file: plug, valid: true, compatible: true }] }) }); s.onText(JSON.stringify({ type: 'start', slot: 'fx:1' })); await wait(() => sent.length); assert.match(sent.pop().message, /VST3/);
+  // VST 3: the same session runs a real VST3 effect (a test plugin written against the public interface layout), picked by class name from a bundle
+  const v3 = pathx.join(dir, 'gain3.so'), bundle = pathx.join(dir, 'gain3.vst3'), c3 = spawnSync('g++', ['-shared', '-fPIC', '-std=c++11', '-o', v3, pathx.join(root, 'test', 'Gain3Plugin.cpp')]);
+  if (c3.status === 0 && process.platform === 'linux') {
+    const arch = { x64: 'x86_64', arm64: 'aarch64', ia32: 'i386' }[process.arch];
+    if (arch) { fsx.mkdirSync(pathx.join(bundle, 'Contents', arch + '-linux'), { recursive: true }); fsx.copyFileSync(v3, pathx.join(bundle, 'Contents', arch + '-linux', 'gain3.so')); }
+    const flat = pathx.join(dir, 'flat.vst3'); fsx.copyFileSync(v3, flat);                                                                                  // a bare module file works as well as a bundle
+    for (const file of arch ? [flat, bundle] : [flat]) {
+      const h3 = new ph.PluginHostProcess({ host: hostBin, plugin: file, className: 'Test Gain 3' }), i3 = await h3.start();
+      assert.deepStrictEqual([i3.name, i3.format, i3.inputs, i3.outputs, i3.params, i3.vendor], ['Test Gain 3', 'VST3', 2, 2, 1, 'Audio Mixer tests']);
+      let o3 = await h3.process(blk); assert.ok(Math.abs(o3.readFloatLE(0) - 0.1) < 1e-6 && Math.abs(o3.readFloatLE(o3.length - 4) + 0.1) < 1e-6);        // unity at 0.5
+      h3.setParam(0, 1); o3 = await h3.process(blk); assert.ok(Math.abs(o3.readFloatLE(0) - 0.2) < 1e-6);                                                   // +6 dB, through the process call's parameter changes
+      const p3 = await h3.params(); assert.deepStrictEqual([p3[0].name, p3[0].label, p3[0].display], ['Gain', 'x', '2.00']); assert.ok(Math.abs(p3[0].value - 1) < 1e-6);
+      h3.stop(); await new Promise(r => h3.child.once('close', r));
+    }
+    const first = new ph.PluginHostProcess({ host: hostBin, plugin: flat }); assert.strictEqual((await first.start()).name, 'Test Gain 3');                  // the instrument class is skipped without a name
+    first.stop(); await new Promise(r => first.child.once('close', r));
+    await assert.rejects(new ph.PluginHostProcess({ host: hostBin, plugin: flat, className: 'Nope' }).start(), /no audio class named "Nope"/);
+    store.slots['fx:1'].format = 'VST3';
+    s = mk({ scan: () => ({ plugins: [{ name: 'gain3', format: 'VST3', file: flat, className: 'Test Gain 3', valid: true, compatible: true }] }) }); store.slots['fx:1'].plugin = 'gain3';
+    sent.length = 0; bin.length = 0; s.onText(JSON.stringify({ type: 'start', slot: 'fx:1' })); await wait(() => sent.length); assert.strictEqual(sent[0].type, 'started'); assert.strictEqual(sent[0].name, 'Test Gain 3');
+    s.onBinary(blk); await wait(() => bin.length); assert.ok(Math.abs(bin[0].readFloatLE(0) - 0.1) < 1e-6); s.onClose();
+  }
+  await assert.rejects(new ph.PluginHostProcess({ host: hostBin, plugin: pathx.join(dir, 'missing.vst3') }).start(), /could not load|no binary/);
+  // bundles with many plugins: one entry per effect class, read from moduleinfo.json (the instruments are left out)
+  const pl = require('./plugins'), mb = pathx.join(dir, 'Pack.vst3'); fsx.mkdirSync(pathx.join(mb, 'Contents', 'Resources'), { recursive: true });
+  fsx.writeFileSync(pathx.join(mb, 'Contents', 'Resources', 'moduleinfo.json'), JSON.stringify({ Classes: [{ Name: 'Comp', Catetory: 'Audio Module Class', 'Sub Categories': ['Fx'] }, { Name: 'Verb', Category: 'Audio Module Class', 'Sub Categories': ['Fx', 'Reverb'] }, { Name: 'Synth', Category: 'Audio Module Class', 'Sub Categories': ['Instrument'] }, { Name: 'Ctl', Category: 'Component Controller Class' }] }));
+  assert.deepStrictEqual(pl.bundleClasses(mb), ['Comp', 'Verb']);
+  const sc = pl.scan({ platform: 'linux', env: { AUDIO_MIXER_PLUGINS: dir }, home: dir, hostArch: process.arch });
+  assert.deepStrictEqual(sc.plugins.filter(p => /^Pack/.test(p.name)).map(p => [p.name, p.className]), [['Pack: Comp', 'Comp'], ['Pack: Verb', 'Verb']]);
   assert.ok(ph.hostPath({ platform: 'win32', arch: 'x64', env: {}, exists: () => true }).endsWith(pathx.join('x64', 'PluginHost.exe')));
   assert.ok(ph.hostPath({ platform: 'win32', arch: 'ia32', env: {}, exists: () => true }).endsWith(pathx.join('x86', 'PluginHost.exe')));
   assert.strictEqual(ph.hostPath({ platform: 'linux', env: {}, exists: () => false }), null);

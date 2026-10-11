@@ -17029,7 +17029,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             async sync() {
                 const ctx = window.state && window.state.ctx, n = window.state && window.state.nodes;
                 if (!bridge() || !ctx || !n || !n.masterLimiter || !L.has('plugins')) { if (Object.keys(this.runs).length && !L.has('plugins')) Object.keys(this.runs).forEach(k => this.closeSlot(k)); return; }
-                const want = {}; this.order.forEach(k => { const s = racks.state[k]; if (s && s.format === 'VST2') want[k] = s; });
+                const fmts = (racks.host && racks.host.formats) || ['VST2'], want = {}; this.order.forEach(k => { const s = racks.state[k]; if (s && fmts.includes(s.format)) want[k] = s; });
                 const sig = JSON.stringify([want, ctx.sampleRate, Object.keys(this.runs).sort(), Object.keys(this.runs).filter(k => this.runs[k].ctx !== ctx)]);
                 if (sig === this.sig) return; this.sig = sig;
                 Object.keys(this.runs).forEach(k => { const r = this.runs[k], s = want[k]; if (!s || r.ctx !== ctx || r.info && r.info.name && racks.state[k] && racks.state[k].plugin !== r.plugin) this.closeSlot(k); });
@@ -17039,7 +17039,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                     this.status[k] = 'STARTING...';
                     try { await this.openSlot(k, ctx); this.runs[k].plugin = want[k].plugin; } catch (e) { this.status[k] = 'ERROR \u2022 ' + e.message; }
                 }
-                Object.keys(racks.state).forEach(k => { if (racks.state[k].format === 'VST3') this.status[k] = 'VST3 \u2022 NOT SUPPORTED BY THE NATIVE HOST YET (VST2 .DLL / .VST ONLY)'; });
+                Object.keys(racks.state).forEach(k => { if (!fmts.includes(racks.state[k].format)) this.status[k] = racks.state[k].format + ' \u2022 NOT SUPPORTED BY THIS PLUGIN HOST'; });
                 racks.render();
             },
             setParam(key, i, v) { const r = this.runs[key]; if (r && r.ready && r.ws.readyState === 1) r.ws.send(JSON.stringify({ type: 'param', i, v })); },

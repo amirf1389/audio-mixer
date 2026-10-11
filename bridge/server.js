@@ -147,7 +147,7 @@ async function handle(req, res) {
     if (!btCache || Date.now() - btCache.at > 2000 || url.searchParams.get('force') === '1') btCache = { at: Date.now(), promise: bluetooth.list() };
     return json(res, 200, await btCache.promise, cors);
   }
-  if (url.pathname === '/api/inserts') return json(res, 200, { ok: true, host: { available: !!pluginHost.hostPath(), formats: ['VST2'] }, ...inserts.read() }, cors);
+  if (url.pathname === '/api/inserts') return json(res, 200, { ok: true, host: { available: !!pluginHost.hostPath(), formats: ['VST2', 'VST3'] }, ...inserts.read() }, cors);
   if (url.pathname === '/api/virtual') return json(res, 200, { ok: true, devices: virtualHub.list() }, cors);
   if (url.pathname === '/api/power') return json(res, 200, { ok: true, pid: process.pid, ...power.capabilities() }, cors);
   if (url.pathname === '/api/meters') return json(res, 200, { ok: true, clipDb: levels.config.clipDb, clipRun: levels.CLIP_RUN }, cors);   // clip threshold of the native streams' meters

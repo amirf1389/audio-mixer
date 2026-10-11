@@ -1,9 +1,9 @@
 // PluginHost - runs ONE VST 2.x effect plugin (.dll on Windows, .vst bundle on macOS, .so / .vst on Linux) in its own process.
 // The Audio Mixer bridge starts it, sends audio blocks on stdin and reads the processed blocks from stdout (binary frames, below).
 // A crashing plugin takes down only this process, never the mixer. The plugin is loaded from the path given on the command line; the
-// bridge only ever passes paths of plugins its own scan found. VST3 is not supported by this host (the SDK is a separate piece of work).
+// bridge only ever passes paths of plugins its own scan found. VST 3 (.vst3) is hosted too: see Vst3Host.h for what is and is not supported.
 //
-//   PluginHost <plugin file> [sampleRate=48000] [blockSize=512]
+//   PluginHost <plugin file> [sampleRate=48000] [blockSize=512] [VST3 class name]
 //
 // Frame (both directions): u8 type, 3 bytes zero, u32 little-endian payload length, payload.
 //   host -> bridge  'H' hello JSON {"ok":true,"name":..,"vendor":..,"inputs":n,"outputs":n,"params":n,"latency":frames} or {"ok":false,"error":..}
@@ -12,7 +12,7 @@
 //   bridge -> host  'G' (get parameters) -> host replies 'G' JSON [{"i":0,"name":"Gain","label":"dB","display":"0.0","value":0.5},...]
 //   bridge -> host  'Q' quit
 //
-// VST 2.x is declared here from the public binary interface (struct layout and opcodes); no Steinberg code is included.
+// VST 2.x is declared here from the public binary interface (struct layout and opcodes); no Steinberg code is included. The same goes for VST 3 (Vst3Host.h).
 //
 // Build:  g++ -O2 -std=c++11 -o PluginHost PluginHost.cpp -ldl                                   (Linux, macOS)
 //         x86_64-w64-mingw32-g++ -O2 -std=c++11 -static -s -o ../x64/PluginHost.exe PluginHost.cpp   (Windows, 64-bit plugins)
@@ -23,6 +23,7 @@
 #include <cstring>
 #include <string>
 #include <vector>
+#include <algorithm>
 #ifdef _WIN32
 #include <windows.h>
 #include <fcntl.h>
@@ -121,6 +122,198 @@ static void* symbol(void* lib, const char* name) {
 #endif
 }
 
+#include "Vst3Host.h"
+
+// ── VST 3 ──
+static bool endsWith(const std::string& s, const char* e) { size_t n = strlen(e); if (s.size() < n) return false; for (size_t i = 0; i < n; i++) { char a = s[s.size() - n + i], b = e[i]; if (a >= 'A' && a <= 'Z') a += 32; if (a != b) return false; } return true; }
+
+// the module inside a .vst3 bundle (Contents/<arch>-<os>/<binary>) or the file itself
+static std::string vst3Binary(const std::string& path) {
+#ifdef _WIN32
+  DWORD attr = GetFileAttributesA(path.c_str()); if (attr == INVALID_FILE_ATTRIBUTES || !(attr & FILE_ATTRIBUTE_DIRECTORY)) return path;
+#if defined(_WIN64)
+  const char* dirs[] = { "x86_64-win", "arm64-win", "arm64ec-win" };
+#else
+  const char* dirs[] = { "x86-win" };
+#endif
+  for (const char* d : dirs) {
+    std::string pat = path + "\\Contents\\" + d + "\\*"; WIN32_FIND_DATAA fd; HANDLE h = FindFirstFileA(pat.c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) continue;
+    do { if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && endsWith(fd.cFileName, ".vst3")) { std::string f = path + "\\Contents\\" + d + "\\" + fd.cFileName; FindClose(h); return f; } } while (FindNextFileA(h, &fd));
+    FindClose(h);
+  }
+  return "";
+#else
+  struct stat st; if (stat(path.c_str(), &st) != 0 || !S_ISDIR(st.st_mode)) return path;
+#if defined(__APPLE__)
+  return macBundleBinary(path);
+#else
+#if defined(__aarch64__)
+  const char* arch = "aarch64-linux";
+#elif defined(__arm__)
+  const char* arch = "armv7l-linux";
+#elif defined(__i386__)
+  const char* arch = "i386-linux";
+#else
+  const char* arch = "x86_64-linux";
+#endif
+  std::string dir = path + "/Contents/" + arch; DIR* d = opendir(dir.c_str()); if (!d) return "";
+  std::string found; while (dirent* e = readdir(d)) { std::string n = e->d_name; if (n != "." && n != ".." && endsWith(n, ".so")) { found = dir + "/" + n; break; } } closedir(d); return found;
+#endif
+#endif
+}
+
+static std::string cstr(const char* s, size_t max) { size_t n = 0; while (n < max && s[n]) n++; return std::string(s, n); }
+
+static int runVst3(const std::string& path, const std::string& wantClass) {
+  using namespace v3;
+  std::string bin = vst3Binary(path); if (bin.empty()) { hello(false, "no binary for this system inside the .vst3 bundle"); return 3; }
+  std::string err; void* lib = openLibrary(bin, err); if (!lib) { hello(false, "could not load the plugin: " + err); return 3; }
+#ifdef _WIN32
+  typedef bool (V3CALL *InitFn)(); InitFn init = (InitFn)symbol(lib, "InitDll"); if (init) init();
+#elif !defined(__APPLE__)
+  typedef bool (*EntryFn)(void*); EntryFn entry = (EntryFn)symbol(lib, "ModuleEntry"); if (entry) entry(lib);
+#endif
+  typedef IPluginFactory* (V3CALL *FactoryFn)(); FactoryFn getFactory = (FactoryFn)symbol(lib, "GetPluginFactory");
+#if defined(_WIN32) && !defined(_WIN64)
+  if (!getFactory) getFactory = (FactoryFn)symbol(lib, "_GetPluginFactory@0");                       // a 32-bit stdcall export that was not undecorated by a .def file
+  if (!getFactory) getFactory = (FactoryFn)symbol(lib, "GetPluginFactory@0");
+#endif
+  if (!getFactory) { hello(false, "no GetPluginFactory export: not a VST3 plugin"); return 3; }
+  IPluginFactory* factory = getFactory(); if (!factory) { hello(false, "the plugin has no factory"); return 3; }
+  PFactoryInfo fi; memset(&fi, 0, sizeof fi); factory->getFactoryInfo(&fi);
+  IPluginFactory2* f2 = nullptr; factory->queryInterface(kPluginFactory2, (void**)&f2);
+
+  // the class to use: the one asked for by name, else the first audio class that is not an instrument
+  int chosen = -1; char cid[16]; std::string name;
+  for (int i = 0, n = factory->countClasses(); i < n && chosen < 0; i++) {
+    PClassInfo2 c2; memset(&c2, 0, sizeof c2); PClassInfo c1; memset(&c1, 0, sizeof c1);
+    bool ok2 = f2 && f2->getClassInfo2(i, &c2) == kOk;
+    if (!ok2 && factory->getClassInfo(i, &c1) != kOk) continue;
+    const char* cat = ok2 ? c2.category : c1.category; if (strcmp(cat, "Audio Module Class") != 0) continue;
+    std::string nm = cstr(ok2 ? c2.name : c1.name, 64), sub = ok2 ? cstr(c2.subCategories, 128) : "";
+    if (!wantClass.empty() ? nm != wantClass : sub.find("Instrument") != std::string::npos) continue;
+    chosen = i; memcpy(cid, ok2 ? c2.cid : c1.cid, 16); name = nm;
+  }
+  if (chosen < 0) { hello(false, wantClass.empty() ? "no audio effect class in this VST3 (instruments are not supported)" : "no audio class named \"" + wantClass + "\" in this VST3"); return 3; }
+
+  static Host host; static Changes changes, outChanges; static NoEvents events, outEvents;
+  IComponent* comp = nullptr;
+  if (factory->createInstance(cid, kComponent, (void**)&comp) != kOk || !comp) { hello(false, "the plugin would not create its audio component"); return 3; }
+  if (comp->initialize(static_cast<IHostApplication*>(&host)) != kOk) { hello(false, "the plugin refused to initialise"); return 3; }
+  IAudioProcessor* proc = nullptr; comp->queryInterface(kAudioProcessor, (void**)&proc);
+  if (!proc) { hello(false, "the plugin has no audio processor"); return 3; }
+  IEditController* ctrl = nullptr; bool ctrlSeparate = false;
+  if (comp->queryInterface(kEditController, (void**)&ctrl) != kOk || !ctrl) {
+    ctrl = nullptr; char ccid[16]; memset(ccid, 0, 16);
+    if (comp->getControllerClassId(ccid) == kOk && factory->createInstance(ccid, kEditController, (void**)&ctrl) == kOk && ctrl) { ctrlSeparate = true; ctrl->initialize(static_cast<IHostApplication*>(&host)); }
+  }
+  if (ctrl) ctrl->setComponentHandler(static_cast<IComponentHandler*>(&host));
+
+  // buses: the first audio input and output carry the signal, every other audio bus stays inactive
+  const int nIn = comp->getBusCount(0, 0), nOut = comp->getBusCount(0, 1);
+  if (nIn < 1 || nOut < 1) { hello(false, "the plugin is not an effect (it needs an audio input and an audio output)"); return 3; }
+  // the plugin's own arrangement for every bus, the main buses asked for stereo (a refusal is fine: what the plugin keeps is read back)
+  std::vector<uint64_t> aIn(nIn, 3), aOut(nOut, 3);
+  for (int i = 0; i < nIn; i++) { uint64_t a = 0; if (proc->getBusArrangement(0, i, a) == kOk && a) aIn[i] = a; }
+  for (int i = 0; i < nOut; i++) { uint64_t a = 0; if (proc->getBusArrangement(1, i, a) == kOk && a) aOut[i] = a; }
+  aIn[0] = 3; aOut[0] = 3;
+  proc->setBusArrangements(aIn.data(), nIn, aOut.data(), nOut);
+  for (int i = 0; i < nIn; i++) { uint64_t a = 0; if (proc->getBusArrangement(0, i, a) == kOk && a) aIn[i] = a; }
+  for (int i = 0; i < nOut; i++) { uint64_t a = 0; if (proc->getBusArrangement(1, i, a) == kOk && a) aOut[i] = a; }
+  auto chans = [](uint64_t a) { int c = 0; while (a) { c += (int)(a & 1); a >>= 1; } return c < 1 ? 2 : c; };
+  const int chIn = chans(aIn[0]), chOut = chans(aOut[0]);
+  if (chIn > 8 || chOut > 8) { hello(false, "only stereo and mono effects are supported"); return 3; }
+  if (proc->canProcessSampleSize(0) != kOk) { hello(false, "the plugin cannot process 32-bit float audio"); return 3; }
+  // the first bus carries the signal; further buses the plugin switches on by default (a side-chain, a second input) are fed silence / their output is dropped
+  std::vector<int> inCh(nIn, 0), outCh(nOut, 0);
+  for (int i = 0; i < nIn; i++) { BusInfo bi; memset(&bi, 0, sizeof bi); bool on = i == 0 || (comp->getBusInfo(0, 0, i, bi) == kOk && (bi.flags & 1)); comp->activateBus(0, 0, i, on); if (on) inCh[i] = i == 0 ? chIn : chans(aIn[i]); }
+  for (int i = 0; i < nOut; i++) { BusInfo bi; memset(&bi, 0, sizeof bi); bool on = i == 0 || (comp->getBusInfo(0, 1, i, bi) == kOk && (bi.flags & 1)); comp->activateBus(0, 1, i, on); if (on) outCh[i] = i == 0 ? chOut : chans(aOut[i]); }
+  ProcessSetup setup; setup.processMode = 0; setup.symbolicSampleSize = 0; setup.maxSamplesPerBlock = gBlock; setup.sampleRate = gSampleRate;
+  if (proc->setupProcessing(setup) != kOk) { hello(false, "the plugin refused the sample rate / block size"); return 3; }
+  comp->setActive(1); proc->setProcessing(1);
+
+  // parameters: the visible, writable ones, in the controller's order
+  struct Par { uint32_t id; };
+  std::vector<Par> pars;
+  if (ctrl) for (int i = 0, n = ctrl->getParameterCount(); i < n && i < 256; i++) { ParameterInfo pi; memset(&pi, 0, sizeof pi); if (ctrl->getParameterInfo(i, pi) == kOk && !(pi.flags & ((1 << 4) | (1 << 1)))) pars.push_back({ pi.id }); }
+  char extra[600]; snprintf(extra, sizeof extra, ",\"name\":\"%s\",\"vendor\":\"%s\",\"inputs\":%d,\"outputs\":%d,\"params\":%d,\"latency\":%u,\"format\":\"VST3\"",
+    jsonEsc(name).c_str(), jsonEsc(cstr(fi.vendor, 64)).c_str(), chIn, chOut, (int)pars.size(), (unsigned)proc->getLatencySamples());
+  hello(true, "", extra);
+
+  std::vector<std::vector<float> > in(chIn, std::vector<float>(gBlock)), out(chOut, std::vector<float>(gBlock));
+  std::vector<float*> pin(chIn), pout(chOut);
+  for (int c = 0; c < chIn; c++) pin[c] = in[c].data();
+  for (int c = 0; c < chOut; c++) pout[c] = out[c].data();
+  std::vector<AudioBusBuffers> ib(nIn), ob(nOut);
+  std::vector<std::vector<std::vector<float> > > spareIn(nIn), spareOut(nOut);       // buffers of the extra buses
+  std::vector<std::vector<float*> > spareInP(nIn), spareOutP(nOut);
+  for (int i = 0; i < nIn; i++) {
+    ib[i].numChannels = inCh[i]; ib[i].silenceFlags = 0; ib[i].channelBuffers32 = nullptr;
+    if (i > 0 && inCh[i] > 0) { spareIn[i].assign(inCh[i], std::vector<float>(gBlock, 0.0f)); for (auto& v : spareIn[i]) spareInP[i].push_back(v.data()); ib[i].channelBuffers32 = spareInP[i].data(); ib[i].silenceFlags = inCh[i] >= 64 ? ~0ull : ((1ull << inCh[i]) - 1); }
+  }
+  for (int i = 0; i < nOut; i++) {
+    ob[i].numChannels = outCh[i]; ob[i].silenceFlags = 0; ob[i].channelBuffers32 = nullptr;
+    if (i > 0 && outCh[i] > 0) { spareOut[i].assign(outCh[i], std::vector<float>(gBlock, 0.0f)); for (auto& v : spareOut[i]) spareOutP[i].push_back(v.data()); ob[i].channelBuffers32 = spareOutP[i].data(); }
+  }
+  ib[0].channelBuffers32 = pin.data(); ob[0].channelBuffers32 = pout.data();
+  ProcessContext pc; memset(&pc, 0, sizeof pc); pc.sampleRate = gSampleRate; pc.tempo = 120; pc.timeSigNumerator = 4; pc.timeSigDenominator = 4;
+  std::vector<std::pair<uint32_t, double> > pending;
+
+  for (;;) {
+    unsigned char h[8]; if (!readAll(h, 8)) break;
+    uint32_t len = h[4] | (h[5] << 8) | (h[6] << 16) | ((uint32_t)h[7] << 24);
+    if (len > (16u << 20)) break;
+    std::vector<unsigned char> body(len); if (len && !readAll(body.data(), len)) break;
+    if (h[0] == 'Q') break;
+    if (h[0] == 'A') {
+      const int frames = (int)(len / 8); const float* src = (const float*)body.data(); std::vector<float> dst((size_t)frames * 2);
+      for (int pos = 0; pos < frames; pos += gBlock) {
+        const int n = frames - pos < gBlock ? frames - pos : gBlock;
+        for (int c = 0; c < chIn; c++) std::fill(in[c].begin(), in[c].end(), 0.0f);
+        for (int i = 0; i < n; i++) { in[0][i] = src[(size_t)(pos + i) * 2]; if (chIn > 1) in[1][i] = src[(size_t)(pos + i) * 2 + 1]; }
+        if (chIn == 1) for (int i = 0; i < n; i++) in[0][i] = 0.5f * (src[(size_t)(pos + i) * 2] + src[(size_t)(pos + i) * 2 + 1]);
+        for (int c = 0; c < chOut; c++) std::fill(out[c].begin(), out[c].end(), 0.0f);
+        changes.n = 0;                                                                              // parameter changes made since the last block go in with this one
+        for (size_t k = 0; k < pending.size() && changes.n < (int32_t)changes.q.size(); k++) { changes.q[changes.n].id = pending[k].first; changes.q[changes.n].value = pending[k].second; changes.n++; }
+        pending.clear();
+        ProcessData pd; memset(&pd, 0, sizeof pd);
+        pd.processMode = 0; pd.symbolicSampleSize = 0; pd.numSamples = n; pd.numInputs = nIn; pd.numOutputs = nOut; pd.inputs = ib.data(); pd.outputs = ob.data();
+        outChanges.n = 0;
+        pd.inputParameterChanges = &changes; pd.outputParameterChanges = &outChanges; pd.inputEvents = &events; pd.outputEvents = &outEvents; pd.processContext = &pc;
+        proc->process(pd);
+        pc.projectTimeSamples += n; pc.continousTimeSamples += n;
+        for (int i = 0; i < n; i++) { dst[(size_t)(pos + i) * 2] = out[0][i]; dst[(size_t)(pos + i) * 2 + 1] = out[chOut > 1 ? 1 : 0][i]; }
+      }
+      writeFrame('A', dst.data(), (uint32_t)(dst.size() * sizeof(float)));
+    } else if (h[0] == 'S' && len >= 8) {
+      uint32_t idx; float v; memcpy(&idx, body.data(), 4); memcpy(&v, body.data() + 4, 4);
+      if (idx < pars.size() && ctrl) { double nv = v < 0 ? 0 : v > 1 ? 1 : v; ctrl->setParamNormalized(pars[idx].id, nv); pending.push_back({ pars[idx].id, nv }); }
+    } else if (h[0] == 'G') {
+      std::string j = "[";
+      for (size_t i = 0; i < pars.size(); i++) {
+        ParameterInfo pi; memset(&pi, 0, sizeof pi); int32_t pidx = -1;
+        for (int k = 0, n = ctrl->getParameterCount(); k < n; k++) { ParameterInfo t; memset(&t, 0, sizeof t); if (ctrl->getParameterInfo(k, t) == kOk && t.id == pars[i].id) { pi = t; pidx = k; break; } }
+        if (pidx < 0) continue;
+        double v = ctrl->getParamNormalized(pi.id); String128 disp; memset(disp, 0, sizeof disp); ctrl->getParamStringByValue(pi.id, v, disp);
+        char b[64]; snprintf(b, sizeof b, "%s{\"i\":%d,\"value\":%.6f,\"name\":\"", j.size() > 1 ? "," : "", (int)i, v);
+        j += b; j += jsonEsc(utf8(pi.title, 128)); j += "\",\"label\":\""; j += jsonEsc(utf8(pi.units, 128)); j += "\",\"display\":\""; j += jsonEsc(utf8(disp, 128)); j += "\"}";
+      }
+      j += "]"; writeFrame('G', j.data(), (uint32_t)j.size());
+    }
+  }
+  proc->setProcessing(0); comp->setActive(0);
+  if (ctrl && ctrlSeparate) ctrl->terminate();
+  comp->terminate();
+  fflush(stdout);
+#ifdef _WIN32
+  ExitProcess(0);                                                                                   // no unloading: some plugins crash in their static destructors
+#else
+  _exit(0);
+#endif
+  return 0;
+}
+
 static std::string str(AEffect* fx, int op, int idx) { char buf[256]; memset(buf, 0, sizeof buf); fx->dispatcher(fx, op, idx, 0, buf, 0); buf[255] = 0; return buf; }
 
 int main(int argc, char** argv) {
@@ -132,7 +325,7 @@ int main(int argc, char** argv) {
   std::string path = argv[1];
   if (argc > 2) gSampleRate = atof(argv[2]) > 1000 ? atof(argv[2]) : 48000;
   if (argc > 3) gBlock = atoi(argv[3]) >= 32 && atoi(argv[3]) <= 8192 ? atoi(argv[3]) : 512;
-  if (path.size() > 5 && path.compare(path.size() - 5, 5, ".vst3") == 0) { hello(false, "VST3 plugins are not supported by this host yet (VST2 .dll / .vst only)"); return 3; }
+  if (endsWith(path, ".vst3")) return runVst3(path, argc > 4 ? argv[4] : "");
   std::string err; void* lib = openLibrary(path, err);
   if (!lib) { hello(false, "could not load the plugin: " + err); return 3; }
   VstMain entry = (VstMain)symbol(lib, "VSTPluginMain"); if (!entry) entry = (VstMain)symbol(lib, "main"); if (!entry) entry = (VstMain)symbol(lib, "main_macho");
