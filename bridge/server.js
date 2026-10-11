@@ -4,7 +4,7 @@
 //   GET /api/status   -> { ok, name, version }
 //   GET /api/drivers  -> native driver/device detection for this OS
 //   GET /api/volume   -> system output / input volume + mute
-//   GET /api/license, POST /api/license/activate|deactivate -> consumer license (plan, machine code)
+//   GET /api/license, GET /api/license/request (the key request file), POST /api/license/activate|deactivate -> consumer license (plan, machine code)
 //   GET /api/update, POST /api/update/download -> OTA updates (signed manifest, checksum-verified download)
 //   GET /api/universal -> universal ASIO driver: all input / output sources, ranked, with the automatic pick
 //   GET /api/plugins -> VST3 / VST2 plugins (.vst3 / .dll / .vst) found and validated
@@ -151,7 +151,11 @@ async function handle(req, res) {
   if (url.pathname === '/api/virtual') return json(res, 200, { ok: true, devices: virtualHub.list() }, cors);
   if (url.pathname === '/api/power') return json(res, 200, { ok: true, pid: process.pid, ...power.capabilities() }, cors);
   if (url.pathname === '/api/meters') return json(res, 200, { ok: true, clipDb: levels.config.clipDb, clipRun: levels.CLIP_RUN }, cors);   // clip threshold of the native streams' meters
-  if (url.pathname === '/api/license') return json(res, 200, { ok: true, version: VERSION, ...license.status() }, cors);
+  if (url.pathname === '/api/license/request') {            // the request file for a key (machine code, plan, name): GET /api/license/request?plan=pro&name=Jane&email=jane@example.com
+    try { return json(res, 200, { ok: true, request: license.request({ plan: url.searchParams.get('plan') || 'pro', name: url.searchParams.get('name'), email: url.searchParams.get('email') }) }, cors); }
+    catch (e) { return json(res, e.status || 500, { ok: false, error: e.message }, cors); }
+  }
+  if (url.pathname === '/api/license') return json(res, 200, { ok: true, version: VERSION, ...license.status(), sandboxKey: license.sandboxJwk() }, cors);
 
   // OTA updates: is a newer, signed version published? (cached for 5 minutes, ?force=1 asks again)
   if (url.pathname === '/api/update') {

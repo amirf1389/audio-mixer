@@ -3410,3 +3410,52 @@ test('KNOX PIN lock: default code 1XF300#, Enter / Escape, the lock survives a r
   for (const s of ["e.key === 'Enter'", "e.key === 'Escape'", "'halx_knox'", "'halx_pin_fail'", 'Number(f.until)', 'autocapitalize="off"', 'enter the PIN first']) assert.ok(html.includes(s), s);
   assert.ok(!/html\.phone-ui #btn-knox-toggle/.test(html));                                    // the lock button is shown on phones and tablets too
 });
+
+test('license sandbox: request file, sandbox issuer with its own key, accepted only in sandbox mode, never packaged, vendor key untouched', async () => {
+  const lic = require('./license'), sb = require('../scripts/license-sandbox'), crypto2 = require('node:crypto');
+  const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'sbx-')), pubFile = pathx.join(dir, 'pub.json');
+  sb.init(dir, pubFile);
+  const jwk = JSON.parse(fsx.readFileSync(pubFile, 'utf8'));
+  assert.notDeepStrictEqual(jwk, lic.PUBLIC_JWK);                                                                   // a key pair of its own
+  assert.strictEqual(lic.sandboxJwk({ env: {}, file: pubFile }), null);                                             // off without AUDIO_MIXER_SANDBOX=1
+  assert.strictEqual(lic.sandboxJwk({ env: { AUDIO_MIXER_SANDBOX: '1' }, file: pathx.join(dir, 'none.json') }), null);   // off without the file
+  assert.deepStrictEqual(lic.sandboxJwk({ env: { AUDIO_MIXER_SANDBOX: '1' }, file: pubFile }), jwk);
+  // the request file the page and the server make
+  const req = lic.request({ plan: 'studio', name: 'Jane <b>Doe</b>', email: 'j@example.com', machine: 'AAAA-BBBB-CCCC-DDDD-EEEE', now: 1 });
+  assert.deepStrictEqual([req.app, req.kind, req.plan, req.machineId, req.name], ['audio-mixer', 'license-request', 'studio', 'AAAA-BBBB-CCCC-DDDD-EEEE', 'Jane bDoe/b']);
+  assert.throws(() => lic.request({ plan: 'gold' }), /plan must be/);
+  // issue for the request: bound to its machine, sandbox mark, the sandbox key verifies it, the vendor key does not
+  const r = sb.issue({ dir, request: req, days: 5, now: Date.now() });
+  assert.ok(r.payload.sandbox && r.payload.mid === 'AAAA-BBBB-CCCC-DDDD-EEEE' && r.payload.plan === 'studio');
+  assert.ok(lic.verifyKey(r.key, { jwk, machine: 'AAAA-BBBB-CCCC-DDDD-EEEE' }).ok);
+  assert.strictEqual(lic.verifyKey(r.key, { machine: 'AAAA-BBBB-CCCC-DDDD-EEEE' }).reason, 'bad-signature');            // a normal build refuses it
+  assert.strictEqual(lic.verifyKey(r.key, { jwk, machine: 'ZZZZ-BBBB-CCCC-DDDD-EEEE' }).reason, 'wrong-machine');
+  assert.throws(() => sb.issue({ dir, request: { kind: 'other' } }), /not an Audio Mixer license request/);
+  // the real server: the request route, no sandbox without the environment variable
+  const started = !server.listening, port = server.listening ? server.address().port : await require('./server').start(0), base = `http://127.0.0.1:${port}`;
+  const j = await (await fetch(base + '/api/license/request?plan=pro&name=Test')).json(); assert.ok(j.ok && j.request.plan === 'pro' && j.request.machineId === lic.machineId());
+  assert.strictEqual((await fetch(base + '/api/license/request?plan=gold')).status, 400);
+  const st = await (await fetch(base + '/api/license')).json(); assert.strictEqual(st.sandbox, false);
+  if (started) await new Promise(r => server.close(r));
+  // not in the packages, not in the repository
+  const build = fsx.readFileSync(pathx.join(__dirname, '..', 'scripts', 'build.js'), 'utf8'); assert.ok(!/license-sandbox/.test(build));
+  assert.ok(/license-sandbox-public\.json/.test(fsx.readFileSync(pathx.join(__dirname, '..', '.gitignore'), 'utf8')));
+  const page = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8'); for (const s of ['lic-req-file', 'lic-req-copy', 'LICENSE_SANDBOX_JWK', "'/api/license/request?plan='"]) assert.ok(page.includes(s), s);
+  fsx.rmSync(dir, { recursive: true, force: true });
+});
+
+test('bus & matrix outputs: out sends to a real interface, speaker processor, amp calculator, mic protector, aux / FX returns, send regulator are wired', () => {
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  const sc = html.slice(html.indexOf('<script id="bus-outs">'), html.indexOf('<script id="rt-engine">'));
+  assert.ok(sc.length > 5000);
+  for (const s of ["'/ws/output'", "registerProcessor('mx-out'", 'createChannelMerger', 'ampCalc', 'scanFeedback', 'applyAdvice', 'regulate', 'applyFx', 'createConvolver', 'createDynamicsCompressor', "'halx_mix_outs'", 'M.render = function', 'M.ensureGraph = function']) assert.ok(sc.includes(s), s);
+  for (const id of ['data-page="aux"', 'data-page="outs"', 'data-page="reg"', 'id="mx-page-aux"', 'id="mx-page-outs"', 'id="mx-page-reg"']) assert.ok(html.includes(id), id);
+  // the calculator, run on its own
+  const src = sc.slice(sc.indexOf('function ampCalc(o) {'), sc.indexOf('// ── graph ──')), ampCalc = new Function(src + '\nreturn ampCalc;')();
+  const r = ampCalc({ ampW: 1000, ampOhm: 8, spkW: 300, spkOhm: 8, count: 1, sens: 100, dist: 10 });
+  assert.ok(Math.abs(r.vmax - 89.44) < 0.01 && Math.abs(r.limDb + 5.23) < 0.01 && Math.abs(r.spl1m - 124.77) < 0.01 && Math.abs(r.splAt - 104.77) < 0.01, JSON.stringify(r));
+  const two = ampCalc({ ampW: 500, ampOhm: 8, spkW: 300, spkOhm: 8, count: 2, sens: 98, dist: 1 });                     // two speakers in parallel: 4 ohm, the amp's voltage gives 1000 W, 500 W each
+  assert.ok(Math.abs(two.load - 4) < 1e-9 && Math.abs(two.pLoad - 1000) < 1e-6 && Math.abs(two.pEach - 500) < 1e-6 && two.limDb < 0 && two.warn === 'The amp can give each speaker 500 W: use the protection limiter.', JSON.stringify(two));
+  const safe = ampCalc({ ampW: 100, ampOhm: 8, spkW: 300, spkOhm: 8, count: 1, sens: 96, dist: 1 });
+  assert.strictEqual(safe.limDb, 0); assert.ok(safe.headroom > 4.7 && safe.warn === '');                                  // a small amp cannot hurt the speaker: no limiter needed
+});

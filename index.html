@@ -4189,6 +4189,9 @@ window.navTabs = [
                     <button role="tab" data-page="sends" class="mx-nav-btn px-3 py-1 rounded"><i class="fa-solid fa-share-nodes mr-1"></i>CHANNEL SENDS</button>
                     <button role="tab" data-page="matrix" class="mx-nav-btn px-3 py-1 rounded"><i class="fa-solid fa-table-cells mr-1"></i>MATRIX (8)</button>
                     <button role="tab" data-page="channels" class="mx-nav-btn px-3 py-1 rounded"><i class="fa-solid fa-wave-square mr-1"></i>CHANNEL INPUT</button>
+                    <button role="tab" data-page="aux" class="mx-nav-btn px-3 py-1 rounded"><i class="fa-solid fa-wand-magic-sparkles mr-1"></i>AUX / FX</button>
+                    <button role="tab" data-page="outs" class="mx-nav-btn px-3 py-1 rounded"><i class="fa-solid fa-volume-high mr-1"></i>OUT SENDS &amp; SPEAKERS</button>
+                    <button role="tab" data-page="reg" class="mx-nav-btn px-3 py-1 rounded"><i class="fa-solid fa-robot mr-1"></i>SEND REGULATOR</button>
                     <button role="tab" data-page="scenes" class="mx-nav-btn px-3 py-1 rounded"><i class="fa-solid fa-box-archive mr-1"></i>SCENES</button>
                   </div>
 
@@ -4237,6 +4240,23 @@ window.navTabs = [
                   <section id="mx-page-channels" class="mx-page hidden space-y-1.5">
                     <div class="text-[8px] text-slate-400 font-bold uppercase">CHANNEL INPUT STAGE &bull; high-pass filter, trim and polarity sit before the fader and before PRE sends</div>
                     <div id="mx-ch" class="grid grid-cols-1 gap-1.5"></div>
+                  </section>
+
+                  <!-- 6. Aux / FX returns of the mix buses -->
+                  <section id="mx-page-aux" class="mx-page hidden space-y-2">
+                    <div class="text-[8px] text-slate-400 font-bold uppercase">AUX / FX &bull; a bus can return an effect (wet only): send channels to it on CHANNEL SENDS, route it to a matrix output on MATRIX</div>
+                    <div id="mx-aux" class="grid grid-cols-1 md:grid-cols-2 gap-2"></div>
+                  </section>
+
+                  <!-- 7. Outputs: real interface, speaker processor, amp calculator, mic protector -->
+                  <section id="mx-page-outs" class="mx-page hidden space-y-2">
+                    <div id="mx-outs" class="space-y-2"></div>
+                  </section>
+
+                  <!-- 8. Send regulator -->
+                  <section id="mx-page-reg" class="mx-page hidden space-y-2">
+                    <div class="text-[8px] text-slate-400 font-bold uppercase">SEND REGULATOR &bull; reads every channel and bus in real time, names the dominant send, the hot, low and silent buses</div>
+                    <div id="mx-reg"></div>
                   </section>
 
                   <!-- 5. Scenes -->
@@ -6955,6 +6975,15 @@ window.navTabs = [
                       <span class="text-slate-400 block text-[7px] font-bold">THIS COMPUTER'S MACHINE CODE (SEND IT WITH YOUR ORDER FOR A KEY BOUND TO THIS PC)</span>
                       <div class="flex gap-1.5 items-center"><code id="lic-machine" class="flex-1 bg-black border border-white/10 rounded px-2 py-1 text-cyan-400 text-[9px] text-center select-all">-</code><button id="lic-copy-machine" type="button" class="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-slate-200 font-bold uppercase text-[7px]">COPY</button></div>
                       <span class="text-slate-500 block text-[6.5px]" id="lic-machine-note">Start PC mode (the local server) to read the machine code.</span>
+                      <div class="border-t border-white/10 pt-1.5 space-y-1">
+                        <span class="text-slate-400 block text-[7px] font-bold">REQUEST A KEY <span id="lic-sandbox-badge" class="hidden ml-1 px-1.5 py-0.5 rounded bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/40 text-[6.5px]">SANDBOX</span></span>
+                        <div class="grid grid-cols-3 gap-1">
+                          <select id="lic-req-plan" class="bg-black border border-white/10 rounded px-1 py-1 text-amber-400 outline-none text-[7.5px]"><option value="pro">PRO</option><option value="studio">STUDIO</option></select>
+                          <input id="lic-req-name" maxlength="80" placeholder="Name" autocomplete="off" class="bg-black border border-white/10 rounded px-1.5 py-1 text-slate-200 outline-none text-[7.5px] min-w-0">
+                          <input id="lic-req-email" maxlength="120" placeholder="E-mail" autocomplete="off" class="bg-black border border-white/10 rounded px-1.5 py-1 text-slate-200 outline-none text-[7.5px] min-w-0">
+                        </div>
+                        <div class="flex gap-1.5"><button id="lic-req-file" type="button" class="flex-1 py-1 rounded bg-amber-500/20 hover:bg-amber-500 hover:text-black text-amber-400 border border-amber-500/40 font-bold uppercase text-[7.5px] transition">DOWNLOAD REQUEST FILE</button><button id="lic-req-copy" type="button" class="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-slate-200 font-bold uppercase text-[7.5px] transition">COPY</button></div>
+                      </div>
                     </div>
                     <div class="bg-black/60 p-2.5 rounded-lg border border-white/10 space-y-1.5">
                       <span class="text-slate-400 block text-[7px] font-bold">LICENSE KEY</span>
@@ -16737,12 +16766,12 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
         async function verifyKey(key, machine) {
             const parts = String(key || '').trim().replace(/\s+/g, '').split('.');
             if (parts.length !== 3 || parts[0] !== 'AMIX1') return { ok: false, reason: 'malformed', message: 'This is not an Audio Mixer license key.' };
-            const jwk = window.LICENSE_PUBLIC_JWK;
+            const jwk = window.LICENSE_PUBLIC_JWK, jwks = [jwk, window.LICENSE_SANDBOX_JWK].filter(k => k && k.x !== 'placeholder');      // the sandbox key only exists while the local server runs in sandbox mode
             if (!jwk || jwk.x === 'placeholder') return { ok: false, reason: 'unconfigured', message: 'This build has no vendor key: license keys cannot be checked.' };
             try {
                 if (!(window.crypto && window.crypto.subtle)) throw new Error('nosubtle');
-                const pub = await crypto.subtle.importKey('jwk', jwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
-                const ok = await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, pub, unb64u(parts[2]), new TextEncoder().encode(parts[1]));
+                let ok = false;
+                for (const k of jwks) { const pub = await crypto.subtle.importKey('jwk', k, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']); if (await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, pub, unb64u(parts[2]), new TextEncoder().encode(parts[1]))) { ok = true; break; } }
                 if (!ok) return { ok: false, reason: 'bad-signature', message: 'The license key is not valid (signature check failed).' };
             } catch (e) { return { ok: false, reason: e.message === 'nosubtle' ? 'nosubtle' : 'bad-signature', message: e.message === 'nosubtle' ? 'This browser cannot check keys here; use PC mode (the local server).' : 'The license key is not valid (signature check failed).' }; }
             let p;
@@ -16828,6 +16857,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                     const j = await (await fetch(bridge() + '/api/license', { cache: 'no-store' })).json();
                     if (!j || !j.ok) return false;
                     this.machineId = j.machineId; this.version = j.version;
+                    window.LICENSE_SANDBOX_JWK = j.sandboxKey || null; { const sb = $('lic-sandbox-badge'); if (sb) sb.classList.toggle('hidden', !j.sandbox); }
                     const key = store.get(KEY_STORE);
                     if (j.state === 'active') this.set(j.plan.id, 'active', j.license);
                     else if (key) {
@@ -16858,6 +16888,26 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 if (input) input.value = '';
                 say('License activated: ' + this.plan.name + ' plan, ' + this.plan.channels + ' channels.', true);
                 notify('License activated: ' + this.plan.name + ' (' + this.plan.channels + ' channels)', 'circle-check');
+            },
+            // the request for a key: machine code, plan, name; from the local server when it runs (same file the command line makes), else built here
+            async requestKey() {
+                const plan = ($('lic-req-plan') || {}).value || 'pro', name = ($('lic-req-name') || {}).value || '', email = ($('lic-req-email') || {}).value || '';
+                let req = null;
+                if (bridge()) { try { const j = await (await fetch(bridge() + '/api/license/request?plan=' + encodeURIComponent(plan) + '&name=' + encodeURIComponent(name) + '&email=' + encodeURIComponent(email), { cache: 'no-store' })).json(); if (j && j.ok) req = j.request; } catch (e) { /* built below */ } }
+                if (!req) req = { app: 'audio-mixer', kind: 'license-request', v: 1, machineId: this.machineId || null, plan, name: name.slice(0, 80), email: email.slice(0, 120), platform: (navigator.platform || '').slice(0, 40), version: this.version || null, at: Date.now(), sandbox: false };
+                return req;
+            },
+            async downloadRequest() {
+                const req = await this.requestKey();
+                const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(req, null, 2) + '\n'], { type: 'application/json' })); a.download = 'audio-mixer-license-request.json';
+                document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+                notify('License request file saved: send it to get your ' + req.plan.toUpperCase() + ' key' + (req.machineId ? '' : ' (start PC mode first to bind the key to this computer)'), 'file-signature');
+                return req;
+            },
+            async copyRequest() {
+                const req = await this.requestKey(), t = JSON.stringify(req);
+                try { await navigator.clipboard.writeText(t); notify('License request copied', 'copy'); } catch (e) { notify('Copy is blocked here: use DOWNLOAD REQUEST FILE', 'triangle-exclamation'); }
+                return req;
             },
             async deactivate() {
                 store.del(KEY_STORE);
@@ -17276,6 +17326,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             const on = (id, fn) => { const e = $(id); if (e && !e.dataset.wired) { e.dataset.wired = '1'; e.addEventListener('click', fn); } };
             on('lic-activate', () => L.activate());
             on('lic-deactivate', () => L.deactivate());
+            on('lic-req-file', () => L.downloadRequest()); on('lic-req-copy', () => L.copyRequest());
             on('lic-copy-machine', () => { const m = L.machineId; if (m && navigator.clipboard) navigator.clipboard.writeText(m).then(() => notify('Machine code copied', 'copy')); });
             on('edition-switch', () => { if (window.currentRole === 'Admin') window.setUserRole('User'); else window.requestRoleSwitch('Admin'); });
             on('plg-scan', () => plugins.scan());
@@ -17308,6 +17359,356 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             }, 100);
         }
         if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
+    })();
+    </script>
+    <script id="bus-outs">
+    /* BUS & MATRIX, outputs: what the matrix outputs do after the matrix, all real audio.
+       OUT SENDS   the 8 matrix outputs go to a real multichannel interface (ASIO / WASAPI / Core Audio / ALSA through the local server, one stream, output n on the channel you choose).
+       SPEAKERS    per matrix output: crossover (24 dB/oct high-pass and low-pass), 3 speaker EQ bands, 4 feedback notches, the amp protection limiter with its gain-reduction meter,
+                   and an amp / speaker calculator (power into the load, headroom, maximum SPL, the limiter threshold that keeps the speaker inside its rating).
+       MIC PROTECTOR  watches each output for a howl (a narrow peak that stays and stands out of its surroundings) and puts a notch on it.
+       AUX / FX    each of the 16 mix buses can return an effect (reverb, delay, chorus: wet only, the aux-send way) instead of the plain bus mix.
+       SEND REGULATOR  measures every channel and bus, tells which send dominates, which bus is hot or silent (rule-based analysis) and can apply the corrections; AUTO keeps each bus near a
+                   target level with a gain stage of its own (the faders are not touched).
+       Everything is added around the existing graph of the BUS & MATRIX page: with all of it off the audio is exactly as before. */
+    (function () {
+        const M = window.mixEngine; if (!M) return;
+        const N_BUS = 16, N_MTX = 8, N_CH = 32, KEY = 'halx_mix_outs';
+        const $ = id => document.getElementById(id);
+        const esc = v => (window.escapeHtml ? window.escapeHtml(String(v)) : String(v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])));
+        const num = (v, lo, hi, d) => { v = Number(v); return Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d; };
+        const note = (m, i) => { if (window.notify) window.notify(m, i || 'sliders'); };
+        const dbf = v => (isFinite(v) ? v.toFixed(1) : '-INF');
+        const lin = db => Math.pow(10, db / 20);
+        const dbOf = v => (v > 1e-9 ? 20 * Math.log10(v) : -Infinity);
+
+        // ── settings ──
+        const DEF_SPK = () => ({ hpOn: false, hp: 80, lpOn: false, lp: 16000, eq: [{ hz: 100, db: 0, q: 1 }, { hz: 1000, db: 0, q: 1 }, { hz: 8000, db: 0, q: 1 }], limOn: false, thr: -3, rel: 120,
+            ampW: 500, ampOhm: 8, spkW: 300, spkOhm: 8, sens: 98, count: 1, dist: 10 });
+        function sanitize(raw) {
+            const r = raw && typeof raw === 'object' ? raw : {}, arr = (a, i) => (Array.isArray(a) ? a[i] : undefined);
+            return {
+                hw: { key: typeof (r.hw || {}).key === 'string' ? r.hw.key.slice(0, 120) : null, map: Array.from({ length: N_MTX }, (_, m) => Math.round(num(arr((r.hw || {}).map, m), 0, 32, 0))) },
+                spk: Array.from({ length: N_MTX }, (_, m) => { const o = arr(r.spk, m) || {}, d = DEF_SPK(); return {
+                    hpOn: !!o.hpOn, hp: num(o.hp, 20, 500, d.hp), lpOn: !!o.lpOn, lp: num(o.lp, 500, 20000, d.lp),
+                    eq: d.eq.map((e, i) => { const x = arr(o.eq, i) || {}; return { hz: num(x.hz, 20, 20000, e.hz), db: num(x.db, -18, 18, 0), q: num(x.q, 0.3, 12, 1) }; }),
+                    limOn: !!o.limOn, thr: num(o.thr, -30, 0, d.thr), rel: num(o.rel, 10, 1000, d.rel),
+                    ampW: num(o.ampW, 1, 20000, d.ampW), ampOhm: num(o.ampOhm, 1, 32, d.ampOhm), spkW: num(o.spkW, 1, 20000, d.spkW), spkOhm: num(o.spkOhm, 1, 32, d.spkOhm), sens: num(o.sens, 70, 130, d.sens), count: Math.round(num(o.count, 1, 64, 1)), dist: num(o.dist, 1, 200, d.dist) }; }),
+                fx: Array.from({ length: N_BUS }, (_, b) => { const o = arr(r.fx, b) || {}; return { type: ['reverb', 'delay', 'chorus'].includes(o.type) ? o.type : 'none', time: num(o.time, 20, 1500, 350), fb: num(o.fb, 0, 90, 35), decay: num(o.decay, 0.2, 8, 2.2), level: num(o.level, -60, 10, 0) }; }),
+                mic: { on: !!(r.mic || {}).on, prom: num((r.mic || {}).prom, 8, 30, 15) },
+                reg: { on: !!(r.reg || {}).on, target: num((r.reg || {}).target, -40, -3, -18), max: num((r.reg || {}).max, 1, 12, 6) },
+            };
+        }
+        const load = () => { try { return sanitize(JSON.parse(localStorage.getItem(KEY))); } catch (e) { return sanitize(null); } };
+        const X = window.busOuts = {
+            cfg: load(), built: false, selOut: 0, spk: [], det: [], notches: [], fx: [], regLvl: [], chAn: [], chLvl: new Array(N_CH).fill(-Infinity), busLvl: new Array(N_BUS).fill(-Infinity), regDb: new Array(N_BUS).fill(0),
+            hw: { ws: null, status: 'off', bytes: 0, node: null, merger: null, C: 2 }, log: [], sink: null, tracker: [],
+            persist() { try { localStorage.setItem(KEY, JSON.stringify(this.cfg)); } catch (e) { /* storage blocked */ } },
+        };
+
+        // ── amp / speaker calculator (pure) ──
+        // Amp: rated power into its rated load (ampW at ampOhm) = a voltage it can swing; the speakers (count in parallel, each spkOhm) are the load.
+        function ampCalc(o) {
+            const vmax = Math.sqrt(o.ampW * o.ampOhm), load = o.spkOhm / Math.max(1, o.count);
+            const pLoad = vmax * vmax / load, pEach = pLoad / Math.max(1, o.count);                     // an amp that is voltage-limited gives more power into a lower load
+            const headroom = 10 * Math.log10(o.spkW / pEach);                                          // dB the speaker can still take at amp clipping (negative: it can be overdriven)
+            const limDb = pEach > o.spkW ? 10 * Math.log10(o.spkW / pEach) : 0;                        // limiter threshold (dBFS, RMS) that keeps one speaker at its rating when the amp is driven to full scale
+            const maxSpl1 = o.sens + 10 * Math.log10(Math.min(pEach, o.spkW)), splTotal = maxSpl1 + 10 * Math.log10(Math.max(1, o.count));     // one speaker at 1 m, all together (not coherent)
+            return { vmax, load, pLoad, pEach, headroom, limDb, spl1m: splTotal, splAt: splTotal - 20 * Math.log10(Math.max(1, o.dist)), peakSpl: splTotal + 3,
+                warn: load < o.ampOhm / 2 ? 'The load (' + load.toFixed(1) + ' ohm) is much lower than the amp\'s rated load: check that the amp is rated for it.' : pEach > o.spkW * 1.5 ? 'The amp can give each speaker ' + pEach.toFixed(0) + ' W: use the protection limiter.' : '' };
+        }
+
+        // ── graph ──
+        const ctx = () => window.state && window.state.ctx;
+        function irFor(c, decay) {
+            const sr = c.sampleRate, len = Math.max(1, Math.floor(sr * decay)), buf = c.createBuffer(2, len, sr);
+            for (let ch = 0; ch < 2; ch++) { const d = buf.getChannelData(ch); for (let i = 0; i < len; i++) { const t = i / len; d[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, 3) * (0.35 + 0.65 * Math.exp(-t * 4)); } }
+            return buf;
+        }
+        X.build = function () {
+            const c = ctx(); if (this.built || !c || !M.built) return !!this.built;
+            const mk = (type, f, q) => { const b = c.createBiquadFilter(); b.type = type; b.frequency.value = f; if (q != null) b.Q.value = q; return b; };
+            this.sink = c.createGain(); this.sink.gain.value = 0; this.sink.connect(c.destination);
+            for (let m = 0; m < N_MTX; m++) {
+                const s = { hp1: mk('highpass', 10, 0.7071), hp2: mk('highpass', 10, 0.7071), lp1: mk('lowpass', Math.min(20000, c.sampleRate / 2 - 100), 0.7071), lp2: mk('lowpass', Math.min(20000, c.sampleRate / 2 - 100), 0.7071),
+                    eq: [mk('peaking', 100, 1), mk('peaking', 1000, 1), mk('peaking', 8000, 1)], nt: [0, 1, 2, 3].map(() => mk('peaking', 1000, 30)), lim: c.createDynamicsCompressor() };
+                s.nt.forEach(n => { n.gain.value = 0; });
+                let prev = s.hp1; s.hp1.connect(s.hp2); s.hp2.connect(s.lp1); s.lp1.connect(s.lp2); prev = s.lp2;
+                [...s.eq, ...s.nt].forEach(n => { prev.connect(n); prev = n; });
+                try { M.mtxIn[m].disconnect(M.mtxDelay[m]); } catch (e) { /* not connected */ }
+                M.mtxIn[m].connect(s.hp1); prev.connect(M.mtxDelay[m]);
+                try { M.mtxFader[m].disconnect(M.mtxAn[m]); } catch (e) { /* not connected */ }
+                M.mtxFader[m].connect(s.lim); s.lim.connect(M.mtxAn[m]);
+                s.lim.knee.value = 0; s.lim.ratio.value = 1; s.lim.threshold.value = 0;
+                const an = c.createAnalyser(); an.fftSize = 4096; an.smoothingTimeConstant = 0.4; s.lim.connect(an); an.connect(this.sink); s.an = an;
+                this.spk.push(s);
+            }
+            for (let b = 0; b < N_BUS; b++) {
+                const f = { inn: c.createGain(), out: c.createGain(), reg: c.createGain(), chain: [], an: c.createAnalyser(), type: 'none' };
+                f.an.fftSize = 1024; f.out.connect(f.an); f.an.connect(this.sink);
+                try { M.busIn[b].disconnect(M.busFader[b]); } catch (e) { /* not connected */ }
+                M.busIn[b].connect(f.inn); f.out.connect(f.reg); f.reg.connect(M.busFader[b]); f.inn.connect(f.out);
+                this.fx.push(f);
+            }
+            this.built = true;
+            for (let m = 0; m < N_MTX; m++) this.applySpk(m);
+            for (let b = 0; b < N_BUS; b++) this.applyFx(b);
+            return true;
+        };
+        X.applySpk = function (m) {
+            const s = this.spk[m], o = this.cfg.spk[m], c = ctx(); if (!s || !c) return;
+            const t = c.currentTime, nyq = Math.min(20000, c.sampleRate / 2 - 100);
+            const f = (p, v) => p.setTargetAtTime(v, t, 0.01);
+            f(s.hp1.frequency, o.hpOn ? o.hp : 10); f(s.hp2.frequency, o.hpOn ? o.hp : 10);
+            f(s.lp1.frequency, o.lpOn ? Math.min(o.lp, nyq) : nyq); f(s.lp2.frequency, o.lpOn ? Math.min(o.lp, nyq) : nyq);
+            o.eq.forEach((e, i) => { f(s.eq[i].frequency, e.hz); f(s.eq[i].gain, e.db); f(s.eq[i].Q, e.q); });
+            f(s.lim.threshold, o.limOn ? o.thr : 0); f(s.lim.ratio, o.limOn ? 20 : 1); f(s.lim.attack, 0.002); f(s.lim.release, o.rel / 1000);
+            (this.notches[m] || []).forEach((n, i) => { if (s.nt[i]) { f(s.nt[i].frequency, n.hz); f(s.nt[i].gain, n.db); } });
+            for (let i = (this.notches[m] || []).length; i < 4; i++) f(s.nt[i].gain, 0);
+        };
+        X.applyFx = function (b) {
+            const f = this.fx[b], o = this.cfg.fx[b], c = ctx(); if (!f || !c) return;
+            const t = c.currentTime;
+            if (f.type !== o.type) {                                                                  // a different effect: rebuild the little chain between the input and the output
+                try { f.inn.disconnect(); } catch (e) { /* none */ }
+                f.chain.forEach(n => { try { n.disconnect(); if (n.stop) n.stop(); } catch (e) { /* gone */ } }); f.chain = [];
+                if (o.type === 'reverb') { const cv = c.createConvolver(); cv.buffer = irFor(c, o.decay); f.conv = cv; f.inn.connect(cv); cv.connect(f.out); f.chain.push(cv); f.irDecay = o.decay; }
+                else if (o.type === 'delay') { const d = c.createDelay(2), fb = c.createGain(), lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3500; f.inn.connect(d); d.connect(lp); lp.connect(f.out); lp.connect(fb); fb.connect(d); f.dly = d; f.fb = fb; f.chain.push(d, fb, lp); }
+                else if (o.type === 'chorus') {
+                    [[0.017, 0.7], [0.025, 1.1]].forEach(([base, rate]) => { const d = c.createDelay(0.1), lfo = c.createOscillator(), depth = c.createGain(); d.delayTime.value = base; lfo.frequency.value = rate; depth.gain.value = 0.0035; lfo.connect(depth); depth.connect(d.delayTime); lfo.start(); f.inn.connect(d); d.connect(f.out); f.chain.push(d, lfo, depth); });
+                } else f.inn.connect(f.out);
+                f.type = o.type;
+            }
+            if (f.type === 'reverb' && f.conv && Math.abs((f.irDecay || 0) - o.decay) > 0.05) { f.conv.buffer = irFor(c, o.decay); f.irDecay = o.decay; }
+            if (f.dly) { f.dly.delayTime.setTargetAtTime(o.time / 1000, t, 0.05); f.fb.gain.setTargetAtTime(Math.min(0.9, o.fb / 100), t, 0.05); }
+            f.out.gain.setTargetAtTime(f.type === 'none' ? 1 : lin(o.level), t, 0.02);
+        };
+        X.setSpk = function (m, patch) { Object.assign(this.cfg.spk[m], patch); this.cfg = sanitize(this.cfg); this.persist(); this.applySpk(m); };
+        X.setFx = function (b, patch) { Object.assign(this.cfg.fx[b], patch); this.cfg = sanitize(this.cfg); this.persist(); this.applyFx(b); };
+
+        // ── hardware outputs ──
+        const API_RANK = [/asio/i, /wasapi/i, /core ?audio/i, /jack/i, /alsa/i, /wdm|kernel/i, /direct ?sound/i, /mme/i];
+        const rank = a => { const i = API_RANK.findIndex(r => r.test(a || '')); return i < 0 ? API_RANK.length : i; };
+        X.outInterfaces = function () { const L = window.liveSources; return L && L.interfaces ? L.interfaces.filter(i => (i.apis || []).some(a => a.outputs > 0 && a.deviceId >= 0)) : []; };
+        X.hwChannels = function () { const m = Math.max(0, ...this.cfg.hw.map); return Math.max(2, m + (m % 2)); };
+        X.startHw = async function () {
+            const L = window.liveSources; this.stopHw(true);
+            const iface = this.outInterfaces().find(i => i.key === this.cfg.hw.key);
+            if (!L || !L.bridgeUrl) { this.hw.status = 'The local system server is not running (PC mode).'; return this.renderOuts(); }
+            if (!iface) { this.hw.status = 'Choose an output interface.'; return this.renderOuts(); }
+            if (!this.cfg.hw.map.some(v => v > 0)) { this.hw.status = 'Give at least one matrix output a hardware channel.'; return this.renderOuts(); }
+            const c = await L.ensureCtx(); if (!c || !c.audioWorklet) { this.hw.status = 'The audio engine is not running.'; return this.renderOuts(); }
+            M.ensureGraph(); this.build();
+            if (!this.built) { this.hw.status = 'The audio engine is not running.'; return this.renderOuts(); }
+            const C = this.hwChannels(), apis = iface.apis.filter(a => a.outputs >= C && a.deviceId >= 0).sort((a, b) => rank(a.api) - rank(b.api));
+            if (!apis.length) { this.hw.status = iface.name + ' has fewer than ' + C + ' output channels.'; return this.renderOuts(); }
+            this.hw.status = 'opening...'; this.renderOuts();
+            if (this.hw.workletFor !== c) {
+                const code = "class P extends AudioWorkletProcessor{constructor(){super();this.n=0;this.b=new Float32Array(512*8)}process(i){const x=i[0];if(!x||!x.length)return true;" +
+                    "for(let k=0;k<128;k++){for(let m=0;m<8;m++){const ch=x[m];this.b[this.n*8+m]=ch?ch[k]:0}if(++this.n===512){this.port.postMessage(this.b.slice());this.n=0}}return true}}registerProcessor('mx-out',P);";
+                const url = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
+                try { await c.audioWorklet.addModule(url); } finally { URL.revokeObjectURL(url); }
+                this.hw.workletFor = c;
+            }
+            let lastErr = 'could not open the interface';
+            for (const a of apis) {
+                try {
+                    const ws = await new Promise((resolve, reject) => {
+                        const w = new WebSocket(L.wsUrl('/ws/output')); w.binaryType = 'arraybuffer'; let done = false;
+                        const fail = msg => { if (!done) { done = true; try { w.close(); } catch (e) { /* ignore */ } reject(new Error(msg)); } };
+                        w.onopen = () => w.send(JSON.stringify({ type: 'start', channels: C, sampleRate: c.sampleRate, frameSize: window.universalAsioSdk && window.universalAsioSdk.frameSizeSetting ? window.universalAsioSdk.frameSizeSetting() : 'auto', exclusive: L.cfg && L.cfg.exclusive !== false, deviceId: a.deviceId }));
+                        w.onerror = () => fail('local server connection failed');
+                        w.onclose = () => { if (!done) fail('closed'); else if (X.hw.ws === w) X.stopHw(); };
+                        w.onmessage = ev => { let m; try { m = JSON.parse(ev.data); } catch (e) { return; } if (m.type === 'levels') { if (window.asioMeters) window.asioMeters.push(m); return; }
+                            if (m.type === 'started' && !done) { done = true; resolve(w); X.hw.how = (m.hostApi || a.api) + ' / ' + m.device + ' / ' + m.channels + ' ch'; } else if (m.type === 'error') { if (!done) fail(m.message); else { X.hw.status = m.message; X.stopHw(true); X.renderOuts(); } } };
+                    });
+                    const merger = c.createChannelMerger(N_MTX), node = new AudioWorkletNode(c, 'mx-out', { numberOfInputs: 1, numberOfOutputs: 1, channelCount: N_MTX, channelCountMode: 'explicit', channelInterpretation: 'discrete', outputChannelCount: [1] });
+                    this.spk.forEach((s, m) => s.lim.connect(merger, 0, m)); merger.connect(node); node.connect(this.sink || L.sink);
+                    const hw = this.hw; hw.ws = ws; hw.node = node; hw.merger = merger; hw.C = C; hw.bytes = 0; hw.status = 'sending';
+                    node.port.onmessage = e => {
+                        if (!hw.ws || hw.ws.readyState !== 1 || hw.ws.bufferedAmount > 65536) return;
+                        const f = e.data, frames = f.length / 8, out = new Int16Array(frames * hw.C), map = X.cfg.hw.map;
+                        for (let k = 0; k < frames; k++) for (let m = 0; m < N_MTX; m++) { const ch = map[m]; if (ch > 0 && ch <= hw.C) { const v = out[k * hw.C + ch - 1] + Math.max(-1, Math.min(1, f[k * 8 + m])) * 32767; out[k * hw.C + ch - 1] = Math.max(-32768, Math.min(32767, v)); } }
+                        hw.ws.send(out.buffer); hw.bytes += out.byteLength;
+                    };
+                    this.renderOuts(); note('Matrix outputs sending to ' + iface.name, 'sliders'); return;
+                } catch (e) { lastErr = e.message; }
+            }
+            this.hw.status = lastErr; this.renderOuts();
+        };
+        X.stopHw = function (quiet) {
+            const hw = this.hw;
+            if (hw.ws) { try { hw.ws.send(JSON.stringify({ type: 'stop' })); hw.ws.close(); } catch (e) { /* gone */ } }
+            if (hw.node) { try { hw.node.port.onmessage = null; hw.node.disconnect(); } catch (e) { /* gone */ } }
+            if (hw.merger) { this.spk.forEach(s => { try { s.lim.disconnect(hw.merger); } catch (e) { /* not connected */ } }); try { hw.merger.disconnect(); } catch (e) { /* gone */ } }
+            hw.ws = null; hw.node = null; hw.merger = null; if (!quiet) hw.status = 'off';
+            if (!quiet) this.renderOuts();
+        };
+
+        // ── mic protector ──
+        X.scanFeedback = function () {
+            if (!this.built) return;
+            const c = ctx(), prom = this.cfg.mic.prom;
+            for (let m = 0; m < N_MTX; m++) {
+                const an = this.spk[m].an, n = an.frequencyBinCount, mag = this.det[m] || (this.det[m] = new Float32Array(n));
+                an.getFloatFrequencyData(mag);
+                const hz = c.sampleRate / an.fftSize, k0 = Math.floor(250 / hz), k1 = Math.min(n - 14, Math.floor(9000 / hz));
+                let best = -1, bestP = 0;
+                for (let k = Math.max(k0, 14); k < k1; k++) {
+                    if (mag[k] < -55 || mag[k] < mag[k - 1] || mag[k] < mag[k + 1]) continue;
+                    let s = 0, cnt = 0; for (let j = 4; j <= 12; j++) { s += mag[k - j] + mag[k + j]; cnt += 2; }
+                    const p = mag[k] - s / cnt; if (p > bestP) { bestP = p; best = k; }
+                }
+                const tr = this.tracker[m] || (this.tracker[m] = { k: -1, n: 0 });
+                if (best < 0 || bestP < prom) { tr.k = -1; tr.n = 0; continue; }
+                if (tr.k >= 0 && Math.abs(best - tr.k) <= 2) tr.n++; else { tr.k = best; tr.n = 1; }
+                if (tr.n < 6) continue;
+                const a = mag[best - 1], b = mag[best], d = mag[best + 1], den = a - 2 * b + d, off = den ? 0.5 * (a - d) / den : 0, f = Math.round((best + off) * hz);
+                this.notch(m, f); tr.n = 0;
+            }
+        };
+        X.notch = function (m, f) {
+            const list = this.notches[m] || (this.notches[m] = []), near = list.find(n => Math.abs(n.hz - f) / f < 0.04);
+            if (near) near.db = Math.max(-24, near.db - 4);
+            else { if (list.length >= 4) list.shift(); list.push({ hz: f, db: -10 }); }
+            this.log.unshift({ t: Date.now(), m, hz: f }); this.log.length = Math.min(this.log.length, 20);
+            this.applySpk(m);
+            if (window.notify) window.notify('MIC PROTECTOR: ' + M.cfg.mtx[m].name + ' feedback at ' + f + ' Hz notched', 'shield-halved');
+        };
+        X.clearNotches = function (m) { if (m == null) { this.notches = []; this.log = []; for (let i = 0; i < N_MTX; i++) this.applySpk(i); } else { this.notches[m] = []; this.applySpk(m); } this.tracker = []; };
+
+        // ── send regulator ──
+        const rms = (an, buf) => { an.getFloatTimeDomainData(buf); let s = 0; for (let i = 0; i < buf.length; i++) s += buf[i] * buf[i]; return dbOf(Math.sqrt(s / buf.length)); };
+        X.measure = function () {
+            const c = ctx(); if (!c || !this.built || !M.built) return;
+            const buf = this.mbuf || (this.mbuf = new Float32Array(1024));
+            for (let ch = 0; ch < N_CH; ch++) {
+                if (!this.chAn[ch]) { const src = M.tapNode(ch, 'post'); if (!src) continue; const an = c.createAnalyser(); an.fftSize = 1024; src.connect(an); an.connect(this.sink); this.chAn[ch] = an; }
+                const v = rms(this.chAn[ch], buf); this.chLvl[ch] = isFinite(v) ? (isFinite(this.chLvl[ch]) ? this.chLvl[ch] * 0.6 + v * 0.4 : v) : -Infinity;
+            }
+            for (let b = 0; b < N_BUS; b++) { const v = rms(this.fx[b].an, buf); this.busLvl[b] = isFinite(v) ? (isFinite(this.busLvl[b]) ? this.busLvl[b] * 0.6 + v * 0.4 : v) : -Infinity; }
+        };
+        // the rule-based reading of one bus: who feeds it, who dominates, is it hot, low or silent
+        X.analyse = function (b) {
+            const sends = M.cfg.sends[b], items = [];
+            for (let ch = 0; ch < N_CH; ch++) { const s = sends[ch]; if (s > -60 && isFinite(this.chLvl[ch]) && this.chLvl[ch] > -70) items.push({ ch, db: this.chLvl[ch] + s, send: s }); }
+            const sum = a => 10 * Math.log10(a.reduce((p, x) => p + Math.pow(10, x.db / 10), 0) || 1e-12);
+            const total = items.length ? sum(items) : -Infinity, measured = this.busLvl[b];
+            items.sort((p, q) => q.db - p.db);
+            const top = items[0], rest = items.slice(1), restDb = rest.length ? sum(rest) : -Infinity, lead = top ? top.db - restDb : 0;
+            let state = 'ok', text = 'BALANCED', actions = [];
+            if (!items.length) { state = 'silent'; text = 'SILENT: no send of this bus carries signal'; }
+            else if (isFinite(measured) && measured > -6 || total > -6) { state = 'hot'; const d = Math.min(12, Math.max(1, Math.round((Math.max(measured, total) + 18) )) ); text = 'HOT (' + dbf(Math.max(measured, total)) + ' dBFS): lower the sends by ' + Math.min(6, d) + ' dB'; actions = items.map(x => ({ b, ch: x.ch, to: Math.max(-60, x.send - Math.min(6, d)) })); }
+            else if (rest.length && lead > 6) { state = 'dominant'; const cut = Math.min(6, Math.round(lead - 3)); text = 'CH ' + (top.ch + 1) + ' DOMINATES (+' + lead.toFixed(0) + ' dB over the rest): lower its send by ' + cut + ' dB'; actions = [{ b, ch: top.ch, to: Math.max(-60, top.send - cut) }]; }
+            else if (total < -40) { state = 'low'; const up = Math.min(6, Math.round(-18 - total)); text = 'LOW (' + dbf(total) + ' dBFS): raise the sends by ' + Math.max(1, Math.min(6, up)) + ' dB'; actions = items.map(x => ({ b, ch: x.ch, to: Math.min(10, x.send + Math.max(1, Math.min(6, up))) })); }
+            return { b, state, text, total, measured, items, actions };
+        };
+        X.applyAdvice = function () {
+            let n = 0; for (let b = 0; b < N_BUS; b++) { const r = this.analyse(b); r.actions.forEach(a => { M.setSend(a.b, a.ch, a.to); n++; }); }
+            note(n ? 'Send regulator: ' + n + ' send(s) corrected' : 'Send regulator: nothing to correct', 'wand-magic-sparkles'); this.renderReg();
+        };
+        X.regulate = function () {
+            if (!this.built) return; const c = ctx(), o = this.cfg.reg;
+            for (let b = 0; b < N_BUS; b++) {
+                const f = this.fx[b]; let g = this.regDb[b];
+                if (o.on && isFinite(this.busLvl[b]) && this.busLvl[b] > -60) { const want = Math.max(-o.max, Math.min(o.max, o.target - (this.busLvl[b] - g))); g += want < g ? Math.max(want - g, -1.5) : Math.min(want - g, 0.5); }
+                else if (!o.on) g = g * 0.8;
+                this.regDb[b] = Math.abs(g) < 0.05 && !o.on ? 0 : g; f.reg.gain.setTargetAtTime(lin(this.regDb[b]), c.currentTime, 0.1);
+            }
+        };
+
+        // ── UI ──
+        const B = 'px-2 py-0.5 rounded font-black border text-[7.5px] uppercase transition ';
+        const b1 = 'bg-yellow-500/15 text-yellow-300 border-yellow-500/30 hover:bg-yellow-400 hover:text-black';
+        const sel = (id, opts, cur) => '<select id="' + id + '" class="bg-black text-slate-200 border border-white/15 rounded px-1 py-0.5 text-[8px]">' + opts.map(o => '<option value="' + esc(o[0]) + '"' + (String(o[0]) === String(cur) ? ' selected' : '') + '>' + esc(o[1]) + '</option>').join('') + '</select>';
+        const slider = (id, lo, hi, step, v, label, unit) => '<label class="flex items-center gap-1.5 text-[7.5px] text-slate-300"><span class="w-16 shrink-0 text-slate-400">' + label + '</span><input id="' + id + '" type="range" min="' + lo + '" max="' + hi + '" step="' + step + '" value="' + v + '" class="flex-1 min-w-0"><span id="' + id + '-v" class="w-14 text-right font-bold text-slate-200">' + v + unit + '</span></label>';
+        const bind = (id, fn, unit) => { const e = $(id); if (!e) return; e.oninput = e.onchange = () => { fn(e.type === 'range' || e.type === 'number' ? Number(e.value) : e.value); const v = $(id + '-v'); if (v) v.textContent = e.value + (unit || ''); }; };
+
+        X.renderOuts = function () {
+            const el = $('mx-outs'); if (!el) return;
+            if (!this.outInterfaces().length && window.liveSources && window.liveSources.scan && !this._scanning) { this._scanning = true; Promise.resolve(window.liveSources.scan()).then(() => { this._scanning = false; if (M.page === 'outs') X.renderOuts(); }, () => { this._scanning = false; }); }
+            const ifs = this.outInterfaces(), hw = this.hw, cfg = this.cfg, m = this.selOut, o = cfg.spk[m], an = ampCalc(o), C = this.hwChannels();
+            const chOpts = [[0, 'OFF'], ...Array.from({ length: 32 }, (_, i) => [i + 1, 'OUT ' + (i + 1)])];
+            el.innerHTML =
+                '<div class="bg-black/50 border border-white/10 rounded-lg p-2 space-y-1.5"><div class="text-[8px] text-yellow-400 font-black uppercase">OUT SENDS • MATRIX OUTPUTS TO A REAL INTERFACE</div>'
+                + '<div class="flex flex-wrap items-center gap-2">' + sel('mo-if', [['', '— choose —'], ...ifs.map(i => [i.key, i.name + ' (' + Math.max(...i.apis.map(a => a.outputs)) + ' out)'])], cfg.hw.key || '')
+                + '<button id="mo-start" class="' + B + b1 + '">' + (hw.ws ? 'RESTART' : 'START') + '</button><button id="mo-stop" class="' + B + 'bg-white/5 text-slate-300 border-white/15">STOP</button>'
+                + '<span id="mo-status" class="text-[8px] font-bold ' + (hw.ws ? 'text-emerald-400' : 'text-slate-400') + '">' + esc(hw.ws ? 'SENDING ' + C + ' ch • ' + (hw.how || '') : hw.status) + '</span></div>'
+                + '<div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5">' + M.cfg.mtx.map((x, i) => '<label class="flex items-center gap-1 text-[7.5px] text-slate-300"><span class="w-16 truncate font-bold text-yellow-300">' + esc(x.name) + '</span>' + sel('mo-map-' + i, chOpts, cfg.hw.map[i]) + '</label>').join('') + '</div></div>'
+                + '<div class="bg-black/50 border border-white/10 rounded-lg p-2 space-y-1.5"><div class="flex flex-wrap items-center gap-1"><span class="text-[8px] text-yellow-400 font-black uppercase mr-1">SPEAKER PROCESSOR</span>'
+                + M.cfg.mtx.map((x, i) => '<button data-m="' + i + '" class="mo-pick ' + B + (i === m ? 'bg-yellow-400 text-black border-yellow-400' : 'bg-white/5 text-slate-300 border-white/10') + '">' + esc(x.name) + '</button>').join('') + '</div>'
+                + '<div class="grid grid-cols-1 lg:grid-cols-2 gap-2"><div class="space-y-1">'
+                + '<div class="flex items-center gap-2"><label class="text-[7.5px] text-slate-300"><input id="mo-hpon" type="checkbox" ' + (o.hpOn ? 'checked' : '') + '> HIGH-PASS 24 dB/oct</label></div>' + slider('mo-hp', 20, 500, 1, o.hp, 'HPF', ' Hz')
+                + '<div class="flex items-center gap-2"><label class="text-[7.5px] text-slate-300"><input id="mo-lpon" type="checkbox" ' + (o.lpOn ? 'checked' : '') + '> LOW-PASS 24 dB/oct</label></div>' + slider('mo-lp', 500, 20000, 10, o.lp, 'LPF', ' Hz')
+                + o.eq.map((e, i) => slider('mo-eqf' + i, 20, 20000, 1, e.hz, 'EQ ' + (i + 1) + ' Hz', ' Hz') + slider('mo-eqg' + i, -18, 18, 0.5, e.db, 'EQ ' + (i + 1) + ' gain', ' dB')).join('')
+                + '</div><div class="space-y-1"><div class="flex items-center gap-2"><label class="text-[7.5px] text-slate-300"><input id="mo-limon" type="checkbox" ' + (o.limOn ? 'checked' : '') + '> AMP PROTECTION LIMITER</label><span class="text-[7.5px] text-slate-400">GR</span><div class="flex-1 h-1.5 bg-white/5 rounded overflow-hidden"><div id="mo-gr" class="h-full bg-rose-500" style="width:0%"></div></div><span id="mo-gr-v" class="w-14 text-right text-[7.5px] font-bold text-slate-200">0.0 dB</span></div>'
+                + slider('mo-thr', -30, 0, 0.5, o.thr, 'THRESHOLD', ' dB') + slider('mo-rel', 10, 1000, 5, o.rel, 'RELEASE', ' ms')
+                + '<div class="text-[8px] text-yellow-400 font-black uppercase pt-1">AMP &amp; SPEAKER CALCULATOR</div><div class="grid grid-cols-3 gap-1 text-[7.5px] text-slate-300">'
+                + [['ampW', 'AMP W', o.ampW, 1, 20000], ['ampOhm', 'AMP OHM', o.ampOhm, 1, 32], ['spkW', 'SPEAKER W', o.spkW, 1, 20000], ['spkOhm', 'SPK OHM', o.spkOhm, 1, 32], ['sens', 'SENS dB', o.sens, 70, 130], ['count', 'SPEAKERS', o.count, 1, 64], ['dist', 'DIST m', o.dist, 1, 200]]
+                    .map(x => '<label class="flex items-center gap-1"><span class="w-14 text-slate-400">' + x[1] + '</span><input id="mo-c-' + x[0] + '" type="number" min="' + x[3] + '" max="' + x[4] + '" value="' + x[2] + '" class="w-16 bg-black border border-white/15 rounded px-1 text-slate-200"></label>').join('') + '</div>'
+                + '<div id="mo-calc" class="text-[7.5px] font-mono text-slate-300 leading-relaxed"></div><button id="mo-apply-lim" class="' + B + b1 + '">USE THE LIMITER THRESHOLD OF THE CALCULATOR</button></div></div></div>'
+                + '<div class="bg-black/50 border border-white/10 rounded-lg p-2 space-y-1.5"><div class="flex flex-wrap items-center gap-2"><span class="text-[8px] text-yellow-400 font-black uppercase">MIC PROTECTOR</span>'
+                + '<label class="text-[7.5px] text-slate-300"><input id="mo-mic" type="checkbox" ' + (cfg.mic.on ? 'checked' : '') + '> WATCH ALL OUTPUTS FOR FEEDBACK</label>' + slider('mo-prom', 8, 30, 1, cfg.mic.prom, 'SENSITIVITY', ' dB') + '<button id="mo-clear" class="' + B + 'bg-rose-500/15 text-rose-300 border-rose-500/30">CLEAR NOTCHES</button></div><div id="mo-notches" class="text-[7.5px] font-mono text-slate-300"></div></div>';
+            bind('mo-hp', v => this.setSpk(m, { hp: v }), ' Hz'); bind('mo-lp', v => this.setSpk(m, { lp: v }), ' Hz'); bind('mo-thr', v => this.setSpk(m, { thr: v }), ' dB'); bind('mo-rel', v => this.setSpk(m, { rel: v }), ' ms'); bind('mo-prom', v => { cfg.mic.prom = v; this.persist(); }, ' dB');
+            o.eq.forEach((e, i) => { bind('mo-eqf' + i, v => { const eq = cfg.spk[m].eq.map(x => ({ ...x })); eq[i].hz = v; this.setSpk(m, { eq }); }, ' Hz'); bind('mo-eqg' + i, v => { const eq = cfg.spk[m].eq.map(x => ({ ...x })); eq[i].db = v; this.setSpk(m, { eq }); }, ' dB'); });
+            const chk = (id, fn) => { const e = $(id); if (e) e.onchange = () => fn(e.checked); };
+            chk('mo-hpon', v => this.setSpk(m, { hpOn: v })); chk('mo-lpon', v => this.setSpk(m, { lpOn: v })); chk('mo-limon', v => this.setSpk(m, { limOn: v })); chk('mo-mic', v => { cfg.mic.on = v; this.persist(); note(v ? 'Mic protector on' : 'Mic protector off', 'shield-halved'); });
+            ['ampW', 'ampOhm', 'spkW', 'spkOhm', 'sens', 'count', 'dist'].forEach(k => { const e = $('mo-c-' + k); if (e) e.oninput = e.onchange = () => { this.setSpk(m, { [k]: Number(e.value) }); this.paintCalc(); }; });
+            const a = $('mo-apply-lim'); if (a) a.onclick = () => { const r = ampCalc(cfg.spk[m]); this.setSpk(m, { limOn: true, thr: Math.max(-30, Math.min(0, Math.round(r.limDb * 2) / 2)) }); this.renderOuts(); note('Limiter set to ' + cfg.spk[m].thr + ' dBFS for ' + M.cfg.mtx[m].name, 'shield-halved'); };
+            el.querySelectorAll('.mo-pick').forEach(x => (x.onclick = () => { this.selOut = Number(x.dataset.m); this.renderOuts(); }));
+            const ifSel = $('mo-if'); if (ifSel) ifSel.onchange = () => { cfg.hw.key = ifSel.value || null; this.persist(); };
+            cfg.hw.map.forEach((_, i) => { const e = $('mo-map-' + i); if (e) e.onchange = () => { cfg.hw.map[i] = Number(e.value); this.persist(); }; });
+            $('mo-start').onclick = () => this.startHw(); $('mo-stop').onclick = () => this.stopHw(); $('mo-clear').onclick = () => { this.clearNotches(); this.paintNotches(); };
+            this.paintCalc(); this.paintNotches();
+        };
+        X.paintCalc = function () {
+            const el = $('mo-calc'); if (!el) return; const r = ampCalc(this.cfg.spk[this.selOut]);
+            el.innerHTML = 'AMP SWING ' + r.vmax.toFixed(1) + ' Vrms • LOAD ' + r.load.toFixed(1) + ' ohm • ' + r.pLoad.toFixed(0) + ' W total, ' + r.pEach.toFixed(0) + ' W per speaker<br>HEADROOM ' + (r.headroom >= 0 ? '+' : '') + r.headroom.toFixed(1) + ' dB at full scale • LIMITER THRESHOLD ' + r.limDb.toFixed(1) + ' dBFS<br>MAX SPL ' + r.spl1m.toFixed(0) + ' dB @ 1 m (peaks ' + r.peakSpl.toFixed(0) + ') • ' + r.splAt.toFixed(0) + ' dB @ ' + this.cfg.spk[this.selOut].dist + ' m'
+                + (r.warn ? '<br><span class="text-amber-400">' + esc(r.warn) + '</span>' : '');
+        };
+        X.paintNotches = function () {
+            const el = $('mo-notches'); if (!el) return;
+            el.innerHTML = M.cfg.mtx.map((x, i) => { const l = this.notches[i] || []; return l.length ? '<div>' + esc(x.name) + ': ' + l.map(n => n.hz + ' Hz ' + n.db + ' dB').join(' • ') + '</div>' : ''; }).join('') || '<span class="text-slate-500">no feedback found</span>';
+        };
+        X.renderAux = function () {
+            const el = $('mx-aux'); if (!el) return;
+            el.innerHTML = this.cfg.fx.map((f, b) => '<div class="bg-black/50 border border-white/10 rounded-lg p-2 space-y-1"><div class="flex items-center gap-2"><span class="w-24 truncate text-[8px] font-black text-yellow-300">' + esc(M.cfg.buses[b].name) + '</span>' + sel('mf-t-' + b, [['none', 'NO EFFECT (BUS MIX)'], ['reverb', 'REVERB'], ['delay', 'DELAY / ECHO'], ['chorus', 'CHORUS']], f.type) + '</div>'
+                + (f.type === 'none' ? '' : slider('mf-l-' + b, -60, 10, 0.5, f.level, 'RETURN', ' dB') + (f.type === 'reverb' ? slider('mf-d-' + b, 0.2, 8, 0.1, f.decay, 'DECAY', ' s') : '') + (f.type === 'delay' ? slider('mf-ti-' + b, 20, 1500, 5, f.time, 'TIME', ' ms') + slider('mf-fb-' + b, 0, 90, 1, f.fb, 'FEEDBACK', ' %') : '')) + '</div>').join('');
+            this.cfg.fx.forEach((f, b) => { const t = $('mf-t-' + b); if (t) t.onchange = () => { this.setFx(b, { type: t.value }); this.renderAux(); }; bind('mf-l-' + b, v => this.setFx(b, { level: v }), ' dB'); bind('mf-d-' + b, v => this.setFx(b, { decay: v }), ' s'); bind('mf-ti-' + b, v => this.setFx(b, { time: v }), ' ms'); bind('mf-fb-' + b, v => this.setFx(b, { fb: v }), ' %'); });
+        };
+        X.renderReg = function () {
+            const el = $('mx-reg'); if (!el) return; const o = this.cfg.reg;
+            el.innerHTML = '<div class="flex flex-wrap items-center gap-2 mb-1"><label class="text-[7.5px] text-slate-300"><input id="mr-on" type="checkbox" ' + (o.on ? 'checked' : '') + '> AUTO REGULATE (own gain stage per bus)</label>' + slider('mr-t', -40, -3, 1, o.target, 'TARGET', ' dBFS') + slider('mr-m', 1, 12, 1, o.max, 'MAX TRIM', ' dB') + '<button id="mr-apply" class="' + B + b1 + '">APPLY ADVICE TO THE SENDS</button></div>'
+                + '<div class="overflow-auto"><table class="w-full text-[7.5px] font-mono text-slate-300 text-left"><thead class="text-slate-500"><tr><th>BUS</th><th>LEVEL dBFS</th><th>FROM SENDS</th><th>REG dB</th><th>TOP</th><th>ANALYSIS</th></tr></thead><tbody id="mr-rows"></tbody></table></div>';
+            const on = $('mr-on'); if (on) on.onchange = () => { o.on = on.checked; this.persist(); note(on.checked ? 'Send regulator: auto on' : 'Send regulator: auto off', 'wand-magic-sparkles'); };
+            bind('mr-t', v => { o.target = v; this.persist(); }, ' dBFS'); bind('mr-m', v => { o.max = v; this.persist(); }, ' dB');
+            const ap = $('mr-apply'); if (ap) ap.onclick = () => this.applyAdvice();
+            this.paintRegRows();
+        };
+        X.paintRegRows = function () {
+            const rows = $('mr-rows'); if (!rows) return; let h = '';
+            for (let b = 0; b < N_BUS; b++) {
+                const r = this.analyse(b), col = { ok: 'text-emerald-400', hot: 'text-rose-400', low: 'text-amber-400', dominant: 'text-amber-400', silent: 'text-slate-500' }[r.state];
+                h += '<tr><td class="pr-2 font-bold text-yellow-300">' + esc(M.cfg.buses[b].name) + '</td><td class="pr-2">' + dbf(r.measured) + '</td><td class="pr-2">' + dbf(r.total) + '</td><td class="pr-2">' + this.regDb[b].toFixed(1) + '</td><td class="pr-2">' + (r.items[0] ? 'CH ' + (r.items[0].ch + 1) : '-') + '</td><td class="' + col + '">' + esc(r.text) + '</td></tr>';
+            }
+            rows.innerHTML = h;
+        };
+        X.paintLive = function () {
+            const gr = $('mo-gr'); if (gr && this.built) { const r = -this.spk[this.selOut].lim.reduction; gr.style.width = Math.min(100, r / 24 * 100) + '%'; const v = $('mo-gr-v'); if (v) v.textContent = (r > 0.05 ? '-' + r.toFixed(1) : '0.0') + ' dB'; }
+            const st = $('mo-status'); if (st && this.hw.ws) st.textContent = 'SENDING ' + this.hw.C + ' ch • ' + (this.hw.how || '') + ' • ' + (this.hw.bytes / 1048576).toFixed(1) + ' MB';
+            this.paintNotches();
+            if (M.page === 'reg') this.paintRegRows();
+        };
+
+        // ── hooks into the page: render, graph, timers ──
+        const origRender = M.render.bind(M);
+        M.render = function () { origRender(); if (M.page === 'outs') X.renderOuts(); else if (M.page === 'aux') X.renderAux(); else if (M.page === 'reg') X.renderReg(); };
+        const origEnsure = M.ensureGraph.bind(M);
+        M.ensureGraph = function () { const r = origEnsure(); if (r) X.build(); return r; };
+        setInterval(() => { if (!X.built) return; if (X.cfg.mic.on) X.scanFeedback(); }, 100);
+        setInterval(() => { if (!X.built) return; if (X.cfg.reg.on || M.page === 'reg') X.measure(); if (X.cfg.reg.on || M.page === 'reg' || X.regDb.some(v => v !== 0)) X.regulate(); }, 250);
+        setInterval(() => { const tab = $('tab-bus'); if (tab && !tab.classList.contains('tab-hidden') && (M.page === 'outs' || M.page === 'reg')) X.paintLive(); }, 400);
+        window.addEventListener('beforeunload', () => X.stopHw(true));
     })();
     </script>
     <script id="rt-engine">

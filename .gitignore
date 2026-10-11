@@ -100,3 +100,4 @@ engine/embedded-c/build/
 engine/cpp/build/
 engine/node/build/
 !engine/**/Makefile
+bridge/license-sandbox-public.json
