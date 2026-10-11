@@ -1,6 +1,6 @@
 # Audio Mixer drivers: virtual audio devices for every operating system
 
-Each folder here is a small driver that adds a virtual audio device called **Audio Mixer** to one operating system's audio architecture, so other programs can send audio into the mixer and record from it:
+Each system's folder holds a small driver that adds a virtual audio device called **Audio Mixer** to one operating system's audio architecture, so other programs can send audio into the mixer and record from it:
 
 ```
  an application ── plays ──▶  [ Audio Mixer virtual device ] ──▶  mixer: LIVE SOURCES → READ   (an input source, like any interface)
@@ -9,17 +9,17 @@ Each folder here is a small driver that adds a virtual audio device called **Aud
 
 | Folder | System | Architecture | Built here | Tested here |
 |---|---|---|---|---|
-| `windows-asio/` | Windows (x64 and x86) | **ASIO driver** (in-process COM DLL, `HKLM\SOFTWARE\ASIO`) | yes (mingw-w64, `-Werror`) | structure only (exports, imports, interface layout); **not on a Windows ASIO host** |
-| `linux-alsa/` | Linux (ALSA; PulseAudio, PipeWire and JACK through their ALSA bridges) | **ALSA PCM plugin** `audiomixer` (user space, no kernel module) | yes | **yes: `aplay` and `arecord` against the real bridge, in real time** |
-| `macos-coreaudio/` | macOS (Apple silicon and Intel) | **Core Audio AudioServerPlugIn** (`Audio Mixer.driver`, user space) | no (needs Xcode) | no |
-| `android-hal/` | Android (AOSP builds, device makers) | **audio HAL module** `audio.audiomixer.default` (legacy `audio_hw_device` API) + audio policy + SELinux snippet | no (needs the AOSP tree) | no (the app side of it, `/ws/virtual` in the Android engine, is tested on a JVM) |
-| `common/` | all | `am_link`: the connection of a driver to the mixer (C99, Winsock or POSIX sockets) | yes | **yes: a real native client against the real bridge** |
+| `windows/asio-driver/` | Windows (x64 and x86) | **ASIO driver** (in-process COM DLL, `HKLM\SOFTWARE\ASIO`) | yes (mingw-w64, `-Werror`) | structure only (exports, imports, interface layout); **not on a Windows ASIO host** |
+| `linux/alsa-plugin/` | Linux (ALSA; PulseAudio, PipeWire and JACK through their ALSA bridges) | **ALSA PCM plugin** `audiomixer` (user space, no kernel module) | yes | **yes: `aplay` and `arecord` against the real bridge, in real time** |
+| `macos/coreaudio-driver/` | macOS (Apple silicon and Intel) | **Core Audio AudioServerPlugIn** (`Audio Mixer.driver`, user space) | no (needs Xcode) | no |
+| `android/hal/` | Android (AOSP builds, device makers) | **audio HAL module** `audio.audiomixer.default` (legacy `audio_hw_device` API) + audio policy + SELinux snippet | no (needs the AOSP tree) | no (the app side of it, `/ws/virtual` in the Android engine, is tested on a JVM) |
+| `drivers/common/` (this folder) | all | `am_link`: the connection of a driver to the mixer (C99, Winsock or POSIX sockets) | yes | **yes: a real native client against the real bridge** |
 
 iOS has no driver architecture for third-party virtual devices (apps cannot add system audio devices), so there is none. Linux, Android and macOS drivers follow the same pattern as the Windows one; adding another system (a vendor audio stack, JACK, a BSD) means a new folder that uses `am_link`.
 
 ## How a driver talks to the mixer
 
-All drivers use `common/am_link.c`, which speaks the **virtual device protocol** of `bridge/virtual.js` (and of `MiniBridge.java` in the Android app): a WebSocket to `ws://127.0.0.1:8765` (8765 to 8774 are tried, or `AUDIO_MIXER_PORT`) on path `/ws/virtual`.
+All drivers use `drivers/common/am_link.c`, which speaks the **virtual device protocol** of `bridge/virtual.js` (and of `MiniBridge.java` in the Android app): a WebSocket to `ws://127.0.0.1:8765` (8765 to 8774 are tried, or `AUDIO_MIXER_PORT`) on path `/ws/virtual`.
 
 1. The driver sends `{"type":"hello","name":"Audio Mixer","channels":2,"rate":48000}`; the mixer answers `{"type":"ready","id":9000}`. (A second driver with the same name, 1 to 32 channels, 8 to 384 kHz are the rules; errors come back as `{"type":"error","message":...}`.)
 2. Binary frames **from** the driver are interleaved signed 16-bit little-endian PCM that applications played to the device. The mixer reads them as an input source.
@@ -38,22 +38,22 @@ Get `AudioMixer-<version>-asio-driver-windows.zip` (built by `node scripts/build
 ### Linux: ALSA plugin
 ```
 sudo apt install libasound2-dev           # Debian / Ubuntu   (Fedora: alsa-lib-devel)
-cd drivers/linux-alsa && make && sudo make install
+cd linux/alsa-plugin && make && sudo make install
 cat asound.conf.example >> ~/.asoundrc    # or /etc/asound.conf
 aplay -D audiomixer music.wav             # plays into the mixer      arecord -D audiomixer -d 10 x.wav   records what the mixer sends
 ```
 PulseAudio / PipeWire programs: `pactl load-module module-alsa-sink device=audiomixer` (and `module-alsa-source` for recording).
 
 ### macOS: Core Audio plug-in
-On a Mac with the Xcode command line tools: `cd drivers/macos-coreaudio && make && sudo make install` (copies `Audio Mixer.driver` to `/Library/Audio/Plug-Ins/HAL` and restarts `coreaudiod`). The bundle is ad-hoc signed; on current macOS versions system extensions of this kind may need a Developer ID signature and notarization, or "Allow" in System Settings. **Not compiled or run in this repository**: expect to debug it (`log stream --predicate 'process == "coreaudiod"'`).
+On a Mac with the Xcode command line tools: `cd macos/coreaudio-driver && make && sudo make install` (copies `Audio Mixer.driver` to `/Library/Audio/Plug-Ins/HAL` and restarts `coreaudiod`). The bundle is ad-hoc signed; on current macOS versions system extensions of this kind may need a Developer ID signature and notarization, or "Allow" in System Settings. **Not compiled or run in this repository**: expect to debug it (`log stream --predicate 'process == "coreaudiod"'`).
 
 ### Android: audio HAL
-For device makers and custom ROMs: copy `android-hal/` and `common/` into the AOSP tree, add `audio.audiomixer.default` to `PRODUCT_PACKAGES`, include `audio_policy_configuration_audiomixer.xml` in the audio policy configuration, and add the SELinux lines of `sepolicy/` after review (a HAL process normally may not open loopback sockets). The Audio Mixer app's engine accepts the HAL on `127.0.0.1:8765` while its foreground service runs. Ordinary phones cannot load a HAL without root and a custom image. **Not compiled or run here**; the HAL API changes between Android releases (Android 14 and later use the AIDL HAL; the legacy module loads through the wrapper), so treat `audio_hw.c` as a template.
+For device makers and custom ROMs: copy `android/hal/` and `drivers/common/` into the AOSP tree, add `audio.audiomixer.default` to `PRODUCT_PACKAGES`, include `audio_policy_configuration_audiomixer.xml` in the audio policy configuration, and add the SELinux lines of `sepolicy/` after review (a HAL process normally may not open loopback sockets). The Audio Mixer app's engine accepts the HAL on `127.0.0.1:8765` while its foreground service runs. Ordinary phones cannot load a HAL without root and a custom image. **Not compiled or run here**; the HAL API changes between Android releases (Android 14 and later use the AIDL HAL; the legacy module loads through the wrapper), so treat `audio_hw.c` as a template.
 
 ## Build everything this machine can
 
 ```
-node scripts/build-drivers.js              # needs mingw-w64 for the ASIO DLLs; writes releases/AudioMixer-<version>-asio-driver-windows.zip and ...-drivers-source.tar.gz
+node scripts/build-drivers.js              # needs mingw-w64 for the ASIO DLLs; writes windows/releases/AudioMixer-<version>-asio-driver-windows.zip (add --source for ...-drivers-source.tar.gz)
 cd bridge && npm test                      # builds am_link and the ALSA plugin with -Werror and runs them against the bridge; cross-compiles and inspects the ASIO DLLs
 ```
 

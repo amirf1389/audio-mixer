@@ -5,9 +5,11 @@ const { execFile } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const DIR = path.resolve(__dirname, '..', 'native', 'win');
-const exePath = (arch = process.arch) => path.join(DIR, arch === 'ia32' ? 'x86' : 'x64', 'AudioDevices.exe');   // native/win/<arch>/AudioDevices.exe
-const vbsPath = () => path.join(DIR, 'vbs', 'audio-devices.vbs');                                         // native/win/vbs/audio-devices.vbs
+// an installed package keeps the helpers in native/win, the repository in windows/native
+const DIRS = [path.resolve(__dirname, '..', 'native', 'win'), path.resolve(__dirname, '..', 'windows', 'native')];
+const firstOf = (...rel) => { const all = DIRS.map(d => path.join(d, ...rel)); return all.find(p => fs.existsSync(p)) || all[0]; };
+const exePath = (arch = process.arch) => firstOf(arch === 'ia32' ? 'x86' : 'x64', 'AudioDevices.exe');   // native/win/<arch>/AudioDevices.exe
+const vbsPath = () => firstOf('vbs', 'audio-devices.vbs');                                                // native/win/vbs/audio-devices.vbs
 
 function defaultRun(cmd, args, timeout = 6000) {
   return new Promise(resolve => {

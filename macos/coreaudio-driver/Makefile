@@ -8,10 +8,10 @@ HALDIR   = /Library/Audio/Plug-Ins/HAL
 
 all: $(BUNDLE)/Contents/MacOS/AudioMixer
 
-$(BUNDLE)/Contents/MacOS/AudioMixer: AudioMixerDriver.c ../common/am_link.c ../common/am_link.h Info.plist
+$(BUNDLE)/Contents/MacOS/AudioMixer: AudioMixerDriver.c ../../drivers/common/am_link.c ../../drivers/common/am_link.h Info.plist
 	mkdir -p $(BUNDLE)/Contents/MacOS
 	cp Info.plist $(BUNDLE)/Contents/Info.plist
-	$(CC) $(ARCHS) -std=gnu99 -O2 -Wall -bundle -fvisibility=hidden -o $@ AudioMixerDriver.c ../common/am_link.c -framework CoreAudio -framework CoreFoundation
+	$(CC) $(ARCHS) -std=gnu99 -O2 -Wall -bundle -fvisibility=hidden -o $@ AudioMixerDriver.c ../../drivers/common/am_link.c -framework CoreAudio -framework CoreFoundation
 	codesign --force --sign - $(BUNDLE) || true
 
 install: all

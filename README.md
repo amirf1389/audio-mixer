@@ -1,6 +1,29 @@
 # audio-mixer
 mixer
 
+## Repository layout
+
+One folder per operating system holds everything of that system: its source, its drivers and its release files. Code shared by all systems stays in a few top-level folders.
+
+```
+index.html  boot.html      the web app (GitHub Pages serves it from the root)
+README.md  LICENSE  SECURITY.md  package.json
+
+android/    the app (src, kotlin), qt/ (Qt project), hal/ (audio HAL), releases/  *.apk
+ios/        Xcode project template, releases/  *.tar.gz
+windows/    installer/ (setup, launcher), native/ (device helper), plugin-host/, asio-driver/,
+            start-pc-mode.bat, start-local-server.bat, Audio Mixer.vbs, releases/  *.exe *.msi *.zip *.cer
+macos/      native/ (Core Audio helper), coreaudio-driver/, releases/  *.dmg *.zip *.tar.gz
+linux/      alsa-plugin/, start-pc-mode.sh, ensure-node.sh, releases/  *.deb *.tar.gz
+
+bridge/     the local server (Node.js)             client/      the launcher / command line
+ota-server/ the update server                      deploy/      hosting files (nginx, fail2ban, OTA server)
+scripts/    build and release tools                drivers/     what the system drivers share (common/am_link) and their README
+releases/   update.json: the signed update manifest that installed apps fetch (its file URLs point into the <os>/releases/ folders)
+```
+
+`scripts/layout.js` is the one place that knows this layout; the installers and packages built from it keep their own file layout (for example `native/win/` inside the installed folder).
+
 
 ## PC mode (local system server + client)
 The mixer is a web page. In **PC mode** it talks to a small Node.js system server on your own PC, which gives it real ASIO / WASAPI /
@@ -8,9 +31,9 @@ Core Audio / ALSA access, system volume, and a list of official audio drivers.
 
 1. Install [Node.js](https://nodejs.org/) 18 or newer.
 2. Start it:
-   - Windows: double-click `start-pc-mode.bat`
-   - macOS / Linux: `./start-pc-mode.sh`
-   - Windows, server only (no browser window): double-click `start-local-server.bat`, then open `http://localhost:8765` yourself
+   - Windows: double-click `windows/start-pc-mode.bat`
+   - macOS / Linux: `./linux/start-pc-mode.sh`
+   - Windows, server only (no browser window): double-click `windows/start-local-server.bat`, then open `http://localhost:8765` yourself
    - or anywhere: `node client/cli.js` (same as `npm start`)
 
    The client starts the server on `http://localhost:8765` and opens the mixer in your browser. In the **DRIVERS** tab the *PC MODE*
@@ -48,7 +71,7 @@ and are never started automatically. See `bridge/README.md` for the server's API
 Copy the built folder (or the archive) to any PC with Node.js 18+ and run `start-pc-mode.bat` (Windows) or `./start-pc-mode.sh`.
 
 ### Installers: Windows, Linux, macOS
-`npm run build:installers` builds the signed Windows installers into `dist/`; `npm run build:unix` builds the Linux and macOS packages. Prebuilt files are in `releases/`.
+`npm run build:installers` builds the signed Windows installers into `dist/`; `npm run build:unix` builds the Linux and macOS packages. Prebuilt files are in the `releases/` folder of each system (`windows/releases/`, `linux/releases/`, `macos/releases/`, `android/releases/`, `ios/releases/`).
 Windows build needs `wixl` (`apt install wixl`), `gcc-mingw-w64-i686`, `osslsigncode` and internet once (official Node.js runtimes, checked against nodejs.org's `SHASUMS256.txt`,
 and the Audify prebuilt binaries, pinned by SHA-256).
 
@@ -69,16 +92,16 @@ under `/opt`, user data stays in `~/AudioMixerDrivers`, `~/AudioMixerPlugins` an
 The installer technology is Windows Installer (MSI) built with wixl, not the commercial InstallShield product, and the NSIS script is gone.
 
 **Signing.** The Windows files are Authenticode-signed with `scripts/sign.js`. Without your own certificate the build creates a self-signed one ("Audio Mixer (self-signed)"; the key stays in
-`dist/cache/signing`, git-ignored) and publishes the public part as `releases/AudioMixer-signing.cer`. That proves the file was not changed after it was built and lets the verification scan
+`dist/cache/signing`, git-ignored) and publishes the public part as `windows/releases/AudioMixer-signing.cer`. That proves the file was not changed after it was built and lets the verification scan
 pin the publisher, but Windows still shows "unknown publisher" / SmartScreen until you trust the certificate (right-click the `.cer` > Install, "Trusted Root" and "Trusted Publishers") or
 sign with a commercial certificate (`SIGN_PFX=cert.pfx SIGN_PFX_PASSWORD=... npm run build:installers`; `SIGN_TIMESTAMP_URL=http://timestamp.digicert.com` adds a timestamp). Thumbprint of the
-published certificate: see `releases/AudioMixer-signing.cer`. The Linux and macOS packages are not signed.
+published certificate: see `windows/releases/AudioMixer-signing.cer`. The Linux and macOS packages are not signed.
 
 **Layout fixes (1.13.0).** The EQ band faders and the DCA / VCA master faders no longer grow to the height of the page and spill out of their cards (the slider now fills its own track). On phones the 10 EQ faders get a usable height and the RTA badge no longer overlaps the curve title, the mixer toolbar wraps instead of scrolling sideways, and the ASIO DRIVER strip can be folded to one line with its chevron button (remembered; folded by default on screens shorter than 700 px).
 
 **Automatic installation of Node.js and the audio runtime.** The Windows `.exe` / `.msi` already contain Node.js. Everywhere else a missing prerequisite is installed for you, after asking
 (`AUDIO_MIXER_YES=1` skips the questions on Linux / macOS; the Windows `start-pc-mode.bat` always asks and treats no answer as No since 1.5.2.0):
-- Linux `audio-mixer`, macOS `Audio Mixer.app` and `./start-pc-mode.sh` (`ensure-node.sh`): when Node.js 18+ is missing they download the official Node.js 22 build from nodejs.org, check its SHA-256
+- Linux `audio-mixer`, macOS `Audio Mixer.app` and `./linux/start-pc-mode.sh` (`linux/ensure-node.sh`): when Node.js 18+ is missing they download the official Node.js 22 build from nodejs.org, check its SHA-256
   against nodejs.org's `SHASUMS256.txt` (a mismatch installs nothing) and unpack it into `~/.local/share/audio-mixer/node`; no administrator rights, nothing outside your home folder. The Audify native
   audio module (prebuilt, no compiler) is installed once into `~/.local/share/audio-mixer/modules`; `AUDIO_MIXER_NO_NATIVE=1` skips it.
 - Windows `start-pc-mode.bat` (portable folder): installs the official Node.js LTS with `winget`, or the checksum-verified zip from nodejs.org into `%LOCALAPPDATA%\AudioMixer\node`.
@@ -94,7 +117,7 @@ a peak-hold tick, the peak in dBFS, a clip light and the driver / buffer size / 
 **Antivirus false positives.** Installers that unpack a payload and start `msiexec`, or programs that start another program in the background, are what heuristic scanners look at,
 and a self-signed file has no reputation yet. To keep the footprint plain: nothing installs a script (the old hidden `wscript` launcher and the `cmd /c` shortcut are gone), nothing is written
 to the Startup folder (autostart is one registry Run value that starts the signed native `AudioMixerServer.exe`), all files live under Program Files, the setup program only runs `msiexec` on its own
-checked payload, and every file is listed in `MANIFEST.sha256`. Source for both native programs is in `installer/`. If a scanner still flags a file, compare it with `verify`, then report it
+checked payload, and every file is listed in `MANIFEST.sha256`. Source for both native programs is in `windows/installer/`. If a scanner still flags a file, compare it with `verify`, then report it
 as a false positive to the vendor (Microsoft: https://www.microsoft.com/wdsi/filesubmission); a certificate from a public CA (`SIGN_PFX`) removes most of these warnings.
 
 ### Windows verification
@@ -153,8 +176,8 @@ Interface changes in the page:
 ## Read + write on one interface, C++ and VBScript helpers for Windows, security hardening (1.13.0)
 
 - **READ + WRITE (duplex).** An ASIO driver serves one client, so reading and writing the same interface with two streams failed. With both switches on, the page now opens one duplex stream (`WS /ws/duplex`, `bridge/duplex.js`; PortAudio and Audify): the interface shows "READING via ASIO duplex" and "WRITING via ASIO duplex". Switching one side off reopens the other on its own. Other host APIs (WASAPI, Core Audio, ALSA) keep separate streams.
-- **C++ (Windows).** `native/win/src/AudioDevices.cpp` is a small WASAPI endpoint lister (`native/win/x64/AudioDevices.exe` and `native/win/x86/AudioDevices.exe` are built from it with MinGW, see the header of the file). When neither PortAudio nor Audify is installed, `GET /api/interfaces` still lists the Windows inputs and outputs through it (`engine: "wasapi-native"`; listing only, opening streams still needs Audify / PortAudio).
-- **VBScript (Windows).** `Audio Mixer.vbs` is a double-click launcher that opens `start-pc-mode.bat` in a normal visible window. `native/win/vbs/audio-devices.vbs` (WMI) supplies the sound device names when PowerShell is blocked. Windows 11 24H2+ may have VBScript turned off (optional feature): use `start-pc-mode.bat` then.
+- **C++ (Windows).** `windows/native/src/AudioDevices.cpp` is a small WASAPI endpoint lister (`windows/native/x64/AudioDevices.exe` and `windows/native/x86/AudioDevices.exe` are built from it with MinGW, see the header of the file). When neither PortAudio nor Audify is installed, `GET /api/interfaces` still lists the Windows inputs and outputs through it (`engine: "wasapi-native"`; listing only, opening streams still needs Audify / PortAudio).
+- **VBScript (Windows).** `windows/Audio Mixer.vbs` is a double-click launcher that opens `windows/start-pc-mode.bat` in a normal visible window. `windows/native/vbs/audio-devices.vbs` (WMI) supplies the sound device names when PowerShell is blocked. Windows 11 24H2+ may have VBScript turned off (optional feature): use `start-pc-mode.bat` then.
 - **Security.** See `SECURITY.md`: response headers, static file allow-list, rate and size limits, WebSocket caps, per-hop redirect checks for downloads.
 
 **Primary Sound driver (1.13.0).** DirectSound's *Primary Sound Capture Driver* / *Primary Sound Driver* are Windows' default-device mappers, not hardware: they duplicate the real default device and often failed to open, which showed as an error on the interface list. They are now listed last as *System default input / output*, and ENABLE ALL and automatic enabling skip them (you can still switch them on by hand).
@@ -176,14 +199,14 @@ Interface changes in the page:
 
 ## Native plugin host, RtAudio ASIO / WASAPI fixes (1.13.0)
 
-- **Native plugin host (VST 2.x: `.dll` on Windows, `.vst` on macOS / Linux).** `native/host/src/PluginHost.cpp` loads one effect plugin in its own process and processes audio the bridge sends on stdin (interleaved stereo float32 blocks, parameters, quit). `native/host/x64/PluginHost.exe` and `x86/PluginHost.exe` ship with the Windows installers (use the one that matches the plugin's bitness: the bridge picks it by the Node.js architecture); on macOS / Linux build it with `g++ -O2 -std=c++11 -o native/host/<platform>-<arch>/PluginHost native/host/src/PluginHost.cpp -ldl` or point `BRIDGE_PLUGIN_HOST` at it. The VST 2 interface is declared in the file from the public binary layout (no Steinberg code). The bridge side is `bridge/pluginhost.js` (`WS /ws/insert`).
+- **Native plugin host (VST 2.x: `.dll` on Windows, `.vst` on macOS / Linux).** `windows/plugin-host/src/PluginHost.cpp` loads one effect plugin in its own process and processes audio the bridge sends on stdin (interleaved stereo float32 blocks, parameters, quit). `native/host/x64/PluginHost.exe` and `x86/PluginHost.exe` ship with the Windows installers (use the one that matches the plugin's bitness: the bridge picks it by the Node.js architecture); on macOS / Linux build it with `g++ -O2 -std=c++11 -o native/host/<platform>-<arch>/PluginHost native/host/src/PluginHost.cpp -ldl` or point `BRIDGE_PLUGIN_HOST` at it. The VST 2 interface is declared in the file from the public binary layout (no Steinberg code). The bridge side is `bridge/pluginhost.js` (`WS /ws/insert`).
 - **In the mixer.** A plugin picked in a PHASE / FX slot (PRO / STUDIO plan, PC mode) starts automatically: the master mix runs `master limiter -> FX 1..8 -> PHASE A..D -> output`, the physical-output tap (LIVE SOURCES write) follows the end of the chain, BYPASS keeps the slot in the chain but passes the signal through, and each running plugin lists its parameters (sliders, 0 to 1). Status per slot: `STARTING`, `RUNNING`, `ERROR`. The added delay is a few 512-sample audio blocks (not measured on real hardware); if the host cannot keep up, blocks are passed dry instead of building up delay.
 - **Not supported yet:** VST3 (slot shows "not supported by the native host yet"), instruments, plugin editor windows, sample-accurate automation, 64-bit and 32-bit plugins in one session (a 32-bit plugin needs the x86 host and a 32-bit Node.js).
 - **RtAudio WASAPI.** A device that does not offer the mixer's sample rate (WASAPI shared mode only offers the Windows mix rate) is opened at its closest rate and the bridge converts; a device with fewer output channels than the stereo master (a mono speaker or headset) is opened with its own channel count and the master is mixed down. ASIO keeps its explicit errors, now saying where to change the rate ("set the sample rate in the ASIO driver's control panel").
 
 ## Android app (.apk, 1.13.0)
 
-`releases/AudioMixer-<version>-android.apk` (0.6 MB, Android 7.0+ / API 24, 64-bit and 32-bit) is the mixer page in a full-screen WebView, bundled offline: Tailwind CSS, Font Awesome and the fonts are packed into the app instead of loaded from CDNs, so it starts without internet. It is signed with APK signature v2 / v3.
+`android/releases/AudioMixer-<version>-android.apk` (0.6 MB, Android 7.0+ / API 24, 64-bit and 32-bit) is the mixer page in a full-screen WebView, bundled offline: Tailwind CSS, Font Awesome and the fonts are packed into the app instead of loaded from CDNs, so it starts without internet. It is signed with APK signature v2 / v3.
 
 - **What works:** the whole mixer in web mode (Web Audio engine, EQ, dynamics, FX, scenes saved in the app), the microphone (Android asks once; only the microphone is ever granted to the page), license keys and plans (BASIC 8 channels; a PRO / STUDIO key is checked in the app), the screen stays on.
 - **What needs the PC:** ASIO / WASAPI interfaces, the plugin manager and plugin inserts, OTA updates and the system volume are features of the PC-mode server (`node bridge/server.js`) and are not part of the app (the page says "start PC mode").
@@ -195,13 +218,13 @@ Interface changes in the page:
 ## iOS app, Swift helper for macOS, microphone EQ presets, RtAudio DirectSound / WASAPI / ASIO fixes (1.13.0)
 
 - **iOS app.** `ios/` holds the Swift app (SwiftUI + WKWebView): the mixer page bundled offline (same bundle as the Android app), served by a small loopback-only server inside the app (`LocalServer.swift`, `http://127.0.0.1:47831/`, so Web Audio worklets, the microphone and license keys get a secure context and the scenes survive restarts), microphone only for that page, screen stays on, audio keeps playing in the background, audio session `playAndRecord` (speaker, Bluetooth, USB interface). `npm run build:ios` writes `releases/AudioMixer-<version>-ios-xcode-project.tar.gz` (Swift sources, XcodeGen spec, bundled page, app icon). **An iOS app can only be compiled and signed with Xcode on a Mac, so there is no `.ipa` in the releases**: on a Mac run `brew install xcodegen`, then `xcodegen generate && open AudioMixer.xcodeproj`, choose your team under Signing & Capabilities and run it on your iPhone / iPad (iOS 15+). On a Mac, `node scripts/build-ios.js --ipa` also archives an unsigned `.ipa` (re-sign it with your Apple ID, e.g. with Sideloadly / AltStore, to install). The Swift code was not compiled or run here (no Xcode available): expect to fix small compiler messages on the first build.
-- **Swift for macOS.** `native/mac/AudioDevices.swift` lists the Core Audio devices (inputs / outputs, channels, sample rate, default device, transport: built-in, USB, Bluetooth ...). `install.command` builds it with `swiftc` when the Xcode command line tools are installed (`swiftc -O -o native/mac/AudioDevices native/mac/AudioDevices.swift` by hand); `bridge/sysaudio.js` uses it for the interface list and falls back to `system_profiler` when it is not built. Not compiled here either.
+- **Swift for macOS.** `macos/native/AudioDevices.swift` lists the Core Audio devices (inputs / outputs, channels, sample rate, default device, transport: built-in, USB, Bluetooth ...). `install.command` builds it with `swiftc` when the Xcode command line tools are installed (`swiftc -O -o native/mac/AudioDevices native/mac/AudioDevices.swift` by hand); `bridge/sysaudio.js` uses it for the interface list and falls back to `system_profiler` when it is not built. Not compiled here either.
 - **Microphone EQ presets.** The EQ page's preset menu has a MICROPHONE PRESETS group (15): male / female vocal, live singer / karaoke, handheld dynamic (SM58 style), podcast / voice-over, broadcast radio, studio condenser, headset / lavalier, guitar amp (SM57 style), acoustic guitar, kick drum, snare / toms, de-mud and de-box, de-ess, feedback safe (live stage). They are starting points across the 10 bands (31 Hz to 16 kHz), loaded like every other preset.
 - **RtAudio DirectSound / WASAPI / ASIO.** (1) RtAudio reports recoverable trouble (a buffer under- or overrun on DirectSound or WASAPI) through the same error callback as fatal errors; the bridge closed the stream on the first glitch. Warnings are now counted (`warnings`, `lastWarning` on the stream) and only real errors stop it. (2) MME and DirectSound cut device names at 31 characters (`Microphone (Focusrite USB Audi`), so one interface showed up twice next to its WASAPI entry; a cut name now joins the longer name it is the start of.
 
 ## macOS app and disk image (1.13.0)
 
-`releases/AudioMixer-<version>-macos.dmg` is the macOS disk image: open it and drag **Audio Mixer** onto **Applications** (the image holds the app, an Applications shortcut and a read-me). `AudioMixer-<version>-macos-app.zip` is the same `Audio Mixer.app` zipped, and `AudioMixer-<version>-macos.tar.gz` still has `install.command` / `uninstall.command` (installs the app, starts it at login on request, builds the Swift Core Audio helper when `swiftc` is there). The app has an icon (`AppIcon.icns`), runs on macOS 11+, and in a double-click start it finds Node.js 18+ (or offers the official build from nodejs.org, checksum verified, no administrator rights), installs the native audio module once, builds the Swift helper in the background when the Xcode command line tools are installed, starts the local server and opens the mixer in your browser.
+`macos/releases/AudioMixer-<version>-macos.dmg` is the macOS disk image: open it and drag **Audio Mixer** onto **Applications** (the image holds the app, an Applications shortcut and a read-me). `AudioMixer-<version>-macos-app.zip` is the same `Audio Mixer.app` zipped, and `AudioMixer-<version>-macos.tar.gz` still has `install.command` / `uninstall.command` (installs the app, starts it at login on request, builds the Swift Core Audio helper when `swiftc` is there). The app has an icon (`AppIcon.icns`), runs on macOS 11+, and in a double-click start it finds Node.js 18+ (or offers the official build from nodejs.org, checksum verified, no administrator rights), installs the native audio module once, builds the Swift helper in the background when the Xcode command line tools are installed, starts the local server and opens the mixer in your browser.
 
 - **Not signed or notarized** (that needs a Mac and an Apple developer account): macOS asks once. Right-click the app > Open > Open, or `xattr -dr com.apple.quarantine "/Applications/Audio Mixer.app"`. On Apple silicon the launcher is a shell script, which macOS runs without a signature.
 - **Build:** `npm run build:macos` (`scripts/build-macos.js`) works on Linux, Windows and macOS: the disk image is an ISO 9660 + Rock Ridge volume (needs `genisoimage` or `xorriso`) wrapped in a UDIF `.dmg` by `scripts/mkdmg.js`, no `hdiutil` needed; the app zip needs `zip`.
@@ -233,7 +256,7 @@ An audit of the LIVE SOURCES page (READ / WRITE per interface, ASIO, WASAPI, Dir
 ## Start Menu shortcuts and installer options (1.14.0)
 
 - **New Start Menu shortcuts** (feature *Tools*): *License key and machine ID*, *List installed plugins*, *Audio drivers (ASIO, WASAPI)*, *Check for updates* and *Audio Mixer diagnostics*. Each opens a console that waits for Enter. They run new commands of the client: `node client/cli.js license [status|activate <key>|deactivate]`, `plugins`, `update [download]` (checks the signed manifest; the download is verified and never run for you), and `--pause` is now accepted by `drivers`, `doctor`, `license`, `plugins` and `update`.
-- **Optional MSI features:** `Main` (always), `Shortcuts`, `Tools`, `PluginHost` (native VST host, `native/host`), `WinHelpers` (native Windows device helpers, `native/win`), `Autostart`, `Desktop` (off by default). Use `ADDLOCAL=Main,Shortcuts,PluginHost` with msiexec, or the wizard's feature tree.
+- **Optional MSI features:** `Main` (always), `Shortcuts`, `Tools`, `PluginHost` (native VST host, `windows/plugin-host`), `WinHelpers` (native Windows device helpers, `native/win`), `Autostart`, `Desktop` (off by default). Use `ADDLOCAL=Main,Shortcuts,PluginHost` with msiexec, or the wizard's feature tree.
 - **Setup `.exe` switches:** `/noplugins`, `/nohelpers`, `/notools`, `/noshortcuts`, `/noautostart` (accepted and ignored since 1.5.2.0), `/vcredist`, `/nodesktop` (`/desktop` is still accepted; they are turned into `ADDLOCAL`; without them the installer keeps its defaults). `/?` lists all switches.
 - Without the plugin host the mixer still works; VST insert slots then report that the host is missing.
 
@@ -390,11 +413,11 @@ The OTA server keeps an **audit log** (`<data>/audit.jsonl`: append-only, hash-c
 - `GET /api/latest`: the same decision as JSON for apps: `os`, `arch`, how it was `detected`, `version`, `notes`, the `file` (name, url, size, `sha256`, how to install) and `others` for every other system. CORS is open (`*`), the answer varies by `User-Agent` / Client Hints.
 - `GET /admin/stats` and the dashboard count "smart links by detected system".
 - **In the app** (UPDATE panel): it shows the detected system, a "download for this device" button and links for the other systems. The PC app asks its local server (signature checked there; the download is SHA-256 verified); the phone / browser edition fetches the signed manifest itself and checks the signature with WebCrypto, using the update source set in the panel (default: the project's `releases/update.json`). The page's detector is tested against the server's on one table of user agents.
-- `scripts/make-update.js` and `scripts/ota.js publish` include the `.tar.gz`, `.dmg`, `.apk` and iOS project files when they are in `releases/`.
+- `scripts/make-update.js` and `scripts/ota.js publish` include the `.tar.gz`, `.dmg`, `.apk` and iOS project files when they are in the `<os>/releases/` folders.
 
 **Android: Quick Settings tile and native audio.** A "Mixer engine" tile (add it from the notification shade's edit view) starts and stops the background engine without opening the app; it is lit while the engine runs. Native audio helpers: channel counts read from the device's index masks (an 8-channel USB interface reports 8), the buffer size follows the device's native burst (`FRAMES_PER_BUFFER` / `OUTPUT_SAMPLE_RATE`, two bursts) unless a size is asked for, and `/api/status` / `/api/interfaces` carry a `native` block (rate, burst, low-latency / pro-audio / USB host). The tile compiles against stubs (`android/stubs/`) that are not packaged.
 
-**Qt project** (`android-qt/`): Qt 6 / Qt Quick shell with the same local server routes and Qt Multimedia device lists; **source only, not built here** (needs the Qt SDK and Android NDK). See `android-qt/README.md` for what it lacks compared with the Java app. Stage the page with `node scripts/prepare-qt.js`.
+**Qt project** (`android/qt/`): Qt 6 / Qt Quick shell with the same local server routes and Qt Multimedia device lists; **source only, not built here** (needs the Qt SDK and Android NDK). See `android-qt/README.md` for what it lacks compared with the Java app. Stage the page with `node scripts/prepare-qt.js`.
 
 Not tested here: the tile and native audio on a real phone (only compiled and the pure logic run on a JVM), a real Windows / Android / iOS device downloading from the smart links, the Qt project, and `releases/update.json` is not re-signed (publish with your vendor key).
 

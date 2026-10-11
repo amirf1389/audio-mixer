@@ -2,7 +2,7 @@
 'use strict';
 // Vendor tool for the Audio Mixer OTA server (ota-server/server.js): builds the manifest of the current version, signs it with the vendor key
 // ON THIS MACHINE (the key never goes to the server), uploads the release files that the server does not have yet, then publishes the manifest.
-//   node scripts/ota.js publish --server https://ota.example.com --token T [--channel stable] [--notes "a|b|c"] [--dir <vendor key dir>] [--releases releases] [--force]
+//   node scripts/ota.js publish --server https://ota.example.com --token T [--channel stable] [--notes "a|b|c"] [--dir <vendor key dir>] [--releases <folder>] [--force]
 //   node scripts/ota.js status  --server https://ota.example.com --token T          files and versions held by the server, downloads per day
 //   node scripts/ota.js sign    --base https://ota.example.com/releases [--out file] writes the signed manifest only (no upload)
 // The token can also be given as OTA_ADMIN_TOKEN, the server as OTA_SERVER. Plain http is only accepted for localhost (testing).
@@ -13,6 +13,7 @@ const crypto = require('node:crypto');
 const { signManifest } = require('../bridge/update');
 const { loadPrivate, vendorDir } = require('./license');
 const { build } = require('./make-update');
+const { findRelease } = require('./layout');
 
 const ROOT = path.resolve(__dirname, '..');
 const arg = (a, n, d) => { const i = a.indexOf(n); return i >= 0 ? a[i + 1] : d; };
@@ -35,7 +36,7 @@ const sha = f => new Promise((res, rej) => { const h = crypto.createHash('sha256
 // manifest for the version in package.json, files from the releases folder, URLs on the server
 function manifestFor(a, base) {
   const version = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version, channel = arg(a, '--channel', 'stable');
-  const m = build({ releases: path.resolve(arg(a, '--releases', path.join(ROOT, 'releases'))), version, base, notes: String(arg(a, '--notes', '')).split('|').filter(Boolean) });
+  const given = arg(a, '--releases', null), m = build({ ...(given ? { releases: path.resolve(given) } : { flatUrls: true }), version, base, notes: String(arg(a, '--notes', '')).split('|').filter(Boolean) });
   m.channel = channel;
   return { manifest: m, channel };
 }
@@ -63,7 +64,7 @@ async function main(a) {
     const have = Object.fromEntries((await call(s + '/admin/files', { headers: auth })).files.map(x => [x.name, x.sha256]));
     for (const f of Object.values(manifest.files)) {
       if (have[f.name] === f.sha256) { console.log('  have   ' + f.name); continue; }
-      const file = path.join(path.resolve(arg(rest, '--releases', path.join(ROOT, 'releases'))), f.name);
+      const given = arg(rest, '--releases', null), file = given ? path.join(path.resolve(given), f.name) : findRelease(f.name);
       process.stdout.write(`  upload ${f.name} (${(f.size / 1048576).toFixed(1)} MB) ... `);
       await call(s + '/admin/files/' + encodeURIComponent(f.name) + (have[f.name] ? '?overwrite=1' : ''), { method: 'PUT', headers: { ...auth, 'X-SHA256': await sha(file), 'Content-Type': 'application/octet-stream', 'Content-Length': String(f.size) }, body: fs.createReadStream(file), duplex: 'half' });
       console.log('ok');

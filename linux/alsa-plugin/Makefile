@@ -7,8 +7,8 @@ ALSADIR ?= $(LIBDIR)/alsa-lib
 
 all: $(PLUGIN)
 
-$(PLUGIN): pcm_audiomixer.c ../common/am_link.c ../common/am_link.h
-	$(CC) -std=gnu99 $(CFLAGS) -fPIC -DPIC -shared -o $@ pcm_audiomixer.c ../common/am_link.c -lasound -lpthread
+$(PLUGIN): pcm_audiomixer.c ../../drivers/common/am_link.c ../../drivers/common/am_link.h
+	$(CC) -std=gnu99 $(CFLAGS) -fPIC -DPIC -shared -o $@ pcm_audiomixer.c ../../drivers/common/am_link.c -lasound -lpthread
 
 # sudo make install: copies the plugin where ALSA looks for plugins; asound.conf.example shows the device definition (put it in /etc/asound.conf or ~/.asoundrc)
 install: $(PLUGIN)

@@ -3,7 +3,7 @@
 // Builds the Android app (.apk): the mixer page in a full-screen WebView, bundled offline (Tailwind CSS, Font Awesome and the fonts are
 // packed into the app instead of loaded from CDNs). Web Audio, the microphone, scenes and the license / plans work as in the browser;
 // PC-mode features (ASIO / WASAPI interfaces, plugins, OTA) need the PC.
-//   node scripts/build-apk.js [--out releases] [--kotlin]   -> AudioMixer-<version>-android.apk (+ .sha256)
+//   node scripts/build-apk.js [--out android/releases] [--kotlin]   -> AudioMixer-<version>-android.apk (+ .sha256)
 //   The background engine (android/src: MiniBridge, AndroidAudio, ...) is Java; --kotlin builds the foreground service from android/kotlin/EngineService.kt (needs kotlinc).
 // Tools (any Android SDK, or the Debian / Ubuntu packages aapt apksigner zipalign dalvik-exchange libandroid-23-java):
 //   javac (JDK 8+), aapt, zipalign, apksigner, d8 or dalvik-exchange (dx), android.jar (ANDROID_JAR, ANDROID_HOME/platforms, or /usr/lib/android-sdk)
@@ -143,7 +143,7 @@ function listFiles(dir, ext) {
   return out.sort();
 }
 
-async function build({ out = path.join(ROOT, 'releases'), kotlin = false } = {}) {
+async function build({ out = path.join(ROOT, 'android', 'releases'), kotlin = false } = {}) {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
   const { tools: t, missing } = findTools();
   if (missing.length) throw new Error('missing tools: ' + missing.join(', ') + '. Install the Android SDK build-tools, or on Debian / Ubuntu: apt install aapt apksigner zipalign dalvik-exchange libandroid-23-java default-jdk');

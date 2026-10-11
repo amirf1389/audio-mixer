@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 'use strict';
 // Builds the iOS app: Swift sources (ios/), the mixer page bundled offline (same bundle as the Android app), the app icon and an XcodeGen spec.
-//   node scripts/build-ios.js [--out releases] [--ipa]
-// Everywhere:  writes releases/AudioMixer-<version>-ios-xcode-project.tar.gz  (open it on a Mac: brew install xcodegen; xcodegen generate; open AudioMixer.xcodeproj)
-// On a Mac with Xcode + xcodegen, --ipa also archives the app without code signing and packs releases/AudioMixer-<version>-ios-unsigned.ipa
+//   node scripts/build-ios.js [--out ios/releases] [--ipa]
+// Everywhere:  writes ios/releases/AudioMixer-<version>-ios-xcode-project.tar.gz  (open it on a Mac: brew install xcodegen; xcodegen generate; open AudioMixer.xcodeproj)
+// On a Mac with Xcode + xcodegen, --ipa also archives the app without code signing and packs ios/releases/AudioMixer-<version>-ios-unsigned.ipa
 //   (an unsigned .ipa installs only after it is re-signed with your Apple ID or developer certificate, e.g. with AltStore / Sideloadly / Xcode).
 // An iOS app can only be compiled and signed with Xcode on macOS: this script cannot make a signed .ipa on Linux or Windows.
 const fs = require('node:fs');
@@ -33,7 +33,7 @@ function stage(dir, version, web) {
   });
 }
 
-async function build({ out = path.join(ROOT, 'releases'), ipa = false } = {}) {
+async function build({ out = path.join(ROOT, 'ios', 'releases'), ipa = false } = {}) {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'ios-')), proj = path.join(work, 'AudioMixer-ios');
   fs.cpSync(IOS, proj, { recursive: true, filter: s => !/[\\/]www($|[\\/])/.test(s) && !s.endsWith('project.yml') });

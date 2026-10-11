@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 'use strict';
-// Builds the operating-system drivers of drivers/ that this machine can build, and packs them:
-//   node scripts/build-drivers.js [--out releases]
+// Builds the operating-system drivers (windows/asio-driver, linux/alsa-plugin, macos/coreaudio-driver, android/hal, shared code in drivers/common) that this machine can build, and packs them:
+//   node scripts/build-drivers.js [--out windows/releases] [--source]
 //   AudioMixer-<version>-asio-driver-windows.zip     AudioMixerASIO64.dll, AudioMixerASIO32.dll (cross-compiled with mingw-w64), register.bat, unregister.bat, README.txt
-//   AudioMixer-<version>-drivers-source.tar.gz       drivers/ complete: ASIO (Windows), ALSA plugin (Linux), Core Audio plug-in (macOS), audio HAL (Android)
+//   AudioMixer-<version>-drivers-source.tar.gz       (only with --source) all driver sources: ASIO (Windows), ALSA plugin (Linux), Core Audio plug-in (macOS), audio HAL (Android)
 // The macOS plug-in and the Android HAL need their own SDKs (Xcode, AOSP) and are shipped as source. The ALSA plugin is built on the target Linux PC (make).
 const fs = require('node:fs');
 const os = require('node:os');
@@ -11,7 +11,9 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
 
-const ROOT = path.resolve(__dirname, '..'), DRV = path.join(ROOT, 'drivers');
+const { ROOT } = require('./layout');
+const COMMON = path.join(ROOT, 'drivers', 'common'), ASIO = path.join(ROOT, 'windows', 'asio-driver');
+const SOURCE_DIRS = ['drivers', 'windows/asio-driver', 'linux/alsa-plugin', 'macos/coreaudio-driver', 'android/hal'];
 const which = n => { for (const d of (process.env.PATH || '').split(path.delimiter)) { const p = path.join(d, n); if (fs.existsSync(p)) return p; } return null; };
 const run = (cmd, args, opts = {}) => { const r = spawnSync(cmd, args, { encoding: 'utf8', ...opts }); if (r.status !== 0) throw new Error(`${path.basename(cmd)} ${args.slice(0, 3).join(' ')} failed: ${(r.stderr || r.error || '').toString().slice(0, 1500)}`); return r; };
 const sha = f => crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex');
@@ -20,10 +22,10 @@ const sha = f => crypto.createHash('sha256').update(fs.readFileSync(f)).digest('
 function buildAsio(arch, outDir) {
   const t = arch === 'x64' ? 'x86_64-w64-mingw32' : 'i686-w64-mingw32', cc = which(t + '-gcc'), cxx = which(t + '-g++');
   if (!cc || !cxx) throw new Error(`mingw-w64 (${t}-g++) is needed to build the ASIO driver (Debian / Ubuntu: apt install mingw-w64)`);
-  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'asio-')), dir = path.join(DRV, 'windows-asio');
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'asio-')), dir = ASIO;
   const out = path.join(outDir, arch === 'x64' ? 'AudioMixerASIO64.dll' : 'AudioMixerASIO32.dll');
   try {
-    run(cc, ['-std=gnu99', '-Wall', '-Wextra', '-Werror', '-O2', '-c', path.join(DRV, 'common', 'am_link.c'), '-o', path.join(work, 'am_link.o')]);
+    run(cc, ['-std=gnu99', '-Wall', '-Wextra', '-Werror', '-O2', '-c', path.join(COMMON, 'am_link.c'), '-o', path.join(work, 'am_link.o')]);
     run(cxx, ['-std=gnu++14', '-Wall', '-Wextra', '-Werror', '-O2', '-c', path.join(dir, 'audiomixer_asio.cpp'), '-o', path.join(work, 'asio.o')]);
     // static runtime: the DLL needs nothing but Windows' own DLLs, so it loads in any host
     run(cxx, ['-shared', '-static', '-static-libgcc', '-static-libstdc++', '-o', out, path.join(work, 'asio.o'), path.join(work, 'am_link.o'), path.join(dir, 'audiomixer_asio.def'),
@@ -53,7 +55,7 @@ Not tested on a real ASIO host in this release: the DLL was cross-compiled and c
 "ASIO" is a trademark of Steinberg Media Technologies GmbH. The interface was implemented from its published description; no Steinberg SDK file is included.
 `;
 
-function buildAll({ out = path.join(ROOT, 'releases') } = {}) {
+function buildAll({ out = path.join(ROOT, 'windows', 'releases'), source = false } = {}) {
   const version = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version, made = [];
   fs.mkdirSync(out, { recursive: true });
   // Windows ASIO driver zip
@@ -61,23 +63,25 @@ function buildAll({ out = path.join(ROOT, 'releases') } = {}) {
   fs.mkdirSync(pack);
   try {
     buildAsio('x64', pack); buildAsio('x86', pack);
-    for (const f of ['register.bat', 'unregister.bat']) fs.copyFileSync(path.join(DRV, 'windows-asio', f), path.join(pack, f));
+    for (const f of ['register.bat', 'unregister.bat']) fs.copyFileSync(path.join(ASIO, f), path.join(pack, f));
     fs.writeFileSync(path.join(pack, 'README.txt'), README_WINDOWS(version).replace(/\r?\n/g, '\r\n'));
     const zip = path.join(out, `AudioMixer-${version}-asio-driver-windows.zip`); fs.rmSync(zip, { force: true });
     run('zip', ['-qr', zip, path.basename(pack)], { cwd: stage });
     fs.writeFileSync(zip + '.sha256', `${sha(zip)}  ${path.basename(zip)}\n`); made.push(zip);
   } finally { fs.rmSync(stage, { recursive: true, force: true }); }
-  // all driver sources
-  const tar = path.join(out, `AudioMixer-${version}-drivers-source.tar.gz`); fs.rmSync(tar, { force: true });
-  run('tar', ['--sort=name', '--mtime=@0', '--owner=0', '--group=0', '--numeric-owner', '--exclude=*.so', '--exclude=*.dll', '--exclude=*.o', '--exclude=*.driver',
-    '-czf', tar, '--transform', `s,^drivers,audio-mixer-drivers-${version},`, '-C', ROOT, 'drivers']);
-  fs.writeFileSync(tar + '.sha256', `${sha(tar)}  ${path.basename(tar)}\n`); made.push(tar);
+  // all driver sources (the repository's own folders, below one version folder; Makefiles keep working because the relative paths stay the same)
+  if (source) {
+    const tar = path.join(out, `AudioMixer-${version}-drivers-source.tar.gz`); fs.rmSync(tar, { force: true });
+    run('tar', ['--sort=name', '--mtime=@0', '--owner=0', '--group=0', '--numeric-owner', '--exclude=*.so', '--exclude=*.dll', '--exclude=*.o', '--exclude=*.driver',
+      '-czf', tar, '--transform', `s,^,audio-mixer-drivers-${version}/,`, '-C', ROOT, ...SOURCE_DIRS]);
+    fs.writeFileSync(tar + '.sha256', `${sha(tar)}  ${path.basename(tar)}\n`); made.push(tar);
+  }
   return { version, files: made };
 }
 
 if (require.main === module) {
   const a = process.argv.slice(2), i = a.indexOf('--out');
-  try { const r = buildAll(i >= 0 ? { out: path.resolve(a[i + 1]) } : {}); r.files.forEach(f => console.log(`${f}  (${(fs.statSync(f).size / 1024).toFixed(0)} KB)`)); }
+  try { const r = buildAll({ ...(i >= 0 ? { out: path.resolve(a[i + 1]) } : {}), source: a.includes('--source') }); r.files.forEach(f => console.log(`${f}  (${(fs.statSync(f).size / 1024).toFixed(0)} KB)`)); }
   catch (e) { console.error('Error: ' + e.message); process.exit(1); }
 }
 module.exports = { buildAsio, buildAll, README_WINDOWS };

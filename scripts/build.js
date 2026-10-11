@@ -9,7 +9,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
 
-const ROOT = path.resolve(__dirname, '..');
+const { ROOT, repoPath } = require('./layout');   // package paths (native/win ...) differ from the repository folders (windows/native ...): see layout.js
 const FILES = [
   'index.html', 'boot.html', 'README.md', 'LICENSE', 'package.json', 'start-pc-mode.bat', 'start-pc-mode.sh', 'ensure-node.sh', 'start-local-server.bat',
   'client/cli.js', 'client/service.js', 'client/verify.js',
@@ -45,8 +45,8 @@ function build({ out = path.join(ROOT, 'dist'), archive = false } = {}) {
   const ALL = [...FILES, ...DIRS.flatMap(listDir)];
 
   for (const rel of ALL) {
-    const from = path.join(ROOT, rel), to = path.join(dest, rel);
-    if (!fs.existsSync(from)) throw new Error('missing build input: ' + rel);
+    const from = path.join(ROOT, repoPath(rel)), to = path.join(dest, rel);
+    if (!fs.existsSync(from)) throw new Error('missing build input: ' + repoPath(rel));
     fs.mkdirSync(path.dirname(to), { recursive: true });
     fs.copyFileSync(from, to);
     if (rel.endsWith('.sh') || rel.startsWith('client/cli')) fs.chmodSync(to, 0o755);

@@ -32,9 +32,9 @@ Audio devices come from **Qt Multimedia** (`QMediaDevices`) instead of `AudioMan
 
        node scripts/prepare-qt.js
 
-3. Open `android-qt/CMakeLists.txt` in Qt Creator, choose the Android kit and run, or from a shell:
+3. Open `android/qt/CMakeLists.txt` in Qt Creator, choose the Android kit and run, or from a shell:
 
-       cmake -S android-qt -B android-qt/build -DCMAKE_TOOLCHAIN_FILE=<Qt>/android_arm64_v8a/lib/cmake/Qt6/qt.toolchain.cmake -DANDROID_SDK_ROOT=<sdk> -DANDROID_NDK_ROOT=<ndk>
-       cmake --build android-qt/build --target apk
+       cmake -S android/qt -B android/qt/build -DCMAKE_TOOLCHAIN_FILE=<Qt>/android_arm64_v8a/lib/cmake/Qt6/qt.toolchain.cmake -DANDROID_SDK_ROOT=<sdk> -DANDROID_NDK_ROOT=<ndk>
+       cmake --build android/qt/build --target apk
 
 The APK is unsigned-debug by default; sign it with your own key for distribution (the Java app's `npm run build:apk` shows how its key is handled).

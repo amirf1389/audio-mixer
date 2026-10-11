@@ -14,7 +14,7 @@
 #ifdef Q_OS_ANDROID
 static const QString kRoot = QStringLiteral("assets:/www");
 #else
-static const QString kRoot = QStringLiteral("assets/www");    // desktop test runs: android-qt/assets/www next to the binary
+static const QString kRoot = QStringLiteral("assets/www");    // desktop test runs: android/qt/assets/www next to the binary
 #endif
 
 MixerServer::MixerServer(AudioDevices *devices, QObject *parent) : QTcpServer(parent), m_devices(devices)

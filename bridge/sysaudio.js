@@ -68,8 +68,8 @@ async function listLinux({ run = defaultRun, readFile = p => fs.readFileSync(p, 
   return devices;
 }
 
-// Core Audio helper written in Swift (native/mac/AudioDevices.swift, built by install.command or `swiftc`): channels, sample rate, default device, transport
-const macHelper = () => path.join(__dirname, '..', 'native', 'mac', 'AudioDevices');
+// Core Audio helper written in Swift (macos/native/AudioDevices.swift; an installed package has it as native/mac, built by install.command or `swiftc`): channels, sample rate, default device, transport
+const macHelper = () => [path.join(__dirname, '..', 'native', 'mac', 'AudioDevices'), path.join(__dirname, '..', 'macos', 'native', 'AudioDevices')].find(p => fs.existsSync(p)) || path.join(__dirname, '..', 'native', 'mac', 'AudioDevices');
 function fromHelper(text) {
   let j; try { j = JSON.parse(text); } catch (_) { return null; }
   if (!j || !j.ok || !Array.isArray(j.devices)) return null;

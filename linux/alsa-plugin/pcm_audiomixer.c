@@ -5,7 +5,7 @@
  *
  * The plugin is a user-space ioplug: no kernel module, no root. It talks to the running Audio Mixer program through drivers/common/am_link.c.
  * ALSA wants a hardware clock; there is none, so a small thread paces the stream at the real sample rate (like the "null" plugin does).
- * Build: see drivers/linux-alsa/Makefile (needs libasound2-dev / alsa-lib-devel). Install: copy the .so to the ALSA plugin folder and add asound.conf.
+ * Build: see linux/alsa-plugin/Makefile (needs libasound2-dev / alsa-lib-devel). Install: copy the .so to the ALSA plugin folder and add asound.conf.
  */
 #define _GNU_SOURCE
 #include <alsa/asoundlib.h>
@@ -19,7 +19,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "../common/am_link.h"
+#include "../../drivers/common/am_link.h"
 
 #define RING_FRAMES 16384    /* capture ring: what the mixer sent and the application has not read yet (about 340 ms at 48 kHz) */
 

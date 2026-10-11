@@ -22,7 +22,7 @@
 #include <log/log.h>
 #include <system/audio.h>
 
-#include "../common/am_link.h"
+#include "../../drivers/common/am_link.h"
 
 #define RATE 48000
 #define CHANNELS 2

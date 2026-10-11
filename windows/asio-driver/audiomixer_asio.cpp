@@ -22,7 +22,7 @@
 
 #include "asio_iface.h"
 extern "C" {
-#include "../common/am_link.h"
+#include "../../drivers/common/am_link.h"
 }
 
 // {C1893F2F-1AD5-4344-9806-DCFD242C0D48}: the class id AND (by ASIO convention) the interface id the hosts ask for

@@ -1,7 +1,7 @@
 // AudioDevices - lists the Core Audio devices of this Mac as JSON on stdout (read-only: it opens no stream and changes nothing).
 //   { "ok":true, "devices":[ {"id":"<uid>","name":"MacBook Pro Microphone","kind":"input","channels":1,"sampleRate":48000,"default":true,"state":"active","transport":"builtin"} ] }
-// Same shape as native/win/AudioDevices.exe, so bridge/sysaudio.js reads both. A device with inputs and outputs is listed once per direction.
-// Build (Xcode command line tools):  swiftc -O -o native/mac/AudioDevices native/mac/AudioDevices.swift
+// Same shape as windows/native/<arch>/AudioDevices.exe, so bridge/sysaudio.js reads both. A device with inputs and outputs is listed once per direction.
+// Build (Xcode command line tools):  swiftc -O -o AudioDevices AudioDevices.swift
 // install.command does this for you when swiftc is installed; without it the bridge falls back to `system_profiler SPAudioDataType -json`.
 import CoreAudio
 import Foundation

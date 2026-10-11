@@ -119,4 +119,4 @@ Real Web Audio graph, saved in the browser (localStorage) and respecting the KNO
 - `start` with `deviceId: "universal"` (or `universal: true`) picks the best device that has enough channels; `started` carries `universal: true`.
 - Every open stream sends `{ type: "levels", id, direction, device, hostApi, engine, frameSize, latencyMs, sampleRate, channels, peak[], rms[], clip }` (dBFS per channel, about 12 per second) measured on the PCM that is really written / read.
 - `GET /api/audify` also returns `error` and `hint` when the module did not load (on Windows usually the missing Visual C++ runtime).
-- `../ensure-node.sh` (sourced by `start-pc-mode.sh`, the Linux launcher and the macOS app) finds or installs Node.js 18+ and the Audify module without administrator rights.
+- `../linux/ensure-node.sh` (sourced by `linux/start-pc-mode.sh`, the Linux launcher and the macOS app) finds or installs Node.js 18+ and the Audify module without administrator rights.
