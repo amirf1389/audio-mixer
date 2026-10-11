@@ -1322,7 +1322,7 @@ test('repository layout: one folder per system with its sources and release file
   const lay = require('../scripts/layout'), mk = require('../scripts/make-update'), root = pathx.join(__dirname, '..');
   const top = fsx.readdirSync(root, { withFileTypes: true }).filter(e => !e.name.startsWith('.') && e.name !== 'node_modules' && e.name !== 'dist');
   const dirs = top.filter(e => e.isDirectory()).map(e => e.name).sort(), files = top.filter(e => e.isFile()).map(e => e.name).sort();
-  assert.deepStrictEqual(dirs, ['android', 'bridge', 'client', 'deploy', 'drivers', 'engine', 'ios', 'linux', 'macos', 'npm-installer', 'ota-server', 'releases', 'scripts', 'windows'], 'the top level is minimal: systems + shared code');
+  assert.deepStrictEqual(dirs, ['android', 'bridge', 'client', 'deploy', 'drivers', 'engine', 'installer', 'ios', 'linux', 'macos', 'npm-installer', 'ota-server', 'releases', 'scripts', 'windows'], 'the top level is minimal: systems + shared code');
   assert.deepStrictEqual(files, ['Additional Terms & Conditions', 'LICENSE', 'LICENSE.txt', 'PROJECT-README.md', 'README.md', 'SECURITY.md', 'Steinberg ASIO Licensing Agreement.pdf', 'Steinberg ASIO SDK 2.3.pdf', 'Steinberg ASIO Usage Guidelines.pdf', 'boot.html', 'changes.txt', 'index.html', 'package.json'], 'only the web app, the project papers and the Steinberg ASIO SDK papers at the root');
   assert.deepStrictEqual(fsx.readdirSync(pathx.join(root, 'releases')), ['update.json'], 'releases/ holds only the manifest that installed apps fetch');
   for (const os of lay.OSES) assert.ok(fsx.statSync(pathx.join(root, os, 'releases')).isDirectory(), os + '/releases');
@@ -3142,4 +3142,96 @@ test('a driver that disappears without a WebSocket close frame (killed host: onl
     const b = await connect('FinDriver');                           // the same name is accepted again
     assert.strictEqual(await count(), 1); b.destroy();
   } finally { server.closeAllConnections(); server.close(); }
+});
+
+test('audify WASAPI output: the queue of blocks waiting for the device is bounded (a slow start or clock drift no longer adds an ever-growing delay)', () => {
+  const a = require('./audify');
+  const mk = () => {
+    const f = fakeAudify(), queue = [], st = { cleared: 0, frameCb: 'unset' };
+    const Base = f.RtAudio;
+    f.RtAudio = class extends Base {
+      openStream(out, inp, fmt, rate, frames, name, cb, frameCb, flags) { st.frameCb = frameCb; return super.openStream(out, inp, fmt, rate, frames, name, cb); }
+      write(b) { queue.push(b[0]); }
+      clearOutputQueue() { st.cleared++; queue.length = 0; }
+    };
+    return { f, queue, st, take: n => { for (let i = 0; i < n && queue.length; i++) { queue.shift(); if (st.frameCb) st.frameCb(); } } };
+  };
+  const wasapi = { id: 1000, rtId: 5, api: 'WINDOWS_WASAPI', hostAPIName: 'Windows WASAPI', name: 'Speakers (Realtek)', maxOutputChannels: 2, maxInputChannels: 0, sampleRates: [48000] };
+  const block = (n, frames) => { const b = Buffer.alloc(frames * 4); b[0] = n; return b; };
+  // the device takes nothing for a while (start-up): after the limit only the newest few blocks are kept
+  let t = mk(); const s = a.openStream({ mod: t.f, dev: wasapi, direction: 'output', channels: 2, sampleRate: 48000 });
+  assert.strictEqual(s.frameSize, 512); assert.strictEqual(typeof t.st.frameCb, 'function', 'Audify is asked to report every block the device takes');
+  for (let i = 1; i <= 60; i++) s.write(block(i, 512));
+  assert.ok(s.trimmed > 0 && t.st.cleared === s.trimmed, 'backlog dropped');
+  assert.ok(t.queue.length <= 15, 'at most about 150 ms waits: ' + t.queue.length);
+  assert.deepStrictEqual(t.queue.slice(-3), [58, 59, 60], 'the newest blocks are the ones that stay');
+  // the device now runs: it takes the blocks as fast as they arrive, nothing more is dropped
+  const trimmed = s.trimmed; t.take(100);
+  for (let i = 61; i <= 400; i++) { s.write(block(i & 255, 512)); t.take(1); }
+  assert.strictEqual(s.trimmed, trimmed, 'a steady stream is never trimmed');
+  assert.ok(t.queue.length <= 1);
+  // a device that takes slightly fewer blocks than arrive (clock drift): bounded, not growing for ever
+  t = mk(); const d = a.openStream({ mod: t.f, dev: wasapi, direction: 'output', channels: 2, sampleRate: 48000 });
+  for (let i = 0; i < 2000; i++) { d.write(block(i & 255, 512)); if (i % 20) t.take(1); }      // 5 % too fast
+  assert.ok(t.queue.length <= 15 && d.trimmed > 0 && d.trimmed < 20, `bounded (${t.queue.length} waiting, ${d.trimmed} trims in 2000 blocks)`);
+  // ASIO and the other host APIs are untouched, and it can be switched off
+  const asio = { id: 1001, rtId: 0, api: 'WINDOWS_ASIO', hostAPIName: 'ASIO', name: 'Focusrite USB ASIO', maxOutputChannels: 20, maxInputChannels: 18, sampleRates: [44100, 48000, 96000] };
+  t = mk(); const x = a.openStream({ mod: t.f, dev: asio, direction: 'output', channels: 2, sampleRate: 48000, frameSize: 128 });
+  assert.strictEqual(t.st.frameCb, null); for (let i = 0; i < 100; i++) x.write(block(i, 128)); assert.strictEqual(t.st.cleared, 0); assert.strictEqual(t.queue.length, 100);
+  t = mk(); const off = a.openStream({ mod: t.f, dev: wasapi, direction: 'output', channels: 2, sampleRate: 48000, queueControl: false });
+  assert.strictEqual(t.st.frameCb, null); for (let i = 0; i < 100; i++) off.write(block(i, 512)); assert.strictEqual(t.queue.length, 100);
+  // input streams never use it
+  t = mk(); a.openStream({ mod: t.f, dev: { ...wasapi, maxInputChannels: 2, maxOutputChannels: 0 }, direction: 'input', channels: 2, sampleRate: 48000 }); assert.strictEqual(t.st.frameCb, null);
+});
+
+test('exclusive access: ASIO is exclusive by nature, the hog flag is asked of Core Audio / OSS only, everything else says it stays shared; the page never falls back to Web Audio for an interface the server can open', () => {
+  const a = require('./audify');
+  const mod = { RtAudioStreamFlags: { RTAUDIO_MINIMIZE_LATENCY: 2, RTAUDIO_HOG_DEVICE: 4 } };
+  assert.deepStrictEqual(a.streamFlags(mod, { api: 'WINDOWS_ASIO' }, false), { flags: 2, exclusive: true });
+  assert.deepStrictEqual(a.streamFlags(mod, { api: 'MACOSX_CORE' }, true), { flags: 6, exclusive: true });
+  assert.deepStrictEqual(a.streamFlags(mod, { api: 'LINUX_OSS' }, true), { flags: 6, exclusive: true });
+  assert.deepStrictEqual(a.streamFlags(mod, { api: 'MACOSX_CORE' }, false), { flags: 2, exclusive: false });          // only when asked
+  for (const api of ['WINDOWS_WASAPI', 'WINDOWS_DS', 'LINUX_ALSA', 'LINUX_PULSE', 'UNIX_JACK']) assert.deepStrictEqual(a.streamFlags(mod, { api }, true), { flags: 2, exclusive: false }, api + ' stays shared and says so');
+  assert.deepStrictEqual(a.streamFlags({ RtAudioStreamFlags: { RTAUDIO_MINIMIZE_LATENCY: 2 } }, { api: 'MACOSX_CORE' }, true), { flags: 2, exclusive: false }, 'a build without the flag');
+  // through a stream: the flags reach RtAudio, the stream reports what was applied
+  const seen = [];
+  const f = fakeAudify(); const Base = f.RtAudio;
+  f.RtAudio = class extends Base { openStream(o, i, fm, r, fr, n, cb, fcb, flags) { seen.push(flags); return super.openStream(o, i, fm, r, fr, n, cb); } };
+  f.RtAudioStreamFlags = { RTAUDIO_MINIMIZE_LATENCY: 2, RTAUDIO_HOG_DEVICE: 4 };
+  const core = { id: 1000, rtId: 1, api: 'MACOSX_CORE', hostAPIName: 'Core Audio', name: 'USB Interface', maxOutputChannels: 2, maxInputChannels: 2, sampleRates: [44100, 48000] };
+  assert.strictEqual(a.openStream({ mod: f, dev: core, direction: 'output', channels: 2, sampleRate: 48000, exclusive: true }).exclusive, true);
+  assert.strictEqual(a.openStream({ mod: f, dev: core, direction: 'output', channels: 2, sampleRate: 48000 }).exclusive, false);
+  assert.deepStrictEqual(seen, [6, 2]);
+  const asio = { id: 1001, rtId: 0, api: 'WINDOWS_ASIO', hostAPIName: 'ASIO', name: 'Focusrite USB ASIO', maxOutputChannels: 20, maxInputChannels: 18, sampleRates: [44100, 48000, 96000] };
+  assert.strictEqual(a.openStream({ mod: fakeAudify(), dev: asio, direction: 'output', channels: 2, sampleRate: 48000, frameSize: 128 }).exclusive, true);
+  // the sessions ask for it and report it
+  const root = pathx.join(__dirname, '..'), rd = f2 => fsx.readFileSync(pathx.join(root, f2), 'utf8');
+  for (const f2 of ['bridge/output.js', 'bridge/input.js', 'bridge/duplex.js']) { const s = rd(f2); assert.match(s, /exclusive: opts\.exclusive === true/); assert.match(s, /exclusive: st\.exclusive/); }
+  // the page: interface streams ask for exclusive access and show shared / exclusive; no silent browser fallback when the server has a native route; browser twins are replaced
+  const html = rd('index.html');
+  assert.strictEqual((html.match(/exclusive: self\.cfg\.exclusive !== false/g) || []).length, 3);
+  assert.match(html, /exclusive: true, deviceId: devSel/); assert.match(html, /lockNote\(m\) \{ return \/asio\/i\.test\(m\.hostApi\)/);
+  assert.match(html, /if \(!cap && i\.browser && i\.browser\.inId && !this\.nativeInput\(i\)\)/);
+  assert.match(html, /nativeInput\(i\) \{ return !!\(this\.bridgeUrl && this\.portaudio && \(i\.apis \|\| \[\]\)\.some\(a => a\.inputs > 0\)\); \}/);
+  assert.match(html, /this\.preferNative\(sel, ins\.concat\(au\), 'selectedInputDeviceId'\)/); assert.match(html, /this\.preferNative\(sel, outs\.concat\(au\), 'selectedOutputDeviceId'\)/);
+});
+
+test('music FFT spectrum: the RTA music trace and the PEQ overlay use a 4096-point analyser on the labelled frequency axis; MIC ONLY / MUSIC ONLY / DUAL work; the Live Sources music feeds the RTA', () => {
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  // a dedicated analyser: the 512-point program bus analyser stays for the scope
+  assert.match(html, /const musicFftAnalyser = window\.state\.ctx\.createAnalyser\(\);\s*musicFftAnalyser\.fftSize = 4096;/);
+  assert.match(html, /masterLimiter\.connect\(musicFftAnalyser\);\s*window\.state\.nodes\.musicFftAnalyser = musicFftAnalyser;/);
+  assert.match(html, /musicAnalyser\.fftSize = 512;/);
+  // the RTA: one source (Live Sources music, else the program bus while powered on), the mode, the same band axis as the mic trace
+  assert.match(html, /const rtaMode = \(window\.musicRtaEngine && window\.musicRtaEngine\.mode\) \|\| 'dual';/);
+  assert.match(html, /const extMusic = window\.liveSources && window\.liveSources\.music && window\.liveSources\.music\.analyser;/);
+  assert.match(html, /const musicAn = extMusic \|\| \(window\.state\.active \? window\.state\.nodes\.musicFftAnalyser : null\);/);
+  assert.match(html, /if \(rtaMode !== 'mic' && musicAn\) \{/); assert.match(html, /if \(rtaMode !== 'music' && \(window\.state\.micActive \|\| window\.state\.micFeeds\)/);
+  assert.ok(!/Math\.pow\(i \/ bars, 1\.7\)/.test(html) && !/Math\.pow\(i \/ bars, 1\.6\)/.test(html), 'the old power-law bin mapping (it did not match the labels) is gone');
+  // the PEQ overlay follows the curve's own axis (band k at x = step * (k + 1))
+  assert.match(html, /const hzAtX = x => \{ const t = x \/ eqStep - 1, k = Math\.max\(0, Math\.min\(EQ_BANDS\.length - 2, Math\.floor\(t\)\)\);/);
+  // the same band axis, run for real: a tone must land on the bar of its label
+  const AX = [20, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000, 20000], hzAt = x => { const t = Math.min(1, Math.max(0, x)) * (AX.length - 1), k = Math.min(AX.length - 2, Math.floor(t)); return AX[k] * Math.pow(AX[k + 1] / AX[k], t - k); };
+  const barOf = hz => { for (let i = 0; i < 64; i++) if (hz >= hzAt(i / 64) && hz < hzAt((i + 1) / 64)) return i; return -1; };
+  assert.deepStrictEqual([250, 1000, 4000, 8000].map(barOf), [19, 32, 44, 51]);
 });
