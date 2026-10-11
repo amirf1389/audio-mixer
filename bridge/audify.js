@@ -246,7 +246,7 @@ function createResampler(inRate, outRate, channels) {
 }
 
 // Opens one RtAudio stream (output or input). Returns { frameSize, sampleRate, channels, write, close } or throws.
-function openStreamRaw({ mod, dev, direction, channels, sampleRate, frameSize, onData, onError, onWarning }) {
+function openStreamRaw({ mod, dev, direction, channels, sampleRate, frameSize, onData, onError, onWarning, queueControl }) {
   sampleRate = Number(sampleRate);
   const { RtAudio, RtAudioFormat = {}, RtAudioStreamFlags = {} } = mod, Api = apiEnum(mod);
   const out = direction === 'output';
@@ -270,30 +270,50 @@ function openStreamRaw({ mod, dev, direction, channels, sampleRate, frameSize, o
   const p = plan(frameSize, { api: dev.api, sampleRate, channels: ch });
   const fmt = RtAudioFormat.RTAUDIO_SINT16 !== undefined ? RtAudioFormat.RTAUDIO_SINT16 : 2;
   const flags = RtAudioStreamFlags.RTAUDIO_MINIMIZE_LATENCY || 0;
+  // Audify keeps every block handed to write() in an unbounded queue until the device takes it. A WASAPI stream starts consuming only after the audio
+  // client is initialised (tens to hundreds of ms, longer for Bluetooth and USB endpoints), and the mixer's clock and the device's clock never match exactly,
+  // so that queue only grows: the sound came out later and later (and the queue used memory). Audify tells when a block is taken (the frame-output
+  // callback), so the bridge counts the blocks waiting and, above a limit, drops the backlog and keeps only the newest few blocks (a short gap instead of an
+  // ever-growing delay). Used for WASAPI; `queueControl: true / false` forces it on / off.
+  const control = out && (queueControl === undefined ? dev.api === 'WINDOWS_WASAPI' : !!queueControl);
   let lastErr = null;
   for (const fs of p.candidates) {
     const rt = new RtAudio(Api[dev.api]);
-    let warnings = 0, lastWarning = '';
+    let warnings = 0, lastWarning = '', queued = 0;
     try {
       const params = { deviceId: dev.rtId, nChannels: ch, firstChannel: 0 };
       const actual = rt.openStream(out ? params : null, out ? null : params, fmt, sampleRate, fs, 'Audio Mixer',
-        out ? null : (pcm => { if (!onData) return; const b = Buffer.from(pcm); onData(conv ? conv(b) : b); }), null, flags, errorHandler(mod, e => onError && onError(e), e => { warnings++; lastWarning = e.message; if (onWarning) onWarning(e); }));
+        out ? null : (pcm => { if (!onData) return; const b = Buffer.from(pcm); onData(conv ? conv(b) : b); }), control ? (() => { if (queued > 0) queued--; }) : null, flags, errorHandler(mod, e => onError && onError(e), e => { warnings++; lastWarning = e.message; if (onWarning) onWarning(e); }));
       rt.start();
       const used = Number.isInteger(actual) && actual > 0 ? actual : fs;
       if (!(used > 0)) throw new Error('the driver did not report its buffer size');
       const frameBytes = used * ch * 2;
-      let pending = Buffer.alloc(0), dropped = 0;
+      let pending = Buffer.alloc(0), dropped = 0, trimmed = 0;
+      const blockMs = used / sampleRate * 1000, keep = Math.max(2, Math.round(30 / blockMs)), limit = Math.max(keep + 4, Math.ceil(150 / blockMs)), recent = [];
       return {
         frameSize: used, sampleRate: wantRate, deviceRate: sampleRate, resampled: !!conv, channels: remap ? channels : ch, deviceChannels: ch, mixedDown: !!remap, auto: p.auto, tried: p.candidates.slice(0, p.candidates.indexOf(fs) + 1),
         latencyMs: Math.round(used / sampleRate * 10000) / 10,
-        get dropped() { return dropped; }, get warnings() { return warnings; }, get lastWarning() { return lastWarning; },
+        get dropped() { return dropped; }, get trimmed() { return trimmed; }, get warnings() { return warnings; }, get lastWarning() { return lastWarning; },
         // RtAudio needs whole blocks of exactly frameSize frames.
         write(buf) {
           if (remap) buf = remap(buf);
           if (conv) buf = conv(buf);
           pending = pending.length ? Buffer.concat([pending, buf]) : buf;
           if (pending.length > frameBytes * 16) { dropped += pending.length - frameBytes * 16; pending = pending.subarray(pending.length - frameBytes * 16); }
-          while (pending.length >= frameBytes) { rt.write(Buffer.from(pending.subarray(0, frameBytes))); pending = pending.subarray(frameBytes); }
+          while (pending.length >= frameBytes) {
+            const block = Buffer.from(pending.subarray(0, frameBytes));
+            pending = pending.subarray(frameBytes);
+            if (control && typeof rt.clearOutputQueue === 'function') {
+              recent.push(block); if (recent.length > keep) recent.shift();
+              if (queued >= limit) {                                   // too late already: drop what waits, play the newest blocks
+                rt.clearOutputQueue(); trimmed++; queued = 0;
+                for (const b of recent) { rt.write(b); queued++; }
+                continue;
+              }
+              queued++;
+            }
+            rt.write(block);
+          }
         },
         close() {
           try { if (typeof rt.isStreamRunning === 'function' ? rt.isStreamRunning() : true) rt.stop(); } catch (_) { /* already stopped */ }

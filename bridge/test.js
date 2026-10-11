@@ -3143,3 +3143,43 @@ test('a driver that disappears without a WebSocket close frame (killed host: onl
     assert.strictEqual(await count(), 1); b.destroy();
   } finally { server.closeAllConnections(); server.close(); }
 });
+
+test('audify WASAPI output: the queue of blocks waiting for the device is bounded (a slow start or clock drift no longer adds an ever-growing delay)', () => {
+  const a = require('./audify');
+  const mk = () => {
+    const f = fakeAudify(), queue = [], st = { cleared: 0, frameCb: 'unset' };
+    const Base = f.RtAudio;
+    f.RtAudio = class extends Base {
+      openStream(out, inp, fmt, rate, frames, name, cb, frameCb, flags) { st.frameCb = frameCb; return super.openStream(out, inp, fmt, rate, frames, name, cb); }
+      write(b) { queue.push(b[0]); }
+      clearOutputQueue() { st.cleared++; queue.length = 0; }
+    };
+    return { f, queue, st, take: n => { for (let i = 0; i < n && queue.length; i++) { queue.shift(); if (st.frameCb) st.frameCb(); } } };
+  };
+  const wasapi = { id: 1000, rtId: 5, api: 'WINDOWS_WASAPI', hostAPIName: 'Windows WASAPI', name: 'Speakers (Realtek)', maxOutputChannels: 2, maxInputChannels: 0, sampleRates: [48000] };
+  const block = (n, frames) => { const b = Buffer.alloc(frames * 4); b[0] = n; return b; };
+  // the device takes nothing for a while (start-up): after the limit only the newest few blocks are kept
+  let t = mk(); const s = a.openStream({ mod: t.f, dev: wasapi, direction: 'output', channels: 2, sampleRate: 48000 });
+  assert.strictEqual(s.frameSize, 512); assert.strictEqual(typeof t.st.frameCb, 'function', 'Audify is asked to report every block the device takes');
+  for (let i = 1; i <= 60; i++) s.write(block(i, 512));
+  assert.ok(s.trimmed > 0 && t.st.cleared === s.trimmed, 'backlog dropped');
+  assert.ok(t.queue.length <= 15, 'at most about 150 ms waits: ' + t.queue.length);
+  assert.deepStrictEqual(t.queue.slice(-3), [58, 59, 60], 'the newest blocks are the ones that stay');
+  // the device now runs: it takes the blocks as fast as they arrive, nothing more is dropped
+  const trimmed = s.trimmed; t.take(100);
+  for (let i = 61; i <= 400; i++) { s.write(block(i & 255, 512)); t.take(1); }
+  assert.strictEqual(s.trimmed, trimmed, 'a steady stream is never trimmed');
+  assert.ok(t.queue.length <= 1);
+  // a device that takes slightly fewer blocks than arrive (clock drift): bounded, not growing for ever
+  t = mk(); const d = a.openStream({ mod: t.f, dev: wasapi, direction: 'output', channels: 2, sampleRate: 48000 });
+  for (let i = 0; i < 2000; i++) { d.write(block(i & 255, 512)); if (i % 20) t.take(1); }      // 5 % too fast
+  assert.ok(t.queue.length <= 15 && d.trimmed > 0 && d.trimmed < 20, `bounded (${t.queue.length} waiting, ${d.trimmed} trims in 2000 blocks)`);
+  // ASIO and the other host APIs are untouched, and it can be switched off
+  const asio = { id: 1001, rtId: 0, api: 'WINDOWS_ASIO', hostAPIName: 'ASIO', name: 'Focusrite USB ASIO', maxOutputChannels: 20, maxInputChannels: 18, sampleRates: [44100, 48000, 96000] };
+  t = mk(); const x = a.openStream({ mod: t.f, dev: asio, direction: 'output', channels: 2, sampleRate: 48000, frameSize: 128 });
+  assert.strictEqual(t.st.frameCb, null); for (let i = 0; i < 100; i++) x.write(block(i, 128)); assert.strictEqual(t.st.cleared, 0); assert.strictEqual(t.queue.length, 100);
+  t = mk(); const off = a.openStream({ mod: t.f, dev: wasapi, direction: 'output', channels: 2, sampleRate: 48000, queueControl: false });
+  assert.strictEqual(t.st.frameCb, null); for (let i = 0; i < 100; i++) off.write(block(i, 512)); assert.strictEqual(t.queue.length, 100);
+  // input streams never use it
+  t = mk(); a.openStream({ mod: t.f, dev: { ...wasapi, maxInputChannels: 2, maxOutputChannels: 0 }, direction: 'input', channels: 2, sampleRate: 48000 }); assert.strictEqual(t.st.frameCb, null);
+});
