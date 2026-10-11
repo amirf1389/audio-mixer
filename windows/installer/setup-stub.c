@@ -13,6 +13,8 @@
  *   Audio Mixer-1.4.0.exe /nopath      do not put the audio-mixer command (audio-mixer.exe) on PATH
  *   Audio Mixer-1.4.0.exe /asio        also register the Audio Mixer ASIO driver (its files are always installed in the install folder, in asio-driver\); /noasio  do not ask about it
  *                                      The driver is registered only on request: /asio, or "Yes" to the question of an interactive install (the default answer is No). /quiet never registers it unless /asio is given.
+ *   Audio Mixer-1.4.0.exe /noregistry  no environment variables (AUDIO_MIXER_DIR, AUDIO_MIXER_ASIO) and no App Paths / version keys;  /nofiletypes  do not take over .amix files and audiomixer:// links
+ *   Audio Mixer-1.4.0.exe /toolspath   also put the driver tools folder (asio-driver) on PATH (off by default)
  *   Audio Mixer-1.4.0.exe /notools     no Start Menu tool shortcuts (license, plugins, drivers, update, diagnostics)
  *   Audio Mixer-1.4.0.exe /noshortcuts no Start Menu shortcuts at all;  /nodesktop  no desktop shortcut (it is on by default);  /noautostart  accepted and ignored (there is no start at login any more)
  *   After an interactive install the setup says it is done and offers to start Audio Mixer at once (not with /quiet or /passive).
@@ -169,7 +171,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int show) {
   (void)inst; (void)prev; (void)cmd; (void)show;
   int argc = 0; wchar_t **argv = CommandLineToArgvW(GetCommandLineW(), &argc);
   int quiet = 0, passive = 0, uninstall = 0, novc = 0, vcyes = 0;
-  int noplug = 0, nohelp = 0, notools = 0, noshort = 0, desktop = 1, nopath = 0, asio = 0, noasio = 0;
+  int noplug = 0, nohelp = 0, notools = 0, noshort = 0, desktop = 1, nopath = 0, asio = 0, noasio = 0, noreg = 0, nofiletypes = 0, toolspath = 0;
   wchar_t extra[2048] = L"";
   for (int i = 1; argv && i < argc; i++) {
     if (!_wcsicmp(argv[i], L"/quiet") || !_wcsicmp(argv[i], L"/S") || !_wcsicmp(argv[i], L"/qn") || !_wcsicmp(argv[i], L"-quiet")) quiet = 1;
@@ -187,9 +189,12 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int show) {
     else if (!_wcsicmp(argv[i], L"/nopath")) nopath = 1;
     else if (!_wcsicmp(argv[i], L"/asio")) asio = 1;                      /* register the ASIO driver (MSI feature AsioDriver) */
     else if (!_wcsicmp(argv[i], L"/noasio")) noasio = 1;                  /* do not ask about it */
+    else if (!_wcsicmp(argv[i], L"/noregistry")) noreg = 1;               /* no environment variables / App Paths keys (MSI feature Registry) */
+    else if (!_wcsicmp(argv[i], L"/nofiletypes")) nofiletypes = 1;        /* no .amix / audiomixer:// handlers (MSI feature FileTypes) */
+    else if (!_wcsicmp(argv[i], L"/toolspath")) toolspath = 1;            /* driver tools folder on PATH (MSI feature ToolsPath) */
     else if (!_wcsicmp(argv[i], L"/uninstall") || !_wcsicmp(argv[i], L"/remove")) uninstall = 1;
     else if (!wcscmp(argv[i], L"/?") || !_wcsicmp(argv[i], L"/help")) {
-      message(L"Audio Mixer setup\n\n/quiet  silent install\n/passive  progress only\n/uninstall  remove Audio Mixer\n/novcredist  do not offer the Visual C++ runtime\n/vcredist  install the Visual C++ runtime without asking\n/noplugins  no VST plugin host\n/nohelpers  no native device helpers\n/notools  no tool shortcuts\n/noshortcuts  no Start Menu shortcuts\n/nodesktop  no desktop shortcut\n/noautostart  accepted and ignored (no start at login any more)\n/nopath  do not put the audio-mixer command on PATH\n/asio  also register the ASIO driver (files are always installed)\n/noasio  do not ask about the ASIO driver\nPROPERTY=value  passed to Windows Installer (for example INSTALLDIR=\"D:\\Audio Mixer\")", MB_ICONINFORMATION);
+      message(L"Audio Mixer setup\n\n/quiet  silent install\n/passive  progress only\n/uninstall  remove Audio Mixer\n/novcredist  do not offer the Visual C++ runtime\n/vcredist  install the Visual C++ runtime without asking\n/noplugins  no VST plugin host\n/nohelpers  no native device helpers\n/notools  no tool shortcuts\n/noshortcuts  no Start Menu shortcuts\n/nodesktop  no desktop shortcut\n/noautostart  accepted and ignored (no start at login any more)\n/nopath  do not put the audio-mixer command on PATH\n/asio  also register the ASIO driver (files are always installed)\n/noasio  do not ask about the ASIO driver\n/noregistry  no environment variables or App Paths keys\n/nofiletypes  no .amix / audiomixer:// handlers\n/toolspath  put the driver tools folder on PATH\nPROPERTY=value  passed to Windows Installer (for example INSTALLDIR=\"D:\\Audio Mixer\")", MB_ICONINFORMATION);
       return 0;
     } else {
       /* quote property values that contain spaces: NAME=value with spaces -> NAME="value" */
@@ -247,8 +252,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int show) {
   /* the ASIO driver: its files are installed anyway; registering it (HKLM\SOFTWARE\ASIO) is asked about in an interactive install, the default answer is No */
   if (!asio && !noasio && !quiet && !passive && MessageBoxW(NULL, L"Register the Audio Mixer ASIO driver?\n\nIt makes \"Audio Mixer\" appear in the ASIO driver list of DAWs, OBS and other ASIO programs, so they can play into the mixer and record from it.\n\nThe driver files are installed in any case (folder asio-driver). Choose No to leave the driver unregistered: you can register it later with register.bat in that folder, as administrator.", TITLE, MB_YESNO | MB_DEFBUTTON2 | MB_ICONQUESTION | MB_SETFOREGROUND) == IDYES) asio = 1;
   /* feature switches -> ADDLOCAL (only when one was used; the default install keeps the MSI defaults) */
-  if (noplug || nohelp || notools || noshort || !desktop || nopath || asio) {
-    wchar_t add[300] = L" ADDLOCAL=Main";
+  if (noplug || nohelp || notools || noshort || !desktop || nopath || asio || noreg || nofiletypes || toolspath) {
+    wchar_t add[400] = L" ADDLOCAL=Main";
     if (!noshort) wcscat(add, L",Shortcuts");
     if (!noshort && !notools) wcscat(add, L",Tools");
     if (!nopath) wcscat(add, L",CommandLine");
@@ -256,6 +261,9 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int show) {
     if (!nohelp) wcscat(add, L",WinHelpers");
     if (desktop) wcscat(add, L",Desktop");
     if (asio) wcscat(add, L",AsioDriver");
+    if (!noreg) wcscat(add, L",Registry");
+    if (!nofiletypes) wcscat(add, L",FileTypes");
+    if (toolspath) wcscat(add, L",ToolsPath");
     if (!wcsstr(extra, L"ADDLOCAL=") && wcslen(extra) + wcslen(add) < 2000) wcscat(extra, add);
   }
 

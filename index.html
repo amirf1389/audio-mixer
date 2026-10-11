@@ -11445,6 +11445,34 @@ window.navTabs = [
             }
         };
 
+        // ─── Links and files opened by the operating system (audiomixer://page/<tab>, .amix scene files): "audio-mixer open" starts the local server and opens
+        //     this page with ?page=<tab> and/or ?scene=1. The tab must exist on the page; a scene file is fetched once from the local server, shown to you and
+        //     only imported after you confirm (it replaces the 8 scene slots).
+        window.addEventListener('load', function() {
+            let q; try { q = new URLSearchParams(location.search); } catch (e) { return; }
+            const page = q.get('page'), scene = q.get('scene');
+            if (!page && scene !== '1') return;
+            setTimeout(async function() {
+                try {
+                    if (page && /^[a-z]{1,16}$/.test(page) && document.getElementById('nav-' + page) && window.switchTab) window.switchTab(page);
+                    if (scene === '1' && location.hostname && /^(localhost|127\.0\.0\.1)$/.test(location.hostname)) {
+                        const r = await fetch(location.origin + '/api/handoff', { cache: 'no-store' });
+                        const j = await r.json();
+                        const d = j && j.ok ? j.scenes : null;
+                        if (Array.isArray(d) && d.length <= 16 && d.every(x => x === null || (x && typeof x === 'object' && !Array.isArray(x)))) {
+                            const n = d.filter(Boolean).length;
+                            if (confirm('Import the scene file you opened (' + n + ' snapshot' + (n === 1 ? '' : 's') + ')?\nThis replaces the scene snapshots stored in this browser.')) {
+                                window.sceneSlots = d;
+                                localStorage.setItem('halx_scenes', JSON.stringify(window.sceneSlots));
+                                window.renderSceneSlots();
+                                window.notify('Scene file imported', 'circle-check');
+                            }
+                        } else window.notify('No scene file waiting', 'triangle-exclamation');
+                    }
+                } catch (e) { /* the page still works without the link */ }
+            }, 600);
+        });
+
         // ─── 2. 32-CHANNEL COLOR ACCENT & SCRIBBLE STRIP MANAGER ───────────
         window.activeColorPickerChannel = 0;
         window.activeColorPickerBank = 0;

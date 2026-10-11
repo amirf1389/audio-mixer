@@ -8,6 +8,10 @@
 // Features: ADDLOCAL=Main,Shortcuts,Tools,CommandLine,PluginHost,WinHelpers,Desktop  (default: all, the desktop shortcut too; the setup program has /nodesktop)
 //   AsioDriver (off by default, add it to ADDLOCAL or use the setup program's /asio): registers the ASIO driver whose files are always in <install folder>\asio-driver
 //   CommandLine: audio-mixer.exe on PATH (system PATH for the all-users package, the user's PATH for the per-user one)
+//   Registry (on): system environment variables AUDIO_MIXER_DIR (install folder) and AUDIO_MIXER_ASIO (driver folder), the App Paths entries of audio-mixer.exe and
+//     AudioMixerServer.exe (Win+R / Start find them by name) and Version / Arch / DriverDir under HKLM\Software\Audio Mixer; all removed on uninstall
+//   FileTypes (on): the .amix scene file type and the audiomixer:// link handler, both run  audio-mixer.exe open "%1"  (see "open" in client/cli.js)
+//   ToolsPath (off by default, ADDLOCAL=...,ToolsPath or the setup program's /toolspath): the driver tools folder (asio-driver: register.bat, unregister.bat, the driver DLLs) on PATH
 //   PluginHost: native VST host (native/host), WinHelpers: native Windows audio device helpers (native/win); Tools: Start Menu shortcuts for license, plugins, drivers, update, doctor
 const fs = require('node:fs');
 const path = require('node:path');
@@ -133,6 +137,32 @@ ${installDirs}
       </Component>
     </DirectoryRef>
 
+    <!-- registry keys and environment variables: the Environment rows are added after wixl (see addEnvironment / environmentRows) -->
+    <DirectoryRef Id="INSTALLDIR">
+      <Component Id="RegistryKeys" Guid="${guid('registry-keys:' + scope)}"${w64}>
+        <RegistryValue Root="${root}" Key="Software\\Audio Mixer" Name="Version" Type="string" Value="${version}" KeyPath="yes"/>
+        <RegistryValue Root="${root}" Key="Software\\Audio Mixer" Name="Arch" Type="string" Value="${arch}"/>
+        <RegistryValue Root="${root}" Key="Software\\Audio Mixer" Name="DriverDir" Type="string" Value="[INSTALLDIR]asio-driver\\"/>
+        <RegistryValue Root="${root}" Key="Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\audio-mixer.exe" Type="string" Value="[INSTALLDIR]audio-mixer.exe"/>
+        <RegistryValue Root="${root}" Key="Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\audio-mixer.exe" Name="Path" Type="string" Value="[INSTALLDIR]"/>
+${hasIcon ? `        <RegistryValue Root="${root}" Key="Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\AudioMixerServer.exe" Type="string" Value="[INSTALLDIR]AudioMixerServer.exe"/>
+        <RegistryValue Root="${root}" Key="Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\AudioMixerServer.exe" Name="Path" Type="string" Value="[INSTALLDIR]"/>
+` : ''}      </Component>
+      <Component Id="FileTypeKeys" Guid="${guid('file-types:' + scope)}"${w64}>
+        <RegistryValue Root="${root}" Key="Software\\Classes\\.amix" Type="string" Value="AudioMixer.Scene" KeyPath="yes"/>
+        <RegistryValue Root="${root}" Key="Software\\Classes\\AudioMixer.Scene" Type="string" Value="Audio Mixer scene archive"/>
+        <RegistryValue Root="${root}" Key="Software\\Classes\\AudioMixer.Scene\\DefaultIcon" Type="string" Value="[INSTALLDIR]${hasIcon ? 'AudioMixerServer.exe' : 'audio-mixer.exe'},0"/>
+        <RegistryValue Root="${root}" Key="Software\\Classes\\AudioMixer.Scene\\shell\\open\\command" Type="string" Value="&quot;[INSTALLDIR]audio-mixer.exe&quot; open &quot;%1&quot;"/>
+        <RegistryValue Root="${root}" Key="Software\\Classes\\audiomixer" Type="string" Value="URL:Audio Mixer"/>
+        <RegistryValue Root="${root}" Key="Software\\Classes\\audiomixer" Name="URL Protocol" Type="string" Value=""/>
+        <RegistryValue Root="${root}" Key="Software\\Classes\\audiomixer\\DefaultIcon" Type="string" Value="[INSTALLDIR]${hasIcon ? 'AudioMixerServer.exe' : 'audio-mixer.exe'},0"/>
+        <RegistryValue Root="${root}" Key="Software\\Classes\\audiomixer\\shell\\open\\command" Type="string" Value="&quot;[INSTALLDIR]audio-mixer.exe&quot; open &quot;%1&quot;"/>
+      </Component>
+      <Component Id="ToolsPathKey" Guid="${guid('tools-path:' + scope)}"${w64}>
+        <RegistryValue Root="${root}" Key="Software\\Audio Mixer" Name="ToolsPath" Type="integer" Value="1" KeyPath="yes"/>
+      </Component>
+    </DirectoryRef>
+
     <DirectoryRef Id="MenuDir">
       <Component Id="MenuShortcuts" Guid="${guid('menu-shortcuts:' + scope)}"${w64}>
 ${scBoot('ScPc', 'Audio Mixer (PC mode)', 'Start the local server (boot screen) and open the mixer')}${sc('ScServer', 'Audio Mixer local server only', '"[INSTALLDIR]bridge\\server.js"', 'Local server without opening the browser')}${sc('ScVerify', 'Verify installation (file check)', '"[INSTALLDIR]client\\cli.js" verify --pause', 'Check the installed files against their recorded SHA-256 hashes')}        <!-- VST3 / VST2 (.vst3, .dll) plugins live in the user's own folder: the launcher creates and opens it -->
@@ -174,6 +204,9 @@ ${groups.PluginHost.map(c => `      <ComponentRef Id="${c}"/>\n`).join('')}    <
 ${groups.WinHelpers.map(c => `      <ComponentRef Id="${c}"/>\n`).join('')}    </Feature>
     <Feature Id="CommandLine" Title="audio-mixer command on PATH (doctor, npm, setup, uninstall ...)" Level="1"><ComponentRef Id="CommandPath"/></Feature>
     <Feature Id="Desktop" Title="Desktop shortcut" Level="1"><ComponentRef Id="DesktopShortcut"/></Feature>
+    <Feature Id="Registry" Title="Environment variables (AUDIO_MIXER_DIR ...) and registry keys (App Paths, version)" Level="1"><ComponentRef Id="RegistryKeys"/></Feature>
+    <Feature Id="FileTypes" Title="Open .amix scene files and audiomixer:// links with Audio Mixer" Level="1"><ComponentRef Id="FileTypeKeys"/></Feature>
+    <Feature Id="ToolsPath" Title="Driver tools folder (asio-driver) on PATH" Level="3"><ComponentRef Id="ToolsPathKey"/></Feature>
 ${asio.feature}
     <UIRef Id="WixUI_Minimal"/>
   </Product>
@@ -181,10 +214,20 @@ ${asio.feature}
 `;
 }
 
-// wixl has no <Environment>: the PATH entry for audio-mixer.exe is written into the finished package (Environment table, owned by component
-// CommandPath, so it follows the CommandLine feature; "=*" = set on install, remove on uninstall; "[~];dir" appends to the existing PATH) together with the
-// two standard actions that apply it. Needs msidump / msibuild (msitools, installed with wixl).
-function addPathEntry(msi, work, component = 'CommandPath') {
+// wixl has no <Environment>: the environment rows are written into the finished package (Environment table; each row belongs to a component, so it follows that
+// component's feature; name prefix "=" = set, "*" = remove on uninstall; value "[~];dir" appends to the existing value) together with the two standard actions
+// that apply them. Needs msidump / msibuild (msitools, installed with wixl).
+//   PATH                 += [INSTALLDIR]                owner CommandLine (audio-mixer.exe)
+//   AUDIO_MIXER_DIR      = [INSTALLDIR]                owner Registry
+//   AUDIO_MIXER_ASIO      = [INSTALLDIR]asio-driver     owner Registry (only when the package carries the driver files)
+//   PATH                 += [INSTALLDIR]asio-driver     owner ToolsPath (off by default)
+function environmentRows({ stage = null } = {}) {
+  const rows = [['PathAudioMixer', '=*PATH', '[~];[INSTALLDIR]', 'CommandPath'], ['EnvAudioMixerDir', '=*AUDIO_MIXER_DIR', '[INSTALLDIR]', 'RegistryKeys']];
+  if (!stage || fs.existsSync(path.join(stage, 'asio-driver'))) rows.push(['EnvAudioMixerAsio', '=*AUDIO_MIXER_ASIO', '[INSTALLDIR]asio-driver', 'RegistryKeys'], ['PathAudioMixerTools', '=*PATH', '[~];[INSTALLDIR]asio-driver', 'ToolsPathKey']);
+  return rows;
+}
+
+function addEnvironment(msi, work, rows) {
   const dir = path.join(work, 'env'); fs.rmSync(dir, { recursive: true, force: true }); fs.mkdirSync(dir, { recursive: true });
   const run = (cmd, args) => { const r = spawnSync(cmd, args, { encoding: 'utf8', cwd: dir }); if (r.error && r.error.code === 'ENOENT') throw new Error(cmd + ' not found (msitools)'); if (r.status !== 0) throw new Error(cmd + ' failed:\n' + r.stdout + r.stderr); };
   run('msidump', ['-t', msi]);
@@ -192,9 +235,12 @@ function addPathEntry(msi, work, component = 'CommandPath') {
   let seq = fs.readFileSync(seqFile, 'utf8').replace(/\r?\n$/, '');
   if (!/^WriteEnvironmentStrings\t/m.test(seq)) seq += '\nRemoveEnvironmentStrings\t\t3300\nWriteEnvironmentStrings\t\t5200';
   fs.writeFileSync(seqFile, seq + '\n');
-  fs.writeFileSync(path.join(dir, 'Environment.idt'), 'Environment\tName\tValue\tComponent_\ns72\tl255\tL255\ts72\nEnvironment\tEnvironment\nPathAudioMixer\t=*PATH\t[~];[INSTALLDIR]\t' + component + '\n');
+  fs.writeFileSync(path.join(dir, 'Environment.idt'), 'Environment\tName\tValue\tComponent_\ns72\tl255\tL255\ts72\nEnvironment\tEnvironment\n' + rows.map(r => r.join('\t') + '\n').join(''));
   run('msibuild', [msi, '-i', 'InstallExecuteSequence.idt', 'Environment.idt']);
 }
+
+// the PATH entry of audio-mixer.exe alone (kept for callers of the older function)
+function addPathEntry(msi, work, component = 'CommandPath') { addEnvironment(msi, work, [['PathAudioMixer', '=*PATH', '[~];[INSTALLDIR]', component]]); }
 
 // `staged` = result of buildInstaller (so several installers can share one staging folder)
 async function buildMsi({ out = path.join(ROOT, 'dist'), arch = 'x64', scope = 'machine', runWixl = true, stageOpts = {}, staged = null } = {}) {
@@ -211,7 +257,7 @@ async function buildMsi({ out = path.join(ROOT, 'dist'), arch = 'x64', scope = '
   const r = spawnSync('wixl', ['-v', '--arch', arch, '--ext', 'ui', '-o', msi, wxsPath], { encoding: 'utf8', cwd: work });
   if (r.error && r.error.code === 'ENOENT') throw new Error('wixl not found. Install msitools/wixl (Linux: apt install wixl; macOS: brew install msitools); the WiX source is in ' + wxsPath);
   if (r.status !== 0) throw new Error('wixl failed:\n' + r.stdout + r.stderr);
-  addPathEntry(msi, work);
+  addEnvironment(msi, work, environmentRows({ stage: st.stage }));
   result.msi = msi;
   result.sha256 = crypto.createHash('sha256').update(fs.readFileSync(msi)).digest('hex');
   return result;
@@ -223,4 +269,4 @@ if (require.main === module) {
     console.log(`MSI: ${r.msi}\nProduct code: ${r.productCode}\nSHA-256: ${r.sha256}\nUnsigned (see build-installers.js for signing).`);
   }).catch(e => { console.error('MSI build failed: ' + e.message); process.exit(1); });
 }
-module.exports = { asioXml, addPathEntry, buildMsi, wxs, guid, rtf, filesXml, productCode, UPGRADE_CODES };
+module.exports = { asioXml, addPathEntry, addEnvironment, environmentRows, buildMsi, wxs, guid, rtf, filesXml, productCode, UPGRADE_CODES };

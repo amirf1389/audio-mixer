@@ -3021,3 +3021,102 @@ test('the page\'s OS detection (index.html otaDetectOs / otaPick) gives the same
     assert.deepStrictEqual(clone(x), y);
   }
 });
+
+test('Windows registry and environment: variables, App Paths, version keys, .amix + audiomixer:// handlers, optional tools PATH; setup switches', async () => {
+  const { spawnSync } = require('node:child_process');
+  const root = pathx.join(__dirname, '..'), m = require('../scripts/build-msi');
+  const stage = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'rg-')); fsx.writeFileSync(pathx.join(stage, 'LICENSE'), 'MIT');
+  for (const f of ['audio-mixer.exe', 'AudioMixerServer.exe']) fsx.writeFileSync(pathx.join(stage, f), 'x');
+  fsx.mkdirSync(pathx.join(stage, 'asio-driver')); for (const f of ['AudioMixerASIO32.dll', 'AudioMixerASIO64.dll', 'register.bat']) fsx.writeFileSync(pathx.join(stage, 'asio-driver', f), 'x');
+  for (const [arch, scope] of [['x64', 'machine'], ['x86', 'machine'], ['x64', 'user']]) {
+    const w = m.wxs({ stage, version: '1.10.0', arch, scope }), hive = scope === 'user' ? 'HKCU' : 'HKLM';
+    assert.match(w, /<Feature Id="Registry"[^>]*Level="1"/); assert.match(w, /<Feature Id="FileTypes"[^>]*Level="1"/); assert.match(w, /<Feature Id="ToolsPath"[^>]*Level="3"/);   // tools PATH is off unless asked
+    assert.ok(w.includes(`Root="${hive}" Key="Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\audio-mixer.exe"`));
+    assert.ok(w.includes('Name="Version" Type="string" Value="1.10.0"') && w.includes(`Name="Arch" Type="string" Value="${arch}"`) && w.includes('Name="DriverDir"'));
+    assert.ok(w.includes('Key="Software\\Classes\\.amix"') && w.includes('Name="URL Protocol"') && w.includes('Key="Software\\Classes\\audiomixer\\shell\\open\\command"'));
+    assert.ok(w.includes('Value="&quot;[INSTALLDIR]audio-mixer.exe&quot; open &quot;%1&quot;"'));       // the argument is quoted, and only "open" is run
+    if (spawnSync('wixl', ['--version']).status !== 0 || spawnSync('msibuild', ['-h']).status === null) continue;
+    const wk = pathx.join(stage, 'w-' + arch + scope); fsx.mkdirSync(wk); fsx.writeFileSync(pathx.join(wk, 'License.rtf'), m.rtf('MIT')); fsx.writeFileSync(pathx.join(wk, 'a.wxs'), w);
+    assert.strictEqual(spawnSync('wixl', ['--arch', arch, '--ext', 'ui', '-o', pathx.join(wk, 'a.msi'), pathx.join(wk, 'a.wxs')], { cwd: wk }).status, 0);
+    m.addEnvironment(pathx.join(wk, 'a.msi'), wk, m.environmentRows({ stage }));
+    const q = pathx.join(wk, 'q'); fsx.mkdirSync(q); spawnSync('msidump', ['-t', pathx.join(wk, 'a.msi')], { cwd: q });
+    const env = fsx.readFileSync(pathx.join(q, 'Environment.idt'), 'utf8');
+    assert.match(env, /PathAudioMixer\t=\*PATH\t\[~\];\[INSTALLDIR\]\tCommandPath/);                             // unchanged: audio-mixer.exe on PATH
+    assert.match(env, /EnvAudioMixerDir\t=\*AUDIO_MIXER_DIR\t\[INSTALLDIR\]\tRegistryKeys/);                  // "=" set, "*" removed on uninstall
+    assert.match(env, /EnvAudioMixerAsio\t=\*AUDIO_MIXER_ASIO\t\[INSTALLDIR\]asio-driver\tRegistryKeys/);
+    assert.match(env, /PathAudioMixerTools\t=\*PATH\t\[~\];\[INSTALLDIR\]asio-driver\tToolsPathKey/);          // follows the (off by default) ToolsPath feature
+    const feat = fsx.readFileSync(pathx.join(q, 'Feature.idt'), 'utf8'), fc = fsx.readFileSync(pathx.join(q, 'FeatureComponents.idt'), 'utf8');
+    assert.match(feat, /^ToolsPath\t.*\t3\t/m); assert.match(fc, /^ToolsPath\tToolsPathKey/m); assert.match(fc, /^Registry\tRegistryKeys/m); assert.match(fc, /^FileTypes\tFileTypeKeys/m);
+  }
+  // AUDIO_MIXER_HOME already means "the private data folder" on Linux / macOS (ensure-node.sh): the install folder variable has another name
+  assert.ok(!fsx.readFileSync(pathx.join(root, 'scripts', 'build-msi.js'), 'utf8').includes("=*AUDIO_MIXER_HOME"));
+  const stub = fsx.readFileSync(pathx.join(root, 'windows', 'installer', 'setup-stub.c'), 'utf8');
+  for (const t of ['/noregistry', '/nofiletypes', '/toolspath', ',Registry', ',FileTypes', ',ToolsPath']) assert.ok(stub.includes(t), t);
+  const gcc = spawnSync('x86_64-w64-mingw32-gcc', ['-fsyntax-only', '-municode', '-Wall', '-Werror', pathx.join(root, 'windows', 'installer', 'setup-stub.c')]);
+  if (!gcc.error) assert.strictEqual(gcc.status, 0, String(gcc.stderr));
+});
+
+test('audio-mixer open: only .amix files and audiomixer://page/<tab> links; a scene file reaches the page once through /api/handoff', async () => {
+  const cli = require('../client/cli.js');
+  assert.deepStrictEqual(cli.parseOpenTarget('audiomixer://page/Mixer'), { kind: 'link', query: '?page=mixer' });
+  assert.deepStrictEqual(cli.parseOpenTarget('audiomixer://'), { kind: 'link', query: '' });
+  for (const bad of ['audiomixer://page/../x', 'audiomixer://page/a;calc', 'audiomixer://page/' + 'a'.repeat(17), 'audiomixer://run/calc', 'notes.txt', 'x.amix.exe', '', 'file://evil/x.amix', 'file:///etc/passwd']) assert.ok(cli.parseOpenTarget(bad).error, bad);
+  assert.strictEqual(cli.parseOpenTarget('file:///tmp/a%20b.amix').file, '/tmp/a b.amix');
+  assert.ok(cli.openCommand('linux', 'http://localhost:8765/?page=scenes&scene=1') && !cli.openCommand('linux', 'http://localhost:8765/?page=a;calc') && !cli.openCommand('linux', 'http://localhost:8765/?x=1&y=%0a'));
+  const d = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'op-'));
+  const put = (n, t) => { const f = pathx.join(d, n); fsx.writeFileSync(f, t); return f; };
+  assert.deepStrictEqual(cli.readScenes(put('ok.amix', '[null,{"name":"a"}]')), [null, { name: 'a' }]);
+  for (const t of ['{"a":1}', '[1,2]', '[[]]', 'not json', JSON.stringify(Array(17).fill(null))]) assert.throws(() => cli.readScenes(put('bad.amix', t)), /scene file/);
+  assert.throws(() => cli.readScenes(put('big.amix', '[' + '{"a":"' + 'x'.repeat(1 << 20) + '"}]')), /larger than 1 MB/);
+  assert.throws(() => cli.readScenes(pathx.join(d, 'missing.amix')), /cannot read/);
+  // the server: needs the header, JSON and a valid archive; the page takes it once
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${server.address().port}`, post = (body, hdr = { 'X-Mixer-Action': 'handoff' }) => fetch(base + '/api/handoff', { method: 'POST', headers: { 'Content-Type': 'application/json', ...hdr }, body: JSON.stringify(body) });
+  assert.strictEqual((await post({ scenes: [null] }, {})).status, 400);                           // no X-Mixer-Action: a foreign page cannot trigger it
+  assert.strictEqual((await post({ scenes: 'x' })).status, 400); assert.strictEqual((await post({ scenes: [[1]] })).status, 400); assert.strictEqual((await post({ scenes: [1] })).status, 400);
+  assert.strictEqual((await (await fetch(base + '/api/handoff')).json()).ok, false);              // nothing waiting
+  const big = { scenes: [{ name: 'x'.repeat(100000) }] };                                          // above the 8 KB of other actions, below 1 MB
+  assert.strictEqual((await post(big)).status, 200);
+  const got = await (await fetch(base + '/api/handoff')).json();
+  assert.strictEqual(got.ok, true); assert.strictEqual(got.scenes[0].name.length, 100000);
+  assert.strictEqual((await (await fetch(base + '/api/handoff')).json()).ok, false);              // taken once
+  assert.strictEqual((await post({ scenes: [null] }, { 'X-Mixer-Action': 'handoff', Origin: 'https://evil.example' })).status, 403);
+  server.closeAllConnections(); server.close();
+  // the page: ?page= must name a tab that exists, ?scene=1 asks before it replaces the scene slots
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  assert.match(html, /getElementById\('nav-' \+ page\)/); assert.match(html, /confirm\('Import the scene file you opened/);
+});
+
+test('Linux and macOS own mechanisms: profile.d / environment.d, mime type + desktop handler, paths.d + launchd; kernel module and am-pump', async () => {
+  const { spawnSync } = require('node:child_process');
+  const root = pathx.join(__dirname, '..'), u = require('../scripts/build-unix');
+  assert.match(u.MIME_XML, /<glob pattern="\*\.amix"\/>/); assert.match(u.MIME_XML, /application\/x-audio-mixer-scene/);
+  const open = u.openDesktopEntry('audio-mixer');
+  assert.match(open, /^Exec=audio-mixer open %u$/m); assert.match(open, /^MimeType=application\/x-audio-mixer-scene;x-scheme-handler\/audiomixer;$/m); assert.match(open, /^NoDisplay=true$/m);
+  assert.strictEqual(u.profileSh('/opt/audio-mixer'), '# Audio Mixer: where it is installed (read by login shells)\n[ -d /opt/audio-mixer ] && export AUDIO_MIXER_DIR=/opt/audio-mixer\n');
+  assert.strictEqual(u.environmentConf('/opt/audio-mixer'), 'AUDIO_MIXER_DIR=/opt/audio-mixer\n');
+  // the .deb carries them in the system's places and refreshes the caches
+  const out = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'dbx-')), d = u.buildDeb({ out });
+  const lst = spawnSync('dpkg-deb', ['-c', d.deb], { encoding: 'utf8' });
+  if (!lst.error) {
+    for (const f of ['./etc/profile.d/audio-mixer.sh', './usr/lib/environment.d/60-audio-mixer.conf', './usr/share/mime/packages/audio-mixer.xml', './usr/share/applications/audio-mixer-open.desktop']) assert.ok(lst.stdout.includes(f), f);
+    const ctl = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'dbc-')); spawnSync('dpkg-deb', ['-e', d.deb, ctl]);
+    assert.match(fsx.readFileSync(pathx.join(ctl, 'postinst'), 'utf8'), /update-mime-database \/usr\/share\/mime/); assert.match(fsx.readFileSync(pathx.join(ctl, 'postrm'), 'utf8'), /update-desktop-database/);
+  }
+  // tarball installer: user level (~/.config/environment.d, ~/.local/share/mime) or root level; uninstall removes both
+  assert.match(u.LINUX_INSTALL, /\.config\/environment\.d/); assert.match(u.LINUX_INSTALL, /\/etc\/profile\.d\/audio-mixer\.sh/); assert.match(u.LINUX_INSTALL, /audio-mixer-open\.desktop/);
+  assert.match(u.LINUX_UNINSTALL, /60-audio-mixer\.conf/); assert.match(u.LINUX_UNINSTALL, /audio-mixer\.xml/);
+  for (const [n, t] of [['install', u.LINUX_INSTALL], ['uninstall', u.LINUX_UNINSTALL]]) { const f = pathx.join(out, n + '.sh'); fsx.writeFileSync(f, t); assert.strictEqual(spawnSync('sh', ['-n', f]).status, 0, n); }
+  // macOS: launchd environment + /etc/paths.d (asked, needs a password); no document type is claimed because a shell-script app cannot receive Apple events
+  assert.match(u.MAC_INSTALL, /com\.audiomixer\.env/); assert.match(u.MAC_INSTALL, /launchctl setenv AUDIO_MIXER_DIR/); assert.match(u.MAC_INSTALL, /\/etc\/paths\.d\/audio-mixer/);
+  assert.match(u.MAC_UNINSTALL, /com\.audiomixer\.env/); assert.match(u.MAC_UNINSTALL, /\/etc\/paths\.d\/audio-mixer/);
+  assert.ok(!/CFBundleDocumentTypes|CFBundleURLTypes/.test(u.infoPlist('1.0.0')));
+  for (const [n, t] of [['mi', u.MAC_INSTALL], ['mu', u.MAC_UNINSTALL], ['mc', u.MAC_COMMAND]]) { const f = pathx.join(out, n + '.sh'); fsx.writeFileSync(f, t); assert.strictEqual(spawnSync('bash', ['-n', f]).status, 0, n); }
+  // kernel module: source only (this machine has no kernel headers); am-pump is plain C and is built here
+  const km = pathx.join(root, 'linux', 'kernel-module'), ko = fsx.readFileSync(pathx.join(km, 'snd-audiomixer.c'), 'utf8');
+  for (const t of ['snd_card_new', 'snd_pcm_new', 'snd_pcm_period_elapsed', 'misc_register', 'MODULE_LICENSE("GPL")', 'MISC_DYNAMIC_MINOR']) assert.ok(ko.includes(t), t);
+  assert.match(ko, /NOT compiled or loaded/);
+  assert.match(fsx.readFileSync(pathx.join(km, 'dkms.conf'), 'utf8'), new RegExp('PACKAGE_VERSION="' + require('../package.json').version.replace(/\.0$/, '').replace(/\./g, '\\.') + '"'));
+  const pump = pathx.join(out, 'am-pump'), cc = spawnSync('gcc', ['-std=gnu99', '-Wall', '-Wextra', '-Werror', '-O2', '-o', pump, pathx.join(km, 'am_pump.c'), pathx.join(root, 'drivers', 'common', 'am_link.c'), '-lpthread'], { encoding: 'utf8' });
+  if (!cc.error) assert.strictEqual(cc.status, 0, cc.stderr);
+});

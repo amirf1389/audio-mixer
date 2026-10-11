@@ -7,7 +7,7 @@
 //   ios/       Xcode project template, releases/*.tar.gz
 //   windows/   installer/ (setup, launcher), native/ (device helper), plugin-host/, asio-driver/, start-*.bat, Audio Mixer.vbs, releases/*.exe *.msi *.zip *.cer
 //   macos/     native/ (Core Audio helper), coreaudio-driver/, releases/*.dmg *.zip *.tar.gz
-//   linux/     alsa-plugin/, start-pc-mode.sh, ensure-node.sh, releases/*.deb *.tar.gz
+//   linux/     alsa-plugin/, kernel-module/, start-pc-mode.sh, ensure-node.sh, releases/*.deb *.tar.gz
 //   releases/update.json   the signed update manifest that installed apps fetch (its file URLs point into the <os>/releases/ folders)
 //
 // The PACKAGES built from this repository keep their own layout (native/win, native/host, native/mac, start-pc-mode.bat ... next to bridge/): `repoPath`

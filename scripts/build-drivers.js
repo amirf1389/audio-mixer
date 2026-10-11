@@ -12,7 +12,7 @@ const { spawnSync } = require('node:child_process');
 
 const { ROOT } = require('./layout');
 const COMMON = path.join(ROOT, 'drivers', 'common'), ASIO = path.join(ROOT, 'windows', 'asio-driver');
-const SOURCE_DIRS = ['drivers', 'windows/asio-driver', 'linux/alsa-plugin', 'macos/coreaudio-driver', 'android/hal'];
+const SOURCE_DIRS = ['drivers', 'windows/asio-driver', 'linux/alsa-plugin', 'linux/kernel-module', 'macos/coreaudio-driver', 'android/hal'];
 const which = n => { for (const d of (process.env.PATH || '').split(path.delimiter)) { const p = path.join(d, n); if (fs.existsSync(p)) return p; } return null; };
 const run = (cmd, args, opts = {}) => { const r = spawnSync(cmd, args, { encoding: 'utf8', ...opts }); if (r.status !== 0) throw new Error(`${path.basename(cmd)} ${args.slice(0, 3).join(' ')} failed: ${(r.stderr || r.error || '').toString().slice(0, 1500)}`); return r; };
 

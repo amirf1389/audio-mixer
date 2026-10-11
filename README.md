@@ -14,7 +14,7 @@ ios/        Xcode project template, releases/  *.tar.gz
 windows/    installer/ (setup, launcher), native/ (device helper), plugin-host/, asio-driver/,
             start-pc-mode.bat, start-local-server.bat, Audio Mixer.vbs, releases/  *.exe *.msi *.zip *.cer
 macos/      native/ (Core Audio helper), coreaudio-driver/, releases/  *.dmg *.zip *.tar.gz
-linux/      alsa-plugin/, start-pc-mode.sh, ensure-node.sh, releases/  *.deb *.tar.gz
+linux/      alsa-plugin/, kernel-module/, start-pc-mode.sh, ensure-node.sh, releases/  *.deb *.tar.gz
 
 bridge/     the local server (Node.js)             client/      the launcher / command line
 ota-server/ the update server                      deploy/      hosting files (nginx, fail2ban, OTA server)
@@ -508,3 +508,20 @@ New folder **`engine/`** (see `engine/README.md`): the measuring and mixing code
 - **In the page:** the LUFS meter and the scope arithmetic run in the WebAssembly build when it is available (the LUFS page says "LIVE ... WASM"); JavaScript is the fallback with the same numbers. **In the bridge:** the native streams' level meter is the C++ one when the addon was built (`node scripts/build-engine.js --node`), JavaScript otherwise; the installers do not contain the addon.
 - Tested here: embedded C (with libm and without), C++, Rust, the null and ALSA `null` devices, WebAssembly in the page logic and in Chromium (loudness, scope, the LUFS note), the Node addon against the JavaScript meter. **Not tested:** the engine on a real sound card (ALSA was tried on its null device only), the WASAPI backend (compiled with mingw-w64, not run), the Core Audio backend and the Swift / Objective-C package (no Xcode: the Objective-C passes a syntax check against a stub header), the embedded core on a microcontroller. Kotlin / JNI, Python and other bindings are not included.
 
+
+## Windows registry, environment and PATH; each system's own places; Linux kernel module (1.10.0.0)
+
+**Windows (MSI and setup `.exe`).** Three new features, written into the package and removed again by the uninstaller:
+- **`Registry`** (on): system environment variables `AUDIO_MIXER_DIR` (the install folder) and `AUDIO_MIXER_ASIO` (the `asio-driver` folder; `AUDIO_MIXER_HOME` is not used: on Linux / macOS it already names the private data folder); the **App Paths** entries of `audio-mixer.exe` and `AudioMixerServer.exe` (Win+R and Start find them by name); `Version`, `Arch` and `DriverDir` next to `InstallDir` under `Software\Audio Mixer`. The per-user package writes the same under HKCU.
+- **`FileTypes`** (on): the **`.amix`** scene file type (`AudioMixer.Scene`) and the **`audiomixer://`** link handler. Both run `audio-mixer.exe open "%1"`.
+- **`ToolsPath`** (off): puts the driver tools folder (`asio-driver`: `register.bat`, `unregister.bat`, the DLLs) on PATH. `audio-mixer.exe` is on PATH as before (feature `CommandLine`).
+- Setup program: `/noregistry`, `/nofiletypes`, `/toolspath`; with `msiexec` use `ADDLOCAL=...,Registry,FileTypes,ToolsPath`. The native engine (`engine/`) is a library for developers and is not part of the installers, so there is no engine folder to put on PATH.
+- The x86 package on 64-bit Windows registers in the 32-bit registry view (App Paths is not shared between the views): use the x64 package on 64-bit Windows.
+
+**`audio-mixer open <file.amix | audiomixer://page/<tab>>`** is what the system runs. Nothing in the file or the link is executed: a link is `audiomixer://page/<1-16 letters>` only (the page ignores a tab it does not have); an `.amix` file is the JSON of SCENES → EXPORT (an array of up to 16 snapshots, at most 1 MB, checked first). The command starts the local server if needed, hands the file over through `POST /api/handoff` (needs the `X-Mixer-Action` header, loopback only, taken once by the page, dropped after 2 minutes) and opens the page with `?page=scenes&scene=1`; **the page asks before it replaces the scene slots**.
+
+**Linux** uses the system's own places: the `.deb` installs `/etc/profile.d/audio-mixer.sh` and `/usr/lib/environment.d/60-audio-mixer.conf` (`AUDIO_MIXER_DIR`), a shared-mime-info entry for `*.amix`, and a hidden `audio-mixer-open.desktop` that claims it and `x-scheme-handler/audiomixer` (the postinst refreshes the mime and desktop caches). `install.sh` does the same for everyone (as root) or for you only (`~/.config/environment.d`, which also puts `~/.local/bin` on PATH for the desktop session, and `~/.local/share/mime`); no shell start-up file is edited, and `uninstall.sh` removes everything.
+
+**macOS:** `install.command` sets `AUDIO_MIXER_DIR` in launchd now and at every login (a LaunchAgent) and, when you answer yes (it needs your password), adds the app folder to `/etc/paths.d/audio-mixer`. The uninstaller removes both. No document type or link scheme is registered: the app's program is a shell script and cannot receive the Apple events that Finder and the browser send; use `audio-mixer open file.amix` in Terminal.
+
+**Kernel-mode driver, honestly.** `linux/kernel-module/` holds **`snd-audiomixer`**, a virtual ALSA sound card as a Linux kernel module (stereo S16_LE, 48 kHz, its own clock; read/write/poll on `/dev/audiomixer`), the small C program **`am-pump`** that joins `/dev/audiomixer` to the mixer (`am_link`), a `Makefile` and `dkms.conf`. `am-pump` is built and was tested here against the real server (through a pseudo-terminal); **the kernel module was not compiled or loaded**: this machine has no kernel headers (build it with `make` on the target PC, or with DKMS). Windows and macOS get no kernel driver: a Windows kernel driver needs the WDK and Microsoft signing, and macOS no longer loads third-party audio kexts; their drivers stay the user-space ASIO driver and the Core Audio plug-in.

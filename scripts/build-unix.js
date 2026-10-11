@@ -55,6 +55,30 @@ Categories=AudioVideo;Audio;Mixer;
 Keywords=mixer;audio;asio;jack;pipewire;
 `;
 
+// The system's own places for "where is it installed", "which file type is this" and "who opens audiomixer:// links" (freedesktop.org):
+//   environment: /etc/profile.d/audio-mixer.sh (shells at login) and environment.d (systemd user sessions: the desktop, the user service) set AUDIO_MIXER_DIR
+//   file type:   a shared-mime-info entry for *.amix and a hidden .desktop entry that claims it and the audiomixer: scheme and runs  audio-mixer open %u
+const MIME_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-audio-mixer-scene">
+    <comment>Audio Mixer scene archive</comment>
+    <glob pattern="*.amix"/>
+    <sub-class-of type="application/json"/>
+  </mime-type>
+</mime-info>
+`;
+const openDesktopEntry = exec => `[Desktop Entry]
+Type=Application
+Name=Audio Mixer (open a scene file or link)
+Exec=${exec} open %u
+Icon=audio-card
+Terminal=false
+NoDisplay=true
+MimeType=application/x-audio-mixer-scene;x-scheme-handler/audiomixer;
+`;
+const profileSh = dir => `# Audio Mixer: where it is installed (read by login shells)\n[ -d ${dir} ] && export AUDIO_MIXER_DIR=${dir}\n`;
+const environmentConf = (dir, path) => `AUDIO_MIXER_DIR=${dir}\n${path ? `PATH=${path}:\${PATH}\n` : ''}`;
+
 const systemdUserUnit = () => `[Unit]
 Description=Audio Mixer local server
 After=default.target
@@ -90,11 +114,16 @@ Description: virtual mixing console with a local audio server
 
 const POSTINST = `#!/bin/sh
 set -e
+# register the *.amix file type and the audiomixer: link handler (menu and mime caches; skipped where the tools are missing)
+command -v update-mime-database >/dev/null 2>&1 && update-mime-database /usr/share/mime >/dev/null 2>&1 || true
+command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database -q /usr/share/applications >/dev/null 2>&1 || true
 echo "Audio Mixer installed in /${OPT}. Run: audio-mixer   (start at login: systemctl --user enable --now audio-mixer)"
 exit 0
 `;
 const POSTRM = `#!/bin/sh
 set -e
+command -v update-mime-database >/dev/null 2>&1 && update-mime-database /usr/share/mime >/dev/null 2>&1 || true
+command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database -q /usr/share/applications >/dev/null 2>&1 || true
 # Downloaded drivers (~/AudioMixerDrivers) and plugins (~/AudioMixerPlugins) belong to the user and are left in place.
 exit 0
 `;
@@ -129,6 +158,10 @@ function buildDeb({ out = path.join(ROOT, 'dist'), app = build({ out }) } = {}) 
   put('usr/bin/audio-mixer', LAUNCHER_LINUX, 0o755);
   put('usr/share/applications/audio-mixer.desktop', desktopEntry());
   put('usr/lib/systemd/user/audio-mixer.service', systemdUserUnit());
+  put('etc/profile.d/audio-mixer.sh', profileSh('/' + OPT));
+  put('usr/lib/environment.d/60-audio-mixer.conf', environmentConf('/' + OPT));
+  put('usr/share/mime/packages/audio-mixer.xml', MIME_XML);
+  put('usr/share/applications/audio-mixer-open.desktop', openDesktopEntry('audio-mixer'));
   const lic = path.join(ROOT, 'LICENSE');
   put('usr/share/doc/audio-mixer/copyright', `Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/\nUpstream-Name: audio-mixer\nSource: ${HOMEPAGE}\nLicense: MIT\n\n` + (fs.existsSync(lic) ? fs.readFileSync(lic, 'utf8') : 'MIT License\n'));
   put('usr/share/doc/audio-mixer/README', fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8'));
@@ -196,6 +229,28 @@ function icns() {
   return Buffer.concat([head, ...parts]);
 }
 
+// macOS keeps environment and PATH in two places of its own: launchd (the environment of every program you start from Finder, the Dock or Spotlight; a
+// LaunchAgent sets it again at every login) and /etc/paths.d (one file = one folder added to the PATH of every new shell; needs administrator rights, so it is asked).
+// AUDIO_MIXER_DIR names the app's folder. A document type and the audiomixer:// link are not registered on macOS: the app's program is a shell script, which cannot receive
+// the Apple events that Finder and the browser send, so a registration would start Audio Mixer and lose the file; use  audio-mixer open <file.amix>  instead.
+const MAC_SYSTEM_ENV = `# environment for programs started from Finder / the Dock (launchd) now and at every login
+mkdir -p "$HOME/Library/LaunchAgents"
+cat > "$HOME/Library/LaunchAgents/com.audiomixer.env.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.audiomixer.env</string>
+  <key>ProgramArguments</key><array><string>/bin/launchctl</string><string>setenv</string><string>AUDIO_MIXER_DIR</string><string>$APP</string></array>
+  <key>RunAtLoad</key><true/>
+</dict></plist>
+PLIST
+launchctl setenv AUDIO_MIXER_DIR "$APP" 2>/dev/null && echo "Environment: AUDIO_MIXER_DIR=$APP (launchd)"
+# the app's folder on the PATH of every new shell (/etc/paths.d); optional because it needs your password
+if [ -t 0 ]; then
+  read -r -p "Add Audio Mixer to the system PATH (/etc/paths.d, asks for your password)? [y/N] " a
+  if [ "$a" = "y" ] || [ "$a" = "Y" ]; then printf '%s\\n' "$APP" | sudo tee /etc/paths.d/audio-mixer >/dev/null && echo "PATH: $APP (/etc/paths.d/audio-mixer)"; fi
+fi`;
+
 const MAC_INSTALL = `#!/bin/bash
 # Installs Audio Mixer: /Applications (or ~/Applications when you cannot write there). Double-click this file in Finder.
 cd "$(dirname "$0")" || exit 1
@@ -225,6 +280,7 @@ fi
 BINDIR=/usr/local/bin; [ -w "$BINDIR" ] || BINDIR="$HOME/.local/bin"
 mkdir -p "$BINDIR" && ln -sf "$APP/audio-mixer" "$BINDIR/audio-mixer" && echo "Command line: $BINDIR/audio-mixer" || echo "Could not link the audio-mixer command."
 case ":$PATH:" in *":$BINDIR:"*) ;; *) echo "Add $BINDIR to your PATH to use it:  echo 'export PATH=\"$BINDIR:\$PATH\"' >> ~/.zshrc" ;; esac
+${MAC_SYSTEM_ENV}
 echo "Done. Open Audio Mixer from $DEST. Remove it later with uninstall.command (or: audio-mixer uninstall)."
 `;
 
@@ -242,6 +298,8 @@ for L in /usr/local/bin/audio-mixer "$HOME/.local/bin/audio-mixer"; do   # the c
   [ -L "$L" ] && case "$(readlink "$L")" in *"Audio Mixer.app"*) rm -f "$L" && echo "Removed $L" ;; esac
 done
 rm -f "$HOME/Library/LaunchAgents/com.audiomixer.bridge.plist"
+rm -f "$HOME/Library/LaunchAgents/com.audiomixer.env.plist"; launchctl unsetenv AUDIO_MIXER_DIR 2>/dev/null
+[ -f /etc/paths.d/audio-mixer ] && { echo "Removing /etc/paths.d/audio-mixer (asks for your password)"; sudo rm -f /etc/paths.d/audio-mixer; }
 rm -rf "$HOME/.local/share/audio-mixer"   # the private Node.js and audio module that Audio Mixer downloaded
 echo "Audio Mixer removed."
 `;
@@ -255,6 +313,7 @@ APP="$DEST/Audio Mixer.app/Contents/Resources/app"
 BINDIR=/usr/local/bin; [ -w "$BINDIR" ] || BINDIR="$HOME/.local/bin"
 mkdir -p "$BINDIR" && ln -sf "$APP/audio-mixer" "$BINDIR/audio-mixer" && echo "Command line: $BINDIR/audio-mixer"
 case ":$PATH:" in *":$BINDIR:"*) ;; *) echo "Add $BINDIR to your PATH to use it:  echo 'export PATH=\"$BINDIR:\$PATH\"' >> ~/.zshrc" ;; esac
+${MAC_SYSTEM_ENV}
 `;
 
 function buildMac({ out = path.join(ROOT, 'dist'), app = build({ out }) } = {}) {
@@ -307,6 +366,25 @@ Terminal=false
 Categories=AudioVideo;Audio;Mixer;
 Keywords=mixer;audio;asio;jack;pipewire;
 DESK
+cat > "$APPS/audio-mixer-open.desktop" <<DESK
+${openDesktopEntry('$BIN/audio-mixer').replace(/\n$/, '')}
+DESK
+# environment, file type and link handler in the system's own places (nothing in your shell start-up files is edited):
+#   root: /etc/profile.d (login shells), /usr/lib/environment.d (systemd user sessions), /usr/share/mime;  user: ~/.config/environment.d (also puts $BIN on PATH there), ~/.local/share/mime
+if [ "$(id -u)" = 0 ]; then
+  mkdir -p /etc/profile.d /usr/lib/environment.d; MIMEDIR=/usr/share/mime
+  printf '# Audio Mixer: where it is installed (read by login shells)\\n[ -d %s ] && export AUDIO_MIXER_DIR=%s\\n' "$DEST" "$DEST" > /etc/profile.d/audio-mixer.sh
+  printf 'AUDIO_MIXER_DIR=%s\\n' "$DEST" > /usr/lib/environment.d/60-audio-mixer.conf
+else
+  mkdir -p "$HOME/.config/environment.d"; MIMEDIR="$HOME/.local/share/mime"
+  printf 'AUDIO_MIXER_DIR=%s\\nPATH=%s:\${PATH}\\n' "$DEST" "$BIN" > "$HOME/.config/environment.d/60-audio-mixer.conf"
+fi
+mkdir -p "$MIMEDIR/packages"
+cat > "$MIMEDIR/packages/audio-mixer.xml" <<'MIMEXML'
+${MIME_XML.replace(/\n$/, '')}
+MIMEXML
+command -v update-mime-database >/dev/null 2>&1 && update-mime-database "$MIMEDIR" >/dev/null 2>&1 || true
+command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "$APPS" >/dev/null 2>&1 || true
 mkdir -p "$HOME/AudioMixerPlugins"
 echo "Audio Mixer installed in $DEST  (command: $BIN/audio-mixer)"
 . "$DEST/ensure-node.sh"
@@ -331,6 +409,8 @@ for B in /usr/local/bin/audio-mixer "$HOME/.local/bin/audio-mixer"; do
   [ -L "$B" ] && case "$(readlink "$B")" in "$HERE"/*) rm -f "$B" && echo "Removed $B" ;; esac
 done
 rm -f /usr/share/applications/audio-mixer.desktop "$HOME/.local/share/applications/audio-mixer.desktop" 2>/dev/null
+rm -f /usr/share/applications/audio-mixer-open.desktop "$HOME/.local/share/applications/audio-mixer-open.desktop" /etc/profile.d/audio-mixer.sh /usr/lib/environment.d/60-audio-mixer.conf "$HOME/.config/environment.d/60-audio-mixer.conf" /usr/share/mime/packages/audio-mixer.xml "$HOME/.local/share/mime/packages/audio-mixer.xml" 2>/dev/null
+command -v update-mime-database >/dev/null 2>&1 && { update-mime-database /usr/share/mime >/dev/null 2>&1; update-mime-database "$HOME/.local/share/mime" >/dev/null 2>&1; } || true
 [ "\${1:-}" = "--purge" ] && rm -rf "$HOME/.local/share/audio-mixer" && echo "Removed the downloaded Node.js and audio module."
 case "$HERE" in
   /opt/audio-mixer|"$HOME"/.local/share/audio-mixer-app) cd / && rm -rf "$HERE" && echo "Removed $HERE" ;;
@@ -366,4 +446,4 @@ if (require.main === module) {
   console.log(`Linux: ${l.tar}\n     SHA-256 ${l.sha256}`);
   console.log(`DEB: ${d.deb}\n     SHA-256 ${d.sha256}\nmacOS: ${m.tar}\n     SHA-256 ${m.sha256}\nNeither package is signed or notarized.`);
 }
-module.exports = { icns, buildDeb, buildMac, controlFile, desktopEntry, systemdUserUnit, infoPlist, LAUNCHER_LINUX, MAC_LAUNCHER, MAC_INSTALL, MAC_UNINSTALL, MAC_COMMAND, LAUNCHER_PORTABLE, LINUX_INSTALL, LINUX_UNINSTALL, buildLinuxTar };
+module.exports = { MAC_SYSTEM_ENV, MIME_XML, openDesktopEntry, profileSh, environmentConf, icns, buildDeb, buildMac, controlFile, desktopEntry, systemdUserUnit, infoPlist, LAUNCHER_LINUX, MAC_LAUNCHER, MAC_INSTALL, MAC_UNINSTALL, MAC_COMMAND, LAUNCHER_PORTABLE, LINUX_INSTALL, LINUX_UNINSTALL, buildLinuxTar };
