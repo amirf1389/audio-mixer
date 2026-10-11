@@ -42,6 +42,7 @@
     { key: 'macos', label: 'macOS archive (.tar.gz)', re: /^AudioMixer-(\d+(?:\.\d+){1,3})-macos\.tar\.gz$/ },
     { key: 'android-apk', label: 'Android app (.apk)', re: /^AudioMixer-(\d+(?:\.\d+){1,3})-android\.apk$/ },
     { key: 'ios-project', label: 'iOS Xcode project (.tar.gz)', re: /^AudioMixer-(\d+(?:\.\d+){1,3})-ios-xcode-project\.tar\.gz$/ },
+    { key: 'win-asio-driver', label: 'Windows ASIO driver (.zip)', re: /^AudioMixer-(\d+(?:\.\d+){1,3})-asio-driver-windows\.zip$/ },
   ];
   const cmpVersion = (a, b) => { const p = v => String(v).split('.').map(n => parseInt(n, 10) || 0); const x = p(a), y = p(b); for (let i = 0; i < Math.max(x.length, y.length); i++) { const d = (x[i] || 0) - (y[i] || 0); if (d) return d < 0 ? -1 : 1; } return 0; };
   // which uploaded files belong to which platform, for the newest version found in the file names

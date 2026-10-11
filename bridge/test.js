@@ -2736,6 +2736,42 @@ test('OS detection for update links: user agents, Client Hints, explicit choice,
   } finally { srv.closeAllConnections(); srv.close(); }
 });
 
+test('OTA server: the system driver (Windows ASIO zip) is published in the manifest, offered next to the app on /api/latest and /driver, and never replaces the installer', async () => {
+  const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), http = require('node:http'), crypto = require('node:crypto');
+  const { createOta } = require('../ota-server/server'), lic = require('../scripts/license'), update = require('./update'), mk = require('../scripts/make-update');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'od-')), keysDir = path.join(tmp, 'v'); lic.initKeys(keysDir);
+  const ota = createOta({ dataDir: path.join(tmp, 'data'), token: 'tk', jwk: lic.loadPublic(keysDir), publicUrl: 'https://ota.test', rate: 1000 }); await ota.reindex();
+  const srv = http.createServer(ota.handler); await new Promise(r => srv.listen(0, '127.0.0.1', r));
+  const b = 'http://127.0.0.1:' + srv.address().port, auth = { Authorization: 'Bearer tk' }, sha = x => crypto.createHash('sha256').update(x).digest('hex');
+  try {
+    // make-update / ota.js know the driver file name
+    const rel = fs.mkdtempSync(path.join(tmp, 'rel')); fs.writeFileSync(path.join(rel, 'AudioMixer-8.0.0.0-asio-driver-windows.zip'), 'zip'); fs.writeFileSync(path.join(rel, 'Audio Mixer-8.0.0.0.exe'), 'exe');
+    assert.deepStrictEqual(Object.keys(mk.build({ releases: rel, version: '8.0.0.0', base: 'https://ota.test/releases' }).files).sort(), ['win-asio-driver', 'win-x64-exe']);
+    const names = { 'win-x64-exe': 'Audio Mixer-8.0.0.0.exe', 'win-asio-driver': 'AudioMixer-8.0.0.0-asio-driver-windows.zip', 'linux-tar': 'AudioMixer-8.0.0.0-linux.tar.gz' }, files = {};
+    for (const [k, n] of Object.entries(names)) { const buf = Buffer.from(k + '-content-' + 'x'.repeat(40)); assert.strictEqual((await fetch(b + '/admin/files/' + encodeURIComponent(n), { method: 'PUT', headers: { ...auth, 'X-SHA256': sha(buf) }, body: buf })).status, 201); files[k] = { name: n, url: 'https://ota.test/releases/' + encodeURIComponent(n), size: buf.length, sha256: sha(buf) }; }
+    const manifest = { product: 'audio-mixer', version: '8.0.0.0', channel: 'stable', released: '2026-10-11', notes: [], files };
+    assert.strictEqual((await fetch(b + '/admin/manifest/stable', { method: 'PUT', headers: auth, body: JSON.stringify(update.signManifest(manifest, lic.loadPrivate(keysDir))) })).status, 200);
+    const WIN = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126.0 Safari/537.36', LIN = 'Mozilla/5.0 (X11; Fedora; Linux x86_64; rv:128.0) Firefox/128.0';
+    const go = (p, ua) => fetch(b + p, { redirect: 'manual', headers: { 'User-Agent': ua } });
+    const w = await (await go('/api/latest', WIN)).json();
+    assert.strictEqual(w.file.key, 'win-x64-exe');                                                              // the installer is still what /latest gives
+    assert.ok(w.driver && w.driver.key === 'win-asio-driver' && w.driver.url === files['win-asio-driver'].url && w.driver.sha256 === files['win-asio-driver'].sha256 && /register\.bat/.test(w.driver.how));
+    assert.deepStrictEqual(w.others.map(o => o.key), ['linux-tar']);                                           // the driver is not listed twice
+    const l = await (await go('/api/latest', LIN)).json(); assert.strictEqual(l.driver, null); assert.deepStrictEqual(l.others.map(o => o.key).sort(), ['win-asio-driver', 'win-x64-exe']);
+    const d = await go('/driver', WIN); assert.strictEqual(d.status, 302); assert.strictEqual(d.headers.get('location'), files['win-asio-driver'].url);
+    assert.strictEqual((await go('/latest', WIN)).headers.get('location'), files['win-x64-exe'].url);
+    const nd = await go('/driver', LIN); assert.strictEqual(nd.status, 404); assert.match((await nd.json()).error, /no driver file is published for this system \(linux\)/);
+    assert.strictEqual((await go('/driver?os=windows', LIN)).headers.get('location'), files['win-asio-driver'].url);   // an explicit choice, like /latest
+    assert.strictEqual((await go('/driver?channel=beta', WIN)).status, 404);
+    assert.strictEqual((await fetch(b + '/driver', { method: 'POST' })).status, 405);
+    // the app's own update check reports the driver too, and still downloads the installer
+    const env = JSON.parse(fs.readFileSync(path.join(tmp, 'data', 'manifests', 'stable.json'), 'utf8'));
+    process.env.BRIDGE_UPDATE_HOSTS = 'ota.test';
+    const chk = await update.check({ current: '7.0.0.0', platform: 'win32', arch: 'x64', url: 'https://ota.test/update.json', jwk: lic.loadPublic(keysDir), fetchImpl: async () => ({ ok: true, status: 200, json: async () => env }) });
+    assert.strictEqual(chk.file.key, 'win-x64-exe'); assert.strictEqual(chk.driver.key, 'win-asio-driver'); assert.ok(!chk.others.some(o => o.key === 'win-asio-driver'));
+  } finally { srv.closeAllConnections(); srv.close(); delete process.env.BRIDGE_UPDATE_HOSTS; }
+});
+
 test('the page\'s OS detection (index.html otaDetectOs / otaPick) gives the same answers as bridge/osdetect.js', () => {
   const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm'), od = require('./osdetect');
   const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');

@@ -453,7 +453,7 @@ Not tested here: the setup program on a real Windows PC or against a real Defend
 - The drivers connect over loopback to the mixer's new `/ws/virtual` endpoint (Node bridge and the Android app's engine); the device appears in `/api/interfaces`.
 - Tested here: the connection library and the Linux plugin against the real bridge (a native client, `aplay`, `arecord`, in real time), the bridge and the Android engine's hub, the Windows DLLs cross-compiled and inspected, and the page end to end in Chromium (the device in LIVE SOURCES, READ shows the level, WRITE reaches the driver). **Not tested: the ASIO driver in a real DAW, the macOS plug-in, the Android HAL.** The installers contain no driver.
 
-## ASIO driver fix (1.6.1.0)
+## ASIO driver fix (1.6.1.0, released with 1.6.2.0)
 
 The Windows ASIO driver stalled or crashed hosts. Causes found in the code and fixed, nothing else changed:
 - **The audio thread connected to the mixer.** Every second without a mixer it ran the connection (on Windows a closed loopback port takes 1 to 2 s to refuse, and the ten ports were tried one after the other), so buffer switches stopped. A separate **connector thread** (started in `start()`, ended in `stop()`) now keeps the link; the audio thread only plays into it.
@@ -463,3 +463,11 @@ The Windows ASIO driver stalled or crashed hosts. Causes found in the code and f
 - **No allocation on the audio thread**: the buffer for the host's outputs is allocated in `createBuffers`.
 
 Not tested: the driver in a real ASIO host (a DAW) on Windows, in either architecture; the checks are the cross-compile with `-Werror`, the inspection of the DLLs and x86 code, and the connection library against the real bridge (including a missing mixer and a mute program on the port).
+
+## System drivers on the OTA server (1.6.2.0)
+
+The OTA server now also serves the **system driver** next to the app, from the same signed manifest, the same uploads and the same checks (no second server, no new key):
+- **Manifest key `win-asio-driver`** = `AudioMixer-<version>-asio-driver-windows.zip` (built by `node scripts/build-drivers.js` into `windows/releases/`). `scripts/make-update.js` and `scripts/ota.js publish` include it when the file exists; the dashboard's Publish tab recognizes the file name.
+- **`GET /driver`** redirects (302) to the driver file for the system that asks, found like `/latest` (`?os=`, Client Hints, user agent; `?channel=`). Systems without a published driver file get 404 (the Linux ALSA plugin, the macOS plug-in and the Android HAL are source code, see `drivers/README.md`).
+- **`GET /api/latest`** has a new `driver` field (`{ key, label, name, url, size, sha256, how }` or `null`); the driver is not repeated in `others`. The app's `GET /api/update` result has the same `driver` field. `/latest` and the app's installer download are unchanged: the driver never replaces the installer, and the app setup never installs a driver (`how` says: unpack the zip, run `register.bat` as administrator).
+- Checked in `bridge/test.js` against the real server and the real update client. Not tested: a public host, and the driver in a real ASIO host.
