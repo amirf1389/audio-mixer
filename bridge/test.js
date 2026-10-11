@@ -3235,3 +3235,46 @@ test('music FFT spectrum: the RTA music trace and the PEQ overlay use a 4096-poi
   const barOf = hz => { for (let i = 0; i < 64; i++) if (hz >= hzAt(i / 64) && hz < hzAt((i + 1) / 64)) return i; return -1; };
   assert.deepStrictEqual([250, 1000, 4000, 8000].map(barOf), [19, 32, 44, 51]);
 });
+
+test('single-file server: the page, the command line and the server in one file (portable JavaScript bundle and the Node.js single-executable builds)', async () => {
+  const cp = require('node:child_process'), root = pathx.join(__dirname, '..');
+  const single = require('../scripts/build-single'), cache = pathx.join(root, 'dist', 'cache');
+  const rd = f => fsx.readFileSync(pathx.join(root, f), 'utf8');
+  // hooks in the normal code: the embedded page is served first; the command line and the autostart know they may be the executable itself
+  assert.match(rd('bridge/server.js'), /global\.__AM_ASSETS && Object\.prototype\.hasOwnProperty\.call\(global\.__AM_ASSETS, rel\)/);
+  assert.match(rd('client/cli.js'), /global\.__AM_SELF \? \(global\.__AM_SELF\.script \? \[global\.__AM_SELF\.script\] : \[\]\) : \[__filename\]/); assert.match(rd('client/cli.js'), /global\.__AM_CLI_HELP !== undefined/);
+  assert.match(rd('scripts/build-installers.js'), /await addSingleFile\(staged/); assert.match(rd('scripts/build-installers.js'), /AudioMixer-single\.exe/);
+  assert.deepStrictEqual(Object.keys(single.TARGETS), ['windows-x64', 'windows-x86', 'linux-x64', 'linux-arm64', 'macos-x64', 'macos-arm64']);
+  // autostart of the single-file build: the executable (or the bundle run by node) with --no-open, no server.js
+  const svc = require('../client/service'), calls = [];
+  global.__AM_SELF = { sea: true, script: null };
+  try {
+    const home = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'sv-'));
+    await svc.install({ platform: 'linux', env: {}, home, exec: (c, a, o, cb) => { calls.push(c + ' ' + a.join(' ')); cb(null); } });
+    const unit = fsx.readFileSync(pathx.join(home, '.config', 'systemd', 'user', 'audio-mixer.service'), 'utf8');
+    assert.ok(unit.includes(`ExecStart="${process.execPath}" "--no-open"`) && !unit.includes('server.js'), unit);
+    global.__AM_SELF = { sea: false, script: '/opt/am/AudioMixerServer.js' };
+    await svc.install({ platform: 'linux', env: {}, home, exec: (c, a, o, cb) => { calls.push(c); cb(null); } });
+    assert.ok(fsx.readFileSync(pathx.join(home, '.config', 'systemd', 'user', 'audio-mixer.service'), 'utf8').includes(`ExecStart="${process.execPath}" "/opt/am/AudioMixerServer.js" "--no-open"`));
+  } finally { delete global.__AM_SELF; }
+  // the bundle itself, run for real in an empty folder (needs the build tools in dist/cache, installed by the first build)
+  if (!fsx.existsSync(pathx.join(cache, 'single-tools', 'node_modules', '.complete'))) return;
+  const out = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'single-')), version = require('../package.json').version;
+  const [b] = await single.build({ targets: ['portable'], out, cache });
+  assert.ok(fsx.statSync(b.file).size < 1.5 * 1024 * 1024, 'the whole product in about half a megabyte of JavaScript');
+  const port = 21000 + Math.floor(Math.random() * 9000), env = { ...process.env, BRIDGE_UPDATE_URL: '' };
+  assert.strictEqual(cp.spawnSync(process.execPath, [b.file, 'version'], { cwd: out, encoding: 'utf8', env }).stdout.trim(), version);
+  assert.match(cp.spawnSync(process.execPath, [b.file, '--help'], { cwd: out, encoding: 'utf8', env }).stdout, /PC-mode client/);
+  const srv = cp.spawn(process.execPath, [b.file, '--no-open', '--port', String(port)], { cwd: out, stdio: 'ignore', env });
+  try {
+    let st = null; for (let i = 0; i < 60 && !st; i++) { await new Promise(r => setTimeout(r, 150)); try { st = await (await fetch(`http://127.0.0.1:${port}/api/status`)).json(); } catch (_) { /* starting */ } }
+    assert.ok(st && st.version === version, 'the bundle serves the API');
+    const page = Buffer.from(await (await fetch(`http://127.0.0.1:${port}/`)).arrayBuffer());
+    assert.ok(page.equals(fsx.readFileSync(pathx.join(root, 'index.html'))), 'the page comes out of the file, byte for byte');
+    assert.strictEqual((await fetch(`http://127.0.0.1:${port}/boot.html`)).status, 200); assert.strictEqual((await fetch(`http://127.0.0.1:${port}/bridge/server.js`)).status, 404);
+    // a scene file opened through the bundle: it starts nothing new (the server runs), hands the file over and the page takes it once
+    fsx.writeFileSync(pathx.join(out, 's.amix'), '[null,{"name":"x"}]');
+    assert.strictEqual(cp.spawnSync(process.execPath, [b.file, 'open', pathx.join(out, 's.amix'), '--port', String(port)], { cwd: out, env }).status, 0);
+    assert.deepStrictEqual((await (await fetch(`http://127.0.0.1:${port}/api/handoff`)).json()).scenes, [null, { name: 'x' }]);
+  } finally { srv.kill(); }
+});
