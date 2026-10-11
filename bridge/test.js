@@ -1832,6 +1832,47 @@ test('RtApiAsio::probeDeviceInfo: a driver that fails to probe is kept for a mom
   assert.deepStrictEqual(m.list, []); assert.deepStrictEqual(m.unprobed, ['X']);                                    // never probed OK: not listed (the registry lists it as "driver only")
 });
 
+test('ASIO probe: a second try on a fresh instance rescues a driver that was not ready; no probe while a driver is being opened; the reason reaches the driver-only row', () => {
+  const a = require('./audify'), { groupInterfaces } = require('./interfaces');
+  const foc = { id: 0, name: 'Focusrite USB ASIO', inputChannels: 18, outputChannels: 20, sampleRates: [44100, 48000], preferredSampleRate: 48000 };
+  const asioNames = d => d.devices.filter(x => x.api === 'WINDOWS_ASIO').map(x => x.name);
+  // 1. the first probe of the scan finds the driver "waking up" (no channels / an exception), the second answers
+  for (const firstFails of ['zero', 'throw']) {
+    const fa = fakeAudify(); const orig = fa.RtAudio.prototype.getDevices; let n = 0;
+    fa.RtAudio.prototype.getDevices = function () {
+      if (this.api !== 6) return orig.call(this);
+      if (++n === 1) { if (firstFails === 'throw') throw new Error('RtApiAsio::probeDeviceInfo: error (-1) initializing driver'); return [{ ...foc, inputChannels: 0, outputChannels: 0, sampleRates: [] }]; }
+      return [foc];
+    };
+    const r = a.listDevices(() => fa);
+    assert.deepStrictEqual(asioNames(r), ['Focusrite USB ASIO'], firstFails); assert.strictEqual(r.devices.find(d => d.api === 'WINDOWS_ASIO').maxInputChannels, 18);
+    assert.strictEqual((r.problems || []).length, 0, firstFails); assert.strictEqual(n, 2);                       // exactly one retry
+  }
+  // a driver that stays unreadable is still reported (and retried only once per scan)
+  { const fa = fakeAudify(); let n = 0; fa.RtAudio.prototype.getDevices = function () { if (this.api !== 6) return []; n++; throw new Error('RtApiAsio::probeDeviceInfo: error (-1) initializing driver'); };
+    const r = a.listDevices(() => fa); assert.strictEqual(n, 2); assert.strictEqual(r.problems[0].retried, true); assert.match(r.problems[0].message, /probeDeviceInfo/); assert.deepStrictEqual(asioNames(r), []); }
+  // 2. a scan that runs while a driver is being opened does not probe it (two probes of a single-client driver make both fail)
+  { const fa = fakeAudify(); let probes = 0, during = null; const orig = fa.RtAudio.prototype.getDevices; const open0 = fa.RtAudio.prototype.openStream;
+    fa.RtAudio.prototype.getDevices = function () { if (this.api === 6) probes++; return orig.call(this); };
+    const first = a.listDevices(() => fa), dev = first.devices.find(d => d.api === 'WINDOWS_ASIO'); assert.strictEqual(probes, 1);
+    fa.RtAudio.prototype.openStream = function (...args) { const before = probes; during = a.listDevices(() => fa); assert.strictEqual(probes, before, 'no probe while the driver opens'); return open0.apply(this, args); };
+    const s = a.openStream({ mod: fa, dev, direction: 'output', channels: 2, sampleRate: 48000 });
+    assert.deepStrictEqual(asioNames(during), ['Focusrite USB ASIO']);                                        // the remembered list is shown meanwhile
+    assert.strictEqual(a._asioOf(fa).opening, 0); s.close();
+    probes = 0; a.listDevices(() => fa); assert.strictEqual(probes, 1); }                                      // the scans probe again once nothing is open or opening
+  { const fa = fakeAudify(); const dev = a.listDevices(() => fa).devices.find(d => d.api === 'WINDOWS_ASIO'); fa.RtAudio.prototype.openStream = () => { throw new Error('driver busy'); };
+    assert.throws(() => a.openStream({ mod: fa, dev, direction: 'output', channels: 2, sampleRate: 48000 }), /could not open/); assert.strictEqual(a._asioOf(fa).opening, 0); }   // a failed open does not leave the guard set
+  // 3. the interface list: an installed driver the engine could not read says why
+  const problems = [{ api: 'ASIO', message: 'RtApiAsio::probeDeviceInfo: error (-1) initializing driver', unprobed: ['Focusrite USB ASIO'], kept: [], retried: true }];
+  const list = groupInterfaces([], ['Focusrite USB ASIO', 'ASIO4ALL v2'], problems);
+  const f = list.find(i => /focusrite/i.test(i.name));
+  assert.ok(f.driverOnly && f.probeNamed && f.probeRetried && /probeDeviceInfo/.test(f.probeError));
+  assert.ok(list.find(i => /asio4all/i.test(i.name)).probeError);                                             // the whole probe failed: the error applies to every unlisted driver
+  assert.strictEqual(groupInterfaces([], ['Focusrite USB ASIO'], []).find(i => i.driverOnly).probeError, undefined);   // nothing known: nothing claimed
+  const html = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'index.html'), 'utf8');
+  assert.ok(html.includes('ls-reprobe') && html.includes("'?force=1'") && html.includes('PROBE AGAIN') && html.includes('i.probeError'));
+});
+
 test('a device the engine could not probe (0 channels, not ASIO) is flagged, takes its mode from the OS endpoint list, and a stream is still tried', () => {
   const a = require('./audify'), { groupInterfaces } = require('./interfaces'); const fa = fakeAudify();
   const orig = fa.RtAudio.prototype.getDevices; let calls = 0;

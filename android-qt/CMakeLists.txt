@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/version.txt" AM_VERSION)          # written by `node scripts/prepare-qt.js`
 string(STRIP "${AM_VERSION}" AM_VERSION)
-project(AudioMixerQt VERSION 1.5.0 LANGUAGES CXX)
+project(AudioMixerQt VERSION 1.5.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -24,5 +24,5 @@ if(ANDROID)
     set_target_properties(AudioMixerQt PROPERTIES
         QT_ANDROID_PACKAGE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/android"
         QT_ANDROID_VERSION_NAME "${AM_VERSION}"
-        QT_ANDROID_VERSION_CODE 10500)
+        QT_ANDROID_VERSION_CODE 10501)
 endif()
