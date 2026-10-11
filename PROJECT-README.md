@@ -560,8 +560,8 @@ The local server, the command line and the mixer page in **one file**, nothing t
 | File | What it is | Where |
 |---|---|---|
 | `AudioMixerServer-<version>.js` | one JavaScript file (about 0.5 MB, the page inside, compressed): `node AudioMixerServer-<version>.js` runs it on anything with Node.js 18+: **Android** (Termux, nodejs-mobile), a Raspberry Pi, any PC | `android/releases/` |
-| `AudioMixerServer-<version>-windows-x64.exe`, `-x86.exe` | Node.js single-executable application: the file *is* the program (Node.js 22 inside) | `windows/releases/` |
-| `AudioMixerServer-<version>-linux-x64.tar.gz`, `-arm64.tar.gz` | the executable `AudioMixerServer` inside (compressed: 120 MB would not fit a repository file) | `linux/releases/` |
+| `AudioMixerServer-<version>-windows-x64.exe` | Node.js single-executable application: the file *is* the program (Node.js 22 inside); the x86 build is made by `node scripts/build-single.js --targets windows-x86` (it is also inside the x86 installers as `AudioMixer-single.exe`) | `windows/releases/` |
+| `AudioMixerServer-<version>-linux-x64.tar.gz`, `-arm64.tar.gz` | the executable `AudioMixerServer` inside (compressed: 120 MB would not fit a repository file). **Not committed** (43 MB each, they made the pull request too big to merge): `node scripts/build-single.js --targets linux-x64,linux-arm64` writes them to `dist/single/` | built on demand |
 | `AudioMixerServer-<version>-macos-x64.tar.gz`, `-arm64.tar.gz` | the same for macOS, ad-hoc signed when `rcodesign` was available at build time | `macos/releases/` |
 
 - **Same commands as the installed copy:** `AudioMixerServer doctor | drivers | open file.amix | service install | version ...`; without a command it starts the server and opens the mixer. Autostart (`service install`) registers the executable itself with `--no-open`.
