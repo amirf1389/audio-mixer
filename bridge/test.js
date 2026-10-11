@@ -3119,3 +3119,27 @@ test('Linux and macOS own mechanisms: profile.d / environment.d, mime type + des
   const pump = pathx.join(out, 'am-pump'), cc = spawnSync('gcc', ['-std=gnu99', '-Wall', '-Wextra', '-Werror', '-O2', '-o', pump, pathx.join(km, 'am_pump.c'), pathx.join(root, 'drivers', 'common', 'am_link.c'), '-lpthread'], { encoding: 'utf8' });
   if (!cc.error) assert.strictEqual(cc.status, 0, cc.stderr);
 });
+
+test('a driver that disappears without a WebSocket close frame (killed host: only FIN) frees its device at once, so the restarted host can connect', async () => {
+  const net = require('node:net');
+  const { server } = require('./server');
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const port = server.address().port, mask = Buffer.from([1, 2, 3, 4]);
+  const frame = t => { const p = Buffer.from(t), m = Buffer.alloc(p.length); for (let i = 0; i < p.length; i++) m[i] = p[i] ^ mask[i % 4]; return Buffer.concat([Buffer.from([0x81, 0x80 | p.length]), mask, m]); };
+  const count = async () => (await (await fetch(`http://127.0.0.1:${port}/api/virtual`)).json()).devices.length;
+  const connect = name => new Promise((resolve, reject) => {
+    const s = net.connect(port, '127.0.0.1', () => s.write(`GET /ws/virtual HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n`));
+    let buf = '', sent = false;
+    s.on('data', d => { buf += d.toString('latin1'); if (!sent && buf.includes('\r\n\r\n')) { sent = true; s.write(frame(JSON.stringify({ type: 'hello', name, channels: 2, rate: 48000 }))); } if (/"type":"ready"/.test(buf)) resolve(s); else if (/"type":"error"/.test(buf)) reject(new Error(buf.slice(-100))); });
+    s.on('error', () => {});
+  });
+  try {
+    const a = await connect('FinDriver');
+    assert.strictEqual(await count(), 1);
+    a.end();                                                        // FIN without a close frame
+    let n = 1; for (let i = 0; i < 40 && n; i++) { await new Promise(r => setTimeout(r, 50)); n = await count(); }
+    assert.strictEqual(n, 0, 'the device is released within about 2 s (it used to stay for about a minute)');
+    const b = await connect('FinDriver');                           // the same name is accepted again
+    assert.strictEqual(await count(), 1); b.destroy();
+  } finally { server.closeAllConnections(); server.close(); }
+});

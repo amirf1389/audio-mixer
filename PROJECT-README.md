@@ -529,3 +529,7 @@ New folder **`engine/`** (see `engine/README.md`): the measuring and mixing code
 ## README layout, no register.bat (1.10.1.0)
 
 `README.md` is now the Steinberg ASIO SDK readme and this project's documentation is in `PROJECT-README.md` (the `.deb` and the app folders ship it). `register.bat` and `unregister.bat` are gone: register the ASIO driver DLLs with `regsvr32` as administrator (or choose the setup's `/asio` / the MSI feature `AsioDriver`), remove them with `regsvr32 /u`.
+
+## ASIO driver: a killed host no longer locks the device (1.10.2.0)
+
+When an ASIO host ended without closing the connection to the mixer (a crashed or force-closed DAW or OBS, Task Manager), the mixer kept the device "Audio Mixer" for about a minute: the restarted host's driver was refused ("a driver named Audio Mixer is already connected") and stayed silent until the old entry timed out. The server (`bridge/ws.js`) now ends a connection as soon as the peer's side closes, so the device is free at once (tested with the real 64-bit and 32-bit driver DLLs under Wine: 60 s before, 0.1 s after). The same release also frees an ASIO device claimed by a browser page that was killed.

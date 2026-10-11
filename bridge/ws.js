@@ -81,6 +81,9 @@ function accept(req, socket, handlers) {
   if (beat.unref) beat.unref();
   socket.on('data', () => { seen = Date.now(); });
   conn.release = release;
+  // a peer that ends the connection without a close frame (a killed ASIO host, a crashed browser) sends only FIN: the HTTP server keeps such a socket half open, so
+  // 'close' never comes and the device stayed claimed for about a minute (until the ping was refused); a WebSocket peer never half-closes on purpose
+  socket.on('end', () => { release(); socket.destroy(); });
   socket.on('close', release);
   socket.on('error', () => socket.destroy());
   return conn;
