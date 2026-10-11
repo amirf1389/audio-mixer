@@ -3,7 +3,7 @@
 // Builds the Android app (.apk): the mixer page in a full-screen WebView, bundled offline (Tailwind CSS, Font Awesome and the fonts are
 // packed into the app instead of loaded from CDNs). Web Audio, the microphone, scenes and the license / plans work as in the browser;
 // PC-mode features (ASIO / WASAPI interfaces, plugins, OTA) need the PC.
-//   node scripts/build-apk.js [--out android/releases] [--kotlin]   -> AudioMixer-<version>-android.apk (+ .sha256)
+//   node scripts/build-apk.js [--out android/releases] [--kotlin]   -> AudioMixer-<version>-android.apk
 //   The background engine (android/src: MiniBridge, AndroidAudio, ...) is Java; --kotlin builds the foreground service from android/kotlin/EngineService.kt (needs kotlinc).
 // Tools (any Android SDK, or the Debian / Ubuntu packages aapt apksigner zipalign dalvik-exchange libandroid-23-java):
 //   javac (JDK 8+), aapt, zipalign, apksigner, d8 or dalvik-exchange (dx), android.jar (ANDROID_JAR, ANDROID_HOME/platforms, or /usr/lib/android-sdk)
@@ -185,7 +185,6 @@ async function build({ out = path.join(ROOT, 'android', 'releases'), kotlin = fa
   run(t.apksigner, ['sign', '--ks', ks.file, '--ks-key-alias', ks.alias, '--ks-pass', 'pass:' + ks.pass, '--key-pass', 'pass:' + ks.pass, '--min-sdk-version', '24', '--v4-signing-enabled', 'false', '--out', dest, aligned]);
   const verify = run(t.apksigner, ['verify', '--verbose', '--min-sdk-version', '24', dest]);
   const sum = crypto.createHash('sha256').update(fs.readFileSync(dest)).digest('hex');
-  fs.writeFileSync(dest + '.sha256', `${sum}  ${path.basename(dest)}\n`);
   fs.rmSync(work, { recursive: true, force: true });
   return { dest, sha256: sum, size: fs.statSync(dest).size, version: pkg.version, versionCode: versionCode(pkg.version), selfSigned: !ks.real, fonts: web.fonts, warning: web.warning, verify: verify.trim() };
 }

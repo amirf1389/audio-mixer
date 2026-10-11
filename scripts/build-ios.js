@@ -9,7 +9,6 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
 const apk = require('./build-apk');
 
@@ -44,7 +43,6 @@ async function build({ out = path.join(ROOT, 'ios', 'releases'), ipa = false } =
   const dest = path.join(path.resolve(out), `AudioMixer-${pkg.version}-ios-xcode-project.tar.gz`);
   const t = spawnSync('tar', ['-czf', dest, '-C', work, 'AudioMixer-ios'], { encoding: 'utf8' });
   if (t.status !== 0) throw new Error('tar failed: ' + (t.stderr || t.error));
-  fs.writeFileSync(dest + '.sha256', `${crypto.createHash('sha256').update(fs.readFileSync(dest)).digest('hex')}  ${path.basename(dest)}\n`);
   const res = { project: dest, version: pkg.version, fonts: web.fonts, ipa: null };
   if (ipa) {
     if (process.platform !== 'darwin' || !apk.which('xcodebuild') || !apk.which('xcodegen')) throw new Error('--ipa needs a Mac with Xcode and xcodegen (brew install xcodegen)');
@@ -56,7 +54,6 @@ async function build({ out = path.join(ROOT, 'ios', 'releases'), ipa = false } =
     fs.cpSync(path.join(archive, 'Products', 'Applications', 'AudioMixer.app'), path.join(payload, 'AudioMixer.app'), { recursive: true });
     const file = path.join(path.resolve(out), `AudioMixer-${pkg.version}-ios-unsigned.ipa`);
     run('zip', ['-qry', file, 'Payload'], work);
-    fs.writeFileSync(file + '.sha256', `${crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex')}  ${path.basename(file)}\n`);
     res.ipa = file;
   }
   fs.rmSync(work, { recursive: true, force: true });

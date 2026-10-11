@@ -10,15 +10,12 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
 const { build } = require('./build');
 const { buildMac } = require('./build-unix');
 const { makeDmg } = require('./mkdmg');
 
 const ROOT = path.resolve(__dirname, '..');
-const sha = f => crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex');
-const sum = f => fs.writeFileSync(f + '.sha256', `${sha(f)}  ${path.basename(f)}\n`);
 
 const readme = version => `Audio Mixer ${version} for macOS
 
@@ -54,7 +51,6 @@ function buildMacApp({ out = path.join(ROOT, 'macos', 'releases') } = {}) {
   res.zip = path.join(outAbs, `AudioMixer-${version}-macos-app.zip`); fs.rmSync(res.zip, { force: true });
   const z = spawnSync('zip', ['-qry', res.zip, 'Audio Mixer.app'], { cwd: path.dirname(m.bundle), encoding: 'utf8' });
   if (z.status !== 0) throw new Error('zip failed: ' + (z.stderr || z.error));
-  sum(res.zip);
   // 2. disk image
   const tool = isoTool();
   if (!tool) throw new Error('genisoimage (or xorriso) is needed for the .dmg: apt install genisoimage');
@@ -71,9 +67,9 @@ function buildMacApp({ out = path.join(ROOT, 'macos', 'releases') } = {}) {
   const r = spawnSync(tool.cmd, [...tool.args, '-V', `Audio Mixer ${version}`.slice(0, 32), '-D', '-R', '-J', '-joliet-long', '-no-pad', '-o', iso, stage], { encoding: 'utf8' });
   if (r.status !== 0) throw new Error(tool.cmd + ' failed: ' + (r.stderr || r.stdout));
   res.dmg = path.join(outAbs, `AudioMixer-${version}-macos.dmg`);
-  const d = makeDmg(iso, res.dmg); res.dmgInfo = d; sum(res.dmg);
+  const d = makeDmg(iso, res.dmg); res.dmgInfo = d;
   // 3. the tar.gz with install.command
-  res.tar = path.join(outAbs, path.basename(m.tar)); fs.copyFileSync(m.tar, res.tar); sum(res.tar);
+  res.tar = path.join(outAbs, path.basename(m.tar)); fs.copyFileSync(m.tar, res.tar);
   fs.rmSync(work, { recursive: true, force: true });
   return res;
 }
