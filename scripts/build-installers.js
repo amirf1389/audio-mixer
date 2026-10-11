@@ -5,6 +5,7 @@
 //   dist/Audio Mixer-<version>.exe      signed setup program (64-bit Windows): checks the package SHA-256, then installs it; /quiet /uninstall
 //   dist/AudioMixer-signing.cer         the public certificate the files are signed with (see scripts/sign.js)
 // Each installer contains the mixer page, the Node.js server and client, the bundled official Node.js runtime, Audify (ASIO / WASAPI / DirectSound),
+// the Audio Mixer ASIO driver files (asio-driver\; registering them is the optional AsioDriver feature, off by default),
 // the verify scan, Start Menu entries and an uninstall entry in Settings > Apps. Linux (.deb) and macOS (.app) packages: build-unix.js.
 const fs = require('node:fs');
 const path = require('node:path');
@@ -12,6 +13,7 @@ const crypto = require('node:crypto');
 const { buildInstaller } = require('./build-installer');
 const { buildMsi } = require('./build-msi');
 const { buildExe, compileLauncher, compileCli } = require('./build-exe');
+const { buildAsio } = require('./build-drivers');
 const { ensureSigningCert, signFile } = require('./sign');
 
 const sha = f => crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex');
@@ -32,6 +34,19 @@ function addLauncher(staged, { out, id, env }) {
   fs.appendFileSync(path.join(staged.stage, 'MANIFEST.sha256'), `${sha(cliTarget)}  audio-mixer.exe\n`);
 }
 
+// The ASIO driver goes into the install tree as files (asio-driver\): AudioMixerASIO32.dll, and for the 64-bit package AudioMixerASIO64.dll too (64-bit Windows runs
+// 32-bit and 64-bit hosts), register.bat / unregister.bat, signed and listed in MANIFEST.sha256. Registering it is the optional MSI feature AsioDriver (see build-msi.js).
+function addAsioDriver(staged, { out, id, env }) {
+  const dir = path.join(staged.stage, 'asio-driver'), work = path.join(out, 'asio', staged.arch);
+  fs.rmSync(dir, { recursive: true, force: true }); fs.mkdirSync(dir, { recursive: true }); fs.mkdirSync(work, { recursive: true });
+  const files = [];
+  for (const arch of staged.arch === 'x64' ? ['x64', 'x86'] : ['x86']) files.push(path.basename(buildAsio(arch, work)));
+  for (const f of files) { fs.copyFileSync(path.join(work, f), path.join(dir, f)); if (id) signFile(path.join(dir, f), id, { env }); }
+  for (const f of ['register.bat', 'unregister.bat']) { fs.copyFileSync(path.join(__dirname, '..', 'windows', 'asio-driver', f), path.join(dir, f)); files.push(f); }
+  fs.appendFileSync(path.join(staged.stage, 'MANIFEST.sha256'), files.map(f => `${sha(path.join(dir, f))}  asio-driver/${f}\n`).join(''));
+  return files;
+}
+
 async function buildInstallers({ out = path.join(__dirname, '..', 'dist'), archs = ['x64', 'x86'], sign = true, env = process.env } = {}) {
   const outAbs = path.resolve(out);
   const id = sign ? ensureSigningCert({ dir: path.join(outAbs, 'cache', 'signing'), env }) : null;
@@ -39,6 +54,7 @@ async function buildInstallers({ out = path.join(__dirname, '..', 'dist'), archs
   for (const arch of archs) {
     const staged = await buildInstaller({ out: outAbs, arch });
     addLauncher(staged, { out: outAbs, id, env });
+    addAsioDriver(staged, { out: outAbs, id, env });
     const m = await buildMsi({ out: outAbs, arch, scope: 'machine', staged });
     if (id) signFile(m.msi, id, { env });
     m.sha256 = sha(m.msi);
@@ -63,4 +79,4 @@ if (require.main === module) {
       : 'Signed with the certificate from SIGN_PFX.');
   }).catch(e => { console.error('Installer build failed: ' + e.message); process.exit(1); });
 }
-module.exports = { buildInstallers };
+module.exports = { buildInstallers, addAsioDriver };

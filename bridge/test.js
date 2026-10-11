@@ -1323,7 +1323,7 @@ test('repository layout: one folder per system with its sources and release file
   const lay = require('../scripts/layout'), mk = require('../scripts/make-update'), root = pathx.join(__dirname, '..');
   const top = fsx.readdirSync(root, { withFileTypes: true }).filter(e => !e.name.startsWith('.') && e.name !== 'node_modules' && e.name !== 'dist');
   const dirs = top.filter(e => e.isDirectory()).map(e => e.name).sort(), files = top.filter(e => e.isFile()).map(e => e.name).sort();
-  assert.deepStrictEqual(dirs, ['android', 'bridge', 'client', 'deploy', 'drivers', 'ios', 'linux', 'macos', 'ota-server', 'releases', 'scripts', 'windows'], 'the top level is minimal: systems + shared code');
+  assert.deepStrictEqual(dirs, ['android', 'bridge', 'client', 'deploy', 'drivers', 'ios', 'linux', 'macos', 'npm-installer', 'ota-server', 'releases', 'scripts', 'windows'], 'the top level is minimal: systems + shared code');
   assert.deepStrictEqual(files, ['Additional Terms & Conditions', 'LICENSE', 'README.md', 'SECURITY.md', 'boot.html', 'index.html', 'package.json'], 'only the web app and the project papers at the root');
   assert.deepStrictEqual(fsx.readdirSync(pathx.join(root, 'releases')), ['update.json'], 'releases/ holds only the manifest that installed apps fetch');
   for (const os of lay.OSES) assert.ok(fsx.statSync(pathx.join(root, os, 'releases')).isDirectory(), os + '/releases');
@@ -2770,6 +2770,111 @@ test('OTA server: the system driver (Windows ASIO zip) is published in the manif
     const chk = await update.check({ current: '7.0.0.0', platform: 'win32', arch: 'x64', url: 'https://ota.test/update.json', jwk: lic.loadPublic(keysDir), fetchImpl: async () => ({ ok: true, status: 200, json: async () => env }) });
     assert.strictEqual(chk.file.key, 'win-x64-exe'); assert.strictEqual(chk.driver.key, 'win-asio-driver'); assert.ok(!chk.others.some(o => o.key === 'win-asio-driver'));
   } finally { srv.closeAllConnections(); srv.close(); delete process.env.BRIDGE_UPDATE_HOSTS; }
+});
+
+test('Windows installers carry the ASIO driver files (Program Files / Program Files (x86)); registering it is the optional feature AsioDriver, the setup asks (default No) or takes /asio', () => {
+  const fsx = require('node:fs'), pathx = require('node:path'), osx = require('node:os'), cp = require('node:child_process');
+  const m = require('../scripts/build-msi'), root = pathx.join(__dirname, '..');
+  const stage = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'asiostage-')); fsx.mkdirSync(pathx.join(stage, 'asio-driver'), { recursive: true }); fsx.writeFileSync(pathx.join(stage, 'LICENSE'), 'x');
+  try {
+    for (const f of ['AudioMixerASIO32.dll', 'AudioMixerASIO64.dll', 'register.bat']) fsx.writeFileSync(pathx.join(stage, 'asio-driver', f), 'x');
+    const x64 = m.wxs({ stage, version: '9.0.0', arch: 'x64' }), x86 = m.wxs({ stage, version: '9.0.0', arch: 'x86' });
+    const feature = w => /<Feature Id="AsioDriver"[^>]*Level="3"[^>]*>(.*?)<\/Feature>/.exec(w);          // Level 3: off unless ADDLOCAL names it
+    assert.ok(feature(x64) && /AsioReg64/.test(feature(x64)[1]) && /AsioReg32/.test(feature(x64)[1]));
+    assert.match(x64, /<Component Id="AsioReg64"[^>]*Win64="yes"/); assert.match(x64, /<Component Id="AsioReg32"[^>]*Win64="no"/);          // 64-bit and 32-bit registry views
+    assert.match(x64, /InprocServer32" Type="string" Value="\[INSTALLDIR\]asio-driver\\AudioMixerASIO64\.dll"/); assert.match(x64, /Key="SOFTWARE\\ASIO\\Audio Mixer" Name="CLSID"[^>]*\{C1893F2F-1AD5-4344-9806-DCFD242C0D48\}/);
+    assert.match(x64, /Directory Id="ProgramFiles64Folder"/); assert.match(x86, /Directory Id="ProgramFilesFolder"/);
+    assert.ok(feature(x86) && !/AsioReg64/.test(feature(x86)[1]) && /AsioReg32/.test(feature(x86)[1]) && !/Value="\[INSTALLDIR\]asio-driver\\AudioMixerASIO64/.test(x86));
+    assert.ok(!/AsioDriver/.test(m.wxs({ stage, version: '9.0.0', arch: 'x64', scope: 'user' })), 'HKLM\\SOFTWARE\\ASIO is per machine: the per-user package has no driver feature');
+    fsx.rmSync(pathx.join(stage, 'asio-driver', 'AudioMixerASIO32.dll')); assert.ok(!/AsioDriver/.test(m.wxs({ stage, version: '9.0.0', arch: 'x64' })), 'no DLL, no feature');
+    // the same keys that DllRegisterServer writes
+    const cpp = fsx.readFileSync(pathx.join(root, 'windows', 'asio-driver', 'audiomixer_asio.cpp'), 'utf8'); assert.ok(cpp.includes('SOFTWARE\\ASIO\\Audio Mixer') && cpp.includes('InprocServer32') && cpp.includes('ThreadingModel'));
+  } finally { fsx.rmSync(stage, { recursive: true, force: true }); }
+  // the setup program: /asio, /noasio, a Yes / No question whose default is No, ADDLOCAL gets AsioDriver only on request
+  const stub = fsx.readFileSync(pathx.join(root, 'windows', 'installer', 'setup-stub.c'), 'utf8');
+  assert.match(stub, /L"\/asio"/); assert.match(stub, /L"\/noasio"/); assert.match(stub, /MB_YESNO \| MB_DEFBUTTON2/); assert.match(stub, /if \(asio\) wcscat\(add, L",AsioDriver"\)/);
+  assert.match(stub, /!asio && !noasio && !quiet && !passive && MessageBoxW/);          // never asked (and never registered) in a silent install
+  const bi = fsx.readFileSync(pathx.join(root, 'scripts', 'build-installers.js'), 'utf8'); assert.match(bi, /addAsioDriver\(staged/); assert.match(bi, /MANIFEST\.sha256/);
+  const gcc = cp.spawnSync('which', ['x86_64-w64-mingw32-gcc']); if (!gcc.status) { const o = pathx.join(osx.tmpdir(), 'stub-' + process.pid + '.o'); const r = cp.spawnSync('x86_64-w64-mingw32-gcc', ['-c', '-DREQUIRE_X64', '-o', o, pathx.join(root, 'windows', 'installer', 'setup-stub.c')], { encoding: 'utf8' }); fsx.rmSync(o, { force: true }); assert.strictEqual(r.status, 0, r.stderr); }
+});
+
+test('phone layout: every rule is scoped to html.phone-ui (or its own #phone- elements), so tablets, laptops and desktops keep the page they had', () => {
+  const html = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'index.html'), 'utf8');
+  const css = /<style id="phone-ui-css">([\s\S]*?)<\/style>/.exec(html); assert.ok(css, 'the phone layout has its own style block');
+  const rules = css[1].replace(/\/\*[\s\S]*?\*\//g, '').split('}').map(r => r.split('{')[0].trim()).filter(Boolean);
+  assert.ok(rules.length > 40);
+  for (const sel of rules.flatMap(r => r.split(','))) assert.match(sel.trim(), /^(html\.phone-ui|#phone-bar|#phone-sheet|#phone-mon-btn)\b/, 'unscoped selector: ' + sel.trim());
+  assert.ok(!/@media/.test(css[1]), 'the gate is the class, set by the script');
+  const js = /<script id="phone-ui-js">([\s\S]*?)<\/script>/.exec(html); assert.ok(js);
+  assert.match(js[1], /max-width: 700px\) and \(pointer: coarse\)/); assert.match(js[1], /phone=0/); assert.match(js[1], /phone=1/);
+  assert.doesNotThrow(() => new Function(js[1]));
+  for (const id of ['mixer', 'live', 'meter', 'fx']) assert.ok(html.includes(`id="nav-${id}"`) || html.includes(`'nav-${id}'`) || html.includes(`"nav-" + `) || html.includes('nav-'), id);
+});
+
+test('npm installer (npm-installer/): per-system choice of file and own installation, signed manifest + SHA-256 checked before anything runs, Windows ASIO registration only on request', async () => {
+  const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), http = require('node:http'), crypto = require('node:crypto');
+  const root = path.join(__dirname, '..', 'npm-installer'), det = require(path.join(root, 'lib', 'detect')), mf = require(path.join(root, 'lib', 'manifest')), { main, parseArgs } = require(path.join(root, 'lib', 'cli'));
+  const lic = require('../scripts/license'), update = require('./update'), osdetect = require('./osdetect');
+  // the package is self-contained and agrees with the app: same public key, same file choice
+  assert.deepStrictEqual(mf.JWK, require('./license-public.json'));
+  const pj = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')); assert.ok(/^\d+\.\d+\.\d+$/.test(pj.version) && pj.bin['audio-mixer-install'] && !pj.dependencies);
+  for (const f of fs.readdirSync(path.join(root, 'lib')).filter(n => n.endsWith('.js'))) assert.ok(!/require\(['"]\.\.\//.test(fs.readFileSync(path.join(root, 'lib', f), 'utf8')), f + ' does not reach into the repository');
+  for (const d of [{ os: 'windows', arch: 'x64' }, { os: 'windows', arch: 'x86' }, { os: 'linux', arch: 'x64', distro: 'debian' }, { os: 'linux', arch: 'x64', distro: 'other' }, { os: 'android' }, { os: 'ios' }]) assert.deepStrictEqual(det.keysFor(d), osdetect.keysFor(d), JSON.stringify(d));
+  assert.deepStrictEqual(det.keysFor({ os: 'macos' }), ['macos']); assert.deepStrictEqual(det.keysFor({ os: 'linux', distro: 'debian' }, { hasApt: false }), ['linux-tar']);
+  assert.strictEqual(det.detect({ platform: 'win32', archName: 'ia32', env: { PROCESSOR_ARCHITEW6432: 'AMD64' } }).arch, 'x64');   // 32-bit Node.js on 64-bit Windows
+  assert.deepStrictEqual(det.detect({ platform: 'linux', archName: 'x64', debian: true }), { os: 'linux', arch: 'x64', distro: 'debian' });
+  assert.throws(() => parseArgs(['--nope']), /unknown option/); assert.throws(() => parseArgs(['--server']), /needs a value/);
+
+  // a small server: the manifest and the files
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'npmi-')), keys = path.join(tmp, 'k'); lic.initKeys(keys);
+  const priv = lic.loadPrivate(keys), pub = lic.loadPublic(keys), sha = b => crypto.createHash('sha256').update(b).digest('hex');
+  const names = { 'win-x64-exe': 'Audio Mixer-9.0.0.0.exe', 'win-x86-msi': 'AudioMixer-9.0.0.0-x86.msi', 'linux-deb': 'audio-mixer_9.0.0.0_all.deb', 'linux-tar': 'AudioMixer-9.0.0.0-linux.tar.gz', 'macos': 'AudioMixer-9.0.0.0-macos.tar.gz', 'android-apk': 'AudioMixer-9.0.0.0-android.apk' };
+  const bodies = {}; for (const [k, n] of Object.entries(names)) bodies[n] = Buffer.from(k + ' content ' + 'x'.repeat(30));
+  let hits = [], tamper = false, base = '';
+  const srv = http.createServer((req, res) => {
+    const u = decodeURIComponent(req.url.split('?')[0]); hits.push(u);
+    if (u === '/update.json' || u === '/other.json') {
+      const files = {}; for (const [k, n] of Object.entries(names)) files[k] = { name: n, url: base + '/releases/' + encodeURIComponent(n), size: bodies[n].length, sha256: sha(bodies[n]) };
+      const env = update.signManifest({ product: 'audio-mixer', version: '9.0.0.0', channel: 'stable', files }, u === '/other.json' ? lic.loadPrivate((() => { const d = path.join(tmp, 'k2'); lic.initKeys(d); return d; })()) : priv);
+      return res.end(JSON.stringify(env));
+    }
+    const m = /^\/releases\/(.+)$/.exec(u); if (m && bodies[m[1]]) return res.end(tamper ? Buffer.from('tampered' + 'x'.repeat(30)) : bodies[m[1]]);
+    res.statusCode = 404; res.end('no');
+  });
+  await new Promise(r => srv.listen(0, '127.0.0.1', r)); base = 'http://127.0.0.1:' + srv.address().port;
+  const calls = [], spawn = (c, a, o) => { calls.push({ c, a, o }); return { status: 0 }; };
+  const run = async (args, io = {}) => { const out = []; calls.length = 0; const code = await main(['--server', base + '/update.json', '--allow-http', ...args], { log: s => out.push(s), spawn, jwk: pub, ...io }); return { code, out: out.join('\n') }; };
+  try {
+    // Windows 64-bit: the setup .exe; the ASIO driver is registered only with --asio (or the setup's own question in an interactive install)
+    let r = await run(['--os', 'windows', '--arch', 'x64', '--yes']); assert.strictEqual(r.code, 0, r.out);
+    assert.strictEqual(calls.length, 1); assert.strictEqual(calls[0].c, 'powershell.exe'); assert.match(calls[0].a[3], /Audio Mixer-9\.0\.0\.0\.exe'.*@\('\/passive','\/noasio'\) -Wait/); assert.match(r.out, /SHA-256 matches the signed manifest/);
+    assert.ok(!fs.existsSync(calls[0].a[3].match(/-FilePath '([^']+)'/)[1]), 'the downloaded file is deleted afterwards');
+    r = await run(['--os', 'windows', '--arch', 'x64', '--quiet', '--asio']); assert.match(calls[0].a[3], /@\('\/quiet','\/asio'\)/);
+    r = await run(['--os', 'windows', '--arch', 'x64', '--asio', '--yes']); assert.match(calls[0].a[3], /@\('\/passive','\/asio'\)/);
+    r = await run(['--os', 'windows', '--arch', 'x64'], { ask: async () => true }); assert.ok(!/ArgumentList/.test(calls[0].a[3]), 'interactive: no switches, the setup asks its own questions');
+    r = await run(['--os', 'windows', '--arch', 'x64'], { ask: async () => false }); assert.strictEqual(calls.length, 0); assert.match(r.out, /Nothing was run/);
+    r = await run(['--os', 'windows', '--arch', 'x64', 'uninstall', '--yes']); assert.match(calls[0].a[3], /@\('\/uninstall'\)/);
+    // Windows 32-bit: the .msi (Program Files (x86)); --asio adds the AsioDriver feature to the default feature list
+    r = await run(['--os', 'windows', '--arch', 'x86', '--yes']); assert.strictEqual(calls[0].c, 'msiexec.exe'); assert.deepStrictEqual(calls[0].a.slice(0, 1).concat(calls[0].a.slice(2)), ['/i', '/passive']);
+    r = await run(['--os', 'windows', '--arch', 'x86', '--yes', '--asio']); assert.match(calls[0].a[3], /^ADDLOCAL=Main,.*Desktop,AsioDriver$/);
+    // macOS and Linux: the system's own installer from the archive, the .deb with apt
+    r = await run(['--os', 'macos', '--yes']); assert.deepStrictEqual(calls.map(x => x.c), ['tar', 'sh']); assert.match(calls[1].a[0], /AudioMixer\/install\.command$/);
+    r = await run(['--os', 'linux', '--distro', 'other', '--yes'], {}); assert.deepStrictEqual(calls.map(x => x.c), ['tar', 'sh']); assert.match(calls[1].a.join(' '), /audio-mixer-9\.0\.0\.0\/install\.sh --yes$/);
+    r = await run(['--os', 'linux', '--distro', 'debian', '--yes'], { hasApt: true }); assert.match([calls[0].c].concat(calls[0].a).join(' '), /apt install -y .*audio-mixer_9\.0\.0\.0_all\.deb$/);
+    r = await run(['--os', 'linux', '--distro', 'debian', '--yes', 'uninstall'], { hasApt: true }); assert.match([calls[0].c].concat(calls[0].a).join(' '), /apt remove -y audio-mixer$/);
+    // dry run: the plan, no download, nothing run
+    hits = []; r = await run(['--os', 'windows', '--arch', 'x64', '--dry-run', '--json']); const plan = JSON.parse(r.out); assert.strictEqual(plan.file.name, 'Audio Mixer-9.0.0.0.exe'); assert.ok(plan.steps.length === 1 && calls.length === 0 && !hits.some(h => h.startsWith('/releases')));
+    // Android / iOS: only downloaded, with the how-to
+    const out = path.join(tmp, 'out'); r = await run(['--os', 'android', '--out', out]); assert.strictEqual(calls.length, 0); assert.ok(fs.existsSync(path.join(out, 'AudioMixer-9.0.0.0-android.apk'))); assert.match(r.out, /open it/);
+    // nothing runs when something is wrong: a changed file, a manifest signed by another key, a host that is not allowed
+    tamper = true; await assert.rejects(run(['--os', 'windows', '--arch', 'x64', '--yes']), /does not match the signed SHA-256/); assert.strictEqual(calls.length, 0); tamper = false;
+    await assert.rejects(main(['--server', base + '/other.json', '--allow-http', '--os', 'linux', '--yes'], { log() {}, spawn, jwk: pub }), /not signed by the Audio Mixer publisher/);
+    await assert.rejects(main(['--server', base + '/update.json', '--os', 'linux', '--yes'], { log() {}, spawn, jwk: pub }), /only https is accepted/);
+    await assert.rejects(main(['--server', 'https://evil.example/update.json', '--os', 'linux', '--yes'], { log() {}, spawn }), /./);
+    // a local folder (a checkout's <os>/releases) works without a network
+    const rel = path.join(tmp, 'rel'); fs.mkdirSync(rel); for (const n of ['AudioMixer-1.2.0.0-linux.tar.gz', 'AudioMixer-1.10.0.0-linux.tar.gz']) fs.writeFileSync(path.join(rel, n), 'x');
+    r = await main(['--dir', rel, '--os', 'linux', '--distro', 'other', '--yes'], { log: s => { r2 = s; }, spawn }); var r2; assert.strictEqual(r, 0); assert.match(calls[0].a.join(' '), /AudioMixer-1\.10\.0\.0-linux\.tar\.gz/);
+  } finally { srv.closeAllConnections(); srv.close(); fs.rmSync(tmp, { recursive: true, force: true }); }
 });
 
 test('the page\'s OS detection (index.html otaDetectOs / otaPick) gives the same answers as bridge/osdetect.js', () => {

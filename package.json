@@ -1,6 +1,6 @@
 {
   "name": "audio-mixer",
-  "version": "1.6.2.0",
+  "version": "1.7.0.0",
   "description": "Audio mixer web app with an optional local system server (PC mode) for ASIO / WASAPI / Core Audio / ALSA.",
   "private": true,
   "license": "MIT",
@@ -31,7 +31,8 @@
     "build:installers": "node scripts/build-installers.js",
     "build:unix": "node scripts/build-unix.js",
     "ota-server": "node ota-server/server.js",
-    "ota": "node scripts/ota.js"
+    "ota": "node scripts/ota.js",
+    "install:app": "node npm-installer/bin/audio-mixer-install.js"
   },
   "engines": {
     "node": ">=18"
