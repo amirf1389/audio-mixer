@@ -3488,6 +3488,13 @@ test('Android APK safety: permission allowlist, listener shipped off, audit tool
   assert.deepStrictEqual(audit.auditApk(['AndroidManifest.xml', 'classes.dex', 'resources.arsc', 'assets/www/index.html', 'res/mipmap-hdpi-v4/ic_launcher.png', 'META-INF/X.RSA']), []);
   assert.match(audit.auditApk(['classes.dex', 'lib/arm64-v8a/libx.so']).join(), /native library/);
   assert.match(audit.auditApk(['classes.dex', 'classes2.dex']).join(), /unexpected file/);
+  // classes.dex must never reference a dynamic class loader (the one string that turns "WebView app" into "dropper" for a scanner)
+  assert.deepStrictEqual(audit.auditDex(Buffer.from('nothing suspicious here', 'latin1')), []);
+  assert.match(audit.auditDex(Buffer.from('...dalvik/system/DexClassLoader...', 'latin1')).join(), /dynamic class loader/);
+  assert.match(audit.auditDex(Buffer.from('...dalvik/system/InMemoryDexClassLoader...', 'latin1')).join(), /dynamic class loader/);
+  // the false-positive appeal report is generated from the real build, not hand-edited, and refuses an APK signed with the wrong key
+  const appeal = require('../scripts/play-protect-appeal');
+  assert.throws(() => appeal.build.call(null, '/nonexistent.apk'));
   // the published fingerprint matches the release the repository carries, and every explained permission has a reason in the app
   const fp = rd('android/signing-fingerprint.txt').trim(); assert.match(fp, /^([0-9A-F]{2}:){31}[0-9A-F]{2}$/);
   const infoJava = rd('android/src/com/audiomixer/app/AppInfo.java'); for (const p of audit.ALLOWED) assert.ok(infoJava.includes('"' + p + '"'), p);
