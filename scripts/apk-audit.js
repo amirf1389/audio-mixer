@@ -7,6 +7,8 @@
 //   - not debuggable, not testOnly, no backup of app data, every component with an intent filter says exported="true" explicitly
 //   - the notification listener (the "now playing" access) is shipped switched off: android:enabled="false"
 //   - the APK holds no native library, no second dex and no file that is not a resource, the page or classes.dex
+//   - classes.dex contains no dynamic code loading (DexClassLoader / InMemoryDexClassLoader / PathClassLoader of a path outside the app) — the single signal that turns "app with a
+//     WebView" into "dropper" for a scanner; this app never loads code it didn't ship, so the string must not be there
 //   node scripts/apk-audit.js [path/to/app.apk]
 const fs = require('node:fs');
 const path = require('node:path');
@@ -45,13 +47,28 @@ function auditApk(entries) {
   return problems;
 }
 
+// `dex`: the raw bytes of classes.dex. Loading code the app didn't ship with (a class from a downloaded file, a decrypted blob, an asset) is the one behaviour that turns
+// "WebView app" into "dropper" for a scanner; this app only ever runs the classes compiled into it, so none of the loader classes should appear as a string at all.
+const DYNAMIC_LOADER = /dalvik\/system\/(DexClassLoader|InMemoryDexClassLoader|PathClassLoader)/;
+function auditDex(dex) {
+  const problems = [];
+  if (DYNAMIC_LOADER.test(dex.toString('latin1'))) problems.push('classes.dex references a dynamic class loader (DexClassLoader / InMemoryDexClassLoader / PathClassLoader): the app must run only the code it ships with');
+  return problems;
+}
+
 function main(argv) {
   const m = auditManifest(fs.readFileSync(path.join(ROOT, 'android', 'AndroidManifest.xml'), 'utf8'));
   let problems = m.problems.slice();
   if (argv[0]) {
-    const r = require('node:child_process').spawnSync('unzip', ['-Z1', argv[0]], { encoding: 'utf8' });
+    const cp = require('node:child_process');
+    const r = cp.spawnSync('unzip', ['-Z1', argv[0]], { encoding: 'utf8' });
     if (r.status !== 0) { console.error('cannot list ' + argv[0]); return 2; }
-    problems = problems.concat(auditApk(r.stdout.split('\n').filter(Boolean)));
+    const entries = r.stdout.split('\n').filter(Boolean);
+    problems = problems.concat(auditApk(entries));
+    if (entries.includes('classes.dex')) {
+      const d = cp.spawnSync('unzip', ['-p', argv[0], 'classes.dex'], { encoding: 'buffer', maxBuffer: 64 * 1024 * 1024 });
+      if (d.status === 0) problems = problems.concat(auditDex(d.stdout));
+    }
   }
   for (const p of problems) console.error('APK AUDIT: ' + p);
   console.log(problems.length ? problems.length + ' problem(s)' : 'APK audit passed: ' + m.permissions.map(p => p.replace('android.permission.', '')).join(', '));
@@ -59,4 +76,4 @@ function main(argv) {
 }
 
 if (require.main === module) process.exit(main(process.argv.slice(2)));
-module.exports = { auditManifest, auditApk, ALLOWED, SUSPICIOUS };
+module.exports = { auditManifest, auditApk, auditDex, ALLOWED, SUSPICIOUS, DYNAMIC_LOADER };
