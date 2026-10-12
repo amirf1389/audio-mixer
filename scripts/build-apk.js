@@ -146,6 +146,8 @@ function listFiles(dir, ext) {
 async function build({ out = path.join(ROOT, 'android', 'releases'), kotlin = false } = {}) {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
   const { tools: t, missing } = findTools();
+  const audit = require('./apk-audit').auditManifest(fs.readFileSync(path.join(ROOT, 'android', 'AndroidManifest.xml'), 'utf8'));      // nothing a scanner or Google Play Protect treats as suspicious gets in
+  if (audit.problems.length) throw new Error('the manifest fails the APK audit (scripts/apk-audit.js): ' + audit.problems.join('; '));
   if (missing.length) throw new Error('missing tools: ' + missing.join(', ') + '. Install the Android SDK build-tools, or on Debian / Ubuntu: apt install aapt apksigner zipalign dalvik-exchange libandroid-23-java default-jdk');
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'apk-')), www = path.join(work, 'assets', 'www');
   fs.mkdirSync(www, { recursive: true });
@@ -184,15 +186,24 @@ async function build({ out = path.join(ROOT, 'android', 'releases'), kotlin = fa
   const dest = path.join(path.resolve(out), `AudioMixer-${pkg.version}-android.apk`);
   run(t.apksigner, ['sign', '--ks', ks.file, '--ks-key-alias', ks.alias, '--ks-pass', 'pass:' + ks.pass, '--key-pass', 'pass:' + ks.pass, '--min-sdk-version', '24', '--v4-signing-enabled', 'false', '--out', dest, aligned]);
   const verify = run(t.apksigner, ['verify', '--verbose', '--min-sdk-version', '24', dest]);
+  // the fingerprint of the signing certificate is published in android/signing-fingerprint.txt (and shown by the app, LICENSE page > APP SAFETY): the key must stay the same
+  // from release to release, otherwise installed copies refuse the update and Google Play Protect sees a new, unknown signer every time
+  const certs = run(t.apksigner, ['verify', '--print-certs', dest]), m = /certificate SHA-256 digest:\s*([0-9a-f]{64})/i.exec(certs);
+  const certSha256 = m ? m[1].toUpperCase().match(/.{2}/g).join(':') : '', fpFile = path.join(ROOT, 'android', 'signing-fingerprint.txt');
+  let published = null; try { published = fs.readFileSync(fpFile, 'utf8').trim(); } catch (e) { /* first build */ }
+  if (certSha256 && !published && !process.env.ANDROID_FINGERPRINT_NO_WRITE) fs.writeFileSync(fpFile, certSha256 + '\n');
+  const fingerprintChanged = !!(published && certSha256 && published !== certSha256);
   const sum = crypto.createHash('sha256').update(fs.readFileSync(dest)).digest('hex');
   fs.rmSync(work, { recursive: true, force: true });
-  return { dest, sha256: sum, size: fs.statSync(dest).size, version: pkg.version, versionCode: versionCode(pkg.version), selfSigned: !ks.real, fonts: web.fonts, warning: web.warning, verify: verify.trim() };
+  return { dest, sha256: sum, size: fs.statSync(dest).size, version: pkg.version, versionCode: versionCode(pkg.version), selfSigned: !ks.real, certSha256, fingerprintChanged, published, fonts: web.fonts, warning: web.warning, verify: verify.trim() };
 }
 
 if (require.main === module) {
   const a = process.argv.slice(2), oi = a.indexOf('--out');
   build({ out: oi >= 0 ? a[oi + 1] : undefined, kotlin: a.includes('--kotlin') }).then(r => {
     console.log(`APK: ${r.dest}  (${(r.size / 1048576).toFixed(1)} MB, versionCode ${r.versionCode})\n     SHA-256 ${r.sha256}`);
+    console.log('     Signing certificate SHA-256 ' + r.certSha256);
+    if (r.fingerprintChanged) console.log('WARNING: this is not the signing key of the published releases (android/signing-fingerprint.txt: ' + r.published + '). Installed copies will refuse the update (uninstall first) and Google Play Protect sees a new unknown signer. Use the same keystore (ANDROID_KEYSTORE, or dist/cache/signing) as before.');
     if (r.selfSigned) console.log('Signed with a self-generated key (dist/cache/signing). Set ANDROID_KEYSTORE for your own; keep the key: updates must be signed with the same one.');
     if (!r.fonts) console.log('Warning: the web fonts could not be bundled (' + r.warning + '); the app uses system fonts.');
   }).catch(e => { console.error('APK build failed: ' + e.message); process.exit(1); });

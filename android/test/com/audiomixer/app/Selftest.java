@@ -21,6 +21,9 @@ public final class Selftest {
         l.add(new NowPlaying.Session("com.example.player", NowPlaying.status(1), "Local file", "", ""));
         l.add(new NowPlaying.Session("com.spotify.music", NowPlaying.status(3), "Karma Police", "Radiohead", "OK Computer"));
         l.add(new NowPlaying.Session("com.example.blank", "stopped", "", "", ""));                                           // no title, unknown service: left out
+        System.out.println("fingerprint=" + AppInfo.fingerprint("abc".getBytes()));
+        java.util.List<AppInfo.Perm> ps = new java.util.ArrayList<AppInfo.Perm>(); ps.add(new AppInfo.Perm("android.permission.RECORD_AUDIO", true)); ps.add(new AppInfo.Perm("android.permission.X_UNKNOWN", false));
+        System.out.println("appinfo=" + AppInfo.toJson("com.audiomixer.app", "1.0", 10000, 29, "AA:BB", "com.android.vending", false, ps, false, true));
         System.out.println("nowplaying=" + NowPlaying.toJson(l, true, null));
         System.out.println("nowplaying.none=" + NowPlaying.toJson(new java.util.ArrayList<NowPlaying.Session>(), false, "Settings > Notifications > Device & app notifications > Audio Mixer"));
     }

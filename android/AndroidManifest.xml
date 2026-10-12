@@ -3,9 +3,7 @@
      Web Audio, the microphone and the license / plans work as in the browser; PC-mode features (ASIO, WASAPI, plugins) need the PC. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.audiomixer.app">
     <uses-permission android:name="android.permission.INTERNET"/>
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
-    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-feature android:name="android.hardware.microphone" android:required="false"/>
@@ -26,8 +24,9 @@
             <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter>
             <meta-data android:name="android.service.quicksettings.ACTIVE_TILE" android:value="true"/>
         </service>
-        <!-- lets the app read what Spotify / YouTube Music / ... is playing (MediaSessionManager) once the user switches it on in the Android settings; it reads no notification -->
-        <service android:name=".NowPlayingListener" android:label="Audio Mixer" android:exported="true" android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+        <!-- lets the app read what Spotify / YouTube Music / ... is playing (MediaSessionManager); shipped SWITCHED OFF (android:enabled="false"): the LICENSE page's APP SAFETY card
+             switches it on, then the person grants the access in the Android settings. It reads no notification. -->
+        <service android:name=".NowPlayingListener" android:label="Audio Mixer" android:enabled="false" android:exported="true" android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
             <intent-filter><action android:name="android.service.notification.NotificationListenerService"/></intent-filter>
         </service>
     </application>
