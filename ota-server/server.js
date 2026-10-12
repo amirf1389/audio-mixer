@@ -12,6 +12,9 @@
 //   GET  /                                a public download page (ota-server/public/index.html, one file): the same data as /api/latest, for a browser
 //                                        instead of the app. No token, no admin data; the DOWNLOAD button is a plain link to /latest so it works
 //                                        even without JavaScript.
+//   POST /request-license                 the app's LICENSE page "REQUEST A KEY" button posts the same request-file JSON it already lets a person
+//                                        download / copy (bridge/license.js's request()) here instead: stored in <data>/license-requests.jsonl for
+//                                        the vendor, and, with SMTP_* configured (bridge/mail.js), a receipt e-mail sent to the requester.
 //   --- administration, only with OTA_ADMIN_TOKEN set (Authorization: Bearer <token>) ---
 //   PUT  /admin/files/<file>             upload a release file; header X-SHA256 (hex) is required and checked; an existing file is not replaced (?overwrite=1)
 //   GET  /admin/files                    files held: name, size, sha256, referenced by which manifests
@@ -24,6 +27,7 @@
 //   GET  /admin/verify                   hashes every file on disk again and reports damage
 //   GET  /admin/audit?limit=&before=&action=&result=   audit log, newest first (<data>/audit.jsonl: append-only, hash-chained, see ota-server/audit.js)
 //   GET  /admin/audit/verify             checks the hash chain of the audit log;  GET /admin/audit/export  the whole log as JSON lines
+//   GET  /admin/license-requests?limit=  license key requests POSTed to /request-license, newest first (<data>/license-requests.jsonl)
 //   GET  /admin/  (+ app.js, style.css)  the vendor web dashboard (ota-server/dashboard/): needs OTA_ADMIN_TOKEN, the token is typed into the page and used as the Bearer token
 //
 // The server never holds the vendor PRIVATE key: manifests are signed on the vendor's machine. A manifest is accepted only when its signature
@@ -35,12 +39,16 @@
 //   OTA_TLS_CERT / OTA_TLS_KEY  serve HTTPS directly (the app only talks to https servers); or run behind nginx / Caddy (deploy/ota)
 //   OTA_TRUST_PROXY=1      take the client address from X-Forwarded-For (behind a proxy only)
 //   OTA_RATE               requests per minute per address for downloads (default 120); OTA_ALLOW_HTTP=1  accept http file URLs (development)
+//   SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS, SMTP_FROM  mail server for the /request-license receipt e-mail (bridge/mail.js); unset = requests are
+//                                        still stored, just never e-mailed
 const fs = require('node:fs');
 const path = require('node:path');
 const http = require('node:http');
 const https = require('node:https');
 const crypto = require('node:crypto');
 const update = require('../bridge/update');
+const lic = require('../bridge/license');
+const mail = require('../bridge/mail');
 const { createLimiter } = require('../bridge/security');
 const { createAudit } = require('./audit');
 const osdetect = require('../bridge/osdetect');
@@ -201,6 +209,41 @@ function createOta({ dataDir, token = '', publicUrl = '', jwk, rate = 120, trust
     send(res, 200, { ok: true, channel: ch, version: m.version, previous: cur, files: Object.keys(m.files) });
   }
 
+  // ── license key requests (public, rate limited): the app's LICENSE page "REQUEST A KEY" button posts the same JSON bridge/license.js's
+  // request() already builds (plan, name, email, machineId, platform, arch, version) here, instead of only offering a local download / copy.
+  // Stored append-only for the vendor (GET /admin/license-requests); with SMTP_* configured (bridge/mail.js) a receipt e-mail best-effort
+  // confirms receipt to the requester, never blocking the stored request on the mail server being reachable.
+  const requestsFile = path.join(dataDir, 'license-requests.jsonl');
+  const appendRequest = entry => fs.appendFileSync(requestsFile, JSON.stringify(entry) + '\n', { mode: 0o640 });
+  function listRequests({ limit } = {}) {
+    let lines; try { lines = fs.readFileSync(requestsFile, 'utf8').split('\n').filter(Boolean); } catch (_) { return []; }
+    const n = Math.max(1, Math.min(500, Number(limit) || 50));
+    return lines.map(l => { try { return JSON.parse(l); } catch (_) { return null; } }).filter(Boolean).reverse().slice(0, n);
+  }
+  const cleanStr = (v, n) => String(v || '').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, n);
+  const LIC_CORS = { ...CORS, 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' };
+  async function handleLicenseRequest(req, res, ip) {
+    if (req.method === 'OPTIONS') return send(res, 204, '', { ...LIC_CORS, 'Access-Control-Max-Age': '600' });
+    if (req.method !== 'POST') return fail(res, 405, 'method not allowed');
+    const lim = limiter.allow('lic:' + ip, 10); if (!lim.ok) return send(res, 429, { ok: false, error: 'too many requests' }, { ...LIC_CORS, 'Retry-After': lim.retryAfter });
+    req.audit = { action: 'license.request', target: '', detail: {} };
+    let body; try { body = JSON.parse((await readBody(req, 8 * 1024)).toString('utf8')); } catch (e) { return send(res, e.status || 400, { ok: false, error: e.status ? e.message : 'the body is not JSON' }, LIC_CORS); }
+    if (!body || typeof body !== 'object' || !lic.PLANS[body.plan]) return send(res, 400, { ok: false, error: 'plan must be one of: ' + Object.keys(lic.PLANS).join(', ') }, LIC_CORS);
+    const email = cleanStr(body.email, 120);
+    if (email && !mail.EMAIL_RE.test(email)) return send(res, 400, { ok: false, error: 'email is not a valid e-mail address' }, LIC_CORS);
+    const entry = { receivedAt: Date.now(), plan: body.plan, name: cleanStr(body.name, 80), email, machineId: cleanStr(body.machineId, 64), platform: cleanStr(body.platform, 40), arch: cleanStr(body.arch, 40), version: cleanStr(body.version, 40), ip };
+    appendRequest(entry);
+    req.audit.detail = { plan: entry.plan, machineId: entry.machineId, hasEmail: !!email };
+    let emailed = false;
+    if (email && mail.configured()) {
+      try {
+        await mail.send({ to: email, subject: 'Audio Mixer: license key request received', text: `Hi${entry.name ? ' ' + entry.name : ''},\n\nWe received your request for an Audio Mixer ${lic.PLANS[body.plan].name} license key${entry.machineId ? ' (machine ' + entry.machineId + ')' : ''}.\nWe will e-mail your key separately once it has been issued.\n\n- Audio Mixer` });
+        emailed = true;
+      } catch (e) { log({ event: 'mail-error', message: String(e && e.message) }); }
+    }
+    send(res, 200, { ok: true, received: true, emailed }, LIC_CORS);
+  }
+
   // ── vendor dashboard (static files; the page itself holds no secret, every API call carries the token) ──
   const DASH = { '/admin/': ['index.html', 'text/html; charset=utf-8'], '/admin/app.js': ['app.js', 'text/javascript; charset=utf-8'], '/admin/style.css': ['style.css', 'text/css; charset=utf-8'] };
   const CSP = "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
@@ -291,9 +334,11 @@ function createOta({ dataDir, token = '', publicUrl = '', jwk, rate = 120, trust
         if (p === '/admin/audit' && req.method === 'GET') { const q = url.searchParams, r = audit.list({ limit: q.get('limit'), before: q.get('before'), action: String(q.get('action') || '').slice(0, 60), result: String(q.get('result') || '').slice(0, 12) }); return send(res, 200, { ok: true, ...r, chain: audit.count() }); }
         if (p === '/admin/audit/verify' && req.method === 'GET') return send(res, 200, { ok: true, ...audit.verify() });
         if (p === '/admin/audit/export' && req.method === 'GET') { req.audit = { action: 'audit.export', target: '', detail: { entries: audit.count() } }; return send(res, 200, audit.exportText(), { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Content-Disposition': 'attachment; filename="audit.jsonl"' }); }
+        if (p === '/admin/license-requests' && req.method === 'GET') return send(res, 200, { ok: true, requests: listRequests({ limit: url.searchParams.get('limit') }) });
         if (p === '/admin/stats' && req.method === 'GET') { flush(); return send(res, 200, { ok: true, days: stats.days }); }
         return fail(res, 404, 'not found');
       }
+      if (p === '/request-license') return await handleLicenseRequest(req, res, ip);
       if (req.method === 'OPTIONS') return send(res, 204, '', { ...CORS, 'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Max-Age': '600' });
       if (req.method !== 'GET' && req.method !== 'HEAD') return fail(res, 405, 'method not allowed');
       if (PUBLIC[p]) return servePublic(req, res, p);

@@ -2696,6 +2696,115 @@ test('OTA public download page: one file, served without a token, a CSP that all
   });
 });
 
+test('mail: minimal SMTP client (bridge/mail.js) speaks EHLO/STARTTLS/AUTH LOGIN/MAIL FROM/RCPT TO/DATA against a real socket, dot-stuffs the body, and never throws when unconfigured', async () => {
+  const net = require('node:net'), tls = require('node:tls'), crypto = require('node:crypto'), fs = require('node:fs'), os = require('node:os'), path = require('node:path'), cp = require('node:child_process');
+  const mail = require('./mail');
+  assert.strictEqual(mail.configured({}), false); assert.strictEqual(mail.configured({ SMTP_HOST: 'x' }), true);
+  assert.deepStrictEqual(await mail.send({ to: 'a@example.com', subject: 's', text: 't', env: {} }), { sent: false, reason: 'not configured' });
+  assert.ok(mail.EMAIL_RE.test('a@b.co')); assert.ok(!mail.EMAIL_RE.test('not-an-email'));
+  assert.strictEqual(mail.dotStuff('.leading\nnormal\n..two dots'), '..leading\r\nnormal\r\n...two dots');
+  // a fake STARTTLS-capable SMTP server (a real socket, a real self-signed certificate, a real TLS upgrade)
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tlscert-')), key = path.join(dir, 'k.pem'), cert = path.join(dir, 'c.pem');
+  cp.execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-keyout', key, '-out', cert, '-days', '1', '-nodes', '-subj', '/CN=localhost']);
+  let received = null;
+  const smtp = net.createServer(sock => {
+    let buf = '', inData = false, dataBuf = '', authStage = 0;
+    sock.write('220 fake.smtp greeting\r\n');
+    const handleLine = (line, s) => {
+      if (inData) { if (line === '.') { inData = false; received = dataBuf; s.write('250 OK\r\n'); dataBuf = ''; } else dataBuf += (line.startsWith('..') ? line.slice(1) : line) + '\r\n'; return; }
+      if (authStage === 1) { authStage = 2; s.write('334 UGFzc3dvcmQ6\r\n'); return; }
+      if (authStage === 2) { authStage = 0; s.write('235 Authenticated\r\n'); return; }
+      if (/^EHLO/i.test(line)) return s.write('250-fake.smtp\r\n' + (!s.encrypted ? '250-STARTTLS\r\n' : '') + '250 AUTH LOGIN\r\n');
+      if (/^STARTTLS/i.test(line)) return s.write('220 go ahead\r\n');
+      if (/^AUTH LOGIN/i.test(line)) { authStage = 1; return s.write('334 VXNlcm5hbWU6\r\n'); }
+      if (/^MAIL FROM/i.test(line) || /^RCPT TO/i.test(line)) return s.write('250 OK\r\n');
+      if (/^DATA/i.test(line)) { inData = true; dataBuf = ''; return s.write('354 go ahead\r\n'); }
+      if (/^QUIT/i.test(line)) { s.write('221 bye\r\n'); return s.end(); }
+      s.write('500 unrecognized\r\n');
+    };
+    const onData = chunk => { buf += chunk.toString('latin1'); let i; while ((i = buf.indexOf('\r\n')) >= 0) { const line = buf.slice(0, i); buf = buf.slice(i + 2); handleLine(line, sock); } };
+    sock.on('data', onData); sock.on('error', () => {});
+    sock._upgradeToTls = () => { sock.removeListener('data', onData); const s2 = new tls.TLSSocket(sock, { isServer: true, key: fs.readFileSync(key), cert: fs.readFileSync(cert) }); s2.encrypted = true; s2.on('data', chunk => { buf += chunk.toString('latin1'); let i; while ((i = buf.indexOf('\r\n')) >= 0) { const line = buf.slice(0, i); buf = buf.slice(i + 2); handleLine(line, s2); } }); s2.on('error', () => {}); };
+  });
+  smtp.on('connection', sock => { const w = sock.write.bind(sock); sock.write = (d, ...r) => { const ok = w(d, ...r); if (String(d).startsWith('220 go ahead')) setImmediate(() => sock._upgradeToTls()); return ok; }; });
+  await new Promise(r => smtp.listen(0, '127.0.0.1', r));
+  const origReject = process.env.NODE_TLS_REJECT_UNAUTHORIZED; process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+  try {
+    const r = await mail.send({ host: '127.0.0.1', port: smtp.address().port, user: 'bob', pass: 'secret', from: 'vendor@audio-mixer.test', to: 'client@example.com', subject: 'Your license request', text: 'Hi Jane,\n.Starts with a dot.\n' });
+    assert.deepStrictEqual(r, { sent: true });
+    assert.match(received, /^From: vendor@audio-mixer\.test$/m); assert.match(received, /^To: client@example\.com$/m); assert.match(received, /^Subject: Your license request$/m);
+    assert.ok(received.includes('\r\n.Starts with a dot.'), 'dot-stuffing was correctly undone by the (fake) server, proving the client stuffed it going out');
+    await assert.rejects(mail.send({ host: '127.0.0.1', port: smtp.address().port, from: 'v@x.test', to: 'not-an-email', subject: 's', text: 't' }), /not an e-mail address/);
+  } finally { delete process.env.NODE_TLS_REJECT_UNAUTHORIZED; if (origReject !== undefined) process.env.NODE_TLS_REJECT_UNAUTHORIZED = origReject; smtp.close(); }
+});
+
+test('OTA license key requests: the app\'s LICENSE page can POST its request file here instead of only downloading / copying it, stored for the vendor, e-mailed to the requester when SMTP_* is set, rate limited, never reachable without the right method or a valid plan', async () => {
+  const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), http = require('node:http'), net = require('node:net');
+  const { createOta } = require('../ota-server/server'), lic = require('./license');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'lic-req-'));
+  let received = null;
+  const smtp = net.createServer(sock => {
+    let buf = '', inData = false, dataBuf = '';
+    sock.write('220 fake\r\n');
+    sock.on('data', chunk => {
+      buf += chunk.toString('latin1'); let i;
+      while ((i = buf.indexOf('\r\n')) >= 0) {
+        const line = buf.slice(0, i); buf = buf.slice(i + 2);
+        if (inData) { if (line === '.') { inData = false; received = dataBuf; sock.write('250 OK\r\n'); } else dataBuf += (line.startsWith('..') ? line.slice(1) : line) + '\r\n'; continue; }
+        if (/^EHLO/i.test(line)) sock.write('250-fake\r\n250 OK\r\n');
+        else if (/^MAIL FROM/i.test(line) || /^RCPT TO/i.test(line)) sock.write('250 OK\r\n');
+        else if (/^DATA/i.test(line)) { inData = true; dataBuf = ''; sock.write('354 go\r\n'); }
+        else if (/^QUIT/i.test(line)) { sock.write('221 bye\r\n'); sock.end(); }
+        else sock.write('500 ?\r\n');
+      }
+    });
+    sock.on('error', () => {});
+  });
+  await new Promise(r => smtp.listen(0, '127.0.0.1', r));
+  const savedEnv = { SMTP_HOST: process.env.SMTP_HOST, SMTP_PORT: process.env.SMTP_PORT, SMTP_FROM: process.env.SMTP_FROM };
+  process.env.SMTP_HOST = '127.0.0.1'; process.env.SMTP_PORT = String(smtp.address().port); process.env.SMTP_FROM = 'vendor@audio-mixer.test';
+  try {
+    const ota = createOta({ dataDir: path.join(tmp, 'data'), token: 'lic-admin-token', rate: 1000 }); await ota.reindex();
+    const server = http.createServer(ota.handler); await new Promise(r => server.listen(0, '127.0.0.1', r));
+    const base = 'http://127.0.0.1:' + server.address().port;
+    try {
+      const req = { app: 'audio-mixer', kind: 'license-request', v: 1, machineId: 'AAAA-BBBB-CCCC', plan: 'pro', name: 'Jane Doe', email: 'jane@example.com', platform: 'linux', arch: 'x64', version: '1.12.2.0', at: Date.now() };
+      // CORS preflight: the app's own page (a different origin than the OTA server) posts here
+      const opt = await fetch(base + '/request-license', { method: 'OPTIONS' });
+      assert.strictEqual(opt.status, 204); assert.match(opt.headers.get('access-control-allow-methods'), /POST/);
+      // a valid request with an e-mail: stored, and a real receipt e-mail sent through the fake SMTP server above
+      const r1 = await fetch(base + '/request-license', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(req) });
+      const j1 = await r1.json(); assert.strictEqual(r1.status, 200); assert.deepStrictEqual(j1, { ok: true, received: true, emailed: true });
+      assert.match(received, /^Subject: Audio Mixer: license key request received$/m); assert.match(received, /PRO license key \(machine AAAA-BBBB-CCCC\)/); assert.match(received, /^To: jane@example\.com$/m);
+      // a request with no e-mail: stored, never e-mailed, never throws for lack of an address
+      const r2 = await fetch(base + '/request-license', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plan: 'studio', machineId: 'ZZZZ' }) });
+      assert.deepStrictEqual(await r2.json(), { ok: true, received: true, emailed: false });
+      // bad plan, bad e-mail, bad JSON, wrong method
+      assert.strictEqual((await fetch(base + '/request-license', { method: 'POST', body: JSON.stringify({ plan: 'nope' }) })).status, 400);
+      assert.strictEqual((await fetch(base + '/request-license', { method: 'POST', body: JSON.stringify({ plan: 'pro', email: 'not-an-email' }) })).status, 400);
+      assert.strictEqual((await fetch(base + '/request-license', { method: 'POST', body: 'not json' })).status, 400);
+      assert.strictEqual((await fetch(base + '/request-license', { method: 'GET' })).status, 405);
+      assert.strictEqual((await fetch(base + '/request-license', { method: 'DELETE' })).status, 405);
+      // stored append-only, newest first via the admin listing; the vendor key stays out of a plain person's reach (sandbox/admin signing is untouched by this)
+      assert.ok(fs.existsSync(path.join(tmp, 'data', 'license-requests.jsonl')));
+      const stored = fs.readFileSync(path.join(tmp, 'data', 'license-requests.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
+      assert.strictEqual(stored.length, 2); assert.strictEqual(stored[0].plan, 'pro'); assert.strictEqual(stored[0].email, 'jane@example.com');
+      assert.strictEqual((await fetch(base + '/admin/license-requests')).status, 401, 'no admin token: refused, same as every other /admin/ route');
+      const list = await (await fetch(base + '/admin/license-requests?limit=2', { headers: { Authorization: 'Bearer lic-admin-token' } })).json();
+      assert.strictEqual(list.ok, true); assert.strictEqual(list.requests.length, 2); assert.strictEqual(list.requests[0].plan, 'studio', 'newest first');
+      // a valid plan from bridge/license.js's own table is accepted, every PLANS key and no others
+      for (const plan of Object.keys(lic.PLANS)) assert.strictEqual((await fetch(base + '/request-license', { method: 'POST', body: JSON.stringify({ plan }) })).status, 200);
+      // rate limited per address, separately from the download/admin limiters
+      let limited = false;
+      for (let i = 0; i < 20; i++) { const r = await fetch(base + '/request-license', { method: 'POST', body: JSON.stringify({ plan: 'basic' }) }); if (r.status === 429) { limited = true; assert.ok(r.headers.get('retry-after')); break; } }
+      assert.ok(limited, 'the public submission route is rate limited');
+    } finally { server.closeAllConnections(); server.close(); }
+  } finally {
+    for (const k of Object.keys(savedEnv)) { if (savedEnv[k] === undefined) delete process.env[k]; else process.env[k] = savedEnv[k]; }
+    smtp.close();
+  }
+});
+
 test('OTA audit log: every admin action is recorded with who / what / result, hash-chained, tampering is found, refused attempts never store a token, the dashboard shows it', async () => {
   const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), http = require('node:http'), crypto = require('node:crypto');
   const { createAudit } = require('../ota-server/audit'), { createOta } = require('../ota-server/server'), update = require('./update'), lic = require('../scripts/license'), dash = require('../ota-server/dashboard/app.js');
