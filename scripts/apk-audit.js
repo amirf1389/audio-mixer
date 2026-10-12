@@ -6,6 +6,9 @@
 //   - nothing from the list scanners treat as spyware / dropper material (SMS, contacts, call log, accessibility, overlay, package installer, all-apps query, boot start, device admin ...)
 //   - not debuggable, not testOnly, no backup of app data, every component with an intent filter says exported="true" explicitly
 //   - the notification listener (the "now playing" access) is shipped switched off: android:enabled="false"
+//   - no blanket android:usesCleartextTraffic="true" (unencrypted traffic to any host): a network security config (android/res/xml/network_security_config.xml)
+//     permits cleartext to this device only (127.0.0.1 / localhost / ::1, where the mixer page's WebView talks to the engine bundled in the same app); auditNetworkConfig()
+//     fails the build if that file ever permits cleartext to anything else
 //   - the APK holds no native library, no second dex and no file that is not a resource, the page or classes.dex
 //   - classes.dex contains no dynamic code loading (DexClassLoader / InMemoryDexClassLoader / PathClassLoader of a path outside the app) — the single signal that turns "app with a
 //     WebView" into "dropper" for a scanner; this app never loads code it didn't ship, so the string must not be there
@@ -32,7 +35,24 @@ function auditManifest(xml) {
     if (/android:name="\.NowPlayingListener"/.test(attrs) && !/android:enabled="false"/.test(attrs)) problems.push('the notification listener must ship switched off (android:enabled="false")');
   }
   if (!/<uses-feature android:name="android.hardware.microphone" android:required="false"\/>/.test(xml)) problems.push('the microphone feature must be optional');
+  if (/android:usesCleartextTraffic="true"/.test(xml)) problems.push('usesCleartextTraffic="true" permits unencrypted traffic to any host: use a network security config that permits it for this device only (127.0.0.1 / localhost)');
+  if (!/android:networkSecurityConfig="@xml\/network_security_config"/.test(xml)) problems.push('the application tag must set android:networkSecurityConfig="@xml/network_security_config" (cleartext traffic restricted to this device)');
   return { permissions: perms, problems };
+}
+
+// `xml`: android/res/xml/network_security_config.xml. Cleartext (unencrypted HTTP) must be denied everywhere except the small set of addresses that are this
+// device, never a real host name or a wildcard: that is the one thing that turns "local-only by policy" back into "plaintext anywhere" for a scanner.
+const LOCAL_ONLY_HOSTS = new Set(['127.0.0.1', 'localhost', '::1']);
+function auditNetworkConfig(xml) {
+  const problems = [];
+  if (!/<base-config[^>]*\bcleartextTrafficPermitted="false"/.test(xml)) problems.push('network security config: base-config must set cleartextTrafficPermitted="false" (cleartext denied everywhere but the domain-config below)');
+  for (const m of xml.matchAll(/<domain-config\b([^>]*)>([\s\S]*?)<\/domain-config>/g)) {
+    if (!/\bcleartextTrafficPermitted="true"/.test(m[1])) continue;
+    const domains = [...m[2].matchAll(/<domain\b[^>]*>([^<]*)<\/domain>/g)].map(d => d[1].trim());
+    if (!domains.length) problems.push('network security config: a domain-config permits cleartext but lists no <domain>');
+    for (const d of domains) if (!LOCAL_ONLY_HOSTS.has(d)) problems.push('network security config: cleartext is permitted for "' + d + '", not just this device (127.0.0.1 / localhost / ::1)');
+  }
+  return problems;
 }
 
 // `entries`: names inside the APK (unzip -Z1 / zipinfo)
@@ -59,6 +79,7 @@ function auditDex(dex) {
 function main(argv) {
   const m = auditManifest(fs.readFileSync(path.join(ROOT, 'android', 'AndroidManifest.xml'), 'utf8'));
   let problems = m.problems.slice();
+  problems = problems.concat(auditNetworkConfig(fs.readFileSync(path.join(ROOT, 'android', 'res', 'xml', 'network_security_config.xml'), 'utf8')));
   if (argv[0]) {
     const cp = require('node:child_process');
     const r = cp.spawnSync('unzip', ['-Z1', argv[0]], { encoding: 'utf8' });
@@ -76,4 +97,4 @@ function main(argv) {
 }
 
 if (require.main === module) process.exit(main(process.argv.slice(2)));
-module.exports = { auditManifest, auditApk, auditDex, ALLOWED, SUSPICIOUS, DYNAMIC_LOADER };
+module.exports = { auditManifest, auditApk, auditDex, auditNetworkConfig, ALLOWED, SUSPICIOUS, DYNAMIC_LOADER, LOCAL_ONLY_HOSTS };

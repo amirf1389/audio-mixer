@@ -146,8 +146,11 @@ function listFiles(dir, ext) {
 async function build({ out = path.join(ROOT, 'android', 'releases'), kotlin = false } = {}) {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
   const { tools: t, missing } = findTools();
-  const audit = require('./apk-audit').auditManifest(fs.readFileSync(path.join(ROOT, 'android', 'AndroidManifest.xml'), 'utf8'));      // nothing a scanner or Google Play Protect treats as suspicious gets in
+  const apkAudit = require('./apk-audit');
+  const audit = apkAudit.auditManifest(fs.readFileSync(path.join(ROOT, 'android', 'AndroidManifest.xml'), 'utf8'));      // nothing a scanner or Google Play Protect treats as suspicious gets in
   if (audit.problems.length) throw new Error('the manifest fails the APK audit (scripts/apk-audit.js): ' + audit.problems.join('; '));
+  const netProblems = apkAudit.auditNetworkConfig(fs.readFileSync(path.join(ROOT, 'android', 'res', 'xml', 'network_security_config.xml'), 'utf8'));
+  if (netProblems.length) throw new Error('the network security config fails the APK audit (scripts/apk-audit.js): ' + netProblems.join('; '));
   if (missing.length) throw new Error('missing tools: ' + missing.join(', ') + '. Install the Android SDK build-tools, or on Debian / Ubuntu: apt install aapt apksigner zipalign dalvik-exchange libandroid-23-java default-jdk');
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'apk-')), www = path.join(work, 'assets', 'www');
   fs.mkdirSync(www, { recursive: true });
@@ -156,6 +159,9 @@ async function build({ out = path.join(ROOT, 'android', 'releases'), kotlin = fa
   for (const [dir, size] of [['mipmap-mdpi', 48], ['mipmap-hdpi', 72], ['mipmap-xhdpi', 96], ['mipmap-xxhdpi', 144], ['mipmap-xxxhdpi', 192]]) {
     fs.mkdirSync(path.join(work, 'res', dir), { recursive: true }); fs.writeFileSync(path.join(work, 'res', dir, 'ic_launcher.png'), png(size, iconPixel));
   }
+  // network security config: cleartext (plain HTTP) permitted to this device only (android/res/xml/network_security_config.xml, see PLAY-PROTECT.md)
+  fs.mkdirSync(path.join(work, 'res', 'xml'), { recursive: true });
+  fs.copyFileSync(path.join(ROOT, 'android', 'res', 'xml', 'network_security_config.xml'), path.join(work, 'res', 'xml', 'network_security_config.xml'));
   // Java (and optionally Kotlin) -> classes -> dex. The engine (MiniBridge, AndroidAudio, protocol classes) is Java; with --kotlin the service is the Kotlin one.
   const cls = path.join(work, 'classes'); fs.mkdirSync(cls);
   const srcDir = path.join(ROOT, 'android', 'src');
