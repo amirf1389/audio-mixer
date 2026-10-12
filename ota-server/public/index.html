@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Audio Mixer — Download</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<header>
+  <h1>AUDIO <b>MIXER</b></h1>
+  <a class="btn" id="src-link" href="/update.json" target="_blank" rel="noopener">update.json</a>
+</header>
+<main>
+  <section class="card" id="hero">
+    <p class="dim mono" id="status">Looking up the latest release…</p>
+    <h2 id="version-line" hidden></h2>
+    <a class="btn primary" id="dl-primary" href="/latest">Download for your system</a>
+    <p class="dim" id="detected-note"></p>
+  </section>
+  <section class="card" id="others-card" hidden>
+    <h2>OTHER SYSTEMS</h2>
+    <div class="grid" id="others-grid"></div>
+  </section>
+  <section class="card" id="driver-card" hidden>
+    <h2>SYSTEM DRIVER</h2>
+    <p class="dim" id="driver-note"></p>
+    <a class="btn" id="driver-link" href="/driver">Download the driver</a>
+  </section>
+  <section class="card" id="notes-card" hidden>
+    <h2>RELEASE NOTES</h2>
+    <ul id="notes-list"></ul>
+  </section>
+  <section class="card" id="none-card" hidden>
+    <p class="dim">No release is published on this server yet.</p>
+  </section>
+</main>
+<noscript><p class="dim center">This page works without JavaScript too: the DOWNLOAD button above already sends you to the right file for your system.</p></noscript>
+<script src="/app.js"></script>
+</body>
+</html>
