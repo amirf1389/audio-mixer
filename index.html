@@ -893,6 +893,9 @@ CRITICAL REVISIONS & ARCHITECTURAL UPGRADES:
         const DEFAULT_ADMIN_PIN = "1XF300#";
         // Vendor public key for license keys and update manifests (written by scripts/license.js; the private key never ships)
         window.LICENSE_PUBLIC_JWK = /*LICENSE_PUBLIC_JWK*/{"kty":"EC","crv":"P-256","x":"pKAM0LhW8NOz1NZacnAlaVmfs0zH_RzIKAwp0BUtLHk","y":"j5Ww_94MXhBoPCjUXTrG7qKFoQBIA5TqIve4zDMB90A"}/*END_LICENSE_PUBLIC_JWK*/;
+        // Admin public key (written by scripts/license-admin.js): a second, delegatable signing authority that can also issue real PRO / STUDIO keys with an
+        // expiration date, without the vendor key itself ever leaving the vendor's safe. null until an admin key pair has been made and embedded.
+        window.LICENSE_ADMIN_JWK = /*LICENSE_ADMIN_JWK*/null/*END_LICENSE_ADMIN_JWK*/;
 
         // COMPLETE REFINED NAVIGATION TABS REGISTRY
 window.navTabs = [
@@ -16766,7 +16769,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
         async function verifyKey(key, machine) {
             const parts = String(key || '').trim().replace(/\s+/g, '').split('.');
             if (parts.length !== 3 || parts[0] !== 'AMIX1') return { ok: false, reason: 'malformed', message: 'This is not an Audio Mixer license key.' };
-            const jwk = window.LICENSE_PUBLIC_JWK, jwks = [jwk, window.LICENSE_SANDBOX_JWK].filter(k => k && k.x !== 'placeholder');      // the sandbox key only exists while the local server runs in sandbox mode
+            const jwk = window.LICENSE_PUBLIC_JWK, jwks = [jwk, window.LICENSE_ADMIN_JWK, window.LICENSE_SANDBOX_JWK].filter(k => k && k.x !== 'placeholder');      // the admin key when this build has one; the sandbox key only while the local server runs in sandbox mode
             if (!jwk || jwk.x === 'placeholder') return { ok: false, reason: 'unconfigured', message: 'This build has no vendor key: license keys cannot be checked.' };
             try {
                 if (!(window.crypto && window.crypto.subtle)) throw new Error('nosubtle');
@@ -16832,7 +16835,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 if (badge) { badge.textContent = 'PLAN: ' + this.plan.name + ' • ' + this.plan.channels + ' CH'; badge.className = 'px-2 py-0.5 rounded text-[7.5px] border font-bold ' + (this.plan.id === 'basic' ? 'bg-slate-500/20 text-slate-300 border-slate-500/40' : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'); }
                 const st = $('lic-status'), i = this.info;
                 if (st) {
-                    if (this.state === 'active' && i) st.textContent = 'Activated for ' + (i.name || 'this customer') + ' • ' + this.plan.name + ' • ' + (i.expires ? 'valid until ' + new Date(i.expires).toISOString().slice(0, 10) : 'no expiry') + (i.boundToThisPc ? ' • bound to this computer' : '');
+                    if (this.state === 'active' && i) st.textContent = 'Activated for ' + (i.name || 'this customer') + ' • ' + this.plan.name + ' • ' + (i.expires ? 'valid until ' + new Date(i.expires).toISOString().slice(0, 10) : 'no expiry') + (i.boundToThisPc ? ' • bound to this computer' : '') + (i.admin ? ' • admin-issued' : '');
                     else if (this.state === 'expired') st.textContent = 'Your license expired' + (i && i.expires ? ' on ' + new Date(i.expires).toISOString().slice(0, 10) : '') + ': running the free BASIC plan (8 channels). Activate a new key to continue.';
                     else if (this.state === 'invalid') st.textContent = (this.message || 'The stored license key is not valid') + ' Running the free BASIC plan (8 channels).';
                     else st.textContent = 'No license key activated: the free BASIC plan with 8 channels.';

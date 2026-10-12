@@ -17,7 +17,7 @@ const FILES = [
   'bridge/package.json', 'bridge/README.md',
   'Audio Mixer.vbs', 'native/win/src/AudioDevices.cpp', 'native/win/x64/AudioDevices.exe', 'native/win/x86/AudioDevices.exe', 'native/win/vbs/audio-devices.vbs',
   'native/mac/AudioDevices.swift', 'native/host/src/PluginHost.cpp', 'native/host/src/Vst3Host.h', 'native/host/test/GainPlugin.cpp', 'native/host/test/Gain3Plugin.cpp', 'native/host/x64/PluginHost.exe', 'native/host/x86/PluginHost.exe',
-  'scripts/license.js', 'scripts/make-update.js',
+  'scripts/license.js', 'scripts/license-admin.js', 'scripts/make-update.js',
 ];
 
 // Whole folders that ship with the app (deploy/ = nginx / fail2ban hosting files). Never dotfiles or folders (.vscode, .git, .github ...).
@@ -43,6 +43,10 @@ function build({ out = path.join(ROOT, 'dist'), archive = false } = {}) {
   if (path.basename(dest) !== 'audio-mixer-pc') throw new Error('refusing to clean an unexpected folder: ' + dest);
   fs.rmSync(dest, { recursive: true, force: true });
   const ALL = [...FILES, ...DIRS.flatMap(listDir)];
+  // The admin license public key (scripts/license-admin.js) is optional, unlike license-public.json: it does not exist until a vendor sets one up, and the
+  // build must still succeed without it (bridge/license.js.adminJwk() already tolerates a missing file the same way).
+  const adminPub = 'bridge/license-admin-public.json';
+  if (fs.existsSync(path.join(ROOT, repoPath(adminPub)))) ALL.push(adminPub);
 
   for (const rel of ALL) {
     const from = path.join(ROOT, repoPath(rel)), to = path.join(dest, rel);

@@ -1355,7 +1355,7 @@ test('repository layout: one folder per system with its sources and release file
   const top = fsx.readdirSync(root, { withFileTypes: true }).filter(e => !e.name.startsWith('.') && e.name !== 'node_modules' && e.name !== 'dist');
   const dirs = top.filter(e => e.isDirectory()).map(e => e.name).sort(), files = top.filter(e => e.isFile()).map(e => e.name).sort();
   assert.deepStrictEqual(dirs, ['android', 'bridge', 'client', 'deploy', 'drivers', 'engine', 'installer', 'ios', 'linux', 'macos', 'npm-installer', 'ota-server', 'releases', 'scripts', 'windows'], 'the top level is minimal: systems + shared code');
-  assert.deepStrictEqual(files, ['Additional Terms & Conditions', 'LICENSE', 'LICENSE.txt', 'PROJECT-README.md', 'README.md', 'SECURITY.md', 'Steinberg ASIO Licensing Agreement.pdf', 'Steinberg ASIO SDK 2.3.pdf', 'Steinberg ASIO Usage Guidelines.pdf', 'boot.html', 'changes.txt', 'index.html', 'package.json'], 'only the web app, the project papers and the Steinberg ASIO SDK papers at the root');
+  assert.deepStrictEqual(files, ['ADMIN-LICENSE.md', 'Additional Terms & Conditions', 'LICENSE', 'LICENSE.txt', 'PROJECT-README.md', 'README.md', 'SECURITY.md', 'Steinberg ASIO Licensing Agreement.pdf', 'Steinberg ASIO SDK 2.3.pdf', 'Steinberg ASIO Usage Guidelines.pdf', 'boot.html', 'changes.txt', 'index.html', 'package.json'], 'only the web app, the project papers and the Steinberg ASIO SDK papers at the root');
   assert.deepStrictEqual(fsx.readdirSync(pathx.join(root, 'releases')), ['update.json'], 'releases/ holds only the manifest that installed apps fetch');
   for (const os of lay.OSES) assert.ok(fsx.statSync(pathx.join(root, os, 'releases')).isDirectory(), os + '/releases');
   // every file that goes into a package exists where the layout says; the package keeps its own paths
@@ -3453,6 +3453,50 @@ test('license sandbox: request file, sandbox issuer with its own key, accepted o
   assert.ok(/license-sandbox-public\.json/.test(fsx.readFileSync(pathx.join(__dirname, '..', '.gitignore'), 'utf8')));
   const page = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8'); for (const s of ['lic-req-file', 'lic-req-copy', 'LICENSE_SANDBOX_JWK', "'/api/license/request?plan='"]) assert.ok(page.includes(s), s);
   fsx.rmSync(dir, { recursive: true, force: true });
+});
+
+test('admin license key: a second signing authority for real PRO / STUDIO upgrades, held only by whoever runs it, trusted in production (unlike sandbox)', () => {
+  const lic = require('./license'), adm = require('../scripts/license-admin');
+  // no admin key configured: adminJwk() is null, a normal build verifies only against the vendor (and, in sandbox, the sandbox) key
+  assert.strictEqual(lic.adminJwk({ file: pathx.join(osx.tmpdir(), 'no-such-admin-key.json') }), null);
+  assert.strictEqual(lic.status({ key: null }).admin, false);
+  // key pair + issue, exactly like the vendor tool but its own identity
+  const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'adm-'));
+  const r = adm.initKeys(dir);
+  assert.ok(fsx.existsSync(r.priv) && fsx.existsSync(r.pub));
+  assert.throws(() => adm.initKeys(dir), /already exists/);                                              // never overwrites a key
+  const jwk = adm.loadPublic(dir);
+  assert.notDeepStrictEqual(jwk, lic.PUBLIC_JWK);                                                         // not the vendor key
+  const { key, payload } = adm.issue({ dir, plan: 'studio', name: 'Support Unlock', days: 30, machine: 'AAAA-BBBB-CCCC-DDDD-EEEE' });
+  assert.ok(payload.admin === true && payload.id.startsWith('ADM-') && payload.expires > Date.now() && payload.expires < Date.now() + 31 * 86400000);
+  assert.throws(() => adm.issue({ dir, plan: 'gold', name: 'x' }), /plan must be/);
+  assert.throws(() => adm.issue({ dir, plan: 'pro' }), /--name/);
+  // verifies against the admin key explicitly, exactly like a vendor key against the vendor key (same signKey / verifyKey code path)
+  assert.strictEqual(lic.verifyKey(key, { jwk, machine: 'AAAA-BBBB-CCCC-DDDD-EEEE' }).plan.id, 'studio');
+  assert.deepStrictEqual(lic.adminJwk({ file: pathx.join(dir, 'admin-public.jwk.json') }), jwk);
+  // this key pair is this test's own, not the one the real repository's adminJwk() default path points at, so the default trust list still refuses it
+  assert.strictEqual(lic.verifyKey(key, { machine: 'AAAA-BBBB-CCCC-DDDD-EEEE' }).reason, 'bad-signature');
+  assert.ok(lic.hasFeature({ plan: lic.PLANS.studio }, 'studio'));
+  // embed into a copy of the project (never the real repository: the private key stays with whoever ran init, exactly like the vendor tool)
+  const copy = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'proj-admin-')); fsx.mkdirSync(pathx.join(copy, 'bridge'));
+  fsx.writeFileSync(pathx.join(copy, 'index.html'), `x ${adm.MARK_A}null${adm.MARK_B} y`);
+  adm.embedPublic(jwk, copy);
+  assert.deepStrictEqual(JSON.parse(fsx.readFileSync(pathx.join(copy, 'bridge', 'license-admin-public.json'), 'utf8')), jwk);
+  assert.ok(fsx.readFileSync(pathx.join(copy, 'index.html'), 'utf8').includes(JSON.stringify(jwk)));
+  // once embedded this way, adminJwk() pointed at that copy's file trusts it, and status() reports admin: true
+  assert.deepStrictEqual(lic.adminJwk({ file: pathx.join(copy, 'bridge', 'license-admin-public.json') }), jwk);
+  // the real repository: no admin key configured yet (nothing was generated for the user), but the marker and the wiring are in place
+  const page = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  assert.ok(page.includes('window.LICENSE_ADMIN_JWK = /*LICENSE_ADMIN_JWK*/null/*END_LICENSE_ADMIN_JWK*/'));
+  assert.ok(page.includes('window.LICENSE_ADMIN_JWK'));
+  const m = new RegExp(adm.MARK_A.replace(/\*/g, '\\*') + '(.*?)' + adm.MARK_B.replace(/\*/g, '\\*')).exec(page);
+  assert.strictEqual(m[1], 'null');
+  assert.strictEqual(fsx.existsSync(pathx.join(__dirname, 'license-admin-public.json')), false);           // nothing was generated on this machine either
+  // the admin tool and the public key slot are real build inputs once a key exists, but never required for the build to succeed without one
+  const bs = fsx.readFileSync(pathx.join(__dirname, '..', 'scripts', 'build.js'), 'utf8');
+  assert.ok(bs.includes("'scripts/license-admin.js'") && bs.includes('license-admin-public.json') && bs.includes('fs.existsSync'));
+  assert.ok(fsx.existsSync(pathx.join(__dirname, '..', 'ADMIN-LICENSE.md')));
+  fsx.rmSync(dir, { recursive: true, force: true }); fsx.rmSync(copy, { recursive: true, force: true });
 });
 
 test('bus & matrix outputs: out sends to a real interface, speaker processor, amp calculator, mic protector, aux / FX returns, send regulator are wired', () => {
