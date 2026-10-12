@@ -1,8 +1,9 @@
 'use strict';
 // Consumer licensing: signed license keys, plans, machine code and activation storage.
 //   Key = "AMIX1." + base64url(payload JSON) + "." + base64url(ECDSA P-256 / SHA-256 signature, 64 bytes IEEE-P1363).
-//   Keys are issued by the vendor with scripts/license.js (private key stays with the vendor); the app only holds the PUBLIC key
-//   (license-public.json) and can verify a key offline, in Node here and in the page with WebCrypto.
+//   Keys are issued by the vendor with scripts/license.js (private key stays with the vendor), or by a second, delegatable authority with
+//   scripts/license-admin.js (its own private key, held by whoever runs that script, e.g. support or a reseller); the app holds only PUBLIC keys
+//   (license-public.json, license-admin-public.json when one exists) and can verify a key offline, in Node here and in the page with WebCrypto.
 // Without a valid key the app runs the BASIC plan (8 channels). Note: checks in a locally running app can be bypassed by someone who edits
 // the code; the signature stops forged keys, not a determined local modification.
 const crypto = require('node:crypto');
@@ -18,6 +19,15 @@ const PUBLIC_JWK = require('./license-public.json');
 // packaged (it is not in scripts/build.js), so installed copies cannot enter sandbox mode.
 function sandboxJwk({ env = process.env, file = path.join(__dirname, 'license-sandbox-public.json') } = {}) {
   if (env.AUDIO_MIXER_SANDBOX !== '1') return null;
+  try { const j = JSON.parse(fs.readFileSync(file, 'utf8')); return j && j.kty === 'EC' && j.crv === 'P-256' && j.x && j.y ? { kty: j.kty, crv: j.crv, x: j.x, y: j.y } : null; } catch (_) { return null; }
+}
+
+// ADMIN key (production): a second, delegatable signing authority alongside the vendor key, made with `node scripts/license-admin.js init`. Unlike the sandbox key this one
+// is meant to ship: bridge/license-admin-public.json is a normal, committed file (like license-public.json) and index.html embeds it too (LICENSE_ADMIN_JWK), so every
+// installed copy trusts it. Its PRIVATE half never goes into this repository, a server process or an environment variable; it stays on whichever machine ran "init", the
+// same rule as the vendor key. Letting a support team or a reseller hold this key, instead of the vendor's own, means a compromised admin key can be stopped (delete
+// bridge/license-admin-public.json, re-embed with no key pair, rebuild) without re-keying the vendor key or any license it issued.
+function adminJwk({ file = path.join(__dirname, 'license-admin-public.json') } = {}) {
   try { const j = JSON.parse(fs.readFileSync(file, 'utf8')); return j && j.kty === 'EC' && j.crv === 'P-256' && j.x && j.y ? { kty: j.kty, crv: j.crv, x: j.x, y: j.y } : null; } catch (_) { return null; }
 }
 
@@ -47,7 +57,7 @@ function verifyKey(key, { now = Date.now(), machine = null, jwk = null } = {}) {
   if (parts.length !== 3 || parts[0] !== PREFIX) return { ok: false, reason: 'malformed', message: 'This is not an Audio Mixer license key.' };
   let payload;
   try {
-    const keys = jwk ? [jwk] : [PUBLIC_JWK, sandboxJwk()].filter(Boolean);                       // the vendor key; in the sandbox the sandbox key too
+    const keys = jwk ? [jwk] : [PUBLIC_JWK, adminJwk(), sandboxJwk()].filter(Boolean);            // the vendor key; the admin key when one exists; in the sandbox the sandbox key too
     if (!keys.some(k => crypto.verify('sha256', Buffer.from(parts[1]), { key: publicKey(k), dsaEncoding: 'ieee-p1363' }, unb64u(parts[2])))) throw new Error('bad');
     payload = JSON.parse(unb64u(parts[1]).toString('utf8'));
   } catch (_) { return { ok: false, reason: 'bad-signature', message: 'The license key is not valid (signature check failed).' }; }
@@ -84,12 +94,12 @@ function readStored() {
 function status(opts = {}) {
   const machine = opts.machine || machineId();
   const stored = opts.key !== undefined ? { key: opts.key } : readStored();
-  const base = { machineId: machine, plans: PLANS, sandbox: !!sandboxJwk() };
+  const base = { machineId: machine, plans: PLANS, sandbox: !!sandboxJwk(), admin: !!adminJwk() };
   if (!stored || !stored.key) return { ...base, state: 'basic', plan: PLANS.basic, license: null };
   const v = verifyKey(stored.key, { now: opts.now, machine, jwk: opts.jwk });
   if (v.ok) {
     const p = v.payload;
-    return { ...base, state: 'active', plan: v.plan, license: { id: p.id || null, plan: p.plan, name: p.name || '', email: p.email || '', issued: p.issued || null, expires: p.expires || null, boundToThisPc: !!p.mid, seats: p.seats || 1 } };
+    return { ...base, state: 'active', plan: v.plan, license: { id: p.id || null, plan: p.plan, name: p.name || '', email: p.email || '', issued: p.issued || null, expires: p.expires || null, boundToThisPc: !!p.mid, seats: p.seats || 1, admin: !!p.admin } };
   }
   // an expired / invalid stored key never raises the plan
   return { ...base, state: v.reason === 'expired' ? 'expired' : 'invalid', plan: PLANS.basic, license: v.payload ? { id: v.payload.id || null, plan: v.payload.plan, name: v.payload.name || '', expires: v.payload.expires || null } : null, message: v.message };
@@ -121,4 +131,4 @@ function deactivate(opts = {}) {
 
 const hasFeature = (st, f) => !!(st && st.plan && st.plan.features.includes(f));
 
-module.exports = { PLANS, PREFIX, PUBLIC_JWK, sandboxJwk, request, publicKeyOf: publicKey, signKey, verifyKey, machineId, status, activate, deactivate, hasFeature, readStored, storeFile, b64u, unb64u };
+module.exports = { PLANS, PREFIX, PUBLIC_JWK, sandboxJwk, adminJwk, request, publicKeyOf: publicKey, signKey, verifyKey, machineId, status, activate, deactivate, hasFeature, readStored, storeFile, b64u, unb64u };
