@@ -9,8 +9,9 @@
 //                                        Android .apk, iOS project), found from ?os=&arch=&distro=&channel=, Client Hints or the User-Agent (bridge/osdetect.js)
 //   GET  /api/latest                     the same as JSON for apps: { os, arch, detected, version, notes, file: { key, label, name, url, size, sha256, how }, driver: { ... } | null, others: [...] }
 //   GET  /driver                         the system driver for the system that asks (Windows: the ASIO driver .zip), a 302 like /latest; 404 where no driver file is published
-//   GET  /  (+ app.js, style.css)        a public download page (ota-server/public/): the same data as /api/latest, for a browser instead of the app. No token,
-//                                        no admin data; the DOWNLOAD button is a plain link to /latest so it works even without JavaScript.
+//   GET  /                                a public download page (ota-server/public/index.html, one file): the same data as /api/latest, for a browser
+//                                        instead of the app. No token, no admin data; the DOWNLOAD button is a plain link to /latest so it works
+//                                        even without JavaScript.
 //   --- administration, only with OTA_ADMIN_TOKEN set (Authorization: Bearer <token>) ---
 //   PUT  /admin/files/<file>             upload a release file; header X-SHA256 (hex) is required and checked; an existing file is not replaced (?overwrite=1)
 //   GET  /admin/files                    files held: name, size, sha256, referenced by which manifests
@@ -209,11 +210,24 @@ function createOta({ dataDir, token = '', publicUrl = '', jwk, rate = 120, trust
   }
 
   // ── public download page: a small website in front of the same data /api/latest and /latest already serve, so a browser (not just the app) can
-  // use this OTA server directly. No token, no admin data: it only ever reads the public GET routes below. ──
-  const PUBLIC = { '/': ['index.html', 'text/html; charset=utf-8'], '/app.js': ['app.js', 'text/javascript; charset=utf-8'], '/app.css': ['style.css', 'text/css; charset=utf-8'] };
+  // use this OTA server directly. No token, no admin data: it only ever reads the public GET routes below. One file (ota-server/public/index.html,
+  // its own <style> and <script>): the CSP below still forbids 'unsafe-inline' by allow-listing the exact script and style by their SHA-256 hash
+  // instead, computed from the file itself, so the lock stays as strict as the (externally-filed) admin dashboard's without a second request. ──
+  const PUBLIC = { '/': ['index.html', 'text/html; charset=utf-8'] };
+  let publicPage = null;   // { body, csp }, cached until the file's mtime changes (it ships with the server, not written at runtime)
+  function loadPublicPage() {
+    const file = path.join(__dirname, 'public', 'index.html'), mtime = fs.statSync(file).mtimeMs;
+    if (publicPage && publicPage.mtime === mtime) return publicPage;
+    const body = fs.readFileSync(file);
+    const hash = text => "'sha256-" + crypto.createHash('sha256').update(text, 'utf8').digest('base64') + "'";
+    const inline = (tag) => { const m = new RegExp('<' + tag + '(?:\\s[^>]*)?>([\\s\\S]*?)</' + tag + '>').exec(body.toString('utf8')); if (!m) throw new Error('no inline <' + tag + '> found in ota-server/public/index.html'); return hash(m[1]); };
+    const csp = `default-src 'none'; script-src ${inline('script')}; style-src ${inline('style')}; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
+    publicPage = { mtime, body, csp };
+    return publicPage;
+  }
   function servePublic(req, res, p) {
-    const [file, type] = PUBLIC[p], body = fs.readFileSync(path.join(__dirname, 'public', file));
-    send(res, 200, req.method === 'HEAD' ? '' : body, { 'Content-Type': type, 'Content-Length': body.length, 'Content-Security-Policy': CSP, 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer', 'Cache-Control': 'no-cache' });
+    const [, type] = PUBLIC[p], page = loadPublicPage();
+    send(res, 200, req.method === 'HEAD' ? '' : page.body, { 'Content-Type': type, 'Content-Length': page.body.length, 'Content-Security-Policy': page.csp, 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer', 'Cache-Control': 'no-cache' });
   }
   function history(ch) {
     return fs.readdirSync(dirs.history).filter(n => n.startsWith(ch + '-') && n.endsWith('.json')).map(n => {
