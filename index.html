@@ -6985,7 +6985,8 @@ window.navTabs = [
                           <input id="lic-req-name" maxlength="80" placeholder="Name" autocomplete="off" class="bg-black border border-white/10 rounded px-1.5 py-1 text-slate-200 outline-none text-[7.5px] min-w-0">
                           <input id="lic-req-email" maxlength="120" placeholder="E-mail" autocomplete="off" class="bg-black border border-white/10 rounded px-1.5 py-1 text-slate-200 outline-none text-[7.5px] min-w-0">
                         </div>
-                        <div class="flex gap-1.5"><button id="lic-req-file" type="button" class="flex-1 py-1 rounded bg-amber-500/20 hover:bg-amber-500 hover:text-black text-amber-400 border border-amber-500/40 font-bold uppercase text-[7.5px] transition">DOWNLOAD REQUEST FILE</button><button id="lic-req-copy" type="button" class="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-slate-200 font-bold uppercase text-[7.5px] transition">COPY</button></div>
+                        <div class="flex gap-1.5"><button id="lic-req-submit" type="button" class="flex-1 py-1 rounded bg-cyan-500/20 hover:bg-cyan-500 hover:text-black text-cyan-400 border border-cyan-500/40 font-bold uppercase text-[7.5px] transition">SUBMIT TO VENDOR</button><button id="lic-req-file" type="button" class="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-slate-200 font-bold uppercase text-[7.5px] transition">FILE</button><button id="lic-req-copy" type="button" class="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-slate-200 font-bold uppercase text-[7.5px] transition">COPY</button></div>
+                        <span class="text-slate-500 block text-[6.5px]">SUBMIT sends this request to the update server set in SETTINGS → OTA (its /request-license); FILE / COPY keep the old offline way.</span>
                       </div>
                     </div>
                     <div class="bg-black/60 p-2.5 rounded-lg border border-white/10 space-y-1.5">
@@ -16912,6 +16913,23 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 try { await navigator.clipboard.writeText(t); notify('License request copied', 'copy'); } catch (e) { notify('Copy is blocked here: use DOWNLOAD REQUEST FILE', 'triangle-exclamation'); }
                 return req;
             },
+            // posts the same request to the update server's POST /request-license (ota-server/server.js): stored for the vendor and, when the
+            // server has SMTP_* configured, a receipt e-mail sent to the address given above. Falls back to telling the person to use FILE / COPY
+            // when no https update source is set (OTA_DEFAULT_URL, the project's own releases, is not a server that accepts submissions).
+            async submitRequest() {
+                const req = await this.requestKey(), btn = $('lic-req-submit');
+                const origin = licenseRequestOrigin();
+                if (!origin) { notify('Set an update server address in SETTINGS → OTA first, or use FILE / COPY to send the request yourself.', 'triangle-exclamation'); return req; }
+                if (btn) { btn.disabled = true; btn.textContent = 'SENDING...'; }
+                try {
+                    const r = await fetch(origin + '/request-license', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(req) });
+                    const j = await r.json().catch(() => null);
+                    if (r.ok && j && j.ok) notify('License request submitted' + (j.emailed ? ' – check your e-mail for a receipt.' : '.'), 'paper-plane');
+                    else notify('The update server rejected the request: ' + ((j && j.error) || ('HTTP ' + r.status)), 'triangle-exclamation');
+                } catch (e) { notify('Could not reach the update server: ' + (e.message || 'network error'), 'triangle-exclamation'); }
+                finally { if (btn) { btn.disabled = false; btn.textContent = 'SUBMIT TO VENDOR'; } }
+                return req;
+            },
             async deactivate() {
                 store.del(KEY_STORE);
                 if (bridge()) { try { await post('/api/license/deactivate', 'license'); } catch (e) { /* server gone */ } }
@@ -17176,6 +17194,11 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
         const OTA_DEFAULT_URL = 'https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/update.json';
         const otaCmp = (a, b) => { const p = v => String(v).split(/[-+]/)[0].split('.').map(n => parseInt(n, 10) || 0); const x = p(a), y = p(b); for (let i = 0; i < Math.max(x.length, y.length, 3); i++) { const d = (x[i] || 0) - (y[i] || 0); if (d) return d < 0 ? -1 : 1; } return 0; };
         const httpsUrl = u => { try { const x = new URL(u, location.href); return (x.protocol === 'https:' || (x.protocol === 'http:' && /^(localhost|127\.0\.0\.1)$/.test(x.hostname))) ? x.href : null; } catch (e) { return null; } };
+        // the origin to POST a license request to: the configured update server (SETTINGS -> OTA), with "/update.json" or "/<channel>/update.json" stripped
+        function licenseRequestOrigin() {
+            const own = httpsUrl(store.get('halx_ota_url') || ''); if (!own) return null;
+            try { const u = new URL(own); u.pathname = u.pathname.replace(/\/(?:[a-z0-9-]+\/)?update\.json$/i, '') || '/'; u.search = ''; u.hash = ''; return u.href.replace(/\/+$/, ''); } catch (e) { return null; }
+        }
         const BADGE = { ok: 'px-2 py-0.5 rounded text-[7.5px] font-mono bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 font-bold', warn: 'px-2 py-0.5 rounded text-[7.5px] font-mono bg-amber-500/20 text-amber-400 border border-amber-500/40 font-bold', bad: 'px-2 py-0.5 rounded text-[7.5px] font-mono bg-rose-500/20 text-rose-400 border border-rose-500/40 font-bold', idle: 'px-2 py-0.5 rounded text-[7.5px] font-mono bg-slate-500/20 text-slate-300 border border-slate-500/40 font-bold' };
         // the manifest straight from an update server (no PC mode): verified here with the vendor public key, like the local server does
         async function otaFetchManifest(url) {
@@ -17329,7 +17352,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             const on = (id, fn) => { const e = $(id); if (e && !e.dataset.wired) { e.dataset.wired = '1'; e.addEventListener('click', fn); } };
             on('lic-activate', () => L.activate());
             on('lic-deactivate', () => L.deactivate());
-            on('lic-req-file', () => L.downloadRequest()); on('lic-req-copy', () => L.copyRequest());
+            on('lic-req-file', () => L.downloadRequest()); on('lic-req-copy', () => L.copyRequest()); on('lic-req-submit', () => L.submitRequest());
             on('lic-copy-machine', () => { const m = L.machineId; if (m && navigator.clipboard) navigator.clipboard.writeText(m).then(() => notify('Machine code copied', 'copy')); });
             on('edition-switch', () => { if (window.currentRole === 'Admin') window.setUserRole('User'); else window.requestRoleSwitch('Admin'); });
             on('plg-scan', () => plugins.scan());
