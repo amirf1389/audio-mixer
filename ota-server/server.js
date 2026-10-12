@@ -9,6 +9,8 @@
 //                                        Android .apk, iOS project), found from ?os=&arch=&distro=&channel=, Client Hints or the User-Agent (bridge/osdetect.js)
 //   GET  /api/latest                     the same as JSON for apps: { os, arch, detected, version, notes, file: { key, label, name, url, size, sha256, how }, driver: { ... } | null, others: [...] }
 //   GET  /driver                         the system driver for the system that asks (Windows: the ASIO driver .zip), a 302 like /latest; 404 where no driver file is published
+//   GET  /  (+ app.js, style.css)        a public download page (ota-server/public/): the same data as /api/latest, for a browser instead of the app. No token,
+//                                        no admin data; the DOWNLOAD button is a plain link to /latest so it works even without JavaScript.
 //   --- administration, only with OTA_ADMIN_TOKEN set (Authorization: Bearer <token>) ---
 //   PUT  /admin/files/<file>             upload a release file; header X-SHA256 (hex) is required and checked; an existing file is not replaced (?overwrite=1)
 //   GET  /admin/files                    files held: name, size, sha256, referenced by which manifests
@@ -205,6 +207,14 @@ function createOta({ dataDir, token = '', publicUrl = '', jwk, rate = 120, trust
     const [file, type] = DASH[p], body = fs.readFileSync(path.join(__dirname, 'dashboard', file));
     send(res, 200, req.method === 'HEAD' ? '' : body, { 'Content-Type': type, 'Content-Length': body.length, 'Content-Security-Policy': CSP, 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer', 'Cache-Control': 'no-cache' });
   }
+
+  // ── public download page: a small website in front of the same data /api/latest and /latest already serve, so a browser (not just the app) can
+  // use this OTA server directly. No token, no admin data: it only ever reads the public GET routes below. ──
+  const PUBLIC = { '/': ['index.html', 'text/html; charset=utf-8'], '/app.js': ['app.js', 'text/javascript; charset=utf-8'], '/app.css': ['style.css', 'text/css; charset=utf-8'] };
+  function servePublic(req, res, p) {
+    const [file, type] = PUBLIC[p], body = fs.readFileSync(path.join(__dirname, 'public', file));
+    send(res, 200, req.method === 'HEAD' ? '' : body, { 'Content-Type': type, 'Content-Length': body.length, 'Content-Security-Policy': CSP, 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer', 'Cache-Control': 'no-cache' });
+  }
   function history(ch) {
     return fs.readdirSync(dirs.history).filter(n => n.startsWith(ch + '-') && n.endsWith('.json')).map(n => {
       const env = readJson(path.join(dirs.history, n), null), v = env && update.verifyManifest(env, jwk);
@@ -272,6 +282,7 @@ function createOta({ dataDir, token = '', publicUrl = '', jwk, rate = 120, trust
       }
       if (req.method === 'OPTIONS') return send(res, 204, '', { ...CORS, 'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Max-Age': '600' });
       if (req.method !== 'GET' && req.method !== 'HEAD') return fail(res, 405, 'method not allowed');
+      if (PUBLIC[p]) return servePublic(req, res, p);
       if (p === '/healthz') return send(res, 200, { ok: true, channels: Object.fromEntries(channels().map(c => [c, versionOf(c)])) });
       const lim = limiter.allow('d:' + ip, rate); if (!lim.ok) return send(res, 429, { ok: false, error: 'too many requests' }, { 'Retry-After': lim.retryAfter });
       let m;
