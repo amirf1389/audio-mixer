@@ -2658,7 +2658,7 @@ test('OTA dashboard: served only with the admin token configured, strict CSP, hi
   });
 });
 
-test('OTA public download page: served without a token, strict CSP, no inline script / style, the DOWNLOAD link works without JavaScript, app.js fills in what /api/latest knows', async () => {
+test('OTA public download page: one file, served without a token, a CSP that allow-lists its own inline script / style by hash instead of weakening to unsafe-inline, the DOWNLOAD link works without JavaScript, the inline script fills in what /api/latest knows', async () => {
   const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), http = require('node:http'), crypto = require('node:crypto');
   const { createOta } = require('../ota-server/server'), update = require('./update'), lic = require('../scripts/license'), dash = require('../ota-server/dashboard/app.js');
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pub-')), keys = path.join(tmp, 'vendor'); lic.initKeys(keys); const jwk = lic.loadPublic(keys);
@@ -2666,16 +2666,18 @@ test('OTA public download page: served without a token, strict CSP, no inline sc
   const ota = createOta({ dataDir: path.join(tmp, 'data'), jwk, publicUrl: 'https://ota.test' }); await ota.reindex();
   const run = async f => { const s = http.createServer(ota.handler); await new Promise(r => s.listen(0, '127.0.0.1', r)); try { await f('http://127.0.0.1:' + s.address().port); } finally { s.closeAllConnections(); s.close(); } };
   await run(async b => {
-    // the page, its script and its stylesheet: public, no inline script / style, nothing from outside, same lockdown as the admin dashboard
+    // the page: one file, public, nothing from outside, no http(s):// reference, same lockdown family as the admin dashboard
     const page = await fetch(b + '/'), html = await page.text(), csp = page.headers.get('content-security-policy');
-    assert.strictEqual(page.status, 200); assert.match(csp, /default-src 'none'/); assert.match(csp, /script-src 'self'/); assert.match(csp, /frame-ancestors 'none'/); assert.strictEqual(page.headers.get('x-frame-options'), 'DENY');
-    assert.ok(!/<script(?![^>]*\bsrc=)/.test(html) && !/\sstyle=|\son\w+=/.test(html) && !/https?:\/\//.test(html.replace(/<!doctype html>/i, '')));
+    assert.strictEqual(page.status, 200); assert.match(csp, /default-src 'none'/); assert.match(csp, /frame-ancestors 'none'/); assert.strictEqual(page.headers.get('x-frame-options'), 'DENY');
+    assert.ok(!/\sstyle=|\son\w+=/.test(html) && !/https?:\/\//.test(html.replace(/<!doctype html>/i, '')));
     assert.match(html, /id="dl-primary" href="\/latest"/);                                          // the DOWNLOAD link works even with JavaScript disabled
-    assert.strictEqual((await (await fetch(b + '/app.js')).text()).includes('/api/latest'), true);
-    assert.strictEqual((await fetch(b + '/app.css')).headers.get('content-type'), 'text/css; charset=utf-8');
+    assert.ok(html.includes('/api/latest') && html.includes('<style>') && html.includes('<script>'), 'the script and the style are inline (one file), not loaded from outside');
     assert.strictEqual((await fetch(b + '/', { method: 'HEAD' })).status, 200);
-    const src = fs.readFileSync(path.join(__dirname, '..', 'ota-server', 'public', 'app.js'), 'utf8');
-    assert.ok(!/innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(|new Function|setAttribute\('style'/.test(src), 'server data is only ever written as text');
+    // no 'unsafe-inline': the CSP allow-lists the exact inline <script> and <style> text by its own SHA-256 hash, computed from the file itself
+    const scriptText = /<script>([\s\S]*?)<\/script>/.exec(html)[1], styleText = /<style>([\s\S]*?)<\/style>/.exec(html)[1];
+    const sriHash = t => "'sha256-" + crypto.createHash('sha256').update(t, 'utf8').digest('base64') + "'";
+    assert.ok(!/unsafe-inline/.test(csp)); assert.match(csp, new RegExp('script-src ' + sriHash(scriptText).replace(/[+/]/g, '\\$&'))); assert.match(csp, new RegExp('style-src ' + sriHash(styleText).replace(/[+/]/g, '\\$&')));
+    assert.ok(!/innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(|new Function|setAttribute\('style'/.test(scriptText), 'server data is only ever written as text');
     // nothing published yet: /api/latest 404s, the page says so and hides the download button (checked at the JSON level: the page itself needs a browser)
     const none = await (await fetch(b + '/api/latest')).json(); assert.strictEqual(none.ok, false);
     // publish a release, then the data the page's app.js reads matches what it expects (file, others, driver, notes)
