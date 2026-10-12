@@ -1,6 +1,6 @@
 [package]
 name = "audiomixer-engine"
-version = "1.12.1"
+version = "1.12.2"
 edition = "2021"
 description = "Audio Mixer engine: meters with clip detection, BS.1770 loudness, phase, scope, VU, Int16 meter and a 32-strip mixer; the same numbers as the page, the C++ engine and the embedded C core."
 license = "MIT"

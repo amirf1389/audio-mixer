@@ -2567,7 +2567,8 @@ test('OTA server: signed manifests only, uploads are checksum-verified, the real
     const tail = await fetch(base + '/releases/' + encodeURIComponent('Audio Mixer-9.9.9.exe'), { headers: { Range: 'bytes=-5' } }); assert.ok(Buffer.from(await tail.arrayBuffer()).equals(exe.subarray(exe.length - 5)));
     assert.strictEqual((await fetch(base + '/releases/' + encodeURIComponent('Audio Mixer-9.9.9.exe'), { headers: { Range: 'bytes=99999-' } })).status, 416);
     assert.strictEqual((await fetch(base + '/releases/nothing.exe')).status, 404);
-    for (const p of ['/releases/..%2F..%2Fetc%2Fpasswd', '/releases/%2e%2e', '/releases/a/b']) assert.ok([400, 404].includes((await fetch(base + p)).status), p);
+    for (const p of ['/releases/..%2F..%2Fetc%2Fpasswd', '/releases/%2e%2e%2f', '/releases/a/b']) assert.ok([400, 404].includes((await fetch(base + p)).status), p);
+    assert.strictEqual(new URL('/releases/%2e%2e', 'http://x').pathname, '/', 'the URL parser itself collapses this one to the site root, before any route matches');
     assert.strictEqual((await fetch(base + '/update.json', { method: 'POST' })).status, 405);
     // a file a manifest lists cannot be deleted; an unlisted one can; stats count the downloads
     assert.strictEqual((await fetch(base + '/admin/files/' + encodeURIComponent('Audio Mixer-9.9.9.exe'), { method: 'DELETE', headers: auth })).status, 409);
@@ -2654,6 +2655,44 @@ test('OTA dashboard: served only with the admin token configured, strict CSP, hi
     assert.strictEqual((await fetch(b + '/admin/manifest/stable', { method: 'DELETE', headers: auth })).status, 404);
     hist = (await (await fetch(b + '/admin/history/stable', { headers: auth })).json()).versions; assert.strictEqual(hist.length, 2);
     assert.strictEqual((await fetch(b + '/admin/files/%E0%A4%A', { method: 'DELETE', headers: auth })).status, 400);              // broken % escape: 400, not a crash
+  });
+});
+
+test('OTA public download page: one file, served without a token, a CSP that allow-lists its own inline script / style by hash instead of weakening to unsafe-inline, the DOWNLOAD link works without JavaScript, the inline script fills in what /api/latest knows', async () => {
+  const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), http = require('node:http'), crypto = require('node:crypto');
+  const { createOta } = require('../ota-server/server'), update = require('./update'), lic = require('../scripts/license'), dash = require('../ota-server/dashboard/app.js');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pub-')), keys = path.join(tmp, 'vendor'); lic.initKeys(keys); const jwk = lic.loadPublic(keys);
+  // no OTA_ADMIN_TOKEN at all: the admin dashboard is off, the public page must still work
+  const ota = createOta({ dataDir: path.join(tmp, 'data'), jwk, publicUrl: 'https://ota.test' }); await ota.reindex();
+  const run = async f => { const s = http.createServer(ota.handler); await new Promise(r => s.listen(0, '127.0.0.1', r)); try { await f('http://127.0.0.1:' + s.address().port); } finally { s.closeAllConnections(); s.close(); } };
+  await run(async b => {
+    // the page: one file, public, nothing from outside, no http(s):// reference, same lockdown family as the admin dashboard
+    const page = await fetch(b + '/'), html = await page.text(), csp = page.headers.get('content-security-policy');
+    assert.strictEqual(page.status, 200); assert.match(csp, /default-src 'none'/); assert.match(csp, /frame-ancestors 'none'/); assert.strictEqual(page.headers.get('x-frame-options'), 'DENY');
+    assert.ok(!/\sstyle=|\son\w+=/.test(html) && !/https?:\/\//.test(html.replace(/<!doctype html>/i, '')));
+    assert.match(html, /id="dl-primary" href="\/latest"/);                                          // the DOWNLOAD link works even with JavaScript disabled
+    assert.ok(html.includes('/api/latest') && html.includes('<style>') && html.includes('<script>'), 'the script and the style are inline (one file), not loaded from outside');
+    assert.strictEqual((await fetch(b + '/', { method: 'HEAD' })).status, 200);
+    // no 'unsafe-inline': the CSP allow-lists the exact inline <script> and <style> text by its own SHA-256 hash, computed from the file itself
+    const scriptText = /<script>([\s\S]*?)<\/script>/.exec(html)[1], styleText = /<style>([\s\S]*?)<\/style>/.exec(html)[1];
+    const sriHash = t => "'sha256-" + crypto.createHash('sha256').update(t, 'utf8').digest('base64') + "'";
+    assert.ok(!/unsafe-inline/.test(csp)); assert.match(csp, new RegExp('script-src ' + sriHash(scriptText).replace(/[+/]/g, '\\$&'))); assert.match(csp, new RegExp('style-src ' + sriHash(styleText).replace(/[+/]/g, '\\$&')));
+    assert.ok(!/innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(|new Function|setAttribute\('style'/.test(scriptText), 'server data is only ever written as text');
+    // nothing published yet: /api/latest 404s, the page says so and hides the download button (checked at the JSON level: the page itself needs a browser)
+    const none = await (await fetch(b + '/api/latest')).json(); assert.strictEqual(none.ok, false);
+    // publish a release, then the data the page's app.js reads matches what it expects (file, others, driver, notes)
+    const exe = Buffer.from('MZ-pub-' + 'a'.repeat(500)), deb = Buffer.from('deb-pub-' + 'b'.repeat(500));
+    for (const [n, buf] of Object.entries({ 'Audio Mixer-5.0.0.0.exe': exe, 'audio-mixer_5.0.0.0_all.deb': deb })) {
+      assert.strictEqual((await fetch(b + '/admin/files/' + encodeURIComponent(n), { method: 'PUT', headers: { 'X-SHA256': crypto.createHash('sha256').update(buf).digest('hex') }, body: buf })).status, 404, 'no admin token at all: 404, not 401');
+    }
+    fs.writeFileSync(path.join(ota.dirs.releases, 'Audio Mixer-5.0.0.0.exe'), exe); fs.writeFileSync(path.join(ota.dirs.releases, 'audio-mixer_5.0.0.0_all.deb'), deb); await ota.reindex();
+    const files = Object.entries(ota.index()).map(([name, f]) => ({ name, size: f.size, sha256: f.sha256 }));
+    const m = dash.buildManifest({ version: '5.0.0.0', channel: 'stable', notes: ['Smooth faders', 'OTA updates'], map: { 'win-x64-exe': 'Audio Mixer-5.0.0.0.exe', 'linux-deb': 'audio-mixer_5.0.0.0_all.deb' }, files, base: 'https://ota.test/releases/', released: '2026-10-12' });
+    const env = update.signManifest(m, lic.loadPrivate(keys));
+    fs.writeFileSync(path.join(ota.dirs.manifests, 'stable.json'), JSON.stringify(env));
+    const j = await (await fetch(b + '/api/latest', { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' } })).json();
+    assert.ok(j.ok && j.version === '5.0.0.0' && j.released === '2026-10-12' && j.notes.includes('Smooth faders'));
+    assert.strictEqual(j.file.key, 'win-x64-exe'); assert.ok(j.others.some(o => o.key === 'linux-deb'));
   });
 });
 
