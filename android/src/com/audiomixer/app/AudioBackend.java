@@ -16,6 +16,12 @@ interface AudioBackend {
     /** Body of GET /api/nowplaying (see NowPlaying.toJson). Backends without media sessions report none. */
     default String nowPlayingJson() { return NowPlaying.toJson(new java.util.ArrayList<NowPlaying.Session>(), false, null); }
 
+    /** Body of GET /api/app (see AppInfo): null where the backend is not the Android app. */
+    default String appJson() { return null; }
+
+    /** POST /api/app/nowplaying/enable | disable: the optional now-playing access. null where not supported. */
+    default String setNowPlaying(boolean on) { return null; }
+
     Input openInput(Map<String, Object> opts, Listener listener) throws Exception;
 
     Output openOutput(Map<String, Object> opts) throws Exception;

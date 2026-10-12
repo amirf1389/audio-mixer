@@ -123,6 +123,11 @@ final class MiniBridge {
                 if (path.equals("/ws/virtual")) { if (origin != null) { send(out, 403, "{\"ok\":false,\"error\":\"drivers are native programs\"}", null); return; } virtualDriver(s, raw, out, h.get("sec-websocket-key")); return; }     // a web page cannot pose as a driver
                 websocket(s, raw, out, path, h.get("sec-websocket-key")); return;
             }
+            if (method.equals("POST") && (path.equals("/api/app/nowplaying/enable") || path.equals("/api/app/nowplaying/disable"))) {      // the optional now-playing access: a page of another origin cannot trigger it (custom header = preflight)
+                if (!"nowplaying".equals(h.get("x-mixer-action"))) { send(out, 400, "{\"ok\":false,\"error\":\"missing X-Mixer-Action: nowplaying\"}", cors); return; }
+                String r = audio.setNowPlaying(path.endsWith("/enable"));
+                send(out, r == null ? 404 : 200, r == null ? "{\"ok\":false,\"error\":\"not available\"}" : r, cors); return;
+            }
             if (!method.equals("GET")) { send(out, 405, "{\"ok\":false,\"error\":\"method not allowed\"}", cors); return; }
             route(out, path, cors);
         } catch (Exception e) { /* connection ended */ }
@@ -133,6 +138,9 @@ final class MiniBridge {
             send(out, 200, "{\"ok\":true,\"name\":\"audio-mixer-bridge\",\"version\":" + Json.str(version) + ",\"engine\":\"android\",\"node\":\"android\",\"pid\":0,\"streams\":" + streamsJson() + ",\"native\":" + audio.nativeJson() + ",\"time\":" + System.currentTimeMillis() + "}", cors);
         } else if (path.equals("/api/interfaces")) {
             send(out, 200, Interfaces.withNative(hub.interfacesJson(audio.interfacesJson()), audio.nativeJson()), cors);
+        } else if (path.equals("/api/app")) {
+            String a = audio.appJson();
+            send(out, a == null ? 404 : 200, a == null ? "{\"ok\":false,\"error\":\"not available\"}" : a, cors);
         } else if (path.equals("/api/nowplaying")) {
             send(out, 200, audio.nowPlayingJson(), cors);
         } else if (path.equals("/api/virtual")) {

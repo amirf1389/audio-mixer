@@ -42,6 +42,14 @@ final class AndroidAudio implements AudioBackend {
 
     public String devicesJson() { return Interfaces.devicesJson(devices()); }
 
+    private AndroidAppInfo appInfo;
+
+    private synchronized AndroidAppInfo appInfo() { if (appInfo == null) appInfo = new AndroidAppInfo(ctx); return appInfo; }
+
+    public String appJson() { return appInfo().json(); }
+
+    public String setNowPlaying(boolean on) { return appInfo().setNowPlaying(on); }
+
     private AndroidNowPlaying nowPlaying;
 
     public synchronized String nowPlayingJson() { if (nowPlaying == null) nowPlaying = new AndroidNowPlaying(ctx); return nowPlaying.json(); }

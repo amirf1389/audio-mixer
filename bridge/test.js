@@ -2184,7 +2184,7 @@ test('a device the engine could not probe (0 channels, not ASIO) is flagged, tak
 test('Android engine (Java): the bridge protocol runs on a plain JVM with a fake backend: HTTP, origin / host checks, WebSocket input and output, interfaces grouping', async () => {
   const { spawnSync, spawn } = require('node:child_process');
   const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'jv-')), src = pathx.join(__dirname, '..', 'android');
-  const files = ['Json', 'Ws', 'AudioBackend', 'Assets', 'Interfaces', 'VirtualHub', 'NowPlaying', 'MiniBridge'].map(n => pathx.join(src, 'src', 'com', 'audiomixer', 'app', n + '.java')).concat(pathx.join(src, 'test', 'com', 'audiomixer', 'app', 'BridgeHarness.java'));
+  const files = ['Json', 'Ws', 'AudioBackend', 'Assets', 'Interfaces', 'VirtualHub', 'NowPlaying', 'AppInfo', 'MiniBridge'].map(n => pathx.join(src, 'src', 'com', 'audiomixer', 'app', n + '.java')).concat(pathx.join(src, 'test', 'com', 'audiomixer', 'app', 'BridgeHarness.java'));
   const c = spawnSync('javac', ['--release', '8', '-Xlint:-options', '-d', dir, ...files], { encoding: 'utf8' });
   if (c.error || c.status !== 0) return;                                                      // needs a JDK (the build of the APK needs one as well)
   const www = pathx.join(dir, 'www'); fsx.mkdirSync(pathx.join(www, 'fonts'), { recursive: true }); fsx.writeFileSync(pathx.join(www, 'index.html'), '<html>mixer</html>'); fsx.writeFileSync(pathx.join(www, 'fonts', 'a.woff2'), Buffer.from([1, 2, 3])); fsx.writeFileSync(pathx.join(dir, 'secret.txt'), 'outside');
@@ -2263,7 +2263,7 @@ test('Android native audio helpers (channel counts, buffer sizes, native info) a
   const { spawnSync } = require('node:child_process');
   const root = pathx.join(__dirname, '..'), rd = f => fsx.readFileSync(pathx.join(root, f), 'utf8'), dir = fsx.mkdtempSync(pathx.join(require('node:os').tmpdir(), 'st-'));
   const src = n => pathx.join(root, 'android', 'src', 'com', 'audiomixer', 'app', n + '.java');
-  const c = spawnSync('javac', ['--release', '8', '-Xlint:-options', '-d', dir, src('Json'), src('Interfaces'), src('NowPlaying'), pathx.join(root, 'android', 'test', 'com', 'audiomixer', 'app', 'Selftest.java')], { encoding: 'utf8' });
+  const c = spawnSync('javac', ['--release', '8', '-Xlint:-options', '-d', dir, src('Json'), src('Interfaces'), src('NowPlaying'), src('AppInfo'), pathx.join(root, 'android', 'test', 'com', 'audiomixer', 'app', 'Selftest.java')], { encoding: 'utf8' });
   assert.strictEqual(c.status, 0, c.stderr);
   const r = spawnSync('java', ['-cp', dir, 'com.audiomixer.app.Selftest'], { encoding: 'utf8' }); assert.strictEqual(r.status, 0, r.stderr);
   const o = Object.fromEntries(r.stdout.split('\n').filter(l => /^[\w.]+=/.test(l)).map(l => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1)]));
@@ -2279,6 +2279,10 @@ test('Android native audio helpers (channel counts, buffer sizes, native info) a
   assert.ok(npj.ok === true && npj.access === true && npj.method === 'media-session' && npj.playing.service === 'spotify' && npj.platform === 'android');
   const npn = JSON.parse(o['nowplaying.none']); assert.ok(npn.access === false && npn.playing === null && npn.sessions.length === 0 && /Notifications/.test(npn.hint));
   assert.ok(rd('android/AndroidManifest.xml').includes('BIND_NOTIFICATION_LISTENER_SERVICE') && rd('android/AndroidManifest.xml').includes('.NowPlayingListener'));
+  // what the app says about itself: SHA-256 of the certificate (colon form), permissions with their reasons, now-playing state
+  assert.strictEqual(o.fingerprint, 'BA:78:16:BF:8F:01:CF:EA:41:41:40:DE:5D:AE:22:23:B0:03:61:A3:96:17:7A:9C:B4:10:FF:61:F2:00:15:AD');
+  const ai = JSON.parse(o.appinfo); assert.deepStrictEqual([ai.package, ai.versionCode, ai.targetSdk, ai.signer.sha256, ai.installer, ai.debuggable, ai.nowPlaying.accessGranted], ['com.audiomixer.app', 10000, 29, 'AA:BB', 'com.android.vending', false, true]);
+  assert.ok(ai.permissions[0].granted === true && /microphone/i.test(ai.permissions[0].why) && ai.permissions[1].why === 'not explained');
   assert.ok(rd('android/src/com/audiomixer/app/AndroidNowPlaying.java').includes('getActiveSessions(new ComponentName(ctx, NowPlayingListener.class))'));
   // the tile: declared with the system permission and intent, compiled against stubs that never go into the app
   const man = rd('android/AndroidManifest.xml');
@@ -2295,7 +2299,7 @@ test('Android native audio helpers (channel counts, buffer sizes, native info) a
 test('Android engine (Java): virtual devices for the audio HAL - /ws/virtual, /api/virtual, the device in /api/interfaces, input and output with its id', async (tc) => {
   const { spawnSync, spawn } = require('node:child_process');
   const root = pathx.join(__dirname, '..', 'android'), dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'avh-'));
-  const files = ['Json', 'Ws', 'AudioBackend', 'Assets', 'Interfaces', 'VirtualHub', 'NowPlaying', 'MiniBridge'].map(n => pathx.join(root, 'src', 'com', 'audiomixer', 'app', n + '.java')).concat(pathx.join(root, 'test', 'com', 'audiomixer', 'app', 'BridgeHarness.java'));
+  const files = ['Json', 'Ws', 'AudioBackend', 'Assets', 'Interfaces', 'VirtualHub', 'NowPlaying', 'AppInfo', 'MiniBridge'].map(n => pathx.join(root, 'src', 'com', 'audiomixer', 'app', n + '.java')).concat(pathx.join(root, 'test', 'com', 'audiomixer', 'app', 'BridgeHarness.java'));
   const c = spawnSync('javac', ['--release', '8', '-Xlint:-options', '-d', dir, ...files], { encoding: 'utf8' });
   if (c.error) return tc.skip('no JDK');
   assert.strictEqual(c.status, 0, c.stderr);
@@ -2305,6 +2309,13 @@ test('Android engine (Java): virtual devices for the audio HAL - /ws/virtual, /a
     const port = await new Promise((res, rej) => { let b = ''; jv.stdout.on('data', d => { b += d; const m = /PORT (\d+)/.exec(b); if (m) res(Number(m[1])); }); jv.on('error', rej); setTimeout(() => rej(new Error('no port')), 8000); });
     const base = `http://127.0.0.1:${port}`, open = (path) => new Promise((res, rej) => { const ws = new WebSocket(`ws://127.0.0.1:${port}${path}`); ws.binaryType = 'arraybuffer'; ws.msgs = []; ws.bins = []; ws.onmessage = e => (typeof e.data === 'string' ? ws.msgs.push(JSON.parse(e.data)) : ws.bins.push(Buffer.from(e.data))); ws.onopen = () => res(ws); ws.onerror = () => rej(new Error('connect')); });
     const npa = await (await fetch(base + '/api/nowplaying')).json(); assert.ok(npa.ok === true && npa.access === false && npa.playing === null);      // the fake backend has no media sessions
+    // GET /api/app and the switch of the optional now-playing access (custom header, local origins only)
+    const app = await (await fetch(base + '/api/app')).json(); assert.ok(app.ok && app.package === 'com.audiomixer.app' && app.signer.sha256.split(':').length === 32 && app.nowPlaying.componentEnabled === false);
+    assert.strictEqual((await fetch(base + '/api/app/nowplaying/enable', { method: 'POST' })).status, 400);                                     // no header: a page cannot do it by a plain request
+    assert.strictEqual((await fetch(base + '/api/app/nowplaying/enable', { method: 'POST', headers: { 'X-Mixer-Action': 'nowplaying', Origin: 'https://evil.example' } })).status, 403);
+    assert.strictEqual((await (await fetch(base + '/api/app/nowplaying/enable', { method: 'POST', headers: { 'X-Mixer-Action': 'nowplaying' } })).json()).enabled, true);
+    assert.strictEqual((await (await fetch(base + '/api/app')).json()).nowPlaying.componentEnabled, true);
+    assert.strictEqual((await (await fetch(base + '/api/app/nowplaying/disable', { method: 'POST', headers: { 'X-Mixer-Action': 'nowplaying' } })).json()).enabled, false);
     assert.deepStrictEqual(await (await fetch(base + '/api/virtual')).json(), { ok: true, devices: [] });
     const before = await (await fetch(base + '/api/interfaces')).json(); assert.ok(!before.interfaces.some(i => i.transport === 'virtual'));
     const drv = await open('/ws/virtual'); sock.push(drv);
@@ -3458,4 +3469,30 @@ test('bus & matrix outputs: out sends to a real interface, speaker processor, am
   assert.ok(Math.abs(two.load - 4) < 1e-9 && Math.abs(two.pLoad - 1000) < 1e-6 && Math.abs(two.pEach - 500) < 1e-6 && two.limDb < 0 && two.warn === 'The amp can give each speaker 500 W: use the protection limiter.', JSON.stringify(two));
   const safe = ampCalc({ ampW: 100, ampOhm: 8, spkW: 300, spkOhm: 8, count: 1, sens: 96, dist: 1 });
   assert.strictEqual(safe.limDb, 0); assert.ok(safe.headroom > 4.7 && safe.warn === '');                                  // a small amp cannot hurt the speaker: no limiter needed
+});
+
+test('Android APK safety: permission allowlist, listener shipped off, audit tool catches additions, fingerprint published, APP SAFETY card wired', () => {
+  const audit = require('../scripts/apk-audit'), root = pathx.join(__dirname, '..'), rd = f => fsx.readFileSync(pathx.join(root, f), 'utf8');
+  const man = rd('android/AndroidManifest.xml'), ok = audit.auditManifest(man);
+  assert.deepStrictEqual(ok.problems, []); assert.deepStrictEqual(ok.permissions.slice().sort(), audit.ALLOWED.slice().sort());
+  assert.ok(/<service android:name="\.NowPlayingListener"[^>]*android:enabled="false"/.test(man));
+  // each thing a scanner dislikes is caught
+  const bad = s => audit.auditManifest(man.replace('<application', s + '<application')).problems.join(' | ');
+  assert.match(bad('<uses-permission android:name="android.permission.READ_SMS"/>'), /suspicious permission: android.permission.READ_SMS/);
+  assert.match(bad('<uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>'), /suspicious/);
+  assert.match(bad('<uses-permission android:name="android.permission.VIBRATE"/>'), /not in the explained list/);
+  assert.match(audit.auditManifest(man.replace('android:label="Audio Mixer" android:enabled="false"', 'android:label="Audio Mixer"')).problems.join(), /switched off/);
+  assert.match(audit.auditManifest(man.replace('android:allowBackup="false"', 'android:allowBackup="true"')).problems.join(), /allowBackup/);
+  assert.match(audit.auditManifest(man.replace('</application>', '<receiver android:name=".Boot"/></application>')).problems.join(), /broadcast receiver/);
+  assert.match(audit.auditManifest(man.replace('android:exported="true" android:launchMode', 'android:launchMode')).problems.join(), /explicit android:exported/);
+  assert.deepStrictEqual(audit.auditApk(['AndroidManifest.xml', 'classes.dex', 'resources.arsc', 'assets/www/index.html', 'res/mipmap-hdpi-v4/ic_launcher.png', 'META-INF/X.RSA']), []);
+  assert.match(audit.auditApk(['classes.dex', 'lib/arm64-v8a/libx.so']).join(), /native library/);
+  assert.match(audit.auditApk(['classes.dex', 'classes2.dex']).join(), /unexpected file/);
+  // the published fingerprint matches the release the repository carries, and every explained permission has a reason in the app
+  const fp = rd('android/signing-fingerprint.txt').trim(); assert.match(fp, /^([0-9A-F]{2}:){31}[0-9A-F]{2}$/);
+  const infoJava = rd('android/src/com/audiomixer/app/AppInfo.java'); for (const p of audit.ALLOWED) assert.ok(infoJava.includes('"' + p + '"'), p);
+  const bs = rd('scripts/build-apk.js'); assert.ok(bs.includes('apk-audit') && bs.includes('signing-fingerprint.txt') && bs.includes('certSha256'));
+  assert.ok(fsx.existsSync(pathx.join(root, 'android', 'PLAY-PROTECT.md')));
+  const page = rd('index.html'); for (const s of ['id="app-safety"', "'/api/app'", "'/api/app/nowplaying/'", 'APP SAFETY', 'Send app for scanning', 'app-safety-card']) assert.ok(page.includes(s), s);
+  const mb = rd('android/src/com/audiomixer/app/MiniBridge.java'); assert.ok(mb.includes('"/api/app"') && mb.includes('x-mixer-action'));
 });

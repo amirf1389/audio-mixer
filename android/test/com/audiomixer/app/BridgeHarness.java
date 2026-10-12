@@ -19,6 +19,13 @@ public final class BridgeHarness {
         }
         public String interfacesJson() { return Interfaces.toJson(devs); }
         public String devicesJson() { return Interfaces.devicesJson(devs); }
+        final boolean[] np = { false };
+        public String appJson() {
+            List<AppInfo.Perm> perms = new ArrayList<AppInfo.Perm>();
+            perms.add(new AppInfo.Perm("android.permission.INTERNET", true)); perms.add(new AppInfo.Perm("android.permission.RECORD_AUDIO", false)); perms.add(new AppInfo.Perm("android.permission.SOMETHING_NEW", false));
+            return AppInfo.toJson("com.audiomixer.app", "1.2.3", 10203, 29, AppInfo.fingerprint("certificate".getBytes()), null, false, perms, np[0], false);
+        }
+        public String setNowPlaying(boolean on) { np[0] = on; return "{\"ok\":true,\"enabled\":" + on + ",\"settingsOpened\":false}"; }
         public String nativeJson() { return Interfaces.nativeJson(48000, 192, true, false, true); }
         public Input openInput(Map<String, Object> o, final Listener l) throws Exception {
             final int id = Json.intOf(o, "deviceId", -1), ch = Math.max(1, Math.min(2, Json.intOf(o, "channels", 2))), rate = Json.intOf(o, "sampleRate", 48000);

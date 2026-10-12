@@ -19699,5 +19699,60 @@ registerProcessor('am-lufs',P)`;
         document.addEventListener('DOMContentLoaded', hook); setTimeout(hook, 2000);
     })();
     </script>
+    <script id="app-safety">
+    /* APP SAFETY (LICENSE page, Android app only): what the installed app is and what it asks for, so a Google Play Protect or antivirus warning can be answered by facts.
+       The app tells its package, version, the SHA-256 of its signing certificate (compare it with android/signing-fingerprint.txt of the project), every permission with the
+       reason and whether it is granted, and switches the optional "now playing" access (the notification-listener component is shipped switched off). The Play Protect help
+       says how to install when it warns, and how to report a false positive. Nothing is shown on the PC or in a browser: only the Android engine answers GET /api/app. */
+    (function () {
+        const $ = id => document.getElementById(id);
+        const esc = v => (window.escapeHtml ? window.escapeHtml(String(v)) : String(v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])));
+        const bridge = () => (window.universalAsioSdk && window.universalAsioSdk.bridgeUrl) || null;
+        const SHORT = n => String(n).replace('android.permission.', '');
+        async function load() {
+            const base = bridge(); if (!base) return null;
+            try { const r = await fetch(base + '/api/app', { cache: 'no-store' }); if (!r.ok) return null; const j = await r.json(); return j && j.ok && j.package ? j : null; } catch (e) { return null; }
+        }
+        async function nowPlaying(on) {
+            const base = bridge(); if (!base) return;
+            try { await fetch(base + '/api/app/nowplaying/' + (on ? 'enable' : 'disable'), { method: 'POST', headers: { 'X-Mixer-Action': 'nowplaying' } }); } catch (e) { /* engine gone */ }
+            paint();
+        }
+        function html(a) {
+            const rows = a.permissions.map(p => '<tr><td class="pr-2 font-bold text-cyan-300 align-top">' + esc(SHORT(p.name)) + '</td><td class="pr-2 align-top ' + (p.granted ? 'text-emerald-400' : 'text-slate-500') + '">' + (p.granted ? 'GRANTED' : 'not granted') + '</td><td class="text-slate-300">' + esc(p.why) + '</td></tr>').join('');
+            const np = a.nowPlaying || {};
+            return '<div class="flex items-center gap-2"><i class="fa-solid fa-shield-halved text-emerald-400 text-xs"></i><h4 class="text-[8.5px] font-black text-emerald-400 uppercase font-wing">APP SAFETY &amp; GOOGLE PLAY PROTECT</h4></div>'
+                + '<div class="grid grid-cols-1 md:grid-cols-2 gap-1.5 text-[7.5px] text-slate-300"><div>PACKAGE <b class="text-white">' + esc(a.package) + '</b></div><div>VERSION <b class="text-white">' + esc(a.versionName) + '</b> (' + a.versionCode + ') • target API ' + a.targetSdk + '</div>'
+                + '<div>INSTALLED BY <b class="text-white">' + esc(a.installer || 'a file / package installer') + '</b></div><div>DEBUGGABLE <b class="' + (a.debuggable ? 'text-rose-400' : 'text-emerald-400') + '">' + (a.debuggable ? 'YES' : 'no') + '</b></div></div>'
+                + '<div class="text-[7.5px] text-slate-400">SIGNING CERTIFICATE SHA-256 (compare with <b>android/signing-fingerprint.txt</b> in the project; a different value means this is not the published build)</div>'
+                + '<div class="flex gap-1.5 items-center"><code class="flex-1 bg-black border border-white/10 rounded px-2 py-1 text-cyan-400 text-[7.5px] break-all select-all">' + esc(a.signer && a.signer.sha256 || '-') + '</code><button id="as-copy" type="button" class="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-slate-200 font-bold uppercase text-[7px]">COPY</button></div>'
+                + '<div class="text-[7.5px] text-slate-400">PERMISSIONS: ' + a.permissions.length + ' (no SMS, contacts, location, camera, storage, overlay, accessibility, installer or boot access)</div>'
+                + '<div class="overflow-auto"><table class="w-full text-[7px] text-left"><tbody>' + rows + '</tbody></table></div>'
+                + '<div class="border-t border-white/10 pt-1.5 flex flex-wrap items-center gap-2"><span class="text-[7.5px] text-slate-300">NOW PLAYING ACCESS (optional, off by default): <b class="' + (np.accessGranted ? 'text-emerald-400' : 'text-slate-400') + '">' + (np.accessGranted ? 'ON' : np.componentEnabled ? 'WAITING FOR YOUR OK IN THE ANDROID SETTINGS' : 'OFF') + '</b></span>'
+                + '<button id="as-np-on" type="button" class="px-2 py-1 rounded bg-amber-500/20 hover:bg-amber-500 hover:text-black text-amber-400 border border-amber-500/40 font-bold uppercase text-[7px]">' + (np.componentEnabled ? 'OPEN THE SETTINGS' : 'SWITCH ON') + '</button>'
+                + (np.componentEnabled ? '<button id="as-np-off" type="button" class="px-2 py-1 rounded bg-white/10 hover:bg-rose-500 hover:text-black text-slate-300 border border-white/15 font-bold uppercase text-[7px]">SWITCH OFF</button>' : '') + '</div>'
+                + '<details class="text-[7.5px] text-slate-300"><summary class="cursor-pointer text-amber-400 font-bold">GOOGLE PLAY PROTECT WARNS ABOUT THIS APP: WHAT TO DO</summary><div class="space-y-1 pt-1 leading-relaxed">'
+                + '<p><b>Why:</b> the app is installed from a file, not from Google Play, and is signed by its developer (not by Google). Play Protect checks such apps by their behaviour and signer; a new or rare app with a microphone, a background service and a local server can be flagged without being harmful. This page lists everything the app asks for.</p>'
+                + '<p><b>Install anyway:</b> in the warning tap <b>More details</b> (or the arrow), then <b>Install anyway</b>. If the screen offers <b>Send app for scanning</b>, choose it: Google then checks the file and the warning normally stops for everybody with the same file.</p>'
+                + '<p><b>Check the file first:</b> the fingerprint above must equal the one in the project (android/signing-fingerprint.txt); the same file is on the project\'s release page.</p>'
+                + '<p><b>Report a false positive:</b> Play Store &gt; profile &gt; Play Protect &gt; settings &gt; Improve harmful app detection ON; and send the APK to Google (support.google.com/googleplay/android-developer, "Appeal Play Protect warning") and to VirusTotal-listed vendors. android/PLAY-PROTECT.md in the project has the text to send.</p>'
+                + '<p><b>Turn the warning off for this app only</b> (not recommended for other apps): Play Protect settings &gt; Scan apps with Play Protect.</p></div></details>';
+        }
+        async function paint() {
+            const host = $('tab-renew'); if (!host) return;
+            const a = await load(); let el = $('app-safety-card');
+            if (!a) { if (el) el.remove(); return; }
+            if (!el) { el = document.createElement('div'); el.id = 'app-safety-card'; el.setAttribute('data-consumer', '1'); el.className = 'glass-panel p-3.5 rounded-xl wing-bezel space-y-2 font-mono'; const inner = host.querySelector('.page-scroll-inner') || host; inner.appendChild(el); }
+            el.innerHTML = html(a);
+            const c = $('as-copy'); if (c) c.onclick = () => { try { navigator.clipboard.writeText(a.signer.sha256); if (window.notify) window.notify('Certificate fingerprint copied', 'copy'); } catch (e) { /* blocked */ } };
+            const on = $('as-np-on'); if (on) on.onclick = () => nowPlaying(true);
+            const off = $('as-np-off'); if (off) off.onclick = () => nowPlaying(false);
+        }
+        window.appSafety = { paint, load, html };
+        const orig = window.switchTab;
+        window.switchTab = function (tabId) { const r = orig.apply(this, arguments); if (tabId === 'renew') paint(); return r; };
+        setTimeout(paint, 3000);
+    })();
+    </script>
 </body>
 </html>
