@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Replaces the blanket android:usesCleartextTraffic="true" (any host, plaintext) with "to this device only": the mixer page's WebView talks to
+     the engine bundled in this same app on http://localhost:<port> / http://127.0.0.1:<port> (see MiniBridge.java, MainActivity.java). Everything
+     else the app does (an update check, a license key request) already goes out only over https (see httpsUrl() in index.html), so denying
+     cleartext everywhere but here does not change what the app can do, only what a scanner sees: not "plaintext anywhere", but "plaintext to this
+     device". scripts/apk-audit.js's auditNetworkConfig() fails the build if a domain other than this device is ever added here. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">localhost</domain>
+        <domain includeSubdomains="false">::1</domain>
+    </domain-config>
+</network-security-config>

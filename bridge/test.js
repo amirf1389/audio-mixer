@@ -3677,7 +3677,19 @@ test('Android APK safety: permission allowlist, listener shipped off, audit tool
   assert.match(audit.auditManifest(man.replace('android:allowBackup="false"', 'android:allowBackup="true"')).problems.join(), /allowBackup/);
   assert.match(audit.auditManifest(man.replace('</application>', '<receiver android:name=".Boot"/></application>')).problems.join(), /broadcast receiver/);
   assert.match(audit.auditManifest(man.replace('android:exported="true" android:launchMode', 'android:launchMode')).problems.join(), /explicit android:exported/);
-  assert.deepStrictEqual(audit.auditApk(['AndroidManifest.xml', 'classes.dex', 'resources.arsc', 'assets/www/index.html', 'res/mipmap-hdpi-v4/ic_launcher.png', 'META-INF/X.RSA']), []);
+  // no blanket "cleartext to any host": a network security config restricts it to this device (127.0.0.1 / localhost / ::1) only
+  assert.ok(!/android:usesCleartextTraffic/.test(man)); assert.match(man, /android:networkSecurityConfig="@xml\/network_security_config"/);
+  assert.match(audit.auditManifest(man.replace('android:networkSecurityConfig="@xml/network_security_config"', 'android:usesCleartextTraffic="true"')).problems.join(), /usesCleartextTraffic="true" permits unencrypted traffic to any host/);
+  assert.match(audit.auditManifest(man.replace('android:networkSecurityConfig="@xml/network_security_config" ', '')).problems.join(), /must set android:networkSecurityConfig/);
+  const net = rd('android/res/xml/network_security_config.xml');
+  assert.deepStrictEqual(audit.auditNetworkConfig(net), []);
+  assert.deepStrictEqual([...audit.LOCAL_ONLY_HOSTS].sort(), ['127.0.0.1', '::1', 'localhost']);
+  assert.match(audit.auditNetworkConfig(net.replace('cleartextTrafficPermitted="false"', 'cleartextTrafficPermitted="true"')).join(), /base-config must set cleartextTrafficPermitted="false"/);
+  assert.match(audit.auditNetworkConfig(net.replace('<domain includeSubdomains="false">localhost</domain>', '<domain includeSubdomains="true">evil.example</domain>')).join(), /cleartext is permitted for "evil\.example", not just this device/);
+  assert.match(audit.auditNetworkConfig(net.replace(/<domain[^>]*>[^<]*<\/domain>\s*/g, '')).join(), /lists no <domain>/);
+  // the build packages the same file under res/xml/, and fails the build the same way the manifest audit does
+  const buildSrc = rd('scripts/build-apk.js'); assert.ok(buildSrc.includes('network_security_config.xml') && buildSrc.includes('auditNetworkConfig'));
+  assert.deepStrictEqual(audit.auditApk(['AndroidManifest.xml', 'classes.dex', 'resources.arsc', 'assets/www/index.html', 'res/mipmap-hdpi-v4/ic_launcher.png', 'res/xml/network_security_config.xml', 'META-INF/X.RSA']), []);
   assert.match(audit.auditApk(['classes.dex', 'lib/arm64-v8a/libx.so']).join(), /native library/);
   assert.match(audit.auditApk(['classes.dex', 'classes2.dex']).join(), /unexpected file/);
   // classes.dex must never reference a dynamic class loader (the one string that turns "WebView app" into "dropper" for a scanner)

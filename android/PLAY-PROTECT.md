@@ -10,6 +10,7 @@ it, and what to do when the warning still appears.
 | Signal | What the app does |
 |---|---|
 | Permissions | Only `INTERNET` (the page talks to the engine inside the app on 127.0.0.1), `RECORD_AUDIO` (inputs of the mixer), `WAKE_LOCK` and `FOREGROUND_SERVICE` (the audio engine with its notification). No SMS, contacts, call log, location, camera, storage, overlay, accessibility, package installer, all-apps query or boot start. `scripts/apk-audit.js` fails the build, and `bridge/test.js` fails the tests, when anything else is added. |
+| Network | No blanket `android:usesCleartextTraffic="true"` ("this app may send unencrypted traffic to any host," a signal scanners read as reckless or C2-like). A network security config (`android/res/xml/network_security_config.xml`) permits cleartext (plain HTTP) to **this device only** — `127.0.0.1` / `localhost`, where the page's WebView talks to the engine bundled in the same app — and denies it everywhere else. Nothing else changes: an update check or a license key request already goes out only over `https`. `scripts/apk-audit.js`'s `auditNetworkConfig()` fails the build if that file is ever widened to another host. |
 | Notification listener | The "now playing" access is a notification-listener component, which scanners rate as sensitive. It is **shipped switched off** (`android:enabled="false"`); only **LICENSE page > APP SAFETY > SWITCH ON** turns it on, and then Android asks you in its own settings. It reads no notification. |
 | Components | No broadcast receiver and no content provider (boot / package receivers look like droppers); every component with an intent filter says `exported` explicitly; not debuggable, not test-only, no backup of app data. |
 | APK content | Only the manifest, one `classes.dex`, resources and the page; no native library, no second dex, no downloaded code, no dynamic class loading (`DexClassLoader` / `InMemoryDexClassLoader` / `PathClassLoader`) — `scripts/apk-audit.js` scans the built `classes.dex` for those strings, since loading unshipped code is the one behaviour that turns "WebView app" into "dropper" for a scanner. The APK is not obfuscated or packed. |
@@ -29,7 +30,9 @@ it, and what to do when the warning still appears.
 > Open-source: https://github.com/amirf1389/audio-mixer. It is a virtual mixing console: a WebView shows a bundled web page; a small engine inside the app serves the page on
 > 127.0.0.1 and reads / writes the phone's audio interfaces (microphone, USB audio, Bluetooth) for the mixer. Permissions: INTERNET, RECORD_AUDIO, WAKE_LOCK,
 > FOREGROUND_SERVICE (see APP SAFETY in the app and `scripts/apk-audit.js`). No SMS, contacts, location, camera, storage, overlay, accessibility, installer or boot access; no
-> receivers, no providers, no native code, no code loaded at run time (classes.dex holds no dynamic class loader). Please remove the Play Protect warning for this file.
+> receivers, no providers, no native code, no code loaded at run time (classes.dex holds no dynamic class loader). Unencrypted (HTTP) traffic is permitted to this device only
+> (127.0.0.1 / localhost, a network security config) and denied to every other host; anything the app does elsewhere already goes out only over https. Please remove the Play
+> Protect warning for this file.
 
 ## For the maintainer
 

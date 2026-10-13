@@ -5,8 +5,11 @@
 // PC-mode features (ASIO / WASAPI interfaces, plugins, OTA) need the PC.
 //   node scripts/build-apk.js [--out android/releases] [--kotlin]   -> AudioMixer-<version>-android.apk
 //   The background engine (android/src: MiniBridge, AndroidAudio, ...) is Java; --kotlin builds the foreground service from android/kotlin/EngineService.kt (needs kotlinc).
-// Tools (any Android SDK, or the Debian / Ubuntu packages aapt apksigner zipalign dalvik-exchange libandroid-23-java):
+// Tools (any Android SDK, or the Debian / Ubuntu packages aapt apksigner zipalign dalvik-exchange libandroid-23-java android-framework-res):
 //   javac (JDK 8+), aapt, zipalign, apksigner, d8 or dalvik-exchange (dx), android.jar (ANDROID_JAR, ANDROID_HOME/platforms, or /usr/lib/android-sdk)
+//   a framework resource table new enough for every android: attribute the manifest uses (ANDROID_FRAMEWORK_RES, or Debian / Ubuntu's android-framework-res
+//   package at /usr/share/android-framework-res/framework-res.apk); falls back to android.jar, which is enough as long as the manifest uses nothing newer
+//   than that jar's API level
 // Needs internet once for the cache in dist/cache/android: npm packages tailwindcss 3 and @fortawesome/fontawesome-free (version pinned) and the Google fonts.
 // Signing: ANDROID_KEYSTORE / ANDROID_KEYSTORE_PASS / ANDROID_KEY_ALIAS for a real key, otherwise a self-generated key kept in dist/cache/signing
 // (the same key must sign every update, or Android refuses to install over the older version).
@@ -71,8 +74,13 @@ function findTools(env = process.env) {
   const bt = (() => { try { const d = path.join(sdk, 'build-tools'); return fs.readdirSync(d).sort().reverse().map(v => path.join(d, v)); } catch (_) { return []; } })();
   const pick = n => [...bt.map(d => path.join(d, n)), which(n)].find(p => p && fs.existsSync(p)) || null;
   const jar = env.ANDROID_JAR || (() => { try { const d = path.join(sdk, 'platforms'); return fs.readdirSync(d).sort((a, b) => parseInt(b.split('-')[1]) - parseInt(a.split('-')[1])).map(v => path.join(d, v, 'android.jar')).find(fs.existsSync); } catch (_) { return null; } })() || '/usr/share/java/com.android.android-23.jar';
-  const t = { aapt: pick('aapt'), zipalign: pick('zipalign'), apksigner: pick('apksigner'), d8: pick('d8'), dx: which('dalvik-exchange') || pick('dx'), javac: which('javac'), keytool: which('keytool'), npm: which('npm'), jar: fs.existsSync(jar) ? jar : null };
-  const missing = ['aapt', 'zipalign', 'apksigner', 'javac', 'keytool', 'jar'].filter(k => !t[k]).concat(t.d8 || t.dx ? [] : ['d8 / dalvik-exchange']);
+  // The resource table aapt reads with -I to resolve android: attributes (android:networkSecurityConfig among them) is separate from the Java classpath javac
+  // compiles against: the app's Java source targets the API 23 jar above (anything newer is reached by reflection, see android/stubs), but an old android.jar's
+  // resource table does not know attributes introduced after it was cut, so aapt refuses a manifest that uses one. Debian / Ubuntu's android-framework-res
+  // package carries a current AOSP framework-res.apk with every modern attribute; ANDROID_FRAMEWORK_RES overrides it, and either one missing falls back to jar.
+  const frameworkRes = env.ANDROID_FRAMEWORK_RES || ['/usr/share/android-framework-res/framework-res.apk'].find(fs.existsSync) || jar;
+  const t = { aapt: pick('aapt'), zipalign: pick('zipalign'), apksigner: pick('apksigner'), d8: pick('d8'), dx: which('dalvik-exchange') || pick('dx'), javac: which('javac'), keytool: which('keytool'), npm: which('npm'), jar: fs.existsSync(jar) ? jar : null, frameworkRes: fs.existsSync(frameworkRes) ? frameworkRes : null };
+  const missing = ['aapt', 'zipalign', 'apksigner', 'javac', 'keytool', 'jar', 'frameworkRes'].filter(k => !t[k]).concat(t.d8 || t.dx ? [] : ['d8 / dalvik-exchange']);
   return { tools: t, missing };
 }
 
@@ -146,8 +154,11 @@ function listFiles(dir, ext) {
 async function build({ out = path.join(ROOT, 'android', 'releases'), kotlin = false } = {}) {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
   const { tools: t, missing } = findTools();
-  const audit = require('./apk-audit').auditManifest(fs.readFileSync(path.join(ROOT, 'android', 'AndroidManifest.xml'), 'utf8'));      // nothing a scanner or Google Play Protect treats as suspicious gets in
+  const apkAudit = require('./apk-audit');
+  const audit = apkAudit.auditManifest(fs.readFileSync(path.join(ROOT, 'android', 'AndroidManifest.xml'), 'utf8'));      // nothing a scanner or Google Play Protect treats as suspicious gets in
   if (audit.problems.length) throw new Error('the manifest fails the APK audit (scripts/apk-audit.js): ' + audit.problems.join('; '));
+  const netProblems = apkAudit.auditNetworkConfig(fs.readFileSync(path.join(ROOT, 'android', 'res', 'xml', 'network_security_config.xml'), 'utf8'));
+  if (netProblems.length) throw new Error('the network security config fails the APK audit (scripts/apk-audit.js): ' + netProblems.join('; '));
   if (missing.length) throw new Error('missing tools: ' + missing.join(', ') + '. Install the Android SDK build-tools, or on Debian / Ubuntu: apt install aapt apksigner zipalign dalvik-exchange libandroid-23-java default-jdk');
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'apk-')), www = path.join(work, 'assets', 'www');
   fs.mkdirSync(www, { recursive: true });
@@ -156,6 +167,9 @@ async function build({ out = path.join(ROOT, 'android', 'releases'), kotlin = fa
   for (const [dir, size] of [['mipmap-mdpi', 48], ['mipmap-hdpi', 72], ['mipmap-xhdpi', 96], ['mipmap-xxhdpi', 144], ['mipmap-xxxhdpi', 192]]) {
     fs.mkdirSync(path.join(work, 'res', dir), { recursive: true }); fs.writeFileSync(path.join(work, 'res', dir, 'ic_launcher.png'), png(size, iconPixel));
   }
+  // network security config: cleartext (plain HTTP) permitted to this device only (android/res/xml/network_security_config.xml, see PLAY-PROTECT.md)
+  fs.mkdirSync(path.join(work, 'res', 'xml'), { recursive: true });
+  fs.copyFileSync(path.join(ROOT, 'android', 'res', 'xml', 'network_security_config.xml'), path.join(work, 'res', 'xml', 'network_security_config.xml'));
   // Java (and optionally Kotlin) -> classes -> dex. The engine (MiniBridge, AndroidAudio, protocol classes) is Java; with --kotlin the service is the Kotlin one.
   const cls = path.join(work, 'classes'); fs.mkdirSync(cls);
   const srcDir = path.join(ROOT, 'android', 'src');
@@ -177,7 +191,7 @@ async function build({ out = path.join(ROOT, 'android', 'releases'), kotlin = fa
   else run(t.dx, ['--dex', '--output=' + path.join(work, 'classes.dex'), cls, ...extra]);
   // resources + manifest -> apk (resources.arsc stored uncompressed, as Android 11+ requires), then the dex, alignment, signature
   const unsigned = path.join(work, 'unsigned.apk'), aligned = path.join(work, 'aligned.apk');
-  run(t.aapt, ['package', '-f', '-M', path.join(ROOT, 'android', 'AndroidManifest.xml'), '-S', path.join(work, 'res'), '-A', path.join(work, 'assets'), '-I', t.jar,
+  run(t.aapt, ['package', '-f', '-M', path.join(ROOT, 'android', 'AndroidManifest.xml'), '-S', path.join(work, 'res'), '-A', path.join(work, 'assets'), '-I', t.frameworkRes,
     '-F', unsigned, '--min-sdk-version', '24', '--target-sdk-version', '29', '--version-code', String(versionCode(pkg.version)), '--version-name', pkg.version, '-0', 'arsc']);
   run(t.aapt, ['add', unsigned, 'classes.dex'], { cwd: work });
   run(t.zipalign, ['-p', '-f', '4', unsigned, aligned]);
