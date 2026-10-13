@@ -5,8 +5,11 @@
 // PC-mode features (ASIO / WASAPI interfaces, plugins, OTA) need the PC.
 //   node scripts/build-apk.js [--out android/releases] [--kotlin]   -> AudioMixer-<version>-android.apk
 //   The background engine (android/src: MiniBridge, AndroidAudio, ...) is Java; --kotlin builds the foreground service from android/kotlin/EngineService.kt (needs kotlinc).
-// Tools (any Android SDK, or the Debian / Ubuntu packages aapt apksigner zipalign dalvik-exchange libandroid-23-java):
+// Tools (any Android SDK, or the Debian / Ubuntu packages aapt apksigner zipalign dalvik-exchange libandroid-23-java android-framework-res):
 //   javac (JDK 8+), aapt, zipalign, apksigner, d8 or dalvik-exchange (dx), android.jar (ANDROID_JAR, ANDROID_HOME/platforms, or /usr/lib/android-sdk)
+//   a framework resource table new enough for every android: attribute the manifest uses (ANDROID_FRAMEWORK_RES, or Debian / Ubuntu's android-framework-res
+//   package at /usr/share/android-framework-res/framework-res.apk); falls back to android.jar, which is enough as long as the manifest uses nothing newer
+//   than that jar's API level
 // Needs internet once for the cache in dist/cache/android: npm packages tailwindcss 3 and @fortawesome/fontawesome-free (version pinned) and the Google fonts.
 // Signing: ANDROID_KEYSTORE / ANDROID_KEYSTORE_PASS / ANDROID_KEY_ALIAS for a real key, otherwise a self-generated key kept in dist/cache/signing
 // (the same key must sign every update, or Android refuses to install over the older version).
@@ -71,8 +74,13 @@ function findTools(env = process.env) {
   const bt = (() => { try { const d = path.join(sdk, 'build-tools'); return fs.readdirSync(d).sort().reverse().map(v => path.join(d, v)); } catch (_) { return []; } })();
   const pick = n => [...bt.map(d => path.join(d, n)), which(n)].find(p => p && fs.existsSync(p)) || null;
   const jar = env.ANDROID_JAR || (() => { try { const d = path.join(sdk, 'platforms'); return fs.readdirSync(d).sort((a, b) => parseInt(b.split('-')[1]) - parseInt(a.split('-')[1])).map(v => path.join(d, v, 'android.jar')).find(fs.existsSync); } catch (_) { return null; } })() || '/usr/share/java/com.android.android-23.jar';
-  const t = { aapt: pick('aapt'), zipalign: pick('zipalign'), apksigner: pick('apksigner'), d8: pick('d8'), dx: which('dalvik-exchange') || pick('dx'), javac: which('javac'), keytool: which('keytool'), npm: which('npm'), jar: fs.existsSync(jar) ? jar : null };
-  const missing = ['aapt', 'zipalign', 'apksigner', 'javac', 'keytool', 'jar'].filter(k => !t[k]).concat(t.d8 || t.dx ? [] : ['d8 / dalvik-exchange']);
+  // The resource table aapt reads with -I to resolve android: attributes (android:networkSecurityConfig among them) is separate from the Java classpath javac
+  // compiles against: the app's Java source targets the API 23 jar above (anything newer is reached by reflection, see android/stubs), but an old android.jar's
+  // resource table does not know attributes introduced after it was cut, so aapt refuses a manifest that uses one. Debian / Ubuntu's android-framework-res
+  // package carries a current AOSP framework-res.apk with every modern attribute; ANDROID_FRAMEWORK_RES overrides it, and either one missing falls back to jar.
+  const frameworkRes = env.ANDROID_FRAMEWORK_RES || ['/usr/share/android-framework-res/framework-res.apk'].find(fs.existsSync) || jar;
+  const t = { aapt: pick('aapt'), zipalign: pick('zipalign'), apksigner: pick('apksigner'), d8: pick('d8'), dx: which('dalvik-exchange') || pick('dx'), javac: which('javac'), keytool: which('keytool'), npm: which('npm'), jar: fs.existsSync(jar) ? jar : null, frameworkRes: fs.existsSync(frameworkRes) ? frameworkRes : null };
+  const missing = ['aapt', 'zipalign', 'apksigner', 'javac', 'keytool', 'jar', 'frameworkRes'].filter(k => !t[k]).concat(t.d8 || t.dx ? [] : ['d8 / dalvik-exchange']);
   return { tools: t, missing };
 }
 
@@ -183,7 +191,7 @@ async function build({ out = path.join(ROOT, 'android', 'releases'), kotlin = fa
   else run(t.dx, ['--dex', '--output=' + path.join(work, 'classes.dex'), cls, ...extra]);
   // resources + manifest -> apk (resources.arsc stored uncompressed, as Android 11+ requires), then the dex, alignment, signature
   const unsigned = path.join(work, 'unsigned.apk'), aligned = path.join(work, 'aligned.apk');
-  run(t.aapt, ['package', '-f', '-M', path.join(ROOT, 'android', 'AndroidManifest.xml'), '-S', path.join(work, 'res'), '-A', path.join(work, 'assets'), '-I', t.jar,
+  run(t.aapt, ['package', '-f', '-M', path.join(ROOT, 'android', 'AndroidManifest.xml'), '-S', path.join(work, 'res'), '-A', path.join(work, 'assets'), '-I', t.frameworkRes,
     '-F', unsigned, '--min-sdk-version', '24', '--target-sdk-version', '29', '--version-code', String(versionCode(pkg.version)), '--version-name', pkg.version, '-0', 'arsc']);
   run(t.aapt, ['add', unsigned, 'classes.dex'], { cwd: work });
   run(t.zipalign, ['-p', '-f', '4', unsigned, aligned]);
