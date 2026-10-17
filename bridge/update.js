@@ -1,6 +1,8 @@
 'use strict';
 // OTA updates: the app asks an update server for a SIGNED manifest (releases/update.json by default), compares versions, and downloads the
-// installer for this computer into the downloads folder, verifying its SHA-256 from the manifest. It never runs an installer by itself.
+// installer for this computer into the downloads folder, verifying its SHA-256 from the manifest. download() never runs an installer by
+// itself; install() (below) does, but only the signed Windows setup .exe, and only when this computer's own system could actually be
+// detected as Windows (never guessed from a user agent or a parameter).
 //   BRIDGE_UPDATE_URL     manifest location (default: the project's releases/update.json on GitHub)
 //   BRIDGE_UPDATE_HOSTS   extra comma-separated hosts that may serve the manifest / files
 // The manifest is signed with the vendor key (scripts/make-update.js); the app verifies it with the embedded public key, so a hijacked
@@ -9,6 +11,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const { spawn } = require('node:child_process');
 const lic = require('./license');
 const { fetchChecked } = require('./security');
 const osdetect = require('./osdetect');
@@ -110,4 +113,18 @@ async function download({ current, fetchImpl = globalThis.fetch, url, dir = upda
   return { ok: true, version: info.latest, file: target, bytes, sha256, verified: true, how: info.file.how, note: 'Saved and verified. It is not started automatically.' };
 }
 
-module.exports = { check, download, verifyManifest, signManifest, platformFile, cmpVersion, hostOk, updateDir, DEFAULT_URL };
+// download(), then run the installer: Windows only, and only the signed setup .exe (build-exe.js), which understands /quiet and performs its
+// own MSI major upgrade - the same ProductCode/UpgradeCode machinery every release already uses, so it reinstalls into the existing
+// Program Files folder, keeps the Start Menu / taskbar icon and file-association registrations, and carries the asio-driver, bridge and
+// client/scripts folders forward exactly as a fresh install would. Nothing here chooses or moves any of that.
+// Anything install() cannot safely auto-run - another OS, a .msi-only release, or a system this computer's own platform could not identify
+// as Windows (process.platform, never a browser user agent) - is left exactly as download() already leaves it: saved, verified, not run.
+async function install({ current, fetchImpl = globalThis.fetch, url, dir, platform = process.platform, arch, jwk = lic.PUBLIC_JWK, spawnImpl = spawn } = {}) {
+  const dl = await download({ current, fetchImpl, url, dir, platform, arch, jwk });
+  if (platform !== 'win32' || !/\.exe$/i.test(dl.file)) return { ...dl, installing: false, note: dl.note + ' Run it yourself: ' + dl.how };
+  const child = spawnImpl(dl.file, ['/quiet'], { detached: true, stdio: 'ignore', windowsHide: true });
+  child.unref();
+  return { ...dl, installing: true, note: `Installing v${dl.version} now (silently, no prompts). Audio Mixer will restart once it finishes.` };
+}
+
+module.exports = { check, download, install, verifyManifest, signManifest, platformFile, cmpVersion, hostOk, updateDir, DEFAULT_URL };

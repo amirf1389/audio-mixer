@@ -15,7 +15,7 @@
 //   (installed packages put these on your PATH as "audio-mixer": audio-mixer doctor, audio-mixer npm install audify ...)
 //   node client/cli.js license [status|activate <key>|deactivate]   show / activate / remove the license key (works offline)
 //   node client/cli.js plugins         list the VST3 / VST2 plugins found on this PC and the plugin folder
-//   node client/cli.js update [download]   check the signed update manifest; download saves the verified installer (never run for you)
+//   node client/cli.js update [download|install]   check the signed manifest; download saves the verified installer; install downloads it and (Windows only) runs it silently
 //   (drivers, verify, license, plugins and update accept --pause: wait for Enter before closing, used by the Start Menu shortcuts)
 const http = require('node:http');
 const fs = require('node:fs');
@@ -208,11 +208,12 @@ async function cmdUpdate(o, argv) {
   let code = 0;
   try {
     if (o.arg === 'download') { const r = await upd.download({ current }); console.log(`Saved and verified ${r.version}: ${r.file}\nSHA-256 ${r.sha256}\n${r.note}`); }
+    else if (o.arg === 'install') { const r = await upd.install({ current }); console.log(`Saved and verified ${r.version}: ${r.file}\nSHA-256 ${r.sha256}\n${r.note}`); }
     else {
       const r = await upd.check({ current });
       console.log(`Installed ${current}   latest ${r.latest}   ${r.updateAvailable ? 'UPDATE AVAILABLE' : 'up to date'}   (signed manifest)`);
       for (const n of r.notes) console.log('  - ' + n);
-      if (r.updateAvailable) console.log('Download it with: node client/cli.js update download');
+      if (r.updateAvailable) console.log('Download it with: node client/cli.js update download   (Windows: update install runs it for you)');
     }
   } catch (e) { console.error('Update: ' + e.message); code = 1; }
   await pause(argv);

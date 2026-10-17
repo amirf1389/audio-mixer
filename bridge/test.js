@@ -2599,6 +2599,42 @@ test('OTA server: signed manifests only, uploads are checksum-verified, the real
   finally { s2.closeAllConnections(); s2.close(); }
 });
 
+test('OTA install: the downloaded Windows setup .exe is run silently (/quiet) and detached; every other system (or one this computer could not detect) is only ever downloaded, never run', async () => {
+  const update = require('./update'), lic = require('../scripts/license');
+  const tmp = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'ota-install-')), keys = pathx.join(tmp, 'vendor');
+  lic.initKeys(keys); const jwk = lic.loadPublic(keys), priv = lic.loadPrivate(keys);
+  const exe = Buffer.from('MZ' + 'x'.repeat(5000)), tgz = Buffer.from('tgz' + 'y'.repeat(3000)), sha = b => cryptox.createHash('sha256').update(b).digest('hex');
+  const man = { product: 'audio-mixer', version: '9.9.9', channel: 'stable', released: '2026-10-10', notes: [], files: {
+    'win-x64-exe': { name: 'Audio Mixer-9.9.9.exe', url: 'https://ota.test/releases/Audio%20Mixer-9.9.9.exe', size: exe.length, sha256: sha(exe) },
+    'macos': { name: 'AudioMixerServer-9.9.9-macos.tar.gz', url: 'https://ota.test/releases/AudioMixerServer-9.9.9-macos.tar.gz', size: tgz.length, sha256: sha(tgz) },
+  } };
+  const env = update.signManifest(man, priv);
+  const route = async u => { if (String(u).endsWith('update.json')) return { ok: true, status: 200, json: async () => env }; if (String(u).includes('Audio%20Mixer-9.9.9.exe')) return { ok: true, status: 200, url: String(u), headers: new Map([['content-length', String(exe.length)]]), body: [exe] }; if (String(u).includes('AudioMixerServer-9.9.9-macos.tar.gz')) return { ok: true, status: 200, url: String(u), headers: new Map([['content-length', String(tgz.length)]]), body: [tgz] }; return { ok: false, status: 404 }; };
+  const calls = [];
+  const fakeSpawn = (file, args, opts) => { calls.push({ file, args, opts }); return { unref() { calls.push('unrefed'); } }; };
+  process.env.BRIDGE_UPDATE_HOSTS = 'ota.test';
+  try {
+    // Windows, a real .exe: runs it, detached, with /quiet - and the install folder / icon / drivers+bridge+scripts in Program Files are untouched
+    // by anything here, because this just launches the signed setup .exe, and its own MSI major upgrade (same UpgradeCode every release uses, see
+    // the "installer:" tests above) is what keeps them - install() does not stage, move or register a single file of its own.
+    const r1 = await update.install({ current: '1.0.0', fetchImpl: route, url: 'https://ota.test/update.json', dir: pathx.join(tmp, 'dl1'), platform: 'win32', arch: 'x64', jwk, spawnImpl: fakeSpawn });
+    assert.ok(r1.ok && r1.installing === true && r1.verified && /Installing v9\.9\.9 now/.test(r1.note));
+    assert.strictEqual(calls.length, 2); assert.strictEqual(calls[0].args[0], '/quiet'); assert.strictEqual(calls[0].file, r1.file);
+    assert.deepStrictEqual(calls[0].opts, { detached: true, stdio: 'ignore', windowsHide: true }); assert.strictEqual(calls[1], 'unrefed');
+    // macOS / Linux: downloaded and verified exactly like download(), but spawnImpl is never called - there is no silent installer for those systems
+    calls.length = 0;
+    const r2 = await update.install({ current: '1.0.0', fetchImpl: route, url: 'https://ota.test/update.json', dir: pathx.join(tmp, 'dl2'), platform: 'darwin', arch: 'x64', jwk, spawnImpl: fakeSpawn });
+    assert.ok(r2.ok && r2.installing === false && r2.verified && calls.length === 0 && /Run it yourself/.test(r2.note));
+    // a system this manifest has no file for (as real as "could not be detected": either way, nothing here may guess and run something anyway)
+    await assert.rejects(update.install({ current: '1.0.0', fetchImpl: route, url: 'https://ota.test/update.json', dir: pathx.join(tmp, 'dl3'), platform: 'android', arch: 'arm64', jwk, spawnImpl: fakeSpawn }), /no update file for this system/);
+    assert.strictEqual(calls.length, 0);
+  } finally { delete process.env.BRIDGE_UPDATE_HOSTS; }
+  // the CLI and the server expose it the same way download already is
+  assert.match(fsx.readFileSync(pathx.join(__dirname, '..', 'client', 'cli.js'), 'utf8'), /o\.arg === 'install'.*upd\.install/);
+  const srvSrc = fsx.readFileSync(pathx.join(__dirname, '..', 'bridge', 'server.js'), 'utf8');
+  assert.match(srvSrc, /'\/api\/update\/install'/); assert.match(srvSrc, /updater\.install\(\{ current: VERSION \}\)/);
+});
+
 test('OTA dashboard: served only with the admin token configured, strict CSP, history / roll back / unpublish / verify / config API, browser-side signing is accepted by the server and the app', async () => {
   const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), http = require('node:http'), crypto = require('node:crypto');
   const { createOta } = require('../ota-server/server'), update = require('./update'), lic = require('../scripts/license');
