@@ -77,9 +77,9 @@ function auditDex(dex) {
 }
 
 function main(argv) {
-  const m = auditManifest(fs.readFileSync(path.join(ROOT, 'android', 'AndroidManifest.xml'), 'utf8'));
+  const m = auditManifest(fs.readFileSync(path.join(ROOT, 'platforms', 'android', 'AndroidManifest.xml'), 'utf8'));
   let problems = m.problems.slice();
-  problems = problems.concat(auditNetworkConfig(fs.readFileSync(path.join(ROOT, 'android', 'res', 'xml', 'network_security_config.xml'), 'utf8')));
+  problems = problems.concat(auditNetworkConfig(fs.readFileSync(path.join(ROOT, 'platforms', 'android', 'res', 'xml', 'network_security_config.xml'), 'utf8')));
   if (argv[0]) {
     const cp = require('node:child_process');
     const r = cp.spawnSync('unzip', ['-Z1', argv[0]], { encoding: 'utf8' });

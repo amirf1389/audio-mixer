@@ -66,15 +66,15 @@ function compileNative({ name, work, version, arch, defs = [], libs = [], consol
   fs.mkdirSync(work, { recursive: true });
   const triple = arch === 'x64' ? 'x86_64-w64-mingw32' : 'i686-w64-mingw32';
   const v4 = version4(version);
-  const rc = fs.readFileSync(path.join(ROOT, 'windows', 'installer', `${name}.rc`), 'utf8').replace(/@VERSION4@/g, v4).replace(/@VERSION@/g, version);
+  const rc = fs.readFileSync(path.join(ROOT, 'platforms', 'windows', 'installer', `${name}.rc`), 'utf8').replace(/@VERSION4@/g, v4).replace(/@VERSION@/g, version);
   fs.writeFileSync(path.join(work, `${name}.rc`), rc);
-  fs.copyFileSync(path.join(ROOT, 'windows', 'installer', `${name}.manifest`), path.join(work, `${name}.manifest`));
+  fs.copyFileSync(path.join(ROOT, 'platforms', 'windows', 'installer', `${name}.manifest`), path.join(work, `${name}.manifest`));
   fs.writeFileSync(path.join(work, 'AudioMixer.ico'), icoFile());
   const res = path.join(work, `${name}.res.o`), exe = path.join(work, `${name}-${arch}.exe`);
   let r = spawnSync(`${triple}-windres`, ['-i', `${name}.rc`, '-o', res], { cwd: work, encoding: 'utf8' });
   if (r.error && r.error.code === 'ENOENT') throw new Error(`${triple}-windres not found (Linux: apt install mingw-w64)`);
   if (r.status !== 0) throw new Error('windres failed: ' + r.stderr);
-  r = spawnSync(`${triple}-gcc`, ['-O2', '-s', isConsole ? '-mconsole' : '-mwindows', '-municode', '-Wall', ...defs, '-o', exe, path.join(ROOT, 'windows', 'installer', name === 'setup' ? 'setup-stub.c' : `${name}.c`), res, ...libs, '-static-libgcc'], { encoding: 'utf8' });
+  r = spawnSync(`${triple}-gcc`, ['-O2', '-s', isConsole ? '-mconsole' : '-mwindows', '-municode', '-Wall', ...defs, '-o', exe, path.join(ROOT, 'platforms', 'windows', 'installer', name === 'setup' ? 'setup-stub.c' : `${name}.c`), res, ...libs, '-static-libgcc'], { encoding: 'utf8' });
   if (r.error && r.error.code === 'ENOENT') throw new Error(`${triple}-gcc not found (Linux: apt install mingw-w64)`);
   if (r.status !== 0) throw new Error(`compiling ${name} failed:\n` + r.stderr);
   return exe;

@@ -17,7 +17,7 @@ let running = 0;
 function hostPath({ platform = process.platform, arch = process.arch, env = process.env, exists = fs.existsSync } = {}) {
   if (env.BRIDGE_PLUGIN_HOST) return exists(env.BRIDGE_PLUGIN_HOST) ? env.BRIDGE_PLUGIN_HOST : null;
   // an installed package keeps the host in native/host, the repository in windows/plugin-host
-  for (const dir of [path.join(ROOT, 'native', 'host'), path.join(ROOT, 'windows', 'plugin-host')]) {
+  for (const dir of [path.join(ROOT, 'native', 'host'), path.join(ROOT, 'platforms', 'windows', 'plugin-host')]) {
     const p = platform === 'win32' ? path.join(dir, arch === 'ia32' ? 'x86' : 'x64', 'PluginHost.exe') : path.join(dir, `${platform}-${arch}`, 'PluginHost');
     if (exists(p)) return p;
   }

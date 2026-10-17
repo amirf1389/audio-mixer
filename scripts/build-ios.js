@@ -13,7 +13,7 @@ const { spawnSync } = require('node:child_process');
 const apk = require('./build-apk');
 
 const ROOT = path.resolve(__dirname, '..');
-const IOS = path.join(ROOT, 'ios');
+const IOS = path.join(ROOT, 'platforms', 'ios');
 
 // App Store icons must not have transparency: the rounded tile of the Android icon becomes a full square
 function iconPixelOpaque(u, v) { const p = apk.iconPixel(u, v); return p[3] === 0 ? [15, 18, 26, 255] : p; }
@@ -32,7 +32,7 @@ function stage(dir, version, web) {
   });
 }
 
-async function build({ out = path.join(ROOT, 'ios', 'releases'), ipa = false } = {}) {
+async function build({ out = path.join(ROOT, 'platforms', 'ios', 'releases'), ipa = false } = {}) {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'ios-')), proj = path.join(work, 'AudioMixer-ios');
   fs.cpSync(IOS, proj, { recursive: true, filter: s => !/[\\/]www($|[\\/])/.test(s) && !s.endsWith('project.yml') });

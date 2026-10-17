@@ -361,7 +361,7 @@ test('installer: stages the app with the bundled runtime for x64 and x86 (no NSI
     assert.match(fsx.readFileSync(pathx.join(r.stage, 'start-local-server.bat'), 'utf8'), /runtime\\node\.exe" bridge\\server\.js/);
     fsx.rmSync(out, { recursive: true, force: true });
   }
-  assert.ok(!fsx.existsSync(pathx.join(__dirname, '..', 'windows', 'installer', 'audio-mixer.nsi')), 'the NSIS script is gone');
+  assert.ok(!fsx.existsSync(pathx.join(__dirname, '..', 'platforms', 'windows', 'installer', 'audio-mixer.nsi')), 'the NSIS script is gone');
   await assert.rejects(bi.fetchNodeRuntime({ cache: osx.tmpdir(), arch: 'arm64', fetchImpl: async () => { throw new Error('x'); } }), /unknown architecture/);
 });
 
@@ -430,13 +430,13 @@ test('now playing: every OS has a path (playerctl, BSD, Android media sessions, 
 
 test('now playing on iOS and Qt Android: the routes exist, the permissions are declared, the Java classes are staged', () => {
   const root = pathx.join(__dirname, '..'), rd = f => fsx.readFileSync(pathx.join(root, f), 'utf8');
-  const sw = rd('ios/AudioMixer/LocalServer.swift');
+  const sw = rd('platforms/ios/AudioMixer/LocalServer.swift');
   assert.ok(sw.includes('"/api/nowplaying"') && sw.includes('MPMusicPlayerController.systemMusicPlayer') && sw.includes('MPMediaLibrary.authorizationStatus()') && sw.includes('"access"'));
-  assert.ok(rd('ios/project.yml.template').includes('NSAppleMusicUsageDescription'));
-  const cpp = rd('android/qt/src/MixerServer.cpp');
+  assert.ok(rd('platforms/ios/project.yml.template').includes('NSAppleMusicUsageDescription'));
+  const cpp = rd('platforms/android/qt/src/MixerServer.cpp');
   assert.ok(cpp.includes('"/api/nowplaying"') && cpp.includes('com/audiomixer/app/AndroidNowPlaying'));
-  assert.ok(rd('android/qt/android/AndroidManifest.xml').includes('BIND_NOTIFICATION_LISTENER_SERVICE') && rd('android/qt/android/AndroidManifest.xml').includes('com.audiomixer.app.NowPlayingListener'));
-  const prep = rd('scripts/prepare-qt.js'); for (const f of ['Json', 'NowPlaying', 'AndroidNowPlaying', 'NowPlayingListener']) { assert.ok(prep.includes("'" + f + "'"), f); assert.ok(fsx.existsSync(pathx.join(root, 'android/src/com/audiomixer/app', f + '.java')), f); }
+  assert.ok(rd('platforms/android/qt/android/AndroidManifest.xml').includes('BIND_NOTIFICATION_LISTENER_SERVICE') && rd('platforms/android/qt/android/AndroidManifest.xml').includes('com.audiomixer.app.NowPlayingListener'));
+  const prep = rd('scripts/prepare-qt.js'); for (const f of ['Json', 'NowPlaying', 'AndroidNowPlaying', 'NowPlayingListener']) { assert.ok(prep.includes("'" + f + "'"), f); assert.ok(fsx.existsSync(pathx.join(root, 'platforms/android/src/com/audiomixer/app', f + '.java')), f); }
   assert.ok(/android\/qt\/android\/src\//.test(rd('.gitignore')));
 });
 
@@ -833,7 +833,7 @@ test('msi: Start Menu tool shortcuts and optional features (plugin host, helpers
 test('cli: license / plugins / update commands exist and the stub has the feature switches', () => {
   const cli = fsx.readFileSync(pathx.join(__dirname, '..', 'client', 'cli.js'), 'utf8');
   for (const c of ["'license'", "'plugins'", "'update'"]) assert.ok(cli.includes(`o.cmd === ${c}`));
-  const stub = fsx.readFileSync(pathx.join(__dirname, '..', 'windows', 'installer', 'setup-stub.c'), 'utf8');
+  const stub = fsx.readFileSync(pathx.join(__dirname, '..', 'platforms', 'windows', 'installer', 'setup-stub.c'), 'utf8');
   for (const sw of ['/noplugins', '/nohelpers', '/notools', '/noshortcuts', '/desktop', '/nodesktop', '/noautostart']) assert.ok(stub.includes(`L"${sw}"`), sw);
   assert.match(stub, /ADDLOCAL=Main/);
   assert.match(stub, /stop_old_server\(old\)/); assert.match(stub, /_wcsnicmp\(path, dir, n\)/);   // upgrade ends only processes that run from the install folder
@@ -858,18 +858,18 @@ test('boot screens: browser page + launcher helper (macOS / Linux), native Windo
   const rd = (...a) => fsx.readFileSync(pathx.join(__dirname, '..', ...a), 'utf8');
   const boot = rd('boot.html');
   assert.match(boot, /api\/status/); assert.match(boot, /location\.replace\(url\)/); assert.ok(!/<script[^>]+src=/.test(boot) && !/https?:\/\/(?!localhost)/.test(boot.replace(/'http:\/\/localhost:'/g, '')), 'self-contained');
-  const en = rd('linux', 'ensure-node.sh');
+  const en = rd('platforms', 'linux', 'ensure-node.sh');
   assert.match(en, /am_splash\(\)/); assert.match(en, /AM_SPLASH_ARGS="--no-open"/); assert.match(en, /AUDIO_MIXER_NO_SPLASH/);
   const unix = rd('scripts', 'build-unix.js');
   assert.strictEqual((unix.match(/am_splash "\$APP" "\$@"/g) || []).length, 3);                       // Linux .deb launcher, macOS app, portable command
   assert.strictEqual((unix.match(/cli\.js" \$AM_SPLASH_ARGS "\$@"/g) || []).length, 3);              // no second browser window when the screen is open
   assert.ok(rd('scripts', 'build.js').includes("'boot.html'"));
-  const l = rd('windows', 'installer', 'launcher.c');
+  const l = rd('platforms', 'windows', 'installer', 'launcher.c');
   assert.match(l, /\/open/); assert.match(l, /AudioMixerBoot/); assert.match(l, /server_up\(\)/);
   assert.ok(rd('scripts', 'build-exe.js').includes("'-lgdi32', '-lws2_32'"));
-  assert.match(rd('android', 'src', 'com', 'audiomixer', 'app', 'MainActivity.java'), /new BootView\(this\)/);
-  assert.match(rd('android', 'src', 'com', 'audiomixer', 'app', 'BootView.java'), /TITAN OS/);
-  assert.match(rd('ios', 'AudioMixer', 'AudioMixerApp.swift'), /struct BootView: View/);
+  assert.match(rd('platforms', 'android', 'src', 'com', 'audiomixer', 'app', 'MainActivity.java'), /new BootView\(this\)/);
+  assert.match(rd('platforms', 'android', 'src', 'com', 'audiomixer', 'app', 'BootView.java'), /TITAN OS/);
+  assert.match(rd('platforms', 'ios', 'AudioMixer', 'AudioMixerApp.swift'), /struct BootView: View/);
 });
 
 test('page: the header mic FFT follows the RTA axis and is fed by every LIVE SOURCES interface', () => {
@@ -887,7 +887,7 @@ test('upgrade: an older server on the port is replaced instead of reused (CLI) a
   const src = fsx.readFileSync(cli, 'utf8');
   assert.match(src, /async function replaceStaleServer/); assert.match(src, /upd\.cmpVersion\(info\.version, own\) > 0\) return 'newer'/);   // never replaces a newer one
   assert.match(src, /argv\.includes\('--ensure'\)/);
-  const l = fsx.readFileSync(pathx.join(__dirname, '..', 'windows', 'installer', 'launcher.c'), 'utf8');
+  const l = fsx.readFileSync(pathx.join(__dirname, '..', 'platforms', 'windows', 'installer', 'launcher.c'), 'utf8');
   assert.match(l, /server_current\(void\)/); assert.match(l, /AMIX_VERSION/); assert.match(l, /cli\.js\\" --no-open --ensure/);
   assert.ok(fsx.readFileSync(pathx.join(__dirname, '..', 'scripts', 'build-exe.js'), 'utf8').includes('-DAMIX_VERSION='));
   // run it for real: a fake OLD server answers /api/status, the client ends it (pid from the status) and starts the current one on that port
@@ -930,10 +930,10 @@ test('installers: audio-mixer command (Windows .exe on PATH, mac / Linux link), 
   const un = spawnSync(process.execPath, [cli, 'uninstall'], { encoding: 'utf8', input: '' });                                  // no "y": nothing is changed
   assert.match(un.stdout, /Uninstalling Audio Mixer/); assert.match(un.stdout, /Nothing was changed/);
   // Windows: console program, stub switch, MSI feature / PATH row / uninstall code
-  const c = rd('windows', 'installer', 'audio-mixer.c');
+  const c = rd('platforms', 'windows', 'installer', 'audio-mixer.c');
   assert.match(c, /wmain\(void\)/); assert.match(c, /runtime\\\\node\.exe/); assert.match(c, /client\\\\cli\.js/);
   assert.ok(rd('scripts', 'build-exe.js').includes("-mconsole"));
-  assert.match(rd('windows', 'installer', 'setup-stub.c'), /L"\/nopath"/); assert.match(rd('windows', 'installer', 'setup-stub.c'), /L",CommandLine"/);
+  assert.match(rd('platforms', 'windows', 'installer', 'setup-stub.c'), /L"\/nopath"/); assert.match(rd('platforms', 'windows', 'installer', 'setup-stub.c'), /L",CommandLine"/);
   const m = require('../scripts/build-msi');
   const stage = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'cl-')); fsx.writeFileSync(pathx.join(stage, 'LICENSE'), 'MIT'); fsx.writeFileSync(pathx.join(stage, 'audio-mixer.exe'), 'x');
   const w = m.wxs({ stage, version: '1.16.0', arch: 'x64' });
@@ -975,7 +975,7 @@ test('installers: audio-mixer command (Windows .exe on PATH, mac / Linux link), 
   assert.match(u.MAC_INSTALL, /ln -sf "\$APP\/audio-mixer" "\$BINDIR\/audio-mixer"/); assert.match(u.MAC_UNINSTALL, /readlink "\$L"/);
   assert.match(rd('scripts', 'build-macos.js'), /Add audio-mixer command\.command/); assert.match(rd('scripts', 'build-macos.js'), /Uninstall Audio Mixer\.command/);
   // a command is not a start: no start-up screen for "audio-mixer doctor"
-  const sh = pathx.join(stage, 'sp.sh'); fsx.writeFileSync(sh, `. "${pathx.join(root, 'linux', 'ensure-node.sh')}"\nmkdir -p "${stage}/bin"; printf '#!/bin/sh\\ntouch "${stage}/opened"\\n' > "${stage}/bin/xdg-open"; chmod +x "${stage}/bin/xdg-open"\nPATH="${stage}/bin:$PATH" DISPLAY=:0 am_splash "${root}" doctor; echo "[$AM_SPLASH_ARGS]"\nPATH="${stage}/bin:$PATH" DISPLAY=:0 am_splash "${root}" --port 8800; echo "[$AM_SPLASH_ARGS]"\n`);
+  const sh = pathx.join(stage, 'sp.sh'); fsx.writeFileSync(sh, `. "${pathx.join(root, 'platforms', 'linux', 'ensure-node.sh')}"\nmkdir -p "${stage}/bin"; printf '#!/bin/sh\\ntouch "${stage}/opened"\\n' > "${stage}/bin/xdg-open"; chmod +x "${stage}/bin/xdg-open"\nPATH="${stage}/bin:$PATH" DISPLAY=:0 am_splash "${root}" doctor; echo "[$AM_SPLASH_ARGS]"\nPATH="${stage}/bin:$PATH" DISPLAY=:0 am_splash "${root}" --port 8800; echo "[$AM_SPLASH_ARGS]"\n`);
   const sp = spawnSync('sh', [sh], { encoding: 'utf8' }).stdout.trim().split('\n'); assert.deepStrictEqual(sp, ['[]', '[--no-open]']);
   fsx.rmSync(stage, { recursive: true, force: true });
 });
@@ -1101,19 +1101,19 @@ test('unix packages: the .deb is built with files under /opt, /usr/bin and /usr/
 // ── automatic Node.js install, levels, universal ASIO driver ──
 test('auto-install scripts: shell syntax, checksum verification, no network needed to parse', () => {
   const cp = require('node:child_process');
-  for (const f of ['ensure-node.sh', 'start-pc-mode.sh']) assert.strictEqual(cp.spawnSync('sh', ['-n', pathx.join(__dirname, '..', 'linux', f)]).status, 0, f);
-  const sh = fsx.readFileSync(pathx.join(__dirname, '..', 'linux', 'ensure-node.sh'), 'utf8');
+  for (const f of ['ensure-node.sh', 'start-pc-mode.sh']) assert.strictEqual(cp.spawnSync('sh', ['-n', pathx.join(__dirname, '..', 'platforms', 'linux', f)]).status, 0, f);
+  const sh = fsx.readFileSync(pathx.join(__dirname, '..', 'platforms', 'linux', 'ensure-node.sh'), 'utf8');
   assert.match(sh, /SHASUMS256\.txt/); assert.match(sh, /does not match nodejs\.org's checksum/);   // refuses an unverified download
   assert.match(sh, /--strip-components=1/); assert.ok(!/sudo|chmod 777|curl[^\n]*\|\s*(ba)?sh/.test(sh), 'no sudo, no pipe-to-shell');
   // with a working Node.js on PATH nothing is downloaded
-  const r = cp.spawnSync('sh', ['-c', `. "${pathx.join(__dirname, '..', 'linux', 'ensure-node.sh')}"; am_ensure_node && echo "$NODE"`], { encoding: 'utf8', env: { ...process.env, AUDIO_MIXER_NODE: process.execPath } });
+  const r = cp.spawnSync('sh', ['-c', `. "${pathx.join(__dirname, '..', 'platforms', 'linux', 'ensure-node.sh')}"; am_ensure_node && echo "$NODE"`], { encoding: 'utf8', env: { ...process.env, AUDIO_MIXER_NODE: process.execPath } });
   assert.strictEqual(r.status, 0); assert.strictEqual(r.stdout.trim(), process.execPath);
   // a too-old / broken Node.js is not accepted
   const bad = pathx.join(osx.tmpdir(), 'amx-oldnode'); fsx.writeFileSync(bad, '#!/bin/sh\necho 12\n'); fsx.chmodSync(bad, 0o755);
-  const r2 = cp.spawnSync('sh', ['-c', `. "${pathx.join(__dirname, '..', 'linux', 'ensure-node.sh')}"; am_node_ok "${bad}"; echo $?`], { encoding: 'utf8' });
+  const r2 = cp.spawnSync('sh', ['-c', `. "${pathx.join(__dirname, '..', 'platforms', 'linux', 'ensure-node.sh')}"; am_node_ok "${bad}"; echo $?`], { encoding: 'utf8' });
   assert.strictEqual(r2.stdout.trim(), '1'); fsx.unlinkSync(bad);
   // Windows launcher: winget first, then the checksum-verified official zip, then the Visual C++ runtime for Audify
-  const bat = fsx.readFileSync(pathx.join(__dirname, '..', 'windows', 'start-pc-mode.bat'), 'utf8');
+  const bat = fsx.readFileSync(pathx.join(__dirname, '..', 'platforms', 'windows', 'start-pc-mode.bat'), 'utf8');
   for (const want of ['winget install --id OpenJS.NodeJS.LTS', 'SHASUMS256.txt', 'certutil -hashfile', 'Microsoft.VCRedist.2015+.x64', 'does not match nodejs.org']) assert.ok(bat.includes(want), want);
   assert.ok(/\r\n/.test(bat));
   // nothing is installed without an answer: the question defaults to No after the timeout and no environment switch answers for the user
@@ -1121,12 +1121,12 @@ test('auto-install scripts: shell syntax, checksum verification, no network need
 });
 
 test('Windows setup installs nothing behind the user\'s back: the Visual C++ runtime is asked for (silent installs install nothing), no start at login', () => {
-  const stub = fsx.readFileSync(pathx.join(__dirname, '..', 'windows', 'installer', 'setup-stub.c'), 'utf8');
+  const stub = fsx.readFileSync(pathx.join(__dirname, '..', 'platforms', 'windows', 'installer', 'setup-stub.c'), 'utf8');
   assert.match(stub, /static void ensure_vc_runtime\(int quiet, int optin\)/); assert.match(stub, /if \(quiet && !optin\) return;/);              // /quiet: no questions, so no install
   assert.ok(stub.indexOf('MB_YESNO') < stub.indexOf('winget.exe install'));
   assert.ok(stub.includes('ensure_vc_runtime(quiet, vcyes)') && stub.includes('L"/vcredist"'));                                           // explicit opt-in for scripted installs
   assert.ok(stub.includes('L"/noautostart")) continue;') && !/Autostart"/.test(stub) && !/\bnoauto\b/.test(stub));                          // the old switch is accepted and ignored
-  for (const f of ['scripts/build-msi.js', 'windows/installer/launcher.c', 'windows/installer/setup-stub.c']) assert.ok(!/RegistryValue[^\n]*CurrentVersion\\+Run/.test(fsx.readFileSync(pathx.join(__dirname, '..', f), 'utf8')), f);
+  for (const f of ['scripts/build-msi.js', 'platforms/windows/installer/launcher.c', 'platforms/windows/installer/setup-stub.c']) assert.ok(!/RegistryValue[^\n]*CurrentVersion\\+Run/.test(fsx.readFileSync(pathx.join(__dirname, '..', f), 'utf8')), f);
   const svc = fsx.readFileSync(pathx.join(__dirname, '..', 'client', 'service.js'), 'utf8'); assert.ok(!/reg['"], \['add'/.test(svc) && svc.includes('not offered on Windows any more'));
 });
 
@@ -1246,7 +1246,7 @@ test('driver link library (drivers/common/am_link.c, C): a real native client co
 test('Linux ALSA plugin (linux/alsa-plugin): aplay plays into the mixer and arecord records what the mixer sends, in real time', async (tc) => {
   const cp = require('node:child_process'), dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'alsa-')), src = pathx.join(__dirname, '..');
   const so = pathx.join(dir, 'libasound_module_pcm_audiomixer.so');
-  const cc = cp.spawnSync('gcc', ['-std=gnu99', '-Wall', '-Wextra', '-Werror', '-O1', '-fPIC', '-DPIC', '-shared', '-o', so, pathx.join(src, 'linux', 'alsa-plugin', 'pcm_audiomixer.c'), pathx.join(src, 'drivers', 'common', 'am_link.c'), '-lasound', '-lpthread'], { encoding: 'utf8' });
+  const cc = cp.spawnSync('gcc', ['-std=gnu99', '-Wall', '-Wextra', '-Werror', '-O1', '-fPIC', '-DPIC', '-shared', '-o', so, pathx.join(src, 'platforms', 'linux', 'alsa-plugin', 'pcm_audiomixer.c'), pathx.join(src, 'drivers', 'common', 'am_link.c'), '-lasound', '-lpthread'], { encoding: 'utf8' });
   if (cc.error || /asoundlib\.h|pcm_external\.h/.test(cc.stderr)) { fsx.rmSync(dir, { recursive: true, force: true }); return tc.skip('no C compiler or no ALSA development files (libasound2-dev) on this machine'); }
   assert.strictEqual(cc.status, 0, cc.stderr);
   const have = n => !cp.spawnSync('which', [n]).status;
@@ -1290,7 +1290,7 @@ test('Linux ALSA plugin (linux/alsa-plugin): aplay plays into the mixer and arec
 test('Windows ASIO driver (windows/asio-driver): cross-compiled for x64 and x86 with -Werror, COM exports, system DLLs only, the GUID agrees everywhere', (tc) => {
   const cp = require('node:child_process'), drv = require('../scripts/build-drivers');
   if (!['x86_64-w64-mingw32-g++', 'i686-w64-mingw32-g++'].every(n => !cp.spawnSync('which', [n]).status)) return tc.skip('mingw-w64 is not installed');
-  const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'asio-')), root = pathx.join(__dirname, '..', 'windows', 'asio-driver');
+  const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'asio-')), root = pathx.join(__dirname, '..', 'platforms', 'windows', 'asio-driver');
   try {
     for (const [arch, machine] of [['x64', 0x8664], ['x86', 0x14c]]) {
       const dll = drv.buildAsio(arch, dir), b = fsx.readFileSync(dll);
@@ -1324,16 +1324,16 @@ test('Windows ASIO driver (windows/asio-driver): cross-compiled for x64 and x86 
 test('driver sources and packaging: macOS plug-in, Android HAL, the build script packs the ASIO zip (and, on request, the source archive)', (tc) => {
   const cp = require('node:child_process'), root = pathx.join(__dirname, '..'), rd = f => fsx.readFileSync(pathx.join(root, f), 'utf8');
   // macOS: the factory id in Info.plist belongs to the factory function and to the type id of Apple's AudioServerPlugIn
-  const plist = rd('macos/coreaudio-driver/Info.plist'), c = rd('macos/coreaudio-driver/AudioMixerDriver.c');
+  const plist = rd('platforms/macos/coreaudio-driver/Info.plist'), c = rd('platforms/macos/coreaudio-driver/AudioMixerDriver.c');
   assert.match(plist, /443ABAB8-E7B3-491A-B985-BEB9187030DB/); assert.match(plist, /<string>AudioMixerDriverFactory<\/string>/); assert.match(c, /void \*AudioMixerDriverFactory\(/); assert.match(c, /visibility\("default"\)/);
   assert.ok(c.includes('kAudioServerPlugInTypeUUID') && c.includes('am_link_play') && c.includes('on_record = onRecord') || c.includes('c.on_record = onRecord'));
   // every interface function of the driver table is defined (the table is the contract with coreaudiod)
   const table = /gInterface = \{\s*NULL, ([^}]+)\}/.exec(c)[1].split(',').map(s => s.trim()).filter(Boolean);
   assert.strictEqual(table.length, 22); for (const fn of table) assert.match(c, new RegExp('\\b' + fn + '\\(')); 
   // Android HAL: the module symbol, the streams, the build file and the policy
-  const hal = rd('android/hal/audio_hw.c');
+  const hal = rd('platforms/android/hal/audio_hw.c');
   for (const s of ['HAL_MODULE_INFO_SYM', 'AUDIO_HARDWARE_MODULE_ID', 'open_output_stream', 'open_input_stream', 'am_link_open', 'am_link_play', 'out_write', 'in_read']) assert.ok(hal.includes(s), s);
-  assert.match(rd('android/hal/Android.bp'), /audio\.audiomixer\.default/); assert.match(rd('android/hal/audio_policy_configuration_audiomixer.xml'), /AUDIO_DEVICE_OUT_BUS/); assert.match(rd('android/hal/sepolicy/hal_audio_audiomixer.te'), /hal_audio_default/);
+  assert.match(rd('platforms/android/hal/Android.bp'), /audio\.audiomixer\.default/); assert.match(rd('platforms/android/hal/audio_policy_configuration_audiomixer.xml'), /AUDIO_DEVICE_OUT_BUS/); assert.match(rd('platforms/android/hal/sepolicy/hal_audio_audiomixer.te'), /hal_audio_default/);
   for (const f of ['drivers/README.md']) { const s = rd(f); assert.match(s, /Not compiled or run|not compiled or run|NOT compiled/i); assert.match(s, /\/ws\/virtual/); }       // the limits are stated
   assert.ok(/STATUS:[^\n]*NOT compiled/.test(c) && /STATUS:[^\n]*NOT compiled/.test(hal));
   // packaging
@@ -1344,7 +1344,7 @@ test('driver sources and packaging: macOS plug-in, Android HAL, the build script
     const zip = cp.spawnSync('unzip', ['-Z1', pathx.join(out, `AudioMixer-${v}-asio-driver-windows.zip`)], { encoding: 'utf8' }).stdout.split('\n').filter(Boolean);
     for (const f of ['AudioMixerASIO64.dll', 'AudioMixerASIO32.dll', 'README.txt']) assert.ok(zip.includes(`AudioMixer-ASIO-${v}/${f}`), f);
     const tar = cp.spawnSync('tar', ['tzf', pathx.join(out, `AudioMixer-${v}-drivers-source.tar.gz`)], { encoding: 'utf8' }).stdout.split('\n');
-    for (const f of ['drivers/common/am_link.c', 'windows/asio-driver/audiomixer_asio.cpp', 'linux/alsa-plugin/pcm_audiomixer.c', 'macos/coreaudio-driver/AudioMixerDriver.c', 'android/hal/audio_hw.c', 'drivers/README.md']) assert.ok(tar.includes(`audio-mixer-drivers-${v}/${f}`), f);
+    for (const f of ['drivers/common/am_link.c', 'platforms/windows/asio-driver/audiomixer_asio.cpp', 'platforms/linux/alsa-plugin/pcm_audiomixer.c', 'platforms/macos/coreaudio-driver/AudioMixerDriver.c', 'platforms/android/hal/audio_hw.c', 'drivers/README.md']) assert.ok(tar.includes(`audio-mixer-drivers-${v}/${f}`), f);
     assert.ok(!tar.some(f => /\.(dll|so|o)$/.test(f)), 'no binaries in the source archive');
     assert.ok(!fsx.readdirSync(out).some(x => x.endsWith('.sha256')), 'no .sha256 files next to the release files');
   } finally { fsx.rmSync(out, { recursive: true, force: true }); }
@@ -1354,33 +1354,34 @@ test('repository layout: one folder per system with its sources and release file
   const lay = require('../scripts/layout'), mk = require('../scripts/make-update'), root = pathx.join(__dirname, '..');
   const top = fsx.readdirSync(root, { withFileTypes: true }).filter(e => !e.name.startsWith('.') && e.name !== 'node_modules' && e.name !== 'dist');
   const dirs = top.filter(e => e.isDirectory()).map(e => e.name).sort(), files = top.filter(e => e.isFile()).map(e => e.name).sort();
-  assert.deepStrictEqual(dirs, ['android', 'bridge', 'client', 'deploy', 'drivers', 'engine', 'ios', 'linux', 'macos', 'npm-installer', 'ota-server', 'releases', 'scripts', 'windows'], 'the top level is minimal: systems + shared code');
+  assert.deepStrictEqual(dirs, ['bridge', 'client', 'deploy', 'drivers', 'engine', 'npm-installer', 'ota-server', 'platforms', 'releases', 'scripts'], 'the top level is minimal: systems (under platforms/) + shared code');
+  assert.deepStrictEqual(fsx.readdirSync(pathx.join(root, 'platforms')).sort(), ['android', 'ios', 'linux', 'macos', 'windows'], 'one folder per system under platforms/');
   assert.deepStrictEqual(files, ['ADMIN-LICENSE.md', 'Additional Terms & Conditions', 'LICENSE', 'LICENSE.txt', 'PROJECT-README.md', 'README.md', 'SECURITY.md', 'Steinberg ASIO Licensing Agreement.pdf', 'Steinberg ASIO SDK 2.3.pdf', 'Steinberg ASIO Usage Guidelines.pdf', 'boot.html', 'changes.txt', 'index.html', 'package.json'], 'only the web app, the project papers and the Steinberg ASIO SDK papers at the root');
   assert.deepStrictEqual(fsx.readdirSync(pathx.join(root, 'releases')), ['update.json'], 'releases/ holds only the manifest that installed apps fetch');
-  for (const os of lay.OSES) assert.ok(fsx.statSync(pathx.join(root, os, 'releases')).isDirectory(), os + '/releases');
+  for (const os of lay.OSES) assert.ok(fsx.statSync(pathx.join(root, 'platforms', os, 'releases')).isDirectory(), os + '/releases');
   // every file that goes into a package exists where the layout says; the package keeps its own paths
   const build = require('../scripts/build'), src = fsx.readFileSync(pathx.join(root, 'scripts', 'build.js'), 'utf8');
   const list = [...src.slice(src.indexOf('const FILES = ['), src.indexOf('];', src.indexOf('const FILES = ['))).matchAll(/'([^']+)'/g)].map(m => m[1]).filter(f => /[./]/.test(f));
   assert.ok(list.length > 30); for (const f of list) assert.ok(fsx.existsSync(pathx.join(root, lay.repoPath(f))), f + ' -> ' + lay.repoPath(f));
   assert.deepStrictEqual([lay.repoPath('start-pc-mode.bat'), lay.repoPath('start-pc-mode.sh'), lay.repoPath('ensure-node.sh'), lay.repoPath('native/win/x64/AudioDevices.exe'), lay.repoPath('native/host/x86/PluginHost.exe'), lay.repoPath('native/mac/AudioDevices.swift'), lay.repoPath('bridge/server.js')],
-    ['windows/start-pc-mode.bat', 'linux/start-pc-mode.sh', 'linux/ensure-node.sh', 'windows/native/x64/AudioDevices.exe', 'windows/plugin-host/x86/PluginHost.exe', 'macos/native/AudioDevices.swift', 'bridge/server.js']);
+    ['platforms/windows/start-pc-mode.bat', 'platforms/linux/start-pc-mode.sh', 'platforms/linux/ensure-node.sh', 'platforms/windows/native/x64/AudioDevices.exe', 'platforms/windows/plugin-host/x86/PluginHost.exe', 'platforms/macos/native/AudioDevices.swift', 'bridge/server.js']);
   assert.deepStrictEqual(['win-x64-exe', 'win-x86-msi', 'linux-deb', 'linux-tar', 'macos', 'macos-dmg', 'android-apk', 'ios-project', 'nope'].map(lay.osOfKey), ['windows', 'windows', 'linux', 'linux', 'macos', 'macos', 'android', 'ios', null]);
   // the manifest builder finds each file in the folder of its system and points the URL there; a flat folder or a server keeps flat URLs
   const version = JSON.parse(fsx.readFileSync(pathx.join(root, 'package.json'), 'utf8')).version, base = 'https://raw.githubusercontent.com/o/r/main';
   const m = mk.build({ version, base, notes: [] }), win = m.files['win-x64-exe'], apk = m.files['android-apk'];
-  assert.strictEqual(win.url, `${base}/windows/releases/${encodeURIComponent('Audio Mixer-' + version + '.exe')}`); assert.strictEqual(apk.url, `${base}/android/releases/AudioMixer-${version}-android.apk`);
-  assert.strictEqual(m.files['linux-deb'].url, `${base}/linux/releases/audio-mixer_${version}_all.deb`); assert.strictEqual(m.files['macos-dmg'].url, `${base}/macos/releases/AudioMixer-${version}-macos.dmg`); assert.strictEqual(m.files['ios-project'].url, `${base}/ios/releases/AudioMixer-${version}-ios-xcode-project.tar.gz`);
+  assert.strictEqual(win.url, `${base}/platforms/windows/releases/${encodeURIComponent('Audio Mixer-' + version + '.exe')}`); assert.strictEqual(apk.url, `${base}/platforms/android/releases/AudioMixer-${version}-android.apk`);
+  assert.strictEqual(m.files['linux-deb'].url, `${base}/platforms/linux/releases/audio-mixer_${version}_all.deb`); assert.strictEqual(m.files['macos-dmg'].url, `${base}/platforms/macos/releases/AudioMixer-${version}-macos.dmg`); assert.strictEqual(m.files['ios-project'].url, `${base}/platforms/ios/releases/AudioMixer-${version}-ios-xcode-project.tar.gz`);
   for (const f of Object.values(m.files)) { const file = lay.findRelease(f.name); assert.ok(file, f.name); assert.strictEqual(fsx.statSync(file).size, f.size); }
   assert.strictEqual(mk.build({ version, base: 'https://ota.test/releases', flatUrls: true, notes: [] }).files['win-x64-exe'].url, `https://ota.test/releases/${encodeURIComponent('Audio Mixer-' + version + '.exe')}`);
   assert.strictEqual(lay.findRelease('nothing-here.exe'), null);
   // the web server never serves the system folders, the installers' own helpers keep being found where they are shipped
-  const sec = require('./security'); for (const d of ['android', 'ios', 'windows', 'macos', 'linux', 'drivers', 'ota-server']) { assert.ok(sec.BLOCKED_TOP.has(d), d); assert.strictEqual(sec.staticAllowed(root, pathx.join(root, d, 'x.json')), false, d); }
+  const sec = require('./security'); for (const d of ['platforms', 'drivers', 'ota-server']) { assert.ok(sec.BLOCKED_TOP.has(d), d); assert.strictEqual(sec.staticAllowed(root, pathx.join(root, d, 'x.json')), false, d); }
   assert.strictEqual(sec.staticAllowed(root, pathx.join(root, 'index.html')), true);
   // the launchers work from their folder in the repository and in a package
   const cp = require('node:child_process'), env = { ...process.env, AUDIO_MIXER_NODE: process.execPath, AUDIO_MIXER_NO_NATIVE: '1' };
-  for (const cwd of [root, pathx.join(root, 'linux')]) { const r = cp.spawnSync('sh', [pathx.join(root, 'linux', 'start-pc-mode.sh'), '--help'], { cwd, env, encoding: 'utf8' }); assert.strictEqual(r.status, 0, r.stderr); assert.match(r.stdout, /PC-mode client/); }
-  const bat = fsx.readFileSync(pathx.join(root, 'windows', 'start-pc-mode.bat'), 'utf8'), srv = fsx.readFileSync(pathx.join(root, 'windows', 'start-local-server.bat'), 'utf8');
-  assert.match(bat, /if not exist client\\cli\.js if exist \.\.\\client\\cli\.js cd \/d \.\./); assert.match(srv, /if not exist bridge\\server\.js if exist \.\.\\bridge\\server\.js cd \/d \.\./); assert.match(bat, /\r\n/);
+  for (const cwd of [root, pathx.join(root, 'platforms', 'linux')]) { const r = cp.spawnSync('sh', [pathx.join(root, 'platforms', 'linux', 'start-pc-mode.sh'), '--help'], { cwd, env, encoding: 'utf8' }); assert.strictEqual(r.status, 0, r.stderr); assert.match(r.stdout, /PC-mode client/); }
+  const bat = fsx.readFileSync(pathx.join(root, 'platforms', 'windows', 'start-pc-mode.bat'), 'utf8'), srv = fsx.readFileSync(pathx.join(root, 'platforms', 'windows', 'start-local-server.bat'), 'utf8');
+  assert.match(bat, /if not exist client\\cli\.js if exist \.\.\\\.\.\\client\\cli\.js cd \/d \.\.\\\.\./); assert.match(srv, /if not exist bridge\\server\.js if exist \.\.\\\.\.\\bridge\\server\.js cd \/d \.\.\\\.\./); assert.match(bat, /\r\n/);
 });
 
 test('clip detection (native streams): threshold, runs of samples, full scale, per channel, runs carried across blocks, the threshold is settable', async () => {
@@ -1720,7 +1721,7 @@ test('windows native helpers: AudioDevices.exe output and the VBScript fallback'
   const w = await wn.listWmi({ platform: 'win32', exists: () => true, run: async (c, a) => { assert.strictEqual(c, 'cscript'); assert.strictEqual(a[0], '//nologo'); return '{"ok":true,"devices":[{"name":"Realtek Audio","vendor":"Realtek","status":"OK"}]}'; } });
   assert.deepStrictEqual(w, [{ name: 'Realtek Audio', vendor: 'Realtek', status: 'OK' }]);
   // the shipped sources and binaries exist, and the binaries are Windows PE files of the right machine type
-  const dir = pathx.join(__dirname, '..', 'windows', 'native');
+  const dir = pathx.join(__dirname, '..', 'platforms', 'windows', 'native');
   for (const f of ['src/AudioDevices.cpp', 'vbs/audio-devices.vbs']) assert.ok(require('node:fs').existsSync(pathx.join(dir, f)), f);
   for (const [f, m] of [['x64/AudioDevices.exe', 0x8664], ['x86/AudioDevices.exe', 0x14c]]) { const b = require('node:fs').readFileSync(pathx.join(dir, f)); assert.strictEqual(b.readUInt16LE(0), 0x5a4d); assert.strictEqual(b.readUInt16LE(b.readUInt32LE(0x3c) + 4), m); }
 });
@@ -1867,7 +1868,7 @@ test('native plugin host: a real VST2 effect runs in its own process and process
   const { spawnSync } = require('node:child_process');
   const ph = require('./pluginhost');
   const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'host-'));
-  const root = pathx.join(__dirname, '..', 'windows', 'plugin-host');
+  const root = pathx.join(__dirname, '..', 'platforms', 'windows', 'plugin-host');
   const hostBin = pathx.join(dir, 'PluginHost'), plug = pathx.join(dir, 'gain.vst');
   const c1 = spawnSync('g++', ['-O2', '-std=c++11', '-o', hostBin, pathx.join(root, 'src', 'PluginHost.cpp'), '-ldl']);
   const c2 = spawnSync('g++', ['-shared', '-fPIC', '-std=c++11', '-o', plug, pathx.join(root, 'test', 'GainPlugin.cpp')]);
@@ -1948,9 +1949,9 @@ test('android app: page transform, version code, launcher icon, sources', () => 
   assert.strictEqual(out.length > html.length - 400 && out.length < html.length + 400, true);
   const p = apk.png(48, apk.iconPixel); assert.strictEqual(p.subarray(0, 8).toString('hex'), '89504e470d0a1a0a'); assert.strictEqual(p.readUInt32BE(16), 48);
   assert.deepStrictEqual(apk.iconPixel(0, 0), [0, 0, 0, 0]);                                         // rounded corner is transparent
-  const man = fsx.readFileSync(pathx.join(__dirname, '..', 'android', 'AndroidManifest.xml'), 'utf8');
+  const man = fsx.readFileSync(pathx.join(__dirname, '..', 'platforms', 'android', 'AndroidManifest.xml'), 'utf8');
   assert.ok(/package="com\.audiomixer\.app"/.test(man) && /RECORD_AUDIO/.test(man) && /android:exported="true"/.test(man) && !/CAMERA|READ_EXTERNAL|WRITE_EXTERNAL|READ_CONTACTS/.test(man));
-  const java = fsx.readFileSync(pathx.join(__dirname, '..', 'android', 'src', 'com', 'audiomixer', 'app', 'MainActivity.java'), 'utf8');
+  const java = fsx.readFileSync(pathx.join(__dirname, '..', 'platforms', 'android', 'src', 'com', 'audiomixer', 'app', 'MainActivity.java'), 'utf8');
   assert.ok(java.includes('file:///android_asset/www/index.html') && java.includes('setAllowUniversalAccessFromFileURLs(false)') && java.includes('RESOURCE_AUDIO_CAPTURE'));
 });
 
@@ -2004,12 +2005,12 @@ test('Swift Core Audio helper: its JSON is read by the bridge, the source is shi
   const fb = await sa.list({ platform: 'darwin', exists: () => true, helper: '/x/AudioDevices', run: async c => (c === '/x/AudioDevices' ? 'garbage' : JSON.stringify({ SPAudioDataType: [{ _items: [{ _name: 'Mic', coreaudio_device_input: 1 }] }] })) });
   assert.strictEqual(fb.devices[0].name, 'Mic');                                                              // broken helper: system_profiler
   assert.strictEqual(sa.fromHelper('{"ok":false}'), null);
-  const src = fsx.readFileSync(pathx.join(__dirname, '..', 'macos', 'native', 'AudioDevices.swift'), 'utf8');
+  const src = fsx.readFileSync(pathx.join(__dirname, '..', 'platforms', 'macos', 'native', 'AudioDevices.swift'), 'utf8');
   assert.ok(src.includes('import CoreAudio') && src.includes('kAudioHardwarePropertyDevices') && src.includes('JSONSerialization'));
 });
 
 test('iOS app: Swift sources, XcodeGen spec, opaque icon, project bundle', async () => {
-  const ios = require('../scripts/build-ios'); const root = pathx.join(__dirname, '..', 'ios');
+  const ios = require('../scripts/build-ios'); const root = pathx.join(__dirname, '..', 'platforms', 'ios');
   const tpl = fsx.readFileSync(pathx.join(root, 'project.yml.template'), 'utf8');
   const yml = ios.projectYml(tpl, '1.11.0'); assert.ok(!yml.includes('@VERSION@') && !yml.includes('@BUILD@') && yml.includes('MARKETING_VERSION: "1.11.0"') && yml.includes('CURRENT_PROJECT_VERSION: "11100"'));
   for (const k of ['NSMicrophoneUsageDescription', 'UIBackgroundModes: [audio]', 'NSAllowsLocalNetworking: true', 'PRODUCT_BUNDLE_IDENTIFIER: com.audiomixer.app', 'path: www']) assert.ok(yml.includes(k), k);
@@ -2183,7 +2184,7 @@ test('a device the engine could not probe (0 channels, not ASIO) is flagged, tak
 
 test('Android engine (Java): the bridge protocol runs on a plain JVM with a fake backend: HTTP, origin / host checks, WebSocket input and output, interfaces grouping', async () => {
   const { spawnSync, spawn } = require('node:child_process');
-  const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'jv-')), src = pathx.join(__dirname, '..', 'android');
+  const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'jv-')), src = pathx.join(__dirname, '..', 'platforms', 'android');
   const files = ['Json', 'Ws', 'AudioBackend', 'Assets', 'Interfaces', 'VirtualHub', 'NowPlaying', 'AppInfo', 'MiniBridge'].map(n => pathx.join(src, 'src', 'com', 'audiomixer', 'app', n + '.java')).concat(pathx.join(src, 'test', 'com', 'audiomixer', 'app', 'BridgeHarness.java'));
   const c = spawnSync('javac', ['--release', '8', '-Xlint:-options', '-d', dir, ...files], { encoding: 'utf8' });
   if (c.error || c.status !== 0) return;                                                      // needs a JDK (the build of the APK needs one as well)
@@ -2244,17 +2245,17 @@ test('Android engine (Java): the bridge protocol runs on a plain JVM with a fake
 
 test('Qt Android project (source only): files, CMake wiring, the routes of its server match the page\'s needs, version follows package.json', () => {
   const root = pathx.join(__dirname, '..'), rd = f => fsx.readFileSync(pathx.join(root, f), 'utf8');
-  for (const f of ['CMakeLists.txt', 'version.txt', 'README.md', 'src/main.cpp', 'src/MixerServer.cpp', 'src/MixerServer.h', 'src/AudioDevices.cpp', 'src/AudioDevices.h', 'qml/Main.qml', 'android/AndroidManifest.xml']) assert.ok(fsx.existsSync(pathx.join(root, 'android', 'qt', f)), f);
-  const cm = rd('android/qt/CMakeLists.txt');
+  for (const f of ['CMakeLists.txt', 'version.txt', 'README.md', 'src/main.cpp', 'src/MixerServer.cpp', 'src/MixerServer.h', 'src/AudioDevices.cpp', 'src/AudioDevices.h', 'qml/Main.qml', 'android/AndroidManifest.xml']) assert.ok(fsx.existsSync(pathx.join(root, 'platforms', 'android', 'qt', f)), f);
+  const cm = rd('platforms/android/qt/CMakeLists.txt');
   for (const s of ['find_package(Qt6 6.5 REQUIRED COMPONENTS', 'WebView', 'Multimedia', 'qt_add_qml_module', 'QT_ANDROID_PACKAGE_SOURCE_DIR', 'src/MixerServer.cpp', 'src/AudioDevices.cpp', 'qml/Main.qml']) assert.ok(cm.includes(s), s);
   for (const f of ['src/MixerServer.cpp', 'src/AudioDevices.cpp', 'src/main.cpp']) assert.ok(cm.includes(f), f);                      // every source is built
-  const srv = rd('android/qt/src/MixerServer.cpp');
+  const srv = rd('platforms/android/qt/src/MixerServer.cpp');
   assert.ok(srv.includes('"/api/status"') && srv.includes('"/api/interfaces"') && srv.includes('assets:/www') && srv.includes('path.contains("..")'));   // routes of the Java app; no way out of the page folder
-  assert.ok(rd('android/qt/src/main.cpp').includes('start(8765, 10)') && rd('android/qt/src/main.cpp').includes('QMicrophonePermission') && rd('android/qt/src/main.cpp').includes('QtWebView::initialize()'));
-  assert.ok(rd('android/qt/qml/Main.qml').includes('"http://localhost:" + mixerPort + "/index.html"'));
-  const man = rd('android/qt/android/AndroidManifest.xml'); assert.ok(man.includes('RECORD_AUDIO') && man.includes('QtActivity') && !/ACCESS_FINE_LOCATION|CAMERA/.test(man));
-  assert.strictEqual(rd('android/qt/version.txt').trim(), JSON.parse(rd('package.json')).version);                                       // `node scripts/prepare-qt.js` keeps it in step
-  assert.match(rd('android/qt/README.md'), /source only, not built or run/);                                                               // the limit is stated
+  assert.ok(rd('platforms/android/qt/src/main.cpp').includes('start(8765, 10)') && rd('platforms/android/qt/src/main.cpp').includes('QMicrophonePermission') && rd('platforms/android/qt/src/main.cpp').includes('QtWebView::initialize()'));
+  assert.ok(rd('platforms/android/qt/qml/Main.qml').includes('"http://localhost:" + mixerPort + "/index.html"'));
+  const man = rd('platforms/android/qt/android/AndroidManifest.xml'); assert.ok(man.includes('RECORD_AUDIO') && man.includes('QtActivity') && !/ACCESS_FINE_LOCATION|CAMERA/.test(man));
+  assert.strictEqual(rd('platforms/android/qt/version.txt').trim(), JSON.parse(rd('package.json')).version);                                       // `node scripts/prepare-qt.js` keeps it in step
+  assert.match(rd('platforms/android/qt/README.md'), /source only, not built or run/);                                                               // the limit is stated
   const prep = require('../scripts/prepare-qt'); assert.strictEqual(typeof prep.main, 'function');
   assert.ok(/android\/qt\/assets\//.test(rd('.gitignore')));
 });
@@ -2262,8 +2263,8 @@ test('Qt Android project (source only): files, CMake wiring, the routes of its s
 test('Android native audio helpers (channel counts, buffer sizes, native info) and the Quick Settings tile: JVM self-test, manifest, build wiring', () => {
   const { spawnSync } = require('node:child_process');
   const root = pathx.join(__dirname, '..'), rd = f => fsx.readFileSync(pathx.join(root, f), 'utf8'), dir = fsx.mkdtempSync(pathx.join(require('node:os').tmpdir(), 'st-'));
-  const src = n => pathx.join(root, 'android', 'src', 'com', 'audiomixer', 'app', n + '.java');
-  const c = spawnSync('javac', ['--release', '8', '-Xlint:-options', '-d', dir, src('Json'), src('Interfaces'), src('NowPlaying'), src('AppInfo'), pathx.join(root, 'android', 'test', 'com', 'audiomixer', 'app', 'Selftest.java')], { encoding: 'utf8' });
+  const src = n => pathx.join(root, 'platforms', 'android', 'src', 'com', 'audiomixer', 'app', n + '.java');
+  const c = spawnSync('javac', ['--release', '8', '-Xlint:-options', '-d', dir, src('Json'), src('Interfaces'), src('NowPlaying'), src('AppInfo'), pathx.join(root, 'platforms', 'android', 'test', 'com', 'audiomixer', 'app', 'Selftest.java')], { encoding: 'utf8' });
   assert.strictEqual(c.status, 0, c.stderr);
   const r = spawnSync('java', ['-cp', dir, 'com.audiomixer.app.Selftest'], { encoding: 'utf8' }); assert.strictEqual(r.status, 0, r.stderr);
   const o = Object.fromEntries(r.stdout.split('\n').filter(l => /^[\w.]+=/.test(l)).map(l => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1)]));
@@ -2278,27 +2279,27 @@ test('Android native audio helpers (channel counts, buffer sizes, native info) a
   const npj = JSON.parse(o.nowplaying); assert.deepStrictEqual(npj.sessions.map(x => [x.service, x.serviceName, x.status, x.title, x.artist]), [['spotify', 'Spotify', 'playing', 'Karma Police', 'Radiohead'], ['youtube-music', 'YouTube Music', 'paused', 'Lofi', 'Chill'], ['other', 'player', 'stopped', 'Local file', '']]);
   assert.ok(npj.ok === true && npj.access === true && npj.method === 'media-session' && npj.playing.service === 'spotify' && npj.platform === 'android');
   const npn = JSON.parse(o['nowplaying.none']); assert.ok(npn.access === false && npn.playing === null && npn.sessions.length === 0 && /Notifications/.test(npn.hint));
-  assert.ok(rd('android/AndroidManifest.xml').includes('BIND_NOTIFICATION_LISTENER_SERVICE') && rd('android/AndroidManifest.xml').includes('.NowPlayingListener'));
+  assert.ok(rd('platforms/android/AndroidManifest.xml').includes('BIND_NOTIFICATION_LISTENER_SERVICE') && rd('platforms/android/AndroidManifest.xml').includes('.NowPlayingListener'));
   // what the app says about itself: SHA-256 of the certificate (colon form), permissions with their reasons, now-playing state
   assert.strictEqual(o.fingerprint, 'BA:78:16:BF:8F:01:CF:EA:41:41:40:DE:5D:AE:22:23:B0:03:61:A3:96:17:7A:9C:B4:10:FF:61:F2:00:15:AD');
   const ai = JSON.parse(o.appinfo); assert.deepStrictEqual([ai.package, ai.versionCode, ai.targetSdk, ai.signer.sha256, ai.installer, ai.debuggable, ai.nowPlaying.accessGranted], ['com.audiomixer.app', 10000, 29, 'AA:BB', 'com.android.vending', false, true]);
   assert.ok(ai.permissions[0].granted === true && /microphone/i.test(ai.permissions[0].why) && ai.permissions[1].why === 'not explained');
-  assert.ok(rd('android/src/com/audiomixer/app/AndroidNowPlaying.java').includes('getActiveSessions(new ComponentName(ctx, NowPlayingListener.class))'));
+  assert.ok(rd('platforms/android/src/com/audiomixer/app/AndroidNowPlaying.java').includes('getActiveSessions(new ComponentName(ctx, NowPlayingListener.class))'));
   // the tile: declared with the system permission and intent, compiled against stubs that never go into the app
-  const man = rd('android/AndroidManifest.xml');
+  const man = rd('platforms/android/AndroidManifest.xml');
   assert.ok(man.includes('android:name=".EngineTileService"') && man.includes('android.permission.BIND_QUICK_SETTINGS_TILE') && man.includes('android.service.quicksettings.action.QS_TILE') && man.includes('ACTIVE_TILE'));
-  const tile = rd('android/src/com/audiomixer/app/EngineTileService.java'); assert.ok(tile.includes('extends TileService') && tile.includes('EngineService.ACTION_STOP') && tile.includes('startForegroundService') && tile.includes('startActivityAndCollapse'));
-  for (const f of ['android/src/com/audiomixer/app/EngineService.java', 'android/kotlin/EngineService.kt']) assert.ok(rd(f).includes('EngineState.running'), f);
-  const apk = require('../scripts/build-apk'), files = apk.listFiles(pathx.join(root, 'android', 'src'), '.java').map(f => pathx.basename(f));
+  const tile = rd('platforms/android/src/com/audiomixer/app/EngineTileService.java'); assert.ok(tile.includes('extends TileService') && tile.includes('EngineService.ACTION_STOP') && tile.includes('startForegroundService') && tile.includes('startActivityAndCollapse'));
+  for (const f of ['platforms/android/src/com/audiomixer/app/EngineService.java', 'platforms/android/kotlin/EngineService.kt']) assert.ok(rd(f).includes('EngineState.running'), f);
+  const apk = require('../scripts/build-apk'), files = apk.listFiles(pathx.join(root, 'platforms', 'android', 'src'), '.java').map(f => pathx.basename(f));
   assert.ok(files.includes('EngineTileService.java') && files.includes('EngineState.java') && !files.includes('TileService.java') && !files.includes('Selftest.java'));
-  assert.ok(fsx.existsSync(pathx.join(root, 'android/stubs/android/service/quicksettings/TileService.java')));
+  assert.ok(fsx.existsSync(pathx.join(root, 'platforms/android/stubs/android/service/quicksettings/TileService.java')));
   const bs = rd('scripts/build-apk.js'); assert.ok(bs.includes('stubs') && bs.includes('--classpath'));
-  const mb = rd('android/src/com/audiomixer/app/MiniBridge.java'); assert.ok(mb.includes('nativeJson()') && mb.includes('withNative'));
+  const mb = rd('platforms/android/src/com/audiomixer/app/MiniBridge.java'); assert.ok(mb.includes('nativeJson()') && mb.includes('withNative'));
 });
 
 test('Android engine (Java): virtual devices for the audio HAL - /ws/virtual, /api/virtual, the device in /api/interfaces, input and output with its id', async (tc) => {
   const { spawnSync, spawn } = require('node:child_process');
-  const root = pathx.join(__dirname, '..', 'android'), dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'avh-'));
+  const root = pathx.join(__dirname, '..', 'platforms', 'android'), dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'avh-'));
   const files = ['Json', 'Ws', 'AudioBackend', 'Assets', 'Interfaces', 'VirtualHub', 'NowPlaying', 'AppInfo', 'MiniBridge'].map(n => pathx.join(root, 'src', 'com', 'audiomixer', 'app', n + '.java')).concat(pathx.join(root, 'test', 'com', 'audiomixer', 'app', 'BridgeHarness.java'));
   const c = spawnSync('javac', ['--release', '8', '-Xlint:-options', '-d', dir, ...files], { encoding: 'utf8' });
   if (c.error) return tc.skip('no JDK');
@@ -2346,14 +2347,14 @@ test('Android engine (Java): virtual devices for the audio HAL - /ws/virtual, /a
 
 test('Android background engine + power-on animation: manifest, service (Java and Kotlin twin), build wiring, page hooks', () => {
   const root = pathx.join(__dirname, '..'), rd = f => fsx.readFileSync(pathx.join(root, f), 'utf8');
-  const man = rd('android/AndroidManifest.xml');
+  const man = rd('platforms/android/AndroidManifest.xml');
   assert.ok(man.includes('android.permission.FOREGROUND_SERVICE') && man.includes('<service android:name=".EngineService" android:exported="false"/>') && /RECORD_AUDIO/.test(man) && !/ACCESS_FINE_LOCATION|CAMERA|READ_EXTERNAL/.test(man));
-  const java = rd('android/src/com/audiomixer/app/EngineService.java'), kt = rd('android/kotlin/EngineService.kt');
+  const java = rd('platforms/android/src/com/audiomixer/app/EngineService.java'), kt = rd('platforms/android/kotlin/EngineService.kt');
   for (const src of [java, kt]) { assert.ok(src.includes('8765') && src.includes('MiniBridge') && src.includes('PARTIAL_WAKE_LOCK') && src.includes('STOP') && src.includes('NotificationChannel') && src.includes('START_STICKY')); }
   assert.ok(java.includes('b.start(8765, 10)') && kt.includes('b.start(8765, 10)') && java.includes('AndroidAssets') && kt.includes('AndroidAssets'));                                  // both twins look for the page's port first
-  const act = rd('android/src/com/audiomixer/app/MainActivity.java'); assert.ok(act.includes('loadMixer(state)') && act.includes('"http://localhost:" + port + "/index.html"') && act.includes('startEngine()') && act.includes('startForegroundService') && act.includes('EngineService.class'));
-  const aa = rd('android/src/com/audiomixer/app/AndroidAudio.java'); assert.ok(aa.includes('AudioRecord') && aa.includes('AudioTrack') && aa.includes('setPreferredDevice') && aa.includes('RECORD_AUDIO') && aa.includes('THREAD_PRIORITY_URGENT_AUDIO'));
-  const apk = require('../scripts/build-apk'); const files = apk.listFiles(pathx.join(root, 'android', 'src'), '.java').map(f => pathx.basename(f));
+  const act = rd('platforms/android/src/com/audiomixer/app/MainActivity.java'); assert.ok(act.includes('loadMixer(state)') && act.includes('"http://localhost:" + port + "/index.html"') && act.includes('startEngine()') && act.includes('startForegroundService') && act.includes('EngineService.class'));
+  const aa = rd('platforms/android/src/com/audiomixer/app/AndroidAudio.java'); assert.ok(aa.includes('AudioRecord') && aa.includes('AudioTrack') && aa.includes('setPreferredDevice') && aa.includes('RECORD_AUDIO') && aa.includes('THREAD_PRIORITY_URGENT_AUDIO'));
+  const apk = require('../scripts/build-apk'); const files = apk.listFiles(pathx.join(root, 'platforms', 'android', 'src'), '.java').map(f => pathx.basename(f));
   for (const n of ['MiniBridge.java', 'AndroidAudio.java', 'EngineService.java', 'MainActivity.java', 'Ws.java', 'Json.java', 'Interfaces.java', 'AudioBackend.java']) assert.ok(files.includes(n), n);
   assert.ok(!files.includes('BridgeHarness.java'));                                                                     // test code is not in the app
   const bs = rd('scripts/build-apk.js'); assert.ok(bs.includes("'--target-sdk-version', '29'") && bs.includes('--kotlin') && bs.includes('kotlin-stdlib.jar'));
@@ -2484,7 +2485,7 @@ test('Windows installer: the app is visible after the install (icons, Start Menu
   const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
   const rd = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
   // every native program carries the application icon (they showed the plain default icon before)
-  for (const n of ['launcher', 'setup', 'audio-mixer']) assert.match(rd('windows', 'installer', n + '.rc'), /^1 ICON "AudioMixer\.ico"$/m, n);
+  for (const n of ['launcher', 'setup', 'audio-mixer']) assert.match(rd('platforms', 'windows', 'installer', n + '.rc'), /^1 ICON "AudioMixer\.ico"$/m, n);
   const ico = require('../scripts/build-exe').icoFile();
   assert.strictEqual(ico.readUInt16LE(2), 1); assert.strictEqual(ico.readUInt16LE(4), 7);                    // type icon, 7 sizes
   for (let i = 0; i < 7; i++) { const off = ico.readUInt32LE(6 + 16 * i + 12), len = ico.readUInt32LE(6 + 16 * i + 8); assert.strictEqual(ico.subarray(off + 1, off + 4).toString(), 'PNG'); assert.ok(off + len <= ico.length); }
@@ -2500,11 +2501,11 @@ test('Windows installer: the app is visible after the install (icons, Start Menu
   }
   assert.doesNotMatch(m.wxs({ stage: fs.mkdtempSync(path.join(os.tmpdir(), 'amy-')), version: '1.4.1' }), /ARPPRODUCTICON/);   // no launcher in the tree: no icon reference
   // setup program: desktop shortcut by default (/nodesktop removes it), done message and start-now offer after an interactive install, started without admin rights
-  const stub = rd('windows', 'installer', 'setup-stub.c');
+  const stub = rd('platforms', 'windows', 'installer', 'setup-stub.c');
   assert.match(stub, /desktop = 1, nopath = 0/); assert.ok(stub.includes('L"/nodesktop"') && stub.includes('!desktop'));
   assert.match(stub, /Audio Mixer is installed\./); assert.match(stub, /!quiet && !passive/); assert.match(stub, /Audio Mixer\.lnk/); assert.match(stub, /explorer\.exe/); assert.match(stub, /CSIDL_COMMON_PROGRAMS/);
   // launcher: default browser, then Explorer, then "start", then the address in a message
-  const lau = rd('windows', 'installer', 'launcher.c');
+  const lau = rd('platforms', 'windows', 'installer', 'launcher.c');
   assert.match(lau, /static void open_page\(void\)/); assert.match(lau, /> 32\) return;[\s\S]*explorer\.exe[\s\S]*cmd\.exe \/c start[\s\S]*http:\/\/localhost:8765\//); assert.match(lau, /if \(show_splash\(inst\)\) open_page\(\)/);
 });
 
@@ -2917,12 +2918,12 @@ test('no Windows Defender scanner: the verify command, the setup program and the
   const v = require('../client/verify');
   assert.ok(!('checkDefender' in v) && !('parseDefender' in v) && typeof v.checkManifest === 'function' && typeof v.checkSignature === 'function' && typeof v.checkLoopbackOnly === 'function');
   // nothing that ships can call Defender: no PowerShell Defender cmdlets, no MpCmdRun, in the client, the bridge, the installers or the MSI definition
-  const code = ['client/verify.js', 'client/cli.js', 'client/service.js', 'windows/installer/setup-stub.c', 'windows/installer/launcher.c', 'windows/installer/audio-mixer.c', 'scripts/build-msi.js'].map(f => rd(...f.split('/'))).join('\n') + fs.readdirSync(path.join(__dirname)).filter(f => /\.js$/.test(f) && f !== 'test.js').map(f => rd('bridge', f)).join('\n');
+  const code = ['client/verify.js', 'client/cli.js', 'client/service.js', 'platforms/windows/installer/setup-stub.c', 'platforms/windows/installer/launcher.c', 'platforms/windows/installer/audio-mixer.c', 'scripts/build-msi.js'].map(f => rd(...f.split('/'))).join('\n') + fs.readdirSync(path.join(__dirname)).filter(f => /\.js$/.test(f) && f !== 'test.js').map(f => rd('bridge', f)).join('\n');
   assert.ok(!/Start-MpScan|Get-MpThreat|MpCmdRun|Add-MpPreference|Set-MpPreference|Get-MpComputerStatus|Update-MpSignature/i.test(code), 'no Defender cmdlet or tool is called');
   assert.ok(!/Defender/.test(rd('scripts', 'build-msi.js')) && !/verify --scan/.test(rd('scripts', 'build-msi.js')));
   assert.match(rd('scripts', 'build-msi.js'), /Verify installation \(file check\)[^\n]*verify --pause/);
   // the setup program: no scan after the install; /scan from an old command line is accepted and not passed on to Windows Installer
-  const stub = rd('windows', 'installer', 'setup-stub.c');
+  const stub = rd('platforms', 'windows', 'installer', 'setup-stub.c');
   assert.ok(!/scan = 1|&& scan\)|verify --scan/.test(stub) && /L"\/scan"\)\) continue;/.test(stub));
   // the command line: --scan is ignored with a note, the file checks still run
   const { execFileSync } = require('node:child_process');
@@ -3048,14 +3049,14 @@ test('Windows installers carry the ASIO driver files (Program Files / Program Fi
     assert.ok(!/AsioDriver/.test(m.wxs({ stage, version: '9.0.0', arch: 'x64', scope: 'user' })), 'HKLM\\SOFTWARE\\ASIO is per machine: the per-user package has no driver feature');
     fsx.rmSync(pathx.join(stage, 'asio-driver', 'AudioMixerASIO32.dll')); assert.ok(!/AsioDriver/.test(m.wxs({ stage, version: '9.0.0', arch: 'x64' })), 'no DLL, no feature');
     // the same keys that DllRegisterServer writes
-    const cpp = fsx.readFileSync(pathx.join(root, 'windows', 'asio-driver', 'audiomixer_asio.cpp'), 'utf8'); assert.ok(cpp.includes('SOFTWARE\\ASIO\\Audio Mixer') && cpp.includes('InprocServer32') && cpp.includes('ThreadingModel'));
+    const cpp = fsx.readFileSync(pathx.join(root, 'platforms', 'windows', 'asio-driver', 'audiomixer_asio.cpp'), 'utf8'); assert.ok(cpp.includes('SOFTWARE\\ASIO\\Audio Mixer') && cpp.includes('InprocServer32') && cpp.includes('ThreadingModel'));
   } finally { fsx.rmSync(stage, { recursive: true, force: true }); }
   // the setup program: /asio, /noasio, a Yes / No question whose default is No, ADDLOCAL gets AsioDriver only on request
-  const stub = fsx.readFileSync(pathx.join(root, 'windows', 'installer', 'setup-stub.c'), 'utf8');
+  const stub = fsx.readFileSync(pathx.join(root, 'platforms', 'windows', 'installer', 'setup-stub.c'), 'utf8');
   assert.match(stub, /L"\/asio"/); assert.match(stub, /L"\/noasio"/); assert.match(stub, /MB_YESNO \| MB_DEFBUTTON2/); assert.match(stub, /if \(asio\) wcscat\(add, L",AsioDriver"\)/);
   assert.match(stub, /!asio && !noasio && !quiet && !passive && MessageBoxW/);          // never asked (and never registered) in a silent install
   const bi = fsx.readFileSync(pathx.join(root, 'scripts', 'build-installers.js'), 'utf8'); assert.match(bi, /addAsioDriver\(staged/); assert.match(bi, /MANIFEST\.sha256/);
-  const gcc = cp.spawnSync('which', ['x86_64-w64-mingw32-gcc']); if (!gcc.status) { const o = pathx.join(osx.tmpdir(), 'stub-' + process.pid + '.o'); const r = cp.spawnSync('x86_64-w64-mingw32-gcc', ['-c', '-DREQUIRE_X64', '-o', o, pathx.join(root, 'windows', 'installer', 'setup-stub.c')], { encoding: 'utf8' }); fsx.rmSync(o, { force: true }); assert.strictEqual(r.status, 0, r.stderr); }
+  const gcc = cp.spawnSync('which', ['x86_64-w64-mingw32-gcc']); if (!gcc.status) { const o = pathx.join(osx.tmpdir(), 'stub-' + process.pid + '.o'); const r = cp.spawnSync('x86_64-w64-mingw32-gcc', ['-c', '-DREQUIRE_X64', '-o', o, pathx.join(root, 'platforms', 'windows', 'installer', 'setup-stub.c')], { encoding: 'utf8' }); fsx.rmSync(o, { force: true }); assert.strictEqual(r.status, 0, r.stderr); }
 });
 
 test('phone layout: every rule is scoped to html.phone-ui (or its own #phone- elements), so tablets, laptops and desktops keep the page they had', () => {
@@ -3310,9 +3311,9 @@ test('Windows registry and environment: variables, App Paths, version keys, .ami
   }
   // AUDIO_MIXER_HOME already means "the private data folder" on Linux / macOS (ensure-node.sh): the install folder variable has another name
   assert.ok(!fsx.readFileSync(pathx.join(root, 'scripts', 'build-msi.js'), 'utf8').includes("=*AUDIO_MIXER_HOME"));
-  const stub = fsx.readFileSync(pathx.join(root, 'windows', 'installer', 'setup-stub.c'), 'utf8');
+  const stub = fsx.readFileSync(pathx.join(root, 'platforms', 'windows', 'installer', 'setup-stub.c'), 'utf8');
   for (const t of ['/noregistry', '/nofiletypes', '/toolspath', ',Registry', ',FileTypes', ',ToolsPath']) assert.ok(stub.includes(t), t);
-  const gcc = spawnSync('x86_64-w64-mingw32-gcc', ['-fsyntax-only', '-municode', '-Wall', '-Werror', pathx.join(root, 'windows', 'installer', 'setup-stub.c')]);
+  const gcc = spawnSync('x86_64-w64-mingw32-gcc', ['-fsyntax-only', '-municode', '-Wall', '-Werror', pathx.join(root, 'platforms', 'windows', 'installer', 'setup-stub.c')]);
   if (!gcc.error) assert.strictEqual(gcc.status, 0, String(gcc.stderr));
 });
 
@@ -3373,7 +3374,7 @@ test('Linux and macOS own mechanisms: profile.d / environment.d, mime type + des
   assert.ok(!/CFBundleDocumentTypes|CFBundleURLTypes/.test(u.infoPlist('1.0.0')));
   for (const [n, t] of [['mi', u.MAC_INSTALL], ['mu', u.MAC_UNINSTALL], ['mc', u.MAC_COMMAND]]) { const f = pathx.join(out, n + '.sh'); fsx.writeFileSync(f, t); assert.strictEqual(spawnSync('bash', ['-n', f]).status, 0, n); }
   // kernel module: compiled against kernel headers where they are installed (below), never loaded here; am-pump is plain C and is built here
-  const km = pathx.join(root, 'linux', 'kernel-module'), ko = fsx.readFileSync(pathx.join(km, 'snd-audiomixer.c'), 'utf8');
+  const km = pathx.join(root, 'platforms', 'linux', 'kernel-module'), ko = fsx.readFileSync(pathx.join(km, 'snd-audiomixer.c'), 'utf8');
   for (const t of ['snd_card_new', 'snd_pcm_new', 'snd_pcm_period_elapsed', 'misc_register', 'MODULE_LICENSE("GPL")', 'MISC_DYNAMIC_MINOR']) assert.ok(ko.includes(t), t);
   assert.match(ko, /NOT loaded or run/); assert.ok(!ko.includes('no_llseek'), 'no_llseek was removed from newer kernels: noop_llseek works on all');
   assert.match(fsx.readFileSync(pathx.join(km, 'dkms.conf'), 'utf8'), new RegExp('PACKAGE_VERSION="' + require('../package.json').version.replace(/\.0$/, '').replace(/\./g, '\\.') + '"'));
@@ -3821,7 +3822,7 @@ test('auto fader: rides a channel toward -18 dBFS from its real pre-fader input 
 
 test('Android APK safety: permission allowlist, listener shipped off, audit tool catches additions, fingerprint published, APP SAFETY card wired', () => {
   const audit = require('../scripts/apk-audit'), root = pathx.join(__dirname, '..'), rd = f => fsx.readFileSync(pathx.join(root, f), 'utf8');
-  const man = rd('android/AndroidManifest.xml'), ok = audit.auditManifest(man);
+  const man = rd('platforms/android/AndroidManifest.xml'), ok = audit.auditManifest(man);
   assert.deepStrictEqual(ok.problems, []); assert.deepStrictEqual(ok.permissions.slice().sort(), audit.ALLOWED.slice().sort());
   assert.ok(/<service android:name="\.NowPlayingListener"[^>]*android:enabled="false"/.test(man));
   // each thing a scanner dislikes is caught
@@ -3837,7 +3838,7 @@ test('Android APK safety: permission allowlist, listener shipped off, audit tool
   assert.ok(!/android:usesCleartextTraffic/.test(man)); assert.match(man, /android:networkSecurityConfig="@xml\/network_security_config"/);
   assert.match(audit.auditManifest(man.replace('android:networkSecurityConfig="@xml/network_security_config"', 'android:usesCleartextTraffic="true"')).problems.join(), /usesCleartextTraffic="true" permits unencrypted traffic to any host/);
   assert.match(audit.auditManifest(man.replace('android:networkSecurityConfig="@xml/network_security_config" ', '')).problems.join(), /must set android:networkSecurityConfig/);
-  const net = rd('android/res/xml/network_security_config.xml');
+  const net = rd('platforms/android/res/xml/network_security_config.xml');
   assert.deepStrictEqual(audit.auditNetworkConfig(net), []);
   assert.deepStrictEqual([...audit.LOCAL_ONLY_HOSTS].sort(), ['127.0.0.1', '::1', 'localhost']);
   assert.match(audit.auditNetworkConfig(net.replace('cleartextTrafficPermitted="false"', 'cleartextTrafficPermitted="true"')).join(), /base-config must set cleartextTrafficPermitted="false"/);
@@ -3856,10 +3857,10 @@ test('Android APK safety: permission allowlist, listener shipped off, audit tool
   const appeal = require('../scripts/play-protect-appeal');
   assert.throws(() => appeal.build.call(null, '/nonexistent.apk'));
   // the published fingerprint matches the release the repository carries, and every explained permission has a reason in the app
-  const fp = rd('android/signing-fingerprint.txt').trim(); assert.match(fp, /^([0-9A-F]{2}:){31}[0-9A-F]{2}$/);
-  const infoJava = rd('android/src/com/audiomixer/app/AppInfo.java'); for (const p of audit.ALLOWED) assert.ok(infoJava.includes('"' + p + '"'), p);
+  const fp = rd('platforms/android/signing-fingerprint.txt').trim(); assert.match(fp, /^([0-9A-F]{2}:){31}[0-9A-F]{2}$/);
+  const infoJava = rd('platforms/android/src/com/audiomixer/app/AppInfo.java'); for (const p of audit.ALLOWED) assert.ok(infoJava.includes('"' + p + '"'), p);
   const bs = rd('scripts/build-apk.js'); assert.ok(bs.includes('apk-audit') && bs.includes('signing-fingerprint.txt') && bs.includes('certSha256'));
-  assert.ok(fsx.existsSync(pathx.join(root, 'android', 'PLAY-PROTECT.md')));
+  assert.ok(fsx.existsSync(pathx.join(root, 'platforms', 'android', 'PLAY-PROTECT.md')));
   const page = rd('index.html'); for (const s of ['id="app-safety"', "'/api/app'", "'/api/app/nowplaying/'", 'APP SAFETY', 'Send app for scanning', 'app-safety-card']) assert.ok(page.includes(s), s);
-  const mb = rd('android/src/com/audiomixer/app/MiniBridge.java'); assert.ok(mb.includes('"/api/app"') && mb.includes('x-mixer-action'));
+  const mb = rd('platforms/android/src/com/audiomixer/app/MiniBridge.java'); assert.ok(mb.includes('"/api/app"') && mb.includes('x-mixer-action'));
 });

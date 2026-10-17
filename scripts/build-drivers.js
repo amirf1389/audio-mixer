@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 'use strict';
-// Builds the operating-system drivers (windows/asio-driver, linux/alsa-plugin, macos/coreaudio-driver, android/hal, shared code in drivers/common) that this machine can build, and packs them:
-//   node scripts/build-drivers.js [--out windows/releases] [--source]
+// Builds the operating-system drivers (platforms/windows/asio-driver, platforms/linux/alsa-plugin, platforms/macos/coreaudio-driver, platforms/android/hal,
+// shared code in drivers/common) that this machine can build, and packs them:
+//   node scripts/build-drivers.js [--out platforms/windows/releases] [--source]
 //   AudioMixer-<version>-asio-driver-windows.zip     AudioMixerASIO64.dll, AudioMixerASIO32.dll (cross-compiled with mingw-w64), README.txt
 //   AudioMixer-<version>-drivers-source.tar.gz       (only with --source) all driver sources: ASIO (Windows), ALSA plugin (Linux), Core Audio plug-in (macOS), audio HAL (Android)
 // The macOS plug-in and the Android HAL need their own SDKs (Xcode, AOSP) and are shipped as source. The ALSA plugin is built on the target Linux PC (make).
@@ -11,8 +12,8 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
 const { ROOT } = require('./layout');
-const COMMON = path.join(ROOT, 'drivers', 'common'), ASIO = path.join(ROOT, 'windows', 'asio-driver');
-const SOURCE_DIRS = ['drivers', 'windows/asio-driver', 'linux/alsa-plugin', 'linux/kernel-module', 'macos/coreaudio-driver', 'android/hal'];
+const COMMON = path.join(ROOT, 'drivers', 'common'), ASIO = path.join(ROOT, 'platforms', 'windows', 'asio-driver');
+const SOURCE_DIRS = ['drivers', 'platforms/windows/asio-driver', 'platforms/linux/alsa-plugin', 'platforms/linux/kernel-module', 'platforms/macos/coreaudio-driver', 'platforms/android/hal'];
 const which = n => { for (const d of (process.env.PATH || '').split(path.delimiter)) { const p = path.join(d, n); if (fs.existsSync(p)) return p; } return null; };
 const run = (cmd, args, opts = {}) => { const r = spawnSync(cmd, args, { encoding: 'utf8', ...opts }); if (r.status !== 0) throw new Error(`${path.basename(cmd)} ${args.slice(0, 3).join(' ')} failed: ${(r.stderr || r.error || '').toString().slice(0, 1500)}`); return r; };
 
@@ -53,7 +54,7 @@ Not tested on a real ASIO host in this release: the DLL was cross-compiled and c
 "ASIO" is a trademark of Steinberg Media Technologies GmbH. The interface was implemented from its published description; no Steinberg SDK file is included.
 `;
 
-function buildAll({ out = path.join(ROOT, 'windows', 'releases'), source = false } = {}) {
+function buildAll({ out = path.join(ROOT, 'platforms', 'windows', 'releases'), source = false } = {}) {
   const version = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version, made = [];
   fs.mkdirSync(out, { recursive: true });
   // Windows ASIO driver zip
