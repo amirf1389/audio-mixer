@@ -19,7 +19,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "../../drivers/common/am_link.h"
+#include "../../../drivers/common/am_link.h"
 
 #define RING_FRAMES 16384    /* capture ring: what the mixer sent and the application has not read yet (about 340 ms at 48 kHz) */
 

@@ -21,7 +21,7 @@ function certSha256(apk) {
 function build(apkPath) {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
   const apk = fs.readFileSync(apkPath);
-  const published = (() => { try { return fs.readFileSync(path.join(ROOT, 'android', 'signing-fingerprint.txt'), 'utf8').trim(); } catch (e) { return null; } })();
+  const published = (() => { try { return fs.readFileSync(path.join(ROOT, 'platforms', 'android', 'signing-fingerprint.txt'), 'utf8').trim(); } catch (e) { return null; } })();
   const signed = certSha256(apkPath);
   if (published && signed && published !== signed) throw new Error('this APK is not signed with the published key (android/signing-fingerprint.txt): ' + signed + ' != ' + published);
   const fp = signed || published;

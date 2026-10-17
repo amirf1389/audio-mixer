@@ -10,7 +10,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
-#include "../../drivers/common/am_link.h"
+#include "../../../drivers/common/am_link.h"
 
 static volatile sig_atomic_t stop;
 static void on_signal(int s) { (void)s; stop = 1; }

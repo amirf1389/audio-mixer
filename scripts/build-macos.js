@@ -41,7 +41,7 @@ function isoTool() {
   return null;
 }
 
-function buildMacApp({ out = path.join(ROOT, 'macos', 'releases') } = {}) {
+function buildMacApp({ out = path.join(ROOT, 'platforms', 'macos', 'releases') } = {}) {
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'macos-'));
   const app = build({ out: work });
   const m = buildMac({ out: work, app });

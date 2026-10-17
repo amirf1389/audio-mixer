@@ -8,7 +8,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { prepareWeb, findTools, which } = require('./build-apk');
 
-const ROOT = path.resolve(__dirname, '..'), QT = path.join(ROOT, 'android', 'qt');
+const ROOT = path.resolve(__dirname, '..'), QT = path.join(ROOT, 'platforms', 'android', 'qt');
 
 async function main() {
   const version = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version;
@@ -19,7 +19,7 @@ async function main() {
   const r = await prepareWeb(www, t);
   fs.writeFileSync(path.join(QT, 'version.txt'), version + '\n');
   // the media-session classes of the Java app (GET /api/nowplaying) go into the Qt package source dir, which Gradle compiles with the activity
-  const jsrc = path.join(ROOT, 'android', 'src', 'com', 'audiomixer', 'app'), jdst = path.join(QT, 'android', 'src', 'com', 'audiomixer', 'app');
+  const jsrc = path.join(ROOT, 'platforms', 'android', 'src', 'com', 'audiomixer', 'app'), jdst = path.join(QT, 'android', 'src', 'com', 'audiomixer', 'app');
   fs.rmSync(path.join(QT, 'android', 'src'), { recursive: true, force: true });
   fs.mkdirSync(jdst, { recursive: true });
   for (const f of ['Json', 'NowPlaying', 'AndroidNowPlaying', 'NowPlayingListener']) fs.copyFileSync(path.join(jsrc, f + '.java'), path.join(jdst, f + '.java'));

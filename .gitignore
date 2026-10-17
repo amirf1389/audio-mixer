@@ -78,21 +78,21 @@ deploy/nginx/logs/
 # PC-mode build output
 dist/
 
-!windows/releases/*.exe
+!platforms/windows/releases/*.exe
 
-# Windows helper binaries built from windows/native/src and windows/plugin-host (kept in the repository, the installers ship them)
-!windows/native/**/*.exe
-!windows/plugin-host/**/*.exe
+# Windows helper binaries built from platforms/windows/native/src and platforms/windows/plugin-host (kept in the repository, the installers ship them)
+!platforms/windows/native/**/*.exe
+!platforms/windows/plugin-host/**/*.exe
 
 # Qt Android project: staged page and build output
-android/qt/assets/
-android/qt/android/src/
-android/qt/build/
+platforms/android/qt/assets/
+platforms/android/qt/android/src/
+platforms/android/qt/build/
 
 # the driver Makefiles are source, not build output
 !drivers/**/Makefile
-!linux/alsa-plugin/Makefile
-!macos/coreaudio-driver/Makefile
+!platforms/linux/alsa-plugin/Makefile
+!platforms/macos/coreaudio-driver/Makefile
 
 # engine build output (node scripts/build-engine.js)
 engine/rust/target/

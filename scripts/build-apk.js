@@ -151,13 +151,13 @@ function listFiles(dir, ext) {
   return out.sort();
 }
 
-async function build({ out = path.join(ROOT, 'android', 'releases'), kotlin = false } = {}) {
+async function build({ out = path.join(ROOT, 'platforms', 'android', 'releases'), kotlin = false } = {}) {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
   const { tools: t, missing } = findTools();
   const apkAudit = require('./apk-audit');
-  const audit = apkAudit.auditManifest(fs.readFileSync(path.join(ROOT, 'android', 'AndroidManifest.xml'), 'utf8'));      // nothing a scanner or Google Play Protect treats as suspicious gets in
+  const audit = apkAudit.auditManifest(fs.readFileSync(path.join(ROOT, 'platforms', 'android', 'AndroidManifest.xml'), 'utf8'));      // nothing a scanner or Google Play Protect treats as suspicious gets in
   if (audit.problems.length) throw new Error('the manifest fails the APK audit (scripts/apk-audit.js): ' + audit.problems.join('; '));
-  const netProblems = apkAudit.auditNetworkConfig(fs.readFileSync(path.join(ROOT, 'android', 'res', 'xml', 'network_security_config.xml'), 'utf8'));
+  const netProblems = apkAudit.auditNetworkConfig(fs.readFileSync(path.join(ROOT, 'platforms', 'android', 'res', 'xml', 'network_security_config.xml'), 'utf8'));
   if (netProblems.length) throw new Error('the network security config fails the APK audit (scripts/apk-audit.js): ' + netProblems.join('; '));
   if (missing.length) throw new Error('missing tools: ' + missing.join(', ') + '. Install the Android SDK build-tools, or on Debian / Ubuntu: apt install aapt apksigner zipalign dalvik-exchange libandroid-23-java default-jdk');
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'apk-')), www = path.join(work, 'assets', 'www');
@@ -169,21 +169,21 @@ async function build({ out = path.join(ROOT, 'android', 'releases'), kotlin = fa
   }
   // network security config: cleartext (plain HTTP) permitted to this device only (android/res/xml/network_security_config.xml, see PLAY-PROTECT.md)
   fs.mkdirSync(path.join(work, 'res', 'xml'), { recursive: true });
-  fs.copyFileSync(path.join(ROOT, 'android', 'res', 'xml', 'network_security_config.xml'), path.join(work, 'res', 'xml', 'network_security_config.xml'));
+  fs.copyFileSync(path.join(ROOT, 'platforms', 'android', 'res', 'xml', 'network_security_config.xml'), path.join(work, 'res', 'xml', 'network_security_config.xml'));
   // Java (and optionally Kotlin) -> classes -> dex. The engine (MiniBridge, AndroidAudio, protocol classes) is Java; with --kotlin the service is the Kotlin one.
   const cls = path.join(work, 'classes'); fs.mkdirSync(cls);
-  const srcDir = path.join(ROOT, 'android', 'src');
+  const srcDir = path.join(ROOT, 'platforms', 'android', 'src');
   const javaFiles = listFiles(srcDir, '.java').filter(f => !(kotlin && /EngineService\.java$/.test(f)));
   // framework classes newer than the API 23 android.jar (the Quick Settings tile, API 24) are compiled against stubs (android/stubs); the stubs are NOT packaged, the phone's own classes are used
   const stubs = path.join(work, 'stubs'); fs.mkdirSync(stubs);
-  run(t.javac, ['--release', '8', '-Xlint:-options', '-cp', t.jar, '-d', stubs, ...listFiles(path.join(ROOT, 'android', 'stubs'), '.java')]);
+  run(t.javac, ['--release', '8', '-Xlint:-options', '-cp', t.jar, '-d', stubs, ...listFiles(path.join(ROOT, 'platforms', 'android', 'stubs'), '.java')]);
   run(t.javac, ['--release', '8', '-Xlint:-options', '-cp', [t.jar, stubs].join(path.delimiter), '-d', cls, ...javaFiles]);
   const extra = [];
   if (kotlin) {
     const kc = which('kotlinc'); if (!kc) throw new Error('--kotlin needs kotlinc (https://kotlinlang.org/docs/command-line.html)');
     const stdlib = [process.env.KOTLIN_HOME && path.join(process.env.KOTLIN_HOME, 'lib', 'kotlin-stdlib.jar'), '/usr/share/java/kotlin-stdlib.jar', path.join(path.dirname(path.dirname(fs.realpathSync(kc))), 'lib', 'kotlin-stdlib.jar')].find(f => f && fs.existsSync(f));
     if (!stdlib) throw new Error('kotlin-stdlib.jar not found (set KOTLIN_HOME)');
-    run(kc, ['-jvm-target', '1.8', '-no-stdlib', '-cp', [t.jar, cls, stdlib].join(path.delimiter), '-d', cls, path.join(ROOT, 'android', 'kotlin', 'EngineService.kt')]);
+    run(kc, ['-jvm-target', '1.8', '-no-stdlib', '-cp', [t.jar, cls, stdlib].join(path.delimiter), '-d', cls, path.join(ROOT, 'platforms', 'android', 'kotlin', 'EngineService.kt')]);
     extra.push(stdlib);
   }
   const classFiles = listFiles(cls, '.class');
@@ -191,7 +191,7 @@ async function build({ out = path.join(ROOT, 'android', 'releases'), kotlin = fa
   else run(t.dx, ['--dex', '--output=' + path.join(work, 'classes.dex'), cls, ...extra]);
   // resources + manifest -> apk (resources.arsc stored uncompressed, as Android 11+ requires), then the dex, alignment, signature
   const unsigned = path.join(work, 'unsigned.apk'), aligned = path.join(work, 'aligned.apk');
-  run(t.aapt, ['package', '-f', '-M', path.join(ROOT, 'android', 'AndroidManifest.xml'), '-S', path.join(work, 'res'), '-A', path.join(work, 'assets'), '-I', t.frameworkRes,
+  run(t.aapt, ['package', '-f', '-M', path.join(ROOT, 'platforms', 'android', 'AndroidManifest.xml'), '-S', path.join(work, 'res'), '-A', path.join(work, 'assets'), '-I', t.frameworkRes,
     '-F', unsigned, '--min-sdk-version', '24', '--target-sdk-version', '29', '--version-code', String(versionCode(pkg.version)), '--version-name', pkg.version, '-0', 'arsc']);
   run(t.aapt, ['add', unsigned, 'classes.dex'], { cwd: work });
   run(t.zipalign, ['-p', '-f', '4', unsigned, aligned]);
@@ -203,7 +203,7 @@ async function build({ out = path.join(ROOT, 'android', 'releases'), kotlin = fa
   // the fingerprint of the signing certificate is published in android/signing-fingerprint.txt (and shown by the app, LICENSE page > APP SAFETY): the key must stay the same
   // from release to release, otherwise installed copies refuse the update and Google Play Protect sees a new, unknown signer every time
   const certs = run(t.apksigner, ['verify', '--print-certs', dest]), m = /certificate SHA-256 digest:\s*([0-9a-f]{64})/i.exec(certs);
-  const certSha256 = m ? m[1].toUpperCase().match(/.{2}/g).join(':') : '', fpFile = path.join(ROOT, 'android', 'signing-fingerprint.txt');
+  const certSha256 = m ? m[1].toUpperCase().match(/.{2}/g).join(':') : '', fpFile = path.join(ROOT, 'platforms', 'android', 'signing-fingerprint.txt');
   let published = null; try { published = fs.readFileSync(fpFile, 'utf8').trim(); } catch (e) { /* first build */ }
   if (certSha256 && !published && !process.env.ANDROID_FINGERPRINT_NO_WRITE) fs.writeFileSync(fpFile, certSha256 + '\n');
   const fingerprintChanged = !!(published && certSha256 && published !== certSha256);

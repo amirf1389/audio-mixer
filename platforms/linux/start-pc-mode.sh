@@ -4,8 +4,8 @@
 # and the native audio module (Audify) is installed once. AUDIO_MIXER_YES=1 skips the questions, AUDIO_MIXER_NO_NATIVE=1 skips the audio module.
 cd "$(dirname "$0")" || exit 1
 HERE=$(pwd)
-# in the repository this file sits in linux/ and the app is one folder up; in an installed package they are the same folder
-[ -f ./client/cli.js ] || { [ -f ../client/cli.js ] && cd ..; }
+# in the repository this file sits in platforms/linux/ and the app is two folders up; in an installed package they are the same folder
+[ -f ./client/cli.js ] || { [ -f ../../client/cli.js ] && cd ../..; }
 APP_DIR=$(pwd)
 if [ -f "$HERE/ensure-node.sh" ]; then
   . "$HERE/ensure-node.sh"
