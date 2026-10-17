@@ -996,6 +996,7 @@ window.navTabs = [
             channelSolos: Array.from({length: 32}, () => false),
             channelLevels: Array.from({length: 32}, () => 0),
             channelAutoFader: Array.from({length: 32}, () => false),
+            lowPowerMode: false,   // throttles the always-running meter loop (see window.setLowPowerMode / startMeterLoop) to cut CPU and battery use
             nodes: { 
                 musicAnalyser: null, micAnalyser: null, masterGain: null, masterLimiter: null,
                 eqFilters: [], phones1Gain: null, phones2Gain: null, crMonitorGain: null,
@@ -7289,6 +7290,20 @@ window.navTabs = [
                   </div>
                 </div>
 
+                <!-- Low Power Mode: throttles the always-running meter loop to cut CPU / battery use; mixing, EQ, FX and the audio itself are unaffected -->
+                <div class="glass-panel p-3 rounded-xl wing-bezel flex flex-wrap items-center justify-between gap-2">
+                  <div class="flex items-center gap-2.5">
+                    <div class="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 text-sm">
+                      <i class="fa-solid fa-leaf"></i>
+                    </div>
+                    <div>
+                      <h3 class="text-[10px] font-black text-white font-wing tracking-wider uppercase">LOW POWER MODE</h3>
+                      <p class="text-[7.5px] font-mono text-slate-400">Refreshes meters at ~15 fps instead of ~60 fps to use less CPU and battery. Mixing, EQ, FX and the audio engine run at full speed either way.</p>
+                    </div>
+                  </div>
+                  <button id="low-power-toggle" onclick="window.setLowPowerMode(!window.state.lowPowerMode)" class="px-3 py-1.5 rounded font-mono font-bold text-[8px] uppercase transition border bg-white/5 text-slate-400 border-white/10">OFF</button>
+                </div>
+
                 <!-- FRAMEWORK ENGINE SYSTEM: CORE AUDIO ARCHITECTURE & DSP SIGNAL FLOW GRAPH -->
 <div class="glass-panel p-3.5 rounded-xl wing-bezel space-y-3 border-cyan-500/40 shadow-[0_0_20px_rgba(6,182,212,0.15)]">
   
@@ -9114,9 +9129,25 @@ window.navTabs = [
             window.notify('Solo Buses Cleared', 'check');
         };
 
+        // LOW POWER MODE: the meter loop below runs every animation frame (~60 fps) touching up to 5 DOM elements per channel; that per-frame DOM
+        // work (not the audio graph, which keeps running unthrottled) is most of this page's idle CPU and, on a laptop, battery use. Low power mode
+        // skips most of those frames instead (~15 fps), cutting that work by about 75% while mixing, EQ, FX and the audio itself stay exactly as fast.
+        window.setLowPowerMode = function(on, silent) {
+            window.state.lowPowerMode = !!on;
+            try { localStorage.setItem('halx_low_power', on ? '1' : '0'); } catch (_) { /* private browsing */ }
+            const btn = document.getElementById('low-power-toggle');
+            if (btn) {
+                btn.textContent = on ? 'ON' : 'OFF';
+                btn.className = "px-3 py-1.5 rounded font-mono font-bold text-[8px] uppercase transition border " + (on ? 'bg-emerald-500 text-black border-emerald-500' : 'bg-white/5 text-slate-400 border-white/10');
+            }
+            if (!silent) window.notify(on ? 'Low Power Mode ON: meters refresh at ~15 fps' : 'Low Power Mode OFF: meters refresh at full rate', on ? 'leaf' : 'bolt');
+        };
+
         // DYNAMIC METER UPDATE LOOP
         function startMeterLoop() {
+            let lowPowerFrame = 0;
             function updateMeters() {
+                if (window.state.lowPowerMode && (++lowPowerFrame % 4 !== 0)) { requestAnimationFrame(updateMeters); return; }   // skip 3 of every 4 frames
                 for (let i = 0; i < CHANNELS; i++) {
                     if (window.state.channelAutoFader[i]) window.rideAutoFader(i);
                     const raw = window.state.channelLevels[i] || 0;
@@ -17418,6 +17449,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             on('plg-scan', () => plugins.scan());
             on('ota-src-save', () => ota.saveSource());
             const hdr = $('hdr-ota-badge'); if (hdr && hdr.parentElement && !hdr.parentElement.dataset.wired) { hdr.parentElement.dataset.wired = '1'; hdr.parentElement.addEventListener('click', () => { window.switchTab && window.switchTab('renew'); setTimeout(() => ota.check(true), 50); }); }
+            if (!wire.lowPowerRestored) { wire.lowPowerRestored = true; let saved = false; try { saved = localStorage.getItem('halx_low_power') === '1'; } catch (_) { /* private browsing */ } if (saved) window.setLowPowerMode(true, true); }
         }
 
         function start() {
