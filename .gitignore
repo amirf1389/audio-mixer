@@ -101,3 +101,6 @@ engine/cpp/build/
 engine/node/build/
 !engine/**/Makefile
 bridge/license-sandbox-public.json
+
+# Local secure OTA demo environment (scripts/ota-local.js): generated vendor keys, TLS cert and demo data. Never commit these.
+.local-ota/
