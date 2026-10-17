@@ -6,6 +6,8 @@
 //   portable              AudioMixerServer-<version>.js          one JavaScript file (about 300 KB, the page inside, compressed): `node AudioMixerServer-<version>.js`
 //                                                                 runs anywhere Node.js 18+ runs: Android (Termux, nodejs-mobile), a Raspberry Pi, any PC
 //   windows-x64 / -x86    AudioMixerServer-<version>-windows-<arch>.exe      Node.js single-executable application: that file IS the program
+//                                                                 (plus node_modules/npm next to it: client/cli.js's "npm" command finds it there,
+//                                                                 so a PC with no Node.js install still gets npm; see stageNpm below)
 //   linux-x64 / -arm64    AudioMixerServer-<version>-linux-<arch>.tar.gz     (the executable inside; 100 MB would not fit a repository file)
 //   macos-x64 / -arm64    AudioMixerServer-<version>-macos-<arch>.tar.gz     the executable inside; not signed (see below)
 //
@@ -148,16 +150,29 @@ function adhocSign(file) {
 }
 
 // deterministic .tar.gz with one executable inside
+// npm next to the Windows single-file executable (node_modules/npm, the exact lookup client/cli.js's npm command already does: a bundled npm
+// is found at path.dirname(process.execPath)/node_modules/npm/bin/npm-cli.js). Not embedded in the executable itself - a single-executable
+// blob carries one script, not a filesystem, and npm is a few thousand files - so it travels as the folder next to it instead, fetched and
+// SHA-256-checked the same way build-installer.js already bundles npm into the Windows .msi/.exe installer.
+async function stageNpm({ out, cache, arch, fetchImpl, version = NODE_VERSION }) {
+  const { fetchNpm } = require('./build-installer');
+  const npm = await fetchNpm({ cache, version, arch, fetchImpl });
+  const dest = path.join(out, 'node_modules', 'npm');
+  fs.rmSync(dest, { recursive: true, force: true });
+  fs.cpSync(npm.dir, dest, { recursive: true, filter: src => path.basename(src) !== '.complete' });
+  return dest;
+}
+
 function pack(dir, file, outTar) {
   run('tar', ['--sort=name', '--owner=0', '--group=0', '--numeric-owner', '--mtime=@0', '-cf', outTar.replace(/\.gz$/, ''), '-C', dir, file]);
   const tar = outTar.replace(/\.gz$/, '');
   fs.writeFileSync(outTar, zlib.gzipSync(fs.readFileSync(tar), { level: 9, mtime: 0 })); fs.rmSync(tar);
 }
 
-async function build({ targets = ['portable', ...Object.keys(TARGETS)], out = path.join(ROOT, 'dist', 'single'), cache = path.join(ROOT, 'dist', 'cache') } = {}) {
+async function build({ targets = ['portable', ...Object.keys(TARGETS)], out = path.join(ROOT, 'dist', 'single'), cache = path.join(ROOT, 'dist', 'cache'), fetchImpl } = {}) {
   const version = versionOf(), made = [];
   fs.mkdirSync(out, { recursive: true });
-  let portable = null;
+  let portable = null, windowsArch = null;
   for (const target of targets) {
     if (target === 'portable') {
       const file = path.join(out, `AudioMixerServer-${version}.js`);
@@ -167,7 +182,7 @@ async function build({ targets = ['portable', ...Object.keys(TARGETS)], out = pa
     const script = bundle({ cache, sea: true });
     if (t.os === 'windows') {
       const file = path.join(out, `AudioMixerServer-${version}-${target}.exe`);
-      buildExecutable({ target, cache, outFile: file, script }); made.push({ target, file });
+      buildExecutable({ target, cache, outFile: file, script }); made.push({ target, file }); windowsArch = t.arch;
     } else {
       const work = fs.mkdtempSync(path.join(os.tmpdir(), 'am-pack-'));
       try {
@@ -177,13 +192,14 @@ async function build({ targets = ['portable', ...Object.keys(TARGETS)], out = pa
       } finally { fs.rmSync(work, { recursive: true, force: true }); }
     }
   }
+  if (windowsArch) { const npmDir = await stageNpm({ out, cache, arch: windowsArch, fetchImpl }); made.push({ target: 'npm', file: npmDir }); }
   return made;
 }
 
 if (require.main === module) {
   const a = process.argv.slice(2), arg = (n, d) => { const i = a.indexOf(n); return i >= 0 ? a[i + 1] : d; };
   build({ targets: arg('--targets', '') ? arg('--targets').split(',') : undefined, out: arg('--out') ? path.resolve(arg('--out')) : undefined }).then(r => {
-    for (const m of r) console.log(`${m.target.padEnd(12)} ${m.file}  (${(fs.statSync(m.file).size / 1048576).toFixed(1)} MB)`);
+    for (const m of r) console.log(fs.statSync(m.file).isDirectory() ? `${m.target.padEnd(12)} ${m.file}` : `${m.target.padEnd(12)} ${m.file}  (${(fs.statSync(m.file).size / 1048576).toFixed(1)} MB)`);
   }).catch(e => { console.error('Single-file build failed: ' + e.message); process.exit(1); });
 }
-module.exports = { build, bundle, buildExecutable, fetchBinary, ensureTools, prelude, TARGETS, NODE_VERSION };
+module.exports = { build, bundle, buildExecutable, fetchBinary, ensureTools, prelude, TARGETS, NODE_VERSION, stageNpm };

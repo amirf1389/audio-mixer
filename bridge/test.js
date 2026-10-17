@@ -3504,6 +3504,21 @@ test('single-file server: the page, the command line and the server in one file 
   } finally { srv.kill(); }
 });
 
+test('single-file Windows build: npm is staged next to the .exe (node_modules/npm, the same spot client/cli.js\'s npm command already looks for a bundled npm)', async () => {
+  const single = require('../scripts/build-single');
+  for (const arch of ['x64', 'x86']) {
+    const zip = makeZip([[`node-v98.1.2-win-${arch}/node_modules/npm/bin/npm-cli.js`, Buffer.from('// npm ' + arch)], [`node-v98.1.2-win-${arch}/node_modules/npm/package.json`, Buffer.from('{}')]]);
+    const out = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'single-npm-')), cache = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'single-npm-cache-'));
+    const dest = await single.stageNpm({ out, cache, arch, version: 'v98.1.2', fetchImpl: fakeNodeFetch(zip, { arch }) });
+    assert.strictEqual(dest, pathx.join(out, 'node_modules', 'npm'));
+    assert.strictEqual(fsx.readFileSync(pathx.join(dest, 'bin', 'npm-cli.js'), 'utf8'), '// npm ' + arch);
+    assert.ok(!fsx.existsSync(pathx.join(dest, '.complete')), 'the cache marker file is not copied into the staged npm');
+    fsx.rmSync(out, { recursive: true, force: true }); fsx.rmSync(cache, { recursive: true, force: true });
+  }
+  // build() stages npm automatically once a Windows target was built in this call (it does not for a linux/macos/portable-only run)
+  assert.match(fsx.readFileSync(pathx.join(__dirname, '..', 'scripts', 'build-single.js'), 'utf8'), /if \(windowsArch\) \{ const npmDir = await stageNpm\(\{ out, cache, arch: windowsArch, fetchImpl \}\);/);
+});
+
 test('reboot system: restart the server for real, reboot the computer only on request (dry run), commands per OS', async () => {
   const power = require('./power'), { spawn } = require('node:child_process');
   assert.strictEqual(power.rebootCommand('win32').cmd, 'shutdown.exe'); assert.ok(power.rebootCommand('win32').args.includes('/t'));          // 10 s to cancel
