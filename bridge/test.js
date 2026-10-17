@@ -3647,6 +3647,54 @@ test('admin license key: a second signing authority for real PRO / STUDIO upgrad
   fsx.rmSync(dir, { recursive: true, force: true }); fsx.rmSync(copy, { recursive: true, force: true });
 });
 
+test('license key generator: a local, form-based way to issue a key with any of the three key pairs, bound to 127.0.0.1, refuses a foreign origin, the private key never leaves the process', async () => {
+  const gen = require('../scripts/license-generator'), lic = require('./license'), http = require('node:http');
+  // vendor: a real key pair, a real HTTP round trip, the signed key verifies with that same public key and no other
+  const vdir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'gen-vendor-'));
+  require('../scripts/license.js').initKeys(vdir);
+  let server = gen.createServer({ kind: 'vendor', dirArgv: ['--dir', vdir] });
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  let base = `http://127.0.0.1:${server.address().port}`;
+  const page = await fetch(base + '/'); const html = await page.text(), csp = page.headers.get('content-security-policy');
+  assert.strictEqual(page.status, 200); assert.match(csp, /default-src 'none'/); assert.ok(!/unsafe-inline/.test(csp));
+  assert.ok(!/innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(|new Function/.test(html), 'the key and summary are only ever set as text');
+  let r = await fetch(base + '/issue', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plan: 'pro', name: 'Jane Doe', email: 'j@example.com', machine: 'AAAA-BBBB-CCCC-DDDD-EEEE', days: 30, seats: 2 }) });
+  let j = await r.json(); assert.strictEqual(r.status, 200); assert.ok(j.ok && j.key.startsWith('AMIX1.') && /VENDOR PRO for Jane Doe/.test(j.summary));
+  const vpub = require('../scripts/license.js').loadPublic(vdir);
+  let v = lic.verifyKey(j.key, { jwk: vpub, machine: 'AAAA-BBBB-CCCC-DDDD-EEEE' }); assert.ok(v.ok && v.payload.seats === 2 && v.plan.id === 'pro');
+  assert.strictEqual(lic.verifyKey(j.key, { machine: 'AAAA-BBBB-CCCC-DDDD-EEEE' }).reason, 'bad-signature');            // not the real vendor key: a normal build refuses it
+  // validation: bad plan, missing name (vendor requires one), oversized / non-JSON body, wrong method
+  assert.strictEqual((await fetch(base + '/issue', { method: 'POST', body: JSON.stringify({ plan: 'gold' }) })).status, 400);
+  assert.strictEqual((await fetch(base + '/issue', { method: 'POST', body: JSON.stringify({ plan: 'pro' }) })).status, 400);
+  assert.strictEqual((await fetch(base + '/issue', { method: 'POST', body: 'not json' })).status, 400);
+  assert.strictEqual((await fetch(base + '/issue', { method: 'GET' })).status, 404);
+  // CSRF / DNS-rebinding guards: a foreign Origin or Host is refused, the same functions bridge/server.js itself uses
+  assert.strictEqual((await fetch(base + '/issue', { method: 'POST', headers: { Origin: 'https://evil.example' }, body: JSON.stringify({ plan: 'pro', name: 'x' }) })).status, 403);
+  const rawHost = await new Promise(res => { const req = http.request({ host: '127.0.0.1', port: server.address().port, path: '/issue', method: 'POST', headers: { Host: 'evil.example', 'Content-Type': 'application/json' } }, out => { out.resume(); out.on('end', () => res(out.statusCode)); }); req.end(JSON.stringify({ plan: 'pro', name: 'x' })); });
+  assert.strictEqual(rawHost, 403);
+  await new Promise(r => server.close(r));
+  // sandbox: no name required, its own key pair, the vendor key does not verify it
+  const sdir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'gen-sandbox-')), spub = pathx.join(sdir, 'pub.json');
+  require('../scripts/license-sandbox.js').init(sdir, spub);
+  server = gen.createServer({ kind: 'sandbox', dirArgv: ['--dir', sdir] }); await new Promise(r => server.listen(0, '127.0.0.1', r)); base = `http://127.0.0.1:${server.address().port}`;
+  r = await fetch(base + '/issue', { method: 'POST', body: JSON.stringify({ plan: 'studio', days: 5 }) }); j = await r.json();
+  assert.strictEqual(r.status, 200); assert.ok(j.ok && /SANDBOX STUDIO/.test(j.summary));
+  v = lic.verifyKey(j.key, { jwk: JSON.parse(fsx.readFileSync(spub, 'utf8')) }); assert.ok(v.ok && v.payload.sandbox === true);
+  assert.strictEqual(lic.verifyKey(j.key, { jwk: vpub }).ok, false);
+  await new Promise(r => server.close(r)); fsx.rmSync(sdir, { recursive: true, force: true });
+  // admin: mirrors vendor (name required, admin: true on the payload), its own key pair
+  const adir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'gen-admin-'));
+  require('../scripts/license-admin.js').initKeys(adir);
+  server = gen.createServer({ kind: 'admin', dirArgv: ['--dir', adir] }); await new Promise(r => server.listen(0, '127.0.0.1', r)); base = `http://127.0.0.1:${server.address().port}`;
+  assert.strictEqual((await fetch(base + '/issue', { method: 'POST', body: JSON.stringify({ plan: 'studio' }) })).status, 400);   // name required
+  r = await fetch(base + '/issue', { method: 'POST', body: JSON.stringify({ plan: 'studio', name: 'Reseller Client', days: 15 }) }); j = await r.json();
+  v = lic.verifyKey(j.key, { jwk: require('../scripts/license-admin.js').loadPublic(adir) }); assert.ok(v.ok && v.payload.admin === true);
+  await new Promise(r => server.close(r)); fsx.rmSync(adir, { recursive: true, force: true });
+  // an unknown --kind is refused up front rather than silently defaulting
+  assert.throws(() => gen.createServer({ kind: 'nope' }), /kind must be one of/);
+  fsx.rmSync(vdir, { recursive: true, force: true });
+});
+
 test('bus & matrix outputs: out sends to a real interface, speaker processor, amp calculator, mic protector, aux / FX returns, send regulator are wired', () => {
   const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
   const sc = html.slice(html.indexOf('<script id="bus-outs">'), html.indexOf('<script id="rt-engine">'));
