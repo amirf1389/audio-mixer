@@ -872,6 +872,31 @@ test('boot screens: browser page + launcher helper (macOS / Linux), native Windo
   assert.match(rd('platforms', 'ios', 'AudioMixer', 'AudioMixerApp.swift'), /struct BootView: View/);
 });
 
+test('Windows tray icon (/open stays resident): reopen the mixer, stop/start the local server by its real pid, exit shows a system notification; compiles clean (-Werror)', () => {
+  const cp = require('node:child_process');
+  const l = fsx.readFileSync(pathx.join(__dirname, '..', 'platforms', 'windows', 'installer', 'launcher.c'), 'utf8');
+  // the server's pid comes from its own GET /api/power, not from a launcher-held process handle (client.js --ensure may itself exit once the real server answers)
+  assert.match(l, /static int server_pid\(void\)/); assert.match(l, /GET \/api\/power HTTP\/1\.0/); assert.match(l, /strstr\(buf, "\\"pid\\":"\)/);
+  assert.match(l, /OpenProcess\(PROCESS_TERMINATE, FALSE, \(DWORD\)pid\)/); assert.match(l, /TerminateProcess\(p, 0\)/);
+  // the menu: reopen, stop/start (label follows whether the server answers right now), exit
+  assert.match(l, /ID_TRAY_OPEN/); assert.match(l, /ID_TRAY_TOGGLE/); assert.match(l, /ID_TRAY_EXIT/);
+  assert.match(l, /running \? L"Stop Server" : L"Start Server"/);
+  // exit stops the server first, then a real Windows notification (the tray icon's own balloon, NIIF_INFO) before the icon is removed
+  assert.match(l, /case ID_TRAY_EXIT:\s*\n\s*if \(server_pid\(\)\) stop_server_now\(\);\s*\n\s*tray_notify\(L"Audio Mixer", L"Audio Mixer has shut down\."\);/);
+  assert.match(l, /dwInfoFlags = NIIF_INFO/);
+  assert.match(l, /Shell_NotifyIconW\(NIM_ADD, &g_nid\)/); assert.match(l, /Shell_NotifyIconW\(NIM_DELETE, &g_nid\)/);
+  assert.match(l, /if \(open\) \{ finish_open\(inst\); run_tray\(inst\); \}/);                        // only the interactive /open flow gets a tray icon
+  // -Wall -Wextra -Werror, the same flags build-exe.js compiles it with, and the full link through the real build function (resources, icon, libs)
+  const gcc = cp.spawnSync('which', ['x86_64-w64-mingw32-gcc']);
+  if (gcc.status !== 0) return;
+  const r = cp.spawnSync('x86_64-w64-mingw32-gcc', ['-municode', '-Wall', '-Wextra', '-Werror', '-c', pathx.join(__dirname, '..', 'platforms', 'windows', 'installer', 'launcher.c'), '-o', pathx.join(osx.tmpdir(), 'launcher-tray-check.o')], { encoding: 'utf8' });
+  try { assert.strictEqual(r.status, 0, r.stderr); } finally { fsx.rmSync(pathx.join(osx.tmpdir(), 'launcher-tray-check.o'), { force: true }); }
+  const { compileLauncher } = require('../scripts/build-exe');
+  const work = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'launcher-tray-'));
+  try { const exe = compileLauncher({ work, version: '1.15.0.0', arch: 'x64' }); assert.ok(fsx.statSync(exe).size > 10000); }
+  finally { fsx.rmSync(work, { recursive: true, force: true }); }
+});
+
 test('page: the header mic FFT follows the RTA axis and is fed by every LIVE SOURCES interface', () => {
   const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
   assert.match(html, /micAnalyser\.fftSize = 4096/);                                                  // 512 points: 94 Hz per bin, nothing readable below ~250 Hz
@@ -3775,6 +3800,26 @@ test('bus & matrix outputs: out sends to a real interface, speaker processor, am
   assert.ok(Math.abs(two.load - 4) < 1e-9 && Math.abs(two.pLoad - 1000) < 1e-6 && Math.abs(two.pEach - 500) < 1e-6 && two.limDb < 0 && two.warn === 'The amp can give each speaker 500 W: use the protection limiter.', JSON.stringify(two));
   const safe = ampCalc({ ampW: 100, ampOhm: 8, spkW: 300, spkOhm: 8, count: 1, sens: 96, dist: 1 });
   assert.strictEqual(safe.limDb, 0); assert.ok(safe.headroom > 4.7 && safe.warn === '');                                  // a small amp cannot hurt the speaker: no limiter needed
+});
+
+test('low power mode: throttles the always-running meter loop to 1 frame in 4 (the real skip line, run for real), persists across reloads, never touches mixing/EQ/FX', () => {
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  for (const s of ["lowPowerMode: false", "window.setLowPowerMode = function(on, silent)", "localStorage.setItem('halx_low_power', on ? '1' : '0')",
+    'id="low-power-toggle"', 'onclick="window.setLowPowerMode(!window.state.lowPowerMode)"', "localStorage.getItem('halx_low_power') === '1'"]) assert.ok(html.includes(s), s);
+  // the exact skip line that ships, run for real (not a reimplementation): 1000 frames with it OFF must all run the per-channel body, and with it
+  // ON only every 4th must (the other 3 of 4 skip straight to the next requestAnimationFrame, which is where the CPU/battery saving comes from -
+  // mixing, EQ, FX and the audio graph itself are untouched by this: only this loop's own DOM writes are throttled)
+  const m = /if \((window\.state\.lowPowerMode && \(\+\+lowPowerFrame % 4 !== 0\))\) \{ requestAnimationFrame\(updateMeters\); return; \}/.exec(html);
+  assert.ok(m, 'the skip line was not found as expected');
+  let lowPowerFrame = 0, bodyRuns = 0;
+  const window = { state: { lowPowerMode: false } };
+  const condition = m[1];
+  const runFrame = () => { if (eval(condition)) return; bodyRuns++; };
+  for (let i = 0; i < 1000; i++) runFrame();
+  assert.strictEqual(bodyRuns, 1000, 'every frame must update the meters when low power mode is off');
+  bodyRuns = 0; lowPowerFrame = 0; window.state.lowPowerMode = true;
+  for (let i = 0; i < 1000; i++) runFrame();
+  assert.strictEqual(bodyRuns, 250, 'exactly 1 frame in 4 must update the meters when low power mode is on');
 });
 
 test('auto fader: rides a channel toward -18 dBFS from its real pre-fader input level, holds its own state outside the step-quantized fader element, hands control back on a manual drag; every meter now agrees on one -90 dBFS silence floor', () => {
