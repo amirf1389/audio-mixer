@@ -995,6 +995,7 @@ window.navTabs = [
             channelMutes: Array.from({length: 32}, () => false),
             channelSolos: Array.from({length: 32}, () => false),
             channelLevels: Array.from({length: 32}, () => 0),
+            channelAutoFader: Array.from({length: 32}, () => false),
             nodes: { 
                 musicAnalyser: null, micAnalyser: null, masterGain: null, masterLimiter: null,
                 eqFilters: [], phones1Gain: null, phones2Gain: null, crMonitorGain: null,
@@ -8974,10 +8975,11 @@ window.navTabs = [
                             </div>
                         </div>
 
-                        <!-- Mute & Solo Buttons -->
+                        <!-- Mute, Solo & Auto Fader Buttons -->
                         <div class="flex gap-0.5 w-full mt-0.5">
                             <button id="btn-mute-${i}" class="text-[6.5px] font-black flex-1 py-1 bg-danger/10 border border-danger/30 text-danger rounded hover:bg-danger hover:text-black transition-all ${window.state.channelMutes[i] ? 'bg-danger text-black' : ''}" onclick="window.toggleChannelMute(${i})">M</button>
                             <button id="btn-solo-${i}" class="text-[6.5px] font-black flex-1 py-1 bg-warn/10 border border-warn/30 text-warn rounded hover:bg-warn hover:text-black transition-all ${window.state.channelSolos[i] ? 'bg-warn text-black' : ''}" onclick="window.toggleChannelSolo(${i})">S</button>
+                            <button id="btn-autofader-${i}" title="AUTO FADER: rides this fader on its own to keep the input near a healthy level (-18 dBFS). Dragging the fader by hand turns it off." class="text-[6.5px] font-black flex-1 py-1 bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 rounded hover:bg-cyan-500 hover:text-black transition-all ${window.state.channelAutoFader[i] ? 'bg-cyan-500 text-black' : ''}" onclick="window.toggleChannelAuto(${i})">A</button>
                         </div>
                     </div>
                 `).join('');
@@ -9011,9 +9013,52 @@ window.navTabs = [
                 window.notify('KNOX Active: Faders Locked', 'shield-halved');
                 return;
             }
+            if (window.state.channelAutoFader[channelIndex]) window.toggleChannelAuto(channelIndex);   // a hand on the fader takes it back from AUTO
             const db = parseFloat(val);
             const dbBadge = document.getElementById(`db-val-${channelIndex}`); if (dbBadge) { dbBadge.innerText = (db <= -59 ? "-INF" : ((db > 0 ? "+" : "") + db.toFixed(1) + "dB")); }
             window.applyChannelGain(channelIndex, db);
+        };
+
+        // AUTO FADER: while on, this channel's fader rides on its own each frame (see startMeterLoop) to keep the strip's input near TARGET_DB,
+        // reading the level at the strip's input the same way rtEngine.chLevel() does (window.rtEngine.ch[i].pk), so it responds to the real
+        // signal regardless of which backend it came from (ASIO, WASAPI, a direct device, Web Audio, or a WS-streamed source). Dragging the
+        // fader by hand (setChannelGain above) turns it off again, so it never fights a person using the fader.
+        window.toggleChannelAuto = function(channelIndex) {
+            window.state.channelAutoFader[channelIndex] = !window.state.channelAutoFader[channelIndex];
+            const on = window.state.channelAutoFader[channelIndex];
+            if (!on) autoFaderDb[channelIndex] = null;   // start fresh (from wherever the fader sits) next time it is switched back on
+            const btn = document.getElementById(`btn-autofader-${channelIndex}`);
+            if (btn) {
+                if (on) btn.className = "text-[6.5px] font-black flex-1 py-1 bg-cyan-500 text-black rounded transition-all shadow-[0_0_8px_#00f2ff]";
+                else btn.className = "text-[6.5px] font-black flex-1 py-1 bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 rounded hover:bg-cyan-500 hover:text-black transition-all";
+            }
+            window.notify(`Channel ${channelIndex + 1} Auto Fader ${on ? 'ON' : 'OFF'}`, on ? 'wand-magic-sparkles' : 'hand');
+        };
+
+        // One frame of AUTO FADER riding, called from startMeterLoop for every channel with it on. Reads the real pre-fader input peak
+        // (window.rtEngine.ch[i].pk, the same tap chLevel() reads) with the -90 dBFS floor every meter in the app now uses, and glides the
+        // fader toward whatever dB would bring that input to AUTO_TARGET_DB - the same simple feedback whatever the input's real backend is
+        // (ASIO, WASAPI, a direct device, Web Audio, or a WS-streamed source): the fader only ever reacts to the metered level, never to how
+        // it got there. A silent channel (no signal yet) is left exactly where it is.
+        // The glide's own running value is kept here, not re-read from the fader element each frame: the fader has step="0.5", and the DOM
+        // sanitizes every .value assignment to the nearest step, which would round a small per-frame nudge straight back to where it started
+        // and the glide would never move at all. autoFaderDb[i] carries the exact (unrounded) value between frames; the element only shows it.
+        const AUTO_TARGET_DB = -18, AUTO_GLIDE = 0.05;
+        const autoFaderDb = new Array(32).fill(null);
+        window.rideAutoFader = function(channelIndex) {
+            const s = window.rtEngine && window.rtEngine.ch && window.rtEngine.ch[channelIndex];
+            const pk = s ? s.pk : 0;
+            if (!(pk >= 0.00003)) return;
+            const inputDb = 20 * Math.log10(pk);
+            const fader = document.getElementById(`ch-fader-${channelIndex}`);
+            if (!fader) return;
+            const cur = autoFaderDb[channelIndex] == null ? (parseFloat(fader.value) || 0) : autoFaderDb[channelIndex];
+            const want = Math.max(-60, Math.min(10, AUTO_TARGET_DB - inputDb));
+            const next = cur + (want - cur) * AUTO_GLIDE;
+            autoFaderDb[channelIndex] = next;
+            fader.value = next;
+            const dbBadge = document.getElementById(`db-val-${channelIndex}`); if (dbBadge) dbBadge.innerText = (next <= -59 ? "-INF" : ((next > 0 ? "+" : "") + next.toFixed(1) + "dB"));
+            window.applyChannelGain(channelIndex, next);
         };
 
         // The strip's fader/mute/solo gain node (falls back to the input node on older graphs).
@@ -9073,6 +9118,7 @@ window.navTabs = [
         function startMeterLoop() {
             function updateMeters() {
                 for (let i = 0; i < CHANNELS; i++) {
+                    if (window.state.channelAutoFader[i]) window.rideAutoFader(i);
                     const raw = window.state.channelLevels[i] || 0;
                     window.state.channelLevels[i] = Math.max(0, raw * 0.92);
                     const level = Math.max(raw, window.rtEngine ? window.rtEngine.chLevel(i) : 0);   // real level of the audio in the strip
@@ -17406,7 +17452,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
         const note = (m, i) => { if (window.notify) window.notify(m, i || 'sliders'); };
         const dbf = v => (isFinite(v) ? v.toFixed(1) : '-INF');
         const lin = db => Math.pow(10, db / 20);
-        const dbOf = v => (v > 1e-9 ? 20 * Math.log10(v) : -Infinity);
+        const dbOf = v => (v < 0.00003 ? -Infinity : 20 * Math.log10(v));   // -90 dBFS floor: the same one every other meter in the app uses (bridge/levels.js, rt-engine, BT input)
 
         // ── settings ──
         const DEF_SPK = () => ({ hpOn: false, hp: 80, lpOn: false, lp: 16000, eq: [{ hz: 100, db: 0, q: 1 }, { hz: 1000, db: 0, q: 1 }, { hz: 8000, db: 0, q: 1 }], limOn: false, thr: -3, rel: 120,
@@ -18734,7 +18780,7 @@ registerProcessor('am-lufs',P)`;
     'use strict';
     const $ = id => document.getElementById(id);
     const visible = id => { const t = $('tab-' + id); return !!t && !t.classList.contains('tab-hidden'); };
-    const dbOf = v => (v < 0.00001 ? -Infinity : 20 * Math.log10(v));
+    const dbOf = v => (v < 0.00003 ? -Infinity : 20 * Math.log10(v));   // -90 dBFS floor: the same one every other meter in the app uses (bridge/levels.js, rt-engine, BT input)
     const set = (id, t) => { const e = $(id); if (e && e.textContent !== t) e.textContent = t; };
     function boot() {
         const D = window.studioDynamicsEngine, G = window.precisionNoiseGateEngine;

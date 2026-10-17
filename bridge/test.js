@@ -3725,6 +3725,49 @@ test('bus & matrix outputs: out sends to a real interface, speaker processor, am
   assert.strictEqual(safe.limDb, 0); assert.ok(safe.headroom > 4.7 && safe.warn === '');                                  // a small amp cannot hurt the speaker: no limiter needed
 });
 
+test('auto fader: rides a channel toward -18 dBFS from its real pre-fader input level, holds its own state outside the step-quantized fader element, hands control back on a manual drag; every meter now agrees on one -90 dBFS silence floor', () => {
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  for (const s of ['channelAutoFader: Array.from({length: 32}, () => false)', 'id="btn-autofader-${i}"', 'onclick="window.toggleChannelAuto(${i})"', 'window.toggleChannelAuto = function', 'window.rideAutoFader = function', 'if (window.state.channelAutoFader[channelIndex]) window.toggleChannelAuto(channelIndex);'])
+    assert.ok(html.includes(s), s);
+
+  // the glide itself, run for real (the same technique the bus & matrix outputs test above uses for ampCalc): extract its source, mock just
+  // enough of document/window to drive it, and prove it actually converges. This is the exact bug that shipped once already: the glide read
+  // its own running value back from the fader element between frames, but the element has step="0.5" and the DOM rounds every .value
+  // assignment to the nearest step - a small per-frame nudge got rounded straight back to where it started, every frame, forever.
+  const start = html.indexOf('const AUTO_TARGET_DB'), end = html.indexOf('window.stripFaderNode = function');
+  assert.ok(start > 0 && end > start);
+  const src = html.slice(start, end);
+  assert.ok(src.includes('autoFaderDb'), 'the glide must keep its own unrounded running value, not only the step-quantized DOM element\'s');
+  // a fader-shaped mock: min="-60" step="0.5", with the browser's own value-sanitization (every .value assignment rounds to the nearest step) -
+  // without this rounding the mock cannot reproduce the bug at all (a plain {value} object never clips a tiny per-frame nudge back to zero)
+  const mkFaderEl = seed => { let v = seed; const el = { innerText: '' }; Object.defineProperty(el, 'value', { get: () => String(v), set: x => { v = Math.round((Number(x) + 60) / 0.5) * 0.5 - 60; } }); return el; };
+  const mkDoc = seed => { const els = {}; return { getElementById: id => els[id] || (els[id] = mkFaderEl(seed)) }; };
+  const run = (pk, frames) => {
+    const applyCalls = [];
+    const window_ = { rtEngine: { ch: [{ pk }] }, applyChannelGain: (i, db) => applyCalls.push(db) };
+    const document_ = mkDoc(0);
+    const rideAutoFader = new Function('window', 'document', src + '\nreturn window.rideAutoFader;')(window_, document_);
+    for (let i = 0; i < frames; i++) rideAutoFader(0);
+    return { fader: parseFloat(document_.getElementById('ch-fader-0').value), applyCalls };
+  };
+  const r = run(0.2, 400);                                             // -14 dBFS in, target -18 dBFS -> settles at -4 dB (-18 - (-14) = -4)
+  assert.ok(Math.abs(r.fader - -4) < 0.05, 'expected the fader to settle near -4 dB, got ' + r.fader);
+  assert.ok(Math.abs(r.applyCalls[r.applyCalls.length - 1] - -4) < 0.05);
+  assert.ok(r.applyCalls.length === 400, 'a live signal must drive the gain every frame');
+  // a silent channel (no signal yet) is left exactly where it is: no gain change at all
+  const window2 = { rtEngine: { ch: [{ pk: 0 }] }, applyChannelGain: () => assert.fail('must not touch the gain of a silent channel') };
+  const document2 = mkDoc(3);
+  const rideAutoFader2 = new Function('window', 'document', src + '\nreturn window.rideAutoFader;')(window2, document2);
+  rideAutoFader2(0);
+  assert.strictEqual(document2.getElementById('ch-fader-0').value, '3');
+
+  // every meter's own silence-floor threshold now agrees (the fix: 4 independent copies of dbOf() used to disagree - one at ~-180 dBFS,
+  // one at ~-100 dBFS, two already at -90 dBFS - so the same near-silent input could read "-INF" on one page and a real number on another)
+  const floors = [...html.matchAll(/const dbOf = v => \(v < ([0-9.e-]+) \?/g)].map(m => Number(m[1]));
+  assert.strictEqual(floors.length, 4, 'expected 4 independent dbOf() copies (speaker processor, rt-engine, dynamics/gate, BT input)');
+  assert.ok(floors.every(f => Math.abs(f - 0.00003) < 1e-12), 'every dbOf() must share the same -90 dBFS floor as bridge/levels.js: ' + JSON.stringify(floors));
+});
+
 test('Android APK safety: permission allowlist, listener shipped off, audit tool catches additions, fingerprint published, APP SAFETY card wired', () => {
   const audit = require('../scripts/apk-audit'), root = pathx.join(__dirname, '..'), rd = f => fsx.readFileSync(pathx.join(root, f), 'utf8');
   const man = rd('android/AndroidManifest.xml'), ok = audit.auditManifest(man);
