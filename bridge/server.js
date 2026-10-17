@@ -5,7 +5,7 @@
 //   GET /api/drivers  -> native driver/device detection for this OS
 //   GET /api/volume   -> system output / input volume + mute
 //   GET /api/license, GET /api/license/request (the key request file), POST /api/license/activate|deactivate -> consumer license (plan, machine code)
-//   GET /api/update, POST /api/update/download -> OTA updates (signed manifest, checksum-verified download)
+//   GET /api/update, POST /api/update/download, POST /api/update/install -> OTA updates (signed manifest, checksum-verified download, Windows-only silent install)
 //   GET /api/universal -> universal ASIO driver: all input / output sources, ranked, with the automatic pick
 //   GET /api/plugins -> VST3 / VST2 plugins (.vst3 / .dll / .vst) found and validated
 //   POST /api/handoff {scenes}, GET /api/handoff -> one scene archive (.amix) from "audio-mixer open" waiting for the page (taken once)
@@ -110,6 +110,10 @@ async function handle(req, res) {
   if (req.method === 'POST' && url.pathname === '/api/update/download') return handleAction(req, res, cors, 'update', async () => {
     if (!license.hasFeature(license.status(), 'ota')) return [402, { ok: false, needs: 'ota', error: 'Downloading updates needs the PRO or STUDIO plan. You can still check for updates.' }];
     return [200, await updater.download({ current: VERSION })];
+  }, false);
+  if (req.method === 'POST' && url.pathname === '/api/update/install') return handleAction(req, res, cors, 'update', async () => {
+    if (!license.hasFeature(license.status(), 'ota')) return [402, { ok: false, needs: 'ota', error: 'Installing updates needs the PRO or STUDIO plan. You can still check for updates.' }];
+    return [200, await updater.install({ current: VERSION })];
   }, false);
   if (req.method === 'POST' && url.pathname === '/api/handoff') return handleAction(req, res, cors, 'handoff', async body => {   // "audio-mixer open file.amix": one scene archive waits here for the page
     const d = body && body.scenes;
