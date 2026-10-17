@@ -176,5 +176,8 @@ function main(argv) {
   return 0;
 }
 
-if (require.main === module) process.exit(main(process.argv.slice(2)));
+if (require.main === module) {
+  const code = main(process.argv.slice(2));
+  if (code !== 0) process.exit(code);   // 0 means the server is listening (asynchronously): exiting now would kill it before it ever serves a request
+}
 module.exports = { KINDS, page, pageFor, issueKey, createServer, main };
