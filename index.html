@@ -892,7 +892,7 @@ CRITICAL REVISIONS & ARCHITECTURAL UPGRADES:
         window.currentRole = localStorage.getItem('halx_role') || 'User';   // consumer edition by default; Admin needs the PIN (see LICENSE page)
         const DEFAULT_ADMIN_PIN = "1XF300#";
         // Vendor public key for license keys and update manifests (written by scripts/license.js; the private key never ships)
-        window.LICENSE_PUBLIC_JWK = /*LICENSE_PUBLIC_JWK*/{"kty":"EC","crv":"P-256","x":"pKAM0LhW8NOz1NZacnAlaVmfs0zH_RzIKAwp0BUtLHk","y":"j5Ww_94MXhBoPCjUXTrG7qKFoQBIA5TqIve4zDMB90A"}/*END_LICENSE_PUBLIC_JWK*/;
+        window.LICENSE_PUBLIC_JWK = /*LICENSE_PUBLIC_JWK*/{"kty":"EC","crv":"P-256","x":"9PdxHXFN8xbPgL88q2oZ8tPfIguD1067UJDMyBZN2WY","y":"DEsg14gYSgOW9EaHuf5FSz2GQ47yxhmZ2NP77ey08lA"}/*END_LICENSE_PUBLIC_JWK*/;
         // Admin public key (written by scripts/license-admin.js): a second, delegatable signing authority that can also issue real PRO / STUDIO keys with an
         // expiration date, without the vendor key itself ever leaving the vendor's safe. null until an admin key pair has been made and embedded.
         window.LICENSE_ADMIN_JWK = /*LICENSE_ADMIN_JWK*/null/*END_LICENSE_ADMIN_JWK*/;
