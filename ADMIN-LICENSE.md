@@ -43,6 +43,19 @@ however you already deliver support — email, chat, your own OTA/download page 
 vendor-issued key. `node scripts/license-admin.js show <key>` decodes and verifies any key (vendor, admin or, in sandbox builds, sandbox) without
 activating it.
 
+### Or skip the flags: `scripts/license-generator.js`
+
+```bash
+node scripts/license-generator.js --kind admin
+```
+
+Prints a local address (`http://127.0.0.1:<port>/`) to open in a browser on this machine. A one-page form — plan, name, e-mail, machine code, expiry,
+seats — issues the key with a click and a COPY button, instead of typing the `issue` command above by hand. It calls the exact same `issue()` this file
+already documents, reading the key pair from the same `--dir` / `AUDIO_MIXER_ADMIN_DIR` default, so everything above about where the private key lives
+still applies unchanged: the key never leaves this process, and the generator never writes it anywhere but the signed key text itself. The server binds
+to `127.0.0.1` only (never configurable to another host) and checks Origin / Host on every request, so nothing but a browser on this same machine can
+reach it. `--kind vendor` / `--kind sandbox` drive the other two key pairs the same way.
+
 ## Where this plugs into the existing system
 
 - **Local server** (`bridge/server.js`): `POST /api/license/activate` already calls `bridge/license.js`'s `verifyKey`, which now also trusts the admin
