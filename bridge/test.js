@@ -3692,7 +3692,21 @@ test('license key generator: a local, form-based way to issue a key with any of 
   await new Promise(r => server.close(r)); fsx.rmSync(adir, { recursive: true, force: true });
   // an unknown --kind is refused up front rather than silently defaulting
   assert.throws(() => gen.createServer({ kind: 'nope' }), /kind must be one of/);
-  fsx.rmSync(vdir, { recursive: true, force: true });
+  // the CLI entry point itself (not just createServer() called as a library) must stay up and actually serve a request: main() returns 0 once
+  // listen() is scheduled, and process.exit(0) right after that would kill the process before the async listen() callback ever runs - exactly
+  // the kind of bug a library-only test cannot catch.
+  const { spawn } = require('node:child_process');
+  const cli = spawn(process.execPath, [pathx.join(__dirname, '..', 'scripts', 'license-generator.js'), '--dir', vdir, '--port', '0'], { stdio: ['ignore', 'pipe', 'pipe'] });
+  try {
+    const url = await new Promise((res, rej) => {
+      let out = ''; cli.stdout.on('data', d => { out += d; const m = /http:\/\/127\.0\.0\.1:(\d+)\//.exec(out); if (m) res('http://127.0.0.1:' + m[1] + '/'); });
+      cli.on('exit', code => rej(new Error('the process exited (code ' + code + ') before it printed its address')));
+      setTimeout(() => rej(new Error('no address printed within 4s')), 4000);
+    });
+    await new Promise(r => setTimeout(r, 50));                          // give the exit-right-after-return bug a moment to strike, if it is back
+    assert.strictEqual(cli.exitCode, null, 'the server process is still running');
+    const r2 = await fetch(url); assert.strictEqual(r2.status, 200);
+  } finally { cli.kill(); fsx.rmSync(vdir, { recursive: true, force: true }); }
 });
 
 test('bus & matrix outputs: out sends to a real interface, speaker processor, amp calculator, mic protector, aux / FX returns, send regulator are wired', () => {
