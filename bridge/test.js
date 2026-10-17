@@ -1354,7 +1354,7 @@ test('repository layout: one folder per system with its sources and release file
   const lay = require('../scripts/layout'), mk = require('../scripts/make-update'), root = pathx.join(__dirname, '..');
   const top = fsx.readdirSync(root, { withFileTypes: true }).filter(e => !e.name.startsWith('.') && e.name !== 'node_modules' && e.name !== 'dist');
   const dirs = top.filter(e => e.isDirectory()).map(e => e.name).sort(), files = top.filter(e => e.isFile()).map(e => e.name).sort();
-  assert.deepStrictEqual(dirs, ['android', 'bridge', 'client', 'deploy', 'drivers', 'engine', 'installer', 'ios', 'linux', 'macos', 'npm-installer', 'ota-server', 'releases', 'scripts', 'windows'], 'the top level is minimal: systems + shared code');
+  assert.deepStrictEqual(dirs, ['android', 'bridge', 'client', 'deploy', 'drivers', 'engine', 'ios', 'linux', 'macos', 'npm-installer', 'ota-server', 'releases', 'scripts', 'windows'], 'the top level is minimal: systems + shared code');
   assert.deepStrictEqual(files, ['ADMIN-LICENSE.md', 'Additional Terms & Conditions', 'LICENSE', 'LICENSE.txt', 'PROJECT-README.md', 'README.md', 'SECURITY.md', 'Steinberg ASIO Licensing Agreement.pdf', 'Steinberg ASIO SDK 2.3.pdf', 'Steinberg ASIO Usage Guidelines.pdf', 'boot.html', 'changes.txt', 'index.html', 'package.json'], 'only the web app, the project papers and the Steinberg ASIO SDK papers at the root');
   assert.deepStrictEqual(fsx.readdirSync(pathx.join(root, 'releases')), ['update.json'], 'releases/ holds only the manifest that installed apps fetch');
   for (const os of lay.OSES) assert.ok(fsx.statSync(pathx.join(root, os, 'releases')).isDirectory(), os + '/releases');
