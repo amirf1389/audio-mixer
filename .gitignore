@@ -104,3 +104,8 @@ bridge/license-sandbox-public.json
 
 # Local secure OTA demo environment (scripts/ota-local.js): generated vendor keys, TLS cert and demo data. Never commit these.
 .local-ota/
+
+# Electron platform package (platforms/electron): its own node_modules, generated icons, and packaged output.
+platforms/electron/node_modules/
+platforms/electron/build/
+dist/electron/
