@@ -1001,6 +1001,7 @@ window.navTabs = [
             msProcessing: { midDb: 0, widthPct: 100 },   // master-bus mid/side: see window.setMsMidDb / window.setMsWidth
             saturation: { driveDb: 6, mix: 0 },   // master-bus saturation/warmth: see window.setSaturationDrive / window.setSaturationMix
             transientShaper: { attack: 0, sustain: 0, gainDb: 0 },   // master-bus transient shaper: see window.rideTransientShaper
+            bassMono: { amount: 0, freq: 120 },   // master-bus bass mono-maker: see window.setBassMonoAmount / window.setBassMonoFreq
             lowPowerMode: false,   // throttles the always-running meter loop (see window.setLowPowerMode / startMeterLoop) to cut CPU and battery use
             autoVolume: { enabled: false, mode: 'peak', ceilingDb: -1, gainDb: 0 },   // master-bus gain rider: see window.rideAutoVolume
             dynamicEq: { enabled: false, freq: 3000, q: 1.4, threshold: -12, ratio: 2, gainDb: 0 },   // one level-dependent EQ band: see window.rideDynamicEq
@@ -1246,6 +1247,46 @@ window.navTabs = [
             lastFilter.connect(transientGain);
             window.state.nodes.transientGain = transientGain;
             lastFilter = transientGain;
+
+            // BASS MONO: collapses the low end (below a crossover frequency) toward mono while the highs stay
+            // full stereo - the classic mastering move for keeping sub/bass phase-coherent on mono PA systems,
+            // club subs and vinyl cutters. Operates on the Mid/Side difference signal, not on L/R directly:
+            // Mid = (L+R)/2 is never touched; Side = (L-R)/2 has `amount` of its own low-passed self (bmSideLow)
+            // subtracted back out of it (bmSideOut = side - amount*lowpass(side)), which is exact BY SUBTRACTION
+            // at amount 0% (nothing removed) regardless of the filter's response, so that's a true identity. At
+            // amount 100% the side signal's content below the crossover is strongly attenuated (collapsing that
+            // band toward mono) while content safely above it is left alone; L'/R' are then reconstructed from
+            // Mid +/- the modified Side exactly as the mid/side processing stage above does.
+            const bmT = window.state.ctx.currentTime;
+            const bmFreq = window.state.bassMono.freq;
+            const bmSplit = window.state.ctx.createChannelSplitter(2);
+            try { bmSplit.channelInterpretation = 'speakers'; } catch (e) { /* keep default */ }
+            lastFilter.connect(bmSplit);
+            const bmMidHalfL = window.state.ctx.createGain(); bmMidHalfL.gain.setValueAtTime(0.5, bmT);
+            const bmMidHalfR = window.state.ctx.createGain(); bmMidHalfR.gain.setValueAtTime(0.5, bmT);
+            bmSplit.connect(bmMidHalfL, 0); bmSplit.connect(bmMidHalfR, 1);
+            const bmMid = window.state.ctx.createGain();
+            bmMidHalfL.connect(bmMid); bmMidHalfR.connect(bmMid);
+            const bmSideHalfL = window.state.ctx.createGain(); bmSideHalfL.gain.setValueAtTime(0.5, bmT);
+            const bmSideHalfR = window.state.ctx.createGain(); bmSideHalfR.gain.setValueAtTime(-0.5, bmT);
+            bmSplit.connect(bmSideHalfL, 0); bmSplit.connect(bmSideHalfR, 1);
+            const bmSide = window.state.ctx.createGain();
+            bmSideHalfL.connect(bmSide); bmSideHalfR.connect(bmSide);
+            const bmSideLow = window.state.ctx.createBiquadFilter();
+            bmSideLow.type = 'lowpass'; bmSideLow.frequency.setValueAtTime(bmFreq, bmT); bmSideLow.Q.setValueAtTime(0.5, bmT);
+            bmSide.connect(bmSideLow);
+            const bmSideLowNeg = window.state.ctx.createGain(); bmSideLowNeg.gain.setValueAtTime(0.0, bmT);
+            bmSideLow.connect(bmSideLowNeg);
+            const bmSideOut = window.state.ctx.createGain();
+            bmSide.connect(bmSideOut); bmSideLowNeg.connect(bmSideOut);
+            const bmSideOutInv = window.state.ctx.createGain(); bmSideOutInv.gain.setValueAtTime(-1.0, bmT);
+            bmSideOut.connect(bmSideOutInv);
+            const bmMerge = window.state.ctx.createChannelMerger(2);
+            bmMid.connect(bmMerge, 0, 0); bmSideOut.connect(bmMerge, 0, 0);
+            bmMid.connect(bmMerge, 0, 1); bmSideOutInv.connect(bmMerge, 0, 1);
+            window.state.nodes.bmSideLowNeg = bmSideLowNeg;
+            window.state.nodes.bmSideLow = bmSideLow;
+            lastFilter = bmMerge;
 
             // 3D Binaural Spatializer Panner
             let spatialPanner = null;
@@ -7528,6 +7569,30 @@ window.navTabs = [
                       <span id="ts-sustain-val" class="text-[7.5px] font-mono text-rose-400 font-bold w-14 text-right">0%</span>
                     </div>
                   </div>
+                  <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-white/5">
+                    <div class="flex items-center gap-2.5">
+                      <div class="w-8 h-8 rounded-lg bg-teal-500/20 border border-teal-500/40 flex items-center justify-center text-teal-400 text-sm">
+                        <i class="fa-solid fa-circle-dot"></i>
+                      </div>
+                      <div>
+                        <h3 class="text-[10px] font-black text-white font-wing tracking-wider uppercase">BASS MONO</h3>
+                        <p class="text-[7.5px] font-mono text-slate-400">Collapses the low end below the crossover to mono (highs stay full stereo) - keeps sub/bass phase-coherent on mono PA systems, club subs and vinyl. 0% is untouched stereo.</p>
+                      </div>
+                    </div>
+                    <button onclick="window.resetBassMono()" class="px-2 py-1 rounded font-mono font-bold text-[7.5px] uppercase transition border bg-white/5 text-slate-300 border-white/10 hover:bg-teal-500 hover:text-black">RESET</button>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-4 pt-1">
+                    <div class="flex items-center gap-2 flex-1 min-w-[140px]">
+                      <span class="text-[7px] font-mono text-slate-400 whitespace-nowrap">AMOUNT</span>
+                      <input type="range" id="bm-amount-slider" min="0" max="100" step="1" value="0" oninput="window.setBassMonoAmount(this.value)" class="flex-1 accent-teal-400 cursor-pointer">
+                      <span id="bm-amount-val" class="text-[7.5px] font-mono text-teal-400 font-bold w-14 text-right">0%</span>
+                    </div>
+                    <div class="flex items-center gap-2 flex-1 min-w-[140px]">
+                      <span class="text-[7px] font-mono text-slate-400 whitespace-nowrap">FREQ</span>
+                      <input type="range" id="bm-freq-slider" min="40" max="300" step="1" value="120" oninput="window.setBassMonoFreq(this.value)" class="flex-1 accent-teal-400 cursor-pointer">
+                      <span id="bm-freq-val" class="text-[7.5px] font-mono text-teal-400 font-bold w-14 text-right">120 Hz</span>
+                    </div>
+                  </div>
                 </div>
 
                 <!-- FRAMEWORK ENGINE SYSTEM: CORE AUDIO ARCHITECTURE & DSP SIGNAL FLOW GRAPH -->
@@ -9545,6 +9610,31 @@ window.navTabs = [
             if (!silent) window.notify('Transient shaper: sustain ' + (n > 0 ? '+' : '') + Math.round(n) + '%', 'wave-square');
         };
         window.resetTransientShaper = function() { window.setTransientAttack(0, true); window.setTransientSustain(0, true); window.notify('Transient Shaper Reset', 'rotate-left'); };
+
+        // MASTER-BUS BASS MONO: AMOUNT sets how much of the side signal's own low-passed self gets subtracted
+        // back out of it (0% = none removed, an exact identity; 100% = the low band is strongly attenuated);
+        // FREQ moves the crossover point. See the bmSideLow filter and bmSideLowNeg gain built in initAudioEngine.
+        window.setBassMonoAmount = function(pct, silent) {
+            const n = Math.max(0, Math.min(100, parseFloat(pct)));
+            if (!isFinite(n)) return;
+            window.state.bassMono.amount = n;
+            try { localStorage.setItem('halx_bm_amount', String(n)); } catch (_) { /* private browsing */ }
+            if (window.state.nodes.bmSideLowNeg && window.state.ctx) window.state.nodes.bmSideLowNeg.gain.setTargetAtTime(-n / 100, window.state.ctx.currentTime, 0.02);
+            const readout = document.getElementById('bm-amount-val'); if (readout) readout.textContent = Math.round(n) + '%';
+            const slider = document.getElementById('bm-amount-slider'); if (slider && parseFloat(slider.value) !== n) slider.value = n;
+            if (!silent) window.notify('Bass mono: ' + Math.round(n) + '%', n === 0 ? 'ban' : 'circle-dot');
+        };
+        window.setBassMonoFreq = function(hz, silent) {
+            const n = Math.max(40, Math.min(300, parseFloat(hz)));
+            if (!isFinite(n)) return;
+            window.state.bassMono.freq = n;
+            try { localStorage.setItem('halx_bm_freq', String(n)); } catch (_) { /* private browsing */ }
+            if (window.state.nodes.bmSideLow && window.state.ctx) window.state.nodes.bmSideLow.frequency.setTargetAtTime(n, window.state.ctx.currentTime, 0.02);
+            const readout = document.getElementById('bm-freq-val'); if (readout) readout.textContent = Math.round(n) + ' Hz';
+            const slider = document.getElementById('bm-freq-slider'); if (slider && parseFloat(slider.value) !== n) slider.value = n;
+            if (!silent) window.notify('Bass mono: crossover ' + Math.round(n) + ' Hz', 'circle-dot');
+        };
+        window.resetBassMono = function() { window.setBassMonoAmount(0, true); window.setBassMonoFreq(120, true); window.notify('Bass Mono Reset', 'rotate-left'); };
 
         // The strip's fader/mute/solo gain node (falls back to the input node on older graphs).
         window.stripFaderNode = function(ch) {
@@ -17999,6 +18089,16 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 } catch (_) { /* private browsing */ }
                 window.setTransientAttack(isFinite(savedAttack) ? savedAttack : 0, true);
                 window.setTransientSustain(isFinite(savedSustain) ? savedSustain : 0, true);
+            }
+            if (!wire.bassMonoRestored) {
+                wire.bassMonoRestored = true;
+                let savedAmount = 0, savedFreq = 120;
+                try {
+                    const a = localStorage.getItem('halx_bm_amount'); if (a != null) savedAmount = parseFloat(a);
+                    const f = localStorage.getItem('halx_bm_freq'); if (f != null) savedFreq = parseFloat(f);
+                } catch (_) { /* private browsing */ }
+                window.setBassMonoAmount(isFinite(savedAmount) ? savedAmount : 0, true);
+                window.setBassMonoFreq(isFinite(savedFreq) ? savedFreq : 120, true);
             }
         }
 
