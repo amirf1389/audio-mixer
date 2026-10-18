@@ -9050,6 +9050,7 @@ window.navTabs = [
                                     <div id="lane-peak-hold-${i}" class="ch-peak-hold" data-peak="0" style="bottom: 0%;"></div>
                                 </div>
                                 <span id="ch-vu-clip-${i}" class="ch-clip-led">CLIP</span>
+                                <button title="Reset this channel's peak hold and clip indicator" class="text-[5.5px] font-mono text-slate-500 hover:text-cyan-400 transition-colors mt-0.5" onclick="window.resetChannelPeak(${i})">RST</button>
                             </div>
                         </div>
 
@@ -9266,6 +9267,17 @@ window.navTabs = [
             try { node.gain.setTargetAtTime(linear, window.state.ctx.currentTime, 0.02); } catch(e){}   // 20 ms glide: no zipper noise while dragging
         };
         window.applyAllChannelGains = function() { for (let i = 0; i < CHANNELS; i++) window.applyChannelGain(i); };
+
+        // Clears one channel's held peak marker and latched clip LED (same reset the all-channel system repair
+        // routine performs, scoped to a single strip) without waiting for the peak to decay on its own.
+        window.resetChannelPeak = function(channelIndex) {
+            const peakEl = document.getElementById(`lane-peak-hold-${channelIndex}`);
+            if (peakEl) { peakEl.dataset.peak = 0; peakEl.style.bottom = '0%'; }
+            const cs = window.rtEngine && window.rtEngine.ch && window.rtEngine.ch[channelIndex];
+            if (cs) window.rtEngine.clip.clear(cs);
+            else { const clipEl = document.getElementById(`ch-vu-clip-${channelIndex}`); if (clipEl) clipEl.classList.remove('active'); }
+            window.notify(`Channel ${channelIndex + 1} Peak Hold Reset`, 'rotate-left');
+        };
 
         window.toggleChannelMute = function(channelIndex) {
             window.state.channelMutes[channelIndex] = !window.state.channelMutes[channelIndex];
