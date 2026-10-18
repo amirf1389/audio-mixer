@@ -19,5 +19,12 @@
   "optionalDependencies": {
     "audify": "^1.10.1",
     "naudiodon2": "^2.5.0"
+  },
+  "overrides": {
+    "audify": {
+      "cmake-js": {
+        "tar": "^7.5.22"
+      }
+    }
   }
 }
