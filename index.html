@@ -996,6 +996,7 @@ window.navTabs = [
             channelSolos: Array.from({length: 32}, () => false),
             channelLevels: Array.from({length: 32}, () => 0),
             channelAutoFader: Array.from({length: 32}, () => false),
+            noiseGate: Array.from({length: 32}, () => ({ enabled: false, mode: 'gate', thresholdDb: -45, rangeDb: -60, ratio: 4, gainDb: 0 })),   // per-channel dual-mode gate: see window.rideNoiseGate
             lowPowerMode: false,   // throttles the always-running meter loop (see window.setLowPowerMode / startMeterLoop) to cut CPU and battery use
             autoVolume: { enabled: false, mode: 'peak', ceilingDb: -1, gainDb: 0 },   // master-bus gain rider: see window.rideAutoVolume
             dynamicEq: { enabled: false, freq: 3000, q: 1.4, threshold: -12, ratio: 2, gainDb: 0 },   // one level-dependent EQ band: see window.rideDynamicEq
@@ -1286,22 +1287,26 @@ window.navTabs = [
             window.state.nodes.channelFaders = [];
             window.state.nodes.channelHpf = [];
             window.state.nodes.channelTrim = [];
+            window.state.nodes.channelGateGain = [];
             for (let i = 0; i < CHANNELS; i++) {
                 // Input node: every source connects here (kept under the historic name channelPostGains).
                 const chGain = window.state.ctx.createGain();
                 chGain.gain.setValueAtTime(1.0, window.state.ctx.currentTime);
-                // Input stage: high-pass (10 Hz = off) -> trim -> polarity. Pre-fader sends tap after this stage.
+                // Input stage: high-pass (10 Hz = off) -> trim -> noise gate -> polarity. Pre-fader sends tap after this stage.
                 const hpf = window.state.ctx.createBiquadFilter();
                 hpf.type = 'highpass'; hpf.frequency.setValueAtTime(10, window.state.ctx.currentTime); hpf.Q.setValueAtTime(0.707, window.state.ctx.currentTime);
                 const trim = window.state.ctx.createGain();
                 trim.gain.setValueAtTime(1.0, window.state.ctx.currentTime);
+                // Noise gate stage: ridden per frame by window.rideNoiseGate (see startMeterLoop); 0 dB (linear 1.0) when off.
+                const gateGain = window.state.ctx.createGain();
+                gateGain.gain.setValueAtTime(1.0, window.state.ctx.currentTime);
                 // Polarity (Ø) stage: +1 normal, -1 inverted 180°
                 const polarity = window.state.ctx.createGain();
                 polarity.gain.setValueAtTime(window.state.phaseInvert && window.state.phaseInvert[i] ? -1 : 1, window.state.ctx.currentTime);
                 // Fader / mute / solo stage
                 const fader = window.state.ctx.createGain();
                 fader.gain.setValueAtTime(1.0, window.state.ctx.currentTime);
-                chGain.connect(hpf); hpf.connect(trim); trim.connect(polarity); polarity.connect(fader);
+                chGain.connect(hpf); hpf.connect(trim); trim.connect(gateGain); gateGain.connect(polarity); polarity.connect(fader);
 
                 let panner = null;
                 if (window.state.ctx.createStereoPanner) {
@@ -1316,6 +1321,7 @@ window.navTabs = [
                 window.state.nodes.channelFaders.push(fader);
                 window.state.nodes.channelHpf.push(hpf);
                 window.state.nodes.channelTrim.push(trim);
+                window.state.nodes.channelGateGain.push(gateGain);
                 window.state.nodes.channelPostGains.push(chGain);
                 window.state.nodes.channelPanners.push(panner);
             }
@@ -9047,12 +9053,14 @@ window.navTabs = [
                             </div>
                         </div>
 
-                        <!-- Mute, Solo & Auto Fader Buttons -->
+                        <!-- Mute, Solo, Auto Fader & Noise Gate Buttons -->
                         <div class="flex gap-0.5 w-full mt-0.5">
                             <button id="btn-mute-${i}" class="text-[6.5px] font-black flex-1 py-1 bg-danger/10 border border-danger/30 text-danger rounded hover:bg-danger hover:text-black transition-all ${window.state.channelMutes[i] ? 'bg-danger text-black' : ''}" onclick="window.toggleChannelMute(${i})">M</button>
                             <button id="btn-solo-${i}" class="text-[6.5px] font-black flex-1 py-1 bg-warn/10 border border-warn/30 text-warn rounded hover:bg-warn hover:text-black transition-all ${window.state.channelSolos[i] ? 'bg-warn text-black' : ''}" onclick="window.toggleChannelSolo(${i})">S</button>
                             <button id="btn-autofader-${i}" title="AUTO FADER: rides this fader on its own to keep the input near a healthy level (-18 dBFS). Dragging the fader by hand turns it off." class="text-[6.5px] font-black flex-1 py-1 bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 rounded hover:bg-cyan-500 hover:text-black transition-all ${window.state.channelAutoFader[i] ? 'bg-cyan-500 text-black' : ''}" onclick="window.toggleChannelAuto(${i})">A</button>
+                            <button id="btn-gate-${i}" title="NOISE GATE: off. Click to arm a hard gate, click again for the gentler expander mode, once more to turn off." class="text-[6.5px] font-black flex-1 py-1 rounded transition-all ${window.state.noiseGate[i].enabled ? (window.state.noiseGate[i].mode === 'expander' ? 'bg-purple-500 text-black shadow-[0_0_8px_#8b5cf6]' : 'bg-emerald-500 text-black shadow-[0_0_8px_#10b981]') : 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500 hover:text-black'}" onclick="window.toggleChannelGate(${i})">${window.state.noiseGate[i].enabled ? (window.state.noiseGate[i].mode === 'expander' ? 'EX' : 'GT') : 'G'}</button>
                         </div>
+                        <div id="gate-gr-${i}" class="text-[5.5px] font-mono text-emerald-400 text-center mt-0.5">0dB</div>
                     </div>
                 `).join('');
                 window.switchMixLayer('1-16');
@@ -9172,6 +9180,50 @@ window.navTabs = [
             return d.gainDb;
         };
 
+        // PER-CHANNEL NOISE GATE: a dual-mode downward processor on each channel strip's own noise gate stage
+        // (window.state.nodes.channelGateGain[i]), independent of the master-bus auto volume / dynamic EQ above.
+        // "gate" mode is a hard gate: once the input falls below threshold it rides toward the full floor
+        // (rangeDb), closing fast and opening a little slower so it doesn't chatter on a decaying tail. "expander"
+        // mode instead applies a downward ratio below threshold (the mirror image of dynamic EQ's over-threshold
+        // compression), for a gentler, proportional clamp-down on room noise and bleed rather than a hard cut.
+        const GATE_GLIDE_CLOSE = 0.5, GATE_GLIDE_OPEN = 0.15;
+        window.rideNoiseGate = function(channelIndex, inputDb) {
+            const g = window.state.noiseGate && window.state.noiseGate[channelIndex];
+            if (!g || !g.enabled) { if (g) g.gainDb = 0; return 0; }
+            if (inputDb == null || !isFinite(inputDb)) return g.gainDb;
+            const under = g.thresholdDb - inputDb;   // positive when the signal is below threshold (gate should close)
+            let desiredDb;
+            if (under <= 0) {
+                desiredDb = 0;
+            } else if (g.mode === 'expander') {
+                desiredDb = Math.max(g.rangeDb, -under * (1 - 1 / g.ratio));
+            } else {
+                desiredDb = g.rangeDb;   // hard gate: straight to the floor once under threshold
+            }
+            const glide = desiredDb < g.gainDb ? GATE_GLIDE_CLOSE : GATE_GLIDE_OPEN;
+            g.gainDb += (desiredDb - g.gainDb) * glide;
+            return g.gainDb;
+        };
+
+        // Cycles each channel's gate OFF -> GATE -> EXPANDER -> OFF on click, so one small button covers both the
+        // on/off and the dual mode without needing a second control per strip across all 32 channels.
+        window.toggleChannelGate = function(channelIndex, silent) {
+            const g = window.state.noiseGate[channelIndex];
+            if (!g.enabled) { g.enabled = true; g.mode = 'gate'; }
+            else if (g.mode === 'gate') { g.mode = 'expander'; }
+            else { g.enabled = false; g.mode = 'gate'; g.gainDb = 0; }
+            const btn = document.getElementById(`btn-gate-${channelIndex}`);
+            if (btn) {
+                btn.textContent = !g.enabled ? 'G' : (g.mode === 'expander' ? 'EX' : 'GT');
+                btn.title = !g.enabled ? 'NOISE GATE: off. Click to arm a hard gate, click again for the gentler expander mode, once more to turn off.'
+                    : (g.mode === 'expander' ? 'NOISE GATE: expander mode (proportional downward ratio below threshold).' : 'NOISE GATE: hard gate mode (full attenuation below threshold).');
+                btn.className = "text-[6.5px] font-black flex-1 py-1 rounded transition-all " + (!g.enabled
+                    ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500 hover:text-black'
+                    : (g.mode === 'expander' ? 'bg-purple-500 text-black shadow-[0_0_8px_#8b5cf6]' : 'bg-emerald-500 text-black shadow-[0_0_8px_#10b981]'));
+            }
+            if (!silent) window.notify(`Channel ${channelIndex + 1} Noise Gate: ` + (!g.enabled ? 'OFF' : (g.mode === 'expander' ? 'EXPANDER' : 'GATE')), g.enabled ? 'door-closed' : 'door-open');
+        };
+
         window.setAutoVolumeMode = function(mode, silent) {
             window.state.autoVolume.mode = mode === 'loudness' ? 'loudness' : 'peak';
             try { localStorage.setItem('halx_auto_volume_mode', window.state.autoVolume.mode); } catch (_) { /* private browsing */ }
@@ -9270,6 +9322,14 @@ window.navTabs = [
                 if (window.state.lowPowerMode && (++lowPowerFrame % 4 !== 0)) { requestAnimationFrame(updateMeters); return; }   // skip 3 of every 4 frames
                 for (let i = 0; i < CHANNELS; i++) {
                     if (window.state.channelAutoFader[i]) window.rideAutoFader(i);
+                    if (window.state.noiseGate[i] && window.state.noiseGate[i].enabled) {
+                        const gs = window.rtEngine && window.rtEngine.ch && window.rtEngine.ch[i];
+                        const gPk = gs ? gs.pk : 0;
+                        const gDb = window.rideNoiseGate(i, gPk >= 0.00003 ? 20 * Math.log10(gPk) : -90);
+                        const gateNode = window.state.nodes.channelGateGain && window.state.nodes.channelGateGain[i];
+                        if (gateNode && window.state.ctx) gateNode.gain.setTargetAtTime(Math.pow(10, gDb / 20), window.state.ctx.currentTime, 0.02);
+                        const grReadout = document.getElementById(`gate-gr-${i}`); if (grReadout) grReadout.textContent = (gDb <= -0.5 ? gDb.toFixed(0) : '0') + 'dB';
+                    }
                     const raw = window.state.channelLevels[i] || 0;
                     window.state.channelLevels[i] = Math.max(0, raw * 0.92);
                     const level = Math.max(raw, window.rtEngine ? window.rtEngine.chLevel(i) : 0);   // real level of the audio in the strip
