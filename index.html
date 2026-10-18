@@ -999,6 +999,7 @@ window.navTabs = [
             noiseGate: Array.from({length: 32}, () => ({ enabled: false, mode: 'gate', thresholdDb: -45, rangeDb: -60, ratio: 4, gainDb: 0 })),   // per-channel dual-mode gate: see window.rideNoiseGate
             stereoLink: Array.from({length: 16}, () => false),   // one flag per adjacent pair (0,1), (2,3), ... see window.toggleStereoLink
             msProcessing: { midDb: 0, widthPct: 100 },   // master-bus mid/side: see window.setMsMidDb / window.setMsWidth
+            saturation: { driveDb: 6, mix: 0 },   // master-bus saturation/warmth: see window.setSaturationDrive / window.setSaturationMix
             lowPowerMode: false,   // throttles the always-running meter loop (see window.setLowPowerMode / startMeterLoop) to cut CPU and battery use
             autoVolume: { enabled: false, mode: 'peak', ceilingDb: -1, gainDb: 0 },   // master-bus gain rider: see window.rideAutoVolume
             dynamicEq: { enabled: false, freq: 3000, q: 1.4, threshold: -12, ratio: 2, gainDb: 0 },   // one level-dependent EQ band: see window.rideDynamicEq
@@ -1211,6 +1212,29 @@ window.navTabs = [
             lastFilter.connect(dynamicEqFilter);
             lastFilter = dynamicEqFilter;
             window.state.nodes.dynamicEqFilter = dynamicEqFilter;
+
+            // SATURATION / WARMTH: a WaveShaper-based analog-style saturator (tanh soft-clip curve, 4x
+            // oversampled to keep the extra harmonics from aliasing). DRIVE is a pre-gain into the curve - more
+            // drive means more harmonic density, not just more level, since a makeup gain (satMakeup) compensates
+            // for the loudness the drive stage itself adds. MIX crossfades dry (satDry) against the saturated
+            // signal (satWet) into one summing junction (satOut); at mix 0% (the default) satWet is silent and
+            // satDry is unity, so this is an exact identity until window.setSaturationMix actually raises it - the
+            // same always-wired, no-op-by-default pattern as dynamic EQ / mid-side above.
+            const satCurve = new Float32Array(2049);
+            for (let i = 0; i < satCurve.length; i++) { const x = (i / (satCurve.length - 1)) * 2 - 1; satCurve[i] = Math.tanh(x * 1.6) / Math.tanh(1.6); }
+            const satDry = window.state.ctx.createGain(); satDry.gain.setValueAtTime(1.0, window.state.ctx.currentTime);
+            const satDrive = window.state.ctx.createGain(); satDrive.gain.setValueAtTime(1.0, window.state.ctx.currentTime);
+            const satShaper = window.state.ctx.createWaveShaper(); satShaper.curve = satCurve; satShaper.oversample = '4x';
+            const satMakeup = window.state.ctx.createGain(); satMakeup.gain.setValueAtTime(1.0, window.state.ctx.currentTime);
+            const satWet = window.state.ctx.createGain(); satWet.gain.setValueAtTime(0.0, window.state.ctx.currentTime);
+            const satOut = window.state.ctx.createGain();
+            lastFilter.connect(satDry); satDry.connect(satOut);
+            lastFilter.connect(satDrive); satDrive.connect(satShaper); satShaper.connect(satMakeup); satMakeup.connect(satWet); satWet.connect(satOut);
+            window.state.nodes.satDrive = satDrive;
+            window.state.nodes.satMakeup = satMakeup;
+            window.state.nodes.satDry = satDry;
+            window.state.nodes.satWet = satWet;
+            lastFilter = satOut;
 
             // 3D Binaural Spatializer Panner
             let spatialPanner = null;
@@ -7442,6 +7466,30 @@ window.navTabs = [
                       <span id="ms-width-val" class="text-[7.5px] font-mono text-amber-400 font-bold w-14 text-right">100%</span>
                     </div>
                   </div>
+                  <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-white/5">
+                    <div class="flex items-center gap-2.5">
+                      <div class="w-8 h-8 rounded-lg bg-orange-500/20 border border-orange-500/40 flex items-center justify-center text-orange-400 text-sm">
+                        <i class="fa-solid fa-fire"></i>
+                      </div>
+                      <div>
+                        <h3 class="text-[10px] font-black text-white font-wing tracking-wider uppercase">SATURATION / WARMTH</h3>
+                        <p class="text-[7.5px] font-mono text-slate-400">Master-bus analog-style saturator (tanh soft-clip, 4x oversampled). DRIVE pushes harmonic density without a loudness jump (auto makeup); MIX blends it in - 0% is bypassed.</p>
+                      </div>
+                    </div>
+                    <button onclick="window.resetSaturation()" class="px-2 py-1 rounded font-mono font-bold text-[7.5px] uppercase transition border bg-white/5 text-slate-300 border-white/10 hover:bg-orange-500 hover:text-black">RESET</button>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-4 pt-1">
+                    <div class="flex items-center gap-2 flex-1 min-w-[140px]">
+                      <span class="text-[7px] font-mono text-slate-400 whitespace-nowrap">DRIVE</span>
+                      <input type="range" id="sat-drive-slider" min="0" max="24" step="0.5" value="6" oninput="window.setSaturationDrive(this.value)" class="flex-1 accent-orange-400 cursor-pointer">
+                      <span id="sat-drive-val" class="text-[7.5px] font-mono text-orange-400 font-bold w-14 text-right">+6.0 dB</span>
+                    </div>
+                    <div class="flex items-center gap-2 flex-1 min-w-[140px]">
+                      <span class="text-[7px] font-mono text-slate-400 whitespace-nowrap">MIX</span>
+                      <input type="range" id="sat-mix-slider" min="0" max="100" step="1" value="0" oninput="window.setSaturationMix(this.value)" class="flex-1 accent-orange-400 cursor-pointer">
+                      <span id="sat-mix-val" class="text-[7.5px] font-mono text-orange-400 font-bold w-14 text-right">0%</span>
+                    </div>
+                  </div>
                 </div>
 
                 <!-- FRAMEWORK ENGINE SYSTEM: CORE AUDIO ARCHITECTURE & DSP SIGNAL FLOW GRAPH -->
@@ -9377,6 +9425,40 @@ window.navTabs = [
         };
         window.setMsMono = function() { window.setMsWidth(0); };   // quick collapse-to-mono, same math as width 0%
         window.resetMsProcessing = function() { window.setMsMidDb(0); window.setMsWidth(100); window.notify('Mid/Side Processing Reset', 'rotate-left'); };
+
+        // MASTER-BUS SATURATION / WARMTH: driveDb is the pre-gain into the WaveShaper curve (satDrive, satMakeup
+        // compensating so more drive adds harmonics, not just loudness); mix (0-100%) crossfades dry against the
+        // saturated signal (satDry / satWet). See the satDrive/satShaper/satMakeup/satWet/satOut nodes built in
+        // initAudioEngine.
+        window.setSaturationDrive = function(db, silent) {
+            const n = Math.max(0, Math.min(24, parseFloat(db)));
+            if (!isFinite(n)) return;
+            window.state.saturation.driveDb = n;
+            try { localStorage.setItem('halx_sat_drive', String(n)); } catch (_) { /* private browsing */ }
+            if (window.state.nodes.satDrive && window.state.ctx) {
+                const t = window.state.ctx.currentTime, linear = Math.pow(10, n / 20);
+                window.state.nodes.satDrive.gain.setTargetAtTime(linear, t, 0.02);
+                if (window.state.nodes.satMakeup) window.state.nodes.satMakeup.gain.setTargetAtTime(1 / linear, t, 0.02);
+            }
+            const readout = document.getElementById('sat-drive-val'); if (readout) readout.textContent = '+' + n.toFixed(1) + ' dB';
+            const slider = document.getElementById('sat-drive-slider'); if (slider && parseFloat(slider.value) !== n) slider.value = n;
+            if (!silent) window.notify('Saturation: drive +' + n.toFixed(1) + ' dB', 'fire');
+        };
+        window.setSaturationMix = function(pct, silent) {
+            const n = Math.max(0, Math.min(100, parseFloat(pct)));
+            if (!isFinite(n)) return;
+            window.state.saturation.mix = n;
+            try { localStorage.setItem('halx_sat_mix', String(n)); } catch (_) { /* private browsing */ }
+            if (window.state.ctx) {
+                const t = window.state.ctx.currentTime;
+                if (window.state.nodes.satWet) window.state.nodes.satWet.gain.setTargetAtTime(n / 100, t, 0.02);
+                if (window.state.nodes.satDry) window.state.nodes.satDry.gain.setTargetAtTime(1 - n / 100, t, 0.02);
+            }
+            const readout = document.getElementById('sat-mix-val'); if (readout) readout.textContent = Math.round(n) + '%';
+            const slider = document.getElementById('sat-mix-slider'); if (slider && parseFloat(slider.value) !== n) slider.value = n;
+            if (!silent) window.notify('Saturation: mix ' + Math.round(n) + '%', n === 0 ? 'ban' : 'fire');
+        };
+        window.resetSaturation = function() { window.setSaturationDrive(6, true); window.setSaturationMix(0, true); window.notify('Saturation Reset', 'rotate-left'); };
 
         // The strip's fader/mute/solo gain node (falls back to the input node on older graphs).
         window.stripFaderNode = function(ch) {
@@ -17807,6 +17889,16 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 } catch (_) { /* private browsing */ }
                 window.setMsMidDb(isFinite(savedMidDb) ? savedMidDb : 0, true);
                 window.setMsWidth(isFinite(savedWidth) ? savedWidth : 100, true);
+            }
+            if (!wire.saturationRestored) {
+                wire.saturationRestored = true;
+                let savedDrive = 6, savedMix = 0;
+                try {
+                    const d = localStorage.getItem('halx_sat_drive'); if (d != null) savedDrive = parseFloat(d);
+                    const mx = localStorage.getItem('halx_sat_mix'); if (mx != null) savedMix = parseFloat(mx);
+                } catch (_) { /* private browsing */ }
+                window.setSaturationDrive(isFinite(savedDrive) ? savedDrive : 6, true);
+                window.setSaturationMix(isFinite(savedMix) ? savedMix : 0, true);
             }
         }
 
