@@ -11,6 +11,11 @@
 // It only runs in a packaged build, never in `electron .` development - matching the guide: autoUpdater needs an
 // installed, code-signed app with Squirrel.Windows / Squirrel.Mac to apply an update to.
 //
+// Separately (local-update-check.js), this app also checks its own installed version against the same signed
+// OTA manifest every other Audio Mixer app checks (bridge/update.js's check(), behind client/cli.js's "update"
+// command and the Windows/macOS/Linux/Android/iOS installers) - once quietly at startup, and on demand from the
+// tray's "Check for updates" item - so this app and every other one agree on whether a newer version exists.
+//
 //   cd platforms/electron && npm install && npm start      (development)
 //   cd platforms/electron && npm run build                 (packaged app for this OS, via electron-builder)
 const path = require('node:path');
@@ -21,13 +26,16 @@ const { app, BrowserWindow, Tray, Menu, Notification, nativeImage } = require('e
 // place. Development: this project's real bridge/, two levels up from this file.
 const ROOT = app.isPackaged ? process.resourcesPath : path.join(__dirname, '..', '..');
 const bridgeServer = require(path.join(ROOT, 'bridge', 'server'));
+const bridgeUpdate = require(path.join(ROOT, 'bridge', 'update'));
 // generate-icons.js (run by "npm start" / "npm run build") writes this once per run; bundled as an ordinary app
 // file (not excluded from "files"), so it reads the same way in development and inside the packaged app.
 const ICON_FILE = path.join(__dirname, 'build', 'icon.png');
 
 const PORT = Number(process.env.BRIDGE_PORT) || bridgeServer.PORT;
 const REPO = 'amirf1389/audio-mixer';
+const APP_VERSION = require('./package.json').version;
 const { trayMenuTemplate } = require(path.join(__dirname, 'tray-menu'));
+const { describeUpdateCheck, checkForUpdates } = require(path.join(__dirname, 'local-update-check'));
 
 let win = null, tray = null, serverUp = false, quitting = false;
 
@@ -58,8 +66,22 @@ function refreshTray() {
   tray.setContextMenu(Menu.buildFromTemplate(trayMenuTemplate(serverUp, {
     onOpen: () => { if (win) { win.show(); win.focus(); } },
     onToggle: toggleServer,
+    onCheckUpdates: () => checkForUpdatesNow(true),
     onExit: () => { quitting = true; app.quit(); },
   })));
+}
+
+// The local, signed-manifest update check (bridge/update.js's check()) every other Audio Mixer app already
+// uses - not a second update mechanism, just this app asking the same question the others do. `notify` shows
+// the result as an OS notification even when up to date (the tray menu item wants that); the startup call
+// passes false so a quiet "up to date" doesn't pop a notification on every launch.
+async function checkForUpdatesNow(notify) {
+  const info = await checkForUpdates({ current: APP_VERSION, checkImpl: bridgeUpdate.check, log: console.error });
+  if (notify || (info && info.updateAvailable)) {
+    const { title, body } = describeUpdateCheck(info);
+    try { if (Notification.isSupported()) new Notification({ title, body, icon: trayIcon() }).show(); } catch (_) { /* best-effort */ }
+  }
+  return info;
 }
 
 async function toggleServer() {
@@ -102,6 +124,7 @@ app.whenReady().then(async () => {
   await startServer();
   createWindow();
   createTray();
+  checkForUpdatesNow(false).catch(() => {});
 }).catch(e => { console.error('Audio Mixer failed to start: ' + (e && e.stack || e)); app.exit(1); });
 
-module.exports = { trayMenuTemplate, PORT, REPO };
+module.exports = { trayMenuTemplate, PORT, REPO, APP_VERSION };
