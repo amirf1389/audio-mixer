@@ -8,11 +8,17 @@
 // Kept free of any `electron` or network dependency so it can be exercised by a plain Node test
 // (platforms/electron/test.js) without installing Electron or reaching the network.
 
-// Human-readable notification content for one check() result ({ ok, updateAvailable, current, latest, ... },
-// or null when the check itself failed, e.g. no network).
+// Human-readable notification content for one check() result ({ ok, updateAvailable, current, latest, notes,
+// ... }, or null when the check itself failed, e.g. no network). When notes (the manifest's own "what's new"
+// list, already shown by the web UI's OTA card and the CLI's "update" command) are present, up to 3 are added
+// as extra lines - matching how an OS notification actually renders, not the full list the other two UIs show.
 function describeUpdateCheck(info) {
   if (!info || !info.ok) return { title: 'Audio Mixer', body: 'Could not check for updates right now.' };
-  if (info.updateAvailable) return { title: 'Audio Mixer update available', body: `Version ${info.latest} is available (you have ${info.current}).` };
+  if (info.updateAvailable) {
+    const notes = Array.isArray(info.notes) ? info.notes.slice(0, 3) : [];
+    const body = `Version ${info.latest} is available (you have ${info.current}).` + (notes.length ? '\n' + notes.map(n => '• ' + n).join('\n') : '');
+    return { title: 'Audio Mixer update available', body };
+  }
   return { title: 'Audio Mixer', body: `You are up to date (${info.current}).` };
 }
 
