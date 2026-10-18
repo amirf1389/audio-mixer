@@ -998,6 +998,7 @@ window.navTabs = [
             channelAutoFader: Array.from({length: 32}, () => false),
             channelSoloSafe: Array.from({length: 32}, () => false),   // exempts a channel from solo-in-place silencing: see window.toggleChannelSoloSafe
             channelComp: Array.from({length: 32}, () => ({ enabled: false, mode: 'comp' })),   // per-channel compressor: see window.toggleChannelComp
+            channelTone: Array.from({length: 32}, () => ({ enabled: false, mode: 'bright' })),   // per-channel tilt EQ: see window.toggleChannelTone
             noiseGate: Array.from({length: 32}, () => ({ enabled: false, mode: 'gate', thresholdDb: -45, rangeDb: -60, ratio: 4, gainDb: 0 })),   // per-channel dual-mode gate: see window.rideNoiseGate
             stereoLink: Array.from({length: 16}, () => false),   // one flag per adjacent pair (0,1), (2,3), ... see window.toggleStereoLink
             msProcessing: { midDb: 0, widthPct: 100 },   // master-bus mid/side: see window.setMsMidDb / window.setMsWidth
@@ -1403,6 +1404,8 @@ window.navTabs = [
             window.state.nodes.channelGateGain = [];
             window.state.nodes.channelComp = [];
             window.state.nodes.channelCompMakeup = [];
+            window.state.nodes.channelToneLow = [];
+            window.state.nodes.channelToneHigh = [];
             for (let i = 0; i < CHANNELS; i++) {
                 // Input node: every source connects here (kept under the historic name channelPostGains).
                 const chGain = window.state.ctx.createGain();
@@ -1425,13 +1428,19 @@ window.navTabs = [
                 comp.release.setValueAtTime(0.15, window.state.ctx.currentTime);
                 const compMakeup = window.state.ctx.createGain();
                 compMakeup.gain.setValueAtTime(1.0, window.state.ctx.currentTime);
+                // Tone (tilt EQ) stage: window.toggleChannelTone cycles OFF -> BRIGHT (low shelf cut, high shelf
+                // boost) -> DARK (low shelf boost, high shelf cut) -> OFF; flat (0 dB both shelves) when off.
+                const toneLow = window.state.ctx.createBiquadFilter();
+                toneLow.type = 'lowshelf'; toneLow.frequency.setValueAtTime(300, window.state.ctx.currentTime); toneLow.gain.setValueAtTime(0, window.state.ctx.currentTime);
+                const toneHigh = window.state.ctx.createBiquadFilter();
+                toneHigh.type = 'highshelf'; toneHigh.frequency.setValueAtTime(3000, window.state.ctx.currentTime); toneHigh.gain.setValueAtTime(0, window.state.ctx.currentTime);
                 // Polarity (Ø) stage: +1 normal, -1 inverted 180°
                 const polarity = window.state.ctx.createGain();
                 polarity.gain.setValueAtTime(window.state.phaseInvert && window.state.phaseInvert[i] ? -1 : 1, window.state.ctx.currentTime);
                 // Fader / mute / solo stage
                 const fader = window.state.ctx.createGain();
                 fader.gain.setValueAtTime(1.0, window.state.ctx.currentTime);
-                chGain.connect(hpf); hpf.connect(trim); trim.connect(gateGain); gateGain.connect(comp); comp.connect(compMakeup); compMakeup.connect(polarity); polarity.connect(fader);
+                chGain.connect(hpf); hpf.connect(trim); trim.connect(gateGain); gateGain.connect(comp); comp.connect(compMakeup); compMakeup.connect(toneLow); toneLow.connect(toneHigh); toneHigh.connect(polarity); polarity.connect(fader);
 
                 let panner = null;
                 if (window.state.ctx.createStereoPanner) {
@@ -1449,6 +1458,8 @@ window.navTabs = [
                 window.state.nodes.channelGateGain.push(gateGain);
                 window.state.nodes.channelComp.push(comp);
                 window.state.nodes.channelCompMakeup.push(compMakeup);
+                window.state.nodes.channelToneLow.push(toneLow);
+                window.state.nodes.channelToneHigh.push(toneHigh);
                 window.state.nodes.channelPostGains.push(chGain);
                 window.state.nodes.channelPanners.push(panner);
             }
@@ -9305,6 +9316,7 @@ window.navTabs = [
                             <button id="btn-autofader-${i}" title="AUTO FADER: rides this fader on its own to keep the input near a healthy level (-18 dBFS). Dragging the fader by hand turns it off." class="text-[6.5px] font-black flex-1 py-1 bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 rounded hover:bg-cyan-500 hover:text-black transition-all ${window.state.channelAutoFader[i] ? 'bg-cyan-500 text-black' : ''}" onclick="window.toggleChannelAuto(${i})">A</button>
                             <button id="btn-gate-${i}" title="NOISE GATE: off. Click to arm a hard gate, click again for the gentler expander mode, once more to turn off." class="text-[6.5px] font-black flex-1 py-1 rounded transition-all ${window.state.noiseGate[i].enabled ? (window.state.noiseGate[i].mode === 'expander' ? 'bg-purple-500 text-black shadow-[0_0_8px_#8b5cf6]' : 'bg-emerald-500 text-black shadow-[0_0_8px_#10b981]') : 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500 hover:text-black'}" onclick="window.toggleChannelGate(${i})">${window.state.noiseGate[i].enabled ? (window.state.noiseGate[i].mode === 'expander' ? 'EX' : 'GT') : 'G'}</button>
                             <button id="btn-comp-${i}" title="COMPRESSOR: off. Click to arm a gentle 4:1 compressor, click again for a fast 10:1 limiter, once more to turn off." class="text-[6.5px] font-black flex-1 py-1 rounded transition-all ${window.state.channelComp[i].enabled ? (window.state.channelComp[i].mode === 'limit' ? 'bg-rose-500 text-black shadow-[0_0_8px_#f43f5e]' : 'bg-indigo-500 text-black shadow-[0_0_8px_#6366f1]') : 'bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 hover:bg-indigo-500 hover:text-black'}" onclick="window.toggleChannelComp(${i})">${window.state.channelComp[i].enabled ? (window.state.channelComp[i].mode === 'limit' ? 'LM' : 'CP') : 'CP'}</button>
+                            <button id="btn-tone-${i}" title="TONE: off. Click to arm BRIGHT (lift highs, trim lows), click again for DARK (lift lows, trim highs), once more to turn off." class="text-[6.5px] font-black flex-1 py-1 rounded transition-all ${window.state.channelTone[i].enabled ? (window.state.channelTone[i].mode === 'dark' ? 'bg-sky-500 text-black shadow-[0_0_8px_#0ea5e9]' : 'bg-amber-500 text-black shadow-[0_0_8px_#f59e0b]') : 'bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500 hover:text-black'}" onclick="window.toggleChannelTone(${i})">${window.state.channelTone[i].enabled ? (window.state.channelTone[i].mode === 'dark' ? 'DK' : 'BR') : 'TN'}</button>
                         </div>
                         <div id="gate-gr-${i}" class="text-[5.5px] font-mono text-emerald-400 text-center mt-0.5">0dB</div>
                         <button id="btn-link-${i}" title="STEREO LINK with channel ${i % 2 === 0 ? i + 2 : i}: fader, mute and solo move together; pan mirrors L/R." class="w-full mt-0.5 text-[5.5px] font-mono flex-1 py-0.5 rounded transition-all ${window.isStereoLinked(i) ? 'bg-amber-500 text-black font-bold' : 'text-slate-500 border border-white/10 hover:text-amber-400 hover:border-amber-400/50'}" onclick="window.toggleStereoLink(${i})">LINK ${2 * Math.floor(i / 2) + 1}-${2 * Math.floor(i / 2) + 2}</button>
@@ -9718,6 +9730,38 @@ window.navTabs = [
                     : (c.mode === 'limit' ? 'bg-rose-500 text-black shadow-[0_0_8px_#f43f5e]' : 'bg-indigo-500 text-black shadow-[0_0_8px_#6366f1]'));
             }
             if (!silent) window.notify(`Channel ${channelIndex + 1} Compressor: ` + (!c.enabled ? 'OFF' : (c.mode === 'limit' ? 'LIMIT' : 'COMP')), c.enabled ? 'compress' : 'expand');
+        };
+
+        // PER-CHANNEL TONE (tilt EQ): two shelving BiquadFilterNodes per strip (window.state.nodes.channelToneLow /
+        // channelToneHigh), cycling OFF -> BRIGHT (-3 dB low shelf @300Hz, +3 dB high shelf @3kHz) -> DARK
+        // (+3 dB low shelf, -3 dB high shelf) -> OFF. Fixed settings, same minimal-control convention as the
+        // per-channel gate/compressor.
+        window.applyChannelTone = function(channelIndex) {
+            const cfg = window.state.channelTone[channelIndex];
+            const low = window.state.nodes.channelToneLow && window.state.nodes.channelToneLow[channelIndex];
+            const high = window.state.nodes.channelToneHigh && window.state.nodes.channelToneHigh[channelIndex];
+            if (!low || !high || !window.state.ctx) return;
+            const t = window.state.ctx.currentTime;
+            if (!cfg.enabled) { low.gain.setTargetAtTime(0, t, 0.02); high.gain.setTargetAtTime(0, t, 0.02); return; }
+            if (cfg.mode === 'dark') { low.gain.setTargetAtTime(3, t, 0.02); high.gain.setTargetAtTime(-3, t, 0.02); }
+            else { low.gain.setTargetAtTime(-3, t, 0.02); high.gain.setTargetAtTime(3, t, 0.02); }
+        };
+        window.toggleChannelTone = function(channelIndex, silent) {
+            const c = window.state.channelTone[channelIndex];
+            if (!c.enabled) { c.enabled = true; c.mode = 'bright'; }
+            else if (c.mode === 'bright') { c.mode = 'dark'; }
+            else { c.enabled = false; c.mode = 'bright'; }
+            window.applyChannelTone(channelIndex);
+            const btn = document.getElementById(`btn-tone-${channelIndex}`);
+            if (btn) {
+                btn.textContent = !c.enabled ? 'TN' : (c.mode === 'dark' ? 'DK' : 'BR');
+                btn.title = !c.enabled ? 'TONE: off. Click to arm BRIGHT (lift highs, trim lows), click again for DARK (lift lows, trim highs), once more to turn off.'
+                    : (c.mode === 'dark' ? 'TONE: dark (+3 dB low shelf, -3 dB high shelf).' : 'TONE: bright (-3 dB low shelf, +3 dB high shelf).');
+                btn.className = "text-[6.5px] font-black flex-1 py-1 rounded transition-all " + (!c.enabled
+                    ? 'bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500 hover:text-black'
+                    : (c.mode === 'dark' ? 'bg-sky-500 text-black shadow-[0_0_8px_#0ea5e9]' : 'bg-amber-500 text-black shadow-[0_0_8px_#f59e0b]'));
+            }
+            if (!silent) window.notify(`Channel ${channelIndex + 1} Tone: ` + (!c.enabled ? 'OFF' : (c.mode === 'dark' ? 'DARK' : 'BRIGHT')), c.enabled ? 'tune' : 'expand');
         };
 
         window.toggleChannelSoloSafe = function(channelIndex, silent) {
