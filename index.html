@@ -17859,7 +17859,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
         const dbOf = v => (v < 0.00003 ? -Infinity : 20 * Math.log10(v));   // -90 dBFS floor: the same one every other meter in the app uses (bridge/levels.js, rt-engine, BT input)
 
         // ── settings ──
-        const DEF_SPK = () => ({ hpOn: false, hp: 80, lpOn: false, lp: 16000, eq: [{ hz: 100, db: 0, q: 1 }, { hz: 1000, db: 0, q: 1 }, { hz: 8000, db: 0, q: 1 }], limOn: false, thr: -3, rel: 120,
+        const DEF_SPK = () => ({ hpOn: false, hp: 80, lpOn: false, lp: 16000, eq: [{ hz: 100, db: 0, q: 1 }, { hz: 1000, db: 0, q: 1 }, { hz: 8000, db: 0, q: 1 }], limOn: false, thr: -3, rel: 120, att: 2,
             ampW: 500, ampOhm: 8, spkW: 300, spkOhm: 8, sens: 98, count: 1, dist: 10, sub: false });
         function sanitize(raw) {
             const r = raw && typeof raw === 'object' ? raw : {}, arr = (a, i) => (Array.isArray(a) ? a[i] : undefined);
@@ -17868,7 +17868,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 spk: Array.from({ length: N_MTX }, (_, m) => { const o = arr(r.spk, m) || {}, d = DEF_SPK(); return {
                     hpOn: !!o.hpOn, hp: num(o.hp, 20, 500, d.hp), lpOn: !!o.lpOn, lp: num(o.lp, 500, 20000, d.lp),
                     eq: d.eq.map((e, i) => { const x = arr(o.eq, i) || {}; return { hz: num(x.hz, 20, 20000, e.hz), db: num(x.db, -18, 18, 0), q: num(x.q, 0.3, 12, 1) }; }),
-                    limOn: !!o.limOn, thr: num(o.thr, -30, 0, d.thr), rel: num(o.rel, 10, 1000, d.rel),
+                    limOn: !!o.limOn, thr: num(o.thr, -30, 0, d.thr), rel: num(o.rel, 10, 1000, d.rel), att: num(o.att, 0.1, 20, d.att),
                     ampW: num(o.ampW, 1, 20000, d.ampW), ampOhm: num(o.ampOhm, 1, 32, d.ampOhm), spkW: num(o.spkW, 1, 20000, d.spkW), spkOhm: num(o.spkOhm, 1, 32, d.spkOhm), sens: num(o.sens, 70, 130, d.sens), count: Math.round(num(o.count, 1, 64, 1)), dist: num(o.dist, 1, 200, d.dist), sub: !!o.sub }; }),
                 fx: Array.from({ length: N_BUS }, (_, b) => { const o = arr(r.fx, b) || {}; return { type: ['reverb', 'delay', 'chorus'].includes(o.type) ? o.type : 'none', time: num(o.time, 20, 1500, 350), fb: num(o.fb, 0, 90, 35), decay: num(o.decay, 0.2, 8, 2.2), level: num(o.level, -60, 10, 0) }; }),
                 mic: { on: !!(r.mic || {}).on, prom: num((r.mic || {}).prom, 8, 30, 15) },
@@ -17946,7 +17946,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             f(s.hp1.frequency, o.hpOn ? o.hp : 10); f(s.hp2.frequency, o.hpOn ? o.hp : 10);
             f(s.lp1.frequency, o.lpOn ? Math.min(o.lp, nyq) : nyq); f(s.lp2.frequency, o.lpOn ? Math.min(o.lp, nyq) : nyq);
             o.eq.forEach((e, i) => { f(s.eq[i].frequency, e.hz); f(s.eq[i].gain, e.db); f(s.eq[i].Q, e.q); });
-            f(s.lim.threshold, o.limOn ? o.thr : 0); f(s.lim.ratio, o.limOn ? 20 : 1); f(s.lim.attack, 0.002); f(s.lim.release, o.rel / 1000);
+            f(s.lim.threshold, o.limOn ? o.thr : 0); f(s.lim.ratio, o.limOn ? 20 : 1); f(s.lim.attack, o.att / 1000); f(s.lim.release, o.rel / 1000);
             (this.notches[m] || []).forEach((n, i) => { if (s.nt[i]) { f(s.nt[i].frequency, n.hz); f(s.nt[i].gain, n.db); } });
             for (let i = (this.notches[m] || []).length; i < 4; i++) f(s.nt[i].gain, 0);
         };
@@ -18127,14 +18127,14 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 + o.eq.map((e, i) => slider('mo-eqf' + i, 20, 20000, 1, e.hz, 'EQ ' + (i + 1) + ' Hz', ' Hz') + slider('mo-eqg' + i, -18, 18, 0.5, e.db, 'EQ ' + (i + 1) + ' gain', ' dB')).join('')
                 + '</div><div class="space-y-1"><div class="flex items-center gap-2"><label class="text-[7.5px] text-slate-300"><input id="mo-limon" type="checkbox" ' + (o.limOn ? 'checked' : '') + '> AMP PROTECTION LIMITER</label><span class="text-[7.5px] text-slate-400">GR</span><div class="flex-1 h-1.5 bg-white/5 rounded overflow-hidden"><div id="mo-gr" class="h-full bg-rose-500" style="width:0%"></div></div><span id="mo-gr-v" class="w-14 text-right text-[7.5px] font-bold text-slate-200">0.0 dB</span></div>'
                 + '<div class="flex items-center gap-2"><label class="text-[7.5px] text-slate-300" title="Credits this output with auto volume control\'s live gain reduction as extra headroom"><input id="mo-sub" type="checkbox" ' + (o.sub ? 'checked' : '') + '> SUBWOOFER (auto volume protection credit)</label></div>'
-                + slider('mo-thr', -30, 0, 0.5, o.thr, 'THRESHOLD', ' dB') + slider('mo-rel', 10, 1000, 5, o.rel, 'RELEASE', ' ms')
+                + slider('mo-thr', -30, 0, 0.5, o.thr, 'THRESHOLD', ' dB') + slider('mo-att', 0.1, 20, 0.1, o.att, 'ATTACK', ' ms') + slider('mo-rel', 10, 1000, 5, o.rel, 'RELEASE', ' ms')
                 + '<div class="text-[8px] text-yellow-400 font-black uppercase pt-1">AMP &amp; SPEAKER CALCULATOR</div><div class="grid grid-cols-3 gap-1 text-[7.5px] text-slate-300">'
                 + [['ampW', 'AMP W', o.ampW, 1, 20000], ['ampOhm', 'AMP OHM', o.ampOhm, 1, 32], ['spkW', 'SPEAKER W', o.spkW, 1, 20000], ['spkOhm', 'SPK OHM', o.spkOhm, 1, 32], ['sens', 'SENS dB', o.sens, 70, 130], ['count', 'SPEAKERS', o.count, 1, 64], ['dist', 'DIST m', o.dist, 1, 200]]
                     .map(x => '<label class="flex items-center gap-1"><span class="w-14 text-slate-400">' + x[1] + '</span><input id="mo-c-' + x[0] + '" type="number" min="' + x[3] + '" max="' + x[4] + '" value="' + x[2] + '" class="w-16 bg-black border border-white/15 rounded px-1 text-slate-200"></label>').join('') + '</div>'
                 + '<div id="mo-calc" class="text-[7.5px] font-mono text-slate-300 leading-relaxed"></div><button id="mo-apply-lim" class="' + B + b1 + '">USE THE LIMITER THRESHOLD OF THE CALCULATOR</button></div></div></div>'
                 + '<div class="bg-black/50 border border-white/10 rounded-lg p-2 space-y-1.5"><div class="flex flex-wrap items-center gap-2"><span class="text-[8px] text-yellow-400 font-black uppercase">MIC PROTECTOR</span>'
                 + '<label class="text-[7.5px] text-slate-300"><input id="mo-mic" type="checkbox" ' + (cfg.mic.on ? 'checked' : '') + '> WATCH ALL OUTPUTS FOR FEEDBACK</label>' + slider('mo-prom', 8, 30, 1, cfg.mic.prom, 'SENSITIVITY', ' dB') + '<button id="mo-clear" class="' + B + 'bg-rose-500/15 text-rose-300 border-rose-500/30">CLEAR NOTCHES</button></div><div id="mo-notches" class="text-[7.5px] font-mono text-slate-300"></div></div>';
-            bind('mo-hp', v => this.setSpk(m, { hp: v }), ' Hz'); bind('mo-lp', v => this.setSpk(m, { lp: v }), ' Hz'); bind('mo-thr', v => this.setSpk(m, { thr: v }), ' dB'); bind('mo-rel', v => this.setSpk(m, { rel: v }), ' ms'); bind('mo-prom', v => { cfg.mic.prom = v; this.persist(); }, ' dB');
+            bind('mo-hp', v => this.setSpk(m, { hp: v }), ' Hz'); bind('mo-lp', v => this.setSpk(m, { lp: v }), ' Hz'); bind('mo-thr', v => this.setSpk(m, { thr: v }), ' dB'); bind('mo-att', v => this.setSpk(m, { att: v }), ' ms'); bind('mo-rel', v => this.setSpk(m, { rel: v }), ' ms'); bind('mo-prom', v => { cfg.mic.prom = v; this.persist(); }, ' dB');
             o.eq.forEach((e, i) => { bind('mo-eqf' + i, v => { const eq = cfg.spk[m].eq.map(x => ({ ...x })); eq[i].hz = v; this.setSpk(m, { eq }); }, ' Hz'); bind('mo-eqg' + i, v => { const eq = cfg.spk[m].eq.map(x => ({ ...x })); eq[i].db = v; this.setSpk(m, { eq }); }, ' dB'); });
             const chk = (id, fn) => { const e = $(id); if (e) e.onchange = () => fn(e.checked); };
             chk('mo-hpon', v => this.setSpk(m, { hpOn: v })); chk('mo-lpon', v => this.setSpk(m, { lpOn: v })); chk('mo-limon', v => this.setSpk(m, { limOn: v })); chk('mo-sub', v => { this.setSpk(m, { sub: v }); this.paintCalc(); }); chk('mo-mic', v => { cfg.mic.on = v; this.persist(); note(v ? 'Mic protector on' : 'Mic protector off', 'shield-halved'); });
