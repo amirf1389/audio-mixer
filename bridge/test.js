@@ -3865,6 +3865,90 @@ test('auto fader: rides a channel toward -18 dBFS from its real pre-fader input 
   assert.ok(floors.every(f => Math.abs(f - 0.00003) < 1e-12), 'every dbOf() must share the same -90 dBFS floor as bridge/levels.js: ' + JSON.stringify(floors));
 });
 
+test('auto volume control (dual mode) + dynamic EQ: master-bus gain riders wired as their own nodes, never fighting the manual master knob or the static EQ bands; subwoofer outputs get a real-time protection credit from ampCalc', () => {
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  for (const s of [
+    "autoVolume: { enabled: false, mode: 'peak', ceilingDb: -1, gainDb: 0 }",
+    "dynamicEq: { enabled: false, freq: 3000, q: 1.4, threshold: -12, ratio: 2, gainDb: 0 }",
+    'window.rideAutoVolume = function', 'window.rideDynamicEq = function',
+    'window.setAutoVolume = function', 'window.setAutoVolumeMode = function', 'window.setDynamicEq = function',
+    'const autoVolumeGain = window.state.ctx.createGain()', 'masterGain.connect(autoVolumeGain)', 'autoVolumeGain.connect(masterCompressor)',
+    'const dynamicEqFilter = window.state.ctx.createBiquadFilter()', 'window.state.nodes.dynamicEqFilter = dynamicEqFilter',
+    'window.state.nodes.autoVolumeGain = autoVolumeGain',
+    'id="auto-volume-toggle"', 'id="auto-volume-mode"', 'id="dynamic-eq-toggle"', 'id="auto-volume-gr"', 'id="dynamic-eq-gr"',
+    'id="mo-sub"', "chk('mo-sub', v => { this.setSpk(m, { sub: v });",
+  ]) assert.ok(html.includes(s), s);
+
+  // the EQ filters array built by EQ_BANDS.forEach must stay untouched (10 bands, nothing else pushed into it) - the dynamic EQ band is a
+  // separate node, created and connected after that loop's own closing brace, never inside it
+  const loopStart = html.indexOf('EQ_BANDS.forEach(freq => {'), loopEnd = html.indexOf('});', loopStart);
+  const loopBody = html.slice(loopStart, loopEnd);
+  assert.ok(loopBody.includes('window.state.nodes.eqFilters.push(bq)') && !loopBody.includes('dynamicEqFilter'), 'the static EQ loop body must not be touched by the new dynamic EQ node');
+  assert.ok(html.indexOf('const dynamicEqFilter') > loopEnd, 'the dynamic EQ node must be created after the static EQ loop, not inside it');
+
+  // rideAutoVolume / rideDynamicEq, run for real (same extraction technique as the auto-fader test above)
+  const start = html.indexOf('const AUTO_TARGET_DB'), end = html.indexOf('window.stripFaderNode = function');
+  assert.ok(start > 0 && end > start);
+  const src = html.slice(start, end);
+  const mkWindow = (autoVolume, dynamicEq) => ({ state: { autoVolume, dynamicEq }, localStorage: undefined, notify: () => {} });
+  const mkLS = () => ({ store: {}, setItem(k, v) { this.store[k] = v; }, getItem(k) { return this.store[k]; } });
+  const run = (window_, fn, args, frames) => {
+    const document_ = { getElementById: () => null };
+    const localStorage_ = mkLS();
+    const f = new Function('window', 'document', 'localStorage', src + '\nreturn window.' + fn + ';')(window_, document_, localStorage_);
+    let last; for (let i = 0; i < frames; i++) last = f(...args);
+    return last;
+  };
+
+  // PEAK mode: ceiling -1 dBFS, fed a steady 0 dBFS true peak - gain reduction must converge to -1 dB (protects the ceiling), never overshoot
+  const av1 = { enabled: true, mode: 'peak', ceilingDb: -1, gainDb: 0 };
+  const peakResult = run(mkWindow(av1, null), 'rideAutoVolume', [0, null, null], 200);
+  assert.ok(Math.abs(peakResult - -1) < 0.05, 'expected peak-mode gain reduction to converge to -1 dB, got ' + peakResult);
+  assert.ok(peakResult <= 0.0001, 'auto volume must never add positive gain in peak mode');
+
+  // LOUDNESS mode: a too-loud program (-8 LUFS short-term) against a -14 LUFS target must converge to -6 dB of reduction
+  const av2 = { enabled: true, mode: 'loudness', ceilingDb: -1, gainDb: 0 };
+  const loudResult = run(mkWindow(av2, null), 'rideAutoVolume', [null, -8, -14], 200);
+  assert.ok(Math.abs(loudResult - -6) < 0.05, 'expected loudness-mode gain reduction to converge to -6 dB, got ' + loudResult);
+  // a too-quiet program never gets boosted above 0 dB (clamped) - auto volume only ever protects, never adds gain
+  const av3 = { enabled: true, mode: 'loudness', ceilingDb: -1, gainDb: 0 };
+  const quietResult = run(mkWindow(av3, null), 'rideAutoVolume', [null, -20, -14], 50);
+  assert.strictEqual(quietResult, 0);
+
+  // disabled always resets to exactly 0, even with nonzero gainDb left over from before
+  const av4 = { enabled: false, mode: 'peak', ceilingDb: -1, gainDb: -7 };
+  assert.strictEqual(run(mkWindow(av4, null), 'rideAutoVolume', [0, null, null], 1), 0);
+  assert.strictEqual(av4.gainDb, 0);
+
+  // DYNAMIC EQ: the standard compressor formula, -(over) * (1 - 1/ratio); 6 dB over a -12 dB threshold at ratio 2 -> -3 dB reduction
+  const deq1 = { enabled: true, freq: 3000, q: 1.4, threshold: -12, ratio: 2, gainDb: 0 };
+  const deqResult = run(mkWindow(null, deq1), 'rideDynamicEq', [-6], 200);
+  assert.ok(Math.abs(deqResult - -3) < 0.05, 'expected dynamic EQ reduction to converge to -3 dB, got ' + deqResult);
+  // under threshold: no reduction at all
+  const deq2 = { enabled: true, freq: 3000, q: 1.4, threshold: -12, ratio: 2, gainDb: 0 };
+  assert.strictEqual(run(mkWindow(null, deq2), 'rideDynamicEq', [-20], 1), 0);
+  // disabled always resets to exactly 0
+  const deq3 = { enabled: false, freq: 3000, q: 1.4, threshold: -12, ratio: 2, gainDb: -4 };
+  assert.strictEqual(run(mkWindow(null, deq3), 'rideDynamicEq', [-6], 1), 0);
+  assert.strictEqual(deq3.gainDb, 0);
+
+  // ampCalc's subwoofer protection credit (the same function the bus & matrix outputs test above exercises) -
+  // scoped to the bus-outs script block, which has its own "// ── graph ──" marker elsewhere in the page too
+  const busOutsSc = html.slice(html.indexOf('<script id="bus-outs">'), html.indexOf('<script id="rt-engine">'));
+  const ampSrc = busOutsSc.slice(busOutsSc.indexOf('function ampCalc(o) {'), busOutsSc.indexOf('// ── graph ──'));
+  const { ampCalc, ampCalcLive } = new Function('window', ampSrc + '\nreturn { ampCalc, ampCalcLive };')({ state: { autoVolume: { gainDb: -4 } } });
+  const base = { ampW: 1000, ampOhm: 8, spkW: 300, spkOhm: 8, count: 1, sens: 100, dist: 10 };
+  const notSub = ampCalc({ ...base, sub: false, avGainDb: -4 });
+  assert.strictEqual(notSub.avReduction, 0, 'a non-subwoofer output must get no credit regardless of avGainDb');
+  assert.strictEqual(notSub.effHeadroom, notSub.headroom);
+  const sub = ampCalc({ ...base, sub: true, avGainDb: -4 });
+  assert.ok(Math.abs(sub.avReduction - 4) < 1e-9, 'a subwoofer output must be credited the full 4 dB auto volume is already pulling down');
+  assert.ok(Math.abs(sub.effHeadroom - (sub.headroom + 4)) < 1e-9);
+  // ampCalcLive reads the live auto-volume state instead of taking avGainDb from the caller
+  const live = ampCalcLive({ ...base, sub: true });
+  assert.ok(Math.abs(live.avReduction - 4) < 1e-9, 'ampCalcLive must read window.state.autoVolume.gainDb on its own');
+});
+
 test('Android APK safety: permission allowlist, listener shipped off, audit tool catches additions, fingerprint published, APP SAFETY card wired', () => {
   const audit = require('../scripts/apk-audit'), root = pathx.join(__dirname, '..'), rd = f => fsx.readFileSync(pathx.join(root, f), 'utf8');
   const man = rd('platforms/android/AndroidManifest.xml'), ok = audit.auditManifest(man);
