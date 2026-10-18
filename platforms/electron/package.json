@@ -1,6 +1,6 @@
 {
   "name": "audio-mixer-electron",
-  "version": "1.16.0.0",
+  "version": "1.16.1.0",
   "private": true,
   "description": "Audio Mixer packaged as an Electron app: wraps the existing bridge/server.js and index.html in a native window with a tray icon (on/off/exit) and auto-updates (following https://www.electronjs.org/docs/latest/tutorial/updates). An additional, optional way to run Audio Mixer alongside the native Windows launcher (platforms/windows) and installers - neither is touched by this package.",
   "main": "main.js",
