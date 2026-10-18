@@ -996,6 +996,7 @@ window.navTabs = [
             channelSolos: Array.from({length: 32}, () => false),
             channelLevels: Array.from({length: 32}, () => 0),
             channelAutoFader: Array.from({length: 32}, () => false),
+            channelSoloSafe: Array.from({length: 32}, () => false),   // exempts a channel from solo-in-place silencing: see window.toggleChannelSoloSafe
             noiseGate: Array.from({length: 32}, () => ({ enabled: false, mode: 'gate', thresholdDb: -45, rangeDb: -60, ratio: 4, gainDb: 0 })),   // per-channel dual-mode gate: see window.rideNoiseGate
             stereoLink: Array.from({length: 16}, () => false),   // one flag per adjacent pair (0,1), (2,3), ... see window.toggleStereoLink
             msProcessing: { midDb: 0, widthPct: 100 },   // master-bus mid/side: see window.setMsMidDb / window.setMsWidth
@@ -9291,6 +9292,7 @@ window.navTabs = [
                         </div>
                         <div id="gate-gr-${i}" class="text-[5.5px] font-mono text-emerald-400 text-center mt-0.5">0dB</div>
                         <button id="btn-link-${i}" title="STEREO LINK with channel ${i % 2 === 0 ? i + 2 : i}: fader, mute and solo move together; pan mirrors L/R." class="w-full mt-0.5 text-[5.5px] font-mono flex-1 py-0.5 rounded transition-all ${window.isStereoLinked(i) ? 'bg-amber-500 text-black font-bold' : 'text-slate-500 border border-white/10 hover:text-amber-400 hover:border-amber-400/50'}" onclick="window.toggleStereoLink(${i})">LINK ${2 * Math.floor(i / 2) + 1}-${2 * Math.floor(i / 2) + 2}</button>
+                        <button id="btn-solosafe-${i}" title="SOLO SAFE: this channel stays audible even while another channel is soloed (for a click track, talkback or reference feed). Muting it still works normally." class="w-full mt-0.5 text-[5.5px] font-mono flex-1 py-0.5 rounded transition-all ${window.state.channelSoloSafe[i] ? 'bg-cyan-500 text-black font-bold' : 'text-slate-500 border border-white/10 hover:text-cyan-400 hover:border-cyan-400/50'}" onclick="window.toggleChannelSoloSafe(${i})">SOLO SAFE</button>
                     </div>
                 `).join('');
                 window.switchMixLayer('1-16');
@@ -9642,18 +9644,32 @@ window.navTabs = [
             return (n.channelFaders && n.channelFaders[ch]) || (n.channelPostGains && n.channelPostGains[ch]);
         };
 
-        // Effective strip gain = fader, unless muted or another channel is soloed (solo-in-place).
+        // Effective strip gain = fader, unless muted or another channel is soloed (solo-in-place) - a channel
+        // marked SOLO SAFE is exempt from that silencing (it still mutes normally), for a click track, talkback
+        // or reference feed that should keep playing no matter what else gets soloed.
         window.applyChannelGain = function(channelIndex, faderDb) {
             const node = window.stripFaderNode(channelIndex);
             if (!node || !window.state.ctx) return;
             let db = faderDb;
             if (db === undefined) { const fader = document.getElementById(`ch-fader-${channelIndex}`); db = fader ? parseFloat(fader.value) : 0; }
             const anySolo = window.state.channelSolos.some(Boolean);
-            const silenced = window.state.channelMutes[channelIndex] || (anySolo && !window.state.channelSolos[channelIndex]) || channelIndex >= (window.licenseChannels || CHANNELS);   // channels above the plan stay silent
+            const soloSafe = window.state.channelSoloSafe && window.state.channelSoloSafe[channelIndex];
+            const silenced = window.state.channelMutes[channelIndex] || (anySolo && !window.state.channelSolos[channelIndex] && !soloSafe) || channelIndex >= (window.licenseChannels || CHANNELS);   // channels above the plan stay silent
             const linear = silenced || !(db > -59) ? 0 : Math.pow(10, db / 20);
             try { node.gain.setTargetAtTime(linear, window.state.ctx.currentTime, 0.02); } catch(e){}   // 20 ms glide: no zipper noise while dragging
         };
         window.applyAllChannelGains = function() { for (let i = 0; i < CHANNELS; i++) window.applyChannelGain(i); };
+
+        window.toggleChannelSoloSafe = function(channelIndex, silent) {
+            window.state.channelSoloSafe[channelIndex] = !window.state.channelSoloSafe[channelIndex];
+            const safe = window.state.channelSoloSafe[channelIndex];
+            const btn = document.getElementById(`btn-solosafe-${channelIndex}`);
+            if (btn) btn.className = "w-full mt-0.5 text-[5.5px] font-mono flex-1 py-0.5 rounded transition-all " + (safe
+                ? 'bg-cyan-500 text-black font-bold'
+                : 'text-slate-500 border border-white/10 hover:text-cyan-400 hover:border-cyan-400/50');
+            window.applyAllChannelGains();   // this channel's own silencing may change immediately if another channel is already soloed
+            if (!silent) window.notify(`Channel ${channelIndex + 1} Solo Safe ${safe ? 'ON' : 'OFF'}`, safe ? 'shield-halved' : 'shield');
+        };
 
         // Clears one channel's held peak marker and latched clip LED (same reset the all-channel system repair
         // routine performs, scoped to a single strip) without waiting for the peak to decay on its own.
