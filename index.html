@@ -997,6 +997,8 @@ window.navTabs = [
             channelLevels: Array.from({length: 32}, () => 0),
             channelAutoFader: Array.from({length: 32}, () => false),
             lowPowerMode: false,   // throttles the always-running meter loop (see window.setLowPowerMode / startMeterLoop) to cut CPU and battery use
+            autoVolume: { enabled: false, mode: 'peak', ceilingDb: -1, gainDb: 0 },   // master-bus gain rider: see window.rideAutoVolume
+            dynamicEq: { enabled: false, freq: 3000, q: 1.4, threshold: -12, ratio: 2, gainDb: 0 },   // one level-dependent EQ band: see window.rideDynamicEq
             nodes: { 
                 musicAnalyser: null, micAnalyser: null, masterGain: null, masterLimiter: null,
                 eqFilters: [], phones1Gain: null, phones2Gain: null, crMonitorGain: null,
@@ -1165,6 +1167,13 @@ window.navTabs = [
             const masterGain = window.state.ctx.createGain();
             masterGain.gain.setValueAtTime(1.0, window.state.ctx.currentTime);
 
+            // AUTO VOLUME CONTROL: its own gain stage, kept separate from masterGain (the manual master-volume
+            // knob above) so the two never fight over the same AudioParam. Starts at 0 dB (linear 1.0) - silent
+            // until window.rideAutoVolume (see the meter loop) actually enables and rides it.
+            const autoVolumeGain = window.state.ctx.createGain();
+            autoVolumeGain.gain.setValueAtTime(1.0, window.state.ctx.currentTime);
+            masterGain.connect(autoVolumeGain);
+
             // Master Dynamics Compressor Node
             const masterCompressor = window.state.ctx.createDynamicsCompressor();
             masterCompressor.threshold.setValueAtTime(-24, window.state.ctx.currentTime);
@@ -1172,7 +1181,7 @@ window.navTabs = [
             masterCompressor.ratio.setValueAtTime(4, window.state.ctx.currentTime);
             masterCompressor.attack.setValueAtTime(0.003, window.state.ctx.currentTime);
             masterCompressor.release.setValueAtTime(0.25, window.state.ctx.currentTime);
-            masterGain.connect(masterCompressor);
+            autoVolumeGain.connect(masterCompressor);
 
             // Construct 10-Band Biquad Filter Chain
             window.state.nodes.eqFilters = [];
@@ -1187,6 +1196,18 @@ window.navTabs = [
                 lastFilter = bq;
                 window.state.nodes.eqFilters.push(bq);
             });
+
+            // DYNAMIC EQ: one extra peaking band after the static 10-band EQ above, left at 0 dB (no-op) until
+            // window.rideDynamicEq actually enables and rides it - a level-dependent, de-essing / resonance-taming
+            // band, not a replacement for the static bands, which it never touches.
+            const dynamicEqFilter = window.state.ctx.createBiquadFilter();
+            dynamicEqFilter.type = 'peaking';
+            dynamicEqFilter.frequency.setValueAtTime(window.state.dynamicEq.freq, window.state.ctx.currentTime);
+            dynamicEqFilter.Q.setValueAtTime(window.state.dynamicEq.q, window.state.ctx.currentTime);
+            dynamicEqFilter.gain.setValueAtTime(0, window.state.ctx.currentTime);
+            lastFilter.connect(dynamicEqFilter);
+            lastFilter = dynamicEqFilter;
+            window.state.nodes.dynamicEqFilter = dynamicEqFilter;
 
             // 3D Binaural Spatializer Panner
             let spatialPanner = null;
@@ -1245,6 +1266,7 @@ window.navTabs = [
             const crMonitorGain = window.state.ctx.createGain();
 
             window.state.nodes.masterGain = masterGain;
+            window.state.nodes.autoVolumeGain = autoVolumeGain;
             window.state.nodes.masterCompressor = masterCompressor;
             window.state.nodes.masterLimiter = masterLimiter;
             if (window.masterLimiterCtl) window.masterLimiterCtl.apply();   // saved ceiling / release / attack / knee / on-off
@@ -7304,6 +7326,41 @@ window.navTabs = [
                   <button id="low-power-toggle" onclick="window.setLowPowerMode(!window.state.lowPowerMode)" class="px-3 py-1.5 rounded font-mono font-bold text-[8px] uppercase transition border bg-white/5 text-slate-400 border-white/10">OFF</button>
                 </div>
 
+                <!-- Auto Volume Control (dual mode: peak-limit / loudness-target) + Dynamic EQ: compact operations panel, master-bus only -->
+                <div class="glass-panel p-3 rounded-xl wing-bezel space-y-2">
+                  <div class="flex flex-wrap items-center justify-between gap-2">
+                    <div class="flex items-center gap-2.5">
+                      <div class="w-8 h-8 rounded-lg bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400 text-sm">
+                        <i class="fa-solid fa-volume-high"></i>
+                      </div>
+                      <div>
+                        <h3 class="text-[10px] font-black text-white font-wing tracking-wider uppercase">AUTO VOLUME CONTROL</h3>
+                        <p class="text-[7.5px] font-mono text-slate-400">Rides the master bus gain: PEAK LIMIT protects against clipping (and credits subwoofer outputs marked SUBWOOFER with the same headroom it buys back); LOUDNESS TARGET holds short-term LUFS near the program target.</p>
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                      <span class="text-[7.5px] font-mono text-slate-400">GR <span id="auto-volume-gr">0.0 dB</span></span>
+                      <button id="auto-volume-mode" onclick="window.setAutoVolumeMode(window.state.autoVolume.mode === 'loudness' ? 'peak' : 'loudness')" class="px-2 py-1 rounded font-mono font-bold text-[7.5px] uppercase transition border bg-white/5 text-slate-300 border-white/10">PEAK LIMIT</button>
+                      <button id="auto-volume-toggle" onclick="window.setAutoVolume(!window.state.autoVolume.enabled)" class="px-3 py-1.5 rounded font-mono font-bold text-[8px] uppercase transition border bg-white/5 text-slate-400 border-white/10">OFF</button>
+                    </div>
+                  </div>
+                  <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-white/5">
+                    <div class="flex items-center gap-2.5">
+                      <div class="w-8 h-8 rounded-lg bg-purple-500/20 border border-purple-500/40 flex items-center justify-center text-purple-400 text-sm">
+                        <i class="fa-solid fa-sliders"></i>
+                      </div>
+                      <div>
+                        <h3 class="text-[10px] font-black text-white font-wing tracking-wider uppercase">DYNAMIC EQ</h3>
+                        <p class="text-[7.5px] font-mono text-slate-400">A level-dependent band on the master bus that ducks only above threshold, compressor-style - not a static cut.</p>
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                      <span class="text-[7.5px] font-mono text-slate-400">GR <span id="dynamic-eq-gr">0.0 dB</span></span>
+                      <button id="dynamic-eq-toggle" onclick="window.setDynamicEq(!window.state.dynamicEq.enabled)" class="px-3 py-1.5 rounded font-mono font-bold text-[8px] uppercase transition border bg-white/5 text-slate-400 border-white/10">OFF</button>
+                    </div>
+                  </div>
+                </div>
+
                 <!-- FRAMEWORK ENGINE SYSTEM: CORE AUDIO ARCHITECTURE & DSP SIGNAL FLOW GRAPH -->
 <div class="glass-panel p-3.5 rounded-xl wing-bezel space-y-3 border-cyan-500/40 shadow-[0_0_20px_rgba(6,182,212,0.15)]">
   
@@ -9076,6 +9133,69 @@ window.navTabs = [
             window.applyChannelGain(channelIndex, next);
         };
 
+        // AUTO VOLUME CONTROL: a master-bus gain rider with two modes, independent of the per-channel auto fader
+        // above. "peak" mode pulls gain down fast whenever the true-peak level creeps past a ceiling (protects
+        // speakers/subwoofer from clipping); "loudness" mode instead rides gain to hold the short-term LUFS near
+        // the program target (window.state.lufsTarget, the same number the LUFS tab already shows against).
+        // Either way the result is one gain-reduction number (gainDb, always <= 0) applied to its own gain stage
+        // (window.state.nodes.autoVolumeGain) and, by extension, every output fed from the master bus - including
+        // the matrix outputs' own power-protection calculator (ampCalc's avGainDb/avReduction, bus-outs script).
+        const AV_GLIDE_DOWN = 0.4, AV_GLIDE_UP = 0.03;   // fast to protect, slow to recover (classic limiter/AGC shape)
+        window.rideAutoVolume = function(peakDb, shortTermLufs, targetLufs) {
+            const av = window.state.autoVolume;
+            if (!av || !av.enabled) { if (av) av.gainDb = 0; return 0; }
+            let desiredDb;
+            if (av.mode === 'loudness') {
+                if (shortTermLufs == null || !isFinite(shortTermLufs)) return av.gainDb;
+                desiredDb = Math.max(-24, Math.min(0, (targetLufs == null ? -14 : targetLufs) - shortTermLufs));
+            } else {
+                if (peakDb == null || !isFinite(peakDb)) return av.gainDb;
+                desiredDb = Math.max(-24, Math.min(0, av.ceilingDb - peakDb));
+            }
+            const glide = desiredDb < av.gainDb ? AV_GLIDE_DOWN : AV_GLIDE_UP;
+            av.gainDb += (desiredDb - av.gainDb) * glide;
+            return av.gainDb;
+        };
+
+        // DYNAMIC EQ: a single band (window.state.dynamicEq.freq/q) that ducks its own gain, compressor-style,
+        // only while the metered level is over threshold - a de-essing / resonance-taming band, not a static EQ
+        // cut. Reduction uses the standard compressor formula (-(over) * (1 - 1/ratio)), glided the same
+        // fast-down / slow-up way as auto volume above so it reacts quickly without pumping.
+        const DEQ_GLIDE_DOWN = 0.35, DEQ_GLIDE_UP = 0.03;
+        window.rideDynamicEq = function(peakDb) {
+            const d = window.state.dynamicEq;
+            if (!d || !d.enabled || peakDb == null || !isFinite(peakDb)) { if (d) d.gainDb = 0; return 0; }
+            const over = peakDb - d.threshold;
+            const desiredDb = over > 0 ? Math.max(-18, -over * (1 - 1 / d.ratio)) : 0;
+            const glide = desiredDb < d.gainDb ? DEQ_GLIDE_DOWN : DEQ_GLIDE_UP;
+            d.gainDb += (desiredDb - d.gainDb) * glide;
+            return d.gainDb;
+        };
+
+        window.setAutoVolumeMode = function(mode, silent) {
+            window.state.autoVolume.mode = mode === 'loudness' ? 'loudness' : 'peak';
+            try { localStorage.setItem('halx_auto_volume_mode', window.state.autoVolume.mode); } catch (_) { /* private browsing */ }
+            const btn = document.getElementById('auto-volume-mode');
+            if (btn) btn.textContent = window.state.autoVolume.mode === 'loudness' ? 'LOUDNESS TARGET' : 'PEAK LIMIT';
+            if (!silent) window.notify('Auto Volume mode: ' + (window.state.autoVolume.mode === 'loudness' ? 'loudness target' : 'peak limit'), 'volume-high');
+        };
+        window.setAutoVolume = function(on, silent) {
+            window.state.autoVolume.enabled = !!on;
+            if (!on) window.state.autoVolume.gainDb = 0;
+            try { localStorage.setItem('halx_auto_volume', on ? '1' : '0'); } catch (_) { /* private browsing */ }
+            const btn = document.getElementById('auto-volume-toggle');
+            if (btn) { btn.textContent = on ? 'ON' : 'OFF'; btn.className = "px-3 py-1.5 rounded font-mono font-bold text-[8px] uppercase transition border " + (on ? 'bg-cyan-500 text-black border-cyan-500' : 'bg-white/5 text-slate-400 border-white/10'); }
+            if (!silent) window.notify(on ? 'Auto Volume Control ON' : 'Auto Volume Control OFF', on ? 'volume-high' : 'volume-xmark');
+        };
+        window.setDynamicEq = function(on, silent) {
+            window.state.dynamicEq.enabled = !!on;
+            if (!on) window.state.dynamicEq.gainDb = 0;
+            try { localStorage.setItem('halx_dynamic_eq', on ? '1' : '0'); } catch (_) { /* private browsing */ }
+            const btn = document.getElementById('dynamic-eq-toggle');
+            if (btn) { btn.textContent = on ? 'ON' : 'OFF'; btn.className = "px-3 py-1.5 rounded font-mono font-bold text-[8px] uppercase transition border " + (on ? 'bg-purple-500 text-black border-purple-500' : 'bg-white/5 text-slate-400 border-white/10'); }
+            if (!silent) window.notify(on ? 'Dynamic EQ ON' : 'Dynamic EQ OFF', 'sliders');
+        };
+
         // The strip's fader/mute/solo gain node (falls back to the input node on older graphs).
         window.stripFaderNode = function(ch) {
             const n = window.state.nodes;
@@ -9192,6 +9312,17 @@ window.navTabs = [
                         bridgeMeter.style.height = `${Math.min(100, Math.round(level * 100))}%`;
                     }
                 }
+                // AUTO VOLUME CONTROL + DYNAMIC EQ: once per rendered frame, not per channel - both ride the
+                // master bus as a whole, using the same LUFS meter (window.lufsMeter) the LUFS tab already shows.
+                const lm = window.lufsMeter;
+                const avDb = window.rideAutoVolume(lm ? lm.truePeak : null, lm ? lm.shortTerm : null, window.state.lufsTarget);
+                const avNode = window.state.nodes.autoVolumeGain;
+                if (avNode && window.state.ctx) avNode.gain.setTargetAtTime(Math.pow(10, avDb / 20), window.state.ctx.currentTime, 0.05);
+                const deqDb = window.rideDynamicEq(lm ? lm.truePeak : null);
+                const deqNode = window.state.nodes.dynamicEqFilter;
+                if (deqNode && window.state.ctx) deqNode.gain.setTargetAtTime(deqDb, window.state.ctx.currentTime, 0.05);
+                const avReadout = document.getElementById('auto-volume-gr'); if (avReadout) avReadout.textContent = (avDb <= -0.05 ? avDb.toFixed(1) : '0.0') + ' dB';
+                const deqReadout = document.getElementById('dynamic-eq-gr'); if (deqReadout) deqReadout.textContent = (deqDb <= -0.05 ? deqDb.toFixed(1) : '0.0') + ' dB';
                 requestAnimationFrame(updateMeters);
             }
             requestAnimationFrame(updateMeters);
@@ -17450,6 +17581,14 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             on('ota-src-save', () => ota.saveSource());
             const hdr = $('hdr-ota-badge'); if (hdr && hdr.parentElement && !hdr.parentElement.dataset.wired) { hdr.parentElement.dataset.wired = '1'; hdr.parentElement.addEventListener('click', () => { window.switchTab && window.switchTab('renew'); setTimeout(() => ota.check(true), 50); }); }
             if (!wire.lowPowerRestored) { wire.lowPowerRestored = true; let saved = false; try { saved = localStorage.getItem('halx_low_power') === '1'; } catch (_) { /* private browsing */ } if (saved) window.setLowPowerMode(true, true); }
+            if (!wire.autoVolumeRestored) {
+                wire.autoVolumeRestored = true;
+                let savedMode = 'peak', savedOn = false, savedDeq = false;
+                try { savedMode = localStorage.getItem('halx_auto_volume_mode') || 'peak'; savedOn = localStorage.getItem('halx_auto_volume') === '1'; savedDeq = localStorage.getItem('halx_dynamic_eq') === '1'; } catch (_) { /* private browsing */ }
+                window.setAutoVolumeMode(savedMode, true);
+                if (savedOn) window.setAutoVolume(true, true);
+                if (savedDeq) window.setDynamicEq(true, true);
+            }
         }
 
         function start() {
@@ -17502,7 +17641,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
 
         // ── settings ──
         const DEF_SPK = () => ({ hpOn: false, hp: 80, lpOn: false, lp: 16000, eq: [{ hz: 100, db: 0, q: 1 }, { hz: 1000, db: 0, q: 1 }, { hz: 8000, db: 0, q: 1 }], limOn: false, thr: -3, rel: 120,
-            ampW: 500, ampOhm: 8, spkW: 300, spkOhm: 8, sens: 98, count: 1, dist: 10 });
+            ampW: 500, ampOhm: 8, spkW: 300, spkOhm: 8, sens: 98, count: 1, dist: 10, sub: false });
         function sanitize(raw) {
             const r = raw && typeof raw === 'object' ? raw : {}, arr = (a, i) => (Array.isArray(a) ? a[i] : undefined);
             return {
@@ -17511,7 +17650,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                     hpOn: !!o.hpOn, hp: num(o.hp, 20, 500, d.hp), lpOn: !!o.lpOn, lp: num(o.lp, 500, 20000, d.lp),
                     eq: d.eq.map((e, i) => { const x = arr(o.eq, i) || {}; return { hz: num(x.hz, 20, 20000, e.hz), db: num(x.db, -18, 18, 0), q: num(x.q, 0.3, 12, 1) }; }),
                     limOn: !!o.limOn, thr: num(o.thr, -30, 0, d.thr), rel: num(o.rel, 10, 1000, d.rel),
-                    ampW: num(o.ampW, 1, 20000, d.ampW), ampOhm: num(o.ampOhm, 1, 32, d.ampOhm), spkW: num(o.spkW, 1, 20000, d.spkW), spkOhm: num(o.spkOhm, 1, 32, d.spkOhm), sens: num(o.sens, 70, 130, d.sens), count: Math.round(num(o.count, 1, 64, 1)), dist: num(o.dist, 1, 200, d.dist) }; }),
+                    ampW: num(o.ampW, 1, 20000, d.ampW), ampOhm: num(o.ampOhm, 1, 32, d.ampOhm), spkW: num(o.spkW, 1, 20000, d.spkW), spkOhm: num(o.spkOhm, 1, 32, d.spkOhm), sens: num(o.sens, 70, 130, d.sens), count: Math.round(num(o.count, 1, 64, 1)), dist: num(o.dist, 1, 200, d.dist), sub: !!o.sub }; }),
                 fx: Array.from({ length: N_BUS }, (_, b) => { const o = arr(r.fx, b) || {}; return { type: ['reverb', 'delay', 'chorus'].includes(o.type) ? o.type : 'none', time: num(o.time, 20, 1500, 350), fb: num(o.fb, 0, 90, 35), decay: num(o.decay, 0.2, 8, 2.2), level: num(o.level, -60, 10, 0) }; }),
                 mic: { on: !!(r.mic || {}).on, prom: num((r.mic || {}).prom, 8, 30, 15) },
                 reg: { on: !!(r.reg || {}).on, target: num((r.reg || {}).target, -40, -3, -18), max: num((r.reg || {}).max, 1, 12, 6) },
@@ -17532,9 +17671,17 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             const headroom = 10 * Math.log10(o.spkW / pEach);                                          // dB the speaker can still take at amp clipping (negative: it can be overdriven)
             const limDb = pEach > o.spkW ? 10 * Math.log10(o.spkW / pEach) : 0;                        // limiter threshold (dBFS, RMS) that keeps one speaker at its rating when the amp is driven to full scale
             const maxSpl1 = o.sens + 10 * Math.log10(Math.min(pEach, o.spkW)), splTotal = maxSpl1 + 10 * Math.log10(Math.max(1, o.count));     // one speaker at 1 m, all together (not coherent)
-            return { vmax, load, pLoad, pEach, headroom, limDb, spl1m: splTotal, splAt: splTotal - 20 * Math.log10(Math.max(1, o.dist)), peakSpl: splTotal + 3,
+            // Subwoofer outputs only (o.sub): auto volume control (window.state.autoVolume) already pulls program
+            // level down by avGainDb (<= 0) dB whenever it's riding - credit that same reduction as extra
+            // effective headroom here, so a subwoofer's own protection numbers reflect what auto volume is
+            // already doing for it in real time, instead of treating that reduction as if it never happened.
+            const avReduction = o.sub ? -Math.min(0, o.avGainDb || 0) : 0, effHeadroom = headroom + avReduction;
+            return { vmax, load, pLoad, pEach, headroom, limDb, spl1m: splTotal, splAt: splTotal - 20 * Math.log10(Math.max(1, o.dist)), peakSpl: splTotal + 3, avReduction, effHeadroom,
                 warn: load < o.ampOhm / 2 ? 'The load (' + load.toFixed(1) + ' ohm) is much lower than the amp\'s rated load: check that the amp is rated for it.' : pEach > o.spkW * 1.5 ? 'The amp can give each speaker ' + pEach.toFixed(0) + ' W: use the protection limiter.' : '' };
         }
+        // ampCalc, fed the auto volume control's current gain reduction (0 when it's off) - used wherever the
+        // calculator needs to reflect what auto volume is doing to a subwoofer output right now.
+        const ampCalcLive = o => ampCalc({ ...o, avGainDb: window.state && window.state.autoVolume ? window.state.autoVolume.gainDb : 0 });
 
         // ── graph ──
         const ctx = () => window.state && window.state.ctx;
@@ -17745,7 +17892,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
         X.renderOuts = function () {
             const el = $('mx-outs'); if (!el) return;
             if (!this.outInterfaces().length && window.liveSources && window.liveSources.scan && !this._scanning) { this._scanning = true; Promise.resolve(window.liveSources.scan()).then(() => { this._scanning = false; if (M.page === 'outs') X.renderOuts(); }, () => { this._scanning = false; }); }
-            const ifs = this.outInterfaces(), hw = this.hw, cfg = this.cfg, m = this.selOut, o = cfg.spk[m], an = ampCalc(o), C = this.hwChannels();
+            const ifs = this.outInterfaces(), hw = this.hw, cfg = this.cfg, m = this.selOut, o = cfg.spk[m], an = ampCalcLive(o), C = this.hwChannels();
             const chOpts = [[0, 'OFF'], ...Array.from({ length: 32 }, (_, i) => [i + 1, 'OUT ' + (i + 1)])];
             el.innerHTML =
                 '<div class="bg-black/50 border border-white/10 rounded-lg p-2 space-y-1.5"><div class="text-[8px] text-yellow-400 font-black uppercase">OUT SENDS • MATRIX OUTPUTS TO A REAL INTERFACE</div>'
@@ -17760,6 +17907,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 + '<div class="flex items-center gap-2"><label class="text-[7.5px] text-slate-300"><input id="mo-lpon" type="checkbox" ' + (o.lpOn ? 'checked' : '') + '> LOW-PASS 24 dB/oct</label></div>' + slider('mo-lp', 500, 20000, 10, o.lp, 'LPF', ' Hz')
                 + o.eq.map((e, i) => slider('mo-eqf' + i, 20, 20000, 1, e.hz, 'EQ ' + (i + 1) + ' Hz', ' Hz') + slider('mo-eqg' + i, -18, 18, 0.5, e.db, 'EQ ' + (i + 1) + ' gain', ' dB')).join('')
                 + '</div><div class="space-y-1"><div class="flex items-center gap-2"><label class="text-[7.5px] text-slate-300"><input id="mo-limon" type="checkbox" ' + (o.limOn ? 'checked' : '') + '> AMP PROTECTION LIMITER</label><span class="text-[7.5px] text-slate-400">GR</span><div class="flex-1 h-1.5 bg-white/5 rounded overflow-hidden"><div id="mo-gr" class="h-full bg-rose-500" style="width:0%"></div></div><span id="mo-gr-v" class="w-14 text-right text-[7.5px] font-bold text-slate-200">0.0 dB</span></div>'
+                + '<div class="flex items-center gap-2"><label class="text-[7.5px] text-slate-300" title="Credits this output with auto volume control\'s live gain reduction as extra headroom"><input id="mo-sub" type="checkbox" ' + (o.sub ? 'checked' : '') + '> SUBWOOFER (auto volume protection credit)</label></div>'
                 + slider('mo-thr', -30, 0, 0.5, o.thr, 'THRESHOLD', ' dB') + slider('mo-rel', 10, 1000, 5, o.rel, 'RELEASE', ' ms')
                 + '<div class="text-[8px] text-yellow-400 font-black uppercase pt-1">AMP &amp; SPEAKER CALCULATOR</div><div class="grid grid-cols-3 gap-1 text-[7.5px] text-slate-300">'
                 + [['ampW', 'AMP W', o.ampW, 1, 20000], ['ampOhm', 'AMP OHM', o.ampOhm, 1, 32], ['spkW', 'SPEAKER W', o.spkW, 1, 20000], ['spkOhm', 'SPK OHM', o.spkOhm, 1, 32], ['sens', 'SENS dB', o.sens, 70, 130], ['count', 'SPEAKERS', o.count, 1, 64], ['dist', 'DIST m', o.dist, 1, 200]]
@@ -17770,9 +17918,9 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             bind('mo-hp', v => this.setSpk(m, { hp: v }), ' Hz'); bind('mo-lp', v => this.setSpk(m, { lp: v }), ' Hz'); bind('mo-thr', v => this.setSpk(m, { thr: v }), ' dB'); bind('mo-rel', v => this.setSpk(m, { rel: v }), ' ms'); bind('mo-prom', v => { cfg.mic.prom = v; this.persist(); }, ' dB');
             o.eq.forEach((e, i) => { bind('mo-eqf' + i, v => { const eq = cfg.spk[m].eq.map(x => ({ ...x })); eq[i].hz = v; this.setSpk(m, { eq }); }, ' Hz'); bind('mo-eqg' + i, v => { const eq = cfg.spk[m].eq.map(x => ({ ...x })); eq[i].db = v; this.setSpk(m, { eq }); }, ' dB'); });
             const chk = (id, fn) => { const e = $(id); if (e) e.onchange = () => fn(e.checked); };
-            chk('mo-hpon', v => this.setSpk(m, { hpOn: v })); chk('mo-lpon', v => this.setSpk(m, { lpOn: v })); chk('mo-limon', v => this.setSpk(m, { limOn: v })); chk('mo-mic', v => { cfg.mic.on = v; this.persist(); note(v ? 'Mic protector on' : 'Mic protector off', 'shield-halved'); });
+            chk('mo-hpon', v => this.setSpk(m, { hpOn: v })); chk('mo-lpon', v => this.setSpk(m, { lpOn: v })); chk('mo-limon', v => this.setSpk(m, { limOn: v })); chk('mo-sub', v => { this.setSpk(m, { sub: v }); this.paintCalc(); }); chk('mo-mic', v => { cfg.mic.on = v; this.persist(); note(v ? 'Mic protector on' : 'Mic protector off', 'shield-halved'); });
             ['ampW', 'ampOhm', 'spkW', 'spkOhm', 'sens', 'count', 'dist'].forEach(k => { const e = $('mo-c-' + k); if (e) e.oninput = e.onchange = () => { this.setSpk(m, { [k]: Number(e.value) }); this.paintCalc(); }; });
-            const a = $('mo-apply-lim'); if (a) a.onclick = () => { const r = ampCalc(cfg.spk[m]); this.setSpk(m, { limOn: true, thr: Math.max(-30, Math.min(0, Math.round(r.limDb * 2) / 2)) }); this.renderOuts(); note('Limiter set to ' + cfg.spk[m].thr + ' dBFS for ' + M.cfg.mtx[m].name, 'shield-halved'); };
+            const a = $('mo-apply-lim'); if (a) a.onclick = () => { const r = ampCalcLive(cfg.spk[m]); this.setSpk(m, { limOn: true, thr: Math.max(-30, Math.min(0, Math.round(r.limDb * 2) / 2)) }); this.renderOuts(); note('Limiter set to ' + cfg.spk[m].thr + ' dBFS for ' + M.cfg.mtx[m].name, 'shield-halved'); };
             el.querySelectorAll('.mo-pick').forEach(x => (x.onclick = () => { this.selOut = Number(x.dataset.m); this.renderOuts(); }));
             const ifSel = $('mo-if'); if (ifSel) ifSel.onchange = () => { cfg.hw.key = ifSel.value || null; this.persist(); };
             cfg.hw.map.forEach((_, i) => { const e = $('mo-map-' + i); if (e) e.onchange = () => { cfg.hw.map[i] = Number(e.value); this.persist(); }; });
@@ -17780,8 +17928,9 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             this.paintCalc(); this.paintNotches();
         };
         X.paintCalc = function () {
-            const el = $('mo-calc'); if (!el) return; const r = ampCalc(this.cfg.spk[this.selOut]);
-            el.innerHTML = 'AMP SWING ' + r.vmax.toFixed(1) + ' Vrms • LOAD ' + r.load.toFixed(1) + ' ohm • ' + r.pLoad.toFixed(0) + ' W total, ' + r.pEach.toFixed(0) + ' W per speaker<br>HEADROOM ' + (r.headroom >= 0 ? '+' : '') + r.headroom.toFixed(1) + ' dB at full scale • LIMITER THRESHOLD ' + r.limDb.toFixed(1) + ' dBFS<br>MAX SPL ' + r.spl1m.toFixed(0) + ' dB @ 1 m (peaks ' + r.peakSpl.toFixed(0) + ') • ' + r.splAt.toFixed(0) + ' dB @ ' + this.cfg.spk[this.selOut].dist + ' m'
+            const el = $('mo-calc'); if (!el) return; const o = this.cfg.spk[this.selOut], r = ampCalcLive(o);
+            el.innerHTML = 'AMP SWING ' + r.vmax.toFixed(1) + ' Vrms • LOAD ' + r.load.toFixed(1) + ' ohm • ' + r.pLoad.toFixed(0) + ' W total, ' + r.pEach.toFixed(0) + ' W per speaker<br>HEADROOM ' + (r.headroom >= 0 ? '+' : '') + r.headroom.toFixed(1) + ' dB at full scale • LIMITER THRESHOLD ' + r.limDb.toFixed(1) + ' dBFS<br>MAX SPL ' + r.spl1m.toFixed(0) + ' dB @ 1 m (peaks ' + r.peakSpl.toFixed(0) + ') • ' + r.splAt.toFixed(0) + ' dB @ ' + o.dist + ' m'
+                + (o.sub ? '<br><span class="text-cyan-400">SUBWOOFER: auto volume is crediting +' + r.avReduction.toFixed(1) + ' dB (effective headroom ' + (r.effHeadroom >= 0 ? '+' : '') + r.effHeadroom.toFixed(1) + ' dB)</span>' : '')
                 + (r.warn ? '<br><span class="text-amber-400">' + esc(r.warn) + '</span>' : '');
         };
         X.paintNotches = function () {

@@ -45,6 +45,15 @@ test('local update check: describes an available update, up to date, and a faile
   assert.match(describeUpdateCheck({ ok: false }).body, /could not check/i);
 });
 
+test('local update check: includes the manifest\'s own release notes (what\'s new), capped at 3, only when an update is available', () => {
+  const withNotes = describeUpdateCheck({ ok: true, updateAvailable: true, current: '1.0.0', latest: '1.1.0', notes: ['Fixed A', 'Added B', 'Changed C', 'Removed D'] });
+  assert.equal(withNotes.body, 'Version 1.1.0 is available (you have 1.0.0).\n• Fixed A\n• Added B\n• Changed C');
+  const upToDateWithNotes = describeUpdateCheck({ ok: true, updateAvailable: false, current: '1.1.0', latest: '1.1.0', notes: ['Fixed A'] });
+  assert.equal(upToDateWithNotes.body, 'You are up to date (1.1.0).');
+  const noNotes = describeUpdateCheck({ ok: true, updateAvailable: true, current: '1.0.0', latest: '1.1.0', notes: [] });
+  assert.equal(noNotes.body, 'Version 1.1.0 is available (you have 1.0.0).');
+});
+
 test('local update check: calls bridge/update.js\'s check() with this app\'s own version, real network failure comes back as null (never throws)', async () => {
   let gotCurrent = null;
   const ok = await checkForUpdates({ current: '9.9.9', checkImpl: async ({ current }) => { gotCurrent = current; return { ok: true, updateAvailable: true, current, latest: '10.0.0' }; } });
