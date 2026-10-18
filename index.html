@@ -1000,6 +1000,7 @@ window.navTabs = [
             stereoLink: Array.from({length: 16}, () => false),   // one flag per adjacent pair (0,1), (2,3), ... see window.toggleStereoLink
             msProcessing: { midDb: 0, widthPct: 100 },   // master-bus mid/side: see window.setMsMidDb / window.setMsWidth
             saturation: { driveDb: 6, mix: 0 },   // master-bus saturation/warmth: see window.setSaturationDrive / window.setSaturationMix
+            transientShaper: { attack: 0, sustain: 0, gainDb: 0 },   // master-bus transient shaper: see window.rideTransientShaper
             lowPowerMode: false,   // throttles the always-running meter loop (see window.setLowPowerMode / startMeterLoop) to cut CPU and battery use
             autoVolume: { enabled: false, mode: 'peak', ceilingDb: -1, gainDb: 0 },   // master-bus gain rider: see window.rideAutoVolume
             dynamicEq: { enabled: false, freq: 3000, q: 1.4, threshold: -12, ratio: 2, gainDb: 0 },   // one level-dependent EQ band: see window.rideDynamicEq
@@ -1235,6 +1236,16 @@ window.navTabs = [
             window.state.nodes.satDry = satDry;
             window.state.nodes.satWet = satWet;
             lastFilter = satOut;
+
+            // TRANSIENT SHAPER: a single gain stage (transientGain) ridden every meter-loop frame by
+            // window.rideTransientShaper - see there for how ATTACK and SUSTAIN are derived. At the default
+            // (attack = sustain = 0) the rider always returns 0 dB, so this is an identity until either control
+            // is moved, the same always-wired, no-op-by-default pattern as dynamic EQ / mid-side / saturation.
+            const transientGain = window.state.ctx.createGain();
+            transientGain.gain.setValueAtTime(1.0, window.state.ctx.currentTime);
+            lastFilter.connect(transientGain);
+            window.state.nodes.transientGain = transientGain;
+            lastFilter = transientGain;
 
             // 3D Binaural Spatializer Panner
             let spatialPanner = null;
@@ -7490,6 +7501,33 @@ window.navTabs = [
                       <span id="sat-mix-val" class="text-[7.5px] font-mono text-orange-400 font-bold w-14 text-right">0%</span>
                     </div>
                   </div>
+                  <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-white/5">
+                    <div class="flex items-center gap-2.5">
+                      <div class="w-8 h-8 rounded-lg bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400 text-sm">
+                        <i class="fa-solid fa-bolt"></i>
+                      </div>
+                      <div>
+                        <h3 class="text-[10px] font-black text-white font-wing tracking-wider uppercase">TRANSIENT SHAPER</h3>
+                        <p class="text-[7.5px] font-mono text-slate-400">Master-bus dual-envelope shaper (no lookahead). ATTACK reacts to a hit's leading edge; SUSTAIN shapes the body/tail once the attack has passed. Both 0% by default.</p>
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                      <span class="text-[7.5px] font-mono text-slate-400">GR <span id="ts-gr">0.0 dB</span></span>
+                      <button onclick="window.resetTransientShaper()" class="px-2 py-1 rounded font-mono font-bold text-[7.5px] uppercase transition border bg-white/5 text-slate-300 border-white/10 hover:bg-rose-500 hover:text-black">RESET</button>
+                    </div>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-4 pt-1">
+                    <div class="flex items-center gap-2 flex-1 min-w-[140px]">
+                      <span class="text-[7px] font-mono text-slate-400 whitespace-nowrap">ATTACK</span>
+                      <input type="range" id="ts-attack-slider" min="-100" max="100" step="1" value="0" oninput="window.setTransientAttack(this.value)" class="flex-1 accent-rose-400 cursor-pointer">
+                      <span id="ts-attack-val" class="text-[7.5px] font-mono text-rose-400 font-bold w-14 text-right">0%</span>
+                    </div>
+                    <div class="flex items-center gap-2 flex-1 min-w-[140px]">
+                      <span class="text-[7px] font-mono text-slate-400 whitespace-nowrap">SUSTAIN</span>
+                      <input type="range" id="ts-sustain-slider" min="-100" max="100" step="1" value="0" oninput="window.setTransientSustain(this.value)" class="flex-1 accent-rose-400 cursor-pointer">
+                      <span id="ts-sustain-val" class="text-[7.5px] font-mono text-rose-400 font-bold w-14 text-right">0%</span>
+                    </div>
+                  </div>
                 </div>
 
                 <!-- FRAMEWORK ENGINE SYSTEM: CORE AUDIO ARCHITECTURE & DSP SIGNAL FLOW GRAPH -->
@@ -9332,6 +9370,32 @@ window.navTabs = [
             return d.gainDb;
         };
 
+        // TRANSIENT SHAPER: a dual-envelope design (no lookahead, meter-rate rather than audio-rate, like every
+        // other master-bus rider here) - a fast envelope (TS_FAST_*) and a slow one (TS_SLOW_*) both chase the
+        // same metered true-peak dB; a fast attack onset makes the fast envelope outrun the slow one, and that gap
+        // (tsDiffDb) is the transient-presence signal: near 0 dB during a steady sustained note, up to ~20+ dB
+        // right on a hit's leading edge. ATTACK (-100..100) scales gain by that gap, boosting or softening just
+        // the leading edge; SUSTAIN (-100..100) applies up to +-6 dB that fades OUT as transient presence rises,
+        // so it only acts on the body/tail a transient control isn't already shaping. Both are 0 (no-op) by
+        // default - see the transientGain node built in initAudioEngine.
+        const TS_FAST_UP = 0.55, TS_FAST_DOWN = 0.15, TS_SLOW_UP = 0.05, TS_SLOW_DOWN = 0.15, TS_GLIDE = 0.3;
+        let tsFastDb = -90, tsSlowDb = -90;
+        window.rideTransientShaper = function(peakDb) {
+            const ts = window.state.transientShaper;
+            if (!ts) return 0;
+            if (ts.attack === 0 && ts.sustain === 0) { ts.gainDb = 0; tsFastDb = tsSlowDb = -90; return 0; }
+            const d = (peakDb == null || !isFinite(peakDb)) ? -90 : peakDb;
+            tsFastDb += (d - tsFastDb) * (d > tsFastDb ? TS_FAST_UP : TS_FAST_DOWN);
+            tsSlowDb += (d - tsSlowDb) * (d > tsSlowDb ? TS_SLOW_UP : TS_SLOW_DOWN);
+            const diffDb = Math.max(0, tsFastDb - tsSlowDb);
+            const attackGainDb = (ts.attack / 100) * Math.min(diffDb, 24) * 0.35;
+            const transientPresence = Math.min(1, diffDb / 12);
+            const sustainGainDb = (ts.sustain / 100) * 6 * (1 - transientPresence);
+            const desiredDb = Math.max(-18, Math.min(18, attackGainDb + sustainGainDb));
+            ts.gainDb += (desiredDb - ts.gainDb) * TS_GLIDE;
+            return ts.gainDb;
+        };
+
         // PER-CHANNEL NOISE GATE: a dual-mode downward processor on each channel strip's own noise gate stage
         // (window.state.nodes.channelGateGain[i]), independent of the master-bus auto volume / dynamic EQ above.
         // "gate" mode is a hard gate: once the input falls below threshold it rides toward the full floor
@@ -9459,6 +9523,28 @@ window.navTabs = [
             if (!silent) window.notify('Saturation: mix ' + Math.round(n) + '%', n === 0 ? 'ban' : 'fire');
         };
         window.resetSaturation = function() { window.setSaturationDrive(6, true); window.setSaturationMix(0, true); window.notify('Saturation Reset', 'rotate-left'); };
+
+        // MASTER-BUS TRANSIENT SHAPER controls - see window.rideTransientShaper (called from the meter loop) for
+        // what ATTACK and SUSTAIN actually do to the signal.
+        window.setTransientAttack = function(pct, silent) {
+            const n = Math.max(-100, Math.min(100, parseFloat(pct)));
+            if (!isFinite(n)) return;
+            window.state.transientShaper.attack = n;
+            try { localStorage.setItem('halx_ts_attack', String(n)); } catch (_) { /* private browsing */ }
+            const readout = document.getElementById('ts-attack-val'); if (readout) readout.textContent = (n > 0 ? '+' : '') + Math.round(n) + '%';
+            const slider = document.getElementById('ts-attack-slider'); if (slider && parseFloat(slider.value) !== n) slider.value = n;
+            if (!silent) window.notify('Transient shaper: attack ' + (n > 0 ? '+' : '') + Math.round(n) + '%', 'bolt');
+        };
+        window.setTransientSustain = function(pct, silent) {
+            const n = Math.max(-100, Math.min(100, parseFloat(pct)));
+            if (!isFinite(n)) return;
+            window.state.transientShaper.sustain = n;
+            try { localStorage.setItem('halx_ts_sustain', String(n)); } catch (_) { /* private browsing */ }
+            const readout = document.getElementById('ts-sustain-val'); if (readout) readout.textContent = (n > 0 ? '+' : '') + Math.round(n) + '%';
+            const slider = document.getElementById('ts-sustain-slider'); if (slider && parseFloat(slider.value) !== n) slider.value = n;
+            if (!silent) window.notify('Transient shaper: sustain ' + (n > 0 ? '+' : '') + Math.round(n) + '%', 'wave-square');
+        };
+        window.resetTransientShaper = function() { window.setTransientAttack(0, true); window.setTransientSustain(0, true); window.notify('Transient Shaper Reset', 'rotate-left'); };
 
         // The strip's fader/mute/solo gain node (falls back to the input node on older graphs).
         window.stripFaderNode = function(ch) {
@@ -9614,6 +9700,10 @@ window.navTabs = [
                 if (deqNode && window.state.ctx) deqNode.gain.setTargetAtTime(deqDb, window.state.ctx.currentTime, 0.05);
                 const avReadout = document.getElementById('auto-volume-gr'); if (avReadout) avReadout.textContent = (avDb <= -0.05 ? avDb.toFixed(1) : '0.0') + ' dB';
                 const deqReadout = document.getElementById('dynamic-eq-gr'); if (deqReadout) deqReadout.textContent = (deqDb <= -0.05 ? deqDb.toFixed(1) : '0.0') + ' dB';
+                const tsDb = window.rideTransientShaper(lm ? lm.truePeak : null);
+                const tsNode = window.state.nodes.transientGain;
+                if (tsNode && window.state.ctx) tsNode.gain.setTargetAtTime(Math.pow(10, tsDb / 20), window.state.ctx.currentTime, 0.02);
+                const tsReadout = document.getElementById('ts-gr'); if (tsReadout) tsReadout.textContent = (tsDb >= 0 ? '+' : '') + tsDb.toFixed(1) + ' dB';
                 requestAnimationFrame(updateMeters);
             }
             requestAnimationFrame(updateMeters);
@@ -17899,6 +17989,16 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 } catch (_) { /* private browsing */ }
                 window.setSaturationDrive(isFinite(savedDrive) ? savedDrive : 6, true);
                 window.setSaturationMix(isFinite(savedMix) ? savedMix : 0, true);
+            }
+            if (!wire.transientShaperRestored) {
+                wire.transientShaperRestored = true;
+                let savedAttack = 0, savedSustain = 0;
+                try {
+                    const a = localStorage.getItem('halx_ts_attack'); if (a != null) savedAttack = parseFloat(a);
+                    const s = localStorage.getItem('halx_ts_sustain'); if (s != null) savedSustain = parseFloat(s);
+                } catch (_) { /* private browsing */ }
+                window.setTransientAttack(isFinite(savedAttack) ? savedAttack : 0, true);
+                window.setTransientSustain(isFinite(savedSustain) ? savedSustain : 0, true);
             }
         }
 
