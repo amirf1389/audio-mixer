@@ -998,6 +998,7 @@ window.navTabs = [
             channelAutoFader: Array.from({length: 32}, () => false),
             noiseGate: Array.from({length: 32}, () => ({ enabled: false, mode: 'gate', thresholdDb: -45, rangeDb: -60, ratio: 4, gainDb: 0 })),   // per-channel dual-mode gate: see window.rideNoiseGate
             stereoLink: Array.from({length: 16}, () => false),   // one flag per adjacent pair (0,1), (2,3), ... see window.toggleStereoLink
+            msProcessing: { midDb: 0, widthPct: 100 },   // master-bus mid/side: see window.setMsMidDb / window.setMsWidth
             lowPowerMode: false,   // throttles the always-running meter loop (see window.setLowPowerMode / startMeterLoop) to cut CPU and battery use
             autoVolume: { enabled: false, mode: 'peak', ceilingDb: -1, gainDb: 0 },   // master-bus gain rider: see window.rideAutoVolume
             dynamicEq: { enabled: false, freq: 3000, q: 1.4, threshold: -12, ratio: 2, gainDb: 0 },   // one level-dependent EQ band: see window.rideDynamicEq
@@ -1231,27 +1232,60 @@ window.navTabs = [
             masterLimiter.ratio.setValueAtTime(20.0, window.state.ctx.currentTime);
             lastFilter.connect(masterLimiter);
 
+            // MID/SIDE PROCESSING: the final stereo-image stage, after the limiter so everything downstream
+            // (metering, the phase scope, the destination itself) sees the processed image. Mid = (L+R)/2, Side =
+            // (L-R)/2; recombining as L' = Mid*midGain + Side*sideGain, R' = Mid*midGain - Side*sideGain. At the
+            // defaults (midGain = sideGain = 1, i.e. 0 dB mid / 100% width) this is an exact identity - L'=L, R'=R -
+            // so it is always wired in, never bypassed, the same way the dynamic EQ band above is a no-op at 0 dB
+            // until window.setMsMidDb / window.setMsWidth actually move it.
+            const msSplit = window.state.ctx.createChannelSplitter(2);
+            try { msSplit.channelInterpretation = 'speakers'; } catch (e) { /* keep default */ }
+            masterLimiter.connect(msSplit);
+            const msMidHalfL = window.state.ctx.createGain(); msMidHalfL.gain.setValueAtTime(0.5, window.state.ctx.currentTime);
+            const msMidHalfR = window.state.ctx.createGain(); msMidHalfR.gain.setValueAtTime(0.5, window.state.ctx.currentTime);
+            const msSideHalfL = window.state.ctx.createGain(); msSideHalfL.gain.setValueAtTime(0.5, window.state.ctx.currentTime);
+            const msSideHalfR = window.state.ctx.createGain(); msSideHalfR.gain.setValueAtTime(-0.5, window.state.ctx.currentTime);
+            msSplit.connect(msMidHalfL, 0); msSplit.connect(msMidHalfR, 1);
+            msSplit.connect(msSideHalfL, 0); msSplit.connect(msSideHalfR, 1);
+            const msMidSum = window.state.ctx.createGain();   // summing junction: Mid = L*0.5 + R*0.5
+            const msSideSum = window.state.ctx.createGain();  // summing junction: Side = L*0.5 - R*0.5
+            msMidHalfL.connect(msMidSum); msMidHalfR.connect(msMidSum);
+            msSideHalfL.connect(msSideSum); msSideHalfR.connect(msSideSum);
+            const msMidGain = window.state.ctx.createGain();   // MID LEVEL: window.setMsMidDb
+            const msSideGain = window.state.ctx.createGain();  // WIDTH: window.setMsWidth (0 = mono, 1 = normal, up to 2 = extra-wide)
+            msMidGain.gain.setValueAtTime(1.0, window.state.ctx.currentTime);
+            msSideGain.gain.setValueAtTime(1.0, window.state.ctx.currentTime);
+            msMidSum.connect(msMidGain); msSideSum.connect(msSideGain);
+            const msSideInv = window.state.ctx.createGain(); msSideInv.gain.setValueAtTime(-1.0, window.state.ctx.currentTime);
+            msSideGain.connect(msSideInv);
+            const msMerge = window.state.ctx.createChannelMerger(2);
+            msMidGain.connect(msMerge, 0, 0); msSideGain.connect(msMerge, 0, 0);   // L' = Mid + Side
+            msMidGain.connect(msMerge, 0, 1); msSideInv.connect(msMerge, 0, 1);    // R' = Mid - Side
+            window.state.nodes.msMidGain = msMidGain;
+            window.state.nodes.msSideGain = msSideGain;
+            const msOut = msMerge;
+
             // Program Bus FFT Analyser
             const musicAnalyser = window.state.ctx.createAnalyser();
             musicAnalyser.fftSize = 512;
             musicAnalyser.smoothingTimeConstant = 0.8;
-            masterLimiter.connect(musicAnalyser);
+            msOut.connect(musicAnalyser);
             musicAnalyser.connect(window.state.ctx.destination);
             // Program bus spectrum (RTA): 4096 points like the mic analyser (11.7 Hz per bin at 48 kHz). musicAnalyser stays at 512 points for the scope and the PEQ overlay.
             const musicFftAnalyser = window.state.ctx.createAnalyser();
             musicFftAnalyser.fftSize = 4096;
             musicFftAnalyser.smoothingTimeConstant = 0.8;
-            masterLimiter.connect(musicFftAnalyser);
+            msOut.connect(musicFftAnalyser);
             window.state.nodes.musicFftAnalyser = musicFftAnalyser;
 
-            // Stereo tap for the phase scope / correlation meter (post-limiter L and R)
+            // Stereo tap for the phase scope / correlation meter (post mid/side L and R)
             const phaseSplit = window.state.ctx.createChannelSplitter(2);
             try { phaseSplit.channelInterpretation = 'speakers'; } catch (e) { /* keep default */ }
             const phaseAnL = window.state.ctx.createAnalyser();
             const phaseAnR = window.state.ctx.createAnalyser();
             phaseAnL.fftSize = phaseAnR.fftSize = 2048;
             phaseAnL.smoothingTimeConstant = phaseAnR.smoothingTimeConstant = 0;
-            masterLimiter.connect(phaseSplit);
+            msOut.connect(phaseSplit);
             phaseSplit.connect(phaseAnL, 0);
             phaseSplit.connect(phaseAnR, 1);
             window.state.nodes.phaseAnL = phaseAnL;
@@ -7381,6 +7415,33 @@ window.navTabs = [
                       <button id="dynamic-eq-toggle" onclick="window.setDynamicEq(!window.state.dynamicEq.enabled)" class="px-3 py-1.5 rounded font-mono font-bold text-[8px] uppercase transition border bg-white/5 text-slate-400 border-white/10">OFF</button>
                     </div>
                   </div>
+                  <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-white/5">
+                    <div class="flex items-center gap-2.5">
+                      <div class="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 text-sm">
+                        <i class="fa-solid fa-arrows-left-right"></i>
+                      </div>
+                      <div>
+                        <h3 class="text-[10px] font-black text-white font-wing tracking-wider uppercase">MID/SIDE PROCESSING</h3>
+                        <p class="text-[7.5px] font-mono text-slate-400">Master-bus Mid/Side matrix, after the limiter. MID LEVEL trims the summed center; WIDTH scales the difference signal (0% mono, 100% normal, up to 200% extra-wide).</p>
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                      <button onclick="window.setMsMono()" class="px-2 py-1 rounded font-mono font-bold text-[7.5px] uppercase transition border bg-white/5 text-slate-300 border-white/10 hover:bg-amber-500 hover:text-black">MONO</button>
+                      <button onclick="window.resetMsProcessing()" class="px-2 py-1 rounded font-mono font-bold text-[7.5px] uppercase transition border bg-white/5 text-slate-300 border-white/10 hover:bg-amber-500 hover:text-black">RESET</button>
+                    </div>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-4 pt-1">
+                    <div class="flex items-center gap-2 flex-1 min-w-[140px]">
+                      <span class="text-[7px] font-mono text-slate-400 whitespace-nowrap">MID LEVEL</span>
+                      <input type="range" id="ms-mid-slider" min="-24" max="12" step="0.5" value="0" oninput="window.setMsMidDb(this.value)" class="flex-1 accent-amber-400 cursor-pointer">
+                      <span id="ms-mid-val" class="text-[7.5px] font-mono text-amber-400 font-bold w-14 text-right">0.0 dB</span>
+                    </div>
+                    <div class="flex items-center gap-2 flex-1 min-w-[140px]">
+                      <span class="text-[7px] font-mono text-slate-400 whitespace-nowrap">WIDTH</span>
+                      <input type="range" id="ms-width-slider" min="0" max="200" step="1" value="100" oninput="window.setMsWidth(this.value)" class="flex-1 accent-amber-400 cursor-pointer">
+                      <span id="ms-width-val" class="text-[7.5px] font-mono text-amber-400 font-bold w-14 text-right">100%</span>
+                    </div>
+                  </div>
                 </div>
 
                 <!-- FRAMEWORK ENGINE SYSTEM: CORE AUDIO ARCHITECTURE & DSP SIGNAL FLOW GRAPH -->
@@ -9290,6 +9351,32 @@ window.navTabs = [
             if (btn) { btn.textContent = on ? 'ON' : 'OFF'; btn.className = "px-3 py-1.5 rounded font-mono font-bold text-[8px] uppercase transition border " + (on ? 'bg-purple-500 text-black border-purple-500' : 'bg-white/5 text-slate-400 border-white/10'); }
             if (!silent) window.notify(on ? 'Dynamic EQ ON' : 'Dynamic EQ OFF', 'sliders');
         };
+
+        // MASTER-BUS MID/SIDE PROCESSING: midDb trims the summed center (Mid = (L+R)/2) in dB; widthPct scales
+        // the difference signal (Side = (L-R)/2), 0% collapsing to mono, 100% the normal stereo width, up to 200%
+        // for an exaggerated, wider image. See the msMidGain / msSideGain nodes built in initAudioEngine.
+        window.setMsMidDb = function(db, silent) {
+            const n = Math.max(-24, Math.min(12, parseFloat(db)));
+            if (!isFinite(n)) return;
+            window.state.msProcessing.midDb = n;
+            try { localStorage.setItem('halx_ms_mid_db', String(n)); } catch (_) { /* private browsing */ }
+            if (window.state.nodes.msMidGain && window.state.ctx) window.state.nodes.msMidGain.gain.setTargetAtTime(Math.pow(10, n / 20), window.state.ctx.currentTime, 0.02);
+            const readout = document.getElementById('ms-mid-val'); if (readout) readout.textContent = (n > 0 ? '+' : '') + n.toFixed(1) + ' dB';
+            const slider = document.getElementById('ms-mid-slider'); if (slider && parseFloat(slider.value) !== n) slider.value = n;
+            if (!silent) window.notify('Mid/Side: mid level ' + (n > 0 ? '+' : '') + n.toFixed(1) + ' dB', 'sliders');
+        };
+        window.setMsWidth = function(pct, silent) {
+            const n = Math.max(0, Math.min(200, parseFloat(pct)));
+            if (!isFinite(n)) return;
+            window.state.msProcessing.widthPct = n;
+            try { localStorage.setItem('halx_ms_width', String(n)); } catch (_) { /* private browsing */ }
+            if (window.state.nodes.msSideGain && window.state.ctx) window.state.nodes.msSideGain.gain.setTargetAtTime(n / 100, window.state.ctx.currentTime, 0.02);
+            const readout = document.getElementById('ms-width-val'); if (readout) readout.textContent = Math.round(n) + '%';
+            const slider = document.getElementById('ms-width-slider'); if (slider && parseFloat(slider.value) !== n) slider.value = n;
+            if (!silent) window.notify('Mid/Side: width ' + Math.round(n) + '%', n === 0 ? 'compress' : 'arrows-left-right');
+        };
+        window.setMsMono = function() { window.setMsWidth(0); };   // quick collapse-to-mono, same math as width 0%
+        window.resetMsProcessing = function() { window.setMsMidDb(0); window.setMsWidth(100); window.notify('Mid/Side Processing Reset', 'rotate-left'); };
 
         // The strip's fader/mute/solo gain node (falls back to the input node on older graphs).
         window.stripFaderNode = function(ch) {
@@ -17710,6 +17797,16 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 window.setAutoVolumeMode(savedMode, true);
                 if (savedOn) window.setAutoVolume(true, true);
                 if (savedDeq) window.setDynamicEq(true, true);
+            }
+            if (!wire.msProcessingRestored) {
+                wire.msProcessingRestored = true;
+                let savedMidDb = 0, savedWidth = 100;
+                try {
+                    const m = localStorage.getItem('halx_ms_mid_db'); if (m != null) savedMidDb = parseFloat(m);
+                    const w = localStorage.getItem('halx_ms_width'); if (w != null) savedWidth = parseFloat(w);
+                } catch (_) { /* private browsing */ }
+                window.setMsMidDb(isFinite(savedMidDb) ? savedMidDb : 0, true);
+                window.setMsWidth(isFinite(savedWidth) ? savedWidth : 100, true);
             }
         }
 

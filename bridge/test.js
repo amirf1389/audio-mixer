@@ -3507,7 +3507,7 @@ test('music FFT spectrum: the RTA music trace and the PEQ overlay use a 4096-poi
   const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
   // a dedicated analyser: the 512-point program bus analyser stays for the scope
   assert.match(html, /const musicFftAnalyser = window\.state\.ctx\.createAnalyser\(\);\s*musicFftAnalyser\.fftSize = 4096;/);
-  assert.match(html, /masterLimiter\.connect\(musicFftAnalyser\);\s*window\.state\.nodes\.musicFftAnalyser = musicFftAnalyser;/);
+  assert.match(html, /msOut\.connect\(musicFftAnalyser\);\s*window\.state\.nodes\.musicFftAnalyser = musicFftAnalyser;/);
   assert.match(html, /musicAnalyser\.fftSize = 512;/);
   // the RTA: one source (Live Sources music, else the program bus while powered on), the mode, the same band axis as the mic trace
   assert.match(html, /const rtaMode = \(window\.musicRtaEngine && window\.musicRtaEngine\.mode\) \|\| 'dual';/);
