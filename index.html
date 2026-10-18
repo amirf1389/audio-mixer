@@ -997,6 +997,7 @@ window.navTabs = [
             channelLevels: Array.from({length: 32}, () => 0),
             channelAutoFader: Array.from({length: 32}, () => false),
             channelSoloSafe: Array.from({length: 32}, () => false),   // exempts a channel from solo-in-place silencing: see window.toggleChannelSoloSafe
+            channelComp: Array.from({length: 32}, () => ({ enabled: false, mode: 'comp' })),   // per-channel compressor: see window.toggleChannelComp
             noiseGate: Array.from({length: 32}, () => ({ enabled: false, mode: 'gate', thresholdDb: -45, rangeDb: -60, ratio: 4, gainDb: 0 })),   // per-channel dual-mode gate: see window.rideNoiseGate
             stereoLink: Array.from({length: 16}, () => false),   // one flag per adjacent pair (0,1), (2,3), ... see window.toggleStereoLink
             msProcessing: { midDb: 0, widthPct: 100 },   // master-bus mid/side: see window.setMsMidDb / window.setMsWidth
@@ -1400,11 +1401,13 @@ window.navTabs = [
             window.state.nodes.channelHpf = [];
             window.state.nodes.channelTrim = [];
             window.state.nodes.channelGateGain = [];
+            window.state.nodes.channelComp = [];
+            window.state.nodes.channelCompMakeup = [];
             for (let i = 0; i < CHANNELS; i++) {
                 // Input node: every source connects here (kept under the historic name channelPostGains).
                 const chGain = window.state.ctx.createGain();
                 chGain.gain.setValueAtTime(1.0, window.state.ctx.currentTime);
-                // Input stage: high-pass (10 Hz = off) -> trim -> noise gate -> polarity. Pre-fader sends tap after this stage.
+                // Input stage: high-pass (10 Hz = off) -> trim -> noise gate -> compressor -> polarity. Pre-fader sends tap after this stage.
                 const hpf = window.state.ctx.createBiquadFilter();
                 hpf.type = 'highpass'; hpf.frequency.setValueAtTime(10, window.state.ctx.currentTime); hpf.Q.setValueAtTime(0.707, window.state.ctx.currentTime);
                 const trim = window.state.ctx.createGain();
@@ -1412,13 +1415,23 @@ window.navTabs = [
                 // Noise gate stage: ridden per frame by window.rideNoiseGate (see startMeterLoop); 0 dB (linear 1.0) when off.
                 const gateGain = window.state.ctx.createGain();
                 gateGain.gain.setValueAtTime(1.0, window.state.ctx.currentTime);
+                // Per-channel compressor: window.toggleChannelComp cycles OFF -> COMP (gentle 4:1) -> LIMIT
+                // (fast 10:1); transparent (ratio 1, threshold 0 dB, unity makeup) when off.
+                const comp = window.state.ctx.createDynamicsCompressor();
+                comp.threshold.setValueAtTime(0, window.state.ctx.currentTime);
+                comp.knee.setValueAtTime(6, window.state.ctx.currentTime);
+                comp.ratio.setValueAtTime(1, window.state.ctx.currentTime);
+                comp.attack.setValueAtTime(0.01, window.state.ctx.currentTime);
+                comp.release.setValueAtTime(0.15, window.state.ctx.currentTime);
+                const compMakeup = window.state.ctx.createGain();
+                compMakeup.gain.setValueAtTime(1.0, window.state.ctx.currentTime);
                 // Polarity (Ø) stage: +1 normal, -1 inverted 180°
                 const polarity = window.state.ctx.createGain();
                 polarity.gain.setValueAtTime(window.state.phaseInvert && window.state.phaseInvert[i] ? -1 : 1, window.state.ctx.currentTime);
                 // Fader / mute / solo stage
                 const fader = window.state.ctx.createGain();
                 fader.gain.setValueAtTime(1.0, window.state.ctx.currentTime);
-                chGain.connect(hpf); hpf.connect(trim); trim.connect(gateGain); gateGain.connect(polarity); polarity.connect(fader);
+                chGain.connect(hpf); hpf.connect(trim); trim.connect(gateGain); gateGain.connect(comp); comp.connect(compMakeup); compMakeup.connect(polarity); polarity.connect(fader);
 
                 let panner = null;
                 if (window.state.ctx.createStereoPanner) {
@@ -1434,6 +1447,8 @@ window.navTabs = [
                 window.state.nodes.channelHpf.push(hpf);
                 window.state.nodes.channelTrim.push(trim);
                 window.state.nodes.channelGateGain.push(gateGain);
+                window.state.nodes.channelComp.push(comp);
+                window.state.nodes.channelCompMakeup.push(compMakeup);
                 window.state.nodes.channelPostGains.push(chGain);
                 window.state.nodes.channelPanners.push(panner);
             }
@@ -9289,6 +9304,7 @@ window.navTabs = [
                             <button id="btn-solo-${i}" class="text-[6.5px] font-black flex-1 py-1 bg-warn/10 border border-warn/30 text-warn rounded hover:bg-warn hover:text-black transition-all ${window.state.channelSolos[i] ? 'bg-warn text-black' : ''}" onclick="window.toggleChannelSolo(${i})">S</button>
                             <button id="btn-autofader-${i}" title="AUTO FADER: rides this fader on its own to keep the input near a healthy level (-18 dBFS). Dragging the fader by hand turns it off." class="text-[6.5px] font-black flex-1 py-1 bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 rounded hover:bg-cyan-500 hover:text-black transition-all ${window.state.channelAutoFader[i] ? 'bg-cyan-500 text-black' : ''}" onclick="window.toggleChannelAuto(${i})">A</button>
                             <button id="btn-gate-${i}" title="NOISE GATE: off. Click to arm a hard gate, click again for the gentler expander mode, once more to turn off." class="text-[6.5px] font-black flex-1 py-1 rounded transition-all ${window.state.noiseGate[i].enabled ? (window.state.noiseGate[i].mode === 'expander' ? 'bg-purple-500 text-black shadow-[0_0_8px_#8b5cf6]' : 'bg-emerald-500 text-black shadow-[0_0_8px_#10b981]') : 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500 hover:text-black'}" onclick="window.toggleChannelGate(${i})">${window.state.noiseGate[i].enabled ? (window.state.noiseGate[i].mode === 'expander' ? 'EX' : 'GT') : 'G'}</button>
+                            <button id="btn-comp-${i}" title="COMPRESSOR: off. Click to arm a gentle 4:1 compressor, click again for a fast 10:1 limiter, once more to turn off." class="text-[6.5px] font-black flex-1 py-1 rounded transition-all ${window.state.channelComp[i].enabled ? (window.state.channelComp[i].mode === 'limit' ? 'bg-rose-500 text-black shadow-[0_0_8px_#f43f5e]' : 'bg-indigo-500 text-black shadow-[0_0_8px_#6366f1]') : 'bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 hover:bg-indigo-500 hover:text-black'}" onclick="window.toggleChannelComp(${i})">${window.state.channelComp[i].enabled ? (window.state.channelComp[i].mode === 'limit' ? 'LM' : 'CP') : 'CP'}</button>
                         </div>
                         <div id="gate-gr-${i}" class="text-[5.5px] font-mono text-emerald-400 text-center mt-0.5">0dB</div>
                         <button id="btn-link-${i}" title="STEREO LINK with channel ${i % 2 === 0 ? i + 2 : i}: fader, mute and solo move together; pan mirrors L/R." class="w-full mt-0.5 text-[5.5px] font-mono flex-1 py-0.5 rounded transition-all ${window.isStereoLinked(i) ? 'bg-amber-500 text-black font-bold' : 'text-slate-500 border border-white/10 hover:text-amber-400 hover:border-amber-400/50'}" onclick="window.toggleStereoLink(${i})">LINK ${2 * Math.floor(i / 2) + 1}-${2 * Math.floor(i / 2) + 2}</button>
@@ -9659,6 +9675,50 @@ window.navTabs = [
             try { node.gain.setTargetAtTime(linear, window.state.ctx.currentTime, 0.02); } catch(e){}   // 20 ms glide: no zipper noise while dragging
         };
         window.applyAllChannelGains = function() { for (let i = 0; i < CHANNELS; i++) window.applyChannelGain(i); };
+
+        // PER-CHANNEL COMPRESSOR: a real DynamicsCompressorNode per strip (window.state.nodes.channelComp),
+        // cycling OFF -> COMP (gentle: -24 dB threshold, 4:1, 10 ms attack, +3 dB makeup) -> LIMIT (fast: -18 dB
+        // threshold, 10:1, 3 ms attack, +6 dB makeup) -> OFF. Fixed, sensible settings rather than per-channel
+        // sliders, the same minimal-control convention the per-channel noise gate already uses.
+        window.applyChannelComp = function(channelIndex) {
+            const cfg = window.state.channelComp[channelIndex];
+            const node = window.state.nodes.channelComp && window.state.nodes.channelComp[channelIndex];
+            const makeup = window.state.nodes.channelCompMakeup && window.state.nodes.channelCompMakeup[channelIndex];
+            if (!node || !makeup || !window.state.ctx) return;
+            const t = window.state.ctx.currentTime;
+            if (!cfg.enabled) {
+                node.threshold.setTargetAtTime(0, t, 0.02); node.ratio.setTargetAtTime(1, t, 0.02);
+                node.attack.setTargetAtTime(0.01, t, 0.02); node.release.setTargetAtTime(0.15, t, 0.02);
+                makeup.gain.setTargetAtTime(1.0, t, 0.02);
+                return;
+            }
+            if (cfg.mode === 'limit') {
+                node.threshold.setTargetAtTime(-18, t, 0.02); node.ratio.setTargetAtTime(10, t, 0.02);
+                node.attack.setTargetAtTime(0.003, t, 0.02); node.release.setTargetAtTime(0.1, t, 0.02);
+                makeup.gain.setTargetAtTime(Math.pow(10, 6 / 20), t, 0.02);
+            } else {
+                node.threshold.setTargetAtTime(-24, t, 0.02); node.ratio.setTargetAtTime(4, t, 0.02);
+                node.attack.setTargetAtTime(0.01, t, 0.02); node.release.setTargetAtTime(0.15, t, 0.02);
+                makeup.gain.setTargetAtTime(Math.pow(10, 3 / 20), t, 0.02);
+            }
+        };
+        window.toggleChannelComp = function(channelIndex, silent) {
+            const c = window.state.channelComp[channelIndex];
+            if (!c.enabled) { c.enabled = true; c.mode = 'comp'; }
+            else if (c.mode === 'comp') { c.mode = 'limit'; }
+            else { c.enabled = false; c.mode = 'comp'; }
+            window.applyChannelComp(channelIndex);
+            const btn = document.getElementById(`btn-comp-${channelIndex}`);
+            if (btn) {
+                btn.textContent = !c.enabled ? 'CP' : (c.mode === 'limit' ? 'LM' : 'CP');
+                btn.title = !c.enabled ? 'COMPRESSOR: off. Click to arm a gentle 4:1 compressor, click again for a fast 10:1 limiter, once more to turn off.'
+                    : (c.mode === 'limit' ? 'COMPRESSOR: limit mode (-18 dB threshold, 10:1, fast attack).' : 'COMPRESSOR: comp mode (-24 dB threshold, 4:1, gentle attack).');
+                btn.className = "text-[6.5px] font-black flex-1 py-1 rounded transition-all " + (!c.enabled
+                    ? 'bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 hover:bg-indigo-500 hover:text-black'
+                    : (c.mode === 'limit' ? 'bg-rose-500 text-black shadow-[0_0_8px_#f43f5e]' : 'bg-indigo-500 text-black shadow-[0_0_8px_#6366f1]'));
+            }
+            if (!silent) window.notify(`Channel ${channelIndex + 1} Compressor: ` + (!c.enabled ? 'OFF' : (c.mode === 'limit' ? 'LIMIT' : 'COMP')), c.enabled ? 'compress' : 'expand');
+        };
 
         window.toggleChannelSoloSafe = function(channelIndex, silent) {
             window.state.channelSoloSafe[channelIndex] = !window.state.channelSoloSafe[channelIndex];
