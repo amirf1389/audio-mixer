@@ -4,4 +4,4 @@ version = 4
 
 [[package]]
 name = "audiomixer-engine"
-version = "1.15.0"
+version = "1.17.0"

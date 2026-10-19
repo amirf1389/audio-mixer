@@ -30,7 +30,7 @@ static const GUID CLSID_AudioMixerAsio = { 0xc1893f2f, 0x1ad5, 0x4344, { 0x98, 0
 static const char *const kDriverName = "Audio Mixer";
 static const wchar_t *const kClsidText = L"{C1893F2F-1AD5-4344-9806-DCFD242C0D48}";
 static const long kChannels = 2;
-static const long kMinBuffer = 64, kMaxBuffer = 2048, kDefaultBuffer = 256;
+static const long kMinBuffer = 32, kMaxBuffer = 2048, kDefaultBuffer = 256;
 static const size_t kRingFrames = 16384;
 
 static HINSTANCE g_module = nullptr;
@@ -64,7 +64,7 @@ class AudioMixerAsio final : public IASIO {
   // ───────── IASIO ─────────
   ASIOBool ASIO_CALL init(void *sysHandle) override { (void)sysHandle; inited_ = true; return ASIOTrue; }
   void ASIO_CALL getDriverName(char *name) override { strcpy(name, kDriverName); }
-  long ASIO_CALL getDriverVersion() override { return 1; }
+  long ASIO_CALL getDriverVersion() override { return 117; }
   void ASIO_CALL getErrorMessage(char *string) override { strncpy(string, error_, 123); string[123] = 0; }
 
   ASIOError ASIO_CALL start() override {
