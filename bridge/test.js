@@ -1331,7 +1331,7 @@ test('Windows ASIO driver (windows/asio-driver): cross-compiled for x64 and x86 
     // the registration scripts: administrator only, regsvr32 on the DLLs that exist, CRLF; nothing else (no run key, no service, no network)
     assert.ok(!/CurrentVersion\\Run/.test(cpp) && !/CreateService/.test(cpp), 'the driver installs nothing that starts by itself');
     // the interface the hosts call: the method order of IASIO is the binary contract
-    const iface = fsx.readFileSync(pathx.join(root, 'asio_iface.h'), 'utf8'), order = ['init', 'getDriverName', 'getDriverVersion', 'getErrorMessage', 'start', 'stop', 'getChannels', 'getLatencies', 'getBufferSize', 'canSampleRate', 'getSampleRate', 'setSampleRate', 'getClockSources', 'setClockSource', 'getSamplePosition', 'getChannelInfo', 'createBuffers', 'disposeBuffers', 'controlPanel', 'future', 'outputReady'];
+    const iface = fsx.readFileSync(pathx.join(root, 'sdk', 'iasiodrv.h'), 'utf8'), order = ['init', 'getDriverName', 'getDriverVersion', 'getErrorMessage', 'start', 'stop', 'getChannels', 'getLatencies', 'getBufferSize', 'canSampleRate', 'getSampleRate', 'setSampleRate', 'getClockSources', 'setClockSource', 'getSamplePosition', 'getChannelInfo', 'createBuffers', 'disposeBuffers', 'controlPanel', 'future', 'outputReady'];
     const at = order.map(n => iface.indexOf(' ' + n + '('));
     assert.ok(at.every((x, i) => x > 0 && (i === 0 || x > at[i - 1])), 'IASIO methods in the order of the ASIO interface: ' + at);
     // 32-bit hosts call IASIO with thiscall (the callee removes the arguments): the x86 object must return with `ret $8` from getChannels(two pointers); cdecl would be a plain `ret`
@@ -1339,7 +1339,7 @@ test('Windows ASIO driver (windows/asio-driver): cross-compiled for x64 and x86 
     assert.strictEqual(cc32.status, 0, cc32.stderr);
     const asm = cp.spawnSync('i686-w64-mingw32-objdump', ['-d', '-C', o32], { encoding: 'utf8', maxBuffer: 1 << 26 }).stdout;
     const body = asm.split(/\n(?=[0-9a-f]+ <)/).find(x => /^[0-9a-f]+ <AudioMixerAsio::getChannels\(/.test(x)) || ''; assert.match(body, /ret\s+\$0x8\b/, 'getChannels is thiscall on x86');
-    assert.match(iface, /ASIO_CALL __attribute__\(\(thiscall\)\)/); assert.strictEqual((iface.match(/virtual \w+ ASIO_CALL /g) || []).length, order.length);
+    assert.match(fsx.readFileSync(pathx.join(root, 'asio_sdk.h'), 'utf8'), /ASIO_CALL __attribute__\(\(thiscall\)\)/); assert.strictEqual((iface.match(/virtual \w+ ASIO_CALL /g) || []).length, order.length);
     // the audio thread never connects, allocates or waits for the network: the connector thread does that
     const cyc = cpp.slice(cpp.indexOf('void cycle()'), cpp.indexOf('void run()'));
     assert.ok(!/am_link_open|am_link_close|alloc\(|Sleep\(/.test(cyc), 'cycle() (the audio thread) has no connect, close, allocation or sleep'); assert.match(cpp, /connectorMain/);
