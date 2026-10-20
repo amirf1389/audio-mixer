@@ -51,7 +51,7 @@ Remove: the same commands with  regsvr32 /u  as administrator, then delete the f
 The 64-bit DLL is for 64-bit programs, the 32-bit DLL for 32-bit programs; register both if you use both.
 Not signed. Windows may warn when a DLL from the internet is registered; check the SHA-256 in the release.
 Not tested on a real ASIO host in this release: the DLL was cross-compiled and checked structurally (exports, imports, interface layout).
-"ASIO" is a trademark of Steinberg Media Technologies GmbH. The interface was implemented from its published description; no Steinberg SDK file is included.
+"ASIO" is a trademark of Steinberg Media Technologies GmbH. The driver is built against the Steinberg ASIO SDK 2.3 headers (platforms/windows/asio-driver/sdk), used under the GNU GPL v3; its source is in the drivers source archive (build-drivers.js --source).
 `;
 
 function buildAll({ out = path.join(ROOT, 'platforms', 'windows', 'releases'), source = false } = {}) {
