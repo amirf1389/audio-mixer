@@ -86,6 +86,11 @@ function buildIo({ out = path.join(ENGINE, 'cpp', 'build') } = {}) {
   if (!r.ok) return { ok: false, detail: steps.join('\n') };
   const mg = which('x86_64-w64-mingw32-g++');                     // the Windows backend: compiled (not run) with mingw-w64
   if (mg) { const o = path.join(out, 'backend_wasapi.o'), w = run(mg, ['-std=c++17', '-Wall', '-Wextra', '-Werror', '-O2', inc, '-c', '-o', o, path.join(c, 'src', 'backend_wasapi.cpp')]); steps.push(w.ok ? 'WASAPI backend: compiles with mingw-w64 (not run: no Windows here)' : 'WASAPI backend FAILED to compile:\n' + w.out.slice(-800)); if (!w.ok) return { ok: false, detail: steps.join('\n') }; }
+  for (const t of ['x86_64-w64-mingw32', 'i686-w64-mingw32']) {   // the ASIO host backend (Steinberg ASIO SDK headers, platforms/windows/asio-driver): compiled for 64- and 32-bit Windows
+    const g = which(t + '-g++'); if (!g) continue;
+    const w = run(g, ['-std=c++17', '-Wall', '-Wextra', '-Werror', '-O2', inc, '-I' + path.join(c, 'src'), '-I' + path.join(ROOT, 'platforms', 'windows', 'asio-driver'), '-c', '-o', path.join(out, `backend_asio_${t}.o`), path.join(c, 'src', 'backend_asio.cpp')]);
+    steps.push(w.ok ? `ASIO backend (${t}): compiles with mingw-w64 (not run: no Windows here)` : `ASIO backend (${t}) FAILED to compile:\n` + w.out.slice(-800)); if (!w.ok) return { ok: false, detail: steps.join('\n') };
+  }
   return { ok: true, detail: steps.join('\n') };
 }
 

@@ -1312,6 +1312,20 @@ test('Linux ALSA plugin (linux/alsa-plugin): aplay plays into the mixer and arec
   } finally { sock.forEach(s => { try { s.close(); } catch (_) { /* closed */ } }); server.closeAllConnections(); server.close(); fsx.rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('ASIO host backend (engine/cpp/src/backend_asio.cpp): any installed ASIO driver through the Steinberg IASIO interface, built into the Windows runtime, compiled for x64 and x86 with -Werror', (tc) => {
+  const cp = require('node:child_process'), root = pathx.join(__dirname, '..');
+  const src = fsx.readFileSync(pathx.join(root, 'engine', 'cpp', 'src', 'backend_asio.cpp'), 'utf8');
+  assert.match(src, /SOFTWARE\\\\ASIO/); assert.match(src, /CoCreateInstance\(clsid, nullptr, CLSCTX_INPROC_SERVER, clsid,/); assert.match(src, /#include "asio_sdk\.h"/);
+  assert.match(fsx.readFileSync(pathx.join(root, 'engine', 'cpp', 'src', 'runtime.cpp'), 'utf8'), /name == "asio"\) return makeAsioBackend\(\)/);
+  assert.match(fsx.readFileSync(pathx.join(root, 'engine', 'cpp', 'CMakeLists.txt'), 'utf8'), /src\/backend_asio\.cpp/);
+  for (const t of ['x86_64-w64-mingw32', 'i686-w64-mingw32']) {
+    if (cp.spawnSync('which', [t + '-g++']).status) return tc.skip('mingw-w64 is not installed');
+    const o = pathx.join(fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'asiohost-')), 'b.o');
+    const r = cp.spawnSync(t + '-g++', ['-std=c++17', '-Wall', '-Wextra', '-Werror', '-O2', '-I' + pathx.join(root, 'engine', 'cpp', 'include'), '-I' + pathx.join(root, 'engine', 'cpp', 'src'), '-I' + pathx.join(root, 'platforms', 'windows', 'asio-driver'), '-c', '-o', o, pathx.join(root, 'engine', 'cpp', 'src', 'backend_asio.cpp')], { encoding: 'utf8' });
+    assert.strictEqual(r.status, 0, t + ': ' + r.stderr);
+  }
+});
+
 test('Windows ASIO driver (windows/asio-driver): cross-compiled for x64 and x86 with -Werror, COM exports, system DLLs only, the GUID agrees everywhere', (tc) => {
   const cp = require('node:child_process'), drv = require('../scripts/build-drivers');
   if (!['x86_64-w64-mingw32-g++', 'i686-w64-mingw32-g++'].every(n => !cp.spawnSync('which', [n]).status)) return tc.skip('mingw-w64 is not installed');

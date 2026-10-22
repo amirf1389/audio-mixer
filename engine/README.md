@@ -5,7 +5,7 @@ The measuring and mixing code of Audio Mixer as native libraries, in several lan
 | Folder | What | Language | Built and tested here |
 |---|---|---|---|
 | `embedded-c/` | the core: no malloc, no stdio, no threads, fixed buffers; for microcontrollers / DSPs, WebAssembly and the Apple wrappers | C99 | yes: `-Werror -pedantic`, with libm and with the built-in math (`AMC_NO_LIBM`) |
-| `cpp/` | the engine as a library (`am::Mixer`, `am::Loudness`, ...) and the **runtime**: the mixer on a sound card (ALSA, WASAPI, Core Audio, a timed null device) | C++17 | engine and runtime: yes (null device, ALSA `null` device); WASAPI backend: compiled with mingw-w64, not run; Core Audio backend: **not compiled** (no Xcode) |
+| `cpp/` | the engine as a library (`am::Mixer`, `am::Loudness`, ...) and the **runtime**: the mixer on a sound card (ALSA, WASAPI, **ASIO** (any installed driver, through the Steinberg ASIO SDK interface), Core Audio, a timed null device) | C++17 | engine and runtime: yes (null device, ALSA `null` device); WASAPI backend: compiled with mingw-w64, not run; Core Audio backend: **not compiled** (no Xcode) |
 | `rust/` | the same engine as a crate (`audiomixer-engine`) | Rust (std, no dependencies) | yes (`cargo test --offline`) |
 | `apple/` | Swift package + Objective-C wrapper over the C core (macOS 10.15+, iOS 13+) | Swift, Objective-C | **not compiled** (no Xcode); the Objective-C file passes a syntax check against a stub header |
 | `wasm/` | the C core as WebAssembly (14 KB, no imports): **the page uses it** for the loudness meter and the scope arithmetic | C -> wasm32 | yes: the embedded binary is run against the vectors |
@@ -44,5 +44,5 @@ cmake -S engine/cpp -B build && cmake --build build && ctest --test-dir build
 - The Rust crate uses `std`; a `no_std` build would need a `libm` crate, which is not included.
 - **In the page** (`index.html`, script `engine-wasm`): when WebAssembly is available the LUFS meter and the scope arithmetic run in the C core (the LUFS page then says "LIVE ... WASM"); otherwise, or if loading fails, the JavaScript versions run with the same numbers. Rebuild and re-embed with `node scripts/build-engine.js --wasm`.
 - **In the bridge** (`bridge/levels.js`): when `engine/node/build/Release/am_engine.node` exists the native streams' level meter is the C++ one, otherwise the JavaScript one. The installers and packages do not contain `engine/` or the addon (it is a per-system binary): the bridge runs on JavaScript there. `AUDIO_MIXER_NATIVE=0` turns the addon off.
-- The runtime's ALSA backend was tried on ALSA's own `null` device (no sound card here): the loop, the format negotiation and the recovery code ran, a real card was not heard. WASAPI and Core Audio were not run.
+- The runtime's ALSA backend was tried on ALSA's own `null` device (no sound card here): the loop, the format negotiation and the recovery code ran, a real card was not heard. WASAPI, ASIO (compiled for x64 and x86 with mingw-w64) and Core Audio were not run.
 - Not included: Kotlin / JNI, Python, Go bindings (the C core and the Node addon are the starting points).
