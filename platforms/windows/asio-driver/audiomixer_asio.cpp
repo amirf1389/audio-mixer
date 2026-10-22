@@ -181,7 +181,17 @@ class AudioMixerAsio final : public IASIO {
     MessageBoxA(nullptr, text, "Audio Mixer ASIO", MB_OK | MB_ICONINFORMATION);
     return ASE_OK;
   }
-  ASIOError ASIO_CALL future(long selector, void *opt) override { (void)selector; (void)opt; return ASE_InvalidParameter; }
+  // ASIO SDK 2.3 capability probes: PCM is the only I/O format; the optional features (time code, transport, monitoring, gain / meters) are answered "not present",
+  // overload reporting is not offered, anything else is an invalid selector.
+  ASIOError ASIO_CALL future(long selector, void *opt) override {
+    switch (selector) {
+      case kAsioGetIoFormat: if (!opt) return ASE_InvalidParameter; ((ASIOIoFormat *)opt)->FormatType = kASIOPCMFormat; return ASE_SUCCESS;
+      case kAsioSetIoFormat: case kAsioCanDoIoFormat: if (!opt) return ASE_InvalidParameter; return ((ASIOIoFormat *)opt)->FormatType == kASIOPCMFormat ? ASE_SUCCESS : ASE_NotPresent;
+      case kAsioCanInputMonitor: case kAsioCanTimeInfo: case kAsioCanTimeCode: case kAsioCanTransport: case kAsioCanInputGain: case kAsioCanInputMeter:
+      case kAsioCanOutputGain: case kAsioCanOutputMeter: case kAsioCanReportOverload: return ASE_NotPresent;
+      default: return ASE_InvalidParameter;
+    }
+  }
   ASIOError ASIO_CALL outputReady() override { return ASE_NotPresent; }
 
  private:

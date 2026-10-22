@@ -15,6 +15,7 @@ std::vector<std::string> availableBackends() {
 #endif
 #ifdef _WIN32
   v.push_back("wasapi");
+  v.push_back("asio");
 #endif
 #ifdef __APPLE__
   v.push_back("coreaudio");
@@ -29,6 +30,7 @@ std::unique_ptr<Backend> createBackend(const std::string& name) {
 #endif
 #ifdef _WIN32
   if (name == "wasapi") return makeWasapiBackend();
+  if (name == "asio") return makeAsioBackend();
 #endif
 #ifdef __APPLE__
   if (name == "coreaudio") return makeCoreAudioBackend();
