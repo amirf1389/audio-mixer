@@ -38,7 +38,7 @@ std::unique_ptr<Backend> createBackend(const std::string& name) {
   return nullptr;
 }
 
-enum Op { kGain, kPan, kMute, kSolo, kMaster, kLimiter, kClipDb, kClear };
+enum Op { kGain, kPan, kMute, kSolo, kMaster, kLimiter, kClipDb, kClear, kSpatialOn, kSpatialPos, kSpatialSpread };
 
 Runtime::Runtime(int strips) : mixer_(strips, 48000) { std::memset(&pub_, 0, sizeof pub_); }
 Runtime::~Runtime() { stop(); }
@@ -49,6 +49,8 @@ bool Runtime::open(const DeviceConfig& cfg, std::string& err) {
   if (name == "auto") name = availableBackends().front();
   backend_ = createBackend(name);
   if (!backend_) { err = "the backend \"" + name + "\" is not built into this binary"; return false; }
+  spatial_.reset(); spatialOn_ = false;
+  if (Spatial::available()) spatial_.reset(new Spatial(cfg.sampleRate, 256));
   backendName_ = name; nIn_ = std::max(0, cfg.inChannels); nOut_ = std::max(0, cfg.outChannels);
   mixer_ = Mixer(mixer_.strips(), cfg.sampleRate);                                  // the mixer runs at the device rate
   const std::size_t n = std::max<std::size_t>(cfg.frames, 16) * 8;                  // scratch for blocks up to 8 periods (devices may hand out more than the period)
@@ -73,6 +75,8 @@ void Runtime::setMasterDb(double db) { post({kMaster, 0, db, 0, 0}); }
 void Runtime::setLimiter(bool on, double c, double r) { post({kLimiter, on ? 1 : 0, c, r, 0}); }
 void Runtime::setClipDb(double db) { post({kClipDb, 0, db, 0, 0}); }
 void Runtime::clearClips() { post({kClear, 0, 0, 0, 0}); }
+bool Runtime::setSpatial(bool on) { if (!spatial_ || !spatial_->ok()) return false; post({kSpatialOn, on ? 1 : 0, 0, 0, 0}); return true; }
+void Runtime::setSpatialPosition(double az, double el, double d, double spread) { post({kSpatialPos, 0, az, el, d}); post({kSpatialSpread, 0, spread, 0, 0}); }
 
 void Runtime::onBlock(const float* const* in, float* const* out, std::size_t frames) {
   for (unsigned t = tail_.load(std::memory_order_relaxed), h = head_.load(std::memory_order_acquire); t != h; ++t) {   // control changes of this block
@@ -86,6 +90,9 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
       case kLimiter: mixer_.setLimiter(c.a != 0, c.x, c.y); break;
       case kClipDb: mixer_.setClipDb(c.x); break;
       case kClear: mixer_.clearClips(); break;
+      case kSpatialOn: spatialOn_ = c.a != 0; break;
+      case kSpatialPos: if (spatial_) { spAz_ = c.x; spEl_ = c.y; spDist_ = c.z; spatial_->setPosition(spAz_, spEl_, spDist_, spSpread_); } break;
+      case kSpatialSpread: if (spatial_) { spSpread_ = c.x; spatial_->setPosition(spAz_, spEl_, spDist_, spSpread_); } break;
       default: break;
     }
     tail_.store(t + 1, std::memory_order_release);
@@ -94,6 +101,7 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
   const float* ins[kMaxStrips];
   for (int s = 0; s < mixer_.strips(); ++s) ins[s] = (s < nIn_ && in && in[s]) ? in[s] : silence_.data();
   mixer_.process(ins, frames, left_.data(), right_.data());
+  if (spatialOn_ && spatial_) spatial_->process(left_.data(), right_.data(), left_.data(), right_.data(), frames);     // after the meters: they show the stereo master
   for (int c = 0; c < nOut_; ++c) {
     if (c == 0) std::memcpy(out[c], left_.data(), frames * sizeof(float));
     else if (c == 1) std::memcpy(out[c], right_.data(), frames * sizeof(float));

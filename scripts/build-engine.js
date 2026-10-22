@@ -78,7 +78,7 @@ function buildIo({ out = path.join(ENGINE, 'cpp', 'build') } = {}) {
   fs.mkdirSync(out, { recursive: true });
   const c = path.join(ENGINE, 'cpp'), inc = '-I' + path.join(c, 'include'), exe = path.join(out, 'runtime_test'), steps = [];
   const hasAlsa = fs.existsSync('/usr/include/alsa/asoundlib.h');
-  const srcs = [path.join(c, 'src', 'engine.cpp'), path.join(c, 'src', 'runtime.cpp'), path.join(c, 'src', 'backend_null.cpp'), path.join(c, 'test', 'runtime_test.cpp')];
+  const srcs = [path.join(c, 'src', 'engine.cpp'), path.join(c, 'src', 'runtime.cpp'), path.join(c, 'src', 'backend_null.cpp'), path.join(c, 'src', 'spatial.cpp'), path.join(c, 'test', 'runtime_test.cpp')];
   if (hasAlsa) srcs.push(path.join(c, 'src', 'backend_alsa.cpp'));
   let r = run(cxx, ['-std=c++17', '-Wall', '-Wextra', '-Wpedantic', '-Werror', '-O2', '-pthread', inc, ...(hasAlsa ? ['-DAM_HAVE_ALSA'] : []), '-o', exe, ...srcs, ...(hasAlsa ? ['-lasound'] : [])]);
   if (!r.ok) return { ok: false, detail: r.out.slice(-1200) };
