@@ -60,7 +60,7 @@ async function build({ out = path.join(ROOT, 'platforms', 'android', 'releases')
   run(aapt2, ['compile', '--dir', path.join(work, 'res'), '-o', path.join(work, 'res.zip')]);
   const proto = path.join(work, 'proto.apk');
   run(aapt2, ['link', '--proto-format', '-o', proto, '-I', t.frameworkRes, '--manifest', path.join(ROOT, 'platforms', 'android', 'AndroidManifest.xml'), '-A', path.join(work, 'assets'),
-    '--min-sdk-version', '24', '--target-sdk-version', '29', '--version-code', String(apk.versionCode(pkg.version)), '--version-name', pkg.version, '--auto-add-overlay', path.join(work, 'res.zip')]);
+    '--min-sdk-version', '24', '--target-sdk-version', '35', '--version-code', String(apk.versionCode(pkg.version)), '--version-name', pkg.version, '--auto-add-overlay', path.join(work, 'res.zip')]);
   const base = path.join(work, 'base'); fs.mkdirSync(base);
   run(unzip, ['-q', proto, '-d', base]);
   fs.mkdirSync(path.join(base, 'manifest')); fs.renameSync(path.join(base, 'AndroidManifest.xml'), path.join(base, 'manifest', 'AndroidManifest.xml'));
@@ -83,7 +83,7 @@ if (require.main === module) {
   const a = process.argv.slice(2), oi = a.indexOf('--out');
   build({ out: oi >= 0 ? a[oi + 1] : undefined }).then(r => {
     console.log(`AAB: ${r.dest}  (${(r.size / 1048576).toFixed(1)} MB, versionCode ${r.versionCode}, signature ${r.verified ? 'verified' : 'NOT verified'})\n     SHA-256 ${r.sha256}`);
-    console.log('Upload it in Play Console > Release > Testing > Internal testing. The target SDK is 29; Play requires a recent one for new apps and updates (see PLAY-PROTECT.md).');
+    console.log('Upload it in Play Console > Release > Testing > Internal testing. Target SDK 35; opt in to Play App Signing and use this key as the upload key.');
   }).catch(e => { console.error('AAB build failed: ' + e.message); process.exit(1); });
 }
 module.exports = { build };

@@ -2387,7 +2387,7 @@ test('Android engine (Java): virtual devices for the audio HAL - /ws/virtual, /a
 test('Android background engine + power-on animation: manifest, service (Java and Kotlin twin), build wiring, page hooks', () => {
   const root = pathx.join(__dirname, '..'), rd = f => fsx.readFileSync(pathx.join(root, f), 'utf8');
   const man = rd('platforms/android/AndroidManifest.xml');
-  assert.ok(man.includes('android.permission.FOREGROUND_SERVICE') && man.includes('<service android:name=".EngineService" android:exported="false"/>') && /RECORD_AUDIO/.test(man) && !/ACCESS_FINE_LOCATION|CAMERA|READ_EXTERNAL/.test(man));
+  assert.ok(man.includes('android.permission.FOREGROUND_SERVICE') && man.includes('android.permission.FOREGROUND_SERVICE_MICROPHONE') && man.includes('<service android:name=".EngineService" android:exported="false" android:foregroundServiceType="microphone"/>') && /RECORD_AUDIO/.test(man) && !/ACCESS_FINE_LOCATION|CAMERA|READ_EXTERNAL/.test(man));
   const java = rd('platforms/android/src/com/audiomixer/app/EngineService.java'), kt = rd('platforms/android/kotlin/EngineService.kt');
   for (const src of [java, kt]) { assert.ok(src.includes('8765') && src.includes('MiniBridge') && src.includes('PARTIAL_WAKE_LOCK') && src.includes('STOP') && src.includes('NotificationChannel') && src.includes('START_STICKY')); }
   assert.ok(java.includes('b.start(8765, 10)') && kt.includes('b.start(8765, 10)') && java.includes('AndroidAssets') && kt.includes('AndroidAssets'));                                  // both twins look for the page's port first
@@ -2396,7 +2396,7 @@ test('Android background engine + power-on animation: manifest, service (Java an
   const apk = require('../scripts/build-apk'); const files = apk.listFiles(pathx.join(root, 'platforms', 'android', 'src'), '.java').map(f => pathx.basename(f));
   for (const n of ['MiniBridge.java', 'AndroidAudio.java', 'EngineService.java', 'MainActivity.java', 'Ws.java', 'Json.java', 'Interfaces.java', 'AudioBackend.java']) assert.ok(files.includes(n), n);
   assert.ok(!files.includes('BridgeHarness.java'));                                                                     // test code is not in the app
-  const bs = rd('scripts/build-apk.js'); assert.ok(bs.includes("'--target-sdk-version', '29'") && bs.includes('--kotlin') && bs.includes('kotlin-stdlib.jar'));
+  const bs = rd('scripts/build-apk.js'); assert.ok(bs.includes("'--target-sdk-version', '35'") && bs.includes('--kotlin') && bs.includes('kotlin-stdlib.jar'));
   // the page: no server-side license step without a license endpoint, power-on sequence
   const html = rd('index.html');
   assert.ok(html.includes("if (bridge() && this.machineId) {"));
