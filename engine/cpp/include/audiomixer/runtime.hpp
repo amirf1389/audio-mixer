@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "audiomixer/engine.hpp"
+#include "audiomixer/spatial.hpp"
 
 namespace am {
 
@@ -71,6 +72,10 @@ class Runtime {
   void setLimiter(bool on, double ceilingDb = -0.5, double releaseMs = 100);
   void setClipDb(double db);
   void clearClips();
+  // 360 degree output (Resonance Audio, only when Spatial::available()): the stereo master after the meters becomes two virtual speakers in a binaural scene; off by default.
+  // The audio is then delayed by Spatial::block() frames. Returns false when this binary has no Resonance Audio.
+  bool setSpatial(bool on);
+  void setSpatialPosition(double azimuthDeg, double elevationDeg, double distanceM, double spreadDeg = 30);
   Snapshot snapshot() const;
  private:
   struct Cmd { int op; int a; double x, y, z; };
@@ -80,6 +85,7 @@ class Runtime {
 
   Mixer mixer_; std::unique_ptr<Backend> backend_; std::string backendName_;
   int nIn_ = 0, nOut_ = 0; bool running_ = false;
+  std::unique_ptr<Spatial> spatial_; bool spatialOn_ = false; double spAz_ = 0, spEl_ = 0, spDist_ = 2, spSpread_ = 30;     // spatial_ is created in open(); spatialOn_ is only touched by the audio thread
   std::vector<float> silence_, left_, right_;
   // control ring: many producers (under a mutex), one consumer (the audio thread)
   static constexpr unsigned kRing = 1024;
