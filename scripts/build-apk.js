@@ -192,7 +192,7 @@ async function build({ out = path.join(ROOT, 'platforms', 'android', 'releases')
   // resources + manifest -> apk (resources.arsc stored uncompressed, as Android 11+ requires), then the dex, alignment, signature
   const unsigned = path.join(work, 'unsigned.apk'), aligned = path.join(work, 'aligned.apk');
   run(t.aapt, ['package', '-f', '-M', path.join(ROOT, 'platforms', 'android', 'AndroidManifest.xml'), '-S', path.join(work, 'res'), '-A', path.join(work, 'assets'), '-I', t.frameworkRes,
-    '-F', unsigned, '--min-sdk-version', '24', '--target-sdk-version', '29', '--version-code', String(versionCode(pkg.version)), '--version-name', pkg.version, '-0', 'arsc']);
+    '-F', unsigned, '--min-sdk-version', '24', '--target-sdk-version', '35', '--version-code', String(versionCode(pkg.version)), '--version-name', pkg.version, '-0', 'arsc']);
   run(t.aapt, ['add', unsigned, 'classes.dex'], { cwd: work });
   run(t.zipalign, ['-p', '-f', '4', unsigned, aligned]);
   const ks = keystore(process.env, t);

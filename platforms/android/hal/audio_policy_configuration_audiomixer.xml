@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Audio policy module for the Audio Mixer HAL: include it from your audio_policy_configuration.xml with  <xi:include href="audio_policy_configuration_audiomixer.xml"/>
+     (inside <modules>) and list the HAL in the audio HAL's module list. A BUS device with the address "audiomixer" carries the stream both ways. -->
+<module name="audiomixer" halVersion="3.0">
+    <attachedDevices>
+        <item>Audiomixer Out</item>
+        <item>Audiomixer In</item>
+    </attachedDevices>
+    <mixPorts>
+        <mixPort name="audiomixer output" role="source">
+            <profile name="" format="AUDIO_FORMAT_PCM_16_BIT" samplingRates="48000" channelMasks="AUDIO_CHANNEL_OUT_STEREO"/>
+        </mixPort>
+        <mixPort name="audiomixer input" role="sink">
+            <profile name="" format="AUDIO_FORMAT_PCM_16_BIT" samplingRates="48000" channelMasks="AUDIO_CHANNEL_IN_STEREO"/>
+        </mixPort>
+    </mixPorts>
+    <devicePorts>
+        <devicePort tagName="Audiomixer Out" type="AUDIO_DEVICE_OUT_BUS" role="sink" address="audiomixer">
+            <profile name="" format="AUDIO_FORMAT_PCM_16_BIT" samplingRates="48000" channelMasks="AUDIO_CHANNEL_OUT_STEREO"/>
+        </devicePort>
+        <devicePort tagName="Audiomixer In" type="AUDIO_DEVICE_IN_BUS" role="source" address="audiomixer">
+            <profile name="" format="AUDIO_FORMAT_PCM_16_BIT" samplingRates="48000" channelMasks="AUDIO_CHANNEL_IN_STEREO"/>
+        </devicePort>
+    </devicePorts>
+    <routes>
+        <route type="mix" sink="Audiomixer Out" sources="audiomixer output"/>
+        <route type="mix" sink="audiomixer input" sources="Audiomixer In"/>
+    </routes>
+</module>
