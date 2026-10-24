@@ -79,7 +79,7 @@ function asioXml({ stage, arch, scope }) {
     return `      <Component Id="${id}" Guid="${guid('asio:' + id)}"${win64 ? ' Win64="yes"' : ' Win64="no"'}>
         <RegistryValue Root="HKLM" Key="${clsid}" Type="string" Value="Audio Mixer ASIO" KeyPath="yes"/>
         <RegistryValue Root="HKLM" Key="${clsid}\\InprocServer32" Type="string" Value="[INSTALLDIR]asio-driver\\${dll}"/>
-        <RegistryValue Root="HKLM" Key="${clsid}\\InprocServer32" Name="ThreadingModel" Type="string" Value="Apartment"/>
+        <RegistryValue Root="HKLM" Key="${clsid}\\InprocServer32" Name="ThreadingModel" Type="string" Value="Both"/>
         <RegistryValue Root="HKLM" Key="SOFTWARE\\ASIO\\Audio Mixer" Name="CLSID" Type="string" Value="${ASIO_CLSID}"/>
         <RegistryValue Root="HKLM" Key="SOFTWARE\\ASIO\\Audio Mixer" Name="Description" Type="string" Value="Audio Mixer"/>
       </Component>\n`;

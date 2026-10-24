@@ -15,6 +15,7 @@
 #include <objbase.h>
 #include <olectl.h>
 #include <mmsystem.h>
+#include <avrt.h>
 #include <new>
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,7 +23,7 @@
 
 #include "asio_iface.h"
 extern "C" {
-#include "../../drivers/common/am_link.h"
+#include "drivers/common/am_link.h"
 }
 
 // {C1893F2F-1AD5-4344-9806-DCFD242C0D48}: the class id AND (by ASIO convention) the interface id the hosts ask for
@@ -30,7 +31,7 @@ static const GUID CLSID_AudioMixerAsio = { 0xc1893f2f, 0x1ad5, 0x4344, { 0x98, 0
 static const char *const kDriverName = "Audio Mixer";
 static const wchar_t *const kClsidText = L"{C1893F2F-1AD5-4344-9806-DCFD242C0D48}";
 static const long kChannels = 2;
-static const long kMinBuffer = 64, kMaxBuffer = 2048, kDefaultBuffer = 256;
+static const long kMinBuffer = 32, kMaxBuffer = 2048, kDefaultBuffer = 256;
 static const size_t kRingFrames = 16384;
 
 static HINSTANCE g_module = nullptr;
@@ -64,13 +65,13 @@ class AudioMixerAsio final : public IASIO {
   // ───────── IASIO ─────────
   ASIOBool ASIO_CALL init(void *sysHandle) override { (void)sysHandle; inited_ = true; return ASIOTrue; }
   void ASIO_CALL getDriverName(char *name) override { strcpy(name, kDriverName); }
-  long ASIO_CALL getDriverVersion() override { return 1; }
+  long ASIO_CALL getDriverVersion() override { return 118; }
   void ASIO_CALL getErrorMessage(char *string) override { strncpy(string, error_, 123); string[123] = 0; }
 
   ASIOError ASIO_CALL start() override {
     if (!buffers_ready_ || !callbacks_) return ASE_NotPresent;
     if (running_) return ASE_OK;
-    sample_pos_ = 0; buffer_index_ = 0;
+    InterlockedExchange64((volatile LONG64 *)&sample_pos_, 0); buffer_index_ = 0;
     running_ = true;
     stop_evt_ = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     connector_ = stop_evt_ ? CreateThread(nullptr, 0, &AudioMixerAsio::connectorMain, this, 0, nullptr) : nullptr;   // without it the driver still runs, silent
@@ -129,7 +130,7 @@ class AudioMixerAsio final : public IASIO {
   ASIOError ASIO_CALL setClockSource(long reference) override { return reference == 0 ? ASE_OK : ASE_NotPresent; }
   ASIOError ASIO_CALL getSamplePosition(ASIOSamples *sPos, ASIOTimeStamp *tStamp) override {
     if (!sPos || !tStamp) return ASE_InvalidParameter;
-    unsigned long long s = sample_pos_, t = stamp_ns_;
+    const unsigned long long s = (unsigned long long)InterlockedCompareExchange64((volatile LONG64 *)&sample_pos_, 0, 0), t = (unsigned long long)InterlockedCompareExchange64((volatile LONG64 *)&stamp_ns_, 0, 0);   // a plain 64-bit read tears on 32-bit builds
     sPos->hi = (unsigned long)(s >> 32); sPos->lo = (unsigned long)(s & 0xffffffffu);
     tStamp->hi = (unsigned long)(t >> 32); tStamp->lo = (unsigned long)(t & 0xffffffffu);
     return running_ ? ASE_OK : ASE_SPNotAdvancing;
@@ -181,7 +182,18 @@ class AudioMixerAsio final : public IASIO {
     MessageBoxA(nullptr, text, "Audio Mixer ASIO", MB_OK | MB_ICONINFORMATION);
     return ASE_OK;
   }
-  ASIOError ASIO_CALL future(long selector, void *opt) override { (void)selector; (void)opt; return ASE_InvalidParameter; }
+  // ASIO SDK 2.3 capability probes (hosts call these right after init): PCM is the only I/O format; the optional features (time code, transport, monitoring,
+  // gain / meters, overload reporting) are answered "not present", anything else is an invalid selector. Answering ASE_InvalidParameter to the can-do probes
+  // made some hosts treat the driver as broken.
+  ASIOError ASIO_CALL future(long selector, void *opt) override {
+    switch (selector) {
+      case kAsioGetIoFormat: if (!opt) return ASE_InvalidParameter; ((ASIOIoFormat *)opt)->FormatType = kASIOPCMFormat; return ASE_SUCCESS;
+      case kAsioSetIoFormat: case kAsioCanDoIoFormat: if (!opt) return ASE_InvalidParameter; return ((ASIOIoFormat *)opt)->FormatType == kASIOPCMFormat ? ASE_SUCCESS : ASE_NotPresent;
+      case kAsioCanInputMonitor: case kAsioCanTimeInfo: case kAsioCanTimeCode: case kAsioCanTransport: case kAsioCanInputGain: case kAsioCanInputMeter:
+      case kAsioCanOutputGain: case kAsioCanOutputMeter: case kAsioCanReportOverload: return ASE_NotPresent;
+      default: return ASE_InvalidParameter;
+    }
+  }
   ASIOError ASIO_CALL outputReady() override { return ASE_NotPresent; }
 
  private:
@@ -245,15 +257,13 @@ class AudioMixerAsio final : public IASIO {
   void cycle() {
     const long n = buffer_size_, idx = buffer_index_;
     // the mixer -> the host's input buffers (silence while the ring is empty)
-    short frame[kChannels];
+    EnterCriticalSection(&ring_lock_);                        // one lock for the whole buffer (it was one per frame: 48000 lock rounds a second against the link thread)
     for (long i = 0; i < n; i++) {
-      bool have = false;
-      EnterCriticalSection(&ring_lock_);
-      if (ring_count_) { memcpy(frame, ring_ + ring_tail_ * kChannels, sizeof frame); ring_tail_ = (ring_tail_ + 1) % kRingFrames; ring_count_--; have = true; }
-      LeaveCriticalSection(&ring_lock_);
-      if (!have) memset(frame, 0, sizeof frame);
+      short frame[kChannels] = { 0, 0 };
+      if (ring_count_) { memcpy(frame, ring_ + ring_tail_ * kChannels, sizeof frame); ring_tail_ = (ring_tail_ + 1) % kRingFrames; ring_count_--; }
       for (int c = 0; c < nchans_; c++) if (chans_[c].input) chans_[c].buf[idx][i] = (int)((unsigned)(unsigned short)frame[chans_[c].num] << 16);
     }
+    LeaveCriticalSection(&ring_lock_);
     callbacks_->bufferSwitch(idx, ASIOTrue);                  // the host reads the inputs and writes the outputs of buffer `idx`
     if (!running_) return;                                    // the host stopped the driver (and may have freed the buffers) inside its callback
     // the host's output buffers -> the mixer (interleaved 16-bit; the buffer was allocated by createBuffers, nothing is allocated here)
@@ -268,28 +278,34 @@ class AudioMixerAsio final : public IASIO {
       am_link_play(link_, out_, (size_t)n);                   // sending has a time limit; a link that fails is dead and the connector replaces it
     }
     LeaveCriticalSection(&link_lock_);
-    sample_pos_ += (unsigned long long)n;
+    InterlockedExchangeAdd64((volatile LONG64 *)&sample_pos_, (LONG64)n);
     buffer_index_ ^= 1;
   }
 
   void run() {
     LARGE_INTEGER freq, next, now; QueryPerformanceFrequency(&freq); QueryPerformanceCounter(&next);
-    HANDLE timer = CreateWaitableTimerW(nullptr, TRUE, nullptr);
+    // a high-resolution timer (Windows 10 1803+) wakes within ~0.5 ms; the classic one rounds to the 1 ms tick and glitches at 32..64 frame buffers
+    HANDLE timer = CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
+    if (!timer) timer = CreateWaitableTimerW(nullptr, TRUE, nullptr);
     timeBeginPeriod(1);
+    DWORD task = 0; HANDLE mm = AvSetMmThreadCharacteristicsW(L"Pro Audio", &task);   // the scheduler keeps the audio thread running (like a real driver's interrupt)
     const LONGLONG period = (LONGLONG)((double)freq.QuadPart * (double)buffer_size_ / rate_);
     while (running_) {
       next.QuadPart += period;
       QueryPerformanceCounter(&now);
       LONGLONG wait = next.QuadPart - now.QuadPart;
-      if (wait > 0 && timer) {
-        LARGE_INTEGER due; due.QuadPart = -(LONGLONG)((double)wait * 10000000.0 / (double)freq.QuadPart);
-        SetWaitableTimer(timer, &due, 0, nullptr, nullptr, FALSE);
-        WaitForSingleObject(timer, 200);
+      if (wait > 0) {
+        const DWORD ms = (DWORD)((double)wait * 1000.0 / (double)freq.QuadPart);
+        if (timer) {
+          LARGE_INTEGER due; due.QuadPart = -(LONGLONG)((double)wait * 10000000.0 / (double)freq.QuadPart);
+          if (SetWaitableTimer(timer, &due, 0, nullptr, nullptr, FALSE)) WaitForSingleObject(timer, 200); else Sleep(ms);
+        } else Sleep(ms);                                        // without a timer: sleep, never spin a core at 100 %
       } else if (wait < -4 * period) next = now;                // the thread was stalled: do not fire a burst of buffers to catch up
       QueryPerformanceCounter(&now);
-      stamp_ns_ = (unsigned long long)((double)now.QuadPart * 1e9 / (double)freq.QuadPart);
+      InterlockedExchange64((volatile LONG64 *)&stamp_ns_, (LONG64)((double)now.QuadPart * 1e9 / (double)freq.QuadPart));
       cycle();
     }
+    if (mm) AvRevertMmThreadCharacteristics(mm);
     timeEndPeriod(1);
     if (timer) CloseHandle(timer);
   }
@@ -305,7 +321,8 @@ class AudioMixerAsio final : public IASIO {
   Chan chans_[2 * kChannels];
   int nchans_ = 0;
   bool in_active_[kChannels] = { false, false }, out_active_[kChannels] = { false, false };
-  volatile unsigned long long sample_pos_ = 0, stamp_ns_ = 0;
+  alignas(8) volatile unsigned long long sample_pos_ = 0;   // 64-bit, aligned: accessed with the Interlocked*64 functions only
+  alignas(8) volatile unsigned long long stamp_ns_ = 0;
   HANDLE thread_ = nullptr, connector_ = nullptr, stop_evt_ = nullptr;
   DWORD thread_id_ = 0;
   am_link *link_ = nullptr;          // guarded by link_lock_
@@ -362,7 +379,7 @@ extern "C" HRESULT __stdcall DllRegisterServer() {
   swprintf(key, 160, L"SOFTWARE\\Classes\\CLSID\\%ls", kClsidText);
   bool ok = setValue(HKEY_LOCAL_MACHINE, key, nullptr, L"Audio Mixer ASIO");
   swprintf(key, 160, L"SOFTWARE\\Classes\\CLSID\\%ls\\InprocServer32", kClsidText);
-  ok = ok && setValue(HKEY_LOCAL_MACHINE, key, nullptr, dll) && setValue(HKEY_LOCAL_MACHINE, key, L"ThreadingModel", L"Apartment");
+  ok = ok && setValue(HKEY_LOCAL_MACHINE, key, nullptr, dll) && setValue(HKEY_LOCAL_MACHINE, key, L"ThreadingModel", L"Both");
   ok = ok && setValue(HKEY_LOCAL_MACHINE, L"SOFTWARE\\ASIO\\Audio Mixer", L"CLSID", kClsidText) && setValue(HKEY_LOCAL_MACHINE, L"SOFTWARE\\ASIO\\Audio Mixer", L"Description", L"Audio Mixer");
   return ok ? S_OK : SELFREG_E_CLASS;
 }

@@ -18,6 +18,16 @@ enum {
 enum { ASIOSTInt16LSB = 16, ASIOSTInt24LSB = 17, ASIOSTInt32LSB = 18 };
 enum { kAsioSelectorSupported = 1, kAsioEngineVersion, kAsioResetRequest, kAsioBufferSizeChange, kAsioResyncRequest, kAsioLatenciesChanged, kAsioSupportsTimeInfo };
 
+/* ASIOFuture() selectors the hosts probe (values of the published interface description) */
+enum {
+  kAsioEnableTimeCodeRead = 1, kAsioDisableTimeCodeRead, kAsioSetInputMonitor, kAsioTransport, kAsioSetInputGain, kAsioGetInputMeter, kAsioSetOutputGain, kAsioGetOutputMeter,
+  kAsioCanInputMonitor, kAsioCanTimeInfo, kAsioCanTimeCode, kAsioCanTransport, kAsioCanInputGain, kAsioCanInputMeter, kAsioCanOutputGain, kAsioCanOutputMeter, kAsioOptionalOne,
+  kAsioSetIoFormat = 0x23111961, kAsioGetIoFormat = 0x23111983, kAsioCanDoIoFormat = 0x23112004, kAsioCanReportOverload = 0x24042012, kAsioGetInternalBufferSamples = 0x25042012
+};
+typedef long ASIOIoFormatType;
+enum { kASIOFormatInvalid = -1, kASIOPCMFormat = 0, kASIODSDFormat = 1 };
+struct ASIOIoFormat { ASIOIoFormatType FormatType; char future[512 - sizeof(ASIOIoFormatType)]; };
+
 struct ASIOTimeStamp { unsigned long hi, lo; };   /* nanoseconds, 64 bit as two 32-bit halves (unsigned long is 32 bit on Windows) */
 struct ASIOSamples { unsigned long hi, lo; };
 struct ASIOClockSource { long index; long associatedChannel; long associatedGroup; ASIOBool isCurrentSource; char name[32]; };
