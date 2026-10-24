@@ -14,6 +14,7 @@ const { buildInstaller } = require('./build-installer');
 const { buildMsi } = require('./build-msi');
 const { buildExe, compileLauncher, compileCli } = require('./build-exe');
 const { buildAsio } = require('./build-drivers');
+const { compileWindows } = require('./build-native');
 const { ensureSigningCert, signFile } = require('./sign');
 
 const sha = f => crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex');
@@ -46,6 +47,15 @@ function addAsioDriver(staged, { out, id, env }) {
   return files;
 }
 
+// The native program (engine/cpp/app/main.cpp: the C++ engine on WASAPI / ASIO, no browser or Node.js) goes into the install tree as audiomixer-native.exe, signed and listed in MANIFEST.sha256.
+function addNative(staged, { out, id, env }) {
+  const target = path.join(staged.stage, 'audiomixer-native.exe');
+  compileWindows(staged.arch, target);
+  if (id) signFile(target, id, { env });
+  fs.appendFileSync(path.join(staged.stage, 'MANIFEST.sha256'), `${sha(target)}  audiomixer-native.exe\n`);
+  return target;
+}
+
 // The single-file server (scripts/build-single.js: server, command line and page in one executable) goes into the install tree too, signed and listed in MANIFEST.sha256:
 // AudioMixer-single.exe runs without anything else next to it (copy it anywhere); the launcher and the shortcuts keep using the files of the install folder.
 async function addSingleFile(staged, { out, id, env }) {
@@ -66,6 +76,7 @@ async function buildInstallers({ out = path.join(__dirname, '..', 'dist'), archs
     const staged = await buildInstaller({ out: outAbs, arch });
     addLauncher(staged, { out: outAbs, id, env });
     addAsioDriver(staged, { out: outAbs, id, env });
+    addNative(staged, { out: outAbs, id, env });
     await addSingleFile(staged, { out: outAbs, id, env });
     const m = await buildMsi({ out: outAbs, arch, scope: 'machine', staged });
     if (id) signFile(m.msi, id, { env });
@@ -91,4 +102,4 @@ if (require.main === module) {
       : 'Signed with the certificate from SIGN_PFX.');
   }).catch(e => { console.error('Installer build failed: ' + e.message); process.exit(1); });
 }
-module.exports = { buildInstallers, addAsioDriver, addSingleFile };
+module.exports = { buildInstallers, addAsioDriver, addNative, addSingleFile };

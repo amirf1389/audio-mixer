@@ -23,10 +23,20 @@ function run(cmd, args, opts = {}) {
 }
 const has = n => spawnSync('which', [n]).status === 0;
 
+// One Windows program (arch 'x64' | 'x86') with mingw-w64 into `exe`; used by main() and by the installer build (scripts/build-installers.js puts it into the install folder)
+function compileWindows(arch, exe) {
+  const t = arch === 'x64' ? 'x86_64-w64-mingw32' : 'i686-w64-mingw32';
+  if (!has(t + '-g++')) throw new Error(`mingw-w64 (${t}-g++) is needed to build the native program (Debian / Ubuntu: apt install mingw-w64)`);
+  const src = ['engine.cpp', 'runtime.cpp', 'backend_null.cpp', 'spatial.cpp', 'backend_wasapi.cpp', 'backend_asio.cpp'].map(f => path.join(ROOT, 'engine/cpp/src', f));
+  fs.mkdirSync(path.dirname(exe), { recursive: true });
+  run(t + '-g++', ['-std=c++17', '-Wall', '-Wextra', '-Werror', '-O2', '-static', '-static-libgcc', '-static-libstdc++', '-I' + path.join(ROOT, 'engine/cpp/include'), '-I' + path.join(ROOT, 'engine/cpp/src'),
+    '-I' + path.join(ROOT, 'platforms/windows/asio-driver'), path.join(ROOT, 'engine/cpp/app/main.cpp'), ...src, '-o', exe, '-lole32', '-luuid', '-ladvapi32']);
+  return exe;
+}
+
 function main() {
   const oi = process.argv.indexOf('--out'), out = oi > 0 ? path.resolve(process.argv[oi + 1]) : null;
   const results = [], work = fs.mkdtempSync(path.join(os.tmpdir(), 'native-'));
-  const src = ['engine.cpp', 'runtime.cpp', 'backend_null.cpp', 'spatial.cpp'].map(f => path.join(ROOT, 'engine/cpp/src', f));
   try {
     if (has('cmake') && has('g++')) {                                                      // Linux (this machine)
       run('cmake', ['-S', path.join(ROOT, 'engine/cpp'), '-B', work, '-DCMAKE_BUILD_TYPE=Release']); run('cmake', ['--build', work, '--target', 'audiomixer-native', '-j', '4']);
@@ -38,13 +48,11 @@ function main() {
     }
     for (const [t, arch] of [['x86_64-w64-mingw32', 'x64'], ['i686-w64-mingw32', 'x86']]) {   // Windows (cross-compiled)
       if (!has(t + '-g++')) continue;
-      const exe = path.join(out || path.join(ROOT, 'platforms/windows/releases'), `AudioMixer-${version}-native-windows-${arch}.exe`); fs.mkdirSync(path.dirname(exe), { recursive: true });
-      run(t + '-g++', ['-std=c++17', '-Wall', '-Wextra', '-Werror', '-O2', '-static', '-static-libgcc', '-static-libstdc++', '-I' + path.join(ROOT, 'engine/cpp/include'), '-I' + path.join(ROOT, 'engine/cpp/src'),
-        '-I' + path.join(ROOT, 'platforms/windows/asio-driver'), path.join(ROOT, 'engine/cpp/app/main.cpp'), ...src, path.join(ROOT, 'engine/cpp/src/backend_wasapi.cpp'), path.join(ROOT, 'engine/cpp/src/backend_asio.cpp'), '-o', exe, '-lole32', '-luuid', '-ladvapi32']);
-      results.push(exe);
+      results.push(compileWindows(arch, path.join(out || path.join(ROOT, 'platforms/windows/releases'), `AudioMixer-${version}-native-windows-${arch}.exe`)));
     }
   } finally { fs.rmSync(work, { recursive: true, force: true }); }
   if (!results.length) throw new Error('nothing could be built: needs cmake + g++ (Linux) and / or mingw-w64 (Windows)');
   for (const f of results) console.log(`${f}  (${(fs.statSync(f).size / 1024).toFixed(0)} KB)\n     SHA-256 ${sha(f)}`);
 }
-try { main(); } catch (e) { console.error('native build failed: ' + e.message); process.exit(1); }
+if (require.main === module) { try { main(); } catch (e) { console.error('native build failed: ' + e.message); process.exit(1); } }
+module.exports = { compileWindows };
