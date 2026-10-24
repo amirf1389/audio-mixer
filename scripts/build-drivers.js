@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 'use strict';
-// Builds the operating-system drivers (drivers/asio, platforms/linux/alsa-plugin, platforms/macos/coreaudio-driver, platforms/android/hal,
+// Builds the operating-system drivers (drivers/asio, platforms/linux/alsa-plugin, platforms/macos/coreaudio-driver, drivers/android-hal,
 // shared code in drivers/common) that this machine can build, and packs them:
 //   node scripts/build-drivers.js [--out releases/windows] [--source]
 //   AudioMixer-<version>-asio-driver-windows.zip     AudioMixerASIO64.dll, AudioMixerASIO32.dll (cross-compiled with mingw-w64), README.txt
@@ -13,7 +13,7 @@ const { spawnSync } = require('node:child_process');
 
 const { ROOT } = require('./layout');
 const COMMON = path.join(ROOT, 'drivers', 'common'), ASIO = path.join(ROOT, 'drivers', 'asio');
-const SOURCE_DIRS = ['drivers', 'platforms/linux/alsa-plugin', 'platforms/linux/kernel-module', 'platforms/macos/coreaudio-driver', 'platforms/android/hal'];
+const SOURCE_DIRS = ['drivers', 'platforms/linux/alsa-plugin', 'platforms/linux/kernel-module', 'platforms/macos/coreaudio-driver', 'drivers/android-hal'];
 const which = n => { for (const d of (process.env.PATH || '').split(path.delimiter)) { const p = path.join(d, n); if (fs.existsSync(p)) return p; } return null; };
 const run = (cmd, args, opts = {}) => { const r = spawnSync(cmd, args, { encoding: 'utf8', ...opts }); if (r.status !== 0) throw new Error(`${path.basename(cmd)} ${args.slice(0, 3).join(' ')} failed: ${(r.stderr || r.error || '').toString().slice(0, 1500)}`); return r; };
 

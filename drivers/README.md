@@ -9,11 +9,11 @@ Each system's folder holds a small driver that adds a virtual audio device calle
 
 | Folder | System | Architecture | Built here | Tested here |
 |---|---|---|---|---|
-| `windows/asio-driver/` | Windows (x64 and x86) | **ASIO driver** (in-process COM DLL, `HKLM\SOFTWARE\ASIO`) | yes (mingw-w64, `-Werror`) | structure only (exports, imports, interface layout); **not on a Windows ASIO host** |
+| `asio/` | Windows (x64 and x86) | **ASIO driver** (in-process COM DLL, `HKLM\SOFTWARE\ASIO`) | yes (mingw-w64, `-Werror`) | structure only (exports, imports, interface layout); **not on a Windows ASIO host** |
 | `linux/alsa-plugin/` | Linux (ALSA; PulseAudio, PipeWire and JACK through their ALSA bridges) | **ALSA PCM plugin** `audiomixer` (user space, no kernel module) | yes | **yes: `aplay` and `arecord` against the real bridge, in real time** |
 | `linux/kernel-module/` | Linux (kernel) | **ALSA kernel module** `snd-audiomixer` (virtual sound card, `/dev/audiomixer`) + `am-pump` (joins it to the mixer) | `am-pump` yes; the module compiles against Linux 6.8 to 7.0 headers, not loaded | `am-pump` against the real bridge (pseudo-terminal); the module is not loaded or run |
 | `macos/coreaudio-driver/` | macOS (Apple silicon and Intel) | **Core Audio AudioServerPlugIn** (`Audio Mixer.driver`, user space) | no (needs Xcode) | no |
-| `android/hal/` | Android (AOSP builds, device makers) | **audio HAL module** `audio.audiomixer.default` (legacy `audio_hw_device` API) + audio policy + SELinux snippet | no (needs the AOSP tree) | no (the app side of it, `/ws/virtual` in the Android engine, is tested on a JVM) |
+| `android-hal/` | Android (AOSP builds, device makers) | **audio HAL module** `audio.audiomixer.default` (legacy `audio_hw_device` API) + audio policy + SELinux snippet | no (needs the AOSP tree) | no (the app side of it, `/ws/virtual` in the Android engine, is tested on a JVM) |
 | `drivers/common/` (this folder) | all | `am_link`: the connection of a driver to the mixer (C99, Winsock or POSIX sockets) | yes | **yes: a real native client against the real bridge** |
 
 iOS has no driver architecture for third-party virtual devices (apps cannot add system audio devices), so there is none. Linux, Android and macOS drivers follow the same pattern as the Windows one; adding another system (a vendor audio stack, JACK, a BSD) means a new folder that uses `am_link`.
@@ -49,7 +49,7 @@ PulseAudio / PipeWire programs: `pactl load-module module-alsa-sink device=audio
 On a Mac with the Xcode command line tools: `cd macos/coreaudio-driver && make && sudo make install` (copies `Audio Mixer.driver` to `/Library/Audio/Plug-Ins/HAL` and restarts `coreaudiod`). The bundle is ad-hoc signed; on current macOS versions system extensions of this kind may need a Developer ID signature and notarization, or "Allow" in System Settings. **Not compiled or run in this repository**: expect to debug it (`log stream --predicate 'process == "coreaudiod"'`).
 
 ### Android: audio HAL
-For device makers and custom ROMs: copy `android/hal/` and `drivers/common/` into the AOSP tree, add `audio.audiomixer.default` to `PRODUCT_PACKAGES`, include `audio_policy_configuration_audiomixer.xml` in the audio policy configuration, and add the SELinux lines of `sepolicy/` after review (a HAL process normally may not open loopback sockets). The Audio Mixer app's engine accepts the HAL on `127.0.0.1:8765` while its foreground service runs. Ordinary phones cannot load a HAL without root and a custom image. **Not compiled or run here**; the HAL API changes between Android releases (Android 14 and later use the AIDL HAL; the legacy module loads through the wrapper), so treat `audio_hw.c` as a template.
+For device makers and custom ROMs: copy `drivers/android-hal/` and `drivers/common/` into the AOSP tree, add `audio.audiomixer.default` to `PRODUCT_PACKAGES`, include `audio_policy_configuration_audiomixer.xml` in the audio policy configuration, and add the SELinux lines of `sepolicy/` after review (a HAL process normally may not open loopback sockets). The Audio Mixer app's engine accepts the HAL on `127.0.0.1:8765` while its foreground service runs. Ordinary phones cannot load a HAL without root and a custom image. **Not compiled or run here**; the HAL API changes between Android releases (Android 14 and later use the AIDL HAL; the legacy module loads through the wrapper), so treat `audio_hw.c` as a template.
 
 ## Build everything this machine can
 

@@ -1370,9 +1370,9 @@ test('driver sources and packaging: macOS plug-in, Android HAL, the build script
   const table = /gInterface = \{\s*NULL, ([^}]+)\}/.exec(c)[1].split(',').map(s => s.trim()).filter(Boolean);
   assert.strictEqual(table.length, 22); for (const fn of table) assert.match(c, new RegExp('\\b' + fn + '\\(')); 
   // Android HAL: the module symbol, the streams, the build file and the policy
-  const hal = rd('platforms/android/hal/audio_hw.c');
+  const hal = rd('drivers/android-hal/audio_hw.c');
   for (const s of ['HAL_MODULE_INFO_SYM', 'AUDIO_HARDWARE_MODULE_ID', 'open_output_stream', 'open_input_stream', 'am_link_open', 'am_link_play', 'out_write', 'in_read']) assert.ok(hal.includes(s), s);
-  assert.match(rd('platforms/android/hal/Android.bp'), /audio\.audiomixer\.default/); assert.match(rd('platforms/android/hal/audio_policy_configuration_audiomixer.xml'), /AUDIO_DEVICE_OUT_BUS/); assert.match(rd('platforms/android/hal/sepolicy/hal_audio_audiomixer.te'), /hal_audio_default/);
+  assert.match(rd('drivers/android-hal/Android.bp'), /audio\.audiomixer\.default/); assert.match(rd('drivers/android-hal/audio_policy_configuration_audiomixer.xml'), /AUDIO_DEVICE_OUT_BUS/); assert.match(rd('drivers/android-hal/sepolicy/hal_audio_audiomixer.te'), /hal_audio_default/);
   for (const f of ['drivers/README.md']) { const s = rd(f); assert.match(s, /Not compiled or run|not compiled or run|NOT compiled/i); assert.match(s, /\/ws\/virtual/); }       // the limits are stated
   assert.ok(/STATUS:[^\n]*NOT compiled/.test(c) && /STATUS:[^\n]*NOT compiled/.test(hal));
   // packaging
@@ -1383,7 +1383,7 @@ test('driver sources and packaging: macOS plug-in, Android HAL, the build script
     const zip = cp.spawnSync('unzip', ['-Z1', pathx.join(out, `AudioMixer-${v}-asio-driver-windows.zip`)], { encoding: 'utf8' }).stdout.split('\n').filter(Boolean);
     for (const f of ['AudioMixerASIO64.dll', 'AudioMixerASIO32.dll', 'README.txt']) assert.ok(zip.includes(`AudioMixer-ASIO-${v}/${f}`), f);
     const tar = cp.spawnSync('tar', ['tzf', pathx.join(out, `AudioMixer-${v}-drivers-source.tar.gz`)], { encoding: 'utf8' }).stdout.split('\n');
-    for (const f of ['drivers/common/am_link.c', 'drivers/asio/audiomixer_asio.cpp', 'platforms/linux/alsa-plugin/pcm_audiomixer.c', 'platforms/macos/coreaudio-driver/AudioMixerDriver.c', 'platforms/android/hal/audio_hw.c', 'drivers/README.md']) assert.ok(tar.includes(`audio-mixer-drivers-${v}/${f}`), f);
+    for (const f of ['drivers/common/am_link.c', 'drivers/asio/audiomixer_asio.cpp', 'platforms/linux/alsa-plugin/pcm_audiomixer.c', 'platforms/macos/coreaudio-driver/AudioMixerDriver.c', 'drivers/android-hal/audio_hw.c', 'drivers/README.md']) assert.ok(tar.includes(`audio-mixer-drivers-${v}/${f}`), f);
     assert.ok(!tar.some(f => /\.(dll|so|o)$/.test(f)), 'no binaries in the source archive');
     assert.ok(!fsx.readdirSync(out).some(x => x.endsWith('.sha256')), 'no .sha256 files next to the release files');
   } finally { fsx.rmSync(out, { recursive: true, force: true }); }
@@ -1749,6 +1749,26 @@ test('WASAPI exclusive mode ("take control"): DeviceConfig::exclusive, --exclusi
   for (const t of ['x86_64-w64-mingw32', 'i686-w64-mingw32']) {
     if (cp.spawnSync('which', [t + '-g++']).status !== 0) continue;                       // no mingw-w64 here: the source checks above stand
     const o = pathx.join(osx.tmpdir(), 'wasapi-' + t + '.o'), c = cp.spawnSync(t + '-g++', ['-std=c++17', '-Wall', '-Wextra', '-Werror', '-O2', '-I' + pathx.join(root, 'engine/cpp/include'), '-I' + pathx.join(root, 'engine/cpp/src'), '-c', pathx.join(root, 'engine/cpp/src/backend_wasapi.cpp'), '-o', o], { encoding: 'utf8' });
+    assert.strictEqual(c.status, 0, t + ': ' + c.stderr.slice(0, 600));
+  }
+});
+
+test('native .exe setup options: the ASIO driver DLL is embedded and written / registered by --install-driver, FlexASIO is run only after its SHA-256 matches; Android HAL sources are in drivers/android-hal', () => {
+  const root = pathx.join(__dirname, '..'), cp = require('node:child_process'), rd = f => fsx.readFileSync(pathx.join(root, f), 'utf8');
+  const wt = rd('engine/cpp/app/win_tools.cpp'), main = rd('engine/cpp/app/main.cpp'), bn = rd('scripts/build-native.js');
+  for (const w of ['--install-driver', '--uninstall-driver', '--install-flexasio', 'DllRegisterServer', 'DllUnregisterServer', 'CALG_SHA_256', '/VERYSILENT', 'AM_EMBED_ASIO']) assert.ok(wt.includes(w), w);
+  assert.ok(wt.indexOf('got != lw') > 0 && wt.indexOf('got != lw') < wt.indexOf('CreateProcessW'), 'the installer is compared before it is started');
+  assert.match(main, /runWinTool\(argc, argv, rc\)/); assert.match(bn, /DAM_EMBED_ASIO/); assert.match(bn, /buildAsio\(arch, work\)/);
+  // the HAL sources: module symbol, streams, build file, policy, SELinux, include of the shared link code
+  const hal = rd('drivers/android-hal/audio_hw.c');
+  for (const s of ['HAL_MODULE_INFO_SYM', 'AUDIO_HARDWARE_MODULE_ID', 'open_output_stream', 'open_input_stream', 'am_link_open', 'am_link_play', 'out_write', 'in_read', '"../common/am_link.h"']) assert.ok(hal.includes(s), s);
+  assert.match(rd('drivers/android-hal/Android.bp'), /audio\.audiomixer\.default/); assert.ok(rd('drivers/android-hal/Android.bp').includes('"../common/am_link.c"'));
+  assert.match(rd('drivers/android-hal/audio_policy_configuration_audiomixer.xml'), /AUDIO_DEVICE_OUT_BUS/); assert.match(rd('drivers/android-hal/sepolicy/hal_audio_audiomixer.te'), /hal_audio_default/);
+  assert.ok(fsx.existsSync(pathx.join(root, 'drivers/common/am_link.h')) && fsx.existsSync(pathx.join(root, 'drivers/common/am_link.c')));
+  for (const t of ['x86_64-w64-mingw32', 'i686-w64-mingw32']) {
+    if (cp.spawnSync('which', [t + '-g++']).status !== 0) continue;
+    const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'wt-')); fsx.writeFileSync(pathx.join(dir, 'asio_blob.inc'), 'static const unsigned char kAsioDll[] = {0x4d,0x5a};\nstatic const unsigned kAsioDllSize = 2u;\nstatic const char kAsioDllName[] = "AudioMixerASIO64.dll";\n');
+    const c = cp.spawnSync(t + '-g++', ['-std=c++17', '-Wall', '-Wextra', '-Werror', '-O2', '-DAM_EMBED_ASIO', '-I' + dir, '-I' + pathx.join(root, 'engine/cpp/app'), '-c', pathx.join(root, 'engine/cpp/app/win_tools.cpp'), '-o', pathx.join(dir, 'wt.o')], { encoding: 'utf8' });
     assert.strictEqual(c.status, 0, t + ': ' + c.stderr.slice(0, 600));
   }
 });
