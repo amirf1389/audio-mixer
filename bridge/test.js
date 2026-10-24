@@ -1321,15 +1321,15 @@ test('ASIO host backend (engine/cpp/src/backend_asio.cpp): any installed ASIO dr
   for (const t of ['x86_64-w64-mingw32', 'i686-w64-mingw32']) {
     if (cp.spawnSync('which', [t + '-g++']).status) return tc.skip('mingw-w64 is not installed');
     const o = pathx.join(fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'asiohost-')), 'b.o');
-    const r = cp.spawnSync(t + '-g++', ['-std=c++17', '-Wall', '-Wextra', '-Werror', '-O2', '-I' + pathx.join(root, 'engine', 'cpp', 'include'), '-I' + pathx.join(root, 'engine', 'cpp', 'src'), '-I' + pathx.join(root, 'platforms', 'windows', 'asio-driver'), '-c', '-o', o, pathx.join(root, 'engine', 'cpp', 'src', 'backend_asio.cpp')], { encoding: 'utf8' });
+    const r = cp.spawnSync(t + '-g++', ['-std=c++17', '-Wall', '-Wextra', '-Werror', '-O2', '-I' + pathx.join(root, 'engine', 'cpp', 'include'), '-I' + pathx.join(root, 'engine', 'cpp', 'src'), '-I' + pathx.join(root, 'drivers', 'asio'), '-c', '-o', o, pathx.join(root, 'engine', 'cpp', 'src', 'backend_asio.cpp')], { encoding: 'utf8' });
     assert.strictEqual(r.status, 0, t + ': ' + r.stderr);
   }
 });
 
-test('Windows ASIO driver (windows/asio-driver): cross-compiled for x64 and x86 with -Werror, COM exports, system DLLs only, the GUID agrees everywhere', (tc) => {
+test('Windows ASIO driver (drivers/asio): cross-compiled for x64 and x86 with -Werror, COM exports, system DLLs only, the GUID agrees everywhere', (tc) => {
   const cp = require('node:child_process'), drv = require('../scripts/build-drivers');
   if (!['x86_64-w64-mingw32-g++', 'i686-w64-mingw32-g++'].every(n => !cp.spawnSync('which', [n]).status)) return tc.skip('mingw-w64 is not installed');
-  const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'asio-')), root = pathx.join(__dirname, '..', 'platforms', 'windows', 'asio-driver');
+  const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'asio-')), root = pathx.join(__dirname, '..', 'drivers', 'asio');
   try {
     for (const [arch, machine] of [['x64', 0x8664], ['x86', 0x14c]]) {
       const dll = drv.buildAsio(arch, dir), b = fsx.readFileSync(dll);
@@ -1337,7 +1337,7 @@ test('Windows ASIO driver (windows/asio-driver): cross-compiled for x64 and x86 
       const dump = cp.spawnSync(arch === 'x64' ? 'x86_64-w64-mingw32-objdump' : 'i686-w64-mingw32-objdump', ['-p', dll], { encoding: 'utf8' }).stdout;
       for (const e of ['DllGetClassObject', 'DllCanUnloadNow', 'DllRegisterServer', 'DllUnregisterServer']) assert.match(dump, new RegExp('\\] ' + e + '\\b'), arch + ' exports ' + e);   // undecorated names on both
       const imports = [...dump.matchAll(/DLL Name: (\S+)/g)].map(m => m[1].toLowerCase());
-      assert.ok(imports.length && imports.every(n => ['kernel32.dll', 'user32.dll', 'advapi32.dll', 'ws2_32.dll', 'winmm.dll', 'msvcrt.dll', 'ole32.dll', 'oleaut32.dll'].includes(n)), arch + ' imports only Windows DLLs: ' + imports);   // no libstdc++ / libgcc / winpthread DLL to ship
+      assert.ok(imports.length && imports.every(n => ['kernel32.dll', 'user32.dll', 'advapi32.dll', 'ws2_32.dll', 'winmm.dll', 'avrt.dll', 'msvcrt.dll', 'ole32.dll', 'oleaut32.dll'].includes(n)), arch + ' imports only Windows DLLs: ' + imports);   // no libstdc++ / libgcc / winpthread DLL to ship
     }
     // one class id: the source, the README texts and the registration use the same GUID
     const cpp = fsx.readFileSync(pathx.join(root, 'audiomixer_asio.cpp'), 'utf8'), guid = /\{C1893F2F-1AD5-4344-9806-DCFD242C0D48\}/i;
@@ -1383,7 +1383,7 @@ test('driver sources and packaging: macOS plug-in, Android HAL, the build script
     const zip = cp.spawnSync('unzip', ['-Z1', pathx.join(out, `AudioMixer-${v}-asio-driver-windows.zip`)], { encoding: 'utf8' }).stdout.split('\n').filter(Boolean);
     for (const f of ['AudioMixerASIO64.dll', 'AudioMixerASIO32.dll', 'README.txt']) assert.ok(zip.includes(`AudioMixer-ASIO-${v}/${f}`), f);
     const tar = cp.spawnSync('tar', ['tzf', pathx.join(out, `AudioMixer-${v}-drivers-source.tar.gz`)], { encoding: 'utf8' }).stdout.split('\n');
-    for (const f of ['drivers/common/am_link.c', 'platforms/windows/asio-driver/audiomixer_asio.cpp', 'platforms/linux/alsa-plugin/pcm_audiomixer.c', 'platforms/macos/coreaudio-driver/AudioMixerDriver.c', 'platforms/android/hal/audio_hw.c', 'drivers/README.md']) assert.ok(tar.includes(`audio-mixer-drivers-${v}/${f}`), f);
+    for (const f of ['drivers/common/am_link.c', 'drivers/asio/audiomixer_asio.cpp', 'platforms/linux/alsa-plugin/pcm_audiomixer.c', 'platforms/macos/coreaudio-driver/AudioMixerDriver.c', 'platforms/android/hal/audio_hw.c', 'drivers/README.md']) assert.ok(tar.includes(`audio-mixer-drivers-${v}/${f}`), f);
     assert.ok(!tar.some(f => /\.(dll|so|o)$/.test(f)), 'no binaries in the source archive');
     assert.ok(!fsx.readdirSync(out).some(x => x.endsWith('.sha256')), 'no .sha256 files next to the release files');
   } finally { fsx.rmSync(out, { recursive: true, force: true }); }
@@ -3165,7 +3165,7 @@ test('Windows installers carry the ASIO driver files (Program Files / Program Fi
     assert.ok(!/AsioDriver/.test(m.wxs({ stage, version: '9.0.0', arch: 'x64', scope: 'user' })), 'HKLM\\SOFTWARE\\ASIO is per machine: the per-user package has no driver feature');
     fsx.rmSync(pathx.join(stage, 'asio-driver', 'AudioMixerASIO32.dll')); assert.ok(!/AsioDriver/.test(m.wxs({ stage, version: '9.0.0', arch: 'x64' })), 'no DLL, no feature');
     // the same keys that DllRegisterServer writes
-    const cpp = fsx.readFileSync(pathx.join(root, 'platforms', 'windows', 'asio-driver', 'audiomixer_asio.cpp'), 'utf8'); assert.ok(cpp.includes('SOFTWARE\\ASIO\\Audio Mixer') && cpp.includes('InprocServer32') && cpp.includes('ThreadingModel'));
+    const cpp = fsx.readFileSync(pathx.join(root, 'drivers', 'asio', 'audiomixer_asio.cpp'), 'utf8'); assert.ok(cpp.includes('SOFTWARE\\ASIO\\Audio Mixer') && cpp.includes('InprocServer32') && cpp.includes('ThreadingModel'));
   } finally { fsx.rmSync(stage, { recursive: true, force: true }); }
   // the setup program: /asio, /noasio, a Yes / No question whose default is No, ADDLOCAL gets AsioDriver only on request
   const stub = fsx.readFileSync(pathx.join(root, 'platforms', 'windows', 'installer', 'setup-stub.c'), 'utf8');

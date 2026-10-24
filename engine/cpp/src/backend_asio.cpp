@@ -1,4 +1,4 @@
-// ASIO backend (Windows): the mixer runs on any installed ASIO driver, through the Steinberg ASIO SDK 2.3 interface (IASIO, platforms/windows/asio-driver/sdk, GPLv3).
+// ASIO backend (Windows): the mixer runs on any installed ASIO driver, through the Steinberg ASIO SDK 2.3 interface (IASIO, drivers/asio/sdk, GPLv3).
 // The driver is chosen by name (DeviceConfig::outDevice, else inDevice; a part of the name is enough, "" = the first registered driver). The inputs of the driver feed the
 // strips, the stereo master goes to output channels 0 and 1, the block size is the driver's buffer size nearest to DeviceConfig::frames. ASIO drivers are single-client: a second
 // open() while one is running fails. Sample types: Int16 / Int24 / Int32 / Float32 / Float64, little endian (what Windows drivers use).

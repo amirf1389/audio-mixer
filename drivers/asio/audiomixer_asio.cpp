@@ -9,6 +9,8 @@
 // The connection to the mixer (drivers/common/am_link.c) is kept by a separate thread that starts in start() and ends in stop(): the audio thread never connects,
 // so a mixer that is not running (or stuck) cannot stall the buffer switches. Without the mixer the driver still runs, silent, and the thread tries again every second.
 //
+// Built against the Steinberg ASIO SDK 2.3 headers in sdk/ (used under the GNU GPL v3, see sdk/README.txt).
+//
 // Registration is a deliberate step and nothing the installer does: run  regsvr32 AudioMixerASIO64.dll  as administrator (see README.md).
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -21,9 +23,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "asio_iface.h"
+#include "asio_sdk.h"
 extern "C" {
-#include "drivers/common/am_link.h"
+#include "../common/am_link.h"
 }
 
 // {C1893F2F-1AD5-4344-9806-DCFD242C0D48}: the class id AND (by ASIO convention) the interface id the hosts ask for
