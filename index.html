@@ -1527,6 +1527,7 @@ window.navTabs = [
 
             if (window.state.active) {
                 await initAudioEngine();
+                if (window.universalAsioSdk && window.universalAsioSdk.autoLinkAsio) { window.universalAsioSdk._autoLinked = false; window.universalAsioSdk.autoLinkAsio('engine started'); }
                 btn.className = "px-2.5 py-1 md:px-3 md:py-1.5 rounded text-black bg-amber-500 border border-amber-400 text-[9px] md:text-[10px] font-black uppercase tracking-wider transition-all flex items-center font-wing shadow-[0_0_12px_rgba(255,106,0,0.5)]";
                 if(pText) pText.innerText = "ONLINE";
                 led.className = "w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_#10b981]";
@@ -14383,6 +14384,7 @@ window.navTabs = [
                     const nd = document.getElementById('notif-usb-driver');
                     if (nd) nd.innerText = self.driverSummary().replace(/^[^:]+: /, '').toUpperCase();
                     self.reportWebAudioCompat(info);
+                    self.autoLinkAsio('bridge connected');
                 }).catch(() => tryNext(i + 1));
             };
             tryNext(0);
@@ -14970,6 +14972,26 @@ window.navTabs = [
             if (asio) { sel.value = 'pa:auto'; this.selectedOutputDeviceId = 'pa:auto'; }   // the universal driver picks the ASIO device (and falls back by itself)
         },
 
+        // The Web Audio output follows the system's default device (often a Bluetooth headset); the ASIO interface the PC has is only used when the output is routed to it through the bridge.
+        // That used to need a manual switch, so a PC with an ASIO interface and a Bluetooth default kept playing on Bluetooth. Once the engine is running and the bridge reports an ASIO output,
+        // the master is linked to the universal ASIO driver by itself (asking for the ASIO device first, falling back by the bridge's own ranking). Off with localStorage halx_asio_auto = "0",
+        // and never again in this page session after the person stopped the ASIO output by hand.
+        autoLinkAsio: function(why) {
+            let off = false; try { off = localStorage.getItem('halx_asio_auto') === '0'; } catch (e) { /* storage blocked: default on */ }
+            if (off || this._userStopped || this._autoLinked || this.paWs || this.paReady) return false;
+            const info = this.bridgeInfo, st = window.state;
+            if (!this.bridgeUrl || !info || !info.portaudio) return false;
+            if (!(st && st.active && st.ctx && st.nodes && st.nodes.masterLimiter)) return false;                  // the engine has to be running: the master is tapped from it
+            const asioOuts = (info.portaudio.devices || []).filter(d => d.outputs > 0 && /asio/i.test(d.hostApi));
+            if (!asioOuts.length) return false;
+            this._autoLinked = true;
+            this.selectedOutputDeviceId = 'pa:auto';
+            this.log(`Web Audio master -> ASIO (${why}): ${asioOuts[0].name}${asioOuts.length > 1 ? ' (+' + (asioOuts.length - 1) + ' more)' : ''}; the system's default output (Bluetooth or other) is no longer used for the mixer`, "info");
+            window.notify('Web Audio ↔ ASIO: linking the master to ' + asioOuts[0].name, 'microchip');
+            this.startWriteStream();
+            return true;
+        },
+
         startPaOutput: async function() {
             const self = this;
             if (!this.bridgeUrl || this.paWs) return;
@@ -15033,6 +15055,7 @@ window.navTabs = [
         },
 
         startWriteStream: function() {
+            this._userStopped = false;
             this.isWriteActive = true;
             this.setStreamBadge('asio-write-rate-badge', 'PLAYBACK ACTIVE');
             this.startPaOutput();
@@ -15049,6 +15072,7 @@ window.navTabs = [
         },
 
         stopWriteStream: function() {
+            this._userStopped = true;                                           // a person stopped it: the automatic link does not start it again in this page session
             this.isWriteActive = false;
             this.setStreamBadge('asio-write-rate-badge', 'PLAYBACK IDLE');
             this.stopPaOutput();
