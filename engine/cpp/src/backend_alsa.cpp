@@ -2,7 +2,9 @@
 #ifdef AM_HAVE_ALSA
 #include <alsa/asoundlib.h>
 
+#include <algorithm>
 #include <atomic>
+#include <cerrno>
 #include <cstring>
 #include <thread>
 
@@ -50,15 +52,29 @@ class AlsaBackend : public Backend {
     if (play_) { snd_pcm_prepare(play_); std::fill(inter_out_.begin(), inter_out_.end(), 0.0f); for (int i = 0; i < 2; ++i) snd_pcm_writei(play_, inter_out_.data(), F); }   // prime the device
     while (!stop_) {
       if (cap_) {
-        const long rc = snd_pcm_readi(cap_, inter_in_.data(), F);
-        if (rc < 0) { if (!recover(cap_, rc)) break; std::fill(inter_in_.begin(), inter_in_.end(), 0.0f); }
+        // snd_pcm_readi may deliver fewer frames than asked (a signal, a period boundary): read until the block is whole, the rest of a short read used to stay stale
+        std::size_t got = 0; bool dead = false;
+        while (got < F && !stop_) {
+          const long rc = snd_pcm_readi(cap_, inter_in_.data() + got * static_cast<std::size_t>(ci), F - got);
+          if (rc == -EAGAIN) continue;
+          if (rc < 0) { if (!recover(cap_, rc)) { dead = true; break; } std::fill(inter_in_.begin(), inter_in_.end(), 0.0f); got = F; break; }
+          got += static_cast<std::size_t>(rc);
+        }
+        if (dead) break;
+        if (got < F) std::fill(inter_in_.begin() + static_cast<std::ptrdiff_t>(got * static_cast<std::size_t>(ci)), inter_in_.end(), 0.0f);   // stopped in the middle of a block
         for (int c = 0; c < ci; ++c) for (std::size_t i = 0; i < F; ++i) in_[static_cast<std::size_t>(c)][i] = inter_in_[i * static_cast<std::size_t>(ci) + static_cast<std::size_t>(c)];
       } else for (auto& v : in_) std::fill(v.begin(), v.end(), 0.0f);
       cb_(inp_.data(), outp_.data(), F);
       if (play_) {
         for (int c = 0; c < co; ++c) for (std::size_t i = 0; i < F; ++i) inter_out_[i * static_cast<std::size_t>(co) + static_cast<std::size_t>(c)] = out_[static_cast<std::size_t>(c)][i];
-        const long rc = snd_pcm_writei(play_, inter_out_.data(), F);
-        if (rc < 0 && !recover(play_, rc)) break;
+        std::size_t put = 0; bool dead = false;                                   // writei may take fewer frames than offered: write the rest too
+        while (put < F && !stop_) {
+          const long rc = snd_pcm_writei(play_, inter_out_.data() + put * static_cast<std::size_t>(co), F - put);
+          if (rc == -EAGAIN) continue;
+          if (rc < 0) { if (!recover(play_, rc)) { dead = true; break; } break; }   // underrun: recovered, the block is dropped (the device restarts with silence)
+          put += static_cast<std::size_t>(rc);
+        }
+        if (dead) break;
       }
     }
   }

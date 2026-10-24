@@ -37,7 +37,7 @@ function compileWindows(arch, exe) {
     fs.writeFileSync(path.join(work, 'asio_blob.inc'), `static const unsigned char kAsioDll[] = {\n${rows.join(',\n')}\n};\nstatic const unsigned kAsioDllSize = ${bytes.length}u;\nstatic const char kAsioDllName[] = ${JSON.stringify(path.basename(dll))};\n`);
     run(t + '-g++', ['-std=c++17', '-Wall', '-Wextra', '-Werror', '-O2', '-static', '-static-libgcc', '-static-libstdc++', '-DAM_EMBED_ASIO', '-I' + work, '-I' + path.join(ROOT, 'engine/cpp/app'),
       '-I' + path.join(ROOT, 'engine/cpp/include'), '-I' + path.join(ROOT, 'engine/cpp/src'), '-I' + path.join(ROOT, 'drivers/asio'),
-      path.join(ROOT, 'engine/cpp/app/main.cpp'), path.join(ROOT, 'engine/cpp/app/win_tools.cpp'), ...src, '-o', exe, '-lole32', '-luuid', '-ladvapi32']);
+      path.join(ROOT, 'engine/cpp/app/main.cpp'), path.join(ROOT, 'engine/cpp/app/win_tools.cpp'), ...src, '-o', exe, '-lole32', '-luuid', '-ladvapi32', '-lavrt']);
   } finally { fs.rmSync(work, { recursive: true, force: true }); }
   return exe;
 }

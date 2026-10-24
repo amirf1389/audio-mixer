@@ -10,7 +10,8 @@
 #include <atomic>
 #include <cstdint>
 #include <cstring>
-#include <deque>
+#include <algorithm>
+#include <avrt.h>
 #include <thread>
 
 #include "backends.hpp"
@@ -24,6 +25,16 @@ const GUID kIidRenderClient = {0xF294ACFC, 0x3146, 0x4483, {0xA7, 0xBF, 0xAD, 0x
 const GUID kIidCaptureClient = {0xC8ADBD64, 0xE71E, 0x48A0, {0xA4, 0xDE, 0x18, 0x5C, 0x39, 0x5C, 0xD3, 0x17}};
 const GUID kPcmSubFormat = {0x00000001, 0x0000, 0x0010, {0x80, 0x00, 0x00, 0xAA, 0x00, 0x38, 0x9B, 0x71}};
 const GUID kFloatSubFormat = {0x00000003, 0x0000, 0x0010, {0x80, 0x00, 0x00, 0xAA, 0x00, 0x38, 0x9B, 0x71}};
+
+// per-channel FIFO with its storage allocated once: nothing is allocated on the audio thread (the former per-sample deque allocated on push)
+struct Fifo {
+  std::vector<float> d; std::size_t head = 0, n = 0;
+  void init(std::size_t cap) { d.assign(std::max<std::size_t>(cap, 16), 0.0f); head = 0; n = 0; }
+  void push(float v) { if (n == d.size()) { head = (head + 1) % d.size(); --n; } d[(head + n) % d.size()] = v; ++n; }      // full: the oldest sample goes
+  float pop() { const float v = d[head]; head = (head + 1) % d.size(); --n; return v; }
+  std::size_t size() const { return n; }
+  void trim(std::size_t keep) { while (n > keep) { head = (head + 1) % d.size(); --n; } }
+};
 
 // one sample format of a stream: what the device takes in exclusive mode (shared mode is always float32)
 struct Sample { bool isFloat = true; WORD bits = 32, valid = 32; std::size_t bytes() const { return bits / 8u; } };
@@ -55,17 +66,18 @@ class WasapiBackend : public Backend {
     if (FAILED(r)) { err = hr("device enumerator", r); return false; }
     const bool wantOut = cfg.outChannels > 0 && cfg.outDevice != "-", wantIn = cfg.inChannels > 0 && cfg.inDevice != "-";
     bool ok = true;
+    captureEvent_ = wantIn && !wantOut;                                        // an input-only stream is clocked by the capture event (there is no render event to wait for)
     if (wantOut) ok = client(en, eRender, cfg.outChannels, &out_, &render_, nullptr, &sOut_, err);
     if (ok && wantIn) ok = client(en, eCapture, cfg.inChannels, &in_, nullptr, &capture_, &sIn_, err);
     en->Release();
     if (!ok) { closeAll(); return false; }
     ev_ = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-    if (out_) out_->SetEventHandle(ev_);
+    if (out_) out_->SetEventHandle(ev_); else if (in_ && captureEvent_) in_->SetEventHandle(ev_);
     const std::size_t cap = static_cast<std::size_t>(cfg.frames) * 16;
     inBuf_.assign(static_cast<std::size_t>(std::max(1, cfg.inChannels)), std::vector<float>(cap, 0.0f)); outBuf_.assign(static_cast<std::size_t>(std::max(1, cfg.outChannels)), std::vector<float>(cap, 0.0f));
     for (auto& v : inBuf_) inp_.push_back(v.data());
     for (auto& v : outBuf_) outp_.push_back(v.data());
-    fifo_.assign(static_cast<std::size_t>(std::max(1, cfg.inChannels)), std::deque<float>());
+    fifo_.assign(static_cast<std::size_t>(std::max(1, cfg.inChannels)), Fifo()); for (auto& q : fifo_) q.init(static_cast<std::size_t>(cfg.frames) * 32);
     return true;
   }
   bool start(std::string& err) override {
@@ -88,7 +100,7 @@ class WasapiBackend : public Backend {
     if (FAILED(r)) { err = hr("default endpoint", r); return false; }
     r = dev->Activate(kIidAudioClient, CLSCTX_ALL, nullptr, reinterpret_cast<void**>(ac));
     if (FAILED(r)) { dev->Release(); err = hr("audio client", r); return false; }
-    const DWORD evt = flow == eRender ? AUDCLNT_STREAMFLAGS_EVENTCALLBACK : 0;
+    const DWORD evt = (flow == eRender || captureEvent_) ? AUDCLNT_STREAMFLAGS_EVENTCALLBACK : 0;
     if (!cfg_.exclusive) {
       dev->Release();
       WAVEFORMATEXTENSIBLE f = makeFormat(ch, cfg_.sampleRate, Sample());
@@ -120,8 +132,9 @@ class WasapiBackend : public Backend {
   }
   void loop() {
     const int ci = cfg_.inChannels, co = cfg_.outChannels; UINT32 bufFrames = 0; if (out_) out_->GetBufferSize(&bufFrames);
+    DWORD task = 0; HANDLE mm = AvSetMmThreadCharacteristicsW(L"Pro Audio", &task);          // the scheduler keeps the audio thread running
     while (!stop_) {
-      if (out_) WaitForSingleObject(ev_, 100); else Sleep(static_cast<DWORD>(1000.0 * cfg_.frames / cfg_.sampleRate));
+      if (out_ || captureEvent_) WaitForSingleObject(ev_, 100); else Sleep(static_cast<DWORD>(1000.0 * cfg_.frames / cfg_.sampleRate));
       if (stop_) break;
       if (capture_) {                                                          // everything the capture side has: into per-channel FIFOs
         UINT32 n = 0;
@@ -129,14 +142,15 @@ class WasapiBackend : public Backend {
           BYTE* data; UINT32 got; DWORD fl;
           if (FAILED(capture_->GetBuffer(&data, &got, &fl, nullptr, nullptr))) break;
           const std::size_t sb = sIn_.bytes();
-          for (UINT32 i = 0; i < got; ++i) for (int c = 0; c < ci; ++c) fifo_[static_cast<std::size_t>(c)].push_back((fl & AUDCLNT_BUFFERFLAGS_SILENT) ? 0.0f : loadSample(data + (static_cast<std::size_t>(i) * static_cast<std::size_t>(ci) + static_cast<std::size_t>(c)) * sb, sIn_));
+          for (UINT32 i = 0; i < got; ++i) for (int c = 0; c < ci; ++c) fifo_[static_cast<std::size_t>(c)].push((fl & AUDCLNT_BUFFERFLAGS_SILENT) ? 0.0f : loadSample(data + (static_cast<std::size_t>(i) * static_cast<std::size_t>(ci) + static_cast<std::size_t>(c)) * sb, sIn_));
           capture_->ReleaseBuffer(got);
         }
       }
       UINT32 pad = 0, room = bufFrames;
       if (out_ && SUCCEEDED(out_->GetCurrentPadding(&pad))) room = bufFrames - pad;
+      else if (!out_) room = ci > 0 ? static_cast<UINT32>(fifo_[0].size() / cfg_.frames * cfg_.frames) : cfg_.frames;   // input only: every whole block the capture side has delivered (this loop used to start with room = 0, the callback never ran)
       while (room >= cfg_.frames && !stop_) {
-        for (int c = 0; c < ci; ++c) { auto& q = fifo_[static_cast<std::size_t>(c)]; for (UINT32 i = 0; i < cfg_.frames; ++i) { if (q.empty()) { inBuf_[static_cast<std::size_t>(c)][i] = 0.0f; ++xruns_; } else { inBuf_[static_cast<std::size_t>(c)][i] = q.front(); q.pop_front(); } } }
+        for (int c = 0; c < ci; ++c) { auto& q = fifo_[static_cast<std::size_t>(c)]; for (UINT32 i = 0; i < cfg_.frames; ++i) { if (q.size() == 0) { inBuf_[static_cast<std::size_t>(c)][i] = 0.0f; ++xruns_; } else inBuf_[static_cast<std::size_t>(c)][i] = q.pop(); } }
         cb_(inp_.data(), outp_.data(), cfg_.frames);
         if (render_) {
           BYTE* data; if (FAILED(render_->GetBuffer(cfg_.frames, &data))) break;
@@ -145,15 +159,16 @@ class WasapiBackend : public Backend {
           render_->ReleaseBuffer(cfg_.frames, 0);
         }
         room -= cfg_.frames;
-        if (!out_) break;
+        if (!out_ && !capture_) break;
       }
-      for (auto& q : fifo_) while (q.size() > cfg_.frames * 16) q.pop_front();      // never let the capture side run away
+      for (auto& q : fifo_) q.trim(static_cast<std::size_t>(cfg_.frames) * 16);      // never let the capture side run away
     }
+    if (mm) AvRevertMmThreadCharacteristics(mm);
   }
   void closeAll() { release(render_); release(capture_); release(out_); release(in_); if (ev_) { CloseHandle(ev_); ev_ = nullptr; } }
   DeviceConfig cfg_; AudioCallback cb_; IAudioClient *out_ = nullptr, *in_ = nullptr; IAudioRenderClient* render_ = nullptr; IAudioCaptureClient* capture_ = nullptr; HANDLE ev_ = nullptr; Sample sOut_, sIn_;
-  std::vector<std::vector<float>> inBuf_, outBuf_; std::vector<const float*> inp_; std::vector<float*> outp_; std::vector<std::deque<float>> fifo_;
-  std::thread thread_; std::atomic<bool> stop_{false}; std::atomic<std::uint64_t> xruns_{0};
+  std::vector<std::vector<float>> inBuf_, outBuf_; std::vector<const float*> inp_; std::vector<float*> outp_; std::vector<Fifo> fifo_;
+  bool captureEvent_ = false; std::thread thread_; std::atomic<bool> stop_{false}; std::atomic<std::uint64_t> xruns_{0};
 };
 }  // namespace
 std::unique_ptr<Backend> makeWasapiBackend() { return std::make_unique<WasapiBackend>(); }

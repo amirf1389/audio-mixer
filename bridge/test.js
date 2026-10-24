@@ -1773,6 +1773,20 @@ test('native .exe setup options: the ASIO driver DLL is embedded and written / r
   }
 });
 
+test('real-time audio backends: WASAPI has no allocation on the audio thread, runs input-only streams and joins MMCSS; ALSA reads and writes whole blocks; both compile', () => {
+  const root = pathx.join(__dirname, '..'), cp = require('node:child_process'), rd = f => fsx.readFileSync(pathx.join(root, f), 'utf8');
+  const w = rd('engine/cpp/src/backend_wasapi.cpp'), a = rd('engine/cpp/src/backend_alsa.cpp');
+  assert.ok(!/std::deque/.test(w), 'no std::deque (it allocates on push) in the WASAPI audio thread'); assert.match(w, /struct Fifo/);
+  assert.match(w, /captureEvent_ = wantIn && !wantOut/); assert.match(w, /else if \(!out_\) room = /);                  // an input-only stream is clocked by the capture event and does run blocks
+  assert.match(w, /AvSetMmThreadCharacteristicsW\(L"Pro Audio"/); assert.match(w, /AvRevertMmThreadCharacteristics/);
+  assert.match(a, /while \(got < F && !stop_\)/); assert.match(a, /while \(put < F && !stop_\)/);                      // short reads / writes are completed
+  for (const t of ['x86_64-w64-mingw32', 'i686-w64-mingw32']) {
+    if (cp.spawnSync('which', [t + '-g++']).status !== 0) continue;
+    const c = cp.spawnSync(t + '-g++', ['-std=c++17', '-Wall', '-Wextra', '-Werror', '-O2', '-I' + pathx.join(root, 'engine/cpp/include'), '-I' + pathx.join(root, 'engine/cpp/src'), '-c', pathx.join(root, 'engine/cpp/src/backend_wasapi.cpp'), '-o', pathx.join(osx.tmpdir(), 'rt-' + t + '.o')], { encoding: 'utf8' });
+    assert.strictEqual(c.status, 0, t + ': ' + c.stderr.slice(0, 600));
+  }
+});
+
 test('endpoints: /api/license (BASIC by default), activation needs a valid key, updates need PRO', async () => {
   process.env.BRIDGE_LICENSE_FILE = pathx.join(fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'lep-')), 'license.json');
   await new Promise(r => server.listen(0, '127.0.0.1', r));
