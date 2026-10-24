@@ -79,7 +79,7 @@ deploy/nginx/logs/
 # PC-mode build output
 dist/
 
-!platforms/windows/releases/*.exe
+!releases/windows/*.exe
 
 # Windows helper binaries built from platforms/windows/native/src and platforms/windows/plugin-host (kept in the repository, the installers ship them)
 !platforms/windows/native/**/*.exe
