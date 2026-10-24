@@ -30,7 +30,7 @@ function compileWindows(arch, exe) {
   const src = ['engine.cpp', 'runtime.cpp', 'backend_null.cpp', 'spatial.cpp', 'backend_wasapi.cpp', 'backend_asio.cpp'].map(f => path.join(ROOT, 'engine/cpp/src', f));
   fs.mkdirSync(path.dirname(exe), { recursive: true });
   run(t + '-g++', ['-std=c++17', '-Wall', '-Wextra', '-Werror', '-O2', '-static', '-static-libgcc', '-static-libstdc++', '-I' + path.join(ROOT, 'engine/cpp/include'), '-I' + path.join(ROOT, 'engine/cpp/src'),
-    '-I' + path.join(ROOT, 'platforms/windows/asio-driver'), path.join(ROOT, 'engine/cpp/app/main.cpp'), ...src, '-o', exe, '-lole32', '-luuid', '-ladvapi32']);
+    '-I' + path.join(ROOT, 'drivers/asio'), path.join(ROOT, 'engine/cpp/app/main.cpp'), ...src, '-o', exe, '-lole32', '-luuid', '-ladvapi32']);
   return exe;
 }
 
@@ -43,12 +43,12 @@ function main() {
       const exe = path.join(work, 'audiomixer-native'), t = run(exe, ['--backend', 'null', '--seconds', '0.6']);
       if (!/audiomixer-native: null/.test(t)) throw new Error('the Linux program did not run on the null device');
       const dir = path.join(work, 'linux'); fs.mkdirSync(dir); fs.copyFileSync(exe, path.join(dir, 'audiomixer-native'));
-      const tar = path.join(out || path.join(ROOT, 'platforms/linux/releases'), `AudioMixer-${version}-native-linux-x64.tar.gz`); fs.mkdirSync(path.dirname(tar), { recursive: true });
+      const tar = path.join(out || path.join(ROOT, 'releases/linux'), `AudioMixer-${version}-native-linux-x64.tar.gz`); fs.mkdirSync(path.dirname(tar), { recursive: true });
       run('tar', ['-czf', tar, '-C', dir, 'audiomixer-native']); results.push(tar);
     }
     for (const [t, arch] of [['x86_64-w64-mingw32', 'x64'], ['i686-w64-mingw32', 'x86']]) {   // Windows (cross-compiled)
       if (!has(t + '-g++')) continue;
-      results.push(compileWindows(arch, path.join(out || path.join(ROOT, 'platforms/windows/releases'), `AudioMixer-${version}-native-windows-${arch}.exe`)));
+      results.push(compileWindows(arch, path.join(out || path.join(ROOT, 'releases/windows'), `AudioMixer-${version}-native-windows-${arch}.exe`)));
     }
   } finally { fs.rmSync(work, { recursive: true, force: true }); }
   if (!results.length) throw new Error('nothing could be built: needs cmake + g++ (Linux) and / or mingw-w64 (Windows)');

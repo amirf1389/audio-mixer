@@ -1,0 +1,8 @@
+{
+  "name": "FlexASIO",
+  "note": "Pin of the FlexASIO installer that scripts/install-flexasio.js downloads (FlexASIO is MIT-licensed; its installer is an Inno Setup program named FlexASIO-<version>.exe on https://github.com/dechamps/FlexASIO/releases). Nothing is downloaded or run until sha256 is filled in: put the SHA-256 of the installer .exe you checked on the release page (the script refuses an installer it cannot verify). args are Inno Setup's silent switches.",
+  "version": "1.10",
+  "url": "https://github.com/dechamps/FlexASIO/releases/download/flexasio-1.10/FlexASIO-1.10.exe",
+  "sha256": "",
+  "args": ["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"]
+}

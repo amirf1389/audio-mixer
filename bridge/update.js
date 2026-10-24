@@ -69,10 +69,12 @@ async function check({ current, fetchImpl = globalThis.fetch, url = process.env.
   const env = await fetchJson(fetchImpl, url);
   const v = verifyManifest(env, jwk);
   if (!v.ok) throw Object.assign(new Error(v.error), { status: 502 });
-  const m = v.manifest, file = platformFile(m, { platform, arch }), det = osdetect.detectOs({ node: { platform: platform || process.platform, arch: arch || process.arch } });
+  const m = v.manifest, det = osdetect.detectOs({ node: { platform: platform || process.platform, arch: arch || process.arch } });
+  // Android: Google Play delivers updates to the store app; an app that downloads and installs its own APK is what Play's policies and Play Protect block, so none is offered
+  const playManaged = det.os === 'android', file = playManaged ? null : platformFile(m, { platform, arch });
   return {
-    ok: true, current, os: det.os, arch: det.arch, others: osdetect.others(m, [file && file.key, (osdetect.driverFor(m, det) || {}).key]).map(o => ({ key: o.key, label: o.label, name: o.name, url: o.url, size: o.size })), latest: m.version, released: m.released || null, channel: m.channel || 'stable', notes: Array.isArray(m.notes) ? m.notes.slice(0, 12).map(String) : [],
-    updateAvailable: cmpVersion(m.version, current) > 0, signed: true,
+    ok: true, current, os: det.os, arch: det.arch, others: osdetect.others(m, [file && file.key, (osdetect.driverFor(m, det) || {}).key, playManaged && 'android-apk']).map(o => ({ key: o.key, label: o.label, name: o.name, url: o.url, size: o.size })), latest: m.version, released: m.released || null, channel: m.channel || 'stable', notes: Array.isArray(m.notes) ? m.notes.slice(0, 12).map(String) : [],
+    updateAvailable: cmpVersion(m.version, current) > 0, signed: true, playManaged,
     file: file ? { key: file.key, name: file.name, url: file.url, size: file.size || null, sha256: file.sha256, how: file.how } : null, source: url,
     driver: (d => d ? { key: d.key, label: d.label, name: d.name, url: d.url, size: d.size || null, sha256: d.sha256, how: d.how } : null)(osdetect.driverFor(m, det)),
   };
@@ -84,6 +86,7 @@ const updateDir = () => path.join(process.env.BRIDGE_DOWNLOAD_DIR || path.join(o
 async function download({ current, fetchImpl = globalThis.fetch, url, dir = updateDir(), platform, arch, jwk = lic.PUBLIC_JWK } = {}) {
   const info = await check({ current, fetchImpl, url, platform, arch, jwk });
   if (!info.updateAvailable) throw Object.assign(new Error('Audio Mixer is up to date (' + current + ')'), { status: 409 });
+  if (info.playManaged) throw Object.assign(new Error('on Android, updates come from Google Play'), { status: 409 });
   if (!info.file) throw Object.assign(new Error('no update file for this system'), { status: 404 });
   const env = await fetchJson(fetchImpl, url || process.env.BRIDGE_UPDATE_URL || DEFAULT_URL);
   const entry = verifyManifest(env, jwk).manifest.files[info.file.key];
@@ -127,4 +130,52 @@ async function install({ current, fetchImpl = globalThis.fetch, url, dir, platfo
   return { ...dl, installing: true, note: `Installing v${dl.version} now (silently, no prompts). Audio Mixer will restart once it finishes.` };
 }
 
-module.exports = { check, download, install, verifyManifest, signManifest, platformFile, cmpVersion, hostOk, updateDir, DEFAULT_URL };
+// Automatic updates (Windows setup .exe only): off until the user switches it on (the page's switch, or BRIDGE_AUTO_UPDATE=1). When on, the server checks a little after
+// it starts and then every 6 hours; a newer signed version is downloaded, checked against the manifest's SHA-256 and installed silently by install() (the signed setup's own
+// MSI major upgrade). A version is tried once per run (a failing installer is not retried in a loop), nothing runs without the PRO / STUDIO plan, and every other system
+// (Android included: Google Play updates the store app) is left alone.
+const autoFile = () => process.env.BRIDGE_AUTO_UPDATE_FILE || path.join(os.homedir(), '.audio-mixer', 'auto-update.json');
+function autoEnabled() {
+  if (process.env.BRIDGE_AUTO_UPDATE === '1') return true;
+  if (process.env.BRIDGE_AUTO_UPDATE === '0') return false;
+  try { return JSON.parse(fs.readFileSync(autoFile(), 'utf8')).enabled === true; } catch (_) { return false; }
+}
+function setAutoEnabled(enabled) {
+  fs.mkdirSync(path.dirname(autoFile()), { recursive: true });
+  fs.writeFileSync(autoFile(), JSON.stringify({ enabled: enabled === true }) + '\n', { mode: 0o600 });
+  return autoEnabled();
+}
+function createAutoUpdater({ current, allowed = () => true, platform = process.platform, firstAfterMs = 120000, everyMs = 6 * 3600 * 1000, checkFn = check, installFn = install, log = () => {} } = {}) {
+  let timer = null, busy = false, last = { at: null, result: 'not run yet' };
+  const tried = new Set();
+  async function tick() {
+    if (busy) return last;
+    busy = true;
+    try {
+      if (platform !== 'win32') last = { at: Date.now(), result: 'automatic updates are for Windows only' };
+      else if (!autoEnabled()) last = { at: Date.now(), result: 'off' };
+      else if (!allowed()) last = { at: Date.now(), result: 'needs the PRO or STUDIO plan' };
+      else {
+        const info = await checkFn({ current, platform });
+        if (!info.updateAvailable) last = { at: Date.now(), result: 'up to date' };
+        else if (!info.file || !/\.exe$/i.test(info.file.name)) last = { at: Date.now(), result: 'v' + info.latest + ' has no setup .exe for this system; install it by hand' };
+        else if (tried.has(info.latest)) last = { at: Date.now(), result: 'v' + info.latest + ' was already tried in this run' };
+        else {
+          tried.add(info.latest);
+          const r = await installFn({ current, platform });
+          last = { at: Date.now(), result: r.installing ? 'installing v' + r.version : 'v' + r.version + ' saved, not run' };
+        }
+      }
+    } catch (e) { last = { at: Date.now(), result: 'failed: ' + e.message }; }
+    finally { busy = false; }
+    log('auto update: ' + last.result);
+    return last;
+  }
+  return {
+    tick, status: () => ({ enabled: autoEnabled(), supported: platform === 'win32', last }),
+    start() { if (timer) return; timer = setTimeout(function again() { tick().then(() => { timer = setTimeout(again, everyMs); if (timer.unref) timer.unref(); }); }, firstAfterMs); if (timer.unref) timer.unref(); },
+    stop() { if (timer) clearTimeout(timer); timer = null; },
+  };
+}
+
+module.exports = { check, download, install, autoEnabled, setAutoEnabled, createAutoUpdater, autoFile, verifyManifest, signManifest, verifyManifest, signManifest, platformFile, cmpVersion, hostOk, updateDir, DEFAULT_URL };

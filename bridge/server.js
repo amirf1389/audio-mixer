@@ -6,6 +6,7 @@
 //   GET /api/volume   -> system output / input volume + mute
 //   GET /api/license, GET /api/license/request (the key request file), POST /api/license/activate|deactivate -> consumer license (plan, machine code)
 //   GET /api/update, POST /api/update/download, POST /api/update/install -> OTA updates (signed manifest, checksum-verified download, Windows-only silent install)
+//   GET / POST /api/update/auto -> automatic updates for the Windows setup .exe (off by default; Android is updated by Google Play only)
 //   GET /api/universal -> universal ASIO driver: all input / output sources, ranked, with the automatic pick
 //   GET /api/plugins -> VST3 / VST2 plugins (.vst3 / .dll / .vst) found and validated
 //   POST /api/handoff {scenes}, GET /api/handoff -> one scene archive (.amix) from "audio-mixer open" waiting for the page (taken once)
@@ -52,6 +53,7 @@ const power = require('./power');
 const openSockets_ = new Set();
 
 const VERSION = (() => { try { return require('../package.json').version; } catch (_) { return '1.0.0'; } })();
+const autoUpdater = updater.createAutoUpdater({ current: VERSION, allowed: () => license.hasFeature(license.status(), 'ota'), log: m => console.log(m) });
 const PORT = Number(process.env.BRIDGE_PORT) || 8765;
 const HOST = '127.0.0.1';
 const ROOT = path.resolve(__dirname, '..');
@@ -115,6 +117,13 @@ async function handle(req, res) {
     if (!license.hasFeature(license.status(), 'ota')) return [402, { ok: false, needs: 'ota', error: 'Installing updates needs the PRO or STUDIO plan. You can still check for updates.' }];
     return [200, await updater.install({ current: VERSION })];
   }, false);
+  if (req.method === 'POST' && url.pathname === '/api/update/auto') return handleAction(req, res, cors, 'update', async body => {
+    if (typeof body.enabled !== 'boolean') return [400, { ok: false, error: 'enabled must be true or false' }];
+    if (body.enabled && !license.hasFeature(license.status(), 'ota')) return [402, { ok: false, needs: 'ota', error: 'Automatic updates need the PRO or STUDIO plan.' }];
+    updater.setAutoEnabled(body.enabled);
+    if (body.enabled) autoUpdater.tick();                                   // check right away; the result shows in GET /api/update/auto
+    return [200, { ok: true, ...autoUpdater.status() }];
+  });
   if (req.method === 'POST' && url.pathname === '/api/handoff') return handleAction(req, res, cors, 'handoff', async body => {   // "audio-mixer open file.amix": one scene archive waits here for the page
     const d = body && body.scenes;
     if (!Array.isArray(d) || d.length > 16 || !d.every(x => x === null || (x && typeof x === 'object' && !Array.isArray(x)))) return [400, { ok: false, error: 'scenes must be an array of up to 16 snapshots' }];
@@ -159,6 +168,7 @@ async function handle(req, res) {
     try { return json(res, 200, { ok: true, request: license.request({ plan: url.searchParams.get('plan') || 'pro', name: url.searchParams.get('name'), email: url.searchParams.get('email') }) }, cors); }
     catch (e) { return json(res, e.status || 500, { ok: false, error: e.message }, cors); }
   }
+  if (url.pathname === '/api/update/auto') return json(res, 200, { ok: true, ...autoUpdater.status() }, cors);
   if (url.pathname === '/api/license') return json(res, 200, { ok: true, version: VERSION, ...license.status(), sandboxKey: license.sandboxJwk() }, cors);
 
   // OTA updates: is a newer, signed version published? (cached for 5 minutes, ?force=1 asks again)
@@ -304,7 +314,7 @@ server.on('clientError', (_, socket) => { try { socket.end('HTTP/1.1 400 Bad Req
 function start(port = PORT) {
   return new Promise((resolve, reject) => {
     server.once('error', reject);
-    server.listen(port, HOST, () => { server.removeListener('error', reject); resolve(server.address().port); });
+    server.listen(port, HOST, () => { server.removeListener('error', reject); autoUpdater.start(); resolve(server.address().port); });
   });
 }
 

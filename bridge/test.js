@@ -1321,15 +1321,15 @@ test('ASIO host backend (engine/cpp/src/backend_asio.cpp): any installed ASIO dr
   for (const t of ['x86_64-w64-mingw32', 'i686-w64-mingw32']) {
     if (cp.spawnSync('which', [t + '-g++']).status) return tc.skip('mingw-w64 is not installed');
     const o = pathx.join(fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'asiohost-')), 'b.o');
-    const r = cp.spawnSync(t + '-g++', ['-std=c++17', '-Wall', '-Wextra', '-Werror', '-O2', '-I' + pathx.join(root, 'engine', 'cpp', 'include'), '-I' + pathx.join(root, 'engine', 'cpp', 'src'), '-I' + pathx.join(root, 'platforms', 'windows', 'asio-driver'), '-c', '-o', o, pathx.join(root, 'engine', 'cpp', 'src', 'backend_asio.cpp')], { encoding: 'utf8' });
+    const r = cp.spawnSync(t + '-g++', ['-std=c++17', '-Wall', '-Wextra', '-Werror', '-O2', '-I' + pathx.join(root, 'engine', 'cpp', 'include'), '-I' + pathx.join(root, 'engine', 'cpp', 'src'), '-I' + pathx.join(root, 'drivers', 'asio'), '-c', '-o', o, pathx.join(root, 'engine', 'cpp', 'src', 'backend_asio.cpp')], { encoding: 'utf8' });
     assert.strictEqual(r.status, 0, t + ': ' + r.stderr);
   }
 });
 
-test('Windows ASIO driver (windows/asio-driver): cross-compiled for x64 and x86 with -Werror, COM exports, system DLLs only, the GUID agrees everywhere', (tc) => {
+test('Windows ASIO driver (drivers/asio): cross-compiled for x64 and x86 with -Werror, COM exports, system DLLs only, the GUID agrees everywhere', (tc) => {
   const cp = require('node:child_process'), drv = require('../scripts/build-drivers');
   if (!['x86_64-w64-mingw32-g++', 'i686-w64-mingw32-g++'].every(n => !cp.spawnSync('which', [n]).status)) return tc.skip('mingw-w64 is not installed');
-  const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'asio-')), root = pathx.join(__dirname, '..', 'platforms', 'windows', 'asio-driver');
+  const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'asio-')), root = pathx.join(__dirname, '..', 'drivers', 'asio');
   try {
     for (const [arch, machine] of [['x64', 0x8664], ['x86', 0x14c]]) {
       const dll = drv.buildAsio(arch, dir), b = fsx.readFileSync(dll);
@@ -1337,7 +1337,7 @@ test('Windows ASIO driver (windows/asio-driver): cross-compiled for x64 and x86 
       const dump = cp.spawnSync(arch === 'x64' ? 'x86_64-w64-mingw32-objdump' : 'i686-w64-mingw32-objdump', ['-p', dll], { encoding: 'utf8' }).stdout;
       for (const e of ['DllGetClassObject', 'DllCanUnloadNow', 'DllRegisterServer', 'DllUnregisterServer']) assert.match(dump, new RegExp('\\] ' + e + '\\b'), arch + ' exports ' + e);   // undecorated names on both
       const imports = [...dump.matchAll(/DLL Name: (\S+)/g)].map(m => m[1].toLowerCase());
-      assert.ok(imports.length && imports.every(n => ['kernel32.dll', 'user32.dll', 'advapi32.dll', 'ws2_32.dll', 'winmm.dll', 'msvcrt.dll', 'ole32.dll', 'oleaut32.dll'].includes(n)), arch + ' imports only Windows DLLs: ' + imports);   // no libstdc++ / libgcc / winpthread DLL to ship
+      assert.ok(imports.length && imports.every(n => ['kernel32.dll', 'user32.dll', 'advapi32.dll', 'ws2_32.dll', 'winmm.dll', 'avrt.dll', 'msvcrt.dll', 'ole32.dll', 'oleaut32.dll'].includes(n)), arch + ' imports only Windows DLLs: ' + imports);   // no libstdc++ / libgcc / winpthread DLL to ship
     }
     // one class id: the source, the README texts and the registration use the same GUID
     const cpp = fsx.readFileSync(pathx.join(root, 'audiomixer_asio.cpp'), 'utf8'), guid = /\{C1893F2F-1AD5-4344-9806-DCFD242C0D48\}/i;
@@ -1383,7 +1383,7 @@ test('driver sources and packaging: macOS plug-in, Android HAL, the build script
     const zip = cp.spawnSync('unzip', ['-Z1', pathx.join(out, `AudioMixer-${v}-asio-driver-windows.zip`)], { encoding: 'utf8' }).stdout.split('\n').filter(Boolean);
     for (const f of ['AudioMixerASIO64.dll', 'AudioMixerASIO32.dll', 'README.txt']) assert.ok(zip.includes(`AudioMixer-ASIO-${v}/${f}`), f);
     const tar = cp.spawnSync('tar', ['tzf', pathx.join(out, `AudioMixer-${v}-drivers-source.tar.gz`)], { encoding: 'utf8' }).stdout.split('\n');
-    for (const f of ['drivers/common/am_link.c', 'platforms/windows/asio-driver/audiomixer_asio.cpp', 'platforms/linux/alsa-plugin/pcm_audiomixer.c', 'platforms/macos/coreaudio-driver/AudioMixerDriver.c', 'platforms/android/hal/audio_hw.c', 'drivers/README.md']) assert.ok(tar.includes(`audio-mixer-drivers-${v}/${f}`), f);
+    for (const f of ['drivers/common/am_link.c', 'drivers/asio/audiomixer_asio.cpp', 'platforms/linux/alsa-plugin/pcm_audiomixer.c', 'platforms/macos/coreaudio-driver/AudioMixerDriver.c', 'platforms/android/hal/audio_hw.c', 'drivers/README.md']) assert.ok(tar.includes(`audio-mixer-drivers-${v}/${f}`), f);
     assert.ok(!tar.some(f => /\.(dll|so|o)$/.test(f)), 'no binaries in the source archive');
     assert.ok(!fsx.readdirSync(out).some(x => x.endsWith('.sha256')), 'no .sha256 files next to the release files');
   } finally { fsx.rmSync(out, { recursive: true, force: true }); }
@@ -1673,6 +1673,84 @@ test('OTA: check and download with the embedded vendor key replaced by a test ke
     await assert.rejects(up.download({ current: '1.5.1', fetchImpl: bad, url, dir: pathx.join(dir, 'b'), platform: 'win32', arch: 'x64' }), /checksum mismatch/);
     assert.deepStrictEqual(fsx.readdirSync(pathx.join(dir, 'b')), []);
   } finally { Object.assign(lic.PUBLIC_JWK, saved); }
+});
+
+test('OTA: automatic updates install the Windows setup .exe once, only when switched on and licensed; Android is left to Google Play and never offered an APK', async () => {
+  const lic = require('./license'), up = require('./update');
+  const { privateKey, jwk } = vendorKeys();
+  const saved = { ...lic.PUBLIC_JWK }; Object.assign(lic.PUBLIC_JWK, jwk);
+  const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'ota-auto-')), prev = { f: process.env.BRIDGE_AUTO_UPDATE_FILE, e: process.env.BRIDGE_AUTO_UPDATE, u: process.env.BRIDGE_UPDATE_URL };
+  process.env.BRIDGE_AUTO_UPDATE_FILE = pathx.join(dir, 'auto-update.json'); delete process.env.BRIDGE_AUTO_UPDATE;
+  process.env.BRIDGE_UPDATE_URL = 'https://raw.githubusercontent.com/o/r/main/releases/update.json';
+  const fetchImpl = fakeUpdateServer({ privateKey });
+  try {
+    assert.strictEqual(up.autoEnabled(), false, 'off by default');
+    const spawned = [], spawnImpl = (f, a) => { spawned.push([pathx.basename(f), a]); return { unref() {} }; };
+    const mk = (o = {}) => up.createAutoUpdater({ current: '1.5.1', platform: 'win32', checkFn: x => up.check({ ...x, fetchImpl, arch: 'x64' }), installFn: x => up.install({ ...x, fetchImpl, dir: pathx.join(dir, 'dl'), arch: 'x64', spawnImpl }), ...o });
+    assert.strictEqual((await mk().tick()).result, 'off'); assert.strictEqual(spawned.length, 0);
+    up.setAutoEnabled(true); assert.strictEqual(up.autoEnabled(), true);
+    assert.match((await mk({ allowed: () => false }).tick()).result, /PRO or STUDIO/); assert.strictEqual(spawned.length, 0);
+    const a = mk();
+    assert.match((await a.tick()).result, /installing v9\.9\.9/); assert.deepStrictEqual(spawned, [['Audio Mixer-9.9.9.exe', ['/quiet']]]);
+    assert.match((await a.tick()).result, /already tried/); assert.strictEqual(spawned.length, 1, 'a version is tried once per run');
+    assert.match((await mk({ platform: 'linux' }).tick()).result, /Windows only/); assert.match((await mk({ platform: 'android' }).tick()).result, /Windows only/);
+    up.setAutoEnabled(false); assert.strictEqual((await mk().tick()).result, 'off');
+    // Android: the update is reported, but no APK is offered or downloaded (Play Protect / Play policy: the store app is updated by Google Play)
+    const url = process.env.BRIDGE_UPDATE_URL, info = await up.check({ current: '1.5.1', fetchImpl, url, platform: 'android', arch: 'arm64' });
+    assert.strictEqual(info.playManaged, true); assert.strictEqual(info.file, null); assert.ok(!info.others.some(o => o.key === 'android-apk'));
+    await assert.rejects(up.download({ current: '1.5.1', fetchImpl, url, dir, platform: 'android', arch: 'arm64' }), /Google Play/);
+  } finally {
+    Object.assign(lic.PUBLIC_JWK, saved);
+    for (const [k, v] of [['BRIDGE_AUTO_UPDATE_FILE', prev.f], ['BRIDGE_AUTO_UPDATE', prev.e], ['BRIDGE_UPDATE_URL', prev.u]]) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+  }
+});
+
+test('service: NSSM and PM2 commands (auto start, restart on exit, rotated logs, the user password never printed), the PM2 config is one forked server instance', () => {
+  const svc = require('../scripts/service'), root = pathx.join(__dirname, '..');
+  const cmds = svc.nssmCommands('install', { name: 'AudioMixer', nssm: 'nssm', dir: 'C:\\AM', node: 'C:\\node\\node.exe', script: 'C:\\AM\\bridge\\server.js', logs: 'C:\\Logs', port: 9000 }).map(c => c.join(' '));
+  assert.strictEqual(cmds[0], 'nssm install AudioMixer C:\\node\\node.exe C:\\AM\\bridge\\server.js');
+  for (const want of ['set AudioMixer Start SERVICE_AUTO_START', 'set AudioMixer AppExit Default Restart', 'set AudioMixer AppRestartDelay 2000', 'AppEnvironmentExtra NODE_ENV=production BRIDGE_PORT=9000', 'AppRotateFiles 1', 'AppDirectory C:\\AM'])
+    assert.ok(cmds.some(c => c.includes(want)), want);
+  assert.strictEqual(cmds[cmds.length - 1], 'nssm start AudioMixer'); assert.ok(!cmds.some(c => c.includes('ObjectName')), 'runs as LocalSystem unless a user is given');
+  assert.ok(svc.nssmCommands('install', { user: 'PC\\me', password: 'pw' }).some(c => c.includes('ObjectName')));
+  assert.deepStrictEqual(svc.nssmCommands('remove', { name: 'X', nssm: 'nssm' }), [['nssm', 'stop', 'X'], ['nssm', 'remove', 'X', 'confirm']]);
+  assert.throws(() => svc.nssmCommands('explode'), /unknown nssm action/); assert.throws(() => svc.pm2Commands('explode'), /unknown pm2 action/);
+  assert.deepStrictEqual(svc.pm2Commands('restart'), [['pm2', 'restart', 'audio-mixer']]);
+  const eco = require(pathx.join(root, 'deploy', 'pm2', 'ecosystem.config.js')).apps[0];
+  assert.strictEqual(eco.name, 'audio-mixer'); assert.strictEqual(eco.instances, 1); assert.strictEqual(eco.exec_mode, 'fork'); assert.ok(eco.autorestart && fsx.existsSync(eco.script));
+  const cp = require('node:child_process'), out = cp.spawnSync(process.execPath, [pathx.join(root, 'scripts', 'service.js'), 'nssm', 'install', '--dry-run', '--user', 'PC\\me'], { encoding: 'utf8', env: { ...process.env, AM_SERVICE_PASSWORD: 'topsecret' } });
+  assert.strictEqual(out.status, 0); assert.ok(!out.stdout.includes('topsecret') && out.stdout.includes('********'), 'the password is not echoed');
+});
+
+test('FlexASIO installer: only a pinned, SHA-256-verified github.com/dechamps/FlexASIO release is run, silently, on Windows', async () => {
+  const fx = require('./flexasio'), bytes = Buffer.from('flexasio-installer'), sha = cryptox.createHash('sha256').update(bytes).digest('hex');
+  const url = 'https://github.com/dechamps/FlexASIO/releases/download/flexasio-1.10/FlexASIO-1.10.exe', pin = { version: '1.10', url, sha256: sha, args: ['/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART'] };
+  assert.match(fx.pinProblem({ url: '', sha256: '' }), /no FlexASIO installer is pinned/); assert.match(fx.pinProblem({ ...pin, url: 'https://evil.example/a.exe' }), /github\.com\/dechamps/);
+  assert.match(fx.pinProblem({ ...pin, sha256: 'abc' }), /not a SHA-256/); assert.match(fx.pinProblem({ ...pin, args: ['/S; calc'] }), /switches/); assert.strictEqual(fx.pinProblem({ ...JSON.parse(fsx.readFileSync(fx.PIN_FILE, 'utf8')), sha256: sha }), null, 'the shipped pin is valid once a hash is filled in'); assert.strictEqual(fx.pinProblem(pin), null);
+  assert.deepStrictEqual(JSON.parse(fsx.readFileSync(fx.PIN_FILE, 'utf8')).sha256, '', 'shipped without a pin: nothing runs until one is filled in');
+  const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'flex-')), spawned = [], spawnImpl = (f, a) => { spawned.push([pathx.basename(f), a]); return { unref() {} }; };
+  const ok = async () => ({ ok: true, status: 200, headers: { get: () => null }, body: (async function* () { yield bytes; })() });
+  const r = await fx.install({ pin, fetchImpl: ok, dir, platform: 'win32', spawnImpl });
+  assert.strictEqual(r.installing, true); assert.deepStrictEqual(spawned, [['FlexASIO-1.10.exe', ['/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART']]]);
+  const bad = async () => ({ ok: true, status: 200, headers: { get: () => null }, body: (async function* () { yield Buffer.from('tampered'); })() });
+  await assert.rejects(fx.install({ pin, fetchImpl: bad, dir: pathx.join(dir, 'b'), platform: 'win32', spawnImpl }), /checksum mismatch/); assert.strictEqual(spawned.length, 1, 'a tampered installer is never run');
+  assert.deepStrictEqual(fsx.readdirSync(pathx.join(dir, 'b')), []);
+  const hop = async () => ({ ok: false, status: 302, headers: { get: k => (k === 'location' ? 'https://evil.example/x.exe' : null) } });
+  await assert.rejects(fx.install({ pin, fetchImpl: hop, dir, platform: 'win32', spawnImpl }), /untrusted host/);
+  await assert.rejects(fx.install({ pin, fetchImpl: ok, dir, platform: 'linux', spawnImpl }), /Windows driver/);
+  assert.strictEqual((await fx.install({ pin, fetchImpl: ok, dir: pathx.join(dir, 'd'), platform: 'win32', spawnImpl, dryRun: true })).installing, false); assert.strictEqual(spawned.length, 1);
+});
+
+test('WASAPI exclusive mode ("take control"): DeviceConfig::exclusive, --exclusive, the exclusive share mode with format fallback and aligned period; compiles for Windows x64 and x86', () => {
+  const root = pathx.join(__dirname, '..'), cp = require('node:child_process'), src = fsx.readFileSync(pathx.join(root, 'engine/cpp/src/backend_wasapi.cpp'), 'utf8');
+  assert.match(fsx.readFileSync(pathx.join(root, 'engine/cpp/include/audiomixer/runtime.hpp'), 'utf8'), /bool exclusive = false;/);
+  assert.match(fsx.readFileSync(pathx.join(root, 'engine/cpp/app/main.cpp'), 'utf8'), /"--exclusive"\) cfg\.exclusive = true/);
+  for (const w of ['AUDCLNT_SHAREMODE_EXCLUSIVE', 'AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED', 'AUDCLNT_E_DEVICE_IN_USE', 'AUDCLNT_E_EXCLUSIVE_MODE_NOT_ALLOWED', 'IsFormatSupported']) assert.ok(src.includes(w), w);
+  for (const t of ['x86_64-w64-mingw32', 'i686-w64-mingw32']) {
+    if (cp.spawnSync('which', [t + '-g++']).status !== 0) continue;                       // no mingw-w64 here: the source checks above stand
+    const o = pathx.join(osx.tmpdir(), 'wasapi-' + t + '.o'), c = cp.spawnSync(t + '-g++', ['-std=c++17', '-Wall', '-Wextra', '-Werror', '-O2', '-I' + pathx.join(root, 'engine/cpp/include'), '-I' + pathx.join(root, 'engine/cpp/src'), '-c', pathx.join(root, 'engine/cpp/src/backend_wasapi.cpp'), '-o', o], { encoding: 'utf8' });
+    assert.strictEqual(c.status, 0, t + ': ' + c.stderr.slice(0, 600));
+  }
 });
 
 test('endpoints: /api/license (BASIC by default), activation needs a valid key, updates need PRO', async () => {
@@ -2665,7 +2743,7 @@ test('OTA install: the downloaded Windows setup .exe is run silently (/quiet) an
     const r2 = await update.install({ current: '1.0.0', fetchImpl: route, url: 'https://ota.test/update.json', dir: pathx.join(tmp, 'dl2'), platform: 'darwin', arch: 'x64', jwk, spawnImpl: fakeSpawn });
     assert.ok(r2.ok && r2.installing === false && r2.verified && calls.length === 0 && /Run it yourself/.test(r2.note));
     // a system this manifest has no file for (as real as "could not be detected": either way, nothing here may guess and run something anyway)
-    await assert.rejects(update.install({ current: '1.0.0', fetchImpl: route, url: 'https://ota.test/update.json', dir: pathx.join(tmp, 'dl3'), platform: 'android', arch: 'arm64', jwk, spawnImpl: fakeSpawn }), /no update file for this system/);
+    await assert.rejects(update.install({ current: '1.0.0', fetchImpl: route, url: 'https://ota.test/update.json', dir: pathx.join(tmp, 'dl3'), platform: 'android', arch: 'arm64', jwk, spawnImpl: fakeSpawn }), /Google Play/);
     assert.strictEqual(calls.length, 0);
   } finally { delete process.env.BRIDGE_UPDATE_HOSTS; }
   // the CLI and the server expose it the same way download already is
@@ -3087,7 +3165,7 @@ test('Windows installers carry the ASIO driver files (Program Files / Program Fi
     assert.ok(!/AsioDriver/.test(m.wxs({ stage, version: '9.0.0', arch: 'x64', scope: 'user' })), 'HKLM\\SOFTWARE\\ASIO is per machine: the per-user package has no driver feature');
     fsx.rmSync(pathx.join(stage, 'asio-driver', 'AudioMixerASIO32.dll')); assert.ok(!/AsioDriver/.test(m.wxs({ stage, version: '9.0.0', arch: 'x64' })), 'no DLL, no feature');
     // the same keys that DllRegisterServer writes
-    const cpp = fsx.readFileSync(pathx.join(root, 'platforms', 'windows', 'asio-driver', 'audiomixer_asio.cpp'), 'utf8'); assert.ok(cpp.includes('SOFTWARE\\ASIO\\Audio Mixer') && cpp.includes('InprocServer32') && cpp.includes('ThreadingModel'));
+    const cpp = fsx.readFileSync(pathx.join(root, 'drivers', 'asio', 'audiomixer_asio.cpp'), 'utf8'); assert.ok(cpp.includes('SOFTWARE\\ASIO\\Audio Mixer') && cpp.includes('InprocServer32') && cpp.includes('ThreadingModel'));
   } finally { fsx.rmSync(stage, { recursive: true, force: true }); }
   // the setup program: /asio, /noasio, a Yes / No question whose default is No, ADDLOCAL gets AsioDriver only on request
   const stub = fsx.readFileSync(pathx.join(root, 'platforms', 'windows', 'installer', 'setup-stub.c'), 'utf8');

@@ -12,7 +12,7 @@ const CATALOG = [
     note: 'Legacy and kernel-streaming host APIs, installed with Windows.',
     url: 'https://learn.microsoft.com/windows-hardware/drivers/audio/', detect: { drivers: ['directsound', 'wdmks', 'mme'] } },
   { id: 'flexasio', os: ['win32'], kind: 'asio', name: 'FlexASIO', vendor: 'Etienne Dechamps (open source)',
-    note: 'ASIO driver on top of WASAPI / PortAudio: ASIO for any sound card. Get it from the project\'s official GitHub release page.',
+    note: 'ASIO driver on top of WASAPI / PortAudio: ASIO for any sound card (MIT). Get it from the project\'s official GitHub release page, or install it with: node scripts/install-flexasio.js (verified download, silent install).',
     url: 'https://github.com/dechamps/FlexASIO/releases', detect: { drivers: ['flexasio'], asio: /flexasio/i } },
   { id: 'asio4all', os: ['win32'], kind: 'asio', name: 'ASIO4ALL', vendor: 'Michael Tippach',
     note: 'Universal low-latency ASIO driver for WDM audio hardware. Get the installer from the official site (asio4all.org).',
