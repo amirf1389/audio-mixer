@@ -1396,8 +1396,7 @@ test('repository layout: one folder per system with its sources and release file
   assert.deepStrictEqual(dirs, ['bridge', 'client', 'deploy', 'drivers', 'engine', 'npm-installer', 'ota-server', 'platforms', 'releases', 'scripts'], 'the top level is minimal: systems (under platforms/) + shared code');
   assert.deepStrictEqual(fsx.readdirSync(pathx.join(root, 'platforms')).sort(), ['android', 'electron', 'ios', 'linux', 'macos', 'windows'], 'one folder per system under platforms/ (electron: an additional, optional packaging, not an installed-release OS target)');
   assert.deepStrictEqual(files, ['ADMIN-LICENSE.md', 'Additional Terms & Conditions', 'LICENSE', 'LICENSE.txt', 'PROJECT-README.md', 'README.md', 'RELEASING.md', 'SECURITY.md', 'Steinberg ASIO Licensing Agreement.pdf', 'Steinberg ASIO SDK 2.3.pdf', 'Steinberg ASIO Usage Guidelines.pdf', 'boot.html', 'changes.txt', 'index.html', 'package.json'], 'only the web app, the project papers and the Steinberg ASIO SDK papers at the root');
-  assert.deepStrictEqual(fsx.readdirSync(pathx.join(root, 'releases')), ['update.json'], 'releases/ holds only the manifest that installed apps fetch');
-  for (const os of lay.OSES) assert.ok(fsx.statSync(pathx.join(root, 'platforms', os, 'releases')).isDirectory(), os + '/releases');
+  assert.deepStrictEqual(fsx.readdirSync(pathx.join(root, 'releases')).sort(), ['android', 'native', 'update.json', 'windows'], 'releases/ holds the manifest that installed apps fetch, the files it lists (one folder per system) and the native programs');
   // every file that goes into a package exists where the layout says; the package keeps its own paths
   const build = require('../scripts/build'), src = fsx.readFileSync(pathx.join(root, 'scripts', 'build.js'), 'utf8');
   const list = [...src.slice(src.indexOf('const FILES = ['), src.indexOf('];', src.indexOf('const FILES = ['))).matchAll(/'([^']+)'/g)].map(m => m[1]).filter(f => /[./]/.test(f));
@@ -1408,8 +1407,8 @@ test('repository layout: one folder per system with its sources and release file
   // the manifest builder finds each file in the folder of its system and points the URL there; a flat folder or a server keeps flat URLs
   const version = JSON.parse(fsx.readFileSync(pathx.join(root, 'package.json'), 'utf8')).version, base = 'https://raw.githubusercontent.com/o/r/main';
   const m = mk.build({ version, base, notes: [] }), win = m.files['win-x64-exe'], apk = m.files['android-apk'];
-  assert.strictEqual(win.url, `${base}/platforms/windows/releases/${encodeURIComponent('Audio Mixer-' + version + '.exe')}`); assert.strictEqual(apk.url, `${base}/platforms/android/releases/AudioMixer-${version}-android.apk`);
-  assert.strictEqual(m.files['linux-deb'].url, `${base}/platforms/linux/releases/audio-mixer_${version}_all.deb`); assert.strictEqual(m.files['macos-dmg'].url, `${base}/platforms/macos/releases/AudioMixer-${version}-macos.dmg`); assert.strictEqual(m.files['ios-project'].url, `${base}/platforms/ios/releases/AudioMixer-${version}-ios-xcode-project.tar.gz`);
+  assert.strictEqual(win.url, `${base}/releases/windows/${encodeURIComponent('Audio Mixer-' + version + '.exe')}`); assert.strictEqual(apk.url, `${base}/releases/android/AudioMixer-${version}-android.apk`);
+  assert.strictEqual(m.files['linux-deb'].url, `${base}/releases/linux/audio-mixer_${version}_all.deb`); assert.strictEqual(m.files['macos-dmg'].url, `${base}/releases/macos/AudioMixer-${version}-macos.dmg`); assert.strictEqual(m.files['ios-project'].url, `${base}/releases/ios/AudioMixer-${version}-ios-xcode-project.tar.gz`);
   for (const f of Object.values(m.files)) { const file = lay.findRelease(f.name); assert.ok(file, f.name); assert.strictEqual(fsx.statSync(file).size, f.size); }
   assert.strictEqual(mk.build({ version, base: 'https://ota.test/releases', flatUrls: true, notes: [] }).files['win-x64-exe'].url, `https://ota.test/releases/${encodeURIComponent('Audio Mixer-' + version + '.exe')}`);
   assert.strictEqual(lay.findRelease('nothing-here.exe'), null);

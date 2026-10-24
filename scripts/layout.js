@@ -8,7 +8,7 @@
 //   platforms/windows/   installer/ (setup, launcher), native/ (device helper), plugin-host/, asio-driver/, start-*.bat, Audio Mixer.vbs, releases/*.exe *.msi *.zip *.cer
 //   platforms/macos/     native/ (Core Audio helper), coreaudio-driver/, releases/*.dmg *.zip *.tar.gz
 //   platforms/linux/     alsa-plugin/, kernel-module/, start-pc-mode.sh, ensure-node.sh, releases/*.deb *.tar.gz
-//   releases/update.json   the signed update manifest that installed apps fetch (its file URLs point into the platforms/<os>/releases/ folders)
+//   releases/update.json   the signed update manifest that installed apps fetch (its file URLs point into the releases/<os>/ folders)
 //
 // The PACKAGES built from this repository keep their own layout (native/win, native/host, native/mac, start-pc-mode.bat ... next to bridge/): `repoPath`
 // maps a path inside a package to the file in the repository.
@@ -36,9 +36,9 @@ function osOfKey(key) {
   return /^win/.test(key) ? 'windows' : /^linux/.test(key) ? 'linux' : /^macos/.test(key) ? 'macos' : key === 'android-apk' ? 'android' : key === 'ios-project' ? 'ios' : null;
 }
 const osDir = os => path.join(ROOT, PLATFORMS, os);
-const releasesDir = os => path.join(osDir(os), 'releases');
+const releasesDir = os => path.join(ROOT, 'releases', os);
 // the repository folder (relative, forward slashes) that holds the files of a manifest key
-const releasesRel = key => { const os = osOfKey(key); return os ? `${PLATFORMS}/${os}/releases` : 'releases'; };
+const releasesRel = key => { const os = osOfKey(key); return os ? `releases/${os}` : 'releases'; };
 // a release file by name: in the folder of its system, else anywhere in the <os>/releases folders (null when it does not exist)
 function findRelease(name, os) {
   for (const o of os ? [os] : OSES) { const f = path.join(releasesDir(o), name); if (fs.existsSync(f)) return f; }
