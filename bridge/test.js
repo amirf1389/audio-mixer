@@ -1830,6 +1830,25 @@ test('RtAudio: an instance is always created for ONE named host API; a missing A
   const scan = au.detectAudify(() => noEntry); assert.ok(scan.devices.some(d => d.hostApi && /ASIO/i.test(d.hostApi)), 'ASIO is still listed'); assert.ok(!scan.devices.some(d => /DirectSound/i.test(d.hostApi)));
 });
 
+test('Web Audio -> ASIO with a Bluetooth system output: a page rate the devices are not opened at (16 kHz hands-free) is converted, not played at the wrong speed; the page links the master to ASIO by itself', () => {
+  const { _owners } = require('./asio-lock'); _owners.clear();
+  const fa = fakeAudify(), sent = [], conn = { send: m => sent.push(JSON.parse(m)), sendBinary() {} };
+  const noPa = () => { throw new Error('no naudiodon2'); };
+  const out = require('./output').createSession(conn, noPa, () => fa);
+  out.onText(JSON.stringify({ type: 'start', channels: 2, sampleRate: 16000 }));        // the page's AudioContext follows the Bluetooth headset (HFP: 16 kHz)
+  assert.strictEqual(sent[0].type, 'started'); assert.strictEqual(sent[0].hostApi, 'ASIO'); assert.strictEqual(sent[0].sampleRate, 48000);
+  const before = fa.written.length, frames16 = 160, pcm = Buffer.alloc(frames16 * 2 * 2);          // 10 ms at 16 kHz, stereo Int16
+  for (let i = 0; i < 40; i++) out.onBinary(pcm);                                                    // 400 ms of audio
+  const bytes = fa.written.slice(before).reduce((a, b) => a + b, 0);
+  assert.ok(bytes / 4 > 400 / 1000 * 48000 * 0.5, 'the 16 kHz audio is stretched to 48 kHz frames (' + bytes / 4 + ' frames written)');   // unconverted it would be a third of that
+  out.onClose(); assert.strictEqual(_owners.size, 0);
+  // the page
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  const at = html.indexOf('autoLinkAsio: function'); assert.ok(at > 0); const body = html.slice(at, at + 1800);
+  for (const w of ["halx_asio_auto", "this._userStopped", "this.paWs || this.paReady", "st.active && st.ctx && st.nodes && st.nodes.masterLimiter", "/asio/i.test(d.hostApi)", "pa:auto", "this.startWriteStream()"]) assert.ok(body.includes(w), w);
+  assert.ok(html.includes("self.autoLinkAsio('bridge connected')") && html.includes("autoLinkAsio('engine started')"), 'linked when the bridge connects and when the engine starts');
+});
+
 test('endpoints: /api/license (BASIC by default), activation needs a valid key, updates need PRO', async () => {
   process.env.BRIDGE_LICENSE_FILE = pathx.join(fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'lep-')), 'license.json');
   await new Promise(r => server.listen(0, '127.0.0.1', r));

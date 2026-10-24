@@ -17,6 +17,7 @@ function pickDevice(pa, wantedId, channels) {
 
 // One output session per WebSocket connection. `load` is injectable for tests.
 function createSession(conn, load = loadPortAudio, loadA = audify.loadAudify) {
+  let pre = null;                                  // converts the page's rate to the device rate when the page's rate is not one the devices are opened at
   let io = null;
   let lock = null;   // ASIO is single-client: see asio-lock.js
   let blocked = false;
@@ -29,7 +30,7 @@ function createSession(conn, load = loadPortAudio, loadA = audify.loadAudify) {
     if (lock) { lock.release(); lock = null; }
     if (unreg) { unreg(); unreg = null; }
     if (meter) { meter.stop(); meter = null; }
-    blocked = false;
+    blocked = false; pre = null;
   };
 
   // Audify (RtAudio) engine: chosen by an Audify device id (>= 1000), engine: "audify", or when PortAudio is not installed.
@@ -38,7 +39,10 @@ function createSession(conn, load = loadPortAudio, loadA = audify.loadAudify) {
     try { list = audify.listDevices(loadA); } catch (_) { list = null; }
     if (!list) return conn.send(JSON.stringify({ type: 'error', message: 'PortAudio not installed: run "npm install" in bridge/ (needs naudiodon2 or audify)' }));
     const channels = Math.min(Math.max(parseInt(opts.channels, 10) || 2, 1), 32);
-    const sampleRate = SAMPLE_RATES.includes(Number(opts.sampleRate)) ? Number(opts.sampleRate) : 48000;
+    // The page's AudioContext runs at the rate of the system's default output (16 / 24 / 32 kHz on a Bluetooth hands-free headset, 44.1 kHz on A2DP). A rate the device list does not offer
+    // used to be replaced by 48000 without converting the audio, so everything played at the wrong speed and pitch (or the ASIO device refused it). It is converted now.
+    const pageRate = parseInt(opts.sampleRate, 10) || 48000, sampleRate = SAMPLE_RATES.includes(pageRate) ? pageRate : 48000;
+    pre = pageRate !== sampleRate && pageRate >= 8000 && pageRate <= 384000 ? audify.createResampler(pageRate, sampleRate, channels) : null;   // a nonsense rate is just ignored (48000)
     const wanted = Number.isInteger(opts.deviceId) && opts.deviceId >= 0 ? opts.deviceId : null;
     const dev = audify.pickAudifyDevice(list.devices, wanted, 'output', channels) || (wanted === null ? list.devices.find(d => d.isDefaultOutput) : null);
     if (!dev) return conn.send(JSON.stringify({ type: 'error', message: wanted !== null ? 'device not found' : 'no output device found' }));
@@ -91,7 +95,10 @@ function createSession(conn, load = loadPortAudio, loadA = audify.loadAudify) {
       return conn.send(JSON.stringify({ type: 'error', message: 'PortAudio not installed: run "npm install" in bridge/ (needs naudiodon2)' }));
     }
     const channels = Math.min(Math.max(parseInt(opts.channels, 10) || 2, 1), 32);
-    const sampleRate = SAMPLE_RATES.includes(Number(opts.sampleRate)) ? Number(opts.sampleRate) : 48000;
+    // The page's AudioContext runs at the rate of the system's default output (16 / 24 / 32 kHz on a Bluetooth hands-free headset, 44.1 kHz on A2DP). A rate the device list does not offer
+    // used to be replaced by 48000 without converting the audio, so everything played at the wrong speed and pitch (or the ASIO device refused it). It is converted now.
+    const pageRate = parseInt(opts.sampleRate, 10) || 48000, sampleRate = SAMPLE_RATES.includes(pageRate) ? pageRate : 48000;
+    pre = pageRate !== sampleRate && pageRate >= 8000 && pageRate <= 384000 ? audify.createResampler(pageRate, sampleRate, channels) : null;   // a nonsense rate is just ignored (48000)
     const wanted = Number.isInteger(opts.deviceId) && opts.deviceId >= 0 ? opts.deviceId : null;
     const dev = pickDevice(pa, wanted, channels);
     if (!dev && wanted !== null) return conn.send(JSON.stringify({ type: 'error', message: 'device not found' }));
@@ -126,6 +133,8 @@ function createSession(conn, load = loadPortAudio, loadA = audify.loadAudify) {
     onBinary(buf) {
       if (!io || blocked) return;               // drop instead of queueing, keeps latency bounded
       if (buf.length % frameBytes !== 0) return; // partial frame would misalign every later sample
+      if (pre) buf = pre(buf);
+      if (!buf.length) return;
       if (meter) meter.push(buf);                  // levels of what is really sent to the driver
       if (io.write(buf) === false) blocked = true;
     },
