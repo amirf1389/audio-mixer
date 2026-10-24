@@ -35,9 +35,12 @@ function compileWindows(arch, exe) {
     const dll = require('./build-drivers').buildAsio(arch, work), bytes = fs.readFileSync(dll);
     const rows = []; for (let i = 0; i < bytes.length; i += 16) rows.push('  ' + Array.from(bytes.subarray(i, i + 16), b => '0x' + b.toString(16).padStart(2, '0')).join(','));
     fs.writeFileSync(path.join(work, 'asio_blob.inc'), `static const unsigned char kAsioDll[] = {\n${rows.join(',\n')}\n};\nstatic const unsigned kAsioDllSize = ${bytes.length}u;\nstatic const char kAsioDllName[] = ${JSON.stringify(path.basename(dll))};\n`);
-    run(t + '-g++', ['-std=c++17', '-Wall', '-Wextra', '-Werror', '-O2', '-static', '-static-libgcc', '-static-libstdc++', '-DAM_EMBED_ASIO', '-I' + work, '-I' + path.join(ROOT, 'engine/cpp/app'),
+    // the project's public key (the one the apps verify update manifests with) for the self-update: --update checks the signature inside the program
+    const jwk = require('../bridge/license-public.json'), raw = k => Array.from(Buffer.from(jwk[k], 'base64url')).join(',');
+    fs.writeFileSync(path.join(work, 'update_key.inc'), `static const unsigned char kUpdateKeyX[32] = {${raw('x')}};\nstatic const unsigned char kUpdateKeyY[32] = {${raw('y')}};\n`);
+    run(t + '-g++', ['-std=c++17', '-Wall', '-Wextra', '-Werror', '-O2', '-static', '-static-libgcc', '-static-libstdc++', '-DAM_EMBED_ASIO', '-DAM_EMBED_UPDATE_KEY', '-DAM_VERSION="' + version + '"', '-I' + work, '-I' + path.join(ROOT, 'engine/cpp/app'),
       '-I' + path.join(ROOT, 'engine/cpp/include'), '-I' + path.join(ROOT, 'engine/cpp/src'), '-I' + path.join(ROOT, 'drivers/asio'),
-      path.join(ROOT, 'engine/cpp/app/main.cpp'), path.join(ROOT, 'engine/cpp/app/win_tools.cpp'), ...src, '-o', exe, '-lole32', '-luuid', '-ladvapi32']);
+      path.join(ROOT, 'engine/cpp/app/main.cpp'), path.join(ROOT, 'engine/cpp/app/win_tools.cpp'), ...src, '-o', exe, '-lole32', '-luuid', '-ladvapi32', '-lavrt', '-lwinhttp', '-lbcrypt']);
   } finally { fs.rmSync(work, { recursive: true, force: true }); }
   return exe;
 }
