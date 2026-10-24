@@ -28,7 +28,7 @@ function buildAsio(arch, outDir) {
     run(cxx, ['-std=gnu++14', '-Wall', '-Wextra', '-Werror', '-O2', '-c', path.join(dir, 'audiomixer_asio.cpp'), '-o', path.join(work, 'asio.o')]);
     // static runtime: the DLL needs nothing but Windows' own DLLs, so it loads in any host
     run(cxx, ['-shared', '-static', '-static-libgcc', '-static-libstdc++', '-o', out, path.join(work, 'asio.o'), path.join(work, 'am_link.o'), path.join(dir, 'audiomixer_asio.def'),
-      '-lws2_32', '-lole32', '-loleaut32', '-luuid', '-ladvapi32', '-lwinmm', '-Wl,--kill-at', '-Wl,--enable-stdcall-fixup']);
+      '-lws2_32', '-lole32', '-loleaut32', '-luuid', '-ladvapi32', '-lwinmm', '-lavrt', '-Wl,--kill-at', '-Wl,--enable-stdcall-fixup']);
     const strip = which(t + '-strip'); if (strip) spawnSync(strip, ['--strip-unneeded', out]);
   } finally { fs.rmSync(work, { recursive: true, force: true }); }
   return out;
