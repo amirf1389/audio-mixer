@@ -21,6 +21,7 @@ function build({ releases, flatUrls = false, version, base, notes = [], now = ne
     'linux-deb': `audio-mixer_${version}_all.deb`, 'linux-tar': `AudioMixer-${version}-linux.tar.gz`, 'macos': `AudioMixer-${version}-macos.tar.gz`, 'macos-dmg': `AudioMixer-${version}-macos.dmg`,
     'android-apk': `AudioMixer-${version}-android.apk`, 'ios-project': `AudioMixer-${version}-ios-xcode-project.tar.gz`,
     'win-asio-driver': `AudioMixer-${version}-asio-driver-windows.zip`,
+    'win-x64-native': `AudioMixer-${version}-native-windows-x64.exe`, 'win-x86-native': `AudioMixer-${version}-native-windows-x86.exe`,   // audiomixer-native.exe --update
   };
   const files = {};
   for (const [key, name] of Object.entries(want)) {
