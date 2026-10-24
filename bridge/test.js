@@ -1675,6 +1675,36 @@ test('OTA: check and download with the embedded vendor key replaced by a test ke
   } finally { Object.assign(lic.PUBLIC_JWK, saved); }
 });
 
+test('OTA: automatic updates install the Windows setup .exe once, only when switched on and licensed; Android is left to Google Play and never offered an APK', async () => {
+  const lic = require('./license'), up = require('./update');
+  const { privateKey, jwk } = vendorKeys();
+  const saved = { ...lic.PUBLIC_JWK }; Object.assign(lic.PUBLIC_JWK, jwk);
+  const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'ota-auto-')), prev = { f: process.env.BRIDGE_AUTO_UPDATE_FILE, e: process.env.BRIDGE_AUTO_UPDATE, u: process.env.BRIDGE_UPDATE_URL };
+  process.env.BRIDGE_AUTO_UPDATE_FILE = pathx.join(dir, 'auto-update.json'); delete process.env.BRIDGE_AUTO_UPDATE;
+  process.env.BRIDGE_UPDATE_URL = 'https://raw.githubusercontent.com/o/r/main/releases/update.json';
+  const fetchImpl = fakeUpdateServer({ privateKey });
+  try {
+    assert.strictEqual(up.autoEnabled(), false, 'off by default');
+    const spawned = [], spawnImpl = (f, a) => { spawned.push([pathx.basename(f), a]); return { unref() {} }; };
+    const mk = (o = {}) => up.createAutoUpdater({ current: '1.5.1', platform: 'win32', checkFn: x => up.check({ ...x, fetchImpl, arch: 'x64' }), installFn: x => up.install({ ...x, fetchImpl, dir: pathx.join(dir, 'dl'), arch: 'x64', spawnImpl }), ...o });
+    assert.strictEqual((await mk().tick()).result, 'off'); assert.strictEqual(spawned.length, 0);
+    up.setAutoEnabled(true); assert.strictEqual(up.autoEnabled(), true);
+    assert.match((await mk({ allowed: () => false }).tick()).result, /PRO or STUDIO/); assert.strictEqual(spawned.length, 0);
+    const a = mk();
+    assert.match((await a.tick()).result, /installing v9\.9\.9/); assert.deepStrictEqual(spawned, [['Audio Mixer-9.9.9.exe', ['/quiet']]]);
+    assert.match((await a.tick()).result, /already tried/); assert.strictEqual(spawned.length, 1, 'a version is tried once per run');
+    assert.match((await mk({ platform: 'linux' }).tick()).result, /Windows only/); assert.match((await mk({ platform: 'android' }).tick()).result, /Windows only/);
+    up.setAutoEnabled(false); assert.strictEqual((await mk().tick()).result, 'off');
+    // Android: the update is reported, but no APK is offered or downloaded (Play Protect / Play policy: the store app is updated by Google Play)
+    const url = process.env.BRIDGE_UPDATE_URL, info = await up.check({ current: '1.5.1', fetchImpl, url, platform: 'android', arch: 'arm64' });
+    assert.strictEqual(info.playManaged, true); assert.strictEqual(info.file, null); assert.ok(!info.others.some(o => o.key === 'android-apk'));
+    await assert.rejects(up.download({ current: '1.5.1', fetchImpl, url, dir, platform: 'android', arch: 'arm64' }), /Google Play/);
+  } finally {
+    Object.assign(lic.PUBLIC_JWK, saved);
+    for (const [k, v] of [['BRIDGE_AUTO_UPDATE_FILE', prev.f], ['BRIDGE_AUTO_UPDATE', prev.e], ['BRIDGE_UPDATE_URL', prev.u]]) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+  }
+});
+
 test('endpoints: /api/license (BASIC by default), activation needs a valid key, updates need PRO', async () => {
   process.env.BRIDGE_LICENSE_FILE = pathx.join(fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'lep-')), 'license.json');
   await new Promise(r => server.listen(0, '127.0.0.1', r));
@@ -2665,7 +2695,7 @@ test('OTA install: the downloaded Windows setup .exe is run silently (/quiet) an
     const r2 = await update.install({ current: '1.0.0', fetchImpl: route, url: 'https://ota.test/update.json', dir: pathx.join(tmp, 'dl2'), platform: 'darwin', arch: 'x64', jwk, spawnImpl: fakeSpawn });
     assert.ok(r2.ok && r2.installing === false && r2.verified && calls.length === 0 && /Run it yourself/.test(r2.note));
     // a system this manifest has no file for (as real as "could not be detected": either way, nothing here may guess and run something anyway)
-    await assert.rejects(update.install({ current: '1.0.0', fetchImpl: route, url: 'https://ota.test/update.json', dir: pathx.join(tmp, 'dl3'), platform: 'android', arch: 'arm64', jwk, spawnImpl: fakeSpawn }), /no update file for this system/);
+    await assert.rejects(update.install({ current: '1.0.0', fetchImpl: route, url: 'https://ota.test/update.json', dir: pathx.join(tmp, 'dl3'), platform: 'android', arch: 'arm64', jwk, spawnImpl: fakeSpawn }), /Google Play/);
     assert.strictEqual(calls.length, 0);
   } finally { delete process.env.BRIDGE_UPDATE_HOSTS; }
   // the CLI and the server expose it the same way download already is

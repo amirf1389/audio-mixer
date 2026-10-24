@@ -7924,7 +7924,7 @@ window.navTabs = [
                       <div class="flex items-center justify-between pt-1 border-t border-white/5">
                         <div class="flex items-center gap-1.5 text-[7px] text-slate-400">
                           <input type="checkbox" id="ota-auto-schedule" onchange="window.toggleOtaAutoSchedule(this.checked)" class="accent-amber-500 cursor-pointer">
-                          <label for="ota-auto-schedule" class="cursor-pointer">Auto-Update Window: 03:00-05:00 AM</label>
+                          <label for="ota-auto-schedule" class="cursor-pointer" id="ota-auto-label">Install updates automatically (Windows setup .exe, PRO)</label>
                         </div>
                         <button id="ota-admin-download-btn" onclick="window.downloadOtaFirmware()" class="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-black font-black uppercase rounded text-[7.5px] transition flex items-center gap-1">
                           <i class="fa-solid fa-download"></i> <span id="ota-dl-label">DOWNLOAD FOR THIS DEVICE</span>
@@ -10825,10 +10825,26 @@ window.navTabs = [
         };
 
         // 8. Toggle OTA Auto Schedule Maintenance
-        window.toggleOtaAutoSchedule = function(enabled) {
-            window.state.ota.autoUpdateScheduled = enabled;
-            window.notify(`Auto-Update Schedule ${enabled ? 'ENGAGED: ' + window.state.ota.maintenanceWindow : 'DISENGAGED'}`, 'clock');
+        // Automatic updates are done by the local server (bridge/update.js createAutoUpdater): Windows setup .exe only, PRO / STUDIO, off until switched on here.
+        // Android is updated by Google Play only: the switch is hidden there, the app never downloads an APK of itself.
+        window.toggleOtaAutoSchedule = async function(enabled) {
+            const b = window.universalAsioSdk && window.universalAsioSdk.bridgeUrl, box = document.getElementById('ota-auto-schedule');
+            if (!b) { if (box) box.checked = false; window.notify('Automatic updates need the Audio Mixer PC server (bridge)', 'triangle-exclamation'); return; }
+            try {
+                const r = await fetch(b + '/api/update/auto', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Mixer-Action': 'update' }, body: JSON.stringify({ enabled }) }), j = await r.json();
+                if (!r.ok || !j.ok) throw new Error(j.error || ('server answered ' + r.status));
+                if (box) box.checked = j.enabled;
+                window.notify('Automatic updates ' + (j.enabled ? 'ON' : 'OFF'), 'cloud');
+            } catch (e) { if (box) box.checked = !enabled; window.notify('Automatic updates: ' + e.message, 'triangle-exclamation'); }
         };
+        window.syncOtaAuto = async function() {
+            const b = window.universalAsioSdk && window.universalAsioSdk.bridgeUrl, box = document.getElementById('ota-auto-schedule');
+            if (!b || !box) return;
+            const row = box.parentElement;
+            if (/Android/i.test(navigator.userAgent)) { if (row) row.style.display = 'none'; return; }
+            try { const j = await (await fetch(b + '/api/update/auto', { cache: 'no-store' })).json(); if (j.ok) { box.checked = j.enabled; if (row) row.style.display = j.supported ? '' : 'none'; } } catch (e) { /* no bridge yet */ }
+        };
+        setTimeout(() => window.syncOtaAuto(), 4000);
 
         // ─── NETWORK REMOTE CONTROL DECK (OSC, WEBSOCKETS, AoIP, RTP-MIDI) ────────
         window.networkRemote = {
@@ -18216,6 +18232,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 const bar = $('ota-progress-bar'), pct = $('ota-progress-pct'), box = $('ota-progress-container'), dl = $('ota-admin-download-btn');
                 if ((i && i.direct) || !bridge()) {                                             // phone / browser: the browser or app downloads the file itself (the link comes from the signed manifest)
                     const url = i && i.file && httpsUrl(i.file.url);
+                    if (/Android/i.test(navigator.userAgent)) { notify('On Android, updates come from Google Play (the app never downloads an APK of itself)', 'triangle-exclamation'); return; }   // Play policy / Play Protect
                     if (!url) { notify('No download for this system in the update', 'triangle-exclamation'); return; }
                     const a = document.createElement('a'); a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.download = i.file.name || ''; document.body.appendChild(a); a.click(); a.remove();
                     this.saved = 'Download started: ' + i.file.name + (i.file.sha256 ? ' (SHA-256 ' + i.file.sha256.slice(0, 16) + '…)' : '') + '. ' + (i.file.how || '');
