@@ -271,7 +271,7 @@ let detectCache = null;
 function detectCached(force = false, maxAgeMs = 3000) {
   const now = Date.now();
   if (!force && detectCache && now - detectCache.at < maxAgeMs) return detectCache.promise;
-  const promise = detect(); detectCache = { at: now, promise };
+  const promise = detect({ force }); detectCache = { at: now, promise };
   promise.catch(() => { if (detectCache && detectCache.promise === promise) detectCache = null; });
   return promise;
 }
