@@ -1794,6 +1794,27 @@ test('exit notification: leaving the page while the audio engine runs asks first
   assert.ok(block.indexOf('return;') < block.indexOf('preventDefault'), 'the engine-off case returns before asking');
 });
 
+test('ASIO detection (Windows registry): both views are read, a failed read is retried and does not make the drivers vanish, other-bitness drivers are named', async () => {
+  const d = require('./detect'), reg = { '64': 'HKEY_LOCAL_MACHINE\\SOFTWARE\\ASIO\\FlexASIO\r\nHKEY_LOCAL_MACHINE\\SOFTWARE\\ASIO\\Audio Mixer\r\n', '32': 'HKEY_LOCAL_MACHINE\\SOFTWARE\\ASIO\\Old32 Driver\r\nHKEY_LOCAL_MACHINE\\SOFTWARE\\ASIO\\Audio Mixer\r\n' };
+  assert.deepStrictEqual(d.parseAsioKeys('\r\nHKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\ASIO\\ASIO4ALL v2 \r\nHKEY_LOCAL_MACHINE\\SOFTWARE\\ASIO\r\n'), ['ASIO4ALL v2']);
+  const mem = () => ({ at: 0, names: [], bits: {} }), ok = async (c, a) => ({ out: reg[a[2].slice(5)], failed: false });
+  const r = await d.readAsioRegistry({ runner: ok, memory: mem(), arch: 'x64' });
+  assert.deepStrictEqual(r.names.sort(), ['Audio Mixer', 'FlexASIO', 'Old32 Driver']); assert.deepStrictEqual(r.bits['Audio Mixer'], [64, 32]); assert.deepStrictEqual(r.wrongBitness, ['Old32 Driver']); assert.strictEqual(r.stale, false);
+  assert.deepStrictEqual((await d.readAsioRegistry({ runner: ok, memory: mem(), arch: 'ia32' })).wrongBitness, ['FlexASIO'], 'a 32-bit server cannot load the 64-bit-only driver');
+  // a read that times out once is retried
+  let calls = 0; const flaky = async (c, a) => (++calls === 1 ? { out: '', failed: true } : ok(c, a));
+  assert.strictEqual((await d.readAsioRegistry({ runner: flaky, memory: mem(), arch: 'x64' })).names.length, 3); assert.strictEqual(calls, 3);
+  // it keeps failing: the drivers seen a minute ago are kept (stale), after ten minutes they are gone; a missing key (an answer) clears the list at once
+  const memory = mem(); let t = 1e6; const now = () => t;
+  await d.readAsioRegistry({ runner: ok, memory, now, arch: 'x64' });
+  const dead = async () => ({ out: '', failed: true }), none = async () => ({ out: '', failed: false });
+  t += 60e3; const s1 = await d.readAsioRegistry({ runner: dead, memory, now, arch: 'x64' }); assert.strictEqual(s1.stale, true); assert.strictEqual(s1.names.length, 3);
+  t += 11 * 60e3; assert.strictEqual((await d.readAsioRegistry({ runner: dead, memory, now, arch: 'x64' })).names.length, 0);
+  await d.readAsioRegistry({ runner: ok, memory, now, arch: 'x64' }); assert.strictEqual((await d.readAsioRegistry({ runner: none, memory, now, arch: 'x64' })).names.length, 0, 'no key = no drivers, not stale');
+  // the RtAudio probe is reused for 15 s (it blocks the event loop); a rescan asks again
+  const src = fsx.readFileSync(pathx.join(__dirname, 'detect.js'), 'utf8'); assert.match(src, /nowMs - audifyMemory\.at < 15000/); assert.match(fsx.readFileSync(pathx.join(__dirname, 'server.js'), 'utf8'), /detect\(\{ force \}\)/);
+});
+
 test('endpoints: /api/license (BASIC by default), activation needs a valid key, updates need PRO', async () => {
   process.env.BRIDGE_LICENSE_FILE = pathx.join(fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'lep-')), 'license.json');
   await new Promise(r => server.listen(0, '127.0.0.1', r));

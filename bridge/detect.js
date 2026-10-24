@@ -14,6 +14,34 @@ function run(cmd, args, timeout = 4000) {
   });
 }
 
+// Like run(), but says why there was no output: a key that does not exist (reg.exe exits 1 at once) is an answer, a timeout or a launch failure is not.
+function runInfo(cmd, args, timeout) {
+  return new Promise(resolve => {
+    execFile(cmd, args, { timeout, windowsHide: true, maxBuffer: 4 * 1024 * 1024 }, (err, stdout) => resolve({ out: String(stdout || ''), failed: !!err && !!(err.killed || err.signal || err.code === 'ENOENT' || err.code === 'EACCES'), err }));
+  });
+}
+
+// The ASIO drivers registered on this PC. HKLM\SOFTWARE\ASIO has two views on 64-bit Windows: 64-bit drivers (read with /reg:64) and 32-bit drivers (WOW6432Node, /reg:32); a 64-bit
+// server that reads only its own view never saw a 32-bit driver, and a probe that timed out (a busy PC) made every driver vanish for one scan. Both views are read, a failed read is
+// tried once more, and when it still fails the drivers seen in the last ten minutes are kept (marked `stale`). Drivers of the other bitness than this process are listed in
+// `wrongBitness`: they exist, but a 32-bit driver cannot be loaded into a 64-bit server (and the other way round).
+const asioMemory = { at: 0, names: [], bits: {} };
+const parseAsioKeys = text => String(text).split(/\r?\n/).map(l => (l.match(/HKEY_LOCAL_MACHINE\\SOFTWARE\\(?:WOW6432Node\\)?ASIO\\(.+)$/i) || [])[1]).filter(Boolean).map(n => n.trim()).filter(Boolean);
+async function readAsioRegistry({ runner = runInfo, now = Date.now, arch = process.arch, memory = asioMemory, timeout = 8000 } = {}) {
+  const names = [], bits = {}; let failed = false;
+  for (const view of ['64', '32']) {
+    let r = await runner('reg', ['query', 'HKLM\\SOFTWARE\\ASIO', '/reg:' + view], timeout);
+    if (r.failed) r = await runner('reg', ['query', 'HKLM\\SOFTWARE\\ASIO', '/reg:' + view], timeout);      // once more: a probe that timed out is not an empty list
+    if (r.failed) { failed = true; continue; }
+    for (const n of parseAsioKeys(r.out)) { if (!names.includes(n)) names.push(n); (bits[n] = bits[n] || []).includes(Number(view)) || bits[n].push(Number(view)); }
+  }
+  let stale = false;
+  if (!names.length && failed && memory.names.length && now() - memory.at < 10 * 60 * 1000) { names.push(...memory.names); Object.assign(bits, memory.bits); stale = true; }
+  else if (!failed || names.length) { memory.at = now(); memory.names = names.slice(); memory.bits = JSON.parse(JSON.stringify(bits)); }
+  const mine = arch === 'ia32' || arch === 'x86' || arch === 'arm' ? 32 : 64;
+  return { names, bits, stale, wrongBitness: names.filter(n => !bits[n].includes(mine)) };
+}
+
 // Keys match the driver ids used by window.universalAsioSdk.drivers in the page.
 async function windows() {
   const drivers = new Set(['wasapi-shared', 'wasapi-excl', 'wasapi-loop', 'directsound', 'wdmks', 'mme']);
@@ -26,11 +54,8 @@ async function windows() {
     (Array.isArray(j) ? j : [j]).forEach(d => d && d.Name && devices.push({ name: d.Name, vendor: d.Manufacturer || '', status: d.Status || '' }));
   } catch (_) { /* ignore */ }
   if (!devices.length) (await winnative.listWmi()).forEach(d => devices.push(d));   // PowerShell blocked: VBScript + WMI
-  const reg = await run('reg', ['query', 'HKLM\\SOFTWARE\\ASIO']);
-  reg.split(/\r?\n/).forEach(line => {
-    const m = line.match(/HKEY_LOCAL_MACHINE\\SOFTWARE\\ASIO\\(.+)$/i);
-    if (m) asio.push(m[1].trim());
-  });
+  const reg = await readAsioRegistry();
+  asio.push(...reg.names);
   asio.forEach(n => {
     drivers.add('steinberg');
     const l = n.toLowerCase();
@@ -45,7 +70,7 @@ async function windows() {
     if (l.includes('ssl')) drivers.add('ssl');
     if (l.includes('cwasio')) drivers.add('cwasio');
   });
-  return { drivers: [...drivers], devices, asio, recommended: asio.length ? 'steinberg' : 'wasapi-excl' };
+  return { drivers: [...drivers], devices, asio, asioBits: reg.bits, ...(reg.wrongBitness.length ? { asioWrongBitness: reg.wrongBitness } : {}), ...(reg.stale ? { asioStale: true } : {}), recommended: asio.length ? 'steinberg' : 'wasapi-excl' };
 }
 
 async function mac() {
@@ -122,11 +147,16 @@ function detectPortAudio() {
   } catch (_) { return null; }
 }
 
-async function detect() {
+// RtAudio's device probe is synchronous and loads every ASIO driver (hundreds of milliseconds, the whole event loop stands still, the audio sockets stutter). The page asks
+// every few seconds; the probe result is reused for 15 s unless a rescan is asked for (?force=1) or this is the first one.
+const audifyMemory = { at: 0, value: null };
+async function detect({ force = false } = {}) {
   const p = process.platform;
   const r = p === 'win32' ? await windows() : p === 'darwin' ? await mac() : p === 'linux' ? await linux() : { drivers: [], devices: [], asio: [], recommended: null };
   const naudiodon = detectPortAudio();
-  const audifyInfo = detectAudify();
+  const nowMs = Date.now();
+  const audifyInfo = !force && audifyMemory.value && nowMs - audifyMemory.at < 15000 ? audifyMemory.value : detectAudify();
+  if (audifyInfo !== audifyMemory.value) { audifyMemory.value = audifyInfo; audifyMemory.at = nowMs; }
   // `portaudio` is the primary native engine: naudiodon2 when installed, otherwise Audify (same shape, so the page works with either).
   const portaudio = naudiodon || audifyInfo;
   if (portaudio) {
@@ -140,4 +170,4 @@ async function detect() {
   return { platform: p, arch: process.arch, node: process.version, ...r, vst: detectVst(), portaudio, audify: audifyInfo, native, engines: { naudiodon: !!naudiodon, audify: !!audifyInfo } };
 }
 
-module.exports = { detect, detectPortAudio };
+module.exports = { detect, detectPortAudio, readAsioRegistry, parseAsioKeys };

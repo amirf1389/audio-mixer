@@ -14414,6 +14414,11 @@ window.navTabs = [
                 this.log(info.platform === 'win32' ? "Web Audio API \u2194 ASIO: no ASIO driver installed (WASAPI / DirectSound available)" : "Web Audio API \u2194 ASIO: ASIO is Windows-only on this OS — using " + (info.recommended || 'system audio'), "warn");
                 window.notify("Web Audio ↔ ASIO: No ASIO driver found", "microchip");
             }
+            if (info.asioWrongBitness && info.asioWrongBitness.length) {         // registered, but of the other bitness than this server: it cannot be loaded here
+                const w = info.asioWrongBitness.join(', ');
+                this.log('ASIO driver(s) found but not usable by this ' + (info.arch === 'ia32' ? '32' : '64') + '-bit server: ' + w + ' (they need the ' + (info.arch === 'ia32' ? '64' : '32') + '-bit server)', 'warn');
+                window.notify('ASIO driver of the other bitness: ' + w, 'triangle-exclamation');
+            }
             const v3 = info.vst ? info.vst.vst3.length : 0, v2 = info.vst ? info.vst.vst2.length : 0;
             if (v3 + v2) {
                 this.log(`VST compatibility: ${v3} VST3 / ${v2} VST2 plugin(s) detected`, "success");
