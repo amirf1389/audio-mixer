@@ -2,7 +2,7 @@
 // (Linux ALSA, Windows WASAPI / ASIO, macOS Core Audio; "null" everywhere). No browser, no Node.js: the mixer (am::Mixer) runs in the real-time callback of the chosen backend.
 //   audiomixer-native --list
 //   audiomixer-native [--backend auto|alsa|wasapi|asio|coreaudio|null] [--in DEV] [--out DEV] [--rate 48000] [--frames 256] [--strips 8]
-//                     [--in-ch 2] [--out-ch 2] [--seconds N] [--master-db X] [--spatial AZIMUTH_DEG]
+//                     [--in-ch 2] [--out-ch 2] [--seconds N] [--master-db X] [--spatial AZIMUTH_DEG] [--exclusive]   (--exclusive: WASAPI exclusive mode, the program takes control of the device)
 // Prints the meters twice a second; stops after --seconds (default: until Ctrl-C).
 #include <algorithm>
 #include <atomic>
@@ -36,6 +36,7 @@ int main(int argc, char** argv) {
     else if (a == "--strips") strips = std::atoi(next());
     else if (a == "--in-ch") cfg.inChannels = std::atoi(next());
     else if (a == "--out-ch") cfg.outChannels = std::atoi(next());
+    else if (a == "--exclusive") cfg.exclusive = true;
     else if (a == "--seconds") seconds = std::atof(next());
     else if (a == "--master-db") masterDb = std::atof(next());
     else if (a == "--spatial") azimuth = std::atof(next());

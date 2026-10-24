@@ -1705,6 +1705,54 @@ test('OTA: automatic updates install the Windows setup .exe once, only when swit
   }
 });
 
+test('service: NSSM and PM2 commands (auto start, restart on exit, rotated logs, the user password never printed), the PM2 config is one forked server instance', () => {
+  const svc = require('../scripts/service'), root = pathx.join(__dirname, '..');
+  const cmds = svc.nssmCommands('install', { name: 'AudioMixer', nssm: 'nssm', dir: 'C:\\AM', node: 'C:\\node\\node.exe', script: 'C:\\AM\\bridge\\server.js', logs: 'C:\\Logs', port: 9000 }).map(c => c.join(' '));
+  assert.strictEqual(cmds[0], 'nssm install AudioMixer C:\\node\\node.exe C:\\AM\\bridge\\server.js');
+  for (const want of ['set AudioMixer Start SERVICE_AUTO_START', 'set AudioMixer AppExit Default Restart', 'set AudioMixer AppRestartDelay 2000', 'AppEnvironmentExtra NODE_ENV=production BRIDGE_PORT=9000', 'AppRotateFiles 1', 'AppDirectory C:\\AM'])
+    assert.ok(cmds.some(c => c.includes(want)), want);
+  assert.strictEqual(cmds[cmds.length - 1], 'nssm start AudioMixer'); assert.ok(!cmds.some(c => c.includes('ObjectName')), 'runs as LocalSystem unless a user is given');
+  assert.ok(svc.nssmCommands('install', { user: 'PC\\me', password: 'pw' }).some(c => c.includes('ObjectName')));
+  assert.deepStrictEqual(svc.nssmCommands('remove', { name: 'X', nssm: 'nssm' }), [['nssm', 'stop', 'X'], ['nssm', 'remove', 'X', 'confirm']]);
+  assert.throws(() => svc.nssmCommands('explode'), /unknown nssm action/); assert.throws(() => svc.pm2Commands('explode'), /unknown pm2 action/);
+  assert.deepStrictEqual(svc.pm2Commands('restart'), [['pm2', 'restart', 'audio-mixer']]);
+  const eco = require(pathx.join(root, 'deploy', 'pm2', 'ecosystem.config.js')).apps[0];
+  assert.strictEqual(eco.name, 'audio-mixer'); assert.strictEqual(eco.instances, 1); assert.strictEqual(eco.exec_mode, 'fork'); assert.ok(eco.autorestart && fsx.existsSync(eco.script));
+  const cp = require('node:child_process'), out = cp.spawnSync(process.execPath, [pathx.join(root, 'scripts', 'service.js'), 'nssm', 'install', '--dry-run', '--user', 'PC\\me'], { encoding: 'utf8', env: { ...process.env, AM_SERVICE_PASSWORD: 'topsecret' } });
+  assert.strictEqual(out.status, 0); assert.ok(!out.stdout.includes('topsecret') && out.stdout.includes('********'), 'the password is not echoed');
+});
+
+test('FlexASIO installer: only a pinned, SHA-256-verified github.com/dechamps/FlexASIO release is run, silently, on Windows', async () => {
+  const fx = require('./flexasio'), bytes = Buffer.from('flexasio-installer'), sha = cryptox.createHash('sha256').update(bytes).digest('hex');
+  const url = 'https://github.com/dechamps/FlexASIO/releases/download/flexasio-1.10/FlexASIO-1.10.exe', pin = { version: '1.10', url, sha256: sha, args: ['/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART'] };
+  assert.match(fx.pinProblem({ url: '', sha256: '' }), /no FlexASIO installer is pinned/); assert.match(fx.pinProblem({ ...pin, url: 'https://evil.example/a.exe' }), /github\.com\/dechamps/);
+  assert.match(fx.pinProblem({ ...pin, sha256: 'abc' }), /not a SHA-256/); assert.match(fx.pinProblem({ ...pin, args: ['/S; calc'] }), /switches/); assert.strictEqual(fx.pinProblem({ ...JSON.parse(fsx.readFileSync(fx.PIN_FILE, 'utf8')), sha256: sha }), null, 'the shipped pin is valid once a hash is filled in'); assert.strictEqual(fx.pinProblem(pin), null);
+  assert.deepStrictEqual(JSON.parse(fsx.readFileSync(fx.PIN_FILE, 'utf8')).sha256, '', 'shipped without a pin: nothing runs until one is filled in');
+  const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'flex-')), spawned = [], spawnImpl = (f, a) => { spawned.push([pathx.basename(f), a]); return { unref() {} }; };
+  const ok = async () => ({ ok: true, status: 200, headers: { get: () => null }, body: (async function* () { yield bytes; })() });
+  const r = await fx.install({ pin, fetchImpl: ok, dir, platform: 'win32', spawnImpl });
+  assert.strictEqual(r.installing, true); assert.deepStrictEqual(spawned, [['FlexASIO-1.10.exe', ['/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART']]]);
+  const bad = async () => ({ ok: true, status: 200, headers: { get: () => null }, body: (async function* () { yield Buffer.from('tampered'); })() });
+  await assert.rejects(fx.install({ pin, fetchImpl: bad, dir: pathx.join(dir, 'b'), platform: 'win32', spawnImpl }), /checksum mismatch/); assert.strictEqual(spawned.length, 1, 'a tampered installer is never run');
+  assert.deepStrictEqual(fsx.readdirSync(pathx.join(dir, 'b')), []);
+  const hop = async () => ({ ok: false, status: 302, headers: { get: k => (k === 'location' ? 'https://evil.example/x.exe' : null) } });
+  await assert.rejects(fx.install({ pin, fetchImpl: hop, dir, platform: 'win32', spawnImpl }), /untrusted host/);
+  await assert.rejects(fx.install({ pin, fetchImpl: ok, dir, platform: 'linux', spawnImpl }), /Windows driver/);
+  assert.strictEqual((await fx.install({ pin, fetchImpl: ok, dir: pathx.join(dir, 'd'), platform: 'win32', spawnImpl, dryRun: true })).installing, false); assert.strictEqual(spawned.length, 1);
+});
+
+test('WASAPI exclusive mode ("take control"): DeviceConfig::exclusive, --exclusive, the exclusive share mode with format fallback and aligned period; compiles for Windows x64 and x86', () => {
+  const root = pathx.join(__dirname, '..'), cp = require('node:child_process'), src = fsx.readFileSync(pathx.join(root, 'engine/cpp/src/backend_wasapi.cpp'), 'utf8');
+  assert.match(fsx.readFileSync(pathx.join(root, 'engine/cpp/include/audiomixer/runtime.hpp'), 'utf8'), /bool exclusive = false;/);
+  assert.match(fsx.readFileSync(pathx.join(root, 'engine/cpp/app/main.cpp'), 'utf8'), /"--exclusive"\) cfg\.exclusive = true/);
+  for (const w of ['AUDCLNT_SHAREMODE_EXCLUSIVE', 'AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED', 'AUDCLNT_E_DEVICE_IN_USE', 'AUDCLNT_E_EXCLUSIVE_MODE_NOT_ALLOWED', 'IsFormatSupported']) assert.ok(src.includes(w), w);
+  for (const t of ['x86_64-w64-mingw32', 'i686-w64-mingw32']) {
+    if (cp.spawnSync('which', [t + '-g++']).status !== 0) continue;                       // no mingw-w64 here: the source checks above stand
+    const o = pathx.join(osx.tmpdir(), 'wasapi-' + t + '.o'), c = cp.spawnSync(t + '-g++', ['-std=c++17', '-Wall', '-Wextra', '-Werror', '-O2', '-I' + pathx.join(root, 'engine/cpp/include'), '-I' + pathx.join(root, 'engine/cpp/src'), '-c', pathx.join(root, 'engine/cpp/src/backend_wasapi.cpp'), '-o', o], { encoding: 'utf8' });
+    assert.strictEqual(c.status, 0, t + ': ' + c.stderr.slice(0, 600));
+  }
+});
+
 test('endpoints: /api/license (BASIC by default), activation needs a valid key, updates need PRO', async () => {
   process.env.BRIDGE_LICENSE_FILE = pathx.join(fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'lep-')), 'license.json');
   await new Promise(r => server.listen(0, '127.0.0.1', r));
