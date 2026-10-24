@@ -35,6 +35,7 @@
 
 # Executables
 *.exe
+!releases/native/*.exe
 *.out
 *.app
 
