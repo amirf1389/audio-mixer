@@ -1787,6 +1787,13 @@ test('real-time audio backends: WASAPI has no allocation on the audio thread, ru
   }
 });
 
+test('exit notification: leaving the page while the audio engine runs asks first and says so if the person stays; nothing is asked when the engine is off', () => {
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8'), at = html.indexOf('EXIT NOTIFICATION');
+  assert.ok(at > 0); const block = html.slice(at, at + 1200);
+  assert.match(block, /addEventListener\('beforeunload'/); assert.match(block, /window\.state && window\.state\.active/); assert.match(block, /e\.preventDefault\(\); e\.returnValue = ''/); assert.match(block, /window\.notify/);
+  assert.ok(block.indexOf('return;') < block.indexOf('preventDefault'), 'the engine-off case returns before asking');
+});
+
 test('endpoints: /api/license (BASIC by default), activation needs a valid key, updates need PRO', async () => {
   process.env.BRIDGE_LICENSE_FILE = pathx.join(fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'lep-')), 'license.json');
   await new Promise(r => server.listen(0, '127.0.0.1', r));

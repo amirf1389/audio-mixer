@@ -1549,6 +1549,14 @@ window.navTabs = [
             setTimeout(() => document.getElementById('pin-input').focus(), 40); 
         };
         window.closePin = function() { document.getElementById('pin-modal').style.display = 'none'; };
+
+        // EXIT NOTIFICATION: closing the tab / window / app while the audio engine is running asks first (the browser shows its own "Leave site?" box; pages cannot change its text).
+        // If the person stays, the page says so (the engine was not stopped). Nothing is asked while the engine is off.
+        window.addEventListener('beforeunload', function(e) {
+            if (!(window.state && window.state.active)) return;
+            e.preventDefault(); e.returnValue = '';
+            setTimeout(function() { if (window.notify && window.state && window.state.active) window.notify('Still here: the audio engine keeps running (close again to exit)', 'shield-halved'); }, 400);
+        });
         // wrong tries are remembered (a reload does not start the count again)
         (function () { try { const f = JSON.parse(localStorage.getItem('halx_pin_fail') || '{}'); window.pinFailures = Number(f.n) || 0; window.pinLockedUntil = Number(f.until) || 0; } catch (e) { window.pinFailures = 0; window.pinLockedUntil = 0; } })();
         const savePinFail = () => { try { if (window.pinFailures) localStorage.setItem('halx_pin_fail', JSON.stringify({ n: window.pinFailures, until: window.pinLockedUntil })); else localStorage.removeItem('halx_pin_fail'); } catch (e) { /* storage blocked */ } };
