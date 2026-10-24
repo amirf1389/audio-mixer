@@ -42,7 +42,7 @@ function createSession(conn, load = loadPortAudio, loadA = audify.loadAudify) {
     // The page's AudioContext runs at the rate of the system's default output (16 / 24 / 32 kHz on a Bluetooth hands-free headset, 44.1 kHz on A2DP). A rate the device list does not offer
     // used to be replaced by 48000 without converting the audio, so everything played at the wrong speed and pitch (or the ASIO device refused it). It is converted now.
     const pageRate = parseInt(opts.sampleRate, 10) || 48000, sampleRate = SAMPLE_RATES.includes(pageRate) ? pageRate : 48000;
-    pre = pageRate !== sampleRate ? audify.createResampler(pageRate, sampleRate, channels) : null;
+    pre = pageRate !== sampleRate && pageRate >= 8000 && pageRate <= 384000 ? audify.createResampler(pageRate, sampleRate, channels) : null;   // a nonsense rate is just ignored (48000)
     const wanted = Number.isInteger(opts.deviceId) && opts.deviceId >= 0 ? opts.deviceId : null;
     const dev = audify.pickAudifyDevice(list.devices, wanted, 'output', channels) || (wanted === null ? list.devices.find(d => d.isDefaultOutput) : null);
     if (!dev) return conn.send(JSON.stringify({ type: 'error', message: wanted !== null ? 'device not found' : 'no output device found' }));
@@ -98,7 +98,7 @@ function createSession(conn, load = loadPortAudio, loadA = audify.loadAudify) {
     // The page's AudioContext runs at the rate of the system's default output (16 / 24 / 32 kHz on a Bluetooth hands-free headset, 44.1 kHz on A2DP). A rate the device list does not offer
     // used to be replaced by 48000 without converting the audio, so everything played at the wrong speed and pitch (or the ASIO device refused it). It is converted now.
     const pageRate = parseInt(opts.sampleRate, 10) || 48000, sampleRate = SAMPLE_RATES.includes(pageRate) ? pageRate : 48000;
-    pre = pageRate !== sampleRate ? audify.createResampler(pageRate, sampleRate, channels) : null;
+    pre = pageRate !== sampleRate && pageRate >= 8000 && pageRate <= 384000 ? audify.createResampler(pageRate, sampleRate, channels) : null;   // a nonsense rate is just ignored (48000)
     const wanted = Number.isInteger(opts.deviceId) && opts.deviceId >= 0 ? opts.deviceId : null;
     const dev = pickDevice(pa, wanted, channels);
     if (!dev && wanted !== null) return conn.send(JSON.stringify({ type: 'error', message: 'device not found' }));
