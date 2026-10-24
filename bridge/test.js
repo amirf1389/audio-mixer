@@ -4007,3 +4007,44 @@ test('Android APK safety: permission allowlist, listener shipped off, audit tool
   const page = rd('index.html'); for (const s of ['id="app-safety"', "'/api/app'", "'/api/app/nowplaying/'", 'APP SAFETY', 'Send app for scanning', 'app-safety-card']) assert.ok(page.includes(s), s);
   const mb = rd('platforms/android/src/com/audiomixer/app/MiniBridge.java'); assert.ok(mb.includes('"/api/app"') && mb.includes('x-mixer-action'));
 });
+
+test('finder (client/finder.js): finds the mixer link by probing /api/status, scans the LAN only on request and only private /24 neighbours, refuses foreign Host headers and the start call without its header, static page with a hash-locked CSP', async () => {
+  const f = require('../client/finder'), http = require('node:http'), crypto = require('node:crypto');
+  assert.deepStrictEqual(f.parsePorts('8765-8767,9000,bad,70000'), [8765, 8766, 8767, 9000]);
+  assert.ok(f.isPrivate('192.168.1.5') && f.isPrivate('10.0.0.1') && f.isPrivate('172.20.1.1') && !f.isPrivate('8.8.8.8') && !f.isPrivate('172.32.0.1'));
+  // a real mixer-shaped server and a server that is not a mixer
+  const mk = body => http.createServer((req, res) => { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(body)); });
+  const mixer = mk({ ok: true, name: 'audio-mixer-bridge', version: '9.9.9' }), other = mk({ ok: true, name: 'something-else' });
+  await Promise.all([mixer, other].map(s => new Promise(r => s.listen(0, '127.0.0.1', r))));
+  const pm = mixer.address().port, po = other.address().port;
+  assert.deepStrictEqual(await f.probe('127.0.0.1', pm), { version: '9.9.9' });
+  assert.strictEqual(await f.probe('127.0.0.1', po), null, 'only an Audio Mixer answer counts');
+  assert.strictEqual(await f.probe('127.0.0.1', 1), null);
+  // the scan: local ports always, neighbours only with lan=1 (the fake network has two hosts, the mixer answers on one of them)
+  const probed = [];
+  const probeFn = async (h, p) => { probed.push(h + ':' + p); return h === '127.0.0.1' ? f.probe(h, p) : (h === '192.168.7.20' && p === pm ? { version: '1.0.0' } : null); };
+  let started = 0;
+  const app = f.createFinder({ ports: [pm, po], probeFn, lan: () => ({ own: ['192.168.7.5'], others: ['192.168.7.20', '192.168.7.21'] }), startMixer: async () => { started++; return { ok: true, message: 'Starting' }; }, cacheMs: 0 });
+  await new Promise(r => app.server.listen(0, '127.0.0.1', r));
+  const base = 'http://127.0.0.1:' + app.server.address().port, get = (p, h) => fetch(base + p, { headers: h });
+  try {
+    let r = await (await get('/api/scan')).json();
+    assert.deepStrictEqual(r.found.map(x => x.url), [`http://127.0.0.1:${pm}/`]); assert.ok(r.found[0].local && r.found[0].version === '9.9.9');
+    assert.ok(!probed.some(x => x.startsWith('192.168.')), 'no LAN probe without lan=1');
+    r = await (await get('/api/scan?lan=1')).json();
+    assert.deepStrictEqual(r.found.map(x => x.url), [`http://127.0.0.1:${pm}/`, `http://192.168.7.20:${pm}/`]);
+    assert.deepStrictEqual([...new Set(probed.filter(x => x.startsWith('192.168.')))].sort(), [`192.168.7.20:${pm}`, `192.168.7.20:${po}`, `192.168.7.21:${pm}`, `192.168.7.21:${po}`].sort());
+    // Host header: DNS rebinding and foreign names are refused (fetch cannot set Host, so use a raw request)
+    const code = await new Promise(res => { const q = http.request({ host: '127.0.0.1', port: app.server.address().port, path: '/api/scan', headers: { Host: 'evil.example' } }, x => { x.resume(); res(x.statusCode); }); q.end(); });
+    assert.strictEqual(code, 403);
+    assert.strictEqual((await fetch(base + '/api/start', { method: 'POST' })).status, 403); assert.strictEqual(started, 0, 'start needs its header');
+    assert.strictEqual((await (await fetch(base + '/api/start', { method: 'POST', headers: { 'X-Finder': '1' } })).json()).ok, true); assert.strictEqual(started, 1);
+    assert.strictEqual((await get('/api/nothing')).status, 404);
+    // the page: static, nothing from outside, no innerHTML, no animation / effects, the CSP hashes exactly its own inline script and style
+    const page = await get('/'), html = await page.text(), csp = page.headers.get('content-security-policy');
+    const hash = t => "'sha256-" + crypto.createHash('sha256').update(t, 'utf8').digest('base64') + "'";
+    assert.ok(csp.includes('script-src ' + hash(/<script>([\s\S]*?)<\/script>/.exec(html)[1])) && csp.includes('style-src ' + hash(/<style>([\s\S]*?)<\/style>/.exec(html)[1])) && csp.includes("default-src 'none'") && !/unsafe-inline/.test(csp));
+    assert.ok(!/https?:\/\//.test(html) && !/innerHTML|eval\(|animation|transition|filter:|backdrop|box-shadow|requestAnimationFrame/.test(html), 'nothing external, nothing that costs GPU time');
+    assert.ok(/document\.hidden/.test(html), 'it does not poll while the tab is hidden');
+  } finally { app.server.close(); mixer.close(); other.close(); }
+});
