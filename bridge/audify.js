@@ -72,6 +72,19 @@ function plan(want, ctx) {
 
 function apiEnum(mod) { return mod.RtAudioApi || mod.RtAudioApis || {}; }
 
+// An RtAudio instance of ONE named host API. `new RtAudio()` with no argument (what `new RtAudio(Api[key])` turns into when the module has no such API entry) lets RtAudio pick any API
+// it was built with, so a stream or probe meant for ASIO ran on WASAPI / DirectSound and its device ids belonged to another API. No number = the API is not available here; an instance that
+// reports another API than the one asked for is refused too. Errors carry `notCompiled` so a scan can skip the API quietly.
+function openRtAudio(RtAudio, Api, key) {
+  const id = Api[key];
+  if (typeof id !== 'number') throw Object.assign(new Error(`the ${API_NAMES[key] || key} host API is not available in this audio engine`), { notCompiled: true });
+  const rt = new RtAudio(id);
+  let other = null;
+  try { if (typeof rt.getApi === 'function') { const got = apiKey(rt.getApi()); if (got !== key) other = got || String(rt.getApi()); } } catch (_) { /* cannot tell: keep it */ }
+  if (other) { try { if (typeof rt.closeStream === 'function') rt.closeStream(); } catch (_) { /* nothing open */ } throw Object.assign(new Error(`the ${API_NAMES[key] || key} host API is not compiled into this audio engine (RtAudio offered ${other} instead)`), { notCompiled: true }); }
+  return rt;
+}
+
 // Open ASIO devices (device id -> entry). ASIO drivers are single-client: one RtAudio stream per driver, so reading AND writing the same
 // device share one duplex stream (see openStream / openDuplex); the same registry tells listDevices not to probe a driver that is in use.
 const registries = new WeakMap();   // per loaded module (in production there is exactly one)
@@ -133,13 +146,11 @@ function listDevices(load = loadAudify) {
     let list = [], probeError = '', retried = false;
     if (cached) list = cached;
     else {
-      try { rt = new RtAudio(Api[key]); } catch (e) { if (!isAsio) continue; probeError = String(e && e.message || e); }
-      // RtAudio silently substitutes another API when the requested one is not compiled in: skip it instead of listing duplicates.
-      if (rt) try { if (typeof rt.getApi === 'function' && apiKey(rt.getApi()) !== key) continue; } catch (_) { /* cannot tell: keep it */ }
+      try { rt = openRtAudio(RtAudio, Api, key); } catch (e) { if (!isAsio || e.notCompiled) continue; probeError = String(e && e.message || e); }   // an API that is not built in is skipped, never replaced by another one
       if (rt) try { list = rt.getDevices() || []; } catch (e) { probeError = String(e && e.message || e); /* API present but no devices */ }
       if (isAsio && (probeError || list.some(d => !probed(d)))) {
         // one more try on a fresh instance (a driver that was waking up or just released by another program answers the second time)
-        try { const again = new RtAudio(Api[key]).getDevices() || []; list = betterOf(list, again); if (list.length) probeError = ''; retried = true; }
+        try { const again = openRtAudio(RtAudio, Api, key).getDevices() || []; list = betterOf(list, again); if (list.length) probeError = ''; retried = true; }
         catch (e) { if (!probeError) probeError = String(e && e.message || e); retried = true; }
       }
       if (isAsio) {
@@ -157,7 +168,7 @@ function listDevices(load = loadAudify) {
     // flagged so that the page can take its mode from the operating system's own endpoint list (interfaces.js) and a stream can still be tried.
     if (!isAsio && !cached && list.some(d => !((d.inputChannels || 0) + (d.outputChannels || 0)))) {
       try {
-        const again = new RtAudio(Api[key]).getDevices() || [];
+        const again = openRtAudio(RtAudio, Api, key).getDevices() || [];
         list = list.map(d => { if ((d.inputChannels || 0) + (d.outputChannels || 0)) return d; const n = again.find(x => x.id === d.id && String(x.name || '') === String(d.name || '')); return n && (n.inputChannels || 0) + (n.outputChannels || 0) ? n : d; });
       } catch (_) { /* keep the first answer */ }
     }
@@ -289,7 +300,8 @@ function openStreamRaw({ mod, dev, direction, channels, sampleRate, frameSize, o
   const control = out && (queueControl === undefined ? dev.api === 'WINDOWS_WASAPI' : !!queueControl);
   let lastErr = null;
   for (const fs of p.candidates) {
-    const rt = new RtAudio(Api[dev.api]);
+    let rt;
+    try { rt = openRtAudio(RtAudio, Api, dev.api); } catch (e) { lastErr = e; break; }      // no other API is ever substituted for the device's own
     let warnings = 0, lastWarning = '', queued = 0;
     try {
       const params = { deviceId: dev.rtId, nChannels: ch, firstChannel: 0 };
@@ -354,7 +366,8 @@ function openDuplexRaw({ mod, dev, inChannels, outChannels, sampleRate, frameSiz
   const sf = streamFlags(mod, dev, exclusive), flags = sf.flags;
   let lastErr = null;
   for (const fs of p.candidates) {
-    const rt = new RtAudio(Api[dev.api]);
+    let rt;
+    try { rt = openRtAudio(RtAudio, Api, dev.api); } catch (e) { lastErr = e; break; }
     try {
       const actual = rt.openStream({ deviceId: dev.rtId, nChannels: outChannels, firstChannel: 0 }, { deviceId: dev.rtId, nChannels: ci, firstChannel: 0 },
         fmt, sampleRate, fs, 'Audio Mixer', pcm => onData && onData(Buffer.from(pcm)), null, flags, errorHandler(mod, e => onError && onError(e), e => { if (onWarning) onWarning(e); }));
@@ -476,4 +489,4 @@ function describe(load = loadAudify) {
   };
 }
 
-module.exports = { streamFlags, mergeAsio, ASIO_GRACE_MS, isWarning, remapChannels, _asioOf: asioOf, createResampler, nearestRate, loadAudify, loadProblem, API_NAMES, apiKey, recommendFrameSize, frameCandidates, plan, listDevices, detectAudify, openStream, openDuplex, pickAudifyDevice, describe, isPow2, AUDIFY_BASE, MIN_FRAMES, MAX_FRAMES };
+module.exports = { openStreamRaw, openRtAudio, streamFlags, mergeAsio, ASIO_GRACE_MS, isWarning, remapChannels, _asioOf: asioOf, createResampler, nearestRate, loadAudify, loadProblem, API_NAMES, apiKey, recommendFrameSize, frameCandidates, plan, listDevices, detectAudify, openStream, openDuplex, pickAudifyDevice, describe, isPow2, AUDIFY_BASE, MIN_FRAMES, MAX_FRAMES };

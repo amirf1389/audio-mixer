@@ -598,7 +598,7 @@ function fakeAudify({ failSizes = [], driverSize = 192 } = {}) {
   const opened = [], written = [];
   class RtAudio {
     constructor(api) { this.api = api; }
-    getApi() { return ({ 6: 'ASIO', 7: 'WASAPI', 3: 'JACK' })[this.api] || 'Dummy'; }
+    getApi() { return ({ 1: 'Core Audio', 6: 'ASIO', 7: 'WASAPI', 8: 'DirectSound', 3: 'JACK' })[this.api] || 'Dummy'; }
     getDevices() {
       return this.api === 6 ? [{ id: 0, name: 'Focusrite USB ASIO', inputChannels: 18, outputChannels: 20, sampleRates: [44100, 48000, 96000], preferredSampleRate: 48000, isDefaultInput: 1, isDefaultOutput: 1 }]
         : this.api === 7 ? [{ id: 5, name: 'Speakers (Realtek)', inputChannels: 0, outputChannels: 2, sampleRates: [48000], preferredSampleRate: 48000, isDefaultInput: 0, isDefaultOutput: 1 }] : [];
@@ -1813,6 +1813,21 @@ test('ASIO detection (Windows registry): both views are read, a failed read is r
   await d.readAsioRegistry({ runner: ok, memory, now, arch: 'x64' }); assert.strictEqual((await d.readAsioRegistry({ runner: none, memory, now, arch: 'x64' })).names.length, 0, 'no key = no drivers, not stale');
   // the RtAudio probe is reused for 15 s (it blocks the event loop); a rescan asks again
   const src = fsx.readFileSync(pathx.join(__dirname, 'detect.js'), 'utf8'); assert.match(src, /nowMs - audifyMemory\.at < 15000/); assert.match(fsx.readFileSync(pathx.join(__dirname, 'server.js'), 'utf8'), /detect\(\{ force \}\)/);
+});
+
+test('RtAudio: an instance is always created for ONE named host API; a missing API entry or a substituted API is refused, never opened with no argument', async () => {
+  const au = require('./audify'), fake = fakeAudify();
+  const dsDev = { api: 'WINDOWS_DS', rtId: 1, name: 'Speakers', hostAPIName: 'Windows DirectSound', maxOutputChannels: 2, maxInputChannels: 0, sampleRates: [48000] };
+  // the module has no entry for the API: the old code did new RtAudio(undefined) and RtAudio picked another API
+  const noEntry = { ...fake, RtAudioApi: { ...fake.RtAudioApi } }; delete noEntry.RtAudioApi.WINDOWS_DS;
+  assert.throws(() => au.openStreamRaw({ mod: noEntry, dev: dsDev, direction: 'output', channels: 2, sampleRate: 48000, frameSize: 256 }), /DirectSound host API is not available/);
+  assert.strictEqual(fake.opened.length, 0, 'nothing was opened on another API');
+  // an engine that substitutes another API (RtAudio does that for an API that is not compiled in)
+  class Sub extends fake.RtAudio { getApi() { return 'Dummy'; } }
+  assert.throws(() => au.openStreamRaw({ mod: { ...fake, RtAudio: Sub }, dev: dsDev, direction: 'output', channels: 2, sampleRate: 48000, frameSize: 256 }), /not compiled into this audio engine/);
+  assert.strictEqual(fake.opened.length, 0);
+  // the device scan skips such an API quietly and still lists the others
+  const scan = au.detectAudify(() => noEntry); assert.ok(scan.devices.some(d => d.hostApi && /ASIO/i.test(d.hostApi)), 'ASIO is still listed'); assert.ok(!scan.devices.some(d => /DirectSound/i.test(d.hostApi)));
 });
 
 test('endpoints: /api/license (BASIC by default), activation needs a valid key, updates need PRO', async () => {
