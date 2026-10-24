@@ -3,7 +3,7 @@
 // Builds the native program (engine/cpp/app/main.cpp: the C++ engine on the operating system's own audio layer, no browser and no Node.js) for the systems this machine can build:
 //   node scripts/build-native.js [--out <dir>]
 //   AudioMixer-<version>-native-linux-x64.tar.gz     audiomixer-native (ALSA + null), built with the C++ compiler and CMake here, run on the null device as a check
-//   AudioMixer-<version>-native-windows-x64.exe      WASAPI + ASIO + null, static, cross-compiled with mingw-w64 (compiled, not run: no Windows here)
+//   AudioMixer-<version>-native-windows-x64.exe      WASAPI + ASIO + null, static, cross-compiled with mingw-w64 (compiled, not run: no Windows here); embeds the ASIO driver DLL (--install-driver)
 //   AudioMixer-<version>-native-windows-x86.exe      the same for 32-bit Windows
 // macOS (Core Audio), iOS and Android need Xcode / the NDK and are not built here: engine/cpp/CMakeLists.txt builds the same program on a Mac (cmake -S engine/cpp -B build).
 const fs = require('node:fs');
@@ -29,8 +29,16 @@ function compileWindows(arch, exe) {
   if (!has(t + '-g++')) throw new Error(`mingw-w64 (${t}-g++) is needed to build the native program (Debian / Ubuntu: apt install mingw-w64)`);
   const src = ['engine.cpp', 'runtime.cpp', 'backend_null.cpp', 'spatial.cpp', 'backend_wasapi.cpp', 'backend_asio.cpp'].map(f => path.join(ROOT, 'engine/cpp/src', f));
   fs.mkdirSync(path.dirname(exe), { recursive: true });
-  run(t + '-g++', ['-std=c++17', '-Wall', '-Wextra', '-Werror', '-O2', '-static', '-static-libgcc', '-static-libstdc++', '-I' + path.join(ROOT, 'engine/cpp/include'), '-I' + path.join(ROOT, 'engine/cpp/src'),
-    '-I' + path.join(ROOT, 'drivers/asio'), path.join(ROOT, 'engine/cpp/app/main.cpp'), ...src, '-o', exe, '-lole32', '-luuid', '-ladvapi32']);
+  // the ASIO driver DLL of this architecture is built here and embedded in the program (--install-driver writes it out and registers it): one .exe sets a machine up
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'native-win-'));
+  try {
+    const dll = require('./build-drivers').buildAsio(arch, work), bytes = fs.readFileSync(dll);
+    const rows = []; for (let i = 0; i < bytes.length; i += 16) rows.push('  ' + Array.from(bytes.subarray(i, i + 16), b => '0x' + b.toString(16).padStart(2, '0')).join(','));
+    fs.writeFileSync(path.join(work, 'asio_blob.inc'), `static const unsigned char kAsioDll[] = {\n${rows.join(',\n')}\n};\nstatic const unsigned kAsioDllSize = ${bytes.length}u;\nstatic const char kAsioDllName[] = ${JSON.stringify(path.basename(dll))};\n`);
+    run(t + '-g++', ['-std=c++17', '-Wall', '-Wextra', '-Werror', '-O2', '-static', '-static-libgcc', '-static-libstdc++', '-DAM_EMBED_ASIO', '-I' + work, '-I' + path.join(ROOT, 'engine/cpp/app'),
+      '-I' + path.join(ROOT, 'engine/cpp/include'), '-I' + path.join(ROOT, 'engine/cpp/src'), '-I' + path.join(ROOT, 'drivers/asio'),
+      path.join(ROOT, 'engine/cpp/app/main.cpp'), path.join(ROOT, 'engine/cpp/app/win_tools.cpp'), ...src, '-o', exe, '-lole32', '-luuid', '-ladvapi32']);
+  } finally { fs.rmSync(work, { recursive: true, force: true }); }
   return exe;
 }
 

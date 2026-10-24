@@ -2,6 +2,7 @@
 // (Linux ALSA, Windows WASAPI / ASIO, macOS Core Audio; "null" everywhere). No browser, no Node.js: the mixer (am::Mixer) runs in the real-time callback of the chosen backend.
 //   audiomixer-native --list
 //   audiomixer-native [--backend auto|alsa|wasapi|asio|coreaudio|null] [--in DEV] [--out DEV] [--rate 48000] [--frames 256] [--strips 8]
+//   Windows setup options: --install-driver | --uninstall-driver (the ASIO driver embedded in this .exe) | --install-flexasio FILE --sha256 HEX (see win_tools.cpp)
 //                     [--in-ch 2] [--out-ch 2] [--seconds N] [--master-db X] [--spatial AZIMUTH_DEG] [--exclusive]   (--exclusive: WASAPI exclusive mode, the program takes control of the device)
 // Prints the meters twice a second; stops after --seconds (default: until Ctrl-C).
 #include <algorithm>
@@ -18,12 +19,18 @@
 #include "audiomixer/asio.hpp"
 #include "audiomixer/runtime.hpp"
 #include "audiomixer/spatial.hpp"
+#ifdef _WIN32
+#include "win_tools.hpp"
+#endif
 
 static std::atomic<bool> g_stop{false};
 static void onSignal(int) { g_stop = true; }
 static double db(double lin) { return lin > 1e-9 ? 20.0 * std::log10(lin) : -120.0; }
 
 int main(int argc, char** argv) {
+#ifdef _WIN32
+  { int rc = 0; if (am::runWinTool(argc, argv, rc)) return rc; }       // --install-driver / --uninstall-driver / --install-flexasio FILE --sha256 HEX
+#endif
   am::DeviceConfig cfg; int strips = 8; double seconds = 0, masterDb = 0, azimuth = 1e9; bool list = false;
   for (int i = 1; i < argc; ++i) {
     const std::string a = argv[i]; auto next = [&]() -> const char* { return i + 1 < argc ? argv[++i] : ""; };
