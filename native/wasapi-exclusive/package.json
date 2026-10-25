@@ -1,0 +1,18 @@
+{
+  "name": "wasapi-exclusive",
+  "version": "0.1.0",
+  "private": true,
+  "description": "EXPERIMENTAL, UNWIRED native Node addon stub for WASAPI exclusive mode (Windows only). Nothing in bridge/, client/ or engine/cpp requires or loads this package; the server's real WASAPI access stays through bridge/audify.js (RtAudio), which only ever opens WASAPI in shared mode - RtAudio has no exclusive-mode path. Read README.md before building or calling it: opening a device exclusively locks every other program (including bridge/server.js's own shared-mode stream) out of it, so openExclusive() refuses to run until it is wired in for real.",
+  "main": "index.js",
+  "gypfile": true,
+  "scripts": {
+    "build": "node-gyp rebuild",
+    "test": "node --test --test-force-exit"
+  },
+  "dependencies": {
+    "node-addon-api": "^8.0.0"
+  },
+  "devDependencies": {
+    "node-gyp": "^10.2.0"
+  }
+}

@@ -950,6 +950,60 @@ window.navTabs = [
         // 10-BAND ISO FREQUENCY CENTERS (Hz)
         const EQ_BANDS = [31, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
 
+        // DSP MATH HELPERS: pure functions, no AudioContext - shared by the dual EQ mode (window.setEqActiveBank,
+        // below), the Fletcher-Munson loudness control and the quad crossover (bridge/test.js extracts and runs
+        // each one directly, the same way it already does for ampCalc in the bus-outs script).
+
+        // Equal-power crossfade curve (n points, 0 -> 1): used wherever two whole signal paths need to swap
+        // audibly for free (window.setEqActiveBank between EQ banks A/B) - sin(x*pi/2) keeps the SUMMED power of
+        // the fading-in and fading-out path constant across the fade, unlike a straight linear ramp (whose sum
+        // dips toward the midpoint and sounds like a dip in level). The complementary fade-out curve is this same
+        // curve reversed: sin((1-x)*pi/2) === cos(x*pi/2), the matching equal-power pair.
+        function equalPowerCrossfadeCurve(n) {
+            n = Math.max(2, Math.round(n));
+            const out = new Float32Array(n);
+            for (let i = 0; i < n; i++) out[i] = Math.sin((i / (n - 1)) * Math.PI / 2);
+            return out;
+        }
+
+        // FLETCHER-MUNSON LOUDNESS COMPENSATION: human hearing's equal-loudness contours (Fletcher & Munson 1933,
+        // refined as ISO 226) get steeper at low sound-pressure levels, in the bass most of all - at a quiet
+        // listening level the ear perceives far less low end (and, more gently, less top end) relative to the
+        // midrange than it would at a loud reference level. masterDb is the master fader's own dB value (the same
+        // number window.state.masterDb below is kept at); refDb is the level at which the contours are treated as
+        // flat (the "calibrated" reference level - 0 dB on the master fader by default, i.e. unity gain). Below
+        // that level, this returns how many dB to add back at the low and high shelves to keep the perceived
+        // tonal balance roughly constant as the listener turns the level down; at or above refDb it is a no-op
+        // (0, 0). This is a shaped approximation of the contours, not a per-listener-calibrated model.
+        function fletcherMunsonCompensation(masterDb, refDb) {
+            if (refDb == null || !isFinite(refDb)) refDb = 0;
+            if (masterDb == null || !isFinite(masterDb)) return { low: 0, high: 0 };
+            const deficit = Math.max(0, refDb - masterDb);    // dB below the reference level; 0 (no boost) at or above it
+            return { low: Math.min(12, deficit * 0.5), high: Math.min(6, deficit * 0.22) };
+        }
+
+        // PHASE-ALIGNED LINKWITZ-RILEY QUAD CROSSOVER: 3 crossover frequencies (f1 < f2 < f3) split one signal
+        // into 4 bands (low / low-mid / high-mid / high). Each crossover point is built from two cascaded
+        // 2nd-order Butterworth stages at the same frequency and type - a "dual 4th-order split" - which is the
+        // Linkwitz-Riley (LR4) construction: -24 dB/octave per side, and critically, its low-pass and high-pass
+        // outputs stay IN PHASE with each other at the crossover point, so the bands sum back to a flat response
+        // with no polarity inversion needed (unlike a plain 4th-order Butterworth crossover, which needs one side
+        // inverted at its crossover). That phase match at each seam is what "phase-aligned" means here: it is not
+        // a linear-phase (constant group-delay) filter overall, which only a FIR crossover gives - this is the
+        // standard IIR technique used in real multi-way speaker crossovers.
+        // Returns 4 band plans, each a list of biquad stages {type, freq} to cascade in series, in signal order.
+        function linkwitzRileyQuadBands(f1, f2, f3) {
+            [f1, f2, f3].forEach(f => { if (!(f > 0) || !isFinite(f)) throw new Error('crossover frequencies must be positive numbers'); });
+            if (!(f1 < f2 && f2 < f3)) throw new Error('crossover frequencies must be strictly increasing (f1 < f2 < f3)');
+            const lr4 = (type, f) => [{ type, freq: f }, { type, freq: f }];
+            return [
+                { name: 'low', stages: lr4('lowpass', f1) },
+                { name: 'low-mid', stages: [...lr4('highpass', f1), ...lr4('lowpass', f2)] },
+                { name: 'high-mid', stages: [...lr4('highpass', f2), ...lr4('lowpass', f3)] },
+                { name: 'high', stages: lr4('highpass', f3) },
+            ];
+        }
+
         // 15 STANDARD PRESETS + ANIX W-SHAPE DEFINITION (dB offsets across 10 bands)
         window.standardEQPresets = {
             "Golden EQ (Amix by AMFB tuned)": [1.0, 5.0, 3.0, 3.0, 4.0, 2.0, 2.0, 3.0, 3.0, 1.0],
@@ -1203,19 +1257,46 @@ window.navTabs = [
             masterCompressor.release.setValueAtTime(0.25, window.state.ctx.currentTime);
             autoVolumeGain.connect(masterCompressor);
 
-            // Construct 10-Band Biquad Filter Chain
-            window.state.nodes.eqFilters = [];
-            let lastFilter = masterCompressor;
+            // FLETCHER-MUNSON LOUDNESS COMPENSATION: a low shelf (80 Hz) and high shelf (10 kHz), both at 0 dB
+            // (no-op) until window.rideLoudnessComp (see startMeterLoop) rides them toward
+            // fletcherMunsonCompensation()'s numbers for the master fader's current level - the always-wired,
+            // no-op-by-default pattern every other master-bus rider here uses.
+            const loudLow = window.state.ctx.createBiquadFilter();
+            loudLow.type = 'lowshelf'; loudLow.frequency.setValueAtTime(80, window.state.ctx.currentTime); loudLow.gain.setValueAtTime(0, window.state.ctx.currentTime);
+            const loudHigh = window.state.ctx.createBiquadFilter();
+            loudHigh.type = 'highshelf'; loudHigh.frequency.setValueAtTime(10000, window.state.ctx.currentTime); loudHigh.gain.setValueAtTime(0, window.state.ctx.currentTime);
+            masterCompressor.connect(loudLow); loudLow.connect(loudHigh);
+            window.state.nodes.loudLow = loudLow;
+            window.state.nodes.loudHigh = loudHigh;
+
+            // DUAL EQ MODE: two complete, independent 10-band EQ banks (A and B) run in parallel at all times;
+            // only one is audible, set by its own crossfade gain (eqBankGainA/B, equalPowerCrossfadeCurve above).
+            // window.setEqActiveBank glides between them with no click and no level dip - smooth A/B listening
+            // between two whole EQ curves, rather than the old single chain's hard jump. Bank A is the default
+            // active bank at full gain, bank B silent, so this is an exact match for the old single-chain
+            // behavior until a user actually switches banks. window.state.nodes.eqFilters keeps its historic name
+            // (bank A) so every existing caller of window.updateEQBand(i, val) - no bank argument - keeps working.
+            window.state.nodes.eqFilters = []; window.state.nodes.eqFiltersB = [];
+            let eqA = loudHigh, eqB = loudHigh;
             EQ_BANDS.forEach(freq => {
                 const bq = window.state.ctx.createBiquadFilter();
-                bq.type = 'peaking';
-                bq.frequency.setValueAtTime(freq, window.state.ctx.currentTime);
-                bq.Q.setValueAtTime(1.41, window.state.ctx.currentTime);
-                bq.gain.setValueAtTime(0, window.state.ctx.currentTime);
-                lastFilter.connect(bq);
-                lastFilter = bq;
-                window.state.nodes.eqFilters.push(bq);
+                bq.type = 'peaking'; bq.frequency.setValueAtTime(freq, window.state.ctx.currentTime); bq.Q.setValueAtTime(1.41, window.state.ctx.currentTime); bq.gain.setValueAtTime(0, window.state.ctx.currentTime);
+                eqA.connect(bq); eqA = bq; window.state.nodes.eqFilters.push(bq);
             });
+            EQ_BANDS.forEach(freq => {
+                const bq = window.state.ctx.createBiquadFilter();
+                bq.type = 'peaking'; bq.frequency.setValueAtTime(freq, window.state.ctx.currentTime); bq.Q.setValueAtTime(1.41, window.state.ctx.currentTime); bq.gain.setValueAtTime(0, window.state.ctx.currentTime);
+                eqB.connect(bq); eqB = bq; window.state.nodes.eqFiltersB.push(bq);
+            });
+            const eqBankGainA = window.state.ctx.createGain(); eqBankGainA.gain.setValueAtTime(1, window.state.ctx.currentTime);
+            const eqBankGainB = window.state.ctx.createGain(); eqBankGainB.gain.setValueAtTime(0, window.state.ctx.currentTime);
+            eqA.connect(eqBankGainA); eqB.connect(eqBankGainB);
+            const eqBankMerge = window.state.ctx.createGain();
+            eqBankGainA.connect(eqBankMerge); eqBankGainB.connect(eqBankMerge);
+            window.state.nodes.eqBankGainA = eqBankGainA; window.state.nodes.eqBankGainB = eqBankGainB;
+            window.state.eqBank = window.state.eqBank || 'A';
+            window.state.eqBanks = window.state.eqBanks || { A: new Array(EQ_BANDS.length).fill(0), B: new Array(EQ_BANDS.length).fill(0) };
+            let lastFilter = eqBankMerge;
 
             // DYNAMIC EQ: one extra peaking band after the static 10-band EQ above, left at 0 dB (no-op) until
             // window.rideDynamicEq actually enables and rides it - a level-dependent, de-essing / resonance-taming
@@ -1764,20 +1845,49 @@ window.navTabs = [
             modal.style.display = 'block';
         };
 
-        // 10-BAND EQ CONTROLS
-        window.updateEQBand = function(bandIndex, val) {
+        // 10-BAND EQ CONTROLS. `bank` ('A' or 'B') defaults to the currently ACTIVE bank (window.state.eqBank), so
+        // every existing 2-argument caller (the EQ sliders) keeps editing whichever bank is actually audible.
+        window.updateEQBand = function(bandIndex, val, bank) {
+            bank = bank === 'B' ? 'B' : bank === 'A' ? 'A' : (window.state.eqBank || 'A');
             const num = parseFloat(val);
-            const label = document.getElementById(`eq-val-${bandIndex}`);
-            if (label) label.innerText = `${num > 0 ? '+' : ''}${num.toFixed(1)}dB`;
-            if (window.state.nodes.eqFilters && window.state.nodes.eqFilters[bandIndex] && window.state.ctx) {
+            if (bank === (window.state.eqBank || 'A')) {
+                const label = document.getElementById(`eq-val-${bandIndex}`);
+                if (label) label.innerText = `${num > 0 ? '+' : ''}${num.toFixed(1)}dB`;
+            }
+            const filters = bank === 'B' ? window.state.nodes.eqFiltersB : window.state.nodes.eqFilters;
+            if (filters && filters[bandIndex] && window.state.ctx) {
                 try {
-                    window.state.nodes.eqFilters[bandIndex].gain.setTargetAtTime(num, window.state.ctx.currentTime, 0.015);
+                    filters[bandIndex].gain.setTargetAtTime(num, window.state.ctx.currentTime, 0.015);
                 } catch(e){}
             }
+            if (!window.state.eqBanks) window.state.eqBanks = { A: new Array(EQ_BANDS.length).fill(0), B: new Array(EQ_BANDS.length).fill(0) };
+            window.state.eqBanks[bank][bandIndex] = num;
             if (window.state.peqDiamondMode) {
                 renderDiamondCurve();
             }
         };
+
+        // DUAL EQ MODE: crossfades the whole 10-band EQ from the active bank to the other one over CROSSFADE_SEC,
+        // using the equal-power curve above - a smooth A/B switch between two complete EQ curves, with no click
+        // and no dip in level at the midpoint. A no-op if the requested bank is already active.
+        const EQ_CROSSFADE_SEC = 0.15, EQ_CROSSFADE_STEPS = 64;
+        window.setEqActiveBank = function(bank) {
+            bank = bank === 'B' ? 'B' : 'A';
+            if ((window.state.eqBank || 'A') === bank) return;
+            window.state.eqBank = bank;
+            const gA = window.state.nodes.eqBankGainA, gB = window.state.nodes.eqBankGainB, c = window.state.ctx;
+            if (gA && gB && c) {
+                const now = c.currentTime, fadeIn = equalPowerCrossfadeCurve(EQ_CROSSFADE_STEPS), fadeOut = fadeIn.slice().reverse();
+                const curveA = bank === 'A' ? fadeIn : fadeOut, curveB = bank === 'A' ? fadeOut : fadeIn;
+                try { gA.gain.cancelScheduledValues(now); gA.gain.setValueCurveAtTime(curveA, now, EQ_CROSSFADE_SEC); } catch(e) { gA.gain.setTargetAtTime(bank === 'A' ? 1 : 0, now, 0.05); }
+                try { gB.gain.cancelScheduledValues(now); gB.gain.setValueCurveAtTime(curveB, now, EQ_CROSSFADE_SEC); } catch(e) { gB.gain.setTargetAtTime(bank === 'B' ? 1 : 0, now, 0.05); }
+            }
+            const faders = document.querySelectorAll ? document.querySelectorAll('[id^="eq-fader-"]') : [];
+            faders.forEach(f => { const i = parseInt(f.id.replace('eq-fader-', '')); const v = window.state.eqBanks && window.state.eqBanks[bank] ? window.state.eqBanks[bank][i] : 0; if (!isNaN(i) && v != null) { f.value = v; const label = document.getElementById(`eq-val-${i}`); if (label) label.innerText = `${v > 0 ? '+' : ''}${v.toFixed(1)}dB`; } });
+            if (window.state.peqDiamondMode) renderDiamondCurve();
+            window.notify(`EQ Bank ${bank} active (crossfaded)`, 'sliders');
+        };
+        window.toggleEqBank = function() { window.setEqActiveBank((window.state.eqBank || 'A') === 'B' ? 'A' : 'B'); };
 
         window.resetEQFlat = function() {
             for (let i = 0; i < EQ_BANDS.length; i++) {
@@ -2705,6 +2815,7 @@ window.navTabs = [
 
             if (param === 'master') {
                 const db = -60 + t * 70;
+                window.state.masterDb = db <= -59 ? -Infinity : db;   // read by window.rideLoudnessComp (Fletcher-Munson compensation) in startMeterLoop
                 const crVal = document.getElementById('cr-knob-val');
                 if (crVal) crVal.innerText = db <= -59 ? '-INF' : (db > 0 ? '+' : '') + db.toFixed(1) + ' dB';
                 if (window.state.nodes.masterGain && window.state.ctx) {
@@ -9534,6 +9645,32 @@ window.navTabs = [
             return ts.gainDb;
         };
 
+        // FLETCHER-MUNSON LOUDNESS CONTROL: rides the loudLow/loudHigh shelves (built in initAudioEngine) toward
+        // fletcherMunsonCompensation()'s numbers for the master fader's current dB (window.state.masterDb, kept
+        // current by handleKnobParam's 'master' case). window.state.loudnessComp.enabled off, or no master level
+        // yet, is a hard 0 dB - never rides toward a stale target while off. Glided the same fast-down / slow-up
+        // way as every other master-bus rider here, so turning the fader down doesn't snap the tone in at once.
+        const LOUD_GLIDE_DOWN = 0.12, LOUD_GLIDE_UP = 0.12;
+        window.rideLoudnessComp = function() {
+            const lc = window.state.loudnessComp;
+            if (!lc || !lc.enabled) { if (lc) { lc.lowDb = 0; lc.highDb = 0; } return { low: 0, high: 0 }; }
+            const target = fletcherMunsonCompensation(window.state.masterDb, lc.refDb);
+            lc.lowDb = (lc.lowDb || 0) + (target.low - (lc.lowDb || 0)) * (target.low > (lc.lowDb || 0) ? LOUD_GLIDE_UP : LOUD_GLIDE_DOWN);
+            lc.highDb = (lc.highDb || 0) + (target.high - (lc.highDb || 0)) * (target.high > (lc.highDb || 0) ? LOUD_GLIDE_UP : LOUD_GLIDE_DOWN);
+            return { low: lc.lowDb, high: lc.highDb };
+        };
+        window.toggleLoudnessComp = function(on) {
+            if (!window.state.loudnessComp) window.state.loudnessComp = { enabled: false, refDb: 0, lowDb: 0, highDb: 0 };
+            window.state.loudnessComp.enabled = on != null ? !!on : !window.state.loudnessComp.enabled;
+            window.notify('Loudness compensation ' + (window.state.loudnessComp.enabled ? 'ON' : 'OFF'), 'volume-up');
+            return window.state.loudnessComp.enabled;
+        };
+        window.setLoudnessRefDb = function(db) {
+            if (!window.state.loudnessComp) window.state.loudnessComp = { enabled: false, refDb: 0, lowDb: 0, highDb: 0 };
+            window.state.loudnessComp.refDb = Math.max(-60, Math.min(10, parseFloat(db) || 0));
+            return window.state.loudnessComp.refDb;
+        };
+
         // PER-CHANNEL NOISE GATE: a dual-mode downward processor on each channel strip's own noise gate stage
         // (window.state.nodes.channelGateGain[i]), independent of the master-bus auto volume / dynamic EQ above.
         // "gate" mode is a hard gate: once the input falls below threshold it rides toward the full floor
@@ -10031,6 +10168,9 @@ window.navTabs = [
                 const tsNode = window.state.nodes.transientGain;
                 if (tsNode && window.state.ctx) tsNode.gain.setTargetAtTime(Math.pow(10, tsDb / 20), window.state.ctx.currentTime, 0.02);
                 const tsReadout = document.getElementById('ts-gr'); if (tsReadout) tsReadout.textContent = (tsDb >= 0 ? '+' : '') + tsDb.toFixed(1) + ' dB';
+                const loud = window.rideLoudnessComp();
+                const loudLowNode = window.state.nodes.loudLow, loudHighNode = window.state.nodes.loudHigh;
+                if (loudLowNode && loudHighNode && window.state.ctx) { loudLowNode.gain.setTargetAtTime(loud.low, window.state.ctx.currentTime, 0.05); loudHighNode.gain.setTargetAtTime(loud.high, window.state.ctx.currentTime, 0.05); }
                 requestAnimationFrame(updateMeters);
             }
             requestAnimationFrame(updateMeters);
@@ -18434,16 +18574,21 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
 
         // ── settings ──
         const DEF_SPK = () => ({ hpOn: false, hp: 80, lpOn: false, lp: 16000, eq: [{ hz: 100, db: 0, q: 1 }, { hz: 1000, db: 0, q: 1 }, { hz: 8000, db: 0, q: 1 }], limOn: false, thr: -3, rel: 120, att: 2,
-            ampW: 500, ampOhm: 8, spkW: 300, spkOhm: 8, sens: 98, count: 1, dist: 10, sub: false });
+            ampW: 500, ampOhm: 8, spkW: 300, spkOhm: 8, sens: 98, count: 1, dist: 10, sub: false,
+            // phase-aligned Linkwitz-Riley quad crossover (see linkwitzRileyQuadBands): off by default, spliced in after the HP/LP pair above, before the 3-band EQ.
+            xo: { on: false, f1: 150, f2: 800, f3: 4000, gain: [0, 0, 0, 0], mute: [false, false, false, false] } });
         function sanitize(raw) {
             const r = raw && typeof raw === 'object' ? raw : {}, arr = (a, i) => (Array.isArray(a) ? a[i] : undefined);
             return {
                 hw: { key: typeof (r.hw || {}).key === 'string' ? r.hw.key.slice(0, 120) : null, map: Array.from({ length: N_MTX }, (_, m) => Math.round(num(arr((r.hw || {}).map, m), 0, 32, 0))) },
-                spk: Array.from({ length: N_MTX }, (_, m) => { const o = arr(r.spk, m) || {}, d = DEF_SPK(); return {
+                spk: Array.from({ length: N_MTX }, (_, m) => { const o = arr(r.spk, m) || {}, d = DEF_SPK();
+                    const ox = o.xo || {}, f1 = num(ox.f1, 20, 2000, d.xo.f1), f2 = num(ox.f2, f1 + 20, 8000, Math.max(d.xo.f2, f1 + 20)), f3 = num(ox.f3, f2 + 20, 20000, Math.max(d.xo.f3, f2 + 20));
+                    return {
                     hpOn: !!o.hpOn, hp: num(o.hp, 20, 500, d.hp), lpOn: !!o.lpOn, lp: num(o.lp, 500, 20000, d.lp),
                     eq: d.eq.map((e, i) => { const x = arr(o.eq, i) || {}; return { hz: num(x.hz, 20, 20000, e.hz), db: num(x.db, -18, 18, 0), q: num(x.q, 0.3, 12, 1) }; }),
                     limOn: !!o.limOn, thr: num(o.thr, -30, 0, d.thr), rel: num(o.rel, 10, 1000, d.rel), att: num(o.att, 0.1, 20, d.att),
-                    ampW: num(o.ampW, 1, 20000, d.ampW), ampOhm: num(o.ampOhm, 1, 32, d.ampOhm), spkW: num(o.spkW, 1, 20000, d.spkW), spkOhm: num(o.spkOhm, 1, 32, d.spkOhm), sens: num(o.sens, 70, 130, d.sens), count: Math.round(num(o.count, 1, 64, 1)), dist: num(o.dist, 1, 200, d.dist), sub: !!o.sub }; }),
+                    ampW: num(o.ampW, 1, 20000, d.ampW), ampOhm: num(o.ampOhm, 1, 32, d.ampOhm), spkW: num(o.spkW, 1, 20000, d.spkW), spkOhm: num(o.spkOhm, 1, 32, d.spkOhm), sens: num(o.sens, 70, 130, d.sens), count: Math.round(num(o.count, 1, 64, 1)), dist: num(o.dist, 1, 200, d.dist), sub: !!o.sub,
+                    xo: { on: !!ox.on, f1, f2, f3, gain: Array.from({ length: 4 }, (_, i) => num(arr(ox.gain, i), -24, 24, 0)), mute: Array.from({ length: 4 }, (_, i) => !!arr(ox.mute, i)) } }; }),
                 fx: Array.from({ length: N_BUS }, (_, b) => { const o = arr(r.fx, b) || {}; return { type: ['reverb', 'delay', 'chorus'].includes(o.type) ? o.type : 'none', time: num(o.time, 20, 1500, 350), fb: num(o.fb, 0, 90, 35), decay: num(o.decay, 0.2, 8, 2.2), level: num(o.level, -60, 10, 0) }; }),
                 mic: { on: !!(r.mic || {}).on, prom: num((r.mic || {}).prom, 8, 30, 15) },
                 reg: { on: !!(r.reg || {}).on, target: num((r.reg || {}).target, -40, -3, -18), max: num((r.reg || {}).max, 1, 12, 6) },
@@ -18489,10 +18634,23 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             this.sink = c.createGain(); this.sink.gain.value = 0; this.sink.connect(c.destination);
             for (let m = 0; m < N_MTX; m++) {
                 const s = { hp1: mk('highpass', 10, 0.7071), hp2: mk('highpass', 10, 0.7071), lp1: mk('lowpass', Math.min(20000, c.sampleRate / 2 - 100), 0.7071), lp2: mk('lowpass', Math.min(20000, c.sampleRate / 2 - 100), 0.7071),
-                    eq: [mk('peaking', 100, 1), mk('peaking', 1000, 1), mk('peaking', 8000, 1)], nt: [0, 1, 2, 3].map(() => mk('peaking', 1000, 30)), lim: c.createDynamicsCompressor() };
+                    eq: [mk('peaking', 100, 1), mk('peaking', 1000, 1), mk('peaking', 8000, 1)], nt: [0, 1, 2, 3].map(() => mk('peaking', 1000, 30)), lim: c.createDynamicsCompressor(),
+                    xoIn: c.createGain(), xoOut: c.createGain(), xoOn: null };
                 s.nt.forEach(n => { n.gain.value = 0; });
-                let prev = s.hp1; s.hp1.connect(s.hp2); s.hp2.connect(s.lp1); s.lp1.connect(s.lp2); prev = s.lp2;
-                [...s.eq, ...s.nt].forEach(n => { prev.connect(n); prev = n; });
+                s.hp1.connect(s.hp2); s.hp2.connect(s.lp1); s.lp1.connect(s.lp2);
+                // phase-aligned Linkwitz-Riley quad crossover (4 bands, see linkwitzRileyQuadBands): always built,
+                // spliced in between the HP/LP pair above and the 3-band EQ below only while xo.on (applySpk
+                // toggles which one s.lp2 feeds); xoOut is always wired into the EQ, silent while nothing feeds
+                // xoIn, so this is a true bypass - off is exactly the old direct lp2 -> EQ wiring.
+                s.xoBands = linkwitzRileyQuadBands(150, 800, 4000).map(band => {
+                    const stages = band.stages.map(st => mk(st.type, st.freq, 0.7071));
+                    for (let i = 1; i < stages.length; i++) stages[i - 1].connect(stages[i]);
+                    const g = c.createGain();
+                    stages[stages.length - 1].connect(g); s.xoIn.connect(stages[0]); g.connect(s.xoOut);
+                    return { name: band.name, stages, gain: g };
+                });
+                s.xoOut.connect(s.eq[0]);
+                let prev = s.eq[0]; [s.eq[1], s.eq[2], ...s.nt].forEach(n => { prev.connect(n); prev = n; });
                 try { M.mtxIn[m].disconnect(M.mtxDelay[m]); } catch (e) { /* not connected */ }
                 M.mtxIn[m].connect(s.hp1); prev.connect(M.mtxDelay[m]);
                 try { M.mtxFader[m].disconnect(M.mtxAn[m]); } catch (e) { /* not connected */ }
@@ -18523,6 +18681,18 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             f(s.lim.threshold, o.limOn ? o.thr : 0); f(s.lim.ratio, o.limOn ? 20 : 1); f(s.lim.attack, o.att / 1000); f(s.lim.release, o.rel / 1000);
             (this.notches[m] || []).forEach((n, i) => { if (s.nt[i]) { f(s.nt[i].frequency, n.hz); f(s.nt[i].gain, n.db); } });
             for (let i = (this.notches[m] || []).length; i < 4; i++) f(s.nt[i].gain, 0);
+            // phase-aligned Linkwitz-Riley quad crossover: retune every band's cascaded stages from the plan
+            // linkwitzRileyQuadBands gives for the current f1/f2/f3, set each band's own gain (muted = 0, not just
+            // a negative dB, since a gain node has no floor), and only rewire the splice point (lp2 -> xoIn vs
+            // lp2 -> EQ direct) when xo.on actually changed - a plain parameter tweak never touches the topology.
+            const xo = o.xo, plan = linkwitzRileyQuadBands(xo.f1, xo.f2, xo.f3);
+            s.xoBands.forEach((band, bi) => { band.stages.forEach((st, si) => f(st.frequency, plan[bi].stages[si].freq)); f(band.gain.gain, xo.mute[bi] ? 0 : lin(xo.gain[bi])); });
+            if (s.xoOn !== xo.on) {
+                try { s.lp2.disconnect(s.eq[0]); } catch (e) { /* not connected */ }
+                try { s.lp2.disconnect(s.xoIn); } catch (e) { /* not connected */ }
+                s.lp2.connect(xo.on ? s.xoIn : s.eq[0]);
+                s.xoOn = xo.on;
+            }
         };
         X.applyFx = function (b) {
             const f = this.fx[b], o = this.cfg.fx[b], c = ctx(); if (!f || !c) return;
@@ -18543,6 +18713,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
         };
         X.setSpk = function (m, patch) { Object.assign(this.cfg.spk[m], patch); this.cfg = sanitize(this.cfg); this.persist(); this.applySpk(m); };
         X.setFx = function (b, patch) { Object.assign(this.cfg.fx[b], patch); this.cfg = sanitize(this.cfg); this.persist(); this.applyFx(b); };
+        X.setXo = function (m, patch) { Object.assign(this.cfg.spk[m].xo, patch); this.cfg = sanitize(this.cfg); this.persist(); this.applySpk(m); };   // partial update of one matrix output's crossover (merges into xo, unlike setSpk which would replace the whole xo object)
 
         // ── hardware outputs ──
         const API_RANK = [/asio/i, /wasapi/i, /core ?audio/i, /jack/i, /alsa/i, /wdm|kernel/i, /direct ?sound/i, /mme/i];
