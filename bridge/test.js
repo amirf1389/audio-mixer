@@ -4308,6 +4308,46 @@ test('dual EQ mode: two complete 10-band EQ banks crossfade smoothly (window.set
   assert.strictEqual(w.state.eqBank, 'A');
 });
 
+test('"start the console" banner dismisses itself whenever the engine actually starts, not only from its own two buttons; the EQ page\'s RTA overlay has a real on-screen toggle', async () => {
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  // the banner's own two buttons already clear it inline - that part is unchanged
+  for (const s of ["window.masterToggle(); document.getElementById('audio-api-banner').classList.remove('show');", "window.grooveEngine.toggle(); document.getElementById('audio-api-banner').classList.remove('show');"]) assert.ok(html.includes(s), s);
+
+  // window.masterToggle's ENGAGE path also dismisses it (not just the banner's own START CONSOLE button) - same state the "nag" timer checks (window.state.active)
+  const mtStart = html.indexOf('window.masterToggle = async function()'), mtEnd = html.indexOf('// KNOX SECURITY');
+  assert.ok(mtStart > 0 && mtEnd > mtStart);
+  const masterToggleBody = html.slice(mtStart, mtEnd);
+  const activeBranch = masterToggleBody.slice(masterToggleBody.indexOf('if (window.state.active) {'), masterToggleBody.indexOf('} else {'));
+  assert.ok(activeBranch.includes("audio-api-banner") && activeBranch.includes("classList.remove('show')"), 'masterToggle\'s active branch must dismiss the banner itself, not rely on which button called it');
+
+  // window.grooveEngine.start() (DEMO AUDIO header/media buttons, not just the banner's own PLAY DEMO) also dismisses it
+  const geStart = html.indexOf('async start() {'), geEnd = html.indexOf('stop() {');
+  assert.ok(geStart > 0 && geEnd > geStart);
+  const startBody = html.slice(geStart, geEnd);
+  assert.ok(startBody.includes('window.state.active = true') && startBody.indexOf("audio-api-banner") > startBody.indexOf('window.state.active = true'), 'grooveEngine.start() must dismiss the banner right after marking the engine active');
+
+  // run masterToggle for real (mocked DOM): it clears a banner left showing from a page load that never touched the banner's own buttons
+  const start = html.indexOf('window.masterToggle = async function()'), end = html.indexOf('// EXIT NOTIFICATION:');
+  assert.ok(start > 0 && end > start);
+  const bannerClasses = new Set(['show']);
+  const elements = {
+    'master-power': { className: '' }, 'status-led': { className: '' }, 'power-text': { innerText: '' }, 'audio-confirm-modal': { style: {} },
+    'audio-api-banner': { classList: { remove: c => bannerClasses.delete(c), contains: c => bannerClasses.has(c) } },
+  };
+  const document_ = { getElementById: id => elements[id] || null };
+  const window_ = { state: { active: false }, universalAsioSdk: null };
+  const masterToggle = new Function('window', 'document', 'initAudioEngine', html.slice(start, end) + '\nreturn window.masterToggle;')(window_, document_, async () => {});
+  assert.strictEqual(bannerClasses.has('show'), true, 'starts showing, same as a fresh page load that never touched the banner');
+  await masterToggle();
+  assert.strictEqual(window_.state.active, true);
+  assert.strictEqual(bannerClasses.has('show'), false, 'ENGAGE must clear the banner even though it never called the banner\'s own onclick handlers');
+
+  // the EQ page's RTA overlay toggle (window.toggleEqRtaMode, already real logic) now has an actual button wired to it, on by default to match window.rtaEqEnabled's default
+  assert.ok(html.includes('<button id="btn-eq-rta-toggle" onclick="window.toggleEqRtaMode()"'));
+  const btnMarkup = html.slice(html.indexOf('<button id="btn-eq-rta-toggle"'), html.indexOf('</button>', html.indexOf('<button id="btn-eq-rta-toggle"')));
+  assert.match(btnMarkup, />RTA: ON$/, 'starts in the ON state, matching window.rtaEqEnabled = true');
+});
+
 test('phase-aligned quad crossover per matrix output (bus-outs): config validated and sanitized, LR4 bands always built, splice point only rewired when xo.on changes', () => {
   const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
   const busOutsSc = html.slice(html.indexOf('<script id="bus-outs">'), html.indexOf('<script id="rt-engine">'));
