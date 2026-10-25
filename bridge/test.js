@@ -210,6 +210,62 @@ test('catalog endpoints: GET list only; the driver download route is gone', asyn
   server.close();
 });
 
+test('third-party SDK plugin slots (AudioShake, GPU Audio, Camb.ai, Clarity Voice Studio): honest configured/wired state, never a fake result', async () => {
+  const sdk = require('./sdk');
+  for (const id of sdk.ids()) { sdk.unregisterClient(id); delete process.env[sdk.provider(id).envKey]; }
+  try {
+    let st = sdk.status();
+    assert.deepStrictEqual(st.map(s => s.id).sort(), ['audioshake', 'cambai', 'clarity-voice', 'gpu-audio']);
+    assert.ok(st.every(s => s.configured === false && s.wired === false && s.ready === false && typeof s.purpose === 'string' && s.purpose.length > 0 && /^[A-Z0-9_]+$/.test(s.envKey)));
+    // no API key, no client: process() refuses rather than inventing output
+    await assert.rejects(sdk.process('audioshake', {}), /not configured.*AUDIOSHAKE_API_KEY/s);
+    assert.throws(() => sdk.provider('nope'), /unknown SDK provider/);
+    assert.throws(() => sdk.registerClient('cambai', {}), /client\.process must be a function/);
+    // API key present but no client registered: still refuses, names the missing package
+    process.env.GPU_AUDIO_API_KEY = 'test-key-123';
+    assert.strictEqual(sdk.configured('gpu-audio'), true); assert.strictEqual(sdk.wired('gpu-audio'), false);
+    await assert.rejects(sdk.process('gpu-audio', {}), /no SDK client installed.*@gpu-audio\/sdk/s);
+    // once both a key and a real client are present, the job reaches the client and nothing else is faked
+    const calls = [];
+    sdk.registerClient('gpu-audio', { process: async job => { calls.push(job); return { ok: true, from: 'real-client' }; } });
+    assert.strictEqual(sdk.wired('gpu-audio'), true);
+    const r = await sdk.process('gpu-audio', { op: 'eq' });
+    assert.deepStrictEqual(r, { ok: true, from: 'real-client' }); assert.deepStrictEqual(calls, [{ op: 'eq' }]);
+    st = sdk.status(); assert.strictEqual(st.find(s => s.id === 'gpu-audio').ready, true);
+    assert.ok(st.filter(s => s.id !== 'gpu-audio').every(s => s.ready === false), 'the other three providers are unaffected');
+  } finally { for (const id of sdk.ids()) { sdk.unregisterClient(id); delete process.env[sdk.provider(id).envKey]; } }
+});
+
+test('GET /api/sdks reports the SDK plugin slots over HTTP', async () => {
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const port = server.address().port, base = `http://127.0.0.1:${port}`;
+  const j = await (await fetch(base + '/api/sdks')).json();
+  assert.strictEqual(j.ok, true);
+  assert.ok(Array.isArray(j.providers) && j.providers.length === 4 && j.providers.every(p => 'configured' in p && 'wired' in p && 'ready' in p));
+  assert.strictEqual((await fetch(base + '/api/sdks', { method: 'POST' })).status, 405);
+  server.closeAllConnections();
+  server.close();
+});
+
+test('WASAPI exclusive mode: honest status, never claims availability RtAudio does not have', async () => {
+  const wasapiExclusive = require('./wasapi-exclusive');
+  const st = wasapiExclusive.status();
+  assert.strictEqual(typeof st.available, 'boolean'); assert.strictEqual(typeof st.wired, 'boolean');
+  if (process.platform !== 'win32') { assert.deepStrictEqual(st, { available: false, wired: false, reason: 'Windows only' }); assert.throws(() => wasapiExclusive.listEndpoints(), /win32|Windows only|not built/i); }
+  assert.ok(!st.available || st.reason === null || typeof st.reason === 'string');
+  // bridge/audify.js itself must still say the same thing it always has: RtAudio's WASAPI is shared-mode only
+  const audifySrc = fsx.readFileSync(pathx.join(__dirname, 'audify.js'), 'utf8');
+  assert.match(audifySrc, /WASAPI shared mode \(the only mode RtAudio has\)/);
+
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const port = server.address().port, base = `http://127.0.0.1:${port}`;
+  const j = await (await fetch(base + '/api/wasapi-exclusive')).json();
+  assert.strictEqual(j.ok, true); assert.strictEqual(typeof j.available, 'boolean'); assert.strictEqual(typeof j.wired, 'boolean');
+  assert.strictEqual((await fetch(base + '/api/wasapi-exclusive', { method: 'POST' })).status, 405);
+  server.closeAllConnections();
+  server.close();
+});
+
 test('client: argument parsing and the browser opener only accept localhost URLs', () => {
   const { parseArgs, openCommand } = require('../client/cli');
   assert.deepStrictEqual(parseArgs([]), { cmd: 'start', arg: null, port: 8765, open: true, help: false });
@@ -1393,10 +1449,10 @@ test('repository layout: one folder per system with its sources and release file
   const lay = require('../scripts/layout'), mk = require('../scripts/make-update'), root = pathx.join(__dirname, '..');
   const top = fsx.readdirSync(root, { withFileTypes: true }).filter(e => !e.name.startsWith('.') && e.name !== 'node_modules' && e.name !== 'dist');
   const dirs = top.filter(e => e.isDirectory()).map(e => e.name).sort(), files = top.filter(e => e.isFile()).map(e => e.name).sort();
-  assert.deepStrictEqual(dirs, ['bridge', 'client', 'deploy', 'drivers', 'engine', 'npm-installer', 'ota-server', 'platforms', 'releases', 'scripts'], 'the top level is minimal: systems (under platforms/) + shared code');
+  assert.deepStrictEqual(dirs, ['bridge', 'client', 'deploy', 'drivers', 'engine', 'licenses', 'native', 'npm-installer', 'ota-server', 'platforms', 'releases', 'scripts'], 'the top level is minimal: systems (under platforms/) + shared code, third-party license texts (licenses/) and opt-in native addons (native/)');
   assert.deepStrictEqual(fsx.readdirSync(pathx.join(root, 'platforms')).sort(), ['android', 'electron', 'ios', 'linux', 'macos', 'windows'], 'one folder per system under platforms/ (electron: an additional, optional packaging, not an installed-release OS target)');
   assert.deepStrictEqual(files, ['ADMIN-LICENSE.md', 'Additional Terms & Conditions', 'LICENSE', 'LICENSE.txt', 'PROJECT-README.md', 'README.md', 'RELEASING.md', 'SECURITY.md', 'Steinberg ASIO Licensing Agreement.pdf', 'Steinberg ASIO SDK 2.3.pdf', 'Steinberg ASIO Usage Guidelines.pdf', 'boot.html', 'changes.txt', 'index.html', 'package.json'], 'only the web app, the project papers and the Steinberg ASIO SDK papers at the root');
-  assert.deepStrictEqual(fsx.readdirSync(pathx.join(root, 'releases')).sort(), ['android', 'native', 'update.json', 'windows'], 'releases/ holds the manifest that installed apps fetch, the files it lists (one folder per system) and the native programs');
+  assert.deepStrictEqual(fsx.readdirSync(pathx.join(root, 'releases')).sort(), ['android', 'ios', 'linux', 'macos', 'native', 'update.json', 'windows'], 'releases/ holds the manifest that installed apps fetch, the files it lists (one folder per system) and the native programs');
   // every file that goes into a package exists where the layout says; the package keeps its own paths
   const build = require('../scripts/build'), src = fsx.readFileSync(pathx.join(root, 'scripts', 'build.js'), 'utf8');
   const list = [...src.slice(src.indexOf('const FILES = ['), src.indexOf('];', src.indexOf('const FILES = ['))).matchAll(/'([^']+)'/g)].map(m => m[1]).filter(f => /[./]/.test(f));
@@ -1849,6 +1905,17 @@ test('Web Audio -> ASIO with a Bluetooth system output: a page rate the devices 
   assert.ok(html.includes("self.autoLinkAsio('bridge connected')") && html.includes("autoLinkAsio('engine started')"), 'linked when the bridge connects and when the engine starts');
 });
 
+test("apiKey() matches RtAudio::getApiDisplayName()'s real strings for every compiled-in API (not a guess: these are rtaudio_api_names[][1] from audify's vendored RtAudio.cpp)", () => {
+  const { apiKey } = require('./audify');
+  // api, RtAudio display name -> our enum key (RtAudio.cpp: const char* rtaudio_api_names[][2])
+  const real = [
+    ['Unknown', null], ['CoreAudio', 'MACOSX_CORE'], ['ALSA', 'LINUX_ALSA'], ['Jack', 'UNIX_JACK'],
+    ['Pulse', 'LINUX_PULSE'], ['OpenSoundSystem', 'LINUX_OSS'], ['ASIO', 'WINDOWS_ASIO'],
+    ['WASAPI', 'WINDOWS_WASAPI'], ['DirectSound', 'WINDOWS_DS'], ['Dummy', null],
+  ];
+  for (const [name, key] of real) assert.strictEqual(apiKey(name), key, name);
+});
+
 test('endpoints: /api/license (BASIC by default), activation needs a valid key, updates need PRO', async () => {
   process.env.BRIDGE_LICENSE_FILE = pathx.join(fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'lep-')), 'license.json');
   await new Promise(r => server.listen(0, '127.0.0.1', r));
@@ -2157,8 +2224,7 @@ test('android app: page transform, version code, launcher icon, sources', () => 
   const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
   const out = apk.transformHtml(html);
   assert.ok(!/src="https:\/\/cdn\.tailwindcss\.com"/.test(out) && !/cdnjs\.cloudflare\.com/.test(out) && !/fonts\.googleapis\.com/.test(out));   // everything the page needs is bundled
-  assert.ok(out.includes('href="tw.css"') && out.includes('href="fa/css/all.min.css"') && out.includes("@import url('fonts/fonts.css');"));
-  assert.strictEqual(out.length > html.length - 400 && out.length < html.length + 400, true);
+  assert.strictEqual(out, html, 'index.html is already self-contained (no CDN links left to bundle): transformHtml is a no-op on it');
   const p = apk.png(48, apk.iconPixel); assert.strictEqual(p.subarray(0, 8).toString('hex'), '89504e470d0a1a0a'); assert.strictEqual(p.readUInt32BE(16), 48);
   assert.deepStrictEqual(apk.iconPixel(0, 0), [0, 0, 0, 0]);                                         // rounded corner is transparent
   const man = fsx.readFileSync(pathx.join(__dirname, '..', 'platforms', 'android', 'AndroidManifest.xml'), 'utf8');
@@ -4134,6 +4200,141 @@ test('auto volume control (dual mode) + dynamic EQ: master-bus gain riders wired
   // ampCalcLive reads the live auto-volume state instead of taking avGainDb from the caller
   const live = ampCalcLive({ ...base, sub: true });
   assert.ok(Math.abs(live.avReduction - 4) < 1e-9, 'ampCalcLive must read window.state.autoVolume.gainDb on its own');
+});
+
+test('DSP math helpers: equal-power EQ-bank crossfade curve, Fletcher-Munson loudness compensation, phase-aligned Linkwitz-Riley quad crossover', () => {
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  const start = html.indexOf('// DSP MATH HELPERS'), end = html.indexOf('// 15 STANDARD PRESETS');
+  assert.ok(start > 0 && end > start);
+  const { equalPowerCrossfadeCurve, fletcherMunsonCompensation, linkwitzRileyQuadBands } = new Function(html.slice(start, end) + '\nreturn { equalPowerCrossfadeCurve, fletcherMunsonCompensation, linkwitzRileyQuadBands };')();
+
+  // equal-power crossfade: starts at 0, ends at 1, monotonically increasing, and at every point the fade-in curve
+  // and its reverse (the fade-out complement) sum their squares to 1 (constant power) - sin^2 + cos^2 = 1
+  const curve = equalPowerCrossfadeCurve(64);
+  assert.strictEqual(curve.length, 64);
+  assert.ok(Math.abs(curve[0] - 0) < 1e-9 && Math.abs(curve[63] - 1) < 1e-9);
+  for (let i = 1; i < curve.length; i++) assert.ok(curve[i] >= curve[i - 1], 'must be non-decreasing at index ' + i);
+  const reversed = curve.slice().reverse();
+  for (let i = 0; i < curve.length; i++) assert.ok(Math.abs(curve[i] * curve[i] + reversed[i] * reversed[i] - 1) < 1e-5, 'constant power at index ' + i);   // Float32Array precision
+  assert.strictEqual(equalPowerCrossfadeCurve(1).length, 2, 'clamped to at least 2 points');
+
+  // Fletcher-Munson loudness compensation: no boost at or above the reference level, increasing boost below it,
+  // bass boosted more than treble, both capped, never negative
+  assert.deepStrictEqual(fletcherMunsonCompensation(0, 0), { low: 0, high: 0 });
+  assert.deepStrictEqual(fletcherMunsonCompensation(5, 0), { low: 0, high: 0 }, 'above the reference level: no boost');
+  const mid = fletcherMunsonCompensation(-20, 0), far = fletcherMunsonCompensation(-40, 0);
+  assert.ok(mid.low > 0 && mid.high > 0 && mid.low > mid.high, 'bass is boosted more than treble below the reference');
+  assert.ok(far.low >= mid.low && far.high >= mid.high, 'boost increases monotonically further below the reference');
+  const extreme = fletcherMunsonCompensation(-200, 0);
+  assert.ok(extreme.low <= 12 && extreme.high <= 6, 'both shelves are capped');
+  assert.deepStrictEqual(fletcherMunsonCompensation(null, 0), { low: 0, high: 0 });
+  assert.deepStrictEqual(fletcherMunsonCompensation(-Infinity, 0), { low: 0, high: 0 });
+  const atRef0 = fletcherMunsonCompensation(-10, 0), atRef10 = fletcherMunsonCompensation(-10, 10);
+  assert.ok(atRef10.low > atRef0.low, 'a higher reference level means more boost at the same master dB');
+
+  // phase-aligned Linkwitz-Riley quad crossover: 4 bands, each an LR4 (two same-type, same-freq cascaded stages per
+  // corner - the "dual 4th-order split"), band edges meet the requested crossover frequencies exactly
+  const bands = linkwitzRileyQuadBands(150, 800, 4000);
+  assert.strictEqual(bands.length, 4);
+  assert.deepStrictEqual(bands.map(b => b.name), ['low', 'low-mid', 'high-mid', 'high']);
+  assert.deepStrictEqual(bands[0].stages, [{ type: 'lowpass', freq: 150 }, { type: 'lowpass', freq: 150 }]);
+  assert.deepStrictEqual(bands[1].stages, [{ type: 'highpass', freq: 150 }, { type: 'highpass', freq: 150 }, { type: 'lowpass', freq: 800 }, { type: 'lowpass', freq: 800 }]);
+  assert.deepStrictEqual(bands[2].stages, [{ type: 'highpass', freq: 800 }, { type: 'highpass', freq: 800 }, { type: 'lowpass', freq: 4000 }, { type: 'lowpass', freq: 4000 }]);
+  assert.deepStrictEqual(bands[3].stages, [{ type: 'highpass', freq: 4000 }, { type: 'highpass', freq: 4000 }]);
+  // every stage is a Butterworth 2-pole (two of them per corner is what makes it 4th-order / LR4); no band is empty
+  assert.ok(bands.every(b => b.stages.length >= 2 && b.stages.length % 2 === 0));
+  assert.throws(() => linkwitzRileyQuadBands(800, 150, 4000), /strictly increasing/, 'out-of-order corners are refused');
+  assert.throws(() => linkwitzRileyQuadBands(0, 800, 4000), /positive/);
+  assert.throws(() => linkwitzRileyQuadBands(150, 150, 4000), /strictly increasing/, 'equal corners are refused (zero-width band)');
+});
+
+test('dual EQ mode: two complete 10-band EQ banks crossfade smoothly (window.setEqActiveBank); bank A matches the old single-chain default exactly', () => {
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  for (const s of [
+    'window.state.nodes.eqFilters = []; window.state.nodes.eqFiltersB = [];',
+    'const eqBankGainA = window.state.ctx.createGain(); eqBankGainA.gain.setValueAtTime(1,',
+    'const eqBankGainB = window.state.ctx.createGain(); eqBankGainB.gain.setValueAtTime(0,',
+    'window.state.nodes.eqBankGainA = eqBankGainA;', 'window.state.nodes.eqBankGainB = eqBankGainB;',
+    'window.setEqActiveBank = function', 'window.toggleEqBank = function',
+    'loudLow.type = \'lowshelf\'', 'loudHigh.type = \'highshelf\'', 'window.state.nodes.loudLow = loudLow;', 'window.state.nodes.loudHigh = loudHigh;',
+  ]) assert.ok(html.includes(s), s);
+
+  // bank A is built first, from the loudness stage's output, and bank A's array keeps the historic "eqFilters" name
+  const dualStart = html.indexOf('// FLETCHER-MUNSON LOUDNESS COMPENSATION:'), dualEnd = html.indexOf('// DYNAMIC EQ: one extra peaking band');
+  assert.ok(dualStart > 0 && dualEnd > dualStart);
+  const dualBody = html.slice(dualStart, dualEnd);
+  assert.ok(dualBody.indexOf('window.state.nodes.eqFilters.push(bq)') < dualBody.indexOf('window.state.nodes.eqFiltersB.push(bq)'), 'bank A is built before bank B');
+  assert.ok(dualBody.includes('let lastFilter = eqBankMerge;'), 'the merged dual-EQ output becomes lastFilter for the rest of the chain (dynamic EQ, saturation, ...)');
+
+  // run updateEQBand / setEqActiveBank / toggleEqBank for real (same extraction + mock-window technique as auto volume above)
+  const start = html.indexOf('// 10-BAND EQ CONTROLS'), end = html.indexOf('window.resetEQFlat = function');
+  assert.ok(start > 0 && end > start);
+  const src = html.slice(start, end) + "\n" + html.slice(html.indexOf('function equalPowerCrossfadeCurve'), html.indexOf('function fletcherMunsonCompensation'));
+  const mkCtx = () => ({ currentTime: 0 });
+  const mkGain = () => ({ gain: { value: 0, calls: [], setTargetAtTime(v) { this.value = v; this.calls.push(['target', v]); }, setValueCurveAtTime(curve) { this.value = curve[curve.length - 1]; this.calls.push(['curve', curve.slice()]); }, cancelScheduledValues() {} } });
+  const mkFilters = n => Array.from({ length: n }, () => mkGain());
+  const notifications = [];
+  const mkWindow = () => {
+    const gA = mkGain(), gB = mkGain(); gA.gain.value = 1; gB.gain.value = 0;
+    return { state: { ctx: mkCtx(), eqBank: 'A', eqBanks: { A: new Array(10).fill(0), B: new Array(10).fill(0) }, nodes: { eqFilters: mkFilters(10), eqFiltersB: mkFilters(10), eqBankGainA: gA, eqBankGainB: gB } }, notify: m => notifications.push(m) };
+  };
+  const document_ = { getElementById: () => null, querySelectorAll: () => [] };
+  const w = mkWindow();
+  const fn = new Function('window', 'document', src + '\nreturn { updateEQBand: window.updateEQBand, setEqActiveBank: window.setEqActiveBank, toggleEqBank: window.toggleEqBank };')(w, document_);
+
+  // bank A is the default active bank: a 2-arg updateEQBand call touches bank A's filter and stored value, never bank B's
+  fn.updateEQBand(2, '4.5');
+  assert.ok(Math.abs(w.state.nodes.eqFilters[2].gain.value - 4.5) < 1e-9);
+  assert.strictEqual(w.state.nodes.eqFiltersB[2].gain.value, 0);
+  assert.strictEqual(w.state.eqBanks.A[2], 4.5);
+  // an explicit 3rd-argument bank write never touches the active bank's filter or the active-bank stored array
+  fn.updateEQBand(5, '-6', 'B');
+  assert.ok(Math.abs(w.state.nodes.eqFiltersB[5].gain.value - -6) < 1e-9);
+  assert.strictEqual(w.state.nodes.eqFilters[5].gain.value, 0);
+  assert.strictEqual(w.state.eqBanks.B[5], -6);
+
+  // switching banks crossfades both gain nodes with a value curve (not a step), and is a no-op when already on that bank
+  notifications.length = 0;
+  fn.setEqActiveBank('B');
+  assert.strictEqual(w.state.eqBank, 'B');
+  assert.strictEqual(w.state.nodes.eqBankGainA.gain.calls[0][0], 'curve'); assert.strictEqual(w.state.nodes.eqBankGainB.gain.calls[0][0], 'curve');
+  assert.ok(Math.abs(w.state.nodes.eqBankGainA.gain.value - 0) < 1e-6, 'bank A fades out to (near) silent');
+  assert.ok(Math.abs(w.state.nodes.eqBankGainB.gain.value - 1) < 1e-6, 'bank B fades in to (near) full');
+  assert.ok(notifications.some(n => /Bank B active \(crossfaded\)/.test(n)));
+  const callsBefore = w.state.nodes.eqBankGainA.gain.calls.length;
+  fn.setEqActiveBank('B');   // already active: no-op, no extra crossfade scheduled
+  assert.strictEqual(w.state.nodes.eqBankGainA.gain.calls.length, callsBefore);
+  fn.toggleEqBank();
+  assert.strictEqual(w.state.eqBank, 'A');
+});
+
+test('phase-aligned quad crossover per matrix output (bus-outs): config validated and sanitized, LR4 bands always built, splice point only rewired when xo.on changes', () => {
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  const busOutsSc = html.slice(html.indexOf('<script id="bus-outs">'), html.indexOf('<script id="rt-engine">'));
+  for (const s of [
+    'xo: { on: false, f1: 150, f2: 800, f3: 4000, gain: [0, 0, 0, 0], mute: [false, false, false, false] }',
+    'xoIn: c.createGain(), xoOut: c.createGain(), xoOn: null',
+    's.xoBands = linkwitzRileyQuadBands(150, 800, 4000).map(band =>',
+    's.xoOut.connect(s.eq[0]);',
+    'plan = linkwitzRileyQuadBands(xo.f1, xo.f2, xo.f3);',
+    'if (s.xoOn !== xo.on) {',
+    'X.setXo = function (m, patch)',
+  ]) assert.ok(busOutsSc.includes(s), s);
+
+  // sanitize(): crossover frequencies are clamped and forced strictly increasing; gain/mute arrays are always length 4
+  const constSeg = busOutsSc.slice(busOutsSc.indexOf('const N_BUS = 16'), busOutsSc.indexOf('const $ = id =>'));
+  const helperSeg = busOutsSc.slice(busOutsSc.indexOf('const num = (v, lo, hi, d) =>'), busOutsSc.indexOf('// ── settings ──'));
+  const defSanSeg = busOutsSc.slice(busOutsSc.indexOf('const DEF_SPK = () =>'), busOutsSc.indexOf('const load = () =>'));
+  const src = constSeg + helperSeg + defSanSeg + "\nreturn { sanitize, DEF_SPK };";
+  const { sanitize } = new Function(src)();
+  const cfg = sanitize({ spk: [{ xo: { on: true, f1: 5000, f2: 2000, f3: 100, gain: [100, -100, 3, 3], mute: [1, 0, '', undefined] } }] });
+  const xo = cfg.spk[0].xo;
+  assert.strictEqual(xo.on, true);
+  assert.ok(xo.f1 < xo.f2 && xo.f2 < xo.f3, 'crossover frequencies end up strictly increasing even when given out of order: ' + JSON.stringify(xo));
+  assert.deepStrictEqual(xo.gain.map(g => Math.max(-24, Math.min(24, g))), xo.gain, 'gains clamped to +-24 dB');
+  assert.deepStrictEqual(xo.mute, [true, false, false, false]);
+  // every other matrix output keeps the untouched default (off, defaults) when not given its own xo config
+  assert.deepStrictEqual(cfg.spk[1].xo, { on: false, f1: 150, f2: 800, f3: 4000, gain: [0, 0, 0, 0], mute: [false, false, false, false] });
 });
 
 test('Android APK safety: permission allowlist, listener shipped off, audit tool catches additions, fingerprint published, APP SAFETY card wired', () => {

@@ -29,7 +29,7 @@ function apiKey(api) {
   if (/JACK/.test(s)) return 'UNIX_JACK';
   if (/ALSA/.test(s)) return 'LINUX_ALSA';
   if (/PULSE/.test(s)) return 'LINUX_PULSE';
-  if (/OSS/.test(s)) return 'LINUX_OSS';
+  if (/OPEN ?SOUND ?SYSTEM|\bOSS\b/.test(s)) return 'LINUX_OSS';   // RtAudio::getApiDisplayName() returns "OpenSoundSystem" (no literal "OSS"), not just an OSS acronym
   return null;
 }
 
@@ -81,7 +81,14 @@ function openRtAudio(RtAudio, Api, key) {
   const rt = new RtAudio(id);
   let other = null;
   try { if (typeof rt.getApi === 'function') { const got = apiKey(rt.getApi()); if (got !== key) other = got || String(rt.getApi()); } } catch (_) { /* cannot tell: keep it */ }
-  if (other) { try { if (typeof rt.closeStream === 'function') rt.closeStream(); } catch (_) { /* nothing open */ } throw Object.assign(new Error(`the ${API_NAMES[key] || key} host API is not compiled into this audio engine (RtAudio offered ${other} instead)`), { notCompiled: true }); }
+  if (other) {
+    try { if (typeof rt.closeStream === 'function') rt.closeStream(); } catch (_) { /* nothing open */ }
+    // A genuinely missing API (not a bug in apiKey()'s matching: see the 'apiKey() matches RtAudio::getApiDisplayName()' test, which pins it against
+    // RtAudio's real display strings) means the installed audify binary was built without it - reinstalling gets the prebuilt that matches this Node /
+    // OS / arch; only a from-source build (no prebuilt for this platform) needs the Windows SDK's Media Foundation libs (mfplat, mfuuid, ksuser) for WASAPI.
+    const reinstall = ' Reinstall it with: cd bridge && npm uninstall audify && npm install audify  (gets the prebuilt binary for this Node / OS / CPU; if it then builds from source, WASAPI needs the Windows SDK installed).';
+    throw Object.assign(new Error(`the ${API_NAMES[key] || key} host API is not compiled into this audio engine (RtAudio offered ${other} instead).${/^WINDOWS_/.test(key) ? reinstall : ''}`), { notCompiled: true });
+  }
   return rt;
 }
 

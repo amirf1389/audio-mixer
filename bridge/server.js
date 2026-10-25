@@ -23,6 +23,8 @@
 //   GET /api/catalog  -> official audio drivers / stacks for this OS, with install detection
 //   GET /api/nowplaying -> what Spotify / YouTube / YouTube Music / TIDAL / ... is playing (OS media sessions)
 //   GET /api/interfaces -> every audio interface grouped across ASIO / WASAPI / DirectSound / Core Audio / ALSA ...
+//   GET /api/sdks     -> third-party processing SDKs (AudioShake, GPU Audio, Camb.ai, Clarity Voice Studio): configured / wired state
+//   GET /api/wasapi-exclusive -> experimental native WASAPI exclusive-mode addon (native/wasapi-exclusive): built / wired state (RtAudio itself is WASAPI shared-mode only)
 //   GET /*            -> serves the mixer page from the repo root (same-origin use)
 const http = require('node:http');
 const fs = require('node:fs');
@@ -34,6 +36,8 @@ const { createInputSession } = require('./input');
 const { createDuplexSession } = require('./duplex');
 const { readVolume } = require('./volume');
 const { listCatalog } = require('./catalog');
+const sdk = require('./sdk');
+const wasapiExclusive = require('./wasapi-exclusive');
 const levels = require('./levels');
 const virtualHub = require('./virtual').hub;
 const { cachedNowPlaying } = require('./nowplaying');
@@ -162,6 +166,10 @@ async function handle(req, res) {
   }
   if (url.pathname === '/api/inserts') return json(res, 200, { ok: true, host: { available: !!pluginHost.hostPath(), formats: ['VST2', 'VST3'] }, ...inserts.read() }, cors);
   if (url.pathname === '/api/virtual') return json(res, 200, { ok: true, devices: virtualHub.list() }, cors);
+  // Third-party processing SDKs (AudioShake, GPU Audio, Camb.ai, Clarity Voice Studio): which are configured (API key set) and wired (a real client installed) - see bridge/sdk.js.
+  if (url.pathname === '/api/sdks') return json(res, 200, { ok: true, providers: sdk.status() }, cors);
+  // WASAPI exclusive mode: RtAudio (bridge/audify.js) has no exclusive-mode path at all; this reports whether the experimental native/wasapi-exclusive addon is built here (it stays unwired - see its README.md).
+  if (url.pathname === '/api/wasapi-exclusive') return json(res, 200, { ok: true, ...wasapiExclusive.status() }, cors);
   if (url.pathname === '/api/power') return json(res, 200, { ok: true, pid: process.pid, ...power.capabilities() }, cors);
   if (url.pathname === '/api/meters') return json(res, 200, { ok: true, clipDb: levels.config.clipDb, clipRun: levels.CLIP_RUN }, cors);   // clip threshold of the native streams' meters
   if (url.pathname === '/api/license/request') {            // the request file for a key (machine code, plan, name): GET /api/license/request?plan=pro&name=Jane&email=jane@example.com
