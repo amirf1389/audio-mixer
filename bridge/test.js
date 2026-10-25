@@ -1849,6 +1849,17 @@ test('Web Audio -> ASIO with a Bluetooth system output: a page rate the devices 
   assert.ok(html.includes("self.autoLinkAsio('bridge connected')") && html.includes("autoLinkAsio('engine started')"), 'linked when the bridge connects and when the engine starts');
 });
 
+test("apiKey() matches RtAudio::getApiDisplayName()'s real strings for every compiled-in API (not a guess: these are rtaudio_api_names[][1] from audify's vendored RtAudio.cpp)", () => {
+  const { apiKey } = require('./audify');
+  // api, RtAudio display name -> our enum key (RtAudio.cpp: const char* rtaudio_api_names[][2])
+  const real = [
+    ['Unknown', null], ['CoreAudio', 'MACOSX_CORE'], ['ALSA', 'LINUX_ALSA'], ['Jack', 'UNIX_JACK'],
+    ['Pulse', 'LINUX_PULSE'], ['OpenSoundSystem', 'LINUX_OSS'], ['ASIO', 'WINDOWS_ASIO'],
+    ['WASAPI', 'WINDOWS_WASAPI'], ['DirectSound', 'WINDOWS_DS'], ['Dummy', null],
+  ];
+  for (const [name, key] of real) assert.strictEqual(apiKey(name), key, name);
+});
+
 test('endpoints: /api/license (BASIC by default), activation needs a valid key, updates need PRO', async () => {
   process.env.BRIDGE_LICENSE_FILE = pathx.join(fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'lep-')), 'license.json');
   await new Promise(r => server.listen(0, '127.0.0.1', r));
