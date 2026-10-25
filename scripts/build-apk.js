@@ -29,7 +29,10 @@ const FONT_CSS = 'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@4
 // 1.9.0 -> 10900 (Android needs an integer that grows with every release)
 function versionCode(v) { const p = String(v).split('.').map(n => parseInt(n, 10) || 0); return p[0] * 10000 + (p[1] || 0) * 100 + (p[2] || 0); }
 
-// The app's copy of the page: CDN links become bundled files. The page in the repository is not touched.
+// The app's copy of the page: any remaining CDN links become bundled files (prepareWeb() below still generates tw.css / fa/ / fonts/ as a fallback).
+// index.html itself is already self-contained (Tailwind, Font Awesome and the Google fonts are inlined, for GitHub Pages to work with no CDN at
+// all - see its own history), so on the current page this is a no-op: nothing here matches, `out` comes back identical to `html`. Kept so a page
+// that goes back to CDN links would still be bundled correctly for the APK. The page in the repository is never touched.
 function transformHtml(html) {
   let out = String(html);
   out = out.replace(/<script src="https:\/\/cdn\.tailwindcss\.com"><\/script>/, '<link rel="stylesheet" href="tw.css">');

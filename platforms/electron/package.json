@@ -1,0 +1,44 @@
+{
+  "name": "audio-mixer-electron",
+  "version": "1.16.1.0",
+  "private": true,
+  "description": "Audio Mixer packaged as an Electron app: wraps the existing bridge/server.js and index.html in a native window with a tray icon (on/off/exit) and auto-updates (following https://www.electronjs.org/docs/latest/tutorial/updates). An additional, optional way to run Audio Mixer alongside the native Windows launcher (platforms/windows) and installers - neither is touched by this package.",
+  "main": "main.js",
+  "scripts": {
+    "start": "node generate-icons.js && electron .",
+    "icons": "node generate-icons.js",
+    "build": "node generate-icons.js && electron-builder --win --mac --linux",
+    "test": "node --test test.js"
+  },
+  "dependencies": {
+    "update-electron-app": "^3.1.1"
+  },
+  "devDependencies": {
+    "electron": "^44.9.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.audiomixer.app",
+    "productName": "Audio Mixer",
+    "directories": {
+      "output": "../../dist/electron"
+    },
+    "files": [
+      "main.js",
+      "generate-icons.js",
+      "build/icon.png",
+      "build/icon.ico"
+    ],
+    "extraResources": [
+      { "from": "../../index.html", "to": "index.html" },
+      { "from": "../../bridge", "to": "bridge", "filter": ["**/*", "!node_modules"] }
+    ],
+    "win": { "icon": "build/icon.ico", "target": ["nsis"] },
+    "mac": { "icon": "build/icon.png", "target": ["dmg"], "category": "public.app-category.music" },
+    "linux": { "icon": "build/icon.png", "target": ["AppImage", "deb"], "category": "AudioVideo" },
+    "publish": { "provider": "github", "owner": "amirf1389", "repo": "audio-mixer" }
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

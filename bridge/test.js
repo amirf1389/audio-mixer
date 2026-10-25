@@ -1393,10 +1393,10 @@ test('repository layout: one folder per system with its sources and release file
   const lay = require('../scripts/layout'), mk = require('../scripts/make-update'), root = pathx.join(__dirname, '..');
   const top = fsx.readdirSync(root, { withFileTypes: true }).filter(e => !e.name.startsWith('.') && e.name !== 'node_modules' && e.name !== 'dist');
   const dirs = top.filter(e => e.isDirectory()).map(e => e.name).sort(), files = top.filter(e => e.isFile()).map(e => e.name).sort();
-  assert.deepStrictEqual(dirs, ['bridge', 'client', 'deploy', 'drivers', 'engine', 'npm-installer', 'ota-server', 'platforms', 'releases', 'scripts'], 'the top level is minimal: systems (under platforms/) + shared code');
+  assert.deepStrictEqual(dirs, ['bridge', 'client', 'deploy', 'drivers', 'engine', 'licenses', 'native', 'npm-installer', 'ota-server', 'platforms', 'releases', 'scripts'], 'the top level is minimal: systems (under platforms/) + shared code, third-party license texts (licenses/) and opt-in native addons (native/)');
   assert.deepStrictEqual(fsx.readdirSync(pathx.join(root, 'platforms')).sort(), ['android', 'electron', 'ios', 'linux', 'macos', 'windows'], 'one folder per system under platforms/ (electron: an additional, optional packaging, not an installed-release OS target)');
   assert.deepStrictEqual(files, ['ADMIN-LICENSE.md', 'Additional Terms & Conditions', 'LICENSE', 'LICENSE.txt', 'PROJECT-README.md', 'README.md', 'RELEASING.md', 'SECURITY.md', 'Steinberg ASIO Licensing Agreement.pdf', 'Steinberg ASIO SDK 2.3.pdf', 'Steinberg ASIO Usage Guidelines.pdf', 'boot.html', 'changes.txt', 'index.html', 'package.json'], 'only the web app, the project papers and the Steinberg ASIO SDK papers at the root');
-  assert.deepStrictEqual(fsx.readdirSync(pathx.join(root, 'releases')).sort(), ['android', 'native', 'update.json', 'windows'], 'releases/ holds the manifest that installed apps fetch, the files it lists (one folder per system) and the native programs');
+  assert.deepStrictEqual(fsx.readdirSync(pathx.join(root, 'releases')).sort(), ['android', 'ios', 'linux', 'macos', 'native', 'update.json', 'windows'], 'releases/ holds the manifest that installed apps fetch, the files it lists (one folder per system) and the native programs');
   // every file that goes into a package exists where the layout says; the package keeps its own paths
   const build = require('../scripts/build'), src = fsx.readFileSync(pathx.join(root, 'scripts', 'build.js'), 'utf8');
   const list = [...src.slice(src.indexOf('const FILES = ['), src.indexOf('];', src.indexOf('const FILES = ['))).matchAll(/'([^']+)'/g)].map(m => m[1]).filter(f => /[./]/.test(f));
@@ -2168,8 +2168,7 @@ test('android app: page transform, version code, launcher icon, sources', () => 
   const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
   const out = apk.transformHtml(html);
   assert.ok(!/src="https:\/\/cdn\.tailwindcss\.com"/.test(out) && !/cdnjs\.cloudflare\.com/.test(out) && !/fonts\.googleapis\.com/.test(out));   // everything the page needs is bundled
-  assert.ok(out.includes('href="tw.css"') && out.includes('href="fa/css/all.min.css"') && out.includes("@import url('fonts/fonts.css');"));
-  assert.strictEqual(out.length > html.length - 400 && out.length < html.length + 400, true);
+  assert.strictEqual(out, html, 'index.html is already self-contained (no CDN links left to bundle): transformHtml is a no-op on it');
   const p = apk.png(48, apk.iconPixel); assert.strictEqual(p.subarray(0, 8).toString('hex'), '89504e470d0a1a0a'); assert.strictEqual(p.readUInt32BE(16), 48);
   assert.deepStrictEqual(apk.iconPixel(0, 0), [0, 0, 0, 0]);                                         // rounded corner is transparent
   const man = fsx.readFileSync(pathx.join(__dirname, '..', 'platforms', 'android', 'AndroidManifest.xml'), 'utf8');

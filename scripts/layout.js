@@ -40,9 +40,10 @@ const osDir = os => path.join(ROOT, PLATFORMS, os);
 const releasesDir = os => path.join(ROOT, 'releases', os);
 // the repository folder (relative, forward slashes) that holds the files of a manifest key
 const releasesRel = key => { const os = osOfKey(key); return os ? `releases/${os}` : 'releases'; };
-// a release file by name: in the folder of its system, else anywhere in the <os>/releases folders (null when it does not exist)
+// a release file by name: in the folder of its system, else anywhere in the <os>/releases folders, including releases/native/ (the self-update
+// programs: osOfKey() already returns 'native' for their manifest keys, but 'native' is not a platforms/<os> system, so it stays out of OSES itself)
 function findRelease(name, os) {
-  for (const o of os ? [os] : OSES) { const f = path.join(releasesDir(o), name); if (fs.existsSync(f)) return f; }
+  for (const o of os ? [os] : [...OSES, 'native']) { const f = path.join(releasesDir(o), name); if (fs.existsSync(f)) return f; }
   return null;
 }
 
