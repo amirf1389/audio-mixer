@@ -535,6 +535,28 @@ test('ASIO is single-client: a second ASIO device is refused until the first is 
   _owners.clear();
 });
 
+test('ASIO lock keys on the driver NAME, not dev.id: the same driver seen with a different id (another engine / a re-scan) is one driver, not two', () => {
+  const { claim, keyOf, _owners } = require('./asio-lock');
+  _owners.clear();
+  // dev.id is a per-enumeration sequential integer (listDevices: `id: next++`); it shifts across engines and re-scans.
+  // The single-client limit is per physical driver, so the output side (one scan) and the input side (another scan) of the
+  // SAME driver must share the lock even though their ids differ - otherwise the read+write pair is wrongly refused.
+  const outSide = { id: 1000, name: 'Audio Mixer ASIO', hostAPIName: 'ASIO' };
+  const inSide = { id: 7, name: 'Audio Mixer ASIO', hostAPIName: 'ASIO' };   // same driver, different engine/scan -> different id
+  assert.strictEqual(keyOf(outSide), keyOf(inSide), 'the key ignores id and normalizes on name');
+  const w = claim(outSide); assert.ok(w.ok);
+  const r = claim(inSide);  assert.ok(r.ok, 'the same driver under a different id is NOT refused as a second driver');
+  assert.strictEqual(_owners.size, 1, 'both handles share one owner slot');
+  // a genuinely different driver is still refused while this one is held
+  assert.strictEqual(claim({ id: 1, name: 'FlexASIO', hostAPIName: 'ASIO' }).ok, false);
+  r.release(); assert.strictEqual(_owners.size, 1, 'still held by the output side');
+  w.release(); assert.strictEqual(_owners.size, 0, 'released once both handles are closed');
+  // name is compared case/space-insensitively, host API still gates (WASAPI is never limited)
+  assert.strictEqual(keyOf({ name: ' Audio Mixer ASIO ', hostAPIName: 'asio' }), keyOf(outSide));
+  assert.ok(claim({ id: 2, name: 'Audio Mixer ASIO', hostAPIName: 'Windows WASAPI' }).ok, 'a WASAPI device of the same name is not ASIO-limited');
+  _owners.clear();
+});
+
 test('input sessions share the ASIO lock', () => {
   const { _owners } = require('./asio-lock');
   _owners.clear();
@@ -4333,6 +4355,27 @@ test('treble guard is wired into the master chain before the limiter, with a UI 
   const dacFn = html.slice(fnStart, fnEnd);
   assert.ok(!/getUserMedia/.test(dacFn), 'DAC output detection must not call getUserMedia (no mic grab)');
   assert.ok(/enumerateDevices/.test(dacFn), 'DAC output detection uses enumerateDevices');
+});
+
+test('master mid/side reaches the hardware output and the recording: the physical tap, the recorder and the plugin chain all sit AFTER msOut', () => {
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  // msOut (the post mid/side merge) and msIn (the M/S input, where inserts splice) are both exposed on state.nodes
+  assert.ok(html.includes('window.state.nodes.msOut = msOut;'), 'the post-M/S node is exposed so every output tap can read it');
+  assert.ok(html.includes('window.state.nodes.msIn = msSplit;'), 'the M/S input is exposed so the plugin chain can splice ahead of it');
+  // the Broadcast recorder reads the post-M/S node, NOT the pre-M/S master limiter
+  assert.ok(html.includes('(window.state.nodes.msOut || window.state.nodes.masterLimiter).connect(dest);'),
+    'the recorder taps msOut so width and mid level are in the recording');
+  assert.ok(!/nodes\.masterLimiter\.connect\(dest\)/.test(html), 'the recorder no longer taps the pre-M/S limiter directly');
+  // the physical-output worklet tap reads the post-M/S node too
+  assert.ok(html.includes('tap = window.state.nodes && (window.state.nodes.msOut || window.state.nodes.masterLimiter)'),
+    'the hardware-output worklet tap reads msOut (post mid/side and post plugin inserts)');
+  // the plugin insert chain splices between the limiter and the M/S input, and no longer builds a parallel limiter->analyser edge
+  const rwStart = html.indexOf('rewire() {'), rwEnd = html.indexOf('this.tail = prev;', rwStart);
+  assert.ok(rwStart > 0 && rwEnd > rwStart);
+  const rewire = html.slice(rwStart, rwEnd);
+  assert.ok(/disconnect\(n\.msIn\)/.test(rewire) && /prev\.connect\(n\.msIn\)/.test(rewire),
+    'the plugin chain terminates into the M/S input, keeping mid/side the final stage');
+  assert.ok(!/connect\(n\.musicAnalyser\)/.test(rewire), 'rewire no longer adds a parallel pre-M/S edge into the analyser');
 });
 
 test('dual EQ mode: two complete 10-band EQ banks crossfade smoothly (window.setEqActiveBank); bank A matches the old single-chain default exactly', () => {
