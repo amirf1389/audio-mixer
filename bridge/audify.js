@@ -96,6 +96,29 @@ function openRtAudio(RtAudio, Api, key) {
 // device share one duplex stream (see openStream / openDuplex); the same registry tells listDevices not to probe a driver that is in use.
 const registries = new WeakMap();   // per loaded module (in production there is exactly one)
 const asioOf = mod => { let m = registries.get(mod); if (!m) { m = new Map(); registries.set(mod, m); } return m; };
+// The single-client registry is keyed on the driver NAME, not dev.id. Reading and writing a device arrive as two separate sessions, each of which
+// enumerates the device afresh, so the same ASIO driver carries a different dev.id in each (dev.id is a per-enumeration sequential integer). Keying on
+// id made the two sessions miss that they are the same driver, so the second direction asked the single-client driver for a second stream (a collision
+// that fails or stalls the first) instead of re-opening it as the one shared duplex stream. The name is the stable per-driver identity (see asio-lock.js).
+const asioRegKey = dev => String((dev && dev.name) || '').trim().toLowerCase();
+
+const inCh = d => (d && d.inputChannels) || 0, outCh = d => (d && d.outputChannels) || 0;
+// A driver that failed to probe on the first try (waking up, the control panel just closed) often answers on a fresh RtAudio instance.
+const probed = d => inCh(d) + outCh(d) > 0;
+// An ASIO interface is duplex hardware: a reading with channels on EXACTLY ONE side (e.g. 18 in / 0 out, or 0 in / 20 out) is the signature of a
+// partial probe - RtApiAsio::probeDeviceInfo read one direction before the driver was fully awake - not a genuinely one-sided device. Such a reading
+// is what made an ASIO interface show up with no inputs, so the mixer had nothing to read from it. It triggers a re-probe and never overwrites a
+// fuller reading (see mergeDev / betterOf / the listDevices retry).
+const partialAsio = d => (inCh(d) === 0) !== (outCh(d) === 0);
+// Merge two readings of the same device: keep the most channels seen on each side, so a partial probe can only ADD a direction, never drop one.
+function mergeDev(a, b) {
+  if (!b) return a; if (!a) return b;
+  const ai = inCh(a), ao = outCh(a), bi = inCh(b), bo = outCh(b);
+  if (bi <= ai && bo <= ao) return a;               // b adds nothing
+  if (ai <= bi && ao <= bo) return b;               // b dominates
+  const base = bi + bo >= ai + ao ? b : a;          // each side richer in a different reading: keep the fuller object, lift both sides to the max
+  return { ...base, inputChannels: Math.max(ai, bi), outputChannels: Math.max(ao, bo) };
+}
 
 // ASIO probe results are merged with what the last probes saw: a device that probes with channels is remembered (name -> info, order kept so the ids stay
 // the same); one that fails to probe is kept for ASIO_GRACE_MS (busy for a moment, driver panel open), then dropped (really unplugged).
@@ -105,7 +128,11 @@ function mergeAsio(asio, fresh, now) {
   const good = new Set(), unprobed = [];
   for (const d of fresh) {
     const name = String(d.name || '');
-    if ((d.inputChannels || 0) + (d.outputChannels || 0) > 0) { seen.set(name, { d, at: now }); good.add(name); } else unprobed.push(name);
+    if (probed(d)) {
+      const prev = seen.get(name);
+      seen.set(name, { d: prev ? mergeDev(prev.d, d) : d, at: now });   // never downgrade a device that a previous probe saw with more channels (e.g. a partial read that lost the inputs)
+      good.add(name);
+    } else unprobed.push(name);
   }
   const names = order.filter(n => seen.has(n) && (good.has(n) || now - seen.get(n).at < ASIO_GRACE_MS));
   for (const n of good) if (!names.includes(n)) names.push(n);
@@ -114,12 +141,11 @@ function mergeAsio(asio, fresh, now) {
   return { list: names.map(n => seen.get(n).d), unprobed, stale: names.filter(n => !good.has(n)) };
 }
 
-// A driver that failed to probe on the first try (waking up, the control panel just closed) often answers on a fresh RtAudio instance: take the probed
-// answer of the second try for every driver the first one could not read, and add the drivers the first one did not list at all.
-const probed = d => ((d && d.inputChannels) || 0) + ((d && d.outputChannels) || 0) > 0;
+// Take the probed answer of the second try for every driver the first one could not read, lift each device to the most channels either try saw (so a
+// partial first read gains the direction the retry found), and add the drivers the first one did not list at all.
 function betterOf(first, again) {
   const byName = new Map(again.map(d => [String(d.name || ''), d]));
-  const out = first.map(d => (probed(d) ? d : (byName.get(String(d.name || '')) && probed(byName.get(String(d.name || ''))) ? byName.get(String(d.name || '')) : d)));
+  const out = first.map(d => mergeDev(d, byName.get(String(d.name || ''))));
   const have = new Set(first.map(d => String(d.name || '')));
   for (const d of again) if (!have.has(String(d.name || ''))) out.push(d);
   return out;
@@ -155,10 +181,16 @@ function listDevices(load = loadAudify) {
     else {
       try { rt = openRtAudio(RtAudio, Api, key); } catch (e) { if (!isAsio || e.notCompiled) continue; probeError = String(e && e.message || e); }   // an API that is not built in is skipped, never replaced by another one
       if (rt) try { list = rt.getDevices() || []; } catch (e) { probeError = String(e && e.message || e); /* API present but no devices */ }
-      if (isAsio && (probeError || list.some(d => !probed(d)))) {
+      // Re-probe not only when a driver gave no channels at all, but also when an ASIO driver came back with channels on one side only (a partial probe
+      // that lost the inputs - the reason an ASIO interface was detected with no input to the mixer). Skip a driver already confirmed one-sided by an
+      // earlier retry, so a genuinely output-only (or input-only) ASIO driver is not reloaded on every scan.
+      const confirmed = asio.confirmed || (asio.confirmed = new Set());
+      if (isAsio && (probeError || list.some(d => !probed(d) || (partialAsio(d) && !confirmed.has(String(d.name || '')))))) {
         // one more try on a fresh instance (a driver that was waking up or just released by another program answers the second time)
         try { const again = openRtAudio(RtAudio, Api, key).getDevices() || []; list = betterOf(list, again); if (list.length) probeError = ''; retried = true; }
         catch (e) { if (!probeError) probeError = String(e && e.message || e); retried = true; }
+        // whatever is still one-sided after the retry is taken as genuinely one-sided: remember it so later scans do not keep reloading it
+        for (const d of list) { const nm = String(d.name || ''); if (partialAsio(d)) confirmed.add(nm); else confirmed.delete(nm); }
       }
       if (isAsio) {
         // RtApiAsio::probeDeviceInfo fails for a driver that another program has open or whose interface is unplugged: the driver then shows up with
@@ -414,7 +446,8 @@ function openStream(o) {
 }
 function openAsioStream(o, asio) {
   const { dev, direction } = o;
-  let e = asio.get(dev.id);
+  const k = asioRegKey(dev);
+  let e = asio.get(k);
   if (e && e.exclusive) throw new Error(`${dev.name} is already open for reading and writing`);
   if (e && e.dirs[direction]) throw new Error(`${dev.name} is already open for ${direction === 'output' ? 'writing' : 'reading'}`);
   const user = { onData: o.onData, onError: o.onError, channels: Number(o.channels) };
@@ -423,7 +456,7 @@ function openAsioStream(o, asio) {
     e.onData = b => { const d = e.dirs.input; if (d && d.onData) d.onData(b); };
     e.onError = err => Object.values(e.dirs).forEach(d => d.onError && d.onError(err));
     e.st = openStreamRaw({ ...o, onData: e.onData, onError: e.onError });
-    asio.set(dev.id, e);
+    asio.set(k, e);
   } else {
     if (Number(o.sampleRate) !== e.sampleRate) throw new Error(`${dev.name} is already open at ${e.sampleRate} Hz: reading and writing it together needs the same sample rate`);
     const inCh = direction === 'input' ? user.channels : e.dirs.input.channels, outCh = direction === 'output' ? user.channels : e.dirs.output.channels;
@@ -431,7 +464,7 @@ function openAsioStream(o, asio) {
     try {
       e.st = openDuplexRaw({ mod: o.mod, dev, inChannels: inCh, outChannels: outCh, sampleRate: e.sampleRate, frameSize: o.frameSize !== undefined ? o.frameSize : e.frameSize, onData: e.onData, onError: e.onError });
     } catch (err) {
-      try { e.st = openStreamRaw({ ...e.first, onData: e.onData, onError: e.onError }); } catch (_) { asio.delete(dev.id); }   // give the first user its stream back
+      try { e.st = openStreamRaw({ ...e.first, onData: e.onData, onError: e.onError }); } catch (_) { asio.delete(k); }   // give the first user its stream back
       throw err;
     }
   }
@@ -444,7 +477,7 @@ function openAsioStream(o, asio) {
     close() {
       if (entry.dirs[direction] !== user) return;
       delete entry.dirs[direction];
-      if (!Object.keys(entry.dirs).length) { try { entry.st.close(); } finally { if (asio.get(dev.id) === entry) asio.delete(dev.id); } }
+      if (!Object.keys(entry.dirs).length) { try { entry.st.close(); } finally { if (asio.get(k) === entry) asio.delete(k); } }
     },
   };
 }
@@ -454,13 +487,14 @@ function openDuplex(o) {
   const { dev } = o;
   if (!dev || dev.api !== 'WINDOWS_ASIO') return openDuplexRaw(o);
   const asio = asioOf(o.mod);
-  if (asio.has(dev.id)) throw new Error(`${dev.name} is already open: close it first, or read and write it together from the same page`);
+  const k = asioRegKey(dev);
+  if (asio.has(k)) throw new Error(`${dev.name} is already open: close it first, or read and write it together from the same page`);
   asio.opening = (asio.opening || 0) + 1;
   let st; try { st = openDuplexRaw(o); } finally { asio.opening--; }
   const entry = { exclusive: true, dev, st, dirs: {} };
-  asio.set(dev.id, entry);
+  asio.set(k, entry);
   const close = st.close;
-  st.close = () => { try { close(); } finally { if (asio.get(dev.id) === entry) asio.delete(dev.id); } };
+  st.close = () => { try { close(); } finally { if (asio.get(k) === entry) asio.delete(k); } };
   return st;
 }
 

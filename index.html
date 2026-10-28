@@ -1474,6 +1474,8 @@ window.navTabs = [
             window.state.nodes.msMidGain = msMidGain;
             window.state.nodes.msSideGain = msSideGain;
             const msOut = msMerge;
+            window.state.nodes.msOut = msOut;    // post mid/side image: the recorder and the physical-output tap read HERE (not masterLimiter), so width and mid level reach the hardware output and recordings
+            window.state.nodes.msIn = msSplit;   // the M/S input: the plugin insert chain splices in just ahead of this, keeping mid/side the final image stage
 
             // Program Bus FFT Analyser
             const musicAnalyser = window.state.ctx.createAnalyser();
@@ -3156,7 +3158,7 @@ window.navTabs = [
             async start() {
                 if (!window.state.ctx) await initAudioEngine();
                 const dest = window.state.ctx.createMediaStreamDestination();
-                window.state.nodes.masterLimiter.connect(dest);
+                (window.state.nodes.msOut || window.state.nodes.masterLimiter).connect(dest);   // post mid/side, so the recording carries the same width and mid level as the output
 
                 this.chunks = [];
                 try {
@@ -17345,7 +17347,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
 
             // ── write: master mix to every enabled interface (ASIO first, then other APIs) ──
             async ensureTap() {
-                const ctx = await this.ensureCtx(), tap = window.state.nodes && window.state.nodes.masterLimiter;
+                const ctx = await this.ensureCtx(), tap = window.state.nodes && (window.state.nodes.msOut || window.state.nodes.masterLimiter);   // post mid/side AND post plugin inserts: the hardware output matches the browser output
                 if (!ctx || !tap || !ctx.audioWorklet) throw new Error('audio engine not running');
                 if (this.tapReady === ctx) return;
                 const code = "class T extends AudioWorkletProcessor{constructor(){super();this.l=new Float32Array(512);this.r=new Float32Array(512);this.n=0}" +
@@ -18317,17 +18319,18 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 try { run.node.disconnect(); } catch (e) { /* gone */ }
                 this.rewire();
             },
-            // master limiter -> [plugin 1 -> plugin 2 ...] -> analyser / browser output; the physical-output tap follows the end of the chain
+            // master limiter -> [plugin 1 -> plugin 2 ...] -> mid/side -> analyser / browser output / physical output.
+            // Plugins are a master insert placed BEFORE the mid/side image stage (msIn), so the processed stereo image
+            // stays the final stage and every downstream tap reads it post-plugins AND post-M/S from msOut: the hardware
+            // output, the recorder and the browser all carry the inserts and the width/mid-level controls alike.
             rewire() {
-                const st = window.state, n = st && st.nodes, ctx = st && st.ctx; if (!ctx || !n || !n.masterLimiter || !n.musicAnalyser) return;
+                const st = window.state, n = st && st.nodes, ctx = st && st.ctx; if (!ctx || !n || !n.masterLimiter || !n.msIn) return;
                 const live = this.order.map(k => this.runs[k]).filter(r => r && r.ready && r.ctx === ctx);
-                try { n.masterLimiter.disconnect(n.musicAnalyser); } catch (e) { /* not connected */ }
+                try { n.masterLimiter.disconnect(n.msIn); } catch (e) { /* not connected */ }
                 this.order.forEach(k => { const r = this.runs[k]; if (r) try { r.node.disconnect(); } catch (e) { /* none */ } });
                 let prev = n.masterLimiter;
                 live.forEach(r => { prev.connect(r.node); prev = r.node; });
-                prev.connect(n.musicAnalyser);
-                const tap = window.liveSources && window.liveSources.tapNode;
-                if (tap) { try { n.masterLimiter.disconnect(tap); } catch (e) { /* none */ } try { prev.disconnect(tap); } catch (e) { /* none */ } prev.connect(tap); }
+                prev.connect(n.msIn);
                 this.tail = prev;
             },
             async sync() {

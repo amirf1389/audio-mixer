@@ -535,6 +535,28 @@ test('ASIO is single-client: a second ASIO device is refused until the first is 
   _owners.clear();
 });
 
+test('ASIO lock keys on the driver NAME, not dev.id: the same driver seen with a different id (another engine / a re-scan) is one driver, not two', () => {
+  const { claim, keyOf, _owners } = require('./asio-lock');
+  _owners.clear();
+  // dev.id is a per-enumeration sequential integer (listDevices: `id: next++`); it shifts across engines and re-scans.
+  // The single-client limit is per physical driver, so the output side (one scan) and the input side (another scan) of the
+  // SAME driver must share the lock even though their ids differ - otherwise the read+write pair is wrongly refused.
+  const outSide = { id: 1000, name: 'Audio Mixer ASIO', hostAPIName: 'ASIO' };
+  const inSide = { id: 7, name: 'Audio Mixer ASIO', hostAPIName: 'ASIO' };   // same driver, different engine/scan -> different id
+  assert.strictEqual(keyOf(outSide), keyOf(inSide), 'the key ignores id and normalizes on name');
+  const w = claim(outSide); assert.ok(w.ok);
+  const r = claim(inSide);  assert.ok(r.ok, 'the same driver under a different id is NOT refused as a second driver');
+  assert.strictEqual(_owners.size, 1, 'both handles share one owner slot');
+  // a genuinely different driver is still refused while this one is held
+  assert.strictEqual(claim({ id: 1, name: 'FlexASIO', hostAPIName: 'ASIO' }).ok, false);
+  r.release(); assert.strictEqual(_owners.size, 1, 'still held by the output side');
+  w.release(); assert.strictEqual(_owners.size, 0, 'released once both handles are closed');
+  // name is compared case/space-insensitively, host API still gates (WASAPI is never limited)
+  assert.strictEqual(keyOf({ name: ' Audio Mixer ASIO ', hostAPIName: 'asio' }), keyOf(outSide));
+  assert.ok(claim({ id: 2, name: 'Audio Mixer ASIO', hostAPIName: 'Windows WASAPI' }).ok, 'a WASAPI device of the same name is not ASIO-limited');
+  _owners.clear();
+});
+
 test('input sessions share the ASIO lock', () => {
   const { _owners } = require('./asio-lock');
   _owners.clear();
@@ -2093,6 +2115,29 @@ test('ASIO (RtAudio): one stream per driver. Reading and writing a device share 
   d.close(); assert.strictEqual(a._asioOf(fa).size, 0);
 });
 
+test('ASIO duplex sharing is keyed on the driver NAME, not dev.id: read and write opened from two independent device scans share ONE duplex stream', () => {
+  const a = require('./audify');
+  const fa = fakeAudify();
+  const base = a.listDevices(() => fa).devices.find(d => d.api === 'WINDOWS_ASIO');
+  // the output session and the input session each enumerate the device on their own, so the SAME physical driver carries a different dev.id in each
+  const outDev = { ...base }, inDev = { ...base, id: base.id + 500 };
+  const got = [];
+  const out = a.openStream({ mod: fa, dev: outDev, direction: 'output', channels: 2, sampleRate: 48000 });
+  assert.strictEqual(a._asioOf(fa).size, 1); assert.ok(fa.opened[0].out && !fa.opened[0].inp);
+  const inp = a.openStream({ mod: fa, dev: inDev, direction: 'input', channels: 2, sampleRate: 48000, onData: b => got.push(b.length) });
+  // the differing ids must not hide that it is the same driver: it re-opens as ONE shared duplex stream, not a second (colliding) single-client stream
+  assert.strictEqual(a._asioOf(fa).size, 1, 'one registry entry for the driver despite the two ids');
+  assert.strictEqual(fa.opened.length, 2); assert.ok(fa.opened[1].out && fa.opened[1].inp, 're-opened as one duplex stream');
+  assert.strictEqual(inp.channels, 2); assert.strictEqual(out.channels, 2);
+  out.write(Buffer.alloc(out.frameSize * 4)); assert.ok(fa.written.length >= 1);                 // the writer stays attached across the re-open
+  inp.close(); out.write(Buffer.alloc(out.frameSize * 4)); out.close();                            // closing the reader (its own id) still finds the shared entry
+  assert.strictEqual(a._asioOf(fa).size, 0);
+  // the duplex endpoint also refuses a second open of the same driver seen under a different id
+  const dd = a.openDuplex({ mod: fa, dev: outDev, inChannels: 2, outChannels: 2, sampleRate: 48000 });
+  assert.throws(() => a.openStream({ mod: fa, dev: inDev, direction: 'output', channels: 2, sampleRate: 48000 }), /already open for reading and writing/);
+  dd.close(); assert.strictEqual(a._asioOf(fa).size, 0);
+});
+
 test('system audio: interfaces are read from the OS on Linux, macOS and Windows without an audio engine', async () => {
   const sa = require('./sysaudio');
   const alsa = 'card 1: USB [Scarlett 2i2 USB], device 0: USB Audio [USB Audio]\ncard 0: PCH [HDA Intel PCH], device 0: ALC [ALC3246 Analog]\n';
@@ -2446,6 +2491,40 @@ test('ASIO probe: a second try on a fresh instance rescues a driver that was not
   assert.strictEqual(groupInterfaces([], ['Focusrite USB ASIO'], []).find(i => i.driverOnly).probeError, undefined);   // nothing known: nothing claimed
   const html = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'index.html'), 'utf8');
   assert.ok(html.includes('ls-reprobe') && html.includes("'?force=1'") && html.includes('PROBE AGAIN') && html.includes('i.probeError'));
+});
+
+test('ASIO partial probe: a driver read with channels on one side only (no inputs) is re-probed and never loses a direction, so a duplex interface reaches the mixer with its inputs', () => {
+  const a = require('./audify');
+  const foc = { id: 0, name: 'Focusrite USB ASIO', sampleRates: [48000], preferredSampleRate: 48000 };
+  const asioDev = r => r.devices.find(d => d.api === 'WINDOWS_ASIO');
+  const mk = script => {               // script: array of getDevices() results for the ASIO api, consumed one per probe
+    const fa = fakeAudify(); const orig = fa.RtAudio.prototype.getDevices; let n = 0;
+    fa.RtAudio.prototype.getDevices = function () { if (this.api !== 6) return orig.call(this); const s = script[Math.min(n, script.length - 1)]; n++; return s; };
+    return { fa, probes: () => n };
+  };
+
+  // 1. first probe reads outputs but NO inputs (partial); the retry reads the full duplex shape -> the interface is listed WITH its 18 inputs
+  { const { fa, probes } = mk([[{ ...foc, inputChannels: 0, outputChannels: 20 }], [{ ...foc, inputChannels: 18, outputChannels: 20 }]]);
+    const d = asioDev(a.listDevices(() => fa));
+    assert.strictEqual(d.maxInputChannels, 18, 'the inputs the retry found are adopted'); assert.strictEqual(d.maxOutputChannels, 20);
+    assert.strictEqual(probes(), 2, 'a one-sided ASIO reading triggers exactly one retry'); }
+
+  // 2. a device already seen as full (18/20) must not lose its inputs when a later scan reads it partially (0/20)
+  { const { fa } = mk([[{ ...foc, inputChannels: 18, outputChannels: 20 }]]);
+    assert.strictEqual(asioDev(a.listDevices(() => fa)).maxInputChannels, 18);                  // scan 1: full
+    fa.RtAudio.prototype.getDevices = function () { return this.api === 6 ? [{ ...foc, inputChannels: 0, outputChannels: 20 }] : []; };   // later scans only ever read outputs
+    assert.strictEqual(asioDev(a.listDevices(() => fa)).maxInputChannels, 18, 'the known inputs are kept through a partial probe');
+    assert.strictEqual(asioDev(a.listDevices(() => fa)).maxInputChannels, 18); }
+
+  // 3. a genuinely one-sided driver (no inputs on either probe) is confirmed once, then NOT reloaded on every later scan
+  { const { fa, probes } = mk([[{ ...foc, inputChannels: 0, outputChannels: 20 }]]);            // every probe returns output-only
+    assert.strictEqual(asioDev(a.listDevices(() => fa)).maxOutputChannels, 20); assert.strictEqual(probes(), 2, 'retried once to be sure');
+    const before = probes(); a.listDevices(() => fa); assert.strictEqual(probes() - before, 1, 'confirmed one-sided: no second probe on later scans'); }
+
+  // 4. mergeDev-through-mergeAsio never downgrades, in either direction
+  { const asio = {}; a.mergeAsio(asio, [{ name: 'X', inputChannels: 4, outputChannels: 6 }], 1);
+    const m = a.mergeAsio(asio, [{ name: 'X', inputChannels: 0, outputChannels: 6 }], 2);
+    assert.strictEqual(m.list[0].inputChannels, 4, 'a later input-less read does not erase the remembered inputs'); assert.strictEqual(m.list[0].outputChannels, 6); }
 });
 
 test('a device the engine could not probe (0 channels, not ASIO) is flagged, takes its mode from the OS endpoint list, and a stream is still tried', () => {
@@ -4333,6 +4412,27 @@ test('treble guard is wired into the master chain before the limiter, with a UI 
   const dacFn = html.slice(fnStart, fnEnd);
   assert.ok(!/getUserMedia/.test(dacFn), 'DAC output detection must not call getUserMedia (no mic grab)');
   assert.ok(/enumerateDevices/.test(dacFn), 'DAC output detection uses enumerateDevices');
+});
+
+test('master mid/side reaches the hardware output and the recording: the physical tap, the recorder and the plugin chain all sit AFTER msOut', () => {
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  // msOut (the post mid/side merge) and msIn (the M/S input, where inserts splice) are both exposed on state.nodes
+  assert.ok(html.includes('window.state.nodes.msOut = msOut;'), 'the post-M/S node is exposed so every output tap can read it');
+  assert.ok(html.includes('window.state.nodes.msIn = msSplit;'), 'the M/S input is exposed so the plugin chain can splice ahead of it');
+  // the Broadcast recorder reads the post-M/S node, NOT the pre-M/S master limiter
+  assert.ok(html.includes('(window.state.nodes.msOut || window.state.nodes.masterLimiter).connect(dest);'),
+    'the recorder taps msOut so width and mid level are in the recording');
+  assert.ok(!/nodes\.masterLimiter\.connect\(dest\)/.test(html), 'the recorder no longer taps the pre-M/S limiter directly');
+  // the physical-output worklet tap reads the post-M/S node too
+  assert.ok(html.includes('tap = window.state.nodes && (window.state.nodes.msOut || window.state.nodes.masterLimiter)'),
+    'the hardware-output worklet tap reads msOut (post mid/side and post plugin inserts)');
+  // the plugin insert chain splices between the limiter and the M/S input, and no longer builds a parallel limiter->analyser edge
+  const rwStart = html.indexOf('rewire() {'), rwEnd = html.indexOf('this.tail = prev;', rwStart);
+  assert.ok(rwStart > 0 && rwEnd > rwStart);
+  const rewire = html.slice(rwStart, rwEnd);
+  assert.ok(/disconnect\(n\.msIn\)/.test(rewire) && /prev\.connect\(n\.msIn\)/.test(rewire),
+    'the plugin chain terminates into the M/S input, keeping mid/side the final stage');
+  assert.ok(!/connect\(n\.musicAnalyser\)/.test(rewire), 'rewire no longer adds a parallel pre-M/S edge into the analyser');
 });
 
 test('dual EQ mode: two complete 10-band EQ banks crossfade smoothly (window.setEqActiveBank); bank A matches the old single-chain default exactly', () => {
