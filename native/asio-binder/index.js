@@ -1,8 +1,8 @@
 'use strict';
-// EXPERIMENTAL, UNWIRED: see README.md. Nothing in bridge/, client/ or engine/cpp requires this file.
+// Read-only ASIO driver listing (Windows). Nothing in bridge/, client/ or engine/cpp requires this file, and it never opens a driver:
+// real ASIO detection stays in bridge/detect.js and streams open only through bridge/audify.js.
 //   const asio = require('./native/asio-binder');
-//   asio.listDrivers();       // Windows only: one registry view, read-only, safe today
-//   asio.initializeDriver();  // throws until a real integration wires it through bridge/asio-lock.js
+//   asio.listDrivers();       // Windows only: one registry view, read-only
 function load() {
   try {
     return require('./build/Release/asio_binder.node');
