@@ -251,6 +251,52 @@ test('no fake stream: the page has no hard-coded YouTube stream status or key; t
   assert.ok(html.includes('id="media-sessions-list"') && html.includes('id="media-sessions-status"'), 'the card has its list and status');
 });
 
+test('ASIO probe (native Steinberg SDK, no RtAudio): the JSON from audiomixer-native --probe-asio is read into real channel counts and rates; bad output is refused', async () => {
+  const { probeAsio, parseProbe } = require('./asio-probe');
+  const good = JSON.stringify([
+    { name: 'Focusrite USB ASIO', clsid: '{AAA}', inChannels: 18, outChannels: 20, sampleRates: [44100, 48000, 96000] },
+    { name: 'Broken Driver', clsid: '{BBB}', inChannels: 0, outChannels: 0, sampleRates: [], error: 'did not start: init failed' },
+  ]);
+  const r = parseProbe(good);
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(r.drivers[0].inChannels, 18); assert.strictEqual(r.drivers[0].outChannels, 20);
+  assert.deepStrictEqual(r.drivers[0].sampleRates, [44100, 48000, 96000]);
+  assert.strictEqual(r.drivers[1].error, 'did not start: init failed');
+  assert.strictEqual(parseProbe('not json').ok, false, 'non-JSON output is refused');
+  assert.strictEqual(parseProbe('{"a":1}').ok, false, 'a non-list reply is refused');
+  assert.deepStrictEqual(parseProbe('[{"name":"X","inChannels":-3,"outChannels":"2","sampleRates":[48000,"x",-1]}]').drivers[0],
+    { name: 'X', clsid: '', inChannels: 0, outChannels: 0, sampleRates: [48000] }, 'bad counts and rates are sanitized');
+  // the probe is run with the exact flag, through the injected runner
+  let called = null;
+  const ok = await probeAsio({ platform: 'win32', exe: 'audiomixer-native.exe', runner: async (exe, args) => { called = [exe, args]; return good; } });
+  assert.deepStrictEqual(called, ['audiomixer-native.exe', ['--probe-asio']]);
+  assert.strictEqual(ok.drivers.length, 2);
+  // not Windows: nothing is run
+  let ran = false;
+  const off = await probeAsio({ platform: 'linux', runner: async () => { ran = true; return good; } });
+  assert.strictEqual(off.ok, false); assert.strictEqual(ran, false, 'no probe off Windows');
+  // the engine cannot run: reported, not thrown
+  const dead = await probeAsio({ platform: 'win32', runner: async () => { throw new Error('ENOENT'); } });
+  assert.strictEqual(dead.ok, false); assert.match(dead.error, /could not run/);
+});
+
+test('ASIO startup check: every driver gets one console line with its real channel counts, or the reason it was not read', () => {
+  const { parseProbe, describeAsio } = require('./asio-probe');
+  const r = parseProbe(JSON.stringify([
+    { name: 'Focusrite USB ASIO', clsid: '{A}', inChannels: 18, outChannels: 20, sampleRates: [44100, 48000] },
+    { name: 'Broken', clsid: '{B}', inChannels: 0, outChannels: 0, sampleRates: [], error: 'did not start' },
+  ]));
+  assert.deepStrictEqual(describeAsio(r), [
+    'ASIO: Focusrite USB ASIO: 18 in / 20 out, 44100, 48000 Hz',
+    'ASIO: Broken: did not start',
+  ]);
+  assert.deepStrictEqual(describeAsio(parseProbe('[]')), ['ASIO: no driver is registered on this PC']);
+  assert.match(describeAsio({ ok: false, error: 'ASIO is only available on Windows', drivers: [] })[0], /not checked .*Windows/);
+  const serverSrc = fsx.readFileSync(pathx.join(__dirname, 'server.js'), 'utf8');
+  assert.ok(serverSrc.includes("asioProbe.probeAsio()"), 'the server runs the ASIO check at startup');
+  assert.ok(serverSrc.includes('describeAsio(r).forEach'), 'and logs one line per driver');
+});
+
 test('ASIO discovery: an ASIO entry reports the Windows ASIO registry names it matched; ASIO4ALL is found there and links to its official site', () => {
   const { listCatalog } = require('./catalog');
   const info = { platform: 'win32', portaudio: false, drivers: [], asio: ['ASIO4ALL v2', 'Focusrite USB ASIO'] };

@@ -31,10 +31,11 @@ int main(int argc, char** argv) {
 #ifdef _WIN32
   { int rc = 0; if (am::runWinTool(argc, argv, rc)) return rc; }       // --install-driver / --uninstall-driver / --install-flexasio FILE --sha256 HEX
 #endif
-  am::DeviceConfig cfg; int strips = 8; double seconds = 0, masterDb = 0, azimuth = 1e9; bool list = false;
+  am::DeviceConfig cfg; int strips = 8; double seconds = 0, masterDb = 0, azimuth = 1e9; bool list = false, probeAsio = false;
   for (int i = 1; i < argc; ++i) {
     const std::string a = argv[i]; auto next = [&]() -> const char* { return i + 1 < argc ? argv[++i] : ""; };
     if (a == "--list") list = true;
+    else if (a == "--probe-asio") probeAsio = true;
     else if (a == "--backend") cfg.backend = next();
     else if (a == "--in") cfg.inDevice = next();
     else if (a == "--out") cfg.outDevice = next();
@@ -48,6 +49,25 @@ int main(int argc, char** argv) {
     else if (a == "--master-db") masterDb = std::atof(next());
     else if (a == "--spatial") azimuth = std::atof(next());
     else { std::printf("unknown option %s (see the header of engine/cpp/app/main.cpp)\n", a.c_str()); return 2; }
+  }
+  if (probeAsio) {
+#ifdef _WIN32
+    // JSON list: one object per registered ASIO driver with its real channel counts and sample rates (the Steinberg interface, no RtAudio)
+    std::printf("[");
+    const auto drivers = am::listAsioDrivers();
+    for (size_t i = 0; i < drivers.size(); ++i) {
+      const auto p = am::probeAsioDriver(drivers[i]);
+      std::printf("%s{\"name\":\"%s\",\"clsid\":\"%s\",\"inChannels\":%ld,\"outChannels\":%ld,\"sampleRates\":[",
+                  i ? "," : "", p.name.c_str(), p.clsid.c_str(), p.inChannels, p.outChannels);
+      for (size_t k = 0; k < p.sampleRates.size(); ++k) std::printf("%s%.0f", k ? "," : "", p.sampleRates[k]);
+      std::printf("]%s}", p.error.empty() ? "" : (std::string(",\"error\":\"") + p.error + "\"").c_str());
+    }
+    std::printf("]\n");
+    return 0;
+#else
+    std::printf("[]\n");
+    return 0;
+#endif
   }
   if (list) {
     std::printf("backends built in:"); for (const auto& b : am::availableBackends()) std::printf(" %s", b.c_str());
