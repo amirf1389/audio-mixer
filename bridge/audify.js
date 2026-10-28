@@ -82,7 +82,9 @@ function openRtAudio(RtAudio, Api, key) {
   // then falls back to another API. Refuse here instead, so nothing is constructed and no other API is ever used.
   if (typeof RtAudio.getCompiledApi === 'function') {
     let compiled = null; try { compiled = RtAudio.getCompiledApi(); } catch (_) { compiled = null; }
-    if (Array.isArray(compiled) && !compiled.includes(id)) throw Object.assign(new Error(`the ${API_NAMES[key] || key} host API is not compiled into this audio engine`), { notCompiled: true });
+    // the binary may report its APIs as numbers (the ids) or as names: accept either form
+    const built = Array.isArray(compiled) && compiled.some(a => a === id || (typeof a === 'string' && apiKey(a) === key));
+    if (Array.isArray(compiled) && !built) throw Object.assign(new Error(`the ${API_NAMES[key] || key} host API is not compiled into this audio engine`), { notCompiled: true });
   }
   const rt = new RtAudio(id);
   let other = null;

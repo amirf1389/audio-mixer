@@ -232,6 +232,17 @@ test('RtAudio: an API the binary was not built with is refused before RtAudio is
   assert.strictEqual(made, 1);
 });
 
+test('RtAudio: the compiled-API check accepts the binary reporting its APIs as names, not only as numbers', () => {
+  const a = require('./audify');
+  let made = 0;
+  class RtAudio { constructor(id) { made++; this.id = id; } getApi() { return 'WINDOWS_WASAPI'; } closeStream() {} }
+  RtAudio.getCompiledApi = () => ['WINDOWS_WASAPI'];       // names, as some builds report them
+  const Api = { WINDOWS_WASAPI: 7, WINDOWS_DS: 8 };
+  assert.ok(a.openRtAudio(RtAudio, Api, 'WINDOWS_WASAPI'), 'a compiled API reported by name still opens');
+  assert.throws(() => a.openRtAudio(RtAudio, Api, 'WINDOWS_DS'), e => e.notCompiled === true);
+  assert.strictEqual(made, 1);
+});
+
 test('ASIO discovery: an ASIO entry reports the Windows ASIO registry names it matched; ASIO4ALL is found there and links to its official site', () => {
   const { listCatalog } = require('./catalog');
   const info = { platform: 'win32', portaudio: false, drivers: [], asio: ['ASIO4ALL v2', 'Focusrite USB ASIO'] };
