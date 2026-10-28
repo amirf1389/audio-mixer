@@ -1,5 +1,5 @@
 'use strict';
-// Smoke test for the EXPERIMENTAL, unwired asio-binder addon (see README.md). Run from this folder:
+// Smoke test for the asio-binder addon (read-only driver listing). Run from this folder:
 //   npm install && npm run build && npm test
 // Skips itself (rather than failing) when the addon has not been built here, so it does not block
 // `node --test` runs elsewhere in the repo that never touch this folder.
@@ -22,11 +22,11 @@ test('index.js fails clearly when the addon is not built', (t) => {
   assert.throws(() => { delete require.cache[require.resolve('./index.js')]; require('./index.js'); }, /npm install -g node-gyp/);
 });
 
-test('the built addon: listDrivers()/initializeDriver() behave as documented', (t) => {
+test('the built addon: listDrivers() is the only export and is read-only', (t) => {
   const built = path.join(__dirname, 'build', 'Release', 'asio_binder.node');
   if (!fs.existsSync(built)) return t.skip('not built here: npm install && npm run build first (needs node-gyp)');
   const asio = require(built);
-  assert.strictEqual(asio.wired, false, 'stays false until a real integration wires it in (see README.md)');
-  assert.throws(() => asio.initializeDriver(), process.platform === 'win32' ? /not wired into Audio Mixer/ : /Windows only/);
+  assert.strictEqual(typeof asio.initializeDriver, 'undefined', 'no stream-open entry point is exported');
+  assert.strictEqual(typeof asio.listDrivers, 'function');
   if (process.platform !== 'win32') assert.throws(() => asio.listDrivers(), /Windows only/);
 });

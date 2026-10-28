@@ -18,17 +18,16 @@ Audio Mixer already has two working ASIO paths:
 `drivers/asio/audiomixer_asio.cpp`). `bridge/asio-lock.js` exists to serialize access for the server's own ASIO
 use. A third, independent path that opens a driver directly — bypassing that lock — can collide with it: both
 opens fail, or one silently stops working. That was the shape of several bugs already fixed in this repo
-(ASIO drivers going undetected or detected-then-lost, RtAudio opening the wrong host API). This addon is built
-to not repeat that: `initializeDriver()` is a stub that refuses to run (see below) until it is deliberately wired
-through the lock.
+(ASIO drivers going undetected or detected-then-lost, RtAudio opening the wrong host API). This addon therefore
+does not open drivers at all: it only lists them. All ASIO streams open through `bridge/audify.js`, under the lock.
 
 ## Status
 
 - `asio.listDrivers()` — works today (Windows only). Read-only: lists the driver names under
   `HKLM\SOFTWARE\ASIO` in **one** registry view (whichever bitness this binary is built as). It cannot open a
   driver and cannot conflict with anything.
-- `asio.initializeDriver()` — **throws**. It is a deliberate no-op until someone wires it in for real (see below).
-- `asio.wired` — `false`. Flip only as part of doing the wiring below, as a visible marker that it happened.
+- There is no stream-open entry point. The native stream-open stub was removed; real ASIO streams are opened by
+  `bridge/audify.js` (RtAudio) and `engine/cpp`'s own ASIO backend.
 
 ## Build (Windows only)
 
@@ -43,7 +42,6 @@ npm run build                    # -> build/Release/asio_binder.node
 ```js
 const asio = require('./native/asio-binder');
 asio.listDrivers();        // ['Audio Mixer', 'FlexASIO', ...] or [] if none are registered
-asio.initializeDriver();   // throws: "not wired into Audio Mixer: ..."
 ```
 
 Not buildable or testable here: this sandbox has no Windows node headers / MSVC toolchain, and `node-gyp` needs
@@ -51,18 +49,3 @@ the real target Node's headers to link against. The N-API surface (`src/main.cc`
 `src/asiosdk.cc` do compile on Linux against this machine's own Node headers as a structural smoke test (see
 `test.js`); the Windows-only registry code in `src/asiosdk.cc` is behind `#ifdef _WIN32` and is untested.
 
-## Before wiring this in for real
-
-Whoever turns `initializeDriver()` into something real should, at minimum:
-
-1. **Claim the driver through `bridge/asio-lock.js` first**, exactly as `bridge/audify.js` does, and release it on
-   close / process exit. Opening a driver this addon has claimed from `bridge/audify.js` (or the other way round)
-   is the bug this stub exists to prevent.
-2. **Reuse `bridge/detect.js`'s `readAsioRegistry`** for driver listing instead of extending the single-view read
-   in `asiosdk.cc` — it already reads both registry views, retries a failed read, and keeps the last known-good
-   list for 10 minutes instead of flickering. Re-deriving that logic here would very likely reintroduce the bug
-   it fixed.
-3. Decide *why* this addon should exist alongside `bridge/audify.js` rather than extending it — a second
-   from-scratch native ASIO client is a maintenance cost, so that reason is worth writing down here.
-4. Flip `exports.Set("wired", ...)` to `true` in `src/main.cc` only once 1–2 are actually done, so `asio.wired`
-   stays an honest signal.

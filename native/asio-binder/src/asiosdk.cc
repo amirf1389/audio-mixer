@@ -3,15 +3,6 @@
 
 namespace asiobinder {
 
-bool NotYetIntegrated(std::string& reason) {
-  reason =
-      "asio_binder.initializeDriver() is not wired into Audio Mixer: ASIO drivers accept one client at a time, "
-      "and this stub does not go through bridge/asio-lock.js's single-client claim. Opening a driver from here "
-      "while bridge/server.js already has it open (via bridge/audify.js / RtAudio) would make one or both fail. "
-      "See native/asio-binder/README.md, section \"Before wiring this in for real\", before removing this guard.";
-  return false;
-}
-
 #ifdef _WIN32
 #include <windows.h>
 
