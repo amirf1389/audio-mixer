@@ -5209,25 +5209,18 @@ window.navTabs = [
                     </button>
                   </div>
 
-                  <!-- YouTube Google Server Audio Read/Write Stream API -->
+                  <!-- Media sessions: what the operating system reports as playing, read by the local bridge (GET /api/nowplaying) -->
                   <div class="glass-panel p-3 rounded-xl wing-bezel space-y-2 flex flex-col justify-between">
                     <div>
                       <div class="flex justify-between items-center border-b border-white/10 pb-1 mb-1.5">
-                        <span class="font-bold text-rose-400 text-[8px] flex items-center gap-1.5"><i class="fa-brands fa-youtube"></i> YOUTUBE GOOGLE SERVER AUDIO STREAM API</span>
-                        <span class="px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-400 border border-rose-500/30 text-[6.5px] font-bold">GOOGLE PROTOBUF DMA</span>
+                        <span class="font-bold text-cyan-400 text-[8px] flex items-center gap-1.5"><i class="fa-solid fa-music"></i> MEDIA SESSIONS (OS, LIVE)</span>
+                        <span id="media-sessions-status" class="text-[6.5px] text-slate-400">CHECKING...</span>
                       </div>
-                      <div class="bg-black/60 p-2 rounded border border-white/10 space-y-1 mb-2 text-[7px]">
-                        <div class="flex justify-between"><span class="text-slate-400">GOOGLE EDGE SERVER:</span><span class="text-emerald-400 font-bold">googleapis.com/youtube/v3 (11.4 ms CDN)</span></div>
-                        <div class="flex justify-between"><span class="text-slate-400">AUDIO FORMAT:</span><span class="text-slate-300">Opus 512 kbps WebM / 48.0 kHz 32-bit Float</span></div>
-                        <div class="flex justify-between"><span class="text-slate-400">FRAMES PROCESSED:</span><span class="text-cyan-400 font-mono">142,980 Frames • 0 Dropped (0%)</span></div>
-                      </div>
+                      <div id="media-sessions-list" class="bg-black/60 p-2 rounded border border-white/10 space-y-1 text-[7px]"></div>
                     </div>
                     <div class="flex gap-2">
-                      <button onclick="window.toggleYoutubeGoogleStream('read')" class="flex-1 py-1 bg-white/10 hover:bg-white/20 text-slate-300 rounded font-bold uppercase text-[7px] transition flex items-center justify-center gap-1">
-                        <i class="fa-solid fa-download"></i> READ STREAM (INGEST)
-                      </button>
-                      <button onclick="window.toggleYoutubeGoogleStream('write')" class="flex-1 py-1 bg-rose-500/20 hover:bg-rose-500 hover:text-black text-rose-400 border border-rose-500/40 rounded font-bold uppercase text-[7px] transition flex items-center justify-center gap-1">
-                        <i class="fa-solid fa-tower-broadcast"></i> WRITE STREAM (BROADCAST)
+                      <button onclick="window.refreshMediaSessions()" class="flex-1 py-1 bg-white/10 hover:bg-white/20 text-slate-300 rounded font-bold uppercase text-[7px] transition flex items-center justify-center gap-1">
+                        <i class="fa-solid fa-rotate"></i> REFRESH
                       </button>
                     </div>
                   </div>
@@ -12077,28 +12070,39 @@ window.navTabs = [
         };
 
         // YOUTUBE SPECIAL READ & WRITE DATA ENGINE (GOOGLE CLOUD SERVERS)
-        window.youtubeGoogleStreamApi = {
-            status: 'STREAMING ONLINE',
-            googleServerEndpoint: 'https://googleapis.com/youtube/v3/liveBroadcasts/titan-feed',
-            rtmpIngestUrl: 'rtmp://a.rtmp.youtube.com/live2/titan-stream-key',
-            edgeLatency: '11.4 ms (Google Global Edge CDN)',
-            audioCodec: 'Opus 512 kbps / WebM Float32 Interleaved',
-            sampleRate: '48.0 kHz Dual Broadcast',
-            readStreamActive: true,
-            writeStreamActive: true,
-            framesWritten: 142980,
-            droppedFrames: 0
-        };
-
-        window.toggleYoutubeGoogleStream = function(mode) {
-            if (mode === 'read') {
-                window.youtubeGoogleStreamApi.readStreamActive = !window.youtubeGoogleStreamApi.readStreamActive;
-                window.notify(`YouTube Audio Ingest (Read from Google Server): ${window.youtubeGoogleStreamApi.readStreamActive ? 'ACTIVE' : 'PAUSED'}`, 'brands fa-youtube');
-            } else if (mode === 'write') {
-                window.youtubeGoogleStreamApi.writeStreamActive = !window.youtubeGoogleStreamApi.writeStreamActive;
-                window.notify(`YouTube Live Broadcast (Write to Google RTMP Server): ${window.youtubeGoogleStreamApi.writeStreamActive ? 'TRANSMITTING' : 'OFFLINE'}`, 'brands fa-youtube');
+        // Real media sessions: what the operating system reports as playing (the local bridge reads SMTC / MPRIS / the Music apps)
+        window.refreshMediaSessions = async function() {
+            const list = document.getElementById('media-sessions-list'), status = document.getElementById('media-sessions-status');
+            if (!list || !status) return;
+            const base = (window.liveSources && window.liveSources.bridgeUrl) || '';
+            if (!base) { status.textContent = 'BRIDGE OFF'; list.textContent = 'Start the local bridge to read the OS media sessions.'; return; }
+            status.textContent = 'READING...';
+            try {
+                const r = await fetch(base + '/api/nowplaying', { cache: 'no-store' });
+                const d = await r.json();
+                if (!d.ok) throw new Error(d.error || 'bridge error');
+                const sessions = Array.isArray(d.sessions) ? d.sessions : [];
+                status.textContent = sessions.length ? sessions.length + (sessions.length > 1 ? ' SESSIONS' : ' SESSION') : 'NONE';
+                list.textContent = '';
+                if (!sessions.length) { list.textContent = 'No media app is reporting a session.'; return; }
+                for (const sess of sessions) {
+                    const row = document.createElement('div');
+                    row.className = 'flex justify-between gap-2';
+                    const name = document.createElement('span');
+                    name.className = 'text-slate-300 truncate';
+                    name.textContent = (sess.serviceName || sess.app || 'Unknown app') + (sess.title ? ' - ' + sess.title : '');
+                    const state = document.createElement('span');
+                    state.className = 'font-bold ' + (sess.status === 'playing' ? 'text-emerald-400' : 'text-slate-500');
+                    state.textContent = String(sess.status || 'unknown').toUpperCase();
+                    row.append(name, state);
+                    list.appendChild(row);
+                }
+            } catch (e) {
+                status.textContent = 'ERROR';
+                list.textContent = 'Could not read media sessions: ' + (e && e.message ? e.message : e);
             }
         };
+        setTimeout(() => window.refreshMediaSessions && window.refreshMediaSessions(), 1500);
 
         
 // ─── PLUGIN STORE & DSP EXTENSION RACK ENGINE ────────────────────────────
