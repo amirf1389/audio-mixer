@@ -11,17 +11,25 @@ function keyOf(dev) {
   return `${String(dev.hostAPIName || '').toLowerCase()}\u0000${String(dev.name || '').trim().toLowerCase()}`;
 }
 
-function claim(dev) {
+// `opts.takeover`: a device the user asked for (WRITE / READ pressed on its row) takes the single-client slot from the device that holds it. Each
+// holder registers a `preempt` callback when it claims; a takeover calls those callbacks, which stop the holder's stream and release its claim.
+// Without `takeover` a second device is refused, as before.
+function claim(dev, opts = {}) {
   const noop = { ok: true, release() {} };
   if (!dev || !/asio/i.test(dev.hostAPIName || '')) return noop;
   const key = keyOf(dev);
-  for (const [k, o] of owners) {
-    if (k !== key && o.count > 0) return { ok: false, message: `ASIO allows one driver at a time: "${o.name}" is already open. Close it first, or use WASAPI for this device.` };
+  const others = () => [...owners].filter(([k, o]) => k !== key && o.count > 0);
+  if (others().length && opts.takeover) {
+    for (const [, o] of others()) for (const preempt of [...o.preempts]) { try { preempt(); } catch (_) { /* that session is already gone */ } }
   }
-  const o = owners.get(key) || { name: dev.name, count: 0 };
+  const blocked = others()[0];
+  if (blocked) return { ok: false, message: `ASIO allows one driver at a time: "${blocked[1].name}" is already open. Close it first, or use WASAPI for this device.` };
+  const o = owners.get(key) || { name: dev.name, count: 0, preempts: new Set() };
   o.count++; owners.set(key, o);
+  const preempt = typeof opts.preempt === 'function' ? opts.preempt : null;
+  if (preempt) o.preempts.add(preempt);
   let done = false;
-  return { ok: true, release() { if (done) return; done = true; o.count--; if (o.count <= 0) owners.delete(key); } };
+  return { ok: true, release() { if (done) return; done = true; if (preempt) o.preempts.delete(preempt); o.count--; if (o.count <= 0) owners.delete(key); } };
 }
 
 module.exports = { claim, keyOf, _owners: owners };

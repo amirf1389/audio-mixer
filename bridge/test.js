@@ -535,6 +535,36 @@ test('ASIO is single-client: a second ASIO device is refused until the first is 
   _owners.clear();
 });
 
+test('ASIO takeover: WRITE on a device takes the single-client slot from the device holding it; without the flag it is still refused', () => {
+  const { claim, _owners } = require('./asio-lock');
+  _owners.clear();
+  const holder = { id: 1, name: 'ASIO4ALL v2', hostAPIName: 'ASIO' }, wanted = { id: 2, name: 'Audio Mixer', hostAPIName: 'ASIO' };
+  let stopped = 0;
+  const held = claim(holder, { preempt: () => { stopped++; held.release(); } });
+  assert.ok(held.ok);
+  // no flag: refused as before, the holder keeps running
+  const refused = claim(wanted); assert.strictEqual(refused.ok, false); assert.strictEqual(stopped, 0);
+  // takeover: the holder is stopped (its preempt releases its claim) and the wanted device gets the slot
+  const taken = claim(wanted, { takeover: true, preempt: () => {} });
+  assert.ok(taken.ok, 'the requested device takes over'); assert.strictEqual(stopped, 1, 'the holder was stopped exactly once');
+  assert.strictEqual(_owners.size, 1); assert.ok([..._owners.keys()][0].includes('audio mixer'));
+  taken.release(); assert.strictEqual(_owners.size, 0);
+  // a holder that registered no preempt cannot be taken over: the request is refused and nothing is stopped
+  const bare = claim(holder); assert.ok(bare.ok);
+  const again = claim({ id: 3, name: 'FlexASIO', hostAPIName: 'ASIO' }, { takeover: true });
+  assert.strictEqual(again.ok, false, 'no preempt registered: refused');
+  bare.release(); assert.strictEqual(_owners.size, 0);
+  _owners.clear();
+});
+
+test('ASIO takeover is requested by WRITE on a row: the page sends takeover:true and the write session passes it to the lock', () => {
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  assert.ok(/type: 'start'[^\n]*deviceId: a\.deviceId, takeover: true \}/.test(html), 'the write start message carries takeover');
+  const out = fsx.readFileSync(pathx.join(__dirname, 'output.js'), 'utf8');
+  assert.ok(/takeover: opts\.takeover === true, preempt: takenOver/.test(out), 'the write session claims with takeover and a preempt');
+  assert.ok(/const takenOver = \(\) => \{ stop\(\); conn\.close\(\); \};/.test(out), 'a takeover stops the stream and closes the socket');
+});
+
 test('ASIO lock keys on the driver NAME, not dev.id: the same driver seen with a different id (another engine / a re-scan) is one driver, not two', () => {
   const { claim, keyOf, _owners } = require('./asio-lock');
   _owners.clear();

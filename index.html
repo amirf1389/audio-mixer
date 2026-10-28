@@ -17392,7 +17392,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                     const ws = new WebSocket(self.wsUrl('/ws/output')); ws.binaryType = 'arraybuffer';
                     let done = false;
                     const fail = m => { if (!done) { done = true; try { ws.close(); } catch (e) { /* ignore */ } reject(new Error(m)); } };
-                    ws.onopen = () => ws.send(JSON.stringify({ type: 'start', channels: 2, sampleRate: ctx.sampleRate, frameSize: window.universalAsioSdk.frameSizeSetting(), exclusive: self.cfg.exclusive !== false, deviceId: a.deviceId }));
+                    ws.onopen = () => ws.send(JSON.stringify({ type: 'start', channels: 2, sampleRate: ctx.sampleRate, frameSize: window.universalAsioSdk.frameSizeSetting(), exclusive: self.cfg.exclusive !== false, deviceId: a.deviceId, takeover: true }));   // WRITE on a row takes an ASIO device over from the one holding it (see asio-lock.js)
                     ws.onerror = () => fail('local server connection failed');
                     ws.onclose = () => { if (!done) fail('closed'); else self.writes.forEach((w, key) => { if (w.ws === ws) self.stopWrite(key); }); };
                     ws.onmessage = ev => {

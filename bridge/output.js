@@ -25,6 +25,8 @@ function createSession(conn, load = loadPortAudio, loadA = audify.loadAudify) {
   let unreg = null;   // live status registry
   let frameBytes = 4; // Int16 * channels; writes must be whole frames or channels swap
 
+  // Another device was asked for (takeover): stop this stream and close the socket, so the page's row goes to stopped
+  const takenOver = () => { stop(); conn.close(); };
   const stop = () => {
     if (io) { try { io.quit(); } catch (_) { /* already closed */ } io = null; }
     if (lock) { lock.release(); lock = null; }
@@ -46,7 +48,7 @@ function createSession(conn, load = loadPortAudio, loadA = audify.loadAudify) {
     const wanted = Number.isInteger(opts.deviceId) && opts.deviceId >= 0 ? opts.deviceId : null;
     const dev = audify.pickAudifyDevice(list.devices, wanted, 'output', channels) || (wanted === null ? list.devices.find(d => d.isDefaultOutput) : null);
     if (!dev) return conn.send(JSON.stringify({ type: 'error', message: wanted !== null ? 'device not found' : 'no output device found' }));
-    lock = claim({ id: dev.id, name: dev.name, hostAPIName: dev.hostAPIName });
+    lock = claim({ id: dev.id, name: dev.name, hostAPIName: dev.hostAPIName }, { takeover: opts.takeover === true, preempt: takenOver });
     if (!lock.ok) { const msg = lock.message; lock = null; return conn.send(JSON.stringify({ type: 'error', message: msg })); }
     try {
       const st = audify.openStream({ mod: loadA(), dev, direction: 'output', channels, sampleRate, frameSize: opts.frameSize, exclusive: opts.exclusive === true,
@@ -103,7 +105,7 @@ function createSession(conn, load = loadPortAudio, loadA = audify.loadAudify) {
     const dev = pickDevice(pa, wanted, channels);
     if (!dev && wanted !== null) return conn.send(JSON.stringify({ type: 'error', message: 'device not found' }));
     if (dev) {
-      lock = claim(dev);
+      lock = claim(dev, { takeover: opts.takeover === true, preempt: takenOver });
       if (!lock.ok) { const msg = lock.message; lock = null; return conn.send(JSON.stringify({ type: 'error', message: msg })); }
     }
     try {
