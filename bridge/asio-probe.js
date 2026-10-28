@@ -35,4 +35,13 @@ async function probeAsio({ exe = 'audiomixer-native.exe', platform = process.pla
   return parseProbe(text);
 }
 
-module.exports = { probeAsio, parseProbe };
+// One startup line per ASIO driver (or one line saying why nothing was read), for the console.
+function describeAsio(result) {
+  if (!result || !result.ok) return [`ASIO: not checked (${result && result.error ? result.error : 'no answer from the native engine'})`];
+  if (!result.drivers.length) return ['ASIO: no driver is registered on this PC'];
+  return result.drivers.map(d => d.error
+    ? `ASIO: ${d.name}: ${d.error}`
+    : `ASIO: ${d.name}: ${d.inChannels} in / ${d.outChannels} out, ${d.sampleRates.join(', ') || 'no sample rates reported'} Hz`);
+}
+
+module.exports = { probeAsio, parseProbe, describeAsio };
