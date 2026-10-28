@@ -192,7 +192,7 @@ test('catalog lists drivers for this OS and detects what is installed', () => {
   assert.strictEqual(by('pipewire').forThisPc, false);
   assert.strictEqual(by('pipewire').installed, null);                     // other system: not detectable here
   assert.ok(CATALOG.every(x => x.url === null || /^https:\/\//.test(x.url)), 'every official link is https, or none (ASIO4ALL is found in the Windows ASIO registry)');
-  assert.strictEqual(by('asio4all').url, null, 'ASIO4ALL no longer links to a website');
+  assert.strictEqual(by('asio4all').url, 'https://www.asio4all.org/', 'ASIO4ALL links to its official site');
   assert.ok(CATALOG.every(x => !('download' in x)) && win.every(x => !('downloadable' in x)), 'no entry offers a download any more');
   const cat = require('./catalog'); assert.deepStrictEqual(Object.keys(cat).sort(), ['CATALOG', 'isInstalled', 'listCatalog']);   // no downloader in the module
 });
@@ -232,14 +232,14 @@ test('RtAudio: an API the binary was not built with is refused before RtAudio is
   assert.strictEqual(made, 1);
 });
 
-test('ASIO discovery: an ASIO entry reports the Windows ASIO registry names it matched; ASIO4ALL is found there and has no website link', () => {
+test('ASIO discovery: an ASIO entry reports the Windows ASIO registry names it matched; ASIO4ALL is found there and links to its official site', () => {
   const { listCatalog } = require('./catalog');
   const info = { platform: 'win32', portaudio: false, drivers: [], asio: ['ASIO4ALL v2', 'Focusrite USB ASIO'] };
   const by = id => listCatalog(info, null).find(x => x.id === id);
   const a4 = by('asio4all');
   assert.strictEqual(a4.installed, true, 'the registered ASIO4ALL is detected');
   assert.deepStrictEqual(a4.registeredAs, ['ASIO4ALL v2'], 'discovery reports the matched registry name');
-  assert.strictEqual(a4.url, null);
+  assert.strictEqual(a4.url, 'https://www.asio4all.org/');
   assert.deepStrictEqual(by('focusrite').registeredAs, ['Focusrite USB ASIO']);
   assert.strictEqual(by('wasapi').registeredAs, undefined, 'only ASIO drivers carry the discovery field');
   const none = listCatalog({ platform: 'win32', portaudio: false, drivers: [], asio: [] }, null).find(x => x.id === 'asio4all');
