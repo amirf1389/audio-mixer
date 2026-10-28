@@ -327,6 +327,13 @@ function start(port = PORT) {
 }
 
 if (require.main === module) {
-  start().then(port => console.log(`Audio Mixer bridge running: http://localhost:${port}  (open this URL to use the mixer)`));
+  start().then(port => {
+    console.log(`Audio Mixer bridge running: http://localhost:${port}  (open this URL to use the mixer)`);
+    // Which host APIs this server's audio binary was built with (RtAudio.getCompiledApi), logged once at startup so a missing ASIO / WASAPI backend is visible in the console.
+    try {
+      const mod = audifyEngine.loadAudify(); const list = typeof mod.RtAudio.getCompiledApi === 'function' ? mod.RtAudio.getCompiledApi() : [];
+      console.log(`Audio engine compiled APIs: ${(list || []).map(String).join(', ') || '(none reported)'}`);
+    } catch (e) { console.log(`Audio engine (audify) not available: ${String(e && e.message || e).split('\n')[0]}`); }
+  });
 }
 module.exports = { detectCached, server, originAllowed, hostAllowed, HOST, PORT, start };
