@@ -17228,7 +17228,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                         const ws = new WebSocket(self.wsUrl('/ws/input')); ws.binaryType = 'arraybuffer';
                         let node = null, ch = 2, done = false;
                         const fail = m => { if (!done) { done = true; try { ws.close(); } catch (e) { /* ignore */ } reject(new Error(m)); } };
-                        ws.onopen = () => ws.send(JSON.stringify({ type: 'start', channels: want, sampleRate: ctx.sampleRate, frameSize: window.universalAsioSdk.frameSizeSetting(), exclusive: self.cfg.exclusive !== false, deviceId: a.deviceId }, takeover: true }));
+                        ws.onopen = () => ws.send(JSON.stringify({ type: 'start', channels: want, sampleRate: ctx.sampleRate, frameSize: window.universalAsioSdk.frameSizeSetting(), exclusive: self.cfg.exclusive !== false, deviceId: a.deviceId, takeover: true }));
                         ws.onerror = () => fail('local server connection failed');
                         ws.onclose = () => { if (!done) fail('closed'); else if (self.caps.get(i.key) && self.caps.get(i.key).ws === ws) self.stopRead(i.key); };
                         ws.onmessage = ev => {
