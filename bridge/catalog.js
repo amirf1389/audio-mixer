@@ -14,9 +14,9 @@ const CATALOG = [
   { id: 'flexasio', os: ['win32'], kind: 'asio', name: 'FlexASIO', vendor: 'Etienne Dechamps (open source)',
     note: 'ASIO driver on top of WASAPI / PortAudio: ASIO for any sound card (MIT). Get it from the project\'s official GitHub release page, or install it with: node scripts/install-flexasio.js (verified download, silent install).',
     url: 'https://github.com/dechamps/FlexASIO/releases', detect: { drivers: ['flexasio'], asio: /flexasio/i } },
-  { id: 'asio4all', os: ['win32'], kind: 'asio', name: 'ASIO4ALL', vendor: 'Michael Tippach',
-    note: 'Universal low-latency ASIO driver for WDM audio hardware. Get the installer from the official site (asio4all.org).',
-    url: 'https://www.asio4all.org/', detect: { drivers: ['asio4all'], asio: /asio4all/i } },
+  { id: 'asio4all', os: ['win32'], kind: 'asio', name: 'ASIO4ALL (Windows ASIO driver)', vendor: 'Michael Tippach',
+    note: 'Universal ASIO driver for WDM hardware, found through the Windows ASIO registry (HKLM\\SOFTWARE\\ASIO) and opened by the native ASIO path. Nothing is downloaded from a website here: if it is not listed, install the driver from its own installer.',
+    url: null, detect: { drivers: ['asio4all'], asio: /asio4all/i } },
   { id: 'steinberg-asio', os: ['win32', 'darwin'], kind: 'sdk', name: 'Steinberg ASIO (SDK and generic driver)', vendor: 'Steinberg Media Technologies',
     note: 'ASIO is a Steinberg specification; drivers are written by the hardware vendor.',
     url: 'https://www.steinberg.net/developers/', detect: { asioAny: true } },
@@ -84,6 +84,8 @@ function listCatalog(info, dir) {
     PUBLIC_FIELDS.forEach(k => { if (it[k] !== undefined) out[k] = it[k]; });
     out.forThisPc = !platform || it.os.includes(platform);
     out.installed = out.forThisPc ? isInstalled(it, info) : null;   // drivers for other systems cannot be detected here
+    // discovery: which registry ASIO names this entry matched (the Windows ASIO registry, read by detect.js), so the page can show the match
+    if ((it.kind === 'asio' || it.kind === 'vendor') && it.detect && it.detect.asio && info && info.platform === 'win32') out.registeredAs = (info.asio || []).filter(n => it.detect.asio.test(n));
     return out;
   });
 }
