@@ -2115,6 +2115,29 @@ test('ASIO (RtAudio): one stream per driver. Reading and writing a device share 
   d.close(); assert.strictEqual(a._asioOf(fa).size, 0);
 });
 
+test('ASIO duplex sharing is keyed on the driver NAME, not dev.id: read and write opened from two independent device scans share ONE duplex stream', () => {
+  const a = require('./audify');
+  const fa = fakeAudify();
+  const base = a.listDevices(() => fa).devices.find(d => d.api === 'WINDOWS_ASIO');
+  // the output session and the input session each enumerate the device on their own, so the SAME physical driver carries a different dev.id in each
+  const outDev = { ...base }, inDev = { ...base, id: base.id + 500 };
+  const got = [];
+  const out = a.openStream({ mod: fa, dev: outDev, direction: 'output', channels: 2, sampleRate: 48000 });
+  assert.strictEqual(a._asioOf(fa).size, 1); assert.ok(fa.opened[0].out && !fa.opened[0].inp);
+  const inp = a.openStream({ mod: fa, dev: inDev, direction: 'input', channels: 2, sampleRate: 48000, onData: b => got.push(b.length) });
+  // the differing ids must not hide that it is the same driver: it re-opens as ONE shared duplex stream, not a second (colliding) single-client stream
+  assert.strictEqual(a._asioOf(fa).size, 1, 'one registry entry for the driver despite the two ids');
+  assert.strictEqual(fa.opened.length, 2); assert.ok(fa.opened[1].out && fa.opened[1].inp, 're-opened as one duplex stream');
+  assert.strictEqual(inp.channels, 2); assert.strictEqual(out.channels, 2);
+  out.write(Buffer.alloc(out.frameSize * 4)); assert.ok(fa.written.length >= 1);                 // the writer stays attached across the re-open
+  inp.close(); out.write(Buffer.alloc(out.frameSize * 4)); out.close();                            // closing the reader (its own id) still finds the shared entry
+  assert.strictEqual(a._asioOf(fa).size, 0);
+  // the duplex endpoint also refuses a second open of the same driver seen under a different id
+  const dd = a.openDuplex({ mod: fa, dev: outDev, inChannels: 2, outChannels: 2, sampleRate: 48000 });
+  assert.throws(() => a.openStream({ mod: fa, dev: inDev, direction: 'output', channels: 2, sampleRate: 48000 }), /already open for reading and writing/);
+  dd.close(); assert.strictEqual(a._asioOf(fa).size, 0);
+});
+
 test('system audio: interfaces are read from the OS on Linux, macOS and Windows without an audio engine', async () => {
   const sa = require('./sysaudio');
   const alsa = 'card 1: USB [Scarlett 2i2 USB], device 0: USB Audio [USB Audio]\ncard 0: PCH [HDA Intel PCH], device 0: ALC [ALC3246 Analog]\n';

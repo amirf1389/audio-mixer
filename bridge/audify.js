@@ -96,6 +96,11 @@ function openRtAudio(RtAudio, Api, key) {
 // device share one duplex stream (see openStream / openDuplex); the same registry tells listDevices not to probe a driver that is in use.
 const registries = new WeakMap();   // per loaded module (in production there is exactly one)
 const asioOf = mod => { let m = registries.get(mod); if (!m) { m = new Map(); registries.set(mod, m); } return m; };
+// The single-client registry is keyed on the driver NAME, not dev.id. Reading and writing a device arrive as two separate sessions, each of which
+// enumerates the device afresh, so the same ASIO driver carries a different dev.id in each (dev.id is a per-enumeration sequential integer). Keying on
+// id made the two sessions miss that they are the same driver, so the second direction asked the single-client driver for a second stream (a collision
+// that fails or stalls the first) instead of re-opening it as the one shared duplex stream. The name is the stable per-driver identity (see asio-lock.js).
+const asioRegKey = dev => String((dev && dev.name) || '').trim().toLowerCase();
 
 const inCh = d => (d && d.inputChannels) || 0, outCh = d => (d && d.outputChannels) || 0;
 // A driver that failed to probe on the first try (waking up, the control panel just closed) often answers on a fresh RtAudio instance.
@@ -441,7 +446,8 @@ function openStream(o) {
 }
 function openAsioStream(o, asio) {
   const { dev, direction } = o;
-  let e = asio.get(dev.id);
+  const k = asioRegKey(dev);
+  let e = asio.get(k);
   if (e && e.exclusive) throw new Error(`${dev.name} is already open for reading and writing`);
   if (e && e.dirs[direction]) throw new Error(`${dev.name} is already open for ${direction === 'output' ? 'writing' : 'reading'}`);
   const user = { onData: o.onData, onError: o.onError, channels: Number(o.channels) };
@@ -450,7 +456,7 @@ function openAsioStream(o, asio) {
     e.onData = b => { const d = e.dirs.input; if (d && d.onData) d.onData(b); };
     e.onError = err => Object.values(e.dirs).forEach(d => d.onError && d.onError(err));
     e.st = openStreamRaw({ ...o, onData: e.onData, onError: e.onError });
-    asio.set(dev.id, e);
+    asio.set(k, e);
   } else {
     if (Number(o.sampleRate) !== e.sampleRate) throw new Error(`${dev.name} is already open at ${e.sampleRate} Hz: reading and writing it together needs the same sample rate`);
     const inCh = direction === 'input' ? user.channels : e.dirs.input.channels, outCh = direction === 'output' ? user.channels : e.dirs.output.channels;
@@ -458,7 +464,7 @@ function openAsioStream(o, asio) {
     try {
       e.st = openDuplexRaw({ mod: o.mod, dev, inChannels: inCh, outChannels: outCh, sampleRate: e.sampleRate, frameSize: o.frameSize !== undefined ? o.frameSize : e.frameSize, onData: e.onData, onError: e.onError });
     } catch (err) {
-      try { e.st = openStreamRaw({ ...e.first, onData: e.onData, onError: e.onError }); } catch (_) { asio.delete(dev.id); }   // give the first user its stream back
+      try { e.st = openStreamRaw({ ...e.first, onData: e.onData, onError: e.onError }); } catch (_) { asio.delete(k); }   // give the first user its stream back
       throw err;
     }
   }
@@ -471,7 +477,7 @@ function openAsioStream(o, asio) {
     close() {
       if (entry.dirs[direction] !== user) return;
       delete entry.dirs[direction];
-      if (!Object.keys(entry.dirs).length) { try { entry.st.close(); } finally { if (asio.get(dev.id) === entry) asio.delete(dev.id); } }
+      if (!Object.keys(entry.dirs).length) { try { entry.st.close(); } finally { if (asio.get(k) === entry) asio.delete(k); } }
     },
   };
 }
@@ -481,13 +487,14 @@ function openDuplex(o) {
   const { dev } = o;
   if (!dev || dev.api !== 'WINDOWS_ASIO') return openDuplexRaw(o);
   const asio = asioOf(o.mod);
-  if (asio.has(dev.id)) throw new Error(`${dev.name} is already open: close it first, or read and write it together from the same page`);
+  const k = asioRegKey(dev);
+  if (asio.has(k)) throw new Error(`${dev.name} is already open: close it first, or read and write it together from the same page`);
   asio.opening = (asio.opening || 0) + 1;
   let st; try { st = openDuplexRaw(o); } finally { asio.opening--; }
   const entry = { exclusive: true, dev, st, dirs: {} };
-  asio.set(dev.id, entry);
+  asio.set(k, entry);
   const close = st.close;
-  st.close = () => { try { close(); } finally { if (asio.get(dev.id) === entry) asio.delete(dev.id); } };
+  st.close = () => { try { close(); } finally { if (asio.get(k) === entry) asio.delete(k); } };
   return st;
 }
 
