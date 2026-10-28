@@ -197,6 +197,17 @@ test('catalog lists drivers for this OS and detects what is installed', () => {
   const cat = require('./catalog'); assert.deepStrictEqual(Object.keys(cat).sort(), ['CATALOG', 'isInstalled', 'listCatalog']);   // no downloader in the module
 });
 
+test('ASIO takeover also covers READ and duplex: a READ on a row takes the driver over, and a displaced read/duplex stops and closes its socket', () => {
+  const inp = fsx.readFileSync(pathx.join(__dirname, 'input.js'), 'utf8'), dup = fsx.readFileSync(pathx.join(__dirname, 'duplex.js'), 'utf8');
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  for (const [name, src] of [['input', inp], ['duplex', dup]]) {
+    assert.ok(/takeover: opts\.takeover === true, preempt: takenOver/.test(src), name + ': claims with takeover and a preempt');
+    assert.ok(/const takenOver = \(\) => \{ stop\(\); conn\.close\(\); \};/.test(src), name + ': a takeover stops the stream and closes the socket');
+  }
+  assert.ok(html.includes("deviceId: a.deviceId, takeover: true }));"), 'READ start carries takeover');
+  assert.ok(html.includes("deviceId: a.deviceId, takeover: true"), 'duplex start carries takeover');
+});
+
 test('ASIO discovery: an ASIO entry reports the Windows ASIO registry names it matched; ASIO4ALL is found there and has no website link', () => {
   const { listCatalog } = require('./catalog');
   const info = { platform: 'win32', portaudio: false, drivers: [], asio: ['ASIO4ALL v2', 'Focusrite USB ASIO'] };
