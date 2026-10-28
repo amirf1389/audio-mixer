@@ -220,6 +220,18 @@ test('SIGNAL badge: a meter row lights above -50 dBFS and holds 3 s after the si
   assert.ok(html.includes("const sg = signalState(r.sigUntil, top, now);"), 'the meter loop updates the badge each frame');
 });
 
+test('RtAudio: an API the binary was not built with is refused before RtAudio is constructed (no "no compiled support" fallback)', () => {
+  const a = require('./audify');
+  let made = 0;
+  class RtAudio { constructor(id) { made++; this.id = id; } getApi() { return 'WINDOWS_WASAPI'; } closeStream() {} }
+  RtAudio.getCompiledApi = () => [7];                     // only WASAPI compiled in
+  const Api = { WINDOWS_WASAPI: 7, WINDOWS_DS: 8, WINDOWS_ASIO: 6 };
+  assert.throws(() => a.openRtAudio(RtAudio, Api, 'WINDOWS_DS'), e => e.notCompiled === true && /not compiled into this audio engine/.test(e.message));
+  assert.strictEqual(made, 0, 'nothing constructed for an uncompiled API');
+  assert.ok(a.openRtAudio(RtAudio, Api, 'WINDOWS_WASAPI'), 'a compiled API still opens');
+  assert.strictEqual(made, 1);
+});
+
 test('ASIO discovery: an ASIO entry reports the Windows ASIO registry names it matched; ASIO4ALL is found there and has no website link', () => {
   const { listCatalog } = require('./catalog');
   const info = { platform: 'win32', portaudio: false, drivers: [], asio: ['ASIO4ALL v2', 'Focusrite USB ASIO'] };
