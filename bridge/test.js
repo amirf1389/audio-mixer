@@ -2470,6 +2470,40 @@ test('ASIO probe: a second try on a fresh instance rescues a driver that was not
   assert.ok(html.includes('ls-reprobe') && html.includes("'?force=1'") && html.includes('PROBE AGAIN') && html.includes('i.probeError'));
 });
 
+test('ASIO partial probe: a driver read with channels on one side only (no inputs) is re-probed and never loses a direction, so a duplex interface reaches the mixer with its inputs', () => {
+  const a = require('./audify');
+  const foc = { id: 0, name: 'Focusrite USB ASIO', sampleRates: [48000], preferredSampleRate: 48000 };
+  const asioDev = r => r.devices.find(d => d.api === 'WINDOWS_ASIO');
+  const mk = script => {               // script: array of getDevices() results for the ASIO api, consumed one per probe
+    const fa = fakeAudify(); const orig = fa.RtAudio.prototype.getDevices; let n = 0;
+    fa.RtAudio.prototype.getDevices = function () { if (this.api !== 6) return orig.call(this); const s = script[Math.min(n, script.length - 1)]; n++; return s; };
+    return { fa, probes: () => n };
+  };
+
+  // 1. first probe reads outputs but NO inputs (partial); the retry reads the full duplex shape -> the interface is listed WITH its 18 inputs
+  { const { fa, probes } = mk([[{ ...foc, inputChannels: 0, outputChannels: 20 }], [{ ...foc, inputChannels: 18, outputChannels: 20 }]]);
+    const d = asioDev(a.listDevices(() => fa));
+    assert.strictEqual(d.maxInputChannels, 18, 'the inputs the retry found are adopted'); assert.strictEqual(d.maxOutputChannels, 20);
+    assert.strictEqual(probes(), 2, 'a one-sided ASIO reading triggers exactly one retry'); }
+
+  // 2. a device already seen as full (18/20) must not lose its inputs when a later scan reads it partially (0/20)
+  { const { fa } = mk([[{ ...foc, inputChannels: 18, outputChannels: 20 }]]);
+    assert.strictEqual(asioDev(a.listDevices(() => fa)).maxInputChannels, 18);                  // scan 1: full
+    fa.RtAudio.prototype.getDevices = function () { return this.api === 6 ? [{ ...foc, inputChannels: 0, outputChannels: 20 }] : []; };   // later scans only ever read outputs
+    assert.strictEqual(asioDev(a.listDevices(() => fa)).maxInputChannels, 18, 'the known inputs are kept through a partial probe');
+    assert.strictEqual(asioDev(a.listDevices(() => fa)).maxInputChannels, 18); }
+
+  // 3. a genuinely one-sided driver (no inputs on either probe) is confirmed once, then NOT reloaded on every later scan
+  { const { fa, probes } = mk([[{ ...foc, inputChannels: 0, outputChannels: 20 }]]);            // every probe returns output-only
+    assert.strictEqual(asioDev(a.listDevices(() => fa)).maxOutputChannels, 20); assert.strictEqual(probes(), 2, 'retried once to be sure');
+    const before = probes(); a.listDevices(() => fa); assert.strictEqual(probes() - before, 1, 'confirmed one-sided: no second probe on later scans'); }
+
+  // 4. mergeDev-through-mergeAsio never downgrades, in either direction
+  { const asio = {}; a.mergeAsio(asio, [{ name: 'X', inputChannels: 4, outputChannels: 6 }], 1);
+    const m = a.mergeAsio(asio, [{ name: 'X', inputChannels: 0, outputChannels: 6 }], 2);
+    assert.strictEqual(m.list[0].inputChannels, 4, 'a later input-less read does not erase the remembered inputs'); assert.strictEqual(m.list[0].outputChannels, 6); }
+});
+
 test('a device the engine could not probe (0 channels, not ASIO) is flagged, takes its mode from the OS endpoint list, and a stream is still tried', () => {
   const a = require('./audify'), { groupInterfaces } = require('./interfaces'); const fa = fakeAudify();
   const orig = fa.RtAudio.prototype.getDevices; let calls = 0;
