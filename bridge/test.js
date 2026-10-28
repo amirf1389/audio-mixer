@@ -243,6 +243,14 @@ test('RtAudio: the compiled-API check accepts the binary reporting its APIs as n
   assert.strictEqual(made, 1);
 });
 
+test('no fake stream: the page has no hard-coded YouTube stream status or key; the card reads the real OS media sessions from /api/nowplaying', () => {
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  for (const bad of ['youtubeGoogleStreamApi', 'toggleYoutubeGoogleStream', 'titan-stream-key', 'titan-feed', 'STREAMING ONLINE', 'rtmp://a.rtmp.youtube.com']) assert.ok(!html.includes(bad), 'removed: ' + bad);
+  assert.ok(html.includes("window.refreshMediaSessions = async function()"), 'the real reader exists');
+  assert.ok(html.includes("base + '/api/nowplaying'"), 'it reads the bridge media-session endpoint');
+  assert.ok(html.includes('id="media-sessions-list"') && html.includes('id="media-sessions-status"'), 'the card has its list and status');
+});
+
 test('ASIO discovery: an ASIO entry reports the Windows ASIO registry names it matched; ASIO4ALL is found there and links to its official site', () => {
   const { listCatalog } = require('./catalog');
   const info = { platform: 'win32', portaudio: false, drivers: [], asio: ['ASIO4ALL v2', 'Focusrite USB ASIO'] };
