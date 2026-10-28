@@ -17846,6 +17846,8 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
         const pct = db => Math.max(0, Math.min(100, (db - MIN_DB) / -MIN_DB * 100));
         const mk = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
 
+        // SIGNAL badge rule: lit while the top peak is above the threshold and for a hold time after it falls below (so a short gap does not flicker)
+        function signalState(untilMs, topDb, now, thrDb = -50, holdMs = 3000) { const on = topDb > thrDb; return { until: on ? now + holdMs : untilMs, on: on || now < untilMs }; }
         function makeRow(m) {
             const el = mk('div', 'flex items-center gap-1.5 min-w-0');
             const asio = /asio/i.test(m.hostApi || '');
@@ -17866,9 +17868,10 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             el.appendChild(barsWrap);
             if ((m.channels || 2) > MAX_BARS) el.appendChild(mk('span', 'text-slate-500', '+' + (m.channels - MAX_BARS)));
             const peak = mk('span', 'font-bold text-slate-200 w-14 text-right'); el.appendChild(peak);
+            const sig = mk('span', 'text-[9px] font-black tracking-wide w-12 text-left text-slate-700', 'NO SIG'); sig.title = 'SIGNAL: lit while this source is above -50 dBFS (and for 3 s after)'; el.appendChild(sig);
             const clip = mk('span', 'w-2 h-2 rounded-full bg-slate-700 inline-block'); clip.title = 'Clip: lights when the signal clips (3 samples in a row over the threshold, or one at full scale)'; el.appendChild(clip);
             clip.style.cursor = 'pointer';
-            return { el, label, bars, peak, clip, hold: new Array(n).fill(MIN_DB), holdAt: new Array(n).fill(0), clipUntil: 0, clipN: 0, clipLatched: false, chClip: new Array(n).fill(false), last: 0, msg: m };
+            return { el, label, bars, peak, sig, sigUntil: 0, clip, hold: new Array(n).fill(MIN_DB), holdAt: new Array(n).fill(0), clipUntil: 0, clipN: 0, clipLatched: false, chClip: new Array(n).fill(false), last: 0, msg: m };
         }
 
         const meters = window.asioMeters = {
@@ -17913,6 +17916,8 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                     if (pk > top) top = pk;
                 });
                 r.peak.textContent = top <= MIN_DB ? '-INF' : (top > 0 ? '+' : '') + top.toFixed(1) + ' dB';
+                const sg = signalState(r.sigUntil, top, now); r.sigUntil = sg.until;
+                r.sig.textContent = sg.on ? 'SIGNAL' : 'NO SIG'; r.sig.className = 'text-[9px] font-black tracking-wide w-12 text-left ' + (sg.on ? 'text-emerald-400' : 'text-slate-700');
                 r.clip.className = 'w-2 h-2 rounded-full inline-block ' + (now < r.clipUntil ? 'bg-rose-500 shadow-[0_0_6px_#f43f5e]' : r.clipLatched ? 'bg-rose-800' : 'bg-slate-700');
                 r.clip.title = r.clipN ? 'Clipped ' + r.clipN + ' time' + (r.clipN > 1 ? 's' : '') + '. Click to clear.' : 'No clipping';
                 r.clip.onclick = () => { r.clipN = 0; r.clipLatched = false; r.clipUntil = 0; r.chClip.fill(false); };

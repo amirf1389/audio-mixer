@@ -208,6 +208,18 @@ test('ASIO takeover also covers READ and duplex: a READ on a row takes the drive
   assert.ok(html.includes("deviceId: a.deviceId, takeover: true"), 'duplex start carries takeover');
 });
 
+test('SIGNAL badge: a meter row lights above -50 dBFS and holds 3 s after the signal drops; the badge is on every meter row', () => {
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  const line = html.match(/function signalState\([^\n]*\n/)[0];
+  const signalState = new Function(line + 'return signalState;')();
+  const a = signalState(0, -30, 1000);
+  assert.strictEqual(a.on, true, 'above -50 dBFS lights the badge');
+  assert.strictEqual(signalState(a.until, -80, 2000).on, true, 'inside the 3 s hold it stays lit');
+  assert.strictEqual(signalState(a.until, -80, 5000).on, false, 'after the hold it goes dark');
+  assert.strictEqual(signalState(0, -50, 1000).on, false, 'exactly at the threshold is not signal');
+  assert.ok(html.includes("const sg = signalState(r.sigUntil, top, now);"), 'the meter loop updates the badge each frame');
+});
+
 test('ASIO discovery: an ASIO entry reports the Windows ASIO registry names it matched; ASIO4ALL is found there and has no website link', () => {
   const { listCatalog } = require('./catalog');
   const info = { platform: 'win32', portaudio: false, drivers: [], asio: ['ASIO4ALL v2', 'Focusrite USB ASIO'] };
