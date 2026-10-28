@@ -1871,7 +1871,7 @@ test('ASIO detection (Windows registry): both views are read, a failed read is r
   const src = fsx.readFileSync(pathx.join(__dirname, 'detect.js'), 'utf8'); assert.match(src, /nowMs - audifyMemory\.at < 15000/); assert.match(fsx.readFileSync(pathx.join(__dirname, 'server.js'), 'utf8'), /detect\(\{ force \}\)/);
 });
 
-test('RtAudio: an instance is always created for ONE named host API; a missing API entry or a substituted API is refused, never opened with no argument', async () => {
+test('RtAudio: an instance is always created for ONE named host API; a missing API entry or a substituted API is refused, never opened with no argument (single AND duplex streams)', async () => {
   const au = require('./audify'), fake = fakeAudify();
   const dsDev = { api: 'WINDOWS_DS', rtId: 1, name: 'Speakers', hostAPIName: 'Windows DirectSound', maxOutputChannels: 2, maxInputChannels: 0, sampleRates: [48000] };
   // the module has no entry for the API: the old code did new RtAudio(undefined) and RtAudio picked another API
@@ -1884,6 +1884,22 @@ test('RtAudio: an instance is always created for ONE named host API; a missing A
   assert.strictEqual(fake.opened.length, 0);
   // the device scan skips such an API quietly and still lists the others
   const scan = au.detectAudify(() => noEntry); assert.ok(scan.devices.some(d => d.hostApi && /ASIO/i.test(d.hostApi)), 'ASIO is still listed'); assert.ok(!scan.devices.some(d => /DirectSound/i.test(d.hostApi)));
+
+  // ASIO is single-client: read + write share ONE duplex stream, so the duplex path is where ASIO is really opened.
+  // It must honour the SAME guard - a missing or substituted API entry is refused there too, never opened on
+  // another API (an ASIO duplex stream silently running on WASAPI/DirectSound would be the real-world ASIO bug).
+  // Exercised through openDuplex() - the public /ws/duplex path, with the single-client ASIO lock - which calls
+  // openDuplexRaw internally; that is the real way an ASIO duplex stream is opened.
+  const asioDev = { api: 'WINDOWS_ASIO', rtId: 0, name: 'Focusrite USB ASIO', hostAPIName: 'ASIO', maxInputChannels: 18, maxOutputChannels: 20, sampleRates: [48000] };
+  const dupNoEntry = fakeAudify(); const mNoAsio = { ...dupNoEntry, RtAudioApi: { ...dupNoEntry.RtAudioApi } }; delete mNoAsio.RtAudioApi.WINDOWS_ASIO;
+  assert.throws(() => au.openDuplex({ mod: mNoAsio, dev: asioDev, inChannels: 2, outChannels: 2, sampleRate: 48000, frameSize: 256 }), /ASIO host API is not available/);
+  assert.strictEqual(dupNoEntry.opened.length, 0, 'duplex opened nothing on another API when ASIO has no entry');
+  assert.strictEqual(au._asioOf(mNoAsio).size, 0, 'a refused ASIO duplex open leaves no dangling single-client lock');
+  const dupSub = fakeAudify(); class SubA extends dupSub.RtAudio { getApi() { return 'Dummy'; } }
+  const mSub = { ...dupSub, RtAudio: SubA };
+  assert.throws(() => au.openDuplex({ mod: mSub, dev: asioDev, inChannels: 2, outChannels: 2, sampleRate: 48000, frameSize: 256 }), /not compiled into this audio engine/);
+  assert.strictEqual(dupSub.opened.length, 0, 'duplex opened nothing when RtAudio substituted another API for ASIO');
+  assert.strictEqual(au._asioOf(mSub).size, 0, 'a substituted-API ASIO duplex open leaves no dangling lock');
 });
 
 test('Web Audio -> ASIO with a Bluetooth system output: a page rate the devices are not opened at (16 kHz hands-free) is converted, not played at the wrong speed; the page links the master to ASIO by itself', () => {
@@ -4185,6 +4201,28 @@ test('auto volume control (dual mode) + dynamic EQ: master-bus gain riders wired
   assert.strictEqual(run(mkWindow(null, deq3), 'rideDynamicEq', [-6], 1), 0);
   assert.strictEqual(deq3.gainDb, 0);
 
+  // TREBLE GUARD (4-16 kHz hearing/tweeter protection): same compressor math as dynamic EQ, -(over)*(1-1/ratio),
+  // fed the measured HF band peak. 8 dB over a -6 dB threshold at ratio 8 -> -(8)*(1-1/8) = -7 dB of shelf cut.
+  const mkTG = (trebleGuard) => ({ state: { trebleGuard }, localStorage: undefined, notify: () => {} });
+  const tg1 = { enabled: true, loHz: 4000, hiHz: 16000, threshold: -6, ratio: 8, gainDb: 0 };
+  const tgResult = run(mkTG(tg1), 'rideTrebleGuard', [2], 400);
+  assert.ok(Math.abs(tgResult - -7) < 0.05, 'expected treble guard to converge to -7 dB, got ' + tgResult);
+  // band under threshold: no attenuation at all
+  const tg2 = { enabled: true, loHz: 4000, hiHz: 16000, threshold: -6, ratio: 8, gainDb: 0 };
+  assert.strictEqual(run(mkTG(tg2), 'rideTrebleGuard', [-20], 1), 0);
+  // a silent / absent band (null or -Infinity) never trips the guard and resets to 0
+  const tg3 = { enabled: true, loHz: 4000, hiHz: 16000, threshold: -6, ratio: 8, gainDb: -5 };
+  assert.strictEqual(run(mkTG(tg3), 'rideTrebleGuard', [null], 1), 0);
+  assert.strictEqual(tg3.gainDb, 0);
+  assert.strictEqual(run(mkTG({ enabled: true, loHz: 4000, hiHz: 16000, threshold: -6, ratio: 8, gainDb: -5 }), 'rideTrebleGuard', [-Infinity], 1), 0);
+  // disabled always resets to exactly 0
+  const tg4 = { enabled: false, loHz: 4000, hiHz: 16000, threshold: -6, ratio: 8, gainDb: -9 };
+  assert.strictEqual(run(mkTG(tg4), 'rideTrebleGuard', [2], 1), 0);
+  assert.strictEqual(tg4.gainDb, 0);
+  // a hard -24 dB floor even on an extreme overshoot (brickwall protection, never runaway)
+  const tg5 = { enabled: true, loHz: 4000, hiHz: 16000, threshold: -6, ratio: 8, gainDb: 0 };
+  assert.ok(run(mkTG(tg5), 'rideTrebleGuard', [60], 400) >= -24 - 1e-9, 'never drops below the -24 dB floor');
+
   // ampCalc's subwoofer protection credit (the same function the bus & matrix outputs test above exercises) -
   // scoped to the bus-outs script block, which has its own "// ── graph ──" marker elsewhere in the page too
   const busOutsSc = html.slice(html.indexOf('<script id="bus-outs">'), html.indexOf('<script id="rt-engine">'));
@@ -4206,7 +4244,7 @@ test('DSP math helpers: equal-power EQ-bank crossfade curve, Fletcher-Munson lou
   const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
   const start = html.indexOf('// DSP MATH HELPERS'), end = html.indexOf('// 15 STANDARD PRESETS');
   assert.ok(start > 0 && end > start);
-  const { equalPowerCrossfadeCurve, fletcherMunsonCompensation, linkwitzRileyQuadBands } = new Function(html.slice(start, end) + '\nreturn { equalPowerCrossfadeCurve, fletcherMunsonCompensation, linkwitzRileyQuadBands };')();
+  const { equalPowerCrossfadeCurve, fletcherMunsonCompensation, linkwitzRileyQuadBands, hfBandPeakDb } = new Function(html.slice(start, end) + '\nreturn { equalPowerCrossfadeCurve, fletcherMunsonCompensation, linkwitzRileyQuadBands, hfBandPeakDb };')();
 
   // equal-power crossfade: starts at 0, ends at 1, monotonically increasing, and at every point the fade-in curve
   // and its reverse (the fade-out complement) sum their squares to 1 (constant power) - sin^2 + cos^2 = 1
@@ -4246,6 +4284,55 @@ test('DSP math helpers: equal-power EQ-bank crossfade curve, Fletcher-Munson lou
   assert.throws(() => linkwitzRileyQuadBands(800, 150, 4000), /strictly increasing/, 'out-of-order corners are refused');
   assert.throws(() => linkwitzRileyQuadBands(0, 800, 4000), /positive/);
   assert.throws(() => linkwitzRileyQuadBands(150, 150, 4000), /strictly increasing/, 'equal corners are refused (zero-width band)');
+
+  // hfBandPeakDb: the loudest bin inside [loHz, hiHz] of a getFloatFrequencyData-style dB spectrum (treble guard).
+  // At 48 kHz / fftSize 4096, binHz = 11.72 Hz; bin k is centred at k*binHz. Build a spectrum where one bin inside
+  // the 4-16 kHz band is hot and the rest are quiet, and confirm it is the value returned.
+  const SR = 48000, FFT = 4096, binHz = SR / FFT, nBins = FFT / 2;
+  const spec = new Float32Array(nBins).fill(-120);
+  const hotBin = Math.round(8000 / binHz); spec[hotBin] = -8;        // a loud 8 kHz component, inside 4-16 kHz
+  const lowBin = Math.round(500 / binHz); spec[lowBin] = -2;          // an even louder 500 Hz component, OUTSIDE the band
+  assert.ok(Math.abs(hfBandPeakDb(spec, SR, FFT, 4000, 16000) - -8) < 1e-9, 'returns the loudest bin inside the band, ignoring louder content below it');
+  // a band with nothing above the floor returns the floor value, not the out-of-band peak
+  const quiet = new Float32Array(nBins).fill(-120); quiet[lowBin] = 0;
+  assert.ok(hfBandPeakDb(quiet, SR, FFT, 4000, 16000) <= -119.9, 'ignores content outside the band entirely');
+  // empty / invalid inputs never trip the guard (return -Infinity)
+  assert.strictEqual(hfBandPeakDb(new Float32Array(0), SR, FFT, 4000, 16000), -Infinity);
+  assert.strictEqual(hfBandPeakDb(spec, 0, FFT, 4000, 16000), -Infinity);
+  assert.strictEqual(hfBandPeakDb(null, SR, FFT, 4000, 16000), -Infinity);
+  // a band entirely above Nyquist maps to no bins -> -Infinity (never a spurious trip)
+  assert.strictEqual(hfBandPeakDb(spec, SR, FFT, 30000, 40000), -Infinity);
+});
+
+test('treble guard is wired into the master chain before the limiter, with a UI toggle; DAC output detection no longer grabs the microphone', () => {
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+
+  // the treble-guard high-shelf is built, defaults to 0 dB (no-op), and sits just before the master limiter
+  assert.ok(html.includes("trebleGuard.type = 'highshelf'"), 'treble guard is a high shelf');
+  assert.ok(html.includes('window.state.nodes.trebleGuard = trebleGuard'), 'treble guard node is stored');
+  const tgIdx = html.indexOf('lastFilter = trebleGuard;'), limIdx = html.indexOf('const masterLimiter = window.state.ctx.createDynamicsCompressor()');
+  assert.ok(tgIdx > 0 && limIdx > tgIdx, 'treble guard is inserted into the chain before the master limiter is built');
+  // default state is off and never applies a static cut
+  assert.ok(html.includes("trebleGuard: { enabled: false, loHz: 4000, hiHz: 16000, threshold: -6, ratio: 8, gainDb: 0 }"), 'treble guard defaults off, 4-16 kHz');
+  // the rider, toggle and threshold setter exist, and the UI button/readout are present
+  for (const s of ['window.rideTrebleGuard = function', 'window.toggleTrebleGuard = function', 'window.setTrebleGuardThreshold = function',
+    'id="btn-treble-guard"', 'onclick="window.toggleTrebleGuard()"', 'id="treble-guard-thr"', 'id="treble-guard-gr"']) assert.ok(html.includes(s), s);
+  // a dedicated sidechain analyser (0 dBFS ceiling, feed-forward tap on the guard's input) feeds the measurement
+  assert.ok(html.includes('trebleAnalyser.minDecibels = -100; trebleAnalyser.maxDecibels = 0;'), 'treble sidechain analyser reads real dBFS (0 ceiling)');
+  assert.ok(html.includes('window.state.nodes.trebleAnalyser = trebleAnalyser'), 'treble sidechain analyser is stored');
+  // the meter loop measures the HF band from that sidechain analyser and applies the ride to the node
+  assert.ok(html.includes('const an = window.state.nodes.trebleAnalyser, g = window.state.trebleGuard;'), 'meter loop reads the dedicated treble sidechain analyser');
+  assert.ok(html.includes('hfBandPeakDb(window.state.hfFloatData, an.context.sampleRate, an.fftSize, g.loHz, g.hiHz)'), 'meter loop measures the 4-16 kHz band');
+  assert.ok(html.includes('const tgDb = window.rideTrebleGuard(hfDb);'), 'meter loop rides the treble guard');
+
+  // MIC AUTO-PULL FIX: requestDacDetection must map outputs via enumerateDevices and NEVER open getUserMedia
+  // (grabbing the mic just to detect output DACs was the defect). Scope to that function's body.
+  const fnStart = html.indexOf('window.requestDacDetection = async function()');
+  const fnEnd = html.indexOf('window.flacApiState', fnStart);
+  assert.ok(fnStart > 0 && fnEnd > fnStart);
+  const dacFn = html.slice(fnStart, fnEnd);
+  assert.ok(!/getUserMedia/.test(dacFn), 'DAC output detection must not call getUserMedia (no mic grab)');
+  assert.ok(/enumerateDevices/.test(dacFn), 'DAC output detection uses enumerateDevices');
 });
 
 test('dual EQ mode: two complete 10-band EQ banks crossfade smoothly (window.setEqActiveBank); bank A matches the old single-chain default exactly', () => {
