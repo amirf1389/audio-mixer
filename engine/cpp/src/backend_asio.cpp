@@ -31,6 +31,26 @@ std::vector<AsioDriverInfo> listAsioDrivers() {
   return out;
 }
 
+// Reads one driver's real channel counts and accepted sample rates through the Steinberg interface (no RtAudio). The driver is loaded, asked, and
+// released again. ASIO drivers are single-client: never probe one while a stream of this program or the bridge has it open.
+AsioProbeInfo probeAsioDriver(const AsioDriverInfo& d) {
+  AsioProbeInfo info; info.name = d.name; info.clsid = d.clsid;
+  CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+  wchar_t wide[96] = {0}; MultiByteToWideChar(CP_ACP, 0, d.clsid.c_str(), -1, wide, 95);
+  CLSID clsid; if (FAILED(CLSIDFromString(wide, &clsid))) { info.error = "the CLSID is not valid"; return info; }
+  IASIO* drv = nullptr;
+  HRESULT r = CoCreateInstance(clsid, nullptr, CLSCTX_INPROC_SERVER, clsid, reinterpret_cast<void**>(&drv));
+  if (FAILED(r) || !drv) { char b[96]; std::snprintf(b, sizeof b, "cannot load the driver (0x%08lx)", static_cast<unsigned long>(r)); info.error = b; return info; }
+  if (!drv->init(GetDesktopWindow())) { char e[128] = {0}; drv->getErrorMessage(e); info.error = std::string("did not start: ") + (e[0] ? e : "init failed"); drv->Release(); return info; }
+  long nIn = 0, nOut = 0;
+  if (drv->getChannels(&nIn, &nOut) != ASE_OK) { info.error = "getChannels failed"; drv->Release(); return info; }
+  info.inChannels = nIn; info.outChannels = nOut;
+  static const double kRates[] = {8000, 11025, 16000, 22050, 32000, 44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000};
+  for (double rate : kRates) if (drv->canSampleRate(rate) == ASE_OK) info.sampleRates.push_back(rate);
+  drv->Release();
+  return info;
+}
+
 namespace {
 std::string lower(std::string s) { for (auto& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c))); return s; }
 std::string msg(const char* what, long e) { char b[96]; std::snprintf(b, sizeof b, "%s failed (ASIO error %ld)", what, e); return b; }
