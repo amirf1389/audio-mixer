@@ -13,7 +13,7 @@ Verified on Ubuntu in this container. Node 22 and the preinstalled Playwright Ch
 node --version          # v22.x (the bridge needs Node 18+)
 ```
 
-For the Windows installers only (not needed to run the app here): `bash scripts/setup-build-tools.sh`, which installs mingw-w64 and wixl.
+For the Windows installers only (not needed to run the app here): `bash scripts/setup-build-tools.sh`, which installs the mingw-w64 C and C++ compilers, wixl, and osslsigncode. Run it once before `npm run build:installers`.
 
 ## Build
 
@@ -23,11 +23,13 @@ Portable Node.js package (verified, 74 files into `dist/audio-mixer-pc`):
 npm run build
 ```
 
-Windows installers need mingw-w64 (`x86_64-w64-mingw32-windres`). On this container they fail without it:
+Windows installers (verified after `bash scripts/setup-build-tools.sh`: two MSIs, the setup .exe, and `AudioMixer-signing.cer` in `dist/`):
 
 ```bash
-npm run build:installers   # fails here: "x86_64-w64-mingw32-windres not found"
+npm run build:installers
 ```
+
+Without the setup script the build fails with `x86_64-w64-mingw32-windres not found` (or, for the ASIO driver, `x86_64-w64-mingw32-g++ is needed`).
 
 ## Run (agent path)
 
@@ -61,7 +63,7 @@ The driver hides the first-run "Factory Hardware Setup" overlay (`#setup-wizard`
 cd bridge && npm test
 ```
 
-Currently 184 tests: 178 pass, 1 fails, 5 skip. The failure is `repository layout` (`bridge/test.js:1615`): commit `27e3249` added a `docs/` folder that the test's expected top-level list does not include. The skips are environment-dependent (no mingw-w64, no C compiler or ALSA headers, no Windows setup signing).
+Currently 184 tests: 182 pass, 1 fails, 1 skip. The failure is `repository layout` (`bridge/test.js:1615`): commit `27e3249` added a `docs/` folder that the test's expected top-level list does not include. The one skip is environment-dependent (no ALSA development headers or C compiler for the Linux plugin test). The Asio tree is vendored in `native/asio/`, so no clone is needed for tests.
 
 ## Stop
 
@@ -80,5 +82,5 @@ lsof -ti:8765 -sTCP:LISTEN | xargs -r kill
 
 - `EADDRINUSE` on 8765: an earlier bridge is still running. Stop it with the port command above, then start again.
 - `Cannot find module 'playwright'`: the driver falls back to the global npm root, which is where the container's Playwright lives. Check with `npm root -g`.
-- `x86_64-w64-mingw32-windres not found`: only for `npm run build:installers`. Install mingw-w64 with `bash scripts/setup-build-tools.sh`.
+- `x86_64-w64-mingw32-windres not found` or `x86_64-w64-mingw32-g++ is needed`: only for `npm run build:installers`. Install the toolchain with `bash scripts/setup-build-tools.sh`.
 - Empty or splash-only screenshot: the page was captured during boot. Re-run the command; it waits for the boot delay.
