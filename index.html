@@ -6273,6 +6273,28 @@ window.navTabs = [
             htmlString += `
             <div id="tab-asio" class="tab-content tab-hidden">
               <div class="page-scroll-inner page-card-center space-y-3">
+                <!-- ASIO AUTO-ACTIVATION: status first. The master is linked to the universal ASIO driver by itself; this panel shows whether it is live and why not -->
+                <div id="asio-hero" class="glass-panel p-3.5 rounded-xl wing-bezel font-mono space-y-3 border border-emerald-500/30">
+                  <div class="flex flex-wrap justify-between items-center gap-3">
+                    <div class="flex items-center gap-3 min-w-0">
+                      <div class="w-10 h-10 rounded-lg bg-emerald-500/15 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0"><i class="fa-solid fa-wave-square"></i></div>
+                      <div class="min-w-0">
+                        <div class="text-[8px] text-slate-400 font-bold uppercase tracking-widest">ASIO AUTO-ACTIVATION</div>
+                        <div id="asio-hero-state" class="text-sm font-black text-slate-300 font-wing tracking-wider uppercase">CHECKING&hellip;</div>
+                        <div id="asio-hero-hint" class="text-[7.5px] text-slate-400 leading-snug">Reading the local server and the audio engine.</div>
+                      </div>
+                    </div>
+                    <button id="asio-hero-action" type="button" onclick="window.universalAsioSdk.heroAction()" class="px-3 py-1.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[8.5px] font-black uppercase hover:bg-emerald-500 hover:text-black transition">RE-LINK ASIO</button>
+                  </div>
+                  <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-[7.5px]">
+                    <div class="bg-black/60 p-2 rounded border border-white/10"><span class="text-slate-500 block">ASIO DEVICE</span><span id="asio-hero-device" class="text-slate-200 font-bold break-all">-</span></div>
+                    <div class="bg-black/60 p-2 rounded border border-white/10"><span class="text-slate-500 block">SAMPLE RATE</span><span id="asio-hero-rate" class="text-slate-200 font-bold">-</span></div>
+                    <div class="bg-black/60 p-2 rounded border border-white/10"><span class="text-slate-500 block">BUFFER</span><span id="asio-hero-buffer" class="text-slate-200 font-bold">-</span></div>
+                    <div class="bg-black/60 p-2 rounded border border-white/10"><span class="text-slate-500 block">NATIVE ENGINE</span><span id="asio-hero-engine" class="text-slate-200 font-bold">-</span></div>
+                  </div>
+                  <label class="flex items-center gap-2 text-[8px] text-slate-300 cursor-pointer"><input id="asio-auto-toggle" type="checkbox" class="accent-emerald-400" onchange="window.universalAsioSdk.setAsioAuto(this.checked)"> ACTIVATE ASIO AUTOMATICALLY WHEN THE AUDIO ENGINE STARTS</label>
+                </div>
+
                 <!-- DAC Hardware Endpoint Selection & Driver Setup -->
                 <div class="glass-panel p-3.5 rounded-xl wing-bezel">
                   <div class="flex flex-wrap justify-between items-center gap-2 pb-2 border-b border-white/10 mb-3">
@@ -14512,6 +14534,8 @@ window.navTabs = [
             if (this.pcAuto()) this.connectBridge();
             this.drawSpectrum();
             this.startVolumePolling();
+            if (!this._heroTimer) this._heroTimer = setInterval(() => this.renderAsioHero(), 1000);
+            this.renderAsioHero();
             this.log("[ ASIO Universal SDK Engine initialized • 32 In / 32 Out ready ]", "success");
         },
 
@@ -14545,6 +14569,50 @@ window.navTabs = [
         frameSizeSetting: function() { try { const v = localStorage.getItem('halx_frame_size'); return v && v !== 'auto' ? parseInt(v, 10) : 'auto'; } catch (e) { return 'auto'; } },
         setFrameSize: function(v) { try { localStorage.setItem('halx_frame_size', String(v)); } catch (e) { /* ignore */ } },
         setPcAuto: function(on) { try { localStorage.setItem('halx_pc_mode_auto', on ? '1' : '0'); } catch (e) { /* ignore */ } },
+        // ASIO auto-activation (halx_asio_auto, on by default): the master links to the ASIO driver as soon as the engine runs
+        asioAutoOn: function() { try { return localStorage.getItem('halx_asio_auto') !== '0'; } catch (e) { return true; } },
+        setAsioAuto: function(on) {
+            try { localStorage.setItem('halx_asio_auto', on ? '1' : '0'); } catch (e) { /* ignore */ }
+            if (on) { this._userStopped = false; this.autoLinkAsio('auto-activation on'); }
+            this.renderAsioHero();
+        },
+        // Re-link now, whatever the auto setting says: stops the current ASIO stream, then opens the universal driver's best ASIO output
+        relinkAsio: function() {
+            if (this.paWs || this.paReady) this.stopPaOutput();
+            this._userStopped = false; this._autoLinked = false;
+            this.autoLinkAsio('manual re-link', true);
+            this.renderAsioHero();
+        },
+        heroAction: function() {
+            if (this._heroNeedsBridge) this.connectBridge(true); else this.relinkAsio();
+        },
+        // Status panel for the Drivers tab: ASIO ACTIVE, or the one reason it is not (no server, no ASIO driver, engine stopped)
+        renderAsioHero: function() {
+            const stateEl = document.getElementById('asio-hero'); if (!stateEl) return;
+            const info = this.bridgeInfo, pa = this.paInfo || null, on = !!this.bridgeUrl, live = !!this.paReady, auto = this.asioAutoOn();
+            const engine = !!(window.state && window.state.active);
+            const asio = info && info.portaudio ? (info.portaudio.devices || []).filter(d => d.outputs > 0 && /asio/i.test(d.hostApi)) : [];
+            const frame = this.frameSizeSetting();
+            let label, tone, hint, action = 'relink', needsBridge = false;
+            if (live) { label = 'ASIO ACTIVE'; tone = 'text-emerald-400'; hint = 'The mixer master is streaming to the ASIO driver. No action needed.'; }
+            else if (!on) { label = 'PC MODE OFF'; tone = 'text-amber-400'; hint = 'Start the local server (start-pc-mode) so the page can reach the ASIO drivers.'; action = 'connect'; needsBridge = true; }
+            else if (!auto) { label = 'AUTO-ACTIVATION OFF'; tone = 'text-slate-400'; hint = 'Turn it on above, or press RE-LINK ASIO once.'; }
+            else if (!asio.length) { label = 'NO ASIO DRIVER FOUND'; tone = 'text-amber-400'; hint = 'Install an ASIO driver (FlexASIO or ASIO4ALL) and press RE-SCAN.'; action = 'connect'; needsBridge = true; }
+            else if (!engine) { label = 'READY: WAITING FOR ENGINE'; tone = 'text-cyan-400'; hint = 'Press play in the mixer; ASIO links by itself when the engine starts.'; }
+            else { label = 'LINKING TO ASIO'; tone = 'text-cyan-400'; hint = 'Opening ' + asio[0].name + '.'; }
+            this._heroNeedsBridge = needsBridge;
+            const set = (id, text) => { const el = document.getElementById(id); if (el && el.textContent !== text) el.textContent = text; };
+            const state = document.getElementById('asio-hero-state');
+            if (state) state.className = 'text-sm font-black font-wing tracking-wider uppercase ' + tone;
+            set('asio-hero-state', label);
+            set('asio-hero-hint', hint);
+            set('asio-hero-action', action === 'connect' ? (on ? 'RE-SCAN' : 'CONNECT PC MODE') : 'RE-LINK ASIO');
+            set('asio-hero-device', live && pa ? pa.device : (asio[0] ? asio[0].name : '-'));
+            set('asio-hero-rate', live && pa ? (pa.sampleRate / 1000).toFixed(1) + ' kHz' : (asio[0] && asio[0].preferredSampleRate ? (asio[0].preferredSampleRate / 1000).toFixed(1) + ' kHz' : '-'));
+            set('asio-hero-buffer', live && pa && pa.frameSize ? pa.frameSize + ' frames • ' + pa.latencyMs + ' ms' : (frame === 'auto' ? 'AUTO (DRIVER SIZE)' : frame + ' frames'));
+            set('asio-hero-engine', info && info.portaudio ? (info.portaudio.engine === 'audify' ? 'AUDIFY (RTAUDIO)' : 'PORTAUDIO') : (on ? 'NOT INSTALLED' : '-'));
+            const toggle = document.getElementById('asio-auto-toggle'); if (toggle) toggle.checked = auto;
+        },
         setCatalogFilter: function(all) {
             this.catalogAll = !!all;
             const a = document.getElementById('pc-f-pc'), b = document.getElementById('pc-f-all');
@@ -15241,9 +15309,9 @@ window.navTabs = [
         // That used to need a manual switch, so a PC with an ASIO interface and a Bluetooth default kept playing on Bluetooth. Once the engine is running and the bridge reports an ASIO output,
         // the master is linked to the universal ASIO driver by itself (asking for the ASIO device first, falling back by the bridge's own ranking). Off with localStorage halx_asio_auto = "0",
         // and never again in this page session after the person stopped the ASIO output by hand.
-        autoLinkAsio: function(why) {
+        autoLinkAsio: function(why, force) {
             let off = false; try { off = localStorage.getItem('halx_asio_auto') === '0'; } catch (e) { /* storage blocked: default on */ }
-            if (off || this._userStopped || this._autoLinked || this.paWs || this.paReady) return false;
+            if ((off && !force) || this._userStopped || this._autoLinked || this.paWs || this.paReady) return false;
             const info = this.bridgeInfo, st = window.state;
             if (!this.bridgeUrl || !info || !info.portaudio) return false;
             if (!(st && st.active && st.ctx && st.nodes && st.nodes.masterLimiter)) return false;                  // the engine has to be running: the master is tapped from it
@@ -15295,7 +15363,7 @@ window.navTabs = [
                     };
                     tap.connect(node); node.connect(mute); mute.connect(ctx.destination);
                     try { window.state.nodes.musicAnalyser.disconnect(ctx.destination); } catch (e) { /* not connected */ }
-                    self.paNode = node; self.paMute = mute; self.paReady = true;
+                    self.paNode = node; self.paMute = mute; self.paReady = true; self.paInfo = m;
                     self.log(`${m.engine === 'audify' ? 'Audify' : 'PortAudio'} output LIVE: ${m.hostApi} / ${m.device} @ ${m.sampleRate / 1000} kHz, ${m.channels} ch${m.frameSize ? ', buffer ' + m.frameSize + ' frames (' + m.latencyMs + ' ms' + (m.autoFrameSize ? ', auto' : '') + ')' : ''}`, "success");
                     window.notify(`${/asio/i.test(m.hostApi) ? 'ASIO' : m.hostApi} Output Live: ${m.device}`, "volume-high");
                 } else if (m.type === 'error') {
@@ -15310,7 +15378,7 @@ window.navTabs = [
         stopPaOutput: function() {
             const ctx = window.state && window.state.ctx, nodes = window.state && window.state.nodes;
             const hadOutput = this.paReady;
-            this.paReady = false;
+            this.paReady = false; this.paInfo = null;
             if (this.paNode) { try { nodes.masterLimiter.disconnect(this.paNode); } catch (e) { /* ignore */ } try { this.paNode.disconnect(); } catch (e) { /* ignore */ } this.paNode = null; }
             if (this.paMute) { try { this.paMute.disconnect(); } catch (e) { /* ignore */ } this.paMute = null; }
             if (hadOutput && nodes && nodes.musicAnalyser && ctx && !(window.spatial360 && window.spatial360.wired)) { try { nodes.musicAnalyser.connect(ctx.destination); } catch (e) { /* ignore */ } }
@@ -15532,6 +15600,9 @@ window.navTabs = [
             self.readAnimationId = requestAnimationFrame(update);
         }
     };
+
+    // ASIO status panel is live from page load, not only after the Drivers tab is opened
+    document.addEventListener('DOMContentLoaded', () => { if (!window.universalAsioSdk._heroTimer) window.universalAsioSdk._heroTimer = setInterval(() => window.universalAsioSdk.renderAsioHero(), 1000); });
 
     // Alias for universal interface
     window.readWriteAudioInterfaceEngine = window.universalAsioSdk;
