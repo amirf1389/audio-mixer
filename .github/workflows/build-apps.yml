@@ -1,12 +1,11 @@
-# Builds the Windows installers (.msi x64 / x86 and the setup .exe) and the portable Node.js package on every push to a
-# build branch, and on demand. The same steps as `npm run build` and `npm run build:installers` on a developer machine.
+# Builds the Windows installers (.msi x64 / x86 and the setup .exe) and the portable Node.js package on demand (workflow_dispatch)
+# and when a version tag is pushed. Branch pushes do not start it. The same steps as `npm run build` and `npm run build:installers` on a developer machine.
 # The outputs are uploaded as a workflow artifact, and attached to a GitHub release when a version tag is pushed (v*).
 name: Build apps
 
 on:
   workflow_dispatch:
   push:
-    branches: [ "main", "claude/windows-audio-sdk-drivers-6murwi" ]
     tags: [ "v*" ]
 
 permissions:
