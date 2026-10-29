@@ -5,6 +5,7 @@
 #   MinGW-w64 (i686, x86_64)  the C and C++ compilers: the setup program stub (scripts/build-exe.js), the ASIO driver (drivers/asio)
 #   wixl + msitools      the .msi packages (scripts/build-msi.js)
 #   osslsigncode         signs the .exe and .msi (scripts/sign.js)
+#   libasound2-dev, alsa-utils  (Linux only) the ALSA headers, aplay and arecord the Linux ALSA plugin test needs
 # Usage:  bash scripts/setup-build-tools.sh
 set -euo pipefail
 
@@ -24,7 +25,7 @@ elif command -v apt-get >/dev/null 2>&1; then
 
   $SUDO apt-get update
   $SUDO apt-get install -y git ca-certificates curl gnupg \
-    gcc-mingw-w64-i686 gcc-mingw-w64-x86-64 g++-mingw-w64-i686 g++-mingw-w64-x86-64 wixl msitools osslsigncode
+    gcc-mingw-w64-i686 gcc-mingw-w64-x86-64 g++-mingw-w64-i686 g++-mingw-w64-x86-64 wixl msitools osslsigncode libasound2-dev alsa-utils
 
   # Node.js 20 from NodeSource when the distribution's Node is missing or older than 18
   need_node=1
@@ -54,6 +55,7 @@ check x86_64-w64-mingw32-g++ --version
 check i686-w64-mingw32-g++ --version
 check wixl --version
 check osslsigncode --version
+if [ "$OS" = "Linux" ]; then check aplay --version; fi
 [ "$fail" -eq 0 ] || { echo "Some tools are missing. Fix the errors above and run this script again." >&2; exit 1; }
 echo
 echo "All build tools are installed. Next: npm run build && npm run build:installers"
