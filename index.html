@@ -2213,18 +2213,6 @@ window.navTabs = [
             window.notify(`EBU R128 Target Set: ${target} LUFS`, 'bullseye');
         };
 
-        // LICENSE VALIDATION CONTROL
-        window.validateLicenseKey = function() {
-            const input = document.getElementById('license-key-input');
-            const key = input ? input.value.trim() : '';
-            if (key.startsWith("HLX-") && key.length >= 12) {
-                document.getElementById('license-tier-text').innerText = "TITAN PRO ULTRA-ENTERPRISE (360 SPATIAL UNLOCKED)";
-                document.getElementById('license-tier-text').className = "text-emerald-400 font-bold";
-                window.notify("License Key Cryptographically Verified", "check-double");
-            } else {
-                window.notify("Invalid License Cryptographic Signature", "triangle-exclamation");
-            }
-        };
 
 // ─── BLUETOOTH GATT ENGINE (SIMULATED + HARDWARE WEB BLUETOOTH) ───────────
         window.bleState = {
@@ -7415,9 +7403,6 @@ window.navTabs = [
                         <span class="text-slate-400">TIER:</span>
                         <span id="license-tier-text" class="text-emerald-400 font-bold">TITAN ENTERPRISE 11.4.8 BROADCAST</span>
                       </div>
-                      <button onclick="window.validateLicenseKey()" class="w-full py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-black uppercase text-[7.5px] rounded transition">
-                        VALIDATE LICENSE SIGNATURE
-                      </button>
                     </div>
 
                     <div class="bg-black/60 p-2.5 rounded-lg border border-white/10 space-y-1.5 flex flex-col justify-between">
