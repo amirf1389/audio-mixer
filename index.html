@@ -14580,7 +14580,8 @@ window.navTabs = [
         relinkAsio: function() {
             if (this.paWs || this.paReady) this.stopPaOutput();
             this._userStopped = false; this._autoLinked = false;
-            this.autoLinkAsio('manual re-link', true);
+            const linked = this.autoLinkAsio('manual re-link', true);
+            if (!linked && !this.paReady) window.notify('ASIO not linked: start the audio engine and make sure an ASIO driver is installed, then try again', 'triangle-exclamation');
             this.renderAsioHero();
         },
         heroAction: function() {
@@ -14596,6 +14597,7 @@ window.navTabs = [
             let label, tone, hint, action = 'relink', needsBridge = false;
             if (live) { label = 'ASIO ACTIVE'; tone = 'text-emerald-400'; hint = 'The mixer master is streaming to the ASIO driver. No action needed.'; }
             else if (!on) { label = 'PC MODE OFF'; tone = 'text-amber-400'; hint = 'Start the local server (start-pc-mode) so the page can reach the ASIO drivers.'; action = 'connect'; needsBridge = true; }
+            else if (!auto && !asio.length) { label = 'AUTO-ACTIVATION OFF'; tone = 'text-slate-400'; hint = 'No ASIO driver is installed, so there is nothing to link. Install one, then press RE-SCAN.'; action = 'connect'; needsBridge = true; }
             else if (!auto) { label = 'AUTO-ACTIVATION OFF'; tone = 'text-slate-400'; hint = 'Turn it on above, or press RE-LINK ASIO once.'; }
             else if (!asio.length) { label = 'NO ASIO DRIVER FOUND'; tone = 'text-amber-400'; hint = 'Install an ASIO driver (FlexASIO or ASIO4ALL) and press RE-SCAN.'; action = 'connect'; needsBridge = true; }
             else if (!engine) { label = 'READY: WAITING FOR ENGINE'; tone = 'text-cyan-400'; hint = 'Press play in the mixer; ASIO links by itself when the engine starts.'; }
