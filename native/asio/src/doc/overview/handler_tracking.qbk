@@ -1,0 +1,432 @@
+[/
+ / Copyright (c) 2003-2026 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+ /
+ / Distributed under the Boost Software License, Version 1.0. (See accompanying
+ / file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+ /]
+
+[section:handler_tracking Handler Tracking]
+
+To aid in debugging asynchronous programs, Asio provides support for handler
+tracking. When enabled by defining `ASIO_ENABLE_HANDLER_TRACKING`, Asio
+writes debugging output that records asynchronous operations and the
+relationships between their handlers. By default this output is a text format
+written to the standard error stream, as described below. Alternatively,
+defining `ASIO_ENABLE_HANDLER_TRACKING=perfetto` selects a backend that
+writes the Perfetto trace file format instead. See [link
+asio.overview.core.handler_tracking.perfetto_trace_format Perfetto Trace
+Format] below.
+
+[teletype]
+This feature is useful when debugging and you need to know how your
+asynchronous operations are chained together, or what the pending asynchronous
+operations are. As an illustration, here is the output when you run the HTTP
+Server example, handle a single request, then shut down via Ctrl+C:
+
+  @asio|1589424178.741850|0*1|signal_set@0x7ffee977d878.async_wait
+  @asio|1589424178.742593|0*2|socket@0x7ffee977d8a8.async_accept
+  @asio|1589424178.742619|.2|non_blocking_accept,ec=asio.system:11
+  @asio|1589424178.742625|0|resolver@0x7ffee977d760.cancel
+  @asio|1589424195.830382|.2|non_blocking_accept,ec=system:0
+  @asio|1589424195.830413|>2|ec=system:0
+  @asio|1589424195.830473|2*3|socket@0x7fa71d808230.async_receive
+  @asio|1589424195.830496|.3|non_blocking_recv,ec=system:0,bytes_transferred=151
+  @asio|1589424195.830503|2*4|socket@0x7ffee977d8a8.async_accept
+  @asio|1589424195.830507|.4|non_blocking_accept,ec=asio.system:11
+  @asio|1589424195.830510|<2|
+  @asio|1589424195.830529|>3|ec=system:0,bytes_transferred=151
+  @asio|1589424195.831143|3^5|in 'async_write' (./../../../include/asio/impl/write.hpp:330)
+  @asio|1589424195.831143|3*5|socket@0x7fa71d808230.async_send
+  @asio|1589424195.831186|.5|non_blocking_send,ec=system:0,bytes_transferred=1090
+  @asio|1589424195.831194|<3|
+  @asio|1589424195.831218|>5|ec=system:0,bytes_transferred=1090
+  @asio|1589424195.831263|5|socket@0x7fa71d808230.close
+  @asio|1589424195.831298|<5|
+  @asio|1589424199.793770|>1|ec=system:0,signal_number=2
+  @asio|1589424199.793781|1|socket@0x7ffee977d8a8.close
+  @asio|1589424199.793809|<1|
+  @asio|1589424199.793840|>4|ec=asio.system:125
+  @asio|1589424199.793854|<4|
+  @asio|1589424199.793883|0|signal_set@0x7ffee977d878.cancel
+
+Each line is of the form:
+
+  <tag>|<timestamp>|<action>|<description>
+
+The `<tag>` is always `@asio`, and is used to identify and extract the handler
+tracking messages from the program output.
+
+The `<timestamp>` is seconds and microseconds from 1 Jan 1970 UTC.
+
+The `<action>` takes one of the following forms:
+
+[variablelist
+  [
+    [>n]
+    [The program entered the handler number `n`. The `<description>` shows the
+    arguments to the handler.]
+  ]
+  [
+    [<n]
+    [The program left handler number `n`.]
+  ]
+  [
+    [!n]
+    [The program left handler number n due to an exception.]
+  ]
+  [
+    [~n]
+    [The handler number `n` was destroyed without having been invoked. This is
+    usually the case for any unfinished asynchronous operations when the
+    `io_context` is destroyed.]
+  ]
+  [
+    [n^m]
+    [The handler number `n` is about to create a new asynchronous operation with
+    completion handler number `m`. The `<description>` contains source location
+    information to help identify where in the program the asynchronous operation
+    is being started.]
+  ]
+  [
+    [n*m]
+    [The handler number `n` created a new asynchronous operation with completion
+    handler number `m`. The `<description>` shows what asynchronous operation
+    was started.]
+  ]
+  [
+    [n]
+    [The handler number `n` performed some other operation. The `<description>`
+    shows what function was called. Currently only `close()` and `cancel()`
+    operations are logged, as these may affect the state of pending
+    asynchronous operations.]
+  ]
+  [
+    [.n]
+    [The implementation performed a system call as part of the asynchronous
+    operation for which handler number `n` is the completion handler. The
+    `<description>` shows what function was called and its results. These
+    tracking events are only emitted when using a reactor-based
+    implementation.]
+  ]
+]
+
+Where the `<description>` shows a synchronous or asynchronous operation, the
+format is `<object-type>@<pointer>.<operation>`. For handler entry, it shows a
+comma-separated list of arguments and their values.
+
+As shown above, Each handler is assigned a numeric identifier. Where the
+handler tracking output shows a handler number of 0, it means that the action
+was performed outside of any handler.
+
+[heading Adding Location Information]
+
+[c++]
+Programs may augment the handler tracking output's location information by
+using the macro `ASIO_HANDLER_LOCATION` in the source code. For example:
+
+  #define HANDLER_LOCATION \
+    ASIO_HANDLER_LOCATION((__FILE__, __LINE__, __func__))
+
+  // ...
+
+  void do_read()
+  {
+    HANDLER_LOCATION;
+
+    auto self(shared_from_this());
+    socket_.async_read_some(asio::buffer(data_, max_length),
+        [this, self](std::error_code ec, std::size_t length)
+        {
+          HANDLER_LOCATION;
+
+          if (!ec)
+          {
+            do_write(length);
+          }
+        });
+  }
+
+[teletype]
+With the additional location information available, the handler tracking output
+may include a call stack of source locations:
+
+  @asio|1589423304.861944|>7|ec=system:0,bytes_transferred=5
+  @asio|1589423304.861952|7^8|in 'async_write' (./../../../include/asio/impl/write.hpp:330)
+  @asio|1589423304.861952|7^8|called from 'do_write' (handler_tracking/async_tcp_echo_server.cpp:62)
+  @asio|1589423304.861952|7^8|called from 'operator()' (handler_tracking/async_tcp_echo_server.cpp:51)
+  @asio|1589423304.861952|7*8|socket@0x7ff61c008230.async_send
+  @asio|1589423304.861975|.8|non_blocking_send,ec=system:0,bytes_transferred=5
+  @asio|1589423304.861980|<7|
+
+Furthermore, if `std::source_location` or `std::experimental::source_location`
+are available, the [link asio.reference.use_awaitable_t `use_awaitable_t`]
+token (when default-constructed or used as a default completion token) will
+also cause handler tracking to output a source location for each newly created
+asynchronous operation. A `use_awaitable_t` object may also be explicitly
+constructed with location information.
+
+[heading Visual Representations]
+
+The handler tracking output may be post-processed using the included
+[^handlerviz.pl] tool to create a visual representation of the handlers
+(requires the GraphViz tool [^dot]).
+[c++]
+
+[heading Perfetto Trace Format]
+
+Defining `ASIO_ENABLE_HANDLER_TRACKING=perfetto` selects a backend that
+writes the Perfetto trace file format, viewable at
+[@https://ui.perfetto.dev ui.perfetto.dev]. This backend has no dependency on
+the Perfetto SDK, protobuf, or any other library or tool.
+
+Each completion handler invocation appears as a slice on the thread that runs
+it, titled after the operation that created it (for example,
+[^socket@0x....async_send completion]). These slices correspond to the handler
+nodes produced by the [^handlerviz.pl] tool. Everything the handler does while
+running, such as starting further operations, nests within its slice. The point
+at which an operation is created is recorded as an instant, and a flow arrow
+links that creation point to the resulting invocation slice. Any system calls
+performed for the operation (such as non-blocking reads and writes) appear as
+further instants on the same flow, between the creation and the invocation.
+
+Each call to an execution context's `run`, `run_one`, `poll` or `poll_one`
+function appears as an enclosing slice on the calling thread, so that the
+handler invocations it dispatches nest within it. Reactor readiness and
+registration events are also recorded as instants on the thread that observes
+them. Each `ASIO_HANDLER_LOCATION` is recorded as its own slice, named after the
+function and annotated with its source file and line. Because these nest within
+the running handler, the call sites leading to an operation form a call tree on
+the thread's timeline. Completion handler arguments (such as the error code and
+bytes transferred) are attached to the invocation slice as debug annotations.
+
+The backend selection has the following precedence: a user-supplied
+`ASIO_CUSTOM_HANDLER_TRACKING` header (see [link
+asio.overview.core.handler_tracking.custom_tracking Custom Tracking]) always
+takes priority. Otherwise `ASIO_ENABLE_HANDLER_TRACKING=perfetto`
+selects the Perfetto backend, and any other enabled value selects the
+default stderr text backend.
+
+[heading:perfetto_configuration Perfetto Configuration]
+
+The Perfetto backend may be configured either through environment variables or
+from code. The environment variables are:
+
+[table
+  [[Variable] [Description]]
+  [
+    [`ASIO_PERFETTO_OUTPUT_PATH`]
+    [The path of the trace file to write. Defaults to
+    [^asio_handler_tracking.<pid>.pftrace] in the current directory.]
+  ]
+  [
+    [`ASIO_PERFETTO_RECLAIM_IDLE_MS`]
+    [How long, in milliseconds, a thread's encode buffer may sit idle before the
+    writer reclaims it: its partial contents are flushed and the buffer returns
+    to a shared pool for other threads to lease. Defaults to 100. This bounds
+    memory to roughly the peak count of concurrently-active threads rather than
+    the total ever created, which matters for programs with many transient
+    threads. Set to 0 to disable reclamation (each active thread keeps its
+    buffer). Reclamation is race-free with respect to a resuming producer.]
+  ]
+  [
+    [`ASIO_PERFETTO_FLUSH_INTERVAL_MS`]
+    [How long, in milliseconds, records may sit in a thread's encode buffer
+    before it is handed to the writer, even when the buffer is not yet full.
+    Defaults to 250. This bounds the trace tail lost on an abnormal termination
+    (a crash or a hard exit that skips the atexit flush) to roughly one interval
+    of each active thread's most recent records. Set to 0 to disable periodic
+    flushing, in which case a buffer reaches the file only when it fills or at
+    normal exit.]
+  ]
+  [
+    [`ASIO_PERFETTO_WRITER_IDLE_MS`]
+    [The longest the background writer thread sleeps between polls once tracing
+    has gone quiet, in milliseconds. Defaults to 1. Larger values lower the idle
+    cost of the writer thread at the expense of latency in flushing the last
+    buffered events after a burst of activity. A value of 0 makes the writer
+    busy-poll, spinning on one core for the lowest drain latency. This is best
+    paired with `ASIO_PERFETTO_WRITER_CPU` to pin it to a dedicated
+    core.]
+  ]
+  [
+    [`ASIO_PERFETTO_WRITER_CPU`]
+    [If set to a core number, the background writer thread is pinned to that
+    core. Unset by default (the thread is left unpinned). Pinning is best effort
+    and has no effect on platforms that do not support it.]
+  ]
+  [
+    [`ASIO_PERFETTO_MAX_FILE_SIZE`]
+    [If set to a non-zero number of bytes, output is rotated across multiple
+    files: the writer starts a new segment once the current one reaches this
+    size (checked at record boundaries, so packets are never split). Unset by
+    default, in which case a single file is written. The first segment keeps the
+    output path. Later segments are named [^<path>.1], [^<path>.2], and so on.
+    Each segment is independently openable, though an operation that straddles a
+    rotation boundary is split between the adjacent segments.]
+  ]
+  [
+    [`ASIO_PERFETTO_MAX_FILES`]
+    [When rotation is enabled, the maximum number of segments to retain. The
+    writer unlinks the oldest as it rolls over. Defaults to 0, which keeps every
+    segment.]
+  ]
+]
+
+[heading Configuring From Code]
+
+The same settings may be supplied programmatically, for applications that prefer
+not to depend on the environment. Populate a `perfetto_writer::config` and pass
+it to `perfetto_writer::init` before the first execution context (such as an
+`io_context` or `thread_pool`) is constructed:
+
+  namespace pw = asio::detail::perfetto_writer;
+
+  pw::config cfg;
+  cfg.output_path = "trace.pftrace";
+  cfg.writer_cpu = 3;    // pin the writer thread
+  pw::init(cfg);
+
+The `config` fields mirror the environment variables above (`output_path`,
+`writer_idle_sleep_ns`, `writer_cpu`, `max_file_size`, `max_files`,
+`reclaim_idle_ns` and `flush_interval_ns`), except that `writer_idle_sleep_ns`,
+`reclaim_idle_ns` and `flush_interval_ns` are expressed in nanoseconds rather
+than milliseconds. A default-constructed `config` carries the same defaults as
+when no environment variable is set, and
+`perfetto_writer::config::from_env()` returns one populated from the environment
+variables. That is the configuration used when `init` is called without an
+explicit configuration. (`perfetto_handler_tracking::init` and
+`perfetto_handler_tracking::config` remain available as forwarders for code that
+prefers the handler-tracking name.)
+
+The tracking state is created when the first execution context is constructed, so
+`init` must be called before that point to take effect. Once the state exists, a
+later `init` call has no effect.
+
+[heading Merging Traces From Multiple Processes]
+
+Every trace uses per-process-unique identifier spaces, so traces written by
+different processes can be merged without collision. The files may be combined
+either by plain byte concatenation or by collecting them into a ZIP archive, and
+the result opened as a single trace. Each process appears as a separately
+labelled process with its own threads, and no flow links are drawn between
+processes.
+
+[heading:custom_tracking Custom Tracking]
+
+Handling tracking may be customised by defining the
+`ASIO_CUSTOM_HANDLER_TRACKING` macro to the name of a header file
+(enclosed in `""` or `<>`). This header file must implement the following
+preprocessor macros:
+
+[table
+  [[Macro] [Description]]
+  [
+    [`ASIO_INHERIT_TRACKED_HANDLER`]
+    [Specifies a base class for classes that implement asynchronous operations.
+    When used, the macro immediately follows the class name, so it must have
+    the form `: public my_class`.]
+  ]
+  [
+    [`ASIO_ALSO_INHERIT_TRACKED_HANDLER`]
+    [Specifies a base class for classes that implement asynchronous operations.
+    When used, the macro follows other base classes, so it must have the form
+    `, public my_class`.]
+  ]
+  [
+    [`ASIO_HANDLER_TRACKING_INIT(args)`]
+    [An expression that is used to initialise the tracking mechanism.]
+  ]
+  [
+    [`ASIO_HANDLER_LOCATION(args)`]
+    [A variable declaration that is used to define a source code location.
+    `args` is a parenthesised function argument list containing the file
+    name, line number, and function name.]
+  ]
+  [
+    [`ASIO_HANDLER_CREATION(args)`]
+    [An expression that is called on creation of an asynchronous operation.
+    `args` is a parenthesised function argument list containing the owning
+    execution context, the tracked handler, the name of the object type, a
+    pointer to the object, the object's native handle, and the operation name.]
+  ]
+  [
+    [`ASIO_HANDLER_COMPLETION(args)`]
+    [An expression that is called on completion of an asynchronous operation.
+    `args` is a parenthesised function argument list containing the tracked
+    handler.]
+  ]
+  [
+    [`ASIO_HANDLER_INVOCATION_BEGIN(args)`]
+    [An expression that is called immediately before a completion handler is
+    invoked. `args` is a parenthesised function argument list containing the
+    arguments to the completion handler.]
+  ]
+  [
+    [`ASIO_HANDLER_INVOCATION_END`]
+    [An expression that is called immediately after a completion handler is
+    invoked.]
+  ]
+  [
+    [`ASIO_HANDLER_OPERATION(args)`]
+    [An expression that is called when some synchronous object operation is
+    called (such as `close()` or `cancel()`). `args` is a parenthesised
+    function argument list containing the owning execution context, the name
+    of the object type, a pointer to the object, the object's native handle,
+    and the operation name.]
+  ]
+  [
+    [`ASIO_HANDLER_REACTOR_REGISTRATION(args)`]
+    [An expression that is called when an object is registered with the
+    reactor. `args` is a parenthesised function argument list containing the
+    owning execution context, the object's native handle, and a unique
+    registration key.]
+  ]
+  [
+    [`ASIO_HANDLER_REACTOR_DEREGISTRATION(args)`]
+    [An expression that is called when an object is deregistered from the
+    reactor. `args` is a parenthesised function argument list containing the
+    owning execution context, the object's native handle, and a unique
+    registration key.]
+  ]
+  [
+    [`ASIO_HANDLER_REACTOR_READ_EVENT`]
+    [A bitmask constant used to identify reactor read readiness events.]
+  ]
+  [
+    [`ASIO_HANDLER_REACTOR_WRITE_EVENT`]
+    [A bitmask constant used to identify reactor write readiness events.]
+  ]
+  [
+    [`ASIO_HANDLER_REACTOR_ERROR_EVENT`]
+    [A bitmask constant used to identify reactor error readiness events.]
+  ]
+  [
+    [`ASIO_HANDLER_REACTOR_EVENTS(args)`]
+    [An expression that is called when an object registered with the reactor
+    becomes ready. `args` is a parenthesised function argument list containing
+    the owning execution context, the unique registration key, and a bitmask of
+    the ready events.]
+  ]
+  [
+    [`ASIO_HANDLER_REACTOR_OPERATION(args)`]
+    [An expression that is called when the implementation performs a system
+    call as part of a reactor-based asynchronous operation. `args` is a
+    parenthesised function argument list containing the tracked handler, the
+    operation name, the error code produced by the operation, and (optionally)
+    the number of bytes transferred.]
+  ]
+  [
+    [`ASIO_HANDLER_SCHEDULER_RUN(args)`]
+    [Optional. A variable declaration used to record an execution context run
+    call for its duration. `args` is a parenthesised argument list containing
+    the name of the run function. If it is not defined, it defaults to doing
+    nothing.]
+  ]
+]
+
+[heading See Also]
+
+[link asio.examples.cpp11_examples.handler_tracking Handler tracking
+examples].
+
+[endsect]
