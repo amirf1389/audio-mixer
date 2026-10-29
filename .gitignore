@@ -78,6 +78,7 @@ deploy/nginx/logs/
 
 # PC-mode build output
 dist/
+third_party/
 
 !releases/windows/*.exe
 
