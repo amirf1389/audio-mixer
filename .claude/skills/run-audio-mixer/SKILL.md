@@ -36,7 +36,7 @@ Without the setup script the build fails with `x86_64-w64-mingw32-windres not fo
 Start the bridge in the background and wait for the port. Do not `sleep`; poll:
 
 ```bash
-node bridge/server.js > /tmp/claude-0/bridge.log 2>&1 &
+mkdir -p .claude/skills/run-audio-mixer/shots && node bridge/server.js > .claude/skills/run-audio-mixer/shots/bridge.log 2>&1 &
 timeout 60 bash -c 'until curl -sf http://localhost:8765/ >/dev/null; do sleep 1; done' && echo SERVER UP
 ```
 
@@ -65,6 +65,18 @@ cd bridge && npm test
 
 Currently 184 tests: 182 pass, 1 fails, 1 skip. The failure is `repository layout` (`bridge/test.js:1615`): commit `27e3249` added a `docs/` folder that the test's expected top-level list does not include. The one skip is environment-dependent (no ALSA development headers or C compiler for the Linux plugin test). The Asio tree is vendored in `native/asio/`, so no clone is needed for tests.
 
+### Drive the Drivers panel (verified flow)
+
+The panel's toggle and button are real DOM controls. This sequence clicks them in one page session and reports the state after each step. Run it from the repo root with the bridge running:
+
+```bash
+node .claude/skills/run-audio-mixer/driver.mjs eval "$(cat .claude/skills/run-audio-mixer/asio-flow.js)"
+```
+
+Expected result on this container (no ASIO driver): the baseline is `NO ASIO DRIVER FOUND` with `RE-SCAN`; after turning auto-activation off it reads `AUTO-ACTIVATION OFF` with the hint "No ASIO driver is installed ..."; the setting is stored as `"0"` and back to `"1"`.
+
+The flow lives in `.claude/skills/run-audio-mixer/asio-flow.js`. It clicks the toggle and the button in one session and reads the panel state after each click, so use it instead of writing new clicks.
+
 ## Stop
 
 ```bash
@@ -73,7 +85,7 @@ lsof -ti:8765 -sTCP:LISTEN | xargs -r kill
 
 ## Gotchas
 
-- **The bridge must be running for the page to show the real state.** Without it the page shows `PC MODE OFF`. The bridge's own log is at `/tmp/claude-0/bridge.log` if you redirect it as above. The `ERR_CONNECTION_REFUSED` console messages in that state are expected; the driver filters them out.
+- **The bridge must be running for the page to show the real state.** Without it the page shows `PC MODE OFF`. The bridge's own log is `.claude/skills/run-audio-mixer/shots/bridge.log` if you redirect it as above (git-ignored). The `ERR_CONNECTION_REFUSED` console messages in that state are expected; the driver filters them out.
 - **Boot takes about 8 seconds.** The driver waits for `window.switchTab` and then a fixed boot delay. Screenshots taken earlier show the boot splash ("FACTORY HARDWARE SETUP" or the logo), not the app.
 - **The ASIO panel has no real driver here.** This container has no ASIO and no `audify` or `naudiodon2`, so the Drivers tab reads `NO ASIO DRIVER FOUND` / `NATIVE ENGINE: NOT INSTALLED`. That is the correct state for this machine. `ASIO ACTIVE` needs a Windows machine with an ASIO driver; it has not been run.
 - **The bridge is a separate process from the page.** `pkill -f` on a broad pattern can match your own shell. Stop it by port, as above.
