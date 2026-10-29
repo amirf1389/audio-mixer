@@ -5,7 +5,6 @@
 #   MinGW-w64 (i686, x86_64)  the C and C++ compilers: the setup program stub (scripts/build-exe.js), the ASIO driver (drivers/asio)
 #   wixl + msitools      the .msi packages (scripts/build-msi.js)
 #   osslsigncode         signs the .exe and .msi (scripts/sign.js)
-#   chriskohlhoff/asio   a clone in third_party/asio (standalone Asio C++ library; not the Steinberg ASIO audio SDK)
 # Usage:  bash scripts/setup-build-tools.sh
 set -euo pipefail
 
@@ -40,14 +39,6 @@ elif command -v apt-get >/dev/null 2>&1; then
 else
   echo "Unsupported system ($OS). Supported: Debian / Ubuntu (apt), macOS (Homebrew), and Windows through setup-build-tools.ps1." >&2
   exit 1
-fi
-
-# Asio (https://github.com/chriskohlhoff/asio): the standalone C++ library, header-only. Cloned once; re-run to skip it.
-ROOT=$(cd "$(dirname "$0")/.." && pwd)
-ASIO_DIR="$ROOT/third_party/asio"
-if [ ! -d "$ASIO_DIR/.git" ]; then
-  mkdir -p "$ROOT/third_party"
-  git clone --depth 1 https://github.com/chriskohlhoff/asio.git "$ASIO_DIR"
 fi
 
 echo
