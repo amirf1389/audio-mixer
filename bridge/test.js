@@ -293,7 +293,7 @@ test('ASIO startup check: every driver gets one console line with its real chann
   assert.deepStrictEqual(describeAsio(parseProbe('[]')), ['ASIO: no driver is registered on this PC']);
   assert.match(describeAsio({ ok: false, error: 'ASIO is only available on Windows', drivers: [] })[0], /not checked .*Windows/);
   const serverSrc = fsx.readFileSync(pathx.join(__dirname, 'server.js'), 'utf8');
-  assert.ok(serverSrc.includes("asioProbe.probeAsio()"), 'the server runs the ASIO check at startup');
+  assert.ok(serverSrc.includes("asioProbe.probeAsio({ exe: path.join(__dirname, '..', 'audiomixer-native.exe') })"), 'the server runs the ASIO check at startup, on the engine in the install root');
   assert.ok(serverSrc.includes('describeAsio(r).forEach'), 'and logs one line per driver');
 });
 
