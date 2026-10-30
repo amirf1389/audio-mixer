@@ -1018,7 +1018,7 @@ test('msi: stable GUIDs, per-machine Program Files paths for x64 and x86, per-us
   fsx.mkdirSync(pathx.join(stage, 'bridge')); fsx.writeFileSync(pathx.join(stage, 'bridge', 'a & b.js'), 'x'); fsx.writeFileSync(pathx.join(stage, 'LICENSE'), 'MIT');
   const x64 = m.wxs({ stage, version: '1.4.0', arch: 'x64' });
   assert.match(x64, /InstallScope="perMachine"/); assert.match(x64, /Directory Id="ProgramFiles64Folder"/); assert.match(x64, /Win64="yes"/);
-  assert.match(x64, /Root="HKLM"/); assert.match(x64, /UpgradeCode="6F3C2B8E-5D41-4A7B-9C0E-2A1D7B64F3A9"/);
+  assert.match(x64, /Root="HKLM"/); assert.match(x64, /UpgradeCode="2D6160F6-55F7-5B7B-A86F-AE1F4023BAC5"/);
   assert.match(x64, /Name="a &amp; b\.js"/); assert.ok(!/Feature Id="Autostart"|AutostartRun|CurrentVersion\\Run/.test(x64), 'no start at login in the package'); assert.match(x64, /Feature Id="Desktop"[^>]*Level="1"/);
   assert.match(x64, /Id="ScUninstall"[^>]*msiexec\.exe" Arguments="\/x \{[0-9A-F-]{36}\}"/);          // Start Menu uninstall entry
   assert.match(x64, /ARPURLINFOABOUT/);                                                                  // Settings > Apps entry details
@@ -1091,7 +1091,7 @@ test('boot screens: browser page + launcher helper (macOS / Linux), native Windo
   assert.match(l, /\/open/); assert.match(l, /AudioMixerBoot/); assert.match(l, /server_up\(\)/);
   assert.ok(rd('scripts', 'build-exe.js').includes("'-lgdi32', '-lws2_32'"));
   assert.match(rd('platforms', 'android', 'src', 'com', 'audiomixer', 'app', 'MainActivity.java'), /new BootView\(this\)/);
-  assert.match(rd('platforms', 'android', 'src', 'com', 'audiomixer', 'app', 'BootView.java'), /TITAN OS/);
+  assert.match(rd('platforms', 'android', 'src', 'com', 'audiomixer', 'app', 'BootView.java'), /AmF X1/);
   assert.match(rd('platforms', 'ios', 'AudioMixer', 'AudioMixerApp.swift'), /struct BootView: View/);
 });
 
@@ -1141,12 +1141,12 @@ test('upgrade: an older server on the port is replaced instead of reused (CLI) a
   // run it for real: a fake OLD server answers /api/status, the client ends it (pid from the status) and starts the current one on that port
   const { spawn } = require('node:child_process');
   const port = 20000 + Math.floor(Math.random() * 20000);
-  const old = spawn(process.execPath, ['-e', `require('http').createServer((q,r)=>{r.setHeader('Content-Type','application/json');r.end(JSON.stringify({ok:true,name:'audio-mixer-bridge',version:'1.0.0',pid:process.pid}))}).listen(${port},'127.0.0.1')`], { stdio: 'ignore' });
+  const old = spawn(process.execPath, ['-e', `require('http').createServer((q,r)=>{r.setHeader('Content-Type','application/json');r.end(JSON.stringify({ok:true,name:'audio-mixer-bridge',version:'0.0.9',pid:process.pid}))}).listen(${port},'127.0.0.1')`], { stdio: 'ignore' });
   const get = () => new Promise(res => http.get({ host: '127.0.0.1', port, path: '/api/status', timeout: 1500 }, r => { let b = ''; r.on('data', d => { b += d; }); r.on('end', () => { try { res(JSON.parse(b)); } catch (_) { res(null); } }); }).on('error', () => res(null)));
   for (let i = 0; i < 40 && !(await get()); i++) await new Promise(r => setTimeout(r, 100));
-  assert.strictEqual((await get()).version, '1.0.0');
+  assert.strictEqual((await get()).version, '0.0.9');
   const cl = spawn(process.execPath, [cli, '--no-open', '--port', String(port)], { stdio: 'ignore', env: { ...process.env, BRIDGE_UPDATE_URL: '' } });
-  let st = null; for (let i = 0; i < 80; i++) { await new Promise(r => setTimeout(r, 150)); st = await get(); if (st && st.version !== '1.0.0') break; }
+  let st = null; for (let i = 0; i < 80; i++) { await new Promise(r => setTimeout(r, 150)); st = await get(); if (st && st.version !== '0.0.9') break; }
   cl.kill(); old.kill();
   assert.ok(st && st.version === require('../package.json').version, 'the current server runs on the port');
 });
@@ -1318,7 +1318,7 @@ test('unix packages: Debian control + FHS layout, macOS bundle, scripts parse', 
   assert.match(u.systemdUserUnit(), /ExecStart=\/usr\/bin\/env node \/opt\/audio-mixer\/bridge\/server\.js/);
   assert.match(u.LAUNCHER_LINUX, /\. "\$APP\/ensure-node\.sh"\nam_splash "\$APP" "\$@"\nam_ensure_node \|\| exit 1\nam_ensure_audio "\$APP"\nexec "\$NODE" "\$APP\/client\/cli\.js" \$AM_SPLASH_ARGS "\$@"/);
   assert.match(u.MAC_LAUNCHER, /am_ensure_node/); assert.match(u.MAC_INSTALL, /am_ensure_audio/);
-  assert.match(u.infoPlist('1.4.0'), /<key>CFBundleIdentifier<\/key><string>com\.audiomixer\.app<\/string>/);
+  assert.match(u.infoPlist('1.4.0'), /<key>CFBundleIdentifier<\/key><string>com\.amfb\.amfx1<\/string>/);
   assert.match(u.MAC_UNINSTALL, /com\.audiomixer\.bridge\.plist/);                           // same label the service installer writes
   const cp = require('node:child_process');
   for (const [name, text, sh] of [['install', u.MAC_INSTALL, 'bash'], ['uninstall', u.MAC_UNINSTALL, 'bash'], ['launcher', u.MAC_LAUNCHER, 'bash'], ['linux', u.LAUNCHER_LINUX, 'sh']]) {
@@ -2497,7 +2497,7 @@ test('iOS app: Swift sources, XcodeGen spec, opaque icon, project bundle', async
   const ios = require('../scripts/build-ios'); const root = pathx.join(__dirname, '..', 'platforms', 'ios');
   const tpl = fsx.readFileSync(pathx.join(root, 'project.yml.template'), 'utf8');
   const yml = ios.projectYml(tpl, '1.11.0'); assert.ok(!yml.includes('@VERSION@') && !yml.includes('@BUILD@') && yml.includes('MARKETING_VERSION: "1.11.0"') && yml.includes('CURRENT_PROJECT_VERSION: "11100"'));
-  for (const k of ['NSMicrophoneUsageDescription', 'UIBackgroundModes: [audio]', 'NSAllowsLocalNetworking: true', 'PRODUCT_BUNDLE_IDENTIFIER: com.audiomixer.app', 'path: www']) assert.ok(yml.includes(k), k);
+  for (const k of ['NSMicrophoneUsageDescription', 'UIBackgroundModes: [audio]', 'NSAllowsLocalNetworking: true', 'PRODUCT_BUNDLE_IDENTIFIER: com.amfb.amfx1', 'path: www']) assert.ok(yml.includes(k), k);
   assert.ok(!/NSCameraUsageDescription|NSPhotoLibrary|NSLocation/.test(yml));
   const app = fsx.readFileSync(pathx.join(root, 'AudioMixer', 'AudioMixerApp.swift'), 'utf8'), srv = fsx.readFileSync(pathx.join(root, 'AudioMixer', 'LocalServer.swift'), 'utf8');
   assert.ok(app.includes('WKWebView') && app.includes('requestMediaCapturePermissionFor') && app.includes('.microphone') && app.includes('origin.host == "127.0.0.1"') && app.includes('AVAudioSession'));
@@ -3013,7 +3013,7 @@ test('Windows installer: the app is visible after the install (icons, Start Menu
   fs.writeFileSync(path.join(d, 'index.html'), 'x'); fs.writeFileSync(path.join(d, 'AudioMixerServer.exe'), 'MZ');
   for (const [arch, scope] of [['x64', 'machine'], ['x86', 'machine'], ['x64', 'user']]) {
     const x = m.wxs({ stage: d, version: '1.4.1', arch, scope });
-    assert.match(x, /<DirectoryRef Id="ProgramMenuFolder">\s*<Component Id="StartRootShortcut"[\s\S]*?Name="Audio Mixer" Target="\[INSTALLDIR\]AudioMixerServer\.exe" Arguments="\/open"/);
+    assert.match(x, /<DirectoryRef Id="ProgramMenuFolder">\s*<Component Id="StartRootShortcut"[\s\S]*?Name="AmF X1" Target="\[INSTALLDIR\]AudioMixerServer\.exe" Arguments="\/open"/);
     assert.match(x, /Feature Id="Shortcuts"[^>]*>.*ComponentRef Id="StartRootShortcut"/); assert.match(x, /Feature Id="Desktop"[^>]*Level="1"/);
     assert.match(x, /<Icon Id="AudioMixer\.exe" SourceFile=/); assert.match(x, /Property Id="ARPPRODUCTICON" Value="AudioMixer\.exe"/); assert.match(x, /Id="ScDesk"[^>]*Icon="AudioMixer\.exe"/);
   }
@@ -3895,7 +3895,7 @@ test('Linux and macOS own mechanisms: profile.d / environment.d, mime type + des
   const km = pathx.join(root, 'platforms', 'linux', 'kernel-module'), ko = fsx.readFileSync(pathx.join(km, 'snd-audiomixer.c'), 'utf8');
   for (const t of ['snd_card_new', 'snd_pcm_new', 'snd_pcm_period_elapsed', 'misc_register', 'MODULE_LICENSE("GPL")', 'MISC_DYNAMIC_MINOR']) assert.ok(ko.includes(t), t);
   assert.match(ko, /NOT loaded or run/); assert.ok(!ko.includes('no_llseek'), 'no_llseek was removed from newer kernels: noop_llseek works on all');
-  assert.match(fsx.readFileSync(pathx.join(km, 'dkms.conf'), 'utf8'), new RegExp('PACKAGE_VERSION="' + require('../package.json').version.replace(/\.0$/, '').replace(/\./g, '\\.') + '"'));
+  assert.match(fsx.readFileSync(pathx.join(km, 'dkms.conf'), 'utf8'), new RegExp('PACKAGE_VERSION="' + require('../package.json').version.replace(/\./g, '\\.') + '"'));
   const pump = pathx.join(out, 'am-pump'), cc = spawnSync('gcc', ['-std=gnu99', '-Wall', '-Wextra', '-Werror', '-O2', '-o', pump, pathx.join(km, 'am_pump.c'), pathx.join(root, 'drivers', 'common', 'am_link.c'), '-lpthread'], { encoding: 'utf8' });
   if (!cc.error) assert.strictEqual(cc.status, 0, cc.stderr);
 });
@@ -4642,37 +4642,13 @@ test('dual EQ mode: two complete 10-band EQ banks crossfade smoothly (window.set
 
 test('"start the console" banner dismisses itself whenever the engine actually starts, not only from its own two buttons; the EQ page\'s RTA overlay has a real on-screen toggle', async () => {
   const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
-  // the banner's own two buttons already clear it inline - that part is unchanged
-  for (const s of ["window.masterToggle(); document.getElementById('audio-api-banner').classList.remove('show');", "window.grooveEngine.toggle(); document.getElementById('audio-api-banner').classList.remove('show');"]) assert.ok(html.includes(s), s);
-
-  // window.masterToggle's ENGAGE path also dismisses it (not just the banner's own START CONSOLE button) - same state the "nag" timer checks (window.state.active)
-  const mtStart = html.indexOf('window.masterToggle = async function()'), mtEnd = html.indexOf('// KNOX SECURITY');
-  assert.ok(mtStart > 0 && mtEnd > mtStart);
-  const masterToggleBody = html.slice(mtStart, mtEnd);
-  const activeBranch = masterToggleBody.slice(masterToggleBody.indexOf('if (window.state.active) {'), masterToggleBody.indexOf('} else {'));
-  assert.ok(activeBranch.includes("audio-api-banner") && activeBranch.includes("classList.remove('show')"), 'masterToggle\'s active branch must dismiss the banner itself, not rely on which button called it');
-
-  // window.grooveEngine.start() (DEMO AUDIO header/media buttons, not just the banner's own PLAY DEMO) also dismisses it
-  const geStart = html.indexOf('async start() {'), geEnd = html.indexOf('stop() {');
-  assert.ok(geStart > 0 && geEnd > geStart);
-  const startBody = html.slice(geStart, geEnd);
-  assert.ok(startBody.includes('window.state.active = true') && startBody.indexOf("audio-api-banner") > startBody.indexOf('window.state.active = true'), 'grooveEngine.start() must dismiss the banner right after marking the engine active');
-
-  // run masterToggle for real (mocked DOM): it clears a banner left showing from a page load that never touched the banner's own buttons
-  const start = html.indexOf('window.masterToggle = async function()'), end = html.indexOf('// EXIT NOTIFICATION:');
-  assert.ok(start > 0 && end > start);
-  const bannerClasses = new Set(['show']);
-  const elements = {
-    'master-power': { className: '' }, 'status-led': { className: '' }, 'power-text': { innerText: '' }, 'audio-confirm-modal': { style: {} },
-    'audio-api-banner': { classList: { remove: c => bannerClasses.delete(c), contains: c => bannerClasses.has(c) } },
-  };
-  const document_ = { getElementById: id => elements[id] || null };
-  const window_ = { state: { active: false }, universalAsioSdk: null };
-  const masterToggle = new Function('window', 'document', 'initAudioEngine', html.slice(start, end) + '\nreturn window.masterToggle;')(window_, document_, async () => {});
-  assert.strictEqual(bannerClasses.has('show'), true, 'starts showing, same as a fresh page load that never touched the banner');
-  await masterToggle();
-  assert.strictEqual(window_.state.active, true);
-  assert.strictEqual(bannerClasses.has('show'), false, 'ENGAGE must clear the banner even though it never called the banner\'s own onclick handlers');
+  // the orange "low-latency" notice was removed from the page: its markup and its two buttons are gone, and the code that used to hide it
+  // still runs safely when the element is missing (every lookup is guarded)
+  assert.ok(!html.includes('id="audio-api-banner"') && !html.includes('Low-Latency Hardware Audio Engine Ready'), 'the banner markup is removed');
+  assert.ok(!html.includes("window.masterToggle(); document.getElementById('audio-api-banner')"), 'no button depends on the removed banner');
+  const guards = html.match(/getElementById\('audio-api-banner'\)[^;]*;/g) || [];
+  assert.ok(guards.length >= 1, 'the remaining lookups exist');
+  for (const g of html.split('\n').filter(l => l.includes("getElementById('audio-api-banner')"))) assert.ok(/if \(banner\)|const banner = document\.getElementById\('audio-api-banner'\);\s*$/.test(g.trim()) || g.includes('if (banner)'), 'guarded: ' + g.trim().slice(0, 80));
 
   // the EQ page's RTA overlay toggle (window.toggleEqRtaMode, already real logic) now has an actual button wired to it, on by default to match window.rtaEqEnabled's default
   assert.ok(html.includes('<button id="btn-eq-rta-toggle" onclick="window.toggleEqRtaMode()"'));

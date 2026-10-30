@@ -85,7 +85,7 @@ async function buildInstallers({ out = path.join(__dirname, '..', 'dist'), archs
   }
   if (result.msi.x64) {
     const m = result.msi.x64;
-    const exe = path.join(outAbs, `Audio Mixer-${m.version}.exe`);
+    const exe = path.join(outAbs, `AmF X1-${m.version}.exe`);
     const e = buildExe({ msi: m.msi, productCode: m.productCode, out: exe, version: m.version, arch: 'x64', work: path.join(outAbs, 'exe'), id });
     result.exe = { ...e, version: m.version };
   }

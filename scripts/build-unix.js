@@ -204,8 +204,8 @@ const infoPlist = version => `<?xml version="1.0" encoding="UTF-8"?>
 <plist version="1.0">
 <dict>
   <key>CFBundleName</key><string>Audio Mixer</string>
-  <key>CFBundleDisplayName</key><string>Audio Mixer</string>
-  <key>CFBundleIdentifier</key><string>com.audiomixer.app</string>
+  <key>CFBundleDisplayName</key><string>AmF X1</string>
+  <key>CFBundleIdentifier</key><string>com.amfb.amfx1</string>
   <key>CFBundleVersion</key><string>${version}</string>
   <key>CFBundleShortVersionString</key><string>${version}</string>
   <key>CFBundleExecutable</key><string>AudioMixer</string>
