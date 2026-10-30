@@ -3681,6 +3681,8 @@ test('native engine in the page: the WebAssembly build is embedded, imports noth
 test('native engine in the bridge: the Node addon (C++) gives the numbers of the JavaScript meter, the loudness meter and the scope of the vectors', (tc) => {
   const be = require('../scripts/build-engine'), r = be.buildNode();
   if (r.skipped) return tc.skip(r.skipped); assert.strictEqual(r.ok, true, r.detail);
+  // the loader and levels.js decide once, when first loaded: an earlier test may have loaded them before this build existed (a fresh checkout), so load them again
+  for (const m of ['../engine/node', './levels.js']) delete require.cache[require.resolve(m)];
   const native = require(r.file), lv = require('./levels.js'), { parse } = require('../engine/tests/vectors'), { gen, genS16 } = require('../engine/tests/signals');
   // the bridge's Int16 meter: the same snapshots as the JavaScript class, block by block, and with a changed clip threshold
   for (const [spec, ch, db] of [['clipsine:440:1.4', 2, -0.1], ['sine:300:0.9', 1, -3], ['noise:11:0.99', 6, -0.1], ['sine:1000:0.1', 2, -0.1]]) {
