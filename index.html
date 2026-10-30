@@ -588,6 +588,63 @@ CRITICAL REVISIONS & ARCHITECTURAL UPGRADES:
         html.phone-ui:not(.on-mixer) #phone-mon-btn { display: none; }
         html.phone-ui.mon-open #phone-mon-btn { background: var(--wing-orange); color: #000; }
     </style>
+    <style id="theme-white">
+        /* WHITE THEME: one override layer, loaded last. Remaps the dark palette used by the Tailwind classes and the custom panels. */
+        :root {
+            --wing-orange: #ea580c; --wing-orange-glow: rgba(234, 88, 12, 0.18);
+            --danger: #dc2626; --mid: #7c3aed; --warn: #d97706; --emerald: #059669; --cyan: #0891b2;
+            --ink: #0f172a; --ink-2: #334155; --ink-3: #64748b; --line: rgba(15, 23, 42, 0.12); --panel: #ffffff; --page: #f1f5f9;
+        }
+        html, body { background: var(--page) !important; color: var(--ink) !important; font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; }
+        .glass-panel, .wing-bezel {
+            background: var(--panel) !important; backdrop-filter: none !important; border: 1px solid var(--line) !important;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 4px 16px rgba(15, 23, 42, 0.05) !important; border-radius: 12px !important;
+        }
+        /* dark surfaces become white surfaces */
+        [class*="bg-black"]:not([class*="hover:"]) { background-color: var(--panel) !important; }
+        [class*="bg-white/"] { background-color: rgba(15, 23, 42, 0.05) !important; }
+        [class*="bg-slate-9"], [class*="bg-slate-8"] { background-color: var(--panel) !important; }
+        /* borders */
+        [class*="border-white/"] { border-color: var(--line) !important; }
+        [class*="border-slate-"] { border-color: var(--line) !important; }
+        /* text: light-on-dark becomes dark-on-light */
+        [class*="text-white"] { color: var(--ink) !important; }
+        [class*="text-slate-100"], [class*="text-slate-200"], [class*="text-slate-300"] { color: var(--ink-2) !important; }
+        [class*="text-slate-400"], [class*="text-slate-500"] { color: var(--ink-3) !important; }
+        [class*="text-slate-600"], [class*="text-slate-700"] { color: #94a3b8 !important; }
+        /* accent colors darkened for contrast on white */
+        .text-cyan-400, .text-cyan-300 { color: #0e7490 !important; }
+        .text-emerald-400, .text-emerald-300 { color: #047857 !important; }
+        .text-amber-400, .text-amber-300 { color: #b45309 !important; }
+        .text-rose-400, .text-rose-500, .text-red-400 { color: #be123c !important; }
+        .text-orange-400, .text-orange-500 { color: #c2410c !important; }
+        .text-fuchsia-300, .text-purple-400 { color: #7e22ce !important; }
+        /* the mixer strips and faders keep their shape; only the surfaces change */
+        .shadow-\[0_0_10px_rgba\(16\,185\,129\,0\.2\)\], .shadow-\[0_0_6px_\#f43f5e\] { box-shadow: none !important; }
+        .glass-panel:hover, .wing-bezel:hover { border-color: rgba(15, 23, 42, 0.2) !important; }
+        input, select, textarea { background-color: #ffffff !important; color: var(--ink) !important; border-color: var(--line) !important; }
+        ::placeholder { color: #94a3b8 !important; }
+        .mobile-scroll-x::-webkit-scrollbar-track, .mobile-scroll-y::-webkit-scrollbar-track, .tab-content::-webkit-scrollbar-track { background: #e2e8f0 !important; }
+        .mobile-scroll-y::-webkit-scrollbar-thumb, .tab-content::-webkit-scrollbar-thumb { background: #cbd5e1 !important; }
+        /* the chassis, nav, strips, meters and overlays: their dark backgrounds are set in the main stylesheet or inline */
+        #main-nav, #app-chassis, .notification, .setup-wizard, .lock-modal, .boot-overlay, .audio-confirm-modal, .eclipsa-room,
+        [class*="bg-[#0b0e14]"], [style*="#0b0e14"], [style*="background:#000"], [style*="background: #000"] {
+            background: var(--panel) !important; background-image: none !important; color: var(--ink) !important;
+        }
+        .setup-wizard, .lock-modal, .boot-overlay, .audio-confirm-modal { background: rgba(241, 245, 249, 0.96) !important; }
+        .fader-track, .led-ladder-container { background: #e2e8f0 !important; }
+        .fader-track::after { background: #94a3b8 !important; }
+        .led-ladder-fill { background: linear-gradient(to right, #059669 0%, #059669 60%, #d97706 60%, #d97706 85%, #dc2626 85%, #dc2626 100%) !important; }
+        .mixer-lane { background: var(--panel) !important; background-image: none !important; border-color: var(--line) !important; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06) !important; }
+        .mixer-lane.selected-channel { border-color: var(--wing-orange) !important; box-shadow: 0 0 0 1px var(--wing-orange) !important; }
+        [class*="bg-slate-7"], [class*="bg-slate-6"], [class*="bg-slate-5"] { background-color: #e2e8f0 !important; }
+        [class*="bg-slate-4"], [class*="bg-slate-3"] { background-color: #cbd5e1 !important; }
+        /* BIGGER FADERS: wider track, larger thumb that is easy to see and grab */
+        .daw-fader { width: 46px !important; }
+        .daw-fader::-webkit-slider-thumb { width: 42px !important; height: 56px !important; border: 2px solid #334155 !important; border-radius: 6px !important; background: linear-gradient(180deg, #ffffff 0%, #e2e8f0 60%, #cbd5e1 100%) !important; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.28), inset 0 -10px 0 var(--wing-orange) !important; }
+        .daw-fader::-moz-range-thumb { width: 42px !important; height: 56px !important; border: 2px solid #334155 !important; border-radius: 6px !important; background: linear-gradient(180deg, #ffffff 0%, #e2e8f0 60%, #cbd5e1 100%) !important; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.28) !important; }
+        .fader-track { width: 26px !important; background: #e2e8f0 !important; border: 1px solid var(--line) !important; box-shadow: inset 0 1px 3px rgba(15, 23, 42, 0.12) !important; }
+    </style>
 </head>
 <body>
 <script id="poweron-boot">
@@ -702,7 +759,7 @@ CRITICAL REVISIONS & ARCHITECTURAL UPGRADES:
                 <h2 class="text-base font-black text-white font-wing tracking-wider uppercase mb-1">WEB AUDIO API ACTIVE</h2>
                 <p class="text-[9.5px] font-mono text-slate-300 mb-3">Web Audio API low-latency DSP engine initialized with hardware drivers.</p>
                 <div class="bg-black/70 p-2.5 rounded border border-white/10 text-left font-mono text-[9px] space-y-1 text-slate-300 mb-4">
-                    <div class="flex justify-between"><span>WEB AUDIO CLOCK:</span><span class="text-emerald-400 font-bold" id="notif-sample-rate">48.0 kHz LOW-LATENCY</span></div>
+                    <div class="flex justify-between"><span>WEB AUDIO CLOCK:</span><span class="text-emerald-400 font-bold" id="notif-sample-rate">48.0 kHz</span></div>
                     <div class="flex justify-between"><span>USB ASIO DRIVER:</span><span class="text-cyan-400 font-bold" id="notif-usb-driver">NOT DETECTED (START LOCAL BRIDGE)</span></div>
                     <div class="flex justify-between"><span>BLUETOOTH GATT:</span><span class="text-purple-400 font-bold" id="notif-ble-gatt">A2DP STEREO / GATT SINK READY</span></div>
                     <div class="flex justify-between"><span>MIC RTA PIPELINE:</span><span class="text-cyan-400 font-bold">LIVE FFT DUAL TRACE OK</span></div>
@@ -728,7 +785,7 @@ CRITICAL REVISIONS & ARCHITECTURAL UPGRADES:
             <div class="w-full max-w-md bg-black/70 p-4 rounded-lg border border-white/10 space-y-2 font-mono text-[9px] mb-4 shadow-2xl">
                 <div class="flex justify-between items-center text-slate-400"><span>1. RAW USB DAC & BLE A2DP DRIVER SCAN</span><span class="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-black">OK</span></div>
                 <div class="flex justify-between items-center text-slate-400"><span>2. MOTORIZED SERVO & TRIM ALIGNMENT</span><span class="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-black">OK</span></div>
-                <div class="flex justify-between items-center text-slate-400"><span>3. ZERO-NOISE LOW-LATENCY DSP HOOK</span><span class="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-black">OK</span></div>
+                <div class="flex justify-between items-center text-slate-400"><span>3. ZERO-NOISE DSP HOOK</span><span class="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-black">OK</span></div>
                 <div class="flex justify-between items-center text-slate-400"><span>4. HOST SECURITY & KNOX CRYPTO AUTH</span><span class="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-black">OK</span></div>
             </div>
             <div class="w-full max-w-md h-1 bg-black rounded-full overflow-hidden border border-white/10 mb-4"><div id="setup-progress" class="h-full bg-amber-500 transition-all duration-300" style="width: 100%;"></div></div>
@@ -1611,7 +1668,7 @@ window.navTabs = [
             }
 
             const notifRate = document.getElementById('notif-sample-rate');
-            if (notifRate) notifRate.innerText = (window.state.ctx.sampleRate / 1000).toFixed(1) + ' kHz LOW-LATENCY';
+            if (notifRate) notifRate.innerText = (window.state.ctx.sampleRate / 1000).toFixed(1) + ' kHz';
 
             startBackgroundTelemetryWatchdog();
         }
@@ -6283,7 +6340,7 @@ const cArea = document.getElementById('content-area');
             <div id="tab-asio" class="tab-content tab-hidden">
               <div class="page-scroll-inner page-card-center space-y-3">
                 <!-- ASIO AUTO-ACTIVATION: status first. The master is linked to the universal ASIO driver by itself; this panel shows whether it is live and why not -->
-                <div id="asio-hero" class="glass-panel p-3.5 rounded-xl wing-bezel font-mono space-y-3 border border-emerald-500/30">
+                <div id="asio-hero" class="glass-panel p-2 rounded-lg wing-bezel font-mono space-y-1.5 border border-emerald-500/30">
                   <div class="flex flex-wrap justify-between items-center gap-3">
                     <div class="flex items-center gap-3 min-w-0">
                       <div class="w-10 h-10 rounded-lg bg-emerald-500/15 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0"><i class="fa-solid fa-wave-square"></i></div>
@@ -6295,7 +6352,7 @@ const cArea = document.getElementById('content-area');
                     </div>
                     <button id="asio-hero-action" type="button" onclick="window.universalAsioSdk.heroAction()" class="px-3 py-1.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[8.5px] font-black uppercase hover:bg-emerald-500 hover:text-black transition">RE-LINK ASIO</button>
                   </div>
-                  <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-[7.5px]">
+                  <div class="grid grid-cols-4 gap-1 text-[7px]">
                     <div class="bg-black/60 p-2 rounded border border-white/10"><span class="text-slate-500 block">ASIO DEVICE</span><span id="asio-hero-device" class="text-slate-200 font-bold break-all">-</span></div>
                     <div class="bg-black/60 p-2 rounded border border-white/10"><span class="text-slate-500 block">SAMPLE RATE</span><span id="asio-hero-rate" class="text-slate-200 font-bold">-</span></div>
                     <div class="bg-black/60 p-2 rounded border border-white/10"><span class="text-slate-500 block">BUFFER</span><span id="asio-hero-buffer" class="text-slate-200 font-bold">-</span></div>
@@ -6313,7 +6370,7 @@ const cArea = document.getElementById('content-area');
                       </div>
                       <div>
                         <h3 class="text-sm font-black text-white font-wing tracking-wider uppercase">DAC &amp; OS AUDIO DRIVER ARCHITECTURE</h3>
-                        <p class="text-[7.5px] font-mono text-slate-400">LOW-LATENCY STREAMING ENGINES &amp; FFT RTA SPECTRUM INPUT CAPTURE</p>
+                        <p class="text-[7.5px] font-mono text-slate-400">STREAMING ENGINES &amp; FFT RTA SPECTRUM INPUT CAPTURE</p>
                       </div>
                     </div>
                     <button onclick="window.scanHardwarePeripherals()" class="px-3 py-1 bg-amber-500/20 text-amber-500 border border-amber-500/40 rounded text-[8.5px] font-bold uppercase hover:bg-amber-500 hover:text-black transition-all">RE-SCAN ENDPOINTS</button>
