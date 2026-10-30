@@ -1,0 +1,14 @@
+{
+  "version": 3,
+  "configurePresets": [
+    { "name": "vs2022-x64", "displayName": "Visual Studio 2022, 64-bit", "generator": "Visual Studio 17 2022", "architecture": "x64", "binaryDir": "${sourceDir}/build/x64" },
+    { "name": "vs2022-x86", "displayName": "Visual Studio 2022, 32-bit", "generator": "Visual Studio 17 2022", "architecture": "Win32", "binaryDir": "${sourceDir}/build/x86" },
+    { "name": "mingw-x64", "displayName": "MinGW-w64, 64-bit (same compiler as the release build)", "generator": "Ninja", "binaryDir": "${sourceDir}/build/mingw-x64",
+      "cacheVariables": { "CMAKE_C_COMPILER": "x86_64-w64-mingw32-gcc", "CMAKE_CXX_COMPILER": "x86_64-w64-mingw32-g++", "CMAKE_RC_COMPILER": "x86_64-w64-mingw32-windres", "CMAKE_SYSTEM_NAME": "Windows" } }
+  ],
+  "buildPresets": [
+    { "name": "vs2022-x64", "configurePreset": "vs2022-x64", "configuration": "Release" },
+    { "name": "vs2022-x86", "configurePreset": "vs2022-x86", "configuration": "Release" },
+    { "name": "mingw-x64", "configurePreset": "mingw-x64" }
+  ]
+}
