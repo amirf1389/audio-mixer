@@ -39,6 +39,7 @@ const { listCatalog } = require('./catalog');
 const sdk = require('./sdk');
 const wasapiExclusive = require('./wasapi-exclusive');
 const levels = require('./levels');
+const control = require('./control');
 const virtualHub = require('./virtual').hub;
 const { cachedNowPlaying } = require('./nowplaying');
 const { groupInterfaces } = require('./interfaces');
@@ -134,6 +135,10 @@ async function handle(req, res) {
     handoff = { scenes: d, at: Date.now() };
     return [200, { ok: true, snapshots: d.filter(Boolean).length }];
   }, true, 1 << 20);
+  if (req.method === 'POST' && url.pathname === '/api/select-device') return handleAction(req, res, cors, 'select-device', async body => {   // the ASIO driver new output streams open
+    const info = await detectCached(true), name = control.select(body.deviceName, info.asio);
+    return [200, { ok: true, selected: name, message: `Output streams now open ${name}` }];
+  });
   if (req.method === 'POST' && url.pathname === '/api/restart') return handleAction(req, res, cors, 'restart', async () => [200, { ok: true, restarting: true, ...power.restartSelf({ server, sockets: openSockets_ }) }], false);
   if (req.method === 'POST' && url.pathname === '/api/reboot') return handleAction(req, res, cors, 'reboot', async body => {     // the computer itself: only with the word REBOOT in the request
     if (body.cancel === true) return [200, await power.rebootOs({ cancel: true })];
@@ -190,6 +195,11 @@ async function handle(req, res) {
 
   if (url.pathname === '/api/drivers') {
     try { return json(res, 200, { ok: true, ...(await detectCached(url.searchParams.get('force') === '1')) }, cors); }
+    catch (e) { return json(res, 500, { ok: false, error: e.message }, cors); }
+  }
+
+  if (url.pathname === '/api/audio-devices') {            // the ASIO drivers on this PC and the one chosen with POST /api/select-device
+    try { const info = await detectCached(url.searchParams.get('force') === '1'); return json(res, 200, { ok: true, devices: info.asio || [], selected: control.selected() }, cors); }
     catch (e) { return json(res, 500, { ok: false, error: e.message }, cors); }
   }
 
@@ -304,14 +314,14 @@ async function handleAction(req, res, cors, action, fn, wantBody = true, maxBody
 server.on('upgrade', (req, socket) => {
   let pathname = '';
   try { pathname = new URL(req.url, `http://${HOST}`).pathname; } catch (_) { /* rejected below */ }
-  if ((pathname !== '/ws/output' && pathname !== '/ws/input' && pathname !== '/ws/duplex' && pathname !== '/ws/insert' && pathname !== '/ws/virtual') || !hostAllowed(req.headers.host) || !originAllowed(req.headers.origin)) { socket.destroy(); return; }
+  if ((pathname !== '/ws/output' && pathname !== '/ws/input' && pathname !== '/ws/duplex' && pathname !== '/ws/insert' && pathname !== '/ws/virtual' && pathname !== '/ws/control') || !hostAllowed(req.headers.host) || !originAllowed(req.headers.origin)) { socket.destroy(); return; }
   if (pathname === '/ws/virtual' && req.headers.origin) { socket.destroy(); return; }     // drivers are native programs: a web page has no business here
   if (openSockets >= MAX_SOCKETS || (RATE && !limiter.allow('ws', 120).ok)) { socket.end('HTTP/1.1 429 Too Many Requests\r\nConnection: close\r\n\r\n'); return; }
   const handlers = {};
   const conn = accept(req, socket, handlers);
   if (!conn) return;
   openSockets++; socket.once('close', () => { openSockets--; });
-  Object.assign(handlers, pathname === '/ws/input' ? createInputSession(conn) : pathname === '/ws/duplex' ? createDuplexSession(conn) : pathname === '/ws/insert' ? pluginHost.createInsertSession(conn) : pathname === '/ws/virtual' ? virtualHub.session(conn) : createSession(conn));
+  Object.assign(handlers, pathname === '/ws/input' ? createInputSession(conn) : pathname === '/ws/duplex' ? createDuplexSession(conn) : pathname === '/ws/insert' ? pluginHost.createInsertSession(conn) : pathname === '/ws/virtual' ? virtualHub.session(conn) : pathname === '/ws/control' ? control.session(conn) : createSession(conn));
 });
 
 server.on('connection', s => { openSockets_.add(s); s.once('close', () => openSockets_.delete(s)); });
