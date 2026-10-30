@@ -9,6 +9,7 @@ project(AudioMixerLinux C CXX)
 
 set(REPO ${CMAKE_CURRENT_SOURCE_DIR}/../../..)
 add_subdirectory(${REPO}/engine/cpp engine)
+include(${REPO}/drivers/asio/asio-libs.cmake)   # AudioMixer::AsioSdk (Steinberg ASIO SDK) and AudioMixer::Asio (Asio C++ networking)
 
 find_package(ALSA REQUIRED)        # libasound2-dev (Debian / Ubuntu), alsa-lib-devel (Fedora); scripts/setup-build-tools.sh installs it
 find_package(Threads REQUIRED)

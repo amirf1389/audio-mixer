@@ -9,6 +9,7 @@ project(AudioMixerWindows C CXX)
 
 set(REPO ${CMAKE_CURRENT_SOURCE_DIR}/../../..)
 add_subdirectory(${REPO}/engine/cpp engine)
+include(${REPO}/drivers/asio/asio-libs.cmake)   # AudioMixer::AsioSdk (Steinberg ASIO SDK) and AudioMixer::Asio (Asio C++ networking)
 
 # ASIO driver: a COM in-process server. MinGW needs the stdcall fixups the build script uses; MSVC takes the exports from the .def file.
 if(CMAKE_SIZEOF_VOID_P EQUAL 8)
@@ -20,8 +21,8 @@ add_library(AudioMixerASIO SHARED
   ${REPO}/drivers/asio/audiomixer_asio.cpp
   ${REPO}/drivers/common/am_link.c
   ${REPO}/drivers/asio/audiomixer_asio.def)
-target_include_directories(AudioMixerASIO PRIVATE ${REPO}/drivers/asio ${REPO}/drivers/common)
-target_link_libraries(AudioMixerASIO PRIVATE ws2_32 ole32 oleaut32 uuid advapi32 winmm avrt)
+target_include_directories(AudioMixerASIO PRIVATE ${REPO}/drivers/common)
+target_link_libraries(AudioMixerASIO PRIVATE AudioMixer::AsioSdk ws2_32 ole32 oleaut32 uuid advapi32 winmm avrt)
 set_target_properties(AudioMixerASIO PROPERTIES PREFIX "" OUTPUT_NAME ${ASIO_DLL_NAME} C_STANDARD 99 C_EXTENSIONS ON CXX_STANDARD 14)
 if(MINGW)
   target_link_options(AudioMixerASIO PRIVATE -static -static-libgcc -static-libstdc++ -Wl,--kill-at -Wl,--enable-stdcall-fixup)
