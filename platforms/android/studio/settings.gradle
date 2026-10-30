@@ -1,0 +1,18 @@
+// Android Studio project for Audio Mixer. Open this folder (platforms/android/studio) in Android Studio.
+// The app's sources live one level up (platforms/android/src, res, AndroidManifest.xml) and are shared with scripts/build-apk.js.
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+rootProject.name = 'AudioMixer'
+include ':app'
