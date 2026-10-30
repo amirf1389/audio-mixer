@@ -4642,37 +4642,13 @@ test('dual EQ mode: two complete 10-band EQ banks crossfade smoothly (window.set
 
 test('"start the console" banner dismisses itself whenever the engine actually starts, not only from its own two buttons; the EQ page\'s RTA overlay has a real on-screen toggle', async () => {
   const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
-  // the banner's own two buttons already clear it inline - that part is unchanged
-  for (const s of ["window.masterToggle(); document.getElementById('audio-api-banner').classList.remove('show');", "window.grooveEngine.toggle(); document.getElementById('audio-api-banner').classList.remove('show');"]) assert.ok(html.includes(s), s);
-
-  // window.masterToggle's ENGAGE path also dismisses it (not just the banner's own START CONSOLE button) - same state the "nag" timer checks (window.state.active)
-  const mtStart = html.indexOf('window.masterToggle = async function()'), mtEnd = html.indexOf('// KNOX SECURITY');
-  assert.ok(mtStart > 0 && mtEnd > mtStart);
-  const masterToggleBody = html.slice(mtStart, mtEnd);
-  const activeBranch = masterToggleBody.slice(masterToggleBody.indexOf('if (window.state.active) {'), masterToggleBody.indexOf('} else {'));
-  assert.ok(activeBranch.includes("audio-api-banner") && activeBranch.includes("classList.remove('show')"), 'masterToggle\'s active branch must dismiss the banner itself, not rely on which button called it');
-
-  // window.grooveEngine.start() (DEMO AUDIO header/media buttons, not just the banner's own PLAY DEMO) also dismisses it
-  const geStart = html.indexOf('async start() {'), geEnd = html.indexOf('stop() {');
-  assert.ok(geStart > 0 && geEnd > geStart);
-  const startBody = html.slice(geStart, geEnd);
-  assert.ok(startBody.includes('window.state.active = true') && startBody.indexOf("audio-api-banner") > startBody.indexOf('window.state.active = true'), 'grooveEngine.start() must dismiss the banner right after marking the engine active');
-
-  // run masterToggle for real (mocked DOM): it clears a banner left showing from a page load that never touched the banner's own buttons
-  const start = html.indexOf('window.masterToggle = async function()'), end = html.indexOf('// EXIT NOTIFICATION:');
-  assert.ok(start > 0 && end > start);
-  const bannerClasses = new Set(['show']);
-  const elements = {
-    'master-power': { className: '' }, 'status-led': { className: '' }, 'power-text': { innerText: '' }, 'audio-confirm-modal': { style: {} },
-    'audio-api-banner': { classList: { remove: c => bannerClasses.delete(c), contains: c => bannerClasses.has(c) } },
-  };
-  const document_ = { getElementById: id => elements[id] || null };
-  const window_ = { state: { active: false }, universalAsioSdk: null };
-  const masterToggle = new Function('window', 'document', 'initAudioEngine', html.slice(start, end) + '\nreturn window.masterToggle;')(window_, document_, async () => {});
-  assert.strictEqual(bannerClasses.has('show'), true, 'starts showing, same as a fresh page load that never touched the banner');
-  await masterToggle();
-  assert.strictEqual(window_.state.active, true);
-  assert.strictEqual(bannerClasses.has('show'), false, 'ENGAGE must clear the banner even though it never called the banner\'s own onclick handlers');
+  // the orange "low-latency" notice was removed from the page: its markup and its two buttons are gone, and the code that used to hide it
+  // still runs safely when the element is missing (every lookup is guarded)
+  assert.ok(!html.includes('id="audio-api-banner"') && !html.includes('Low-Latency Hardware Audio Engine Ready'), 'the banner markup is removed');
+  assert.ok(!html.includes("window.masterToggle(); document.getElementById('audio-api-banner')"), 'no button depends on the removed banner');
+  const guards = html.match(/getElementById\('audio-api-banner'\)[^;]*;/g) || [];
+  assert.ok(guards.length >= 1, 'the remaining lookups exist');
+  for (const g of html.split('\n').filter(l => l.includes("getElementById('audio-api-banner')"))) assert.ok(/if \(banner\)|const banner = document\.getElementById\('audio-api-banner'\);\s*$/.test(g.trim()) || g.includes('if (banner)'), 'guarded: ' + g.trim().slice(0, 80));
 
   // the EQ page's RTA overlay toggle (window.toggleEqRtaMode, already real logic) now has an actual button wired to it, on by default to match window.rtaEqEnabled's default
   assert.ok(html.includes('<button id="btn-eq-rta-toggle" onclick="window.toggleEqRtaMode()"'));
