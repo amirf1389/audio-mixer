@@ -759,7 +759,7 @@ CRITICAL REVISIONS & ARCHITECTURAL UPGRADES:
                 <h2 class="text-base font-black text-white font-wing tracking-wider uppercase mb-1">WEB AUDIO API ACTIVE</h2>
                 <p class="text-[9.5px] font-mono text-slate-300 mb-3">Web Audio API low-latency DSP engine initialized with hardware drivers.</p>
                 <div class="bg-black/70 p-2.5 rounded border border-white/10 text-left font-mono text-[9px] space-y-1 text-slate-300 mb-4">
-                    <div class="flex justify-between"><span>WEB AUDIO CLOCK:</span><span class="text-emerald-400 font-bold" id="notif-sample-rate">48.0 kHz LOW-LATENCY</span></div>
+                    <div class="flex justify-between"><span>WEB AUDIO CLOCK:</span><span class="text-emerald-400 font-bold" id="notif-sample-rate">48.0 kHz</span></div>
                     <div class="flex justify-between"><span>USB ASIO DRIVER:</span><span class="text-cyan-400 font-bold" id="notif-usb-driver">NOT DETECTED (START LOCAL BRIDGE)</span></div>
                     <div class="flex justify-between"><span>BLUETOOTH GATT:</span><span class="text-purple-400 font-bold" id="notif-ble-gatt">A2DP STEREO / GATT SINK READY</span></div>
                     <div class="flex justify-between"><span>MIC RTA PIPELINE:</span><span class="text-cyan-400 font-bold">LIVE FFT DUAL TRACE OK</span></div>
@@ -785,7 +785,7 @@ CRITICAL REVISIONS & ARCHITECTURAL UPGRADES:
             <div class="w-full max-w-md bg-black/70 p-4 rounded-lg border border-white/10 space-y-2 font-mono text-[9px] mb-4 shadow-2xl">
                 <div class="flex justify-between items-center text-slate-400"><span>1. RAW USB DAC & BLE A2DP DRIVER SCAN</span><span class="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-black">OK</span></div>
                 <div class="flex justify-between items-center text-slate-400"><span>2. MOTORIZED SERVO & TRIM ALIGNMENT</span><span class="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-black">OK</span></div>
-                <div class="flex justify-between items-center text-slate-400"><span>3. ZERO-NOISE LOW-LATENCY DSP HOOK</span><span class="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-black">OK</span></div>
+                <div class="flex justify-between items-center text-slate-400"><span>3. ZERO-NOISE DSP HOOK</span><span class="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-black">OK</span></div>
                 <div class="flex justify-between items-center text-slate-400"><span>4. HOST SECURITY & KNOX CRYPTO AUTH</span><span class="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-black">OK</span></div>
             </div>
             <div class="w-full max-w-md h-1 bg-black rounded-full overflow-hidden border border-white/10 mb-4"><div id="setup-progress" class="h-full bg-amber-500 transition-all duration-300" style="width: 100%;"></div></div>
@@ -1668,7 +1668,7 @@ window.navTabs = [
             }
 
             const notifRate = document.getElementById('notif-sample-rate');
-            if (notifRate) notifRate.innerText = (window.state.ctx.sampleRate / 1000).toFixed(1) + ' kHz LOW-LATENCY';
+            if (notifRate) notifRate.innerText = (window.state.ctx.sampleRate / 1000).toFixed(1) + ' kHz';
 
             startBackgroundTelemetryWatchdog();
         }
@@ -6340,7 +6340,7 @@ const cArea = document.getElementById('content-area');
             <div id="tab-asio" class="tab-content tab-hidden">
               <div class="page-scroll-inner page-card-center space-y-3">
                 <!-- ASIO AUTO-ACTIVATION: status first. The master is linked to the universal ASIO driver by itself; this panel shows whether it is live and why not -->
-                <div id="asio-hero" class="glass-panel p-3.5 rounded-xl wing-bezel font-mono space-y-3 border border-emerald-500/30">
+                <div id="asio-hero" class="glass-panel p-2 rounded-lg wing-bezel font-mono space-y-1.5 border border-emerald-500/30">
                   <div class="flex flex-wrap justify-between items-center gap-3">
                     <div class="flex items-center gap-3 min-w-0">
                       <div class="w-10 h-10 rounded-lg bg-emerald-500/15 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0"><i class="fa-solid fa-wave-square"></i></div>
@@ -6352,7 +6352,7 @@ const cArea = document.getElementById('content-area');
                     </div>
                     <button id="asio-hero-action" type="button" onclick="window.universalAsioSdk.heroAction()" class="px-3 py-1.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[8.5px] font-black uppercase hover:bg-emerald-500 hover:text-black transition">RE-LINK ASIO</button>
                   </div>
-                  <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-[7.5px]">
+                  <div class="grid grid-cols-4 gap-1 text-[7px]">
                     <div class="bg-black/60 p-2 rounded border border-white/10"><span class="text-slate-500 block">ASIO DEVICE</span><span id="asio-hero-device" class="text-slate-200 font-bold break-all">-</span></div>
                     <div class="bg-black/60 p-2 rounded border border-white/10"><span class="text-slate-500 block">SAMPLE RATE</span><span id="asio-hero-rate" class="text-slate-200 font-bold">-</span></div>
                     <div class="bg-black/60 p-2 rounded border border-white/10"><span class="text-slate-500 block">BUFFER</span><span id="asio-hero-buffer" class="text-slate-200 font-bold">-</span></div>
@@ -6370,7 +6370,7 @@ const cArea = document.getElementById('content-area');
                       </div>
                       <div>
                         <h3 class="text-sm font-black text-white font-wing tracking-wider uppercase">DAC &amp; OS AUDIO DRIVER ARCHITECTURE</h3>
-                        <p class="text-[7.5px] font-mono text-slate-400">LOW-LATENCY STREAMING ENGINES &amp; FFT RTA SPECTRUM INPUT CAPTURE</p>
+                        <p class="text-[7.5px] font-mono text-slate-400">STREAMING ENGINES &amp; FFT RTA SPECTRUM INPUT CAPTURE</p>
                       </div>
                     </div>
                     <button onclick="window.scanHardwarePeripherals()" class="px-3 py-1 bg-amber-500/20 text-amber-500 border border-amber-500/40 rounded text-[8.5px] font-bold uppercase hover:bg-amber-500 hover:text-black transition-all">RE-SCAN ENDPOINTS</button>
