@@ -579,6 +579,58 @@ CRITICAL REVISIONS & ARCHITECTURAL UPGRADES:
         html.phone-ui:not(.on-mixer) #phone-mon-btn { display: none; }
         html.phone-ui.mon-open #phone-mon-btn { background: var(--wing-orange); color: #000; }
     </style>
+    <style id="theme-white">
+        /* WHITE THEME: one override layer, loaded last. Remaps the dark palette used by the Tailwind classes and the custom panels. */
+        :root {
+            --wing-orange: #ea580c; --wing-orange-glow: rgba(234, 88, 12, 0.18);
+            --danger: #dc2626; --mid: #7c3aed; --warn: #d97706; --emerald: #059669; --cyan: #0891b2;
+            --ink: #0f172a; --ink-2: #334155; --ink-3: #64748b; --line: rgba(15, 23, 42, 0.12); --panel: #ffffff; --page: #f1f5f9;
+        }
+        html, body { background: var(--page) !important; color: var(--ink) !important; font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; }
+        .glass-panel, .wing-bezel {
+            background: var(--panel) !important; backdrop-filter: none !important; border: 1px solid var(--line) !important;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 4px 16px rgba(15, 23, 42, 0.05) !important; border-radius: 12px !important;
+        }
+        /* dark surfaces become white surfaces */
+        [class*="bg-black"]:not([class*="hover:"]) { background-color: var(--panel) !important; }
+        [class*="bg-white/"] { background-color: rgba(15, 23, 42, 0.05) !important; }
+        [class*="bg-slate-9"], [class*="bg-slate-8"] { background-color: var(--panel) !important; }
+        /* borders */
+        [class*="border-white/"] { border-color: var(--line) !important; }
+        [class*="border-slate-"] { border-color: var(--line) !important; }
+        /* text: light-on-dark becomes dark-on-light */
+        [class*="text-white"] { color: var(--ink) !important; }
+        [class*="text-slate-100"], [class*="text-slate-200"], [class*="text-slate-300"] { color: var(--ink-2) !important; }
+        [class*="text-slate-400"], [class*="text-slate-500"] { color: var(--ink-3) !important; }
+        [class*="text-slate-600"], [class*="text-slate-700"] { color: #94a3b8 !important; }
+        /* accent colors darkened for contrast on white */
+        .text-cyan-400, .text-cyan-300 { color: #0e7490 !important; }
+        .text-emerald-400, .text-emerald-300 { color: #047857 !important; }
+        .text-amber-400, .text-amber-300 { color: #b45309 !important; }
+        .text-rose-400, .text-rose-500, .text-red-400 { color: #be123c !important; }
+        .text-orange-400, .text-orange-500 { color: #c2410c !important; }
+        .text-fuchsia-300, .text-purple-400 { color: #7e22ce !important; }
+        /* the mixer strips and faders keep their shape; only the surfaces change */
+        .shadow-\[0_0_10px_rgba\(16\,185\,129\,0\.2\)\], .shadow-\[0_0_6px_\#f43f5e\] { box-shadow: none !important; }
+        .glass-panel:hover, .wing-bezel:hover { border-color: rgba(15, 23, 42, 0.2) !important; }
+        input, select, textarea { background-color: #ffffff !important; color: var(--ink) !important; border-color: var(--line) !important; }
+        ::placeholder { color: #94a3b8 !important; }
+        .mobile-scroll-x::-webkit-scrollbar-track, .mobile-scroll-y::-webkit-scrollbar-track, .tab-content::-webkit-scrollbar-track { background: #e2e8f0 !important; }
+        .mobile-scroll-y::-webkit-scrollbar-thumb, .tab-content::-webkit-scrollbar-thumb { background: #cbd5e1 !important; }
+        /* the chassis, nav, strips, meters and overlays: their dark backgrounds are set in the main stylesheet or inline */
+        #main-nav, #app-chassis, .notification, .setup-wizard, .lock-modal, .boot-overlay, .audio-confirm-modal, .eclipsa-room,
+        [class*="bg-[#0b0e14]"], [style*="#0b0e14"], [style*="background:#000"], [style*="background: #000"] {
+            background: var(--panel) !important; background-image: none !important; color: var(--ink) !important;
+        }
+        .setup-wizard, .lock-modal, .boot-overlay, .audio-confirm-modal { background: rgba(241, 245, 249, 0.96) !important; }
+        .fader-track, .led-ladder-container { background: #e2e8f0 !important; }
+        .fader-track::after { background: #94a3b8 !important; }
+        .led-ladder-fill { background: linear-gradient(to right, #059669 0%, #059669 60%, #d97706 60%, #d97706 85%, #dc2626 85%, #dc2626 100%) !important; }
+        .mixer-lane { background: var(--panel) !important; background-image: none !important; border-color: var(--line) !important; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06) !important; }
+        .mixer-lane.selected-channel { border-color: var(--wing-orange) !important; box-shadow: 0 0 0 1px var(--wing-orange) !important; }
+        [class*="bg-slate-7"], [class*="bg-slate-6"], [class*="bg-slate-5"] { background-color: #e2e8f0 !important; }
+        [class*="bg-slate-4"], [class*="bg-slate-3"] { background-color: #cbd5e1 !important; }
+    </style>
 </head>
 <body>
 <script id="poweron-boot">
