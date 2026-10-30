@@ -331,8 +331,6 @@ CRITICAL REVISIONS & ARCHITECTURAL UPGRADES:
         #notify-stack .notification { position: static; max-width: 100%; }
         .notification { position: fixed; top: 3.8rem; right: 1.2rem; padding: 0.7rem 1.1rem; background: rgba(8,10,15,0.98); border: 1px solid var(--wing-orange); border-radius: 8px; font-size: 10px; font-weight: 800; color: white; z-index: 120000; box-shadow: 0 8px 32px rgba(0,0,0,0.9); }
         .setup-wizard, .lock-modal, .boot-overlay, .audio-confirm-modal { position: fixed; inset: 0; background: rgba(4,5,8,0.98); backdrop-filter: blur(18px); z-index: 100000; display: none; flex-direction: column; align-items: center; justify-content: center; }
-        #audio-api-banner { display: flex; position: fixed; top: 0; left: 0; right: 0; z-index: 150000; background: rgba(255, 106, 0, 0.95); backdrop-filter: blur(10px); padding: 8px 14px; justify-content: center; align-items: center; gap: 12px; color: black; font-weight: 900; text-transform: uppercase; letter-spacing: 1.5px; transform: translateY(-100%); transition: transform 0.35s ease; }
-        #audio-api-banner.show { transform: translateY(0); }
     
         /* CONTINUOUS 1-PAGE FLOW & SCROLL WHEEL NAVIGATION */
         #content-area.continuous-scroll-mode {
@@ -511,7 +509,45 @@ CRITICAL REVISIONS & ARCHITECTURAL UPGRADES:
             perspective: 1000px;
             will-change: transform, opacity;
         }
-</style>
+
+        /* HOME PAGE and the LIGHT theme (default). html.theme-light is set by window.setTheme; DARK is the original look. */
+        html { --ink: #0f172a; --muted: #475569; --card: #ffffff; --line: #d7dee8; --accent: #b45309; }
+        html:not(.theme-light) { --ink: #f1f5f9; --muted: #cbd5e1; --card: #0f141c; --line: rgba(255,255,255,0.14); --accent: #fbbf24; }
+        html.theme-light, html.theme-light body { background: #f1f4f8 !important; color: #0f172a; }
+        html.theme-light .glass-panel { background: #ffffff; border-color: #d7dee8; box-shadow: 0 2px 10px rgba(15,23,42,0.07); }
+        html.theme-light .boot-overlay, html.theme-light #boot-overlay { background: #f1f4f8 !important; }
+        html.theme-light [class*="bg-black"] { background-color: #ffffff !important; }
+        html.theme-light [class*="bg-slate-9"], html.theme-light [class*="bg-slate-8"], html.theme-light [class*="bg-zinc-9"], html.theme-light [class*="bg-neutral-9"], html.theme-light [class*="bg-gray-9"] { background-color: #ffffff !important; }
+        html.theme-light [class*="bg-white/"] { background-color: rgba(15,23,42,0.05) !important; }
+        html.theme-light [class*="border-white/"] { border-color: rgba(15,23,42,0.14) !important; }
+        html.theme-light [class*="text-white"]:not([class*="bg-amber"]):not([class*="bg-orange"]):not([class*="bg-emerald"]):not([class*="bg-red"]):not([class*="bg-rose"]):not([class*="bg-blue"]):not([class*="bg-cyan"]):not([class*="bg-indigo"]):not([class*="bg-purple"]):not([class*="bg-pink"]) { color: #0f172a !important; }
+        html.theme-light [class*="text-slate-2"], html.theme-light [class*="text-slate-3"] { color: #1e293b !important; }
+        html.theme-light [class*="text-slate-4"], html.theme-light [class*="text-slate-5"] { color: #475569 !important; }
+        html.theme-light [class*="text-amber-3"], html.theme-light [class*="text-amber-4"], html.theme-light [class*="text-amber-5"] { color: #b45309 !important; }
+        html.theme-light [class*="text-cyan-3"], html.theme-light [class*="text-cyan-4"] { color: #0e7490 !important; }
+        html.theme-light [class*="text-emerald-3"], html.theme-light [class*="text-emerald-4"] { color: #047857 !important; }
+        html.theme-light [class*="text-yellow-3"], html.theme-light [class*="text-yellow-4"] { color: #a16207 !important; }
+        html.theme-light [class*="text-purple-3"], html.theme-light [class*="text-purple-4"] { color: #7e22ce !important; }
+        html.theme-light [class*="text-pink-3"], html.theme-light [class*="text-pink-4"] { color: #be185d !important; }
+        html.theme-light [class*="text-blue-3"], html.theme-light [class*="text-blue-4"] { color: #1d4ed8 !important; }
+        html.theme-light [class*="text-indigo-3"], html.theme-light [class*="text-indigo-4"] { color: #4338ca !important; }
+        html.theme-light [class*="text-rose-4"], html.theme-light [class*="text-rose-5"], html.theme-light [class*="text-red-4"] { color: #b91c1c !important; }
+        html.theme-light .nav-group { color: #475569; border-color: rgba(15,23,42,0.12) !important; }
+        html.theme-light .nav-btn { color: #0f172a; }
+        html.theme-light .nav-btn.active-btn { background: #fff7ed; border-color: #f59e0b; }
+        html.theme-light #app-chassis, html.theme-light #content-area { color: #0f172a; }
+        .home-wrap { max-width: 980px; margin: 0 auto; padding: 32px 22px 28px; color: var(--ink); font-family: 'Inter', sans-serif; user-select: text; overflow-y: auto; height: 100%; box-sizing: border-box; }
+        .home-title { font-size: 30px; font-weight: 800; letter-spacing: -0.01em; color: var(--ink); margin: 0; }
+        .home-sub { font-size: 16px; color: var(--muted); margin: 6px 0 0; }
+        .home-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin-top: 26px; }
+        .home-tile { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 22px; text-align: left; cursor: pointer; min-height: 150px; display: flex; flex-direction: column; gap: 8px; color: var(--ink); box-shadow: 0 2px 10px rgba(15,23,42,0.06); transition: border-color 0.15s, transform 0.15s; }
+        .home-tile:hover { border-color: #f59e0b; transform: translateY(-1px); }
+        .home-tile:focus-visible { outline: 3px solid #f59e0b; outline-offset: 2px; }
+        .home-tile i { font-size: 26px; color: var(--accent); margin-bottom: 4px; }
+        .home-tile b { font-size: 20px; font-weight: 800; }
+        .home-tile span { font-size: 15px; line-height: 1.45; color: var(--muted); }
+        .home-foot { margin-top: 28px; font-size: 13px; color: var(--muted); }
+        </style>
     <!-- PHONE LAYOUT: only on narrow touch screens (the Android app, the iOS app, a phone browser): html.phone-ui is set by the script at the end of the page.
          Nothing here applies to tablets, laptops or desktops; ?phone=1 / ?phone=0 force it on / off. -->
     <style id="phone-ui-css">
@@ -738,17 +774,7 @@ CRITICAL REVISIONS & ARCHITECTURAL UPGRADES:
 
     <div id="app-chassis">
         <!-- AUDIO INITIALIZATION BANNER -->
-        <div id="audio-api-banner">
-            <i class="fa-solid fa-microphone-lines text-xl animate-pulse"></i>
-            <div class="flex flex-col text-left">
-                <span class="text-xs font-bold">Low-Latency Hardware Audio Engine Ready</span>
-                <span class="text-[8.5px] font-mono opacity-80">Dual-Engine Program Bus & Mic FFT Spectrum Analyzer Active</span>
-            </div>
-            <div class="flex items-center gap-2 ml-3">
-                <button onclick="window.masterToggle(); document.getElementById('audio-api-banner').classList.remove('show');" class="px-4 py-1.5 bg-black text-amber-500 rounded-full hover:scale-105 transition-transform text-[11px] shadow-lg font-black tracking-wider">START CONSOLE</button>
-                <button onclick="window.grooveEngine.toggle(); document.getElementById('audio-api-banner').classList.remove('show');" class="px-3 py-1.5 bg-white text-black rounded-full hover:scale-105 transition text-[10px] shadow-lg font-black tracking-wider"><i class="fa-solid fa-music mr-1"></i>PLAY DEMO</button>
-            </div>
-        </div>
+        
 
         <!-- POST-ENGAGE WEB AUDIO API & HARDWARE DRIVERS NOTIFICATION MODAL -->
         <div id="audio-confirm-modal" class="audio-confirm-modal p-4">
@@ -824,7 +850,8 @@ CRITICAL REVISIONS & ARCHITECTURAL UPGRADES:
         <!-- MAIN HEADER -->
         <header class="w-full h-12 md:h-14 px-2 md:px-5 flex items-center justify-between border-b border-white/10 z-40 shrink-0 bg-black/70 backdrop-blur-md">
             <div class="flex items-center gap-1.5 md:gap-3">
-                <button onclick="window.switchTab('mixer')" title="Home / Mix View" class="w-8 h-8 rounded bg-white/5 border border-white/10 flex items-center justify-center text-slate-300 hover:text-amber-500 hover:border-amber-500 transition-all text-xs"><i class="fa-solid fa-house"></i></button>
+                <button onclick="window.switchTab('home')" title="Home" class="w-8 h-8 rounded bg-white/5 border border-white/10 flex items-center justify-center text-slate-300 hover:text-amber-500 hover:border-amber-500 transition-all text-xs"><i class="fa-solid fa-house"></i></button>
+                <button id="theme-toggle-btn" onclick="window.toggleTheme()" title="Switch between light and dark" aria-label="Switch between light and dark" class="w-8 h-8 rounded bg-white/5 border border-white/10 flex items-center justify-center text-slate-300 hover:text-amber-500 hover:border-amber-500 transition-all text-xs"><i class="fa-solid fa-circle-half-stroke"></i></button>
                 <button onclick="window.switchTab('admin')" title="Authenticated Admin Vault" class="w-8 h-8 rounded bg-danger/10 border border-danger/30 flex items-center justify-center text-danger hover:bg-danger hover:text-black transition-all text-xs"><i class="fa-solid fa-key"></i></button>
                 <div id="status-led" class="w-2 h-2 rounded-full bg-slate-500"></div>
                 <div class="flex flex-col hidden sm:flex">
@@ -975,19 +1002,20 @@ CRITICAL REVISIONS & ARCHITECTURAL UPGRADES:
 
         // COMPLETE REFINED NAVIGATION TABS REGISTRY
 window.navTabs = [
+            { group: 'START', id: 'home', text: 'HOME', icon: 'fa-solid fa-house', color: 'text-amber-500' },
             { group: 'MIX', id: 'mixer', text: 'MIXER', icon: 'fa-solid fa-sliders', color: 'text-amber-500' },
-            { group: 'MIX', id: 'dsp', text: 'EQUALIZER', icon: 'fa-solid fa-chart-line', color: 'text-cyan-400' },
-            { group: 'MIX', id: 'dyn', text: 'DYNAMICS', icon: 'fa-solid fa-wave-square', color: 'text-emerald-400' },
-            { group: 'MIX', id: 'gate', text: 'GATE', icon: 'fa-solid fa-door-closed', color: 'text-pink-400' },
-            { group: 'MIX', id: 'fx', text: 'FX RACK', icon: 'fa-solid fa-wand-magic-sparkles', color: 'text-purple-400' },
-            { group: 'MIX', id: 'bus', text: 'BUS & MATRIX', icon: 'fa-solid fa-diagram-project', color: 'text-yellow-400' },
-            { group: 'MIX', id: 'dca', text: 'DCA / VCA', icon: 'fa-solid fa-layer-group', color: 'text-orange-400' },
-            { group: 'MIX', id: 'stereopan', text: '11.4.8 PAN', icon: 'fa-solid fa-arrows-left-right-to-line', color: 'text-blue-400' },
-            { group: 'ROUTE', id: 'io', text: 'PATCHBAY', icon: 'fa-solid fa-plug', color: 'text-indigo-400' },
+            { group: 'MIX', id: 'dsp', text: 'TONE (EQ)', icon: 'fa-solid fa-chart-line', color: 'text-cyan-400' },
+            { group: 'MIX', id: 'dyn', text: 'COMPRESSOR', icon: 'fa-solid fa-wave-square', color: 'text-emerald-400' },
+            { group: 'MIX', id: 'gate', text: 'NOISE GATE', icon: 'fa-solid fa-door-closed', color: 'text-pink-400' },
+            { group: 'MIX', id: 'fx', text: 'EFFECTS', icon: 'fa-solid fa-wand-magic-sparkles', color: 'text-purple-400' },
+            { group: 'MIX', id: 'bus', text: 'SEND TO', icon: 'fa-solid fa-diagram-project', color: 'text-yellow-400' },
+            { group: 'MIX', id: 'dca', text: 'GROUP FADERS', icon: 'fa-solid fa-layer-group', color: 'text-orange-400' },
+            { group: 'MIX', id: 'stereopan', text: 'SURROUND', icon: 'fa-solid fa-arrows-left-right-to-line', color: 'text-blue-400' },
+            { group: 'ROUTE', id: 'io', text: 'CONNECTIONS', icon: 'fa-solid fa-plug', color: 'text-indigo-400' },
             { group: 'ROUTE', id: 'routing', text: 'ROUTING', icon: 'fa-solid fa-route', color: 'text-yellow-400' },
-            { group: 'METER', id: 'meter', text: 'VU METERS', icon: 'fa-solid fa-chart-simple', color: 'text-green-400' },
-            { group: 'METER', id: 'lufs', text: 'LUFS TRUE', icon: 'fa-solid fa-bullseye', color: 'text-emerald-400' },
-            { group: 'METER', id: 'osc', text: 'SCOPE', icon: 'fa-solid fa-wave-square', color: 'text-lime-400' },
+            { group: 'METER', id: 'meter', text: 'LEVELS', icon: 'fa-solid fa-chart-simple', color: 'text-green-400' },
+            { group: 'METER', id: 'lufs', text: 'LOUDNESS', icon: 'fa-solid fa-bullseye', color: 'text-emerald-400' },
+            { group: 'METER', id: 'osc', text: 'WAVEFORM', icon: 'fa-solid fa-wave-square', color: 'text-lime-400' },
             { group: 'METER', id: 'phase', text: 'PHASE', icon: 'fa-solid fa-yin-yang', color: 'text-indigo-400' },
             { group: 'SOURCE', id: 'media', text: 'STREAM & MEDIA', icon: 'fa-solid fa-play', color: 'text-cyan-400' },
             { group: 'SOURCE', id: 'live', text: 'LIVE SOURCES', icon: 'fa-solid fa-satellite-dish', color: 'text-fuchsia-400' },
@@ -995,14 +1023,14 @@ window.navTabs = [
             { group: 'SOURCE', id: 'ai', text: 'AI MIX', icon: 'fa-solid fa-brain', color: 'text-rose-400' },
             { group: 'SOURCE', id: 'tools', text: 'TOOLS', icon: 'fa-solid fa-screwdriver-wrench', color: 'text-lime-400' },
             { group: 'SOURCE', id: 'plugins', text: 'PLUGINS', icon: 'fa-solid fa-puzzle-piece', color: 'text-purple-400' },
-            { group: 'DEVICE', id: 'asio', text: 'DRIVERS', icon: 'fa-solid fa-compact-disc', color: 'text-amber-400' },
+            { group: 'DEVICE', id: 'asio', text: 'SOUND CARD', icon: 'fa-solid fa-compact-disc', color: 'text-amber-400' },
             { group: 'DEVICE', id: 'bluetooth', text: 'BLUETOOTH', icon: 'fa-brands fa-bluetooth-b', color: 'text-blue-400' },
             { group: 'DEVICE', id: 'network', text: 'NETWORK', icon: 'fa-solid fa-network-wired', color: 'text-cyan-400' },
             { group: 'DEVICE', id: 'cloud', text: 'CLOUD', icon: 'fa-solid fa-cloud-arrow-up', color: 'text-sky-400' },
             { group: 'DEVICE', id: 'cascade', text: 'CASCADE', icon: 'fa-solid fa-link', color: 'text-teal-400' },
             { group: 'SYSTEM', id: 'presets', text: 'PRESETS', icon: 'fa-solid fa-box-archive', color: 'text-amber-400' },
-            { group: 'SYSTEM', id: 'sys', text: 'SYSTEM', icon: 'fa-solid fa-gear', color: 'text-slate-400' },
-            { group: 'SYSTEM', id: 'acct', text: 'OPERATOR', icon: 'fa-solid fa-user-shield', color: 'text-violet-400' },
+            { group: 'SYSTEM', id: 'sys', text: 'SETTINGS', icon: 'fa-solid fa-gear', color: 'text-slate-400' },
+            { group: 'SYSTEM', id: 'acct', text: 'ACCOUNT', icon: 'fa-solid fa-user-shield', color: 'text-violet-400' },
             { group: 'SYSTEM', id: 'access', text: 'ACCESS', icon: 'fa-solid fa-id-badge', color: 'text-rose-400' },
             { group: 'SYSTEM', id: 'renew', text: 'LICENSE', icon: 'fa-solid fa-certificate', color: 'text-amber-400' },
             { group: 'SYSTEM', id: 'admin', text: 'ADMIN', icon: 'fa-solid fa-key', color: 'text-red-400' },
@@ -1831,6 +1859,14 @@ window.navTabs = [
             try { on = localStorage.getItem('halx_simple_home') !== '0'; } catch (e) { /* default on */ }
             document.documentElement.classList.toggle('simple-home', on);
         })();
+        // LIGHT is the default (white pages, dark text). The header half-circle button switches to DARK; the choice is kept on this computer.
+        window.setTheme = function (light) {
+            document.documentElement.classList.toggle('theme-light', light);
+            try { localStorage.setItem('amfx1_theme', light ? 'light' : 'dark'); } catch (e) { /* storage blocked: applies to this page only */ }
+        };
+        window.toggleTheme = function () { window.setTheme(!document.documentElement.classList.contains('theme-light')); };
+        (function () { let light = true; try { light = localStorage.getItem('amfx1_theme') !== 'dark'; } catch (e) { /* default light */ } window.setTheme(light); })();
+
         window.switchTab = function(tabId) {
 const cArea = document.getElementById('content-area');
             const isContinuous = cArea && cArea.classList.contains('continuous-scroll-mode');
@@ -3709,7 +3745,7 @@ const cArea = document.getElementById('content-area');
                     const head = t.group !== lastGroup ? `<div class="nav-group" role="presentation"><span>${t.group}</span></div>` : '';
                     lastGroup = t.group;
                     return head + `
-                    <button onclick="window.switchTab('${t.id}')" id="nav-${t.id}" class="nav-btn ${t.color} ${t.id === 'mixer' ? 'active-btn' : ''}" title="${t.text}" aria-label="${t.text}">
+                    <button onclick="window.switchTab('${t.id}')" id="nav-${t.id}" class="nav-btn ${t.color} ${t.id === 'home' ? 'active-btn' : ''}" title="${t.text}" aria-label="${t.text}">
                         <i class="${t.icon} text-xs md:text-base"></i>
                         <span class="text-[6px] md:text-[6.5px] font-black uppercase mt-0.5 tracking-wider">${t.text}</span>
                     </button>`;
@@ -3722,6 +3758,24 @@ const cArea = document.getElementById('content-area');
             let htmlString = '';
 
             
+            // 0. HOME (tab-home): the plain-language start page
+            htmlString += `
+<div id="tab-home" class="tab-content">
+  <div class="home-wrap">
+    <h1 class="home-title">Welcome to AmF X1</h1>
+    <p class="home-sub">Choose what you want to do. You can change anything later.</p>
+    <div class="home-grid">
+      <button class="home-tile" onclick="window.switchTab('mixer')"><i class="fa-solid fa-sliders"></i><b>Mix my sound</b><span>Set the volume and balance for each microphone, instrument or source.</span></button>
+      <button class="home-tile" onclick="window.switchTab('asio')"><i class="fa-solid fa-compact-disc"></i><b>Use my sound card</b><span>Choose the device that plays your sound, and check that it works.</span></button>
+      <button class="home-tile" onclick="window.switchTab('dsp')"><i class="fa-solid fa-chart-line"></i><b>Tone and effects</b><span>Make voices and music clearer, warmer or brighter.</span></button>
+      <button class="home-tile" onclick="window.switchTab('meter')"><i class="fa-solid fa-chart-simple"></i><b>Check the levels</b><span>See how loud each sound is, so nothing distorts.</span></button>
+      <button class="home-tile" onclick="window.switchTab('io')"><i class="fa-solid fa-plug"></i><b>Connect devices</b><span>Plug in microphones, speakers and other sources.</span></button>
+      <button class="home-tile" onclick="window.switchTab('sys')"><i class="fa-solid fa-gear"></i><b>Settings and help</b><span>Your account, license, updates and the computer.</span></button>
+    </div>
+    <p class="home-foot">AmF X1 by AMFB Audio &middot; Version 0.1 Alpha</p>
+  </div>
+</div>`;
+
             // 1. MIXER (tab-mixer)
             htmlString += `
             <!-- UPGRADED TAB 01: MIXER (tab-mixer) -->
@@ -16323,7 +16377,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
         document.addEventListener('DOMContentLoaded', () => {
             window.enforceHostSecurity();
             window.initDOM();
-            window.switchTab('mixer'); setTimeout(window.renderBLEDeviceList, 60); setTimeout(window.loadApiAudioDevices, 150);
+            window.switchTab('home'); setTimeout(window.renderBLEDeviceList, 60); setTimeout(window.loadApiAudioDevices, 150);
             window.setupPageFlowBanners();
             window.initPageScrollWheelSystem();
             setTimeout(() => {
