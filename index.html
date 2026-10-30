@@ -639,6 +639,11 @@ CRITICAL REVISIONS & ARCHITECTURAL UPGRADES:
         .mixer-lane.selected-channel { border-color: var(--wing-orange) !important; box-shadow: 0 0 0 1px var(--wing-orange) !important; }
         [class*="bg-slate-7"], [class*="bg-slate-6"], [class*="bg-slate-5"] { background-color: #e2e8f0 !important; }
         [class*="bg-slate-4"], [class*="bg-slate-3"] { background-color: #cbd5e1 !important; }
+        /* BIGGER FADERS: wider track, larger thumb that is easy to see and grab */
+        .daw-fader { width: 46px !important; }
+        .daw-fader::-webkit-slider-thumb { width: 42px !important; height: 56px !important; border: 2px solid #334155 !important; border-radius: 6px !important; background: linear-gradient(180deg, #ffffff 0%, #e2e8f0 60%, #cbd5e1 100%) !important; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.28), inset 0 -10px 0 var(--wing-orange) !important; }
+        .daw-fader::-moz-range-thumb { width: 42px !important; height: 56px !important; border: 2px solid #334155 !important; border-radius: 6px !important; background: linear-gradient(180deg, #ffffff 0%, #e2e8f0 60%, #cbd5e1 100%) !important; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.28) !important; }
+        .fader-track { width: 26px !important; background: #e2e8f0 !important; border: 1px solid var(--line) !important; box-shadow: inset 0 1px 3px rgba(15, 23, 42, 0.12) !important; }
     </style>
 </head>
 <body>
