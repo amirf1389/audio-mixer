@@ -14,8 +14,8 @@ const CATALOG = [
   { id: 'flexasio', os: ['win32'], kind: 'asio', name: 'FlexASIO', vendor: 'Etienne Dechamps (open source)',
     note: 'ASIO driver on top of WASAPI / PortAudio: ASIO for any sound card (MIT). Get it from the project\'s official GitHub release page, or install it with: node scripts/install-flexasio.js (verified download, silent install).',
     url: 'https://github.com/dechamps/FlexASIO/releases', detect: { drivers: ['flexasio'], asio: /flexasio/i } },
-  { id: 'asio4all', os: ['win32'], kind: 'asio', name: 'ASIO4ALL', vendor: 'Michael Tippach',
-    note: 'Universal low-latency ASIO driver for WDM audio hardware. Get the installer from the official site (asio4all.org).',
+  { id: 'asio4all', os: ['win32'], kind: 'asio', name: 'ASIO4ALL (Windows ASIO driver)', vendor: 'Michael Tippach',
+    note: 'Universal ASIO driver for WDM hardware, found through the Windows ASIO registry (HKLM\\SOFTWARE\\ASIO) and opened by the native ASIO path. Detection uses the registry; the official site (asio4all.org) is linked for installing it.',
     url: 'https://www.asio4all.org/', detect: { drivers: ['asio4all'], asio: /asio4all/i } },
   { id: 'steinberg-asio', os: ['win32', 'darwin'], kind: 'sdk', name: 'Steinberg ASIO (SDK and generic driver)', vendor: 'Steinberg Media Technologies',
     note: 'ASIO is a Steinberg specification; drivers are written by the hardware vendor.',
@@ -30,6 +30,30 @@ const CATALOG = [
     note: 'Console / UAD software including drivers.', url: 'https://www.uaudio.com/downloads', detect: { asio: /apollo|universal audio|uad/i } },
   { id: 'behringer', os: ['win32', 'darwin'], kind: 'vendor', name: 'Behringer / Music Tribe WING and X-USB', vendor: 'Music Tribe',
     note: 'WING / X-USB / UMC drivers. Search the product on the site.', url: 'https://www.behringer.com/', detect: { asio: /wing|behringer|x-?usb|umc/i } },
+  { id: 'harman', os: ['win32', 'darwin'], kind: 'vendor', name: 'Harman audio interface drivers', vendor: 'Harman',
+    note: 'Interface drivers (ASIO and Core Audio). Find the product on the official site.', url: 'https://www.harman.com/', detect: { asio: /harman|jbl|akg|dbx|lexicon/i } },
+  { id: 'roland', os: ['win32', 'darwin'], kind: 'vendor', name: 'Roland / BOSS audio interface drivers', vendor: 'Roland',
+    note: 'UA / Rubix / Quad-Capture drivers (ASIO and Core Audio). Find the product on the official site.', url: 'https://www.roland.com/', detect: { asio: /roland|boss|rubix|quad.?capture|\bUA-/i } },
+  { id: 'yamaha', os: ['win32', 'darwin'], kind: 'vendor', name: 'Yamaha audio interface drivers', vendor: 'Yamaha',
+    note: 'Interface drivers (ASIO and Core Audio). Find the product on the official site.', url: 'https://www.yamaha.com/', detect: { asio: /yamaha|\bAG\d|\bZG\d/i } },
+  { id: 'steinberg-ui', os: ['win32', 'darwin'], kind: 'vendor', name: 'Steinberg UR audio interface drivers', vendor: 'Steinberg',
+    note: 'Interface drivers (ASIO and Core Audio). Find the product on the official site.', url: 'https://www.steinberg.net/', detect: { asio: /steinberg|\bUR\d{1,2}\b|\bUR-?(RT|C)\b/i } },
+  { id: 'presonus', os: ['win32', 'darwin'], kind: 'vendor', name: 'PreSonus audio interface drivers', vendor: 'PreSonus',
+    note: 'Interface drivers (ASIO and Core Audio). Find the product on the official site.', url: 'https://www.presonus.com/', detect: { asio: /presonus|studio\s?\d+usb|quantum|audiobox/i } },
+  { id: 'tascam', os: ['win32', 'darwin'], kind: 'vendor', name: 'TASCAM audio interface drivers', vendor: 'TASCAM',
+    note: 'Interface drivers (ASIO and Core Audio). Find the product on the official site.', url: 'https://tascam.com/', detect: { asio: /tascam|\bUS-\d/i } },
+  { id: 'zoom', os: ['win32', 'darwin'], kind: 'vendor', name: 'Zoom audio interface drivers', vendor: 'Zoom',
+    note: 'Interface drivers (ASIO and Core Audio). Find the product on the official site.', url: 'https://zoomcorp.com/', detect: { asio: /\bzoom\b|\bUAC-|\bU-\d{2}\b/i } },
+  { id: 'm-audio', os: ['win32', 'darwin'], kind: 'vendor', name: 'M-Audio interface drivers', vendor: 'M-Audio',
+    note: 'Interface drivers (ASIO and Core Audio). Find the product on the official site.', url: 'https://m-audio.com/', detect: { asio: /m-?audio|\bM-Track|\bFast ?Track|\bHDH|\bAir ?192/i } },
+  { id: 'native-instruments', os: ['win32', 'darwin'], kind: 'vendor', name: 'Native Instruments Komplete Audio drivers', vendor: 'Native Instruments',
+    note: 'Interface drivers (ASIO and Core Audio). Find the product on the official site.', url: 'https://www.native-instruments.com/', detect: { asio: /native instruments|komplete audio|\bKA\d/i } },
+  { id: 'apogee', os: ['win32', 'darwin'], kind: 'vendor', name: 'Apogee interface drivers', vendor: 'Apogee',
+    note: 'Interface drivers (ASIO and Core Audio). Find the product on the official site.', url: 'https://apogeedigital.com/', detect: { asio: /apogee|\bSymphony|\bDuet\b|\bOne\b.*apogee/i } },
+  { id: 'audient', os: ['win32', 'darwin'], kind: 'vendor', name: 'Audient interface drivers', vendor: 'Audient',
+    note: 'Interface drivers (ASIO and Core Audio). Find the product on the official site.', url: 'https://audient.com/', detect: { asio: /audient|\bid\d{1,2}\b|\bevo\b/i } },
+  { id: 'arturia', os: ['win32', 'darwin'], kind: 'vendor', name: 'Arturia audio interface drivers', vendor: 'Arturia',
+    note: 'Interface drivers (ASIO and Core Audio). Find the product on the official site.', url: 'https://www.arturia.com/', detect: { asio: /arturia|\bMiniFuse/i } },
   { id: 'ssl', os: ['win32', 'darwin'], kind: 'vendor', name: 'Solid State Logic SSL 2 / SSL 12', vendor: 'Solid State Logic',
     note: 'USB audio interface drivers.', url: 'https://solidstatelogic.com/', detect: { asio: /ssl|solid state/i } },
   { id: 'vb-cable', os: ['win32'], kind: 'virtual', name: 'VB-CABLE virtual audio device', vendor: 'VB-Audio',
@@ -84,6 +108,8 @@ function listCatalog(info, dir) {
     PUBLIC_FIELDS.forEach(k => { if (it[k] !== undefined) out[k] = it[k]; });
     out.forThisPc = !platform || it.os.includes(platform);
     out.installed = out.forThisPc ? isInstalled(it, info) : null;   // drivers for other systems cannot be detected here
+    // discovery: which registry ASIO names this entry matched (the Windows ASIO registry, read by detect.js), so the page can show the match
+    if ((it.kind === 'asio' || it.kind === 'vendor') && it.detect && it.detect.asio && info && info.platform === 'win32') out.registeredAs = (info.asio || []).filter(n => it.detect.asio.test(n));
     return out;
   });
 }

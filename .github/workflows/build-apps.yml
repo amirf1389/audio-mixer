@@ -1,0 +1,63 @@
+# Builds the Windows installers (.msi x64 / x86 and the setup .exe) and the portable Node.js package on demand (workflow_dispatch)
+# and when a version tag is pushed. Branch pushes do not start it. The same steps as `npm run build` and `npm run build:installers` on a developer machine.
+# The outputs are uploaded as a workflow artifact, and attached to a GitHub release when a version tag is pushed (v*).
+name: Build apps
+
+on:
+  workflow_dispatch:
+  push:
+    tags: [ "v*" ]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install build tools (same set as scripts/setup-build-tools.sh)
+        run: bash scripts/setup-build-tools.sh
+
+      - name: Check tool versions
+        run: |
+          git --version
+          node --version
+          x86_64-w64-mingw32-gcc --version | head -1
+          i686-w64-mingw32-gcc --version | head -1
+          wixl --version
+          osslsigncode --version 2>&1 | head -1
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts || npm install --ignore-scripts
+
+      - name: Portable Node.js package
+        run: npm run build
+
+      - name: Windows installers (.msi, setup .exe)
+        run: npm run build:installers
+
+      - name: Upload build outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: audio-mixer-${{ github.sha }}
+          path: |
+            dist/*.msi
+            dist/*.exe
+            dist/AudioMixer-signing.cer
+            dist/audio-mixer-pc/**
+          if-no-files-found: error
+
+      - name: Attach to release (version tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.msi
+            dist/*.exe
+            dist/AudioMixer-signing.cer

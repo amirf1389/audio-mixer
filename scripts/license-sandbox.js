@@ -5,6 +5,7 @@
 //   node scripts/license-sandbox.js issue --request request.json [--plan P] [--days N] [--dir D]    key for a request file made by the app (GET /api/license/request, LICENSE page)
 //   node scripts/license-sandbox.js issue --plan pro --name "Test" [--machine XXXX-...] [--days N]   key without a request file
 //   node scripts/license-sandbox.js show <key>
+//   node scripts/license-sandbox.js dev [--plan P] [--name N] [--dir D]                 issue a 10-year key for this machine (STUDIO by default) and activate it
 // Start the server with AUDIO_MIXER_SANDBOX=1 so it accepts the sandbox key. The public file is not committed and not packaged: installed copies never accept sandbox keys.
 // The vendor private key is never read or created here (scripts/license.js is the vendor tool).
 const fs = require('node:fs');
@@ -53,6 +54,15 @@ function main(argv) {
       const r = issue({ dir: sandboxDir(a), request, plan: arg(a, '--plan'), name: arg(a, '--name'), email: arg(a, '--email'), days: Number(arg(a, '--days', 30)) || 30, machine: arg(a, '--machine') });
       console.log(r.key);
       console.error(`\nSANDBOX ${lic.PLANS[r.payload.plan].name} for ${r.payload.name}, expires ${new Date(r.payload.expires).toISOString().slice(0, 10)}${r.payload.mid ? ', bound to ' + r.payload.mid : ''}`);
+    } else if (cmd === 'dev') {
+      // Development copy only: makes the sandbox key pair if needed, issues a STUDIO key (every feature) bound to this machine for 10 years, and
+      // activates it, so a server started with AUDIO_MIXER_SANDBOX=1 comes up licensed. Servers without that flag reject the key.
+      const dir = sandboxDir(a);
+      init(dir);
+      const r = issue({ dir, plan: arg(a, '--plan', 'studio'), name: arg(a, '--name', 'Development'), days: 3650, machine: lic.machineId() });
+      const res = lic.activate(r.key, { jwk: lic.sandboxJwk({ env: { AUDIO_MIXER_SANDBOX: '1' } }) });
+      if (!res.ok) throw new Error(`activation failed: ${res.message || res.reason}`);
+      console.log(`SANDBOX ${lic.PLANS[r.payload.plan].name} activated for ${r.payload.name} on ${r.payload.mid}, expires ${new Date(r.payload.expires).toISOString().slice(0, 10)}.\nStart the server with AUDIO_MIXER_SANDBOX=1 to use it.`);
     } else if (cmd === 'show') {
       const v = lic.verifyKey(a[0]);
       console.log(JSON.stringify(v.ok ? { ok: true, plan: v.plan.name, payload: v.payload } : { ok: false, reason: v.reason, message: v.message }, null, 2));

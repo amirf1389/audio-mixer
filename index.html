@@ -197,6 +197,15 @@ CRITICAL REVISIONS & ARCHITECTURAL UPGRADES:
         #eq-faders-view > div, #tab-dca .grid > div { min-height: 0; }
         #eq-faders-view .fader-track, #tab-dca .fader-track { min-height: 0; overflow: hidden; }
         #eq-faders-view .daw-fader, #tab-dca .daw-fader { position: absolute; left: 50%; top: 4px; height: calc(100% - 8px); transform: translateX(-50%); }
+        /* SIMPLE VIEW (the default home screen): fewer controls, large high-contrast text for older eyes. Off = the full mixer. */
+        html.simple-home #tab-mixer #asio-meter-strip,
+        html.simple-home #tab-mixer #foh-mode-toggle-btn,
+        html.simple-home #tab-mixer div:has(> #mg-btn-0) { display: none !important; }
+        html.simple-home #tab-mixer > div > .glass-panel:first-child [class*="text-["] { font-size: 14px !important; line-height: 1.35 !important; color: #f5f5f5 !important; }
+        html.simple-home #tab-mixer > div > .glass-panel:first-child button { min-height: 36px; padding: 4px 10px !important; }
+        html.simple-home #tab-mixer .bank-btn { font-size: 16px !important; }
+        #simple-home-toggle-btn::before { content: 'SIMPLE VIEW'; }
+        html.simple-home #simple-home-toggle-btn::before { content: 'FULL MIXER'; }
         /* phones: the 10 EQ faders sit in two rows and each gets a usable height; the RTA badge no longer overlaps the curve title; the mixer toolbar wraps instead of scrolling sideways */
         @media (max-width: 639px) {
             #eq-faders-view { height: auto !important; grid-auto-rows: 150px; }
@@ -1754,8 +1763,19 @@ window.navTabs = [
         };
 
                 // TAB SWITCHING LOGIC (CORE BUG FIX)
+        // Simple view is the default home screen (the Mixer tab); localStorage halx_simple_home = "0" turns it off (full mixer).
+        window.toggleSimpleHome = function () {
+            const on = !document.documentElement.classList.contains('simple-home');
+            document.documentElement.classList.toggle('simple-home', on);
+            try { localStorage.setItem('halx_simple_home', on ? '1' : '0'); } catch (e) { /* storage blocked: applies to this page only */ }
+        };
+        (function () {
+            let on = true;
+            try { on = localStorage.getItem('halx_simple_home') !== '0'; } catch (e) { /* default on */ }
+            document.documentElement.classList.toggle('simple-home', on);
+        })();
         window.switchTab = function(tabId) {
-            const cArea = document.getElementById('content-area');
+const cArea = document.getElementById('content-area');
             const isContinuous = cArea && cArea.classList.contains('continuous-scroll-mode');
 
             const tabIdx = window.navTabs.findIndex(t => t.id === tabId);
@@ -2213,18 +2233,6 @@ window.navTabs = [
             window.notify(`EBU R128 Target Set: ${target} LUFS`, 'bullseye');
         };
 
-        // LICENSE VALIDATION CONTROL
-        window.validateLicenseKey = function() {
-            const input = document.getElementById('license-key-input');
-            const key = input ? input.value.trim() : '';
-            if (key.startsWith("HLX-") && key.length >= 12) {
-                document.getElementById('license-tier-text').innerText = "TITAN PRO ULTRA-ENTERPRISE (360 SPATIAL UNLOCKED)";
-                document.getElementById('license-tier-text').className = "text-emerald-400 font-bold";
-                window.notify("License Key Cryptographically Verified", "check-double");
-            } else {
-                window.notify("Invalid License Cryptographic Signature", "triangle-exclamation");
-            }
-        };
 
 // ─── BLUETOOTH GATT ENGINE (SIMULATED + HARDWARE WEB BLUETOOTH) ───────────
         window.bleState = {
@@ -3682,6 +3690,7 @@ window.navTabs = [
           <button id="mg-btn-2" onclick="window.toggleMuteGroup(2)" class="px-1.5 py-0.5 rounded bg-white/5 text-slate-400 font-bold text-[7px] border border-white/10 hover:border-red-500/40">VOX</button>
           <button id="mg-btn-3" onclick="window.toggleMuteGroup(3)" class="px-1.5 py-0.5 rounded bg-white/5 text-slate-400 font-bold text-[7px] border border-white/10 hover:border-red-500/40">ALL</button>
         </div>
+        <button id="simple-home-toggle-btn" onclick="window.toggleSimpleHome()" class="px-2 py-0.5 rounded bg-white/10 text-slate-200 border border-white/20 text-[8px] font-black uppercase hover:bg-white/20 transition" title="Switch between the simple home view and the full mixer"></button>
         <button onclick="window.clearAllSolos()" class="px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 border border-red-500/30 text-[7.5px] font-black uppercase hover:bg-red-500 hover:text-black transition">CLEAR SOLO</button>
       </div>
     </div>
@@ -5209,25 +5218,18 @@ window.navTabs = [
                     </button>
                   </div>
 
-                  <!-- YouTube Google Server Audio Read/Write Stream API -->
+                  <!-- Media sessions: what the operating system reports as playing, read by the local bridge (GET /api/nowplaying) -->
                   <div class="glass-panel p-3 rounded-xl wing-bezel space-y-2 flex flex-col justify-between">
                     <div>
                       <div class="flex justify-between items-center border-b border-white/10 pb-1 mb-1.5">
-                        <span class="font-bold text-rose-400 text-[8px] flex items-center gap-1.5"><i class="fa-brands fa-youtube"></i> YOUTUBE GOOGLE SERVER AUDIO STREAM API</span>
-                        <span class="px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-400 border border-rose-500/30 text-[6.5px] font-bold">GOOGLE PROTOBUF DMA</span>
+                        <span class="font-bold text-cyan-400 text-[8px] flex items-center gap-1.5"><i class="fa-solid fa-music"></i> MEDIA SESSIONS (OS, LIVE)</span>
+                        <span id="media-sessions-status" class="text-[6.5px] text-slate-400">CHECKING...</span>
                       </div>
-                      <div class="bg-black/60 p-2 rounded border border-white/10 space-y-1 mb-2 text-[7px]">
-                        <div class="flex justify-between"><span class="text-slate-400">GOOGLE EDGE SERVER:</span><span class="text-emerald-400 font-bold">googleapis.com/youtube/v3 (11.4 ms CDN)</span></div>
-                        <div class="flex justify-between"><span class="text-slate-400">AUDIO FORMAT:</span><span class="text-slate-300">Opus 512 kbps WebM / 48.0 kHz 32-bit Float</span></div>
-                        <div class="flex justify-between"><span class="text-slate-400">FRAMES PROCESSED:</span><span class="text-cyan-400 font-mono">142,980 Frames • 0 Dropped (0%)</span></div>
-                      </div>
+                      <div id="media-sessions-list" class="bg-black/60 p-2 rounded border border-white/10 space-y-1 text-[7px]"></div>
                     </div>
                     <div class="flex gap-2">
-                      <button onclick="window.toggleYoutubeGoogleStream('read')" class="flex-1 py-1 bg-white/10 hover:bg-white/20 text-slate-300 rounded font-bold uppercase text-[7px] transition flex items-center justify-center gap-1">
-                        <i class="fa-solid fa-download"></i> READ STREAM (INGEST)
-                      </button>
-                      <button onclick="window.toggleYoutubeGoogleStream('write')" class="flex-1 py-1 bg-rose-500/20 hover:bg-rose-500 hover:text-black text-rose-400 border border-rose-500/40 rounded font-bold uppercase text-[7px] transition flex items-center justify-center gap-1">
-                        <i class="fa-solid fa-tower-broadcast"></i> WRITE STREAM (BROADCAST)
+                      <button onclick="window.refreshMediaSessions()" class="flex-1 py-1 bg-white/10 hover:bg-white/20 text-slate-300 rounded font-bold uppercase text-[7px] transition flex items-center justify-center gap-1">
+                        <i class="fa-solid fa-rotate"></i> REFRESH
                       </button>
                     </div>
                   </div>
@@ -6280,6 +6282,28 @@ window.navTabs = [
             htmlString += `
             <div id="tab-asio" class="tab-content tab-hidden">
               <div class="page-scroll-inner page-card-center space-y-3">
+                <!-- ASIO AUTO-ACTIVATION: status first. The master is linked to the universal ASIO driver by itself; this panel shows whether it is live and why not -->
+                <div id="asio-hero" class="glass-panel p-3.5 rounded-xl wing-bezel font-mono space-y-3 border border-emerald-500/30">
+                  <div class="flex flex-wrap justify-between items-center gap-3">
+                    <div class="flex items-center gap-3 min-w-0">
+                      <div class="w-10 h-10 rounded-lg bg-emerald-500/15 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0"><i class="fa-solid fa-wave-square"></i></div>
+                      <div class="min-w-0">
+                        <div class="text-[8px] text-slate-400 font-bold uppercase tracking-widest">ASIO AUTO-ACTIVATION</div>
+                        <div id="asio-hero-state" class="text-sm font-black text-slate-300 font-wing tracking-wider uppercase">CHECKING&hellip;</div>
+                        <div id="asio-hero-hint" class="text-[7.5px] text-slate-400 leading-snug">Reading the local server and the audio engine.</div>
+                      </div>
+                    </div>
+                    <button id="asio-hero-action" type="button" onclick="window.universalAsioSdk.heroAction()" class="px-3 py-1.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[8.5px] font-black uppercase hover:bg-emerald-500 hover:text-black transition">RE-LINK ASIO</button>
+                  </div>
+                  <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-[7.5px]">
+                    <div class="bg-black/60 p-2 rounded border border-white/10"><span class="text-slate-500 block">ASIO DEVICE</span><span id="asio-hero-device" class="text-slate-200 font-bold break-all">-</span></div>
+                    <div class="bg-black/60 p-2 rounded border border-white/10"><span class="text-slate-500 block">SAMPLE RATE</span><span id="asio-hero-rate" class="text-slate-200 font-bold">-</span></div>
+                    <div class="bg-black/60 p-2 rounded border border-white/10"><span class="text-slate-500 block">BUFFER</span><span id="asio-hero-buffer" class="text-slate-200 font-bold">-</span></div>
+                    <div class="bg-black/60 p-2 rounded border border-white/10"><span class="text-slate-500 block">NATIVE ENGINE</span><span id="asio-hero-engine" class="text-slate-200 font-bold">-</span></div>
+                  </div>
+                  <label class="flex items-center gap-2 text-[8px] text-slate-300 cursor-pointer"><input id="asio-auto-toggle" type="checkbox" class="accent-emerald-400" onchange="window.universalAsioSdk.setAsioAuto(this.checked)"> ACTIVATE ASIO AUTOMATICALLY WHEN THE AUDIO ENGINE STARTS</label>
+                </div>
+
                 <!-- DAC Hardware Endpoint Selection & Driver Setup -->
                 <div class="glass-panel p-3.5 rounded-xl wing-bezel">
                   <div class="flex flex-wrap justify-between items-center gap-2 pb-2 border-b border-white/10 mb-3">
@@ -7395,14 +7419,11 @@ window.navTabs = [
                   <div class="grid grid-cols-1 md:grid-cols-2 gap-2.5">
                     <div class="bg-black/60 p-2.5 rounded-lg border border-white/10 space-y-1.5">
                       <span class="text-slate-400 block text-[7px] font-bold">CRYPTOGRAPHIC LICENSE KEY VALIDATION</span>
-                      <input type="text" id="license-key-input" value="HLX-9981-PRO-AUTH-2029" class="bg-black border border-white/10 p-1.5 rounded text-emerald-400 font-mono w-full text-center text-xs outline-none">
+                      <input type="text" id="license-key-input" value="" placeholder="Paste license key" class="bg-black border border-white/10 p-1.5 rounded text-emerald-400 font-mono w-full text-center text-xs outline-none">
                       <div class="flex justify-between items-center text-[7.5px] pt-1">
                         <span class="text-slate-400">TIER:</span>
                         <span id="license-tier-text" class="text-emerald-400 font-bold">TITAN ENTERPRISE 11.4.8 BROADCAST</span>
                       </div>
-                      <button onclick="window.validateLicenseKey()" class="w-full py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-black uppercase text-[7.5px] rounded transition">
-                        VALIDATE LICENSE SIGNATURE
-                      </button>
                     </div>
 
                     <div class="bg-black/60 p-2.5 rounded-lg border border-white/10 space-y-1.5 flex flex-col justify-between">
@@ -12077,28 +12098,39 @@ window.navTabs = [
         };
 
         // YOUTUBE SPECIAL READ & WRITE DATA ENGINE (GOOGLE CLOUD SERVERS)
-        window.youtubeGoogleStreamApi = {
-            status: 'STREAMING ONLINE',
-            googleServerEndpoint: 'https://googleapis.com/youtube/v3/liveBroadcasts/titan-feed',
-            rtmpIngestUrl: 'rtmp://a.rtmp.youtube.com/live2/titan-stream-key',
-            edgeLatency: '11.4 ms (Google Global Edge CDN)',
-            audioCodec: 'Opus 512 kbps / WebM Float32 Interleaved',
-            sampleRate: '48.0 kHz Dual Broadcast',
-            readStreamActive: true,
-            writeStreamActive: true,
-            framesWritten: 142980,
-            droppedFrames: 0
-        };
-
-        window.toggleYoutubeGoogleStream = function(mode) {
-            if (mode === 'read') {
-                window.youtubeGoogleStreamApi.readStreamActive = !window.youtubeGoogleStreamApi.readStreamActive;
-                window.notify(`YouTube Audio Ingest (Read from Google Server): ${window.youtubeGoogleStreamApi.readStreamActive ? 'ACTIVE' : 'PAUSED'}`, 'brands fa-youtube');
-            } else if (mode === 'write') {
-                window.youtubeGoogleStreamApi.writeStreamActive = !window.youtubeGoogleStreamApi.writeStreamActive;
-                window.notify(`YouTube Live Broadcast (Write to Google RTMP Server): ${window.youtubeGoogleStreamApi.writeStreamActive ? 'TRANSMITTING' : 'OFFLINE'}`, 'brands fa-youtube');
+        // Real media sessions: what the operating system reports as playing (the local bridge reads SMTC / MPRIS / the Music apps)
+        window.refreshMediaSessions = async function() {
+            const list = document.getElementById('media-sessions-list'), status = document.getElementById('media-sessions-status');
+            if (!list || !status) return;
+            const base = (window.liveSources && window.liveSources.bridgeUrl) || '';
+            if (!base) { status.textContent = 'BRIDGE OFF'; list.textContent = 'Start the local bridge to read the OS media sessions.'; return; }
+            status.textContent = 'READING...';
+            try {
+                const r = await fetch(base + '/api/nowplaying', { cache: 'no-store' });
+                const d = await r.json();
+                if (!d.ok) throw new Error(d.error || 'bridge error');
+                const sessions = Array.isArray(d.sessions) ? d.sessions : [];
+                status.textContent = sessions.length ? sessions.length + (sessions.length > 1 ? ' SESSIONS' : ' SESSION') : 'NONE';
+                list.textContent = '';
+                if (!sessions.length) { list.textContent = 'No media app is reporting a session.'; return; }
+                for (const sess of sessions) {
+                    const row = document.createElement('div');
+                    row.className = 'flex justify-between gap-2';
+                    const name = document.createElement('span');
+                    name.className = 'text-slate-300 truncate';
+                    name.textContent = (sess.serviceName || sess.app || 'Unknown app') + (sess.title ? ' - ' + sess.title : '');
+                    const state = document.createElement('span');
+                    state.className = 'font-bold ' + (sess.status === 'playing' ? 'text-emerald-400' : 'text-slate-500');
+                    state.textContent = String(sess.status || 'unknown').toUpperCase();
+                    row.append(name, state);
+                    list.appendChild(row);
+                }
+            } catch (e) {
+                status.textContent = 'ERROR';
+                list.textContent = 'Could not read media sessions: ' + (e && e.message ? e.message : e);
             }
         };
+        setTimeout(() => window.refreshMediaSessions && window.refreshMediaSessions(), 1500);
 
         
 // ─── PLUGIN STORE & DSP EXTENSION RACK ENGINE ────────────────────────────
@@ -14508,6 +14540,8 @@ window.navTabs = [
             if (this.pcAuto()) this.connectBridge();
             this.drawSpectrum();
             this.startVolumePolling();
+            if (!this._heroTimer) this._heroTimer = setInterval(() => this.renderAsioHero(), 1000);
+            this.renderAsioHero();
             this.log("[ ASIO Universal SDK Engine initialized • 32 In / 32 Out ready ]", "success");
         },
 
@@ -14541,6 +14575,52 @@ window.navTabs = [
         frameSizeSetting: function() { try { const v = localStorage.getItem('halx_frame_size'); return v && v !== 'auto' ? parseInt(v, 10) : 'auto'; } catch (e) { return 'auto'; } },
         setFrameSize: function(v) { try { localStorage.setItem('halx_frame_size', String(v)); } catch (e) { /* ignore */ } },
         setPcAuto: function(on) { try { localStorage.setItem('halx_pc_mode_auto', on ? '1' : '0'); } catch (e) { /* ignore */ } },
+        // ASIO auto-activation (halx_asio_auto, on by default): the master links to the ASIO driver as soon as the engine runs
+        asioAutoOn: function() { try { return localStorage.getItem('halx_asio_auto') !== '0'; } catch (e) { return true; } },
+        setAsioAuto: function(on) {
+            try { localStorage.setItem('halx_asio_auto', on ? '1' : '0'); } catch (e) { /* ignore */ }
+            if (on) { this._userStopped = false; this.autoLinkAsio('auto-activation on'); }
+            this.renderAsioHero();
+        },
+        // Re-link now, whatever the auto setting says: stops the current ASIO stream, then opens the universal driver's best ASIO output
+        relinkAsio: function() {
+            if (this.paWs || this.paReady) this.stopPaOutput();
+            this._userStopped = false; this._autoLinked = false;
+            const linked = this.autoLinkAsio('manual re-link', true);
+            if (!linked && !this.paReady) window.notify('ASIO not linked: start the audio engine and make sure an ASIO driver is installed, then try again', 'triangle-exclamation');
+            this.renderAsioHero();
+        },
+        heroAction: function() {
+            if (this._heroNeedsBridge) this.connectBridge(true); else this.relinkAsio();
+        },
+        // Status panel for the Drivers tab: ASIO ACTIVE, or the one reason it is not (no server, no ASIO driver, engine stopped)
+        renderAsioHero: function() {
+            const stateEl = document.getElementById('asio-hero'); if (!stateEl) return;
+            const info = this.bridgeInfo, pa = this.paInfo || null, on = !!this.bridgeUrl, live = !!this.paReady, auto = this.asioAutoOn();
+            const engine = !!(window.state && window.state.active);
+            const asio = info && info.portaudio ? (info.portaudio.devices || []).filter(d => d.outputs > 0 && /asio/i.test(d.hostApi)) : [];
+            const frame = this.frameSizeSetting();
+            let label, tone, hint, action = 'relink', needsBridge = false;
+            if (live) { label = 'ASIO ACTIVE'; tone = 'text-emerald-400'; hint = 'The mixer master is streaming to the ASIO driver. No action needed.'; }
+            else if (!on) { label = 'PC MODE OFF'; tone = 'text-amber-400'; hint = 'Start the local server (start-pc-mode) so the page can reach the ASIO drivers.'; action = 'connect'; needsBridge = true; }
+            else if (!auto && !asio.length) { label = 'AUTO-ACTIVATION OFF'; tone = 'text-slate-400'; hint = 'No ASIO driver is installed, so there is nothing to link. Install one, then press RE-SCAN.'; action = 'connect'; needsBridge = true; }
+            else if (!auto) { label = 'AUTO-ACTIVATION OFF'; tone = 'text-slate-400'; hint = 'Turn it on above, or press RE-LINK ASIO once.'; }
+            else if (!asio.length) { label = 'NO ASIO DRIVER FOUND'; tone = 'text-amber-400'; hint = 'Install an ASIO driver (FlexASIO or ASIO4ALL) and press RE-SCAN.'; action = 'connect'; needsBridge = true; }
+            else if (!engine) { label = 'READY: WAITING FOR ENGINE'; tone = 'text-cyan-400'; hint = 'Press play in the mixer; ASIO links by itself when the engine starts.'; }
+            else { label = 'LINKING TO ASIO'; tone = 'text-cyan-400'; hint = 'Opening ' + asio[0].name + '.'; }
+            this._heroNeedsBridge = needsBridge;
+            const set = (id, text) => { const el = document.getElementById(id); if (el && el.textContent !== text) el.textContent = text; };
+            const state = document.getElementById('asio-hero-state');
+            if (state) state.className = 'text-sm font-black font-wing tracking-wider uppercase ' + tone;
+            set('asio-hero-state', label);
+            set('asio-hero-hint', hint);
+            set('asio-hero-action', action === 'connect' ? (on ? 'RE-SCAN' : 'CONNECT PC MODE') : 'RE-LINK ASIO');
+            set('asio-hero-device', live && pa ? pa.device : (asio[0] ? asio[0].name : '-'));
+            set('asio-hero-rate', live && pa ? (pa.sampleRate / 1000).toFixed(1) + ' kHz' : (asio[0] && asio[0].preferredSampleRate ? (asio[0].preferredSampleRate / 1000).toFixed(1) + ' kHz' : '-'));
+            set('asio-hero-buffer', live && pa && pa.frameSize ? pa.frameSize + ' frames • ' + pa.latencyMs + ' ms' : (frame === 'auto' ? 'AUTO (DRIVER SIZE)' : frame + ' frames'));
+            set('asio-hero-engine', info && info.portaudio ? (info.portaudio.engine === 'audify' ? 'AUDIFY (RTAUDIO)' : 'PORTAUDIO') : (on ? 'NOT INSTALLED' : '-'));
+            const toggle = document.getElementById('asio-auto-toggle'); if (toggle) toggle.checked = auto;
+        },
         setCatalogFilter: function(all) {
             this.catalogAll = !!all;
             const a = document.getElementById('pc-f-pc'), b = document.getElementById('pc-f-all');
@@ -15237,9 +15317,9 @@ window.navTabs = [
         // That used to need a manual switch, so a PC with an ASIO interface and a Bluetooth default kept playing on Bluetooth. Once the engine is running and the bridge reports an ASIO output,
         // the master is linked to the universal ASIO driver by itself (asking for the ASIO device first, falling back by the bridge's own ranking). Off with localStorage halx_asio_auto = "0",
         // and never again in this page session after the person stopped the ASIO output by hand.
-        autoLinkAsio: function(why) {
+        autoLinkAsio: function(why, force) {
             let off = false; try { off = localStorage.getItem('halx_asio_auto') === '0'; } catch (e) { /* storage blocked: default on */ }
-            if (off || this._userStopped || this._autoLinked || this.paWs || this.paReady) return false;
+            if ((off && !force) || this._userStopped || this._autoLinked || this.paWs || this.paReady) return false;
             const info = this.bridgeInfo, st = window.state;
             if (!this.bridgeUrl || !info || !info.portaudio) return false;
             if (!(st && st.active && st.ctx && st.nodes && st.nodes.masterLimiter)) return false;                  // the engine has to be running: the master is tapped from it
@@ -15291,7 +15371,7 @@ window.navTabs = [
                     };
                     tap.connect(node); node.connect(mute); mute.connect(ctx.destination);
                     try { window.state.nodes.musicAnalyser.disconnect(ctx.destination); } catch (e) { /* not connected */ }
-                    self.paNode = node; self.paMute = mute; self.paReady = true;
+                    self.paNode = node; self.paMute = mute; self.paReady = true; self.paInfo = m;
                     self.log(`${m.engine === 'audify' ? 'Audify' : 'PortAudio'} output LIVE: ${m.hostApi} / ${m.device} @ ${m.sampleRate / 1000} kHz, ${m.channels} ch${m.frameSize ? ', buffer ' + m.frameSize + ' frames (' + m.latencyMs + ' ms' + (m.autoFrameSize ? ', auto' : '') + ')' : ''}`, "success");
                     window.notify(`${/asio/i.test(m.hostApi) ? 'ASIO' : m.hostApi} Output Live: ${m.device}`, "volume-high");
                 } else if (m.type === 'error') {
@@ -15306,7 +15386,7 @@ window.navTabs = [
         stopPaOutput: function() {
             const ctx = window.state && window.state.ctx, nodes = window.state && window.state.nodes;
             const hadOutput = this.paReady;
-            this.paReady = false;
+            this.paReady = false; this.paInfo = null;
             if (this.paNode) { try { nodes.masterLimiter.disconnect(this.paNode); } catch (e) { /* ignore */ } try { this.paNode.disconnect(); } catch (e) { /* ignore */ } this.paNode = null; }
             if (this.paMute) { try { this.paMute.disconnect(); } catch (e) { /* ignore */ } this.paMute = null; }
             if (hadOutput && nodes && nodes.musicAnalyser && ctx && !(window.spatial360 && window.spatial360.wired)) { try { nodes.musicAnalyser.connect(ctx.destination); } catch (e) { /* ignore */ } }
@@ -15528,6 +15608,9 @@ window.navTabs = [
             self.readAnimationId = requestAnimationFrame(update);
         }
     };
+
+    // ASIO status panel is live from page load, not only after the Drivers tab is opened
+    document.addEventListener('DOMContentLoaded', () => { if (!window.universalAsioSdk._heroTimer) window.universalAsioSdk._heroTimer = setInterval(() => window.universalAsioSdk.renderAsioHero(), 1000); });
 
     // Alias for universal interface
     window.readWriteAudioInterfaceEngine = window.universalAsioSdk;
@@ -17224,7 +17307,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                         const ws = new WebSocket(self.wsUrl('/ws/input')); ws.binaryType = 'arraybuffer';
                         let node = null, ch = 2, done = false;
                         const fail = m => { if (!done) { done = true; try { ws.close(); } catch (e) { /* ignore */ } reject(new Error(m)); } };
-                        ws.onopen = () => ws.send(JSON.stringify({ type: 'start', channels: want, sampleRate: ctx.sampleRate, frameSize: window.universalAsioSdk.frameSizeSetting(), exclusive: self.cfg.exclusive !== false, deviceId: a.deviceId }));
+                        ws.onopen = () => ws.send(JSON.stringify({ type: 'start', channels: want, sampleRate: ctx.sampleRate, frameSize: window.universalAsioSdk.frameSizeSetting(), exclusive: self.cfg.exclusive !== false, deviceId: a.deviceId, takeover: true }));
                         ws.onerror = () => fail('local server connection failed');
                         ws.onclose = () => { if (!done) fail('closed'); else if (self.caps.get(i.key) && self.caps.get(i.key).ws === ws) self.stopRead(i.key); };
                         ws.onmessage = ev => {
@@ -17264,7 +17347,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                         const ws = new WebSocket(self.wsUrl('/ws/duplex')); ws.binaryType = 'arraybuffer';
                         let node = null, ch = 2, done = false;
                         const fail = m => { if (!done) { done = true; try { ws.close(); } catch (e) { /* ignore */ } reject(new Error(m)); } };
-                        ws.onopen = () => ws.send(JSON.stringify({ type: 'start', inChannels: want, channels: 2, sampleRate: ctx.sampleRate, frameSize: window.universalAsioSdk.frameSizeSetting(), exclusive: self.cfg.exclusive !== false, deviceId: a.deviceId }));
+                        ws.onopen = () => ws.send(JSON.stringify({ type: 'start', inChannels: want, channels: 2, sampleRate: ctx.sampleRate, frameSize: window.universalAsioSdk.frameSizeSetting(), exclusive: self.cfg.exclusive !== false, deviceId: a.deviceId, takeover: true }));
                         ws.onerror = () => fail('local server connection failed');
                         ws.onclose = () => { if (!done) fail('closed'); else self.dropDuplex(i.key, ws); };
                         ws.onmessage = ev => {
@@ -17392,7 +17475,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                     const ws = new WebSocket(self.wsUrl('/ws/output')); ws.binaryType = 'arraybuffer';
                     let done = false;
                     const fail = m => { if (!done) { done = true; try { ws.close(); } catch (e) { /* ignore */ } reject(new Error(m)); } };
-                    ws.onopen = () => ws.send(JSON.stringify({ type: 'start', channels: 2, sampleRate: ctx.sampleRate, frameSize: window.universalAsioSdk.frameSizeSetting(), exclusive: self.cfg.exclusive !== false, deviceId: a.deviceId }));
+                    ws.onopen = () => ws.send(JSON.stringify({ type: 'start', channels: 2, sampleRate: ctx.sampleRate, frameSize: window.universalAsioSdk.frameSizeSetting(), exclusive: self.cfg.exclusive !== false, deviceId: a.deviceId, takeover: true }));   // WRITE on a row takes an ASIO device over from the one holding it (see asio-lock.js)
                     ws.onerror = () => fail('local server connection failed');
                     ws.onclose = () => { if (!done) fail('closed'); else self.writes.forEach((w, key) => { if (w.ws === ws) self.stopWrite(key); }); };
                     ws.onmessage = ev => {
@@ -17846,6 +17929,8 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
         const pct = db => Math.max(0, Math.min(100, (db - MIN_DB) / -MIN_DB * 100));
         const mk = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
 
+        // SIGNAL badge rule: lit while the top peak is above the threshold and for a hold time after it falls below (so a short gap does not flicker)
+        function signalState(untilMs, topDb, now, thrDb = -50, holdMs = 3000) { const on = topDb > thrDb; return { until: on ? now + holdMs : untilMs, on: on || now < untilMs }; }
         function makeRow(m) {
             const el = mk('div', 'flex items-center gap-1.5 min-w-0');
             const asio = /asio/i.test(m.hostApi || '');
@@ -17866,9 +17951,10 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             el.appendChild(barsWrap);
             if ((m.channels || 2) > MAX_BARS) el.appendChild(mk('span', 'text-slate-500', '+' + (m.channels - MAX_BARS)));
             const peak = mk('span', 'font-bold text-slate-200 w-14 text-right'); el.appendChild(peak);
+            const sig = mk('span', 'text-[9px] font-black tracking-wide w-12 text-left text-slate-700', 'NO SIG'); sig.title = 'SIGNAL: lit while this source is above -50 dBFS (and for 3 s after)'; el.appendChild(sig);
             const clip = mk('span', 'w-2 h-2 rounded-full bg-slate-700 inline-block'); clip.title = 'Clip: lights when the signal clips (3 samples in a row over the threshold, or one at full scale)'; el.appendChild(clip);
             clip.style.cursor = 'pointer';
-            return { el, label, bars, peak, clip, hold: new Array(n).fill(MIN_DB), holdAt: new Array(n).fill(0), clipUntil: 0, clipN: 0, clipLatched: false, chClip: new Array(n).fill(false), last: 0, msg: m };
+            return { el, label, bars, peak, sig, sigUntil: 0, clip, hold: new Array(n).fill(MIN_DB), holdAt: new Array(n).fill(0), clipUntil: 0, clipN: 0, clipLatched: false, chClip: new Array(n).fill(false), last: 0, msg: m };
         }
 
         const meters = window.asioMeters = {
@@ -17913,6 +17999,8 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                     if (pk > top) top = pk;
                 });
                 r.peak.textContent = top <= MIN_DB ? '-INF' : (top > 0 ? '+' : '') + top.toFixed(1) + ' dB';
+                const sg = signalState(r.sigUntil, top, now); r.sigUntil = sg.until;
+                r.sig.textContent = sg.on ? 'SIGNAL' : 'NO SIG'; r.sig.className = 'text-[9px] font-black tracking-wide w-12 text-left ' + (sg.on ? 'text-emerald-400' : 'text-slate-700');
                 r.clip.className = 'w-2 h-2 rounded-full inline-block ' + (now < r.clipUntil ? 'bg-rose-500 shadow-[0_0_6px_#f43f5e]' : r.clipLatched ? 'bg-rose-800' : 'bg-slate-700');
                 r.clip.title = r.clipN ? 'Clipped ' + r.clipN + ' time' + (r.clipN > 1 ? 's' : '') + '. Click to clear.' : 'No clipping';
                 r.clip.onclick = () => { r.clipN = 0; r.clipLatched = false; r.clipUntil = 0; r.chClip.fill(false); };

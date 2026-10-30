@@ -334,6 +334,10 @@ if (require.main === module) {
       const mod = audifyEngine.loadAudify(); const list = typeof mod.RtAudio.getCompiledApi === 'function' ? mod.RtAudio.getCompiledApi() : [];
       console.log(`Audio engine compiled APIs: ${(list || []).map(String).join(', ') || '(none reported)'}`);
     } catch (e) { console.log(`Audio engine (audify) not available: ${String(e && e.message || e).split('\n')[0]}`); }
+    // ASIO is always checked at startup, through the Steinberg SDK (the native engine's --probe-asio), not RtAudio. It runs in the background: startup does not wait for it.
+    const asioProbe = require('./asio-probe');
+    // The native engine sits in the install root, next to bridge/ (not on PATH): give the probe that exact file.
+    asioProbe.probeAsio({ exe: path.join(__dirname, '..', 'audiomixer-native.exe') }).then(r => asioProbe.describeAsio(r).forEach(line => console.log(line))).catch(e => console.log(`ASIO: not checked (${String(e && e.message || e).split('\n')[0]})`));
   });
 }
 module.exports = { detectCached, server, originAllowed, hostAllowed, HOST, PORT, start };

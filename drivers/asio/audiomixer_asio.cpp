@@ -141,8 +141,14 @@ class AudioMixerAsio final : public IASIO {
     if (!info || info->channel < 0 || info->channel >= kChannels) return ASE_InvalidParameter;
     info->type = ASIOSTInt32LSB; info->channelGroup = 0;
     info->isActive = (info->isInput ? in_active_ : out_active_)[info->channel] ? ASIOTrue : ASIOFalse;
-    // an ASIO input is what the mixer sends to the device ("Mixer"); an ASIO output is what the host plays into the mixer ("To mixer")
-    sprintf(info->name, info->isInput ? "Mixer %s" : "To mixer %s", info->channel == 0 ? "L" : "R");
+    // an ASIO input is what the mixer sends to the device ("Mixer", with the link state: the source is only there while the mixer is connected);
+    // an ASIO output is what the host plays into the mixer ("To mixer")
+    if (info->isInput) {
+      EnterCriticalSection(&link_lock_); bool up = link_ && am_link_alive(link_); LeaveCriticalSection(&link_lock_);
+      sprintf(info->name, "Mixer %s (%s)", info->channel == 0 ? "L" : "R", up ? "connected" : "waiting");
+    } else {
+      sprintf(info->name, "To mixer %s", info->channel == 0 ? "L" : "R");
+    }
     return ASE_OK;
   }
 

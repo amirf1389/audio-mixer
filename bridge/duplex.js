@@ -13,6 +13,8 @@ function createDuplexSession(conn, load = loadPortAudio, loadA = audify.loadAudi
   let io = null, lock = null, blocked = false, frameBytes = 4;
   let mIn = null, mOut = null, uIn = null, uOut = null;
   const err = message => conn.send(JSON.stringify({ type: 'error', message }));
+  // a takeover by another device: stop this duplex and close its socket, so its row goes idle instead of holding the driver
+  const takenOver = () => { stop(); conn.close(); };
   const stop = () => {
     if (io) { try { io.quit(); } catch (_) { /* already closed */ } io = null; }
     if (lock) { lock.release(); lock = null; }
@@ -45,7 +47,7 @@ function createDuplexSession(conn, load = loadPortAudio, loadA = audify.loadAudi
         if (!list) return err('PortAudio not installed: run "npm install" in bridge/ (needs naudiodon2 or audify)');
         const dev = list.devices.find(d => d.id === id);
         if (!dev) return err('device not found');
-        lock = claim({ id: dev.id, name: dev.name, hostAPIName: dev.hostAPIName });
+        lock = claim({ id: dev.id, name: dev.name, hostAPIName: dev.hostAPIName }, { takeover: opts.takeover === true, preempt: takenOver });
         if (!lock.ok) { const m = lock.message; lock = null; return err(m); }
         const st = audify.openDuplex({ mod: loadA(), dev, inChannels: inCh, outChannels: outCh, sampleRate, frameSize: opts.frameSize, exclusive: opts.exclusive === true,
           onData: send, onError: e => { err(String(e && e.message || e)); stop(); } });
@@ -55,7 +57,7 @@ function createDuplexSession(conn, load = loadPortAudio, loadA = audify.loadAudi
       const dev = pa.getDevices().find(d => d.id === id);
       if (!dev) return err('device not found');
       if (!dev.maxInputChannels || !dev.maxOutputChannels) return err(`${dev.name} cannot read and write at once`);
-      lock = claim(dev);
+      lock = claim(dev, { takeover: opts.takeover === true, preempt: takenOver });
       if (!lock.ok) { const m = lock.message; lock = null; return err(m); }
       const ci = Math.min(inCh, dev.maxInputChannels);
       const a = new pa.AudioIO({ inOptions: { channelCount: ci, sampleFormat: pa.SampleFormat16Bit, sampleRate, deviceId: dev.id, closeOnError: true },

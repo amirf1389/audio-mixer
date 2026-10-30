@@ -22,6 +22,8 @@ function createInputSession(conn, load = loadPortAudio, loadA = audify.loadAudif
   let meter = null;   // level metering of this stream
   let unreg = null;  // live status registry
 
+  // a takeover by another device: stop this read and close its socket, so the page's READ goes to idle instead of holding the driver
+  const takenOver = () => { stop(); conn.close(); };
   const stop = () => {
     if (io) { try { io.quit(); } catch (_) { /* already closed */ } io = null; }
     if (lock) { lock.release(); lock = null; }
@@ -39,7 +41,7 @@ function createInputSession(conn, load = loadPortAudio, loadA = audify.loadAudif
     const wanted = Number.isInteger(opts.deviceId) ? opts.deviceId : null;
     const dev = audify.pickAudifyDevice(list.devices, wanted, 'input', channels) || (wanted === null ? list.devices.find(d => d.isDefaultInput) : null);
     if (!dev) return conn.send(JSON.stringify({ type: 'error', message: wanted !== null ? 'device not found' : 'no input device found' }));
-    lock = claim({ id: dev.id, name: dev.name, hostAPIName: dev.hostAPIName });
+    lock = claim({ id: dev.id, name: dev.name, hostAPIName: dev.hostAPIName }, { takeover: opts.takeover === true, preempt: takenOver });
     if (!lock.ok) { const msg = lock.message; lock = null; return conn.send(JSON.stringify({ type: 'error', message: msg })); }
     try {
       const st = audify.openStream({ mod: loadA(), dev, direction: 'input', channels, sampleRate, frameSize: opts.frameSize, exclusive: opts.exclusive === true,
@@ -99,7 +101,7 @@ function createInputSession(conn, load = loadPortAudio, loadA = audify.loadAudif
     const dev = pickInput(pa, Number.isInteger(opts.deviceId) ? opts.deviceId : null, channels);
     if (!dev && Number.isInteger(opts.deviceId)) return conn.send(JSON.stringify({ type: 'error', message: 'device not found' }));
     if (dev) {
-      lock = claim(dev);
+      lock = claim(dev, { takeover: opts.takeover === true, preempt: takenOver });
       if (!lock.ok) { const msg = lock.message; lock = null; return conn.send(JSON.stringify({ type: 'error', message: msg })); }
     }
     try {

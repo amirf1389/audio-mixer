@@ -191,9 +191,124 @@ test('catalog lists drivers for this OS and detects what is installed', () => {
   assert.strictEqual(by('naudiodon2').installed, false);
   assert.strictEqual(by('pipewire').forThisPc, false);
   assert.strictEqual(by('pipewire').installed, null);                     // other system: not detectable here
-  assert.ok(CATALOG.every(x => /^https:\/\//.test(x.url)), 'every official link is https');
+  assert.ok(CATALOG.every(x => x.url === null || /^https:\/\//.test(x.url)), 'every official link is https, or none (ASIO4ALL is found in the Windows ASIO registry)');
+  assert.strictEqual(by('asio4all').url, 'https://www.asio4all.org/', 'ASIO4ALL links to its official site');
   assert.ok(CATALOG.every(x => !('download' in x)) && win.every(x => !('downloadable' in x)), 'no entry offers a download any more');
   const cat = require('./catalog'); assert.deepStrictEqual(Object.keys(cat).sort(), ['CATALOG', 'isInstalled', 'listCatalog']);   // no downloader in the module
+});
+
+test('ASIO takeover also covers READ and duplex: a READ on a row takes the driver over, and a displaced read/duplex stops and closes its socket', () => {
+  const inp = fsx.readFileSync(pathx.join(__dirname, 'input.js'), 'utf8'), dup = fsx.readFileSync(pathx.join(__dirname, 'duplex.js'), 'utf8');
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  for (const [name, src] of [['input', inp], ['duplex', dup]]) {
+    assert.ok(/takeover: opts\.takeover === true, preempt: takenOver/.test(src), name + ': claims with takeover and a preempt');
+    assert.ok(/const takenOver = \(\) => \{ stop\(\); conn\.close\(\); \};/.test(src), name + ': a takeover stops the stream and closes the socket');
+  }
+  assert.ok(html.includes("deviceId: a.deviceId, takeover: true }));"), 'READ start carries takeover');
+  assert.ok(html.includes("deviceId: a.deviceId, takeover: true"), 'duplex start carries takeover');
+});
+
+test('SIGNAL badge: a meter row lights above -50 dBFS and holds 3 s after the signal drops; the badge is on every meter row', () => {
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  const line = html.match(/function signalState\([^\n]*\n/)[0];
+  const signalState = new Function(line + 'return signalState;')();
+  const a = signalState(0, -30, 1000);
+  assert.strictEqual(a.on, true, 'above -50 dBFS lights the badge');
+  assert.strictEqual(signalState(a.until, -80, 2000).on, true, 'inside the 3 s hold it stays lit');
+  assert.strictEqual(signalState(a.until, -80, 5000).on, false, 'after the hold it goes dark');
+  assert.strictEqual(signalState(0, -50, 1000).on, false, 'exactly at the threshold is not signal');
+  assert.ok(html.includes("const sg = signalState(r.sigUntil, top, now);"), 'the meter loop updates the badge each frame');
+});
+
+test('RtAudio: an API the binary was not built with is refused before RtAudio is constructed (no "no compiled support" fallback)', () => {
+  const a = require('./audify');
+  let made = 0;
+  class RtAudio { constructor(id) { made++; this.id = id; } getApi() { return 'WINDOWS_WASAPI'; } closeStream() {} }
+  RtAudio.getCompiledApi = () => [7];                     // only WASAPI compiled in
+  const Api = { WINDOWS_WASAPI: 7, WINDOWS_DS: 8, WINDOWS_ASIO: 6 };
+  assert.throws(() => a.openRtAudio(RtAudio, Api, 'WINDOWS_DS'), e => e.notCompiled === true && /not compiled into this audio engine/.test(e.message));
+  assert.strictEqual(made, 0, 'nothing constructed for an uncompiled API');
+  assert.ok(a.openRtAudio(RtAudio, Api, 'WINDOWS_WASAPI'), 'a compiled API still opens');
+  assert.strictEqual(made, 1);
+});
+
+test('RtAudio: the compiled-API check accepts the binary reporting its APIs as names, not only as numbers', () => {
+  const a = require('./audify');
+  let made = 0;
+  class RtAudio { constructor(id) { made++; this.id = id; } getApi() { return 'WINDOWS_WASAPI'; } closeStream() {} }
+  RtAudio.getCompiledApi = () => ['WINDOWS_WASAPI'];       // names, as some builds report them
+  const Api = { WINDOWS_WASAPI: 7, WINDOWS_DS: 8 };
+  assert.ok(a.openRtAudio(RtAudio, Api, 'WINDOWS_WASAPI'), 'a compiled API reported by name still opens');
+  assert.throws(() => a.openRtAudio(RtAudio, Api, 'WINDOWS_DS'), e => e.notCompiled === true);
+  assert.strictEqual(made, 1);
+});
+
+test('no fake stream: the page has no hard-coded YouTube stream status or key; the card reads the real OS media sessions from /api/nowplaying', () => {
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  for (const bad of ['youtubeGoogleStreamApi', 'toggleYoutubeGoogleStream', 'titan-stream-key', 'titan-feed', 'STREAMING ONLINE', 'rtmp://a.rtmp.youtube.com']) assert.ok(!html.includes(bad), 'removed: ' + bad);
+  assert.ok(html.includes("window.refreshMediaSessions = async function()"), 'the real reader exists');
+  assert.ok(html.includes("base + '/api/nowplaying'"), 'it reads the bridge media-session endpoint');
+  assert.ok(html.includes('id="media-sessions-list"') && html.includes('id="media-sessions-status"'), 'the card has its list and status');
+});
+
+test('ASIO probe (native Steinberg SDK, no RtAudio): the JSON from audiomixer-native --probe-asio is read into real channel counts and rates; bad output is refused', async () => {
+  const { probeAsio, parseProbe } = require('./asio-probe');
+  const good = JSON.stringify([
+    { name: 'Focusrite USB ASIO', clsid: '{AAA}', inChannels: 18, outChannels: 20, sampleRates: [44100, 48000, 96000] },
+    { name: 'Broken Driver', clsid: '{BBB}', inChannels: 0, outChannels: 0, sampleRates: [], error: 'did not start: init failed' },
+  ]);
+  const r = parseProbe(good);
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(r.drivers[0].inChannels, 18); assert.strictEqual(r.drivers[0].outChannels, 20);
+  assert.deepStrictEqual(r.drivers[0].sampleRates, [44100, 48000, 96000]);
+  assert.strictEqual(r.drivers[1].error, 'did not start: init failed');
+  assert.strictEqual(parseProbe('not json').ok, false, 'non-JSON output is refused');
+  assert.strictEqual(parseProbe('{"a":1}').ok, false, 'a non-list reply is refused');
+  assert.deepStrictEqual(parseProbe('[{"name":"X","inChannels":-3,"outChannels":"2","sampleRates":[48000,"x",-1]}]').drivers[0],
+    { name: 'X', clsid: '', inChannels: 0, outChannels: 0, sampleRates: [48000] }, 'bad counts and rates are sanitized');
+  // the probe is run with the exact flag, through the injected runner
+  let called = null;
+  const ok = await probeAsio({ platform: 'win32', exe: 'audiomixer-native.exe', runner: async (exe, args) => { called = [exe, args]; return good; } });
+  assert.deepStrictEqual(called, ['audiomixer-native.exe', ['--probe-asio']]);
+  assert.strictEqual(ok.drivers.length, 2);
+  // not Windows: nothing is run
+  let ran = false;
+  const off = await probeAsio({ platform: 'linux', runner: async () => { ran = true; return good; } });
+  assert.strictEqual(off.ok, false); assert.strictEqual(ran, false, 'no probe off Windows');
+  // the engine cannot run: reported, not thrown
+  const dead = await probeAsio({ platform: 'win32', runner: async () => { throw new Error('ENOENT'); } });
+  assert.strictEqual(dead.ok, false); assert.match(dead.error, /could not run/);
+});
+
+test('ASIO startup check: every driver gets one console line with its real channel counts, or the reason it was not read', () => {
+  const { parseProbe, describeAsio } = require('./asio-probe');
+  const r = parseProbe(JSON.stringify([
+    { name: 'Focusrite USB ASIO', clsid: '{A}', inChannels: 18, outChannels: 20, sampleRates: [44100, 48000] },
+    { name: 'Broken', clsid: '{B}', inChannels: 0, outChannels: 0, sampleRates: [], error: 'did not start' },
+  ]));
+  assert.deepStrictEqual(describeAsio(r), [
+    'ASIO: Focusrite USB ASIO: 18 in / 20 out, 44100, 48000 Hz',
+    'ASIO: Broken: did not start',
+  ]);
+  assert.deepStrictEqual(describeAsio(parseProbe('[]')), ['ASIO: no driver is registered on this PC']);
+  assert.match(describeAsio({ ok: false, error: 'ASIO is only available on Windows', drivers: [] })[0], /not checked .*Windows/);
+  const serverSrc = fsx.readFileSync(pathx.join(__dirname, 'server.js'), 'utf8');
+  assert.ok(serverSrc.includes("asioProbe.probeAsio({ exe: path.join(__dirname, '..', 'audiomixer-native.exe') })"), 'the server runs the ASIO check at startup, on the engine in the install root');
+  assert.ok(serverSrc.includes('describeAsio(r).forEach'), 'and logs one line per driver');
+});
+
+test('ASIO discovery: an ASIO entry reports the Windows ASIO registry names it matched; ASIO4ALL is found there and links to its official site', () => {
+  const { listCatalog } = require('./catalog');
+  const info = { platform: 'win32', portaudio: false, drivers: [], asio: ['ASIO4ALL v2', 'Focusrite USB ASIO'] };
+  const by = id => listCatalog(info, null).find(x => x.id === id);
+  const a4 = by('asio4all');
+  assert.strictEqual(a4.installed, true, 'the registered ASIO4ALL is detected');
+  assert.deepStrictEqual(a4.registeredAs, ['ASIO4ALL v2'], 'discovery reports the matched registry name');
+  assert.strictEqual(a4.url, 'https://www.asio4all.org/');
+  assert.deepStrictEqual(by('focusrite').registeredAs, ['Focusrite USB ASIO']);
+  assert.strictEqual(by('wasapi').registeredAs, undefined, 'only ASIO drivers carry the discovery field');
+  const none = listCatalog({ platform: 'win32', portaudio: false, drivers: [], asio: [] }, null).find(x => x.id === 'asio4all');
+  assert.strictEqual(none.installed, false); assert.deepStrictEqual(none.registeredAs, []);
 });
 
 test('catalog endpoints: GET list only; the driver download route is gone', async () => {
@@ -533,6 +648,36 @@ test('ASIO is single-client: a second ASIO device is refused until the first is 
   l1b.release();
   assert.ok(claim(b).ok);
   _owners.clear();
+});
+
+test('ASIO takeover: WRITE on a device takes the single-client slot from the device holding it; without the flag it is still refused', () => {
+  const { claim, _owners } = require('./asio-lock');
+  _owners.clear();
+  const holder = { id: 1, name: 'ASIO4ALL v2', hostAPIName: 'ASIO' }, wanted = { id: 2, name: 'Audio Mixer', hostAPIName: 'ASIO' };
+  let stopped = 0;
+  const held = claim(holder, { preempt: () => { stopped++; held.release(); } });
+  assert.ok(held.ok);
+  // no flag: refused as before, the holder keeps running
+  const refused = claim(wanted); assert.strictEqual(refused.ok, false); assert.strictEqual(stopped, 0);
+  // takeover: the holder is stopped (its preempt releases its claim) and the wanted device gets the slot
+  const taken = claim(wanted, { takeover: true, preempt: () => {} });
+  assert.ok(taken.ok, 'the requested device takes over'); assert.strictEqual(stopped, 1, 'the holder was stopped exactly once');
+  assert.strictEqual(_owners.size, 1); assert.ok([..._owners.keys()][0].includes('audio mixer'));
+  taken.release(); assert.strictEqual(_owners.size, 0);
+  // a holder that registered no preempt cannot be taken over: the request is refused and nothing is stopped
+  const bare = claim(holder); assert.ok(bare.ok);
+  const again = claim({ id: 3, name: 'FlexASIO', hostAPIName: 'ASIO' }, { takeover: true });
+  assert.strictEqual(again.ok, false, 'no preempt registered: refused');
+  bare.release(); assert.strictEqual(_owners.size, 0);
+  _owners.clear();
+});
+
+test('ASIO takeover is requested by WRITE on a row: the page sends takeover:true and the write session passes it to the lock', () => {
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  assert.ok(/type: 'start'[^\n]*deviceId: a\.deviceId, takeover: true \}/.test(html), 'the write start message carries takeover');
+  const out = fsx.readFileSync(pathx.join(__dirname, 'output.js'), 'utf8');
+  assert.ok(/takeover: opts\.takeover === true, preempt: takenOver/.test(out), 'the write session claims with takeover and a preempt');
+  assert.ok(/const takenOver = \(\) => \{ stop\(\); conn\.close\(\); \};/.test(out), 'a takeover stops the stream and closes the socket');
 });
 
 test('ASIO lock keys on the driver NAME, not dev.id: the same driver seen with a different id (another engine / a re-scan) is one driver, not two', () => {
