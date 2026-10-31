@@ -31,6 +31,21 @@ found), and **WRITE** / **DUPLEX** stream the mixer's master output (Int16 stere
 and restored on stop. Without `naudiodon2` the page logs how to enable it and nothing else changes.
 Tested with a stubbed PortAudio; not yet verified on real ASIO hardware. Output only (no input capture).
 
+## Remote control: ASIO driver choice, fader board and meters (control.js)
+Same port and the same local-only checks as everything else (Host must be this PC, Origin must be a local page):
+
+    GET  /api/audio-devices                      { devices: [ASIO driver names], selected }
+    POST /api/select-device  { "deviceName": "Focusrite USB ASIO" }     header X-Mixer-Action: select-device
+
+The selected driver is what `/ws/output` opens when the page names no device. `ws://localhost:8765/ws/control`
+sends `INIT` (volumes, mutes, locks) on connect and takes `SET_VOLUME { channel, value 0-1 }`,
+`FADER_CHANGE { channel, value -90..+10 dB }`, `SET_MUTE { channel, muted }` and `TOGGLE_LOCK { ch1, ch2 }`
+(a linked pair moves together). Every change goes to every connected page (`VOLUME_CHANGED`, `MUTE_CHANGED`,
+`LOCK_CHANGED`), with `METERS` from the open streams about 12 times a second. The board scales what `/ws/output`
+and `/ws/duplex` send to the driver; `/ws/duplex` with `monitor: true` sends the input straight to the output
+through it (input channel n to output n). 32 channels; nothing is saved: a restart is unity, unmuted, unlinked.
+Tested with a stubbed PortAudio; not yet verified on real ASIO hardware.
+
 ## Audify (RtAudio) engine and automatic frame size
 `cd bridge && npm install` also installs the optional `audify` module (RtAudio: ASIO, WASAPI, DirectSound, Core Audio, JACK, ALSA, PulseAudio).
 It works next to `naudiodon2` or on its own: with only Audify installed, `/api/drivers` `portaudio` (and the page) use Audify's devices.
