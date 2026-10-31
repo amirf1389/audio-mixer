@@ -113,3 +113,7 @@ dist/electron/
 
 # Platform build outputs (npm run build:apk / build:macos / build:ios)
 platforms/*/releases/
+
+# Vendor signing keys for the license server (deploy/license): never committed
+secrets/
+*vendor-private*.pem
