@@ -60,15 +60,21 @@ class NativeMeter {
 }
 const newMeter = channels => (native ? new NativeMeter(channels) : new Meter(channels));
 
+// Every stream's snapshot also goes to these listeners (control.js sends them on /ws/control).
+const listeners = new Set();
+function onSnapshot(fn) { listeners.add(fn); return () => listeners.delete(fn); }
+
 // Starts reporting for one open stream. `info` = what streams.add() got (direction, device, hostApi, engine, frameSize, latencyMs, sampleRate, channels).
 function attach(conn, info, { interval = 80 } = {}) {
   const meter = newMeter(info.channels || 2);
   const id = `${info.sid || 0}:${info.direction}:${info.hostApi}:${info.device}`;   // one id per open stream
   const timer = setInterval(() => {
-    try { conn.send(JSON.stringify({ type: 'levels', id, direction: info.direction, device: info.device, hostApi: info.hostApi, engine: info.engine, frameSize: info.frameSize || null, latencyMs: info.latencyMs || null, sampleRate: info.sampleRate, channels: meter.ch, ...meter.snapshot() })); } catch (_) { /* connection closing */ }
+    const s = { type: 'levels', id, direction: info.direction, device: info.device, hostApi: info.hostApi, engine: info.engine, frameSize: info.frameSize || null, latencyMs: info.latencyMs || null, sampleRate: info.sampleRate, channels: meter.ch, ...meter.snapshot() };
+    try { conn.send(JSON.stringify(s)); } catch (_) { /* connection closing */ }
+    for (const fn of listeners) { try { fn(s); } catch (_) { /* a listener's problem */ } }
   }, interval);
   if (timer.unref) timer.unref();
   return { push: buf => meter.push(buf), stop: () => clearInterval(timer), meter };
 }
 
-module.exports = { Meter, NativeMeter, native: () => native, attach, dbfs, FLOOR, CLIP_RUN, config, setClipDb, limitOf };
+module.exports = { Meter, NativeMeter, native: () => native, attach, onSnapshot, dbfs, FLOOR, CLIP_RUN, config, setClipDb, limitOf };
