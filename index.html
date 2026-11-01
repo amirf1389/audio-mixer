@@ -569,6 +569,12 @@ CRITICAL REVISIONS & ARCHITECTURAL UPGRADES:
         html.skin-analog.theme-light .home-tile { box-shadow: inset 0 1px 0 #ffffff, 0 3px 8px var(--analog-shadow); }
         .home-skin { align-self: flex-start; margin-top: 6px; margin-left: 8px; padding: 8px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font-size: 14px; font-weight: 700; cursor: pointer; }
         .home-skin:hover { border-color: #f59e0b; }
+        .upgrade-slot { flex: 0 0 auto; width: 200px; margin-left: 6px; padding: 14px; border-radius: 12px; border: 2px dashed #f59e0b; background: rgba(245, 158, 11, 0.06); display: flex; flex-direction: column; gap: 10px; justify-content: center; color: var(--ink); }
+        .upgrade-slot b { font-size: 15px; }
+        .upgrade-slot span { font-size: 12.5px; color: var(--muted); line-height: 1.4; }
+        .upgrade-slot button { padding: 9px 10px; border-radius: 8px; border: 1px solid #b45309; background: #fff7ed; color: #92400e; font-weight: 800; font-size: 13px; cursor: pointer; }
+        .upgrade-slot button:hover { background: #fde68a; }
+        .upgrade-slot button:focus-visible { outline: 3px solid #f59e0b; outline-offset: 2px; }
         /* COMFORT: smooth changes, compact layout on small screens, bigger text for any age, clear keyboard focus, and no motion for people who ask for less. */
         html, body, html.theme-light, html.theme-light body { transition: background-color 0.35s ease, color 0.35s ease; }
         .glass-panel, .home-tile, .nav-btn, html.theme-light .glass-panel { transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, transform 0.2s ease; }
@@ -1934,6 +1940,26 @@ window.navTabs = [
             }
         };
         document.addEventListener('click', e => { if (e.target.closest && e.target.closest('.nav-btn, #theme-toggle-btn, #text-size-btn, .home-tile, .bank-btn')) setTimeout(window.fixLightContrast, 450); }, true);
+
+        // Empty mixer space for a plan with fewer channels than the page: one card with the next plan up. Built with DOM calls (no HTML from data).
+        window.buildUpgradeSlot = function (channels) {
+            const div = document.createElement('div');
+            div.className = 'upgrade-slot';
+            const title = document.createElement('b');
+            title.textContent = 'CH ' + (channels + 1) + ' to ' + (channels < 16 ? 16 : 32) + ' are locked';
+            const note = document.createElement('span');
+            note.textContent = 'Your plan has ' + channels + ' channels. Unlock more in LICENSE.';
+            div.append(title, note);
+            const tiers = [['PRO', 16], ['STUDIO', 32]].filter(([, c]) => c > channels);
+            for (const [name, count] of tiers) {
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.textContent = 'Unlock ' + name + ' · ' + count + ' channels';
+                b.addEventListener('click', () => window.switchTab('renew'));
+                div.appendChild(b);
+            }
+            return div;
+        };
 
         // LOOK: analog (warm console, the default) or flat (the plain white look). Kept on this computer.
         window.setSkin = function (analog) {
@@ -18328,6 +18354,12 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             limits() {
                 const n = this.plan.channels;
                 document.querySelectorAll('.mixer-lane').forEach((lane, i) => lane.classList.toggle('lane-locked', i >= n));
+                // the empty space after the unlocked channels: a card with the next plan up (opens the LICENSE page)
+                const lanes = document.getElementById('mixer-lanes-container');
+                if (lanes) {
+                    lanes.querySelectorAll('.upgrade-slot').forEach(el => el.remove());
+                    if (n < 32) lanes.appendChild(window.buildUpgradeSlot(n));
+                }
                 const btns = document.querySelectorAll('.bank-btn');
                 btns.forEach(b => {
                     const m = /'([^']+)'/.exec(b.getAttribute('onclick') || '');
