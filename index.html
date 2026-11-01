@@ -554,6 +554,30 @@ CRITICAL REVISIONS & ARCHITECTURAL UPGRADES:
         .home-tile b { font-size: 20px; font-weight: 800; }
         .home-tile span { font-size: 15px; line-height: 1.45; color: var(--muted); }
         .home-foot { margin-top: 28px; font-size: 13px; color: var(--muted); }
+        /* COMFORT: smooth changes, compact layout on small screens, bigger text for any age, clear keyboard focus, and no motion for people who ask for less. */
+        html, body, html.theme-light, html.theme-light body { transition: background-color 0.35s ease, color 0.35s ease; }
+        .glass-panel, .home-tile, .nav-btn, html.theme-light .glass-panel { transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, transform 0.2s ease; }
+        .home-tile { transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease; }
+        .home-tile:hover { box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12); }
+        .home-tile:active { transform: scale(0.99); }
+        .home-wrap { padding: 24px 18px 20px; gap: 0; }
+        .home-grid { gap: 12px; margin-top: 20px; }
+        .home-tile { min-height: 0; padding: 18px; gap: 6px; }
+        .home-tile b { font-size: 18px; }
+        .home-tile span { font-size: 14px; }
+        .home-title { font-size: 26px; }
+        @media (min-width: 900px) { .home-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+        @media (max-width: 640px) { .home-grid { grid-template-columns: 1fr; } .home-title { font-size: 24px; } }
+        html.text-large .home-wrap { zoom: 1.12; }
+        html.text-largest .home-wrap { zoom: 1.25; }
+        .home-size { align-self: flex-start; margin-top: 6px; padding: 8px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font-size: 14px; font-weight: 700; cursor: pointer; }
+        .home-size:hover { border-color: #f59e0b; }
+        html.text-large .home-tile b, html.text-largest .home-tile b { font-size: 22px; }
+        html.text-large .home-tile span, html.text-largest .home-tile span { font-size: 17px; }
+        html.theme-light button:focus-visible, html.theme-light [role="button"]:focus-visible, html.theme-light a:focus-visible { outline: 3px solid #f59e0b; outline-offset: 2px; }
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; }
+        }
         </style>
     <!-- PHONE LAYOUT: only on narrow touch screens (the Android app, the iOS app, a phone browser): html.phone-ui is set by the script at the end of the page.
          Nothing here applies to tablets, laptops or desktops; ?phone=1 / ?phone=0 force it on / off. -->
@@ -1872,6 +1896,24 @@ window.navTabs = [
             try { localStorage.setItem('amfx1_theme', light ? 'light' : 'dark'); } catch (e) { /* storage blocked: applies to this page only */ }
         };
         window.toggleTheme = function () { window.setTheme(!document.documentElement.classList.contains('theme-light')); };
+
+        // TEXT SIZE for every age: normal, large, largest. Kept on this computer.
+        const TEXT_SIZES = ['normal', 'large', 'largest'];
+        window.setTextSize = function (size) {
+            const level = TEXT_SIZES.includes(size) ? size : 'normal';
+            TEXT_SIZES.forEach(n => document.documentElement.classList.toggle('text-' + n, n !== 'normal' && n === level));
+            try { localStorage.setItem('amfx1_text', level); } catch (e) { /* storage blocked: applies to this page only */ }
+            const btn = document.getElementById('text-size-btn');
+            const names = { normal: 'Normal', large: 'Large', largest: 'Largest' };
+            if (btn) btn.textContent = 'Text size: ' + names[level];
+            return level;
+        };
+        window.cycleTextSize = function () {
+            let current = 'normal';
+            try { current = localStorage.getItem('amfx1_text') || 'normal'; } catch (e) { /* default normal */ }
+            return window.setTextSize(TEXT_SIZES[(TEXT_SIZES.indexOf(current) + 1) % TEXT_SIZES.length]);
+        };
+        (function () { let saved = 'normal'; try { saved = localStorage.getItem('amfx1_text') || 'normal'; } catch (e) { /* default */ } window.setTextSize(saved); })();
         (function () { let light = true; try { light = localStorage.getItem('amfx1_theme') !== 'dark'; } catch (e) { /* default light */ } window.setTheme(light); })();
 
         window.switchTab = function(tabId) {
@@ -3771,6 +3813,7 @@ const cArea = document.getElementById('content-area');
   <div class="home-wrap">
     <h1 class="home-title">Welcome to AmF X1</h1>
     <p class="home-sub">Choose what you want to do. You can change anything later.</p>
+    <button id="text-size-btn" class="home-size" onclick="window.cycleTextSize()" aria-label="Text size">Text size: Normal</button>
     <div class="home-grid">
       <button class="home-tile" onclick="window.switchTab('mixer')"><i class="fa-solid fa-sliders"></i><b>Mix my sound</b><span>Set the volume and balance for each microphone, instrument or source.</span></button>
       <button class="home-tile" onclick="window.switchTab('asio')"><i class="fa-solid fa-compact-disc"></i><b>Use my sound card</b><span>Choose the device that plays your sound, and check that it works.</span></button>
