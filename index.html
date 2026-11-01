@@ -575,6 +575,31 @@ CRITICAL REVISIONS & ARCHITECTURAL UPGRADES:
         .upgrade-slot button { padding: 9px 10px; border-radius: 8px; border: 1px solid #b45309; background: #fff7ed; color: #92400e; font-weight: 800; font-size: 13px; cursor: pointer; }
         .upgrade-slot button:hover { background: #fde68a; }
         .upgrade-slot button:focus-visible { outline: 3px solid #f59e0b; outline-offset: 2px; }
+        .guide-card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px; display: flex; flex-direction: column; gap: 6px; color: var(--ink); }
+        .guide-card b { font-size: 17px; }
+        .guide-card span { font-size: 15px; line-height: 1.5; color: var(--muted); }
+        .rec-panel { margin-top: 20px; background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 22px; display: flex; flex-direction: column; gap: 14px; align-items: center; color: var(--ink); }
+        .rec-time { font-size: 56px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--ink); }
+        .rec-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; width: 100%; }
+        .rec-btn { padding: 14px 22px; border-radius: 12px; border: 1px solid #b45309; background: #fff7ed; color: #92400e; font-weight: 800; font-size: 16px; cursor: pointer; }
+        .rec-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+        .rec-btn:not(:disabled):hover { background: #fde68a; }
+        .rec-btn:focus-visible, .scene-input:focus-visible { outline: 3px solid #f59e0b; outline-offset: 2px; }
+        .scene-input { flex: 1 1 260px; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font-size: 16px; }
+        .scene-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 18px; }
+        .scene-item { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 10px; color: var(--ink); }
+        .scene-item b { font-size: 17px; }
+        .scene-item span { font-size: 13px; color: var(--muted); }
+        .scene-item .scene-btns { display: flex; gap: 8px; }
+        .scene-item button { flex: 1; padding: 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font-weight: 700; cursor: pointer; }
+        .scene-item button.scene-load { border-color: #b45309; background: #fff7ed; color: #92400e; }
+        .scene-item button:focus-visible { outline: 3px solid #f59e0b; outline-offset: 2px; }
+        /* the mixer fills the whole width on a computer: each channel takes an equal share, and the upgrade card too */
+        html:not(.phone-ui) #mixer-lanes-container { gap: 6px; }
+        html:not(.phone-ui) #mixer-lanes-container .mixer-lane { flex: 1 1 0 !important; min-width: 0 !important; width: 0; max-width: none !important; }
+        html:not(.phone-ui) #mixer-lanes-container .upgrade-slot { flex: 1.6 1 0 !important; width: auto !important; min-width: 0; margin-left: 0; overflow: hidden; }
+        html:not(.phone-ui) #mixer-lanes-container .upgrade-slot b { font-size: 14px; }
+        html:not(.phone-ui) #mixer-lanes-container .upgrade-slot button { font-size: 12px; }
         /* COMFORT: smooth changes, compact layout on small screens, bigger text for any age, clear keyboard focus, and no motion for people who ask for less. */
         html, body, html.theme-light, html.theme-light body { transition: background-color 0.35s ease, color 0.35s ease; }
         .glass-panel, .home-tile, .nav-btn, html.theme-light .glass-panel { transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, transform 0.2s ease; }
@@ -1087,6 +1112,9 @@ window.navTabs = [
             { group: 'SYSTEM', id: 'renew', text: 'LICENSE', icon: 'fa-solid fa-certificate', color: 'text-amber-400' },
             { group: 'SYSTEM', id: 'admin', text: 'ADMIN', icon: 'fa-solid fa-key', color: 'text-red-400' },
             { group: 'SYSTEM', id: 'calib', text: 'CALIBRATE', icon: 'fa-solid fa-ruler-combined', color: 'text-amber-400' },
+            { group: 'HELP', id: 'help', text: 'HELP', icon: 'fa-solid fa-circle-question', color: 'text-sky-500' },
+            { group: 'HELP', id: 'record', text: 'RECORD', icon: 'fa-solid fa-circle-dot', color: 'text-rose-500' },
+            { group: 'HELP', id: 'scenes', text: 'SCENES', icon: 'fa-solid fa-bookmark', color: 'text-amber-500' },
             { group: 'SYSTEM', id: 'boot', text: 'BOOT / RESET', icon: 'fa-solid fa-power-off', color: 'text-rose-500' }
         ];
 
@@ -1960,6 +1988,108 @@ window.navTabs = [
             }
             return div;
         };
+
+        // RECORD: records the microphone to a file that is saved to this computer when you stop.
+        window.recState = { rec: null, chunks: [], t0: 0, timer: null, stream: null };
+        window.recStart = async function () {
+            const status = document.getElementById('rec-status');
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const rec = new MediaRecorder(stream);
+                window.recState.chunks = [];
+                rec.ondataavailable = e => { if (e.data && e.data.size) window.recState.chunks.push(e.data); };
+                rec.onstop = () => {
+                    stream.getTracks().forEach(t => t.stop());
+                    const blob = new Blob(window.recState.chunks, { type: rec.mimeType || 'audio/webm' });
+                    const a = document.createElement('a');
+                    a.href = URL.createObjectURL(blob);
+                    a.download = 'AmFX1-recording-' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.webm';
+                    a.click();
+                    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+                };
+                rec.start();
+                window.recState.rec = rec;
+                window.recState.t0 = Date.now();
+                window.recState.timer = setInterval(() => {
+                    const sec = Math.floor((Date.now() - window.recState.t0) / 1000);
+                    document.getElementById('rec-time').textContent = String(Math.floor(sec / 60)).padStart(2, '0') + ':' + String(sec % 60).padStart(2, '0');
+                }, 250);
+                document.getElementById('rec-start').disabled = true;
+                document.getElementById('rec-stop').disabled = false;
+                if (status) status.textContent = 'Recording. Press Stop and save when you are finished.';
+            } catch (e) {
+                if (status) status.textContent = 'The microphone is not available. Allow microphone access and try again. ' + (e && e.message ? e.message : '');
+            }
+        };
+        window.recStop = function () {
+            const st = window.recState;
+            if (!st.rec) return;
+            st.rec.stop();
+            clearInterval(st.timer);
+            st.rec = null;
+            document.getElementById('rec-start').disabled = false;
+            document.getElementById('rec-stop').disabled = true;
+            const status = document.getElementById('rec-status');
+            if (status) status.textContent = 'Saved. The file was downloaded to this computer.';
+        };
+
+        // SCENES: a scene is the position of every mixer fader, saved under a name on this computer.
+        const sceneRead = () => { try { return JSON.parse(localStorage.getItem('amfx1_scenes') || '[]'); } catch (e) { return []; } };
+        const sceneWrite = list => { try { localStorage.setItem('amfx1_scenes', JSON.stringify(list)); } catch (e) { /* storage blocked */ } };
+        window.sceneRender = function () {
+            const list = document.getElementById('scene-list');
+            if (!list) return;
+            list.textContent = '';
+            sceneRead().forEach((scene, i) => {
+                const card = document.createElement('div');
+                card.className = 'scene-item';
+                const title = document.createElement('b');
+                title.textContent = scene.name;
+                const info = document.createElement('span');
+                info.textContent = scene.faders.length + ' channels saved';
+                const row = document.createElement('div');
+                row.className = 'scene-btns';
+                const load = document.createElement('button');
+                load.className = 'scene-load';
+                load.type = 'button';
+                load.textContent = 'Bring back';
+                load.addEventListener('click', () => window.sceneLoad(i));
+                const del = document.createElement('button');
+                del.type = 'button';
+                del.textContent = 'Delete';
+                del.addEventListener('click', () => window.sceneDelete(i));
+                row.append(load, del);
+                card.append(title, info, row);
+                list.appendChild(card);
+            });
+        };
+        window.sceneSave = function () {
+            const name = (document.getElementById('scene-name').value || '').trim();
+            const status = document.getElementById('scene-status');
+            if (!name) { status.textContent = 'Type a name first.'; return; }
+            const faders = Array.from(document.querySelectorAll('#tab-mixer .daw-fader')).map(f => f.value);
+            if (!faders.length) { status.textContent = 'Open the Mixer once, so the faders are there to save.'; return; }
+            const list = sceneRead().filter(s => s.name !== name);
+            list.push({ name, faders });
+            sceneWrite(list);
+            status.textContent = 'Saved "' + name + '".';
+            document.getElementById('scene-name').value = '';
+            window.sceneRender();
+        };
+        window.sceneLoad = function (i) {
+            const scene = sceneRead()[i];
+            if (!scene) return;
+            const faders = document.querySelectorAll('#tab-mixer .daw-fader');
+            scene.faders.forEach((v, k) => { if (faders[k]) { faders[k].value = v; faders[k].dispatchEvent(new Event('input', { bubbles: true })); } });
+            document.getElementById('scene-status').textContent = 'Brought back "' + scene.name + '".';
+        };
+        window.sceneDelete = function (i) {
+            const list = sceneRead();
+            list.splice(i, 1);
+            sceneWrite(list);
+            window.sceneRender();
+        };
+        document.addEventListener('click', e => { if (e.target.closest && e.target.closest('#nav-scenes')) setTimeout(window.sceneRender, 60); });
 
         // LOOK: analog (warm console, the default) or flat (the plain white look). Kept on this computer.
         window.setSkin = function (analog) {
@@ -3900,6 +4030,51 @@ const cArea = document.getElementById('content-area');
       <button class="home-tile" onclick="window.switchTab('sys')"><i class="fa-solid fa-gear"></i><b>Settings and help</b><span>Your account, license, updates and the computer.</span></button>
     </div>
     <p class="home-foot">AmF X1 by AMFB Audio &middot; Version 0.1 Alpha</p>
+  </div>
+</div>`;
+
+            // HELP, RECORD and SCENES: plain pages (hidden until chosen from the menu)
+            htmlString += `
+<div id="tab-help" class="tab-content tab-hidden">
+  <div class="home-wrap">
+    <h1 class="home-title">Help</h1>
+    <p class="home-sub">Step by step, in plain words.</p>
+    <div class="home-grid">
+      <div class="guide-card"><b>1. Connect your microphone</b><span>Plug it into the computer. Open Connections, then choose the microphone under sound inputs.</span></div>
+      <div class="guide-card"><b>2. Hear the sound</b><span>Open Sound card, choose your speakers or headphones, then press Start. Turn the fader up slowly.</span></div>
+      <div class="guide-card"><b>3. Set the balance</b><span>Mix my sound: move each fader so no voice is louder than the others. Keep the peak level below the top mark.</span></div>
+      <div class="guide-card"><b>4. Save your mix</b><span>Open Scenes, type a name, and press Save scene. Press the name later to bring the mix back.</span></div>
+      <div class="guide-card"><b>5. Record it</b><span>Open Record, press Start recording, and press Stop and save when you are finished.</span></div>
+      <div class="guide-card"><b>6. Change the look</b><span>On the home page, use Text size for bigger text and Look to switch between analog and flat.</span></div>
+    </div>
+  </div>
+</div>
+<div id="tab-record" class="tab-content tab-hidden">
+  <div class="home-wrap">
+    <h1 class="home-title">Record</h1>
+    <p class="home-sub">Record from your microphone and save the file to this computer.</p>
+    <div class="rec-panel">
+      <div id="rec-time" class="rec-time">00:00</div>
+      <div class="rec-actions">
+        <button id="rec-start" class="rec-btn" onclick="window.recStart()">Start recording</button>
+        <button id="rec-stop" class="rec-btn" onclick="window.recStop()" disabled>Stop and save</button>
+      </div>
+      <p id="rec-status" class="home-sub">Ready. Press Start recording.</p>
+    </div>
+  </div>
+</div>
+<div id="tab-scenes" class="tab-content tab-hidden">
+  <div class="home-wrap">
+    <h1 class="home-title">Scenes</h1>
+    <p class="home-sub">Save where every fader is, under a name, and bring it back with one tap.</p>
+    <div class="rec-panel">
+      <div class="rec-actions">
+        <input id="scene-name" class="scene-input" placeholder="Name, for example: Opening song" maxlength="40" aria-label="Scene name">
+        <button class="rec-btn" onclick="window.sceneSave()">Save scene</button>
+      </div>
+      <p id="scene-status" class="home-sub"></p>
+    </div>
+    <div id="scene-list" class="scene-list"></div>
   </div>
 </div>`;
 
