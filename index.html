@@ -554,6 +554,21 @@ CRITICAL REVISIONS & ARCHITECTURAL UPGRADES:
         .home-tile b { font-size: 20px; font-weight: 800; }
         .home-tile span { font-size: 15px; line-height: 1.45; color: var(--muted); }
         .home-foot { margin-top: 28px; font-size: 13px; color: var(--muted); }
+
+        /* ANALOG SKIN (light mode): a warm console look for the MIXER and DRIVERS pages: cream panels with bevelled edges,
+           a fader track like a real slot, a raised fader cap with grip lines, and rotary knobs with a metal rim. Switched from the home page. */
+        html.skin-analog.theme-light { --analog-edge: #d4c9b2; --analog-shadow: rgba(60, 45, 20, 0.18); }
+        html.skin-analog.theme-light #tab-mixer, html.skin-analog.theme-light #tab-asio { background: transparent; }
+        html.skin-analog.theme-light #tab-mixer .glass-panel, html.skin-analog.theme-light #tab-asio .glass-panel {
+            background: linear-gradient(180deg, #fbf6ea, #efe6d3); border: 1px solid var(--analog-edge); border-radius: 10px;
+            box-shadow: inset 0 1px 0 #ffffff, 0 3px 8px var(--analog-shadow); }
+        html.skin-analog.theme-light .fader-track { background: linear-gradient(90deg, #cfc5ae, #efe9db 50%, #cfc5ae); border-radius: 6px; box-shadow: inset 0 2px 6px rgba(60, 45, 20, 0.28); }
+        html.skin-analog.theme-light .daw-fader::-webkit-slider-thumb { width: 34px !important; height: 18px !important; border-radius: 4px !important; border: 1px solid #8f8570 !important; background: repeating-linear-gradient(180deg, #ffffff 0 3px, #cfc6b1 3px 4px), linear-gradient(#ffffff, #dcd4c2) !important; box-shadow: 0 2px 3px rgba(0, 0, 0, 0.3), inset 0 1px 0 #ffffff !important; }
+        html.skin-analog.theme-light #content-area:has(#tab-mixer:not(.tab-hidden)), html.skin-analog.theme-light #content-area:has(#tab-asio:not(.tab-hidden)) { background: #ebe3d1; }
+        html.skin-analog.theme-light .rotary-knob { background: radial-gradient(circle at 35% 30%, #ffffff, #cdc3ac); border: 1px solid #8f8570; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.28), inset 0 1px 0 #ffffff; }
+        html.skin-analog.theme-light .home-tile { box-shadow: inset 0 1px 0 #ffffff, 0 3px 8px var(--analog-shadow); }
+        .home-skin { align-self: flex-start; margin-top: 6px; margin-left: 8px; padding: 8px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font-size: 14px; font-weight: 700; cursor: pointer; }
+        .home-skin:hover { border-color: #f59e0b; }
         /* COMFORT: smooth changes, compact layout on small screens, bigger text for any age, clear keyboard focus, and no motion for people who ask for less. */
         html, body, html.theme-light, html.theme-light body { transition: background-color 0.35s ease, color 0.35s ease; }
         .glass-panel, .home-tile, .nav-btn, html.theme-light .glass-panel { transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, transform 0.2s ease; }
@@ -1919,6 +1934,16 @@ window.navTabs = [
             }
         };
         document.addEventListener('click', e => { if (e.target.closest && e.target.closest('.nav-btn, #theme-toggle-btn, #text-size-btn, .home-tile, .bank-btn')) setTimeout(window.fixLightContrast, 450); }, true);
+
+        // LOOK: analog (warm console, the default) or flat (the plain white look). Kept on this computer.
+        window.setSkin = function (analog) {
+            document.documentElement.classList.toggle('skin-analog', analog);
+            try { localStorage.setItem('amfx1_skin', analog ? 'analog' : 'flat'); } catch (e) { /* storage blocked */ }
+            const btn = document.getElementById('skin-btn');
+            if (btn) btn.textContent = 'Look: ' + (analog ? 'Analog' : 'Flat');
+        };
+        window.toggleSkin = function () { window.setSkin(!document.documentElement.classList.contains('skin-analog')); };
+        (function () { let saved = 'analog'; try { saved = localStorage.getItem('amfx1_skin') || 'analog'; } catch (e) { /* default */ } window.setSkin(saved !== 'flat'); })();
 
         // TEXT SIZE for every age: normal, large, largest. Kept on this computer.
         const TEXT_SIZES = ['normal', 'large', 'largest'];
@@ -3836,7 +3861,10 @@ const cArea = document.getElementById('content-area');
   <div class="home-wrap">
     <h1 class="home-title">Welcome to AmF X1</h1>
     <p class="home-sub">Choose what you want to do. You can change anything later.</p>
-    <button id="text-size-btn" class="home-size" onclick="window.cycleTextSize()" aria-label="Text size">Text size: Normal</button>
+    <div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center">
+      <button id="text-size-btn" class="home-size" onclick="window.cycleTextSize()" aria-label="Text size">Text size: Normal</button>
+      <button id="skin-btn" class="home-skin" onclick="window.toggleSkin()" aria-label="Look">Look: Analog</button>
+    </div>
     <div class="home-grid">
       <button class="home-tile" onclick="window.switchTab('mixer')"><i class="fa-solid fa-sliders"></i><b>Mix my sound</b><span>Set the volume and balance for each microphone, instrument or source.</span></button>
       <button class="home-tile" onclick="window.switchTab('asio')"><i class="fa-solid fa-compact-disc"></i><b>Use my sound card</b><span>Choose the device that plays your sound, and check that it works.</span></button>
