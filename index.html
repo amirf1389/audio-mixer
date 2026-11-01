@@ -1894,8 +1894,31 @@ window.navTabs = [
         window.setTheme = function (light) {
             document.documentElement.classList.toggle('theme-light', light);
             try { localStorage.setItem('amfx1_theme', light ? 'light' : 'dark'); } catch (e) { /* storage blocked: applies to this page only */ }
+            setTimeout(() => window.fixLightContrast && window.fixLightContrast(), 350);
         };
         window.toggleTheme = function () { window.setTheme(!document.documentElement.classList.contains('theme-light')); };
+
+        // LIGHT MODE SAFETY NET: any text that is light on a light background (hard to read) is made dark. It runs after a menu click, a theme change and a text-size change.
+        window.fixLightContrast = function () {
+            if (!document.documentElement.classList.contains('theme-light')) return;
+            const lum = c => { const [r, g, b] = c.map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+            const parse = str => { const m = str.match(/rgba?\(([^)]+)\)/); if (!m) return null; const p = m[1].split(',').map(x => parseFloat(x)); return { c: p.slice(0, 3), a: p.length > 3 ? p[3] : 1 }; };
+            const bgOf = el => { for (let e = el; e; e = e.parentElement) { const b = parse(getComputedStyle(e).backgroundColor); if (b && b.a > 0.5) return b.c; } return [255, 255, 255]; };
+            const scope = document.querySelector('.tab-content:not(.tab-hidden)') || document.getElementById('content-area');
+            if (!scope) return;
+            const walker = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT);
+            const seen = new Set();
+            while (walker.nextNode()) {
+                const el = walker.currentNode.parentElement;
+                if (!el || seen.has(el) || !walker.currentNode.textContent.trim()) continue;
+                seen.add(el);
+                const fg = parse(getComputedStyle(el).color); if (!fg) continue;
+                const bg = bgOf(el), fl = lum(fg.c), bl = lum(bg);
+                const ratio = (Math.max(fl, bl) + 0.05) / (Math.min(fl, bl) + 0.05);
+                if (bl > 0.6 && ratio < 3) el.style.setProperty('color', '#0f172a', 'important');
+            }
+        };
+        document.addEventListener('click', e => { if (e.target.closest && e.target.closest('.nav-btn, #theme-toggle-btn, #text-size-btn, .home-tile, .bank-btn')) setTimeout(window.fixLightContrast, 450); }, true);
 
         // TEXT SIZE for every age: normal, large, largest. Kept on this computer.
         const TEXT_SIZES = ['normal', 'large', 'largest'];
