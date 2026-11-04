@@ -4817,6 +4817,16 @@ test('native engine in place of Audify: --list-devices in the bridge shape, and 
       assert.ok(await until(() => cd.bytes > 0), 'duplex captures as it plays');
       sd.onText(JSON.stringify({ type: 'stop' }));
       assert.ok(await until(() => native._state.open.size === 0), 'every engine process is let go');
+      // ALSA devices come from the names ALSA advertises, each opened for a moment for its real channel count; a layer that converts any count (here the
+      // null plugin, the only kind this machine has: no sound card) keeps 2. Only when the engine was built with ALSA.
+      if (/\balsa\b/.test(cp.spawnSync(exe, ['--list'], { encoding: 'utf8' }).stdout)) {
+        const home = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'am-alsa-'));
+        fsx.writeFileSync(pathx.join(home, '.asoundrc'), 'pcm.amtest {\n  type null\n  hint { show on description "AmF X1 test device" }\n}\n');
+        const r = cp.spawnSync(exe, ['--list-devices'], { encoding: 'utf8', env: { ...process.env, HOME: home } });
+        fsx.rmSync(home, { recursive: true, force: true });
+        const d = JSON.parse(r.stdout).find(x => x.backend === 'alsa' && x.id === 'amtest');
+        assert.ok(d && d.name === 'AmF X1 test device' && d.inChannels === 2 && d.outChannels === 2 && d.defaultRate === 48000, r.stdout);
+      }
       // a single-client driver (ASIO; the null device stands in for it here): WRITE then READ on the same device share ONE engine process, restarted as duplex
       native._shared.add('null');
       try {
