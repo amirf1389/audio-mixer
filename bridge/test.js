@@ -4817,6 +4817,38 @@ test('native engine in place of Audify: --list-devices in the bridge shape, and 
       assert.ok(await until(() => cd.bytes > 0), 'duplex captures as it plays');
       sd.onText(JSON.stringify({ type: 'stop' }));
       assert.ok(await until(() => native._state.open.size === 0), 'every engine process is let go');
+      // ALSA devices come from the names ALSA advertises, each opened for a moment for its real channel count; a layer that converts any count (here the
+      // null plugin, the only kind this machine has: no sound card) keeps 2. Only when the engine was built with ALSA.
+      if (/\balsa\b/.test(cp.spawnSync(exe, ['--list'], { encoding: 'utf8' }).stdout)) {
+        const home = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'am-alsa-'));
+        fsx.writeFileSync(pathx.join(home, '.asoundrc'), 'pcm.amtest {\n  type null\n  hint { show on description "AmF X1 test device" }\n}\n');
+        const r = cp.spawnSync(exe, ['--list-devices'], { encoding: 'utf8', env: { ...process.env, HOME: home } });
+        fsx.rmSync(home, { recursive: true, force: true });
+        const d = JSON.parse(r.stdout).find(x => x.backend === 'alsa' && x.id === 'amtest');
+        assert.ok(d && d.name === 'AmF X1 test device' && d.inChannels === 2 && d.outChannels === 2 && d.defaultRate === 48000, r.stdout);
+      }
+      // a single-client driver (ASIO; the null device stands in for it here): WRITE then READ on the same device share ONE engine process, restarted as duplex
+      native._shared.add('null');
+      try {
+        const key = 'null\u0000null';
+        const cw = conn(), sw = require('./output').createSession(cw, () => { throw new Error('no PortAudio'); });
+        sw.onText(JSON.stringify({ type: 'start', deviceId: nul.id, channels: 2, sampleRate: 48000 }));
+        assert.ok(cw.msgs.some(m => m.type === 'started' && m.engine === 'native'), JSON.stringify(cw.msgs));
+        assert.ok(await until(() => native._state.open.size === 1), 'WRITE runs one engine process');
+        const cr = conn(), sr = require('./input').createInputSession(cr, () => { throw new Error('no PortAudio'); });
+        sr.onText(JSON.stringify({ type: 'start', deviceId: nul.id, channels: 2, sampleRate: 48000 }));
+        assert.ok(cr.msgs.some(m => m.type === 'started' && m.engine === 'native'), 'READ on the device WRITE holds is accepted, not refused: ' + JSON.stringify(cr.msgs));
+        assert.ok(await until(() => cr.bytes > 0 && native._state.open.size === 1), 'READ gets audio while one process (duplex) serves both');
+        sw.onBinary(Buffer.alloc(4800 * 4));
+        assert.ok(!cw.msgs.some(m => m.type === 'error') && !cr.msgs.some(m => m.type === 'error'), JSON.stringify([cw.msgs, cr.msgs]));
+        const rd = conn(), sx = require('./input').createInputSession(rd, () => { throw new Error('no PortAudio'); });
+        sx.onText(JSON.stringify({ type: 'start', deviceId: nul.id, channels: 2, sampleRate: 48000 }));
+        assert.ok(rd.msgs.some(m => m.type === 'error' && /already open for reading/.test(m.message)), 'a second reader of the same driver is refused: ' + JSON.stringify(rd.msgs));
+        sr.onText(JSON.stringify({ type: 'stop' }));
+        assert.ok(await until(() => native._groups.get(key) && !native._groups.get(key).users.input && native._state.open.size === 1), 'closing READ keeps WRITE running');
+        sw.onText(JSON.stringify({ type: 'stop' }));
+        assert.ok(await until(() => native._state.open.size === 0 && !native._groups.has(key)), 'closing both lets the driver go');
+      } finally { native._shared.delete('null'); }
     } finally {
       native._reset();
       if (prev.e === undefined) delete process.env.AUDIO_MIXER_ENGINE; else process.env.AUDIO_MIXER_ENGINE = prev.e;

@@ -1,7 +1,8 @@
 // listDevices(): every device the backends of this binary can open, for `audiomixer-native --list-devices` (the bridge's device list).
 //   WASAPI   active render and capture endpoints: id = the endpoint id string, channels and rate from the shared-mode mix format
 //   ASIO     the registered drivers, probed through the Steinberg interface (real channel counts and rates); id = the driver name
-//   ALSA     the PCM names ALSA advertises (snd_device_name_hint); channel counts are not known without opening, so 2 is reported
+//   ALSA     the PCM names ALSA advertises (snd_device_name_hint), each opened for a moment (non-blocking) to read its real channel count;
+//            a software layer that converts any count (plug, PulseAudio), a busy device or one that cannot be opened is reported as 2 channels
 //   Core Audio  the system default device only (the backend does not choose another device yet)
 //   null     one timed device that needs no hardware
 // Probing an ASIO driver loads it: a caller must not list while one of its ASIO streams is open (ASIO drivers serve one client).
@@ -105,6 +106,27 @@ void addAsio(std::vector<DeviceInfo>& out) {
 #endif
 
 #ifdef AM_HAVE_ALSA
+// The channels one direction of a PCM offers: >0 the device's own maximum, 0 a layer that converts any count, -1 it could not be opened (busy, absent).
+// rate: 48000 when the device takes it, else the closest end of its range.
+int alsaChannels(const char* name, snd_pcm_stream_t dir, double* rate) {
+  snd_pcm_t* pcm = nullptr;
+  if (snd_pcm_open(&pcm, name, dir, SND_PCM_NONBLOCK) < 0) return -1;
+  snd_pcm_hw_params_t* hw = nullptr;
+  int ch = -1;
+  if (snd_pcm_hw_params_malloc(&hw) >= 0) {
+    if (snd_pcm_hw_params_any(pcm, hw) >= 0) {
+      unsigned mx = 0;
+      if (snd_pcm_hw_params_get_channels_max(hw, &mx) >= 0) ch = mx > 64 ? 0 : static_cast<int>(mx);
+      unsigned lo = 0, hi = 0; int d = 0;
+      if (rate && snd_pcm_hw_params_get_rate_min(hw, &lo, &d) >= 0 && snd_pcm_hw_params_get_rate_max(hw, &hi, &d) >= 0 && hi > 0)
+        *rate = (48000 >= lo && 48000 <= hi) ? 48000.0 : static_cast<double>(48000 < lo ? lo : hi);
+    }
+    snd_pcm_hw_params_free(hw);
+  }
+  snd_pcm_close(pcm);
+  return ch;
+}
+
 void addAlsa(std::vector<DeviceInfo>& out) {
   void** hints = nullptr;
   if (snd_device_name_hint(-1, "pcm", &hints) < 0) return;
@@ -118,7 +140,10 @@ void addAlsa(std::vector<DeviceInfo>& out) {
       for (char& c : label) if (c == '\n') c = ' ';
       info.name = label;
       const bool in = !io || std::strcmp(io, "Input") == 0, outDir = !io || std::strcmp(io, "Output") == 0;
-      info.inChannels = in ? 2 : 0; info.outChannels = outDir ? 2 : 0;
+      double rate = 48000;
+      const int ci = in ? alsaChannels(name, SND_PCM_STREAM_CAPTURE, &rate) : -1, co = outDir ? alsaChannels(name, SND_PCM_STREAM_PLAYBACK, &rate) : -1;
+      info.inChannels = in ? (ci > 0 ? ci : 2) : 0; info.outChannels = outDir ? (co > 0 ? co : 2) : 0;
+      info.defaultRate = rate;
       info.defaultIn = info.defaultOut = std::strcmp(name, "default") == 0;
       out.push_back(info);
     }

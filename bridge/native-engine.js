@@ -48,9 +48,9 @@ function listDevices({ exe = enginePath(), base = 1000, run = execFileSync, now 
   return state.list;
 }
 
-function launch({ dev, inCh, outCh, sampleRate, frameSize, exclusive, onData, onError, exe = enginePath(), spawnImpl = spawn }) {
+function launch({ dev, inCh, outCh, sampleRate, frameSize, exclusive, onData, onError, exe = enginePath(), spawnImpl = spawn, shared = false }) {
   if (!exe) throw new Error('the audio engine (audiomixer-native) is not installed');
-  if (dev.engineBackend === 'asio' && [...state.open].some(s => s.backend === 'asio' && s.device === dev.engineId))
+  if (!shared && dev.engineBackend === 'asio' && [...state.open].some(s => s.backend === 'asio' && s.device === dev.engineId))
     throw new Error(`${dev.name} is already open: an ASIO driver serves one stream, so read and write it together (duplex)`);
   const rate = Number(sampleRate) || 48000;
   const frames = Number.isInteger(frameSize) && frameSize > 0 ? frameSize : DEFAULT_FRAMES;
@@ -82,12 +82,14 @@ function launch({ dev, inCh, outCh, sampleRate, frameSize, exclusive, onData, on
       if (j && j.type === 'error') fail(new Error(j.message || 'the audio engine refused the device'));
     }
   });
-  child.on('error', fail);
-  child.on('exit', code => { state.open.delete(rec); if (code) fail(new Error('the audio engine stopped (exit code ' + code + ')')); });
+  let ended;
+  const whenClosed = new Promise(res => { ended = res; });
+  child.on('error', e => { fail(e); ended(); });
+  child.on('exit', code => { state.open.delete(rec); if (code) fail(new Error('the audio engine stopped (exit code ' + code + ')')); ended(); });
   child.stdin.on('error', () => { /* the engine ended: exit reports why */ });
   return {
     inChannels: inCh, outChannels: outCh, channels: outCh || inCh, frameSize: frames, auto: !(Number.isInteger(frameSize) && frameSize > 0),
-    latencyMs: Math.round(frames / rate * 10000) / 10, sampleRate: rate, deviceRate: rate, resampled: false, exclusive: !!exclusive, duplex: !!(inCh && outCh), engine: 'native',
+    latencyMs: Math.round(frames / rate * 10000) / 10, sampleRate: rate, deviceRate: rate, resampled: false, exclusive: !!exclusive, duplex: !!(inCh && outCh), engine: 'native', whenClosed,
     write(buf) { if (!closed && outCh) child.stdin.write(buf); },
     close() {
       if (closed) return;
@@ -99,19 +101,73 @@ function launch({ dev, inCh, outCh, sampleRate, frameSize, exclusive, onData, on
   };
 }
 
+// Single-client drivers (ASIO): one engine process per device, shared by an input user and an output user. When the second direction opens (or one
+// closes), the process is restarted with both (or the remaining) directions, after the old one has let go of the driver: ASIO cannot be opened twice.
+const SHARED = new Set(['asio']);
+const groups = new Map();   // backend + device id -> { dev, sampleRate, frameSize, exclusive, exe, spawnImpl, users: { input, output }, duplex, proc, gen }
+
+function startGroup(key, g) {
+  const inU = g.users.input, outU = g.users.output;
+  if (!inU && !outU) { groups.delete(key); return; }
+  g.proc = launch({
+    dev: g.dev, inCh: inU ? inU.channels : 0, outCh: outU ? outU.channels : 0, sampleRate: g.sampleRate, frameSize: g.frameSize, exclusive: g.exclusive,
+    exe: g.exe, spawnImpl: g.spawnImpl, shared: true,
+    onData: b => { const u = g.users.input; if (u && u.onData) u.onData(b); },
+    onError: e => { for (const u of [g.users.input, g.users.output]) if (u && u.onError) u.onError(e); },
+  });
+}
+function restartGroup(key, g) {
+  const gen = ++g.gen, old = g.proc;
+  g.proc = null;
+  if (!old) { startGroup(key, g); return; }
+  old.close();
+  old.whenClosed.then(() => { if (g.gen === gen && groups.get(key) === g) startGroup(key, g); });
+}
+
+function openShared(o, direction, channels) {
+  const key = o.dev.engineBackend + '\u0000' + o.dev.engineId, rate = Number(o.sampleRate) || 48000;
+  let g = groups.get(key);
+  if (g && g.duplex) throw new Error(`${o.dev.name} is already open for reading and writing`);
+  if (g && g.users[direction]) throw new Error(`${o.dev.name} is already open for ${direction === 'output' ? 'writing' : 'reading'}`);
+  if (g && rate !== g.sampleRate) throw new Error(`${o.dev.name} is already open at ${g.sampleRate} Hz: reading and writing it together needs the same sample rate`);
+  if (!g) {
+    if (!(o.exe || enginePath())) throw new Error('the audio engine (audiomixer-native) is not installed');
+    g = { dev: o.dev, sampleRate: rate, frameSize: o.frameSize, exclusive: o.exclusive === true, exe: o.exe, spawnImpl: o.spawnImpl, users: {}, duplex: false, proc: null, gen: 0 };
+    groups.set(key, g);
+  }
+  const user = { channels, onData: o.onData, onError: o.onError };
+  g.users[direction] = user;
+  restartGroup(key, g);
+  const frames = Number.isInteger(g.frameSize) && g.frameSize > 0 ? g.frameSize : DEFAULT_FRAMES;
+  return {
+    inChannels: direction === 'input' ? channels : 0, outChannels: direction === 'output' ? channels : 0, channels, frameSize: frames, auto: !(Number.isInteger(g.frameSize) && g.frameSize > 0),
+    latencyMs: Math.round(frames / g.sampleRate * 10000) / 10, sampleRate: g.sampleRate, deviceRate: g.sampleRate, resampled: false, exclusive: g.exclusive, duplex: false, engine: 'native', shared: true,
+    write(buf) { if (direction === 'output' && g.users.output === user && g.proc) g.proc.write(buf); },
+    close() { if (g.users[direction] !== user) return; delete g.users[direction]; restartGroup(key, g); },
+  };
+}
+
 // The same arguments as audify.openStream / openDuplex. A device with fewer channels than asked delivers / takes its own count.
 function openStream(o) {
   const out = o.direction === 'output', max = out ? o.dev.maxOutputChannels : o.dev.maxInputChannels;
   if (!max) throw new Error(`${o.dev.name} has no ${out ? 'output' : 'input'} channels`);
   const ch = Math.min(Math.max(1, Number(o.channels) || 2), max);
+  if (SHARED.has(o.dev.engineBackend)) return openShared(o, out ? 'output' : 'input', ch);
   return launch({ ...o, inCh: out ? 0 : ch, outCh: out ? ch : 0 });
 }
 function openDuplex(o) {
   const inCh = Math.min(Math.max(1, Number(o.inChannels) || 2), o.dev.maxInputChannels), outCh = Math.min(Math.max(1, Number(o.outChannels) || 2), o.dev.maxOutputChannels);
   if (!inCh || !outCh) throw new Error(`${o.dev.name} cannot read and write at once`);
-  return launch({ ...o, inCh, outCh });
+  if (!SHARED.has(o.dev.engineBackend)) return launch({ ...o, inCh, outCh });
+  // a duplex session owns a single-client driver: it opens only when nothing else uses it, and blocks the device for others until it closes
+  const key = o.dev.engineBackend + '\u0000' + o.dev.engineId;
+  if (groups.has(key)) throw new Error(`${o.dev.name} is already open: close it first, or read and write it together from the same page`);
+  const st = launch({ ...o, inCh, outCh, shared: true }), mark = { duplex: true, users: {} };
+  groups.set(key, mark);
+  st.whenClosed.then(() => { if (groups.get(key) === mark) groups.delete(key); });   // the device is free once the process has let go of the driver
+  return st;
 }
 
-function _reset() { state.open.clear(); state.list = null; state.at = 0; }
+function _reset() { state.open.clear(); state.list = null; state.at = 0; groups.clear(); }
 
-module.exports = { enginePath, listDevices, openStream, openDuplex, toDevices, _reset, _state: state };
+module.exports = { enginePath, listDevices, openStream, openDuplex, toDevices, _reset, _state: state, _shared: SHARED, _groups: groups };
