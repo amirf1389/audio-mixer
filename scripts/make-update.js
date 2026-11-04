@@ -7,7 +7,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { signManifest } = require('../bridge/update');
-const { loadPrivate, vendorDir } = require('./license');
+const { keyFor, vendorDir } = require('./license');
 
 const { ROOT, osOfKey, releasesRel, findRelease } = require('./layout');
 const arg = (a, n, d) => { const i = a.indexOf(n); return i >= 0 ? a[i + 1] : d; };
@@ -35,14 +35,14 @@ function build({ releases, flatUrls = false, version, base, notes = [], now = ne
   return { product: 'audio-mixer', version, channel: 'stable', released: now.toISOString().slice(0, 10), notes, files };
 }
 
-if (require.main === module) {
+if (require.main === module) (async () => {
   const a = process.argv.slice(2);
   try {
     const version = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version;
     const manifest = build({ version, base: arg(a, '--base', 'https://raw.githubusercontent.com/amirf1389/audio-mixer/main'), notes: String(arg(a, '--notes', '')).split('|').filter(Boolean) });
-    const env = signManifest(manifest, loadPrivate(vendorDir(a)));
+    const env = signManifest(manifest, await keyFor(vendorDir(a)));   // a locked key folder asks for the PIN
     fs.writeFileSync(path.join(ROOT, 'releases', 'update.json'), JSON.stringify(env, null, 2) + '\n');
     console.log(`releases/update.json signed: version ${version}, ${Object.keys(manifest.files).length} files`);
   } catch (e) { console.error('Error: ' + e.message); process.exit(1); }
-}
+})();
 module.exports = { build };
