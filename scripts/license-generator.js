@@ -29,6 +29,9 @@
 // POST /request-license, GET /update.json and GET /releases/<published file>, rate-limited per address. Customers' SUBMIT TO VENDOR reaches
 // it at http://<your public IP>:8780 once the router forwards that port to this computer. The key page, unlock, issue and publish
 // never answer there: they stay on 127.0.0.1:8799.
+// VENDOR ADDRESS: the page asks api.ipify.org for this computer's public IP and PUBLISH VENDOR ADDRESS signs {server: "http://<ip>:8780"}
+// with the vendor key into <project>/releases/vendor.json (commit + push it) and <key folder>/ota/vendor.json (served at /vendor.json). The app
+// fetches it from GitHub, checks the signature with the public key it carries, and posts SUBMIT TO VENDOR there. A new IP: publish again.
 // --root <project folder>: where index.html / bridge/license-public.json / the release folders are (default: this project, or the .exe's folder).
 // Several keys at once: "How many" > 1 returns that many keys (random serials) and a CSV to download.
 const http = require('node:http');
@@ -130,6 +133,9 @@ textarea,#key-out{width:100%;background:var(--panel2);border:1px solid var(--lin
     <h2>LOCAL UPDATE SERVER (OTA)</h2>
     <p class="dim">In the app: SETTINGS &rarr; OTA &rarr; <span class="mono" id="ota-url"></span></p>
     <p id="ota-state" class="mono"></p>
+    <div class="field"><label for="vaddr">Your public address for customers' key requests (router: forward TCP 8780 to this computer)</label><input id="vaddr" type="text" placeholder="looking up your public IP…"></div>
+    <button class="btn" id="vpub" type="button">PUBLISH VENDOR ADDRESS</button>
+    <p class="dim" id="vstate"></p>
     <label class="dim"><input type="checkbox" id="ota-repo"> also write releases/update.json in the project (for GitHub)</label>
     <button class="btn" id="publish" type="button">PUBLISH UPDATE</button>
   </section>
@@ -201,6 +207,13 @@ textarea,#key-out{width:100%;background:var(--panel2);border:1px solid var(--lin
     }).catch(function () { /* not the vendor kind */ });
   };
   loadOta();
+  fetch('/vendor/ip').then(function (r) { return r.json(); }).then(function (j) { if (j && j.ip && !$('vaddr').value) $('vaddr').value = 'http://' + (j.ip.indexOf(':') >= 0 ? '[' + j.ip + ']' : j.ip) + ':8780'; else if (!$('vaddr').value) $('vaddr').placeholder = 'http://<your public IP>:8780'; }).catch(function () { /* offline */ });
+  $('vpub').addEventListener('click', function () {
+    post('/vendor/publish', { server: $('vaddr').value.trim() }).then(function (j) {
+      if (!j || !j.ok) { showErr((j && j.error) || 'Could not publish.'); if (j && j.locked) refresh(); return; }
+      $('err').hidden = true; $('vstate').textContent = 'Published ' + j.server + (j.repoFile ? '. Commit and push ' + j.repoFile + ' so every copy of the app finds it.' : '. (No project folder here: start the generator with --root <project> to write releases/vendor.json.)');
+    });
+  });
   $('publish').addEventListener('click', function () {
     $('publish').disabled = true;
     post('/ota/publish', { repo: $('ota-repo').checked }).then(function (j) { if (!j || !j.ok) { showErr((j && j.error) || 'Could not publish.'); if (j && j.locked) refresh(); } else { $('err').hidden = true; loadOta(); } }).catch(function () { showErr('Could not reach this server.'); }).then(function () { $('publish').disabled = false; });
@@ -332,6 +345,23 @@ function otaStatus(dir, root, releases) {
   let found = 0; try { found = Object.keys(require('./make-update').build({ version, base: 'x', releases }).files).length; } catch (_) { /* none */ }
   return { version, published, found, requests: readJsonl(path.join(dir, 'license-requests.jsonl'), 50) };
 }
+// this computer's public address as the internet sees it (a small public API; nothing is sent but the request itself)
+async function publicIp(fetchImpl = globalThis.fetch) {
+  for (const u of ['https://api.ipify.org?format=json', 'https://api64.ipify.org?format=json']) {
+    try { const c = new AbortController(), t = setTimeout(() => c.abort(), 5000); const r = await fetchImpl(u, { signal: c.signal }); clearTimeout(t); const j = await r.json(); if (j && /^[0-9a-f.:]+$/i.test(j.ip || '')) return j.ip; } catch (_) { /* next */ }
+  }
+  return null;
+}
+function vendorPublish(dir, root, privateKey, server) {
+  if (!/^https?:\/\/[\w.:\[\]-]+$/.test(server)) { const e = new Error('not an address: ' + server); e.status = 400; throw e; }
+  const { signManifest } = require('../bridge/update');
+  const env = signManifest({ product: 'audio-mixer', kind: 'vendor', server, at: new Date().toISOString(), version: 'vendor', files: {} }, privateKey);
+  fs.mkdirSync(otaDir(dir), { recursive: true, mode: 0o700 });
+  fs.writeFileSync(path.join(otaDir(dir), 'vendor.json'), JSON.stringify(env, null, 2) + '\n');
+  const r = root || layout.ROOT, wrote = fs.existsSync(path.join(r, 'releases'));
+  if (wrote) fs.writeFileSync(path.join(r, 'releases', 'vendor.json'), JSON.stringify(env, null, 2) + '\n');
+  return { server, repoFile: wrote ? path.join(r, 'releases', 'vendor.json') : null };
+}
 function otaPublish(dir, root, releases, privateKey, base, alsoRepo) {
   const r = root || layout.ROOT, version = JSON.parse(fs.readFileSync(path.join(r, 'package.json'), 'utf8')).version;
   const { signManifest } = require('../bridge/update');
@@ -369,15 +399,19 @@ function createServer({ kind = 'vendor', dirArgv = [], root, session = makeSessi
     try {
       const url = new URL(req.url, 'http://x');
       if (publicOnly) {   // the internet-facing listener: only the three public routes, nothing about keys
-        if (!(url.pathname === '/update.json' || url.pathname.startsWith('/releases/') || url.pathname === '/request-license')) return fail(res, 404, 'not found');
+        if (!(url.pathname === '/update.json' || url.pathname === '/vendor.json' || url.pathname.startsWith('/releases/') || url.pathname === '/request-license')) return fail(res, 404, 'not found');
         if (!limit(req.socket.remoteAddress || '?')) return fail(res, 429, 'too many requests');
       } else if (!hostAllowed(req.headers.host)) return fail(res, 403, 'host not allowed');
       // the public part of the local update server: any origin (the app is a file, localhost:8765, ...), still only this computer (Host check above)
-      const pub = KINDS[kind].canInit && (publicOnly || url.pathname === '/update.json' || url.pathname.startsWith('/releases/') || url.pathname === '/request-license');
+      const pub = KINDS[kind].canInit && (publicOnly || url.pathname === '/vendor.json' || url.pathname === '/update.json' || url.pathname.startsWith('/releases/') || url.pathname === '/request-license');
       if (pub) {
         const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' };
         const dir = KINDS[kind].mod[KINDS[kind].dirFn](dirArgv);
         if (req.method === 'OPTIONS') { res.writeHead(204, cors); return res.end(); }
+        if (url.pathname === '/vendor.json' && req.method === 'GET') {
+          const f = path.join(otaDir(dir), 'vendor.json'); if (!fs.existsSync(f)) return send(res, 404, { ok: false, error: 'no vendor address published' }, cors);
+          return send(res, 200, fs.readFileSync(f, 'utf8'), { ...cors, 'Content-Type': 'application/json; charset=utf-8' });
+        }
         if (url.pathname === '/update.json' && (req.method === 'GET' || req.method === 'HEAD')) {
           const f = path.join(otaDir(dir), 'update.json'); if (!fs.existsSync(f)) return send(res, 404, { ok: false, error: 'nothing published yet' }, cors);
           return send(res, 200, fs.readFileSync(f, 'utf8'), { ...cors, 'Content-Type': 'application/json; charset=utf-8' });
@@ -405,6 +439,12 @@ function createServer({ kind = 'vendor', dirArgv = [], root, session = makeSessi
       if (!originAllowed(req.headers.origin)) return fail(res, 403, 'origin not allowed');
       if (req.method === 'GET' && url.pathname === '/') { const p = pageFor(kind); return send(res, 200, p.body, { 'Content-Security-Policy': p.csp }); }
       if (req.method === 'GET' && url.pathname === '/ota/status' && KINDS[kind].canInit) return send(res, 200, { ok: true, ...otaStatus(KINDS[kind].mod[KINDS[kind].dirFn](dirArgv), root, releases) });
+      if (req.method === 'GET' && url.pathname === '/vendor/ip' && KINDS[kind].canInit) return send(res, 200, { ok: true, ip: await publicIp() });
+      if (req.method === 'POST' && url.pathname === '/vendor/publish' && KINDS[kind].canInit) {
+        const dir = KINDS[kind].mod[KINDS[kind].dirFn](dirArgv); let b = {}; try { const chunks = []; for await (const c of req) chunks.push(c); b = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'); } catch (_) { /* defaults */ }
+        try { const key = session.key(dir) || vault.loadKey(dir); return send(res, 200, { ok: true, ...vendorPublish(dir, root, key, String(b.server || '')) }); }
+        catch (e) { return e.locked ? send(res, 401, { ok: false, error: e.message, locked: true }) : fail(res, e.status || 500, e.message); }
+      }
       if (req.method === 'POST' && url.pathname === '/ota/publish' && KINDS[kind].canInit) {
         const dir = KINDS[kind].mod[KINDS[kind].dirFn](dirArgv); let b = {}; try { const chunks = []; for await (const c of req) chunks.push(c); b = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'); } catch (_) { /* defaults */ }
         try { const key = session.key(dir) || vault.loadKey(dir); return send(res, 200, { ok: true, ...otaPublish(dir, root, releases, key, 'http://127.0.0.1:' + req.socket.localPort, !!b.repo) }); }
@@ -467,4 +507,4 @@ if (require.main === module) {
   const code = main(process.argv.slice(2));
   if (code !== 0) process.exit(code);   // 0 means the server is listening (asynchronously): exiting now would kill it before it ever serves a request
 }
-module.exports = { rateLimiter, otaStatus, otaPublish, KINDS, page, pageFor, issueKey, keyStatus, initKind, makeSession, createServer, main };
+module.exports = { publicIp, vendorPublish, rateLimiter, otaStatus, otaPublish, KINDS, page, pageFor, issueKey, keyStatus, initKind, makeSession, createServer, main };

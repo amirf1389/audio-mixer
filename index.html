@@ -18806,7 +18806,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             async submitRequest() {
                 const req = await this.requestKey(), btn = $('lic-req-submit');
                 // the update server set in SETTINGS -> OTA, else the vendor's own key generator on the internet (VENDOR_SERVER), else e-mail
-                const origin = licenseRequestOrigin() || vendorServer();
+                const origin = licenseRequestOrigin() || vendorServer() || await vendorServerPublished();
                 if (!origin) return this.submitWithoutServer(req);
                 if (btn) { btn.disabled = true; btn.textContent = 'SENDING...'; }
                 try {
@@ -19092,6 +19092,25 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
         // e.g. 'http://203.0.113.7:8780'. Empty = SUBMIT TO VENDOR uses the e-mail draft. Plain http is accepted here only, for this address: a request holds
         // a name, an e-mail and a machine code, nothing secret, and no key ever travels this way (keys go back by e-mail).
         const VENDOR_SERVER = '';
+        // The address the vendor's key generator published (PUBLISH VENDOR ADDRESS -> releases/vendor.json, signed with the vendor key): fetched from
+        // the project on GitHub and accepted only when the signature checks out with the public key in this app, so nobody can redirect requests.
+        const VENDOR_JSON_URL = 'https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/vendor.json';
+        let vendorCache = null;
+        async function vendorServerPublished() {
+            if (vendorCache && Date.now() - vendorCache.at < 10 * 60 * 1000) return vendorCache.server;
+            try {
+                const c = new AbortController(), t = setTimeout(() => c.abort(), 5000);
+                const env = await (await fetch(VENDOR_JSON_URL, { cache: 'no-store', signal: c.signal })).json(); clearTimeout(t);
+                const jwk = window.LICENSE_PUBLIC_JWK;
+                if (!env || typeof env.payload !== 'string' || typeof env.signature !== 'string' || !jwk || !(window.crypto && crypto.subtle)) return null;
+                const key = await crypto.subtle.importKey('jwk', jwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
+                const sig = Uint8Array.from(atob(env.signature.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((env.signature.length + 3) % 4)), ch => ch.charCodeAt(0));
+                if (!(await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, key, sig, new TextEncoder().encode(env.payload)))) return null;
+                const m = JSON.parse(env.payload), v = String(m.server || '').replace(/\/+$/, '');
+                if (m.product !== 'audio-mixer' || m.kind !== 'vendor' || !/^https?:\/\/[\w.:\[\]-]+$/.test(v)) return null;
+                vendorCache = { server: v, at: Date.now() }; return v;
+            } catch (e) { return null; }
+        }
         function vendorServer() { const v = String(VENDOR_SERVER || '').replace(/\/+$/, ''); return /^https?:\/\/[\w.-]+(:\d+)?$/.test(v) ? v : null; }
         function licenseRequestOrigin() {
             const own = httpsUrl(store.get('halx_ota_url') || ''); if (!own) return null;
