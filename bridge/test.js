@@ -1820,7 +1820,7 @@ test('vendor tool: key pair, issue and embed into a copy of the project', () => 
   const { key, payload } = v.issue({ dir, plan: 'studio', name: 'Studio One', days: 365, machine: 'AAAA-BBBB-CCCC-DDDD-EEEE' });
   assert.strictEqual(lic.verifyKey(key, { jwk, machine: 'AAAA-BBBB-CCCC-DDDD-EEEE' }).plan.id, 'studio'); assert.ok(payload.expires > Date.now());
   assert.throws(() => v.issue({ dir, plan: 'gold', name: 'x' }), /plan must be/);
-  assert.throws(() => v.issue({ dir, plan: 'pro' }), /--name/);
+  { const r = v.issue({ dir, plan: 'master' }); assert.match(r.payload.id, /^[0-9A-F]{12}$/); assert.strictEqual(r.payload.name, 'Customer ' + r.payload.id); }   // no name: an automatic one from the random id
   const copy = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'proj-')); fsx.mkdirSync(pathx.join(copy, 'bridge'));
   fsx.writeFileSync(pathx.join(copy, 'index.html'), `x ${v.MARK_A}{"old":1}${v.MARK_B} y`);
   v.embedPublic(jwk, copy);
@@ -4298,7 +4298,7 @@ test('bus & matrix outputs: out sends to a real interface, speaker processor, am
 
 test('low power mode: throttles the always-running meter loop to 1 frame in 4 (the real skip line, run for real), persists across reloads, never touches mixing/EQ/FX', () => {
   const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
-  for (const s of ["lowPowerMode: false", "window.setLowPowerMode = function(on, silent)", "localStorage.setItem('halx_low_power', on ? '1' : '0')",
+  for (const s of ["lowPowerMode: false", "window.setLowPowerMode = function(on, silent, auto)", "localStorage.setItem('halx_low_power', on ? '1' : '0')",
     'id="low-power-toggle"', 'onclick="window.setLowPowerMode(!window.state.lowPowerMode)"', "localStorage.getItem('halx_low_power') === '1'"]) assert.ok(html.includes(s), s);
   // the exact skip line that ships, run for real (not a reimplementation): 1000 frames with it OFF must all run the per-channel body, and with it
   // ON only every 4th must (the other 3 of 4 skip straight to the next requestAnimationFrame, which is where the CPU/battery saving comes from -
@@ -4936,4 +4936,54 @@ test('remote control (control.js): GET /api/audio-devices, POST /api/select-devi
     const foreign = await new Promise(res => { const sk = require('node:net').connect(port, '127.0.0.1', () => sk.write(`GET /ws/control HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\nOrigin: https://evil.example\r\n\r\n`)); let got = ''; sk.on('data', d => { got += d; }); sk.on('close', () => res(!/ 101 /.test(got))); setTimeout(() => sk.destroy(), 800); });
     assert.ok(foreign, 'a foreign page cannot open /ws/control');
   } finally { sockets.forEach(w => w.close()); control.reset(); server.closeAllConnections(); server.close(); }
+});
+
+test('native engine keeps ASIO and Windows sound apart on one onboard chip (Realtek): WASAPI stays shared next to ASIO, ASIO refuses an exclusive lock', () => {
+  const ne = require('./native-engine');
+  const { EventEmitter } = require('node:events');
+  ne._reset();
+  const args = [];
+  const spawnImpl = (f, a) => { args.push(a); const c = new EventEmitter(); c.stdout = new EventEmitter(); c.stderr = new EventEmitter(); c.stdin = new EventEmitter(); c.stdin.write = () => {}; c.stdin.end = () => {}; c.kill = () => {}; return c; };
+  const [asio, spk, usb] = ne.toDevices([
+    { backend: 'asio', id: 'Realtek ASIO', name: 'Realtek ASIO', inChannels: 2, outChannels: 2 },
+    { backend: 'wasapi', id: '{0.0.0}.{a}', name: 'Speakers (Realtek(R) Audio)', outChannels: 2 },
+    { backend: 'wasapi', id: '{0.0.0}.{b}', name: 'Speakers (USB Audio)', outChannels: 2 },
+  ], 1000);
+  assert.strictEqual(asio.hardware, 'realtek'); assert.strictEqual(spk.hardware, 'realtek'); assert.strictEqual(usb.hardware, null);
+  assert.strictEqual(ne.hardwareFamily('ASIO4ALL v2'), null); assert.strictEqual(ne.toDevices([{ backend: 'asio', name: 'ASIO4ALL v2' }], 0)[0].hardware, 'wdm');
+  // an exclusive Windows stream on the chip blocks Realtek ASIO with a clear message
+  const ex = ne.openStream({ dev: spk, direction: 'output', channels: 2, exclusive: true, exe: 'x', spawnImpl });
+  assert.strictEqual(ex.exclusive, true);
+  assert.throws(() => ne.openStream({ dev: asio, direction: 'input', channels: 2, exe: 'x', spawnImpl }), /exclusive mode/);
+  ex.close();
+  // with ASIO open, music on the same chip is opened shared; another device keeps exclusive
+  ne.openStream({ dev: asio, direction: 'input', channels: 2, exe: 'x', spawnImpl });
+  const music = ne.openStream({ dev: spk, direction: 'output', channels: 2, exclusive: true, exe: 'x', spawnImpl });
+  assert.strictEqual(music.exclusive, false); assert.strictEqual(music.separated, true); assert.ok(!args[args.length - 1].includes('--exclusive'));
+  const other = ne.openStream({ dev: usb, direction: 'output', channels: 2, exclusive: true, exe: 'x', spawnImpl });
+  assert.strictEqual(other.exclusive, true);
+  ne._reset();
+});
+
+test('MASTER plan: all access in the bridge and the page; a MASTER key may run any plan below it, never above', () => {
+  const lic = require('./license');
+  assert.deepStrictEqual(Object.keys(lic.PLANS), ['basic', 'pro', 'studio', 'master']);
+  for (const f of ['core', 'plugins', 'ota', 'studio']) assert.ok(lic.PLANS.master.features.includes(f), f);
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  assert.ok(html.includes("master: { id: 'master', name: 'MASTER', channels: 32") && html.includes('data-plan="master"') && html.includes('<option value="master">MASTER</option>'));
+  assert.ok(html.includes("ORDER: ['basic', 'pro', 'studio', 'master']") && html.includes("O.indexOf(want) <= O.indexOf(this.licensed.id)"), 'the plan in use is capped by the key');
+});
+
+test('channel VU meters: the strip ladder is the scale, VU ballistics and the peak hold run on time, not frames', () => {
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  const i = html.indexOf('window.vuMeter = {'), j = html.indexOf('// DYNAMIC METER UPDATE LOOP', i);
+  const window = {}; eval(html.slice(i, j));   // eslint-disable-line no-eval
+  const v = window.vuMeter;
+  assert.strictEqual(v.dbToPct(0), 75); assert.strictEqual(v.dbToPct(-10), 50); assert.strictEqual(v.dbToPct(-40), 12.5); assert.strictEqual(v.dbToPct(-Infinity), 0);
+  const run = step => { const m = {}; let r; for (let t = 0; t <= 1000; t += step) r = v.step(m, 1, 0.5, t); return r; };
+  const a = run(16), b = run(64);   // full rate vs low power: the same reading
+  assert.ok(Math.abs(a.fill - b.fill) < 0.5 && a.peakDb === 0 && b.peakDb === 0);
+  const m = {}; v.step(m, 1, 1, 0); assert.strictEqual(v.step(m, 0, 0, 1400).peakDb, 0);   // held for 1.5 s
+  assert.ok(v.step(m, 0, 0, 2500).peakDb < -15);                                            // then falls ~20 dB/s
+  assert.strictEqual(v.label(-Infinity), '-inf'); assert.strictEqual(v.label(-3.25), '-3.3');
 });
