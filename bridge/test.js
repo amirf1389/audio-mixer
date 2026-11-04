@@ -4234,9 +4234,9 @@ test('license key generator: a local, form-based way to issue a key with any of 
   const vpub = require('../scripts/license.js').loadPublic(vdir);
   let v = lic.verifyKey(j.key, { jwk: vpub, machine: 'AAAA-BBBB-CCCC-DDDD-EEEE' }); assert.ok(v.ok && v.payload.seats === 2 && v.plan.id === 'pro');
   assert.strictEqual(lic.verifyKey(j.key, { machine: 'AAAA-BBBB-CCCC-DDDD-EEEE' }).reason, 'bad-signature');            // not the real vendor key: a normal build refuses it
-  // validation: bad plan, missing name (vendor requires one), oversized / non-JSON body, wrong method
+  // validation: bad plan, oversized / non-JSON body, wrong method; a vendor key needs no name any more ("Customer <serial>")
   assert.strictEqual((await fetch(base + '/issue', { method: 'POST', body: JSON.stringify({ plan: 'gold' }) })).status, 400);
-  assert.strictEqual((await fetch(base + '/issue', { method: 'POST', body: JSON.stringify({ plan: 'pro' }) })).status, 400);
+  assert.strictEqual((await fetch(base + '/issue', { method: 'POST', body: JSON.stringify({ plan: 'pro' }) })).status, 200);
   assert.strictEqual((await fetch(base + '/issue', { method: 'POST', body: 'not json' })).status, 400);
   assert.strictEqual((await fetch(base + '/issue', { method: 'GET' })).status, 404);
   // CSRF / DNS-rebinding guards: a foreign Origin or Host is refused, the same functions bridge/server.js itself uses
@@ -5006,4 +5006,33 @@ test('AI DSP: feedback detector finds a narrow standing peak, de-esser and AI ru
   assert.ok(Math.abs(D.speakerWatts(Math.SQRT1_2, 100) - 100) < 1e-9); assert.ok(Math.abs(D.speakerWatts(Math.SQRT1_2 / 10, 100) - 1) < 1e-9);   // -20 dB = 1/100 of the power
   assert.deepStrictEqual(Object.keys(D.POWER), ['eco', 'balanced', 'performance']); assert.deepStrictEqual(Object.keys(D.OUTPUT), ['safe', 'normal', 'max']);
   assert.ok(html.includes('id="aidsp-panel"') && html.includes("n.msIn = g.in"), 'the panel ships and the block splices ahead of mid/side');
+});
+
+test('license generator page: creates the vendor key pair when none exists (never overwrites), keys without a name, batches with a CSV', async () => {
+  const gen = require('../scripts/license-generator'), lic = require('./license'), http = require('node:http');
+  const tmp = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'gen-')), vdir = pathx.join(tmp, 'vendor'), root = pathx.join(tmp, 'proj');
+  fsx.mkdirSync(pathx.join(root, 'bridge'), { recursive: true });
+  fsx.copyFileSync(pathx.join(__dirname, '..', 'index.html'), pathx.join(root, 'index.html'));
+  const srv = gen.createServer({ kind: 'vendor', dirArgv: ['--dir', vdir], root });
+  await new Promise(r => srv.listen(0, '127.0.0.1', r));
+  const port = srv.address().port;
+  const call = (method, p, body) => new Promise((res, rej) => {
+    const rq = http.request({ host: '127.0.0.1', port, method, path: p, headers: { 'Content-Type': 'application/json', Host: '127.0.0.1:' + port } }, r => { let t = ''; r.on('data', c => { t += c; }); r.on('end', () => res({ status: r.statusCode, j: JSON.parse(t) })); });
+    rq.on('error', rej); if (body) rq.write(JSON.stringify(body)); rq.end();
+  });
+  try {
+    let r = await call('GET', '/status'); assert.strictEqual(r.j.hasKey, false); assert.strictEqual(r.j.canInit, true);
+    r = await call('POST', '/init', {}); assert.strictEqual(r.status, 200); assert.ok(fsx.existsSync(pathx.join(vdir, 'private.pem')));
+    const jwk = JSON.parse(fsx.readFileSync(pathx.join(root, 'bridge', 'license-public.json'), 'utf8'));
+    assert.ok(fsx.readFileSync(pathx.join(root, 'index.html'), 'utf8').includes(JSON.stringify(jwk)), 'the page trusts the new key');
+    r = await call('POST', '/init', {}); assert.strictEqual(r.status, 409, 'an existing key pair is never overwritten');
+    r = await call('POST', '/issue', { plan: 'master' }); assert.strictEqual(r.status, 200);
+    const v = lic.verifyKey(r.j.key, { jwk }); assert.ok(v.ok); assert.strictEqual(v.payload.name, 'Customer ' + v.payload.id);
+    r = await call('POST', '/issue', { plan: 'pro', count: 5, days: 365 });
+    assert.strictEqual(r.j.keys.length, 5); assert.strictEqual(new Set(r.j.keys.map(x => x.id)).size, 5);
+    assert.ok(r.j.keys.every(x => lic.verifyKey(x.key, { jwk }).ok));
+    assert.strictEqual(r.j.csv.trim().split('\n').length, 6); assert.match(r.j.csv, /^id,plan,name,expires,key\n/);
+    r = await call('POST', '/issue', { plan: 'pro', count: 501 }); assert.strictEqual(r.status, 400);
+  } finally { srv.close(); fsx.rmSync(tmp, { recursive: true, force: true }); }
+  assert.ok(fsx.readFileSync(pathx.join(__dirname, '..', 'scripts', 'license-generator.bat'), 'utf8').includes('license-generator.js --open'));
 });
