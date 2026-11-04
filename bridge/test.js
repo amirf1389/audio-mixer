@@ -5022,10 +5022,13 @@ test('license generator page: creates the vendor key pair when none exists (neve
   });
   try {
     let r = await call('GET', '/status'); assert.strictEqual(r.j.hasKey, false); assert.strictEqual(r.j.canInit, true);
-    r = await call('POST', '/init', {}); assert.strictEqual(r.status, 200); assert.ok(fsx.existsSync(pathx.join(vdir, 'private.pem')));
+    r = await call('POST', '/init', {}); assert.strictEqual(r.status, 400, 'a PIN is required');
+    r = await call('POST', '/init', { pin: '482916' }); assert.strictEqual(r.status, 200);
+    assert.ok(fsx.existsSync(pathx.join(vdir, 'private.pem.enc')) && !fsx.existsSync(pathx.join(vdir, 'private.pem')), 'only the encrypted key is written');
+    assert.ok(!fsx.readFileSync(pathx.join(vdir, 'private.pem.enc'), 'utf8').includes('PRIVATE KEY'));
     const jwk = JSON.parse(fsx.readFileSync(pathx.join(root, 'bridge', 'license-public.json'), 'utf8'));
     assert.ok(fsx.readFileSync(pathx.join(root, 'index.html'), 'utf8').includes(JSON.stringify(jwk)), 'the page trusts the new key');
-    r = await call('POST', '/init', {}); assert.strictEqual(r.status, 409, 'an existing key pair is never overwritten');
+    r = await call('POST', '/init', { pin: '482916' }); assert.strictEqual(r.status, 409, 'an existing key pair is never overwritten');
     r = await call('POST', '/issue', { plan: 'master' }); assert.strictEqual(r.status, 200);
     const v = lic.verifyKey(r.j.key, { jwk }); assert.ok(v.ok); assert.strictEqual(v.payload.name, 'Customer ' + v.payload.id);
     r = await call('POST', '/issue', { plan: 'pro', count: 5, days: 365 });
@@ -5033,6 +5036,12 @@ test('license generator page: creates the vendor key pair when none exists (neve
     assert.ok(r.j.keys.every(x => lic.verifyKey(x.key, { jwk }).ok));
     assert.strictEqual(r.j.csv.trim().split('\n').length, 6); assert.match(r.j.csv, /^id,plan,name,expires,key\n/);
     r = await call('POST', '/issue', { plan: 'pro', count: 501 }); assert.strictEqual(r.status, 400);
+    // PIN lock: LOCK drops the key from memory, issuing then needs UNLOCK; wrong PINs are refused and 5 in a row lock the page out
+    r = await call('POST', '/lock', {}); r = await call('GET', '/status'); assert.ok(r.j.locked && !r.j.unlocked);
+    r = await call('POST', '/issue', { plan: 'pro' }); assert.strictEqual(r.status, 401); assert.strictEqual(r.j.locked, true);
+    r = await call('POST', '/unlock', { pin: '000000' }); assert.strictEqual(r.status, 401);
+    r = await call('POST', '/unlock', { pin: '482916' }); assert.strictEqual(r.status, 200);
+    r = await call('POST', '/issue', { plan: 'pro' }); assert.ok(lic.verifyKey(r.j.key, { jwk }).ok);
   } finally { srv.close(); fsx.rmSync(tmp, { recursive: true, force: true }); }
   assert.ok(fsx.readFileSync(pathx.join(__dirname, '..', 'scripts', 'license-generator.bat'), 'utf8').includes('license-generator.js --open'));
 });
@@ -5044,4 +5053,32 @@ test('license generator page: its own script parses (it is built inside a templa
   assert.ok(js.includes("new URLSearchParams(location.search)") && js.includes("'http://localhost:8765/#license='"));
   const app = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
   assert.ok(app.includes('id="lic-req-generator"') && app.includes("'http://127.0.0.1:8799/?'") && app.includes('takeKeyFromAddress()'));
+});
+
+test('license key vault: PIN-locked folder (AES-256-GCM, scrypt), only the encrypted copy on disk, lock / change-PIN, session lockout after 5 wrong PINs', () => {
+  const vault = require('../scripts/license-vault'), L = require('../scripts/license'), gen = require('../scripts/license-generator'), lic = require('./license');
+  const d = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'vault-'));
+  try {
+    assert.throws(() => L.initKeys(d, { pin: '123' }), /at least 6/);
+    L.initKeys(d, { pin: '482916' });
+    assert.deepStrictEqual(fsx.readdirSync(d).sort(), ['private.pem.enc', 'public.jwk.json']);
+    const box = JSON.parse(fsx.readFileSync(pathx.join(d, 'private.pem.enc'), 'utf8'));
+    assert.strictEqual(box.alg, 'aes-256-gcm'); assert.strictEqual(box.kdf, 'scrypt'); assert.ok(box.N >= 1 << 17);
+    assert.throws(() => L.issue({ dir: d, plan: 'pro' }), /locked/);
+    assert.throws(() => L.loadPrivate(d, '000000'), /wrong PIN/);
+    assert.ok(lic.verifyKey(L.issue({ dir: d, plan: 'pro', pin: '482916' }).key, { jwk: L.loadPublic(d) }).ok);
+    const tampered = { ...box, ct: Buffer.from(box.ct, 'base64').map((b, i) => (i === 5 ? b ^ 1 : b)).toString('base64') };
+    assert.throws(() => vault.decrypt(tampered, '482916'), /wrong PIN/, 'a changed file is detected');
+    vault.changePin(d, '482916', 'a longer passphrase');
+    assert.throws(() => L.loadPrivate(d, '482916')); assert.ok(L.loadPrivate(d, 'a longer passphrase'));
+    // the generator session: 5 wrong PINs -> 60 s lockout (even for the right PIN), then it opens; idle 15 min closes it
+    let now = 0; const s = gen.makeSession(() => now);
+    for (let i = 0; i < 5; i++) assert.throws(() => s.unlock(d, 'wrong-pin'), /wrong PIN/);
+    assert.throws(() => s.unlock(d, 'a longer passphrase'), e => e.status === 429);
+    now += 61000; s.unlock(d, 'a longer passphrase'); assert.ok(s.isOpen() && s.key(d));
+    now += 15 * 60 * 1000 + 1; assert.ok(!s.isOpen()); assert.throws(() => s.key(d), /locked/);
+  } finally { fsx.rmSync(d, { recursive: true, force: true }); }
+  const d2 = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'vault-'));
+  try { L.initKeys(d2); vault.lock(d2, '135790'); assert.deepStrictEqual(fsx.readdirSync(d2).sort(), ['private.pem.enc', 'public.jwk.json']); assert.ok(L.loadPrivate(d2, '135790')); }
+  finally { fsx.rmSync(d2, { recursive: true, force: true }); }
 });
