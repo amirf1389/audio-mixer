@@ -2,7 +2,7 @@
 # Sourced by start-pc-mode.sh, the Linux launcher and the macOS app. Sets NODE (and puts it on PATH when it installs a private copy).
 #   AUDIO_MIXER_NODE=/path/to/node   use this Node.js
 #   AUDIO_MIXER_YES=1                do not ask before downloading
-#   AUDIO_MIXER_NODE_MAJOR=22        Node.js line to install (an LTS line; default 22)
+#   AUDIO_MIXER_NODE_MAJOR=22        Node.js line to install (default: the newest LTS named by nodejs.org/dist/index.json, else 22)
 #   AUDIO_MIXER_HOME=<dir>           where the private copy and the audio module live (default ~/.local/share/audio-mixer)
 AM_MIN_NODE=18
 AM_HOME="${AUDIO_MIXER_HOME:-$HOME/.local/share/audio-mixer}"
@@ -40,8 +40,17 @@ am_install_node() {
   os=$(uname -s); arch=$(uname -m)
   case "$os" in Linux) p=linux;; Darwin) p=darwin;; *) echo "Automatic Node.js install is not supported on $os: https://nodejs.org/" >&2; return 1;; esac
   case "$arch" in x86_64|amd64) a=x64;; aarch64|arm64) a=arm64;; armv7l) a=armv7l;; *) echo "No official Node.js build for $arch: https://nodejs.org/" >&2; return 1;; esac
-  major="${AUDIO_MIXER_NODE_MAJOR:-22}"
-  base="https://nodejs.org/dist/latest-v${major}.x"
+  base=""; major="${AUDIO_MIXER_NODE_MAJOR:-}"
+  if [ -z "$major" ]; then   # the release API: newest LTS that has a build for this system
+    idx=$(mktemp 2>/dev/null || echo "${TMPDIR:-/tmp}/am-node-index.$$")
+    if am_fetch "https://nodejs.org/dist/index.json" "$idx"; then
+      ver=$(tr '{' '\n' < "$idx" | grep '"lts":"' | grep "\"$p-$a\"" | head -n 1 | sed 's/.*"version":"\(v[0-9.]*\)".*/\1/')
+      case "$ver" in v[0-9]*) base="https://nodejs.org/dist/$ver"; major=${ver#v}; major=${major%%.*};; esac
+    fi
+    rm -f "$idx"
+  fi
+  [ -n "$major" ] || major=22
+  [ -n "$base" ] || base="https://nodejs.org/dist/latest-v${major}.x"
   am_ask "Node.js $AM_MIN_NODE or newer is needed and was not found. Download the official Node.js ${major} (about 30 MB) from nodejs.org into $AM_NODE_DIR?" || { echo "Node.js is required: https://nodejs.org/" >&2; return 1; }
   tmp=$(mktemp -d 2>/dev/null || echo "${TMPDIR:-/tmp}/audio-mixer-node.$$"); mkdir -p "$tmp"
   echo "Downloading the Node.js ${major} checksum list ..."
