@@ -133,6 +133,7 @@ textarea,#key-out{width:100%;background:var(--panel2);border:1px solid var(--lin
     <div id="key-out" class="mono"></div>
     <p class="dim" id="summary"></p>
     <div class="row2"><button class="btn" id="copy" type="button">COPY</button><button class="btn" id="csv" type="button" hidden>DOWNLOAD CSV</button></div>
+    <p><a id="mailkey" class="btn" href="#" hidden>E-MAIL KEY TO CUSTOMER</a></p>
     <p><a id="activate" class="btn" href="#" target="_blank" rel="noopener noreferrer" hidden>ACTIVATE IN AMF X1 (THIS COMPUTER)</a></p>
   </section>
 </main>
@@ -212,6 +213,14 @@ textarea,#key-out{width:100%;background:var(--panel2);border:1px solid var(--lin
         $('summary').textContent = res.j.summary;
         csvText = res.j.csv || ''; $('csv').hidden = !csvText;
         $('activate').hidden = !!res.j.keys; if (!res.j.keys) $('activate').href = 'http://localhost:8765/#license=' + encodeURIComponent(res.j.key);
+        // send the key to the customer: an e-mail draft to the address on the form, with the key and how to activate it
+        var to = $('email').value.trim();
+        $('mailkey').hidden = !!res.j.keys || !/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(to);
+        if (!$('mailkey').hidden) {
+          var who = $('name').value.trim(), plan = $('plan').options[$('plan').selectedIndex].text;
+          var body = 'Hello' + (who ? ' ' + who : '') + ',\\n\\nhere is your AmF X1 license key (' + plan + '):\\n\\n' + res.j.key + '\\n\\nTo activate: open AmF X1, go to SYSTEM > LICENSE, paste the key into the LICENSE KEY box and press ACTIVATE.\\n' + ($('machine').value.trim() ? 'The key works on the computer with machine code ' + $('machine').value.trim().toUpperCase() + '.\\n' : '') + '\\nAMFB Audio\\n';
+          $('mailkey').href = 'mailto:' + encodeURIComponent(to) + '?subject=' + encodeURIComponent('Your AmF X1 license key') + '&body=' + encodeURIComponent(body);
+        }
         $('result').hidden = false;
       })
       .catch(function () { $('err').textContent = 'Could not reach this server.'; $('err').hidden = false; })

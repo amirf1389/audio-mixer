@@ -18752,9 +18752,9 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             // The owner's local key generator (scripts/license-generator.js, fixed port 8799 on 127.0.0.1) opened with this request filled in.
             // It only answers on the computer that runs it, so for a customer the link does nothing: they use SUBMIT / FILE / COPY.
             async openWebsite() {
-                const base = String(WEBSITE_URL || '').replace(/\/+$/, ''); if (!/^https:\/\//.test(base)) return null;
+                const page = String(WEBSITE_URL || ''); if (!/^https:\/\//.test(page)) return null;
                 const req = await this.requestKey(), q = new URLSearchParams({ plan: req.plan || 'pro', name: req.name || '', email: req.email || '', machine: req.machineId || '' });
-                window.open(base + '/license.html?' + q.toString(), '_blank', 'noopener');
+                window.open(page + (page.includes('?') ? '&' : '?') + q.toString(), '_blank', 'noopener');
                 return req;
             },
             async openGenerator() {
@@ -19084,8 +19084,8 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
         const httpsUrl = u => { try { const x = new URL(u, location.href); return (x.protocol === 'https:' || (x.protocol === 'http:' && /^(localhost|127\.0\.0\.1)$/.test(x.hostname))) ? x.href : null; } catch (e) { return null; } };
         // the origin to POST a license request to: the configured update server (SETTINGS -> OTA), with "/update.json" or "/<channel>/update.json" stripped
         const VENDOR_EMAIL = 'badriamirfakhri@gmail.com';
-        // The vendor's website, holding deploy/website/license.html (upload that file to the site root). Empty = the WEBSITE button stays hidden. Set it to e.g. 'https://amfb-audio.com'.
-        const WEBSITE_URL = '';   // where SUBMIT TO VENDOR's e-mail draft goes when no update server is set (localStorage halx_vendor_email overrides)
+        // The vendor's key request page (deploy/website/license.html as published on the website). Empty = the WEBSITE button stays hidden.
+        const WEBSITE_URL = 'https://amirfakhri.interactivelink.site/keys';   // where SUBMIT TO VENDOR's e-mail draft goes when no update server is set (localStorage halx_vendor_email overrides)
         function licenseRequestOrigin() {
             const own = httpsUrl(store.get('halx_ota_url') || ''); if (!own) return null;
             try { const u = new URL(own); u.pathname = u.pathname.replace(/\/(?:[a-z0-9-]+\/)?update\.json$/i, '') || '/'; u.search = ''; u.hash = ''; return u.href.replace(/\/+$/, ''); } catch (e) { return null; }
