@@ -7852,7 +7852,7 @@ const cArea = document.getElementById('content-area');
                           <input id="lic-req-email" maxlength="120" placeholder="E-mail" autocomplete="off" class="bg-black border border-white/10 rounded px-1.5 py-1 text-slate-200 outline-none text-[7.5px] min-w-0">
                         </div>
                         <div class="flex gap-1.5"><button id="lic-req-submit" type="button" class="flex-1 py-1 rounded bg-cyan-500/20 hover:bg-cyan-500 hover:text-black text-cyan-400 border border-cyan-500/40 font-bold uppercase text-[7.5px] transition">SUBMIT TO VENDOR</button><button id="lic-req-file" type="button" class="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-slate-200 font-bold uppercase text-[7.5px] transition">FILE</button><button id="lic-req-copy" type="button" class="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-slate-200 font-bold uppercase text-[7.5px] transition">COPY</button><button id="lic-req-generator" type="button" title="Owner's computer: opens the local key generator (scripts/license-generator.bat) with this machine code, plan, name and e-mail filled in" class="px-2 py-1 rounded bg-amber-500/20 hover:bg-amber-500 hover:text-black text-amber-400 border border-amber-500/40 font-bold uppercase text-[7.5px] transition">GENERATOR</button></div>
-                        <span class="text-slate-500 block text-[6.5px]">SUBMIT sends this request to the update server set in SETTINGS → OTA (its /request-license); FILE / COPY keep the old offline way.</span>
+                        <span class="text-slate-500 block text-[6.5px]">SUBMIT sends this request to the update server set in SETTINGS → OTA. Without one it opens the key generator on the vendor's own computer, or an e-mail draft with the request (also copied). FILE / COPY keep the offline way.</span>
                       </div>
                     </div>
                     <div class="bg-black/60 p-2.5 rounded-lg border border-white/10 space-y-1.5">
@@ -18783,10 +18783,24 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             // posts the same request to the update server's POST /request-license (ota-server/server.js): stored for the vendor and, when the
             // server has SMTP_* configured, a receipt e-mail sent to the address given above. Falls back to telling the person to use FILE / COPY
             // when no https update source is set (OTA_DEFAULT_URL, the project's own releases, is not a server that accepts submissions).
+            // No update server set: the vendor's own computer (the key generator answers on 127.0.0.1:8799) gets the generator, filled in;
+            // anyone else gets an e-mail draft holding the request (to the vendor address set with localStorage halx_vendor_email, or blank),
+            // and the request is copied as well, so it can be pasted into any message.
+            async submitWithoutServer(req) {
+                let local = false;
+                try { const c = new AbortController(), t = setTimeout(() => c.abort(), 1200); await fetch('http://127.0.0.1:8799/status', { mode: 'no-cors', cache: 'no-store', signal: c.signal }); clearTimeout(t); local = true; } catch (e) { /* no generator here */ }
+                if (local) { await this.openGenerator(); return req; }
+                const t = JSON.stringify(req), to = (store.get('halx_vendor_email') || '').replace(/[^\w.+@-]/g, '');
+                try { await navigator.clipboard.writeText(t); } catch (e) { /* blocked: the e-mail body has it anyway */ }
+                const subject = 'AmF X1 license request: ' + String(req.plan || '').toUpperCase() + (req.name ? ' for ' + req.name : '');
+                location.href = 'mailto:' + encodeURIComponent(to) + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent('Please send me a license key for this request:\n\n' + t + '\n');
+                notify('E-mail draft opened with your request (also copied). Send it to the vendor; the key comes back by reply.', 'envelope');
+                return req;
+            },
             async submitRequest() {
                 const req = await this.requestKey(), btn = $('lic-req-submit');
                 const origin = licenseRequestOrigin();
-                if (!origin) { notify('Set an update server address in SETTINGS → OTA first, or use FILE / COPY to send the request yourself.', 'triangle-exclamation'); return req; }
+                if (!origin) return this.submitWithoutServer(req);
                 if (btn) { btn.disabled = true; btn.textContent = 'SENDING...'; }
                 try {
                     const r = await fetch(origin + '/request-license', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(req) });

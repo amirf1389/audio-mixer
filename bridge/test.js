@@ -5082,3 +5082,10 @@ test('license key vault: PIN-locked folder (AES-256-GCM, scrypt), only the encry
   try { L.initKeys(d2); vault.lock(d2, '135790'); assert.deepStrictEqual(fsx.readdirSync(d2).sort(), ['private.pem.enc', 'public.jwk.json']); assert.ok(L.loadPrivate(d2, '135790')); }
   finally { fsx.rmSync(d2, { recursive: true, force: true }); }
 });
+
+test('license page SUBMIT TO VENDOR works without an update server: local generator, else an e-mail draft with the request', () => {
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  assert.ok(html.includes('if (!origin) return this.submitWithoutServer(req);'), 'no server no longer stops the button');
+  assert.ok(html.includes("fetch('http://127.0.0.1:8799/status', { mode: 'no-cors'") && html.includes("location.href = 'mailto:'"));
+  assert.ok(!html.includes('Set an update server address in SETTINGS → OTA first'));
+});
