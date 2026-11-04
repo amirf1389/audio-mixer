@@ -5140,3 +5140,22 @@ test('deploy/website/license.html: a public request page (no signing), prefilled
   const app = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
   assert.ok(app.includes("const WEBSITE_URL = '") && app.includes('id="lic-req-website"') && app.includes("const WEBSITE_URL = 'https://amirfakhri.interactivelink.site/keys'"));
 });
+
+test('generator public listener (--public): only /request-license, /update.json and published files on all networks, rate-limited; the key page stays on 127.0.0.1; the app posts to VENDOR_SERVER', async () => {
+  const gen = require('../scripts/license-generator'), http = require('node:http');
+  const tmp = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'gpub-'));
+  let now = 0; const srv = gen.createServer({ kind: 'vendor', dirArgv: ['--dir', tmp], root: tmp, publicOnly: true, limit: gen.rateLimiter(2, () => now) });
+  await new Promise(r => srv.listen(0, '127.0.0.1', r)); const port = srv.address().port;
+  const call = (method, p, body, host) => new Promise((res, rej) => { const rq = http.request({ host: '127.0.0.1', port, method, path: p, headers: { 'Content-Type': 'application/json', Host: host || 'vendor.example.net:8780' } }, r => { r.resume(); r.on('end', () => res(r.statusCode)); }); rq.on('error', rej); if (body) rq.write(JSON.stringify(body)); rq.end(); });
+  try {
+    for (const p of ['/', '/status', '/ota/status']) assert.strictEqual(await call('GET', p), 404, p);
+    for (const p of ['/issue', '/unlock', '/init', '/ota/publish', '/lock']) assert.strictEqual(await call('POST', p, {}), 404, p);
+    assert.strictEqual(await call('POST', '/request-license', { kind: 'license-request', plan: 'pro', name: 'A' }), 200, 'a public Host is fine here');
+    assert.strictEqual(await call('GET', '/update.json'), 404);   // nothing published
+    assert.strictEqual(await call('POST', '/request-license', {}), 429, 'rate limit: the 3rd counted request in a minute (refused paths do not count)');
+    now += 61000; assert.strictEqual(await call('POST', '/request-license', { kind: 'license-request', plan: 'pro' }), 200);
+  } finally { srv.close(); fsx.rmSync(tmp, { recursive: true, force: true }); }
+  const app = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  assert.ok(app.includes('const origin = licenseRequestOrigin() || vendorServer();') && app.includes("const VENDOR_SERVER = '"));
+  const kg = require('../scripts/build-keygen'); assert.strictEqual(kg.NAMES['windows-x64'], 'AmF X1 Key Generator.exe');
+});

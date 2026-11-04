@@ -25,6 +25,11 @@
 //   POST /request-license    the app's SUBMIT TO VENDOR: kept in <key folder>/license-requests.jsonl and listed in the page's INBOX (USE fills the form)
 // These three answer any origin (the app runs as a file, on localhost:8765 or elsewhere on this computer) but only on 127.0.0.1 (the Host check stays).
 // In the app: SETTINGS -> OTA -> http://127.0.0.1:8799/update.json; then SUBMIT TO VENDOR posts here as well.
+// PUBLIC LISTENER (--public [port], default port 8780; the .exe turns it on): a SECOND server on all network interfaces that answers ONLY
+// POST /request-license, GET /update.json and GET /releases/<published file>, rate-limited per address. Customers' SUBMIT TO VENDOR reaches
+// it at http://<your public IP>:8780 once the router forwards that port to this computer. The key page, unlock, issue and publish
+// never answer there: they stay on 127.0.0.1:8799.
+// --root <project folder>: where index.html / bridge/license-public.json / the release folders are (default: this project, or the .exe's folder).
 // Several keys at once: "How many" > 1 returns that many keys (random serials) and a CSV to download.
 const http = require('node:http');
 const crypto = require('node:crypto');
@@ -166,7 +171,7 @@ textarea,#key-out{width:100%;background:var(--panel2);border:1px solid var(--lin
     post('/init', { pin: $('pin1').value }).then(function (j) {
       $('pin1').value = $('pin2').value = '';
       if (!j || !j.ok) { showErr((j && j.error) || 'Could not create the key pair.'); $('init').disabled = false; return; }
-      $('privpath').textContent = j.priv; $('init-done').hidden = false; $('init').hidden = true; $('gen').hidden = false; $('lockbtn').hidden = false;
+      $('privpath').style.whiteSpace = 'pre-wrap'; $('privpath').textContent = j.priv + (j.embedded ? '' : '\\n\\nNo AmF X1 project here: put this public key into bridge/license-public.json (and index.html, between LICENSE_PUBLIC_JWK) of your project, or run the generator from the project with --root:\\n' + j.publicKey); $('init-done').hidden = false; $('init').hidden = true; $('gen').hidden = false; $('lockbtn').hidden = false;
     }).catch(function () { showErr('Could not reach this server.'); $('init').disabled = false; });
   });
   $('uf').addEventListener('submit', function (ev) {
@@ -311,8 +316,11 @@ function initKind(kind, dirArgv, root, pin, session) {
   vault.checkPin(pin);   // a new vendor key pair is always PIN-locked from the page
   let r; try { r = k.mod.initKeys(dir, { pin }); } catch (e) { e.status = e.status || 409; throw e; }   // never overwrites an existing key
   if (session) session.unlock(dir, pin);
-  k.mod.embedPublic(k.mod.loadPublic(dir), root);
-  return { priv: r.priv };
+  const jwk = k.mod.loadPublic(dir);
+  // in a project: the public key is written into the app (index.html, bridge/license-public.json); without one (the .exe alone) it is shown to copy
+  const where = root || layout.ROOT;
+  if (fs.existsSync(path.join(where, 'index.html')) && fs.existsSync(path.join(where, 'bridge'))) { k.mod.embedPublic(jwk, where); return { priv: r.priv, embedded: true }; }
+  return { priv: r.priv, embedded: false, publicKey: JSON.stringify(jwk) };
 }
 
 // ---- local OTA -----------------------------------------------------------------------------------------------------------------------------------
@@ -346,17 +354,26 @@ function otaFile(dir, releases, name) {
   return f && fs.existsSync(f) ? f : null;
 }
 
-function createServer({ kind = 'vendor', dirArgv = [], root, session = makeSession(), releases } = {}) {
+// per-address request budget for the public listener: 20 requests a minute (requests are tiny; this only stops floods)
+function rateLimiter(perMin = 20, now = () => Date.now()) {
+  const seen = new Map();
+  return ip => { const t = now(), w = (seen.get(ip) || []).filter(x => t - x < 60000); w.push(t); seen.set(ip, w); if (seen.size > 5000) seen.clear(); return w.length <= perMin; };
+}
+
+function createServer({ kind = 'vendor', dirArgv = [], root, session = makeSession(), releases, publicOnly = false, limit = rateLimiter() } = {}) {
   if (!KINDS[kind]) throw new Error('kind must be one of: ' + Object.keys(KINDS).join(', '));
   const send = (res, code, body, headers = {}) => { const t = typeof body === 'string' ? body : JSON.stringify(body); res.writeHead(code, { 'Content-Type': typeof body === 'string' ? 'text/html; charset=utf-8' : 'application/json; charset=utf-8', 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer', ...headers }); res.end(t); };
   const fail = (res, code, error) => send(res, code, { ok: false, error });
 
   return http.createServer(async (req, res) => {
     try {
-      if (!hostAllowed(req.headers.host)) return fail(res, 403, 'host not allowed');
       const url = new URL(req.url, 'http://x');
+      if (publicOnly) {   // the internet-facing listener: only the three public routes, nothing about keys
+        if (!(url.pathname === '/update.json' || url.pathname.startsWith('/releases/') || url.pathname === '/request-license')) return fail(res, 404, 'not found');
+        if (!limit(req.socket.remoteAddress || '?')) return fail(res, 429, 'too many requests');
+      } else if (!hostAllowed(req.headers.host)) return fail(res, 403, 'host not allowed');
       // the public part of the local update server: any origin (the app is a file, localhost:8765, ...), still only this computer (Host check above)
-      const pub = KINDS[kind].canInit && (url.pathname === '/update.json' || url.pathname.startsWith('/releases/') || url.pathname === '/request-license');
+      const pub = KINDS[kind].canInit && (publicOnly || url.pathname === '/update.json' || url.pathname.startsWith('/releases/') || url.pathname === '/request-license');
       if (pub) {
         const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' };
         const dir = KINDS[kind].mod[KINDS[kind].dirFn](dirArgv);
@@ -424,7 +441,14 @@ function main(argv) {
   const kind = arg(argv, '--kind', 'vendor');
   if (!KINDS[kind]) { console.error('--kind must be one of: ' + Object.keys(KINDS).join(', ')); return 2; }
   const want = arg(argv, '--port', '8799'), port = want === '0' ? 0 : Number(want) || 8799;
-  const server = createServer({ kind, dirArgv: argv });
+  let root = arg(argv, '--root'); if (!root) root = fs.existsSync(path.join(layout.ROOT, 'package.json')) ? layout.ROOT : (process.execPath && /generator/i.test(path.basename(process.execPath)) ? path.dirname(process.execPath) : process.cwd());
+  const server = createServer({ kind, dirArgv: argv, root });
+  if (argv.includes('--public') && KINDS[kind].canInit) {
+    const pv = argv[argv.indexOf('--public') + 1], pport = /^\d+$/.test(pv || '') ? Number(pv) : 8780;
+    const ps = createServer({ kind, dirArgv: argv, root, publicOnly: true });
+    ps.on('error', e => console.error(`Public listener on port ${pport} could not start: ${e.message}`));
+    ps.listen(pport, '0.0.0.0', () => console.log(`Public requests and updates on port ${pport} (all networks). Forward TCP ${pport} on your router to this computer; customers then use http://<your public IP>:${pport}`));
+  }
   server.once('error', e => { if (e.code === 'EADDRINUSE' && port) { console.error(`Port ${port} is in use: using a free port instead (the app's GENERATOR button will not find this one).`); server.listen(0, '127.0.0.1'); } else { console.error('Error: ' + e.message); process.exit(1); } });
   server.on('listening', () => {
     const url = `http://127.0.0.1:${server.address().port}/`;
@@ -443,4 +467,4 @@ if (require.main === module) {
   const code = main(process.argv.slice(2));
   if (code !== 0) process.exit(code);   // 0 means the server is listening (asynchronously): exiting now would kill it before it ever serves a request
 }
-module.exports = { otaStatus, otaPublish, KINDS, page, pageFor, issueKey, keyStatus, initKind, makeSession, createServer, main };
+module.exports = { rateLimiter, otaStatus, otaPublish, KINDS, page, pageFor, issueKey, keyStatus, initKind, makeSession, createServer, main };
