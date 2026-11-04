@@ -1,15 +1,24 @@
 @echo off
 rem Audio Mixer PC mode (Windows): starts the local system server and opens the mixer.
-rem If Node.js 18+ is missing, the script ASKS whether to install it: with winget (official Node.js LTS) when available, otherwise the official zip
-rem from nodejs.org (SHA-256 checked, into %LOCALAPPDATA%\AudioMixer\node, no administrator rights). Nothing is installed without an answer:
-rem no answer within a minute means No, and there is no switch that answers for you.
+rem If Node.js 18+ is missing, it is installed automatically (the question defaults to Yes after a minute, answer N to decline): with winget (official Node.js LTS) when available, otherwise the official zip
+rem from nodejs.org: the newest LTS named by the release API (nodejs.org/dist/index.json), downloaded from the nodejs.org CDN,
+rem SHA-256 checked, into %LOCALAPPDATA%\AudioMixer\node, no administrator rights.
 rem The Microsoft Visual C++ runtime that the native audio module (Audify) needs is offered the same way (winget) when it is missing.
 setlocal EnableDelayedExpansion
 cd /d "%~dp0"
+if /i "%~1"=="--ensure-node" goto ensure_only
 if not exist client\cli.js if exist ..\..\client\cli.js cd /d ..\..
 rem (in the repository this file sits in platforms\windows\, the app two folders up; in an installed package they are the same folder)
 set "AM_NODE_DIR=%LOCALAPPDATA%\AudioMixer\node"
+call :ensure_only
+set "AM_NODE_DIR=%LOCALAPPDATA%\AudioMixer\node"
 call :find_node
+if not defined NODE_OK (call :install_node & call :find_node)
+if not defined NODE_OK exit /b 1
+endlocal & set "PATH=%PATH%"
+exit /b 0
+
+:find_node
 if not defined NODE_OK (
   call :install_node
   call :find_node
@@ -35,13 +44,13 @@ if exist "%AM_NODE_DIR%\node.exe" (
 exit /b 0
 
 :ask
-rem %~1 = question; returns 0 for yes. Default (no answer in 60 seconds, or no console to answer on) is No.
-choice /c YN /d N /t 60 /m "%~1"
+rem %~1 = question; returns 0 for yes. No answer within 60 seconds means Yes; N declines.
+choice /c YN /d Y /t 60 /m "%~1"
 if errorlevel 2 exit /b 1
 exit /b 0
 
 :install_node
-call :ask "Node.js 18 or newer was not found. Install the official Node.js LTS now?"
+call :ask "Node.js 18 or newer was not found. Install the official Node.js LTS now (automatic in 60 seconds)?"
 if errorlevel 1 exit /b 1
 where winget >nul 2>nul
 if not errorlevel 1 (
@@ -54,7 +63,10 @@ echo Downloading the official Node.js zip from nodejs.org ...
 set "ARCH=x64"
 if /i "%PROCESSOR_ARCHITECTURE%"=="x86" if not defined PROCESSOR_ARCHITEW6432 set "ARCH=x86"
 if /i "%PROCESSOR_ARCHITECTURE%"=="ARM64" set "ARCH=arm64"
-set "BASE=https://nodejs.org/dist/latest-v22.x"
+set "LTS="
+for /f "delims=" %%v in ('powershell -NoProfile -Command "try { ((Invoke-RestMethod https://nodejs.org/dist/index.json) ^| Where-Object { $_.lts -and $_.files -contains 'win-%ARCH%-zip' } ^| Select-Object -First 1).version } catch {}" 2^>nul') do set "LTS=%%v"
+if defined LTS (set "BASE=https://nodejs.org/dist/%LTS%") else (set "BASE=https://nodejs.org/dist/latest-v22.x")
+echo Node.js release: %BASE%
 curl.exe -fsSL "%BASE%/SHASUMS256.txt" -o "%TEMP%\am-shasums.txt" || (echo Cannot reach nodejs.org. & exit /b 1)
 set "WANT=" & set "FILE="
 for /f "tokens=1,2" %%a in ('findstr /r /c:"node-v[0-9.]*-win-%ARCH%\.zip$" "%TEMP%\am-shasums.txt"') do (set "WANT=%%a" & set "FILE=%%b")

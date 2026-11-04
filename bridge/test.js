@@ -1353,8 +1353,11 @@ test('auto-install scripts: shell syntax, checksum verification, no network need
   const bat = fsx.readFileSync(pathx.join(__dirname, '..', 'platforms', 'windows', 'start-pc-mode.bat'), 'utf8');
   for (const want of ['winget install --id OpenJS.NodeJS.LTS', 'SHASUMS256.txt', 'certutil -hashfile', 'Microsoft.VCRedist.2015+.x64', 'does not match nodejs.org']) assert.ok(bat.includes(want), want);
   assert.ok(/\r\n/.test(bat));
-  // nothing is installed without an answer: the question defaults to No after the timeout and no environment switch answers for the user
-  assert.match(bat, /choice \/c YN \/d N \/t 60/); assert.ok(!/AUDIO_MIXER_YES/.test(bat) && !/choice \/c YN \/d Y/.test(bat));
+  // automatic like Linux: the question defaults to Yes after the timeout (N declines); the newest LTS comes from the nodejs.org release API
+  assert.match(bat, /choice \/c YN \/d Y \/t 60/); assert.ok(bat.includes('https://nodejs.org/dist/index.json') && bat.includes('--ensure-node'));
+  const ls = fsx.readFileSync(pathx.join(__dirname, '..', 'platforms', 'windows', 'start-local-server.bat'), 'utf8');
+  assert.ok(ls.includes('start-pc-mode.bat" --ensure-node'));
+  assert.ok(sh.includes('https://nodejs.org/dist/index.json'));
 });
 
 test('Windows setup installs nothing behind the user\'s back: the Visual C++ runtime is asked for (silent installs install nothing), no start at login', () => {
