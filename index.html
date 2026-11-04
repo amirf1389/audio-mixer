@@ -19092,7 +19092,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
         // e.g. 'http://203.0.113.7:8780'. Empty = SUBMIT TO VENDOR uses the e-mail draft. Plain http is accepted here only, for this address: a request holds
         // a name, an e-mail and a machine code, nothing secret, and no key ever travels this way (keys go back by e-mail).
         const VENDOR_SERVER = '';
-        function vendorServer() { const v = String(VENDOR_SERVER || '').replace(/\/+$/, ''); return /^https?:\/\/[\w.-]+(:\d+)?$/.test(v) ? v : null; }   // where SUBMIT TO VENDOR's e-mail draft goes when no update server is set (localStorage halx_vendor_email overrides)
+        function vendorServer() { const v = String(VENDOR_SERVER || '').replace(/\/+$/, ''); return /^https?:\/\/[\w.-]+(:\d+)?$/.test(v) ? v : null; }
         function licenseRequestOrigin() {
             const own = httpsUrl(store.get('halx_ota_url') || ''); if (!own) return null;
             try { const u = new URL(own); u.pathname = u.pathname.replace(/\/(?:[a-z0-9-]+\/)?update\.json$/i, '') || '/'; u.search = ''; u.hash = ''; return u.href.replace(/\/+$/, ''); } catch (e) { return null; }
