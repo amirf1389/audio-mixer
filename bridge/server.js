@@ -40,6 +40,7 @@ const sdk = require('./sdk');
 const wasapiExclusive = require('./wasapi-exclusive');
 const levels = require('./levels');
 const control = require('./control');
+const licenseClient = require('./license-client');
 const virtualHub = require('./virtual').hub;
 const { cachedNowPlaying } = require('./nowplaying');
 const { groupInterfaces } = require('./interfaces');
@@ -110,10 +111,19 @@ async function handle(req, res) {
   if (req.method === 'OPTIONS') return send(res, 204, '', { ...cors, 'Access-Control-Allow-Methods': 'GET, POST', 'Access-Control-Allow-Headers': 'Content-Type, X-Mixer-Action' });
   const url = new URL(req.url, `http://${HOST}`);
   if (req.method === 'POST' && url.pathname === '/api/license/activate') return handleAction(req, res, cors, 'license', async body => {
+    const key = String(body.key || '').trim().replace(/\s+/g, '');
+    const remote = await licenseClient.activate(key, license.machineId());     // the 4-computer device lock (when LICENSE_SERVER_URL is set)
+    if (remote.ok === false) return [remote.status === 409 ? 409 : 400, { ok: false, reason: 'device-limit', error: remote.message }];
+    const stored = license.readStored();
+    if (remote.offline && !(stored && stored.key === key)) return [503, { ok: false, error: 'Could not reach the license server to check how many computers use this key. Connect to the internet and try again.' }];
     const r = license.activate(body.key);
     return r.ok ? [200, r] : [400, r];
   });
-  if (req.method === 'POST' && url.pathname === '/api/license/deactivate') return handleAction(req, res, cors, 'license', async () => [200, license.deactivate()], false);
+  if (req.method === 'POST' && url.pathname === '/api/license/deactivate') return handleAction(req, res, cors, 'license', async () => {
+    const stored = license.readStored();
+    if (stored && stored.key) await licenseClient.deactivate(stored.key, license.machineId());
+    return [200, license.deactivate()];
+  }, false);
   if (req.method === 'POST' && url.pathname === '/api/update/download') return handleAction(req, res, cors, 'update', async () => {
     if (!license.hasFeature(license.status(), 'ota')) return [402, { ok: false, needs: 'ota', error: 'Downloading updates needs the PRO or STUDIO plan. You can still check for updates.' }];
     return [200, await updater.download({ current: VERSION })];
