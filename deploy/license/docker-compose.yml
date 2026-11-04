@@ -1,0 +1,17 @@
+# From the repository root:
+#   LICENSE_ADMIN_TOKEN=... docker compose -f deploy/license/docker-compose.yml up -d
+# The vendor private key is read from ./secrets/vendor-private.pem (never committed, never in the image).
+# Port 8787 is for nginx / Caddy on the same host (TLS there); do not publish it to the internet without TLS.
+services:
+  license:
+    build: { context: ../.., dockerfile: deploy/license/Dockerfile }
+    restart: unless-stopped
+    ports: ["127.0.0.1:8787:8787"]
+    environment:
+      LICENSE_ADMIN_TOKEN: ${LICENSE_ADMIN_TOKEN:?set LICENSE_ADMIN_TOKEN (32+ characters)}
+      LICENSE_PRIVATE_KEY_FILE: /secrets/vendor-private.pem
+    volumes:
+      - ../../secrets/vendor-private.pem:/secrets/vendor-private.pem:ro
+      - license-data:/data
+volumes:
+  license-data:
