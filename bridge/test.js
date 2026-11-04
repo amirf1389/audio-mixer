@@ -5156,6 +5156,22 @@ test('generator public listener (--public): only /request-license, /update.json 
     now += 61000; assert.strictEqual(await call('POST', '/request-license', { kind: 'license-request', plan: 'pro' }), 200);
   } finally { srv.close(); fsx.rmSync(tmp, { recursive: true, force: true }); }
   const app = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
-  assert.ok(app.includes('const origin = licenseRequestOrigin() || vendorServer();') && app.includes("const VENDOR_SERVER = '"));
+  assert.ok(app.includes('const origin = licenseRequestOrigin() || vendorServer() || await vendorServerPublished();') && app.includes("const VENDOR_SERVER = '"));
   const kg = require('../scripts/build-keygen'); assert.strictEqual(kg.NAMES['windows-x64'], 'AmF X1 Key Generator.exe');
+});
+
+test('vendor address: the generator signs {server} into releases/vendor.json (and serves /vendor.json); the app fetches it from GitHub and checks the signature', async () => {
+  const gen = require('../scripts/license-generator'), L = require('../scripts/license'), up = require('./update');
+  const tmp = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'vend-')); fsx.mkdirSync(pathx.join(tmp, 'p', 'releases'), { recursive: true });
+  try {
+    L.initKeys(pathx.join(tmp, 'v'), { pin: '482916' });
+    const r = gen.vendorPublish(pathx.join(tmp, 'v'), pathx.join(tmp, 'p'), L.loadPrivate(pathx.join(tmp, 'v'), '482916'), 'http://203.0.113.7:8780');
+    const env = JSON.parse(fsx.readFileSync(r.repoFile, 'utf8'));
+    const v = up.verifyManifest(env, L.loadPublic(pathx.join(tmp, 'v'))); assert.strictEqual(v.ok, true); assert.strictEqual(v.manifest.server, 'http://203.0.113.7:8780'); assert.strictEqual(v.manifest.kind, 'vendor');
+    assert.throws(() => gen.vendorPublish(pathx.join(tmp, 'v'), pathx.join(tmp, 'p'), L.loadPrivate(pathx.join(tmp, 'v'), '482916'), 'javascript:alert(1)'), /not an address/);
+    assert.strictEqual(await gen.publicIp(async () => ({ json: async () => ({ ip: '198.51.100.4' }) })), '198.51.100.4');
+    assert.strictEqual(await gen.publicIp(async () => { throw new Error('offline'); }), null);
+  } finally { fsx.rmSync(tmp, { recursive: true, force: true }); }
+  const app = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  assert.ok(app.includes("const VENDOR_JSON_URL = 'https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/vendor.json'") && app.includes("m.kind !== 'vendor'") && app.includes('crypto.subtle.verify'));
 });
