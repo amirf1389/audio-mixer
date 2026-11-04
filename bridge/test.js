@@ -4987,3 +4987,23 @@ test('channel VU meters: the strip ladder is the scale, VU ballistics and the pe
   assert.ok(v.step(m, 0, 0, 2500).peakDb < -15);                                            // then falls ~20 dB/s
   assert.strictEqual(v.label(-Infinity), '-inf'); assert.strictEqual(v.label(-3.25), '-3.3');
 });
+
+test('AI DSP: feedback detector finds a narrow standing peak, de-esser and AI rules, speaker watts', () => {
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  const i = html.indexOf('    (function () {\n        \'use strict\';\n        const POWER'), j = html.indexOf('        // its own throttled loop', i);
+  assert.ok(i > 0 && j > i);
+  const window = {}, localStorage = { getItem: () => null, setItem() {} };   // eslint-disable-line no-unused-vars
+  eval(html.slice(i, j).replace("(function () {\n        'use strict';", '{') + '}');   // eslint-disable-line no-eval
+  const D = window.aiDsp, sr = 48000, fft = 4096, spec = new Float32Array(2048).fill(-80);
+  for (let k = 0; k < spec.length; k++) spec[k] = -80 + Math.sin(k) * 2;   // a ragged noise floor
+  const bin = Math.round(2500 / (sr / fft)); spec[bin] = -20; spec[bin - 1] = -32; spec[bin + 1] = -30;
+  const h = D.detectHowl(spec, sr, fft, { sens: 14 });
+  assert.strictEqual(h.length, 1); assert.ok(Math.abs(h[0].hz - 2500) < 15, String(h[0].hz));
+  const broad = new Float32Array(2048).fill(-80); for (let k = bin - 40; k < bin + 40; k++) broad[k] = -30;   // broadband: not feedback
+  assert.strictEqual(D.detectHowl(broad, sr, fft, { sens: 14 }).length, 0);
+  assert.strictEqual(D.deessGainDb(-40, -30, 8), 0); assert.strictEqual(D.deessGainDb(-20, -30, 8), -5); assert.strictEqual(D.deessGainDb(0, -30, 8), -8);
+  assert.deepStrictEqual(D.suggest({ sibHz: 7234, sibDb: -24, floorDb: -70, howls: 3 }), { freq: 7200, thr: -30, sens: 10, depth: 15, afs: true });
+  assert.ok(Math.abs(D.speakerWatts(Math.SQRT1_2, 100) - 100) < 1e-9); assert.ok(Math.abs(D.speakerWatts(Math.SQRT1_2 / 10, 100) - 1) < 1e-9);   // -20 dB = 1/100 of the power
+  assert.deepStrictEqual(Object.keys(D.POWER), ['eco', 'balanced', 'performance']); assert.deepStrictEqual(Object.keys(D.OUTPUT), ['safe', 'normal', 'max']);
+  assert.ok(html.includes('id="aidsp-panel"') && html.includes("n.msIn = g.in"), 'the panel ships and the block splices ahead of mid/side');
+});
