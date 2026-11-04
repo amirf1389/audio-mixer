@@ -21,7 +21,8 @@ const HOMEPAGE = 'https://github.com/amirf1389/audio-mixer';
 const LAUNCHER_LINUX = `#!/bin/sh
 # Audio Mixer: starts the local server and opens the mixer in the browser (PC mode). Options are passed on, for example --no-open or --port 8800.
 # Node.js 18+ is installed automatically from nodejs.org when missing (into ~/.local/share/audio-mixer, checksum verified, no administrator rights),
-# and the native audio module (Audify) is installed once. AUDIO_MIXER_YES=1 skips the questions, AUDIO_MIXER_NO_NATIVE=1 skips the audio module.
+# and the bundled native engine does the audio I/O; where it does not run, the Audify module is installed once. AUDIO_MIXER_YES=1 skips the questions,
+# AUDIO_MIXER_NO_NATIVE=1 skips the audio module.
 APP=/${OPT}
 . "$APP/ensure-node.sh"
 am_splash "$APP" "$@"
@@ -147,13 +148,36 @@ function setModes(root) {
 }
 
 // ── Debian package ──
-function buildDeb({ out = path.join(ROOT, 'dist'), app = build({ out }) } = {}) {
+// The native engine for Linux x86-64 (audiomixer-native: the audio I/O, see bridge/native-engine.js), built with CMake into dist/cache and shared by
+// the packages. null when this machine cannot build it; the packages then go out without it. Where the engine does not run (ARM boards, an older
+// C library) the launcher installs Audify instead (platforms/linux/ensure-node.sh, am_ensure_audio).
+function linuxEngine({ run = spawnSync, platform = process.platform, arch = process.arch } = {}) {
+  if (platform !== 'linux' || arch !== 'x64') return null;
+  const dir = path.join(ROOT, 'dist', 'cache', 'engine-linux-x64');
+  const ok = args => { const r = run('cmake', args, { encoding: 'utf8' }); return !!r && r.status === 0; };
+  if (!ok(['-S', path.join(ROOT, 'engine', 'cpp'), '-B', dir, '-DCMAKE_BUILD_TYPE=Release']) || !ok(['--build', dir, '--target', 'audiomixer-native', '-j', '4'])) return null;
+  const exe = path.join(dir, 'audiomixer-native');
+  return fs.existsSync(exe) ? exe : null;
+}
+// Puts the engine into an app folder and lists it in the app's MANIFEST.sha256, so the verification scan covers it.
+function addEngine(appDir, exe) {
+  if (!exe) return false;
+  const to = path.join(appDir, 'audiomixer-native');
+  fs.copyFileSync(exe, to);
+  fs.chmodSync(to, 0o755);
+  const mf = path.join(appDir, 'MANIFEST.sha256');
+  if (fs.existsSync(mf)) fs.appendFileSync(mf, `${crypto.createHash('sha256').update(fs.readFileSync(to)).digest('hex')}  audiomixer-native\n`);
+  return true;
+}
+
+function buildDeb({ out = path.join(ROOT, 'dist'), app = build({ out }), engine = linuxEngine() } = {}) {
   const outAbs = path.resolve(out), version = app.version;
   const root = path.join(outAbs, 'unix', 'deb');
   fs.rmSync(root, { recursive: true, force: true });
   const opt = path.join(root, OPT);
   fs.cpSync(app.dest, opt, { recursive: true });
   for (const f of ['start-pc-mode.bat', 'start-local-server.bat', 'start-pc-mode.sh']) fs.rmSync(path.join(opt, f), { force: true });   // Windows launchers / project-folder launcher
+  addEngine(opt, engine);
   const put = (rel, text, mode = 0o644) => { const f = path.join(root, rel); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, text); fs.chmodSync(f, mode); };
   put('usr/bin/audio-mixer', LAUNCHER_LINUX, 0o755);
   put('usr/share/applications/audio-mixer.desktop', desktopEntry());
@@ -169,6 +193,7 @@ function buildDeb({ out = path.join(ROOT, 'dist'), app = build({ out }) } = {}) 
   const modeTree = d => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const f = path.join(d, e.name); if (e.isDirectory()) { fs.chmodSync(f, 0o755); modeTree(f); } else if (!f.endsWith('/usr/bin/audio-mixer')) fs.chmodSync(f, 0o644); } };
   modeTree(root);
   for (const f of ['client/cli.js', 'bridge/server.js']) fs.chmodSync(path.join(opt, f), 0o755);
+  if (fs.existsSync(path.join(opt, 'audiomixer-native'))) fs.chmodSync(path.join(opt, 'audiomixer-native'), 0o755);
   const files = listFiles(root);
   const deb = path.join(root, 'DEBIAN');
   fs.mkdirSync(deb);
@@ -344,7 +369,7 @@ function buildMac({ out = path.join(ROOT, 'dist'), app = build({ out }) } = {}) 
 const LINUX_INSTALL = `#!/bin/sh
 # Installs Audio Mixer on any Linux distribution: as root into /opt/audio-mixer (command in /usr/local/bin, menu entry for everyone), otherwise into
 # ~/.local/share/audio-mixer-app (command in ~/.local/bin, menu entry for you). Node.js 18+ with npm is downloaded when missing (official build from
-# nodejs.org, checksum verified, into ~/.local/share/audio-mixer, no administrator rights) and the native audio module (Audify) is installed.
+# nodejs.org, checksum verified, into ~/.local/share/audio-mixer, no administrator rights) and, where the bundled engine does not run, the Audify module.
 #   sh install.sh [--yes]        --yes: no questions (also AUDIO_MIXER_YES=1);  AUDIO_MIXER_NO_NATIVE=1 skips the audio module
 set -e
 cd "$(dirname "$0")"
@@ -420,13 +445,14 @@ echo "Audio Mixer removed."
 `;
 
 // AudioMixer-<version>-linux.tar.gz: install.sh / uninstall.sh for every distribution (the .deb is for Debian / Ubuntu)
-function buildLinuxTar({ out = path.join(ROOT, 'dist'), app = build({ out }) } = {}) {
+function buildLinuxTar({ out = path.join(ROOT, 'dist'), app = build({ out }), engine = linuxEngine() } = {}) {
   const outAbs = path.resolve(out), version = app.version;
   const base = path.join(outAbs, 'unix', 'linux'), root = path.join(base, `audio-mixer-${version}`);
   fs.rmSync(base, { recursive: true, force: true });
   const dest = path.join(root, 'app');
   fs.cpSync(app.dest, dest, { recursive: true });
   for (const f of ['start-pc-mode.bat', 'start-local-server.bat', 'start-pc-mode.sh']) fs.rmSync(path.join(dest, f), { force: true });
+  addEngine(dest, engine);
   const put = (rel, text, mode) => { const f = path.join(root, rel); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, text); fs.chmodSync(f, mode); };
   put('app/audio-mixer', LAUNCHER_PORTABLE, 0o755);
   put('app/uninstall.sh', LINUX_UNINSTALL, 0o755);
@@ -446,4 +472,4 @@ if (require.main === module) {
   console.log(`Linux: ${l.tar}\n     SHA-256 ${l.sha256}`);
   console.log(`DEB: ${d.deb}\n     SHA-256 ${d.sha256}\nmacOS: ${m.tar}\n     SHA-256 ${m.sha256}\nNeither package is signed or notarized.`);
 }
-module.exports = { MAC_SYSTEM_ENV, MIME_XML, openDesktopEntry, profileSh, environmentConf, icns, buildDeb, buildMac, controlFile, desktopEntry, systemdUserUnit, infoPlist, LAUNCHER_LINUX, MAC_LAUNCHER, MAC_INSTALL, MAC_UNINSTALL, MAC_COMMAND, LAUNCHER_PORTABLE, LINUX_INSTALL, LINUX_UNINSTALL, buildLinuxTar };
+module.exports = { linuxEngine, addEngine, MAC_SYSTEM_ENV, MIME_XML, openDesktopEntry, profileSh, environmentConf, icns, buildDeb, buildMac, controlFile, desktopEntry, systemdUserUnit, infoPlist, LAUNCHER_LINUX, MAC_LAUNCHER, MAC_INSTALL, MAC_UNINSTALL, MAC_COMMAND, LAUNCHER_PORTABLE, LINUX_INSTALL, LINUX_UNINSTALL, buildLinuxTar };

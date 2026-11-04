@@ -130,19 +130,27 @@ async function cmdDoctor(port) {
   return bad ? 1 : 0;
 }
 
-// Installs the native audio modules. Default: bridge/ dependencies (Audify and naudiodon2). --user: only Audify (prebuilt binary, no compiler),
+// Installs the native audio modules. Default: bridge/ dependencies (naudiodon2). --user: Audify (prebuilt binary, no compiler),
 // into ~/.local/share/audio-mixer/modules, which the launchers put on NODE_PATH (the app folder may be read-only, e.g. /opt/audio-mixer).
+// Audify is only installed where the project's own engine (audiomixer-native) does not run: macOS, and Linux machines the x86-64 engine does not run on.
+function engineRuns() {
+  const exe = require('../bridge/native-engine').enginePath();
+  if (!exe) return false;
+  try { return require('node:child_process').spawnSync(exe, ['--list'], { timeout: 10000, windowsHide: true }).status === 0; } catch (_) { return false; }
+}
+
 function cmdSetup(argv = []) {
   const { spawn } = require('node:child_process');
   const path = require('node:path'), os = require('node:os');
+  if (argv.includes('--user') && engineRuns()) { console.log('The native engine (audiomixer-native) runs on this computer: Audify is not needed.'); return Promise.resolve(0); }
   let cwd = path.resolve(__dirname, '..', 'bridge'), args = ['install'];
   if (argv.includes('--user')) {
     cwd = path.join(process.env.AUDIO_MIXER_HOME || path.join(os.homedir(), '.local', 'share', 'audio-mixer'), 'modules');
     fs.mkdirSync(cwd, { recursive: true });
-    if (!fs.existsSync(path.join(cwd, 'package.json'))) fs.writeFileSync(path.join(cwd, 'package.json'), '{"name":"audio-mixer-modules","private":true}\n');
+    if (!fs.existsSync(path.join(cwd, 'package.json'))) fs.writeFileSync(path.join(cwd, 'package.json'), '{"name":"audio-mixer-modules","private":true,"overrides":{"audify":{"cmake-js":{"tar":"^7.5.22"}}}}\n');   // the override pins a patched tar under Audify's build tool
     args = ['install', '--no-audit', '--no-fund', 'audify'];
     console.log(`Installing the Audify native audio module in ${cwd} ...`);
-  } else console.log('Installing the native audio modules (Audify, PortAudio) in bridge/ (this can take a minute) ...');
+  } else console.log('Installing the native audio module (PortAudio) in bridge/ (this can take a minute) ...');
   return new Promise(resolve => {
     const n = findNpm(), env = { ...process.env, PATH: path.dirname(process.execPath) + path.delimiter + (process.env.PATH || '') };
     const c = spawn(n.cmd, [...n.pre, ...args], { cwd, stdio: 'inherit', env });

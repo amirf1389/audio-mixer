@@ -75,16 +75,19 @@ am_ensure_node() {
   return 0
 }
 
-# Native audio module (Audify = RtAudio: ALSA / JACK / PulseAudio / Core Audio; prebuilt binary, no compiler) installed once into the user's folder.
+# Native audio: the project's own engine (audiomixer-native in the app folder, see bridge/native-engine.js) when it runs on this machine;
+# otherwise the Audify module (RtAudio: ALSA / JACK / PulseAudio / Core Audio; prebuilt binary, no compiler), installed once into the user's folder.
+# Audify is the fallback for macOS and for Linux machines the bundled x86-64 engine does not run on (ARM boards).
 # $1 = the app folder (checked first, so a bundled module is never installed twice). Never fatal: without it the mixer runs in web-audio mode.
 am_ensure_audio() {
   [ "${AUDIO_MIXER_NO_NATIVE:-}" = "1" ] && return 0
+  if [ -x "$1/audiomixer-native" ] && "$1/audiomixer-native" --list >/dev/null 2>&1; then return 0; fi
   [ -d "$1/bridge/node_modules/audify" ] && return 0
   [ -d "$AM_HOME/modules/node_modules/audify" ] && return 0
   command -v npm >/dev/null 2>&1 || { echo "npm not found: skipping the native audio module (the mixer still works with browser audio)." >&2; return 0; }
   am_ask "Install the native audio module (Audify, a prebuilt download of about 1 MB) for ASIO-style low-latency audio?" || return 0
   mkdir -p "$AM_HOME/modules" || return 0
-  [ -f "$AM_HOME/modules/package.json" ] || echo '{"name":"audio-mixer-modules","private":true}' > "$AM_HOME/modules/package.json"
+  [ -f "$AM_HOME/modules/package.json" ] || echo '{"name":"audio-mixer-modules","private":true,"overrides":{"audify":{"cmake-js":{"tar":"^7.5.22"}}}}' > "$AM_HOME/modules/package.json"
   if (cd "$AM_HOME/modules" && npm install --no-audit --no-fund audify); then echo "Native audio module installed."; else echo "Could not install the native audio module; continuing with browser audio." >&2; fi
   return 0
 }
