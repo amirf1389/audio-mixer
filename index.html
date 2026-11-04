@@ -18805,15 +18805,17 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             },
             async submitRequest() {
                 const req = await this.requestKey(), btn = $('lic-req-submit');
-                const origin = licenseRequestOrigin();
+                // the update server set in SETTINGS -> OTA, else the vendor's own key generator on the internet (VENDOR_SERVER), else e-mail
+                const origin = licenseRequestOrigin() || vendorServer();
                 if (!origin) return this.submitWithoutServer(req);
                 if (btn) { btn.disabled = true; btn.textContent = 'SENDING...'; }
                 try {
                     const r = await fetch(origin + '/request-license', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(req) });
                     const j = await r.json().catch(() => null);
                     if (r.ok && j && j.ok) notify('License request submitted' + (j.emailed ? ' – check your e-mail for a receipt.' : '.'), 'paper-plane');
-                    else notify('The update server rejected the request: ' + ((j && j.error) || ('HTTP ' + r.status)), 'triangle-exclamation');
-                } catch (e) { notify('Could not reach the update server: ' + (e.message || 'network error'), 'triangle-exclamation'); }
+                    else if (r.status === 429) notify('Too many requests: wait a minute and try again.', 'triangle-exclamation');
+                    else { notify('The vendor server did not take the request: sending it by e-mail instead.', 'envelope'); return this.submitWithoutServer(req); }
+                } catch (e) { notify('The vendor server could not be reached: sending the request by e-mail instead.', 'envelope'); return this.submitWithoutServer(req); }
                 finally { if (btn) { btn.disabled = false; btn.textContent = 'SUBMIT TO VENDOR'; } }
                 return req;
             },
@@ -19085,7 +19087,12 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
         // the origin to POST a license request to: the configured update server (SETTINGS -> OTA), with "/update.json" or "/<channel>/update.json" stripped
         const VENDOR_EMAIL = 'badriamirfakhri@gmail.com';
         // The vendor's key request page (deploy/website/license.html as published on the website). Empty = the WEBSITE button stays hidden.
-        const WEBSITE_URL = 'https://amirfakhri.interactivelink.site/keys';   // where SUBMIT TO VENDOR's e-mail draft goes when no update server is set (localStorage halx_vendor_email overrides)
+        const WEBSITE_URL = 'https://amirfakhri.interactivelink.site/keys';
+        // The vendor's key generator reachable from the internet ("AmF X1 Key Generator.exe" listens for requests on port 8780; the router forwards it):
+        // e.g. 'http://203.0.113.7:8780'. Empty = SUBMIT TO VENDOR uses the e-mail draft. Plain http is accepted here only, for this address: a request holds
+        // a name, an e-mail and a machine code, nothing secret, and no key ever travels this way (keys go back by e-mail).
+        const VENDOR_SERVER = '';
+        function vendorServer() { const v = String(VENDOR_SERVER || '').replace(/\/+$/, ''); return /^https?:\/\/[\w.-]+(:\d+)?$/.test(v) ? v : null; }
         function licenseRequestOrigin() {
             const own = httpsUrl(store.get('halx_ota_url') || ''); if (!own) return null;
             try { const u = new URL(own); u.pathname = u.pathname.replace(/\/(?:[a-z0-9-]+\/)?update\.json$/i, '') || '/'; u.search = ''; u.hash = ''; return u.href.replace(/\/+$/, ''); } catch (e) { return null; }
