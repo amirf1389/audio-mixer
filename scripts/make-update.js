@@ -29,7 +29,8 @@ function build({ releases, flatUrls = false, version, base, notes = [], now = ne
     let name = null, f = null;
     for (const n of [].concat(names)) { const c = releases ? path.join(releases, n) : findRelease(n, osOfKey(key)); if (c && fs.existsSync(c)) { name = n; f = c; break; } }
     if (!f) continue;
-    files[key] = { name, url: `${base}/${releases || flatUrls ? '' : releasesRel(key) + '/'}${encodeURIComponent(name)}`, size: fs.statSync(f).size, sha256: sha(f) };
+    const rel = releases || flatUrls ? '' : path.relative(ROOT, path.dirname(f)).split(path.sep).map(encodeURIComponent).join('/') + '/';   // where the file really is (releases/<os>/ or platforms/<os>/releases/)
+    files[key] = { name, url: `${base}/${rel}${encodeURIComponent(name)}`, size: fs.statSync(f).size, sha256: sha(f) };
   }
   if (!Object.keys(files).length) throw new Error('no release files for version ' + version + ' in ' + (releases || '<os>/releases'));
   return { product: 'audio-mixer', version, channel: 'stable', released: now.toISOString().slice(0, 10), notes, files };

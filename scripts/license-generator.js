@@ -19,6 +19,12 @@
 // PIN LOCK (vendor): the key folder is created locked (private.pem.enc, scripts/license-vault.js). The page asks for the PIN once; the unlocked key is
 // held in THIS process's memory only, and dropped by LOCK, after 15 minutes without use, or when the generator stops. 5 wrong PINs in a row lock the
 // page out for 60 s, and every wrong PIN waits 1 s. A plain private.pem from before keeps working, and the page offers to lock it.
+// LOCAL OTA (vendor): the same process is a small update server for the app, on the same 127.0.0.1:8799 address:
+//   GET  /update.json        the signed manifest made with PUBLISH UPDATE on the page (kept in <key folder>/ota/update.json; signing needs the unlocked key)
+//   GET  /releases/<file>    the installers of that manifest (platforms/<os>/releases or releases/<os>), HEAD and Range supported
+//   POST /request-license    the app's SUBMIT TO VENDOR: kept in <key folder>/license-requests.jsonl and listed in the page's INBOX (USE fills the form)
+// These three answer any origin (the app runs as a file, on localhost:8765 or elsewhere on this computer) but only on 127.0.0.1 (the Host check stays).
+// In the app: SETTINGS -> OTA -> http://127.0.0.1:8799/update.json; then SUBMIT TO VENDOR posts here as well.
 // Several keys at once: "How many" > 1 returns that many keys (random serials) and a CSV to download.
 const http = require('node:http');
 const crypto = require('node:crypto');
@@ -26,6 +32,9 @@ const lic = require('../bridge/license');
 const { originAllowed, hostAllowed } = require('../bridge/server');
 
 const vault = require('./license-vault');
+const fs = require('node:fs');
+const path = require('node:path');
+const layout = require('./layout');
 const IDLE_MS = 15 * 60 * 1000, MAX_TRIES = 5, LOCKOUT_MS = 60 * 1000;
 const KINDS = {
   vendor: { mod: require('./license.js'), dirFn: 'vendorDir', label: 'VENDOR', needsName: false, canInit: true },   // no name: "Customer <serial>"
@@ -108,6 +117,17 @@ textarea,#key-out{width:100%;background:var(--panel2);border:1px solid var(--lin
     </form>
     <p class="err" id="err" hidden></p>
   </section>
+  <section class="card" id="inbox-card" hidden>
+    <h2>INBOX: KEY REQUESTS FROM THE APP</h2>
+    <div id="inbox" class="mono"></div>
+  </section>
+  <section class="card" id="ota-card" hidden>
+    <h2>LOCAL UPDATE SERVER (OTA)</h2>
+    <p class="dim">In the app: SETTINGS &rarr; OTA &rarr; <span class="mono" id="ota-url"></span></p>
+    <p id="ota-state" class="mono"></p>
+    <label class="dim"><input type="checkbox" id="ota-repo"> also write releases/update.json in the project (for GitHub)</label>
+    <button class="btn" id="publish" type="button">PUBLISH UPDATE</button>
+  </section>
   <section class="card" id="result" hidden>
     <h2>SIGNED KEY</h2>
     <div id="key-out" class="mono"></div>
@@ -158,6 +178,26 @@ textarea,#key-out{width:100%;background:var(--panel2);border:1px solid var(--lin
   $('lockplain').addEventListener('click', function () {
     if ($('lpin1').value !== $('lpin2').value) return showErr('The two PINs differ.');
     post('/lock-file', { pin: $('lpin1').value }).then(function (j) { $('lpin1').value = $('lpin2').value = ''; if (!j || !j.ok) showErr((j && j.error) || 'Could not lock.'); else refresh(); });
+  });
+  var fill = function (r) { if (r.plan && $('plan').querySelector('option[value="' + String(r.plan).replace(/[^a-z]/g, '') + '"]')) $('plan').value = r.plan; $('name').value = r.name || ''; $('email').value = r.email || ''; $('machine').value = r.machineId || ''; $('count').value = 1; window.scrollTo(0, 0); };
+  var loadOta = function () {
+    fetch('/ota/status').then(function (r) { return r.json(); }).then(function (j) {
+      if (!j || !j.ok) return;
+      $('ota-card').hidden = false; $('ota-url').textContent = location.origin + '/update.json';
+      $('ota-state').textContent = (j.published ? 'Published: ' + j.published.version + ' (' + j.published.files + ' files, ' + j.published.at + ')' : 'Nothing published yet.') + ' Project version: ' + j.version + ', ' + j.found + ' installer(s) found.';
+      var box = $('inbox'); box.textContent = ''; $('inbox-card').hidden = !j.requests.length;
+      j.requests.forEach(function (r) {
+        var row = document.createElement('div'); row.style.cssText = 'display:flex;gap:8px;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);padding:6px 0';
+        var t = document.createElement('span'); t.textContent = (r.at ? new Date(r.at).toISOString().slice(0, 16).replace('T', ' ') + '  ' : '') + String(r.plan || '').toUpperCase() + '  ' + (r.name || '(no name)') + '  ' + (r.email || '') + '  ' + (r.machineId || '');
+        var b = document.createElement('button'); b.type = 'button'; b.className = 'pill'; b.textContent = 'USE'; b.addEventListener('click', function () { fill(r); });
+        row.appendChild(t); row.appendChild(b); box.appendChild(row);
+      });
+    }).catch(function () { /* not the vendor kind */ });
+  };
+  loadOta();
+  $('publish').addEventListener('click', function () {
+    $('publish').disabled = true;
+    post('/ota/publish', { repo: $('ota-repo').checked }).then(function (j) { if (!j || !j.ok) { showErr((j && j.error) || 'Could not publish.'); if (j && j.locked) refresh(); } else { $('err').hidden = true; loadOta(); } }).catch(function () { showErr('Could not reach this server.'); }).then(function () { $('publish').disabled = false; });
   });
   $('lockbtn').addEventListener('click', function () { post('/lock', {}).then(function () { $('result').hidden = true; refresh(); }); });
   $('f').addEventListener('submit', function (ev) {
@@ -266,7 +306,38 @@ function initKind(kind, dirArgv, root, pin, session) {
   return { priv: r.priv };
 }
 
-function createServer({ kind = 'vendor', dirArgv = [], root, session = makeSession() } = {}) {
+// ---- local OTA -----------------------------------------------------------------------------------------------------------------------------------
+const otaDir = dir => path.join(dir, 'ota');
+function readJsonl(f, limit) { try { return fs.readFileSync(f, 'utf8').split('\n').filter(Boolean).slice(-limit).reverse().map(l => { try { return JSON.parse(l); } catch (_) { return null; } }).filter(Boolean); } catch (_) { return []; } }
+function otaStatus(dir, root, releases) {
+  const r = root || layout.ROOT; let version = '?'; try { version = JSON.parse(fs.readFileSync(path.join(r, 'package.json'), 'utf8')).version; } catch (_) { /* none */ }
+  let published = null; try { const env = JSON.parse(fs.readFileSync(path.join(otaDir(dir), 'update.json'), 'utf8')), m = JSON.parse(env.payload); published = { version: m.version, files: Object.keys(m.files).length, at: m.released }; } catch (_) { /* none yet */ }
+  let found = 0; try { found = Object.keys(require('./make-update').build({ version, base: 'x', releases }).files).length; } catch (_) { /* none */ }
+  return { version, published, found, requests: readJsonl(path.join(dir, 'license-requests.jsonl'), 50) };
+}
+function otaPublish(dir, root, releases, privateKey, base, alsoRepo) {
+  const r = root || layout.ROOT, version = JSON.parse(fs.readFileSync(path.join(r, 'package.json'), 'utf8')).version;
+  const { signManifest } = require('../bridge/update');
+  const local = require('./make-update').build({ version, base: base + '/releases', flatUrls: true, releases });
+  fs.mkdirSync(otaDir(dir), { recursive: true, mode: 0o700 });
+  fs.writeFileSync(path.join(otaDir(dir), 'update.json'), JSON.stringify(signManifest(local, privateKey), null, 2) + '\n');
+  if (alsoRepo) {   // the same release for the app's default source (GitHub): links to the files where the repository keeps them
+    const gh = require('./make-update').build({ version, base: 'https://raw.githubusercontent.com/amirf1389/audio-mixer/main', releases });
+    fs.writeFileSync(path.join(r, 'releases', 'update.json'), JSON.stringify(signManifest(gh, privateKey), null, 2) + '\n');
+  }
+  return { version, files: Object.keys(local.files).length };
+}
+// the file a published manifest names: from the flat releases folder (tests) or the project's release folders
+function otaFile(dir, releases, name) {
+  if (!/^[\w .+()-]+$/.test(name) || name.includes('..')) return null;
+  let env; try { env = JSON.parse(fs.readFileSync(path.join(otaDir(dir), 'update.json'), 'utf8')); } catch (_) { return null; }
+  const m = JSON.parse(env.payload);
+  if (!Object.values(m.files).some(f => f.name === name)) return null;   // only what was published, never any other file
+  const f = releases ? path.join(releases, name) : layout.findRelease(name);
+  return f && fs.existsSync(f) ? f : null;
+}
+
+function createServer({ kind = 'vendor', dirArgv = [], root, session = makeSession(), releases } = {}) {
   if (!KINDS[kind]) throw new Error('kind must be one of: ' + Object.keys(KINDS).join(', '));
   const send = (res, code, body, headers = {}) => { const t = typeof body === 'string' ? body : JSON.stringify(body); res.writeHead(code, { 'Content-Type': typeof body === 'string' ? 'text/html; charset=utf-8' : 'application/json; charset=utf-8', 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer', ...headers }); res.end(t); };
   const fail = (res, code, error) => send(res, code, { ok: false, error });
@@ -274,9 +345,45 @@ function createServer({ kind = 'vendor', dirArgv = [], root, session = makeSessi
   return http.createServer(async (req, res) => {
     try {
       if (!hostAllowed(req.headers.host)) return fail(res, 403, 'host not allowed');
-      if (!originAllowed(req.headers.origin)) return fail(res, 403, 'origin not allowed');
       const url = new URL(req.url, 'http://x');
+      // the public part of the local update server: any origin (the app is a file, localhost:8765, ...), still only this computer (Host check above)
+      const pub = KINDS[kind].canInit && (url.pathname === '/update.json' || url.pathname.startsWith('/releases/') || url.pathname === '/request-license');
+      if (pub) {
+        const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' };
+        const dir = KINDS[kind].mod[KINDS[kind].dirFn](dirArgv);
+        if (req.method === 'OPTIONS') { res.writeHead(204, cors); return res.end(); }
+        if (url.pathname === '/update.json' && (req.method === 'GET' || req.method === 'HEAD')) {
+          const f = path.join(otaDir(dir), 'update.json'); if (!fs.existsSync(f)) return send(res, 404, { ok: false, error: 'nothing published yet' }, cors);
+          return send(res, 200, fs.readFileSync(f, 'utf8'), { ...cors, 'Content-Type': 'application/json; charset=utf-8' });
+        }
+        if (url.pathname.startsWith('/releases/') && (req.method === 'GET' || req.method === 'HEAD')) {
+          const f = otaFile(dir, releases, decodeURIComponent(url.pathname.slice(10))); if (!f) return send(res, 404, { ok: false, error: 'not found' }, cors);
+          const size = fs.statSync(f).size, m = /^bytes=(\d+)-(\d*)$/.exec(req.headers.range || '');
+          const start = m ? Number(m[1]) : 0, end = m && m[2] ? Math.min(Number(m[2]), size - 1) : size - 1;
+          if (m && start >= size) { res.writeHead(416, { ...cors, 'Content-Range': 'bytes */' + size }); return res.end(); }
+          res.writeHead(m ? 206 : 200, { ...cors, 'Content-Type': 'application/octet-stream', 'Content-Length': end - start + 1, 'Accept-Ranges': 'bytes', 'Content-Disposition': 'attachment; filename="' + path.basename(f).replace(/"/g, '') + '"', ...(m ? { 'Content-Range': `bytes ${start}-${end}/${size}` } : {}) });
+          if (req.method === 'HEAD') return res.end();
+          return fs.createReadStream(f, { start, end }).pipe(res);
+        }
+        if (url.pathname === '/request-license' && req.method === 'POST') {
+          const chunks = []; let n = 0; for await (const c of req) { n += c.length; if (n > 8192) return send(res, 413, { ok: false, error: 'request too large' }, cors); chunks.push(c); }
+          let b; try { b = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch (_) { return send(res, 400, { ok: false, error: 'the body is not JSON' }, cors); }
+          if (!b || b.kind !== 'license-request' || !lic.PLANS[b.plan]) return send(res, 400, { ok: false, error: 'not a license request' }, cors);
+          const rec = { at: Date.now(), plan: b.plan, name: clean(b.name, 80), email: clean(b.email, 120), machineId: clean(b.machineId, 40), platform: clean(b.platform, 40), version: clean(b.version, 20) };
+          if (readJsonl(path.join(dir, 'license-requests.jsonl'), 1000).length >= 1000) return send(res, 429, { ok: false, error: 'the inbox is full' }, cors);
+          fs.mkdirSync(dir, { recursive: true, mode: 0o700 }); fs.appendFileSync(path.join(dir, 'license-requests.jsonl'), JSON.stringify(rec) + '\n', { mode: 0o600 });
+          return send(res, 200, { ok: true, emailed: false }, cors);
+        }
+        return send(res, 405, { ok: false, error: 'method not allowed' }, cors);
+      }
+      if (!originAllowed(req.headers.origin)) return fail(res, 403, 'origin not allowed');
       if (req.method === 'GET' && url.pathname === '/') { const p = pageFor(kind); return send(res, 200, p.body, { 'Content-Security-Policy': p.csp }); }
+      if (req.method === 'GET' && url.pathname === '/ota/status' && KINDS[kind].canInit) return send(res, 200, { ok: true, ...otaStatus(KINDS[kind].mod[KINDS[kind].dirFn](dirArgv), root, releases) });
+      if (req.method === 'POST' && url.pathname === '/ota/publish' && KINDS[kind].canInit) {
+        const dir = KINDS[kind].mod[KINDS[kind].dirFn](dirArgv); let b = {}; try { const chunks = []; for await (const c of req) chunks.push(c); b = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'); } catch (_) { /* defaults */ }
+        try { const key = session.key(dir) || vault.loadKey(dir); return send(res, 200, { ok: true, ...otaPublish(dir, root, releases, key, 'http://127.0.0.1:' + req.socket.localPort, !!b.repo) }); }
+        catch (e) { return e.locked ? send(res, 401, { ok: false, error: e.message, locked: true }) : fail(res, e.status || 500, e.message); }
+      }
       if (req.method === 'GET' && url.pathname === '/status') return send(res, 200, { ok: true, ...keyStatus(kind, dirArgv, session) });
       const readJson = async () => { const chunks = []; let n = 0; for await (const c of req) { n += c.length; if (n > 8192) return null; chunks.push(c); } try { return JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'); } catch (_) { return null; } };
       const dirNow = () => KINDS[kind].mod[KINDS[kind].dirFn](dirArgv);
@@ -327,4 +434,4 @@ if (require.main === module) {
   const code = main(process.argv.slice(2));
   if (code !== 0) process.exit(code);   // 0 means the server is listening (asynchronously): exiting now would kill it before it ever serves a request
 }
-module.exports = { KINDS, page, pageFor, issueKey, keyStatus, initKind, makeSession, createServer, main };
+module.exports = { otaStatus, otaPublish, KINDS, page, pageFor, issueKey, keyStatus, initKind, makeSession, createServer, main };

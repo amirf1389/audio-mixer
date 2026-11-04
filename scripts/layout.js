@@ -42,8 +42,9 @@ const releasesDir = os => path.join(ROOT, 'releases', os);
 const releasesRel = key => { const os = osOfKey(key); return os ? `releases/${os}` : 'releases'; };
 // a release file by name: in the folder of its system, else anywhere in the <os>/releases folders, including releases/native/ (the self-update
 // programs: osOfKey() already returns 'native' for their manifest keys, but 'native' is not a platforms/<os> system, so it stays out of OSES itself)
+// Also platforms/<os>/releases/, where the installers are kept since the old releases/<os>/ folders were removed.
 function findRelease(name, os) {
-  for (const o of os ? [os] : [...OSES, 'native']) { const f = path.join(releasesDir(o), name); if (fs.existsSync(f)) return f; }
+  for (const o of os ? [os] : [...OSES, 'native']) for (const d of [releasesDir(o), path.join(ROOT, 'platforms', o, 'releases')]) { const f = path.join(d, name); if (fs.existsSync(f)) return f; }
   return null;
 }
 
