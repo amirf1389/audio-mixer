@@ -9,7 +9,9 @@
 //     vendor (default)  scripts/license.js's key          (default ~/.audio-mixer-vendor,  or AUDIO_MIXER_VENDOR_DIR  / --dir)
 //     sandbox           scripts/license-sandbox.js's key  (default ~/.audio-mixer-sandbox, or AUDIO_MIXER_SANDBOX_DIR / --dir)
 //     admin             scripts/license-admin.js's key    (default ~/.audio-mixer-admin,   or AUDIO_MIXER_ADMIN_DIR   / --dir)
-//   --port 0 (default) picks a free port and prints the address; a fixed port reopens the same one every time.
+//   --port 8799 (default) is the address the app's GENERATOR button opens; when it is taken a free port is used instead. --port 0 always picks a free one.
+//   The page fills plan / name / e-mail / machine from its address (?plan=&name=&email=&machine=, what the app's button sends), and after a single key
+//   offers ACTIVATE IN AMF X1: http://localhost:8765/#license=<key> (the key stays in the # part, which is never sent to any server).
 //   --open            also opens the page in the default browser (the double-click launchers use it)
 // VENDOR only: when no key pair exists yet, the page offers to create one (the same as `node scripts/license.js init`): the private key is written
 // to the key directory on THIS computer (0600) and the public half into bridge/license-public.json and index.html, which are then committed and
@@ -94,6 +96,7 @@ textarea,#key-out{width:100%;background:var(--panel2);border:1px solid var(--lin
     <div id="key-out" class="mono"></div>
     <p class="dim" id="summary"></p>
     <div class="row2"><button class="btn" id="copy" type="button">COPY</button><button class="btn" id="csv" type="button" hidden>DOWNLOAD CSV</button></div>
+    <p><a id="activate" class="btn" href="#" target="_blank" rel="noopener noreferrer" hidden>ACTIVATE IN AMF X1 (THIS COMPUTER)</a></p>
   </section>
 </main>
 <script>
@@ -103,6 +106,8 @@ textarea,#key-out{width:100%;background:var(--panel2);border:1px solid var(--lin
 (function () {
   var $ = function (id) { return document.getElementById(id); };
   var csvText = '';
+  // filled in from the address: the app's GENERATOR button sends ?plan=&name=&email=&machine=
+  try { var q = new URLSearchParams(location.search); ['plan', 'name', 'email', 'machine'].forEach(function (k) { var v = q.get(k); if (v && $(k)) { if (k !== 'plan' || $(k).querySelector('option[value="' + v.replace(/[^a-z]/g, '') + '"]')) $(k).value = v.slice(0, 120); } }); } catch (e) { /* old browser */ }
   fetch('/status').then(function (r) { return r.json(); }).then(function (j) {
     if (j && j.ok && !j.hasKey) { $('keydir').textContent = j.dir; $('setup').hidden = false; $('gen').hidden = !!j.canInit; if (!j.canInit) { $('init').hidden = true; } }
   }).catch(function () { /* the form still works */ });
@@ -121,9 +126,10 @@ textarea,#key-out{width:100%;background:var(--panel2);border:1px solid var(--lin
       .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
       .then(function (res) {
         if (!res.ok || !res.j || !res.j.ok) { $('err').textContent = (res.j && res.j.error) || 'Could not generate the key.'; $('err').hidden = false; return; }
-        $('key-out').textContent = res.j.keys ? res.j.keys.map(function (x) { return x.id + '  ' + x.key; }).join('\n') : res.j.key;
+        $('key-out').textContent = res.j.keys ? res.j.keys.map(function (x) { return x.id + '  ' + x.key; }).join('\\n') : res.j.key;
         $('summary').textContent = res.j.summary;
         csvText = res.j.csv || ''; $('csv').hidden = !csvText;
+        $('activate').hidden = !!res.j.keys; if (!res.j.keys) $('activate').href = 'http://localhost:8765/#license=' + encodeURIComponent(res.j.key);
         $('result').hidden = false;
       })
       .catch(function () { $('err').textContent = 'Could not reach this server.'; $('err').hidden = false; })
@@ -222,17 +228,19 @@ function createServer({ kind = 'vendor', dirArgv = [], root } = {}) {
 function main(argv) {
   const kind = arg(argv, '--kind', 'vendor');
   if (!KINDS[kind]) { console.error('--kind must be one of: ' + Object.keys(KINDS).join(', ')); return 2; }
-  const port = Number(arg(argv, '--port', 0)) || 0;
+  const want = arg(argv, '--port', '8799'), port = want === '0' ? 0 : Number(want) || 8799;
   const server = createServer({ kind, dirArgv: argv });
-  server.listen(port, '127.0.0.1', () => {
+  server.once('error', e => { if (e.code === 'EADDRINUSE' && port) { console.error(`Port ${port} is in use: using a free port instead (the app's GENERATOR button will not find this one).`); server.listen(0, '127.0.0.1'); } else { console.error('Error: ' + e.message); process.exit(1); } });
+  server.on('listening', () => {
     const url = `http://127.0.0.1:${server.address().port}/`;
     console.log(`Audio Mixer license key generator (${KINDS[kind].label}) on ${url} — open it in a browser on this computer. Ctrl+C to stop.`);
-    if (argv.includes('--open')) {
+    if (argv.includes('--open') && !server.opened) { server.opened = true;
       const { spawn } = require('node:child_process');
       const [cmd, args] = process.platform === 'win32' ? ['cmd', ['/c', 'start', '', url]] : process.platform === 'darwin' ? ['open', [url]] : ['xdg-open', [url]];
       try { spawn(cmd, args, { stdio: 'ignore', detached: true }).unref(); } catch (_) { /* open it by hand */ }
     }
   });
+  server.listen(port, '127.0.0.1');
   return 0;
 }
 

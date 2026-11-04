@@ -7851,7 +7851,7 @@ const cArea = document.getElementById('content-area');
                           <input id="lic-req-name" maxlength="80" placeholder="Name" autocomplete="off" class="bg-black border border-white/10 rounded px-1.5 py-1 text-slate-200 outline-none text-[7.5px] min-w-0">
                           <input id="lic-req-email" maxlength="120" placeholder="E-mail" autocomplete="off" class="bg-black border border-white/10 rounded px-1.5 py-1 text-slate-200 outline-none text-[7.5px] min-w-0">
                         </div>
-                        <div class="flex gap-1.5"><button id="lic-req-submit" type="button" class="flex-1 py-1 rounded bg-cyan-500/20 hover:bg-cyan-500 hover:text-black text-cyan-400 border border-cyan-500/40 font-bold uppercase text-[7.5px] transition">SUBMIT TO VENDOR</button><button id="lic-req-file" type="button" class="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-slate-200 font-bold uppercase text-[7.5px] transition">FILE</button><button id="lic-req-copy" type="button" class="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-slate-200 font-bold uppercase text-[7.5px] transition">COPY</button></div>
+                        <div class="flex gap-1.5"><button id="lic-req-submit" type="button" class="flex-1 py-1 rounded bg-cyan-500/20 hover:bg-cyan-500 hover:text-black text-cyan-400 border border-cyan-500/40 font-bold uppercase text-[7.5px] transition">SUBMIT TO VENDOR</button><button id="lic-req-file" type="button" class="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-slate-200 font-bold uppercase text-[7.5px] transition">FILE</button><button id="lic-req-copy" type="button" class="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-slate-200 font-bold uppercase text-[7.5px] transition">COPY</button><button id="lic-req-generator" type="button" title="Owner's computer: opens the local key generator (scripts/license-generator.bat) with this machine code, plan, name and e-mail filled in" class="px-2 py-1 rounded bg-amber-500/20 hover:bg-amber-500 hover:text-black text-amber-400 border border-amber-500/40 font-bold uppercase text-[7.5px] transition">GENERATOR</button></div>
                         <span class="text-slate-500 block text-[6.5px]">SUBMIT sends this request to the update server set in SETTINGS → OTA (its /request-license); FILE / COPY keep the old offline way.</span>
                       </div>
                     </div>
@@ -18749,6 +18749,25 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 if (!req) req = { app: 'audio-mixer', kind: 'license-request', v: 1, machineId: this.machineId || null, plan, name: name.slice(0, 80), email: email.slice(0, 120), platform: (navigator.platform || '').slice(0, 40), version: this.version || null, at: Date.now(), sandbox: false };
                 return req;
             },
+            // The owner's local key generator (scripts/license-generator.js, fixed port 8799 on 127.0.0.1) opened with this request filled in.
+            // It only answers on the computer that runs it, so for a customer the link does nothing: they use SUBMIT / FILE / COPY.
+            async openGenerator() {
+                const req = await this.requestKey(), q = new URLSearchParams({ plan: req.plan || 'pro', name: req.name || '', email: req.email || '', machine: req.machineId || '' });
+                const w = window.open('http://127.0.0.1:8799/?' + q.toString(), '_blank', 'noopener');
+                notify(w ? 'Key generator opened (start scripts/license-generator.bat first if the page does not load)' : 'Pop-up blocked: open http://127.0.0.1:8799/ yourself', 'key');
+                return req;
+            },
+            // A key handed over in the address (#license=AMIX1....), e.g. from the generator's ACTIVATE IN AMF X1 link: filled into the key box on the
+            // license page and removed from the address; activating is still the person's own click.
+            takeKeyFromAddress() {
+                const m = /[#&]license=(AMIX1\.[A-Za-z0-9_.-]+)/.exec(location.hash || '');
+                if (!m) return false;
+                try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { location.hash = ''; }
+                const box = $('lic-key-input'); if (box) box.value = m[1];
+                if (typeof window.switchTab === 'function') window.switchTab('renew');
+                notify('License key received: press ACTIVATE to use it', 'key');
+                return true;
+            },
             async downloadRequest() {
                 const req = await this.requestKey();
                 const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(req, null, 2) + '\n'], { type: 'application/json' })); a.download = 'audio-mixer-license-request.json';
@@ -19216,7 +19235,8 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             const on = (id, fn) => { const e = $(id); if (e && !e.dataset.wired) { e.dataset.wired = '1'; e.addEventListener('click', fn); } };
             on('lic-activate', () => L.activate());
             on('lic-deactivate', () => L.deactivate());
-            on('lic-req-file', () => L.downloadRequest()); on('lic-req-copy', () => L.copyRequest()); on('lic-req-submit', () => L.submitRequest());
+            on('lic-req-file', () => L.downloadRequest()); on('lic-req-copy', () => L.copyRequest()); on('lic-req-submit', () => L.submitRequest()); on('lic-req-generator', () => L.openGenerator());
+            setTimeout(() => L.takeKeyFromAddress(), 0); window.addEventListener('hashchange', () => L.takeKeyFromAddress());
             on('lic-copy-machine', () => { const m = L.machineId; if (m && navigator.clipboard) navigator.clipboard.writeText(m).then(() => notify('Machine code copied', 'copy')); });
             on('edition-switch', () => { if (window.currentRole === 'Admin') window.setUserRole('User'); else window.requestRoleSwitch('Admin'); });
             on('plg-scan', () => plugins.scan());

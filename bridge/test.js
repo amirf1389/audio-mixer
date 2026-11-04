@@ -5036,3 +5036,12 @@ test('license generator page: creates the vendor key pair when none exists (neve
   } finally { srv.close(); fsx.rmSync(tmp, { recursive: true, force: true }); }
   assert.ok(fsx.readFileSync(pathx.join(__dirname, '..', 'scripts', 'license-generator.bat'), 'utf8').includes('license-generator.js --open'));
 });
+
+test('license generator page: its own script parses (it is built inside a template string), fills from the address and links back to the app', () => {
+  const gen = require('../scripts/license-generator');
+  const html = gen.page('vendor'), js = /<script>([\s\S]*?)<\/script>/.exec(html)[1];
+  assert.doesNotThrow(() => new Function(js), 'the generator page script must be valid JavaScript');   // eslint-disable-line no-new-func
+  assert.ok(js.includes("new URLSearchParams(location.search)") && js.includes("'http://localhost:8765/#license='"));
+  const app = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  assert.ok(app.includes('id="lic-req-generator"') && app.includes("'http://127.0.0.1:8799/?'") && app.includes('takeKeyFromAddress()'));
+});
