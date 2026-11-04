@@ -14856,7 +14856,7 @@ const cArea = document.getElementById('content-area');
             set('asio-hero-device', live && pa ? pa.device : (asio[0] ? asio[0].name : '-'));
             set('asio-hero-rate', live && pa ? (pa.sampleRate / 1000).toFixed(1) + ' kHz' : (asio[0] && asio[0].preferredSampleRate ? (asio[0].preferredSampleRate / 1000).toFixed(1) + ' kHz' : '-'));
             set('asio-hero-buffer', live && pa && pa.frameSize ? pa.frameSize + ' frames • ' + pa.latencyMs + ' ms' : (frame === 'auto' ? 'AUTO (DRIVER SIZE)' : frame + ' frames'));
-            set('asio-hero-engine', info && info.portaudio ? (info.portaudio.engine === 'audify' ? 'AUDIFY (RTAUDIO)' : 'PORTAUDIO') : (on ? 'NOT INSTALLED' : '-'));
+            set('asio-hero-engine', info && info.portaudio ? (info.portaudio.engine === 'audify' ? (info.portaudio.provider === 'native' ? 'NATIVE ENGINE' : 'AUDIFY (RTAUDIO)') : 'PORTAUDIO') : (on ? 'NOT INSTALLED' : '-'));
             const toggle = document.getElementById('asio-auto-toggle'); if (toggle) toggle.checked = auto;
         },
         setCatalogFilter: function(all) {
@@ -14875,7 +14875,7 @@ const cArea = document.getElementById('content-area');
             st.textContent = on ? 'PC MODE: CONNECTED' : 'WEB MODE: SERVER NOT FOUND';
             $('pc-url').textContent = on ? this.bridgeUrl : '-';
             $('pc-platform').textContent = on && info ? `${info.platform} ${info.arch} \u2022 Node ${info.node}` : '-';
-            $('pc-native').textContent = on ? (info && info.portaudio ? 'READY' + (info.portaudio.engine === 'audify' ? ' (AUDIFY)' : '') + ': ' + info.portaudio.hostApis.join(', ') : 'NOT INSTALLED (cd bridge && npm install)') : '-';
+            $('pc-native').textContent = on ? (info && info.portaudio ? 'READY' + (info.portaudio.engine === 'audify' ? (info.portaudio.provider === 'native' ? ' (NATIVE ENGINE)' : ' (AUDIFY)') : '') + ': ' + info.portaudio.hostApis.join(', ') : 'NOT INSTALLED (cd bridge && npm install)') : '-';
             $('pc-help').classList.toggle('hidden', on);
             $('pc-connect').textContent = on ? 'RECONNECT' : 'CONNECT';
             const auto = $('pc-auto'); if (auto) auto.checked = this.pcAuto();
@@ -15459,7 +15459,7 @@ const cArea = document.getElementById('content-area');
             const g = document.createElement('optgroup');
             g.label = 'PORTAUDIO HOST API INPUTS (via bridge)';
             g.setAttribute('data-pa', '1');
-            if (info.portaudio.engine === 'audify') g.label = 'AUDIFY (RTAUDIO) HOST API INPUTS (via bridge)';
+            if (info.portaudio.engine === 'audify') g.label = (info.portaudio.provider === 'native' ? 'NATIVE ENGINE' : 'AUDIFY (RTAUDIO)') + ' HOST API INPUTS (via bridge)';
             ins.forEach(d => { const o = document.createElement('option'); o.value = 'pa:' + d.id; o.text = `${d.hostApi}: ${d.name} (${d.inputs} ch)`; g.appendChild(o); });
             sel.insertBefore(g, sel.firstChild);
             const uo = document.createElement('option'); uo.value = 'pa:auto'; uo.text = 'UNIVERSAL ASIO DRIVER: auto-detect, best input (ASIO first)'; g.insertBefore(uo, g.firstChild);
@@ -15511,7 +15511,7 @@ const cArea = document.getElementById('content-area');
                     self.paInNode.connect(self.readAnalyserNode);
                     self.readAnalyserNode.connect(self.paInMute);
                     self.paInMute.connect(ctx.destination);
-                    self.log(`${m.engine === 'audify' ? 'Audify' : 'PortAudio'} input LIVE: ${m.hostApi} / ${m.device} @ ${m.sampleRate / 1000} kHz, ${m.channels} ch${m.frameSize ? ', buffer ' + m.frameSize + ' frames (' + m.latencyMs + ' ms' + (m.autoFrameSize ? ', auto' : '') + ')' : ''}`, "success");
+                    self.log(`${m.engine === 'native' ? 'Native engine' : m.engine === 'audify' ? 'Audify' : 'PortAudio'} input LIVE: ${m.hostApi} / ${m.device} @ ${m.sampleRate / 1000} kHz, ${m.channels} ch${m.frameSize ? ', buffer ' + m.frameSize + ' frames (' + m.latencyMs + ' ms' + (m.autoFrameSize ? ', auto' : '') + ')' : ''}`, "success");
                     window.notify(`${/asio/i.test(m.hostApi) ? 'ASIO' : m.hostApi} Input Live: ${m.device}`, "microphone");
                 } else if (m.type === 'error') {
                     self.log(`PortAudio input error: ${m.message}`, "error");
@@ -15539,7 +15539,7 @@ const cArea = document.getElementById('content-area');
             const g = document.createElement('optgroup');
             g.label = 'PORTAUDIO HOST API OUTPUTS (via bridge)';
             g.setAttribute('data-pa', '1');
-            if (info.portaudio.engine === 'audify') g.label = 'AUDIFY (RTAUDIO) HOST API OUTPUTS (via bridge)';
+            if (info.portaudio.engine === 'audify') g.label = (info.portaudio.provider === 'native' ? 'NATIVE ENGINE' : 'AUDIFY (RTAUDIO)') + ' HOST API OUTPUTS (via bridge)';
             outs.forEach(d => { const o = document.createElement('option'); o.value = 'pa:' + d.id; o.text = `${d.hostApi}: ${d.name} (${d.outputs} ch)`; g.appendChild(o); });
             sel.insertBefore(g, sel.firstChild);
             const uo = document.createElement('option'); uo.value = 'pa:auto'; uo.text = 'UNIVERSAL ASIO DRIVER: auto-detect, best output (ASIO first)'; g.insertBefore(uo, g.firstChild);
@@ -15610,7 +15610,7 @@ const cArea = document.getElementById('content-area');
                     tap.connect(node); node.connect(mute); mute.connect(ctx.destination);
                     try { window.state.nodes.musicAnalyser.disconnect(ctx.destination); } catch (e) { /* not connected */ }
                     self.paNode = node; self.paMute = mute; self.paReady = true; self.paInfo = m;
-                    self.log(`${m.engine === 'audify' ? 'Audify' : 'PortAudio'} output LIVE: ${m.hostApi} / ${m.device} @ ${m.sampleRate / 1000} kHz, ${m.channels} ch${m.frameSize ? ', buffer ' + m.frameSize + ' frames (' + m.latencyMs + ' ms' + (m.autoFrameSize ? ', auto' : '') + ')' : ''}`, "success");
+                    self.log(`${m.engine === 'native' ? 'Native engine' : m.engine === 'audify' ? 'Audify' : 'PortAudio'} output LIVE: ${m.hostApi} / ${m.device} @ ${m.sampleRate / 1000} kHz, ${m.channels} ch${m.frameSize ? ', buffer ' + m.frameSize + ' frames (' + m.latencyMs + ' ms' + (m.autoFrameSize ? ', auto' : '') + ')' : ''}`, "success");
                     window.notify(`${/asio/i.test(m.hostApi) ? 'ASIO' : m.hostApi} Output Live: ${m.device}`, "volume-high");
                 } else if (m.type === 'error') {
                     self.log(`PortAudio output error: ${m.message}`, "error");

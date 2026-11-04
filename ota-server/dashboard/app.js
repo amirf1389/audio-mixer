@@ -33,7 +33,7 @@
   }
 
   const PLATFORMS = [
-    { key: 'win-x64-exe', label: 'Windows 64-bit setup (.exe)', re: /^Audio Mixer-(\d+(?:\.\d+){1,3})\.exe$/ },
+    { key: 'win-x64-exe', label: 'Windows 64-bit setup (.exe)', re: /^(?:AmF X1|Audio Mixer)-(\d+(?:\.\d+){1,3})\.exe$/ },   // the name since the rename, and the one before it
     { key: 'win-x64-msi', label: 'Windows 64-bit package (.msi)', re: /^AudioMixer-(\d+(?:\.\d+){1,3})-x64\.msi$/ },
     { key: 'win-x86-msi', label: 'Windows 32-bit package (.msi)', re: /^AudioMixer-(\d+(?:\.\d+){1,3})-x86\.msi$/ },
     { key: 'linux-deb', label: 'Debian / Ubuntu (.deb)', re: /^audio-mixer_(\d+(?:\.\d+){1,3})_all\.deb$/ },

@@ -17,16 +17,18 @@ const arg = (a, n, d) => { const i = a.indexOf(n); return i >= 0 ? a[i + 1] : d;
 function build({ releases, flatUrls = false, version, base, notes = [], now = new Date() } = {}) {
   const sha = f => crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex');
   const want = {
-    'win-x64-exe': `Audio Mixer-${version}.exe`, 'win-x64-msi': `AudioMixer-${version}-x64.msi`, 'win-x86-msi': `AudioMixer-${version}-x86.msi`,
+    // the setup program: its name since the rename to AmF X1, then the one before it
+    'win-x64-exe': [`AmF X1-${version}.exe`, `Audio Mixer-${version}.exe`], 'win-x64-msi': `AudioMixer-${version}-x64.msi`, 'win-x86-msi': `AudioMixer-${version}-x86.msi`,
     'linux-deb': `audio-mixer_${version}_all.deb`, 'linux-tar': `AudioMixer-${version}-linux.tar.gz`, 'macos': `AudioMixer-${version}-macos.tar.gz`, 'macos-dmg': `AudioMixer-${version}-macos.dmg`,
     'android-apk': `AudioMixer-${version}-android.apk`, 'ios-project': `AudioMixer-${version}-ios-xcode-project.tar.gz`,
     'win-asio-driver': `AudioMixer-${version}-asio-driver-windows.zip`,
     'win-x64-native': `AudioMixer-${version}-native-windows-x64.exe`, 'win-x86-native': `AudioMixer-${version}-native-windows-x86.exe`,   // audiomixer-native.exe --update
   };
   const files = {};
-  for (const [key, name] of Object.entries(want)) {
-    const f = releases ? path.join(releases, name) : findRelease(name, osOfKey(key));
-    if (!f || !fs.existsSync(f)) continue;
+  for (const [key, names] of Object.entries(want)) {
+    let name = null, f = null;
+    for (const n of [].concat(names)) { const c = releases ? path.join(releases, n) : findRelease(n, osOfKey(key)); if (c && fs.existsSync(c)) { name = n; f = c; break; } }
+    if (!f) continue;
     files[key] = { name, url: `${base}/${releases || flatUrls ? '' : releasesRel(key) + '/'}${encodeURIComponent(name)}`, size: fs.statSync(f).size, sha256: sha(f) };
   }
   if (!Object.keys(files).length) throw new Error('no release files for version ' + version + ' in ' + (releases || '<os>/releases'));

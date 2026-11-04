@@ -41,9 +41,9 @@ function listDevices({ exe = enginePath(), base = 1000, run = execFileSync, now 
   if (state.list && (asioOpen || now - state.at < LIST_TTL_MS)) return state.list;
   let raw;
   try { raw = JSON.parse(String(run(exe, ['--list-devices'], { timeout: 20000, windowsHide: true, encoding: 'utf8' }))); }
-  catch (e) { return state.list || { hostApis: [], devices: [], problems: [{ api: 'engine', message: String(e && e.message || e).split('\n')[0] }] }; }
+  catch (e) { return state.list || { provider: 'native', hostApis: [], devices: [], problems: [{ api: 'engine', message: String(e && e.message || e).split('\n')[0] }] }; }
   const devices = toDevices(includeNull ? raw : raw.filter(d => d.backend !== 'null'), base);
-  state.list = { hostApis: [...new Set(devices.map(d => d.hostAPIName))], devices, problems: [] };
+  state.list = { provider: 'native', hostApis: [...new Set(devices.map(d => d.hostAPIName))], devices, problems: [] };
   state.at = now;
   return state.list;
 }
