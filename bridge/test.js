@@ -5131,3 +5131,11 @@ test('generator + local OTA: PUBLISH signs update.json with the unlocked key, se
   } finally { srv.close(); fsx.rmSync(tmp, { recursive: true, force: true }); }
   const page = gen.page('vendor'); assert.ok(page.includes('id="inbox-card"') && page.includes('PUBLISH UPDATE'));
 });
+
+test('deploy/website/license.html: a public request page (no signing), prefilled from the app, mails the vendor; the app WEBSITE button hides until WEBSITE_URL is set', () => {
+  const w = fsx.readFileSync(pathx.join(__dirname, '..', 'deploy', 'website', 'license.html'), 'utf8');
+  const js = /<script>([\s\S]*?)<\/script>/.exec(w)[1]; assert.doesNotThrow(() => new Function(js));   // eslint-disable-line no-new-func
+  assert.ok(w.includes("var VENDOR_EMAIL = 'badriamirfakhri@gmail.com'") && !/PRIVATE KEY|signKey|private\.pem/.test(w), 'request only, nothing secret');
+  const app = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  assert.ok(app.includes("const WEBSITE_URL = '") && app.includes('id="lic-req-website"') && app.includes("base + '/license.html?'"));
+});
