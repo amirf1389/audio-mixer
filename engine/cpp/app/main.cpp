@@ -1,6 +1,7 @@
 // audiomixer-native: the Audio Mixer engine as a native program on the audio layer of the operating system it is built for
 // (Linux ALSA, Windows WASAPI / ASIO, macOS Core Audio; "null" everywhere). No browser, no Node.js: the mixer (am::Mixer) runs in the real-time callback of the chosen backend.
 //   audiomixer-native --list
+//   audiomixer-native --list-devices   (JSON: every device of every backend, see src/devices.cpp)
 //   audiomixer-native --stream [--backend ...] [--in DEV] [--out DEV] [--rate 48000] [--frames 256] [--in-ch 2] [--out-ch 2] [--exclusive]
 //                     PCM between the device and stdin / stdout for the bridge (see stream.cpp); ends when stdin ends
 //   audiomixer-native [--backend auto|alsa|wasapi|asio|coreaudio|null] [--in DEV] [--out DEV] [--rate 48000] [--frames 256] [--strips 8]
@@ -34,12 +35,13 @@ int main(int argc, char** argv) {
 #ifdef _WIN32
   { int rc = 0; if (am::runWinTool(argc, argv, rc)) return rc; }       // --install-driver / --uninstall-driver / --install-flexasio FILE --sha256 HEX
 #endif
-  am::DeviceConfig cfg; int strips = 8; double seconds = 0, masterDb = 0, azimuth = 1e9; bool list = false, probeAsio = false, stream = false;
+  am::DeviceConfig cfg; int strips = 8; double seconds = 0, masterDb = 0, azimuth = 1e9; bool list = false, probeAsio = false, stream = false, listDevices = false;
   for (int i = 1; i < argc; ++i) {
     const std::string a = argv[i]; auto next = [&]() -> const char* { return i + 1 < argc ? argv[++i] : ""; };
     if (a == "--list") list = true;
     else if (a == "--probe-asio") probeAsio = true;
     else if (a == "--stream") stream = true;
+    else if (a == "--list-devices") listDevices = true;
     else if (a == "--backend") cfg.backend = next();
     else if (a == "--in") cfg.inDevice = next();
     else if (a == "--out") cfg.outDevice = next();
@@ -55,6 +57,21 @@ int main(int argc, char** argv) {
     else { std::printf("unknown option %s (see the header of engine/cpp/app/main.cpp)\n", a.c_str()); return 2; }
   }
   if (stream) return am::runStream(cfg);
+  if (listDevices) {
+    // JSON list for the bridge: one object per device of every backend built in (see src/devices.cpp)
+    auto text = [](const std::string& s) { std::string o = "\""; for (const char c : s) { if (c == '"' || c == '\\') { o += '\\'; o += c; } else if (static_cast<unsigned char>(c) < 0x20) o += ' '; else o += c; } return o + "\""; };
+    const auto devs = am::listDevices();
+    std::printf("[");
+    for (std::size_t i = 0; i < devs.size(); ++i) {
+      const auto& d = devs[i];
+      std::printf("%s{\"backend\":%s,\"id\":%s,\"name\":%s,\"inChannels\":%d,\"outChannels\":%d,\"defaultRate\":%.0f,\"sampleRates\":[",
+                  i ? "," : "", text(d.backend).c_str(), text(d.id).c_str(), text(d.name).c_str(), d.inChannels, d.outChannels, d.defaultRate);
+      for (std::size_t k = 0; k < d.sampleRates.size(); ++k) std::printf("%s%.0f", k ? "," : "", d.sampleRates[k]);
+      std::printf("],\"defaultIn\":%s,\"defaultOut\":%s}", d.defaultIn ? "true" : "false", d.defaultOut ? "true" : "false");
+    }
+    std::printf("]\n");
+    return 0;
+  }
   if (probeAsio) {
 #ifdef _WIN32
     // JSON list: one object per registered ASIO driver with its real channel counts and sample rates (the Steinberg interface, no RtAudio)

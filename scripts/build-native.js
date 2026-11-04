@@ -27,7 +27,7 @@ const has = n => spawnSync('which', [n]).status === 0;
 function compileWindows(arch, exe) {
   const t = arch === 'x64' ? 'x86_64-w64-mingw32' : 'i686-w64-mingw32';
   if (!has(t + '-g++')) throw new Error(`mingw-w64 (${t}-g++) is needed to build the native program (Debian / Ubuntu: apt install mingw-w64)`);
-  const src = ['engine.cpp', 'runtime.cpp', 'backend_null.cpp', 'spatial.cpp', 'backend_wasapi.cpp', 'backend_asio.cpp'].map(f => path.join(ROOT, 'engine/cpp/src', f));
+  const src = ['engine.cpp', 'runtime.cpp', 'backend_null.cpp', 'spatial.cpp', 'devices.cpp', 'backend_wasapi.cpp', 'backend_asio.cpp'].map(f => path.join(ROOT, 'engine/cpp/src', f));
   fs.mkdirSync(path.dirname(exe), { recursive: true });
   // the ASIO driver DLL of this architecture is built here and embedded in the program (--install-driver writes it out and registers it): one .exe sets a machine up
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'native-win-'));

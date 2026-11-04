@@ -96,8 +96,18 @@ class WasapiBackend : public Backend {
     return f;
   }
   bool client(IMMDeviceEnumerator* en, EDataFlow flow, int ch, IAudioClient** ac, IAudioRenderClient** rc, IAudioCaptureClient** cc, Sample* used, std::string& err) {
-    IMMDevice* dev = nullptr; HRESULT r = en->GetDefaultAudioEndpoint(flow, eConsole, &dev);
-    if (FAILED(r)) { err = hr("default endpoint", r); return false; }
+    // the endpoint: the one named by its id string (from --list-devices), else the default one of this direction
+    const std::string& want = flow == eRender ? cfg_.outDevice : cfg_.inDevice;
+    IMMDevice* dev = nullptr; HRESULT r;
+    if (!want.empty() && want != "-") {
+      const int n = MultiByteToWideChar(CP_UTF8, 0, want.c_str(), -1, nullptr, 0);
+      std::vector<wchar_t> w(static_cast<std::size_t>(n > 0 ? n : 1), L'\0');
+      if (n > 0) MultiByteToWideChar(CP_UTF8, 0, want.c_str(), -1, w.data(), n);
+      r = en->GetDevice(w.data(), &dev);
+    } else {
+      r = en->GetDefaultAudioEndpoint(flow, eConsole, &dev);
+    }
+    if (FAILED(r)) { err = hr(want.empty() || want == "-" ? "default endpoint" : "endpoint", r); return false; }
     r = dev->Activate(kIidAudioClient, CLSCTX_ALL, nullptr, reinterpret_cast<void**>(ac));
     if (FAILED(r)) { dev->Release(); err = hr("audio client", r); return false; }
     const DWORD evt = (flow == eRender || captureEvent_) ? AUDCLNT_STREAMFLAGS_EVENTCALLBACK : 0;

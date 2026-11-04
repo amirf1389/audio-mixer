@@ -47,6 +47,17 @@ class Backend {
 std::vector<std::string> availableBackends();                 // the ones built into this binary, "null" last
 std::unique_ptr<Backend> createBackend(const std::string& name);   // nullptr when it is not built in
 
+// One device a backend can open. `id` is the string to put in DeviceConfig::inDevice / outDevice for that backend
+// (WASAPI endpoint id, ASIO driver name, ALSA PCM name). Channel counts of 0 mean that direction is not offered.
+struct DeviceInfo {
+  std::string backend, id, name;
+  int inChannels = 0, outChannels = 0;
+  double defaultRate = 48000;
+  std::vector<double> sampleRates;   // empty: not known without opening the device
+  bool defaultIn = false, defaultOut = false;
+};
+std::vector<DeviceInfo> listDevices();                       // every device of every backend built in ("null" last)
+
 // the meters, copied out consistently
 struct Snapshot {
   struct StripMeter { double pk, rms, hold; std::uint32_t clipN; };
