@@ -20,11 +20,11 @@ const { spawnSync } = require('node:child_process');
 const { buildInstaller } = require('./build-installer');
 
 const ROOT = path.resolve(__dirname, '..');
-const UPGRADE_CODES = {                       // fixed per flavour: lets a newer package replace an older one of the same flavour
-  'x64-machine': '6F3C2B8E-5D41-4A7B-9C0E-2A1D7B64F3A9',
-  'x86-machine': '2B9E1D47-8C3A-4F65-A1B0-7D5E3C9F8A12',
-  'x64-user': '9A4D7E21-3B6C-4E58-8F0A-1C2D3E4F5A6B',
-  'x86-user': '4C8F2A90-6D1E-47B3-B5A9-0E7D6C5B4A32',
+const UPGRADE_CODES = {                       // fixed per flavour: lets a newer package replace an older one of the same flavour (AmF X1: new codes, so it installs beside the old Audio Mixer 1.x)
+  'x64-machine': '2D6160F6-55F7-5B7B-A86F-AE1F4023BAC5',
+  'x86-machine': '2B123566-FB55-5EE4-B35B-8C8C19845B56',
+  'x64-user': '27B11F02-5B38-5047-BDB4-3BF20BF4A80A',
+  'x86-user': 'F861A703-AC5C-59A1-AB8D-03DF2C187217',
 };
 
 const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -105,13 +105,13 @@ function wxs({ stage, version, arch = 'x64', scope = 'machine' }) {
   const code = productCode(arch, scope, version);
   // Program Files (64-bit) for x64, Program Files (x86) for x86; or the user's own folder for the no-administrator flavour
   const installDirs = machine
-    ? `      <Directory Id="${win64 ? 'ProgramFiles64Folder' : 'ProgramFilesFolder'}">\n        <Directory Id="INSTALLDIR" Name="Audio Mixer">\n${xml}        </Directory>\n      </Directory>`
+    ? `      <Directory Id="${win64 ? 'ProgramFiles64Folder' : 'ProgramFilesFolder'}">\n        <Directory Id="INSTALLDIR" Name="AmF X1">\n${xml}        </Directory>\n      </Directory>`
     : `      <Directory Id="LocalAppDataFolder">\n        <Directory Id="ProgramsDir" Name="Programs">\n          <Directory Id="INSTALLDIR" Name="AudioMixer">\n${xml}          </Directory>\n        </Directory>\n      </Directory>`;
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
-  <Product Id="${code}" Name="Audio Mixer" Language="1033" Version="${version}" Manufacturer="Audio Mixer" UpgradeCode="${UPGRADE_CODES[arch + '-' + scope]}">
-    <Package Description="Audio Mixer local system server and mixer" Manufacturer="Audio Mixer" InstallerVersion="200" Compressed="yes" InstallScope="${machine ? 'perMachine' : 'perUser'}"/>
-    <MajorUpgrade DowngradeErrorMessage="A newer version of Audio Mixer is already installed."/>
+  <Product Id="${code}" Name="AmF X1" Language="1033" Version="${version}" Manufacturer="AMFB Audio" UpgradeCode="${UPGRADE_CODES[arch + '-' + scope]}">
+    <Package Description="AmF X1 by AMFB Audio: mixer and local audio server" Manufacturer="AMFB Audio" InstallerVersion="200" Compressed="yes" InstallScope="${machine ? 'perMachine' : 'perUser'}"/>
+    <MajorUpgrade DowngradeErrorMessage="A newer version of AmF X1 is already installed."/>
     <Media Id="1" Cabinet="audiomixer.cab" EmbedCab="yes"/>
     <!-- Settings > Apps (Add or remove programs) entry: name, version, publisher and a working Uninstall button come with the package -->
 ${hasIcon ? `    <Icon Id="AudioMixer.exe" SourceFile="${esc(path.join(stage, 'AudioMixerServer.exe'))}"/>\n    <Property Id="ARPPRODUCTICON" Value="AudioMixer.exe"/>   <!-- the icon of the entry in Settings > Apps -->\n` : ''}    <Property Id="ARPCOMMENTS" Value="Virtual mixing console with a local Node.js server for ASIO / WASAPI audio"/>
@@ -121,7 +121,7 @@ ${hasIcon ? `    <Icon Id="AudioMixer.exe" SourceFile="${esc(path.join(stage, 'A
     <Directory Id="TARGETDIR" Name="SourceDir">
 ${installDirs}
       <Directory Id="ProgramMenuFolder">
-        <Directory Id="MenuDir" Name="Audio Mixer"/>
+        <Directory Id="MenuDir" Name="AmF X1"/>
       </Directory>
       <Directory Id="DesktopFolder"/>
     </Directory>
@@ -176,7 +176,7 @@ ${scBoot('ScPc', 'Audio Mixer (PC mode)', 'Start the local server (boot screen) 
     <!-- "Audio Mixer" itself in the Start Menu list and in the Start search (the folder below holds the tools) -->
     <DirectoryRef Id="ProgramMenuFolder">
       <Component Id="StartRootShortcut" Guid="${guid('start-root:' + scope)}"${w64}>
-${scBoot('ScStart', 'Audio Mixer', 'Start Audio Mixer (boot screen, then the mixer in your browser)')}        <RegistryValue Root="${root}" Key="Software\\Audio Mixer" Name="StartRoot" Type="integer" Value="1" KeyPath="yes"/>
+${scBoot('ScStart', 'AmF X1', 'Start AmF X1 (opens the mixer in your browser)')}        <RegistryValue Root="${root}" Key="Software\\Audio Mixer" Name="StartRoot" Type="integer" Value="1" KeyPath="yes"/>
       </Component>
     </DirectoryRef>
 
@@ -189,7 +189,7 @@ ${sc('ScLicense', 'License key and machine ID', '"[INSTALLDIR]client\\cli.js" li
 
     <DirectoryRef Id="DesktopFolder">
       <Component Id="DesktopShortcut" Guid="${guid('desktop-shortcut:' + scope)}"${w64}>
-${scBoot('ScDesk', 'Audio Mixer', 'Start PC mode (boot screen)')}        <RegistryValue Root="${root}" Key="Software\\Audio Mixer" Name="Desktop" Type="integer" Value="1" KeyPath="yes"/>
+${scBoot('ScDesk', 'AmF X1', 'Start AmF X1')}        <RegistryValue Root="${root}" Key="Software\\Audio Mixer" Name="Desktop" Type="integer" Value="1" KeyPath="yes"/>
       </Component>
     </DirectoryRef>
 

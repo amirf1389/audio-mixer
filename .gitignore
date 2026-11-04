@@ -110,3 +110,6 @@ bridge/license-sandbox-public.json
 platforms/electron/node_modules/
 platforms/electron/build/
 dist/electron/
+
+# Platform build outputs (npm run build:apk / build:macos / build:ios)
+platforms/*/releases/

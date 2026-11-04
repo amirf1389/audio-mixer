@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 'use strict';
+const APP_ID = 'com.amfb.amfx1';   // AmF X1's Android application id: a new app beside Audio Mixer 1.x (the Java classes keep com.audiomixer.app)
 // Builds the Android app (.apk): the mixer page in a full-screen WebView, bundled offline (Tailwind CSS, Font Awesome and the fonts are
 // packed into the app instead of loaded from CDNs). Web Audio, the microphone, scenes and the license / plans work as in the browser;
 // PC-mode features (ASIO / WASAPI interfaces, plugins, OTA) need the PC.
@@ -195,7 +196,7 @@ async function build({ out = path.join(ROOT, 'platforms', 'android', 'releases')
   // resources + manifest -> apk (resources.arsc stored uncompressed, as Android 11+ requires), then the dex, alignment, signature
   const unsigned = path.join(work, 'unsigned.apk'), aligned = path.join(work, 'aligned.apk');
   run(t.aapt, ['package', '-f', '-M', path.join(ROOT, 'platforms', 'android', 'AndroidManifest.xml'), '-S', path.join(work, 'res'), '-A', path.join(work, 'assets'), '-I', t.frameworkRes,
-    '-F', unsigned, '--min-sdk-version', '24', '--target-sdk-version', '35', '--version-code', String(versionCode(pkg.version)), '--version-name', pkg.version, '-0', 'arsc']);
+    '-F', unsigned, '--min-sdk-version', '24', '--target-sdk-version', '35', '--rename-manifest-package', APP_ID, '--version-code', String(versionCode(pkg.version)), '--version-name', pkg.version, '-0', 'arsc']);
   run(t.aapt, ['add', unsigned, 'classes.dex'], { cwd: work });
   run(t.zipalign, ['-p', '-f', '4', unsigned, aligned]);
   const ks = keystore(process.env, t);

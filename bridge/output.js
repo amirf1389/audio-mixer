@@ -6,13 +6,15 @@ const streams = require('./streams');
 const levels = require('./levels');
 const universal = require('./universal');
 const virtual = require('./virtual');
+const control = require('./control');
 function loadPortAudio() { return require('naudiodon2'); }
 const SAMPLE_RATES = [44100, 48000, 88200, 96000, 176400, 192000];
 
 function pickDevice(pa, wantedId, channels) {
   const devices = pa.getDevices();
   if (Number.isInteger(wantedId)) return devices.find(d => d.id === wantedId) || null;
-  return devices.find(d => /asio/i.test(d.hostAPIName) && d.maxOutputChannels >= channels) || null;
+  const asio = devices.filter(d => /asio/i.test(d.hostAPIName) && d.maxOutputChannels >= channels), sel = control.selected();   // the driver chosen with POST /api/select-device first
+  return (sel && asio.find(d => d.name === sel)) || asio[0] || null;
 }
 
 // One output session per WebSocket connection. `load` is injectable for tests.
@@ -46,7 +48,8 @@ function createSession(conn, load = loadPortAudio, loadA = audify.loadAudify) {
     const pageRate = parseInt(opts.sampleRate, 10) || 48000, sampleRate = SAMPLE_RATES.includes(pageRate) ? pageRate : 48000;
     pre = pageRate !== sampleRate && pageRate >= 8000 && pageRate <= 384000 ? audify.createResampler(pageRate, sampleRate, channels) : null;   // a nonsense rate is just ignored (48000)
     const wanted = Number.isInteger(opts.deviceId) && opts.deviceId >= 0 ? opts.deviceId : null;
-    const dev = audify.pickAudifyDevice(list.devices, wanted, 'output', channels) || (wanted === null ? list.devices.find(d => d.isDefaultOutput) : null);
+    const sel = wanted === null && control.selected(), chosen = sel ? list.devices.find(d => /asio/i.test(d.hostAPIName) && d.name === sel && d.outputChannels >= channels) : null;
+    const dev = chosen || audify.pickAudifyDevice(list.devices, wanted, 'output', channels) || (wanted === null ? list.devices.find(d => d.isDefaultOutput) : null);
     if (!dev) return conn.send(JSON.stringify({ type: 'error', message: wanted !== null ? 'device not found' : 'no output device found' }));
     lock = claim({ id: dev.id, name: dev.name, hostAPIName: dev.hostAPIName }, { takeover: opts.takeover === true, preempt: takenOver });
     if (!lock.ok) { const msg = lock.message; lock = null; return conn.send(JSON.stringify({ type: 'error', message: msg })); }
@@ -137,6 +140,7 @@ function createSession(conn, load = loadPortAudio, loadA = audify.loadAudify) {
       if (buf.length % frameBytes !== 0) return; // partial frame would misalign every later sample
       if (pre) buf = pre(buf);
       if (!buf.length) return;
+      buf = control.apply(buf, frameBytes >> 1);    // the faders of /ws/control
       if (meter) meter.push(buf);                  // levels of what is really sent to the driver
       if (io.write(buf) === false) blocked = true;
     },

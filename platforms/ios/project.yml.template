@@ -2,7 +2,7 @@
 #   brew install xcodegen && cd ios && xcodegen generate && open AudioMixer.xcodeproj
 name: AudioMixer
 options:
-  bundleIdPrefix: com.audiomixer
+  bundleIdPrefix: com.amfb
   deploymentTarget:
     iOS: "15.0"
   createIntermediateGroups: true
@@ -24,7 +24,7 @@ targets:
     info:
       path: AudioMixer/Info.plist
       properties:
-        CFBundleDisplayName: Audio Mixer
+        CFBundleDisplayName: AmF X1
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         UILaunchScreen: {}
@@ -34,13 +34,13 @@ targets:
         UISupportedInterfaceOrientations: [UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight, UIInterfaceOrientationPortrait]
         UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight, UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown]
         UIBackgroundModes: [audio]
-        NSMicrophoneUsageDescription: Audio Mixer reads your microphone or audio interface as mixer inputs.
-        NSAppleMusicUsageDescription: Audio Mixer shows what the Music app is playing (Now Playing).
+        NSMicrophoneUsageDescription: AmF X1 reads your microphone or audio interface as mixer inputs.
+        NSAppleMusicUsageDescription: AmF X1 shows what the Music app is playing (Now Playing).
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.audiomixer.app
+        PRODUCT_BUNDLE_IDENTIFIER: com.amfb.amfx1
         TARGETED_DEVICE_FAMILY: "1,2"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         GENERATE_INFOPLIST_FILE: NO

@@ -1,10 +1,12 @@
 'use strict';
 // READ + WRITE on one interface through ONE native stream (ASIO drivers are single-client, so two separate streams on the same driver fail).
 // Page -> bridge binary frames are the output PCM, bridge -> page binary frames are the captured input PCM (both interleaved Int16).
+// monitor: true sends the input straight to the output as well (input channel n to output channel n, through the faders of /ws/control); the page's output frames are then ignored.
 const { claim } = require('./asio-lock');
 const audify = require('./audify');
 const streams = require('./streams');
 const levels = require('./levels');
+const control = require('./control');
 function loadPortAudio() { return require('naudiodon2'); }
 const SAMPLE_RATES = [44100, 48000, 88200, 96000, 176400, 192000];
 const CHUNK = 16384;
@@ -12,6 +14,7 @@ const CHUNK = 16384;
 function createDuplexSession(conn, load = loadPortAudio, loadA = audify.loadAudify) {
   let io = null, lock = null, blocked = false, frameBytes = 4;
   let mIn = null, mOut = null, uIn = null, uOut = null;
+  let monitor = false, monIn = 2;   // input straight to output, and the input's channel count
   const err = message => conn.send(JSON.stringify({ type: 'error', message }));
   // a takeover by another device: stop this duplex and close its socket, so its row goes idle instead of holding the driver
   const takenOver = () => { stop(); conn.close(); };
@@ -20,16 +23,25 @@ function createDuplexSession(conn, load = loadPortAudio, loadA = audify.loadAudi
     if (lock) { lock.release(); lock = null; }
     [uIn, uOut].forEach(u => u && u()); uIn = uOut = null;
     [mIn, mOut].forEach(m => m && m.stop()); mIn = mOut = null;
-    blocked = false;
+    blocked = false; monitor = false;
   };
   const announce = (engine, dev, hostApi, sampleRate, inCh, outCh, extra) => {
     const base = { engine, device: dev, hostApi, sampleRate, ...extra };
     uIn = streams.add({ ...base, direction: 'input', channels: inCh }); uOut = streams.add({ ...base, direction: 'output', channels: outCh });
     mIn = levels.attach(conn, { ...base, direction: 'input', channels: inCh, sid: uIn.id });
     mOut = levels.attach(conn, { ...base, direction: 'output', channels: outCh, sid: uOut.id });
+    monIn = inCh;
     conn.send(JSON.stringify({ type: 'started', duplex: true, ...base, channels: outCh, inChannels: inCh, ...extra }));
   };
-  const send = chunk => { if (mIn) mIn.push(chunk); for (let i = 0; i < chunk.length; i += CHUNK) conn.sendBinary(chunk.subarray(i, i + CHUNK)); };
+  const send = chunk => {
+    if (mIn) mIn.push(chunk);
+    for (let i = 0; i < chunk.length; i += CHUNK) conn.sendBinary(chunk.subarray(i, i + CHUNK));
+    if (monitor && io && !blocked) {
+      const outCh = frameBytes >> 1, out = control.apply(audify.remapChannels(chunk, monIn, outCh), outCh);
+      if (mOut) mOut.push(out);
+      if (io.write(out) === false) blocked = true;
+    }
+  };
 
   function start(opts) {
     stop();
@@ -37,6 +49,7 @@ function createDuplexSession(conn, load = loadPortAudio, loadA = audify.loadAudi
     if (id === null) return err('duplex needs a device id');
     const inCh = Math.min(Math.max(parseInt(opts.inChannels, 10) || 2, 1), 32), outCh = Math.min(Math.max(parseInt(opts.channels, 10) || 2, 1), 32);
     const sampleRate = SAMPLE_RATES.includes(Number(opts.sampleRate)) ? Number(opts.sampleRate) : 48000;
+    monitor = opts.monitor === true;
     const forceAudify = opts.engine === 'audify' || id >= audify.AUDIFY_BASE;
     let pa = null;
     if (!forceAudify) { try { pa = load(); } catch (_) { pa = null; } }
@@ -76,7 +89,8 @@ function createDuplexSession(conn, load = loadPortAudio, loadA = audify.loadAudi
       if (m.type === 'start') start(m); else if (m.type === 'stop') { stop(); conn.send(JSON.stringify({ type: 'stopped' })); }
     },
     onBinary(buf) {
-      if (!io || blocked || buf.length % frameBytes !== 0) return;
+      if (!io || blocked || monitor || buf.length % frameBytes !== 0) return;
+      buf = control.apply(buf, frameBytes >> 1);   // the faders of /ws/control
       if (mOut) mOut.push(buf);
       if (io.write(buf) === false) blocked = true;
     },

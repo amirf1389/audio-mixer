@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 'use strict';
+const APP_ID = 'com.amfb.amfx1';   // AmF X1's Android application id: a new app beside Audio Mixer 1.x (the Java classes keep com.audiomixer.app)
 // Builds the Android App Bundle (.aab) that Google Play Console takes, from the same sources as the .apk (scripts/build-apk.js):
 //   node scripts/build-aab.js [--out platforms/android/releases]   -> AudioMixer-<version>-android.aab
 // Needs what build-apk.js needs plus aapt2 (Android SDK build-tools or Debian / Ubuntu `aapt`) and bundletool (BUNDLETOOL=<jar>, or the pinned 1.18.1 release is
@@ -60,7 +61,7 @@ async function build({ out = path.join(ROOT, 'platforms', 'android', 'releases')
   run(aapt2, ['compile', '--dir', path.join(work, 'res'), '-o', path.join(work, 'res.zip')]);
   const proto = path.join(work, 'proto.apk');
   run(aapt2, ['link', '--proto-format', '-o', proto, '-I', t.frameworkRes, '--manifest', path.join(ROOT, 'platforms', 'android', 'AndroidManifest.xml'), '-A', path.join(work, 'assets'),
-    '--min-sdk-version', '24', '--target-sdk-version', '35', '--version-code', String(apk.versionCode(pkg.version)), '--version-name', pkg.version, '--auto-add-overlay', path.join(work, 'res.zip')]);
+    '--min-sdk-version', '24', '--target-sdk-version', '35', '--rename-manifest-package', APP_ID, '--version-code', String(apk.versionCode(pkg.version)), '--version-name', pkg.version, '--auto-add-overlay', path.join(work, 'res.zip')]);
   const base = path.join(work, 'base'); fs.mkdirSync(base);
   run(unzip, ['-q', proto, '-d', base]);
   fs.mkdirSync(path.join(base, 'manifest')); fs.renameSync(path.join(base, 'AndroidManifest.xml'), path.join(base, 'manifest', 'AndroidManifest.xml'));

@@ -10,7 +10,7 @@ import android.view.View;
 /** Start-up screen drawn over the page while the engine starts and the page loads: power LED (red, amber, green), the logo spelling in, the OS boot lines
  *  ticking to OK and a progress bar, like the console's power-on sequence (the page plays its own right after). */
 final class BootView extends View {
-    private static final String[] LINES = { "TITAN OS", "DSP CORE", "AUDIO ENGINE", "I/O", "FADERS", "CONSOLE" };
+    private static final String[] LINES = { "AmF X1", "DSP CORE", "AUDIO ENGINE", "I/O", "FADERS", "CONSOLE" };
     private static final String LOGO = "AUDIO MIXER";
     private final long t0 = System.currentTimeMillis();
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
