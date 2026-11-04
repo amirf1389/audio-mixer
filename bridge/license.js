@@ -36,6 +36,7 @@ const PLANS = {
   basic:  { id: 'basic',  name: 'BASIC',  channels: 8,  features: ['core'] },
   pro:    { id: 'pro',    name: 'PRO',    channels: 16, features: ['core', 'plugins', 'ota'] },
   studio: { id: 'studio', name: 'STUDIO', channels: 32, features: ['core', 'plugins', 'ota', 'studio'] },
+  master: { id: 'master', name: 'MASTER', channels: 32, features: ['core', 'plugins', 'ota', 'studio', 'master'] },   // all access: every feature, every channel
 };
 const PREFIX = 'AMIX1';
 

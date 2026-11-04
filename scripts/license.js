@@ -3,7 +3,9 @@
 // Vendor tool for Audio Mixer licenses and update manifests. The PRIVATE key never goes into the repo or the installers.
 //   node scripts/license.js init  [--dir D]                       create the vendor key pair (default ~/.audio-mixer-vendor), then embed the public key
 //   node scripts/license.js embed [--dir D]                       write the public key into bridge/license-public.json and index.html
-//   node scripts/license.js issue --plan basic|pro|studio --name "Jane Doe" [--email e] [--days 365] [--machine XXXX-...] [--seats 1] [--dir D]
+//   node scripts/license.js issue --plan basic|pro|studio|master [--name "Jane Doe"] [--email e] [--days 365] [--machine XXXX-...] [--seats 1] [--dir D]
+//                                                                  (no --name: an automatic one from the key's random id, "Customer 3F9A12C4B7E0")
+//   node scripts/license.js batch --plan pro|studio|master --count 10 [--days 365] [--dir D]   that many random keys, one CSV line each: id,plan,expires,key
 //   node scripts/license.js show <key>                             decode and verify a key
 //   node scripts/license.js manifest [--dir D]                     sign releases/update.json for the OTA updater (see scripts/make-update.js)
 // The key directory can also be set with AUDIO_MIXER_VENDOR_DIR. Keep a backup of private.pem: without it no further keys can be issued
@@ -45,8 +47,9 @@ function embedPublic(jwk, root = ROOT) {
 
 function issue({ dir, plan, name, email, days, machine, seats, now = Date.now() }) {
   if (!lic.PLANS[plan]) throw new Error('plan must be one of: ' + Object.keys(lic.PLANS).join(', '));
-  if (!name) throw new Error('--name is required');
-  const payload = { v: 1, id: crypto.randomBytes(6).toString('hex').toUpperCase(), plan, name, issued: now, expires: days ? now + Math.round(days * 86400000) : null, seats: seats || 1 };
+  const id = crypto.randomBytes(6).toString('hex').toUpperCase();   // 48 random bits from the OS generator: the key's serial
+  if (!name) name = 'Customer ' + id;
+  const payload = { v: 1, id, plan, name, issued: now, expires: days ? now + Math.round(days * 86400000) : null, seats: seats || 1 };
   if (email) payload.email = email;
   if (machine) payload.mid = machine.toUpperCase();
   return { key: lic.signKey(payload, loadPrivate(dir)), payload };
@@ -64,11 +67,20 @@ function main(argv) {
       const r = issue({ dir: vendorDir(a), plan: arg(a, '--plan'), name: arg(a, '--name'), email: arg(a, '--email'), days: Number(arg(a, '--days', 0)) || 0, machine: arg(a, '--machine'), seats: Number(arg(a, '--seats', 1)) });
       console.log(r.key);
       console.error(`\n${lic.PLANS[r.payload.plan].name} for ${r.payload.name}, ${r.payload.expires ? 'expires ' + new Date(r.payload.expires).toISOString().slice(0, 10) : 'no expiry'}${r.payload.mid ? ', bound to ' + r.payload.mid : ', not bound to a computer'}`);
+    } else if (cmd === 'batch') {
+      const n = Number(arg(a, '--count', 1)), dir = vendorDir(a);
+      if (!Number.isInteger(n) || n < 1 || n > 10000) throw new Error('--count must be 1..10000');
+      console.log('id,plan,expires,key');
+      for (let k = 0; k < n; k++) {
+        const r = issue({ dir, plan: arg(a, '--plan'), days: Number(arg(a, '--days', 0)) || 0 });
+        console.log([r.payload.id, r.payload.plan, r.payload.expires ? new Date(r.payload.expires).toISOString().slice(0, 10) : '', r.key].join(','));
+      }
+      console.error(`\n${n} ${lic.PLANS[arg(a, '--plan')].name} key(s), random ids, not bound to a computer`);
     } else if (cmd === 'show') {
       const v = lic.verifyKey(a[0]);
       console.log(JSON.stringify(v.ok ? { ok: true, plan: v.plan.name, payload: v.payload } : { ok: false, reason: v.reason, message: v.message, payload: v.payload }, null, 2));
       return v.ok ? 0 : 1;
-    } else { console.error('Usage: node scripts/license.js init | embed | issue | show | manifest (see the header of this file)'); return 2; }
+    } else { console.error('Usage: node scripts/license.js init | embed | issue | batch | show | manifest (see the header of this file)'); return 2; }
     return 0;
   } catch (e) { console.error('Error: ' + e.message); return 1; }
 }

@@ -22,6 +22,29 @@ function enginePath({ env = process.env, platform = process.platform, root = pat
 
 const state = { open: new Set(), list: null, at: 0 };
 
+// Onboard codecs (Realtek and the like) are served by two stacks at once: Windows' own (WASAPI, which system sound and music players use) and the
+// vendor's ASIO driver (Realtek ASIO) or a generic ASIO wrapper (ASIO4ALL, FlexASIO) that drives the same chip. Both on one chip conflict: an
+// exclusive WASAPI stream locks ASIO out, and an ASIO driver that grabs the chip silences music. They are kept apart: ASIO carries the mixer, WASAPI
+// stays in SHARED mode so music and system sound keep playing through Windows' mixer next to it.
+const FAMILIES = [['realtek', /realtek/i], ['conexant', /conexant|synaptics/i], ['idt', /\bidt\b|sigmatel|tempo/i], ['via', /\bvia\b|vinyl/i], ['cirrus', /cirrus/i], ['intel', /intel.*(smart sound|display audio)/i], ['amd', /\bamd\b.*(high definition|audio)/i]];
+const WRAPPERS = /asio4all|flexasio|generic low latency|asio2wasapi/i;   // ASIO drivers that open a Windows endpoint themselves
+function hardwareFamily(name) { for (const [f, re] of FAMILIES) if (re.test(String(name))) return f; return null; }
+// the hardware an open engine stream sits on: an onboard family, or 'wdm' for a wrapper (it takes whichever Windows endpoint it is set to)
+function hwOf(dev) { const f = hardwareFamily(dev.name); return f || (dev.engineBackend === 'asio' && WRAPPERS.test(dev.name) ? 'wdm' : null); }
+function separation(dev, exclusive) {
+  const hw = hwOf(dev);
+  if (!hw) return { exclusive };
+  const open = [...state.open].filter(r => r.hw && (r.hw === hw || r.hw === 'wdm' || hw === 'wdm'));
+  if (dev.engineBackend === 'asio') {
+    const lock = open.find(r => r.backend === 'wasapi' && r.exclusive);
+    if (lock) throw new Error(`${dev.name} shares its chip with a Windows device this mixer holds in exclusive mode: close it, or use it in shared mode next to ASIO`);
+    return { exclusive };
+  }
+  // WASAPI next to an ASIO driver on the same chip: shared mode only, so ASIO keeps the chip and music / system sound keep playing
+  if (dev.engineBackend === 'wasapi' && exclusive && open.some(r => r.backend === 'asio')) return { exclusive: false, separated: true };
+  return { exclusive };
+}
+
 function toDevices(raw, base) {
   return raw.map((d, i) => {
     const api = API[d.backend] || 'ENGINE_' + String(d.backend).toUpperCase();
@@ -29,6 +52,7 @@ function toDevices(raw, base) {
       id: base + i, engineBackend: d.backend, engineId: String(d.id || ''), api, hostAPIName: HOST_API[api] || String(d.backend), name: String(d.name || d.id || ''),
       maxInputChannels: d.inChannels | 0, maxOutputChannels: d.outChannels | 0, defaultSampleRate: d.defaultRate || 48000,
       sampleRates: Array.isArray(d.sampleRates) ? d.sampleRates : [], isDefaultInput: !!d.defaultIn, isDefaultOutput: !!d.defaultOut,
+      hardware: hardwareFamily(d.name || d.id) || (d.backend === 'asio' && WRAPPERS.test(String(d.name || d.id)) ? 'wdm' : null),
     };
   });
 }
@@ -52,6 +76,8 @@ function launch({ dev, inCh, outCh, sampleRate, frameSize, exclusive, onData, on
   if (!exe) throw new Error('the audio engine (audiomixer-native) is not installed');
   if (!shared && dev.engineBackend === 'asio' && [...state.open].some(s => s.backend === 'asio' && s.device === dev.engineId))
     throw new Error(`${dev.name} is already open: an ASIO driver serves one stream, so read and write it together (duplex)`);
+  const sep = separation(dev, !!exclusive);
+  exclusive = sep.exclusive;
   const rate = Number(sampleRate) || 48000;
   const frames = Number.isInteger(frameSize) && frameSize > 0 ? frameSize : DEFAULT_FRAMES;
   const args = ['--stream', '--backend', dev.engineBackend, '--rate', String(rate), '--frames', String(frames), '--in-ch', String(inCh), '--out-ch', String(outCh)];
@@ -59,7 +85,7 @@ function launch({ dev, inCh, outCh, sampleRate, frameSize, exclusive, onData, on
   if (outCh) args.push('--out', dev.engineId);
   if (exclusive) args.push('--exclusive');
   const child = spawnImpl(exe, args, { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
-  const rec = { backend: dev.engineBackend, device: dev.engineId };
+  const rec = { backend: dev.engineBackend, device: dev.engineId, hw: hwOf(dev), exclusive: !!exclusive };
   state.open.add(rec);
   let closed = false;
   const fail = e => { if (!closed && onError) onError(e instanceof Error ? e : new Error(String(e))); };
@@ -89,7 +115,7 @@ function launch({ dev, inCh, outCh, sampleRate, frameSize, exclusive, onData, on
   child.stdin.on('error', () => { /* the engine ended: exit reports why */ });
   return {
     inChannels: inCh, outChannels: outCh, channels: outCh || inCh, frameSize: frames, auto: !(Number.isInteger(frameSize) && frameSize > 0),
-    latencyMs: Math.round(frames / rate * 10000) / 10, sampleRate: rate, deviceRate: rate, resampled: false, exclusive: !!exclusive, duplex: !!(inCh && outCh), engine: 'native', whenClosed,
+    latencyMs: Math.round(frames / rate * 10000) / 10, sampleRate: rate, deviceRate: rate, resampled: false, exclusive: !!exclusive, separated: !!sep.separated, duplex: !!(inCh && outCh), engine: 'native', whenClosed,
     write(buf) { if (!closed && outCh) child.stdin.write(buf); },
     close() {
       if (closed) return;
@@ -129,6 +155,7 @@ function openShared(o, direction, channels) {
   let g = groups.get(key);
   if (g && g.duplex) throw new Error(`${o.dev.name} is already open for reading and writing`);
   if (g && g.users[direction]) throw new Error(`${o.dev.name} is already open for ${direction === 'output' ? 'writing' : 'reading'}`);
+  if (!g) separation(o.dev, o.exclusive === true);   // refuse before claiming the device, so a refused open leaves nothing behind
   if (g && rate !== g.sampleRate) throw new Error(`${o.dev.name} is already open at ${g.sampleRate} Hz: reading and writing it together needs the same sample rate`);
   if (!g) {
     if (!(o.exe || enginePath())) throw new Error('the audio engine (audiomixer-native) is not installed');
@@ -170,4 +197,4 @@ function openDuplex(o) {
 
 function _reset() { state.open.clear(); state.list = null; state.at = 0; groups.clear(); }
 
-module.exports = { enginePath, listDevices, openStream, openDuplex, toDevices, _reset, _state: state, _shared: SHARED, _groups: groups };
+module.exports = { hardwareFamily, enginePath, listDevices, openStream, openDuplex, toDevices, _reset, _state: state, _shared: SHARED, _groups: groups };
