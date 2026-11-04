@@ -4794,3 +4794,58 @@ test('finder (client/finder.js): finds the mixer link by probing /api/status, sc
     assert.ok(/document\.hidden/.test(html), 'it does not poll while the tab is hidden');
   } finally { app.server.close(); mixer.close(); other.close(); }
 });
+
+test('native engine in place of Audify: --list-devices in the bridge shape, and input / output / duplex sessions stream real PCM through audiomixer-native --stream (null device)', { timeout: 240000 }, async t => {
+  const cp = require('node:child_process'), osx = require('node:os'), pathx = require('node:path'), fsx = require('node:fs');
+  const has = cmd => { try { return cp.spawnSync(cmd, ['--version'], { encoding: 'utf8' }).status === 0; } catch (_) { return false; } };
+  if (!has('cmake') || !(has('c++') || has('g++'))) { t.skip('cmake and a C++ compiler are needed to build the engine'); return; }
+  const build = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'am-engine-'));
+  try {
+    const root = pathx.join(__dirname, '..');
+    assert.strictEqual(cp.spawnSync('cmake', ['-S', pathx.join(root, 'engine', 'cpp'), '-B', build], { encoding: 'utf8' }).status, 0);
+    assert.strictEqual(cp.spawnSync('cmake', ['--build', build, '--target', 'audiomixer-native', '-j', '4'], { encoding: 'utf8' }).status, 0, 'the engine builds');
+    const exe = pathx.join(build, 'audiomixer-native');
+    const prev = { e: process.env.AUDIO_MIXER_ENGINE, n: process.env.AUDIO_MIXER_ENGINE_NULL };
+    process.env.AUDIO_MIXER_ENGINE = exe; process.env.AUDIO_MIXER_ENGINE_NULL = '1';
+    const native = require('./native-engine'), audify = require('./audify');
+    native._reset();
+    try {
+      // the device list, in the shape audify.listDevices() gives, with Audify's id range (so the callers route these ids as before)
+      const list = audify.listDevices();
+      const nul = list.devices.find(d => d.engineBackend === 'null');
+      assert.ok(nul && nul.id >= audify.AUDIFY_BASE && nul.hostAPIName === 'Null' && nul.maxInputChannels === 2 && nul.maxOutputChannels === 2);
+      assert.strictEqual(native.listDevices({ includeNull: false, now: Date.now() + 60000 }).devices.some(d => d.engineBackend === 'null'), false, 'the null device is hidden from the page');
+      native._reset(); audify.listDevices();
+      const until = async (f, ms = 8000) => { const t0 = Date.now(); while (!f()) { if (Date.now() - t0 > ms) return false; await new Promise(r => setTimeout(r, 25)); } return true; };
+      const conn = () => { const c = { msgs: [], bytes: 0, chunks: [], closed: false }; c.send = m => c.msgs.push(JSON.parse(m)); c.sendBinary = b => { c.bytes += b.length; c.chunks.push(b.length); }; c.close = () => { c.closed = true; }; return c; };
+      // input: the bridge's /ws/input session reads the null device through the engine
+      const ci = conn(), si = require('./input').createInputSession(ci, () => { throw new Error('no PortAudio'); });
+      si.onText(JSON.stringify({ type: 'start', deviceId: nul.id, channels: 2, sampleRate: 48000 }));
+      const started = ci.msgs.find(m => m.type === 'started');
+      assert.ok(started && started.engine === 'native' && started.hostApi === 'Null', JSON.stringify(ci.msgs));
+      assert.ok(await until(() => ci.bytes >= 48000 * 4 / 4), 'a quarter second of captured PCM reaches the page');
+      assert.ok(ci.chunks.every(n => n % 4 === 0), 'every buffer holds whole stereo frames');
+      si.onText(JSON.stringify({ type: 'stop' }));
+      // output: the /ws/output session plays PCM from the page through the engine
+      const co = conn(), so = require('./output').createSession(co, () => { throw new Error('no PortAudio'); });
+      so.onText(JSON.stringify({ type: 'start', deviceId: nul.id, channels: 2, sampleRate: 48000 }));
+      assert.ok(co.msgs.some(m => m.type === 'started' && m.engine === 'native'), JSON.stringify(co.msgs));
+      for (let i = 0; i < 5; i++) so.onBinary(Buffer.alloc(4800 * 4));
+      await new Promise(r => setTimeout(r, 300));
+      assert.ok(!co.msgs.some(m => m.type === 'error'), JSON.stringify(co.msgs));
+      so.onText(JSON.stringify({ type: 'stop' }));
+      // duplex: one engine process reads and writes the same device
+      const cd = conn(), sd = require('./duplex').createDuplexSession(cd, () => { throw new Error('no PortAudio'); });
+      sd.onText(JSON.stringify({ type: 'start', deviceId: nul.id, channels: 2, inChannels: 2, sampleRate: 48000 }));
+      assert.ok(cd.msgs.some(m => m.type === 'started' && m.duplex === true), JSON.stringify(cd.msgs));
+      sd.onBinary(Buffer.alloc(4800 * 4));
+      assert.ok(await until(() => cd.bytes > 0), 'duplex captures as it plays');
+      sd.onText(JSON.stringify({ type: 'stop' }));
+      assert.ok(await until(() => native._state.open.size === 0), 'every engine process is let go');
+    } finally {
+      native._reset();
+      if (prev.e === undefined) delete process.env.AUDIO_MIXER_ENGINE; else process.env.AUDIO_MIXER_ENGINE = prev.e;
+      if (prev.n === undefined) delete process.env.AUDIO_MIXER_ENGINE_NULL; else process.env.AUDIO_MIXER_ENGINE_NULL = prev.n;
+    }
+  } finally { fsx.rmSync(build, { recursive: true, force: true }); }
+});

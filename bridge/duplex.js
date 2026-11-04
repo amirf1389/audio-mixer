@@ -49,10 +49,10 @@ function createDuplexSession(conn, load = loadPortAudio, loadA = audify.loadAudi
         if (!dev) return err('device not found');
         lock = claim({ id: dev.id, name: dev.name, hostAPIName: dev.hostAPIName }, { takeover: opts.takeover === true, preempt: takenOver });
         if (!lock.ok) { const m = lock.message; lock = null; return err(m); }
-        const st = audify.openDuplex({ mod: loadA(), dev, inChannels: inCh, outChannels: outCh, sampleRate, frameSize: opts.frameSize, exclusive: opts.exclusive === true,
+        const st = audify.openDuplex({ mod: dev.engineBackend ? null : loadA(), dev, inChannels: inCh, outChannels: outCh, sampleRate, frameSize: opts.frameSize, exclusive: opts.exclusive === true,
           onData: send, onError: e => { err(String(e && e.message || e)); stop(); } });
         io = { quit: () => st.close(), write: b => st.write(b) }; frameBytes = 2 * outCh;
-        return announce('audify', dev.name, dev.hostAPIName, sampleRate, st.inChannels, outCh, { frameSize: st.frameSize, latencyMs: st.latencyMs, exclusive: st.exclusive });
+        return announce(dev.engineBackend ? 'native' : 'audify', dev.name, dev.hostAPIName, sampleRate, st.inChannels, outCh, { frameSize: st.frameSize, latencyMs: st.latencyMs, exclusive: st.exclusive });
       }
       const dev = pa.getDevices().find(d => d.id === id);
       if (!dev) return err('device not found');

@@ -2,6 +2,9 @@
 // Audify (RtAudio) audio engine: device listing for every compiled host API, automatic frame-size allocation, and stream open/close.
 // `audify` is an optional dependency (native module). Everything takes an injectable `load` so it is testable without hardware.
 function loadAudify() { return require('audify'); }
+// The project's own native engine (native-engine.js) replaces this binding wherever audiomixer-native is installed: listDevices, openStream and
+// openDuplex hand over to it. An injected `load` (the tests' fake RtAudio) keeps the RtAudio path.
+const native = require('./native-engine');
 
 // RtAudio API enum name -> host API name used everywhere else in the bridge (matches the interface grouping ranks).
 const API_NAMES = {
@@ -161,6 +164,7 @@ function betterOf(first, again) {
 
 // Every compiled API (ASIO, WASAPI, ...) with its devices. Device ids are made unique across APIs (the bridge's `deviceId`).
 function listDevices(load = loadAudify) {
+  if (load === loadAudify) { const n = native.listDevices({ base: AUDIFY_BASE }); if (n) return n; }
   let mod;
   try { mod = load(); } catch (_) { return null; }
   const RtAudio = mod.RtAudio, Api = apiEnum(mod);
@@ -446,6 +450,7 @@ function openDuplexRaw({ mod, dev, inChannels, outChannels, sampleRate, frameSiz
 // ASIO: one stream per driver. A second direction on a device that is already open (the other direction) re-opens it as ONE duplex stream and
 // keeps the first user attached, instead of asking the single-client driver for a second stream (which fails or stalls the first).
 function openStream(o) {
+  if (o.dev && o.dev.engineBackend) return native.openStream(o);
   const { dev } = o;
   if (!dev || dev.api !== 'WINDOWS_ASIO') return openStreamRaw(o);
   const asio = asioOf(o.mod);
@@ -492,6 +497,7 @@ function openAsioStream(o, asio) {
 
 // One duplex stream (the /ws/duplex endpoint). On ASIO it owns the driver: any other stream on that device is refused until it closes.
 function openDuplex(o) {
+  if (o.dev && o.dev.engineBackend) return native.openDuplex(o);
   const { dev } = o;
   if (!dev || dev.api !== 'WINDOWS_ASIO') return openDuplexRaw(o);
   const asio = asioOf(o.mod);
