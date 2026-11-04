@@ -40,7 +40,7 @@ function compileWindows(arch, exe) {
     fs.writeFileSync(path.join(work, 'update_key.inc'), `static const unsigned char kUpdateKeyX[32] = {${raw('x')}};\nstatic const unsigned char kUpdateKeyY[32] = {${raw('y')}};\n`);
     run(t + '-g++', ['-std=c++17', '-Wall', '-Wextra', '-Werror', '-O2', '-static', '-static-libgcc', '-static-libstdc++', '-DAM_EMBED_ASIO', '-DAM_EMBED_UPDATE_KEY', '-DAM_VERSION="' + version + '"', '-I' + work, '-I' + path.join(ROOT, 'engine/cpp/app'),
       '-I' + path.join(ROOT, 'engine/cpp/include'), '-I' + path.join(ROOT, 'engine/cpp/src'), '-I' + path.join(ROOT, 'drivers/asio'),
-      path.join(ROOT, 'engine/cpp/app/main.cpp'), path.join(ROOT, 'engine/cpp/app/win_tools.cpp'), ...src, '-o', exe, '-lole32', '-luuid', '-ladvapi32', '-lavrt', '-lwinhttp', '-lbcrypt']);
+      path.join(ROOT, 'engine/cpp/app/main.cpp'), path.join(ROOT, 'engine/cpp/app/stream.cpp'), path.join(ROOT, 'engine/cpp/app/win_tools.cpp'), ...src, '-o', exe, '-lole32', '-luuid', '-ladvapi32', '-lavrt', '-lwinhttp', '-lbcrypt']);
   } finally { fs.rmSync(work, { recursive: true, force: true }); }
   return exe;
 }
