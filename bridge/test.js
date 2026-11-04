@@ -1619,10 +1619,10 @@ test('repository layout: one folder per system with its sources and release file
   // the manifest builder finds each file in the folder of its system and points the URL there; a flat folder or a server keeps flat URLs
   const version = JSON.parse(fsx.readFileSync(pathx.join(root, 'package.json'), 'utf8')).version, base = 'https://raw.githubusercontent.com/o/r/main';
   const m = mk.build({ version, base, notes: [] }), win = m.files['win-x64-exe'], apk = m.files['android-apk'];
-  assert.strictEqual(win.url, `${base}/releases/windows/${encodeURIComponent('Audio Mixer-' + version + '.exe')}`); assert.strictEqual(apk.url, `${base}/releases/android/AudioMixer-${version}-android.apk`);
+  assert.strictEqual(win.url, `${base}/releases/windows/${encodeURIComponent('AmF X1-' + version + '.exe')}`); assert.strictEqual(apk.url, `${base}/releases/android/AudioMixer-${version}-android.apk`);
   assert.strictEqual(m.files['linux-deb'].url, `${base}/releases/linux/audio-mixer_${version}_all.deb`); assert.strictEqual(m.files['macos-dmg'].url, `${base}/releases/macos/AudioMixer-${version}-macos.dmg`); assert.strictEqual(m.files['ios-project'].url, `${base}/releases/ios/AudioMixer-${version}-ios-xcode-project.tar.gz`);
   for (const f of Object.values(m.files)) { const file = lay.findRelease(f.name); assert.ok(file, f.name); assert.strictEqual(fsx.statSync(file).size, f.size); }
-  assert.strictEqual(mk.build({ version, base: 'https://ota.test/releases', flatUrls: true, notes: [] }).files['win-x64-exe'].url, `https://ota.test/releases/${encodeURIComponent('Audio Mixer-' + version + '.exe')}`);
+  assert.strictEqual(mk.build({ version, base: 'https://ota.test/releases', flatUrls: true, notes: [] }).files['win-x64-exe'].url, `https://ota.test/releases/${encodeURIComponent('AmF X1-' + version + '.exe')}`);
   assert.strictEqual(lay.findRelease('nothing-here.exe'), null);
   // the web server never serves the system folders, the installers' own helpers keep being found where they are shipped
   const sec = require('./security'); for (const d of ['platforms', 'drivers', 'ota-server']) { assert.ok(sec.BLOCKED_TOP.has(d), d); assert.strictEqual(sec.staticAllowed(root, pathx.join(root, d, 'x.json')), false, d); }
@@ -4784,6 +4784,7 @@ test('native engine in place of Audify: --list-devices in the bridge shape, and 
       const list = audify.listDevices();
       const nul = list.devices.find(d => d.engineBackend === 'null');
       assert.ok(nul && nul.id >= audify.AUDIFY_BASE && nul.hostAPIName === 'Null' && nul.maxInputChannels === 2 && nul.maxOutputChannels === 2);
+      assert.strictEqual(audify.detectAudify().provider, 'native', 'the page is told the native engine made the list (its labels say NATIVE ENGINE, not Audify)');
       assert.strictEqual(native.listDevices({ includeNull: false, now: Date.now() + 60000 }).devices.some(d => d.engineBackend === 'null'), false, 'the null device is hidden from the page');
       native._reset(); audify.listDevices();
       const until = async (f, ms = 8000) => { const t0 = Date.now(); while (!f()) { if (Date.now() - t0 > ms) return false; await new Promise(r => setTimeout(r, 25)); } return true; };

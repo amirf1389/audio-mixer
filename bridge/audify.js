@@ -243,7 +243,8 @@ function detectAudify(load = loadAudify) {
   const r = listDevices(load);
   if (!r) return null;
   return {
-    engine: 'audify', hostApis: r.hostApis, ...(r.problems && r.problems.length ? { problems: r.problems } : {}),
+    // engine 'audify' names the bridge's own device list in the page protocol; provider says what produced it: the native engine or RtAudio (the macOS fallback)
+    engine: 'audify', provider: r.provider || 'rtaudio', hostApis: r.hostApis, ...(r.problems && r.problems.length ? { problems: r.problems } : {}),
     devices: r.devices.map(d => ({ id: d.id, name: d.name, hostApi: d.hostAPIName, inputs: d.maxInputChannels, outputs: d.maxOutputChannels, sampleRate: d.defaultSampleRate, ...(d.probeFailed ? { probeFailed: true } : {}) })),
   };
 }
