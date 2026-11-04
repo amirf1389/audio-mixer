@@ -521,13 +521,14 @@ test('installer: stages the app with the bundled runtime for x64 and x86 (no NSI
   for (const arch of ['x64', 'x86']) {
     const zip = makeZip([[`node-v98.1.2-win-${arch}/LICENSE`, Buffer.from('MIT')], [`node-v98.1.2-win-${arch}/node.exe`, Buffer.from('MZ-fake-node-' + arch)], [`node-v98.1.2-win-${arch}/node_modules/npm/bin/npm-cli.js`, Buffer.from('// npm')], [`node-v98.1.2-win-${arch}/node_modules/npm/package.json`, Buffer.from('{}')]]);
     const out = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'inst-'));
-    const r = await bi.buildInstaller({ out, arch, fetchImpl: fakeNodeFetch(zip, { arch }), bundleAudify: false });
+    const r = await bi.buildInstaller({ out, arch, fetchImpl: fakeNodeFetch(zip, { arch }) });
     assert.strictEqual(pathx.basename(r.stage), `stage-${arch}`);
     assert.strictEqual(fsx.readFileSync(pathx.join(r.stage, 'runtime', 'node.exe')).toString(), 'MZ-fake-node-' + arch);
     assert.strictEqual(fsx.readFileSync(pathx.join(r.stage, 'runtime', 'node_modules', 'npm', 'bin', 'npm-cli.js'), 'utf8'), '// npm');   // npm travels with the runtime
     assert.ok(fsx.readFileSync(pathx.join(r.stage, 'MANIFEST.sha256'), 'utf8').includes('  runtime/node_modules/npm/bin/npm-cli.js'));   // and is covered by the verification scan
     assert.ok(fsx.existsSync(pathx.join(r.stage, 'client', 'cli.js')) && fsx.existsSync(pathx.join(r.stage, 'MANIFEST.sha256')));
     assert.ok(!fsx.existsSync(pathx.join(r.stage, 'start-pc-mode.sh')));
+    assert.ok(!fsx.existsSync(pathx.join(r.stage, 'bridge', 'node_modules', 'audify')), 'Audify is not bundled: the native engine does the audio I/O on Windows');
     assert.match(fsx.readFileSync(pathx.join(r.stage, 'start-pc-mode.bat'), 'utf8'), /runtime\\node\.exe/);
     assert.match(fsx.readFileSync(pathx.join(r.stage, 'start-local-server.bat'), 'utf8'), /runtime\\node\.exe" bridge\\server\.js/);
     fsx.rmSync(out, { recursive: true, force: true });
@@ -969,29 +970,17 @@ test('endpoint: /api/plugins', async () => {
   server.closeAllConnections(); server.close();
 });
 
-test('installer bundles Audify: pinned Windows binaries, copied into the stage and listed in the manifest', () => {
+test('Audify is gone from Windows and Linux: not bundled, not a bridge dependency, installed only where the native engine does not run', () => {
   const bi = require('../scripts/build-installer');
-  const cache = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'au-'));
-  const mkRun = (content) => (cmd, args, opts) => {
-    const nm = pathx.join(opts.cwd.endsWith('audify') ? pathx.dirname(opts.cwd) : opts.cwd, opts.cwd.endsWith('audify') ? '' : 'node_modules');
-    if (!opts.cwd.endsWith('audify')) {
-      for (const [m, files] of [['audify', ['index.js', 'package.json']], ['bindings', ['bindings.js']], ['file-uri-to-path', ['index.js']], ['prebuild-install', ['bin.js']]]) {
-        fsx.mkdirSync(pathx.join(nm, m), { recursive: true }); files.forEach(f => fsx.writeFileSync(pathx.join(nm, m, f), '//'));
-      }
-    } else {
-      const rel = pathx.join(opts.cwd, 'build', 'Release'); fsx.mkdirSync(rel, { recursive: true });
-      Object.keys(bi.AUDIFY_WIN_SHA256.x64).forEach(f => fsx.writeFileSync(pathx.join(rel, f), content));
-    }
-    return { status: 0 };
-  };
-  assert.throws(() => bi.fetchAudify({ cache, run: mkRun('tampered') }), /checksum mismatch/);   // a binary that is not the pinned build is refused and removed
-  const stage = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'st-'));
-  const fake = { version: 'x', nm: pathx.join(cache, 'audify-1.10.1', 'node_modules'), dirs: [['audify', ['index.js', 'build/Release']], ['bindings', ['bindings.js']], ['file-uri-to-path', ['index.js']]] };
-  fsx.mkdirSync(pathx.join(fake.nm, 'audify', 'build', 'Release'), { recursive: true }); fsx.writeFileSync(pathx.join(fake.nm, 'audify', 'build', 'Release', 'audify.node'), 'x');
-  bi.stageAudify(fake, stage);
-  assert.ok(fsx.existsSync(pathx.join(stage, 'bridge', 'node_modules', 'audify', 'build', 'Release', 'audify.node')));
-  assert.ok(fsx.existsSync(pathx.join(stage, 'bridge', 'node_modules', 'bindings', 'bindings.js')));
-  fsx.rmSync(cache, { recursive: true, force: true }); fsx.rmSync(stage, { recursive: true, force: true });
+  assert.ok(!('fetchAudify' in bi) && !('stageAudify' in bi) && !('AUDIFY_WIN_SHA256' in bi), 'the installer has no Audify download any more');
+  const pkg = JSON.parse(fsx.readFileSync(pathx.join(__dirname, 'package.json'), 'utf8'));
+  assert.ok(!('audify' in (pkg.optionalDependencies || {})) && !('audify' in (pkg.dependencies || {})), 'npm install in bridge/ no longer pulls Audify');
+  assert.strictEqual(pkg.overrides.audify['cmake-js'].tar, '^7.5.22', 'the patched tar stays pinned for the macOS fallback install');
+  const sh = fsx.readFileSync(pathx.join(__dirname, '..', 'platforms', 'linux', 'ensure-node.sh'), 'utf8');
+  assert.match(sh, /"\$1\/audiomixer-native" --list >\/dev\/null 2>&1; then return 0; fi/, 'the launcher skips Audify when the bundled engine runs');
+  assert.match(sh, /"overrides":\{"audify":\{"cmake-js":\{"tar":"\^7\.5\.22"\}\}\}/, 'the user-folder Audify install pins the patched tar too');
+  const cli = fsx.readFileSync(pathx.join(__dirname, '..', 'client', 'cli.js'), 'utf8');
+  assert.match(cli, /argv\.includes\('--user'\) && engineRuns\(\)/, 'setup --user installs Audify only where the engine does not run');
 });
 
 test('verify: native files under bridge/node_modules must be in the manifest', () => {
