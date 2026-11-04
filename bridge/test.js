@@ -5087,5 +5087,47 @@ test('license page SUBMIT TO VENDOR works without an update server: local genera
   const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
   assert.ok(html.includes('if (!origin) return this.submitWithoutServer(req);'), 'no server no longer stops the button');
   assert.ok(html.includes("fetch('http://127.0.0.1:8799/status', { mode: 'no-cors'") && html.includes("location.href = 'mailto:'"));
-  assert.ok(!html.includes('Set an update server address in SETTINGS → OTA first'));
+  assert.ok(!html.includes('Set an update server address in SETTINGS → OTA first')); assert.ok(html.includes("const VENDOR_EMAIL = 'badriamirfakhri@gmail.com'"));
+});
+
+test('generator + local OTA: PUBLISH signs update.json with the unlocked key, serves only published files (Range), takes key requests from the app into the INBOX', async () => {
+  const gen = require('../scripts/license-generator'), L = require('../scripts/license'), up = require('./update'), http = require('node:http');
+  const tmp = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'gota-')), vdir = pathx.join(tmp, 'v'), root = pathx.join(tmp, 'proj'), rel = pathx.join(tmp, 'rel');
+  fsx.mkdirSync(pathx.join(root, 'releases'), { recursive: true }); fsx.mkdirSync(rel);
+  fsx.writeFileSync(pathx.join(root, 'package.json'), JSON.stringify({ version: '1.22.0.1' }));
+  fsx.writeFileSync(pathx.join(rel, 'AmF X1-1.22.0.1.exe'), Buffer.alloc(5000, 7)); fsx.writeFileSync(pathx.join(rel, 'secret.txt'), 'not published');
+  L.initKeys(vdir, { pin: '482916' }); const jwk = L.loadPublic(vdir);
+  const srv = gen.createServer({ kind: 'vendor', dirArgv: ['--dir', vdir], root, releases: rel });
+  await new Promise(r => srv.listen(0, '127.0.0.1', r)); const port = srv.address().port;
+  const call = (method, p, body, headers = {}) => new Promise((res, rej) => {
+    const rq = http.request({ host: '127.0.0.1', port, method, path: p, headers: { 'Content-Type': 'application/json', Host: '127.0.0.1:' + port, ...headers } }, r => { const c = []; r.on('data', d => c.push(d)); r.on('end', () => { const b = Buffer.concat(c); let j = null; try { j = JSON.parse(b.toString('utf8')); } catch (_) { /* binary */ } res({ status: r.statusCode, h: r.headers, j, b }); }); });
+    rq.on('error', rej); if (body) rq.write(typeof body === 'string' ? body : JSON.stringify(body)); rq.end();
+  });
+  try {
+    assert.strictEqual((await call('GET', '/update.json')).status, 404);
+    assert.strictEqual((await call('POST', '/ota/publish', {})).status, 401, 'publishing signs: the PIN lock applies');
+    assert.strictEqual((await call('POST', '/unlock', { pin: '482916' })).status, 200);
+    let r = await call('POST', '/ota/publish', { repo: true }); assert.strictEqual(r.status, 200); assert.strictEqual(r.j.files, 1);
+    r = await call('GET', '/update.json', null, { Origin: 'http://localhost:8765' });
+    assert.strictEqual(r.h['access-control-allow-origin'], '*');
+    const v = up.verifyManifest(r.j, jwk); assert.strictEqual(v.ok, true, 'signed with the vendor key');
+    const m = JSON.parse(r.j.payload);
+    assert.strictEqual(m.version, '1.22.0.1'); assert.strictEqual(m.files['win-x64-exe'].url, `http://127.0.0.1:${port}/releases/AmF%20X1-1.22.0.1.exe`);
+    assert.ok(fsx.existsSync(pathx.join(root, 'releases', 'update.json')), 'also written for GitHub');
+    r = await call('GET', '/releases/AmF%20X1-1.22.0.1.exe'); assert.strictEqual(r.status, 200); assert.strictEqual(r.b.length, 5000);
+    r = await call('GET', '/releases/AmF%20X1-1.22.0.1.exe', null, { Range: 'bytes=4000-' }); assert.strictEqual(r.status, 206); assert.strictEqual(r.b.length, 1000);
+    assert.strictEqual((await call('GET', '/releases/secret.txt')).status, 404, 'only files the manifest lists');
+    assert.strictEqual((await call('GET', '/releases/..%2Fv%2Fprivate.pem.enc')).status, 404);
+    // the app's SUBMIT TO VENDOR, from a page origin
+    assert.strictEqual((await call('OPTIONS', '/request-license', null, { Origin: 'null' })).status, 204);
+    r = await call('POST', '/request-license', { app: 'audio-mixer', kind: 'license-request', v: 1, machineId: 'CC2B-A1AC-00B9-85AD-6C4D', plan: 'master', name: 'Amir <b>', email: 'a@example.com' }, { Origin: 'null' });
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual((await call('POST', '/request-license', { kind: 'other' })).status, 400);
+    r = await call('GET', '/ota/status'); assert.strictEqual(r.j.requests.length, 1); assert.strictEqual(r.j.requests[0].machineId, 'CC2B-A1AC-00B9-85AD-6C4D'); assert.strictEqual(r.j.requests[0].name, 'Amir b');
+    assert.strictEqual(r.j.published.version, '1.22.0.1');
+    // the page and the key routes still refuse a foreign origin
+    assert.strictEqual((await call('POST', '/issue', { plan: 'pro' }, { Origin: 'https://evil.example' })).status, 403);
+    assert.strictEqual((await call('GET', '/update.json', null, { Host: 'evil.example' })).status, 403, 'DNS-rebinding guard');
+  } finally { srv.close(); fsx.rmSync(tmp, { recursive: true, force: true }); }
+  const page = gen.page('vendor'); assert.ok(page.includes('id="inbox-card"') && page.includes('PUBLISH UPDATE'));
 });

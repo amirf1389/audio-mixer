@@ -18784,13 +18784,13 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             // server has SMTP_* configured, a receipt e-mail sent to the address given above. Falls back to telling the person to use FILE / COPY
             // when no https update source is set (OTA_DEFAULT_URL, the project's own releases, is not a server that accepts submissions).
             // No update server set: the vendor's own computer (the key generator answers on 127.0.0.1:8799) gets the generator, filled in;
-            // anyone else gets an e-mail draft holding the request (to the vendor address set with localStorage halx_vendor_email, or blank),
+            // anyone else gets an e-mail draft holding the request (to VENDOR_EMAIL, or the address in localStorage halx_vendor_email),
             // and the request is copied as well, so it can be pasted into any message.
             async submitWithoutServer(req) {
                 let local = false;
                 try { const c = new AbortController(), t = setTimeout(() => c.abort(), 1200); await fetch('http://127.0.0.1:8799/status', { mode: 'no-cors', cache: 'no-store', signal: c.signal }); clearTimeout(t); local = true; } catch (e) { /* no generator here */ }
                 if (local) { await this.openGenerator(); return req; }
-                const t = JSON.stringify(req), to = (store.get('halx_vendor_email') || '').replace(/[^\w.+@-]/g, '');
+                const t = JSON.stringify(req), to = (store.get('halx_vendor_email') || VENDOR_EMAIL).replace(/[^\w.+@-]/g, '');
                 try { await navigator.clipboard.writeText(t); } catch (e) { /* blocked: the e-mail body has it anyway */ }
                 const subject = 'AmF X1 license request: ' + String(req.plan || '').toUpperCase() + (req.name ? ' for ' + req.name : '');
                 location.href = 'mailto:' + encodeURIComponent(to) + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent('Please send me a license key for this request:\n\n' + t + '\n');
@@ -19077,6 +19077,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
         const otaCmp = (a, b) => { const p = v => String(v).split(/[-+]/)[0].split('.').map(n => parseInt(n, 10) || 0); const x = p(a), y = p(b); for (let i = 0; i < Math.max(x.length, y.length, 3); i++) { const d = (x[i] || 0) - (y[i] || 0); if (d) return d < 0 ? -1 : 1; } return 0; };
         const httpsUrl = u => { try { const x = new URL(u, location.href); return (x.protocol === 'https:' || (x.protocol === 'http:' && /^(localhost|127\.0\.0\.1)$/.test(x.hostname))) ? x.href : null; } catch (e) { return null; } };
         // the origin to POST a license request to: the configured update server (SETTINGS -> OTA), with "/update.json" or "/<channel>/update.json" stripped
+        const VENDOR_EMAIL = 'badriamirfakhri@gmail.com';   // where SUBMIT TO VENDOR's e-mail draft goes when no update server is set (localStorage halx_vendor_email overrides)
         function licenseRequestOrigin() {
             const own = httpsUrl(store.get('halx_ota_url') || ''); if (!own) return null;
             try { const u = new URL(own); u.pathname = u.pathname.replace(/\/(?:[a-z0-9-]+\/)?update\.json$/i, '') || '/'; u.search = ''; u.hash = ''; return u.href.replace(/\/+$/, ''); } catch (e) { return null; }
