@@ -1608,7 +1608,7 @@ test('repository layout: one folder per system with its sources and release file
   assert.deepStrictEqual(dirs, ['bridge', 'client', 'deploy', 'drivers', 'engine', 'licenses', 'native', 'npm-installer', 'ota-server', 'platforms', 'releases', 'scripts'], 'the top level is minimal: systems (under platforms/) + shared code, third-party license texts (licenses/) and opt-in native addons (native/)');
   assert.deepStrictEqual(fsx.readdirSync(pathx.join(root, 'platforms')).sort(), ['android', 'electron', 'ios', 'linux', 'macos', 'windows'], 'one folder per system under platforms/ (electron: an additional, optional packaging, not an installed-release OS target)');
   assert.deepStrictEqual(files, ['ADMIN-LICENSE.md', 'Additional Terms & Conditions', 'LICENSE', 'LICENSE.txt', 'PROJECT-README.md', 'README.md', 'RELEASING.md', 'SECURITY.md', 'Steinberg ASIO Licensing Agreement.pdf', 'Steinberg ASIO SDK 2.3.pdf', 'Steinberg ASIO Usage Guidelines.pdf', 'boot.html', 'changes.txt', 'index.html', 'package.json'], 'only the web app, the project papers and the Steinberg ASIO SDK papers at the root');
-  assert.deepStrictEqual(fsx.readdirSync(pathx.join(root, 'releases')).sort(), ['android', 'ios', 'linux', 'macos', 'native', 'update.json', 'windows'], 'releases/ holds the manifest that installed apps fetch, the files it lists (one folder per system) and the native programs');
+  assert.deepStrictEqual(fsx.readdirSync(pathx.join(root, 'releases')).sort(), ['update.json'], 'releases/ holds only the signed manifest that installed apps fetch; the installers and packages are published elsewhere, not committed');
   // every file that goes into a package exists where the layout says; the package keeps its own paths
   const build = require('../scripts/build'), src = fsx.readFileSync(pathx.join(root, 'scripts', 'build.js'), 'utf8');
   const list = [...src.slice(src.indexOf('const FILES = ['), src.indexOf('];', src.indexOf('const FILES = ['))).matchAll(/'([^']+)'/g)].map(m => m[1]).filter(f => /[./]/.test(f));
@@ -1616,13 +1616,17 @@ test('repository layout: one folder per system with its sources and release file
   assert.deepStrictEqual([lay.repoPath('start-pc-mode.bat'), lay.repoPath('start-pc-mode.sh'), lay.repoPath('ensure-node.sh'), lay.repoPath('native/win/x64/AudioDevices.exe'), lay.repoPath('native/host/x86/PluginHost.exe'), lay.repoPath('native/mac/AudioDevices.swift'), lay.repoPath('bridge/server.js')],
     ['platforms/windows/start-pc-mode.bat', 'platforms/linux/start-pc-mode.sh', 'platforms/linux/ensure-node.sh', 'platforms/windows/native/x64/AudioDevices.exe', 'platforms/windows/plugin-host/x86/PluginHost.exe', 'platforms/macos/native/AudioDevices.swift', 'bridge/server.js']);
   assert.deepStrictEqual(['win-x64-exe', 'win-x86-msi', 'linux-deb', 'linux-tar', 'macos', 'macos-dmg', 'android-apk', 'ios-project', 'nope'].map(lay.osOfKey), ['windows', 'windows', 'linux', 'linux', 'macos', 'macos', 'android', 'ios', null]);
-  // the manifest builder finds each file in the folder of its system and points the URL there; a flat folder or a server keeps flat URLs
+  // the release files are no longer committed: the manifest builder takes them from a folder, names each one as the installers do, and keeps flat URLs;
+  // in the repository layout (when files are under releases/<os>/) each system's URL points into its own folder
   const version = JSON.parse(fsx.readFileSync(pathx.join(root, 'package.json'), 'utf8')).version, base = 'https://raw.githubusercontent.com/o/r/main';
-  const m = mk.build({ version, base, notes: [] }), win = m.files['win-x64-exe'], apk = m.files['android-apk'];
-  assert.strictEqual(win.url, `${base}/releases/windows/${encodeURIComponent('AmF X1-' + version + '.exe')}`); assert.strictEqual(apk.url, `${base}/releases/android/AudioMixer-${version}-android.apk`);
-  assert.strictEqual(m.files['linux-deb'].url, `${base}/releases/linux/audio-mixer_${version}_all.deb`); assert.strictEqual(m.files['macos-dmg'].url, `${base}/releases/macos/AudioMixer-${version}-macos.dmg`); assert.strictEqual(m.files['ios-project'].url, `${base}/releases/ios/AudioMixer-${version}-ios-xcode-project.tar.gz`);
-  for (const f of Object.values(m.files)) { const file = lay.findRelease(f.name); assert.ok(file, f.name); assert.strictEqual(fsx.statSync(file).size, f.size); }
-  assert.strictEqual(mk.build({ version, base: 'https://ota.test/releases', flatUrls: true, notes: [] }).files['win-x64-exe'].url, `https://ota.test/releases/${encodeURIComponent('AmF X1-' + version + '.exe')}`);
+  const relDir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'rel-'));
+  const names = { 'win-x64-exe': `AmF X1-${version}.exe`, 'android-apk': `AudioMixer-${version}-android.apk`, 'linux-deb': `audio-mixer_${version}_all.deb`, 'macos-dmg': `AudioMixer-${version}-macos.dmg`, 'ios-project': `AudioMixer-${version}-ios-xcode-project.tar.gz` };
+  Object.values(names).forEach((n, i) => fsx.writeFileSync(pathx.join(relDir, n), 'x'.repeat(i + 1)));
+  const m = mk.build({ releases: relDir, version, base, notes: [] });
+  for (const [k, n] of Object.entries(names)) { assert.strictEqual(m.files[k].name, n); assert.strictEqual(m.files[k].url, `${base}/${encodeURIComponent(n)}`); assert.strictEqual(m.files[k].size, fsx.statSync(pathx.join(relDir, n)).size); }
+  assert.deepStrictEqual(Object.keys(names).map(lay.releasesRel), ['releases/windows', 'releases/android', 'releases/linux', 'releases/macos', 'releases/ios']);
+  assert.strictEqual(mk.build({ releases: relDir, version, base: 'https://ota.test/releases', flatUrls: true, notes: [] }).files['win-x64-exe'].url, `https://ota.test/releases/${encodeURIComponent('AmF X1-' + version + '.exe')}`);
+  fsx.rmSync(relDir, { recursive: true, force: true });
   assert.strictEqual(lay.findRelease('nothing-here.exe'), null);
   // the web server never serves the system folders, the installers' own helpers keep being found where they are shipped
   const sec = require('./security'); for (const d of ['platforms', 'drivers', 'ota-server']) { assert.ok(sec.BLOCKED_TOP.has(d), d); assert.strictEqual(sec.staticAllowed(root, pathx.join(root, d, 'x.json')), false, d); }
