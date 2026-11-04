@@ -10,15 +10,18 @@
 //     sandbox           scripts/license-sandbox.js's key  (default ~/.audio-mixer-sandbox, or AUDIO_MIXER_SANDBOX_DIR / --dir)
 //     admin             scripts/license-admin.js's key    (default ~/.audio-mixer-admin,   or AUDIO_MIXER_ADMIN_DIR   / --dir)
 //   --port 0 (default) picks a free port and prints the address; a fixed port reopens the same one every time.
-// The key directory must already exist (node scripts/license.js init, or the sandbox / admin equivalent): this tool only issues keys with a key
-// pair that is already there, it never creates one.
+//   --open            also opens the page in the default browser (the double-click launchers use it)
+// VENDOR only: when no key pair exists yet, the page offers to create one (the same as `node scripts/license.js init`): the private key is written
+// to the key directory on THIS computer (0600) and the public half into bridge/license-public.json and index.html, which are then committed and
+// rebuilt. It never overwrites an existing key pair. The sandbox / admin key pairs are still made with their own "init" commands.
+// Several keys at once: "How many" > 1 returns that many keys (random serials) and a CSV to download.
 const http = require('node:http');
 const crypto = require('node:crypto');
 const lic = require('../bridge/license');
 const { originAllowed, hostAllowed } = require('../bridge/server');
 
 const KINDS = {
-  vendor: { mod: require('./license.js'), dirFn: 'vendorDir', label: 'VENDOR', needsName: true },
+  vendor: { mod: require('./license.js'), dirFn: 'vendorDir', label: 'VENDOR', needsName: false, canInit: true },   // no name: "Customer <serial>"
   sandbox: { mod: require('./license-sandbox.js'), dirFn: 'sandboxDir', label: 'SANDBOX', needsName: false },
   admin: { mod: require('./license-admin.js'), dirFn: 'adminDir', label: 'ADMIN', needsName: true },
 };
@@ -64,7 +67,13 @@ textarea,#key-out{width:100%;background:var(--panel2);border:1px solid var(--lin
 <body>
 <header><h1>AUDIO <b>MIXER</b></h1><span class="pill">${k.label} KEY</span></header>
 <main>
-  <section class="card">
+  <section class="card" id="setup" hidden>
+    <h2>NO SIGNING KEY ON THIS COMPUTER YET</h2>
+    <p class="dim">Keys are signed with your private key. None was found in <span class="mono" id="keydir"></span>. Create one here: it stays on this computer only.</p>
+    <button class="btn" id="init" type="button">CREATE MY KEY PAIR</button>
+    <div id="init-done" hidden><p><b>Done.</b> Back up this file now (USB drive or password manager, not a cloud folder and not the repository). Without it no more keys can be made for your builds:</p><div id="privpath" class="mono"></div><p class="dim">The public half was written into bridge/license-public.json and index.html. Commit and push those two files, then rebuild the installers so the app trusts your keys.</p></div>
+  </section>
+  <section class="card" id="gen">
     <h2>GENERATE A LICENSE KEY</h2>
     <form id="f">
       <div class="field"><label for="plan">Plan</label><select id="plan">${plans}</select></div>
@@ -75,6 +84,7 @@ textarea,#key-out{width:100%;background:var(--panel2);border:1px solid var(--lin
         <div class="field"><label for="days">Expires in (days, 0 = never)</label><input id="days" type="number" min="0" step="1" value="${kind === 'sandbox' || kind === 'admin' ? 30 : 0}"></div>
         <div class="field"><label for="seats">Seats</label><input id="seats" type="number" min="1" step="1" value="1"></div>
       </div>
+      <div class="field"><label for="count">How many keys (1 = one key; more = a batch with random serials and a CSV)</label><input id="count" type="number" min="1" max="500" step="1" value="1"></div>
       <button class="btn" id="go" type="submit">GENERATE KEY</button>
     </form>
     <p class="err" id="err" hidden></p>
@@ -83,7 +93,7 @@ textarea,#key-out{width:100%;background:var(--panel2);border:1px solid var(--lin
     <h2>SIGNED KEY</h2>
     <div id="key-out" class="mono"></div>
     <p class="dim" id="summary"></p>
-    <button class="btn" id="copy" type="button">COPY</button>
+    <div class="row2"><button class="btn" id="copy" type="button">COPY</button><button class="btn" id="csv" type="button" hidden>DOWNLOAD CSV</button></div>
   </section>
 </main>
 <script>
@@ -92,23 +102,39 @@ textarea,#key-out{width:100%;background:var(--panel2);border:1px solid var(--lin
 // written with textContent only, no HTML is ever parsed.
 (function () {
   var $ = function (id) { return document.getElementById(id); };
+  var csvText = '';
+  fetch('/status').then(function (r) { return r.json(); }).then(function (j) {
+    if (j && j.ok && !j.hasKey) { $('keydir').textContent = j.dir; $('setup').hidden = false; $('gen').hidden = !!j.canInit; if (!j.canInit) { $('init').hidden = true; } }
+  }).catch(function () { /* the form still works */ });
+  $('init').addEventListener('click', function () {
+    $('init').disabled = true;
+    fetch('/init', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).then(function (r) { return r.json(); }).then(function (j) {
+      if (!j || !j.ok) { $('err').textContent = (j && j.error) || 'Could not create the key pair.'; $('err').hidden = false; $('init').disabled = false; return; }
+      $('privpath').textContent = j.priv; $('init-done').hidden = false; $('init').hidden = true; $('gen').hidden = false;
+    }).catch(function () { $('err').textContent = 'Could not reach this server.'; $('err').hidden = false; $('init').disabled = false; });
+  });
   $('f').addEventListener('submit', function (ev) {
     ev.preventDefault();
     $('err').hidden = true; $('go').disabled = true; $('go').textContent = 'GENERATING…';
-    var body = { plan: $('plan').value, name: $('name').value, email: $('email').value, machine: $('machine').value, days: Number($('days').value) || 0, seats: Number($('seats').value) || 1 };
+    var body = { plan: $('plan').value, name: $('name').value, email: $('email').value, machine: $('machine').value, days: Number($('days').value) || 0, seats: Number($('seats').value) || 1, count: Number($('count').value) || 1 };
     fetch('/issue', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
       .then(function (res) {
         if (!res.ok || !res.j || !res.j.ok) { $('err').textContent = (res.j && res.j.error) || 'Could not generate the key.'; $('err').hidden = false; return; }
-        $('key-out').textContent = res.j.key;
+        $('key-out').textContent = res.j.keys ? res.j.keys.map(function (x) { return x.id + '  ' + x.key; }).join('\n') : res.j.key;
         $('summary').textContent = res.j.summary;
+        csvText = res.j.csv || ''; $('csv').hidden = !csvText;
         $('result').hidden = false;
       })
       .catch(function () { $('err').textContent = 'Could not reach this server.'; $('err').hidden = false; })
       .then(function () { $('go').disabled = false; $('go').textContent = 'GENERATE KEY'; });
   });
   $('copy').addEventListener('click', function () {
-    navigator.clipboard.writeText($('key-out').textContent).then(function () { $('copy').textContent = 'COPIED'; setTimeout(function () { $('copy').textContent = 'COPY'; }, 1200); });
+    navigator.clipboard.writeText(csvText || $('key-out').textContent).then(function () { $('copy').textContent = 'COPIED'; setTimeout(function () { $('copy').textContent = 'COPY'; }, 1200); });
+  });
+  $('csv').addEventListener('click', function () {
+    var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csvText], { type: 'text/csv' })); a.download = 'amfx1-license-keys-' + new Date().toISOString().slice(0, 10) + '.csv';
+    document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
   });
 })();
 </script>
@@ -140,10 +166,36 @@ function issueKey(kind, dirArgv, body) {
   const r = k.mod.issue({ dir, plan, name, email: email || undefined, machine: machine || undefined, days, seats, now: Date.now() });
   const p = r.payload;
   const summary = `${k.label} ${lic.PLANS[p.plan].name} for ${p.name || '(no name)'}, ${p.expires ? 'expires ' + new Date(p.expires).toISOString().slice(0, 10) : 'no expiry'}${p.mid ? ', bound to ' + p.mid : ', not bound to a computer'}`;
+  const count = Math.floor(Number(body.count) || 1);
+  if (count > 1) {
+    if (count > 500) { const e = new Error('at most 500 keys at a time'); e.status = 400; throw e; }
+    const keys = [{ id: p.id, key: r.key, name: p.name }];
+    for (let i = 1; i < count; i++) {   // a batch: random serials, names only when one was given (then numbered)
+      const x = k.mod.issue({ dir, plan, name: name ? name + ' #' + (i + 1) : '', email: email || undefined, machine: machine || undefined, days, seats, now: Date.now() });
+      keys.push({ id: x.payload.id, key: x.key, name: x.payload.name });
+    }
+    if (name) keys[0].name = name + ' #1';
+    const q = v => '"' + String(v).replace(/"/g, '""') + '"';
+    const csv = 'id,plan,name,expires,key\n' + keys.map(x => [x.id, plan, q(x.name || ''), p.expires ? new Date(p.expires).toISOString().slice(0, 10) : '', x.key].join(',')).join('\n') + '\n';
+    return { keys, csv, summary: `${count} ${k.label} ${lic.PLANS[plan].name} keys, ${p.expires ? 'expire ' + new Date(p.expires).toISOString().slice(0, 10) : 'no expiry'}${p.mid ? ', bound to ' + p.mid : ', not bound to a computer'}` };
+  }
   return { key: r.key, summary };
 }
 
-function createServer({ kind = 'vendor', dirArgv = [] } = {}) {
+function keyStatus(kind, dirArgv) {
+  const k = KINDS[kind], dir = k.mod[k.dirFn](dirArgv);
+  return { hasKey: require('node:fs').existsSync(require('node:path').join(dir, 'private.pem')), dir, canInit: !!k.canInit };
+}
+function initKind(kind, dirArgv, root) {
+  const k = KINDS[kind];
+  if (!k.canInit) { const e = new Error('create this key pair with its own "init" command'); e.status = 400; throw e; }
+  const dir = k.mod[k.dirFn](dirArgv);
+  let r; try { r = k.mod.initKeys(dir); } catch (e) { e.status = 409; throw e; }   // never overwrites an existing key
+  k.mod.embedPublic(k.mod.loadPublic(dir), root);
+  return { priv: r.priv };
+}
+
+function createServer({ kind = 'vendor', dirArgv = [], root } = {}) {
   if (!KINDS[kind]) throw new Error('kind must be one of: ' + Object.keys(KINDS).join(', '));
   const send = (res, code, body, headers = {}) => { const t = typeof body === 'string' ? body : JSON.stringify(body); res.writeHead(code, { 'Content-Type': typeof body === 'string' ? 'text/html; charset=utf-8' : 'application/json; charset=utf-8', 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer', ...headers }); res.end(t); };
   const fail = (res, code, error) => send(res, code, { ok: false, error });
@@ -154,6 +206,8 @@ function createServer({ kind = 'vendor', dirArgv = [] } = {}) {
       if (!originAllowed(req.headers.origin)) return fail(res, 403, 'origin not allowed');
       const url = new URL(req.url, 'http://x');
       if (req.method === 'GET' && url.pathname === '/') { const p = pageFor(kind); return send(res, 200, p.body, { 'Content-Security-Policy': p.csp }); }
+      if (req.method === 'GET' && url.pathname === '/status') return send(res, 200, { ok: true, ...keyStatus(kind, dirArgv) });
+      if (req.method === 'POST' && url.pathname === '/init') { try { return send(res, 200, { ok: true, ...initKind(kind, dirArgv, root) }); } catch (e) { return fail(res, e.status || 500, e.message); } }
       if (req.method === 'POST' && url.pathname === '/issue') {
         const chunks = []; let n = 0;
         for await (const c of req) { n += c.length; if (n > 8192) return fail(res, 413, 'request too large'); chunks.push(c); }
@@ -171,7 +225,13 @@ function main(argv) {
   const port = Number(arg(argv, '--port', 0)) || 0;
   const server = createServer({ kind, dirArgv: argv });
   server.listen(port, '127.0.0.1', () => {
-    console.log(`Audio Mixer license key generator (${KINDS[kind].label}) on http://127.0.0.1:${server.address().port}/ — open it in a browser on this computer. Ctrl+C to stop.`);
+    const url = `http://127.0.0.1:${server.address().port}/`;
+    console.log(`Audio Mixer license key generator (${KINDS[kind].label}) on ${url} — open it in a browser on this computer. Ctrl+C to stop.`);
+    if (argv.includes('--open')) {
+      const { spawn } = require('node:child_process');
+      const [cmd, args] = process.platform === 'win32' ? ['cmd', ['/c', 'start', '', url]] : process.platform === 'darwin' ? ['open', [url]] : ['xdg-open', [url]];
+      try { spawn(cmd, args, { stdio: 'ignore', detached: true }).unref(); } catch (_) { /* open it by hand */ }
+    }
   });
   return 0;
 }
@@ -180,4 +240,4 @@ if (require.main === module) {
   const code = main(process.argv.slice(2));
   if (code !== 0) process.exit(code);   // 0 means the server is listening (asynchronously): exiting now would kill it before it ever serves a request
 }
-module.exports = { KINDS, page, pageFor, issueKey, createServer, main };
+module.exports = { KINDS, page, pageFor, issueKey, keyStatus, initKind, createServer, main };

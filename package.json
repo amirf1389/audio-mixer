@@ -40,7 +40,8 @@
     "electron": "cd platforms/electron && npm start",
     "build:electron": "cd platforms/electron && npm run build",
     "install:app": "node npm-installer/bin/audio-mixer-install.js",
-    "engine": "node scripts/build-engine.js"
+    "engine": "node scripts/build-engine.js",
+    "license:generator": "node scripts/license-generator.js --open"
   },
   "engines": {
     "node": ">=18"
