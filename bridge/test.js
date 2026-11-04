@@ -5051,6 +5051,7 @@ test('license generator page: its own script parses (it is built inside a templa
   const html = gen.page('vendor'), js = /<script>([\s\S]*?)<\/script>/.exec(html)[1];
   assert.doesNotThrow(() => new Function(js), 'the generator page script must be valid JavaScript');   // eslint-disable-line no-new-func
   assert.ok(js.includes("new URLSearchParams(location.search)") && js.includes("'http://localhost:8765/#license='"));
+  assert.ok(html.includes('id="mailkey"') && js.includes("'Your AmF X1 license key'"), 'the key can be e-mailed to the customer');
   const app = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
   assert.ok(app.includes('id="lic-req-generator"') && app.includes("'http://127.0.0.1:8799/?'") && app.includes('takeKeyFromAddress()'));
 });
@@ -5137,5 +5138,5 @@ test('deploy/website/license.html: a public request page (no signing), prefilled
   const js = /<script>([\s\S]*?)<\/script>/.exec(w)[1]; assert.doesNotThrow(() => new Function(js));   // eslint-disable-line no-new-func
   assert.ok(w.includes("var VENDOR_EMAIL = 'badriamirfakhri@gmail.com'") && !/PRIVATE KEY|signKey|private\.pem/.test(w), 'request only, nothing secret');
   const app = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
-  assert.ok(app.includes("const WEBSITE_URL = '") && app.includes('id="lic-req-website"') && app.includes("base + '/license.html?'"));
+  assert.ok(app.includes("const WEBSITE_URL = '") && app.includes('id="lic-req-website"') && app.includes("const WEBSITE_URL = 'https://amirfakhri.interactivelink.site/keys'"));
 });
