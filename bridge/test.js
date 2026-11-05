@@ -5195,3 +5195,21 @@ test('key mismatch is explained: the app names the vendor key it trusts (fingerp
   const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
   assert.ok(html.includes('id="lic-key-fp"') && html.includes('window.licenseKeyFingerprint'));
 });
+
+test('device scans stay light: the engine list refreshes in the background at most every 30 s (no ASIO reload per scan), SCAN NOW probes at once, the OS scan (PowerShell on Windows) is reused 30 s', async () => {
+  const ne = require('./native-engine'); ne._reset();
+  let sync = 0, bg = 0, pending = null;
+  const out = JSON.stringify([{ backend: 'asio', id: 'X', name: 'X ASIO', inChannels: 2, outChannels: 2 }]);
+  const run = () => { sync++; return out; }, runAsync = (exe, args, o, cb) => { bg++; pending = () => cb(null, out); };
+  const t = 1e6, o = { exe: 'x', run, runAsync };
+  assert.strictEqual(ne.listDevices({ ...o, now: t }).devices.length, 1); assert.strictEqual(sync, 1);   // the first list is probed
+  for (let i = 1; i <= 5; i++) ne.listDevices({ ...o, now: t + i * 5000 });                           // 25 s of page scans
+  assert.strictEqual(sync + bg, 1, 'no probe inside 30 s');
+  ne.listDevices({ ...o, now: t + 31000 }); ne.listDevices({ ...o, now: t + 32000 });
+  assert.strictEqual(bg, 1, 'one background refresh, never two at once'); assert.strictEqual(sync, 1, 'the scan itself never blocks');
+  pending(); ne.listDevices({ ...o, now: t + 40000 }); assert.strictEqual(bg, 1, 'the 30 s restart with the refresh');
+  ne.invalidate(); ne.listDevices({ ...o, now: t + 41000 }); assert.strictEqual(sync, 2, 'SCAN NOW / device change probes at once');
+  ne._reset();
+  const det = fsx.readFileSync(pathx.join(__dirname, 'detect.js'), 'utf8');
+  assert.ok(det.includes('const OS_SCAN_MS = 30000;') && det.includes('if (force) nativeEngine.invalidate();') && det.includes('const r = await osScan(force);'));
+});
