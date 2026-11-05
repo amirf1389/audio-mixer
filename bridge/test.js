@@ -5175,3 +5175,20 @@ test('vendor address: the generator signs {server} into releases/vendor.json (an
   const app = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
   assert.ok(app.includes("const VENDOR_JSON_URL = 'https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/vendor.json'") && app.includes("m.kind !== 'vendor'") && app.includes('crypto.subtle.verify'));
 });
+
+test('key mismatch is explained: the app names the vendor key it trusts (fingerprint) and the generator shows its own and whether the project matches', () => {
+  const lic = require('./license'), L = require('../scripts/license'), gen = require('../scripts/license-generator');
+  const tmp = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'fp-'));
+  try {
+    L.initKeys(tmp, { pin: '482916' });
+    const key = L.issue({ dir: tmp, plan: 'master', pin: '482916' }).key;
+    const v = lic.verifyKey(key); assert.strictEqual(v.reason, 'bad-signature');
+    assert.ok(v.message.includes(lic.fingerprint()) && /not signed by the vendor key this copy of AmF X1 trusts/.test(v.message));
+    const st = gen.keyStatus('vendor', ['--dir', tmp]);
+    assert.strictEqual(st.fingerprint, lic.fingerprint(L.loadPublic(tmp))); assert.strictEqual(st.projectFingerprint, lic.fingerprint());
+    assert.notStrictEqual(st.fingerprint, st.projectFingerprint); assert.deepStrictEqual(JSON.parse(st.publicKey), L.loadPublic(tmp));
+    assert.match(lic.fingerprint(), /^[0-9A-F]{4}(-[0-9A-F]{4}){3}$/);
+  } finally { fsx.rmSync(tmp, { recursive: true, force: true }); }
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  assert.ok(html.includes('id="lic-key-fp"') && html.includes('window.licenseKeyFingerprint'));
+});
