@@ -4993,7 +4993,7 @@ test('channel VU meters: the strip ladder is the scale, VU ballistics and the pe
 
 test('AI DSP: feedback detector finds a narrow standing peak, de-esser and AI rules, speaker watts', () => {
   const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
-  const i = html.indexOf('    (function () {\n        \'use strict\';\n        const POWER'), j = html.indexOf('        // its own throttled loop', i);
+  const i = html.indexOf('    (function () {\n        \'use strict\';\n        // A delay-line pitch shifter'), j = html.indexOf('        // its own throttled loop', i);
   assert.ok(i > 0 && j > i);
   const window = {}, localStorage = { getItem: () => null, setItem() {} };   // eslint-disable-line no-unused-vars
   eval(html.slice(i, j).replace("(function () {\n        'use strict';", '{') + '}');   // eslint-disable-line no-eval
@@ -5212,4 +5212,13 @@ test('device scans stay light: the engine list refreshes in the background at mo
   ne._reset();
   const det = fsx.readFileSync(pathx.join(__dirname, 'detect.js'), 'utf8');
   assert.ok(det.includes('const OS_SCAN_MS = 30000;') && det.includes('if (force) nativeEngine.invalidate();') && det.includes('const r = await osScan(force);'));
+});
+
+test('HARMONY and VOCAL ENHANCE plugins in the AI DSP rack: delay-line pitch shifter voices, the vocal EQ chain, panel controls', () => {
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  for (const s of ["vocal: { on: false, amt: 50 }", "harmony: { on: false, mix: 30, a: 4, b: 7 }", 'shifter(ctx) {', "const r = Math.pow(2, semis / 12), rate = Math.abs(1 - r) / WINDOW;",
+    'g.vHp = bq(\'highpass\'', 'g.voices = [this.shifter(ctx), this.shifter(ctx)];', 'id="aid-harm-on"', 'id="aid-vocal-on"', 'id="aid-harm-a"']) assert.ok(html.includes(s), s);
+  // the ramps the shifter reads: sin^2 crossfades of two lines half a window apart add up to a constant level (no pumping)
+  const f = x => Math.sin(Math.PI * x) ** 2;
+  for (const x of [0, 0.1, 0.3, 0.5, 0.77]) assert.ok(Math.abs(f(x) + f((x + 0.5) % 1) - 1) < 1e-9);
 });
