@@ -5510,3 +5510,21 @@ test('DEVICE SIMULATOR (UM2 base): ASIO busy -> WASAPI twin, mono ch1 -> both si
     await new Promise(r => { const t = setTimeout(r, 2000); server.close(() => { clearTimeout(t); r(); }); });
   }
 });
+
+test('ISO 3-BAND isolator: Linkwitz-Riley bands sum flat at 0 dB, each KILL removes its band, crossovers follow the settings', () => {
+  const s = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'index.html'), 'utf8');
+  const a = s.indexOf('//@@ISO-MATH-START'), b = s.indexOf('//@@ISO-MATH-END'); assert.ok(a > 0 && b > a);
+  const m = new Function(s.slice(a, b) + ';return isoMath;')();
+  for (const f of [20, 40, 100, 250, 600, 1000, 2500, 6000, 12000, 20000]) assert.ok(Math.abs(m.responseDb(f)) < 0.01, 'flat at ' + f + ' Hz: ' + m.responseDb(f));
+  for (const f of [30, 50]) assert.ok(m.responseDb(f, { low: -40 }) < -40, 'kill low at ' + f);
+  assert.ok(m.responseDb(80, { low: -40 }) < -30, 'kill low at 80 Hz (24 dB/oct, 1.6 octaves below 250 Hz)');
+  for (const f of [3000, 8000]) assert.ok(m.responseDb(f, { low: -40 }) > -0.5, 'kill low keeps ' + f);
+  for (const f of [10000, 16000]) assert.ok(m.responseDb(f, { high: -40 }) < -40, 'kill high at ' + f);
+  assert.ok(m.responseDb(800, { mid: -40 }) < -25, 'kill mid');
+  assert.ok(Math.abs(m.responseDb(250, { low: -40 }) + 6.02) < 0.1, 'LR4: -6 dB at the crossover');
+  assert.ok(Math.abs(m.responseDb(100, { f1: 100, low: -40 }) + 6.02) < 0.1, 'the crossover moves');
+  assert.ok(Math.abs(m.responseDb(60, { low: 6 }) - 6) < 0.1 && Math.abs(m.responseDb(60, { low: -6 }) + 6) < 0.1, 'band gain');
+  for (const f of [100, 1000, 10000]) assert.ok(Math.abs(m.responseDb(f, { f1: 120, f2: 6000 })) < 0.01, 'still flat with other crossovers');
+  assert.strictEqual(m.clampF2(150, 250), 500, 'the high crossover stays at least an octave above the low one');
+  const page = s; for (const id of ['iso-eq-panel', 'iso-${b}-kill', 'iso-mode', 'isoMaster', 'isoCh', 'KILL ${label}']) assert.ok(page.includes(id), id);
+});
