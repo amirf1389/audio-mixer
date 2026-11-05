@@ -5222,3 +5222,11 @@ test('HARMONY and VOCAL ENHANCE plugins in the AI DSP rack: delay-line pitch shi
   const f = x => Math.sin(Math.PI * x) ** 2;
   for (const x of [0, 0.1, 0.3, 0.5, 0.77]) assert.ok(Math.abs(f(x) + f((x + 0.5) % 1) - 1) < 1e-9);
 });
+
+test('EQ and license pages: the EQ page buttons match what is on screen, the trusted key code is shown, no stale 0.1 Alpha version text', () => {
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8'), ver = require('../package.json').version;
+  assert.ok(html.includes('(function eqPageStart() {') && html.includes("localStorage.setItem('halx_eq_page', page)"));
+  assert.ok(html.includes("{ const fp = $('lic-key-fp'); if (fp && window.licenseKeyFingerprint"), 'the key code is written on every license page redraw');
+  assert.ok(!/0\.1 Alpha|0\.1 ALPHA/.test(html), 'no stale version text');
+  for (const s of ['version ' + ver, 'Version ' + ver, 'AmF X1 ' + ver]) assert.ok(html.includes(s), s + ' (page version follows package.json)');
+});
