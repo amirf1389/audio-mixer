@@ -18,6 +18,34 @@ const VERSION = pkg.version, SHOWN = label.displayVersion(pkg.version).replace(/
 const REPO = 'https://github.com/amirf1389/audio-mixer';
 const CONTACT = { email: 'badriamirfakhri@gmail.com', whatsapp: 'https://wa.me/601120871185' };
 
+// ---- downloads: read from the release folders at build time (name, size, SHA-256), so the site never lists a file that does not exist ----
+const crypto = require('node:crypto');
+const KINDS_DL = [
+  { re: /^AmF X1-.*\.exe$/i, os: 'windows', title: 'Windows setup (64-bit)', note: 'Recommended for Windows 10 and 11', primary: true },
+  { re: /-x64\.msi$/i, os: 'windows', title: 'Windows Installer MSI (64-bit)', note: 'For managed and silent installs' },
+  { re: /-x86\.msi$/i, os: 'windows', title: 'Windows Installer MSI (32-bit)', note: 'For 32-bit Windows' },
+  { re: /_all\.deb$/i, os: 'linux', title: 'Linux .deb package', note: 'Debian, Ubuntu, Linux Mint', primary: true },
+  { re: /-linux\.tar\.gz$/i, os: 'linux', title: 'Linux .tar.gz', note: 'Any distribution' },
+  { re: /-macos\.tar\.gz$/i, os: 'macos', title: 'macOS .tar.gz', note: 'The app and its local server for macOS', primary: true },
+];
+const OS_NAME = { windows: 'Windows', linux: 'Linux', macos: 'macOS' };
+function humanSize(n) { return n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB'; }
+function downloads() {
+  const out = [];
+  for (const os of ['windows', 'linux', 'macos']) {
+    const dir = path.join(ROOT, 'platforms', os, 'releases');
+    let names = []; try { names = fs.readdirSync(dir); } catch (_) { continue; }
+    for (const name of names.sort()) {
+      if (/key generator/i.test(name)) continue;   // the vendor's own tool is never offered to the public
+      const k = KINDS_DL.find(x => x.re.test(name)); if (!k) continue;
+      const f = path.join(dir, name), buf = fs.readFileSync(f), rel = path.relative(ROOT, f).split(path.sep).map(encodeURIComponent).join('/');
+      out.push({ ...k, name, size: humanSize(buf.length), sha256: crypto.createHash('sha256').update(buf).digest('hex'), url: `${REPO}/raw/main/${rel}` });
+    }
+  }
+  return out;
+}
+const DL = downloads();
+
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const NAV = [['/', 'Home'], ['/features', 'Features'], ['/developers', 'Developers'], ['/security', 'Security'], ['/faq', 'FAQ'], ['/keys', 'License']];
 
@@ -112,6 +140,16 @@ ${card('Metering', 'Phase, loudness, spectrum', 'Correlation to three decimals w
 ${card('Languages', '22 languages', 'English, Bahasa Melayu, Bahasa Indonesia, Persian, Arabic, Urdu, Spanish, French, German, Japanese, Korean, Chinese and more, with accessibility options.')}
 ${card('Privacy', 'Works offline', 'Licenses are checked on your PC with a digital signature. Nothing about your audio leaves your computer.')}
 </div></div></section>
+<section class="block" id="download"><div class="wrap">
+<h2>Download AmF X1 ${esc(SHOWN)}</h2>
+<p class="sub">Free to download and use with the Basic edition. Pick your system; every file is listed with its size and checksum on the <a href="/download">download page</a>.</p>
+<div class="dl-grid">
+${['windows', 'macos', 'linux'].map(os => { const files = DL.filter(d => d.os === os); if (!files.length) return ''; const main = files.find(d => d.primary) || files[0];
+  return `<article class="card dl-card"><span class="tag">${OS_NAME[os]}</span><h3>${esc(main.title)}</h3><p>${esc(main.note)} · ${esc(main.size)}</p>
+${files.length > 1 ? `<p class="dl-more">Also: ${files.filter(d => d !== main).map(d => `<a href="${d.url}" rel="noopener">${esc(d.title.replace(/^(Windows|Linux|macOS) /, ''))}</a>`).join(' · ')}</p>` : ''}
+<p class="btns dl-btn"><a class="btn dark" href="${main.url}" rel="noopener">Download for ${OS_NAME[os]}</a></p></article>`; }).join('\n')}
+</div>
+</div></section>
 <section class="block"><div class="wrap">
 <h2>Editions</h2>
 <p class="sub">Start with Basic. Upgrade when you need more channels and studio tools; existing keys can be checked before you activate them.</p>
@@ -155,25 +193,34 @@ ${card('', 'Light on your PC', 'Meters run at 30 frames per second (15 in low-po
 }));
 
 // DOWNLOAD
+const dlRows = DL.map(d => `<tr><td data-label="Package"><strong>${esc(d.title)}</strong><br><span class="dim">${esc(d.note)}</span></td><td data-label="File"><code>${esc(d.name)}</code><br><span class="dim">${esc(d.size)}</span></td><td data-label="SHA-256"><code class="hash">${d.sha256}</code></td><td><a class="btn dark" href="${d.url}" rel="noopener" aria-label="Download ${esc(d.title)}">Download</a></td></tr>`).join('\n');
 pages.push(page({
-  slug: '/download', title: `Download AmF X1 ${SHOWN} for Windows`, h1: 'Download', priority: '0.9', changefreq: 'weekly',
-  description: `Download AmF X1 ${SHOWN} for Windows (64-bit setup and MSI, 32-bit MSI). Also available for Linux and macOS. Free Basic edition, upgrade any time.`,
-  intro: `AmF X1 ${esc(SHOWN)}. Beta builds are for testers: please report anything that does not work.`, jsonld: [SOFTWARE],
+  slug: '/download', title: `Download AmF X1 ${SHOWN} for Windows, macOS, Linux`, h1: 'Download', priority: '0.9', changefreq: 'weekly',
+  description: `Download AmF X1 ${SHOWN}: Windows setup and MSI, Linux .deb and .tar.gz, macOS. Free Basic edition; every file listed with its SHA-256 checksum.`,
+  intro: `AmF X1 ${esc(SHOWN)}. Beta builds are for testers: please report anything that does not work.`,
+  jsonld: [{ ...SOFTWARE, offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD', description: 'Basic edition' } }],
   body: `<section class="block"><div class="wrap">
-<h2>Windows</h2>
-<p class="sub">Windows 10 or 11. The setup includes everything it needs; no separate Node.js install.</p>
-<div class="table-wrap"><table><thead><tr><th>File</th><th>For</th></tr></thead><tbody>
-<tr><td><code>AmF X1-${esc(label.fileVersion(VERSION))}.exe</code></td><td>Setup for 64-bit Windows (recommended)</td></tr>
-<tr><td><code>AudioMixer-${esc(label.fileVersion(VERSION))}-x64.msi</code></td><td>64-bit Windows Installer package (managed PCs)</td></tr>
-<tr><td><code>AudioMixer-${esc(label.fileVersion(VERSION))}-x86.msi</code></td><td>32-bit Windows</td></tr>
+<h2>All downloads</h2>
+<p class="sub">Choose the file for your system. The SHA-256 checksum lets you confirm the file is exactly the one published here.</p>
+<div class="table-wrap"><table class="dl-table"><thead><tr><th>Package</th><th>File</th><th>SHA-256</th><th></th></tr></thead><tbody>
+${dlRows}
 </tbody></table></div>
-<p class="btns mt"><a class="btn dark" href="${REPO}/releases" rel="noopener">Get the files on GitHub Releases</a></p>
-<p class="note warn mt"><strong>"Unknown publisher" warning:</strong> the installers are not yet signed with a commercial code-signing certificate, so Windows SmartScreen may warn you. Only download from this site or the GitHub page above. Updates inside the app are always checked against the AMFB Audio signing key before they install.</p>
+<p class="note warn mt"><strong>"Unknown publisher" warning on Windows:</strong> the installers are not yet signed with a commercial code-signing certificate, so Windows SmartScreen may warn you ("More info" then "Run anyway"). Only download from this site or the official <a href="${REPO}/releases" rel="noopener">GitHub releases</a>, and compare the checksum below. Updates inside the app are always checked against the AMFB Audio signing key before they install.</p>
 </div></section>
-<section class="block"><div class="wrap"><h2>Linux and macOS</h2>
-<p class="sub">A <code>.deb</code> package and a <code>.tar.gz</code> for Linux, and a <code>.tar.gz</code> for macOS, on the same <a href="${REPO}/releases" rel="noopener">releases page</a>.</p>
+<section class="block"><div class="wrap"><h2>Check a download</h2>
+<p class="sub">Compare the result with the SHA-256 in the table above. If they differ, do not run the file.</p>
+<pre><code># Windows (PowerShell)
+Get-FileHash ".\\AmF X1-${esc(label.fileVersion(VERSION))}.exe" -Algorithm SHA256
+
+# macOS
+shasum -a 256 AudioMixer-${esc(VERSION)}-macos.tar.gz
+
+# Linux
+sha256sum audio-mixer_${esc(VERSION)}_all.deb</code></pre>
 <h2 class="mt">After installing</h2>
-<ol><li>Start AmF X1 and choose your audio interface on the DAC &amp; OS sources page.</li><li>Basic works right away. For Pro, Studio or Master, request a key on the <a href="/keys">license page</a> or message us on <a href="${CONTACT.whatsapp}" rel="noopener">WhatsApp</a>.</li><li>Use CHECK KEY to see what a key unlocks before you activate it.</li></ol>
+<ol><li>Start AmF X1 and choose your audio interface on the DAC &amp; OS sources page.</li><li>Basic works right away. For Pro, Studio or Master, request a key on the <a href="/keys">license page</a> or message us on <a href="${CONTACT.whatsapp}" rel="noopener">WhatsApp</a>.</li><li>Use CHECK KEY to see what a key unlocks before you activate it.</li><li>If a device has no sound, open DIAGNOSTICS on the DAC &amp; OS sources page and use COPY REPORT to send us the log.</li></ol>
+<h2 class="mt">System requirements</h2>
+<ul><li>Windows 10 or 11 (64-bit; a 32-bit MSI is available), macOS, or a 64-bit Linux.</li><li>Any audio interface: ASIO drivers are used when present, Windows audio (WASAPI), Core Audio or ALSA otherwise.</li><li>A current browser engine for the console (the Windows setup includes everything it needs).</li></ul>
 </div></section>`,
 }));
 
