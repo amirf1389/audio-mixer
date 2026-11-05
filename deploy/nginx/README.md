@@ -109,7 +109,7 @@ Puts the customer key page (`deploy/website/license.html`) and the Key Generator
     sudo cp deploy/nginx/keys-api.conf /etc/nginx/conf.d/ && sudo cp deploy/nginx/keys-api-proxy.inc /etc/nginx/
     sudo certbot certonly --webroot -w /var/www/letsencrypt -d amirfakhri.interactivelink.site
     sudo nginx -t && sudo nginx -s reload
-    "AmF X1 Key Generator.exe"          # 127.0.0.1:8780 is the default since 1.22.0.1 (security fix); or: node scripts/license-generator.js --public
+    "AmF X1 Key Generator.exe"          # 127.0.0.1:8780 is the default since 1.22.0.1 (security fix, Nov 2026); or: node scripts/license-generator.js --public
 
 With `--public-bind 127.0.0.1` the generator's port 8780 is reachable only from nginx on the same computer: forward
 TCP **443** (and 80 for certificate renewal) on the router instead of 8780. The generator then takes the customer's

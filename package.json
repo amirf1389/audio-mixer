@@ -1,6 +1,7 @@
 {
   "name": "audio-mixer",
-  "version": "1.22.0.1",
+  "version": "1.22.1.0",
+  "releaseChannel": "beta",
   "description": "Audio mixer web app with an optional local system server (PC mode) for ASIO / WASAPI / Core Audio / ALSA.",
   "private": true,
   "license": "MIT",

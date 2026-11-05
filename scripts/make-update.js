@@ -18,7 +18,8 @@ function build({ releases, flatUrls = false, version, base, notes = [], now = ne
   const sha = f => crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex');
   const want = {
     // the setup program: its name since the rename to AmF X1, then the one before it
-    'win-x64-exe': [`AmF X1-${version}.exe`, `Audio Mixer-${version}.exe`], 'win-x64-msi': `AudioMixer-${version}-x64.msi`, 'win-x86-msi': `AudioMixer-${version}-x86.msi`,
+    // a channel build (1.22.1.0 Beta) names its Windows installers "<version>-beta"; both spellings are found
+    'win-x64-exe': [`AmF X1-${version}-beta.exe`, `AmF X1-${version}.exe`, `Audio Mixer-${version}.exe`], 'win-x64-msi': [`AudioMixer-${version}-beta-x64.msi`, `AudioMixer-${version}-x64.msi`], 'win-x86-msi': [`AudioMixer-${version}-beta-x86.msi`, `AudioMixer-${version}-x86.msi`],
     'linux-deb': `audio-mixer_${version}_all.deb`, 'linux-tar': `AudioMixer-${version}-linux.tar.gz`, 'macos': `AudioMixer-${version}-macos.tar.gz`, 'macos-dmg': `AudioMixer-${version}-macos.dmg`,
     'android-apk': `AudioMixer-${version}-android.apk`, 'ios-project': `AudioMixer-${version}-ios-xcode-project.tar.gz`,
     'win-asio-driver': `AudioMixer-${version}-asio-driver-windows.zip`,
@@ -33,7 +34,7 @@ function build({ releases, flatUrls = false, version, base, notes = [], now = ne
     files[key] = { name, url: `${base}/${rel}${encodeURIComponent(name)}`, size: fs.statSync(f).size, sha256: sha(f) };
   }
   if (!Object.keys(files).length) throw new Error('no release files for version ' + version + ' in ' + (releases || '<os>/releases'));
-  return { product: 'audio-mixer', version, channel: 'stable', released: now.toISOString().slice(0, 10), notes, files };
+  return { product: 'audio-mixer', version, channel: require('./release-label').channel() || 'stable', released: now.toISOString().slice(0, 10), notes, files };
 }
 
 if (require.main === module) (async () => {
