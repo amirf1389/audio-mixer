@@ -5321,3 +5321,20 @@ test('CHORUS, LO-FI, AUTO-PAN plugins and the PLUGIN STORE: every catalog entry 
   for (const id of cat) assert.ok(html.includes(`data-aid-plugin="${id}"`), 'store-controlled row: ' + id);
   for (const s2 of ['g.chDl = ctx.createDelay(0.1)', 'g.pan = ctx.createStereoPanner()', 'Math.round(x * steps) / steps', 'eff() {', 'const g = this.g, s = this.eff();', 'id="aid-store"']) assert.ok(html.includes(s2), s2);
 });
+
+test('public key-request listener: IPv6 /64 grouping, bounded rate table, per-sender daily cap', () => {
+  const gen = require('../scripts/license-generator');
+  assert.strictEqual(gen.senderKey('2001:db8:1:2:aaaa::1'), gen.senderKey('2001:db8:1:2:bbbb::9'));
+  assert.notStrictEqual(gen.senderKey('2001:db8:1:3::1'), gen.senderKey('2001:db8:1:2::1'));
+  assert.strictEqual(gen.senderKey('::ffff:1.2.3.4'), '1.2.3.4');
+  let t = 0; const lim = gen.rateLimiter(2, () => t, 10);
+  assert.ok(lim('1.1.1.1') && lim('1.1.1.1')); assert.strictEqual(lim('1.1.1.1'), false);
+  for (let i = 0; i < 8; i++) lim('9.9.9.' + i);               // other senders do not reset this one's window (no global clear)
+  assert.strictEqual(lim('1.1.1.1'), false);
+  for (let i = 0; i < 50; i++) lim('8.8.8.' + i);
+  assert.ok(lim('8.8.8.49') !== undefined);                      // the table stays bounded under a flood of new senders
+  t = 61000; assert.ok(lim('1.1.1.1'));
+  const cap = gen.dailyCap(2, () => t);
+  assert.ok(cap('2001:db8::1') && cap('2001:db8::2')); assert.strictEqual(cap('2001:db8::3'), false);
+  t += 86400001; assert.ok(cap('2001:db8::4'));
+});

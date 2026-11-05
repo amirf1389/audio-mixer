@@ -393,12 +393,36 @@ function otaFile(dir, releases, name) {
 }
 
 // per-address request budget for the public listener: 20 requests a minute (requests are tiny; this only stops floods)
-function rateLimiter(perMin = 20, now = () => Date.now()) {
+// one key per sender: IPv4 address, or the /64 network for IPv6 (one home gets a whole /64, so rotating addresses inside it does not help)
+function senderKey(ip) {
+  ip = String(ip || '?').replace(/^::ffff:/, '');
+  if (ip.includes(':')) { const h = ip.split('::')[0].split(':'); return h.slice(0, 4).join(':') + '::/64'; }
+  return ip;
+}
+// per-sender request budget for the public listener: 20 requests a minute (requests are tiny; this only stops floods). The table is bounded:
+// when full, the stalest senders are dropped (never everyone at once, which would let a flood reset the limit for itself).
+function rateLimiter(perMin = 20, now = () => Date.now(), max = 5000) {
   const seen = new Map();
-  return ip => { const t = now(), w = (seen.get(ip) || []).filter(x => t - x < 60000); w.push(t); seen.set(ip, w); if (seen.size > 5000) seen.clear(); return w.length <= perMin; };
+  return ip => {
+    const k = senderKey(ip), t = now(), w = (seen.get(k) || []).filter(x => t - x < 60000); w.push(t);
+    seen.delete(k); seen.set(k, w);   // re-insert: Map order is then least- to most-recently seen
+    if (seen.size > max) for (const old of seen.keys()) { seen.delete(old); if (seen.size <= max * 0.9) break; }
+    return w.length <= perMin;
+  };
+}
+// license requests per sender per day (the inbox holds 1000: one sender must not be able to fill it)
+function dailyCap(perDay = 5, now = () => Date.now()) {
+  const seen = new Map();
+  return ip => {
+    const k = senderKey(ip), t = now(), w = (seen.get(k) || []).filter(x => t - x < 86400000);
+    if (w.length >= perDay) { seen.set(k, w); return false; }
+    w.push(t); seen.delete(k); seen.set(k, w);
+    if (seen.size > 20000) for (const old of seen.keys()) { seen.delete(old); if (seen.size <= 18000) break; }
+    return true;
+  };
 }
 
-function createServer({ kind = 'vendor', dirArgv = [], root, session = makeSession(), releases, publicOnly = false, limit = rateLimiter() } = {}) {
+function createServer({ kind = 'vendor', dirArgv = [], root, session = makeSession(), releases, publicOnly = false, limit = rateLimiter(), requestCap = dailyCap() } = {}) {
   if (!KINDS[kind]) throw new Error('kind must be one of: ' + Object.keys(KINDS).join(', '));
   const send = (res, code, body, headers = {}) => { const t = typeof body === 'string' ? body : JSON.stringify(body); res.writeHead(code, { 'Content-Type': typeof body === 'string' ? 'text/html; charset=utf-8' : 'application/json; charset=utf-8', 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer', ...headers }); res.end(t); };
   const fail = (res, code, error) => send(res, code, { ok: false, error });
@@ -438,7 +462,11 @@ function createServer({ kind = 'vendor', dirArgv = [], root, session = makeSessi
           let b; try { b = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch (_) { return send(res, 400, { ok: false, error: 'the body is not JSON' }, cors); }
           if (!b || b.kind !== 'license-request' || !lic.PLANS[b.plan]) return send(res, 400, { ok: false, error: 'not a license request' }, cors);
           const rec = { at: Date.now(), plan: b.plan, name: clean(b.name, 80), email: clean(b.email, 120), machineId: clean(b.machineId, 40), platform: clean(b.platform, 40), version: clean(b.version, 20) };
-          if (readJsonl(path.join(dir, 'license-requests.jsonl'), 1000).length >= 1000) return send(res, 429, { ok: false, error: 'the inbox is full' }, cors);
+          if (rec.machineId && !/^[A-Za-z0-9-]{4,40}$/.test(rec.machineId)) return send(res, 400, { ok: false, error: 'invalid machine ID' }, cors);
+          const inbox = readJsonl(path.join(dir, 'license-requests.jsonl'), 1000);
+          if (rec.machineId && inbox.some(r => r.machineId === rec.machineId && r.plan === rec.plan && Date.now() - r.at < 86400000)) return send(res, 200, { ok: true, emailed: false, duplicate: true }, cors);   // already waiting
+          if (!requestCap(req.socket.remoteAddress)) return send(res, 429, { ok: false, error: 'too many key requests from this network today' }, cors);
+          if (inbox.length >= 1000) return send(res, 429, { ok: false, error: 'the inbox is full' }, cors);
           fs.mkdirSync(dir, { recursive: true, mode: 0o700 }); fs.appendFileSync(path.join(dir, 'license-requests.jsonl'), JSON.stringify(rec) + '\n', { mode: 0o600 });
           return send(res, 200, { ok: true, emailed: false }, cors);
         }
@@ -494,6 +522,7 @@ function main(argv) {
   if (argv.includes('--public') && KINDS[kind].canInit) {
     const pv = argv[argv.indexOf('--public') + 1], pport = /^\d+$/.test(pv || '') ? Number(pv) : 8780;
     const ps = createServer({ kind, dirArgv: argv, root, publicOnly: true });
+    ps.headersTimeout = 10000; ps.requestTimeout = 20000; ps.keepAliveTimeout = 5000; ps.maxHeadersCount = 50;   // slow-client (slowloris) guard on the internet-facing port
     ps.on('error', e => console.error(`Public listener on port ${pport} could not start: ${e.message}`));
     ps.listen(pport, '0.0.0.0', () => console.log(`Public requests and updates on port ${pport} (all networks). Forward TCP ${pport} on your router to this computer; customers then use http://<your public IP>:${pport}`));
   }
@@ -515,4 +544,4 @@ if (require.main === module) {
   const code = main(process.argv.slice(2));
   if (code !== 0) process.exit(code);   // 0 means the server is listening (asynchronously): exiting now would kill it before it ever serves a request
 }
-module.exports = { publicIp, vendorPublish, rateLimiter, otaStatus, otaPublish, KINDS, page, pageFor, issueKey, keyStatus, initKind, makeSession, createServer, main };
+module.exports = { publicIp, vendorPublish, rateLimiter, dailyCap, senderKey, otaStatus, otaPublish, KINDS, page, pageFor, issueKey, keyStatus, initKind, makeSession, createServer, main };
