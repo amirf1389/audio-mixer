@@ -1689,6 +1689,8 @@ window.navTabs = [
             msMidGain.connect(msMerge, 0, 0); msSideGain.connect(msMerge, 0, 0);   // L' = Mid + Side
             msMidGain.connect(msMerge, 0, 1); msSideInv.connect(msMerge, 0, 1);    // R' = Mid - Side
             window.state.nodes.msMidGain = msMidGain;
+            Object.assign(window.state.nodes, { msMidHalfL, msMidHalfR, msSideHalfL, msSideHalfR });   // POLARITY: window.applyPolarity flips L / R here (real audio, not only the scope)
+            if (window.applyPolarity) window.applyPolarity();
             window.state.nodes.msSideGain = msSideGain;
             const msOut = msMerge;
             window.state.nodes.msOut = msOut;    // post mid/side image: the recorder and the physical-output tap read HERE (not masterLimiter), so width and mid level reach the hardware output and recordings
@@ -9148,7 +9150,7 @@ const cArea = document.getElementById('content-area');
                     <div>
                       <span class="text-[8px] font-black text-amber-400 uppercase font-wing block mb-1">CORRELATION METER</span>
                       <div class="correlation-bar-bg my-1.5">
-                        <div id="phase-correlation-pointer" class="correlation-pointer" style="left: 88%;"></div>
+                        <div id="phase-correlation-pointer" class="correlation-pointer" style="left: 88%;"></div><div class="absolute inset-0 pointer-events-none flex justify-between" aria-hidden="true"><span style="width:1px;height:100%;background:rgba(255,255,255,.45)"></span><span style="width:1px;height:100%;background:rgba(255,255,255,.18)"></span><span style="width:1px;height:100%;background:rgba(255,255,255,.18)"></span><span style="width:1px;height:100%;background:rgba(255,255,255,.18)"></span><span style="width:1px;height:100%;background:rgba(255,255,255,.18)"></span><span style="width:1px;height:100%;background:rgba(255,255,255,.45)"></span><span style="width:1px;height:100%;background:rgba(255,255,255,.18)"></span><span style="width:1px;height:100%;background:rgba(255,255,255,.18)"></span><span style="width:1px;height:100%;background:rgba(255,255,255,.18)"></span><span style="width:1px;height:100%;background:rgba(255,255,255,.18)"></span><span style="width:1px;height:100%;background:rgba(255,255,255,.45)"></span></div>
                       </div>
                       <div class="flex justify-between font-mono text-[7px] text-slate-400">
                         <span class="text-red-400">-1.0 (OUT)</span><span>0.0 (WIDE)</span><span class="text-emerald-400">+1.0 (MONO)</span>
@@ -12455,7 +12457,7 @@ const cArea = document.getElementById('content-area');
                     }
                 }
                 ctx.stroke();
-                const correlationSum = rd2 ? rd2.corr : 0;
+                const correlationSum = rd2 ? rd2.corrAvg : 0;
 
                 // Phase Correlation Bar (-1.0 to +1.0)
                 const normCorr = correlationSum;
@@ -12464,7 +12466,7 @@ const cArea = document.getElementById('content-area');
                 if (corrBar && corrVal) {
                     const pct = ((normCorr + 1) / 2) * 100;
                     if (corrBar.checkVisibility ? corrBar.checkVisibility({visibilityProperty:true}) : corrBar.offsetParent) corrBar.style.width = `${pct.toFixed(0)}%`;
-                    window.amSetText(corrVal, normCorr >= 0 ? `+${normCorr.toFixed(2)}` : normCorr.toFixed(2));
+                    window.amSetText(corrVal, (normCorr >= 0 ? '+' : '') + normCorr.toFixed(3));
                     window.amSetClass(corrBar, normCorr < 0 
                         ? 'h-full bg-rose-500 transition-all' 
                         : (normCorr > 0.8 ? 'h-full bg-emerald-500 transition-all' : 'h-full bg-amber-500 transition-all'));
@@ -12747,7 +12749,11 @@ const cArea = document.getElementById('content-area');
             const L = window._phaseBufL, R = window._phaseBufR;
             an.L.getFloatTimeDomainData(L);
             an.R.getFloatTimeDomainData(R);
-            const ps = window.phaseScopeState || {};
+            // In the page the analysers sit AFTER the real width / polarity stages (window.applyPolarity, setMsWidth), so the meter reads the
+            // signal as heard and applies nothing itself (neutral settings). Without those stages (the engine reference / native-engine vectors)
+            // the same math still simulates width and polarity, so every engine stays held to the same numbers.
+            const real = !!(window.state && window.state.nodes && window.state.nodes.msMidHalfL);
+            const ps = real ? {} : (window.phaseScopeState || {});
             const width = (ps.stereoWidth == null ? 100 : ps.stereoWidth) / 100;
             let sLR = 0, sLL = 0, sRR = 0, peak = 0;
             for (let i = 0; i < size; i++) {
@@ -12762,7 +12768,11 @@ const cArea = document.getElementById('content-area');
             }
             const den = Math.sqrt(sLL * sRR);
             const corr = peak < 0.0005 || den === 0 ? 0 : Math.max(-1, Math.min(1, sLR / den));
-            return { l: L, r: R, corr: corr, peak: peak, silent: peak < 0.0005, rmsL: Math.sqrt(sLL / size), rmsR: Math.sqrt(sRR / size) };
+            // 10-frame moving average (~0.17 s) steadies the reading; angle = equivalent L/R phase offset in degrees
+            const hist = window._phaseCorrHist || (window._phaseCorrHist = []);
+            if (peak >= 0.0005) { hist.push(corr); if (hist.length > 10) hist.shift(); } else hist.length = 0;
+            const avg = hist.length ? hist.reduce((a, b) => a + b, 0) / hist.length : 0;
+            return { l: L, r: R, corr: corr, corrAvg: avg, angle: Math.acos(Math.max(-1, Math.min(1, avg))) * 180 / Math.PI, peak: peak, silent: peak < 0.0005, rmsL: Math.sqrt(sLL / size), rmsR: Math.sqrt(sRR / size) };
         };
 
         // ─── STEREO PHASE CORRELATION & GONIOMETER ENGINE ─────────────────────────
@@ -12826,7 +12836,7 @@ const cArea = document.getElementById('content-area');
                     }
                     ctx.stroke();
                     ctx.shadowBlur = 0;
-                    const correlationSum = rd ? rd.corr : 0;
+                    const correlationSum = rd ? rd.corrAvg : 0;
 
                     // Live L/R balance readout
                     const balEl = document.getElementById('stereo-balance-val');
@@ -12848,7 +12858,7 @@ const cArea = document.getElementById('content-area');
                         pointer.style.left = `${leftPercent}%`;
                     }
                     if (badge) {
-                        const valStr = corrNormalized >= 0 ? `+${corrNormalized.toFixed(2)}` : corrNormalized.toFixed(2);
+                        const valStr = (corrNormalized >= 0 ? '+' : '') + corrNormalized.toFixed(3) + (rd ? ' · ' + rd.angle.toFixed(1) + '°' : '');
                         badge.textContent = (rd && !rd.silent) ? `${valStr} ${corrNormalized > 0.3 ? 'IN-PHASE MONO OK' : (corrNormalized < -0.1 ? 'OUT OF PHASE' : 'WIDE / CHECK PHASE')}` : 'NO SIGNAL';
                         badge.className = corrNormalized > 0 ? 'px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-bold' : 'px-2 py-0.5 rounded bg-red-500/15 text-red-400 border border-red-500/30 font-bold';
                     }
@@ -12858,21 +12868,31 @@ const cArea = document.getElementById('content-area');
             render();
         };
 
+        // STEREO SPREAD on the phase page = the real master mid/side width (same stage as the M/S panel, so both sliders agree)
         window.setStereoWidth = function(val) {
-            window.phaseScopeState.stereoWidth = parseFloat(val);
-            const el = document.getElementById('stereo-width-val');
-            if (el) el.textContent = `${val}%`;
-            window.notify(`Stereo Width Spreader: ${val}%`, 'arrows-left-right-to-line');
+            const n = Math.max(0, Math.min(200, parseFloat(val))); if (!isFinite(n)) return;
+            window.phaseScopeState.stereoWidth = n;
+            window.setMsWidth(n, true);
+            const el = document.getElementById('stereo-width-val'); if (el) el.textContent = `${Math.round(n)}%`;
+            window.notify(`Stereo spread (master): ${Math.round(n)}%` + (window.state.nodes.msSideGain ? '' : ' (applies when the engine starts)'), 'arrows-left-right-to-line');
+        };
+        // POLARITY (phase invert 180 deg) on the master, in the real signal: L -> -L flips L's share of mid and side; R likewise.
+        window.applyPolarity = function() {
+            const n = window.state.nodes, c = window.state.ctx, ps = window.phaseScopeState || {};
+            if (!c || !n.msMidHalfL) return;
+            const sl = ps.invertL ? -1 : 1, sr = ps.invertR ? -1 : 1, t = c.currentTime;
+            n.msMidHalfL.gain.setTargetAtTime(0.5 * sl, t, 0.005); n.msSideHalfL.gain.setTargetAtTime(0.5 * sl, t, 0.005);
+            n.msMidHalfR.gain.setTargetAtTime(0.5 * sr, t, 0.005); n.msSideHalfR.gain.setTargetAtTime(-0.5 * sr, t, 0.005);
         };
 
         window.toggleScopePhaseInvert = function(ch) {
             if (ch === 'L') {
-                window.phaseScopeState.invertL = !window.phaseScopeState.invertL;
+                window.phaseScopeState.invertL = !window.phaseScopeState.invertL; window.applyPolarity();
                 const btn = document.getElementById('btn-phase-inv-l');
                 if (btn) btn.className = window.phaseScopeState.invertL ? 'py-1 rounded bg-red-500 text-white font-mono text-[8px] font-bold' : 'py-1 rounded bg-white/5 border border-white/10 text-slate-300 font-mono text-[8px]';
                 window.notify(`Phase Invert Left Channel: ${window.phaseScopeState.invertL ? 'INVERTED 180°' : 'NORMAL'}`, 'yin-yang');
             } else {
-                window.phaseScopeState.invertR = !window.phaseScopeState.invertR;
+                window.phaseScopeState.invertR = !window.phaseScopeState.invertR; window.applyPolarity();
                 const btn = document.getElementById('btn-phase-inv-r');
                 if (btn) btn.className = window.phaseScopeState.invertR ? 'py-1 rounded bg-red-500 text-white font-mono text-[8px] font-bold' : 'py-1 rounded bg-white/5 border border-white/10 text-slate-300 font-mono text-[8px]';
                 window.notify(`Phase Invert Right Channel: ${window.phaseScopeState.invertR ? 'INVERTED 180°' : 'NORMAL'}`, 'yin-yang');
