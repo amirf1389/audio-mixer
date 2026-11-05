@@ -5230,3 +5230,34 @@ test('EQ and license pages: the EQ page buttons match what is on screen, the tru
   assert.ok(!/0\.1 Alpha|0\.1 ALPHA/.test(html), 'no stale version text');
   for (const s of ['version ' + ver, 'Version ' + ver, 'AmF X1 ' + ver]) assert.ok(html.includes(s), s + ' (page version follows package.json)');
 });
+
+test('perf controller: AMD / Intel detection, post-GC growth and detached-context traps, report format, optional hw_perf_engine.node (never estimated)', () => {
+  const pc = require('../scripts/perf-controller');
+  assert.strictEqual(pc.detectCpu({ cpus: [{ model: 'AMD Ryzen 9 7950X 16-Core Processor' }], env: {} }).vendor, 'AMD');
+  assert.strictEqual(pc.detectCpu({ cpus: [{ model: 'Intel(R) Core(TM) i7-12700K' }], env: {} }).vendor, 'Intel');
+  assert.match(pc.detectCpu({ cpus: [{ model: '' }], env: { PROCESSOR_IDENTIFIER: 'AMD64 Family 25 Model 33, AuthenticAMD' } }).profile, /uProf/);
+  const t = pc.makeTraps({ growthPct: 15, samples: 2 }), s = (heapUsed, detachedContexts = 0) => ({ heapUsed, detachedContexts });
+  assert.deepStrictEqual(t(s(100)), []); assert.deepStrictEqual(t(s(120)), []);
+  assert.match(t(s(130))[0], /post-GC heap grew 30% over its baseline for 2 samples/);
+  assert.match(t(s(130, 2)).join(), /detached contexts rose to 2/);
+  const base = { rss: 100 * 1048576, heapUsed: 20 * 1048576, heapLimit: 8192 * 1048576, detachedContexts: 1 };
+  const off = pc.formatReport({ s: base, cpu: { vendor: 'AMD' }, hw: null, artifact: './profiles/AMD-x.heapsnapshot' });
+  assert.match(off, /^Runtime Metrics: RSS: 100\.0 MB \| Heap Used: 20\.0 MB \/ 8192\.0 MB \| Detached Contexts: 1\nHardware Telemetry: Engine Active: AMD \| L3 Miss Rate: not available/);
+  assert.match(off, /Artifact Path: Saved to \.\/profiles\/AMD-x\.heapsnapshot$/);
+  assert.match(pc.formatReport({ s: base, cpu: { vendor: 'Intel' }, hw: { l3MissRate: 3.456, busBandwidthMBs: 18000.4, busStalls: 12 } }), /L3 Miss Rate: 3\.46% \| Bus Bandwidth: 18000 MB\/s \| Bus Stalls: 12/);
+  const tmp = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'hw-')); fsx.writeFileSync(pathx.join(tmp, 'hw_perf_engine.node'), 'x');
+  const hw = pc.loadHardware({ dirs: [tmp], req: () => ({ sample: () => ({ l3MissRate: 1 }) }) }); assert.strictEqual(hw.sample().l3MissRate, 1);
+  assert.strictEqual(pc.loadHardware({ dirs: [pathx.join(tmp, 'none')] }), null); fsx.rmSync(tmp, { recursive: true, force: true });
+});
+
+test('world language & accessibility engine: 13 languages (RTL for fa / ar / ur), every row complete, exact switch back to English, accessibility settings', () => {
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  const i = html.indexOf('    // WORLD LANGUAGE & ACCESSIBILITY ENGINE'), j = html.indexOf('        const CODES = Object.keys(LANGS);', i);
+  const LANGS = new Function(html.slice(html.indexOf('const LANGS', i), html.indexOf('// [en, fa', i)) + 'return LANGS;')();   // eslint-disable-line no-new-func
+  const T = new Function(html.slice(html.indexOf('const T = [', i), j) + 'return T;')();   // eslint-disable-line no-new-func
+  assert.strictEqual(Object.keys(LANGS).length, 13); for (const c of ['fa', 'ar', 'ur']) assert.strictEqual(LANGS[c].dir, 'rtl');
+  for (const r of T) { assert.strictEqual(r.length, 13, r[0]); assert.ok(r.every(x => typeof x === 'string' && x.length), r[0]); }
+  const menu = [...html.matchAll(/\{ group: '([A-Z ]*)', id: '[a-z]*', text: '([^']*)'/g)];
+  for (const m of menu) for (const k of [m[1], m[2]]) assert.ok(T.some(r => r[0] === k), 'menu text translated: ' + k);
+  for (const s of ["rec = { en: cur, shown: cur }", 'id="am-lang-top"', 'id="am-a11y-panel"', "r.setAttribute('aria-live', 'polite')", 'body.am-motion *', 'body.am-focus :focus-visible']) assert.ok(html.includes(s), s);
+});
