@@ -1,4 +1,5 @@
 'use strict';
+const nativeEngine = require('./native-engine');
 const { detectAudify } = require('./audify');
 // Native audio driver / device detection. Read-only; every probe is optional and fails soft.
 const { execFile } = require('node:child_process');
@@ -150,9 +151,22 @@ function detectPortAudio() {
 // RtAudio's device probe is synchronous and loads every ASIO driver (hundreds of milliseconds, the whole event loop stands still, the audio sockets stutter). The page asks
 // every few seconds; the probe result is reused for 15 s unless a rescan is asked for (?force=1) or this is the first one.
 const audifyMemory = { at: 0, value: null };
+// The operating-system scan (Windows: a PowerShell run plus registry reads, about a second of CPU and a large short-lived process) is the
+// slowest and heaviest part of a scan, and drivers or registered ASIO entries do not change every few seconds: it is reused for 30 s.
+// A rescan (?force=1: SCAN NOW, a device-change event) always runs it again. The result is copied, never shared, because callers add to it.
+const osMemory = { at: 0, value: null, platform: null };
+const OS_SCAN_MS = 30000;
+async function osScan(force) {
+  const p = process.platform, nowMs = Date.now();
+  if (!force && osMemory.value && osMemory.platform === p && nowMs - osMemory.at < OS_SCAN_MS) return JSON.parse(JSON.stringify(osMemory.value));
+  const v = p === 'win32' ? await windows() : p === 'darwin' ? await mac() : p === 'linux' ? await linux() : { drivers: [], devices: [], asio: [], recommended: null };
+  Object.assign(osMemory, { at: Date.now(), value: JSON.parse(JSON.stringify(v)), platform: p });
+  return v;
+}
 async function detect({ force = false } = {}) {
+  if (force) nativeEngine.invalidate();   // the engine's device list is probed again too
   const p = process.platform;
-  const r = p === 'win32' ? await windows() : p === 'darwin' ? await mac() : p === 'linux' ? await linux() : { drivers: [], devices: [], asio: [], recommended: null };
+  const r = await osScan(force);
   const naudiodon = detectPortAudio();
   const nowMs = Date.now();
   const audifyInfo = !force && audifyMemory.value && nowMs - audifyMemory.at < 15000 ? audifyMemory.value : detectAudify();

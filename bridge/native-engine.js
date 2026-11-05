@@ -10,7 +10,9 @@ const { execFileSync, spawn } = require('node:child_process');
 
 const API = { wasapi: 'WINDOWS_WASAPI', asio: 'WINDOWS_ASIO', alsa: 'LINUX_ALSA', coreaudio: 'MACOSX_CORE', null: 'ENGINE_NULL' };
 const HOST_API = { WINDOWS_WASAPI: 'Windows WASAPI', WINDOWS_ASIO: 'ASIO', LINUX_ALSA: 'ALSA', MACOSX_CORE: 'Core Audio', ENGINE_NULL: 'Null' };
-const LIST_TTL_MS = 5000;        // the page scans every few seconds: one engine run answers them all for a while
+const LIST_TTL_MS = 30000;       // a full probe loads every ASIO driver (seconds, and it can disturb another program holding a single-client driver):
+                                 // at most every 30 s; SCAN NOW / a device change (detect force) asks for a fresh one at once
+const { execFile } = require('node:child_process');
 const DEFAULT_FRAMES = 256;
 
 // The engine program: AUDIO_MIXER_ENGINE (a development build), else audiomixer-native(.exe) in the install root, where the installers put it.
@@ -20,7 +22,7 @@ function enginePath({ env = process.env, platform = process.platform, root = pat
   return fs.existsSync(p) ? p : null;
 }
 
-const state = { open: new Set(), list: null, at: 0 };
+const state = { open: new Set(), list: null, at: 0, refreshing: null, stale: false };
 
 // Onboard codecs (Realtek and the like) are served by two stacks at once: Windows' own (WASAPI, which system sound and music players use) and the
 // vendor's ASIO driver (Realtek ASIO) or a generic ASIO wrapper (ASIO4ALL, FlexASIO) that drives the same chip. Both on one chip conflict: an
@@ -59,18 +61,37 @@ function toDevices(raw, base) {
 
 // Synchronous, like audify.listDevices(). The null device is left out unless includeNull (tests); it plays to nothing.
 // While an ASIO stream of the engine is open, the last list is reused: probing an ASIO driver loads it, and ASIO drivers serve one client.
-function listDevices({ exe = enginePath(), base = 1000, run = execFileSync, now = Date.now(), includeNull = process.env.AUDIO_MIXER_ENGINE_NULL === '1' } = {}) {
+// The first list (nothing known yet) or an invalidated one is probed synchronously, as callers expect a list back; every later refresh runs in
+// the background (async spawn) while the last list is answered at once, so a scan never stalls the server or the audio sockets again.
+function listDevices({ exe = enginePath(), base = 1000, run = execFileSync, runAsync = execFile, now = Date.now(), includeNull = process.env.AUDIO_MIXER_ENGINE_NULL === '1' } = {}) {
   if (!exe) return null;
   const asioOpen = [...state.open].some(s => s.backend === 'asio');
-  if (state.list && (asioOpen || now - state.at < LIST_TTL_MS)) return state.list;
+  const build = raw => { const devices = toDevices(includeNull ? raw : raw.filter(d => d.backend !== 'null'), base); return { provider: 'native', hostApis: [...new Set(devices.map(d => d.hostAPIName))], devices, problems: [] }; };
+  // the raw engine answer is cached; each call shapes it with its own options (null device or not, id base)
+  const shaped = () => (state.raw ? (state.list = build(state.raw)) : state.list);
+  if (state.list && !state.stale) {
+    if (asioOpen || now - state.at < LIST_TTL_MS || state.refreshing) return shaped();
+    state.at = now;   // the 30 s count from the start of a refresh: a slow or failed probe is never started again on the next scan
+    state.refreshing = new Promise(done => {
+      try {
+        runAsync(exe, ['--list-devices'], { timeout: 20000, windowsHide: true, encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 }, (err, out) => {
+          if (!err && !(state.open.size && [...state.open].some(s => s.backend === 'asio'))) {
+            try { const raw = JSON.parse(String(out)); state.list = build(raw); state.raw = raw; } catch (_) { /* keep the last list */ }
+          }
+          state.refreshing = null; done();
+        });
+      } catch (_) { state.refreshing = null; done(); }
+    });
+    return shaped();
+  }
   let raw;
   try { raw = JSON.parse(String(run(exe, ['--list-devices'], { timeout: 20000, windowsHide: true, encoding: 'utf8' }))); }
-  catch (e) { return state.list || { provider: 'native', hostApis: [], devices: [], problems: [{ api: 'engine', message: String(e && e.message || e).split('\n')[0] }] }; }
-  const devices = toDevices(includeNull ? raw : raw.filter(d => d.backend !== 'null'), base);
-  state.list = { provider: 'native', hostApis: [...new Set(devices.map(d => d.hostAPIName))], devices, problems: [] };
-  state.at = now;
+  catch (e) { state.stale = false; return state.list || { provider: 'native', hostApis: [], devices: [], problems: [{ api: 'engine', message: String(e && e.message || e).split('\n')[0] }] }; }
+  state.list = build(raw); state.raw = raw; state.at = now; state.stale = false;
   return state.list;
 }
+// the next listDevices() probes afresh (SCAN NOW, a device-change event); not while an ASIO stream of ours is open (that driver would be reloaded)
+function invalidate() { if (![...state.open].some(s => s.backend === 'asio')) state.stale = true; }
 
 function launch({ dev, inCh, outCh, sampleRate, frameSize, exclusive, onData, onError, exe = enginePath(), spawnImpl = spawn, shared = false }) {
   if (!exe) throw new Error('the audio engine (audiomixer-native) is not installed');
@@ -195,6 +216,6 @@ function openDuplex(o) {
   return st;
 }
 
-function _reset() { state.open.clear(); state.list = null; state.at = 0; groups.clear(); }
+function _reset() { state.open.clear(); state.list = null; state.at = 0; state.refreshing = null; state.stale = false; state.raw = null; groups.clear(); }
 
-module.exports = { hardwareFamily, enginePath, listDevices, openStream, openDuplex, toDevices, _reset, _state: state, _shared: SHARED, _groups: groups };
+module.exports = { invalidate, hardwareFamily, enginePath, listDevices, openStream, openDuplex, toDevices, _reset, _state: state, _shared: SHARED, _groups: groups };
