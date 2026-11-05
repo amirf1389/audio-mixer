@@ -948,7 +948,7 @@ CRITICAL REVISIONS & ARCHITECTURAL UPGRADES:
                 <button onclick="window.switchTab('home')" title="Home" class="w-8 h-8 rounded bg-white/5 border border-white/10 flex items-center justify-center text-slate-300 hover:text-amber-500 hover:border-amber-500 transition-all text-xs"><i class="fa-solid fa-house"></i></button>
                 <button id="theme-toggle-btn" onclick="window.toggleTheme()" title="Switch between light and dark" aria-label="Switch between light and dark" class="w-8 h-8 rounded bg-white/5 border border-white/10 flex items-center justify-center text-slate-300 hover:text-amber-500 hover:border-amber-500 transition-all text-xs"><i class="fa-solid fa-circle-half-stroke"></i></button>
                 <button onclick="window.switchTab('admin')" title="Authenticated Admin Vault" class="w-8 h-8 rounded bg-danger/10 border border-danger/30 flex items-center justify-center text-danger hover:bg-danger hover:text-black transition-all text-xs"><i class="fa-solid fa-key"></i></button>
-                <label class="sr-only" for="am-lang-top">Language</label><select id="am-lang-top" title="Language (Alt+L)" aria-label="Language" onchange="window.amA11y.setLang(this.value)" class="h-8 max-w-[92px] rounded bg-white/5 border border-white/10 text-slate-300 text-[9px] font-bold px-1"><option value="en">English</option><option value="fa">فارسی</option><option value="ar">العربية</option><option value="ur">اردو</option><option value="es">Español</option><option value="fr">Français</option><option value="de">Deutsch</option><option value="pt">Português</option><option value="ru">Русский</option><option value="tr">Türkçe</option><option value="hi">हिन्दी</option><option value="zh">中文</option><option value="ja">日本語</option></select>
+                <label class="sr-only" for="am-lang-top">Language</label><select id="am-lang-top" title="Language (Alt+L)" aria-label="Language" onchange="window.amA11y.setLang(this.value)" class="h-8 max-w-[92px] rounded bg-white/5 border border-white/10 text-slate-300 text-[9px] font-bold px-1"><option value="en">English</option><option value="fa">فارسی</option><option value="ar">العربية</option><option value="ur">اردو</option><option value="es">Español</option><option value="fr">Français</option><option value="de">Deutsch</option><option value="pt">Português</option><option value="ru">Русский</option><option value="tr">Türkçe</option><option value="hi">हिन्दी</option><option value="zh">中文</option><option value="ja">日本語</option><option value="ko">한국어</option></select>
                 <div id="status-led" class="w-2 h-2 rounded-full bg-slate-500"></div>
                 <div class="flex flex-col hidden sm:flex">
                     <h2 class="text-xs font-black tracking-[0.12em] text-white m-0 uppercase font-wing truncate">AmF X1 <span class="text-amber-500">by AMFB Audio</span></h2>
@@ -8149,7 +8149,7 @@ const cArea = document.getElementById('content-area');
                 <div id="am-a11y-panel" class="glass-panel p-3 rounded-xl wing-bezel space-y-2">
                   <h3 class="text-xs font-black text-white font-wing tracking-wider uppercase"><i class="fa-solid fa-globe text-cyan-400 mr-1"></i><span>LANGUAGE</span> &amp; <span>ACCESSIBILITY</span></h3>
                   <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-[8px]">
-                    <label class="block text-slate-400 font-bold"><span>LANGUAGE</span><select id="am-lang" onchange="window.amA11y.setLang(this.value)" class="w-full mt-0.5 bg-black border border-white/10 rounded p-1 text-amber-400 text-[10px]"><option value="en">English</option><option value="fa">فارسی</option><option value="ar">العربية</option><option value="ur">اردو</option><option value="es">Español</option><option value="fr">Français</option><option value="de">Deutsch</option><option value="pt">Português</option><option value="ru">Русский</option><option value="tr">Türkçe</option><option value="hi">हिन्दी</option><option value="zh">中文</option><option value="ja">日本語</option></select></label>
+                    <label class="block text-slate-400 font-bold"><span>LANGUAGE</span><select id="am-lang" onchange="window.amA11y.setLang(this.value)" class="w-full mt-0.5 bg-black border border-white/10 rounded p-1 text-amber-400 text-[10px]"><option value="en">English</option><option value="fa">فارسی</option><option value="ar">العربية</option><option value="ur">اردو</option><option value="es">Español</option><option value="fr">Français</option><option value="de">Deutsch</option><option value="pt">Português</option><option value="ru">Русский</option><option value="tr">Türkçe</option><option value="hi">हिन्दी</option><option value="zh">中文</option><option value="ja">日本語</option><option value="ko">한국어</option></select></label>
                     <label class="block text-slate-400 font-bold"><span>TEXT SIZE</span> <span id="am-scale-v" class="text-white"></span><input id="am-scale" type="range" min="90" max="150" step="10" class="w-full accent-cyan-400" oninput="window.amA11y.set('scale', this.value)"></label>
                     <label class="flex items-center gap-1.5 text-slate-300 font-bold"><input id="am-contrast" type="checkbox" onchange="window.amA11y.set('contrast', this.checked)"><span>HIGH CONTRAST</span></label>
                     <label class="flex items-center gap-1.5 text-slate-300 font-bold"><input id="am-motion" type="checkbox" onchange="window.amA11y.set('motion', this.checked)"><span>REDUCE MOTION</span></label>
@@ -22301,7 +22301,7 @@ t.Omnitone=e(11)},function(A,t,e){"use strict";const i=e(1),n=e(4),s=e(12),o=e(6
 </script>
 <script>
     // WORLD LANGUAGE & ACCESSIBILITY ENGINE (window.amA11y). Settings page panel + the globe button in the top bar.
-    // Languages: the interface text this table knows is shown in the chosen language (menu, groups, page names, common buttons and messages);
+    // Languages (14, Korean / Hangul included): the interface text this table knows is shown in the chosen language (menu, groups, page names, common buttons and messages);
     // anything not in the table stays English, never machine-guessed. Persian, Arabic and Urdu switch the page to right-to-left.
     // A MutationObserver translates text the page adds later (one pass per animation frame, text nodes only, nothing while English is chosen).
     // Accessibility: text size (90-150 %), high contrast, reduced motion, strong focus outlines, a screen-reader live region that reads every
@@ -22311,76 +22311,76 @@ t.Omnitone=e(11)},function(A,t,e){"use strict";const i=e(1),n=e(4),s=e(12),o=e(6
         const LANGS = {
             en: { name: 'English', dir: 'ltr' }, fa: { name: 'فارسی', dir: 'rtl' }, ar: { name: 'العربية', dir: 'rtl' }, ur: { name: 'اردو', dir: 'rtl' },
             es: { name: 'Español', dir: 'ltr' }, fr: { name: 'Français', dir: 'ltr' }, de: { name: 'Deutsch', dir: 'ltr' }, pt: { name: 'Português', dir: 'ltr' },
-            ru: { name: 'Русский', dir: 'ltr' }, tr: { name: 'Türkçe', dir: 'ltr' }, hi: { name: 'हिन्दी', dir: 'ltr' }, zh: { name: '中文', dir: 'ltr' }, ja: { name: '日本語', dir: 'ltr' },
+            ru: { name: 'Русский', dir: 'ltr' }, tr: { name: 'Türkçe', dir: 'ltr' }, hi: { name: 'हिन्दी', dir: 'ltr' }, zh: { name: '中文', dir: 'ltr' }, ja: { name: '日本語', dir: 'ltr' }, ko: { name: '한국어', dir: 'ltr' },
         };
-        // [en, fa, ar, ur, es, fr, de, pt, ru, tr, hi, zh, ja]
+        // [en, fa, ar, ur, es, fr, de, pt, ru, tr, hi, zh, ja, ko]
         const T = [
-            ['START', 'شروع', 'البداية', 'آغاز', 'INICIO', 'DÉBUT', 'START', 'INÍCIO', 'СТАРТ', 'BAŞLANGIÇ', 'शुरुआत', '开始', 'スタート'],
-            ['HOME', 'خانه', 'الرئيسية', 'ہوم', 'INICIO', 'ACCUEIL', 'STARTSEITE', 'INÍCIO', 'ГЛАВНАЯ', 'ANA SAYFA', 'होम', '主页', 'ホーム'],
-            ['MIX', 'میکس', 'المزج', 'مکس', 'MEZCLA', 'MIXAGE', 'MIX', 'MIXAGEM', 'МИКС', 'MİKS', 'मिक्स', '混音', 'ミックス'],
-            ['MIXER', 'میکسر', 'الميكسر', 'مکسر', 'MEZCLADOR', 'MIXEUR', 'MISCHPULT', 'MIXER', 'МИКШЕР', 'MİKSER', 'मिक्सर', '调音台', 'ミキサー'],
-            ['TONE (EQ)', 'تن (اکولایزر)', 'النغمة (EQ)', 'ٹون (EQ)', 'TONO (EQ)', 'TONALITÉ (EQ)', 'KLANG (EQ)', 'TOM (EQ)', 'ТЕМБР (EQ)', 'TON (EQ)', 'टोन (EQ)', '音色 (EQ)', '音質 (EQ)'],
-            ['COMPRESSOR', 'کمپرسور', 'الضاغط', 'کمپریسر', 'COMPRESOR', 'COMPRESSEUR', 'KOMPRESSOR', 'COMPRESSOR', 'КОМПРЕССОР', 'KOMPRESÖR', 'कंप्रेसर', '压缩器', 'コンプレッサー'],
-            ['NOISE GATE', 'نویز گیت', 'بوابة الضوضاء', 'نوائز گیٹ', 'PUERTA DE RUIDO', 'NOISE GATE', 'NOISE GATE', 'PORTA DE RUÍDO', 'ШУМОПОДАВИТЕЛЬ', 'GÜRÜLTÜ KAPISI', 'नॉइज़ गेट', '噪声门', 'ノイズゲート'],
-            ['EFFECTS', 'افکت‌ها', 'المؤثرات', 'ایفیکٹس', 'EFECTOS', 'EFFETS', 'EFFEKTE', 'EFEITOS', 'ЭФФЕКТЫ', 'EFEKTLER', 'इफ़ेक्ट्स', '效果', 'エフェクト'],
-            ['SEND TO', 'ارسال به', 'إرسال إلى', 'بھیجیں', 'ENVIAR A', 'ENVOYER VERS', 'SENDEN AN', 'ENVIAR PARA', 'ОТПРАВИТЬ', 'GÖNDER', 'भेजें', '发送至', '送信先'],
-            ['GROUP FADERS', 'فیدرهای گروهی', 'مزلقات المجموعات', 'گروپ فیڈرز', 'FADERS DE GRUPO', 'FADERS DE GROUPE', 'GRUPPENFADER', 'FADERS DE GRUPO', 'ГРУППОВЫЕ ФЕЙДЕРЫ', 'GRUP FADERLARI', 'ग्रुप फ़ेडर', '编组推子', 'グループフェーダー'],
-            ['SURROUND', 'فراگیر', 'الصوت المحيطي', 'سراؤنڈ', 'ENVOLVENTE', 'SURROUND', 'SURROUND', 'SURROUND', 'ОБЪЁМНЫЙ ЗВУК', 'SURROUND', 'सराउंड', '环绕声', 'サラウンド'],
-            ['ROUTE', 'مسیر', 'التوجيه', 'روٹ', 'RUTA', 'ROUTAGE', 'ROUTING', 'ROTA', 'МАРШРУТ', 'YÖNLENDİRME', 'रूट', '路由', 'ルート'],
-            ['CONNECTIONS', 'اتصال‌ها', 'الاتصالات', 'کنکشنز', 'CONEXIONES', 'CONNEXIONS', 'VERBINDUNGEN', 'CONEXÕES', 'ПОДКЛЮЧЕНИЯ', 'BAĞLANTILAR', 'कनेक्शन', '连接', '接続'],
-            ['ROUTING', 'مسیریابی', 'توجيه الإشارة', 'روٹنگ', 'ENRUTAMIENTO', 'ROUTAGE', 'ROUTING', 'ROTEAMENTO', 'МАРШРУТИЗАЦИЯ', 'YÖNLENDİRME', 'रूटिंग', '信号路由', 'ルーティング'],
-            ['METER', 'سنجش', 'القياس', 'میٹر', 'MEDIDOR', 'MESURE', 'METER', 'MEDIDOR', 'ИЗМЕРЕНИЕ', 'ÖLÇÜM', 'मीटर', '电平表', 'メーター'],
-            ['LEVELS', 'سطوح', 'المستويات', 'لیولز', 'NIVELES', 'NIVEAUX', 'PEGEL', 'NÍVEIS', 'УРОВНИ', 'SEVİYELER', 'लेवल', '电平', 'レベル'],
-            ['LOUDNESS', 'بلندی صدا', 'شدة الصوت', 'آواز کی شدت', 'SONORIDAD', 'SONIE', 'LAUTHEIT', 'LOUDNESS', 'ГРОМКОСТЬ', 'YÜKSEKLİK', 'लाउडनेस', '响度', 'ラウドネス'],
-            ['WAVEFORM', 'شکل موج', 'شكل الموجة', 'ویوفارم', 'FORMA DE ONDA', "FORME D'ONDE", 'WELLENFORM', 'FORMA DE ONDA', 'ОСЦИЛЛОГРАММА', 'DALGA FORMU', 'वेवफ़ॉर्म', '波形', '波形'],
-            ['PHASE', 'فاز', 'الطور', 'فیز', 'FASE', 'PHASE', 'PHASE', 'FASE', 'ФАЗА', 'FAZ', 'फ़ेज़', '相位', '位相'],
-            ['SOURCE', 'منبع', 'المصدر', 'سورس', 'FUENTE', 'SOURCE', 'QUELLE', 'FONTE', 'ИСТОЧНИК', 'KAYNAK', 'स्रोत', '音源', 'ソース'],
-            ['STREAM & MEDIA', 'استریم و رسانه', 'البث والوسائط', 'اسٹریم اور میڈیا', 'STREAM Y MEDIOS', 'FLUX ET MÉDIAS', 'STREAM & MEDIEN', 'STREAM E MÍDIA', 'ПОТОК И МЕДИА', 'YAYIN VE MEDYA', 'स्ट्रीम और मीडिया', '串流与媒体', 'ストリーム & メディア'],
-            ['LIVE SOURCES', 'منابع زنده', 'المصادر المباشرة', 'لائیو سورسز', 'FUENTES EN VIVO', 'SOURCES EN DIRECT', 'LIVE-QUELLEN', 'FONTES AO VIVO', 'ЖИВЫЕ ИСТОЧНИКИ', 'CANLI KAYNAKLAR', 'लाइव स्रोत', '实时音源', 'ライブソース'],
-            ['MIC EQ', 'اکولایزر میکروفون', 'معادل الميكروفون', 'مائیک EQ', 'EQ DE MICRÓFONO', 'EQ MICRO', 'MIKROFON-EQ', 'EQ DO MICROFONE', 'EQ МИКРОФОНА', 'MİKROFON EQ', 'माइक EQ', '麦克风 EQ', 'マイク EQ'],
-            ['AI MIX', 'میکس هوشمند', 'المزج الذكي', 'AI مکس', 'MEZCLA IA', 'MIXAGE IA', 'KI-MIX', 'MIXAGEM IA', 'ИИ-МИКС', 'YAPAY ZEKÂ MİKS', 'AI मिक्स', 'AI 混音', 'AI ミックス'],
-            ['TOOLS', 'ابزارها', 'الأدوات', 'ٹولز', 'HERRAMIENTAS', 'OUTILS', 'WERKZEUGE', 'FERRAMENTAS', 'ИНСТРУМЕНТЫ', 'ARAÇLAR', 'टूल्स', '工具', 'ツール'],
-            ['PLUGINS', 'افزونه‌ها', 'الإضافات', 'پلگ انز', 'PLUGINS', 'PLUGINS', 'PLUGINS', 'PLUGINS', 'ПЛАГИНЫ', 'EKLENTİLER', 'प्लगइन्स', '插件', 'プラグイン'],
-            ['DEVICE', 'دستگاه', 'الجهاز', 'ڈیوائس', 'DISPOSITIVO', 'APPAREIL', 'GERÄT', 'DISPOSITIVO', 'УСТРОЙСТВО', 'CİHAZ', 'डिवाइस', '设备', 'デバイス'],
-            ['SOUND CARD', 'کارت صدا', 'بطاقة الصوت', 'ساؤنڈ کارڈ', 'TARJETA DE SONIDO', 'CARTE SON', 'SOUNDKARTE', 'PLACA DE SOM', 'ЗВУКОВАЯ КАРТА', 'SES KARTI', 'साउंड कार्ड', '声卡', 'サウンドカード'],
-            ['BLUETOOTH', 'بلوتوث', 'بلوتوث', 'بلوٹوتھ', 'BLUETOOTH', 'BLUETOOTH', 'BLUETOOTH', 'BLUETOOTH', 'BLUETOOTH', 'BLUETOOTH', 'ब्लूटूथ', '蓝牙', 'Bluetooth'],
-            ['NETWORK', 'شبکه', 'الشبكة', 'نیٹ ورک', 'RED', 'RÉSEAU', 'NETZWERK', 'REDE', 'СЕТЬ', 'AĞ', 'नेटवर्क', '网络', 'ネットワーク'],
-            ['CLOUD', 'ابر', 'السحابة', 'کلاؤڈ', 'NUBE', 'CLOUD', 'CLOUD', 'NUVEM', 'ОБЛАКО', 'BULUT', 'क्लाउड', '云', 'クラウド'],
-            ['CASCADE', 'آبشاری', 'التتالي', 'کیسکیڈ', 'CASCADA', 'CASCADE', 'KASKADE', 'CASCATA', 'КАСКАД', 'KASKAD', 'कैस्केड', '级联', 'カスケード'],
-            ['SYSTEM', 'سیستم', 'النظام', 'سسٹم', 'SISTEMA', 'SYSTÈME', 'SYSTEM', 'SISTEMA', 'СИСТЕМА', 'SİSTEM', 'सिस्टम', '系统', 'システム'],
-            ['PRESETS', 'پیش‌تنظیم‌ها', 'الإعدادات المسبقة', 'پری سیٹس', 'PREAJUSTES', 'PRÉRÉGLAGES', 'PRESETS', 'PREDEFINIÇÕES', 'ПРЕСЕТЫ', 'ÖN AYARLAR', 'प्रीसेट', '预设', 'プリセット'],
-            ['SETTINGS', 'تنظیمات', 'الإعدادات', 'ترتیبات', 'AJUSTES', 'PARAMÈTRES', 'EINSTELLUNGEN', 'CONFIGURAÇÕES', 'НАСТРОЙКИ', 'AYARLAR', 'सेटिंग्स', '设置', '設定'],
-            ['ACCOUNT', 'حساب کاربری', 'الحساب', 'اکاؤنٹ', 'CUENTA', 'COMPTE', 'KONTO', 'CONTA', 'АККАУНТ', 'HESAP', 'खाता', '账户', 'アカウント'],
-            ['ACCESS', 'دسترسی', 'الوصول', 'رسائی', 'ACCESO', 'ACCÈS', 'ZUGRIFF', 'ACESSO', 'ДОСТУП', 'ERİŞİM', 'एक्सेस', '访问', 'アクセス'],
-            ['LICENSE', 'مجوز', 'الترخيص', 'لائسنس', 'LICENCIA', 'LICENCE', 'LIZENZ', 'LICENÇA', 'ЛИЦЕНЗИЯ', 'LİSANS', 'लाइसेंस', '许可证', 'ライセンス'],
-            ['ADMIN', 'مدیریت', 'الإدارة', 'ایڈمن', 'ADMIN', 'ADMIN', 'ADMIN', 'ADMIN', 'АДМИН', 'YÖNETİCİ', 'एडमिन', '管理', '管理'],
-            ['CALIBRATE', 'کالیبره', 'المعايرة', 'کیلیبریٹ', 'CALIBRAR', 'CALIBRER', 'KALIBRIEREN', 'CALIBRAR', 'КАЛИБРОВКА', 'KALİBRE ET', 'कैलिब्रेट', '校准', 'キャリブレーション'],
-            ['HELP', 'راهنما', 'المساعدة', 'مدد', 'AYUDA', 'AIDE', 'HILFE', 'AJUDA', 'ПОМОЩЬ', 'YARDIM', 'सहायता', '帮助', 'ヘルプ'],
-            ['RECORD', 'ضبط', 'التسجيل', 'ریکارڈ', 'GRABAR', 'ENREGISTRER', 'AUFNAHME', 'GRAVAR', 'ЗАПИСЬ', 'KAYIT', 'रिकॉर्ड', '录音', '録音'],
-            ['SCENES', 'صحنه‌ها', 'المشاهد', 'سینز', 'ESCENAS', 'SCÈNES', 'SZENEN', 'CENAS', 'СЦЕНЫ', 'SAHNELER', 'सीन', '场景', 'シーン'],
-            ['BOOT / RESET', 'راه‌اندازی / بازنشانی', 'الإقلاع / إعادة الضبط', 'بوٹ / ری سیٹ', 'ARRANQUE / REINICIO', 'DÉMARRAGE / RÉINITIALISATION', 'START / RESET', 'INICIALIZAÇÃO / REDEFINIR', 'ЗАГРУЗКА / СБРОС', 'BAŞLAT / SIFIRLA', 'बूट / रीसेट', '启动 / 重置', '起動 / リセット'],
-            ['ACTIVATE', 'فعال‌سازی', 'تفعيل', 'فعال کریں', 'ACTIVAR', 'ACTIVER', 'AKTIVIEREN', 'ATIVAR', 'АКТИВИРОВАТЬ', 'ETKİNLEŞTİR', 'सक्रिय करें', '激活', 'アクティベート'],
-            ['DEACTIVATE', 'غیرفعال‌سازی', 'إلغاء التفعيل', 'غیر فعال کریں', 'DESACTIVAR', 'DÉSACTIVER', 'DEAKTIVIEREN', 'DESATIVAR', 'ДЕАКТИВИРОВАТЬ', 'DEVRE DIŞI BIRAK', 'निष्क्रिय करें', '停用', '無効化'],
-            ['SUBMIT TO VENDOR', 'ارسال به فروشنده', 'إرسال إلى البائع', 'وینڈر کو بھیجیں', 'ENVIAR AL PROVEEDOR', 'ENVOYER AU FOURNISSEUR', 'AN HERSTELLER SENDEN', 'ENVIAR AO FORNECEDOR', 'ОТПРАВИТЬ ПОСТАВЩИКУ', 'SATICIYA GÖNDER', 'विक्रेता को भेजें', '提交给供应商', 'ベンダーに送信'],
-            ['COPY', 'کپی', 'نسخ', 'کاپی', 'COPIAR', 'COPIER', 'KOPIEREN', 'COPIAR', 'КОПИРОВАТЬ', 'KOPYALA', 'कॉपी', '复制', 'コピー'],
-            ['FILE', 'فایل', 'ملف', 'فائل', 'ARCHIVO', 'FICHIER', 'DATEI', 'ARQUIVO', 'ФАЙЛ', 'DOSYA', 'फ़ाइल', '文件', 'ファイル'],
-            ['LOAD', 'بارگذاری', 'تحميل', 'لوڈ', 'CARGAR', 'CHARGER', 'LADEN', 'CARREGAR', 'ЗАГРУЗИТЬ', 'YÜKLE', 'लोड', '加载', '読み込み'],
-            ['SAVE', 'ذخیره', 'حفظ', 'محفوظ کریں', 'GUARDAR', 'ENREGISTRER', 'SPEICHERN', 'SALVAR', 'СОХРАНИТЬ', 'KAYDET', 'सहेजें', '保存', '保存'],
-            ['FLAT', 'صاف', 'مسطّح', 'فلیٹ', 'PLANO', 'PLAT', 'NEUTRAL', 'PLANO', 'РОВНО', 'DÜZ', 'फ़्लैट', '平直', 'フラット'],
-            ['ENGAGE', 'روشن', 'تشغيل', 'چالو', 'ACTIVAR', 'ENGAGER', 'EINSCHALTEN', 'LIGAR', 'ВКЛЮЧИТЬ', 'BAŞLAT', 'चालू करें', '启动', '起動'],
-            ['ONLINE', 'آنلاین', 'متصل', 'آن لائن', 'EN LÍNEA', 'EN LIGNE', 'ONLINE', 'ONLINE', 'В СЕТИ', 'ÇEVRİMİÇİ', 'ऑनलाइन', '在线', 'オンライン'],
-            ['ENTER CONSOLE', 'ورود به کنسول', 'دخول وحدة التحكم', 'کنسول میں داخل ہوں', 'ENTRAR A LA CONSOLA', 'ENTRER DANS LA CONSOLE', 'KONSOLE ÖFFNEN', 'ENTRAR NO CONSOLE', 'ОТКРЫТЬ КОНСОЛЬ', 'KONSOLA GİR', 'कंसोल खोलें', '进入控制台', 'コンソールへ'],
-            ['DEMO AUDIO', 'صدای نمونه', 'صوت تجريبي', 'ڈیمو آڈیو', 'AUDIO DE DEMOSTRACIÓN', 'AUDIO DÉMO', 'DEMO-AUDIO', 'ÁUDIO DE DEMONSTRAÇÃO', 'ДЕМО-ЗВУК', 'DEMO SES', 'डेमो ऑडियो', '演示音频', 'デモ音声'],
-            ['REC MASTER', 'ضبط مستر', 'تسجيل الماستر', 'ماسٹر ریکارڈ', 'GRABAR MASTER', 'ENREG. MASTER', 'MASTER AUFNEHMEN', 'GRAVAR MASTER', 'ЗАПИСЬ МАСТЕРА', 'MASTER KAYDI', 'मास्टर रिकॉर्ड', '录制总线', 'マスター録音'],
-            ['LANGUAGE', 'زبان', 'اللغة', 'زبان', 'IDIOMA', 'LANGUE', 'SPRACHE', 'IDIOMA', 'ЯЗЫК', 'DİL', 'भाषा', '语言', '言語'],
-            ['ACCESSIBILITY', 'دسترس‌پذیری', 'إمكانية الوصول', 'رسائی پذیری', 'ACCESIBILIDAD', 'ACCESSIBILITÉ', 'BARRIEREFREIHEIT', 'ACESSIBILIDADE', 'СПЕЦИАЛЬНЫЕ ВОЗМОЖНОСТИ', 'ERİŞİLEBİLİRLİK', 'सुलभता', '无障碍', 'アクセシビリティ'],
-            ['TEXT SIZE', 'اندازه متن', 'حجم النص', 'متن کا سائز', 'TAMAÑO DEL TEXTO', 'TAILLE DU TEXTE', 'TEXTGRÖSSE', 'TAMANHO DO TEXTO', 'РАЗМЕР ТЕКСТА', 'METİN BOYUTU', 'टेक्स्ट आकार', '文字大小', '文字サイズ'],
-            ['HIGH CONTRAST', 'کنتراست بالا', 'تباين عالٍ', 'زیادہ کنٹراسٹ', 'ALTO CONTRASTE', 'CONTRASTE ÉLEVÉ', 'HOHER KONTRAST', 'ALTO CONTRASTE', 'ВЫСОКИЙ КОНТРАСТ', 'YÜKSEK KONTRAST', 'उच्च कंट्रास्ट', '高对比度', 'ハイコントラスト'],
-            ['REDUCE MOTION', 'کاهش حرکت', 'تقليل الحركة', 'حرکت کم کریں', 'REDUCIR MOVIMIENTO', 'RÉDUIRE LES ANIMATIONS', 'BEWEGUNG REDUZIEREN', 'REDUZIR MOVIMENTO', 'МЕНЬШЕ АНИМАЦИИ', 'HAREKETİ AZALT', 'गति कम करें', '减少动画', '動きを減らす'],
-            ['FOCUS OUTLINES', 'نمایش فوکوس', 'إبراز التركيز', 'فوکس آؤٹ لائن', 'CONTORNOS DE FOCO', 'CONTOURS DE FOCUS', 'FOKUSRAHMEN', 'CONTORNO DE FOCO', 'РАМКА ФОКУСА', 'ODAK ÇERÇEVESİ', 'फ़ोकस आउटलाइन', '焦点轮廓', 'フォーカス枠'],
-            ['SKIP TO CONTENT', 'رفتن به محتوا', 'انتقل إلى المحتوى', 'مواد پر جائیں', 'IR AL CONTENIDO', 'ALLER AU CONTENU', 'ZUM INHALT', 'IR PARA O CONTEÚDO', 'К СОДЕРЖИМОМУ', 'İÇERİĞE GEÇ', 'सामग्री पर जाएं', '跳到内容', 'コンテンツへ移動'],
-            ['YOUR LICENSE', 'مجوز شما', 'ترخيصك', 'آپ کا لائسنس', 'TU LICENCIA', 'VOTRE LICENCE', 'IHRE LIZENZ', 'SUA LICENÇA', 'ВАША ЛИЦЕНЗИЯ', 'LİSANSINIZ', 'आपका लाइसेंस', '您的许可证', 'ライセンス情報'],
-            ['LICENSE KEY', 'کلید مجوز', 'مفتاح الترخيص', 'لائسنس کی', 'CLAVE DE LICENCIA', 'CLÉ DE LICENCE', 'LIZENZSCHLÜSSEL', 'CHAVE DE LICENÇA', 'КЛЮЧ ЛИЦЕНЗИИ', 'LİSANS ANAHTARI', 'लाइसेंस कुंजी', '许可证密钥', 'ライセンスキー'],
+            ['START', 'شروع', 'البداية', 'آغاز', 'INICIO', 'DÉBUT', 'START', 'INÍCIO', 'СТАРТ', 'BAŞLANGIÇ', 'शुरुआत', '开始', 'スタート', '시작'],
+            ['HOME', 'خانه', 'الرئيسية', 'ہوم', 'INICIO', 'ACCUEIL', 'STARTSEITE', 'INÍCIO', 'ГЛАВНАЯ', 'ANA SAYFA', 'होम', '主页', 'ホーム', '홈'],
+            ['MIX', 'میکس', 'المزج', 'مکس', 'MEZCLA', 'MIXAGE', 'MIX', 'MIXAGEM', 'МИКС', 'MİKS', 'मिक्स', '混音', 'ミックス', '믹스'],
+            ['MIXER', 'میکسر', 'الميكسر', 'مکسر', 'MEZCLADOR', 'MIXEUR', 'MISCHPULT', 'MIXER', 'МИКШЕР', 'MİKSER', 'मिक्सर', '调音台', 'ミキサー', '믹서'],
+            ['TONE (EQ)', 'تن (اکولایزر)', 'النغمة (EQ)', 'ٹون (EQ)', 'TONO (EQ)', 'TONALITÉ (EQ)', 'KLANG (EQ)', 'TOM (EQ)', 'ТЕМБР (EQ)', 'TON (EQ)', 'टोन (EQ)', '音色 (EQ)', '音質 (EQ)', '톤 (EQ)'],
+            ['COMPRESSOR', 'کمپرسور', 'الضاغط', 'کمپریسر', 'COMPRESOR', 'COMPRESSEUR', 'KOMPRESSOR', 'COMPRESSOR', 'КОМПРЕССОР', 'KOMPRESÖR', 'कंप्रेसर', '压缩器', 'コンプレッサー', '컴프레서'],
+            ['NOISE GATE', 'نویز گیت', 'بوابة الضوضاء', 'نوائز گیٹ', 'PUERTA DE RUIDO', 'NOISE GATE', 'NOISE GATE', 'PORTA DE RUÍDO', 'ШУМОПОДАВИТЕЛЬ', 'GÜRÜLTÜ KAPISI', 'नॉइज़ गेट', '噪声门', 'ノイズゲート', '노이즈 게이트'],
+            ['EFFECTS', 'افکت‌ها', 'المؤثرات', 'ایفیکٹس', 'EFECTOS', 'EFFETS', 'EFFEKTE', 'EFEITOS', 'ЭФФЕКТЫ', 'EFEKTLER', 'इफ़ेक्ट्स', '效果', 'エフェクト', '이펙트'],
+            ['SEND TO', 'ارسال به', 'إرسال إلى', 'بھیجیں', 'ENVIAR A', 'ENVOYER VERS', 'SENDEN AN', 'ENVIAR PARA', 'ОТПРАВИТЬ', 'GÖNDER', 'भेजें', '发送至', '送信先', '보내기'],
+            ['GROUP FADERS', 'فیدرهای گروهی', 'مزلقات المجموعات', 'گروپ فیڈرز', 'FADERS DE GRUPO', 'FADERS DE GROUPE', 'GRUPPENFADER', 'FADERS DE GRUPO', 'ГРУППОВЫЕ ФЕЙДЕРЫ', 'GRUP FADERLARI', 'ग्रुप फ़ेडर', '编组推子', 'グループフェーダー', '그룹 페이더'],
+            ['SURROUND', 'فراگیر', 'الصوت المحيطي', 'سراؤنڈ', 'ENVOLVENTE', 'SURROUND', 'SURROUND', 'SURROUND', 'ОБЪЁМНЫЙ ЗВУК', 'SURROUND', 'सराउंड', '环绕声', 'サラウンド', '서라운드'],
+            ['ROUTE', 'مسیر', 'التوجيه', 'روٹ', 'RUTA', 'ROUTAGE', 'ROUTING', 'ROTA', 'МАРШРУТ', 'YÖNLENDİRME', 'रूट', '路由', 'ルート', '경로'],
+            ['CONNECTIONS', 'اتصال‌ها', 'الاتصالات', 'کنکشنز', 'CONEXIONES', 'CONNEXIONS', 'VERBINDUNGEN', 'CONEXÕES', 'ПОДКЛЮЧЕНИЯ', 'BAĞLANTILAR', 'कनेक्शन', '连接', '接続', '연결'],
+            ['ROUTING', 'مسیریابی', 'توجيه الإشارة', 'روٹنگ', 'ENRUTAMIENTO', 'ROUTAGE', 'ROUTING', 'ROTEAMENTO', 'МАРШРУТИЗАЦИЯ', 'YÖNLENDİRME', 'रूटिंग', '信号路由', 'ルーティング', '라우팅'],
+            ['METER', 'سنجش', 'القياس', 'میٹر', 'MEDIDOR', 'MESURE', 'METER', 'MEDIDOR', 'ИЗМЕРЕНИЕ', 'ÖLÇÜM', 'मीटर', '电平表', 'メーター', '미터'],
+            ['LEVELS', 'سطوح', 'المستويات', 'لیولز', 'NIVELES', 'NIVEAUX', 'PEGEL', 'NÍVEIS', 'УРОВНИ', 'SEVİYELER', 'लेवल', '电平', 'レベル', '레벨'],
+            ['LOUDNESS', 'بلندی صدا', 'شدة الصوت', 'آواز کی شدت', 'SONORIDAD', 'SONIE', 'LAUTHEIT', 'LOUDNESS', 'ГРОМКОСТЬ', 'YÜKSEKLİK', 'लाउडनेस', '响度', 'ラウドネス', '라우드니스'],
+            ['WAVEFORM', 'شکل موج', 'شكل الموجة', 'ویوفارم', 'FORMA DE ONDA', "FORME D'ONDE", 'WELLENFORM', 'FORMA DE ONDA', 'ОСЦИЛЛОГРАММА', 'DALGA FORMU', 'वेवफ़ॉर्म', '波形', '波形', '파형'],
+            ['PHASE', 'فاز', 'الطور', 'فیز', 'FASE', 'PHASE', 'PHASE', 'FASE', 'ФАЗА', 'FAZ', 'फ़ेज़', '相位', '位相', '위상'],
+            ['SOURCE', 'منبع', 'المصدر', 'سورس', 'FUENTE', 'SOURCE', 'QUELLE', 'FONTE', 'ИСТОЧНИК', 'KAYNAK', 'स्रोत', '音源', 'ソース', '소스'],
+            ['STREAM & MEDIA', 'استریم و رسانه', 'البث والوسائط', 'اسٹریم اور میڈیا', 'STREAM Y MEDIOS', 'FLUX ET MÉDIAS', 'STREAM & MEDIEN', 'STREAM E MÍDIA', 'ПОТОК И МЕДИА', 'YAYIN VE MEDYA', 'स्ट्रीम और मीडिया', '串流与媒体', 'ストリーム & メディア', '스트림 및 미디어'],
+            ['LIVE SOURCES', 'منابع زنده', 'المصادر المباشرة', 'لائیو سورسز', 'FUENTES EN VIVO', 'SOURCES EN DIRECT', 'LIVE-QUELLEN', 'FONTES AO VIVO', 'ЖИВЫЕ ИСТОЧНИКИ', 'CANLI KAYNAKLAR', 'लाइव स्रोत', '实时音源', 'ライブソース', '라이브 소스'],
+            ['MIC EQ', 'اکولایزر میکروفون', 'معادل الميكروفون', 'مائیک EQ', 'EQ DE MICRÓFONO', 'EQ MICRO', 'MIKROFON-EQ', 'EQ DO MICROFONE', 'EQ МИКРОФОНА', 'MİKROFON EQ', 'माइक EQ', '麦克风 EQ', 'マイク EQ', '마이크 EQ'],
+            ['AI MIX', 'میکس هوشمند', 'المزج الذكي', 'AI مکس', 'MEZCLA IA', 'MIXAGE IA', 'KI-MIX', 'MIXAGEM IA', 'ИИ-МИКС', 'YAPAY ZEKÂ MİKS', 'AI मिक्स', 'AI 混音', 'AI ミックス', 'AI 믹스'],
+            ['TOOLS', 'ابزارها', 'الأدوات', 'ٹولز', 'HERRAMIENTAS', 'OUTILS', 'WERKZEUGE', 'FERRAMENTAS', 'ИНСТРУМЕНТЫ', 'ARAÇLAR', 'टूल्स', '工具', 'ツール', '도구'],
+            ['PLUGINS', 'افزونه‌ها', 'الإضافات', 'پلگ انز', 'PLUGINS', 'PLUGINS', 'PLUGINS', 'PLUGINS', 'ПЛАГИНЫ', 'EKLENTİLER', 'प्लगइन्स', '插件', 'プラグイン', '플러그인'],
+            ['DEVICE', 'دستگاه', 'الجهاز', 'ڈیوائس', 'DISPOSITIVO', 'APPAREIL', 'GERÄT', 'DISPOSITIVO', 'УСТРОЙСТВО', 'CİHAZ', 'डिवाइस', '设备', 'デバイス', '장치'],
+            ['SOUND CARD', 'کارت صدا', 'بطاقة الصوت', 'ساؤنڈ کارڈ', 'TARJETA DE SONIDO', 'CARTE SON', 'SOUNDKARTE', 'PLACA DE SOM', 'ЗВУКОВАЯ КАРТА', 'SES KARTI', 'साउंड कार्ड', '声卡', 'サウンドカード', '사운드 카드'],
+            ['BLUETOOTH', 'بلوتوث', 'بلوتوث', 'بلوٹوتھ', 'BLUETOOTH', 'BLUETOOTH', 'BLUETOOTH', 'BLUETOOTH', 'BLUETOOTH', 'BLUETOOTH', 'ब्लूटूथ', '蓝牙', 'Bluetooth', '블루투스'],
+            ['NETWORK', 'شبکه', 'الشبكة', 'نیٹ ورک', 'RED', 'RÉSEAU', 'NETZWERK', 'REDE', 'СЕТЬ', 'AĞ', 'नेटवर्क', '网络', 'ネットワーク', '네트워크'],
+            ['CLOUD', 'ابر', 'السحابة', 'کلاؤڈ', 'NUBE', 'CLOUD', 'CLOUD', 'NUVEM', 'ОБЛАКО', 'BULUT', 'क्लाउड', '云', 'クラウド', '클라우드'],
+            ['CASCADE', 'آبشاری', 'التتالي', 'کیسکیڈ', 'CASCADA', 'CASCADE', 'KASKADE', 'CASCATA', 'КАСКАД', 'KASKAD', 'कैस्केड', '级联', 'カスケード', '캐스케이드'],
+            ['SYSTEM', 'سیستم', 'النظام', 'سسٹم', 'SISTEMA', 'SYSTÈME', 'SYSTEM', 'SISTEMA', 'СИСТЕМА', 'SİSTEM', 'सिस्टम', '系统', 'システム', '시스템'],
+            ['PRESETS', 'پیش‌تنظیم‌ها', 'الإعدادات المسبقة', 'پری سیٹس', 'PREAJUSTES', 'PRÉRÉGLAGES', 'PRESETS', 'PREDEFINIÇÕES', 'ПРЕСЕТЫ', 'ÖN AYARLAR', 'प्रीसेट', '预设', 'プリセット', '프리셋'],
+            ['SETTINGS', 'تنظیمات', 'الإعدادات', 'ترتیبات', 'AJUSTES', 'PARAMÈTRES', 'EINSTELLUNGEN', 'CONFIGURAÇÕES', 'НАСТРОЙКИ', 'AYARLAR', 'सेटिंग्स', '设置', '設定', '설정'],
+            ['ACCOUNT', 'حساب کاربری', 'الحساب', 'اکاؤنٹ', 'CUENTA', 'COMPTE', 'KONTO', 'CONTA', 'АККАУНТ', 'HESAP', 'खाता', '账户', 'アカウント', '계정'],
+            ['ACCESS', 'دسترسی', 'الوصول', 'رسائی', 'ACCESO', 'ACCÈS', 'ZUGRIFF', 'ACESSO', 'ДОСТУП', 'ERİŞİM', 'एक्सेस', '访问', 'アクセス', '접근'],
+            ['LICENSE', 'مجوز', 'الترخيص', 'لائسنس', 'LICENCIA', 'LICENCE', 'LIZENZ', 'LICENÇA', 'ЛИЦЕНЗИЯ', 'LİSANS', 'लाइसेंस', '许可证', 'ライセンス', '라이선스'],
+            ['ADMIN', 'مدیریت', 'الإدارة', 'ایڈمن', 'ADMIN', 'ADMIN', 'ADMIN', 'ADMIN', 'АДМИН', 'YÖNETİCİ', 'एडमिन', '管理', '管理', '관리자'],
+            ['CALIBRATE', 'کالیبره', 'المعايرة', 'کیلیبریٹ', 'CALIBRAR', 'CALIBRER', 'KALIBRIEREN', 'CALIBRAR', 'КАЛИБРОВКА', 'KALİBRE ET', 'कैलिब्रेट', '校准', 'キャリブレーション', '보정'],
+            ['HELP', 'راهنما', 'المساعدة', 'مدد', 'AYUDA', 'AIDE', 'HILFE', 'AJUDA', 'ПОМОЩЬ', 'YARDIM', 'सहायता', '帮助', 'ヘルプ', '도움말'],
+            ['RECORD', 'ضبط', 'التسجيل', 'ریکارڈ', 'GRABAR', 'ENREGISTRER', 'AUFNAHME', 'GRAVAR', 'ЗАПИСЬ', 'KAYIT', 'रिकॉर्ड', '录音', '録音', '녹음'],
+            ['SCENES', 'صحنه‌ها', 'المشاهد', 'سینز', 'ESCENAS', 'SCÈNES', 'SZENEN', 'CENAS', 'СЦЕНЫ', 'SAHNELER', 'सीन', '场景', 'シーン', '장면'],
+            ['BOOT / RESET', 'راه‌اندازی / بازنشانی', 'الإقلاع / إعادة الضبط', 'بوٹ / ری سیٹ', 'ARRANQUE / REINICIO', 'DÉMARRAGE / RÉINITIALISATION', 'START / RESET', 'INICIALIZAÇÃO / REDEFINIR', 'ЗАГРУЗКА / СБРОС', 'BAŞLAT / SIFIRLA', 'बूट / रीसेट', '启动 / 重置', '起動 / リセット', '부팅 / 초기화'],
+            ['ACTIVATE', 'فعال‌سازی', 'تفعيل', 'فعال کریں', 'ACTIVAR', 'ACTIVER', 'AKTIVIEREN', 'ATIVAR', 'АКТИВИРОВАТЬ', 'ETKİNLEŞTİR', 'सक्रिय करें', '激活', 'アクティベート', '활성화'],
+            ['DEACTIVATE', 'غیرفعال‌سازی', 'إلغاء التفعيل', 'غیر فعال کریں', 'DESACTIVAR', 'DÉSACTIVER', 'DEAKTIVIEREN', 'DESATIVAR', 'ДЕАКТИВИРОВАТЬ', 'DEVRE DIŞI BIRAK', 'निष्क्रिय करें', '停用', '無効化', '비활성화'],
+            ['SUBMIT TO VENDOR', 'ارسال به فروشنده', 'إرسال إلى البائع', 'وینڈر کو بھیجیں', 'ENVIAR AL PROVEEDOR', 'ENVOYER AU FOURNISSEUR', 'AN HERSTELLER SENDEN', 'ENVIAR AO FORNECEDOR', 'ОТПРАВИТЬ ПОСТАВЩИКУ', 'SATICIYA GÖNDER', 'विक्रेता को भेजें', '提交给供应商', 'ベンダーに送信', '판매자에게 보내기'],
+            ['COPY', 'کپی', 'نسخ', 'کاپی', 'COPIAR', 'COPIER', 'KOPIEREN', 'COPIAR', 'КОПИРОВАТЬ', 'KOPYALA', 'कॉपी', '复制', 'コピー', '복사'],
+            ['FILE', 'فایل', 'ملف', 'فائل', 'ARCHIVO', 'FICHIER', 'DATEI', 'ARQUIVO', 'ФАЙЛ', 'DOSYA', 'फ़ाइल', '文件', 'ファイル', '파일'],
+            ['LOAD', 'بارگذاری', 'تحميل', 'لوڈ', 'CARGAR', 'CHARGER', 'LADEN', 'CARREGAR', 'ЗАГРУЗИТЬ', 'YÜKLE', 'लोड', '加载', '読み込み', '불러오기'],
+            ['SAVE', 'ذخیره', 'حفظ', 'محفوظ کریں', 'GUARDAR', 'ENREGISTRER', 'SPEICHERN', 'SALVAR', 'СОХРАНИТЬ', 'KAYDET', 'सहेजें', '保存', '保存', '저장'],
+            ['FLAT', 'صاف', 'مسطّح', 'فلیٹ', 'PLANO', 'PLAT', 'NEUTRAL', 'PLANO', 'РОВНО', 'DÜZ', 'फ़्लैट', '平直', 'フラット', '플랫'],
+            ['ENGAGE', 'روشن', 'تشغيل', 'چالو', 'ACTIVAR', 'ENGAGER', 'EINSCHALTEN', 'LIGAR', 'ВКЛЮЧИТЬ', 'BAŞLAT', 'चालू करें', '启动', '起動', '시작'],
+            ['ONLINE', 'آنلاین', 'متصل', 'آن لائن', 'EN LÍNEA', 'EN LIGNE', 'ONLINE', 'ONLINE', 'В СЕТИ', 'ÇEVRİMİÇİ', 'ऑनलाइन', '在线', 'オンライン', '온라인'],
+            ['ENTER CONSOLE', 'ورود به کنسول', 'دخول وحدة التحكم', 'کنسول میں داخل ہوں', 'ENTRAR A LA CONSOLA', 'ENTRER DANS LA CONSOLE', 'KONSOLE ÖFFNEN', 'ENTRAR NO CONSOLE', 'ОТКРЫТЬ КОНСОЛЬ', 'KONSOLA GİR', 'कंसोल खोलें', '进入控制台', 'コンソールへ', '콘솔 열기'],
+            ['DEMO AUDIO', 'صدای نمونه', 'صوت تجريبي', 'ڈیمو آڈیو', 'AUDIO DE DEMOSTRACIÓN', 'AUDIO DÉMO', 'DEMO-AUDIO', 'ÁUDIO DE DEMONSTRAÇÃO', 'ДЕМО-ЗВУК', 'DEMO SES', 'डेमो ऑडियो', '演示音频', 'デモ音声', '데모 오디오'],
+            ['REC MASTER', 'ضبط مستر', 'تسجيل الماستر', 'ماسٹر ریکارڈ', 'GRABAR MASTER', 'ENREG. MASTER', 'MASTER AUFNEHMEN', 'GRAVAR MASTER', 'ЗАПИСЬ МАСТЕРА', 'MASTER KAYDI', 'मास्टर रिकॉर्ड', '录制总线', 'マスター録音', '마스터 녹음'],
+            ['LANGUAGE', 'زبان', 'اللغة', 'زبان', 'IDIOMA', 'LANGUE', 'SPRACHE', 'IDIOMA', 'ЯЗЫК', 'DİL', 'भाषा', '语言', '言語', '언어'],
+            ['ACCESSIBILITY', 'دسترس‌پذیری', 'إمكانية الوصول', 'رسائی پذیری', 'ACCESIBILIDAD', 'ACCESSIBILITÉ', 'BARRIEREFREIHEIT', 'ACESSIBILIDADE', 'СПЕЦИАЛЬНЫЕ ВОЗМОЖНОСТИ', 'ERİŞİLEBİLİRLİK', 'सुलभता', '无障碍', 'アクセシビリティ', '접근성'],
+            ['TEXT SIZE', 'اندازه متن', 'حجم النص', 'متن کا سائز', 'TAMAÑO DEL TEXTO', 'TAILLE DU TEXTE', 'TEXTGRÖSSE', 'TAMANHO DO TEXTO', 'РАЗМЕР ТЕКСТА', 'METİN BOYUTU', 'टेक्स्ट आकार', '文字大小', '文字サイズ', '글자 크기'],
+            ['HIGH CONTRAST', 'کنتراست بالا', 'تباين عالٍ', 'زیادہ کنٹراسٹ', 'ALTO CONTRASTE', 'CONTRASTE ÉLEVÉ', 'HOHER KONTRAST', 'ALTO CONTRASTE', 'ВЫСОКИЙ КОНТРАСТ', 'YÜKSEK KONTRAST', 'उच्च कंट्रास्ट', '高对比度', 'ハイコントラスト', '고대비'],
+            ['REDUCE MOTION', 'کاهش حرکت', 'تقليل الحركة', 'حرکت کم کریں', 'REDUCIR MOVIMIENTO', 'RÉDUIRE LES ANIMATIONS', 'BEWEGUNG REDUZIEREN', 'REDUZIR MOVIMENTO', 'МЕНЬШЕ АНИМАЦИИ', 'HAREKETİ AZALT', 'गति कम करें', '减少动画', '動きを減らす', '움직임 줄이기'],
+            ['FOCUS OUTLINES', 'نمایش فوکوس', 'إبراز التركيز', 'فوکس آؤٹ لائن', 'CONTORNOS DE FOCO', 'CONTOURS DE FOCUS', 'FOKUSRAHMEN', 'CONTORNO DE FOCO', 'РАМКА ФОКУСА', 'ODAK ÇERÇEVESİ', 'फ़ोकस आउटलाइन', '焦点轮廓', 'フォーカス枠', '포커스 테두리'],
+            ['SKIP TO CONTENT', 'رفتن به محتوا', 'انتقل إلى المحتوى', 'مواد پر جائیں', 'IR AL CONTENIDO', 'ALLER AU CONTENU', 'ZUM INHALT', 'IR PARA O CONTEÚDO', 'К СОДЕРЖИМОМУ', 'İÇERİĞE GEÇ', 'सामग्री पर जाएं', '跳到内容', 'コンテンツへ移動', '본문으로 건너뛰기'],
+            ['YOUR LICENSE', 'مجوز شما', 'ترخيصك', 'آپ کا لائسنس', 'TU LICENCIA', 'VOTRE LICENCE', 'IHRE LIZENZ', 'SUA LICENÇA', 'ВАША ЛИЦЕНЗИЯ', 'LİSANSINIZ', 'आपका लाइसेंस', '您的许可证', 'ライセンス情報', '내 라이선스'],
+            ['LICENSE KEY', 'کلید مجوز', 'مفتاح الترخيص', 'لائسنس کی', 'CLAVE DE LICENCIA', 'CLÉ DE LICENCE', 'LIZENZSCHLÜSSEL', 'CHAVE DE LICENÇA', 'КЛЮЧ ЛИЦЕНЗИИ', 'LİSANS ANAHTARI', 'लाइसेंस कुंजी', '许可证密钥', 'ライセンスキー', '라이선스 키'],
         ];
         const CODES = Object.keys(LANGS);
         const dict = {};   // lang -> Map(EN UPPER -> text)
