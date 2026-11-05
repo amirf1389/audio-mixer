@@ -2,8 +2,8 @@
 'use strict';
 // "AmF X1 Key Generator.exe": the license key generator + local update server (scripts/license-generator.js) as ONE Windows program,
 // so it needs no Node.js install and no project folder next to it. Double-click: the page opens in the browser, and the public
-// listener for customers' key requests starts on 127.0.0.1:8780 (put nginx with HTTPS in front: deploy/nginx/keys-api.conf; add
-// --public-bind 0.0.0.0 only to open port 8780 itself to all networks).
+// listener for update downloads starts on 127.0.0.1:8780 (put nginx with HTTPS in front: deploy/nginx/keys-api.conf; add
+// --public-bind 0.0.0.0 only to open port 8780 itself to all networks). Key requests from copies older than 1.22.1.0 only with --accept-requests.
 //   node scripts/build-keygen.js [--targets windows-x64,linux-x64] [--out dist]
 // Built the same way as the single-file server (scripts/build-single.js): esbuild bundles the script, Node.js single-executable support injects
 // it into the official Node.js binary (cached in dist/cache). The executable is not code-signed here: Windows shows "unknown publisher".
@@ -18,7 +18,7 @@ const NAMES = { 'windows-x64': 'AmF X1 Key Generator.exe', 'windows-x86': 'AmF X
 function bundle(cache) {
   const { esbuild } = single.ensureTools(cache);
   const entry = path.join(os.tmpdir(), `am-keygen-entry-${process.pid}.js`);
-  // double-click defaults: open the page, take requests from the internet on 8780; any argument given replaces nothing, it is added
+  // double-click defaults: open the page, serve updates (and, with --accept-requests, old copies' key requests) on 8780; any argument given replaces nothing, it is added
   fs.writeFileSync(entry, `const a = process.argv.slice(2); if (!a.includes('--no-open')) a.push('--open'); if (!a.includes('--no-public') && !a.includes('--public')) a.push('--public');\n` +
     `const code = require(${JSON.stringify(path.join(ROOT, 'scripts', 'license-generator.js'))}).main(a.filter(x => x !== '--no-open' && x !== '--no-public')); if (code) process.exit(code);\n`);
   try {

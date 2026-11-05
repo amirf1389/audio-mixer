@@ -102,7 +102,7 @@ function asioXml({ stage, arch, scope }) {
   return { components, feature: `    <Feature Id="AsioDriver" Title="Register the Audio Mixer ASIO driver (appears in ASIO hosts: DAWs, OBS ...)" Level="3">${ids.map(i => `<ComponentRef Id="${i}"/>`).join('')}</Feature>\n` };
 }
 
-function wxs({ stage, version, arch = 'x64', scope = 'machine', build = '' }) {
+function wxs({ stage, version, arch = 'x64', scope = 'machine', build = '', product = 'AmF X1' }) {   // product: 'AmF X1 Pro' / 'AmF X1 Studio Master' for a paid edition (scripts/build-edition.js)
   if (!['x64', 'x86'].includes(arch) || !['machine', 'user'].includes(scope)) throw new Error('bad arch / scope');
   const win64 = arch === 'x64', machine = scope === 'machine', root = machine ? 'HKLM' : 'HKCU';
   const { xml, comps, groups } = filesXml(stage, win64);
@@ -119,8 +119,8 @@ function wxs({ stage, version, arch = 'x64', scope = 'machine', build = '' }) {
     : `      <Directory Id="LocalAppDataFolder">\n        <Directory Id="ProgramsDir" Name="Programs">\n          <Directory Id="INSTALLDIR" Name="AudioMixer">\n${xml}          </Directory>\n        </Directory>\n      </Directory>`;
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
-  <Product Id="${code}" Name="AmF X1" Language="1033" Version="${version}" Manufacturer="AMFB Audio" UpgradeCode="${UPGRADE_CODES[arch + '-' + scope]}">
-    <Package Description="AmF X1 by AMFB Audio: mixer and local audio server" Manufacturer="AMFB Audio" InstallerVersion="200" Compressed="yes" InstallScope="${machine ? 'perMachine' : 'perUser'}"/>
+  <Product Id="${code}" Name="${esc(product)}" Language="1033" Version="${version}" Manufacturer="AMFB Audio" UpgradeCode="${UPGRADE_CODES[arch + '-' + scope]}">
+    <Package Description="${esc(product)} by AMFB Audio: mixer and local audio server" Manufacturer="AMFB Audio" InstallerVersion="200" Compressed="yes" InstallScope="${machine ? 'perMachine' : 'perUser'}"/>
     <MajorUpgrade AllowSameVersionUpgrades="yes" DowngradeErrorMessage="A newer version of AmF X1 is already installed."/>
     <Media Id="1" Cabinet="audiomixer.cab" EmbedCab="yes"/>
     <!-- Settings > Apps (Add or remove programs) entry: name, version, publisher and a working Uninstall button come with the package -->
@@ -253,7 +253,9 @@ function addEnvironment(msi, work, rows) {
 function addPathEntry(msi, work, component = 'CommandPath') { addEnvironment(msi, work, [['PathAudioMixer', '=*PATH', '[~];[INSTALLDIR]', component]]); }
 
 // `staged` = result of buildInstaller (so several installers can share one staging folder)
-async function buildMsi({ out = path.join(ROOT, 'dist'), arch = 'x64', scope = 'machine', runWixl = true, stageOpts = {}, staged = null } = {}) {
+// edition: { name: 'AmF X1 Pro', file: 'Pro' } for a paid edition: product name in Settings > Apps and the file name. Same upgrade code as Basic on purpose:
+// installing the edition REPLACES an installed Basic (same folder, settings kept); the product code differs anyway (it hashes the staged files, token included).
+async function buildMsi({ out = path.join(ROOT, 'dist'), arch = 'x64', scope = 'machine', runWixl = true, stageOpts = {}, staged = null, edition = null } = {}) {
   const st = staged || await buildInstaller({ out, arch, ...stageOpts });
   const work = path.join(path.resolve(out), 'msi', `${arch}-${scope}`);
   fs.mkdirSync(work, { recursive: true });
@@ -261,8 +263,8 @@ async function buildMsi({ out = path.join(ROOT, 'dist'), arch = 'x64', scope = '
   const version = st.version.replace(/[^\d.]/g, '').split('.').slice(0, 3).join('.');
   const wxsPath = path.join(work, 'audio-mixer.wxs');
   const build = stageHash(st.stage);
-  fs.writeFileSync(wxsPath, wxs({ stage: st.stage, version, arch, scope, build }));
-  const msi = path.join(path.resolve(out), `AudioMixer-${require('./release-label').fileVersion(st.version)}-${arch}${scope === 'user' ? '-user' : ''}.msi`);
+  fs.writeFileSync(wxsPath, wxs({ stage: st.stage, version, arch, scope, build, product: edition ? edition.name : 'AmF X1' }));
+  const msi = path.join(path.resolve(out), `AudioMixer-${edition ? edition.file + '-' : ''}${require('./release-label').fileVersion(st.version)}-${arch}${scope === 'user' ? '-user' : ''}.msi`);
   const result = { ...st, wxs: wxsPath, msi: null, scope, productCode: productCode(arch, scope, version, build), build };
   if (!runWixl) return result;
   const r = spawnSync('wixl', ['-v', '--arch', arch, '--ext', 'ui', '-o', msi, wxsPath], { encoding: 'utf8', cwd: work });

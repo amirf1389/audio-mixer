@@ -5097,11 +5097,18 @@ test('license key vault: PIN-locked folder (AES-256-GCM, scrypt), only the encry
   finally { fsx.rmSync(d2, { recursive: true, force: true }); }
 });
 
-test('license page SUBMIT TO VENDOR works without an update server: local generator, else an e-mail draft with the request', () => {
+test('license page: SUBMIT TO VENDOR is gone (1.22.1.0); UPGRADE TO PRO / STUDIO MASTER opens WhatsApp, the page posts no key request anywhere', () => {
   const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
-  assert.ok(html.includes('if (!origin) return this.submitWithoutServer(req);'), 'no server no longer stops the button');
-  assert.ok(html.includes("fetch('http://127.0.0.1:8799/status', { mode: 'no-cors'") && html.includes("location.href = 'mailto:'"));
-  assert.ok(!html.includes('Set an update server address in SETTINGS → OTA first')); assert.ok(html.includes("const VENDOR_EMAIL = 'badriamirfakhri@gmail.com'"));
+  assert.ok(!/SUBMIT TO VENDOR|lic-req-submit|submitRequest|submitWithoutServer|vendorServerPublished|VENDOR_SERVER/.test(html), 'no trace of the vendor-submit path');
+  assert.ok(!html.includes("'/request-license'"), 'the app never posts a key request');
+  assert.ok(html.includes('id="lic-upgrade-pro"') && html.includes('id="lic-upgrade-master"') && html.includes("on('lic-upgrade-pro', () => L.upgrade('pro'))") && html.includes("on('lic-upgrade-master', () => L.upgrade('studio-master'))"));
+  assert.ok(html.includes("WHATSAPP: '601120871185'") && html.includes("'https://wa.me/' + this.WHATSAPP + '?text=' + encodeURIComponent(t)"));
+  assert.ok(html.includes('id="lic-req-file"') && html.includes('id="lic-req-copy"') && html.includes('id="lic-check"') && html.includes('id="lic-activate"'), 'COPY / FILE / manual key / CHECK KEY stay');
+  assert.ok(html.includes("['lic-manual-request', 'lic-key-panel'].forEach(id => { const e = $(id); if (e) e.classList.toggle('hidden', !!ed); });"), 'an edition hides the manual activation UI');
+  for (const w of ['UPGRADE TO PRO', 'UPGRADE TO STUDIO MASTER']) {
+    const row = new RegExp("\\['" + w + "',([^\\n]*)\\],").exec(html); assert.ok(row, w + ' is translated');
+    assert.strictEqual(row[0].match(/'(?:[^'\\]|\\.)*'|"[^"]*"/g).length, 22, w + ': all 22 languages');
+  }
 });
 
 test('generator + local OTA: PUBLISH signs update.json with the unlocked key, serves only published files (Range), takes key requests from the app into the INBOX', async () => {
@@ -5111,7 +5118,7 @@ test('generator + local OTA: PUBLISH signs update.json with the unlocked key, se
   fsx.writeFileSync(pathx.join(root, 'package.json'), JSON.stringify({ version: '1.22.0.1' }));
   fsx.writeFileSync(pathx.join(rel, 'AmF X1-1.22.0.1.exe'), Buffer.alloc(5000, 7)); fsx.writeFileSync(pathx.join(rel, 'secret.txt'), 'not published');
   L.initKeys(vdir, { pin: '482916' }); const jwk = L.loadPublic(vdir);
-  const srv = gen.createServer({ kind: 'vendor', dirArgv: ['--dir', vdir], root, releases: rel });
+  const srv = gen.createServer({ kind: 'vendor', dirArgv: ['--dir', vdir], root, releases: rel, acceptRequests: true });   // --accept-requests: older copies' submit path
   await new Promise(r => srv.listen(0, '127.0.0.1', r)); const port = srv.address().port;
   const call = (method, p, body, headers = {}) => new Promise((res, rej) => {
     const rq = http.request({ host: '127.0.0.1', port, method, path: p, headers: { 'Content-Type': 'application/json', 'X-Gen-Action': '1', Host: '127.0.0.1:' + port, ...headers } }, r => { const c = []; r.on('data', d => c.push(d)); r.on('end', () => { const b = Buffer.concat(c); let j = null; try { j = JSON.parse(b.toString('utf8')); } catch (_) { /* binary */ } res({ status: r.statusCode, h: r.headers, j, b }); }); });
@@ -5132,7 +5139,7 @@ test('generator + local OTA: PUBLISH signs update.json with the unlocked key, se
     r = await call('GET', '/releases/AmF%20X1-1.22.0.1.exe', null, { Range: 'bytes=4000-' }); assert.strictEqual(r.status, 206); assert.strictEqual(r.b.length, 1000);
     assert.strictEqual((await call('GET', '/releases/secret.txt')).status, 404, 'only files the manifest lists');
     assert.strictEqual((await call('GET', '/releases/..%2Fv%2Fprivate.pem.enc')).status, 404);
-    // the app's SUBMIT TO VENDOR, from a page origin
+    // an older copy's vendor-submit button, from a page origin (only with --accept-requests)
     assert.strictEqual((await call('OPTIONS', '/request-license', null, { Origin: 'null' })).status, 204);
     r = await call('POST', '/request-license', { app: 'audio-mixer', kind: 'license-request', v: 1, machineId: 'CC2B-A1AC-00B9-85AD-6C4D', plan: 'master', name: 'Amir <b>', email: 'a@example.com' }, { Origin: 'null' });
     assert.strictEqual(r.status, 200);
@@ -5146,18 +5153,21 @@ test('generator + local OTA: PUBLISH signs update.json with the unlocked key, se
   const page = gen.page('vendor'); assert.ok(page.includes('id="inbox-card"') && page.includes('PUBLISH UPDATE'));
 });
 
-test('deploy/website/license.html: a public request page (no signing), prefilled from the app, mails the vendor; the app WEBSITE button hides until WEBSITE_URL is set', () => {
+test('deploy/website/license.html (/keys): buys on WhatsApp, posts nothing, CSP allows no connections; the app WEBSITE button hides until WEBSITE_URL is set', () => {
   const w = fsx.readFileSync(pathx.join(__dirname, '..', 'deploy', 'website', 'license.html'), 'utf8');
   const js = /<script>([\s\S]*?)<\/script>/.exec(w)[1]; assert.doesNotThrow(() => new Function(js));   // eslint-disable-line no-new-func
-  assert.ok(w.includes("var VENDOR_EMAIL = 'badriamirfakhri@gmail.com'") && !/PRIVATE KEY|signKey|private\.pem/.test(w), 'request only, nothing secret');
+  assert.ok(!/fetch\(|XMLHttpRequest|sendBeacon|<form|request-license/.test(w), 'nothing is posted from the page');
+  assert.ok(w.includes("var NUMBER = '601120871185'") && w.includes("'https://wa.me/' + NUMBER + '?text=' + encodeURIComponent(") && !/PRIVATE KEY|signKey|private\.pem/.test(w));
+  const conf = fsx.readFileSync(pathx.join(__dirname, '..', 'deploy', 'nginx', 'keys-api.conf'), 'utf8');
+  assert.ok(/location = \/keys[\s\S]*?connect-src 'none'; form-action 'none'/.test(conf), 'the keys page may not connect or submit anywhere');
   const app = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
   assert.ok(app.includes("const WEBSITE_URL = '") && app.includes('id="lic-req-website"') && app.includes("const WEBSITE_URL = 'https://amirfakhri.interactivelink.site/keys'"));
 });
 
-test('generator public listener (--public): only /request-license, /update.json and published files on all networks, rate-limited; the key page stays on 127.0.0.1; the app posts to VENDOR_SERVER', async () => {
+test('generator public listener (--public): only /request-license, /update.json and published files on all networks, rate-limited; the key page stays on 127.0.0.1', async () => {
   const gen = require('../scripts/license-generator'), http = require('node:http');
   const tmp = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'gpub-'));
-  let now = 0; const srv = gen.createServer({ kind: 'vendor', dirArgv: ['--dir', tmp], root: tmp, publicOnly: true, limit: gen.rateLimiter(2, () => now) });
+  let now = 0; const srv = gen.createServer({ kind: 'vendor', dirArgv: ['--dir', tmp], root: tmp, publicOnly: true, limit: gen.rateLimiter(2, () => now), acceptRequests: true });
   await new Promise(r => srv.listen(0, '127.0.0.1', r)); const port = srv.address().port;
   const call = (method, p, body, host) => new Promise((res, rej) => { const rq = http.request({ host: '127.0.0.1', port, method, path: p, headers: { 'Content-Type': 'application/json', Host: host || 'vendor.example.net:8780' } }, r => { r.resume(); r.on('end', () => res(r.statusCode)); }); rq.on('error', rej); if (body) rq.write(JSON.stringify(body)); rq.end(); });
   try {
@@ -5169,11 +5179,11 @@ test('generator public listener (--public): only /request-license, /update.json 
     now += 61000; assert.strictEqual(await call('POST', '/request-license', { kind: 'license-request', plan: 'pro' }), 200);
   } finally { srv.close(); fsx.rmSync(tmp, { recursive: true, force: true }); }
   const app = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
-  assert.ok(app.includes('const origin = licenseRequestOrigin() || vendorServer() || await vendorServerPublished();') && app.includes("const VENDOR_SERVER = '"));
+  assert.ok(!app.includes('vendorServerPublished') && !app.includes('VENDOR_SERVER'), 'the app no longer looks up a vendor server to post to');
   const kg = require('../scripts/build-keygen'); assert.strictEqual(kg.NAMES['windows-x64'], 'AmF X1 Key Generator.exe');
 });
 
-test('vendor address: the generator signs {server} into releases/vendor.json (and serves /vendor.json); the app fetches it from GitHub and checks the signature', async () => {
+test('vendor address: the generator signs {server} into releases/vendor.json (and serves /vendor.json) for copies older than 1.22.1.0', async () => {
   const gen = require('../scripts/license-generator'), L = require('../scripts/license'), up = require('./update');
   const tmp = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'vend-')); fsx.mkdirSync(pathx.join(tmp, 'p', 'releases'), { recursive: true });
   try {
@@ -5186,7 +5196,7 @@ test('vendor address: the generator signs {server} into releases/vendor.json (an
     assert.strictEqual(await gen.publicIp(async () => { throw new Error('offline'); }), null);
   } finally { fsx.rmSync(tmp, { recursive: true, force: true }); }
   const app = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
-  assert.ok(app.includes("const VENDOR_JSON_URL = 'https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/vendor.json'") && app.includes("m.kind !== 'vendor'") && app.includes('crypto.subtle.verify'));
+  assert.ok(!app.includes('VENDOR_JSON_URL'), '1.22.1.0 no longer looks up the vendor address (it only served the removed submit button; older copies still use vendor.json)');
 });
 
 test('key mismatch is explained: the app names the vendor key it trusts (fingerprint) and the generator shows its own and whether the project matches', () => {
@@ -5417,7 +5427,7 @@ test('key-request inbox is encrypted to the vendor key: unreadable on disk, open
   fsx.writeFileSync(pathx.join(dir, 'public.jwk.json'), JSON.stringify(pub));
   vault.writeLocked(dir, privateKey.export({ type: 'pkcs8', format: 'pem' }), 'pin-123456');
   fsx.appendFileSync(pathx.join(dir, 'license-requests.jsonl'), JSON.stringify({ at: 2, plan: 'basic', name: 'Old Plain', email: 'old@example.com', machineId: '' }) + '\n');   // made before encryption
-  const s = gen.createServer({ kind: 'vendor', dirArgv: ['--dir', dir], publicOnly: true, limit: () => true, requestCap: () => true });
+  const s = gen.createServer({ kind: 'vendor', dirArgv: ['--dir', dir], publicOnly: true, limit: () => true, requestCap: () => true, acceptRequests: true });
   await new Promise(r => s.listen(0, '127.0.0.1', r));
   const post = () => fetch(`http://127.0.0.1:${s.address().port}/request-license`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: 'license-request', ...rec }) }).then(r => r.json());
   assert.strictEqual((await post()).ok, true); assert.strictEqual((await post()).duplicate, true);   // dedupe works on the sealed hash
@@ -5528,3 +5538,159 @@ test('ISO 3-BAND isolator: Linkwitz-Riley bands sum flat at 0 dB, each KILL remo
   assert.strictEqual(m.clampF2(150, 250), 500, 'the high crossover stays at least an octave above the low one');
   const page = s; for (const id of ['iso-eq-panel', 'iso-${b}-kill', 'iso-mode', 'isoMaster', 'isoCh', 'KILL ${label}']) assert.ok(page.includes(id), id);
 });
+
+// ---- PAID EDITIONS (block 0, 1.22.1.0 Beta): signed edition token, automatic offline activation, WhatsApp upgrade --------------------------------
+{
+  const crypto = require('node:crypto'), fsx = require('node:fs'), osx = require('node:os'), pathx = require('node:path');
+  const ed = require('./edition');
+  const pair = () => { const k = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' }); const j = k.publicKey.export({ format: 'jwk' }); return { priv: k.privateKey, jwk: { kty: 'EC', crv: 'P-256', x: j.x, y: j.y } }; };
+  const V = pair(), OTHER = pair(), MID = 'AAAA-BBBB-CCCC-DDDD-EEEE';
+  const b64u = b => Buffer.from(b).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const signRaw = (payload, priv) => { const body = b64u(JSON.stringify(payload)); return 'AMFXE1.' + body + '.' + b64u(crypto.sign('sha256', Buffer.from(body), { key: priv, dsaEncoding: 'ieee-p1363' })); };
+
+  test('edition token: genuine Pro / Studio Master verify; tampered, unsigned, foreign-key, wrong-edition, bad-serial and expired tokens are refused', () => {
+    const now = Date.UTC(2026, 10, 5);
+    const pro = ed.signToken({ edition: 'pro', privateKey: V.priv, order: 'WA-1001', now }), sm = ed.signToken({ edition: 'studio-master', privateKey: V.priv, now });
+    let v = ed.verifyToken(pro.token, { jwk: V.jwk, now }); assert.strictEqual(v.ok, true); assert.strictEqual(v.plan, 'pro'); assert.strictEqual(v.payload.order, 'WA-1001'); assert.match(v.payload.serial, /^AMFX-PRO-/);
+    v = ed.verifyToken(sm.token, { jwk: V.jwk, now }); assert.strictEqual(v.ok, true); assert.strictEqual(v.plan, 'master'); assert.strictEqual(v.edition.name, 'AmF X1 Studio Master'); assert.match(v.payload.serial, /^AMFX-SM-/);
+    // tampered: Pro payload rewritten to Studio Master, old signature kept
+    const [p0, body, sig] = pro.token.split('.'), forged = JSON.parse(Buffer.from(body.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString());
+    forged.edition = 'studio-master'; forged.plan = 'master';
+    assert.strictEqual(ed.verifyToken([p0, b64u(JSON.stringify(forged)), sig].join('.'), { jwk: V.jwk, now }).reason, 'bad-signature');
+    assert.strictEqual(ed.verifyToken(pro.token.slice(0, -4) + 'AAAA', { jwk: V.jwk, now }).reason, 'bad-signature', 'changed signature');
+    assert.strictEqual(ed.verifyToken([p0, body, ''].join('.'), { jwk: V.jwk, now }).reason, 'bad-signature', 'unsigned');
+    assert.strictEqual(ed.verifyToken([p0, body].join('.'), { jwk: V.jwk, now }).reason, 'malformed');
+    assert.strictEqual(ed.verifyToken('AMIX1.' + body + '.' + sig, { jwk: V.jwk, now }).reason, 'malformed', 'a license key is not an edition token');
+    assert.strictEqual(ed.verifyToken(pro.token, { jwk: OTHER.jwk, now }).reason, 'bad-signature', 'signed by another key');
+    assert.strictEqual(ed.verifyToken(pro.token, { now }).reason, 'bad-signature', 'the shipped vendor key does not trust a test key');
+    // genuinely signed, but the payload is wrong
+    const base = { v: 1, kind: 'amfx1-edition', edition: 'pro', plan: 'pro', serial: 'AMFX-PRO-ABCD-EFGH-JKLM', issued: now };
+    assert.strictEqual(ed.verifyToken(signRaw({ ...base, plan: 'master' }, V.priv), { jwk: V.jwk, now }).reason, 'wrong-edition', 'Pro may not carry the MASTER plan');
+    assert.strictEqual(ed.verifyToken(signRaw({ ...base, edition: 'ultimate' }, V.priv), { jwk: V.jwk, now }).reason, 'wrong-edition');
+    assert.strictEqual(ed.verifyToken(signRaw({ ...base, kind: 'license' }, V.priv), { jwk: V.jwk, now }).reason, 'wrong-edition');
+    assert.strictEqual(ed.verifyToken(signRaw({ ...base, serial: 'AMFX-SM-ABCD-EFGH-JKLM' }, V.priv), { jwk: V.jwk, now }).reason, 'bad-serial', 'serial of another edition');
+    assert.strictEqual(ed.verifyToken(signRaw({ ...base, serial: 'AMFX-PRO-0000-0000-0000' }, V.priv), { jwk: V.jwk, now }).reason, 'bad-serial');
+    const exp = ed.signToken({ edition: 'pro', privateKey: V.priv, days: 30, now });
+    assert.strictEqual(ed.verifyToken(exp.token, { jwk: V.jwk, now: now + 29 * 86400000 }).ok, true);
+    assert.strictEqual(ed.verifyToken(exp.token, { jwk: V.jwk, now: now + 31 * 86400000 }).reason, 'expired');
+    assert.throws(() => ed.signToken({ edition: 'basic', privateKey: V.priv }), /edition must be one of/);
+  });
+
+  test('edition serials: random per copy, AMFX-PRO-XXXX-XXXX-XXXX / AMFX-SM-…, no look-alike characters', () => {
+    const seen = new Set();
+    for (let i = 0; i < 2000; i++) { const s = ed.newSerial(i % 2 ? 'pro' : 'studio-master'); assert.match(s, ed.SERIAL_RE); assert.ok(!/[01OI]/.test(s.slice(8))); seen.add(s); }
+    assert.strictEqual(seen.size, 2000, 'no repeats');
+    assert.match(ed.newSerial('pro'), /^AMFX-PRO-[2-9A-HJ-NP-Z]{4}-[2-9A-HJ-NP-Z]{4}-[2-9A-HJ-NP-Z]{4}$/);
+  });
+
+  test('edition activation: first start verifies the shipped token and records it bound to this machine; another machine or a bad token gets Basic', () => {
+    const tmp = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'am-ed-')), shipped = pathx.join(tmp, 'edition-token.json'), file = pathx.join(tmp, 'home', 'edition.json');
+    try {
+      const L = require('./license'), now = Date.now();
+      const opts = extra => ({ machine: MID, jwk: V.jwk, shipped, file, now, ...extra });
+      assert.strictEqual(ed.current(opts()), null, 'Basic: no token, no activation');
+      const t = ed.signToken({ edition: 'pro', privateKey: V.priv, now });
+      fsx.writeFileSync(shipped, JSON.stringify({ token: t.token }));
+      let c = ed.current(opts());
+      assert.strictEqual(c.id, 'pro'); assert.strictEqual(c.plan, 'pro'); assert.strictEqual(c.source, 'installer'); assert.strictEqual(c.activatedNow, true); assert.strictEqual(c.serial, t.payload.serial);
+      const rec = JSON.parse(fsx.readFileSync(file, 'utf8')); assert.strictEqual(rec.machineId, MID); assert.strictEqual(rec.token, t.token);
+      if (process.platform !== 'win32') assert.strictEqual(fsx.statSync(file).mode & 0o777, 0o600, 'activation file readable by the user only');
+      c = ed.current(opts()); assert.strictEqual(c.source, 'activated', 'second start: from the activation');
+      fsx.rmSync(shipped);   // a Basic OTA update replaced the installed files: the activation keeps the edition
+      assert.strictEqual(ed.current(opts()).id, 'pro');
+      assert.strictEqual(ed.current(opts({ machine: 'FFFF-FFFF-FFFF-FFFF-FFFF' })), null, 'activation copied to another computer: Basic');
+      // license status: the edition counts like a key for its plan; a higher key wins; a lower key does not lower it
+      const st = L.status({ key: null, machine: MID, edition: { jwk: V.jwk, shipped, file, now } });
+      assert.strictEqual(st.state, 'active'); assert.strictEqual(st.plan.id, 'pro'); assert.strictEqual(st.edition.serial, t.payload.serial); assert.strictEqual(st.license.edition, 'pro');
+      const key = (plan) => L.signKey({ v: 1, plan, issued: now, id: 'K-' + plan }, V.priv);
+      assert.strictEqual(L.status({ key: key('master'), machine: MID, jwk: V.jwk, edition: { jwk: V.jwk, shipped, file, now } }).plan.id, 'master');
+      assert.strictEqual(L.status({ key: key('basic'), machine: MID, jwk: V.jwk, edition: { jwk: V.jwk, shipped, file, now } }).plan.id, 'pro');
+      assert.strictEqual(L.status({ key: 'AMIX1.broken.key', machine: MID, jwk: V.jwk, edition: { jwk: V.jwk, shipped, file, now } }).plan.id, 'pro', 'a broken stored key does not drop the edition');
+      assert.strictEqual(L.status({ key: null, machine: MID, edition: false }).plan.id, 'basic', 'edition: false = keys only');
+      // a tampered token in a fresh install: refused, Basic, and the reason is reported
+      fsx.rmSync(file); const [a, b] = t.token.split('.');
+      fsx.writeFileSync(shipped, JSON.stringify({ token: [a, b, b64u(Buffer.alloc(64, 1))].join('.') }));
+      c = ed.current(opts()); assert.strictEqual(c.error.reason, 'bad-signature'); assert.ok(!fsx.existsSync(file), 'nothing recorded');
+      const st2 = L.status({ key: null, machine: MID, edition: { jwk: V.jwk, shipped, file, now } });
+      assert.strictEqual(st2.plan.id, 'basic'); assert.strictEqual(st2.edition, null); assert.strictEqual(st2.editionError.reason, 'bad-signature');
+    } finally { fsx.rmSync(tmp, { recursive: true, force: true }); }
+  });
+
+  test('UPGRADE link: wa.me/601120871185 with the edition, machine ID, version and platform, every character percent-encoded', () => {
+    const u = ed.upgradeUrl({ edition: 'studio-master', machineId: MID, version: '1.22.1.0 Beta', platform: 'win32 x64 & <b>?#' });
+    assert.ok(u.startsWith('https://wa.me/601120871185?text='));
+    const q = u.slice(u.indexOf('?text=') + 6); assert.ok(!/[\s&?#<>]/.test(q), 'nothing unencoded after ?text=');
+    const t = decodeURIComponent(q);
+    assert.ok(t.includes('AmF X1 Studio Master') && t.includes('Edition: STUDIO MASTER') && t.includes('Machine ID: ' + MID) && t.includes('Version: 1.22.1.0 Beta'));
+    assert.ok(t.includes('Platform: win32 x64 &  b ?#'), 'angle brackets removed, the rest kept as text');
+    assert.strictEqual(t, ed.upgradeText({ edition: 'studio-master', machineId: MID, version: '1.22.1.0 Beta', platform: 'win32 x64 & <b>?#' }));
+    assert.throws(() => ed.upgradeUrl({}, '12-34'), /8 to 15 digits/);
+    assert.ok(decodeURIComponent(ed.upgradeUrl({ edition: 'pro' })).includes('Machine ID: (not shown)'));
+    // the page builds the same message
+    const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+    assert.ok(html.includes("'Hello AMFB Audio, I would like to buy ' + e.name + '.\\nEdition: ' + e.short + '\\nMachine ID: '"), 'same text as bridge/edition.js');
+  });
+
+  test('edition build: refuses a missing, tampered or foreign token before building anything; the installer tree gets the token and the edition name', async () => {
+    const be = require('../scripts/build-edition'), bi = require('../scripts/build-installers'), msi = require('../scripts/build-msi');
+    const tmp = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'am-edb-'));
+    try {
+      const t = ed.signToken({ edition: 'pro', privateKey: V.priv });
+      const e = be.checkToken(t.token, { jwk: V.jwk }); assert.strictEqual(e.name, 'AmF X1 Pro'); assert.strictEqual(e.file, 'Pro'); assert.strictEqual(e.serial, t.payload.serial);
+      assert.strictEqual(be.checkToken(ed.signToken({ edition: 'studio-master', privateKey: V.priv }).token, { jwk: V.jwk }).file, 'StudioMaster');
+      assert.throws(() => be.checkToken('', { jwk: V.jwk }), /no edition token/);
+      assert.throws(() => be.checkToken(t.token.slice(0, -3) + 'abc', { jwk: V.jwk }), /not valid.*bad-signature/);
+      assert.throws(() => be.checkToken(t.token), /not valid.*bad-signature/, 'the CLI trusts only the shipped vendor key: a test-key token is refused');
+      const f = pathx.join(tmp, 'tok.json'); fsx.writeFileSync(f, JSON.stringify({ token: t.token }));
+      assert.strictEqual(be.readToken(f), t.token); assert.strictEqual(be.readToken(t.token), t.token);
+      assert.strictEqual(await be.main(['--token', f]), 1, 'CLI: refused (test key), nothing built');
+      assert.strictEqual(await be.main([]), 1);
+      // the stage gets bridge/edition-token.json listed in MANIFEST.sha256
+      const stage = pathx.join(tmp, 'stage'); fsx.mkdirSync(pathx.join(stage, 'bridge'), { recursive: true }); fsx.writeFileSync(pathx.join(stage, 'MANIFEST.sha256'), '');
+      bi.addEditionToken({ stage }, e);
+      assert.strictEqual(JSON.parse(fsx.readFileSync(pathx.join(stage, 'bridge', 'edition-token.json'), 'utf8')).token, t.token);
+      assert.match(fsx.readFileSync(pathx.join(stage, 'MANIFEST.sha256'), 'utf8'), /^[0-9a-f]{64} {2}bridge\/edition-token\.json\n$/);
+      fsx.writeFileSync(pathx.join(stage, 'LICENSE'), 'x');
+      const x = msi.wxs({ stage, version: '1.22.1', product: 'AmF X1 Pro' });
+      assert.ok(x.includes('Name="AmF X1 Pro"') && x.includes('AmF X1 Pro by AMFB Audio') && x.includes(`UpgradeCode="${msi.UPGRADE_CODES['x64-machine']}"`), 'edition name, same upgrade code as Basic (replaces it)');
+      assert.ok(msi.wxs({ stage, version: '1.22.1' }).includes('Name="AmF X1" Language'), 'Basic unchanged');
+      const gi = fsx.readFileSync(pathx.join(__dirname, '..', '.gitignore'), 'utf8'); assert.ok(/^bridge\/edition-token\.json$/m.test(gi), 'a token is never committed');
+      assert.ok(!fsx.readFileSync(pathx.join(__dirname, '..', 'scripts', 'build.js'), 'utf8').includes('edition-token.json'), 'the Basic package never carries a token');
+    } finally { fsx.rmSync(tmp, { recursive: true, force: true }); }
+  });
+
+  test('Key Generator: BUILD EDITION TOKEN needs the PIN, records the sale encrypted, SALES LOG readable only unlocked; /request-license is off unless --accept-requests', async () => {
+    const gen = require('../scripts/license-generator'), vault = require('../scripts/license-vault'), http = require('node:http');
+    const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'am-gen-ed-'));
+    fsx.writeFileSync(pathx.join(dir, 'public.jwk.json'), JSON.stringify(V.jwk));
+    vault.writeLocked(dir, V.priv.export({ type: 'pkcs8', format: 'pem' }), 'pin-482916');
+    const srv = gen.createServer({ kind: 'vendor', dirArgv: ['--dir', dir], root: dir });
+    await new Promise(r => srv.listen(0, '127.0.0.1', r)); const port = srv.address().port;
+    const call = (method, p, body, headers = {}) => new Promise((res, rej) => {
+      const rq = http.request({ host: '127.0.0.1', port, method, path: p, headers: { 'Content-Type': 'application/json', 'X-Gen-Action': '1', Host: '127.0.0.1:' + port, ...headers } }, r => { const c = []; r.on('data', d => c.push(d)); r.on('end', () => { let j = null; try { j = JSON.parse(Buffer.concat(c).toString()); } catch (_) { /* html */ } res({ status: r.statusCode, j }); }); });
+      rq.on('error', rej); if (body) rq.write(JSON.stringify(body)); rq.end();
+    });
+    try {
+      const sale = { edition: 'pro', order: 'WA-77', buyer: 'Siti <b>', whatsapp: '+60 12-345 6789' };
+      let r = await call('POST', '/edition', sale); assert.strictEqual(r.status, 401); assert.strictEqual(r.j.locked, true, 'signing needs the PIN');
+      assert.strictEqual((await call('POST', '/unlock', { pin: 'pin-482916' })).status, 200);
+      assert.strictEqual((await call('POST', '/edition', { edition: 'gold' })).status, 400);
+      assert.strictEqual((await call('POST', '/edition', sale, { 'X-Gen-Action': '' })).status, 403, 'CSRF guard');
+      assert.strictEqual((await call('POST', '/edition', sale, { Origin: 'https://evil.example' })).status, 403);
+      r = await call('POST', '/edition', sale); assert.strictEqual(r.status, 200);
+      const v = ed.verifyToken(r.j.token, { jwk: V.jwk }); assert.strictEqual(v.ok, true); assert.strictEqual(v.payload.order, 'WA-77'); assert.strictEqual(r.j.serial, v.payload.serial); assert.strictEqual(r.j.file, 'edition-token-' + r.j.serial + '.json');
+      const log = fsx.readFileSync(pathx.join(dir, 'sales.jsonl'), 'utf8');
+      assert.ok(!log.includes(r.j.serial) && !log.includes('Siti') && !log.includes('60123456789') && !log.includes('WA-77'), 'the sales log on disk is sealed');
+      r = await call('GET', '/sales'); assert.strictEqual(r.j.sales[0].serial, v.payload.serial); assert.strictEqual(r.j.sales[0].buyer, 'Siti b'); assert.strictEqual(r.j.sales[0].whatsapp, '60123456789');
+      await call('POST', '/lock', {});
+      r = await call('GET', '/sales'); assert.strictEqual(r.j.sales[0].locked, true); assert.strictEqual(r.j.sales[0].serial, undefined, 'locked: no sale details');
+      r = await call('POST', '/request-license', { kind: 'license-request', plan: 'pro' }); assert.strictEqual(r.status, 410); assert.ok(r.j.whatsapp.startsWith('https://wa.me/601120871185'));
+      assert.strictEqual((await call('GET', '/status')).j.acceptRequests, false);
+    } finally { srv.close(); fsx.rmSync(dir, { recursive: true, force: true }); }
+    assert.strictEqual(gen.waDigits('+60 12-345 6789'), '60123456789'); assert.strictEqual(gen.waDigits('123'), '');
+    const page = gen.page('vendor'), js = /<script>([\s\S]*?)<\/script>/.exec(page)[1];
+    assert.doesNotThrow(() => new Function(js));   // eslint-disable-line no-new-func
+    assert.ok(page.includes('BUILD EDITION TOKEN') && page.includes('id="wasend"') && page.includes('SEND SERIAL VIA WHATSAPP') && js.includes("window.open('https://wa.me/' + d + '?text=' + encodeURIComponent(text), '_blank', 'noopener')"));
+    assert.ok(!gen.page('sandbox').includes('BUILD EDITION TOKEN'), 'editions are vendor-only');
+  });
+}

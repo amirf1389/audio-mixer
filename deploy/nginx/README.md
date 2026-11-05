@@ -101,7 +101,7 @@ Puts the customer key page (`deploy/website/license.html`) and the Key Generator
 | URL | Goes to |
 | --- | --- |
 | `/keys` | the key request page (static file) |
-| `POST /request-license` | the generator's inbox (8 KB max, 6/min per IP at nginx, 5/day per sender in the generator) |
+| `POST /request-license` | copies older than 1.22.1.0 only: answered 410 (buy on WhatsApp) unless the generator runs with `--accept-requests`; then its inbox (8 KB max, 6/min per IP at nginx, 5/day per sender) |
 | `/update.json`, `/vendor.json`, `/releases/<file>` | OTA updates published by the generator |
 | anything else | 404 (the vendor page with keys and PIN is **never** proxied) |
 
@@ -114,4 +114,4 @@ Puts the customer key page (`deploy/website/license.html`) and the Key Generator
 With `--public-bind 127.0.0.1` the generator's port 8780 is reachable only from nginx on the same computer: forward
 TCP **443** (and 80 for certificate renewal) on the router instead of 8780. The generator then takes the customer's
 address from nginx's `X-Real-IP` (only from a loopback connection, so it cannot be faked from outside).
-The page posts to `/request-license` on its own site and falls back to e-mail if that fails.
+The page posts nothing: its BUY buttons open WhatsApp (wa.me/601120871185) with the edition and the machine code from the address.

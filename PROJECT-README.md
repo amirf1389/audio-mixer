@@ -168,6 +168,14 @@ Interface changes in the page:
 - Endpoints: `GET /api/nowplaying`, `GET /api/interfaces` (see `bridge/README.md`). Not verified on real Windows / macOS hardware; the Linux path was
   tested with a fake D-Bus and a stubbed PortAudio.
 
+## Paid editions: AmF X1 Pro and Studio Master, automatic activation (1.22.1.0 Beta)
+
+- **For the customer.** LICENSE page → **UPGRADE TO PRO** or **UPGRADE TO STUDIO MASTER** opens WhatsApp (`wa.me/601120871185`) with the edition, the machine code, the version and the platform filled in; nothing is sent until they press send. After payment they get their own installer (`AmF X1 Pro-<version>.exe` / MSI): it activates by itself on first start, no key to type. The old SUBMIT TO VENDOR button is gone; COPY / FILE, the manual key box and CHECK KEY stay for Basic.
+- **For the vendor, per sale.** Key Generator (`scripts/license-generator.bat`, vendor key, unlock with the PIN) → **BUILD EDITION TOKEN** (edition, optional order number, buyer, WhatsApp number, expiry) → **SAVE TOKEN FILE** → in the project: `npm run build:edition -- --token edition-token-<serial>.json`. The build refuses any token that does not verify with `bridge/license-public.json`. **SEND SERIAL VIA WHATSAPP** opens WhatsApp to the buyer; send the installer in that chat. **SALES LOG** lists every sale (sealed to the vendor key on disk, `<key folder>/sales.jsonl`, readable only unlocked).
+- **How it works.** The token (`AMFXE1.…`, `bridge/edition.js`) is signed with the vendor key: edition, plan, a random serial `AMFX-PRO-XXXX-XXXX-XXXX` / `AMFX-SM-…`, issue date, optional order and expiry. The edition installer carries it as `bridge/edition-token.json` (gitignored, never in the Basic package). On first start the local server verifies it offline and records the activation in `~/.audio-mixer/edition.json` bound to the machine ID, so a later Basic OTA update keeps the edition. A higher license key still wins.
+- **Limits.** A token cannot be forged or changed, and an activation file copied to another PC does nothing there. The installer itself can be copied: the per-sale serial traces a leaked copy to its order.
+- **Older copies.** The generator's `POST /request-license` answers 410 unless it runs with `--accept-requests`. The website `/keys` page now only opens WhatsApp and posts nothing.
+
 ## Consumer edition: license keys, plans, plugins and OTA updates (1.13.0)
 
 - **Plans.** Without a key the app runs as **BASIC (8 channels)**. **PRO** unlocks 16 channels, the plugin manager and OTA downloads; **STUDIO** unlocks all 32 channels. Channels above the plan are hidden and silent; the bank buttons, the LIVE SOURCES auto-patch and the plan chip (next to the FOH button) follow the plan.

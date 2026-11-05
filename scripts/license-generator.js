@@ -22,8 +22,13 @@
 // LOCAL OTA (vendor): the same process is a small update server for the app, on the same 127.0.0.1:8799 address:
 //   GET  /update.json        the signed manifest made with PUBLISH UPDATE on the page (kept in <key folder>/ota/update.json; signing needs the unlocked key)
 //   GET  /releases/<file>    the installers of that manifest (platforms/<os>/releases or releases/<os>), HEAD and Range supported
-//   POST /request-license    the app's SUBMIT TO VENDOR: kept in <key folder>/license-requests.jsonl ENCRYPTED to the vendor key (scripts/inbox-crypto.js)
-//                            and listed in the page's INBOX once the folder is unlocked with the PIN (USE fills the form)
+//   POST /request-license    OFF unless the generator runs with --accept-requests (copies older than 1.22.1.0 still have SUBMIT TO VENDOR; 1.22.1.0
+//                            upgrades over WhatsApp instead). When on: kept in <key folder>/license-requests.jsonl ENCRYPTED to the vendor key
+//                            (scripts/inbox-crypto.js) and listed in the page's INBOX once the folder is unlocked with the PIN (USE fills the form)
+// PAID EDITIONS (vendor): BUILD EDITION TOKEN signs an AmF X1 Pro / Studio Master token with a random serial (bridge/edition.js) for one sale; the sale
+// (serial, edition, order, buyer, WhatsApp number) goes into <key folder>/sales.jsonl SEALED to the vendor key like the inbox (readable only after
+// unlocking with the PIN). Then: npm run build:edition -- --token <saved token file>. SEND VIA WHATSAPP opens wa.me with the key or serial for the
+// buyer's number; the generator itself sends nothing.
 // These three answer any origin (the app runs as a file, on localhost:8765 or elsewhere on this computer) but only on 127.0.0.1 (the Host check stays).
 // In the app: SETTINGS -> OTA -> http://127.0.0.1:8799/update.json; then SUBMIT TO VENDOR posts here as well.
 // PUBLIC LISTENER (--public [port], default port 8780; the .exe turns it on): a SECOND server on all network interfaces that answers ONLY
@@ -128,6 +133,25 @@ textarea,#key-out{width:100%;background:var(--panel2);border:1px solid var(--lin
     </form>
     <p class="err" id="err" hidden></p>
   </section>
+${k.canInit ? `<section class="card" id="ed-card">
+    <h2>PAID EDITION: BUILD EDITION TOKEN</h2>
+    <p class="dim">One token per sale. It carries a random serial and is signed with your key; the edition installer is built with it and activates by itself on the buyer's computer (no key to type).</p>
+    <div class="row2"><div class="field"><label for="ed">Edition</label><select id="ed"><option value="pro">AmF X1 Pro (PRO plan)</option><option value="studio-master">AmF X1 Studio Master (MASTER plan)</option></select></div>
+    <div class="field"><label for="ed-days">Expires in (days, 0 = never)</label><input id="ed-days" type="number" min="0" step="1" value="0"></div></div>
+    <div class="row2"><div class="field"><label for="ed-order">Order number (optional)</label><input id="ed-order" type="text" maxlength="40" autocomplete="off"></div>
+    <div class="field"><label for="ed-buyer">Buyer (optional, kept encrypted)</label><input id="ed-buyer" type="text" maxlength="80" autocomplete="off"></div></div>
+    <div class="field"><label for="ed-wa">Buyer's WhatsApp number (optional, kept encrypted)</label><input id="ed-wa" type="tel" maxlength="20" autocomplete="off"></div>
+    <button class="btn" id="ed-go" type="button">BUILD EDITION TOKEN</button>
+    <div id="ed-result" hidden>
+      <p id="ed-summary" class="mono"></p>
+      <div id="ed-token" class="mono"></div>
+      <p class="dim">Next, in the project folder: <span class="mono" id="ed-cmd"></span></p>
+      <p class="err" id="ed-warn" hidden></p>
+      <div class="row2"><button class="btn" id="ed-save" type="button">SAVE TOKEN FILE</button><button class="btn" id="ed-wasend" type="button">SEND SERIAL VIA WHATSAPP</button></div>
+    </div>
+    <p><button class="pill" id="sales-load" type="button">SALES LOG</button></p>
+    <div id="sales" class="mono"></div>
+  </section>` : ''}
   <section class="card" id="inbox-card" hidden>
     <h2>INBOX: KEY REQUESTS FROM THE APP</h2>
     <div id="inbox" class="mono"></div>
@@ -148,6 +172,8 @@ textarea,#key-out{width:100%;background:var(--panel2);border:1px solid var(--lin
     <p class="dim" id="summary"></p>
     <div class="row2"><button class="btn" id="copy" type="button">COPY</button><button class="btn" id="csv" type="button" hidden>DOWNLOAD CSV</button></div>
     <p><a id="mailkey" class="btn" href="#" hidden>E-MAIL KEY TO CUSTOMER</a></p>
+    <div class="field" id="wa-row"><label for="wa">Buyer's WhatsApp number (with country code, e.g. 60123456789)</label><input id="wa" type="tel" maxlength="20" autocomplete="off"></div>
+    <button class="btn" id="wasend" type="button">SEND VIA WHATSAPP</button>
     <p><a id="activate" class="btn" href="#" target="_blank" rel="noopener noreferrer" hidden>ACTIVATE IN AMF X1 (THIS COMPUTER)</a></p>
   </section>
 </main>
@@ -251,6 +277,53 @@ textarea,#key-out{width:100%;background:var(--panel2);border:1px solid var(--lin
       .catch(function () { $('err').textContent = 'Could not reach this server.'; $('err').hidden = false; })
       .then(function () { $('go').disabled = false; $('go').textContent = 'GENERATE KEY'; });
   });
+  // WhatsApp: opens wa.me with the text for the number typed here; nothing is sent until the vendor presses send in WhatsApp
+  var waOpen = function (number, text) {
+    var d = String(number || '').replace(/\\D/g, '');
+    if (!/^\\d{8,15}$/.test(d)) { showErr('Type the buyer\\'s WhatsApp number with the country code (8 to 15 digits).'); return false; }
+    window.open('https://wa.me/' + d + '?text=' + encodeURIComponent(text), '_blank', 'noopener');
+    return true;
+  };
+  $('wasend').addEventListener('click', function () {
+    var k = $('key-out').textContent.trim(); if (!k || csvText) { showErr('WhatsApp sends one key at a time: generate a single key first.'); return; }
+    var plan = $('plan').options[$('plan').selectedIndex].text, who = $('name').value.trim();
+    waOpen($('wa').value, 'Hello' + (who ? ' ' + who : '') + ', here is your AmF X1 license key (' + plan + '):\\n\\n' + k + '\\n\\nTo activate: open AmF X1, SYSTEM > LICENSE, paste the key into LICENSE KEY and press ACTIVATE.\\n\\nAMFB Audio');
+  });
+  var edLast = null;
+  if ($('ed-go')) {
+    $('ed-go').addEventListener('click', function () {
+      $('err').hidden = true; $('ed-go').disabled = true;
+      post('/edition', { edition: $('ed').value, days: Number($('ed-days').value) || 0, order: $('ed-order').value, buyer: $('ed-buyer').value, whatsapp: $('ed-wa').value }).then(function (j) {
+        if (!j || !j.ok) { showErr((j && j.error) || 'Could not build the token.'); if (j && j.locked) refresh(); return; }
+        edLast = j;
+        $('ed-summary').textContent = j.summary; $('ed-token').textContent = j.token;
+        $('ed-cmd').textContent = 'npm run build:edition -- --token ' + j.file;
+        $('ed-warn').hidden = j.projectMatches !== false; $('ed-warn').textContent = 'This project trusts a different vendor key: an edition built here would refuse this token. Rebuild with the key shown above.';
+        $('ed-result').hidden = false;
+      }).catch(function () { showErr('Could not reach this server.'); }).then(function () { $('ed-go').disabled = false; });
+    });
+    $('ed-save').addEventListener('click', function () {
+      if (!edLast) return;
+      var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify({ token: edLast.token }) + '\\n'], { type: 'application/json' })); a.download = edLast.file;
+      document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    });
+    $('ed-wasend').addEventListener('click', function () {
+      if (!edLast) return;
+      var who = $('ed-buyer').value.trim();
+      waOpen($('ed-wa').value, 'Hello' + (who ? ' ' + who : '') + ', thank you for buying ' + edLast.name + '.\\nYour serial: ' + edLast.serial + '\\nYour personal installer follows in this chat. It activates by itself on first start: no key to type.\\n\\nAMFB Audio');
+    });
+    $('sales-load').addEventListener('click', function () {
+      fetch('/sales').then(function (r) { return r.json(); }).then(function (j) {
+        var box = $('sales'); box.textContent = '';
+        (j && j.sales || []).forEach(function (r) {
+          var line = document.createElement('div');
+          line.textContent = new Date(r.at).toISOString().slice(0, 16).replace('T', ' ') + '  ' + (r.locked ? 'LOCKED (unlock with your PIN to read)' : r.damaged ? 'DAMAGED RECORD' : (r.serial + '  ' + r.edition + (r.order ? '  #' + r.order : '') + (r.buyer ? '  ' + r.buyer : '') + (r.whatsapp ? '  +' + r.whatsapp : '')));
+          box.appendChild(line);
+        });
+        if (!box.firstChild) box.textContent = 'No sales recorded yet.';
+      }).catch(function () { showErr('Could not read the sales log.'); });
+    });
+  }
   $('copy').addEventListener('click', function () {
     navigator.clipboard.writeText(csvText || $('key-out').textContent).then(function () { $('copy').textContent = 'COPIED'; setTimeout(function () { $('copy').textContent = 'COPY'; }, 1200); });
   });
@@ -344,6 +417,32 @@ function initKind(kind, dirArgv, root, pin, session) {
   const where = root || layout.ROOT;
   if (fs.existsSync(path.join(where, 'index.html')) && fs.existsSync(path.join(where, 'bridge'))) { k.mod.embedPublic(jwk, where); return { priv: r.priv, embedded: true }; }
   return { priv: r.priv, embedded: false, publicKey: JSON.stringify(jwk) };
+}
+
+// ---- paid editions: token + encrypted sales log ---------------------------------------------------------------------------------------------
+const salesFile = dir => path.join(dir, 'sales.jsonl');
+const waDigits = v => { const d = String(v || '').replace(/\D/g, ''); return /^\d{8,15}$/.test(d) ? d : ''; };
+function buildEditionToken(dir, session, body, now = Date.now()) {
+  const ed = require('../bridge/edition');
+  if (!ed.EDITIONS[body.edition]) { const e = new Error('edition must be one of: ' + Object.keys(ed.EDITIONS).join(', ')); e.status = 400; throw e; }
+  const pub = vendorPub(dir); if (!pub) { const e = new Error('no vendor key pair in ' + dir + ': create one first'); e.status = 400; throw e; }
+  const privateKey = (session && session.key(dir)) || vault.loadKey(dir);   // a PIN-locked folder needs UNLOCK first (session.key throws "locked")
+  const r = ed.signToken({ edition: body.edition, privateKey, order: body.order, days: body.days, now });
+  const v = ed.verifyToken(r.token, { jwk: pub, now }); if (!v.ok) { const e = new Error('the new token did not verify: ' + v.message); e.status = 500; throw e; }   // never hand out a token that fails
+  const p = r.payload, rec = { at: now, kind: 'edition-sale', plan: p.plan, edition: p.edition, serial: p.serial, order: p.order || '', buyer: clean(body.buyer, 80), whatsapp: waDigits(body.whatsapp), expires: p.expires || null };
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 }); fs.appendFileSync(salesFile(dir), JSON.stringify(inboxCrypto.seal(rec, pub)) + '\n', { mode: 0o600 });
+  let project = null; try { project = lic.fingerprint(JSON.parse(fs.readFileSync(path.join(layout.ROOT, 'bridge', 'license-public.json'), 'utf8'))); } catch (_) { /* not in a project */ }
+  return { token: r.token, serial: p.serial, edition: p.edition, name: v.edition.name, plan: p.plan, expires: p.expires || null, file: 'edition-token-' + p.serial + '.json',
+    projectMatches: project ? project === lic.fingerprint(pub) : null, summary: `${v.edition.name}, serial ${p.serial}${p.order ? ', order ' + p.order : ''}${p.expires ? ', expires ' + new Date(p.expires).toISOString().slice(0, 10) : ', no expiry'}` };
+}
+// the sales log: opened with the private key when unlocked, otherwise only time and plan are shown (LOCKED)
+function readSales(dir, session, limit = 50) {
+  const key = inboxKey(dir, session);
+  return readJsonl(salesFile(dir), limit).map(r => {
+    if (!r.sealed) return { locked: false, damaged: true, at: r.at };
+    if (!key) return { locked: true, at: r.at, plan: r.plan };
+    try { return inboxCrypto.open(r, key); } catch (_) { return { damaged: true, at: r.at, plan: r.plan }; }
+  });
 }
 
 // ---- local OTA -----------------------------------------------------------------------------------------------------------------------------------
@@ -449,7 +548,7 @@ function dailyCap(perDay = 5, now = () => Date.now()) {
   };
 }
 
-function createServer({ kind = 'vendor', dirArgv = [], root, session = makeSession(), releases, publicOnly = false, limit = rateLimiter(), requestCap = dailyCap(), trustProxy = false } = {}) {
+function createServer({ kind = 'vendor', dirArgv = [], root, session = makeSession(), releases, publicOnly = false, limit = rateLimiter(), requestCap = dailyCap(), trustProxy = false, acceptRequests = false } = {}) {
   const clientIp = req => { const a = req.socket.remoteAddress || '?'; if (trustProxy && /^(127\.|::1$|::ffff:127\.)/.test(a)) { const h = String(req.headers['x-real-ip'] || '').trim(); if (/^[0-9a-fA-F:.]{2,45}$/.test(h)) return h; } return a; };
   if (!KINDS[kind]) throw new Error('kind must be one of: ' + Object.keys(KINDS).join(', '));
   const send = (res, code, body, headers = {}) => { const t = typeof body === 'string' ? body : JSON.stringify(body); res.writeHead(code, { 'Content-Type': typeof body === 'string' ? 'text/html; charset=utf-8' : 'application/json; charset=utf-8', 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer', ...headers }); res.end(t); };
@@ -485,6 +584,7 @@ function createServer({ kind = 'vendor', dirArgv = [], root, session = makeSessi
           if (req.method === 'HEAD') return res.end();
           return fs.createReadStream(f, { start, end }).pipe(res);
         }
+        if (url.pathname === '/request-license' && req.method === 'POST' && !acceptRequests) return send(res, 410, { ok: false, error: 'key requests are not taken here: upgrade from the app (UPGRADE TO PRO / STUDIO MASTER, WhatsApp)', whatsapp: 'https://wa.me/' + require('../bridge/edition').VENDOR_WHATSAPP }, cors);
         if (url.pathname === '/request-license' && req.method === 'POST') {
           const chunks = []; let n = 0; for await (const c of req) { n += c.length; if (n > 8192) return send(res, 413, { ok: false, error: 'request too large' }, cors); chunks.push(c); }
           let b; try { b = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch (_) { return send(res, 400, { ok: false, error: 'the body is not JSON' }, cors); }
@@ -517,7 +617,14 @@ function createServer({ kind = 'vendor', dirArgv = [], root, session = makeSessi
         try { const key = session.key(dir) || vault.loadKey(dir); return send(res, 200, { ok: true, ...otaPublish(dir, root, releases, key, 'http://127.0.0.1:' + req.socket.localPort, !!b.repo) }); }
         catch (e) { return e.locked ? send(res, 401, { ok: false, error: e.message, locked: true }) : fail(res, e.status || 500, e.message); }
       }
-      if (req.method === 'GET' && url.pathname === '/status') return send(res, 200, { ok: true, ...keyStatus(kind, dirArgv, session) });
+      if (req.method === 'GET' && url.pathname === '/status') return send(res, 200, { ok: true, ...keyStatus(kind, dirArgv, session), acceptRequests });
+      if (req.method === 'GET' && url.pathname === '/sales' && KINDS[kind].canInit) return send(res, 200, { ok: true, sales: readSales(KINDS[kind].mod[KINDS[kind].dirFn](dirArgv), session) });
+      if (req.method === 'POST' && url.pathname === '/edition' && KINDS[kind].canInit) {
+        const chunks = []; let n = 0; for await (const c of req) { n += c.length; if (n > 8192) return fail(res, 413, 'request too large'); chunks.push(c); }
+        let b; try { b = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'); } catch (_) { return fail(res, 400, 'the body is not JSON'); }
+        try { return send(res, 200, { ok: true, ...buildEditionToken(KINDS[kind].mod[KINDS[kind].dirFn](dirArgv), session, b || {}) }); }
+        catch (e) { return e.locked ? send(res, 401, { ok: false, error: e.message, locked: true }) : fail(res, e.status || 500, e.message); }
+      }
       const readJson = async () => { const chunks = []; let n = 0; for await (const c of req) { n += c.length; if (n > 8192) return null; chunks.push(c); } try { return JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'); } catch (_) { return null; } };
       const dirNow = () => KINDS[kind].mod[KINDS[kind].dirFn](dirArgv);
       if (req.method === 'POST' && ['/init', '/unlock', '/lock', '/lock-file'].includes(url.pathname)) {
@@ -549,13 +656,13 @@ function main(argv) {
   if (!KINDS[kind]) { console.error('--kind must be one of: ' + Object.keys(KINDS).join(', ')); return 2; }
   const want = arg(argv, '--port', '8799'), port = want === '0' ? 0 : Number(want) || 8799;
   let root = arg(argv, '--root'); if (!root) root = fs.existsSync(path.join(layout.ROOT, 'package.json')) ? layout.ROOT : (process.execPath && /generator/i.test(path.basename(process.execPath)) ? path.dirname(process.execPath) : process.cwd());
-  const server = createServer({ kind, dirArgv: argv, root });
+  const server = createServer({ kind, dirArgv: argv, root, acceptRequests: argv.includes('--accept-requests') });
   if (argv.includes('--public') && KINDS[kind].canInit) {
     const pv = argv[argv.indexOf('--public') + 1], pport = /^\d+$/.test(pv || '') ? Number(pv) : 8780;
     // Default --public-bind 127.0.0.1: only nginx on this computer reaches the public listener (deploy/nginx/keys-api.conf adds HTTPS) and nginx's
     // X-Real-IP is used for the per-sender limits. --public-bind 0.0.0.0 opens it to every network over plain HTTP (old behaviour; not recommended).
     const pbind = arg(argv, '--public-bind') || '127.0.0.1', behindProxy = /^(127\.0\.0\.1|::1|localhost)$/.test(pbind);
-    const ps = createServer({ kind, dirArgv: argv, root, publicOnly: true, trustProxy: behindProxy });
+    const ps = createServer({ kind, dirArgv: argv, root, publicOnly: true, trustProxy: behindProxy, acceptRequests: argv.includes('--accept-requests') });
     ps.headersTimeout = 10000; ps.requestTimeout = 20000; ps.keepAliveTimeout = 5000; ps.maxHeadersCount = 50;   // slow-client (slowloris) guard on the internet-facing port
     ps.on('error', e => console.error(`Public listener on port ${pport} could not start: ${e.message}`));
     ps.listen(pport, pbind === 'localhost' ? '127.0.0.1' : pbind, () => console.log(behindProxy ? `Public requests and updates on 127.0.0.1:${pport}: reachable from the internet only through nginx (deploy/nginx/keys-api.conf, HTTPS on 443). To open port ${pport} itself to all networks over plain HTTP, add --public-bind 0.0.0.0.` : `Public requests and updates on port ${pport} (${pbind}, plain HTTP). Prefer nginx with HTTPS: deploy/nginx/keys-api.conf.`));
@@ -578,4 +685,4 @@ if (require.main === module) {
   const code = main(process.argv.slice(2));
   if (code !== 0) process.exit(code);   // 0 means the server is listening (asynchronously): exiting now would kill it before it ever serves a request
 }
-module.exports = { readInbox, publicIp, vendorPublish, rateLimiter, dailyCap, senderKey, otaStatus, otaPublish, KINDS, page, pageFor, issueKey, keyStatus, initKind, makeSession, createServer, main };
+module.exports = { buildEditionToken, readSales, waDigits, readInbox, publicIp, vendorPublish, rateLimiter, dailyCap, senderKey, otaStatus, otaPublish, KINDS, page, pageFor, issueKey, keyStatus, initKind, makeSession, createServer, main };
