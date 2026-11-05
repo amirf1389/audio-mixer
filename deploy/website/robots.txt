@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /request-license
+Disallow: /releases/
+
+Sitemap: https://amirfakhri.interactivelink.site/sitemap.xml

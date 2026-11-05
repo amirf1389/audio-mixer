@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Developers — Frameworks, Local API and CDN Hosting | AmF X1</title>
+<meta name="description" content="How AmF X1 is built (Node.js, Web Audio, PortAudio, ASIO, WASAPI), its local API and WebSockets, and secure CDN hosting for the website.">
+<link rel="canonical" href="https://amirfakhri.interactivelink.site/developers">
+<meta name="robots" content="index, follow, max-image-preview:large">
+<meta name="theme-color" content="#0f121a">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="AmF X1 by AMFB Audio">
+<meta property="og:title" content="Developers — Frameworks, Local API and CDN Hosting | AmF X1">
+<meta property="og:description" content="How AmF X1 is built (Node.js, Web Audio, PortAudio, ASIO, WASAPI), its local API and WebSockets, and secure CDN hosting for the website.">
+<meta property="og:url" content="https://amirfakhri.interactivelink.site/developers">
+<meta property="og:image" content="https://amirfakhri.interactivelink.site/assets/icon-512.png">
+<meta property="og:image:width" content="512"><meta property="og:image:height" content="512">
+<meta property="og:image:alt" content="AmF X1 logo: three amber mixer faders">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Developers — Frameworks, Local API and CDN Hosting | AmF X1">
+<meta name="twitter:description" content="How AmF X1 is built (Node.js, Web Audio, PortAudio, ASIO, WASAPI), its local API and WebSockets, and secure CDN hosting for the website.">
+<link rel="icon" href="/assets/icon.svg" type="image/svg+xml">
+<link rel="icon" href="/assets/icon-512.png" type="image/png" sizes="512x512">
+<link rel="apple-touch-icon" href="/assets/icon-512.png">
+<link rel="stylesheet" href="/assets/site.css?v=1.22.1.0">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"Developers — Frameworks, Local API and CDN Hosting | AmF X1","description":"How AmF X1 is built (Node.js, Web Audio, PortAudio, ASIO, WASAPI), its local API and WebSockets, and secure CDN hosting for the website.","url":"https://amirfakhri.interactivelink.site/developers","isPartOf":{"@type":"WebSite","name":"AmF X1 by AMFB Audio","url":"https://amirfakhri.interactivelink.site/"},"inLanguage":"en"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://amirfakhri.interactivelink.site/"},{"@type":"ListItem","position":2,"name":"Developers","item":"https://amirfakhri.interactivelink.site/developers"}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"AmF X1 frameworks, local API and CDN hosting","author":{"@type":"Organization","name":"AMFB Audio"},"url":"https://amirfakhri.interactivelink.site/developers"}</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-head"><div class="wrap"><a class="brand" href="/" aria-label="AmF X1 home"><img src="/assets/icon.svg" alt="" width="32" height="32">AMF X1 <b>BY AMFB</b></a><nav class="nav" aria-label="Main"><a href="/">Home</a><a href="/features">Features</a><a href="/developers" aria-current="page">Developers</a><a href="/security">Security</a><a href="/faq">FAQ</a><a href="/keys">License</a><a class="cta" href="/download">Download</a></nav></div></header>
+<div class="page-head"><div class="wrap"><nav class="crumbs" aria-label="Breadcrumb"><a href="/">Home</a> / <span aria-current="page">Developers</span></nav><h1>Developers</h1><p>The frameworks AmF X1 is built on, the local API its page uses, and how this website is hosted.</p></div></div>
+<main id="main">
+<section class="block" id="frameworks"><div class="wrap">
+<h2>Frameworks and building blocks</h2>
+<p class="sub">AmF X1 is one browser page (the console) served by a small local program (the bridge) that talks to your audio drivers.</p>
+<div class="table-wrap"><table><thead><tr><th>Layer</th><th>Technology</th><th>Role</th></tr></thead><tbody>
+<tr><td>Console</td><td>HTML, CSS, Web Audio API</td><td>Mixer, EQ, dynamics, effects and meters run in the page's audio graph.</td></tr>
+<tr><td>Bridge</td><td>Node.js 22 LTS (bundled as a single executable)</td><td>Serves the page on 127.0.0.1, lists devices and streams audio over WebSockets. No runtime dependencies beyond the audio engines.</td></tr>
+<tr><td>Audio engines</td><td>PortAudio (naudiodon2), RtAudio (Audify)</td><td>Open devices through ASIO, WASAPI, Core Audio, ALSA or JACK.</td></tr>
+<tr><td>Native</td><td>C, C++ and Rust DSP cores, a Windows ASIO driver</td><td>Held to the same test vectors as the page's reference code.</td></tr>
+<tr><td>Desktop shell (optional)</td><td>Electron</td><td>A native window and tray around the same page and bridge.</td></tr>
+<tr><td>Mobile</td><td>Android (Java, Jetpack Compose), iOS (Swift)</td><td>The same page with an on-device engine.</td></tr>
+</tbody></table></div></div></section>
+<section class="block" id="api"><div class="wrap">
+<h2>Local API (127.0.0.1 only)</h2>
+<p class="sub">The bridge listens on <code>http://127.0.0.1:8765</code> on your own computer and is not reachable from the network. Actions need the app's own page: other websites can read status only, never change settings or open audio streams.</p>
+<div class="table-wrap"><table><thead><tr><th>Method</th><th>Path</th><th>What it does</th></tr></thead><tbody>
+<tr><td>GET</td><td><code>/api/status</code></td><td>Bridge name, version and open streams.</td></tr>
+<tr><td>GET</td><td><code>/api/drivers</code></td><td>Host APIs, drivers and devices found on this computer.</td></tr>
+<tr><td>GET</td><td><code>/api/interfaces</code></td><td>Devices grouped per physical interface, with read / write routes and fallbacks.</td></tr>
+<tr><td>GET</td><td><code>/api/license</code></td><td>Current plan and machine code.</td></tr>
+<tr><td>POST</td><td><code>/api/license/check</code></td><td>Checks a key (genuine, this PC, expiry, upgrade or downgrade) without storing it.</td></tr>
+<tr><td>POST</td><td><code>/api/license/activate</code></td><td>Activates a key.</td></tr>
+<tr><td>WS</td><td><code>/ws/input</code>, <code>/ws/output</code>, <code>/ws/duplex</code></td><td>16-bit PCM audio streams to and from a device.</td></tr>
+</tbody></table></div>
+<p class="sub mt">Every POST needs <code>Content-Type: application/json</code> and an <code>X-Mixer-Action</code> header naming the action:</p>
+<pre><code>curl -s http://127.0.0.1:8765/api/status
+
+curl -s -X POST http://127.0.0.1:8765/api/license/check \
+  -H "Content-Type: application/json" -H "X-Mixer-Action: license" \
+  -d '{"key":"AMIX1.…"}'</code></pre>
+<h3 class="mt">Public update API</h3>
+<p class="sub">The vendor server publishes <code>/update.json</code> (a signed list of installers with SHA-256 checksums) and <code>/releases/&lt;file&gt;</code>. The app installs an update only when the signature matches the AMFB Audio key built into it.</p>
+</div></section>
+<section class="block" id="cdn"><div class="wrap">
+<h2>CDN and hosting</h2>
+<p class="sub">This website is static HTML and one stylesheet. It loads no third-party scripts, fonts or CDN libraries, so there is nothing external to trust and the security policy stays strict.</p>
+<div class="grid">
+<article class="card"><span class="tag">Origin</span><h3>nginx with HTTPS</h3><p>TLS 1.2 / 1.3, HSTS, a strict Content-Security-Policy, rate limits and request size limits (deploy/nginx/keys-api.conf).</p></article>
+<article class="card"><span class="tag">Edge</span><h3>Any CDN in front</h3><p>Proxy the domain through a CDN with "Full (strict)" TLS to the origin. Cache /assets/ for a year; revalidate HTML on every request.</p></article>
+<article class="card"><span class="tag">Integrity</span><h3>Versioned assets</h3><p>Stylesheet URLs carry the version (?v=), so a new release is picked up at once without purging the cache.</p></article>
+</div>
+<pre class="mt"><code># origin cache headers (already in the nginx config)
+/assets/*   Cache-Control: public, max-age=31536000, immutable
+/*.html     Cache-Control: no-cache
+/update.json, /keys, /request-license   never cached by the CDN</code></pre>
+</div></section>
+</main>
+<footer class="site-foot"><div class="wrap">
+<div><h2>AmF X1</h2><ul><li><a href="/features">Features</a></li><li><a href="/download">Download 1.22.1.0 Beta</a></li><li><a href="/keys">License key</a></li><li><a href="/faq">FAQ</a></li></ul></div>
+<div><h2>Developers</h2><ul><li><a href="/developers#frameworks">Frameworks</a></li><li><a href="/developers#api">Local API</a></li><li><a href="/developers#cdn">CDN &amp; hosting</a></li><li><a href="https://github.com/amirf1389/audio-mixer" rel="noopener">Source on GitHub</a></li></ul></div>
+<div><h2>Trust</h2><ul><li><a href="/security">Security</a></li><li><a href="/privacy">Privacy</a></li><li><a href="mailto:badriamirfakhri@gmail.com">Report a problem</a></li></ul></div>
+<div><h2>Contact</h2><ul><li><a href="https://wa.me/601120871185" rel="noopener">WhatsApp</a></li><li><a href="mailto:badriamirfakhri@gmail.com">badriamirfakhri@gmail.com</a></li></ul></div>
+<p class="legal">&copy; 2026 AMFB Audio. AmF X1 1.22.1.0 Beta. Dolby, DTS, THX, ASIO and other names are trademarks of their owners; AmF X1 is not affiliated with them.</p>
+</div></footer>
+</body>
+</html>
