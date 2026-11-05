@@ -5302,3 +5302,22 @@ test('ASIO -> WASAPI fallback is reported: input / output sessions send it with 
   const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
   assert.ok(html.includes('Hooked.amFallbackHook = true; window.WebSocket = Hooked;') && html.includes("' (Windows audio) instead.'"));
 });
+
+test('interfaces: an ASIO interface with no input or output gets the missing side from the same hardware on WASAPI (never loopback or Bluetooth)', () => {
+  const i = require('./interfaces'), dev = (id, name, hostApi, inputs, outputs) => ({ id, name, hostApi, inputs, outputs });
+  const r = i.groupInterfaces([dev(1, 'Realtek ASIO', 'ASIO', 2, 0), dev(2, 'Speakers (Realtek(R) Audio)', 'Windows WASAPI', 0, 2), dev(7, 'Stereo Mix (Realtek(R) Audio)', 'Windows WASAPI', 2, 0),
+    dev(8, 'Headphones (WH-1000XM4 Stereo)', 'Windows WASAPI', 0, 2), dev(9, 'Lonely ASIO', 'ASIO', 0, 0)], []);
+  const rt = r.find(x => x.name === 'Realtek ASIO');
+  assert.strictEqual(rt.read.api, 'ASIO'); assert.deepStrictEqual([rt.write.api, rt.write.deviceId, rt.write.fallback], ['Windows WASAPI', 2, 'wasapi']);
+  assert.strictEqual(rt.outputs, 2); assert.strictEqual(rt.fallback.via, 'wasapi');
+  const lonely = r.find(x => x.name === 'Lonely ASIO'); assert.strictEqual(lonely.write, null, 'no matching hardware: nothing is guessed');
+  assert.ok(!r.some(x => x.asio && x.write && x.write.deviceId === 8), 'Bluetooth is never a fallback');
+});
+
+test('CHORUS, LO-FI, AUTO-PAN plugins and the PLUGIN STORE: every catalog entry has a row, a removed plugin counts as off in the chain', () => {
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  const cat = [...html.slice(html.indexOf('CATALOG: [')).slice(0, 900).matchAll(/\['([a-z]+)', '/g)].map(m => m[1]);
+  assert.deepStrictEqual(cat, ['deess', 'afs', 'exciter', 'warmth', 'tilt', 'vocal', 'harmony', 'chorus', 'lofi', 'autopan']);
+  for (const id of cat) assert.ok(html.includes(`data-aid-plugin="${id}"`), 'store-controlled row: ' + id);
+  for (const s2 of ['g.chDl = ctx.createDelay(0.1)', 'g.pan = ctx.createStereoPanner()', 'Math.round(x * steps) / steps', 'eff() {', 'const g = this.g, s = this.eff();', 'id="aid-store"']) assert.ok(html.includes(s2), s2);
+});

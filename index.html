@@ -5687,7 +5687,7 @@ const cArea = document.getElementById('content-area');
         </div>
       </div>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
-        <div class="bg-black/60 p-2 rounded-lg border border-white/10 space-y-1">
+        <div data-aid-plugin="deess" class="bg-black/60 p-2 rounded-lg border border-white/10 space-y-1">
           <div class="flex justify-between"><span class="text-cyan-400 font-bold text-[7.5px]">DE-ESSER</span><label class="text-[7px]"><input id="aid-deess-on" type="checkbox" onchange="window.aiDsp.set('deess.on', this.checked)"> ON</label></div>
           <label class="block text-[7px] text-slate-400">FREQUENCY <span id="aid-deess-freq-v" class="text-white"></span><input id="aid-deess-freq" type="range" min="4000" max="10000" step="100" class="w-full accent-cyan-400" oninput="window.aiDsp.set('deess.freq', this.value)"></label>
           <label class="block text-[7px] text-slate-400">THRESHOLD <span id="aid-deess-thr-v" class="text-white"></span><input id="aid-deess-thr" type="range" min="-50" max="-10" step="1" class="w-full accent-cyan-400" oninput="window.aiDsp.set('deess.thr', this.value)"></label>
@@ -5695,7 +5695,7 @@ const cArea = document.getElementById('content-area');
           <div class="flex justify-between text-[7px]"><span class="text-slate-400">SIBILANCE <span id="aid-sib" class="text-white">--</span></span><span class="text-slate-400">CUT <span id="aid-deess-gr" class="text-amber-400 font-bold">0.0 dB</span></span></div>
           <div class="h-1.5 bg-black rounded overflow-hidden"><div id="aid-deess-bar" class="h-full bg-amber-500" style="width:0%"></div></div>
         </div>
-        <div class="bg-black/60 p-2 rounded-lg border border-white/10 space-y-1">
+        <div data-aid-plugin="afs" class="bg-black/60 p-2 rounded-lg border border-white/10 space-y-1">
           <div class="flex justify-between"><span class="text-rose-400 font-bold text-[7.5px]">ANTI-FEEDBACK <span id="aid-notch-count" class="text-slate-400"></span></span><span class="flex gap-1.5 items-center"><button type="button" class="text-[6.5px] px-1.5 rounded bg-white/10 hover:bg-rose-500 hover:text-black" onclick="window.aiDsp.clearNotches()">CLEAR</button><label class="text-[7px]"><input id="aid-afs-on" type="checkbox" onchange="window.aiDsp.set('afs.on', this.checked)"> ON</label></span></div>
           <label class="block text-[7px] text-slate-400">SENSITIVITY (peak above its neighbours) <span id="aid-afs-sens-v" class="text-white"></span><input id="aid-afs-sens" type="range" min="8" max="24" step="1" class="w-full accent-rose-400" oninput="window.aiDsp.set('afs.sens', this.value)"></label>
           <label class="block text-[7px] text-slate-400">NOTCH DEPTH <span id="aid-afs-depth-v" class="text-white"></span><input id="aid-afs-depth" type="range" min="6" max="24" step="1" class="w-full accent-rose-400" oninput="window.aiDsp.set('afs.depth', this.value)"></label>
@@ -5705,12 +5705,17 @@ const cArea = document.getElementById('content-area');
         </div>
         <div class="bg-black/60 p-2 rounded-lg border border-white/10 space-y-1">
           <span class="text-fuchsia-400 font-bold text-[7.5px]">PLUGINS (MASTER)</span>
-          <label class="block text-[7px] text-slate-400"><input id="aid-ex-on" type="checkbox" onchange="window.aiDsp.set('exciter.on', this.checked)"> EXCITER (adds high harmonics) <span id="aid-ex-amt-v" class="text-white"></span><input id="aid-ex-amt" type="range" min="0" max="100" step="1" class="w-full accent-fuchsia-400" oninput="window.aiDsp.set('exciter.amt', this.value)"></label>
-          <label class="block text-[7px] text-slate-400"><input id="aid-warm-on" type="checkbox" onchange="window.aiDsp.set('warmth.on', this.checked)"> WARMTH (tube saturation) <span id="aid-warm-amt-v" class="text-white"></span><input id="aid-warm-amt" type="range" min="0" max="100" step="1" class="w-full accent-fuchsia-400" oninput="window.aiDsp.set('warmth.amt', this.value)"></label>
-          <label class="block text-[7px] text-slate-400"><input id="aid-vocal-on" type="checkbox" onchange="window.aiDsp.set('vocal.on', this.checked)"> VOCAL ENHANCE (clean lows, presence, air) <span id="aid-vocal-amt-v" class="text-white"></span><input id="aid-vocal-amt" type="range" min="0" max="100" step="1" class="w-full accent-fuchsia-400" oninput="window.aiDsp.set('vocal.amt', this.value)"></label>
-          <div class="block text-[7px] text-slate-400"><label><input id="aid-harm-on" type="checkbox" onchange="window.aiDsp.set('harmony.on', this.checked)"> HARMONY (two extra voices) <span id="aid-harm-mix-v" class="text-white"></span></label><input id="aid-harm-mix" type="range" min="0" max="100" step="1" class="w-full accent-fuchsia-400" oninput="window.aiDsp.set('harmony.mix', this.value)">
+          <label data-aid-plugin="chorus" class="block text-[7px] text-slate-400"><input id="aid-chorus-on" type="checkbox" onchange="window.aiDsp.set('chorus.on', this.checked)"> CHORUS <span id="aid-chorus-mix-v" class="text-white"></span><input id="aid-chorus-mix" type="range" min="0" max="100" step="1" class="w-full accent-fuchsia-400" oninput="window.aiDsp.set('chorus.mix', this.value)"></label>
+          <label data-aid-plugin="lofi" class="block text-[7px] text-slate-400"><input id="aid-lofi-on" type="checkbox" onchange="window.aiDsp.set('lofi.on', this.checked)"> LO-FI (bit / rate crush) <span id="aid-lofi-amt-v" class="text-white"></span><input id="aid-lofi-amt" type="range" min="0" max="100" step="1" class="w-full accent-fuchsia-400" oninput="window.aiDsp.set('lofi.amt', this.value)"></label>
+          <div data-aid-plugin="autopan" class="block text-[7px] text-slate-400"><label><input id="aid-ap-on" type="checkbox" onchange="window.aiDsp.set('autopan.on', this.checked)"> AUTO-PAN <span id="aid-ap-v" class="text-white"></span></label>
+            <div class="flex gap-1"><input id="aid-ap-rate" type="range" min="0.1" max="8" step="0.1" class="flex-1 accent-fuchsia-400" title="Speed" oninput="window.aiDsp.set('autopan.rate', this.value)"><input id="aid-ap-depth" type="range" min="0" max="100" step="1" class="flex-1 accent-fuchsia-400" title="Width" oninput="window.aiDsp.set('autopan.depth', this.value)"></div></div>
+          <details class="text-[7px] text-slate-400"><summary class="cursor-pointer text-emerald-400 font-bold">PLUGIN STORE</summary><div id="aid-store" class="mt-1"></div></details>
+          <label data-aid-plugin="exciter" class="block text-[7px] text-slate-400"><input id="aid-ex-on" type="checkbox" onchange="window.aiDsp.set('exciter.on', this.checked)"> EXCITER (adds high harmonics) <span id="aid-ex-amt-v" class="text-white"></span><input id="aid-ex-amt" type="range" min="0" max="100" step="1" class="w-full accent-fuchsia-400" oninput="window.aiDsp.set('exciter.amt', this.value)"></label>
+          <label data-aid-plugin="warmth" class="block text-[7px] text-slate-400"><input id="aid-warm-on" type="checkbox" onchange="window.aiDsp.set('warmth.on', this.checked)"> WARMTH (tube saturation) <span id="aid-warm-amt-v" class="text-white"></span><input id="aid-warm-amt" type="range" min="0" max="100" step="1" class="w-full accent-fuchsia-400" oninput="window.aiDsp.set('warmth.amt', this.value)"></label>
+          <label data-aid-plugin="vocal" class="block text-[7px] text-slate-400"><input id="aid-vocal-on" type="checkbox" onchange="window.aiDsp.set('vocal.on', this.checked)"> VOCAL ENHANCE (clean lows, presence, air) <span id="aid-vocal-amt-v" class="text-white"></span><input id="aid-vocal-amt" type="range" min="0" max="100" step="1" class="w-full accent-fuchsia-400" oninput="window.aiDsp.set('vocal.amt', this.value)"></label>
+          <div data-aid-plugin="harmony" class="block text-[7px] text-slate-400"><label><input id="aid-harm-on" type="checkbox" onchange="window.aiDsp.set('harmony.on', this.checked)"> HARMONY (two extra voices) <span id="aid-harm-mix-v" class="text-white"></span></label><input id="aid-harm-mix" type="range" min="0" max="100" step="1" class="w-full accent-fuchsia-400" oninput="window.aiDsp.set('harmony.mix', this.value)">
             <div class="flex gap-1 mt-0.5"><select id="aid-harm-a" class="flex-1 bg-black border border-white/10 rounded text-amber-400" onchange="window.aiDsp.set('harmony.a', this.value)"><option value="3">+3 minor 3rd</option><option value="4">+4 major 3rd</option><option value="5">+5 4th</option><option value="7">+7 5th</option><option value="12">+12 octave</option><option value="-5">-5 low 5th</option><option value="-12">-12 octave down</option></select><select id="aid-harm-b" class="flex-1 bg-black border border-white/10 rounded text-amber-400" onchange="window.aiDsp.set('harmony.b', this.value)"><option value="3">+3 minor 3rd</option><option value="4">+4 major 3rd</option><option value="5">+5 4th</option><option value="7">+7 5th</option><option value="12">+12 octave</option><option value="-5">-5 low 5th</option><option value="-12">-12 octave down</option></select></div></div>
-          <label class="block text-[7px] text-slate-400"><input id="aid-tilt-on" type="checkbox" onchange="window.aiDsp.set('tilt.on', this.checked)"> TILT EQ (dark &larr; &rarr; bright) <span id="aid-tilt-db-v" class="text-white"></span><input id="aid-tilt-db" type="range" min="-6" max="6" step="0.5" class="w-full accent-fuchsia-400" oninput="window.aiDsp.set('tilt.db', this.value)"></label>
+          <label data-aid-plugin="tilt" class="block text-[7px] text-slate-400"><input id="aid-tilt-on" type="checkbox" onchange="window.aiDsp.set('tilt.on', this.checked)"> TILT EQ (dark &larr; &rarr; bright) <span id="aid-tilt-db-v" class="text-white"></span><input id="aid-tilt-db" type="range" min="-6" max="6" step="0.5" class="w-full accent-fuchsia-400" oninput="window.aiDsp.set('tilt.db', this.value)"></label>
         </div>
         <div class="bg-black/60 p-2 rounded-lg border border-white/10 space-y-1">
           <div class="flex justify-between items-center"><span class="text-emerald-400 font-bold text-[7.5px]">DIGITAL SPEAKER METER</span><label class="text-[7px] text-slate-400">AMP <input id="aid-spk-watts" type="number" min="1" max="20000" step="1" class="w-14 bg-black border border-white/10 rounded px-1 text-white" onchange="window.aiDsp.set('spk.watts', Math.max(1, this.value))"> W</label></div>
@@ -22059,6 +22064,8 @@ t.Omnitone=e(11)},function(A,t,e){"use strict";const i=e(1),n=e(4),s=e(12),o=e(6
                 deess: { on: true, freq: 6800, thr: -30, range: 8 },
                 afs: { on: true, sens: 14, depth: 12, hold: 0.5 },   // a peak must stand 0.5 s: shorter musical notes pass
                 exciter: { on: false, amt: 25 }, warmth: { on: false, amt: 20 }, tilt: { on: false, db: 0 },
+                chorus: { on: false, mix: 35 }, lofi: { on: false, amt: 40 }, autopan: { on: false, rate: 0.5, depth: 60 },   // 1.22.0.1 plugins
+                store: { installed: ['deess', 'afs', 'exciter', 'warmth', 'tilt', 'vocal', 'harmony', 'chorus', 'lofi', 'autopan'] },   // PLUGIN STORE: what shows in PLUGINS
                 vocal: { on: false, amt: 50 },                              // VOCAL ENHANCE: rumble cut, de-mud, presence, air (amount scales all four)
                 harmony: { on: false, mix: 30, a: 4, b: 7 },                // HARMONY: two pitch-shifted voices (semitones) under the original
                 spk: { watts: 100, ohms: 8 },
@@ -22149,7 +22156,17 @@ t.Omnitone=e(11)},function(A,t,e){"use strict";const i=e(1),n=e(4),s=e(12),o=e(6
                 g.voices.forEach(v => { p.connect(v.in); v.out.connect(g.hSum); });
                 p = g.hSum;
                 p.connect(g.warm); p.connect(g.exHp); g.exHp.connect(g.exWs); g.exWs.connect(g.exAmt); g.exAmt.connect(g.warm);
-                g.warm.connect(g.tLow); g.tLow.connect(g.tHigh); g.tHigh.connect(g.ceil); g.ceil.connect(g.out);
+                g.warm.connect(g.tLow); g.tLow.connect(g.tHigh);
+                // CHORUS (dry + one 20 ms delay swept by a 0.8 Hz LFO), LO-FI (bit / rate crush by a staircase curve + 6 kHz low-pass), AUTO-PAN (LFO on a panner)
+                g.chSum = ctx.createGain(); g.tHigh.connect(g.chSum);
+                g.chDl = ctx.createDelay(0.1); g.chDl.delayTime.value = 0.02; g.chWet = ctx.createGain(); g.chWet.gain.value = 0;
+                g.chLfo = ctx.createOscillator(); g.chLfo.frequency.value = 0.8; g.chDepth = ctx.createGain(); g.chDepth.gain.value = 0.004; g.chLfo.connect(g.chDepth); g.chDepth.connect(g.chDl.delayTime); g.chLfo.start();
+                g.tHigh.connect(g.chDl); g.chDl.connect(g.chWet); g.chWet.connect(g.chSum);
+                g.lf = ctx.createWaveShaper(); g.lfLp = ctx.createBiquadFilter(); g.lfLp.type = 'lowpass'; g.lfLp.frequency.value = 20000;
+                g.chSum.connect(g.lf); g.lf.connect(g.lfLp);
+                g.pan = ctx.createStereoPanner(); g.panLfo = ctx.createOscillator(); g.panDepth = ctx.createGain(); g.panDepth.gain.value = 0;
+                g.panLfo.connect(g.panDepth); g.panDepth.connect(g.pan.pan); g.panLfo.start();
+                g.lfLp.connect(g.pan); g.pan.connect(g.ceil); g.ceil.connect(g.out);
                 g.out.connect(g.split); g.split.connect(g.anL, 0); g.split.connect(g.anR, 1);
                 g.spec = new Float32Array(g.an.frequencyBinCount); g.td = new Float32Array(2048);
                 // splice: master limiter -> [plugins] -> THIS -> mid/side. The plugin rack rewires to nodes.msIn, which is now our input.
@@ -22167,7 +22184,7 @@ t.Omnitone=e(11)},function(A,t,e){"use strict";const i=e(1),n=e(4),s=e(12),o=e(6
                 if (on) g.in.connect(g.out); else g.in.connect(g.deess);
             },
             apply() {
-                const g = this.g, s = this.st; if (!g) return;
+                const g = this.g, s = this.eff(); if (!g) return;
                 const t = this.ctx.currentTime, O = OUTPUT[s.outPower] || OUTPUT.normal;
                 this.setBypass(!s.on);
                 g.deess.frequency.setTargetAtTime(s.deess.freq, t, 0.05);
@@ -22177,7 +22194,13 @@ t.Omnitone=e(11)},function(A,t,e){"use strict";const i=e(1),n=e(4),s=e(12),o=e(6
                 const va = s.vocal.on ? s.vocal.amt / 100 : 0;
                 g.vHp.frequency.setTargetAtTime(s.vocal.on ? 70 + 50 * va : 20, t, 0.05);
                 g.vMud.gain.setTargetAtTime(-4 * va, t, 0.05); g.vPres.gain.setTargetAtTime(5 * va, t, 0.05); g.vAir.gain.setTargetAtTime(4 * va, t, 0.05);
-                const hm = s.harmony.on ? s.harmony.mix / 100 : 0;
+                const on = id => this.installed(id) && s[id] && s[id].on;
+                g.chWet.gain.setTargetAtTime(on('chorus') ? s.chorus.mix / 100 : 0, t, 0.05);
+                { const lo = on('lofi') ? s.lofi.amt / 100 : 0, steps = Math.round(256 - 248 * lo), c = new Float32Array(2048);
+                  for (let i = 0; i < 2048; i++) { const x = i / 1023.5 - 1; c[i] = lo ? Math.round(x * steps) / steps : x; }
+                  g.lf.curve = c; g.lfLp.frequency.setTargetAtTime(lo ? 12000 - 9000 * lo : 20000, t, 0.05); }
+                g.panLfo.frequency.setTargetAtTime(s.autopan.rate, t, 0.05); g.panDepth.gain.setTargetAtTime(on('autopan') ? s.autopan.depth / 100 : 0, t, 0.05);
+                const hm = s.harmony.on && this.installed('harmony') ? s.harmony.mix / 100 : 0;
                 [s.harmony.a, s.harmony.b].forEach((st, k) => { const v = g.voices[k]; if (hm) v.retune(Number(st) || 0); v.out.gain.setTargetAtTime(hm * 0.7, t, 0.05); });
                 const k = s.warmth.on ? 1 + s.warmth.amt / 12 : 0, c = new Float32Array(1024);
                 for (let i = 0; i < 1024; i++) { const x = i / 511.5 - 1; c[i] = k ? Math.tanh(k * x) / Math.tanh(k) : x; }
@@ -22190,6 +22213,26 @@ t.Omnitone=e(11)},function(A,t,e){"use strict";const i=e(1),n=e(4),s=e(12),o=e(6
                 const ks = path.split('.'); let o = this.st; ks.slice(0, -1).forEach(k => { o = o[k]; });
                 const old = o[ks[ks.length - 1]]; o[ks[ks.length - 1]] = typeof old === 'number' ? Number(v) : typeof old === 'boolean' ? !!v : v;
                 this.save(); this.apply();
+            },
+            // PLUGIN STORE: a plugin that is not installed is hidden from PLUGINS and stays off in the chain
+            CATALOG: [['deess', 'DE-ESSER', 'Tames harsh S sounds'], ['afs', 'ANTI-FEEDBACK', 'Notches feedback howl'], ['exciter', 'EXCITER', 'Adds high harmonics'], ['warmth', 'WARMTH', 'Tube saturation'],
+                ['tilt', 'TILT EQ', 'Dark to bright in one knob'], ['vocal', 'VOCAL ENHANCE', 'Clean lows, presence, air'], ['harmony', 'HARMONY', 'Two extra voices'],
+                ['chorus', 'CHORUS', 'Wide, moving doubling'], ['lofi', 'LO-FI', 'Bit and rate crush'], ['autopan', 'AUTO-PAN', 'Moves the sound left and right']],
+            installed(id) { return this.st.store.installed.includes(id); },
+            // the settings as the chain uses them: a plugin removed in the store counts as off (its own settings are kept for a reinstall)
+            eff() { const e = Object.assign({}, this.st); this.CATALOG.forEach(([id]) => { if (!this.installed(id) && e[id]) e[id] = Object.assign({}, e[id], { on: false }); }); return e; },
+            toggleInstall(id) { const L = this.st.store.installed, i = L.indexOf(id); if (i >= 0) L.splice(i, 1); else L.push(id); this.save(); this.apply(); this.renderStore(); },
+            renderStore() {
+                const box = document.getElementById('aid-store'); if (!box) return;
+                box.textContent = '';
+                this.CATALOG.forEach(([id, name, what]) => {
+                    const row = document.createElement('div'); row.className = 'flex justify-between items-center gap-1 py-0.5 border-b border-white/5';
+                    const t = document.createElement('span'); t.className = 'text-[7px] text-slate-300'; t.textContent = name + ' · ' + what;
+                    const b = document.createElement('button'); b.type = 'button'; const inst = this.installed(id);
+                    b.className = 'text-[6.5px] px-1.5 rounded font-bold ' + (inst ? 'bg-white/10 text-slate-300' : 'bg-emerald-500 text-black'); b.textContent = inst ? 'REMOVE' : 'INSTALL';
+                    b.addEventListener('click', () => this.toggleInstall(id)); row.appendChild(t); row.appendChild(b); box.appendChild(row);
+                    document.querySelectorAll('[data-aid-plugin="' + id + '"]').forEach(e => { e.hidden = !inst; });
+                });
             },
             clearNotches() { this.notches.forEach(x => { x.hz = 0; x.db = 0; x.at = 0; }); this.cand.clear(); this.live.howls = 0; if (this.g) this.g.notch.forEach(f => f.gain.setTargetAtTime(0, this.ctx.currentTime, 0.05)); this.render(); },
 
@@ -22210,12 +22253,12 @@ t.Omnitone=e(11)},function(A,t,e){"use strict";const i=e(1),n=e(4),s=e(12),o=e(6
                 this.live.sib = bandDb;
                 const hist = this.hist || (this.hist = { sib: [], hz: [] });
                 if (bandDb > -70) { hist.sib.push(bandDb); hist.hz.push(pkHz); if (hist.sib.length > 300) { hist.sib.shift(); hist.hz.shift(); } }
-                if (s.on && s.deess.on) {
+                if (s.on && s.deess.on && this.installed('deess')) {
                     const gr = this.deessGainDb(bandDb, s.deess.thr, s.deess.range);
                     this.live.deessGr = gr; g.deess.gain.setTargetAtTime(gr, t, gr < this.lastGr ? 0.003 : 0.06); this.lastGr = gr;
                 } else this.live.deessGr = 0;
                 // anti-feedback: a peak that stays for `hold` seconds gets a notch
-                if (s.on && s.afs.on) {
+                if (s.on && s.afs.on && this.installed('afs')) {
                     const found = this.detectHowl(g.spec, sr, g.an.fftSize, { sens: s.afs.sens }), seen = new Set();
                     found.forEach(h => {
                         const key = Math.round(12 * Math.log2(h.hz / 440) * 2);   // quarter-tone buckets
@@ -22281,6 +22324,9 @@ t.Omnitone=e(11)},function(A,t,e){"use strict";const i=e(1),n=e(4),s=e(12),o=e(6
                 const set = (id, v) => { const e = $(id); if (e && document.activeElement !== e) { if (e.type === 'checkbox') e.checked = !!v; else e.value = v; } };
                 set('aid-on', s.on); set('aid-auto', s.auto); set('aid-power', s.power); set('aid-outpower', s.outPower); set('aid-deess-on', s.deess.on); set('aid-deess-freq', s.deess.freq); set('aid-deess-thr', s.deess.thr); set('aid-deess-range', s.deess.range);
                 set('aid-afs-on', s.afs.on); set('aid-afs-sens', s.afs.sens); set('aid-afs-depth', s.afs.depth);
+                set('aid-chorus-on', s.chorus.on); set('aid-chorus-mix', s.chorus.mix); set('aid-lofi-on', s.lofi.on); set('aid-lofi-amt', s.lofi.amt); set('aid-ap-on', s.autopan.on); set('aid-ap-rate', s.autopan.rate); set('aid-ap-depth', s.autopan.depth);
+                txt('aid-chorus-mix-v', s.chorus.mix + '%'); txt('aid-lofi-amt-v', s.lofi.amt + '%'); txt('aid-ap-v', s.autopan.rate + ' Hz / ' + s.autopan.depth + '%');
+                this.renderStore();
                 set('aid-vocal-on', s.vocal.on); set('aid-vocal-amt', s.vocal.amt); set('aid-harm-on', s.harmony.on); set('aid-harm-mix', s.harmony.mix); set('aid-harm-a', s.harmony.a); set('aid-harm-b', s.harmony.b);
                 txt('aid-vocal-amt-v', s.vocal.amt + '%'); txt('aid-harm-mix-v', s.harmony.mix + '%');
                 set('aid-ex-on', s.exciter.on); set('aid-ex-amt', s.exciter.amt); set('aid-warm-on', s.warmth.on); set('aid-warm-amt', s.warmth.amt); set('aid-tilt-on', s.tilt.on); set('aid-tilt-db', s.tilt.db);
