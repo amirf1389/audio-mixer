@@ -17815,6 +17815,13 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 window.notify(asioOnly ? 'All ASIO interfaces enabled (read + write)' : 'All audio interfaces enabled (read + write)', 'plug-circle-check');
             },
 
+            // the same hardware seen through another driver (e.g. "BEHRINGER USB AUDIO" over ASIO and "2- BEHRINGER USB WDM AUDIO 2.8.40" over WASAPI):
+            // when one side cannot be opened (ASIO driver busy / one client only), it is read / written through its twin instead of failing
+            hwName(n) { return String(n || '').toLowerCase().replace(/^\d+\s*-\s*/, '').replace(/\(.*?\)/g, ' ').replace(/\b(usb|wdm|audio|asio|driver|device|interface|v?\d+(\.\d+)*)\b/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim(); },
+            twin(i, dir) {
+                const n = this.hwName(i.name); if (!n || n.length < 3) return null;
+                return (this.interfaces || []).find(j => j !== i && j.key !== i.key && !j.loopback && !j.systemDefault && this.hwName(j.name) === n && (dir === 'in' ? j.inputs > 0 : j.outputs > 0)) || null;
+            },
             // ── capture (READ) ──
             makeCap(i, node, how, extra) {
                 const c = window.state.ctx, an = c.createAnalyser();
@@ -17855,6 +17862,13 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                     try { if (!granted && navigator.permissions) granted = (await navigator.permissions.query({ name: 'microphone' })).state === 'granted'; } catch (e) { /* unsupported */ }
                     if (granted) { try { cap = await this.browserRead(i); } catch (e) { lastErr = e.message; } }
                     else lastErr = 'click READ to allow the microphone';
+                }
+                if (!cap) {   // same hardware through its other driver
+                    const t = this.twin(i, 'in');
+                    if (t && (this.caps.has(t.key) || (this.cfg.enabled[t.key] || {}).read)) return this.setStatus(i.key, 'READING via ' + t.name + ' (same hardware)', false);
+                    if (t && this.bridgeUrl && this.portaudio) for (const a of (t.apis || []).filter(a => a.inputs > 0 && a.deviceId >= 0).sort((a, b) => apiRank(a.api) - apiRank(b.api))) {
+                        try { cap = await this.bridgeRead(i, a); cap.how = (cap.how || a.api) + ' (same hardware: ' + t.name + ')'; break; } catch (e) { lastErr = e.message; }
+                    }
                 }
                 if (!cap) return this.setStatus(i.key, lastErr || 'no readable device', true);
                 cap.music = !!o.music;
@@ -18048,7 +18062,13 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                     try { const w = await this.openWrite(a, i.name); this.writes.set(i.key, w); this.setStatus(k, 'WRITING via ' + w.how, false); this.updateMute(); this.render(); return; }
                     catch (e) { lastErr = e.message; }
                 }
-                this.setStatus(k, lastErr, true);
+                const t = this.twin(i, 'out');   // same hardware through its other driver
+                if (t && (this.writes.has(t.key) || (this.cfg.enabled[t.key] || {}).write)) return this.setStatus(k, 'WRITING via ' + t.name + ' (same hardware)', false);
+                if (t) for (const a of (t.apis || []).filter(a => a.outputs > 0 && a.deviceId >= 0).sort((a, b) => apiRank(a.api) - apiRank(b.api))) {
+                    try { const w = await this.openWrite(a, i.name); w.how = (w.how || a.api) + ' (same hardware: ' + t.name + ')'; this.writes.set(i.key, w); this.setStatus(k, 'WRITING via ' + w.how, false); this.updateMute(); this.render(); return; }
+                    catch (e) { lastErr = e.message; }
+                }
+                this.setStatus(k, lastErr || 'no writable device', true);
             },
             openWrite(a, name) {
                 const ctx = window.state.ctx, self = this;
