@@ -141,10 +141,10 @@ function detectVst() {
 // Only used when `npm i naudiodon2` was run in bridge/ (needs a native build); otherwise skipped.
 function detectPortAudio() {
   try {
-    const pa = require('naudiodon2');
+    const pa = require('./portaudio').load();   // naudiodon2, or the device simulator when it is switched on
     const apis = pa.getHostAPIs().HostAPIs.map(h => h.name);
-    const devices = pa.getDevices().map(d => ({ id: d.id, name: d.name, hostApi: d.hostAPIName, inputs: d.maxInputChannels, outputs: d.maxOutputChannels, sampleRate: d.defaultSampleRate }));
-    return { engine: 'naudiodon', hostApis: apis, devices };
+    const devices = pa.getDevices().map(d => ({ id: d.id, name: d.name, hostApi: d.hostAPIName, inputs: d.maxInputChannels, outputs: d.maxOutputChannels, sampleRate: d.defaultSampleRate, ...(d.simulated ? { simulated: true } : {}) }));
+    return { engine: pa.simulated ? 'simulator' : 'naudiodon', hostApis: apis, devices, ...(pa.simulated ? { simulated: true } : {}) };
   } catch (_) { return null; }
 }
 

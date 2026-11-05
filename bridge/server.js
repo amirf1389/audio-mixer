@@ -53,6 +53,7 @@ const license = require('./license');
 const updater = require('./update');
 const streamRegistry = require('./streams');
 const security = require('./security');
+const diag = require('./diagnostics');
 const inserts = require('./inserts');
 const pluginHost = require('./pluginhost');
 const power = require('./power');
@@ -174,6 +175,15 @@ async function handle(req, res) {
     if (!license.hasFeature(license.status(), 'plugins')) return [402, { ok: false, error: 'Plugin inserts need the PRO or STUDIO plan', needs: 'plugins' }];
     return [200, { ok: true, ...inserts.set(body) }];
   });
+  // SIMULATED DEVICES (bridge/sim): POST {enabled, profiles, faults} with X-Mixer-Action: sim (local page only, like every action)
+  if (req.method === 'POST' && url.pathname === '/api/sim') return handleAction(req, res, cors, 'sim', async body => {
+    const sim = require('./sim');
+    const st = sim.configure({ enabled: body.enabled, profiles: body.profiles, faults: body.faults });
+    if (body.enabled === false) sim.closeAll();
+    detectCache = null; lastScanSig = '';
+    diag.info('sim', `simulated devices ${st.enabled ? 'ON: ' + st.profiles.join(', ') + (Object.keys(st.faults).length ? ' (faults: ' + JSON.stringify(st.faults) + ')' : '') : 'OFF'}`);
+    return [200, { ok: true, ...st }];
+  });
   if (req.method !== 'GET') return json(res, 405, { ok: false, error: 'method not allowed' }, cors);
   if (url.pathname === '/api/handoff') {   // the page takes the waiting scene archive once (it is dropped after 2 minutes)
     const h = handoff && Date.now() - handoff.at < 120000 ? handoff : null; handoff = null;
@@ -209,6 +219,11 @@ async function handle(req, res) {
     } catch (e) { return json(res, e.status || 502, { ok: false, current: VERSION, error: e.message }, cors); }
   }
 
+  // AUDIO DIAGNOSTICS (bridge/diagnostics.js): GET /api/diagnostics?filter=all|errors|asio|wasapi&since=<seq>, GET /api/diagnostics/report (plain text)
+  if (url.pathname === '/api/diagnostics') return json(res, 200, { ok: true, logFile: diag.fileFor().replace(/([A-Za-z]:\\Users\\|\/(?:home|Users)\/)[^\\/]+/, '$1<user>'), entries: diag.list({ filter: url.searchParams.get('filter') || 'all', since: parseInt(url.searchParams.get('since'), 10) || 0 }), sim: require('./sim').status() }, cors);
+  if (url.pathname === '/api/diagnostics/report') return send(res, 200, diag.report({ version: VERSION }), { ...cors, 'Content-Type': 'text/plain; charset=utf-8', 'Content-Disposition': 'attachment; filename="amfx1-audio-diagnostics.txt"' });
+  // SIMULATED DEVICES (bridge/sim): GET status; POST {enabled, profiles, faults} with X-Mixer-Action: sim (local page only, like every action)
+  if (url.pathname === '/api/sim') return json(res, 200, { ok: true, ...require('./sim').status() }, cors);
   if (url.pathname === '/api/drivers') {
     try { return json(res, 200, { ok: true, ...(await detectCached(url.searchParams.get('force') === '1')) }, cors); }
     catch (e) { return json(res, 500, { ok: false, error: e.message }, cors); }
@@ -306,8 +321,23 @@ function detectCached(force = false, maxAgeMs = 3000) {
   const now = Date.now();
   if (!force && detectCache && now - detectCache.at < maxAgeMs) return detectCache.promise;
   const promise = detect({ force }); detectCache = { at: now, promise };
+  promise.then(logScan, () => {});
   promise.catch(() => { if (detectCache && detectCache.promise === promise) detectCache = null; });
   return promise;
+}
+
+// the device scan in the diagnostics log: once per change of the device list (not every 3 s poll), per host API
+let lastScanSig = '';
+function logScan(info) {
+  try {
+    const src = info.portaudio || info.native || { devices: [] }, devs = src.devices || [];
+    const by = {}; for (const d of devs) (by[d.hostApi || 'other'] = by[d.hostApi || 'other'] || []).push(`${d.name} (${d.inputs || 0} in / ${d.outputs || 0} out${d.probeFailed ? ', probe failed' : ''})`);
+    const sig = JSON.stringify([src.engine, by, info.asio]);
+    if (sig === lastScanSig) return; lastScanSig = sig;
+    diag.info('scan', `device scan (${src.engine || 'no engine'}${src.simulated ? ', SIMULATED DEVICES' : ''}): ${devs.length} device(s); ASIO drivers installed: ${(info.asio || []).join(', ') || 'none'}`);
+    for (const [api, list] of Object.entries(by)) diag.info(/asio/i.test(api) ? 'asio' : /wasapi/i.test(api) ? 'wasapi' : 'scan', `${api}: ${list.join('; ')}`);
+    if (!info.portaudio) diag.warn('scan', 'no audio engine (PortAudio / Audify) is installed: devices are listed from the operating system and cannot be opened by the bridge');
+  } catch (_) { /* logging never breaks a scan */ }
 }
 
 let updateCache = null;

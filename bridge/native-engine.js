@@ -28,7 +28,8 @@ const state = { open: new Set(), list: null, at: 0, refreshing: null, stale: fal
 // vendor's ASIO driver (Realtek ASIO) or a generic ASIO wrapper (ASIO4ALL, FlexASIO) that drives the same chip. Both on one chip conflict: an
 // exclusive WASAPI stream locks ASIO out, and an ASIO driver that grabs the chip silences music. They are kept apart: ASIO carries the mixer, WASAPI
 // stays in SHARED mode so music and system sound keep playing through Windows' mixer next to it.
-const FAMILIES = [['realtek', /realtek/i], ['conexant', /conexant|synaptics/i], ['idt', /\bidt\b|sigmatel|tempo/i], ['via', /\bvia\b|vinyl/i], ['cirrus', /cirrus/i], ['intel', /intel.*(smart sound|display audio)/i], ['amd', /\bamd\b.*(high definition|audio)/i]];
+const hwm = require('./hw-match');
+const FAMILIES = hwm.FAMILIES;   // shared with interfaces.js and the simulator (adds Behringer / USB Audio CODEC, Focusrite ...)
 const WRAPPERS = /asio4all|flexasio|generic low latency|asio2wasapi/i;   // ASIO drivers that open a Windows endpoint themselves
 function hardwareFamily(name) { for (const [f, re] of FAMILIES) if (re.test(String(name))) return f; return null; }
 // the hardware an open engine stream sits on: an onboard family, or 'wdm' for a wrapper (it takes whichever Windows endpoint it is set to)
@@ -209,7 +210,9 @@ function wasapiFallback(dev, direction, list = state.list) {
   const fam = hardwareFamily(dev.name), w = words(dev.name);
   const score = d => (fam && hardwareFamily(d.name) === fam ? 100 : 0) + [...words(d.name)].filter(x => w.has(x)).length * 10 + ((out ? d.isDefaultOutput : d.isDefaultInput) ? 1 : 0);
   const best = pool.map(d => ({ d, s: score(d) })).sort((a, b) => b.s - a.s)[0];
-  return best ? best.d : null;
+  // real hardware: the same device only, never just the Windows default (it can be a different card); a wrapper (ASIO4ALL ...) opens the Windows
+  // default endpoint itself, so for it the default IS the right twin
+  return best && (best.s >= 10 || (WRAPPERS.test(String(dev.name)) && best.s >= 1)) ? best.d : null;
 }
 // A stream that can change engine underneath: the caller keeps one object while an ASIO open that fails early is replaced by WASAPI.
 function withFallback(o, direction, openAsio) {

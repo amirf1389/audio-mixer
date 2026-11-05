@@ -101,22 +101,35 @@ function groupInterfaces(devices = [], asioNames = [], problems = []) {
     if (!groups.has(k)) out.push({ key: k, name: baseName(n), inputs: 0, outputs: 0, loopback: false, asio: true, apis: [], read: null, write: null, driverOnly: true, ...probeReason(n, problems) });
   }
   linkAsioFallback(out);
+  // ASIO4ALL / FlexASIO wrap Windows devices that may also be open through their own driver: flagged, and never enabled automatically when a
+  // device with its own ASIO driver is present
+  const nativeAsio = out.some(g => g.asio && !hw.isWrapper(g.name) && !g.driverOnly);
+  for (const g of out) if (g.asio && hw.isWrapper(g.name)) { g.wrapper = true; if (nativeAsio) g.preferNative = true; }
+  // The Windows endpoints of hardware that also has its own ASIO driver ("USB Audio CODEC" next to "BEHRINGER USB AUDIO"): reading both opens the
+  // SAME microphone twice (a doubled, comb-filtered voice). The twin is marked for the directions the ASIO driver already covers; the page
+  // does not enable those automatically. It stays usable by hand and is what the ASIO -> Windows fallback opens.
+  for (const g of out) {
+    if (g.asio || g.loopback || g.bluetooth || g.systemDefault) continue;
+    let best = null, sc = 0;
+    for (const a of out) { if (!a.asio || a.wrapper || a.driverOnly) continue; const v = hw.score(a.name, g.name); if (v > sc) { sc = v; best = a; } }
+    if (best && sc >= 100) g.twinOf = { key: best.key, name: best.name, read: best.inputs > 0 && !(best.fallback && best.fallback.input), write: best.outputs > 0 && !(best.fallback && best.fallback.output) };
+  }
   return out.sort((a, b) => (a.systemDefault - b.systemDefault) || (a.loopback - b.loopback) || (b.asio - a.asio) || a.name.localeCompare(b.name));
 }
 
 // An ASIO interface with no input or no output (Realtek ASIO often shows outputs only, or none; a probe can fail while another program holds
 // the driver) gets the missing side from the Windows endpoint of the same hardware, so the page can still read / write it. The same match the
 // engine uses for its runtime fallback (native-engine.wasapiFallback): chip family first, then name words, never a loopback or Bluetooth device.
-const FAMILY = [['realtek', /realtek/i], ['conexant', /conexant|synaptics/i], ['idt', /\bidt\b|sigmatel|tempo/i], ['via', /\bvia\b|vinyl/i], ['cirrus', /cirrus/i], ['intel', /intel.*(smart sound|display audio)/i], ['amd', /\bamd\b.*(high definition|audio)/i]];
-const familyOf = n => { for (const [f, re] of FAMILY) if (re.test(String(n))) return f; return null; };
-const GENERIC = new Set(['asio', 'audio', 'driver', 'usb', 'device', 'speakers', 'microphone', 'line', 'input', 'output', 'high', 'definition', 'the', 'and', 'for', 'generic', 'low', 'latency', 'array', 'headphones']);
-const wordsOf = n => new Set(String(n || '').toLowerCase().split(/[^a-z0-9]+/).filter(w => w.length >= 3 && !GENERIC.has(w)));
+const hw = require('./hw-match');   // chip / product families shared with the engine fallback, the silence fallback and the simulator
+const familyOf = hw.family;
+const wordsOf = hw.words;
 function linkAsioFallback(list) {
   for (const a of list) {
     if (!a.asio || (a.read && a.write)) continue;
     const fam = familyOf(a.name), w = wordsOf(a.name);
     const score = b => (fam && familyOf(b.name) === fam ? 100 : 0) + [...wordsOf(b.name)].filter(x => w.has(x)).length * 10;
     const pool = list.filter(b => b !== a && !b.asio && !b.loopback && !b.bluetooth && score(b) > 0);
+    if (hw.isWrapper(a.name)) continue;   // ASIO4ALL & co. are not one device: no twin
     const pick = side => pool.filter(b => b[side]).sort((x, y) => score(y) - score(x))[0] || null;
     const fb = {};
     if (!a.read) { const b = pick('read'); if (b) { a.read = { ...b.read, fallback: 'wasapi' }; a.inputs = b.inputs; fb.input = b.name; } }

@@ -133,7 +133,8 @@ pages.push(page({
   body: `<section class="block"><div class="wrap"><h2>Devices and drivers</h2><div class="grid">
 ${card('', 'Every interface in one list', 'USB interfaces, onboard sound, DACs, Bluetooth headsets and loopback devices are grouped by hardware, with read / write switches and a live level for each.')}
 ${card('', 'Same-hardware fallback', 'When an ASIO driver is held by another program, AmF X1 reads and writes the same device through its Windows driver instead of failing.')}
-${card('', 'Low-latency ASIO', 'Your interface\'s own ASIO driver is used first, with automatic activation when the audio engine starts.')}
+${card('', 'Low-latency ASIO', 'Your interface\'s own ASIO driver is used first; ASIO4ALL-style wrappers are only used when no device has its own driver, and a device is never read twice.')}
+${card('', 'Readable diagnostics', 'Every driver step is logged in plain language with what it means and what to do, ready to copy into a bug report.')}
 </div></div></section>
 <section class="block"><div class="wrap"><h2>Mixing and processing</h2><div class="grid">
 ${card('', 'Console', 'Faders, pan, mute, solo, sends, group faders, scenes and presets, with smooth paging up to 32 channels.')}
@@ -249,7 +250,7 @@ ${card('Hardened', 'Runtimes and website', 'Node.js 22 security releases, Electr
 const FAQ = [
   ['Which Windows versions does AmF X1 support?', 'Windows 10 and Windows 11, 64-bit, with a 32-bit MSI for older PCs. Linux and macOS builds are also available.'],
   ['Do I need an ASIO driver?', 'No. AmF X1 uses your interface\'s own ASIO driver when it has one for the lowest latency, and Windows audio (WASAPI) otherwise. Onboard sound such as Realtek works through Windows audio.'],
-  ['Does it work with the Behringer UM2 and similar USB interfaces?', 'Yes, through its own ASIO driver (BEHRINGER USB AUDIO) or through Windows audio (USB Audio CODEC). The UM2 microphone is on input 1 only. If you get no signal, close other audio programs that may hold the ASIO driver, or read the device through Windows audio.'],
+  ['Does it work with the Behringer UM2 and similar USB interfaces?', 'Yes. AmF X1 opens the UM2 through its ASIO driver (BEHRINGER USB AUDIO); its microphone is on input 1 only, so AmF X1 copies it to both sides. If the ASIO driver is held by another program, AmF X1 switches to the same device through Windows (USB Audio CODEC) by itself, and the DIAGNOSTICS panel says what happened.'],
   ['What does Beta mean?', `Version ${SHOWN} is a test version with new features. It may still have problems; please report them so they can be fixed before the final release.`],
   ['How do I activate a license?', 'Request a key on the license page or on WhatsApp, paste it on the LICENSE page of AmF X1, press CHECK KEY to see what it unlocks, then ACTIVATE.'],
   ['Does AmF X1 send my audio or data anywhere?', 'No. Audio stays on your computer. The app only goes online to check for signed updates, and key requests are sent only when you choose to.'],
