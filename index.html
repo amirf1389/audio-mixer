@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <!-- 
-AmF X1 by AMFB Audio, version 0.1 Alpha
+AmF X1 by AMFB Audio, version 1.22.0.1
 CRITICAL REVISIONS & ARCHITECTURAL UPGRADES:
 1. FIXED BLANK INTERFACE BUG:
    - Defined complete navTabs registry with 19 comprehensive subsystems.
@@ -822,7 +822,7 @@ CRITICAL REVISIONS & ARCHITECTURAL UPGRADES:
         '<path d="M14 14 H106 V106 H14 Z" style="stroke-dasharray:420;stroke-dashoffset:420"/>' +
         '<rect class="po-trk" x="34" y="26" width="0.1" height="68"/><rect class="po-trk" x="60" y="26" width="0.1" height="68"/><rect class="po-trk" x="86" y="26" width="0.1" height="68"/>' +
         '<rect class="po-cap" x="26" y="62" width="16" height="9" rx="2"/><rect class="po-cap" x="52" y="36" width="16" height="9" rx="2" style="animation-delay:' + (1.65 * S) + 's"/><rect class="po-cap" x="78" y="52" width="16" height="9" rx="2" style="animation-delay:' + (1.8 * S) + 's"/></svg>' +
-        '<div class="po-title" aria-hidden="true"></div><div class="po-sub">AmF X1 &bull; by AMFB Audio &bull; 0.1 Alpha</div>' +
+        '<div class="po-title" aria-hidden="true"></div><div class="po-sub">AmF X1 &bull; by AMFB Audio &bull; 1.22.0.1</div>' +
         '<div class="po-bank" aria-hidden="true">' + bank + meters + '</div>' +
         '<div class="po-term" aria-hidden="true"></div><div class="po-bar"><u></u></div><div class="po-led"></div>';
     document.body.appendChild(el);
@@ -830,7 +830,7 @@ CRITICAL REVISIONS & ARCHITECTURAL UPGRADES:
     var title = el.querySelector('.po-title'), word = 'AUDIO MIXER';
     for (i = 0; i < word.length; i++) { var sp = document.createElement('span'); sp.textContent = word[i] === ' ' ? ' ' : word[i]; sp.style.animationDelay = (1.15 * S + i * 0.055 * S) + 's'; title.appendChild(sp); }
 
-    var lines = [['AmF X1 0.1 ALPHA ........ BOOT', 'OK'], ['DSP CORE  64-BIT ........ INIT', 'OK'], ['AUDIO ENGINE ............. READY', 'OK'], ['I/O  USB • ASIO • BLE ...... SCAN', 'OK'], ['MOTORISED FADERS ......... ALIGN', 'OK'], ['CONSOLE .................. ONLINE', 'READY']];
+    var lines = [['AmF X1 1.22.0.1 ...... BOOT', 'OK'], ['DSP CORE  64-BIT ........ INIT', 'OK'], ['AUDIO ENGINE ............. READY', 'OK'], ['I/O  USB • ASIO • BLE ...... SCAN', 'OK'], ['MOTORISED FADERS ......... ALIGN', 'OK'], ['CONSOLE .................. ONLINE', 'READY']];
     var term = el.querySelector('.po-term'), timers = [], done = false;
     lines.forEach(function (l, k) {
         timers.push(setTimeout(function () {
@@ -890,7 +890,7 @@ CRITICAL REVISIONS & ARCHITECTURAL UPGRADES:
                 <i class="fa-solid fa-screwdriver-wrench text-amber-500 text-2xl animate-pulse"></i>
             </div>
             <h1 class="text-base md:text-xl font-black text-white uppercase tracking-widest font-wing mb-0.5">FACTORY HARDWARE SETUP</h1>
-            <p class="text-[9px] font-mono text-slate-400 uppercase tracking-widest mb-4">AmF X1 &bull; Version 0.1 Alpha</p>
+            <p class="text-[9px] font-mono text-slate-400 uppercase tracking-widest mb-4">AmF X1 &bull; Version 1.22.0.1</p>
 
             <div class="w-full max-w-md bg-black/70 p-4 rounded-lg border border-white/10 space-y-2 font-mono text-[9px] mb-4 shadow-2xl">
                 <div class="flex justify-between items-center text-slate-400"><span>1. RAW USB DAC & BLE A2DP DRIVER SCAN</span><span class="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-black">OK</span></div>
@@ -4036,7 +4036,7 @@ const cArea = document.getElementById('content-area');
       <button class="home-tile" onclick="window.switchTab('io')"><i class="fa-solid fa-plug"></i><b>Connect devices</b><span>Plug in microphones, speakers and other sources.</span></button>
       <button class="home-tile" onclick="window.switchTab('sys')"><i class="fa-solid fa-gear"></i><b>Settings and help</b><span>Your account, license, updates and the computer.</span></button>
     </div>
-    <p class="home-foot">AmF X1 by AMFB Audio &middot; Version 0.1 Alpha</p>
+    <p class="home-foot">AmF X1 by AMFB Audio &middot; Version 1.22.0.1</p>
   </div>
 </div>`;
 
@@ -7896,7 +7896,7 @@ const cArea = document.getElementById('content-area');
                       <input type="text" id="license-key-input" value="" placeholder="Paste license key" class="bg-black border border-white/10 p-1.5 rounded text-emerald-400 font-mono w-full text-center text-xs outline-none">
                       <div class="flex justify-between items-center text-[7.5px] pt-1">
                         <span class="text-slate-400">TIER:</span>
-                        <span id="license-tier-text" class="text-emerald-400 font-bold">AmF X1 0.1 ALPHA</span>
+                        <span id="license-tier-text" class="text-emerald-400 font-bold">AmF X1 1.22.0.1</span>
                       </div>
                     </div>
 
@@ -14480,6 +14480,17 @@ const cArea = document.getElementById('content-area');
             }
         };
 
+        // The EQ page opens with the curve AND the faders on screen, so its page buttons start on SPLIT: BOTH (they used to light PAGE 1,
+        // which shows the curve only, while both were visible). The choice is remembered on this computer.
+        (function eqPageStart() {
+            const go = () => { let pg = 'both'; try { pg = localStorage.getItem('halx_eq_page') || 'both'; } catch (e) { /* storage blocked */ } if (!/^(both|diamond|faders)$/.test(pg)) pg = 'both'; const b = document.getElementById('eq-btn-' + pg); if (b) window.switchEQPage(pg, b); };
+            let done = false; const once = () => { if (done) return; done = true; go(); };
+            if (document.readyState === 'complete') setTimeout(once, 0); else window.addEventListener('load', once);
+            setTimeout(once, 1500);   // whichever comes first; the EQ page opening (below) also applies it
+            const st = window.switchTab; if (typeof st === 'function') window.switchTab = function (t) { const r = st.apply(this, arguments); if (t === 'dsp') once(); return r; };
+            const orig = window.switchEQPage; window.switchEQPage = function (page, btn) { try { localStorage.setItem('halx_eq_page', page); } catch (e) { /* storage blocked */ } return orig.apply(this, arguments); };
+        })();
+
         // 3D IMMERSIVE PAN & SURROUND ENGINE CONTROLLER
         window.panEngineEnabled = true;
 
@@ -18618,7 +18629,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
         }
 
         // the fingerprint of the vendor public key this page trusts (SHA-256 of x.y, first 16 hex): compared with the one the key generator shows
-        (async () => { try { const j = window.LICENSE_PUBLIC_JWK; if (!j || !(window.crypto && crypto.subtle)) return; const d = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(j.x) + '.' + String(j.y)))); const h = Array.from(d.slice(0, 8), b => b.toString(16).padStart(2, '0')).join('').toUpperCase(); window.licenseKeyFingerprint = h.match(/.{4}/g).join('-'); const e = document.getElementById('lic-key-fp'); if (e) e.textContent = window.licenseKeyFingerprint; } catch (e) { /* no WebCrypto */ } })();
+        (async () => { try { const j = window.LICENSE_PUBLIC_JWK; if (!j || !(window.crypto && crypto.subtle)) return; const d = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(j.x) + '.' + String(j.y)))); const h = Array.from(d.slice(0, 8), b => b.toString(16).padStart(2, '0')).join('').toUpperCase(); window.licenseKeyFingerprint = h.match(/.{4}/g).join('-'); const e = document.getElementById('lic-key-fp'); if (e) e.textContent = window.licenseKeyFingerprint; if (window.license && window.license.render) window.license.render(); } catch (e) { /* no WebCrypto */ } })();
         const L = window.license = {
             plan: PLANS.basic, state: 'basic', info: null, machineId: null, version: null,
             has(feature) { return this.plan.features.indexOf(feature) >= 0; },
@@ -18679,6 +18690,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 return true;
             },
             render() {
+                { const fp = $('lic-key-fp'); if (fp && window.licenseKeyFingerprint && fp.textContent !== window.licenseKeyFingerprint) fp.textContent = window.licenseKeyFingerprint; }   // redrawn with the page
                 const sw = $('lic-switch');
                 if (sw) {
                     const O = this.ORDER, top = O.indexOf((this.licensed || PLANS.basic).id);
