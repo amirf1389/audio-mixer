@@ -177,6 +177,7 @@ ${card('', 'Readable diagnostics', 'Every driver step is logged in plain languag
 <section class="block"><div class="wrap"><h2>Mixing and processing</h2><div class="grid">
 ${card('', 'Console', 'Faders, pan, mute, solo, sends, group faders, scenes and presets, with smooth paging up to 32 channels.')}
 ${card('', 'Tone', 'Parametric EQ with an analyser overlay, mic EQ, dynamic EQ, auto-volume and a treble guard.')}
+${card('', 'ISO 3-band isolator', 'A DJ-style LOW / MID / HIGH isolator with KILL buttons on the master and every channel, perfectly flat when all bands are at 0 dB.')}
 ${card('', 'Dynamics and effects', 'Compressor, noise gate, limiter, de-esser, anti-feedback, chorus, lo-fi, auto-pan, harmony and vocal enhance.')}
 ${card('', 'Stereo image', 'Mid/side level and width plus left / right polarity that act on the real master signal.')}
 </div></div></section>

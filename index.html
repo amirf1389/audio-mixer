@@ -1541,6 +1541,7 @@ window.navTabs = [
             dynamicEqFilter.Q.setValueAtTime(window.state.dynamicEq.q, window.state.ctx.currentTime);
             dynamicEqFilter.gain.setValueAtTime(0, window.state.ctx.currentTime);
             lastFilter.connect(dynamicEqFilter);
+            window.state.nodes.isoMaster = { from: lastFilter, to: dynamicEqFilter };   // ISO 3-BAND splices in here when switched on (window.isoEq)
             lastFilter = dynamicEqFilter;
             window.state.nodes.dynamicEqFilter = dynamicEqFilter;
 
@@ -1815,7 +1816,9 @@ window.navTabs = [
                 window.state.nodes.channelToneHigh.push(toneHigh);
                 window.state.nodes.channelPostGains.push(chGain);
                 window.state.nodes.channelPanners.push(panner);
+                (window.state.nodes.isoCh = window.state.nodes.isoCh || [])[i] = { from: toneHigh, to: polarity };   // ISO 3-BAND per channel
             }
+            if (window.isoEq) window.isoEq.restore();   // switched-on isolators come back with the engine
 
             if ('wakeLock' in navigator) {
                 try { window.wakeLockSentinel = await navigator.wakeLock.request('screen'); } catch(e){}
@@ -10484,6 +10487,150 @@ const cArea = document.getElementById('content-area');
             const slider = document.getElementById('ms-width-slider'); if (slider && parseFloat(slider.value) !== n) slider.value = n;
             if (!silent) window.notify('Mid/Side: width ' + Math.round(n) + '%', n === 0 ? 'compress' : 'arrows-left-right');
         };
+
+    // ───────────────────────── ISO 3-BAND (DJ-style isolator EQ) ─────────────────────────
+    // LOW / MID / HIGH with full KILL (-inf) up to +6 dB, on the master and on every channel. Linkwitz-Riley 24 dB/oct crossovers
+    // (two cascaded 2nd-order Butterworth sections) at f1 (default 250 Hz) and f2 (2.5 kHz); the low band also runs through an all-pass at f2
+    // (LR4 low + LR4 high of f2), so LOW + MID + HIGH = AP(f1) x AP(f2): a FLAT magnitude when every band is at 0 dB. The nodes exist only while
+    // a stage is switched on (spliced between two existing nodes, removed again when off), so it costs nothing until used.
+    //@@ISO-MATH-START
+    const isoMath = (() => {
+        // RBJ biquad (the formulas Web Audio's BiquadFilterNode uses) and its complex response
+        function coeffs(type, f0, Q, fs) {
+            const w = 2 * Math.PI * f0 / fs, c = Math.cos(w), al = Math.sin(w) / (2 * Q);
+            const lp = type === 'lowpass';
+            const b0 = lp ? (1 - c) / 2 : (1 + c) / 2, b1 = lp ? 1 - c : -(1 + c), b2 = b0, a0 = 1 + al, a1 = -2 * c, a2 = 1 - al;
+            return [b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0];
+        }
+        function resp(co, f, fs) {   // H(e^jw) as [re, im]
+            const w = 2 * Math.PI * f / fs, cr = Math.cos(w), ci = -Math.sin(w), c2r = Math.cos(2 * w), c2i = -Math.sin(2 * w);
+            const nr = co[0] + co[1] * cr + co[2] * c2r, ni = co[1] * ci + co[2] * c2i, dr = 1 + co[3] * cr + co[4] * c2r, di = co[3] * ci + co[4] * c2i;
+            const d = dr * dr + di * di; return [(nr * dr + ni * di) / d, (ni * dr - nr * di) / d];
+        }
+        const mul = (a, b) => [a[0] * b[0] - a[1] * b[1], a[0] * b[1] + a[1] * b[0]], add = (a, b) => [a[0] + b[0], a[1] + b[1]], sc = (a, k) => [a[0] * k, a[1] * k];
+        const lr4 = (type, f0, f, fs) => { const h = resp(coeffs(type, f0, Math.SQRT1_2, fs), f, fs); return mul(h, h); };
+        const gainOf = db => (db <= -40 ? 0 : Math.pow(10, db / 20));   // -40 dB and below = KILL
+        // the summed response of the isolator at frequency f, as a magnitude in dB
+        function responseDb(f, { f1 = 250, f2 = 2500, low = 0, mid = 0, high = 0 } = {}, fs = 48000) {
+            const ap2 = add(lr4('lowpass', f2, f, fs), lr4('highpass', f2, f, fs));
+            const L = sc(mul(lr4('lowpass', f1, f, fs), ap2), gainOf(low));
+            const M = sc(mul(lr4('highpass', f1, f, fs), lr4('lowpass', f2, f, fs)), gainOf(mid));
+            const H = sc(mul(lr4('highpass', f1, f, fs), lr4('highpass', f2, f, fs)), gainOf(high));
+            const t = add(add(L, M), H), m = Math.hypot(t[0], t[1]);
+            return m > 0 ? 20 * Math.log10(m) : -Infinity;
+        }
+        return { coeffs, responseDb, gainOf, clampF1: f => Math.min(800, Math.max(40, +f || 250)), clampF2: (f, f1) => Math.min(12000, Math.max((f1 || 250) * 2, +f || 2500)) };
+    })();
+    //@@ISO-MATH-END
+    window.isoEq = (() => {
+        const KEY = 'halx_iso_eq';
+        const defaults = () => ({ on: false, low: 0, mid: 0, high: 0, f1: 250, f2: 2500 });
+        let saved = {}; try { saved = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (_) { saved = {}; }
+        const st = {};   // target -> settings ('master', 'ch0', 'ch1', ...)
+        for (const [k, v] of Object.entries(saved)) st[k] = Object.assign(defaults(), v);
+        const live = {};  // target -> built graph
+        const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(st)); } catch (_) { /* private browsing */ } };
+        const hook = t => { const n = window.state && window.state.nodes; if (!n) return null; return t === 'master' ? n.isoMaster : (n.isoCh || [])[+t.slice(2)]; };
+        function build(ctx, s) {
+            const bq = (type, f) => { const b = ctx.createBiquadFilter(); b.type = type; b.frequency.value = f; b.Q.value = Math.SQRT1_2; return b; };
+            const chain = (input, list) => { let x = input; for (const n of list) { x.connect(n); x = n; } return x; };
+            const g = { input: ctx.createGain(), output: ctx.createGain(), low: ctx.createGain(), mid: ctx.createGain(), high: ctx.createGain(), f: [] };
+            const lp1 = [bq('lowpass', s.f1), bq('lowpass', s.f1)], hp1m = [bq('highpass', s.f1), bq('highpass', s.f1)], hp1h = [bq('highpass', s.f1), bq('highpass', s.f1)];
+            const apL = [bq('lowpass', s.f2), bq('lowpass', s.f2)], apH = [bq('highpass', s.f2), bq('highpass', s.f2)];
+            const lp2m = [bq('lowpass', s.f2), bq('lowpass', s.f2)], hp2h = [bq('highpass', s.f2), bq('highpass', s.f2)];
+            const lowEnd = chain(g.input, lp1); const apLo = chain(lowEnd, apL), apHi = chain(lowEnd, apH); apLo.connect(g.low); apHi.connect(g.low);
+            chain(chain(g.input, hp1m), lp2m).connect(g.mid);
+            chain(chain(g.input, hp1h), hp2h).connect(g.high);
+            g.low.connect(g.output); g.mid.connect(g.output); g.high.connect(g.output);
+            g.f1 = [...lp1, ...hp1m, ...hp1h]; g.f2 = [...apL, ...apH, ...lp2m, ...hp2h];
+            return g;
+        }
+        function apply(t) {
+            const s = st[t], g = live[t]; if (!s || !g || !window.state.ctx) return;
+            const now = window.state.ctx.currentTime;
+            g.low.gain.setTargetAtTime(isoMath.gainOf(s.low), now, 0.008); g.mid.gain.setTargetAtTime(isoMath.gainOf(s.mid), now, 0.008); g.high.gain.setTargetAtTime(isoMath.gainOf(s.high), now, 0.008);
+            for (const b of g.f1) b.frequency.setTargetAtTime(s.f1, now, 0.02); for (const b of g.f2) b.frequency.setTargetAtTime(s.f2, now, 0.02);
+        }
+        function attach(t) {
+            const h = hook(t), ctx = window.state && window.state.ctx; if (!h || !ctx || live[t]) return !!live[t];
+            const g = build(ctx, st[t]); live[t] = g; apply(t);
+            try { h.from.disconnect(h.to); } catch (_) { /* already apart */ }
+            h.from.connect(g.input); g.output.connect(h.to);
+            return true;
+        }
+        function detach(t) {
+            const h = hook(t), g = live[t]; if (!g) return;
+            try { h.from.disconnect(g.input); } catch (_) { /* gone */ } try { g.output.disconnect(); } catch (_) { /* gone */ }
+            try { h.from.connect(h.to); } catch (_) { /* engine gone */ }
+            delete live[t];
+        }
+        const api = {
+            math: isoMath,
+            get: t => Object.assign(defaults(), st[t] || {}),
+            set(t, patch) {
+                const s = st[t] = Object.assign(api.get(t), patch || {});
+                s.f1 = isoMath.clampF1(s.f1); s.f2 = isoMath.clampF2(s.f2, s.f1);
+                for (const b of ['low', 'mid', 'high']) s[b] = Math.max(-40, Math.min(6, +s[b] || 0));
+                if (s.on) { attach(t); apply(t); } else detach(t);
+                persist(); api.render(); return s;
+            },
+            kill(t, band) { const s = api.get(t); return api.set(t, { on: true, [band]: s[band] <= -40 ? (s['_' + band] != null ? s['_' + band] : 0) : -40, ['_' + band]: s[band] <= -40 ? null : s[band] }); },
+            reset(t) { return api.set(t, { ...defaults(), on: api.get(t).on }); },
+            restore() { for (const [t, s] of Object.entries(st)) if (s.on) { delete live[t]; attach(t); } api.render(); },
+            active: () => Object.keys(live),
+            render() {
+                if (typeof document === 'undefined' || typeof document.getElementById !== 'function') return;
+                const box = document.getElementById('iso-eq-panel'); if (!box) return;
+                const sel = document.getElementById('iso-target'), t = sel ? sel.value : 'master', s = api.get(t);
+                const fmt = v => (v <= -40 ? 'KILL' : (v > 0 ? '+' : '') + Number(v).toFixed(1) + ' dB');
+                const mode = document.getElementById('iso-mode'); if (mode) { mode.textContent = s.on ? 'ISO 3-BAND' : 'PARAMETRIC'; mode.setAttribute('aria-pressed', s.on ? 'true' : 'false'); mode.className = 'px-2.5 py-1 rounded text-[8px] font-black uppercase border ' + (s.on ? 'bg-amber-400 text-black border-amber-400' : 'bg-white/5 text-slate-300 border-white/10'); }
+                for (const b of ['low', 'mid', 'high']) {
+                    const r = document.getElementById('iso-' + b), v = document.getElementById('iso-' + b + '-v'), k = document.getElementById('iso-' + b + '-kill');
+                    if (r && +r.value !== s[b]) r.value = s[b]; if (v) v.textContent = fmt(s[b]);
+                    if (k) { const dead = s[b] <= -40; k.setAttribute('aria-pressed', dead ? 'true' : 'false'); k.className = 'w-full py-1 rounded text-[8px] font-black uppercase border ' + (dead ? 'bg-rose-500 text-white border-rose-500' : 'bg-white/5 text-slate-300 border-white/10'); }
+                }
+                const f1 = document.getElementById('iso-f1'), f2 = document.getElementById('iso-f2');
+                if (f1 && +f1.value !== s.f1) f1.value = s.f1; if (f2 && +f2.value !== s.f2) f2.value = s.f2;
+                const f1v = document.getElementById('iso-f1-v'), f2v = document.getElementById('iso-f2-v');
+                if (f1v) f1v.textContent = Math.round(s.f1) + ' Hz'; if (f2v) f2v.textContent = (s.f2 >= 1000 ? (s.f2 / 1000).toFixed(2) + ' kHz' : Math.round(s.f2) + ' Hz');
+                const on = document.getElementById('iso-active'), lbl = x => (x === 'master' ? 'MASTER' : 'CH ' + (+x.slice(2) + 1)), waiting = Object.keys(st).filter(x => st[x].on && !live[x]);
+                if (on) on.textContent = (api.active().length ? 'ACTIVE ON: ' + api.active().map(lbl).join(', ') : waiting.length ? '' : 'OFF EVERYWHERE (no extra processing)') + (waiting.length ? (api.active().length ? ' · ' : '') + 'SWITCHED ON, WAITING FOR THE AUDIO ENGINE: ' + waiting.map(lbl).join(', ') : '');
+            },
+            mount() {
+                if (document.getElementById('iso-eq-panel')) return;
+                const tab = document.getElementById('tab-dsp'), eqCard = tab && tab.querySelector(':scope > .glass-panel'); if (!eqCard) return;
+                const nCh = (window.navTabs && window.state && window.state.nodes && window.state.nodes.isoCh) ? window.state.nodes.isoCh.length : 16;
+                const d = document.createElement('div');
+                d.id = 'iso-eq-panel'; d.className = 'glass-panel p-3.5 rounded-xl wing-bezel font-mono space-y-2.5 max-w-5xl w-full mx-auto mt-3';
+                const band = (b, label, hint) => `<div class="bg-black/50 border border-white/10 rounded-lg p-2.5 space-y-1.5"><div class="flex justify-between text-[8px]"><span class="text-amber-400 font-black">${label}</span><span id="iso-${b}-v" class="text-white font-bold">0.0 dB</span></div>
+                    <input id="iso-${b}" type="range" min="-40" max="6" step="0.5" value="0" aria-label="${label} level" class="w-full accent-amber-400"><div class="text-[7px] text-slate-500">${hint}</div>
+                    <button id="iso-${b}-kill" type="button" aria-pressed="false">KILL ${label}</button></div>`;
+                d.innerHTML = `<div class="flex flex-wrap justify-between items-center gap-2 pb-2 border-b border-white/10">
+                    <div><h3 class="text-xs font-black text-white font-wing tracking-wider uppercase">ISO 3-BAND ISOLATOR</h3><p class="text-[7.5px] text-slate-400">DJ-STYLE LOW / MID / HIGH WITH KILL &bull; LINKWITZ-RILEY 24 DB/OCT &bull; FLAT AT 0 DB</p></div>
+                    <div class="flex items-center gap-1.5 text-[8px]"><label for="iso-target" class="text-slate-400">ON</label><select id="iso-target" class="bg-black border border-white/10 rounded px-1 py-0.5 text-slate-200"><option value="master">MASTER</option>${Array.from({ length: nCh }, (_, i) => `<option value="ch${i}">CH ${i + 1}</option>`).join('')}</select>
+                    <span class="text-slate-400">EQ MODE</span><button id="iso-mode" type="button" aria-pressed="false">PARAMETRIC</button><button id="iso-reset" type="button" class="px-2 py-1 rounded bg-white/5 border border-white/10 text-slate-300 text-[8px] font-bold">RESET</button></div></div>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">${band('low', 'LOW', 'below the low crossover')}${band('mid', 'MID', 'between the crossovers')}${band('high', 'HIGH', 'above the high crossover')}</div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[8px]"><label class="block text-slate-400">LOW / MID CROSSOVER <span id="iso-f1-v" class="text-white">250 Hz</span><input id="iso-f1" type="range" min="40" max="800" step="5" value="250" class="w-full accent-cyan-400"></label>
+                    <label class="block text-slate-400">MID / HIGH CROSSOVER <span id="iso-f2-v" class="text-white">2.50 kHz</span><input id="iso-f2" type="range" min="500" max="12000" step="50" value="2500" class="w-full accent-cyan-400"></label></div>
+                    <div id="iso-active" class="text-[7.5px] text-slate-500" aria-live="polite"></div>`;
+                eqCard.insertAdjacentElement('afterend', d);   // right under the 10-band EQ
+                const T = () => document.getElementById('iso-target').value;
+                document.getElementById('iso-target').onchange = () => api.render();
+                document.getElementById('iso-mode').onclick = () => { const on = !api.get(T()).on; if (on && !window.state.ctx) window.notify('Start the audio engine (ENGAGE) to hear the isolator', 'circle-info'); api.set(T(), { on }); window.notify((T() === 'master' ? 'Master' : 'CH ' + (+T().slice(2) + 1)) + ' EQ mode: ' + (on ? 'ISO 3-BAND' : 'PARAMETRIC'), 'sliders'); };
+                document.getElementById('iso-reset').onclick = () => api.reset(T());
+                for (const b of ['low', 'mid', 'high']) {
+                    document.getElementById('iso-' + b).oninput = e => api.set(T(), { on: true, [b]: +e.target.value });
+                    document.getElementById('iso-' + b + '-kill').onclick = () => api.kill(T(), b);
+                }
+                document.getElementById('iso-f1').oninput = e => api.set(T(), { f1: +e.target.value });
+                document.getElementById('iso-f2').oninput = e => api.set(T(), { f2: +e.target.value });
+                api.render();
+            },
+        };
+        const tryMount = () => { if (typeof document === 'undefined' || typeof document.querySelector !== 'function') return true; if (document.querySelector('#tab-dsp > .glass-panel')) { api.mount(); return true; } return false; };
+        if (!tryMount()) { let n = 0; const iv = setInterval(() => { if (tryMount() || ++n > 120) clearInterval(iv); }, 500); }
+        return api;
+    })();
         window.setMsMono = function() { window.setMsWidth(0); };   // quick collapse-to-mono, same math as width 0%
         window.resetMsProcessing = function() { window.setMsMidDb(0); window.setMsWidth(100); window.notify('Mid/Side Processing Reset', 'rotate-left'); };
 
