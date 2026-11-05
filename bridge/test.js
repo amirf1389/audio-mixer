@@ -5261,3 +5261,44 @@ test('world language & accessibility engine: 13 languages (RTL for fa / ar / ur)
   for (const m of menu) for (const k of [m[1], m[2]]) assert.ok(T.some(r => r[0] === k), 'menu text translated: ' + k);
   for (const s of ["rec = { en: cur, shown: cur }", 'id="am-lang-top"', 'id="am-a11y-panel"', "r.setAttribute('aria-live', 'polite')", 'body.am-motion *', 'body.am-focus :focus-visible']) assert.ok(html.includes(s), s);
 });
+
+test('ASIO with no input / output, or failing at start, falls back to the same hardware through WASAPI (shared); matching by chip family, name, then default', () => {
+  const ne = require('./native-engine'); const { EventEmitter } = require('node:events');
+  ne._reset();
+  const spawned = [];
+  const spawnImpl = (f, a) => { const c = new EventEmitter(); c.stdout = new EventEmitter(); c.stderr = new EventEmitter(); c.stdin = new EventEmitter(); c.stdin.write = () => {}; c.stdin.end = () => {}; c.kill = () => {}; c.args = a; spawned.push(c); return c; };
+  const raw = [
+    { backend: 'asio', id: 'Realtek ASIO', name: 'Realtek ASIO', inChannels: 0, outChannels: 2 },
+    { backend: 'asio', id: 'Focusrite USB ASIO', name: 'Focusrite USB ASIO', inChannels: 2, outChannels: 2 },
+    { backend: 'wasapi', id: 'w1', name: 'Microphone (Realtek(R) Audio)', inChannels: 2 },
+    { backend: 'wasapi', id: 'w2', name: 'Analogue 1 + 2 (Focusrite USB Audio)', inChannels: 2 },
+    { backend: 'wasapi', id: 'w3', name: 'Speakers (Focusrite USB Audio)', outChannels: 2 },
+    { backend: 'wasapi', id: 'w4', name: 'Headset Mic (Bluetooth)', inChannels: 1, defaultIn: true },
+  ];
+  ne._state.list = { devices: ne.toDevices(raw, 1000) }; ne._state.at = Date.now();
+  const [rtAsio, fAsio] = ne._state.list.devices;
+  // matching
+  assert.strictEqual(ne.wasapiFallback(rtAsio, 'input').name, 'Microphone (Realtek(R) Audio)', 'same chip family');
+  assert.strictEqual(ne.wasapiFallback(fAsio, 'input').name, 'Analogue 1 + 2 (Focusrite USB Audio)', 'name words');
+  assert.strictEqual(ne.wasapiFallback({ name: 'ASIO4ALL v2' }, 'input').name, 'Headset Mic (Bluetooth)', 'the default device last');
+  // 1) no inputs on the ASIO driver: the input opens on WASAPI, shared, and says so
+  const a = ne.openStream({ dev: rtAsio, direction: 'input', channels: 2, exe: 'x', spawnImpl });
+  assert.deepStrictEqual([a.fallback.via, a.fallback.to, a.exclusive], ['wasapi', 'Microphone (Realtek(R) Audio)', false]);
+  assert.ok(spawned[0].args.includes('wasapi') && spawned[0].args.includes('w1'));
+  assert.throws(() => ne.openStream({ dev: rtAsio, direction: 'input', channels: 2, exe: 'x', spawnImpl, wasapiFallback: false }), /no input channels/);
+  // 2) the ASIO driver errors right after starting (no sound yet): the same stream object switches to WASAPI
+  let switched = null; const errs = [];
+  const b = ne.openStream({ dev: fAsio, direction: 'output', channels: 2, exe: 'x', spawnImpl, onFallback: f => { switched = f; }, onError: e => errs.push(e) });
+  const asioProc = spawned[spawned.length - 1]; assert.ok(asioProc.args.includes('asio'));
+  asioProc.stderr.emit('data', JSON.stringify({ type: 'error', message: 'ASIO driver is busy (used by another program)' }) + '\n');
+  assert.ok(switched && /busy/.test(switched.reason) && switched.to === 'Speakers (Focusrite USB Audio)');
+  assert.strictEqual(b.fallback.via, 'wasapi'); assert.strictEqual(errs.length, 0, 'the caller sees a switch, not an error');
+  assert.ok(spawned[spawned.length - 1].args.includes('w3'));
+  ne._reset();
+});
+
+test('ASIO -> WASAPI fallback is reported: input / output sessions send it with started (and a fallback message on a later switch), the page announces it', () => {
+  for (const f of ['input.js', 'output.js']) { const s = fsx.readFileSync(pathx.join(__dirname, f), 'utf8'); assert.ok(s.includes("...(st.fallback ? { fallback: st.fallback } : {})") && s.includes("type: 'fallback', fallback: f"), f); }
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  assert.ok(html.includes('Hooked.amFallbackHook = true; window.WebSocket = Hooked;') && html.includes("' (Windows audio) instead.'"));
+});

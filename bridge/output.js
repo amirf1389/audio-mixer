@@ -55,12 +55,13 @@ function createSession(conn, load = loadPortAudio, loadA = audify.loadAudify) {
     if (!lock.ok) { const msg = lock.message; lock = null; return conn.send(JSON.stringify({ type: 'error', message: msg })); }
     try {
       const st = audify.openStream({ mod: dev.engineBackend ? null : loadA(), dev, direction: 'output', channels, sampleRate, frameSize: opts.frameSize, exclusive: opts.exclusive === true,
+        onFallback: f => { try { conn.send(JSON.stringify({ type: 'fallback', fallback: f })); } catch (_) { /* closed */ } },   // ASIO failed at start: now on WASAPI
         onError: e => { conn.send(JSON.stringify({ type: 'error', message: String(e && e.message || e) })); stop(); } });
       io = { quit: () => st.close(), write: b => st.write(b) };
       frameBytes = 2 * channels;
       const si = { direction: 'output', engine: dev.engineBackend ? 'native' : 'audify', device: dev.name, hostApi: dev.hostAPIName, sampleRate, channels: channels, frameSize: st.frameSize, latencyMs: st.latencyMs };
       unreg = streams.add(si); meter = levels.attach(conn, { ...si, sid: unreg.id });
-      conn.send(JSON.stringify({ type: 'started', ...(opts.universal ? { universal: true } : {}), engine: dev.engineBackend ? 'native' : 'audify', device: dev.name, hostApi: dev.hostAPIName, sampleRate, channels, frameSize: st.frameSize, latencyMs: st.latencyMs, autoFrameSize: st.auto, exclusive: st.exclusive }));
+      conn.send(JSON.stringify({ type: 'started', ...(opts.universal ? { universal: true } : {}), engine: dev.engineBackend ? 'native' : 'audify', device: dev.name, hostApi: dev.hostAPIName, sampleRate, channels, frameSize: st.frameSize, latencyMs: st.latencyMs, autoFrameSize: st.auto, exclusive: st.exclusive, ...(st.fallback ? { fallback: st.fallback } : {}) }));
     } catch (e) {
       stop();
       conn.send(JSON.stringify({ type: 'error', message: String(e && e.message || e) }));

@@ -196,11 +196,63 @@ function openShared(o, direction, channels) {
 }
 
 // The same arguments as audify.openStream / openDuplex. A device with fewer channels than asked delivers / takes its own count.
+// ASIO -> WASAPI fallback. An ASIO driver can show no inputs or outputs (its probe failed, another program holds it, it was just plugged in)
+// or fail when it starts. Then the same hardware is used through its Windows (WASAPI, shared) endpoint instead, so there is sound anyway.
+// The endpoint is chosen by: the same onboard chip family (Realtek ...), then the most name words in common with the ASIO driver
+// ("Focusrite USB ASIO" -> "Speakers (Focusrite USB Audio)"), then the Windows default device for that direction.
+const GENERIC = new Set(['asio', 'audio', 'driver', 'usb', 'device', 'speakers', 'microphone', 'line', 'input', 'output', 'high', 'definition', 'the', 'and', 'for', 'generic', 'low', 'latency']);
+const words = n => new Set(String(n || '').toLowerCase().split(/[^a-z0-9]+/).filter(w => w.length >= 3 && !GENERIC.has(w)));
+function wasapiFallback(dev, direction, list = state.list) {
+  const out = direction === 'output', has = d => (out ? d.maxOutputChannels : d.maxInputChannels) > 0;
+  const pool = ((list && list.devices) || []).filter(d => d.engineBackend === 'wasapi' && has(d));
+  if (!pool.length) return null;
+  const fam = hardwareFamily(dev.name), w = words(dev.name);
+  const score = d => (fam && hardwareFamily(d.name) === fam ? 100 : 0) + [...words(d.name)].filter(x => w.has(x)).length * 10 + ((out ? d.isDefaultOutput : d.isDefaultInput) ? 1 : 0);
+  const best = pool.map(d => ({ d, s: score(d) })).sort((a, b) => b.s - a.s)[0];
+  return best ? best.d : null;
+}
+// A stream that can change engine underneath: the caller keeps one object while an ASIO open that fails early is replaced by WASAPI.
+function withFallback(o, direction, openAsio) {
+  const fb = () => wasapiFallback(o.dev, direction);
+  const openWasapi = (why) => {
+    const alt = fb(); if (!alt) return null;
+    const s = openStream({ ...o, dev: alt, exclusive: false });   // shared: music and the rest of Windows keep playing
+    s.fallback = { from: o.dev.name, to: alt.name, via: 'wasapi', reason: why };
+    return s;
+  };
+  let cur, started = Date.now(), gotData = false;
+  const proxy = {};
+  const adopt = s => { cur = s; Object.assign(proxy, { inChannels: s.inChannels, outChannels: s.outChannels, channels: s.channels, frameSize: s.frameSize, auto: s.auto, latencyMs: s.latencyMs, sampleRate: s.sampleRate, deviceRate: s.deviceRate, exclusive: s.exclusive, engine: s.engine, shared: s.shared, fallback: s.fallback || null, whenClosed: s.whenClosed }); };
+  const onData = b => { gotData = true; if (o.onData) o.onData(b); };
+  const onError = e => {
+    // an ASIO failure in the first seconds, before any sound came through: switch to WASAPI once
+    if (!proxy.fallback && !gotData && Date.now() - started < 4000) {
+      try { const old = cur; const s = openWasapi('the ASIO driver failed: ' + String(e && e.message || e)); if (s) { adopt(s); try { old.close(); } catch (_) { /* gone */ } if (o.onFallback) o.onFallback(proxy.fallback); return; } } catch (_) { /* report the original error */ }
+    }
+    if (o.onError) o.onError(e);
+  };
+  try { adopt(openAsio({ ...o, onData, onError })); }
+  catch (e) { const s = openWasapi('the ASIO driver could not be opened: ' + String(e && e.message || e)); if (!s) throw e; adopt(s); }
+  proxy.write = buf => cur.write(buf);
+  proxy.close = () => cur.close();
+  return proxy;
+}
+
 function openStream(o) {
   const out = o.direction === 'output', max = out ? o.dev.maxOutputChannels : o.dev.maxInputChannels;
-  if (!max) throw new Error(`${o.dev.name} has no ${out ? 'output' : 'input'} channels`);
+  if (!max) {
+    // an ASIO driver with no channels this way: the same hardware through WASAPI
+    if (o.dev.engineBackend === 'asio' && o.wasapiFallback !== false) {
+      const alt = wasapiFallback(o.dev, out ? 'output' : 'input');
+      if (alt) { const s = openStream({ ...o, dev: alt, exclusive: false }); s.fallback = { from: o.dev.name, to: alt.name, via: 'wasapi', reason: `the ASIO driver shows no ${out ? 'outputs' : 'inputs'}` }; return s; }
+    }
+    throw new Error(`${o.dev.name} has no ${out ? 'output' : 'input'} channels`);
+  }
   const ch = Math.min(Math.max(1, Number(o.channels) || 2), max);
-  if (SHARED.has(o.dev.engineBackend)) return openShared(o, out ? 'output' : 'input', ch);
+  if (SHARED.has(o.dev.engineBackend)) {
+    if (o.dev.engineBackend === 'asio' && o.wasapiFallback !== false) return withFallback(o, out ? 'output' : 'input', oo => openShared(oo, out ? 'output' : 'input', ch));
+    return openShared(o, out ? 'output' : 'input', ch);
+  }
   return launch({ ...o, inCh: out ? 0 : ch, outCh: out ? ch : 0 });
 }
 function openDuplex(o) {
@@ -218,4 +270,4 @@ function openDuplex(o) {
 
 function _reset() { state.open.clear(); state.list = null; state.at = 0; state.refreshing = null; state.stale = false; state.raw = null; groups.clear(); }
 
-module.exports = { invalidate, hardwareFamily, enginePath, listDevices, openStream, openDuplex, toDevices, _reset, _state: state, _shared: SHARED, _groups: groups };
+module.exports = { wasapiFallback, invalidate, hardwareFamily, enginePath, listDevices, openStream, openDuplex, toDevices, _reset, _state: state, _shared: SHARED, _groups: groups };
