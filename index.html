@@ -7903,10 +7903,11 @@ const cArea = document.getElementById('content-area');
                     <div class="bg-black/60 p-2.5 rounded-lg border border-white/10 space-y-1.5">
                       <span class="text-slate-400 block text-[7px] font-bold">LICENSE KEY</span>
                       <textarea id="lic-key-input" rows="3" spellcheck="false" autocomplete="off" placeholder="Paste your license key (AMIX1.…)" class="w-full bg-black border border-white/10 rounded p-1.5 text-emerald-400 font-mono text-[8px] outline-none resize-none break-all"></textarea>
-                      <div class="flex gap-1.5"><button id="lic-activate" type="button" class="flex-1 py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-black uppercase rounded text-[8px] transition">ACTIVATE</button><button id="lic-deactivate" type="button" class="px-3 py-1.5 bg-white/10 hover:bg-rose-500 hover:text-black text-slate-300 font-bold uppercase rounded text-[8px] transition">DEACTIVATE</button></div>
+                      <div class="flex gap-1.5"><button id="lic-check" type="button" title="Check whether this key is genuine and what it upgrades, without activating" class="px-3 py-1.5 bg-cyan-500/20 hover:bg-cyan-400 hover:text-black text-cyan-300 border border-cyan-500/40 font-black uppercase rounded text-[8px] transition">CHECK KEY</button><button id="lic-activate" type="button" class="flex-1 py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-black uppercase rounded text-[8px] transition">ACTIVATE</button><button id="lic-deactivate" type="button" class="px-3 py-1.5 bg-white/10 hover:bg-rose-500 hover:text-black text-slate-300 font-bold uppercase rounded text-[8px] transition">DEACTIVATE</button></div>
                     </div>
                   </div>
                   <div id="lic-msg" class="text-[7.5px] min-h-[10px]" role="status" aria-live="polite"></div>
+                  <div id="lic-check-report" class="hidden text-[7.5px] font-mono rounded border p-2 space-y-0.5" role="status" aria-live="polite"></div>
                 </div>
 
                 <!-- CONSUMER EDITION / ADMIN MODE -->
@@ -18816,6 +18817,45 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 let tries = 0;
                 const t = setInterval(async () => { if (++tries > 40) clearInterval(t); else if (bridge() && await this.syncBridge()) { clearInterval(t); ota.autoCheck(); plugins.scan(); } }, 1000);
             },
+            // CHECK KEY: like checking a Windows product key before an edition upgrade. Genuine? This PC? Expired? Upgrade, same or downgrade,
+            // and what it unlocks. Checked in the page (signature with the trusted vendor key) and, in PC mode, by the local server too. Stores nothing.
+            async checkKey(quiet) {
+                const input = $('lic-key-input'), box = $('lic-check-report');
+                const key = (input && input.value || '').trim().replace(/\s+/g, '');
+                if (!box) return null;
+                if (!key) { box.classList.add('hidden'); if (!quiet) notify('Paste a license key to check it', 'key'); return null; }
+                if (bridge() && !this.machineId) await this.syncBridge();
+                let r = null;
+                if (bridge() && this.machineId) { try { const x = await post('/api/license/check', 'license', { key }); if (x.json && x.json.ok) r = x.json; } catch (_) { /* page check below */ } }
+                if (!r) {
+                    const v = await verifyKey(key, this.machineId), cur = (this.plan && this.plan.id) || 'basic';
+                    const rank = { basic: 0, pro: 1, studio: 2, master: 3 };
+                    if (!v.ok) r = { valid: false, genuine: !/bad-signature|malformed/.test(v.reason), reason: v.reason, message: v.message, current: cur };
+                    else { const a = PLANS[cur] || PLANS.basic, b = PLANS[v.payload.plan], d = rank[b.id] - rank[a.id];
+                        r = { valid: true, genuine: true, current: a.id, plan: b.id, change: d > 0 ? 'upgrade' : d < 0 ? 'downgrade' : 'same', channels: [a.channels, b.channels], adds: b.features.filter(f => !a.features.includes(f)),
+                            boundToThisPc: !!v.payload.mid, expires: v.payload.expires || null, daysLeft: v.payload.expires ? Math.max(0, Math.floor((v.payload.expires - Date.now()) / 86400000)) : null, canActivate: d >= 0 }; }
+                }
+                const P = id => (PLANS[id] || PLANS.basic).name, esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+                const row = (ok, t) => '<div class="' + (ok === true ? 'text-emerald-400' : ok === false ? 'text-rose-400' : 'text-amber-300') + '">' + (ok === true ? '✔ ' : ok === false ? '✘ ' : '• ') + esc(t) + '</div>';
+                let h = '';
+                if (!r.valid) {
+                    h += row(r.genuine ? null : false, r.genuine ? 'Genuine AmF X1 key' : 'Not a genuine AmF X1 key');
+                    h += row(false, r.message || 'This key cannot be used here');
+                    h += row(null, 'Current plan stays ' + P(r.current) + '. Nothing was changed.');
+                } else {
+                    h += row(true, 'Genuine AmF X1 key (signed by the trusted vendor key)');
+                    h += row(true, r.boundToThisPc ? 'Issued for THIS computer' : 'Not tied to one computer');
+                    h += row(true, r.expires ? 'Valid until ' + new Date(r.expires).toISOString().slice(0, 10) + ' (' + r.daysLeft + ' days left)' : 'Does not expire');
+                    if (r.change === 'upgrade') h += row(true, 'UPGRADE: ' + P(r.current) + ' → ' + P(r.plan) + ' · channels ' + r.channels[0] + ' → ' + r.channels[1] + (r.adds && r.adds.length ? ' · unlocks ' + r.adds.join(', ').toUpperCase() : ''));
+                    else if (r.change === 'same') h += row(null, 'Same plan as now (' + P(r.plan) + '): activating renews it');
+                    else h += row(false, 'DOWNGRADE: ' + P(r.current) + ' → ' + P(r.plan) + ' (activating would lower your plan)');
+                    h += row(r.canActivate ? true : null, r.canActivate ? 'Ready: press ACTIVATE to apply it' : 'Keep your current key; activate this one only if you mean to downgrade');
+                }
+                box.innerHTML = h;
+                box.className = 'text-[7.5px] font-mono rounded border p-2 space-y-0.5 ' + (r.valid ? (r.change === 'downgrade' ? 'border-amber-500/40 bg-amber-500/5' : 'border-emerald-500/40 bg-emerald-500/5') : 'border-rose-500/40 bg-rose-500/5');
+                if (!quiet) notify(r.valid ? (r.change === 'upgrade' ? 'Key valid: upgrades to ' + P(r.plan) : r.change === 'same' ? 'Key valid: same plan (' + P(r.plan) + ')' : 'Key valid but would downgrade to ' + P(r.plan)) : 'Key not valid: ' + (r.message || ''), r.valid ? 'circle-check' : 'triangle-exclamation');
+                return r;
+            },
             async activate() {
                 const input = $('lic-key-input'), msg = $('lic-msg'), say = (t, ok) => { if (msg) { msg.textContent = t; msg.className = 'text-[7.5px] min-h-[10px] ' + (ok ? 'text-emerald-400' : 'text-rose-400'); } };
                 const key = (input && input.value || '').trim().replace(/\s+/g, '');
@@ -19375,6 +19415,8 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
         function wire() {
             const on = (id, fn) => { const e = $(id); if (e && !e.dataset.wired) { e.dataset.wired = '1'; e.addEventListener('click', fn); } };
             on('lic-activate', () => L.activate());
+            on('lic-check', () => L.checkKey(false));
+            { const ki = $('lic-key-input'); let kt = 0; if (ki) ki.addEventListener('input', () => { clearTimeout(kt); kt = setTimeout(() => L.checkKey(true), 400); }); }   // checks as the key is pasted
             on('lic-deactivate', () => L.deactivate());
             on('lic-req-file', () => L.downloadRequest()); on('lic-req-copy', () => L.copyRequest()); on('lic-req-submit', () => L.submitRequest()); on('lic-req-generator', () => L.openGenerator()); on('lic-req-website', () => L.openWebsite());
             { const w = $('lic-req-website'); if (w) w.hidden = !/^https:\/\//.test(String(WEBSITE_URL || '')); }

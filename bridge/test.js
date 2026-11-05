@@ -5353,3 +5353,38 @@ test('public key API behind nginx: X-Real-IP is trusted only with trustProxy ove
   assert.deepStrictEqual(seen.map(x => x.replace('::ffff:', '')), ['127.0.0.1', '127.0.0.1', '203.0.113.7', '127.0.0.1']);
   fsx.rmSync(dir, { recursive: true, force: true });
 });
+
+test('license CHECK KEY: genuine / upgrade / same / downgrade / wrong PC / forged, nothing stored', () => {
+  const license = require('./license'), crypto = require('node:crypto');
+  const { privateKey, publicKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });
+  const jwk = publicKey.export({ format: 'jwk' });
+  const key = (plan, extra = {}) => license.signKey({ v: 1, plan, issued: 1000, ...extra }, privateKey);
+  const up = license.check(key('studio'), { jwk, machine: 'AAAA-BBBB', current: 'basic', now: 5000 });
+  assert.strictEqual(up.valid, true); assert.strictEqual(up.change, 'upgrade'); assert.deepStrictEqual(up.channels, [8, 32]);
+  assert.deepStrictEqual(up.adds, ['plugins', 'ota', 'studio']); assert.strictEqual(up.canActivate, true); assert.strictEqual(up.anyPc, true);
+  assert.strictEqual(license.check(key('pro'), { jwk, machine: 'X', current: 'pro', now: 5000 }).change, 'same');
+  const down = license.check(key('pro'), { jwk, machine: 'X', current: 'master', now: 5000 });
+  assert.strictEqual(down.change, 'downgrade'); assert.strictEqual(down.canActivate, false);
+  const bound = license.check(key('master', { mid: 'AAAA-BBBB', expires: 5000 + 10 * 86400000 }), { jwk, machine: 'AAAABBBB', current: 'basic', now: 5000 });
+  assert.strictEqual(bound.boundToThisPc, true); assert.strictEqual(bound.daysLeft, 10);
+  const other = license.check(key('master', { mid: 'CCCC-DDDD' }), { jwk, machine: 'AAAA-BBBB', current: 'basic', now: 5000 });
+  assert.strictEqual(other.valid, false); assert.strictEqual(other.reason, 'wrong-machine'); assert.strictEqual(other.genuine, true);
+  const exp = license.check(key('pro', { expires: 2000 }), { jwk, machine: 'X', current: 'basic', now: 5000 });
+  assert.strictEqual(exp.valid, false); assert.strictEqual(exp.reason, 'expired');
+  const forged = key('master').split('.'); forged[1] = license.b64u(JSON.stringify({ v: 1, plan: 'master', issued: 1 }));
+  const f = license.check(forged.join('.'), { jwk, machine: 'X', current: 'basic', now: 5000 });
+  assert.strictEqual(f.valid, false); assert.strictEqual(f.genuine, false);
+  assert.strictEqual(license.check('hello', { jwk, machine: 'X', current: 'basic' }).genuine, false);
+});
+
+test('POST /api/license/check answers without storing a key', async () => {
+  const pathx = require('node:path'), fsx = require('node:fs'), osx = require('node:os'), license = require('./license');
+  process.env.BRIDGE_LICENSE_FILE = pathx.join(fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'lck-')), 'license.json');
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  try {
+    const res = await fetch(`http://127.0.0.1:${server.address().port}/api/license/check`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Mixer-Action': 'license' }, body: '{"key":"AMIX1.bad.bad"}' });
+    const r = await res.json();
+    assert.strictEqual(res.status, 200); assert.strictEqual(r.valid, false); assert.strictEqual(r.genuine, false); assert.strictEqual(r.current, 'basic');
+    assert.strictEqual(license.readStored(), null);
+  } finally { server.closeAllConnections(); await new Promise(r => server.close(r)); delete process.env.BRIDGE_LICENSE_FILE; }
+});
