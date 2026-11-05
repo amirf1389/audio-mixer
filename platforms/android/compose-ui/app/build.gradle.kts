@@ -12,8 +12,8 @@ android {
         applicationId = "com.amfb.amfx1"
         minSdk = 24
         targetSdk = 35
-        versionCode = 12201        // 1.22.0.1 (see AppConfig.kt for the name shown)
-        versionName = "1.22.0.1"
+        versionCode = 12210        // 1.22.1.0 Beta (see AppConfig.kt for the name shown)
+        versionName = "1.22.1.0-beta"
     }
 
     buildFeatures { compose = true }

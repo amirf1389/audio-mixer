@@ -262,7 +262,7 @@ async function buildMsi({ out = path.join(ROOT, 'dist'), arch = 'x64', scope = '
   const wxsPath = path.join(work, 'audio-mixer.wxs');
   const build = stageHash(st.stage);
   fs.writeFileSync(wxsPath, wxs({ stage: st.stage, version, arch, scope, build }));
-  const msi = path.join(path.resolve(out), `AudioMixer-${st.version}-${arch}${scope === 'user' ? '-user' : ''}.msi`);
+  const msi = path.join(path.resolve(out), `AudioMixer-${require('./release-label').fileVersion(st.version)}-${arch}${scope === 'user' ? '-user' : ''}.msi`);
   const result = { ...st, wxs: wxsPath, msi: null, scope, productCode: productCode(arch, scope, version, build), build };
   if (!runWixl) return result;
   const r = spawnSync('wixl', ['-v', '--arch', arch, '--ext', 'ui', '-o', msi, wxsPath], { encoding: 'utf8', cwd: work });
