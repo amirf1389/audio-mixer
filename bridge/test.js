@@ -5255,8 +5255,8 @@ test('world language & accessibility engine: 13 languages (RTL for fa / ar / ur)
   const i = html.indexOf('    // WORLD LANGUAGE & ACCESSIBILITY ENGINE'), j = html.indexOf('        const CODES = Object.keys(LANGS);', i);
   const LANGS = new Function(html.slice(html.indexOf('const LANGS', i), html.indexOf('// [en, fa', i)) + 'return LANGS;')();   // eslint-disable-line no-new-func
   const T = new Function(html.slice(html.indexOf('const T = [', i), j) + 'return T;')();   // eslint-disable-line no-new-func
-  assert.strictEqual(Object.keys(LANGS).length, 13); for (const c of ['fa', 'ar', 'ur']) assert.strictEqual(LANGS[c].dir, 'rtl');
-  for (const r of T) { assert.strictEqual(r.length, 13, r[0]); assert.ok(r.every(x => typeof x === 'string' && x.length), r[0]); }
+  assert.strictEqual(Object.keys(LANGS).length, 14); assert.strictEqual(LANGS.ko.name, '한국어'); for (const c of ['fa', 'ar', 'ur']) assert.strictEqual(LANGS[c].dir, 'rtl');
+  for (const r of T) { assert.strictEqual(r.length, 14, r[0]); assert.ok(r.every(x => typeof x === 'string' && x.length), r[0]); }
   const menu = [...html.matchAll(/\{ group: '([A-Z ]*)', id: '[a-z]*', text: '([^']*)'/g)];
   for (const m of menu) for (const k of [m[1], m[2]]) assert.ok(T.some(r => r[0] === k), 'menu text translated: ' + k);
   for (const s of ["rec = { en: cur, shown: cur }", 'id="am-lang-top"', 'id="am-a11y-panel"', "r.setAttribute('aria-live', 'polite')", 'body.am-motion *', 'body.am-focus :focus-visible']) assert.ok(html.includes(s), s);
