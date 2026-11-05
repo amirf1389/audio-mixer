@@ -42,7 +42,8 @@
     "install:app": "node npm-installer/bin/audio-mixer-install.js",
     "engine": "node scripts/build-engine.js",
     "license:generator": "node scripts/license-generator.js --open",
-    "build:keygen": "node scripts/build-keygen.js"
+    "build:keygen": "node scripts/build-keygen.js",
+    "perf": "node scripts/perf-controller.js"
   },
   "engines": {
     "node": ">=18"

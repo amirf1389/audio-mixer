@@ -117,3 +117,6 @@ platforms/*/releases/
 # Vendor signing keys for the license server (deploy/license): never committed
 secrets/
 *vendor-private*.pem
+
+# V8 heap profiles and snapshots written by scripts/perf-controller.js
+profiles/
