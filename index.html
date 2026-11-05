@@ -5695,6 +5695,9 @@ const cArea = document.getElementById('content-area');
           <span class="text-fuchsia-400 font-bold text-[7.5px]">PLUGINS (MASTER)</span>
           <label class="block text-[7px] text-slate-400"><input id="aid-ex-on" type="checkbox" onchange="window.aiDsp.set('exciter.on', this.checked)"> EXCITER (adds high harmonics) <span id="aid-ex-amt-v" class="text-white"></span><input id="aid-ex-amt" type="range" min="0" max="100" step="1" class="w-full accent-fuchsia-400" oninput="window.aiDsp.set('exciter.amt', this.value)"></label>
           <label class="block text-[7px] text-slate-400"><input id="aid-warm-on" type="checkbox" onchange="window.aiDsp.set('warmth.on', this.checked)"> WARMTH (tube saturation) <span id="aid-warm-amt-v" class="text-white"></span><input id="aid-warm-amt" type="range" min="0" max="100" step="1" class="w-full accent-fuchsia-400" oninput="window.aiDsp.set('warmth.amt', this.value)"></label>
+          <label class="block text-[7px] text-slate-400"><input id="aid-vocal-on" type="checkbox" onchange="window.aiDsp.set('vocal.on', this.checked)"> VOCAL ENHANCE (clean lows, presence, air) <span id="aid-vocal-amt-v" class="text-white"></span><input id="aid-vocal-amt" type="range" min="0" max="100" step="1" class="w-full accent-fuchsia-400" oninput="window.aiDsp.set('vocal.amt', this.value)"></label>
+          <div class="block text-[7px] text-slate-400"><label><input id="aid-harm-on" type="checkbox" onchange="window.aiDsp.set('harmony.on', this.checked)"> HARMONY (two extra voices) <span id="aid-harm-mix-v" class="text-white"></span></label><input id="aid-harm-mix" type="range" min="0" max="100" step="1" class="w-full accent-fuchsia-400" oninput="window.aiDsp.set('harmony.mix', this.value)">
+            <div class="flex gap-1 mt-0.5"><select id="aid-harm-a" class="flex-1 bg-black border border-white/10 rounded text-amber-400" onchange="window.aiDsp.set('harmony.a', this.value)"><option value="3">+3 minor 3rd</option><option value="4">+4 major 3rd</option><option value="5">+5 4th</option><option value="7">+7 5th</option><option value="12">+12 octave</option><option value="-5">-5 low 5th</option><option value="-12">-12 octave down</option></select><select id="aid-harm-b" class="flex-1 bg-black border border-white/10 rounded text-amber-400" onchange="window.aiDsp.set('harmony.b', this.value)"><option value="3">+3 minor 3rd</option><option value="4">+4 major 3rd</option><option value="5">+5 4th</option><option value="7">+7 5th</option><option value="12">+12 octave</option><option value="-5">-5 low 5th</option><option value="-12">-12 octave down</option></select></div></div>
           <label class="block text-[7px] text-slate-400"><input id="aid-tilt-on" type="checkbox" onchange="window.aiDsp.set('tilt.on', this.checked)"> TILT EQ (dark &larr; &rarr; bright) <span id="aid-tilt-db-v" class="text-white"></span><input id="aid-tilt-db" type="range" min="-6" max="6" step="0.5" class="w-full accent-fuchsia-400" oninput="window.aiDsp.set('tilt.db', this.value)"></label>
         </div>
         <div class="bg-black/60 p-2 rounded-lg border border-white/10 space-y-1">
@@ -21999,6 +22002,15 @@ t.Omnitone=e(11)},function(A,t,e){"use strict";const i=e(1),n=e(4),s=e(12),o=e(6
     // the speakers get (SAFE -3, NORMAL -1, MAX -0.3 dBFS).
     (function () {
         'use strict';
+        // A delay-line pitch shifter (two crossfaded modulated delays, the classic "Jungle" shifter): no AudioWorklet needed, works in every engine.
+        // ratio = 2^(semitones/12); the delay sweeps at (1 - ratio) seconds per second over a 60 ms window, the second line half a window behind.
+        const WINDOW = 0.06;
+        function ramps(ctx) {
+            const n = ctx.sampleRate, up = ctx.createBuffer(1, n, n), down = ctx.createBuffer(1, n, n), fade = ctx.createBuffer(1, n, n);
+            const u = up.getChannelData(0), d = down.getChannelData(0), f = fade.getChannelData(0);
+            for (let i = 0; i < n; i++) { const x = i / n; u[i] = x; d[i] = 1 - x; f[i] = Math.sin(Math.PI * x) ** 2; }
+            return { up, down, fade };
+        }
         const POWER = { eco: { hz: 10, label: 'ECO' }, balanced: { hz: 30, label: 'BALANCED' }, performance: { hz: 60, label: 'PERFORMANCE' } };
         const OUTPUT = { safe: { ceil: -3, label: 'SAFE' }, normal: { ceil: -1, label: 'NORMAL' }, max: { ceil: -0.3, label: 'MAX' } };
         const N_NOTCH = 12;
@@ -22010,6 +22022,8 @@ t.Omnitone=e(11)},function(A,t,e){"use strict";const i=e(1),n=e(4),s=e(12),o=e(6
                 deess: { on: true, freq: 6800, thr: -30, range: 8 },
                 afs: { on: true, sens: 14, depth: 12, hold: 0.5 },   // a peak must stand 0.5 s: shorter musical notes pass
                 exciter: { on: false, amt: 25 }, warmth: { on: false, amt: 20 }, tilt: { on: false, db: 0 },
+                vocal: { on: false, amt: 50 },                              // VOCAL ENHANCE: rumble cut, de-mud, presence, air (amount scales all four)
+                harmony: { on: false, mix: 30, a: 4, b: 7 },                // HARMONY: two pitch-shifted voices (semitones) under the original
                 spk: { watts: 100, ohms: 8 },
             }, load()),
             notches: Array.from({ length: N_NOTCH }, () => ({ hz: 0, db: 0, at: 0 })),
@@ -22050,6 +22064,30 @@ t.Omnitone=e(11)},function(A,t,e){"use strict";const i=e(1),n=e(4),s=e(12),o=e(6
             speakerWatts(rms, watts) { return watts * Math.min(4, (rms * rms) / 0.5); },
 
             // ---- graph --------------------------------------------------------------------------------------------------------------------
+            // one harmony voice: in -> [delay A * fade A] + [delay B * fade B] -> level -> out; retune(semitones) restarts its modulators
+            shifter(ctx) {
+                const v = { in: ctx.createGain(), out: ctx.createGain(), lines: [], srcs: [], semis: null };
+                v.out.gain.value = 0;
+                for (let k = 0; k < 2; k++) {
+                    const dl = ctx.createDelay(1), amp = ctx.createGain(), depth = ctx.createGain();
+                    amp.gain.value = 0; depth.gain.value = WINDOW; dl.delayTime.value = 0;
+                    v.in.connect(dl); dl.connect(amp); amp.connect(v.out); depth.connect(dl.delayTime);
+                    v.lines.push({ dl, amp, depth });
+                }
+                v.retune = semis => {
+                    if (semis === v.semis) return; v.semis = semis;
+                    v.srcs.forEach(x => { try { x.stop(); x.disconnect(); } catch (e) { /* gone */ } }); v.srcs = [];
+                    const r = Math.pow(2, semis / 12), rate = Math.abs(1 - r) / WINDOW; if (!rate) return;
+                    const R = this.ramps || (this.ramps = ramps(ctx)), t0 = ctx.currentTime + 0.02;
+                    v.lines.forEach((ln, k) => {
+                        const mod = ctx.createBufferSource(), fd = ctx.createBufferSource();
+                        mod.buffer = r > 1 ? R.down : R.up; fd.buffer = R.fade; mod.loop = fd.loop = true; mod.playbackRate.value = fd.playbackRate.value = rate;
+                        mod.connect(ln.depth); fd.connect(ln.amp.gain);
+                        mod.start(t0, k * 0.5); fd.start(t0, k * 0.5); v.srcs.push(mod, fd);
+                    });
+                };
+                return v;
+            },
             build(ctx, n) {
                 const g = { in: ctx.createGain(), out: ctx.createGain() };
                 g.deess = ctx.createBiquadFilter(); g.deess.type = 'peaking'; g.deess.Q.value = 1.4; g.deess.gain.value = 0;
@@ -22065,6 +22103,14 @@ t.Omnitone=e(11)},function(A,t,e){"use strict";const i=e(1),n=e(4),s=e(12),o=e(6
                 g.split = ctx.createChannelSplitter(2); g.anL = ctx.createAnalyser(); g.anR = ctx.createAnalyser(); g.anL.fftSize = g.anR.fftSize = 2048;
                 let p = g.in; g.in.connect(g.an);
                 [g.deess, ...g.notch].forEach(f => { p.connect(f); p = f; });
+                // VOCAL ENHANCE (series) then HARMONY (parallel voices into a sum with the dry signal)
+                const bq = (type, f, q) => { const x = ctx.createBiquadFilter(); x.type = type; x.frequency.value = f; if (q) x.Q.value = q; return x; };
+                g.vHp = bq('highpass', 20, 0.7); g.vMud = bq('peaking', 300, 1); g.vPres = bq('peaking', 3500, 0.9); g.vAir = bq('highshelf', 11000);
+                [g.vHp, g.vMud, g.vPres, g.vAir].forEach(f => { p.connect(f); p = f; });
+                g.hSum = ctx.createGain(); p.connect(g.hSum);
+                g.voices = [this.shifter(ctx), this.shifter(ctx)];
+                g.voices.forEach(v => { p.connect(v.in); v.out.connect(g.hSum); });
+                p = g.hSum;
                 p.connect(g.warm); p.connect(g.exHp); g.exHp.connect(g.exWs); g.exWs.connect(g.exAmt); g.exAmt.connect(g.warm);
                 g.warm.connect(g.tLow); g.tLow.connect(g.tHigh); g.tHigh.connect(g.ceil); g.ceil.connect(g.out);
                 g.out.connect(g.split); g.split.connect(g.anL, 0); g.split.connect(g.anR, 1);
@@ -22091,6 +22137,11 @@ t.Omnitone=e(11)},function(A,t,e){"use strict";const i=e(1),n=e(4),s=e(12),o=e(6
                 if (!s.deess.on) g.deess.gain.setTargetAtTime(0, t, 0.02);
                 if (!s.afs.on) g.notch.forEach(f => f.gain.setTargetAtTime(0, t, 0.05));
                 g.exAmt.gain.setTargetAtTime(s.exciter.on ? s.exciter.amt / 100 * 0.6 : 0, t, 0.05);
+                const va = s.vocal.on ? s.vocal.amt / 100 : 0;
+                g.vHp.frequency.setTargetAtTime(s.vocal.on ? 70 + 50 * va : 20, t, 0.05);
+                g.vMud.gain.setTargetAtTime(-4 * va, t, 0.05); g.vPres.gain.setTargetAtTime(5 * va, t, 0.05); g.vAir.gain.setTargetAtTime(4 * va, t, 0.05);
+                const hm = s.harmony.on ? s.harmony.mix / 100 : 0;
+                [s.harmony.a, s.harmony.b].forEach((st, k) => { const v = g.voices[k]; if (hm) v.retune(Number(st) || 0); v.out.gain.setTargetAtTime(hm * 0.7, t, 0.05); });
                 const k = s.warmth.on ? 1 + s.warmth.amt / 12 : 0, c = new Float32Array(1024);
                 for (let i = 0; i < 1024; i++) { const x = i / 511.5 - 1; c[i] = k ? Math.tanh(k * x) / Math.tanh(k) : x; }
                 g.warm.curve = c;
@@ -22193,6 +22244,8 @@ t.Omnitone=e(11)},function(A,t,e){"use strict";const i=e(1),n=e(4),s=e(12),o=e(6
                 const set = (id, v) => { const e = $(id); if (e && document.activeElement !== e) { if (e.type === 'checkbox') e.checked = !!v; else e.value = v; } };
                 set('aid-on', s.on); set('aid-auto', s.auto); set('aid-power', s.power); set('aid-outpower', s.outPower); set('aid-deess-on', s.deess.on); set('aid-deess-freq', s.deess.freq); set('aid-deess-thr', s.deess.thr); set('aid-deess-range', s.deess.range);
                 set('aid-afs-on', s.afs.on); set('aid-afs-sens', s.afs.sens); set('aid-afs-depth', s.afs.depth);
+                set('aid-vocal-on', s.vocal.on); set('aid-vocal-amt', s.vocal.amt); set('aid-harm-on', s.harmony.on); set('aid-harm-mix', s.harmony.mix); set('aid-harm-a', s.harmony.a); set('aid-harm-b', s.harmony.b);
+                txt('aid-vocal-amt-v', s.vocal.amt + '%'); txt('aid-harm-mix-v', s.harmony.mix + '%');
                 set('aid-ex-on', s.exciter.on); set('aid-ex-amt', s.exciter.amt); set('aid-warm-on', s.warmth.on); set('aid-warm-amt', s.warmth.amt); set('aid-tilt-on', s.tilt.on); set('aid-tilt-db', s.tilt.db);
                 set('aid-spk-watts', s.spk.watts);
                 txt('aid-deess-freq-v', (s.deess.freq / 1000).toFixed(1) + ' kHz'); txt('aid-deess-thr-v', s.deess.thr + ' dB'); txt('aid-deess-range-v', s.deess.range + ' dB');
