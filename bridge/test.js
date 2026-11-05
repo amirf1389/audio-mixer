@@ -1002,6 +1002,9 @@ test('msi: stable GUIDs, per-machine Program Files paths for x64 and x86, per-us
   assert.match(m.guid('x'), /^[0-9A-F]{8}-[0-9A-F]{4}-5[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/);
   assert.strictEqual(m.productCode('x64', 'machine', '1.4.0'), m.productCode('x64', 'machine', '1.4.0'));
   assert.notStrictEqual(m.productCode('x64', 'machine', '1.4.0'), m.productCode('x86', 'machine', '1.4.0'));
+  // a rebuild of the same version is a different product that replaces the installed one (it once kept old files, and an old license key, in place)
+  assert.notStrictEqual(m.productCode('x64', 'machine', '1.22.0', 'aaaa'), m.productCode('x64', 'machine', '1.22.0', 'bbbb'));
+  assert.ok(m.wxs({ stage: fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'wxs-')), version: '1.22.0', build: 'aaaa' }).includes('AllowSameVersionUpgrades="yes"'));
   assert.strictEqual(new Set(Object.values(m.UPGRADE_CODES)).size, 4);
   const stage = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'msi-'));
   fsx.mkdirSync(pathx.join(stage, 'bridge')); fsx.writeFileSync(pathx.join(stage, 'bridge', 'a & b.js'), 'x'); fsx.writeFileSync(pathx.join(stage, 'LICENSE'), 'MIT');
