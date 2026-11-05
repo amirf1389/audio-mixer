@@ -17801,9 +17801,12 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                     if (cur && !cur.auto) return;   // chosen by the user (or saved by an older version): left alone
                     if (this.cfg.asioOnly && !i.asio) return;
                     if (i.systemDefault) return;   // Windows default mapper (Primary Sound driver): duplicates the real device and often fails
+                    if (i.wrapper && i.preferNative) { if (cur && cur.auto) { delete this.cfg.enabled[i.key]; changed = true; } return; }   // ASIO4ALL wraps devices that have their own driver: never opened automatically
                     const m = this.ioMode(i);
                     // Bluetooth: the hands-free microphone is only opened on request (it drops the headset to phone quality)
-                    const e = { read: m.read && !i.bluetooth, write: m.write, auto: true };
+                    // the Windows twin of an interface whose own ASIO driver covers that direction: not opened automatically (the same mic twice)
+                    const tw = i.twinOf && this.interfaces.some(x => x.key === i.twinOf.key) ? i.twinOf : null;
+                    const e = { read: m.read && !i.bluetooth && !(tw && tw.read), write: m.write && !(tw && tw.write), auto: true };
                     // an automatic choice follows the device: a driver that only listed its channels later (ASIO probe, DAC waking up) is detected again
                     if (cur && cur.read === e.read && cur.write === e.write) return;
                     this.cfg.enabled[i.key] = e; changed = true;
@@ -17831,6 +17834,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 this.interfaces.forEach(i => {
                     if (asioOnly && !i.asio) return;
                     if (i.systemDefault) return;
+                    if (i.wrapper && i.preferNative) return;   // ASIO4ALL: only when no device has its own ASIO driver
                     this.cfg.enabled[i.key] = { read: (i.inputs > 0 && !i.bluetooth) || !!i.loopback, write: i.outputs > 0 && !i.loopback };   // Bluetooth: the hands-free microphone is only opened on request (it drops the headset to phone quality)
                 });
                 this.persist(); this.applyEnabled(); this.render();
@@ -17938,10 +17942,15 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                             }
                             let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
                             if (m.type === 'levels') { if (window.asioMeters) window.asioMeters.push(m); return; }
+                            // the bridge's guards (bridge/input.js): same-hardware fallback, mono input copied to both sides, no-signal warning
+                            if (m.type === 'fallback' && m.fallback) { self.fbNote = self.fbNote || {}; self.fbNote[i.key] = m.fallback; if (done) self.setStatus(i.key, 'READING via ' + m.fallback.to + ' (same hardware: ' + m.fallback.from + ' was busy)', false); window.notify(i.name + ': ASIO busy, now reading the same device through Windows (' + m.fallback.to + ')', 'shuffle'); return; }
+                            if (m.type === 'started' && done) { ch = m.channels; return; }
+                            if (m.type === 'mapped') { const st = self.status[i.key]; self.setStatus(i.key, ((st && st.text) || 'READING') + ' · MONO IN ' + m.source + ' -> BOTH SIDES', false); return; }
+                            if (m.type === 'signal') { if (m.state === 'none' || m.state === 'asio-silent') self.warn(i.key, i.name + ': no signal for ' + m.seconds + ' s' + (m.exactZero || m.state === 'asio-silent' ? ' (digital silence: the ASIO driver may be held by another program; close it or use the Windows twin)' : ' (check the gain knob, the cable and the input channel)')); return; }
                             if (m.type === 'started' && !done) {
                                 done = true; ch = m.channels;
                                 node = new AudioWorkletNode(ctx, 'ls-in', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
-                                const cap = self.makeCap(i, node, (/asio/i.test(m.hostApi) ? 'ASIO' : m.hostApi) + self.lockNote(m) + (want > 2 ? ' CH ' + (pair * 2 + 1) + '-' + (pair * 2 + 2) : ''), { ws, bridge: true });
+                                const cap = self.makeCap(i, node, (/asio/i.test(m.hostApi) ? 'ASIO' : m.hostApi) + self.lockNote(m) + (m.fallbackFrom ? ' (same hardware: ' + m.fallbackFrom + ' was busy) / ' + m.device : '') + (m.simulated ? ' [SIM]' : '') + (want > 2 ? ' CH ' + (pair * 2 + 1) + '-' + (pair * 2 + 2) : ''), { ws, bridge: true });
                                 cap.stop = () => { try { ws.send(JSON.stringify({ type: 'stop' })); ws.close(); node.disconnect(); cap.analyser.disconnect(); } catch (e) { /* gone */ } };
                                 resolve(cap);
                             } else if (m.type === 'error') {
@@ -20296,9 +20305,50 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             <p class="text-[7.5px] text-slate-400">EVERY AUDIO DEVICE OF THIS COMPUTER AS IT IS NOW: ENABLED / READING / WRITING, LEVEL, DRIVER</p></div></div>
             <div class="flex items-center gap-2"><span id="rt-drv-pill" class="px-2 py-0.5 rounded text-[7.5px] font-bold border bg-emerald-500/15 text-emerald-400 border-emerald-500/40">LIVE</span>
             <button id="rt-drv-scan" class="px-2.5 py-1 rounded bg-amber-500/20 text-amber-400 border border-amber-500/40 text-[7.5px] font-black uppercase hover:bg-amber-500 hover:text-black">SCAN NOW</button>
-            <button id="rt-drv-all" class="px-2.5 py-1 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[7.5px] font-black uppercase hover:bg-emerald-500 hover:text-black">ENABLE ALL</button></div></div>
-            <div id="rt-drv-rows" class="space-y-1"></div>`;
+            <button id="rt-drv-all" class="px-2.5 py-1 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[7.5px] font-black uppercase hover:bg-emerald-500 hover:text-black">ENABLE ALL</button>
+            <button id="rt-drv-diag" class="px-2.5 py-1 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 text-[7.5px] font-black uppercase hover:bg-cyan-400 hover:text-black" aria-expanded="false" aria-controls="rt-diag">DIAGNOSTICS</button>
+            <button id="rt-drv-sim" class="px-2.5 py-1 rounded bg-white/5 text-slate-400 border border-white/10 text-[7.5px] font-black uppercase" aria-pressed="false" title="Test devices without hardware: a Behringer UM2 model and devices derived from it">SIMULATED DEVICES: OFF</button></div></div>
+            <div id="rt-drv-rows" class="space-y-1"></div>
+            <div id="rt-diag" class="hidden space-y-1.5 pt-2 border-t border-white/10" role="region" aria-label="Audio diagnostics">
+              <div class="flex flex-wrap items-center gap-1.5 text-[7.5px]">
+                <span class="text-cyan-300 font-black">AUDIO DIAGNOSTICS</span>
+                <select id="rt-diag-filter" class="bg-black border border-white/10 rounded px-1 py-0.5 text-slate-300" aria-label="Filter"><option value="all">ALL</option><option value="errors">ERRORS ONLY</option><option value="asio">ASIO</option><option value="wasapi">WASAPI</option><option value="signal">SIGNAL</option><option value="fallback">FALLBACK</option><option value="scan">SCAN</option></select>
+                <button id="rt-diag-copy" class="px-2 py-0.5 rounded bg-white/10 text-slate-200 font-bold">COPY REPORT</button>
+                <button id="rt-diag-save" class="px-2 py-0.5 rounded bg-white/10 text-slate-200 font-bold">SAVE LOG</button>
+                <span id="rt-diag-file" class="text-slate-500 truncate"></span>
+              </div>
+              <div id="rt-diag-list" class="max-h-64 overflow-y-auto space-y-1 text-[7.5px]" aria-live="polite"></div>
+            </div>`;
         host.insertBefore(d, host.firstChild);
+        // DIAGNOSTICS (bridge/diagnostics.js): every driver step in plain language, with what it means and what to do; refreshed while open
+        const dg = { open: false, timer: 0 };
+        const bridgeUrl = () => { const l = LS(); return l && l.bridgeUrl; };
+        const escD = t => (window.escapeHtml ? window.escapeHtml(String(t)) : String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])));
+        const loadDiag = async () => {
+            const b = bridgeUrl(), box = $('rt-diag-list'); if (!box) return;
+            if (!b) { box.innerHTML = '<div class="text-slate-500">Start PC mode (the local server) to see the diagnostics.</div>'; return; }
+            try {
+                const j = await (await fetch(b + '/api/diagnostics?filter=' + encodeURIComponent($('rt-diag-filter').value), { cache: 'no-store' })).json();
+                $('rt-diag-file').textContent = j.logFile ? 'saved in ' + j.logFile : '';
+                const simB = $('rt-drv-sim'); if (simB && j.sim) { simB.textContent = 'SIMULATED DEVICES: ' + (j.sim.enabled ? 'ON' : 'OFF'); simB.setAttribute('aria-pressed', j.sim.enabled ? 'true' : 'false'); simB.className = 'px-2.5 py-1 rounded text-[7.5px] font-black uppercase border ' + (j.sim.enabled ? 'bg-fuchsia-500 text-black border-fuchsia-500' : 'bg-white/5 text-slate-400 border-white/10'); }
+                const rows = (j.entries || []).slice().reverse();
+                box.innerHTML = rows.length ? rows.map(e => `<div class="rounded px-2 py-1 border ${e.level === 'error' ? 'border-rose-500/40 bg-rose-500/10' : e.level === 'warn' ? 'border-amber-500/40 bg-amber-500/10' : 'border-white/5 bg-black/30'}"><div><span class="text-slate-500">${escD(e.at.slice(11, 19))}</span> <span class="${e.level === 'error' ? 'text-rose-300' : e.level === 'warn' ? 'text-amber-300' : 'text-slate-400'} font-bold">${escD(e.level.toUpperCase())}</span> <span class="text-cyan-300">[${escD(e.area)}]</span> <span class="text-slate-200">${escD(e.message)}</span></div>${e.advice ? `<div class="text-slate-400 pl-2">What it means: ${escD(e.advice.means)}</div><div class="text-emerald-300 pl-2">What to do: ${escD(e.advice.todo)}</div>` : ''}</div>`).join('') : '<div class="text-slate-500">Nothing logged yet: press SCAN NOW or enable a device.</div>';
+            } catch (e) { box.innerHTML = '<div class="text-rose-300">Could not read the diagnostics: ' + escD(e.message) + '</div>'; }
+        };
+        $('rt-drv-diag').onclick = () => { dg.open = !dg.open; $('rt-diag').classList.toggle('hidden', !dg.open); $('rt-drv-diag').setAttribute('aria-expanded', dg.open ? 'true' : 'false'); clearInterval(dg.timer); if (dg.open) { loadDiag(); dg.timer = setInterval(() => { if (visible('asio')) loadDiag(); }, 2000); } };
+        $('rt-diag-filter').onchange = loadDiag;
+        const getReport = async () => { const b = bridgeUrl(); if (!b) throw new Error('PC mode is off'); return (await fetch(b + '/api/diagnostics/report', { cache: 'no-store' })).text(); };
+        $('rt-diag-copy').onclick = async () => { try { const t = await getReport(); await navigator.clipboard.writeText(t); window.notify('Diagnostics report copied: paste it into your bug report', 'copy'); } catch (e) { window.notify('Could not copy the report: ' + e.message, 'triangle-exclamation'); } };
+        $('rt-diag-save').onclick = async () => { try { const t = await getReport(), a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([t], { type: 'text/plain' })); a.download = 'amfx1-audio-diagnostics.txt'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); } catch (e) { window.notify('Could not save the log: ' + e.message, 'triangle-exclamation'); } };
+        $('rt-drv-sim').onclick = async () => {
+            const b = bridgeUrl(); if (!b) return window.notify('Start PC mode (the local server) first', 'triangle-exclamation');
+            try {
+                const cur = await (await fetch(b + '/api/sim', { cache: 'no-store' })).json(), on = !cur.enabled;
+                const r = await (await fetch(b + '/api/sim', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Mixer-Action': 'sim' }, body: JSON.stringify({ enabled: on, profiles: ['um2', 'realtek', 'focusrite', 'usbdac', 'asio4all'] }) })).json();
+                window.notify(r.enabled ? 'Simulated devices ON: a Behringer UM2 model plus Realtek, Focusrite, USB DAC and ASIO4ALL (no real hardware is used)' : 'Simulated devices OFF', 'flask');
+                const l = LS(); if (l) l.scan(); loadDiag();
+            } catch (e) { window.notify('Simulator: ' + e.message, 'triangle-exclamation'); }
+        };
         $('rt-drv-scan').onclick = () => { const l = LS(); if (l) l.scan(); };
         $('rt-drv-all').onclick = () => { const l = LS(); if (l) l.ensureCtx().then(() => { l.enableAll(false); }); };
         return (drv.el = d);

@@ -7,7 +7,9 @@ const levels = require('./levels');
 const universal = require('./universal');
 const virtual = require('./virtual');
 const control = require('./control');
-function loadPortAudio() { return require('naudiodon2'); }
+const diag = require('./diagnostics');
+const hw = require('./hw-match');
+function loadPortAudio() { return require('./portaudio').load(); }   // naudiodon2, or the device simulator (bridge/sim)
 const SAMPLE_RATES = [44100, 48000, 88200, 96000, 176400, 192000];
 
 function pickDevice(pa, wantedId, channels) {
@@ -106,26 +108,40 @@ function createSession(conn, load = loadPortAudio, loadA = audify.loadAudify) {
     const pageRate = parseInt(opts.sampleRate, 10) || 48000, sampleRate = SAMPLE_RATES.includes(pageRate) ? pageRate : 48000;
     pre = pageRate !== sampleRate && pageRate >= 8000 && pageRate <= 384000 ? audify.createResampler(pageRate, sampleRate, channels) : null;   // a nonsense rate is just ignored (48000)
     const wanted = Number.isInteger(opts.deviceId) && opts.deviceId >= 0 ? opts.deviceId : null;
-    const dev = pickDevice(pa, wanted, channels);
-    if (!dev && wanted !== null) return conn.send(JSON.stringify({ type: 'error', message: 'device not found' }));
+    let dev = pickDevice(pa, wanted, channels);
+    const sim = pa.simulated ? '[SIM] ' : '';
+    if (!dev && wanted !== null) { diag.error('device', 'write: device ' + wanted + ' not found (unplugged, or the list changed)'); return conn.send(JSON.stringify({ type: 'error', message: 'device not found' })); }
     if (dev) {
       lock = claim(dev, { takeover: opts.takeover === true, preempt: takenOver });
-      if (!lock.ok) { const msg = lock.message; lock = null; return conn.send(JSON.stringify({ type: 'error', message: msg })); }
+      if (!lock.ok) {
+        const msg = lock.message; lock = null;
+        // one ASIO driver per program (PortAudio): the second interface writes through its own Windows endpoint instead of failing
+        const twin = /asio/i.test(dev.hostAPIName) && opts.autoFallback !== false ? hw.bestTwin(dev.name, pa.getDevices().filter(d => !/asio/i.test(d.hostAPIName) && d.maxOutputChannels > 0)) : null;
+        if (!twin) { diag.error('asio', `write: ${sim}${dev.name}: ${msg}`, { device: dev.name, hostApi: dev.hostAPIName }); return conn.send(JSON.stringify({ type: 'error', message: msg })); }
+        const fb = { from: dev.name, to: twin.name, via: 'wasapi', reason: msg };
+        diag.warn('asio', `write: ${sim}${dev.name}: ${msg}; using the same hardware through Windows: ${twin.name}`, { device: dev.name, twin: twin.name });
+        try { conn.send(JSON.stringify({ type: 'fallback', fallback: fb })); } catch (_) { /* closed */ }
+        dev = twin;
+        lock = claim(dev, { takeover: false, preempt: takenOver });
+        if (!lock.ok) { const m2 = lock.message; lock = null; diag.error('wasapi', `write: ${sim}${dev.name}: ${m2}`); return conn.send(JSON.stringify({ type: 'error', message: m2 })); }
+      }
     }
     try {
       io = new pa.AudioIO({ outOptions: {
         channelCount: channels, sampleFormat: pa.SampleFormat16Bit, sampleRate,
         deviceId: dev ? dev.id : -1, closeOnError: true,
       } });
-      io.on('error', e => { conn.send(JSON.stringify({ type: 'error', message: String(e && e.message || e) })); stop(); });
+      io.on('error', e => { const m = String(e && e.message || e); diag.error(dev && /asio/i.test(dev.hostAPIName) ? 'asio' : 'device', `write: ${sim}${dev ? dev.name : 'default'}: ${m}`); conn.send(JSON.stringify({ type: 'error', message: m })); stop(); });
       io.on('drain', () => { blocked = false; });
       io.start();
       frameBytes = 2 * channels;
       const si = { direction: 'output', engine: 'naudiodon', device: dev ? dev.name : 'default', hostApi: dev ? dev.hostAPIName : 'default', sampleRate, channels };
       unreg = streams.add(si); meter = levels.attach(conn, { ...si, sid: unreg.id });
+      diag.info(dev && /asio/i.test(dev.hostAPIName) ? 'asio' : 'stream', `write: ${sim}${si.device} (${si.hostApi}) open: ${channels} ch at ${sampleRate} Hz`);
       conn.send(JSON.stringify({ type: 'started', ...(opts.universal ? { universal: true } : {}), engine: 'naudiodon', device: dev ? dev.name : 'default', hostApi: dev ? dev.hostAPIName : 'default', sampleRate, channels }));
     } catch (e) {
       stop();
+      diag.error('stream', `write: ${sim}${dev ? dev.name : 'default'}: ${String(e && e.message || e)}`);
       conn.send(JSON.stringify({ type: 'error', message: String(e && e.message || e) }));
     }
   }

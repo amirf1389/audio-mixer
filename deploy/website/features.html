@@ -35,7 +35,8 @@
 <section class="block"><div class="wrap"><h2>Devices and drivers</h2><div class="grid">
 <article class="card"><h3>Every interface in one list</h3><p>USB interfaces, onboard sound, DACs, Bluetooth headsets and loopback devices are grouped by hardware, with read / write switches and a live level for each.</p></article>
 <article class="card"><h3>Same-hardware fallback</h3><p>When an ASIO driver is held by another program, AmF X1 reads and writes the same device through its Windows driver instead of failing.</p></article>
-<article class="card"><h3>Low-latency ASIO</h3><p>Your interface's own ASIO driver is used first, with automatic activation when the audio engine starts.</p></article>
+<article class="card"><h3>Low-latency ASIO</h3><p>Your interface's own ASIO driver is used first; ASIO4ALL-style wrappers are only used when no device has its own driver, and a device is never read twice.</p></article>
+<article class="card"><h3>Readable diagnostics</h3><p>Every driver step is logged in plain language with what it means and what to do, ready to copy into a bug report.</p></article>
 </div></div></section>
 <section class="block"><div class="wrap"><h2>Mixing and processing</h2><div class="grid">
 <article class="card"><h3>Console</h3><p>Faders, pan, mute, solo, sends, group faders, scenes and presets, with smooth paging up to 32 channels.</p></article>

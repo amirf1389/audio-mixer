@@ -7,7 +7,7 @@ const audify = require('./audify');
 const streams = require('./streams');
 const levels = require('./levels');
 const control = require('./control');
-function loadPortAudio() { return require('naudiodon2'); }
+function loadPortAudio() { return require('./portaudio').load(); }   // naudiodon2, or the device simulator (bridge/sim)
 const SAMPLE_RATES = [44100, 48000, 88200, 96000, 176400, 192000];
 const CHUNK = 16384;
 

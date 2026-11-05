@@ -5433,3 +5433,80 @@ test('key-request inbox is encrypted to the vendor key: unreadable on disk, open
   assert.ok(!fsx.readFileSync(pathx.join(dir, 'license-requests.jsonl'), 'utf8').includes('old@example.com'));   // the old plain record is now sealed too
   fsx.rmSync(dir, { recursive: true, force: true });
 });
+
+test('DEVICE SIMULATOR (UM2 base): ASIO busy -> WASAPI twin, mono ch1 -> both sides, native rate, busy error, unplug while others play, wrappers, diagnostics', { timeout: 60000 }, async () => {
+  const sim = require('./sim'), diag = require('./diagnostics'), hw = require('./hw-match'), ifs = require('./interfaces');
+  const { server } = require('./server');
+  // the UM2's two names have no word in common: the family must pair them (the reason its fallback never worked)
+  assert.ok(hw.score('BEHRINGER USB AUDIO', 'Microphone (USB Audio CODEC)') >= 100);
+  assert.strictEqual(hw.bestTwin('BEHRINGER USB AUDIO', [{ name: 'Microphone Array (Realtek(R) Audio)' }]), null);          // never another card
+  assert.strictEqual(hw.score('ASIO4ALL v2', 'Microphone (USB Audio CODEC)'), 0);
+  sim.configure({ enabled: true, profiles: ['um2', 'realtek', 'focusrite', 'asio4all'], faults: {} });
+  const clients = [];
+  try {
+    const pa = require('./portaudio').load(); assert.ok(pa.simulated);
+    const grouped = ifs.groupInterfaces(pa.getDevices().map(d => ({ id: d.id, name: d.name, hostApi: d.hostAPIName, inputs: d.maxInputChannels, outputs: d.maxOutputChannels })), ['BEHRINGER USB AUDIO', 'Focusrite USB ASIO', 'ASIO4ALL v2']);
+    const w = grouped.find(g => /asio4all/i.test(g.name)); assert.ok(w && w.wrapper && w.preferNative);
+    const codec = grouped.find(g => g.name === 'USB Audio CODEC'); assert.ok(codec && codec.twinOf && codec.twinOf.name === 'BEHRINGER USB AUDIO' && codec.twinOf.read, 'the UM2 Windows endpoint is marked as its twin (never read twice)');
+    // the engine fallback no longer picks "the default device" of another card
+    const ne = require('./native-engine');
+    assert.strictEqual(ne.wasapiFallback({ name: 'BEHRINGER USB AUDIO' }, 'input', { devices: [{ name: 'Microphone Array (Realtek(R) Audio)', engineBackend: 'wasapi', maxInputChannels: 2, isDefaultInput: true }] }), null);
+    assert.strictEqual(ne.wasapiFallback({ name: 'BEHRINGER USB AUDIO' }, 'input', { devices: [{ name: 'Microphone Array (Realtek(R) Audio)', engineBackend: 'wasapi', maxInputChannels: 2, isDefaultInput: true }, { name: 'Microphone (USB Audio CODEC)', engineBackend: 'wasapi', maxInputChannels: 2 }] }).name, 'Microphone (USB Audio CODEC)');
+    await new Promise(r => server.listen(0, '127.0.0.1', r));
+    const port = server.address().port, devs = pa.getDevices(), id = n => devs.find(d => d.name === n).id;
+    const open = (deviceId, extra = {}) => new Promise((res, rej) => {
+      const ws = new WebSocket(`ws://127.0.0.1:${port}/ws/input`); ws.binaryType = 'arraybuffer'; clients.push(ws);
+      const s = { ws, msgs: [], frames: [] };
+      ws.onmessage = e => { if (typeof e.data === 'string') s.msgs.push(JSON.parse(e.data)); else s.frames.push(Buffer.from(e.data)); };
+      ws.onopen = () => { ws.send(JSON.stringify({ type: 'start', deviceId, channels: 2, sampleRate: 48000, ...extra })); res(s); }; ws.onerror = rej;
+    });
+    const until = async (s, pred, ms = 6000) => { const t = Date.now(); while (Date.now() - t < ms) { const m = s.msgs.find(pred); if (m) return m; await new Promise(r => setTimeout(r, 50)); } return null; };
+    const lr = s => { const b = Buffer.concat(s.frames.slice(-5)); let l = 0, r = 0; for (let i = 0; i + 3 < b.length; i += 4) { l = Math.max(l, Math.abs(b.readInt16LE(i))); r = Math.max(r, Math.abs(b.readInt16LE(i + 2))); } return { l, r }; };
+    // 1) UM2 through its ASIO driver: signal on input 1 only -> copied to both sides
+    let a = await open(id('BEHRINGER USB AUDIO'));
+    assert.ok(await until(a, m => m.type === 'started' && m.hostApi === 'ASIO' && m.simulated));
+    assert.ok(await until(a, m => m.type === 'mapped' && m.source === 1));
+    await new Promise(r => setTimeout(r, 200)); let p = lr(a); assert.ok(p.l > 1000 && Math.abs(p.l - p.r) < 2, JSON.stringify(p));
+    // 2) a second reader of the same single-client UM2 driver gets silence -> switches to the Windows twin by itself, with sound
+    let b = await open(id('BEHRINGER USB AUDIO'), { takeover: false });
+    const fbOrErr = await until(b, m => m.type === 'fallback' || m.type === 'error', 8000);
+    if (fbOrErr && fbOrErr.type === 'error') assert.match(fbOrErr.message, /in use|busy|ASIO/i);   // the ASIO lock refused it up front: also a readable answer
+    else { assert.ok(fbOrErr, 'expected a fallback'); assert.strictEqual(fbOrErr.fallback.to, 'Microphone (USB Audio CODEC)'); assert.ok(await until(b, m => m.type === 'started' && m.fallbackFrom === 'BEHRINGER USB AUDIO')); }
+    b.ws.close(); a.ws.close(); await new Promise(r => setTimeout(r, 150));
+    // 2b) the driver held by ANOTHER program (no lock of ours): exact silence for 3 s -> fallback to the twin, sound comes back
+    sim.configure({ faults: { um2: { asioHeldByOtherApp: true } } });
+    a = await open(id('BEHRINGER USB AUDIO'));
+    const fb = await until(a, m => m.type === 'fallback', 8000); assert.ok(fb, 'silence fallback'); assert.strictEqual(fb.fallback.to, 'Microphone (USB Audio CODEC)');
+    assert.ok(await until(a, m => m.type === 'started' && m.hostApi === 'Windows WASAPI'));
+    await new Promise(r => setTimeout(r, 400)); assert.ok(lr(a).l > 1000, 'sound after the fallback');
+    a.ws.close(); sim.configure({ faults: {} });
+    // 3) a rate the UM2 cannot do: opened at its own rate and converted
+    a = await open(id('BEHRINGER USB AUDIO'), { sampleRate: 96000 });
+    const st = await until(a, m => m.type === 'started'); assert.strictEqual(st.sampleRate, 96000); assert.strictEqual(st.deviceRate, 48000);
+    a.ws.close();
+    // 4) Focusrite's driver refuses a second client with an error -> readable error + advice in the diagnostics
+    sim.configure({ faults: { focusrite: { asioHeldByOtherApp: true } } });
+    a = await open(id('Focusrite USB ASIO'), { autoFallback: false });
+    const err = await until(a, m => m.type === 'error'); assert.match(err.message, /in use by another program/);
+    assert.ok(diag.list({ filter: 'errors' }).some(e => /Focusrite USB ASIO/.test(e.message) && e.advice && /one program at a time/.test(e.advice.means)));
+    a.ws.close(); sim.configure({ faults: { realtek: { unplugAfterMs: 600 } } });
+    // 5) all interfaces at once: one ASIO driver per program, so the Focusrite runs through its own Windows endpoint; Realtek unplugged
+    //    mid-stream; the UM2 and the Focusrite keep delivering
+    const um = await open(id('BEHRINGER USB AUDIO')), rt = await open(id('Microphone Array (Realtek(R) Audio)')), fo = await open(id('Focusrite USB ASIO'));
+    const foFb = await until(fo, m => m.type === 'fallback'); assert.ok(foFb && foFb.fallback.to === 'Analogue 1 + 2 (Focusrite USB Audio)', JSON.stringify(fo.msgs.slice(0, 3)));
+    assert.ok(await until(rt, m => m.type === 'error' && /unplugged/.test(m.message), 4000));
+    const n1 = um.frames.length, n2 = fo.frames.length; await new Promise(r => setTimeout(r, 400));
+    assert.ok(um.frames.length > n1 && fo.frames.length > n2, 'the others keep playing');
+    for (const s of [um, rt, fo]) s.ws.close();
+    // 6) the diagnostics API: entries, a filter, a plain-text report without personal data
+    const d = await (await fetch(`http://127.0.0.1:${port}/api/diagnostics?filter=asio`)).json();
+    assert.ok(d.ok && d.entries.length && d.entries.every(e => e.area === 'asio' || /asio/i.test(e.message) || (e.data && /asio/i.test(e.data.hostApi || ''))));
+    const rep = await (await fetch(`http://127.0.0.1:${port}/api/diagnostics/report`)).text(); assert.match(rep, /\[SIM\] BEHRINGER USB AUDIO/); assert.match(rep, /what to do:/);
+    assert.strictEqual(diag.redact('C:\\Users\\Amir\\x jane@example.com CC2B-A1AC-00B9-85AD-6C4D'), 'C:\\Users\\<user>\\x <email> CC2B-…');
+  } finally {
+    for (const ws of clients) try { ws.close(); } catch (_) { /* closed */ }
+    await new Promise(r => setTimeout(r, 300));
+    sim.configure({ enabled: false, faults: {} }); sim.closeAll(); server.closeAllConnections();
+    await new Promise(r => { const t = setTimeout(r, 2000); server.close(() => { clearTimeout(t); r(); }); });
+  }
+});
