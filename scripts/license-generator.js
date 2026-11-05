@@ -160,7 +160,7 @@ textarea,#key-out{width:100%;background:var(--panel2);border:1px solid var(--lin
   var csvText = '';
   // filled in from the address: the app's GENERATOR button sends ?plan=&name=&email=&machine=
   try { var q = new URLSearchParams(location.search); ['plan', 'name', 'email', 'machine'].forEach(function (k) { var v = q.get(k); if (v && $(k)) { if (k !== 'plan' || $(k).querySelector('option[value="' + v.replace(/[^a-z]/g, '') + '"]')) $(k).value = v.slice(0, 120); } }); } catch (e) { /* old browser */ }
-  var post = function (url, body) { return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) }).then(function (r) { return r.json(); }); };
+  var post = function (url, body) { return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Gen-Action': '1' }, body: JSON.stringify(body || {}) }).then(function (r) { return r.json(); }); };
   var showErr = function (t) { $('err').textContent = t; $('err').hidden = false; };
   var refresh = function () {
     return fetch('/status').then(function (r) { return r.json(); }).then(function (j) {
@@ -230,7 +230,7 @@ textarea,#key-out{width:100%;background:var(--panel2);border:1px solid var(--lin
     ev.preventDefault();
     $('err').hidden = true; $('go').disabled = true; $('go').textContent = 'GENERATING…';
     var body = { plan: $('plan').value, name: $('name').value, email: $('email').value, machine: $('machine').value, days: Number($('days').value) || 0, seats: Number($('seats').value) || 1, count: Number($('count').value) || 1 };
-    fetch('/issue', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    fetch('/issue', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Gen-Action': '1' }, body: JSON.stringify(body) })
       .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
       .then(function (res) {
         if (!res.ok || !res.j || !res.j.ok) { $('err').textContent = (res.j && res.j.error) || 'Could not generate the key.'; $('err').hidden = false; if (res.j && res.j.locked) refresh(); return; }
@@ -500,7 +500,10 @@ function createServer({ kind = 'vendor', dirArgv = [], root, session = makeSessi
         }
         return send(res, 405, { ok: false, error: 'method not allowed' }, cors);
       }
-      if (!originAllowed(req.headers.origin)) return fail(res, 403, 'origin not allowed');
+      if (!originAllowed(req.headers.origin) || req.headers.origin === 'null') return fail(res, 403, 'origin not allowed');   // "null" = any site's sandboxed iframe
+      // CSRF: every action must come from this page's own script: JSON + the X-Gen-Action header make it a non-simple request, which a
+      // foreign page cannot send without a CORS preflight this server never grants
+      if (req.method === 'POST' && (!String(req.headers['content-type'] || '').startsWith('application/json') || req.headers['x-gen-action'] !== '1')) return fail(res, 403, 'actions need the generator page');
       if (req.method === 'GET' && url.pathname === '/') { const p = pageFor(kind); return send(res, 200, p.body, { 'Content-Security-Policy': p.csp }); }
       if (req.method === 'GET' && url.pathname === '/ota/status' && KINDS[kind].canInit) return send(res, 200, { ok: true, ...otaStatus(KINDS[kind].mod[KINDS[kind].dirFn](dirArgv), root, releases, session) });
       if (req.method === 'GET' && url.pathname === '/vendor/ip' && KINDS[kind].canInit) return send(res, 200, { ok: true, ip: await publicIp() });
@@ -549,13 +552,13 @@ function main(argv) {
   const server = createServer({ kind, dirArgv: argv, root });
   if (argv.includes('--public') && KINDS[kind].canInit) {
     const pv = argv[argv.indexOf('--public') + 1], pport = /^\d+$/.test(pv || '') ? Number(pv) : 8780;
-    // --public-bind 127.0.0.1: only nginx on this computer can reach the public listener (recommended: deploy/nginx/keys-api.conf adds HTTPS);
-    // then nginx's X-Real-IP is used for the per-sender limits. Default 0.0.0.0 (direct port forward, as before).
-    const pbind = arg(argv, '--public-bind') || '0.0.0.0', behindProxy = /^(127\.0\.0\.1|::1|localhost)$/.test(pbind);
+    // Default --public-bind 127.0.0.1: only nginx on this computer reaches the public listener (deploy/nginx/keys-api.conf adds HTTPS) and nginx's
+    // X-Real-IP is used for the per-sender limits. --public-bind 0.0.0.0 opens it to every network over plain HTTP (old behaviour; not recommended).
+    const pbind = arg(argv, '--public-bind') || '127.0.0.1', behindProxy = /^(127\.0\.0\.1|::1|localhost)$/.test(pbind);
     const ps = createServer({ kind, dirArgv: argv, root, publicOnly: true, trustProxy: behindProxy });
     ps.headersTimeout = 10000; ps.requestTimeout = 20000; ps.keepAliveTimeout = 5000; ps.maxHeadersCount = 50;   // slow-client (slowloris) guard on the internet-facing port
     ps.on('error', e => console.error(`Public listener on port ${pport} could not start: ${e.message}`));
-    ps.listen(pport, pbind === 'localhost' ? '127.0.0.1' : pbind, () => console.log(`Public requests and updates on port ${pport} (${pbind}). Forward TCP ${pport} on your router to this computer; customers then use http://<your public IP>:${pport}`));
+    ps.listen(pport, pbind === 'localhost' ? '127.0.0.1' : pbind, () => console.log(behindProxy ? `Public requests and updates on 127.0.0.1:${pport}: reachable from the internet only through nginx (deploy/nginx/keys-api.conf, HTTPS on 443). To open port ${pport} itself to all networks over plain HTTP, add --public-bind 0.0.0.0.` : `Public requests and updates on port ${pport} (${pbind}, plain HTTP). Prefer nginx with HTTPS: deploy/nginx/keys-api.conf.`));
   }
   server.once('error', e => { if (e.code === 'EADDRINUSE' && port) { console.error(`Port ${port} is in use: using a free port instead (the app's GENERATOR button will not find this one).`); server.listen(0, '127.0.0.1'); } else { console.error('Error: ' + e.message); process.exit(1); } });
   server.on('listening', () => {

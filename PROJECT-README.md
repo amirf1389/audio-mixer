@@ -303,7 +303,7 @@ After installing a new version the mixer could still show the old page and featu
 - `node client/cli.js` (and the Start Menu / desktop *Audio Mixer* entry) checks the running server's version through `/api/status`; an **older** one (verified by name and process id on this PC's loopback) is ended and the current server is started in its place, with a message. A **newer** one is never replaced.
 - The Windows start-up screen (`AudioMixerServer.exe /open`) now starts the client in `--ensure` mode (starts or replaces, exits when a current server already runs) and only opens the browser when the server answers **with this version**. If an older server cannot be ended (for example it runs as another user) it says so: end `node.exe` in Task Manager and start again.
 - The setup `.exe` from 1.14.2 on already ends the old server before installing; the `.msi` alone does not (Windows Installer may then ask for a restart: do it, or end `node.exe` first).
-- The bundled Node.js is the current LTS (x64: 24.21.0, x86: 22.23.3, checked against nodejs.org's SHASUMS256.txt when the installer is built).
+- The bundled Node.js is the newest LTS at build time (x64; x86 from the newest line that still ships it), checked against nodejs.org's SHASUMS256.txt when the installer is built. The single-file .exe and the Key Generator use Node.js 22.23.4 (security release, Oct 2026).
 
 ## Interface read / write mode not readable (1.15.3)
 
@@ -325,7 +325,7 @@ One command, `audio-mixer`, on Windows, macOS and Linux (it is the `npm run` of 
 
 | | Windows (`.exe` / `.msi`) | macOS (`.dmg`, `.app.zip`, `.tar.gz`) | Linux (`.tar.gz`, `.deb`) |
 |---|---|---|---|
-| **Node.js** | bundled (24.21.0 x64 / 22.23.3 x86, checksum verified at build) | found, else downloaded on first start (official build, checksum verified, no administrator rights) | found, else downloaded by `install.sh` / first start (same) |
+| **Node.js** | bundled (newest LTS at build time: x64, and the newest line that still ships x86; checksum verified at build; the single-file .exe and Key Generator use 22.23.4) | found, else downloaded on first start (official build, checksum verified, no administrator rights) | found, else downloaded by `install.sh` / first start (same) |
 | **npm** | bundled next to `node.exe` (`runtime\node_modules\npm`, 1900 files, listed in `MANIFEST.sha256`) | comes with the Node.js download / your Node.js | comes with the Node.js download / your Node.js |
 | **audio module** | Audify prebuilt, bundled | `npm install audify` once (asked) | `npm install audify` once (asked) |
 | **command** | `audio-mixer.exe` (signed console program) on **PATH** (feature `CommandLine`, setup switch `/nopath`) | `audio-mixer` linked onto PATH by `install.command` or `Add audio-mixer command.command` (in the `.dmg`) | `audio-mixer` in `/usr/local/bin` (root) or `~/.local/bin` (user) by `install.sh`; `/usr/bin/audio-mixer` by the `.deb` |

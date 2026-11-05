@@ -116,10 +116,15 @@ final class MiniBridge {
             if (!hostAllowed(h.get("host"))) { send(out, 403, "{\"ok\":false,\"error\":\"host not allowed\"}", null); return; }
             String origin = h.get("origin");
             if (!originAllowed(origin)) { send(out, 403, "{\"ok\":false,\"error\":\"origin not allowed\"}", null); return; }
+            // Origin "null" is also what any website's sandboxed iframe sends (Chrome on this phone can reach localhost): reads only, no
+            // actions, no preflights, no audio sockets. The app page itself is served from http://localhost (MainActivity.loadMixer).
+            boolean opaque = "null".equals(origin);
+            if (opaque && !(method.equals("GET") || method.equals("HEAD"))) { send(out, 403, "{\"ok\":false,\"error\":\"actions need the app page (http://localhost)\"}", null); return; }
             Map<String, String> cors = new HashMap<String, String>();
-            if (origin != null) { cors.put("Access-Control-Allow-Origin", origin); cors.put("Vary", "Origin"); cors.put("Access-Control-Allow-Private-Network", "true"); }
+            if (origin != null) { cors.put("Access-Control-Allow-Origin", origin); cors.put("Vary", "Origin"); if (!opaque) cors.put("Access-Control-Allow-Private-Network", "true"); }
             if (method.equals("OPTIONS")) { cors.put("Access-Control-Allow-Methods", "GET, POST"); cors.put("Access-Control-Allow-Headers", "Content-Type, X-Mixer-Action"); sendRaw(out, 204, "", "text/plain", cors); return; }
             if ("websocket".equalsIgnoreCase(h.get("upgrade"))) {
+                if (opaque) { send(out, 403, "{\"ok\":false,\"error\":\"audio sockets need the app page\"}", null); return; }
                 if (path.equals("/ws/virtual")) { if (origin != null) { send(out, 403, "{\"ok\":false,\"error\":\"drivers are native programs\"}", null); return; } virtualDriver(s, raw, out, h.get("sec-websocket-key")); return; }     // a web page cannot pose as a driver
                 websocket(s, raw, out, path, h.get("sec-websocket-key")); return;
             }

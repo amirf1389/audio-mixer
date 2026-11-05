@@ -1,0 +1,7 @@
+secrets/
+.git
+dist/
+**/node_modules
+*.pem
+*.enc
+.env*
