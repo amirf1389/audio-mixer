@@ -28,7 +28,7 @@ CRITICAL REVISIONS & ARCHITECTURAL UPGRADES:
 <script>
 /* AmF X1 lean runtime: change-only / visible-only DOM writes, frame cap, idle animation stop */
 (function(){
-  var vis=function(el){return !!(el&&el.offsetParent!==null);};
+  var vis=function(el){if(!el)return false;return el.checkVisibility?el.checkVisibility({visibilityProperty:true,contentVisibilityAuto:true}):el.offsetParent!==null;};
   window.amSetText=function(el,v){if(!el||!vis(el))return;v=String(v);if(el.__amT!==v){el.__amT=v;el.textContent=v;}};
   window.amSetClass=function(el,v){if(!el||!vis(el))return;if(el.__amC!==v){el.__amC=v;el.className=v;}};
   // frame cap: meters do not need more than 30 fps (15 in low-power mode); batches all rAF callbacks into one tick
@@ -162,7 +162,7 @@ html.am-lite *,html.am-settled.am-lowpower *{backdrop-filter:none!important;-web
 
         @media (max-width: 767px) { .tab-content { padding-bottom: 5.5rem; } }
         @media (min-width: 768px) { .tab-content { padding-bottom: 0.5rem; } }
-        .tab-hidden { opacity: 0 !important; visibility: hidden !important; z-index: -1 !important; pointer-events: none !important; }
+        .tab-hidden { content-visibility: hidden; contain: strict; opacity: 0 !important; visibility: hidden !important; z-index: -1 !important; pointer-events: none !important; }
         
         /* Page inner scroll wrapper for sub-sections */
         .page-scroll-inner {
@@ -394,6 +394,7 @@ html.am-lite *,html.am-settled.am-lowpower *{backdrop-filter:none!important;-web
         }
 
         #content-area.continuous-scroll-mode .tab-hidden {
+            content-visibility: auto; contain: none;
             opacity: 1 !important;
             visibility: visible !important;
             z-index: 1 !important;
@@ -12461,7 +12462,7 @@ const cArea = document.getElementById('content-area');
                 const corrVal = document.getElementById('phase-corr-val');
                 if (corrBar && corrVal) {
                     const pct = ((normCorr + 1) / 2) * 100;
-                    if (corrBar.offsetParent) corrBar.style.width = `${pct.toFixed(0)}%`;
+                    if (corrBar.checkVisibility ? corrBar.checkVisibility({visibilityProperty:true}) : corrBar.offsetParent) corrBar.style.width = `${pct.toFixed(0)}%`;
                     window.amSetText(corrVal, normCorr >= 0 ? `+${normCorr.toFixed(2)}` : normCorr.toFixed(2));
                     window.amSetClass(corrBar, normCorr < 0 
                         ? 'h-full bg-rose-500 transition-all' 
