@@ -53,7 +53,7 @@ button{margin-top:14px;width:100%;border:0;border-radius:8px;padding:12px;backgr
 'use strict';
 (function () {
   var VENDOR_EMAIL = 'badriamirfakhri@gmail.com';
-  var REQUEST_URL = '';   // e.g. 'https://ota.example.com/request-license' (optional)
+  var REQUEST_URL = '/request-license';   // same-origin API behind nginx (deploy/nginx/keys-api.conf); '' = email only
   var $ = function (id) { return document.getElementById(id); };
   var q = new URLSearchParams(location.search);
   if (q.get('name')) $('name').value = q.get('name').slice(0, 80);
