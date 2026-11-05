@@ -5338,3 +5338,18 @@ test('public key-request listener: IPv6 /64 grouping, bounded rate table, per-se
   assert.ok(cap('2001:db8::1') && cap('2001:db8::2')); assert.strictEqual(cap('2001:db8::3'), false);
   t += 86400001; assert.ok(cap('2001:db8::4'));
 });
+
+test('public key API behind nginx: X-Real-IP is trusted only with trustProxy over loopback', async () => {
+  const gen = require('../scripts/license-generator'), os = require('node:os'), pathx = require('node:path'), fsx = require('node:fs');
+  const seen = [], dir = fsx.mkdtempSync(pathx.join(os.tmpdir(), 'am-kp-'));
+  const run = async (trustProxy) => {
+    const s = gen.createServer({ kind: 'vendor', dirArgv: ['--dir', dir], publicOnly: true, trustProxy, limit: ip => { seen.push(ip); return true; } });
+    await new Promise(r => s.listen(0, '127.0.0.1', r));
+    await fetch(`http://127.0.0.1:${s.address().port}/update.json`, { headers: { 'X-Real-IP': '203.0.113.7' } });
+    await fetch(`http://127.0.0.1:${s.address().port}/update.json`, { headers: { 'X-Real-IP': 'bad value<>' } });
+    s.close();
+  };
+  await run(false); await run(true);
+  assert.deepStrictEqual(seen.map(x => x.replace('::ffff:', '')), ['127.0.0.1', '127.0.0.1', '203.0.113.7', '127.0.0.1']);
+  fsx.rmSync(dir, { recursive: true, force: true });
+});

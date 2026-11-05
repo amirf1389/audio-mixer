@@ -93,3 +93,25 @@ Permissions-Policy, gzip, HTTP→HTTPS redirect, 404 for `/bridge/*`, `/.git/*`,
 The fail2ban filter was checked with `fail2ban-regex` (matches 401/403/429 bridge hits, scanner 404s, IPv6 and logins with
 spaces; ignores 200s and ordinary 404s). `guard.sh` was run against real nginx: 6 bad requests → ban → nginx answers 403 →
 unban / expiry restore access; hostile "client addresses" (`;`, `$()`, backticks, `}`) are rejected before reaching the config.
+
+## Keys website + public key API (`keys-api.conf`)
+Puts the customer key page (`deploy/website/license.html`) and the Key Generator's public API behind HTTPS at
+`https://amirfakhri.interactivelink.site` (change the domain on the `CHANGE ME` lines):
+
+| URL | Goes to |
+| --- | --- |
+| `/keys` | the key request page (static file) |
+| `POST /request-license` | the generator's inbox (8 KB max, 6/min per IP at nginx, 5/day per sender in the generator) |
+| `/update.json`, `/vendor.json`, `/releases/<file>` | OTA updates published by the generator |
+| anything else | 404 (the vendor page with keys and PIN is **never** proxied) |
+
+    sudo mkdir -p /srv/amfx1-website && sudo cp deploy/website/license.html /srv/amfx1-website/
+    sudo cp deploy/nginx/keys-api.conf /etc/nginx/conf.d/ && sudo cp deploy/nginx/keys-api-proxy.inc /etc/nginx/
+    sudo certbot certonly --webroot -w /var/www/letsencrypt -d amirfakhri.interactivelink.site
+    sudo nginx -t && sudo nginx -s reload
+    "AmF X1 Key Generator.exe" --public 8780 --public-bind 127.0.0.1     # or: node scripts/license-generator.js ...
+
+With `--public-bind 127.0.0.1` the generator's port 8780 is reachable only from nginx on the same computer: forward
+TCP **443** (and 80 for certificate renewal) on the router instead of 8780. The generator then takes the customer's
+address from nginx's `X-Real-IP` (only from a loopback connection, so it cannot be faked from outside).
+The page posts to `/request-license` on its own site and falls back to e-mail if that fails.

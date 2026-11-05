@@ -422,7 +422,8 @@ function dailyCap(perDay = 5, now = () => Date.now()) {
   };
 }
 
-function createServer({ kind = 'vendor', dirArgv = [], root, session = makeSession(), releases, publicOnly = false, limit = rateLimiter(), requestCap = dailyCap() } = {}) {
+function createServer({ kind = 'vendor', dirArgv = [], root, session = makeSession(), releases, publicOnly = false, limit = rateLimiter(), requestCap = dailyCap(), trustProxy = false } = {}) {
+  const clientIp = req => { const a = req.socket.remoteAddress || '?'; if (trustProxy && /^(127\.|::1$|::ffff:127\.)/.test(a)) { const h = String(req.headers['x-real-ip'] || '').trim(); if (/^[0-9a-fA-F:.]{2,45}$/.test(h)) return h; } return a; };
   if (!KINDS[kind]) throw new Error('kind must be one of: ' + Object.keys(KINDS).join(', '));
   const send = (res, code, body, headers = {}) => { const t = typeof body === 'string' ? body : JSON.stringify(body); res.writeHead(code, { 'Content-Type': typeof body === 'string' ? 'text/html; charset=utf-8' : 'application/json; charset=utf-8', 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer', ...headers }); res.end(t); };
   const fail = (res, code, error) => send(res, code, { ok: false, error });
@@ -432,7 +433,7 @@ function createServer({ kind = 'vendor', dirArgv = [], root, session = makeSessi
       const url = new URL(req.url, 'http://x');
       if (publicOnly) {   // the internet-facing listener: only the three public routes, nothing about keys
         if (!(url.pathname === '/update.json' || url.pathname === '/vendor.json' || url.pathname.startsWith('/releases/') || url.pathname === '/request-license')) return fail(res, 404, 'not found');
-        if (!limit(req.socket.remoteAddress || '?')) return fail(res, 429, 'too many requests');
+        if (!limit(clientIp(req))) return fail(res, 429, 'too many requests');
       } else if (!hostAllowed(req.headers.host)) return fail(res, 403, 'host not allowed');
       // the public part of the local update server: any origin (the app is a file, localhost:8765, ...), still only this computer (Host check above)
       const pub = KINDS[kind].canInit && (publicOnly || url.pathname === '/vendor.json' || url.pathname === '/update.json' || url.pathname.startsWith('/releases/') || url.pathname === '/request-license');
@@ -465,7 +466,7 @@ function createServer({ kind = 'vendor', dirArgv = [], root, session = makeSessi
           if (rec.machineId && !/^[A-Za-z0-9-]{4,40}$/.test(rec.machineId)) return send(res, 400, { ok: false, error: 'invalid machine ID' }, cors);
           const inbox = readJsonl(path.join(dir, 'license-requests.jsonl'), 1000);
           if (rec.machineId && inbox.some(r => r.machineId === rec.machineId && r.plan === rec.plan && Date.now() - r.at < 86400000)) return send(res, 200, { ok: true, emailed: false, duplicate: true }, cors);   // already waiting
-          if (!requestCap(req.socket.remoteAddress)) return send(res, 429, { ok: false, error: 'too many key requests from this network today' }, cors);
+          if (!requestCap(clientIp(req))) return send(res, 429, { ok: false, error: 'too many key requests from this network today' }, cors);
           if (inbox.length >= 1000) return send(res, 429, { ok: false, error: 'the inbox is full' }, cors);
           fs.mkdirSync(dir, { recursive: true, mode: 0o700 }); fs.appendFileSync(path.join(dir, 'license-requests.jsonl'), JSON.stringify(rec) + '\n', { mode: 0o600 });
           return send(res, 200, { ok: true, emailed: false }, cors);
@@ -521,10 +522,13 @@ function main(argv) {
   const server = createServer({ kind, dirArgv: argv, root });
   if (argv.includes('--public') && KINDS[kind].canInit) {
     const pv = argv[argv.indexOf('--public') + 1], pport = /^\d+$/.test(pv || '') ? Number(pv) : 8780;
-    const ps = createServer({ kind, dirArgv: argv, root, publicOnly: true });
+    // --public-bind 127.0.0.1: only nginx on this computer can reach the public listener (recommended: deploy/nginx/keys-api.conf adds HTTPS);
+    // then nginx's X-Real-IP is used for the per-sender limits. Default 0.0.0.0 (direct port forward, as before).
+    const pbind = arg(argv, '--public-bind') || '0.0.0.0', behindProxy = /^(127\.0\.0\.1|::1|localhost)$/.test(pbind);
+    const ps = createServer({ kind, dirArgv: argv, root, publicOnly: true, trustProxy: behindProxy });
     ps.headersTimeout = 10000; ps.requestTimeout = 20000; ps.keepAliveTimeout = 5000; ps.maxHeadersCount = 50;   // slow-client (slowloris) guard on the internet-facing port
     ps.on('error', e => console.error(`Public listener on port ${pport} could not start: ${e.message}`));
-    ps.listen(pport, '0.0.0.0', () => console.log(`Public requests and updates on port ${pport} (all networks). Forward TCP ${pport} on your router to this computer; customers then use http://<your public IP>:${pport}`));
+    ps.listen(pport, pbind === 'localhost' ? '127.0.0.1' : pbind, () => console.log(`Public requests and updates on port ${pport} (${pbind}). Forward TCP ${pport} on your router to this computer; customers then use http://<your public IP>:${pport}`));
   }
   server.once('error', e => { if (e.code === 'EADDRINUSE' && port) { console.error(`Port ${port} is in use: using a free port instead (the app's GENERATOR button will not find this one).`); server.listen(0, '127.0.0.1'); } else { console.error('Error: ' + e.message); process.exit(1); } });
   server.on('listening', () => {
