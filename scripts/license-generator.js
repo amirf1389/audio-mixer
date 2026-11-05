@@ -91,6 +91,8 @@ textarea,#key-out{width:100%;background:var(--panel2);border:1px solid var(--lin
 <body>
 <header><h1>AUDIO <b>MIXER</b></h1><span><span class="pill">${k.label} KEY</span> <button type="button" id="lockbtn" class="pill" hidden>LOCK</button></span></header>
 <main>
+  <p id="fp" class="mono dim" hidden></p>
+  <p><button class="btn" id="copypub" type="button" hidden>COPY PUBLIC KEY (safe to share: AmF X1 is built with it)</button></p>
   <section class="card" id="setup" hidden>
     <h2>NO SIGNING KEY ON THIS COMPUTER YET</h2>
     <p class="dim">Keys are signed with your private key. None was found in <span class="mono" id="keydir"></span>. Create one here: it stays on this computer only, encrypted with a PIN you choose.</p>
@@ -168,6 +170,8 @@ textarea,#key-out{width:100%;background:var(--panel2);border:1px solid var(--lin
       $('unlock-card').hidden = !needUnlock; $('plain-card').hidden = !(j.hasKey && !j.locked && j.canInit);
       $('gen').hidden = needInit && j.canInit || needUnlock; $('lockbtn').hidden = !(j.locked && j.unlocked);
       if (needUnlock) $('upin').focus();
+      if (j.publicKey) { $('copypub').hidden = false; $('copypub').dataset.k = j.publicKey; }
+      if (j.fingerprint) { $('fp').hidden = false; $('fp').textContent = 'Signing key: ' + j.fingerprint + (j.projectFingerprint ? (j.projectFingerprint === j.fingerprint ? '  (matches this project)' : '  (this project trusts ' + j.projectFingerprint + ': rebuild AmF X1 with this key, or keys will not activate)') : '') + '. AmF X1 accepts keys only when its LICENSE page shows the same code.'; }
     }).catch(function () { /* the form still works */ });
   };
   refresh();
@@ -218,6 +222,7 @@ textarea,#key-out{width:100%;background:var(--panel2);border:1px solid var(--lin
     $('publish').disabled = true;
     post('/ota/publish', { repo: $('ota-repo').checked }).then(function (j) { if (!j || !j.ok) { showErr((j && j.error) || 'Could not publish.'); if (j && j.locked) refresh(); } else { $('err').hidden = true; loadOta(); } }).catch(function () { showErr('Could not reach this server.'); }).then(function () { $('publish').disabled = false; });
   });
+  $('copypub').addEventListener('click', function () { navigator.clipboard.writeText($('copypub').dataset.k || '').then(function () { $('copypub').textContent = 'COPIED: paste it to the developer'; }); });
   $('lockbtn').addEventListener('click', function () { post('/lock', {}).then(function () { $('result').hidden = true; refresh(); }); });
   $('f').addEventListener('submit', function (ev) {
     ev.preventDefault();
@@ -301,7 +306,10 @@ function issueKey(kind, dirArgv, body, session) {
 function keyStatus(kind, dirArgv, session) {
   const k = KINDS[kind], dir = k.mod[k.dirFn](dirArgv);
   const hasKey = k.canInit ? vault.hasKey(dir) : require('node:fs').existsSync(require('node:path').join(dir, 'private.pem'));
-  return { hasKey, locked: !!k.canInit && vault.isLocked(dir), unlocked: !!(session && session.isOpen()), dir, canInit: !!k.canInit };
+  let fp = null, app = null, publicKey = null;
+  try { const j = JSON.parse(fs.readFileSync(path.join(dir, 'public.jwk.json'), 'utf8')); fp = lic.fingerprint(j); publicKey = JSON.stringify({ kty: j.kty, crv: j.crv, x: j.x, y: j.y }); } catch (_) { /* no key yet */ }
+  try { app = lic.fingerprint(JSON.parse(fs.readFileSync(path.join(layout.ROOT, 'bridge', 'license-public.json'), 'utf8'))); } catch (_) { /* not in a project */ }
+  return { hasKey, locked: !!k.canInit && vault.isLocked(dir), unlocked: !!(session && session.isOpen()), dir, canInit: !!k.canInit, fingerprint: fp, projectFingerprint: app, publicKey };
 }
 // The unlocked key of a PIN-locked folder, in memory only. Plain folders do not need it (key(dir) then returns undefined and issue() reads the file).
 function makeSession(now = () => Date.now()) {

@@ -7844,6 +7844,7 @@ const cArea = document.getElementById('content-area');
                       <span class="text-slate-400 block text-[7px] font-bold">THIS COMPUTER'S MACHINE CODE (SEND IT WITH YOUR ORDER FOR A KEY BOUND TO THIS PC)</span>
                       <div class="flex gap-1.5 items-center"><code id="lic-machine" class="flex-1 bg-black border border-white/10 rounded px-2 py-1 text-cyan-400 text-[9px] text-center select-all">-</code><button id="lic-copy-machine" type="button" class="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-slate-200 font-bold uppercase text-[7px]">COPY</button></div>
                       <span class="text-slate-500 block text-[6.5px]" id="lic-machine-note">Start PC mode (the local server) to read the machine code.</span>
+                      <span class="text-slate-500 block text-[6.5px]">Trusted vendor key: <span id="lic-key-fp" class="font-mono text-slate-300">-</span> (the key generator shows the same code for keys this copy accepts)</span>
                       <div class="border-t border-white/10 pt-1.5 space-y-1">
                         <span class="text-slate-400 block text-[7px] font-bold">REQUEST A KEY <span id="lic-sandbox-badge" class="hidden ml-1 px-1.5 py-0.5 rounded bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/40 text-[6.5px]">SANDBOX</span></span>
                         <div class="grid grid-cols-3 gap-1">
@@ -18598,7 +18599,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 if (!(window.crypto && window.crypto.subtle)) throw new Error('nosubtle');
                 let ok = false;
                 for (const k of jwks) { const pub = await crypto.subtle.importKey('jwk', k, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']); if (await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, pub, unb64u(parts[2]), new TextEncoder().encode(parts[1]))) { ok = true; break; } }
-                if (!ok) return { ok: false, reason: 'bad-signature', message: 'The license key is not valid (signature check failed).' };
+                if (!ok) return { ok: false, reason: 'bad-signature', message: 'This key was not signed by the vendor key this copy of AmF X1 trusts (key ' + (window.licenseKeyFingerprint || '?') + '). Ask the vendor for a key from the current generator, or install the AmF X1 build that matches it.' };
             } catch (e) { return { ok: false, reason: e.message === 'nosubtle' ? 'nosubtle' : 'bad-signature', message: e.message === 'nosubtle' ? 'This browser cannot check keys here; use PC mode (the local server).' : 'The license key is not valid (signature check failed).' }; }
             let p;
             try { p = JSON.parse(new TextDecoder().decode(unb64u(parts[1]))); } catch (e) { return { ok: false, reason: 'malformed', message: 'This is not an Audio Mixer license key.' }; }
@@ -18613,6 +18614,8 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             return { ok: true, payload: p, plan: PLANS[p.plan] };
         }
 
+        // the fingerprint of the vendor public key this page trusts (SHA-256 of x.y, first 16 hex): compared with the one the key generator shows
+        (async () => { try { const j = window.LICENSE_PUBLIC_JWK; if (!j || !(window.crypto && crypto.subtle)) return; const d = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(j.x) + '.' + String(j.y)))); const h = Array.from(d.slice(0, 8), b => b.toString(16).padStart(2, '0')).join('').toUpperCase(); window.licenseKeyFingerprint = h.match(/.{4}/g).join('-'); const e = document.getElementById('lic-key-fp'); if (e) e.textContent = window.licenseKeyFingerprint; } catch (e) { /* no WebCrypto */ } })();
         const L = window.license = {
             plan: PLANS.basic, state: 'basic', info: null, machineId: null, version: null,
             has(feature) { return this.plan.features.indexOf(feature) >= 0; },

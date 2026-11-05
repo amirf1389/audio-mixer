@@ -43,6 +43,8 @@ const PREFIX = 'AMIX1';
 const b64u = buf => Buffer.from(buf).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const unb64u = s => Buffer.from(String(s).replace(/-/g, '+').replace(/_/g, '/'), 'base64');
 
+// a short, comparable name for a public key: the generator page shows the same one for the key it signs with
+function fingerprint(jwk = PUBLIC_JWK) { const h = crypto.createHash('sha256').update(String(jwk && jwk.x) + '.' + String(jwk && jwk.y)).digest('hex').slice(0, 16).toUpperCase(); return h.match(/.{4}/g).join('-'); }
 function publicKey(jwk = PUBLIC_JWK) { return crypto.createPublicKey({ key: jwk, format: 'jwk' }); }
 
 // Vendor side (also used by tests): sign a payload with a private KeyObject.
@@ -61,7 +63,7 @@ function verifyKey(key, { now = Date.now(), machine = null, jwk = null } = {}) {
     const keys = jwk ? [jwk] : [PUBLIC_JWK, adminJwk(), sandboxJwk()].filter(Boolean);            // the vendor key; the admin key when one exists; in the sandbox the sandbox key too
     if (!keys.some(k => crypto.verify('sha256', Buffer.from(parts[1]), { key: publicKey(k), dsaEncoding: 'ieee-p1363' }, unb64u(parts[2])))) throw new Error('bad');
     payload = JSON.parse(unb64u(parts[1]).toString('utf8'));
-  } catch (_) { return { ok: false, reason: 'bad-signature', message: 'The license key is not valid (signature check failed).' }; }
+  } catch (_) { return { ok: false, reason: 'bad-signature', message: 'This key was not signed by the vendor key this copy of AmF X1 trusts (key ' + fingerprint(jwk || PUBLIC_JWK) + '). Ask the vendor for a key from the current generator, or install the AmF X1 build that matches it.' }; }
   if (!payload || payload.v !== 1 || !PLANS[payload.plan]) return { ok: false, reason: 'unknown-plan', message: 'The license key is for an unknown plan.' };
   if (payload.issued && payload.issued > now + 86400000) return { ok: false, reason: 'not-yet-valid', message: 'The license key is not valid yet (check the date of this computer).' };
   if (payload.expires && payload.expires < now) return { ok: false, reason: 'expired', message: `The license key expired on ${new Date(payload.expires).toISOString().slice(0, 10)}.`, payload };
@@ -132,4 +134,4 @@ function deactivate(opts = {}) {
 
 const hasFeature = (st, f) => !!(st && st.plan && st.plan.features.includes(f));
 
-module.exports = { PLANS, PREFIX, PUBLIC_JWK, sandboxJwk, adminJwk, request, publicKeyOf: publicKey, signKey, verifyKey, machineId, status, activate, deactivate, hasFeature, readStored, storeFile, b64u, unb64u };
+module.exports = { fingerprint, PLANS, PREFIX, PUBLIC_JWK, sandboxJwk, adminJwk, request, publicKeyOf: publicKey, signKey, verifyKey, machineId, status, activate, deactivate, hasFeature, readStored, storeFile, b64u, unb64u };
