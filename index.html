@@ -22456,5 +22456,24 @@ t.Omnitone=e(11)},function(A,t,e){"use strict";const i=e(1),n=e(4),s=e(12),o=e(6
         if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else setTimeout(start, 0);
     })();
 </script>
+<script>
+    // ASIO -> WASAPI fallback notice: any audio socket that reports a reroute (bridge native-engine: an ASIO driver with no inputs /
+    // outputs or failing at start was replaced by the same hardware through WASAPI) is announced once, on every page that opens audio.
+    (function () {
+        const W = window.WebSocket; if (!W || W.amFallbackHook) return;
+        const seen = new Set();
+        function Hooked(url, protocols) {
+            const ws = protocols === undefined ? new W(url) : new W(url, protocols);
+            ws.addEventListener('message', ev => {
+                if (typeof ev.data !== 'string' || ev.data.indexOf('"fallback"') < 0) return;
+                try { const m = JSON.parse(ev.data), f = m && m.fallback; if (!f || !f.via) return; const k = f.from + '>' + f.to; if (seen.has(k)) return; seen.add(k); setTimeout(() => seen.delete(k), 60000);
+                    if (window.notify) window.notify('ASIO ' + f.from + ': ' + f.reason + '. Using ' + f.to + ' (Windows audio) instead.', 'route'); } catch (e) { /* not JSON */ }
+            });
+            return ws;
+        }
+        Hooked.prototype = W.prototype; ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'].forEach(k => { Hooked[k] = W[k]; });
+        Hooked.amFallbackHook = true; window.WebSocket = Hooked;
+    })();
+</script>
 </body>
 </html>
