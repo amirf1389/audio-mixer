@@ -5388,3 +5388,38 @@ test('POST /api/license/check answers without storing a key', async () => {
     assert.strictEqual(license.readStored(), null);
   } finally { server.closeAllConnections(); await new Promise(r => server.close(r)); delete process.env.BRIDGE_LICENSE_FILE; }
 });
+
+test('key-request inbox is encrypted to the vendor key: unreadable on disk, opens only with the private key, tamper-evident, old records sealed on unlock', async () => {
+  const ic = require('../scripts/inbox-crypto'), gen = require('../scripts/license-generator'), vault = require('../scripts/license-vault');
+  const crypto = require('node:crypto'), fsx = require('node:fs'), osx = require('node:os'), pathx = require('node:path');
+  const { privateKey, publicKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });
+  const pub = publicKey.export({ format: 'jwk' }), rec = { at: 1, plan: 'pro', name: 'Jane Secret', email: 'jane@example.com', machineId: 'ABCD-1234' };
+  const box = ic.seal(rec, pub), raw = JSON.stringify(box);
+  for (const s of ['Jane', 'jane@example.com', 'ABCD-1234']) assert.ok(!raw.includes(s), 'plain text leaked: ' + s);
+  assert.deepStrictEqual(ic.open(box, privateKey), rec);
+  const other = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' }).privateKey;
+  assert.throws(() => ic.open(box, other));                                                         // wrong key
+  assert.throws(() => ic.open({ ...box, plan: 'master' }, privateKey));                              // header changed
+  const ct = Buffer.from(box.ct, 'base64'); ct[0] ^= 1; assert.throws(() => ic.open({ ...box, ct: ct.toString('base64') }, privateKey));   // body changed
+  assert.notStrictEqual(ic.seal(rec, pub).ct, box.ct);                                              // fresh ephemeral key every time
+  // through the public listener: stored sealed, LOCKED without the PIN, readable after unlock
+  const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'am-inbox-'));
+  fsx.writeFileSync(pathx.join(dir, 'public.jwk.json'), JSON.stringify(pub));
+  vault.writeLocked(dir, privateKey.export({ type: 'pkcs8', format: 'pem' }), 'pin-123456');
+  fsx.appendFileSync(pathx.join(dir, 'license-requests.jsonl'), JSON.stringify({ at: 2, plan: 'basic', name: 'Old Plain', email: 'old@example.com', machineId: '' }) + '\n');   // made before encryption
+  const s = gen.createServer({ kind: 'vendor', dirArgv: ['--dir', dir], publicOnly: true, limit: () => true, requestCap: () => true });
+  await new Promise(r => s.listen(0, '127.0.0.1', r));
+  const post = () => fetch(`http://127.0.0.1:${s.address().port}/request-license`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: 'license-request', ...rec }) }).then(r => r.json());
+  assert.strictEqual((await post()).ok, true); assert.strictEqual((await post()).duplicate, true);   // dedupe works on the sealed hash
+  s.close();
+  const disk = fsx.readFileSync(pathx.join(dir, 'license-requests.jsonl'), 'utf8');
+  assert.ok(!disk.includes('Jane') && !disk.includes('jane@example.com'));
+  const session = gen.makeSession();
+  const locked = gen.readInbox(dir, session);
+  assert.ok(locked.some(r => r.locked && r.plan === 'pro')); assert.ok(!JSON.stringify(locked).includes('Jane'));
+  session.unlock(dir, 'pin-123456');
+  const open = gen.readInbox(dir, session);
+  assert.ok(open.some(r => r.name === 'Jane Secret' && r.email === 'jane@example.com')); assert.ok(open.some(r => r.name === 'Old Plain'));
+  assert.ok(!fsx.readFileSync(pathx.join(dir, 'license-requests.jsonl'), 'utf8').includes('old@example.com'));   // the old plain record is now sealed too
+  fsx.rmSync(dir, { recursive: true, force: true });
+});
