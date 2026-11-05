@@ -4,7 +4,7 @@
 //   GET /api/status   -> { ok, name, version }
 //   GET /api/drivers  -> native driver/device detection for this OS
 //   GET /api/volume   -> system output / input volume + mute
-//   GET /api/license, GET /api/license/request (the key request file), POST /api/license/activate|deactivate -> consumer license (plan, machine code)
+//   GET /api/license, GET /api/license/request (the key request file), POST /api/license/check (validity + upgrade report, stores nothing) | activate | deactivate -> consumer license (plan, machine code)
 //   GET /api/update, POST /api/update/download, POST /api/update/install -> OTA updates (signed manifest, checksum-verified download, Windows-only silent install)
 //   GET / POST /api/update/auto -> automatic updates for the Windows setup .exe (off by default; Android is updated by Google Play only)
 //   GET /api/universal -> universal ASIO driver: all input / output sources, ranked, with the automatic pick
@@ -119,6 +119,7 @@ async function handle(req, res) {
     const r = license.activate(body.key);
     return r.ok ? [200, r] : [400, r];
   });
+  if (req.method === 'POST' && url.pathname === '/api/license/check') return handleAction(req, res, cors, 'license', async body => [200, license.check(String(body.key || '').trim().replace(/\s+/g, ''))]);   // read-only: nothing stored, no device registered
   if (req.method === 'POST' && url.pathname === '/api/license/deactivate') return handleAction(req, res, cors, 'license', async () => {
     const stored = license.readStored();
     if (stored && stored.key) await licenseClient.deactivate(stored.key, license.machineId());

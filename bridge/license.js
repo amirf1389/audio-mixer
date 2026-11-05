@@ -116,6 +116,26 @@ function request({ plan = 'pro', name = '', email = '', now = Date.now(), machin
   return { app: 'audio-mixer', kind: 'license-request', v: 1, machineId: machine, plan, name: clean(name, 80), email: clean(email, 120), platform: os.platform(), arch: os.arch(), version, at: now, sandbox: !!sandboxJwk() };
 }
 
+// "Check key" (like checking a Windows product key before an edition upgrade): is the key genuine, for this PC, not expired, and what would
+// it change compared with the plan active now (upgrade / same / downgrade, channels, features unlocked). Reads only: nothing is stored.
+const RANK = { basic: 0, pro: 1, studio: 2, master: 3 };
+function compare(from, to) {
+  const a = PLANS[from] || PLANS.basic, b = PLANS[to] || PLANS.basic, d = RANK[b.id] - RANK[a.id];
+  return { from: a.id, to: b.id, change: d > 0 ? 'upgrade' : d < 0 ? 'downgrade' : 'same', channels: [a.channels, b.channels],
+    adds: b.features.filter(f => !a.features.includes(f)), removes: a.features.filter(f => !b.features.includes(f)) };
+}
+function check(key, opts = {}) {
+  const machine = opts.machine || machineId(), now = opts.now || Date.now();
+  const cur = opts.current || status({ machine, now, jwk: opts.jwk }).plan.id;
+  const v = verifyKey(key, { machine, now, jwk: opts.jwk });
+  if (!v.ok) return { ok: true, valid: false, genuine: v.reason !== 'bad-signature' && v.reason !== 'malformed', reason: v.reason, message: v.message, current: cur, plan: v.payload ? v.payload.plan : null };
+  const p = v.payload, c = compare(cur, p.plan);
+  return { ok: true, valid: true, genuine: true, current: cur, plan: p.plan, ...c, canActivate: c.change !== 'downgrade',
+    boundToThisPc: !!p.mid, anyPc: !p.mid, expires: p.expires || null, daysLeft: p.expires ? Math.max(0, Math.floor((p.expires - now) / 86400000)) : null,
+    name: p.name || '', id: p.id || null, seats: p.seats || 1,
+    message: c.change === 'upgrade' ? `Genuine key: upgrades ${PLANS[cur].name} to ${PLANS[p.plan].name}.` : c.change === 'same' ? `Genuine key for the ${PLANS[p.plan].name} plan you already have (renews it).` : `Genuine key, but ${PLANS[p.plan].name} is lower than your ${PLANS[cur].name} plan: activating it would downgrade.` };
+}
+
 function activate(key, opts = {}) {
   const v = verifyKey(key, { machine: opts.machine || machineId(), now: opts.now, jwk: opts.jwk });
   if (!v.ok) return { ok: false, reason: v.reason, message: v.message };
@@ -134,4 +154,4 @@ function deactivate(opts = {}) {
 
 const hasFeature = (st, f) => !!(st && st.plan && st.plan.features.includes(f));
 
-module.exports = { fingerprint, PLANS, PREFIX, PUBLIC_JWK, sandboxJwk, adminJwk, request, publicKeyOf: publicKey, signKey, verifyKey, machineId, status, activate, deactivate, hasFeature, readStored, storeFile, b64u, unb64u };
+module.exports = { check, compare, fingerprint, PLANS, PREFIX, PUBLIC_JWK, sandboxJwk, adminJwk, request, publicKeyOf: publicKey, signKey, verifyKey, machineId, status, activate, deactivate, hasFeature, readStored, storeFile, b64u, unb64u };
