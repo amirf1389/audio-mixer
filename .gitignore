@@ -125,3 +125,6 @@ profiles/
 .env
 .env.local
 .env.*.local
+
+# a paid edition's signed token is made per sale and goes only into that edition's installer (scripts/build-edition.js)
+bridge/edition-token.json

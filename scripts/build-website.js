@@ -47,7 +47,7 @@ function downloads() {
 const DL = downloads();
 
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const NAV = [['/', 'Home'], ['/features', 'Features'], ['/developers', 'Developers'], ['/security', 'Security'], ['/faq', 'FAQ'], ['/keys', 'License']];
+const NAV = [['/', 'Home'], ['/features', 'Features'], ['/developers', 'Developers'], ['/security', 'Security'], ['/faq', 'FAQ'], ['/keys', 'Buy']];
 
 function page({ slug, title, description, h1, intro, crumbs = true, body, jsonld = [], hero = null, changefreq = 'monthly', priority = '0.7' }) {
   const url = SITE + (slug === '/' ? '/' : slug);
@@ -90,7 +90,7 @@ ${head}
 ${body}
 </main>
 <footer class="site-foot"><div class="wrap">
-<div><h2>AmF X1</h2><ul><li><a href="/features">Features</a></li><li><a href="/download">Download ${esc(SHOWN)}</a></li><li><a href="/keys">License key</a></li><li><a href="/faq">FAQ</a></li></ul></div>
+<div><h2>AmF X1</h2><ul><li><a href="/features">Features</a></li><li><a href="/download">Download ${esc(SHOWN)}</a></li><li><a href="/keys">Buy Pro / Studio Master</a></li><li><a href="/faq">FAQ</a></li></ul></div>
 <div><h2>Developers</h2><ul><li><a href="/developers#frameworks">Frameworks</a></li><li><a href="/developers#api">Local API</a></li><li><a href="/developers#cdn">CDN &amp; hosting</a></li><li><a href="${REPO}" rel="noopener">Source on GitHub</a></li></ul></div>
 <div><h2>Trust</h2><ul><li><a href="/security">Security</a></li><li><a href="/privacy">Privacy</a></li><li><a href="mailto:${CONTACT.email}">Report a problem</a></li></ul></div>
 <div><h2>Contact</h2><ul><li><a href="${CONTACT.whatsapp}" rel="noopener">WhatsApp</a></li><li><a href="mailto:${CONTACT.email}">${CONTACT.email}</a></li></ul></div>
@@ -158,8 +158,9 @@ ${files.length > 1 ? `<p class="dl-more">Also: ${files.filter(d => d !== main).m
 <article class="card edition"><span class="tag">Pro</span><h3>16 channels</h3><p>Adds plugins and in-app updates.</p></article>
 <article class="card edition"><span class="tag">Studio</span><h3>32 channels</h3><p>Adds the studio tool set.</p></article>
 <article class="card edition"><span class="tag">Master</span><h3>All access</h3><p>Every feature and every channel.</p></article>
+<article class="card edition"><span class="tag">Paid editions</span><h3>AmF X1 Pro and Studio Master</h3><p>Buy once on WhatsApp and get your own installer: it activates by itself on first start, no key to type.</p></article>
 </div>
-<p class="sub mt">Upgrade or ask a question on <a href="${CONTACT.whatsapp}" rel="noopener">WhatsApp</a>, or request a key on the <a href="/keys">license page</a>.</p>
+<p class="sub mt">Buy Pro or Studio Master on <a href="/keys">the editions page</a> or ask a question on <a href="${CONTACT.whatsapp}" rel="noopener">WhatsApp</a>. In the app, UPGRADE TO PRO / STUDIO MASTER on the LICENSE page opens the same chat with your machine code.</p>
 </div></section>`,
 }));
 
@@ -219,7 +220,7 @@ shasum -a 256 AudioMixer-${esc(VERSION)}-macos.tar.gz
 # Linux
 sha256sum audio-mixer_${esc(VERSION)}_all.deb</code></pre>
 <h2 class="mt">After installing</h2>
-<ol><li>Start AmF X1 and choose your audio interface on the DAC &amp; OS sources page.</li><li>Basic works right away. For Pro, Studio or Master, request a key on the <a href="/keys">license page</a> or message us on <a href="${CONTACT.whatsapp}" rel="noopener">WhatsApp</a>.</li><li>Use CHECK KEY to see what a key unlocks before you activate it.</li><li>If a device has no sound, open DIAGNOSTICS on the DAC &amp; OS sources page and use COPY REPORT to send us the log.</li></ol>
+<ol><li>Start AmF X1 and choose your audio interface on the DAC &amp; OS sources page.</li><li>Basic works right away. For Pro or Studio Master, use UPGRADE on the LICENSE page of the app, the <a href="/keys">editions page</a>, or message us on <a href="${CONTACT.whatsapp}" rel="noopener">WhatsApp</a>.</li><li>Use CHECK KEY to see what a key unlocks before you activate it.</li><li>If a device has no sound, open DIAGNOSTICS on the DAC &amp; OS sources page and use COPY REPORT to send us the log.</li></ol>
 <h2 class="mt">System requirements</h2>
 <ul><li>Windows 10 or 11 (64-bit; a 32-bit MSI is available), macOS, or a 64-bit Linux.</li><li>Any audio interface: ASIO drivers are used when present, Windows audio (WASAPI), Core Audio or ALSA otherwise.</li><li>A current browser engine for the console (the Windows setup includes everything it needs).</li></ul>
 </div></section>`,
@@ -300,8 +301,9 @@ const FAQ = [
   ['Do I need an ASIO driver?', 'No. AmF X1 uses your interface\'s own ASIO driver when it has one for the lowest latency, and Windows audio (WASAPI) otherwise. Onboard sound such as Realtek works through Windows audio.'],
   ['Does it work with the Behringer UM2 and similar USB interfaces?', 'Yes. AmF X1 opens the UM2 through its ASIO driver (BEHRINGER USB AUDIO); its microphone is on input 1 only, so AmF X1 copies it to both sides. If the ASIO driver is held by another program, AmF X1 switches to the same device through Windows (USB Audio CODEC) by itself, and the DIAGNOSTICS panel says what happened.'],
   ['What does Beta mean?', `Version ${SHOWN} is a test version with new features. It may still have problems; please report them so they can be fixed before the final release.`],
-  ['How do I activate a license?', 'Request a key on the license page or on WhatsApp, paste it on the LICENSE page of AmF X1, press CHECK KEY to see what it unlocks, then ACTIVATE.'],
-  ['Does AmF X1 send my audio or data anywhere?', 'No. Audio stays on your computer. The app only goes online to check for signed updates, and key requests are sent only when you choose to.'],
+  ['How do I get Pro or Studio Master?', 'Press UPGRADE TO PRO or UPGRADE TO STUDIO MASTER on the LICENSE page of AmF X1 (or use the editions page): WhatsApp opens with your machine code. After payment you receive your own edition installer; it activates by itself on first start.'],
+  ['I already have a license key. How do I activate it?', 'Paste it on the LICENSE page of AmF X1, press CHECK KEY to see what it unlocks, then ACTIVATE.'],
+  ['Does AmF X1 send my audio or data anywhere?', 'No. Audio stays on your computer. The app only goes online to check for signed updates, and WhatsApp or e-mail messages are sent only when you press send.'],
   ['Why does Windows say "unknown publisher"?', 'The installers are not yet signed with a commercial code-signing certificate. Download only from this site or the official GitHub releases page.'],
 ];
 pages.push(page({
@@ -314,11 +316,11 @@ pages.push(page({
 // PRIVACY
 pages.push(page({
   slug: '/privacy', title: 'Privacy — AmF X1 by AMFB Audio', h1: 'Privacy', priority: '0.4', changefreq: 'yearly',
-  description: 'What data AmF X1 and this website use: no tracking, no analytics, no cookies; key requests are encrypted and used only to send your license.',
+  description: 'What data AmF X1 and this website use: no tracking, no analytics, no cookies; sales records are encrypted and used only to send your edition.',
   intro: 'Short version: no tracking, no analytics, no cookies.',
   body: `<section class="block"><div class="wrap">
 <h2>This website</h2><p>No cookies, no analytics, no third-party scripts or fonts. The web server keeps standard access logs (IP address, time, page) for security and removes them regularly.</p>
-<h2 class="mt">Key requests</h2><p>When you request a key you send your name, e-mail address, the plan and your computer's machine code. They are stored encrypted and used only to make and send your license key. Ask us at <a href="mailto:${CONTACT.email}">${CONTACT.email}</a> to see or delete them.</p>
+<h2 class="mt">Buying an edition</h2><p>When you buy on WhatsApp you send the edition and, if you include it, your computer's machine code. The sale (serial number, edition, order and the contact you gave) is stored encrypted and used only to make and send your edition installer. Ask us at <a href="mailto:${CONTACT.email}">${CONTACT.email}</a> to see or delete them.</p>
 <h2 class="mt">The app</h2><p>Your audio never leaves your computer. The app checks for signed updates and, if you choose, opens WhatsApp or e-mail with a prepared message; nothing is sent without you pressing send.</p>
 </div></section>`,
 }));

@@ -378,7 +378,7 @@ server.on('clientError', (_, socket) => { try { socket.end('HTTP/1.1 400 Bad Req
 function start(port = PORT) {
   return new Promise((resolve, reject) => {
     server.once('error', reject);
-    server.listen(port, HOST, () => { server.removeListener('error', reject); autoUpdater.start(); resolve(server.address().port); });
+    server.listen(port, HOST, () => { server.removeListener('error', reject); autoUpdater.start(); try { license.status(); } catch (_) { /* a paid edition activates here on first start; Basic: nothing to do */ } resolve(server.address().port); });
   });
 }
 

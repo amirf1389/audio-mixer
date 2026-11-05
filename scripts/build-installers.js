@@ -68,24 +68,33 @@ async function addSingleFile(staged, { out, id, env }) {
   return target;
 }
 
-async function buildInstallers({ out = path.join(__dirname, '..', 'dist'), archs = ['x64', 'x86'], sign = true, env = process.env } = {}) {
+// edition (scripts/build-edition.js): { id, name, file, token } puts the verified edition token into the install tree as bridge/edition-token.json
+// (listed in MANIFEST.sha256 like every file) and names the packages after the edition. Without it: the Basic installers, as before.
+function addEditionToken(staged, edition) {
+  const rel = 'bridge/edition-token.json', f = path.join(staged.stage, 'bridge', 'edition-token.json');
+  fs.writeFileSync(f, JSON.stringify({ token: edition.token }) + '\n');
+  fs.appendFileSync(path.join(staged.stage, 'MANIFEST.sha256'), `${sha(f)}  ${rel}\n`);
+}
+
+async function buildInstallers({ out = path.join(__dirname, '..', 'dist'), archs = ['x64', 'x86'], sign = true, env = process.env, edition = null } = {}) {
   const outAbs = path.resolve(out);
   const id = sign ? ensureSigningCert({ dir: path.join(outAbs, 'cache', 'signing'), env }) : null;
   const result = { msi: {}, exe: null, signing: id };
   for (const arch of archs) {
     const staged = await buildInstaller({ out: outAbs, arch });
+    if (edition) addEditionToken(staged, edition);
     addLauncher(staged, { out: outAbs, id, env });
     addAsioDriver(staged, { out: outAbs, id, env });
     addNative(staged, { out: outAbs, id, env });
     await addSingleFile(staged, { out: outAbs, id, env });
-    const m = await buildMsi({ out: outAbs, arch, scope: 'machine', staged });
+    const m = await buildMsi({ out: outAbs, arch, scope: 'machine', staged, edition });
     if (id) signFile(m.msi, id, { env });
     m.sha256 = sha(m.msi);
     result.msi[arch] = m;
   }
   if (result.msi.x64) {
     const m = result.msi.x64;
-    const exe = path.join(outAbs, `AmF X1-${require('./release-label').fileVersion(m.version)}.exe`);
+    const exe = path.join(outAbs, `${edition ? edition.name : 'AmF X1'}-${require('./release-label').fileVersion(m.version)}.exe`);
     const e = buildExe({ msi: m.msi, productCode: m.productCode, out: exe, version: m.version, arch: 'x64', work: path.join(outAbs, 'exe'), id });
     result.exe = { ...e, version: m.version };
   }
@@ -102,4 +111,4 @@ if (require.main === module) {
       : 'Signed with the certificate from SIGN_PFX.');
   }).catch(e => { console.error('Installer build failed: ' + e.message); process.exit(1); });
 }
-module.exports = { buildInstallers, addAsioDriver, addNative, addSingleFile };
+module.exports = { buildInstallers, addEditionToken, addAsioDriver, addNative, addSingleFile };

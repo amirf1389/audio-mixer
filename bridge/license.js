@@ -93,17 +93,25 @@ function readStored() {
   try { const j = JSON.parse(fs.readFileSync(storeFile(), 'utf8')); return j && typeof j.key === 'string' ? j : null; } catch (_) { return null; }
 }
 
-// What the app should run as right now.
+// What the app should run as right now. A paid edition (bridge/edition.js: AmF X1 Pro / Studio Master, activated automatically from the
+// installer's signed token) counts like a key for its plan; a stored key for a higher plan still wins. opts.edition === false: keys only.
+const RANK_OF = id => ({ basic: 0, pro: 1, studio: 2, master: 3 })[id] || 0;
 function status(opts = {}) {
   const machine = opts.machine || machineId();
   const stored = opts.key !== undefined ? { key: opts.key } : readStored();
-  const base = { machineId: machine, plans: PLANS, sandbox: !!sandboxJwk(), admin: !!adminJwk() };
-  if (!stored || !stored.key) return { ...base, state: 'basic', plan: PLANS.basic, license: null };
+  let ed = null;
+  if (opts.edition !== false) { try { ed = require('./edition').current({ machine, now: opts.now, ...(opts.edition || {}) }); } catch (_) { ed = null; } }
+  const edition = ed && !ed.error ? ed : null;
+  const base = { machineId: machine, plans: PLANS, sandbox: !!sandboxJwk(), admin: !!adminJwk(), edition, editionError: ed && ed.error ? ed.error : null };
+  const fromEdition = () => ({ ...base, state: 'active', plan: PLANS[edition.plan], license: { id: edition.serial, plan: edition.plan, name: edition.name, email: '', issued: edition.issued, expires: edition.expires, boundToThisPc: true, seats: 1, admin: false, edition: edition.id } });
+  if (!stored || !stored.key) return edition ? fromEdition() : { ...base, state: 'basic', plan: PLANS.basic, license: null };
   const v = verifyKey(stored.key, { now: opts.now, machine, jwk: opts.jwk });
   if (v.ok) {
+    if (edition && RANK_OF(edition.plan) > RANK_OF(v.payload.plan)) return fromEdition();
     const p = v.payload;
     return { ...base, state: 'active', plan: v.plan, license: { id: p.id || null, plan: p.plan, name: p.name || '', email: p.email || '', issued: p.issued || null, expires: p.expires || null, boundToThisPc: !!p.mid, seats: p.seats || 1, admin: !!p.admin } };
   }
+  if (edition) return fromEdition();
   // an expired / invalid stored key never raises the plan
   return { ...base, state: v.reason === 'expired' ? 'expired' : 'invalid', plan: PLANS.basic, license: v.payload ? { id: v.payload.id || null, plan: v.payload.plan, name: v.payload.name || '', expires: v.payload.expires || null } : null, message: v.message };
 }
@@ -142,7 +150,7 @@ function activate(key, opts = {}) {
   const file = opts.file || storeFile();
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify({ key: String(key).trim().replace(/\s+/g, ''), activatedAt: Date.now() }) + '\n', { mode: 0o600 });
-  return { ok: true, ...status({ key: String(key).trim() , machine: opts.machine, now: opts.now, jwk: opts.jwk }) };
+  return { ok: true, ...status({ key: String(key).trim(), machine: opts.machine, now: opts.now, jwk: opts.jwk, edition: opts.edition }) };
 }
 
 function deactivate(opts = {}) {

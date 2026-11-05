@@ -7889,24 +7889,26 @@ const cArea = document.getElementById('content-area');
                     <div data-plan="master" class="bg-black/60 p-2.5 rounded-lg border border-white/10 space-y-1"><div class="text-emerald-400 font-black text-[9px]">MASTER</div><div class="text-amber-400 font-bold text-[8px]">32 CHANNELS • ALL ACCESS</div><div class="text-slate-400 text-[7px] leading-relaxed">Everything in STUDIO, every feature unlocked. A MASTER key can switch this computer to any plan below it.</div></div>
                   </div>
                   <div id="lic-switch" class="hidden flex flex-wrap items-center gap-1.5 text-[7.5px]"><span class="text-slate-400 font-bold">USE PLAN:</span></div>
+                  <div id="lic-edition" class="hidden text-[8px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/40 rounded px-2 py-1" role="status"></div>
+                  <div id="lic-upgrade-row" class="flex flex-wrap items-center gap-1.5 text-[7.5px]"><button id="lic-upgrade-pro" type="button" title="Opens WhatsApp with a message to AMFB Audio: edition, this computer's machine code, version and platform (nothing is sent until you press send)" class="px-3 py-1.5 rounded bg-emerald-500/20 hover:bg-emerald-500 hover:text-black text-emerald-400 border border-emerald-500/40 font-black uppercase text-[7.5px] transition"><i class="fa-brands fa-whatsapp mr-1" aria-hidden="true"></i>UPGRADE TO PRO</button><button id="lic-upgrade-master" type="button" title="Opens WhatsApp with a message to AMFB Audio: edition, this computer's machine code, version and platform (nothing is sent until you press send)" class="px-3 py-1.5 rounded bg-emerald-500/20 hover:bg-emerald-500 hover:text-black text-emerald-400 border border-emerald-500/40 font-black uppercase text-[7.5px] transition"><i class="fa-brands fa-whatsapp mr-1" aria-hidden="true"></i>UPGRADE TO STUDIO MASTER</button><span class="text-slate-500 text-[6.5px]">Pay once: the edition installer you receive activates by itself.</span></div>
                   <div class="grid grid-cols-1 md:grid-cols-2 gap-2.5">
                     <div class="bg-black/60 p-2.5 rounded-lg border border-white/10 space-y-1.5">
                       <span class="text-slate-400 block text-[7px] font-bold">THIS COMPUTER'S MACHINE CODE (SEND IT WITH YOUR ORDER FOR A KEY BOUND TO THIS PC)</span>
                       <div class="flex gap-1.5 items-center"><code id="lic-machine" class="flex-1 bg-black border border-white/10 rounded px-2 py-1 text-cyan-400 text-[9px] text-center select-all">-</code><button id="lic-copy-machine" type="button" class="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-slate-200 font-bold uppercase text-[7px]">COPY</button></div>
                       <span class="text-slate-500 block text-[6.5px]" id="lic-machine-note">Start PC mode (the local server) to read the machine code.</span>
                       <span class="text-slate-500 block text-[6.5px]">Trusted vendor key: <span id="lic-key-fp" class="font-mono text-slate-300">-</span> (the key generator shows the same code for keys this copy accepts)</span>
-                      <div class="border-t border-white/10 pt-1.5 space-y-1">
+                      <div id="lic-manual-request" class="border-t border-white/10 pt-1.5 space-y-1">
                         <span class="text-slate-400 block text-[7px] font-bold">REQUEST A KEY <span id="lic-sandbox-badge" class="hidden ml-1 px-1.5 py-0.5 rounded bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/40 text-[6.5px]">SANDBOX</span></span>
                         <div class="grid grid-cols-3 gap-1">
                           <select id="lic-req-plan" class="bg-black border border-white/10 rounded px-1 py-1 text-amber-400 outline-none text-[7.5px]"><option value="pro">PRO</option><option value="studio">STUDIO</option><option value="master">MASTER</option></select>
                           <input id="lic-req-name" maxlength="80" placeholder="Name" autocomplete="off" class="bg-black border border-white/10 rounded px-1.5 py-1 text-slate-200 outline-none text-[7.5px] min-w-0">
                           <input id="lic-req-email" maxlength="120" placeholder="E-mail" autocomplete="off" class="bg-black border border-white/10 rounded px-1.5 py-1 text-slate-200 outline-none text-[7.5px] min-w-0">
                         </div>
-                        <div class="flex gap-1.5"><button id="lic-req-submit" type="button" class="flex-1 py-1 rounded bg-cyan-500/20 hover:bg-cyan-500 hover:text-black text-cyan-400 border border-cyan-500/40 font-bold uppercase text-[7.5px] transition">SUBMIT TO VENDOR</button><button id="lic-req-file" type="button" class="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-slate-200 font-bold uppercase text-[7.5px] transition">FILE</button><button id="lic-req-copy" type="button" class="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-slate-200 font-bold uppercase text-[7.5px] transition">COPY</button><button id="lic-req-website" type="button" hidden title="Request a key on the AMFB Audio website (this computer's machine code and plan are filled in)" class="px-2 py-1 rounded bg-emerald-500/20 hover:bg-emerald-500 hover:text-black text-emerald-400 border border-emerald-500/40 font-bold uppercase text-[7.5px] transition">WEBSITE</button><button id="lic-req-generator" type="button" title="Owner's computer: opens the local key generator (scripts/license-generator.bat) with this machine code, plan, name and e-mail filled in" class="px-2 py-1 rounded bg-amber-500/20 hover:bg-amber-500 hover:text-black text-amber-400 border border-amber-500/40 font-bold uppercase text-[7.5px] transition">GENERATOR</button></div>
-                        <span class="text-slate-500 block text-[6.5px]">SUBMIT sends this request to the update server set in SETTINGS → OTA. Without one it opens the key generator on the vendor's own computer, or an e-mail draft with the request (also copied). FILE / COPY keep the offline way.</span>
+                        <div class="flex gap-1.5"><button id="lic-req-file" type="button" class="flex-1 px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-slate-200 font-bold uppercase text-[7.5px] transition">FILE</button><button id="lic-req-copy" type="button" class="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-slate-200 font-bold uppercase text-[7.5px] transition">COPY</button><button id="lic-req-website" type="button" hidden title="Request a key on the AMFB Audio website (this computer's machine code and plan are filled in)" class="px-2 py-1 rounded bg-emerald-500/20 hover:bg-emerald-500 hover:text-black text-emerald-400 border border-emerald-500/40 font-bold uppercase text-[7.5px] transition">WEBSITE</button><button id="lic-req-generator" type="button" title="Owner's computer: opens the local key generator (scripts/license-generator.bat) with this machine code, plan, name and e-mail filled in" class="px-2 py-1 rounded bg-amber-500/20 hover:bg-amber-500 hover:text-black text-amber-400 border border-amber-500/40 font-bold uppercase text-[7.5px] transition">GENERATOR</button></div>
+                        <span class="text-slate-500 block text-[6.5px]">To buy: UPGRADE above opens WhatsApp with your machine code filled in (you press send). FILE / COPY keep the offline way for a key bound to this PC.</span>
                       </div>
                     </div>
-                    <div class="bg-black/60 p-2.5 rounded-lg border border-white/10 space-y-1.5">
+                    <div id="lic-key-panel" class="bg-black/60 p-2.5 rounded-lg border border-white/10 space-y-1.5">
                       <span class="text-slate-400 block text-[7px] font-bold">LICENSE KEY</span>
                       <textarea id="lic-key-input" rows="3" spellcheck="false" autocomplete="off" placeholder="Paste your license key (AMIX1.…)" class="w-full bg-black border border-white/10 rounded p-1.5 text-emerald-400 font-mono text-[8px] outline-none resize-none break-all"></textarea>
                       <div class="flex gap-1.5"><button id="lic-check" type="button" title="Check whether this key is genuine and what it upgrades, without activating" class="px-3 py-1.5 bg-cyan-500/20 hover:bg-cyan-400 hover:text-black text-cyan-300 border border-cyan-500/40 font-black uppercase rounded text-[8px] transition">CHECK KEY</button><button id="lic-activate" type="button" class="flex-1 py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-black uppercase rounded text-[8px] transition">ACTIVATE</button><button id="lic-deactivate" type="button" class="px-3 py-1.5 bg-white/10 hover:bg-rose-500 hover:text-black text-slate-300 font-bold uppercase rounded text-[8px] transition">DEACTIVATE</button></div>
@@ -18960,6 +18962,20 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                     else st.textContent = 'No license key activated: the free BASIC plan with 8 channels.';
                 }
                 document.querySelectorAll('#lic-plan-grid [data-plan]').forEach(c => c.classList.toggle('active-plan', c.getAttribute('data-plan') === this.plan.id));
+                // a paid edition (AmF X1 Pro / Studio Master, bridge/edition.js) activates by itself: no key box, no request form; UPGRADE shows only what is above
+                {
+                    const ed = this.edition, err = this.editionError, box = $('lic-edition');
+                    if (box) {
+                        box.classList.toggle('hidden', !ed && !err);
+                        const t = ed ? ed.name.toUpperCase() + ' • SERIAL ' + ed.serial + ' • ACTIVATED AUTOMATICALLY ON THIS COMPUTER' + (ed.expires ? ' • UNTIL ' + new Date(ed.expires).toISOString().slice(0, 10) : '') : err ? 'THIS INSTALLER\'S EDITION TOKEN IS NOT VALID (' + String(err.message || err.reason || '') + '): running BASIC. Contact AMFB Audio on WhatsApp.' : '';
+                        if (box.textContent !== t) box.textContent = t;
+                        box.classList.toggle('text-rose-400', !ed && !!err); box.classList.toggle('text-emerald-400', !!ed);
+                    }
+                    ['lic-manual-request', 'lic-key-panel'].forEach(id => { const e = $(id); if (e) e.classList.toggle('hidden', !!ed); });
+                    const rank = this.ORDER.indexOf((this.licensed || PLANS.basic).id);
+                    const up = $('lic-upgrade-pro'); if (up) up.classList.toggle('hidden', rank >= 1);
+                    const row = $('lic-upgrade-row'); if (row) row.classList.toggle('hidden', rank >= 3);
+                }
                 if (this.machineId) { text('lic-machine', this.machineId); text('lic-machine-note', 'Keys can be bound to this computer with this code.'); }
                 else { text('lic-machine', '-'); text('lic-machine-note', 'Start PC mode (the local server) to read the machine code.'); }
                 const d = $('lic-deactivate'); if (d) d.disabled = this.state === 'basic';
@@ -18978,7 +18994,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 try {
                     const j = await (await fetch(bridge() + '/api/license', { cache: 'no-store' })).json();
                     if (!j || !j.ok) return false;
-                    this.machineId = j.machineId; this.version = j.version;
+                    this.machineId = j.machineId; this.version = j.version; this.edition = j.edition || null; this.editionError = j.editionError || null;
                     window.LICENSE_SANDBOX_JWK = j.sandboxKey || null; { const sb = $('lic-sandbox-badge'); if (sb) sb.classList.toggle('hidden', !j.sandbox); }
                     const key = store.get(KEY_STORE);
                     if (j.state === 'active') this.set(j.plan.id, 'active', j.license);
@@ -19059,7 +19075,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 return req;
             },
             // The owner's local key generator (scripts/license-generator.js, fixed port 8799 on 127.0.0.1) opened with this request filled in.
-            // It only answers on the computer that runs it, so for a customer the link does nothing: they use SUBMIT / FILE / COPY.
+            // It only answers on the computer that runs it, so for a customer the link does nothing: they use UPGRADE (WhatsApp) / FILE / COPY.
             async openWebsite() {
                 const page = String(WEBSITE_URL || ''); if (!/^https:\/\//.test(page)) return null;
                 const req = await this.requestKey(), q = new URLSearchParams({ plan: req.plan || 'pro', name: req.name || '', email: req.email || '', machine: req.machineId || '' });
@@ -19095,38 +19111,21 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 try { await navigator.clipboard.writeText(t); notify('License request copied', 'copy'); } catch (e) { notify('Copy is blocked here: use DOWNLOAD REQUEST FILE', 'triangle-exclamation'); }
                 return req;
             },
-            // posts the same request to the update server's POST /request-license (ota-server/server.js): stored for the vendor and, when the
-            // server has SMTP_* configured, a receipt e-mail sent to the address given above. Falls back to telling the person to use FILE / COPY
-            // when no https update source is set (OTA_DEFAULT_URL, the project's own releases, is not a server that accepts submissions).
-            // No update server set: the vendor's own computer (the key generator answers on 127.0.0.1:8799) gets the generator, filled in;
-            // anyone else gets an e-mail draft holding the request (to VENDOR_EMAIL, or the address in localStorage halx_vendor_email),
-            // and the request is copied as well, so it can be pasted into any message.
-            async submitWithoutServer(req) {
-                let local = false;
-                try { const c = new AbortController(), t = setTimeout(() => c.abort(), 1200); await fetch('http://127.0.0.1:8799/status', { mode: 'no-cors', cache: 'no-store', signal: c.signal }); clearTimeout(t); local = true; } catch (e) { /* no generator here */ }
-                if (local) { await this.openGenerator(); return req; }
-                const t = JSON.stringify(req), to = (store.get('halx_vendor_email') || VENDOR_EMAIL).replace(/[^\w.+@-]/g, '');
-                try { await navigator.clipboard.writeText(t); } catch (e) { /* blocked: the e-mail body has it anyway */ }
-                const subject = 'AmF X1 license request: ' + String(req.plan || '').toUpperCase() + (req.name ? ' for ' + req.name : '');
-                location.href = 'mailto:' + encodeURIComponent(to) + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent('Please send me a license key for this request:\n\n' + t + '\n');
-                notify('E-mail draft opened with your request (also copied). Send it to the vendor; the key comes back by reply.', 'envelope');
-                return req;
+            // UPGRADE TO PRO / STUDIO MASTER (replaced the old vendor-submit button in 1.22.1.0): WhatsApp to the vendor with the edition, this computer's machine code,
+            // version and platform, percent-encoded. The app posts nothing anywhere: WhatsApp opens with the text and the person presses send.
+            // Same text as bridge/edition.js upgradeText(), so the vendor reads the same message from every copy.
+            EDITIONS: { pro: { name: 'AmF X1 Pro', short: 'PRO', plan: 'pro' }, 'studio-master': { name: 'AmF X1 Studio Master', short: 'STUDIO MASTER', plan: 'master' } },
+            WHATSAPP: '601120871185',
+            upgradeUrl(edition) {
+                const e = this.EDITIONS[edition] || this.EDITIONS.pro, c = (v, n) => String(v || '').replace(/[\u0000-\u001f<>]/g, ' ').trim().slice(0, n);
+                const ua = navigator.userAgentData && navigator.userAgentData.platform, plat = c(ua || navigator.platform || '', 40);
+                const t = 'Hello AMFB Audio, I would like to buy ' + e.name + '.\nEdition: ' + e.short + '\nMachine ID: ' + (c(this.machineId, 40) || '(not shown)') + '\nVersion: ' + c(window.AMFX_VERSION ? window.AMFX_VERSION + (window.AMFX_CHANNEL ? ' ' + window.AMFX_CHANNEL : '') : (this.version || ''), 40) + '\nPlatform: ' + plat;
+                return 'https://wa.me/' + this.WHATSAPP + '?text=' + encodeURIComponent(t);
             },
-            async submitRequest() {
-                const req = await this.requestKey(), btn = $('lic-req-submit');
-                // the update server set in SETTINGS -> OTA, else the vendor's own key generator on the internet (VENDOR_SERVER), else e-mail
-                const origin = licenseRequestOrigin() || vendorServer() || await vendorServerPublished();
-                if (!origin) return this.submitWithoutServer(req);
-                if (btn) { btn.disabled = true; btn.textContent = 'SENDING...'; }
-                try {
-                    const r = await fetch(origin + '/request-license', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(req) });
-                    const j = await r.json().catch(() => null);
-                    if (r.ok && j && j.ok) notify('License request submitted' + (j.emailed ? ' – check your e-mail for a receipt.' : '.'), 'paper-plane');
-                    else if (r.status === 429) notify('Too many requests: wait a minute and try again.', 'triangle-exclamation');
-                    else { notify('The vendor server did not take the request: sending it by e-mail instead.', 'envelope'); return this.submitWithoutServer(req); }
-                } catch (e) { notify('The vendor server could not be reached: sending the request by e-mail instead.', 'envelope'); return this.submitWithoutServer(req); }
-                finally { if (btn) { btn.disabled = false; btn.textContent = 'SUBMIT TO VENDOR'; } }
-                return req;
+            upgrade(edition) {
+                const w = window.open(this.upgradeUrl(edition), '_blank', 'noopener');
+                notify(w ? 'WhatsApp opened with your upgrade request: press send there' + (this.machineId ? '' : ' (start PC mode first so your machine code is included)') : 'Pop-up blocked: allow pop-ups for WhatsApp, or use COPY', 'key');
+                return !!w;
             },
             async deactivate() {
                 store.del(KEY_STORE);
@@ -19393,38 +19392,9 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
         const OTA_DEFAULT_URL = 'https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/update.json';
         const otaCmp = (a, b) => { const p = v => String(v).split(/[-+]/)[0].split('.').map(n => parseInt(n, 10) || 0); const x = p(a), y = p(b); for (let i = 0; i < Math.max(x.length, y.length, 3); i++) { const d = (x[i] || 0) - (y[i] || 0); if (d) return d < 0 ? -1 : 1; } return 0; };
         const httpsUrl = u => { try { const x = new URL(u, location.href); return (x.protocol === 'https:' || (x.protocol === 'http:' && /^(localhost|127\.0\.0\.1)$/.test(x.hostname))) ? x.href : null; } catch (e) { return null; } };
-        // the origin to POST a license request to: the configured update server (SETTINGS -> OTA), with "/update.json" or "/<channel>/update.json" stripped
         const VENDOR_EMAIL = 'badriamirfakhri@gmail.com';
         // The vendor's key request page (deploy/website/license.html as published on the website). Empty = the WEBSITE button stays hidden.
         const WEBSITE_URL = 'https://amirfakhri.interactivelink.site/keys';
-        // The vendor's key generator reachable from the internet ("AmF X1 Key Generator.exe" listens for requests on port 8780; the router forwards it):
-        // e.g. 'http://203.0.113.7:8780'. Empty = SUBMIT TO VENDOR uses the e-mail draft. Plain http is accepted here only, for this address: a request holds
-        // a name, an e-mail and a machine code, nothing secret, and no key ever travels this way (keys go back by e-mail).
-        const VENDOR_SERVER = '';
-        // The address the vendor's key generator published (PUBLISH VENDOR ADDRESS -> releases/vendor.json, signed with the vendor key): fetched from
-        // the project on GitHub and accepted only when the signature checks out with the public key in this app, so nobody can redirect requests.
-        const VENDOR_JSON_URL = 'https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/vendor.json';
-        let vendorCache = null;
-        async function vendorServerPublished() {
-            if (vendorCache && Date.now() - vendorCache.at < 10 * 60 * 1000) return vendorCache.server;
-            try {
-                const c = new AbortController(), t = setTimeout(() => c.abort(), 5000);
-                const env = await (await fetch(VENDOR_JSON_URL, { cache: 'no-store', signal: c.signal })).json(); clearTimeout(t);
-                const jwk = window.LICENSE_PUBLIC_JWK;
-                if (!env || typeof env.payload !== 'string' || typeof env.signature !== 'string' || !jwk || !(window.crypto && crypto.subtle)) return null;
-                const key = await crypto.subtle.importKey('jwk', jwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
-                const sig = Uint8Array.from(atob(env.signature.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((env.signature.length + 3) % 4)), ch => ch.charCodeAt(0));
-                if (!(await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, key, sig, new TextEncoder().encode(env.payload)))) return null;
-                const m = JSON.parse(env.payload), v = String(m.server || '').replace(/\/+$/, '');
-                if (m.product !== 'audio-mixer' || m.kind !== 'vendor' || !/^https?:\/\/[\w.:\[\]-]+$/.test(v)) return null;
-                vendorCache = { server: v, at: Date.now() }; return v;
-            } catch (e) { return null; }
-        }
-        function vendorServer() { const v = String(VENDOR_SERVER || '').replace(/\/+$/, ''); return /^https?:\/\/[\w.-]+(:\d+)?$/.test(v) ? v : null; }
-        function licenseRequestOrigin() {
-            const own = httpsUrl(store.get('halx_ota_url') || ''); if (!own) return null;
-            try { const u = new URL(own); u.pathname = u.pathname.replace(/\/(?:[a-z0-9-]+\/)?update\.json$/i, '') || '/'; u.search = ''; u.hash = ''; return u.href.replace(/\/+$/, ''); } catch (e) { return null; }
-        }
         const BADGE = { ok: 'px-2 py-0.5 rounded text-[7.5px] font-mono bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 font-bold', warn: 'px-2 py-0.5 rounded text-[7.5px] font-mono bg-amber-500/20 text-amber-400 border border-amber-500/40 font-bold', bad: 'px-2 py-0.5 rounded text-[7.5px] font-mono bg-rose-500/20 text-rose-400 border border-rose-500/40 font-bold', idle: 'px-2 py-0.5 rounded text-[7.5px] font-mono bg-slate-500/20 text-slate-300 border border-slate-500/40 font-bold' };
         // the manifest straight from an update server (no PC mode): verified here with the vendor public key, like the local server does
         async function otaFetchManifest(url) {
@@ -19595,7 +19565,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             on('lic-check', () => L.checkKey(false));
             { const ki = $('lic-key-input'); let kt = 0; if (ki) ki.addEventListener('input', () => { clearTimeout(kt); kt = setTimeout(() => L.checkKey(true), 400); }); }   // checks as the key is pasted
             on('lic-deactivate', () => L.deactivate());
-            on('lic-req-file', () => L.downloadRequest()); on('lic-req-copy', () => L.copyRequest()); on('lic-req-submit', () => L.submitRequest()); on('lic-req-generator', () => L.openGenerator()); on('lic-req-website', () => L.openWebsite());
+            on('lic-req-file', () => L.downloadRequest()); on('lic-req-copy', () => L.copyRequest()); on('lic-upgrade-pro', () => L.upgrade('pro')); on('lic-upgrade-master', () => L.upgrade('studio-master')); on('lic-req-generator', () => L.openGenerator()); on('lic-req-website', () => L.openWebsite());
             { const w = $('lic-req-website'); if (w) w.hidden = !/^https:\/\//.test(String(WEBSITE_URL || '')); }
             setTimeout(() => L.takeKeyFromAddress(), 0); window.addEventListener('hashchange', () => L.takeKeyFromAddress());
             on('lic-copy-machine', () => { const m = L.machineId; if (m && navigator.clipboard) navigator.clipboard.writeText(m).then(() => notify('Machine code copied', 'copy')); });
@@ -22713,7 +22683,8 @@ t.Omnitone=e(11)},function(A,t,e){"use strict";const i=e(1),n=e(4),s=e(12),o=e(6
             ['BOOT / RESET', 'راه‌اندازی / بازنشانی', 'الإقلاع / إعادة الضبط', 'بوٹ / ری سیٹ', 'ARRANQUE / REINICIO', 'DÉMARRAGE / RÉINITIALISATION', 'START / RESET', 'INICIALIZAÇÃO / REDEFINIR', 'ЗАГРУЗКА / СБРОС', 'BAŞLAT / SIFIRLA', 'बूट / रीसेट', '启动 / 重置', '起動 / リセット', '부팅 / 초기화', 'BUT / SET SEMULA', 'BOOT / RESET', 'AVVIO / RIPRISTINO', 'OPSTARTEN / RESET', 'URUCHOM / RESETUJ', 'KHỞI ĐỘNG / ĐẶT LẠI', 'บูต / รีเซ็ต', 'ЗАВАНТАЖЕННЯ / СКИДАННЯ'],
             ['ACTIVATE', 'فعال‌سازی', 'تفعيل', 'فعال کریں', 'ACTIVAR', 'ACTIVER', 'AKTIVIEREN', 'ATIVAR', 'АКТИВИРОВАТЬ', 'ETKİNLEŞTİR', 'सक्रिय करें', '激活', 'アクティベート', '활성화', 'AKTIFKAN', 'AKTIFKAN', 'ATTIVA', 'ACTIVEREN', 'AKTYWUJ', 'KÍCH HOẠT', 'เปิดใช้งาน', 'АКТИВУВАТИ'],
             ['DEACTIVATE', 'غیرفعال‌سازی', 'إلغاء التفعيل', 'غیر فعال کریں', 'DESACTIVAR', 'DÉSACTIVER', 'DEAKTIVIEREN', 'DESATIVAR', 'ДЕАКТИВИРОВАТЬ', 'DEVRE DIŞI BIRAK', 'निष्क्रिय करें', '停用', '無効化', '비활성화', 'NYAHAKTIFKAN', 'NONAKTIFKAN', 'DISATTIVA', 'DEACTIVEREN', 'DEZAKTYWUJ', 'HỦY KÍCH HOẠT', 'ปิดใช้งาน', 'ДЕАКТИВУВАТИ'],
-            ['SUBMIT TO VENDOR', 'ارسال به فروشنده', 'إرسال إلى البائع', 'وینڈر کو بھیجیں', 'ENVIAR AL PROVEEDOR', 'ENVOYER AU FOURNISSEUR', 'AN HERSTELLER SENDEN', 'ENVIAR AO FORNECEDOR', 'ОТПРАВИТЬ ПОСТАВЩИКУ', 'SATICIYA GÖNDER', 'विक्रेता को भेजें', '提交给供应商', 'ベンダーに送信', '판매자에게 보내기', 'HANTAR KEPADA PENJUAL', 'KIRIM KE VENDOR', 'INVIA AL FORNITORE', 'NAAR LEVERANCIER STUREN', 'WYŚLIJ DO DOSTAWCY', 'GỬI CHO NHÀ CUNG CẤP', 'ส่งให้ผู้จำหน่าย', 'НАДІСЛАТИ ПОСТАЧАЛЬНИКУ'],
+            ['UPGRADE TO PRO', 'ارتقا به PRO', 'الترقية إلى PRO', 'PRO میں اپ گریڈ کریں', 'ACTUALIZAR A PRO', 'PASSER À PRO', 'AUF PRO UPGRADEN', 'ATUALIZAR PARA PRO', 'ПЕРЕЙТИ НА PRO', "PRO'YA YÜKSELT", 'PRO में अपग्रेड करें', '升级到 PRO', 'PRO にアップグレード', 'PRO로 업그레이드', 'NAIK TARAF KE PRO', 'UPGRADE KE PRO', 'PASSA A PRO', 'UPGRADEN NAAR PRO', 'PRZEJDŹ NA PRO', 'NÂNG CẤP LÊN PRO', 'อัปเกรดเป็น PRO', 'ПЕРЕЙТИ НА PRO'],
+            ['UPGRADE TO STUDIO MASTER', 'ارتقا به STUDIO MASTER', 'الترقية إلى STUDIO MASTER', 'STUDIO MASTER میں اپ گریڈ کریں', 'ACTUALIZAR A STUDIO MASTER', 'PASSER À STUDIO MASTER', 'AUF STUDIO MASTER UPGRADEN', 'ATUALIZAR PARA STUDIO MASTER', 'ПЕРЕЙТИ НА STUDIO MASTER', "STUDIO MASTER'A YÜKSELT", 'STUDIO MASTER में अपग्रेड करें', '升级到 STUDIO MASTER', 'STUDIO MASTER にアップグレード', 'STUDIO MASTER로 업그레이드', 'NAIK TARAF KE STUDIO MASTER', 'UPGRADE KE STUDIO MASTER', 'PASSA A STUDIO MASTER', 'UPGRADEN NAAR STUDIO MASTER', 'PRZEJDŹ NA STUDIO MASTER', 'NÂNG CẤP LÊN STUDIO MASTER', 'อัปเกรดเป็น STUDIO MASTER', 'ПЕРЕЙТИ НА STUDIO MASTER'],
             ['COPY', 'کپی', 'نسخ', 'کاپی', 'COPIAR', 'COPIER', 'KOPIEREN', 'COPIAR', 'КОПИРОВАТЬ', 'KOPYALA', 'कॉपी', '复制', 'コピー', '복사', 'SALIN', 'SALIN', 'COPIA', 'KOPIËREN', 'KOPIUJ', 'SAO CHÉP', 'คัดลอก', 'КОПІЮВАТИ'],
             ['FILE', 'فایل', 'ملف', 'فائل', 'ARCHIVO', 'FICHIER', 'DATEI', 'ARQUIVO', 'ФАЙЛ', 'DOSYA', 'फ़ाइल', '文件', 'ファイル', '파일', 'FAIL', 'FILE', 'FILE', 'BESTAND', 'PLIK', 'TỆP', 'ไฟล์', 'ФАЙЛ'],
             ['LOAD', 'بارگذاری', 'تحميل', 'لوڈ', 'CARGAR', 'CHARGER', 'LADEN', 'CARREGAR', 'ЗАГРУЗИТЬ', 'YÜKLE', 'लोड', '加载', '読み込み', '불러오기', 'MUAT', 'MUAT', 'CARICA', 'LADEN', 'WCZYTAJ', 'TẢI', 'โหลด', 'ЗАВАНТАЖИТИ'],

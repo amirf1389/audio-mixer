@@ -3,12 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AmF X1 License Key</title>
-<meta name="description" content="Request a license key for AmF X1 by AMFB Audio.">
-<!-- Public page for the vendor's website: a customer requests a key here; the key is made OFFLINE with the vendor's PIN-locked generator
-     (scripts/license-generator.js) and sent back by e-mail. No private key and no signing ever happen on the website.
-     The app opens this page as  <site>/license.html?plan=pro&name=..&email=..&machine=XXXX-..  (index.html WEBSITE_URL).
-     Settings: VENDOR_EMAIL below; REQUEST_URL = an update server's /request-license (ota-server/server.js) to also store requests there, or ''. -->
+<title>AmF X1 Pro and Studio Master</title>
+<meta name="description" content="Buy AmF X1 Pro or AmF X1 Studio Master by AMFB Audio on WhatsApp. The edition installer activates by itself.">
+<!-- Public page for the vendor's website (served at /keys). Since 1.22.1.0 it POSTS NOTHING: buying is a WhatsApp chat with AMFB Audio, prefilled
+     with the edition and, when the app opened this page, the machine code (<site>/keys?plan=pro&machine=XXXX-..). The buyer presses send in WhatsApp.
+     The edition token is made OFFLINE with the vendor's PIN-locked Key Generator; no private key and no signing ever happen on the website. -->
 <style>
 :root{--bg:#f3f5f9;--panel:#fff;--line:#d8deea;--text:#161b27;--dim:#5b6579;--accent:#b45309;--ok:#047857;--err:#be123c;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0b0e14;--panel:#121722;--line:#252d3f;--text:#e6e9f0;--dim:#8b95ab;--accent:#fbbf24;--ok:#34d399;--err:#f43f5e}}
@@ -17,63 +16,45 @@ header{padding:20px 16px;border-bottom:1px solid var(--line);background:var(--pa
 main{max-width:640px;margin:0 auto;padding:16px;display:grid;gap:14px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px}
 h2{margin:0 0 8px;font:700 13px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--accent)}
-.plans{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(130px,1fr))}
-.plan{border:1px solid var(--line);border-radius:9px;padding:10px;cursor:pointer}.plan input{margin-right:6px}.plan small{display:block;color:var(--dim)}
-label{display:grid;gap:4px;margin:10px 0 0;font:700 11px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--dim)}
-input[type=text],input[type=email]{font:inherit;color:inherit;background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:9px}
-button{margin-top:14px;width:100%;border:0;border-radius:8px;padding:12px;background:var(--accent);color:#111;font:800 13px var(--mono);letter-spacing:.06em;cursor:pointer}
-.dim{color:var(--dim);font-size:13px}.ok{color:var(--ok)}.err{color:var(--err)}[hidden]{display:none!important}
+.plans{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+.plan{border:1px solid var(--line);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:6px}.plan small{color:var(--dim)}
+.buy{display:block;margin-top:auto;text-align:center;text-decoration:none;border-radius:8px;padding:12px;background:var(--accent);color:#111;font:800 13px var(--mono);letter-spacing:.06em}
+.buy:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+code{font-family:var(--mono);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:1px 6px}
+.dim{color:var(--dim);font-size:13px}
 </style>
 </head>
 <body>
-<header><h1>AMF X1 <b>LICENSE</b></h1></header>
+<header><h1>AMF X1 <b>EDITIONS</b></h1></header>
 <main>
   <section class="card">
-    <h2>Request a license key</h2>
-    <p class="dim">Choose a plan and send your request. Your key is sent to your e-mail; paste it on the LICENSE page of AmF X1 and press ACTIVATE.</p>
-    <form id="f">
-      <div class="plans">
-        <label class="plan"><span><input type="radio" name="plan" value="pro" checked>PRO</span><small>16 channels, plugins, updates</small></label>
-        <label class="plan"><span><input type="radio" name="plan" value="studio">STUDIO</span><small>32 channels</small></label>
-        <label class="plan"><span><input type="radio" name="plan" value="master">MASTER</span><small>All access</small></label>
-      </div>
-      <label>Name<input type="text" id="name" maxlength="80" autocomplete="name" required></label>
-      <label>E-mail (the key is sent here)<input type="email" id="email" maxlength="120" autocomplete="email" required></label>
-      <label>Machine code (optional: AmF X1 → LICENSE → this computer's machine code)<input type="text" id="machine" maxlength="40" placeholder="XXXX-XXXX-XXXX-XXXX-XXXX" autocomplete="off"></label>
-      <button type="submit">SEND REQUEST</button>
-    </form>
-    <p id="msg" class="dim" role="status" aria-live="polite"></p>
+    <h2>Buy an edition</h2>
+    <p class="dim">Pay once on WhatsApp. You receive your own edition installer: install it and it activates by itself, no key to type.</p>
+    <p class="dim" id="mid-line" hidden>Machine code from AmF X1: <code id="mid"></code> (included in the message)</p>
+    <div class="plans">
+      <div class="plan"><b>AmF X1 Pro</b><small>16 channels, plugins, updates</small><a class="buy" id="buy-pro" href="https://wa.me/601120871185" rel="noopener">BUY PRO ON WHATSAPP</a></div>
+      <div class="plan"><b>AmF X1 Studio Master</b><small>32 channels, all access</small><a class="buy" id="buy-sm" href="https://wa.me/601120871185" rel="noopener">BUY STUDIO MASTER ON WHATSAPP</a></div>
+    </div>
+  </section>
+  <section class="card">
+    <h2>Already have a license key?</h2>
+    <p class="dim">Open AmF X1, go to SYSTEM &rarr; LICENSE, paste the key, press CHECK KEY to see what it unlocks, then ACTIVATE.</p>
   </section>
   <section class="card">
     <h2>How it works</h2>
-    <p class="dim">The key is signed by AMFB Audio on an offline computer, never on this website. A key with a machine code works only on that computer; without one it can be activated on any computer you own.</p>
+    <p class="dim">Each edition installer carries a token signed by AMFB Audio on an offline computer, never on this website, with a serial number for your purchase. On first start AmF X1 checks the signature and activates on that computer. This page sends nothing anywhere: WhatsApp opens with a message, and you decide whether to send it.</p>
   </section>
 </main>
 <script>
 'use strict';
 (function () {
-  var VENDOR_EMAIL = 'badriamirfakhri@gmail.com';
-  var REQUEST_URL = '/request-license';   // same-origin API behind nginx (deploy/nginx/keys-api.conf); '' = email only
-  var $ = function (id) { return document.getElementById(id); };
-  var q = new URLSearchParams(location.search);
-  if (q.get('name')) $('name').value = q.get('name').slice(0, 80);
-  if (q.get('email')) $('email').value = q.get('email').slice(0, 120);
-  if (/^[0-9A-F]{4}(-[0-9A-F]{4}){4}$/i.test(q.get('machine') || '')) $('machine').value = q.get('machine').toUpperCase();
-  var p = (q.get('plan') || '').replace(/[^a-z]/g, ''); var r = document.querySelector('input[name=plan][value="' + p + '"]'); if (r) r.checked = true;
-  $('f').addEventListener('submit', function (ev) {
-    ev.preventDefault();
-    var machine = $('machine').value.trim().toUpperCase();
-    if (machine && !/^[0-9A-F]{4}(-[0-9A-F]{4}){4}$/.test(machine)) { $('msg').className = 'err'; $('msg').textContent = 'The machine code looks wrong: copy it from the LICENSE page of AmF X1.'; return; }
-    var req = { app: 'audio-mixer', kind: 'license-request', v: 1, machineId: machine || null, plan: document.querySelector('input[name=plan]:checked').value, name: $('name').value.trim(), email: $('email').value.trim(), platform: 'website', at: Date.now() };
-    var mail = function () {
-      location.href = 'mailto:' + VENDOR_EMAIL + '?subject=' + encodeURIComponent('AmF X1 license request: ' + req.plan.toUpperCase() + ' for ' + req.name) + '&body=' + encodeURIComponent('Please send me a license key for this request:\n\n' + JSON.stringify(req) + '\n');
-      $('msg').className = 'ok'; $('msg').textContent = 'Your e-mail program opened with the request: press Send. You will get the key by reply.';
-    };
-    if (!REQUEST_URL) return mail();
-    fetch(REQUEST_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(req) })
-      .then(function (x) { if (!x.ok) throw new Error(); $('msg').className = 'ok'; $('msg').textContent = 'Request received. The key will be sent to ' + req.email + '.'; })
-      .catch(mail);
-  });
+  var NUMBER = '601120871185';
+  var q = new URLSearchParams(location.search), machine = (q.get('machine') || '').toUpperCase();
+  if (!/^[0-9A-F]{4}(-[0-9A-F]{4}){4}$/.test(machine)) machine = '';
+  if (machine) { document.getElementById('mid').textContent = machine; document.getElementById('mid-line').hidden = false; }
+  var text = function (name, short) { return 'Hello AMFB Audio, I would like to buy ' + name + '.\nEdition: ' + short + '\nMachine ID: ' + (machine || '(not shown)') + '\nVersion: \nPlatform: ' + (navigator.platform || '').slice(0, 40); };
+  document.getElementById('buy-pro').href = 'https://wa.me/' + NUMBER + '?text=' + encodeURIComponent(text('AmF X1 Pro', 'PRO'));
+  document.getElementById('buy-sm').href = 'https://wa.me/' + NUMBER + '?text=' + encodeURIComponent(text('AmF X1 Studio Master', 'STUDIO MASTER'));
 })();
 </script>
 </body>
