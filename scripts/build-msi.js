@@ -35,7 +35,17 @@ function guid(seed) {
   const x = h.subarray(0, 16).toString('hex');
   return `${x.slice(0, 8)}-${x.slice(8, 12)}-${x.slice(12, 16)}-${x.slice(16, 20)}-${x.slice(20, 32)}`.toUpperCase();
 }
-const productCode = (arch, scope, version) => `{${guid(`product:${arch}:${scope}:${version}`)}}`;
+// The product code also carries the build (a hash of the staged files): two builds of the same version are two products, so installing
+// a rebuilt 1.22.0.1 over the old one REPLACES it (MajorUpgrade AllowSameVersionUpgrades) instead of Windows seeing it as already installed
+// and keeping the old files (which once kept an old license key in place). Without a build id the code is the same for a version, as before.
+const productCode = (arch, scope, version, build = '') => `{${guid(`product:${arch}:${scope}:${version}${build ? ':' + build : ''}`)}}`;
+function stageHash(dir) {
+  const h = crypto.createHash('sha256'), walk = d => fs.readdirSync(d, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1)).forEach(e => {
+    const f = path.join(d, e.name); if (e.isDirectory()) return walk(f);
+    h.update(path.relative(dir, f) + '\0'); h.update(fs.readFileSync(f)); h.update('\0');
+  });
+  walk(dir); return h.digest('hex').slice(0, 16);
+}
 const idOf = (prefix, rel) => prefix + crypto.createHash('sha1').update(rel).digest('hex').slice(0, 20) + (rel.replace(/[^A-Za-z0-9]/g, '_').slice(-24));
 
 function rtf(text) {
@@ -92,7 +102,7 @@ function asioXml({ stage, arch, scope }) {
   return { components, feature: `    <Feature Id="AsioDriver" Title="Register the Audio Mixer ASIO driver (appears in ASIO hosts: DAWs, OBS ...)" Level="3">${ids.map(i => `<ComponentRef Id="${i}"/>`).join('')}</Feature>\n` };
 }
 
-function wxs({ stage, version, arch = 'x64', scope = 'machine' }) {
+function wxs({ stage, version, arch = 'x64', scope = 'machine', build = '' }) {
   if (!['x64', 'x86'].includes(arch) || !['machine', 'user'].includes(scope)) throw new Error('bad arch / scope');
   const win64 = arch === 'x64', machine = scope === 'machine', root = machine ? 'HKLM' : 'HKCU';
   const { xml, comps, groups } = filesXml(stage, win64);
@@ -102,7 +112,7 @@ function wxs({ stage, version, arch = 'x64', scope = 'machine' }) {
   const hasIcon = fs.existsSync(path.join(stage, 'AudioMixerServer.exe'));   // the launcher carries the application icon
   const scBoot = (id, name, desc) => `        <Shortcut Id="${id}" Name="${esc(name)}" Target="[INSTALLDIR]AudioMixerServer.exe" Arguments="/open" WorkingDirectory="INSTALLDIR" Description="${esc(desc)}"${hasIcon ? ' Icon="AudioMixer.exe"' : ''}/>\n`;
   const sc = (id, name, args, desc) => `        <Shortcut Id="${id}" Name="${esc(name)}" Target="[INSTALLDIR]runtime\\node.exe" Arguments="${esc(args)}" WorkingDirectory="INSTALLDIR" Description="${esc(desc)}"/>\n`;
-  const code = productCode(arch, scope, version);
+  const code = productCode(arch, scope, version, build);
   // Program Files (64-bit) for x64, Program Files (x86) for x86; or the user's own folder for the no-administrator flavour
   const installDirs = machine
     ? `      <Directory Id="${win64 ? 'ProgramFiles64Folder' : 'ProgramFilesFolder'}">\n        <Directory Id="INSTALLDIR" Name="AmF X1">\n${xml}        </Directory>\n      </Directory>`
@@ -111,7 +121,7 @@ function wxs({ stage, version, arch = 'x64', scope = 'machine' }) {
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
   <Product Id="${code}" Name="AmF X1" Language="1033" Version="${version}" Manufacturer="AMFB Audio" UpgradeCode="${UPGRADE_CODES[arch + '-' + scope]}">
     <Package Description="AmF X1 by AMFB Audio: mixer and local audio server" Manufacturer="AMFB Audio" InstallerVersion="200" Compressed="yes" InstallScope="${machine ? 'perMachine' : 'perUser'}"/>
-    <MajorUpgrade DowngradeErrorMessage="A newer version of AmF X1 is already installed."/>
+    <MajorUpgrade AllowSameVersionUpgrades="yes" DowngradeErrorMessage="A newer version of AmF X1 is already installed."/>
     <Media Id="1" Cabinet="audiomixer.cab" EmbedCab="yes"/>
     <!-- Settings > Apps (Add or remove programs) entry: name, version, publisher and a working Uninstall button come with the package -->
 ${hasIcon ? `    <Icon Id="AudioMixer.exe" SourceFile="${esc(path.join(stage, 'AudioMixerServer.exe'))}"/>\n    <Property Id="ARPPRODUCTICON" Value="AudioMixer.exe"/>   <!-- the icon of the entry in Settings > Apps -->\n` : ''}    <Property Id="ARPCOMMENTS" Value="Virtual mixing console with a local Node.js server for ASIO / WASAPI audio"/>
@@ -250,9 +260,10 @@ async function buildMsi({ out = path.join(ROOT, 'dist'), arch = 'x64', scope = '
   fs.writeFileSync(path.join(work, 'License.rtf'), rtf(fs.readFileSync(path.join(st.stage, 'LICENSE'), 'utf8')));   // the wixl UI reads License.rtf from the working directory
   const version = st.version.replace(/[^\d.]/g, '').split('.').slice(0, 3).join('.');
   const wxsPath = path.join(work, 'audio-mixer.wxs');
-  fs.writeFileSync(wxsPath, wxs({ stage: st.stage, version, arch, scope }));
+  const build = stageHash(st.stage);
+  fs.writeFileSync(wxsPath, wxs({ stage: st.stage, version, arch, scope, build }));
   const msi = path.join(path.resolve(out), `AudioMixer-${st.version}-${arch}${scope === 'user' ? '-user' : ''}.msi`);
-  const result = { ...st, wxs: wxsPath, msi: null, scope, productCode: productCode(arch, scope, version) };
+  const result = { ...st, wxs: wxsPath, msi: null, scope, productCode: productCode(arch, scope, version, build), build };
   if (!runWixl) return result;
   const r = spawnSync('wixl', ['-v', '--arch', arch, '--ext', 'ui', '-o', msi, wxsPath], { encoding: 'utf8', cwd: work });
   if (r.error && r.error.code === 'ENOENT') throw new Error('wixl not found. Install msitools/wixl (Linux: apt install wixl; macOS: brew install msitools); the WiX source is in ' + wxsPath);
@@ -269,4 +280,4 @@ if (require.main === module) {
     console.log(`MSI: ${r.msi}\nProduct code: ${r.productCode}\nSHA-256: ${r.sha256}\nUnsigned (see build-installers.js for signing).`);
   }).catch(e => { console.error('MSI build failed: ' + e.message); process.exit(1); });
 }
-module.exports = { asioXml, addPathEntry, addEnvironment, environmentRows, buildMsi, wxs, guid, rtf, filesXml, productCode, UPGRADE_CODES };
+module.exports = { stageHash, asioXml, addPathEntry, addEnvironment, environmentRows, buildMsi, wxs, guid, rtf, filesXml, productCode, UPGRADE_CODES };
