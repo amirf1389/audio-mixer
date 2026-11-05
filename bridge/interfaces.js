@@ -100,7 +100,30 @@ function groupInterfaces(devices = [], asioNames = [], problems = []) {
     const k = keyOf(n);
     if (!groups.has(k)) out.push({ key: k, name: baseName(n), inputs: 0, outputs: 0, loopback: false, asio: true, apis: [], read: null, write: null, driverOnly: true, ...probeReason(n, problems) });
   }
+  linkAsioFallback(out);
   return out.sort((a, b) => (a.systemDefault - b.systemDefault) || (a.loopback - b.loopback) || (b.asio - a.asio) || a.name.localeCompare(b.name));
 }
 
-module.exports = { probeReason, inferProbeFailed, untruncate, isBluetooth, btBase, isPrimary, groupInterfaces, keyOf, baseName, apiRank };
+// An ASIO interface with no input or no output (Realtek ASIO often shows outputs only, or none; a probe can fail while another program holds
+// the driver) gets the missing side from the Windows endpoint of the same hardware, so the page can still read / write it. The same match the
+// engine uses for its runtime fallback (native-engine.wasapiFallback): chip family first, then name words, never a loopback or Bluetooth device.
+const FAMILY = [['realtek', /realtek/i], ['conexant', /conexant|synaptics/i], ['idt', /\bidt\b|sigmatel|tempo/i], ['via', /\bvia\b|vinyl/i], ['cirrus', /cirrus/i], ['intel', /intel.*(smart sound|display audio)/i], ['amd', /\bamd\b.*(high definition|audio)/i]];
+const familyOf = n => { for (const [f, re] of FAMILY) if (re.test(String(n))) return f; return null; };
+const GENERIC = new Set(['asio', 'audio', 'driver', 'usb', 'device', 'speakers', 'microphone', 'line', 'input', 'output', 'high', 'definition', 'the', 'and', 'for', 'generic', 'low', 'latency', 'array', 'headphones']);
+const wordsOf = n => new Set(String(n || '').toLowerCase().split(/[^a-z0-9]+/).filter(w => w.length >= 3 && !GENERIC.has(w)));
+function linkAsioFallback(list) {
+  for (const a of list) {
+    if (!a.asio || (a.read && a.write)) continue;
+    const fam = familyOf(a.name), w = wordsOf(a.name);
+    const score = b => (fam && familyOf(b.name) === fam ? 100 : 0) + [...wordsOf(b.name)].filter(x => w.has(x)).length * 10;
+    const pool = list.filter(b => b !== a && !b.asio && !b.loopback && !b.bluetooth && score(b) > 0);
+    const pick = side => pool.filter(b => b[side]).sort((x, y) => score(y) - score(x))[0] || null;
+    const fb = {};
+    if (!a.read) { const b = pick('read'); if (b) { a.read = { ...b.read, fallback: 'wasapi' }; a.inputs = b.inputs; fb.input = b.name; } }
+    if (!a.write) { const b = pick('write'); if (b) { a.write = { ...b.write, fallback: 'wasapi' }; a.outputs = b.outputs; fb.output = b.name; } }
+    if (fb.input || fb.output) a.fallback = { via: 'wasapi', ...fb };
+  }
+  return list;
+}
+
+module.exports = { linkAsioFallback, probeReason, inferProbeFailed, untruncate, isBluetooth, btBase, isPrimary, groupInterfaces, keyOf, baseName, apiRank };
