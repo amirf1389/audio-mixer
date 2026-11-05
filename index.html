@@ -25,6 +25,29 @@ CRITICAL REVISIONS & ARCHITECTURAL UPGRADES:
    - Dynamic real-time LED ladder meters on all 32 channel strips.
 -->
 <head>
+<script>
+/* AmF X1 lean runtime: change-only / visible-only DOM writes, frame cap, idle animation stop */
+(function(){
+  var vis=function(el){return !!(el&&el.offsetParent!==null);};
+  window.amSetText=function(el,v){if(!el||!vis(el))return;v=String(v);if(el.__amT!==v){el.__amT=v;el.textContent=v;}};
+  window.amSetClass=function(el,v){if(!el||!vis(el))return;if(el.__amC!==v){el.__amC=v;el.className=v;}};
+  // frame cap: meters do not need more than 30 fps (15 in low-power mode); batches all rAF callbacks into one tick
+  var raf=window.requestAnimationFrame.bind(window),q=[],sched=false,last=0,ids=0,dead={};
+  function flush(t){sched=false;var low=window.state&&window.state.lowPowerMode,min=low?64:31;
+    if(t-last<min){sched=true;raf(flush);return;} last=t;var run=q;q=[];
+    for(var i=0;i<run.length;i++){if(dead[run[i][0]]){delete dead[run[i][0]];continue;}try{run[i][1](t);}catch(e){setTimeout(function(){throw e;});}}}
+  window.requestAnimationFrame=function(cb){var id=++ids;q.push([id,cb]);if(!sched){sched=true;raf(flush);}return id;};
+  var caf=window.cancelAnimationFrame.bind(window);window.cancelAnimationFrame=function(id){dead[id]=1;};
+  // stop decorative looping animations (ping/pulse) 8 s after load; they cost a style pass each frame
+  window.addEventListener('load',function(){setTimeout(function(){document.documentElement.classList.add('am-settled');},8000);});
+})();
+</script>
+<style>
+html.am-settled .animate-ping,html.am-settled .animate-pulse,html.am-settled .animate-spin-slow{animation:none!important}
+html.am-lite *,html.am-settled.am-lowpower *{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+</style>
+
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>AmF X1 by AMFB Audio</title>
@@ -10707,7 +10730,7 @@ const cArea = document.getElementById('content-area');
         // work (not the audio graph, which keeps running unthrottled) is most of this page's idle CPU and, on a laptop, battery use. Low power mode
         // skips most of those frames instead (~15 fps), cutting that work by about 75% while mixing, EQ, FX and the audio itself stay exactly as fast.
         window.setLowPowerMode = function(on, silent, auto) {
-            window.state.lowPowerMode = !!on;
+            window.state.lowPowerMode = !!on; document.documentElement.classList.toggle('am-lowpower', !!on);
             if (!auto) try { localStorage.setItem('halx_low_power', on ? '1' : '0'); } catch (_) { /* private browsing */ }
             const btn = document.getElementById('low-power-toggle');
             if (btn) {
@@ -10823,12 +10846,12 @@ const cArea = document.getElementById('content-area');
                 const deqDb = window.rideDynamicEq(lm ? lm.truePeak : null);
                 const deqNode = window.state.nodes.dynamicEqFilter;
                 if (deqNode && window.state.ctx) deqNode.gain.setTargetAtTime(deqDb, window.state.ctx.currentTime, 0.05);
-                const avReadout = document.getElementById('auto-volume-gr'); if (avReadout) avReadout.textContent = (avDb <= -0.05 ? avDb.toFixed(1) : '0.0') + ' dB';
-                const deqReadout = document.getElementById('dynamic-eq-gr'); if (deqReadout) deqReadout.textContent = (deqDb <= -0.05 ? deqDb.toFixed(1) : '0.0') + ' dB';
+                window.amSetText(document.getElementById('auto-volume-gr'), (avDb <= -0.05 ? avDb.toFixed(1) : '0.0') + ' dB');
+                window.amSetText(document.getElementById('dynamic-eq-gr'), (deqDb <= -0.05 ? deqDb.toFixed(1) : '0.0') + ' dB');
                 const tsDb = window.rideTransientShaper(lm ? lm.truePeak : null);
                 const tsNode = window.state.nodes.transientGain;
                 if (tsNode && window.state.ctx) tsNode.gain.setTargetAtTime(Math.pow(10, tsDb / 20), window.state.ctx.currentTime, 0.02);
-                const tsReadout = document.getElementById('ts-gr'); if (tsReadout) tsReadout.textContent = (tsDb >= 0 ? '+' : '') + tsDb.toFixed(1) + ' dB';
+                window.amSetText(document.getElementById('ts-gr'), (tsDb >= 0 ? '+' : '') + tsDb.toFixed(1) + ' dB');
                 const loud = window.rideLoudnessComp();
                 const loudLowNode = window.state.nodes.loudLow, loudHighNode = window.state.nodes.loudHigh;
                 if (loudLowNode && loudHighNode && window.state.ctx) { loudLowNode.gain.setTargetAtTime(loud.low, window.state.ctx.currentTime, 0.05); loudHighNode.gain.setTargetAtTime(loud.high, window.state.ctx.currentTime, 0.05); }
@@ -12438,11 +12461,11 @@ const cArea = document.getElementById('content-area');
                 const corrVal = document.getElementById('phase-corr-val');
                 if (corrBar && corrVal) {
                     const pct = ((normCorr + 1) / 2) * 100;
-                    corrBar.style.width = `${pct}%`;
-                    corrVal.textContent = normCorr >= 0 ? `+${normCorr.toFixed(2)}` : normCorr.toFixed(2);
-                    corrBar.className = normCorr < 0 
+                    if (corrBar.offsetParent) corrBar.style.width = `${pct.toFixed(0)}%`;
+                    window.amSetText(corrVal, normCorr >= 0 ? `+${normCorr.toFixed(2)}` : normCorr.toFixed(2));
+                    window.amSetClass(corrBar, normCorr < 0 
                         ? 'h-full bg-rose-500 transition-all' 
-                        : (normCorr > 0.8 ? 'h-full bg-emerald-500 transition-all' : 'h-full bg-amber-500 transition-all');
+                        : (normCorr > 0.8 ? 'h-full bg-emerald-500 transition-all' : 'h-full bg-amber-500 transition-all'));
                 }
 
                 requestAnimationFrame(render);
@@ -18465,7 +18488,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             const gr = Lim.gr();
             const bar = $('lim-gr-bar'); if (bar) bar.style.width = Math.min(100, gr / 12 * 100).toFixed(1) + '%';
             text('lim-gr-num', '-' + gr.toFixed(1) + ' dB');
-            const led = $('lim-led'); if (led) { const hot = gr > 0.05 && Lim.cfg.on; led.className = 'w-2.5 h-2.5 rounded-full inline-block ' + (hot ? 'bg-rose-500 shadow-[0_0_8px_#f43f5e]' : 'bg-slate-600'); }
+            const led = $('lim-led'); if (led) { const hot = gr > 0.05 && Lim.cfg.on; window.amSetClass(led, 'w-2.5 h-2.5 rounded-full inline-block ' + (hot ? 'bg-rose-500 shadow-[0_0_8px_#f43f5e]' : 'bg-slate-600')); }
             render();
         }
         function start() {
