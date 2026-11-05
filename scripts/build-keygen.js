@@ -2,7 +2,8 @@
 'use strict';
 // "AmF X1 Key Generator.exe": the license key generator + local update server (scripts/license-generator.js) as ONE Windows program,
 // so it needs no Node.js install and no project folder next to it. Double-click: the page opens in the browser, and the public
-// listener for customers' key requests starts on port 8780 (forward that port on the router to receive requests from the internet).
+// listener for customers' key requests starts on 127.0.0.1:8780 (put nginx with HTTPS in front: deploy/nginx/keys-api.conf; add
+// --public-bind 0.0.0.0 only to open port 8780 itself to all networks).
 //   node scripts/build-keygen.js [--targets windows-x64,linux-x64] [--out dist]
 // Built the same way as the single-file server (scripts/build-single.js): esbuild bundles the script, Node.js single-executable support injects
 // it into the official Node.js binary (cached in dist/cache). The executable is not code-signed here: Windows shows "unknown publisher".

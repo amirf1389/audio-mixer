@@ -120,3 +120,8 @@ secrets/
 
 # V8 heap profiles and snapshots written by scripts/perf-controller.js
 profiles/
+
+# local secrets for docker compose / servers: never committed
+.env
+.env.local
+.env.*.local

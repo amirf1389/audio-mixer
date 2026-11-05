@@ -1,7 +1,7 @@
 # Linux only (host networking so nginx reaches the bridge on 127.0.0.1:8765).
 services:
   nginx:
-    image: nginx:1.27-alpine
+    image: nginx:1.28-alpine
     network_mode: host
     restart: unless-stopped
     volumes:

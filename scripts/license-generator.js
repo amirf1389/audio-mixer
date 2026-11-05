@@ -22,7 +22,8 @@
 // LOCAL OTA (vendor): the same process is a small update server for the app, on the same 127.0.0.1:8799 address:
 //   GET  /update.json        the signed manifest made with PUBLISH UPDATE on the page (kept in <key folder>/ota/update.json; signing needs the unlocked key)
 //   GET  /releases/<file>    the installers of that manifest (platforms/<os>/releases or releases/<os>), HEAD and Range supported
-//   POST /request-license    the app's SUBMIT TO VENDOR: kept in <key folder>/license-requests.jsonl and listed in the page's INBOX (USE fills the form)
+//   POST /request-license    the app's SUBMIT TO VENDOR: kept in <key folder>/license-requests.jsonl ENCRYPTED to the vendor key (scripts/inbox-crypto.js)
+//                            and listed in the page's INBOX once the folder is unlocked with the PIN (USE fills the form)
 // These three answer any origin (the app runs as a file, on localhost:8765 or elsewhere on this computer) but only on 127.0.0.1 (the Host check stays).
 // In the app: SETTINGS -> OTA -> http://127.0.0.1:8799/update.json; then SUBMIT TO VENDOR posts here as well.
 // PUBLIC LISTENER (--public [port], default port 8780; the .exe turns it on): a SECOND server on all network interfaces that answers ONLY
@@ -159,7 +160,7 @@ textarea,#key-out{width:100%;background:var(--panel2);border:1px solid var(--lin
   var csvText = '';
   // filled in from the address: the app's GENERATOR button sends ?plan=&name=&email=&machine=
   try { var q = new URLSearchParams(location.search); ['plan', 'name', 'email', 'machine'].forEach(function (k) { var v = q.get(k); if (v && $(k)) { if (k !== 'plan' || $(k).querySelector('option[value="' + v.replace(/[^a-z]/g, '') + '"]')) $(k).value = v.slice(0, 120); } }); } catch (e) { /* old browser */ }
-  var post = function (url, body) { return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) }).then(function (r) { return r.json(); }); };
+  var post = function (url, body) { return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Gen-Action': '1' }, body: JSON.stringify(body || {}) }).then(function (r) { return r.json(); }); };
   var showErr = function (t) { $('err').textContent = t; $('err').hidden = false; };
   var refresh = function () {
     return fetch('/status').then(function (r) { return r.json(); }).then(function (j) {
@@ -203,6 +204,7 @@ textarea,#key-out{width:100%;background:var(--panel2);border:1px solid var(--lin
       $('ota-state').textContent = (j.published ? 'Published: ' + j.published.version + ' (' + j.published.files + ' files, ' + j.published.at + ')' : 'Nothing published yet.') + ' Project version: ' + j.version + ', ' + j.found + ' installer(s) found.';
       var box = $('inbox'); box.textContent = ''; $('inbox-card').hidden = !j.requests.length;
       j.requests.forEach(function (r) {
+        if (r.locked || r.damaged) { var lr = document.createElement('div'); lr.style.cssText = 'border-bottom:1px solid var(--line);padding:6px 0;color:var(--dim)'; lr.textContent = (r.at ? new Date(r.at).toISOString().slice(0, 16).replace('T', ' ') + '  ' : '') + String(r.plan || '').toUpperCase() + '  ' + (r.damaged ? 'DAMAGED RECORD (cannot be opened)' : 'ENCRYPTED REQUEST: unlock with your PIN to read'); box.appendChild(lr); return; }
         var row = document.createElement('div'); row.style.cssText = 'display:flex;gap:8px;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);padding:6px 0';
         var t = document.createElement('span'); t.textContent = (r.at ? new Date(r.at).toISOString().slice(0, 16).replace('T', ' ') + '  ' : '') + String(r.plan || '').toUpperCase() + '  ' + (r.name || '(no name)') + '  ' + (r.email || '') + '  ' + (r.machineId || '');
         var b = document.createElement('button'); b.type = 'button'; b.className = 'pill'; b.textContent = 'USE'; b.addEventListener('click', function () { fill(r); });
@@ -228,7 +230,7 @@ textarea,#key-out{width:100%;background:var(--panel2);border:1px solid var(--lin
     ev.preventDefault();
     $('err').hidden = true; $('go').disabled = true; $('go').textContent = 'GENERATING…';
     var body = { plan: $('plan').value, name: $('name').value, email: $('email').value, machine: $('machine').value, days: Number($('days').value) || 0, seats: Number($('seats').value) || 1, count: Number($('count').value) || 1 };
-    fetch('/issue', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    fetch('/issue', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Gen-Action': '1' }, body: JSON.stringify(body) })
       .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
       .then(function (res) {
         if (!res.ok || !res.j || !res.j.ok) { $('err').textContent = (res.j && res.j.error) || 'Could not generate the key.'; $('err').hidden = false; if (res.j && res.j.locked) refresh(); return; }
@@ -347,11 +349,36 @@ function initKind(kind, dirArgv, root, pin, session) {
 // ---- local OTA -----------------------------------------------------------------------------------------------------------------------------------
 const otaDir = dir => path.join(dir, 'ota');
 function readJsonl(f, limit) { try { return fs.readFileSync(f, 'utf8').split('\n').filter(Boolean).slice(-limit).reverse().map(l => { try { return JSON.parse(l); } catch (_) { return null; } }).filter(Boolean); } catch (_) { return []; } }
-function otaStatus(dir, root, releases) {
+// ---- encrypted request inbox (scripts/inbox-crypto.js) ----------------------------------------------------------------------------------------
+const inboxCrypto = require('./inbox-crypto');
+const inboxFile = dir => path.join(dir, 'license-requests.jsonl');
+function vendorPub(dir) { try { return JSON.parse(fs.readFileSync(path.join(dir, 'public.jwk.json'), 'utf8')); } catch (_) { return null; } }
+// the private key when it is available without asking: an unlocked PIN session, or a plain (not PIN-locked) folder; else null
+function inboxKey(dir, session) {
+  try { if (vault.isLocked(dir)) return session && session.isOpen() ? session.key(dir) : null; return vault.loadKey(dir); } catch (_) { return null; }
+}
+// Reads the inbox: sealed records are opened with the private key when it is available, otherwise listed as LOCKED (time and plan only).
+// With the key in hand, any old plain-text records (made before encryption) are sealed in place, so personal data never stays readable on disk.
+function readInbox(dir, session, limit = 50) {
+  const all = readJsonl(inboxFile(dir), 1000).reverse(), key = inboxKey(dir, session), pub = vendorPub(dir);
+  if (key && pub && all.some(r => !r.sealed)) {
+    const f = inboxFile(dir), tmp = f + '.tmp';
+    fs.writeFileSync(tmp, all.map(r => JSON.stringify(r.sealed ? r : inboxCrypto.seal(r, pub))).join('\n') + '\n', { mode: 0o600 });
+    fs.renameSync(tmp, f);
+    return readInbox(dir, session, limit);
+  }
+  return all.slice(-limit).reverse().map(r => {
+    if (!r.sealed) return r;
+    if (!key) return { sealed: true, locked: true, at: r.at, plan: r.plan };
+    try { return { ...inboxCrypto.open(r, key), sealed: true }; } catch (_) { return { sealed: true, damaged: true, at: r.at, plan: r.plan }; }
+  });
+}
+
+function otaStatus(dir, root, releases, session) {
   const r = root || layout.ROOT; let version = '?'; try { version = JSON.parse(fs.readFileSync(path.join(r, 'package.json'), 'utf8')).version; } catch (_) { /* none */ }
   let published = null; try { const env = JSON.parse(fs.readFileSync(path.join(otaDir(dir), 'update.json'), 'utf8')), m = JSON.parse(env.payload); published = { version: m.version, files: Object.keys(m.files).length, at: m.released }; } catch (_) { /* none yet */ }
   let found = 0; try { found = Object.keys(require('./make-update').build({ version, base: 'x', releases }).files).length; } catch (_) { /* none */ }
-  return { version, published, found, requests: readJsonl(path.join(dir, 'license-requests.jsonl'), 50) };
+  return { version, published, found, requests: readInbox(dir, session, 50) };
 }
 // this computer's public address as the internet sees it (a small public API; nothing is sent but the request itself)
 async function publicIp(fetchImpl = globalThis.fetch) {
@@ -464,18 +491,21 @@ function createServer({ kind = 'vendor', dirArgv = [], root, session = makeSessi
           if (!b || b.kind !== 'license-request' || !lic.PLANS[b.plan]) return send(res, 400, { ok: false, error: 'not a license request' }, cors);
           const rec = { at: Date.now(), plan: b.plan, name: clean(b.name, 80), email: clean(b.email, 120), machineId: clean(b.machineId, 40), platform: clean(b.platform, 40), version: clean(b.version, 20) };
           if (rec.machineId && !/^[A-Za-z0-9-]{4,40}$/.test(rec.machineId)) return send(res, 400, { ok: false, error: 'invalid machine ID' }, cors);
-          const inbox = readJsonl(path.join(dir, 'license-requests.jsonl'), 1000);
-          if (rec.machineId && inbox.some(r => r.machineId === rec.machineId && r.plan === rec.plan && Date.now() - r.at < 86400000)) return send(res, 200, { ok: true, emailed: false, duplicate: true }, cors);   // already waiting
+          const inbox = readJsonl(inboxFile(dir), 1000), pub = vendorPub(dir), mh = pub && rec.machineId ? inboxCrypto.dedupeHash(pub, rec.machineId, rec.plan) : null;
+          if (rec.machineId && inbox.some(r => (r.sealed ? (mh && r.mh === mh) : (r.machineId === rec.machineId && r.plan === rec.plan)) && Date.now() - r.at < 86400000)) return send(res, 200, { ok: true, emailed: false, duplicate: true }, cors);   // already waiting
           if (!requestCap(clientIp(req))) return send(res, 429, { ok: false, error: 'too many key requests from this network today' }, cors);
           if (inbox.length >= 1000) return send(res, 429, { ok: false, error: 'the inbox is full' }, cors);
-          fs.mkdirSync(dir, { recursive: true, mode: 0o700 }); fs.appendFileSync(path.join(dir, 'license-requests.jsonl'), JSON.stringify(rec) + '\n', { mode: 0o600 });
+          fs.mkdirSync(dir, { recursive: true, mode: 0o700 }); fs.appendFileSync(inboxFile(dir), JSON.stringify(pub ? inboxCrypto.seal(rec, pub) : rec) + '\n', { mode: 0o600 });   // sealed to the vendor key: unreadable without the PIN
           return send(res, 200, { ok: true, emailed: false }, cors);
         }
         return send(res, 405, { ok: false, error: 'method not allowed' }, cors);
       }
-      if (!originAllowed(req.headers.origin)) return fail(res, 403, 'origin not allowed');
+      if (!originAllowed(req.headers.origin) || req.headers.origin === 'null') return fail(res, 403, 'origin not allowed');   // "null" = any site's sandboxed iframe
+      // CSRF: every action must come from this page's own script: JSON + the X-Gen-Action header make it a non-simple request, which a
+      // foreign page cannot send without a CORS preflight this server never grants
+      if (req.method === 'POST' && (!String(req.headers['content-type'] || '').startsWith('application/json') || req.headers['x-gen-action'] !== '1')) return fail(res, 403, 'actions need the generator page');
       if (req.method === 'GET' && url.pathname === '/') { const p = pageFor(kind); return send(res, 200, p.body, { 'Content-Security-Policy': p.csp }); }
-      if (req.method === 'GET' && url.pathname === '/ota/status' && KINDS[kind].canInit) return send(res, 200, { ok: true, ...otaStatus(KINDS[kind].mod[KINDS[kind].dirFn](dirArgv), root, releases) });
+      if (req.method === 'GET' && url.pathname === '/ota/status' && KINDS[kind].canInit) return send(res, 200, { ok: true, ...otaStatus(KINDS[kind].mod[KINDS[kind].dirFn](dirArgv), root, releases, session) });
       if (req.method === 'GET' && url.pathname === '/vendor/ip' && KINDS[kind].canInit) return send(res, 200, { ok: true, ip: await publicIp() });
       if (req.method === 'POST' && url.pathname === '/vendor/publish' && KINDS[kind].canInit) {
         const dir = KINDS[kind].mod[KINDS[kind].dirFn](dirArgv); let b = {}; try { const chunks = []; for await (const c of req) chunks.push(c); b = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'); } catch (_) { /* defaults */ }
@@ -522,13 +552,13 @@ function main(argv) {
   const server = createServer({ kind, dirArgv: argv, root });
   if (argv.includes('--public') && KINDS[kind].canInit) {
     const pv = argv[argv.indexOf('--public') + 1], pport = /^\d+$/.test(pv || '') ? Number(pv) : 8780;
-    // --public-bind 127.0.0.1: only nginx on this computer can reach the public listener (recommended: deploy/nginx/keys-api.conf adds HTTPS);
-    // then nginx's X-Real-IP is used for the per-sender limits. Default 0.0.0.0 (direct port forward, as before).
-    const pbind = arg(argv, '--public-bind') || '0.0.0.0', behindProxy = /^(127\.0\.0\.1|::1|localhost)$/.test(pbind);
+    // Default --public-bind 127.0.0.1: only nginx on this computer reaches the public listener (deploy/nginx/keys-api.conf adds HTTPS) and nginx's
+    // X-Real-IP is used for the per-sender limits. --public-bind 0.0.0.0 opens it to every network over plain HTTP (old behaviour; not recommended).
+    const pbind = arg(argv, '--public-bind') || '127.0.0.1', behindProxy = /^(127\.0\.0\.1|::1|localhost)$/.test(pbind);
     const ps = createServer({ kind, dirArgv: argv, root, publicOnly: true, trustProxy: behindProxy });
     ps.headersTimeout = 10000; ps.requestTimeout = 20000; ps.keepAliveTimeout = 5000; ps.maxHeadersCount = 50;   // slow-client (slowloris) guard on the internet-facing port
     ps.on('error', e => console.error(`Public listener on port ${pport} could not start: ${e.message}`));
-    ps.listen(pport, pbind === 'localhost' ? '127.0.0.1' : pbind, () => console.log(`Public requests and updates on port ${pport} (${pbind}). Forward TCP ${pport} on your router to this computer; customers then use http://<your public IP>:${pport}`));
+    ps.listen(pport, pbind === 'localhost' ? '127.0.0.1' : pbind, () => console.log(behindProxy ? `Public requests and updates on 127.0.0.1:${pport}: reachable from the internet only through nginx (deploy/nginx/keys-api.conf, HTTPS on 443). To open port ${pport} itself to all networks over plain HTTP, add --public-bind 0.0.0.0.` : `Public requests and updates on port ${pport} (${pbind}, plain HTTP). Prefer nginx with HTTPS: deploy/nginx/keys-api.conf.`));
   }
   server.once('error', e => { if (e.code === 'EADDRINUSE' && port) { console.error(`Port ${port} is in use: using a free port instead (the app's GENERATOR button will not find this one).`); server.listen(0, '127.0.0.1'); } else { console.error('Error: ' + e.message); process.exit(1); } });
   server.on('listening', () => {
@@ -548,4 +578,4 @@ if (require.main === module) {
   const code = main(process.argv.slice(2));
   if (code !== 0) process.exit(code);   // 0 means the server is listening (asynchronously): exiting now would kill it before it ever serves a request
 }
-module.exports = { publicIp, vendorPublish, rateLimiter, dailyCap, senderKey, otaStatus, otaPublish, KINDS, page, pageFor, issueKey, keyStatus, initKind, makeSession, createServer, main };
+module.exports = { readInbox, publicIp, vendorPublish, rateLimiter, dailyCap, senderKey, otaStatus, otaPublish, KINDS, page, pageFor, issueKey, keyStatus, initKind, makeSession, createServer, main };

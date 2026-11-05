@@ -2730,7 +2730,15 @@ test('Android engine (Java): the bridge protocol runs on a plain JVM with a fake
     assert.strictEqual((await fetch(base + '/api/status', { headers: { Origin: 'https://evil.example' } })).status, 403);
     const nul = await fetch(base + '/api/status', { headers: { Origin: 'null' } }); assert.strictEqual(nul.status, 200); assert.strictEqual(nul.headers.get('access-control-allow-origin'), 'null');
     assert.strictEqual((await fetch(base + '/api/status', { headers: { Origin: 'http://localhost:8765' } })).status, 200);
-    const pre = await fetch(base + '/api/status', { method: 'OPTIONS', headers: { Origin: 'null' } }); assert.strictEqual(pre.status, 204);
+    const pre = await fetch(base + '/api/status', { method: 'OPTIONS', headers: { Origin: 'null' } }); assert.strictEqual(pre.status, 403);   // opaque origin (any site's sandboxed iframe): reads only, no preflight
+    assert.strictEqual(nul.headers.get('access-control-allow-private-network'), null);                                                     // public pages are never invited into the private network
+    const locPre = await fetch(base + '/api/status', { method: 'OPTIONS', headers: { Origin: 'http://localhost:8765' } }); assert.strictEqual(locPre.status, 204); assert.strictEqual(locPre.headers.get('access-control-allow-private-network'), 'true');
+    for (const [p, a, b] of [['/api/reboot', 'reboot', '{"confirm":"REBOOT"}'], ['/api/license/deactivate', 'license', ''], ['/api/select-device', 'select-device', '{}']])
+      assert.strictEqual((await fetch(base + p, { method: 'POST', headers: { Origin: 'null', 'X-Mixer-Action': a, 'Content-Type': 'application/json' }, body: b || undefined })).status, 403, p);   // no action from Origin null
+    for (const wp of ['/ws/input', '/ws/duplex', '/ws/output']) {
+      const ok = await new Promise(res => { const c = require('node:net').connect(port, '127.0.0.1', () => c.write(`GET ${wp} HTTP/1.1\r\nHost: localhost\r\nOrigin: null\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n`)); let d = ''; c.on('data', x => { d += x; }); c.on('close', () => res(d)); c.on('error', () => res(d)); setTimeout(() => { c.destroy(); res(d); }, 1500); });
+      assert.ok(!/101 Switching/.test(ok), wp + ' must not open from Origin null');   // no microphone / interface audio for sandboxed pages
+    }
     assert.strictEqual((await fetch(base + '/api/status', { method: 'POST' })).status, 405);
     const raw = await new Promise(res => { const s = require('node:net').connect(port, '127.0.0.1', () => s.write('GET /api/status HTTP/1.1\r\nHost: evil.example\r\nConnection: close\r\n\r\n')); let d = ''; s.on('data', x => d += x); s.on('close', () => res(d)); });
     assert.match(raw, /^HTTP\/1\.1 403/);                                                         // DNS-rebinding guard
@@ -4232,18 +4240,20 @@ test('license key generator: a local, form-based way to issue a key with any of 
   const page = await fetch(base + '/'); const html = await page.text(), csp = page.headers.get('content-security-policy');
   assert.strictEqual(page.status, 200); assert.match(csp, /default-src 'none'/); assert.ok(!/unsafe-inline/.test(csp));
   assert.ok(!/innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(|new Function/.test(html), 'the key and summary are only ever set as text');
-  let r = await fetch(base + '/issue', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plan: 'pro', name: 'Jane Doe', email: 'j@example.com', machine: 'AAAA-BBBB-CCCC-DDDD-EEEE', days: 30, seats: 2 }) });
+  let r = await fetch(base + '/issue', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Gen-Action': '1' }, body: JSON.stringify({ plan: 'pro', name: 'Jane Doe', email: 'j@example.com', machine: 'AAAA-BBBB-CCCC-DDDD-EEEE', days: 30, seats: 2 }) });
   let j = await r.json(); assert.strictEqual(r.status, 200); assert.ok(j.ok && j.key.startsWith('AMIX1.') && /VENDOR PRO for Jane Doe/.test(j.summary));
   const vpub = require('../scripts/license.js').loadPublic(vdir);
   let v = lic.verifyKey(j.key, { jwk: vpub, machine: 'AAAA-BBBB-CCCC-DDDD-EEEE' }); assert.ok(v.ok && v.payload.seats === 2 && v.plan.id === 'pro');
   assert.strictEqual(lic.verifyKey(j.key, { machine: 'AAAA-BBBB-CCCC-DDDD-EEEE' }).reason, 'bad-signature');            // not the real vendor key: a normal build refuses it
   // validation: bad plan, oversized / non-JSON body, wrong method; a vendor key needs no name any more ("Customer <serial>")
-  assert.strictEqual((await fetch(base + '/issue', { method: 'POST', body: JSON.stringify({ plan: 'gold' }) })).status, 400);
-  assert.strictEqual((await fetch(base + '/issue', { method: 'POST', body: JSON.stringify({ plan: 'pro' }) })).status, 200);
-  assert.strictEqual((await fetch(base + '/issue', { method: 'POST', body: 'not json' })).status, 400);
+  assert.strictEqual((await fetch(base + '/issue', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Gen-Action': '1' }, body: JSON.stringify({ plan: 'gold' }) })).status, 400);
+  assert.strictEqual((await fetch(base + '/issue', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Gen-Action': '1' }, body: JSON.stringify({ plan: 'pro' }) })).status, 200);
+  assert.strictEqual((await fetch(base + '/issue', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Gen-Action': '1' }, body: 'not json' })).status, 400);
   assert.strictEqual((await fetch(base + '/issue', { method: 'GET' })).status, 404);
   // CSRF / DNS-rebinding guards: a foreign Origin or Host is refused, the same functions bridge/server.js itself uses
-  assert.strictEqual((await fetch(base + '/issue', { method: 'POST', headers: { Origin: 'https://evil.example' }, body: JSON.stringify({ plan: 'pro', name: 'x' }) })).status, 403);
+  assert.strictEqual((await fetch(base + '/issue', { method: 'POST', headers: { Origin: 'https://evil.example', 'Content-Type': 'application/json', 'X-Gen-Action': '1' }, body: JSON.stringify({ plan: 'pro', name: 'x' }) })).status, 403);
+  for (const h of [{}, { 'Content-Type': 'text/plain' }, { 'Content-Type': 'application/json' }, { 'Content-Type': 'application/json', 'X-Gen-Action': '1', Origin: 'null' }])   // CSRF: simple requests, missing header, sandboxed iframe
+    assert.strictEqual((await fetch(base + '/issue', { method: 'POST', headers: h, body: JSON.stringify({ plan: 'pro' }) })).status, 403, JSON.stringify(h));
   const rawHost = await new Promise(res => { const req = http.request({ host: '127.0.0.1', port: server.address().port, path: '/issue', method: 'POST', headers: { Host: 'evil.example', 'Content-Type': 'application/json' } }, out => { out.resume(); out.on('end', () => res(out.statusCode)); }); req.end(JSON.stringify({ plan: 'pro', name: 'x' })); });
   assert.strictEqual(rawHost, 403);
   await new Promise(r => server.close(r));
@@ -4251,7 +4261,7 @@ test('license key generator: a local, form-based way to issue a key with any of 
   const sdir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'gen-sandbox-')), spub = pathx.join(sdir, 'pub.json');
   require('../scripts/license-sandbox.js').init(sdir, spub);
   server = gen.createServer({ kind: 'sandbox', dirArgv: ['--dir', sdir] }); await new Promise(r => server.listen(0, '127.0.0.1', r)); base = `http://127.0.0.1:${server.address().port}`;
-  r = await fetch(base + '/issue', { method: 'POST', body: JSON.stringify({ plan: 'studio', days: 5 }) }); j = await r.json();
+  r = await fetch(base + '/issue', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Gen-Action': '1' }, body: JSON.stringify({ plan: 'studio', days: 5 }) }); j = await r.json();
   assert.strictEqual(r.status, 200); assert.ok(j.ok && /SANDBOX STUDIO/.test(j.summary));
   v = lic.verifyKey(j.key, { jwk: JSON.parse(fsx.readFileSync(spub, 'utf8')) }); assert.ok(v.ok && v.payload.sandbox === true);
   assert.strictEqual(lic.verifyKey(j.key, { jwk: vpub }).ok, false);
@@ -4260,8 +4270,8 @@ test('license key generator: a local, form-based way to issue a key with any of 
   const adir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'gen-admin-'));
   require('../scripts/license-admin.js').initKeys(adir);
   server = gen.createServer({ kind: 'admin', dirArgv: ['--dir', adir] }); await new Promise(r => server.listen(0, '127.0.0.1', r)); base = `http://127.0.0.1:${server.address().port}`;
-  assert.strictEqual((await fetch(base + '/issue', { method: 'POST', body: JSON.stringify({ plan: 'studio' }) })).status, 400);   // name required
-  r = await fetch(base + '/issue', { method: 'POST', body: JSON.stringify({ plan: 'studio', name: 'Reseller Client', days: 15 }) }); j = await r.json();
+  assert.strictEqual((await fetch(base + '/issue', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Gen-Action': '1' }, body: JSON.stringify({ plan: 'studio' }) })).status, 400);   // name required
+  r = await fetch(base + '/issue', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Gen-Action': '1' }, body: JSON.stringify({ plan: 'studio', name: 'Reseller Client', days: 15 }) }); j = await r.json();
   v = lic.verifyKey(j.key, { jwk: require('../scripts/license-admin.js').loadPublic(adir) }); assert.ok(v.ok && v.payload.admin === true);
   await new Promise(r => server.close(r)); fsx.rmSync(adir, { recursive: true, force: true });
   // an unknown --kind is refused up front rather than silently defaulting
@@ -5020,7 +5030,7 @@ test('license generator page: creates the vendor key pair when none exists (neve
   await new Promise(r => srv.listen(0, '127.0.0.1', r));
   const port = srv.address().port;
   const call = (method, p, body) => new Promise((res, rej) => {
-    const rq = http.request({ host: '127.0.0.1', port, method, path: p, headers: { 'Content-Type': 'application/json', Host: '127.0.0.1:' + port } }, r => { let t = ''; r.on('data', c => { t += c; }); r.on('end', () => res({ status: r.statusCode, j: JSON.parse(t) })); });
+    const rq = http.request({ host: '127.0.0.1', port, method, path: p, headers: { 'Content-Type': 'application/json', 'X-Gen-Action': '1', Host: '127.0.0.1:' + port } }, r => { let t = ''; r.on('data', c => { t += c; }); r.on('end', () => res({ status: r.statusCode, j: JSON.parse(t) })); });
     rq.on('error', rej); if (body) rq.write(JSON.stringify(body)); rq.end();
   });
   try {
@@ -5104,7 +5114,7 @@ test('generator + local OTA: PUBLISH signs update.json with the unlocked key, se
   const srv = gen.createServer({ kind: 'vendor', dirArgv: ['--dir', vdir], root, releases: rel });
   await new Promise(r => srv.listen(0, '127.0.0.1', r)); const port = srv.address().port;
   const call = (method, p, body, headers = {}) => new Promise((res, rej) => {
-    const rq = http.request({ host: '127.0.0.1', port, method, path: p, headers: { 'Content-Type': 'application/json', Host: '127.0.0.1:' + port, ...headers } }, r => { const c = []; r.on('data', d => c.push(d)); r.on('end', () => { const b = Buffer.concat(c); let j = null; try { j = JSON.parse(b.toString('utf8')); } catch (_) { /* binary */ } res({ status: r.statusCode, h: r.headers, j, b }); }); });
+    const rq = http.request({ host: '127.0.0.1', port, method, path: p, headers: { 'Content-Type': 'application/json', 'X-Gen-Action': '1', Host: '127.0.0.1:' + port, ...headers } }, r => { const c = []; r.on('data', d => c.push(d)); r.on('end', () => { const b = Buffer.concat(c); let j = null; try { j = JSON.parse(b.toString('utf8')); } catch (_) { /* binary */ } res({ status: r.statusCode, h: r.headers, j, b }); }); });
     rq.on('error', rej); if (body) rq.write(typeof body === 'string' ? body : JSON.stringify(body)); rq.end();
   });
   try {
@@ -5387,4 +5397,39 @@ test('POST /api/license/check answers without storing a key', async () => {
     assert.strictEqual(res.status, 200); assert.strictEqual(r.valid, false); assert.strictEqual(r.genuine, false); assert.strictEqual(r.current, 'basic');
     assert.strictEqual(license.readStored(), null);
   } finally { server.closeAllConnections(); await new Promise(r => server.close(r)); delete process.env.BRIDGE_LICENSE_FILE; }
+});
+
+test('key-request inbox is encrypted to the vendor key: unreadable on disk, opens only with the private key, tamper-evident, old records sealed on unlock', async () => {
+  const ic = require('../scripts/inbox-crypto'), gen = require('../scripts/license-generator'), vault = require('../scripts/license-vault');
+  const crypto = require('node:crypto'), fsx = require('node:fs'), osx = require('node:os'), pathx = require('node:path');
+  const { privateKey, publicKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });
+  const pub = publicKey.export({ format: 'jwk' }), rec = { at: 1, plan: 'pro', name: 'Jane Secret', email: 'jane@example.com', machineId: 'ABCD-1234' };
+  const box = ic.seal(rec, pub), raw = JSON.stringify(box);
+  for (const s of ['Jane', 'jane@example.com', 'ABCD-1234']) assert.ok(!raw.includes(s), 'plain text leaked: ' + s);
+  assert.deepStrictEqual(ic.open(box, privateKey), rec);
+  const other = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' }).privateKey;
+  assert.throws(() => ic.open(box, other));                                                         // wrong key
+  assert.throws(() => ic.open({ ...box, plan: 'master' }, privateKey));                              // header changed
+  const ct = Buffer.from(box.ct, 'base64'); ct[0] ^= 1; assert.throws(() => ic.open({ ...box, ct: ct.toString('base64') }, privateKey));   // body changed
+  assert.notStrictEqual(ic.seal(rec, pub).ct, box.ct);                                              // fresh ephemeral key every time
+  // through the public listener: stored sealed, LOCKED without the PIN, readable after unlock
+  const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'am-inbox-'));
+  fsx.writeFileSync(pathx.join(dir, 'public.jwk.json'), JSON.stringify(pub));
+  vault.writeLocked(dir, privateKey.export({ type: 'pkcs8', format: 'pem' }), 'pin-123456');
+  fsx.appendFileSync(pathx.join(dir, 'license-requests.jsonl'), JSON.stringify({ at: 2, plan: 'basic', name: 'Old Plain', email: 'old@example.com', machineId: '' }) + '\n');   // made before encryption
+  const s = gen.createServer({ kind: 'vendor', dirArgv: ['--dir', dir], publicOnly: true, limit: () => true, requestCap: () => true });
+  await new Promise(r => s.listen(0, '127.0.0.1', r));
+  const post = () => fetch(`http://127.0.0.1:${s.address().port}/request-license`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: 'license-request', ...rec }) }).then(r => r.json());
+  assert.strictEqual((await post()).ok, true); assert.strictEqual((await post()).duplicate, true);   // dedupe works on the sealed hash
+  s.close();
+  const disk = fsx.readFileSync(pathx.join(dir, 'license-requests.jsonl'), 'utf8');
+  assert.ok(!disk.includes('Jane') && !disk.includes('jane@example.com'));
+  const session = gen.makeSession();
+  const locked = gen.readInbox(dir, session);
+  assert.ok(locked.some(r => r.locked && r.plan === 'pro')); assert.ok(!JSON.stringify(locked).includes('Jane'));
+  session.unlock(dir, 'pin-123456');
+  const open = gen.readInbox(dir, session);
+  assert.ok(open.some(r => r.name === 'Jane Secret' && r.email === 'jane@example.com')); assert.ok(open.some(r => r.name === 'Old Plain'));
+  assert.ok(!fsx.readFileSync(pathx.join(dir, 'license-requests.jsonl'), 'utf8').includes('old@example.com'));   // the old plain record is now sealed too
+  fsx.rmSync(dir, { recursive: true, force: true });
 });

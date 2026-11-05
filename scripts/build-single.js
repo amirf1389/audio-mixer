@@ -26,7 +26,7 @@ const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
 
 const ROOT = path.resolve(__dirname, '..');
-const NODE_VERSION = process.env.SINGLE_NODE_VERSION || 'v22.23.3';          // one version for every target: the blob must match the binary it is injected into
+const NODE_VERSION = process.env.SINGLE_NODE_VERSION || 'v22.23.4';          // one version for every target: the blob must match the binary it is injected into
 const ESBUILD_VERSION = '0.28.2', POSTJECT_VERSION = '1.0.0-alpha.6';
 const FUSE = 'NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2';
 const TARGETS = {

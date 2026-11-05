@@ -65,7 +65,11 @@ const HOST = '127.0.0.1';
 const ROOT = path.resolve(__dirname, '..');
 const EXTRA_ORIGINS = (process.env.BRIDGE_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
 const EXTRA_HOSTS = (process.env.BRIDGE_HOSTS || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-const ALLOW_NULL_ORIGIN = process.env.BRIDGE_ALLOW_NULL_ORIGIN !== '0'; // file:// pages send "null"; set 0 to refuse
+const ALLOW_NULL_ORIGIN = process.env.BRIDGE_ALLOW_NULL_ORIGIN !== '0'; // file:// pages send "null"; set 0 to refuse even reads
+// Origin "null" is ALSO what any website's sandboxed iframe sends, so by default it may only READ (GET); actions, preflights and the audio
+// WebSockets (microphone / interface audio) need a real local origin. BRIDGE_ALLOW_NULL_ORIGIN=1 restores full access for file:// development.
+const NULL_ORIGIN_FULL = process.env.BRIDGE_ALLOW_NULL_ORIGIN === '1';
+const isLocalOrigin = o => { try { const h = new URL(o).hostname; return h === 'localhost' || h === '127.0.0.1' || h === '[::1]'; } catch (_) { return false; } };
 const SECURITY_HEADERS = security.HEADERS;
 const RATE = process.env.BRIDGE_RATE_LIMIT === '0' ? 0 : 1;   // 0 turns the request limits off
 const limiter = security.createLimiter();
@@ -103,11 +107,12 @@ async function handle(req, res) {
   const origin = req.headers.origin;
   if (!hostAllowed(req.headers.host)) return json(res, 403, { ok: false, error: 'host not allowed' });
   if (!originAllowed(origin)) return json(res, 403, { ok: false, error: 'origin not allowed' });
+  if (origin === 'null' && !NULL_ORIGIN_FULL && req.method !== 'GET' && req.method !== 'HEAD') return json(res, 403, { ok: false, error: 'actions need the app page (http://localhost), not an opaque origin' });
   if (RATE && req.url.startsWith('/api/')) {   // per page origin: reads 900/min, actions (POST) 40/min
     const post = req.method === 'POST', r = limiter.allow((post ? 'p:' : 'g:') + (origin || 'local'), post ? 40 : 900);
     if (!r.ok) return json(res, 429, { ok: false, error: 'too many requests, retry in ' + r.retryAfter + ' s' }, { 'Retry-After': String(r.retryAfter) });
   }
-  const cors = origin ? { 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin', 'Access-Control-Allow-Private-Network': 'true' } : {};
+  const cors = origin ? { 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin', ...(isLocalOrigin(origin) || EXTRA_ORIGINS.includes(origin) ? { 'Access-Control-Allow-Private-Network': 'true' } : {}) } : {};   // never invite public pages into the private network
   if (req.method === 'OPTIONS') return send(res, 204, '', { ...cors, 'Access-Control-Allow-Methods': 'GET, POST', 'Access-Control-Allow-Headers': 'Content-Type, X-Mixer-Action' });
   const url = new URL(req.url, `http://${HOST}`);
   if (req.method === 'POST' && url.pathname === '/api/license/activate') return handleAction(req, res, cors, 'license', async body => {
@@ -325,7 +330,7 @@ async function handleAction(req, res, cors, action, fn, wantBody = true, maxBody
 server.on('upgrade', (req, socket) => {
   let pathname = '';
   try { pathname = new URL(req.url, `http://${HOST}`).pathname; } catch (_) { /* rejected below */ }
-  if ((pathname !== '/ws/output' && pathname !== '/ws/input' && pathname !== '/ws/duplex' && pathname !== '/ws/insert' && pathname !== '/ws/virtual' && pathname !== '/ws/control') || !hostAllowed(req.headers.host) || !originAllowed(req.headers.origin)) { socket.destroy(); return; }
+  if ((pathname !== '/ws/output' && pathname !== '/ws/input' && pathname !== '/ws/duplex' && pathname !== '/ws/insert' && pathname !== '/ws/virtual' && pathname !== '/ws/control') || !hostAllowed(req.headers.host) || !originAllowed(req.headers.origin) || (req.headers.origin === 'null' && !NULL_ORIGIN_FULL)) { socket.destroy(); return; }   // audio sockets: never from an opaque (sandboxed) origin
   if (pathname === '/ws/virtual' && req.headers.origin) { socket.destroy(); return; }     // drivers are native programs: a web page has no business here
   if (openSockets >= MAX_SOCKETS || (RATE && !limiter.allow('ws', 120).ok)) { socket.end('HTTP/1.1 429 Too Many Requests\r\nConnection: close\r\n\r\n'); return; }
   const handlers = {};
