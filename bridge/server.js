@@ -10,6 +10,7 @@
 //   GET /api/universal -> universal ASIO driver: all input / output sources, ranked, with the automatic pick
 //   GET /api/plugins -> VST3 / VST2 plugins (.vst3 / .dll / .vst) found and validated
 //   POST /api/handoff {scenes}, GET /api/handoff -> one scene archive (.amix) from "audio-mixer open" waiting for the page (taken once)
+//   GET /api/driver-lock, POST /api/driver-lock (X-Mixer-Action: driver-lock, {forget}) -> AI driver lock: ladder per ASIO interface and the learned locks
 //   GET /api/power, POST /api/restart (X-Mixer-Action: restart) -> restart this server; POST /api/reboot (X-Mixer-Action: reboot, {confirm:'REBOOT'}) -> reboot the computer
 //   GET /api/meters, POST /api/meters {clipDb} -> clip threshold (dBFS) of the level meters of native streams
 //   WS  /ws/virtual, GET /api/virtual -> virtual audio devices of the operating-system drivers (drivers/); they appear in /api/interfaces and open like any interface
@@ -184,6 +185,14 @@ async function handle(req, res) {
     diag.info('sim', `simulated devices ${st.enabled ? 'ON: ' + st.profiles.join(', ') + (Object.keys(st.faults).length ? ' (faults: ' + JSON.stringify(st.faults) + ')' : '') : 'OFF'}`);
     return [200, { ok: true, ...st }];
   });
+  // AI DRIVER LOCK (bridge/driver-lock.js): POST /api/driver-lock { forget: "<device name>" | "*", dir?: "input" | "output" } clears a lock
+  if (req.method === 'POST' && url.pathname === '/api/driver-lock') return handleAction(req, res, cors, 'driver-lock', async body => {
+    const dl = require('./driver-lock'), name = typeof body.forget === 'string' ? body.forget.slice(0, 120) : null;
+    if (!name) return [400, { ok: false, error: 'forget: a device name, or "*" for every lock' }];
+    const n = dl.forget(name, body.dir === 'output' || body.dir === 'input' ? body.dir : undefined);
+    diag.info('lock', name === '*' ? `AI driver lock: every lock forgotten (${n})` : `AI driver lock: ${name} forgotten: its own ASIO driver is tried first again`);
+    return [200, { ok: true, removed: n, locks: dl.list() }];
+  });
   if (req.method !== 'GET') return json(res, 405, { ok: false, error: 'method not allowed' }, cors);
   if (url.pathname === '/api/handoff') {   // the page takes the waiting scene archive once (it is dropped after 2 minutes)
     const h = handoff && Date.now() - handoff.at < 120000 ? handoff : null; handoff = null;
@@ -224,6 +233,13 @@ async function handle(req, res) {
   if (url.pathname === '/api/diagnostics/report') return send(res, 200, diag.report({ version: VERSION }), { ...cors, 'Content-Type': 'text/plain; charset=utf-8', 'Content-Disposition': 'attachment; filename="amfx1-audio-diagnostics.txt"' });
   // SIMULATED DEVICES (bridge/sim): GET status; POST {enabled, profiles, faults} with X-Mixer-Action: sim (local page only, like every action)
   if (url.pathname === '/api/sim') return json(res, 200, { ok: true, ...require('./sim').status() }, cors);
+  // the ladder of every ASIO interface (ASIO -> WASAPI exclusive -> WASAPI shared -> DirectSound -> MME) and the locks learned so far
+  if (url.pathname === '/api/driver-lock') {
+    const dl = require('./driver-lock'); let devices = []; try { devices = require('./portaudio').load().getDevices(); } catch (_) { /* no PortAudio here */ }
+    const asio = devices.filter(d => /asio/i.test(d.hostAPIName)), view = l => l.map(x => ({ step: x.step, mode: x.mode, available: x.available, device: x.device ? x.device.name : null, hostApi: x.device ? x.device.hostAPIName : null, why: x.why }));
+    return json(res, 200, { ok: true, exclusive: dl.exclusiveAvailable(), retryHours: dl.RETRY_MS / 3600000, locks: dl.list(),
+      interfaces: asio.map(d => ({ name: d.name, input: d.maxInputChannels > 0 ? view(dl.ladder(d.name, devices, 'input')) : null, output: d.maxOutputChannels > 0 ? view(dl.ladder(d.name, devices, 'output')) : null })) }, cors);
+  }
   if (url.pathname === '/api/drivers') {
     try { return json(res, 200, { ok: true, ...(await detectCached(url.searchParams.get('force') === '1')) }, cors); }
     catch (e) { return json(res, 500, { ok: false, error: e.message }, cors); }

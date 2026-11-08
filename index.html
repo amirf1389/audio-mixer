@@ -4140,6 +4140,7 @@ const cArea = document.getElementById('content-area');
         <button onclick="window.switchMixLayer('1-16', this)" class="bank-btn px-2 py-0.5 rounded bg-amber-500 text-black font-black text-[8px]">PAGE 1: CH 01-16</button>
         <button onclick="window.switchMixLayer('17-32', this)" class="bank-btn px-2 py-0.5 rounded bg-white/5 text-slate-300 font-bold text-[8px]">PAGE 2: CH 17-32</button>
         <button onclick="window.switchMixLayer('all', this)" class="bank-btn px-2 py-0.5 rounded bg-white/5 text-slate-300 font-bold text-[8px]">ALL 32 CH</button>
+        <span id="mix-sets" class="flex gap-1 items-center ml-1" role="group" aria-label="Mixer sets"><span class="text-[8px] font-black text-amber-500 uppercase tracking-widest font-wing">SETS:</span><button type="button" data-mixset="0" class="px-1.5 py-0.5 rounded bg-white/5 text-slate-300 font-bold text-[8px] border border-white/10">1</button><button type="button" data-mixset="1" class="px-1.5 py-0.5 rounded bg-white/5 text-slate-300 font-bold text-[8px] border border-white/10">2</button><button type="button" data-mixset="2" class="px-1.5 py-0.5 rounded bg-white/5 text-slate-300 font-bold text-[8px] border border-white/10">3</button><button type="button" data-mixset="3" class="px-1.5 py-0.5 rounded bg-white/5 text-slate-300 font-bold text-[8px] border border-white/10">4</button><button type="button" id="mix-set-store" aria-pressed="false" title="STORE, then a number: keeps faders, mute, solo and pan of every channel in that set. A number alone recalls it." class="px-1.5 py-0.5 rounded bg-white/5 text-amber-400 font-black text-[7px] border border-amber-500/40">STORE</button></span>
         <button id="foh-mode-toggle-btn" onclick="window.toggleFohMode()" class="px-2.5 py-1 rounded bg-white/10 hover:bg-white/20 text-slate-300 font-bold text-[7.5px] border border-white/10 transition">FOH FULL MODE</button>
       </div>
 
@@ -10922,6 +10923,60 @@ const cArea = document.getElementById('content-area');
         if (realDoc()) arm();   // a page only: never a timer in a script that just loads the code
         const tryMount = () => { if (!realDoc()) return true; if (document.getElementById('automation-panel')) { api.mount(); return true; } return false; };
         if (!tryMount()) { let k = 0; const t = setInterval(() => { if (tryMount() || ++k > 120) clearInterval(t); }, 500); }
+        return api;
+    })();
+    // MIXER SETS 1-4: four quick console snapshots on the mixer toolbar (faders, mute, solo and pan of every channel). STORE, then a number,
+    // keeps the console in that set; a number alone recalls it (an empty set is stored on its first press). Kept in localStorage (halx_mix_sets).
+    // Lighter than SCENES (the SCENES page keeps names and colours too); SETS are for switching between song parts or A/B mixes in one click.
+    window.mixSets = (() => {
+        const KEY = 'halx_mix_sets', N = 32;
+        let sets = [null, null, null, null]; try { const j = JSON.parse(localStorage.getItem(KEY) || 'null'); if (Array.isArray(j)) sets = [0, 1, 2, 3].map(i => j[i] || null); } catch (_) { /* fresh */ }
+        let armed = false, active = -1;
+        const S = () => window.state || {};
+        const knob = i => document.querySelector(`.rotary-knob[data-param="pan-${i}"]`);
+        const angleOf = k => { const v = k ? parseFloat(k.style.getPropertyValue('--knob-angle')) : 0; return isFinite(v) ? v : 0; };
+        function capture() {
+            const ch = [];
+            for (let i = 0; i < N; i++) {
+                const f = document.getElementById('ch-fader-' + i);
+                ch.push({ db: f ? Math.round((parseFloat(f.value) || 0) * 10) / 10 : 0, mute: !!(S().channelMutes && S().channelMutes[i]), solo: !!(S().channelSolos && S().channelSolos[i]), pan: Math.round(angleOf(knob(i))) });
+            }
+            return { at: Date.now(), ch };
+        }
+        function recall(set) {
+            set.ch.forEach((c, i) => {
+                const f = document.getElementById('ch-fader-' + i);
+                if (f && Math.abs((parseFloat(f.value) || 0) - c.db) >= 0.05) { f.value = c.db; window.setChannelGain(i, c.db, true); }
+                if (S().channelMutes && !!S().channelMutes[i] !== c.mute) window.toggleChannelMute(i, true);
+                if (S().channelSolos && !!S().channelSolos[i] !== c.solo) window.toggleChannelSolo(i, true);
+                const k = knob(i); if (k && Math.round(angleOf(k)) !== c.pan && window.handleKnobParam) { k.style.setProperty('--knob-angle', c.pan + 'deg'); window.handleKnobParam(k, c.pan); }
+            });
+            if (window.applyAllChannelGains) window.applyAllChannelGains();
+        }
+        const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(sets)); } catch (_) { /* full or private */ } };
+        const api = {
+            get: i => sets[i],
+            store(i) { if (!(i >= 0 && i < 4)) return; sets[i] = capture(); active = i; armed = false; persist(); api.render(); window.notify && window.notify('SET ' + (i + 1) + ' stored (faders, mute, solo, pan)', 'floppy-disk'); },
+            recall(i) { if (!sets[i]) return api.store(i); recall(sets[i]); active = i; api.render(); window.notify && window.notify('SET ' + (i + 1) + ' recalled', 'layer-group'); },
+            press(i) { return armed ? api.store(i) : api.recall(i); },
+            arm(on) { armed = on === undefined ? !armed : !!on; api.render(); },
+            clear(i) { sets[i] = null; if (active === i) active = -1; persist(); api.render(); },
+            render() {
+                if (typeof document === 'undefined' || typeof document.querySelectorAll !== 'function') return;
+                document.querySelectorAll('[data-mixset]').forEach(b => {
+                    const i = +b.dataset.mixset, has = !!sets[i];
+                    b.className = 'px-1.5 py-0.5 rounded font-bold text-[8px] border ' + (i === active ? 'bg-amber-500 text-black border-amber-500' : armed ? 'bg-rose-500/20 text-rose-300 border-rose-500/50' : has ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40' : 'bg-white/5 text-slate-300 border-white/10');
+                    b.title = armed ? 'Store the console in SET ' + (i + 1) : has ? 'Recall SET ' + (i + 1) + ' (stored ' + new Date(sets[i].at).toLocaleTimeString() + ')' : 'SET ' + (i + 1) + ' is empty: press to store the console';
+                    b.setAttribute('aria-label', b.title); b.setAttribute('aria-pressed', i === active ? 'true' : 'false');
+                });
+                const st = document.getElementById('mix-set-store'); if (st) { st.setAttribute('aria-pressed', armed ? 'true' : 'false'); st.className = 'px-1.5 py-0.5 rounded font-black text-[7px] border ' + (armed ? 'bg-rose-500 text-white border-rose-500' : 'bg-white/5 text-amber-400 border-amber-500/40'); }
+            },
+            _capture: capture,
+        };
+        if (typeof document !== 'undefined' && typeof document.querySelectorAll === 'function') {
+            const wire = () => { const bs = document.querySelectorAll('[data-mixset]'); if (!bs.length) return false; bs.forEach(b => { b.onclick = () => api.press(+b.dataset.mixset); }); const st = document.getElementById('mix-set-store'); if (st) st.onclick = () => api.arm(); api.render(); return true; };
+            if (!wire()) { let k = 0; const iv = setInterval(() => { if (wire() || ++k > 120) clearInterval(iv); }, 500); }
+        }
         return api;
     })();
         window.setMsMono = function() { window.setMsWidth(0); };   // quick collapse-to-mono, same math as width 0%
@@ -20725,6 +20780,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 <button id="rt-diag-save" class="px-2 py-0.5 rounded bg-white/10 text-slate-200 font-bold">SAVE LOG</button>
                 <span id="rt-diag-file" class="text-slate-500 truncate"></span>
               </div>
+              <div id="rt-lock" class="space-y-1 text-[7.5px] border border-cyan-500/30 rounded p-1.5"><div class="flex items-center justify-between gap-2"><span class="text-cyan-300 font-black">AI DRIVER LOCK</span><span class="text-slate-500">ASIO &rarr; WASAPI EXCLUSIVE &rarr; WASAPI SHARED &rarr; DIRECTSOUND &rarr; MME: THE PATH THAT WORKED GOES FIRST NEXT TIME</span><button id="rt-lock-forget" class="px-2 py-0.5 rounded bg-white/10 text-slate-200 font-bold">FORGET ALL</button></div><div id="rt-lock-list" aria-live="polite"></div></div>
               <div id="rt-diag-list" class="max-h-64 overflow-y-auto space-y-1 text-[7.5px]" aria-live="polite"></div>
             </div>`;
         host.insertBefore(d, host.firstChild);
@@ -20734,6 +20790,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
         const escD = t => (window.escapeHtml ? window.escapeHtml(String(t)) : String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])));
         const loadDiag = async () => {
             const b = bridgeUrl(), box = $('rt-diag-list'); if (!box) return;
+            if (b && typeof loadLocks === 'function') loadLocks();
             if (!b) { box.innerHTML = '<div class="text-slate-500">Start PC mode (the local server) to see the diagnostics.</div>'; return; }
             try {
                 const j = await (await fetch(b + '/api/diagnostics?filter=' + encodeURIComponent($('rt-diag-filter').value), { cache: 'no-store' })).json();
@@ -20744,6 +20801,21 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             } catch (e) { box.innerHTML = '<div class="text-rose-300">Could not read the diagnostics: ' + escD(e.message) + '</div>'; }
         };
         $('rt-drv-diag').onclick = () => { dg.open = !dg.open; $('rt-diag').classList.toggle('hidden', !dg.open); $('rt-drv-diag').setAttribute('aria-expanded', dg.open ? 'true' : 'false'); clearInterval(dg.timer); if (dg.open) { loadDiag(); dg.timer = setInterval(() => { if (visible('asio')) loadDiag(); }, 2000); } };
+        // AI DRIVER LOCK (bridge/driver-lock.js): what each interface is locked to, and why; FORGET makes its own ASIO driver go first again
+        const loadLocks = async () => {
+            const b = bridgeUrl(), box = $('rt-lock-list'); if (!box || !b) return;
+            try {
+                const j = await (await fetch(b + '/api/driver-lock', { cache: 'no-store' })).json(); if (!j || !j.ok) return;
+                const when = t => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                box.innerHTML = (j.locks || []).length ? j.locks.map(l => `<div class="flex flex-wrap items-center gap-1.5 bg-black/30 rounded px-1.5 py-0.5"><b class="text-white">${escD(l.name)}</b><span class="text-slate-400">${l.dir === 'output' ? 'WRITE' : 'READ'}</span><span class="px-1 rounded font-black ${l.mode === 'asio' ? 'bg-amber-400 text-black' : 'bg-cyan-500/20 text-cyan-300'}">${escD(String(l.mode).toUpperCase())}</span>${l.device && l.device !== l.name ? `<span class="text-slate-300">${escD(l.device)}</span>` : ''}<span class="text-slate-500">${escD(l.reason || '')} &bull; since ${when(l.at)}${l.retryAt ? ' &bull; ASIO retried after ' + when(l.retryAt) : ''}</span><button data-forget="${escD(l.name)}" class="ml-auto px-1.5 rounded bg-white/10 text-slate-200 font-bold">FORGET</button></div>`).join('') + (j.exclusive ? '' : '<div class="text-slate-500">WASAPI exclusive is not built into this copy: that step is skipped.</div>') : '<div class="text-slate-500">No locks yet: every interface starts with its own ASIO driver.' + (j.exclusive ? '' : ' (WASAPI exclusive is not built into this copy.)') + '</div>';
+                box.querySelectorAll('[data-forget]').forEach(x => { x.onclick = () => forgetLock(x.dataset.forget); });
+            } catch (_) { /* older server without the lock */ }
+        };
+        const forgetLock = async name => {
+            const b = bridgeUrl(); if (!b) return;
+            try { await fetch(b + '/api/driver-lock', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Mixer-Action': 'driver-lock' }, body: JSON.stringify({ forget: name }) }); window.notify(name === '*' ? 'AI driver lock: every interface tries its own ASIO driver first again' : 'AI driver lock forgotten: ' + name + ' tries its own ASIO driver first again', 'unlock'); loadLocks(); loadDiag(); } catch (e) { window.notify('Could not forget the lock: ' + e.message, 'triangle-exclamation'); }
+        };
+        $('rt-lock-forget').onclick = () => forgetLock('*');
         $('rt-diag-filter').onchange = loadDiag;
         const getReport = async () => { const b = bridgeUrl(); if (!b) throw new Error('PC mode is off'); return (await fetch(b + '/api/diagnostics/report', { cache: 'no-store' })).text(); };
         $('rt-diag-copy').onclick = async () => { try { const t = await getReport(); await navigator.clipboard.writeText(t); window.notify('Diagnostics report copied: paste it into your bug report', 'copy'); } catch (e) { window.notify('Could not copy the report: ' + e.message, 'triangle-exclamation'); } };
@@ -22986,6 +23058,11 @@ t.Omnitone=e(11)},function(A,t,e){"use strict";const i=e(1),n=e(4),s=e(12),o=e(6
             ['APPLY ALL', 'اعمال همه', 'تطبيق الكل', 'سب لاگو کریں', 'APLICAR TODO', 'TOUT APPLIQUER', 'ALLE ANWENDEN', 'APLICAR TUDO', 'ПРИМЕНИТЬ ВСЁ', 'TÜMÜNÜ UYGULA', 'सभी लागू करें', '全部应用', 'すべて適用', '모두 적용', 'GUNA SEMUA', 'TERAPKAN SEMUA', 'APPLICA TUTTO', 'ALLES TOEPASSEN', 'ZASTOSUJ WSZYSTKO', 'ÁP DỤNG TẤT CẢ', 'ใช้ทั้งหมด', 'ЗАСТОСУВАТИ ВСЕ'],
             ['LANE VIEW', 'نمای لاین', 'عرض المسار', 'لین ویو', 'VISTA DE CARRILES', 'VUE DES PISTES', 'SPURANSICHT', 'VISTA DE FAIXAS', 'ВИД ДОРОЖЕК', 'ŞERİT GÖRÜNÜMÜ', 'लेन दृश्य', '轨道视图', 'レーン表示', '레인 보기', 'PAPARAN LALUAN', 'TAMPILAN JALUR', 'VISTA CORSIE', 'BAANWEERGAVE', 'WIDOK ŚCIEŻEK', 'XEM LÀN', 'มุมมองเลน', 'ВИГЛЯД ДОРІЖОК'],
             ['PLAY LANE', 'لاین پخش', 'مسار التشغيل', 'پلے لین', 'CARRIL A REPRODUCIR', 'PISTE LUE', 'WIEDERGABESPUR', 'FAIXA A REPRODUZIR', 'ДОРОЖКА ВОСПРОИЗВЕДЕНИЯ', 'OYNATILAN ŞERİT', 'चलने वाली लेन', '播放轨道', '再生レーン', '재생 레인', 'LALUAN MAIN', 'JALUR PUTAR', 'CORSIA IN RIPRODUZIONE', 'AFSPEELBAAN', 'ŚCIEŻKA ODTWARZANIA', 'LÀN PHÁT', 'เลนที่เล่น', 'ДОРІЖКА ВІДТВОРЕННЯ'],
+            ['AI DRIVER LOCK', 'قفل هوشمند درایور', 'قفل برنامج التشغيل الذكي', 'AI ڈرائیور لاک', 'BLOQUEO DE DRIVER IA', 'VERROU DE PILOTE IA', 'KI-TREIBERSPERRE', 'BLOQUEIO DE DRIVER IA', 'ИИ-БЛОКИРОВКА ДРАЙВЕРА', 'YAPAY ZEKÂ SÜRÜCÜ KİLİDİ', 'AI ड्राइवर लॉक', 'AI 驱动锁定', 'AI ドライバーロック', 'AI 드라이버 잠금', 'KUNCI PEMACU AI', 'KUNCI DRIVER AI', 'BLOCCO DRIVER IA', 'AI-STUURPROGRAMMAVERGRENDELING', 'BLOKADA STEROWNIKA AI', 'KHÓA TRÌNH ĐIỀU KHIỂN AI', 'ล็อกไดรเวอร์ AI', 'ШІ-БЛОКУВАННЯ ДРАЙВЕРА'],
+            ['FORGET ALL', 'فراموش کردن همه', 'نسيان الكل', 'سب بھول جائیں', 'OLVIDAR TODO', 'TOUT OUBLIER', 'ALLE VERGESSEN', 'ESQUECER TUDO', 'ЗАБЫТЬ ВСЁ', 'TÜMÜNÜ UNUT', 'सभी भूलें', '全部忘记', 'すべて忘れる', '모두 잊기', 'LUPAKAN SEMUA', 'LUPAKAN SEMUA', 'DIMENTICA TUTTO', 'ALLES VERGETEN', 'ZAPOMNIJ WSZYSTKO', 'QUÊN TẤT CẢ', 'ลืมทั้งหมด', 'ЗАБУТИ ВСЕ'],
+            ['FORGET', 'فراموش کردن', 'نسيان', 'بھول جائیں', 'OLVIDAR', 'OUBLIER', 'VERGESSEN', 'ESQUECER', 'ЗАБЫТЬ', 'UNUT', 'भूलें', '忘记', '忘れる', '잊기', 'LUPAKAN', 'LUPAKAN', 'DIMENTICA', 'VERGETEN', 'ZAPOMNIJ', 'QUÊN', 'ลืม', 'ЗАБУТИ'],
+            ['SETS:', 'مجموعه‌ها:', 'المجموعات:', 'سیٹس:', 'CONJUNTOS:', 'JEUX :', 'SETS:', 'CONJUNTOS:', 'НАБОРЫ:', 'SETLER:', 'सेट:', '组：', 'セット:', '세트:', 'SET:', 'SET:', 'SET:', 'SETS:', 'ZESTAWY:', 'BỘ:', 'ชุด:', 'НАБОРИ:'],
+            ['STORE', 'ذخیره', 'تخزين', 'محفوظ', 'GUARDAR', 'MÉMORISER', 'SPEICHERN', 'ARMAZENAR', 'СОХРАНИТЬ', 'KAYDET', 'संग्रहित करें', '存储', '保存', '저장', 'SIMPAN', 'SIMPAN', 'MEMORIZZA', 'OPSLAAN', 'ZAPISZ', 'LƯU', 'จัดเก็บ', 'ЗБЕРЕГТИ'],
             ['UPGRADE TO PRO', 'ارتقا به PRO', 'الترقية إلى PRO', 'PRO میں اپ گریڈ کریں', 'ACTUALIZAR A PRO', 'PASSER À PRO', 'AUF PRO UPGRADEN', 'ATUALIZAR PARA PRO', 'ПЕРЕЙТИ НА PRO', "PRO'YA YÜKSELT", 'PRO में अपग्रेड करें', '升级到 PRO', 'PRO にアップグレード', 'PRO로 업그레이드', 'NAIK TARAF KE PRO', 'UPGRADE KE PRO', 'PASSA A PRO', 'UPGRADEN NAAR PRO', 'PRZEJDŹ NA PRO', 'NÂNG CẤP LÊN PRO', 'อัปเกรดเป็น PRO', 'ПЕРЕЙТИ НА PRO'],
             ['UPGRADE TO STUDIO MASTER', 'ارتقا به STUDIO MASTER', 'الترقية إلى STUDIO MASTER', 'STUDIO MASTER میں اپ گریڈ کریں', 'ACTUALIZAR A STUDIO MASTER', 'PASSER À STUDIO MASTER', 'AUF STUDIO MASTER UPGRADEN', 'ATUALIZAR PARA STUDIO MASTER', 'ПЕРЕЙТИ НА STUDIO MASTER', "STUDIO MASTER'A YÜKSELT", 'STUDIO MASTER में अपग्रेड करें', '升级到 STUDIO MASTER', 'STUDIO MASTER にアップグレード', 'STUDIO MASTER로 업그레이드', 'NAIK TARAF KE STUDIO MASTER', 'UPGRADE KE STUDIO MASTER', 'PASSA A STUDIO MASTER', 'UPGRADEN NAAR STUDIO MASTER', 'PRZEJDŹ NA STUDIO MASTER', 'NÂNG CẤP LÊN STUDIO MASTER', 'อัปเกรดเป็น STUDIO MASTER', 'ПЕРЕЙТИ НА STUDIO MASTER'],
             ['COPY', 'کپی', 'نسخ', 'کاپی', 'COPIAR', 'COPIER', 'KOPIEREN', 'COPIAR', 'КОПИРОВАТЬ', 'KOPYALA', 'कॉपी', '复制', 'コピー', '복사', 'SALIN', 'SALIN', 'COPIA', 'KOPIËREN', 'KOPIUJ', 'SAO CHÉP', 'คัดลอก', 'КОПІЮВАТИ'],
