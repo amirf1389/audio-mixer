@@ -435,6 +435,7 @@ test('autostart generates safe per-OS files and installs / removes them', async 
 
 test('build produces a self-contained PC-mode package that serves the mixer', async () => {
   const { build, FILES, DIRS, listDir } = require('../scripts/build');
+  const genLaunchers = require('../scripts/win-launchers').writeInto(fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'gl-')));   // start-pc-mode.bat etc. generated into the package, not committed
   const out = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'dist-'));
   const r = build({ out });
   assert.strictEqual(r.dest, pathx.join(out, 'audio-mixer-pc'));
@@ -443,7 +444,8 @@ test('build produces a self-contained PC-mode package that serves the mixer', as
   const pkg = JSON.parse(fsx.readFileSync(pathx.join(r.dest, 'package.json'), 'utf8'));
   assert.ok(!('test' in pkg.scripts) && pkg.scripts.start);
   const manifest = fsx.readFileSync(pathx.join(r.dest, 'MANIFEST.sha256'), 'utf8').trim().split('\n');
-  assert.strictEqual(manifest.length, FILES.length + DIRS.flatMap(listDir).length);
+  assert.strictEqual(manifest.length, FILES.length + DIRS.flatMap(listDir).length + genLaunchers.length);
+  for (const f of genLaunchers) assert.ok(fsx.existsSync(pathx.join(r.dest, f)), 'generated launcher ' + f + ' in the package');
   for (const d of ['bridge', 'client', 'scripts', 'deploy', 'native']) assert.ok(fsx.existsSync(pathx.join(r.dest, d)), d);          // folders that go to Program Files
   const walkAll = d => fsx.readdirSync(d, { withFileTypes: true }).flatMap(e => [e.name, ...(e.isDirectory() ? walkAll(pathx.join(d, e.name)) : [])]);
   assert.ok(!walkAll(r.dest).some(n => n.startsWith('.')), 'no .vscode / dotfiles in the installed tree');
@@ -1354,14 +1356,18 @@ test('auto-install scripts: shell syntax, checksum verification, no network need
   const bad = pathx.join(osx.tmpdir(), 'amx-oldnode'); fsx.writeFileSync(bad, '#!/bin/sh\necho 12\n'); fsx.chmodSync(bad, 0o755);
   const r2 = cp.spawnSync('sh', ['-c', `. "${pathx.join(__dirname, '..', 'platforms', 'linux', 'ensure-node.sh')}"; am_node_ok "${bad}"; echo $?`], { encoding: 'utf8' });
   assert.strictEqual(r2.stdout.trim(), '1'); fsx.unlinkSync(bad);
-  // Windows launcher: winget first, then the checksum-verified official zip, then the Visual C++ runtime for Audify
-  const bat = fsx.readFileSync(pathx.join(__dirname, '..', 'platforms', 'windows', 'start-pc-mode.bat'), 'utf8');
+  // Windows launcher: winget first, then the checksum-verified official zip, then the Visual C++ runtime for Audify.
+  // The ZIP launchers are no longer committed; build.js writes them from scripts/win-launchers.js (see "remove but regenerate").
+  const winL = require('../scripts/win-launchers');
+  const bat = winL.START_PC_MODE_BAT;
   for (const want of ['winget install --id OpenJS.NodeJS.LTS', 'SHASUMS256.txt', 'certutil -hashfile', 'Microsoft.VCRedist.2015+.x64', 'does not match nodejs.org']) assert.ok(bat.includes(want), want);
   assert.ok(/\r\n/.test(bat));
   // automatic like Linux: the question defaults to Yes after the timeout (N declines); the newest LTS comes from the nodejs.org release API
   assert.match(bat, /choice \/c YN \/d Y \/t 60/); assert.ok(bat.includes('https://nodejs.org/dist/index.json') && bat.includes('--ensure-node'));
-  const ls = fsx.readFileSync(pathx.join(__dirname, '..', 'platforms', 'windows', 'start-local-server.bat'), 'utf8');
+  const ls = winL.START_LOCAL_SERVER_BAT;
   assert.ok(ls.includes('start-pc-mode.bat" --ensure-node'));
+  // build.js writes the three launchers (+ Audio Mixer.vbs) into the PC package at build time
+  assert.deepStrictEqual(winL.writeInto(fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'winl-'))).sort(), ['Audio Mixer.vbs', 'start-local-server.bat', 'start-pc-mode.bat']);
   assert.ok(sh.includes('https://nodejs.org/dist/index.json'));
 });
 
@@ -1642,7 +1648,7 @@ test('repository layout: one folder per system with its sources and release file
   // the launchers work from their folder in the repository and in a package
   const cp = require('node:child_process'), env = { ...process.env, AUDIO_MIXER_NODE: process.execPath, AUDIO_MIXER_NO_NATIVE: '1' };
   for (const cwd of [root, pathx.join(root, 'platforms', 'linux')]) { const r = cp.spawnSync('sh', [pathx.join(root, 'platforms', 'linux', 'start-pc-mode.sh'), '--help'], { cwd, env, encoding: 'utf8' }); assert.strictEqual(r.status, 0, r.stderr); assert.match(r.stdout, /PC-mode client/); }
-  const bat = fsx.readFileSync(pathx.join(root, 'platforms', 'windows', 'start-pc-mode.bat'), 'utf8'), srv = fsx.readFileSync(pathx.join(root, 'platforms', 'windows', 'start-local-server.bat'), 'utf8');
+  const winL = require('../scripts/win-launchers'), bat = winL.START_PC_MODE_BAT, srv = winL.START_LOCAL_SERVER_BAT;
   assert.match(bat, /if not exist client\\cli\.js if exist \.\.\\\.\.\\client\\cli\.js cd \/d \.\.\\\.\./); assert.match(srv, /if not exist bridge\\server\.js if exist \.\.\\\.\.\\bridge\\server\.js cd \/d \.\.\\\.\./); assert.match(bat, /\r\n/);
 });
 
