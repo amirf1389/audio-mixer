@@ -9,13 +9,14 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
 
-const { ROOT, repoPath } = require('./layout');   // package paths (native/win ...) differ from the repository folders (windows/native ...): see layout.js
+const { ROOT, repoPath } = require('./layout');
+const winLaunchers = require('./win-launchers');   // the Windows ZIP launchers are generated into the package, not committed   // package paths (native/win ...) differ from the repository folders (windows/native ...): see layout.js
 const FILES = [
-  'index.html', 'boot.html', 'PROJECT-README.md', 'LICENSE', 'package.json', 'start-pc-mode.bat', 'start-pc-mode.sh', 'ensure-node.sh', 'start-local-server.bat',
+  'index.html', 'boot.html', 'PROJECT-README.md', 'LICENSE', 'package.json', 'start-pc-mode.sh', 'ensure-node.sh',
   'client/cli.js', 'client/service.js', 'client/verify.js',
   'bridge/server.js', 'bridge/osdetect.js', 'bridge/virtual.js', 'bridge/detect.js', 'bridge/catalog.js', 'bridge/nowplaying.js', 'bridge/power.js', 'bridge/interfaces.js', 'bridge/hw-match.js', 'bridge/diagnostics.js', 'bridge/input-guard.js', 'bridge/portaudio.js', 'bridge/sim/index.js', 'bridge/asio-lock.js', 'bridge/driver-lock.js', 'bridge/audify.js', 'bridge/native-engine.js', 'bridge/plugins.js', 'bridge/streams.js', 'bridge/levels.js', 'bridge/universal.js', 'bridge/license.js', 'bridge/edition.js', 'bridge/license-public.json', 'bridge/update.js', 'bridge/duplex.js', 'bridge/winnative.js', 'bridge/security.js', 'bridge/sysaudio.js', 'bridge/inserts.js', 'bridge/pluginhost.js', 'bridge/bluetooth.js', 'bridge/input.js', 'bridge/output.js', 'bridge/control.js', 'bridge/license-client.js', 'bridge/volume.js', 'bridge/ws.js', 'bridge/sdk.js', 'bridge/wasapi-exclusive.js',
   'bridge/package.json', 'bridge/README.md',
-  'Audio Mixer.vbs', 'native/win/src/AudioDevices.cpp', 'native/win/x64/AudioDevices.exe', 'native/win/x86/AudioDevices.exe', 'native/win/vbs/audio-devices.vbs',
+  'native/win/src/AudioDevices.cpp', 'native/win/x64/AudioDevices.exe', 'native/win/x86/AudioDevices.exe', 'native/win/vbs/audio-devices.vbs',
   'native/mac/AudioDevices.swift', 'native/host/src/PluginHost.cpp', 'native/host/src/Vst3Host.h', 'native/host/test/GainPlugin.cpp', 'native/host/test/Gain3Plugin.cpp', 'native/host/x64/PluginHost.exe', 'native/host/x86/PluginHost.exe',
   'scripts/license.js', 'scripts/license-admin.js', 'scripts/make-update.js', 'scripts/release-label.js',
 ];
@@ -68,7 +69,9 @@ function build({ out = path.join(ROOT, 'dist'), archive = false } = {}) {
   // The installed tree must never carry editor / VCS folders (.vscode, .git, .github ...).
   const stray = ALL.filter(f => f.split('/').some(p => p.startsWith('.')));
   if (stray.length) throw new Error('dotfiles must not be installed: ' + stray.join(', '));
-  const manifest = [...ALL].sort().map(rel => `${sha256(path.join(dest, rel))}  ${rel}`).join('\n') + '\n';
+  // the Windows ZIP launchers (start-pc-mode.bat, start-local-server.bat, Audio Mixer.vbs) are written in from scripts/win-launchers.js
+  const generated = winLaunchers.writeInto(dest);
+  const manifest = [...ALL, ...generated].sort().map(rel => `${sha256(path.join(dest, rel))}  ${rel}`).join('\n') + '\n';
   fs.writeFileSync(path.join(dest, 'MANIFEST.sha256'), manifest);
 
   let archivePath = null;
@@ -77,7 +80,7 @@ function build({ out = path.join(ROOT, 'dist'), archive = false } = {}) {
     const r = spawnSync('tar', ['-czf', archivePath, '-C', path.resolve(out), 'audio-mixer-pc'], { encoding: 'utf8' });
     if (r.status !== 0) throw new Error('tar failed: ' + (r.stderr || r.error));
   }
-  return { dest, files: ALL.length + 1, archive: archivePath, version: pkg.version };
+  return { dest, files: ALL.length + generated.length + 1, archive: archivePath, version: pkg.version };
 }
 
 if (require.main === module) {
