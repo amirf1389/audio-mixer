@@ -168,6 +168,13 @@ Interface changes in the page:
 - Endpoints: `GET /api/nowplaying`, `GET /api/interfaces` (see `bridge/README.md`). Not verified on real Windows / macOS hardware; the Linux path was
   tested with a fake D-Bus and a stubbed PortAudio.
 
+## Dual mode fader automation and AI MODE CONTROL (1.22.1.0 Beta)
+
+- **Where.** AI MIX page, top: DUAL MODE FADER AUTOMATION and AI MODE CONTROL (`window.faderAuto`, `window.aiMode`; the pure maths sit between `//@@AUTOMATION-MATH-START` / `-END` in index.html and are unit-tested).
+- **Modes per channel.** Click a channel once to select it in the lane view, again to cycle OFF → READ → WRITE → TOUCH → LATCH (ALL sets every channel). PLAY / STOP / RTZ run the automation clock; nothing runs while it is stopped. TOUCH writes while your hand is on the fader, LATCH keeps writing after you let go until STOP, WRITE writes the whole pass, READ plays the lane back into the fader.
+- **Two lanes.** Lane A records your hand, lane B records what AUTO FADER / AI MODE does. PLAY LANE A / B chooses which one READ plays; COPY AI → MANUAL keeps the AI's moves. While a channel READs, AUTO FADER leaves it alone. Lanes are kept in `localStorage` (`halx_automation`).
+- **AI MODE.** OFF switches the ticked AI features off (AI faders, AI MIX engine, AUTO VOLUME, DYNAMIC EQ, AI DSP rack). ASSIST changes nothing on its own and lists suggestions every second (fader levels toward -18 dBFS input, AUTO VOLUME when the master peaks above -1 dBTP, AI DSP AUTO on feedback risk) with APPLY / APPLY ALL. AUTO switches the ticked features on and hands each channel with signal to AUTO FADER once; a hand on the fader takes it back.
+
 ## Paid editions: AmF X1 Pro and Studio Master, automatic activation (1.22.1.0 Beta)
 
 - **For the customer.** LICENSE page → **UPGRADE TO PRO** or **UPGRADE TO STUDIO MASTER** opens WhatsApp (`wa.me/601120871185`) with the edition, the machine code, the version and the platform filled in; nothing is sent until they press send. After payment they get their own installer (`AmF X1 Pro-<version>.exe` / MSI): it activates by itself on first start, no key to type. The old SUBMIT TO VENDOR button is gone; COPY / FILE, the manual key box and CHECK KEY stay for Basic.

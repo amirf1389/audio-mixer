@@ -10159,7 +10159,7 @@ const cArea = document.getElementById('content-area');
         // reading the level at the strip's input the same way rtEngine.chLevel() does (window.rtEngine.ch[i].pk), so it responds to the real
         // signal regardless of which backend it came from (ASIO, WASAPI, a direct device, Web Audio, or a WS-streamed source). Dragging the
         // fader by hand (setChannelGain above) turns it off again, so it never fights a person using the fader.
-        window.toggleChannelAuto = function(channelIndex) {
+        window.toggleChannelAuto = function(channelIndex, silent) {   // silent: AI MODE switching many channels at once
             window.state.channelAutoFader[channelIndex] = !window.state.channelAutoFader[channelIndex];
             const on = window.state.channelAutoFader[channelIndex];
             if (!on) autoFaderDb[channelIndex] = null;   // start fresh (from wherever the fader sits) next time it is switched back on
@@ -10168,7 +10168,7 @@ const cArea = document.getElementById('content-area');
                 if (on) btn.className = "text-[6.5px] font-black flex-1 py-1 bg-cyan-500 text-black rounded transition-all shadow-[0_0_8px_#00f2ff]";
                 else btn.className = "text-[6.5px] font-black flex-1 py-1 bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 rounded hover:bg-cyan-500 hover:text-black transition-all";
             }
-            window.notify(`Channel ${channelIndex + 1} Auto Fader ${on ? 'ON' : 'OFF'}`, on ? 'wand-magic-sparkles' : 'hand');
+            if (!silent) window.notify(`Channel ${channelIndex + 1} Auto Fader ${on ? 'ON' : 'OFF'}`, on ? 'wand-magic-sparkles' : 'hand');
         };
 
         // One frame of AUTO FADER riding, called from startMeterLoop for every channel with it on. Reads the real pre-fader input peak
@@ -10633,6 +10633,297 @@ const cArea = document.getElementById('content-area');
         if (!tryMount()) { let n = 0; const iv = setInterval(() => { if (tryMount() || ++n > 120) clearInterval(iv); }, 500); }
         return api;
     })();
+    // ───────────────────────── DUAL MODE FADER AUTOMATION + AI MODE CONTROL (1.22.1.0 Beta) ─────────────────────────
+    // Every channel fader can be recorded and played back on its own transport (PLAY / STOP / RETURN TO ZERO), with the console modes
+    // OFF, READ, WRITE, TOUCH and LATCH. Each channel has TWO lanes: A = MANUAL (your hand on the fader) and B = AI (the moves AUTO FADER /
+    // AI MODE make), so a pass can be compared lane against lane and the AI's moves kept (COPY AI -> MANUAL) or thrown away. READ plays the lane
+    // chosen with PLAY LANE A / B. While a channel READs, AUTO FADER does not ride it (the recorded moves win). Nothing runs while the transport
+    // is stopped; the loop exists only while it plays. AI MODE CONTROL (OFF / ASSIST / AUTO) switches the AI features together: OFF turns them
+    // off, ASSIST leaves them as they are and lists suggestions to APPLY, AUTO switches them on (each one can be left out with its tick box).
+    //@@AUTOMATION-MATH-START
+    const autoMath = (() => {
+        const MODES = ['off', 'read', 'write', 'touch', 'latch'];
+        const clampDb = v => Math.max(-60, Math.min(10, Number(v) || 0));
+        // a lane is a sorted array of [t seconds, dB]; the value at t is interpolated, held before the first and after the last point
+        function valueAt(pts, t) {
+            if (!pts || !pts.length) return null;
+            if (t <= pts[0][0]) return pts[0][1];
+            const n = pts.length; if (t >= pts[n - 1][0]) return pts[n - 1][1];
+            let lo = 0, hi = n - 1;
+            while (hi - lo > 1) { const m = (lo + hi) >> 1; if (pts[m][0] <= t) lo = m; else hi = m; }
+            const [t0, v0] = pts[lo], [t1, v1] = pts[hi];
+            return t1 === t0 ? v1 : v0 + (v1 - v0) * (t - t0) / (t1 - t0);
+        }
+        // a new pass replaces what the lane had between t0 and t1, keeps what is outside, and is held at its edges (no jump into the old curve)
+        function writeRange(pts, t0, t1, fresh) {
+            const keep = (pts || []).filter(p => p[0] < t0 || p[0] > t1);
+            const add = (fresh || []).filter(p => p[0] >= t0 && p[0] <= t1).map(p => [Math.round(p[0] * 1000) / 1000, Math.round(clampDb(p[1]) * 10) / 10]);
+            return keep.concat(add).sort((a, b) => a[0] - b[0]);
+        }
+        // thinning while writing: a point when the fader moved 0.2 dB or more, else one every 0.5 s (a held fader stays a straight line)
+        const shouldAdd = (last, t, db) => !last || (t - last[0] >= 0.02 && (Math.abs(db - last[1]) >= 0.2 || t - last[0] >= 0.5));
+        // what a channel does this frame: write its fader into the lane, read the lane into its fader, or nothing
+        function step({ mode = 'off', playing = false, touching = false, latched = false, hasLane = false } = {}) {
+            if (!playing || mode === 'off') return { write: false, read: false };
+            if (mode === 'write') return { write: true, read: false };
+            if (mode === 'touch') return touching ? { write: true, read: false } : { write: false, read: hasLane };
+            if (mode === 'latch') return touching || latched ? { write: true, read: false } : { write: false, read: hasLane };
+            return { write: false, read: hasLane };   // read
+        }
+        const nextMode = m => MODES[(MODES.indexOf(m) + 1) % MODES.length];
+        // ASSIST: suggestions from the live levels. channels: [{ i, pk (linear peak at the strip input), faderDb, auto }]
+        function suggest({ channels = [], masterPeakDb = null, autoVolume = false, dspRisk = 0, dspAuto = false, target = -18, minGap = 6 } = {}) {
+            const out = [];
+            for (const c of channels) {
+                if (c.auto || !(c.pk >= 0.002)) continue;   // AI already rides it, or no signal (below about -54 dBFS)
+                const inDb = 20 * Math.log10(c.pk), want = Math.round(clampDb(target - inDb) * 2) / 2;
+                if (Math.abs(want - c.faderDb) >= minGap) out.push({ id: 'fader:' + c.i, kind: 'fader', ch: c.i, db: want, text: `CH ${c.i + 1}: fader ${want > c.faderDb ? 'up' : 'down'} to ${want > 0 ? '+' : ''}${want.toFixed(1)} dB (input ${inDb.toFixed(0)} dBFS)` });
+            }
+            if (!autoVolume && masterPeakDb != null && masterPeakDb > -1) out.push({ id: 'autovol', kind: 'autovol', text: `Master peaks at ${masterPeakDb.toFixed(1)} dBTP: switch AUTO VOLUME on` });
+            if (!dspAuto && dspRisk >= 50) out.push({ id: 'aidsp', kind: 'aidsp', text: 'Feedback risk on the master: switch AI DSP AUTO on' });
+            return out;
+        }
+        return { MODES, valueAt, writeRange, shouldAdd, step, nextMode, suggest, clampDb };
+    })();
+    //@@AUTOMATION-MATH-END
+    const realDoc = () => typeof document !== 'undefined' && typeof document.querySelector === 'function' && typeof document.createElement === 'function';
+    window.faderAuto = (() => {
+        const KEY = 'halx_automation', N = 32, M = autoMath;
+        let saved = {}; try { saved = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (_) { saved = {}; }
+        const st = {
+            mode: Array.from({ length: N }, (_, i) => (saved.mode && M.MODES.includes(saved.mode[i]) ? saved.mode[i] : 'off')),
+            play: Array.from({ length: N }, (_, i) => (saved.play && saved.play[i] === 'B' ? 'B' : 'A')),
+            lanes: Array.from({ length: N }, (_, i) => ({ A: (saved.lanes && saved.lanes[i] && saved.lanes[i].A) || [], B: (saved.lanes && saved.lanes[i] && saved.lanes[i].B) || [] })),
+        };
+        const tr = { playing: false, t0: 0, at: 0, raf: 0 };   // transport: seconds = at + (now - t0) while playing
+        const touching = new Array(N).fill(false), touchUntil = new Array(N).fill(0), latched = new Array(N).fill(false);
+        const pass = new Array(N).fill(null);   // the open write pass of a channel: { lane, t0, pts }
+        let sel = 0, frame = 0, saveT = 0;
+        const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;
+        const time = () => (tr.playing ? tr.at + now() - tr.t0 : tr.at);
+        const persist = () => { clearTimeout(saveT); saveT = setTimeout(() => { try { localStorage.setItem(KEY, JSON.stringify({ v: 1, mode: st.mode, play: st.play, lanes: st.lanes })); } catch (_) { /* full or private: kept in memory */ } }, 300); };
+        const faderEl = i => (typeof document !== 'undefined' && document.getElementById ? document.getElementById('ch-fader-' + i) : null);
+        const faderDb = i => { const f = faderEl(i); return f ? parseFloat(f.value) || 0 : 0; };
+        function showFader(i, db) {
+            const f = faderEl(i); if (!f) return;
+            f.value = db;
+            const b = document.getElementById('db-val-' + i); if (b) b.innerText = (db <= -59 ? '-INF' : ((db > 0 ? '+' : '') + db.toFixed(1) + 'dB'));
+            if (window.applyChannelGain) window.applyChannelGain(i, db);
+        }
+        // the lane a write goes to: B while the AI (AUTO FADER) drives the channel, else A (the hand)
+        const writeLane = i => (window.state && window.state.channelAutoFader && window.state.channelAutoFader[i] ? 'B' : 'A');
+        function closePass(i, tEnd) {
+            const p = pass[i]; if (!p) return; pass[i] = null;
+            if (p.pts.length) st.lanes[i][p.lane] = M.writeRange(st.lanes[i][p.lane], p.t0, tEnd, p.pts);
+            persist();
+        }
+        function tick() {
+            if (!tr.playing) { tr.raf = 0; return; }
+            const t = time(), wall = now(), n = Math.min(N, window.licenseChannels || N);
+            for (let i = 0; i < n; i++) {
+                const mode = st.mode[i]; if (mode === 'off') { if (pass[i]) closePass(i, t); continue; }
+                const touch = touching[i] || wall < touchUntil[i];
+                if (mode === 'latch' && touch) latched[i] = true;
+                const lane = st.lanes[i][st.play[i]], s = M.step({ mode, playing: true, touching: touch, latched: latched[i], hasLane: lane.length > 0 });
+                if (s.write) {
+                    const L = writeLane(i);
+                    if (pass[i] && pass[i].lane !== L) closePass(i, t);
+                    if (!pass[i]) pass[i] = { lane: L, t0: t, pts: [] };
+                    const db = faderDb(i), last = pass[i].pts[pass[i].pts.length - 1];
+                    if (M.shouldAdd(last, t, db)) pass[i].pts.push([t, db]);
+                } else {
+                    if (pass[i]) closePass(i, t);
+                    if (s.read) { const v = M.valueAt(lane, t); if (v != null && Math.abs(v - faderDb(i)) >= 0.05) showFader(i, v); }
+                }
+            }
+            if (++frame % 3 === 0) api.render();
+            tr.raf = requestAnimationFrame(tick);
+        }
+        const api = {
+            math: M, st,
+            time, isPlaying: () => tr.playing,
+            reading: i => tr.playing && st.mode[i] !== 'off' && M.step({ mode: st.mode[i], playing: true, touching: touching[i] || now() < touchUntil[i], latched: latched[i], hasLane: st.lanes[i][st.play[i]].length > 0 }).read,
+            play() { if (tr.playing) return; tr.playing = true; tr.t0 = now(); latched.fill(false); tr.raf = requestAnimationFrame(tick); api.render(); },
+            stop() { if (!tr.playing) return; const t = time(); tr.at = t; tr.playing = false; for (let i = 0; i < N; i++) closePass(i, t); latched.fill(false); if (tr.raf) cancelAnimationFrame(tr.raf); tr.raf = 0; api.render(); },
+            rtz() { const was = tr.playing; if (was) api.stop(); tr.at = 0; if (was) api.play(); else api.render(); },
+            locate(t) { const was = tr.playing; if (was) api.stop(); tr.at = Math.max(0, +t || 0); if (was) api.play(); else api.render(); },
+            setMode(i, m) { if (!M.MODES.includes(m) || !(i >= 0 && i < N)) return; if (pass[i]) closePass(i, time()); st.mode[i] = m; latched[i] = false; persist(); api.render(); },
+            setAll(m) { for (let i = 0; i < N; i++) api.setMode(i, m); window.notify && window.notify('Automation: every channel ' + m.toUpperCase(), 'route'); },
+            cycle(i) { api.setMode(i, M.nextMode(st.mode[i])); },
+            setPlay(i, lane) { st.play[i] = lane === 'B' ? 'B' : 'A'; persist(); api.render(); },
+            copyAiToManual(i) { st.lanes[i].A = st.lanes[i].B.map(p => p.slice()); persist(); api.render(); window.notify && window.notify('CH ' + (i + 1) + ': AI lane copied to the manual lane', 'copy'); },
+            clear(i, lane) { st.lanes[i][lane] = []; persist(); api.render(); },
+            touch(i, on) { if (!(i >= 0 && i < N)) return; touching[i] = !!on; if (!on) touchUntil[i] = now() + 0.25; },   // keyboard / wheel moves count as a short touch
+            nudge(i) { touchUntil[i] = now() + 0.4; },
+            select(i) { sel = Math.max(0, Math.min(N - 1, +i || 0)); api.render(); },
+            render() {
+                if (!realDoc()) return;
+                const box = document.getElementById('automation-panel'); if (!box) return;
+                const t = time(), mm = Math.floor(t / 60), ss = (t - mm * 60).toFixed(1).padStart(4, '0');
+                const tEl = document.getElementById('fa-time'); if (tEl) tEl.textContent = mm + ':' + ss;
+                const pb = document.getElementById('fa-play'); if (pb) { pb.setAttribute('aria-pressed', tr.playing ? 'true' : 'false'); pb.className = 'px-3 py-1 rounded text-[8px] font-black border ' + (tr.playing ? 'bg-emerald-500 text-black border-emerald-500' : 'bg-white/5 text-emerald-300 border-emerald-500/40'); }
+                const COL = { off: 'bg-white/5 text-slate-400 border-white/10', read: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50', write: 'bg-rose-500 text-white border-rose-500', touch: 'bg-amber-400 text-black border-amber-400', latch: 'bg-orange-500 text-black border-orange-500' };
+                const n = Math.min(N, window.licenseChannels || N);
+                box.querySelectorAll('[data-fa-ch]').forEach(b => {
+                    const i = +b.dataset.faCh, m = st.mode[i], txt = 'CH ' + (i + 1) + ' ' + m.toUpperCase() + (st.lanes[i].A.length || st.lanes[i].B.length ? ' •' : '');
+                    if (b.textContent !== txt) b.textContent = txt;
+                    const cls = 'px-1 py-0.5 rounded border text-[7px] font-bold ' + COL[m] + (i === sel ? ' ring-1 ring-cyan-400' : '') + (i >= n ? ' opacity-30' : '');
+                    if (b.className !== cls) b.className = cls; b.setAttribute('aria-label', 'Channel ' + (i + 1) + ' automation ' + m);
+                });
+                const lbl = document.getElementById('fa-sel'); if (lbl) lbl.textContent = 'CH ' + (sel + 1);
+                const la = document.getElementById('fa-lane-a'), lb = document.getElementById('fa-lane-b');
+                if (la) { la.setAttribute('aria-pressed', st.play[sel] === 'A' ? 'true' : 'false'); la.className = 'px-2 py-0.5 rounded border text-[7.5px] font-black ' + (st.play[sel] === 'A' ? 'bg-cyan-400 text-black border-cyan-400' : 'bg-white/5 text-cyan-300 border-cyan-500/40'); }
+                if (lb) { lb.setAttribute('aria-pressed', st.play[sel] === 'B' ? 'true' : 'false'); lb.className = 'px-2 py-0.5 rounded border text-[7.5px] font-black ' + (st.play[sel] === 'B' ? 'bg-fuchsia-400 text-black border-fuchsia-400' : 'bg-white/5 text-fuchsia-300 border-fuchsia-500/40'); }
+                const cv = document.getElementById('fa-canvas'); if (!cv || !cv.getContext) return;
+                const g = cv.getContext('2d'), W = cv.width, H = cv.height, A = st.lanes[sel].A, B = st.lanes[sel].B;
+                const end = Math.max(30, t + 5, A.length ? A[A.length - 1][0] + 2 : 0, B.length ? B[B.length - 1][0] + 2 : 0);
+                const x = s => (s / end) * W, y = db => H - 4 - ((M.clampDb(db) + 60) / 70) * (H - 8);
+                g.clearRect(0, 0, W, H);
+                g.strokeStyle = 'rgba(148,163,184,0.25)'; g.lineWidth = 1; g.beginPath(); g.moveTo(0, y(0)); g.lineTo(W, y(0)); g.stroke();   // 0 dB line
+                const draw = (pts, color, active) => { if (!pts.length) return; g.strokeStyle = color; g.lineWidth = active ? 2 : 1; g.globalAlpha = active ? 1 : 0.55; g.beginPath(); g.moveTo(0, y(pts[0][1])); for (const p of pts) g.lineTo(x(p[0]), y(p[1])); g.lineTo(W, y(pts[pts.length - 1][1])); g.stroke(); g.globalAlpha = 1; };
+                draw(A, '#22d3ee', st.play[sel] === 'A'); draw(B, '#e879f9', st.play[sel] === 'B');
+                g.strokeStyle = '#fbbf24'; g.lineWidth = 1; g.beginPath(); g.moveTo(x(t), 0); g.lineTo(x(t), H); g.stroke();   // playhead
+                const info = document.getElementById('fa-info'); if (info) { const txt = `LANE A (MANUAL): ${A.length} POINTS · LANE B (AI): ${B.length} POINTS · PLAYING LANE ${st.play[sel]}`; if (info.textContent !== txt) info.textContent = txt; }
+            },
+            mount() {
+                if (document.getElementById('automation-panel')) return;
+                const tab = document.getElementById('tab-ai'), host = tab && tab.querySelector('.page-scroll-inner'); if (!host) return;
+                const d = document.createElement('div');
+                d.id = 'automation-panel'; d.className = 'glass-panel p-3 rounded-xl wing-bezel space-y-2';
+                d.innerHTML = `<div class="flex flex-wrap justify-between items-center gap-2">
+                    <div><h3 class="text-xs font-black text-white font-wing tracking-wider uppercase"><i class="fa-solid fa-route text-cyan-400 mr-1"></i>DUAL MODE FADER AUTOMATION</h3><p class="text-[7.5px] text-slate-400">READ / WRITE / TOUCH / LATCH &bull; LANE A = MANUAL, LANE B = AI &bull; CLICK A CHANNEL TO CHANGE ITS MODE</p></div>
+                    <div class="flex items-center gap-1.5 text-[8px]"><button id="fa-rtz" type="button" title="Return to zero" class="px-2 py-1 rounded border bg-white/5 text-slate-300 border-white/10 font-black"><i class="fa-solid fa-backward-step" aria-hidden="true"></i> RTZ</button><button id="fa-play" type="button" aria-pressed="false"><i class="fa-solid fa-play" aria-hidden="true"></i> PLAY</button><button id="fa-stop" type="button" class="px-3 py-1 rounded border bg-white/5 text-rose-300 border-rose-500/40 font-black"><i class="fa-solid fa-stop" aria-hidden="true"></i> STOP</button><span id="fa-time" class="font-mono text-amber-400 font-black text-[10px] w-14 text-right">0:00.0</span>
+                    <label class="text-slate-400">ALL<select id="fa-all" class="ml-1 bg-black border border-white/10 rounded text-amber-400"><option value="">SET…</option><option value="off">OFF</option><option value="read">READ</option><option value="write">WRITE</option><option value="touch">TOUCH</option><option value="latch">LATCH</option></select></label></div></div>
+                    <div class="grid grid-cols-4 sm:grid-cols-8 gap-1">${Array.from({ length: N }, (_, i) => `<button type="button" data-fa-ch="${i}">CH ${i + 1}</button>`).join('')}</div>
+                    <div class="flex flex-wrap items-center gap-1.5 text-[7.5px]"><span class="text-slate-400">LANE VIEW</span><span id="fa-sel" class="text-white font-black">CH 1</span><select id="fa-pick" aria-label="Channel shown in the lane view" class="bg-black border border-white/10 rounded text-slate-200">${Array.from({ length: N }, (_, i) => `<option value="${i}">CH ${i + 1}</option>`).join('')}</select>
+                    <span class="text-slate-400 ml-2">PLAY LANE</span><button id="fa-lane-a" type="button" aria-pressed="true">A MANUAL</button><button id="fa-lane-b" type="button" aria-pressed="false">B AI</button>
+                    <button id="fa-copy" type="button" class="px-2 py-0.5 rounded border bg-white/5 text-slate-300 border-white/10 font-bold">COPY AI &rarr; MANUAL</button><button id="fa-clear-a" type="button" class="px-2 py-0.5 rounded border bg-white/5 text-slate-300 border-white/10 font-bold">CLEAR A</button><button id="fa-clear-b" type="button" class="px-2 py-0.5 rounded border bg-white/5 text-slate-300 border-white/10 font-bold">CLEAR B</button></div>
+                    <canvas id="fa-canvas" width="900" height="110" class="w-full h-[110px] bg-black/60 border border-white/10 rounded" role="img" aria-label="Automation lanes of the selected channel: cyan = manual, magenta = AI, amber = playhead"></canvas>
+                    <div id="fa-info" class="text-[7px] text-slate-500" aria-live="polite"></div>`;
+                host.insertAdjacentElement('afterbegin', d);
+                const $ = id => document.getElementById(id);
+                $('fa-play').onclick = () => api.play(); $('fa-stop').onclick = () => api.stop(); $('fa-rtz').onclick = () => api.rtz();
+                $('fa-all').onchange = e => { if (e.target.value) api.setAll(e.target.value); e.target.value = ''; };
+                d.querySelectorAll('[data-fa-ch]').forEach(b => { b.onclick = () => { const i = +b.dataset.faCh; if (i === sel) api.cycle(i); else { api.select(i); const p = $('fa-pick'); if (p) p.value = i; } }; });
+                $('fa-pick').onchange = e => api.select(e.target.value);
+                $('fa-lane-a').onclick = () => api.setPlay(sel, 'A'); $('fa-lane-b').onclick = () => api.setPlay(sel, 'B');
+                $('fa-copy').onclick = () => api.copyAiToManual(sel); $('fa-clear-a').onclick = () => api.clear(sel, 'A'); $('fa-clear-b').onclick = () => api.clear(sel, 'B');
+                api.render();
+            },
+        };
+        // a hand on a fader: TOUCH / LATCH write while it is held (pointer), keyboard and wheel moves count as a short touch
+        if (realDoc() && typeof document.addEventListener === 'function') {
+            const idx = e => { const el = e.target && e.target.closest ? e.target.closest('input[id^="ch-fader-"]') : null; return el ? +el.id.slice(9) : -1; };
+            document.addEventListener('pointerdown', e => { const i = idx(e); if (i >= 0) api.touch(i, true); }, true);
+            const up = () => { for (let i = 0; i < N; i++) if (touching[i]) api.touch(i, false); };
+            document.addEventListener('pointerup', up, true); document.addEventListener('pointercancel', up, true);
+            document.addEventListener('input', e => { const i = idx(e); if (i >= 0 && !touching[i]) api.nudge(i); }, true);
+        }
+        const tryMount = () => { if (!realDoc()) return true; if (document.querySelector('#tab-ai .page-scroll-inner')) { api.mount(); return true; } return false; };
+        if (!tryMount()) { let k = 0; const iv = setInterval(() => { if (tryMount() || ++k > 120) clearInterval(iv); }, 500); }
+        return api;
+    })();
+    window.aiMode = (() => {
+        const KEY = 'halx_ai_mode', FEATURES = ['faders', 'aimix', 'autovol', 'dyneq', 'aidsp'];
+        const LABEL = { faders: 'AI FADERS', aimix: 'AI MIX ENGINE', autovol: 'AUTO VOLUME', dyneq: 'DYNAMIC EQ', aidsp: 'AI DSP RACK' };
+        let saved = {}; try { saved = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (_) { saved = {}; }
+        const st = { mode: ['off', 'assist', 'auto'].includes(saved.mode) ? saved.mode : 'assist', scope: Object.assign({ faders: true, aimix: true, autovol: true, dyneq: true, aidsp: true }, saved.scope || {}) };
+        const offered = new Array(32).fill(false);   // AUTO: each live channel is handed to AI FADER once; a hand on the fader takes it back for good
+        let iv = 0, list = [];
+        const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(st)); } catch (_) { /* private browsing */ } };
+        const S = () => window.state || {};
+        const nCh = () => Math.min(32, window.licenseChannels || 32);
+        const pkOf = i => { const s = window.rtEngine && window.rtEngine.ch && window.rtEngine.ch[i]; return s ? s.pk || 0 : 0; };
+        function feature(f, on) {
+            try {
+                if (f === 'autovol' && window.setAutoVolume && !!S().autoVolume.enabled !== on) window.setAutoVolume(on, true);
+                if (f === 'dyneq' && window.setDynamicEq && !!S().dynamicEq.enabled !== on) window.setDynamicEq(on, true);
+                if (f === 'aidsp' && window.aiDsp && !!window.aiDsp.st.auto !== on) window.aiDsp.set('auto', on);
+                if (f === 'aimix' && window.aiState && !!window.aiState.masterEngaged !== on && window.toggleAiMasterEngine) window.toggleAiMasterEngine();
+                if (f === 'faders' && !on) for (let i = 0; i < 32; i++) if (S().channelAutoFader && S().channelAutoFader[i]) window.toggleChannelAuto(i, true);
+            } catch (_) { /* a feature not on this page */ }
+        }
+        function handFaders() {
+            if (st.mode !== 'auto' || !st.scope.faders || !S().channelAutoFader) return;
+            for (let i = 0; i < nCh(); i++) {
+                if (offered[i] || S().channelAutoFader[i] || pkOf(i) < 0.002) continue;
+                if (window.faderAuto && window.faderAuto.st.mode[i] === 'read') continue;   // recorded moves win
+                offered[i] = true; window.toggleChannelAuto(i, true);
+            }
+        }
+        function scan() {
+            const ch = [];
+            for (let i = 0; i < nCh(); i++) { const f = document.getElementById('ch-fader-' + i); ch.push({ i, pk: pkOf(i), faderDb: f ? parseFloat(f.value) || 0 : 0, auto: !!(S().channelAutoFader && S().channelAutoFader[i]) }); }
+            const lm = window.lufsMeter;
+            return autoMath.suggest({ channels: ch, masterPeakDb: lm && isFinite(lm.truePeak) ? lm.truePeak : null, autoVolume: !!(S().autoVolume && S().autoVolume.enabled), dspRisk: window.aiDsp ? window.aiDsp.live.risk : 0, dspAuto: !!(window.aiDsp && window.aiDsp.st.auto) });
+        }
+        function loop() {
+            if (st.mode === 'off') return;
+            if (st.mode === 'auto') handFaders();
+            if (st.mode === 'assist') { list = scan(); api.render(); }
+        }
+        function arm() { clearInterval(iv); iv = 0; if (st.mode !== 'off') iv = setInterval(loop, 1000); }   // nothing runs in OFF
+        const api = {
+            st, FEATURES, LABEL,
+            suggestions: () => list.slice(),
+            set(mode, quiet) {
+                if (!['off', 'assist', 'auto'].includes(mode)) return;
+                st.mode = mode; offered.fill(false); list = [];
+                if (mode === 'off') FEATURES.forEach(f => st.scope[f] && feature(f, false));
+                if (mode === 'auto') { FEATURES.forEach(f => f !== 'faders' && st.scope[f] && feature(f, true)); handFaders(); }
+                persist(); arm(); api.render();
+                if (!quiet && window.notify) window.notify('AI MODE: ' + mode.toUpperCase() + (mode === 'auto' ? ' (' + FEATURES.filter(f => st.scope[f]).map(f => LABEL[f]).join(', ') + ')' : mode === 'assist' ? ' (suggestions only)' : ''), 'brain');
+            },
+            scope(f, on) { if (!FEATURES.includes(f)) return; st.scope[f] = !!on; persist(); if (st.mode === 'auto') { if (f === 'faders') { if (on) handFaders(); else feature('faders', false); } else feature(f, !!on); } api.render(); },
+            apply(id) {
+                const s = list.find(x => x.id === id); if (!s) return false;
+                if (s.kind === 'fader') { const f = document.getElementById('ch-fader-' + s.ch); if (f) f.value = s.db; window.setChannelGain(s.ch, s.db); }
+                if (s.kind === 'autovol') feature('autovol', true);
+                if (s.kind === 'aidsp') feature('aidsp', true);
+                list = list.filter(x => x.id !== id); api.render(); return true;
+            },
+            applyAll() { list.slice().forEach(s => api.apply(s.id)); },
+            render() {
+                if (!realDoc()) return;
+                const box = document.getElementById('ai-mode-panel'); if (!box) return;
+                ['off', 'assist', 'auto'].forEach(m => { const b = document.getElementById('aim-' + m); if (!b) return; const on = st.mode === m; b.setAttribute('aria-pressed', on ? 'true' : 'false'); b.className = 'px-3 py-1 rounded border text-[8px] font-black ' + (on ? (m === 'auto' ? 'bg-rose-500 text-white border-rose-500' : m === 'assist' ? 'bg-amber-400 text-black border-amber-400' : 'bg-slate-300 text-black border-slate-300') : 'bg-white/5 text-slate-300 border-white/10'); });
+                FEATURES.forEach(f => { const c = document.getElementById('aim-scope-' + f); if (c && c.checked !== !!st.scope[f]) c.checked = !!st.scope[f]; });
+                const help = document.getElementById('aim-help'); if (help) help.textContent = st.mode === 'off' ? 'OFF: the ticked AI features are switched off and stay off.' : st.mode === 'assist' ? 'ASSIST: nothing moves on its own; suggestions appear below every second, APPLY the ones you want.' : 'AUTO: the ticked AI features run on their own. A hand on a fader takes that channel back.';
+                const ul = document.getElementById('aim-list'); if (!ul) return;
+                const key = list.map(s => s.id + s.text).join('|'); if (ul.dataset.key === key) return; ul.dataset.key = key;
+                ul.textContent = '';
+                if (!list.length) { const p = document.createElement('div'); p.className = 'text-slate-500'; p.textContent = st.mode === 'assist' ? 'No suggestions: levels look fine.' : 'Suggestions appear in ASSIST.'; ul.appendChild(p); }
+                for (const s of list) {
+                    const row = document.createElement('div'); row.className = 'flex items-center justify-between gap-2 bg-black/40 border border-white/10 rounded px-2 py-1';
+                    const t = document.createElement('span'); t.textContent = s.text;
+                    const b = document.createElement('button'); b.type = 'button'; b.textContent = 'APPLY'; b.className = 'px-2 py-0.5 rounded bg-amber-400 text-black font-black text-[7px]'; b.onclick = () => api.apply(s.id);
+                    row.append(t, b); ul.appendChild(row);
+                }
+                const all = document.getElementById('aim-apply-all'); if (all) all.disabled = !list.length;
+            },
+            mount() {
+                if (document.getElementById('ai-mode-panel')) return;
+                const anchor = document.getElementById('automation-panel'); if (!anchor) return;
+                const d = document.createElement('div');
+                d.id = 'ai-mode-panel'; d.className = 'glass-panel p-3 rounded-xl wing-bezel space-y-2';
+                d.innerHTML = `<div class="flex flex-wrap justify-between items-center gap-2">
+                    <div><h3 class="text-xs font-black text-white font-wing tracking-wider uppercase"><i class="fa-solid fa-brain text-rose-400 mr-1"></i>AI MODE CONTROL</h3><p id="aim-help" class="text-[7.5px] text-slate-400"></p></div>
+                    <div class="flex items-center gap-1" role="group" aria-label="AI mode"><button id="aim-off" type="button" aria-pressed="false">OFF</button><button id="aim-assist" type="button" aria-pressed="false">ASSIST</button><button id="aim-auto" type="button" aria-pressed="false">AUTO</button></div></div>
+                    <div class="flex flex-wrap gap-3 text-[7.5px] text-slate-300">${FEATURES.map(f => `<label class="flex items-center gap-1"><input id="aim-scope-${f}" type="checkbox"> ${LABEL[f]}</label>`).join('')}</div>
+                    <div class="flex justify-between items-center text-[7.5px]"><span class="text-slate-400 font-bold">SUGGESTIONS</span><button id="aim-apply-all" type="button" class="px-2 py-0.5 rounded bg-white/10 text-slate-200 font-bold">APPLY ALL</button></div>
+                    <div id="aim-list" class="space-y-1 text-[7.5px]" aria-live="polite"></div>`;
+                anchor.insertAdjacentElement('afterend', d);
+                ['off', 'assist', 'auto'].forEach(m => { document.getElementById('aim-' + m).onclick = () => api.set(m); });
+                FEATURES.forEach(f => { document.getElementById('aim-scope-' + f).onchange = e => api.scope(f, e.target.checked); });
+                document.getElementById('aim-apply-all').onclick = () => api.applyAll();
+                api.render();
+            },
+        };
+        if (realDoc()) arm();   // a page only: never a timer in a script that just loads the code
+        const tryMount = () => { if (!realDoc()) return true; if (document.getElementById('automation-panel')) { api.mount(); return true; } return false; };
+        if (!tryMount()) { let k = 0; const t = setInterval(() => { if (tryMount() || ++k > 120) clearInterval(t); }, 500); }
+        return api;
+    })();
         window.setMsMono = function() { window.setMsWidth(0); };   // quick collapse-to-mono, same math as width 0%
         window.resetMsProcessing = function() { window.setMsMidDb(0); window.setMsWidth(100); window.notify('Mid/Side Processing Reset', 'rotate-left'); };
 
@@ -10947,7 +11238,7 @@ const cArea = document.getElementById('content-area');
             function updateMeters() {
                 if (window.state.lowPowerMode && (++lowPowerFrame % 4 !== 0)) { requestAnimationFrame(updateMeters); return; }   // skip 3 of every 4 frames
                 for (let i = 0; i < CHANNELS; i++) {
-                    if (window.state.channelAutoFader[i]) window.rideAutoFader(i);
+                    if (window.state.channelAutoFader[i] && !(window.faderAuto && window.faderAuto.reading(i))) window.rideAutoFader(i);   // automation READ wins over AUTO FADER
                     if (window.state.noiseGate[i] && window.state.noiseGate[i].enabled) {
                         const gs = window.rtEngine && window.rtEngine.ch && window.rtEngine.ch[i];
                         const gPk = gs ? gs.pk : 0;
@@ -22683,6 +22974,18 @@ t.Omnitone=e(11)},function(A,t,e){"use strict";const i=e(1),n=e(4),s=e(12),o=e(6
             ['BOOT / RESET', 'راه‌اندازی / بازنشانی', 'الإقلاع / إعادة الضبط', 'بوٹ / ری سیٹ', 'ARRANQUE / REINICIO', 'DÉMARRAGE / RÉINITIALISATION', 'START / RESET', 'INICIALIZAÇÃO / REDEFINIR', 'ЗАГРУЗКА / СБРОС', 'BAŞLAT / SIFIRLA', 'बूट / रीसेट', '启动 / 重置', '起動 / リセット', '부팅 / 초기화', 'BUT / SET SEMULA', 'BOOT / RESET', 'AVVIO / RIPRISTINO', 'OPSTARTEN / RESET', 'URUCHOM / RESETUJ', 'KHỞI ĐỘNG / ĐẶT LẠI', 'บูต / รีเซ็ต', 'ЗАВАНТАЖЕННЯ / СКИДАННЯ'],
             ['ACTIVATE', 'فعال‌سازی', 'تفعيل', 'فعال کریں', 'ACTIVAR', 'ACTIVER', 'AKTIVIEREN', 'ATIVAR', 'АКТИВИРОВАТЬ', 'ETKİNLEŞTİR', 'सक्रिय करें', '激活', 'アクティベート', '활성화', 'AKTIFKAN', 'AKTIFKAN', 'ATTIVA', 'ACTIVEREN', 'AKTYWUJ', 'KÍCH HOẠT', 'เปิดใช้งาน', 'АКТИВУВАТИ'],
             ['DEACTIVATE', 'غیرفعال‌سازی', 'إلغاء التفعيل', 'غیر فعال کریں', 'DESACTIVAR', 'DÉSACTIVER', 'DEAKTIVIEREN', 'DESATIVAR', 'ДЕАКТИВИРОВАТЬ', 'DEVRE DIŞI BIRAK', 'निष्क्रिय करें', '停用', '無効化', '비활성화', 'NYAHAKTIFKAN', 'NONAKTIFKAN', 'DISATTIVA', 'DEACTIVEREN', 'DEZAKTYWUJ', 'HỦY KÍCH HOẠT', 'ปิดใช้งาน', 'ДЕАКТИВУВАТИ'],
+            ['DUAL MODE FADER AUTOMATION', 'اتوماسیون فیدر دوحالته', 'أتمتة الفيدر ثنائية الوضع', 'ڈوئل موڈ فیڈر آٹومیشن', 'AUTOMATIZACIÓN DE FADER DE DOBLE MODO', 'AUTOMATION DE FADER DOUBLE MODE', 'FADER-AUTOMATION MIT ZWEI MODI', 'AUTOMAÇÃO DE FADER DE MODO DUPLO', 'АВТОМАТИЗАЦИЯ ФЕЙДЕРОВ (ДВА РЕЖИМА)', 'ÇİFT MODLU FADER OTOMASYONU', 'डुअल मोड फ़ेडर ऑटोमेशन', '双模式推子自动化', 'デュアルモード・フェーダーオートメーション', '듀얼 모드 페이더 오토메이션', 'AUTOMASI FADER DWI MOD', 'OTOMASI FADER MODE GANDA', 'AUTOMAZIONE FADER A DOPPIA MODALITÀ', 'FADERAUTOMATISERING MET TWEE MODI', 'AUTOMATYKA SUWAKÓW (DWA TRYBY)', 'TỰ ĐỘNG HÓA FADER HAI CHẾ ĐỘ', 'ระบบอัตโนมัติเฟดเดอร์สองโหมด', 'АВТОМАТИЗАЦІЯ ФЕЙДЕРІВ (ДВА РЕЖИМИ)'],
+            ['AI MODE CONTROL', 'کنترل حالت هوش مصنوعی', 'التحكم في وضع الذكاء الاصطناعي', 'AI موڈ کنٹرول', 'CONTROL DEL MODO IA', 'CONTRÔLE DU MODE IA', 'KI-MODUS-STEUERUNG', 'CONTROLE DO MODO IA', 'УПРАВЛЕНИЕ РЕЖИМОМ ИИ', 'YAPAY ZEKÂ MODU KONTROLÜ', 'AI मोड नियंत्रण', 'AI 模式控制', 'AI モード制御', 'AI 모드 제어', 'KAWALAN MOD AI', 'KONTROL MODE AI', 'CONTROLLO MODALITÀ IA', 'AI-MODUSBEDIENING', 'STEROWANIE TRYBEM AI', 'ĐIỀU KHIỂN CHẾ ĐỘ AI', 'การควบคุมโหมด AI', 'КЕРУВАННЯ РЕЖИМОМ ШІ'],
+            ['PLAY', 'پخش', 'تشغيل', 'چلائیں', 'REPRODUCIR', 'LECTURE', 'WIEDERGABE', 'REPRODUZIR', 'ВОСПРОИЗВЕДЕНИЕ', 'OYNAT', 'चलाएँ', '播放', '再生', '재생', 'MAINKAN', 'PUTAR', 'RIPRODUCI', 'AFSPELEN', 'ODTWÓRZ', 'PHÁT', 'เล่น', 'ВІДТВОРИТИ'],
+            ['STOP', 'توقف', 'إيقاف', 'روکیں', 'DETENER', 'ARRÊT', 'STOPP', 'PARAR', 'СТОП', 'DURDUR', 'रोकें', '停止', '停止', '정지', 'HENTI', 'BERHENTI', 'STOP', 'STOPPEN', 'STOP', 'DỪNG', 'หยุด', 'СТОП'],
+            ['OFF', 'خاموش', 'إيقاف', 'بند', 'APAGADO', 'ARRÊT', 'AUS', 'DESLIGADO', 'ВЫКЛ', 'KAPALI', 'बंद', '关', 'オフ', '끔', 'MATI', 'MATI', 'SPENTO', 'UIT', 'WYŁ.', 'TẮT', 'ปิด', 'ВИМК'],
+            ['ASSIST', 'کمکی', 'مساعدة', 'معاونت', 'ASISTIR', 'ASSISTANCE', 'ASSISTENZ', 'ASSISTÊNCIA', 'ПОМОЩЬ', 'YARDIM', 'सहायता', '辅助', 'アシスト', '어시스트', 'BANTU', 'BANTU', 'ASSISTENZA', 'ASSISTENTIE', 'ASYSTA', 'HỖ TRỢ', 'ช่วยเหลือ', 'ДОПОМОГА'],
+            ['AUTO', 'خودکار', 'تلقائي', 'آٹو', 'AUTO', 'AUTO', 'AUTO', 'AUTO', 'АВТО', 'OTOMATİK', 'ऑटो', '自动', 'オート', '자동', 'AUTO', 'OTOMATIS', 'AUTO', 'AUTO', 'AUTO', 'TỰ ĐỘNG', 'อัตโนมัติ', 'АВТО'],
+            ['SUGGESTIONS', 'پیشنهادها', 'اقتراحات', 'تجاویز', 'SUGERENCIAS', 'SUGGESTIONS', 'VORSCHLÄGE', 'SUGESTÕES', 'ПРЕДЛОЖЕНИЯ', 'ÖNERİLER', 'सुझाव', '建议', '提案', '제안', 'CADANGAN', 'SARAN', 'SUGGERIMENTI', 'SUGGESTIES', 'SUGESTIE', 'GỢI Ý', 'คำแนะนำ', 'ПРОПОЗИЦІЇ'],
+            ['APPLY', 'اعمال', 'تطبيق', 'لاگو کریں', 'APLICAR', 'APPLIQUER', 'ANWENDEN', 'APLICAR', 'ПРИМЕНИТЬ', 'UYGULA', 'लागू करें', '应用', '適用', '적용', 'GUNA', 'TERAPKAN', 'APPLICA', 'TOEPASSEN', 'ZASTOSUJ', 'ÁP DỤNG', 'ใช้', 'ЗАСТОСУВАТИ'],
+            ['APPLY ALL', 'اعمال همه', 'تطبيق الكل', 'سب لاگو کریں', 'APLICAR TODO', 'TOUT APPLIQUER', 'ALLE ANWENDEN', 'APLICAR TUDO', 'ПРИМЕНИТЬ ВСЁ', 'TÜMÜNÜ UYGULA', 'सभी लागू करें', '全部应用', 'すべて適用', '모두 적용', 'GUNA SEMUA', 'TERAPKAN SEMUA', 'APPLICA TUTTO', 'ALLES TOEPASSEN', 'ZASTOSUJ WSZYSTKO', 'ÁP DỤNG TẤT CẢ', 'ใช้ทั้งหมด', 'ЗАСТОСУВАТИ ВСЕ'],
+            ['LANE VIEW', 'نمای لاین', 'عرض المسار', 'لین ویو', 'VISTA DE CARRILES', 'VUE DES PISTES', 'SPURANSICHT', 'VISTA DE FAIXAS', 'ВИД ДОРОЖЕК', 'ŞERİT GÖRÜNÜMÜ', 'लेन दृश्य', '轨道视图', 'レーン表示', '레인 보기', 'PAPARAN LALUAN', 'TAMPILAN JALUR', 'VISTA CORSIE', 'BAANWEERGAVE', 'WIDOK ŚCIEŻEK', 'XEM LÀN', 'มุมมองเลน', 'ВИГЛЯД ДОРІЖОК'],
+            ['PLAY LANE', 'لاین پخش', 'مسار التشغيل', 'پلے لین', 'CARRIL A REPRODUCIR', 'PISTE LUE', 'WIEDERGABESPUR', 'FAIXA A REPRODUZIR', 'ДОРОЖКА ВОСПРОИЗВЕДЕНИЯ', 'OYNATILAN ŞERİT', 'चलने वाली लेन', '播放轨道', '再生レーン', '재생 레인', 'LALUAN MAIN', 'JALUR PUTAR', 'CORSIA IN RIPRODUZIONE', 'AFSPEELBAAN', 'ŚCIEŻKA ODTWARZANIA', 'LÀN PHÁT', 'เลนที่เล่น', 'ДОРІЖКА ВІДТВОРЕННЯ'],
             ['UPGRADE TO PRO', 'ارتقا به PRO', 'الترقية إلى PRO', 'PRO میں اپ گریڈ کریں', 'ACTUALIZAR A PRO', 'PASSER À PRO', 'AUF PRO UPGRADEN', 'ATUALIZAR PARA PRO', 'ПЕРЕЙТИ НА PRO', "PRO'YA YÜKSELT", 'PRO में अपग्रेड करें', '升级到 PRO', 'PRO にアップグレード', 'PRO로 업그레이드', 'NAIK TARAF KE PRO', 'UPGRADE KE PRO', 'PASSA A PRO', 'UPGRADEN NAAR PRO', 'PRZEJDŹ NA PRO', 'NÂNG CẤP LÊN PRO', 'อัปเกรดเป็น PRO', 'ПЕРЕЙТИ НА PRO'],
             ['UPGRADE TO STUDIO MASTER', 'ارتقا به STUDIO MASTER', 'الترقية إلى STUDIO MASTER', 'STUDIO MASTER میں اپ گریڈ کریں', 'ACTUALIZAR A STUDIO MASTER', 'PASSER À STUDIO MASTER', 'AUF STUDIO MASTER UPGRADEN', 'ATUALIZAR PARA STUDIO MASTER', 'ПЕРЕЙТИ НА STUDIO MASTER', "STUDIO MASTER'A YÜKSELT", 'STUDIO MASTER में अपग्रेड करें', '升级到 STUDIO MASTER', 'STUDIO MASTER にアップグレード', 'STUDIO MASTER로 업그레이드', 'NAIK TARAF KE STUDIO MASTER', 'UPGRADE KE STUDIO MASTER', 'PASSA A STUDIO MASTER', 'UPGRADEN NAAR STUDIO MASTER', 'PRZEJDŹ NA STUDIO MASTER', 'NÂNG CẤP LÊN STUDIO MASTER', 'อัปเกรดเป็น STUDIO MASTER', 'ПЕРЕЙТИ НА STUDIO MASTER'],
             ['COPY', 'کپی', 'نسخ', 'کاپی', 'COPIAR', 'COPIER', 'KOPIEREN', 'COPIAR', 'КОПИРОВАТЬ', 'KOPYALA', 'कॉपी', '复制', 'コピー', '복사', 'SALIN', 'SALIN', 'COPIA', 'KOPIËREN', 'KOPIUJ', 'SAO CHÉP', 'คัดลอก', 'КОПІЮВАТИ'],
