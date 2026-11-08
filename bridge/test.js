@@ -1613,7 +1613,7 @@ test('repository layout: one folder per system with its sources and release file
   const lay = require('../scripts/layout'), mk = require('../scripts/make-update'), root = pathx.join(__dirname, '..');
   const top = fsx.readdirSync(root, { withFileTypes: true }).filter(e => !e.name.startsWith('.') && e.name !== 'node_modules' && e.name !== 'dist');
   const dirs = top.filter(e => e.isDirectory()).map(e => e.name).sort(), files = top.filter(e => e.isFile()).map(e => e.name).sort();
-  assert.deepStrictEqual(dirs, ['bridge', 'client', 'deploy', 'drivers', 'engine', 'licenses', 'native', 'npm-installer', 'ota-server', 'platforms', 'releases', 'scripts'], 'the top level is minimal: systems (under platforms/) + shared code, third-party license texts (licenses/) and opt-in native addons (native/)');
+  assert.deepStrictEqual(dirs, ['bridge', 'client', 'deploy', 'docs', 'drivers', 'engine', 'licenses', 'native', 'npm-installer', 'ota-server', 'platforms', 'releases', 'scripts'], 'the top level is minimal: systems (under platforms/) + shared code, third-party license texts (licenses/) and opt-in native addons (native/)');
   assert.deepStrictEqual(fsx.readdirSync(pathx.join(root, 'platforms')).sort(), ['android', 'electron', 'ios', 'linux', 'macos', 'windows'], 'one folder per system under platforms/ (electron: an additional, optional packaging, not an installed-release OS target)');
   assert.deepStrictEqual(files, ['ADMIN-LICENSE.md', 'Additional Terms & Conditions', 'LICENSE', 'LICENSE.txt', 'PROJECT-README.md', 'README.md', 'RELEASING.md', 'SECURITY.md', 'Steinberg ASIO Licensing Agreement.pdf', 'Steinberg ASIO SDK 2.3.pdf', 'Steinberg ASIO Usage Guidelines.pdf', 'boot.html', 'changes.txt', 'index.html', 'package.json'], 'only the web app, the project papers and the Steinberg ASIO SDK papers at the root');
   assert.deepStrictEqual(fsx.readdirSync(pathx.join(root, 'releases')).sort(), ['update.json'], 'releases/ holds only the signed manifest that installed apps fetch; the installers and packages are published elsewhere, not committed');
@@ -5883,4 +5883,33 @@ test('FX library page: panel on tab-fx, search / category / favourite, real-proc
     const row = new RegExp("\\n {12}\\['" + w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + "',([^\\n]*)\\],").exec(html); assert.ok(row, w + ' is translated');
     assert.strictEqual(row[0].match(/'(?:[^'\\]|\\.)*'|"[^"]*"/g).length, 22, w + ': all 22 languages');
   }
+});
+
+// ---- HEADPHONE CROSSFEED + spatial architecture doc (block 3, 1.22.1.0 Beta) --------------------------------------------------------------------
+test('crossfeed math: amount 0 bypasses, feed scales with amount and preset, make-up keeps the centre level; the page module builds a real cross graph', () => {
+  const html = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'index.html'), 'utf8');
+  const a = html.indexOf('//@@CROSSFEED-MATH-START'), b = html.indexOf('//@@CROSSFEED-MATH-END'); assert.ok(a > 0 && b > a);
+  const M = new Function(html.slice(a, b) + ';return crossfeedMath;')();
+  assert.strictEqual(M.coeffs(0).feed, 0); assert.strictEqual(M.coeffs(0).bypass, true); assert.strictEqual(M.coeffs(0).outGain, 1);
+  assert.ok(M.coeffs(100, 'natural').feed > M.coeffs(50, 'natural').feed, 'more amount, more feed');
+  assert.ok(M.coeffs(100, 'wide').freq > M.coeffs(100, 'warm').freq, 'wide opens the low-pass higher than warm');
+  for (const p of ['natural', 'warm', 'wide']) { const c = M.coeffs(100, p); assert.ok(c.outGain < 1 && c.outGain > 0.5, 'make-up trims for the added feed'); assert.ok(c.delaySec > 0 && c.delaySec < 0.002, 'inter-aural delay under the 2 ms node max'); }
+  assert.strictEqual(M.coeffs(50, 'nonsense').freq, M.coeffs(50, 'natural').freq, 'an unknown preset falls back to natural');
+  // the live module: a real splitter -> cross low-pass -> merger graph, wired on the master, mutually exclusive with 360
+  for (const s of ['window.crossfeed', "ctx.createChannelSplitter(2)", "ctx.createChannelMerger(2)", "lpL.connect(xL); xL.connect(merge, 0, 1)", "n.musicAnalyser.connect(g.input)", "window.setSpatial360(false, true)"]) assert.ok(html.includes(s), s);
+  assert.ok(html.includes("if (on && window.crossfeed && window.state.crossfeed && window.state.crossfeed.enabled) window.crossfeed.set(false, true);"), '360 turns crossfeed off');
+  assert.ok(html.includes('id="xfeed-toggle"') && html.includes('id="xfeed-amount"') && html.includes('id="xfeed-preset"'));
+});
+
+test('spatial architecture doc: honest about trademarks and figures, AMFB DNA is the project own profile, Eclipsa/IAMF marked open and research-only', () => {
+  const fsx = require('node:fs'), pathx = require('node:path');
+  const f = pathx.join(__dirname, '..', 'docs', 'spatial-audio-architecture.md'); assert.ok(fsx.existsSync(f), 'docs/spatial-audio-architecture.md exists');
+  const d = fsx.readFileSync(f, 'utf8');
+  assert.match(d, /does \*\*not\*\* implement, decode, license or claim/i, 'trademarks are described, not claimed');
+  assert.match(d, /AMFB DNA.*own|own.*AMFB DNA/is); assert.match(d, /not a licensed format/i);
+  assert.match(d, /Eclipsa|IAMF/); assert.match(d, /open.*royalty-free|royalty-free.*open/i);
+  assert.match(d, /Research only|research item|research-only/i, 'IAMF render is marked research-only, not shipped');
+  assert.match(d, /Confidence/, 'a confidence column so figures are not quoted blind');
+  for (const tm of ['Dolby Atmos', 'DTS:X', 'Sony 360', 'Auro-3D', 'MPEG-H', 'THX', 'IMAX Enhanced']) assert.ok(d.includes(tm), tm + ' covered');
+  assert.match(d, /Shipped \(1\.22\.1\.0\)|Shipped/i, 'crossfeed / 360 marked as shipped, the rest planned');
 });

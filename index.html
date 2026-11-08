@@ -10454,6 +10454,7 @@ const cArea = document.getElementById('content-area');
                 if (!s.build()) { if (!silent) window.notify('360 audio: the Resonance Audio engine could not be loaded', 'triangle-exclamation'); on = false; }
             }
             cfg.enabled = !!on;
+            if (on && window.crossfeed && window.state.crossfeed && window.state.crossfeed.enabled) window.crossfeed.set(false, true);   // one master binauraliser at a time
             if (s.scene) s.wire(cfg.enabled);
             const btn = document.getElementById('spatial360-toggle');
             if (btn) { btn.textContent = cfg.enabled ? 'ON' : 'OFF'; btn.className = "px-3 py-1.5 rounded font-mono font-bold text-[8px] uppercase transition border " + (cfg.enabled ? 'bg-emerald-500 text-black border-emerald-500' : 'bg-white/5 text-slate-400 border-white/10'); }
@@ -10466,6 +10467,119 @@ const cArea = document.getElementById('content-area');
             const readout = document.getElementById('spatial360-' + key + '-val'); if (readout) readout.textContent = key === 'room' ? cfg.room.toUpperCase() : (key === 'distance' ? cfg.distance.toFixed(1) + ' m' : Math.round(cfg[key]) + '°');
             window.spatial360.apply();
         };
+
+        // ───────────────────────── HEADPHONE CROSSFEED (1.22.1.0 Beta, block 3 spatial) ─────────────────────────
+        // On headphones each ear hears only its own channel, so hard-panned mixes feel split and tiring. Crossfeed bleeds a short, low-passed
+        // copy of each channel into the opposite ear, the way a small speaker pair in a room would, which pulls the image together. Real Web Audio
+        // (a channel splitter, a per-channel delay + low-pass into the other ear, a merger): the sound genuinely changes. It sits on THIS device's
+        // own output (headphones / the browser / the phone); PC-mode ASIO / WASAPI output goes to the hardware and is left untouched. Mutually
+        // exclusive with 360 AUDIO (both re-route the master to the speakers), so turning one on turns the other off.
+        //@@CROSSFEED-MATH-START
+        const crossfeedMath = (() => {
+            // bs2b-style presets: the low-pass cut, the inter-aural delay, and the cross feed at 100 % amount
+            const PRESETS = { natural: { freq: 700, delayMs: 0.26, feed: 0.5 }, warm: { freq: 500, delayMs: 0.30, feed: 0.6 }, wide: { freq: 1100, delayMs: 0.22, feed: 0.42 } };
+            // coefficients at an amount 0..100: the cross-feed gain, a matching direct-path trim and an output make-up so the centre stays level
+            function coeffs(amount = 50, preset = 'natural') {
+                const p = PRESETS[preset] || PRESETS.natural, a = Math.max(0, Math.min(100, Number(amount) || 0)) / 100;
+                const feed = a * p.feed;
+                return { feed: Math.round(feed * 1000) / 1000, outGain: Math.round(1 / (1 + feed) * 1000) / 1000, freq: p.freq, delaySec: p.delayMs / 1000, bypass: a === 0 };
+            }
+            return { PRESETS, coeffs };
+        })();
+        //@@CROSSFEED-MATH-END
+        window.crossfeed = (() => {
+            const M = crossfeedMath, KEY = 'halx_crossfeed';
+            const S = (typeof window !== 'undefined' && window.state) ? window.state : {};   // tolerate being evaluated without the engine (unit tests slice this region)
+            const st = S.crossfeed = Object.assign({ enabled: false, amount: 55, preset: 'natural' }, (() => { try { return JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (_) { return {}; } })());
+            let g = null;   // the built graph
+            const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(st)); } catch (_) { /* private */ } };
+            function build(ctx) {
+                if (g || !ctx) return g;
+                const split = ctx.createChannelSplitter(2), merge = ctx.createChannelMerger(2), out = ctx.createGain();
+                const dL = ctx.createGain(), dR = ctx.createGain();                                   // direct paths
+                const xL = ctx.createGain(), xR = ctx.createGain();                                   // cross feed gains
+                const delL = ctx.createDelay(0.002), delR = ctx.createDelay(0.002);
+                const lpL = ctx.createBiquadFilter(), lpR = ctx.createBiquadFilter(); lpL.type = lpR.type = 'lowpass';
+                split.connect(dL, 0); split.connect(dR, 1); dL.connect(merge, 0, 0); dR.connect(merge, 0, 1);
+                // left channel -> delay -> low-pass -> cross gain -> RIGHT ear, and the mirror
+                split.connect(delL, 0); delL.connect(lpL); lpL.connect(xL); xL.connect(merge, 0, 1);
+                split.connect(delR, 1); delR.connect(lpR); lpR.connect(xR); xR.connect(merge, 0, 0);
+                merge.connect(out);
+                g = { input: split, output: out, dL, dR, xL, xR, delL, delR, lpL, lpR };
+                apply();
+                return g;
+            }
+            function apply() {
+                if (!g || !window.state.ctx) return;
+                const c = M.coeffs(st.amount, st.preset), t = window.state.ctx.currentTime;
+                for (const x of [g.xL, g.xR]) x.gain.setTargetAtTime(c.feed, t, 0.02);
+                for (const d of [g.dL, g.dR]) d.gain.setTargetAtTime(1, t, 0.02);
+                for (const l of [g.lpL, g.lpR]) l.frequency.setTargetAtTime(c.freq, t, 0.02);
+                for (const d of [g.delL, g.delR]) d.delayTime.setTargetAtTime(c.delaySec, t, 0.02);
+                g.output.gain.setTargetAtTime(c.outGain, t, 0.02);
+            }
+            const api = {
+                math: M, state: st,
+                wire(on) {
+                    const ctx = window.state.ctx, n = window.state.nodes;
+                    if (!ctx || !n || !n.musicAnalyser) return false;
+                    if (on && !api.wired) {
+                        if (!build(ctx)) return false;
+                        try { n.musicAnalyser.disconnect(ctx.destination); } catch (_) { /* PortAudio output on, or already apart */ }
+                        n.musicAnalyser.connect(g.input); g.output.connect(ctx.destination); api.wired = true;
+                    } else if (!on && api.wired) {
+                        try { n.musicAnalyser.disconnect(g.input); } catch (_) { /* gone */ }
+                        try { g.output.disconnect(ctx.destination); } catch (_) { /* gone */ }
+                        if (!(window.universalAsioSdk && window.universalAsioSdk.paReady)) n.musicAnalyser.connect(ctx.destination);
+                        api.wired = false;
+                    }
+                    return true;
+                },
+                async set(on, silent) {
+                    if (on) {
+                        if (!window.state.ctx && typeof initAudioEngine === 'function') await initAudioEngine();
+                        if (window.state.spatial360 && window.state.spatial360.enabled && window.setSpatial360) window.setSpatial360(false, true);   // one master binauraliser at a time
+                    }
+                    st.enabled = !!on; persist(); api.wire(st.enabled); api.render();
+                    if (!silent && window.notify) window.notify(st.enabled ? 'Headphone crossfeed ON (' + st.preset + ', ' + st.amount + '%)' : 'Headphone crossfeed OFF', 'headphones');
+                },
+                setParam(key, value) {
+                    if (key === 'preset') st.preset = M.PRESETS[value] ? value : 'natural';
+                    else if (key === 'amount') st.amount = Math.max(0, Math.min(100, parseInt(value, 10) || 0));
+                    persist(); apply(); api.render();
+                },
+                render() {
+                    if (typeof document === 'undefined' || typeof document.getElementById !== 'function') return;
+                    const t = document.getElementById('xfeed-toggle'); if (!t) return;
+                    t.textContent = st.enabled ? 'ON' : 'OFF'; t.setAttribute('aria-pressed', st.enabled ? 'true' : 'false');
+                    t.className = 'px-3 py-1.5 rounded font-mono font-bold text-[8px] uppercase transition border ' + (st.enabled ? 'bg-emerald-500 text-black border-emerald-500' : 'bg-white/5 text-slate-400 border-white/10');
+                    const a = document.getElementById('xfeed-amount'); if (a && +a.value !== st.amount) a.value = st.amount;
+                    const av = document.getElementById('xfeed-amount-val'); if (av) av.textContent = st.amount + '%';
+                    const p = document.getElementById('xfeed-preset'); if (p && p.value !== st.preset) p.value = st.preset;
+                },
+                mount() {
+                    if (document.getElementById('xfeed-panel')) return;
+                    const anchor = document.getElementById('spatial360-toggle'); const panel = anchor && anchor.closest && anchor.closest('.glass-panel'); if (!panel) return;
+                    const d = document.createElement('div'); d.id = 'xfeed-panel'; d.className = panel.className; d.classList.add('mt-2');
+                    d.innerHTML = `<div class="flex flex-wrap items-center justify-between gap-2">
+                        <div class="flex items-center gap-2.5"><div class="w-8 h-8 rounded-lg bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400 text-sm"><i class="fa-solid fa-headphones-simple"></i></div>
+                        <div><h3 class="text-[10px] font-black text-white font-wing tracking-wider uppercase">HEADPHONE CROSSFEED</h3><p class="text-[7.5px] font-mono text-slate-400">Bleeds each channel softly into the other ear, the way speakers in a room would: hard-panned mixes feel natural on headphones. Applies to this device's output.</p></div></div>
+                        <button id="xfeed-toggle" type="button" aria-pressed="false" class="px-3 py-1.5 rounded font-mono font-bold text-[8px] uppercase transition border bg-white/5 text-slate-400 border-white/10">OFF</button></div>
+                        <div class="grid grid-cols-2 gap-2 text-[7.5px] font-mono mt-2">
+                        <div><div class="flex justify-between text-slate-300 mb-0.5"><span>AMOUNT</span><span id="xfeed-amount-val" class="text-amber-400 font-bold">55%</span></div><input id="xfeed-amount" type="range" min="0" max="100" step="1" value="55" class="w-full accent-cyan-400 cursor-pointer" aria-label="Crossfeed amount"></div>
+                        <div><div class="flex justify-between text-slate-300 mb-0.5"><span>CHARACTER</span></div><select id="xfeed-preset" class="w-full bg-black/40 border border-white/10 rounded text-[8px] text-slate-200 py-0.5" aria-label="Crossfeed character"><option value="natural">NATURAL</option><option value="warm">WARM (closer)</option><option value="wide">WIDE (airier)</option></select></div></div>`;
+                    panel.insertAdjacentElement('afterend', d);
+                    document.getElementById('xfeed-toggle').onclick = () => api.set(!st.enabled);
+                    document.getElementById('xfeed-amount').oninput = e => api.setParam('amount', e.target.value);
+                    document.getElementById('xfeed-preset').onchange = e => api.setParam('preset', e.target.value);
+                    api.render();
+                },
+                wired: false,
+            };
+            const tryMount = () => { if (typeof document === 'undefined' || typeof document.getElementById !== 'function') return true; if (document.getElementById('spatial360-toggle')) { api.mount(); return true; } return false; };
+            if (!tryMount()) { let k = 0; const iv = setInterval(() => { if (tryMount() || ++k > 120) clearInterval(iv); }, 500); }
+            return api;
+        })();
 
         // MASTER-BUS MID/SIDE PROCESSING: midDb trims the summed center (Mid = (L+R)/2) in dB; widthPct scales
         // the difference signal (Side = (L-R)/2), 0% collapsing to mono, 100% the normal stereo width, up to 200%
