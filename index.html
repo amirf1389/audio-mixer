@@ -10979,6 +10979,122 @@ const cArea = document.getElementById('content-area');
         }
         return api;
     })();
+    // ───────────────────────── FX LIBRARY: 300 DSP EFFECT PRESETS (1.22.1.0 Beta) ─────────────────────────
+    // 300 named presets for the real AI DSP rack (window.aiDsp): every preset is a set of actual parameter values over the rack's building
+    // blocks (warmth / exciter / tilt EQ / vocal enhance / lo-fi / chorus / auto-pan / harmony / de-esser), so choosing one truly changes the
+    // sound - it drives aiDsp.set(path, value), the same path a knob on the AI MIX page uses. They are PRESETS over the built-in engine, not 300
+    // separate algorithms, and not VST plugins: real third-party VST3 / VST2 / .dll inserts load separately in PC mode (the PLUGIN EXTENSIONS
+    // section on this page). Applying a preset switches on the blocks it names at their amounts and switches the rack's other effect blocks off,
+    // so presets are exclusive and audible; CLEAR turns them all off. The pure generator sits between the markers below and is unit-tested.
+    //@@FXLIB-MATH-START
+    const fxLibGen = (() => {
+        // the rack's effect blocks this library drives, with the parameter paths and ranges aiDsp.set() accepts
+        const BLOCKS = ['warmth', 'exciter', 'tilt', 'vocal', 'lofi', 'chorus', 'autopan', 'harmony'];
+        const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+        const lerp = (a, b, t) => a + (b - a) * t;
+        const r1 = v => Math.round(v);               // integer amount
+        const r2 = v => Math.round(v * 10) / 10;     // one decimal (tilt dB, pan rate)
+        // one block's on + amount pairs at intensity k (0..1); each returns [[path, value], ...]
+        const amt = (blk, lo, hi, k) => [[blk + '.on', true], [blk + '.' + (blk === 'chorus' || blk === 'harmony' ? 'mix' : 'amt'), r1(clamp(lerp(lo, hi, k), 0, 100))]];
+        const tilt = (lo, hi, k) => [['tilt.on', true], ['tilt.db', r2(clamp(lerp(lo, hi, k), -6, 6))]];
+        const pan = (rLo, rHi, dLo, dHi, k) => [['autopan.on', true], ['autopan.rate', r2(clamp(lerp(rLo, rHi, k), 0.1, 8))], ['autopan.depth', r1(clamp(lerp(dLo, dHi, k), 0, 100))]];
+        const harm = (mLo, mHi, a, b, k) => [['harmony.on', true], ['harmony.mix', r1(clamp(lerp(mLo, mHi, k), 0, 100))], ['harmony.a', a], ['harmony.b', b]];
+        // categories: id, label, how many presets, and a builder mapping index -> { name, set }
+        const CATS = [
+            { id: 'vocal', label: 'VOCAL', n: 40, build: (i, n) => { const k = i / (n - 1); return { name: 'Vocal ' + ['Air', 'Presence', 'Clarity', 'Broadcast'][i % 4] + ' ' + String(i + 1).padStart(2, '0'), set: [...amt('vocal', 25, 95, k), ...tilt(0.5, 3.2, k), ['deess.on', true]] }; } },
+            { id: 'warm', label: 'WARM / ANALOG', n: 35, build: (i, n) => { const k = i / (n - 1); return { name: 'Analog ' + ['Tube', 'Tape', 'Console', 'Valve'][i % 4] + ' ' + String(i + 1).padStart(2, '0'), set: [...amt('warmth', 15, 90, k), ...tilt(-0.5, -3.5, k)] }; } },
+            { id: 'bright', label: 'BRIGHT / AIR', n: 30, build: (i, n) => { const k = i / (n - 1); return { name: 'Air ' + ['Sheen', 'Sparkle', 'Crisp', 'Glass'][i % 4] + ' ' + String(i + 1).padStart(2, '0'), set: [...amt('exciter', 10, 80, k), ...tilt(0.8, 4.5, k)] }; } },
+            { id: 'lofi', label: 'LO-FI', n: 30, build: (i, n) => { const k = i / (n - 1); return { name: 'Lo-Fi ' + ['Dust', 'Crush', 'Vinyl', 'Cassette'][i % 4] + ' ' + String(i + 1).padStart(2, '0'), set: [...amt('lofi', 15, 85, k), ...tilt(-1, -4, k)] }; } },
+            { id: 'wide', label: 'WIDE / CHORUS', n: 30, build: (i, n) => { const k = i / (n - 1); return { name: 'Wide ' + ['Shimmer', 'Doubler', 'Ensemble', 'Lush'][i % 4] + ' ' + String(i + 1).padStart(2, '0'), set: [...amt('chorus', 15, 80, k), ...pan(0.2, 0.8, 10, 40, k)] }; } },
+            { id: 'motion', label: 'MOTION', n: 25, build: (i, n) => { const k = i / (n - 1); return { name: 'Motion ' + ['Sweep', 'Drift', 'Swirl', 'Orbit'][i % 4] + ' ' + String(i + 1).padStart(2, '0'), set: [...pan(0.3, 6, 30, 95, k), ...amt('chorus', 10, 45, k)] }; } },
+            { id: 'harmony', label: 'HARMONY', n: 25, build: (i, n) => { const k = i / (n - 1); const [a, b] = [[4, 7], [3, 7], [5, 12], [-5, 7], [4, 12]][i % 5]; return { name: 'Harmony ' + (a > 0 ? '+' : '') + a + '/' + (b > 0 ? '+' : '') + b + ' ' + String(i + 1).padStart(2, '0'), set: harm(20, 70, a, b, k) }; } },
+            { id: 'phone', label: 'TELEPHONE / RADIO', n: 20, build: (i, n) => { const k = i / (n - 1); return { name: ['Telephone', 'AM Radio', 'Walkie', 'Megaphone'][i % 4] + ' ' + String(i + 1).padStart(2, '0'), set: [...amt('lofi', 55, 100, k), ...tilt(-2, 2, k)] }; } },
+            { id: 'master', label: 'MASTER GLUE', n: 25, build: (i, n) => { const k = i / (n - 1); return { name: 'Master ' + ['Glue', 'Polish', 'Finish', 'Bus'][i % 4] + ' ' + String(i + 1).padStart(2, '0'), set: [...amt('warmth', 8, 35, k), ['exciter.on', true], ['exciter.amt', r1(lerp(5, 25, k))], ...tilt(-0.5, 1.5, k)] }; } },
+            { id: 'creative', label: 'CREATIVE', n: 40, build: (i, n) => { const k = i / (n - 1); const combo = i % 4; const base = combo === 0 ? [...amt('exciter', 20, 70, k), ...amt('chorus', 20, 60, k)] : combo === 1 ? [...amt('warmth', 20, 70, k), ...amt('lofi', 10, 50, k)] : combo === 2 ? [...amt('vocal', 20, 60, k), ...pan(0.4, 4, 20, 70, k)] : [...amt('exciter', 15, 55, k), ...harm(15, 50, 4, 7, k)]; return { name: 'Creative ' + ['Fusion', 'Hybrid', 'Texture', 'Motion'][combo] + ' ' + String(i + 1).padStart(2, '0'), set: base }; } },
+        ];
+        function generate() {
+            const out = [];
+            for (const c of CATS) for (let i = 0; i < c.n; i++) { const p = c.build(i, c.n); out.push({ id: c.id + '-' + i, cat: c.id, catLabel: c.label, name: p.name, set: p.set }); }
+            return out;
+        }
+        // the set of aiDsp paths a preset is allowed to touch (so a typo can never reach aiDsp.set): <block>.on/.amt/.mix/.db/.rate/.depth/.a/.b, deess.on
+        const validPath = p => /^(warmth|exciter|vocal|lofi)\.(on|amt)$|^tilt\.(on|db)$|^chorus\.(on|mix)$|^autopan\.(on|rate|depth)$|^harmony\.(on|mix|a|b)$|^deess\.on$/.test(p);
+        return { BLOCKS, CATS, generate, validPath };
+    })();
+    //@@FXLIB-MATH-END
+    window.fxLibrary = (() => {
+        const KEY = 'halx_fx_fav', G = fxLibGen, ALL = G.generate();
+        let fav = new Set(); try { const j = JSON.parse(localStorage.getItem(KEY) || '[]'); if (Array.isArray(j)) fav = new Set(j); } catch (_) { /* fresh */ }
+        let cat = 'all', q = '', active = null;
+        const persist = () => { try { localStorage.setItem(KEY, JSON.stringify([...fav])); } catch (_) { /* private browsing */ } };
+        const dsp = () => window.aiDsp;
+        function ensureInstalled(blocks) { const d = dsp(); if (!d || !d.toggleInstall) return; blocks.forEach(b => { if (!d.installed(b)) d.toggleInstall(b); }); }
+        const api = {
+            gen: G, all: () => ALL.slice(), count: ALL.length,
+            categories: () => G.CATS.map(c => ({ id: c.id, label: c.label, n: c.n })),
+            filter(category = cat, query = q) {
+                const s = String(query || '').trim().toLowerCase();
+                return ALL.filter(p => (category === 'all' || (category === 'fav' ? fav.has(p.id) : p.cat === category)) && (!s || p.name.toLowerCase().includes(s) || p.catLabel.toLowerCase().includes(s)));
+            },
+            isFav: id => fav.has(id),
+            toggleFav(id) { if (fav.has(id)) fav.delete(id); else fav.add(id); persist(); api.render(); },
+            apply(id) {
+                const p = ALL.find(x => x.id === id); if (!p) return false;
+                const d = dsp(); if (!d || !d.set) { window.notify && window.notify('Start the audio engine (ENGAGE) to hear the effects', 'circle-info'); active = id; api.render(); return false; }
+                ensureInstalled(G.BLOCKS.filter(b => p.set.some(([path]) => path.startsWith(b + '.'))));
+                d.set('on', true);
+                const touched = new Set(p.set.map(([path]) => path.split('.')[0]));
+                G.BLOCKS.forEach(b => { if (!touched.has(b) && d.st[b] && d.st[b].on) d.set(b + '.on', false); });   // other effect blocks off: the preset is what you hear
+                for (const [path, value] of p.set) if (G.validPath(path)) d.set(path, value);
+                active = id; api.render();
+                window.notify && window.notify('FX: ' + p.name, 'wand-magic-sparkles');
+                return true;
+            },
+            clear() { const d = dsp(); if (d && d.set) G.BLOCKS.forEach(b => { if (d.st[b] && d.st[b].on) d.set(b + '.on', false); }); active = null; api.render(); window.notify && window.notify('FX library: all preset blocks off', 'power-off'); },
+            setCat(c) { cat = c; api.render(); },
+            setQuery(s) { q = s; api.render(); },
+            render() {
+                if (typeof document === 'undefined' || typeof document.getElementById !== 'function') return;
+                const box = document.getElementById('fxlib-list'); if (!box) return;
+                document.querySelectorAll('[data-fxcat]').forEach(b => { const on = b.dataset.fxcat === cat; b.className = 'px-2 py-0.5 rounded border text-[7px] font-bold ' + (on ? 'bg-purple-500 text-white border-purple-500' : 'bg-white/5 text-slate-300 border-white/10'); b.setAttribute('aria-pressed', on ? 'true' : 'false'); });
+                const rows = api.filter(), cap = 160, shown = rows.slice(0, cap);
+                const head = document.getElementById('fxlib-count'); if (head) head.textContent = rows.length + ' OF ' + ALL.length + (rows.length > cap ? ' · SHOWING ' + cap : '');
+                const key = cat + '|' + q + '|' + active + '|' + shown.map(p => p.id + (fav.has(p.id) ? '*' : '')).join(',');
+                if (box.dataset.key === key) return; box.dataset.key = key;
+                box.textContent = '';
+                if (!shown.length) { const e = document.createElement('div'); e.className = 'text-slate-500 col-span-full'; e.textContent = 'No effect matches.'; box.appendChild(e); return; }
+                for (const p of shown) {
+                    const row = document.createElement('div'); row.className = 'flex items-center gap-1 bg-black/40 border rounded px-1.5 py-1 ' + (active === p.id ? 'border-purple-500' : 'border-white/10');
+                    const star = document.createElement('button'); star.type = 'button'; star.className = 'text-[9px] ' + (fav.has(p.id) ? 'text-amber-400' : 'text-slate-600'); star.textContent = '★'; star.title = 'Favourite'; star.setAttribute('aria-label', 'Favourite ' + p.name); star.onclick = e => { e.stopPropagation(); api.toggleFav(p.id); };
+                    const t = document.createElement('button'); t.type = 'button'; t.className = 'flex-1 text-left min-w-0'; t.onclick = () => api.apply(p.id);
+                    const nm = document.createElement('div'); nm.className = 'text-[7.5px] font-bold text-white truncate'; nm.textContent = p.name;
+                    const cl = document.createElement('div'); cl.className = 'text-[6.5px] text-slate-500 truncate'; cl.textContent = p.catLabel;
+                    t.append(nm, cl); row.append(star, t); box.appendChild(row);
+                }
+            },
+            mount() {
+                if (document.getElementById('fxlib-panel')) return;
+                const tab = document.getElementById('tab-fx'), host = tab && tab.querySelector('.page-scroll-inner'); if (!host) return;
+                const d = document.createElement('div');
+                d.id = 'fxlib-panel'; d.className = 'glass-panel p-3 rounded-xl wing-bezel space-y-2 font-mono';
+                const chips = [['all', 'ALL'], ['fav', '★ FAVOURITES'], ...api.categories().map(c => [c.id, c.label])].map(([id, label]) => `<button type="button" data-fxcat="${id}">${label}</button>`).join('');
+                d.innerHTML = `<div class="flex flex-wrap justify-between items-center gap-2">
+                    <div><h3 class="text-xs font-black text-white font-wing tracking-wider uppercase"><i class="fa-solid fa-sliders text-purple-400 mr-1"></i>FX LIBRARY · 300 EFFECTS</h3><p class="text-[7.5px] text-slate-400">PRESETS FOR THE AI DSP RACK (REAL PROCESSING) &bull; TAP TO APPLY &bull; PC MODE ALSO LOADS VST3 / VST2 / DLL BELOW</p></div>
+                    <div class="flex items-center gap-1.5"><input id="fxlib-search" type="search" placeholder="Search effects…" aria-label="Search effects" class="bg-black border border-white/10 rounded px-2 py-1 text-slate-200 text-[8px] outline-none"><button id="fxlib-clear" type="button" class="px-2 py-1 rounded bg-white/5 text-slate-300 border border-white/10 text-[7.5px] font-bold">CLEAR FX</button></div></div>
+                    <div class="flex flex-wrap gap-1" role="group" aria-label="Effect category">${chips}</div>
+                    <div class="text-[7px] text-slate-500" id="fxlib-count" aria-live="polite"></div>
+                    <div id="fxlib-list" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-1 max-h-80 overflow-y-auto" role="list"></div>`;
+                host.insertBefore(d, host.firstChild);
+                document.getElementById('fxlib-search').oninput = e => api.setQuery(e.target.value);
+                document.getElementById('fxlib-clear').onclick = () => api.clear();
+                d.querySelectorAll('[data-fxcat]').forEach(b => { b.onclick = () => api.setCat(b.dataset.fxcat); });
+                api.render();
+            },
+        };
+        const tryMount = () => { if (typeof document === 'undefined' || typeof document.querySelector !== 'function') return true; if (document.querySelector('#tab-fx .page-scroll-inner')) { api.mount(); return true; } return false; };
+        if (!tryMount()) { let k = 0; const iv = setInterval(() => { if (tryMount() || ++k > 120) clearInterval(iv); }, 500); }
+        return api;
+    })();
         window.setMsMono = function() { window.setMsWidth(0); };   // quick collapse-to-mono, same math as width 0%
         window.resetMsProcessing = function() { window.setMsMidDb(0); window.setMsWidth(100); window.notify('Mid/Side Processing Reset', 'rotate-left'); };
 
@@ -23063,6 +23179,8 @@ t.Omnitone=e(11)},function(A,t,e){"use strict";const i=e(1),n=e(4),s=e(12),o=e(6
             ['FORGET', 'فراموش کردن', 'نسيان', 'بھول جائیں', 'OLVIDAR', 'OUBLIER', 'VERGESSEN', 'ESQUECER', 'ЗАБЫТЬ', 'UNUT', 'भूलें', '忘记', '忘れる', '잊기', 'LUPAKAN', 'LUPAKAN', 'DIMENTICA', 'VERGETEN', 'ZAPOMNIJ', 'QUÊN', 'ลืม', 'ЗАБУТИ'],
             ['SETS:', 'مجموعه‌ها:', 'المجموعات:', 'سیٹس:', 'CONJUNTOS:', 'JEUX :', 'SETS:', 'CONJUNTOS:', 'НАБОРЫ:', 'SETLER:', 'सेट:', '组：', 'セット:', '세트:', 'SET:', 'SET:', 'SET:', 'SETS:', 'ZESTAWY:', 'BỘ:', 'ชุด:', 'НАБОРИ:'],
             ['STORE', 'ذخیره', 'تخزين', 'محفوظ', 'GUARDAR', 'MÉMORISER', 'SPEICHERN', 'ARMAZENAR', 'СОХРАНИТЬ', 'KAYDET', 'संग्रहित करें', '存储', '保存', '저장', 'SIMPAN', 'SIMPAN', 'MEMORIZZA', 'OPSLAAN', 'ZAPISZ', 'LƯU', 'จัดเก็บ', 'ЗБЕРЕГТИ'],
+            ['CLEAR FX', 'پاک‌کردن افکت', 'مسح المؤثرات', 'ایف ایکس صاف کریں', 'LIMPIAR FX', 'EFFACER FX', 'FX LÖSCHEN', 'LIMPAR FX', 'СБРОС ЭФФЕКТОВ', 'FX TEMİZLE', 'FX साफ़ करें', '清除效果', 'FXをクリア', 'FX 지우기', 'KOSONGKAN FX', 'HAPUS FX', 'AZZERA FX', 'FX WISSEN', 'WYCZYŚĆ FX', 'XÓA FX', 'ล้าง FX', 'СКИНУТИ FX'],
+            ['★ FAVOURITES', '★ موردعلاقه‌ها', '★ المفضلة', '★ پسندیدہ', '★ FAVORITOS', '★ FAVORIS', '★ FAVORITEN', '★ FAVORITOS', '★ ИЗБРАННОЕ', '★ FAVORİLER', '★ पसंदीदा', '★ 收藏', '★ お気に入り', '★ 즐겨찾기', '★ KEGEMARAN', '★ FAVORIT', '★ PREFERITI', '★ FAVORIETEN', '★ ULUBIONE', '★ YÊU THÍCH', '★ รายการโปรด', '★ ОБРАНЕ'],
             ['UPGRADE TO PRO', 'ارتقا به PRO', 'الترقية إلى PRO', 'PRO میں اپ گریڈ کریں', 'ACTUALIZAR A PRO', 'PASSER À PRO', 'AUF PRO UPGRADEN', 'ATUALIZAR PARA PRO', 'ПЕРЕЙТИ НА PRO', "PRO'YA YÜKSELT", 'PRO में अपग्रेड करें', '升级到 PRO', 'PRO にアップグレード', 'PRO로 업그레이드', 'NAIK TARAF KE PRO', 'UPGRADE KE PRO', 'PASSA A PRO', 'UPGRADEN NAAR PRO', 'PRZEJDŹ NA PRO', 'NÂNG CẤP LÊN PRO', 'อัปเกรดเป็น PRO', 'ПЕРЕЙТИ НА PRO'],
             ['UPGRADE TO STUDIO MASTER', 'ارتقا به STUDIO MASTER', 'الترقية إلى STUDIO MASTER', 'STUDIO MASTER میں اپ گریڈ کریں', 'ACTUALIZAR A STUDIO MASTER', 'PASSER À STUDIO MASTER', 'AUF STUDIO MASTER UPGRADEN', 'ATUALIZAR PARA STUDIO MASTER', 'ПЕРЕЙТИ НА STUDIO MASTER', "STUDIO MASTER'A YÜKSELT", 'STUDIO MASTER में अपग्रेड करें', '升级到 STUDIO MASTER', 'STUDIO MASTER にアップグレード', 'STUDIO MASTER로 업그레이드', 'NAIK TARAF KE STUDIO MASTER', 'UPGRADE KE STUDIO MASTER', 'PASSA A STUDIO MASTER', 'UPGRADEN NAAR STUDIO MASTER', 'PRZEJDŹ NA STUDIO MASTER', 'NÂNG CẤP LÊN STUDIO MASTER', 'อัปเกรดเป็น STUDIO MASTER', 'ПЕРЕЙТИ НА STUDIO MASTER'],
             ['COPY', 'کپی', 'نسخ', 'کاپی', 'COPIAR', 'COPIER', 'KOPIEREN', 'COPIAR', 'КОПИРОВАТЬ', 'KOPYALA', 'कॉपी', '复制', 'コピー', '복사', 'SALIN', 'SALIN', 'COPIA', 'KOPIËREN', 'KOPIUJ', 'SAO CHÉP', 'คัดลอก', 'КОПІЮВАТИ'],

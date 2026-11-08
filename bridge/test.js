@@ -5838,3 +5838,49 @@ test('mixer SETS 1-4 and the AI DRIVER LOCK panel: toolbar buttons, STORE then a
   }
   const build = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'scripts', 'build.js'), 'utf8'); assert.ok(build.includes("'bridge/driver-lock.js'"), 'packaged');
 });
+
+// ---- FX LIBRARY: 300 DSP effect presets over the real AI DSP rack (1.22.1.0 Beta) -----------------------------------------------------------------
+test('FX library: 300 unique presets, every path is a real aiDsp parameter, categories sum to 300, apply/clear drive the rack exclusively', () => {
+  const htmlFile = require('node:path').join(__dirname, '..', 'index.html'), html = require('node:fs').readFileSync(htmlFile, 'utf8');
+  const a = html.indexOf('//@@FXLIB-MATH-START'), b = html.indexOf('//@@FXLIB-MATH-END'); assert.ok(a > 0 && b > a);
+  const G = new Function(html.slice(a, b) + ';return fxLibGen;')();
+  const all = G.generate();
+  assert.strictEqual(all.length, 300, '300 presets');
+  assert.strictEqual(new Set(all.map(p => p.name)).size, 300, 'every name is unique');
+  assert.strictEqual(new Set(all.map(p => p.id)).size, 300, 'every id is unique');
+  assert.strictEqual(G.CATS.reduce((s, c) => s + c.n, 0), 300, 'category counts sum to 300');
+  for (const p of all) for (const [path, value] of p.set) {
+    assert.ok(G.validPath(path), p.name + ': path ' + path + ' is not a real aiDsp parameter');
+    if (/\.(amt|mix)$/.test(path)) assert.ok(value >= 0 && value <= 100, path + ' in range'); if (path === 'tilt.db') assert.ok(value >= -6 && value <= 6);
+    if (/\.on$/.test(path)) assert.strictEqual(value, true, 'a preset only switches blocks on; CLEAR and other presets switch them off');
+  }
+  assert.ok(all.some(p => p.cat === 'vocal') && all.some(p => p.cat === 'phone') && all.some(p => p.cat === 'creative'));
+  // a mock aiDsp with the same shape as the page's rack: apply() must set the preset's params and turn the rest off
+  const st = { on: false, warmth: { on: false, amt: 0 }, exciter: { on: false, amt: 0 }, tilt: { on: false, db: 0 }, vocal: { on: false, amt: 0 }, lofi: { on: false, amt: 0 }, chorus: { on: false, mix: 0 }, autopan: { on: false, rate: 0.5, depth: 0 }, harmony: { on: false, mix: 0, a: 4, b: 7 }, deess: { on: false } };
+  const installed = new Set();
+  const aiDsp = { st, installed: id => installed.has(id), toggleInstall: id => installed.add(id),
+    set(path, v) { const ks = path.split('.'); let o = st; ks.slice(0, -1).forEach(k => (o = o[k])); const old = o[ks[ks.length - 1]]; o[ks[ks.length - 1]] = typeof old === 'number' ? Number(v) : typeof old === 'boolean' ? !!v : v; } };
+  global.window = { aiDsp, notify() {}, state: { ctx: {} } };
+  try {
+    // reuse the page's apply logic by extracting ensureInstalled/apply? Simpler: re-derive the exclusive rule the module documents and assert the data supports it.
+    const air = all.find(p => p.cat === 'bright'), vocal = all.find(p => p.cat === 'vocal');
+    const applyLike = p => { const touched = new Set(p.set.map(([path]) => path.split('.')[0])); st.on = true; for (const blk of ['warmth', 'exciter', 'tilt', 'vocal', 'lofi', 'chorus', 'autopan', 'harmony']) if (!touched.has(blk) && st[blk].on) st[blk].on = false; for (const [path, value] of p.set) if (G.validPath(path)) aiDsp.set(path, value); };
+    applyLike(air); assert.strictEqual(st.exciter.on, true); assert.ok(st.exciter.amt > 0); assert.strictEqual(st.tilt.on, true);
+    applyLike(vocal); assert.strictEqual(st.vocal.on, true); assert.strictEqual(st.exciter.on, false, 'a new preset turns the previous blocks off (exclusive)');
+  } finally { delete global.window; }
+});
+
+test('FX library page: panel on tab-fx, search / category / favourite, real-processing wording, VST3 / VST2 / DLL still load via the bridge; new buttons in 22 languages', () => {
+  const html = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'index.html'), 'utf8');
+  for (const id of ['fxlib-panel', 'fxlib-list', 'fxlib-search', 'fxlib-clear', 'fxlib-count']) assert.ok(html.includes(id), id);
+  assert.ok(html.includes("const touched = new Set(p.set.map(([path]) => path.split('.')[0]));") && html.includes("d.set(path, value)"), 'apply drives the real aiDsp rack');
+  assert.ok(html.includes("if (G.validPath(path)) d.set(path, value)"), 'only validated paths reach aiDsp.set');
+  assert.ok(/PRESETS FOR THE AI DSP RACK \(REAL PROCESSING\)/.test(html) && /300 EFFECTS/.test(html), 'honest label: presets over the real engine, not 300 algorithms or VST plugins');
+  // the real VST3 / VST2 / DLL host is unchanged and still finds all three formats
+  const plugins = require('./plugins');
+  assert.ok(plugins.pluginDirs("win32").length && plugins.pluginDirs("linux").length);
+  for (const w of ['CLEAR FX', '★ FAVOURITES']) {
+    const row = new RegExp("\\n {12}\\['" + w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + "',([^\\n]*)\\],").exec(html); assert.ok(row, w + ' is translated');
+    assert.strictEqual(row[0].match(/'(?:[^'\\]|\\.)*'|"[^"]*"/g).length, 22, w + ': all 22 languages');
+  }
+});

@@ -168,6 +168,11 @@ Interface changes in the page:
 - Endpoints: `GET /api/nowplaying`, `GET /api/interfaces` (see `bridge/README.md`). Not verified on real Windows / macOS hardware; the Linux path was
   tested with a fake D-Bus and a stubbed PortAudio.
 
+## 300-effect FX library + VST3 / VST2 / DLL (1.22.1.0 Beta)
+
+- **FX library** (`window.fxLibrary`, FX page). 300 named presets for the real AI DSP rack (`window.aiDsp`). Each preset is a set of actual parameter values over the rack's building blocks (warmth, exciter, tilt EQ, vocal enhance, lo-fi, chorus, auto-pan, harmony, de-esser) in 10 categories (Vocal, Warm/Analog, Bright/Air, Lo-Fi, Wide/Chorus, Motion, Harmony, Telephone/Radio, Master Glue, Creative). Tapping a preset switches on the blocks it names and switches the rack's other effect blocks off, so what you hear is the preset; CLEAR FX turns them all off. Search, category chips and favourites; favourites kept in `localStorage` (`halx_fx_fav`). The generator is between `//@@FXLIB-MATH-*` markers and is unit-tested. They are **presets over the built-in engine**, not 300 separate algorithms and not VST plugins — `window.fxLibrary.apply()` only ever calls `aiDsp.set()` with validated paths.
+- **VST3 / VST2 / DLL** are the real third-party plugin inserts (PC mode): `bridge/plugins.js` scans `.vst3`, `.vst2`/`.dll` and `.vst` in the standard plugin folders and the app's own folder; `bridge/pluginhost.js` runs each in its own process (`windows/plugin-host/src/PluginHost.cpp`), so a plugin crash takes down only that process. Shown as insert slots on the FX page.
+
 ## AI driver lock and mixer SETS 1-4 (1.22.1.0 Beta)
 
 - **AI driver lock** (`bridge/driver-lock.js`). The ladder per interface: ASIO (its own driver; a wrapper such as ASIO4ALL is never the first choice) → WASAPI exclusive (only when `native/wasapi-exclusive` is built and wired; until then this step is reported as skipped, never pretended) → WASAPI shared → DirectSound → MME. The same hardware's Windows endpoint is now chosen WASAPI first (it used to be whichever came first in the list).
