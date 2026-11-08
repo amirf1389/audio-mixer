@@ -9,7 +9,6 @@ CRITICAL REVISIONS & ARCHITECTURAL UPGRADES:
    - Implemented window.selectChannel, window.openQuickSend, window.attachKnobListeners.
    - Removed destructive sandbox lock that blanked iframe/preview environments.
 2. UPGRADED NEW FEATURES:
-   - Virtual Multi-Track & Procedural Synthesizer Groove Engine (Kick, Snare, Hi-Hat, Synth Bass, Chords).
    - Audio Test Signal Generator (Sine 40Hz/100Hz/440Hz/1kHz/10kHz, Pink/White Noise, Acoustic Sweep 20Hz-20kHz).
    - Local Audio File Player (Drag-and-drop / load custom MP3, WAV, OGG, FLAC directly into channel strips).
    - Live Master USB Broadcast Audio Recorder (Record mix to WAV/WebM and instant download).
@@ -682,7 +681,6 @@ html.am-lite *,html.am-settled.am-lowpower *{backdrop-filter:none!important;-web
         html.phone-ui #app-chassis > header { height: 46px; padding: 0 8px; }
         html.phone-ui #app-chassis > header button[onclick*="rebootSystem"], html.phone-ui #btn-screen-toggle, html.phone-ui #app-chassis > header button[onclick*="'admin'"] { display: none !important; }
         html.phone-ui #app-chassis > header button { min-width: 40px; min-height: 36px; }
-        html.phone-ui #header-groove-btn { padding: 4px 10px; font-size: 10px; }
         /* the old horizontal page strip is replaced by the bottom bar and the page sheet (the strip stays in the page: the sheet reads it) */
         html.phone-ui #main-nav { display: none !important; }
         html.phone-ui #phone-bar { display: flex; order: 3; flex: 0 0 auto; height: calc(var(--pb-h) + env(safe-area-inset-bottom)); padding: 0 4px env(safe-area-inset-bottom); background: linear-gradient(180deg, rgba(13,16,23,0.98), rgba(5,6,8,0.99)); border-top: 1px solid rgba(255,255,255,0.1); z-index: 60; }
@@ -982,11 +980,6 @@ html.am-lite *,html.am-settled.am-lowpower *{backdrop-filter:none!important;-web
             </div>
 
             <div class="flex items-center gap-1.5 md:gap-3">
-                <!-- Virtual Demo Groove Synth Engine Button -->
-                <button id="header-groove-btn" onclick="window.grooveEngine.toggle()" class="flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/15 border border-amber-500/40 hover:bg-amber-500 hover:text-black rounded text-[8.5px] font-mono font-black text-amber-400 uppercase transition-all shadow-[0_0_10px_rgba(255,106,0,0.2)]">
-                    <i class="fa-solid fa-play" id="groove-icon"></i>
-                    <span id="groove-text">DEMO AUDIO</span>
-                </button>
 
                 <!-- USB Live Master Recording Button -->
                 <button id="header-rec-btn" onclick="window.recEngine.toggle()" class="hidden sm:flex items-center gap-1 px-2.5 py-1 bg-red-500/15 border border-red-500/40 hover:bg-red-500 hover:text-black rounded text-[8.5px] font-mono font-black text-red-400 uppercase transition-all">
@@ -1303,6 +1296,7 @@ window.navTabs = [
             transientShaper: { attack: 0, sustain: 0, gainDb: 0 },   // master-bus transient shaper: see window.rideTransientShaper
             bassMono: { amount: 0, freq: 120 },   // master-bus bass mono-maker: see window.setBassMonoAmount / window.setBassMonoFreq
             lowPowerMode: false,   // throttles the always-running meter loop (see window.setLowPowerMode / startMeterLoop) to cut CPU and battery use
+            meterSkip: 1,          // SYSTEM OPTIMIZE meter-rate factor (1 full, 2 half, 4 quarter); multiplies the ECO throttle
             spatial360: { enabled: false, azimuth: 0, elevation: 0, distance: 2, spread: 30, room: 'off' },   // 360 degree output (Resonance Audio): see window.spatial360
             autoVolume: { enabled: false, mode: 'peak', ceilingDb: -1, gainDb: 0 },   // master-bus gain rider: see window.rideAutoVolume
             dynamicEq: { enabled: false, freq: 3000, q: 1.4, threshold: -12, ratio: 2, gainDb: 0 },   // one level-dependent EQ band: see window.rideDynamicEq
@@ -1883,7 +1877,6 @@ window.navTabs = [
                 btn.className = "px-2.5 py-1 md:px-3 md:py-1.5 rounded text-slate-500 border border-slate-700 hover:text-amber-500 hover:border-amber-500 text-[9px] md:text-[10px] font-black uppercase tracking-wider transition-all flex items-center font-wing";
                 if(pText) pText.innerText = "ENGAGE";
                 led.className = "w-2 h-2 rounded-full bg-slate-500";
-                if (window.grooveEngine && window.grooveEngine.playing) window.grooveEngine.stop();
                 window.notify("Audio Engine Suspended", "power-off");
             }
         };
@@ -2998,9 +2991,6 @@ const cArea = document.getElementById('content-area');
                 window.tapTempoState.bpm = Math.round(60000 / avg);
                 const bpmEl = document.getElementById('tap-bpm-display');
                 if (bpmEl) bpmEl.textContent = window.tapTempoState.bpm + ' BPM';
-                if (window.grooveEngine && window.grooveEngine.running) {
-                    window.grooveEngine.bpm = window.tapTempoState.bpm;
-                }
                 window.notify(`Tap BPM: ${window.tapTempoState.bpm}`, 'music');
             }
         };
@@ -3348,206 +3338,6 @@ const cArea = document.getElementById('content-area');
                 window.state.nodes.spatialPanner.positionZ.setValueAtTime(normZ * 2, window.state.ctx.currentTime);
             } catch(e){}
         }
-
-        // VIRTUAL MULTI-TRACK SYNTHESIZER & GROOVE ENGINE
-        window.grooveEngine = {
-            playing: false,
-            bpm: 124,
-            step: 0,
-            timerId: null,
-            nextNoteTime: 0,
-
-            async toggle() {
-                if (this.playing) this.stop();
-                else await this.start();
-            },
-
-            async start() {
-                if (!window.state.ctx) await initAudioEngine();
-                if (window.state.ctx.state === 'suspended') await window.state.ctx.resume();
-                window.state.active = true;
-                const banner = document.getElementById('audio-api-banner'); if (banner) banner.classList.remove('show');   // same dismiss-on-state-change fix as window.masterToggle: the DEMO AUDIO buttons (header, media panel) start the engine too, not just the banner's own PLAY DEMO button
-
-                this.playing = true;
-                this.step = 0;
-                this.nextNoteTime = window.state.ctx.currentTime + 0.05;
-                this.schedule();
-
-                const btn = document.getElementById('header-groove-btn');
-                const icon = document.getElementById('groove-icon');
-                const txt = document.getElementById('groove-text');
-                if (btn) btn.className = "flex items-center gap-1.5 px-2.5 py-1 bg-amber-500 text-black rounded text-[8.5px] font-mono font-black uppercase transition-all shadow-[0_0_12px_rgba(255,106,0,0.6)] animate-pulse";
-                if (icon) icon.className = "fa-solid fa-stop";
-                if (txt) txt.innerText = "STOP DEMO";
-
-                const mediaBtn = document.getElementById('media-groove-btn');
-                if (mediaBtn) mediaBtn.innerHTML = '<i class="fa-solid fa-stop mr-1.5"></i>STOP VIRTUAL GROOVE';
-
-                window.notify("Virtual Multi-Track Stems: GROOVE PLAYING", "play");
-            },
-
-            stop() {
-                this.playing = false;
-                if (this.timerId) clearTimeout(this.timerId);
-                const btn = document.getElementById('header-groove-btn');
-                const icon = document.getElementById('groove-icon');
-                const txt = document.getElementById('groove-text');
-                if (btn) btn.className = "flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/15 border border-amber-500/40 hover:bg-amber-500 hover:text-black rounded text-[8.5px] font-mono font-black text-amber-400 uppercase transition-all shadow-[0_0_10px_rgba(255,106,0,0.2)]";
-                if (icon) icon.className = "fa-solid fa-play";
-                if (txt) txt.innerText = "DEMO AUDIO";
-
-                const mediaBtn = document.getElementById('media-groove-btn');
-                if (mediaBtn) mediaBtn.innerHTML = '<i class="fa-solid fa-play mr-1.5"></i>START VIRTUAL GROOVE';
-
-                window.notify("Virtual Multi-Track Engine: STOPPED", "stop");
-            },
-
-            schedule() {
-                if (!this.playing || !window.state.ctx) return;
-                while (this.nextNoteTime < window.state.ctx.currentTime + 0.1) {
-                    this.playStep(this.step, this.nextNoteTime);
-                    const secondsPerBeat = 60.0 / this.bpm;
-                    this.nextNoteTime += 0.25 * secondsPerBeat; // 16th notes
-                    this.step = (this.step + 1) % 16;
-                }
-                this.timerId = setTimeout(() => this.schedule(), 25);
-            },
-
-            playStep(step, time) {
-                // CH 1: Kick Drum (4 on the floor + step 14)
-                if ((step % 4 === 0 || step === 14) && !window.state.channelMutes[0]) {
-                    this.synthKick(time);
-                }
-                // CH 2: Snare Drum (backbeat on steps 4, 12)
-                if ((step === 4 || step === 12) && !window.state.channelMutes[1]) {
-                    this.synthSnare(time);
-                }
-                // CH 3: Closed / Open Hi-Hat
-                if (!window.state.channelMutes[2]) {
-                    this.synthHiHat(time, step % 4 === 2);
-                }
-                // CH 4: Synth Bassline
-                if ([0, 3, 6, 8, 10, 14].includes(step) && !window.state.channelMutes[3]) {
-                    const bassNotes = [55, 55, 65.4, 73.4, 82.4, 55, 65.4, 49];
-                    this.synthBass(time, bassNotes[Math.floor(step / 2) % bassNotes.length]);
-                }
-                // CH 5 & 6: Warm Synth Chords
-                if ((step === 0 || step === 8) && !window.state.channelMutes[4]) {
-                    this.synthChord(time, step === 0 ? [220, 261.6, 329.6] : [174.6, 220, 261.6]);
-                }
-            },
-
-            synthKick(time) {
-                const ctx = window.state.ctx;
-                const osc = ctx.createOscillator();
-                const gain = ctx.createGain();
-                osc.frequency.setValueAtTime(140, time);
-                osc.frequency.exponentialRampToValueAtTime(45, time + 0.08);
-                gain.gain.setValueAtTime(1.0, time);
-                gain.gain.exponentialRampToValueAtTime(0.001, time + 0.28);
-                osc.connect(gain);
-                gain.connect(window.state.nodes.channelPostGains[0]);
-                osc.start(time);
-                osc.stop(time + 0.3);
-                window.state.channelLevels[0] = 0.95;
-            },
-
-            synthSnare(time) {
-                const ctx = window.state.ctx;
-                // Noise burst
-                const bufferSize = ctx.sampleRate * 0.18;
-                const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-                const data = buffer.getChannelData(0);
-                for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1);
-
-                const noise = ctx.createBufferSource();
-                noise.buffer = buffer;
-                const filter = ctx.createBiquadFilter();
-                filter.type = 'highpass';
-                filter.frequency.setValueAtTime(800, time);
-
-                const gain = ctx.createGain();
-                gain.gain.setValueAtTime(0.8, time);
-                gain.gain.exponentialRampToValueAtTime(0.001, time + 0.18);
-
-                noise.connect(filter);
-                filter.connect(gain);
-                gain.connect(window.state.nodes.channelPostGains[1]);
-                noise.start(time);
-                noise.stop(time + 0.2);
-                window.state.channelLevels[1] = 0.85;
-            },
-
-            synthHiHat(time, open) {
-                const ctx = window.state.ctx;
-                const dur = open ? 0.22 : 0.05;
-                const bufferSize = ctx.sampleRate * dur;
-                const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-                const data = buffer.getChannelData(0);
-                for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1);
-
-                const noise = ctx.createBufferSource();
-                noise.buffer = buffer;
-                const filter = ctx.createBiquadFilter();
-                filter.type = 'highpass';
-                filter.frequency.setValueAtTime(7500, time);
-
-                const gain = ctx.createGain();
-                gain.gain.setValueAtTime(open ? 0.45 : 0.25, time);
-                gain.gain.exponentialRampToValueAtTime(0.001, time + dur);
-
-                noise.connect(filter);
-                filter.connect(gain);
-                gain.connect(window.state.nodes.channelPostGains[2]);
-                noise.start(time);
-                noise.stop(time + dur);
-                window.state.channelLevels[2] = 0.6;
-            },
-
-            synthBass(time, freq) {
-                const ctx = window.state.ctx;
-                const osc = ctx.createOscillator();
-                osc.type = 'sawtooth';
-                osc.frequency.setValueAtTime(freq, time);
-
-                const filter = ctx.createBiquadFilter();
-                filter.type = 'lowpass';
-                filter.frequency.setValueAtTime(600, time);
-                filter.frequency.exponentialRampToValueAtTime(160, time + 0.15);
-                filter.Q.setValueAtTime(4.0, time);
-
-                const gain = ctx.createGain();
-                gain.gain.setValueAtTime(0.7, time);
-                gain.gain.exponentialRampToValueAtTime(0.001, time + 0.2);
-
-                osc.connect(filter);
-                filter.connect(gain);
-                gain.connect(window.state.nodes.channelPostGains[3]);
-                osc.start(time);
-                osc.stop(time + 0.22);
-                window.state.channelLevels[3] = 0.8;
-            },
-
-            synthChord(time, freqs) {
-                const ctx = window.state.ctx;
-                freqs.forEach((f, idx) => {
-                    const osc = ctx.createOscillator();
-                    osc.type = 'triangle';
-                    osc.frequency.setValueAtTime(f, time);
-
-                    const gain = ctx.createGain();
-                    gain.gain.setValueAtTime(0.2, time);
-                    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.6);
-
-                    osc.connect(gain);
-                    gain.connect(window.state.nodes.channelPostGains[4 + (idx % 2)]);
-                    osc.start(time);
-                    osc.stop(time + 0.65);
-                });
-                window.state.channelLevels[4] = 0.7;
-                window.state.channelLevels[5] = 0.7;
-            }
-        };
 
         // LIVE MASTER USB BROADCAST RECORDER
         window.recEngine = {
@@ -3919,10 +3709,6 @@ const cArea = document.getElementById('content-area');
                 else if (presetType === 'aes') src = `AES ${i + 1}`;
                 else if (presetType === 'usb') src = `USB ${i + 1}`;
                 else if (presetType === 'dante') src = `DNT ${i + 1}`;
-                else if (presetType === 'groove') {
-                    const stems = ['KICK', 'SNARE', 'HI-HAT', 'BASS', 'SYNTH', 'PAD'];
-                    src = i < 6 ? stems[i] : `LOC ${i + 1}`;
-                }
                 window.state.channelSources[i] = src;
                 const srcBtn = document.getElementById(`ch-src-btn-${i}`);
                 if (srcBtn) srcBtn.textContent = src;
@@ -3951,7 +3737,7 @@ const cArea = document.getElementById('content-area');
 
         window.renderPatchTableRows = function(startIdx, endIdx) {
             const sources = [
-                'LOC', 'AES', 'USB', 'DNT', 'GEN', 'GROOVE'
+                'LOC', 'AES', 'USB', 'DNT', 'GEN'
             ];
             let rows = '';
             for (let i = startIdx; i < endIdx; i++) {
@@ -3979,10 +3765,6 @@ const cArea = document.getElementById('content-area');
                             ${Array.from({length:32}, (_, s) => `<option value="DNT ${s+1}" ${currentSrc === `DNT ${s+1}` ? 'selected' : ''}>DANTE ${s+1} (AoIP)</option>`).join('')}
                             <option value="GEN SINE" ${currentSrc === 'GEN SINE' ? 'selected' : ''}>SIG GEN: 1kHz Sine</option>
                             <option value="GEN PINK" ${currentSrc === 'GEN PINK' ? 'selected' : ''}>SIG GEN: Pink Noise</option>
-                            <option value="KICK" ${currentSrc === 'KICK' ? 'selected' : ''}>GROOVE: Kick Drum</option>
-                            <option value="SNARE" ${currentSrc === 'SNARE' ? 'selected' : ''}>GROOVE: Snare Drum</option>
-                            <option value="HI-HAT" ${currentSrc === 'HI-HAT' ? 'selected' : ''}>GROOVE: Hi-Hat</option>
-                            <option value="BASS" ${currentSrc === 'BASS' ? 'selected' : ''}>GROOVE: Synth Bass</option>
                         </select>
                     </td>
                     <td class="p-2">
@@ -5615,18 +5397,8 @@ const cArea = document.getElementById('content-area');
                   <span class="px-2 py-0.5 rounded text-[7.5px] bg-cyan-500/20 text-cyan-400 border border-cyan-500/40 font-bold">BIT-PERFECT STREAMING</span>
                 </div>
 
-                <!-- Existing Media Utilities (Groove, Calibration, Local Audio) -->
+                <!-- Existing Media Utilities (Calibration, Local Audio) -->
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-2.5">
-                  <!-- 1. Virtual Multi-Track Groove Synth -->
-                  <div class="bg-black/70 p-2.5 rounded-lg border border-amber-500/30 flex flex-col justify-between">
-                    <div>
-                      <span class="font-bold text-amber-400 text-[8px] block mb-1">VIRTUAL MULTI-TRACK GROOVE</span>
-                      <p class="text-[7px] text-slate-400 mb-2">5-stem procedural groove engine routed through Channels 1-6.</p>
-                    </div>
-                    <button id="media-groove-btn" onclick="window.grooveEngine.toggle()" class="w-full py-1.5 bg-amber-500 text-black font-black uppercase rounded text-[7.5px] hover:bg-amber-400 transition">
-                      <i class="fa-solid fa-play mr-1"></i> START VIRTUAL GROOVE
-                    </button>
-                  </div>
 
                   <!-- 2. Test Tone Generator -->
                   <div class="bg-black/70 p-2.5 rounded-lg border border-cyan-500/30 flex flex-col justify-between">
@@ -6035,7 +5807,6 @@ const cArea = document.getElementById('content-area');
                       <button onclick="window.applyPatchPreset('aes')" class="px-2 py-0.5 rounded bg-white/5 hover:bg-cyan-500/20 text-slate-300 hover:text-cyan-300 border border-white/10 text-[7.5px] font-bold transition">STAGEBOX AES50-A</button>
                       <button onclick="window.applyPatchPreset('usb')" class="px-2 py-0.5 rounded bg-white/5 hover:bg-amber-500/20 text-slate-300 hover:text-amber-300 border border-white/10 text-[7.5px] font-bold transition">USB ASIO DAW</button>
                       <button onclick="window.applyPatchPreset('dante')" class="px-2 py-0.5 rounded bg-white/5 hover:bg-purple-500/20 text-slate-300 hover:text-purple-300 border border-white/10 text-[7.5px] font-bold transition">DANTE NETWORK</button>
-                      <button onclick="window.applyPatchPreset('groove')" class="px-2 py-0.5 rounded bg-emerald-500/15 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30 text-[7.5px] font-bold transition">GROOVE STEMS 1-6</button>
                     </div>
                   </div>
 
@@ -6435,9 +6206,6 @@ const cArea = document.getElementById('content-area');
                       </button>
                       <button onclick="if(window.syncTapToMetronome)window.syncTapToMetronome();" class="px-2.5 py-1 bg-lime-500/15 hover:bg-lime-500 hover:text-black text-lime-400 rounded font-bold text-[8px] uppercase border border-lime-500/30 transition-all flex items-center gap-1">
                         <i class="fa-solid fa-metronome"></i> SYNC METRONOME
-                      </button>
-                      <button onclick="if(window.grooveEngine){window.grooveEngine.bpm=window.tapTempoState.bpm||120;window.notify('BPM Synced to Groove Engine: '+(window.tapTempoState.bpm||120),'music');}" class="px-2.5 py-1 bg-emerald-500/15 hover:bg-emerald-500 hover:text-black text-emerald-400 rounded font-bold text-[8px] uppercase border border-emerald-500/30 transition-all flex items-center gap-1">
-                        <i class="fa-solid fa-music"></i> SYNC GROOVE
                       </button>
                     </div>
                   </div>
@@ -11209,6 +10977,122 @@ const cArea = document.getElementById('content-area');
         if (!tryMount()) { let k = 0; const iv = setInterval(() => { if (tryMount() || ++k > 120) clearInterval(iv); }, 500); }
         return api;
     })();
+        // ───────────────────────── SYSTEM OPTIMIZE (1.22.1.0 Beta) ─────────────────────────
+        // A page that measures the running app and offers one-tap, reversible optimisations with real before/after numbers. The readings are
+        // measured, not invented: FPS and frame time from a requestAnimationFrame sampler, JS heap from performance.memory where the browser
+        // exposes it, cores/RAM from the Navigator, and the live audio-node / stream count from the engine. The levers all drive real code:
+        // ECO ENGINE MODE throttles the meter loop (window.setLowPowerMode), METER RATE multiplies that throttle (window.state.meterSkip, honored
+        // in startMeterLoop), LITE UI drops the backdrop-blur compositing (html.am-lite), and SUSPEND IDLE ENGINE suspends the AudioContext when
+        // nothing is making sound (ctx.suspend/resume), which is the biggest saver when the mixer is left open and idle.
+        //@@SYSOPT-MATH-START
+        const sysOptMath = (() => {
+            // frame deltas (ms) -> fps / average / worst, and a rough "render budget used" against a 60 Hz (16.7 ms) frame
+            function summarize(deltas) {
+                const d = (deltas || []).filter(x => x > 0 && x < 1000);
+                if (!d.length) return { fps: 0, avgMs: 0, worstMs: 0, budgetPct: 0, samples: 0 };
+                const avg = d.reduce((a, b) => a + b, 0) / d.length, worst = Math.max(...d);
+                return { fps: Math.round(1000 / avg), avgMs: Math.round(avg * 10) / 10, worstMs: Math.round(worst * 10) / 10, budgetPct: Math.min(100, Math.round(avg / (1000 / 60) * 100)), samples: d.length };
+            }
+            // before/after delta for a benchmark: fps gain and heap change
+            function compare(before, after) {
+                return { fpsBefore: before.fps, fpsAfter: after.fps, fpsGain: after.fps - before.fps,
+                    heapBeforeMb: before.heapMb != null ? before.heapMb : null, heapAfterMb: after.heapMb != null ? after.heapMb : null,
+                    heapSavedMb: before.heapMb != null && after.heapMb != null ? Math.round((before.heapMb - after.heapMb) * 10) / 10 : null };
+            }
+            const grade = fps => fps >= 55 ? 'SMOOTH' : fps >= 40 ? 'OK' : fps >= 25 ? 'HEAVY' : 'STRAINED';
+            return { summarize, compare, grade };
+        })();
+        //@@SYSOPT-MATH-END
+        window.sysOptimize = (() => {
+            const M = sysOptMath;
+            const deltas = []; let last = 0, fpsNow = 0, running = false, bench = null;
+            const heapMb = () => { try { return performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1048576 * 10) / 10 : null; } catch (_) { return null; } };
+            function loop(t) {
+                if (last) { const dt = t - last; deltas.push(dt); if (deltas.length > 120) deltas.shift(); }
+                last = t;
+                if (running) requestAnimationFrame(loop);
+            }
+            function start() { if (!running) { running = true; last = 0; requestAnimationFrame(loop); } }
+            function stop() { running = false; }
+            // a live snapshot of the system and the engine
+            function snapshot() {
+                const s = M.summarize(deltas.slice(-90));
+                const st = window.state || {}, ctx = st.ctx;
+                let nodes = 0; try { const n = st.nodes || {}; nodes = Object.values(n).reduce((a, v) => a + (Array.isArray(v) ? v.length : v ? 1 : 0), 0); } catch (_) { nodes = 0; }
+                let active = 0, peak = 0; try { const r = window.rtEngine; if (r && r.ch) for (let i = 0; i < (window.licenseChannels || 32); i++) { const pk = r.ch[i] ? r.ch[i].pk || 0 : 0; if (pk >= 0.00003) active++; peak = Math.max(peak, pk); } } catch (_) { /* no engine */ }
+                return { fps: s.fps || fpsNow, avgMs: s.avgMs, worstMs: s.worstMs, budgetPct: s.budgetPct, grade: M.grade(s.fps || 60),
+                    heapMb: heapMb(), cores: navigator.hardwareConcurrency || null, devMemGb: navigator.deviceMemory || null,
+                    ctx: ctx ? ctx.state : 'stopped', sampleRate: ctx ? ctx.sampleRate : null, nodes, activeChannels: active, idle: ctx ? (ctx.state === 'running' && active === 0) : false,
+                    eco: !!st.lowPowerMode, lite: document.documentElement.classList.contains('am-lite'), meterSkip: st.meterSkip || 1 };
+            }
+            const api = {
+                math: M, snapshot, start, stop,
+                eco(on) { if (window.setLowPowerMode) window.setLowPowerMode(on === undefined ? !window.state.lowPowerMode : !!on); api.render(); },
+                lite(on) { const el = document.documentElement; el.classList.toggle('am-lite', on === undefined ? !el.classList.contains('am-lite') : !!on); try { localStorage.setItem('halx_lite', el.classList.contains('am-lite') ? '1' : '0'); } catch (_) {} if (window.notify) window.notify('Lite UI ' + (el.classList.contains('am-lite') ? 'ON (no blur)' : 'OFF'), 'bolt'); api.render(); },
+                meterRate() { const st = window.state; st.meterSkip = st.meterSkip === 1 ? 2 : st.meterSkip === 2 ? 4 : 1; try { localStorage.setItem('halx_meterskip', String(st.meterSkip)); } catch (_) {} if (window.notify) window.notify('Meter rate: ' + (st.meterSkip === 1 ? 'FULL' : st.meterSkip === 2 ? 'HALF' : 'QUARTER'), 'gauge'); api.render(); },
+                async suspendIdle() {
+                    const ctx = window.state && window.state.ctx; if (!ctx) { if (window.notify) window.notify('The audio engine is not running', 'circle-info'); return; }
+                    if (ctx.state === 'running') { const snap = snapshot(); if (!snap.idle) { if (window.notify) window.notify('Audio is playing: not suspending (' + snap.activeChannels + ' active channel(s))', 'triangle-exclamation'); return; } await ctx.suspend(); if (window.notify) window.notify('Idle audio engine suspended — CPU freed. Press RESUME or ENGAGE to restart.', 'pause'); }
+                    else { await ctx.resume(); if (window.notify) window.notify('Audio engine resumed', 'play'); }
+                    api.render();
+                },
+                // BENCHMARK: measure FPS (and heap) now, flip ECO on, measure again, report both. Reversible: it restores the prior ECO state.
+                async benchmark() {
+                    if (bench) return; const wasEco = !!window.state.lowPowerMode;
+                    const sample = async ms => { deltas.length = 0; await new Promise(r => setTimeout(r, ms)); const s = M.summarize(deltas.slice()); return { fps: s.fps, heapMb: heapMb() }; };
+                    bench = { phase: 'before' }; api.render();
+                    if (wasEco && window.setLowPowerMode) window.setLowPowerMode(false, true);
+                    const before = await sample(1500);
+                    if (window.setLowPowerMode) window.setLowPowerMode(true, true); bench = { phase: 'after' }; api.render();
+                    const after = await sample(1500);
+                    if (!wasEco && window.setLowPowerMode) window.setLowPowerMode(false, true);   // restore
+                    bench = { result: M.compare(before, after) }; api.render();
+                    if (window.notify) window.notify('Benchmark: ' + before.fps + ' -> ' + after.fps + ' fps with ECO' + (bench.result.heapSavedMb != null ? ', heap ' + bench.result.heapSavedMb + ' MB' : ''), 'gauge');
+                },
+                render() {
+                    if (typeof document === 'undefined' || typeof document.getElementById !== 'function') return;
+                    const box = document.getElementById('sysopt-panel'); if (!box) return;
+                    const s = snapshot();
+                    const set = (id, v) => { const e = document.getElementById(id); if (e && e.textContent !== String(v)) e.textContent = String(v); };
+                    set('so-fps', s.fps + ' FPS · ' + s.grade); set('so-frame', s.avgMs + ' ms (worst ' + s.worstMs + ') · ' + s.budgetPct + '% budget');
+                    set('so-heap', s.heapMb != null ? s.heapMb + ' MB' : 'n/a (browser hides it)'); set('so-dev', (s.cores || '?') + ' cores' + (s.devMemGb ? ' · ' + s.devMemGb + ' GB' : ''));
+                    set('so-engine', s.ctx.toUpperCase() + (s.sampleRate ? ' · ' + (s.sampleRate / 1000) + ' kHz' : '') + ' · ' + s.nodes + ' nodes · ' + s.activeChannels + ' active');
+                    const chip = (id, on, onText, offText) => { const e = document.getElementById(id); if (!e) return; e.textContent = on ? onText : offText; e.setAttribute('aria-pressed', on ? 'true' : 'false'); e.className = 'px-2.5 py-1 rounded text-[8px] font-black uppercase border ' + (on ? 'bg-emerald-500 text-black border-emerald-500' : 'bg-white/5 text-slate-300 border-white/10'); };
+                    chip('so-eco', s.eco, 'ECO ON', 'ECO OFF'); chip('so-lite', s.lite, 'LITE UI ON', 'LITE UI OFF');
+                    const mr = document.getElementById('so-meter'); if (mr) { mr.textContent = 'METER: ' + (s.meterSkip === 1 ? 'FULL' : s.meterSkip === 2 ? 'HALF' : 'QUARTER'); mr.className = 'px-2.5 py-1 rounded text-[8px] font-black uppercase border ' + (s.meterSkip > 1 ? 'bg-amber-400 text-black border-amber-400' : 'bg-white/5 text-slate-300 border-white/10'); }
+                    const sus = document.getElementById('so-suspend'); if (sus) sus.textContent = s.ctx === 'suspended' ? 'RESUME ENGINE' : 'SUSPEND IDLE ENGINE';
+                    const idle = document.getElementById('so-idle'); if (idle) { idle.textContent = s.ctx === 'running' ? (s.idle ? 'Engine running but idle (no signal): safe to suspend.' : 'Engine active: ' + s.activeChannels + ' channel(s) with signal.') : s.ctx === 'suspended' ? 'Engine suspended (CPU freed).' : 'Engine not started.'; }
+                    const br = document.getElementById('so-bench'); if (br) { if (bench && bench.phase) br.textContent = 'Measuring (' + bench.phase + ' ECO)…'; else if (bench && bench.result) { const r = bench.result; br.textContent = 'ECO result: ' + r.fpsBefore + ' -> ' + r.fpsAfter + ' FPS (' + (r.fpsGain >= 0 ? '+' : '') + r.fpsGain + ')' + (r.heapSavedMb != null ? ' · heap ' + (r.heapSavedMb >= 0 ? 'freed ' : 'grew ') + Math.abs(r.heapSavedMb) + ' MB' : ''); } else br.textContent = ''; }
+                },
+                mount() {
+                    if (document.getElementById('sysopt-panel')) return;
+                    const tab = document.getElementById('tab-sys'), host = tab && tab.querySelector('.page-scroll-inner'); if (!host) return;
+                    try { if (localStorage.getItem('halx_lite') === '1') document.documentElement.classList.add('am-lite'); const ms = parseInt(localStorage.getItem('halx_meterskip'), 10); if (ms === 2 || ms === 4) window.state.meterSkip = ms; } catch (_) {}
+                    const d = document.createElement('div'); d.id = 'sysopt-panel'; d.className = 'glass-panel p-3 rounded-xl wing-bezel space-y-2.5';
+                    const metric = (icon, label, id) => `<div class="bg-black/50 border border-white/10 rounded-lg p-2"><div class="text-[6.5px] text-slate-500 uppercase font-bold">${label}</div><div id="${id}" class="text-[9px] font-black text-white"><i class="fa-solid ${icon} text-cyan-400 mr-1"></i>—</div></div>`;
+                    d.innerHTML = `<div class="flex flex-wrap justify-between items-center gap-2">
+                        <div><h3 class="text-xs font-black text-white font-wing tracking-wider uppercase"><i class="fa-solid fa-gauge-high text-emerald-400 mr-1"></i>SYSTEM OPTIMIZE</h3><p class="text-[7.5px] text-slate-400">Live performance and one-tap, reversible optimisations with before/after numbers. Nothing here is faked — the readings are measured.</p></div>
+                        <button id="so-bench-btn" type="button" class="px-3 py-1.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 text-[8px] font-black uppercase">BENCHMARK ECO</button></div>
+                        <div class="grid grid-cols-2 md:grid-cols-5 gap-2">${metric('fa-film', 'Frame rate', 'so-fps')}${metric('fa-stopwatch', 'Frame time', 'so-frame')}${metric('fa-memory', 'JS heap (RAM)', 'so-heap')}${metric('fa-microchip', 'Device', 'so-dev')}${metric('fa-wave-square', 'Audio engine', 'so-engine')}</div>
+                        <div class="flex flex-wrap gap-1.5 items-center pt-1 border-t border-white/10"><span class="text-[7px] text-slate-400 font-bold">ONE-TAP:</span>
+                        <button id="so-eco" type="button" aria-pressed="false">ECO OFF</button><button id="so-meter" type="button">METER: FULL</button><button id="so-lite" type="button" aria-pressed="false">LITE UI OFF</button><button id="so-suspend" type="button" class="px-2.5 py-1 rounded text-[8px] font-black uppercase border bg-white/5 text-amber-300 border-amber-500/40">SUSPEND IDLE ENGINE</button></div>
+                        <div id="so-idle" class="text-[7px] text-slate-500" aria-live="polite"></div>
+                        <div id="so-bench" class="text-[7.5px] text-emerald-300 font-bold" aria-live="polite"></div>`;
+                    host.insertBefore(d, host.firstChild);
+                    document.getElementById('so-eco').onclick = () => api.eco();
+                    document.getElementById('so-lite').onclick = () => api.lite();
+                    document.getElementById('so-meter').onclick = () => api.meterRate();
+                    document.getElementById('so-suspend').onclick = () => api.suspendIdle();
+                    document.getElementById('so-bench-btn').onclick = () => api.benchmark();
+                    start(); api.render();
+                    setInterval(() => { if (!document.hidden) api.render(); }, 1000);
+                },
+            };
+            const tryMount = () => { if (typeof document === 'undefined' || typeof document.querySelector !== 'function') return true; if (document.querySelector('#tab-sys .page-scroll-inner')) { api.mount(); return true; } return false; };
+            if (!tryMount()) { let k = 0; const iv = setInterval(() => { if (tryMount() || ++k > 120) clearInterval(iv); }, 500); }
+            return api;
+        })();
+
         window.setMsMono = function() { window.setMsWidth(0); };   // quick collapse-to-mono, same math as width 0%
         window.resetMsProcessing = function() { window.setMsMidDb(0); window.setMsWidth(100); window.notify('Mid/Side Processing Reset', 'rotate-left'); };
 
@@ -11521,7 +11405,8 @@ const cArea = document.getElementById('content-area');
             const vuEl = i => { let e = vuEls[i]; if (!e || !e.fill.isConnected) { e = vuEls[i] = { fill: document.getElementById(`lane-meter-vu-${i}`), hold: document.getElementById(`lane-peak-hold-${i}`), txt: document.getElementById(`ch-vu-db-${i}`), f: -1, p: -1, l: '' }; if (!e.fill) { vuEls[i] = null; return null; } } return e; };
             let lowPowerFrame = 0;
             function updateMeters() {
-                if (window.state.lowPowerMode && (++lowPowerFrame % 4 !== 0)) { requestAnimationFrame(updateMeters); return; }   // skip 3 of every 4 frames
+                const _skip = (window.state.lowPowerMode ? 4 : 1) * (window.state.meterSkip || 1);   // ECO (4x) times the SYSTEM OPTIMIZE meter-rate factor
+                if (_skip > 1 && (++lowPowerFrame % _skip !== 0)) { requestAnimationFrame(updateMeters); return; }
                 for (let i = 0; i < CHANNELS; i++) {
                     if (window.state.channelAutoFader[i] && !(window.faderAuto && window.faderAuto.reading(i))) window.rideAutoFader(i);   // automation READ wins over AUTO FADER
                     if (window.state.noiseGate[i] && window.state.noiseGate[i].enabled) {
@@ -23295,6 +23180,8 @@ t.Omnitone=e(11)},function(A,t,e){"use strict";const i=e(1),n=e(4),s=e(12),o=e(6
             ['STORE', 'ذخیره', 'تخزين', 'محفوظ', 'GUARDAR', 'MÉMORISER', 'SPEICHERN', 'ARMAZENAR', 'СОХРАНИТЬ', 'KAYDET', 'संग्रहित करें', '存储', '保存', '저장', 'SIMPAN', 'SIMPAN', 'MEMORIZZA', 'OPSLAAN', 'ZAPISZ', 'LƯU', 'จัดเก็บ', 'ЗБЕРЕГТИ'],
             ['CLEAR FX', 'پاک‌کردن افکت', 'مسح المؤثرات', 'ایف ایکس صاف کریں', 'LIMPIAR FX', 'EFFACER FX', 'FX LÖSCHEN', 'LIMPAR FX', 'СБРОС ЭФФЕКТОВ', 'FX TEMİZLE', 'FX साफ़ करें', '清除效果', 'FXをクリア', 'FX 지우기', 'KOSONGKAN FX', 'HAPUS FX', 'AZZERA FX', 'FX WISSEN', 'WYCZYŚĆ FX', 'XÓA FX', 'ล้าง FX', 'СКИНУТИ FX'],
             ['★ FAVOURITES', '★ موردعلاقه‌ها', '★ المفضلة', '★ پسندیدہ', '★ FAVORITOS', '★ FAVORIS', '★ FAVORITEN', '★ FAVORITOS', '★ ИЗБРАННОЕ', '★ FAVORİLER', '★ पसंदीदा', '★ 收藏', '★ お気に入り', '★ 즐겨찾기', '★ KEGEMARAN', '★ FAVORIT', '★ PREFERITI', '★ FAVORIETEN', '★ ULUBIONE', '★ YÊU THÍCH', '★ รายการโปรด', '★ ОБРАНЕ'],
+            ['SYSTEM OPTIMIZE', 'بهینه‌سازی سیستم', 'تحسين النظام', 'سسٹم آپٹیمائز', 'OPTIMIZAR SISTEMA', 'OPTIMISER LE SYSTÈME', 'SYSTEM OPTIMIEREN', 'OTIMIZAR SISTEMA', 'ОПТИМИЗАЦИЯ СИСТЕМЫ', 'SİSTEMİ OPTİMİZE ET', 'सिस्टम ऑप्टिमाइज़', '系统优化', 'システム最適化', '시스템 최적화', 'OPTIMUM SISTEM', 'OPTIMALKAN SISTEM', 'OTTIMIZZA SISTEMA', 'SYSTEEM OPTIMALISEREN', 'OPTYMALIZUJ SYSTEM', 'TỐI ƯU HỆ THỐNG', 'เพิ่มประสิทธิภาพระบบ', 'ОПТИМІЗАЦІЯ СИСТЕМИ'],
+            ['LITE UI OFF', 'رابط سبک خاموش', 'الواجهة الخفيفة متوقفة', 'لائٹ UI بند', 'IU LIGERA APAGADA', 'UI LÉGÈRE ARRÊT', 'LITE-UI AUS', 'IU LEVE DESLIG.', 'ЛЁГКИЙ UI ВЫКЛ', 'HAFİF ARAYÜZ KAPALI', 'लाइट UI बंद', '轻量界面 关', 'ライトUI オフ', '라이트 UI 끔', 'UI RINGKAS MATI', 'UI RINGAN MATI', 'UI LEGGERA OFF', 'LITE-UI UIT', 'LEKKIE UI WYŁ.', 'GIAO DIỆN NHẸ TẮT', 'UI เบา ปิด', 'ЛЕГКИЙ UI ВИМК'],
             ['UPGRADE TO PRO', 'ارتقا به PRO', 'الترقية إلى PRO', 'PRO میں اپ گریڈ کریں', 'ACTUALIZAR A PRO', 'PASSER À PRO', 'AUF PRO UPGRADEN', 'ATUALIZAR PARA PRO', 'ПЕРЕЙТИ НА PRO', "PRO'YA YÜKSELT", 'PRO में अपग्रेड करें', '升级到 PRO', 'PRO にアップグレード', 'PRO로 업그레이드', 'NAIK TARAF KE PRO', 'UPGRADE KE PRO', 'PASSA A PRO', 'UPGRADEN NAAR PRO', 'PRZEJDŹ NA PRO', 'NÂNG CẤP LÊN PRO', 'อัปเกรดเป็น PRO', 'ПЕРЕЙТИ НА PRO'],
             ['UPGRADE TO STUDIO MASTER', 'ارتقا به STUDIO MASTER', 'الترقية إلى STUDIO MASTER', 'STUDIO MASTER میں اپ گریڈ کریں', 'ACTUALIZAR A STUDIO MASTER', 'PASSER À STUDIO MASTER', 'AUF STUDIO MASTER UPGRADEN', 'ATUALIZAR PARA STUDIO MASTER', 'ПЕРЕЙТИ НА STUDIO MASTER', "STUDIO MASTER'A YÜKSELT", 'STUDIO MASTER में अपग्रेड करें', '升级到 STUDIO MASTER', 'STUDIO MASTER にアップグレード', 'STUDIO MASTER로 업그레이드', 'NAIK TARAF KE STUDIO MASTER', 'UPGRADE KE STUDIO MASTER', 'PASSA A STUDIO MASTER', 'UPGRADEN NAAR STUDIO MASTER', 'PRZEJDŹ NA STUDIO MASTER', 'NÂNG CẤP LÊN STUDIO MASTER', 'อัปเกรดเป็น STUDIO MASTER', 'ПЕРЕЙТИ НА STUDIO MASTER'],
             ['COPY', 'کپی', 'نسخ', 'کاپی', 'COPIAR', 'COPIER', 'KOPIEREN', 'COPIAR', 'КОПИРОВАТЬ', 'KOPYALA', 'कॉपी', '复制', 'コピー', '복사', 'SALIN', 'SALIN', 'COPIA', 'KOPIËREN', 'KOPIUJ', 'SAO CHÉP', 'คัดลอก', 'КОПІЮВАТИ'],
@@ -23305,7 +23192,6 @@ t.Omnitone=e(11)},function(A,t,e){"use strict";const i=e(1),n=e(4),s=e(12),o=e(6
             ['ENGAGE', 'روشن', 'تشغيل', 'چالو', 'ACTIVAR', 'ENGAGER', 'EINSCHALTEN', 'LIGAR', 'ВКЛЮЧИТЬ', 'BAŞLAT', 'चालू करें', '启动', '起動', '시작', 'HIDUPKAN', 'AKTIFKAN', 'AVVIA', 'INSCHAKELEN', 'WŁĄCZ', 'BẬT', 'เปิด', 'УВІМКНУТИ'],
             ['ONLINE', 'آنلاین', 'متصل', 'آن لائن', 'EN LÍNEA', 'EN LIGNE', 'ONLINE', 'ONLINE', 'В СЕТИ', 'ÇEVRİMİÇİ', 'ऑनलाइन', '在线', 'オンライン', '온라인', 'DALAM TALIAN', 'DARING', 'ONLINE', 'ONLINE', 'ONLINE', 'TRỰC TUYẾN', 'ออนไลน์', 'ОНЛАЙН'],
             ['ENTER CONSOLE', 'ورود به کنسول', 'دخول وحدة التحكم', 'کنسول میں داخل ہوں', 'ENTRAR A LA CONSOLA', 'ENTRER DANS LA CONSOLE', 'KONSOLE ÖFFNEN', 'ENTRAR NO CONSOLE', 'ОТКРЫТЬ КОНСОЛЬ', 'KONSOLA GİR', 'कंसोल खोलें', '进入控制台', 'コンソールへ', '콘솔 열기', 'MASUK KONSOL', 'MASUK KONSOL', 'ENTRA NELLA CONSOLE', 'CONSOLE OPENEN', 'OTWÓRZ KONSOLĘ', 'VÀO BẢNG ĐIỀU KHIỂN', 'เข้าสู่คอนโซล', 'ВІДКРИТИ КОНСОЛЬ'],
-            ['DEMO AUDIO', 'صدای نمونه', 'صوت تجريبي', 'ڈیمو آڈیو', 'AUDIO DE DEMOSTRACIÓN', 'AUDIO DÉMO', 'DEMO-AUDIO', 'ÁUDIO DE DEMONSTRAÇÃO', 'ДЕМО-ЗВУК', 'DEMO SES', 'डेमो ऑडियो', '演示音频', 'デモ音声', '데모 오디오', 'AUDIO DEMO', 'AUDIO DEMO', 'AUDIO DEMO', 'DEMO-AUDIO', 'DŹWIĘK DEMO', 'ÂM THANH DEMO', 'เสียงตัวอย่าง', 'ДЕМО-ЗВУК'],
             ['REC MASTER', 'ضبط مستر', 'تسجيل الماستر', 'ماسٹر ریکارڈ', 'GRABAR MASTER', 'ENREG. MASTER', 'MASTER AUFNEHMEN', 'GRAVAR MASTER', 'ЗАПИСЬ МАСТЕРА', 'MASTER KAYDI', 'मास्टर रिकॉर्ड', '录制总线', 'マスター録音', '마스터 녹음', 'RAKAM MASTER', 'REKAM MASTER', 'REGISTRA MASTER', 'MASTER OPNEMEN', 'NAGRAJ MASTER', 'GHI MASTER', 'บันทึกมาสเตอร์', 'ЗАПИС МАСТЕРА'],
             ['LANGUAGE', 'زبان', 'اللغة', 'زبان', 'IDIOMA', 'LANGUE', 'SPRACHE', 'IDIOMA', 'ЯЗЫК', 'DİL', 'भाषा', '语言', '言語', '언어', 'BAHASA', 'BAHASA', 'LINGUA', 'TAAL', 'JĘZYK', 'NGÔN NGỮ', 'ภาษา', 'МОВА'],
             ['ACCESSIBILITY', 'دسترس‌پذیری', 'إمكانية الوصول', 'رسائی پذیری', 'ACCESIBILIDAD', 'ACCESSIBILITÉ', 'BARRIEREFREIHEIT', 'ACESSIBILIDADE', 'СПЕЦИАЛЬНЫЕ ВОЗМОЖНОСТИ', 'ERİŞİLEBİLİRLİK', 'सुलभता', '无障碍', 'アクセシビリティ', '접근성', 'KEBOLEHCAPAIAN', 'AKSESIBILITAS', 'ACCESSIBILITÀ', 'TOEGANKELIJKHEID', 'DOSTĘPNOŚĆ', 'TRỢ NĂNG', 'การช่วยการเข้าถึง', 'ДОСТУПНІСТЬ'],
