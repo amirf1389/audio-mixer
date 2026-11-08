@@ -4324,17 +4324,21 @@ test('low power mode: throttles the always-running meter loop to 1 frame in 4 (t
   // the exact skip line that ships, run for real (not a reimplementation): 1000 frames with it OFF must all run the per-channel body, and with it
   // ON only every 4th must (the other 3 of 4 skip straight to the next requestAnimationFrame, which is where the CPU/battery saving comes from -
   // mixing, EQ, FX and the audio graph itself are untouched by this: only this loop's own DOM writes are throttled)
-  const m = /if \((window\.state\.lowPowerMode && \(\+\+lowPowerFrame % 4 !== 0\))\) \{ requestAnimationFrame\(updateMeters\); return; \}/.exec(html);
-  assert.ok(m, 'the skip line was not found as expected');
-  let lowPowerFrame = 0, bodyRuns = 0;
-  const window = { state: { lowPowerMode: false } };
-  const condition = m[1];
-  const runFrame = () => { if (eval(condition)) return; bodyRuns++; };
+  const skipDef = /const _skip = \(window\.state\.lowPowerMode \? 4 : 1\) \* \(window\.state\.meterSkip \|\| 1\);/.exec(html);
+  const skipLine = /if \(_skip > 1 && \(\+\+lowPowerFrame % _skip !== 0\)\) \{ requestAnimationFrame\(updateMeters\); return; \}/.exec(html);
+  assert.ok(skipDef && skipLine, 'the skip lines were not found as expected');
+  let lowPowerFrame = 0, bodyRuns = 0, _skip = 1;
+  const window = { state: { lowPowerMode: false, meterSkip: 1 } };
+  const cond = skipLine[0].match(/if \((.*?)\) \{/)[1];
+  const runFrame = () => { eval(skipDef[0].replace('const ', '')); if (eval('(' + cond + ')')) return; bodyRuns++; };   // assign the outer _skip, don't rebind
   for (let i = 0; i < 1000; i++) runFrame();
-  assert.strictEqual(bodyRuns, 1000, 'every frame must update the meters when low power mode is off');
+  assert.strictEqual(bodyRuns, 1000, 'every frame updates the meters when ECO is off and meter rate is full');
   bodyRuns = 0; lowPowerFrame = 0; window.state.lowPowerMode = true;
   for (let i = 0; i < 1000; i++) runFrame();
-  assert.strictEqual(bodyRuns, 250, 'exactly 1 frame in 4 must update the meters when low power mode is on');
+  assert.strictEqual(bodyRuns, 250, 'exactly 1 frame in 4 when ECO is on');
+  bodyRuns = 0; lowPowerFrame = 0; window.state.lowPowerMode = false; window.state.meterSkip = 2;
+  for (let i = 0; i < 1000; i++) runFrame();
+  assert.strictEqual(bodyRuns, 500, 'SYSTEM OPTIMIZE meter rate HALF runs 1 frame in 2');
 });
 
 test('auto fader: rides a channel toward -18 dBFS from its real pre-fader input level, holds its own state outside the step-quantized fader element, hands control back on a manual drag; every meter now agrees on one -90 dBFS silence floor', () => {
@@ -5918,4 +5922,42 @@ test('spatial architecture doc: honest about trademarks and figures, AMFB DNA is
   assert.match(d, /Confidence/, 'a confidence column so figures are not quoted blind');
   for (const tm of ['Dolby Atmos', 'DTS:X', 'Sony 360', 'Auro-3D', 'MPEG-H', 'THX', 'IMAX Enhanced']) assert.ok(d.includes(tm), tm + ' covered');
   assert.match(d, /Shipped \(1\.22\.1\.0\)|Shipped/i, 'crossfeed / 360 marked as shipped, the rest planned');
+});
+
+// ---- Demo-audio removal + SYSTEM OPTIMIZE page (1.22.1.0 Beta) -----------------------------------------------------------------------------------
+test('demo audio removed from every platform: no groove engine, no DEMO AUDIO / VIRTUAL GROOVE, no GROOVE sources, the page still parses', () => {
+  const fsx = require('node:fs'), pathx = require('node:path');
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  assert.ok(!/grooveEngine/.test(html), 'window.grooveEngine is gone');
+  assert.ok(!/DEMO AUDIO|VIRTUAL GROOVE|VIRTUAL MULTI-TRACK GROOVE|START VIRTUAL GROOVE|SYNC GROOVE|GROOVE STEMS/.test(html), 'no demo/groove UI text');
+  assert.ok(!/GROOVE: Kick|GROOVE: Snare|GROOVE: Hi-Hat|GROOVE: Synth Bass/.test(html), 'no GROOVE channel sources');
+  assert.ok(!/header-groove-btn|media-groove-btn|groove-icon|groove-text/.test(html), 'no groove element ids');
+  assert.ok(!/applyPatchPreset\('groove'\)|presetType === 'groove'/.test(html), 'no groove patch preset');
+  // index.html is the single page shipped on every platform (web, desktop WebView, Android/iOS WebView): removing it here removes it everywhere.
+  // other tracked files must not reintroduce it
+  const { execSync } = require('node:child_process');
+  const hits = execSync("git -C " + JSON.stringify(pathx.join(__dirname, '..')) + " grep -liE 'grooveengine|demo audio|virtual groove' -- ':!dist' ':!bridge/test.js' ':!*.md' || true", { encoding: 'utf8' }).trim();
+  assert.strictEqual(hits, '', 'no file references demo audio: ' + hits);
+});
+
+test('SYSTEM OPTIMIZE: measured FPS/heap maths, real one-tap levers (ECO / meter rate / lite / suspend), 22 languages', () => {
+  const fsx = require('node:fs'), pathx = require('node:path');
+  const html = fsx.readFileSync(pathx.join(__dirname, '..', 'index.html'), 'utf8');
+  const a = html.indexOf('//@@SYSOPT-MATH-START'), b = html.indexOf('//@@SYSOPT-MATH-END'); assert.ok(a > 0 && b > a);
+  const M = new Function(html.slice(a, b) + ';return sysOptMath;')();
+  assert.deepStrictEqual(M.summarize([]), { fps: 0, avgMs: 0, worstMs: 0, budgetPct: 0, samples: 0 });
+  const s = M.summarize([16.67, 16.67, 16.67, 16.67]); assert.strictEqual(s.fps, 60); assert.strictEqual(s.budgetPct, 100);
+  assert.strictEqual(M.summarize([33.3, 33.3]).fps, 30); assert.ok(M.summarize([8, 8, 8]).fps >= 120);
+  assert.ok(M.summarize([5, 5, 2000, 5]).samples === 3, 'absurd deltas are dropped');
+  assert.strictEqual(M.grade(60), 'SMOOTH'); assert.strictEqual(M.grade(45), 'OK'); assert.strictEqual(M.grade(30), 'HEAVY'); assert.strictEqual(M.grade(10), 'STRAINED');
+  const c = M.compare({ fps: 28, heapMb: 120 }, { fps: 58, heapMb: 110 }); assert.strictEqual(c.fpsGain, 30); assert.strictEqual(c.heapSavedMb, 10);
+  assert.strictEqual(M.compare({ fps: 30, heapMb: null }, { fps: 40, heapMb: null }).heapSavedMb, null, 'no heap when the browser hides it');
+  // the levers drive real engine code
+  assert.ok(html.includes('window.setLowPowerMode') && html.includes("window.state.meterSkip") && html.includes("classList.toggle('am-lite'") && html.includes('ctx.suspend()') && html.includes('ctx.resume()'));
+  assert.ok(html.includes("const _skip = (window.state.lowPowerMode ? 4 : 1) * (window.state.meterSkip || 1);"), 'the meter loop honours the optimize meter-rate factor');
+  for (const id of ['sysopt-panel', 'so-fps', 'so-heap', 'so-eco', 'so-meter', 'so-lite', 'so-suspend', 'so-bench-btn']) assert.ok(html.includes(id), id);
+  for (const w of ['SYSTEM OPTIMIZE', 'LITE UI OFF']) {
+    const row = new RegExp("\\n {12}\\['" + w + "',([^\\n]*)\\],").exec(html); assert.ok(row, w + ' translated');
+    assert.strictEqual(row[0].match(/'(?:[^'\\]|\\.)*'|"[^"]*"/g).length, 22, w + ': all 22 languages');
+  }
 });
