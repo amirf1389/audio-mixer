@@ -5694,3 +5694,47 @@ test('ISO 3-BAND isolator: Linkwitz-Riley bands sum flat at 0 dB, each KILL remo
     assert.ok(!gen.page('sandbox').includes('BUILD EDITION TOKEN'), 'editions are vendor-only');
   });
 }
+
+// ---- DUAL MODE FADER AUTOMATION + AI MODE CONTROL (block 1, 1.22.1.0 Beta) ----------------------------------------------------------------------
+test('automation math: lanes interpolate and hold, a write pass replaces only its range, thinning keeps held faders cheap', () => {
+  const s = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'index.html'), 'utf8');
+  const a = s.indexOf('//@@AUTOMATION-MATH-START'), b = s.indexOf('//@@AUTOMATION-MATH-END'); assert.ok(a > 0 && b > a);
+  const M = new Function(s.slice(a, b) + ';return autoMath;')();
+  assert.strictEqual(M.valueAt([], 3), null, 'empty lane: nothing to read');
+  const L = [[1, -20], [3, 0], [5, -10]];
+  assert.strictEqual(M.valueAt(L, 0), -20, 'held before the first point'); assert.strictEqual(M.valueAt(L, 9), -10, 'held after the last');
+  assert.strictEqual(M.valueAt(L, 2), -10); assert.strictEqual(M.valueAt(L, 4), -5); assert.strictEqual(M.valueAt(L, 3), 0);
+  const w = M.writeRange(L, 2.5, 4.5, [[2.5, 6], [3.5, 6.04], [9, 99]]);
+  assert.deepStrictEqual(w, [[1, -20], [2.5, 6], [3.5, 6], [5, -10]], 'inside the pass replaced (rounded to 0.1 dB), outside kept, a point past the pass dropped');
+  assert.deepStrictEqual(M.writeRange([], 0, 1, [[0.5, 50]]), [[0.5, 10]], 'clamped to +10 dB');
+  assert.ok(M.shouldAdd(null, 0, 0)); assert.ok(!M.shouldAdd([0, 0], 0.1, 0.1), 'small move, short time: skipped'); assert.ok(M.shouldAdd([0, 0], 0.1, 0.3)); assert.ok(M.shouldAdd([0, 0], 0.6, 0), 'held fader: one point every 0.5 s'); assert.ok(!M.shouldAdd([0, 0], 0.01, 5), 'at most one point per 20 ms');
+  // console modes
+  const st = o => M.step({ playing: true, hasLane: true, ...o });
+  assert.deepStrictEqual(M.step({ mode: 'write', playing: false }), { write: false, read: false }, 'nothing while stopped');
+  assert.deepStrictEqual(st({ mode: 'off' }), { write: false, read: false });
+  assert.deepStrictEqual(st({ mode: 'read' }), { write: false, read: true });
+  assert.deepStrictEqual(st({ mode: 'read', hasLane: false }), { write: false, read: false }, 'an empty lane leaves the fader alone');
+  assert.deepStrictEqual(st({ mode: 'write' }), { write: true, read: false });
+  assert.deepStrictEqual(st({ mode: 'touch' }), { write: false, read: true }); assert.deepStrictEqual(st({ mode: 'touch', touching: true }), { write: true, read: false });
+  assert.deepStrictEqual(st({ mode: 'latch', latched: true }), { write: true, read: false }, 'LATCH keeps writing after release'); assert.deepStrictEqual(st({ mode: 'latch' }), { write: false, read: true });
+  assert.strictEqual(M.nextMode('off'), 'read'); assert.strictEqual(M.nextMode('latch'), 'off');
+  // ASSIST suggestions
+  const sg = M.suggest({ channels: [{ i: 0, pk: 0.5, faderDb: 0 }, { i: 1, pk: 0.0001, faderDb: 0 }, { i: 2, pk: 0.5, faderDb: 0, auto: true }, { i: 3, pk: 0.126, faderDb: 0 }], masterPeakDb: -0.2, autoVolume: false, dspRisk: 70 });
+  assert.deepStrictEqual(sg.map(x => x.id), ['fader:0', 'autovol', 'aidsp'], 'loud ch 1 only: silent, AI-ridden and near-target channels give none');
+  assert.strictEqual(sg[0].db, -12, '-6 dBFS input -> -12 dB fader for the -18 dBFS target'); assert.match(sg[0].text, /^CH 1: fader down to -12\.0 dB/);
+  assert.strictEqual(M.suggest({ masterPeakDb: -0.2, autoVolume: true, dspRisk: 70, dspAuto: true }).length, 0);
+});
+
+test('automation + AI MODE in the page: panels, transport, dual lanes, AUTO FADER yields to READ, OFF / ASSIST / AUTO wiring, 22 languages', () => {
+  const html = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'index.html'), 'utf8');
+  for (const id of ['automation-panel', 'fa-play', 'fa-stop', 'fa-rtz', 'fa-canvas', 'fa-lane-a', 'fa-lane-b', 'fa-copy', 'ai-mode-panel', 'aim-off', 'aim-assist', 'aim-auto', 'aim-list', 'aim-apply-all']) assert.ok(html.includes(id), id);
+  assert.ok(html.includes("if (window.state.channelAutoFader[i] && !(window.faderAuto && window.faderAuto.reading(i))) window.rideAutoFader(i);"), 'READ wins over AUTO FADER');
+  assert.ok(html.includes("const writeLane = i => (window.state && window.state.channelAutoFader && window.state.channelAutoFader[i] ? 'B' : 'A');"), 'AI moves go to lane B');
+  assert.ok(html.includes("function arm() { clearInterval(iv); iv = 0; if (st.mode !== 'off') iv = setInterval(loop, 1000); }"), 'AI MODE OFF runs nothing');
+  assert.ok(/if \(!tr\.playing\) \{ tr\.raf = 0; return; \}/.test(html), 'the automation loop exists only while playing');
+  assert.ok(html.includes("if (!silent) window.notify(`Channel ${channelIndex + 1} Auto Fader"), 'AUTO switches many channels quietly');
+  for (const w of ['DUAL MODE FADER AUTOMATION', 'AI MODE CONTROL', 'PLAY', 'STOP', 'OFF', 'ASSIST', 'AUTO', 'SUGGESTIONS', 'APPLY', 'APPLY ALL', 'LANE VIEW', 'PLAY LANE']) {
+    const row = new RegExp("\\n {12}\\['" + w + "',([^\\n]*)\\],").exec(html); assert.ok(row, w + ' is translated');
+    assert.strictEqual(row[0].match(/'(?:[^'\\]|\\.)*'|"[^"]*"/g).length, 22, w + ': all 22 languages');
+  }
+});
