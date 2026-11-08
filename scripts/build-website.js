@@ -183,6 +183,8 @@ ${card('', 'ISO 3-band isolator', 'A DJ-style LOW / MID / HIGH isolator with KIL
 ${card('', 'Mixer sets 1-4', 'Store the whole console (faders, mute, solo, pan) in four sets on the mixer toolbar and switch between them in one click.')}
 ${card('', 'Fader automation', 'Record and play back every fader with READ, WRITE, TOUCH and LATCH. Each channel has a manual lane and an AI lane, so you can compare them and keep the AI moves you like.')}
 ${card('', 'AI mode control', 'One switch for the AI features: OFF, ASSIST (suggestions you apply yourself) or AUTO (AI faders, auto volume, dynamic EQ and the AI DSP rack run on their own).')}
+${card('', '300 FX presets', 'A library of 300 ready effects for the AI DSP rack: vocal, analog warmth, air, lo-fi, wide, motion, harmony and more. Tap one to apply; search and keep favourites.')}
+${card('', 'VST3 / VST2 / DLL', 'In PC mode AmF X1 finds and runs your own VST3, VST2 and .dll effect plugins as inserts, each in its own process so one crash cannot take down the mixer.')}
 ${card('', 'Dynamics and effects', 'Compressor, noise gate, limiter, de-esser, anti-feedback, chorus, lo-fi, auto-pan, harmony and vocal enhance.')}
 ${card('', 'Stereo image', 'Mid/side level and width plus left / right polarity that act on the real master signal.')}
 </div></div></section>
