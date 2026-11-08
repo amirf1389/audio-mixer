@@ -129,7 +129,7 @@ function createInputSession(conn, load = loadPortAudio, loadA = audify.loadAudif
         const msg = lock.message; lock = null;
         // PortAudio loads ONE ASIO driver per program: a second interface (or a second reader of a busy driver) runs through its own
         // Windows endpoint instead, so every interface can run at the same time ("all audio interfaces run")
-        const twin = /asio/i.test(api) && !fallbackFrom && opts.autoFallback !== false ? dlock.twin(name, pa.getDevices().filter(d => !/asio/i.test(d.hostAPIName) && d.maxInputChannels > 0)) : null;
+        const twin = /asio/i.test(api) && !fallbackFrom && opts.autoFallback !== false ? dlock.twin(name, pa.getDevices().filter(d => !/asio/i.test(d.hostAPIName) && d.maxInputChannels > 0), 10, pa.getDevices()) : null;
         if (twin) {
           const fb = { from: name, to: twin.name, via: 'wasapi', reason: msg };
           diag.warn('asio', `read: ${sim}${name}: ${msg}; using the same hardware through Windows: ${twin.name}`, { device: name, hostApi: api, twin: twin.name });
@@ -159,7 +159,7 @@ function createInputSession(conn, load = loadPortAudio, loadA = audify.loadAudif
     if (!io && dev && /asio/i.test(api) && !fallbackFrom && opts.autoFallback !== false) {
       // ASIO first, then the same hardware through Windows: a driver that refuses to open (busy, not present, wrong state) is not the end
       const m = String(lastErr && lastErr.message || lastErr || 'could not open the device');
-      const twin = dlock.twin(name, pa.getDevices().filter(d => !/asio/i.test(d.hostAPIName) && d.maxInputChannels > 0));
+      const twin = dlock.twin(name, pa.getDevices().filter(d => !/asio/i.test(d.hostAPIName) && d.maxInputChannels > 0), 10, pa.getDevices());
       if (twin) {
         if (lock) { lock.release(); lock = null; }
         diag.warn('asio', `read: ${sim}${name} (${api}) did not open: ${m}; trying the same hardware through Windows: ${twin.name}`, { device: name, hostApi: api, twin: twin.name });
@@ -181,7 +181,7 @@ function createInputSession(conn, load = loadPortAudio, loadA = audify.loadAudif
       onNoSignal: s => { diag.warn('signal', `read: ${sim}${name} (${api}): no signal for ${s.seconds} s${s.exactZero ? ' (exact digital silence)' : ''}`, { device: name, hostApi: api }); try { conn.send(JSON.stringify({ type: 'signal', state: 'none', seconds: s.seconds, exactZero: s.exactZero })); } catch (_) { /* closed */ } },
       onSilentAsio: () => {
         if (fallbackFrom || opts.autoFallback === false || switching) return;
-        const twin = dlock.twin(name, pa.getDevices().filter(d => !/asio/i.test(d.hostAPIName) && d.maxInputChannels > 0));
+        const twin = dlock.twin(name, pa.getDevices().filter(d => !/asio/i.test(d.hostAPIName) && d.maxInputChannels > 0), 10, pa.getDevices());
         diag.warn('asio', `read: ${sim}${name} delivered silence for 3 s: the ASIO driver is held by another client` + (twin ? `; switching to the same hardware through Windows: ${twin.name}` : '; no Windows twin of this hardware was found'), { device: name, hostApi: api, twin: twin ? twin.name : null });
         if (!twin) { try { conn.send(JSON.stringify({ type: 'signal', state: 'asio-silent', seconds: 3 })); } catch (_) { /* closed */ } return; }
         switching = true;

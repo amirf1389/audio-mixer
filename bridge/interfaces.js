@@ -78,6 +78,7 @@ function groupInterfaces(devices = [], asioNames = [], problems = []) {
     const key = bt && btBase(d.name) ? 'bt:' + btBase(d.name) : keyOf(d.name) + (LOOPBACK.test(d.name) ? ':loopback' : '');   // a loopback device is never merged into a real interface
     const g = groups.get(key) || { key, names: [], apis: [], inputs: 0, outputs: 0, loopback: false, systemDefault: false };
     if (isPrimary(d.name)) g.systemDefault = true;
+    if (d.isDefaultInput) g.defaultIn = true; if (d.isDefaultOutput) g.defaultOut = true;   // the native engine marks the Windows default endpoints
     g.names.push(baseName(d.name));
     if (bt) g.bluetooth = true;
     g.apis.push({ api: d.hostApi || d.hostAPIName || 'default', deviceId: d.id, ...(bt ? { profile: btProfile(d.name) } : {}), inputs: d.inputs || 0, outputs: d.outputs || 0, sampleRate: d.sampleRate || null });
@@ -93,7 +94,7 @@ function groupInterfaces(devices = [], asioNames = [], problems = []) {
     const asioDev = g.apis.find(a => /asio/i.test(a.api));
     const name0 = (asioDev ? g.names[g.apis.indexOf(asioDev)] : g.names.slice().sort((a, b) => b.length - a.length)[0]) || g.key;
     const name = g.bluetooth ? btBase(g.names[0], true) || name0 : name0;
-    out.push({ key: g.key, name: g.systemDefault ? 'System default ' + (g.inputs ? 'input' : 'output') + ' (' + name + ')' : name, inputs: g.inputs, outputs: g.outputs, loopback: g.loopback, asio: !!asioDev, systemDefault: g.systemDefault, bluetooth: !!g.bluetooth, apis: g.apis, read, write });
+    out.push({ key: g.key, name: g.systemDefault ? 'System default ' + (g.inputs ? 'input' : 'output') + ' (' + name + ')' : name, inputs: g.inputs, outputs: g.outputs, loopback: g.loopback, asio: !!asioDev, systemDefault: g.systemDefault, bluetooth: !!g.bluetooth, ...(g.defaultIn ? { defaultIn: true } : {}), ...(g.defaultOut ? { defaultOut: true } : {}), apis: g.apis, read, write });
   }
   // Installed ASIO drivers that PortAudio does not list (not installed yet, device unplugged, or PortAudio missing).
   for (const n of asioNames) {
@@ -129,7 +130,19 @@ function linkAsioFallback(list) {
     const fam = familyOf(a.name), w = wordsOf(a.name);
     const score = b => (fam && familyOf(b.name) === fam ? 100 : 0) + [...wordsOf(b.name)].filter(x => w.has(x)).length * 10;
     const pool = list.filter(b => b !== a && !b.asio && !b.loopback && !b.bluetooth && score(b) > 0);
-    if (hw.isWrapper(a.name)) continue;   // ASIO4ALL & co. are not one device: no twin
+    if (hw.isWrapper(a.name)) {
+      // ASIO4ALL / FlexASIO are not one device: they open the Windows DEFAULT endpoint themselves. When one shows no inputs or outputs (nothing
+      // enabled in its own panel yet, or its probe failed because another program holds the endpoint) the same default endpoint is its
+      // fallback - the rule native-engine.wasapiFallback already applies when it opens the stream. Without this the row had no READ / WRITE
+      // at all and looked "not connected" although the engine could open it.
+      const any = list.filter(b => b !== a && !b.asio && !b.loopback && !b.bluetooth);
+      const pickW = side => { const c = any.filter(b => b[side]); return c.find(b => b.systemDefault) || c.find(b => (side === 'read' ? b.defaultIn : b.defaultOut)) || c[0] || null; };
+      const wf = {};
+      if (!a.read) { const b = pickW('read'); if (b) { a.read = { ...b.read, fallback: 'wasapi' }; a.inputs = b.inputs; wf.input = b.name; } }
+      if (!a.write) { const b = pickW('write'); if (b) { a.write = { ...b.write, fallback: 'wasapi' }; a.outputs = b.outputs; wf.output = b.name; } }
+      if (wf.input || wf.output) a.fallback = { via: 'wasapi', defaultEndpoint: true, ...wf };
+      continue;
+    }
     const pick = side => pool.filter(b => b[side]).sort((x, y) => score(y) - score(x))[0] || null;
     const fb = {};
     if (!a.read) { const b = pick('read'); if (b) { a.read = { ...b.read, fallback: 'wasapi' }; a.inputs = b.inputs; fb.input = b.name; } }
