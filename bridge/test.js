@@ -5770,7 +5770,10 @@ test('AI driver lock: ladder ASIO -> WASAPI exclusive (only when built) -> WASAP
   assert.strictEqual(L[0].available, true); assert.strictEqual(L[2].device.name, 'Microphone (USB Audio CODEC)'); assert.strictEqual(L[3].device.hostAPIName, 'Windows DirectSound'); assert.strictEqual(L[4].device.hostAPIName, 'MME');
   assert.strictEqual(L[1].available, false); assert.match(L[1].why, /not built/, 'exclusive is reported, never pretended');
   assert.strictEqual(dl.ladder('BEHRINGER USB AUDIO', devs, 'output')[2].device.name, 'Speakers (USB Audio CODEC)');
-  assert.strictEqual(dl.ladder('ASIO4ALL v2', [{ name: 'ASIO4ALL v2', hostAPIName: 'ASIO', maxInputChannels: 2 }], 'input')[0].available, false, 'a wrapper is not the first choice');
+  // a wrapper is the first choice when it is the ONLY ASIO driver (the old rule reported "no path" and the row looked not connected) ...
+  assert.strictEqual(dl.ladder('ASIO4ALL v2', [{ name: 'ASIO4ALL v2', hostAPIName: 'ASIO', maxInputChannels: 2 }], 'input')[0].available, true, 'the only ASIO driver: first choice');
+  // ... and held back only next to a device with its own ASIO driver
+  assert.strictEqual(dl.ladder('ASIO4ALL v2', [{ name: 'ASIO4ALL v2', hostAPIName: 'ASIO', maxInputChannels: 2 }, devs[0]], 'input')[0].available, false, 'next to a native ASIO driver it is not the first choice');
   // learn, route, expire, forget
   const t0 = Date.now();
   assert.strictEqual(dl.route(devs[0], devs, 'input').dev, devs[0], 'no lock: its own ASIO driver');
@@ -5960,4 +5963,67 @@ test('SYSTEM OPTIMIZE: measured FPS/heap maths, real one-tap levers (ECO / meter
     const row = new RegExp("\\n {12}\\['" + w + "',([^\\n]*)\\],").exec(html); assert.ok(row, w + ' translated');
     assert.strictEqual(row[0].match(/'(?:[^'\\]|\\.)*'|"[^"]*"/g).length, 22, w + ': all 22 languages');
   }
+});
+
+// ---- ASIO4ALL "not connected" fixes (1.22.1.0 Beta) ----------------------------------------------------------------------------------------------
+test('ASIO4ALL with no channels gets the Windows DEFAULT endpoint as its fallback (it was a dead row: no READ / WRITE)', () => {
+  const ifs = require('./interfaces');
+  const devs = [
+    { id: 1, name: 'ASIO4ALL v2', hostApi: 'ASIO', inputs: 0, outputs: 0 },                       // nothing enabled in its panel / probe failed
+    { id: 2, name: 'Microphone Array (Realtek(R) Audio)', hostApi: 'Windows WASAPI', inputs: 2, outputs: 0 },
+    { id: 3, name: 'Speakers (Realtek(R) Audio)', hostApi: 'Windows WASAPI', inputs: 0, outputs: 2 },
+    { id: 4, name: 'Primary Sound Driver', hostApi: 'MME', inputs: 0, outputs: 2 },
+    { id: 5, name: 'Primary Sound Capture Driver', hostApi: 'MME', inputs: 2, outputs: 0 },
+  ];
+  const g = ifs.groupInterfaces(devs, ['ASIO4ALL v2']), a = g.find(i => i.name === 'ASIO4ALL v2');
+  assert.ok(a.wrapper && a.read && a.write, 'ASIO4ALL is openable both ways: ' + JSON.stringify(a));
+  assert.strictEqual(a.fallback.via, 'wasapi'); assert.strictEqual(a.fallback.defaultEndpoint, true);
+  assert.ok(a.inputs > 0 && a.outputs > 0);
+  // the native engine marks the Windows defaults: those win over the first endpoint in the list
+  const devs2 = [{ id: 1, name: 'ASIO4ALL v2', hostApi: 'ASIO', inputs: 0, outputs: 0 },
+    { id: 2, name: 'Microphone (USB Audio CODEC)', hostApi: 'Windows WASAPI', inputs: 2, outputs: 0 },
+    { id: 3, name: 'Microphone Array (Realtek(R) Audio)', hostApi: 'Windows WASAPI', inputs: 2, outputs: 0, isDefaultInput: true }];
+  const b = ifs.groupInterfaces(devs2, ['ASIO4ALL v2']).find(i => i.name === 'ASIO4ALL v2');
+  assert.strictEqual(b.fallback.input, 'Microphone Array (Realtek(R) Audio)', 'the default input');
+  // a wrapper that DOES report channels is left alone
+  const c = ifs.groupInterfaces([{ id: 1, name: 'ASIO4ALL v2', hostApi: 'ASIO', inputs: 2, outputs: 2 }, devs[1]], ['ASIO4ALL v2']).find(i => i.name === 'ASIO4ALL v2');
+  assert.ok(!c.fallback, 'no fallback when it has its own channels');
+});
+
+test('AI driver lock + ASIO4ALL: first choice when it is the only ASIO driver, held back next to a native one; its fallback never doubles a native device', () => {
+  const dl = require('./driver-lock');
+  const realtek = [{ name: 'Microphone Array (Realtek(R) Audio)', hostAPIName: 'Windows WASAPI', maxInputChannels: 2, maxOutputChannels: 0 }, { name: 'Speakers (Realtek(R) Audio)', hostAPIName: 'Windows WASAPI', maxInputChannels: 0, maxOutputChannels: 2 }];
+  const a4a = { name: 'ASIO4ALL v2', hostAPIName: 'ASIO', maxInputChannels: 2, maxOutputChannels: 2 };
+  let L = dl.ladder('ASIO4ALL v2', [a4a, ...realtek], 'input');
+  assert.strictEqual(L[0].available, true, 'the only ASIO driver here: used first (it was reported as "no path")');
+  assert.strictEqual(L[2].device.name, 'Microphone Array (Realtek(R) Audio)', 'its Windows fallback is the default-type endpoint');
+  const um2 = [{ name: 'BEHRINGER USB AUDIO', hostAPIName: 'ASIO', maxInputChannels: 2, maxOutputChannels: 2 }, { name: 'Microphone (USB Audio CODEC)', hostAPIName: 'Windows WASAPI', maxInputChannels: 2, maxOutputChannels: 0 }];
+  L = dl.ladder('ASIO4ALL v2', [a4a, ...um2, ...realtek], 'input');
+  assert.strictEqual(L[0].available, false); assert.match(L[0].why, /own ASIO driver is present/);
+  // the wrapper twin skips the UM2's own endpoint (its ASIO driver may be reading it) and prefers a default-flagged endpoint
+  const all = [a4a, ...um2, ...realtek];
+  assert.strictEqual(dl.twin('ASIO4ALL v2', all.filter(d => !/asio/i.test(d.hostAPIName) && d.maxInputChannels > 0), 10, all).name, 'Microphone Array (Realtek(R) Audio)');
+  const flagged = [{ ...realtek[0], isDefaultInput: false }, { name: 'Line In (Realtek(R) Audio)', hostAPIName: 'Windows WASAPI', maxInputChannels: 2, isDefaultInput: true }];
+  assert.strictEqual(dl.twin('ASIO4ALL v2', flagged, 10, flagged).name, 'Line In (Realtek(R) Audio)');
+  assert.strictEqual(dl.twin('ASIO4ALL v2', [{ name: 'Stereo Mix (Realtek(R) Audio)', hostAPIName: 'Windows WASAPI', maxInputChannels: 2 }], 10, []), null, 'never a loopback');
+});
+
+test('ASIO4ALL on the simulator: opens alone; next to a native ASIO driver (one ASIO driver per program) it falls back to Realtek instead of erroring', { timeout: 30000 }, async () => {
+  const sim = require('./sim'), dl = require('./driver-lock'); dl.forget('*');
+  const open = (devs, name) => { const s = { msgs: [] }; s.sess = require('./input').createInputSession({ send: m => s.msgs.push(JSON.parse(m)), sendBinary() {}, close() {} }); s.sess.onText(JSON.stringify({ type: 'start', deviceId: devs.find(d => d.name === name).id, channels: 2, sampleRate: 48000 })); return s; };
+  const until = async (s, pred, ms = 4000) => { const t = Date.now(); while (Date.now() - t < ms) { const m = s.msgs.find(pred); if (m) return m; await new Promise(r => setTimeout(r, 40)); } return null; };
+  try {
+    sim.configure({ enabled: true, profiles: ['realtek', 'asio4all'], faults: {} });
+    let devs = require('./portaudio').load().getDevices();
+    let a = open(devs, 'ASIO4ALL v2'); assert.ok(await until(a, m => m.type === 'started' && m.hostApi === 'ASIO'), 'ASIO4ALL alone opens on ASIO'); a.sess.onClose();
+    sim.configure({ profiles: ['um2', 'realtek', 'asio4all'] }); devs = require('./portaudio').load().getDevices();
+    const um = open(devs, 'BEHRINGER USB AUDIO'); assert.ok(await until(um, m => m.type === 'started' && m.hostApi === 'ASIO'));
+    a = open(devs, 'ASIO4ALL v2');
+    const fb = await until(a, m => m.type === 'fallback' || m.type === 'error');
+    assert.ok(fb && fb.type === 'fallback', 'a fallback, not an error: ' + JSON.stringify(a.msgs.slice(0, 2)));
+    assert.strictEqual(fb.fallback.to, 'Microphone Array (Realtek(R) Audio)', 'not the UM2 endpoint its own ASIO driver is reading');
+    assert.ok(await until(a, m => m.type === 'started' && /WASAPI/.test(m.hostApi)));
+    assert.strictEqual(dl.get('ASIO4ALL v2', 'input'), null, 'a one-ASIO-per-program refusal is a situation, never locked');
+    a.sess.onClose(); um.sess.onClose();
+  } finally { sim.configure({ enabled: false, faults: {} }); sim.closeAll(); dl.forget('*'); }
 });

@@ -28,7 +28,18 @@ function reset() { cache = null; }   // tests: re-read the file
 function exclusiveAvailable() { try { const s = require('./wasapi-exclusive').status(); return !!(s.available && s.wired); } catch (_) { return false; } }
 
 // the same hardware through another host API: the best name match, and among equally good matches WASAPI before DirectSound before MME
-function twin(name, pool, min = 10) {
+function twin(name, pool, min = 10, all = null) {
+  // a wrapper (ASIO4ALL, FlexASIO) is not one device: it drives the Windows default endpoint, so that endpoint is its twin (the native engine's
+  // wasapiFallback uses the same rule). Default flags first, then WASAPI before DirectSound / MME; never a loopback or a hands-free headset.
+  if (hw.isWrapper(name)) {
+    let ok = (pool || []).filter(d => !/stereo mix|loopback|what u hear|hands-free|headset/i.test(d.name || ''));
+    // never the Windows endpoint of hardware that has its OWN ASIO driver (that driver may be reading it right now: a doubled signal)
+    const natives = (all || []).filter(d => /asio/i.test(d.hostAPIName) && !hw.isWrapper(d.name)).map(d => d.name);
+    const free = ok.filter(d => !natives.some(n => hw.score(n, d.name) >= 100));
+    if (free.length) ok = free;
+    const isDef = d => +!!(d.isDefaultInput || d.isDefaultOutput);
+    return ok.slice().sort((a, b) => (isDef(b) - isDef(a)) || (rankOf(a.hostAPIName) - rankOf(b.hostAPIName)))[0] || null;
+  }
   let best = null, bs = 0, br = 99;
   for (const d of pool || []) {
     const s = hw.score(name, d.name), r = rankOf(d.hostAPIName);
@@ -42,11 +53,15 @@ function ladder(name, devices, dir = 'input') {
   const has = d => (dir === 'output' ? d.maxOutputChannels > 0 : d.maxInputChannels > 0);
   const list = (devices || []).filter(has), asio = list.find(d => /asio/i.test(d.hostAPIName) && d.name === name) || null;
   const others = list.filter(d => !/asio/i.test(d.hostAPIName));
-  const win = others.filter(d => hw.score(name, d.name) >= 10);
-  const pick = mode => twin(name, win.filter(d => modeOf(d.hostAPIName) === mode));
+  const win = hw.isWrapper(name) ? others : others.filter(d => hw.score(name, d.name) >= 10);
+  const pick = mode => twin(name, win.filter(d => modeOf(d.hostAPIName) === mode), hw.isWrapper(name) ? 0 : 10, list);
   const excl = exclusiveAvailable(), was = pick('wasapi');
+  // ASIO4ALL is the right first step when it is the only ASIO driver here (onboard Realtek without its own driver, a laptop); it is only held
+  // back when a device with its OWN ASIO driver is present (then it would open the same hardware twice)
+  const nativeAsio = list.some(d => /asio/i.test(d.hostAPIName) && !hw.isWrapper(d.name));
+  const wrapperOk = hw.isWrapper(name) && !nativeAsio;
   return [
-    { step: 1, mode: 'asio', device: asio, available: !!asio && !hw.isWrapper(name), why: !asio ? 'no ASIO driver for this interface' : hw.isWrapper(name) ? 'a wrapper (ASIO4ALL-style), used only when nothing else works' : null },
+    { step: 1, mode: 'asio', device: asio, available: !!asio && (!hw.isWrapper(name) || wrapperOk), why: !asio ? 'no ASIO driver for this interface' : hw.isWrapper(name) && !wrapperOk ? 'a wrapper (ASIO4ALL-style): a device with its own ASIO driver is present, so that driver is used first' : null },
     { step: 2, mode: 'wasapi-exclusive', device: excl ? was : null, available: excl && !!was, why: !excl ? 'WASAPI exclusive is not built into this copy (native/wasapi-exclusive): skipped' : !was ? 'no Windows endpoint of this hardware' : null },
     { step: 3, mode: 'wasapi-shared', device: was, available: !!was, why: was ? null : 'no WASAPI endpoint of this hardware' },
     { step: 4, mode: 'directsound', device: pick('directsound'), available: !!pick('directsound'), why: pick('directsound') ? null : 'no DirectSound endpoint of this hardware' },

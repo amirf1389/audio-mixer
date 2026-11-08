@@ -125,7 +125,7 @@ function createSession(conn, load = loadPortAudio, loadA = audify.loadAudify) {
       if (!lock.ok) {
         const msg = lock.message; lock = null;
         // one ASIO driver per program (PortAudio): the second interface writes through its own Windows endpoint instead of failing
-        const twin = /asio/i.test(dev.hostAPIName) && opts.autoFallback !== false ? dlock.twin(dev.name, pa.getDevices().filter(d => !/asio/i.test(d.hostAPIName) && d.maxOutputChannels > 0)) : null;
+        const twin = /asio/i.test(dev.hostAPIName) && opts.autoFallback !== false ? dlock.twin(dev.name, pa.getDevices().filter(d => !/asio/i.test(d.hostAPIName) && d.maxOutputChannels > 0), 10, pa.getDevices()) : null;
         if (!twin) { diag.error('asio', `write: ${sim}${dev.name}: ${msg}`, { device: dev.name, hostApi: dev.hostAPIName }); return conn.send(JSON.stringify({ type: 'error', message: msg })); }
         const fb = { from: dev.name, to: twin.name, via: 'wasapi', reason: msg };
         diag.warn('asio', `write: ${sim}${dev.name}: ${msg}; using the same hardware through Windows: ${twin.name}`, { device: dev.name, twin: twin.name });
@@ -140,7 +140,7 @@ function createSession(conn, load = loadPortAudio, loadA = audify.loadAudify) {
       try { io = openOut(dev); }
       catch (e) {
         // ASIO first, then the same hardware through Windows: a refused ASIO driver is not the end (AI driver lock remembers what worked)
-        const twin = dev && /asio/i.test(dev.hostAPIName) && opts.autoFallback !== false ? dlock.twin(dev.name, pa.getDevices().filter(d => !/asio/i.test(d.hostAPIName) && d.maxOutputChannels > 0)) : null;
+        const twin = dev && /asio/i.test(dev.hostAPIName) && opts.autoFallback !== false ? dlock.twin(dev.name, pa.getDevices().filter(d => !/asio/i.test(d.hostAPIName) && d.maxOutputChannels > 0), 10, pa.getDevices()) : null;
         if (!twin) throw e;
         const m = String(e && e.message || e);
         diag.warn('asio', `write: ${sim}${dev.name} did not open: ${m}; trying the same hardware through Windows: ${twin.name}`, { device: dev.name, twin: twin.name });
