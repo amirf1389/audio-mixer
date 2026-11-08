@@ -1,4 +1,6 @@
 'use strict';
+// AI driver locks learned during the tests go to a temporary file, never the developer's own ~/.audio-mixer
+process.env.BRIDGE_DRIVER_LOCK_FILE = require('node:path').join(require('node:os').tmpdir(), 'amfx-test-driver-lock-' + process.pid + '.json');
 const test = require('node:test');
 const assert = require('node:assert');
 const { server, originAllowed } = require('./server');
@@ -5500,6 +5502,7 @@ test('DEVICE SIMULATOR (UM2 base): ASIO busy -> WASAPI twin, mono ch1 -> both si
     const err = await until(a, m => m.type === 'error'); assert.match(err.message, /in use by another program/);
     assert.ok(diag.list({ filter: 'errors' }).some(e => /Focusrite USB ASIO/.test(e.message) && e.advice && /one program at a time/.test(e.advice.means)));
     a.ws.close(); sim.configure({ faults: { realtek: { unplugAfterMs: 600 } } });
+    require('./driver-lock').forget('*');   // this step is about two ASIO drivers at once: start without the locks learned above
     // 5) all interfaces at once: one ASIO driver per program, so the Focusrite runs through its own Windows endpoint; Realtek unplugged
     //    mid-stream; the UM2 and the Focusrite keep delivering
     const um = await open(id('BEHRINGER USB AUDIO')), rt = await open(id('Microphone Array (Realtek(R) Audio)')), fo = await open(id('Focusrite USB ASIO'));
@@ -5737,4 +5740,101 @@ test('automation + AI MODE in the page: panels, transport, dual lanes, AUTO FADE
     const row = new RegExp("\\n {12}\\['" + w + "',([^\\n]*)\\],").exec(html); assert.ok(row, w + ' is translated');
     assert.strictEqual(row[0].match(/'(?:[^'\\]|\\.)*'|"[^"]*"/g).length, 22, w + ': all 22 languages');
   }
+});
+
+// ---- AI DRIVER LOCK (block 2, 1.22.1.0 Beta) ------------------------------------------------------------------------------------------------------
+test('AI driver lock: ladder ASIO -> WASAPI exclusive (only when built) -> WASAPI shared -> DirectSound -> MME; WASAPI twin preferred; locks expire and can be forgotten', () => {
+  const dl = require('./driver-lock'); dl.forget('*');
+  const devs = [
+    { name: 'BEHRINGER USB AUDIO', hostAPIName: 'ASIO', maxInputChannels: 2, maxOutputChannels: 2 },
+    { name: 'Microphone (USB Audio CODEC)', hostAPIName: 'MME', maxInputChannels: 2, maxOutputChannels: 0 },
+    { name: 'Microphone (USB Audio CODEC)', hostAPIName: 'Windows DirectSound', maxInputChannels: 2, maxOutputChannels: 0 },
+    { name: 'Microphone (USB Audio CODEC)', hostAPIName: 'Windows WASAPI', maxInputChannels: 2, maxOutputChannels: 0 },
+    { name: 'Speakers (USB Audio CODEC)', hostAPIName: 'Windows WASAPI', maxInputChannels: 0, maxOutputChannels: 2 },
+    { name: 'Microphone Array (Realtek(R) Audio)', hostAPIName: 'Windows WASAPI', maxInputChannels: 2, maxOutputChannels: 0 },
+  ];
+  assert.strictEqual(dl.twin('BEHRINGER USB AUDIO', devs.filter(d => d.hostAPIName !== 'ASIO')).hostAPIName, 'Windows WASAPI', 'same hardware: WASAPI before DirectSound and MME (lowest latency)');
+  assert.strictEqual(dl.twin('BEHRINGER USB AUDIO', [devs[5]]), null, 'never another card');
+  const L = dl.ladder('BEHRINGER USB AUDIO', devs, 'input');
+  assert.deepStrictEqual(L.map(x => x.mode), ['asio', 'wasapi-exclusive', 'wasapi-shared', 'directsound', 'mme']);
+  assert.strictEqual(L[0].available, true); assert.strictEqual(L[2].device.name, 'Microphone (USB Audio CODEC)'); assert.strictEqual(L[3].device.hostAPIName, 'Windows DirectSound'); assert.strictEqual(L[4].device.hostAPIName, 'MME');
+  assert.strictEqual(L[1].available, false); assert.match(L[1].why, /not built/, 'exclusive is reported, never pretended');
+  assert.strictEqual(dl.ladder('BEHRINGER USB AUDIO', devs, 'output')[2].device.name, 'Speakers (USB Audio CODEC)');
+  assert.strictEqual(dl.ladder('ASIO4ALL v2', [{ name: 'ASIO4ALL v2', hostAPIName: 'ASIO', maxInputChannels: 2 }], 'input')[0].available, false, 'a wrapper is not the first choice');
+  // learn, route, expire, forget
+  const t0 = Date.now();
+  assert.strictEqual(dl.route(devs[0], devs, 'input').dev, devs[0], 'no lock: its own ASIO driver');
+  dl.learn('BEHRINGER USB AUDIO', 'input', { mode: 'wasapi-shared', device: 'Microphone (USB Audio CODEC)', hostApi: 'Windows WASAPI', reason: 'ASIO delivered silence' }, t0);
+  const r = dl.route(devs[0], devs, 'input', t0 + 1000); assert.strictEqual(r.dev, devs[3], 'locked: straight to the WASAPI endpoint'); assert.strictEqual(r.locked.mode, 'wasapi-shared');
+  assert.strictEqual(dl.route(devs[0], devs, 'output', t0 + 1000).dev, devs[0], 'a read lock does not move writes');
+  assert.strictEqual(dl.route(devs[0], devs, 'input', t0 + dl.RETRY_MS + 1).dev, devs[0], 'after the retry time its own ASIO driver is tried again');
+  assert.strictEqual(dl.route(devs[0], devs.filter(d => d.hostAPIName !== 'Windows WASAPI'), 'input', t0 + 1000).dev, devs[0], 'a locked endpoint that is gone: back to ASIO');
+  assert.ok(JSON.parse(require('node:fs').readFileSync(dl.file(), 'utf8')).locks['in:behringer usb audio'], 'kept on disk');
+  dl.reset(); assert.strictEqual(dl.get('BEHRINGER USB AUDIO', 'input', t0 + 1000).mode, 'wasapi-shared', 'read back after a restart');
+  assert.strictEqual(dl.forget('BEHRINGER USB AUDIO'), 1); assert.strictEqual(dl.get('BEHRINGER USB AUDIO', 'input'), null);
+  dl.learn('X', 'input', { mode: 'asio', device: 'X' }); dl.learn('Y', 'output', { mode: 'mme', device: 'Y' }); assert.strictEqual(dl.forget('*'), 2);
+});
+
+test('AI driver lock on the simulator: UM2 held by another program -> WASAPI once, then straight there; FORGET -> ASIO first again; a refused Focusrite driver opens its Windows endpoint', { timeout: 60000 }, async () => {
+  const sim = require('./sim'), dl = require('./driver-lock'), diag = require('./diagnostics');
+  dl.forget('*');
+  sim.configure({ enabled: true, profiles: ['um2', 'focusrite'], faults: { um2: { asioHeldByOtherApp: true }, focusrite: { asioHeldByOtherApp: true } } });
+  const pa = require('./portaudio').load(), devs = pa.getDevices(), id = n => devs.find(d => d.name === n).id;
+  const open = (name, extra = {}) => { const s = { msgs: [], frames: 0 }; s.sess = require('./input').createInputSession({ send: m => s.msgs.push(JSON.parse(m)), sendBinary() { s.frames++; }, close() {} }); s.sess.onText(JSON.stringify({ type: 'start', deviceId: id(name), channels: 2, sampleRate: 48000, ...extra })); return s; };
+  const until = async (s, pred, ms = 7000) => { const t = Date.now(); while (Date.now() - t < ms) { const m = s.msgs.find(pred); if (m) return m; await new Promise(r => setTimeout(r, 40)); } return null; };
+  try {
+    // 1) first start: ASIO is silent for 3 s (held elsewhere) -> the Windows twin, and the lock is learned
+    let a = open('BEHRINGER USB AUDIO');
+    let fb = await until(a, m => m.type === 'fallback'); assert.ok(fb); assert.strictEqual(fb.fallback.via, 'wasapi');
+    assert.ok(await until(a, m => m.type === 'started' && m.hostApi === 'Windows WASAPI'));
+    const lk = dl.get('BEHRINGER USB AUDIO', 'input'); assert.ok(lk, 'locked'); assert.strictEqual(lk.mode, 'wasapi-shared'); assert.strictEqual(lk.device, 'Microphone (USB Audio CODEC)'); assert.match(lk.reason, /silence/);
+    a.sess.onClose();
+    // 2) next start: no 3 s of silence, straight to the twin
+    const t = Date.now(); a = open('BEHRINGER USB AUDIO');
+    fb = await until(a, m => m.type === 'fallback', 2000); assert.ok(fb && fb.fallback.via === 'lock', JSON.stringify(a.msgs.slice(0, 2)));
+    assert.ok(await until(a, m => m.type === 'started' && m.hostApi === 'Windows WASAPI', 2000)); assert.ok(Date.now() - t < 2000, 'no waiting on a busy driver');
+    assert.ok(a.msgs.every(m => !(m.type === 'started' && m.hostApi === 'ASIO')), 'ASIO not even tried');
+    a.sess.onClose();
+    assert.ok(diag.list({ filter: 'lock' }).some(e => /AI driver lock/.test(e.message) && /BEHRINGER USB AUDIO/.test(e.message)), 'readable in DIAGNOSTICS');
+    // 3) the other program closed; FORGET: ASIO first again, and a clean ASIO run with signal locks ASIO
+    sim.configure({ faults: { focusrite: { asioHeldByOtherApp: true } } }); dl.forget('BEHRINGER USB AUDIO');
+    a = open('BEHRINGER USB AUDIO');
+    assert.ok(await until(a, m => m.type === 'started' && m.hostApi === 'ASIO'));
+    await until(a, () => (dl.get('BEHRINGER USB AUDIO', 'input') || {}).mode === 'asio', 3000);
+    assert.strictEqual((dl.get('BEHRINGER USB AUDIO', 'input') || {}).mode, 'asio', 'signal on ASIO: ASIO locked');
+    a.sess.onClose();
+    // 4) a driver that REFUSES to open (Focusrite, busy) -> its Windows endpoint opens instead (it used to stop with an error), and that is locked
+    a = open('Focusrite USB ASIO');
+    fb = await until(a, m => m.type === 'fallback'); assert.ok(fb && /in use by another program/.test(fb.fallback.reason), JSON.stringify(a.msgs.slice(0, 3)));
+    assert.ok(await until(a, m => m.type === 'started' && /WASAPI/.test(m.hostApi)));
+    assert.match(dl.get('Focusrite USB ASIO', 'input').reason, /ASIO did not open/);
+    a.sess.onClose();
+    // 5) the API: ladders and locks; FORGET needs the action header
+    const { server } = require('./server');
+    await new Promise(r => server.listen(0, '127.0.0.1', r)); const base = 'http://127.0.0.1:' + server.address().port;
+    try {
+      const j = await (await fetch(base + '/api/driver-lock')).json();
+      assert.ok(j.ok && j.exclusive === false && j.locks.some(l => l.name === 'Focusrite USB ASIO'));
+      const um = j.interfaces.find(i => i.name === 'BEHRINGER USB AUDIO'); assert.deepStrictEqual(um.input.map(x => x.mode), ['asio', 'wasapi-exclusive', 'wasapi-shared', 'directsound', 'mme']);
+      assert.strictEqual(um.input[2].device, 'Microphone (USB Audio CODEC)');
+      assert.strictEqual((await fetch(base + '/api/driver-lock', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ forget: '*' }) })).status, 400, 'needs X-Mixer-Action');
+      const f = await (await fetch(base + '/api/driver-lock', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Mixer-Action': 'driver-lock' }, body: JSON.stringify({ forget: '*' }) })).json();
+      assert.ok(f.ok && f.removed >= 1 && f.locks.length === 0);
+    } finally { await new Promise(r => server.close(r)); }
+  } finally { sim.configure({ enabled: false, faults: {} }); sim.closeAll(); dl.forget('*'); }
+});
+
+test('mixer SETS 1-4 and the AI DRIVER LOCK panel: toolbar buttons, STORE then a number, recall through the real setters, locks with FORGET, 22 languages', () => {
+  const html = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'index.html'), 'utf8');
+  for (const i of [0, 1, 2, 3]) assert.ok(html.includes(`data-mixset="${i}"`), 'SET ' + (i + 1));
+  assert.ok(html.includes('id="mix-set-store"') && html.includes("press(i) { return armed ? api.store(i) : api.recall(i); }"));
+  assert.ok(html.includes("window.setChannelGain(i, c.db, true)") && html.includes("window.toggleChannelMute(i, true)") && html.includes("window.toggleChannelSolo(i, true)") && html.includes("window.handleKnobParam(k, c.pan)"), 'recall goes through the same setters as a hand');
+  assert.ok(!html.includes('window.handleKnobParam = ('), 'handleKnobParam is already global: never wrapped (it would call itself)');
+  assert.ok(html.includes('id="rt-lock"') && html.includes("fetch(b + '/api/driver-lock', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Mixer-Action': 'driver-lock' }"));
+  assert.ok(/escD\(l\.name\)/.test(html) && /escD\(l\.reason/.test(html), 'device names and reasons are escaped');
+  for (const w of ['AI DRIVER LOCK', 'FORGET ALL', 'FORGET', 'SETS:', 'STORE']) {
+    const row = new RegExp("\\n {12}\\['" + w + "',([^\\n]*)\\],").exec(html); assert.ok(row, w + ' is translated');
+    assert.strictEqual(row[0].match(/'(?:[^'\\]|\\.)*'|"[^"]*"/g).length, 22, w + ': all 22 languages');
+  }
+  const build = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'scripts', 'build.js'), 'utf8'); assert.ok(build.includes("'bridge/driver-lock.js'"), 'packaged');
 });

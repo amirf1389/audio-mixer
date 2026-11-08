@@ -8,7 +8,7 @@ const universal = require('./universal');
 const virtual = require('./virtual');
 const control = require('./control');
 const diag = require('./diagnostics');
-const hw = require('./hw-match');
+const dlock = require('./driver-lock');   // AI driver lock (see driver-lock.js)
 function loadPortAudio() { return require('./portaudio').load(); }   // naudiodon2, or the device simulator (bridge/sim)
 const SAMPLE_RATES = [44100, 48000, 88200, 96000, 176400, 192000];
 
@@ -111,12 +111,21 @@ function createSession(conn, load = loadPortAudio, loadA = audify.loadAudify) {
     let dev = pickDevice(pa, wanted, channels);
     const sim = pa.simulated ? '[SIM] ' : '';
     if (!dev && wanted !== null) { diag.error('device', 'write: device ' + wanted + ' not found (unplugged, or the list changed)'); return conn.send(JSON.stringify({ type: 'error', message: 'device not found' })); }
+    let fallbackFrom = null, fallbackReason = '';
+    if (dev && opts.noLock !== true) {   // AI DRIVER LOCK: straight to the Windows endpoint that worked when this ASIO driver failed before
+      const r = dlock.route(dev, pa.getDevices(), 'output');
+      if (r.dev !== dev) {
+        diag.info('lock', `write: ${sim}${dev.name}: AI driver lock -> ${r.locked.mode.toUpperCase()} (${r.dev.name}): ${r.locked.reason || 'it worked last time'}`, { device: dev.name, via: r.dev.name });
+        try { conn.send(JSON.stringify({ type: 'fallback', fallback: { from: dev.name, to: r.dev.name, via: 'lock', reason: 'AI driver lock: ' + (r.locked.reason || r.locked.mode) } })); } catch (_) { /* closed */ }
+        dev = r.dev;
+      }
+    }
     if (dev) {
       lock = claim(dev, { takeover: opts.takeover === true, preempt: takenOver });
       if (!lock.ok) {
         const msg = lock.message; lock = null;
         // one ASIO driver per program (PortAudio): the second interface writes through its own Windows endpoint instead of failing
-        const twin = /asio/i.test(dev.hostAPIName) && opts.autoFallback !== false ? hw.bestTwin(dev.name, pa.getDevices().filter(d => !/asio/i.test(d.hostAPIName) && d.maxOutputChannels > 0)) : null;
+        const twin = /asio/i.test(dev.hostAPIName) && opts.autoFallback !== false ? dlock.twin(dev.name, pa.getDevices().filter(d => !/asio/i.test(d.hostAPIName) && d.maxOutputChannels > 0)) : null;
         if (!twin) { diag.error('asio', `write: ${sim}${dev.name}: ${msg}`, { device: dev.name, hostApi: dev.hostAPIName }); return conn.send(JSON.stringify({ type: 'error', message: msg })); }
         const fb = { from: dev.name, to: twin.name, via: 'wasapi', reason: msg };
         diag.warn('asio', `write: ${sim}${dev.name}: ${msg}; using the same hardware through Windows: ${twin.name}`, { device: dev.name, twin: twin.name });
@@ -126,11 +135,22 @@ function createSession(conn, load = loadPortAudio, loadA = audify.loadAudify) {
         if (!lock.ok) { const m2 = lock.message; lock = null; diag.error('wasapi', `write: ${sim}${dev.name}: ${m2}`); return conn.send(JSON.stringify({ type: 'error', message: m2 })); }
       }
     }
+    const openOut = d => new pa.AudioIO({ outOptions: { channelCount: channels, sampleFormat: pa.SampleFormat16Bit, sampleRate, deviceId: d ? d.id : -1, closeOnError: true } });
     try {
-      io = new pa.AudioIO({ outOptions: {
-        channelCount: channels, sampleFormat: pa.SampleFormat16Bit, sampleRate,
-        deviceId: dev ? dev.id : -1, closeOnError: true,
-      } });
+      try { io = openOut(dev); }
+      catch (e) {
+        // ASIO first, then the same hardware through Windows: a refused ASIO driver is not the end (AI driver lock remembers what worked)
+        const twin = dev && /asio/i.test(dev.hostAPIName) && opts.autoFallback !== false ? dlock.twin(dev.name, pa.getDevices().filter(d => !/asio/i.test(d.hostAPIName) && d.maxOutputChannels > 0)) : null;
+        if (!twin) throw e;
+        const m = String(e && e.message || e);
+        diag.warn('asio', `write: ${sim}${dev.name} did not open: ${m}; trying the same hardware through Windows: ${twin.name}`, { device: dev.name, twin: twin.name });
+        try { conn.send(JSON.stringify({ type: 'fallback', fallback: { from: dev.name, to: twin.name, via: 'wasapi', reason: m } })); } catch (_) { /* closed */ }
+        if (lock) { lock.release(); lock = null; }
+        fallbackFrom = dev.name; fallbackReason = 'ASIO did not open: ' + m; dev = twin;
+        io = openOut(dev);
+      }
+      if (dev && /asio/i.test(dev.hostAPIName)) dlock.learn(dev.name, 'output', { mode: 'asio', device: dev.name, hostApi: dev.hostAPIName, reason: 'its own ASIO driver opened' });
+      else if (fallbackFrom) dlock.learn(fallbackFrom, 'output', { mode: dlock.modeOf(dev.hostAPIName) === 'wasapi' ? 'wasapi-shared' : dlock.modeOf(dev.hostAPIName), device: dev.name, hostApi: dev.hostAPIName, reason: fallbackReason });
       io.on('error', e => { const m = String(e && e.message || e); diag.error(dev && /asio/i.test(dev.hostAPIName) ? 'asio' : 'device', `write: ${sim}${dev ? dev.name : 'default'}: ${m}`); conn.send(JSON.stringify({ type: 'error', message: m })); stop(); });
       io.on('drain', () => { blocked = false; });
       io.start();

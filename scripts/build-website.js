@@ -173,12 +173,14 @@ pages.push(page({
 ${card('', 'Every interface in one list', 'USB interfaces, onboard sound, DACs, Bluetooth headsets and loopback devices are grouped by hardware, with read / write switches and a live level for each.')}
 ${card('', 'Same-hardware fallback', 'When an ASIO driver is held by another program, AmF X1 reads and writes the same device through its Windows driver instead of failing.')}
 ${card('', 'Low-latency ASIO', 'Your interface\'s own ASIO driver is used first; ASIO4ALL-style wrappers are only used when no device has its own driver, and a device is never read twice.')}
+${card('', 'AI driver lock', 'ASIO first, then WASAPI, then DirectSound and MME. When a driver is busy and another path works, AmF X1 remembers it and goes straight there next time; one click forgets it.')}
 ${card('', 'Readable diagnostics', 'Every driver step is logged in plain language with what it means and what to do, ready to copy into a bug report.')}
 </div></div></section>
 <section class="block"><div class="wrap"><h2>Mixing and processing</h2><div class="grid">
 ${card('', 'Console', 'Faders, pan, mute, solo, sends, group faders, scenes and presets, with smooth paging up to 32 channels.')}
 ${card('', 'Tone', 'Parametric EQ with an analyser overlay, mic EQ, dynamic EQ, auto-volume and a treble guard.')}
 ${card('', 'ISO 3-band isolator', 'A DJ-style LOW / MID / HIGH isolator with KILL buttons on the master and every channel, perfectly flat when all bands are at 0 dB.')}
+${card('', 'Mixer sets 1-4', 'Store the whole console (faders, mute, solo, pan) in four sets on the mixer toolbar and switch between them in one click.')}
 ${card('', 'Fader automation', 'Record and play back every fader with READ, WRITE, TOUCH and LATCH. Each channel has a manual lane and an AI lane, so you can compare them and keep the AI moves you like.')}
 ${card('', 'AI mode control', 'One switch for the AI features: OFF, ASSIST (suggestions you apply yourself) or AUTO (AI faders, auto volume, dynamic EQ and the AI DSP rack run on their own).')}
 ${card('', 'Dynamics and effects', 'Compressor, noise gate, limiter, de-esser, anti-feedback, chorus, lo-fi, auto-pan, harmony and vocal enhance.')}

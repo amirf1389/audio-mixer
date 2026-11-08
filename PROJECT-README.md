@@ -168,6 +168,14 @@ Interface changes in the page:
 - Endpoints: `GET /api/nowplaying`, `GET /api/interfaces` (see `bridge/README.md`). Not verified on real Windows / macOS hardware; the Linux path was
   tested with a fake D-Bus and a stubbed PortAudio.
 
+## AI driver lock and mixer SETS 1-4 (1.22.1.0 Beta)
+
+- **AI driver lock** (`bridge/driver-lock.js`). The ladder per interface: ASIO (its own driver; a wrapper such as ASIO4ALL is never the first choice) → WASAPI exclusive (only when `native/wasapi-exclusive` is built and wired; until then this step is reported as skipped, never pretended) → WASAPI shared → DirectSound → MME. The same hardware's Windows endpoint is now chosen WASAPI first (it used to be whichever came first in the list).
+  - An ASIO driver that refuses to open now falls back to the same hardware through Windows, for reading and writing (it used to stop with an error).
+  - When ASIO was silent (held by another program) or refused and the Windows endpoint worked, that path is LOCKED for the interface: the next start goes straight there (no 3 s of silence). A clean ASIO run with signal locks ASIO. Locks are retried after 6 h and can be forgotten on DIAGNOSTICS (FORGET / FORGET ALL) or with `POST /api/driver-lock {"forget": "<name>" | "*"}` (X-Mixer-Action: driver-lock). `GET /api/driver-lock` shows every ASIO interface's ladder and the locks. Kept in `~/.audio-mixer/driver-lock.json` (`BRIDGE_DRIVER_LOCK_FILE`).
+  - When two ASIO interfaces are open in this program (one ASIO driver per program), the second one's Windows fallback is NOT locked: that is a situation, not a fault of the hardware.
+- **Mixer SETS 1-4** (mixer toolbar). STORE, then 1-4, keeps faders, mute, solo and pan of all 32 channels; a number alone recalls it (an empty set is stored on its first press). Kept in `localStorage` (`halx_mix_sets`).
+
 ## Dual mode fader automation and AI MODE CONTROL (1.22.1.0 Beta)
 
 - **Where.** AI MIX page, top: DUAL MODE FADER AUTOMATION and AI MODE CONTROL (`window.faderAuto`, `window.aiMode`; the pure maths sit between `//@@AUTOMATION-MATH-START` / `-END` in index.html and are unit-tested).

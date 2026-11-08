@@ -9,6 +9,7 @@ const virtual = require('./virtual');
 const diag = require('./diagnostics');
 const guard = require('./input-guard');
 const hw = require('./hw-match');
+const dlock = require('./driver-lock');   // AI driver lock: the path that worked last time goes first
 function loadPortAudio() { return require('./portaudio').load(); }   // naudiodon2, or the device simulator (bridge/sim)
 
 function pickInput(pa, wantedId, channels) {
@@ -105,12 +106,21 @@ function createInputSession(conn, load = loadPortAudio, loadA = audify.loadAudif
     const sampleRate = parseInt(opts.sampleRate, 10) || 48000;
     const dev = pickInput(pa, Number.isInteger(opts.deviceId) ? opts.deviceId : null, channels);
     if (!dev && Number.isInteger(opts.deviceId)) { diag.error('device', 'read: device ' + opts.deviceId + ' not found (unplugged, or the list changed)'); return conn.send(JSON.stringify({ type: 'error', message: 'device not found' })); }
+    // AI DRIVER LOCK: this interface's ASIO driver failed before (held by another program, silent, refused) and its Windows endpoint worked:
+    // go there directly instead of fighting the busy driver again. Retried after a while; FORGET on the DIAGNOSTICS panel clears it.
+    const r = opts.noLock === true ? { dev, locked: null } : dlock.route(dev, pa.getDevices(), 'input');
+    if (dev && r.dev !== dev) {
+      const fb = { from: dev.name, to: r.dev.name, via: 'lock', reason: 'AI driver lock: ' + (r.locked.reason || r.locked.mode) };
+      diag.info('lock', `read: ${pa.simulated ? '[SIM] ' : ''}${dev.name}: AI driver lock -> ${r.locked.mode.toUpperCase()} (${r.dev.name}) since ${new Date(r.locked.at).toISOString().slice(11, 16)}: ${r.locked.reason || 'it worked last time'}`, { device: dev.name, via: r.dev.name });
+      try { conn.send(JSON.stringify({ type: 'fallback', fallback: fb })); } catch (_) { /* closed */ }
+      return openPa(pa, r.dev, { channels, sampleRate, opts: { ...opts, takeover: false }, universal: opts.universal, fallbackFrom: dev.name, locked: true });
+    }
     openPa(pa, dev, { channels, sampleRate, opts, universal: opts.universal });
   }
 
   // Opens a PortAudio input and runs it through the guards. On an ASIO device that delivers exact silence (driver held by another client) it
   // switches, once, to the same hardware's Windows (WASAPI) endpoint and tells the page with a "fallback" message.
-  function openPa(pa, dev, { channels, sampleRate, opts, universal, fallbackFrom }) {
+  function openPa(pa, dev, { channels, sampleRate, opts, universal, fallbackFrom, fallbackReason, locked }) {
     const sim = pa.simulated ? '[SIM] ' : '', api = dev ? dev.hostAPIName : 'default', name = dev ? dev.name : 'default';
     if (dev) {
       if (hw.isWrapper(dev.name) && /asio/i.test(api)) diag.warn('asio', `read: ${sim}${dev.name} is an ASIO wrapper: it may open a device that is also open through its own driver`, { device: dev.name });
@@ -119,7 +129,7 @@ function createInputSession(conn, load = loadPortAudio, loadA = audify.loadAudif
         const msg = lock.message; lock = null;
         // PortAudio loads ONE ASIO driver per program: a second interface (or a second reader of a busy driver) runs through its own
         // Windows endpoint instead, so every interface can run at the same time ("all audio interfaces run")
-        const twin = /asio/i.test(api) && !fallbackFrom && opts.autoFallback !== false ? hw.bestTwin(name, pa.getDevices().filter(d => !/asio/i.test(d.hostAPIName) && d.maxInputChannels > 0)) : null;
+        const twin = /asio/i.test(api) && !fallbackFrom && opts.autoFallback !== false ? dlock.twin(name, pa.getDevices().filter(d => !/asio/i.test(d.hostAPIName) && d.maxInputChannels > 0)) : null;
         if (twin) {
           const fb = { from: name, to: twin.name, via: 'wasapi', reason: msg };
           diag.warn('asio', `read: ${sim}${name}: ${msg}; using the same hardware through Windows: ${twin.name}`, { device: name, hostApi: api, twin: twin.name });
@@ -146,6 +156,17 @@ function createInputSession(conn, load = loadPortAudio, loadA = audify.loadAudif
         diag.warn('stream', `read: ${sim}${name} refused ${r} Hz: ${m}`, { device: name, hostApi: api, rate: r });
       }
     }
+    if (!io && dev && /asio/i.test(api) && !fallbackFrom && opts.autoFallback !== false) {
+      // ASIO first, then the same hardware through Windows: a driver that refuses to open (busy, not present, wrong state) is not the end
+      const m = String(lastErr && lastErr.message || lastErr || 'could not open the device');
+      const twin = dlock.twin(name, pa.getDevices().filter(d => !/asio/i.test(d.hostAPIName) && d.maxInputChannels > 0));
+      if (twin) {
+        if (lock) { lock.release(); lock = null; }
+        diag.warn('asio', `read: ${sim}${name} (${api}) did not open: ${m}; trying the same hardware through Windows: ${twin.name}`, { device: name, hostApi: api, twin: twin.name });
+        try { conn.send(JSON.stringify({ type: 'fallback', fallback: { from: name, to: twin.name, via: 'wasapi', reason: m } })); } catch (_) { /* closed */ }
+        return openPa(pa, twin, { channels, sampleRate, opts: { ...opts, takeover: false }, universal, fallbackFrom: name, fallbackReason: 'ASIO did not open: ' + m });
+      }
+    }
     if (!io) { const m = String(lastErr && lastErr.message || lastErr || 'could not open the device'); diag.error(/asio/i.test(api) ? 'asio' : 'stream', `read: ${sim}${name} (${api}) did not open: ${m}`, { device: name, hostApi: api, code: lastErr && lastErr.code }); stop(); return conn.send(JSON.stringify({ type: 'error', message: m })); }
     if (devRate !== sampleRate) diag.info('stream', `read: ${sim}${name} runs at its own rate ${devRate} Hz, converted to ${sampleRate} Hz`, { device: name });
     const remap = devCh !== channels ? b => audify.remapChannels(b, devCh, channels) : null;
@@ -156,11 +177,11 @@ function createInputSession(conn, load = loadPortAudio, loadA = audify.loadAudif
     const isAsio = /asio/i.test(api);
     let switching = false;
     const watch = guard.createSignalWatch({ rate: sampleRate, channels, isAsio,
-      onSignal: s => diag.info('signal', `read: ${sim}${name}: signal (${s.peakDb.toFixed(1)} dBFS)`, { device: name }),
+      onSignal: s => { diag.info('signal', `read: ${sim}${name}: signal (${s.peakDb.toFixed(1)} dBFS)`, { device: name }); if (isAsio && !fallbackFrom) dlock.learn(name, 'input', { mode: 'asio', device: name, hostApi: api, reason: 'its own ASIO driver delivers signal' }); },
       onNoSignal: s => { diag.warn('signal', `read: ${sim}${name} (${api}): no signal for ${s.seconds} s${s.exactZero ? ' (exact digital silence)' : ''}`, { device: name, hostApi: api }); try { conn.send(JSON.stringify({ type: 'signal', state: 'none', seconds: s.seconds, exactZero: s.exactZero })); } catch (_) { /* closed */ } },
       onSilentAsio: () => {
         if (fallbackFrom || opts.autoFallback === false || switching) return;
-        const twin = hw.bestTwin(name, pa.getDevices().filter(d => !/asio/i.test(d.hostAPIName) && d.maxInputChannels > 0));
+        const twin = dlock.twin(name, pa.getDevices().filter(d => !/asio/i.test(d.hostAPIName) && d.maxInputChannels > 0));
         diag.warn('asio', `read: ${sim}${name} delivered silence for 3 s: the ASIO driver is held by another client` + (twin ? `; switching to the same hardware through Windows: ${twin.name}` : '; no Windows twin of this hardware was found'), { device: name, hostApi: api, twin: twin ? twin.name : null });
         if (!twin) { try { conn.send(JSON.stringify({ type: 'signal', state: 'asio-silent', seconds: 3 })); } catch (_) { /* closed */ } return; }
         switching = true;
@@ -169,7 +190,7 @@ function createInputSession(conn, load = loadPortAudio, loadA = audify.loadAudif
           const fb = { from: name, to: twin.name, via: 'wasapi', reason: 'the ASIO driver delivered silence (held by another client)' };
           try { conn.send(JSON.stringify({ type: 'fallback', fallback: fb })); } catch (_) { /* closed */ }
           diag.info('fallback', `read: ${sim}${name} -> ${twin.name} (WASAPI, shared)`, fb);
-          openPa(pa, twin, { channels, sampleRate, opts: { ...opts, takeover: false }, universal, fallbackFrom: name });
+          openPa(pa, twin, { channels, sampleRate, opts: { ...opts, takeover: false }, universal, fallbackFrom: name, fallbackReason: 'ASIO delivered silence (held by another program)' });
         });
       } });
     try {
@@ -185,6 +206,7 @@ function createInputSession(conn, load = loadPortAudio, loadA = audify.loadAudif
       io.start();
       const si = { direction: 'input', engine: pa.simulated ? 'simulator' : 'naudiodon', device: name, hostApi: api, sampleRate, channels, ...(devRate !== sampleRate ? { deviceRate: devRate } : {}), ...(pa.simulated ? { simulated: true } : {}) };
       unreg = streams.add(si); meter = levels.attach(conn, { ...si, sid: unreg.id });
+      if (fallbackFrom && fallbackReason && !locked) dlock.learn(fallbackFrom, 'input', { mode: dlock.modeOf(api) === 'wasapi' ? 'wasapi-shared' : dlock.modeOf(api), device: name, hostApi: api, reason: fallbackReason });
       diag.info(isAsio ? 'asio' : 'stream', `read: ${sim}${name} (${api}) open: ${devCh} ch at ${devRate} Hz` + (fallbackFrom ? ` (fallback from ${fallbackFrom})` : ''), { device: name, hostApi: api, rate: devRate, channels: devCh });
       conn.send(JSON.stringify({ type: 'started', ...(universal ? { universal: true } : {}), engine: si.engine, device: name, hostApi: api, sampleRate, channels, ...(devRate !== sampleRate ? { deviceRate: devRate } : {}), ...(fallbackFrom ? { fallbackFrom } : {}), ...(pa.simulated ? { simulated: true } : {}) }));
     } catch (e) {
