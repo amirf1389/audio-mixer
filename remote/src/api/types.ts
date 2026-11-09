@@ -3,9 +3,10 @@ export interface Status { name: string; version: string; daemon: string; backend
 export interface Device { backend: string; id: string; name: string; in: number; out: number; defaultRate: number; defaultIn: boolean; defaultOut: boolean; sampleRates: number[] }
 export interface StripState { id: number; name: string; db: number; pan: number; mute: boolean; solo: boolean }
 export interface BusState { id: number; db: number; returnDb: number; mute: boolean }
-export interface ConsoleState { strips: StripState[]; buses: BusState[]; master: { db: number; limiter: boolean; ceilingDb: number }; backend: string; running: boolean }
+export interface MonitorState { source: number; db: number; dim: boolean; mono: boolean; mute: boolean }
+export interface ConsoleState { strips: StripState[]; buses: BusState[]; master: { db: number; limiter: boolean; ceilingDb: number }; monitor: MonitorState; backend: string; running: boolean }
 export interface StripMeter { pk: number; rms: number; hold: number; clip: number; gr: number; gate: number; in: number }
-export interface Meters { running: boolean; strips?: StripMeter[]; master?: { l: number; r: number; rms: number; clip: number }; buses?: number[]; loudness?: { m: number; s: number; i: number; lra: number; tp: number }; correlation?: number; blocks?: number; xruns?: number }
+export interface Meters { running: boolean; strips?: StripMeter[]; master?: { l: number; r: number; rms: number; clip: number }; monitor?: { l: number; r: number }; buses?: number[]; loudness?: { m: number; s: number; i: number; lra: number; tp: number }; correlation?: number; blocks?: number; xruns?: number }
 
 export type FilterType = 'off' | 'peaking' | 'lowshelf' | 'highshelf' | 'lowpass' | 'highpass' | 'notch' | 'allpass1' | 'allpass2';
 export type Control =
@@ -27,5 +28,6 @@ export type Control =
   | { op: 'polarity'; strip: number; on: boolean }
   | { op: 'compressor'; strip: number; on: boolean; thresholdDb?: number; ratio?: number; kneeDb?: number; attackMs?: number; releaseMs?: number; makeupDb?: number }
   | { op: 'gate'; strip: number; on: boolean; thresholdDb?: number; rangeDb?: number; attackMs?: number; holdMs?: number; releaseMs?: number }
+  | { op: 'monitor'; source?: number; db?: number; dim?: boolean; mono?: boolean; mute?: boolean }
   | { op: 'clearClips' };
 export interface ControlOk { ok: true; [k: string]: unknown }

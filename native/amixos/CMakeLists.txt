@@ -35,6 +35,7 @@ qt_add_qml_module(amixos
         qml/Panel.qml
         qml/Fader.qml
         qml/MeterBar.qml
+        qml/VuMeter.qml
         qml/HomePage.qml
         qml/MixerPage.qml
         qml/TonePage.qml

@@ -1,6 +1,6 @@
-// MIXER: 32 strips in two pages of 16 (or all), each with colour, name, pan, mute, solo, fader, post-fader meter, input meter, gain-reduction meter,
+// MIXER: 32 strips in two pages of 16 (or all), each with colour, name, pan, mute, solo, MORE menu, fader, post-fader meter (bars or an analogue VU face), input meter, gain-reduction meter,
 // DSP badges (GATE / EQ / X / COMP / LIM / DLY / Ø: lit when that stage is on, click to open its page for this channel), DCA / mute-group /
-// sends readout; click a strip to select it and edit its whole chain in the side panel; the master on the right.
+// sends readout; click a strip to select it and edit its whole chain in the side panel; the master and the MONITOR (control room: source, level, dim, mono, mute) on the right.
 import QtQuick
 import AmixOS   // this module: brings the Theme singleton (a plain directory import would see Theme as an ordinary type)
 import QtQuick.Controls
@@ -8,8 +8,12 @@ import QtQuick.Layouts
 
 Item {
     id: page
+    objectName: "mixerPage"
     property int bank: 0      // 0 = 1-16, 1 = 17-32, 2 = all
     property bool sidePanel: true
+    property bool vuMode: false        // bar meters or analogue VU faces on every strip and the master
+    property bool monitorPanel: true   // the control-room section next to the master
+    readonly property var mon: engine.monitor
     signal go(string id)
     readonly property int sel: engine.selectedStrip
     readonly property var selSt: engine.stripState[sel]
@@ -33,6 +37,9 @@ Item {
                     }
                 }
                 Rectangle { implicitWidth: 90; implicitHeight: 20; radius: 4; color: page.sidePanel ? Qt.rgba(0, 0.95, 1, 0.18) : Qt.rgba(1, 1, 1, 0.06); border.color: page.sidePanel ? Theme.cyan : "transparent"; Text { anchors.centerIn: parent; text: "CHANNEL PANEL"; color: page.sidePanel ? Theme.cyan : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.sidePanel = !page.sidePanel } }
+                Rectangle { implicitWidth: 70; implicitHeight: 20; radius: 4; color: page.vuMode ? Qt.rgba(0.984, 0.749, 0.141, 0.2) : Qt.rgba(1, 1, 1, 0.06); border.color: page.vuMode ? Theme.amber : "transparent"; Text { anchors.centerIn: parent; text: page.vuMode ? "VU METERS" : "BAR METERS"; color: page.vuMode ? Theme.amber : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.vuMode = !page.vuMode } }
+                Rectangle { visible: page.vuMode; implicitWidth: 86; implicitHeight: 20; radius: 4; color: Qt.rgba(1, 1, 1, 0.06); Text { anchors.centerIn: parent; text: "0 VU = " + engine.vuRefDb + " dBFS"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 } MouseArea { anchors.fill: parent; onClicked: engine.vuRefDb = engine.vuRefDb === -18 ? -20 : engine.vuRefDb === -20 ? -14 : -18 } }
+                Rectangle { implicitWidth: 64; implicitHeight: 20; radius: 4; color: page.monitorPanel ? Qt.rgba(0.2, 0.9, 0.5, 0.18) : Qt.rgba(1, 1, 1, 0.06); border.color: page.monitorPanel ? Theme.emerald : "transparent"; Text { anchors.centerIn: parent; text: "MONITOR"; color: page.monitorPanel ? Theme.emerald : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.monitorPanel = !page.monitorPanel } }
                 Item { Layout.fillWidth: true }
                 Text { text: engine.running ? engine.status : "ENGINE IDLE: connect a sound card"; color: engine.running ? Theme.emerald : Theme.amber; font.family: Theme.mono; font.pixelSize: 8 }
             }
@@ -80,6 +87,29 @@ Item {
                                     RowLayout { Layout.alignment: Qt.AlignHCenter; spacing: 3
                                         Rectangle { implicitWidth: 26; implicitHeight: 16; radius: 3; color: st && st.mute ? Theme.danger : (st && st.effectiveMute ? Qt.rgba(1, 0.165, 0.373, 0.3) : Qt.rgba(1, 1, 1, 0.08)); Text { anchors.centerIn: parent; text: "M"; color: st && st.mute ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setMute(index, !(st && st.mute)) } }
                                         Rectangle { implicitWidth: 26; implicitHeight: 16; radius: 3; color: st && st.solo ? Theme.amber : Qt.rgba(1, 1, 1, 0.08); Text { anchors.centerIn: parent; text: "S"; color: st && st.solo ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setSolo(index, !(st && st.solo)) } } }
+                                    // MORE: everything that does not fit on a 74 px strip
+                                    Rectangle { Layout.fillWidth: true; implicitHeight: 14; radius: 3; color: more.visible ? Theme.cyan : Qt.rgba(1, 1, 1, 0.06); border.color: Theme.lineSoft
+                                        Text { anchors.centerIn: parent; text: "MORE ▾"; color: more.visible ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
+                                        MouseArea { anchors.fill: parent; onClicked: { engine.selectedStrip = index; more.open() } }
+                                        Menu { id: more; width: 190
+                                            MenuItem { text: "Channel panel ›"; onTriggered: { page.sidePanel = true } }
+                                            MenuItem { text: "Open EQ / tone"; onTriggered: page.go("dsp") }
+                                            MenuItem { text: "Open compressor"; onTriggered: page.go("dyn") }
+                                            MenuItem { text: "Open gate"; onTriggered: page.go("gate") }
+                                            MenuItem { text: "Sends to buses"; onTriggered: page.go("bus") }
+                                            MenuSeparator {}
+                                            MenuItem { text: "Fader to 0 dB"; onTriggered: engine.setGain(index, 0) }
+                                            MenuItem { text: "Pan to centre"; onTriggered: engine.setPan(index, 0) }
+                                            MenuItem { text: "Flatten DSP (EQ, dyn, delay, Ø)"; onTriggered: engine.resetStripDsp(index) }
+                                            MenuItem { text: "Reset channel (keep name, colour)"; onTriggered: engine.resetStrip(index) }
+                                            MenuSeparator {}
+                                            MenuItem { text: "Copy channel"; onTriggered: engine.copyChannel(index) }
+                                            MenuItem { text: "Paste channel (DSP, sends, pan)"; enabled: engine.channelClipboard; onTriggered: engine.pasteChannel(index) }
+                                            MenuSeparator {}
+                                            MenuItem { text: (engine.recallSafe(index) ? "✓ " : "") + "Recall safe (scenes skip it)"; onTriggered: engine.setRecallSafe(index, !engine.recallSafe(index)) }
+                                            MenuItem { text: "Listen here: monitor = master"; onTriggered: engine.setMonitor(0, page.mon.db, page.mon.dim, page.mon.mono, page.mon.mute) }
+                                        } }
+                                    VuMeter { visible: page.vuMode; Layout.fillWidth: true; Layout.preferredHeight: 40; vuDb: mt ? mt.vuDb : -120; refDb: engine.vuRefDb; peakLamp: mt ? mt.clip : false; label: "VU" }
                                     RowLayout { Layout.fillHeight: true; Layout.alignment: Qt.AlignHCenter; spacing: 4
                                         Fader { Layout.fillHeight: true; value: st ? st.db : 0; onMoved: function (db) { engine.setGain(index, db) } }
                                         ColumnLayout { Layout.fillHeight: true; spacing: 0
@@ -152,6 +182,7 @@ Item {
                 ColumnLayout {
                     anchors.fill: parent; anchors.margins: 8; spacing: 6
                     Text { Layout.alignment: Qt.AlignHCenter; text: "MASTER"; color: Theme.orange; font.family: Theme.mono; font.pixelSize: 10; font.bold: true; font.letterSpacing: 2 }
+                    VuMeter { visible: page.vuMode; Layout.fillWidth: true; Layout.preferredHeight: 60; vuDb: engine.telemetry.masterVuDb === undefined ? -120 : engine.telemetry.masterVuDb; refDb: engine.vuRefDb; peakLamp: engine.telemetry.masterClip === true; label: "VU  MASTER" }
                     RowLayout { Layout.fillHeight: true; Layout.alignment: Qt.AlignHCenter; spacing: 8
                         Fader { Layout.fillHeight: true; value: engine.masterDb; onMoved: function (db) { engine.setMaster(db) } }
                         MeterBar { Layout.fillHeight: true; Layout.topMargin: 8; peakDb: engine.telemetry.masterLDb; rmsDb: engine.telemetry.masterRmsDb; clip: engine.telemetry.masterClip }
@@ -160,6 +191,33 @@ Item {
                     Text { Layout.alignment: Qt.AlignHCenter; text: (engine.telemetry.shortTerm <= -119 ? "-inf" : engine.telemetry.shortTerm.toFixed(1)) + " LUFS"; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8 }
                     Text { Layout.alignment: Qt.AlignHCenter; text: "LIMITER -0.5 dBFS"; color: Theme.emerald; font.family: Theme.mono; font.pixelSize: 7 }
                     Rectangle { Layout.fillWidth: true; implicitHeight: 18; radius: 3; color: Qt.rgba(1, 1, 1, 0.08); Text { anchors.centerIn: parent; text: "CLEAR CLIPS"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.clearClips() } }
+                }
+            }
+            // MONITOR: the control room. What the speakers / headphones get after the master meters: a source (master or a bus), level, DIM, MONO, MUTE.
+            // The master mix and its meters are not touched: muting the monitor does not mute the show.
+            Rectangle {
+                visible: page.monitorPanel
+                Layout.preferredWidth: 118; Layout.fillHeight: true; radius: Theme.radius; color: Theme.cardRaised; border.color: Theme.emerald
+                ColumnLayout {
+                    anchors.fill: parent; anchors.margins: 8; spacing: 5
+                    Text { Layout.alignment: Qt.AlignHCenter; text: "MONITOR"; color: Theme.emerald; font.family: Theme.mono; font.pixelSize: 10; font.bold: true; font.letterSpacing: 2 }
+                    Text { Layout.alignment: Qt.AlignHCenter; text: "CONTROL ROOM"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 6; font.letterSpacing: 1 }
+                    Text { text: "SOURCE"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
+                    Flow { Layout.fillWidth: true; spacing: 3
+                        Repeater { model: 9
+                            delegate: Rectangle { implicitWidth: index === 0 ? 46 : 22; implicitHeight: 14; radius: 2; color: page.mon.source === index ? Theme.emerald : Qt.rgba(1, 1, 1, 0.08)
+                                Text { anchors.centerIn: parent; text: index === 0 ? "MASTER" : "B" + index; color: page.mon.source === index ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 6; font.bold: true }
+                                MouseArea { anchors.fill: parent; onClicked: engine.setMonitor(index, page.mon.db, page.mon.dim, page.mon.mono, page.mon.mute) } } } }
+                    RowLayout { Layout.fillHeight: true; Layout.alignment: Qt.AlignHCenter; spacing: 6
+                        Fader { Layout.fillHeight: true; value: page.mon.db; onMoved: function (db) { engine.setMonitor(page.mon.source, db, page.mon.dim, page.mon.mono, page.mon.mute) } }
+                        MeterBar { Layout.fillHeight: true; Layout.topMargin: 8; implicitWidth: 7; peakDb: engine.telemetry.monitorLDb === undefined ? -120 : engine.telemetry.monitorLDb; rmsDb: -120 }
+                        MeterBar { Layout.fillHeight: true; Layout.topMargin: 8; implicitWidth: 7; peakDb: engine.telemetry.monitorRDb === undefined ? -120 : engine.telemetry.monitorRDb; rmsDb: -120 } }
+                    Text { Layout.alignment: Qt.AlignHCenter; text: Theme.dbText(page.mon.db) + " dB" + (page.mon.dim ? "  DIM -20" : ""); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8 }
+                    RowLayout { Layout.fillWidth: true; spacing: 3
+                        Rectangle { Layout.fillWidth: true; implicitHeight: 18; radius: 3; color: page.mon.dim ? Theme.amber : Qt.rgba(1, 1, 1, 0.08); Text { anchors.centerIn: parent; text: "DIM"; color: page.mon.dim ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setMonitor(page.mon.source, page.mon.db, !page.mon.dim, page.mon.mono, page.mon.mute) } }
+                        Rectangle { Layout.fillWidth: true; implicitHeight: 18; radius: 3; color: page.mon.mono ? Theme.cyan : Qt.rgba(1, 1, 1, 0.08); Text { anchors.centerIn: parent; text: "MONO"; color: page.mon.mono ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setMonitor(page.mon.source, page.mon.db, page.mon.dim, !page.mon.mono, page.mon.mute) } } }
+                    Rectangle { Layout.fillWidth: true; implicitHeight: 22; radius: 3; color: page.mon.mute ? Theme.danger : Qt.rgba(1, 1, 1, 0.08); border.color: page.mon.mute ? Theme.danger : Theme.lineSoft; Text { anchors.centerIn: parent; text: page.mon.mute ? "MONITOR MUTED" : "MUTE"; color: page.mon.mute ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setMonitor(page.mon.source, page.mon.db, page.mon.dim, page.mon.mono, !page.mon.mute) } }
+                    Text { Layout.fillWidth: true; text: "After the master meters: the show is not affected"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 6; wrapMode: Text.WordWrap }
                 }
             }
         }

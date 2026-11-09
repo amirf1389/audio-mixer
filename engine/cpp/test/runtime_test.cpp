@@ -3,7 +3,9 @@
 #include "audiomixer/runtime.hpp"
 
 #include <chrono>
+#include <algorithm>
 #include <cmath>
+#include <vector>
 #include <cstdio>
 #include <cstdlib>
 #include <thread>
@@ -45,6 +47,25 @@ int main() {
   std::printf("backends built in:"); for (const auto& n : names) std::printf(" %s", n.c_str()); std::printf("\n");
   expect(names.back() == "null", "null is always there");
   run("null", "", "", true);
+  {   // the monitor section: -20 dB dim halves nothing on the master meters but the monitor peak drops by 10x; mute silences the monitor only
+    am::Runtime rt(2); am::DeviceConfig c; c.backend = "null"; c.frames = 64; std::string err; expect(rt.open(c, err), "open null for the monitor test");
+    const std::size_t n = 64; std::vector<float> tone(n); for (std::size_t i = 0; i < n; ++i) tone[i] = 0.5f * ((i / 8) % 2 ? 1.f : -1.f);
+    std::vector<float> o0(n), o1(n); const float* ins[2] = {tone.data(), tone.data()}; float* outs[2] = {o0.data(), o1.data()};
+    rt.setGainDb(0, 0); rt.setGainDb(1, 0); rt.setPan(0, -1); rt.setPan(1, 1);
+    for (int k = 0; k < 20; ++k) rt.onBlock(ins, outs, n);
+    const am::Snapshot plain = rt.snapshot(); const float lPlain = *std::max_element(o0.begin(), o0.end());
+    rt.setMonitor(0, 0, true, false, false); for (int k = 0; k < 20; ++k) rt.onBlock(ins, outs, n);
+    const am::Snapshot dim = rt.snapshot(); const float lDim = *std::max_element(o0.begin(), o0.end());
+    expect(std::fabs(dim.master[0].pk - plain.master[0].pk) < 0.02, "dim leaves the master meter alone");
+    expect(lDim > 0 && std::fabs(lDim / lPlain - 0.1f) < 0.01f, "dim is -20 dB on the outputs");
+    expect(std::fabs(dim.monitorPk[0] / plain.monitorPk[0] - 0.1) < 0.02, "the monitor meter follows the dim");
+    rt.setMonitor(0, 0, false, true, false); for (int k = 0; k < 20; ++k) rt.onBlock(ins, outs, n);
+    expect(std::fabs(*std::max_element(o0.begin(), o0.end()) - *std::max_element(o1.begin(), o1.end())) < 1e-5f, "mono: both outputs carry the same sum");
+    rt.setMonitor(0, 0, false, false, true); for (int k = 0; k < 20; ++k) rt.onBlock(ins, outs, n);
+    expect(*std::max_element(o0.begin(), o0.end()) == 0.f && rt.snapshot().master[0].pk > 0.1, "mute silences the outputs, the master meter still shows signal");
+    rt.setMonitor(1, 0, false, false, false); rt.setSend(0, 0, 0, false); rt.setBusLevel(0, 0); for (int k = 0; k < 20; ++k) rt.onBlock(ins, outs, n);
+    expect(*std::max_element(o0.begin(), o0.end()) > 0.1f, "monitor source = bus 1 hears the send");
+  }
   { std::string unknown = "nonexistent"; am::Runtime rt(2); am::DeviceConfig c; c.backend = unknown; std::string err; expect(!rt.open(c, err) && !err.empty(), "an unknown backend is refused with a reason"); }
 #ifdef AM_HAVE_ALSA
   run("alsa", "null", "null", false);                                                     // ALSA's own null device: no hardware needed (skipped where it is not configured)

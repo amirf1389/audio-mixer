@@ -149,6 +149,7 @@ json::Value Daemon::state() const {
   for (int k = 0; k < kMaxBuses; ++k) { json::Value v = json::Value::object(); v.set("id", k); v.set("db", buses_[k].db); v.set("returnDb", buses_[k].returnDb); v.set("mute", buses_[k].mute); buses.push(v); }
   o.set("buses", buses);
   json::Value m = json::Value::object(); m.set("db", masterDb_); m.set("limiter", limiter_); m.set("ceilingDb", ceiling_); o.set("master", m);
+  json::Value mo = json::Value::object(); mo.set("source", mon_.source); mo.set("db", mon_.db); mo.set("dim", mon_.dim); mo.set("mono", mon_.mono); mo.set("mute", mon_.mute); o.set("monitor", mo);
   o.set("backend", rt_ ? backend_ : ""); o.set("running", rt_ && rt_->running());
   return o;
 }
@@ -170,6 +171,7 @@ json::Value Daemon::meters() const {
   o.set("master", master);
   json::Value buses = json::Value::array(); for (int k = 0; k < kMaxBuses; ++k) buses.push(num(s.buses[k].pk)); o.set("buses", buses);
   json::Value loud = json::Value::object(); loud.set("m", num(s.momentary)); loud.set("s", num(s.shortTerm)); loud.set("i", num(s.integrated)); loud.set("lra", num(s.lra)); loud.set("tp", num(s.truePeak)); o.set("loudness", loud);
+  json::Value mon = json::Value::object(); mon.set("l", num(s.monitorPk[0])); mon.set("r", num(s.monitorPk[1])); o.set("monitor", mon);
   o.set("correlation", num(s.correlation)); o.set("blocks", static_cast<double>(s.blocks)); o.set("xruns", static_cast<double>(s.xruns)); o.set("running", rt_->running());
   return o;
 }
@@ -193,7 +195,7 @@ json::Value Daemon::control(const json::Value& cmd, std::string& err) {
     // replay the console onto the fresh runtime so that what the phone shows is what sounds
     for (int i = 0; i < opt_.strips; ++i) { const Strip& st = strips_[static_cast<std::size_t>(i)]; rt->setGainDb(i, st.db); rt->setPan(i, st.pan); rt->setMute(i, st.mute); rt->setSolo(i, st.solo); }
     for (int k = 0; k < kMaxBuses; ++k) { rt->setBusLevel(k, buses_[k].db); rt->setBusMute(k, buses_[k].mute); rt->setBusReturn(k, buses_[k].returnDb); }
-    rt->setMasterDb(masterDb_); rt->setLimiter(limiter_, ceiling_);
+    rt->setMasterDb(masterDb_); rt->setLimiter(limiter_, ceiling_); rt->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute);
     rt_ = std::move(rt); backend_ = rt_->backendName(); lastError_.clear();
     ok.set("backend", backend_); ok.set("rate", cfg.sampleRate); ok.set("frames", static_cast<int>(cfg.frames)); return ok;
   }
@@ -228,6 +230,14 @@ json::Value Daemon::control(const json::Value& cmd, std::string& err) {
   if (op == "gate") {
     if (!strip(s) || !need()) return {};
     rt_->setGate(s, cmd["on"].asBool(), clampDb(cmd["thresholdDb"].asNumber(-40), -80, 0), clampDb(cmd["rangeDb"].asNumber(-80), -120, 0), std::max(0.1, cmd["attackMs"].asNumber(1)), std::max(0.0, cmd["holdMs"].asNumber(50)), std::max(5.0, cmd["releaseMs"].asNumber(100)));
+    return ok;
+  }
+  if (op == "monitor") {   // control room: source 0 master, 1..8 bus; level, dim, mono, mute (after the master meters)
+    mon_.source = std::max(0, std::min(kMaxBuses, cmd["source"].asInt(mon_.source))); if (cmd.has("db")) mon_.db = clampDb(cmd["db"].asNumber(0), -60, 10);
+    if (cmd.has("dim")) mon_.dim = cmd["dim"].asBool();
+    if (cmd.has("mono")) mon_.mono = cmd["mono"].asBool();
+    if (cmd.has("mute")) mon_.mute = cmd["mute"].asBool();
+    if (rt_) rt_->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute);
     return ok;
   }
   if (op == "clearClips") { if (rt_) rt_->clearClips(); return ok; }

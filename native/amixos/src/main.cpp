@@ -46,6 +46,12 @@ int main(int argc, char* argv[]) {
     if (std::fabs(engine.stripState()[0].toMap().value("db").toDouble() + 6) > 1e-9) { std::fprintf(stderr, "amixos --smoke: scene recall did not restore the fader\n"); return 5; }
     if (!engine.applyPreset("VOCAL", 1) || !engine.channelParams(1).value("compOn").toBool()) { std::fprintf(stderr, "amixos --smoke: factory preset did not apply\n"); return 6; }
     engine.clearScene(15);
+    // the monitor section and the MORE menu's copy / paste are model changes; they must round-trip through the Engine
+    engine.setMonitor(2, -12, true, true, false);
+    { const QVariantMap mo = engine.monitor(); if (mo.value("source").toInt() != 2 || std::fabs(mo.value("db").toDouble() + 12) > 1e-9 || !mo.value("dim").toBool() || !mo.value("mono").toBool() || mo.value("mute").toBool()) { std::fprintf(stderr, "amixos --smoke: monitor state did not take\n"); return 8; } }
+    engine.copyChannel(1); if (!engine.channelClipboard() || !engine.pasteChannel(2) || !engine.channelParams(2).value("compOn").toBool()) { std::fprintf(stderr, "amixos --smoke: copy / paste channel failed\n"); return 9; }
+    engine.resetStrip(2); if (engine.channelParams(2).value("compOn").toBool()) { std::fprintf(stderr, "amixos --smoke: reset channel left the compressor on\n"); return 10; }
+    engine.setMonitor(0, 0, false, false, false);
     QTimer::singleShot(1200, &app, [&] {
       if (!shots.isEmpty()) {   // one picture per ported page
         QDir().mkpath(shots);
@@ -53,6 +59,9 @@ int main(int argc, char* argv[]) {
         for (const char* id : {"home", "mixer", "dsp", "dyn", "gate", "bus", "dca", "scenes", "presets", "io", "meter", "lufs", "sys", "fx"}) {
           win->setProperty("current", QString::fromLatin1(id)); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
           const QImage img = win->grabWindow(); img.save(shots + "/" + id + ".png"); std::printf("amixos --shots: %s %dx%d\n", id, img.width(), img.height());
+          if (QString::fromLatin1(id) == "mixer") {   // the same page with the analogue VU faces
+            if (QObject* mixer = win->findChild<QObject*>("mixerPage")) { mixer->setProperty("vuMode", true); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + "/mixer-vu.png"); mixer->setProperty("vuMode", false); std::printf("amixos --shots: mixer-vu\n"); }
+          }
         }
       }
       // the language tables: 80 languages, every one covers the page names
