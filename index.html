@@ -4692,7 +4692,7 @@ const cArea = document.getElementById('content-area');
                       <option value="quad">Quadraphonic (4.0)</option>
                       <option value="5.1">5.1 Surround</option>
                       <option value="7.1">7.1 Cinema</option>
-                      <option value="7.1.4">7.1.4 Dolby Atmos</option>
+                      <option value="7.1.4">7.1.4 Immersive</option>
                       <option value="9.1.6">9.1.6 Studio Pro</option>
                       <option value="11.4.8" selected>11.4.8 Titan Omnisphere</option>
                     </select>
@@ -10307,6 +10307,7 @@ const cArea = document.getElementById('content-area');
                     if (on) {
                         if (!window.state.ctx && typeof initAudioEngine === 'function') await initAudioEngine();
                         if (window.state.spatial360 && window.state.spatial360.enabled && window.setSpatial360) window.setSpatial360(false, true);   // one master binauraliser at a time
+                        if (window.surroundMaster && window.surroundMaster.state.enabled) await window.surroundMaster.set(false, true);
                     }
                     st.enabled = !!on; persist(); api.wire(st.enabled); api.render();
                     if (!silent && window.notify) window.notify(st.enabled ? 'Headphone crossfeed ON (' + st.preset + ', ' + st.amount + '%)' : 'Headphone crossfeed OFF', 'headphones');
@@ -10810,6 +10811,230 @@ const cArea = document.getElementById('content-area');
     // MIXER SETS 1-4: four quick console snapshots on the mixer toolbar (faders, mute, solo and pan of every channel). STORE, then a number,
     // keeps the console in that set; a number alone recalls it (an empty set is stored on its first press). Kept in localStorage (halx_mix_sets).
     // Lighter than SCENES (the SCENES page keeps names and colours too); SETS are for switching between song parts or A/B mixes in one click.
+    // ── SURROUND MASTER (1.22.1.0 Beta): virtual master channel pages STEREO (2) / QUAD (4) / SURROUND 7.1.2 (10 channels, not 8) ──
+    // The stereo master is upmixed to the chosen speaker layout (direct L/R, a centre from the mid signal, surrounds and heights from the delayed
+    // side signal, LFE from the low-passed sum), every speaker gets its own master strip (fader, mute, meter), and the result goes to the output
+    // as discrete channels when the output has them, else it is folded back to stereo (ITU-style -3 dB coefficients) so nothing is lost.
+    // QUAD and SURROUND are part of AmF X1 Pro / Studio Master (license plan pro, studio or master); STEREO is free. This is AmF X1's own
+    // channel-based layout: it does not encode, decode or claim any licensed immersive format.
+    window.surroundMaster = (() => {
+        //@@SURROUND-MATH-START
+        const SM = (() => {
+            const FORMATS = {
+                stereo: { id: 'stereo', name: 'STEREO', speakers: [{ id: 'L', az: -30 }, { id: 'R', az: 30 }] },
+                quad: { id: 'quad', name: 'QUAD', speakers: [{ id: 'L', az: -45 }, { id: 'R', az: 45 }, { id: 'Ls', az: -135 }, { id: 'Rs', az: 135 }] },
+                '7.1.2': { id: '7.1.2', name: 'SURROUND 7.1.2', speakers: [{ id: 'L', az: -30 }, { id: 'R', az: 30 }, { id: 'C', az: 0 }, { id: 'LFE', lfe: true }, { id: 'Ls', az: -90 }, { id: 'Rs', az: 90 },
+                    { id: 'Lb', az: -150 }, { id: 'Rb', az: 150 }, { id: 'Ltf', az: -45, el: 45 }, { id: 'Rtf', az: 45, el: 45 }] },
+            };
+            const PAID = ['pro', 'studio', 'master'];
+            const fmt = id => FORMATS[id] || FORMATS.stereo;
+            const allowed = (id, plan) => fmt(id).id === 'stereo' || PAID.indexOf(String(plan || 'basic')) >= 0;
+            const wrap = a => { a = ((a + 180) % 360 + 360) % 360 - 180; return a; };
+            const sumSq = g => g.reduce((s, x) => s + x * x, 0);
+            // constant-power pairwise panning on the ear-level ring, heights by elevation; the gains of one source always have power 1, LFE never
+            function panGains(id, az, el) {
+                const F = fmt(id), sp = F.speakers, g = sp.map(() => 0);
+                az = wrap(+az || 0); el = Math.max(0, Math.min(90, +el || 0));
+                const ring = sp.map((s, i) => ({ i, az: s.az })).filter((s, k) => !sp[s.i].lfe && !sp[s.i].el).sort((a, b) => a.az - b.az);
+                const tops = sp.map((s, i) => ({ i, az: s.az })).filter(s => sp[s.i].el);
+                const hShare = tops.length ? Math.sin(el * Math.PI / 180) : 0, rShare = Math.sqrt(1 - hShare * hShare);
+                const pair = (set, a, share) => {
+                    if (!set.length || !share) return;
+                    if (set.length === 1) { g[set[0].i] += share; return; }
+                    const full = set.length > 2 || (set[set.length - 1].az - set[0].az) >= 180;   // a ring around the listener, or a frontal arc (stereo)
+                    let lo = null, hi = null;
+                    for (let k = 0; k < set.length; k++) { const n = set[(k + 1) % set.length]; if (!full && k === set.length - 1) break; const a0 = set[k].az, a1 = k === set.length - 1 ? n.az + 360 : n.az, x = a < a0 ? a + 360 : a; if (x >= a0 && x <= a1) { lo = set[k]; hi = n; break; } }
+                    if (!lo) { const c = a < set[0].az ? set[0] : set[set.length - 1]; g[c.i] += share; return; }   // outside a frontal arc: the nearest end
+                    const a0 = lo.az, a1 = hi.az <= a0 ? hi.az + 360 : hi.az, x = a < a0 ? a + 360 : a, t = a1 === a0 ? 0 : (x - a0) / (a1 - a0);
+                    g[lo.i] += share * Math.cos(t * Math.PI / 2); g[hi.i] += share * Math.sin(t * Math.PI / 2);
+                };
+                pair(ring, az, rShare); pair(tops.sort((a, b) => a.az - b.az), az, hShare);
+                const p = Math.sqrt(sumSq(g)) || 1;
+                return g.map(x => Math.round(x / p * 1e6) / 1e6);
+            }
+            // how much of the stereo master's L and R feeds each speaker, and through which path (direct, ambient = delayed side, lfe = low-passed sum)
+            function upmix(id, o = {}) {
+                const c = v => Math.max(0, Math.min(1, v == null ? 0.5 : +v || 0));
+                const centre = c(o.center), sur = c(o.surround), hgt = c(o.height), lfe = c(o.lfe);
+                return fmt(id).speakers.map(s => {
+                    if (s.id === 'L') return { id: s.id, fromL: 1, fromR: 0, path: 'direct' };
+                    if (s.id === 'R') return { id: s.id, fromL: 0, fromR: 1, path: 'direct' };
+                    if (s.id === 'C') return { id: s.id, fromL: 0.5 * centre, fromR: 0.5 * centre, path: 'direct' };
+                    if (s.lfe) return { id: s.id, fromL: 0.5 * lfe, fromR: 0.5 * lfe, path: 'lfe' };
+                    const k = (s.el ? 0.5 * hgt : (Math.abs(s.az) > 120 ? 0.7 : 1) * 0.5 * sur), left = s.az < 0;
+                    return { id: s.id, fromL: left ? k : -k, fromR: left ? -k : k, path: 'ambient' };   // the side signal (L - R), each side its own polarity
+                });
+            }
+            // fold a layout back to stereo: centre, surrounds and heights at -3 dB into their side, LFE left out; normalised so it never clips
+            function downmix(id) {
+                const sp = fmt(id).speakers, h = Math.SQRT1_2;
+                const L = sp.map(s => s.lfe ? 0 : s.id === 'L' ? 1 : s.id === 'R' ? 0 : s.id === 'C' ? h : s.az < 0 ? h : 0);
+                const R = sp.map(s => s.lfe ? 0 : s.id === 'R' ? 1 : s.id === 'L' ? 0 : s.id === 'C' ? h : s.az > 0 ? h : 0);
+                const m = Math.max(1, L.reduce((a, b) => a + b, 0), R.reduce((a, b) => a + b, 0));
+                return { L: L.map(x => Math.round(x / m * 1e6) / 1e6), R: R.map(x => Math.round(x / m * 1e6) / 1e6) };
+            }
+            const stripGain = s => (!s || s.mute) ? 0 : Math.pow(10, Math.max(-60, Math.min(10, +s.db || 0)) / 20);
+            return { FORMATS, PAID, fmt, allowed, panGains, upmix, downmix, stripGain, wrap };
+        })();
+        //@@SURROUND-MATH-END
+        const KEY = 'halx_surround_master';
+        const st = { enabled: false, format: 'stereo', opts: { center: 0.5, surround: 0.5, height: 0.4, lfe: 0.5 }, strips: {} };
+        try { const j = JSON.parse(localStorage.getItem(KEY) || 'null'); if (j && typeof j === 'object') { st.format = SM.FORMATS[j.format] ? j.format : 'stereo'; Object.assign(st.opts, j.opts || {}); st.strips = j.strips && typeof j.strips === 'object' ? j.strips : {}; st.enabled = !!j.enabled; } } catch (_) { /* fresh */ }
+        const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(st)); } catch (_) { /* storage blocked */ } };
+        const plan = () => (window.license && window.license.plan && window.license.plan.id) || 'basic';
+        const strip = id => st.strips[id] || (st.strips[id] = { db: 0, mute: false });
+        let g = null, wired = false, raf = 0;
+        function teardown() {
+            if (!g) return;
+            const ctx = window.state && window.state.ctx, n = window.state && window.state.nodes;
+            try { if (n && n.musicAnalyser) n.musicAnalyser.disconnect(g.input); } catch (_) { /* gone */ }
+            try { g.output.disconnect(); } catch (_) { /* gone */ }
+            if (ctx && g.channels > 2) { try { ctx.destination.channelCount = 2; ctx.destination.channelInterpretation = 'speakers'; } catch (_) { /* fixed */ } }
+            g = null;
+        }
+        function build(ctx) {
+            const F = SM.fmt(st.format), sp = F.speakers, N = sp.length, U = SM.upmix(F.id, st.opts);
+            const maxCh = (ctx.destination && ctx.destination.maxChannelCount) || 2, discrete = maxCh >= N && N > 2;
+            const input = ctx.createGain(), split = ctx.createChannelSplitter(2), merge = ctx.createChannelMerger(N);
+            input.channelCount = 2; input.channelCountMode = 'explicit'; input.connect(split);
+            const trims = [], meters = [];
+            U.forEach((u, i) => {
+                const sum = ctx.createGain(); sum.gain.value = 1;
+                const a = ctx.createGain(), b = ctx.createGain(); a.gain.value = u.fromL; b.gain.value = u.fromR;
+                split.connect(a, 0); split.connect(b, 1); a.connect(sum); b.connect(sum);
+                let tail = sum;
+                if (u.path === 'ambient') { const d = ctx.createDelay(0.05), lp = ctx.createBiquadFilter(); d.delayTime.value = sp[i].el ? 0.02 : 0.012 + (Math.abs(sp[i].az) > 120 ? 0.006 : 0); lp.type = 'lowpass'; lp.frequency.value = sp[i].el ? 9000 : 7000; tail.connect(d); d.connect(lp); tail = lp; }
+                if (u.path === 'lfe') { const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 120; tail.connect(lp); tail = lp; }
+                const trim = ctx.createGain(); trim.gain.value = SM.stripGain(strip(sp[i].id)); tail.connect(trim); trim.connect(merge, 0, i);
+                const m = ctx.createAnalyser(); m.fftSize = 256; trim.connect(m); trims.push(trim); meters.push(m);
+            });
+            let output = merge;
+            if (!discrete && N > 2) {   // fold back to stereo for a 2-channel output
+                const sp2 = ctx.createChannelSplitter(N), out2 = ctx.createChannelMerger(2), D = SM.downmix(F.id);
+                merge.connect(sp2);
+                for (let i = 0; i < N; i++) { const l = ctx.createGain(), r = ctx.createGain(); l.gain.value = D.L[i]; r.gain.value = D.R[i]; sp2.connect(l, i); sp2.connect(r, i); l.connect(out2, 0, 0); r.connect(out2, 0, 1); }
+                output = out2;
+            }
+            if (discrete) { try { ctx.destination.channelCount = N; ctx.destination.channelCountMode = 'explicit'; ctx.destination.channelInterpretation = 'discrete'; } catch (_) { /* fixed */ } }
+            g = { input, output, trims, meters, channels: discrete ? N : 2, discrete, format: F.id, N };
+            return g;
+        }
+        const api = {
+            math: SM, state: st,
+            get wired() { return wired; }, get graph() { return g; },
+            outputInfo() {
+                const ctx = window.state && window.state.ctx, N = SM.fmt(st.format).speakers.length, max = ctx && ctx.destination ? ctx.destination.maxChannelCount || 2 : 2;
+                return N <= 2 ? 'Output: stereo (2 channels)' : max >= N ? 'Output: ' + N + ' discrete channels (' + max + ' available)' : 'This output has ' + max + ' channels: ' + SM.fmt(st.format).name + ' is folded down to stereo (centre, surrounds and heights at -3 dB)';
+            },
+            wire(on) {
+                const ctx = window.state && window.state.ctx, n = window.state && window.state.nodes;
+                if (!ctx || !n || !n.musicAnalyser) return false;
+                if (on) {
+                    teardown();
+                    try { n.musicAnalyser.disconnect(ctx.destination); } catch (_) { /* PortAudio output on, or already apart */ }
+                    build(ctx); n.musicAnalyser.connect(g.input); g.output.connect(ctx.destination); wired = true;
+                } else if (wired) {
+                    teardown(); wired = false;
+                    if (!(window.universalAsioSdk && window.universalAsioSdk.paReady)) { try { n.musicAnalyser.connect(ctx.destination); } catch (_) { /* gone */ } }
+                }
+                return true;
+            },
+            async set(on, silent) {
+                if (on && !SM.allowed(st.format, plan())) { st.format = 'stereo'; }
+                if (on) {
+                    if (!(window.state && window.state.ctx) && typeof initAudioEngine === 'function') await initAudioEngine();
+                    if (window.crossfeed && window.crossfeed.state && window.crossfeed.state.enabled) await window.crossfeed.set(false, true);   // one master processor at a time
+                    if (window.state && window.state.spatial360 && window.state.spatial360.enabled && window.setSpatial360) window.setSpatial360(false, true);
+                }
+                st.enabled = !!on; persist(); api.wire(st.enabled); api.render(); api.meters(st.enabled);
+                if (!silent && window.notify) window.notify(st.enabled ? 'Surround master ON: ' + SM.fmt(st.format).name + ' (' + SM.fmt(st.format).speakers.length + ' channels). ' + api.outputInfo() : 'Surround master OFF', 'volume-high');
+            },
+            setFormat(id) {
+                if (!SM.FORMATS[id]) return false;
+                if (!SM.allowed(id, plan())) {
+                    if (window.notify) window.notify(SM.FORMATS[id].name + ' is part of AmF X1 Pro and Studio Master: UPGRADE on the LICENSE page', 'lock');
+                    return false;
+                }
+                st.format = id; persist(); if (st.enabled) api.wire(true); api.render(); return true;
+            },
+            setStrip(id, key, value) {
+                const s = strip(id);
+                if (key === 'db') s.db = Math.max(-60, Math.min(10, Math.round((parseFloat(value) || 0) * 10) / 10)); else if (key === 'mute') s.mute = !!value;
+                persist();
+                const i = SM.fmt(st.format).speakers.findIndex(x => x.id === id), ctx = window.state && window.state.ctx;
+                if (g && g.trims[i] && ctx) g.trims[i].gain.setTargetAtTime(SM.stripGain(s), ctx.currentTime, 0.015);
+                api.renderStrip(id);
+            },
+            setOpt(key, value) { if (!(key in st.opts)) return; st.opts[key] = Math.max(0, Math.min(1, parseFloat(value) || 0)); persist(); if (st.enabled && wired) api.wire(true); },
+            meters(on) {
+                cancelAnimationFrame(raf); if (!on || typeof document === 'undefined') return;
+                const buf = new Float32Array(256);
+                const tick = () => {
+                    if (!g || !st.enabled) return;
+                    const root = document.getElementById('surm-strips');
+                    if (root && root.offsetParent !== null) g.meters.forEach((m, i) => { m.getFloatTimeDomainData(buf); let s = 0; for (let k = 0; k < buf.length; k++) s += buf[k] * buf[k]; const db = 20 * Math.log10(Math.sqrt(s / buf.length) + 1e-9), el = document.getElementById('surm-meter-' + i); if (el) el.style.height = Math.max(0, Math.min(100, (db + 60) / 60 * 100)) + '%'; });
+                    raf = requestAnimationFrame(tick);
+                };
+                raf = requestAnimationFrame(tick);
+            },
+            renderStrip(id) {
+                if (typeof document === 'undefined') return;
+                const s = strip(id), v = document.getElementById('surm-db-' + id), m = document.getElementById('surm-mute-' + id), f = document.getElementById('surm-fader-' + id);
+                if (v) v.textContent = (s.db > 0 ? '+' : '') + s.db.toFixed(1);
+                if (f && +f.value !== s.db) f.value = s.db;
+                if (m) { m.setAttribute('aria-pressed', s.mute ? 'true' : 'false'); m.className = 'w-full px-1 py-0.5 rounded font-black text-[7px] border ' + (s.mute ? 'bg-rose-500 text-black border-rose-500' : 'bg-white/5 text-slate-400 border-white/10'); }
+            },
+            render() {
+                if (typeof document === 'undefined' || typeof document.getElementById !== 'function') return;
+                const root = document.getElementById('surm-panel'); if (!root) return;
+                const t = document.getElementById('surm-toggle');
+                if (t) { t.textContent = st.enabled ? 'ON' : 'OFF'; t.setAttribute('aria-pressed', st.enabled ? 'true' : 'false'); t.className = 'px-3 py-1.5 rounded font-mono font-bold text-[8px] uppercase border ' + (st.enabled ? 'bg-emerald-500 text-black border-emerald-500' : 'bg-white/5 text-slate-400 border-white/10'); }
+                root.querySelectorAll('[data-surm-fmt]').forEach(b => {
+                    const id = b.getAttribute('data-surm-fmt'), on = id === st.format, ok = SM.allowed(id, plan());
+                    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+                    b.className = 'px-2 py-1 rounded font-black text-[7.5px] border ' + (on ? 'bg-blue-500 text-black border-blue-500' : ok ? 'bg-white/5 text-slate-300 border-white/10' : 'bg-white/5 text-slate-500 border-white/5');
+                    const lk = b.querySelector('.surm-lock'); if (lk) lk.style.display = ok ? 'none' : '';   // style, not a class: Font Awesome sets its own display
+                });
+                const info = document.getElementById('surm-info'); if (info) info.textContent = api.outputInfo();
+                const box = document.getElementById('surm-strips'), sp = SM.fmt(st.format).speakers;
+                if (box && box.getAttribute('data-fmt') !== st.format) {
+                    box.setAttribute('data-fmt', st.format);
+                    box.style.gridTemplateColumns = 'repeat(' + sp.length + ', minmax(0, 1fr))';
+                    box.innerHTML = sp.map((s, i) => `<div class="flex flex-col items-center gap-1 bg-black/30 rounded p-1 border border-white/5"><span class="font-black text-white text-[8px]">${s.id}</span><div class="relative w-2 h-20 bg-black/60 rounded overflow-hidden" aria-hidden="true"><div id="surm-meter-${i}" class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-emerald-500 via-amber-400 to-rose-500" style="height:0%"></div></div><input id="surm-fader-${s.id}" type="range" min="-60" max="10" step="0.5" value="0" aria-label="${s.id} master level (dB)" class="w-full accent-blue-500"><span id="surm-db-${s.id}" class="text-slate-300 text-[7px]">0.0</span><button id="surm-mute-${s.id}" type="button" aria-pressed="false" aria-label="Mute ${s.id}">M</button></div>`).join('');
+                    sp.forEach(s => {
+                        const f = document.getElementById('surm-fader-' + s.id); if (f) f.oninput = () => api.setStrip(s.id, 'db', f.value);
+                        const m = document.getElementById('surm-mute-' + s.id); if (m) m.onclick = () => api.setStrip(s.id, 'mute', !strip(s.id).mute);
+                        api.renderStrip(s.id);
+                    });
+                }
+                ['center', 'surround', 'height', 'lfe'].forEach(k => { const e = document.getElementById('surm-opt-' + k); if (e && +e.value !== Math.round(st.opts[k] * 100)) e.value = Math.round(st.opts[k] * 100); });
+            },
+            mount() {
+                if (typeof document === 'undefined' || document.getElementById('surm-panel')) return !!(typeof document !== 'undefined' && document.getElementById('surm-panel'));
+                const tab = document.getElementById('tab-stereopan'), inner = tab && tab.querySelector('.page-scroll-inner'); if (!inner) return false;
+                const fb = id => { const F = SM.FORMATS[id]; return `<button type="button" data-surm-fmt="${id}" aria-pressed="false">${F.name} &bull; ${F.speakers.length} CH<i class="surm-lock fa-solid fa-lock ml-1" style="display:none" aria-hidden="true"></i></button>`; };
+                const opt = (k, label) => `<label class="flex items-center gap-1 text-slate-400">${label}<input id="surm-opt-${k}" type="range" min="0" max="100" value="50" class="w-20 accent-blue-500" aria-label="${label} upmix amount"></label>`;
+                const el = document.createElement('div');
+                el.id = 'surm-panel'; el.className = 'glass-panel p-3 rounded-xl wing-bezel space-y-2';
+                el.innerHTML = `<div class="flex flex-wrap items-center justify-between gap-2"><div><div class="text-[9px] font-black text-white font-wing tracking-wider uppercase">SURROUND MASTER</div><p class="text-[7px] text-slate-400">Virtual master channel pages: the stereo master upmixed to STEREO, QUAD or SURROUND 7.1.2 (10 channels), one strip per speaker. QUAD and SURROUND: AmF X1 Pro / Studio Master.</p></div><button id="surm-toggle" type="button" aria-pressed="false" aria-label="Surround master on or off">OFF</button></div>
+<div class="flex flex-wrap gap-1.5" role="group" aria-label="Master channel layout">${fb('stereo')}${fb('quad')}${fb('7.1.2')}</div>
+<div class="flex flex-wrap gap-3 text-[7.5px]">${opt('center', 'CENTRE')}${opt('surround', 'SURROUND')}${opt('height', 'HEIGHT')}${opt('lfe', 'LFE')}</div>
+<div id="surm-info" class="text-[7px] text-cyan-300" role="status"></div>
+<div id="surm-strips" class="grid gap-1"></div>`;
+                inner.insertBefore(el, inner.firstChild);
+                document.getElementById('surm-toggle').onclick = () => api.set(!st.enabled);
+                el.querySelectorAll('[data-surm-fmt]').forEach(b => { b.onclick = () => api.setFormat(b.getAttribute('data-surm-fmt')); });
+                ['center', 'surround', 'height', 'lfe'].forEach(k => { const e = document.getElementById('surm-opt-' + k); if (e) e.onchange = () => api.setOpt(k, e.value / 100); });
+                api.render();
+                return true;
+            },
+        };
+        if (typeof document !== 'undefined' && typeof document.getElementById === 'function' && typeof setInterval === 'function') {
+            let tries = 0; const t = setInterval(() => { if (api.mount() || ++tries > 120) { clearInterval(t); if (st.enabled && !SM.allowed(st.format, plan())) st.format = 'stereo'; } }, 500);
+            window.addEventListener && window.addEventListener('amfx-license', () => api.render());
+        }
+        return api;
+    })();
     window.mixSets = (() => {
         const KEY = 'halx_mix_sets', N = 32;
         let sets = [null, null, null, null]; try { const j = JSON.parse(localStorage.getItem(KEY) || 'null'); if (Array.isArray(j)) sets = [0, 1, 2, 3].map(i => j[i] || null); } catch (_) { /* fresh */ }
@@ -19357,7 +19582,7 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 this.licensed = PLANS[planId] || PLANS.basic; this.state = state; this.info = info || null; this.message = message || '';
                 const want = store.get('halx_plan_use'), O = this.ORDER;
                 this.plan = want && PLANS[want] && O.indexOf(want) <= O.indexOf(this.licensed.id) ? PLANS[want] : this.licensed;
-                window.licenseChannels = this.plan.channels;
+                window.licenseChannels = this.plan.channels; try { window.dispatchEvent(new Event('amfx-license')); } catch (e) { /* no events */ }
                 this.limits(); this.render();
                 try { if (typeof window.applyAllChannelGains === 'function' && window.state && window.state.ctx) window.applyAllChannelGains(); } catch (e) { /* engine not started */ }
                 if (window.state && window.state.selectedChannel >= this.plan.channels && typeof window.selectChannel === 'function') { /* keep selection inside the plan */ window.selectChannel(0); }
@@ -20923,6 +21148,10 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
                 const j = await (await fetch(b + '/api/driver-lock', { cache: 'no-store' })).json(); if (!j || !j.ok) return;
                 const when = t => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                 box.innerHTML = (j.locks || []).length ? j.locks.map(l => `<div class="flex flex-wrap items-center gap-1.5 bg-black/30 rounded px-1.5 py-0.5"><b class="text-white">${escD(l.name)}</b><span class="text-slate-400">${l.dir === 'output' ? 'WRITE' : 'READ'}</span><span class="px-1 rounded font-black ${l.mode === 'asio' ? 'bg-amber-400 text-black' : 'bg-cyan-500/20 text-cyan-300'}">${escD(String(l.mode).toUpperCase())}</span>${l.device && l.device !== l.name ? `<span class="text-slate-300">${escD(l.device)}</span>` : ''}<span class="text-slate-500">${escD(l.reason || '')} &bull; since ${when(l.at)}${l.retryAt ? ' &bull; ASIO retried after ' + when(l.retryAt) : ''}</span><button data-forget="${escD(l.name)}" class="ml-auto px-1.5 rounded bg-white/10 text-slate-200 font-bold">FORGET</button></div>`).join('') + (j.exclusive ? '' : '<div class="text-slate-500">WASAPI exclusive is not built into this copy: that step is skipped.</div>') : '<div class="text-slate-500">No locks yet: every interface starts with its own ASIO driver.' + (j.exclusive ? '' : ' (WASAPI exclusive is not built into this copy.)') + '</div>';
+                // REALTEK PIN: onboard Realtek ASIO is pinned to its Windows (WASAPI) endpoint by default; UNPIN / PIN toggles it (in-app routing only)
+                const pinRows = (j.pins || []).map(p => `<div class="flex flex-wrap items-center gap-1.5 bg-black/30 rounded px-1.5 py-0.5"><b class="text-white">${escD(p.name)}</b><span class="px-1 rounded font-black ${p.on ? 'bg-cyan-500/20 text-cyan-300' : 'bg-amber-400 text-black'}">${p.on ? 'PINNED: WASAPI' : 'ASIO'}</span><span class="text-slate-500">${escD(p.on ? p.reason : 'pin off: its own ASIO driver goes first')}</span><button data-pin="${escD(p.name)}" data-on="${p.on ? '0' : '1'}" class="ml-auto px-1.5 rounded bg-white/10 text-slate-200 font-bold">${p.on ? 'UNPIN' : 'PIN'}</button></div>`).join('');
+                if (pinRows) box.insertAdjacentHTML('afterbegin', pinRows);
+                box.querySelectorAll('[data-pin]').forEach(x => { x.onclick = async () => { try { await fetch(b + '/api/driver-lock', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Mixer-Action': 'driver-lock' }, body: JSON.stringify({ pin: x.dataset.pin, on: x.dataset.on === '1' }) }); window.notify(x.dataset.on === '1' ? 'Realtek pinned to WASAPI: ' + x.dataset.pin : 'Realtek pin off: ' + x.dataset.pin + ' tries its ASIO driver first', 'thumbtack'); loadLocks(); loadDiag(); } catch (e) { window.notify('Could not change the pin: ' + e.message, 'triangle-exclamation'); } }; });
                 box.querySelectorAll('[data-forget]').forEach(x => { x.onclick = () => forgetLock(x.dataset.forget); });
             } catch (_) { /* older server without the lock */ }
         };
@@ -20939,8 +21168,8 @@ window.togglePluginInstall = function(name) { const btn=document.getElementById(
             const b = bridgeUrl(); if (!b) return window.notify('Start PC mode (the local server) first', 'triangle-exclamation');
             try {
                 const cur = await (await fetch(b + '/api/sim', { cache: 'no-store' })).json(), on = !cur.enabled;
-                const r = await (await fetch(b + '/api/sim', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Mixer-Action': 'sim' }, body: JSON.stringify({ enabled: on, profiles: ['um2', 'realtek', 'focusrite', 'usbdac', 'asio4all'] }) })).json();
-                window.notify(r.enabled ? 'Simulated devices ON: a Behringer UM2 model plus Realtek, Focusrite, USB DAC and ASIO4ALL (no real hardware is used)' : 'Simulated devices OFF', 'flask');
+                const r = await (await fetch(b + '/api/sim', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Mixer-Action': 'sim' }, body: JSON.stringify({ enabled: on, profiles: ['um2', 'realtek', 'realtekasio', 'focusrite', 'usbdac', 'asio4all'] }) })).json();
+                window.notify(r.enabled ? 'Simulated devices ON: a Behringer UM2 model plus Realtek (with and without Realtek ASIO), Focusrite, USB DAC and ASIO4ALL (no real hardware is used)' : 'Simulated devices OFF', 'flask');
                 const l = LS(); if (l) l.scan(); loadDiag();
             } catch (e) { window.notify('Simulator: ' + e.message, 'triangle-exclamation'); }
         };
@@ -23182,6 +23411,7 @@ t.Omnitone=e(11)},function(A,t,e){"use strict";const i=e(1),n=e(4),s=e(12),o=e(6
             ['★ FAVOURITES', '★ موردعلاقه‌ها', '★ المفضلة', '★ پسندیدہ', '★ FAVORITOS', '★ FAVORIS', '★ FAVORITEN', '★ FAVORITOS', '★ ИЗБРАННОЕ', '★ FAVORİLER', '★ पसंदीदा', '★ 收藏', '★ お気に入り', '★ 즐겨찾기', '★ KEGEMARAN', '★ FAVORIT', '★ PREFERITI', '★ FAVORIETEN', '★ ULUBIONE', '★ YÊU THÍCH', '★ รายการโปรด', '★ ОБРАНЕ'],
             ['SYSTEM OPTIMIZE', 'بهینه‌سازی سیستم', 'تحسين النظام', 'سسٹم آپٹیمائز', 'OPTIMIZAR SISTEMA', 'OPTIMISER LE SYSTÈME', 'SYSTEM OPTIMIEREN', 'OTIMIZAR SISTEMA', 'ОПТИМИЗАЦИЯ СИСТЕМЫ', 'SİSTEMİ OPTİMİZE ET', 'सिस्टम ऑप्टिमाइज़', '系统优化', 'システム最適化', '시스템 최적화', 'OPTIMUM SISTEM', 'OPTIMALKAN SISTEM', 'OTTIMIZZA SISTEMA', 'SYSTEEM OPTIMALISEREN', 'OPTYMALIZUJ SYSTEM', 'TỐI ƯU HỆ THỐNG', 'เพิ่มประสิทธิภาพระบบ', 'ОПТИМІЗАЦІЯ СИСТЕМИ'],
             ['LITE UI OFF', 'رابط سبک خاموش', 'الواجهة الخفيفة متوقفة', 'لائٹ UI بند', 'IU LIGERA APAGADA', 'UI LÉGÈRE ARRÊT', 'LITE-UI AUS', 'IU LEVE DESLIG.', 'ЛЁГКИЙ UI ВЫКЛ', 'HAFİF ARAYÜZ KAPALI', 'लाइट UI बंद', '轻量界面 关', 'ライトUI オフ', '라이트 UI 끔', 'UI RINGKAS MATI', 'UI RINGAN MATI', 'UI LEGGERA OFF', 'LITE-UI UIT', 'LEKKIE UI WYŁ.', 'GIAO DIỆN NHẸ TẮT', 'UI เบา ปิด', 'ЛЕГКИЙ UI ВИМК'],
+            ['SURROUND MASTER', 'مستر سراوند', 'ماستر محيطي', 'سراؤنڈ ماسٹر', 'MÁSTER SURROUND', 'MASTER SURROUND', 'SURROUND-MASTER', 'MASTER SURROUND', 'МАСТЕР SURROUND', 'SURROUND MASTER', 'सराउंड मास्टर', '环绕声主控', 'サラウンドマスター', '서라운드 마스터', 'MASTER SURROUND', 'MASTER SURROUND', 'MASTER SURROUND', 'SURROUND-MASTER', 'MASTER SURROUND', 'MASTER VÒM', 'มาสเตอร์เซอร์ราวด์', 'МАЙСТЕР SURROUND'],
             ['UPGRADE TO PRO', 'ارتقا به PRO', 'الترقية إلى PRO', 'PRO میں اپ گریڈ کریں', 'ACTUALIZAR A PRO', 'PASSER À PRO', 'AUF PRO UPGRADEN', 'ATUALIZAR PARA PRO', 'ПЕРЕЙТИ НА PRO', "PRO'YA YÜKSELT", 'PRO में अपग्रेड करें', '升级到 PRO', 'PRO にアップグレード', 'PRO로 업그레이드', 'NAIK TARAF KE PRO', 'UPGRADE KE PRO', 'PASSA A PRO', 'UPGRADEN NAAR PRO', 'PRZEJDŹ NA PRO', 'NÂNG CẤP LÊN PRO', 'อัปเกรดเป็น PRO', 'ПЕРЕЙТИ НА PRO'],
             ['UPGRADE TO STUDIO MASTER', 'ارتقا به STUDIO MASTER', 'الترقية إلى STUDIO MASTER', 'STUDIO MASTER میں اپ گریڈ کریں', 'ACTUALIZAR A STUDIO MASTER', 'PASSER À STUDIO MASTER', 'AUF STUDIO MASTER UPGRADEN', 'ATUALIZAR PARA STUDIO MASTER', 'ПЕРЕЙТИ НА STUDIO MASTER', "STUDIO MASTER'A YÜKSELT", 'STUDIO MASTER में अपग्रेड करें', '升级到 STUDIO MASTER', 'STUDIO MASTER にアップグレード', 'STUDIO MASTER로 업그레이드', 'NAIK TARAF KE STUDIO MASTER', 'UPGRADE KE STUDIO MASTER', 'PASSA A STUDIO MASTER', 'UPGRADEN NAAR STUDIO MASTER', 'PRZEJDŹ NA STUDIO MASTER', 'NÂNG CẤP LÊN STUDIO MASTER', 'อัปเกรดเป็น STUDIO MASTER', 'ПЕРЕЙТИ НА STUDIO MASTER'],
             ['COPY', 'کپی', 'نسخ', 'کاپی', 'COPIAR', 'COPIER', 'KOPIEREN', 'COPIAR', 'КОПИРОВАТЬ', 'KOPYALA', 'कॉपी', '复制', 'コピー', '복사', 'SALIN', 'SALIN', 'COPIA', 'KOPIËREN', 'KOPIUJ', 'SAO CHÉP', 'คัดลอก', 'КОПІЮВАТИ'],

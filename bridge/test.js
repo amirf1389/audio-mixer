@@ -6027,3 +6027,110 @@ test('ASIO4ALL on the simulator: opens alone; next to a native ASIO driver (one 
     a.sess.onClose(); um.sess.onClose();
   } finally { sim.configure({ enabled: false, faults: {} }); sim.closeAll(); dl.forget('*'); }
 });
+
+// ---- Realtek WASAPI pin (1.22.1.0 Beta): in-app routing only, no driver / registry / scheduled-task changes -----------------------------------
+test('Realtek pin: the Realtek ASIO driver is pinned to the chip WASAPI endpoint by default; UNPIN lets ASIO go first; never a loopback; other drivers untouched', () => {
+  const dl = require('./driver-lock'); dl.forget('*'); dl.setPin('Realtek ASIO', true);
+  const devs = [{ name: 'Realtek ASIO', hostAPIName: 'ASIO', maxInputChannels: 2, maxOutputChannels: 2 },
+    { name: 'Stereo Mix (Realtek High Definition Audio)', hostAPIName: 'Windows WASAPI', maxInputChannels: 2, maxOutputChannels: 0 },
+    { name: 'Microphone (Realtek High Definition Audio)', hostAPIName: 'Windows WASAPI', maxInputChannels: 2, maxOutputChannels: 0 },
+    { name: 'Speakers (Realtek High Definition Audio)', hostAPIName: 'Windows WASAPI', maxInputChannels: 0, maxOutputChannels: 2 },
+    { name: 'BEHRINGER USB AUDIO', hostAPIName: 'ASIO', maxInputChannels: 2, maxOutputChannels: 2 }];
+  const pin = dl.pinOf('Realtek ASIO'); assert.ok(pin && pin.on && pin.builtIn); assert.match(pin.reason, /WASAPI/);
+  assert.strictEqual(dl.pinOf('BEHRINGER USB AUDIO'), null, 'only Realtek'); assert.strictEqual(dl.pinOf('ASIO4ALL v2'), null, 'a wrapper is never pinned');
+  let L = dl.ladder('Realtek ASIO', devs, 'input');
+  assert.strictEqual(L[0].available, false); assert.strictEqual(L[0].pinned, true); assert.match(L[0].why, /pinned/);
+  assert.strictEqual(L[2].device.name, 'Microphone (Realtek High Definition Audio)', 'the microphone, never Stereo Mix');
+  let r = dl.route(devs[0], devs, 'input'); assert.strictEqual(r.dev.name, 'Microphone (Realtek High Definition Audio)'); assert.strictEqual(r.locked.pinned, true);
+  r = dl.route(devs[0], devs, 'output'); assert.strictEqual(r.dev.name, 'Speakers (Realtek High Definition Audio)');
+  assert.strictEqual(dl.route(devs[4], devs, 'input').dev, devs[4], 'the UM2 keeps its own ASIO driver');
+  assert.deepStrictEqual(dl.pins(devs).map(p => p.name), ['Realtek ASIO']);
+  dl.setPin('Realtek ASIO', false);
+  assert.strictEqual(dl.pinOf('Realtek ASIO').on, false); assert.strictEqual(dl.route(devs[0], devs, 'input').dev, devs[0], 'unpinned: ASIO first');
+  assert.strictEqual(dl.ladder('Realtek ASIO', devs, 'input')[0].available, true);
+  dl.reset(); assert.strictEqual(dl.pinOf('Realtek ASIO').on, false, 'the opt-out is saved');
+  dl.setPin('Realtek ASIO', true); assert.strictEqual(dl.pinOf('Realtek ASIO').on, true);
+  assert.strictEqual(dl.setPin('BEHRINGER USB AUDIO', false), null, 'cannot pin other hardware');
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, 'driver-lock.js'), 'utf8');
+  assert.ok(!/reg(\.exe)?\s+(add|delete)|schtasks|rename(Sync)?\(|unlinkSync|MMDevices/i.test(src), 'no OS or driver tampering in the pin');
+});
+
+test('Realtek pin on the simulator: Realtek ASIO opens its WASAPI endpoint straight away (ASIO never opened); the API lists and toggles the pin', { timeout: 30000 }, async () => {
+  const sim = require('./sim'), dl = require('./driver-lock'); dl.forget('*'); dl.setPin('Realtek ASIO', true);
+  const until = async (s, pred, ms = 3000) => { const t = Date.now(); while (Date.now() - t < ms) { const m = s.msgs.find(pred); if (m) return m; await new Promise(r => setTimeout(r, 40)); } return null; };
+  try {
+    sim.configure({ enabled: true, profiles: ['um2', 'realtekasio'], faults: {} });   // one Realtek chip, as on a real PC
+    const devs = require('./portaudio').load().getDevices(), rt = devs.find(d => d.name === 'Realtek ASIO');
+    assert.ok(rt, 'the simulator has a Realtek ASIO driver');
+    const s = { msgs: [] }; s.sess = require('./input').createInputSession({ send: m => s.msgs.push(JSON.parse(m)), sendBinary() {}, close() {} });
+    s.sess.onText(JSON.stringify({ type: 'start', deviceId: rt.id, channels: 2, sampleRate: 48000 }));
+    const fb = await until(s, m => m.type === 'fallback'); assert.ok(fb && fb.fallback.via === 'lock' && /Realtek onboard/.test(fb.fallback.reason), JSON.stringify(s.msgs.slice(0, 2)));
+    assert.strictEqual(fb.fallback.to, 'Microphone (Realtek High Definition Audio)');
+    assert.ok(await until(s, m => m.type === 'started' && /WASAPI/.test(m.hostApi)));
+    assert.ok(s.msgs.every(m => !(m.type === 'started' && m.hostApi === 'ASIO')), 'the Realtek ASIO driver is not opened');
+    assert.strictEqual(dl.get('Realtek ASIO', 'input'), null, 'a pin is policy, not a learned lock');
+    s.sess.onClose();
+    const { server } = require('./server');
+    await new Promise(r => server.listen(0, '127.0.0.1', r)); const base = 'http://127.0.0.1:' + server.address().port;
+    try {
+      const j = await (await fetch(base + '/api/driver-lock')).json();
+      assert.ok(j.pins.some(p => p.name === 'Realtek ASIO' && p.on));
+      const rtl = j.interfaces.find(i => i.name === 'Realtek ASIO'); assert.strictEqual(rtl.input[0].pinned, true);
+      const post = body => fetch(base + '/api/driver-lock', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Mixer-Action': 'driver-lock' }, body: JSON.stringify(body) });
+      assert.strictEqual((await (await post({ pin: 'Realtek ASIO', on: false })).json()).pin.on, false);
+      assert.strictEqual((await post({ pin: 'BEHRINGER USB AUDIO', on: false })).status, 400);
+      assert.strictEqual((await (await post({ pin: 'Realtek ASIO', on: true })).json()).pin.on, true);
+    } finally { await new Promise(r => server.close(r)); }
+  } finally { sim.configure({ enabled: false, faults: {} }); sim.closeAll(); dl.forget('*'); dl.setPin('Realtek ASIO', true); }
+});
+
+test('Realtek pin: the DIAGNOSTICS panel shows PINNED / UNPIN and the simulator switch includes the Realtek ASIO profile', () => {
+  const html = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'index.html'), 'utf8');
+  assert.ok(html.includes("PINNED: WASAPI") && html.includes("JSON.stringify({ pin: x.dataset.pin, on: x.dataset.on === '1' })"));
+  assert.ok(html.includes("profiles: ['um2', 'realtek', 'realtekasio', 'focusrite', 'usbdac', 'asio4all']"));
+});
+
+// ---- SURROUND MASTER (1.22.1.0 Beta): STEREO / QUAD / 7.1.2 virtual master pages, 10 channels, QUAD + SURROUND for Pro / Studio Master -----
+const surroundMath = () => {
+  const html = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'index.html'), 'utf8');
+  const a = html.indexOf('//@@SURROUND-MATH-START'), b = html.indexOf('//@@SURROUND-MATH-END');
+  assert.ok(a > 0 && b > a, 'math markers'); return { html, SM: new Function(html.slice(a, b) + '\nreturn SM;')() };
+};
+test('Surround master math: 2 / 4 / 10 channels; constant-power panning; upmix paths; a stereo fold-down that never clips; paid gate', () => {
+  const { SM } = surroundMath();
+  assert.deepStrictEqual(['stereo', 'quad', '7.1.2'].map(f => SM.fmt(f).speakers.length), [2, 4, 10], '7.1.2 is 10 channels, not 8');
+  assert.deepStrictEqual(SM.fmt('7.1.2').speakers.map(s => s.id), ['L', 'R', 'C', 'LFE', 'Ls', 'Rs', 'Lb', 'Rb', 'Ltf', 'Rtf']);
+  for (const f of ['stereo', 'quad', '7.1.2']) for (const az of [-180, -135, -90, -45, -30, -10, 0, 17, 45, 90, 150, 179]) for (const el of [0, 30, 90]) {
+    const g = SM.panGains(f, az, el); assert.ok(Math.abs(g.reduce((s, x) => s + x * x, 0) - 1) < 1e-4, `${f} ${az}/${el}: power 1`); assert.ok(g.every(x => x >= 0));
+    if (f === '7.1.2') assert.strictEqual(g[3], 0, 'never into the LFE');
+  }
+  const g0 = SM.panGains('7.1.2', 0, 0); assert.ok(g0[2] > 0.999, 'front centre -> C');
+  const gs = SM.panGains('stereo', 0, 0); assert.ok(Math.abs(gs[0] - gs[1]) < 1e-6, 'stereo centre: equal L/R');
+  assert.ok(SM.panGains('stereo', -170, 0)[0] > 0.999, 'behind on stereo: the nearest end');
+  const gq = SM.panGains('quad', 180, 0); assert.ok(Math.abs(gq[2] - gq[3]) < 1e-6 && gq[2] > 0.7, 'quad rear centre between Ls and Rs');
+  const gh = SM.panGains('7.1.2', -45, 90); assert.ok(gh[8] > 0.999, 'overhead left-front -> Ltf');
+  const U = SM.upmix('7.1.2', { center: 1, surround: 1, height: 1, lfe: 1 });
+  assert.deepStrictEqual(U.map(u => u.path), ['direct', 'direct', 'direct', 'lfe', 'ambient', 'ambient', 'ambient', 'ambient', 'ambient', 'ambient']);
+  assert.ok(U[4].fromL > 0 && U[4].fromR < 0 && U[5].fromL < 0 && U[5].fromR > 0, 'surrounds carry the side signal, each side its own polarity');
+  assert.deepStrictEqual(SM.upmix('stereo').map(u => [u.fromL, u.fromR]), [[1, 0], [0, 1]], 'stereo is untouched');
+  for (const f of ['stereo', 'quad', '7.1.2']) {
+    const D = SM.downmix(f); assert.ok(D.L.reduce((a, b) => a + b, 0) <= 1 + 1e-9 && D.R.reduce((a, b) => a + b, 0) <= 1 + 1e-9, f + ': never clips');
+    assert.strictEqual(D.L.length, SM.fmt(f).speakers.length);
+  }
+  assert.deepStrictEqual(SM.downmix('stereo'), { L: [1, 0], R: [0, 1] });
+  assert.strictEqual(SM.downmix('7.1.2').L[3], 0, 'LFE is left out of the fold-down');
+  assert.strictEqual(SM.stripGain({ db: 0 }), 1); assert.strictEqual(SM.stripGain({ db: 0, mute: true }), 0); assert.ok(Math.abs(SM.stripGain({ db: -6 }) - 0.501187) < 1e-5); assert.ok(Math.abs(SM.stripGain({ db: 99 }) - Math.pow(10, 0.5)) < 1e-9, '+10 dB max');
+  assert.strictEqual(SM.allowed('stereo', 'basic'), true); assert.strictEqual(SM.allowed('quad', 'basic'), false); assert.strictEqual(SM.allowed('7.1.2', 'basic'), false);
+  for (const p of ['pro', 'studio', 'master']) assert.strictEqual(SM.allowed('7.1.2', p), true, p + ' unlocks surround');
+});
+test('Surround master: mounted on the SURROUND page, gated in the page, one master processor at a time, no licensed format names claimed', () => {
+  const { html } = surroundMath();
+  assert.ok(html.includes("window.surroundMaster = (() => {") && html.includes("document.getElementById('tab-stereopan')"));
+  assert.ok(html.includes("is part of AmF X1 Pro and Studio Master: UPGRADE on the LICENSE page"));
+  assert.ok(html.includes("if (window.surroundMaster && window.surroundMaster.state.enabled) await window.surroundMaster.set(false, true);"), 'crossfeed turns the surround master off');
+  assert.ok(html.includes("if (window.crossfeed && window.crossfeed.state && window.crossfeed.state.enabled) await window.crossfeed.set(false, true);"), 'and the other way round');
+  assert.ok(!html.includes('7.1.4 Dolby Atmos'), 'no licensed format name on the layout picker');
+  const a = html.indexOf('window.surroundMaster = (() => {'), mod = html.slice(a, html.indexOf('window.mixSets = (() => {'));
+  assert.ok(!/Dolby|DTS|THX|Auro|Atmos/.test(mod), 'the module claims no licensed format');
+  assert.ok(html.includes("window.dispatchEvent(new Event('amfx-license'))"), 'a license change re-renders the locks');
+});
