@@ -112,7 +112,7 @@ struct Strip { double gainDb = 0, gainLin = 1, pan = 0; bool mute = false, solo 
 // way to hear a monitor mix); its own stereo output is handed to the caller through process()'s busOut (the runtime maps it to output channels).
 constexpr int kMaxBuses = 8;
 struct Send { double lin = 0; bool pre = false; };
-struct Bus { double levelLin = 1, returnLin = 0; bool mute = false; Meter meter; };
+struct Bus { double levelLin = 1, returnLin = 0; bool mute = false; Meter meter = Meter(); };
 class Mixer {
  public:
   Mixer(int strips, double sampleRate);
@@ -145,7 +145,7 @@ class Mixer {
   double masterDb_ = 0, masterLin_ = 1;
   bool limOn_ = false; double limCeil_, limGain_ = 1, limReleaseMs_ = 100;
   ClipConfig clip_; Meter master_[2]; Loudness loudness_; PhaseResult phase_{0, 0, 0, 0, true};
-  Send sends_[kMaxStrips][kMaxBuses]{}; Bus buses_[kMaxBuses]{}; bool anySend_ = false;
+  Send sends_[kMaxStrips][kMaxBuses]{}; Bus buses_[kMaxBuses]; bool anySend_ = false;
 };
 
 }  // namespace am

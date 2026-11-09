@@ -2,13 +2,21 @@
 // The driver is chosen by name (DeviceConfig::outDevice, else inDevice; a part of the name is enough, "" = the first registered driver). The inputs of the driver feed the
 // strips, the stereo master goes to output channels 0 and 1, the block size is the driver's buffer size nearest to DeviceConfig::frames. ASIO drivers are single-client: a second
 // open() while one is running fails. Sample types: Int16 / Int24 / Int32 / Float32 / Float64, little endian (what Windows drivers use).
-// Compiled with mingw-w64 in the tests (scripts/build-engine.js --io); it has not been run against a real ASIO driver.
+// Host duties a real driver expects (ASIO4ALL, FlexASIO, the interfaces' own drivers): time-info buffer switches (kAsioSupportsTimeInfo), and the
+// driver's requests to reset / resync / change the buffer size (kAsioResetRequest ...), which a host must answer 1 and then act on OUTSIDE the
+// callback: a worker thread stops the stream, disposes the buffers, re-queries the buffer size and the channel types, creates the buffers again
+// and restarts, without the Runtime noticing (the callback stays; a changed buffer size is accepted up to the 8 periods the Runtime holds scratch for). Channel counts the driver lacks are filled with silence
+// instead of refusing the driver (a USB DAC has no inputs). Cross-compiled with mingw-w64 (-Werror) in the tests; run against real drivers only
+// on a Windows PC.
 #ifdef _WIN32
 #include "asio_sdk.h"
 
 #include <algorithm>
 #include <atomic>
 #include <cctype>
+#include <condition_variable>
+#include <mutex>
+#include <thread>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -65,6 +73,7 @@ class AsioBackend : public Backend {
 
   bool open(const DeviceConfig& cfg, AudioCallback cb, std::string& err) override {
     cfg_ = cfg; cb_ = std::move(cb);
+    { std::lock_guard<std::mutex> g(wm_); quit_ = false; resetPending_ = false; }   // a backend may be opened again after close
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);            // already initialised by the host: fine
     AsioBackend* none = nullptr;
     if (!g_active.compare_exchange_strong(none, this)) { err = "ASIO allows one driver at a time: another one is already open"; return false; }
@@ -85,22 +94,31 @@ class AsioBackend : public Backend {
 
     long nIn = 0, nOut = 0; ASIOError a = drv_->getChannels(&nIn, &nOut);
     if (a != ASE_OK) { err = msg("getChannels", a); return false; }
+    // what the driver lacks is filled with silence (a USB DAC has no inputs, an ADC no outputs): never a reason to refuse the driver
     nIn_ = std::min<long>(std::max(0, cfg.inChannels), nIn); nOut_ = std::min<long>(std::max(0, cfg.outChannels), nOut);
-    if (cfg.inChannels > nIn || cfg.outChannels > nOut) { char b[160]; std::snprintf(b, sizeof b, "\"%s\" has %ld inputs and %ld outputs, %d and %d were asked", pick->name.c_str(), nIn, nOut, cfg.inChannels, cfg.outChannels); err = b; return false; }
+    if (nIn_ + nOut_ == 0) { char b[160]; std::snprintf(b, sizeof b, "\"%s\" has %ld inputs and %ld outputs: nothing to open", pick->name.c_str(), nIn, nOut); err = b; closeAll(); return false; }
     a = drv_->canSampleRate(cfg.sampleRate);
-    if (a != ASE_OK) { char b[128]; std::snprintf(b, sizeof b, "\"%s\" does not run at %.0f Hz", pick->name.c_str(), cfg.sampleRate); err = b; return false; }
-    a = drv_->setSampleRate(cfg.sampleRate); if (a != ASE_OK) { err = msg("setSampleRate", a); return false; }
+    if (a != ASE_OK) { char b[128]; std::snprintf(b, sizeof b, "\"%s\" does not run at %.0f Hz", pick->name.c_str(), cfg.sampleRate); err = b; closeAll(); return false; }
+    a = drv_->setSampleRate(cfg.sampleRate);
+    if (a != ASE_OK) {   // an externally clocked interface refuses to be set but may already run at that rate
+      ASIOSampleRate now = 0; if (drv_->getSampleRate(&now) != ASE_OK || std::fabs(now - cfg.sampleRate) > 0.5) { err = msg("setSampleRate", a); closeAll(); return false; }
+    }
 
     long mn = 0, mx = 0, pref = 0, gran = 0; a = drv_->getBufferSize(&mn, &mx, &pref, &gran);
-    if (a != ASE_OK) { err = msg("getBufferSize", a); return false; }
+    if (a != ASE_OK) { err = msg("getBufferSize", a); closeAll(); return false; }
     frames_ = chooseBuffer(static_cast<long>(cfg.frames), mn, mx, pref, gran);
-    if (frames_ > static_cast<long>(std::max<unsigned>(cfg.frames, 16)) * 8) { err = "the smallest ASIO buffer of this driver is larger than 8 periods of the requested block"; return false; }
-
+    if (frames_ > static_cast<long>(std::max<unsigned>(cfg.frames, 16)) * 8) { err = "the smallest ASIO buffer of this driver is larger than 8 periods of the requested block"; closeAll(); return false; }
+    if (!createBuffers(err)) { closeAll(); return false; }
+    worker_ = std::thread([this] { workerLoop(); });
+    return true;
+  }
+  // the buffers and channel types for the current frames_ (open, and again after a driver reset)
+  bool createBuffers(std::string& err) {
     infos_.assign(static_cast<std::size_t>(nIn_ + nOut_), ASIOBufferInfo());
     for (long i = 0; i < nIn_; ++i) { infos_[static_cast<std::size_t>(i)].isInput = ASIOTrue; infos_[static_cast<std::size_t>(i)].channelNum = i; }
     for (long i = 0; i < nOut_; ++i) { infos_[static_cast<std::size_t>(nIn_ + i)].isInput = ASIOFalse; infos_[static_cast<std::size_t>(nIn_ + i)].channelNum = i; }
     callbacks_.bufferSwitch = &AsioBackend::onSwitch; callbacks_.sampleRateDidChange = &AsioBackend::onRate; callbacks_.asioMessage = &AsioBackend::onMessage; callbacks_.bufferSwitchTimeInfo = &AsioBackend::onSwitchTime;
-    a = drv_->createBuffers(infos_.data(), nIn_ + nOut_, frames_, &callbacks_);
+    ASIOError a = drv_->createBuffers(infos_.data(), nIn_ + nOut_, frames_, &callbacks_);
     if (a != ASE_OK) { err = msg("createBuffers", a); return false; }
     buffers_ = true;
 
@@ -108,7 +126,7 @@ class AsioBackend : public Backend {
     for (std::size_t i = 0; i < infos_.size(); ++i) {
       ASIOChannelInfo ci; std::memset(&ci, 0, sizeof ci); ci.channel = infos_[i].channelNum; ci.isInput = infos_[i].isInput;
       a = drv_->getChannelInfo(&ci); if (a != ASE_OK) { err = msg("getChannelInfo", a); return false; }
-      if (!supported(ci.type)) { char b[128]; std::snprintf(b, sizeof b, "\"%s\" uses the sample type %ld, which this backend does not convert", pick->name.c_str(), static_cast<long>(ci.type)); err = b; return false; }
+      if (!supported(ci.type)) { char b[128]; std::snprintf(b, sizeof b, "\"%s\" uses the sample type %ld, which this backend does not convert", driverName_.c_str(), static_cast<long>(ci.type)); err = b; return false; }
       types_[i] = ci.type;
     }
     const std::size_t n = static_cast<std::size_t>(frames_);
@@ -118,10 +136,31 @@ class AsioBackend : public Backend {
     for (long i = 0; i < nOut_; ++i) outp_.push_back(outBuf_[static_cast<std::size_t>(i)].data());
     // the runtime hands out cfg.inChannels / cfg.outChannels pointers: fill what the driver does not have with silence
     zeros_.assign(n, 0.0f); sink_.assign(n, 0.0f);
-    while (static_cast<int>(inp_.size()) < cfg.inChannels) inp_.push_back(zeros_.data());
-    while (static_cast<int>(outp_.size()) < cfg.outChannels) outp_.push_back(sink_.data());
+    while (static_cast<int>(inp_.size()) < cfg_.inChannels) inp_.push_back(zeros_.data());
+    while (static_cast<int>(outp_.size()) < cfg_.outChannels) outp_.push_back(sink_.data());
+    long inLat = 0, outLat = 0; if (drv_->getLatencies(&inLat, &outLat) == ASE_OK) { inLatency_ = inLat; outLatency_ = outLat; }
     return true;
   }
+  // a driver asked for a reset (its settings changed, the device was re-plugged, ASIO4ALL's panel was used): done here, never in the callback
+  void workerLoop() {
+    std::unique_lock<std::mutex> lk(wm_);
+    for (;;) {
+      wcv_.wait(lk, [this] { return quit_ || resetPending_; });
+      if (quit_) return;
+      resetPending_ = false; lk.unlock();
+      const bool wasRunning = running_.exchange(false);
+      if (drv_) {
+        drv_->stop();
+        if (buffers_) { drv_->disposeBuffers(); buffers_ = false; }
+        long mn = 0, mx = 0, pref = 0, gran = 0;
+        if (drv_->getBufferSize(&mn, &mx, &pref, &gran) == ASE_OK) { const long f = chooseBuffer(frames_, mn, mx, pref, gran); if (f == frames_ || f <= static_cast<long>(std::max<unsigned>(cfg_.frames, 16)) * 8) frames_ = f; }
+        std::string err; if (createBuffers(err) && wasRunning) { running_ = true; if (drv_->start() != ASE_OK) running_ = false; }
+        ++resets_;
+      }
+      lk.lock();
+    }
+  }
+  void requestReset() { { std::lock_guard<std::mutex> g(wm_); resetPending_ = true; } wcv_.notify_one(); }
   bool start(std::string& err) override {
     if (!drv_) { err = "open() first"; return false; }
     running_ = true; ASIOError a = drv_->start();
@@ -131,6 +170,9 @@ class AsioBackend : public Backend {
   void stop() override { if (drv_ && running_.exchange(false)) drv_->stop(); }
   std::uint64_t xruns() const override { return xruns_; }
   const std::string& driverName() const { return driverName_; }
+  long inputLatency() const { return inLatency_; }     // frames, as the driver reports them
+  long outputLatency() const { return outLatency_; }
+  std::uint64_t resets() const { return resets_; }
 
  private:
   static long chooseBuffer(long want, long mn, long mx, long pref, long gran) {
@@ -176,17 +218,24 @@ class AsioBackend : public Backend {
   }
   static void onSwitch(long index, ASIOBool) { if (AsioBackend* s = g_active.load()) s->block(index); }
   static ASIOTime* onSwitchTime(ASIOTime* t, long index, ASIOBool) { if (AsioBackend* s = g_active.load()) s->block(index); return t; }
-  static void onRate(ASIOSampleRate) {}
+  static void onRate(ASIOSampleRate) { if (AsioBackend* s = g_active.load()) s->requestReset(); }   // the clock moved: buffers and types may differ now
   static long onMessage(long selector, long value, void*, double*) {
     AsioBackend* s = g_active.load();
     switch (selector) {
-      case kAsioSelectorSupported: return value == kAsioEngineVersion || value == kAsioOverload ? 1 : 0;
+      case kAsioSelectorSupported:
+        return (value == kAsioEngineVersion || value == kAsioOverload || value == kAsioResetRequest || value == kAsioBufferSizeChange || value == kAsioResyncRequest || value == kAsioLatenciesChanged || value == kAsioSupportsTimeInfo) ? 1 : 0;
       case kAsioEngineVersion: return 2;
       case kAsioOverload: if (s) ++s->xruns_; return 1;
-      default: return 0;                                        // time info, reset requests, ...: not handled; the host would have to reopen the driver
+      case kAsioResetRequest: case kAsioBufferSizeChange: case kAsioResyncRequest: if (s) s->requestReset(); return 1;   // accepted; done on the worker thread
+      case kAsioLatenciesChanged: if (s && s->drv_) { long i = 0, o = 0; if (s->drv_->getLatencies(&i, &o) == ASE_OK) { s->inLatency_ = i; s->outLatency_ = o; } } return 1;
+      case kAsioSupportsTimeInfo: return 1;                     // the driver then calls bufferSwitchTimeInfo, which this host handles the same way
+      case kAsioSupportsTimeCode: return 0;
+      default: return 0;
     }
   }
   void closeAll() {
+    { std::lock_guard<std::mutex> g(wm_); quit_ = true; } wcv_.notify_one();
+    if (worker_.joinable()) worker_.join();
     if (drv_) { if (buffers_) { drv_->disposeBuffers(); buffers_ = false; } drv_->Release(); drv_ = nullptr; }
     if (mine_) { AsioBackend* me = this; g_active.compare_exchange_strong(me, nullptr); mine_ = false; }
   }
@@ -195,7 +244,8 @@ class AsioBackend : public Backend {
   long nIn_ = 0, nOut_ = 0, frames_ = 0; bool buffers_ = false, mine_ = false;
   std::vector<ASIOBufferInfo> infos_; std::vector<ASIOSampleType> types_; ASIOCallbacks callbacks_{};
   std::vector<std::vector<float>> inBuf_, outBuf_; std::vector<float> zeros_, sink_; std::vector<const float*> inp_; std::vector<float*> outp_;
-  std::atomic<bool> running_{false}; std::atomic<std::uint64_t> xruns_{0};
+  std::atomic<bool> running_{false}; std::atomic<std::uint64_t> xruns_{0}, resets_{0}; std::atomic<long> inLatency_{0}, outLatency_{0};
+  std::thread worker_; std::mutex wm_; std::condition_variable wcv_; bool resetPending_ = false, quit_ = false;
 };
 }  // namespace
 std::unique_ptr<Backend> makeAsioBackend() { return std::make_unique<AsioBackend>(); }
