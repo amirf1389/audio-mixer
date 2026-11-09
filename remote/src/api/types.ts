@@ -29,5 +29,7 @@ export type Control =
   | { op: 'compressor'; strip: number; on: boolean; thresholdDb?: number; ratio?: number; kneeDb?: number; attackMs?: number; releaseMs?: number; makeupDb?: number }
   | { op: 'gate'; strip: number; on: boolean; thresholdDb?: number; rangeDb?: number; attackMs?: number; holdMs?: number; releaseMs?: number }
   | { op: 'monitor'; source?: number; db?: number; dim?: boolean; mono?: boolean; mute?: boolean }
+  | { op: 'inRoute'; strip: number; input: number }
+  | { op: 'outRoute'; out: number; source: number }
   | { op: 'clearClips' };
 export interface ControlOk { ok: true; [k: string]: unknown }

@@ -38,6 +38,11 @@ class Engine : public QObject {
   Q_PROPERTY(QVariantList scenes READ scenes NOTIFY scenesChanged)
   Q_PROPERTY(QVariantList presets READ presets NOTIFY presetsChanged)
   Q_PROPERTY(int selectedStrip READ selectedStrip WRITE setSelectedStrip NOTIFY selectedStripChanged)
+  Q_PROPERTY(QVariantList inputRoutes READ inputRoutes NOTIFY routingChanged)     // per strip: the device input it reads (-1 none)
+  Q_PROPERTY(QVariantList outputRoutes READ outputRoutes NOTIFY routingChanged)   // per device output: the source index (see outputSources)
+  Q_PROPERTY(QVariantList outputSources READ outputSources NOTIFY busesChanged)              // [{index, name, group}] off, master L/R, monitor L/R, bus k L/R
+  Q_PROPERTY(int deviceInputs READ deviceInputs NOTIFY stateChanged)
+  Q_PROPERTY(int deviceOutputs READ deviceOutputs NOTIFY stateChanged)
   Q_PROPERTY(QVariantMap monitor READ monitor NOTIFY monitorChanged)                 // control room: source (0 master, 1..8 bus), db, dim, mono, mute
   Q_PROPERTY(bool channelClipboard READ channelClipboard NOTIFY clipboardChanged)   // a channel has been copied (MORE > COPY)
   Q_PROPERTY(int vuRefDb READ vuRefDb WRITE setVuRefDb NOTIFY monitorChanged)         // 0 VU = this many dBFS (-18 EBU, -20 SMPTE, -14 loud)
@@ -75,6 +80,11 @@ class Engine : public QObject {
   void setSelectedStrip(int i) { if (i < 0 || i >= kStrips || i == selected_) return; selected_ = i; emit selectedStripChanged(); }
   Q_INVOKABLE void setMasterLimiter(bool on, double ceilingDb);
   QVariantMap monitor() const;
+  QVariantList inputRoutes() const; QVariantList outputRoutes() const; QVariantList outputSources() const;
+  int deviceInputs() const { return devIn_; } int deviceOutputs() const { return devOut_; }
+  Q_INVOKABLE void setInputRoute(int strip, int input);
+  Q_INVOKABLE void setOutputRoute(int out, int source);
+  Q_INVOKABLE void resetRouting();                      // input s -> strip s, monitor on 1-2, bus k on 3+2k / 4+2k
   Q_INVOKABLE void setMonitor(int source, double db, bool dim, bool mono, bool mute);
   int vuRefDb() const { return vuRef_; }
   void setVuRefDb(int db) { vuRef_ = std::clamp(db, -24, -8); settings_.setValue("ui/vuRef", vuRef_); emit monitorChanged(); }
@@ -144,6 +154,7 @@ class Engine : public QObject {
   void selectedStripChanged();
   void presetsChanged();
   void monitorChanged();
+  void routingChanged();
   void clipboardChanged();
 
  private:
@@ -176,6 +187,8 @@ class Engine : public QObject {
   QVariantMap telemetry_;
   std::vector<StripUi> strips_;
   double masterDb_ = 0; bool masterLim_ = true; double masterCeil_ = -0.5;
+  static constexpr int kOutputs = 32;
+  int inRoute_[kStrips] = {}; int outRoute_[kOutputs] = {}; int devIn_ = 0, devOut_ = 0;
   struct MonitorUi { int source = 0; double db = 0; bool dim = false, mono = false, mute = false; } mon_;
   int vuRef_ = -18; double vu_[kStrips] = {}; double vuMaster_ = 0;                     // VU ballistics (300 ms to 99 %), run on the UI timer
   std::optional<QJsonObject> clipboard_;

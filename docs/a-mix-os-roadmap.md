@@ -35,6 +35,9 @@ decided, what exists, what is next, and what was asked for but is not possible a
   `--allow-lan` for a phone, unencrypted without `deploy/nginx`), tested on the null backend (ctest `daemon`), cross-compiled for Windows.
 - **Remote** (`remote/`, React Native + TypeScript, Expo): Connect, Mixer, Channel (EQ / compressor / gate), Devices. The client
   (`src/api/client.ts`) is tested under Node against the real daemon; the app typechecks. A phone build needs Expo on a PC / Mac.
+- **MIXER additions**: analogue VU meters (300 ms ballistics, 0 VU reference), MORE menu per strip, MONITOR control-room section
+  (source, level, DIM, MONO, MUTE after the master meters). **ROUTING** page: inputs → strips and sources → outputs matrices
+  (`Runtime::setInputRoute / setOutputRoute`), persisted with the console; daemon ops `monitor`, `inRoute`, `outRoute`.
 - **ASIO host hardening**: reset / resync / buffer-size requests handled on a worker thread, time-info, channel clamping, latencies;
   verified by mingw cross-compile only — the first run against real drivers is on the user's Windows PC.
 
