@@ -25,7 +25,14 @@ by one as native pages. Pages that are not native yet are dimmed on the rail and
 | LOUDNESS | EBU R128 momentary / short-term / integrated / range, true peak, correlation |
 | SETTINGS | engine facts, saved state, porting status |
 
-Console state (names, levels, channel DSP, master) is saved with `QSettings` and restored at start.
+Console state (names, levels, channel DSP, sends, groups, buses, master), scenes, presets and the language are saved with `QSettings` and restored at start.
+
+## Languages
+
+`i18n/verified-22.json` holds the 22 languages of the web console (checked); `i18n/auto-58.json` adds 61 more as **machine translations**,
+marked "auto" in the language menu (header and SETTINGS) until a native speaker reviews them. Page names, groups and the main buttons are
+translated; long help texts stay English for now. Right-to-left languages (Persian, Arabic, Urdu, Hebrew, Pashto) mirror the layout.
+`amixos --lang fa` starts in a language; `--smoke` checks that every language covers all page names.
 
 ## Build
 

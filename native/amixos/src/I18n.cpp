@@ -1,0 +1,58 @@
+#include "I18n.h"
+
+#include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+
+static QJsonDocument readJson(const QString& path) { QFile f(path); if (!f.open(QIODevice::ReadOnly)) return {}; return QJsonDocument::fromJson(f.readAll()); }
+
+I18n::I18n(QObject* parent) : QObject(parent) {
+  loadVerified(); loadAuto();
+  const QString saved = settings_.value("ui/lang", "en").toString();
+  lang_ = meta_.contains(saved) ? saved : "en";
+}
+
+void I18n::loadVerified() {
+  // the 22 languages of the web console, in its column order
+  struct L { const char* code; const char* name; bool rtl; };
+  static const L k[] = {{"en", "English", false}, {"fa", "فارسی", true}, {"ar", "العربية", true}, {"ur", "اردو", true}, {"es", "Español", false}, {"fr", "Français", false}, {"de", "Deutsch", false}, {"pt", "Português", false},
+    {"ru", "Русский", false}, {"tr", "Türkçe", false}, {"hi", "हिन्दी", false}, {"zh", "中文", false}, {"ja", "日本語", false}, {"ko", "한국어", false}, {"ms", "Bahasa Melayu", false}, {"id", "Bahasa Indonesia", false},
+    {"it", "Italiano", false}, {"nl", "Nederlands", false}, {"pl", "Polski", false}, {"vi", "Tiếng Việt", false}, {"th", "ไทย", false}, {"uk", "Українська", false}};
+  for (const L& l : k) { meta_.insert(l.code, {l.name, l.rtl, false}); order_ << l.code; }
+  const QJsonObject o = readJson(":/qt/qml/AmixOS/i18n/verified-22.json").object();
+  for (auto it = o.begin(); it != o.end(); ++it) {
+    const QJsonObject row = it.value().toObject(); QHash<QString, QString> h;
+    for (auto jt = row.begin(); jt != row.end(); ++jt) h.insert(jt.key(), jt.value().toString());
+    words_.insert(it.key(), h); if (!keys_.contains(it.key())) keys_ << it.key();
+  }
+}
+
+void I18n::loadAuto() {
+  const QJsonObject o = readJson(":/qt/qml/AmixOS/i18n/auto-58.json").object();
+  const QJsonArray keys = o.value("keys").toArray(); QStringList ks; for (const QJsonValue& v : keys) ks << v.toString();
+  for (const QString& key : ks) { if (!words_.contains(key)) words_.insert(key, {}); if (!keys_.contains(key)) keys_ << key; }
+  const QJsonObject langs = o.value("languages").toObject();
+  for (auto it = langs.begin(); it != langs.end(); ++it) {
+    const QJsonObject l = it.value().toObject();
+    if (!meta_.contains(it.key())) { meta_.insert(it.key(), {l.value("name").toString(it.key()), l.value("rtl").toBool(), true}); order_ << it.key(); }
+    const QJsonArray words = l.value("words").toArray();
+    for (int i = 0; i < ks.size() && i < words.size(); ++i) { const QString w = words[i].toString(); if (!w.isEmpty() && !words_[ks[i]].contains(it.key())) words_[ks[i]].insert(it.key(), w); }
+  }
+}
+
+void I18n::setLang(const QString& code) { if (!meta_.contains(code) || code == lang_) return; lang_ = code; settings_.setValue("ui/lang", code); emit langChanged(); }
+
+QVariantList I18n::languages() const {
+  QVariantList l;
+  for (const QString& c : order_) { const Meta& m = meta_.value(c); QVariantMap x; x["code"] = c; x["name"] = m.name; x["rtl"] = m.rtl; x["auto"] = m.autoTr; x["coverage"] = coverage(c); l << x; }
+  return l;
+}
+
+QString I18n::t(const QString& key, const QString& lang) const {
+  const QString code = lang.isEmpty() ? lang_ : lang;
+  const auto it = words_.constFind(key); if (it == words_.constEnd()) return key;
+  const QString w = it->value(code); return w.isEmpty() ? it->value("en", key) : w;
+}
+
+int I18n::coverage(const QString& code) const { int n = 0; for (const QString& k : keys_) if (!words_.value(k).value(code).isEmpty()) ++n; return n; }

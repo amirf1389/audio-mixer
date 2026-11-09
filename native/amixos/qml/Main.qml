@@ -15,6 +15,8 @@ ApplicationWindow {
     title: "A mix OS " + appVersion
     color: Theme.obsidian
     property string current: "home"
+    LayoutMirroring.enabled: i18n.rtl
+    LayoutMirroring.childrenInherit: true
     function pageOf(id) { for (var i = 0; i < engine.pages.length; i++) if (engine.pages[i].id === id) return engine.pages[i]; return engine.pages[0] }
 
     ColumnLayout {
@@ -32,6 +34,14 @@ ApplicationWindow {
                     Text { id: statusText; anchors.centerIn: parent; text: engine.running ? "ENGINE ON • " + engine.backend.toUpperCase() : "ENGINE OFF"; color: engine.running ? Theme.emerald : Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } }
                 Text { text: "MASTER " + Theme.dbText(engine.telemetry.masterPeakDb) + " dBFS"; color: engine.telemetry.masterClip ? Theme.danger : Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                 Text { text: engine.edition.toUpperCase(); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                ComboBox {   // LANGUAGE: 80 languages; "auto" marks a machine translation
+                    id: langBox; implicitWidth: 150; implicitHeight: 26; font.family: Theme.mono; font.pixelSize: 9
+                    model: i18n.languages; textRole: "name"
+                    displayText: (i18n.languages.find(function (l) { return l.code === i18n.lang }) || { name: "English" }).name + (i18n.autoTranslated ? " (auto)" : "")
+                    delegate: ItemDelegate { width: parent.width; text: modelData.name + (modelData.auto ? "  · auto" : ""); font.family: Theme.mono; font.pixelSize: 10 }
+                    Component.onCompleted: currentIndex = i18n.languages.findIndex(function (l) { return l.code === i18n.lang })
+                    onActivated: i18n.lang = i18n.languages[currentIndex].code
+                }
             }
         }
         RowLayout {

@@ -24,6 +24,14 @@ decided, what exists, what is next, and what was asked for but is not possible a
 - `am::Runtime`: `setEqBand / setDelayMs / setPolarity / setCrossover / setChannelLimiter` per strip through the control ring; one scratch block per strip.
 - Automated: engine `ctest` (vectors, dsp, runtime, stream, update_logic), `amixos --smoke` (offscreen: interface loaded, null device running), `amixos --shots DIR` (a PNG per page), GitHub Actions for Linux and the Windows x64 zip.
 
+## Added after 0.1.0 (2026-11-09)
+
+- MIXER upgrade: DSP badges, IN / OUT / GR meters, groups and sends readout, select-to-edit channel panel, strip colours.
+- 83 interface languages (22 verified + 61 machine-translated, marked auto), RTL mirroring.
+- Decision (user): the engine also runs as a **background service (headless daemon)** with a local API, and a **React Native (TypeScript)
+  app** is the remote control from a phone or tablet. The Qt console stays the desktop interface. Android as a full console stays parked;
+  the RN remote covers phones first.
+
 ## Next, in order
 
 1. **Windows .exe in hand**: run the Actions workflow, download `amixos-windows-x64.zip`, test ASIO (UM2, Focusrite, ASIO4ALL, Realtek) on the user's PC. Fix what the real drivers show.
