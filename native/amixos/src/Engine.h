@@ -8,6 +8,7 @@
 #include <QTimer>
 #include <QVariantList>
 #include <QVariantMap>
+#include <QJsonObject>
 #include <memory>
 #include <vector>
 
@@ -32,6 +33,8 @@ class Engine : public QObject {
   Q_PROPERTY(QVariantList dcaState READ dcaState NOTIFY groupsChanged)
   Q_PROPERTY(QVariantList muteGroupState READ muteGroupState NOTIFY groupsChanged)
   Q_PROPERTY(QVariantList busMeters READ busMeters NOTIFY metersChanged)
+  Q_PROPERTY(QVariantList scenes READ scenes NOTIFY scenesChanged)
+  Q_PROPERTY(QVariantList presets READ presets NOTIFY presetsChanged)
 
  public:
   explicit Engine(QObject* parent = nullptr);
@@ -96,6 +99,19 @@ class Engine : public QObject {
   Q_INVOKABLE void setMuteGroupActive(int group, bool on);
   Q_INVOKABLE double effectiveDb(int strip) const;
   Q_INVOKABLE bool effectiveMute(int strip) const;
+  // SCENES: 16 snapshots of the whole console; RECALL SAFE strips are left alone by a recall
+  QVariantList scenes() const;
+  Q_INVOKABLE void storeScene(int i, const QString& name);
+  Q_INVOKABLE bool recallScene(int i);
+  Q_INVOKABLE void clearScene(int i);
+  Q_INVOKABLE void renameScene(int i, const QString& name);
+  Q_INVOKABLE void setRecallSafe(int strip, bool on);
+  Q_INVOKABLE bool recallSafe(int strip) const;
+  // PRESETS: a channel's DSP chain by name (factory + user)
+  QVariantList presets() const;
+  Q_INVOKABLE bool applyPreset(const QString& name, int strip);
+  Q_INVOKABLE bool savePreset(const QString& name, int strip);
+  Q_INVOKABLE bool deletePreset(const QString& name);
   Q_INVOKABLE void save();
 
  signals:
@@ -105,6 +121,8 @@ class Engine : public QObject {
   void metersChanged();
   void busesChanged();
   void groupsChanged();
+  void scenesChanged();
+  void presetsChanged();
 
  private:
   static constexpr int kStrips = 32;
@@ -115,6 +133,16 @@ class Engine : public QObject {
   struct DcaUi { QString name; double db = 0; bool mute = false; };
   struct MuteGroupUi { QString name; bool active = false; };
   void pushStrip(int i);   // the strip's effective gain and mute (its own + DCA + mute groups) into the runtime
+  static constexpr int kScenes = 16;
+  struct SceneUi { QString name, at; QJsonObject data; };
+  struct PresetUi { QString name, category; QJsonObject dsp; };
+  QJsonObject stripJson(const StripUi& s) const;
+  static QJsonObject dspJson(const am::dsp::ChannelParams& p);
+  static am::dsp::ChannelParams dspFromJson(const QJsonObject& o);
+  static void stripFromJson(StripUi& s, const QJsonObject& o);
+  QJsonObject consoleJson() const;
+  void applyConsoleJson(const QJsonObject& root, bool respectSafe);
+  std::vector<SceneUi> scenes_; int currentScene_ = -1; unsigned recallSafe_ = 0; std::vector<PresetUi> userPresets_;
   void tick();
   void load();
   void pushAll();   // every setting into a freshly opened runtime

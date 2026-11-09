@@ -42,6 +42,8 @@ qt_add_qml_module(amixos
         qml/DynCurve.qml
         qml/SendToPage.qml
         qml/GroupFadersPage.qml
+        qml/ScenesPage.qml
+        qml/PresetsPage.qml
         qml/ConnectionsPage.qml
         qml/LevelsPage.qml
         qml/LoudnessPage.qml
