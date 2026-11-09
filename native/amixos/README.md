@@ -7,12 +7,14 @@ A mix OS is the native successor of the AmF X1 web console: a **Qt 6 Quick** int
 The web console (index.html, 1.22.1.0 Beta) was retired at git tag / commit `html-app-final` (`2237603`); its pages return here one
 by one as native pages. Pages that are not native yet are dimmed on the rail and say so when opened.
 
-## What is native in 0.1.0
+## What is native in 0.1.x
 
 | Page | State |
 |---|---|
 | HOME | the console's start page |
 | MIXER | 32 strips (name, pan, mute, solo, fader, meter), master with limiter and clip clear; pages 1-16 / 17-32 / all |
+| COMPRESSOR | per channel: threshold, ratio, soft knee, attack, release, make-up; transfer curve, live input / output dot, gain-reduction meter, presets |
+| NOISE GATE | per channel: threshold (3 dB hysteresis), range, attack, hold, release; transfer curve, OPEN / CLOSED lamp, presets |
 | TONE (EQ) | per channel: polarity, delay (sub-sample, 0-50 ms), crossover (Butterworth / Linkwitz-Riley / Bessel, 6-48 dB/oct), 10-band parametric EQ (peaking, shelves, pass, notch, all-pass) with the live response curve, channel peak limiter |
 | CONNECTIONS | drivers built into the copy, inputs / outputs with channels and rates, sample rate, buffer, START / STOP, block and xrun counters |
 | LEVELS | peak / RMS / hold / clip on every strip and the master |

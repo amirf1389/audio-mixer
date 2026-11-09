@@ -66,6 +66,10 @@ class Engine : public QObject {
   Q_INVOKABLE void setPolarity(int strip, bool invert);
   Q_INVOKABLE void setCrossover(int strip, int type, int hpOrder, double hpFreq, int lpOrder, double lpFreq);
   Q_INVOKABLE void setChannelLimiter(int strip, bool on, double ceilingDb, double releaseMs);
+  Q_INVOKABLE void setCompressor(int strip, bool on, double thresholdDb, double ratio, double kneeDb, double attackMs, double releaseMs, double makeupDb);
+  Q_INVOKABLE void setGate(int strip, bool on, double thresholdDb, double rangeDb, double attackMs, double holdMs, double releaseMs);
+  Q_INVOKABLE QVariantList compressorCurve(int strip, int points) const;   // [{in, out}] dB, -60..0, the static transfer without make-up
+  Q_INVOKABLE QVariantList gateCurve(int strip, int points) const;
   Q_INVOKABLE QVariantMap channelParams(int strip) const;
   Q_INVOKABLE QVariantList responseCurve(int strip, int points) const;   // [{f, db}] 20 Hz .. 20 kHz, log spaced: EQ + crossover of that strip
   Q_INVOKABLE void save();

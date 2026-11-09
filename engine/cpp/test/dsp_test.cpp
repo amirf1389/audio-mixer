@@ -66,6 +66,24 @@ int main() {
     ch.setEqBand(2, {FilterType::Peaking, 1000, 1, 6}); ch.setSampleRate(96000); CHECK(near(ch.gainDbAt(1000), 6, 0.01), "coefficients recomputed for 96 kHz"); }
   // 7. a band above Nyquist or at 0 Hz is ignored, never NaN
   { Channel ch(fs); ch.setEqBand(0, {FilterType::Peaking, 30000, 1, 6}); ch.setEqBand(1, {FilterType::LowPass, 0, 1, 0}); float v[4] = {1, 1, 1, 1}; ch.process(v, 4); CHECK(std::isfinite(v[3]) && near(v[3], 1, 1e-6), "impossible bands = identity"); }
+  // 8. compressor: 4:1 above a -20 dB threshold -> a -6 dB sine comes out near -16.5 dB; below the threshold untouched; knee is continuous; GR reported
+  { Channel ch(fs); ch.setCompressor(true, -20, 4, 0, 1, 50, 0);
+    const double out = sineGainDb(ch, fs, 1000) ; (void)out;   // the helper uses a full-scale sine: -20 + 20/4 = -15 dB
+    CHECK(near(out, -15, 0.3), "compressor 4:1 on a 0 dB sine -> -15 dB");
+    CHECK(ch.limiterGainReductionDb() < 0.01, "limiter idle"); CHECK(ch.compressor().gainReductionDb() < -14 && ch.compressor().gainReductionDb() > -16, "GR about -15 dB");
+    Channel quiet(fs); quiet.setCompressor(true, -20, 4, 0, 1, 50, 0); { std::vector<float> x(48000); for (std::size_t i = 0; i < x.size(); ++i) x[i] = 0.01f * static_cast<float>(std::sin(2 * kPi * 1000 * static_cast<double>(i) / fs)); quiet.process(x.data(), x.size()); double pk = 0; for (std::size_t i = 24000; i < x.size(); ++i) pk = std::max(pk, std::fabs(static_cast<double>(x[i]))); CHECK(near(20 * std::log10(pk), -40, 0.2), "below threshold untouched"); }
+    Channel knee(fs); knee.setCompressor(true, -20, 4, 12, 1, 50, 0); const auto& K = knee.compressor();
+    CHECK(near(K.computeDb(-26), -26, 1e-9) && near(K.computeDb(-14), -20 + 6 / 4.0, 1e-9), "knee ends meet the straight lines");
+    CHECK(std::fabs(K.computeDb(-20.001) - K.computeDb(-19.999)) < 0.01, "knee is continuous at the threshold");
+    Channel mk(fs); mk.setCompressor(true, -20, 4, 0, 1, 50, 6); CHECK(near(sineGainDb(mk, fs, 1000), -9, 0.3), "make-up adds 6 dB"); }
+  // 9. gate: -40 dB noise with a -30 dB threshold is attenuated by the range; a -20 dB signal passes; hysteresis closes 3 dB under the threshold
+  { Channel g(fs); g.setGate(true, -30, -60, 1, 10, 20);
+    std::vector<float> x(48000); for (std::size_t i = 0; i < x.size(); ++i) x[i] = 0.01f * static_cast<float>(std::sin(2 * kPi * 1000 * static_cast<double>(i) / fs));   // -40 dB
+    g.process(x.data(), x.size()); double pk = 0; for (std::size_t i = 24000; i < x.size(); ++i) pk = std::max(pk, std::fabs(static_cast<double>(x[i])));
+    CHECK(20 * std::log10(pk + 1e-12) < -95, "closed: -40 dB - 60 dB range"); CHECK(!g.gate().isOpen() && g.gate().gainDb() < -59, "gate reports closed");
+    Channel o(fs); o.setGate(true, -30, -60, 1, 10, 20); CHECK(near(sineGainDb(o, fs, 1000), 0, 0.1), "a full-scale sine passes"); CHECK(o.gate().isOpen(), "gate reports open");
+    CHECK(near(o.gate().computeDb(-20), -20, 1e-9) && near(o.gate().computeDb(-40), -100, 1e-9), "static curve: closed below the threshold");
+    Channel off(fs); CHECK(off.gate().isOpen(), "a gate that is off is open"); }
   if (fails) { std::fprintf(stderr, "%d failure(s)\n", fails); return 1; }
   std::printf("dsp_test: ok\n"); return 0;
 }
