@@ -40,6 +40,8 @@ qt_add_qml_module(amixos
         qml/CompressorPage.qml
         qml/GatePage.qml
         qml/DynCurve.qml
+        qml/SendToPage.qml
+        qml/GroupFadersPage.qml
         qml/ConnectionsPage.qml
         qml/LevelsPage.qml
         qml/LoudnessPage.qml

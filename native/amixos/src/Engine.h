@@ -28,6 +28,10 @@ class Engine : public QObject {
   Q_PROPERTY(double masterDb READ masterDb WRITE setMaster NOTIFY stripsChanged)
   Q_PROPERTY(QVariantList pages READ pages CONSTANT)
   Q_PROPERTY(QString edition READ edition CONSTANT)
+  Q_PROPERTY(QVariantList busState READ busState NOTIFY busesChanged)
+  Q_PROPERTY(QVariantList dcaState READ dcaState NOTIFY groupsChanged)
+  Q_PROPERTY(QVariantList muteGroupState READ muteGroupState NOTIFY groupsChanged)
+  Q_PROPERTY(QVariantList busMeters READ busMeters NOTIFY metersChanged)
 
  public:
   explicit Engine(QObject* parent = nullptr);
@@ -72,6 +76,26 @@ class Engine : public QObject {
   Q_INVOKABLE QVariantList gateCurve(int strip, int points) const;
   Q_INVOKABLE QVariantMap channelParams(int strip) const;
   Q_INVOKABLE QVariantList responseCurve(int strip, int points) const;   // [{f, db}] 20 Hz .. 20 kHz, log spaced: EQ + crossover of that strip
+  // AUX SENDS: 8 stereo buses; each strip sends pre or post fader; a bus has level, mute, RETURN into the master and its own output channels
+  QVariantList busState() const;
+  QVariantList busMeters() const { return busMeters_; }
+  Q_INVOKABLE void setSend(int strip, int bus, double db, bool pre);
+  Q_INVOKABLE QVariantMap send(int strip, int bus) const;
+  Q_INVOKABLE void setBusLevel(int bus, double db);
+  Q_INVOKABLE void setBusMute(int bus, bool on);
+  Q_INVOKABLE void setBusReturn(int bus, double db);
+  Q_INVOKABLE void setBusName(int bus, const QString& name);
+  // GROUP FADERS: 8 DCA groups (a group fader adds to its members' faders, a group mute mutes them) and 8 mute groups
+  QVariantList dcaState() const;
+  QVariantList muteGroupState() const;
+  Q_INVOKABLE void setDca(int strip, int group);               // 0 = none, 1..8
+  Q_INVOKABLE void setDcaLevel(int group, double db);
+  Q_INVOKABLE void setDcaMute(int group, bool on);
+  Q_INVOKABLE void setDcaName(int group, const QString& name);
+  Q_INVOKABLE void setMuteGroupMember(int strip, int group, bool member);
+  Q_INVOKABLE void setMuteGroupActive(int group, bool on);
+  Q_INVOKABLE double effectiveDb(int strip) const;
+  Q_INVOKABLE bool effectiveMute(int strip) const;
   Q_INVOKABLE void save();
 
  signals:
@@ -79,17 +103,26 @@ class Engine : public QObject {
   void devicesChanged();
   void stripsChanged();
   void metersChanged();
+  void busesChanged();
+  void groupsChanged();
 
  private:
   static constexpr int kStrips = 32;
-  struct StripUi { QString name; double db = 0, pan = 0; bool mute = false, solo = false; am::dsp::Channel dsp{48000}; };
+  static constexpr int kBuses = 8, kGroups = 8;
+  struct SendUi { double db = -60; bool pre = false; };
+  struct StripUi { QString name; double db = 0, pan = 0; bool mute = false, solo = false; am::dsp::Channel dsp{48000}; SendUi sends[kBuses]; int dca = 0; unsigned muteGroups = 0; };
+  struct BusUi { QString name; double db = 0, returnDb = -60; bool mute = false; };
+  struct DcaUi { QString name; double db = 0; bool mute = false; };
+  struct MuteGroupUi { QString name; bool active = false; };
+  void pushStrip(int i);   // the strip's effective gain and mute (its own + DCA + mute groups) into the runtime
   void tick();
   void load();
   void pushAll();   // every setting into a freshly opened runtime
 
   std::unique_ptr<am::Runtime> rt_;
   QString status_ = QStringLiteral("Not connected: choose a sound card on CONNECTIONS");
-  QVariantList devices_, meters_;
+  QVariantList devices_, meters_, busMeters_;
+  BusUi buses_[kBuses]; DcaUi dcas_[kGroups]; MuteGroupUi muteGroups_[kGroups];
   QVariantMap telemetry_;
   std::vector<StripUi> strips_;
   double masterDb_ = 0; bool masterLim_ = true; double masterCeil_ = -0.5;

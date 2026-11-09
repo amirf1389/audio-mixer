@@ -107,6 +107,12 @@ class S16Meter {
 
 // ───────── mixer ─────────
 struct Strip { double gainDb = 0, gainLin = 1, pan = 0; bool mute = false, solo = false; Meter meter; };
+// AUX SENDS: kMaxBuses stereo buses. Each strip sends to each bus at its own level, pre-fader (the raw input: monitor mixes) or post-fader
+// (after gain, mute and solo: effects sends). A bus has a level, a mute, a meter and a RETURN level into the master (an effects return or a
+// way to hear a monitor mix); its own stereo output is handed to the caller through process()'s busOut (the runtime maps it to output channels).
+constexpr int kMaxBuses = 8;
+struct Send { double lin = 0; bool pre = false; };
+struct Bus { double levelLin = 1, returnLin = 0; bool mute = false; Meter meter; };
 class Mixer {
  public:
   Mixer(int strips, double sampleRate);
@@ -119,8 +125,15 @@ class Mixer {
   void setMasterDb(double db);
   void setLimiter(bool on, double ceilingDb = -0.5, double releaseMs = 100);   // brick-wall peak limiter: instant attack
   void setClipDb(double db);
+  void setSend(int strip, int bus, double db, bool pre);     // -60 and below = off, +10 at most
+  void setBusLevel(int bus, double db);
+  void setBusMute(int bus, bool on);
+  void setBusReturn(int bus, double db);                     // -60 and below = none (default)
+  const Bus& bus(int k) const { return buses_[static_cast<std::size_t>(k)]; }
+  const Send& send(int strip, int bus) const { return sends_[static_cast<std::size_t>(strip)][static_cast<std::size_t>(bus)]; }
   // inputs[strip] -> outL / outR (frames samples each). Meters, loudness and phase are updated once per call.
-  void process(const float* const* inputs, std::size_t frames, float* outL, float* outR);
+  // busOut (optional): 2 * kMaxBuses pointers (L, R per bus, any may be null) that receive each bus's stereo output.
+  void process(const float* const* inputs, std::size_t frames, float* outL, float* outR, float* const* busOut = nullptr);
   const Strip& strip(int i) const { return strips_[i]; }
   const MeterState& masterMeter(int ch) const { return master_[ch].state(); }
   const Loudness& loudness() const { return loudness_; }
@@ -132,6 +145,7 @@ class Mixer {
   double masterDb_ = 0, masterLin_ = 1;
   bool limOn_ = false; double limCeil_, limGain_ = 1, limReleaseMs_ = 100;
   ClipConfig clip_; Meter master_[2]; Loudness loudness_; PhaseResult phase_{0, 0, 0, 0, true};
+  Send sends_[kMaxStrips][kMaxBuses]{}; Bus buses_[kMaxBuses]{}; bool anySend_ = false;
 };
 
 }  // namespace am

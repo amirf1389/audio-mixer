@@ -38,7 +38,7 @@ std::unique_ptr<Backend> createBackend(const std::string& name) {
   return nullptr;
 }
 
-enum Op { kGain, kPan, kMute, kSolo, kMaster, kLimiter, kClipDb, kClear, kSpatialOn, kSpatialPos, kSpatialSpread, kEq, kDelay, kPolarity, kXover, kChLimiter, kComp, kGate };
+enum Op { kGain, kPan, kMute, kSolo, kMaster, kLimiter, kClipDb, kClear, kSpatialOn, kSpatialPos, kSpatialSpread, kEq, kDelay, kPolarity, kXover, kChLimiter, kComp, kGate, kSend, kBusLevel, kBusMute, kBusReturn };
 
 Runtime::Runtime(int strips) : mixer_(strips, 48000) { std::memset(&pub_, 0, sizeof pub_); }
 Runtime::~Runtime() { stop(); }
@@ -56,6 +56,7 @@ bool Runtime::open(const DeviceConfig& cfg, std::string& err) {
   const std::size_t n = std::max<std::size_t>(cfg.frames, 16) * 8;                  // scratch for blocks up to 8 periods (devices may hand out more than the period)
   silence_.assign(n, 0.0f); left_.assign(n, 0.0f); right_.assign(n, 0.0f);
   ch_.assign(static_cast<std::size_t>(mixer_.strips()), dsp::Channel(cfg.sampleRate)); chBuf_.assign(ch_.size(), std::vector<float>(n, 0.0f));
+  busBuf_.assign(2 * kMaxBuses, std::vector<float>(n, 0.0f));
   head_ = 0; tail_ = 0; blocks_ = 0; frames_ = 0; std::memset(&pub_, 0, sizeof pub_);
   return backend_->open(cfg, [this](const float* const* in, float* const* out, std::size_t frames) { onBlock(in, out, frames); }, err);
 }
@@ -83,6 +84,10 @@ void Runtime::setCrossover(int s, dsp::XoverType t, int hpO, double hpF, int lpO
 void Runtime::setChannelLimiter(int s, bool on, double ceil, double rel) { Cmd c{kChLimiter, s, ceil, rel, 0}; c.b = on ? 1 : 0; post(c); }
 void Runtime::setCompressor(int s, bool on, double thr, double ratio, double knee, double att, double rel, double makeup) { Cmd c{kComp, s, thr, ratio, knee}; c.b = on ? 1 : 0; c.w = att; c.v = rel; c.u = makeup; post(c); }
 void Runtime::setGate(int s, bool on, double thr, double range, double att, double hold, double rel) { Cmd c{kGate, s, thr, range, att}; c.b = on ? 1 : 0; c.w = hold; c.v = rel; post(c); }
+void Runtime::setSend(int s, int b, double db, bool pre) { Cmd c{kSend, s, db, pre ? 1.0 : 0.0, 0}; c.b = b; post(c); }
+void Runtime::setBusLevel(int b, double db) { post({kBusLevel, b, db, 0, 0}); }
+void Runtime::setBusMute(int b, bool on) { post({kBusMute, b, on ? 1.0 : 0.0, 0, 0}); }
+void Runtime::setBusReturn(int b, double db) { post({kBusReturn, b, db, 0, 0}); }
 bool Runtime::setSpatial(bool on) { if (!spatial_ || !spatial_->ok()) return false; post({kSpatialOn, on ? 1 : 0, 0, 0, 0}); return true; }
 void Runtime::setSpatialPosition(double az, double el, double d, double spread) { post({kSpatialPos, 0, az, el, d}); post({kSpatialSpread, 0, spread, 0, 0}); }
 
@@ -108,6 +113,10 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
       case kChLimiter: if (c.a >= 0 && c.a < static_cast<int>(ch_.size())) ch_[static_cast<std::size_t>(c.a)].setLimiter(c.b != 0, c.x, c.y); break;
       case kComp: if (c.a >= 0 && c.a < static_cast<int>(ch_.size())) ch_[static_cast<std::size_t>(c.a)].setCompressor(c.b != 0, c.x, c.y, c.z, c.w, c.v, c.u); break;
       case kGate: if (c.a >= 0 && c.a < static_cast<int>(ch_.size())) ch_[static_cast<std::size_t>(c.a)].setGate(c.b != 0, c.x, c.y, c.z, c.w, c.v); break;
+      case kSend: mixer_.setSend(c.a, c.b, c.x, c.y != 0); break;
+      case kBusLevel: mixer_.setBusLevel(c.a, c.x); break;
+      case kBusMute: mixer_.setBusMute(c.a, c.x != 0); break;
+      case kBusReturn: mixer_.setBusReturn(c.a, c.x); break;
       default: break;
     }
     tail_.store(t + 1, std::memory_order_release);
@@ -119,11 +128,13 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
     dsp::Channel& ch = ch_[static_cast<std::size_t>(s)];
     if (ch.active()) { float* b = chBuf_[static_cast<std::size_t>(s)].data(); std::memcpy(b, ins[s], frames * sizeof(float)); ch.process(b, frames); ins[s] = b; }   // the strip's channel DSP, in a scratch block
   }
-  mixer_.process(ins, frames, left_.data(), right_.data());
+  float* busOut[2 * kMaxBuses]; for (int k = 0; k < 2 * kMaxBuses; ++k) busOut[k] = busBuf_[static_cast<std::size_t>(k)].data();
+  mixer_.process(ins, frames, left_.data(), right_.data(), busOut);
   if (spatialOn_ && spatial_) spatial_->process(left_.data(), right_.data(), left_.data(), right_.data(), frames);     // after the meters: they show the stereo master
   for (int c = 0; c < nOut_; ++c) {
     if (c == 0) std::memcpy(out[c], left_.data(), frames * sizeof(float));
     else if (c == 1) std::memcpy(out[c], right_.data(), frames * sizeof(float));
+    else if (c - 2 < 2 * kMaxBuses) std::memcpy(out[c], busOut[c - 2], frames * sizeof(float));   // aux bus k on channels 2 + 2k, 3 + 2k
     else std::memset(out[c], 0, frames * sizeof(float));
   }
   ++blocks_; frames_ += frames;
@@ -134,6 +145,7 @@ void Runtime::publish() {
   Snapshot s; std::memset(&s, 0, sizeof s);
   for (int i = 0; i < mixer_.strips(); ++i) { const MeterState& m = mixer_.strip(i).meter.state(); const std::size_t k = static_cast<std::size_t>(i); s.strips[i] = {m.pk, m.rms, m.hold, m.clipN, k < ch_.size() ? ch_[k].compressor().gainReductionDb() : 0.0, k < ch_.size() ? ch_[k].gate().gainDb() : 0.0}; }
   for (int c = 0; c < 2; ++c) { const MeterState& m = mixer_.masterMeter(c); s.master[c] = {m.pk, m.rms, m.hold, m.clipN, 0.0, 0.0}; }
+  for (int k = 0; k < kMaxBuses; ++k) { const MeterState& m = mixer_.bus(k).meter.state(); s.buses[k] = {m.pk, m.rms, m.hold, m.clipN, 0.0, 0.0}; }
   s.momentary = mixer_.loudness().momentary(); s.shortTerm = mixer_.loudness().shortTerm(); s.integrated = mixer_.loudness().integrated(); s.lra = mixer_.loudness().range(); s.truePeak = mixer_.loudness().truePeak();
   s.correlation = mixer_.phase().corr; s.blocks = blocks_; s.frames = frames_; s.xruns = backend_ ? backend_->xruns() : 0;
   const unsigned q = seq_.load(std::memory_order_relaxed);

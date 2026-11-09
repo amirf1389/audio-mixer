@@ -27,7 +27,7 @@ decided, what exists, what is next, and what was asked for but is not possible a
 ## Next, in order
 
 1. **Windows .exe in hand**: run the Actions workflow, download `amixos-windows-x64.zip`, test ASIO (UM2, Focusrite, ASIO4ALL, Realtek) on the user's PC. Fix what the real drivers show.
-2. **Mixer parity**: ~~compressor and noise gate per channel (curve pages)~~ done 2026-11-09; sends / buses (pre / post), group faders (DCA), mute groups, scenes, presets; the surround master pages (stereo / quad / 7.1.2) and crossfeed from the web console's math.
+2. **Mixer parity**: ~~compressor and noise gate per channel (curve pages)~~ done 2026-11-09; ~~sends / buses (pre / post), group faders (DCA), mute groups~~ done 2026-11-09; scenes, presets; the surround master pages (stereo / quad / 7.1.2) and crossfeed from the web console's math.
 3. **Routing**: input → strip and master → output matrix; multi-channel outputs (the runtime writes channels 0/1 today).
 4. **Licence / editions**: the AMFXE1 edition tokens and the vendor public key (`bridge/license-public.json`) verified natively (Ed25519 / ECDSA as the Node code does); hardware-bound keys; Lite / Pro tiers unlock pages and strip counts. "JWT / authenticator" from the request = signed tokens + a TOTP second factor for the vendor's Key Generator, not for end users' audio.
 5. **Driver intelligence**: the AI driver lock ladder, the Realtek WASAPI pin and the ASIO4ALL default-endpoint fallback, ported from `bridge/driver-lock.js` into the runtime's device layer (in-app routing only, never OS or driver tampering).

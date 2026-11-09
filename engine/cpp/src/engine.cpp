@@ -214,22 +214,45 @@ void Mixer::setSolo(int s, bool on) { if (s >= 0 && s < n_) strips_[s].solo = on
 void Mixer::setMasterDb(double db) { db = std::min(db, 10.0); masterDb_ = db; masterLin_ = db <= -60.0 ? 0.0 : linOf(db); }
 void Mixer::setLimiter(bool on, double ceilingDb, double releaseMs) { limOn_ = on; limCeil_ = linOf(clampd(ceilingDb, -24.0, 0.0)); limReleaseMs_ = std::max(1.0, releaseMs); }
 void Mixer::setClipDb(double db) { clip_ = ClipConfig::fromDb(db); for (auto& s : strips_) s.meter.setClip(clip_); master_[0].setClip(clip_); master_[1].setClip(clip_); }
+void Mixer::setSend(int s, int b, double db, bool pre) {
+  if (s < 0 || s >= n_ || b < 0 || b >= kMaxBuses) return;
+  Send& x = sends_[s][b]; x.lin = db <= -60.0 ? 0.0 : linOf(std::min(db, 10.0)); x.pre = pre;
+  anySend_ = false; for (int i = 0; i < n_; ++i) for (int k = 0; k < kMaxBuses; ++k) anySend_ = anySend_ || sends_[i][k].lin > 0;
+}
+void Mixer::setBusLevel(int b, double db) { if (b >= 0 && b < kMaxBuses) buses_[b].levelLin = db <= -60.0 ? 0.0 : linOf(std::min(db, 10.0)); }
+void Mixer::setBusMute(int b, bool on) { if (b >= 0 && b < kMaxBuses) buses_[b].mute = on; }
+void Mixer::setBusReturn(int b, double db) { if (b >= 0 && b < kMaxBuses) buses_[b].returnLin = db <= -60.0 ? 0.0 : linOf(std::min(db, 10.0)); }
 void Mixer::clearClips() { for (auto& s : strips_) s.meter.state().clearClip(); master_[0].state().clearClip(); master_[1].state().clearClip(); }
 
-void Mixer::process(const float* const* in, std::size_t frames, float* outL, float* outR) {
+void Mixer::process(const float* const* in, std::size_t frames, float* outL, float* outR, float* const* busOut) {
   constexpr std::size_t kChunk = 512;
   bool anySolo = false; for (const auto& s : strips_) anySolo = anySolo || s.solo;
   const double rel = 1.0 - std::exp(-1.0 / (limReleaseMs_ * 0.001 * fs_));   // one-pole release: the time constant is the release time
   float tmp[kChunk];
+  static thread_local float busL[kMaxBuses][kChunk], busR[kMaxBuses][kChunk], busM[kChunk];   // aux bus sums of this chunk (fixed, never allocated)
+  const bool buses = anySend_ || busOut;
   for (std::size_t done = 0; done < frames; done += kChunk) {
     const std::size_t n = std::min(kChunk, frames - done);
     for (std::size_t i = 0; i < n; ++i) { outL[done + i] = 0.0f; outR[done + i] = 0.0f; }
+    if (buses) for (int k = 0; k < kMaxBuses; ++k) for (std::size_t i = 0; i < n; ++i) { busL[k][i] = 0.0f; busR[k][i] = 0.0f; }
     for (int s = 0; s < n_; ++s) {
       Strip& st = strips_[static_cast<std::size_t>(s)];
       const double ang = (st.pan + 1.0) * kPi * 0.25, gl = std::cos(ang), gr = std::sin(ang); const bool audible = !st.mute && (!anySolo || st.solo);
       for (std::size_t i = 0; i < n; ++i) tmp[i] = static_cast<float>(static_cast<double>(in[s][done + i]) * st.gainLin);   // post-fader signal: what the strip meter shows
       st.meter.add(tmp, n);
       if (audible) for (std::size_t i = 0; i < n; ++i) { outL[done + i] += static_cast<float>(tmp[i] * gl); outR[done + i] += static_cast<float>(tmp[i] * gr); }
+      if (anySend_) for (int k = 0; k < kMaxBuses; ++k) {
+        const Send& sd = sends_[s][k]; if (sd.lin <= 0) continue;
+        if (sd.pre) { for (std::size_t i = 0; i < n; ++i) { const double v = static_cast<double>(in[s][done + i]) * sd.lin; busL[k][i] += static_cast<float>(v * gl); busR[k][i] += static_cast<float>(v * gr); } }
+        else if (audible) { for (std::size_t i = 0; i < n; ++i) { const double v = static_cast<double>(tmp[i]) * sd.lin; busL[k][i] += static_cast<float>(v * gl); busR[k][i] += static_cast<float>(v * gr); } }
+      }
+    }
+    if (buses) for (int k = 0; k < kMaxBuses; ++k) {   // bus level and mute, meter (the louder side), return into the master, the bus's own output
+      Bus& b = buses_[k]; const double g = b.mute ? 0.0 : b.levelLin;
+      for (std::size_t i = 0; i < n; ++i) { busL[k][i] = static_cast<float>(busL[k][i] * g); busR[k][i] = static_cast<float>(busR[k][i] * g); busM[i] = std::fabs(busL[k][i]) > std::fabs(busR[k][i]) ? busL[k][i] : busR[k][i]; }
+      b.meter.add(busM, n);
+      if (b.returnLin > 0) for (std::size_t i = 0; i < n; ++i) { outL[done + i] += static_cast<float>(busL[k][i] * b.returnLin); outR[done + i] += static_cast<float>(busR[k][i] * b.returnLin); }
+      if (busOut) { if (busOut[2 * k]) std::copy(busL[k], busL[k] + n, busOut[2 * k] + done); if (busOut[2 * k + 1]) std::copy(busR[k], busR[k] + n, busOut[2 * k + 1] + done); }
     }
     for (std::size_t i = 0; i < n; ++i) {
       double l = static_cast<double>(outL[done + i]) * masterLin_, r = static_cast<double>(outR[done + i]) * masterLin_;
@@ -247,6 +270,7 @@ void Mixer::process(const float* const* in, std::size_t frames, float* outL, flo
   }
   timeMs_ += static_cast<double>(frames) * 1000.0 / fs_;
   for (auto& s : strips_) s.meter.end(timeMs_);
+  for (auto& b : buses_) b.meter.end(timeMs_);
   master_[0].end(timeMs_); master_[1].end(timeMs_);
 }
 

@@ -62,7 +62,7 @@ std::vector<DeviceInfo> listDevices();                       // every device of 
 // the meters, copied out consistently
 struct Snapshot {
   struct StripMeter { double pk, rms, hold; std::uint32_t clipN; double compGrDb, gateDb; };   // compGrDb <= 0 (the channel compressor), gateDb <= 0 (the channel gate)
-  StripMeter strips[kMaxStrips]; StripMeter master[2];
+  StripMeter strips[kMaxStrips]; StripMeter master[2]; StripMeter buses[kMaxBuses];
   double momentary, shortTerm, integrated, lra, truePeak, correlation;
   std::uint64_t blocks, frames, xruns;
 };
@@ -94,6 +94,11 @@ class Runtime {
   void setChannelLimiter(int strip, bool on, double ceilingDb, double releaseMs);
   void setCompressor(int strip, bool on, double thresholdDb, double ratio, double kneeDb, double attackMs, double releaseMs, double makeupDb);
   void setGate(int strip, bool on, double thresholdDb, double rangeDb, double attackMs, double holdMs, double releaseMs);
+  // AUX SENDS (am::Mixer buses): bus k's stereo output goes to output channels 2 + 2k and 3 + 2k when the device has them
+  void setSend(int strip, int bus, double db, bool pre);
+  void setBusLevel(int bus, double db);
+  void setBusMute(int bus, bool on);
+  void setBusReturn(int bus, double db);
   // 360 degree output (Resonance Audio, only when Spatial::available()): the stereo master after the meters becomes two virtual speakers in a binaural scene; off by default.
   // The audio is then delayed by Spatial::block() frames. Returns false when this binary has no Resonance Audio.
   bool setSpatial(bool on);
@@ -109,7 +114,8 @@ class Runtime {
   int nIn_ = 0, nOut_ = 0; bool running_ = false;
   std::unique_ptr<Spatial> spatial_; bool spatialOn_ = false; double spAz_ = 0, spEl_ = 0, spDist_ = 2, spSpread_ = 30;     // spatial_ is created in open(); spatialOn_ is only touched by the audio thread
   std::vector<float> silence_, left_, right_;
-  std::vector<dsp::Channel> ch_; std::vector<std::vector<float>> chBuf_;   // one channel DSP and one scratch block per strip (sized in open())
+  std::vector<dsp::Channel> ch_; std::vector<std::vector<float>> chBuf_;
+  std::vector<std::vector<float>> busBuf_;   // 2 * kMaxBuses blocks for the aux bus outputs   // one channel DSP and one scratch block per strip (sized in open())
   // control ring: many producers (under a mutex), one consumer (the audio thread)
   static constexpr unsigned kRing = 1024;
   Cmd ring_[kRing]; std::atomic<unsigned> head_{0}, tail_{0}; std::mutex producers_;

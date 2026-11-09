@@ -45,7 +45,7 @@ ApplicationWindow {
                     sourceComponent: {
                         switch (root.current) {
                         case "home": return homeC; case "mixer": return mixerC; case "dsp": return toneC; case "io": return connC;
-                        case "meter": return levelsC; case "lufs": return loudC; case "sys": return settingsC; case "dyn": return compC; case "gate": return gateC; default: return comingC
+                        case "meter": return levelsC; case "lufs": return loudC; case "sys": return settingsC; case "dyn": return compC; case "gate": return gateC; case "bus": return sendC; case "dca": return dcaC; default: return comingC
                         }
                     }
                 }
@@ -58,6 +58,8 @@ ApplicationWindow {
                 Component { id: settingsC; SettingsPage {} }
                 Component { id: compC; CompressorPage {} }
                 Component { id: gateC; GatePage {} }
+                Component { id: sendC; SendToPage {} }
+                Component { id: dcaC; GroupFadersPage {} }
                 Component { id: comingC; ComingPage { page: root.pageOf(root.current) } }
             }
         }
