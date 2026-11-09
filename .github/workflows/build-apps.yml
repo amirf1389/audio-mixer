@@ -4,6 +4,7 @@
 #   windows  builds the Windows x64 console with Qt 6 (MSVC) and the ASIO + WASAPI backends (the Steinberg ASIO SDK headers are in drivers/asio/sdk),
 #            runs windeployqt and uploads amixos-windows-x64.zip: unzip anywhere and start amixos.exe. Not code-signed here (Windows shows "unknown publisher").
 # Runs on demand (workflow_dispatch), on pushes that touch the native code, and on version tags (v*), which also get a GitHub release.
+# Only GitHub-owned actions (actions/*) are used: repositories that allow only those can run it; Qt comes from aqtinstall, the release from gh.
 name: Build apps
 
 on:
@@ -48,17 +49,19 @@ jobs:
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
-      - name: Qt 6 (MSVC 2019 x64)
-        uses: jurplel/install-qt-action@v4
+      - uses: actions/setup-python@v5
         with:
-          version: "6.7.3"
-          arch: win64_msvc2019_64
-          modules: ""
-          cache: true
+          python-version: "3.12"
+      - name: Qt 6 (MSVC 2019 x64, via aqtinstall; no third-party action)
+        shell: pwsh
+        run: |
+          pip install aqtinstall
+          aqt install-qt windows desktop 6.7.3 win64_msvc2019_64 -O C:\Qt
+          "QT_ROOT_DIR=C:\Qt\6.7.3\msvc2019_64" | Out-File -FilePath $env:GITHUB_ENV -Append
       - name: Build the console
         shell: pwsh
         run: |
-          cmake -S native/amixos -B build/amixos -G "Visual Studio 17 2022" -A x64 -DCMAKE_BUILD_TYPE=Release
+          cmake -S native/amixos -B build/amixos -G "Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR"
           cmake --build build/amixos --config Release --parallel
       - name: Engine tests (Windows)
         shell: pwsh
@@ -82,6 +85,9 @@ jobs:
           if-no-files-found: error
       - name: Attach to release (version tags only)
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist/amixos-windows-x64.zip
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$env:GITHUB_REF_NAME" --repo "$env:GITHUB_REPOSITORY" --title "A mix OS $env:GITHUB_REF_NAME" --notes "Windows x64 console: unzip and start amixos.exe" dist/amixos-windows-x64.zip 2>$null
+          if ($LASTEXITCODE -ne 0) { gh release upload "$env:GITHUB_REF_NAME" --repo "$env:GITHUB_REPOSITORY" --clobber dist/amixos-windows-x64.zip }
