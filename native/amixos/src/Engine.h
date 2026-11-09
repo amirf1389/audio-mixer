@@ -35,6 +35,7 @@ class Engine : public QObject {
   Q_PROPERTY(QVariantList busMeters READ busMeters NOTIFY metersChanged)
   Q_PROPERTY(QVariantList scenes READ scenes NOTIFY scenesChanged)
   Q_PROPERTY(QVariantList presets READ presets NOTIFY presetsChanged)
+  Q_PROPERTY(int selectedStrip READ selectedStrip WRITE setSelectedStrip NOTIFY selectedStripChanged)
 
  public:
   explicit Engine(QObject* parent = nullptr);
@@ -64,6 +65,9 @@ class Engine : public QObject {
   Q_INVOKABLE void setSolo(int strip, bool on);
   Q_INVOKABLE void setName(int strip, const QString& name);
   Q_INVOKABLE void setMaster(double db);
+  Q_INVOKABLE void setColor(int strip, int color);           // 0..7 (Theme.stripColors)
+  int selectedStrip() const { return selected_; }
+  void setSelectedStrip(int i) { if (i < 0 || i >= kStrips || i == selected_) return; selected_ = i; emit selectedStripChanged(); }
   Q_INVOKABLE void setMasterLimiter(bool on, double ceilingDb);
   Q_INVOKABLE void clearClips();
   // channel DSP; type: 0 off, 1 peaking, 2 low shelf, 3 high shelf, 4 low pass, 5 high pass, 6 notch, 7 all-pass 1st, 8 all-pass 2nd
@@ -122,13 +126,14 @@ class Engine : public QObject {
   void busesChanged();
   void groupsChanged();
   void scenesChanged();
+  void selectedStripChanged();
   void presetsChanged();
 
  private:
   static constexpr int kStrips = 32;
   static constexpr int kBuses = 8, kGroups = 8;
   struct SendUi { double db = -60; bool pre = false; };
-  struct StripUi { QString name; double db = 0, pan = 0; bool mute = false, solo = false; am::dsp::Channel dsp{48000}; SendUi sends[kBuses]; int dca = 0; unsigned muteGroups = 0; };
+  struct StripUi { QString name; double db = 0, pan = 0; bool mute = false, solo = false; am::dsp::Channel dsp{48000}; SendUi sends[kBuses]; int dca = 0; unsigned muteGroups = 0; int color = 0; };
   struct BusUi { QString name; double db = 0, returnDb = -60; bool mute = false; };
   struct DcaUi { QString name; double db = 0; bool mute = false; };
   struct MuteGroupUi { QString name; bool active = false; };
@@ -142,7 +147,7 @@ class Engine : public QObject {
   static void stripFromJson(StripUi& s, const QJsonObject& o);
   QJsonObject consoleJson() const;
   void applyConsoleJson(const QJsonObject& root, bool respectSafe);
-  std::vector<SceneUi> scenes_; int currentScene_ = -1; unsigned recallSafe_ = 0; std::vector<PresetUi> userPresets_;
+  std::vector<SceneUi> scenes_; int currentScene_ = -1; int selected_ = 0; unsigned recallSafe_ = 0; std::vector<PresetUi> userPresets_;
   void tick();
   void load();
   void pushAll();   // every setting into a freshly opened runtime

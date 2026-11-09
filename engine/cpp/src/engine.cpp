@@ -238,8 +238,9 @@ void Mixer::process(const float* const* in, std::size_t frames, float* outL, flo
     for (int s = 0; s < n_; ++s) {
       Strip& st = strips_[static_cast<std::size_t>(s)];
       const double ang = (st.pan + 1.0) * kPi * 0.25, gl = std::cos(ang), gr = std::sin(ang); const bool audible = !st.mute && (!anySolo || st.solo);
-      for (std::size_t i = 0; i < n; ++i) tmp[i] = static_cast<float>(static_cast<double>(in[s][done + i]) * st.gainLin);   // post-fader signal: what the strip meter shows
-      st.meter.add(tmp, n);
+      double ipk = done == 0 ? 0.0 : st.inPk;
+      for (std::size_t i = 0; i < n; ++i) { const double x = static_cast<double>(in[s][done + i]); if (std::fabs(x) > ipk) ipk = std::fabs(x); tmp[i] = static_cast<float>(x * st.gainLin); }   // post-fader signal: what the strip meter shows
+      st.inPk = ipk; st.meter.add(tmp, n);
       if (audible) for (std::size_t i = 0; i < n; ++i) { outL[done + i] += static_cast<float>(tmp[i] * gl); outR[done + i] += static_cast<float>(tmp[i] * gr); }
       if (anySend_) for (int k = 0; k < kMaxBuses; ++k) {
         const Send& sd = sends_[s][k]; if (sd.lin <= 0) continue;

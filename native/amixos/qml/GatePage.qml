@@ -6,7 +6,7 @@ import QtQuick.Layouts
 
 Flickable {
     id: page
-    property int strip: 0
+    property int strip: engine.selectedStrip
     property var ch: ({})
     property var curve: []
     contentHeight: col.implicitHeight + 24

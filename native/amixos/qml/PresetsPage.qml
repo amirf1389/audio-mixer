@@ -7,7 +7,7 @@ import QtQuick.Layouts
 
 Flickable {
     id: page
-    property int strip: 0
+    property int strip: engine.selectedStrip
     property string category: "ALL"
     contentHeight: col.implicitHeight + 24; clip: true
     readonly property var cats: { var c = ["ALL"]; for (var i = 0; i < engine.presets.length; i++) if (c.indexOf(engine.presets[i].category) < 0) c.push(engine.presets[i].category); return c }

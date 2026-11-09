@@ -106,7 +106,7 @@ class S16Meter {
 };
 
 // ───────── mixer ─────────
-struct Strip { double gainDb = 0, gainLin = 1, pan = 0; bool mute = false, solo = false; Meter meter; };
+struct Strip { double gainDb = 0, gainLin = 1, pan = 0; bool mute = false, solo = false; Meter meter; double inPk = 0; };   // inPk: pre-fader input peak of the last block
 // AUX SENDS: kMaxBuses stereo buses. Each strip sends to each bus at its own level, pre-fader (the raw input: monitor mixes) or post-fader
 // (after gain, mute and solo: effects sends). A bus has a level, a mute, a meter and a RETURN level into the master (an effects return or a
 // way to hear a monitor mix); its own stereo output is handed to the caller through process()'s busOut (the runtime maps it to output channels).

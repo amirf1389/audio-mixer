@@ -50,7 +50,7 @@ ApplicationWindow {
                     }
                 }
                 Component { id: homeC; HomePage { onGo: function (id) { root.current = id } } }
-                Component { id: mixerC; MixerPage {} }
+                Component { id: mixerC; MixerPage { onGo: function (id) { root.current = id } } }
                 Component { id: toneC; TonePage {} }
                 Component { id: connC; ConnectionsPage {} }
                 Component { id: levelsC; LevelsPage {} }
