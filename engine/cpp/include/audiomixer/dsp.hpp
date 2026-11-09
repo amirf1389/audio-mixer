@@ -1,7 +1,8 @@
 // A mix OS channel DSP (C++20): the processing of one channel strip before it reaches the mixer, in the order a car / studio processor applies it.
-//   polarity -> delay (time alignment, 0..50 ms, sub-sample by linear interpolation) -> high-pass / low-pass crossover (Butterworth, Linkwitz-Riley or
-//   Bessel, 6..48 dB/octave) -> parametric EQ (kEqBands biquads: peaking, low / high shelf, low / high pass, notch, all-pass 1st / 2nd order) ->
-//   peak limiter (instant attack, one-pole release)
+//   polarity -> delay (time alignment, 0..50 ms, sub-sample by linear interpolation) -> noise gate (threshold with 3 dB hysteresis, attack /
+//   hold / release, range) -> high-pass / low-pass crossover (Butterworth, Linkwitz-Riley or Bessel, 6..48 dB/octave) -> parametric EQ (kEqBands
+//   biquads: peaking, low / high shelf, low / high pass, notch, all-pass 1st / 2nd order) -> compressor (feed-forward peak detector, soft knee,
+//   attack / release in the dB domain, make-up) -> peak limiter (instant attack, one-pole release)
 // Real-time rules: no allocation, no locks, no exceptions and no I/O in process(); every buffer is a fixed array sized at compile time; parameter changes
 // recompute coefficients in the caller's thread (set*) and are applied at the next block, so a change never tears a filter in the middle of a block.
 // All arithmetic in double (the "64-bit summing" of the Pro tier); the audio arrives and leaves as float.
@@ -130,6 +131,61 @@ class Limiter {
   bool on_ = false; double ceil_ = 1, rel_ = 0.001, g_ = 1;
 };
 
+// feed-forward compressor: a smoothed peak detector, a soft-knee gain computer in dB, attack / release on the gain
+class Compressor {
+ public:
+  void set(bool on, double thresholdDb, double ratio, double kneeDb, double attackMs, double releaseMs, double makeupDb, double fs) noexcept {
+    on_ = on; thr_ = thresholdDb; ratio_ = ratio < 1 ? 1 : ratio; knee_ = kneeDb < 0 ? 0 : kneeDb; makeup_ = makeupDb;
+    att_ = 1.0 - std::exp(-1.0 / ((attackMs < 0.05 ? 0.05 : attackMs) * 0.001 * fs)); rel_ = 1.0 - std::exp(-1.0 / ((releaseMs < 1 ? 1 : releaseMs) * 0.001 * fs));
+    det_ = 1.0 - std::exp(-1.0 / (0.02 * fs));   // peak detector: instant rise, 20 ms fall, so a steady sine reads its peak
+  }
+  // the static transfer: output level for an input level (dB), without make-up; what the page draws
+  [[nodiscard]] double computeDb(double inDb) const noexcept {
+    const double over = inDb - thr_;
+    if (knee_ > 0 && std::fabs(over) <= knee_ / 2) { const double t = over + knee_ / 2; return inDb + (1.0 / ratio_ - 1.0) * t * t / (2.0 * knee_); }
+    return over > 0 ? thr_ + over / ratio_ : inDb;
+  }
+  [[nodiscard]] double tick(double x) noexcept {
+    if (!on_) return x;
+    const double a = std::fabs(x); env_ = a > env_ ? a : env_ + (a - env_) * det_;   // peak follower
+    const double inDb = 20.0 * std::log10(env_ + 1e-9), want = computeDb(inDb) - inDb;   // <= 0: how much to turn down
+    gr_ += (want - gr_) * (want < gr_ ? att_ : rel_);
+    return x * std::pow(10.0, (gr_ + makeup_) / 20.0);
+  }
+  [[nodiscard]] double gainReductionDb() const noexcept { return on_ ? gr_ : 0; }
+  [[nodiscard]] bool on() const noexcept { return on_; }
+  void reset() noexcept { env_ = 0; gr_ = 0; }
+ private:
+  bool on_ = false; double thr_ = -20, ratio_ = 4, knee_ = 6, makeup_ = 0, att_ = 0.01, rel_ = 0.001, det_ = 0.05, env_ = 0, gr_ = 0;
+};
+
+// noise gate: opens above the threshold, closes 3 dB below it (hysteresis) after the hold time; attenuates by `range` when closed
+class Gate {
+ public:
+  void set(bool on, double thresholdDb, double rangeDb, double attackMs, double holdMs, double releaseMs, double fs) noexcept {
+    on_ = on; thr_ = thresholdDb; range_ = rangeDb > 0 ? 0 : rangeDb < -90 ? -90 : rangeDb; holdSamples_ = static_cast<std::uint32_t>((holdMs < 0 ? 0 : holdMs) * 0.001 * fs);
+    att_ = 1.0 - std::exp(-1.0 / ((attackMs < 0.05 ? 0.05 : attackMs) * 0.001 * fs)); rel_ = 1.0 - std::exp(-1.0 / ((releaseMs < 1 ? 1 : releaseMs) * 0.001 * fs));
+    det_ = 1.0 - std::exp(-1.0 / (0.02 * fs));
+  }
+  // the static transfer for the page: in -> out (dB), closed below the threshold by `range`
+  [[nodiscard]] double computeDb(double inDb) const noexcept { return inDb >= thr_ ? inDb : inDb + range_; }
+  [[nodiscard]] double tick(double x) noexcept {
+    if (!on_) return x;
+    const double a = std::fabs(x); env_ = a > env_ ? a : env_ + (a - env_) * det_;
+    const double lvl = 20.0 * std::log10(env_ + 1e-9);
+    if (lvl >= thr_) { open_ = true; hold_ = holdSamples_; }
+    else if (open_ && lvl < thr_ - 3.0) { if (hold_ > 0) --hold_; else open_ = false; }
+    const double target = open_ ? 0.0 : range_;
+    g_ += (target - g_) * (target > g_ ? att_ : rel_);
+    return x * std::pow(10.0, g_ / 20.0);
+  }
+  [[nodiscard]] double gainDb() const noexcept { return on_ ? g_ : 0; }
+  [[nodiscard]] bool isOpen() const noexcept { return !on_ || open_; }
+  void reset() noexcept { env_ = 0; g_ = 0; open_ = false; hold_ = 0; }
+ private:
+  bool on_ = false, open_ = false; double thr_ = -50, range_ = -80, att_ = 0.1, rel_ = 0.001, det_ = 0.05, env_ = 0, g_ = 0; std::uint32_t holdSamples_ = 0, hold_ = 0;
+};
+
 struct ChannelParams {
   bool polarityInvert = false;
   double delayMs = 0;                                   // 0..50
@@ -138,6 +194,8 @@ struct ChannelParams {
   double hpFreq = 80, lpFreq = 4000;
   std::array<EqBand, kEqBands> eq{};
   bool limiterOn = false; double limiterCeilDb = -1, limiterReleaseMs = 80;
+  bool compOn = false; double compThresholdDb = -20, compRatio = 4, compKneeDb = 6, compAttackMs = 10, compReleaseMs = 100, compMakeupDb = 0;
+  bool gateOn = false; double gateThresholdDb = -50, gateRangeDb = -80, gateAttackMs = 1, gateHoldMs = 50, gateReleaseMs = 100;
 };
 
 class Channel {
@@ -152,8 +210,12 @@ class Channel {
   void setPolarity(bool invert) noexcept { p_.polarityInvert = invert; }
   void setCrossover(XoverType t, int hpOrder, double hpFreq, int lpOrder, double lpFreq) noexcept { p_.xoverType = t; p_.hpOrder = hpOrder; p_.hpFreq = hpFreq; p_.lpOrder = lpOrder; p_.lpFreq = lpFreq; hp_.set(true, t, hpOrder, hpFreq, fs_); lp_.set(false, t, lpOrder, lpFreq, fs_); }
   void setLimiter(bool on, double ceilDb, double releaseMs) noexcept { p_.limiterOn = on; p_.limiterCeilDb = ceilDb; p_.limiterReleaseMs = releaseMs; lim_.set(on, ceilDb, releaseMs, fs_); }
+  void setCompressor(bool on, double thr, double ratio, double knee, double att, double rel, double makeup) noexcept { p_.compOn = on; p_.compThresholdDb = thr; p_.compRatio = ratio; p_.compKneeDb = knee; p_.compAttackMs = att; p_.compReleaseMs = rel; p_.compMakeupDb = makeup; comp_.set(on, thr, ratio, knee, att, rel, makeup, fs_); }
+  void setGate(bool on, double thr, double range, double att, double hold, double rel) noexcept { p_.gateOn = on; p_.gateThresholdDb = thr; p_.gateRangeDb = range; p_.gateAttackMs = att; p_.gateHoldMs = hold; p_.gateReleaseMs = rel; gate_.set(on, thr, range, att, hold, rel, fs_); }
+  [[nodiscard]] const Compressor& compressor() const noexcept { return comp_; }
+  [[nodiscard]] const Gate& gate() const noexcept { return gate_; }
   [[nodiscard]] bool active() const noexcept {
-    if (p_.polarityInvert || p_.delayMs > 0 || hp_.order() || lp_.order() || p_.limiterOn) return true;
+    if (p_.polarityInvert || p_.delayMs > 0 || hp_.order() || lp_.order() || p_.limiterOn || p_.compOn || p_.gateOn) return true;
     for (const auto& b : p_.eq) if (b.type != FilterType::Off) return true;
     return false;
   }
@@ -170,8 +232,10 @@ class Channel {
         v = buf_[i0] + (buf_[i1] - buf_[i0]) * fr;
         w_ = (w_ + 1) % kMaxDelayFrames;
       }
+      v = gate_.tick(v);
       v = hp_.tick(v); v = lp_.tick(v);
       for (auto& b : eq_) v = b.tick(v);
+      v = comp_.tick(v);
       v = lim_.tick(v);
       x[i] = static_cast<float>(v);
     }
@@ -179,17 +243,19 @@ class Channel {
   // the whole channel's magnitude response at f (EQ + crossover), for the curves
   [[nodiscard]] double gainDbAt(double f) const noexcept { double g = hp_.gainDbAt(fs_, f) + lp_.gainDbAt(fs_, f); for (const auto& b : eq_) g += b.gainDbAt(fs_, f); return g; }
   [[nodiscard]] double limiterGainReductionDb() const noexcept { return lim_.gainReductionDb(); }
-  void reset() noexcept { for (auto& b : eq_) b.reset(); hp_.reset(); lp_.reset(); lim_.reset(); buf_.fill(0); w_ = 0; }
+  void reset() noexcept { for (auto& b : eq_) b.reset(); hp_.reset(); lp_.reset(); lim_.reset(); comp_.reset(); gate_.reset(); buf_.fill(0); w_ = 0; }
 
  private:
   void apply() noexcept {
     for (int i = 0; i < kEqBands; ++i) { const EqBand& b = p_.eq[static_cast<std::size_t>(i)]; eq_[static_cast<std::size_t>(i)].design(b.type, fs_, b.freq, b.q, b.gainDb); }
     hp_.set(true, p_.xoverType, p_.hpOrder, p_.hpFreq, fs_); lp_.set(false, p_.xoverType, p_.lpOrder, p_.lpFreq, fs_);
     lim_.set(p_.limiterOn, p_.limiterCeilDb, p_.limiterReleaseMs, fs_);
+    comp_.set(p_.compOn, p_.compThresholdDb, p_.compRatio, p_.compKneeDb, p_.compAttackMs, p_.compReleaseMs, p_.compMakeupDb, fs_);
+    gate_.set(p_.gateOn, p_.gateThresholdDb, p_.gateRangeDb, p_.gateAttackMs, p_.gateHoldMs, p_.gateReleaseMs, fs_);
     setDelayMs(p_.delayMs);
   }
   double fs_ = 48000; ChannelParams p_{};
-  std::array<Biquad, kEqBands> eq_{}; Crossover hp_, lp_; Limiter lim_;
+  std::array<Biquad, kEqBands> eq_{}; Crossover hp_, lp_; Limiter lim_; Compressor comp_; Gate gate_;
   std::array<double, kMaxDelayFrames> buf_{}; std::size_t w_ = 0; double delaySamples_ = 0;
 };
 

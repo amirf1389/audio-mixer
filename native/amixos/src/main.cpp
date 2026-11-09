@@ -41,7 +41,7 @@ int main(int argc, char* argv[]) {
       if (!shots.isEmpty()) {   // one picture per ported page
         QDir().mkpath(shots);
         auto* win = qobject_cast<QQuickWindow*>(qml.rootObjects().first());
-        for (const char* id : {"home", "mixer", "dsp", "io", "meter", "lufs", "sys", "fx"}) {
+        for (const char* id : {"home", "mixer", "dsp", "dyn", "gate", "io", "meter", "lufs", "sys", "fx"}) {
           win->setProperty("current", QString::fromLatin1(id)); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
           const QImage img = win->grabWindow(); img.save(shots + "/" + id + ".png"); std::printf("amixos --shots: %s %dx%d\n", id, img.width(), img.height());
         }

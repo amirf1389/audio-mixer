@@ -61,7 +61,7 @@ std::vector<DeviceInfo> listDevices();                       // every device of 
 
 // the meters, copied out consistently
 struct Snapshot {
-  struct StripMeter { double pk, rms, hold; std::uint32_t clipN; };
+  struct StripMeter { double pk, rms, hold; std::uint32_t clipN; double compGrDb, gateDb; };   // compGrDb <= 0 (the channel compressor), gateDb <= 0 (the channel gate)
   StripMeter strips[kMaxStrips]; StripMeter master[2];
   double momentary, shortTerm, integrated, lra, truePeak, correlation;
   std::uint64_t blocks, frames, xruns;
@@ -92,13 +92,15 @@ class Runtime {
   void setPolarity(int strip, bool invert);
   void setCrossover(int strip, dsp::XoverType type, int hpOrder, double hpFreq, int lpOrder, double lpFreq);
   void setChannelLimiter(int strip, bool on, double ceilingDb, double releaseMs);
+  void setCompressor(int strip, bool on, double thresholdDb, double ratio, double kneeDb, double attackMs, double releaseMs, double makeupDb);
+  void setGate(int strip, bool on, double thresholdDb, double rangeDb, double attackMs, double holdMs, double releaseMs);
   // 360 degree output (Resonance Audio, only when Spatial::available()): the stereo master after the meters becomes two virtual speakers in a binaural scene; off by default.
   // The audio is then delayed by Spatial::block() frames. Returns false when this binary has no Resonance Audio.
   bool setSpatial(bool on);
   void setSpatialPosition(double azimuthDeg, double elevationDeg, double distanceM, double spreadDeg = 30);
   Snapshot snapshot() const;
  private:
-  struct Cmd { int op; int a; double x, y, z; int b = 0; double w = 0; };
+  struct Cmd { int op; int a; double x, y, z; int b = 0; double w = 0, v = 0, u = 0; };
   void post(const Cmd& c);
   void onBlock(const float* const* in, float* const* out, std::size_t frames);
   void publish();
