@@ -39,7 +39,7 @@ std::unique_ptr<Backend> createBackend(const std::string& name) {
   return nullptr;
 }
 
-enum Op { kGain, kPan, kMute, kSolo, kMaster, kLimiter, kClipDb, kClear, kSpatialOn, kSpatialPos, kSpatialSpread, kEq, kDelay, kPolarity, kXover, kChLimiter, kComp, kGate, kSend, kBusLevel, kBusMute, kBusReturn, kMonitor };
+enum Op { kGain, kPan, kMute, kSolo, kMaster, kLimiter, kClipDb, kClear, kSpatialOn, kSpatialPos, kSpatialSpread, kEq, kDelay, kPolarity, kXover, kChLimiter, kComp, kGate, kSend, kBusLevel, kBusMute, kBusReturn, kMonitor, kInRoute, kOutRoute };
 
 Runtime::Runtime(int strips) : mixer_(strips, 48000) { std::memset(&pub_, 0, sizeof pub_); }
 Runtime::~Runtime() { stop(); }
@@ -55,7 +55,9 @@ bool Runtime::open(const DeviceConfig& cfg, std::string& err) {
   backendName_ = name; nIn_ = std::max(0, cfg.inChannels); nOut_ = std::max(0, cfg.outChannels);
   mixer_ = Mixer(mixer_.strips(), cfg.sampleRate);                                  // the mixer runs at the device rate
   const std::size_t n = std::max<std::size_t>(cfg.frames, 16) * 8;                  // scratch for blocks up to 8 periods (devices may hand out more than the period)
-  silence_.assign(n, 0.0f); left_.assign(n, 0.0f); right_.assign(n, 0.0f);
+  silence_.assign(n, 0.0f); left_.assign(n, 0.0f); right_.assign(n, 0.0f); monL_.assign(n, 0.0f); monR_.assign(n, 0.0f);
+  for (int s = 0; s < kMaxStrips; ++s) inRoute_[s] = s;
+  for (int o = 0; o < kMaxOutputs; ++o) outRoute_[o] = defaultOutputSource(o);
   ch_.assign(static_cast<std::size_t>(mixer_.strips()), dsp::Channel(cfg.sampleRate)); chBuf_.assign(ch_.size(), std::vector<float>(n, 0.0f));
   busBuf_.assign(2 * kMaxBuses, std::vector<float>(n, 0.0f));
   head_ = 0; tail_ = 0; blocks_ = 0; frames_ = 0; std::memset(&pub_, 0, sizeof pub_);
@@ -89,6 +91,8 @@ void Runtime::setSend(int s, int b, double db, bool pre) { Cmd c{kSend, s, db, p
 void Runtime::setBusLevel(int b, double db) { post({kBusLevel, b, db, 0, 0}); }
 void Runtime::setBusMute(int b, bool on) { post({kBusMute, b, on ? 1.0 : 0.0, 0, 0}); }
 void Runtime::setBusReturn(int b, double db) { post({kBusReturn, b, db, 0, 0}); }
+void Runtime::setInputRoute(int strip, int input) { if (strip < 0 || strip >= kMaxStrips) return; post({kInRoute, strip, 0, 0, 0, std::max(-1, std::min(kMaxStrips - 1, input))}); }
+void Runtime::setOutputRoute(int out, int source) { if (out < 0 || out >= kMaxOutputs) return; post({kOutRoute, out, 0, 0, 0, std::max(0, std::min(kSrcBus0L + 2 * kMaxBuses - 1, source))}); }
 void Runtime::setMonitor(int source, double db, bool dim, bool mono, bool mute) {
   double lin = std::pow(10.0, std::clamp(db, -120.0, 10.0) / 20); if (dim) lin *= 0.1; if (mute || db <= -119) lin = 0;
   post({kMonitor, std::clamp(source, 0, kMaxBuses), lin, 0, 0, mono ? 1 : 0});
@@ -123,6 +127,8 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
       case kBusMute: mixer_.setBusMute(c.a, c.x != 0); break;
       case kBusReturn: mixer_.setBusReturn(c.a, c.x); break;
       case kMonitor: monSrc_ = c.a; monGainTarget_ = c.x; monMono_ = c.b != 0; break;
+      case kInRoute: inRoute_[c.a] = c.b; break;
+      case kOutRoute: outRoute_[c.a] = c.b; break;
       default: break;
     }
     tail_.store(t + 1, std::memory_order_release);
@@ -130,7 +136,8 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
   frames = std::min(frames, left_.size());
   const float* ins[kMaxStrips];
   for (int s = 0; s < mixer_.strips(); ++s) {
-    ins[s] = (s < nIn_ && in && in[s]) ? in[s] : silence_.data();
+    const int src = inRoute_[s];
+    ins[s] = (src >= 0 && src < nIn_ && in && in[src]) ? in[src] : silence_.data();
     dsp::Channel& ch = ch_[static_cast<std::size_t>(s)];
     if (ch.active()) { float* b = chBuf_[static_cast<std::size_t>(s)].data(); std::memcpy(b, ins[s], frames * sizeof(float)); ch.process(b, frames); ins[s] = b; }   // the strip's channel DSP, in a scratch block
   }
@@ -140,19 +147,22 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
   // the monitor section: source, level (smoothed over the block, no clicks), mono, mute -> outputs 0 / 1, with its own peak
   { const float* ml = monSrc_ > 0 ? busOut[2 * (monSrc_ - 1)] : left_.data(); const float* mr = monSrc_ > 0 ? busOut[2 * (monSrc_ - 1) + 1] : right_.data();
     const double g0 = monGain_, g1 = monGainTarget_; monGain_ = g1; const double step = frames ? (g1 - g0) / static_cast<double>(frames) : 0; double pl = 0, pr = 0;
-    float* ol = nOut_ > 0 ? out[0] : nullptr; float* or_ = nOut_ > 1 ? out[1] : nullptr;
+    float* ol = monL_.data(); float* or_ = monR_.data();
     for (std::size_t i = 0; i < frames; ++i) {
       const float g = static_cast<float>(g0 + step * static_cast<double>(i));
       float l = ml[i] * g, r = mr[i] * g; if (monMono_) { l = r = 0.5f * (l + r); }
-      if (ol) ol[i] = l;
-      if (or_) or_[i] = r;
+      ol[i] = l; or_[i] = r;
       pl = std::max(pl, static_cast<double>(std::fabs(l))); pr = std::max(pr, static_cast<double>(std::fabs(r)));
     }
     monPk_[0] = std::max(pl, monPk_[0] * 0.8); monPk_[1] = std::max(pr, monPk_[1] * 0.8); }
-  for (int c = 2; c < nOut_; ++c) {
-    if (false) {}
-    else if (c - 2 < 2 * kMaxBuses) std::memcpy(out[c], busOut[c - 2], frames * sizeof(float));   // aux bus k on channels 2 + 2k, 3 + 2k
-    else std::memset(out[c], 0, frames * sizeof(float));
+  // the output matrix: every device output carries one source
+  for (int c = 0; c < nOut_; ++c) {
+    if (!out || !out[c]) continue;
+    const int src = c < kMaxOutputs ? outRoute_[c] : kSrcOff; const float* from = nullptr;
+    if (src == kSrcMasterL) from = left_.data(); else if (src == kSrcMasterR) from = right_.data();
+    else if (src == kSrcMonL) from = monL_.data(); else if (src == kSrcMonR) from = monR_.data();
+    else if (src >= kSrcBus0L && src - kSrcBus0L < 2 * kMaxBuses) from = busOut[src - kSrcBus0L];
+    if (from) std::memcpy(out[c], from, frames * sizeof(float)); else std::memset(out[c], 0, frames * sizeof(float));
   }
   ++blocks_; frames_ += frames;
   publish();

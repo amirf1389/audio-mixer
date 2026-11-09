@@ -103,6 +103,14 @@ class Runtime {
   // the monitor section (control room): what goes to output channels 0 / 1 after the master meters. source 0 = master, 1..kMaxBuses = that bus
   // (post level, pre return); level in dB, dim = -20 dB, mono sums L+R, mute = silence. The master meters and loudness are not affected.
   void setMonitor(int source, double db, bool dim, bool mono, bool mute);
+  // the routing matrix. Inputs: strip s reads device input channel `input` (-1 = nothing; the default is input s). Outputs: device output
+  // channel `out` carries `source`: 0 off, 1 / 2 master L / R, 3 / 4 monitor L / R, 5 + 2k / 6 + 2k bus k L / R. The default is monitor on 0 / 1 and
+  // bus k on 2 + 2k / 3 + 2k. Several outputs may carry the same source; an input may feed several strips.
+  static constexpr int kMaxOutputs = 64;
+  static constexpr int kSrcOff = 0, kSrcMasterL = 1, kSrcMasterR = 2, kSrcMonL = 3, kSrcMonR = 4, kSrcBus0L = 5;
+  void setInputRoute(int strip, int input);
+  void setOutputRoute(int out, int source);
+  static int defaultOutputSource(int out) { return out < 2 ? kSrcMonL + out : (out - 2 < 2 * kMaxBuses ? kSrcBus0L + (out - 2) : kSrcOff); }
   // 360 degree output (Resonance Audio, only when Spatial::available()): the stereo master after the meters becomes two virtual speakers in a binaural scene; off by default.
   // The audio is then delayed by Spatial::block() frames. Returns false when this binary has no Resonance Audio.
   bool setSpatial(bool on);
@@ -119,6 +127,7 @@ class Runtime {
   std::unique_ptr<Spatial> spatial_; bool spatialOn_ = false; double spAz_ = 0, spEl_ = 0, spDist_ = 2, spSpread_ = 30;     // spatial_ is created in open(); spatialOn_ is only touched by the audio thread
   std::vector<float> silence_, left_, right_;
   int monSrc_ = 0; double monGainTarget_ = 1, monGain_ = 1; bool monMono_ = false; double monPk_[2] = {0, 0};   // audio thread only
+  std::vector<float> monL_, monR_; int inRoute_[kMaxStrips]; int outRoute_[kMaxOutputs];                            // audio thread only (set in open, then by ops)
   std::vector<dsp::Channel> ch_; std::vector<std::vector<float>> chBuf_;
   std::vector<std::vector<float>> busBuf_;   // 2 * kMaxBuses blocks for the aux bus outputs   // one channel DSP and one scratch block per strip (sized in open())
   // control ring: many producers (under a mutex), one consumer (the audio thread)
