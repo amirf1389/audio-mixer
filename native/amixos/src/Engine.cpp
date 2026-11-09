@@ -3,6 +3,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QDateTime>
 #include <cmath>
 
 using am::dsp::FilterType;
@@ -67,7 +68,10 @@ void Engine::pushAll() {
 
 QVariantList Engine::stripState() const {
   QVariantList l;
-  for (int i = 0; i < kStrips; ++i) { const StripUi& s = strips_[static_cast<std::size_t>(i)]; QVariantMap m; m["index"] = i; m["name"] = s.name; m["db"] = s.db; m["pan"] = s.pan; m["mute"] = s.mute; m["solo"] = s.solo; m["dsp"] = s.dsp.active(); m["dca"] = s.dca; m["muteGroups"] = static_cast<int>(s.muteGroups); m["effectiveDb"] = effectiveDb(i); m["effectiveMute"] = effectiveMute(i); l << m; }
+  for (int i = 0; i < kStrips; ++i) { const StripUi& s = strips_[static_cast<std::size_t>(i)]; QVariantMap m; m["index"] = i; m["name"] = s.name; m["db"] = s.db; m["pan"] = s.pan; m["mute"] = s.mute; m["solo"] = s.solo; m["dsp"] = s.dsp.active(); m["dca"] = s.dca; m["muteGroups"] = static_cast<int>(s.muteGroups); m["effectiveDb"] = effectiveDb(i); m["effectiveMute"] = effectiveMute(i); m["color"] = s.color;
+    const auto& p = s.dsp.params(); bool eqOn = false; for (const auto& b : p.eq) eqOn = eqOn || b.type != am::dsp::FilterType::Off;
+    m["gateOn"] = p.gateOn; m["compOn"] = p.compOn; m["limOn"] = p.limiterOn; m["eqOn"] = eqOn; m["xoverOn"] = p.hpOrder > 0 || p.lpOrder > 0; m["delayOn"] = p.delayMs > 0; m["polarity"] = p.polarityInvert;
+    QVariantList sb; for (int k = 0; k < kBuses; ++k) if (s.sends[k].db > -60) sb << (k + 1); m["sendsTo"] = sb; l << m; }
   return l;
 }
 // ── aux sends ──
@@ -104,6 +108,7 @@ void Engine::setPan(int i, double p) { if (i < 0 || i >= kStrips) return; strips
 void Engine::setMute(int i, bool on) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].mute = on; pushStrip(i); emit stripsChanged(); }
 void Engine::setSolo(int i, bool on) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].solo = on; if (rt_) rt_->setSolo(i, on); emit stripsChanged(); }
 void Engine::setName(int i, const QString& n) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].name = n.left(24); emit stripsChanged(); }
+void Engine::setColor(int i, int c) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].color = std::clamp(c, 0, 7); emit stripsChanged(); }
 void Engine::setMaster(double db) { masterDb_ = std::clamp(db, -60.0, 10.0); if (rt_) rt_->setMasterDb(masterDb_); emit stripsChanged(); }
 void Engine::setMasterLimiter(bool on, double c) { masterLim_ = on; masterCeil_ = c; if (rt_) rt_->setLimiter(on, c); emit stripsChanged(); }
 void Engine::clearClips() { if (rt_) rt_->clearClips(); }
@@ -186,60 +191,165 @@ void Engine::tick() {
   QVariantList m; QVariantMap t;
   if (rt_) {
     const am::Snapshot s = rt_->snapshot();
-    for (int i = 0; i < kStrips; ++i) { QVariantMap x; x["peakDb"] = toDb(s.strips[i].pk); x["rmsDb"] = toDb(s.strips[i].rms); x["holdDb"] = toDb(s.strips[i].hold); x["clip"] = s.strips[i].clipN > 0; x["compGrDb"] = s.strips[i].compGrDb; x["gateDb"] = s.strips[i].gateDb; m << x; }
+    for (int i = 0; i < kStrips; ++i) { QVariantMap x; x["peakDb"] = toDb(s.strips[i].pk); x["rmsDb"] = toDb(s.strips[i].rms); x["holdDb"] = toDb(s.strips[i].hold); x["clip"] = s.strips[i].clipN > 0; x["compGrDb"] = s.strips[i].compGrDb; x["gateDb"] = s.strips[i].gateDb; x["inDb"] = toDb(s.strips[i].inPk); m << x; }
     t["masterPeakDb"] = toDb(std::max(s.master[0].pk, s.master[1].pk)); t["masterLDb"] = toDb(s.master[0].pk); t["masterRDb"] = toDb(s.master[1].pk); t["masterRmsDb"] = toDb(std::max(s.master[0].rms, s.master[1].rms));
     t["masterClip"] = s.master[0].clipN + s.master[1].clipN > 0; t["momentary"] = s.momentary; t["shortTerm"] = s.shortTerm; t["integrated"] = s.integrated; t["lra"] = s.lra; t["truePeak"] = s.truePeak; t["correlation"] = s.correlation;
     t["blocks"] = static_cast<qulonglong>(s.blocks); t["frames"] = static_cast<qulonglong>(s.frames); t["xruns"] = static_cast<qulonglong>(s.xruns);
     QVariantList bm; for (int k = 0; k < kBuses; ++k) { QVariantMap x; x["peakDb"] = toDb(s.buses[k].pk); x["rmsDb"] = toDb(s.buses[k].rms); x["holdDb"] = toDb(s.buses[k].hold); x["clip"] = s.buses[k].clipN > 0; bm << x; } busMeters_ = bm;
   } else {
     QVariantList bm; for (int k = 0; k < kBuses; ++k) { QVariantMap x; x["peakDb"] = -120.0; x["rmsDb"] = -120.0; x["holdDb"] = -120.0; x["clip"] = false; bm << x; } busMeters_ = bm;
-    for (int i = 0; i < kStrips; ++i) { QVariantMap x; x["peakDb"] = -120.0; x["rmsDb"] = -120.0; x["holdDb"] = -120.0; x["clip"] = false; x["compGrDb"] = 0.0; x["gateDb"] = 0.0; m << x; }
+    for (int i = 0; i < kStrips; ++i) { QVariantMap x; x["peakDb"] = -120.0; x["rmsDb"] = -120.0; x["holdDb"] = -120.0; x["clip"] = false; x["compGrDb"] = 0.0; x["gateDb"] = 0.0; x["inDb"] = -120.0; m << x; }
     t["masterPeakDb"] = -120.0; t["masterLDb"] = -120.0; t["masterRDb"] = -120.0; t["masterRmsDb"] = -120.0; t["masterClip"] = false; t["momentary"] = -120.0; t["shortTerm"] = -120.0; t["integrated"] = -120.0; t["lra"] = 0.0; t["truePeak"] = -120.0; t["correlation"] = 0.0; t["blocks"] = 0; t["frames"] = 0; t["xruns"] = 0;
   }
   meters_ = m; telemetry_ = t; emit metersChanged();
 }
 
-// ── persistence: one JSON document in QSettings (strip names, levels, pan, mute, solo, channel DSP, master) ──
-void Engine::save() {
-  QJsonArray arr;
-  for (const StripUi& s : strips_) {
-    const auto& p = s.dsp.params(); QJsonObject o; o["name"] = s.name; o["db"] = s.db; o["pan"] = s.pan; o["mute"] = s.mute; o["solo"] = s.solo;
-    o["polarity"] = p.polarityInvert; o["delayMs"] = p.delayMs; o["xoverType"] = static_cast<int>(p.xoverType); o["hpOrder"] = p.hpOrder; o["hpFreq"] = p.hpFreq; o["lpOrder"] = p.lpOrder; o["lpFreq"] = p.lpFreq;
-    o["limOn"] = p.limiterOn; o["limCeil"] = p.limiterCeilDb; o["limRel"] = p.limiterReleaseMs;
-    o["compOn"] = p.compOn; o["compThr"] = p.compThresholdDb; o["compRatio"] = p.compRatio; o["compKnee"] = p.compKneeDb; o["compAtt"] = p.compAttackMs; o["compRel"] = p.compReleaseMs; o["compMakeup"] = p.compMakeupDb;
-    o["gateOn"] = p.gateOn; o["gateThr"] = p.gateThresholdDb; o["gateRange"] = p.gateRangeDb; o["gateAtt"] = p.gateAttackMs; o["gateHold"] = p.gateHoldMs; o["gateRel"] = p.gateReleaseMs;
-    QJsonArray eq; for (const auto& b : p.eq) { QJsonObject e; e["t"] = static_cast<int>(b.type); e["f"] = b.freq; e["q"] = b.q; e["g"] = b.gainDb; eq << e; } o["eq"] = eq;
-    QJsonArray sends; for (const SendUi& sd : s.sends) { QJsonObject e; e["db"] = sd.db; e["pre"] = sd.pre; sends << e; } o["sends"] = sends; o["dca"] = s.dca; o["muteGroups"] = static_cast<int>(s.muteGroups);
-    arr << o;
-  }
+// ── persistence: the console as one JSON document (strips, sends, groups, buses, master). The same document is a SCENE; a strip's DSP part
+// is a PRESET. QSettings keeps the current console, the 16 scenes and the user presets.
+QJsonObject Engine::stripJson(const StripUi& s) const {
+  const auto& p = s.dsp.params(); QJsonObject o; o["name"] = s.name; o["db"] = s.db; o["pan"] = s.pan; o["mute"] = s.mute; o["solo"] = s.solo;
+  o["dsp"] = dspJson(p);
+  QJsonArray sends; for (const SendUi& sd : s.sends) { QJsonObject e; e["db"] = sd.db; e["pre"] = sd.pre; sends << e; } o["sends"] = sends; o["dca"] = s.dca; o["muteGroups"] = static_cast<int>(s.muteGroups); o["color"] = s.color;
+  return o;
+}
+QJsonObject Engine::dspJson(const am::dsp::ChannelParams& p) {
+  QJsonObject o;
+  o["polarity"] = p.polarityInvert; o["delayMs"] = p.delayMs; o["xoverType"] = static_cast<int>(p.xoverType); o["hpOrder"] = p.hpOrder; o["hpFreq"] = p.hpFreq; o["lpOrder"] = p.lpOrder; o["lpFreq"] = p.lpFreq;
+  o["limOn"] = p.limiterOn; o["limCeil"] = p.limiterCeilDb; o["limRel"] = p.limiterReleaseMs;
+  o["compOn"] = p.compOn; o["compThr"] = p.compThresholdDb; o["compRatio"] = p.compRatio; o["compKnee"] = p.compKneeDb; o["compAtt"] = p.compAttackMs; o["compRel"] = p.compReleaseMs; o["compMakeup"] = p.compMakeupDb;
+  o["gateOn"] = p.gateOn; o["gateThr"] = p.gateThresholdDb; o["gateRange"] = p.gateRangeDb; o["gateAtt"] = p.gateAttackMs; o["gateHold"] = p.gateHoldMs; o["gateRel"] = p.gateReleaseMs;
+  QJsonArray eq; for (const auto& b : p.eq) { QJsonObject e; e["t"] = static_cast<int>(b.type); e["f"] = b.freq; e["q"] = b.q; e["g"] = b.gainDb; eq << e; } o["eq"] = eq;
+  return o;
+}
+am::dsp::ChannelParams Engine::dspFromJson(const QJsonObject& o) {
+  am::dsp::ChannelParams p; p.polarityInvert = o.value("polarity").toBool(); p.delayMs = std::clamp(o.value("delayMs").toDouble(0), 0.0, 50.0); p.xoverType = static_cast<XoverType>(std::clamp(o.value("xoverType").toInt(1), 0, 2));
+  p.hpOrder = std::clamp(o.value("hpOrder").toInt(0), 0, 8); p.hpFreq = std::clamp(o.value("hpFreq").toDouble(80), 10.0, 24000.0); p.lpOrder = std::clamp(o.value("lpOrder").toInt(0), 0, 8); p.lpFreq = std::clamp(o.value("lpFreq").toDouble(4000), 10.0, 24000.0);
+  p.limiterOn = o.value("limOn").toBool(); p.limiterCeilDb = std::clamp(o.value("limCeil").toDouble(-1), -30.0, 0.0); p.limiterReleaseMs = std::clamp(o.value("limRel").toDouble(80), 1.0, 2000.0);
+  p.compOn = o.value("compOn").toBool(); p.compThresholdDb = std::clamp(o.value("compThr").toDouble(-20), -60.0, 0.0); p.compRatio = std::clamp(o.value("compRatio").toDouble(4), 1.0, 20.0); p.compKneeDb = std::clamp(o.value("compKnee").toDouble(6), 0.0, 24.0);
+  p.compAttackMs = std::clamp(o.value("compAtt").toDouble(10), 0.1, 200.0); p.compReleaseMs = std::clamp(o.value("compRel").toDouble(100), 5.0, 2000.0); p.compMakeupDb = std::clamp(o.value("compMakeup").toDouble(0), 0.0, 24.0);
+  p.gateOn = o.value("gateOn").toBool(); p.gateThresholdDb = std::clamp(o.value("gateThr").toDouble(-50), -90.0, 0.0); p.gateRangeDb = std::clamp(o.value("gateRange").toDouble(-80), -90.0, 0.0);
+  p.gateAttackMs = std::clamp(o.value("gateAtt").toDouble(1), 0.1, 100.0); p.gateHoldMs = std::clamp(o.value("gateHold").toDouble(50), 0.0, 2000.0); p.gateReleaseMs = std::clamp(o.value("gateRel").toDouble(100), 5.0, 3000.0);
+  const QJsonArray eq = o.value("eq").toArray();
+  for (int b = 0; b < am::dsp::kEqBands && b < eq.size(); ++b) { const QJsonObject e = eq[b].toObject(); p.eq[static_cast<std::size_t>(b)] = {static_cast<FilterType>(std::clamp(e.value("t").toInt(0), 0, 8)), std::clamp(e.value("f").toDouble(1000), 10.0, 24000.0), std::clamp(e.value("q").toDouble(1), 0.1, 36.0), std::clamp(e.value("g").toDouble(0), -24.0, 24.0)}; }
+  return p;
+}
+void Engine::stripFromJson(StripUi& s, const QJsonObject& o) {
+  if (o.contains("name")) s.name = o.value("name").toString().left(24); s.db = std::clamp(o.value("db").toDouble(0), -60.0, 10.0); s.pan = std::clamp(o.value("pan").toDouble(0), -1.0, 1.0); s.mute = o.value("mute").toBool(); s.solo = o.value("solo").toBool();
+  s.dsp.set(dspFromJson(o.value("dsp").toObject()));
+  const QJsonArray sends = o.value("sends").toArray(); for (int k = 0; k < kBuses; ++k) { if (k < sends.size()) { const QJsonObject e = sends[k].toObject(); s.sends[k].db = std::clamp(e.value("db").toDouble(-60), -60.0, 10.0); s.sends[k].pre = e.value("pre").toBool(); } else s.sends[k] = SendUi{}; }
+  s.dca = std::clamp(o.value("dca").toInt(0), 0, kGroups); s.muteGroups = static_cast<unsigned>(std::clamp(o.value("muteGroups").toInt(0), 0, 255)); s.color = std::clamp(o.value("color").toInt(0), 0, 7);
+}
+QJsonObject Engine::consoleJson() const {
+  QJsonArray arr; for (const StripUi& s : strips_) arr << stripJson(s);
   QJsonArray buses; for (const BusUi& b : buses_) { QJsonObject o; o["name"] = b.name; o["db"] = b.db; o["returnDb"] = b.returnDb; o["mute"] = b.mute; buses << o; }
   QJsonArray dcas; for (const DcaUi& d : dcas_) { QJsonObject o; o["name"] = d.name; o["db"] = d.db; o["mute"] = d.mute; dcas << o; }
   QJsonArray mgs; for (const MuteGroupUi& g : muteGroups_) { QJsonObject o; o["name"] = g.name; o["active"] = g.active; mgs << o; }
-  QJsonObject root; root["strips"] = arr; root["buses"] = buses; root["dcas"] = dcas; root["muteGroups"] = mgs; root["masterDb"] = masterDb_; root["masterLim"] = masterLim_; root["masterCeil"] = masterCeil_; root["v"] = 1;
-  settings_.setValue("console/state", QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact)));
+  QJsonObject root; root["strips"] = arr; root["buses"] = buses; root["dcas"] = dcas; root["muteGroups"] = mgs; root["masterDb"] = masterDb_; root["masterLim"] = masterLim_; root["masterCeil"] = masterCeil_; root["v"] = 2;
+  return root;
 }
-void Engine::load() {
-  const QJsonObject root = QJsonDocument::fromJson(settings_.value("console/state").toString().toUtf8()).object();
+// respectSafe: strips flagged RECALL SAFE keep what they have (a scene recall); false = the whole document (start-up)
+void Engine::applyConsoleJson(const QJsonObject& root, bool respectSafe) {
   if (root.isEmpty()) return;
   masterDb_ = std::clamp(root.value("masterDb").toDouble(0), -60.0, 10.0); masterLim_ = root.value("masterLim").toBool(true); masterCeil_ = std::clamp(root.value("masterCeil").toDouble(-0.5), -12.0, 0.0);
   const QJsonArray arr = root.value("strips").toArray();
-  for (int i = 0; i < kStrips && i < arr.size(); ++i) {
-    const QJsonObject o = arr[i].toObject(); StripUi& s = strips_[static_cast<std::size_t>(i)];
-    if (o.contains("name")) s.name = o.value("name").toString().left(24); s.db = std::clamp(o.value("db").toDouble(0), -60.0, 10.0); s.pan = std::clamp(o.value("pan").toDouble(0), -1.0, 1.0); s.mute = o.value("mute").toBool(); s.solo = o.value("solo").toBool();
-    am::dsp::ChannelParams p; p.polarityInvert = o.value("polarity").toBool(); p.delayMs = std::clamp(o.value("delayMs").toDouble(0), 0.0, 50.0); p.xoverType = static_cast<XoverType>(std::clamp(o.value("xoverType").toInt(1), 0, 2));
-    p.hpOrder = std::clamp(o.value("hpOrder").toInt(0), 0, 8); p.hpFreq = std::clamp(o.value("hpFreq").toDouble(80), 10.0, 24000.0); p.lpOrder = std::clamp(o.value("lpOrder").toInt(0), 0, 8); p.lpFreq = std::clamp(o.value("lpFreq").toDouble(4000), 10.0, 24000.0);
-    p.limiterOn = o.value("limOn").toBool(); p.limiterCeilDb = std::clamp(o.value("limCeil").toDouble(-1), -30.0, 0.0); p.limiterReleaseMs = std::clamp(o.value("limRel").toDouble(80), 1.0, 2000.0);
-    p.compOn = o.value("compOn").toBool(); p.compThresholdDb = std::clamp(o.value("compThr").toDouble(-20), -60.0, 0.0); p.compRatio = std::clamp(o.value("compRatio").toDouble(4), 1.0, 20.0); p.compKneeDb = std::clamp(o.value("compKnee").toDouble(6), 0.0, 24.0);
-    p.compAttackMs = std::clamp(o.value("compAtt").toDouble(10), 0.1, 200.0); p.compReleaseMs = std::clamp(o.value("compRel").toDouble(100), 5.0, 2000.0); p.compMakeupDb = std::clamp(o.value("compMakeup").toDouble(0), 0.0, 24.0);
-    p.gateOn = o.value("gateOn").toBool(); p.gateThresholdDb = std::clamp(o.value("gateThr").toDouble(-50), -90.0, 0.0); p.gateRangeDb = std::clamp(o.value("gateRange").toDouble(-80), -90.0, 0.0);
-    p.gateAttackMs = std::clamp(o.value("gateAtt").toDouble(1), 0.1, 100.0); p.gateHoldMs = std::clamp(o.value("gateHold").toDouble(50), 0.0, 2000.0); p.gateReleaseMs = std::clamp(o.value("gateRel").toDouble(100), 5.0, 3000.0);
-    const QJsonArray eq = o.value("eq").toArray();
-    for (int b = 0; b < am::dsp::kEqBands && b < eq.size(); ++b) { const QJsonObject e = eq[b].toObject(); p.eq[static_cast<std::size_t>(b)] = {static_cast<FilterType>(std::clamp(e.value("t").toInt(0), 0, 8)), std::clamp(e.value("f").toDouble(1000), 10.0, 24000.0), std::clamp(e.value("q").toDouble(1), 0.1, 36.0), std::clamp(e.value("g").toDouble(0), -24.0, 24.0)}; }
-    s.dsp.set(p);
-    const QJsonArray sends = o.value("sends").toArray(); for (int k = 0; k < kBuses && k < sends.size(); ++k) { const QJsonObject e = sends[k].toObject(); s.sends[k].db = std::clamp(e.value("db").toDouble(-60), -60.0, 10.0); s.sends[k].pre = e.value("pre").toBool(); }
-    s.dca = std::clamp(o.value("dca").toInt(0), 0, kGroups); s.muteGroups = static_cast<unsigned>(std::clamp(o.value("muteGroups").toInt(0), 0, 255));
-  }
+  for (int i = 0; i < kStrips && i < arr.size(); ++i) { if (respectSafe && ((recallSafe_ >> i) & 1u)) continue; stripFromJson(strips_[static_cast<std::size_t>(i)], arr[i].toObject()); }
   const QJsonArray buses = root.value("buses").toArray(); for (int k = 0; k < kBuses && k < buses.size(); ++k) { const QJsonObject o = buses[k].toObject(); if (o.contains("name")) buses_[k].name = o.value("name").toString().left(16); buses_[k].db = std::clamp(o.value("db").toDouble(0), -60.0, 10.0); buses_[k].returnDb = std::clamp(o.value("returnDb").toDouble(-60), -60.0, 10.0); buses_[k].mute = o.value("mute").toBool(); }
   const QJsonArray dcas = root.value("dcas").toArray(); for (int g = 0; g < kGroups && g < dcas.size(); ++g) { const QJsonObject o = dcas[g].toObject(); if (o.contains("name")) dcas_[g].name = o.value("name").toString().left(16); dcas_[g].db = std::clamp(o.value("db").toDouble(0), -60.0, 10.0); dcas_[g].mute = o.value("mute").toBool(); }
   const QJsonArray mgs = root.value("muteGroups").toArray(); for (int g = 0; g < kGroups && g < mgs.size(); ++g) { const QJsonObject o = mgs[g].toObject(); if (o.contains("name")) muteGroups_[g].name = o.value("name").toString().left(16); muteGroups_[g].active = o.value("active").toBool(); }
+  if (rt_) { for (auto& s : strips_) s.dsp.setSampleRate(s.dsp.sampleRate()); pushAll(); }
+  emit stripsChanged(); emit busesChanged(); emit groupsChanged();
+}
+void Engine::save() {
+  settings_.setValue("console/state", QString::fromUtf8(QJsonDocument(consoleJson()).toJson(QJsonDocument::Compact)));
+  QJsonArray sc; for (const SceneUi& x : scenes_) { QJsonObject o; o["name"] = x.name; o["at"] = x.at; o["data"] = x.data; sc << o; }
+  settings_.setValue("console/scenes", QString::fromUtf8(QJsonDocument(sc).toJson(QJsonDocument::Compact)));
+  settings_.setValue("console/recallSafe", static_cast<qulonglong>(recallSafe_));
+  QJsonArray pr; for (const PresetUi& x : userPresets_) { QJsonObject o; o["name"] = x.name; o["category"] = x.category; o["dsp"] = x.dsp; pr << o; }
+  settings_.setValue("console/presets", QString::fromUtf8(QJsonDocument(pr).toJson(QJsonDocument::Compact)));
+}
+void Engine::load() {
+  const QJsonObject root = QJsonDocument::fromJson(settings_.value("console/state").toString().toUtf8()).object();
+  if (!root.isEmpty()) {
+    if (root.value("v").toInt(1) < 2) {   // 0.1.0 wrote the DSP fields flat on the strip: lift them into "dsp"
+      QJsonObject r2 = root; QJsonArray arr;
+      for (const QJsonValue& v : root.value("strips").toArray()) { QJsonObject o = v.toObject(); if (!o.contains("dsp")) o["dsp"] = o; arr << o; }
+      r2["strips"] = arr; applyConsoleJson(r2, false);
+    } else applyConsoleJson(root, false);
+  }
+  scenes_.resize(kScenes);
+  const QJsonArray sc = QJsonDocument::fromJson(settings_.value("console/scenes").toString().toUtf8()).array();
+  for (int i = 0; i < kScenes && i < sc.size(); ++i) { const QJsonObject o = sc[i].toObject(); scenes_[static_cast<std::size_t>(i)].name = o.value("name").toString().left(24); scenes_[static_cast<std::size_t>(i)].at = o.value("at").toString(); scenes_[static_cast<std::size_t>(i)].data = o.value("data").toObject(); }
+  recallSafe_ = static_cast<unsigned>(settings_.value("console/recallSafe", 0).toULongLong() & 0xffffffffu);
+  const QJsonArray pr = QJsonDocument::fromJson(settings_.value("console/presets").toString().toUtf8()).array();
+  for (const QJsonValue& v : pr) { const QJsonObject o = v.toObject(); if (o.value("name").toString().isEmpty()) continue; userPresets_.push_back({o.value("name").toString().left(24), o.value("category").toString("USER").left(16), o.value("dsp").toObject()}); }
+}
+
+// ── SCENES: 16 snapshots of the whole console ──
+QVariantList Engine::scenes() const {
+  QVariantList l;
+  for (int i = 0; i < kScenes; ++i) { const SceneUi& x = scenes_[static_cast<std::size_t>(i)]; QVariantMap m; m["index"] = i; m["name"] = x.name.isEmpty() ? QStringLiteral("SCENE %1").arg(i + 1, 2, 10, QLatin1Char('0')) : x.name; m["at"] = x.at; m["empty"] = x.data.isEmpty(); m["current"] = i == currentScene_; l << m; }
+  return l;
+}
+void Engine::storeScene(int i, const QString& name) {
+  if (i < 0 || i >= kScenes) return; SceneUi& x = scenes_[static_cast<std::size_t>(i)];
+  x.data = consoleJson(); x.at = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm"); if (!name.trimmed().isEmpty()) x.name = name.trimmed().left(24); else if (x.name.isEmpty()) x.name = QStringLiteral("SCENE %1").arg(i + 1, 2, 10, QLatin1Char('0'));
+  currentScene_ = i; save(); emit scenesChanged();
+}
+bool Engine::recallScene(int i) {
+  if (i < 0 || i >= kScenes || scenes_[static_cast<std::size_t>(i)].data.isEmpty()) return false;
+  applyConsoleJson(scenes_[static_cast<std::size_t>(i)].data, true); currentScene_ = i; emit scenesChanged(); return true;
+}
+void Engine::clearScene(int i) { if (i < 0 || i >= kScenes) return; scenes_[static_cast<std::size_t>(i)] = SceneUi{}; if (currentScene_ == i) currentScene_ = -1; save(); emit scenesChanged(); }
+void Engine::renameScene(int i, const QString& name) { if (i < 0 || i >= kScenes) return; scenes_[static_cast<std::size_t>(i)].name = name.trimmed().left(24); save(); emit scenesChanged(); }
+void Engine::setRecallSafe(int strip, bool on) { if (strip < 0 || strip >= kStrips) return; if (on) recallSafe_ |= 1u << strip; else recallSafe_ &= ~(1u << strip); save(); emit scenesChanged(); }
+bool Engine::recallSafe(int strip) const { return strip >= 0 && strip < kStrips && ((recallSafe_ >> strip) & 1u); }
+
+// ── PRESETS: a channel's DSP chain by name (factory ones built in, user ones saved) ──
+namespace {
+struct Factory { const char* name; const char* category; const char* json; };
+// the chains as compact JSON (the same shape dspJson writes); only the fields that differ from the defaults are given
+const Factory kFactory[] = {
+  {"FLAT", "UTILITY", R"({})"},
+  {"VOCAL", "VOICE", R"({"hpOrder":2,"hpFreq":90,"xoverType":0,"eq":[{"t":1,"f":250,"q":1.2,"g":-2.5},{"t":1,"f":3200,"q":1.0,"g":2.5},{"t":3,"f":10000,"q":0.7,"g":2}],"compOn":true,"compThr":-18,"compRatio":3,"compKnee":6,"compAtt":5,"compRel":80,"compMakeup":3,"gateOn":true,"gateThr":-48,"gateRange":-40,"gateAtt":1,"gateHold":80,"gateRel":150})"},
+  {"PODCAST VOICE", "VOICE", R"({"hpOrder":2,"hpFreq":80,"xoverType":0,"eq":[{"t":1,"f":180,"q":1.0,"g":2},{"t":1,"f":400,"q":1.4,"g":-3},{"t":1,"f":4500,"q":1.2,"g":2},{"t":4,"f":14000,"q":0.7,"g":0}],"compOn":true,"compThr":-20,"compRatio":4,"compKnee":8,"compAtt":8,"compRel":120,"compMakeup":4,"limOn":true,"limCeil":-1,"limRel":80})"},
+  {"KICK", "DRUMS", R"({"eq":[{"t":1,"f":60,"q":1.0,"g":4},{"t":1,"f":350,"q":1.4,"g":-5},{"t":1,"f":4000,"q":1.2,"g":3}],"compOn":true,"compThr":-12,"compRatio":4,"compKnee":2,"compAtt":15,"compRel":120,"compMakeup":2,"gateOn":true,"gateThr":-30,"gateRange":-80,"gateAtt":0.3,"gateHold":30,"gateRel":60})"},
+  {"SNARE", "DRUMS", R"({"hpOrder":2,"hpFreq":80,"xoverType":0,"eq":[{"t":1,"f":200,"q":1.2,"g":2},{"t":1,"f":600,"q":1.5,"g":-3},{"t":1,"f":5000,"q":1.0,"g":3}],"compOn":true,"compThr":-14,"compRatio":4,"compKnee":4,"compAtt":10,"compRel":100,"compMakeup":2,"gateOn":true,"gateThr":-28,"gateRange":-60,"gateAtt":0.3,"gateHold":40,"gateRel":80})"},
+  {"BASS", "INSTRUMENTS", R"({"hpOrder":1,"hpFreq":35,"xoverType":0,"eq":[{"t":1,"f":80,"q":1.0,"g":2},{"t":1,"f":250,"q":1.2,"g":-2},{"t":1,"f":900,"q":1.0,"g":1.5}],"compOn":true,"compThr":-20,"compRatio":5,"compKnee":4,"compAtt":10,"compRel":150,"compMakeup":4})"},
+  {"ACOUSTIC GUITAR", "INSTRUMENTS", R"({"hpOrder":2,"hpFreq":100,"xoverType":0,"eq":[{"t":1,"f":220,"q":1.4,"g":-3},{"t":1,"f":2500,"q":1.0,"g":1.5},{"t":3,"f":9000,"q":0.7,"g":2}],"compOn":true,"compThr":-22,"compRatio":2.5,"compKnee":10,"compAtt":15,"compRel":200,"compMakeup":2})"},
+  {"ELECTRIC GUITAR", "INSTRUMENTS", R"({"hpOrder":2,"hpFreq":110,"xoverType":0,"lpOrder":2,"lpFreq":9000,"eq":[{"t":1,"f":400,"q":1.2,"g":-2},{"t":1,"f":2200,"q":1.0,"g":2}],"gateOn":true,"gateThr":-50,"gateRange":-40,"gateAtt":2,"gateHold":120,"gateRel":250})"},
+  {"KEYS / STEREO LINE", "INSTRUMENTS", R"({"hpOrder":1,"hpFreq":40,"xoverType":0,"compOn":true,"compThr":-24,"compRatio":2,"compKnee":12,"compAtt":20,"compRel":300,"compMakeup":1})"},
+  {"CAR FRONT (TWEETER + MID)", "CAR AUDIO", R"({"hpOrder":4,"hpFreq":80,"xoverType":1,"eq":[{"t":1,"f":2500,"q":1.5,"g":-2},{"t":3,"f":8000,"q":0.7,"g":1.5}],"limOn":true,"limCeil":-1,"limRel":80})"},
+  {"CAR REAR", "CAR AUDIO", R"({"hpOrder":4,"hpFreq":100,"xoverType":1,"lpOrder":2,"lpFreq":12000,"delayMs":1.2,"eq":[{"t":1,"f":3000,"q":1.2,"g":-3}],"limOn":true,"limCeil":-1,"limRel":80})"},
+  {"CAR SUBWOOFER", "CAR AUDIO", R"({"lpOrder":4,"lpFreq":80,"xoverType":1,"hpOrder":2,"hpFreq":25,"eq":[{"t":1,"f":45,"q":1.0,"g":3}],"limOn":true,"limCeil":-0.5,"limRel":120})"},
+  {"PA MAIN (FULL RANGE)", "LIVE", R"({"hpOrder":4,"hpFreq":40,"xoverType":1,"eq":[{"t":1,"f":250,"q":1.0,"g":-2},{"t":1,"f":2500,"q":1.4,"g":-1.5}],"limOn":true,"limCeil":-1,"limRel":100})"},
+  {"STAGE MONITOR", "LIVE", R"({"hpOrder":4,"hpFreq":100,"xoverType":1,"eq":[{"t":6,"f":315,"q":8,"g":0},{"t":6,"f":2500,"q":8,"g":0},{"t":1,"f":4000,"q":1.0,"g":-2}],"limOn":true,"limCeil":-2,"limRel":60})"},
+  {"TELEPHONE", "EFFECT", R"({"hpOrder":4,"hpFreq":300,"xoverType":0,"lpOrder":4,"lpFreq":3400,"eq":[{"t":1,"f":1500,"q":1.0,"g":4}],"compOn":true,"compThr":-20,"compRatio":8,"compKnee":2,"compAtt":1,"compRel":60,"compMakeup":4})"},
+};
+}  // namespace
+QVariantList Engine::presets() const {
+  QVariantList l;
+  for (const Factory& f : kFactory) { QVariantMap m; m["name"] = f.name; m["category"] = f.category; m["factory"] = true; l << m; }
+  for (const PresetUi& u : userPresets_) { QVariantMap m; m["name"] = u.name; m["category"] = u.category; m["factory"] = false; l << m; }
+  return l;
+}
+bool Engine::applyPreset(const QString& name, int strip) {
+  if (strip < 0 || strip >= kStrips) return false;
+  QJsonObject o; bool found = false;
+  for (const Factory& f : kFactory) if (name == QLatin1String(f.name)) { o = QJsonDocument::fromJson(QByteArray(f.json)).object(); found = true; break; }
+  if (!found) for (const PresetUi& u : userPresets_) if (u.name == name) { o = u.dsp; found = true; break; }
+  if (!found) return false;
+  StripUi& s = strips_[static_cast<std::size_t>(strip)]; s.dsp.set(dspFromJson(o));
+  if (rt_) { const auto& p = s.dsp.params(); for (int b = 0; b < am::dsp::kEqBands; ++b) { const auto& e = p.eq[static_cast<std::size_t>(b)]; rt_->setEqBand(strip, b, e.type, e.freq, e.q, e.gainDb); } rt_->setDelayMs(strip, p.delayMs); rt_->setPolarity(strip, p.polarityInvert); rt_->setCrossover(strip, p.xoverType, p.hpOrder, p.hpFreq, p.lpOrder, p.lpFreq); rt_->setChannelLimiter(strip, p.limiterOn, p.limiterCeilDb, p.limiterReleaseMs); rt_->setCompressor(strip, p.compOn, p.compThresholdDb, p.compRatio, p.compKneeDb, p.compAttackMs, p.compReleaseMs, p.compMakeupDb); rt_->setGate(strip, p.gateOn, p.gateThresholdDb, p.gateRangeDb, p.gateAttackMs, p.gateHoldMs, p.gateReleaseMs); }
+  emit stripsChanged(); return true;
+}
+bool Engine::savePreset(const QString& name, int strip) {
+  const QString n = name.trimmed().left(24); if (n.isEmpty() || strip < 0 || strip >= kStrips) return false;
+  for (const Factory& f : kFactory) if (n == QLatin1String(f.name)) return false;   // factory names stay factory
+  const QJsonObject d = dspJson(strips_[static_cast<std::size_t>(strip)].dsp.params());
+  for (PresetUi& u : userPresets_) if (u.name == n) { u.dsp = d; save(); emit presetsChanged(); return true; }
+  userPresets_.push_back({n, QStringLiteral("USER"), d}); save(); emit presetsChanged(); return true;
+}
+bool Engine::deletePreset(const QString& name) {
+  for (std::size_t i = 0; i < userPresets_.size(); ++i) if (userPresets_[i].name == name) { userPresets_.erase(userPresets_.begin() + static_cast<long>(i)); save(); emit presetsChanged(); return true; }
+  return false;
 }

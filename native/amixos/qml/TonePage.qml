@@ -6,7 +6,7 @@ import QtQuick.Layouts
 
 Flickable {
     id: page
-    property int strip: 0
+    property int strip: engine.selectedStrip
     property int band: 0
     property var curve: []
     property var bandNow: ({ type: 0, freq: 1000, q: 1, gainDb: 0 })

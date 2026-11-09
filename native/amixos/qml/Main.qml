@@ -15,6 +15,8 @@ ApplicationWindow {
     title: "A mix OS " + appVersion
     color: Theme.obsidian
     property string current: "home"
+    LayoutMirroring.enabled: i18n.rtl
+    LayoutMirroring.childrenInherit: true
     function pageOf(id) { for (var i = 0; i < engine.pages.length; i++) if (engine.pages[i].id === id) return engine.pages[i]; return engine.pages[0] }
 
     ColumnLayout {
@@ -32,6 +34,14 @@ ApplicationWindow {
                     Text { id: statusText; anchors.centerIn: parent; text: engine.running ? "ENGINE ON • " + engine.backend.toUpperCase() : "ENGINE OFF"; color: engine.running ? Theme.emerald : Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } }
                 Text { text: "MASTER " + Theme.dbText(engine.telemetry.masterPeakDb) + " dBFS"; color: engine.telemetry.masterClip ? Theme.danger : Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                 Text { text: engine.edition.toUpperCase(); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                ComboBox {   // LANGUAGE: 80 languages; "auto" marks a machine translation
+                    id: langBox; implicitWidth: 150; implicitHeight: 26; font.family: Theme.mono; font.pixelSize: 9
+                    model: i18n.languages; textRole: "name"
+                    displayText: (i18n.languages.find(function (l) { return l.code === i18n.lang }) || { name: "English" }).name + (i18n.autoTranslated ? " (auto)" : "")
+                    delegate: ItemDelegate { width: parent.width; text: modelData.name + (modelData.auto ? "  · auto" : ""); font.family: Theme.mono; font.pixelSize: 10 }
+                    Component.onCompleted: currentIndex = i18n.languages.findIndex(function (l) { return l.code === i18n.lang })
+                    onActivated: i18n.lang = i18n.languages[currentIndex].code
+                }
             }
         }
         RowLayout {
@@ -45,12 +55,12 @@ ApplicationWindow {
                     sourceComponent: {
                         switch (root.current) {
                         case "home": return homeC; case "mixer": return mixerC; case "dsp": return toneC; case "io": return connC;
-                        case "meter": return levelsC; case "lufs": return loudC; case "sys": return settingsC; case "dyn": return compC; case "gate": return gateC; case "bus": return sendC; case "dca": return dcaC; default: return comingC
+                        case "meter": return levelsC; case "lufs": return loudC; case "sys": return settingsC; case "dyn": return compC; case "gate": return gateC; case "bus": return sendC; case "dca": return dcaC; case "scenes": return scenesC; case "presets": return presetsC; default: return comingC
                         }
                     }
                 }
                 Component { id: homeC; HomePage { onGo: function (id) { root.current = id } } }
-                Component { id: mixerC; MixerPage {} }
+                Component { id: mixerC; MixerPage { onGo: function (id) { root.current = id } } }
                 Component { id: toneC; TonePage {} }
                 Component { id: connC; ConnectionsPage {} }
                 Component { id: levelsC; LevelsPage {} }
@@ -60,6 +70,8 @@ ApplicationWindow {
                 Component { id: gateC; GatePage {} }
                 Component { id: sendC; SendToPage {} }
                 Component { id: dcaC; GroupFadersPage {} }
+                Component { id: scenesC; ScenesPage {} }
+                Component { id: presetsC; PresetsPage {} }
                 Component { id: comingC; ComingPage { page: root.pageOf(root.current) } }
             }
         }

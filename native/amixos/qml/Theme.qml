@@ -22,6 +22,7 @@ QtObject {
     readonly property string mono: "JetBrains Mono, DejaVu Sans Mono, Consolas, monospace"
     readonly property string sans: "Inter, Segoe UI, Roboto, sans-serif"
     readonly property int radius: 10
+    readonly property var stripColors: ["#f59e0b", "#22d3ee", "#a78bfa", "#34d399", "#f472b6", "#fb923c", "#60a5fa", "#facc15"]
     function groupColor(g) {
         switch (g) {
         case "MIX": return amber; case "ROUTE": return "#818cf8"; case "METER": return emerald; case "SOURCE": return cyan;

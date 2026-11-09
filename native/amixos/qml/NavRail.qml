@@ -27,7 +27,7 @@ Rectangle {
                     width: col.width
                     property var p: modelData
                     property bool newGroup: index === 0 || rail.pages[index - 1].group !== p.group
-                    Text { visible: newGroup; text: p.group; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.bold: true; font.letterSpacing: 2; leftPadding: 10; topPadding: index === 0 ? 0 : 10; bottomPadding: 2 }
+                    Text { visible: newGroup; text: i18n.t(p.group, i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.bold: true; font.letterSpacing: 2; leftPadding: 10; topPadding: index === 0 ? 0 : 10; bottomPadding: 2 }
                     Rectangle {
                         width: col.width - 10; x: 5; height: 50; radius: 8
                         color: rail.current === p.id ? Qt.rgba(0.918, 0.345, 0.047, 0.16) : "transparent"
@@ -35,7 +35,7 @@ Rectangle {
                         Column {
                             anchors.centerIn: parent; spacing: 3
                             Text { anchors.horizontalCenter: parent.horizontalCenter; text: p.icon; color: p.ready ? Theme.groupColor(p.group) : Theme.dim; font.pixelSize: 16; opacity: p.ready ? 1 : 0.55 }
-                            Text { anchors.horizontalCenter: parent.horizontalCenter; text: p.text; color: rail.current === p.id ? Theme.ink : (p.ready ? Theme.muted : Theme.dim); font.family: Theme.mono; font.pixelSize: 7; font.bold: true; width: col.width - 14; horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight }
+                            Text { anchors.horizontalCenter: parent.horizontalCenter; text: i18n.t(p.text, i18n.lang); color: rail.current === p.id ? Theme.ink : (p.ready ? Theme.muted : Theme.dim); font.family: Theme.mono; font.pixelSize: 7; font.bold: true; width: col.width - 14; horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight }
                         }
                         MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: rail.picked(p.id) }
                     }

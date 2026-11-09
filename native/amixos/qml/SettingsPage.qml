@@ -20,6 +20,16 @@ Flickable {
         }
         Panel {
             Layout.fillWidth: true
+            title: i18n.t("LANGUAGE", i18n.lang) + " • " + i18n.count + " LANGUAGES"
+            subtitle: "22 languages come from the web console and were checked; 58 are machine translations marked \"auto\" until a native speaker reviews them. Long help texts stay English for now. Right-to-left languages mirror the layout."
+            Flow { Layout.fillWidth: true; spacing: 4
+                Repeater { model: i18n.languages; delegate: Rectangle { implicitWidth: lt.implicitWidth + 14; implicitHeight: 22; radius: 4; color: i18n.lang === modelData.code ? Theme.amber : Qt.rgba(1, 1, 1, 0.06); border.color: modelData.auto ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0.063, 0.725, 0.506, 0.4)
+                    Text { id: lt; anchors.centerIn: parent; text: modelData.name + (modelData.auto ? " ·auto" : ""); color: i18n.lang === modelData.code ? "#000" : (modelData.auto ? Theme.muted : Theme.ink); font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                    MouseArea { anchors.fill: parent; onClicked: i18n.lang = modelData.code } } }
+            }
+        }
+        Panel {
+            Layout.fillWidth: true
             title: "PORTING STATUS"
             subtitle: "Pages of the retired web console and whether they are native yet"
             Flow { Layout.fillWidth: true; spacing: 4

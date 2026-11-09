@@ -1,4 +1,6 @@
-// MIXER: 32 strips in two pages of 16 (or all), each with name, pan, mute, solo, fader, meter; the master on the right
+// MIXER: 32 strips in two pages of 16 (or all), each with colour, name, pan, mute, solo, fader, post-fader meter, input meter, gain-reduction meter,
+// DSP badges (GATE / EQ / X / COMP / LIM / DLY / Ø: lit when that stage is on, click to open its page for this channel), DCA / mute-group /
+// sends readout; click a strip to select it and edit its whole chain in the side panel; the master on the right.
 import QtQuick
 import AmixOS   // this module: brings the Theme singleton (a plain directory import would see Theme as an ordinary type)
 import QtQuick.Controls
@@ -7,6 +9,11 @@ import QtQuick.Layouts
 Item {
     id: page
     property int bank: 0      // 0 = 1-16, 1 = 17-32, 2 = all
+    property bool sidePanel: true
+    signal go(string id)
+    readonly property int sel: engine.selectedStrip
+    readonly property var selSt: engine.stripState[sel]
+    readonly property var selCh: engine.channelParams(sel)
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 10
@@ -25,6 +32,7 @@ Item {
                         MouseArea { anchors.fill: parent; onClicked: page.bank = index }
                     }
                 }
+                Rectangle { implicitWidth: 90; implicitHeight: 20; radius: 4; color: page.sidePanel ? Qt.rgba(0, 0.95, 1, 0.18) : Qt.rgba(1, 1, 1, 0.06); border.color: page.sidePanel ? Theme.cyan : "transparent"; Text { anchors.centerIn: parent; text: "CHANNEL PANEL"; color: page.sidePanel ? Theme.cyan : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.sidePanel = !page.sidePanel } }
                 Item { Layout.fillWidth: true }
                 Text { text: engine.running ? engine.status : "ENGINE IDLE: connect a sound card"; color: engine.running ? Theme.emerald : Theme.amber; font.family: Theme.mono; font.pixelSize: 8 }
             }
@@ -45,27 +53,97 @@ Item {
                             model: engine.strips
                             delegate: Item {
                                 visible: page.bank === 2 || Math.floor(index / 16) === page.bank
-                                width: visible ? 64 : 0
+                                width: visible ? 74 : 0
                                 height: strips.height
                                 property var st: engine.stripState[index]
                                 property var mt: engine.meters[index]
-                                Rectangle { anchors.fill: parent; radius: 6; color: index % 2 ? Qt.rgba(1, 1, 1, 0.025) : Qt.rgba(0, 0, 0, 0.25); border.color: st && st.dsp ? Qt.rgba(0, 0.95, 1, 0.35) : Theme.lineSoft }
+                                property color sc: Theme.stripColors[st ? st.color : 0]
+                                property bool selected: page.sel === index
+                                Rectangle { anchors.fill: parent; radius: 6; color: selected ? Qt.rgba(1, 1, 1, 0.06) : (index % 2 ? Qt.rgba(1, 1, 1, 0.025) : Qt.rgba(0, 0, 0, 0.25)); border.color: selected ? Theme.ink : Theme.lineSoft; border.width: selected ? 1.5 : 1
+                                    MouseArea { anchors.fill: parent; onPressed: function (m) { engine.selectedStrip = index; m.accepted = false } } }
+                                Rectangle { anchors.top: parent.top; anchors.left: parent.left; anchors.right: parent.right; anchors.margins: 1; height: 3; radius: 2; color: sc }
                                 ColumnLayout {
-                                    anchors.fill: parent; anchors.margins: 4; spacing: 4
-                                    TextInput { Layout.fillWidth: true; text: st ? st.name : ""; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; horizontalAlignment: Text.AlignHCenter; selectByMouse: true; onEditingFinished: engine.setName(index, text) }
-                                    Dial { id: pan; Layout.alignment: Qt.AlignHCenter; implicitWidth: 30; implicitHeight: 30; from: -1; to: 1; value: st ? st.pan : 0; onMoved: engine.setPan(index, value)
+                                    anchors.fill: parent; anchors.margins: 4; anchors.topMargin: 6; spacing: 3
+                                    TextInput { Layout.fillWidth: true; text: st ? st.name : ""; color: st && st.effectiveMute ? Theme.dim : Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; horizontalAlignment: Text.AlignHCenter; selectByMouse: true; onEditingFinished: engine.setName(index, text); onActiveFocusChanged: if (activeFocus) engine.selectedStrip = index }
+                                    // DSP badges: lit when on, click opens the page for this channel
+                                    Flow { Layout.fillWidth: true; spacing: 2
+                                        Repeater {
+                                            model: [ { k: "gateOn", t: "GATE", p: "gate" }, { k: "eqOn", t: "EQ", p: "dsp" }, { k: "xoverOn", t: "X", p: "dsp" }, { k: "compOn", t: "COMP", p: "dyn" }, { k: "limOn", t: "LIM", p: "dsp" }, { k: "delayOn", t: "DLY", p: "dsp" }, { k: "polarity", t: "Ø", p: "dsp" } ]
+                                            delegate: Rectangle { implicitWidth: bt.implicitWidth + 6; implicitHeight: 11; radius: 2; color: st && st[modelData.k] ? Qt.rgba(0, 0.95, 1, 0.22) : Qt.rgba(1, 1, 1, 0.04); border.color: st && st[modelData.k] ? Theme.cyan : "transparent"
+                                                Text { id: bt; anchors.centerIn: parent; text: modelData.t; color: st && st[modelData.k] ? Theme.cyan : Theme.dim; font.family: Theme.mono; font.pixelSize: 6; font.bold: true }
+                                                MouseArea { anchors.fill: parent; onClicked: { engine.selectedStrip = index; page.go(modelData.p) } } }
+                                        }
+                                    }
+                                    Dial { id: pan; Layout.alignment: Qt.AlignHCenter; implicitWidth: 28; implicitHeight: 28; from: -1; to: 1; value: st ? st.pan : 0; onMoved: engine.setPan(index, value)
                                         background: Rectangle { radius: width / 2; color: "#05070a"; border.color: Theme.line }
-                                        handle: Rectangle { x: pan.background.x + pan.background.width / 2 - width / 2; y: pan.background.y + 3; width: 4; height: 9; radius: 2; color: Theme.cyan; transformOrigin: Item.Bottom; transform: [ Translate { y: 0 }, Rotation { angle: pan.angle; origin.x: 2; origin.y: pan.background.height / 2 - 3 } ] } }
+                                        handle: Rectangle { x: pan.background.x + pan.background.width / 2 - width / 2; y: pan.background.y + 3; width: 4; height: 8; radius: 2; color: Theme.cyan; transform: Rotation { angle: pan.angle; origin.x: 2; origin.y: pan.background.height / 2 - 3 } } }
                                     RowLayout { Layout.alignment: Qt.AlignHCenter; spacing: 3
-                                        Rectangle { implicitWidth: 24; implicitHeight: 16; radius: 3; color: st && st.mute ? Theme.danger : Qt.rgba(1, 1, 1, 0.08); Text { anchors.centerIn: parent; text: "M"; color: st && st.mute ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setMute(index, !(st && st.mute)) } }
-                                        Rectangle { implicitWidth: 24; implicitHeight: 16; radius: 3; color: st && st.solo ? Theme.amber : Qt.rgba(1, 1, 1, 0.08); Text { anchors.centerIn: parent; text: "S"; color: st && st.solo ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setSolo(index, !(st && st.solo)) } } }
-                                    RowLayout { Layout.fillHeight: true; Layout.alignment: Qt.AlignHCenter; spacing: 6
+                                        Rectangle { implicitWidth: 26; implicitHeight: 16; radius: 3; color: st && st.mute ? Theme.danger : (st && st.effectiveMute ? Qt.rgba(1, 0.165, 0.373, 0.3) : Qt.rgba(1, 1, 1, 0.08)); Text { anchors.centerIn: parent; text: "M"; color: st && st.mute ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setMute(index, !(st && st.mute)) } }
+                                        Rectangle { implicitWidth: 26; implicitHeight: 16; radius: 3; color: st && st.solo ? Theme.amber : Qt.rgba(1, 1, 1, 0.08); Text { anchors.centerIn: parent; text: "S"; color: st && st.solo ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setSolo(index, !(st && st.solo)) } } }
+                                    RowLayout { Layout.fillHeight: true; Layout.alignment: Qt.AlignHCenter; spacing: 4
                                         Fader { Layout.fillHeight: true; value: st ? st.db : 0; onMoved: function (db) { engine.setGain(index, db) } }
-                                        MeterBar { Layout.fillHeight: true; Layout.topMargin: 8; peakDb: mt ? mt.peakDb : -120; rmsDb: mt ? mt.rmsDb : -120; holdDb: mt ? mt.holdDb : -120; clip: mt ? mt.clip : false } }
-                                    Text { Layout.alignment: Qt.AlignHCenter; text: Theme.dbText(st ? st.db : 0); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8 }
+                                        ColumnLayout { Layout.fillHeight: true; spacing: 0
+                                            RowLayout { Layout.fillHeight: true; spacing: 2
+                                                MeterBar { Layout.fillHeight: true; Layout.topMargin: 8; implicitWidth: 5; peakDb: mt ? mt.inDb : -120; rmsDb: mt ? mt.inDb : -120; floorDb: -60 }   // input (pre-fader)
+                                                MeterBar { Layout.fillHeight: true; Layout.topMargin: 8; implicitWidth: 9; peakDb: mt ? mt.peakDb : -120; rmsDb: mt ? mt.rmsDb : -120; holdDb: mt ? mt.holdDb : -120; clip: mt ? mt.clip : false }   // post-fader
+                                                Rectangle { Layout.fillHeight: true; Layout.topMargin: 8; implicitWidth: 4; radius: 2; color: "#05070a"; border.color: Theme.lineSoft   // gain reduction, from the top
+                                                    Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 1; height: Math.min(1, Math.max(0, -(mt ? mt.compGrDb : 0) / 24)) * (parent.height - 2); radius: 1; color: Theme.amber } } }
+                                            Text { Layout.alignment: Qt.AlignHCenter; text: "IN  OUT GR"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 5 } } }
+                                    Text { Layout.alignment: Qt.AlignHCenter; text: Theme.dbText(st ? st.db : 0) + (st && st.dca > 0 && st.effectiveDb !== st.db ? " (" + Theme.dbText(st.effectiveDb) + ")" : ""); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 7 }
+                                    // groups and sends readout
+                                    RowLayout { Layout.alignment: Qt.AlignHCenter; spacing: 2
+                                        Rectangle { visible: st && st.dca > 0; implicitWidth: 22; implicitHeight: 11; radius: 2; color: Qt.rgba(0.984, 0.749, 0.141, 0.2); Text { anchors.centerIn: parent; text: "D" + (st ? st.dca : 0); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } }
+                                        Repeater { model: 8; delegate: Rectangle { visible: st && ((st.muteGroups >> index) & 1); implicitWidth: 5; implicitHeight: 5; radius: 2.5; color: Theme.pink } }
+                                        Text { visible: st && st.sendsTo.length; text: st && st.sendsTo.length ? "→" + st.sendsTo.join("") : ""; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 6 } }
                                 }
                             }
                         }
+                    }
+                }
+            }
+            // the selected channel's whole chain, editable
+            Rectangle {
+                visible: page.sidePanel
+                Layout.preferredWidth: 230; Layout.fillHeight: true; radius: Theme.radius; color: Theme.cardRaised; border.color: Theme.cyan
+                Flickable {
+                    anchors.fill: parent; anchors.margins: 8; contentHeight: side.implicitHeight; clip: true
+                    ColumnLayout {
+                        id: side; width: parent.width; spacing: 6
+                        RowLayout { Layout.fillWidth: true
+                            Rectangle { implicitWidth: 10; implicitHeight: 10; radius: 5; color: Theme.stripColors[page.selSt ? page.selSt.color : 0] }
+                            Text { Layout.fillWidth: true; text: (page.selSt ? page.selSt.name : "") + "  ·  CH " + (page.sel + 1); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 10; font.bold: true; elide: Text.ElideRight } }
+                        Text { text: "COLOUR"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
+                        RowLayout { spacing: 4; Repeater { model: 8; delegate: Rectangle { implicitWidth: 20; implicitHeight: 14; radius: 3; color: Theme.stripColors[index]; border.color: page.selSt && page.selSt.color === index ? Theme.ink : "transparent"; border.width: 2; MouseArea { anchors.fill: parent; onClicked: engine.setColor(page.sel, index) } } } }
+                        Rectangle { Layout.fillWidth: true; height: 1; color: Theme.lineSoft }
+                        // gate
+                        RowLayout { Layout.fillWidth: true
+                            Rectangle { implicitWidth: 44; implicitHeight: 18; radius: 3; color: page.selCh.gateOn ? Theme.pink : Qt.rgba(1, 1, 1, 0.08); Text { anchors.centerIn: parent; text: "GATE"; color: page.selCh.gateOn ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setGate(page.sel, !page.selCh.gateOn, page.selCh.gateThresholdDb, page.selCh.gateRangeDb, page.selCh.gateAttackMs, page.selCh.gateHoldMs, page.selCh.gateReleaseMs) } }
+                            Text { text: "THR " + Theme.dbText(page.selCh.gateThresholdDb === undefined ? -50 : page.selCh.gateThresholdDb); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7 } Item { Layout.fillWidth: true }
+                            Text { text: "OPEN ›"; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 7; Layout.preferredWidth: 34; MouseArea { anchors.fill: parent; onClicked: page.go("gate") } } }
+                        Slider { Layout.fillWidth: true; from: -90; to: 0; value: page.selCh.gateThresholdDb === undefined ? -50 : page.selCh.gateThresholdDb; onMoved: engine.setGate(page.sel, page.selCh.gateOn, value, page.selCh.gateRangeDb, page.selCh.gateAttackMs, page.selCh.gateHoldMs, page.selCh.gateReleaseMs) }
+                        // compressor
+                        RowLayout { Layout.fillWidth: true
+                            Rectangle { implicitWidth: 44; implicitHeight: 18; radius: 3; color: page.selCh.compOn ? Theme.emerald : Qt.rgba(1, 1, 1, 0.08); Text { anchors.centerIn: parent; text: "COMP"; color: page.selCh.compOn ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setCompressor(page.sel, !page.selCh.compOn, page.selCh.compThresholdDb, page.selCh.compRatio, page.selCh.compKneeDb, page.selCh.compAttackMs, page.selCh.compReleaseMs, page.selCh.compMakeupDb) } }
+                            Text { text: "THR " + Theme.dbText(page.selCh.compThresholdDb === undefined ? -20 : page.selCh.compThresholdDb) + "  " + Number(page.selCh.compRatio || 4).toFixed(1) + ":1"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7 } Item { Layout.fillWidth: true }
+                            Text { text: "OPEN ›"; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 7; Layout.preferredWidth: 34; MouseArea { anchors.fill: parent; onClicked: page.go("dyn") } } }
+                        Slider { Layout.fillWidth: true; from: -60; to: 0; value: page.selCh.compThresholdDb === undefined ? -20 : page.selCh.compThresholdDb; onMoved: engine.setCompressor(page.sel, page.selCh.compOn, value, page.selCh.compRatio, page.selCh.compKneeDb, page.selCh.compAttackMs, page.selCh.compReleaseMs, page.selCh.compMakeupDb) }
+                        // tone
+                        RowLayout { Layout.fillWidth: true
+                            Text { text: "TONE: " + (page.selSt && page.selSt.eqOn ? "EQ " : "") + (page.selSt && page.selSt.xoverOn ? "X-OVER " : "") + (page.selSt && page.selSt.limOn ? "LIM " : "") + (page.selSt && page.selSt.delayOn ? Number(page.selCh.delayMs).toFixed(2) + " ms " : "") + (page.selSt && page.selSt.polarity ? "Ø " : "") + (page.selSt && !(page.selSt.eqOn || page.selSt.xoverOn || page.selSt.limOn || page.selSt.delayOn || page.selSt.polarity) ? "flat" : ""); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; Layout.fillWidth: true; elide: Text.ElideRight }
+                            Text { text: "OPEN ›"; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 7; Layout.preferredWidth: 34; MouseArea { anchors.fill: parent; onClicked: page.go("dsp") } } }
+                        Rectangle { Layout.fillWidth: true; height: 1; color: Theme.lineSoft }
+                        // sends
+                        RowLayout { Layout.fillWidth: true; Text { text: "SENDS"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; Layout.fillWidth: true } Text { text: "OPEN ›"; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 7; Layout.preferredWidth: 34; MouseArea { anchors.fill: parent; onClicked: page.go("bus") } } }
+                        Repeater { model: engine.busState; delegate: RowLayout { Layout.fillWidth: true; spacing: 4
+                            property var sd: engine.send(page.sel, index)
+                            Connections { target: engine; function onStripsChanged() { sd = engine.send(page.sel, index) } function onSelectedStripChanged() { sd = engine.send(page.sel, index) } }
+                            Text { text: modelData.name; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; Layout.preferredWidth: 44; elide: Text.ElideRight }
+                            Slider { Layout.fillWidth: true; from: -60; to: 10; value: sd ? sd.db : -60; onMoved: engine.setSend(page.sel, index, value, sd ? sd.pre : false) }
+                            Rectangle { implicitWidth: 28; implicitHeight: 14; radius: 2; color: sd && sd.pre ? Theme.cyan : Qt.rgba(1, 1, 1, 0.08); Text { anchors.centerIn: parent; text: sd && sd.pre ? "PRE" : "POST"; color: sd && sd.pre ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setSend(page.sel, index, sd ? sd.db : -60, !(sd && sd.pre)) } } } }
+                        Rectangle { Layout.fillWidth: true; height: 1; color: Theme.lineSoft }
+                        // dca
+                        RowLayout { Layout.fillWidth: true; Text { text: "DCA"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
+                            Repeater { model: 9; delegate: Rectangle { implicitWidth: 18; implicitHeight: 14; radius: 2; color: page.selSt && page.selSt.dca === index ? Theme.amber : Qt.rgba(1, 1, 1, 0.08); Text { anchors.centerIn: parent; text: index === 0 ? "-" : index; color: page.selSt && page.selSt.dca === index ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setDca(page.sel, index) } } } }
                     }
                 }
             }
@@ -79,6 +157,7 @@ Item {
                         MeterBar { Layout.fillHeight: true; Layout.topMargin: 8; peakDb: engine.telemetry.masterLDb; rmsDb: engine.telemetry.masterRmsDb; clip: engine.telemetry.masterClip }
                         MeterBar { Layout.fillHeight: true; Layout.topMargin: 8; peakDb: engine.telemetry.masterRDb; rmsDb: engine.telemetry.masterRmsDb; clip: engine.telemetry.masterClip } }
                     Text { Layout.alignment: Qt.AlignHCenter; text: Theme.dbText(engine.masterDb) + " dB"; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9 }
+                    Text { Layout.alignment: Qt.AlignHCenter; text: (engine.telemetry.shortTerm <= -119 ? "-inf" : engine.telemetry.shortTerm.toFixed(1)) + " LUFS"; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8 }
                     Text { Layout.alignment: Qt.AlignHCenter; text: "LIMITER -0.5 dBFS"; color: Theme.emerald; font.family: Theme.mono; font.pixelSize: 7 }
                     Rectangle { Layout.fillWidth: true; implicitHeight: 18; radius: 3; color: Qt.rgba(1, 1, 1, 0.08); Text { anchors.centerIn: parent; text: "CLEAR CLIPS"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.clearClips() } }
                 }

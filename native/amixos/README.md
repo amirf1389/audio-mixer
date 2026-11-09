@@ -17,13 +17,22 @@ by one as native pages. Pages that are not native yet are dimmed on the rail and
 | NOISE GATE | per channel: threshold (3 dB hysteresis), range, attack, hold, release; transfer curve, OPEN / CLOSED lamp, presets |
 | SEND TO | 8 stereo aux buses: per-channel send level PRE (raw input: monitor mixes) or POST (after fader / mute / solo: effects); bus level, mute, meter, RETURN into the master; bus k on output channels 3+2k / 4+2k when the card has them |
 | GROUP FADERS | 8 DCA groups (group fader added in dB to the members, group mute) and 8 mute groups, with member pickers |
+| SCENES | 16 snapshots of the whole console (STORE / RECALL / CLEAR / rename, double-click to recall); RECALL SAFE channels are left alone |
+| PRESETS | a channel's DSP chain by name: 15 factory presets (voice, drums, instruments, car audio, live, effect) and your own (SAVE CHANNEL AS / APPLY / delete) |
 | TONE (EQ) | per channel: polarity, delay (sub-sample, 0-50 ms), crossover (Butterworth / Linkwitz-Riley / Bessel, 6-48 dB/oct), 10-band parametric EQ (peaking, shelves, pass, notch, all-pass) with the live response curve, channel peak limiter |
 | CONNECTIONS | drivers built into the copy, inputs / outputs with channels and rates, sample rate, buffer, START / STOP, block and xrun counters |
 | LEVELS | peak / RMS / hold / clip on every strip and the master |
 | LOUDNESS | EBU R128 momentary / short-term / integrated / range, true peak, correlation |
 | SETTINGS | engine facts, saved state, porting status |
 
-Console state (names, levels, channel DSP, master) is saved with `QSettings` and restored at start.
+Console state (names, levels, channel DSP, sends, groups, buses, master), scenes, presets and the language are saved with `QSettings` and restored at start.
+
+## Languages
+
+`i18n/verified-22.json` holds the 22 languages of the web console (checked); `i18n/auto-58.json` adds 61 more as **machine translations**,
+marked "auto" in the language menu (header and SETTINGS) until a native speaker reviews them. Page names, groups and the main buttons are
+translated; long help texts stay English for now. Right-to-left languages (Persian, Arabic, Urdu, Hebrew, Pashto) mirror the layout.
+`amixos --lang fa` starts in a language; `--smoke` checks that every language covers all page names.
 
 ## Build
 

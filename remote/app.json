@@ -1,0 +1,13 @@
+{
+  "expo": {
+    "name": "A mix OS Remote",
+    "slug": "amixos-remote",
+    "version": "0.1.0",
+    "orientation": "default",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0b0d12",
+    "android": { "package": "com.amixos.remote", "usesCleartextTraffic": true },
+    "ios": { "bundleIdentifier": "com.amixos.remote", "infoPlist": { "NSAppTransportSecurity": { "NSAllowsLocalNetworking": true } } },
+    "plugins": []
+  }
+}

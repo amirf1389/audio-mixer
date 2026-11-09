@@ -24,10 +24,24 @@ decided, what exists, what is next, and what was asked for but is not possible a
 - `am::Runtime`: `setEqBand / setDelayMs / setPolarity / setCrossover / setChannelLimiter` per strip through the control ring; one scratch block per strip.
 - Automated: engine `ctest` (vectors, dsp, runtime, stream, update_logic), `amixos --smoke` (offscreen: interface loaded, null device running), `amixos --shots DIR` (a PNG per page), GitHub Actions for Linux and the Windows x64 zip.
 
+## Added after 0.1.0 (2026-11-09)
+
+- MIXER upgrade: DSP badges, IN / OUT / GR meters, groups and sends readout, select-to-edit channel panel, strip colours.
+- 83 interface languages (22 verified + 61 machine-translated, marked auto), RTL mirroring.
+- Decision (user): the engine also runs as a **background service (headless daemon)** with a local API, and a **React Native (TypeScript)
+  app** is the remote control from a phone or tablet. The Qt console stays the desktop interface. Android as a full console stays parked;
+  the RN remote covers phones first.
+- **amixos-daemon** (`engine/cpp/app/daemon`): HTTP + WebSocket JSON API on 127.0.0.1:8765 (token in `~/.amixos/daemon.token`,
+  `--allow-lan` for a phone, unencrypted without `deploy/nginx`), tested on the null backend (ctest `daemon`), cross-compiled for Windows.
+- **Remote** (`remote/`, React Native + TypeScript, Expo): Connect, Mixer, Channel (EQ / compressor / gate), Devices. The client
+  (`src/api/client.ts`) is tested under Node against the real daemon; the app typechecks. A phone build needs Expo on a PC / Mac.
+- **ASIO host hardening**: reset / resync / buffer-size requests handled on a worker thread, time-info, channel clamping, latencies;
+  verified by mingw cross-compile only — the first run against real drivers is on the user's Windows PC.
+
 ## Next, in order
 
 1. **Windows .exe in hand**: run the Actions workflow, download `amixos-windows-x64.zip`, test ASIO (UM2, Focusrite, ASIO4ALL, Realtek) on the user's PC. Fix what the real drivers show.
-2. **Mixer parity**: ~~compressor and noise gate per channel (curve pages)~~ done 2026-11-09; ~~sends / buses (pre / post), group faders (DCA), mute groups~~ done 2026-11-09; scenes, presets; the surround master pages (stereo / quad / 7.1.2) and crossfeed from the web console's math.
+2. **Mixer parity**: ~~compressor and noise gate per channel (curve pages)~~ done 2026-11-09; ~~sends / buses (pre / post), group faders (DCA), mute groups~~ done 2026-11-09; ~~scenes, presets~~ done 2026-11-09; the surround master pages (stereo / quad / 7.1.2) and crossfeed from the web console's math.
 3. **Routing**: input → strip and master → output matrix; multi-channel outputs (the runtime writes channels 0/1 today).
 4. **Licence / editions**: the AMFXE1 edition tokens and the vendor public key (`bridge/license-public.json`) verified natively (Ed25519 / ECDSA as the Node code does); hardware-bound keys; Lite / Pro tiers unlock pages and strip counts. "JWT / authenticator" from the request = signed tokens + a TOTP second factor for the vendor's Key Generator, not for end users' audio.
 5. **Driver intelligence**: the AI driver lock ladder, the Realtek WASAPI pin and the ASIO4ALL default-endpoint fallback, ported from `bridge/driver-lock.js` into the runtime's device layer (in-app routing only, never OS or driver tampering).

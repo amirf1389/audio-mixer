@@ -61,7 +61,7 @@ std::vector<DeviceInfo> listDevices();                       // every device of 
 
 // the meters, copied out consistently
 struct Snapshot {
-  struct StripMeter { double pk, rms, hold; std::uint32_t clipN; double compGrDb, gateDb; };   // compGrDb <= 0 (the channel compressor), gateDb <= 0 (the channel gate)
+  struct StripMeter { double pk, rms, hold; std::uint32_t clipN; double compGrDb, gateDb, inPk; };   // compGrDb <= 0 (the channel compressor), gateDb <= 0 (the channel gate)
   StripMeter strips[kMaxStrips]; StripMeter master[2]; StripMeter buses[kMaxBuses];
   double momentary, shortTerm, integrated, lra, truePeak, correlation;
   std::uint64_t blocks, frames, xruns;
