@@ -2797,7 +2797,7 @@ test('Android native audio helpers (channel counts, buffer sizes, native info) a
   const { spawnSync } = require('node:child_process');
   const root = pathx.join(__dirname, '..'), rd = f => fsx.readFileSync(pathx.join(root, f), 'utf8'), dir = fsx.mkdtempSync(pathx.join(require('node:os').tmpdir(), 'st-'));
   const src = n => pathx.join(root, 'platforms', 'android', 'src', 'com', 'audiomixer', 'app', n + '.java');
-  const c = spawnSync('javac', ['--release', '8', '-Xlint:-options', '-d', dir, src('Json'), src('Interfaces'), src('NowPlaying'), src('AppInfo'), pathx.join(root, 'platforms', 'android', 'test', 'com', 'audiomixer', 'app', 'Selftest.java')], { encoding: 'utf8' });
+  const c = spawnSync('javac', ['--release', '8', '-Xlint:-options', '-d', dir, src('Json'), src('Interfaces'), src('NowPlaying'), src('AppInfo'), src('Hal'), src('Power'), pathx.join(root, 'platforms', 'android', 'test', 'com', 'audiomixer', 'app', 'Selftest.java')], { encoding: 'utf8' });
   assert.strictEqual(c.status, 0, c.stderr);
   const r = spawnSync('java', ['-cp', dir, 'com.audiomixer.app.Selftest'], { encoding: 'utf8' }); assert.strictEqual(r.status, 0, r.stderr);
   const o = Object.fromEntries(r.stdout.split('\n').filter(l => /^[\w.]+=/.test(l)).map(l => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1)]));
@@ -2812,6 +2812,22 @@ test('Android native audio helpers (channel counts, buffer sizes, native info) a
   const npj = JSON.parse(o.nowplaying); assert.deepStrictEqual(npj.sessions.map(x => [x.service, x.serviceName, x.status, x.title, x.artist]), [['spotify', 'Spotify', 'playing', 'Karma Police', 'Radiohead'], ['youtube-music', 'YouTube Music', 'paused', 'Lofi', 'Chill'], ['other', 'player', 'stopped', 'Local file', '']]);
   assert.ok(npj.ok === true && npj.access === true && npj.method === 'media-session' && npj.playing.service === 'spotify' && npj.platform === 'android');
   const npn = JSON.parse(o['nowplaying.none']); assert.ok(npn.access === false && npn.playing === null && npn.sessions.length === 0 && /Notifications/.test(npn.hint));
+  // AUDIO HAL DETECTION (beta 1.1): device types and transports named, encodings reported (detection only), a USB interface suggested first, never the earpiece
+  const hal = JSON.parse(o.hal);
+  assert.deepStrictEqual([hal.hal.latencyClass, hal.hal.recommendedFrames, hal.hal.burstMs, hal.devicesVersion], ['pro', 192, 2, 3]);
+  assert.deepStrictEqual(hal.devices.map(d => d.transport), ['builtin', 'builtin', 'bluetooth', 'usb', 'builtin', 'hdmi']);
+  assert.deepStrictEqual(hal.devices[3].encodings, ['pcm-16', 'pcm-24', 'pcm-float']); assert.deepStrictEqual(hal.suggested, { input: 4, output: 4 });
+  assert.deepStrictEqual(hal.devices[5].encodings, ['pcm-16', 'ac3', 'e-ac3', 'dts'], 'passthrough encodings are reported as the HAL lists them');
+  const h0 = JSON.parse(o['hal.none']); assert.ok(h0.hal.latencyClass === 'standard' && h0.hal.burstMs === null && h0.hal.recommendedFrames === 480 && h0.suggested.input === null);
+  // BATTERY (beta 1.1): the wake lock only while streams are open (+1 min grace); low power on Battery Saver or <= 20 % unplugged
+  const pw = k => JSON.parse(o['power.' + k]);
+  assert.deepStrictEqual([pw('idle').wakeLockWanted, pw('idle').lowPower], [false, false]);
+  assert.deepStrictEqual([pw('low').wakeLockWanted, pw('low').lowPower, pw('low').reason], [true, true, 'battery at 15% and not charging']);
+  assert.deepStrictEqual([pw('charging').wakeLockWanted, pw('charging').lowPower], [true, false], 'within the grace; charging is never low power');
+  assert.deepStrictEqual([pw('saver').wakeLockWanted, pw('saver').lowPower, pw('saver').reason], [false, true, 'Battery Saver is on']);
+  const es = rd('platforms/android/src/com/audiomixer/app/EngineService.java'); assert.ok(es.includes('Power.holdWakeLock(st)') && !/wake\.acquire\(\);\s+\/\/ the CPU keeps running/.test(es), 'no longer held for the whole engine lifetime');
+  const aa = rd('platforms/android/src/com/audiomixer/app/AndroidAudio.java'); assert.ok(aa.includes('registerAudioDeviceCallback') && aa.includes('isPowerSaveMode()') && aa.includes('ACTION_BATTERY_CHANGED'));
+  const mbh = rd('platforms/android/src/com/audiomixer/app/MiniBridge.java'); assert.ok(mbh.includes('path.equals("/api/hal")') && mbh.includes('path.equals("/api/power")'));
   assert.ok(rd('platforms/android/AndroidManifest.xml').includes('BIND_NOTIFICATION_LISTENER_SERVICE') && rd('platforms/android/AndroidManifest.xml').includes('.NowPlayingListener'));
   // what the app says about itself: SHA-256 of the certificate (colon form), permissions with their reasons, now-playing state
   assert.strictEqual(o.fingerprint, 'BA:78:16:BF:8F:01:CF:EA:41:41:40:DE:5D:AE:22:23:B0:03:61:A3:96:17:7A:9C:B4:10:FF:61:F2:00:15:AD');
@@ -6133,4 +6149,48 @@ test('Surround master: mounted on the SURROUND page, gated in the page, one mast
   const a = html.indexOf('window.surroundMaster = (() => {'), mod = html.slice(a, html.indexOf('window.mixSets = (() => {'));
   assert.ok(!/Dolby|DTS|THX|Auro|Atmos/.test(mod), 'the module claims no licensed format');
   assert.ok(html.includes("window.dispatchEvent(new Event('amfx-license'))"), 'a license change re-renders the locks');
+});
+
+test('Android HAL + battery card (beta 1.1): low-power mode on for Battery Saver / low battery, off again only when the card turned it on; hidden on the PC', () => {
+  const html = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'index.html'), 'utf8');
+  const a = html.indexOf('//@@ANDROIDHAL-MATH-START'), b = html.indexOf('//@@ANDROIDHAL-MATH-END'); assert.ok(a > 0 && b > a);
+  const AH = new Function(html.slice(a, b) + '\nreturn AH;')();
+  assert.strictEqual(AH.ecoAction({ ok: true, lowPower: true }, false, false), 'on');
+  assert.strictEqual(AH.ecoAction({ ok: true, lowPower: true }, true, false), null, 'already on');
+  assert.strictEqual(AH.ecoAction({ ok: true, lowPower: false }, true, true), 'off', 'the card turned it on: it turns it off');
+  assert.strictEqual(AH.ecoAction({ ok: true, lowPower: false }, true, false), null, 'the user turned it on: left alone');
+  assert.strictEqual(AH.ecoAction(null, false, false), null); assert.strictEqual(AH.ecoAction({ ok: false, error: 'not on Android' }, false, false), null);
+  assert.strictEqual(AH.transportLabel('usb'), 'USB'); assert.match(AH.latencyLabel('pro'), /PRO AUDIO/);
+  assert.ok(html.includes("fetch(b + '/api/hal', { cache: 'no-store' })") && html.includes("box.classList.toggle('hidden', !st.hal)"), 'hidden unless the engine has /api/hal');
+});
+
+// ---- ARRANGE (1.22.1.0 Beta): a DAW-style arrangement page without recording ---------------------------------------------------------------
+test('ARRANGE math: grid snap, automation, solo/mute, no-overlap clip placement, split, 24-bit WAV, untrusted project sanitized', () => {
+  const html = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'index.html'), 'utf8');
+  const a = html.indexOf('//@@ARRANGE-MATH-START'), b = html.indexOf('//@@ARRANGE-MATH-END'); assert.ok(a > 0 && b > a);
+  const AR = new Function(html.slice(a, b) + '\nreturn AR;')();
+  assert.strictEqual(AR.snap(2.7, 120, 4), 2.5); assert.strictEqual(AR.snap(2.7, 120, 1), 2); assert.strictEqual(AR.snap(2.7, 120, 0), 2.7); assert.strictEqual(AR.barOf(4.1, 120), 3);
+  assert.strictEqual(AR.autoAt([], 5), 0); assert.strictEqual(AR.autoAt([{ t: 1, v: 0 }, { t: 3, v: -20 }], 2), -10); assert.strictEqual(AR.autoAt([{ t: 1, v: 0 }, { t: 3, v: -20 }], 9), -20);
+  assert.deepStrictEqual(AR.addPoint([{ t: 1, v: 0 }], 0.5, -3), [{ t: 0.5, v: -3 }, { t: 1, v: 0 }]);
+  assert.strictEqual(AR.trackGain({ db: 0, mute: false, solo: false }, true), 0, 'another track soloed: silent'); assert.strictEqual(AR.trackGain({ db: 0, mute: true, solo: true }, true), 0, 'mute still wins'); assert.strictEqual(AR.trackGain({ db: -6, solo: true }, true).toFixed(3), '0.501');
+  const [l, r] = AR.panGains(0); assert.ok(Math.abs(l - r) < 1e-9 && Math.abs(l * l + r * r - 1) < 1e-9);
+  const clips = [{ id: 1, track: 1, start: 0, offset: 0, duration: 2 }, { id: 2, track: 1, start: 5, offset: 0, duration: 2 }];
+  assert.strictEqual(AR.placeClip(clips, 1, 4).find(c => c.id === 1).start, 3, 'pushed left of the neighbour'); assert.strictEqual(AR.placeClip(clips, 1, 6.5).find(c => c.id === 1).start, 7, 'or right of it');
+  assert.strictEqual(AR.placeClip(clips, 1, 2.5).find(c => c.id === 1).start, 2.5, 'free space is kept');
+  const sp = AR.splitClip(clips, 2, 6, 9); assert.deepStrictEqual(sp.filter(c => c.track === 1 && c.start >= 5).map(c => [c.id, c.start, c.offset, c.duration]), [[2, 5, 0, 1], [9, 6, 1, 2]]);
+  assert.strictEqual(AR.splitClip(clips, 2, 5.001, 9).length, 2, 'no sliver splits');
+  const wav = AR.wavEncode([new Float32Array([0, 1, -1]), new Float32Array([0.5, 2, -2])], 48000), v = new DataView(wav);
+  assert.strictEqual(wav.byteLength, 44 + 3 * 2 * 3); assert.strictEqual(v.getUint16(34, true), 24); assert.strictEqual(v.getUint16(22, true), 2); assert.strictEqual(v.getUint32(24, true), 48000);
+  assert.strictEqual((v.getUint8(44 + 3) | (v.getUint8(45 + 3) << 8) | (v.getUint8(46 + 3) << 16)), 4194304, 'right ch sample 0 = 0.5 -> round(0.5 * 8388607)'); assert.strictEqual(v.getUint8(44 + 8), 0x7f, '2.0 clips to full scale');
+  const p = AR.sanitize({ bpm: 9999, snap: 3, tracks: [{ id: 1, name: '<b>x</b>'.repeat(40), db: 99, color: 'red', auto: [{ t: -5, v: 50 }] }, 'junk'], clips: [{ id: 1, track: 1, file: 'a.wav', start: -1, duration: 3 }, { id: 2, track: 7, file: 'orphan', duration: 1 }, { id: 3, track: 1, file: 'empty', duration: 0 }] });
+  assert.deepStrictEqual([p.bpm, p.snap, p.tracks.length, p.tracks[0].db, p.tracks[0].color, p.tracks[0].name.length, p.tracks[0].auto[0], p.clips.length, p.clips[0].start], [300, 4, 2, 6, '#f59e0b', 80, { t: 0, v: 6 }, 1, 0]);
+});
+test('ARRANGE page: in the MIX group, mounted into #tab-arrange, plays through masterGain, exports offline, and records nothing', () => {
+  const html = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'index.html'), 'utf8');
+  assert.ok(html.includes("{ group: 'MIX', id: 'arrange', text: 'ARRANGE'") && html.includes('<div id="tab-arrange" class="tab-content tab-hidden"></div>'));
+  const a = html.indexOf('window.arrange = (() => {'), mod = html.slice(a, html.indexOf('// ── SURROUND MASTER', a));
+  assert.ok(mod.includes('window.state.nodes.masterGain') && mod.includes('new OfflineAudioContext(2,') && mod.includes("accept=\"audio/*\" multiple"));
+  assert.ok(!/getUserMedia|MediaRecorder|createMediaStreamSource|recStart/.test(mod), 'no recording in the arrangement');
+  assert.ok(mod.includes('Array.from(e.target.files)'), 'the FileList is copied before the input is cleared');
+  assert.ok(html.includes("['ARRANGE', "), 'translated');
 });

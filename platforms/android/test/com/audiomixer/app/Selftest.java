@@ -25,6 +25,21 @@ public final class Selftest {
         java.util.List<AppInfo.Perm> ps = new java.util.ArrayList<AppInfo.Perm>(); ps.add(new AppInfo.Perm("android.permission.RECORD_AUDIO", true)); ps.add(new AppInfo.Perm("android.permission.X_UNKNOWN", false));
         System.out.println("appinfo=" + AppInfo.toJson("com.audiomixer.app", "1.0", 10000, 29, "AA:BB", "com.android.vending", false, ps, false, true));
         System.out.println("nowplaying=" + NowPlaying.toJson(l, true, null));
+        // AUDIO HAL DETECTION + BATTERY (beta 1.1)
+        Hal.Info hi = new Hal.Info(); hi.sdk = 34; hi.manufacturer = "Google"; hi.model = "Pixel 8"; hi.nativeRate = 48000; hi.burstFrames = 96; hi.lowLatency = true; hi.proAudio = true; hi.usbHost = true; hi.devicesVersion = 3;
+        java.util.List<Hal.Device> hd = new java.util.ArrayList<Hal.Device>();
+        hd.add(new Hal.Device(1, "Pixel 8", 15, true, false, 1, new int[] { 48000 }, new int[] { 2 }));
+        hd.add(new Hal.Device(2, "Pixel 8", 2, false, true, 2, new int[] { 48000 }, new int[] { 2, 4 }));
+        hd.add(new Hal.Device(3, "WH-1000XM4", 8, false, true, 2, new int[] { 48000 }, new int[] { 2 }));
+        hd.add(new Hal.Device(4, "UMC404HD 192k", 11, true, true, 4, new int[] { 44100, 192000 }, new int[] { 2, 21, 4 }));
+        hd.add(new Hal.Device(5, "Pixel 8", 1, false, true, 1, new int[] { 48000 }, new int[] { 2 }));
+        hd.add(new Hal.Device(6, "TV", 9, false, true, 8, new int[] { 48000 }, new int[] { 2, 5, 6, 7 }));
+        System.out.println("hal=" + Hal.toJson(hi, hd));
+        Hal.Info h0 = new Hal.Info(); System.out.println("hal.none=" + Hal.toJson(h0, new java.util.ArrayList<Hal.Device>()));
+        Power.State ps1 = new Power.State(); ps1.percent = 80; ps1.charging = false; ps1.streams = 0; ps1.idleMs = 120000; System.out.println("power.idle=" + Power.toJson(ps1));
+        Power.State ps2 = new Power.State(); ps2.percent = 15; ps2.streams = 1; System.out.println("power.low=" + Power.toJson(ps2));
+        Power.State ps3 = new Power.State(); ps3.percent = 15; ps3.charging = true; ps3.idleMs = 30000; System.out.println("power.charging=" + Power.toJson(ps3));
+        Power.State ps4 = new Power.State(); ps4.percent = 90; ps4.saver = true; ps4.idleMs = 999999; System.out.println("power.saver=" + Power.toJson(ps4));
         System.out.println("nowplaying.none=" + NowPlaying.toJson(new java.util.ArrayList<NowPlaying.Session>(), false, "Settings > Notifications > Device & app notifications > Audio Mixer"));
     }
 }

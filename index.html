@@ -1118,6 +1118,7 @@ html.am-lite *,html.am-settled.am-lowpower *{backdrop-filter:none!important;-web
 window.navTabs = [
             { group: 'START', id: 'home', text: 'HOME', icon: 'fa-solid fa-house', color: 'text-amber-500' },
             { group: 'MIX', id: 'mixer', text: 'MIXER', icon: 'fa-solid fa-sliders', color: 'text-amber-500' },
+            { group: 'MIX', id: 'arrange', text: 'ARRANGE', icon: 'fa-solid fa-bars-staggered', color: 'text-fuchsia-400' },
             { group: 'MIX', id: 'dsp', text: 'TONE (EQ)', icon: 'fa-solid fa-chart-line', color: 'text-cyan-400' },
             { group: 'MIX', id: 'dyn', text: 'COMPRESSOR', icon: 'fa-solid fa-wave-square', color: 'text-emerald-400' },
             { group: 'MIX', id: 'gate', text: 'NOISE GATE', icon: 'fa-solid fa-door-closed', color: 'text-pink-400' },
@@ -3894,6 +3895,7 @@ const cArea = document.getElementById('content-area');
     </div>
   </div>
 </div>
+<div id="tab-arrange" class="tab-content tab-hidden"></div>
 <div id="tab-scenes" class="tab-content tab-hidden">
   <div class="home-wrap">
     <h1 class="home-title">Scenes</h1>
@@ -10811,6 +10813,278 @@ const cArea = document.getElementById('content-area');
     // MIXER SETS 1-4: four quick console snapshots on the mixer toolbar (faders, mute, solo and pan of every channel). STORE, then a number,
     // keeps the console in that set; a number alone recalls it (an empty set is stored on its first press). Kept in localStorage (halx_mix_sets).
     // Lighter than SCENES (the SCENES page keeps names and colours too); SETS are for switching between song parts or A/B mixes in one click.
+    // ── ARRANGE (1.22.1.0 Beta): a DAW-style arrangement page. Audio files are placed as clips on tracks along a timeline (bars / beats or
+    // seconds), each track has gain, pan, mute, solo and a volume automation lane, the transport plays the arrangement through the mixer's
+    // master chain (masterGain -> EQ -> compressor -> ...), markers mark positions, and EXPORT renders the whole mix offline to a 24-bit WAV.
+    // There is NO recording here: files come in through IMPORT (the file picker), nothing captures the microphone. The project layout (tracks,
+    // clips, automation, markers) is saved in localStorage; the audio itself stays in memory and is re-imported next time (a clip whose file is
+    // not loaded is shown as MISSING and is silent). Works wherever Web Audio does: PC, Android, Linux, macOS.
+    window.arrange = (() => {
+        //@@ARRANGE-MATH-START
+        const AR = (() => {
+            const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+            const beatSec = bpm => 60 / clamp(+bpm || 120, 20, 300);
+            // snap a time to the grid: div = 1 (bar of 4 beats), 4 (beat), 8, 16 (sixteenth); 0 = no snap
+            const snap = (t, bpm, div) => { if (!div) return Math.max(0, t); const step = beatSec(bpm) * (div === 1 ? 4 : 4 / div); return Math.max(0, Math.round(t / step) * step); };
+            const barOf = (t, bpm) => Math.floor(t / (beatSec(bpm) * 4)) + 1;
+            // the automation value at t: points [{t, v}] sorted by t, linear between, flat outside; v in dB (-60..+6); no points = 0 dB
+            function autoAt(points, t) {
+                if (!points || !points.length) return 0;
+                if (t <= points[0].t) return points[0].v;
+                for (let i = 1; i < points.length; i++) if (t <= points[i].t) { const a = points[i - 1], b = points[i]; return b.t === a.t ? b.v : a.v + (b.v - a.v) * (t - a.t) / (b.t - a.t); }
+                return points[points.length - 1].v;
+            }
+            const addPoint = (points, t, v) => { const p = (points || []).filter(x => Math.abs(x.t - t) > 1e-3).concat([{ t: Math.max(0, t), v: clamp(v, -60, 6) }]); p.sort((a, b) => a.t - b.t); return p; };
+            const dbToGain = db => db <= -60 ? 0 : Math.pow(10, clamp(db, -60, 12) / 20);
+            // the audible gain of a track: solo wins over mute (when any track is soloed, only soloed tracks sound)
+            const trackGain = (track, anySolo) => (track.mute || (anySolo && !track.solo)) ? 0 : dbToGain(track.db);
+            const panGains = pan => { const a = (clamp(pan, -1, 1) + 1) * Math.PI / 4; return [Math.cos(a), Math.sin(a)]; };
+            // a clip's audible span: [start, start + len) where len = (duration - offset) * (1 / rate); offset trims the head
+            const clipEnd = c => c.start + Math.max(0, (c.duration - c.offset));
+            // move a clip to a new start without overlapping its neighbours on the same track: it is clamped to the gap it was dropped in
+            function placeClip(clips, id, start) {
+                const me = clips.find(c => c.id === id); if (!me) return clips;
+                const len = clipEnd(me) - me.start, others = clips.filter(c => c.id !== id && c.track === me.track).sort((a, b) => a.start - b.start);
+                let s = Math.max(0, start);
+                for (const o of others) { const oe = clipEnd(o); if (s < oe && s + len > o.start) { s = (s + len / 2 < (o.start + oe) / 2) ? Math.max(0, o.start - len) : oe; } }
+                for (const o of others) { if (s < clipEnd(o) && s + len > o.start) return clips; }   // still no room: left where it was
+                return clips.map(c => c.id === id ? { ...c, start: s } : c);
+            }
+            // split a clip at time t (inside it): two clips sharing the buffer, the second with a larger offset
+            function splitClip(clips, id, t, newId) {
+                const c = clips.find(x => x.id === id); if (!c || t <= c.start + 0.01 || t >= clipEnd(c) - 0.01) return clips;
+                const cut = t - c.start;
+                return clips.map(x => x.id === id ? { ...x, duration: x.offset + cut } : x).concat([{ ...c, id: newId, start: t, offset: c.offset + cut }]);
+            }
+            const projectEnd = (clips, markers) => Math.max(0, ...(clips || []).map(clipEnd), ...(markers || []).map(m => m.t));
+            // 24-bit little-endian WAV from planar float channels
+            function wavEncode(channels, sampleRate) {
+                const n = channels[0] ? channels[0].length : 0, ch = channels.length, bytes = 3, data = n * ch * bytes, buf = new ArrayBuffer(44 + data), v = new DataView(buf);
+                const str = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+                str(0, 'RIFF'); v.setUint32(4, 36 + data, true); str(8, 'WAVE'); str(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, ch, true);
+                v.setUint32(24, sampleRate, true); v.setUint32(28, sampleRate * ch * bytes, true); v.setUint16(32, ch * bytes, true); v.setUint16(34, 24, true); str(36, 'data'); v.setUint32(40, data, true);
+                let o = 44;
+                for (let i = 0; i < n; i++) for (let c = 0; c < ch; c++) { const s = Math.round(clamp(channels[c][i], -1, 1) * 8388607); v.setUint8(o, s & 255); v.setUint8(o + 1, (s >> 8) & 255); v.setUint8(o + 2, (s >> 16) & 255); o += 3; }
+                return buf;
+            }
+            // a saved project, checked field by field (localStorage content is not trusted)
+            function sanitize(p) {
+                const num = (v, d, a, b) => clamp(Number.isFinite(+v) ? +v : d, a, b), s = v => String(v == null ? '' : v).slice(0, 80);
+                const tracks = Array.isArray(p && p.tracks) ? p.tracks.slice(0, 64).map((t, i) => ({ id: num(t.id, i + 1, 1, 1e9), name: s(t.name) || 'Track ' + (i + 1), db: num(t.db, 0, -60, 6), pan: num(t.pan, 0, -1, 1), mute: !!t.mute, solo: !!t.solo, color: /^#[0-9a-f]{6}$/i.test(t.color) ? t.color : '#f59e0b',
+                    auto: Array.isArray(t.auto) ? t.auto.slice(0, 500).map(x => ({ t: num(x.t, 0, 0, 36000), v: num(x.v, 0, -60, 6) })).sort((a, b) => a.t - b.t) : [] })) : [];
+                const ids = new Set(tracks.map(t => t.id));
+                const clips = Array.isArray(p && p.clips) ? p.clips.slice(0, 2000).map((c, i) => ({ id: num(c.id, i + 1, 1, 1e9), track: num(c.track, 0, 0, 1e9), file: s(c.file), start: num(c.start, 0, 0, 36000), offset: num(c.offset, 0, 0, 36000), duration: num(c.duration, 0, 0, 36000), db: num(c.db, 0, -60, 6) })).filter(c => ids.has(c.track) && c.duration > c.offset) : [];
+                const markers = Array.isArray(p && p.markers) ? p.markers.slice(0, 200).map(m => ({ t: num(m.t, 0, 0, 36000), name: s(m.name) || 'Marker' })).sort((a, b) => a.t - b.t) : [];
+                return { bpm: num(p && p.bpm, 120, 20, 300), snap: [0, 1, 4, 8, 16].indexOf(num(p && p.snap, 4, 0, 16)) >= 0 ? num(p.snap, 4, 0, 16) : 4, loop: !!(p && p.loop), tracks, clips, markers, zoom: num(p && p.zoom, 40, 5, 400) };
+            }
+            return { clamp, beatSec, snap, barOf, autoAt, addPoint, dbToGain, trackGain, panGains, clipEnd, placeClip, splitClip, projectEnd, wavEncode, sanitize };
+        })();
+        //@@ARRANGE-MATH-END
+        const KEY = 'halx_arrange';
+        let P = AR.sanitize({}); try { P = AR.sanitize(JSON.parse(localStorage.getItem(KEY) || 'null')); } catch (_) { /* fresh */ }
+        const buffers = new Map();        // file name -> AudioBuffer (memory only)
+        const T = { playing: false, t0: 0, ctxT0: 0, pos: 0, nodes: [], raf: 0, sel: null, drag: null };
+        let nextId = Math.max(1, ...P.tracks.map(t => t.id), ...P.clips.map(c => c.id)) + 1;
+        const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(P)); } catch (_) { /* storage blocked */ } };
+        const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        const COLORS = ['#f59e0b', '#22d3ee', '#a78bfa', '#34d399', '#f472b6', '#fb923c', '#60a5fa', '#facc15'];
+        const $ = id => document.getElementById(id);
+        const LANE = 56, HEAD = 26, LEFT = 0;
+        const ctx = () => window.state && window.state.ctx;
+        const master = () => (window.state && window.state.nodes && window.state.nodes.masterGain) || (ctx() && ctx().destination);
+        const now = () => T.playing ? T.pos + (ctx().currentTime - T.ctxT0) : T.pos;
+        const anySolo = () => P.tracks.some(t => t.solo);
+        // the whole graph of one playback (live or offline): per track gain (automation) -> pan -> master
+        function buildGraph(ac, dest, from, to) {
+            const nodes = [];
+            for (const tr of P.tracks) {
+                const g = ac.createGain(), split = ac.createChannelSplitter(2), merge = ac.createChannelMerger(2), gl = ac.createGain(), gr = ac.createGain();
+                const [pl, pr] = AR.panGains(tr.pan), tg = AR.trackGain(tr, anySolo());
+                g.gain.value = tg * AR.dbToGain(AR.autoAt(tr.auto, from));
+                if (tr.auto.length && tg > 0) { const pts = tr.auto.filter(p => p.t > from && p.t <= to); for (const p of pts) g.gain.linearRampToValueAtTime(tg * AR.dbToGain(p.v), ac.currentTime + (p.t - from)); }
+                gl.gain.value = pl; gr.gain.value = pr;
+                g.connect(split); split.connect(gl, 0); split.connect(gr, 1); gl.connect(merge, 0, 0); gr.connect(merge, 0, 1); merge.connect(dest);
+                for (const c of P.clips.filter(c => c.track === tr.id)) {
+                    const b = buffers.get(c.file); if (!b) continue;
+                    const end = AR.clipEnd(c); if (end <= from || c.start >= to) continue;
+                    const src = ac.createBufferSource(); src.buffer = b;
+                    const cg = ac.createGain(); cg.gain.value = AR.dbToGain(c.db); src.connect(cg); cg.connect(g);
+                    const late = Math.max(0, from - c.start), when = ac.currentTime + Math.max(0, c.start - from), off = c.offset + late, dur = Math.min(end, to) - Math.max(c.start, from);
+                    if (dur > 0 && off < b.duration) src.start(when, off, Math.min(dur, b.duration - off));
+                    nodes.push(src);
+                }
+                nodes.push(g, merge);
+            }
+            return nodes;
+        }
+        const api = {
+            math: AR, get project() { return P; }, buffers, transport: T,
+            async play(from) {
+                if (!ctx() && typeof initAudioEngine === 'function') await initAudioEngine();
+                const ac = ctx(); if (!ac) return false;
+                if (ac.state === 'suspended') await ac.resume();
+                api.stop(true);
+                T.pos = Math.max(0, from == null ? T.pos : from); T.ctxT0 = ac.currentTime; T.playing = true;
+                const end = AR.projectEnd(P.clips, P.markers) + 0.05;
+                T.nodes = buildGraph(ac, master(), T.pos, end);
+                const tick = () => { if (!T.playing) return; const t = now(); if (t >= end) { if (P.loop && end > 0.1) { api.play(0); return; } api.stop(); return; } api.drawHead(); T.raf = requestAnimationFrame(tick); };
+                T.raf = requestAnimationFrame(tick); api.render(); return true;
+            },
+            stop(keepPos) {
+                if (T.playing) T.pos = keepPos ? now() : T.pos;
+                T.playing = false; cancelAnimationFrame(T.raf);
+                for (const n of T.nodes) { try { if (n.stop) n.stop(); } catch (_) { /* not started */ } try { n.disconnect(); } catch (_) { /* gone */ } }
+                T.nodes = []; if (!keepPos) api.render();
+            },
+            toStart() { api.stop(); T.pos = 0; api.render(); },
+            seek(t) { const was = T.playing; api.stop(true); T.pos = Math.max(0, t); if (was) api.play(T.pos); else api.render(); },
+            addTrack(name) { const id = nextId++; P.tracks.push({ id, name: name || 'Track ' + P.tracks.length + 1, db: 0, pan: 0, mute: false, solo: false, color: COLORS[(P.tracks.length) % COLORS.length], auto: [] }); persist(); api.render(); return id; },
+            removeTrack(id) { P.tracks = P.tracks.filter(t => t.id !== id); P.clips = P.clips.filter(c => c.track !== id); if (T.sel && T.sel.track === id) T.sel = null; persist(); api.render(); },
+            setTrack(id, key, value) {
+                const t = P.tracks.find(x => x.id === id); if (!t) return;
+                if (key === 'db') t.db = AR.clamp(parseFloat(value) || 0, -60, 6); else if (key === 'pan') t.pan = AR.clamp(parseFloat(value) || 0, -1, 1); else if (key === 'mute' || key === 'solo') t[key] = !!value; else if (key === 'name') t.name = String(value).slice(0, 80);
+                persist(); if (T.playing) { const p = now(); api.stop(true); T.pos = p; api.play(p); } else api.render();
+            },
+            async importFiles(files, trackId) {
+                if (!ctx() && typeof initAudioEngine === 'function') await initAudioEngine();
+                const ac = ctx(); if (!ac) return 0;
+                let tid = trackId || (P.tracks.length ? P.tracks[P.tracks.length - 1].id : api.addTrack()), n = 0, at = AR.snap(now(), P.bpm, P.snap);
+                for (const f of Array.from(files || [])) {
+                    try {
+                        const buf = await ac.decodeAudioData(await f.arrayBuffer());
+                        buffers.set(f.name, buf);
+                        const missing = P.clips.filter(c => c.file === f.name && c.duration > 0);
+                        if (missing.length && !trackId) { n++; continue; }   // a file that was MISSING is back: its clips play again
+                        const end = Math.max(at, ...P.clips.filter(c => c.track === tid).map(AR.clipEnd));
+                        P.clips.push({ id: nextId++, track: tid, file: f.name.slice(0, 80), start: end, offset: 0, duration: buf.duration, db: 0 }); n++;
+                        if (files.length > 1 && trackId == null) tid = api.addTrack(f.name.replace(/\.[^.]+$/, '').slice(0, 24));
+                    } catch (e) { if (window.notify) window.notify('Could not decode ' + f.name + ': ' + (e.message || e), 'triangle-exclamation'); }
+                }
+                persist(); api.render(); return n;
+            },
+            moveClip(id, start) { P.clips = AR.placeClip(P.clips, id, AR.snap(start, P.bpm, P.snap)); persist(); api.render(); },
+            splitAtHead() { if (!T.sel) return; P.clips = AR.splitClip(P.clips, T.sel.id, now(), nextId++); persist(); api.render(); },
+            deleteSel() { if (!T.sel) return; P.clips = P.clips.filter(c => c.id !== T.sel.id); T.sel = null; persist(); api.render(); },
+            setClipGain(id, db) { const c = P.clips.find(x => x.id === id); if (c) { c.db = AR.clamp(parseFloat(db) || 0, -60, 6); persist(); api.render(); } },
+            addMarker(name) { P.markers.push({ t: now(), name: (name || 'Marker ' + (P.markers.length + 1)).slice(0, 80) }); P.markers.sort((a, b) => a.t - b.t); persist(); api.render(); },
+            removeMarker(i) { P.markers.splice(i, 1); persist(); api.render(); },
+            addAuto(trackId, t, v) { const tr = P.tracks.find(x => x.id === trackId); if (tr) { tr.auto = AR.addPoint(tr.auto, t, v); persist(); api.render(); } },
+            clearAuto(trackId) { const tr = P.tracks.find(x => x.id === trackId); if (tr) { tr.auto = []; persist(); api.render(); } },
+            set(key, value) { if (key === 'bpm') P.bpm = AR.clamp(parseFloat(value) || 120, 20, 300); else if (key === 'snap') P.snap = +value; else if (key === 'loop') P.loop = !!value; else if (key === 'zoom') P.zoom = AR.clamp(+value, 5, 400); persist(); api.render(); },
+            newProject() { api.stop(); P = AR.sanitize({}); T.sel = null; persist(); api.render(); },
+            async exportWav() {
+                const end = AR.projectEnd(P.clips, P.markers); if (end <= 0 || !P.clips.some(c => buffers.has(c.file))) { if (window.notify) window.notify('Nothing to export: import audio files first', 'triangle-exclamation'); return null; }
+                const rate = (ctx() && ctx().sampleRate) || 48000, oc = new OfflineAudioContext(2, Math.ceil(end * rate), rate);
+                buildGraph(oc, oc.destination, 0, end);
+                const out = await oc.startRendering(), wav = AR.wavEncode([out.getChannelData(0), out.getChannelData(1)], rate);
+                const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([wav], { type: 'audio/wav' })); a.download = 'amfx1-arrangement.wav'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+                if (window.notify) window.notify('Arrangement exported: ' + end.toFixed(1) + ' s, 24-bit WAV', 'file-export');
+                return wav.byteLength;
+            },
+            // ── drawing ──
+            x: t => LEFT + t * P.zoom, t: x => Math.max(0, (x - LEFT) / P.zoom),
+            drawHead() { const h = $('arr-head'); if (h) h.style.left = api.x(now()) + 'px'; const tm = $('arr-time'); if (tm) { const t = now(); tm.textContent = Math.floor(t / 60).toString().padStart(2, '0') + ':' + (t % 60).toFixed(2).padStart(5, '0') + '  bar ' + AR.barOf(t, P.bpm); } },
+            draw() {
+                const cv = $('arr-canvas'); if (!cv) return;
+                const end = Math.max(30, AR.projectEnd(P.clips, P.markers) + 10), W = Math.ceil(api.x(end)) + 40, H = HEAD + Math.max(1, P.tracks.length) * LANE;
+                if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; cv.style.width = W + 'px'; cv.style.height = H + 'px'; }
+                const g = cv.getContext('2d'); g.clearRect(0, 0, W, H); g.font = '9px JetBrains Mono, monospace';
+                const bar = AR.beatSec(P.bpm) * 4;
+                for (let t = 0, b = 1; t < end; t += bar, b++) { const x = api.x(t); g.fillStyle = 'rgba(255,255,255,0.08)'; g.fillRect(x, 0, 1, H); g.fillStyle = '#94a3b8'; g.fillText(String(b), x + 3, 10); if (P.zoom > 25) for (let k = 1; k < 4; k++) { g.fillStyle = 'rgba(255,255,255,0.03)'; g.fillRect(api.x(t + k * bar / 4), HEAD, 1, H - HEAD); } }
+                for (let s = 0; s < end; s += 5) { g.fillStyle = '#64748b'; g.fillText(s + 's', api.x(s) + 3, HEAD - 4); }
+                P.tracks.forEach((tr, i) => {
+                    const y = HEAD + i * LANE; g.fillStyle = i % 2 ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.15)'; g.fillRect(0, y, W, LANE);
+                    for (const c of P.clips.filter(c => c.track === tr.id)) {
+                        const x0 = api.x(c.start), x1 = api.x(AR.clipEnd(c)), b = buffers.get(c.file), sel = T.sel && T.sel.id === c.id;
+                        g.fillStyle = b ? tr.color + (sel ? 'ee' : '99') : 'rgba(244,63,94,0.35)'; g.fillRect(x0, y + 3, Math.max(2, x1 - x0), LANE - 16);
+                        if (sel) { g.strokeStyle = '#fff'; g.lineWidth = 1.5; g.strokeRect(x0 + 0.5, y + 3.5, Math.max(2, x1 - x0) - 1, LANE - 17); }
+                        if (b) { const d = b.getChannelData(0), step = Math.max(1, Math.floor((AR.clipEnd(c) - c.start) * b.sampleRate / Math.max(1, x1 - x0))); g.fillStyle = 'rgba(0,0,0,0.45)'; const mid = y + 3 + (LANE - 16) / 2; for (let px = x0; px < x1; px++) { const s0 = Math.floor((c.offset + (px - x0) / P.zoom) * b.sampleRate); let pk = 0; for (let k = 0; k < step && s0 + k < d.length; k += Math.max(1, step >> 4)) pk = Math.max(pk, Math.abs(d[s0 + k])); g.fillRect(px, mid - pk * (LANE - 18) / 2, 1, Math.max(1, pk * (LANE - 18))); } }
+                        g.fillStyle = '#000'; g.fillText((b ? '' : 'MISSING ') + c.file + (c.db ? ' ' + (c.db > 0 ? '+' : '') + c.db.toFixed(1) + ' dB' : ''), x0 + 4, y + 14);
+                    }
+                    // automation lane (dB -60..+6 over the lane height), drawn over the clips
+                    if (tr.auto.length) { g.strokeStyle = '#f0abfc'; g.lineWidth = 1.5; g.beginPath(); const yy = v => y + LANE - 4 - (v + 60) / 66 * (LANE - 8); g.moveTo(0, yy(AR.autoAt(tr.auto, 0))); for (const p of tr.auto) g.lineTo(api.x(p.t), yy(p.v)); g.lineTo(W, yy(AR.autoAt(tr.auto, end))); g.stroke(); g.fillStyle = '#f0abfc'; for (const p of tr.auto) g.fillRect(api.x(p.t) - 2, yy(p.v) - 2, 4, 4); }
+                });
+                for (const m of P.markers) { const x = api.x(m.t); g.fillStyle = '#fbbf24'; g.fillRect(x, 0, 1, H); g.fillText('▼ ' + m.name, x + 3, HEAD - 14); }
+                api.drawHead();
+            },
+            render() {
+                if (typeof document === 'undefined' || !$('arr-root')) return;
+                const tl = $('arr-tracks');
+                if (tl) tl.innerHTML = P.tracks.map(tr => `<div class="flex items-center gap-1 px-1 border-b border-white/5" style="height:${LANE}px"><span class="w-1.5 self-stretch rounded" style="background:${esc(tr.color)}"></span><div class="flex-1 min-w-0"><input data-trk="${tr.id}" data-key="name" value="${esc(tr.name)}" aria-label="Track name" class="w-full bg-transparent text-white font-bold text-[8px] outline-none truncate"><div class="flex items-center gap-1"><input data-trk="${tr.id}" data-key="db" type="range" min="-60" max="6" step="0.5" value="${tr.db}" aria-label="${esc(tr.name)} level dB" class="w-16 accent-amber-500"><span class="text-slate-400 w-7 text-right">${tr.db > 0 ? '+' : ''}${tr.db.toFixed(1)}</span><input data-trk="${tr.id}" data-key="pan" type="range" min="-1" max="1" step="0.05" value="${tr.pan}" aria-label="${esc(tr.name)} pan" class="w-10 accent-cyan-400"></div></div><div class="flex flex-col gap-0.5"><button data-trk="${tr.id}" data-key="mute" aria-pressed="${tr.mute}" class="px-1 rounded text-[7px] font-black ${tr.mute ? 'bg-rose-500 text-black' : 'bg-white/10 text-slate-300'}">M</button><button data-trk="${tr.id}" data-key="solo" aria-pressed="${tr.solo}" class="px-1 rounded text-[7px] font-black ${tr.solo ? 'bg-amber-400 text-black' : 'bg-white/10 text-slate-300'}">S</button></div><div class="flex flex-col gap-0.5"><button data-trk="${tr.id}" data-key="auto" title="Write an automation point: ALT+click the lane" class="px-1 rounded text-[7px] font-black bg-white/10 ${tr.auto.length ? 'text-fuchsia-300' : 'text-slate-500'}">A${tr.auto.length ? tr.auto.length : ''}</button><button data-trk="${tr.id}" data-key="del" aria-label="Remove ${esc(tr.name)}" class="px-1 rounded text-[7px] font-black bg-white/10 text-slate-400">&times;</button></div></div>`).join('') || '<div class="text-slate-500 p-2">No tracks: press + TRACK or IMPORT.</div>';
+                if (tl) tl.querySelectorAll('[data-trk]').forEach(el => {
+                    const id = +el.dataset.trk, k = el.dataset.key;
+                    if (k === 'name') el.onchange = () => api.setTrack(id, 'name', el.value);
+                    else if (k === 'db' || k === 'pan') el.oninput = () => api.setTrack(id, k, el.value);
+                    else if (k === 'mute' || k === 'solo') el.onclick = () => api.setTrack(id, k, !P.tracks.find(t => t.id === id)[k]);
+                    else if (k === 'auto') el.onclick = () => { const tr = P.tracks.find(t => t.id === id); if (tr.auto.length) api.clearAuto(id); else if (window.notify) window.notify('Automation: hold ALT (or long-press on a phone) and click the track lane to write a volume point', 'wand-magic-sparkles'); };
+                    else if (k === 'del') el.onclick = () => api.removeTrack(id);
+                });
+                const ml = $('arr-markers'); if (ml) ml.innerHTML = P.markers.map((m, i) => `<button data-mk="${i}" class="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold" title="Go to ${esc(m.name)} (right click: remove)">${esc(m.name)} ${m.t.toFixed(1)}s</button>`).join('');
+                if (ml) ml.querySelectorAll('[data-mk]').forEach(b => { b.onclick = () => api.seek(P.markers[+b.dataset.mk].t); b.oncontextmenu = e => { e.preventDefault(); api.removeMarker(+b.dataset.mk); }; });
+                const pb = $('arr-play'); if (pb) { pb.innerHTML = T.playing ? '<i class="fa-solid fa-pause" aria-hidden="true"></i>' : '<i class="fa-solid fa-play" aria-hidden="true"></i>'; pb.setAttribute('aria-label', T.playing ? 'Pause' : 'Play'); }
+                const lp = $('arr-loop'); if (lp) { lp.setAttribute('aria-pressed', P.loop ? 'true' : 'false'); lp.className = 'px-2 py-1 rounded font-black text-[8px] border ' + (P.loop ? 'bg-cyan-500 text-black border-cyan-500' : 'bg-white/5 text-slate-300 border-white/10'); }
+                const bpm = $('arr-bpm'); if (bpm && +bpm.value !== P.bpm) bpm.value = P.bpm;
+                const sn = $('arr-snap'); if (sn && +sn.value !== P.snap) sn.value = P.snap;
+                const zm = $('arr-zoom'); if (zm && +zm.value !== P.zoom) zm.value = P.zoom;
+                const sel = $('arr-sel'); if (sel) { const c = T.sel && P.clips.find(x => x.id === T.sel.id); sel.classList.toggle('hidden', !c); if (c) { $('arr-sel-name').textContent = c.file; const cg = $('arr-clip-db'); if (+cg.value !== c.db) cg.value = c.db; } }
+                api.draw();
+            },
+            mount() {
+                if (typeof document === 'undefined') return true;
+                const tab = $('tab-arrange'); if (!tab) return false; if ($('arr-root')) return true;
+                tab.innerHTML = `<div id="arr-root" class="page-scroll-inner w-full max-w-6xl mx-auto space-y-2 font-mono text-[8px]">
+<div class="glass-panel p-3 rounded-xl wing-bezel flex flex-wrap items-center gap-2">
+  <div class="mr-2"><div class="text-[10px] font-black text-white font-wing tracking-wider uppercase">ARRANGE</div><p class="text-[7px] text-slate-400">Place audio files on tracks, mix them through the console and export the result. Nothing is recorded here.</p></div>
+  <button id="arr-start" type="button" aria-label="Return to start" class="px-2 py-1 rounded bg-white/10 text-slate-200"><i class="fa-solid fa-backward-step" aria-hidden="true"></i></button>
+  <button id="arr-play" type="button" aria-label="Play" class="px-3 py-1 rounded bg-emerald-500 text-black font-black"><i class="fa-solid fa-play" aria-hidden="true"></i></button>
+  <button id="arr-stop" type="button" aria-label="Stop" class="px-2 py-1 rounded bg-white/10 text-slate-200"><i class="fa-solid fa-stop" aria-hidden="true"></i></button>
+  <button id="arr-loop" type="button" aria-pressed="false">LOOP</button>
+  <span id="arr-time" class="px-2 py-1 rounded bg-black/40 text-amber-300 font-bold min-w-[9rem] text-center" role="timer">00:00.00  bar 1</span>
+  <label class="text-slate-400">BPM <input id="arr-bpm" type="number" min="20" max="300" value="120" class="w-12 bg-black/40 text-white px-1 rounded" aria-label="Tempo"></label>
+  <label class="text-slate-400">SNAP <select id="arr-snap" class="bg-black/40 text-white px-1 rounded" aria-label="Snap to grid"><option value="0">off</option><option value="1">bar</option><option value="4" selected>beat</option><option value="8">1/8</option><option value="16">1/16</option></select></label>
+  <label class="text-slate-400">ZOOM <input id="arr-zoom" type="range" min="5" max="400" value="40" class="w-16 accent-amber-500" aria-label="Zoom"></label>
+  <span class="ml-auto flex flex-wrap gap-1">
+    <button id="arr-add" type="button" class="px-2 py-1 rounded bg-white/10 text-slate-200 font-bold">+ TRACK</button>
+    <label class="px-2 py-1 rounded bg-cyan-500/20 text-cyan-300 font-bold cursor-pointer">IMPORT AUDIO<input id="arr-file" type="file" accept="audio/*" multiple class="hidden"></label>
+    <button id="arr-marker" type="button" class="px-2 py-1 rounded bg-amber-500/20 text-amber-300 font-bold">+ MARKER</button>
+    <button id="arr-export" type="button" class="px-2 py-1 rounded bg-emerald-500/20 text-emerald-300 font-bold">EXPORT WAV</button>
+    <button id="arr-new" type="button" class="px-2 py-1 rounded bg-white/5 text-slate-400 font-bold">NEW</button>
+  </span>
+</div>
+<div id="arr-sel" class="glass-panel px-3 py-1.5 rounded-xl flex flex-wrap items-center gap-2 hidden"><span class="text-slate-400">CLIP</span><b id="arr-sel-name" class="text-white"></b><label class="text-slate-400">GAIN <input id="arr-clip-db" type="range" min="-60" max="6" step="0.5" value="0" class="w-24 accent-amber-500" aria-label="Clip gain"></label><button id="arr-split" type="button" class="px-2 py-0.5 rounded bg-white/10 text-slate-200 font-bold">SPLIT AT PLAYHEAD</button><button id="arr-del" type="button" class="px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 font-bold">DELETE</button></div>
+<div id="arr-markers" class="flex flex-wrap gap-1"></div>
+<div class="glass-panel rounded-xl overflow-hidden flex" style="min-height:160px">
+  <div id="arr-tracks" class="w-44 shrink-0 bg-black/30 border-r border-white/10" style="padding-top:${HEAD}px"></div>
+  <div id="arr-scroll" class="relative flex-1 overflow-x-auto overflow-y-hidden" style="touch-action:pan-x"><canvas id="arr-canvas" role="img" aria-label="Arrangement timeline" style="display:block"></canvas><div id="arr-head" class="absolute top-0 bottom-0 w-px bg-rose-400 pointer-events-none" style="left:0"></div></div>
+</div></div>`;
+                $('arr-play').onclick = () => T.playing ? api.stop(true) || api.render() : api.play();
+                $('arr-stop').onclick = () => api.stop(); $('arr-start').onclick = () => api.toStart();
+                $('arr-loop').onclick = () => api.set('loop', !P.loop);
+                $('arr-bpm').onchange = e => api.set('bpm', e.target.value); $('arr-snap').onchange = e => api.set('snap', e.target.value); $('arr-zoom').oninput = e => api.set('zoom', e.target.value);
+                $('arr-add').onclick = () => api.addTrack(); $('arr-marker').onclick = () => api.addMarker(); $('arr-export').onclick = () => api.exportWav(); $('arr-new').onclick = () => { if (confirm('Start a new empty arrangement?')) api.newProject(); };
+                $('arr-file').onchange = e => { api.importFiles(Array.from(e.target.files)); e.target.value = ''; };   // copy first: clearing the input empties the live FileList
+                $('arr-split').onclick = () => api.splitAtHead(); $('arr-del').onclick = () => api.deleteSel(); $('arr-clip-db').oninput = e => { if (T.sel) api.setClipGain(T.sel.id, e.target.value); };
+                const cv = $('arr-canvas'); let press = 0;
+                const hit = (x, y) => { const i = Math.floor((y - HEAD) / LANE), tr = P.tracks[i]; if (!tr) return { tr: null }; const t = api.t(x); return { tr, t, clip: P.clips.find(c => c.track === tr.id && t >= c.start && t < AR.clipEnd(c)) || null }; };
+                cv.onpointerdown = e => {
+                    const r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top; press = Date.now();
+                    if (y < HEAD) { api.seek(AR.snap(api.t(x), P.bpm, P.snap)); return; }
+                    const h = hit(x, y); if (!h.tr) return;
+                    if (e.altKey) { api.addAuto(h.tr.id, h.t, -60 + ((HEAD + P.tracks.indexOf(h.tr) * LANE + LANE - 4) - y) / (LANE - 8) * 66); return; }
+                    if (h.clip) { T.sel = h.clip; T.drag = { id: h.clip.id, dx: h.t - h.clip.start, moved: false }; cv.setPointerCapture(e.pointerId); } else { T.sel = null; }
+                    api.render();
+                };
+                cv.onpointermove = e => { if (!T.drag) return; const r = cv.getBoundingClientRect(); const s = api.t(e.clientX - r.left) - T.drag.dx; if (Math.abs(s - P.clips.find(c => c.id === T.drag.id).start) > 0.02) { T.drag.moved = true; P.clips = AR.placeClip(P.clips, T.drag.id, AR.snap(s, P.bpm, P.snap)); api.draw(); } };
+                cv.onpointerup = e => { if (T.drag) { if (T.drag.moved) persist(); T.drag = null; api.render(); } else if (Date.now() - press > 500 && !e.altKey) { const r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, h = hit(x, y); if (h.tr) api.addAuto(h.tr.id, h.t, -60 + ((HEAD + P.tracks.indexOf(h.tr) * LANE + LANE - 4) - y) / (LANE - 8) * 66); } };
+                cv.oncontextmenu = e => e.preventDefault();
+                document.addEventListener('keydown', e => { if (!$('arr-root') || $('tab-arrange').classList.contains('tab-hidden') || /INPUT|SELECT|TEXTAREA/.test(document.activeElement && document.activeElement.tagName)) return; if (e.code === 'Space') { e.preventDefault(); T.playing ? (api.stop(true), api.render()) : api.play(); } else if (e.key === 'Delete' || e.key === 'Backspace') api.deleteSel(); else if (e.key === 's' || e.key === 'S') api.splitAtHead(); else if (e.key === 'm' || e.key === 'M') api.addMarker(); });
+                api.render(); return true;
+            },
+        };
+        if (typeof document !== 'undefined' && typeof document.getElementById === 'function' && typeof setInterval === 'function') { let k = 0; const iv = setInterval(() => { if (api.mount() || ++k > 120) clearInterval(iv); }, 500); }
+        return api;
+    })();
+
     // ── SURROUND MASTER (1.22.1.0 Beta): virtual master channel pages STEREO (2) / QUAD (4) / SURROUND 7.1.2 (10 channels, not 8) ──
     // The stereo master is upmixed to the chosen speaker layout (direct L/R, a centre from the mid signal, surrounds and heights from the delayed
     // side signal, LFE from the low-passed sum), every speaker gets its own master strip (fader, mute, meter), and the result goes to the output
@@ -11315,6 +11589,73 @@ const cArea = document.getElementById('content-area');
             };
             const tryMount = () => { if (typeof document === 'undefined' || typeof document.querySelector !== 'function') return true; if (document.querySelector('#tab-sys .page-scroll-inner')) { api.mount(); return true; } return false; };
             if (!tryMount()) { let k = 0; const iv = setInterval(() => { if (tryMount() || ++k > 120) clearInterval(iv); }, 500); }
+            return api;
+        })();
+
+        // ── ANDROID AUDIO HAL + BATTERY (beta 1.1): in the Android app the engine (MiniBridge) reports the phone's audio HAL (GET /api/hal: device
+        // types, USB / Bluetooth / built-in, rates, channels, encodings, native rate and burst, low-latency / pro-audio features) and the battery
+        // (GET /api/power). Shown on the SYSTEM page under SYSTEM OPTIMIZE; low-power mode turns on by itself on Battery Saver or a low battery
+        // unplugged, and off again only if it was this card that turned it on. Hidden on the PC (the PC bridge has no /api/hal).
+        window.androidHal = (() => {
+            //@@ANDROIDHAL-MATH-START
+            const AH = {
+                // what to do with low-power mode: 'on' / 'off' / null (leave it); `auto` = this card turned it on last time
+                ecoAction(power, eco, auto) {
+                    if (!power || power.ok !== true) return null;
+                    if (power.lowPower && !eco) return 'on';
+                    if (!power.lowPower && eco && auto) return 'off';
+                    return null;
+                },
+                transportLabel: t => ({ usb: 'USB', bluetooth: 'BLUETOOTH', builtin: 'BUILT-IN', wired: 'WIRED', hdmi: 'HDMI' }[t] || 'OTHER'),
+                latencyLabel: c => c === 'pro' ? 'PRO AUDIO (round trip under 20 ms)' : c === 'low' ? 'LOW LATENCY' : 'STANDARD LATENCY',
+            };
+            //@@ANDROIDHAL-MATH-END
+            const st = { hal: null, power: null, auto: false, version: -1 };
+            const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+            const base = () => (window.universalAsioSdk && window.universalAsioSdk.bridgeUrl) || null;
+            const api = {
+                math: AH, state: st,
+                async refresh() {
+                    const b = base(); if (!b) return false;
+                    try {
+                        const [h, p] = await Promise.all([fetch(b + '/api/hal', { cache: 'no-store' }), fetch(b + '/api/power', { cache: 'no-store' })]);
+                        if (!h.ok) { st.hal = null; api.render(); return false; }
+                        st.hal = await h.json(); st.power = p.ok ? await p.json() : null;
+                    } catch (_) { st.hal = null; api.render(); return false; }
+                    const act = AH.ecoAction(st.power, !!(window.state && window.state.lowPowerMode), st.auto);
+                    if (act && window.setLowPowerMode) {
+                        window.setLowPowerMode(act === 'on', true); st.auto = act === 'on';
+                        if (window.notify) window.notify(act === 'on' ? 'Low-power mode ON: ' + st.power.reason : 'Battery fine again: low-power mode OFF', 'battery-quarter');
+                    }
+                    if (st.version !== st.hal.devicesVersion) { if (st.version >= 0 && window.notify) window.notify('Android audio devices changed: rescanning', 'plug'); st.version = st.hal.devicesVersion; }
+                    api.render(); return true;
+                },
+                render() {
+                    if (typeof document === 'undefined' || typeof document.getElementById !== 'function') return;
+                    const box = document.getElementById('ahal-panel'); if (!box) return;
+                    box.classList.toggle('hidden', !st.hal);
+                    if (!st.hal) return;
+                    const h = st.hal, x = h.hal || {}, p = st.power;
+                    document.getElementById('ahal-phone').textContent = [h.manufacturer, h.model].filter(Boolean).join(' ') + ' • Android API ' + h.sdk;
+                    document.getElementById('ahal-native').textContent = (x.nativeRate || '?') + ' Hz • burst ' + (x.burstFrames || '?') + ' frames' + (x.burstMs != null ? ' (' + x.burstMs + ' ms)' : '') + ' • buffer ' + x.recommendedFrames + ' • ' + AH.latencyLabel(x.latencyClass) + (x.usbHost ? ' • USB host' : '') + (x.unprocessedSource ? ' • unprocessed mic' : '') + (x.offload ? ' • offload' : '');
+                    const sug = h.suggested || {};
+                    document.getElementById('ahal-devs').innerHTML = (h.devices || []).map(d => `<div class="flex flex-wrap items-center gap-1.5 bg-black/30 rounded px-1.5 py-0.5"><b class="text-white">${esc(d.name)}</b><span class="px-1 rounded bg-cyan-500/20 text-cyan-300 font-black">${esc(AH.transportLabel(d.transport))}</span><span class="text-slate-400">${esc(d.type)} • ${d.input ? 'IN' : ''}${d.input && d.output ? '/' : ''}${d.output ? 'OUT' : ''} • ${+d.channels || '?'} ch • ${d.maxRate ? (d.maxRate / 1000) + ' kHz' : 'any rate'}</span><span class="text-slate-500">${esc((d.encodings || []).join(', '))}</span>${d.id === sug.input || d.id === sug.output ? '<span class="ml-auto px-1 rounded bg-emerald-500 text-black font-black">BEST</span>' : ''}</div>`).join('') || '<div class="text-slate-500">No audio devices listed.</div>';
+                    document.getElementById('ahal-power').textContent = p && p.ok ? 'Battery ' + (p.percent >= 0 ? p.percent + '%' : '?') + (p.charging ? ' (charging)' : '') + (p.saver ? ' • Battery Saver ON' : '') + ' • CPU kept awake: ' + (p.wakeLock ? 'yes (' + p.streams + ' stream' + (p.streams === 1 ? '' : 's') + ' open)' : 'no (idle)') + (p.lowPower ? ' • low-power mode advised: ' + p.reason : '') : 'Battery: not reported';
+                },
+                mount() {
+                    if (typeof document === 'undefined' || document.getElementById('ahal-panel')) return true;
+                    const so = document.getElementById('sysopt-panel'); if (!so || !so.parentNode) return false;
+                    const d = document.createElement('div');
+                    d.id = 'ahal-panel'; d.className = 'glass-panel p-3 rounded-xl wing-bezel space-y-1.5 font-mono text-[7.5px] hidden';
+                    d.innerHTML = `<div class="flex flex-wrap items-center justify-between gap-2"><div class="text-[9px] font-black text-white font-wing tracking-wider uppercase"><i class="fa-brands fa-android mr-1 text-emerald-400" aria-hidden="true"></i>ANDROID AUDIO HAL</div><button id="ahal-refresh" type="button" class="px-2 py-0.5 rounded bg-white/10 text-slate-200 font-bold">RESCAN</button></div>
+<div id="ahal-phone" class="text-slate-300"></div><div id="ahal-native" class="text-cyan-300"></div><div id="ahal-power" class="text-amber-300" role="status"></div><div id="ahal-devs" class="space-y-0.5"></div>`;
+                    so.parentNode.insertBefore(d, so.nextSibling);
+                    document.getElementById('ahal-refresh').onclick = () => api.refresh();
+                    api.refresh(); setInterval(() => { if (!document.hidden) api.refresh(); }, 30000);
+                    return true;
+                },
+            };
+            if (typeof document !== 'undefined' && typeof document.getElementById === 'function' && typeof setInterval === 'function') { let k = 0; const iv = setInterval(() => { if (api.mount() || ++k > 120) clearInterval(iv); }, 500); }
             return api;
         })();
 
@@ -23412,6 +23753,7 @@ t.Omnitone=e(11)},function(A,t,e){"use strict";const i=e(1),n=e(4),s=e(12),o=e(6
             ['SYSTEM OPTIMIZE', 'بهینه‌سازی سیستم', 'تحسين النظام', 'سسٹم آپٹیمائز', 'OPTIMIZAR SISTEMA', 'OPTIMISER LE SYSTÈME', 'SYSTEM OPTIMIEREN', 'OTIMIZAR SISTEMA', 'ОПТИМИЗАЦИЯ СИСТЕМЫ', 'SİSTEMİ OPTİMİZE ET', 'सिस्टम ऑप्टिमाइज़', '系统优化', 'システム最適化', '시스템 최적화', 'OPTIMUM SISTEM', 'OPTIMALKAN SISTEM', 'OTTIMIZZA SISTEMA', 'SYSTEEM OPTIMALISEREN', 'OPTYMALIZUJ SYSTEM', 'TỐI ƯU HỆ THỐNG', 'เพิ่มประสิทธิภาพระบบ', 'ОПТИМІЗАЦІЯ СИСТЕМИ'],
             ['LITE UI OFF', 'رابط سبک خاموش', 'الواجهة الخفيفة متوقفة', 'لائٹ UI بند', 'IU LIGERA APAGADA', 'UI LÉGÈRE ARRÊT', 'LITE-UI AUS', 'IU LEVE DESLIG.', 'ЛЁГКИЙ UI ВЫКЛ', 'HAFİF ARAYÜZ KAPALI', 'लाइट UI बंद', '轻量界面 关', 'ライトUI オフ', '라이트 UI 끔', 'UI RINGKAS MATI', 'UI RINGAN MATI', 'UI LEGGERA OFF', 'LITE-UI UIT', 'LEKKIE UI WYŁ.', 'GIAO DIỆN NHẸ TẮT', 'UI เบา ปิด', 'ЛЕГКИЙ UI ВИМК'],
             ['SURROUND MASTER', 'مستر سراوند', 'ماستر محيطي', 'سراؤنڈ ماسٹر', 'MÁSTER SURROUND', 'MASTER SURROUND', 'SURROUND-MASTER', 'MASTER SURROUND', 'МАСТЕР SURROUND', 'SURROUND MASTER', 'सराउंड मास्टर', '环绕声主控', 'サラウンドマスター', '서라운드 마스터', 'MASTER SURROUND', 'MASTER SURROUND', 'MASTER SURROUND', 'SURROUND-MASTER', 'MASTER SURROUND', 'MASTER VÒM', 'มาสเตอร์เซอร์ราวด์', 'МАЙСТЕР SURROUND'],
+            ['ARRANGE', 'چیدمان', 'ترتيب', 'ترتیب', 'ARREGLO', 'ARRANGEMENT', 'ARRANGEMENT', 'ARRANJO', 'АРАНЖИРОВКА', 'DÜZENLEME', 'अरेंज', '编排', 'アレンジ', '편곡', 'SUSUNAN', 'SUSUNAN', 'ARRANGIAMENTO', 'ARRANGEMENT', 'ARANŻACJA', 'SẮP XẾP', 'เรียบเรียง', 'АРАНЖУВАННЯ'],
             ['UPGRADE TO PRO', 'ارتقا به PRO', 'الترقية إلى PRO', 'PRO میں اپ گریڈ کریں', 'ACTUALIZAR A PRO', 'PASSER À PRO', 'AUF PRO UPGRADEN', 'ATUALIZAR PARA PRO', 'ПЕРЕЙТИ НА PRO', "PRO'YA YÜKSELT", 'PRO में अपग्रेड करें', '升级到 PRO', 'PRO にアップグレード', 'PRO로 업그레이드', 'NAIK TARAF KE PRO', 'UPGRADE KE PRO', 'PASSA A PRO', 'UPGRADEN NAAR PRO', 'PRZEJDŹ NA PRO', 'NÂNG CẤP LÊN PRO', 'อัปเกรดเป็น PRO', 'ПЕРЕЙТИ НА PRO'],
             ['UPGRADE TO STUDIO MASTER', 'ارتقا به STUDIO MASTER', 'الترقية إلى STUDIO MASTER', 'STUDIO MASTER میں اپ گریڈ کریں', 'ACTUALIZAR A STUDIO MASTER', 'PASSER À STUDIO MASTER', 'AUF STUDIO MASTER UPGRADEN', 'ATUALIZAR PARA STUDIO MASTER', 'ПЕРЕЙТИ НА STUDIO MASTER', "STUDIO MASTER'A YÜKSELT", 'STUDIO MASTER में अपग्रेड करें', '升级到 STUDIO MASTER', 'STUDIO MASTER にアップグレード', 'STUDIO MASTER로 업그레이드', 'NAIK TARAF KE STUDIO MASTER', 'UPGRADE KE STUDIO MASTER', 'PASSA A STUDIO MASTER', 'UPGRADEN NAAR STUDIO MASTER', 'PRZEJDŹ NA STUDIO MASTER', 'NÂNG CẤP LÊN STUDIO MASTER', 'อัปเกรดเป็น STUDIO MASTER', 'ПЕРЕЙТИ НА STUDIO MASTER'],
             ['COPY', 'کپی', 'نسخ', 'کاپی', 'COPIAR', 'COPIER', 'KOPIEREN', 'COPIAR', 'КОПИРОВАТЬ', 'KOPYALA', 'कॉपी', '复制', 'コピー', '복사', 'SALIN', 'SALIN', 'COPIA', 'KOPIËREN', 'KOPIUJ', 'SAO CHÉP', 'คัดลอก', 'КОПІЮВАТИ'],

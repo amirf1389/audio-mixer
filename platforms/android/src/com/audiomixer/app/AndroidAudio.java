@@ -25,7 +25,64 @@ final class AndroidAudio implements AudioBackend {
     private final Context ctx;
     private final AudioManager am;
 
-    AndroidAudio(Context ctx) { this.ctx = ctx.getApplicationContext(); this.am = (AudioManager) this.ctx.getSystemService(Context.AUDIO_SERVICE); }
+    AndroidAudio(Context ctx) {
+        this.ctx = ctx.getApplicationContext(); this.am = (AudioManager) this.ctx.getSystemService(Context.AUDIO_SERVICE);
+        // AUDIO HAL DETECTION: a USB interface, headset or Bluetooth device plugged in or out bumps devicesVersion, so the page rescans
+        try {
+            am.registerAudioDeviceCallback(new android.media.AudioDeviceCallback() {
+                @Override public void onAudioDevicesAdded(AudioDeviceInfo[] added) { devicesVersion++; }
+                @Override public void onAudioDevicesRemoved(AudioDeviceInfo[] removed) { devicesVersion++; }
+            }, null);
+        } catch (Exception e) { /* no callback: the page polls */ }
+    }
+
+    private volatile long devicesVersion;
+
+    /** GET /api/hal: the audio HAL as Android reports it (see Hal). */
+    public String halJson() {
+        PackageManager pm = ctx.getPackageManager();
+        Hal.Info i = new Hal.Info();
+        i.sdk = Build.VERSION.SDK_INT; i.manufacturer = String.valueOf(Build.MANUFACTURER); i.model = String.valueOf(Build.MODEL); i.board = String.valueOf(Build.BOARD);
+        i.nativeRate = nativeProp(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE); i.burstFrames = nativeProp(AudioManager.PROPERTY_OUTPUT_FRAMES_PER_BUFFER);
+        i.lowLatency = pm.hasSystemFeature("android.hardware.audio.low_latency"); i.proAudio = pm.hasSystemFeature("android.hardware.audio.pro"); i.usbHost = pm.hasSystemFeature("android.hardware.usb.host");
+        i.unprocessedSource = "true".equals(String.valueOf(am.getProperty("android.media.property.SUPPORT_AUDIO_SOURCE_UNPROCESSED")));   // API 24 property name
+        i.offload = offloadSupported();
+        i.devicesVersion = devicesVersion;
+        List<Hal.Device> l = new ArrayList<Hal.Device>();
+        for (AudioDeviceInfo d : am.getDevices(AudioManager.GET_DEVICES_ALL))
+            l.add(new Hal.Device(d.getId(), String.valueOf(d.getProductName()), d.getType(), d.isSource(), d.isSink(), Interfaces.maxChannels(d.getChannelCounts(), d.getChannelIndexMasks()), d.getSampleRates(), d.getEncodings()));
+        return Hal.toJson(i, l);
+    }
+
+    // AudioManager.isOffloadedPlaybackSupported is API 29: reached by reflection (the build compiles against API 23)
+    private boolean offloadSupported() {
+        if (Build.VERSION.SDK_INT < 29) return false;
+        try {
+            AudioFormat f = new AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(48000).setChannelMask(AudioFormat.CHANNEL_OUT_STEREO).build();
+            AudioAttributes a = new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build();
+            return Boolean.TRUE.equals(AudioManager.class.getMethod("isOffloadedPlaybackSupported", AudioFormat.class, AudioAttributes.class).invoke(null, f, a));
+        } catch (Exception e) { return false; }
+    }
+
+    /** GET /api/power: battery, Battery Saver, the wake lock and what the page should do (see Power). */
+    public String powerJson(int streams, long idleMs) {
+        Power.State s = new Power.State();
+        s.streams = streams; s.idleMs = idleMs; s.wakeHeld = EngineService.wakeHeld;
+        try {
+            android.os.PowerManager pw = (android.os.PowerManager) ctx.getSystemService(Context.POWER_SERVICE);
+            s.saver = pw.isPowerSaveMode();
+            s.ignoringOptimizations = pw.isIgnoringBatteryOptimizations(ctx.getPackageName());
+        } catch (Exception e) { /* unknown: defaults */ }
+        try {
+            android.content.Intent b = ctx.registerReceiver(null, new android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED));   // sticky: no receiver is kept
+            if (b != null) {
+                int level = b.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1), scale = b.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, -1);
+                s.percent = level >= 0 && scale > 0 ? Math.round(level * 100f / scale) : -1;
+                s.charging = b.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, 0) != 0;
+            }
+        } catch (Exception e) { /* unknown */ }
+        return Power.toJson(s);
+    }
 
     private List<Interfaces.Dev> devices() {
         List<Interfaces.Dev> out = new ArrayList<Interfaces.Dev>();

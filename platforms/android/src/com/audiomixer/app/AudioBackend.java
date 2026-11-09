@@ -22,6 +22,12 @@ interface AudioBackend {
     /** POST /api/app/nowplaying/enable | disable: the optional now-playing access. null where not supported. */
     default String setNowPlaying(boolean on) { return null; }
 
+    /** Body of GET /api/hal (see Hal.toJson): the audio HAL as Android reports it. null where the backend is not the Android app. */
+    default String halJson() { return null; }
+
+    /** Body of GET /api/power (see Power.toJson) for this many open streams, idle for idleMs. null where the backend is not the Android app. */
+    default String powerJson(int streams, long idleMs) { return null; }
+
     Input openInput(Map<String, Object> opts, Listener listener) throws Exception;
 
     Output openOutput(Map<String, Object> opts) throws Exception;

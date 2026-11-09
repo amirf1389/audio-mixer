@@ -25,6 +25,18 @@ public class EngineService extends Service {
     static volatile int port;
     private MiniBridge bridge;
     private PowerManager.WakeLock wake;
+    private android.os.Handler power;
+    static volatile boolean wakeHeld;
+
+    private void checkWake() {
+        if (wake == null) return;
+        Power.State st = new Power.State();
+        MiniBridge b = bridge;
+        st.streams = b == null ? 0 : b.activeStreams(); st.idleMs = b == null ? Long.MAX_VALUE : b.idleMs();
+        boolean want = Power.holdWakeLock(st);
+        if (want && !wake.isHeld()) wake.acquire(); else if (!want && wake.isHeld()) wake.release();
+        wakeHeld = wake.isHeld();
+    }
 
     @Override public IBinder onBind(Intent intent) { return null; }
 
@@ -48,7 +60,12 @@ public class EngineService extends Service {
             PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
             wake = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "AudioMixer:engine");
             wake.setReferenceCounted(false);
-            wake.acquire();                                                      // the CPU keeps running with the screen off while audio is processed
+        }
+        // BATTERY (beta 1.1): the CPU is kept awake only while audio streams are open (plus a one-minute grace, see Power), not for as long as
+        // the engine runs; checked every 10 s
+        if (power == null) {
+            power = new android.os.Handler(android.os.Looper.getMainLooper());
+            power.post(new Runnable() { public void run() { checkWake(); if (power != null) power.postDelayed(this, 10000); } });
         }
         return START_STICKY;
     }
@@ -58,7 +75,9 @@ public class EngineService extends Service {
         if (bridge != null) { bridge.stop(); bridge = null; }
         port = 0;
         EngineState.running = false; EngineState.changed(this);
+        if (power != null) { power.removeCallbacksAndMessages(null); power = null; }
         if (wake != null && wake.isHeld()) wake.release();
+        wakeHeld = false;
         super.onDestroy();
     }
 

@@ -148,6 +148,12 @@ final class MiniBridge {
             send(out, a == null ? 404 : 200, a == null ? "{\"ok\":false,\"error\":\"not available\"}" : a, cors);
         } else if (path.equals("/api/nowplaying")) {
             send(out, 200, audio.nowPlayingJson(), cors);
+        } else if (path.equals("/api/hal")) {                                                        // AUDIO HAL DETECTION (beta 1.1)
+            String h = audio.halJson();
+            send(out, h == null ? 404 : 200, h == null ? "{\"ok\":false,\"error\":\"not on Android\"}" : h, cors);
+        } else if (path.equals("/api/power")) {                                                      // BATTERY (beta 1.1)
+            String p = audio.powerJson(activeStreams(), idleMs());
+            send(out, p == null ? 404 : 200, p == null ? "{\"ok\":false,\"error\":\"not on Android\"}" : p, cors);
         } else if (path.equals("/api/virtual")) {
             send(out, 200, hub.json(), cors);
         } else if (path.equals("/api/drivers")) {
@@ -178,6 +184,19 @@ final class MiniBridge {
         for (String[] t : TYPES) if (l.endsWith(t[0])) type = t[1];
         sendBytes(out, 200, body, type, cors);
     }
+
+    private volatile long lastActive = System.currentTimeMillis();
+
+    /** Open audio streams right now (EngineService holds the wake lock only while there are some, see Power). */
+    int activeStreams() {
+        int n = 0;
+        synchronized (sessions) { for (Session s : sessions) if (s.json() != null) n++; }
+        if (n > 0) lastActive = System.currentTimeMillis();
+        return n;
+    }
+
+    /** Milliseconds since the last open stream (0 while one is open). */
+    long idleMs() { return activeStreams() > 0 ? 0 : Math.max(0, System.currentTimeMillis() - lastActive); }
 
     private String streamsJson() {
         StringBuilder b = new StringBuilder("[");
@@ -333,6 +352,7 @@ final class MiniBridge {
         }
 
         synchronized void closeStream() {
+            if (info != null) lastActive = System.currentTimeMillis();
             if (stopVirtual != null) { stopVirtual.run(); stopVirtual = null; }
             if (in != null) { in.close(); in = null; }
             if (outStream != null) { outStream.close(); outStream = null; }
