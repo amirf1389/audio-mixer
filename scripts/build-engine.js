@@ -52,7 +52,9 @@ function buildWasm({ embed = true } = {}) {
   const bytes = fs.readFileSync(out), mod = new WebAssembly.Module(bytes);
   if (WebAssembly.Module.imports(mod).length) return { ok: false, detail: 'the module has imports: ' + JSON.stringify(WebAssembly.Module.imports(mod)) };
   if (embed) {
-    const page = path.join(ROOT, 'index.html'), html = fs.readFileSync(page, 'utf8'), a = html.indexOf('/*AM_WASM_B64:BEGIN*/'), b = html.indexOf('/*AM_WASM_B64:END*/');
+    const page = path.join(ROOT, 'index.html');
+    if (!fs.existsSync(page)) return { ok: true, detail: `${bytes.length} bytes, no imports (the web console is retired: nothing to embed)` };
+    const html = fs.readFileSync(page, 'utf8'), a = html.indexOf('/*AM_WASM_B64:BEGIN*/'), b = html.indexOf('/*AM_WASM_B64:END*/');
     if (a < 0 || b < a) return { ok: false, detail: 'the markers of the engine-wasm script are not in index.html' };
     fs.writeFileSync(page, html.slice(0, a) + "/*AM_WASM_B64:BEGIN*/'" + bytes.toString('base64') + "'" + html.slice(b));
   }

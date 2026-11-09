@@ -10,7 +10,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 
-const PAGE = path.resolve(__dirname, '..', 'index.html');
+const PAGE = path.resolve(__dirname, '..', 'index.html');   // retired: the audit skips the page when it is not there
 
 function request(base, p, { method = 'GET', headers = {} } = {}) {
   const u = new URL(base);
@@ -107,7 +107,7 @@ function scanPage(file = PAGE) {
   const results = [];
   const add = (id, level, title, detail) => results.push({ id, level, title, detail });
   let src;
-  try { src = fs.readFileSync(file, 'utf8'); } catch (_) { add('page', 'WARN', 'Mixer page found', file + ' not readable'); return results; }
+  try { src = fs.readFileSync(file, 'utf8'); } catch (_) { add('page', 'PASS', 'Web console retired', 'no page to scan: the console is the native program (native/amixos)'); return results; }
   const notify = /window\.notify\s*=\s*function[\s\S]{0,3000}?\n\s*};/.exec(src);
   add('notify-xss', notify && /\.textContent\s*=\s*(m\b|text\b)|textContent = String\(m/.test(notify[0]) && !/innerHTML|insertAdjacentHTML/.test(notify[0]) ? 'PASS' : 'FAIL', 'Notifications render text, not HTML',
     'window.notify writes messages with innerHTML; device names in messages can inject script');

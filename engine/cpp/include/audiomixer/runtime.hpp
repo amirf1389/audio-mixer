@@ -16,6 +16,7 @@
 #include <string>
 #include <vector>
 
+#include "audiomixer/dsp.hpp"
 #include "audiomixer/engine.hpp"
 #include "audiomixer/spatial.hpp"
 
@@ -84,13 +85,20 @@ class Runtime {
   void setLimiter(bool on, double ceilingDb = -0.5, double releaseMs = 100);
   void setClipDb(double db);
   void clearClips();
+  // A mix OS channel DSP (audiomixer/dsp.hpp), applied to a strip's input before the mixer: parametric EQ, crossover, delay, polarity, limiter.
+  // Coefficients are computed on the audio thread at the start of the next block (a few cos / pow, no allocation).
+  void setEqBand(int strip, int band, dsp::FilterType type, double freq, double q, double gainDb);
+  void setDelayMs(int strip, double ms);
+  void setPolarity(int strip, bool invert);
+  void setCrossover(int strip, dsp::XoverType type, int hpOrder, double hpFreq, int lpOrder, double lpFreq);
+  void setChannelLimiter(int strip, bool on, double ceilingDb, double releaseMs);
   // 360 degree output (Resonance Audio, only when Spatial::available()): the stereo master after the meters becomes two virtual speakers in a binaural scene; off by default.
   // The audio is then delayed by Spatial::block() frames. Returns false when this binary has no Resonance Audio.
   bool setSpatial(bool on);
   void setSpatialPosition(double azimuthDeg, double elevationDeg, double distanceM, double spreadDeg = 30);
   Snapshot snapshot() const;
  private:
-  struct Cmd { int op; int a; double x, y, z; };
+  struct Cmd { int op; int a; double x, y, z; int b = 0; double w = 0; };
   void post(const Cmd& c);
   void onBlock(const float* const* in, float* const* out, std::size_t frames);
   void publish();
@@ -99,6 +107,7 @@ class Runtime {
   int nIn_ = 0, nOut_ = 0; bool running_ = false;
   std::unique_ptr<Spatial> spatial_; bool spatialOn_ = false; double spAz_ = 0, spEl_ = 0, spDist_ = 2, spSpread_ = 30;     // spatial_ is created in open(); spatialOn_ is only touched by the audio thread
   std::vector<float> silence_, left_, right_;
+  std::vector<dsp::Channel> ch_; std::vector<std::vector<float>> chBuf_;   // one channel DSP and one scratch block per strip (sized in open())
   // control ring: many producers (under a mutex), one consumer (the audio thread)
   static constexpr unsigned kRing = 1024;
   Cmd ring_[kRing]; std::atomic<unsigned> head_{0}, tail_{0}; std::mutex producers_;
