@@ -3759,3 +3759,35 @@ test('Realtek pin on the simulator: Realtek ASIO opens its WASAPI endpoint strai
 
 
 // ---- ARRANGE (1.22.1.0 Beta): a DAW-style arrangement page without recording ---------------------------------------------------------------
+
+// ---- Key Generator second factor (TOTP, scripts/license-totp.js) --------------------------------------------------------------------------
+test('license-totp: RFC 6238 vectors, base32, setup -> confirm -> verify with the PIN, replay and wrong code refused, generator unlock needs the code', () => {
+  const T = require("../scripts/license-totp"), vault = require("../scripts/license-vault"), gen = require("../scripts/license-generator"), fs = fsx, os = osx, crypto = cryptox;
+  const secret = Buffer.from('12345678901234567890');
+  assert.strictEqual(T.totp(secret, 59, 8), 94287082); assert.strictEqual(T.totp(secret, 1111111109, 8), 7081804); assert.strictEqual(T.totp(secret, 1234567890, 8), 89005924); assert.strictEqual(T.totp(secret, 20000000000, 8), 65353130);
+  assert.strictEqual(T.base32(secret), 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ'); assert.deepStrictEqual(T.unbase32('gezd gnbv-GY3TQOJQGEZDGNBVGY3TQOJQ'), secret);
+  const dir = fs.mkdtempSync(pathx.join(os.tmpdir(), 'amx-totp-')); const pin = 'correct-horse';
+  const { privateKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });
+  vault.writeLocked(dir, privateKey.export({ type: 'pkcs8', format: 'pem' }), pin);
+  assert.strictEqual(T.isSet(dir), false); assert.strictEqual(T.verify(dir, pin, '000000'), true, 'nothing set up: the PIN alone decides');
+  const s = T.setup(dir, pin); assert.match(s.secret, /^[A-Z2-7]{32}$/); assert.ok(s.uri.startsWith('otpauth://totp/')); assert.ok(s.uri.includes('secret=' + s.secret));
+  assert.strictEqual(T.isSet(dir), false, 'pending until confirmed');
+  T.setup(dir, pin);   // a pending (unconfirmed) secret may be replaced: a mistyped one must not lock the vendor out
+  const s2 = T.setup(dir, pin); assert.notStrictEqual(s2.secret, s.secret); Object.assign(s, s2);
+  const now = 1_700_000_000_000, sec = T.unbase32(s.secret), code = T.pad(T.totp(sec, now / 1000));
+  assert.throws(() => T.confirm(dir, pin, '123456', now), /wrong authenticator code/);
+  assert.throws(() => T.confirm(dir, 'wrong-pin!!', code, now), /wrong PIN/);
+  assert.strictEqual(T.confirm(dir, pin, code, now), true); assert.strictEqual(T.isSet(dir), true);
+  assert.throws(() => T.verify(dir, pin, code, now), /wrong authenticator code/, 'the confirming code cannot be replayed');
+  const next = T.pad(T.totp(sec, now / 1000 + 30)); assert.strictEqual(T.verify(dir, pin, next, now + 30000), true); assert.throws(() => T.verify(dir, pin, next, now + 31000), /wrong/, 'no replay');
+  assert.strictEqual(T.verify(dir, pin, T.pad(T.totp(sec, now / 1000 + 90)), now + 60000), true, 'one step ahead is accepted (clock drift)');
+  assert.throws(() => T.verify(dir, pin, T.pad(T.totp(sec, now / 1000 + 300)), now + 120000), /wrong/, 'far ahead is not');
+  // the generator session: PIN alone no longer opens; PIN + code does; the secret file alone says nothing (encrypted with the PIN)
+  let clock = now + 200000; const session = gen.makeSession(() => clock);
+  assert.throws(() => session.unlock(dir, pin), /6 digits/); assert.strictEqual(session.isOpen(), false);
+  assert.throws(() => session.unlock(dir, pin, '000000'), /wrong authenticator code/);
+  session.unlock(dir, pin, T.pad(T.totp(sec, clock / 1000))); assert.strictEqual(session.isOpen(), true);
+  const onDisk = JSON.parse(fs.readFileSync(T.file(dir), 'utf8')); assert.ok(onDisk.box && onDisk.box.ct && !JSON.stringify(onDisk).includes(s.secret), 'the secret is not on disk in clear');
+  assert.throws(() => T.remove(dir, 'wrong-pin!!'), /wrong PIN/); assert.strictEqual(T.remove(dir, pin), true); assert.strictEqual(T.isSet(dir), false);
+  fs.rmSync(dir, { recursive: true, force: true });
+});

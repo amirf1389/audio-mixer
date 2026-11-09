@@ -38,6 +38,9 @@ decided, what exists, what is next, and what was asked for but is not possible a
 - **MIXER additions**: analogue VU meters (300 ms ballistics, 0 VU reference), MORE menu per strip, MONITOR control-room section
   (source, level, DIM, MONO, MUTE after the master meters). **ROUTING** page: inputs → strips and sources → outputs matrices
   (`Runtime::setInputRoute / setOutputRoute`), persisted with the console; daemon ops `monitor`, `inRoute`, `outRoute`.
+- **Native LICENSE**: `engine/cpp/app/license` verifies AMIX1 keys and AMFXE1 edition tokens offline with the vendor public key compiled in
+  (self-contained SHA-256 + ECDSA P-256, checked against Node-made vectors), machine code, store / activate / deactivate, plan gating (strips
+  beyond the plan are muted and shown locked); LICENSE page. Key Generator gets a TOTP second factor (`scripts/license-totp.js`): PIN + code.
 - **ASIO host hardening**: reset / resync / buffer-size requests handled on a worker thread, time-info, channel clamping, latencies;
   verified by mingw cross-compile only — the first run against real drivers is on the user's Windows PC.
 

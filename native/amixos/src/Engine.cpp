@@ -1,5 +1,7 @@
 #include "Engine.h"
 
+#include "license/license.hpp"
+
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -22,6 +24,7 @@ Engine::Engine(QObject* parent) : QObject(parent) {
   vuRef_ = std::clamp(settings_.value("ui/vuRef", -18).toInt(), -24, -8);
   for (int i = 0; i < kStrips; ++i) inRoute_[i] = i;
   for (int o = 0; o < kOutputs; ++o) outRoute_[o] = am::Runtime::defaultOutputSource(o);
+  refreshLicense();
   connect(&timer_, &QTimer::timeout, this, &Engine::tick);
   tick();
 }
@@ -108,7 +111,7 @@ void Engine::setMuteGroupMember(int i, int g, bool member) { if (i < 0 || i >= k
 void Engine::setMuteGroupActive(int g, bool on) { if (g < 1 || g > kGroups) return; muteGroups_[g - 1].active = on; for (int i = 0; i < kStrips; ++i) pushStrip(i); emit stripsChanged(); emit groupsChanged(); }
 // effective = the strip's own fader + its DCA's fader (in dB), muted when the strip, its DCA or an active mute group it belongs to is muted
 double Engine::effectiveDb(int i) const { if (i < 0 || i >= kStrips) return -60; const StripUi& s = strips_[static_cast<std::size_t>(i)]; const double g = s.dca > 0 ? dcas_[s.dca - 1].db : 0; return std::clamp(s.db + g, -60.0, 10.0); }
-bool Engine::effectiveMute(int i) const { if (i < 0 || i >= kStrips) return true; const StripUi& s = strips_[static_cast<std::size_t>(i)]; if (s.mute) return true; if (s.dca > 0 && dcas_[s.dca - 1].mute) return true; for (int g = 0; g < kGroups; ++g) if ((s.muteGroups >> g) & 1u && muteGroups_[g].active) return true; return false; }
+bool Engine::effectiveMute(int i) const { if (i < 0 || i >= kStrips) return true; if (i >= licensedChannels_) return true; const StripUi& s = strips_[static_cast<std::size_t>(i)]; if (s.mute) return true; if (s.dca > 0 && dcas_[s.dca - 1].mute) return true; for (int g = 0; g < kGroups; ++g) if ((s.muteGroups >> g) & 1u && muteGroups_[g].active) return true; return false; }
 void Engine::pushStrip(int i) { if (!rt_) return; rt_->setGainDb(i, effectiveDb(i)); rt_->setMute(i, effectiveMute(i)); }
 void Engine::setGain(int i, double db) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].db = std::clamp(db, -60.0, 10.0); pushStrip(i); emit stripsChanged(); }
 void Engine::setPan(int i, double p) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].pan = std::clamp(p, -1.0, 1.0); if (rt_) rt_->setPan(i, strips_[static_cast<std::size_t>(i)].pan); emit stripsChanged(); }
@@ -119,6 +122,39 @@ void Engine::setColor(int i, int c) { if (i < 0 || i >= kStrips) return; strips_
 void Engine::setMaster(double db) { masterDb_ = std::clamp(db, -60.0, 10.0); if (rt_) rt_->setMasterDb(masterDb_); emit stripsChanged(); }
 void Engine::setMasterLimiter(bool on, double c) { masterLim_ = on; masterCeil_ = c; if (rt_) rt_->setLimiter(on, c); emit stripsChanged(); }
 void Engine::clearClips() { if (rt_) rt_->clearClips(); }
+// ---- licence (engine/cpp/app/license): the vendor public key is compiled in; keys and tokens are verified offline
+static QVariantMap licenseMap(const am::lic::Status& st) {
+  QVariantMap m; m["state"] = QString::fromStdString(st.state); m["plan"] = QString::fromStdString(st.planId); m["planName"] = QString::fromStdString(st.planName); m["channels"] = st.channels; m["source"] = QString::fromStdString(st.source);
+  m["id"] = QString::fromStdString(st.id); m["name"] = QString::fromStdString(st.name); m["serial"] = QString::fromStdString(st.serial); m["editionName"] = QString::fromStdString(st.editionName); m["expires"] = static_cast<qlonglong>(st.expires); m["boundToThisPc"] = st.boundToThisPc; m["machine"] = QString::fromStdString(st.machine); m["message"] = QString::fromStdString(st.message);
+  return m;
+}
+QString Engine::edition() const { return license_.value("planName", "BASIC").toString(); }
+void Engine::refreshLicense() {
+  const am::lic::Status st = am::lic::status(QDateTime::currentMSecsSinceEpoch());
+  license_ = licenseMap(st); const int before = licensedChannels_; licensedChannels_ = std::clamp(st.channels, 1, kStrips);
+  if (before != licensedChannels_ && rt_) for (int i = 0; i < kStrips; ++i) pushStrip(i);
+  emit licenseChanged(); if (before != licensedChannels_) emit stripsChanged();
+}
+QVariantMap Engine::checkKey(const QString& key) const {
+  const qint64 now = QDateTime::currentMSecsSinceEpoch(); const am::lic::Verdict v = am::lic::verifyKey(key.toStdString(), now, am::lic::machineId());
+  QVariantMap m; m["valid"] = v.ok; m["reason"] = QString::fromStdString(v.reason); m["message"] = QString::fromStdString(v.message); m["genuine"] = v.reason != "bad-signature" && v.reason != "malformed";
+  if (!v.ok) return m;
+  const am::lic::Plan* cur = am::lic::plan(license_.value("plan", "basic").toString().toStdString()); const am::lic::Plan* to = am::lic::plan(v.planId); if (!cur) cur = &am::lic::basic();
+  const int d = to->rank - cur->rank; m["plan"] = QString::fromLatin1(to->id); m["planName"] = QString::fromLatin1(to->name); m["channels"] = to->channels; m["change"] = d > 0 ? "upgrade" : d < 0 ? "downgrade" : "same"; m["canActivate"] = d >= 0;
+  m["name"] = QString::fromStdString(v.payload["name"].asString()); m["id"] = QString::fromStdString(v.payload["id"].asString()); m["boundToThisPc"] = v.payload.has("mid"); m["expires"] = static_cast<qlonglong>(v.payload["expires"].asNumber(0));
+  m["message"] = d > 0 ? QStringLiteral("Genuine key: upgrades %1 to %2 (%3 channels).").arg(QString::fromLatin1(cur->name), QString::fromLatin1(to->name)).arg(to->channels) : d == 0 ? QStringLiteral("Genuine key for the %1 plan you already have (renews it).").arg(QString::fromLatin1(to->name)) : QStringLiteral("Genuine key, but %1 is lower than your %2 plan: activating it would downgrade.").arg(QString::fromLatin1(to->name), QString::fromLatin1(cur->name));
+  return m;
+}
+QVariantMap Engine::activateKey(const QString& key) {
+  const am::lic::Verdict v = am::lic::activate(key.toStdString(), QDateTime::currentMSecsSinceEpoch());
+  QVariantMap m; m["ok"] = v.ok; m["reason"] = QString::fromStdString(v.reason); m["message"] = QString::fromStdString(v.message);
+  if (v.ok) { refreshLicense(); m["message"] = QStringLiteral("%1 activated on this computer.").arg(edition()); }
+  return m;
+}
+bool Engine::deactivateKey() { const bool r = am::lic::deactivate(); refreshLicense(); return r; }
+QString Engine::licenseRequest(const QString& plan, const QString& name, const QString& email) const { return QString::fromStdString(am::lic::request(plan.toStdString(), name.toStdString(), email.toStdString(), QDateTime::currentMSecsSinceEpoch(), AMIX_VERSION).dump()); }
+QString Engine::vendorKeyFingerprint() const { return QString::fromStdString(am::lic::fingerprint(am::lic::kVendorJwk)); }
+
 QVariantList Engine::inputRoutes() const { QVariantList l; for (int i = 0; i < kStrips; ++i) l << inRoute_[i]; return l; }
 QVariantList Engine::outputRoutes() const { QVariantList l; for (int o = 0; o < kOutputs; ++o) l << outRoute_[o]; return l; }
 QVariantList Engine::outputSources() const {
@@ -217,7 +253,7 @@ QVariantList Engine::pages() const {
     {"METER", "meter", "LEVELS", "▓", true}, {"METER", "lufs", "LOUDNESS", "◎", true}, {"METER", "osc", "WAVEFORM", "∽", false}, {"METER", "phase", "PHASE", "☯", false},
     {"SOURCE", "media", "STREAM & MEDIA", "▶", false}, {"SOURCE", "live", "LIVE SOURCES", "☉", false}, {"SOURCE", "miceq", "MIC EQ", "♪", false}, {"SOURCE", "ai", "AI MIX", "⚙", false}, {"SOURCE", "tools", "TOOLS", "⚒", false}, {"SOURCE", "plugins", "PLUGINS", "⬡", false},
     {"DEVICE", "asio", "SOUND CARD", "◉", false}, {"DEVICE", "bluetooth", "BLUETOOTH", "⮁", false}, {"DEVICE", "network", "NETWORK", "⮞", false}, {"DEVICE", "cloud", "CLOUD", "☁", false}, {"DEVICE", "cascade", "CASCADE", "⚭", false},
-    {"SYSTEM", "presets", "PRESETS", "⬇", false}, {"SYSTEM", "sys", "SETTINGS", "⚙", true}, {"SYSTEM", "acct", "ACCOUNT", "☺", false}, {"SYSTEM", "access", "ACCESS", "⚿", false}, {"SYSTEM", "renew", "LICENSE", "★", false}, {"SYSTEM", "admin", "ADMIN", "⚑", false}, {"SYSTEM", "calib", "CALIBRATE", "⌖", false},
+    {"SYSTEM", "presets", "PRESETS", "⬇", false}, {"SYSTEM", "sys", "SETTINGS", "⚙", true}, {"SYSTEM", "acct", "ACCOUNT", "☺", false}, {"SYSTEM", "access", "ACCESS", "⚿", false}, {"SYSTEM", "renew", "LICENSE", "★", true}, {"SYSTEM", "admin", "ADMIN", "⚑", false}, {"SYSTEM", "calib", "CALIBRATE", "⌖", false},
     {"HELP", "help", "HELP", "?", false}, {"HELP", "scenes", "SCENES", "⚐", false}, {"SYSTEM", "boot", "BOOT / RESET", "⏻", false},
   };
   QVariantList l; for (const P& p : k) { QVariantMap m; m["group"] = p.group; m["id"] = p.id; m["text"] = p.text; m["icon"] = QString::fromUtf8(p.icon); m["ready"] = p.ready; l << m; }

@@ -46,6 +46,7 @@ const lic = require('../bridge/license');
 const { originAllowed, hostAllowed } = require('../bridge/server');
 
 const vault = require('./license-vault');
+const totp = require('./license-totp');
 const fs = require('node:fs');
 const path = require('node:path');
 const layout = require('./layout');
@@ -108,7 +109,7 @@ textarea,#key-out{width:100%;background:var(--panel2);border:1px solid var(--lin
   </section>
   <section class="card" id="unlock-card" hidden>
     <h2>KEY FOLDER LOCKED</h2>
-    <form id="uf"><div class="field"><label for="upin">PIN</label><input id="upin" type="password" autocomplete="current-password"></div><button class="btn" id="unlock" type="submit">UNLOCK</button></form>
+    <form id="uf"><div class="field"><label for="upin">PIN</label><input id="upin" type="password" autocomplete="current-password"></div><div class="field" id="ucode-f" hidden><label for="ucode">Authenticator code</label><input id="ucode" inputmode="numeric" autocomplete="one-time-code" maxlength="7"></div><button class="btn" id="unlock" type="submit">UNLOCK</button></form>
     <p class="dim">The key stays unlocked in this generator only, until LOCK, 15 minutes without use, or closing the generator.</p>
   </section>
   <section class="card" id="plain-card" hidden>
@@ -116,6 +117,14 @@ textarea,#key-out{width:100%;background:var(--panel2);border:1px solid var(--lin
     <p class="dim">private.pem is stored as plain text. Lock it with a PIN: it is encrypted and the plain file is removed.</p>
     <div class="row2"><div class="field"><label for="lpin1">New PIN</label><input id="lpin1" type="password" autocomplete="new-password"></div><div class="field"><label for="lpin2">Same PIN again</label><input id="lpin2" type="password" autocomplete="new-password"></div></div>
     <button class="btn" id="lockplain" type="button">LOCK WITH PIN</button>
+  </section>
+  <section class="card" id="totp-card" hidden>
+    <h2>SECOND FACTOR (AUTHENTICATOR APP)</h2>
+    <p class="dim" id="totp-off">Unlocking needs the PIN only. Add a one-time code from an authenticator app (Google Authenticator, Aegis, 1Password, …): then a stolen PIN alone cannot sign keys.</p>
+    <p class="dim" id="totp-on" hidden>A second factor is set up: unlocking needs the PIN and the current code from your authenticator app.</p>
+    <div class="row2"><div class="field"><label for="tpin">PIN</label><input id="tpin" type="password" autocomplete="current-password"></div><div class="field" id="tcode-f" hidden><label for="tcode">Code from the app</label><input id="tcode" inputmode="numeric" maxlength="7"></div></div>
+    <div id="totp-secret" hidden><p>Type this secret into your authenticator app (or scan the URI with a QR tool), then enter the code it shows to confirm. The secret is shown ONCE.</p><div class="mono" id="tsecret"></div><div class="mono dim" id="turi" style="word-break:break-all"></div></div>
+    <button class="btn" id="totp-setup" type="button">SET UP</button> <button class="btn" id="totp-confirm" type="button" hidden>CONFIRM CODE</button> <button class="btn" id="totp-remove" type="button" hidden>REMOVE</button>
   </section>
   <section class="card" id="gen">
     <h2>GENERATE A LICENSE KEY</h2>
@@ -196,6 +205,7 @@ ${k.canInit ? `<section class="card" id="ed-card">
       $('keydir').textContent = j.dir; $('setup').hidden = !needInit; if (!j.canInit) $('init').hidden = true;
       $('unlock-card').hidden = !needUnlock; $('plain-card').hidden = !(j.hasKey && !j.locked && j.canInit);
       $('gen').hidden = needInit && j.canInit || needUnlock; $('lockbtn').hidden = !(j.locked && j.unlocked);
+      $('ucode-f').hidden = !j.totp; $('totp-card').hidden = !(j.locked && j.unlocked); $('totp-on').hidden = !j.totp; $('totp-off').hidden = !!j.totp; $('totp-setup').hidden = !!j.totp; $('totp-remove').hidden = !j.totp; $('tcode-f').hidden = !j.totp && $('totp-secret').hidden;
       if (needUnlock) $('upin').focus();
       if (j.publicKey) { $('copypub').hidden = false; $('copypub').dataset.k = j.publicKey; }
       if (j.fingerprint) { $('fp').hidden = false; $('fp').textContent = 'Signing key: ' + j.fingerprint + (j.projectFingerprint ? (j.projectFingerprint === j.fingerprint ? '  (matches this project)' : '  (this project trusts ' + j.projectFingerprint + ': rebuild AmF X1 with this key, or keys will not activate)') : '') + '. AmF X1 accepts keys only when its LICENSE page shows the same code.'; }
@@ -213,10 +223,25 @@ ${k.canInit ? `<section class="card" id="ed-card">
   });
   $('uf').addEventListener('submit', function (ev) {
     ev.preventDefault(); $('unlock').disabled = true; $('unlock').textContent = 'CHECKING…';
-    post('/unlock', { pin: $('upin').value }).then(function (j) {
-      $('upin').value = '';
+    post('/unlock', { pin: $('upin').value, code: $('ucode').value }).then(function (j) {
+      $('upin').value = ''; $('ucode').value = '';
       if (!j || !j.ok) showErr((j && j.error) || 'Could not unlock.'); else refresh();
     }).catch(function () { showErr('Could not reach this server.'); }).then(function () { $('unlock').disabled = false; $('unlock').textContent = 'UNLOCK'; });
+  });
+  $('totp-setup').addEventListener('click', function () {
+    post('/totp-setup', { pin: $('tpin').value }).then(function (j) {
+      if (!j || !j.ok) return showErr((j && j.error) || 'Could not set up the second factor.');
+      $('tsecret').textContent = j.secret; $('turi').textContent = j.uri; $('totp-secret').hidden = false; $('tcode-f').hidden = false; $('totp-setup').hidden = true; $('totp-confirm').hidden = false; $('tcode').focus();
+    }).catch(function () { showErr('Could not reach this server.'); });
+  });
+  $('totp-confirm').addEventListener('click', function () {
+    post('/totp-confirm', { pin: $('tpin').value, code: $('tcode').value }).then(function (j) {
+      if (!j || !j.ok) return showErr((j && j.error) || 'That code did not match: check the secret in the app and try the next code.');
+      $('tpin').value = $('tcode').value = ''; $('totp-secret').hidden = true; $('totp-confirm').hidden = true; refresh();
+    }).catch(function () { showErr('Could not reach this server.'); });
+  });
+  $('totp-remove').addEventListener('click', function () {
+    post('/totp-remove', { pin: $('tpin').value }).then(function (j) { if (!j || !j.ok) return showErr((j && j.error) || 'Could not remove it.'); $('tpin').value = ''; refresh(); }).catch(function () { showErr('Could not reach this server.'); });
   });
   $('lockplain').addEventListener('click', function () {
     if ($('lpin1').value !== $('lpin2').value) return showErr('The two PINs differ.');
@@ -384,7 +409,7 @@ function keyStatus(kind, dirArgv, session) {
   let fp = null, app = null, publicKey = null;
   try { const j = JSON.parse(fs.readFileSync(path.join(dir, 'public.jwk.json'), 'utf8')); fp = lic.fingerprint(j); publicKey = JSON.stringify({ kty: j.kty, crv: j.crv, x: j.x, y: j.y }); } catch (_) { /* no key yet */ }
   try { app = lic.fingerprint(JSON.parse(fs.readFileSync(path.join(layout.ROOT, 'bridge', 'license-public.json'), 'utf8'))); } catch (_) { /* not in a project */ }
-  return { hasKey, locked: !!k.canInit && vault.isLocked(dir), unlocked: !!(session && session.isOpen()), dir, canInit: !!k.canInit, fingerprint: fp, projectFingerprint: app, publicKey };
+  return { hasKey, locked: !!k.canInit && vault.isLocked(dir), unlocked: !!(session && session.isOpen()), dir, canInit: !!k.canInit, fingerprint: fp, projectFingerprint: app, publicKey, totp: !!k.canInit && totp.isSet(dir) };
 }
 // The unlocked key of a PIN-locked folder, in memory only. Plain folders do not need it (key(dir) then returns undefined and issue() reads the file).
 function makeSession(now = () => Date.now()) {
@@ -392,9 +417,9 @@ function makeSession(now = () => Date.now()) {
   const s = {
     isOpen() { if (key && now() - used > IDLE_MS) key = null; return !!key; },
     close() { key = null; },
-    unlock(dir, pin) {
+    unlock(dir, pin, code) {   // the PIN, and the authenticator code when a second factor is set up (scripts/license-totp.js)
       if (now() < until) { const e = new Error('too many wrong PINs: wait ' + Math.ceil((until - now()) / 1000) + ' s'); e.status = 429; throw e; }
-      try { key = vault.loadKey(dir, String(pin || '')); used = now(); fails = 0; }
+      try { const k = vault.loadKey(dir, String(pin || '')); totp.verify(dir, String(pin || ''), code, now()); key = k; used = now(); fails = 0; }
       catch (e) { if (++fails >= MAX_TRIES) { fails = 0; until = now() + LOCKOUT_MS; } e.status = e.status || 401; throw e; }
     },
     key(dir) {
@@ -627,15 +652,19 @@ function createServer({ kind = 'vendor', dirArgv = [], root, session = makeSessi
       }
       const readJson = async () => { const chunks = []; let n = 0; for await (const c of req) { n += c.length; if (n > 8192) return null; chunks.push(c); } try { return JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'); } catch (_) { return null; } };
       const dirNow = () => KINDS[kind].mod[KINDS[kind].dirFn](dirArgv);
-      if (req.method === 'POST' && ['/init', '/unlock', '/lock', '/lock-file'].includes(url.pathname)) {
+      if (req.method === 'POST' && ['/init', '/unlock', '/lock', '/lock-file', '/totp-setup', '/totp-confirm', '/totp-remove'].includes(url.pathname)) {
         const b = await readJson(); if (!b) return fail(res, 400, 'the body is not JSON');
         try {
           if (url.pathname === '/init') return send(res, 200, { ok: true, ...initKind(kind, dirArgv, root, b.pin, session) });
           if (!KINDS[kind].canInit) return fail(res, 400, 'not for this key kind');
           if (url.pathname === '/unlock') {
-            try { session.unlock(dirNow(), b.pin); } catch (e) { if (e.code === 'WRONG_PIN') await new Promise(r => setTimeout(r, 1000)); throw e; }   // a wrong PIN costs a second
+            try { session.unlock(dirNow(), b.pin, b.code); } catch (e) { if (e.code === 'WRONG_PIN' || e.code === 'WRONG_CODE') await new Promise(r => setTimeout(r, 1000)); throw e; }   // a wrong PIN or code costs a second
             return send(res, 200, { ok: true });
           }
+          // the second factor: set up (secret shown once, pending), confirm with a first code, remove; every step needs the PIN
+          if (url.pathname === '/totp-setup') { vault.loadKey(dirNow(), String(b.pin || '')); const r = totp.setup(dirNow(), String(b.pin || '')); return send(res, 200, { ok: true, secret: r.secret, uri: r.uri }); }
+          if (url.pathname === '/totp-confirm') { totp.confirm(dirNow(), String(b.pin || ''), b.code); return send(res, 200, { ok: true }); }
+          if (url.pathname === '/totp-remove') { totp.remove(dirNow(), String(b.pin || '')); return send(res, 200, { ok: true }); }
           if (url.pathname === '/lock') { session.close(); return send(res, 200, { ok: true }); }
           vault.lock(dirNow(), b.pin); session.unlock(dirNow(), b.pin); return send(res, 200, { ok: true });   // /lock-file: encrypt a plain private.pem
         } catch (e) { return fail(res, e.status || 500, e.message); }
