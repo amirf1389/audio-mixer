@@ -3,6 +3,7 @@
 // Everything here runs on the GUI thread; the audio thread is inside am::Runtime and is never blocked by this object (control goes through
 // the runtime's lock-free ring, meters come out of its sequence-counted snapshot). Settings (strip names, levels, DSP) persist with QSettings.
 #pragma once
+#include <algorithm>
 #include <QObject>
 #include <QSettings>
 #include <QTimer>
@@ -10,6 +11,7 @@
 #include <QVariantMap>
 #include <QJsonObject>
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "audiomixer/dsp.hpp"
@@ -36,6 +38,9 @@ class Engine : public QObject {
   Q_PROPERTY(QVariantList scenes READ scenes NOTIFY scenesChanged)
   Q_PROPERTY(QVariantList presets READ presets NOTIFY presetsChanged)
   Q_PROPERTY(int selectedStrip READ selectedStrip WRITE setSelectedStrip NOTIFY selectedStripChanged)
+  Q_PROPERTY(QVariantMap monitor READ monitor NOTIFY monitorChanged)                 // control room: source (0 master, 1..8 bus), db, dim, mono, mute
+  Q_PROPERTY(bool channelClipboard READ channelClipboard NOTIFY clipboardChanged)   // a channel has been copied (MORE > COPY)
+  Q_PROPERTY(int vuRefDb READ vuRefDb WRITE setVuRefDb NOTIFY monitorChanged)         // 0 VU = this many dBFS (-18 EBU, -20 SMPTE, -14 loud)
 
  public:
   explicit Engine(QObject* parent = nullptr);
@@ -69,6 +74,16 @@ class Engine : public QObject {
   int selectedStrip() const { return selected_; }
   void setSelectedStrip(int i) { if (i < 0 || i >= kStrips || i == selected_) return; selected_ = i; emit selectedStripChanged(); }
   Q_INVOKABLE void setMasterLimiter(bool on, double ceilingDb);
+  QVariantMap monitor() const;
+  Q_INVOKABLE void setMonitor(int source, double db, bool dim, bool mono, bool mute);
+  int vuRefDb() const { return vuRef_; }
+  void setVuRefDb(int db) { vuRef_ = std::clamp(db, -24, -8); settings_.setValue("ui/vuRef", vuRef_); emit monitorChanged(); }
+  // MORE menu on a strip
+  Q_INVOKABLE void resetStrip(int strip);            // fader 0, pan centre, unmuted, DSP flat, sends off, no groups; the name and colour stay
+  Q_INVOKABLE void resetStripDsp(int strip);         // only the channel DSP
+  Q_INVOKABLE void copyChannel(int strip);
+  Q_INVOKABLE bool pasteChannel(int strip);          // the copied DSP + sends + pan onto this strip (not the name, colour, fader or groups)
+  bool channelClipboard() const { return clipboard_.has_value(); }
   Q_INVOKABLE void clearClips();
   // channel DSP; type: 0 off, 1 peaking, 2 low shelf, 3 high shelf, 4 low pass, 5 high pass, 6 notch, 7 all-pass 1st, 8 all-pass 2nd
   Q_INVOKABLE void setEq(int strip, int band, int type, double freq, double q, double gainDb);
@@ -128,6 +143,8 @@ class Engine : public QObject {
   void scenesChanged();
   void selectedStripChanged();
   void presetsChanged();
+  void monitorChanged();
+  void clipboardChanged();
 
  private:
   static constexpr int kStrips = 32;
@@ -159,6 +176,9 @@ class Engine : public QObject {
   QVariantMap telemetry_;
   std::vector<StripUi> strips_;
   double masterDb_ = 0; bool masterLim_ = true; double masterCeil_ = -0.5;
+  struct MonitorUi { int source = 0; double db = 0; bool dim = false, mono = false, mute = false; } mon_;
+  int vuRef_ = -18; double vu_[kStrips] = {}; double vuMaster_ = 0;                     // VU ballistics (300 ms to 99 %), run on the UI timer
+  std::optional<QJsonObject> clipboard_;
   QTimer timer_;
   QSettings settings_;
 };

@@ -1,5 +1,6 @@
 // Audio Mixer runtime: see include/audiomixer/runtime.hpp.
 #include "audiomixer/runtime.hpp"
+#include <cmath>
 
 #include <algorithm>
 #include <cstring>
@@ -38,7 +39,7 @@ std::unique_ptr<Backend> createBackend(const std::string& name) {
   return nullptr;
 }
 
-enum Op { kGain, kPan, kMute, kSolo, kMaster, kLimiter, kClipDb, kClear, kSpatialOn, kSpatialPos, kSpatialSpread, kEq, kDelay, kPolarity, kXover, kChLimiter, kComp, kGate, kSend, kBusLevel, kBusMute, kBusReturn };
+enum Op { kGain, kPan, kMute, kSolo, kMaster, kLimiter, kClipDb, kClear, kSpatialOn, kSpatialPos, kSpatialSpread, kEq, kDelay, kPolarity, kXover, kChLimiter, kComp, kGate, kSend, kBusLevel, kBusMute, kBusReturn, kMonitor };
 
 Runtime::Runtime(int strips) : mixer_(strips, 48000) { std::memset(&pub_, 0, sizeof pub_); }
 Runtime::~Runtime() { stop(); }
@@ -88,6 +89,10 @@ void Runtime::setSend(int s, int b, double db, bool pre) { Cmd c{kSend, s, db, p
 void Runtime::setBusLevel(int b, double db) { post({kBusLevel, b, db, 0, 0}); }
 void Runtime::setBusMute(int b, bool on) { post({kBusMute, b, on ? 1.0 : 0.0, 0, 0}); }
 void Runtime::setBusReturn(int b, double db) { post({kBusReturn, b, db, 0, 0}); }
+void Runtime::setMonitor(int source, double db, bool dim, bool mono, bool mute) {
+  double lin = std::pow(10.0, std::clamp(db, -120.0, 10.0) / 20); if (dim) lin *= 0.1; if (mute || db <= -119) lin = 0;
+  post({kMonitor, std::clamp(source, 0, kMaxBuses), lin, 0, 0, mono ? 1 : 0});
+}
 bool Runtime::setSpatial(bool on) { if (!spatial_ || !spatial_->ok()) return false; post({kSpatialOn, on ? 1 : 0, 0, 0, 0}); return true; }
 void Runtime::setSpatialPosition(double az, double el, double d, double spread) { post({kSpatialPos, 0, az, el, d}); post({kSpatialSpread, 0, spread, 0, 0}); }
 
@@ -117,6 +122,7 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
       case kBusLevel: mixer_.setBusLevel(c.a, c.x); break;
       case kBusMute: mixer_.setBusMute(c.a, c.x != 0); break;
       case kBusReturn: mixer_.setBusReturn(c.a, c.x); break;
+      case kMonitor: monSrc_ = c.a; monGainTarget_ = c.x; monMono_ = c.b != 0; break;
       default: break;
     }
     tail_.store(t + 1, std::memory_order_release);
@@ -131,9 +137,20 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
   float* busOut[2 * kMaxBuses]; for (int k = 0; k < 2 * kMaxBuses; ++k) busOut[k] = busBuf_[static_cast<std::size_t>(k)].data();
   mixer_.process(ins, frames, left_.data(), right_.data(), busOut);
   if (spatialOn_ && spatial_) spatial_->process(left_.data(), right_.data(), left_.data(), right_.data(), frames);     // after the meters: they show the stereo master
-  for (int c = 0; c < nOut_; ++c) {
-    if (c == 0) std::memcpy(out[c], left_.data(), frames * sizeof(float));
-    else if (c == 1) std::memcpy(out[c], right_.data(), frames * sizeof(float));
+  // the monitor section: source, level (smoothed over the block, no clicks), mono, mute -> outputs 0 / 1, with its own peak
+  { const float* ml = monSrc_ > 0 ? busOut[2 * (monSrc_ - 1)] : left_.data(); const float* mr = monSrc_ > 0 ? busOut[2 * (monSrc_ - 1) + 1] : right_.data();
+    const double g0 = monGain_, g1 = monGainTarget_; monGain_ = g1; const double step = frames ? (g1 - g0) / static_cast<double>(frames) : 0; double pl = 0, pr = 0;
+    float* ol = nOut_ > 0 ? out[0] : nullptr; float* or_ = nOut_ > 1 ? out[1] : nullptr;
+    for (std::size_t i = 0; i < frames; ++i) {
+      const float g = static_cast<float>(g0 + step * static_cast<double>(i));
+      float l = ml[i] * g, r = mr[i] * g; if (monMono_) { l = r = 0.5f * (l + r); }
+      if (ol) ol[i] = l;
+      if (or_) or_[i] = r;
+      pl = std::max(pl, static_cast<double>(std::fabs(l))); pr = std::max(pr, static_cast<double>(std::fabs(r)));
+    }
+    monPk_[0] = std::max(pl, monPk_[0] * 0.8); monPk_[1] = std::max(pr, monPk_[1] * 0.8); }
+  for (int c = 2; c < nOut_; ++c) {
+    if (false) {}
     else if (c - 2 < 2 * kMaxBuses) std::memcpy(out[c], busOut[c - 2], frames * sizeof(float));   // aux bus k on channels 2 + 2k, 3 + 2k
     else std::memset(out[c], 0, frames * sizeof(float));
   }
@@ -147,6 +164,7 @@ void Runtime::publish() {
   for (int c = 0; c < 2; ++c) { const MeterState& m = mixer_.masterMeter(c); s.master[c] = {m.pk, m.rms, m.hold, m.clipN, 0.0, 0.0, 0.0}; }
   for (int k = 0; k < kMaxBuses; ++k) { const MeterState& m = mixer_.bus(k).meter.state(); s.buses[k] = {m.pk, m.rms, m.hold, m.clipN, 0.0, 0.0, 0.0}; }
   s.momentary = mixer_.loudness().momentary(); s.shortTerm = mixer_.loudness().shortTerm(); s.integrated = mixer_.loudness().integrated(); s.lra = mixer_.loudness().range(); s.truePeak = mixer_.loudness().truePeak();
+  s.monitorPk[0] = monPk_[0]; s.monitorPk[1] = monPk_[1];
   s.correlation = mixer_.phase().corr; s.blocks = blocks_; s.frames = frames_; s.xruns = backend_ ? backend_->xruns() : 0;
   const unsigned q = seq_.load(std::memory_order_relaxed);
   seq_.store(q + 1, std::memory_order_release);                                    // odd: being written

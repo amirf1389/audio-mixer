@@ -47,8 +47,10 @@ int main() {
   CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"gain\",\"strip\":99,\"db\":0}", auth, status, body) && status == 400);
   CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"nope\"}", auth, status, body) && status == 400);
   CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "not json", auth, status, body) && status == 400);
+  CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"monitor\",\"source\":1,\"db\":-6,\"dim\":true}", auth, status, body) && status == 200);
   CHECK(am::httpd::Client::request("127.0.0.1", port, "GET", "/api/state", "", {}, status, body) && status == 200);
   Value s = Value::parse(body, ok); CHECK(ok);
+  CHECK(s["monitor"]["source"].asInt() == 1 && s["monitor"]["db"].asNumber() == -6 && s["monitor"]["dim"].asBool() && !s["monitor"]["mute"].asBool());
   CHECK(s["strips"].items()[2]["db"].asNumber() == -6.5 && s["strips"].items()[2]["name"].asString() == "Vox" && s["strips"].items()[3]["mute"].asBool() && s["buses"].items()[1]["db"].asNumber() == -3 && s["running"].asBool());
 
   // the meters run (the null backend clocks blocks)

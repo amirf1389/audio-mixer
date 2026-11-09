@@ -63,6 +63,7 @@ std::vector<DeviceInfo> listDevices();                       // every device of 
 struct Snapshot {
   struct StripMeter { double pk, rms, hold; std::uint32_t clipN; double compGrDb, gateDb, inPk; };   // compGrDb <= 0 (the channel compressor), gateDb <= 0 (the channel gate)
   StripMeter strips[kMaxStrips]; StripMeter master[2]; StripMeter buses[kMaxBuses];
+  double monitorPk[2];                       // what the control room hears, after the monitor section
   double momentary, shortTerm, integrated, lra, truePeak, correlation;
   std::uint64_t blocks, frames, xruns;
 };
@@ -99,21 +100,25 @@ class Runtime {
   void setBusLevel(int bus, double db);
   void setBusMute(int bus, bool on);
   void setBusReturn(int bus, double db);
+  // the monitor section (control room): what goes to output channels 0 / 1 after the master meters. source 0 = master, 1..kMaxBuses = that bus
+  // (post level, pre return); level in dB, dim = -20 dB, mono sums L+R, mute = silence. The master meters and loudness are not affected.
+  void setMonitor(int source, double db, bool dim, bool mono, bool mute);
   // 360 degree output (Resonance Audio, only when Spatial::available()): the stereo master after the meters becomes two virtual speakers in a binaural scene; off by default.
   // The audio is then delayed by Spatial::block() frames. Returns false when this binary has no Resonance Audio.
   bool setSpatial(bool on);
   void setSpatialPosition(double azimuthDeg, double elevationDeg, double distanceM, double spreadDeg = 30);
   Snapshot snapshot() const;
+  void onBlock(const float* const* in, float* const* out, std::size_t frames);   // the audio callback; public so a test can clock the runtime itself
  private:
   struct Cmd { int op; int a; double x, y, z; int b = 0; double w = 0, v = 0, u = 0; };
   void post(const Cmd& c);
-  void onBlock(const float* const* in, float* const* out, std::size_t frames);
   void publish();
 
   Mixer mixer_; std::unique_ptr<Backend> backend_; std::string backendName_;
   int nIn_ = 0, nOut_ = 0; bool running_ = false;
   std::unique_ptr<Spatial> spatial_; bool spatialOn_ = false; double spAz_ = 0, spEl_ = 0, spDist_ = 2, spSpread_ = 30;     // spatial_ is created in open(); spatialOn_ is only touched by the audio thread
   std::vector<float> silence_, left_, right_;
+  int monSrc_ = 0; double monGainTarget_ = 1, monGain_ = 1; bool monMono_ = false; double monPk_[2] = {0, 0};   // audio thread only
   std::vector<dsp::Channel> ch_; std::vector<std::vector<float>> chBuf_;
   std::vector<std::vector<float>> busBuf_;   // 2 * kMaxBuses blocks for the aux bus outputs   // one channel DSP and one scratch block per strip (sized in open())
   // control ring: many producers (under a mutex), one consumer (the audio thread)
