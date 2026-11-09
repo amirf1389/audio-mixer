@@ -65,6 +65,18 @@ int main() {
     expect(*std::max_element(o0.begin(), o0.end()) == 0.f && rt.snapshot().master[0].pk > 0.1, "mute silences the outputs, the master meter still shows signal");
     rt.setMonitor(1, 0, false, false, false); rt.setSend(0, 0, 0, false); rt.setBusLevel(0, 0); for (int k = 0; k < 20; ++k) rt.onBlock(ins, outs, n);
     expect(*std::max_element(o0.begin(), o0.end()) > 0.1f, "monitor source = bus 1 hears the send");
+    // the routing matrix: strip 0 fed from input 1 (silence here), output 0 carrying bus 1 L directly, output 1 off
+    rt.setMonitor(0, 0, false, false, false); rt.setSend(0, 0, -120, false);
+    std::vector<float> quiet(n, 0.0f); const float* ins2[2] = {tone.data(), quiet.data()};
+    rt.setInputRoute(0, 1); rt.setInputRoute(1, -1); for (int k = 0; k < 800; ++k) rt.onBlock(ins2, outs, n);   // ~1 s: the peak meters fall
+    expect(rt.snapshot().strips[0].pk < 1e-3 && rt.snapshot().strips[1].pk < 1e-3, "input routing: strip 0 reads the quiet input 1, strip 1 reads nothing");
+    rt.setInputRoute(0, 0); rt.setInputRoute(1, 0); for (int k = 0; k < 20; ++k) rt.onBlock(ins2, outs, n);
+    expect(rt.snapshot().strips[1].pk > 0.3, "input 0 can feed two strips");
+    rt.setOutputRoute(0, am::Runtime::kSrcBus0L); rt.setOutputRoute(1, am::Runtime::kSrcOff); rt.setSend(0, 0, 0, false); for (int k = 0; k < 20; ++k) rt.onBlock(ins2, outs, n);   // strip 0 is panned left: its send lands on bus L
+    expect(*std::max_element(o0.begin(), o0.end()) > 0.1f, "output routing: out 0 = bus 1 L");
+    expect(*std::max_element(o1.begin(), o1.end()) == 0.f, "output routing: out 1 = off");
+    rt.setOutputRoute(0, am::Runtime::kSrcMasterL); rt.setOutputRoute(1, am::Runtime::kSrcMasterL); rt.setMonitor(0, 0, false, false, true); for (int k = 0; k < 20; ++k) rt.onBlock(ins2, outs, n);
+    expect(*std::max_element(o1.begin(), o1.end()) > 0.3f, "master L on two outputs is not affected by the monitor mute");
   }
   { std::string unknown = "nonexistent"; am::Runtime rt(2); am::DeviceConfig c; c.backend = unknown; std::string err; expect(!rt.open(c, err) && !err.empty(), "an unknown backend is refused with a reason"); }
 #ifdef AM_HAVE_ALSA

@@ -240,6 +240,8 @@ json::Value Daemon::control(const json::Value& cmd, std::string& err) {
     if (rt_) rt_->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute);
     return ok;
   }
+  if (op == "inRoute") { if (!strip(s) || !need()) return {}; rt_->setInputRoute(s, cmd["input"].asInt(-1)); return ok; }
+  if (op == "outRoute") { if (!need()) return {}; const int o = cmd["out"].asInt(-1); if (o < 0 || o >= Runtime::kMaxOutputs) { err = "out of range"; return {}; } rt_->setOutputRoute(o, cmd["source"].asInt(0)); return ok; }
   if (op == "clearClips") { if (rt_) rt_->clearClips(); return ok; }
   err = op.empty() ? "no op" : "unknown op \"" + op + "\""; return {};
 }
