@@ -37,6 +37,7 @@ qt_add_qml_module(amixos
         qml/MeterBar.qml
         qml/VuMeter.qml
         qml/RoutingPage.qml
+        qml/LicensePage.qml
         qml/HomePage.qml
         qml/MixerPage.qml
         qml/TonePage.qml
@@ -56,7 +57,7 @@ qt_add_qml_module(amixos
         i18n/verified-22.json
         i18n/auto-58.json)
 target_compile_definitions(amixos PRIVATE AMIX_VERSION="${AMIX_VERSION}")
-target_link_libraries(amixos PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::QuickControls2 audiomixer_runtime audiomixer_engine)
+target_link_libraries(amixos PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::QuickControls2 audiomixer_runtime audiomixer_engine amixos_license)
 
 if(WIN32)
     set_target_properties(amixos PROPERTIES WIN32_EXECUTABLE TRUE)

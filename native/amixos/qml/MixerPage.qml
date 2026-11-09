@@ -69,6 +69,14 @@ Item {
                                 Rectangle { anchors.fill: parent; radius: 6; color: selected ? Qt.rgba(1, 1, 1, 0.06) : (index % 2 ? Qt.rgba(1, 1, 1, 0.025) : Qt.rgba(0, 0, 0, 0.25)); border.color: selected ? Theme.ink : Theme.lineSoft; border.width: selected ? 1.5 : 1
                                     MouseArea { anchors.fill: parent; onPressed: function (m) { engine.selectedStrip = index; m.accepted = false } } }
                                 Rectangle { anchors.top: parent.top; anchors.left: parent.left; anchors.right: parent.right; anchors.margins: 1; height: 3; radius: 2; color: sc }
+                                // beyond the licence: the strip is muted in the engine and shown locked; a click opens LICENSE
+                                Rectangle { anchors.fill: parent; z: 10; radius: 6; color: Qt.rgba(0, 0, 0, 0.72); visible: index >= engine.licensedChannels
+                                    ColumnLayout { anchors.centerIn: parent; spacing: 6
+                                        Text { Layout.alignment: Qt.AlignHCenter; text: "🔒"; color: Theme.amber; font.pixelSize: 18 }
+                                        Text { Layout.alignment: Qt.AlignHCenter; text: "CH " + (index + 1); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                                        Text { Layout.alignment: Qt.AlignHCenter; text: index < 16 ? "PRO" : "STUDIO"; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
+                                        Text { Layout.alignment: Qt.AlignHCenter; text: "UNLOCK ›"; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 7 } }
+                                    MouseArea { anchors.fill: parent; onClicked: page.go("renew") } }
                                 ColumnLayout {
                                     anchors.fill: parent; anchors.margins: 4; anchors.topMargin: 6; spacing: 3
                                     TextInput { Layout.fillWidth: true; text: st ? st.name : ""; color: st && st.effectiveMute ? Theme.dim : Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; horizontalAlignment: Text.AlignHCenter; selectByMouse: true; onEditingFinished: engine.setName(index, text); onActiveFocusChanged: if (activeFocus) engine.selectedStrip = index }

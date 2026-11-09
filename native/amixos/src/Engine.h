@@ -30,7 +30,9 @@ class Engine : public QObject {
   Q_PROPERTY(QVariantMap telemetry READ telemetry NOTIFY metersChanged)
   Q_PROPERTY(double masterDb READ masterDb WRITE setMaster NOTIFY stripsChanged)
   Q_PROPERTY(QVariantList pages READ pages CONSTANT)
-  Q_PROPERTY(QString edition READ edition CONSTANT)
+  Q_PROPERTY(QString edition READ edition NOTIFY licenseChanged)
+  Q_PROPERTY(QVariantMap license READ license NOTIFY licenseChanged)          // state, plan, planName, channels, source, id, name, serial, expires, machine, message
+  Q_PROPERTY(int licensedChannels READ licensedChannels NOTIFY licenseChanged)   // strips beyond this are locked (muted in the engine)
   Q_PROPERTY(QVariantList busState READ busState NOTIFY busesChanged)
   Q_PROPERTY(QVariantList dcaState READ dcaState NOTIFY groupsChanged)
   Q_PROPERTY(QVariantList muteGroupState READ muteGroupState NOTIFY groupsChanged)
@@ -63,7 +65,15 @@ class Engine : public QObject {
   double masterDb() const { return masterDb_; }
   QVariantList pages() const;
   int pageCount() const { return pages().size(); }
-  QString edition() const { return QStringLiteral("Lite"); }   // the Pro tier (editions, licence) is ported after the interface
+  QString edition() const;                      // BASIC / PRO / STUDIO / MASTER, from the licence check
+  QVariantMap license() const { return license_; }
+  int licensedChannels() const { return licensedChannels_; }
+  Q_INVOKABLE void refreshLicense();            // re-reads the stored key / edition (also after the date changes)
+  Q_INVOKABLE QVariantMap checkKey(const QString& key) const;   // genuine? which plan? upgrade / same / downgrade; nothing is stored
+  Q_INVOKABLE QVariantMap activateKey(const QString& key);      // verifies and stores; {ok, reason, message}
+  Q_INVOKABLE bool deactivateKey();
+  Q_INVOKABLE QString licenseRequest(const QString& plan, const QString& name, const QString& email) const;   // JSON to send the vendor
+  Q_INVOKABLE QString vendorKeyFingerprint() const;
 
   Q_INVOKABLE void refreshDevices();
   Q_INVOKABLE bool open(const QString& backend, const QString& inDevice, const QString& outDevice, double sampleRate, int frames, int inChannels, int outChannels);
@@ -155,6 +165,7 @@ class Engine : public QObject {
   void presetsChanged();
   void monitorChanged();
   void routingChanged();
+  void licenseChanged();
   void clipboardChanged();
 
  private:
@@ -189,6 +200,7 @@ class Engine : public QObject {
   double masterDb_ = 0; bool masterLim_ = true; double masterCeil_ = -0.5;
   static constexpr int kOutputs = 32;
   int inRoute_[kStrips] = {}; int outRoute_[kOutputs] = {}; int devIn_ = 0, devOut_ = 0;
+  QVariantMap license_; int licensedChannels_ = 8;
   struct MonitorUi { int source = 0; double db = 0; bool dim = false, mono = false, mute = false; } mon_;
   int vuRef_ = -18; double vu_[kStrips] = {}; double vuMaster_ = 0;                     // VU ballistics (300 ms to 99 %), run on the UI timer
   std::optional<QJsonObject> clipboard_;
