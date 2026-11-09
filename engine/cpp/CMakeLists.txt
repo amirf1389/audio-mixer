@@ -1,8 +1,8 @@
-# Audio Mixer engine (C++17): the engine library, the runtime (device backends of the system it is built on) and the tests.
+# Audio Mixer / A mix OS engine (C++20): the engine library, the runtime (device backends of the system it is built on) and the tests.
 #   cmake -S engine/cpp -B build && cmake --build build && ctest --test-dir build --output-on-failure
 cmake_minimum_required(VERSION 3.12)
 project(audiomixer_engine CXX)
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)   # the channel DSP (include/audiomixer/dsp.hpp) is C++20; everything else compiles as before
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(Threads REQUIRED)
 
@@ -62,6 +62,9 @@ enable_testing()
 add_executable(engine_test test/engine_test.cpp)
 target_link_libraries(engine_test audiomixer_engine)
 add_test(NAME vectors COMMAND engine_test ${CMAKE_CURRENT_SOURCE_DIR}/../tests/vectors.txt)
+add_executable(dsp_test test/dsp_test.cpp)
+target_include_directories(dsp_test PRIVATE include)
+add_test(NAME dsp COMMAND dsp_test)
 add_executable(runtime_test test/runtime_test.cpp)
 target_link_libraries(runtime_test audiomixer_runtime)
 add_test(NAME runtime COMMAND runtime_test)

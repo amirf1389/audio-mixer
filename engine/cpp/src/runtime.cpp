@@ -38,7 +38,7 @@ std::unique_ptr<Backend> createBackend(const std::string& name) {
   return nullptr;
 }
 
-enum Op { kGain, kPan, kMute, kSolo, kMaster, kLimiter, kClipDb, kClear, kSpatialOn, kSpatialPos, kSpatialSpread };
+enum Op { kGain, kPan, kMute, kSolo, kMaster, kLimiter, kClipDb, kClear, kSpatialOn, kSpatialPos, kSpatialSpread, kEq, kDelay, kPolarity, kXover, kChLimiter };
 
 Runtime::Runtime(int strips) : mixer_(strips, 48000) { std::memset(&pub_, 0, sizeof pub_); }
 Runtime::~Runtime() { stop(); }
@@ -55,6 +55,7 @@ bool Runtime::open(const DeviceConfig& cfg, std::string& err) {
   mixer_ = Mixer(mixer_.strips(), cfg.sampleRate);                                  // the mixer runs at the device rate
   const std::size_t n = std::max<std::size_t>(cfg.frames, 16) * 8;                  // scratch for blocks up to 8 periods (devices may hand out more than the period)
   silence_.assign(n, 0.0f); left_.assign(n, 0.0f); right_.assign(n, 0.0f);
+  ch_.assign(static_cast<std::size_t>(mixer_.strips()), dsp::Channel(cfg.sampleRate)); chBuf_.assign(ch_.size(), std::vector<float>(n, 0.0f));
   head_ = 0; tail_ = 0; blocks_ = 0; frames_ = 0; std::memset(&pub_, 0, sizeof pub_);
   return backend_->open(cfg, [this](const float* const* in, float* const* out, std::size_t frames) { onBlock(in, out, frames); }, err);
 }
@@ -75,6 +76,11 @@ void Runtime::setMasterDb(double db) { post({kMaster, 0, db, 0, 0}); }
 void Runtime::setLimiter(bool on, double c, double r) { post({kLimiter, on ? 1 : 0, c, r, 0}); }
 void Runtime::setClipDb(double db) { post({kClipDb, 0, db, 0, 0}); }
 void Runtime::clearClips() { post({kClear, 0, 0, 0, 0}); }
+void Runtime::setEqBand(int s, int band, dsp::FilterType t, double f, double q, double g) { Cmd c{kEq, s, f, q, g}; c.b = band; c.w = static_cast<double>(t); post(c); }
+void Runtime::setDelayMs(int s, double ms) { post({kDelay, s, ms, 0, 0}); }
+void Runtime::setPolarity(int s, bool inv) { post({kPolarity, s, inv ? 1.0 : 0.0, 0, 0}); }
+void Runtime::setCrossover(int s, dsp::XoverType t, int hpO, double hpF, int lpO, double lpF) { Cmd c{kXover, s, hpF, lpF, static_cast<double>(hpO)}; c.b = static_cast<int>(t); c.w = static_cast<double>(lpO); post(c); }
+void Runtime::setChannelLimiter(int s, bool on, double ceil, double rel) { Cmd c{kChLimiter, s, ceil, rel, 0}; c.b = on ? 1 : 0; post(c); }
 bool Runtime::setSpatial(bool on) { if (!spatial_ || !spatial_->ok()) return false; post({kSpatialOn, on ? 1 : 0, 0, 0, 0}); return true; }
 void Runtime::setSpatialPosition(double az, double el, double d, double spread) { post({kSpatialPos, 0, az, el, d}); post({kSpatialSpread, 0, spread, 0, 0}); }
 
@@ -93,13 +99,22 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
       case kSpatialOn: spatialOn_ = c.a != 0; break;
       case kSpatialPos: if (spatial_) { spAz_ = c.x; spEl_ = c.y; spDist_ = c.z; spatial_->setPosition(spAz_, spEl_, spDist_, spSpread_); } break;
       case kSpatialSpread: if (spatial_) { spSpread_ = c.x; spatial_->setPosition(spAz_, spEl_, spDist_, spSpread_); } break;
+      case kEq: if (c.a >= 0 && c.a < static_cast<int>(ch_.size())) ch_[static_cast<std::size_t>(c.a)].setEqBand(c.b, {static_cast<dsp::FilterType>(static_cast<int>(c.w)), c.x, c.y, c.z}); break;
+      case kDelay: if (c.a >= 0 && c.a < static_cast<int>(ch_.size())) ch_[static_cast<std::size_t>(c.a)].setDelayMs(c.x); break;
+      case kPolarity: if (c.a >= 0 && c.a < static_cast<int>(ch_.size())) ch_[static_cast<std::size_t>(c.a)].setPolarity(c.x != 0); break;
+      case kXover: if (c.a >= 0 && c.a < static_cast<int>(ch_.size())) ch_[static_cast<std::size_t>(c.a)].setCrossover(static_cast<dsp::XoverType>(c.b), static_cast<int>(c.z), c.x, static_cast<int>(c.w), c.y); break;
+      case kChLimiter: if (c.a >= 0 && c.a < static_cast<int>(ch_.size())) ch_[static_cast<std::size_t>(c.a)].setLimiter(c.b != 0, c.x, c.y); break;
       default: break;
     }
     tail_.store(t + 1, std::memory_order_release);
   }
   frames = std::min(frames, left_.size());
   const float* ins[kMaxStrips];
-  for (int s = 0; s < mixer_.strips(); ++s) ins[s] = (s < nIn_ && in && in[s]) ? in[s] : silence_.data();
+  for (int s = 0; s < mixer_.strips(); ++s) {
+    ins[s] = (s < nIn_ && in && in[s]) ? in[s] : silence_.data();
+    dsp::Channel& ch = ch_[static_cast<std::size_t>(s)];
+    if (ch.active()) { float* b = chBuf_[static_cast<std::size_t>(s)].data(); std::memcpy(b, ins[s], frames * sizeof(float)); ch.process(b, frames); ins[s] = b; }   // the strip's channel DSP, in a scratch block
+  }
   mixer_.process(ins, frames, left_.data(), right_.data());
   if (spatialOn_ && spatial_) spatial_->process(left_.data(), right_.data(), left_.data(), right_.data(), frames);     // after the meters: they show the stereo master
   for (int c = 0; c < nOut_; ++c) {

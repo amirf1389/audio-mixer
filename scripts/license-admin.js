@@ -42,6 +42,7 @@ const MARK_A = '/*LICENSE_ADMIN_JWK*/', MARK_B = '/*END_LICENSE_ADMIN_JWK*/';
 function embedPublic(jwk, root = ROOT) {
   fs.writeFileSync(path.join(root, 'bridge', 'license-admin-public.json'), JSON.stringify(jwk) + '\n');
   const page = path.join(root, 'index.html');
+  if (!fs.existsSync(page)) return;   // the web console is retired: bridge/license-admin-public.json is the one copy
   let s = fs.readFileSync(page, 'utf8');
   const a = s.indexOf(MARK_A), b = s.indexOf(MARK_B);
   if (a < 0 || b < 0) throw new Error('admin license key markers not found in index.html');

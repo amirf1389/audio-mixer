@@ -27,6 +27,10 @@ const PROFILES = {
   realtek: derive({ key: 'realtek', label: 'Realtek onboard', asio: null, inputs: 2, outputs: 2, rates: [44100, 48000, 96000],
     wasapi: [{ name: 'Microphone Array (Realtek(R) Audio)', in: 2, out: 0 }, { name: 'Speakers (Realtek(R) Audio)', in: 0, out: 2 }, { name: 'Headphones (Realtek(R) Audio)', in: 0, out: 2 }],
     signal: [{ wave: 'noise', db: -50 }, { wave: 'noise', db: -50 }] }),
+  // Realtek onboard WITH the "Realtek ASIO" driver (classic HD Audio driver naming): the ASIO entry is pinned to WASAPI by driver-lock.js
+  realtekasio: derive({ key: 'realtekasio', label: 'Realtek onboard + Realtek ASIO', asio: { name: 'Realtek ASIO', single: true, busyMode: 'zeros' }, inputs: 2, outputs: 2,
+    rates: [44100, 48000], wasapi: [{ name: 'Microphone (Realtek High Definition Audio)', in: 2, out: 0 }, { name: 'Speakers (Realtek High Definition Audio)', in: 0, out: 2 }],
+    signal: [{ wave: 'noise', db: -50 }, { wave: 'noise', db: -50 }] }),
   focusrite: derive({ key: 'focusrite', label: 'Focusrite 2i2', asio: { name: 'Focusrite USB ASIO', single: true, busyMode: 'error' },
     wasapi: [{ name: 'Analogue 1 + 2 (Focusrite USB Audio)', in: 2, out: 0 }, { name: 'Speakers (Focusrite USB Audio)', in: 0, out: 2 }],
     rates: [44100, 48000, 88200, 96000, 176400, 192000], signal: [{ wave: 'sine', freq: 261.6, db: -24 }, { wave: 'sine', freq: 392, db: -24 }] }),

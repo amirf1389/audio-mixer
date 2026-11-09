@@ -188,6 +188,10 @@ async function handle(req, res) {
   // AI DRIVER LOCK (bridge/driver-lock.js): POST /api/driver-lock { forget: "<device name>" | "*", dir?: "input" | "output" } clears a lock
   if (req.method === 'POST' && url.pathname === '/api/driver-lock') return handleAction(req, res, cors, 'driver-lock', async body => {
     const dl = require('./driver-lock'), name = typeof body.forget === 'string' ? body.forget.slice(0, 120) : null;
+    if (typeof body.pin === 'string') {   // REALTEK PIN: { pin: "<ASIO driver name>", on: true|false }
+      const p = dl.setPin(body.pin.slice(0, 120), body.on !== false);
+      return p ? [200, { ok: true, pin: p, locks: dl.list() }] : [400, { ok: false, error: 'pin: only a Realtek onboard ASIO driver can be pinned' }];
+    }
     if (!name) return [400, { ok: false, error: 'forget: a device name, or "*" for every lock' }];
     const n = dl.forget(name, body.dir === 'output' || body.dir === 'input' ? body.dir : undefined);
     diag.info('lock', name === '*' ? `AI driver lock: every lock forgotten (${n})` : `AI driver lock: ${name} forgotten: its own ASIO driver is tried first again`);
@@ -236,8 +240,8 @@ async function handle(req, res) {
   // the ladder of every ASIO interface (ASIO -> WASAPI exclusive -> WASAPI shared -> DirectSound -> MME) and the locks learned so far
   if (url.pathname === '/api/driver-lock') {
     const dl = require('./driver-lock'); let devices = []; try { devices = require('./portaudio').load().getDevices(); } catch (_) { /* no PortAudio here */ }
-    const asio = devices.filter(d => /asio/i.test(d.hostAPIName)), view = l => l.map(x => ({ step: x.step, mode: x.mode, available: x.available, device: x.device ? x.device.name : null, hostApi: x.device ? x.device.hostAPIName : null, why: x.why }));
-    return json(res, 200, { ok: true, exclusive: dl.exclusiveAvailable(), retryHours: dl.RETRY_MS / 3600000, locks: dl.list(),
+    const asio = devices.filter(d => /asio/i.test(d.hostAPIName)), view = l => l.map(x => ({ step: x.step, mode: x.mode, available: x.available, pinned: !!x.pinned, device: x.device ? x.device.name : null, hostApi: x.device ? x.device.hostAPIName : null, why: x.why }));
+    return json(res, 200, { ok: true, exclusive: dl.exclusiveAvailable(), retryHours: dl.RETRY_MS / 3600000, locks: dl.list(), pins: dl.pins(devices),
       interfaces: asio.map(d => ({ name: d.name, input: d.maxInputChannels > 0 ? view(dl.ladder(d.name, devices, 'input')) : null, output: d.maxOutputChannels > 0 ? view(dl.ladder(d.name, devices, 'output')) : null })) }, cors);
   }
   if (url.pathname === '/api/drivers') {
@@ -316,7 +320,7 @@ async function handle(req, res) {
   let rel;
   try { rel = decodeURIComponent(url.pathname); } catch (_) { return json(res, 400, { ok: false, error: 'bad request' }); }
   if (rel.includes('\0')) return json(res, 400, { ok: false, error: 'bad request' });
-  if (rel === '/') rel = '/index.html';
+  if (rel === '/') return json(res, 200, { ok: true, name: 'audio-mixer-bridge', note: 'The web console is retired. This is the engine service of A mix OS; the console is the native program (native/amixos).' }, cors);
   const embedded = global.__AM_ASSETS && Object.prototype.hasOwnProperty.call(global.__AM_ASSETS, rel) ? global.__AM_ASSETS[rel] : null;   // the single-file build (scripts/build-single.js) carries the page inside
   if (embedded) return send(res, 200, embedded, { 'Content-Type': TYPES[path.extname(rel).toLowerCase()] || 'application/octet-stream' });
   const file = path.resolve(ROOT, '.' + rel);

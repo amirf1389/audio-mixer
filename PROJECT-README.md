@@ -1,5 +1,12 @@
-# audio-mixer
-mixer
+# A mix OS (formerly Audio Mixer / AmF X1)
+
+**A mix OS** is a native mixing console: a Qt 6 Quick interface on a C++20 audio engine (ASIO and WASAPI on Windows, Core Audio on macOS,
+ALSA on Linux). It lives in `native/amixos/` (see its README) on the engine in `engine/`. The roadmap and the architecture decisions are in
+`docs/a-mix-os-roadmap.md`.
+
+> The web console (index.html, AmF X1 1.22.1.0 Beta) was retired on 2026-11-09 at commit `2237603` (`html-app-final`). Everything below
+> that still speaks of "the page", "PC mode" or the browser describes the **legacy engine service** (`bridge/`, Node.js) and the vendor's
+> licence tools, which are kept while their logic is ported to the native console.
 
 ## Repository layout
 
@@ -7,12 +14,12 @@ One folder per operating system, under `platforms/`, holds everything of that sy
 Code shared by all systems stays in a few top-level folders.
 
 ```
-index.html  boot.html      the web app (GitHub Pages serves it from the root)
+native/amixos/             the native console (Qt 6 Quick on engine/cpp)
 README.md  LICENSE  SECURITY.md  package.json
 
 platforms/
-  android/    the app (src, kotlin), qt/ (Qt project), hal/ (audio HAL), releases/  *.apk
-  ios/        Xcode project template, releases/  *.tar.gz
+  android/    releases/  *.apk (the A mix OS Android build, later)
+  ios/        releases/  *.tar.gz (later)
   windows/    installer/ (setup, launcher), native/ (device helper), plugin-host/, asio-driver/,
               start-pc-mode.bat, start-local-server.bat, Audio Mixer.vbs, releases/  *.exe *.msi *.zip *.cer
   macos/      native/ (Core Audio helper), coreaudio-driver/, releases/  *.dmg *.zip *.tar.gz
@@ -22,7 +29,7 @@ bridge/     the local server (Node.js)             client/      the launcher / c
 ota-server/ the update server                      deploy/      hosting files (nginx, fail2ban, OTA server)
 scripts/    build and release tools                drivers/     what the system drivers share (common/am_link) and their README
 npm-installer/  the npm package audio-mixer-installer: installs Audio Mixer the way each system does it
-engine/     the native engine (C++17, embedded C, Rust, Swift / Objective-C, WebAssembly, Node addon) with shared test vectors
+engine/     the native engine (C++20, embedded C, Rust, Swift / Objective-C, WebAssembly, Node addon) with shared test vectors
 releases/   update.json: the signed update manifest that installed apps fetch (its file URLs point into the platforms/<os>/releases/ folders)
 ```
 
