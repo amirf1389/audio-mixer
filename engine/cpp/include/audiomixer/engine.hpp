@@ -112,7 +112,9 @@ struct Strip { double gainDb = 0, gainLin = 1, pan = 0; bool mute = false, solo 
 // way to hear a monitor mix); its own stereo output is handed to the caller through process()'s busOut (the runtime maps it to output channels).
 constexpr int kMaxBuses = 8;
 struct Send { double lin = 0; bool pre = false; };
-struct Bus { double levelLin = 1, returnLin = 0; bool mute = false; Meter meter = Meter(); };
+// an effect on a bus (reverb, delay ...), processed in place after the bus level and before its meter, return and output; audio thread only
+struct BusProcessor { virtual ~BusProcessor() = default; virtual void process(float* L, float* R, std::size_t frames) = 0; };
+struct Bus { double levelLin = 1, returnLin = 0; bool mute = false; Meter meter = Meter(); BusProcessor* fx = nullptr; };
 class Mixer {
  public:
   Mixer(int strips, double sampleRate);
@@ -125,10 +127,13 @@ class Mixer {
   void setMasterDb(double db);
   void setLimiter(bool on, double ceilingDb = -0.5, double releaseMs = 100);   // brick-wall peak limiter: instant attack
   void setClipDb(double db);
+  void setPeakHoldMs(double ms);              // how long the peak-hold line stays (all meters); 0 = no hold
   void setSend(int strip, int bus, double db, bool pre);     // -60 and below = off, +10 at most
   void setBusLevel(int bus, double db);
   void setBusMute(int bus, bool on);
   void setBusReturn(int bus, double db);                     // -60 and below = none (default)
+  void setBusProcessor(int bus, BusProcessor* p);            // nullptr = none; the caller keeps it alive while set
+  void setWidth(double w);                                   // master stereo width: 0 mono, 1 as is, 2 wide (mid / side), before the master gain
   const Bus& bus(int k) const { return buses_[static_cast<std::size_t>(k)]; }
   const Send& send(int strip, int bus) const { return sends_[static_cast<std::size_t>(strip)][static_cast<std::size_t>(bus)]; }
   // inputs[strip] -> outL / outR (frames samples each). Meters, loudness and phase are updated once per call.
@@ -144,6 +149,7 @@ class Mixer {
   int n_; double fs_, timeMs_ = 0;
   std::vector<Strip> strips_;
   double masterDb_ = 0, masterLin_ = 1;
+  double width_ = 1.0;   // master stereo width
   bool limOn_ = false; double limCeil_, limGain_ = 1, limReleaseMs_ = 100;
   ClipConfig clip_; Meter master_[2]; Loudness loudness_; PhaseResult phase_{0, 0, 0, 0, true};
   Send sends_[kMaxStrips][kMaxBuses]{}; Bus buses_[kMaxBuses]; bool anySend_ = false;

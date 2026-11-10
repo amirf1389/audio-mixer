@@ -10,12 +10,19 @@
 #include <QVariantList>
 #include <QVariantMap>
 #include <QJsonObject>
+#include <map>
 #include <memory>
 #include <optional>
 #include <vector>
 
 #include "audiomixer/dsp.hpp"
 #include "audiomixer/runtime.hpp"
+#include "vst3/vst3_host.hpp"
+#include "vst2/vst2_host.hpp"
+#include "record/recorder.hpp"
+#include "fx/fx.hpp"
+#include "Scope.h"
+#include "Generator.h"
 
 class Engine : public QObject {
   Q_OBJECT
@@ -70,6 +77,13 @@ class Engine : public QObject {
   int licensedChannels() const { return licensedChannels_; }
   Q_INVOKABLE void tick();   // one meter poll now (the timer does this every 33 ms; the smoke test calls it directly)
   Q_INVOKABLE void refreshLicense();            // re-reads the stored key / edition (also after the date changes)
+  // for the Settings system
+  void setClipThreshold(double db);             // the meters' clip point in dBFS (default -0.1)
+  void setPeakHold(int ms);
+  QJsonObject consoleExport() const { return consoleJson(); }
+  QJsonArray scenesExport() const; QJsonArray presetsExport() const;
+  void consoleImport(const QJsonObject& console, const QJsonArray& scenes, const QJsonArray& presets);
+  void factoryReset();                          // the console, scenes, user presets, selection back to a new desk (saved)
   Q_INVOKABLE QVariantMap checkKey(const QString& key) const;   // genuine? which plan? upgrade / same / downgrade; nothing is stored
   Q_INVOKABLE QVariantMap activateKey(const QString& key);      // verifies and stores; {ok, reason, message}
   Q_INVOKABLE bool deactivateKey();
@@ -88,8 +102,73 @@ class Engine : public QObject {
   Q_PROPERTY(QString lastRoute READ lastRoute NOTIFY stateChanged)   // what the last start did, in plain words
   QString lastRoute() const { return lastRoute_; }
   Q_INVOKABLE void stop();
+  // RECORD (engine/cpp/app/record): the master and armed strips to WAV while the engine runs
+  Q_PROPERTY(bool recording READ recording NOTIFY recordChanged)
+  Q_PROPERTY(double recordSeconds READ recordSeconds NOTIFY metersChanged)
+  Q_PROPERTY(QStringList recordFiles READ recordFiles NOTIFY recordChanged)
+  Q_PROPERTY(QString recordFolder READ recordFolder WRITE setRecordFolder NOTIFY recordChanged)
+  Q_PROPERTY(bool recordFloat READ recordFloat WRITE setRecordFloat NOTIFY recordChanged)
+  Q_PROPERTY(bool recordMaster READ recordMaster WRITE setRecordMaster NOTIFY recordChanged)
+  Q_PROPERTY(QString recordMessage READ recordMessage NOTIFY recordChanged)
+  bool recording() const { return recorder_.recording(); }
+  double recordSeconds() const { return recorder_.seconds(); }
+  QStringList recordFiles() const { QStringList l; for (const auto& f : recorder_.files()) l << QString::fromStdString(f); return l; }
+  QString recordFolder() const; void setRecordFolder(const QString& f) { settings_.setValue("record/folder", f); emit recordChanged(); }
+  bool recordFloat() const { return settings_.value("record/float32", false).toBool(); } void setRecordFloat(bool v) { settings_.setValue("record/float32", v); emit recordChanged(); }
+  bool recordMaster() const { return settings_.value("record/master", true).toBool(); } void setRecordMaster(bool v) { settings_.setValue("record/master", v); emit recordChanged(); }
+  QString recordMessage() const { return recMsg_; }
+  Q_INVOKABLE bool startRecording();
+  Q_INVOKABLE void stopRecording();
+  Q_INVOKABLE void setArmed(int strip, bool on);
+  Q_INVOKABLE bool armed(int strip) const { return strip >= 0 && strip < kStrips && ((armed_ >> strip) & 1u); }
+  Q_INVOKABLE int armedCount() const { int n = 0; for (int i = 0; i < kStrips; ++i) if ((armed_ >> i) & 1u) ++n; return n; }
+  // EFFECTS: one built-in effect per bus (reverb / delay / chorus / drive), before the bus returns to the master
+  Q_INVOKABLE QVariantList fxCatalog() const;                 // [{kind, name}]
+  Q_INVOKABLE QVariantMap busFx(int bus) const;               // {kind, name, bypass, mix, params: [{id, title, units, value, text, default}]}
+  Q_INVOKABLE void setBusFx(int bus, const QString& kind);    // "" removes
+  Q_INVOKABLE void setBusFxParam(int bus, const QString& id, double value);
+  Q_INVOKABLE void setBusFxBypass(int bus, bool on);
+  Q_INVOKABLE void setBusFxMix(int bus, double wet);
+  // WAVEFORM / PHASE: the scope tap
+  Q_PROPERTY(double width READ width WRITE setWidth NOTIFY stripsChanged)   // master stereo width 0..2
+  double width() const { return width_; } void setWidth(double w);
+  Q_INVOKABLE QVariantMap scopeFrame(int channel, double windowMs, int points, bool trigger);   // {samples: [..], vpp, vrms, freq, crest}
+  Q_INVOKABLE QVariantList lissajous(int points);                                                // [l0, r0, l1, r1, ...]
+  Q_INVOKABLE void setScopeStrip(int strip) { scope_.setStrip(strip); }
+  // AUTO DETECT: the best device to start with, without a remembered one: a native ASIO driver (not a wrapper, Realtek pinned) >
+  // ASIO4ALL-style wrapper > WASAPI / Core Audio / ALSA default endpoints > nothing (null is never auto-picked)
+  Q_INVOKABLE QVariantMap autoDetect() const;      // {backend, in, out, name, why, inChannels, outChannels, rate} or empty
+  Q_INVOKABLE bool autoStart(int frames);           // detect and SMART START it
   // an extra stereo source summed into the master (the ARRANGE player): attached to every runtime this Engine opens
-  void setExtraSource(am::Runtime::ExtraSource* s) { extra_ = s; if (rt_) rt_->setExtraSource(s); }
+  void setExtraSource(am::Runtime::ExtraSource* s) { extra_ = s; sources_.a.store(s); }
+  Q_INVOKABLE QVariantList spectrum(int channel);
+  Q_INVOKABLE QVariantMap roundTrip() const { double ms = 0, db = -120; QVariantMap m; m["ok"] = scope_.roundTrip(ms, db); m["ms"] = ms; m["returnDb"] = db; m["frames"] = blockFrames(); m["rate"] = sampleRate(); return m; }
+  Q_PROPERTY(double sampleRate READ sampleRate NOTIFY stateChanged)
+  Q_PROPERTY(int blockFrames READ blockFrames NOTIFY stateChanged)
+  double sampleRate() const { return rt_ ? rt_->sampleRate() : 0.0; } int blockFrames() const { return rt_ ? blockFrames_ : 0; }    // 31 third-octave bands in dBFS, 20 Hz .. 20 kHz; channel 0 master L, 1 R, 2 the scope strip
+  // TOOLS: test generator and metronome, summed into the master (pre master fader) with the ARRANGE player
+  Q_PROPERTY(bool testOn READ testOn WRITE setTestOn NOTIFY genChanged)
+  Q_PROPERTY(int testType READ testType WRITE setTestType NOTIFY genChanged)        // 0 sine, 1 pink, 2 white, 3 polarity pulse
+  Q_PROPERTY(double testFreq READ testFreq WRITE setTestFreq NOTIFY genChanged)
+  Q_PROPERTY(double testDb READ testDb WRITE setTestDb NOTIFY genChanged)
+  Q_PROPERTY(bool clickOn READ clickOn WRITE setClickOn NOTIFY genChanged)
+  Q_PROPERTY(double clickBpm READ clickBpm WRITE setClickBpm NOTIFY genChanged)
+  Q_PROPERTY(int clickBeats READ clickBeats WRITE setClickBeats NOTIFY genChanged)
+  Q_PROPERTY(double clickDb READ clickDb WRITE setClickDb NOTIFY genChanged)
+  Q_PROPERTY(int clickBeat READ clickBeat NOTIFY metersChanged)
+  bool testOn() const { return gen_.testOn.load(); } void setTestOn(bool v) { gen_.testOn.store(v); emit genChanged(); }
+  int testType() const { return gen_.testType.load(); } void setTestType(int v) { gen_.testType.store(std::clamp(v, 0, 3)); emit genChanged(); }
+  double testFreq() const { return gen_.testFreq.load(); } void setTestFreq(double v) { gen_.testFreq.store(std::clamp(v, 10.0, 20000.0)); emit genChanged(); }
+  double testDb() const { return gen_.testDb.load(); } void setTestDb(double v) { gen_.testDb.store(std::clamp(v, -60.0, 0.0)); emit genChanged(); }
+  bool clickOn() const { return gen_.clickOn.load(); } void setClickOn(bool v) { gen_.clickOn.store(v); emit genChanged(); }
+  double clickBpm() const { return gen_.bpm.load(); } void setClickBpm(double v) { gen_.bpm.store(std::clamp(v, 20.0, 300.0)); emit genChanged(); }
+  int clickBeats() const { return gen_.beatsPerBar.load(); } void setClickBeats(int v) { gen_.beatsPerBar.store(std::clamp(v, 1, 12)); emit genChanged(); }
+  double clickDb() const { return gen_.clickDb.load(); } void setClickDb(double v) { gen_.clickDb.store(std::clamp(v, -60.0, 0.0)); emit genChanged(); }
+  int clickBeat() const { return gen_.beat.load(); }
+  // MIC EQ: the 10 bands of a strip as a graphic equaliser on the ISO octave centres (31.5 Hz .. 16 kHz)
+  Q_INVOKABLE void setGraphicEq(int strip, const QVariantList& gainsDb, bool on);   // 10 gains; on = false keeps them but switches the bands off
+  Q_INVOKABLE QVariantList graphicEq(int strip) const;                             // the 10 gains (0 for a band that is not on an octave centre)
+  Q_INVOKABLE void copyEqToAll(int strip);                                          // EQ bands + high-pass of this strip onto every other strip
   am::Runtime* runtime() { return rt_.get(); }
   // strips
   Q_INVOKABLE void setGain(int strip, double db);
@@ -114,6 +193,41 @@ class Engine : public QObject {
   // MORE menu on a strip
   Q_INVOKABLE void resetStrip(int strip);            // fader 0, pan centre, unmuted, DSP flat, sends off, no groups; the name and colour stay
   Q_INVOKABLE void resetStripDsp(int strip);         // only the channel DSP
+  // UNDO / REDO of console changes (a snapshot after each burst of changes, 100 deep) and A / B compare
+  Q_PROPERTY(bool canUndo READ canUndo NOTIFY historyChanged)
+  Q_PROPERTY(bool canRedo READ canRedo NOTIFY historyChanged)
+  Q_PROPERTY(QString abSlot READ abSlot NOTIFY historyChanged)   // "A" or "B"
+  bool canUndo() const { return histPos_ > 0; } bool canRedo() const { return histPos_ + 1 < static_cast<int>(history_.size()); } QString abSlot() const { return abSlot_; }
+  Q_INVOKABLE void recordHistory();                   // snapshot now (the timer does it 400 ms after a change)
+  Q_INVOKABLE void undo();
+  Q_INVOKABLE void redo();
+  Q_INVOKABLE void toggleAB();                        // swap the console with the other slot (the first toggle copies the current console to B)
+  // stereo LINK: strips 2k and 2k+1 follow each other (gain, mute, solo; pan mirrored)
+  Q_INVOKABLE void setLink(int strip, bool on);
+  Q_INVOKABLE bool linked(int strip) const;
+  // input TRIM before the channel DSP (-24 .. +24 dB)
+  Q_INVOKABLE void setTrim(int strip, double db);
+  Q_INVOKABLE double trim(int strip) const;
+  // global mixer actions (the MIXER toolbar)
+  Q_INVOKABLE void muteAll(bool on);
+  Q_INVOKABLE void clearSolo();
+  Q_INVOKABLE void resetFaders();                     // every strip and the master to 0 dB, pans centre
+  Q_INVOKABLE void flattenAllDsp();
+  // PLUGIN slots: 10 per strip. A slot holds a built-in stage (gate | eq | xover | comp | limiter | delay | polarity: inserting it switches that
+  // stage on, removing it switches it off) or a VST3 reference ("vst3:<path>"), kept for the VST3 host that is not built yet (shown as pending).
+  static constexpr int kPluginSlots = 10;
+  Q_INVOKABLE QVariantList plugins(int strip) const;  // [{slot, kind, name, bypass, builtIn, pending}]
+  Q_INVOKABLE void setPlugin(int strip, int slot, const QString& kind);   // "" clears the slot
+  Q_INVOKABLE void setPluginBypass(int strip, int slot, bool bypass);
+  Q_INVOKABLE QVariantList pluginCatalog() const;     // the built-in stages, for the chooser
+  Q_INVOKABLE void movePlugin(int strip, int from, int to);   // reorder the rack (swap two slots)
+  // VST3 (engine/cpp/app/vst3): plug-ins found in the VST3 folders (Settings adds more), loaded into a slot as "vst3:<module path>|<class id>"
+  Q_INVOKABLE QVariantList vstCatalog() const;        // [{kind, name, vendor, module, cid, format}] from the last scan: VST3 and VST2
+  Q_INVOKABLE int rescanVst(const QStringList& extraDirs);   // scans the platform folders + extraDirs; returns the plug-in count
+  Q_INVOKABLE QVariantList pluginParams(int strip, int slot) const;   // [{id, title, units, value (normalized), text, stepCount, bypass, hidden, readOnly}]
+  Q_INVOKABLE void setPluginParam(int strip, int slot, int id, double normalized);
+  Q_INVOKABLE QString pluginError(int strip, int slot) const;
+  Q_INVOKABLE int pluginCount(int strip) const;
   Q_INVOKABLE void copyChannel(int strip);
   Q_INVOKABLE bool pasteChannel(int strip);          // the copied DSP + sends + pan onto this strip (not the name, colour, fader or groups)
   bool channelClipboard() const { return clipboard_.has_value(); }
@@ -179,14 +293,27 @@ class Engine : public QObject {
   void monitorChanged();
   void routingChanged();
   void licenseChanged();
+  void historyChanged();
+  void recordChanged();
+  void genChanged();
   void clipboardChanged();
 
  private:
   static constexpr int kStrips = 32;
   static constexpr int kBuses = 8, kGroups = 8;
   struct SendUi { double db = -60; bool pre = false; };
-  struct StripUi { QString name; double db = 0, pan = 0; bool mute = false, solo = false; am::dsp::Channel dsp{48000}; SendUi sends[kBuses]; int dca = 0; unsigned muteGroups = 0; int color = 0; };
-  struct BusUi { QString name; double db = 0, returnDb = -60; bool mute = false; };
+  struct PluginUi { QString kind; bool bypass = false; std::shared_ptr<am::host::Plugin> vst; QString state, error; };   // vst: loaded instance (null = pending with error)
+  std::vector<QVariantMap> vstCatalog_; std::vector<std::shared_ptr<am::host::Plugin>> graveyard_; QTimer graveTimer_;
+  bool loadVst(int strip, int slot);                      // from kind + state at the runtime's rate; false -> error set
+  void rebuildInserts(int strip);                         // the strip's VST chain into the runtime
+  void reloadAllVst();                                    // after open (new rate / block)
+  struct StripUi { QString name; double db = 0, pan = 0; bool mute = false, solo = false; am::dsp::Channel dsp{48000}; SendUi sends[kBuses]; int dca = 0; unsigned muteGroups = 0; int color = 0; PluginUi plugins[kPluginSlots]; bool link = false; double trimDb = 0; };
+  std::vector<QJsonObject> history_; int histPos_ = -1; bool restoring_ = false; QTimer histTimer_; QJsonObject abOther_; QString abSlot_ = "A";
+  int partner(int i) const { return (i ^ 1) < kStrips ? (i ^ 1) : -1; }
+  void applyPluginStage(int strip, const QString& kind, bool on);   // a built-in stage follows its slot
+  struct BusUi { QString name; double db = 0, returnDb = -60; bool mute = false; QString fxKind; std::unique_ptr<am::fx::Effect> fx; double fxMix = 1; bool fxBypass = false; std::map<QString, double> fxValues; };
+  std::vector<std::unique_ptr<am::fx::Effect>> fxGraveyard_; double width_ = 1.0; ScopeTap scope_; TapFanout taps_; Generator gen_; SourceFanout sources_; int blockFrames_ = 0;
+  void makeBusFx(int k);   // (re)creates the bus effect at the runtime's rate from kind + values and attaches it
   struct DcaUi { QString name; double db = 0; bool mute = false; };
   struct MuteGroupUi { QString name; bool active = false; };
   void pushStrip(int i);   // the strip's effective gain and mute (its own + DCA + mute groups) into the runtime
@@ -213,7 +340,7 @@ class Engine : public QObject {
   static constexpr int kOutputs = 32;
   int inRoute_[kStrips] = {}; int outRoute_[kOutputs] = {}; int devIn_ = 0, devOut_ = 0;
   QVariantMap license_; int licensedChannels_ = 8;
-  QString lastRoute_; am::Runtime::ExtraSource* extra_ = nullptr;
+  QString lastRoute_; am::Runtime::ExtraSource* extra_ = nullptr; am::rec::Recorder recorder_; unsigned armed_ = 0; QString recMsg_; double clipDb_ = -0.1; int peakHoldMs_ = 1400;
   struct MonitorUi { int source = 0; double db = 0; bool dim = false, mono = false, mute = false; } mon_;
   int vuRef_ = -18; double vu_[kStrips] = {}; double vuMaster_ = 0;                     // VU ballistics (300 ms to 99 %), run on the UI timer
   std::optional<QJsonObject> clipboard_;

@@ -18,7 +18,6 @@
 
 #include "audiomixer/dsp.hpp"
 #include "audiomixer/engine.hpp"
-#include "audiomixer/spatial.hpp"
 
 namespace am {
 
@@ -86,6 +85,7 @@ class Runtime {
   void setMasterDb(double db);
   void setLimiter(bool on, double ceilingDb = -0.5, double releaseMs = 100);
   void setClipDb(double db);
+  void setPeakHoldMs(double ms);
   void clearClips();
   // A mix OS channel DSP (audiomixer/dsp.hpp), applied to a strip's input before the mixer: parametric EQ, crossover, delay, polarity, limiter.
   // Coefficients are computed on the audio thread at the start of the next block (a few cos / pow, no allocation).
@@ -101,6 +101,8 @@ class Runtime {
   void setBusLevel(int bus, double db);
   void setBusMute(int bus, bool on);
   void setBusReturn(int bus, double db);
+  void setBusProcessor(int bus, BusProcessor* p);   // an effect on a bus (app/fx); keep it alive while set, detach with nullptr before deleting
+  void setWidth(double w);                           // master stereo width 0..2
   // the monitor section (control room): what goes to output channels 0 / 1 after the master meters. source 0 = master, 1..kMaxBuses = that bus
   // (post level, pre return); level in dB, dim = -20 dB, mono sums L+R, mute = silence. The master meters and loudness are not affected.
   void setMonitor(int source, double db, bool dim, bool mono, bool mute);
@@ -111,28 +113,33 @@ class Runtime {
   static constexpr int kSrcOff = 0, kSrcMasterL = 1, kSrcMasterR = 2, kSrcMonL = 3, kSrcMonR = 4, kSrcBus0L = 5;
   void setInputRoute(int strip, int input);
   void setOutputRoute(int out, int source);
+  void setTrimDb(int strip, double db);
+  // INSERTS: external processors (VST3 plug-ins) on a strip, after the built-in channel DSP and before the fader. The chain is swapped
+  // whole from the UI thread; the audio thread keeps its own reference for the block, so a removed plug-in stays alive until the block ends.
+  struct Insert { virtual ~Insert() = default; virtual void process(float* mono, std::size_t frames) = 0; };
+  using InsertChain = std::vector<std::shared_ptr<Insert>>;
+  void setInserts(int strip, std::shared_ptr<const InsertChain> chain);                     // input trim, before the channel DSP and the input meter (-24 .. +24 dB)
   static int defaultOutputSource(int out) { return out < 2 ? kSrcMonL + out : (out - 2 < 2 * kMaxBuses ? kSrcBus0L + (out - 2) : kSrcOff); }
   // an extra stereo source summed into the master before the master chain (the ARRANGE player): render() is called on the audio thread
   // with the block size; set nullptr to detach. The pointer must stay valid until setExtraSource(nullptr) has returned.
   struct ExtraSource { virtual ~ExtraSource() = default; virtual void render(float* L, float* R, std::size_t frames, double sampleRate) = 0; };
   void setExtraSource(ExtraSource* s) { extra_.store(s); }
-  // 360 degree output (Resonance Audio, only when Spatial::available()): the stereo master after the meters becomes two virtual speakers in a binaural scene; off by default.
-  // The audio is then delayed by Spatial::block() frames. Returns false when this binary has no Resonance Audio.
-  bool setSpatial(bool on);
-  void setSpatialPosition(double azimuthDeg, double elevationDeg, double distanceM, double spreadDeg = 30);
+  // a TAP sees every block on the audio thread (the recorder): the strips after trim / DSP / inserts and before the fader, then the master
+  // after its chain and meters (what the show hears, before the monitor section). Must not block or allocate. nullptr detaches.
+  struct Tap { virtual ~Tap() = default; virtual void onBlock(const float* const* strips, int nStrips, const float* L, const float* R, std::size_t frames, double sampleRate) = 0; };
+  void setTap(Tap* t) { tap_.store(t); }
   Snapshot snapshot() const;
   void onBlock(const float* const* in, float* const* out, std::size_t frames);   // the audio callback; public so a test can clock the runtime itself
  private:
-  struct Cmd { int op; int a; double x, y, z; int b = 0; double w = 0, v = 0, u = 0; };
+  struct Cmd { int op; int a; double x, y, z; int b = 0; double w = 0, v = 0, u = 0; void* p = nullptr; };
   void post(const Cmd& c);
   void publish();
 
   Mixer mixer_; std::unique_ptr<Backend> backend_; std::string backendName_;
   int nIn_ = 0, nOut_ = 0; bool running_ = false;
-  std::unique_ptr<Spatial> spatial_; bool spatialOn_ = false; double spAz_ = 0, spEl_ = 0, spDist_ = 2, spSpread_ = 30;     // spatial_ is created in open(); spatialOn_ is only touched by the audio thread
   std::vector<float> silence_, left_, right_;
   int monSrc_ = 0; double monGainTarget_ = 1, monGain_ = 1; bool monMono_ = false; double monPk_[2] = {0, 0};   // audio thread only
-  std::vector<float> monL_, monR_, extL_, extR_; std::atomic<ExtraSource*> extra_{nullptr}; int inRoute_[kMaxStrips]; int outRoute_[kMaxOutputs];                            // audio thread only (set in open, then by ops)
+  std::vector<float> monL_, monR_, extL_, extR_; std::atomic<ExtraSource*> extra_{nullptr}; std::atomic<Tap*> tap_{nullptr}; int inRoute_[kMaxStrips]; int outRoute_[kMaxOutputs]; double trim_[kMaxStrips]; std::atomic<std::shared_ptr<const InsertChain>> inserts_[kMaxStrips];                            // audio thread only (set in open, then by ops)
   std::vector<dsp::Channel> ch_; std::vector<std::vector<float>> chBuf_;
   std::vector<std::vector<float>> busBuf_;   // 2 * kMaxBuses blocks for the aux bus outputs   // one channel DSP and one scratch block per strip (sized in open())
   // control ring: many producers (under a mutex), one consumer (the audio thread)

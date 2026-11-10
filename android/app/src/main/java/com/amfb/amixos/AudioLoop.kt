@@ -1,0 +1,46 @@
+package com.amfb.amixos
+
+import android.media.AudioAttributes
+import android.media.AudioFormat
+import android.media.AudioRecord
+import android.media.AudioTrack
+import android.media.MediaRecorder
+import kotlin.concurrent.thread
+
+/** Microphone -> strip 0 of the engine -> speaker / headphones, in 256-frame blocks on a worker thread. Needs RECORD_AUDIO. */
+class AudioLoop(private val engine: Engine, private val sampleRate: Int = 48000, private val frames: Int = 256) {
+    @Volatile private var running = false
+    private var worker: Thread? = null
+    @Volatile var lastPeaks: FloatArray = FloatArray(engine.strips + 2)
+        private set
+
+    fun start() {
+        if (running) return
+        running = true
+        worker = thread(name = "amix-audio", priority = Thread.MAX_PRIORITY) {
+            val inMin = AudioRecord.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_FLOAT)
+            val outMin = AudioTrack.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_FLOAT)
+            val rec = AudioRecord(MediaRecorder.AudioSource.UNPROCESSED, sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_FLOAT, maxOf(inMin, frames * 8))
+            val track = AudioTrack.Builder()
+                .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
+                .setAudioFormat(AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_FLOAT).setSampleRate(sampleRate).setChannelMask(AudioFormat.CHANNEL_OUT_STEREO).build())
+                .setBufferSizeInBytes(maxOf(outMin, frames * 16)).setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY).build()
+            val mono = FloatArray(frames)
+            val inputs = arrayOfNulls<FloatArray>(engine.strips).also { it[0] = mono }
+            try {
+                rec.startRecording(); track.play()
+                while (running) {
+                    val got = rec.read(mono, 0, frames, AudioRecord.READ_BLOCKING)
+                    if (got <= 0) continue
+                    val stereo = engine.process(inputs, got)
+                    track.write(stereo, 0, stereo.size, AudioTrack.WRITE_BLOCKING)
+                    lastPeaks = engine.peaks()
+                }
+            } finally {
+                runCatching { rec.stop() }; rec.release(); runCatching { track.stop() }; track.release()
+            }
+        }
+    }
+
+    fun stop() { running = false; worker?.join(1000); worker = null }
+}

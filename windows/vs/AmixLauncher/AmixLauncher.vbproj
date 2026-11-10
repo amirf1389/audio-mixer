@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- A mix OS launcher: a VB.NET WinForms front end that starts amixos-daemon.exe, shows its status and opens the console / the web remote.
+       Build with Visual Studio 2022 (.NET 8 desktop workload) or `dotnet build`. It talks to the daemon over HTTP on 127.0.0.1 only. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <RootNamespace>AmixLauncher</RootNamespace>
+    <AssemblyName>AmixLauncher</AssemblyName>
+    <Platforms>x64</Platforms>
+    <ApplicationIcon />
+    <Nullable>disable</Nullable>
+    <OptionStrict>On</OptionStrict>
+    <OutputPath>$(SolutionDir)out\$(Configuration)\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <ProjectGuid>{6F2C7A10-1D4E-4B8A-9C21-2A7E3F4B5C03}</ProjectGuid>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Update="MainForm.vb"><SubType>Form</SubType></Compile>
+  </ItemGroup>
+</Project>

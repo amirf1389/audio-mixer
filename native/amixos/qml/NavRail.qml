@@ -29,7 +29,8 @@ Rectangle {
                     property bool newGroup: index === 0 || rail.pages[index - 1].group !== p.group
                     Text { visible: newGroup; text: i18n.t(p.group, i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.bold: true; font.letterSpacing: 2; leftPadding: 10; topPadding: index === 0 ? 0 : 10; bottomPadding: 2 }
                     Rectangle {
-                        width: col.width - 10; x: 5; height: 50; radius: 8
+                        readonly property bool allowed: access.canPage(p.id)
+                        visible: allowed; width: col.width - 10; x: 5; height: allowed ? 50 : 0; radius: 8
                         color: rail.current === p.id ? Qt.rgba(0.918, 0.345, 0.047, 0.16) : "transparent"
                         border.color: rail.current === p.id ? Theme.orange : "transparent"
                         Column {

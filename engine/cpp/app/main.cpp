@@ -6,7 +6,7 @@
 //                     PCM between the device and stdin / stdout for the bridge (see stream.cpp); ends when stdin ends
 //   audiomixer-native [--backend auto|alsa|wasapi|asio|coreaudio|null] [--in DEV] [--out DEV] [--rate 48000] [--frames 256] [--strips 8]
 //   Windows setup options: --install-driver | --uninstall-driver (the ASIO driver embedded in this .exe) | --install-flexasio FILE --sha256 HEX (see win_tools.cpp)
-//                     [--in-ch 2] [--out-ch 2] [--seconds N] [--master-db X] [--spatial AZIMUTH_DEG] [--exclusive]   (--exclusive: WASAPI exclusive mode, the program takes control of the device)
+//                     [--in-ch 2] [--out-ch 2] [--seconds N] [--master-db X] [--exclusive]   (--exclusive: WASAPI exclusive mode, the program takes control of the device)
 // Prints the meters twice a second; stops after --seconds (default: until Ctrl-C).
 #include <algorithm>
 #include <atomic>
@@ -21,7 +21,6 @@
 
 #include "audiomixer/asio.hpp"
 #include "audiomixer/runtime.hpp"
-#include "audiomixer/spatial.hpp"
 #include "stream.hpp"
 #ifdef _WIN32
 #include "win_tools.hpp"
@@ -35,7 +34,7 @@ int main(int argc, char** argv) {
 #ifdef _WIN32
   { int rc = 0; if (am::runWinTool(argc, argv, rc)) return rc; }       // --install-driver / --uninstall-driver / --install-flexasio FILE --sha256 HEX
 #endif
-  am::DeviceConfig cfg; int strips = 8; double seconds = 0, masterDb = 0, azimuth = 1e9; bool list = false, probeAsio = false, stream = false, listDevices = false;
+  am::DeviceConfig cfg; int strips = 8; double seconds = 0, masterDb = 0; bool list = false, probeAsio = false, stream = false, listDevices = false;
   for (int i = 1; i < argc; ++i) {
     const std::string a = argv[i]; auto next = [&]() -> const char* { return i + 1 < argc ? argv[++i] : ""; };
     if (a == "--list") list = true;
@@ -53,7 +52,6 @@ int main(int argc, char** argv) {
     else if (a == "--exclusive") cfg.exclusive = true;
     else if (a == "--seconds") seconds = std::atof(next());
     else if (a == "--master-db") masterDb = std::atof(next());
-    else if (a == "--spatial") azimuth = std::atof(next());
     else { std::printf("unknown option %s (see the header of engine/cpp/app/main.cpp)\n", a.c_str()); return 2; }
   }
   if (stream) return am::runStream(cfg);
@@ -93,7 +91,6 @@ int main(int argc, char** argv) {
   }
   if (list) {
     std::printf("backends built in:"); for (const auto& b : am::availableBackends()) std::printf(" %s", b.c_str());
-    std::printf("\n360 output (Resonance Audio): %s\n", am::Spatial::available() ? "built in" : "not built in");
     const auto drivers = am::listAsioDrivers(); std::printf("ASIO drivers:"); if (drivers.empty()) std::printf(" none"); for (const auto& d : drivers) std::printf(" [%s]", d.name.c_str()); std::printf("\n");
     return 0;
   }
@@ -102,9 +99,8 @@ int main(int argc, char** argv) {
   am::Runtime rt(strips); std::string err;
   if (!rt.open(cfg, err)) { std::printf("cannot open the audio device: %s\n", err.c_str()); return 1; }
   rt.setMasterDb(masterDb);
-  if (azimuth < 1e8) { if (rt.setSpatial(true)) rt.setSpatialPosition(azimuth, 0, 2, 30); else std::printf("note: this build has no 360 output\n"); }
   if (!rt.start(err)) { std::printf("cannot start: %s\n", err.c_str()); return 1; }
-  std::printf("audiomixer-native: %s, %.0f Hz, %u frames, %d strips -> stereo master%s\n", rt.backendName().c_str(), cfg.sampleRate, cfg.frames, strips, azimuth < 1e8 ? " (360)" : "");
+  std::printf("audiomixer-native: %s, %.0f Hz, %u frames, %d strips -> stereo master%s\n", rt.backendName().c_str(), cfg.sampleRate, cfg.frames, strips, "");
   const auto t0 = std::chrono::steady_clock::now();
   while (!g_stop) {
     std::this_thread::sleep_for(std::chrono::milliseconds(500));

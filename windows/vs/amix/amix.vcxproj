@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A mix OS: amix. Visual Studio 2022 (v143), C++20. Open windows\vs\AmixOS.sln. -->
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64"><Configuration>Debug</Configuration><Platform>x64</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64"><Configuration>Release</Configuration><Platform>x64</Platform></ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{6F2C7A10-1D4E-4B8A-9C21-2A7E3F4B5C01}</ProjectGuid>
+    <RootNamespace>amix</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <UseDebugLibraries Condition="'$(Configuration)'=='Debug'">true</UseDebugLibraries>
+    <WholeProgramOptimization Condition="'$(Configuration)'=='Release'">true</WholeProgramOptimization>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <PropertyGroup>
+    <OutDir>$(SolutionDir)out\$(Configuration)\</OutDir>
+    <IntDir>$(SolutionDir)out\obj\$(ProjectName)\$(Configuration)\</IntDir>
+    <TargetName>amix</TargetName>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>$(SolutionDir)..\..\engine\cpp\include;$(SolutionDir)..\..\engine\cpp\src;$(SolutionDir)..\..\engine\cpp\app;$(SolutionDir)..\..\sdk\c\include;$(SolutionDir)..\..\drivers\asio;$(SolutionDir)..\..\drivers\asio\sdk;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>AMIX_BUILD_DLL;NOMINMAX;WIN32_LEAN_AND_MEAN;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <WarningLevel>Level3</WarningLevel>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <Optimization Condition="'$(Configuration)'=='Release'">MaxSpeed</Optimization>
+      <RuntimeLibrary Condition="'$(Configuration)'=='Release'">MultiThreaded</RuntimeLibrary>
+      <RuntimeLibrary Condition="'$(Configuration)'=='Debug'">MultiThreadedDebug</RuntimeLibrary>
+      <ExceptionHandling>Sync</ExceptionHandling>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <AdditionalDependencies>ole32.lib;oleaut32.lib;uuid.lib;advapi32.lib;avrt.lib;ws2_32.lib;winhttp.lib;bcrypt.lib;crypt32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\..\engine\cpp\src\engine.cpp" />
+    <ClCompile Include="..\..\..\engine\cpp\src\runtime.cpp" />
+    <ClCompile Include="..\..\..\engine\cpp\src\backend_null.cpp" />
+    <ClCompile Include="..\..\..\engine\cpp\src\devices.cpp" />
+    <ClCompile Include="..\..\..\engine\cpp\src\driver_intel.cpp" />
+    <ClCompile Include="..\..\..\engine\cpp\src\backend_wasapi.cpp" />
+    <ClCompile Include="..\..\..\engine\cpp\src\backend_asio.cpp" />
+    <ClCompile Include="..\..\..\engine\cpp\app\license\license.cpp" />
+    <ClCompile Include="..\..\..\engine\cpp\app\license\crypto.cpp" />
+    <ClCompile Include="..\..\..\engine\cpp\app\sdk\amix_c.cpp" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

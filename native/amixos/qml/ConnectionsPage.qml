@@ -9,8 +9,8 @@ Flickable {
     property string backend: engine.backends.length ? engine.backends[0] : "null"
     property string inId: ""
     property string outId: ""
-    property int rate: 48000
-    property int frames: 256
+    property int rate: settings.defaultRate
+    property int frames: settings.defaultFrames
     property var planModel: []
     onInIdChanged: planModel = engine.driverPlan(backend, inId, outId)
     onOutIdChanged: planModel = engine.driverPlan(backend, inId, outId)
@@ -59,10 +59,15 @@ Flickable {
                 Layout.fillWidth: true; spacing: 8
                 Rectangle { implicitWidth: 110; implicitHeight: 30; radius: 6; color: engine.running ? Qt.rgba(1, 1, 1, 0.08) : Theme.emerald
                     Text { anchors.centerIn: parent; text: engine.running ? "RESTART" : "START ENGINE"; color: engine.running ? Theme.ink : "#000"; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
-                    MouseArea { anchors.fill: parent; onClicked: { var i = page.dev(page.inId), o = page.dev(page.outId); engine.open(page.backend, page.inId, page.outId, page.rate, page.frames, i ? Math.min(32, i.inChannels) : 2, o ? Math.min(2, o.outChannels) : 2) } } }
+                    MouseArea { anchors.fill: parent; onClicked: { var i = page.dev(page.inId), o = page.dev(page.outId); var ok = engine.open(page.backend, page.inId, page.outId, page.rate, page.frames, i ? Math.min(32, i.inChannels) : 2, o ? Math.min(2, o.outChannels) : 2); if (ok) settings.rememberDevice(page.backend, page.inId, page.outId, page.rate, page.frames, i ? Math.min(32, i.inChannels) : 2, o ? Math.min(2, o.outChannels) : 2) } } }
+                Rectangle { implicitWidth: 100; implicitHeight: 30; radius: 6; color: Qt.rgba(0.984, 0.749, 0.141, 0.2); border.color: Theme.amber
+                    Text { anchors.centerIn: parent; text: "AUTO DETECT"; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
+                    property var det: engine.autoDetect()
+                    MouseArea { anchors.fill: parent; onClicked: engine.autoStart(page.frames) }
+                    ToolTip.visible: adHov.hovered; ToolTip.text: det && det.name ? ("Would start " + det.name + " (" + det.backend.toUpperCase() + "): " + det.why) : "No real sound card found"; HoverHandler { id: adHov } }
                 Rectangle { visible: page.backend === "asio"; implicitWidth: 110; implicitHeight: 30; radius: 6; color: Theme.cyan
                     Text { anchors.centerIn: parent; text: "SMART START"; color: "#000"; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
-                    MouseArea { anchors.fill: parent; onClicked: { var i = page.dev(page.inId), o = page.dev(page.outId); engine.openSmart(page.backend, page.inId, page.outId, page.rate, page.frames, i ? Math.min(32, i.inChannels) : 2, o ? Math.min(2, o.outChannels) : 2); page.planModel = engine.driverPlan(page.backend, page.inId, page.outId) } } }
+                    MouseArea { anchors.fill: parent; onClicked: { var i = page.dev(page.inId), o = page.dev(page.outId); var ok = engine.openSmart(page.backend, page.inId, page.outId, page.rate, page.frames, i ? Math.min(32, i.inChannels) : 2, o ? Math.min(2, o.outChannels) : 2); if (ok) settings.rememberDevice(page.backend, page.inId, page.outId, page.rate, page.frames, i ? Math.min(32, i.inChannels) : 2, o ? Math.min(2, o.outChannels) : 2); page.planModel = engine.driverPlan(page.backend, page.inId, page.outId) } } }
                 Rectangle { implicitWidth: 80; implicitHeight: 30; radius: 6; color: engine.running ? Theme.danger : Qt.rgba(1, 1, 1, 0.05); Text { anchors.centerIn: parent; text: "STOP"; color: engine.running ? "#000" : Theme.dim; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; enabled: engine.running; onClicked: engine.stop() } }
                 Text { text: engine.status; color: engine.running ? Theme.emerald : Theme.amber; font.family: Theme.mono; font.pixelSize: 9; Layout.fillWidth: true; wrapMode: Text.WordWrap }
             }

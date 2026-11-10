@@ -42,13 +42,29 @@ jobs:
           cmake --build build/amixos
           ctest --test-dir build/amixos --output-on-failure
           QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software build/amixos/amixos --shots build/shots
+      - name: C SDK, Perl XS, Rust crates, WASM core, Linux tarball
+        run: |
+          sudo apt-get install -y perl clang lld
+          curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal && . "$HOME/.cargo/env"
+          (cd bindings/perl/Audio-AmixOS && AMIX_LIB=$PWD/../../../build/engine perl Makefile.PL && make && make test)
+          (cd bindings/rust && AMIX_LIB_DIR=$PWD/../../build/engine LD_LIBRARY_PATH=$PWD/../../build/engine cargo test)
+          sh sdk/wasm/build.sh && node sdk/wasm/test.mjs
+          scripts/package-linux.sh build/engine
       - uses: actions/upload-artifact@v4
         with:
           name: amixos-linux-x64-${{ github.sha }}
           path: |
             build/amixos/amixos
             build/shots/*.png
+            dist/amixos-*-linux-*.tar.gz
+            dist/amixos-*-linux-*.tar.gz.sha256
+            sdk/wasm/amix_dsp.wasm
           if-no-files-found: error
+      - name: Attach to release (version tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --clobber dist/amixos-*-linux-*.tar.gz dist/amixos-*-linux-*.tar.gz.sha256 || (sleep 30 && gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --clobber dist/amixos-*-linux-*.tar.gz dist/amixos-*-linux-*.tar.gz.sha256)
 
   windows:
     runs-on: windows-2022
@@ -164,12 +180,21 @@ jobs:
           cp app/build/outputs/apk/debug/app-debug.apk ../../dist/amixos-remote-debug.apk
           cp app/build/outputs/bundle/release/app-release.aab ../../dist/amixos-remote-release-unsigned.aab
           ls -la ../../dist
+      - name: Native app (Kotlin + the engine's C SDK through the NDK)
+        working-directory: android
+        run: |
+          gradle wrapper --gradle-version 8.9 --no-daemon
+          ./gradlew --no-daemon assembleRelease bundleRelease
+          cp app/build/outputs/apk/release/app-release.apk ../dist/amixos-android.apk
+          cp app/build/outputs/bundle/release/app-release.aab ../dist/amixos-android.aab
       - uses: actions/upload-artifact@v4
         with:
           name: amixos-remote-android-${{ github.sha }}
           path: |
             dist/amixos-remote-debug.apk
             dist/amixos-remote-release-unsigned.aab
+            dist/amixos-android.apk
+            dist/amixos-android.aab
           if-no-files-found: error
       - name: Attach to release (version tags only)
         if: startsWith(github.ref, 'refs/tags/v')

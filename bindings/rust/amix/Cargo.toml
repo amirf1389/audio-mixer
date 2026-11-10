@@ -1,0 +1,9 @@
+[package]
+name = "amix"
+version = "0.1.0"
+edition = "2021"
+description = "Safe Rust API for the A mix OS audio engine: offline mixer, live runtime, meters, devices"
+license = "LicenseRef-AmixOS"
+
+[dependencies]
+amix-sys = { path = "../amix-sys" }

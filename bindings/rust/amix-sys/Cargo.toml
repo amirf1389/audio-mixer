@@ -1,0 +1,10 @@
+[package]
+name = "amix-sys"
+version = "0.1.0"
+edition = "2021"
+description = "Raw FFI to the A mix OS engine C SDK (libamix)"
+license = "LicenseRef-AmixOS"
+links = "amix"
+build = "build.rs"
+
+[dependencies]

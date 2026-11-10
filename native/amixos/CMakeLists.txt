@@ -22,6 +22,10 @@ qt_add_executable(amixos
     src/main.cpp
     src/Engine.cpp src/Engine.h
     src/Arrange.cpp src/Arrange.h
+    src/Settings.cpp src/Settings.h
+    src/Access.cpp src/Access.h
+    src/Scope.cpp src/Scope.h
+    src/Generator.cpp src/Generator.h
     src/I18n.cpp src/I18n.h)
 set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)   # before qt_add_qml_module, or Theme is a plain type and every Theme.* colour is undefined
 qt_add_qml_module(amixos
@@ -40,6 +44,19 @@ qt_add_qml_module(amixos
         qml/RoutingPage.qml
         qml/LicensePage.qml
         qml/ArrangePage.qml
+        qml/EffectsPage.qml
+        qml/WaveformPage.qml
+        qml/PhasePage.qml
+        qml/MicEqPage.qml
+        qml/LiveSourcesPage.qml
+        qml/ToolsPage.qml
+        qml/CalibratePage.qml
+        qml/DiagnosticsPage.qml
+        qml/HelpPage.qml
+        qml/AccountPage.qml
+        qml/AccessPage.qml
+        qml/AdminPage.qml
+        qml/PinPad.qml
         qml/HomePage.qml
         qml/MixerPage.qml
         qml/TonePage.qml
@@ -59,7 +76,7 @@ qt_add_qml_module(amixos
         i18n/verified-22.json
         i18n/auto-58.json)
 target_compile_definitions(amixos PRIVATE AMIX_VERSION="${AMIX_VERSION}")
-target_link_libraries(amixos PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::QuickControls2 audiomixer_runtime audiomixer_engine amixos_license amixos_arrange)
+target_link_libraries(amixos PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::QuickControls2 audiomixer_runtime audiomixer_engine amixos_license amixos_arrange amixos_vst3 amixos_vst2 amixos_record amixos_fx)
 
 if(WIN32)
     set_target_properties(amixos PROPERTIES WIN32_EXECUTABLE TRUE)
