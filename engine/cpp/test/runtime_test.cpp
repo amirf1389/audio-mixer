@@ -65,6 +65,10 @@ int main() {
     expect(*std::max_element(o0.begin(), o0.end()) == 0.f && rt.snapshot().master[0].pk > 0.1, "mute silences the outputs, the master meter still shows signal");
     rt.setMonitor(1, 0, false, false, false); rt.setSend(0, 0, 0, false); rt.setBusLevel(0, 0); for (int k = 0; k < 20; ++k) rt.onBlock(ins, outs, n);
     expect(*std::max_element(o0.begin(), o0.end()) > 0.1f, "monitor source = bus 1 hears the send");
+    // input trim: -6 dB halves the strip's post-fader peak, +6 dB doubles it (fader at 0 dB)
+    rt.setMonitor(0, 0, false, false, false); rt.setInputRoute(0, 0); rt.setInputRoute(1, 1); rt.setSend(0, 0, -120, false);
+    rt.setTrimDb(0, -6.0206); for (int k = 0; k < 800; ++k) rt.onBlock(ins, outs, n); expect(std::fabs(rt.snapshot().strips[0].pk - 0.25) < 0.02, "trim -6 dB halves the strip peak");
+    rt.setTrimDb(0, 0); for (int k = 0; k < 800; ++k) rt.onBlock(ins, outs, n); expect(std::fabs(rt.snapshot().strips[0].pk - 0.5) < 0.02, "trim back to 0 dB");
     // the routing matrix: strip 0 fed from input 1 (silence here), output 0 carrying bus 1 L directly, output 1 off
     rt.setMonitor(0, 0, false, false, false); rt.setSend(0, 0, -120, false);
     std::vector<float> quiet(n, 0.0f); const float* ins2[2] = {tone.data(), quiet.data()};

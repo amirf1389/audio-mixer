@@ -31,5 +31,6 @@ export type Control =
   | { op: 'monitor'; source?: number; db?: number; dim?: boolean; mono?: boolean; mute?: boolean }
   | { op: 'inRoute'; strip: number; input: number }
   | { op: 'outRoute'; out: number; source: number }
+  | { op: 'trim'; strip: number; db: number }
   | { op: 'clearClips' };
 export interface ControlOk { ok: true; [k: string]: unknown }

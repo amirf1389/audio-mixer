@@ -39,7 +39,7 @@ std::unique_ptr<Backend> createBackend(const std::string& name) {
   return nullptr;
 }
 
-enum Op { kGain, kPan, kMute, kSolo, kMaster, kLimiter, kClipDb, kClear, kEq, kDelay, kPolarity, kXover, kChLimiter, kComp, kGate, kSend, kBusLevel, kBusMute, kBusReturn, kMonitor, kInRoute, kOutRoute };
+enum Op { kGain, kPan, kMute, kSolo, kMaster, kLimiter, kClipDb, kClear, kEq, kDelay, kPolarity, kXover, kChLimiter, kComp, kGate, kSend, kBusLevel, kBusMute, kBusReturn, kMonitor, kInRoute, kOutRoute, kTrim };
 
 Runtime::Runtime(int strips) : mixer_(strips, 48000) { std::memset(&pub_, 0, sizeof pub_); }
 Runtime::~Runtime() { stop(); }
@@ -54,7 +54,7 @@ bool Runtime::open(const DeviceConfig& cfg, std::string& err) {
   mixer_ = Mixer(mixer_.strips(), cfg.sampleRate);                                  // the mixer runs at the device rate
   const std::size_t n = std::max<std::size_t>(cfg.frames, 16) * 8;                  // scratch for blocks up to 8 periods (devices may hand out more than the period)
   silence_.assign(n, 0.0f); left_.assign(n, 0.0f); right_.assign(n, 0.0f); monL_.assign(n, 0.0f); monR_.assign(n, 0.0f); extL_.assign(n, 0.0f); extR_.assign(n, 0.0f);
-  for (int s = 0; s < kMaxStrips; ++s) inRoute_[s] = s;
+  for (int s = 0; s < kMaxStrips; ++s) { inRoute_[s] = s; trim_[s] = 1.0; }
   for (int o = 0; o < kMaxOutputs; ++o) outRoute_[o] = defaultOutputSource(o);
   ch_.assign(static_cast<std::size_t>(mixer_.strips()), dsp::Channel(cfg.sampleRate)); chBuf_.assign(ch_.size(), std::vector<float>(n, 0.0f));
   busBuf_.assign(2 * kMaxBuses, std::vector<float>(n, 0.0f));
@@ -91,6 +91,7 @@ void Runtime::setBusMute(int b, bool on) { post({kBusMute, b, on ? 1.0 : 0.0, 0,
 void Runtime::setBusReturn(int b, double db) { post({kBusReturn, b, db, 0, 0}); }
 void Runtime::setInputRoute(int strip, int input) { if (strip < 0 || strip >= kMaxStrips) return; post({kInRoute, strip, 0, 0, 0, std::max(-1, std::min(kMaxStrips - 1, input))}); }
 void Runtime::setOutputRoute(int out, int source) { if (out < 0 || out >= kMaxOutputs) return; post({kOutRoute, out, 0, 0, 0, std::max(0, std::min(kSrcBus0L + 2 * kMaxBuses - 1, source))}); }
+void Runtime::setTrimDb(int strip, double db) { if (strip < 0 || strip >= kMaxStrips) return; post({kTrim, strip, std::pow(10.0, std::clamp(db, -24.0, 24.0) / 20), 0, 0}); }
 void Runtime::setMonitor(int source, double db, bool dim, bool mono, bool mute) {
   double lin = std::pow(10.0, std::clamp(db, -120.0, 10.0) / 20); if (dim) lin *= 0.1; if (mute || db <= -119) lin = 0;
   post({kMonitor, std::clamp(source, 0, kMaxBuses), lin, 0, 0, mono ? 1 : 0});
@@ -122,6 +123,7 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
       case kMonitor: monSrc_ = c.a; monGainTarget_ = c.x; monMono_ = c.b != 0; break;
       case kInRoute: inRoute_[c.a] = c.b; break;
       case kOutRoute: outRoute_[c.a] = c.b; break;
+      case kTrim: trim_[c.a] = c.x; break;
       default: break;
     }
     tail_.store(t + 1, std::memory_order_release);
@@ -132,7 +134,13 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
     const int src = inRoute_[s];
     ins[s] = (src >= 0 && src < nIn_ && in && in[src]) ? in[src] : silence_.data();
     dsp::Channel& ch = ch_[static_cast<std::size_t>(s)];
-    if (ch.active()) { float* b = chBuf_[static_cast<std::size_t>(s)].data(); std::memcpy(b, ins[s], frames * sizeof(float)); ch.process(b, frames); ins[s] = b; }   // the strip's channel DSP, in a scratch block
+    const double tr = trim_[s];
+    if (ch.active() || tr != 1.0) {   // the strip's input trim and channel DSP, in a scratch block
+      float* b = chBuf_[static_cast<std::size_t>(s)].data();
+      if (tr != 1.0) { const float g = static_cast<float>(tr); for (std::size_t i = 0; i < frames; ++i) b[i] = ins[s][i] * g; } else std::memcpy(b, ins[s], frames * sizeof(float));
+      if (ch.active()) ch.process(b, frames);
+      ins[s] = b;
+    }
   }
   float* busOut[2 * kMaxBuses]; for (int k = 0; k < 2 * kMaxBuses; ++k) busOut[k] = busBuf_[static_cast<std::size_t>(k)].data();
   ExtraSource* ext = extra_.load();

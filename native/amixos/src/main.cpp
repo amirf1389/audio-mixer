@@ -87,6 +87,15 @@ int main(int argc, char* argv[]) {
     engine.setPlugin(4, 0, ""); engine.setPlugin(4, 1, "");
     engine.muteAll(true); if (!engine.stripState()[7].toMap().value("mute").toBool()) { std::fprintf(stderr, "amixos --smoke: mute all failed\n"); return 24; } engine.muteAll(false);
     engine.setSolo(2, true); engine.clearSolo(); if (engine.stripState()[2].toMap().value("solo").toBool()) { std::fprintf(stderr, "amixos --smoke: clear solo failed\n"); return 25; }
+    // stereo link, trim, undo / redo, A / B
+    engine.setLink(6, true); engine.setGain(6, -9); engine.setPan(6, -0.5); if (std::fabs(engine.stripState()[7].toMap().value("db").toDouble() + 9) > 1e-9 || std::fabs(engine.stripState()[7].toMap().value("pan").toDouble() - 0.5) > 1e-9) { std::fprintf(stderr, "amixos --smoke: stereo link did not follow\n"); return 27; }
+    engine.setLink(6, false); engine.setGain(6, 0); engine.setGain(7, 0); engine.setPan(6, 0); engine.setPan(7, 0);
+    engine.setTrim(5, 6); if (std::fabs(engine.trim(5) - 6) > 1e-9) { std::fprintf(stderr, "amixos --smoke: trim did not take\n"); return 28; } engine.setTrim(5, 0);
+    engine.recordHistory(); engine.setGain(9, -12); engine.recordHistory(); if (!engine.canUndo()) { std::fprintf(stderr, "amixos --smoke: no undo history\n"); return 29; }
+    engine.undo(); if (std::fabs(engine.stripState()[9].toMap().value("db").toDouble()) > 1e-9) { std::fprintf(stderr, "amixos --smoke: undo did not restore the fader\n"); return 30; }
+    engine.redo(); if (std::fabs(engine.stripState()[9].toMap().value("db").toDouble() + 12) > 1e-9) { std::fprintf(stderr, "amixos --smoke: redo failed\n"); return 31; }
+    engine.toggleAB(); engine.setGain(9, 3); engine.toggleAB(); if (std::fabs(engine.stripState()[9].toMap().value("db").toDouble() + 12) > 1e-9 || engine.abSlot() != "A") { std::fprintf(stderr, "amixos --smoke: A/B did not restore A\n"); return 32; }
+    engine.toggleAB(); engine.setGain(9, 0); engine.toggleAB(); engine.setGain(9, 0);
     engine.setInputRoute(3, 0); engine.setOutputRoute(0, 1);   // the routing matrix: CH 4 reads input 1, OUT 1 carries MASTER L
     if (engine.inputRoutes()[3].toInt() != 0 || engine.outputRoutes()[0].toInt() != 1) { std::fprintf(stderr, "amixos --smoke: routing did not take\n"); return 11; }
     engine.resetRouting(); if (engine.inputRoutes()[3].toInt() != 3 || engine.outputRoutes()[0].toInt() != 3) { std::fprintf(stderr, "amixos --smoke: routing defaults wrong\n"); return 12; }

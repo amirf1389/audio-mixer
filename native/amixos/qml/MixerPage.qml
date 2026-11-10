@@ -16,6 +16,20 @@ Item {
     property bool rack: true           // the PLUGIN RACK of the selected channel, under the action bar
     readonly property var selPlugins: engine.plugins(sel)
     Connections { target: engine; function onStripsChanged() { page.selPlugins = engine.plugins(page.sel) } function onSelectedStripChanged() { page.selPlugins = engine.plugins(page.sel) } }
+    // keyboard: ← → select strip, M mute, S solo, 0 fader to 0 dB, Ctrl+Z / Ctrl+Y undo / redo, A A/B, R plugin rack, Esc clear solo
+    focus: true
+    Keys.onPressed: function (e) {
+        if (e.key === Qt.Key_Left) { engine.selectedStrip = Math.max(0, page.sel - 1); e.accepted = true }
+        else if (e.key === Qt.Key_Right) { engine.selectedStrip = Math.min(engine.strips - 1, page.sel + 1); e.accepted = true }
+        else if (e.key === Qt.Key_M) engine.setMute(page.sel, !(page.selSt && page.selSt.mute))
+        else if (e.key === Qt.Key_S && !(e.modifiers & Qt.ControlModifier)) engine.setSolo(page.sel, !(page.selSt && page.selSt.solo))
+        else if (e.key === Qt.Key_0) engine.setGain(page.sel, 0)
+        else if (e.key === Qt.Key_Z && (e.modifiers & Qt.ControlModifier)) engine.undo()
+        else if (e.key === Qt.Key_Y && (e.modifiers & Qt.ControlModifier)) engine.redo()
+        else if (e.key === Qt.Key_A) engine.toggleAB()
+        else if (e.key === Qt.Key_R) page.rack = !page.rack
+        else if (e.key === Qt.Key_Escape) engine.clearSolo()
+    }
     readonly property var mon: engine.monitor
     signal go(string id)
     readonly property int sel: engine.selectedStrip
@@ -56,6 +70,10 @@ Item {
                 property bool anySolo: { var m = false; for (var i = 0; i < engine.stripState.length; i++) if (engine.stripState[i].solo) m = true; return m }
                 id: bar
                 Text { text: "ACTIONS:"; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
+                Rectangle { implicitWidth: 44; implicitHeight: 20; radius: 4; color: engine.canUndo ? Qt.rgba(1, 1, 1, 0.1) : Qt.rgba(1, 1, 1, 0.03); Text { anchors.centerIn: parent; text: "↶ UNDO"; color: engine.canUndo ? Theme.ink : Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; enabled: engine.canUndo; onClicked: engine.undo() } }
+                Rectangle { implicitWidth: 44; implicitHeight: 20; radius: 4; color: engine.canRedo ? Qt.rgba(1, 1, 1, 0.1) : Qt.rgba(1, 1, 1, 0.03); Text { anchors.centerIn: parent; text: "REDO ↷"; color: engine.canRedo ? Theme.ink : Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; enabled: engine.canRedo; onClicked: engine.redo() } }
+                Rectangle { implicitWidth: 44; implicitHeight: 20; radius: 4; color: engine.abSlot === "B" ? Theme.pink : Qt.rgba(1, 1, 1, 0.06); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: "A / B: " + engine.abSlot; color: engine.abSlot === "B" ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.toggleAB() } ToolTip.visible: abHov.hovered; ToolTip.text: "Compare two console states: the first press keeps the current console as B and shows A; press again to swap"; HoverHandler { id: abHov } }
+                Rectangle { width: 1; implicitHeight: 20; color: Theme.lineSoft }
                 Rectangle { implicitWidth: 72; implicitHeight: 20; radius: 4; color: bar.anyMute ? Theme.danger : Qt.rgba(1, 1, 1, 0.06); Text { anchors.centerIn: parent; text: bar.anyMute ? "UNMUTE ALL" : "MUTE ALL"; color: bar.anyMute ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.muteAll(!bar.anyMute) } }
                 Rectangle { implicitWidth: 72; implicitHeight: 20; radius: 4; color: bar.anySolo ? Theme.amber : Qt.rgba(1, 1, 1, 0.06); Text { anchors.centerIn: parent; text: "CLEAR SOLO"; color: bar.anySolo ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; enabled: bar.anySolo; onClicked: engine.clearSolo() } }
                 Rectangle { implicitWidth: 80; implicitHeight: 20; radius: 4; color: Qt.rgba(1, 1, 1, 0.06); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: "RESET FADERS"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: confirmReset.open() } }
@@ -150,6 +168,10 @@ Item {
                                 ColumnLayout {
                                     anchors.fill: parent; anchors.margins: 4; anchors.topMargin: 6; spacing: 3
                                     TextInput { Layout.fillWidth: true; text: st ? st.name : ""; color: st && st.effectiveMute ? Theme.dim : Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; horizontalAlignment: Text.AlignHCenter; selectByMouse: true; onEditingFinished: engine.setName(index, text); onActiveFocusChanged: if (activeFocus) engine.selectedStrip = index }
+                                    RowLayout { Layout.fillWidth: true; spacing: 2
+                                        Rectangle { implicitWidth: 22; implicitHeight: 10; radius: 2; color: st && st.link ? Theme.cyan : Qt.rgba(1, 1, 1, 0.05); Text { anchors.centerIn: parent; text: index % 2 ? "⟵L" : "L⟶"; color: st && st.link ? "#000" : Theme.dim; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setLink(index, !(st && st.link)) } ToolTip.visible: lnkHov.hovered; ToolTip.text: "Stereo link with CH " + ((index ^ 1) + 1) + ": gain, mute, solo follow, pan mirrors"; HoverHandler { id: lnkHov } }
+                                        Item { Layout.fillWidth: true }
+                                        Text { text: "TRIM " + (st && st.trimDb > 0 ? "+" : "") + (st ? st.trimDb.toFixed(1) : "0.0"); color: st && st.trimDb !== 0 ? Theme.amber : Theme.dim; font.family: Theme.mono; font.pixelSize: 6; MouseArea { anchors.fill: parent; onClicked: { engine.selectedStrip = index; page.sidePanel = true } } } }
                                     // DSP badges: lit when on, click opens the page for this channel
                                     Flow { Layout.fillWidth: true; spacing: 2
                                         Repeater {
@@ -223,6 +245,12 @@ Item {
                             Text { Layout.fillWidth: true; text: (page.selSt ? page.selSt.name : "") + "  ·  CH " + (page.sel + 1); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 10; font.bold: true; elide: Text.ElideRight } }
                         Text { text: "COLOUR"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
                         RowLayout { spacing: 4; Repeater { model: 8; delegate: Rectangle { implicitWidth: 20; implicitHeight: 14; radius: 3; color: Theme.stripColors[index]; border.color: page.selSt && page.selSt.color === index ? Theme.ink : "transparent"; border.width: 2; MouseArea { anchors.fill: parent; onClicked: engine.setColor(page.sel, index) } } } }
+                        RowLayout { Layout.fillWidth: true
+                            Text { text: "INPUT TRIM"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
+                            Slider { Layout.fillWidth: true; from: -24; to: 24; stepSize: 0.5; value: page.selSt ? page.selSt.trimDb : 0; onMoved: engine.setTrim(page.sel, value) }
+                            Text { text: (page.selSt && page.selSt.trimDb > 0 ? "+" : "") + (page.selSt ? page.selSt.trimDb.toFixed(1) : "0.0") + " dB"; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 7; Layout.preferredWidth: 46 }
+                            Rectangle { implicitWidth: 18; implicitHeight: 14; radius: 2; color: Qt.rgba(1, 1, 1, 0.08); Text { anchors.centerIn: parent; text: "0"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7 } MouseArea { anchors.fill: parent; onClicked: engine.setTrim(page.sel, 0) } } }
+                        Text { text: "Gain staging before the gate / EQ / compressor and the IN meter: bring a quiet source up or a hot one down here, keep the fader near 0 dB."; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 6; wrapMode: Text.WordWrap; Layout.fillWidth: true }
                         Rectangle { Layout.fillWidth: true; height: 1; color: Theme.lineSoft }
                         // gate
                         RowLayout { Layout.fillWidth: true

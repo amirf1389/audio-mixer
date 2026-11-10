@@ -114,6 +114,21 @@ class Engine : public QObject {
   // MORE menu on a strip
   Q_INVOKABLE void resetStrip(int strip);            // fader 0, pan centre, unmuted, DSP flat, sends off, no groups; the name and colour stay
   Q_INVOKABLE void resetStripDsp(int strip);         // only the channel DSP
+  // UNDO / REDO of console changes (a snapshot after each burst of changes, 100 deep) and A / B compare
+  Q_PROPERTY(bool canUndo READ canUndo NOTIFY historyChanged)
+  Q_PROPERTY(bool canRedo READ canRedo NOTIFY historyChanged)
+  Q_PROPERTY(QString abSlot READ abSlot NOTIFY historyChanged)   // "A" or "B"
+  bool canUndo() const { return histPos_ > 0; } bool canRedo() const { return histPos_ + 1 < static_cast<int>(history_.size()); } QString abSlot() const { return abSlot_; }
+  Q_INVOKABLE void recordHistory();                   // snapshot now (the timer does it 400 ms after a change)
+  Q_INVOKABLE void undo();
+  Q_INVOKABLE void redo();
+  Q_INVOKABLE void toggleAB();                        // swap the console with the other slot (the first toggle copies the current console to B)
+  // stereo LINK: strips 2k and 2k+1 follow each other (gain, mute, solo; pan mirrored)
+  Q_INVOKABLE void setLink(int strip, bool on);
+  Q_INVOKABLE bool linked(int strip) const;
+  // input TRIM before the channel DSP (-24 .. +24 dB)
+  Q_INVOKABLE void setTrim(int strip, double db);
+  Q_INVOKABLE double trim(int strip) const;
   // global mixer actions (the MIXER toolbar)
   Q_INVOKABLE void muteAll(bool on);
   Q_INVOKABLE void clearSolo();
@@ -193,6 +208,7 @@ class Engine : public QObject {
   void monitorChanged();
   void routingChanged();
   void licenseChanged();
+  void historyChanged();
   void clipboardChanged();
 
  private:
@@ -200,7 +216,9 @@ class Engine : public QObject {
   static constexpr int kBuses = 8, kGroups = 8;
   struct SendUi { double db = -60; bool pre = false; };
   struct PluginUi { QString kind; bool bypass = false; };
-  struct StripUi { QString name; double db = 0, pan = 0; bool mute = false, solo = false; am::dsp::Channel dsp{48000}; SendUi sends[kBuses]; int dca = 0; unsigned muteGroups = 0; int color = 0; PluginUi plugins[kPluginSlots]; };
+  struct StripUi { QString name; double db = 0, pan = 0; bool mute = false, solo = false; am::dsp::Channel dsp{48000}; SendUi sends[kBuses]; int dca = 0; unsigned muteGroups = 0; int color = 0; PluginUi plugins[kPluginSlots]; bool link = false; double trimDb = 0; };
+  std::vector<QJsonObject> history_; int histPos_ = -1; bool restoring_ = false; QTimer histTimer_; QJsonObject abOther_; QString abSlot_ = "A";
+  int partner(int i) const { return (i ^ 1) < kStrips ? (i ^ 1) : -1; }
   void applyPluginStage(int strip, const QString& kind, bool on);   // a built-in stage follows its slot
   struct BusUi { QString name; double db = 0, returnDb = -60; bool mute = false; };
   struct DcaUi { QString name; double db = 0; bool mute = false; };

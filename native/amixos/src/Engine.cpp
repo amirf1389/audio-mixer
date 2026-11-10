@@ -27,6 +27,9 @@ Engine::Engine(QObject* parent) : QObject(parent) {
   for (int i = 0; i < kStrips; ++i) inRoute_[i] = i;
   for (int o = 0; o < kOutputs; ++o) outRoute_[o] = am::Runtime::defaultOutputSource(o);
   refreshLicense();
+  histTimer_.setSingleShot(true); histTimer_.setInterval(400); connect(&histTimer_, &QTimer::timeout, this, &Engine::recordHistory);
+  for (auto sig : {&Engine::stripsChanged, &Engine::busesChanged, &Engine::groupsChanged, &Engine::monitorChanged, &Engine::routingChanged}) connect(this, sig, this, [this] { if (!restoring_) histTimer_.start(); });
+  history_.push_back(consoleJson()); histPos_ = 0;
   connect(&timer_, &QTimer::timeout, this, &Engine::tick);
   tick();
 }
@@ -66,7 +69,7 @@ void Engine::pushAll() {
   for (int k = 0; k < kBuses; ++k) { rt_->setBusLevel(k, buses_[k].db); rt_->setBusMute(k, buses_[k].mute); rt_->setBusReturn(k, buses_[k].returnDb); }
   for (int i = 0; i < kStrips; ++i) {
     const StripUi& s = strips_[static_cast<std::size_t>(i)];
-    pushStrip(i); rt_->setPan(i, s.pan); rt_->setSolo(i, s.solo);
+    pushStrip(i); rt_->setPan(i, s.pan); rt_->setSolo(i, s.solo); rt_->setTrimDb(i, s.trimDb);
     for (int k = 0; k < kBuses; ++k) rt_->setSend(i, k, s.sends[k].db, s.sends[k].pre);
     const am::dsp::ChannelParams& p = s.dsp.params();
     for (int b = 0; b < am::dsp::kEqBands; ++b) { const auto& e = p.eq[static_cast<std::size_t>(b)]; rt_->setEqBand(i, b, e.type, e.freq, e.q, e.gainDb); }
@@ -81,7 +84,7 @@ void Engine::pushAll() {
 
 QVariantList Engine::stripState() const {
   QVariantList l;
-  for (int i = 0; i < kStrips; ++i) { const StripUi& s = strips_[static_cast<std::size_t>(i)]; QVariantMap m; m["index"] = i; m["name"] = s.name; m["db"] = s.db; m["pan"] = s.pan; m["mute"] = s.mute; m["solo"] = s.solo; m["dsp"] = s.dsp.active(); m["dca"] = s.dca; m["muteGroups"] = static_cast<int>(s.muteGroups); m["effectiveDb"] = effectiveDb(i); m["effectiveMute"] = effectiveMute(i); m["color"] = s.color; m["plugins"] = pluginCount(i);
+  for (int i = 0; i < kStrips; ++i) { const StripUi& s = strips_[static_cast<std::size_t>(i)]; QVariantMap m; m["index"] = i; m["name"] = s.name; m["db"] = s.db; m["pan"] = s.pan; m["mute"] = s.mute; m["solo"] = s.solo; m["dsp"] = s.dsp.active(); m["dca"] = s.dca; m["muteGroups"] = static_cast<int>(s.muteGroups); m["effectiveDb"] = effectiveDb(i); m["effectiveMute"] = effectiveMute(i); m["color"] = s.color; m["plugins"] = pluginCount(i); m["link"] = s.link; m["trimDb"] = s.trimDb;
     const auto& p = s.dsp.params(); bool eqOn = false; for (const auto& b : p.eq) eqOn = eqOn || b.type != am::dsp::FilterType::Off;
     m["gateOn"] = p.gateOn; m["compOn"] = p.compOn; m["limOn"] = p.limiterOn; m["eqOn"] = eqOn; m["xoverOn"] = p.hpOrder > 0 || p.lpOrder > 0; m["delayOn"] = p.delayMs > 0; m["polarity"] = p.polarityInvert;
     QVariantList sb; for (int k = 0; k < kBuses; ++k) if (s.sends[k].db > -60) sb << (k + 1); m["sendsTo"] = sb; l << m; }
@@ -116,10 +119,10 @@ void Engine::setMuteGroupActive(int g, bool on) { if (g < 1 || g > kGroups) retu
 double Engine::effectiveDb(int i) const { if (i < 0 || i >= kStrips) return -60; const StripUi& s = strips_[static_cast<std::size_t>(i)]; const double g = s.dca > 0 ? dcas_[s.dca - 1].db : 0; return std::clamp(s.db + g, -60.0, 10.0); }
 bool Engine::effectiveMute(int i) const { if (i < 0 || i >= kStrips) return true; if (i >= licensedChannels_) return true; const StripUi& s = strips_[static_cast<std::size_t>(i)]; if (s.mute) return true; if (s.dca > 0 && dcas_[s.dca - 1].mute) return true; for (int g = 0; g < kGroups; ++g) if ((s.muteGroups >> g) & 1u && muteGroups_[g].active) return true; return false; }
 void Engine::pushStrip(int i) { if (!rt_) return; rt_->setGainDb(i, effectiveDb(i)); rt_->setMute(i, effectiveMute(i)); }
-void Engine::setGain(int i, double db) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].db = std::clamp(db, -60.0, 10.0); pushStrip(i); emit stripsChanged(); }
-void Engine::setPan(int i, double p) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].pan = std::clamp(p, -1.0, 1.0); if (rt_) rt_->setPan(i, strips_[static_cast<std::size_t>(i)].pan); emit stripsChanged(); }
-void Engine::setMute(int i, bool on) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].mute = on; pushStrip(i); emit stripsChanged(); }
-void Engine::setSolo(int i, bool on) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].solo = on; if (rt_) rt_->setSolo(i, on); emit stripsChanged(); }
+void Engine::setGain(int i, double db) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].db = std::clamp(db, -60.0, 10.0); pushStrip(i); if (linked(i)) { strips_[static_cast<std::size_t>(partner(i))].db = strips_[static_cast<std::size_t>(i)].db; pushStrip(partner(i)); } emit stripsChanged(); }
+void Engine::setPan(int i, double p) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].pan = std::clamp(p, -1.0, 1.0); if (rt_) rt_->setPan(i, strips_[static_cast<std::size_t>(i)].pan); if (linked(i)) { const int j = partner(i); strips_[static_cast<std::size_t>(j)].pan = -strips_[static_cast<std::size_t>(i)].pan; if (rt_) rt_->setPan(j, strips_[static_cast<std::size_t>(j)].pan); } emit stripsChanged(); }
+void Engine::setMute(int i, bool on) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].mute = on; pushStrip(i); if (linked(i)) { strips_[static_cast<std::size_t>(partner(i))].mute = on; pushStrip(partner(i)); } emit stripsChanged(); }
+void Engine::setSolo(int i, bool on) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].solo = on; if (rt_) rt_->setSolo(i, on); if (linked(i)) { const int j = partner(i); strips_[static_cast<std::size_t>(j)].solo = on; if (rt_) rt_->setSolo(j, on); } emit stripsChanged(); }
 void Engine::setName(int i, const QString& n) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].name = n.left(24); emit stripsChanged(); }
 void Engine::setColor(int i, int c) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].color = std::clamp(c, 0, 7); emit stripsChanged(); }
 void Engine::setMaster(double db) { masterDb_ = std::clamp(db, -60.0, 10.0); if (rt_) rt_->setMasterDb(masterDb_); emit stripsChanged(); }
@@ -216,6 +219,17 @@ void Engine::resetStrip(int i) {
   s.db = 0; s.pan = 0; s.mute = false; s.solo = false; s.dca = 0; s.muteGroups = 0; for (SendUi& sd : s.sends) sd = SendUi{}; s.dsp.set(am::dsp::ChannelParams{});
   if (rt_) pushAll(); emit stripsChanged(); emit groupsChanged();
 }
+void Engine::recordHistory() {
+  const QJsonObject now = consoleJson(); if (histPos_ >= 0 && histPos_ < static_cast<int>(history_.size()) && history_[static_cast<std::size_t>(histPos_)] == now) return;
+  history_.resize(static_cast<std::size_t>(histPos_ + 1)); history_.push_back(now); if (history_.size() > 100) history_.erase(history_.begin()); histPos_ = static_cast<int>(history_.size()) - 1; emit historyChanged();
+}
+void Engine::undo() { histTimer_.stop(); if (histPos_ <= 0) return; restoring_ = true; applyConsoleJson(history_[static_cast<std::size_t>(--histPos_)], false); restoring_ = false; emit historyChanged(); }
+void Engine::redo() { histTimer_.stop(); if (histPos_ + 1 >= static_cast<int>(history_.size())) return; restoring_ = true; applyConsoleJson(history_[static_cast<std::size_t>(++histPos_)], false); restoring_ = false; emit historyChanged(); }
+void Engine::toggleAB() { const QJsonObject cur = consoleJson(); if (abOther_.isEmpty()) abOther_ = cur; const QJsonObject other = abOther_; abOther_ = cur; abSlot_ = abSlot_ == "A" ? "B" : "A"; applyConsoleJson(other, false); emit historyChanged(); }
+void Engine::setLink(int i, bool on) { if (i < 0 || i >= kStrips || partner(i) < 0) return; strips_[static_cast<std::size_t>(i)].link = on; strips_[static_cast<std::size_t>(partner(i))].link = on; if (on) { const StripUi& a = strips_[static_cast<std::size_t>(i & ~1)]; StripUi& b = strips_[static_cast<std::size_t>(i | 1)]; b.db = a.db; b.mute = a.mute; b.solo = a.solo; b.pan = -a.pan; pushStrip(i | 1); if (rt_) { rt_->setPan(i | 1, b.pan); rt_->setSolo(i | 1, b.solo); } } emit stripsChanged(); }
+bool Engine::linked(int i) const { return i >= 0 && i < kStrips && strips_[static_cast<std::size_t>(i)].link; }
+void Engine::setTrim(int i, double db) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].trimDb = std::clamp(db, -24.0, 24.0); if (rt_) rt_->setTrimDb(i, strips_[static_cast<std::size_t>(i)].trimDb); emit stripsChanged(); }
+double Engine::trim(int i) const { return i >= 0 && i < kStrips ? strips_[static_cast<std::size_t>(i)].trimDb : 0; }
 void Engine::muteAll(bool on) { for (int i = 0; i < kStrips; ++i) { strips_[static_cast<std::size_t>(i)].mute = on; pushStrip(i); } emit stripsChanged(); }
 void Engine::clearSolo() { for (int i = 0; i < kStrips; ++i) { strips_[static_cast<std::size_t>(i)].solo = false; if (rt_) rt_->setSolo(i, false); } emit stripsChanged(); }
 void Engine::resetFaders() { for (int i = 0; i < kStrips; ++i) { StripUi& s = strips_[static_cast<std::size_t>(i)]; s.db = 0; s.pan = 0; pushStrip(i); if (rt_) rt_->setPan(i, 0); } masterDb_ = 0; if (rt_) rt_->setMasterDb(0); emit stripsChanged(); }
@@ -363,7 +377,7 @@ QJsonObject Engine::stripJson(const StripUi& s) const {
   const auto& p = s.dsp.params(); QJsonObject o; o["name"] = s.name; o["db"] = s.db; o["pan"] = s.pan; o["mute"] = s.mute; o["solo"] = s.solo;
   o["dsp"] = dspJson(p);
   QJsonArray sends; for (const SendUi& sd : s.sends) { QJsonObject e; e["db"] = sd.db; e["pre"] = sd.pre; sends << e; } o["sends"] = sends; o["dca"] = s.dca; o["muteGroups"] = static_cast<int>(s.muteGroups); o["color"] = s.color;
-  QJsonArray pl; for (const PluginUi& p : s.plugins) { QJsonObject e; e["kind"] = p.kind; e["bypass"] = p.bypass; pl << e; } o["plugins"] = pl;
+  QJsonArray pl; for (const PluginUi& p : s.plugins) { QJsonObject e; e["kind"] = p.kind; e["bypass"] = p.bypass; pl << e; } o["plugins"] = pl; o["link"] = s.link; o["trimDb"] = s.trimDb;
   return o;
 }
 QJsonObject Engine::dspJson(const am::dsp::ChannelParams& p) {
@@ -392,6 +406,7 @@ void Engine::stripFromJson(StripUi& s, const QJsonObject& o) {
   s.dsp.set(dspFromJson(o.value("dsp").toObject()));
   const QJsonArray sends = o.value("sends").toArray(); for (int k = 0; k < kBuses; ++k) { if (k < sends.size()) { const QJsonObject e = sends[k].toObject(); s.sends[k].db = std::clamp(e.value("db").toDouble(-60), -60.0, 10.0); s.sends[k].pre = e.value("pre").toBool(); } else s.sends[k] = SendUi{}; }
   s.dca = std::clamp(o.value("dca").toInt(0), 0, kGroups); s.muteGroups = static_cast<unsigned>(std::clamp(o.value("muteGroups").toInt(0), 0, 255)); s.color = std::clamp(o.value("color").toInt(0), 0, 7);
+  s.link = o.value("link").toBool(); s.trimDb = std::clamp(o.value("trimDb").toDouble(0), -24.0, 24.0);
   const QJsonArray pl = o.value("plugins").toArray(); for (int k = 0; k < kPluginSlots; ++k) { if (k < pl.size()) { const QJsonObject e = pl[k].toObject(); s.plugins[k].kind = e.value("kind").toString().left(1024); s.plugins[k].bypass = e.value("bypass").toBool(); } else s.plugins[k] = PluginUi{}; }
 }
 QJsonObject Engine::consoleJson() const {
