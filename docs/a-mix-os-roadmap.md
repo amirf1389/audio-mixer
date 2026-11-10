@@ -30,10 +30,10 @@ decided, what exists, what is next, and what was asked for but is not possible a
 - 83 interface languages (22 verified + 61 machine-translated, marked auto), RTL mirroring.
 - Decision (user): the engine also runs as a **background service (headless daemon)** with a local API, and a **React Native (TypeScript)
   app** is the remote control from a phone or tablet. The Qt console stays the desktop interface. Android as a full console stays parked;
-  the RN remote covers phones first.
+  the Kotlin app covers phones.
 - **amixos-daemon** (`engine/cpp/app/daemon`): HTTP + WebSocket JSON API on 127.0.0.1:8765 (token in `~/.amixos/daemon.token`,
   `--allow-lan` for a phone, unencrypted without `deploy/nginx`), tested on the null backend (ctest `daemon`), cross-compiled for Windows.
-- **Remote** (`remote/`, React Native + TypeScript, Expo): Connect, Mixer, Channel (EQ / compressor / gate), Devices. The client
+- **Remote** (was `remote/`, React Native + TypeScript, Expo; replaced 2026-11-10 by the Kotlin remote in `android/`, pure-Kotlin client tested on the JVM against the daemon): Connect, Mixer, Channel (EQ / compressor / gate), Devices. The client
   (`src/api/client.ts`) is tested under Node against the real daemon; the app typechecks. A phone build needs Expo on a PC / Mac.
 - **MIXER additions**: analogue VU meters (300 ms ballistics, 0 VU reference), MORE menu per strip, MONITOR control-room section
   (source, level, DIM, MONO, MUTE after the master meters). **ROUTING** page: inputs → strips and sources → outputs matrices
@@ -80,6 +80,10 @@ decided, what exists, what is next, and what was asked for but is not possible a
 - **SDK and packaging** (`docs/sdk.md`): a stable C API (`sdk/c/include/amix.h`, `libamix`) over the engine; Perl XS module, Rust
   crates, Kotlin / Android app through JNI, a Visual Studio solution with a VB.NET launcher, a freestanding WebAssembly DSP core, a
   Linux tarball script, and Actions jobs that produce the tar.gz, the APK / AAB, the exe and the dmg. One engine, no duplicates.
+- **AI MIX** (gain-sharing AUTOMIX per strip with weights and live shares; master AUTO LEVEL toward a LUFS target under the limiter:
+  roadmap item 10), **PLUGINS** (manager: search, folders, rescan, INSERT into the selected strip), **NETWORK** (an OSC 1.0 UDP server:
+  faders, mutes, solos, pans, master, buses in; meters out; this computer only unless LAN is allowed, and the page says it is
+  unauthenticated). COMPRESSOR / NOISE GATE / SEND TO / GROUP FADERS / PRESETS / SCENES were long ported and are now marked so.
 
 ## Next, in order
 
@@ -92,7 +96,7 @@ decided, what exists, what is next, and what was asked for but is not possible a
 7. ~~VST3 hosting~~ done 2026-11-10 (generic controls; still open: the plug-in's own editor window, macOS bundles). VST2 hosting added 2026-11-10 as a clean-room host of the public ABI (no Steinberg VST2 SDK file is used).
 8. **Bluetooth** as ordinary inputs / outputs (they appear through WASAPI / Core Audio / ALSA already; the page shows codec and latency).
 9. ~~Spatial / 360~~: removed 2026-11-10 at the user's request (the SURROUND page and the Resonance Audio path are gone; no spatial rendering is built in).
-10. **Volume optimise ("no low, but loud")**: a master loudness stage = loudness-normalising gain + look-ahead true-peak limiter to a target (−14 LUFS streaming / −1 dBTP), with the "quiet source" detector raising gain smoothly; never clipping, always measured on the LOUDNESS page.
+10. ~~Volume optimise ("no low, but loud")~~ done 2026-11-10 as AUTO LEVEL on AI MIX: a master loudness stage = loudness-normalising gain + look-ahead true-peak limiter to a target (−14 LUFS streaming / −1 dBTP), with the "quiet source" detector raising gain smoothly; never clipping, always measured on the LOUDNESS page.
 11. **High-resolution engine**: 96 / 192 kHz paths are already native (double precision, device rate); add sample-rate conversion for mixed-rate sources and 32-bit float / 24-bit WAV export.
 12. **Low noise from the media player**: dither on output when the device is 16-bit, DC removal, denormal protection, and a "player gain" stage so the OS mixer is never needed.
 13. **Factory reset**: a SETTINGS / BOOT page action that wipes the saved console state (QSettings), presets and licence cache after a confirmation, and a `--factory-reset` command line switch.

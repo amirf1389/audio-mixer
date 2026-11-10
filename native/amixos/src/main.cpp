@@ -15,12 +15,15 @@
 
 #include <QElapsedTimer>
 #include <QThread>
+#include <QUdpSocket>
+#include <QtEndian>
 #include <QFileInfo>
 #include <QFile>
 #include <vector>
 #include "Arrange.h"
 #include "Settings.h"
 #include "Access.h"
+#include "Osc.h"
 #include "Engine.h"
 #include "license/license.hpp"
 #include "I18n.h"
@@ -41,13 +44,14 @@ int main(int argc, char* argv[]) {
   const QString smokeWav = QDir::tempPath() + "/amixos-smoke-tone.wav", smokeOut = QDir::tempPath() + "/amixos-smoke-export.wav";   // used by the smoke and by its end-of-run lambda: must outlive both
   for (int i = 1; i < argc; ++i) { const QString a = QString::fromLocal8Bit(argv[i]); if (a == "--smoke") smoke = true; else if (a == "--shots" && i + 1 < argc) { smoke = true; shots = QString::fromLocal8Bit(argv[++i]); } else if (a == "--lang" && i + 1 < argc) lang = QString::fromLocal8Bit(argv[++i]); }
 
-  Engine engine; I18n i18n; Arrange arrange(&engine); Settings settings(&engine); Access access(&engine);
+  Engine engine; I18n i18n; Arrange arrange(&engine); Settings settings(&engine); Access access(&engine); Osc osc(&engine);
   if (!lang.isEmpty()) i18n.setLang(lang);   // --lang fa: start in that language (also for --shots)
   QQmlApplicationEngine qml;
   qml.rootContext()->setContextProperty("engine", &engine);
   qml.rootContext()->setContextProperty("arrange", &arrange);
   qml.rootContext()->setContextProperty("settings", &settings);
   qml.rootContext()->setContextProperty("access", &access);
+  qml.rootContext()->setContextProperty("osc", &osc);
   QObject::connect(&app, &QGuiApplication::aboutToQuit, &settings, &Settings::sessionClosed);
   qml.rootContext()->setContextProperty("i18n", &i18n);
   qml.rootContext()->setContextProperty("appVersion", QStringLiteral(AMIX_VERSION));
@@ -162,6 +166,17 @@ int main(int argc, char* argv[]) {
       access.setPerm("guest", "dsp", true); if (access.matrix()["guest"].toMap()["dsp"].toBool()) { std::fprintf(stderr, "amixos --smoke: matrix edit without ADMIN mode must fail\n"); return 95; }
       if (!access.enterAdmin("1234")) { std::fprintf(stderr, "amixos --smoke: admin PIN\n"); return 96; } access.setPerm("guest", "dsp", true); if (!access.matrix()["guest"].toMap()["dsp"].toBool()) { std::fprintf(stderr, "amixos --smoke: matrix edit\n"); return 97; } access.resetMatrix(); access.leaveAdmin();
       if (access.audit().size() < 5) { std::fprintf(stderr, "amixos --smoke: audit log\n"); return 98; } }
+    { engine.setAutomix(0, true, 2.0); engine.setAutomix(1, true, 1.0); if (!engine.stripState()[0].toMap()["automix"].toBool() || std::fabs(engine.stripState()[0].toMap()["amWeight"].toDouble() - 2.0) > 1e-9) { std::fprintf(stderr, "amixos --smoke: automix state\n"); return 100; }
+      engine.setAutoLevelOn(true); engine.setAutoLevelTarget(-18); if (!engine.autoLevelOn() || std::fabs(engine.autoLevelTarget() + 18) > 1e-9) { std::fprintf(stderr, "amixos --smoke: auto level props\n"); return 101; }
+      waitMs(300); if (!engine.meters()[0].toMap().contains("amGainDb") || !engine.telemetry().contains("autoLevelDb")) { std::fprintf(stderr, "amixos --smoke: automix / auto level telemetry\n"); return 102; }
+      engine.setAutoLevelOn(false); engine.setAutomix(0, false, 1); engine.setAutomix(1, false, 1);
+      // OSC: a /ch/5/fader -12 packet through the parser, then one over UDP to the server on 127.0.0.1
+      auto pkt = [](const QByteArray& addr, float v) { QByteArray o = addr; o.append('\0'); while (o.size() % 4) o.append('\0'); o += QByteArray(",f\0\0", 4); quint32 b; std::memcpy(&b, &v, 4); char be[4]; qToBigEndian(b, be); o.append(be, 4); return o; };
+      if (!osc.handle(pkt("/ch/5/fader", -12.f)) || std::fabs(engine.stripState()[4].toMap()["db"].toDouble() + 12) > 1e-6) { std::fprintf(stderr, "amixos --smoke: OSC parse\n"); return 103; }
+      osc.setAllowLan(false); osc.setPort(18000); osc.setEnabled(true); if (!osc.enabled()) { std::fprintf(stderr, "amixos --smoke: OSC bind: %s\n", qPrintable(osc.status())); return 104; }
+      QUdpSocket client; client.writeDatagram(pkt("/ch/6/fader", -7.f), QHostAddress::LocalHost, 18000); waitMs(300);
+      if (std::fabs(engine.stripState()[5].toMap()["db"].toDouble() + 7) > 1e-6 || osc.rx() < 1) { std::fprintf(stderr, "amixos --smoke: OSC over UDP did not arrive (rx %d)\n", osc.rx()); return 105; }
+      osc.setEnabled(false); engine.setGain(4, 0); engine.setGain(5, 0); }
     engine.setInputRoute(3, 0); engine.setOutputRoute(0, 1);   // the routing matrix: CH 4 reads input 1, OUT 1 carries MASTER L
     if (engine.inputRoutes()[3].toInt() != 0 || engine.outputRoutes()[0].toInt() != 1) { std::fprintf(stderr, "amixos --smoke: routing did not take\n"); return 11; }
     engine.resetRouting(); if (engine.inputRoutes()[3].toInt() != 3 || engine.outputRoutes()[0].toInt() != 3) { std::fprintf(stderr, "amixos --smoke: routing defaults wrong\n"); return 12; }
@@ -169,7 +184,7 @@ int main(int argc, char* argv[]) {
       if (!shots.isEmpty()) {   // one picture per ported page
         QDir().mkpath(shots);
         auto* win = qobject_cast<QQuickWindow*>(qml.rootObjects().first());
-        for (const char* id : {"home", "mixer", "dsp", "dyn", "gate", "bus", "dca", "scenes", "presets", "routing", "renew", "arrange", "io", "meter", "lufs", "sys", "fx", "osc", "phase", "miceq", "live", "tools", "calib", "boot", "help", "acct", "access", "admin"}) {
+        for (const char* id : {"home", "mixer", "dsp", "dyn", "gate", "bus", "dca", "scenes", "presets", "routing", "renew", "arrange", "io", "meter", "lufs", "sys", "fx", "osc", "phase", "miceq", "live", "tools", "calib", "boot", "help", "acct", "access", "admin", "ai", "plugins", "network"}) {
           win->setProperty("current", QString::fromLatin1(id)); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
           const QImage img = win->grabWindow(); img.save(shots + "/" + id + ".png"); std::printf("amixos --shots: %s %dx%d\n", id, img.width(), img.height());
           if (QString::fromLatin1(id) == "admin") {   // the same page with the PIN entered

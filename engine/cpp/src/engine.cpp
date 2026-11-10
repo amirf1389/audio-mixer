@@ -222,6 +222,9 @@ void Mixer::setSend(int s, int b, double db, bool pre) {
 }
 void Mixer::setBusLevel(int b, double db) { if (b >= 0 && b < kMaxBuses) buses_[b].levelLin = db <= -60.0 ? 0.0 : linOf(std::min(db, 10.0)); }
 void Mixer::setBusMute(int b, bool on) { if (b >= 0 && b < kMaxBuses) buses_[b].mute = on; }
+void Mixer::setAutomix(int s, bool on, double w) { if (s < 0 || s >= n_) return; Strip& st = strips_[static_cast<std::size_t>(s)]; st.automix = on; st.amWeight = clampd(w, 0.25, 4.0); if (!on) { st.amGain = 1; st.amLevel = 0; } automixN_ = 0; for (const auto& x : strips_) automixN_ += x.automix ? 1 : 0; }
+double Mixer::automixGainDb(int s) const { if (s < 0 || s >= n_) return 0; const Strip& st = strips_[static_cast<std::size_t>(s)]; return st.automix ? 20 * std::log10(std::max(1e-4, st.amGain)) : 0; }
+void Mixer::setAutoLevel(bool on, double target, double maxDb) { if (on && !autoOn_) autoSec_ = 0; autoOn_ = on; autoTarget_ = clampd(target, -30, -6); autoMax_ = clampd(maxDb, 0, 24); if (!on) autoDb_ = 0; }
 void Mixer::setBusProcessor(int k, BusProcessor* p) { if (k >= 0 && k < kMaxBuses) buses_[k].fx = p; }
 void Mixer::setWidth(double w) { width_ = w < 0 ? 0 : w > 2 ? 2 : w; }
 void Mixer::setBusReturn(int b, double db) { if (b >= 0 && b < kMaxBuses) buses_[b].returnLin = db <= -60.0 ? 0.0 : linOf(std::min(db, 10.0)); }
@@ -238,11 +241,16 @@ void Mixer::process(const float* const* in, std::size_t frames, float* outL, flo
     const std::size_t n = std::min(kChunk, frames - done);
     for (std::size_t i = 0; i < n; ++i) { outL[done + i] = 0.0f; outR[done + i] = 0.0f; }
     if (buses) for (int k = 0; k < kMaxBuses; ++k) for (std::size_t i = 0; i < n; ++i) { busL[k][i] = 0.0f; busR[k][i] = 0.0f; }
+    if (automixN_ > 0) {   // gain sharing: each member's share of one unity gain, from its smoothed weighted input level
+      const double attack = 1.0 - std::exp(-static_cast<double>(n) / (0.010 * fs_)), release = 1.0 - std::exp(-static_cast<double>(n) / (0.300 * fs_)); double sum = 0;
+      for (int s = 0; s < n_; ++s) { Strip& st = strips_[static_cast<std::size_t>(s)]; if (!st.automix) continue; double e = 0; for (std::size_t i = 0; i < n; ++i) { const double x = in[s][done + i]; e += x * x; } const double lvl = std::sqrt(e / static_cast<double>(n)) * st.amWeight; st.amLevel += (lvl - st.amLevel) * (lvl > st.amLevel ? attack : release); sum += st.amLevel; }
+      for (int s = 0; s < n_; ++s) { Strip& st = strips_[static_cast<std::size_t>(s)]; if (!st.automix) continue; const double share = sum > 1e-9 ? st.amLevel / sum : 1.0 / automixN_; const double target = std::max(0.01, std::min(1.0, share * automixN_ > 1.0 ? 1.0 : share * automixN_)); st.amGain += (target - st.amGain) * (target > st.amGain ? attack : release); }
+    }
     for (int s = 0; s < n_; ++s) {
       Strip& st = strips_[static_cast<std::size_t>(s)];
       const double ang = (st.pan + 1.0) * kPi * 0.25, gl = std::cos(ang), gr = std::sin(ang); const bool audible = !st.mute && (!anySolo || st.solo);
-      double ipk = done == 0 ? 0.0 : st.inPk;
-      for (std::size_t i = 0; i < n; ++i) { const double x = static_cast<double>(in[s][done + i]); if (std::fabs(x) > ipk) ipk = std::fabs(x); tmp[i] = static_cast<float>(x * st.gainLin); }   // post-fader signal: what the strip meter shows
+      double ipk = done == 0 ? 0.0 : st.inPk; const double g = st.gainLin * (st.automix ? st.amGain : 1.0);
+      for (std::size_t i = 0; i < n; ++i) { const double x = static_cast<double>(in[s][done + i]); if (std::fabs(x) > ipk) ipk = std::fabs(x); tmp[i] = static_cast<float>(x * g); }   // post-fader signal: what the strip meter shows
       st.inPk = ipk; st.meter.add(tmp, n);
       if (audible) for (std::size_t i = 0; i < n; ++i) { outL[done + i] += static_cast<float>(tmp[i] * gl); outR[done + i] += static_cast<float>(tmp[i] * gr); }
       if (anySend_) for (int k = 0; k < kMaxBuses; ++k) {
@@ -261,8 +269,13 @@ void Mixer::process(const float* const* in, std::size_t frames, float* outL, flo
     }
     if (extL && extR) for (std::size_t i = 0; i < n; ++i) { outL[done + i] += extL[done + i]; outR[done + i] += extR[done + i]; }   // the arrangement player, pre master
     if (width_ != 1.0) for (std::size_t i = 0; i < n; ++i) { const float mid = 0.5f * (outL[done + i] + outR[done + i]), side = 0.5f * (outL[done + i] - outR[done + i]) * static_cast<float>(width_); outL[done + i] = mid + side; outR[done + i] = mid - side; }
+    if (autoOn_) {   // steer the short-term loudness toward the target, slowly, within [-12, +max] dB, once the 3 s window has filled
+      const double step = static_cast<double>(n) / fs_; autoSec_ += step; const double st = loudness_.shortTerm();
+      if (autoSec_ >= 3.0 && st > -70 && st < -1) { const double want = std::max(-12.0, std::min(autoMax_, autoDb_ + (autoTarget_ - st))); autoDb_ += want > autoDb_ ? std::min(want - autoDb_, 1.0 * step) : std::max(want - autoDb_, -6.0 * step); }
+    } else { autoDb_ = 0; autoSec_ = 0; }
+    const double autoLin = autoOn_ ? linOf(autoDb_) : 1.0;
     for (std::size_t i = 0; i < n; ++i) {
-      double l = static_cast<double>(outL[done + i]) * masterLin_, r = static_cast<double>(outR[done + i]) * masterLin_;
+      double l = static_cast<double>(outL[done + i]) * masterLin_ * autoLin, r = static_cast<double>(outR[done + i]) * masterLin_ * autoLin;
       if (limOn_) {
         const double pk = std::max(std::fabs(l), std::fabs(r)), need = pk > limCeil_ ? limCeil_ / pk : 1.0;
         if (need < limGain_) limGain_ = need; else limGain_ += (1.0 - limGain_) * rel;

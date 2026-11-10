@@ -47,7 +47,7 @@ Build: `cmake -S engine/cpp -B build && cmake --build build` gives `libamix.so` 
 with `{"op": "...", ...}` for `open`, `stop`, `gain`, `pan`, `mute`, `solo`, `master`, `limiter`, `eq`, `compressor`, `gate`, `delay`,
 `polarity`, `send`, `busLevel`, `busMute`, `busReturn`, `trim`, `monitor`, `inRoute`, `outRoute`, `name`, `clearClips`, and a WebSocket
 meter stream. A token (`--token-file`) guards every call. `--allow-lan` serves plain HTTP to the LAN: use it only behind your own TLS
-proxy (`deploy/nginx`). The Expo remote (`remote/`) is its reference client.
+proxy (`deploy/nginx`). The Kotlin remote (`android/`, `RemoteActivity`) is its reference client.
 
 ## Packages
 

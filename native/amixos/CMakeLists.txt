@@ -13,7 +13,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
-find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Quick QuickControls2)
+find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Quick QuickControls2 Network)
 qt_standard_project_setup()
 
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../engine/cpp ${CMAKE_BINARY_DIR}/engine)
@@ -24,6 +24,7 @@ qt_add_executable(amixos
     src/Arrange.cpp src/Arrange.h
     src/Settings.cpp src/Settings.h
     src/Access.cpp src/Access.h
+    src/Osc.cpp src/Osc.h
     src/Scope.cpp src/Scope.h
     src/Generator.cpp src/Generator.h
     src/I18n.cpp src/I18n.h)
@@ -57,6 +58,9 @@ qt_add_qml_module(amixos
         qml/AccessPage.qml
         qml/AdminPage.qml
         qml/PinPad.qml
+        qml/AiMixPage.qml
+        qml/PluginsPage.qml
+        qml/NetworkPage.qml
         qml/HomePage.qml
         qml/MixerPage.qml
         qml/TonePage.qml
@@ -76,7 +80,7 @@ qt_add_qml_module(amixos
         i18n/verified-22.json
         i18n/auto-58.json)
 target_compile_definitions(amixos PRIVATE AMIX_VERSION="${AMIX_VERSION}")
-target_link_libraries(amixos PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::QuickControls2 audiomixer_runtime audiomixer_engine amixos_license amixos_arrange amixos_vst3 amixos_vst2 amixos_record amixos_fx)
+target_link_libraries(amixos PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::QuickControls2 Qt6::Network audiomixer_runtime audiomixer_engine amixos_license amixos_arrange amixos_vst3 amixos_vst2 amixos_record amixos_fx)
 
 if(WIN32)
     set_target_properties(amixos PROPERTIES WIN32_EXECUTABLE TRUE)
