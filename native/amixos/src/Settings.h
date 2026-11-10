@@ -19,7 +19,7 @@ class Settings : public QObject {
   Q_PROPERTY(bool confirmDestructive READ confirmDestructive WRITE setConfirmDestructive NOTIFY changed)
   Q_PROPERTY(bool tooltips READ tooltips WRITE setTooltips NOTIFY changed)
   Q_PROPERTY(bool darkTheme READ darkTheme WRITE setDarkTheme NOTIFY changed)   // the console's look: dark (stage) or light (daylight); Theme.qml and the Qt palette follow
-  Q_PROPERTY(bool autoStart READ autoStart WRITE setAutoStart NOTIFY changed)
+  Q_PROPERTY(bool autoStart READ autoStart WRITE setAutoStart NOTIFY changed)   // the system is auto on: the remembered device, else AUTO DETECT, at every start (default on)
   Q_PROPERTY(QVariantMap lastDevice READ lastDevice NOTIFY changed)              // backend, in, out, rate, frames, inChannels, outChannels
   Q_PROPERTY(int defaultRate READ defaultRate WRITE setDefaultRate NOTIFY changed)
   Q_PROPERTY(int defaultFrames READ defaultFrames WRITE setDefaultFrames NOTIFY changed)
@@ -48,7 +48,7 @@ class Settings : public QObject {
   bool confirmDestructive() const { return s_.value("general/confirm", true).toBool(); } void setConfirmDestructive(bool v) { set("general/confirm", v); }
   bool tooltips() const { return s_.value("general/tooltips", true).toBool(); } void setTooltips(bool v) { set("general/tooltips", v); }
   bool darkTheme() const { return s_.value("ui/dark", true).toBool(); } void setDarkTheme(bool v) { set("ui/dark", v); }
-  bool autoStart() const { return s_.value("audio/autoStart", false).toBool(); } void setAutoStart(bool v) { set("audio/autoStart", v); }
+  bool autoStart() const { return s_.value("audio/autoStart", true).toBool(); } void setAutoStart(bool v) { set("audio/autoStart", v); }
   QVariantMap lastDevice() const { return s_.value("audio/lastDevice").toMap(); }
   int defaultRate() const { return s_.value("audio/rate", 48000).toInt(); } void setDefaultRate(int v) { set("audio/rate", v); }
   int defaultFrames() const { return s_.value("audio/frames", 256).toInt(); } void setDefaultFrames(int v) { set("audio/frames", v); }

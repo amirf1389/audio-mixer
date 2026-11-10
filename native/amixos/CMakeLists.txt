@@ -68,6 +68,7 @@ qt_add_qml_module(amixos
         qml/SamplesPage.qml
         qml/SoundCardPage.qml
         qml/SetupPage.qml
+        qml/BootPage.qml
         qml/HomePage.qml
         qml/MixerPage.qml
         qml/TonePage.qml

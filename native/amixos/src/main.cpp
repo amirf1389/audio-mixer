@@ -83,6 +83,7 @@ int main(int argc, char* argv[]) {
   if (!lang.isEmpty()) i18n.setLang(lang);   // --lang fa: start in that language (also for --shots)
   QQmlApplicationEngine qml;
   qml.rootContext()->setContextProperty("engine", &engine);
+  qml.setInitialProperties({{"bootFast", smoke}});
   qml.rootContext()->setContextProperty("arrange", &arrange);
   qml.rootContext()->setContextProperty("settings", &settings);
   qml.rootContext()->setContextProperty("access", &access);
@@ -270,6 +271,10 @@ int main(int argc, char* argv[]) {
       if (!shots.isEmpty()) {   // one picture per ported page
         QDir().mkpath(shots);
         auto* win = qobject_cast<QQuickWindow*>(qml.rootObjects().first());
+        engine.setNullTestInput(true); engine.open("null", "", "", 48000, 256, 2, 2); waitMs(300);   // the null device with the -12 dBFS test input: meters, fader IN / OUT columns and VU faces show a signal on the shots
+        if (engine.meters().size() > 0 && engine.meters()[0].toMap()["inDb"].toDouble() < -20) { std::fprintf(stderr, "amixos --shots: the null test input is not reaching the strips (%.1f dBFS)\n", engine.meters()[0].toMap()["inDb"].toDouble()); QCoreApplication::exit(8); return; }
+        { // the BOOT screen at its third stage, then off again
+          win->setProperty("booting", true); if (QObject* bp = win->findChild<QObject*>("bootPage")) { bp->setProperty("stage", 3); } waitMs(350); win->grabWindow().save(shots + "/boot-screen.png"); win->setProperty("booting", false); waitMs(100); std::printf("amixos --shots: boot-screen\n"); }
         if (QObject* wiz = win->findChild<QObject*>("setupPage")) {   // the factory setup, every step
           win->setProperty("forceSetup", true);
           for (int step = 0; step < 7; ++step) { wiz->setProperty("step", step); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + QStringLiteral("/setup-%1.png").arg(step + 1)); std::printf("amixos --shots: setup-%d\n", step + 1); }
@@ -282,7 +287,7 @@ int main(int argc, char* argv[]) {
           if (QString::fromLatin1(id) == "admin") {   // the same page with the PIN entered
             access.enterAdmin("1234"); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + "/admin-open.png"); access.leaveAdmin(); std::printf("amixos --shots: admin-open\n"); }
           if (QString::fromLatin1(id) == "fx") { if (QObject* fp = win->findChild<QObject*>("effectsPage")) { fp->setProperty("browse", true); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + "/fx-presets.png"); fp->setProperty("browse", false); std::printf("amixos --shots: fx-presets\n"); } }
-          if (QString::fromLatin1(id) == "dsp") { if (QObject* tp = win->findChild<QObject*>("tonePage")) { tp->setProperty("rta", true); for (int k = 0; k < 8; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + "/tone-rta.png"); tp->setProperty("rta", false);
+          if (QString::fromLatin1(id) == "dsp") { if (QObject* tp = win->findChild<QObject*>("tonePage")) { tp->setProperty("rta", true); waitMs(500); win->grabWindow().save(shots + "/tone-rta.png"); tp->setProperty("rta", false);
             engine.applyEqPreset(1, 0); tp->setProperty("contentY", 400); waitMs(300); win->grabWindow().save(shots + "/tone-presets.png"); tp->setProperty("contentY", 0); for (int b = 0; b < 10; ++b) engine.setEq(0, b, 0, 1000, 1, 0); engine.setCrossover(0, 0, 0, 80, 0, 16000); std::printf("amixos --shots: tone-rta, tone-presets\n"); } }
           if (QString::fromLatin1(id) == "rtaeq") { if (QObject* rp = win->findChild<QObject*>("rtaEqPage")) { for (const char* v : {"faders", "both"}) { rp->setProperty("view", QString::fromLatin1(v)); waitMs(250); win->grabWindow().save(shots + "/rtaeq-" + v + ".png"); } rp->setProperty("view", "diamond"); std::printf("amixos --shots: rtaeq-faders, rtaeq-both\n"); } engine.setGraphicEq(0, QVariantList(), false); }
           if (QString::fromLatin1(id) == "routing") {

@@ -335,7 +335,7 @@ Item {
                                     VuMeter { visible: page.vuMode; Layout.fillWidth: true; Layout.preferredHeight: 40; vuDb: mt ? mt.vuDb : -120; refDb: engine.vuRefDb; peakLamp: mt ? mt.clip : false; label: "VU" }
                                     // SENDS ON STRIPS: 8 mini faders (AUX 1-8 or FX 1-8), each with its PRE/POST switch
                                     RowLayout { visible: page.sendView > 0; Layout.fillHeight: true; Layout.fillWidth: true; spacing: 2
-                                    Fader { Layout.fillHeight: true; Layout.preferredWidth: 22; value: st ? st.db : 0; onMoved: function (db) { engine.setGain(index, db) } }   // the channel fader stays next to its sends
+                                    Fader { Layout.fillHeight: true; Layout.preferredWidth: 22; value: st ? st.db : 0; inDb: mt ? mt.inDb : -120; outDb: mt ? mt.peakDb : -120; clip: mt ? mt.clip : false; onMoved: function (db) { engine.setGain(index, db) } }   // the channel fader stays next to its sends
                                     ColumnLayout { Layout.fillHeight: true; Layout.fillWidth: true; spacing: 1
                                         Repeater { model: page.sendView > 0 ? 8 : 0
                                             delegate: RowLayout { Layout.fillWidth: true; spacing: 2
@@ -351,7 +351,7 @@ Item {
                                         Item { Layout.fillHeight: true }   // lets this column take the strip height (a nested layout's maximum is otherwise the sum of its rows)
                                         Text { Layout.alignment: Qt.AlignHCenter; text: page.sendView === 1 ? "AUX SENDS" : "FX SENDS"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 5 } } }
                                     RowLayout { visible: page.sendView === 0; Layout.fillHeight: true; Layout.alignment: Qt.AlignHCenter; spacing: 4
-                                        Fader { Layout.fillHeight: true; value: st ? st.db : 0; onMoved: function (db) { engine.setGain(index, db) } }
+                                        Fader { Layout.fillHeight: true; value: st ? st.db : 0; inDb: mt ? mt.inDb : -120; outDb: mt ? mt.peakDb : -120; clip: mt ? mt.clip : false; onMoved: function (db) { engine.setGain(index, db) } }
                                         ColumnLayout { Layout.fillHeight: true; spacing: 0
                                             RowLayout { Layout.fillHeight: true; spacing: 2
                                                 MeterBar { Layout.fillHeight: true; Layout.topMargin: 8; implicitWidth: 5; peakDb: mt ? mt.inDb : -120; rmsDb: mt ? mt.inDb : -120; floorDb: -60 }   // input (pre-fader)
@@ -431,7 +431,7 @@ Item {
                     Text { Layout.alignment: Qt.AlignHCenter; text: "MASTER"; color: Theme.orange; font.family: Theme.mono; font.pixelSize: 10; font.bold: true; font.letterSpacing: 2 }
                     VuMeter { visible: page.vuMode; Layout.fillWidth: true; Layout.preferredHeight: 60; vuDb: engine.telemetry.masterVuDb === undefined ? -120 : engine.telemetry.masterVuDb; refDb: engine.vuRefDb; peakLamp: engine.telemetry.masterClip === true; label: "VU  MASTER" }
                     RowLayout { Layout.fillHeight: true; Layout.alignment: Qt.AlignHCenter; spacing: 8
-                        Fader { Layout.fillHeight: true; value: engine.masterDb; onMoved: function (db) { engine.setMaster(db) } }
+                        Fader { Layout.fillHeight: true; value: engine.masterDb; inDb: engine.telemetry.masterRmsDb === undefined ? -120 : engine.telemetry.masterRmsDb; outDb: engine.telemetry.masterPeakDb === undefined ? -120 : engine.telemetry.masterPeakDb; clip: engine.telemetry.masterClip === true; onMoved: function (db) { engine.setMaster(db) } }
                         MeterBar { Layout.fillHeight: true; Layout.topMargin: 8; peakDb: engine.telemetry.masterLDb; rmsDb: engine.telemetry.masterRmsDb; clip: engine.telemetry.masterClip }
                         MeterBar { Layout.fillHeight: true; Layout.topMargin: 8; peakDb: engine.telemetry.masterRDb; rmsDb: engine.telemetry.masterRmsDb; clip: engine.telemetry.masterClip } }
                     Text { Layout.alignment: Qt.AlignHCenter; text: Theme.dbText(engine.masterDb) + " dB"; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9 }
@@ -456,7 +456,7 @@ Item {
                                 Text { anchors.centerIn: parent; text: index === 0 ? "MASTER" : "B" + index; color: page.mon.source === index ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 6; font.bold: true }
                                 MouseArea { anchors.fill: parent; onClicked: engine.setMonitor(index, page.mon.db, page.mon.dim, page.mon.mono, page.mon.mute) } } } }
                     RowLayout { Layout.fillHeight: true; Layout.alignment: Qt.AlignHCenter; spacing: 6
-                        Fader { Layout.fillHeight: true; value: page.mon.db; onMoved: function (db) { engine.setMonitor(page.mon.source, db, page.mon.dim, page.mon.mono, page.mon.mute) } }
+                        Fader { Layout.fillHeight: true; value: page.mon.db; outDb: engine.telemetry.monitorLDb === undefined ? -120 : Math.max(engine.telemetry.monitorLDb, engine.telemetry.monitorRDb); onMoved: function (db) { engine.setMonitor(page.mon.source, db, page.mon.dim, page.mon.mono, page.mon.mute) } }
                         MeterBar { Layout.fillHeight: true; Layout.topMargin: 8; implicitWidth: 7; peakDb: engine.telemetry.monitorLDb === undefined ? -120 : engine.telemetry.monitorLDb; rmsDb: -120 }
                         MeterBar { Layout.fillHeight: true; Layout.topMargin: 8; implicitWidth: 7; peakDb: engine.telemetry.monitorRDb === undefined ? -120 : engine.telemetry.monitorRDb; rmsDb: -120 } }
                     Text { Layout.alignment: Qt.AlignHCenter; text: Theme.dbText(page.mon.db) + " dB" + (page.mon.dim ? "  DIM -20" : ""); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8 }
