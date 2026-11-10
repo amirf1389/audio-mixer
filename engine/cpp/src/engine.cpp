@@ -224,7 +224,7 @@ void Mixer::setBusMute(int b, bool on) { if (b >= 0 && b < kMaxBuses) buses_[b].
 void Mixer::setBusReturn(int b, double db) { if (b >= 0 && b < kMaxBuses) buses_[b].returnLin = db <= -60.0 ? 0.0 : linOf(std::min(db, 10.0)); }
 void Mixer::clearClips() { for (auto& s : strips_) s.meter.state().clearClip(); master_[0].state().clearClip(); master_[1].state().clearClip(); }
 
-void Mixer::process(const float* const* in, std::size_t frames, float* outL, float* outR, float* const* busOut) {
+void Mixer::process(const float* const* in, std::size_t frames, float* outL, float* outR, float* const* busOut, const float* extL, const float* extR) {
   constexpr std::size_t kChunk = 512;
   bool anySolo = false; for (const auto& s : strips_) anySolo = anySolo || s.solo;
   const double rel = 1.0 - std::exp(-1.0 / (limReleaseMs_ * 0.001 * fs_));   // one-pole release: the time constant is the release time
@@ -255,6 +255,7 @@ void Mixer::process(const float* const* in, std::size_t frames, float* outL, flo
       if (b.returnLin > 0) for (std::size_t i = 0; i < n; ++i) { outL[done + i] += static_cast<float>(busL[k][i] * b.returnLin); outR[done + i] += static_cast<float>(busR[k][i] * b.returnLin); }
       if (busOut) { if (busOut[2 * k]) std::copy(busL[k], busL[k] + n, busOut[2 * k] + done); if (busOut[2 * k + 1]) std::copy(busR[k], busR[k] + n, busOut[2 * k + 1] + done); }
     }
+    if (extL && extR) for (std::size_t i = 0; i < n; ++i) { outL[done + i] += extL[done + i]; outR[done + i] += extR[done + i]; }   // the arrangement player, pre master
     for (std::size_t i = 0; i < n; ++i) {
       double l = static_cast<double>(outL[done + i]) * masterLin_, r = static_cast<double>(outR[done + i]) * masterLin_;
       if (limOn_) {

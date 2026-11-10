@@ -21,6 +21,7 @@ add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../engine/cpp ${CMAKE_BINARY_DIR
 qt_add_executable(amixos
     src/main.cpp
     src/Engine.cpp src/Engine.h
+    src/Arrange.cpp src/Arrange.h
     src/I18n.cpp src/I18n.h)
 set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)   # before qt_add_qml_module, or Theme is a plain type and every Theme.* colour is undefined
 qt_add_qml_module(amixos
@@ -38,6 +39,7 @@ qt_add_qml_module(amixos
         qml/VuMeter.qml
         qml/RoutingPage.qml
         qml/LicensePage.qml
+        qml/ArrangePage.qml
         qml/HomePage.qml
         qml/MixerPage.qml
         qml/TonePage.qml
@@ -57,7 +59,7 @@ qt_add_qml_module(amixos
         i18n/verified-22.json
         i18n/auto-58.json)
 target_compile_definitions(amixos PRIVATE AMIX_VERSION="${AMIX_VERSION}")
-target_link_libraries(amixos PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::QuickControls2 audiomixer_runtime audiomixer_engine amixos_license)
+target_link_libraries(amixos PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::QuickControls2 audiomixer_runtime audiomixer_engine amixos_license amixos_arrange)
 
 if(WIN32)
     set_target_properties(amixos PROPERTIES WIN32_EXECUTABLE TRUE)

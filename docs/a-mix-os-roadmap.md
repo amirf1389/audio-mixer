@@ -41,6 +41,11 @@ decided, what exists, what is next, and what was asked for but is not possible a
 - **Native LICENSE**: `engine/cpp/app/license` verifies AMIX1 keys and AMFXE1 edition tokens offline with the vendor public key compiled in
   (self-contained SHA-256 + ECDSA P-256, checked against Node-made vectors), machine code, store / activate / deactivate, plan gating (strips
   beyond the plan are muted and shown locked); LICENSE page. Key Generator gets a TOTP second factor (`scripts/license-totp.js`): PIN + code.
+- **Driver intelligence** (`engine/cpp/src/driver_intel.cpp`): hardware match, ladder ASIO → WASAPI exclusive → shared, Realtek pin, AI
+  driver locks, SMART START on CONNECTIONS.
+- **ARRANGE native** (`engine/cpp/app/arrange`, `native/amixos/src/Arrange.cpp`, `ArrangePage.qml`): WAV clips on tracks, gain / pan / M / S,
+  volume automation, markers, snap to bars / beats, transport through the master chain (`Runtime::ExtraSource`), 24-bit WAV export, project in
+  `~/.amixos/arrangement.json`. WAV only for now (no decoder for MP3 / FLAC in the native build); no recording, by design.
 - **ASIO host hardening**: reset / resync / buffer-size requests handled on a worker thread, time-info, channel clamping, latencies;
   verified by mingw cross-compile only — the first run against real drivers is on the user's Windows PC.
 

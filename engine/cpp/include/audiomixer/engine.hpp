@@ -133,7 +133,8 @@ class Mixer {
   const Send& send(int strip, int bus) const { return sends_[static_cast<std::size_t>(strip)][static_cast<std::size_t>(bus)]; }
   // inputs[strip] -> outL / outR (frames samples each). Meters, loudness and phase are updated once per call.
   // busOut (optional): 2 * kMaxBuses pointers (L, R per bus, any may be null) that receive each bus's stereo output.
-  void process(const float* const* inputs, std::size_t frames, float* outL, float* outR, float* const* busOut = nullptr);
+  // extL / extR: an optional stereo signal summed into the master before master gain / limiter / meters (the ARRANGE player)
+  void process(const float* const* inputs, std::size_t frames, float* outL, float* outR, float* const* busOut = nullptr, const float* extL = nullptr, const float* extR = nullptr);
   const Strip& strip(int i) const { return strips_[i]; }
   const MeterState& masterMeter(int ch) const { return master_[ch].state(); }
   const Loudness& loudness() const { return loudness_; }
