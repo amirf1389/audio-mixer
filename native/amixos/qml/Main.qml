@@ -118,22 +118,5 @@ ApplicationWindow {
             }
         }
     }
-    Popup {   // WHAT'S NEW: the feature feed from the signed manifest, newest first
-        id: whatsNew; modal: true; anchors.centerIn: parent; width: Math.min(640, root.width - 80); height: Math.min(520, root.height - 80); padding: 18
-        background: Rectangle { radius: 12; color: Theme.card; border.color: Theme.line }
-        onOpened: updater.markFeaturesSeen()
-        ColumnLayout { anchors.fill: parent; spacing: 10
-            RowLayout { Text { text: i18n.t("WHAT'S NEW", i18n.lang); color: Theme.orange; font.family: Theme.mono; font.pixelSize: 12; font.bold: true; font.letterSpacing: 2 } Item { Layout.fillWidth: true }
-                Text { text: i18n.t("THIS VERSION ", i18n.lang) + updater.current; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 } }
-            Text { visible: updater.state === "available"; text: updater.message; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; Layout.fillWidth: true; wrapMode: Text.WordWrap }
-            Flickable { Layout.fillWidth: true; Layout.fillHeight: true; contentHeight: feedCol.implicitHeight; clip: true
-                ColumnLayout { id: feedCol; width: parent.width; spacing: 8
-                    Text { visible: updater.features.length === 0; text: i18n.t("No feature feed yet: CHECK NOW on SETTINGS reads the signed manifest.", i18n.lang); color: Theme.muted; font.family: Theme.sans; font.pixelSize: 11 }
-                    Repeater { model: updater.features; delegate: ColumnLayout { Layout.fillWidth: true; spacing: 3
-                        RowLayout { Text { text: modelData.version; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 10; font.bold: true } Text { text: modelData.date + "  " + modelData.title; color: Theme.muted; font.family: Theme.sans; font.pixelSize: 11 } }
-                        Repeater { model: modelData.items; delegate: Text { Layout.fillWidth: true; text: "• " + modelData; color: Theme.ink; font.family: Theme.sans; font.pixelSize: 11; wrapMode: Text.WordWrap } } } } } }
-            RowLayout { Item { Layout.fillWidth: true }
-                Rectangle { visible: updater.state === "available" && updater.file.url !== undefined; implicitWidth: 120; implicitHeight: 24; radius: 5; color: Theme.amber; Text { anchors.centerIn: parent; text: i18n.t("DOWNLOAD", i18n.lang); color: "#000"; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: updater.download() } }
-                Rectangle { implicitWidth: 80; implicitHeight: 24; radius: 5; color: Theme.ov(0.1); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: i18n.t("CLOSE", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: whatsNew.close() } } } } }
     SetupPage { anchors.fill: parent; z: 100; visible: root.forceSetup || !settings.setupDone; onFinished: { settings.finishSetup(); root.forceSetup = false; root.current = settings.startPage } }
 }
