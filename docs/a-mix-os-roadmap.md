@@ -77,6 +77,9 @@ decided, what exists, what is next, and what was asked for but is not possible a
   SHA-256 (default 1234 only until set, and the pages say so) that locks the surface, guards the FOH MASTER role and ADMIN mode (30 min);
   an append-only audit log (~/.amixos/audit.log) with CSV export; ADMIN: PRO / CONSUMER edition, backups, audit, the honest state of
   updates (signed installer, no OTA / A/B / hardware vault: those were mock-ups in the browser build).
+- **SDK and packaging** (`docs/sdk.md`): a stable C API (`sdk/c/include/amix.h`, `libamix`) over the engine; Perl XS module, Rust
+  crates, Kotlin / Android app through JNI, a Visual Studio solution with a VB.NET launcher, a freestanding WebAssembly DSP core, a
+  Linux tarball script, and Actions jobs that produce the tar.gz, the APK / AAB, the exe and the dmg. One engine, no duplicates.
 
 ## Next, in order
 
