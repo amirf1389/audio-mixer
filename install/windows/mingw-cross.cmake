@@ -1,0 +1,17 @@
+# Cross-building the Qt console (native/amixos) for Windows from Linux with mingw-w64 and the official Qt 6 MinGW kit:
+#   Qt kit:   the win64_mingw archives of the same Qt version as the host's Qt (qtbase, qtdeclarative, qttools; download.qt.io)
+#   host Qt:  the Linux Qt 6 of the same version (its moc / rcc / qmlcachegen / qmltyperegistrar run here)
+#   cmake -S native/amixos -B build-win -DCMAKE_TOOLCHAIN_FILE=install/windows/mingw-cross.cmake -DQT_WIN_KIT=/path/to/6.4.2/mingw_64 -DQT_HOST_PATH=/usr -DCMAKE_BUILD_TYPE=Release
+set(CMAKE_SYSTEM_NAME Windows)
+set(CMAKE_SYSTEM_PROCESSOR AMD64)
+set(CMAKE_C_COMPILER x86_64-w64-mingw32-gcc)
+set(CMAKE_CXX_COMPILER x86_64-w64-mingw32-g++)
+set(CMAKE_RC_COMPILER x86_64-w64-mingw32-windres)
+set(CMAKE_FIND_ROOT_PATH "${QT_WIN_KIT}" /usr/x86_64-w64-mingw32)
+set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
+set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
+set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
+set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
+set(CMAKE_PREFIX_PATH "${QT_WIN_KIT}")
+set(CMAKE_CXX_FLAGS_INIT "-static-libgcc -static-libstdc++")
+set(CMAKE_EXE_LINKER_FLAGS_INIT "-static-libgcc -static-libstdc++ -Wl,-Bstatic,-lwinpthread,-Bdynamic")
