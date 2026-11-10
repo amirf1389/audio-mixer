@@ -13,6 +13,7 @@ Item {
     property bool sidePanel: settings.channelPanelDefault
     property bool vuMode: settings.vuDefault        // bar meters or analogue VU faces on every strip and the master
     property bool monitorPanel: settings.monitorPanelDefault   // the control-room section next to the master
+    property int rackBank: 0                           // which ten slots of the rack are shown (PRO and up have more than ten)
     property bool rack: settings.rackDefault           // the PLUGIN RACK of the selected channel, under the action bar
     property bool rackCompact: settings.rackCompactDefault   // one line of chips instead of the cards
     property int sendView: 0    // 0 faders, 1 the 8 AUX sends of every strip, 2 the 8 FX sends (each a mini fader with PRE/POST), the way a desk flips to "sends on faders"
@@ -207,8 +208,12 @@ Item {
                     Text { text: i18n.t("PLUGIN RACK", i18n.lang); color: "#a78bfa"; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
                     Text { text: i18n.t("CH ", i18n.lang) + (page.sel + 1 < 10 ? "0" : "") + (page.sel + 1) + "  " + (page.selSt ? page.selSt.name : ""); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; elide: Text.ElideRight; Layout.preferredWidth: 96 }
                     Text { text: engine.pluginCount(page.sel) + i18n.t(" of ", i18n.lang) + (engine.pluginSlotLimit >= 64 ? i18n.t("unlimited", i18n.lang) : engine.pluginSlotLimit) + i18n.t(" used", i18n.lang) + (engine.pluginSlotLimit < 64 ? i18n.t(" · PRO unlocks unlimited", i18n.lang) : ""); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
+                    RowLayout { visible: engine.pluginSlotLimit > 10; spacing: 3
+                        Rectangle { implicitWidth: 18; implicitHeight: 14; radius: 3; color: Theme.ov(0.08); Text { anchors.centerIn: parent; text: "‹"; color: Theme.ink; font.pixelSize: 10 } MouseArea { anchors.fill: parent; onClicked: page.rackBank = Math.max(0, page.rackBank - 1) } }
+                        Text { text: (page.rackBank * 10 + 1) + " - " + Math.min(engine.pluginSlotLimit, page.rackBank * 10 + 10); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
+                        Rectangle { implicitWidth: 18; implicitHeight: 14; radius: 3; color: Theme.ov(0.08); Text { anchors.centerIn: parent; text: "›"; color: Theme.ink; font.pixelSize: 10 } MouseArea { anchors.fill: parent; onClicked: page.rackBank = Math.min(Math.ceil(engine.pluginSlotLimit / 10) - 1, page.rackBank + 1) } } }
                     Text { text: i18n.t("chain: Ø → DLY → GATE → X → EQ → COMP → LIM", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 6 } }
-                Repeater { model: page.selPlugins
+                Repeater { model: page.selPlugins.slice(page.rackBank * 10, page.rackBank * 10 + 10)   // ten slots at a time; the bank buttons page through the rest
                     delegate: Rectangle { Layout.fillWidth: true; Layout.fillHeight: true; Layout.topMargin: 8; Layout.bottomMargin: 8; radius: 6
                         readonly property bool empty: !modelData.kind
                         color: empty ? Theme.ov(0.03) : modelData.pending ? Qt.rgba(0.984, 0.749, 0.141, 0.12) : modelData.bypass ? Theme.ov(0.06) : Qt.rgba(0.6, 0.4, 1, 0.16)
@@ -222,7 +227,7 @@ Item {
                                 MouseArea { anchors.fill: parent; acceptedButtons: Qt.LeftButton | Qt.RightButton; onClicked: function (m) { engine.selectedStrip = page.sel; if (m.button === Qt.RightButton && !empty) { engine.setPluginBypass(page.sel, modelData.slot, !modelData.bypass); return } chooser.slot = modelData.slot; chooser.open() } } }
                             RowLayout { Layout.fillWidth: true; spacing: 2; visible: !empty
                                 Rectangle { implicitWidth: 14; implicitHeight: 12; radius: 2; color: Theme.ov(0.08); Text { anchors.centerIn: parent; text: "‹"; color: Theme.muted; font.pixelSize: 9 } MouseArea { anchors.fill: parent; enabled: modelData.slot > 0; onClicked: engine.movePlugin(page.sel, modelData.slot, modelData.slot - 1) } }
-                                Rectangle { implicitWidth: 14; implicitHeight: 12; radius: 2; color: Theme.ov(0.08); Text { anchors.centerIn: parent; text: "›"; color: Theme.muted; font.pixelSize: 9 } MouseArea { anchors.fill: parent; enabled: modelData.slot < 9; onClicked: engine.movePlugin(page.sel, modelData.slot, modelData.slot + 1) } }
+                                Rectangle { implicitWidth: 14; implicitHeight: 12; radius: 2; color: Theme.ov(0.08); Text { anchors.centerIn: parent; text: "›"; color: Theme.muted; font.pixelSize: 9 } MouseArea { anchors.fill: parent; enabled: modelData.slot < engine.pluginSlotLimit - 1; onClicked: engine.movePlugin(page.sel, modelData.slot, modelData.slot + 1) } }
                                 Item { Layout.fillWidth: true }
                                 Rectangle { visible: modelData.builtIn; implicitWidth: 30; implicitHeight: 12; radius: 2; color: Qt.rgba(0, 0.95, 1, 0.18); Text { anchors.centerIn: parent; text: i18n.t("OPEN", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.go(modelData.kind === "gate" ? "gate" : modelData.kind === "comp" ? "dyn" : "dsp") } }
                                 Rectangle { visible: modelData.vst && !modelData.pending; implicitWidth: 36; implicitHeight: 12; radius: 2; color: Qt.rgba(0.6, 0.4, 1, 0.3); Text { anchors.centerIn: parent; text: i18n.t("PARAMS", i18n.lang); color: "#a78bfa"; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } MouseArea { anchors.fill: parent; onClicked: { paramsPop.slot = modelData.slot; paramsPop.title = modelData.name; paramsPop.model = engine.pluginParams(page.sel, modelData.slot); paramsPop.open() } } }
