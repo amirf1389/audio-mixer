@@ -1,6 +1,6 @@
 // FACTORY SETUP: the first-run wizard (and RERUN SETUP from SETTINGS / DIAGNOSTICS; FACTORY RESET brings it back too), the way a phone
 // sets itself up: WELCOME (language) -> TERMS -> AUDIO (auto detect) -> CONSOLE (rate, block, start page, licence key) -> OPERATOR (PIN,
-// profile) -> UPDATES (signed manifest check) -> DONE. Every step can be skipped; FINISH marks the setup done.
+// profile) -> UPDATES (signed manifest check) -> DONE. The setup is mandatory: there is no SKIP SETUP; the wizard stays until FINISH on the last step (AUDIO alone may be left for CONNECTIONS later).
 import QtQuick
 import AmixOS   // this module: brings the Theme singleton (a plain directory import would see Theme as an ordinary type)
 import QtQuick.Controls
@@ -106,7 +106,6 @@ Rectangle {
         RowLayout { spacing: 8
             Btn { label: "BACK"; visible: wiz.step > 0; onClicked: wiz.step-- }
             Item { Layout.fillWidth: true }
-            Btn { label: "SKIP SETUP"; visible: wiz.step < 6; onClicked: wiz.finished() }
             Btn { label: wiz.step === 6 ? "FINISH" : "NEXT"; on: wiz.step !== 1 || wiz.accepted; onColor: wiz.step === 6 ? Theme.emerald : Theme.amber; onClicked: { if (wiz.step === 1 && !wiz.accepted) return; if (wiz.step === 6) wiz.finished(); else wiz.step++ } } }
     }
 }

@@ -89,7 +89,7 @@ decided, what exists, what is next, and what was asked for but is not possible a
   DSP profiler: block time, worst case, load %, jitter, overruns, roadmap 14; the output stage: DC removal before the limiter and
   TPDF dither at 16 / 24 bit after it, roadmap 12). output_stage_test covers the blocker, the dither grid and the profiler.
 - **FACTORY SETUP** (`SetupPage.qml`, like a phone's first start): WELCOME (language) -> TERMS -> AUDIO (auto detect) -> CONSOLE (rate,
-  block, start page, licence key) -> OPERATOR (PIN, profile) -> UPDATES -> DONE; shows until finished or skipped, again after RERUN
+  block, start page, licence key) -> OPERATOR (PIN, profile) -> UPDATES -> DONE; shows until FINISH (no SKIP SETUP: the setup is mandatory), again after RERUN
   SETUP (SETTINGS / DIAGNOSTICS) or FACTORY RESET. **UPDATES** (`Update.*`): the signed manifest (ECDSA P-256 over the payload text,
   vendor key) is verified before it is parsed, only the project's hosts are allowed, a download is sha256-checked and saved, never
   run. The product is **AmF X1 by AMFB Audio** (Theme.product / Theme.vendor; header, title, HOME, setup). NOTE: releases/update.json is
