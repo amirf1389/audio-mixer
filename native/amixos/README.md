@@ -54,7 +54,10 @@ cmake --build build/amixos --config Release
 C:\Qt\6.7.3\msvc2019_64\bin\windeployqt --qmldir native/amixos/qml build/amixos/Release/amixos.exe
 ```
 
-GitHub Actions (`.github/workflows/build-apps.yml`) does exactly this and uploads `amixos-windows-x64.zip`. The ASIO backend uses the
+GitHub Actions (`.github/workflows/build-apps.yml`) does exactly this and uploads `amixos-windows-x64.zip`; its `macos` job builds
+`amixos-macos.dmg` (Qt 6 clang, Core Audio backend, `macdeployqt -dmg`, not notarised: right-click > Open the first time), and its
+`android` job builds the React Native remote's APK / AAB (`remote/README.md`). On a Mac by hand: install Qt 6.5+ for macOS, then
+`cmake -S native/amixos -B build/amixos -DCMAKE_PREFIX_PATH=~/Qt/6.7.3/macos && cmake --build build/amixos && ~/Qt/6.7.3/macos/bin/macdeployqt build/amixos/amixos.app -qmldir=native/amixos/qml -dmg`. The ASIO backend uses the
 Steinberg ASIO SDK headers in `drivers/asio/sdk` (dual licence: GPLv3 or the Steinberg proprietary licence; this repository is MIT +
 the ASIO licence agreement in the root, read it before distributing). ASIO4ALL, FlexASIO and the devices' own drivers are all ordinary
 ASIO drivers to the engine: there is no separate "ASIO4ALL SDK".

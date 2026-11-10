@@ -26,3 +26,9 @@ npm run test:client            # the TS client against a real amixos-daemon (bui
 npx expo start                 # Expo dev client; npx expo run:android / run:ios for native builds
 ```
 The client (`src/api/client.ts`) has no React Native imports, so the same code is tested under Node against the daemon.
+
+## APK / AAB
+GitHub Actions (`.github/workflows/build-apps.yml`, job `android`) builds `amixos-remote-debug.apk` (debug-signed: installs on any phone
+with "unknown sources") and `amixos-remote-release-unsigned.aab`. Sign the AAB on your PC before Play with your upload key:
+`jarsigner -keystore upload.jks amixos-remote-release-unsigned.aab upload` (or `apksigner` for an APK). The keystore never goes into the repository.
+Locally: `npx expo prebuild --platform android && cd android && ./gradlew assembleDebug bundleRelease` (Android Studio's SDK + JDK 17).

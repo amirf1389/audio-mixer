@@ -3,6 +3,11 @@
 #            and the console's offscreen smoke test (interface loaded, null device running), and uploads the page screenshots
 #   windows  builds the Windows x64 console with Qt 6 (MSVC) and the ASIO + WASAPI backends (the Steinberg ASIO SDK headers are in drivers/asio/sdk),
 #            runs windeployqt and uploads amixos-windows-x64.zip: unzip anywhere and start amixos.exe. Not code-signed here (Windows shows "unknown publisher").
+#   macos    builds the console with Qt 6 (clang, Core Audio backend), runs macdeployqt -dmg and uploads amixos-macos.dmg. Not notarised here:
+#            right-click > Open the first time (or sign + notarise on your Mac with your Developer ID).
+#   android  builds the React Native remote (remote/, Expo prebuild + Gradle): amixos-remote-debug.apk (debug-signed, installs anywhere) and
+#            amixos-remote-release.aab (UNSIGNED: sign on your PC with your upload key before Play, see remote/README.md). The remote drives
+#            amixos-daemon on the PC; the full console on Android stays parked (roadmap).
 # Runs on demand (workflow_dispatch), on pushes that touch the native code, and on version tags (v*), which also get a GitHub release.
 # Only GitHub-owned actions (actions/*) are used: repositories that allow only those can run it; Qt comes from aqtinstall, the release from gh.
 name: Build apps
@@ -11,7 +16,7 @@ on:
   workflow_dispatch:
   push:
     branches: [ "**" ]
-    paths: [ "native/**", "engine/cpp/**", "drivers/asio/**", ".github/workflows/build-apps.yml" ]
+    paths: [ "native/**", "engine/cpp/**", "drivers/asio/**", "remote/**", ".github/workflows/build-apps.yml" ]
     tags: [ "v*" ]
 
 permissions:
@@ -91,3 +96,83 @@ jobs:
         run: |
           gh release create "$env:GITHUB_REF_NAME" --repo "$env:GITHUB_REPOSITORY" --title "A mix OS $env:GITHUB_REF_NAME" --notes "Windows x64 console: unzip and start amixos.exe" dist/amixos-windows-x64.zip 2>$null
           if ($LASTEXITCODE -ne 0) { gh release upload "$env:GITHUB_REF_NAME" --repo "$env:GITHUB_REPOSITORY" --clobber dist/amixos-windows-x64.zip }
+
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Qt 6 (clang 64, via aqtinstall; no third-party action)
+        run: |
+          pip install aqtinstall
+          aqt install-qt mac desktop 6.7.3 clang_64 -O "$HOME/Qt"
+          echo "QT_ROOT_DIR=$HOME/Qt/6.7.3/macos" >> "$GITHUB_ENV"
+      - name: Engine tests (macOS, Core Audio backend compiled)
+        run: |
+          cmake -S engine/cpp -B build/engine -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/engine --parallel
+          ctest --test-dir build/engine --output-on-failure
+      - name: Console + dmg (macdeployqt)
+        run: |
+          cmake -S native/amixos -B build/amixos -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR"
+          cmake --build build/amixos --parallel
+          ls build/amixos
+          APP=$(find build/amixos -maxdepth 2 -name "amixos.app" | head -1)
+          if [ -z "$APP" ]; then mkdir -p build/amixos/amixos.app/Contents/MacOS && cp build/amixos/amixos build/amixos/amixos.app/Contents/MacOS/amixos && APP=build/amixos/amixos.app
+            printf '<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0"><dict><key>CFBundleExecutable</key><string>amixos</string><key>CFBundleIdentifier</key><string>com.amfb.amixos</string><key>CFBundleName</key><string>A mix OS</string><key>CFBundlePackageType</key><string>APPL</string><key>CFBundleShortVersionString</key><string>0.1.0</string><key>NSMicrophoneUsageDescription</key><string>A mix OS reads your audio interface.</string></dict></plist>\n' > "$APP/Contents/Info.plist"; fi
+          cp build/engine/audiomixer-native "$APP/Contents/MacOS/"
+          "$QT_ROOT_DIR/bin/macdeployqt" "$APP" -qmldir=native/amixos/qml -dmg
+          mkdir -p dist && mv "${APP%.app}.dmg" dist/amixos-macos.dmg
+          ls -la dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: amixos-macos-${{ github.sha }}
+          path: dist/amixos-macos.dmg
+          if-no-files-found: error
+      - name: Attach to release (version tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --clobber dist/amixos-macos.dmg || (sleep 30 && gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --clobber dist/amixos-macos.dmg)
+
+  android:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Android SDK (GitHub's runner image carries it; accept licences, install the platform Expo targets)
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-34" "build-tools;34.0.0" "ndk;26.1.10909125" >/dev/null
+      - name: Remote (Expo prebuild + Gradle)
+        working-directory: remote
+        run: |
+          npm install --no-audit --no-fund
+          npx tsc --noEmit
+          npx expo prebuild --platform android --no-install --non-interactive
+          cd android
+          ./gradlew --no-daemon assembleDebug bundleRelease
+          mkdir -p ../../dist
+          cp app/build/outputs/apk/debug/app-debug.apk ../../dist/amixos-remote-debug.apk
+          cp app/build/outputs/bundle/release/app-release.aab ../../dist/amixos-remote-release-unsigned.aab
+          ls -la ../../dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: amixos-remote-android-${{ github.sha }}
+          path: |
+            dist/amixos-remote-debug.apk
+            dist/amixos-remote-release-unsigned.aab
+          if-no-files-found: error
+      - name: Attach to release (version tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --clobber dist/amixos-remote-debug.apk dist/amixos-remote-release-unsigned.aab || (sleep 30 && gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --clobber dist/amixos-remote-debug.apk dist/amixos-remote-release-unsigned.aab)

@@ -68,6 +68,7 @@ class Engine : public QObject {
   QString edition() const;                      // BASIC / PRO / STUDIO / MASTER, from the licence check
   QVariantMap license() const { return license_; }
   int licensedChannels() const { return licensedChannels_; }
+  Q_INVOKABLE void tick();   // one meter poll now (the timer does this every 33 ms; the smoke test calls it directly)
   Q_INVOKABLE void refreshLicense();            // re-reads the stored key / edition (also after the date changes)
   Q_INVOKABLE QVariantMap checkKey(const QString& key) const;   // genuine? which plan? upgrade / same / downgrade; nothing is stored
   Q_INVOKABLE QVariantMap activateKey(const QString& key);      // verifies and stores; {ok, reason, message}
@@ -87,6 +88,9 @@ class Engine : public QObject {
   Q_PROPERTY(QString lastRoute READ lastRoute NOTIFY stateChanged)   // what the last start did, in plain words
   QString lastRoute() const { return lastRoute_; }
   Q_INVOKABLE void stop();
+  // an extra stereo source summed into the master (the ARRANGE player): attached to every runtime this Engine opens
+  void setExtraSource(am::Runtime::ExtraSource* s) { extra_ = s; if (rt_) rt_->setExtraSource(s); }
+  am::Runtime* runtime() { return rt_.get(); }
   // strips
   Q_INVOKABLE void setGain(int strip, double db);
   Q_INVOKABLE void setPan(int strip, double pan);
@@ -196,7 +200,6 @@ class Engine : public QObject {
   QJsonObject consoleJson() const;
   void applyConsoleJson(const QJsonObject& root, bool respectSafe);
   std::vector<SceneUi> scenes_; int currentScene_ = -1; int selected_ = 0; unsigned recallSafe_ = 0; std::vector<PresetUi> userPresets_;
-  void tick();
   void load();
   void pushAll();   // every setting into a freshly opened runtime
 
@@ -210,7 +213,7 @@ class Engine : public QObject {
   static constexpr int kOutputs = 32;
   int inRoute_[kStrips] = {}; int outRoute_[kOutputs] = {}; int devIn_ = 0, devOut_ = 0;
   QVariantMap license_; int licensedChannels_ = 8;
-  QString lastRoute_;
+  QString lastRoute_; am::Runtime::ExtraSource* extra_ = nullptr;
   struct MonitorUi { int source = 0; double db = 0; bool dim = false, mono = false, mute = false; } mon_;
   int vuRef_ = -18; double vu_[kStrips] = {}; double vuMaster_ = 0;                     // VU ballistics (300 ms to 99 %), run on the UI timer
   std::optional<QJsonObject> clipboard_;
