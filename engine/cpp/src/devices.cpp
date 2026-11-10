@@ -108,8 +108,8 @@ void addDsound(std::vector<DeviceInfo>& out) { DsList r{&out, false}; DirectSoun
 
 void addAsio(std::vector<DeviceInfo>& out) {
   for (const auto& d : listAsioDrivers()) {
-    const AsioProbeInfo p = probeAsioDriver(d);
-    DeviceInfo info; info.backend = "asio"; info.id = d.name; info.name = d.name;
+    const AsioProbeInfo p = probeAsioDriver(d);   // a driver of the other bitness is not loaded: it comes back with error set and no channels
+    DeviceInfo info; info.backend = "asio"; info.id = d.name; info.name = d.bits == static_cast<int>(sizeof(void*) * 8) ? d.name : d.name + " (" + std::to_string(d.bits) + "-bit driver)";
     info.inChannels = static_cast<int>(p.inChannels); info.outChannels = static_cast<int>(p.outChannels);
     info.sampleRates = p.sampleRates;
     if (!p.sampleRates.empty()) {

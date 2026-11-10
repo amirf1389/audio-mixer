@@ -4,10 +4,14 @@
 //   amixos --shots DIR  like --smoke, and saves a PNG of every ported page into DIR (visual check without a display: QT_QPA_PLATFORM=offscreen)
 //   amixos --lang CODE  start in that language (one of the 80+; also applies to --shots)
 #include <QGuiApplication>
+#ifdef _WIN32
+#include <objbase.h>
+#endif
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
 #include <QQuickWindow>
+#include <QPalette>
 #include <QDir>
 #include <QTimer>
 #include <cmath>
@@ -45,14 +49,27 @@ static void logToFile(QtMsgType t, const QMessageLogContext&, const QString& m) 
   std::fputs(line.constData(), stderr); if (g_log && g_log->isOpen()) { g_log->write(line); g_log->flush(); }
 }
 int main(int argc, char* argv[]) {
+#ifdef _WIN32
+  CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);   // COM for the main thread before Qt starts: the ASIO driver objects (CoCreateInstance) and the WASAPI enumerator are created from here
+#endif
   for (int i = 1; i < argc; ++i) { const QByteArray a(argv[i]); if (a == "--software") QQuickWindow::setGraphicsApi(QSGRendererInterface::Software); else if (a == "--opengl") QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL); }
   QGuiApplication app(argc, argv);
+  // One explicit dark palette for every stock control (Slider, ComboBox, TextField, Menu, Dialog, ScrollBar, ToolTip): the Basic style draws
+  // them from the application palette, which Windows and macOS hand over light. The custom panels use Theme.qml's own colours; this keeps the
+  // rest in the same obsidian / ink / amber language instead of light grey boxes. Every value is an explicit #RRGGBB.
+  { QPalette pal;
+    const QColor obsidian("#040507"), card("#0f141c"), raised("#141b26"), ink("#f1f5f9"), muted("#94a3b8"), dim("#64748b"), amber("#fbbf24"), line("#242c3a");
+    pal.setColor(QPalette::Window, obsidian); pal.setColor(QPalette::WindowText, ink); pal.setColor(QPalette::Base, card); pal.setColor(QPalette::AlternateBase, raised); pal.setColor(QPalette::Text, ink);
+    pal.setColor(QPalette::Button, raised); pal.setColor(QPalette::ButtonText, ink); pal.setColor(QPalette::Highlight, amber); pal.setColor(QPalette::HighlightedText, QColor("#000000"));
+    pal.setColor(QPalette::ToolTipBase, raised); pal.setColor(QPalette::ToolTipText, ink); pal.setColor(QPalette::PlaceholderText, dim); pal.setColor(QPalette::Mid, line); pal.setColor(QPalette::Dark, obsidian); pal.setColor(QPalette::Light, line); pal.setColor(QPalette::Midlight, line); pal.setColor(QPalette::Shadow, obsidian);
+    pal.setColor(QPalette::Disabled, QPalette::Text, dim); pal.setColor(QPalette::Disabled, QPalette::ButtonText, dim); pal.setColor(QPalette::Disabled, QPalette::WindowText, dim); pal.setColor(QPalette::Link, QColor("#00f2ff"));
+    QGuiApplication::setPalette(pal); (void)muted; }
   app.setOrganizationName("AMFB Audio");
   am::lic::setProgramDir(QCoreApplication::applicationDirPath().toStdString());   // edition-token.json next to the program (paid editions)
   app.setOrganizationDomain("amfb.audio");
   app.setApplicationName("A mix OS"); app.setApplicationDisplayName("AmF X1");
   app.setApplicationVersion(QStringLiteral(AMIX_VERSION));
-  QQuickStyle::setStyle("Basic");   // the console draws its own controls (Theme.qml); the Basic style never fights the colours
+  QQuickStyle::setStyle("Fusion");   // the one stock style that draws from the application palette (set dark below); Basic ignores the palette and paints light grey boxes on Windows
 
   bool smoke = false; QString shots, lang;
   const QString smokeWav = QDir::tempPath() + "/amixos-smoke-tone.wav", smokeOut = QDir::tempPath() + "/amixos-smoke-export.wav";   // used by the smoke and by its end-of-run lambda: must outlive both

@@ -37,6 +37,8 @@ ApplicationWindow {
                 Text { text: engine.edition.toUpperCase(); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                 ComboBox {   // LANGUAGE: 80 languages; "auto" marks a machine translation
                     id: langBox; implicitWidth: 150; implicitHeight: 26; font.family: Theme.mono; font.pixelSize: 9
+                    background: Rectangle { radius: 5; color: Theme.cardRaised; border.color: langBox.activeFocus ? Theme.amber : Theme.line }   // explicit: never the style's own light box
+                    contentItem: Text { leftPadding: 8; rightPadding: 24; text: langBox.displayText; color: Theme.ink; font: langBox.font; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight }
                     model: i18n.languages; textRole: "name"
                     displayText: (i18n.languages.find(function (l) { return l.code === i18n.lang }) || { name: "English" }).name + (i18n.autoTranslated ? " (auto)" : "")
                     delegate: ItemDelegate { width: parent.width; text: modelData.name + (modelData.auto ? "  · auto" : ""); font.family: Theme.mono; font.pixelSize: 10 }

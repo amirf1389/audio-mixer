@@ -158,6 +158,16 @@ decided, what exists, what is next, and what was asked for but is not possible a
   signed with the debug key until the vendor's keystore is set) and the Linux tarball, all under `releases/` with checksums. The console
   writes `<data>/console.log` (every Qt / QML message) and takes `--software` / `--opengl` for the render backend.
 
+- **Colour and ASIO review** (asked for): every colour literal in the console is an explicit #RRGGBB / #RGB or Qt.rgba (no 8-digit hex, so no
+  channel order mistakes); what was light on Windows were the stock controls (Slider, ComboBox, TextField, Menu, Dialog), which the Basic
+  style paints with hard-coded light colours. The console now sets an explicit dark QPalette (every entry #RRGGBB) and uses the Fusion style,
+  the one that draws from the palette; the language box carries its own background. ASIO: `CoInitializeEx(COINIT_APARTMENTTHREADED)` at
+  the very start of main() in the console and the engine program, `COINIT_MULTITHREADED` on the driver reset worker; the registry is read in
+  both views (`KEY_WOW64_64KEY` SOFTWARE\ASIO and `KEY_WOW64_32KEY` = WOW6432Node) so 32-bit drivers are listed with their bits and
+  refused with a clear message instead of a load failure; a failed `CoCreateInstance` reports FormatMessage text + the HRESULT. Language
+  system: 83 languages, RTL mirroring (LayoutMirroring from i18n.rtl); only the navigation (page and group names) is translated, the pages
+  themselves are English.
+
 ## Next, in order
 
 1. **Windows .exe in hand**: run the Actions workflow, download `amixos-windows-x64.zip`, test ASIO (UM2, Focusrite, ASIO4ALL, Realtek) on the user's PC. Fix what the real drivers show.

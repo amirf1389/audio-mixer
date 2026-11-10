@@ -13,6 +13,9 @@
 #include <chrono>
 #include <cmath>
 #include <csignal>
+#ifdef _WIN32
+#include <objbase.h>
+#endif
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -31,6 +34,9 @@ static void onSignal(int) { g_stop = true; }
 static double db(double lin) { return lin > 1e-9 ? 20.0 * std::log10(lin) : -120.0; }
 
 int main(int argc, char** argv) {
+#ifdef _WIN32
+  CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);   // COM for the main thread before anything else: the ASIO driver objects and the WASAPI enumerator are created from here
+#endif
 #ifdef _WIN32
   { int rc = 0; if (am::runWinTool(argc, argv, rc)) return rc; }       // --install-driver / --uninstall-driver / --install-flexasio FILE --sha256 HEX
 #endif
