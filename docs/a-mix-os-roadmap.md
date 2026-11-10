@@ -72,6 +72,11 @@ decided, what exists, what is next, and what was asked for but is not possible a
   native one lists only what is real.
 - Fixed: the smoke harness used two file-name strings after their scope had ended (a dangling reference since the ARRANGE smoke),
   which corrupted the heap and crashed the console at exit about one run in three on Release builds. Effect parameters are atomics now.
+- **ACCOUNT / ACCESS / ADMIN** (`native/amixos/src/Access.*`): four operator profiles with a permission matrix (faders, DSP, routing,
+  loudness, archive, system) that hides pages from the rail and makes the fader surface read-only; a 4..8 digit PIN stored as a salted
+  SHA-256 (default 1234 only until set, and the pages say so) that locks the surface, guards the FOH MASTER role and ADMIN mode (30 min);
+  an append-only audit log (~/.amixos/audit.log) with CSV export; ADMIN: PRO / CONSUMER edition, backups, audit, the honest state of
+  updates (signed installer, no OTA / A/B / hardware vault: those were mock-ups in the browser build).
 
 ## Next, in order
 

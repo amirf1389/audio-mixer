@@ -28,6 +28,7 @@ Item {
     }
     MouseArea {
         id: drag
+        enabled: !access.surfaceLocked   // ACCOUNT > LOCK CONSOLE: the surface is read-only until the PIN
         anchors.fill: parent
         onPressed: function (m) { var v = fader.dbAt(m.y); fader.value = v; fader.moved(v) }
         onPositionChanged: function (m) { if (pressed) { var v = fader.dbAt(m.y); if (Math.abs(v) < 0.4) v = 0; fader.value = v; fader.moved(v) } }

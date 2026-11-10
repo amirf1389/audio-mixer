@@ -20,6 +20,7 @@
 #include <vector>
 #include "Arrange.h"
 #include "Settings.h"
+#include "Access.h"
 #include "Engine.h"
 #include "license/license.hpp"
 #include "I18n.h"
@@ -40,12 +41,13 @@ int main(int argc, char* argv[]) {
   const QString smokeWav = QDir::tempPath() + "/amixos-smoke-tone.wav", smokeOut = QDir::tempPath() + "/amixos-smoke-export.wav";   // used by the smoke and by its end-of-run lambda: must outlive both
   for (int i = 1; i < argc; ++i) { const QString a = QString::fromLocal8Bit(argv[i]); if (a == "--smoke") smoke = true; else if (a == "--shots" && i + 1 < argc) { smoke = true; shots = QString::fromLocal8Bit(argv[++i]); } else if (a == "--lang" && i + 1 < argc) lang = QString::fromLocal8Bit(argv[++i]); }
 
-  Engine engine; I18n i18n; Arrange arrange(&engine); Settings settings(&engine);
+  Engine engine; I18n i18n; Arrange arrange(&engine); Settings settings(&engine); Access access(&engine);
   if (!lang.isEmpty()) i18n.setLang(lang);   // --lang fa: start in that language (also for --shots)
   QQmlApplicationEngine qml;
   qml.rootContext()->setContextProperty("engine", &engine);
   qml.rootContext()->setContextProperty("arrange", &arrange);
   qml.rootContext()->setContextProperty("settings", &settings);
+  qml.rootContext()->setContextProperty("access", &access);
   QObject::connect(&app, &QGuiApplication::aboutToQuit, &settings, &Settings::sessionClosed);
   qml.rootContext()->setContextProperty("i18n", &i18n);
   qml.rootContext()->setContextProperty("appVersion", QStringLiteral(AMIX_VERSION));
@@ -152,6 +154,14 @@ int main(int argc, char* argv[]) {
     { const QString t = settings.saveText("smoke-test.csv", "a,b\n1,2\n"); if (t.isEmpty() || !QFileInfo::exists(t)) { std::fprintf(stderr, "amixos --smoke: saveText\n"); return 80; } QFile::remove(t);
       if (engine.blockFrames() != 256 || std::fabs(engine.sampleRate() - 48000) > 1e-6) { std::fprintf(stderr, "amixos --smoke: blockFrames / sampleRate\n"); return 81; }
       const QVariantMap rt = engine.roundTrip(); if (rt["ok"].toBool()) { std::fprintf(stderr, "amixos --smoke: round trip found an echo on a silent input\n"); return 82; } }
+    { if (!access.can("faders") || !access.canPage("admin")) { std::fprintf(stderr, "amixos --smoke: FOH MASTER must see everything\n"); return 90; }
+      access.lock(); if (!access.surfaceLocked() || access.can("faders")) { std::fprintf(stderr, "amixos --smoke: surface lock\n"); return 91; }
+      if (access.unlock("0000") || !access.unlock(access.pinIsDefault() ? "1234" : "1234")) { std::fprintf(stderr, "amixos --smoke: PIN check (default 1234 expected on a fresh profile)\n"); return 92; }
+      if (!access.setRole("guest", "") || access.canPage("routing") || access.can("dsp") || !access.can("faders")) { std::fprintf(stderr, "amixos --smoke: GUEST gating\n"); return 93; }
+      if (access.setRole("master", "9999") || !access.setRole("master", "1234")) { std::fprintf(stderr, "amixos --smoke: switching up needs the PIN\n"); return 94; }
+      access.setPerm("guest", "dsp", true); if (access.matrix()["guest"].toMap()["dsp"].toBool()) { std::fprintf(stderr, "amixos --smoke: matrix edit without ADMIN mode must fail\n"); return 95; }
+      if (!access.enterAdmin("1234")) { std::fprintf(stderr, "amixos --smoke: admin PIN\n"); return 96; } access.setPerm("guest", "dsp", true); if (!access.matrix()["guest"].toMap()["dsp"].toBool()) { std::fprintf(stderr, "amixos --smoke: matrix edit\n"); return 97; } access.resetMatrix(); access.leaveAdmin();
+      if (access.audit().size() < 5) { std::fprintf(stderr, "amixos --smoke: audit log\n"); return 98; } }
     engine.setInputRoute(3, 0); engine.setOutputRoute(0, 1);   // the routing matrix: CH 4 reads input 1, OUT 1 carries MASTER L
     if (engine.inputRoutes()[3].toInt() != 0 || engine.outputRoutes()[0].toInt() != 1) { std::fprintf(stderr, "amixos --smoke: routing did not take\n"); return 11; }
     engine.resetRouting(); if (engine.inputRoutes()[3].toInt() != 3 || engine.outputRoutes()[0].toInt() != 3) { std::fprintf(stderr, "amixos --smoke: routing defaults wrong\n"); return 12; }
@@ -159,9 +169,11 @@ int main(int argc, char* argv[]) {
       if (!shots.isEmpty()) {   // one picture per ported page
         QDir().mkpath(shots);
         auto* win = qobject_cast<QQuickWindow*>(qml.rootObjects().first());
-        for (const char* id : {"home", "mixer", "dsp", "dyn", "gate", "bus", "dca", "scenes", "presets", "routing", "renew", "arrange", "io", "meter", "lufs", "sys", "fx", "osc", "phase", "miceq", "live", "tools", "calib", "boot", "help"}) {
+        for (const char* id : {"home", "mixer", "dsp", "dyn", "gate", "bus", "dca", "scenes", "presets", "routing", "renew", "arrange", "io", "meter", "lufs", "sys", "fx", "osc", "phase", "miceq", "live", "tools", "calib", "boot", "help", "acct", "access", "admin"}) {
           win->setProperty("current", QString::fromLatin1(id)); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
           const QImage img = win->grabWindow(); img.save(shots + "/" + id + ".png"); std::printf("amixos --shots: %s %dx%d\n", id, img.width(), img.height());
+          if (QString::fromLatin1(id) == "admin") {   // the same page with the PIN entered
+            access.enterAdmin("1234"); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + "/admin-open.png"); access.leaveAdmin(); std::printf("amixos --shots: admin-open\n"); }
           if (QString::fromLatin1(id) == "routing") {
             if (QObject* rp = win->findChild<QObject*>("routingPage")) { rp->setProperty("tab", 1); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + "/routing-outputs.png"); std::printf("amixos --shots: routing-outputs\n"); }
           }

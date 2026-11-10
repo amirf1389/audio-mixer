@@ -23,6 +23,7 @@ qt_add_executable(amixos
     src/Engine.cpp src/Engine.h
     src/Arrange.cpp src/Arrange.h
     src/Settings.cpp src/Settings.h
+    src/Access.cpp src/Access.h
     src/Scope.cpp src/Scope.h
     src/Generator.cpp src/Generator.h
     src/I18n.cpp src/I18n.h)
@@ -52,6 +53,10 @@ qt_add_qml_module(amixos
         qml/CalibratePage.qml
         qml/DiagnosticsPage.qml
         qml/HelpPage.qml
+        qml/AccountPage.qml
+        qml/AccessPage.qml
+        qml/AdminPage.qml
+        qml/PinPad.qml
         qml/HomePage.qml
         qml/MixerPage.qml
         qml/TonePage.qml
