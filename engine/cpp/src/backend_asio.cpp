@@ -25,17 +25,33 @@
 #include "backends.hpp"
 
 namespace am {
-std::vector<AsioDriverInfo> listAsioDrivers() {
-  std::vector<AsioDriverInfo> out; HKEY root = nullptr;
-  if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, "SOFTWARE\\ASIO", 0, KEY_READ, &root) != ERROR_SUCCESS) return out;
+// the text Windows gives for an HRESULT (CoCreateInstance, driver load), so a failure says why instead of a bare code
+std::string hresultText(HRESULT r) {
+  char* buf = nullptr; const DWORD n = FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, nullptr, static_cast<DWORD>(r), MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), reinterpret_cast<char*>(&buf), 0, nullptr);
+  std::string t = n && buf ? std::string(buf, n) : std::string(); if (buf) LocalFree(buf); while (!t.empty() && (t.back() == '\r' || t.back() == '\n' || t.back() == ' ' || t.back() == '.')) t.pop_back();
+  char b[48]; std::snprintf(b, sizeof b, " (HRESULT 0x%08lx)", static_cast<unsigned long>(r)); return (t.empty() ? std::string("unknown error") : t) + b;
+}
+static void listAsioView(std::vector<AsioDriverInfo>& out, REGSAM view, int bits) {
+  HKEY root = nullptr;
+  if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, "SOFTWARE\\ASIO", 0, KEY_READ | view, &root) != ERROR_SUCCESS) return;
   char name[256];
   for (DWORD i = 0, n = sizeof name; RegEnumKeyExA(root, i, name, &n, nullptr, nullptr, nullptr, nullptr) == ERROR_SUCCESS; ++i, n = sizeof name) {
-    HKEY k = nullptr; if (RegOpenKeyExA(root, name, 0, KEY_READ, &k) != ERROR_SUCCESS) continue;
+    HKEY k = nullptr; if (RegOpenKeyExA(root, name, 0, KEY_READ | view, &k) != ERROR_SUCCESS) continue;
     char clsid[96] = {0}; DWORD len = sizeof clsid - 1, type = 0;
-    if (RegQueryValueExA(k, "CLSID", nullptr, &type, reinterpret_cast<BYTE*>(clsid), &len) == ERROR_SUCCESS && type == REG_SZ) out.push_back({name, clsid});
+    if (RegQueryValueExA(k, "CLSID", nullptr, &type, reinterpret_cast<BYTE*>(clsid), &len) == ERROR_SUCCESS && type == REG_SZ) {
+      bool dup = false; for (const auto& d : out) if (d.clsid == clsid) dup = true;   // a driver registered in both views (most 64-bit installers do) is listed once, as 64-bit
+      if (!dup) out.push_back({name, clsid, bits});
+    }
     RegCloseKey(k);
   }
   RegCloseKey(root);
+}
+std::vector<AsioDriverInfo> listAsioDrivers() {
+  std::vector<AsioDriverInfo> out;
+  // the 64-bit view first (KEY_WOW64_64KEY: the real SOFTWARE\ASIO), then the 32-bit view (KEY_WOW64_32KEY = SOFTWARE\WOW6432Node\ASIO) so a
+  // 32-bit-only driver is at least seen and named, with its bits; on 32-bit Windows both open the same key
+  listAsioView(out, KEY_WOW64_64KEY, 64);
+  listAsioView(out, KEY_WOW64_32KEY, 32);
   return out;
 }
 
@@ -43,12 +59,13 @@ std::vector<AsioDriverInfo> listAsioDrivers() {
 // released again. ASIO drivers are single-client: never probe one while a stream of this program or the bridge has it open.
 AsioProbeInfo probeAsioDriver(const AsioDriverInfo& d) {
   AsioProbeInfo info; info.name = d.name; info.clsid = d.clsid;
-  CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+  if (d.bits != static_cast<int>(sizeof(void*) * 8)) { info.error = d.bits == 32 ? "a 32-bit driver: only the 32-bit AmF X1 can load it" : "a 64-bit driver: only the 64-bit AmF X1 can load it"; return info; }
+  CoInitializeEx(nullptr, COINIT_MULTITHREADED);   // no-op when the thread already has COM (the console's main thread is apartment-threaded: fine, CoCreateInstance works there too)
   wchar_t wide[96] = {0}; MultiByteToWideChar(CP_ACP, 0, d.clsid.c_str(), -1, wide, 95);
   CLSID clsid; if (FAILED(CLSIDFromString(wide, &clsid))) { info.error = "the CLSID is not valid"; return info; }
   IASIO* drv = nullptr;
   HRESULT r = CoCreateInstance(clsid, nullptr, CLSCTX_INPROC_SERVER, clsid, reinterpret_cast<void**>(&drv));
-  if (FAILED(r) || !drv) { char b[96]; std::snprintf(b, sizeof b, "cannot load the driver (0x%08lx)", static_cast<unsigned long>(r)); info.error = b; return info; }
+  if (FAILED(r) || !drv) { info.error = "cannot load the driver: " + hresultText(FAILED(r) ? r : E_POINTER); return info; }
   if (!drv->init(GetDesktopWindow())) { char e[128] = {0}; drv->getErrorMessage(e); info.error = std::string("did not start: ") + (e[0] ? e : "init failed"); drv->Release(); return info; }
   long nIn = 0, nOut = 0;
   if (drv->getChannels(&nIn, &nOut) != ASE_OK) { info.error = "getChannels failed"; drv->Release(); return info; }
@@ -84,12 +101,13 @@ class AsioBackend : public Backend {
     const AsioDriverInfo* pick = want.empty() ? &drivers[0] : nullptr;
     for (const auto& d : drivers) if (!pick && (d.clsid == want || lower(d.name).find(lower(want)) != std::string::npos)) pick = &d;
     if (!pick) { err = "no ASIO driver named \"" + want + "\""; closeAll(); return false; }
+    if (pick->bits != static_cast<int>(sizeof(void*) * 8)) { err = "\"" + pick->name + "\" is a " + std::to_string(pick->bits) + "-bit driver: only the " + std::to_string(pick->bits) + "-bit AmF X1 can load it"; closeAll(); return false; }
     driverName_ = pick->name;
 
     wchar_t wide[96] = {0}; MultiByteToWideChar(CP_ACP, 0, pick->clsid.c_str(), -1, wide, 95);
     CLSID clsid; if (FAILED(CLSIDFromString(wide, &clsid))) { err = "the CLSID of \"" + pick->name + "\" is not valid"; closeAll(); return false; }
     HRESULT r = CoCreateInstance(clsid, nullptr, CLSCTX_INPROC_SERVER, clsid, reinterpret_cast<void**>(&drv_));     // ASIO drivers use their CLSID as the interface id too
-    if (FAILED(r) || !drv_) { char b[96]; std::snprintf(b, sizeof b, "cannot load the ASIO driver \"%s\" (0x%08lx)", pick->name.c_str(), static_cast<unsigned long>(r)); err = b; drv_ = nullptr; closeAll(); return false; }
+    if (FAILED(r) || !drv_) { err = "cannot load the ASIO driver \"" + pick->name + "\": " + hresultText(FAILED(r) ? r : E_POINTER); drv_ = nullptr; closeAll(); return false; }
     if (!drv_->init(GetDesktopWindow())) { char e[128] = {0}; drv_->getErrorMessage(e); err = "the ASIO driver \"" + pick->name + "\" did not start: " + (e[0] ? e : "init failed"); closeAll(); return false; }
 
     long nIn = 0, nOut = 0; ASIOError a = drv_->getChannels(&nIn, &nOut);
@@ -143,6 +161,8 @@ class AsioBackend : public Backend {
   }
   // a driver asked for a reset (its settings changed, the device was re-plugged, ASIO4ALL's panel was used): done here, never in the callback
   void workerLoop() {
+    CoInitializeEx(nullptr, COINIT_MULTITHREADED);   // the reset worker talks to the driver object from its own thread
+    struct Uninit { ~Uninit() { CoUninitialize(); } } uninit;
     std::unique_lock<std::mutex> lk(wm_);
     for (;;) {
       wcv_.wait(lk, [this] { return quit_ || resetPending_; });
