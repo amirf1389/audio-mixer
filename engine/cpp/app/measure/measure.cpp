@@ -59,6 +59,7 @@ Impulse deconvolve(const std::vector<float>& recorded, const Sweep& sweep, int h
   const std::size_t base = static_cast<std::size_t>(sweep.leadSec * sweep.fs) + n - 1; std::size_t pk = base; double best = 0;
   for (std::size_t i = base > 2048 ? base - 2048 : 0; i < std::min(N, base + static_cast<std::size_t>(sweep.fs * 2)); ++i) if (std::fabs(full[i]) > best) { best = std::fabs(full[i]); pk = i; }
   ir.peak = pk; const std::size_t len = std::min(N - pk, static_cast<std::size_t>(sweep.fs * std::min(sweep.tailSec + 1.0, 3.0))); ir.h.assign(full.begin() + static_cast<long>(pk), full.begin() + static_cast<long>(pk + len));
+  { const std::size_t np = std::min<std::size_t>(pk, static_cast<std::size_t>(sweep.fs * 0.02)); ir.pre.assign(full.begin() + static_cast<long>(pk - np), full.begin() + static_cast<long>(pk)); }
   const double R = std::log(sweep.f2 / sweep.f1);
   for (int k = 2; k <= harmonics; ++k) {   // the k-th harmonic's impulse sits T ln(k) / R before the linear one; its window ends half-way to the next lower harmonic
     const double dt = sweep.seconds * std::log(static_cast<double>(k)) / R, dtPrev = sweep.seconds * std::log(static_cast<double>(k - 1)) / R; const std::size_t at = static_cast<std::size_t>(std::llround(dt * sweep.fs));
@@ -69,9 +70,12 @@ Impulse deconvolve(const std::vector<float>& recorded, const Sweep& sweep, int h
 }
 
 Response response(const Impulse& ir, int ppo, double fLo, double fHi, double windowSec) {
-  Response r; if (ir.h.empty()) return r; r.freq = logGrid(ppo, fLo, fHi); const std::size_t n = std::min(ir.h.size(), static_cast<std::size_t>(windowSec * ir.fs)); std::vector<double> w(ir.h.begin(), ir.h.begin() + static_cast<long>(n));
+  Response r; if (ir.h.empty()) return r; r.freq = logGrid(ppo, fLo, fHi); const std::size_t n = std::min(ir.h.size(), static_cast<std::size_t>(windowSec * ir.fs)); std::vector<double> w(ir.h.begin(), ir.h.begin() + static_cast<long>(n)); const std::size_t np = ir.pre.size();
   for (std::size_t i = n / 2; i < n; ++i) w[i] *= 0.5 + 0.5 * std::cos(kPi * static_cast<double>(i - n / 2) / static_cast<double>(n - n / 2));   // half Hann tail
-  spectrumOnGrid(w, ir.fs, r.freq, ppo, r.magDb, &r.phaseDeg); return r;
+  if (np) { for (std::size_t i = 0; i < np; ++i) { const double g = 0.5 - 0.5 * std::cos(kPi * static_cast<double>(i) / static_cast<double>(np)); w.insert(w.begin() + static_cast<long>(i), ir.pre[i] * g); } }   // the pre-ringing, faded in
+  spectrumOnGrid(w, ir.fs, r.freq, ppo, r.magDb, &r.phaseDeg);
+  if (np) for (std::size_t i = 0; i < r.freq.size(); ++i) { double ph = r.phaseDeg[i] + 360.0 * r.freq[i] * static_cast<double>(np) / ir.fs; ph = std::fmod(ph + 180.0, 360.0); if (ph < 0) ph += 360.0; r.phaseDeg[i] = ph - 180.0; }   // take the pre-roll's delay out of the phase
+  return r;
 }
 std::vector<double> thdPercent(const Impulse& ir, const std::vector<double>& freq) {
   std::vector<double> out(freq.size(), 0.0); if (ir.h.empty() || ir.harmonics.empty()) return out;

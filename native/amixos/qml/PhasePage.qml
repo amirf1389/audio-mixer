@@ -36,10 +36,10 @@ Item {
                     anchors.fill: parent; anchors.margins: 8
                     onPaint: {
                         const ctx = getContext("2d"); const w = width, h = height, cx = w / 2, cy = h / 2, r = Math.min(w, h) / 2 - 4; ctx.clearRect(0, 0, w, h)
-                        ctx.strokeStyle = "rgba(255,255,255,0.10)"; ctx.lineWidth = 1
+                        ctx.strokeStyle = Theme.ov(0.10); ctx.lineWidth = 1
                         ctx.beginPath(); ctx.arc(cx, cy, r, 0, 2 * Math.PI); ctx.stroke(); ctx.beginPath(); ctx.arc(cx, cy, r / 2, 0, 2 * Math.PI); ctx.stroke()
                         ctx.beginPath(); ctx.moveTo(cx, cy - r); ctx.lineTo(cx, cy + r); ctx.moveTo(cx - r, cy); ctx.lineTo(cx + r, cy); ctx.stroke()
-                        ctx.strokeStyle = "rgba(255,255,255,0.18)"; ctx.beginPath(); ctx.moveTo(cx - r * 0.707, cy - r * 0.707); ctx.lineTo(cx + r * 0.707, cy + r * 0.707); ctx.moveTo(cx + r * 0.707, cy - r * 0.707); ctx.lineTo(cx - r * 0.707, cy + r * 0.707); ctx.stroke()
+                        ctx.strokeStyle = Theme.ov(0.18); ctx.beginPath(); ctx.moveTo(cx - r * 0.707, cy - r * 0.707); ctx.lineTo(cx + r * 0.707, cy + r * 0.707); ctx.moveTo(cx + r * 0.707, cy - r * 0.707); ctx.lineTo(cx - r * 0.707, cy + r * 0.707); ctx.stroke()
                         const p = page.pairs; if (!p || p.length < 4) return
                         ctx.fillStyle = "rgba(0,242,255,0.55)"
                         for (let i = 0; i + 1 < p.length; i += 2) { const l = p[i], rr = p[i + 1]; const x = (rr - l) * 0.7071, y = (l + rr) * 0.7071; ctx.fillRect(cx + x * r - 1, cy - y * r - 1, 2, 2) }

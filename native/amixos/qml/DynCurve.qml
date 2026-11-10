@@ -19,9 +19,9 @@ Canvas {
         var L = 34, R = width - 10, T = 10, B = height - 22;
         function fx(db) { return L + (db - minDb) / (0 - minDb) * (R - L) }
         function fy(db) { return B - (db - minDb) / (0 - minDb) * (B - T) }
-        c.strokeStyle = "rgba(255,255,255,0.08)"; c.lineWidth = 1; c.fillStyle = "#64748b"; c.font = "8px monospace";
+        c.strokeStyle = Theme.ov(0.08); c.lineWidth = 1; c.fillStyle = "#64748b"; c.font = "8px monospace";
         for (var d = minDb; d <= 0; d += 10) { c.beginPath(); c.moveTo(fx(d), T); c.lineTo(fx(d), B); c.stroke(); c.beginPath(); c.moveTo(L, fy(d)); c.lineTo(R, fy(d)); c.stroke(); c.fillText(d, fx(d) - 8, height - 8); c.fillText(d, 4, fy(d) + 3) }
-        c.strokeStyle = "rgba(255,255,255,0.18)"; c.setLineDash([3, 3]); c.beginPath(); c.moveTo(fx(minDb), fy(minDb)); c.lineTo(fx(0), fy(0)); c.stroke(); c.setLineDash([]);
+        c.strokeStyle = Theme.ov(0.18); c.setLineDash([3, 3]); c.beginPath(); c.moveTo(fx(minDb), fy(minDb)); c.lineTo(fx(0), fy(0)); c.stroke(); c.setLineDash([]);
         c.strokeStyle = "rgba(251,191,36,0.6)"; c.beginPath(); c.moveTo(fx(thresholdDb), T); c.lineTo(fx(thresholdDb), B); c.stroke();
         if (curve.length) {
             c.beginPath(); c.strokeStyle = lineColor; c.lineWidth = 2;

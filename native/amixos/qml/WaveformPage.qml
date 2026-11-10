@@ -52,10 +52,10 @@ Item {
                 anchors.fill: parent; anchors.margins: 8
                 onPaint: {
                     const ctx = getContext("2d"); const w = width, h = height; ctx.clearRect(0, 0, w, h)
-                    ctx.strokeStyle = "rgba(255,255,255,0.07)"; ctx.lineWidth = 1
+                    ctx.strokeStyle = Theme.ov(0.07); ctx.lineWidth = 1
                     for (let i = 0; i <= 10; ++i) { const x = Math.round(w * i / 10) + 0.5; ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke() }
                     for (let j = 0; j <= 8; ++j) { const y = Math.round(h * j / 8) + 0.5; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke() }
-                    ctx.strokeStyle = "rgba(255,255,255,0.25)"; ctx.beginPath(); ctx.moveTo(0, h / 2 + 0.5); ctx.lineTo(w, h / 2 + 0.5); ctx.stroke()
+                    ctx.strokeStyle = Theme.ov(0.25); ctx.beginPath(); ctx.moveTo(0, h / 2 + 0.5); ctx.lineTo(w, h / 2 + 0.5); ctx.stroke()
                     function trace(s, col) { if (!s || s.length < 2) return; ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.beginPath(); for (let i = 0; i < s.length; ++i) { const x = w * i / (s.length - 1), y = h / 2 - Math.max(-1, Math.min(1, s[i])) * h / 2; if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y) } ctx.stroke() }
                     trace(page.frameR.samples, "#00f2ff"); trace(page.frameL.samples, page.source === 3 ? Theme.stripColors[page.stripSt ? page.stripSt.color : 0] : (page.source === 1 ? "#00f2ff" : "#fbbf24"))
                 }

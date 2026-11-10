@@ -84,6 +84,7 @@ class Runtime {
   // control: any thread, takes effect at the start of the next block
   void setGainDb(int strip, double db);
   void setPan(int strip, double pan);
+  void setSpatial(int strip, bool on, double azDeg, double elDeg, double distM, double spread);   // 360 audio (headphones)
   void setMute(int strip, bool on);
   void setSolo(int strip, bool on);
   void setMasterDb(double db);

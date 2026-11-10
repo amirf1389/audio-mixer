@@ -33,9 +33,10 @@ class ScopeTap : public am::Runtime::Tap {
 };
 
 struct TapFanout : am::Runtime::Tap {
-  std::atomic<am::Runtime::Tap*> a{nullptr}, b{nullptr};
+  std::atomic<am::Runtime::Tap*> a{nullptr}, b{nullptr}, c{nullptr};   // a: recorder, b: scope, c: ACOUSTICS
   void onBlock(const float* const* strips, int nStrips, const float* L, const float* R, std::size_t frames, double fs) override {
     if (am::Runtime::Tap* t = a.load()) t->onBlock(strips, nStrips, L, R, frames, fs);
     if (am::Runtime::Tap* t = b.load()) t->onBlock(strips, nStrips, L, R, frames, fs);
+    if (am::Runtime::Tap* t = c.load()) t->onBlock(strips, nStrips, L, R, frames, fs);
   }
 };

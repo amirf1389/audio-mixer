@@ -60,7 +60,7 @@ Item {
                     width: page.hdrW; spacing: 0
                     Item { width: parent.width; height: page.head; Text { anchors.centerIn: parent; text: arrange.tracks.length + i18n.t(" TRACKS · ", i18n.lang) + arrange.clips.length + i18n.t(" CLIPS · END ", i18n.lang) + arrange.end.toFixed(1) + " s"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
                     Repeater { model: arrange.tracks
-                        delegate: Rectangle { width: parent.width - 4; height: page.lane; color: Qt.rgba(1, 1, 1, index % 2 ? 0.025 : 0.05); border.color: Theme.lineSoft
+                        delegate: Rectangle { width: parent.width - 4; height: page.lane; color: Theme.ov(index % 2 ? 0.025 : 0.05); border.color: Theme.lineSoft
                             Rectangle { anchors.left: parent.left; anchors.top: parent.top; anchors.bottom: parent.bottom; width: 4; color: Theme.stripColors[modelData.color] }
                             ColumnLayout { anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 4; anchors.topMargin: 3; spacing: 2
                                 RowLayout { Layout.fillWidth: true; spacing: 3
@@ -88,13 +88,13 @@ Item {
                             const w = width, h = height, bar = page.beat * 4, pxBar = page.xOf(bar), lane = page.lane, head = page.head;
                             ctx.fillStyle = Theme.chrome; ctx.fillRect(0, 0, w, h);
                             // lanes
-                            for (let i = 0; i < arrange.tracks.length; i++) { ctx.fillStyle = i % 2 ? "rgba(255,255,255,0.02)" : "rgba(255,255,255,0.04)"; ctx.fillRect(0, head + i * lane, w, lane - 1) }
+                            for (let i = 0; i < arrange.tracks.length; i++) { ctx.fillStyle = i % 2 ? Theme.ov(0.02) : Theme.ov(0.04); ctx.fillRect(0, head + i * lane, w, lane - 1) }
                             // grid: bars (strong) and beats (faint) when there is room
                             const step = pxBar >= 24 ? 1 : pxBar >= 12 ? 2 : pxBar >= 6 ? 4 : 8;
                             ctx.font = "7px monospace"; ctx.textBaseline = "top";
                             for (let b = 0; b * pxBar < w; b += step) {
-                                const x = b * pxBar; ctx.fillStyle = "rgba(255,255,255,0.14)"; ctx.fillRect(x, 0, 1, h); ctx.fillStyle = "#8b93a7"; ctx.fillText(String(b + 1), x + 3, 3);
-                                if (pxBar >= 60) for (let k = 1; k < 4; k++) { ctx.fillStyle = "rgba(255,255,255,0.05)"; ctx.fillRect(x + k * pxBar / 4, head, 1, h - head) }
+                                const x = b * pxBar; ctx.fillStyle = Theme.ov(0.14); ctx.fillRect(x, 0, 1, h); ctx.fillStyle = "#8b93a7"; ctx.fillText(String(b + 1), x + 3, 3);
+                                if (pxBar >= 60) for (let k = 1; k < 4; k++) { ctx.fillStyle = Theme.ov(0.05); ctx.fillRect(x + k * pxBar / 4, head, 1, h - head) }
                             }
                             // clips
                             for (const c of arrange.clips) {

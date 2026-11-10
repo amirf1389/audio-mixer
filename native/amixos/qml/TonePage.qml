@@ -63,12 +63,12 @@ Flickable {
                     var L = 40, R = width - 10, T = 10, B = height - 22, dbTop = 24, dbBot = -24;
                     if (page.rta && page.spec && page.spec.length === 31) {   // RTA: 31 bands 20 Hz .. 20 kHz, 0 .. -72 dBFS over the full height
                         var bw = (R - L) / 31; for (var k = 0; k < 31; k++) { var sdb = Math.max(-72, Math.min(0, page.spec[k])); var bh = (sdb + 72) / 72 * (B - T); c.fillStyle = sdb > -6 ? "rgba(251,191,36,0.5)" : "rgba(0,242,255,0.35)"; c.fillRect(L + k * bw + 1, B - bh, bw - 2, bh) }
-                        c.fillStyle = "rgba(255,255,255,0.5)"; c.font = "7px monospace"; c.fillText("RTA 1/3 oct  0 .. -72 dBFS", L + 4, T + 10) }
+                        c.fillStyle = Theme.ov(0.5); c.font = "7px monospace"; c.fillText("RTA 1/3 oct  0 .. -72 dBFS", L + 4, T + 10) }
                     function fx(f) { return L + (Math.log(f / 20) / Math.log(1000)) * (R - L) }
                     function fy(db) { return T + (dbTop - db) / (dbTop - dbBot) * (B - T) }
-                    c.strokeStyle = "rgba(255,255,255,0.08)"; c.lineWidth = 1; c.fillStyle = "#64748b"; c.font = "8px monospace";
+                    c.strokeStyle = Theme.ov(0.08); c.lineWidth = 1; c.fillStyle = "#64748b"; c.font = "8px monospace";
                     [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000].forEach(function (f) { c.beginPath(); c.moveTo(fx(f), T); c.lineTo(fx(f), B); c.stroke(); c.fillText(f >= 1000 ? (f / 1000) + "k" : f, fx(f) - 8, height - 8) });
-                    [-24, -12, -6, 0, 6, 12, 24].forEach(function (d) { c.strokeStyle = d === 0 ? "rgba(251,191,36,0.5)" : "rgba(255,255,255,0.08)"; c.beginPath(); c.moveTo(L, fy(d)); c.lineTo(R, fy(d)); c.stroke(); c.fillText((d > 0 ? "+" : "") + d, 6, fy(d) + 3) });
+                    [-24, -12, -6, 0, 6, 12, 24].forEach(function (d) { c.strokeStyle = d === 0 ? "rgba(251,191,36,0.5)" : Theme.ov(0.08); c.beginPath(); c.moveTo(L, fy(d)); c.lineTo(R, fy(d)); c.stroke(); c.fillText((d > 0 ? "+" : "") + d, 6, fy(d) + 3) });
                     if (page.curve.length) {
                         c.beginPath(); c.strokeStyle = "#00f2ff"; c.lineWidth = 2;
                         for (var i = 0; i < page.curve.length; i++) { var p = page.curve[i], x = fx(p.f), y = fy(Math.max(dbBot - 2, Math.min(dbTop + 2, p.db))); if (i === 0) c.moveTo(x, y); else c.lineTo(x, y) }

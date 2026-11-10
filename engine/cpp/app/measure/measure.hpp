@@ -24,7 +24,7 @@ namespace am::measure {
 
 struct Sweep { double fs = 48000, f1 = 20, f2 = 20000, seconds = 5; std::vector<float> signal; std::vector<double> inverse; double leadSec = 0.2, tailSec = 1.0; };
 Sweep makeSweep(double fs, double f1, double f2, double seconds, double amplitude = 0.5);   // signal: lead silence + sweep + tail silence
-struct Impulse { double fs = 48000; std::vector<double> h; std::size_t peak = 0; std::vector<std::vector<double>> harmonics; std::vector<std::size_t> harmonicAt; };   // h: linear impulse response from the peak on; harmonics[k-2]: the k-th harmonic's response
+struct Impulse { double fs = 48000; std::vector<double> h; std::vector<double> pre; std::size_t peak = 0; std::vector<std::vector<double>> harmonics; std::vector<std::size_t> harmonicAt; };   // h: linear impulse response from the peak on; pre: the samples just before the peak (the band-limited pulse's pre-ringing, used by response()); harmonics[k-2]: the k-th harmonic's response
 Impulse deconvolve(const std::vector<float>& recorded, const Sweep& sweep, int harmonics = 5);
 
 struct Response { std::vector<double> freq, magDb, phaseDeg; };   // log-spaced points, pointsPerOctave each octave from fLo to fHi

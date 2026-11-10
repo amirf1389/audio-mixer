@@ -35,5 +35,12 @@ int main() {
     m.setDepth(0, 1); m.process5(in, n, outs); CHECK(near(peak(o[0]), peak(o[1]), 1e-3) && peak(o[0]) > 0.25, "5.0 front L = R (centre takes a share, constant power)"); CHECK(peak(o[2]) > 0.3, "5.0 centre carries a centred strip"); CHECK(peak(o[3]) == 0 && peak(o[4]) == 0, "5.0 depth +1: rears silent");
     m.setDepth(0, -1); m.process5(in, n, outs); CHECK(peak(o[0]) == 0 && peak(o[2]) == 0, "5.0 depth -1: fronts silent"); CHECK(near(peak(o[3]), 0.5 * c45, 2e-3), "5.0 rear Ls");
     m.setDepth(0, 0); m.setPan(0, -1); m.process5(in, n, outs); CHECK(peak(o[2]) == 0, "5.0 hard-left pan leaves the centre"); CHECK(peak(o[0]) > peak(o[1]), "5.0 hard left favours L"); CHECK(near(m.depth(0), 0, 1e-9), "depth getter"); }
-  if (fails) return 1; std::printf("bus_test: ok (incl. 5.0 surround)\n"); return 0;
+  // 6. 360 AUDIO: straight ahead = the centre pan; at +90 degrees the right ear is louder and the left ear hears it about 0.65 ms later; 2 m = half
+  { am::Mixer m(2, fs); m.setSpatial(0, true, 0, 0, 1, 0); m.process(in, n, L.data(), R.data()); CHECK(near(peak(L), 0.5 * c45, 2e-3) && near(peak(R), peak(L), 1e-6), "360: front = centre");
+    m.setSpatial(0, true, 0, 0, 2, 0); m.process(in, n, L.data(), R.data()); m.process(in, n, L.data(), R.data()); CHECK(near(peak(L), 0.25 * c45, 2e-3), "360: 2 m is half");
+    am::Mixer q(2, fs); std::vector<float> ck(n, 0.f); ck[100] = 1.f; const float* cin[2] = {ck.data(), s1.data()}; q.setSpatial(0, true, 90, 0, 1, 0); q.process(cin, n, L.data(), R.data());
+    std::size_t pl = 0, pr = 0; for (std::size_t i = 0; i < n; ++i) { if (std::fabs(L[i]) > std::fabs(L[pl])) pl = i; if (std::fabs(R[i]) > std::fabs(R[pr])) pr = i; }
+    CHECK(pr == 100 && pl > pr + 25 && pl < pr + 40, "360: the far ear is 0.5 - 0.8 ms late"); CHECK(std::fabs(R[pr]) > 2 * std::fabs(L[pl]), "360: the far ear is quieter and duller");
+    CHECK(q.spatial(0).on && !q.spatial(1).on, "360 getter"); }
+  if (fails) return 1; std::printf("bus_test: ok (incl. 5.0 surround, 360 audio)\n"); return 0;
 }

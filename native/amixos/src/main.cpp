@@ -34,6 +34,8 @@
 #include "samples/samples.hpp"
 #include <QHostAddress>
 #include "Update.h"
+#include "Measure.h"
+#include "measure/measure.hpp"
 #include "Engine.h"
 #include "license/license.hpp"
 #include "I18n.h"
@@ -79,7 +81,7 @@ int main(int argc, char* argv[]) {
 
   am::paths::setProgramDir(QCoreApplication::applicationDirPath().toStdString());
   if (!smoke) { QFile* lf = new QFile(QString::fromStdString(am::paths::file("console.log"))); if (lf->size() > 256 * 1024) lf->remove(); if (lf->open(QIODevice::Append | QIODevice::Text)) { g_log = lf; qInstallMessageHandler(logToFile); qInfo("AmF X1 %s starting: %s, Qt %s, render %s", AMIX_VERSION, am::paths::osName(), qVersion(), QQuickWindow::graphicsApi() == QSGRendererInterface::Software ? "software" : "auto"); } }
-  Engine engine; I18n i18n; Arrange arrange(&engine); Settings settings(&engine); applyPalette(settings.darkTheme()); QObject::connect(&settings, &Settings::changed, &app, [&] { static bool last = settings.darkTheme(); if (last != settings.darkTheme()) { last = settings.darkTheme(); applyPalette(last); } }); if (smoke) settings.finishSetup(); Access access(&engine); Osc osc(&engine); Media media(&engine); Samples samples(&engine); Update update(QStringLiteral(AMIX_VERSION));
+  Engine engine; I18n i18n; Arrange arrange(&engine); Settings settings(&engine); applyPalette(settings.darkTheme()); QObject::connect(&settings, &Settings::changed, &app, [&] { static bool last = settings.darkTheme(); if (last != settings.darkTheme()) { last = settings.darkTheme(); applyPalette(last); } }); if (smoke) settings.finishSetup(); Access access(&engine); Osc osc(&engine); Media media(&engine); Samples samples(&engine); Update update(QStringLiteral(AMIX_VERSION)); Measure measure(&engine);
   if (!lang.isEmpty()) i18n.setLang(lang);   // --lang fa: start in that language (also for --shots)
   QQmlApplicationEngine qml;
   qml.rootContext()->setContextProperty("engine", &engine);
@@ -90,6 +92,7 @@ int main(int argc, char* argv[]) {
   qml.rootContext()->setContextProperty("media", &media);
   qml.rootContext()->setContextProperty("samples", &samples);
   qml.rootContext()->setContextProperty("updater", &update);
+  qml.rootContext()->setContextProperty("measure", &measure);
   QObject::connect(&app, &QGuiApplication::aboutToQuit, &settings, &Settings::sessionClosed);
   if (!smoke && update.checkAtStart() && settings.setupDone()) QTimer::singleShot(3000, &update, &Update::check);
   qml.rootContext()->setContextProperty("i18n", &i18n);
@@ -146,6 +149,15 @@ int main(int argc, char* argv[]) {
       engine.setPlugin(0, 4, "vst3:/plugins/Example.vst3|00");
       arrange.seek(0.75); arrange.addMarker("Verse"); arrange.addAutomation(t2, 1.0, 0); arrange.addAutomation(t2, 1.5, -20); arrange.setSelectedClip(clip); }
     // the mixer action bar: plugin slots drive the built-in stages, global actions touch every strip
+    { // ACOUSTICS offline: the sweep at -6 dB and 5 ms late, as a WAV -> a flat response at -6 dB, the delay found, room modes, auto EQ runs
+      const am::measure::Sweep sw = am::measure::makeSweep(48000, 20, 20000, 2, 0.5); std::vector<float> rec(sw.signal.size() + 240, 0.f); for (std::size_t i = 0; i < sw.signal.size(); ++i) rec[i + 240] = 0.5f * sw.signal[i];
+      const QString mw = QDir::tempPath() + "/amixos-smoke-sweep.wav"; std::string merr; if (!am::arr::writeWav24(mw.toStdString(), rec, rec, 48000, merr) || !measure.importSweep(mw, 2, 20, 20000, 24)) { std::fprintf(stderr, "amixos --smoke: acoustics import failed: %s\n", qPrintable(measure.message())); return 60; }
+      const QVariantList mf = measure.result().value("freq").toList(), mm = measure.result().value("mag").toList(); double at1k = -999; for (int i = 0; i < mf.size(); ++i) if (std::fabs(mf[i].toDouble() - 1000) < 20) at1k = mm[i].toDouble();
+      if (std::fabs(at1k + 6.0) > 1.0 || std::fabs(measure.decay().value("delayMs").toDouble() - 5.0) > 0.2) { std::fprintf(stderr, "amixos --smoke: acoustics reads %.2f dB at 1 kHz (want -6), delay %.2f ms (want 5)\n", at1k, measure.decay().value("delayMs").toDouble()); return 61; }
+      if (measure.room(5, 4, 2.7, 0.5, 1, 1, 1.2, 2.5, 3, 1.2).value("modes").toList().isEmpty() || !measure.autoEq("house", 0, 4, 20, 400, 8) || measure.waterfall(12).value("rows").toList().isEmpty()) { std::fprintf(stderr, "amixos --smoke: acoustics room / auto EQ / waterfall failed\n"); return 62; }
+      QFile::remove(mw);
+      engine.setSpatial(5, true, 90, 0, 2, 0); if (!engine.spatial(5).value("on").toBool() || engine.spatial(5).value("az").toDouble() != 90) { std::fprintf(stderr, "amixos --smoke: 360 audio state did not take\n"); return 63; } engine.setSpatial(5, false, 0, 0, 1, 0);
+      std::fprintf(stderr, "amixos --smoke: acoustics offline sweep %.2f dB at 1 kHz, delay 5 ms, room modes, auto EQ; 360 audio state OK\n", at1k); }
     engine.setPlugin(4, 0, "comp"); if (!engine.channelParams(4).value("compOn").toBool() || engine.plugins(4)[0].toMap().value("kind").toString() != "comp") { std::fprintf(stderr, "amixos --smoke: plugin slot did not switch the compressor on\n"); return 21; }
     engine.setPluginBypass(4, 0, true); if (engine.channelParams(4).value("compOn").toBool()) { std::fprintf(stderr, "amixos --smoke: plugin bypass left the compressor on\n"); return 22; }
     engine.setPlugin(4, 1, "vst3:/plugins/Example.vst3"); if (!engine.plugins(4)[1].toMap().value("pending").toBool()) { std::fprintf(stderr, "amixos --smoke: VST3 slot not marked pending\n"); return 23; }
@@ -305,7 +317,7 @@ int main(int argc, char* argv[]) {
           for (int step = 0; step < 7; ++step) { wiz->setProperty("step", step); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + QStringLiteral("/setup-%1.png").arg(step + 1)); std::printf("amixos --shots: setup-%d\n", step + 1); }
           win->setProperty("forceSetup", false); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
         }
-        for (const char* id : {"home", "mixer", "dsp", "dyn", "gate", "bus", "dca", "scenes", "presets", "routing", "renew", "arrange", "io", "meter", "lufs", "sys", "fx", "osc", "phase", "miceq", "live", "tools", "calib", "boot", "help", "acct", "access", "admin", "ai", "plugins", "network", "media", "asio", "samples", "rtaeq", "bluetooth"}) {
+        for (const char* id : {"home", "mixer", "dsp", "dyn", "gate", "bus", "dca", "scenes", "presets", "routing", "renew", "arrange", "io", "meter", "lufs", "sys", "fx", "osc", "phase", "acoustics", "surround", "miceq", "live", "tools", "calib", "boot", "help", "acct", "access", "admin", "ai", "plugins", "network", "media", "asio", "samples", "rtaeq", "bluetooth"}) {
           if (QString::fromLatin1(id) == "rtaeq") { QVariantList golden; for (double g : {1.0, 5.0, 3.0, 3.0, 4.0, 2.0, 2.0, 3.0, 3.0, 1.0}) golden << g; engine.setGraphicEq(0, golden, true); }   // the beta's Golden EQ on the shot
           win->setProperty("current", QString::fromLatin1(id)); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
           const QImage img = win->grabWindow(); img.save(shots + "/" + id + ".png"); std::printf("amixos --shots: %s %dx%d\n", id, img.width(), img.height());

@@ -43,7 +43,7 @@ std::unique_ptr<Backend> createBackend(const std::string& name) {
   return nullptr;
 }
 
-enum Op { kGain, kPan, kMute, kSolo, kMaster, kLimiter, kClipDb, kClear, kEq, kDelay, kPolarity, kXover, kChLimiter, kComp, kGate, kSend, kBusLevel, kBusMute, kBusReturn, kMonitor, kInRoute, kOutRoute, kTrim, kPeakHold, kBusFx, kWidth, kAutomix, kAutoLevel, kOutBits, kProfReset, kDcBlock };
+enum Op { kGain, kPan, kMute, kSolo, kMaster, kLimiter, kClipDb, kClear, kEq, kDelay, kPolarity, kXover, kChLimiter, kComp, kGate, kSend, kBusLevel, kBusMute, kBusReturn, kMonitor, kInRoute, kOutRoute, kTrim, kPeakHold, kBusFx, kWidth, kAutomix, kAutoLevel, kOutBits, kProfReset, kDcBlock, kSpatial };
 
 Runtime::Runtime(int strips) : mixer_(strips, 48000) { std::memset(&pub_, 0, sizeof pub_); }
 Runtime::~Runtime() { stop(); }
@@ -76,6 +76,7 @@ void Runtime::post(const Cmd& c) {
 }
 void Runtime::setGainDb(int s, double db) { post({kGain, s, db, 0, 0}); }
 void Runtime::setPan(int s, double p) { post({kPan, s, p, 0, 0}); }
+void Runtime::setSpatial(int s, bool on, double az, double el, double dist, double spread) { Cmd c{kSpatial, s, az, el, dist}; c.b = on ? 1 : 0; c.w = spread; post(c); }
 void Runtime::setMute(int s, bool on) { post({kMute, s, on ? 1.0 : 0.0, 0, 0}); }
 void Runtime::setSolo(int s, bool on) { post({kSolo, s, on ? 1.0 : 0.0, 0, 0}); }
 void Runtime::setMasterDb(double db) { post({kMaster, 0, db, 0, 0}); }
@@ -119,6 +120,7 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
     switch (c.op) {
       case kGain: mixer_.setGainDb(c.a, c.x); break;
       case kPan: mixer_.setPan(c.a, c.x); break;
+      case kSpatial: mixer_.setSpatial(c.a, c.b != 0, c.x, c.y, c.z, c.w); break;
       case kMute: mixer_.setMute(c.a, c.x != 0); break;
       case kSolo: mixer_.setSolo(c.a, c.x != 0); break;
       case kMaster: mixer_.setMasterDb(c.x); break;

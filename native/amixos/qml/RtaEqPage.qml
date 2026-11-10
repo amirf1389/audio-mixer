@@ -92,12 +92,12 @@ Flickable {
                         for (let b = b0; b <= b1; b++) if (sp[b] > val) val = sp[b]
                         const h = Math.max(0, Math.min(1, (val + 72) / 72)) * height * 0.85
                         const g = c.createLinearGradient(0, height - h, 0, height); g.addColorStop(0, "rgba(255,106,0,0.45)"); g.addColorStop(1, "rgba(0,242,255,0.08)"); c.fillStyle = g; c.fillRect(i * bw, height - h, bw - 1, h)
-                        c.fillStyle = "rgba(255,255,255,0.7)"; c.fillRect(i * bw, height - h, bw - 1, 1.5) } } }
+                        c.fillStyle = Theme.ov(0.7); c.fillRect(i * bw, height - h, bw - 1, 1.5) } } }
             Canvas { id: curve; anchors.fill: parent
                 onPaint: { const c = getContext("2d"); c.reset(); const midY = height / 2, step = width / 11
                     c.lineWidth = 1; c.font = "7px monospace"
-                    for (const db of [-12, -6, 0, 6, 12]) { const y = midY - db / 12 * height * 0.42; c.strokeStyle = "rgba(255,255,255,0.08)"; c.beginPath(); c.moveTo(0, y); c.lineTo(width, y); c.stroke(); c.fillStyle = "rgba(255,255,255,0.3)"; c.fillText((db > 0 ? "+" : "") + db + "dB", 4, y - 2) }
-                    const pts = []; for (let i = 0; i < 10; i++) { const x = step * (i + 1), y = midY - page.gains[i] / 12 * height * 0.42; pts.push({ x: x, y: y }); c.strokeStyle = "rgba(255,255,255,0.04)"; c.beginPath(); c.moveTo(x, 0); c.lineTo(x, height); c.stroke(); c.fillStyle = "rgba(255,255,255,0.35)"; c.fillText(page.bandText[i] + "Hz", x - 8, height - 6) }
+                    for (const db of [-12, -6, 0, 6, 12]) { const y = midY - db / 12 * height * 0.42; c.strokeStyle = Theme.ov(0.08); c.beginPath(); c.moveTo(0, y); c.lineTo(width, y); c.stroke(); c.fillStyle = Theme.ov(0.3); c.fillText((db > 0 ? "+" : "") + db + "dB", 4, y - 2) }
+                    const pts = []; for (let i = 0; i < 10; i++) { const x = step * (i + 1), y = midY - page.gains[i] / 12 * height * 0.42; pts.push({ x: x, y: y }); c.strokeStyle = Theme.ov(0.04); c.beginPath(); c.moveTo(x, 0); c.lineTo(x, height); c.stroke(); c.fillStyle = Theme.ov(0.35); c.fillText(page.bandText[i] + "Hz", x - 8, height - 6) }
                     const grad = c.createLinearGradient(0, 0, width, 0); grad.addColorStop(0, "#00f2ff"); grad.addColorStop(0.5, "#ffb020"); grad.addColorStop(1, "#ff6a00")
                     c.strokeStyle = grad; c.lineWidth = 3; c.beginPath(); c.moveTo(0, midY)
                     for (let i = 0; i < pts.length; i++) { if (i === 0) c.quadraticCurveTo(pts[0].x / 2, midY, pts[0].x, pts[0].y); else { const p = pts[i - 1]; c.quadraticCurveTo(p.x, p.y, (p.x + pts[i].x) / 2, (p.y + pts[i].y) / 2) } }

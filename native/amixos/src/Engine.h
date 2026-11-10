@@ -178,6 +178,10 @@ class Engine : public QObject {
   void setExtraSource(am::Runtime::ExtraSource* s) { extra_ = s; sources_.a.store(s); }
   void setMediaSource(am::Runtime::ExtraSource* s) { sources_.c.store(s); }
   void setSampleSource(am::Runtime::ExtraSource* s) { sources_.d.store(s); }
+  void setMeasureIo(am::Runtime::Tap* t, am::Runtime::ExtraSource* s) { taps_.c.store(t); sources_.e.store(s); }
+  // 360 AUDIO: a strip around the head (headphones). az degrees (0 front, 90 right), el -90..90, dist metres, spread 0..1
+  Q_INVOKABLE void setSpatial(int strip, bool on, double az, double el, double dist, double spread);
+  Q_INVOKABLE QVariantMap spatial(int strip) const;
   // OUTPUT STAGE + PROFILER (SOUND CARD page): DC removal before the limiter, TPDF dither for 16 / 24-bit devices, block-time figures in telemetry
   Q_PROPERTY(bool dcBlock READ dcBlock WRITE setDcBlock NOTIFY stateChanged)
   Q_PROPERTY(int outputBits READ outputBits WRITE setOutputBits NOTIFY stateChanged)   // 0 float, 16, 24
@@ -369,7 +373,7 @@ class Engine : public QObject {
   bool loadVst(int strip, int slot);                      // from kind + state at the runtime's rate; false -> error set
   void rebuildInserts(int strip);                         // the strip's VST chain into the runtime
   void reloadAllVst();                                    // after open (new rate / block)
-  struct StripUi { QString name; double db = 0, pan = 0; bool mute = false, solo = false; am::dsp::Channel dsp{48000}; SendUi sends[kBuses]; int dca = 0; unsigned muteGroups = 0; int color = 0; PluginUi plugins[kPluginSlots]; bool automix = false; double amWeight = 1; bool link = false; double trimDb = 0; int eqPreset = 0; };
+  struct StripUi { bool spOn = false; double spAz = 0, spEl = 0, spDist = 1, spSpread = 0; QString name; double db = 0, pan = 0; bool mute = false, solo = false; am::dsp::Channel dsp{48000}; SendUi sends[kBuses]; int dca = 0; unsigned muteGroups = 0; int color = 0; PluginUi plugins[kPluginSlots]; bool automix = false; double amWeight = 1; bool link = false; double trimDb = 0; int eqPreset = 0; };
   std::vector<QJsonObject> history_; int histPos_ = -1; bool restoring_ = false; QTimer histTimer_; QJsonObject abOther_; QString abSlot_ = "A";
   int partner(int i) const { return (i ^ 1) < kStrips ? (i ^ 1) : -1; }
   void applyPluginStage(int strip, const QString& kind, bool on);   // a built-in stage follows its slot

@@ -94,7 +94,7 @@ void Engine::pushAll() {
   pushAutoLevel(); rt_->setDcBlock(dcBlock()); rt_->setOutputBits(outputBits());
   for (int i = 0; i < kStrips; ++i) {
     const StripUi& s = strips_[static_cast<std::size_t>(i)];
-    pushStrip(i); rt_->setPan(i, s.pan); rt_->setSolo(i, s.solo); rt_->setTrimDb(i, s.trimDb);
+    pushStrip(i); rt_->setPan(i, s.pan); rt_->setSpatial(i, s.spOn, s.spAz, s.spEl, s.spDist, s.spSpread); rt_->setSolo(i, s.solo); rt_->setTrimDb(i, s.trimDb);
     for (int k = 0; k < kBuses; ++k) rt_->setSend(i, k, s.sends[k].db, s.sends[k].pre);
     const am::dsp::ChannelParams& p = s.dsp.params();
     for (int b = 0; b < am::dsp::kEqBands; ++b) { const auto& e = p.eq[static_cast<std::size_t>(b)]; rt_->setEqBand(i, b, e.type, e.freq, e.q, e.gainDb); }
@@ -148,6 +148,12 @@ double Engine::effectiveDb(int i) const { if (i < 0 || i >= kStrips) return -60;
 bool Engine::effectiveMute(int i) const { if (i < 0 || i >= kStrips) return true; if (i >= licensedChannels_) return true; const StripUi& s = strips_[static_cast<std::size_t>(i)]; if (s.mute) return true; if (s.dca > 0 && dcas_[s.dca - 1].mute) return true; for (int g = 0; g < kGroups; ++g) if ((s.muteGroups >> g) & 1u && muteGroups_[g].active) return true; return false; }
 void Engine::pushStrip(int i) { if (!rt_) return; rt_->setGainDb(i, effectiveDb(i)); rt_->setMute(i, effectiveMute(i)); }
 void Engine::setGain(int i, double db) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].db = std::clamp(db, -60.0, 10.0); pushStrip(i); if (linked(i)) { strips_[static_cast<std::size_t>(partner(i))].db = strips_[static_cast<std::size_t>(i)].db; pushStrip(partner(i)); } emit stripsChanged(); }
+void Engine::setSpatial(int i, bool on, double az, double el, double dist, double spread) {
+  if (i < 0 || i >= kStrips) return; StripUi& s = strips_[static_cast<std::size_t>(i)];
+  s.spOn = on; s.spAz = std::fmod(az, 360.0); s.spEl = std::clamp(el, -90.0, 90.0); s.spDist = std::clamp(dist, 0.3, 20.0); s.spSpread = std::clamp(spread, 0.0, 1.0);
+  if (rt_) rt_->setSpatial(i, s.spOn, s.spAz, s.spEl, s.spDist, s.spSpread); emit stripsChanged();
+}
+QVariantMap Engine::spatial(int i) const { QVariantMap m; if (i < 0 || i >= kStrips) return m; const StripUi& s = strips_[static_cast<std::size_t>(i)]; m["on"] = s.spOn; m["az"] = s.spAz; m["el"] = s.spEl; m["dist"] = s.spDist; m["spread"] = s.spSpread; return m; }
 void Engine::setPan(int i, double p) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].pan = std::clamp(p, -1.0, 1.0); if (rt_) rt_->setPan(i, strips_[static_cast<std::size_t>(i)].pan); if (linked(i)) { const int j = partner(i); strips_[static_cast<std::size_t>(j)].pan = -strips_[static_cast<std::size_t>(i)].pan; if (rt_) rt_->setPan(j, strips_[static_cast<std::size_t>(j)].pan); } emit stripsChanged(); }
 void Engine::setMute(int i, bool on) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].mute = on; pushStrip(i); if (linked(i)) { strips_[static_cast<std::size_t>(partner(i))].mute = on; pushStrip(partner(i)); } emit stripsChanged(); }
 void Engine::setSolo(int i, bool on) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].solo = on; if (rt_) rt_->setSolo(i, on); if (linked(i)) { const int j = partner(i); strips_[static_cast<std::size_t>(j)].solo = on; if (rt_) rt_->setSolo(j, on); } emit stripsChanged(); }
@@ -631,9 +637,9 @@ QVariantList Engine::pages() const {
   static const P k[] = {
     {"START", "home", "HOME", "⌂", true},
     {"MIX", "mixer", "MIXER", "☰", true}, {"MIX", "arrange", "ARRANGE", "≡", true}, {"MIX", "dsp", "TONE (EQ)", "∿", true}, {"MIX", "rtaeq", "RTA EQ", "◭", true}, {"MIX", "dyn", "COMPRESSOR", "⩏", true}, {"MIX", "gate", "NOISE GATE", "▣", true},
-    {"MIX", "fx", "EFFECTS", "✨", true}, {"MIX", "bus", "SEND TO", "⇉", true}, {"MIX", "dca", "GROUP FADERS", "☷", true},
+    {"MIX", "fx", "EFFECTS", "✨", true}, {"MIX", "surround", "360 AUDIO", "◍", true}, {"MIX", "bus", "SEND TO", "⇉", true}, {"MIX", "dca", "GROUP FADERS", "☷", true},
     {"ROUTE", "io", "CONNECTIONS", "⚡", true}, {"ROUTE", "routing", "ROUTING", "⎇", true},
-    {"METER", "meter", "LEVELS", "▓", true}, {"METER", "lufs", "LOUDNESS", "◎", true}, {"METER", "osc", "WAVEFORM", "∽", true}, {"METER", "phase", "PHASE", "☯", true},
+    {"METER", "meter", "LEVELS", "▓", true}, {"METER", "lufs", "LOUDNESS", "◎", true}, {"METER", "osc", "WAVEFORM", "∽", true}, {"METER", "phase", "PHASE", "☯", true}, {"METER", "acoustics", "ACOUSTICS", "⌇", true},
     {"SOURCE", "media", "STREAM & MEDIA", "▶", true}, {"SOURCE", "live", "LIVE SOURCES", "☉", true}, {"SOURCE", "miceq", "MIC EQ", "♪", true}, {"SOURCE", "ai", "AI MIX", "⚙", true}, {"SOURCE", "tools", "TOOLS", "⚒", true}, {"SOURCE", "plugins", "PLUGINS", "⬡", true}, {"SOURCE", "samples", "SAMPLES", "▦", true},
     {"DEVICE", "asio", "SOUND CARD", "◉", true}, {"DEVICE", "bluetooth", "BLUETOOTH", "⮁", true}, {"DEVICE", "network", "NETWORK", "⮞", true}, {"DEVICE", "cloud", "CLOUD", "☁", false}, {"DEVICE", "cascade", "CASCADE", "⚭", false},
     {"SYSTEM", "presets", "PRESETS", "⬇", true}, {"SYSTEM", "sys", "SETTINGS", "⚙", true}, {"SYSTEM", "acct", "ACCOUNT", "☺", true}, {"SYSTEM", "access", "ACCESS", "⚿", true}, {"SYSTEM", "renew", "LICENSE", "★", true}, {"SYSTEM", "admin", "ADMIN", "⚑", true}, {"SYSTEM", "calib", "CALIBRATE", "⌖", true},
@@ -667,7 +673,7 @@ void Engine::tick() {
 // ── persistence: the console as one JSON document (strips, sends, groups, buses, master). The same document is a SCENE; a strip's DSP part
 // is a PRESET. QSettings keeps the current console, the 16 scenes and the user presets.
 QJsonObject Engine::stripJson(const StripUi& s) const {
-  const auto& p = s.dsp.params(); QJsonObject o; o["name"] = s.name; o["db"] = s.db; o["pan"] = s.pan; o["mute"] = s.mute; o["solo"] = s.solo;
+  const auto& p = s.dsp.params(); QJsonObject o; o["name"] = s.name; o["db"] = s.db; o["pan"] = s.pan; if (s.spOn || s.spAz != 0 || s.spEl != 0 || s.spDist != 1 || s.spSpread != 0) { QJsonObject sp; sp["on"] = s.spOn; sp["az"] = s.spAz; sp["el"] = s.spEl; sp["dist"] = s.spDist; sp["spread"] = s.spSpread; o["spatial"] = sp; } o["mute"] = s.mute; o["solo"] = s.solo;
   o["dsp"] = dspJson(p);
   QJsonArray sends; for (const SendUi& sd : s.sends) { QJsonObject e; e["db"] = sd.db; e["pre"] = sd.pre; sends << e; } o["sends"] = sends; o["dca"] = s.dca; o["muteGroups"] = static_cast<int>(s.muteGroups); o["color"] = s.color;
   QJsonArray pl; for (const PluginUi& p : s.plugins) { QJsonObject e; e["kind"] = p.kind; e["bypass"] = p.bypass; if (p.vst) e["state"] = QString::fromStdString(p.vst->state()); else if (!p.state.isEmpty()) e["state"] = p.state; pl << e; } o["plugins"] = pl; o["link"] = s.link; o["trimDb"] = s.trimDb; o["automix"] = s.automix; o["amWeight"] = s.amWeight;
@@ -695,7 +701,7 @@ am::dsp::ChannelParams Engine::dspFromJson(const QJsonObject& o) {
   return p;
 }
 void Engine::stripFromJson(StripUi& s, const QJsonObject& o) {
-  if (o.contains("name")) s.name = o.value("name").toString().left(24); s.db = std::clamp(o.value("db").toDouble(0), -60.0, 10.0); s.pan = std::clamp(o.value("pan").toDouble(0), -1.0, 1.0); s.mute = o.value("mute").toBool(); s.solo = o.value("solo").toBool();
+  if (o.contains("name")) s.name = o.value("name").toString().left(24); s.db = std::clamp(o.value("db").toDouble(0), -60.0, 10.0); s.pan = std::clamp(o.value("pan").toDouble(0), -1.0, 1.0); s.mute = o.value("mute").toBool(); { const QJsonObject sp = o.value("spatial").toObject(); s.spOn = sp.value("on").toBool(); s.spAz = sp.value("az").toDouble(0); s.spEl = std::clamp(sp.value("el").toDouble(0), -90.0, 90.0); s.spDist = std::clamp(sp.value("dist").toDouble(1), 0.3, 20.0); s.spSpread = std::clamp(sp.value("spread").toDouble(0), 0.0, 1.0); } s.solo = o.value("solo").toBool();
   s.dsp.set(dspFromJson(o.value("dsp").toObject()));
   const QJsonArray sends = o.value("sends").toArray(); for (int k = 0; k < kBuses; ++k) { if (k < sends.size()) { const QJsonObject e = sends[k].toObject(); s.sends[k].db = std::clamp(e.value("db").toDouble(-60), -60.0, 10.0); s.sends[k].pre = e.value("pre").toBool(); } else s.sends[k] = SendUi{}; }
   s.dca = std::clamp(o.value("dca").toInt(0), 0, kGroups); s.muteGroups = static_cast<unsigned>(std::clamp(o.value("muteGroups").toInt(0), 0, 255)); s.color = std::clamp(o.value("color").toInt(0), 0, 7);
