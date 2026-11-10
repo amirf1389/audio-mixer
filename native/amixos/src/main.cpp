@@ -18,6 +18,7 @@
 #include <QFile>
 #include <vector>
 #include "Arrange.h"
+#include "Settings.h"
 #include "Engine.h"
 #include "license/license.hpp"
 #include "I18n.h"
@@ -34,15 +35,17 @@ int main(int argc, char* argv[]) {
   bool smoke = false; QString shots, lang;
   for (int i = 1; i < argc; ++i) { const QString a = QString::fromLocal8Bit(argv[i]); if (a == "--smoke") smoke = true; else if (a == "--shots" && i + 1 < argc) { smoke = true; shots = QString::fromLocal8Bit(argv[++i]); } else if (a == "--lang" && i + 1 < argc) lang = QString::fromLocal8Bit(argv[++i]); }
 
-  Engine engine; I18n i18n; Arrange arrange(&engine);
+  Engine engine; I18n i18n; Arrange arrange(&engine); Settings settings(&engine);
   if (!lang.isEmpty()) i18n.setLang(lang);   // --lang fa: start in that language (also for --shots)
   QQmlApplicationEngine qml;
   qml.rootContext()->setContextProperty("engine", &engine);
   qml.rootContext()->setContextProperty("arrange", &arrange);
+  qml.rootContext()->setContextProperty("settings", &settings);
   qml.rootContext()->setContextProperty("i18n", &i18n);
   qml.rootContext()->setContextProperty("appVersion", QStringLiteral(AMIX_VERSION));
   QObject::connect(&qml, &QQmlApplicationEngine::objectCreationFailed, &app, [] { std::fprintf(stderr, "amixos: the interface could not be created\n"); QCoreApplication::exit(2); }, Qt::QueuedConnection);
   qml.load(QUrl(QStringLiteral("qrc:/qt/qml/AmixOS/qml/Main.qml")));   // Qt 6.4 (loadFromModule is 6.5+)
+  if (!smoke && settings.autoStart()) QTimer::singleShot(300, &app, [&] { settings.startLastDevice(); });   // the remembered device, once the interface is up
   if (qml.rootObjects().isEmpty()) return 2;
 
   if (smoke) {
@@ -96,6 +99,12 @@ int main(int argc, char* argv[]) {
     engine.redo(); if (std::fabs(engine.stripState()[9].toMap().value("db").toDouble() + 12) > 1e-9) { std::fprintf(stderr, "amixos --smoke: redo failed\n"); return 31; }
     engine.toggleAB(); engine.setGain(9, 3); engine.toggleAB(); if (std::fabs(engine.stripState()[9].toMap().value("db").toDouble() + 12) > 1e-9 || engine.abSlot() != "A") { std::fprintf(stderr, "amixos --smoke: A/B did not restore A\n"); return 32; }
     engine.toggleAB(); engine.setGain(9, 0); engine.toggleAB(); engine.setGain(9, 0);
+    // settings: a value round-trips through QSettings; the console exports and imports as one JSON file
+    { const bool was = settings.confirmDestructive(); settings.setConfirmDestructive(!was); if (settings.confirmDestructive() == was) { std::fprintf(stderr, "amixos --smoke: setting did not persist\n"); return 33; } settings.setConfirmDestructive(was);
+      settings.setClipDb(-3); if (std::fabs(settings.clipDb() + 3) > 1e-9) { std::fprintf(stderr, "amixos --smoke: clip point\n"); return 34; } settings.setClipDb(-0.1);
+      engine.setName(11, "ExportMe"); const QString ex = settings.exportConsole(QDir::tempPath() + "/amixos-smoke-console.json"); if (ex.isEmpty()) { std::fprintf(stderr, "amixos --smoke: export console failed\n"); return 35; }
+      engine.setName(11, "Changed"); if (!settings.importConsole(ex) || engine.stripState()[11].toMap().value("name").toString() != "ExportMe") { std::fprintf(stderr, "amixos --smoke: import console did not restore the name\n"); return 36; }
+      engine.setName(11, "CH 12"); QFile::remove(ex); if (settings.dataFiles().size() < 5 || settings.factoryResetPreview().size() < 5) { std::fprintf(stderr, "amixos --smoke: settings lists\n"); return 37; } }
     engine.setInputRoute(3, 0); engine.setOutputRoute(0, 1);   // the routing matrix: CH 4 reads input 1, OUT 1 carries MASTER L
     if (engine.inputRoutes()[3].toInt() != 0 || engine.outputRoutes()[0].toInt() != 1) { std::fprintf(stderr, "amixos --smoke: routing did not take\n"); return 11; }
     engine.resetRouting(); if (engine.inputRoutes()[3].toInt() != 3 || engine.outputRoutes()[0].toInt() != 3) { std::fprintf(stderr, "amixos --smoke: routing defaults wrong\n"); return 12; }

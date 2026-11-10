@@ -39,7 +39,7 @@ std::unique_ptr<Backend> createBackend(const std::string& name) {
   return nullptr;
 }
 
-enum Op { kGain, kPan, kMute, kSolo, kMaster, kLimiter, kClipDb, kClear, kEq, kDelay, kPolarity, kXover, kChLimiter, kComp, kGate, kSend, kBusLevel, kBusMute, kBusReturn, kMonitor, kInRoute, kOutRoute, kTrim };
+enum Op { kGain, kPan, kMute, kSolo, kMaster, kLimiter, kClipDb, kClear, kEq, kDelay, kPolarity, kXover, kChLimiter, kComp, kGate, kSend, kBusLevel, kBusMute, kBusReturn, kMonitor, kInRoute, kOutRoute, kTrim, kPeakHold };
 
 Runtime::Runtime(int strips) : mixer_(strips, 48000) { std::memset(&pub_, 0, sizeof pub_); }
 Runtime::~Runtime() { stop(); }
@@ -77,6 +77,7 @@ void Runtime::setSolo(int s, bool on) { post({kSolo, s, on ? 1.0 : 0.0, 0, 0}); 
 void Runtime::setMasterDb(double db) { post({kMaster, 0, db, 0, 0}); }
 void Runtime::setLimiter(bool on, double c, double r) { post({kLimiter, on ? 1 : 0, c, r, 0}); }
 void Runtime::setClipDb(double db) { post({kClipDb, 0, db, 0, 0}); }
+void Runtime::setPeakHoldMs(double ms) { post({kPeakHold, 0, ms, 0, 0}); }
 void Runtime::clearClips() { post({kClear, 0, 0, 0, 0}); }
 void Runtime::setEqBand(int s, int band, dsp::FilterType t, double f, double q, double g) { Cmd c{kEq, s, f, q, g}; c.b = band; c.w = static_cast<double>(t); post(c); }
 void Runtime::setDelayMs(int s, double ms) { post({kDelay, s, ms, 0, 0}); }
@@ -108,6 +109,7 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
       case kMaster: mixer_.setMasterDb(c.x); break;
       case kLimiter: mixer_.setLimiter(c.a != 0, c.x, c.y); break;
       case kClipDb: mixer_.setClipDb(c.x); break;
+      case kPeakHold: mixer_.setPeakHoldMs(c.x); break;
       case kClear: mixer_.clearClips(); break;
       case kEq: if (c.a >= 0 && c.a < static_cast<int>(ch_.size())) ch_[static_cast<std::size_t>(c.a)].setEqBand(c.b, {static_cast<dsp::FilterType>(static_cast<int>(c.w)), c.x, c.y, c.z}); break;
       case kDelay: if (c.a >= 0 && c.a < static_cast<int>(ch_.size())) ch_[static_cast<std::size_t>(c.a)].setDelayMs(c.x); break;

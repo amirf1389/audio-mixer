@@ -14,7 +14,7 @@ ApplicationWindow {
     minimumHeight: 480
     title: "A mix OS " + appVersion
     color: Theme.obsidian
-    property string current: "home"
+    property string current: settings.startPage
     LayoutMirroring.enabled: i18n.rtl
     LayoutMirroring.childrenInherit: true
     function pageOf(id) { for (var i = 0; i < engine.pages.length; i++) if (engine.pages[i].id === id) return engine.pages[i]; return engine.pages[0] }

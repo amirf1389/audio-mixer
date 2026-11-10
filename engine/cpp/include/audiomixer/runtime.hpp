@@ -85,6 +85,7 @@ class Runtime {
   void setMasterDb(double db);
   void setLimiter(bool on, double ceilingDb = -0.5, double releaseMs = 100);
   void setClipDb(double db);
+  void setPeakHoldMs(double ms);
   void clearClips();
   // A mix OS channel DSP (audiomixer/dsp.hpp), applied to a strip's input before the mixer: parametric EQ, crossover, delay, polarity, limiter.
   // Coefficients are computed on the audio thread at the start of the next block (a few cos / pow, no allocation).

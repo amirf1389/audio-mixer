@@ -213,7 +213,8 @@ void Mixer::setMute(int s, bool on) { if (s >= 0 && s < n_) strips_[s].mute = on
 void Mixer::setSolo(int s, bool on) { if (s >= 0 && s < n_) strips_[s].solo = on; }
 void Mixer::setMasterDb(double db) { db = std::min(db, 10.0); masterDb_ = db; masterLin_ = db <= -60.0 ? 0.0 : linOf(db); }
 void Mixer::setLimiter(bool on, double ceilingDb, double releaseMs) { limOn_ = on; limCeil_ = linOf(clampd(ceilingDb, -24.0, 0.0)); limReleaseMs_ = std::max(1.0, releaseMs); }
-void Mixer::setClipDb(double db) { clip_ = ClipConfig::fromDb(db); for (auto& s : strips_) s.meter.setClip(clip_); master_[0].setClip(clip_); master_[1].setClip(clip_); }
+void Mixer::setClipDb(double db) { const double hold = clip_.holdMs; clip_ = ClipConfig::fromDb(db); clip_.holdMs = hold; for (auto& s : strips_) s.meter.setClip(clip_); master_[0].setClip(clip_); master_[1].setClip(clip_); for (auto& b : buses_) b.meter.setClip(clip_); }
+void Mixer::setPeakHoldMs(double ms) { clip_.holdMs = ms < 0 ? 0 : ms; for (auto& s : strips_) s.meter.setClip(clip_); master_[0].setClip(clip_); master_[1].setClip(clip_); for (auto& b : buses_) b.meter.setClip(clip_); }
 void Mixer::setSend(int s, int b, double db, bool pre) {
   if (s < 0 || s >= n_ || b < 0 || b >= kMaxBuses) return;
   Send& x = sends_[s][b]; x.lin = db <= -60.0 ? 0.0 : linOf(std::min(db, 10.0)); x.pre = pre;

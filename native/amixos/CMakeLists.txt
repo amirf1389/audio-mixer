@@ -22,6 +22,7 @@ qt_add_executable(amixos
     src/main.cpp
     src/Engine.cpp src/Engine.h
     src/Arrange.cpp src/Arrange.h
+    src/Settings.cpp src/Settings.h
     src/I18n.cpp src/I18n.h)
 set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)   # before qt_add_qml_module, or Theme is a plain type and every Theme.* colour is undefined
 qt_add_qml_module(amixos

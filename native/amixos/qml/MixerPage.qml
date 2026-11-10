@@ -10,10 +10,10 @@ Item {
     id: page
     objectName: "mixerPage"
     property int bank: 0      // 0 = 1-16, 1 = 17-32, 2 = all
-    property bool sidePanel: true
-    property bool vuMode: false        // bar meters or analogue VU faces on every strip and the master
-    property bool monitorPanel: true   // the control-room section next to the master
-    property bool rack: true           // the PLUGIN RACK of the selected channel, under the action bar
+    property bool sidePanel: settings.channelPanelDefault
+    property bool vuMode: settings.vuDefault        // bar meters or analogue VU faces on every strip and the master
+    property bool monitorPanel: settings.monitorPanelDefault   // the control-room section next to the master
+    property bool rack: settings.rackDefault           // the PLUGIN RACK of the selected channel, under the action bar
     readonly property var selPlugins: engine.plugins(sel)
     Connections { target: engine; function onStripsChanged() { page.selPlugins = engine.plugins(page.sel) } function onSelectedStripChanged() { page.selPlugins = engine.plugins(page.sel) } }
     // keyboard: ← → select strip, M mute, S solo, 0 fader to 0 dB, Ctrl+Z / Ctrl+Y undo / redo, A A/B, R plugin rack, Esc clear solo
@@ -76,8 +76,8 @@ Item {
                 Rectangle { width: 1; implicitHeight: 20; color: Theme.lineSoft }
                 Rectangle { implicitWidth: 72; implicitHeight: 20; radius: 4; color: bar.anyMute ? Theme.danger : Qt.rgba(1, 1, 1, 0.06); Text { anchors.centerIn: parent; text: bar.anyMute ? "UNMUTE ALL" : "MUTE ALL"; color: bar.anyMute ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.muteAll(!bar.anyMute) } }
                 Rectangle { implicitWidth: 72; implicitHeight: 20; radius: 4; color: bar.anySolo ? Theme.amber : Qt.rgba(1, 1, 1, 0.06); Text { anchors.centerIn: parent; text: "CLEAR SOLO"; color: bar.anySolo ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; enabled: bar.anySolo; onClicked: engine.clearSolo() } }
-                Rectangle { implicitWidth: 80; implicitHeight: 20; radius: 4; color: Qt.rgba(1, 1, 1, 0.06); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: "RESET FADERS"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: confirmReset.open() } }
-                Rectangle { implicitWidth: 78; implicitHeight: 20; radius: 4; color: Qt.rgba(1, 1, 1, 0.06); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: "FLATTEN DSP"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: confirmFlatten.open() } }
+                Rectangle { implicitWidth: 80; implicitHeight: 20; radius: 4; color: Qt.rgba(1, 1, 1, 0.06); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: "RESET FADERS"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: settings.confirmDestructive ? confirmReset.open() : engine.resetFaders() } }
+                Rectangle { implicitWidth: 78; implicitHeight: 20; radius: 4; color: Qt.rgba(1, 1, 1, 0.06); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: "FLATTEN DSP"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: settings.confirmDestructive ? confirmFlatten.open() : engine.flattenAllDsp() } }
                 Rectangle { implicitWidth: 70; implicitHeight: 20; radius: 4; color: Qt.rgba(1, 1, 1, 0.06); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: "CLEAR CLIPS"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.clearClips() } }
                 Rectangle { width: 1; implicitHeight: 20; color: Theme.lineSoft }
                 Text { text: "SCENES"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }

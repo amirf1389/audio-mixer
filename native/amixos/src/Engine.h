@@ -70,6 +70,13 @@ class Engine : public QObject {
   int licensedChannels() const { return licensedChannels_; }
   Q_INVOKABLE void tick();   // one meter poll now (the timer does this every 33 ms; the smoke test calls it directly)
   Q_INVOKABLE void refreshLicense();            // re-reads the stored key / edition (also after the date changes)
+  // for the Settings system
+  void setClipThreshold(double db);             // the meters' clip point in dBFS (default -0.1)
+  void setPeakHold(int ms);
+  QJsonObject consoleExport() const { return consoleJson(); }
+  QJsonArray scenesExport() const; QJsonArray presetsExport() const;
+  void consoleImport(const QJsonObject& console, const QJsonArray& scenes, const QJsonArray& presets);
+  void factoryReset();                          // the console, scenes, user presets, selection back to a new desk (saved)
   Q_INVOKABLE QVariantMap checkKey(const QString& key) const;   // genuine? which plan? upgrade / same / downgrade; nothing is stored
   Q_INVOKABLE QVariantMap activateKey(const QString& key);      // verifies and stores; {ok, reason, message}
   Q_INVOKABLE bool deactivateKey();
@@ -247,7 +254,7 @@ class Engine : public QObject {
   static constexpr int kOutputs = 32;
   int inRoute_[kStrips] = {}; int outRoute_[kOutputs] = {}; int devIn_ = 0, devOut_ = 0;
   QVariantMap license_; int licensedChannels_ = 8;
-  QString lastRoute_; am::Runtime::ExtraSource* extra_ = nullptr;
+  QString lastRoute_; am::Runtime::ExtraSource* extra_ = nullptr; double clipDb_ = -0.1; int peakHoldMs_ = 1400;
   struct MonitorUi { int source = 0; double db = 0; bool dim = false, mono = false, mute = false; } mon_;
   int vuRef_ = -18; double vu_[kStrips] = {}; double vuMaster_ = 0;                     // VU ballistics (300 ms to 99 %), run on the UI timer
   std::optional<QJsonObject> clipboard_;

@@ -125,6 +125,7 @@ class Mixer {
   void setMasterDb(double db);
   void setLimiter(bool on, double ceilingDb = -0.5, double releaseMs = 100);   // brick-wall peak limiter: instant attack
   void setClipDb(double db);
+  void setPeakHoldMs(double ms);              // how long the peak-hold line stays (all meters); 0 = no hold
   void setSend(int strip, int bus, double db, bool pre);     // -60 and below = off, +10 at most
   void setBusLevel(int bus, double db);
   void setBusMute(int bus, bool on);

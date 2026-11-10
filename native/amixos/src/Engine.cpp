@@ -77,7 +77,7 @@ void Engine::pushAll() {
     rt_->setCompressor(i, p.compOn, p.compThresholdDb, p.compRatio, p.compKneeDb, p.compAttackMs, p.compReleaseMs, p.compMakeupDb); rt_->setGate(i, p.gateOn, p.gateThresholdDb, p.gateRangeDb, p.gateAttackMs, p.gateHoldMs, p.gateReleaseMs);
   }
   rt_->setMasterDb(masterDb_); rt_->setLimiter(masterLim_, masterCeil_);
-  rt_->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute);
+  rt_->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute); rt_->setClipDb(clipDb_); rt_->setPeakHoldMs(peakHoldMs_);
   for (int i = 0; i < kStrips; ++i) rt_->setInputRoute(i, inRoute_[i]);
   for (int o = 0; o < kOutputs; ++o) rt_->setOutputRoute(o, outRoute_[o]);
 }
@@ -218,6 +218,26 @@ void Engine::resetStrip(int i) {
   if (i < 0 || i >= kStrips) return; StripUi& s = strips_[static_cast<std::size_t>(i)];
   s.db = 0; s.pan = 0; s.mute = false; s.solo = false; s.dca = 0; s.muteGroups = 0; for (SendUi& sd : s.sends) sd = SendUi{}; s.dsp.set(am::dsp::ChannelParams{});
   if (rt_) pushAll(); emit stripsChanged(); emit groupsChanged();
+}
+void Engine::setPeakHold(int ms) { peakHoldMs_ = std::clamp(ms, 0, 999999); if (rt_) rt_->setPeakHoldMs(peakHoldMs_); }
+void Engine::setClipThreshold(double db) { clipDb_ = std::clamp(db, -12.0, 0.0); if (rt_) rt_->setClipDb(clipDb_); }
+QJsonArray Engine::scenesExport() const { QJsonArray sc; for (const SceneUi& x : scenes_) { QJsonObject o; o["name"] = x.name; o["at"] = x.at; o["data"] = x.data; sc << o; } return sc; }
+QJsonArray Engine::presetsExport() const { QJsonArray pr; for (const PresetUi& p : userPresets_) { QJsonObject o; o["name"] = p.name; o["category"] = p.category; o["dsp"] = p.dsp; pr << o; } return pr; }
+void Engine::consoleImport(const QJsonObject& console, const QJsonArray& scenes, const QJsonArray& presets) {
+  applyConsoleJson(console, false);
+  for (int i = 0; i < kScenes && i < scenes.size(); ++i) { const QJsonObject o = scenes[i].toObject(); SceneUi& x = scenes_[static_cast<std::size_t>(i)]; x.name = o.value("name").toString().left(24); x.at = o.value("at").toString(); x.data = o.value("data").toObject(); }
+  userPresets_.clear(); for (const QJsonValue& v : presets) { const QJsonObject o = v.toObject(); if (o.value("name").toString().isEmpty()) continue; userPresets_.push_back({o.value("name").toString().left(24), o.value("category").toString().left(16), o.value("dsp").toObject()}); }
+  save(); emit scenesChanged(); emit presetsChanged();
+}
+void Engine::factoryReset() {
+  for (int i = 0; i < kStrips; ++i) { StripUi& s = strips_[static_cast<std::size_t>(i)]; s = StripUi{}; s.name = QStringLiteral("CH %1").arg(i + 1, 2, 10, QLatin1Char('0')); s.dsp.setSampleRate(48000); }
+  for (BusUi& b : buses_) b = BusUi{}; for (int k = 0; k < kBuses; ++k) buses_[k].name = QStringLiteral("BUS %1").arg(k + 1);
+  for (DcaUi& d : dcas_) d = DcaUi{}; for (int g = 0; g < kGroups; ++g) dcas_[g].name = QStringLiteral("DCA %1").arg(g + 1);
+  for (MuteGroupUi& m : muteGroups_) m = MuteGroupUi{}; for (int g = 0; g < kGroups; ++g) muteGroups_[g].name = QStringLiteral("MUTE %1").arg(g + 1);
+  masterDb_ = 0; masterLim_ = true; masterCeil_ = -0.5; mon_ = MonitorUi{}; for (int i = 0; i < kStrips; ++i) inRoute_[i] = i; for (int o = 0; o < kOutputs; ++o) outRoute_[o] = am::Runtime::defaultOutputSource(o);
+  for (SceneUi& x : scenes_) x = SceneUi{}; currentScene_ = -1; recallSafe_ = 0; userPresets_.clear(); selected_ = 0; clipboard_.reset(); history_.clear(); histPos_ = -1; abOther_ = QJsonObject(); abSlot_ = "A";
+  if (rt_) pushAll(); save(); history_.push_back(consoleJson()); histPos_ = 0;
+  emit stripsChanged(); emit busesChanged(); emit groupsChanged(); emit scenesChanged(); emit presetsChanged(); emit selectedStripChanged(); emit monitorChanged(); emit routingChanged(); emit clipboardChanged(); emit historyChanged();
 }
 void Engine::recordHistory() {
   const QJsonObject now = consoleJson(); if (histPos_ >= 0 && histPos_ < static_cast<int>(history_.size()) && history_[static_cast<std::size_t>(histPos_)] == now) return;
