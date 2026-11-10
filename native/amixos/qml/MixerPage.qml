@@ -59,6 +59,37 @@ Item {
                 Rectangle { implicitWidth: 64; implicitHeight: 20; radius: 4; color: page.monitorPanel ? Qt.rgba(0.2, 0.9, 0.5, 0.18) : Qt.rgba(1, 1, 1, 0.06); border.color: page.monitorPanel ? Theme.emerald : "transparent"; Text { anchors.centerIn: parent; text: "MONITOR"; color: page.monitorPanel ? Theme.emerald : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.monitorPanel = !page.monitorPanel } }
                 Item { Layout.fillWidth: true }
                 Text { text: engine.running ? engine.status : "ENGINE IDLE: connect a sound card"; color: engine.running ? Theme.emerald : Theme.amber; font.family: Theme.mono; font.pixelSize: 8 }
+                // SETTINGS: a quick popover with the mixer's own options, and a link to the full SETTINGS page
+                Rectangle { id: gear; implicitWidth: 26; implicitHeight: 20; radius: 4; color: quick.visible ? Theme.amber : Qt.rgba(1, 1, 1, 0.08); border.color: Theme.lineSoft
+                    Text { anchors.centerIn: parent; text: "⚙"; color: quick.visible ? "#000" : Theme.ink; font.pixelSize: 12 }
+                    MouseArea { anchors.fill: parent; onClicked: quick.visible ? quick.close() : quick.open() }
+                    ToolTip.visible: gearHov.hovered && !quick.visible; ToolTip.text: "Mixer settings"; HoverHandler { id: gearHov }
+                    Popup { id: quick; objectName: "mixerQuick"; x: parent.width - width; y: parent.height + 6; width: 300; padding: 10; modal: false; focus: true; closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+                        background: Rectangle { radius: 8; color: Theme.cardRaised; border.color: Theme.amber }
+                        contentItem: ColumnLayout { spacing: 6
+                            Text { text: "MIXER SETTINGS"; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
+                            Text { text: "What you change here is saved as the default for next time."; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+                            Repeater { model: [
+                                    { t: "VU faces instead of bars", k: "vu" }, { t: "Monitor (control room) panel", k: "monitor" }, { t: "Plugin rack", k: "rack" }, { t: "Channel panel", k: "channel" }, { t: "Confirm reset / flatten", k: "confirm" }, { t: "Tooltips", k: "tips" } ]
+                                delegate: RowLayout { Layout.fillWidth: true
+                                    readonly property bool on: modelData.k === "vu" ? page.vuMode : modelData.k === "monitor" ? page.monitorPanel : modelData.k === "rack" ? page.rack : modelData.k === "channel" ? page.sidePanel : modelData.k === "confirm" ? settings.confirmDestructive : settings.tooltips
+                                    Text { text: modelData.t; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; Layout.fillWidth: true }
+                                    Rectangle { implicitWidth: 40; implicitHeight: 18; radius: 9; color: on ? Theme.emerald : Qt.rgba(1, 1, 1, 0.1); Rectangle { width: 14; height: 14; radius: 7; y: 2; x: on ? 24 : 2; color: on ? "#000" : Theme.muted }
+                                        MouseArea { anchors.fill: parent; onClicked: {
+                                            var v = !on
+                                            if (modelData.k === "vu") { page.vuMode = v; settings.vuDefault = v } else if (modelData.k === "monitor") { page.monitorPanel = v; settings.monitorPanelDefault = v } else if (modelData.k === "rack") { page.rack = v; settings.rackDefault = v }
+                                            else if (modelData.k === "channel") { page.sidePanel = v; settings.channelPanelDefault = v } else if (modelData.k === "confirm") settings.confirmDestructive = v; else settings.tooltips = v } } } } }
+                            RowLayout { Layout.fillWidth: true
+                                Text { text: "0 VU ="; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 }
+                                Repeater { model: [-18, -20, -14]; delegate: Rectangle { implicitWidth: 34; implicitHeight: 18; radius: 3; color: engine.vuRefDb === modelData ? Theme.amber : Qt.rgba(1, 1, 1, 0.08); Text { anchors.centerIn: parent; text: modelData; color: engine.vuRefDb === modelData ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.vuRefDb = modelData } } }
+                                Text { text: "dBFS"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 } Item { Layout.fillWidth: true } }
+                            RowLayout { Layout.fillWidth: true
+                                Text { text: "Clip point"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 }
+                                Slider { Layout.fillWidth: true; from: -12; to: 0; stepSize: 0.1; value: settings.clipDb; onMoved: settings.clipDb = value }
+                                Text { text: settings.clipDb.toFixed(1) + " dBFS"; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8 } }
+                            Rectangle { Layout.fillWidth: true; height: 1; color: Theme.lineSoft }
+                            Rectangle { Layout.fillWidth: true; implicitHeight: 24; radius: 5; color: Qt.rgba(0, 0.95, 1, 0.18); border.color: Theme.cyan; Text { anchors.centerIn: parent; text: "ALL SETTINGS ›"; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: { quick.close(); page.go("sys") } } }
+                        } } }
             }
         }
         // the action bar: global mixer actions, four quick scenes, and the 10 PLUGIN slots of the selected channel
