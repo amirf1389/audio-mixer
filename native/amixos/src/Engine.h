@@ -77,6 +77,15 @@ class Engine : public QObject {
 
   Q_INVOKABLE void refreshDevices();
   Q_INVOKABLE bool open(const QString& backend, const QString& inDevice, const QString& outDevice, double sampleRate, int frames, int inChannels, int outChannels);
+  // DRIVER INTELLIGENCE (engine/cpp/include/audiomixer/driver_intel.hpp): the ladder for an ASIO device, the Realtek pin and the locks learned
+  Q_INVOKABLE bool openSmart(const QString& backend, const QString& inDevice, const QString& outDevice, double sampleRate, int frames, int inChannels, int outChannels);   // walks the plan until a step opens
+  Q_INVOKABLE QVariantList driverPlan(const QString& backend, const QString& inDevice, const QString& outDevice) const;   // [{mode, backend, in, out, exclusive, why, fromLock, pinned}]
+  Q_INVOKABLE QVariantList driverLocks() const;
+  Q_INVOKABLE QVariantList driverPins() const;          // Realtek ASIO drivers seen, with their pin state
+  Q_INVOKABLE void setDriverPin(const QString& name, bool on);
+  Q_INVOKABLE int forgetDriverLocks(const QString& name);   // "*" = all
+  Q_PROPERTY(QString lastRoute READ lastRoute NOTIFY stateChanged)   // what the last start did, in plain words
+  QString lastRoute() const { return lastRoute_; }
   Q_INVOKABLE void stop();
   // strips
   Q_INVOKABLE void setGain(int strip, double db);
@@ -201,6 +210,7 @@ class Engine : public QObject {
   static constexpr int kOutputs = 32;
   int inRoute_[kStrips] = {}; int outRoute_[kOutputs] = {}; int devIn_ = 0, devOut_ = 0;
   QVariantMap license_; int licensedChannels_ = 8;
+  QString lastRoute_;
   struct MonitorUi { int source = 0; double db = 0; bool dim = false, mono = false, mute = false; } mon_;
   int vuRef_ = -18; double vu_[kStrips] = {}; double vuMaster_ = 0;                     // VU ballistics (300 ms to 99 %), run on the UI timer
   std::optional<QJsonObject> clipboard_;

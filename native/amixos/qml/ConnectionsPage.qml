@@ -11,6 +11,9 @@ Flickable {
     property string outId: ""
     property int rate: 48000
     property int frames: 256
+    property var planModel: []
+    onInIdChanged: planModel = engine.driverPlan(backend, inId, outId)
+    onOutIdChanged: planModel = engine.driverPlan(backend, inId, outId)
     contentHeight: col.implicitHeight + 24
     clip: true
     function devs(dir) { var l = []; for (var i = 0; i < engine.devices.length; i++) { var d = engine.devices[i]; if (d.backend === page.backend && (dir === "in" ? d.inChannels > 0 : d.outChannels > 0)) l.push(d) } return l }
@@ -57,10 +60,40 @@ Flickable {
                 Rectangle { implicitWidth: 110; implicitHeight: 30; radius: 6; color: engine.running ? Qt.rgba(1, 1, 1, 0.08) : Theme.emerald
                     Text { anchors.centerIn: parent; text: engine.running ? "RESTART" : "START ENGINE"; color: engine.running ? Theme.ink : "#000"; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
                     MouseArea { anchors.fill: parent; onClicked: { var i = page.dev(page.inId), o = page.dev(page.outId); engine.open(page.backend, page.inId, page.outId, page.rate, page.frames, i ? Math.min(32, i.inChannels) : 2, o ? Math.min(2, o.outChannels) : 2) } } }
+                Rectangle { visible: page.backend === "asio"; implicitWidth: 110; implicitHeight: 30; radius: 6; color: Theme.cyan
+                    Text { anchors.centerIn: parent; text: "SMART START"; color: "#000"; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
+                    MouseArea { anchors.fill: parent; onClicked: { var i = page.dev(page.inId), o = page.dev(page.outId); engine.openSmart(page.backend, page.inId, page.outId, page.rate, page.frames, i ? Math.min(32, i.inChannels) : 2, o ? Math.min(2, o.outChannels) : 2); page.planModel = engine.driverPlan(page.backend, page.inId, page.outId) } } }
                 Rectangle { implicitWidth: 80; implicitHeight: 30; radius: 6; color: engine.running ? Theme.danger : Qt.rgba(1, 1, 1, 0.05); Text { anchors.centerIn: parent; text: "STOP"; color: engine.running ? "#000" : Theme.dim; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; enabled: engine.running; onClicked: engine.stop() } }
                 Text { text: engine.status; color: engine.running ? Theme.emerald : Theme.amber; font.family: Theme.mono; font.pixelSize: 9; Layout.fillWidth: true; wrapMode: Text.WordWrap }
             }
             Text { visible: engine.running; text: "Blocks " + engine.telemetry.blocks + " • frames " + engine.telemetry.frames + " • xruns " + engine.telemetry.xruns; color: engine.telemetry.xruns > 0 ? Theme.danger : Theme.dim; font.family: Theme.mono; font.pixelSize: 8 }
+            Text { visible: engine.lastRoute.length > 0; text: engine.lastRoute; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+        }
+        // DRIVER INTELLIGENCE: the ladder SMART START walks for the chosen ASIO device, the Realtek pin, the locks learned
+        Panel {
+            Layout.fillWidth: true
+            title: "DRIVER INTELLIGENCE"
+            subtitle: "SMART START tries the best path first and falls back by itself: ASIO (the device's own driver; ASIO4ALL only when nothing here has its own) → WASAPI exclusive → WASAPI shared on the same hardware. The step that worked is locked for next time; a lower lock is retried after 6 hours. In-app routing only: no driver, registry or Windows setting is touched."
+            Text { text: "PLAN FOR THE SELECTED DEVICE" + (page.backend === "asio" ? "" : " (choose the ASIO driver to see a ladder)"); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
+            Repeater { model: page.planModel; delegate: RowLayout { Layout.fillWidth: true; spacing: 8
+                Rectangle { implicitWidth: 18; implicitHeight: 18; radius: 9; color: index === 0 ? Theme.cyan : Qt.rgba(1, 1, 1, 0.08); Text { anchors.centerIn: parent; text: index + 1; color: index === 0 ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } }
+                Text { text: modelData.mode.toUpperCase() + (modelData.pinned ? "  PINNED" : modelData.fromLock ? "  LOCKED" : ""); color: modelData.pinned ? Theme.amber : modelData.fromLock ? Theme.emerald : Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; Layout.preferredWidth: 180 }
+                Text { text: (modelData.in !== "-" ? "in " + modelData.in : "") + (modelData.out !== "-" ? "  out " + modelData.out : "") + (modelData.why ? "  ·  " + modelData.why : ""); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; elide: Text.ElideRight; Layout.fillWidth: true } } }
+            Rectangle { Layout.fillWidth: true; height: 1; color: Theme.lineSoft }
+            Text { text: "REALTEK PIN"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
+            Text { visible: engine.driverPins().length === 0; text: "No Realtek ASIO driver on this computer: the pin does not apply."; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
+            Repeater { model: engine.driverPins(); delegate: RowLayout { Layout.fillWidth: true; spacing: 8
+                Rectangle { implicitWidth: 60; implicitHeight: 20; radius: 4; color: modelData.on ? Theme.amber : Qt.rgba(1, 1, 1, 0.08); Text { anchors.centerIn: parent; text: modelData.on ? "PINNED" : "UNPINNED"; color: modelData.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: { engine.setDriverPin(modelData.name, !modelData.on); page.planModel = engine.driverPlan(page.backend, page.inId, page.outId) } } }
+                Text { text: modelData.name + "  ·  " + modelData.reason; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.WordWrap; Layout.fillWidth: true } } }
+            Rectangle { Layout.fillWidth: true; height: 1; color: Theme.lineSoft }
+            RowLayout { Layout.fillWidth: true
+                Text { text: "LOCKS LEARNED"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; Layout.fillWidth: true }
+                Rectangle { visible: engine.driverLocks().length > 0; implicitWidth: 90; implicitHeight: 20; radius: 4; color: Qt.rgba(1, 1, 1, 0.08); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: "FORGET ALL"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: { engine.forgetDriverLocks("*"); page.planModel = engine.driverPlan(page.backend, page.inId, page.outId) } } } }
+            Text { visible: engine.driverLocks().length === 0; text: "None yet: locks appear after a start had to fall back, or after a clean ASIO run."; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
+            Repeater { model: engine.driverLocks(); delegate: RowLayout { Layout.fillWidth: true; spacing: 8
+                Text { text: modelData.name + " → " + modelData.mode.toUpperCase() + (modelData.device && modelData.device !== modelData.name ? " (" + modelData.device + ")" : ""); color: Theme.emerald; font.family: Theme.mono; font.pixelSize: 8; Layout.preferredWidth: 320; elide: Text.ElideRight }
+                Text { text: modelData.reason + (modelData.retryAt > 0 ? "  ·  retries ASIO " + new Date(modelData.retryAt).toISOString().slice(0, 16).replace("T", " ") : ""); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; Layout.fillWidth: true; elide: Text.ElideRight }
+                Rectangle { implicitWidth: 60; implicitHeight: 18; radius: 4; color: Qt.rgba(1, 1, 1, 0.08); Text { anchors.centerIn: parent; text: "FORGET"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: { engine.forgetDriverLocks(modelData.name); page.planModel = engine.driverPlan(page.backend, page.inId, page.outId) } } } } }
         }
     }
 }

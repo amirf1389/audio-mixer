@@ -1,6 +1,7 @@
 #include "Engine.h"
 
 #include "license/license.hpp"
+#include "audiomixer/driver_intel.hpp"
 
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -154,6 +155,40 @@ QVariantMap Engine::activateKey(const QString& key) {
 bool Engine::deactivateKey() { const bool r = am::lic::deactivate(); refreshLicense(); return r; }
 QString Engine::licenseRequest(const QString& plan, const QString& name, const QString& email) const { return QString::fromStdString(am::lic::request(plan.toStdString(), name.toStdString(), email.toStdString(), QDateTime::currentMSecsSinceEpoch(), AMIX_VERSION).dump()); }
 QString Engine::vendorKeyFingerprint() const { return QString::fromStdString(am::lic::fingerprint(am::lic::kVendorJwk)); }
+
+// ---- driver intelligence
+static QVariantMap attemptMap(const am::drv::Attempt& a) { QVariantMap m; m["mode"] = QString::fromStdString(a.mode); m["backend"] = QString::fromStdString(a.backend); m["in"] = QString::fromStdString(a.inDevice); m["out"] = QString::fromStdString(a.outDevice); m["exclusive"] = a.exclusive; m["why"] = QString::fromStdString(a.why); m["fromLock"] = a.fromLock; m["pinned"] = a.pinned; return m; }
+static std::vector<am::DeviceInfo> devInfos(const QVariantList& l) { std::vector<am::DeviceInfo> v; for (const QVariant& x : l) { const QVariantMap m = x.toMap(); am::DeviceInfo d; d.backend = m["backend"].toString().toStdString(); d.id = m["id"].toString().toStdString(); d.name = m["name"].toString().toStdString(); d.inChannels = m["inChannels"].toInt(); d.outChannels = m["outChannels"].toInt(); d.defaultIn = m["defaultIn"].toBool(); d.defaultOut = m["defaultOut"].toBool(); d.defaultRate = m["defaultRate"].toDouble(); v.push_back(d); } return v; }
+QVariantList Engine::driverPlan(const QString& backend, const QString& in, const QString& out) const { QVariantList l; for (const auto& a : am::drv::plan(backend.toStdString(), in.toStdString(), out.toStdString(), devInfos(devices_), QDateTime::currentMSecsSinceEpoch())) l << attemptMap(a); return l; }
+QVariantList Engine::driverLocks() const { QVariantList l; for (const auto& k : am::drv::locks()) { QVariantMap m; m["name"] = QString::fromStdString(k.name); m["mode"] = QString::fromStdString(k.mode); m["device"] = QString::fromStdString(k.device); m["reason"] = QString::fromStdString(k.reason); m["at"] = static_cast<qlonglong>(k.at); m["retryAt"] = k.mode == "asio" ? 0 : static_cast<qlonglong>(k.at + am::drv::kRetryMs); l << m; } return l; }
+QVariantList Engine::driverPins() const { QVariantList l; for (const auto& p : am::drv::pins(devInfos(devices_))) { QVariantMap m; m["name"] = QString::fromStdString(p.name); m["on"] = p.on; m["reason"] = QString::fromStdString(p.reason); l << m; } return l; }
+void Engine::setDriverPin(const QString& name, bool on) { am::drv::setPin(name.toStdString(), on); emit devicesChanged(); }
+int Engine::forgetDriverLocks(const QString& name) { const int n = am::drv::forget(name.toStdString()); emit devicesChanged(); return n; }
+bool Engine::openSmart(const QString& backend, const QString& in, const QString& out, double rate, int frames, int inCh, int outCh) {
+  const qint64 now = QDateTime::currentMSecsSinceEpoch();
+  const auto steps = am::drv::plan(backend.toStdString(), in.toStdString(), out.toStdString(), devInfos(devices_), now);
+  QStringList tried; const QString asioName = backend == "asio" ? (out.isEmpty() || out == "-" ? in : out) : QString();
+  for (std::size_t i = 0; i < steps.size(); ++i) {
+    const auto& a = steps[i];
+    stop(); rt_ = std::make_unique<am::Runtime>(kStrips);
+    am::DeviceConfig cfg; cfg.backend = a.backend; cfg.inDevice = a.inDevice; cfg.outDevice = a.outDevice; cfg.sampleRate = rate > 0 ? rate : 48000; cfg.frames = static_cast<unsigned>(frames > 0 ? frames : 256); cfg.inChannels = inCh; cfg.outChannels = outCh; cfg.exclusive = a.exclusive;
+    devIn_ = std::clamp(inCh, 0, kStrips); devOut_ = std::clamp(outCh, 0, kOutputs);
+    std::string err;
+    if (rt_->open(cfg, err) && rt_->start(err)) {
+      for (auto& st : strips_) st.dsp.setSampleRate(cfg.sampleRate);
+      pushAll();
+      status_ = QStringLiteral("%1 • %2 Hz • %3 frames • %4 in / %5 out").arg(QString::fromStdString(rt_->backendName())).arg(cfg.sampleRate).arg(cfg.frames).arg(inCh).arg(outCh);
+      const QString mode = QString::fromStdString(a.mode).toUpper();
+      if (a.pinned) lastRoute_ = QStringLiteral("REALTEK PIN: %1 → %2 (%3). The ASIO driver was not opened.").arg(asioName, mode, QString::fromStdString(a.inDevice != "-" ? a.inDevice : a.outDevice));
+      else if (a.fromLock) lastRoute_ = QStringLiteral("AI DRIVER LOCK: %1 went straight to %2 (learned earlier: %3).").arg(asioName, mode, QString::fromStdString(a.why));
+      else if (i > 0) { lastRoute_ = QStringLiteral("FALLBACK: %1 failed (%2) → %3 works. Locked for next time.").arg(tried.join("; "), QString::fromStdString(err), mode); if (!asioName.isEmpty()) am::drv::learn(asioName.toStdString(), a.mode, a.inDevice != "-" ? a.inDevice : a.outDevice, tried.join("; ").toStdString(), now); }
+      else { lastRoute_ = QStringLiteral("%1 opened first try.").arg(mode); if (!asioName.isEmpty() && a.mode == "asio") am::drv::learn(asioName.toStdString(), "asio", asioName.toStdString(), "clean run", now); }
+      timer_.start(); emit stateChanged(); return true;
+    }
+    tried << QStringLiteral("%1: %2").arg(QString::fromStdString(a.mode).toUpper(), QString::fromStdString(err)); rt_.reset();
+  }
+  status_ = QStringLiteral("Could not open the sound card on any path: %1").arg(tried.join(" | ")); lastRoute_ = status_; emit stateChanged(); return false;
+}
 
 QVariantList Engine::inputRoutes() const { QVariantList l; for (int i = 0; i < kStrips; ++i) l << inRoute_[i]; return l; }
 QVariantList Engine::outputRoutes() const { QVariantList l; for (int o = 0; o < kOutputs; ++o) l << outRoute_[o]; return l; }
