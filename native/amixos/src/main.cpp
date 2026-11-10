@@ -81,6 +81,7 @@ int main(int argc, char* argv[]) {
       // a little more for the screenshot: a second track with the same file later, a marker, two automation points, the head in the middle
       const int t2 = arrange.addTrack("Pad"); arrange.importFile(wav, t2); arrange.moveClip(arrange.clips()[1].toMap().value("id").toInt(), 1.0); arrange.setTrack(t2, "pan", 0.5);
       engine.setPlugin(0, 0, "gate"); engine.setPlugin(0, 1, "eq"); engine.setPlugin(0, 2, "comp"); engine.setPluginBypass(0, 2, true);   // the rack in the screenshot: three built-in stages, the test VST3 loaded, a missing VST3 pending
+      engine.rescanVst({QCoreApplication::applicationDirPath() + "/engine/vst3"});   // the engine build's test plug-in, for the rack in the picture
       if (!engine.vstCatalog().isEmpty()) engine.setPlugin(0, 3, engine.vstCatalog()[0].toMap()["kind"].toString());
       engine.setPlugin(0, 4, "vst3:/plugins/Example.vst3|00");
       arrange.seek(0.75); arrange.addMarker("Verse"); arrange.addAutomation(t2, 1.0, 0); arrange.addAutomation(t2, 1.5, -20); arrange.setSelectedClip(clip); }
