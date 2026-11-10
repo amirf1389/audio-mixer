@@ -95,6 +95,19 @@ decided, what exists, what is next, and what was asked for but is not possible a
   run. The product is **AmF X1 by AMFB Audio** (Theme.product / Theme.vendor; header, title, HOME, setup). NOTE: releases/update.json is
   still signed with the previous vendor key; re-sign it with scripts/make-update.js, or every client (console, native --update) rejects it.
 
+- **16 buses, 8 AUX + 8 FX** (`kMaxBuses` 16, C SDK `AMIX_API_VERSION` 2 / `AMIX_MAX_BUSES` 16, Rust/Perl tests follow): AUX 1-8 for
+  monitor mixes, FX 1-8 for effects; SEND TO colours them, OSC takes `/bus/{1..16}/level`. **MIXER redesign**: FADERS / AUX SENDS / FX
+  SENDS on the action bar flip every strip to eight mini faders with PRE/POST (sends on faders), and an INPUT chip on each strip picks
+  the device input (or none) without leaving the page. **300 FX presets** (`engine/cpp/app/fx/presets.*`: 110 reverb, 100 delay, 50
+  chorus, 40 drive, generated from families, every value 0..1, fx_test checks all 300 load) with a browser on EFFECTS (family tabs,
+  search, one click loads kind + values + mix on the bus). **100 samples** (`engine/cpp/app/samples/*`: drums, percussion, bass, leads,
+  pads, keys, FX, test signals, rendered in the program, samples_test renders all 100) on a SAMPLES page: pads, 8-voice player into the
+  master (`Samples.*`, fanout slot d), keys 1-0, EXPORT writes 100 WAVs to ~/.amixos/samples. **NETWORK**: the IPv4 cards of the
+  computer, bind to one card or any, the REMOTE ADDRESS to type into a controller, an ALLOWED IPs list (addresses or CIDR) that refuses
+  other senders. **RTA** on TONE (EQ): the strip's 1/3-octave spectrum under the curve (MIC EQ / LIVE SOURCES already had theirs).
+  **AUTO LICENCE**: the console writes ~/.amixos/key-request.json itself and watches ~/.amixos and Downloads for the vendor's key file
+  (*.amixkey, *.key, key*.txt), verifies it against the vendor's public key and activates it; keys are never generated in the console.
+
 ## Next, in order
 
 1. **Windows .exe in hand**: run the Actions workflow, download `amixos-windows-x64.zip`, test ASIO (UM2, Focusrite, ASIO4ALL, Realtek) on the user's PC. Fix what the real drivers show.

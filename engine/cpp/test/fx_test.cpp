@@ -1,11 +1,13 @@
 // The bus effects: an impulse through the reverb rings and decays, the delay repeats at its time, the chorus modulates, the drive saturates,
 // bypass passes through, and an effect on a Runtime bus reaches the master through the return.
 #include <cmath>
+#include <set>
 #include <cstdio>
 #include <string>
 #include <vector>
 
 #include "fx/fx.hpp"
+#include "fx/presets.hpp"
 #include "audiomixer/runtime.hpp"
 
 #define CHECK(c) do { if (!(c)) { std::fprintf(stderr, "FAIL %s:%d %s\n", __FILE__, __LINE__, #c); return 1; } } while (0)
@@ -34,5 +36,10 @@ int main() {
     for (int k = 0; k < 40; ++k) rt.onBlock(quiet, outs, n); CHECK(peak(o0, 0, n) > 0.001f);   // the tail is still sounding 50 ms after the input stopped
     rt.setBusProcessor(0, nullptr); for (int k = 0; k < 2; ++k) rt.onBlock(quiet, outs, n); }
   std::printf("fx_test: reverb rings and decays, delay repeats on time (ping-pong crosses), chorus modulates, drive saturates, bypass, bus return OK\n");
+  { const auto& all = am::fx::presets(); CHECK(all.size() == 300); std::set<std::string> names; int perKind[4] = {0, 0, 0, 0};
+    for (const auto& p : all) { names.insert(p.name); auto e = am::fx::make(p.kind, 48000); CHECK(e); for (const auto& [id, v] : p.values) { CHECK(v >= 0 && v <= 1); e->set(id, v); } e->setMix(p.mix); bool known = false; for (const auto& prm : e->params()) for (const auto& [id, v] : p.values) if (prm.id == id) known = true; CHECK(known);
+      perKind[p.kind == "reverb" ? 0 : p.kind == "delay" ? 1 : p.kind == "chorus" ? 2 : 3]++; }
+    CHECK(names.size() == 300 && perKind[0] == 110 && perKind[1] == 100 && perKind[2] == 50 && perKind[3] == 40 && am::fx::preset(1) && !am::fx::preset(301));
+    std::printf("fx_test: 300 presets, unique names, every parameter known to its effect\n"); }
   return 0;
 }

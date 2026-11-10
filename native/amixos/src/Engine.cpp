@@ -1,6 +1,9 @@
 #include "Engine.h"
 
 #include "license/license.hpp"
+#include "fx/presets.hpp"
+#include <QFileSystemWatcher>
+#include <QRegularExpression>
 #include "audiomixer/driver_intel.hpp"
 #include <QDir>
 #include <QStandardPaths>
@@ -20,7 +23,7 @@ static double toDb(double lin) { return lin > 1e-9 ? 20.0 * std::log10(lin) : -1
 Engine::Engine(QObject* parent) : QObject(parent) {
   strips_.resize(kStrips);
   for (int i = 0; i < kStrips; ++i) strips_[static_cast<std::size_t>(i)].name = QStringLiteral("CH %1").arg(i + 1, 2, 10, QLatin1Char('0'));
-  for (int k = 0; k < kBuses; ++k) buses_[k].name = QStringLiteral("BUS %1").arg(k + 1);
+  for (int k = 0; k < kBuses; ++k) buses_[k].name = k < 8 ? QStringLiteral("AUX %1").arg(k + 1) : QStringLiteral("FX %1").arg(k - 7);
   for (int g = 0; g < kGroups; ++g) { dcas_[g].name = QStringLiteral("DCA %1").arg(g + 1); muteGroups_[g].name = QStringLiteral("MUTE %1").arg(g + 1); }
   load();
   refreshDevices();
@@ -101,7 +104,7 @@ QVariantList Engine::stripState() const {
   return l;
 }
 // ── aux sends ──
-QVariantList Engine::busState() const { QVariantList l; for (int k = 0; k < kBuses; ++k) { QVariantMap m; m["index"] = k; m["name"] = buses_[k].name; m["db"] = buses_[k].db; m["returnDb"] = buses_[k].returnDb; m["mute"] = buses_[k].mute; m["outputs"] = QStringLiteral("OUT %1-%2").arg(3 + 2 * k).arg(4 + 2 * k); m["fx"] = buses_[k].fxKind; m["fxName"] = buses_[k].fx ? QString::fromLatin1(buses_[k].fx->name()) : QString(); l << m; } return l; }
+QVariantList Engine::busState() const { QVariantList l; for (int k = 0; k < kBuses; ++k) { QVariantMap m; m["index"] = k; m["name"] = buses_[k].name; m["db"] = buses_[k].db; m["returnDb"] = buses_[k].returnDb; m["mute"] = buses_[k].mute; m["outputs"] = QStringLiteral("OUT %1-%2").arg(3 + 2 * k).arg(4 + 2 * k); m["kind"] = k < 8 ? "aux" : "fx"; m["fx"] = buses_[k].fxKind; m["fxName"] = buses_[k].fx ? QString::fromLatin1(buses_[k].fx->name()) : QString(); l << m; } return l; }
 void Engine::setSend(int i, int k, double db, bool pre) { if (i < 0 || i >= kStrips || k < 0 || k >= kBuses) return; SendUi& sd = strips_[static_cast<std::size_t>(i)].sends[k]; sd.db = std::clamp(db, -60.0, 10.0); sd.pre = pre; if (rt_) rt_->setSend(i, k, sd.db, sd.pre); emit stripsChanged(); }
 QVariantMap Engine::send(int i, int k) const { QVariantMap m; if (i < 0 || i >= kStrips || k < 0 || k >= kBuses) return m; const SendUi& sd = strips_[static_cast<std::size_t>(i)].sends[k]; m["db"] = sd.db; m["pre"] = sd.pre; return m; }
 void Engine::setBusLevel(int k, double db) { if (k < 0 || k >= kBuses) return; buses_[k].db = std::clamp(db, -60.0, 10.0); if (rt_) rt_->setBusLevel(k, buses_[k].db); emit busesChanged(); }
@@ -167,6 +170,50 @@ QVariantMap Engine::activateKey(const QString& key) {
   if (v.ok) { refreshLicense(); m["message"] = QStringLiteral("%1 activated on this computer.").arg(edition()); }
   return m;
 }
+QVariantList Engine::fxPresets() const {
+  QVariantList l; for (const auto& p : am::fx::presets()) { QVariantMap m; m["id"] = p.id; m["name"] = QString::fromStdString(p.name); m["kind"] = QString::fromStdString(p.kind); m["category"] = QString::fromStdString(p.category); m["mix"] = p.mix; l << m; }
+  return l;
+}
+bool Engine::applyFxPreset(int k, int id) {
+  if (k < 0 || k >= kBuses) return false; const am::fx::Preset* p = am::fx::preset(id); if (!p) return false;
+  BusUi& b = buses_[k]; const QString kind = QString::fromStdString(p->kind);
+  if (b.fxKind != kind) { b.fxKind = kind; b.fxValues.clear(); b.fxBypass = false; makeBusFx(k); if (b.returnDb <= -60) { b.returnDb = 0; if (rt_) rt_->setBusReturn(k, 0); } }
+  for (const auto& [pid, v] : p->values) { b.fxValues[QString::fromStdString(pid)] = v; if (b.fx) b.fx->set(pid, v); }
+  b.fxMix = p->mix; if (b.fx) b.fx->setMix(p->mix); b.fxBypass = false; if (b.fx) b.fx->setBypass(false); b.fxPreset = id;
+  emit busesChanged(); return true;
+}
+// ---- AUTO LICENCE
+static QString amixHome() { return QDir::homePath() + "/.amixos"; }
+bool Engine::autoLicense() const { return settings_.value("license/auto", true).toBool(); }
+QString Engine::autoLicenseRequestPath() const { return amixHome() + "/key-request.json"; }
+void Engine::setAutoLicense(bool on) {
+  settings_.setValue("license/auto", on);
+  if (!on) { delete keyWatch_; keyWatch_ = nullptr; keyScan_.stop(); autoStatus_ = "off"; emit licenseChanged(); return; }
+  if (!keyWatch_) {
+    QDir().mkpath(amixHome()); keyWatch_ = new QFileSystemWatcher(this);
+    for (const QString& d : {amixHome(), QStandardPaths::writableLocation(QStandardPaths::DownloadLocation)}) if (!d.isEmpty() && QDir(d).exists()) keyWatch_->addPath(d);
+    connect(keyWatch_, &QFileSystemWatcher::directoryChanged, this, [this](const QString&) { keyScan_.start(); });
+    keyScan_.setSingleShot(true); keyScan_.setInterval(600); connect(&keyScan_, &QTimer::timeout, this, [this] { scanForKeys(); });
+  }
+  autoStatus_ = license_.value("state").toString() == "active" && license_.value("source").toString() == "key" ? "active" : "watching " + QString::number(keyWatch_->directories().size()) + " folders for a key file";
+  emit licenseChanged(); scanForKeys();
+}
+QString Engine::writeLicenseRequest(const QString& plan, const QString& name, const QString& email) {
+  QDir().mkpath(amixHome()); QFile f(autoLicenseRequestPath());
+  if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) { autoStatus_ = "cannot write " + autoLicenseRequestPath(); emit licenseChanged(); return QString(); }
+  f.write(licenseRequest(plan, name, email).toUtf8()); f.close(); autoStatus_ = "request written; waiting for the vendor's key file"; emit licenseChanged(); return autoLicenseRequestPath();
+}
+int Engine::scanForKeys() {
+  if (license_.value("state").toString() == "active" && license_.value("source").toString() == "key") { autoStatus_ = "active"; emit licenseChanged(); return 0; }
+  static const QRegularExpression keyRe("AMIX1\\.[A-Za-z0-9_\\-\\.]+"); int tried = 0; QStringList dirs{amixHome(), QStandardPaths::writableLocation(QStandardPaths::DownloadLocation)};
+  for (const QString& d : dirs) { if (d.isEmpty()) continue; QDir dir(d); if (!dir.exists()) continue;
+    for (const QFileInfo& fi : dir.entryInfoList({"*.amixkey", "*.key", "key*.txt", "amix*.txt"}, QDir::Files, QDir::Time)) {
+      if (fi.size() > 16384) continue; QFile f(fi.filePath()); if (!f.open(QIODevice::ReadOnly)) continue; const QString text = QString::fromUtf8(f.readAll()); ++tried;
+      auto it = keyRe.globalMatch(text); while (it.hasNext()) { const QString key = it.next().captured(0); const QVariantMap r = activateKey(key);
+        if (r["ok"].toBool()) { autoStatus_ = "activated from " + fi.fileName(); emit licenseChanged(); return tried; } autoStatus_ = fi.fileName() + ": " + r["message"].toString(); } } }
+  if (tried == 0 && autoStatus_ != "off" && !autoStatus_.startsWith("request")) autoStatus_ = "watching for a key file (*.amixkey, *.key, key*.txt) in " + amixHome() + " or Downloads";
+  emit licenseChanged(); return tried;
+}
 bool Engine::deactivateKey() { const bool r = am::lic::deactivate(); refreshLicense(); return r; }
 QString Engine::licenseRequest(const QString& plan, const QString& name, const QString& email) const { return QString::fromStdString(am::lic::request(plan.toStdString(), name.toStdString(), email.toStdString(), QDateTime::currentMSecsSinceEpoch(), AMIX_VERSION).dump()); }
 QString Engine::vendorKeyFingerprint() const { return QString::fromStdString(am::lic::fingerprint(am::lic::kVendorJwk)); }
@@ -225,12 +272,12 @@ void Engine::makeBusFx(int k) {
   graveTimer_.start();
 }
 QVariantMap Engine::busFx(int k) const {
-  QVariantMap m; if (k < 0 || k >= kBuses) return m; const BusUi& b = buses_[k]; m["kind"] = b.fxKind; m["bypass"] = b.fxBypass; m["mix"] = b.fxMix; m["name"] = b.fx ? QString::fromLatin1(b.fx->name()) : QString();
+  QVariantMap m; if (k < 0 || k >= kBuses) return m; const BusUi& b = buses_[k]; m["preset"] = b.fxPreset; m["kind"] = b.fxKind; m["bypass"] = b.fxBypass; m["mix"] = b.fxMix; m["name"] = b.fx ? QString::fromLatin1(b.fx->name()) : QString();
   QVariantList ps; if (b.fx) for (const auto& p : b.fx->params()) { QVariantMap x; x["id"] = QString::fromStdString(p.id); x["title"] = QString::fromStdString(p.title); x["units"] = QString::fromStdString(p.units); x["value"] = p.value; x["default"] = p.def; x["text"] = QString::fromStdString(b.fx->text(p.id, p.value)); ps << x; } m["params"] = ps;
   return m;
 }
-void Engine::setBusFx(int k, const QString& kind) { if (k < 0 || k >= kBuses) return; BusUi& b = buses_[k]; if (b.fxKind == kind) return; b.fxKind = kind; b.fxValues.clear(); b.fxBypass = false; makeBusFx(k); if (!kind.isEmpty() && b.returnDb <= -60) { b.returnDb = 0; if (rt_) rt_->setBusReturn(k, 0); } emit busesChanged(); }
-void Engine::setBusFxParam(int k, const QString& id, double v) { if (k < 0 || k >= kBuses) return; BusUi& b = buses_[k]; b.fxValues[id] = std::clamp(v, 0.0, 1.0); if (b.fx) b.fx->set(id.toStdString(), b.fxValues[id]); emit busesChanged(); }
+void Engine::setBusFx(int k, const QString& kind) { if (k < 0 || k >= kBuses) return; BusUi& b = buses_[k]; if (b.fxKind == kind) return; b.fxKind = kind; b.fxPreset = 0; b.fxValues.clear(); b.fxBypass = false; makeBusFx(k); if (!kind.isEmpty() && b.returnDb <= -60) { b.returnDb = 0; if (rt_) rt_->setBusReturn(k, 0); } emit busesChanged(); }
+void Engine::setBusFxParam(int k, const QString& id, double v) { if (k < 0 || k >= kBuses) return; BusUi& b = buses_[k]; b.fxPreset = 0; b.fxValues[id] = std::clamp(v, 0.0, 1.0); if (b.fx) b.fx->set(id.toStdString(), b.fxValues[id]); emit busesChanged(); }
 void Engine::setBusFxBypass(int k, bool on) { if (k < 0 || k >= kBuses) return; buses_[k].fxBypass = on; if (buses_[k].fx) buses_[k].fx->setBypass(on); emit busesChanged(); }
 void Engine::setBusFxMix(int k, double wet) { if (k < 0 || k >= kBuses) return; buses_[k].fxMix = std::clamp(wet, 0.0, 1.0); if (buses_[k].fx) buses_[k].fx->setMix(buses_[k].fxMix); emit busesChanged(); }
 void Engine::setAutomix(int i, bool on, double w) { if (i < 0 || i >= kStrips) return; StripUi& s = strips_[static_cast<std::size_t>(i)]; s.automix = on; s.amWeight = std::clamp(w, 0.25, 4.0); if (rt_) rt_->setAutomix(i, on, s.amWeight); emit stripsChanged(); }
@@ -281,7 +328,7 @@ void Engine::consoleImport(const QJsonObject& console, const QJsonArray& scenes,
 }
 void Engine::factoryReset() {
   for (int i = 0; i < kStrips; ++i) { StripUi& s = strips_[static_cast<std::size_t>(i)]; for (PluginUi& p : s.plugins) if (p.vst) graveyard_.push_back(p.vst); s = StripUi{}; s.name = QStringLiteral("CH %1").arg(i + 1, 2, 10, QLatin1Char('0')); s.dsp.setSampleRate(48000); }
-  for (int k = 0; k < kBuses; ++k) { if (rt_) rt_->setBusProcessor(k, nullptr); if (buses_[k].fx) fxGraveyard_.push_back(std::move(buses_[k].fx)); buses_[k] = BusUi{}; buses_[k].name = QStringLiteral("BUS %1").arg(k + 1); } width_ = 1.0;
+  for (int k = 0; k < kBuses; ++k) { if (rt_) rt_->setBusProcessor(k, nullptr); if (buses_[k].fx) fxGraveyard_.push_back(std::move(buses_[k].fx)); buses_[k] = BusUi{}; buses_[k].name = k < 8 ? QStringLiteral("AUX %1").arg(k + 1) : QStringLiteral("FX %1").arg(k - 7); } width_ = 1.0;
   for (DcaUi& d : dcas_) d = DcaUi{}; for (int g = 0; g < kGroups; ++g) dcas_[g].name = QStringLiteral("DCA %1").arg(g + 1);
   for (MuteGroupUi& m : muteGroups_) m = MuteGroupUi{}; for (int g = 0; g < kGroups; ++g) muteGroups_[g].name = QStringLiteral("MUTE %1").arg(g + 1);
   masterDb_ = 0; masterLim_ = true; masterCeil_ = -0.5; mon_ = MonitorUi{}; for (int i = 0; i < kStrips; ++i) inRoute_[i] = i; for (int o = 0; o < kOutputs; ++o) outRoute_[o] = am::Runtime::defaultOutputSource(o);
@@ -481,7 +528,7 @@ QVariantList Engine::pages() const {
     {"MIX", "fx", "EFFECTS", "✨", true}, {"MIX", "bus", "SEND TO", "⇉", true}, {"MIX", "dca", "GROUP FADERS", "☷", true},
     {"ROUTE", "io", "CONNECTIONS", "⚡", true}, {"ROUTE", "routing", "ROUTING", "⎇", true},
     {"METER", "meter", "LEVELS", "▓", true}, {"METER", "lufs", "LOUDNESS", "◎", true}, {"METER", "osc", "WAVEFORM", "∽", true}, {"METER", "phase", "PHASE", "☯", true},
-    {"SOURCE", "media", "STREAM & MEDIA", "▶", true}, {"SOURCE", "live", "LIVE SOURCES", "☉", true}, {"SOURCE", "miceq", "MIC EQ", "♪", true}, {"SOURCE", "ai", "AI MIX", "⚙", true}, {"SOURCE", "tools", "TOOLS", "⚒", true}, {"SOURCE", "plugins", "PLUGINS", "⬡", true},
+    {"SOURCE", "media", "STREAM & MEDIA", "▶", true}, {"SOURCE", "live", "LIVE SOURCES", "☉", true}, {"SOURCE", "miceq", "MIC EQ", "♪", true}, {"SOURCE", "ai", "AI MIX", "⚙", true}, {"SOURCE", "tools", "TOOLS", "⚒", true}, {"SOURCE", "plugins", "PLUGINS", "⬡", true}, {"SOURCE", "samples", "SAMPLES", "▦", true},
     {"DEVICE", "asio", "SOUND CARD", "◉", true}, {"DEVICE", "bluetooth", "BLUETOOTH", "⮁", false}, {"DEVICE", "network", "NETWORK", "⮞", true}, {"DEVICE", "cloud", "CLOUD", "☁", false}, {"DEVICE", "cascade", "CASCADE", "⚭", false},
     {"SYSTEM", "presets", "PRESETS", "⬇", true}, {"SYSTEM", "sys", "SETTINGS", "⚙", true}, {"SYSTEM", "acct", "ACCOUNT", "☺", true}, {"SYSTEM", "access", "ACCESS", "⚿", true}, {"SYSTEM", "renew", "LICENSE", "★", true}, {"SYSTEM", "admin", "ADMIN", "⚑", true}, {"SYSTEM", "calib", "CALIBRATE", "⌖", true},
     {"HELP", "help", "HELP", "?", true}, {"HELP", "scenes", "SCENES", "⚐", true}, {"SYSTEM", "boot", "DIAGNOSTICS", "⏻", true},

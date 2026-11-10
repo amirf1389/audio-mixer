@@ -6,6 +6,11 @@ import QtQuick.Layouts
 
 Flickable {
     id: page
+    objectName: "tonePage"
+    property bool rta: false      // real-time analyser: the strip's 1/3-octave spectrum after its DSP, under the EQ curve
+    property var spec: []
+    Timer { interval: 60; running: page.visible && page.rta; repeat: true; onTriggered: { page.spec = engine.spectrum(2); canvas.requestPaint() } }
+    onRtaChanged: { if (rta) engine.setScopeStrip(strip); canvas.requestPaint() }
     property int strip: engine.selectedStrip
     property int band: 0
     property var curve: []
@@ -38,6 +43,7 @@ Flickable {
                     onActivated: page.strip = currentIndex
                 }
                 Item { Layout.fillWidth: true }
+                Rectangle { implicitWidth: 44; implicitHeight: 22; radius: 4; color: page.rta ? Theme.cyan : Qt.rgba(1, 1, 1, 0.08); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: "RTA"; color: page.rta ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.rta = !page.rta } ToolTip.visible: rtaH.hovered; ToolTip.text: "Real-time analyser under the curve: this strip after its DSP"; HoverHandler { id: rtaH } }
                 Rectangle { implicitWidth: 60; implicitHeight: 22; radius: 4; color: page.ch.polarityInvert ? Theme.violet : Qt.rgba(1, 1, 1, 0.08); Text { anchors.centerIn: parent; text: "Ø 180°"; color: page.ch.polarityInvert ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setPolarity(page.strip, !page.ch.polarityInvert) } }
             }
             // the curve
@@ -48,6 +54,9 @@ Flickable {
                 onPaint: {
                     var c = getContext("2d"); c.reset(); c.fillStyle = "#05070a"; c.fillRect(0, 0, width, height);
                     var L = 40, R = width - 10, T = 10, B = height - 22, dbTop = 24, dbBot = -24;
+                    if (page.rta && page.spec && page.spec.length === 31) {   // RTA: 31 bands 20 Hz .. 20 kHz, 0 .. -72 dBFS over the full height
+                        var bw = (R - L) / 31; for (var k = 0; k < 31; k++) { var sdb = Math.max(-72, Math.min(0, page.spec[k])); var bh = (sdb + 72) / 72 * (B - T); c.fillStyle = sdb > -6 ? "rgba(251,191,36,0.5)" : "rgba(0,242,255,0.35)"; c.fillRect(L + k * bw + 1, B - bh, bw - 2, bh) }
+                        c.fillStyle = "rgba(255,255,255,0.5)"; c.font = "7px monospace"; c.fillText("RTA 1/3 oct  0 .. -72 dBFS", L + 4, T + 10) }
                     function fx(f) { return L + (Math.log(f / 20) / Math.log(1000)) * (R - L) }
                     function fy(db) { return T + (dbTop - db) / (dbTop - dbBot) * (B - T) }
                     c.strokeStyle = "rgba(255,255,255,0.08)"; c.lineWidth = 1; c.fillStyle = "#64748b"; c.font = "8px monospace";

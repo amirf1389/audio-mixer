@@ -24,9 +24,9 @@ extern "C" {
 #define AMIX_API __attribute__((visibility("default")))
 #endif
 
-#define AMIX_API_VERSION 1
+#define AMIX_API_VERSION 2   // 2: 16 buses (8 AUX + 8 FX)
 #define AMIX_MAX_STRIPS 32
-#define AMIX_MAX_BUSES 8
+#define AMIX_MAX_BUSES 16
 
 typedef struct amix_meter { double peak, rms, hold; uint32_t clips; double comp_gr_db, gate_db, in_peak; } amix_meter;   /* linear 0..1+, dB for the reductions */
 typedef struct amix_levels {

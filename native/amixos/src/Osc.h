@@ -24,6 +24,10 @@ class Osc : public QObject {
   Q_PROPERTY(int tx READ tx NOTIFY statsChanged)
   Q_PROPERTY(QStringList log READ log NOTIFY statsChanged)                // the last 40 messages, newest last
   Q_PROPERTY(QStringList addresses READ addresses CONSTANT)
+  Q_PROPERTY(QVariantList interfaces READ interfaces NOTIFY changed)     // the network cards: [{name, ip, mask, up, kind}]
+  Q_PROPERTY(QString bindAddress READ bindAddress WRITE setBindAddress NOTIFY changed)   // "" = every card (LAN) / 127.0.0.1; else one card's IP
+  Q_PROPERTY(QString allowedIps READ allowedIps WRITE setAllowedIps NOTIFY changed)      // comma list of remote IPs allowed to control (LAN); empty = any
+  Q_PROPERTY(QString remoteAddress READ remoteAddress NOTIFY changed)                    // what to type into the remote: ip:port
  public:
   explicit Osc(Engine* engine, QObject* parent = nullptr);
   ~Osc() override;
@@ -37,6 +41,11 @@ class Osc : public QObject {
   int rx() const { return rx_; } int tx() const { return tx_; }
   QStringList log() const { return log_; }
   QStringList addresses() const;
+  QVariantList interfaces() const;
+  QString bindAddress() const { return s_.value("osc/bind").toString(); } void setBindAddress(const QString& ip);
+  QString allowedIps() const { return s_.value("osc/allow").toString(); } void setAllowedIps(const QString& list);
+  QString remoteAddress() const;
+  bool ipAllowed(const QHostAddress& a) const;
   Q_INVOKABLE bool handle(const QByteArray& datagram);                   // one OSC packet (also used by the smoke test)
  signals:
   void changed();

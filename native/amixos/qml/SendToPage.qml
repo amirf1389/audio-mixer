@@ -1,4 +1,4 @@
-// SEND TO: 8 aux buses. Pick a bus; every strip shows its send level to it (PRE = before the fader, for monitor mixes; POST = after fader,
+// SEND TO: 16 buses, 8 AUX (monitor mixes, pre-fader) and 8 FX (effects, post-fader). Pick a bus; every strip shows its send level to it (PRE = before the fader, for monitor mixes; POST = after fader,
 // mute and solo, for effects). The bus has a level, a mute, a meter, a RETURN into the master, and its own output channels (OUT 3-4 for BUS 1 ...).
 import QtQuick
 import AmixOS   // this module: brings the Theme singleton (a plain directory import would see Theme as an ordinary type)
@@ -18,8 +18,8 @@ Item {
             RowLayout {
                 anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 6
                 Text { text: "SEND TO:"; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
-                Repeater { model: engine.busState; delegate: Rectangle { implicitWidth: bl.implicitWidth + 16; implicitHeight: 20; radius: 4; color: page.bus === index ? Theme.amber : Qt.rgba(1, 1, 1, 0.06); border.color: modelData.mute ? Theme.danger : "transparent"
-                    Text { id: bl; anchors.centerIn: parent; text: modelData.name; color: page.bus === index ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.bus = index } } }
+                Repeater { model: engine.busState; delegate: Rectangle { implicitWidth: bl.implicitWidth + 12; implicitHeight: 20; radius: 4; color: page.bus === index ? (modelData.kind === "fx" ? "#a78bfa" : Theme.emerald) : Qt.rgba(1, 1, 1, 0.06); border.color: modelData.kind === "fx" ? Qt.rgba(0.65, 0.55, 1, 0.4) : Qt.rgba(0.2, 0.9, 0.5, 0.35)
+                    Text { id: bl; anchors.centerIn: parent; text: modelData.name; color: page.bus === index ? "#000" : (modelData.kind === "fx" ? "#a78bfa" : Theme.emerald); font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.bus = index } } }
                 Item { Layout.fillWidth: true }
                 Repeater { model: ["CH 01-16", "CH 17-32"]; delegate: Rectangle { implicitWidth: 70; implicitHeight: 20; radius: 4; color: page.bank === index ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(1, 1, 1, 0.06); Text { anchors.centerIn: parent; text: modelData; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.bank = index } } }
             }

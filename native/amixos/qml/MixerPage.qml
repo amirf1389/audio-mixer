@@ -1,4 +1,4 @@
-// MIXER: 32 strips in two pages of 16 (or all), each with colour, name, pan, mute, solo, MORE menu, fader, post-fader meter (bars or an analogue VU face), input meter, gain-reduction meter,
+// MIXER: 32 strips in two pages of 16 (or all), each with colour, name, INPUT pick, pan, mute, solo, MORE menu, fader (or the 8 AUX / 8 FX sends on the strip), post-fader meter (bars or an analogue VU face), input meter, gain-reduction meter,
 // DSP badges (GATE / EQ / X / COMP / LIM / DLY / Ø: lit when that stage is on, click to open its page for this channel), DCA / mute-group /
 // sends readout; click a strip to select it and edit its whole chain in the side panel; the master and the MONITOR (control room: source, level, dim, mono, mute) on the right.
 import QtQuick
@@ -15,6 +15,9 @@ Item {
     property bool monitorPanel: settings.monitorPanelDefault   // the control-room section next to the master
     property bool rack: settings.rackDefault           // the PLUGIN RACK of the selected channel, under the action bar
     property bool rackCompact: settings.rackCompactDefault   // one line of chips instead of the cards
+    property int sendView: 0    // 0 faders, 1 the 8 AUX sends of every strip, 2 the 8 FX sends (each a mini fader with PRE/POST), the way a desk flips to "sends on faders"
+    property int sendsTick: 0   // bumped when sends change so the send rows re-read engine.send()
+    Connections { target: engine; function onBusesChanged() { page.sendsTick++ } function onRoutingChanged() { page.sendsTick++ } }
     readonly property var selPlugins: engine.plugins(sel)
     Connections { target: engine; function onStripsChanged() { page.selPlugins = engine.plugins(page.sel) } function onSelectedStripChanged() { page.selPlugins = engine.plugins(page.sel) } }
     // keyboard: ← → select strip, M mute, S solo, 0 fader to 0 dB, Ctrl+Z / Ctrl+Y undo / redo, A A/B, R plugin rack, Esc clear solo
@@ -54,6 +57,18 @@ Item {
                         MouseArea { anchors.fill: parent; onClicked: page.bank = index }
                     }
                 }
+                Rectangle { implicitWidth: 1; implicitHeight: 16; color: Theme.lineSoft }
+                Repeater {
+                    model: ["FADERS", "AUX SENDS", "FX SENDS"]
+                    delegate: Rectangle {
+                        implicitWidth: svl.implicitWidth + 14; implicitHeight: 20; radius: 4
+                        color: page.sendView === index ? (index === 0 ? Theme.cyan : index === 1 ? Theme.emerald : "#a78bfa") : Qt.rgba(1, 1, 1, 0.06)
+                        Text { id: svl; anchors.centerIn: parent; text: modelData; color: page.sendView === index ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                        MouseArea { anchors.fill: parent; onClicked: page.sendView = index }
+                        ToolTip.visible: svh.hovered; ToolTip.text: index === 0 ? "Channel faders" : index === 1 ? "Sends to AUX 1-8 on the strips (monitor mixes)" : "Sends to FX 1-8 on the strips (reverb, delay...)"; HoverHandler { id: svh }
+                    }
+                }
+                Rectangle { implicitWidth: 1; implicitHeight: 16; color: Theme.lineSoft }
                 Rectangle { implicitWidth: 90; implicitHeight: 20; radius: 4; color: page.sidePanel ? Qt.rgba(0, 0.95, 1, 0.18) : Qt.rgba(1, 1, 1, 0.06); border.color: page.sidePanel ? Theme.cyan : "transparent"; Text { anchors.centerIn: parent; text: "CHANNEL PANEL"; color: page.sidePanel ? Theme.cyan : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.sidePanel = !page.sidePanel } }
                 Rectangle { implicitWidth: 70; implicitHeight: 20; radius: 4; color: page.vuMode ? Qt.rgba(0.984, 0.749, 0.141, 0.2) : Qt.rgba(1, 1, 1, 0.06); border.color: page.vuMode ? Theme.amber : "transparent"; Text { anchors.centerIn: parent; text: page.vuMode ? "VU METERS" : "BAR METERS"; color: page.vuMode ? Theme.amber : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.vuMode = !page.vuMode } }
                 Rectangle { visible: page.vuMode; implicitWidth: 86; implicitHeight: 20; radius: 4; color: Qt.rgba(1, 1, 1, 0.06); Text { anchors.centerIn: parent; text: "0 VU = " + engine.vuRefDb + " dBFS"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 } MouseArea { anchors.fill: parent; onClicked: engine.vuRefDb = engine.vuRefDb === -18 ? -20 : engine.vuRefDb === -20 ? -14 : -18 } }
@@ -224,8 +239,10 @@ Item {
                         Repeater {
                             model: engine.strips
                             delegate: Item {
+                                id: stripItem
+                                readonly property int stripIdx: index
                                 visible: page.bank === 2 || Math.floor(index / 16) === page.bank
-                                width: visible ? 74 : 0
+                                width: visible ? (page.sendView ? 96 : 74) : 0
                                 height: strips.height
                                 property var st: engine.stripState[index]
                                 property var mt: engine.meters[index]
@@ -245,6 +262,21 @@ Item {
                                 ColumnLayout {
                                     anchors.fill: parent; anchors.margins: 4; anchors.topMargin: 6; spacing: 3
                                     TextInput { Layout.fillWidth: true; text: st ? st.name : ""; color: st && st.effectiveMute ? Theme.dim : Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; horizontalAlignment: Text.AlignHCenter; selectByMouse: true; onEditingFinished: engine.setName(index, text); onActiveFocusChanged: if (activeFocus) engine.selectedStrip = index }
+                                    // INPUT: which device input feeds this strip (click: pick another, or none)
+                                    Rectangle { Layout.fillWidth: true; implicitHeight: 11; radius: 2; color: Qt.rgba(0.2, 0.9, 0.5, 0.12); border.color: inPop.visible ? Theme.emerald : "transparent"
+                                        property int route: page.sendsTick >= 0 && engine.inputRoutes[index] !== undefined ? engine.inputRoutes[index] : -1
+                                        Text { anchors.centerIn: parent; text: parent.route >= 0 ? "IN " + (parent.route + 1) : "IN —"; color: parent.route >= 0 ? Theme.emerald : Theme.dim; font.family: Theme.mono; font.pixelSize: 6; font.bold: true }
+                                        MouseArea { anchors.fill: parent; onClicked: { engine.selectedStrip = index; inPop.open() } }
+                                        Popup { id: inPop; y: parent.height + 2; width: 150; padding: 6; modal: false; closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+                                            background: Rectangle { radius: 6; color: Theme.cardRaised; border.color: Theme.emerald }
+                                            contentItem: ColumnLayout { spacing: 2
+                                                Text { text: "INPUT → CH " + (index + 1); color: Theme.emerald; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
+                                                Flow { Layout.fillWidth: true; spacing: 3
+                                                    Repeater { model: Math.max(0, engine.deviceInputs) + 1
+                                                        delegate: Rectangle { property int inp: index - 1; implicitWidth: 30; implicitHeight: 16; radius: 3; color: engine.inputRoutes[page.sel] === inp ? Theme.emerald : Qt.rgba(1, 1, 1, 0.08)
+                                                            Text { anchors.centerIn: parent; text: inp < 0 ? "—" : inp + 1; color: engine.inputRoutes[page.sel] === inp ? "#000" : Theme.ink; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
+                                                            MouseArea { anchors.fill: parent; onClicked: { engine.setInputRoute(page.sel, inp); inPop.close() } } } }
+                                                    Text { visible: engine.deviceInputs <= 0; text: "no device open"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } } } } }
                                     RowLayout { Layout.fillWidth: true; spacing: 2
                                         Rectangle { implicitWidth: 12; implicitHeight: 10; radius: 2; color: st && st.armed ? Theme.danger : Qt.rgba(1, 1, 1, 0.05); Text { anchors.centerIn: parent; text: "●"; color: st && st.armed ? "#000" : Theme.dim; font.pixelSize: 7 } MouseArea { anchors.fill: parent; onClicked: engine.setArmed(index, !(st && st.armed)) } ToolTip.visible: armHov.hovered; ToolTip.text: "Arm CH " + (index + 1) + " for recording"; HoverHandler { id: armHov } }
                                         Rectangle { implicitWidth: 22; implicitHeight: 10; radius: 2; color: st && st.link ? Theme.cyan : Qt.rgba(1, 1, 1, 0.05); Text { anchors.centerIn: parent; text: index % 2 ? "⟵L" : "L⟶"; color: st && st.link ? "#000" : Theme.dim; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setLink(index, !(st && st.link)) } ToolTip.visible: lnkHov.hovered; ToolTip.text: "Stereo link with CH " + ((index ^ 1) + 1) + ": gain, mute, solo follow, pan mirrors"; HoverHandler { id: lnkHov } }
@@ -289,7 +321,22 @@ Item {
                                             MenuItem { text: (st && st.armed ? "✓ " : "") + "Arm for recording (pre-fader WAV)"; onTriggered: engine.setArmed(index, !(st && st.armed)) }
                                         } }
                                     VuMeter { visible: page.vuMode; Layout.fillWidth: true; Layout.preferredHeight: 40; vuDb: mt ? mt.vuDb : -120; refDb: engine.vuRefDb; peakLamp: mt ? mt.clip : false; label: "VU" }
-                                    RowLayout { Layout.fillHeight: true; Layout.alignment: Qt.AlignHCenter; spacing: 4
+                                    // SENDS ON STRIPS: 8 mini faders (AUX 1-8 or FX 1-8), each with its PRE/POST switch
+                                    ColumnLayout { visible: page.sendView > 0; Layout.fillHeight: true; Layout.fillWidth: true; spacing: 1
+                                        Repeater { model: page.sendView > 0 ? 8 : 0
+                                            delegate: RowLayout { Layout.fillWidth: true; spacing: 2
+                                                property int bus: (page.sendView - 1) * 8 + index
+                                                property var sd: page.sendsTick >= 0 ? engine.send(stripItem.stripIdx, bus) : null
+                                                Text { text: (page.sendView === 1 ? "A" : "F") + (index + 1); color: sd && sd.db > -60 ? (page.sendView === 1 ? Theme.emerald : "#a78bfa") : Theme.dim; font.family: Theme.mono; font.pixelSize: 6; font.bold: true; Layout.preferredWidth: 12 }
+                                                Slider { id: sl; Layout.fillWidth: true; implicitHeight: 12; from: -60; to: 10; stepSize: 0.5; value: sd ? sd.db : -60; onMoved: { engine.setSend(stripItem.stripIdx, bus, value, sd ? sd.pre : false); page.sendsTick++ }
+                                                    background: Rectangle { x: sl.leftPadding; y: sl.topPadding + sl.availableHeight / 2 - 2; width: sl.availableWidth; height: 4; radius: 2; color: "#05070a"; border.color: Theme.lineSoft
+                                                        Rectangle { width: sl.visualPosition * parent.width; height: parent.height; radius: 2; color: page.sendView === 1 ? Theme.emerald : "#a78bfa"; opacity: sd && sd.db > -60 ? 1 : 0.25 } }
+                                                    handle: Rectangle { x: sl.leftPadding + sl.visualPosition * (sl.availableWidth - width); y: sl.topPadding + sl.availableHeight / 2 - height / 2; width: 6; height: 10; radius: 2; color: Theme.ink } }
+                                                Rectangle { implicitWidth: 14; implicitHeight: 10; radius: 2; color: sd && sd.pre ? Theme.amber : Qt.rgba(1, 1, 1, 0.06); Text { anchors.centerIn: parent; text: sd && sd.pre ? "PRE" : "PST"; color: sd && sd.pre ? "#000" : Theme.dim; font.family: Theme.mono; font.pixelSize: 5; font.bold: true }
+                                                    MouseArea { anchors.fill: parent; onClicked: { engine.setSend(stripItem.stripIdx, bus, sd ? sd.db : -60, !(sd && sd.pre)); page.sendsTick++ } } } } }
+                                        Item { Layout.fillHeight: true }   // lets this column take the strip height (a nested layout's maximum is otherwise the sum of its rows)
+                                        Text { Layout.alignment: Qt.AlignHCenter; text: page.sendView === 1 ? "AUX SENDS" : "FX SENDS"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 5 } }
+                                    RowLayout { visible: page.sendView === 0; Layout.fillHeight: true; Layout.alignment: Qt.AlignHCenter; spacing: 4
                                         Fader { Layout.fillHeight: true; value: st ? st.db : 0; onMoved: function (db) { engine.setGain(index, db) } }
                                         ColumnLayout { Layout.fillHeight: true; spacing: 0
                                             RowLayout { Layout.fillHeight: true; spacing: 2

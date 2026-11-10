@@ -33,7 +33,7 @@ Rectangle {
                 // 0 WELCOME
                 ColumnLayout { spacing: 12
                     Head { text: "Welcome to " + Theme.product }
-                    Body { text: "A mixing console and DSP workstation: 32 channels, 8 buses, EQ, dynamics, effects, VST plug-ins, recording, remote control. Pick your language; everything else can be changed later on SETTINGS." }
+                    Body { text: "A mixing console and DSP workstation: 32 channels, 16 buses (8 AUX + 8 FX), EQ with RTA, dynamics, 300 effect presets, 100 samples, VST plug-ins, recording, remote control. Pick your language; everything else can be changed later on SETTINGS." }
                     Text { text: "LANGUAGE"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.letterSpacing: 2 }
                     Flickable { Layout.fillWidth: true; Layout.fillHeight: true; contentHeight: langFlow.implicitHeight; clip: true
                         Flow { id: langFlow; width: parent.width; spacing: 6

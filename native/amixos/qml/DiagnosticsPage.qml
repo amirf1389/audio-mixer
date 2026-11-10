@@ -15,7 +15,7 @@ Item {
     function audit() {
         const r = []; const t = engine.telemetry; const lic = engine.license
         const add = (name, what, ok, result) => r.push({ name: name, what: what, ok: ok, result: result })
-        add("AUDIO ENGINE", "32 strips · 8 buses · master limiter · loudness", true, "v" + appVersion + " · " + engine.pages.length + " pages")
+        add("AUDIO ENGINE", "32 strips · 16 buses (8 AUX + 8 FX) · 300 FX presets · 100 samples · master limiter · loudness", true, "v" + appVersion + " · " + engine.pages.length + " pages")
         add("DEVICE", "the open interface", engine.running, engine.running ? engine.backend.toUpperCase() + " · " + engine.deviceInputs + " in / " + engine.deviceOutputs + " out" : "NOT OPEN")
         add("CLOCK", "sample rate and block size", engine.running, engine.running ? engine.sampleRate + " Hz · " + engine.blockFrames + " frames (" + (engine.blockFrames / engine.sampleRate * 1000).toFixed(2) + " ms)" : "—")
         add("BUFFER", "overruns since start", t.xruns === 0, t.xruns === 0 ? "0 overruns · " + t.blocks + " blocks OK" : t.xruns + " OVERRUNS")
