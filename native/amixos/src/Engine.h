@@ -126,6 +126,8 @@ class Engine : public QObject {
   Q_INVOKABLE void setPlugin(int strip, int slot, const QString& kind);   // "" clears the slot
   Q_INVOKABLE void setPluginBypass(int strip, int slot, bool bypass);
   Q_INVOKABLE QVariantList pluginCatalog() const;     // the built-in stages, for the chooser
+  Q_INVOKABLE void movePlugin(int strip, int from, int to);   // reorder the rack (swap two slots)
+  Q_INVOKABLE int pluginCount(int strip) const;
   Q_INVOKABLE void copyChannel(int strip);
   Q_INVOKABLE bool pasteChannel(int strip);          // the copied DSP + sends + pan onto this strip (not the name, colour, fader or groups)
   bool channelClipboard() const { return clipboard_.has_value(); }

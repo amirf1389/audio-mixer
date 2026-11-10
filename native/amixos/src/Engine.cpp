@@ -81,7 +81,7 @@ void Engine::pushAll() {
 
 QVariantList Engine::stripState() const {
   QVariantList l;
-  for (int i = 0; i < kStrips; ++i) { const StripUi& s = strips_[static_cast<std::size_t>(i)]; QVariantMap m; m["index"] = i; m["name"] = s.name; m["db"] = s.db; m["pan"] = s.pan; m["mute"] = s.mute; m["solo"] = s.solo; m["dsp"] = s.dsp.active(); m["dca"] = s.dca; m["muteGroups"] = static_cast<int>(s.muteGroups); m["effectiveDb"] = effectiveDb(i); m["effectiveMute"] = effectiveMute(i); m["color"] = s.color;
+  for (int i = 0; i < kStrips; ++i) { const StripUi& s = strips_[static_cast<std::size_t>(i)]; QVariantMap m; m["index"] = i; m["name"] = s.name; m["db"] = s.db; m["pan"] = s.pan; m["mute"] = s.mute; m["solo"] = s.solo; m["dsp"] = s.dsp.active(); m["dca"] = s.dca; m["muteGroups"] = static_cast<int>(s.muteGroups); m["effectiveDb"] = effectiveDb(i); m["effectiveMute"] = effectiveMute(i); m["color"] = s.color; m["plugins"] = pluginCount(i);
     const auto& p = s.dsp.params(); bool eqOn = false; for (const auto& b : p.eq) eqOn = eqOn || b.type != am::dsp::FilterType::Off;
     m["gateOn"] = p.gateOn; m["compOn"] = p.compOn; m["limOn"] = p.limiterOn; m["eqOn"] = eqOn; m["xoverOn"] = p.hpOrder > 0 || p.lpOrder > 0; m["delayOn"] = p.delayMs > 0; m["polarity"] = p.polarityInvert;
     QVariantList sb; for (int k = 0; k < kBuses; ++k) if (s.sends[k].db > -60) sb << (k + 1); m["sendsTo"] = sb; l << m; }
@@ -252,6 +252,8 @@ void Engine::setPluginBypass(int i, int slot, bool bypass) {
   if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots) return; PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[slot]; if (p.kind.isEmpty()) return;
   p.bypass = bypass; if (!p.kind.startsWith("vst3:")) applyPluginStage(i, p.kind, !bypass); emit stripsChanged();
 }
+void Engine::movePlugin(int i, int from, int to) { if (i < 0 || i >= kStrips || from < 0 || from >= kPluginSlots || to < 0 || to >= kPluginSlots || from == to) return; std::swap(strips_[static_cast<std::size_t>(i)].plugins[from], strips_[static_cast<std::size_t>(i)].plugins[to]); emit stripsChanged(); }
+int Engine::pluginCount(int i) const { if (i < 0 || i >= kStrips) return 0; int n = 0; for (const PluginUi& p : strips_[static_cast<std::size_t>(i)].plugins) if (!p.kind.isEmpty()) ++n; return n; }
 void Engine::copyChannel(int i) { if (i < 0 || i >= kStrips) return; clipboard_ = stripJson(strips_[static_cast<std::size_t>(i)]); emit clipboardChanged(); }
 bool Engine::pasteChannel(int i) {
   if (i < 0 || i >= kStrips || !clipboard_) return false; StripUi& s = strips_[static_cast<std::size_t>(i)]; const QJsonObject& o = *clipboard_;

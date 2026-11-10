@@ -13,6 +13,9 @@ Item {
     property bool sidePanel: true
     property bool vuMode: false        // bar meters or analogue VU faces on every strip and the master
     property bool monitorPanel: true   // the control-room section next to the master
+    property bool rack: true           // the PLUGIN RACK of the selected channel, under the action bar
+    readonly property var selPlugins: engine.plugins(sel)
+    Connections { target: engine; function onStripsChanged() { page.selPlugins = engine.plugins(page.sel) } function onSelectedStripChanged() { page.selPlugins = engine.plugins(page.sel) } }
     readonly property var mon: engine.monitor
     signal go(string id)
     readonly property int sel: engine.selectedStrip
@@ -67,15 +70,8 @@ Item {
                             Text { anchors.centerIn: parent; text: "S" + (index + 1); color: sc && !sc.empty ? Theme.cyan : Theme.dim; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                             MouseArea { anchors.fill: parent; onClicked: { if (sc && !sc.empty) engine.recallScene(index) } } }
                         Rectangle { implicitWidth: 14; implicitHeight: 20; radius: 3; color: Qt.rgba(1, 1, 1, 0.05); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: "●"; color: Theme.danger; font.pixelSize: 7 } MouseArea { anchors.fill: parent; onClicked: engine.storeScene(index, "") } } } }
-                Rectangle { width: 1; implicitHeight: 20; color: Theme.lineSoft }
-                Text { text: "PLUGINS  CH " + (page.sel + 1); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
-                Repeater { model: engine.plugins(page.sel)
-                    delegate: Rectangle { implicitWidth: modelData.kind ? Math.max(40, pt.implicitWidth + 10) : 22; implicitHeight: 20; radius: 3
-                        color: !modelData.kind ? Qt.rgba(1, 1, 1, 0.04) : modelData.pending ? Qt.rgba(0.984, 0.749, 0.141, 0.15) : modelData.bypass ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0.95, 1, 0.2); border.color: !modelData.kind ? Theme.lineSoft : modelData.pending ? Theme.amber : modelData.bypass ? Theme.lineSoft : Theme.cyan
-                        Text { id: pt; anchors.centerIn: parent; text: modelData.kind ? modelData.name.split(" ")[0] : "+"; color: !modelData.kind ? Theme.dim : modelData.pending ? Theme.amber : modelData.bypass ? Theme.dim : Theme.cyan; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
-                        MouseArea { anchors.fill: parent; acceptedButtons: Qt.LeftButton | Qt.RightButton
-                            onClicked: function (m) { if (m.button === Qt.RightButton && modelData.kind) { engine.setPluginBypass(page.sel, modelData.slot, !modelData.bypass); return } chooser.slot = modelData.slot; chooser.open() } }
-                        ToolTip.visible: hov.hovered && !!modelData.kind; ToolTip.text: (modelData.name || "") + (modelData.bypass ? " (bypassed)" : "") + "  ·  right-click: bypass"; HoverHandler { id: hov } } }
+                Item { Layout.fillWidth: true }
+                Rectangle { implicitWidth: 92; implicitHeight: 20; radius: 4; color: page.rack ? Qt.rgba(0.6, 0.4, 1, 0.22) : Qt.rgba(1, 1, 1, 0.06); border.color: page.rack ? "#a78bfa" : "transparent"; Text { anchors.centerIn: parent; text: "PLUGIN RACK"; color: page.rack ? "#a78bfa" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.rack = !page.rack } }
             }
             Menu { id: chooser; property int slot: 0; width: 260
                 Repeater { model: engine.pluginCatalog(); delegate: MenuItem { text: modelData.name; enabled: modelData.builtIn; onTriggered: engine.setPlugin(page.sel, chooser.slot, modelData.kind) } }
@@ -85,6 +81,38 @@ Item {
             }
             Dialog { id: confirmReset; title: "Reset every fader?"; modal: true; standardButtons: Dialog.Ok | Dialog.Cancel; anchors.centerIn: Overlay.overlay; onAccepted: engine.resetFaders(); Text { text: "All 32 strips and the master go to 0 dB, pans to centre. Mutes, solos and DSP stay."; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; wrapMode: Text.WordWrap; width: 300 } }
             Dialog { id: confirmFlatten; title: "Flatten the DSP of every channel?"; modal: true; standardButtons: Dialog.Ok | Dialog.Cancel; anchors.centerIn: Overlay.overlay; onAccepted: engine.flattenAllDsp(); Text { text: "Gate, EQ, crossover, compressor, limiter, delay and polarity are switched off on all 32 channels. Faders, sends and names stay."; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; wrapMode: Text.WordWrap; width: 300 } }
+        }
+        // PLUGIN RACK: the 10 insert slots of the selected channel, one card each. A built-in stage lights up when inserted; right-click or
+        // BYP bypasses; ‹ › reorder; OPEN goes to the stage's page; a VST3 reference waits (amber) for the VST3 host.
+        Rectangle {
+            visible: page.rack
+            Layout.fillWidth: true; implicitHeight: 74; radius: 8; color: Theme.card; border.color: "#a78bfa"
+            RowLayout {
+                anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 6
+                ColumnLayout { spacing: 2; Layout.preferredWidth: 96
+                    Text { text: "PLUGIN RACK"; color: "#a78bfa"; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
+                    Text { text: "CH " + (page.sel + 1 < 10 ? "0" : "") + (page.sel + 1) + "  " + (page.selSt ? page.selSt.name : ""); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; elide: Text.ElideRight; Layout.preferredWidth: 96 }
+                    Text { text: engine.pluginCount(page.sel) + " of 10 used"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
+                    Text { text: "chain: Ø → DLY → GATE → X → EQ → COMP → LIM"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 6 } }
+                Repeater { model: page.selPlugins
+                    delegate: Rectangle { Layout.fillWidth: true; Layout.fillHeight: true; Layout.topMargin: 8; Layout.bottomMargin: 8; radius: 6
+                        readonly property bool empty: !modelData.kind
+                        color: empty ? Qt.rgba(1, 1, 1, 0.03) : modelData.pending ? Qt.rgba(0.984, 0.749, 0.141, 0.12) : modelData.bypass ? Qt.rgba(1, 1, 1, 0.06) : Qt.rgba(0.6, 0.4, 1, 0.16)
+                        border.color: empty ? Theme.lineSoft : modelData.pending ? Theme.amber : modelData.bypass ? Theme.lineSoft : "#a78bfa"
+                        ColumnLayout { anchors.fill: parent; anchors.margins: 4; spacing: 2
+                            RowLayout { Layout.fillWidth: true; spacing: 2
+                                Text { text: (modelData.slot + 1 < 10 ? "0" : "") + (modelData.slot + 1); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
+                                Item { Layout.fillWidth: true }
+                                Rectangle { visible: !empty; implicitWidth: 24; implicitHeight: 11; radius: 2; color: modelData.pending ? Theme.amber : modelData.bypass ? Qt.rgba(1, 1, 1, 0.1) : Theme.emerald; Text { anchors.centerIn: parent; text: modelData.pending ? "WAIT" : modelData.bypass ? "BYP" : "ON"; color: modelData.bypass && !modelData.pending ? Theme.muted : "#000"; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } MouseArea { anchors.fill: parent; enabled: !modelData.pending; onClicked: engine.setPluginBypass(page.sel, modelData.slot, !modelData.bypass) } } }
+                            Text { Layout.fillWidth: true; text: empty ? "+ insert" : modelData.name.replace(" (VST3, pending)", ""); color: empty ? Theme.dim : modelData.pending ? Theme.amber : modelData.bypass ? Theme.muted : Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: !empty; elide: Text.ElideRight; horizontalAlignment: Text.AlignHCenter
+                                MouseArea { anchors.fill: parent; acceptedButtons: Qt.LeftButton | Qt.RightButton; onClicked: function (m) { engine.selectedStrip = page.sel; if (m.button === Qt.RightButton && !empty) { engine.setPluginBypass(page.sel, modelData.slot, !modelData.bypass); return } chooser.slot = modelData.slot; chooser.open() } } }
+                            RowLayout { Layout.fillWidth: true; spacing: 2; visible: !empty
+                                Rectangle { implicitWidth: 14; implicitHeight: 12; radius: 2; color: Qt.rgba(1, 1, 1, 0.08); Text { anchors.centerIn: parent; text: "‹"; color: Theme.muted; font.pixelSize: 9 } MouseArea { anchors.fill: parent; enabled: modelData.slot > 0; onClicked: engine.movePlugin(page.sel, modelData.slot, modelData.slot - 1) } }
+                                Rectangle { implicitWidth: 14; implicitHeight: 12; radius: 2; color: Qt.rgba(1, 1, 1, 0.08); Text { anchors.centerIn: parent; text: "›"; color: Theme.muted; font.pixelSize: 9 } MouseArea { anchors.fill: parent; enabled: modelData.slot < 9; onClicked: engine.movePlugin(page.sel, modelData.slot, modelData.slot + 1) } }
+                                Item { Layout.fillWidth: true }
+                                Rectangle { visible: modelData.builtIn; implicitWidth: 30; implicitHeight: 12; radius: 2; color: Qt.rgba(0, 0.95, 1, 0.18); Text { anchors.centerIn: parent; text: "OPEN"; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.go(modelData.kind === "gate" ? "gate" : modelData.kind === "comp" ? "dyn" : "dsp") } }
+                                Rectangle { implicitWidth: 14; implicitHeight: 12; radius: 2; color: Qt.rgba(1, 0.165, 0.373, 0.25); Text { anchors.centerIn: parent; text: "×"; color: Theme.danger; font.pixelSize: 9 } MouseArea { anchors.fill: parent; onClicked: engine.setPlugin(page.sel, modelData.slot, "") } } } } } }
+            }
         }
         RowLayout {
             Layout.fillWidth: true; Layout.fillHeight: true; spacing: 8
@@ -174,7 +202,8 @@ Item {
                                     RowLayout { Layout.alignment: Qt.AlignHCenter; spacing: 2
                                         Rectangle { visible: st && st.dca > 0; implicitWidth: 22; implicitHeight: 11; radius: 2; color: Qt.rgba(0.984, 0.749, 0.141, 0.2); Text { anchors.centerIn: parent; text: "D" + (st ? st.dca : 0); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } }
                                         Repeater { model: 8; delegate: Rectangle { visible: st && ((st.muteGroups >> index) & 1); implicitWidth: 5; implicitHeight: 5; radius: 2.5; color: Theme.pink } }
-                                        Text { visible: st && st.sendsTo.length; text: st && st.sendsTo.length ? "→" + st.sendsTo.join("") : ""; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 6 } }
+                                        Text { visible: st && st.sendsTo.length; text: st && st.sendsTo.length ? "→" + st.sendsTo.join("") : ""; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 6 }
+                                        Rectangle { visible: st && st.plugins > 0; implicitWidth: 24; implicitHeight: 11; radius: 2; color: Qt.rgba(0.6, 0.4, 1, 0.25); Text { anchors.centerIn: parent; text: "FX " + (st ? st.plugins : 0); color: "#a78bfa"; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } MouseArea { anchors.fill: parent; onClicked: { engine.selectedStrip = index; page.rack = true } } } }
                                 }
                             }
                         }
