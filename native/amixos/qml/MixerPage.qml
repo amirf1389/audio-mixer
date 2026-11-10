@@ -111,6 +111,12 @@ Item {
                 Rectangle { implicitWidth: 78; implicitHeight: 20; radius: 4; color: Qt.rgba(1, 1, 1, 0.06); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: "FLATTEN DSP"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: settings.confirmDestructive ? confirmFlatten.open() : engine.flattenAllDsp() } }
                 Rectangle { implicitWidth: 70; implicitHeight: 20; radius: 4; color: Qt.rgba(1, 1, 1, 0.06); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: "CLEAR CLIPS"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.clearClips() } }
                 Rectangle { width: 1; implicitHeight: 20; color: Theme.lineSoft }
+                // RECORD: master + armed strips to WAV (Settings: folder, format)
+                Rectangle { implicitWidth: recT.implicitWidth + 16; implicitHeight: 20; radius: 4; color: engine.recording ? Theme.danger : Qt.rgba(1, 0.165, 0.373, 0.18); border.color: Theme.danger
+                    Text { id: recT; anchors.centerIn: parent; text: engine.recording ? "■ " + engine.recordSeconds.toFixed(1) + " s" : "● REC" + (engine.armedCount() ? " +" + engine.armedCount() : ""); color: engine.recording ? "#000" : Theme.danger; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
+                    MouseArea { anchors.fill: parent; onClicked: engine.recording ? engine.stopRecording() : engine.startRecording() }
+                    ToolTip.visible: recHov.hovered; ToolTip.text: engine.recordMessage || ("Record the master" + (engine.armedCount() ? " and " + engine.armedCount() + " armed strip(s)" : "") + " to WAV in " + engine.recordFolder + ". Arm strips with the ● on each strip or MORE."); HoverHandler { id: recHov } }
+                Rectangle { width: 1; implicitHeight: 20; color: Theme.lineSoft }
                 Text { text: "SCENES"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
                 Repeater { model: 4
                     delegate: RowLayout { spacing: 1
@@ -218,6 +224,7 @@ Item {
                                     anchors.fill: parent; anchors.margins: 4; anchors.topMargin: 6; spacing: 3
                                     TextInput { Layout.fillWidth: true; text: st ? st.name : ""; color: st && st.effectiveMute ? Theme.dim : Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; horizontalAlignment: Text.AlignHCenter; selectByMouse: true; onEditingFinished: engine.setName(index, text); onActiveFocusChanged: if (activeFocus) engine.selectedStrip = index }
                                     RowLayout { Layout.fillWidth: true; spacing: 2
+                                        Rectangle { implicitWidth: 12; implicitHeight: 10; radius: 2; color: st && st.armed ? Theme.danger : Qt.rgba(1, 1, 1, 0.05); Text { anchors.centerIn: parent; text: "●"; color: st && st.armed ? "#000" : Theme.dim; font.pixelSize: 7 } MouseArea { anchors.fill: parent; onClicked: engine.setArmed(index, !(st && st.armed)) } ToolTip.visible: armHov.hovered; ToolTip.text: "Arm CH " + (index + 1) + " for recording"; HoverHandler { id: armHov } }
                                         Rectangle { implicitWidth: 22; implicitHeight: 10; radius: 2; color: st && st.link ? Theme.cyan : Qt.rgba(1, 1, 1, 0.05); Text { anchors.centerIn: parent; text: index % 2 ? "⟵L" : "L⟶"; color: st && st.link ? "#000" : Theme.dim; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setLink(index, !(st && st.link)) } ToolTip.visible: lnkHov.hovered; ToolTip.text: "Stereo link with CH " + ((index ^ 1) + 1) + ": gain, mute, solo follow, pan mirrors"; HoverHandler { id: lnkHov } }
                                         Item { Layout.fillWidth: true }
                                         Text { text: "TRIM " + (st && st.trimDb > 0 ? "+" : "") + (st ? st.trimDb.toFixed(1) : "0.0"); color: st && st.trimDb !== 0 ? Theme.amber : Theme.dim; font.family: Theme.mono; font.pixelSize: 6; MouseArea { anchors.fill: parent; onClicked: { engine.selectedStrip = index; page.sidePanel = true } } } }
@@ -257,6 +264,7 @@ Item {
                                             MenuSeparator {}
                                             MenuItem { text: (engine.recallSafe(index) ? "✓ " : "") + "Recall safe (scenes skip it)"; onTriggered: engine.setRecallSafe(index, !engine.recallSafe(index)) }
                                             MenuItem { text: "Listen here: monitor = master"; onTriggered: engine.setMonitor(0, page.mon.db, page.mon.dim, page.mon.mono, page.mon.mute) }
+                                            MenuItem { text: (st && st.armed ? "✓ " : "") + "Arm for recording (pre-fader WAV)"; onTriggered: engine.setArmed(index, !(st && st.armed)) }
                                         } }
                                     VuMeter { visible: page.vuMode; Layout.fillWidth: true; Layout.preferredHeight: 40; vuDb: mt ? mt.vuDb : -120; refDb: engine.vuRefDb; peakLamp: mt ? mt.clip : false; label: "VU" }
                                     RowLayout { Layout.fillHeight: true; Layout.alignment: Qt.AlignHCenter; spacing: 4

@@ -30,11 +30,23 @@ Flickable {
             subtitle: "The sound card and how it starts. The device itself is chosen on CONNECTIONS."
             Opt { label: "Start the last device on launch"; hint: settings.lastDevice.backend ? ("Last: " + settings.lastDevice.backend.toUpperCase() + " • " + settings.lastDevice.rate + " Hz • " + settings.lastDevice.frames + " frames") : "No device remembered yet: start one on CONNECTIONS once"; Toggle { on: settings.autoStart; onToggled: function (v) { settings.autoStart = v } }
                 Rectangle { implicitWidth: 90; implicitHeight: 20; radius: 4; color: Qt.rgba(0, 0.95, 1, 0.18); border.color: Theme.cyan; Text { anchors.centerIn: parent; text: "START NOW"; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: settings.startLastDevice() } } }
+            Opt { label: "AUTO DETECT ASIO"; hint: "With no remembered device, start the best one by itself: the interface's own ASIO driver first, then a wrapper, then the system endpoint"; Toggle { on: settings.autoAsio; onToggled: function (v) { settings.autoAsio = v } }
+                Text { property var det: engine.autoDetect(); text: det && det.name ? ("Now: " + det.name + " · " + det.backend.toUpperCase()) : "Now: no real sound card"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 } }
             Opt { label: "SMART START by default"; hint: "Walk the driver ladder (ASIO → WASAPI exclusive → shared) instead of one fixed driver"; Toggle { on: settings.smartStart; onToggled: function (v) { settings.smartStart = v } } }
             Opt { label: "Default sample rate"; Choice { options: [{t: "44.1k", v: 44100}, {t: "48k", v: 48000}, {t: "88.2k", v: 88200}, {t: "96k", v: 96000}, {t: "192k", v: 192000}]; value: settings.defaultRate; onPicked: function (v) { settings.defaultRate = v } } }
             Opt { label: "Default buffer"; hint: (settings.defaultFrames / settings.defaultRate * 1000).toFixed(1) + " ms per block at the default rate"; Choice { options: [{t: "64", v: 64}, {t: "128", v: 128}, {t: "256", v: 256}, {t: "512", v: 512}, {t: "1024", v: 1024}]; value: settings.defaultFrames; onPicked: function (v) { settings.defaultFrames = v } } }
             Opt { label: "Clip point"; hint: "The meters' clip lamp lights at this level (dBFS)"; Slider { from: -12; to: 0; stepSize: 0.1; value: settings.clipDb; onMoved: settings.clipDb = value; implicitWidth: 200 } Text { text: settings.clipDb.toFixed(1) + " dBFS"; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8 } }
             Opt { label: "Peak hold"; hint: "How long the peak line stays before falling"; Choice { options: [{t: "OFF", v: 0}, {t: "0.5 s", v: 500}, {t: "1.4 s", v: 1400}, {t: "3 s", v: 3000}, {t: "∞", v: 999999}]; value: settings.peakHoldMs; onPicked: function (v) { settings.peakHoldMs = v } } }
+        }
+        Panel {
+            Layout.fillWidth: true
+            title: "RECORDING"
+            subtitle: "● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV files, one per source, named by time."
+            Opt { label: "Folder"; TextField { Layout.fillWidth: true; text: engine.recordFolder; font.family: Theme.mono; font.pixelSize: 9; implicitHeight: 26; onEditingFinished: engine.recordFolder = text } }
+            Opt { label: "Record the master"; hint: "Off = only the armed strips"; Toggle { on: engine.recordMaster; onToggled: function (v) { engine.recordMaster = v } } }
+            Opt { label: "Format"; Choice { options: [{t: "24-bit PCM", v: false}, {t: "32-bit float", v: true}]; value: engine.recordFloat; onPicked: function (v) { engine.recordFloat = v } } }
+            Text { visible: engine.recordMessage.length > 0; text: engine.recordMessage; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+            Repeater { model: engine.recordFiles; delegate: Text { text: modelData; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; elide: Text.ElideMiddle; Layout.fillWidth: true } }
         }
         Panel {
             Layout.fillWidth: true

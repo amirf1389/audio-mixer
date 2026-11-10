@@ -60,6 +60,11 @@ Flickable {
                 Rectangle { implicitWidth: 110; implicitHeight: 30; radius: 6; color: engine.running ? Qt.rgba(1, 1, 1, 0.08) : Theme.emerald
                     Text { anchors.centerIn: parent; text: engine.running ? "RESTART" : "START ENGINE"; color: engine.running ? Theme.ink : "#000"; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
                     MouseArea { anchors.fill: parent; onClicked: { var i = page.dev(page.inId), o = page.dev(page.outId); var ok = engine.open(page.backend, page.inId, page.outId, page.rate, page.frames, i ? Math.min(32, i.inChannels) : 2, o ? Math.min(2, o.outChannels) : 2); if (ok) settings.rememberDevice(page.backend, page.inId, page.outId, page.rate, page.frames, i ? Math.min(32, i.inChannels) : 2, o ? Math.min(2, o.outChannels) : 2) } } }
+                Rectangle { implicitWidth: 100; implicitHeight: 30; radius: 6; color: Qt.rgba(0.984, 0.749, 0.141, 0.2); border.color: Theme.amber
+                    Text { anchors.centerIn: parent; text: "AUTO DETECT"; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
+                    property var det: engine.autoDetect()
+                    MouseArea { anchors.fill: parent; onClicked: engine.autoStart(page.frames) }
+                    ToolTip.visible: adHov.hovered; ToolTip.text: det && det.name ? ("Would start " + det.name + " (" + det.backend.toUpperCase() + "): " + det.why) : "No real sound card found"; HoverHandler { id: adHov } }
                 Rectangle { visible: page.backend === "asio"; implicitWidth: 110; implicitHeight: 30; radius: 6; color: Theme.cyan
                     Text { anchors.centerIn: parent; text: "SMART START"; color: "#000"; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
                     MouseArea { anchors.fill: parent; onClicked: { var i = page.dev(page.inId), o = page.dev(page.outId); var ok = engine.openSmart(page.backend, page.inId, page.outId, page.rate, page.frames, i ? Math.min(32, i.inChannels) : 2, o ? Math.min(2, o.outChannels) : 2); if (ok) settings.rememberDevice(page.backend, page.inId, page.outId, page.rate, page.frames, i ? Math.min(32, i.inChannels) : 2, o ? Math.min(2, o.outChannels) : 2); page.planModel = engine.driverPlan(page.backend, page.inId, page.outId) } } }

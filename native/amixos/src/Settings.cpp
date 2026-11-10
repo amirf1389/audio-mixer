@@ -38,7 +38,9 @@ void Settings::rememberDevice(const QString& backend, const QString& in, const Q
   QVariantMap m; m["backend"] = backend; m["in"] = in; m["out"] = out; m["rate"] = rate; m["frames"] = frames; m["inChannels"] = inCh; m["outChannels"] = outCh; set("audio/lastDevice", m);
 }
 bool Settings::startLastDevice() {
-  const QVariantMap d = lastDevice(); if (d.isEmpty() || !engine_) { note(QStringLiteral("No device remembered yet: start one on CONNECTIONS once.")); return false; }
+  const QVariantMap d = lastDevice();
+  if (d.isEmpty() && engine_ && autoAsio()) { const bool ok = engine_->autoStart(defaultFrames()); note(ok ? engine_->lastRoute() : engine_->status()); return ok; }
+  if (d.isEmpty() || !engine_) { note(QStringLiteral("No device remembered yet: start one on CONNECTIONS once, or turn AUTO DETECT on.")); return false; }
   const bool ok = smartStart() ? engine_->openSmart(d["backend"].toString(), d["in"].toString(), d["out"].toString(), d["rate"].toDouble(), d["frames"].toInt(), d["inChannels"].toInt(), d["outChannels"].toInt())
                                : engine_->open(d["backend"].toString(), d["in"].toString(), d["out"].toString(), d["rate"].toDouble(), d["frames"].toInt(), d["inChannels"].toInt(), d["outChannels"].toInt());
   note(ok ? QStringLiteral("Started the last device: %1").arg(engine_->status()) : QStringLiteral("Could not start the last device: %1").arg(engine_->status()));

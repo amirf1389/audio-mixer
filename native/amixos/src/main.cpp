@@ -77,6 +77,13 @@ int main(int argc, char* argv[]) {
       arrange.play(0); QElapsedTimer et; et.start(); while (et.elapsed() < 350) QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
       engine.tick(); const double mpk = engine.telemetry().value("masterPeakDb").toDouble(), spk = engine.meters()[0].toMap().value("peakDb").toDouble();
       if (mpk < -20 || spk > -100 || !arrange.playing()) { std::fprintf(stderr, "amixos --smoke: arrangement not audible on the master (master %.1f dBFS, strip %.1f, playing %d)\n", mpk, spk, arrange.playing()); return 19; }
+      // RECORD while the tone plays: master + armed CH 1 -> two WAV files in a temp folder, the master file carries signal
+      engine.setRecordFolder(QDir::tempPath() + "/amixos-smoke-rec"); engine.setArmed(0, true); if (!engine.startRecording()) { std::fprintf(stderr, "amixos --smoke: record start: %s\n", qPrintable(engine.recordMessage())); return 45; }
+      { QElapsedTimer rt2; rt2.start(); while (rt2.elapsed() < 300) QCoreApplication::processEvents(QEventLoop::AllEvents, 20); }
+      engine.stopRecording(); const QStringList rf = engine.recordFiles(); if (rf.size() != 2 || engine.recordSeconds() < 0.2) { std::fprintf(stderr, "amixos --smoke: record files %d, %.2f s\n", static_cast<int>(rf.size()), engine.recordSeconds()); return 46; }
+      { am::arr::Audio ra; std::string rerr; if (!am::arr::readWav(rf[0].toStdString(), ra, rerr) || ra.L.size() < 9600) { std::fprintf(stderr, "amixos --smoke: recorded master unreadable: %s\n", rerr.c_str()); return 47; } float pk = 0; for (float v : ra.L) pk = std::max(pk, std::fabs(v)); if (pk < 0.1f) { std::fprintf(stderr, "amixos --smoke: recorded master is silent (%.3f)\n", pk); return 48; } }
+      for (const QString& f : rf) QFile::remove(f); QDir().rmdir(QDir::tempPath() + "/amixos-smoke-rec"); engine.setArmed(0, false); engine.setRecordFolder("");
+      { const QVariantMap ad = engine.autoDetect(); if (!ad.isEmpty() && ad["backend"].toString() == "null") { std::fprintf(stderr, "amixos --smoke: auto detect must never pick null\n"); return 49; } }
       arrange.stop(); const QString out = arrange.exportWav(smokeOut); if (out.isEmpty() || !QFileInfo::exists(out)) { std::fprintf(stderr, "amixos --smoke: export failed: %s\n", qPrintable(arrange.message())); return 20; }
       // a little more for the screenshot: a second track with the same file later, a marker, two automation points, the head in the middle
       const int t2 = arrange.addTrack("Pad"); arrange.importFile(wav, t2); arrange.moveClip(arrange.clips()[1].toMap().value("id").toInt(), 1.0); arrange.setTrack(t2, "pan", 0.5);

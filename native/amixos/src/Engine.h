@@ -17,6 +17,7 @@
 #include "audiomixer/dsp.hpp"
 #include "audiomixer/runtime.hpp"
 #include "vst3/vst3_host.hpp"
+#include "record/recorder.hpp"
 
 class Engine : public QObject {
   Q_OBJECT
@@ -96,6 +97,30 @@ class Engine : public QObject {
   Q_PROPERTY(QString lastRoute READ lastRoute NOTIFY stateChanged)   // what the last start did, in plain words
   QString lastRoute() const { return lastRoute_; }
   Q_INVOKABLE void stop();
+  // RECORD (engine/cpp/app/record): the master and armed strips to WAV while the engine runs
+  Q_PROPERTY(bool recording READ recording NOTIFY recordChanged)
+  Q_PROPERTY(double recordSeconds READ recordSeconds NOTIFY metersChanged)
+  Q_PROPERTY(QStringList recordFiles READ recordFiles NOTIFY recordChanged)
+  Q_PROPERTY(QString recordFolder READ recordFolder WRITE setRecordFolder NOTIFY recordChanged)
+  Q_PROPERTY(bool recordFloat READ recordFloat WRITE setRecordFloat NOTIFY recordChanged)
+  Q_PROPERTY(bool recordMaster READ recordMaster WRITE setRecordMaster NOTIFY recordChanged)
+  Q_PROPERTY(QString recordMessage READ recordMessage NOTIFY recordChanged)
+  bool recording() const { return recorder_.recording(); }
+  double recordSeconds() const { return recorder_.seconds(); }
+  QStringList recordFiles() const { QStringList l; for (const auto& f : recorder_.files()) l << QString::fromStdString(f); return l; }
+  QString recordFolder() const; void setRecordFolder(const QString& f) { settings_.setValue("record/folder", f); emit recordChanged(); }
+  bool recordFloat() const { return settings_.value("record/float32", false).toBool(); } void setRecordFloat(bool v) { settings_.setValue("record/float32", v); emit recordChanged(); }
+  bool recordMaster() const { return settings_.value("record/master", true).toBool(); } void setRecordMaster(bool v) { settings_.setValue("record/master", v); emit recordChanged(); }
+  QString recordMessage() const { return recMsg_; }
+  Q_INVOKABLE bool startRecording();
+  Q_INVOKABLE void stopRecording();
+  Q_INVOKABLE void setArmed(int strip, bool on);
+  Q_INVOKABLE bool armed(int strip) const { return strip >= 0 && strip < kStrips && ((armed_ >> strip) & 1u); }
+  Q_INVOKABLE int armedCount() const { int n = 0; for (int i = 0; i < kStrips; ++i) if ((armed_ >> i) & 1u) ++n; return n; }
+  // AUTO DETECT: the best device to start with, without a remembered one: a native ASIO driver (not a wrapper, Realtek pinned) >
+  // ASIO4ALL-style wrapper > WASAPI / Core Audio / ALSA default endpoints > nothing (null is never auto-picked)
+  Q_INVOKABLE QVariantMap autoDetect() const;      // {backend, in, out, name, why, inChannels, outChannels, rate} or empty
+  Q_INVOKABLE bool autoStart(int frames);           // detect and SMART START it
   // an extra stereo source summed into the master (the ARRANGE player): attached to every runtime this Engine opens
   void setExtraSource(am::Runtime::ExtraSource* s) { extra_ = s; if (rt_) rt_->setExtraSource(s); }
   am::Runtime* runtime() { return rt_.get(); }
@@ -223,6 +248,7 @@ class Engine : public QObject {
   void routingChanged();
   void licenseChanged();
   void historyChanged();
+  void recordChanged();
   void clipboardChanged();
 
  private:
@@ -265,7 +291,7 @@ class Engine : public QObject {
   static constexpr int kOutputs = 32;
   int inRoute_[kStrips] = {}; int outRoute_[kOutputs] = {}; int devIn_ = 0, devOut_ = 0;
   QVariantMap license_; int licensedChannels_ = 8;
-  QString lastRoute_; am::Runtime::ExtraSource* extra_ = nullptr; double clipDb_ = -0.1; int peakHoldMs_ = 1400;
+  QString lastRoute_; am::Runtime::ExtraSource* extra_ = nullptr; am::rec::Recorder recorder_; unsigned armed_ = 0; QString recMsg_; double clipDb_ = -0.1; int peakHoldMs_ = 1400;
   struct MonitorUi { int source = 0; double db = 0; bool dim = false, mono = false, mute = false; } mon_;
   int vuRef_ = -18; double vu_[kStrips] = {}; double vuMaster_ = 0;                     // VU ballistics (300 ms to 99 %), run on the UI timer
   std::optional<QJsonObject> clipboard_;

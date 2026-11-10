@@ -122,6 +122,10 @@ class Runtime {
   // with the block size; set nullptr to detach. The pointer must stay valid until setExtraSource(nullptr) has returned.
   struct ExtraSource { virtual ~ExtraSource() = default; virtual void render(float* L, float* R, std::size_t frames, double sampleRate) = 0; };
   void setExtraSource(ExtraSource* s) { extra_.store(s); }
+  // a TAP sees every block on the audio thread (the recorder): the strips after trim / DSP / inserts and before the fader, then the master
+  // after its chain and meters (what the show hears, before the monitor section). Must not block or allocate. nullptr detaches.
+  struct Tap { virtual ~Tap() = default; virtual void onBlock(const float* const* strips, int nStrips, const float* L, const float* R, std::size_t frames, double sampleRate) = 0; };
+  void setTap(Tap* t) { tap_.store(t); }
   Snapshot snapshot() const;
   void onBlock(const float* const* in, float* const* out, std::size_t frames);   // the audio callback; public so a test can clock the runtime itself
  private:
@@ -133,7 +137,7 @@ class Runtime {
   int nIn_ = 0, nOut_ = 0; bool running_ = false;
   std::vector<float> silence_, left_, right_;
   int monSrc_ = 0; double monGainTarget_ = 1, monGain_ = 1; bool monMono_ = false; double monPk_[2] = {0, 0};   // audio thread only
-  std::vector<float> monL_, monR_, extL_, extR_; std::atomic<ExtraSource*> extra_{nullptr}; int inRoute_[kMaxStrips]; int outRoute_[kMaxOutputs]; double trim_[kMaxStrips]; std::atomic<std::shared_ptr<const InsertChain>> inserts_[kMaxStrips];                            // audio thread only (set in open, then by ops)
+  std::vector<float> monL_, monR_, extL_, extR_; std::atomic<ExtraSource*> extra_{nullptr}; std::atomic<Tap*> tap_{nullptr}; int inRoute_[kMaxStrips]; int outRoute_[kMaxOutputs]; double trim_[kMaxStrips]; std::atomic<std::shared_ptr<const InsertChain>> inserts_[kMaxStrips];                            // audio thread only (set in open, then by ops)
   std::vector<dsp::Channel> ch_; std::vector<std::vector<float>> chBuf_;
   std::vector<std::vector<float>> busBuf_;   // 2 * kMaxBuses blocks for the aux bus outputs   // one channel DSP and one scratch block per strip (sized in open())
   // control ring: many producers (under a mutex), one consumer (the audio thread)
