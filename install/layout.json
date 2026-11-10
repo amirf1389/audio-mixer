@@ -8,7 +8,7 @@
     "cache":    "%LOCALAPPDATA%\\AMFB Audio\\AmF X1\\cache",
     "prefetch": "%LOCALAPPDATA%\\AMFB Audio\\AmF X1\\prefetch",
     "temp":     "%TEMP%\\AmF X1",
-    "program_files": ["amixos.exe", "amixos-daemon.exe", "amix.dll", "AudioMixer-native.exe", "edition-token.json", "Qt6*.dll", "platforms\\", "qml\\", "drivers\\amixos-asio-x64.dll", "LICENSE"]
+    "program_files": ["AmF X1.exe (the engine, version-stamped, signed)", "AudioMixerASIO64.dll (the ASIO driver, registered in place by AmF X1.exe --install-driver)", "amixos.exe (the Qt console)", "amixos-daemon.exe", "amix.dll", "edition-token.json", "Qt6*.dll", "platforms\\", "qml\\", "LICENSE"]
   },
   "android": {
     "program":  "the APK (installed by the system)",

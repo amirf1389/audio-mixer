@@ -1,7 +1,8 @@
 ; AmF X1 by AMFB Audio: Windows installer (Inno Setup 6). Everything of the program goes into Program Files; nothing is written there at run
 ; time: the program keeps its data in %APPDATA%\AMFB Audio\AmF X1, its cache and prefetch under %LOCALAPPDATA%\AMFB Audio\AmF X1, temp files
 ; in %TEMP%\AmF X1 (install\layout.json). Uninstall removes the program and the cache; the data (licence, scenes, presets) stays unless the
-; user ticks "remove my data". Build: iscc install\windows\amfx1.iss  (after the Qt console and the engine are built into dist\windows\)
+; user says so. Build: iscc install\windows\amfx1.iss  (after the Qt console and the engine are built into dist\windows\ and signed with scripts/sign-windows.js;
+; sign the setup .exe too). SignTool=... can be set in the Inno Setup IDE to sign the setup automatically.
 #define AppName "AmF X1"
 #define AppVendor "AMFB Audio"
 #define AppVersion GetEnv("AMFX1_VERSION")
@@ -27,10 +28,10 @@ UninstallDisplayIcon={app}\amixos.exe
 Source: "..\..\dist\windows\amixos.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\..\dist\windows\amixos-daemon.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\..\dist\windows\amix.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\..\dist\windows\AudioMixer-native.exe"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "..\..\dist\windows\AmF X1.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\..\dist\windows\AudioMixerASIO64.dll"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "..\..\dist\windows\edition-token.json"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "..\..\dist\windows\qt\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "..\..\dist\windows\drivers\*"; DestDir: "{app}\drivers"; Flags: ignoreversion recursesubdirs skipifsourcedoesntexist
 Source: "..\..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 [Dirs]
 Name: "{userappdata}\{#AppVendor}\{#AppName}"

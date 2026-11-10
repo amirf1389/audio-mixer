@@ -23,7 +23,7 @@ function build({ releases, flatUrls = false, version, base, notes = [], now = ne
     'linux-deb': `audio-mixer_${version}_all.deb`, 'linux-tar': `AudioMixer-${version}-linux.tar.gz`, 'macos': `AudioMixer-${version}-macos.tar.gz`, 'macos-dmg': `AudioMixer-${version}-macos.dmg`,
     'android-apk': `AudioMixer-${version}-android.apk`, 'ios-project': `AudioMixer-${version}-ios-xcode-project.tar.gz`,
     'win-asio-driver': `AudioMixer-${version}-asio-driver-windows.zip`,
-    'win-x64-native': `AudioMixer-${version}-native-windows-x64.exe`, 'win-x86-native': `AudioMixer-${version}-native-windows-x86.exe`,   // audiomixer-native.exe --update
+    'win-x64-native': ['AmF X1.exe', `AudioMixer-${version}-native-windows-x64.exe`], 'win-x86-native': ['AmF X1 (32-bit).exe', `AudioMixer-${version}-native-windows-x86.exe`],   // AmF X1.exe --update (the old name is still found)
   };
   const files = {};
   for (const [key, names] of Object.entries(want)) {

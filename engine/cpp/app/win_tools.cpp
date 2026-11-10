@@ -76,8 +76,26 @@ int uninstallDriver() {
   return 0;
 }
 #else
-int installDriver() { std::printf("this audiomixer-native was built without the embedded ASIO driver (build it with scripts/build-native.js)\n"); return 1; }
-int uninstallDriver() { return installDriver(); }
+// no embedded driver: the DLL ships next to the program (AM_DRIVER_DLL, the installer puts both in Program Files) and is registered in place
+std::wstring sideDll() {
+  wchar_t me[MAX_PATH] = {0}; GetModuleFileNameW(nullptr, me, MAX_PATH); std::wstring dir = me; const std::size_t s = dir.find_last_of(L"\\/"); if (s != std::wstring::npos) dir.resize(s);
+#ifdef AM_DRIVER_DLL
+  return dir + L"\\" + widen(AM_DRIVER_DLL);
+#else
+  return dir + L"\\AudioMixerASIO64.dll";
+#endif
+}
+typedef HRESULT(__stdcall* RegFn)();
+int callRegister(const std::wstring& dll, const char* fn) {
+  HMODULE m = LoadLibraryW(dll.c_str());
+  if (!m) { std::printf("cannot load %ls (error %lu): the driver DLL must sit next to AmF X1.exe\n", dll.c_str(), static_cast<unsigned long>(GetLastError())); return 1; }
+  RegFn f = reinterpret_cast<RegFn>(reinterpret_cast<void*>(GetProcAddress(m, fn)));
+  const HRESULT r = f ? f() : E_NOTIMPL; FreeLibrary(m);
+  if (FAILED(r)) { std::printf("%s failed (0x%08lx)%s\n", fn, static_cast<unsigned long>(r), r == SELFREG_E_CLASS ? ": run this from an administrator prompt (the driver is registered in HKLM)" : ""); return 1; }
+  return 0;
+}
+int installDriver() { const std::wstring dll = sideDll(); if (callRegister(dll, "DllRegisterServer")) return 1; std::printf("ASIO driver \"Audio Mixer\" registered from %ls (nothing was copied; keep the DLL next to the program)\n", dll.c_str()); return 0; }
+int uninstallDriver() { const std::wstring dll = sideDll(); if (GetFileAttributesW(dll.c_str()) == INVALID_FILE_ATTRIBUTES) { std::printf("no driver DLL next to the program (%ls)\n", dll.c_str()); return 0; } if (callRegister(dll, "DllUnregisterServer")) return 1; std::printf("ASIO driver \"Audio Mixer\" unregistered\n"); return 0; }
 #endif
 
 bool sha256Of(const std::wstring& file, std::string& hex) {
