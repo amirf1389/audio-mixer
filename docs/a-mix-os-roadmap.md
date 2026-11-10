@@ -190,6 +190,15 @@ decided, what exists, what is next, and what was asked for but is not possible a
   / `outputDeviceName`) with the full driver name in the tooltip. The BOOT screen is gone (asked for). An amber alert bar under the header
   appears when no sound card is remembered and the engine is idle, with FACTORY SETUP and CONNECTIONS buttons.
 
+- **UM2 detection checked, hot-plug (auto audio interface insert)**: `--smoke` runs a simulated UM2 machine (Behringer ASIO + its split
+  Windows endpoints + DirectSound + Realtek onboard) through AUTO DETECT (picks the UM2's own ASIO), the driver plan and the fallback policy.
+  It found a real defect: a **duplex** start (input AND output) lost the whole fallback ladder because Windows endpoints are one-directional
+  ("Microphone (USB Audio CODEC)" + "Speakers (USB Audio CODEC)") and the ladder looked for one endpoint with both; the ladder now takes one
+  twin per direction (`Step::inId / outId`), so ASIO -> WASAPI exclusive -> WASAPI shared -> DirectSound works for a duplex UM2 start. An old
+  test that asserted the broken behaviour was corrected. **Hot-plug**: `am::deviceFingerprint()` (endpoint ids + ASIO names from the registry,
+  no driver loaded) is polled every 1.5 s; a change rescans, an added interface auto-starts the engine when idle and AUTO START is on, the
+  running device vanishing stops the engine with a note. `Engine::simulateDevices` feeds a device list to the tests.
+
 ## Next, in order
 
 1. **Windows .exe in hand**: run the Actions workflow, download `amixos-windows-x64.zip`, test ASIO (UM2, Focusrite, ASIO4ALL, Realtek) on the user's PC. Fix what the real drivers show.

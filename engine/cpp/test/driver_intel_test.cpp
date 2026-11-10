@@ -47,8 +47,8 @@ int main(int argc, char** argv) {
     auto P = drv::plan("asio", "-", "ASIO4ALL v2", laptop, now); CHECK(P[0].mode == "asio" && P[0].outDevice == "ASIO4ALL v2" && P[0].inDevice == "-"); }
   // the UM2: ASIO first, then exclusive, then shared on the CODEC endpoints
   { auto P = drv::plan("asio", "BEHRINGER USB AUDIO", "-", pc, now); CHECK(P.size() == 3 && P[0].mode == "asio" && P[1].mode == "wasapi-exclusive" && P[1].exclusive && P[1].inDevice == "{um2-in}" && P[2].mode == "wasapi-shared");
-    // both directions wanted: the twin must offer both; the CODEC endpoints are split in / out, so there is none -> only the ASIO step
-    P = drv::plan("asio", "BEHRINGER USB AUDIO", "BEHRINGER USB AUDIO", pc, now); CHECK(P.size() == 1 && P[0].mode == "asio"); }
+    // both directions wanted: Windows endpoints are one-directional, so the WASAPI steps take the mic endpoint as input and the speakers endpoint as output
+    P = drv::plan("asio", "BEHRINGER USB AUDIO", "BEHRINGER USB AUDIO", pc, now); CHECK(P.size() == 3 && P[0].mode == "asio" && P[1].inDevice == "{um2-in}" && P[1].outDevice == "{um2-out}" && P[2].inDevice == "{um2-in}" && P[2].outDevice == "{um2-out}"); }
   // locks: a fallback that worked is tried first next time; a lower lock is retried after 6 h; forget clears
   { drv::learn("BEHRINGER USB AUDIO", "wasapi-shared", "Microphone (USB Audio CODEC)", "ASIO busy: another program holds the driver", now);
     drv::Lock l; CHECK(drv::getLock("BEHRINGER USB AUDIO", l, now + 1000) && l.mode == "wasapi-shared");
@@ -69,6 +69,12 @@ int main(int argc, char** argv) {
     drv::setFallback("none"); P = drv::plan("asio", "-", "BEHRINGER USB AUDIO", um, now); CHECK(P.size() == 1 && P[0].mode == "asio");
     drv::setFallback("bogus"); CHECK(drv::fallback() == "none"); drv::setFallback("all"); P = drv::plan("asio", "-", "BEHRINGER USB AUDIO", um, now); CHECK(P.size() == 4);
     drv::resetCache(); CHECK(drv::fallback() == "all"); }   // and it survives a reload of the store
+  // duplex: the UM2 asked for input AND output: the WASAPI steps carry the mic endpoint as input and the speakers endpoint as output (one-directional endpoints)
+  { std::vector<DeviceInfo> um = {dev("asio", "BEHRINGER USB AUDIO", "BEHRINGER USB AUDIO", 2, 2), dev("wasapi", "{um2-in}", "Microphone (USB Audio CODEC)", 2, 0), dev("wasapi", "{um2-out}", "Speakers (USB Audio CODEC)", 0, 2), dev("dsound", "{ds-um2}", "Speakers (USB Audio CODEC)", 0, 2), dev("dsound", "{ds-um2-in}", "Microphone (USB Audio CODEC)", 2, 0)};
+    auto P = drv::plan("asio", "BEHRINGER USB AUDIO", "BEHRINGER USB AUDIO", um, now);
+    CHECK(P.size() == 4 && P[1].mode == "wasapi-exclusive" && P[1].inDevice == "{um2-in}" && P[1].outDevice == "{um2-out}" && P[2].inDevice == "{um2-in}" && P[2].outDevice == "{um2-out}" && P[3].mode == "dsound" && P[3].inDevice == "{ds-um2-in}" && P[3].outDevice == "{ds-um2}");
+    std::vector<DeviceInfo> outOnly = {um[0], um[2], um[3]}; P = drv::plan("asio", "BEHRINGER USB AUDIO", "BEHRINGER USB AUDIO", outOnly, now); CHECK(P.size() == 1 && P[0].mode == "asio");   // no input endpoint: the duplex ladder has no WASAPI / DirectSound step
+    P = drv::plan("asio", "-", "BEHRINGER USB AUDIO", outOnly, now); CHECK(P.size() == 4 && P[1].inDevice == "-" && P[1].outDevice == "{um2-out}"); }
   std::printf("driver_intel_test: hardware match, Realtek pin (default on, opt-out saved), ASIO4ALL rule, ladder, locks, plan OK\n");
   return 0;
 }

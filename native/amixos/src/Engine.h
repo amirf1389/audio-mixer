@@ -105,6 +105,12 @@ class Engine : public QObject {
   Q_INVOKABLE int scanForKeys();                                                                              // looks now; returns how many files were tried
 
   Q_INVOKABLE void refreshDevices();
+  // HOT-PLUG: a cheap fingerprint of what is plugged in is polled every 1.5 s (no driver is loaded); when it changes the list is rescanned and
+  // hotplug(added) fires; main() then auto-starts when the engine is idle and AUTO START is on. The running device vanishing stops the engine with a note.
+  Q_PROPERTY(bool hotplugWatch READ hotplugWatch WRITE setHotplugWatch NOTIFY stateChanged)
+  bool hotplugWatch() const { return hotplug_.isActive(); } void setHotplugWatch(bool on);
+  Q_INVOKABLE void simulateDevices(const QVariantList& devices);   // tests: replace the scanned list with this one (devicesChanged fires; the fingerprint poll is paused)
+  Q_INVOKABLE void checkHotplug();                                 // one poll now
   Q_INVOKABLE bool open(const QString& backend, const QString& inDevice, const QString& outDevice, double sampleRate, int frames, int inChannels, int outChannels);
   // DRIVER INTELLIGENCE (engine/cpp/include/audiomixer/driver_intel.hpp): the ladder for an ASIO device, the Realtek pin and the locks learned
   Q_INVOKABLE bool openSmart(const QString& backend, const QString& inDevice, const QString& outDevice, double sampleRate, int frames, int inChannels, int outChannels);   // walks the plan until a step opens
@@ -336,6 +342,7 @@ class Engine : public QObject {
  signals:
   void stateChanged();
   void devicesChanged();
+  void hotplug(bool added, const QString& what);   // a device appeared (added) or went away
   void stripsChanged();
   void metersChanged();
   void busesChanged();
@@ -401,6 +408,6 @@ class Engine : public QObject {
   struct MonitorUi { int source = 0; double db = 0; bool dim = false, mono = false, mute = false; } mon_;
   int vuRef_ = -18; double vu_[kStrips] = {}; double vuMaster_ = 0;                     // VU ballistics (300 ms to 99 %), run on the UI timer
   std::optional<QJsonObject> clipboard_;
-  QTimer timer_;
+  QTimer timer_; QTimer hotplug_; std::string fingerprint_; bool simulated_ = false;
   mutable QSettings settings_;
 };
