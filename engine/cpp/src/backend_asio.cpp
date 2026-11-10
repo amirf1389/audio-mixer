@@ -79,21 +79,21 @@ class AsioBackend : public Backend {
     if (!g_active.compare_exchange_strong(none, this)) { err = "ASIO allows one driver at a time: another one is already open"; return false; }
     mine_ = true;
     const auto drivers = listAsioDrivers();
-    if (drivers.empty()) { err = "no ASIO driver is installed (HKLM\\SOFTWARE\\ASIO is empty)"; return false; }
+    if (drivers.empty()) { err = "no ASIO driver is installed (HKLM\\SOFTWARE\\ASIO is empty)"; closeAll(); return false; }
     std::string want = cfg.outDevice != "-" && !cfg.outDevice.empty() ? cfg.outDevice : (cfg.inDevice != "-" ? cfg.inDevice : std::string());
     const AsioDriverInfo* pick = want.empty() ? &drivers[0] : nullptr;
     for (const auto& d : drivers) if (!pick && (d.clsid == want || lower(d.name).find(lower(want)) != std::string::npos)) pick = &d;
-    if (!pick) { err = "no ASIO driver named \"" + want + "\""; return false; }
+    if (!pick) { err = "no ASIO driver named \"" + want + "\""; closeAll(); return false; }
     driverName_ = pick->name;
 
     wchar_t wide[96] = {0}; MultiByteToWideChar(CP_ACP, 0, pick->clsid.c_str(), -1, wide, 95);
-    CLSID clsid; if (FAILED(CLSIDFromString(wide, &clsid))) { err = "the CLSID of \"" + pick->name + "\" is not valid"; return false; }
+    CLSID clsid; if (FAILED(CLSIDFromString(wide, &clsid))) { err = "the CLSID of \"" + pick->name + "\" is not valid"; closeAll(); return false; }
     HRESULT r = CoCreateInstance(clsid, nullptr, CLSCTX_INPROC_SERVER, clsid, reinterpret_cast<void**>(&drv_));     // ASIO drivers use their CLSID as the interface id too
-    if (FAILED(r) || !drv_) { char b[96]; std::snprintf(b, sizeof b, "cannot load the ASIO driver \"%s\" (0x%08lx)", pick->name.c_str(), static_cast<unsigned long>(r)); err = b; return false; }
-    if (!drv_->init(GetDesktopWindow())) { char e[128] = {0}; drv_->getErrorMessage(e); err = "the ASIO driver \"" + pick->name + "\" did not start: " + (e[0] ? e : "init failed"); return false; }
+    if (FAILED(r) || !drv_) { char b[96]; std::snprintf(b, sizeof b, "cannot load the ASIO driver \"%s\" (0x%08lx)", pick->name.c_str(), static_cast<unsigned long>(r)); err = b; drv_ = nullptr; closeAll(); return false; }
+    if (!drv_->init(GetDesktopWindow())) { char e[128] = {0}; drv_->getErrorMessage(e); err = "the ASIO driver \"" + pick->name + "\" did not start: " + (e[0] ? e : "init failed"); closeAll(); return false; }
 
     long nIn = 0, nOut = 0; ASIOError a = drv_->getChannels(&nIn, &nOut);
-    if (a != ASE_OK) { err = msg("getChannels", a); return false; }
+    if (a != ASE_OK) { err = msg("getChannels", a); closeAll(); return false; }
     // what the driver lacks is filled with silence (a USB DAC has no inputs, an ADC no outputs): never a reason to refuse the driver
     nIn_ = std::min<long>(std::max(0, cfg.inChannels), nIn); nOut_ = std::min<long>(std::max(0, cfg.outChannels), nOut);
     if (nIn_ + nOut_ == 0) { char b[160]; std::snprintf(b, sizeof b, "\"%s\" has %ld inputs and %ld outputs: nothing to open", pick->name.c_str(), nIn, nOut); err = b; closeAll(); return false; }
@@ -149,6 +149,7 @@ class AsioBackend : public Backend {
       if (quit_) return;
       resetPending_ = false; lk.unlock();
       const bool wasRunning = running_.exchange(false);
+      while (inCallback_.load()) std::this_thread::yield();   // a bufferSwitch that started before running_ went false finishes first
       if (drv_) {
         drv_->stop();
         if (buffers_) { drv_->disposeBuffers(); buffers_ = false; }
@@ -167,7 +168,7 @@ class AsioBackend : public Backend {
     if (a != ASE_OK) { running_ = false; err = msg("start", a); return false; }
     return true;
   }
-  void stop() override { if (drv_ && running_.exchange(false)) drv_->stop(); }
+  void stop() override { if (drv_ && running_.exchange(false)) { while (inCallback_.load()) std::this_thread::yield(); drv_->stop(); } }
   std::uint64_t xruns() const override { return xruns_; }
   const std::string& driverName() const { return driverName_; }
   long inputLatency() const { return inLatency_; }     // frames, as the driver reports them
@@ -209,7 +210,10 @@ class AsioBackend : public Backend {
     }
   }
   void block(long index) {
-    if (!running_) return;
+    struct Guard { std::atomic<int>& c; explicit Guard(std::atomic<int>& x) : c(x) { ++c; } ~Guard() { --c; } } guard(inCallback_);
+    if (!running_ || !buffers_) {   // stopped or mid-reset: hand the driver silence, never stale output
+      for (long i = 0; i < nOut_ && i < static_cast<long>(infos_.size()) - nIn_; ++i) { const ASIOSampleType t = types_[static_cast<std::size_t>(nIn_ + i)]; const std::size_t bytes = static_cast<std::size_t>(frames_) * (t == ASIOSTInt16LSB ? 2 : t == ASIOSTInt24LSB ? 3 : t == ASIOSTFloat64LSB ? 8 : 4); if (buffers_) std::memset(infos_[static_cast<std::size_t>(nIn_ + i)].buffers[index], 0, bytes); }
+      return; }
     for (long i = 0; i < nIn_; ++i) toFloat(types_[static_cast<std::size_t>(i)], infos_[static_cast<std::size_t>(i)].buffers[index], inBuf_[static_cast<std::size_t>(i)].data(), frames_);
     for (auto& v : outBuf_) std::fill(v.begin(), v.end(), 0.0f);
     cb_(inp_.data(), outp_.data(), static_cast<std::size_t>(frames_));
@@ -241,10 +245,10 @@ class AsioBackend : public Backend {
   }
 
   DeviceConfig cfg_; AudioCallback cb_; IASIO* drv_ = nullptr; std::string driverName_;
-  long nIn_ = 0, nOut_ = 0, frames_ = 0; bool buffers_ = false, mine_ = false;
+  long nIn_ = 0, nOut_ = 0, frames_ = 0; std::atomic<bool> buffers_{false}; bool mine_ = false;
   std::vector<ASIOBufferInfo> infos_; std::vector<ASIOSampleType> types_; ASIOCallbacks callbacks_{};
   std::vector<std::vector<float>> inBuf_, outBuf_; std::vector<float> zeros_, sink_; std::vector<const float*> inp_; std::vector<float*> outp_;
-  std::atomic<bool> running_{false}; std::atomic<std::uint64_t> xruns_{0}, resets_{0}; std::atomic<long> inLatency_{0}, outLatency_{0};
+  std::atomic<bool> running_{false}; std::atomic<int> inCallback_{0}; std::atomic<std::uint64_t> xruns_{0}, resets_{0}; std::atomic<long> inLatency_{0}, outLatency_{0};
   std::thread worker_; std::mutex wm_; std::condition_variable wcv_; bool resetPending_ = false, quit_ = false;
 };
 }  // namespace

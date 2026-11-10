@@ -1,4 +1,5 @@
-// TONE (EQ): the channel DSP of one strip: 10-band parametric EQ with the live response curve, crossover, delay, polarity, channel limiter
+// TONE (EQ): the channel DSP of one strip: 10-band parametric EQ with the live response curve (RTA under it), crossover, delay, polarity, channel
+// limiter, and EQ PRESETS: 10 locked factory curves (AmiX W Shape, AmiX Golden EQ, ...) and 10 custom slots saved from the strip. Scrolls.
 import QtQuick
 import AmixOS   // this module: brings the Theme singleton (a plain directory import would see Theme as an ordinary type)
 import QtQuick.Controls
@@ -18,6 +19,12 @@ Flickable {
     property var ch: ({})
     contentHeight: col.implicitHeight + 24
     clip: true
+    boundsBehavior: Flickable.StopAtBounds
+    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+    property int presetTick: 0
+    property int presetSel: 0
+    property string presetName: ""
+    Connections { target: engine; function onStripsChanged() { page.presetTick++ } }
     function reload() { curve = engine.responseCurve(strip, 160); bandNow = engine.eqBand(strip, band); ch = engine.channelParams(strip); canvas.requestPaint() }
     Component.onCompleted: reload()
     onStripChanged: reload()
@@ -92,6 +99,38 @@ Flickable {
                 Slider { Layout.fillWidth: true; from: 0.1; to: 12; value: page.bandNow.q; onMoved: engine.setEq(page.strip, page.band, page.bandNow.type || 1, page.bandNow.freq, value, page.bandNow.gainDb) }
                 Slider { Layout.fillWidth: true; from: -24; to: 24; value: page.bandNow.gainDb; onMoved: engine.setEq(page.strip, page.band, page.bandNow.type || 1, page.bandNow.freq, page.bandNow.q, value) }
             }
+        }
+        Panel {
+            Layout.fillWidth: true
+            title: "EQ PRESETS  ·  10 LOCKED + 10 CUSTOM"
+            subtitle: "Click a preset to load its bands and high-pass / low-pass onto CH " + (page.strip + 1) + ". The first ten are the factory set and cannot be changed (AmiX W Shape, AmiX Golden EQ...); the ten CUSTOM slots take SAVE from this channel. Editing a band clears the preset mark."
+            Flow { Layout.fillWidth: true; spacing: 4
+                Repeater { model: (page.presetTick, engine.eqPresets())
+                    delegate: Rectangle { property bool cur: (page.presetTick, engine.stripEqPreset(page.strip) === modelData.slot); property bool picked: page.presetSel === modelData.slot
+                        implicitWidth: 128; implicitHeight: 46; radius: 6; color: cur ? (modelData.locked ? Theme.amber : Theme.cyan) : Qt.rgba(1, 1, 1, 0.05); border.color: picked ? Theme.ink : cur ? "transparent" : (modelData.locked ? Qt.rgba(0.984, 0.749, 0.141, 0.35) : Qt.rgba(0, 0.95, 1, 0.3)); border.width: picked ? 1.5 : 1
+                        Canvas { anchors.fill: parent; anchors.margins: 3; opacity: 0.55; property var cv: (page.presetTick, modelData.empty ? [] : engine.eqPresetCurve(modelData.slot, 40)); onCvChanged: requestPaint()
+                            onPaint: { const c = getContext("2d"); c.reset(); const v = cv; if (!v || v.length < 2) return; c.strokeStyle = cur ? "#000" : (modelData.locked ? "#fbbf24" : "#00f2ff"); c.lineWidth = 1.2; c.beginPath(); for (let i = 0; i < v.length; i++) { const x = i / (v.length - 1) * width, y = height / 2 - Math.max(-12, Math.min(12, v[i].db)) / 12 * (height / 2 - 2); if (i === 0) c.moveTo(x, y); else c.lineTo(x, y) } c.stroke() } }
+                        ColumnLayout { anchors.fill: parent; anchors.margins: 6; spacing: 1
+                            RowLayout { Layout.fillWidth: true; spacing: 3
+                                Text { text: modelData.locked ? "🔒" : (modelData.empty ? "＋" : "✎"); color: cur ? "#000" : Theme.dim; font.pixelSize: 7 }
+                                Text { Layout.fillWidth: true; elide: Text.ElideRight; text: modelData.name; color: cur ? "#000" : (modelData.empty ? Theme.dim : Theme.ink); font.family: Theme.mono; font.pixelSize: 8; font.bold: true } }
+                            Item { Layout.fillHeight: true }
+                            Text { text: (modelData.locked ? "FACTORY " : "CUSTOM ") + modelData.slot + (modelData.empty ? " · empty" : " · " + modelData.bands + " bands"); color: cur ? "#222" : Theme.dim; font.family: Theme.mono; font.pixelSize: 6 } }
+                        MouseArea { anchors.fill: parent; onClicked: { page.presetSel = modelData.slot; if (!modelData.empty) engine.applyEqPreset(modelData.slot, page.strip) }
+                            onDoubleClicked: { if (!modelData.locked) { page.presetSel = modelData.slot; nameIn.forceActiveFocus() } } } } } }
+            RowLayout { Layout.fillWidth: true; spacing: 6
+                Text { text: "SAVE INTO"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
+                Text { text: page.presetSel > 10 ? "CUSTOM " + (page.presetSel - 10) : page.presetSel > 0 ? "a locked preset (pick a CUSTOM slot)" : "pick a CUSTOM slot above"; color: page.presetSel > 10 ? Theme.cyan : Theme.dim; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                Rectangle { Layout.preferredWidth: 200; implicitHeight: 22; radius: 4; color: "#05070a"; border.color: nameIn.activeFocus ? Theme.cyan : Theme.lineSoft
+                    TextInput { id: nameIn; anchors.fill: parent; anchors.margins: 5; text: page.presetName; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; selectByMouse: true; maximumLength: 24; onTextChanged: page.presetName = text
+                        Text { visible: !parent.text.length; text: "preset name"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 9 } } }
+                Rectangle { implicitWidth: 110; implicitHeight: 22; radius: 4; color: page.presetSel > 10 ? Theme.cyan : Qt.rgba(1, 1, 1, 0.06); Text { anchors.centerIn: parent; text: "SAVE CH " + (page.strip + 1) + " EQ"; color: page.presetSel > 10 ? "#000" : Theme.dim; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                    MouseArea { anchors.fill: parent; enabled: page.presetSel > 10; onClicked: { engine.saveEqPreset(page.presetSel, page.presetName, page.strip); page.presetName = "" } } }
+                Rectangle { implicitWidth: 60; implicitHeight: 22; radius: 4; color: Qt.rgba(1, 1, 1, 0.06); border.color: Theme.lineSoft; visible: page.presetSel > 10; Text { anchors.centerIn: parent; text: "CLEAR"; color: Theme.danger; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                    MouseArea { anchors.fill: parent; onClicked: engine.clearEqPreset(page.presetSel) } }
+                Item { Layout.fillWidth: true }
+                Rectangle { implicitWidth: 90; implicitHeight: 22; radius: 4; color: Qt.rgba(1, 1, 1, 0.06); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: "FLAT EQ"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                    MouseArea { anchors.fill: parent; onClicked: { for (let b = 0; b < 10; ++b) engine.setEq(page.strip, b, 0, engine.eqBand(page.strip, b).freq, 1, 0) } } } }
         }
         RowLayout {
             Layout.fillWidth: true; spacing: 10

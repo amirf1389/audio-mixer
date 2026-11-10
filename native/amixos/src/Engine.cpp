@@ -25,7 +25,7 @@ Engine::Engine(QObject* parent) : QObject(parent) {
   for (int i = 0; i < kStrips; ++i) strips_[static_cast<std::size_t>(i)].name = QStringLiteral("CH %1").arg(i + 1, 2, 10, QLatin1Char('0'));
   for (int k = 0; k < kBuses; ++k) buses_[k].name = k < 8 ? QStringLiteral("AUX %1").arg(k + 1) : QStringLiteral("FX %1").arg(k - 7);
   for (int g = 0; g < kGroups; ++g) { dcas_[g].name = QStringLiteral("DCA %1").arg(g + 1); muteGroups_[g].name = QStringLiteral("MUTE %1").arg(g + 1); }
-  load();
+  load(); loadUserEq();
   refreshDevices();
   timer_.setInterval(33);
   vuRef_ = std::clamp(settings_.value("ui/vuRef", -18).toInt(), -24, -8);
@@ -466,7 +466,7 @@ bool Engine::pasteChannel(int i) {
 void Engine::setEq(int i, int band, int type, double f, double q, double g) {
   if (i < 0 || i >= kStrips || band < 0 || band >= am::dsp::kEqBands) return;
   const am::dsp::EqBand b{static_cast<FilterType>(std::clamp(type, 0, 8)), std::clamp(f, 10.0, 24000.0), std::clamp(q, 0.1, 36.0), std::clamp(g, -24.0, 24.0)};
-  strips_[static_cast<std::size_t>(i)].dsp.setEqBand(band, b);
+  strips_[static_cast<std::size_t>(i)].dsp.setEqBand(band, b); strips_[static_cast<std::size_t>(i)].eqPreset = 0;
   if (rt_) rt_->setEqBand(i, band, b.type, b.freq, b.q, b.gainDb);
   emit stripsChanged();
 }
@@ -512,6 +512,60 @@ QVariantMap Engine::channelParams(int i) const {
   m["gateOn"] = p.gateOn; m["gateThresholdDb"] = p.gateThresholdDb; m["gateRangeDb"] = p.gateRangeDb; m["gateAttackMs"] = p.gateAttackMs; m["gateHoldMs"] = p.gateHoldMs; m["gateReleaseMs"] = p.gateReleaseMs;
   m["polarityInvert"] = p.polarityInvert; m["delayMs"] = p.delayMs; m["xoverType"] = static_cast<int>(p.xoverType); m["hpOrder"] = p.hpOrder; m["hpFreq"] = p.hpFreq; m["lpOrder"] = p.lpOrder; m["lpFreq"] = p.lpFreq;
   m["limiterOn"] = p.limiterOn; m["limiterCeilDb"] = p.limiterCeilDb; m["limiterReleaseMs"] = p.limiterReleaseMs; return m;
+}
+
+// ---- EQ PRESETS
+const Engine::EqPresetUi* Engine::factoryEqPreset(int slot) {
+  using FT = am::dsp::FilterType; using B = am::dsp::EqBand;
+  static const EqPresetUi k[10] = {
+    // AmiX W Shape: lifted lows and highs, two gentle mid dips (a "W" on the curve): the house curve for playback and DJ mixes
+    {"AmiX W Shape", {B{FT::LowShelf, 90, 0.8, 4}, B{FT::Peaking, 250, 1.2, -2.5}, B{FT::Peaking, 1000, 1.0, 1.5}, B{FT::Peaking, 3200, 1.2, -2.5}, B{FT::HighShelf, 9000, 0.8, 4}, B{}, B{}, B{}, B{}, B{}}, 2, 30, 0, 16000, true},
+    // AmiX Golden EQ: the vocal / broadcast curve: clean lows, presence, a touch of air
+    {"AmiX Golden EQ", {B{FT::HighPass, 85, 0.71, 0}, B{FT::Peaking, 180, 1.0, 1.5}, B{FT::Peaking, 450, 1.4, -2.0}, B{FT::Peaking, 2800, 1.1, 2.5}, B{FT::Peaking, 5500, 1.6, 1.5}, B{FT::HighShelf, 12000, 0.7, 2.0}, B{}, B{}, B{}, B{}}, 0, 80, 0, 16000, true},
+    {"Vocal Presence", {B{FT::HighPass, 100, 0.71, 0}, B{FT::Peaking, 300, 1.2, -2}, B{FT::Peaking, 3000, 1.0, 3}, B{FT::HighShelf, 10000, 0.7, 1.5}, B{}, B{}, B{}, B{}, B{}, B{}}, 0, 80, 0, 16000, true},
+    {"Warm Bass", {B{FT::LowShelf, 100, 0.7, 3}, B{FT::Peaking, 700, 1.0, -1.5}, B{FT::Peaking, 2500, 1.2, 1.5}, B{FT::LowPass, 8000, 0.71, 0}, B{}, B{}, B{}, B{}, B{}, B{}}, 0, 80, 0, 16000, true},
+    {"Air Lift", {B{FT::HighShelf, 8000, 0.6, 3.5}, B{FT::Peaking, 12000, 1.0, 1.5}, B{}, B{}, B{}, B{}, B{}, B{}, B{}, B{}}, 0, 80, 0, 16000, true},
+    {"De-Mud", {B{FT::Peaking, 200, 1.4, -3}, B{FT::Peaking, 400, 1.6, -2}, B{FT::Peaking, 4000, 1.0, 1}, B{}, B{}, B{}, B{}, B{}, B{}, B{}}, 2, 60, 0, 16000, true},
+    {"Telephone", {B{FT::HighPass, 300, 0.71, 0}, B{FT::Peaking, 1800, 1.2, 4}, B{FT::LowPass, 3400, 0.71, 0}, B{}, B{}, B{}, B{}, B{}, B{}, B{}}, 4, 300, 4, 3400, true},
+    {"Broadcast Voice", {B{FT::HighPass, 70, 0.71, 0}, B{FT::LowShelf, 120, 0.8, 2}, B{FT::Peaking, 250, 1.3, -1.5}, B{FT::Peaking, 2200, 1.0, 2}, B{FT::Peaking, 6500, 2.0, -1.5}, B{FT::HighShelf, 10000, 0.7, 1}, B{}, B{}, B{}, B{}}, 0, 80, 0, 16000, true},
+    {"Kick Punch", {B{FT::Peaking, 60, 1.2, 3}, B{FT::Peaking, 300, 1.4, -3}, B{FT::Peaking, 4000, 1.0, 3}, B{FT::LowPass, 12000, 0.71, 0}, B{}, B{}, B{}, B{}, B{}, B{}}, 0, 80, 0, 16000, true},
+    {"Acoustic Guitar", {B{FT::HighPass, 80, 0.71, 0}, B{FT::Peaking, 180, 1.2, -2}, B{FT::Peaking, 1200, 1.0, 1}, B{FT::Peaking, 5000, 1.2, 2}, B{FT::HighShelf, 11000, 0.7, 1.5}, B{}, B{}, B{}, B{}, B{}}, 0, 80, 0, 16000, true},
+  };
+  return slot >= 1 && slot <= 10 ? &k[slot - 1] : nullptr;
+}
+void Engine::loadUserEq() {
+  const QJsonArray arr = QJsonDocument::fromJson(settings_.value("eq/userPresets").toByteArray()).array();
+  for (int u = 0; u < 10 && u < arr.size(); ++u) { const QJsonObject o = arr[u].toObject(); EqPresetUi& e = userEq_[u]; e.used = !o.value("name").toString().isEmpty(); if (!e.used) continue; e.name = o.value("name").toString().left(24);
+    const QJsonArray b = o.value("bands").toArray(); for (int i = 0; i < 10 && i < b.size(); ++i) { const QJsonObject x = b[i].toObject(); e.bands[i] = {static_cast<FilterType>(std::clamp(x.value("type").toInt(), 0, 8)), std::clamp(x.value("freq").toDouble(1000), 10.0, 24000.0), std::clamp(x.value("q").toDouble(1), 0.1, 36.0), std::clamp(x.value("gainDb").toDouble(0), -24.0, 24.0)}; }
+    e.hpOrder = std::clamp(o.value("hpOrder").toInt(), 0, 8); e.hpFreq = std::clamp(o.value("hpFreq").toDouble(80), 10.0, 24000.0); e.lpOrder = std::clamp(o.value("lpOrder").toInt(), 0, 8); e.lpFreq = std::clamp(o.value("lpFreq").toDouble(16000), 10.0, 24000.0); }
+}
+void Engine::storeUserEq() const {
+  QJsonArray arr; for (int u = 0; u < 10; ++u) { const EqPresetUi& e = userEq_[u]; QJsonObject o; if (e.used) { o["name"] = e.name; QJsonArray b; for (int i = 0; i < 10; ++i) { QJsonObject x; x["type"] = static_cast<int>(e.bands[i].type); x["freq"] = e.bands[i].freq; x["q"] = e.bands[i].q; x["gainDb"] = e.bands[i].gainDb; b << x; } o["bands"] = b; o["hpOrder"] = e.hpOrder; o["hpFreq"] = e.hpFreq; o["lpOrder"] = e.lpOrder; o["lpFreq"] = e.lpFreq; } arr << o; }
+  settings_.setValue("eq/userPresets", QJsonDocument(arr).toJson(QJsonDocument::Compact));
+}
+QVariantList Engine::eqPresets() const {
+  QVariantList l;
+  for (int slot = 1; slot <= 20; ++slot) { const EqPresetUi* e = slot <= 10 ? factoryEqPreset(slot) : &userEq_[slot - 11]; QVariantMap m; m["slot"] = slot; m["locked"] = slot <= 10; m["empty"] = !e->used; m["name"] = e->used ? e->name : QStringLiteral("CUSTOM %1").arg(slot - 10);
+    int n = 0; if (e->used) for (const auto& b : e->bands) if (b.type != FilterType::Off) ++n; m["bands"] = n; l << m; }
+  return l;
+}
+bool Engine::applyEqPreset(int slot, int i) {
+  if (i < 0 || i >= kStrips) return false; const EqPresetUi* e = slot >= 1 && slot <= 10 ? factoryEqPreset(slot) : slot >= 11 && slot <= 20 ? &userEq_[slot - 11] : nullptr; if (!e || !e->used) return false;
+  for (int b = 0; b < 10; ++b) setEq(i, b, static_cast<int>(e->bands[b].type), e->bands[b].freq, e->bands[b].q, e->bands[b].gainDb);
+  const auto& p = strips_[static_cast<std::size_t>(i)].dsp.params(); setCrossover(i, static_cast<int>(p.xoverType), e->hpOrder, e->hpFreq, e->lpOrder, e->lpFreq);
+  strips_[static_cast<std::size_t>(i)].eqPreset = slot; emit stripsChanged(); return true;
+}
+bool Engine::saveEqPreset(int slot, const QString& name, int i) {
+  if (slot < 11 || slot > 20 || i < 0 || i >= kStrips) return false; EqPresetUi& e = userEq_[slot - 11]; const auto& p = strips_[static_cast<std::size_t>(i)].dsp.params();
+  e.name = name.trimmed().isEmpty() ? QStringLiteral("CUSTOM %1").arg(slot - 10) : name.trimmed().left(24); for (int b = 0; b < 10; ++b) e.bands[b] = p.eq[static_cast<std::size_t>(b)]; e.hpOrder = p.hpOrder; e.hpFreq = p.hpFreq; e.lpOrder = p.lpOrder; e.lpFreq = p.lpFreq; e.used = true;
+  storeUserEq(); strips_[static_cast<std::size_t>(i)].eqPreset = slot; emit stripsChanged(); return true;
+}
+bool Engine::clearEqPreset(int slot) { if (slot < 11 || slot > 20) return false; userEq_[slot - 11] = EqPresetUi(); storeUserEq(); for (int i = 0; i < kStrips; ++i) if (strips_[static_cast<std::size_t>(i)].eqPreset == slot) strips_[static_cast<std::size_t>(i)].eqPreset = 0; emit stripsChanged(); return true; }
+QVariantList Engine::eqPresetCurve(int slot, int points) const {
+  QVariantList l; const EqPresetUi* e = slot >= 1 && slot <= 10 ? factoryEqPreset(slot) : slot >= 11 && slot <= 20 ? &userEq_[slot - 11] : nullptr; if (!e || !e->used) return l; points = std::clamp(points, 8, 512);
+  am::dsp::Channel ch{48000}; for (int b = 0; b < 10; ++b) ch.setEqBand(b, e->bands[b]); ch.setCrossover(am::dsp::XoverType::Butterworth, e->hpOrder, e->hpFreq, e->lpOrder, e->lpFreq);
+  for (int k = 0; k < points; ++k) { const double f = 20.0 * std::pow(1000.0, static_cast<double>(k) / (points - 1)); QVariantMap m; m["f"] = f; m["db"] = ch.gainDbAt(f); l << m; }
+  return l;
 }
 QVariantList Engine::responseCurve(int i, int points) const {
   QVariantList l; if (i < 0 || i >= kStrips) return l; points = std::clamp(points, 8, 512);

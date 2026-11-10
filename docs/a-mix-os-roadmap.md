@@ -108,6 +108,16 @@ decided, what exists, what is next, and what was asked for but is not possible a
   **AUTO LICENCE**: the console writes ~/.amixos/key-request.json itself and watches ~/.amixos and Downloads for the vendor's key file
   (*.amixkey, *.key, key*.txt), verifies it against the vendor's public key and activates it; keys are never generated in the console.
 
+- **MIXER strip, second pass**: the channel fader stays on the strip in the AUX / FX send views (sends beside it); an **AI chip** per
+  strip switches automix (gain sharing between open channels) and shows the gain it applies right now (bar + number; right-click opens
+  AI MIX); the MORE button is gone: the strip menu is on ⋯ and on a right-click anywhere on the strip; SETTINGS has STRIP toggles
+  (INPUT chip, DSP badges, pan, AI chip, groups readout) for a leaner strip. **TONE (EQ)**: a scroll bar, RTA, and **EQ PRESETS**: 10
+  locked factory curves (AmiX W Shape, AmiX Golden EQ, Vocal Presence, Warm Bass, Air Lift, De-Mud, Telephone, Broadcast Voice, Kick
+  Punch, Acoustic Guitar) and 10 CUSTOM slots (SAVE from the channel, CLEAR), each tile drawing its curve; a band edit clears the mark.
+  **ASIO pass** (`backend_asio.cpp`): every failed open releases the driver and the single-client slot (a second try no longer says
+  "another one is already open"), a driver reset waits for the bufferSwitch in flight before disposing buffers, stop() does the same,
+  and a stopped or resetting stream writes silence into the driver's buffers instead of stale output. Cross-compiled with mingw -Werror.
+
 ## Next, in order
 
 1. **Windows .exe in hand**: run the Actions workflow, download `amixos-windows-x64.zip`, test ASIO (UM2, Focusrite, ASIO4ALL, Realtek) on the user's PC. Fix what the real drivers show.
