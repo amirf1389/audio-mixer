@@ -1,0 +1,10 @@
+TYPEMAP
+amix_mixer *	O_AMIX_MIXER
+
+INPUT
+O_AMIX_MIXER
+	if (sv_isobject($arg) && SvTYPE(SvRV($arg)) == SVt_PVMG) $var = INT2PTR($type, SvIV((SV*)SvRV($arg))); else croak(\"${Package}::$func_name(): $var is not an Audio::AmixOS::Mixer\");
+
+OUTPUT
+O_AMIX_MIXER
+	sv_setref_pv($arg, \"Audio::AmixOS::Mixer\", (void*)$var);

@@ -1,10 +1,11 @@
 # Audio Mixer / A mix OS engine (C++20): the engine library, the runtime (device backends of the system it is built on) and the tests.
 #   cmake -S engine/cpp -B build && cmake --build build && ctest --test-dir build --output-on-failure
 cmake_minimum_required(VERSION 3.12)
-project(audiomixer_engine CXX)
+project(audiomixer_engine C CXX)
 set(CMAKE_CXX_STANDARD 20)   # the channel DSP (include/audiomixer/dsp.hpp) is C++20; everything else compiles as before
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(Threads REQUIRED)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)   # the static libs also go into libamix.so (the C SDK)
 
 add_library(audiomixer_engine STATIC src/engine.cpp)
 target_include_directories(audiomixer_engine PUBLIC include)
@@ -153,3 +154,23 @@ target_link_libraries(stream_test Threads::Threads)
 add_test(NAME stream COMMAND stream_test)
 add_executable(update_logic_test test/update_logic_test.cpp)
 add_test(NAME update_logic COMMAND update_logic_test ${CMAKE_CURRENT_SOURCE_DIR}/../../releases/update.json)   # the self-update's manifest reading, on the real signed manifest
+
+# ---- the C SDK: one shared library (and a static twin) over the runtime, the engine and the licence check; header in sdk/c/include
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/../../native/amixos/version.txt" AMIX_SDK_VERSION)
+string(STRIP "${AMIX_SDK_VERSION}" AMIX_SDK_VERSION)
+add_library(amix SHARED app/sdk/amix_c.cpp)
+add_library(amix_static STATIC app/sdk/amix_c.cpp)
+foreach(t amix amix_static)
+  target_include_directories(${t} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../../sdk/c/include PRIVATE app)
+  target_link_libraries(${t} PUBLIC audiomixer_runtime audiomixer_engine amixos_license)
+  target_compile_definitions(${t} PRIVATE AMIX_VERSION_STRING="${AMIX_SDK_VERSION}")
+endforeach()
+set_target_properties(amix PROPERTIES CXX_VISIBILITY_PRESET hidden VERSION ${AMIX_SDK_VERSION} SOVERSION 1 PUBLIC_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/../../sdk/c/include/amix.h)
+target_compile_definitions(amix_static PUBLIC AMIX_STATIC)
+if(NOT WIN32 AND NOT APPLE)
+  target_link_options(amix PRIVATE -Wl,--exclude-libs,ALL)   # only the amix_* C symbols leave the shared library
+endif()
+add_executable(sdk_c_test test/sdk_c_test.c)
+target_link_libraries(sdk_c_test PRIVATE amix m)
+add_test(NAME sdk_c_test COMMAND sdk_c_test)
+install(TARGETS amix amixos-daemon LIBRARY DESTINATION lib RUNTIME DESTINATION bin PUBLIC_HEADER DESTINATION include)
