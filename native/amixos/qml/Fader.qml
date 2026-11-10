@@ -12,10 +12,10 @@ Item {
     implicitHeight: 180
     function pos(db) { return (1 - (db - from) / (to - from)) * (height - knob.height) }
     function dbAt(y) { var t = 1 - Math.max(0, Math.min(1, (y - knob.height / 2) / (height - knob.height))); return from + t * (to - from) }
-    Rectangle { anchors.horizontalCenter: parent.horizontalCenter; width: 4; height: parent.height; radius: 2; color: "#05070a"; border.color: Theme.lineSoft }
+    Rectangle { anchors.horizontalCenter: parent.horizontalCenter; width: 4; height: parent.height; radius: 2; color: Theme.deep; border.color: Theme.lineSoft }
     Repeater {   // scale marks: +10, 0, -10, -20, -40, -60
         model: [10, 0, -10, -20, -40, -60]
-        Rectangle { x: parent.width / 2 + 6; y: fader.pos(modelData) + knob.height / 2; width: modelData === 0 ? 10 : 5; height: 1; color: modelData === 0 ? Theme.amber : Theme.dim }
+        Rectangle { x: parent.width / 2 + 6; y: fader.pos(modelData) + knob.height / 2; width: modelData === 0 ? 10 : 5; height: 1; color: modelData === 0 ? Theme.orange : Theme.dim }
     }
     Rectangle {
         id: knob

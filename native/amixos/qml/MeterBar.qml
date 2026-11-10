@@ -12,7 +12,7 @@ Item {
     implicitWidth: 10
     implicitHeight: 160
     function norm(db) { return Math.max(0, Math.min(1, (db - floorDb) / -floorDb)); }
-    Rectangle { anchors.fill: parent; radius: 3; color: "#05070a"; border.color: Theme.lineSoft }
+    Rectangle { anchors.fill: parent; radius: 3; color: Theme.deep; border.color: Theme.lineSoft }
     Rectangle {  // rms
         anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.margins: 2
         height: (parent.height - 4) * meter.norm(meter.rmsDb)
@@ -24,7 +24,7 @@ Item {
     Rectangle {  // peak
         anchors.left: parent.left; anchors.right: parent.right; anchors.margins: 2
         y: 2 + (parent.height - 4) * (1 - meter.norm(meter.peakDb)) - 1
-        height: 2; color: Qt.rgba(1, 1, 1, 0.8); visible: meter.peakDb > meter.floorDb
+        height: 2; color: Theme.ov(0.8); visible: meter.peakDb > meter.floorDb
     }
     Rectangle {  // hold
         anchors.left: parent.left; anchors.right: parent.right; anchors.margins: 2

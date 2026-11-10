@@ -50,8 +50,8 @@ Flickable {
                     onActivated: page.strip = currentIndex
                 }
                 Item { Layout.fillWidth: true }
-                Rectangle { implicitWidth: 44; implicitHeight: 22; radius: 4; color: page.rta ? Theme.cyan : Qt.rgba(1, 1, 1, 0.08); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: "RTA"; color: page.rta ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.rta = !page.rta } ToolTip.visible: rtaH.hovered; ToolTip.text: "Real-time analyser under the curve: this strip after its DSP"; HoverHandler { id: rtaH } }
-                Rectangle { implicitWidth: 60; implicitHeight: 22; radius: 4; color: page.ch.polarityInvert ? Theme.violet : Qt.rgba(1, 1, 1, 0.08); Text { anchors.centerIn: parent; text: "Ø 180°"; color: page.ch.polarityInvert ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setPolarity(page.strip, !page.ch.polarityInvert) } }
+                Rectangle { implicitWidth: 44; implicitHeight: 22; radius: 4; color: page.rta ? Theme.cyan : Theme.ov(0.08); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: "RTA"; color: page.rta ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.rta = !page.rta } ToolTip.visible: rtaH.hovered; ToolTip.text: "Real-time analyser under the curve: this strip after its DSP"; HoverHandler { id: rtaH } }
+                Rectangle { implicitWidth: 60; implicitHeight: 22; radius: 4; color: page.ch.polarityInvert ? Theme.violet : Theme.ov(0.08); Text { anchors.centerIn: parent; text: "Ø 180°"; color: page.ch.polarityInvert ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setPolarity(page.strip, !page.ch.polarityInvert) } }
             }
             // the curve
             Canvas {
@@ -59,7 +59,7 @@ Flickable {
                 Layout.fillWidth: true
                 implicitHeight: 220
                 onPaint: {
-                    var c = getContext("2d"); c.reset(); c.fillStyle = "#05070a"; c.fillRect(0, 0, width, height);
+                    var c = getContext("2d"); c.reset(); c.fillStyle = Theme.deep; c.fillRect(0, 0, width, height);
                     var L = 40, R = width - 10, T = 10, B = height - 22, dbTop = 24, dbBot = -24;
                     if (page.rta && page.spec && page.spec.length === 31) {   // RTA: 31 bands 20 Hz .. 20 kHz, 0 .. -72 dBFS over the full height
                         var bw = (R - L) / 31; for (var k = 0; k < 31; k++) { var sdb = Math.max(-72, Math.min(0, page.spec[k])); var bh = (sdb + 72) / 72 * (B - T); c.fillStyle = sdb > -6 ? "rgba(251,191,36,0.5)" : "rgba(0,242,255,0.35)"; c.fillRect(L + k * bw + 1, B - bh, bw - 2, bh) }
@@ -86,7 +86,7 @@ Flickable {
             // band picker
             RowLayout {
                 Layout.fillWidth: true; spacing: 4
-                Repeater { model: 10; delegate: Rectangle { implicitWidth: 34; implicitHeight: 22; radius: 4; color: page.band === index ? Theme.amber : Qt.rgba(1, 1, 1, 0.08); border.color: engine.eqBand(page.strip, index).type > 0 ? Theme.cyan : "transparent"; Text { anchors.centerIn: parent; text: "B" + (index + 1); color: page.band === index ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.band = index } } }
+                Repeater { model: 10; delegate: Rectangle { implicitWidth: 34; implicitHeight: 22; radius: 4; color: page.band === index ? Theme.amber : Theme.ov(0.08); border.color: engine.eqBand(page.strip, index).type > 0 ? Theme.cyan : "transparent"; Text { anchors.centerIn: parent; text: "B" + (index + 1); color: page.band === index ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.band = index } } }
             }
             GridLayout {
                 columns: 4; columnSpacing: 10; rowSpacing: 4; Layout.fillWidth: true
@@ -107,7 +107,7 @@ Flickable {
             Flow { Layout.fillWidth: true; spacing: 4
                 Repeater { model: (page.presetTick, engine.eqPresets())
                     delegate: Rectangle { property bool cur: (page.presetTick, engine.stripEqPreset(page.strip) === modelData.slot); property bool picked: page.presetSel === modelData.slot
-                        implicitWidth: 128; implicitHeight: 46; radius: 6; color: cur ? (modelData.locked ? Theme.amber : Theme.cyan) : Qt.rgba(1, 1, 1, 0.05); border.color: picked ? Theme.ink : cur ? "transparent" : (modelData.locked ? Qt.rgba(0.984, 0.749, 0.141, 0.35) : Qt.rgba(0, 0.95, 1, 0.3)); border.width: picked ? 1.5 : 1
+                        implicitWidth: 128; implicitHeight: 46; radius: 6; color: cur ? (modelData.locked ? Theme.amber : Theme.cyan) : Theme.ov(0.05); border.color: picked ? Theme.ink : cur ? "transparent" : (modelData.locked ? Qt.rgba(0.984, 0.749, 0.141, 0.35) : Qt.rgba(0, 0.95, 1, 0.3)); border.width: picked ? 1.5 : 1
                         Canvas { anchors.fill: parent; anchors.margins: 3; opacity: 0.55; property var cv: (page.presetTick, modelData.empty ? [] : engine.eqPresetCurve(modelData.slot, 40)); onCvChanged: requestPaint()
                             onPaint: { const c = getContext("2d"); c.reset(); const v = cv; if (!v || v.length < 2) return; c.strokeStyle = cur ? "#000" : (modelData.locked ? "#fbbf24" : "#00f2ff"); c.lineWidth = 1.2; c.beginPath(); for (let i = 0; i < v.length; i++) { const x = i / (v.length - 1) * width, y = height / 2 - Math.max(-12, Math.min(12, v[i].db)) / 12 * (height / 2 - 2); if (i === 0) c.moveTo(x, y); else c.lineTo(x, y) } c.stroke() } }
                         ColumnLayout { anchors.fill: parent; anchors.margins: 6; spacing: 1
@@ -121,15 +121,15 @@ Flickable {
             RowLayout { Layout.fillWidth: true; spacing: 6
                 Text { text: "SAVE INTO"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                 Text { text: page.presetSel > 10 ? "CUSTOM " + (page.presetSel - 10) : page.presetSel > 0 ? "a locked preset (pick a CUSTOM slot)" : "pick a CUSTOM slot above"; color: page.presetSel > 10 ? Theme.cyan : Theme.dim; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-                Rectangle { Layout.preferredWidth: 200; implicitHeight: 22; radius: 4; color: "#05070a"; border.color: nameIn.activeFocus ? Theme.cyan : Theme.lineSoft
+                Rectangle { Layout.preferredWidth: 200; implicitHeight: 22; radius: 4; color: Theme.deep; border.color: nameIn.activeFocus ? Theme.cyan : Theme.lineSoft
                     TextInput { id: nameIn; anchors.fill: parent; anchors.margins: 5; text: page.presetName; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; selectByMouse: true; maximumLength: 24; onTextChanged: page.presetName = text
                         Text { visible: !parent.text.length; text: "preset name"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 9 } } }
-                Rectangle { implicitWidth: 110; implicitHeight: 22; radius: 4; color: page.presetSel > 10 ? Theme.cyan : Qt.rgba(1, 1, 1, 0.06); Text { anchors.centerIn: parent; text: "SAVE CH " + (page.strip + 1) + " EQ"; color: page.presetSel > 10 ? "#000" : Theme.dim; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                Rectangle { implicitWidth: 110; implicitHeight: 22; radius: 4; color: page.presetSel > 10 ? Theme.cyan : Theme.ov(0.06); Text { anchors.centerIn: parent; text: "SAVE CH " + (page.strip + 1) + " EQ"; color: page.presetSel > 10 ? "#000" : Theme.dim; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                     MouseArea { anchors.fill: parent; enabled: page.presetSel > 10; onClicked: { engine.saveEqPreset(page.presetSel, page.presetName, page.strip); page.presetName = "" } } }
-                Rectangle { implicitWidth: 60; implicitHeight: 22; radius: 4; color: Qt.rgba(1, 1, 1, 0.06); border.color: Theme.lineSoft; visible: page.presetSel > 10; Text { anchors.centerIn: parent; text: "CLEAR"; color: Theme.danger; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                Rectangle { implicitWidth: 60; implicitHeight: 22; radius: 4; color: Theme.ov(0.06); border.color: Theme.lineSoft; visible: page.presetSel > 10; Text { anchors.centerIn: parent; text: "CLEAR"; color: Theme.danger; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                     MouseArea { anchors.fill: parent; onClicked: engine.clearEqPreset(page.presetSel) } }
                 Item { Layout.fillWidth: true }
-                Rectangle { implicitWidth: 90; implicitHeight: 22; radius: 4; color: Qt.rgba(1, 1, 1, 0.06); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: "FLAT EQ"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                Rectangle { implicitWidth: 90; implicitHeight: 22; radius: 4; color: Theme.ov(0.06); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: "FLAT EQ"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                     MouseArea { anchors.fill: parent; onClicked: { for (let b = 0; b < 10; ++b) engine.setEq(page.strip, b, 0, engine.eqBand(page.strip, b).freq, 1, 0) } } } }
         }
         RowLayout {
@@ -156,7 +156,7 @@ Flickable {
                 Text { text: "DELAY  " + Number(page.ch.delayMs || 0).toFixed(2) + " ms  (" + (Number(page.ch.delayMs || 0) * 34.3).toFixed(1) + " cm)"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                 Slider { Layout.fillWidth: true; from: 0; to: 50; stepSize: 0.01; value: page.ch.delayMs || 0; onMoved: engine.setDelay(page.strip, value) }
                 RowLayout { Layout.fillWidth: true
-                    Rectangle { implicitWidth: 70; implicitHeight: 22; radius: 4; color: page.ch.limiterOn ? Theme.emerald : Qt.rgba(1, 1, 1, 0.08); Text { anchors.centerIn: parent; text: "LIMITER"; color: page.ch.limiterOn ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setChannelLimiter(page.strip, !page.ch.limiterOn, page.ch.limiterCeilDb || -1, page.ch.limiterReleaseMs || 80) } }
+                    Rectangle { implicitWidth: 70; implicitHeight: 22; radius: 4; color: page.ch.limiterOn ? Theme.emerald : Theme.ov(0.08); Text { anchors.centerIn: parent; text: "LIMITER"; color: page.ch.limiterOn ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setChannelLimiter(page.strip, !page.ch.limiterOn, page.ch.limiterCeilDb || -1, page.ch.limiterReleaseMs || 80) } }
                     Text { text: "CEILING " + Theme.dbText(page.ch.limiterCeilDb === undefined ? -1 : page.ch.limiterCeilDb) + " dBFS"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 } }
                 Slider { Layout.fillWidth: true; from: -30; to: 0; value: page.ch.limiterCeilDb === undefined ? -1 : page.ch.limiterCeilDb; onMoved: engine.setChannelLimiter(page.strip, page.ch.limiterOn, value, page.ch.limiterReleaseMs || 80) }
                 Text { text: "RELEASE " + Math.round(page.ch.limiterReleaseMs || 80) + " ms"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }

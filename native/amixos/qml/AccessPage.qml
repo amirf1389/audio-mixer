@@ -11,7 +11,7 @@ Item {
     readonly property var mx: access.matrix
     readonly property var permText: ({ faders: "FADERS, MUTES, SOLOS, PANS", dsp: "EQ · DYNAMICS · EFFECTS · SENDS · ARRANGE · TOOLS", routing: "CONNECTIONS · ROUTING · LIVE SOURCES", loudness: "LOUDNESS · LIMITER", archive: "SCENES · PRESETS · IMPORT / OVERWRITE", system: "SETTINGS · CALIBRATE · DIAGNOSTICS · ACCOUNT · ACCESS · ADMIN · LICENSE" })
     component Head: Text { color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
-    component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(56, bl.implicitWidth + 16); implicitHeight: 24; radius: 4; color: on ? onColor : Qt.rgba(1, 1, 1, 0.08); border.color: Theme.lineSoft
+    component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(56, bl.implicitWidth + 16); implicitHeight: 24; radius: 4; color: on ? onColor : Theme.ov(0.08); border.color: Theme.lineSoft
         Text { id: bl; anchors.centerIn: parent; text: label; color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
     ColumnLayout {
         anchors.fill: parent; anchors.margins: 10; spacing: 8
@@ -35,7 +35,7 @@ Item {
                                 Rectangle { visible: c > 0; anchors.centerIn: parent; width: 64; height: 24; radius: 12
                                     readonly property string rid: c > 0 ? access.roles[c - 1].id : ""
                                     readonly property bool on: rid !== "" && page.mx[rid] !== undefined ? page.mx[rid][pm] === true : false
-                                    color: on ? Theme.emerald : Qt.rgba(1, 1, 1, 0.08); border.color: Theme.lineSoft; opacity: access.adminMode ? 1 : 0.8
+                                    color: on ? Theme.emerald : Theme.ov(0.08); border.color: Theme.lineSoft; opacity: access.adminMode ? 1 : 0.8
                                     Rectangle { width: 18; height: 18; radius: 9; y: 3; x: parent.on ? parent.width - 21 : 3; color: parent.on ? "#000" : Theme.dim; Behavior on x { NumberAnimation { duration: 120 } } }
                                     MouseArea { anchors.fill: parent; onClicked: access.setPerm(parent.rid, pm, !parent.on) } } } } }
                     Item { Layout.fillHeight: true }

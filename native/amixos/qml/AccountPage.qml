@@ -12,7 +12,7 @@ Item {
     function permLine(row) { var a = [], d = []; for (var p = 0; p < access.perms.length; ++p) { if (row && row[access.perms[p]]) a.push(access.perms[p].toUpperCase()); else d.push(access.perms[p].toUpperCase()) } return (a.length ? "ALLOWED: " + a.join(" · ") : "") + (d.length ? "   LOCKED: " + d.join(" · ") : "") }
     function roleName(id) { for (let i = 0; i < access.roles.length; ++i) if (access.roles[i].id === id) return access.roles[i].name; return id }
     component Head: Text { color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
-    component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(56, bl.implicitWidth + 16); implicitHeight: 24; radius: 4; color: on ? onColor : Qt.rgba(1, 1, 1, 0.08); border.color: Theme.lineSoft
+    component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(56, bl.implicitWidth + 16); implicitHeight: 24; radius: 4; color: on ? onColor : Theme.ov(0.08); border.color: Theme.lineSoft
         Text { id: bl; anchors.centerIn: parent; text: label; color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
     ColumnLayout {
         anchors.fill: parent; anchors.margins: 10; spacing: 8
@@ -29,7 +29,7 @@ Item {
             Rectangle { Layout.fillWidth: true; Layout.fillHeight: true; radius: Theme.radius; color: Theme.card; border.color: Theme.line
                 ColumnLayout { anchors.fill: parent; anchors.margins: 12; spacing: 6
                     Head { text: "SELECT ACTIVE OPERATOR PROFILE" }
-                    Repeater { model: access.roles; delegate: Rectangle { Layout.fillWidth: true; implicitHeight: 58; radius: 6; color: access.role === modelData.id ? Qt.rgba(0.98, 0.75, 0.14, 0.14) : Qt.rgba(1, 1, 1, 0.04); border.color: access.role === modelData.id ? Theme.amber : (page.wantRole === modelData.id ? Theme.cyan : Theme.lineSoft)
+                    Repeater { model: access.roles; delegate: Rectangle { Layout.fillWidth: true; implicitHeight: 58; radius: 6; color: access.role === modelData.id ? Qt.rgba(0.98, 0.75, 0.14, 0.14) : Theme.ov(0.04); border.color: access.role === modelData.id ? Theme.amber : (page.wantRole === modelData.id ? Theme.cyan : Theme.lineSoft)
                         ColumnLayout { anchors.fill: parent; anchors.margins: 8; spacing: 2
                             RowLayout { Text { text: modelData.name; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 10; font.bold: true } Item { Layout.fillWidth: true } }
                             Text { Layout.fillWidth: true; text: modelData.blurb; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap }

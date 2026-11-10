@@ -358,7 +358,7 @@ void Engine::stopRecording() { if (!recorder_.recording()) return; taps_.a.store
 void Engine::setArmed(int i, bool on) { if (i < 0 || i >= kStrips) return; if (on) armed_ |= 1u << i; else armed_ &= ~(1u << i); emit stripsChanged(); emit recordChanged(); }
 QVariantMap Engine::autoDetect() const {
   QVariantMap best; int bestRank = -1;
-  for (const QVariant& v : devices_) { const QVariantMap d = v.toMap(); const QString b = d["backend"].toString(), name = d["name"].toString(); if (b == "null") continue;
+  for (const QVariant& v : devices_) { const QVariantMap d = v.toMap(); const QString b = d["backend"].toString(), name = d["name"].toString(); if (b == "null" || d["id"].toString().startsWith("loopback:")) continue;
     const bool in = d["inChannels"].toInt() > 0, out = d["outChannels"].toInt() > 0; if (!in && !out) continue;
     int rank = 0; QString why;
     if (b == "asio") { const bool wrapper = am::drv::isWrapper(name.toStdString()); const bool pinned = am::drv::pinOf(name.toStdString()).on; rank = wrapper ? 60 : pinned ? 50 : 100; why = wrapper ? "an ASIO wrapper (ASIO4ALL-style): used when nothing has its own driver" : pinned ? "Realtek onboard: pinned to its Windows endpoint, SMART START routes it" : "the device's own ASIO driver"; }

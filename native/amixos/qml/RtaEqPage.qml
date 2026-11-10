@@ -52,7 +52,7 @@ Flickable {
     onBandChanged: bandNow = engine.eqBand(strip, band)
     Connections { target: engine; function onStripsChanged() { page.reload() } function onPresetsChanged() { page.slotTick++ } }
     Timer { interval: 16; running: page.visible && page.rtaOn && !page.frozen; repeat: true; onTriggered: { page.spec = engine.spectrum(2); rta.requestPaint() } }
-    component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; property color offColor: Qt.rgba(1, 1, 1, 0.08); signal clicked(); implicitWidth: bl.implicitWidth + 16; implicitHeight: 22; radius: 4; color: on ? onColor : offColor; border.color: on ? onColor : Theme.lineSoft
+    component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; property color offColor: Theme.ov(0.08); signal clicked(); implicitWidth: bl.implicitWidth + 16; implicitHeight: 22; radius: 4; color: on ? onColor : offColor; border.color: on ? onColor : Theme.lineSoft
         Text { id: bl; anchors.centerIn: parent; text: label; color: parent.on ? "#000" : Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
     ColumnLayout {
         id: col
@@ -82,7 +82,7 @@ Flickable {
                         onActivated: function (i) { page.loadPreset(page.presets[i].n) } }
                     Btn { label: "FLAT"; onClicked: { page.apply([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]); page.presetName = "Flat" } } } } }
         // 1. DIAMOND PEQ RESPONSE CURVE & 64-BIN RTA SPECTRUM OVERLAY
-        Rectangle { visible: page.view !== "faders"; Layout.fillWidth: true; implicitHeight: page.view === "both" ? 240 : 360; radius: Theme.radius; color: "#05070a"; border.color: Theme.line; clip: true
+        Rectangle { visible: page.view !== "faders"; Layout.fillWidth: true; implicitHeight: page.view === "both" ? 240 : 360; radius: Theme.radius; color: Theme.deep; border.color: Theme.line; clip: true
             Canvas { id: rta; anchors.fill: parent; visible: page.rtaOn
                 onPaint: { const c = getContext("2d"); c.reset(); const sp = page.spec; if (!sp || sp.length !== 31) return; const bars = 64, bw = width / bars, step = width / 11
                     // the bars sit on the curve's own frequency axis (band k at x = step * (k + 1)); the 31 third-octave bands of the analyser (20 Hz .. 20 kHz) are read at that frequency
@@ -125,7 +125,7 @@ Flickable {
                     delegate: ColumnLayout { Layout.fillWidth: true; Layout.fillHeight: true; spacing: 2
                         Text { Layout.alignment: Qt.AlignHCenter; text: page.bandText[index] + "Hz"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                         Slider { id: sl; Layout.fillHeight: true; Layout.alignment: Qt.AlignHCenter; orientation: Qt.Vertical; from: -12; to: 12; stepSize: 0.5; value: page.gains[index]; onMoved: page.setBand(index, value)
-                            background: Rectangle { x: sl.leftPadding + sl.availableWidth / 2 - 3; y: sl.topPadding; width: 6; height: sl.availableHeight; radius: 3; color: "#05070a"; border.color: Theme.lineSoft
+                            background: Rectangle { x: sl.leftPadding + sl.availableWidth / 2 - 3; y: sl.topPadding; width: 6; height: sl.availableHeight; radius: 3; color: Theme.deep; border.color: Theme.lineSoft
                                 Rectangle { width: parent.width; y: Math.min(parent.height / 2, sl.visualPosition * parent.height); height: Math.abs(parent.height / 2 - sl.visualPosition * parent.height); radius: 3; color: page.gains[index] >= 0 ? Theme.amber : Theme.cyan } }
                             handle: Rectangle { x: sl.leftPadding + sl.availableWidth / 2 - width / 2; y: sl.topPadding + sl.visualPosition * (sl.availableHeight - height); width: 26; height: 14; radius: 3; color: "#1b2230"; border.color: Theme.ink; Rectangle { anchors.centerIn: parent; width: 18; height: 2; color: Theme.amber } } }
                         Text { Layout.alignment: Qt.AlignHCenter; text: page.dbText(page.gains[index]); color: page.gains[index] !== 0 ? Theme.amber : Theme.dim; font.family: Theme.mono; font.pixelSize: 8 } } } } }
@@ -135,7 +135,7 @@ Flickable {
                 RowLayout { Layout.fillWidth: true; spacing: 6
                     Text { text: "PARAMETRIC CONTROL"; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 1 }
                     Text { text: "band"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
-                    Repeater { model: 10; delegate: Rectangle { implicitWidth: 30; implicitHeight: 20; radius: 4; color: page.band === index ? Theme.amber : Qt.rgba(1, 1, 1, 0.08); border.color: page.gains[index] !== 0 ? Theme.cyan : "transparent"
+                    Repeater { model: 10; delegate: Rectangle { implicitWidth: 30; implicitHeight: 20; radius: 4; color: page.band === index ? Theme.amber : Theme.ov(0.08); border.color: page.gains[index] !== 0 ? Theme.cyan : "transparent"
                         Text { anchors.centerIn: parent; text: "B" + (index + 1); color: page.band === index ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.band = index } } }
                     Item { Layout.fillWidth: true }
                     Text { text: page.typeNames[page.bandNow.type] + " · " + Math.round(page.bandNow.freq) + " Hz · Q " + Number(page.bandNow.q).toFixed(2) + " · " + page.dbText(page.bandNow.gainDb); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8 } }
@@ -159,14 +159,14 @@ Flickable {
                 RowLayout { Layout.fillWidth: true; spacing: 8
                     Text { text: "CUSTOM PRESET USER SLOTS: 10"; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 1 }
                     Item { Layout.fillWidth: true }
-                    Rectangle { Layout.preferredWidth: 180; implicitHeight: 22; radius: 4; color: "#05070a"; border.color: nameIn.activeFocus ? Theme.cyan : Theme.lineSoft
+                    Rectangle { Layout.preferredWidth: 180; implicitHeight: 22; radius: 4; color: Theme.deep; border.color: nameIn.activeFocus ? Theme.cyan : Theme.lineSoft
                         TextInput { id: nameIn; anchors.fill: parent; anchors.margins: 5; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; selectByMouse: true; maximumLength: 24
                             Text { visible: !parent.text.length; text: "name for SAVE"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 9 } } }
                     Btn { label: "▲"; onClicked: page.contentY = 0 } Btn { label: "▼"; onClicked: page.contentY = Math.max(0, page.contentHeight - page.height) }
                     Text { text: "LOAD • SAVE • DELETE • SCROLL THE LIST"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
                 GridLayout { Layout.fillWidth: true; columns: 5; columnSpacing: 6; rowSpacing: 6
                     Repeater { model: (page.slotTick, engine.geqSlots())
-                        delegate: Rectangle { Layout.fillWidth: true; implicitHeight: 78; radius: 6; color: page.slotSel === modelData.slot ? Qt.rgba(0, 0.95, 1, 0.12) : Qt.rgba(1, 1, 1, 0.04); border.color: page.slotSel === modelData.slot ? Theme.cyan : Theme.lineSoft
+                        delegate: Rectangle { Layout.fillWidth: true; implicitHeight: 78; radius: 6; color: page.slotSel === modelData.slot ? Qt.rgba(0, 0.95, 1, 0.12) : Theme.ov(0.04); border.color: page.slotSel === modelData.slot ? Theme.cyan : Theme.lineSoft
                             Canvas { anchors.fill: parent; anchors.margins: 4; opacity: 0.5; property var g: modelData.gains; onGChanged: requestPaint()
                                 onPaint: { const c = getContext("2d"); c.reset(); if (modelData.empty) return; c.strokeStyle = "#00f2ff"; c.lineWidth = 1.5; c.beginPath(); for (let i = 0; i < 10; i++) { const x = (i + 0.5) / 10 * width, y = height / 2 - g[i] / 12 * height * 0.4; if (i === 0) c.moveTo(x, y); else c.lineTo(x, y) } c.stroke() } }
                             ColumnLayout { anchors.fill: parent; anchors.margins: 7; spacing: 2

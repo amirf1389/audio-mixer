@@ -15,7 +15,7 @@ Rectangle {
     readonly property var steps: ["WELCOME", "TERMS", "AUDIO", "CONSOLE", "OPERATOR", "UPDATES", "DONE"]
     signal finished()
     color: Theme.obsidian
-    component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(70, bl.implicitWidth + 24); implicitHeight: 30; radius: 6; color: on ? onColor : Qt.rgba(1, 1, 1, 0.08); border.color: Theme.lineSoft
+    component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(70, bl.implicitWidth + 24); implicitHeight: 30; radius: 6; color: on ? onColor : Theme.ov(0.08); border.color: Theme.lineSoft
         Text { id: bl; anchors.centerIn: parent; text: label; color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
     component Head: Text { color: Theme.ink; font.family: Theme.sans; font.pixelSize: 24; font.weight: Font.DemiBold }
     component Body: Text { Layout.fillWidth: true; color: Theme.muted; font.family: Theme.sans; font.pixelSize: 12; wrapMode: Text.WordWrap; lineHeight: 1.25 }
@@ -27,7 +27,7 @@ Rectangle {
             Text { text: "by " + Theme.vendor; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 9; font.letterSpacing: 2 }
             Item { Layout.fillWidth: true }
             Text { text: "FACTORY SETUP · " + (wiz.step + 1) + " / " + wiz.steps.length; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.letterSpacing: 2 } }
-        RowLayout { spacing: 4; Repeater { model: wiz.steps; delegate: Rectangle { Layout.fillWidth: true; implicitHeight: 4; radius: 2; color: index <= wiz.step ? Theme.orange : Qt.rgba(1, 1, 1, 0.1) } } }
+        RowLayout { spacing: 4; Repeater { model: wiz.steps; delegate: Rectangle { Layout.fillWidth: true; implicitHeight: 4; radius: 2; color: index <= wiz.step ? Theme.orange : Theme.ov(0.1) } } }
         Rectangle { Layout.fillWidth: true; implicitHeight: 480; radius: 14; color: Theme.card; border.color: Theme.line
             StackLayout { anchors.fill: parent; anchors.margins: 28; currentIndex: wiz.step
                 // 0 WELCOME
@@ -45,7 +45,7 @@ Rectangle {
                     Flickable { Layout.fillWidth: true; Layout.fillHeight: true; contentHeight: terms.implicitHeight; clip: true
                         Body { id: terms; width: parent.width; text: "• " + Theme.product + " is published by " + Theme.vendor + " under the repository licence; the BASIC plan (8 channels) is free, PRO / STUDIO / MASTER unlock more with a key bound to this computer.\n\n• The Windows ASIO support uses the Steinberg ASIO SDK under Steinberg's licence terms; VST3 hosting uses the Steinberg VST3 interface headers under their dual licence. ASIO and VST are trademarks of Steinberg Media Technologies GmbH. Plug-ins you load are governed by their own licences.\n\n• Nothing is sent anywhere by itself: no telemetry, no account. The update check reads one signed file from the project's own hosts when you ask (or at start, if you switch it on below). Licence keys are verified offline against the vendor's public key.\n\n• The remote control (phone app, OSC, the daemon) serves this computer only unless you open it to your network; those paths are not encrypted without your own TLS proxy, and the pages say so." } }
                     RowLayout { spacing: 10
-                        Rectangle { width: 22; height: 22; radius: 4; color: wiz.accepted ? Theme.emerald : Qt.rgba(1, 1, 1, 0.08); border.color: Theme.line; Text { anchors.centerIn: parent; text: wiz.accepted ? "✓" : ""; color: "#000"; font.bold: true } MouseArea { anchors.fill: parent; onClicked: wiz.accepted = !wiz.accepted } }
+                        Rectangle { width: 22; height: 22; radius: 4; color: wiz.accepted ? Theme.emerald : Theme.ov(0.08); border.color: Theme.line; Text { anchors.centerIn: parent; text: wiz.accepted ? "✓" : ""; color: "#000"; font.bold: true } MouseArea { anchors.fill: parent; onClicked: wiz.accepted = !wiz.accepted } }
                         Text { text: "I have read the terms"; color: Theme.ink; font.family: Theme.sans; font.pixelSize: 12 } } }
                 // 2 AUDIO
                 ColumnLayout { spacing: 12

@@ -35,7 +35,7 @@ Item {
         rows = r
     }
     Component.onCompleted: audit()
-    component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(56, bl.implicitWidth + 16); implicitHeight: 24; radius: 4; color: on ? onColor : Qt.rgba(1, 1, 1, 0.08); border.color: Theme.lineSoft
+    component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(56, bl.implicitWidth + 16); implicitHeight: 24; radius: 4; color: on ? onColor : Theme.ov(0.08); border.color: Theme.lineSoft
         Text { id: bl; anchors.centerIn: parent; text: label; color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
     ColumnLayout {
         anchors.fill: parent; anchors.margins: 10; spacing: 8
@@ -52,7 +52,7 @@ Item {
             Layout.fillWidth: true; Layout.fillHeight: true; radius: Theme.radius; color: Theme.card; border.color: Theme.line; clip: true
             ColumnLayout { anchors.fill: parent; anchors.margins: 12; spacing: 4
                 Text { text: "POWER-ON SELF TEST"; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
-                Repeater { model: page.rows; delegate: Rectangle { Layout.fillWidth: true; implicitHeight: 30; radius: 4; color: Qt.rgba(1, 1, 1, 0.03)
+                Repeater { model: page.rows; delegate: Rectangle { Layout.fillWidth: true; implicitHeight: 30; radius: 4; color: Theme.ov(0.03)
                     RowLayout { anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 8; spacing: 10
                         Rectangle { width: 8; height: 8; radius: 4; color: modelData.ok ? Theme.emerald : Theme.amber }
                         Text { Layout.preferredWidth: 110; text: modelData.name; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }

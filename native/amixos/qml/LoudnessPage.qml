@@ -26,7 +26,7 @@ Flickable {
                 }
             }
             Rectangle {   // the integrated loudness against the two targets
-                Layout.fillWidth: true; implicitHeight: 26; radius: 6; color: "#05070a"; border.color: Theme.lineSoft
+                Layout.fillWidth: true; implicitHeight: 26; radius: 6; color: Theme.deep; border.color: Theme.lineSoft
                 property real v: engine.telemetry.integrated === undefined ? -120 : engine.telemetry.integrated
                 Rectangle { x: 2; y: 2; height: parent.height - 4; radius: 4; width: Math.max(0, Math.min(1, (parent.v + 60) / 60)) * (parent.width - 4); color: parent.v > -12 ? Theme.danger : parent.v > -16 ? Theme.amber : Theme.emerald; Behavior on width { NumberAnimation { duration: 120 } } }
                 Rectangle { x: 2 + (parent.width - 4) * ((-23 + 60) / 60); width: 2; height: parent.height; color: Theme.amber; Text { anchors.bottom: parent.top; text: "-23"; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 7 } }

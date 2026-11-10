@@ -15,7 +15,7 @@ Canvas {
     onLiveInDbChanged: requestPaint()
     onThresholdDbChanged: requestPaint()
     onPaint: {
-        var c = getContext("2d"); c.reset(); c.fillStyle = "#05070a"; c.fillRect(0, 0, width, height);
+        var c = getContext("2d"); c.reset(); c.fillStyle = Theme.deep; c.fillRect(0, 0, width, height);
         var L = 34, R = width - 10, T = 10, B = height - 22;
         function fx(db) { return L + (db - minDb) / (0 - minDb) * (R - L) }
         function fy(db) { return B - (db - minDb) / (0 - minDb) * (B - T) }

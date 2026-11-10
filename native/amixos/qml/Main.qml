@@ -17,6 +17,7 @@ ApplicationWindow {
     color: Theme.obsidian
     property string current: settings.startPage
     LayoutMirroring.enabled: i18n.rtl
+    Binding { target: Theme; property: "dark"; value: settings.darkTheme }
     LayoutMirroring.childrenInherit: true
     function pageOf(id) { for (var i = 0; i < engine.pages.length; i++) if (engine.pages[i].id === id) return engine.pages[i]; return engine.pages[0] }
 
@@ -24,7 +25,7 @@ ApplicationWindow {
         anchors.fill: parent
         spacing: 0
         Rectangle {   // header
-            Layout.fillWidth: true; implicitHeight: 48; color: "#070a10"
+            Layout.fillWidth: true; implicitHeight: 48; color: Theme.chrome
             Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Theme.lineSoft }
             RowLayout {
                 anchors.fill: parent; anchors.leftMargin: 14; anchors.rightMargin: 14; spacing: 12
@@ -35,6 +36,10 @@ ApplicationWindow {
                     Text { id: statusText; anchors.centerIn: parent; text: engine.running ? "ENGINE ON • " + engine.backend.toUpperCase() : "ENGINE OFF"; color: engine.running ? Theme.emerald : Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } }
                 Text { text: "MASTER " + Theme.dbText(engine.telemetry.masterPeakDb) + " dBFS"; color: engine.telemetry.masterClip ? Theme.danger : Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                 Text { text: engine.edition.toUpperCase(); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                Rectangle { implicitWidth: 26; implicitHeight: 26; radius: 13; color: Theme.cardRaised; border.color: Theme.line   // THEME: dark / light
+                    Text { anchors.centerIn: parent; text: settings.darkTheme ? "☾" : "☀"; color: settings.darkTheme ? Theme.amber : Theme.orange; font.pixelSize: 13 }
+                    MouseArea { anchors.fill: parent; onClicked: settings.darkTheme = !settings.darkTheme }
+                    ToolTip.visible: thH.hovered; ToolTip.text: settings.darkTheme ? "Dark look (stage). Click for the light look." : "Light look (daylight). Click for the dark look."; HoverHandler { id: thH } }
                 ComboBox {   // LANGUAGE: 80 languages; "auto" marks a machine translation
                     id: langBox; implicitWidth: 150; implicitHeight: 26; font.family: Theme.mono; font.pixelSize: 9
                     background: Rectangle { radius: 5; color: Theme.cardRaised; border.color: langBox.activeFocus ? Theme.amber : Theme.line }   // explicit: never the style's own light box

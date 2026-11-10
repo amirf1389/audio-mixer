@@ -24,13 +24,13 @@ Item {
                 Text { text: "goniometer · correlation · stereo width"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                 Item { Layout.fillWidth: true }
                 Text { text: engine.running ? "LIVE" : "NO DEVICE"; color: engine.running ? Theme.emerald : Theme.amber; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
-                Rectangle { implicitWidth: 60; implicitHeight: 20; radius: 4; color: page.frozen ? Theme.danger : Qt.rgba(1, 1, 1, 0.06); Text { anchors.centerIn: parent; text: "FREEZE"; color: page.frozen ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.frozen = !page.frozen } }
+                Rectangle { implicitWidth: 60; implicitHeight: 20; radius: 4; color: page.frozen ? Theme.danger : Theme.ov(0.06); Text { anchors.centerIn: parent; text: "FREEZE"; color: page.frozen ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.frozen = !page.frozen } }
             }
         }
         RowLayout {
             Layout.fillWidth: true; Layout.fillHeight: true; spacing: 8
             Rectangle {
-                Layout.fillHeight: true; Layout.preferredWidth: height; radius: Theme.radius; color: "#070a0e"; border.color: Theme.line; clip: true
+                Layout.fillHeight: true; Layout.preferredWidth: height; radius: Theme.radius; color: Theme.chrome; border.color: Theme.line; clip: true
                 Canvas {
                     id: gonio
                     anchors.fill: parent; anchors.margins: 8
@@ -56,7 +56,7 @@ Item {
                     anchors.fill: parent; anchors.margins: 12; spacing: 12
                     Text { text: "CORRELATION"; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 12; font.bold: true; font.letterSpacing: 1.5 }
                     Rectangle {
-                        Layout.fillWidth: true; implicitHeight: 18; radius: 4; color: Qt.rgba(1, 1, 1, 0.05); border.color: Theme.lineSoft
+                        Layout.fillWidth: true; implicitHeight: 18; radius: 4; color: Theme.ov(0.05); border.color: Theme.lineSoft
                         Rectangle { x: parent.width / 2 - 1; width: 2; height: parent.height; color: Theme.line }
                         Rectangle { readonly property real c: Math.max(-1, Math.min(1, page.corr)); x: c >= 0 ? parent.width / 2 : parent.width / 2 * (1 + c); width: Math.abs(c) * parent.width / 2; height: parent.height; radius: 4; color: c >= 0.3 ? Theme.emerald : c >= 0 ? Theme.amber : Theme.danger }
                     }
@@ -76,7 +76,7 @@ Item {
                     }
                     RowLayout { spacing: 6
                         Repeater { model: [{ t: "MONO", v: 0 }, { t: "NARROW", v: 0.5 }, { t: "NORMAL", v: 1 }, { t: "WIDE", v: 1.5 }, { t: "MAX", v: 2 }]
-                            delegate: Rectangle { implicitWidth: 60; implicitHeight: 22; radius: 4; color: Math.abs(engine.width - modelData.v) < 0.005 ? Theme.amber : Qt.rgba(1, 1, 1, 0.06); border.color: Theme.lineSoft
+                            delegate: Rectangle { implicitWidth: 60; implicitHeight: 22; radius: 4; color: Math.abs(engine.width - modelData.v) < 0.005 ? Theme.amber : Theme.ov(0.06); border.color: Theme.lineSoft
                                 Text { anchors.centerIn: parent; text: modelData.t; color: Math.abs(engine.width - modelData.v) < 0.005 ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.width = modelData.v } } } }
                     Text { Layout.fillWidth: true; text: "Mid/side on the master before the fader: 100 % leaves the mix as it is, below narrows it toward mono, above lifts the side signal (watch the correlation)."; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.WordWrap }
                     Item { Layout.fillHeight: true }

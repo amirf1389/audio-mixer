@@ -27,11 +27,11 @@ Flickable {
                     onActivated: page.strip = currentIndex
                 }
                 Item { Layout.fillWidth: true }
-                TextField { id: saveName; Layout.preferredWidth: 200; placeholderText: "new preset name"; font.family: Theme.mono; font.pixelSize: 10; color: Theme.ink; background: Rectangle { color: "#05070a"; radius: 4; border.color: Theme.line } }
-                Rectangle { implicitWidth: 120; implicitHeight: 28; radius: 6; color: saveName.text.trim().length ? Theme.amber : Qt.rgba(1, 1, 1, 0.05); Text { anchors.centerIn: parent; text: "SAVE CHANNEL AS"; color: saveName.text.trim().length ? "#000" : Theme.dim; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; enabled: saveName.text.trim().length > 0; onClicked: { if (engine.savePreset(saveName.text, page.strip)) saveName.text = "" } } }
+                TextField { id: saveName; Layout.preferredWidth: 200; placeholderText: "new preset name"; font.family: Theme.mono; font.pixelSize: 10; color: Theme.ink; background: Rectangle { color: Theme.deep; radius: 4; border.color: Theme.line } }
+                Rectangle { implicitWidth: 120; implicitHeight: 28; radius: 6; color: saveName.text.trim().length ? Theme.amber : Theme.ov(0.05); Text { anchors.centerIn: parent; text: "SAVE CHANNEL AS"; color: saveName.text.trim().length ? "#000" : Theme.dim; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; enabled: saveName.text.trim().length > 0; onClicked: { if (engine.savePreset(saveName.text, page.strip)) saveName.text = "" } } }
             }
             Flow { Layout.fillWidth: true; spacing: 4
-                Repeater { model: page.cats; delegate: Rectangle { implicitWidth: cl.implicitWidth + 16; implicitHeight: 20; radius: 4; color: page.category === modelData ? Theme.amber : Qt.rgba(1, 1, 1, 0.08); Text { id: cl; anchors.centerIn: parent; text: modelData; color: page.category === modelData ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.category = modelData } } }
+                Repeater { model: page.cats; delegate: Rectangle { implicitWidth: cl.implicitWidth + 16; implicitHeight: 20; radius: 4; color: page.category === modelData ? Theme.amber : Theme.ov(0.08); Text { id: cl; anchors.centerIn: parent; text: modelData; color: page.category === modelData ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.category = modelData } } }
             }
             GridLayout {
                 columns: width > 900 ? 3 : (width > 560 ? 2 : 1); columnSpacing: 8; rowSpacing: 8; Layout.fillWidth: true
