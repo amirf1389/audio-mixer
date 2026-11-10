@@ -30,10 +30,10 @@ decided, what exists, what is next, and what was asked for but is not possible a
 - 83 interface languages (22 verified + 61 machine-translated, marked auto), RTL mirroring.
 - Decision (user): the engine also runs as a **background service (headless daemon)** with a local API, and a **React Native (TypeScript)
   app** is the remote control from a phone or tablet. The Qt console stays the desktop interface. Android as a full console stays parked;
-  the RN remote covers phones first.
+  the Kotlin app covers phones.
 - **amixos-daemon** (`engine/cpp/app/daemon`): HTTP + WebSocket JSON API on 127.0.0.1:8765 (token in `~/.amixos/daemon.token`,
   `--allow-lan` for a phone, unencrypted without `deploy/nginx`), tested on the null backend (ctest `daemon`), cross-compiled for Windows.
-- **Remote** (`remote/`, React Native + TypeScript, Expo): Connect, Mixer, Channel (EQ / compressor / gate), Devices. The client
+- **Remote** (was `remote/`, React Native + TypeScript, Expo; replaced 2026-11-10 by the Kotlin remote in `android/`, pure-Kotlin client tested on the JVM against the daemon): Connect, Mixer, Channel (EQ / compressor / gate), Devices. The client
   (`src/api/client.ts`) is tested under Node against the real daemon; the app typechecks. A phone build needs Expo on a PC / Mac.
 - **MIXER additions**: analogue VU meters (300 ms ballistics, 0 VU reference), MORE menu per strip, MONITOR control-room section
   (source, level, DIM, MONO, MUTE after the master meters). **ROUTING** page: inputs → strips and sources → outputs matrices

@@ -1,5 +1,12 @@
 # A mix OS for Android (Kotlin + the engine's C SDK)
 
+Two things in one app: a **local mixer** (the engine on the phone, microphone in) and the **remote control** of a console on the LAN
+(`RemoteActivity`: connect to `amixos-daemon` with host, port and the token from `~/.amixos/daemon.token`; 32 strips with fader, pan,
+mute, solo and meters from the WebSocket stream; master; devices open / stop; a channel page with EQ, compressor and gate). The
+remote client (`remote/DaemonClient.kt`, `MiniJson.kt`, `MiniWebSocket.kt`) is plain Kotlin with no dependencies and is tested on the
+JVM against the real daemon: `jvm-test/run.sh`. It replaced the earlier React Native / Expo remote.
+
+
 Open this folder in Android Studio, or with the SDK and NDK installed:
 
     cd android && gradle wrapper && ./gradlew assembleRelease      # app/build/outputs/apk/release/app-release.apk

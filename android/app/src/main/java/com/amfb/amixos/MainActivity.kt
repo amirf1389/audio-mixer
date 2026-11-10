@@ -1,6 +1,7 @@
 package com.amfb.amixos
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.Handler
@@ -39,6 +40,7 @@ class MainActivity : AppCompatActivity() {
             }) }
         findViewById<ToggleButton>(R.id.mute).setOnCheckedChangeListener { _, on -> engine.setMute(0, on) }
         findViewById<Button>(R.id.start).setOnClickListener { if (loop == null) startAudio() else stopAudio() }
+        findViewById<Button>(R.id.remote).setOnClickListener { startActivity(Intent(this, RemoteActivity::class.java)) }
         ui.post(object : Runnable { override fun run() { showMeters(); ui.postDelayed(this, 50) } })
     }
 

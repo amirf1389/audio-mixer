@@ -11,4 +11,13 @@
     <string name="start">START</string>
     <string name="stop">STOP</string>
     <string name="note">Use headphones: the microphone plays back through the speaker otherwise. The engine is the same C++ as the desktop console (libamix); audio I/O goes through AudioRecord / AudioTrack.</string>
+    <string name="remote_title">A mix OS remote</string>
+    <string name="open_remote">REMOTE CONTROL (console on the LAN)</string>
+    <string name="connect">CONNECT</string>
+    <string name="devices">DEVICES</string>
+    <string name="not_connected">not connected</string>
+    <string name="connecting">connecting…</string>
+    <string name="failed">failed: %1$s</string>
+    <string name="stop_engine">STOP ENGINE</string>
+    <string name="stopped">engine stopped</string>
 </resources>

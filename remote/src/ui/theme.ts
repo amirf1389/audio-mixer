@@ -1,1 +1,0 @@
-export const T = { bg: '#0b0d12', panel: '#141822', line: '#232838', text: '#e6e9f0', dim: '#8b93a7', accent: '#4cc3ff', ok: '#38d39f', warn: '#ffb020', clip: '#ff4d5e', mute: '#ff9f43', solo: '#ffd93d', radius: 10 };

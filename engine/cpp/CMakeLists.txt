@@ -49,7 +49,7 @@ if(WIN32)
   target_link_options(audiomixer-native PRIVATE -static)
 endif()
 
-# amixos-daemon: the engine as a background service with a local JSON API (engine/cpp/app/daemon). The React Native remote (remote/) talks to it.
+# amixos-daemon: the engine as a background service with a local JSON API (engine/cpp/app/daemon). The Kotlin remote (android/) talks to it.
 add_library(amixos_daemon_lib STATIC app/daemon/daemon.cpp app/daemon/httpd.cpp)
 target_include_directories(amixos_daemon_lib PUBLIC app)
 target_link_libraries(amixos_daemon_lib PUBLIC audiomixer_runtime)
