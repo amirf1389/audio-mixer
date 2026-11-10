@@ -38,6 +38,9 @@ Pin setPin(const std::string& asioName, bool on);
 std::vector<Pin> pins(const std::vector<DeviceInfo>& devices);
 
 // the ladder for one ASIO device over the device list; wantInput / wantOutput say which directions the step must offer
+// The fallback policy after ASIO: "all" (WASAPI exclusive, WASAPI shared, DirectSound), "dsound" (DirectSound only: WASAPI is optional, never a lock), "none" (ASIO only). Kept in the lock file.
+std::string fallback();
+void setFallback(const std::string& policy);
 std::vector<Step> ladder(const DeviceInfo& asio, const std::vector<DeviceInfo>& devices, bool wantInput, bool wantOutput, std::int64_t nowMs);
 
 // the lock store

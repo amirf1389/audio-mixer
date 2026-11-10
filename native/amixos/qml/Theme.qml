@@ -19,6 +19,8 @@ QtObject {
     readonly property color danger: "#ff2a5f"
     readonly property color violet: "#8b5cf6"
     readonly property color pink: "#f472b6"
+    readonly property string product: "AmF X1"
+    readonly property string vendor: "AMFB Audio"
     readonly property string mono: "JetBrains Mono, DejaVu Sans Mono, Consolas, monospace"
     readonly property string sans: "Inter, Segoe UI, Roboto, sans-serif"
     readonly property int radius: 10

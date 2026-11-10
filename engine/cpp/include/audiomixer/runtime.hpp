@@ -22,7 +22,7 @@
 namespace am {
 
 struct DeviceConfig {
-  std::string backend = "auto";          // auto (the first real backend of this system, else null), alsa, wasapi, coreaudio, null
+  std::string backend = "auto";          // auto (the first real backend of this system, else null), alsa, asio, wasapi, dsound (DirectSound: Bluetooth and anything else, no lock), coreaudio, null
   std::string inDevice, outDevice;       // empty = the default device; "-" = none (ALSA: "default", "hw:0,0", "plughw:1" ...)
   double sampleRate = 48000;
   unsigned frames = 256;                 // frames per block (the period)

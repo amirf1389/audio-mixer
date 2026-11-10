@@ -110,7 +110,7 @@ struct Strip { double gainDb = 0, gainLin = 1, pan = 0; bool mute = false, solo 
 // AUX SENDS: kMaxBuses stereo buses. Each strip sends to each bus at its own level, pre-fader (the raw input: monitor mixes) or post-fader
 // (after gain, mute and solo: effects sends). A bus has a level, a mute, a meter and a RETURN level into the master (an effects return or a
 // way to hear a monitor mix); its own stereo output is handed to the caller through process()'s busOut (the runtime maps it to output channels).
-constexpr int kMaxBuses = 8;
+constexpr int kMaxBuses = 16;   // 8 AUX (monitor mixes, usually pre-fader) + 8 FX (effect returns, post-fader); the console names them so
 struct Send { double lin = 0; bool pre = false; };
 // an effect on a bus (reverb, delay ...), processed in place after the bus level and before its meter, return and output; audio thread only
 struct BusProcessor { virtual ~BusProcessor() = default; virtual void process(float* L, float* R, std::size_t frames) = 0; };

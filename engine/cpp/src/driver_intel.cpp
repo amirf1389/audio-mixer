@@ -43,7 +43,7 @@ std::string lower(std::string s) { for (auto& c : s) c = static_cast<char>(std::
 std::string keyOf(const std::string& name) { std::string k = lower(name); std::string o; bool sp = false; for (char c : k) { if (c == ' ' || c == '\t') { if (!sp && !o.empty()) o += ' '; sp = true; } else { o += c; sp = false; } } while (!o.empty() && o.back() == ' ') o.pop_back(); if (o.size() > 120) o.resize(120); return o; }
 
 // ---- the store: {"v":1,"locks":{key:{name,mode,device,reason,at}},"pins":{key:false}}
-struct Store { std::map<std::string, Lock> locks; std::map<std::string, bool> pins; bool loaded = false; };
+struct Store { std::map<std::string, Lock> locks; std::map<std::string, bool> pins; std::string fallback = "all"; bool loaded = false; };
 Store g_store;
 std::string jsonEsc(const std::string& s) { std::string o = "\""; for (unsigned char c : s) { if (c == '"') o += "\\\""; else if (c == '\\') o += "\\\\"; else if (c < 0x20) { char b[8]; std::snprintf(b, sizeof b, "\\u%04x", c); o += b; } else o += static_cast<char>(c); } return o + "\""; }
 // a tiny reader for our own file (flat strings / numbers / booleans two levels deep): tolerant, never throws
@@ -60,13 +60,14 @@ void load() {
       else { if (t[i] == '}') --depth; ++i; }
     }
   }
+  { const std::size_t fp = t.find("\"fallback\":\""); if (fp != std::string::npos) { const std::size_t e = t.find('"', fp + 12); if (e != std::string::npos) { const std::string v = t.substr(fp + 12, e - fp - 12); if (v == "all" || v == "dsound" || v == "none") g_store.fallback = v; } } }
   const std::size_t pp = t.find("\"pins\":{");
   if (pp != std::string::npos) { const std::size_t e = t.find('}', pp); std::string body = t.substr(pp + 8, e == std::string::npos ? std::string::npos : e - pp - 8); std::size_t i = 0; while ((i = body.find('"', i)) != std::string::npos) { const std::size_t j = body.find('"', i + 1); if (j == std::string::npos) break; const std::string k = body.substr(i + 1, j - i - 1); const std::size_t c = body.find(':', j); if (c != std::string::npos && body.compare(c + 1, 5, "false") == 0) g_store.pins[k] = false; i = j + 1; } }
 }
 void save() {
   std::string o = "{\"v\":1,\"locks\":{"; bool first = true;
   for (const auto& [k, l] : g_store.locks) { if (!first) o += ','; first = false; o += jsonEsc(k) + ":{\"name\":" + jsonEsc(l.name) + ",\"mode\":" + jsonEsc(l.mode) + ",\"device\":" + jsonEsc(l.device) + ",\"reason\":" + jsonEsc(l.reason) + ",\"at\":" + std::to_string(l.at) + "}"; }
-  o += "},\"pins\":{"; first = true; for (const auto& [k, on] : g_store.pins) { if (on) continue; if (!first) o += ','; first = false; o += jsonEsc(k) + ":false"; } o += "}}\n";
+  o += "},\"pins\":{"; first = true; for (const auto& [k, on] : g_store.pins) { if (on) continue; if (!first) o += ','; first = false; o += jsonEsc(k) + ":false"; } o += "},\"fallback\":" + jsonEsc(g_store.fallback) + "}\n";
   const std::string f = lockFile(); const std::size_t slash = f.find_last_of("/\\");
   if (slash != std::string::npos) {
 #ifdef _WIN32
@@ -83,6 +84,7 @@ void save() {
 }
 bool isAsio(const DeviceInfo& d) { return d.backend == "asio"; }
 bool isWasapi(const DeviceInfo& d) { return d.backend == "wasapi"; }
+bool isDsound(const DeviceInfo& d) { return d.backend == "dsound"; }
 bool offers(const DeviceInfo& d, bool in, bool out) { return (!in || d.inChannels > 0) && (!out || d.outChannels > 0); }
 }  // namespace
 
@@ -112,6 +114,14 @@ const DeviceInfo* twin(const std::string& asioName, const std::vector<DeviceInfo
   return bs >= 10 ? best : nullptr;
 }
 
+const DeviceInfo* dsTwin(const std::string& asioName, const DeviceInfo* w, const std::vector<DeviceInfo>& devices, bool wantInput, bool wantOutput) {
+  const DeviceInfo* best = nullptr; int bs = 0;
+  for (const auto& d : devices) { if (!isDsound(d) || !offers(d, wantInput, wantOutput)) continue; int sc = 0; if (w && lower(d.name) == lower(w->name)) sc = 1000; else if (w) sc = score(w->name, d.name); if (sc < 10) sc = std::max(sc, score(asioName, d.name)); if (sc > bs) { bs = sc; best = &d; } }
+  return bs >= 10 ? best : nullptr;
+}
+std::string fallback() { load(); return g_store.fallback; }
+void setFallback(const std::string& f) { load(); if (f == "all" || f == "dsound" || f == "none") { g_store.fallback = f; save(); } }
+
 bool pinRule(const std::string& n) { return !n.empty() && !isWrapper(n) && family(n) == "realtek"; }
 Pin pinOf(const std::string& n) { load(); Pin p; p.name = n; p.reason = kPinReason; if (!pinRule(n)) { p.on = false; p.reason.clear(); return p; } const auto it = g_store.pins.find(keyOf(n)); p.on = it == g_store.pins.end() || it->second; return p; }
 Pin setPin(const std::string& n, bool on) { load(); if (pinRule(n)) { if (on) g_store.pins.erase(keyOf(n)); else g_store.pins[keyOf(n)] = false; save(); } return pinOf(n); }
@@ -128,6 +138,11 @@ std::vector<Step> ladder(const DeviceInfo& asio, const std::vector<DeviceInfo>& 
     if (!offers(asio, wantInput, wantOutput)) s.why = "the ASIO driver has no channels in this direction"; else if (pinned) s.why = std::string("pinned: ") + kPinReason; else if (wrapper && !wrapperOk) s.why = "a wrapper (ASIO4ALL-style): a device with its own ASIO driver is present, so that driver is used first"; out.push_back(s); }
   { Step s; s.step = 2; s.mode = "wasapi-exclusive"; s.backend = "wasapi"; s.exclusive = true; if (w) { s.id = w->id; s.name = w->name; } s.available = w != nullptr; if (!w) s.why = "no Windows endpoint of this hardware"; out.push_back(s); }
   { Step s; s.step = 3; s.mode = "wasapi-shared"; s.backend = "wasapi"; if (w) { s.id = w->id; s.name = w->name; } s.available = w != nullptr; if (!w) s.why = "no Windows endpoint of this hardware"; out.push_back(s); }
+  const DeviceInfo* ds = dsTwin(asio.name, w, devices, wantInput, wantOutput);
+  { Step s; s.step = 4; s.mode = "dsound"; s.backend = "dsound"; if (ds) { s.id = ds->id; s.name = ds->name; } s.available = ds != nullptr; if (!ds) s.why = "no DirectSound device of this hardware"; out.push_back(s); }
+  // the fallback policy: "all" = WASAPI exclusive, WASAPI shared, then DirectSound; "dsound" = DirectSound only (WASAPI is optional, never a lock); "none" = ASIO only
+  const std::string fb = fallback();
+  for (Step& s : out) { if (fb == "none" && s.step > 1 && s.available) { s.available = false; s.why = "fallback policy: ASIO only"; } if (fb == "dsound" && (s.step == 2 || s.step == 3) && s.available) { s.available = false; s.why = "fallback policy: DirectSound, not WASAPI"; } }
   return out;
 }
 
@@ -154,6 +169,7 @@ std::vector<Attempt> plan(const std::string& backend, const std::string& inId, c
   std::vector<std::string> done;
   auto push = [&](const Step& s, const std::string& why, bool fromLock) { if (std::find(done.begin(), done.end(), s.mode) != done.end()) return; done.push_back(s.mode); Attempt a = attemptOf(s); if (!why.empty()) a.why = why; a.fromLock = fromLock; out.push_back(a); };
   if (steps[0].pinned && steps[2].available) { push(steps[2], std::string("pinned: ") + kPinReason, false); out.back().pinned = true; }
+  else if (steps[0].pinned && steps.size() > 3 && steps[3].available) { push(steps[3], std::string("pinned: ") + kPinReason, false); out.back().pinned = true; }
   Lock l; if (getLock(asio->name, l, nowMs)) { for (const Step& s : steps) if (s.mode == l.mode && s.available && (s.mode == "asio" || s.name == l.device)) push(s, "locked: " + l.reason, true); }
   for (const Step& s : steps) if (s.available) push(s, "", false);
   if (out.empty()) { Attempt a; a.mode = "asio"; a.backend = "asio"; a.inDevice = inId; a.outDevice = outId; a.why = "no alternative known for this interface"; out.push_back(a); }

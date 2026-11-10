@@ -1,5 +1,6 @@
 // listDevices(): every device the backends of this binary can open, for `audiomixer-native --list-devices` (the bridge's device list).
 //   WASAPI   active render and capture endpoints: id = the endpoint id string, channels and rate from the shared-mode mix format
+//   DirectSound  every render and capture device DirectSound enumerates (Bluetooth headsets / speakers included); id = the device GUID "{...}", "default" for the Windows default
 //   ASIO     the registered drivers, probed through the Steinberg interface (real channel counts and rates); id = the driver name
 //   ALSA     the PCM names ALSA advertises (snd_device_name_hint), each opened for a moment (non-blocking) to read its real channel count;
 //            a software layer that converts any count (plug, PulseAudio), a busy device or one that cannot be opened is reported as 2 channels
@@ -11,10 +12,13 @@
 #include <audioclient.h>
 #include <mmdeviceapi.h>
 #include <propsys.h>
+#include <mmsystem.h>
+#include <dsound.h>
 #endif
 #ifdef AM_HAVE_ALSA
 #include <alsa/asoundlib.h>
 #endif
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <string>
@@ -90,6 +94,18 @@ void addWasapi(std::vector<DeviceInfo>& out) {
   en->Release();
 }
 
+
+struct DsList { std::vector<DeviceInfo>* out; bool capture; };
+BOOL CALLBACK dsEnum(LPGUID guid, LPCSTR desc, LPCSTR, LPVOID ctx) {
+  DsList* l = static_cast<DsList*>(ctx); DeviceInfo info; info.backend = "dsound";
+  if (guid) { char b[64]; std::snprintf(b, sizeof b, "{%08lx-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x}", static_cast<unsigned long>(guid->Data1), guid->Data2, guid->Data3, guid->Data4[0], guid->Data4[1], guid->Data4[2], guid->Data4[3], guid->Data4[4], guid->Data4[5], guid->Data4[6], guid->Data4[7]); info.id = b; }
+  else info.id = "default";
+  info.name = desc ? desc : info.id; info.defaultRate = 48000;
+  if (l->capture) { info.inChannels = 2; info.defaultIn = guid == nullptr; } else { info.outChannels = 2; info.defaultOut = guid == nullptr; }
+  l->out->push_back(info); return TRUE;
+}
+void addDsound(std::vector<DeviceInfo>& out) { DsList r{&out, false}; DirectSoundEnumerateA(&dsEnum, &r); DsList c{&out, true}; DirectSoundCaptureEnumerateA(&dsEnum, &c); }
+
 void addAsio(std::vector<DeviceInfo>& out) {
   for (const auto& d : listAsioDrivers()) {
     const AsioProbeInfo p = probeAsioDriver(d);
@@ -163,6 +179,7 @@ std::vector<DeviceInfo> listDevices() {
 #ifdef _WIN32
   addWasapi(v);
   addAsio(v);
+  addDsound(v);
 #endif
 #ifdef __APPLE__
   DeviceInfo ca; ca.backend = "coreaudio"; ca.name = "System default"; ca.inChannels = 2; ca.outChannels = 2; ca.defaultIn = ca.defaultOut = true;

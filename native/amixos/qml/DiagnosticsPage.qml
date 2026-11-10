@@ -15,7 +15,7 @@ Item {
     function audit() {
         const r = []; const t = engine.telemetry; const lic = engine.license
         const add = (name, what, ok, result) => r.push({ name: name, what: what, ok: ok, result: result })
-        add("AUDIO ENGINE", "32 strips · 8 buses · master limiter · loudness", true, "v" + appVersion + " · " + engine.pages.length + " pages")
+        add("AUDIO ENGINE", "32 strips · 16 buses (8 AUX + 8 FX) · 300 FX presets · 100 samples · master limiter · loudness", true, "v" + appVersion + " · " + engine.pages.length + " pages")
         add("DEVICE", "the open interface", engine.running, engine.running ? engine.backend.toUpperCase() + " · " + engine.deviceInputs + " in / " + engine.deviceOutputs + " out" : "NOT OPEN")
         add("CLOCK", "sample rate and block size", engine.running, engine.running ? engine.sampleRate + " Hz · " + engine.blockFrames + " frames (" + (engine.blockFrames / engine.sampleRate * 1000).toFixed(2) + " ms)" : "—")
         add("BUFFER", "overruns since start", t.xruns === 0, t.xruns === 0 ? "0 overruns · " + t.blocks + " blocks OK" : t.xruns + " OVERRUNS")
@@ -61,11 +61,12 @@ Item {
             }
         }
         GridLayout {
-            Layout.fillWidth: true; columns: 4; columnSpacing: 8
+            Layout.fillWidth: true; columns: 5; columnSpacing: 8
             Repeater {
                 model: [
                     { t: "SAFE MODE", d: "Every fader to -inf and every strip muted: nothing reaches the speakers until you bring faders up.", b: "ENGAGE SAFE MODE", c: Theme.amber, a: 0 },
                     { t: "SOFT RESTART", d: "Stops the engine and opens the remembered device again (SMART START). Plug-ins and effects are rebuilt.", b: "RESTART ENGINE", c: Theme.cyan, a: 1 },
+                    { t: "FACTORY SETUP", d: "Runs the first-start wizard again: language, terms, sound card, console defaults, operator PIN, updates.", b: "RERUN SETUP", c: Theme.cyan, a: 4 },
                     { t: "FAST BOOT", d: settings.autoStart ? "On: the last device opens when the console starts." : "Off: the console starts silent and waits for START.", b: settings.autoStart ? "SWITCH OFF" : "SWITCH ON", c: Theme.emerald, a: 2 },
                     { t: "FACTORY RESET", d: page.confirmReset ? "Removes: " + settings.factoryResetPreview().join(", ") + ". The licence stays. Press again to confirm." : "Settings, console, scenes, presets, arrangement and driver locks back to zero. The licence stays.", b: page.confirmReset ? "YES, RESET NOW" : "FACTORY RESET", c: Theme.danger, a: 3 }]
                 delegate: Rectangle { Layout.fillWidth: true; implicitHeight: 110; radius: Theme.radius; color: Theme.card; border.color: Theme.line
@@ -76,6 +77,7 @@ Item {
                             if (modelData.a === 0) { for (let s = 0; s < engine.stripState.length; ++s) engine.setGain(s, -120); engine.muteAll(true); engine.setMaster(-120) }
                             else if (modelData.a === 1) { engine.stop(); settings.startLastDevice() }
                             else if (modelData.a === 2) settings.autoStart = !settings.autoStart
+                            else if (modelData.a === 4) settings.rerunSetup()
                             else if (!page.confirmReset) page.confirmReset = true
                             else { page.confirmReset = false; settings.factoryReset() }
                             page.audit() } } } }

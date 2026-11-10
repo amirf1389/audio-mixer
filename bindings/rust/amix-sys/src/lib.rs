@@ -2,9 +2,9 @@
 #![allow(non_camel_case_types)]
 use std::os::raw::{c_char, c_int, c_void};
 
-pub const AMIX_API_VERSION: c_int = 1;
+pub const AMIX_API_VERSION: c_int = 2;
 pub const AMIX_MAX_STRIPS: usize = 32;
-pub const AMIX_MAX_BUSES: usize = 8;
+pub const AMIX_MAX_BUSES: usize = 16;
 
 #[repr(C)] #[derive(Clone, Copy, Debug, Default)]
 pub struct amix_meter { pub peak: f64, pub rms: f64, pub hold: f64, pub clips: u32, pub comp_gr_db: f64, pub gate_db: f64, pub in_peak: f64 }

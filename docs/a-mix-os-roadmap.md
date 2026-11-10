@@ -88,6 +88,51 @@ decided, what exists, what is next, and what was asked for but is not possible a
   peak), **SOUND CARD** (device state, re-open at another rate / block, AUTO ASIO and SMART START switches, the driver ladder, the
   DSP profiler: block time, worst case, load %, jitter, overruns, roadmap 14; the output stage: DC removal before the limiter and
   TPDF dither at 16 / 24 bit after it, roadmap 12). output_stage_test covers the blocker, the dither grid and the profiler.
+- **FACTORY SETUP** (`SetupPage.qml`, like a phone's first start): WELCOME (language) -> TERMS -> AUDIO (auto detect) -> CONSOLE (rate,
+  block, start page, licence key) -> OPERATOR (PIN, profile) -> UPDATES -> DONE; shows until FINISH (no SKIP SETUP: the setup is mandatory), again after RERUN
+  SETUP (SETTINGS / DIAGNOSTICS) or FACTORY RESET. **UPDATES** (`Update.*`): the signed manifest (ECDSA P-256 over the payload text,
+  vendor key) is verified before it is parsed, only the project's hosts are allowed, a download is sha256-checked and saved, never
+  run. The product is **AmF X1 by AMFB Audio** (Theme.product / Theme.vendor; header, title, HOME, setup). NOTE: releases/update.json is
+  still signed with the previous vendor key; re-sign it with scripts/make-update.js, or every client (console, native --update) rejects it.
+
+- **16 buses, 8 AUX + 8 FX** (`kMaxBuses` 16, C SDK `AMIX_API_VERSION` 2 / `AMIX_MAX_BUSES` 16, Rust/Perl tests follow): AUX 1-8 for
+  monitor mixes, FX 1-8 for effects; SEND TO colours them, OSC takes `/bus/{1..16}/level`. **MIXER redesign**: FADERS / AUX SENDS / FX
+  SENDS on the action bar flip every strip to eight mini faders with PRE/POST (sends on faders), and an INPUT chip on each strip picks
+  the device input (or none) without leaving the page. **300 FX presets** (`engine/cpp/app/fx/presets.*`: 110 reverb, 100 delay, 50
+  chorus, 40 drive, generated from families, every value 0..1, fx_test checks all 300 load) with a browser on EFFECTS (family tabs,
+  search, one click loads kind + values + mix on the bus). **100 samples** (`engine/cpp/app/samples/*`: drums, percussion, bass, leads,
+  pads, keys, FX, test signals, rendered in the program, samples_test renders all 100) on a SAMPLES page: pads, 8-voice player into the
+  master (`Samples.*`, fanout slot d), keys 1-0, EXPORT writes 100 WAVs to ~/.amixos/samples. **NETWORK**: the IPv4 cards of the
+  computer, bind to one card or any, the REMOTE ADDRESS to type into a controller, an ALLOWED IPs list (addresses or CIDR) that refuses
+  other senders. **RTA** on TONE (EQ): the strip's 1/3-octave spectrum under the curve (MIC EQ / LIVE SOURCES already had theirs).
+  **AUTO LICENCE**: the console writes ~/.amixos/key-request.json itself and watches ~/.amixos and Downloads for the vendor's key file
+  (*.amixkey, *.key, key*.txt), verifies it against the vendor's public key and activates it; keys are never generated in the console.
+
+- **MIXER strip, second pass**: the channel fader stays on the strip in the AUX / FX send views (sends beside it); an **AI chip** per
+  strip switches automix (gain sharing between open channels) and shows the gain it applies right now (bar + number; right-click opens
+  AI MIX); the MORE button is gone: the strip menu is on ⋯ and on a right-click anywhere on the strip; SETTINGS has STRIP toggles
+  (INPUT chip, DSP badges, pan, AI chip, groups readout) for a leaner strip. **TONE (EQ)**: a scroll bar, RTA, and **EQ PRESETS**: 10
+  locked factory curves (AmiX W Shape, AmiX Golden EQ, Vocal Presence, Warm Bass, Air Lift, De-Mud, Telephone, Broadcast Voice, Kick
+  Punch, Acoustic Guitar) and 10 CUSTOM slots (SAVE from the channel, CLEAR), each tile drawing its curve; a band edit clears the mark.
+  **ASIO pass** (`backend_asio.cpp`): every failed open releases the driver and the single-client slot (a second try no longer says
+  "another one is already open"), a driver reset waits for the bufferSwitch in flight before disposing buffers, stop() does the same,
+  and a stopped or resetting stream writes silence into the driver's buffers instead of stale output. Cross-compiled with mingw -Werror.
+
+- **RTA EQ** (`RtaEqPage.qml`, page id `rtaeq`, after TONE): the beta's "10-BAND PROGRAM BUS EQ & DIAMOND RTA" on the native engine:
+  PAGE 1 the DIAMOND response curve (drag a diamond, wheel for 0.5 dB) over a 64-bar spectrum behind it (the strip after its DSP, from
+  the engine analyser; RTA ON/OFF, FREEZE), PAGE 2 the ten ISO faders +-12 dB, SPLIT both; the toolbar with GOLDEN EQ (Amix by AMFB
+  tuned +1,+5,+3,+3,+4,+2,+2,+3,+3,+1), CUSTOM EQ / SAVE CUSTOM (slot 1), ANIX W-SHAPE, the 15 standard + 15 MIC presets, FLAT; ten
+  CUSTOM PRESET USER SLOTS (LOAD / SAVE / DELETE, `geqSlots` in QSettings). The bands are the strip's own ten (TONE / MIC EQ edit the same).
+
+- **DirectSound backend** (`backend_dsound.cpp`, backend id `dsound`): render + capture through DirectSound, 16-bit, 8 periods, no
+  exclusive lock, the path every Bluetooth headset / speaker answers to; listed by `listDevices` ("{guid}" ids, "default"), in the C SDK
+  (`amix.h` backend "dsound"), the VS projects, build-native.js (`-ldsound -lwinmm`) and the Windows .exe. **Driver ladder step 4** =
+  DirectSound twin; the **fallback policy** (`drv::fallback` / `setFallback`, kept in the lock file: "all" = WASAPI exclusive, shared,
+  DirectSound; "dsound" = DirectSound only, WASAPI optional and never a lock; "none" = ASIO only) with AFTER ASIO chips on SOUND CARD.
+  **BLUETOOTH page** (ready): the endpoints whose name says Bluetooth / hands-free / A2DP / brand, DirectSound first, USE AS OUTPUT /
+  INPUT, START ENGINE ON BLUETOOTH, what to expect (A2DP vs HFP, codec latency). **RTA EQ parametric control**: TYPE / FREQUENCY / Q /
+  GAIN sliders for the selected band (click a diamond or B1-B10), ISO CENTRE, BAND OFF; the diamonds read the real bands.
+  None of the Windows backends has run on a Windows PC from here: the UM2 run needs the user's computer (Remote Control) or a Windows build.
 
 ## Next, in order
 

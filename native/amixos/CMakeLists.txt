@@ -26,6 +26,8 @@ qt_add_executable(amixos
     src/Access.cpp src/Access.h
     src/Osc.cpp src/Osc.h
     src/Media.cpp src/Media.h
+    src/Samples.cpp src/Samples.h
+    src/Update.cpp src/Update.h
     src/Scope.cpp src/Scope.h
     src/Generator.cpp src/Generator.h
     src/I18n.cpp src/I18n.h)
@@ -63,10 +65,14 @@ qt_add_qml_module(amixos
         qml/PluginsPage.qml
         qml/NetworkPage.qml
         qml/MediaPage.qml
+        qml/SamplesPage.qml
         qml/SoundCardPage.qml
+        qml/SetupPage.qml
         qml/HomePage.qml
         qml/MixerPage.qml
         qml/TonePage.qml
+        qml/RtaEqPage.qml
+        qml/BluetoothPage.qml
         qml/CompressorPage.qml
         qml/GatePage.qml
         qml/DynCurve.qml
@@ -83,7 +89,8 @@ qt_add_qml_module(amixos
         i18n/verified-22.json
         i18n/auto-58.json)
 target_compile_definitions(amixos PRIVATE AMIX_VERSION="${AMIX_VERSION}")
-target_link_libraries(amixos PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::QuickControls2 Qt6::Network audiomixer_runtime audiomixer_engine amixos_license amixos_arrange amixos_vst3 amixos_vst2 amixos_record amixos_fx)
+target_compile_definitions(amixos PRIVATE AMIX_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+target_link_libraries(amixos PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::QuickControls2 Qt6::Network audiomixer_runtime audiomixer_engine amixos_license amixos_arrange amixos_vst3 amixos_vst2 amixos_record amixos_fx amixos_samples)
 
 if(WIN32)
     set_target_properties(amixos PROPERTIES WIN32_EXECUTABLE TRUE)

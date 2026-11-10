@@ -61,7 +61,7 @@ bool Settings::startLastDevice() {
 
 QString Settings::exportConsole(const QString& path) {
   const QString out = path.isEmpty() ? QDir::homePath() + "/amixos-console.json" : path;
-  QJsonObject root; root["app"] = "A mix OS"; root["kind"] = "console-export"; root["v"] = 1; root["console"] = engine_->consoleExport(); root["scenes"] = engine_->scenesExport(); root["presets"] = engine_->presetsExport();
+  QJsonObject root; root["app"] = "AmF X1"; root["kind"] = "console-export"; root["v"] = 1; root["console"] = engine_->consoleExport(); root["scenes"] = engine_->scenesExport(); root["presets"] = engine_->presetsExport();
   QFile f(out); if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) { note(QStringLiteral("Cannot write %1").arg(out)); return QString(); }
   f.write(QJsonDocument(root).toJson(QJsonDocument::Indented)); note(QStringLiteral("Console exported: %1").arg(out)); return out;
 }

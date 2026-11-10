@@ -13,7 +13,7 @@ Flickable {
         anchors.horizontalCenter: parent.horizontalCenter
         y: 24
         spacing: 16
-        Text { text: "A mix OS"; color: Theme.ink; font.family: Theme.sans; font.pixelSize: 30; font.weight: Font.Black }
+        Text { text: Theme.product; color: Theme.ink; font.family: Theme.sans; font.pixelSize: 30; font.weight: Font.Black }
         Text { text: "Native console, version " + appVersion + " • " + engine.edition + " tier • engine " + (engine.running ? engine.backend : "idle"); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 10 }
         Text { text: engine.status; color: engine.running ? Theme.emerald : Theme.amber; font.family: Theme.mono; font.pixelSize: 10; Layout.fillWidth: true; wrapMode: Text.WordWrap }
         GridLayout {

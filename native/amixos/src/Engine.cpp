@@ -1,6 +1,10 @@
 #include "Engine.h"
 
 #include "license/license.hpp"
+#include "fx/presets.hpp"
+#include <QFileSystemWatcher>
+static bool looksBluetooth(const QString& n);
+#include <QRegularExpression>
 #include "audiomixer/driver_intel.hpp"
 #include <QDir>
 #include <QStandardPaths>
@@ -20,9 +24,9 @@ static double toDb(double lin) { return lin > 1e-9 ? 20.0 * std::log10(lin) : -1
 Engine::Engine(QObject* parent) : QObject(parent) {
   strips_.resize(kStrips);
   for (int i = 0; i < kStrips; ++i) strips_[static_cast<std::size_t>(i)].name = QStringLiteral("CH %1").arg(i + 1, 2, 10, QLatin1Char('0'));
-  for (int k = 0; k < kBuses; ++k) buses_[k].name = QStringLiteral("BUS %1").arg(k + 1);
+  for (int k = 0; k < kBuses; ++k) buses_[k].name = k < 8 ? QStringLiteral("AUX %1").arg(k + 1) : QStringLiteral("FX %1").arg(k - 7);
   for (int g = 0; g < kGroups; ++g) { dcas_[g].name = QStringLiteral("DCA %1").arg(g + 1); muteGroups_[g].name = QStringLiteral("MUTE %1").arg(g + 1); }
-  load();
+  load(); loadUserEq();
   refreshDevices();
   timer_.setInterval(33);
   vuRef_ = std::clamp(settings_.value("ui/vuRef", -18).toInt(), -24, -8);
@@ -46,7 +50,7 @@ void Engine::refreshDevices() {
   devices_.clear();
   for (const am::DeviceInfo& d : am::listDevices()) {
     QVariantMap m; m["backend"] = QString::fromStdString(d.backend); m["id"] = QString::fromStdString(d.id); m["name"] = QString::fromStdString(d.name);
-    m["inChannels"] = d.inChannels; m["outChannels"] = d.outChannels; m["defaultRate"] = d.defaultRate; m["defaultIn"] = d.defaultIn; m["defaultOut"] = d.defaultOut;
+    m["inChannels"] = d.inChannels; m["outChannels"] = d.outChannels; m["defaultRate"] = d.defaultRate; m["defaultIn"] = d.defaultIn; m["defaultOut"] = d.defaultOut; m["bluetooth"] = looksBluetooth(m["name"].toString());
     QVariantList rates; for (double r : d.sampleRates) rates << r; m["sampleRates"] = rates;
     devices_ << m;
   }
@@ -101,7 +105,7 @@ QVariantList Engine::stripState() const {
   return l;
 }
 // ── aux sends ──
-QVariantList Engine::busState() const { QVariantList l; for (int k = 0; k < kBuses; ++k) { QVariantMap m; m["index"] = k; m["name"] = buses_[k].name; m["db"] = buses_[k].db; m["returnDb"] = buses_[k].returnDb; m["mute"] = buses_[k].mute; m["outputs"] = QStringLiteral("OUT %1-%2").arg(3 + 2 * k).arg(4 + 2 * k); m["fx"] = buses_[k].fxKind; m["fxName"] = buses_[k].fx ? QString::fromLatin1(buses_[k].fx->name()) : QString(); l << m; } return l; }
+QVariantList Engine::busState() const { QVariantList l; for (int k = 0; k < kBuses; ++k) { QVariantMap m; m["index"] = k; m["name"] = buses_[k].name; m["db"] = buses_[k].db; m["returnDb"] = buses_[k].returnDb; m["mute"] = buses_[k].mute; m["outputs"] = QStringLiteral("OUT %1-%2").arg(3 + 2 * k).arg(4 + 2 * k); m["kind"] = k < 8 ? "aux" : "fx"; m["fx"] = buses_[k].fxKind; m["fxName"] = buses_[k].fx ? QString::fromLatin1(buses_[k].fx->name()) : QString(); l << m; } return l; }
 void Engine::setSend(int i, int k, double db, bool pre) { if (i < 0 || i >= kStrips || k < 0 || k >= kBuses) return; SendUi& sd = strips_[static_cast<std::size_t>(i)].sends[k]; sd.db = std::clamp(db, -60.0, 10.0); sd.pre = pre; if (rt_) rt_->setSend(i, k, sd.db, sd.pre); emit stripsChanged(); }
 QVariantMap Engine::send(int i, int k) const { QVariantMap m; if (i < 0 || i >= kStrips || k < 0 || k >= kBuses) return m; const SendUi& sd = strips_[static_cast<std::size_t>(i)].sends[k]; m["db"] = sd.db; m["pre"] = sd.pre; return m; }
 void Engine::setBusLevel(int k, double db) { if (k < 0 || k >= kBuses) return; buses_[k].db = std::clamp(db, -60.0, 10.0); if (rt_) rt_->setBusLevel(k, buses_[k].db); emit busesChanged(); }
@@ -167,6 +171,50 @@ QVariantMap Engine::activateKey(const QString& key) {
   if (v.ok) { refreshLicense(); m["message"] = QStringLiteral("%1 activated on this computer.").arg(edition()); }
   return m;
 }
+QVariantList Engine::fxPresets() const {
+  QVariantList l; for (const auto& p : am::fx::presets()) { QVariantMap m; m["id"] = p.id; m["name"] = QString::fromStdString(p.name); m["kind"] = QString::fromStdString(p.kind); m["category"] = QString::fromStdString(p.category); m["mix"] = p.mix; l << m; }
+  return l;
+}
+bool Engine::applyFxPreset(int k, int id) {
+  if (k < 0 || k >= kBuses) return false; const am::fx::Preset* p = am::fx::preset(id); if (!p) return false;
+  BusUi& b = buses_[k]; const QString kind = QString::fromStdString(p->kind);
+  if (b.fxKind != kind) { b.fxKind = kind; b.fxValues.clear(); b.fxBypass = false; makeBusFx(k); if (b.returnDb <= -60) { b.returnDb = 0; if (rt_) rt_->setBusReturn(k, 0); } }
+  for (const auto& [pid, v] : p->values) { b.fxValues[QString::fromStdString(pid)] = v; if (b.fx) b.fx->set(pid, v); }
+  b.fxMix = p->mix; if (b.fx) b.fx->setMix(p->mix); b.fxBypass = false; if (b.fx) b.fx->setBypass(false); b.fxPreset = id;
+  emit busesChanged(); return true;
+}
+// ---- AUTO LICENCE
+static QString amixHome() { return QDir::homePath() + "/.amixos"; }
+bool Engine::autoLicense() const { return settings_.value("license/auto", true).toBool(); }
+QString Engine::autoLicenseRequestPath() const { return amixHome() + "/key-request.json"; }
+void Engine::setAutoLicense(bool on) {
+  settings_.setValue("license/auto", on);
+  if (!on) { delete keyWatch_; keyWatch_ = nullptr; keyScan_.stop(); autoStatus_ = "off"; emit licenseChanged(); return; }
+  if (!keyWatch_) {
+    QDir().mkpath(amixHome()); keyWatch_ = new QFileSystemWatcher(this);
+    for (const QString& d : {amixHome(), QStandardPaths::writableLocation(QStandardPaths::DownloadLocation)}) if (!d.isEmpty() && QDir(d).exists()) keyWatch_->addPath(d);
+    connect(keyWatch_, &QFileSystemWatcher::directoryChanged, this, [this](const QString&) { keyScan_.start(); });
+    keyScan_.setSingleShot(true); keyScan_.setInterval(600); connect(&keyScan_, &QTimer::timeout, this, [this] { scanForKeys(); });
+  }
+  autoStatus_ = license_.value("state").toString() == "active" && license_.value("source").toString() == "key" ? "active" : "watching " + QString::number(keyWatch_->directories().size()) + " folders for a key file";
+  emit licenseChanged(); scanForKeys();
+}
+QString Engine::writeLicenseRequest(const QString& plan, const QString& name, const QString& email) {
+  QDir().mkpath(amixHome()); QFile f(autoLicenseRequestPath());
+  if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) { autoStatus_ = "cannot write " + autoLicenseRequestPath(); emit licenseChanged(); return QString(); }
+  f.write(licenseRequest(plan, name, email).toUtf8()); f.close(); autoStatus_ = "request written; waiting for the vendor's key file"; emit licenseChanged(); return autoLicenseRequestPath();
+}
+int Engine::scanForKeys() {
+  if (license_.value("state").toString() == "active" && license_.value("source").toString() == "key") { autoStatus_ = "active"; emit licenseChanged(); return 0; }
+  static const QRegularExpression keyRe("AMIX1\\.[A-Za-z0-9_\\-\\.]+"); int tried = 0; QStringList dirs{amixHome(), QStandardPaths::writableLocation(QStandardPaths::DownloadLocation)};
+  for (const QString& d : dirs) { if (d.isEmpty()) continue; QDir dir(d); if (!dir.exists()) continue;
+    for (const QFileInfo& fi : dir.entryInfoList({"*.amixkey", "*.key", "key*.txt", "amix*.txt"}, QDir::Files, QDir::Time)) {
+      if (fi.size() > 16384) continue; QFile f(fi.filePath()); if (!f.open(QIODevice::ReadOnly)) continue; const QString text = QString::fromUtf8(f.readAll()); ++tried;
+      auto it = keyRe.globalMatch(text); while (it.hasNext()) { const QString key = it.next().captured(0); const QVariantMap r = activateKey(key);
+        if (r["ok"].toBool()) { autoStatus_ = "activated from " + fi.fileName(); emit licenseChanged(); return tried; } autoStatus_ = fi.fileName() + ": " + r["message"].toString(); } } }
+  if (tried == 0 && autoStatus_ != "off" && !autoStatus_.startsWith("request")) autoStatus_ = "watching for a key file (*.amixkey, *.key, key*.txt) in " + amixHome() + " or Downloads";
+  emit licenseChanged(); return tried;
+}
 bool Engine::deactivateKey() { const bool r = am::lic::deactivate(); refreshLicense(); return r; }
 QString Engine::licenseRequest(const QString& plan, const QString& name, const QString& email) const { return QString::fromStdString(am::lic::request(plan.toStdString(), name.toStdString(), email.toStdString(), QDateTime::currentMSecsSinceEpoch(), AMIX_VERSION).dump()); }
 QString Engine::vendorKeyFingerprint() const { return QString::fromStdString(am::lic::fingerprint(am::lic::kVendorJwk)); }
@@ -178,6 +226,14 @@ QVariantList Engine::driverPlan(const QString& backend, const QString& in, const
 QVariantList Engine::driverLocks() const { QVariantList l; for (const auto& k : am::drv::locks()) { QVariantMap m; m["name"] = QString::fromStdString(k.name); m["mode"] = QString::fromStdString(k.mode); m["device"] = QString::fromStdString(k.device); m["reason"] = QString::fromStdString(k.reason); m["at"] = static_cast<qlonglong>(k.at); m["retryAt"] = k.mode == "asio" ? 0 : static_cast<qlonglong>(k.at + am::drv::kRetryMs); l << m; } return l; }
 QVariantList Engine::driverPins() const { QVariantList l; for (const auto& p : am::drv::pins(devInfos(devices_))) { QVariantMap m; m["name"] = QString::fromStdString(p.name); m["on"] = p.on; m["reason"] = QString::fromStdString(p.reason); l << m; } return l; }
 void Engine::setDriverPin(const QString& name, bool on) { am::drv::setPin(name.toStdString(), on); emit devicesChanged(); }
+QString Engine::driverFallback() const { return QString::fromStdString(am::drv::fallback()); }
+void Engine::setDriverFallback(const QString& f) { am::drv::setFallback(f.toStdString()); emit devicesChanged(); }
+static bool looksBluetooth(const QString& n) { static const QRegularExpression re("bluetooth|hands-free|hands free|\\bhfp\\b|a2dp|airpods|\\bbt\\b|wireless|headset|earbuds|buds|jbl|bose|sony wh|wf-|galaxy buds|soundcore|boat|beats", QRegularExpression::CaseInsensitiveOption); return re.match(n).hasMatch(); }
+QVariantList Engine::bluetoothDevices() const {
+  QVariantList l; for (const QVariant& v : devices_) { const QVariantMap d = v.toMap(); if (d["backend"] == "null" || d["backend"] == "asio") continue; if (!looksBluetooth(d["name"].toString())) continue; l << d; }
+  std::stable_sort(l.begin(), l.end(), [](const QVariant& a, const QVariant& b) { return (a.toMap()["backend"] == "dsound") > (b.toMap()["backend"] == "dsound"); });
+  return l;
+}
 int Engine::forgetDriverLocks(const QString& name) { const int n = am::drv::forget(name.toStdString()); emit devicesChanged(); return n; }
 bool Engine::openSmart(const QString& backend, const QString& in, const QString& out, double rate, int frames, int inCh, int outCh) {
   const qint64 now = QDateTime::currentMSecsSinceEpoch();
@@ -225,12 +281,12 @@ void Engine::makeBusFx(int k) {
   graveTimer_.start();
 }
 QVariantMap Engine::busFx(int k) const {
-  QVariantMap m; if (k < 0 || k >= kBuses) return m; const BusUi& b = buses_[k]; m["kind"] = b.fxKind; m["bypass"] = b.fxBypass; m["mix"] = b.fxMix; m["name"] = b.fx ? QString::fromLatin1(b.fx->name()) : QString();
+  QVariantMap m; if (k < 0 || k >= kBuses) return m; const BusUi& b = buses_[k]; m["preset"] = b.fxPreset; m["kind"] = b.fxKind; m["bypass"] = b.fxBypass; m["mix"] = b.fxMix; m["name"] = b.fx ? QString::fromLatin1(b.fx->name()) : QString();
   QVariantList ps; if (b.fx) for (const auto& p : b.fx->params()) { QVariantMap x; x["id"] = QString::fromStdString(p.id); x["title"] = QString::fromStdString(p.title); x["units"] = QString::fromStdString(p.units); x["value"] = p.value; x["default"] = p.def; x["text"] = QString::fromStdString(b.fx->text(p.id, p.value)); ps << x; } m["params"] = ps;
   return m;
 }
-void Engine::setBusFx(int k, const QString& kind) { if (k < 0 || k >= kBuses) return; BusUi& b = buses_[k]; if (b.fxKind == kind) return; b.fxKind = kind; b.fxValues.clear(); b.fxBypass = false; makeBusFx(k); if (!kind.isEmpty() && b.returnDb <= -60) { b.returnDb = 0; if (rt_) rt_->setBusReturn(k, 0); } emit busesChanged(); }
-void Engine::setBusFxParam(int k, const QString& id, double v) { if (k < 0 || k >= kBuses) return; BusUi& b = buses_[k]; b.fxValues[id] = std::clamp(v, 0.0, 1.0); if (b.fx) b.fx->set(id.toStdString(), b.fxValues[id]); emit busesChanged(); }
+void Engine::setBusFx(int k, const QString& kind) { if (k < 0 || k >= kBuses) return; BusUi& b = buses_[k]; if (b.fxKind == kind) return; b.fxKind = kind; b.fxPreset = 0; b.fxValues.clear(); b.fxBypass = false; makeBusFx(k); if (!kind.isEmpty() && b.returnDb <= -60) { b.returnDb = 0; if (rt_) rt_->setBusReturn(k, 0); } emit busesChanged(); }
+void Engine::setBusFxParam(int k, const QString& id, double v) { if (k < 0 || k >= kBuses) return; BusUi& b = buses_[k]; b.fxPreset = 0; b.fxValues[id] = std::clamp(v, 0.0, 1.0); if (b.fx) b.fx->set(id.toStdString(), b.fxValues[id]); emit busesChanged(); }
 void Engine::setBusFxBypass(int k, bool on) { if (k < 0 || k >= kBuses) return; buses_[k].fxBypass = on; if (buses_[k].fx) buses_[k].fx->setBypass(on); emit busesChanged(); }
 void Engine::setBusFxMix(int k, double wet) { if (k < 0 || k >= kBuses) return; buses_[k].fxMix = std::clamp(wet, 0.0, 1.0); if (buses_[k].fx) buses_[k].fx->setMix(buses_[k].fxMix); emit busesChanged(); }
 void Engine::setAutomix(int i, bool on, double w) { if (i < 0 || i >= kStrips) return; StripUi& s = strips_[static_cast<std::size_t>(i)]; s.automix = on; s.amWeight = std::clamp(w, 0.25, 4.0); if (rt_) rt_->setAutomix(i, on, s.amWeight); emit stripsChanged(); }
@@ -281,7 +337,7 @@ void Engine::consoleImport(const QJsonObject& console, const QJsonArray& scenes,
 }
 void Engine::factoryReset() {
   for (int i = 0; i < kStrips; ++i) { StripUi& s = strips_[static_cast<std::size_t>(i)]; for (PluginUi& p : s.plugins) if (p.vst) graveyard_.push_back(p.vst); s = StripUi{}; s.name = QStringLiteral("CH %1").arg(i + 1, 2, 10, QLatin1Char('0')); s.dsp.setSampleRate(48000); }
-  for (int k = 0; k < kBuses; ++k) { if (rt_) rt_->setBusProcessor(k, nullptr); if (buses_[k].fx) fxGraveyard_.push_back(std::move(buses_[k].fx)); buses_[k] = BusUi{}; buses_[k].name = QStringLiteral("BUS %1").arg(k + 1); } width_ = 1.0;
+  for (int k = 0; k < kBuses; ++k) { if (rt_) rt_->setBusProcessor(k, nullptr); if (buses_[k].fx) fxGraveyard_.push_back(std::move(buses_[k].fx)); buses_[k] = BusUi{}; buses_[k].name = k < 8 ? QStringLiteral("AUX %1").arg(k + 1) : QStringLiteral("FX %1").arg(k - 7); } width_ = 1.0;
   for (DcaUi& d : dcas_) d = DcaUi{}; for (int g = 0; g < kGroups; ++g) dcas_[g].name = QStringLiteral("DCA %1").arg(g + 1);
   for (MuteGroupUi& m : muteGroups_) m = MuteGroupUi{}; for (int g = 0; g < kGroups; ++g) muteGroups_[g].name = QStringLiteral("MUTE %1").arg(g + 1);
   masterDb_ = 0; masterLim_ = true; masterCeil_ = -0.5; mon_ = MonitorUi{}; for (int i = 0; i < kStrips; ++i) inRoute_[i] = i; for (int o = 0; o < kOutputs; ++o) outRoute_[o] = am::Runtime::defaultOutputSource(o);
@@ -307,6 +363,7 @@ QVariantMap Engine::autoDetect() const {
     if (b == "asio") { const bool wrapper = am::drv::isWrapper(name.toStdString()); const bool pinned = am::drv::pinOf(name.toStdString()).on; rank = wrapper ? 60 : pinned ? 50 : 100; why = wrapper ? "an ASIO wrapper (ASIO4ALL-style): used when nothing has its own driver" : pinned ? "Realtek onboard: pinned to its Windows endpoint, SMART START routes it" : "the device's own ASIO driver"; }
     else if (b == "wasapi" || b == "coreaudio") { rank = (d["defaultOut"].toBool() ? 40 : 30) + (in && out ? 2 : 0); why = "the system's " + QString(d["defaultOut"].toBool() ? "default " : "") + "endpoint"; }
     else if (b == "alsa") { rank = (name.contains("default") ? 25 : 20); why = "an ALSA device"; }
+    else if (b == "dsound") { rank = (d["defaultOut"].toBool() ? 12 : 10) + (in && out ? 2 : 0); why = "DirectSound (no lock; the Bluetooth path)"; }
     if (rank > bestRank) { bestRank = rank; best = d; best["why"] = why; }
   }
   if (best.isEmpty()) return best;
@@ -419,7 +476,7 @@ bool Engine::pasteChannel(int i) {
 void Engine::setEq(int i, int band, int type, double f, double q, double g) {
   if (i < 0 || i >= kStrips || band < 0 || band >= am::dsp::kEqBands) return;
   const am::dsp::EqBand b{static_cast<FilterType>(std::clamp(type, 0, 8)), std::clamp(f, 10.0, 24000.0), std::clamp(q, 0.1, 36.0), std::clamp(g, -24.0, 24.0)};
-  strips_[static_cast<std::size_t>(i)].dsp.setEqBand(band, b);
+  strips_[static_cast<std::size_t>(i)].dsp.setEqBand(band, b); strips_[static_cast<std::size_t>(i)].eqPreset = 0;
   if (rt_) rt_->setEqBand(i, band, b.type, b.freq, b.q, b.gainDb);
   emit stripsChanged();
 }
@@ -466,6 +523,75 @@ QVariantMap Engine::channelParams(int i) const {
   m["polarityInvert"] = p.polarityInvert; m["delayMs"] = p.delayMs; m["xoverType"] = static_cast<int>(p.xoverType); m["hpOrder"] = p.hpOrder; m["hpFreq"] = p.hpFreq; m["lpOrder"] = p.lpOrder; m["lpFreq"] = p.lpFreq;
   m["limiterOn"] = p.limiterOn; m["limiterCeilDb"] = p.limiterCeilDb; m["limiterReleaseMs"] = p.limiterReleaseMs; return m;
 }
+
+// ---- EQ PRESETS
+const Engine::EqPresetUi* Engine::factoryEqPreset(int slot) {
+  using FT = am::dsp::FilterType; using B = am::dsp::EqBand;
+  static const EqPresetUi k[10] = {
+    // AmiX W Shape: lifted lows and highs, two gentle mid dips (a "W" on the curve): the house curve for playback and DJ mixes
+    {"AmiX W Shape", {B{FT::LowShelf, 90, 0.8, 4}, B{FT::Peaking, 250, 1.2, -2.5}, B{FT::Peaking, 1000, 1.0, 1.5}, B{FT::Peaking, 3200, 1.2, -2.5}, B{FT::HighShelf, 9000, 0.8, 4}, B{}, B{}, B{}, B{}, B{}}, 2, 30, 0, 16000, true},
+    // AmiX Golden EQ: the vocal / broadcast curve: clean lows, presence, a touch of air
+    {"AmiX Golden EQ", {B{FT::HighPass, 85, 0.71, 0}, B{FT::Peaking, 180, 1.0, 1.5}, B{FT::Peaking, 450, 1.4, -2.0}, B{FT::Peaking, 2800, 1.1, 2.5}, B{FT::Peaking, 5500, 1.6, 1.5}, B{FT::HighShelf, 12000, 0.7, 2.0}, B{}, B{}, B{}, B{}}, 0, 80, 0, 16000, true},
+    {"Vocal Presence", {B{FT::HighPass, 100, 0.71, 0}, B{FT::Peaking, 300, 1.2, -2}, B{FT::Peaking, 3000, 1.0, 3}, B{FT::HighShelf, 10000, 0.7, 1.5}, B{}, B{}, B{}, B{}, B{}, B{}}, 0, 80, 0, 16000, true},
+    {"Warm Bass", {B{FT::LowShelf, 100, 0.7, 3}, B{FT::Peaking, 700, 1.0, -1.5}, B{FT::Peaking, 2500, 1.2, 1.5}, B{FT::LowPass, 8000, 0.71, 0}, B{}, B{}, B{}, B{}, B{}, B{}}, 0, 80, 0, 16000, true},
+    {"Air Lift", {B{FT::HighShelf, 8000, 0.6, 3.5}, B{FT::Peaking, 12000, 1.0, 1.5}, B{}, B{}, B{}, B{}, B{}, B{}, B{}, B{}}, 0, 80, 0, 16000, true},
+    {"De-Mud", {B{FT::Peaking, 200, 1.4, -3}, B{FT::Peaking, 400, 1.6, -2}, B{FT::Peaking, 4000, 1.0, 1}, B{}, B{}, B{}, B{}, B{}, B{}, B{}}, 2, 60, 0, 16000, true},
+    {"Telephone", {B{FT::HighPass, 300, 0.71, 0}, B{FT::Peaking, 1800, 1.2, 4}, B{FT::LowPass, 3400, 0.71, 0}, B{}, B{}, B{}, B{}, B{}, B{}, B{}}, 4, 300, 4, 3400, true},
+    {"Broadcast Voice", {B{FT::HighPass, 70, 0.71, 0}, B{FT::LowShelf, 120, 0.8, 2}, B{FT::Peaking, 250, 1.3, -1.5}, B{FT::Peaking, 2200, 1.0, 2}, B{FT::Peaking, 6500, 2.0, -1.5}, B{FT::HighShelf, 10000, 0.7, 1}, B{}, B{}, B{}, B{}}, 0, 80, 0, 16000, true},
+    {"Kick Punch", {B{FT::Peaking, 60, 1.2, 3}, B{FT::Peaking, 300, 1.4, -3}, B{FT::Peaking, 4000, 1.0, 3}, B{FT::LowPass, 12000, 0.71, 0}, B{}, B{}, B{}, B{}, B{}, B{}}, 0, 80, 0, 16000, true},
+    {"Acoustic Guitar", {B{FT::HighPass, 80, 0.71, 0}, B{FT::Peaking, 180, 1.2, -2}, B{FT::Peaking, 1200, 1.0, 1}, B{FT::Peaking, 5000, 1.2, 2}, B{FT::HighShelf, 11000, 0.7, 1.5}, B{}, B{}, B{}, B{}, B{}}, 0, 80, 0, 16000, true},
+  };
+  return slot >= 1 && slot <= 10 ? &k[slot - 1] : nullptr;
+}
+void Engine::loadUserEq() {
+  const QJsonArray arr = QJsonDocument::fromJson(settings_.value("eq/userPresets").toByteArray()).array();
+  for (int u = 0; u < 10 && u < arr.size(); ++u) { const QJsonObject o = arr[u].toObject(); EqPresetUi& e = userEq_[u]; e.used = !o.value("name").toString().isEmpty(); if (!e.used) continue; e.name = o.value("name").toString().left(24);
+    const QJsonArray b = o.value("bands").toArray(); for (int i = 0; i < 10 && i < b.size(); ++i) { const QJsonObject x = b[i].toObject(); e.bands[i] = {static_cast<FilterType>(std::clamp(x.value("type").toInt(), 0, 8)), std::clamp(x.value("freq").toDouble(1000), 10.0, 24000.0), std::clamp(x.value("q").toDouble(1), 0.1, 36.0), std::clamp(x.value("gainDb").toDouble(0), -24.0, 24.0)}; }
+    e.hpOrder = std::clamp(o.value("hpOrder").toInt(), 0, 8); e.hpFreq = std::clamp(o.value("hpFreq").toDouble(80), 10.0, 24000.0); e.lpOrder = std::clamp(o.value("lpOrder").toInt(), 0, 8); e.lpFreq = std::clamp(o.value("lpFreq").toDouble(16000), 10.0, 24000.0); }
+}
+void Engine::storeUserEq() const {
+  QJsonArray arr; for (int u = 0; u < 10; ++u) { const EqPresetUi& e = userEq_[u]; QJsonObject o; if (e.used) { o["name"] = e.name; QJsonArray b; for (int i = 0; i < 10; ++i) { QJsonObject x; x["type"] = static_cast<int>(e.bands[i].type); x["freq"] = e.bands[i].freq; x["q"] = e.bands[i].q; x["gainDb"] = e.bands[i].gainDb; b << x; } o["bands"] = b; o["hpOrder"] = e.hpOrder; o["hpFreq"] = e.hpFreq; o["lpOrder"] = e.lpOrder; o["lpFreq"] = e.lpFreq; } arr << o; }
+  settings_.setValue("eq/userPresets", QJsonDocument(arr).toJson(QJsonDocument::Compact));
+}
+QVariantList Engine::eqPresets() const {
+  QVariantList l;
+  for (int slot = 1; slot <= 20; ++slot) { const EqPresetUi* e = slot <= 10 ? factoryEqPreset(slot) : &userEq_[slot - 11]; QVariantMap m; m["slot"] = slot; m["locked"] = slot <= 10; m["empty"] = !e->used; m["name"] = e->used ? e->name : QStringLiteral("CUSTOM %1").arg(slot - 10);
+    int n = 0; if (e->used) for (const auto& b : e->bands) if (b.type != FilterType::Off) ++n; m["bands"] = n; l << m; }
+  return l;
+}
+bool Engine::applyEqPreset(int slot, int i) {
+  if (i < 0 || i >= kStrips) return false; const EqPresetUi* e = slot >= 1 && slot <= 10 ? factoryEqPreset(slot) : slot >= 11 && slot <= 20 ? &userEq_[slot - 11] : nullptr; if (!e || !e->used) return false;
+  for (int b = 0; b < 10; ++b) setEq(i, b, static_cast<int>(e->bands[b].type), e->bands[b].freq, e->bands[b].q, e->bands[b].gainDb);
+  const auto& p = strips_[static_cast<std::size_t>(i)].dsp.params(); setCrossover(i, static_cast<int>(p.xoverType), e->hpOrder, e->hpFreq, e->lpOrder, e->lpFreq);
+  strips_[static_cast<std::size_t>(i)].eqPreset = slot; emit stripsChanged(); return true;
+}
+bool Engine::saveEqPreset(int slot, const QString& name, int i) {
+  if (slot < 11 || slot > 20 || i < 0 || i >= kStrips) return false; EqPresetUi& e = userEq_[slot - 11]; const auto& p = strips_[static_cast<std::size_t>(i)].dsp.params();
+  e.name = name.trimmed().isEmpty() ? QStringLiteral("CUSTOM %1").arg(slot - 10) : name.trimmed().left(24); for (int b = 0; b < 10; ++b) e.bands[b] = p.eq[static_cast<std::size_t>(b)]; e.hpOrder = p.hpOrder; e.hpFreq = p.hpFreq; e.lpOrder = p.lpOrder; e.lpFreq = p.lpFreq; e.used = true;
+  storeUserEq(); strips_[static_cast<std::size_t>(i)].eqPreset = slot; emit stripsChanged(); return true;
+}
+bool Engine::clearEqPreset(int slot) { if (slot < 11 || slot > 20) return false; userEq_[slot - 11] = EqPresetUi(); storeUserEq(); for (int i = 0; i < kStrips; ++i) if (strips_[static_cast<std::size_t>(i)].eqPreset == slot) strips_[static_cast<std::size_t>(i)].eqPreset = 0; emit stripsChanged(); return true; }
+QVariantList Engine::eqPresetCurve(int slot, int points) const {
+  QVariantList l; const EqPresetUi* e = slot >= 1 && slot <= 10 ? factoryEqPreset(slot) : slot >= 11 && slot <= 20 ? &userEq_[slot - 11] : nullptr; if (!e || !e->used) return l; points = std::clamp(points, 8, 512);
+  am::dsp::Channel ch{48000}; for (int b = 0; b < 10; ++b) ch.setEqBand(b, e->bands[b]); ch.setCrossover(am::dsp::XoverType::Butterworth, e->hpOrder, e->hpFreq, e->lpOrder, e->lpFreq);
+  for (int k = 0; k < points; ++k) { const double f = 20.0 * std::pow(1000.0, static_cast<double>(k) / (points - 1)); QVariantMap m; m["f"] = f; m["db"] = ch.gainDbAt(f); l << m; }
+  return l;
+}
+QVariantList Engine::geqSlots() const {
+  const QJsonArray arr = QJsonDocument::fromJson(settings_.value("eq/geqSlots").toByteArray()).array(); QVariantList l;
+  for (int u = 0; u < 10; ++u) { const QJsonObject o = u < arr.size() ? arr[u].toObject() : QJsonObject(); QVariantMap m; m["slot"] = u + 1; const QString n = o.value("name").toString(); m["empty"] = n.isEmpty(); m["name"] = n.isEmpty() ? QStringLiteral("Custom %1").arg(u + 1) : n;
+    QVariantList g; const QJsonArray ga = o.value("gains").toArray(); for (int b = 0; b < 10; ++b) g << (b < ga.size() ? std::clamp(ga[b].toDouble(), -12.0, 12.0) : 0.0); m["gains"] = g; l << m; }
+  return l;
+}
+bool Engine::saveGeqSlot(int slot, const QString& name, const QVariantList& gains) {
+  if (slot < 1 || slot > 10) return false; QJsonArray arr = QJsonDocument::fromJson(settings_.value("eq/geqSlots").toByteArray()).array(); while (arr.size() < 10) arr << QJsonObject();
+  QJsonObject o; o["name"] = name.trimmed().isEmpty() ? QStringLiteral("Custom %1").arg(slot) : name.trimmed().left(24); QJsonArray g; for (int b = 0; b < 10; ++b) g << (b < gains.size() ? std::clamp(gains[b].toDouble(), -12.0, 12.0) : 0.0); o["gains"] = g; arr[slot - 1] = o;
+  settings_.setValue("eq/geqSlots", QJsonDocument(arr).toJson(QJsonDocument::Compact)); emit presetsChanged(); return true;
+}
+bool Engine::clearGeqSlot(int slot) {
+  if (slot < 1 || slot > 10) return false; QJsonArray arr = QJsonDocument::fromJson(settings_.value("eq/geqSlots").toByteArray()).array(); while (arr.size() < 10) arr << QJsonObject(); arr[slot - 1] = QJsonObject();
+  settings_.setValue("eq/geqSlots", QJsonDocument(arr).toJson(QJsonDocument::Compact)); emit presetsChanged(); return true;
+}
 QVariantList Engine::responseCurve(int i, int points) const {
   QVariantList l; if (i < 0 || i >= kStrips) return l; points = std::clamp(points, 8, 512);
   for (int k = 0; k < points; ++k) { const double f = 20.0 * std::pow(1000.0, static_cast<double>(k) / (points - 1)); QVariantMap m; m["f"] = f; m["db"] = strips_[static_cast<std::size_t>(i)].dsp.gainDbAt(f); l << m; }
@@ -477,12 +603,12 @@ QVariantList Engine::pages() const {
   struct P { const char* group; const char* id; const char* text; const char* icon; bool ready; };
   static const P k[] = {
     {"START", "home", "HOME", "⌂", true},
-    {"MIX", "mixer", "MIXER", "☰", true}, {"MIX", "arrange", "ARRANGE", "≡", true}, {"MIX", "dsp", "TONE (EQ)", "∿", true}, {"MIX", "dyn", "COMPRESSOR", "⩏", true}, {"MIX", "gate", "NOISE GATE", "▣", true},
+    {"MIX", "mixer", "MIXER", "☰", true}, {"MIX", "arrange", "ARRANGE", "≡", true}, {"MIX", "dsp", "TONE (EQ)", "∿", true}, {"MIX", "rtaeq", "RTA EQ", "◭", true}, {"MIX", "dyn", "COMPRESSOR", "⩏", true}, {"MIX", "gate", "NOISE GATE", "▣", true},
     {"MIX", "fx", "EFFECTS", "✨", true}, {"MIX", "bus", "SEND TO", "⇉", true}, {"MIX", "dca", "GROUP FADERS", "☷", true},
     {"ROUTE", "io", "CONNECTIONS", "⚡", true}, {"ROUTE", "routing", "ROUTING", "⎇", true},
     {"METER", "meter", "LEVELS", "▓", true}, {"METER", "lufs", "LOUDNESS", "◎", true}, {"METER", "osc", "WAVEFORM", "∽", true}, {"METER", "phase", "PHASE", "☯", true},
-    {"SOURCE", "media", "STREAM & MEDIA", "▶", true}, {"SOURCE", "live", "LIVE SOURCES", "☉", true}, {"SOURCE", "miceq", "MIC EQ", "♪", true}, {"SOURCE", "ai", "AI MIX", "⚙", true}, {"SOURCE", "tools", "TOOLS", "⚒", true}, {"SOURCE", "plugins", "PLUGINS", "⬡", true},
-    {"DEVICE", "asio", "SOUND CARD", "◉", true}, {"DEVICE", "bluetooth", "BLUETOOTH", "⮁", false}, {"DEVICE", "network", "NETWORK", "⮞", true}, {"DEVICE", "cloud", "CLOUD", "☁", false}, {"DEVICE", "cascade", "CASCADE", "⚭", false},
+    {"SOURCE", "media", "STREAM & MEDIA", "▶", true}, {"SOURCE", "live", "LIVE SOURCES", "☉", true}, {"SOURCE", "miceq", "MIC EQ", "♪", true}, {"SOURCE", "ai", "AI MIX", "⚙", true}, {"SOURCE", "tools", "TOOLS", "⚒", true}, {"SOURCE", "plugins", "PLUGINS", "⬡", true}, {"SOURCE", "samples", "SAMPLES", "▦", true},
+    {"DEVICE", "asio", "SOUND CARD", "◉", true}, {"DEVICE", "bluetooth", "BLUETOOTH", "⮁", true}, {"DEVICE", "network", "NETWORK", "⮞", true}, {"DEVICE", "cloud", "CLOUD", "☁", false}, {"DEVICE", "cascade", "CASCADE", "⚭", false},
     {"SYSTEM", "presets", "PRESETS", "⬇", true}, {"SYSTEM", "sys", "SETTINGS", "⚙", true}, {"SYSTEM", "acct", "ACCOUNT", "☺", true}, {"SYSTEM", "access", "ACCESS", "⚿", true}, {"SYSTEM", "renew", "LICENSE", "★", true}, {"SYSTEM", "admin", "ADMIN", "⚑", true}, {"SYSTEM", "calib", "CALIBRATE", "⌖", true},
     {"HELP", "help", "HELP", "?", true}, {"HELP", "scenes", "SCENES", "⚐", true}, {"SYSTEM", "boot", "DIAGNOSTICS", "⏻", true},
   };

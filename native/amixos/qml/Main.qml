@@ -12,7 +12,8 @@ ApplicationWindow {
     height: 860
     minimumWidth: 720
     minimumHeight: 480
-    title: "A mix OS " + appVersion
+    title: Theme.product + " " + appVersion + " · " + Theme.vendor
+    property bool forceSetup: false   // the smoke / shots show the wizard on demand
     color: Theme.obsidian
     property string current: settings.startPage
     LayoutMirroring.enabled: i18n.rtl
@@ -27,7 +28,7 @@ ApplicationWindow {
             Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Theme.lineSoft }
             RowLayout {
                 anchors.fill: parent; anchors.leftMargin: 14; anchors.rightMargin: 14; spacing: 12
-                Text { text: "A MIX OS"; color: Theme.orange; font.family: Theme.mono; font.pixelSize: 15; font.weight: Font.Black; font.letterSpacing: 4 }
+                Text { text: Theme.product.toUpperCase(); color: Theme.orange; font.family: Theme.mono; font.pixelSize: 15; font.weight: Font.Black; font.letterSpacing: 4 }
                 Text { text: "BY AMFB AUDIO"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8; font.letterSpacing: 2 }
                 Item { Layout.fillWidth: true }
                 Rectangle { implicitWidth: statusText.implicitWidth + 20; implicitHeight: 24; radius: 12; color: engine.running ? Qt.rgba(0.063, 0.725, 0.506, 0.15) : Qt.rgba(0.984, 0.749, 0.141, 0.12); border.color: engine.running ? Theme.emerald : Theme.amber
@@ -54,14 +55,16 @@ ApplicationWindow {
                     anchors.fill: parent
                     sourceComponent: {
                         switch (root.current) {
-                        case "home": return homeC; case "mixer": return mixerC; case "dsp": return toneC; case "io": return connC;
-                        case "meter": return levelsC; case "lufs": return loudC; case "sys": return settingsC; case "dyn": return compC; case "gate": return gateC; case "bus": return sendC; case "dca": return dcaC; case "scenes": return scenesC; case "presets": return presetsC; case "routing": return routingC; case "renew": return licenseC; case "arrange": return arrangeC; case "fx": return fxC; case "osc": return oscC; case "phase": return phaseC; case "miceq": return miceqC; case "live": return liveC; case "tools": return toolsC; case "calib": return calibC; case "boot": return bootC; case "help": return helpC; case "acct": return acctC; case "access": return accessC; case "admin": return adminC; case "ai": return aiC; case "plugins": return pluginsC; case "network": return networkC; case "media": return mediaC; case "asio": return soundC; default: return comingC
+                        case "home": return homeC; case "mixer": return mixerC; case "dsp": return toneC; case "rtaeq": return rtaEqC; case "bluetooth": return bluetoothC; case "io": return connC;
+                        case "meter": return levelsC; case "lufs": return loudC; case "sys": return settingsC; case "dyn": return compC; case "gate": return gateC; case "bus": return sendC; case "dca": return dcaC; case "scenes": return scenesC; case "presets": return presetsC; case "routing": return routingC; case "renew": return licenseC; case "arrange": return arrangeC; case "fx": return fxC; case "osc": return oscC; case "phase": return phaseC; case "miceq": return miceqC; case "live": return liveC; case "tools": return toolsC; case "calib": return calibC; case "boot": return bootC; case "help": return helpC; case "acct": return acctC; case "access": return accessC; case "admin": return adminC; case "ai": return aiC; case "plugins": return pluginsC; case "network": return networkC; case "media": return mediaC; case "samples": return samplesC; case "asio": return soundC; default: return comingC
                         }
                     }
                 }
                 Component { id: homeC; HomePage { onGo: function (id) { root.current = id } } }
                 Component { id: mixerC; MixerPage { onGo: function (id) { root.current = id } } }
                 Component { id: toneC; TonePage {} }
+                Component { id: rtaEqC; RtaEqPage {} }
+                Component { id: bluetoothC; BluetoothPage {} }
                 Component { id: connC; ConnectionsPage {} }
                 Component { id: levelsC; LevelsPage {} }
                 Component { id: loudC; LoudnessPage {} }
@@ -91,9 +94,11 @@ ApplicationWindow {
                 Component { id: pluginsC; PluginsPage {} }
                 Component { id: networkC; NetworkPage {} }
                 Component { id: mediaC; MediaPage {} }
+                Component { id: samplesC; SamplesPage {} }
                 Component { id: soundC; SoundCardPage {} }
                 Component { id: comingC; ComingPage { page: root.pageOf(root.current) } }
             }
         }
     }
+    SetupPage { anchors.fill: parent; z: 100; visible: root.forceSetup || !settings.setupDone; onFinished: { settings.finishSetup(); root.forceSetup = false; root.current = settings.startPage } }
 }

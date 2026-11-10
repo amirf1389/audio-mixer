@@ -20,7 +20,7 @@ the daemon, the bindings and the packages all run the same DSP. Nothing is dupli
 |---|---|
 | `amix_version`, `amix_api_version`, `amix_free` | version strings, API level, freeing returned strings |
 | `amix_backends_json`, `amix_devices_json` | the drivers built in and the sound cards found, as JSON |
-| `amix_mixer_*` | an **offline mixer**: create, faders, pans, mute / solo, master, limiter, sends, buses, width, `process(in, frames, L, R)`, `levels` |
+| `amix_mixer_*` | an **offline mixer**: create, faders, pans, mute / solo, master, limiter, sends, 16 buses (API version 2), width, `process(in, frames, L, R)`, `levels` |
 | `amix_rt_*` | the **live runtime**: open a device (ASIO / WASAPI / Core Audio / ALSA / null), every control the console has (EQ, dynamics, routing, monitor), `levels` |
 | `amix_license_json`, `amix_machine_id` | the licence state and this machine's code (read-only) |
 

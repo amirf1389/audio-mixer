@@ -52,7 +52,7 @@ class Engine : public QObject {
   Q_PROPERTY(QVariantList outputSources READ outputSources NOTIFY busesChanged)              // [{index, name, group}] off, master L/R, monitor L/R, bus k L/R
   Q_PROPERTY(int deviceInputs READ deviceInputs NOTIFY stateChanged)
   Q_PROPERTY(int deviceOutputs READ deviceOutputs NOTIFY stateChanged)
-  Q_PROPERTY(QVariantMap monitor READ monitor NOTIFY monitorChanged)                 // control room: source (0 master, 1..8 bus), db, dim, mono, mute
+  Q_PROPERTY(QVariantMap monitor READ monitor NOTIFY monitorChanged)                 // control room: source (0 master, 1..16 bus), db, dim, mono, mute
   Q_PROPERTY(bool channelClipboard READ channelClipboard NOTIFY clipboardChanged)   // a channel has been copied (MORE > COPY)
   Q_PROPERTY(int vuRefDb READ vuRefDb WRITE setVuRefDb NOTIFY monitorChanged)         // 0 VU = this many dBFS (-18 EBU, -20 SMPTE, -14 loud)
 
@@ -89,6 +89,17 @@ class Engine : public QObject {
   Q_INVOKABLE bool deactivateKey();
   Q_INVOKABLE QString licenseRequest(const QString& plan, const QString& name, const QString& email) const;   // JSON to send the vendor
   Q_INVOKABLE QString vendorKeyFingerprint() const;
+  // AUTO LICENCE: the console writes its key request to ~/.amixos/key-request.json on its own and watches ~/.amixos and ~/Downloads for a
+  // key file (*.amixkey / *.key / key.txt holding an AMIX1 key) and activates it on sight. Keys are never made here: only the vendor's
+  // Key Generator signs them; the console only asks and listens.
+  Q_PROPERTY(bool autoLicense READ autoLicense WRITE setAutoLicense NOTIFY licenseChanged)
+  Q_PROPERTY(QString autoLicenseStatus READ autoLicenseStatus NOTIFY licenseChanged)
+  Q_PROPERTY(QString autoLicenseRequestPath READ autoLicenseRequestPath CONSTANT)
+  bool autoLicense() const; void setAutoLicense(bool on);
+  QString autoLicenseStatus() const { return autoStatus_; }
+  QString autoLicenseRequestPath() const;
+  Q_INVOKABLE QString writeLicenseRequest(const QString& plan, const QString& name, const QString& email);   // writes key-request.json; returns the path ("" + status on failure)
+  Q_INVOKABLE int scanForKeys();                                                                              // looks now; returns how many files were tried
 
   Q_INVOKABLE void refreshDevices();
   Q_INVOKABLE bool open(const QString& backend, const QString& inDevice, const QString& outDevice, double sampleRate, int frames, int inChannels, int outChannels);
@@ -99,6 +110,9 @@ class Engine : public QObject {
   Q_INVOKABLE QVariantList driverPins() const;          // Realtek ASIO drivers seen, with their pin state
   Q_INVOKABLE void setDriverPin(const QString& name, bool on);
   Q_INVOKABLE int forgetDriverLocks(const QString& name);   // "*" = all
+  Q_PROPERTY(QString driverFallback READ driverFallback WRITE setDriverFallback NOTIFY devicesChanged)   // after ASIO: "all" (WASAPI exclusive, shared, DirectSound), "dsound" (DirectSound only; WASAPI never a lock), "none"
+  QString driverFallback() const; void setDriverFallback(const QString& f);
+  Q_INVOKABLE QVariantList bluetoothDevices() const;        // the devices whose name says Bluetooth (headset, hands-free, A2DP, AirPods...), DirectSound first
   Q_PROPERTY(QString lastRoute READ lastRoute NOTIFY stateChanged)   // what the last start did, in plain words
   QString lastRoute() const { return lastRoute_; }
   Q_INVOKABLE void stop();
@@ -129,6 +143,9 @@ class Engine : public QObject {
   Q_INVOKABLE void setBusFxParam(int bus, const QString& id, double value);
   Q_INVOKABLE void setBusFxBypass(int bus, bool on);
   Q_INVOKABLE void setBusFxMix(int bus, double wet);
+  Q_INVOKABLE QVariantList fxPresets() const;                 // the 300 presets: [{id, name, kind, category, mix}]
+  Q_INVOKABLE bool applyFxPreset(int bus, int presetId);      // loads the kind on the bus (if different) and sets every value
+  Q_INVOKABLE int busFxPreset(int bus) const { return bus >= 0 && bus < kBuses ? buses_[bus].fxPreset : 0; }
   // WAVEFORM / PHASE: the scope tap
   Q_PROPERTY(double width READ width WRITE setWidth NOTIFY stripsChanged)   // master stereo width 0..2
   double width() const { return width_; } void setWidth(double w);
@@ -151,6 +168,7 @@ class Engine : public QObject {
   // an extra stereo source summed into the master (the ARRANGE player): attached to every runtime this Engine opens
   void setExtraSource(am::Runtime::ExtraSource* s) { extra_ = s; sources_.a.store(s); }
   void setMediaSource(am::Runtime::ExtraSource* s) { sources_.c.store(s); }
+  void setSampleSource(am::Runtime::ExtraSource* s) { sources_.d.store(s); }
   // OUTPUT STAGE + PROFILER (SOUND CARD page): DC removal before the limiter, TPDF dither for 16 / 24-bit devices, block-time figures in telemetry
   Q_PROPERTY(bool dcBlock READ dcBlock WRITE setDcBlock NOTIFY stateChanged)
   Q_PROPERTY(int outputBits READ outputBits WRITE setOutputBits NOTIFY stateChanged)   // 0 float, 16, 24
@@ -184,7 +202,19 @@ class Engine : public QObject {
   // MIC EQ: the 10 bands of a strip as a graphic equaliser on the ISO octave centres (31.5 Hz .. 16 kHz)
   Q_INVOKABLE void setGraphicEq(int strip, const QVariantList& gainsDb, bool on);   // 10 gains; on = false keeps them but switches the bands off
   Q_INVOKABLE QVariantList graphicEq(int strip) const;                             // the 10 gains (0 for a band that is not on an octave centre)
-  Q_INVOKABLE void copyEqToAll(int strip);                                          // EQ bands + high-pass of this strip onto every other strip
+  Q_INVOKABLE void copyEqToAll(int strip);
+  // EQ PRESETS: slots 1-10 are the factory set (locked: AmiX W Shape, AmiX Golden EQ, ...), slots 11-20 are the user's own (SAVE from a strip, CLEAR).
+  // A preset holds the 10 parametric bands and the high-pass / low-pass of the crossover; it is applied to one strip.
+  Q_INVOKABLE QVariantList eqPresets() const;                        // [{slot, name, locked, empty, bands: n}]
+  Q_INVOKABLE bool applyEqPreset(int slot, int strip);
+  Q_INVOKABLE bool saveEqPreset(int slot, const QString& name, int strip);   // user slots only
+  Q_INVOKABLE bool clearEqPreset(int slot);
+  Q_INVOKABLE int stripEqPreset(int strip) const { return strip >= 0 && strip < kStrips ? strips_[static_cast<std::size_t>(strip)].eqPreset : 0; }   // the last preset applied (0 after an edit)
+  Q_INVOKABLE QVariantList eqPresetCurve(int slot, int points) const;        // [{f, db}] the preset's response, for the picker
+  // RTA EQ (the beta's "10-band program bus EQ & diamond RTA"): ten custom graphic-EQ slots, each a name + 10 ISO band gains
+  Q_INVOKABLE QVariantList geqSlots() const;                                 // [{slot 1..10, name, gains: [10], empty}]
+  Q_INVOKABLE bool saveGeqSlot(int slot, const QString& name, const QVariantList& gains);
+  Q_INVOKABLE bool clearGeqSlot(int slot);                                          // EQ bands + high-pass of this strip onto every other strip
   am::Runtime* runtime() { return rt_.get(); }
   // strips
   Q_INVOKABLE void setGain(int strip, double db);
@@ -316,18 +346,18 @@ class Engine : public QObject {
 
  private:
   static constexpr int kStrips = 32;
-  static constexpr int kBuses = 8, kGroups = 8;
+  static constexpr int kBuses = 16, kGroups = 8;   // buses 0-7 AUX, 8-15 FX
   struct SendUi { double db = -60; bool pre = false; };
   struct PluginUi { QString kind; bool bypass = false; std::shared_ptr<am::host::Plugin> vst; QString state, error; };   // vst: loaded instance (null = pending with error)
   std::vector<QVariantMap> vstCatalog_; std::vector<std::shared_ptr<am::host::Plugin>> graveyard_; QTimer graveTimer_;
   bool loadVst(int strip, int slot);                      // from kind + state at the runtime's rate; false -> error set
   void rebuildInserts(int strip);                         // the strip's VST chain into the runtime
   void reloadAllVst();                                    // after open (new rate / block)
-  struct StripUi { QString name; double db = 0, pan = 0; bool mute = false, solo = false; am::dsp::Channel dsp{48000}; SendUi sends[kBuses]; int dca = 0; unsigned muteGroups = 0; int color = 0; PluginUi plugins[kPluginSlots]; bool automix = false; double amWeight = 1; bool link = false; double trimDb = 0; };
+  struct StripUi { QString name; double db = 0, pan = 0; bool mute = false, solo = false; am::dsp::Channel dsp{48000}; SendUi sends[kBuses]; int dca = 0; unsigned muteGroups = 0; int color = 0; PluginUi plugins[kPluginSlots]; bool automix = false; double amWeight = 1; bool link = false; double trimDb = 0; int eqPreset = 0; };
   std::vector<QJsonObject> history_; int histPos_ = -1; bool restoring_ = false; QTimer histTimer_; QJsonObject abOther_; QString abSlot_ = "A";
   int partner(int i) const { return (i ^ 1) < kStrips ? (i ^ 1) : -1; }
   void applyPluginStage(int strip, const QString& kind, bool on);   // a built-in stage follows its slot
-  struct BusUi { QString name; double db = 0, returnDb = -60; bool mute = false; QString fxKind; std::unique_ptr<am::fx::Effect> fx; double fxMix = 1; bool fxBypass = false; std::map<QString, double> fxValues; };
+  struct BusUi { QString name; double db = 0, returnDb = -60; bool mute = false; QString fxKind; std::unique_ptr<am::fx::Effect> fx; double fxMix = 1; bool fxBypass = false; std::map<QString, double> fxValues; int fxPreset = 0; };
   std::vector<std::unique_ptr<am::fx::Effect>> fxGraveyard_; double width_ = 1.0; ScopeTap scope_; TapFanout taps_; Generator gen_; SourceFanout sources_; int blockFrames_ = 0; bool autoOn_ = false; double autoTarget_ = -16, autoMax_ = 12;
   void makeBusFx(int k);   // (re)creates the bus effect at the runtime's rate from kind + values and attaches it
   struct DcaUi { QString name; double db = 0; bool mute = false; };
@@ -356,10 +386,13 @@ class Engine : public QObject {
   static constexpr int kOutputs = 32;
   int inRoute_[kStrips] = {}; int outRoute_[kOutputs] = {}; int devIn_ = 0, devOut_ = 0;
   QVariantMap license_; int licensedChannels_ = 8;
+  struct EqPresetUi { QString name; am::dsp::EqBand bands[10]; int hpOrder = 0; double hpFreq = 80; int lpOrder = 0; double lpFreq = 16000; bool used = false; };
+  static const EqPresetUi* factoryEqPreset(int slot); EqPresetUi userEq_[10]; void loadUserEq(); void storeUserEq() const;
+  QString autoStatus_ = "off"; class QFileSystemWatcher* keyWatch_ = nullptr; QTimer keyScan_;
   QString lastRoute_; am::Runtime::ExtraSource* extra_ = nullptr; am::rec::Recorder recorder_; unsigned armed_ = 0; QString recMsg_; double clipDb_ = -0.1; int peakHoldMs_ = 1400;
   struct MonitorUi { int source = 0; double db = 0; bool dim = false, mono = false, mute = false; } mon_;
   int vuRef_ = -18; double vu_[kStrips] = {}; double vuMaster_ = 0;                     // VU ballistics (300 ms to 99 %), run on the UI timer
   std::optional<QJsonObject> clipboard_;
   QTimer timer_;
-  QSettings settings_;
+  mutable QSettings settings_;
 };

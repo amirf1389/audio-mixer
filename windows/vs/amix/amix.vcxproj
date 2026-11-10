@@ -38,7 +38,7 @@
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
-      <AdditionalDependencies>ole32.lib;oleaut32.lib;uuid.lib;advapi32.lib;avrt.lib;ws2_32.lib;winhttp.lib;bcrypt.lib;crypt32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>ole32.lib;oleaut32.lib;uuid.lib;advapi32.lib;avrt.lib;dsound.lib;winmm.lib;ws2_32.lib;winhttp.lib;bcrypt.lib;crypt32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
   </ItemDefinitionGroup>
@@ -50,6 +50,7 @@
     <ClCompile Include="..\..\..\engine\cpp\src\driver_intel.cpp" />
     <ClCompile Include="..\..\..\engine\cpp\src\backend_wasapi.cpp" />
     <ClCompile Include="..\..\..\engine\cpp\src\backend_asio.cpp" />
+    <ClCompile Include="..\..\..\engine\cpp\src\backend_dsound.cpp" />
     <ClCompile Include="..\..\..\engine\cpp\app\license\license.cpp" />
     <ClCompile Include="..\..\..\engine\cpp\app\license\crypto.cpp" />
     <ClCompile Include="..\..\..\engine\cpp\app\sdk\amix_c.cpp" />

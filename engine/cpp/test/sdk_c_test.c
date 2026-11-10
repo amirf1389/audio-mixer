@@ -9,7 +9,7 @@
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "FAIL %s:%d %s\n", __FILE__, __LINE__, #c); return 1; } } while (0)
 
 int main(void) {
-  CHECK(amix_api_version() == AMIX_API_VERSION && strlen(amix_version()) >= 5);
+  CHECK(amix_api_version() == 2 && amix_api_version() == AMIX_API_VERSION && strlen(amix_version()) >= 5);
   char* devs = amix_devices_json(); CHECK(devs && strstr(devs, "\"null\"")); amix_free(devs);
   char* bk = amix_backends_json(); CHECK(bk && bk[0] == '['); amix_free(bk);
   amix_mixer* m = amix_mixer_create(4, 48000.0); CHECK(m && amix_mixer_strips(m) == 4);

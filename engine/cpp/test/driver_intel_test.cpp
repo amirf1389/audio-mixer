@@ -33,7 +33,7 @@ int main(int argc, char** argv) {
   t = drv::twin("ASIO4ALL v2", pc, false, true); CHECK(t && t->id == "{r-out}");   // every endpoint here belongs to a native-ASIO device: the Windows default wins (as the bridge does)
 
   // Realtek pin: default on, the ladder goes to WASAPI shared, the ASIO step is marked pinned
-  { auto L = drv::ladder(pc[0], pc, true, false, now); CHECK(L.size() == 3 && L[0].mode == "asio" && !L[0].available && L[0].pinned && L[2].mode == "wasapi-shared" && L[2].available && L[2].id == "{r-in}");
+  { auto L = drv::ladder(pc[0], pc, true, false, now); CHECK(L.size() == 4 && L[0].mode == "asio" && !L[0].available && L[0].pinned && L[2].mode == "wasapi-shared" && L[2].available && L[2].id == "{r-in}");
     auto P = drv::plan("asio", "Realtek ASIO", "-", pc, now); CHECK(!P.empty() && P[0].mode == "wasapi-shared" && P[0].pinned && P[0].inDevice == "{r-in}" && P[0].outDevice == "-");
     CHECK(drv::pins(pc).size() == 1 && drv::pins(pc)[0].on);
     drv::setPin("Realtek ASIO", false); CHECK(!drv::pinOf("Realtek ASIO").on);
@@ -61,6 +61,14 @@ int main(int argc, char** argv) {
   { auto P = drv::plan("wasapi", "{r-in}", "{r-out}", pc, now); CHECK(P.size() == 1 && P[0].backend == "wasapi" && P[0].inDevice == "{r-in}");
     P = drv::plan("null", "", "", pc, now); CHECK(P.size() == 1 && P[0].backend == "null"); }
   std::remove(f.c_str());
+  // DirectSound step: a dsound device named like the WASAPI twin becomes step 4; the fallback policy "dsound" skips WASAPI, "none" leaves ASIO alone, "all" restores the ladder
+  { std::vector<DeviceInfo> um = {dev("asio", "BEHRINGER USB AUDIO", "BEHRINGER USB AUDIO", 2, 2), dev("wasapi", "{um2-in}", "Microphone (USB Audio CODEC)", 2, 0), dev("wasapi", "{um2-out}", "Speakers (USB Audio CODEC)", 0, 2), dev("dsound", "{ds-out}", "Speakers (USB Audio CODEC)", 0, 2), dev("dsound", "{ds-bt}", "Headphones (JBL TUNE Stereo)", 0, 2)};
+    auto L = drv::ladder(um[0], um, false, true, now); CHECK(L.size() == 4 && L[3].mode == "dsound" && L[3].available && L[3].id == "{ds-out}");
+    auto P = drv::plan("asio", "-", "BEHRINGER USB AUDIO", um, now); CHECK(P.size() == 4 && P[3].mode == "dsound" && P[3].backend == "dsound" && P[3].outDevice == "{ds-out}" && P[3].inDevice == "-");
+    drv::setFallback("dsound"); CHECK(drv::fallback() == "dsound"); P = drv::plan("asio", "-", "BEHRINGER USB AUDIO", um, now); CHECK(P.size() == 2 && P[0].mode == "asio" && P[1].mode == "dsound");
+    drv::setFallback("none"); P = drv::plan("asio", "-", "BEHRINGER USB AUDIO", um, now); CHECK(P.size() == 1 && P[0].mode == "asio");
+    drv::setFallback("bogus"); CHECK(drv::fallback() == "none"); drv::setFallback("all"); P = drv::plan("asio", "-", "BEHRINGER USB AUDIO", um, now); CHECK(P.size() == 4);
+    drv::resetCache(); CHECK(drv::fallback() == "all"); }   // and it survives a reload of the store
   std::printf("driver_intel_test: hardware match, Realtek pin (default on, opt-out saved), ASIO4ALL rule, ladder, locks, plan OK\n");
   return 0;
 }
