@@ -12,7 +12,8 @@ ApplicationWindow {
     height: 860
     minimumWidth: 720
     minimumHeight: 480
-    title: "A mix OS " + appVersion
+    title: Theme.product + " " + appVersion + " · " + Theme.vendor
+    property bool forceSetup: false   // the smoke / shots show the wizard on demand
     color: Theme.obsidian
     property string current: settings.startPage
     LayoutMirroring.enabled: i18n.rtl
@@ -27,7 +28,7 @@ ApplicationWindow {
             Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Theme.lineSoft }
             RowLayout {
                 anchors.fill: parent; anchors.leftMargin: 14; anchors.rightMargin: 14; spacing: 12
-                Text { text: "A MIX OS"; color: Theme.orange; font.family: Theme.mono; font.pixelSize: 15; font.weight: Font.Black; font.letterSpacing: 4 }
+                Text { text: Theme.product.toUpperCase(); color: Theme.orange; font.family: Theme.mono; font.pixelSize: 15; font.weight: Font.Black; font.letterSpacing: 4 }
                 Text { text: "BY AMFB AUDIO"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8; font.letterSpacing: 2 }
                 Item { Layout.fillWidth: true }
                 Rectangle { implicitWidth: statusText.implicitWidth + 20; implicitHeight: 24; radius: 12; color: engine.running ? Qt.rgba(0.063, 0.725, 0.506, 0.15) : Qt.rgba(0.984, 0.749, 0.141, 0.12); border.color: engine.running ? Theme.emerald : Theme.amber
@@ -96,4 +97,5 @@ ApplicationWindow {
             }
         }
     }
+    SetupPage { anchors.fill: parent; z: 100; visible: root.forceSetup || !settings.setupDone; onFinished: { settings.finishSetup(); root.forceSetup = false; root.current = settings.startPage } }
 }

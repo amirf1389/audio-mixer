@@ -25,6 +25,7 @@
 #include "Access.h"
 #include "Osc.h"
 #include "Media.h"
+#include "Update.h"
 #include "Engine.h"
 #include "license/license.hpp"
 #include "I18n.h"
@@ -37,7 +38,7 @@ int main(int argc, char* argv[]) {
   app.setOrganizationName("AMFB Audio");
   am::lic::setProgramDir(QCoreApplication::applicationDirPath().toStdString());   // edition-token.json next to the program (paid editions)
   app.setOrganizationDomain("amfb.audio");
-  app.setApplicationName("A mix OS");
+  app.setApplicationName("A mix OS"); app.setApplicationDisplayName("AmF X1");
   app.setApplicationVersion(QStringLiteral(AMIX_VERSION));
   QQuickStyle::setStyle("Basic");   // the console draws its own controls (Theme.qml); the Basic style never fights the colours
 
@@ -45,7 +46,7 @@ int main(int argc, char* argv[]) {
   const QString smokeWav = QDir::tempPath() + "/amixos-smoke-tone.wav", smokeOut = QDir::tempPath() + "/amixos-smoke-export.wav";   // used by the smoke and by its end-of-run lambda: must outlive both
   for (int i = 1; i < argc; ++i) { const QString a = QString::fromLocal8Bit(argv[i]); if (a == "--smoke") smoke = true; else if (a == "--shots" && i + 1 < argc) { smoke = true; shots = QString::fromLocal8Bit(argv[++i]); } else if (a == "--lang" && i + 1 < argc) lang = QString::fromLocal8Bit(argv[++i]); }
 
-  Engine engine; I18n i18n; Arrange arrange(&engine); Settings settings(&engine); Access access(&engine); Osc osc(&engine); Media media(&engine);
+  Engine engine; I18n i18n; Arrange arrange(&engine); Settings settings(&engine); if (smoke) settings.finishSetup(); Access access(&engine); Osc osc(&engine); Media media(&engine); Update update(QStringLiteral(AMIX_VERSION));
   if (!lang.isEmpty()) i18n.setLang(lang);   // --lang fa: start in that language (also for --shots)
   QQmlApplicationEngine qml;
   qml.rootContext()->setContextProperty("engine", &engine);
@@ -54,7 +55,9 @@ int main(int argc, char* argv[]) {
   qml.rootContext()->setContextProperty("access", &access);
   qml.rootContext()->setContextProperty("osc", &osc);
   qml.rootContext()->setContextProperty("media", &media);
+  qml.rootContext()->setContextProperty("updater", &update);
   QObject::connect(&app, &QGuiApplication::aboutToQuit, &settings, &Settings::sessionClosed);
+  if (!smoke && update.checkAtStart() && settings.setupDone()) QTimer::singleShot(3000, &update, &Update::check);
   qml.rootContext()->setContextProperty("i18n", &i18n);
   qml.rootContext()->setContextProperty("appVersion", QStringLiteral(AMIX_VERSION));
   QObject::connect(&qml, &QQmlApplicationEngine::objectCreationFailed, &app, [] { std::fprintf(stderr, "amixos: the interface could not be created\n"); QCoreApplication::exit(2); }, Qt::QueuedConnection);
@@ -149,6 +152,17 @@ int main(int argc, char* argv[]) {
       media.stop(); if (media.playing() || media.position() != 0) { std::fprintf(stderr, "amixos --smoke: media stop\n"); return 113; }
       const QVariantMap t = engine.telemetry(); if (!t.contains("loadPct") || t["blocks"].toULongLong() == 0 || t["maxBlockUs"].toDouble() <= 0) { std::fprintf(stderr, "amixos --smoke: profiler telemetry\n"); return 114; }
       engine.setOutputBits(16); engine.setDcBlock(true); if (engine.outputBits() != 16 || !engine.dcBlock()) { std::fprintf(stderr, "amixos --smoke: output stage settings\n"); return 115; } engine.setOutputBits(0); media.clear(); }
+    { update.setUrl("http://example.com/update.json"); if (update.state() != "error") { std::fprintf(stderr, "amixos --smoke: a non-project update URL was accepted\n"); return 123; }
+      QFile mf(QCoreApplication::applicationDirPath() + "/../../releases/update.json"); if (!mf.exists()) mf.setFileName(QStringLiteral(AMIX_SOURCE_DIR) + "/../../releases/update.json");
+      if (mf.open(QIODevice::ReadOnly)) { const QString env = QString::fromUtf8(mf.readAll());
+        // releases/update.json is still signed by the previous vendor key (re-sign it with scripts/make-update.js): the console must say so, not accept it
+        const bool ok = update.applyManifest(env); if (ok && update.state() != "available" && update.state() != "upToDate") { std::fprintf(stderr, "amixos --smoke: manifest accepted but state %s\n", qPrintable(update.state())); return 120; }
+        if (!ok && (update.state() != "error" || !update.message().contains("signature"))) { std::fprintf(stderr, "amixos --smoke: manifest rejected for the wrong reason: %s\n", qPrintable(update.message())); return 120; }
+        std::printf("amixos --smoke: manifest %s (%s)\n", ok ? "verified" : "rejected", qPrintable(update.message()));
+        QString bad = env; bad.replace("\"version\":\"", "\"version\":\"9"); if (update.applyManifest(bad) || update.state() != "error") { std::fprintf(stderr, "amixos --smoke: a tampered manifest was accepted\n"); return 121; }
+        if (Update::compareVersions("1.2.10", "1.2.9") <= 0 || Update::compareVersions("0.1.0", "0.1.0") != 0) { std::fprintf(stderr, "amixos --smoke: version compare\n"); return 122; } }
+      else std::printf("amixos --smoke: releases/update.json not found next to the build; manifest check skipped\n");
+      const bool wasDone = settings.setupDone(); settings.rerunSetup(); if (settings.setupDone()) { std::fprintf(stderr, "amixos --smoke: rerunSetup\n"); return 124; } settings.finishSetup(); if (!settings.setupDone()) { std::fprintf(stderr, "amixos --smoke: finishSetup\n"); return 125; } (void)wasDone; }
     engine.setBusFx(0, "reverb"); if (engine.busFx(0)["name"].toString().isEmpty() || engine.busFx(0)["params"].toList().isEmpty() || engine.busState()[0].toMap()["fx"].toString() != "reverb") { std::fprintf(stderr, "amixos --smoke: bus effect did not load\n"); return 60; }
     { const QString pid = engine.busFx(0)["params"].toList()[0].toMap()["id"].toString(); engine.setBusFxParam(0, pid, 0.8); if (std::fabs(engine.busFx(0)["params"].toList()[0].toMap()["value"].toDouble() - 0.8) > 1e-9) { std::fprintf(stderr, "amixos --smoke: bus effect param\n"); return 61; } }
     engine.setBusFxMix(0, 0.5); engine.setBusFxBypass(0, true); if (std::fabs(engine.busFx(0)["mix"].toDouble() - 0.5) > 1e-9 || !engine.busFx(0)["bypass"].toBool()) { std::fprintf(stderr, "amixos --smoke: bus effect mix / bypass\n"); return 62; } engine.setBusFxBypass(0, false);
@@ -192,6 +206,11 @@ int main(int argc, char* argv[]) {
       if (!shots.isEmpty()) {   // one picture per ported page
         QDir().mkpath(shots);
         auto* win = qobject_cast<QQuickWindow*>(qml.rootObjects().first());
+        if (QObject* wiz = win->findChild<QObject*>("setupPage")) {   // the factory setup, every step
+          win->setProperty("forceSetup", true);
+          for (int step = 0; step < 7; ++step) { wiz->setProperty("step", step); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + QStringLiteral("/setup-%1.png").arg(step + 1)); std::printf("amixos --shots: setup-%d\n", step + 1); }
+          win->setProperty("forceSetup", false); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+        }
         for (const char* id : {"home", "mixer", "dsp", "dyn", "gate", "bus", "dca", "scenes", "presets", "routing", "renew", "arrange", "io", "meter", "lufs", "sys", "fx", "osc", "phase", "miceq", "live", "tools", "calib", "boot", "help", "acct", "access", "admin", "ai", "plugins", "network", "media", "asio"}) {
           win->setProperty("current", QString::fromLatin1(id)); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
           const QImage img = win->grabWindow(); img.save(shots + "/" + id + ".png"); std::printf("amixos --shots: %s %dx%d\n", id, img.width(), img.height());

@@ -1,5 +1,5 @@
 // ADMIN: behind the PIN. Edition (PRO shows the operator pages, CONSUMER hides them), licence summary, backups (now / restore / autosave),
-// audit log export and clear, data folder, and the honest state of updates: this build verifies a signed update.json but does not flash
+// audit log export and clear, data folder, and the honest state of updates: this build verifies a signed updater.json but does not flash
 // anything; the browser build's KNOX vault, A/B partitions and OTA firmware were mock-ups and are not ported.
 import QtQuick
 import AmixOS   // this module: brings the Theme singleton (a plain directory import would see Theme as an ordinary type)
@@ -51,7 +51,12 @@ Item {
                         Text { text: access.audit.length + " events kept (last 300 shown on ACCOUNT)"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 } }
                     Note { text: "Role switches, locks, PIN changes, permission edits and admin actions, with time and role, in ~/.amixos/audit.log." } }
                 Card { Head { text: "UPDATES" }
-                    Note { text: "Version " + appVersion + ". The console does not download or flash anything by itself: updates come as a signed installer from the releases page, and the installer's update.json is verified against the vendor's public key before anything is applied (the same check the daemon runs). There is no OTA firmware, no A/B partition and no hardware vault in this build; the browser demo showed those as mock-ups." } }
+                    RowLayout { spacing: 6
+                        Btn { label: "CHECK NOW"; on: updater.state !== "checking"; onColor: Theme.cyan; onClicked: updater.check() }
+                        Btn { visible: updater.state === "available" && updater.file.url !== undefined; label: "DOWNLOAD " + (updater.file.name || ""); on: true; onClicked: updater.download() }
+                        Btn { visible: updater.downloaded !== ""; label: "OPEN DOWNLOAD FOLDER"; onClicked: updater.openDownloadFolder() }
+                        Btn { label: updater.checkAtStart ? "AT START: ON" : "AT START: OFF"; on: updater.checkAtStart; onColor: Theme.emerald; onClicked: updater.checkAtStart = !updater.checkAtStart } }
+                    Note { text: "Version " + updater.current + " · " + updater.state.toUpperCase() + (updater.lastCheck ? " · last check " + updater.lastCheck : "") + ". " + updater.message + " Signed manifest from " + updater.url + "; a download is sha256-checked and saved under ~/.amixos/downloads; the console never runs installers itself. No OTA firmware, no A/B partition, no hardware vault in this build." } }
                 Card { Layout.columnSpan: 2; Head { text: "MAINTENANCE" }
                     RowLayout { spacing: 6
                         Btn { label: "LOCK CONSOLE"; onColor: Theme.danger; onClicked: access.lock() }
