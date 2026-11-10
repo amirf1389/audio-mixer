@@ -63,24 +63,24 @@ Flickable {
         Rectangle { Layout.fillWidth: true; implicitHeight: hdr.implicitHeight + 20; radius: Theme.radius; color: Theme.card; border.color: Theme.line
             ColumnLayout { id: hdr; anchors.fill: parent; anchors.margins: 10; spacing: 6
                 RowLayout { Layout.fillWidth: true; spacing: 8
-                    Text { text: "◭ 10-BAND PROGRAM BUS EQ & DIAMOND RTA"; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
-                    Text { text: "CH " + (page.strip + 1); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
+                    Text { text: i18n.t("◭ 10-BAND PROGRAM BUS EQ & DIAMOND RTA", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
+                    Text { text: i18n.t("CH ", i18n.lang) + (page.strip + 1); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
                     Item { Layout.fillWidth: true }
-                    Text { text: "PAGES:"; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; font.letterSpacing: 2 }
-                    Btn { label: "PAGE 1: DIAMOND + FFT RTA"; on: page.view === "diamond"; onClicked: page.view = "diamond" }
-                    Btn { label: "PAGE 2: ISO FADERS"; on: page.view === "faders"; onClicked: page.view = "faders" }
-                    Btn { label: "SPLIT: BOTH"; on: page.view === "both"; onClicked: page.view = "both" } }
+                    Text { text: i18n.t("PAGES:", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; font.letterSpacing: 2 }
+                    Btn { label: i18n.t("PAGE 1: DIAMOND + FFT RTA", i18n.lang); on: page.view === "diamond"; onClicked: page.view = "diamond" }
+                    Btn { label: i18n.t("PAGE 2: ISO FADERS", i18n.lang); on: page.view === "faders"; onClicked: page.view = "faders" }
+                    Btn { label: i18n.t("SPLIT: BOTH", i18n.lang); on: page.view === "both"; onClicked: page.view = "both" } }
                 Flow { Layout.fillWidth: true; spacing: 6
-                    Btn { label: "★ GOLDEN EQ (AMIX BY AMFB TUNED)"; onColor: Theme.amber; offColor: Qt.rgba(0.984, 0.749, 0.141, 0.18); on: page.presetName === "Golden EQ (Amix by AMFB tuned)"; onClicked: page.loadPreset("Golden EQ (Amix by AMFB tuned)")
-                        ToolTip.visible: gh.hovered; ToolTip.text: "Amix by AMFB tuned (+1,+5,+3,+3,+4,+2,+2,+3,+3,+1 dB)"; HoverHandler { id: gh } }
-                    Btn { label: "CUSTOM EQ"; onColor: Theme.cyan; offColor: Qt.rgba(0, 0.95, 1, 0.14); on: page.presetName === "Custom EQ"; onClicked: { const s = engine.geqSlots()[0]; page.apply(s.gains); page.presetName = "Custom EQ" }
-                        ToolTip.visible: ch.hovered; ToolTip.text: "Load custom slot 1 (the user profile)"; HoverHandler { id: ch } }
-                    Btn { label: "💾 SAVE CUSTOM"; offColor: Qt.rgba(0, 0.95, 1, 0.14); onClicked: engine.saveGeqSlot(1, "Custom EQ", page.gains) }
-                    Btn { label: "ANIX W-SHAPE"; onColor: Theme.amber; offColor: Qt.rgba(0.984, 0.749, 0.141, 0.18); on: page.presetName === "Anix W Shape"; onClicked: page.loadPreset("Anix W Shape") }
+                    Btn { label: i18n.t("★ GOLDEN EQ (AMIX BY AMFB TUNED)", i18n.lang); onColor: Theme.amber; offColor: Qt.rgba(0.984, 0.749, 0.141, 0.18); on: page.presetName === "Golden EQ (Amix by AMFB tuned)"; onClicked: page.loadPreset("Golden EQ (Amix by AMFB tuned)")
+                        ToolTip.visible: gh.hovered; ToolTip.text: i18n.t("Amix by AMFB tuned (+1,+5,+3,+3,+4,+2,+2,+3,+3,+1 dB)", i18n.lang); HoverHandler { id: gh } }
+                    Btn { label: i18n.t("CUSTOM EQ", i18n.lang); onColor: Theme.cyan; offColor: Qt.rgba(0, 0.95, 1, 0.14); on: page.presetName === "Custom EQ"; onClicked: { const s = engine.geqSlots()[0]; page.apply(s.gains); page.presetName = "Custom EQ" }
+                        ToolTip.visible: ch.hovered; ToolTip.text: i18n.t("Load custom slot 1 (the user profile)", i18n.lang); HoverHandler { id: ch } }
+                    Btn { label: i18n.t("💾 SAVE CUSTOM", i18n.lang); offColor: Qt.rgba(0, 0.95, 1, 0.14); onClicked: engine.saveGeqSlot(1, "Custom EQ", page.gains) }
+                    Btn { label: i18n.t("ANIX W-SHAPE", i18n.lang); onColor: Theme.amber; offColor: Qt.rgba(0.984, 0.749, 0.141, 0.18); on: page.presetName === "Anix W Shape"; onClicked: page.loadPreset("Anix W Shape") }
                     ComboBox { id: presetBox; implicitWidth: 290; implicitHeight: 22; font.family: Theme.mono; font.pixelSize: 8; displayText: page.presetName ? page.presetName : "Standard + Mic Presets (30+)"
                         model: { const l = []; for (let i = 0; i < page.presets.length; ++i) l.push((i < 2 ? "★ " : "") + page.presets[i].n); return l }
                         onActivated: function (i) { page.loadPreset(page.presets[i].n) } }
-                    Btn { label: "FLAT"; onClicked: { page.apply([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]); page.presetName = "Flat" } } } } }
+                    Btn { label: i18n.t("FLAT", i18n.lang); onClicked: { page.apply([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]); page.presetName = "Flat" } } } } }
         // 1. DIAMOND PEQ RESPONSE CURVE & 64-BIN RTA SPECTRUM OVERLAY
         Rectangle { visible: page.view !== "faders"; Layout.fillWidth: true; implicitHeight: page.view === "both" ? 240 : 360; radius: Theme.radius; color: Theme.deep; border.color: Theme.line; clip: true
             Canvas { id: rta; anchors.fill: parent; visible: page.rtaOn
@@ -111,19 +111,19 @@ Flickable {
                     function move(m) { const midY = height / 2; page.setBand(band, (midY - m.y) / (height * 0.42) * 12) }
                     onWheel: function (w) { const b = bandAt(w.x); page.setBand(b, page.gains[b] + (w.angleDelta.y > 0 ? 0.5 : -0.5)) } } }
             Row { anchors.left: parent.left; anchors.top: parent.top; anchors.margins: 8; spacing: 6
-                Text { text: "◆ DIAMOND PEQ RESPONSE CURVE"; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 7; font.bold: true; font.letterSpacing: 1 }
+                Text { text: i18n.t("◆ DIAMOND PEQ RESPONSE CURVE", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 7; font.bold: true; font.letterSpacing: 1 }
                 Text { text: "•"; color: Theme.dim; font.pixelSize: 7 }
-                Text { text: "REAL-TIME 64-BIN FFT SPECTRUM ANALYZER"; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 7; font.bold: true; font.letterSpacing: 1 } }
+                Text { text: i18n.t("REAL-TIME 64-BIN FFT SPECTRUM ANALYZER", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 7; font.bold: true; font.letterSpacing: 1 } }
             Row { anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 8; spacing: 6
-                Text { anchors.verticalCenter: parent.verticalCenter; text: "RTA ENGINE: " + (page.rtaOn ? (page.frozen ? "FROZEN" : "ACTIVE (60 FPS)") : "OFF"); color: page.rtaOn && !page.frozen ? Theme.emerald : Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
-                Btn { label: page.rtaOn ? "RTA: ON" : "RTA: OFF"; on: page.rtaOn; implicitHeight: 18; onClicked: page.rtaOn = !page.rtaOn }
-                Btn { label: "❄ FREEZE"; on: page.frozen; onColor: Theme.cyan; implicitHeight: 18; onClicked: page.frozen = !page.frozen } } }
+                Text { anchors.verticalCenter: parent.verticalCenter; text: i18n.t("RTA ENGINE: ", i18n.lang) + (page.rtaOn ? (page.frozen ? i18n.t("FROZEN", i18n.lang) : i18n.t("ACTIVE (60 FPS)", i18n.lang)) : i18n.t("OFF", i18n.lang)); color: page.rtaOn && !page.frozen ? Theme.emerald : Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
+                Btn { label: page.rtaOn ? i18n.t("RTA: ON", i18n.lang) : i18n.t("RTA: OFF", i18n.lang); on: page.rtaOn; implicitHeight: 18; onClicked: page.rtaOn = !page.rtaOn }
+                Btn { label: i18n.t("❄ FREEZE", i18n.lang); on: page.frozen; onColor: Theme.cyan; implicitHeight: 18; onClicked: page.frozen = !page.frozen } } }
         // 2. the ten ISO faders
         Rectangle { visible: page.view !== "diamond"; Layout.fillWidth: true; implicitHeight: page.view === "both" ? 190 : 330; radius: Theme.radius; color: Theme.card; border.color: Theme.line
             RowLayout { anchors.fill: parent; anchors.margins: 10; spacing: 6
                 Repeater { model: 10
                     delegate: ColumnLayout { Layout.fillWidth: true; Layout.fillHeight: true; spacing: 2
-                        Text { Layout.alignment: Qt.AlignHCenter; text: page.bandText[index] + "Hz"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                        Text { Layout.alignment: Qt.AlignHCenter; text: page.bandText[index] + i18n.t("Hz", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                         Slider { id: sl; Layout.fillHeight: true; Layout.alignment: Qt.AlignHCenter; orientation: Qt.Vertical; from: -12; to: 12; stepSize: 0.5; value: page.gains[index]; onMoved: page.setBand(index, value)
                             background: Rectangle { x: sl.leftPadding + sl.availableWidth / 2 - 3; y: sl.topPadding; width: 6; height: sl.availableHeight; radius: 3; color: Theme.deep; border.color: Theme.lineSoft
                                 Rectangle { width: parent.width; y: Math.min(parent.height / 2, sl.visualPosition * parent.height); height: Math.abs(parent.height / 2 - sl.visualPosition * parent.height); radius: 3; color: page.gains[index] >= 0 ? Theme.amber : Theme.cyan } }
@@ -133,51 +133,51 @@ Flickable {
         Rectangle { Layout.fillWidth: true; implicitHeight: par.implicitHeight + 20; radius: Theme.radius; color: Theme.card; border.color: Theme.line
             ColumnLayout { id: par; anchors.fill: parent; anchors.margins: 10; spacing: 6
                 RowLayout { Layout.fillWidth: true; spacing: 6
-                    Text { text: "PARAMETRIC CONTROL"; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 1 }
-                    Text { text: "band"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
+                    Text { text: i18n.t("PARAMETRIC CONTROL", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 1 }
+                    Text { text: i18n.t("band", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
                     Repeater { model: 10; delegate: Rectangle { implicitWidth: 30; implicitHeight: 20; radius: 4; color: page.band === index ? Theme.amber : Theme.ov(0.08); border.color: page.gains[index] !== 0 ? Theme.cyan : "transparent"
                         Text { anchors.centerIn: parent; text: "B" + (index + 1); color: page.band === index ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.band = index } } }
                     Item { Layout.fillWidth: true }
-                    Text { text: page.typeNames[page.bandNow.type] + " · " + Math.round(page.bandNow.freq) + " Hz · Q " + Number(page.bandNow.q).toFixed(2) + " · " + page.dbText(page.bandNow.gainDb); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8 } }
+                    Text { text: page.typeNames[page.bandNow.type] + " · " + Math.round(page.bandNow.freq) + i18n.t(" Hz · Q ", i18n.lang) + Number(page.bandNow.q).toFixed(2) + " · " + page.dbText(page.bandNow.gainDb); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8 } }
                 GridLayout { columns: 4; columnSpacing: 10; rowSpacing: 2; Layout.fillWidth: true
-                    Text { text: "TYPE"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
-                    Text { text: "FREQUENCY  " + Math.round(page.bandNow.freq) + " Hz"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
-                    Text { text: "Q  " + Number(page.bandNow.q).toFixed(2) + "  (bandwidth " + (page.bandNow.q > 0 ? (1.44 / page.bandNow.q).toFixed(2) : "-") + " oct)"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
-                    Text { text: "GAIN  " + page.dbText(page.bandNow.gainDb); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
+                    Text { text: i18n.t("TYPE", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
+                    Text { text: i18n.t("FREQUENCY  ", i18n.lang) + Math.round(page.bandNow.freq) + i18n.t(" Hz", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
+                    Text { text: "Q  " + Number(page.bandNow.q).toFixed(2) + i18n.t("  (bandwidth ", i18n.lang) + (page.bandNow.q > 0 ? (1.44 / page.bandNow.q).toFixed(2) : "-") + i18n.t(" oct)", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
+                    Text { text: i18n.t("GAIN  ", i18n.lang) + page.dbText(page.bandNow.gainDb); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                     ComboBox { Layout.fillWidth: true; implicitHeight: 24; font.family: Theme.mono; font.pixelSize: 8; model: page.typeNames; currentIndex: page.bandNow.type; onActivated: page.setParam(currentIndex, page.bandNow.freq, page.bandNow.q, page.bandNow.gainDb) }
                     Slider { Layout.fillWidth: true; from: Math.log(20); to: Math.log(20000); value: Math.log(Math.max(20, page.bandNow.freq)); onMoved: page.setParam(page.bandNow.type || 1, Math.exp(value), page.bandNow.q, page.bandNow.gainDb) }
                     Slider { Layout.fillWidth: true; from: 0.1; to: 12; value: page.bandNow.q; onMoved: page.setParam(page.bandNow.type || 1, page.bandNow.freq, value, page.bandNow.gainDb) }
                     Slider { Layout.fillWidth: true; from: -12; to: 12; stepSize: 0.5; value: page.bandNow.gainDb; onMoved: page.setParam(page.bandNow.type || 1, page.bandNow.freq, page.bandNow.q, value) } }
                 RowLayout { spacing: 6
-                    Btn { label: "ISO CENTRE"; onClicked: page.setParam(page.bandNow.type || 1, page.bands[page.band], 1.41, page.bandNow.gainDb) }
-                    Btn { label: "Q 1.41 (2/3 oct)"; onClicked: page.setParam(page.bandNow.type || 1, page.bandNow.freq, 1.41, page.bandNow.gainDb) }
-                    Btn { label: "BAND OFF"; onClicked: page.setParam(0, page.bandNow.freq, page.bandNow.q, 0) }
-                    Text { text: "A band moved off its ISO centre keeps its gain on the diamond; the FREQUENCY and Q here are the band's real ones (the same ten bands as TONE (EQ))."; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } } } }
+                    Btn { label: i18n.t("ISO CENTRE", i18n.lang); onClicked: page.setParam(page.bandNow.type || 1, page.bands[page.band], 1.41, page.bandNow.gainDb) }
+                    Btn { label: i18n.t("Q 1.41 (2/3 oct)", i18n.lang); onClicked: page.setParam(page.bandNow.type || 1, page.bandNow.freq, 1.41, page.bandNow.gainDb) }
+                    Btn { label: i18n.t("BAND OFF", i18n.lang); onClicked: page.setParam(0, page.bandNow.freq, page.bandNow.q, 0) }
+                    Text { text: i18n.t("A band moved off its ISO centre keeps its gain on the diamond; the FREQUENCY and Q here are the band's real ones (the same ten bands as TONE (EQ)).", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } } } }
         // 3. CUSTOM PRESET USER SLOTS
         Rectangle { Layout.fillWidth: true; implicitHeight: slots.implicitHeight + 20; radius: Theme.radius; color: Theme.card; border.color: Theme.line
             ColumnLayout { id: slots; anchors.fill: parent; anchors.margins: 10; spacing: 6
                 RowLayout { Layout.fillWidth: true; spacing: 8
-                    Text { text: "CUSTOM PRESET USER SLOTS: 10"; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 1 }
+                    Text { text: i18n.t("CUSTOM PRESET USER SLOTS: 10", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 1 }
                     Item { Layout.fillWidth: true }
                     Rectangle { Layout.preferredWidth: 180; implicitHeight: 22; radius: 4; color: Theme.deep; border.color: nameIn.activeFocus ? Theme.cyan : Theme.lineSoft
                         TextInput { id: nameIn; anchors.fill: parent; anchors.margins: 5; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; selectByMouse: true; maximumLength: 24
-                            Text { visible: !parent.text.length; text: "name for SAVE"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 9 } } }
+                            Text { visible: !parent.text.length; text: i18n.t("name for SAVE", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 9 } } }
                     Btn { label: "▲"; onClicked: page.contentY = 0 } Btn { label: "▼"; onClicked: page.contentY = Math.max(0, page.contentHeight - page.height) }
-                    Text { text: "LOAD • SAVE • DELETE • SCROLL THE LIST"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
+                    Text { text: i18n.t("LOAD • SAVE • DELETE • SCROLL THE LIST", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
                 GridLayout { Layout.fillWidth: true; columns: 5; columnSpacing: 6; rowSpacing: 6
                     Repeater { model: (page.slotTick, engine.geqSlots())
                         delegate: Rectangle { Layout.fillWidth: true; implicitHeight: 78; radius: 6; color: page.slotSel === modelData.slot ? Qt.rgba(0, 0.95, 1, 0.12) : Theme.ov(0.04); border.color: page.slotSel === modelData.slot ? Theme.cyan : Theme.lineSoft
                             Canvas { anchors.fill: parent; anchors.margins: 4; opacity: 0.5; property var g: modelData.gains; onGChanged: requestPaint()
                                 onPaint: { const c = getContext("2d"); c.reset(); if (modelData.empty) return; c.strokeStyle = "#00f2ff"; c.lineWidth = 1.5; c.beginPath(); for (let i = 0; i < 10; i++) { const x = (i + 0.5) / 10 * width, y = height / 2 - g[i] / 12 * height * 0.4; if (i === 0) c.moveTo(x, y); else c.lineTo(x, y) } c.stroke() } }
                             ColumnLayout { anchors.fill: parent; anchors.margins: 7; spacing: 2
-                                RowLayout { Layout.fillWidth: true; Text { text: "SLOT " + modelData.slot; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } Item { Layout.fillWidth: true } Text { text: modelData.empty ? "EMPTY" : modelData.gains.map(function (v) { return (v > 0 ? "+" : "") + v }).join(" "); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 5; elide: Text.ElideRight; Layout.maximumWidth: 150 } }
+                                RowLayout { Layout.fillWidth: true; Text { text: i18n.t("SLOT ", i18n.lang) + modelData.slot; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } Item { Layout.fillWidth: true } Text { text: modelData.empty ? i18n.t("EMPTY", i18n.lang) : modelData.gains.map(function (v) { return (v > 0 ? "+" : "") + v }).join(" "); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 5; elide: Text.ElideRight; Layout.maximumWidth: 150 } }
                                 Text { Layout.fillWidth: true; elide: Text.ElideRight; text: modelData.name; color: modelData.empty ? Theme.dim : Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
                                 Item { Layout.fillHeight: true }
                                 RowLayout { spacing: 4
-                                    Btn { label: "LOAD"; implicitHeight: 18; onColor: Theme.emerald; on: !modelData.empty; onClicked: { if (!modelData.empty) { page.apply(modelData.gains); page.presetName = modelData.name; page.slotSel = modelData.slot } } }
-                                    Btn { label: "SAVE"; implicitHeight: 18; onClicked: { engine.saveGeqSlot(modelData.slot, nameIn.text.length ? nameIn.text : modelData.name, page.gains); page.slotSel = modelData.slot; nameIn.text = "" } }
-                                    Btn { label: "DELETE"; implicitHeight: 18; offColor: Qt.rgba(1, 0.165, 0.373, 0.15); onClicked: { engine.clearGeqSlot(modelData.slot); if (page.slotSel === modelData.slot) page.slotSel = 0 } } } }
+                                    Btn { label: i18n.t("LOAD", i18n.lang); implicitHeight: 18; onColor: Theme.emerald; on: !modelData.empty; onClicked: { if (!modelData.empty) { page.apply(modelData.gains); page.presetName = modelData.name; page.slotSel = modelData.slot } } }
+                                    Btn { label: i18n.t("SAVE", i18n.lang); implicitHeight: 18; onClicked: { engine.saveGeqSlot(modelData.slot, nameIn.text.length ? nameIn.text : modelData.name, page.gains); page.slotSel = modelData.slot; nameIn.text = "" } }
+                                    Btn { label: i18n.t("DELETE", i18n.lang); implicitHeight: 18; offColor: Qt.rgba(1, 0.165, 0.373, 0.15); onClicked: { engine.clearGeqSlot(modelData.slot); if (page.slotSel === modelData.slot) page.slotSel = 0 } } } }
                             MouseArea { anchors.fill: parent; z: -1; onClicked: page.slotSel = modelData.slot } } } }
-                Text { Layout.fillWidth: true; text: "The ten bands are the strip's own equaliser (peaking, Q 1.41 on the ISO centres), the same ten that TONE (EQ) and MIC EQ edit; the spectrum is the strip after its DSP, from the engine's analyser. Golden EQ and Anix W-Shape are the AmF X1 beta curves."; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap } } }
+                Text { Layout.fillWidth: true; text: i18n.t("The ten bands are the strip's own equaliser (peaking, Q 1.41 on the ISO centres), the same ten that TONE (EQ) and MIC EQ edit; the spectrum is the strip after its DSP, from the engine's analyser. Golden EQ and Anix W-Shape are the AmF X1 beta curves.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap } } }
     }
 }

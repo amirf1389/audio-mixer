@@ -8,7 +8,7 @@ Item {
     property real vuDb: -120          // the ballistically smoothed level in dBFS
     property real refDb: -18          // 0 VU
     property bool peakLamp: false     // lit from the peak meter's clip flag
-    property string label: "VU"
+    property string label: i18n.t("VU", i18n.lang)
     implicitWidth: 64
     implicitHeight: 44
     readonly property real valueVu: Math.max(-20, Math.min(3, vuDb - refDb))

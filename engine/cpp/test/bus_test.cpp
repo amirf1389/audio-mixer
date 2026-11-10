@@ -30,5 +30,10 @@ int main() {
     CHECK(near(peak(L), 0.5 * c45, 1e-3), "a muted strip is still heard through the bus RETURN"); }
   // 4. a send below -60 dB is off; the bus output pointers may be null
   { am::Mixer m(2, fs); m.setSend(0, 0, -70, true); m.process(in, n, L.data(), R.data(), nullptr); CHECK(m.bus(0).meter.state().pk == 0, "-70 dB send is off"); }
-  if (fails) return 1; std::printf("bus_test: ok\n"); return 0;
+  // 5. SURROUND 5.0 (process5): a centred front strip (depth +1) lands in L / R and the centre; depth -1 goes to the rears only; a pan hard left leaves the centre
+  { am::Mixer m(2, fs); std::vector<float> o[5]; for (auto& v : o) v.assign(n, 0.f); float* outs[5] = {o[0].data(), o[1].data(), o[2].data(), o[3].data(), o[4].data()};
+    m.setDepth(0, 1); m.process5(in, n, outs); CHECK(near(peak(o[0]), peak(o[1]), 1e-3) && peak(o[0]) > 0.25, "5.0 front L = R (centre takes a share, constant power)"); CHECK(peak(o[2]) > 0.3, "5.0 centre carries a centred strip"); CHECK(peak(o[3]) == 0 && peak(o[4]) == 0, "5.0 depth +1: rears silent");
+    m.setDepth(0, -1); m.process5(in, n, outs); CHECK(peak(o[0]) == 0 && peak(o[2]) == 0, "5.0 depth -1: fronts silent"); CHECK(near(peak(o[3]), 0.5 * c45, 2e-3), "5.0 rear Ls");
+    m.setDepth(0, 0); m.setPan(0, -1); m.process5(in, n, outs); CHECK(peak(o[2]) == 0, "5.0 hard-left pan leaves the centre"); CHECK(peak(o[0]) > peak(o[1]), "5.0 hard left favours L"); CHECK(near(m.depth(0), 0, 1e-9), "depth getter"); }
+  if (fails) return 1; std::printf("bus_test: ok (incl. 5.0 surround)\n"); return 0;
 }

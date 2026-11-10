@@ -58,6 +58,14 @@ void amix_mixer_set_send(amix_mixer* m, int s, int b, double db, int pre) { if (
 void amix_mixer_set_bus_level(amix_mixer* m, int b, double db) { if (m) m->mixer.setBusLevel(b, db); }
 void amix_mixer_set_bus_return(amix_mixer* m, int b, double db) { if (m) m->mixer.setBusReturn(b, db); }
 void amix_mixer_set_width(amix_mixer* m, double w) { if (m) m->mixer.setWidth(w); }
+void amix_mixer_set_depth(amix_mixer* m, int strip, double depth) { if (m) m->mixer.setDepth(strip, depth); }
+int amix_mixer_process5(amix_mixer* m, const float* const* in, int frames, float* const* outs) {
+  if (!m || frames <= 0 || !outs) return 0;
+  for (int c = 0; c < 5; ++c) if (!outs[c]) return 0;
+  if (frames > m->frames) { m->silence.assign(static_cast<std::size_t>(frames), 0.f); m->frames = frames; }
+  const float* ins[AMIX_MAX_STRIPS]; for (int s = 0; s < m->mixer.strips(); ++s) ins[s] = (in && in[s]) ? in[s] : m->silence.data();
+  m->mixer.process5(ins, static_cast<std::size_t>(frames), outs); return frames;
+}
 int amix_mixer_process(amix_mixer* m, const float* const* in, int frames, float* outL, float* outR) {
   if (!m || frames <= 0 || !outL || !outR) return 0;
   if (frames > m->frames) { m->silence.assign(static_cast<std::size_t>(frames), 0.f); m->frames = frames; }

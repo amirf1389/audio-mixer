@@ -20,11 +20,11 @@ Item {
             Layout.fillWidth: true; implicitHeight: 34; radius: 8; color: Theme.card; border.color: Theme.line
             RowLayout {
                 anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 6
-                Text { text: "PHASE:"; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
-                Text { text: "goniometer · correlation · stereo width"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
+                Text { text: i18n.t("PHASE:", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
+                Text { text: i18n.t("goniometer · correlation · stereo width", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                 Item { Layout.fillWidth: true }
-                Text { text: engine.running ? "LIVE" : "NO DEVICE"; color: engine.running ? Theme.emerald : Theme.amber; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
-                Rectangle { implicitWidth: 60; implicitHeight: 20; radius: 4; color: page.frozen ? Theme.danger : Theme.ov(0.06); Text { anchors.centerIn: parent; text: "FREEZE"; color: page.frozen ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.frozen = !page.frozen } }
+                Text { text: engine.running ? i18n.t("LIVE", i18n.lang) : i18n.t("NO DEVICE", i18n.lang); color: engine.running ? Theme.emerald : Theme.amber; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
+                Rectangle { implicitWidth: 60; implicitHeight: 20; radius: 4; color: page.frozen ? Theme.danger : Theme.ov(0.06); Text { anchors.centerIn: parent; text: i18n.t("FREEZE", i18n.lang); color: page.frozen ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.frozen = !page.frozen } }
             }
         }
         RowLayout {
@@ -54,31 +54,31 @@ Item {
                 Layout.fillWidth: true; Layout.fillHeight: true; radius: Theme.radius; color: Theme.card; border.color: Theme.line
                 ColumnLayout {
                     anchors.fill: parent; anchors.margins: 12; spacing: 12
-                    Text { text: "CORRELATION"; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 12; font.bold: true; font.letterSpacing: 1.5 }
+                    Text { text: i18n.t("CORRELATION", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 12; font.bold: true; font.letterSpacing: 1.5 }
                     Rectangle {
                         Layout.fillWidth: true; implicitHeight: 18; radius: 4; color: Theme.ov(0.05); border.color: Theme.lineSoft
                         Rectangle { x: parent.width / 2 - 1; width: 2; height: parent.height; color: Theme.line }
                         Rectangle { readonly property real c: Math.max(-1, Math.min(1, page.corr)); x: c >= 0 ? parent.width / 2 : parent.width / 2 * (1 + c); width: Math.abs(c) * parent.width / 2; height: parent.height; radius: 4; color: c >= 0.3 ? Theme.emerald : c >= 0 ? Theme.amber : Theme.danger }
                     }
                     RowLayout { Layout.fillWidth: true
-                        Text { text: "-1  out of phase"; color: Theme.danger; font.family: Theme.mono; font.pixelSize: 7 } Item { Layout.fillWidth: true }
+                        Text { text: i18n.t("-1  out of phase", i18n.lang); color: Theme.danger; font.family: Theme.mono; font.pixelSize: 7 } Item { Layout.fillWidth: true }
                         Text { text: page.corr.toFixed(2); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 14; font.bold: true } Item { Layout.fillWidth: true }
-                        Text { text: "mono  +1"; color: Theme.emerald; font.family: Theme.mono; font.pixelSize: 7 } }
-                    Text { Layout.fillWidth: true; text: "Above 0 the mix sums to mono without loss. Below 0 something cancels in mono (a flipped cable, a wide effect): check with the POLARITY buttons on the strips and with WIDTH below."; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.WordWrap }
+                        Text { text: i18n.t("mono  +1", i18n.lang); color: Theme.emerald; font.family: Theme.mono; font.pixelSize: 7 } }
+                    Text { Layout.fillWidth: true; text: i18n.t("Above 0 the mix sums to mono without loss. Below 0 something cancels in mono (a flipped cable, a wide effect): check with the POLARITY buttons on the strips and with WIDTH below.", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.WordWrap }
                     Rectangle { Layout.fillWidth: true; height: 1; color: Theme.lineSoft }
-                    Text { text: "STEREO WIDTH"; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 12; font.bold: true; font.letterSpacing: 1.5 }
+                    Text { text: i18n.t("STEREO WIDTH", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 12; font.bold: true; font.letterSpacing: 1.5 }
                     RowLayout {
                         Layout.fillWidth: true; spacing: 10
-                        Text { text: "MONO"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
+                        Text { text: i18n.t("MONO", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
                         Slider { id: widthSlider; Layout.fillWidth: true; from: 0; to: 2; stepSize: 0.01; value: engine.width; onMoved: engine.width = value }
-                        Text { text: "WIDE"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
+                        Text { text: i18n.t("WIDE", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
                         Text { Layout.preferredWidth: 50; text: Math.round(engine.width * 100) + " %"; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 10; font.bold: true; horizontalAlignment: Text.AlignRight }
                     }
                     RowLayout { spacing: 6
                         Repeater { model: [{ t: "MONO", v: 0 }, { t: "NARROW", v: 0.5 }, { t: "NORMAL", v: 1 }, { t: "WIDE", v: 1.5 }, { t: "MAX", v: 2 }]
                             delegate: Rectangle { implicitWidth: 60; implicitHeight: 22; radius: 4; color: Math.abs(engine.width - modelData.v) < 0.005 ? Theme.amber : Theme.ov(0.06); border.color: Theme.lineSoft
                                 Text { anchors.centerIn: parent; text: modelData.t; color: Math.abs(engine.width - modelData.v) < 0.005 ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.width = modelData.v } } } }
-                    Text { Layout.fillWidth: true; text: "Mid/side on the master before the fader: 100 % leaves the mix as it is, below narrows it toward mono, above lifts the side signal (watch the correlation)."; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.WordWrap }
+                    Text { Layout.fillWidth: true; text: i18n.t("Mid/side on the master before the fader: 100 % leaves the mix as it is, below narrows it toward mono, above lifts the side signal (watch the correlation).", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.WordWrap }
                     Item { Layout.fillHeight: true }
                 }
             }

@@ -17,15 +17,15 @@ Item {
         anchors.fill: parent; anchors.margins: 10; spacing: 8
         Rectangle { Layout.fillWidth: true; implicitHeight: 34; radius: 8; color: Theme.card; border.color: Theme.line
             RowLayout { anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 8
-                Text { text: "ACCESS:"; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
-                Text { text: "role-based permission matrix"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
+                Text { text: i18n.t("ACCESS:", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
+                Text { text: i18n.t("role-based permission matrix", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                 Item { Layout.fillWidth: true }
-                Text { text: access.adminMode ? "ADMIN MODE: editing allowed" : "read-only: enter the ADMIN PIN to edit"; color: access.adminMode ? Theme.emerald : Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-                Btn { label: "DEFAULTS"; on: access.adminMode; onClicked: access.resetMatrix() } } }
+                Text { text: access.adminMode ? i18n.t("ADMIN MODE: editing allowed", i18n.lang) : i18n.t("read-only: enter the ADMIN PIN to edit", i18n.lang); color: access.adminMode ? Theme.emerald : Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                Btn { label: i18n.t("DEFAULTS", i18n.lang); on: access.adminMode; onClicked: access.resetMatrix() } } }
         RowLayout { Layout.fillWidth: true; Layout.fillHeight: true; spacing: 8
             Rectangle { Layout.fillWidth: true; Layout.fillHeight: true; radius: Theme.radius; color: Theme.card; border.color: Theme.line
                 ColumnLayout { anchors.fill: parent; anchors.margins: 12; spacing: 4
-                    Head { text: "PERMISSION PERIMETERS" }
+                    Head { text: i18n.t("PERMISSION PERIMETERS", i18n.lang) }
                     GridLayout { columns: 1 + access.roles.length; columnSpacing: 6; rowSpacing: 4; Layout.fillWidth: true
                         Text { text: ""; Layout.preferredWidth: 260 }
                         Repeater { model: access.roles; delegate: Text { text: modelData.name; color: access.role === modelData.id ? Theme.amber : Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; horizontalAlignment: Text.AlignHCenter; Layout.fillWidth: true } }
@@ -39,13 +39,13 @@ Item {
                                     Rectangle { width: 18; height: 18; radius: 9; y: 3; x: parent.on ? parent.width - 21 : 3; color: parent.on ? "#000" : Theme.dim; Behavior on x { NumberAnimation { duration: 120 } } }
                                     MouseArea { anchors.fill: parent; onClicked: access.setPerm(parent.rid, pm, !parent.on) } } } } }
                     Item { Layout.fillHeight: true }
-                    Text { Layout.fillWidth: true; text: "What a denied perimeter does: FADERS off = the surface is read-only (meters still run). DSP / ROUTING / LOUDNESS / ARCHIVE / SYSTEM off = those pages leave the rail for that profile. FOH MASTER always keeps SYSTEM. " + access.message; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap } } }
+                    Text { Layout.fillWidth: true; text: i18n.t("What a denied perimeter does: FADERS off = the surface is read-only (meters still run). DSP / ROUTING / LOUDNESS / ARCHIVE / SYSTEM off = those pages leave the rail for that profile. FOH MASTER always keeps SYSTEM. ", i18n.lang) + access.message; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap } } }
             Rectangle { Layout.preferredWidth: 230; Layout.fillHeight: true; radius: Theme.radius; color: Theme.card; border.color: Theme.line
                 ColumnLayout { anchors.fill: parent; anchors.margins: 12; spacing: 8
-                    Head { text: "ADMIN SECURITY PIN" }
-                    Text { Layout.fillWidth: true; text: access.adminMode ? "ADMIN mode is on for 30 minutes or until LOCK CONSOLE / LEAVE." : "Enter the PIN to edit the matrix, the edition and the audit log."; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap }
-                    PinPad { Layout.alignment: Qt.AlignHCenter; hint: "ADMIN PIN"; onEntered: function (pin) { access.enterAdmin(pin) } }
-                    Btn { visible: access.adminMode; label: "LEAVE ADMIN MODE"; onClicked: access.leaveAdmin() }
+                    Head { text: i18n.t("ADMIN SECURITY PIN", i18n.lang) }
+                    Text { Layout.fillWidth: true; text: access.adminMode ? i18n.t("ADMIN mode is on for 30 minutes or until LOCK CONSOLE / LEAVE.", i18n.lang) : i18n.t("Enter the PIN to edit the matrix, the edition and the audit log.", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap }
+                    PinPad { Layout.alignment: Qt.AlignHCenter; hint: i18n.t("ADMIN PIN", i18n.lang); onEntered: function (pin) { access.enterAdmin(pin) } }
+                    Btn { visible: access.adminMode; label: i18n.t("LEAVE ADMIN MODE", i18n.lang); onClicked: access.leaveAdmin() }
                     Item { Layout.fillHeight: true } } } }
     }
 }

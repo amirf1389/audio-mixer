@@ -21,8 +21,8 @@ Item {
     ColumnLayout {
         anchors.centerIn: parent; spacing: 10; width: Math.min(parent.width - 40, 560)
         Text { Layout.alignment: Qt.AlignHCenter; text: i18n.t(page.text, i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 20; font.bold: true; font.letterSpacing: 2 }
-        Text { Layout.alignment: Qt.AlignHCenter; text: "NOT NATIVE YET"; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.letterSpacing: 3 }
-        Text { Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter; text: notes[page.id] || "Coming to A mix OS."; color: Theme.muted; font.family: Theme.sans; font.pixelSize: 13; wrapMode: Text.WordWrap }
-        Text { Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter; text: "This page existed in the web console (AmF X1 1.22.1.0 Beta, git tag html-app-final) and is being rebuilt as a native page."; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.WordWrap }
+        Text { Layout.alignment: Qt.AlignHCenter; text: i18n.t("NOT NATIVE YET", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.letterSpacing: 3 }
+        Text { Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter; text: notes[page.id] || i18n.t("Coming to A mix OS.", i18n.lang); color: Theme.muted; font.family: Theme.sans; font.pixelSize: 13; wrapMode: Text.WordWrap }
+        Text { Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter; text: i18n.t("This page existed in the web console (AmF X1 1.22.1.0 Beta, git tag html-app-final) and is being rebuilt as a native page.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.WordWrap }
     }
 }

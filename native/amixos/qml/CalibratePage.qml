@@ -50,57 +50,57 @@ Item {
         GridLayout {
             id: grid; width: parent.width; columns: 2; columnSpacing: 8; rowSpacing: 8
             Card {
-                Head { text: "CLOCK & ENGINE" }
+                Head { text: i18n.t("CLOCK & ENGINE", i18n.lang) }
                 GridLayout { columns: 4; columnSpacing: 14; rowSpacing: 4
-                    Text { text: "ENGINE"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 } Val { text: engine.running ? "RUNNING · " + engine.backend : "STOPPED"; color: engine.running ? Theme.emerald : Theme.amber }
-                    Text { text: "DEVICE"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 } Val { text: page.last && page.last.in ? page.last.in : (page.last && page.last.out ? page.last.out : "—"); elide: Text.ElideMiddle; Layout.maximumWidth: 220 }
-                    Text { text: "SAMPLE RATE"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 } Val { text: engine.running ? engine.sampleRate + " Hz" : "—" }
-                    Text { text: "BLOCK"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 } Val { text: engine.running ? engine.blockFrames + " frames = " + page.bufferMs.toFixed(2) + " ms" : "—" }
-                    Text { text: "BUFFER LATENCY"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 } Val { text: engine.running ? "≈ " + (2 * page.bufferMs).toFixed(1) + " ms in + out (driver safety buffers add to it)" : "—" }
-                    Text { text: "OVERRUNS"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 } Val { text: page.tel.xruns + " since start · " + page.tel.blocks + " blocks"; color: page.tel.xruns > 0 ? Theme.amber : Theme.cyan }
+                    Text { text: i18n.t("ENGINE", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 } Val { text: engine.running ? i18n.t("RUNNING · ", i18n.lang) + engine.backend : i18n.t("STOPPED", i18n.lang); color: engine.running ? Theme.emerald : Theme.amber }
+                    Text { text: i18n.t("DEVICE", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 } Val { text: page.last && page.last.in ? page.last.in : (page.last && page.last.out ? page.last.out : "—"); elide: Text.ElideMiddle; Layout.maximumWidth: 220 }
+                    Text { text: i18n.t("SAMPLE RATE", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 } Val { text: engine.running ? engine.sampleRate + i18n.t(" Hz", i18n.lang) : "—" }
+                    Text { text: i18n.t("BLOCK", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 } Val { text: engine.running ? engine.blockFrames + i18n.t(" frames = ", i18n.lang) + page.bufferMs.toFixed(2) + i18n.t(" ms", i18n.lang) : "—" }
+                    Text { text: i18n.t("BUFFER LATENCY", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 } Val { text: engine.running ? "≈ " + (2 * page.bufferMs).toFixed(1) + i18n.t(" ms in + out (driver safety buffers add to it)", i18n.lang) : "—" }
+                    Text { text: i18n.t("OVERRUNS", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 } Val { text: page.tel.xruns + i18n.t(" since start · ", i18n.lang) + page.tel.blocks + i18n.t(" blocks", i18n.lang); color: page.tel.xruns > 0 ? Theme.amber : Theme.cyan }
                 }
-                Note { text: "Smaller blocks give less latency and more overruns. 128 frames at 48 kHz is 2.7 ms per block; a USB interface usually runs clean at 128..256, a built-in sound card wants 512. Set it on CONNECTIONS." }
+                Note { text: i18n.t("Smaller blocks give less latency and more overruns. 128 frames at 48 kHz is 2.7 ms per block; a USB interface usually runs clean at 128..256, a built-in sound card wants 512. Set it on CONNECTIONS.", i18n.lang) }
             }
             Card {
-                Head { text: "ROUND-TRIP LATENCY" }
+                Head { text: i18n.t("ROUND-TRIP LATENCY", i18n.lang) }
                 RowLayout { spacing: 8
-                    Text { text: "LISTEN ON CH"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
+                    Text { text: i18n.t("LISTEN ON CH", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                     SpinBox { from: 1; to: engine.stripState.length; value: page.strip + 1; onValueModified: page.strip = value - 1; implicitWidth: 90 }
-                    Btn { label: page.measuring ? "MEASURING" : "MEASURE"; on: !page.measuring; onColor: Theme.cyan; onClicked: if (!page.measuring) page.measureRt() } }
+                    Btn { label: page.measuring ? i18n.t("MEASURING", i18n.lang) : i18n.t("MEASURE", i18n.lang); on: !page.measuring; onColor: Theme.cyan; onClicked: if (!page.measuring) page.measureRt() } }
                 Text { Layout.fillWidth: true; text: page.rtText; color: page.rtColor; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; wrapMode: Text.WordWrap }
-                Note { text: "Connect a cable from an output that carries MASTER (OUT 1 by default on ROUTING? no: MONITOR is on 1-2; set an output to MASTER L) to the device input this strip reads. The pulse is sent at -12 dBFS for 1.5 s and the delay to its echo is the whole path: output buffers, converters, cable, input buffers." }
+                Note { text: i18n.t("Connect a cable from an output that carries MASTER (OUT 1 by default on ROUTING? no: MONITOR is on 1-2; set an output to MASTER L) to the device input this strip reads. The pulse is sent at -12 dBFS for 1.5 s and the delay to its echo is the whole path: output buffers, converters, cable, input buffers.", i18n.lang) }
             }
             Card {
-                Head { text: "NOISE FLOOR" }
+                Head { text: i18n.t("NOISE FLOOR", i18n.lang) }
                 RowLayout { spacing: 8
-                    Text { text: "CH " + (page.strip + 1) + " (set above) and the master, 1 second"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
-                    Btn { label: "MEASURE"; on: true; onColor: Theme.cyan; onClicked: page.measureNoise() } }
+                    Text { text: i18n.t("CH ", i18n.lang) + (page.strip + 1) + i18n.t(" (set above) and the master, 1 second", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
+                    Btn { label: i18n.t("MEASURE", i18n.lang); on: true; onColor: Theme.cyan; onClicked: page.measureNoise() } }
                 Text { Layout.fillWidth: true; text: page.noiseText; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; wrapMode: Text.WordWrap }
-                Note { text: "Measure with the microphone connected, the room quiet and no music. A good interface with a dynamic mic gives -80 dBFS or lower; -60 and above means a noisy preamp, a hum loop or the gain too high." }
+                Note { text: i18n.t("Measure with the microphone connected, the room quiet and no music. A good interface with a dynamic mic gives -80 dBFS or lower; -60 and above means a noisy preamp, a hum loop or the gain too high.", i18n.lang) }
             }
             Card {
-                Head { text: "LOUDNESS LOG" }
+                Head { text: i18n.t("LOUDNESS LOG", i18n.lang) }
                 RowLayout { spacing: 6
-                    Btn { label: page.logging ? "STOP" : "START LOG"; on: page.logging; onColor: Theme.danger; onClicked: { if (!page.logging) { page.logRows = []; page.logStart = Date.now(); page.maxM = -120; page.maxTp = -120 } page.logging = !page.logging } }
-                    Btn { label: "SAVE CSV"; on: page.logRows.length > 0; onColor: Theme.cyan; onClicked: if (page.logRows.length) settings.saveText("loudness-log-" + new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19) + ".csv", page.csv()) }
-                    Text { text: page.logRows.length + " s logged · max momentary " + (page.maxM > -119 ? page.maxM.toFixed(1) + " LUFS" : "—") + " · max true peak " + (page.maxTp > -119 ? page.maxTp.toFixed(1) + " dBTP" : "—"); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 } }
+                    Btn { label: page.logging ? i18n.t("STOP", i18n.lang) : i18n.t("START LOG", i18n.lang); on: page.logging; onColor: Theme.danger; onClicked: { if (!page.logging) { page.logRows = []; page.logStart = Date.now(); page.maxM = -120; page.maxTp = -120 } page.logging = !page.logging } }
+                    Btn { label: i18n.t("SAVE CSV", i18n.lang); on: page.logRows.length > 0; onColor: Theme.cyan; onClicked: if (page.logRows.length) settings.saveText("loudness-log-" + new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19) + ".csv", page.csv()) }
+                    Text { text: page.logRows.length + i18n.t(" s logged · max momentary ", i18n.lang) + (page.maxM > -119 ? page.maxM.toFixed(1) + i18n.t(" LUFS", i18n.lang) : "—") + i18n.t(" · max true peak ", i18n.lang) + (page.maxTp > -119 ? page.maxTp.toFixed(1) + i18n.t(" dBTP", i18n.lang) : "—"); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 } }
                 RowLayout { spacing: 14
                     Repeater { model: [{ t: "MOMENTARY", v: page.tel.momentary, u: " LUFS" }, { t: "SHORT TERM", v: page.tel.shortTerm, u: " LUFS" }, { t: "INTEGRATED", v: page.tel.integrated, u: " LUFS" }, { t: "LRA", v: page.tel.lra, u: " LU" }, { t: "TRUE PEAK", v: page.tel.truePeak, u: " dBTP" }]
                         delegate: ColumnLayout { spacing: 1; Text { text: modelData.t; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } Text { text: (modelData.v > -119 ? modelData.v.toFixed(1) : "—") + modelData.u; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 10; font.bold: true } } } }
-                Note { text: "One row per second: seconds, momentary, short-term, integrated, LRA, true peak. The CSV goes to " + settings.dataFolder + " (open it from SETTINGS). " + settings.message }
+                Note { text: i18n.t("One row per second: seconds, momentary, short-term, integrated, LRA, true peak. The CSV goes to ", i18n.lang) + settings.dataFolder + i18n.t(" (open it from SETTINGS). ", i18n.lang) + settings.message }
             }
             Card {
                 Layout.columnSpan: 2
-                Head { text: "SESSION" }
+                Head { text: i18n.t("SESSION", i18n.lang) }
                 RowLayout { spacing: 6; Layout.fillWidth: true
-                    Btn { label: "BACKUP CONSOLE"; on: true; onColor: Theme.cyan; onClicked: settings.exportConsole("") }
-                    Btn { label: "RESTORE BACKUP"; onClicked: settings.importConsole("") }
-                    Btn { label: "RESTORE AUTOSAVE"; on: settings.autosave.exists; onColor: Theme.amber; onClicked: settings.restoreAutosave() }
-                    Btn { label: "OPEN DATA FOLDER"; onClicked: settings.openDataFolder() }
+                    Btn { label: i18n.t("BACKUP CONSOLE", i18n.lang); on: true; onColor: Theme.cyan; onClicked: settings.exportConsole("") }
+                    Btn { label: i18n.t("RESTORE BACKUP", i18n.lang); onClicked: settings.importConsole("") }
+                    Btn { label: i18n.t("RESTORE AUTOSAVE", i18n.lang); on: settings.autosave.exists; onColor: Theme.amber; onClicked: settings.restoreAutosave() }
+                    Btn { label: i18n.t("OPEN DATA FOLDER", i18n.lang); onClicked: settings.openDataFolder() }
                     Item { Layout.fillWidth: true }
-                    Text { text: settings.autosave.exists ? "autosave " + settings.autosave.at + " · " + settings.autosave.bytes + " bytes" : "no autosave yet (written every 60 s)"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 } }
-                Text { visible: settings.lastSessionCrashed; Layout.fillWidth: true; text: "The last session ended unexpectedly. RESTORE AUTOSAVE brings the console back as it was within the last minute of that session; the console as it is now is written to before-restore.json first."; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.WordWrap }
-                Note { text: "BACKUP writes the whole console, the scenes and the presets to ~/amixos-console.json; RESTORE reads that file back. The licence is never in a backup." }
+                    Text { text: settings.autosave.exists ? i18n.t("autosave ", i18n.lang) + settings.autosave.at + " · " + settings.autosave.bytes + i18n.t(" bytes", i18n.lang) : i18n.t("no autosave yet (written every 60 s)", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 } }
+                Text { visible: settings.lastSessionCrashed; Layout.fillWidth: true; text: i18n.t("The last session ended unexpectedly. RESTORE AUTOSAVE brings the console back as it was within the last minute of that session; the console as it is now is written to before-restore.json first.", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.WordWrap }
+                Note { text: i18n.t("BACKUP writes the whole console, the scenes and the presets to ~/amixos-console.json; RESTORE reads that file back. The licence is never in a backup.", i18n.lang) }
             }
         }
     }

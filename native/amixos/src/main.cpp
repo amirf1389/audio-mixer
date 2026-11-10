@@ -129,7 +129,7 @@ int main(int argc, char* argv[]) {
       arrange.newProject(); const int clip = arrange.importFile(wav, 0); if (!clip || arrange.clips().size() != 1) { std::fprintf(stderr, "amixos --smoke: arrange import failed: %s\n", qPrintable(arrange.message())); return 18; }
       arrange.play(0); QElapsedTimer et; et.start(); while (et.elapsed() < 350) QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
       engine.tick(); const double mpk = engine.telemetry().value("masterPeakDb").toDouble(), spk = engine.meters()[0].toMap().value("peakDb").toDouble();
-      if (mpk < -20 || spk > -100 || !arrange.playing()) { std::fprintf(stderr, "amixos --smoke: arrangement not audible on the master (master %.1f dBFS, strip %.1f, playing %d)\n", mpk, spk, arrange.playing()); return 19; }
+      if (mpk < -20 || spk > -100 || !arrange.playing()) { std::fprintf(stderr, "amixos --smoke: arrangement not audible on the master (master %.1f dBFS, strip %.1f, playing %d, engine running %d: %s)\n", mpk, spk, arrange.playing(), engine.running(), qPrintable(engine.status())); return 19; }
       // RECORD while the tone plays: master + armed CH 1 -> two WAV files in a temp folder, the master file carries signal
       engine.setRecordFolder(QDir::tempPath() + "/amixos-smoke-rec"); engine.setArmed(0, true); if (!engine.startRecording()) { std::fprintf(stderr, "amixos --smoke: record start: %s\n", qPrintable(engine.recordMessage())); return 45; }
       { QElapsedTimer rt2; rt2.start(); while (rt2.elapsed() < 300) QCoreApplication::processEvents(QEventLoop::AllEvents, 20); }

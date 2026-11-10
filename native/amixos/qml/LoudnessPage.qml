@@ -9,7 +9,7 @@ Flickable {
         id: col; width: parent.width - 20; x: 10; y: 10; spacing: 10
         Panel {
             Layout.fillWidth: true
-            title: "LOUDNESS • EBU R128"
+            title: i18n.t("LOUDNESS • EBU R128", i18n.lang)
             subtitle: "Momentary 400 ms, short-term 3 s, integrated (gated -70 / -10 LU), loudness range, 4x true peak. Target -23 LUFS broadcast, -14 LUFS streaming."
             GridLayout {
                 columns: width > 700 ? 6 : 3; Layout.fillWidth: true; columnSpacing: 10; rowSpacing: 10
@@ -21,7 +21,7 @@ Flickable {
                         property real v: engine.telemetry[modelData.k] === undefined ? -120 : engine.telemetry[modelData.k]
                         ColumnLayout { anchors.centerIn: parent; spacing: 2
                             Text { Layout.alignment: Qt.AlignHCenter; text: modelData.t; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.letterSpacing: 1.5 }
-                            Text { Layout.alignment: Qt.AlignHCenter; text: modelData.k === "correlation" ? (v > 0 ? "+" : "") + v.toFixed(2) : (v <= -119 ? "-inf" : v.toFixed(1)); color: modelData.c; font.family: Theme.mono; font.pixelSize: 22; font.bold: true }
+                            Text { Layout.alignment: Qt.AlignHCenter; text: modelData.k === "correlation" ? (v > 0 ? "+" : "") + v.toFixed(2) : (v <= -119 ? i18n.t("-inf", i18n.lang) : v.toFixed(1)); color: modelData.c; font.family: Theme.mono; font.pixelSize: 22; font.bold: true }
                             Text { Layout.alignment: Qt.AlignHCenter; text: modelData.u; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 } } }
                 }
             }

@@ -474,6 +474,7 @@ void Engine::applyPluginStage(int i, const QString& kind, bool on) {
   else if (kind == "eq") { if (on) { bool any = false; for (const auto& b : p.eq) any = any || b.type != am::dsp::FilterType::Off; if (!any) setEq(i, 0, static_cast<int>(am::dsp::FilterType::Peaking), 1000, 1.0, 0); } else for (int b = 0; b < am::dsp::kEqBands; ++b) setEq(i, b, static_cast<int>(am::dsp::FilterType::Off), p.eq[static_cast<std::size_t>(b)].freq, p.eq[static_cast<std::size_t>(b)].q, 0); }
 }
 void Engine::setPlugin(int i, int slot, const QString& kind) {
+  if (slot >= pluginSlotLimit() && !kind.isEmpty()) return;   // beyond the edition's slots: the rack shows them locked
   if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots) return; StripUi& s = strips_[static_cast<std::size_t>(i)]; PluginUi& p = s.plugins[slot];
   bool known = kind.isEmpty() || isVstKind(kind); for (const auto& b : kBuiltIns) if (kind == b.kind) known = true; if (!known) return;
   if (!kind.isEmpty() && !isVstKind(kind)) for (int k = 0; k < kPluginSlots; ++k) if (k != slot && s.plugins[k].kind == kind) s.plugins[k] = PluginUi{};   // one slot per built-in stage

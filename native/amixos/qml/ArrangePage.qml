@@ -31,24 +31,24 @@ Item {
             Layout.fillWidth: true; implicitHeight: 36; radius: 8; color: Theme.card; border.color: Theme.line
             RowLayout {
                 anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 6
-                Text { text: "ARRANGE"; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
+                Text { text: i18n.t("ARRANGE", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
                 Rectangle { implicitWidth: 28; implicitHeight: 22; radius: 4; color: Theme.ov(0.08); Text { anchors.centerIn: parent; text: "⏮"; color: Theme.ink; font.pixelSize: 11 } MouseArea { anchors.fill: parent; onClicked: arrange.toStart() } }
-                Rectangle { implicitWidth: 60; implicitHeight: 22; radius: 4; color: arrange.playing ? Theme.emerald : Theme.ov(0.08); Text { anchors.centerIn: parent; text: arrange.playing ? "▶ PLAYING" : "▶ PLAY"; color: arrange.playing ? "#000" : Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: arrange.play(-1) } }
+                Rectangle { implicitWidth: 60; implicitHeight: 22; radius: 4; color: arrange.playing ? Theme.emerald : Theme.ov(0.08); Text { anchors.centerIn: parent; text: arrange.playing ? i18n.t("▶ PLAYING", i18n.lang) : i18n.t("▶ PLAY", i18n.lang); color: arrange.playing ? "#000" : Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: arrange.play(-1) } }
                 Rectangle { implicitWidth: 40; implicitHeight: 22; radius: 4; color: Theme.ov(0.08); Text { anchors.centerIn: parent; text: "■"; color: Theme.ink; font.pixelSize: 11 } MouseArea { anchors.fill: parent; onClicked: arrange.stop() } }
-                Rectangle { implicitWidth: 44; implicitHeight: 22; radius: 4; color: arrange.loop ? Theme.cyan : Theme.ov(0.08); Text { anchors.centerIn: parent; text: "LOOP"; color: arrange.loop ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: arrange.loop = !arrange.loop } }
+                Rectangle { implicitWidth: 44; implicitHeight: 22; radius: 4; color: arrange.loop ? Theme.cyan : Theme.ov(0.08); Text { anchors.centerIn: parent; text: i18n.t("LOOP", i18n.lang); color: arrange.loop ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: arrange.loop = !arrange.loop } }
                 Text { text: page.fmt(arrange.position); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; Layout.preferredWidth: 120 }
-                Text { text: "BPM"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 }
+                Text { text: i18n.t("BPM", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 }
                 SpinBox { from: 20; to: 300; value: Math.round(arrange.bpm); onValueModified: arrange.bpm = value; implicitWidth: 90; implicitHeight: 24; font.pixelSize: 9 }
-                Text { text: "SNAP"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 }
+                Text { text: i18n.t("SNAP", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 }
                 Repeater { model: [[0, "OFF"], [1, "BAR"], [4, "1/4"], [8, "1/8"], [16, "1/16"]]; delegate: Rectangle { implicitWidth: 34; implicitHeight: 20; radius: 3; color: arrange.snap === modelData[0] ? Theme.amber : Theme.ov(0.06); Text { anchors.centerIn: parent; text: modelData[1]; color: arrange.snap === modelData[0] ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: arrange.snap = modelData[0] } } }
-                Text { text: "ZOOM"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 }
+                Text { text: i18n.t("ZOOM", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 }
                 Slider { from: 5; to: 400; value: arrange.zoom; onMoved: arrange.zoom = value; implicitWidth: 100 }
                 Item { Layout.fillWidth: true }
-                Rectangle { implicitWidth: 70; implicitHeight: 22; radius: 4; color: Theme.ov(0.08); Text { anchors.centerIn: parent; text: "+ TRACK"; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: arrange.addTrack() } }
-                Rectangle { implicitWidth: 70; implicitHeight: 22; radius: 4; color: Theme.ov(0.08); Text { anchors.centerIn: parent; text: "MARKER"; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: arrange.addMarker() } }
-                Rectangle { implicitWidth: 60; implicitHeight: 22; radius: 4; color: Theme.ov(0.08); Text { anchors.centerIn: parent; text: "SPLIT"; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: arrange.splitAtHead() } }
-                Rectangle { implicitWidth: 70; implicitHeight: 22; radius: 4; color: Theme.orange; Text { anchors.centerIn: parent; text: "EXPORT"; color: "#000"; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: arrange.exportWav("") } }
-                Rectangle { implicitWidth: 44; implicitHeight: 22; radius: 4; color: Theme.ov(0.06); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: "NEW"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: arrange.newProject() } }
+                Rectangle { implicitWidth: 70; implicitHeight: 22; radius: 4; color: Theme.ov(0.08); Text { anchors.centerIn: parent; text: i18n.t("+ TRACK", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: arrange.addTrack() } }
+                Rectangle { implicitWidth: 70; implicitHeight: 22; radius: 4; color: Theme.ov(0.08); Text { anchors.centerIn: parent; text: i18n.t("MARKER", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: arrange.addMarker() } }
+                Rectangle { implicitWidth: 60; implicitHeight: 22; radius: 4; color: Theme.ov(0.08); Text { anchors.centerIn: parent; text: i18n.t("SPLIT", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: arrange.splitAtHead() } }
+                Rectangle { implicitWidth: 70; implicitHeight: 22; radius: 4; color: Theme.orange; Text { anchors.centerIn: parent; text: i18n.t("EXPORT", i18n.lang); color: "#000"; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: arrange.exportWav("") } }
+                Rectangle { implicitWidth: 44; implicitHeight: 22; radius: 4; color: Theme.ov(0.06); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: i18n.t("NEW", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: arrange.newProject() } }
             }
         }
         // the timeline: track headers on the left, a scrolling canvas on the right
@@ -58,7 +58,7 @@ Item {
                 anchors.fill: parent; anchors.margins: 6
                 Column {   // headers
                     width: page.hdrW; spacing: 0
-                    Item { width: parent.width; height: page.head; Text { anchors.centerIn: parent; text: arrange.tracks.length + " TRACKS · " + arrange.clips.length + " CLIPS · END " + arrange.end.toFixed(1) + " s"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
+                    Item { width: parent.width; height: page.head; Text { anchors.centerIn: parent; text: arrange.tracks.length + i18n.t(" TRACKS · ", i18n.lang) + arrange.clips.length + i18n.t(" CLIPS · END ", i18n.lang) + arrange.end.toFixed(1) + " s"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
                     Repeater { model: arrange.tracks
                         delegate: Rectangle { width: parent.width - 4; height: page.lane; color: Qt.rgba(1, 1, 1, index % 2 ? 0.025 : 0.05); border.color: Theme.lineSoft
                             Rectangle { anchors.left: parent.left; anchors.top: parent.top; anchors.bottom: parent.bottom; width: 4; color: Theme.stripColors[modelData.color] }
@@ -72,7 +72,7 @@ Item {
                                     Text { text: "G"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } Slider { Layout.fillWidth: true; from: -60; to: 6; value: modelData.db; onMoved: arrange.setTrack(modelData.id, "db", value); implicitHeight: 14 } Text { text: Theme.dbText(modelData.db); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 7; Layout.preferredWidth: 30 } }
                                 RowLayout { Layout.fillWidth: true; spacing: 4
                                     Text { text: "P"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } Slider { Layout.fillWidth: true; from: -1; to: 1; value: modelData.pan; onMoved: arrange.setTrack(modelData.id, "pan", value); implicitHeight: 14 } Text { text: modelData.pan === 0 ? "C" : (modelData.pan < 0 ? "L" + Math.round(-modelData.pan * 100) : "R" + Math.round(modelData.pan * 100)); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; Layout.preferredWidth: 30 }
-                                    Rectangle { implicitWidth: 22; implicitHeight: 12; radius: 2; color: Theme.ov(0.06); Text { anchors.centerIn: parent; text: "AUTO"; color: modelData.auto.length ? Theme.cyan : Theme.dim; font.family: Theme.mono; font.pixelSize: 5 } MouseArea { anchors.fill: parent; onClicked: arrange.clearAutomation(modelData.id) } } }
+                                    Rectangle { implicitWidth: 22; implicitHeight: 12; radius: 2; color: Theme.ov(0.06); Text { anchors.centerIn: parent; text: i18n.t("AUTO", i18n.lang); color: modelData.auto.length ? Theme.cyan : Theme.dim; font.family: Theme.mono; font.pixelSize: 5 } MouseArea { anchors.fill: parent; onClicked: arrange.clearAutomation(modelData.id) } } }
                             } } }
                 }
                 Flickable {
@@ -148,14 +148,14 @@ Item {
             Layout.fillWidth: true; implicitHeight: 92; radius: 8; color: Theme.card; border.color: Theme.line
             ColumnLayout { anchors.fill: parent; anchors.margins: 8; spacing: 4
                 RowLayout { Layout.fillWidth: true; spacing: 6
-                    Text { text: "IMPORT WAV"; color: Theme.emerald; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-                    TextField { id: folderIn; Layout.fillWidth: true; placeholderText: "folder with .wav files (empty = your Music folder); or a single .wav path"; font.family: Theme.mono; font.pixelSize: 9; implicitHeight: 24; onAccepted: page.scan() }
-                    Rectangle { implicitWidth: 60; implicitHeight: 24; radius: 4; color: Qt.rgba(0, 0.95, 1, 0.18); border.color: Theme.cyan; Text { anchors.centerIn: parent; text: "SCAN"; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.scan() } }
-                    Text { text: "Selected clip: " + (arrange.selectedClip ? "#" + arrange.selectedClip : "none") + "  ·  S split · M marker · Del remove · right-click a lane = automation point"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
+                    Text { text: i18n.t("IMPORT WAV", i18n.lang); color: Theme.emerald; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                    TextField { id: folderIn; Layout.fillWidth: true; placeholderText: i18n.t("folder with .wav files (empty = your Music folder); or a single .wav path", i18n.lang); font.family: Theme.mono; font.pixelSize: 9; implicitHeight: 24; onAccepted: page.scan() }
+                    Rectangle { implicitWidth: 60; implicitHeight: 24; radius: 4; color: Qt.rgba(0, 0.95, 1, 0.18); border.color: Theme.cyan; Text { anchors.centerIn: parent; text: i18n.t("SCAN", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.scan() } }
+                    Text { text: i18n.t("Selected clip: ", i18n.lang) + (arrange.selectedClip ? "#" + arrange.selectedClip : i18n.t("none", i18n.lang)) + i18n.t("  ·  S split · M marker · Del remove · right-click a lane = automation point", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
                 Flow { Layout.fillWidth: true; spacing: 4
                     Repeater { model: page.files; delegate: Rectangle { implicitWidth: fl.implicitWidth + 12; implicitHeight: 18; radius: 3; color: Theme.ov(0.08); border.color: Theme.lineSoft
                         Text { id: fl; anchors.centerIn: parent; text: modelData.split("/").pop(); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 7 } MouseArea { anchors.fill: parent; onClicked: arrange.importFile(modelData, 0) } } }
-                    Text { visible: page.files.length === 0; text: "No files listed yet. Type a folder or a .wav path and press SCAN; click a file to place it on the last track at the playhead (snapped)."; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
+                    Text { visible: page.files.length === 0; text: i18n.t("No files listed yet. Type a folder or a .wav path and press SCAN; click a file to place it on the last track at the playhead (snapped).", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
                 Text { text: arrange.message; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; Layout.fillWidth: true; elide: Text.ElideRight }
             }
         }

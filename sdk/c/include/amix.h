@@ -24,7 +24,7 @@ extern "C" {
 #define AMIX_API __attribute__((visibility("default")))
 #endif
 
-#define AMIX_API_VERSION 2   // 2: 16 buses (8 AUX + 8 FX)
+#define AMIX_API_VERSION 3   // 2: 16 buses (8 AUX + 8 FX)
 #define AMIX_MAX_STRIPS 32
 #define AMIX_MAX_BUSES 16
 
@@ -65,6 +65,10 @@ AMIX_API void        amix_mixer_set_bus_return(amix_mixer*, int bus, double db);
 AMIX_API void        amix_mixer_set_width(amix_mixer*, double width);               /* 0 mono .. 1 .. 2 wide */
 /* in: strips pointers of `frames` floats (NULL = silence); out_l / out_r: `frames` floats. Returns frames processed. */
 AMIX_API int         amix_mixer_process(amix_mixer*, const float* const* in, int frames, float* out_l, float* out_r);
+/* SURROUND 5.0: outs = L, R, C, Ls, Rs; a strip's depth (+1 front .. -1 rear, default +1) with its pan places it in the field; buses and
+   effects stay with the stereo process. Added in API version 3. */
+AMIX_API void        amix_mixer_set_depth(amix_mixer*, int strip, double depth);
+AMIX_API int         amix_mixer_process5(amix_mixer*, const float* const* in, int frames, float* const* outs5);
 AMIX_API void        amix_mixer_levels(const amix_mixer*, amix_levels* out);
 
 /* ---- live runtime ---- */

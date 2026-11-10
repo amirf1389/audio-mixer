@@ -31,18 +31,18 @@ Item {
             Layout.fillWidth: true; implicitHeight: 34; radius: 8; color: Theme.card; border.color: Theme.line
             RowLayout {
                 anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 6
-                Text { text: "WAVEFORM:"; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
+                Text { text: i18n.t("WAVEFORM:", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
                 Repeater { model: ["MASTER L", "MASTER R", "L + R", "STRIP"]; delegate: Rectangle { implicitWidth: tl.implicitWidth + 16; implicitHeight: 20; radius: 4; color: page.source === index ? Theme.amber : Theme.ov(0.06)
                     Text { id: tl; anchors.centerIn: parent; text: modelData; color: page.source === index ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: { page.source = index; page.refresh() } } } }
                 Rectangle { visible: page.source === 3; implicitWidth: 22; implicitHeight: 20; radius: 4; color: Theme.ov(0.08); Text { anchors.centerIn: parent; text: "‹"; color: Theme.ink; font.pixelSize: 12 } MouseArea { anchors.fill: parent; onClicked: page.strip = Math.max(0, page.strip - 1) } }
-                Text { visible: page.source === 3; text: "CH " + (page.strip + 1 < 10 ? "0" : "") + (page.strip + 1) + " " + (page.stripSt ? page.stripSt.name : ""); color: Theme.stripColors[page.stripSt ? page.stripSt.color : 0]; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                Text { visible: page.source === 3; text: i18n.t("CH ", i18n.lang) + (page.strip + 1 < 10 ? "0" : "") + (page.strip + 1) + " " + (page.stripSt ? page.stripSt.name : ""); color: Theme.stripColors[page.stripSt ? page.stripSt.color : 0]; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                 Rectangle { visible: page.source === 3; implicitWidth: 22; implicitHeight: 20; radius: 4; color: Theme.ov(0.08); Text { anchors.centerIn: parent; text: "›"; color: Theme.ink; font.pixelSize: 12 } MouseArea { anchors.fill: parent; onClicked: page.strip = Math.min(engine.stripState.length - 1, page.strip + 1) } }
                 Item { Layout.fillWidth: true }
-                Text { text: "TIME"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.letterSpacing: 2 }
+                Text { text: i18n.t("TIME", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.letterSpacing: 2 }
                 Repeater { model: [1, 5, 20, 100, 500]; delegate: Rectangle { implicitWidth: 42; implicitHeight: 20; radius: 4; color: page.windowMs === modelData ? Theme.ov(0.16) : Theme.ov(0.06)
-                    Text { anchors.centerIn: parent; text: modelData + " ms"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: { page.windowMs = modelData; page.refresh() } } } }
-                Rectangle { implicitWidth: 60; implicitHeight: 20; radius: 4; color: page.trigger ? Theme.cyan : Theme.ov(0.06); Text { anchors.centerIn: parent; text: "TRIGGER"; color: page.trigger ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.trigger = !page.trigger } }
-                Rectangle { implicitWidth: 60; implicitHeight: 20; radius: 4; color: page.frozen ? Theme.danger : Theme.ov(0.06); Text { anchors.centerIn: parent; text: "FREEZE"; color: page.frozen ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.frozen = !page.frozen } }
+                    Text { anchors.centerIn: parent; text: modelData + i18n.t(" ms", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: { page.windowMs = modelData; page.refresh() } } } }
+                Rectangle { implicitWidth: 60; implicitHeight: 20; radius: 4; color: page.trigger ? Theme.cyan : Theme.ov(0.06); Text { anchors.centerIn: parent; text: i18n.t("TRIGGER", i18n.lang); color: page.trigger ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.trigger = !page.trigger } }
+                Rectangle { implicitWidth: 60; implicitHeight: 20; radius: 4; color: page.frozen ? Theme.danger : Theme.ov(0.06); Text { anchors.centerIn: parent; text: i18n.t("FREEZE", i18n.lang); color: page.frozen ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.frozen = !page.frozen } }
             }
         }
         Rectangle {
@@ -60,8 +60,8 @@ Item {
                     trace(page.frameR.samples, "#00f2ff"); trace(page.frameL.samples, page.source === 3 ? Theme.stripColors[page.stripSt ? page.stripSt.color : 0] : (page.source === 1 ? "#00f2ff" : "#fbbf24"))
                 }
             }
-            Text { anchors.left: parent.left; anchors.top: parent.top; anchors.margins: 10; text: (page.source === 3 ? "STRIP pre-fader" : page.source === 2 ? "MASTER L (amber) + R (cyan)" : page.source === 1 ? "MASTER R" : "MASTER L") + "   " + page.windowMs + " ms / screen   ±1.0 FS"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
-            Text { anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 10; text: page.frozen ? "FROZEN" : (engine.running ? "LIVE" : "NO DEVICE"); color: page.frozen ? Theme.danger : (engine.running ? Theme.emerald : Theme.amber); font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
+            Text { anchors.left: parent.left; anchors.top: parent.top; anchors.margins: 10; text: (page.source === 3 ? i18n.t("STRIP pre-fader", i18n.lang) : page.source === 2 ? i18n.t("MASTER L (amber) + R (cyan)", i18n.lang) : page.source === 1 ? i18n.t("MASTER R", i18n.lang) : i18n.t("MASTER L", i18n.lang)) + "   " + page.windowMs + i18n.t(" ms / screen   ±1.0 FS", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
+            Text { anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 10; text: page.frozen ? i18n.t("FROZEN", i18n.lang) : (engine.running ? i18n.t("LIVE", i18n.lang) : i18n.t("NO DEVICE", i18n.lang)); color: page.frozen ? Theme.danger : (engine.running ? Theme.emerald : Theme.amber); font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
         }
         RowLayout {
             Layout.fillWidth: true; spacing: 8

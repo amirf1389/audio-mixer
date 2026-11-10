@@ -18,50 +18,50 @@ Item {
         anchors.fill: parent; anchors.margins: 10; spacing: 8
         Rectangle { Layout.fillWidth: true; implicitHeight: 34; radius: 8; color: Theme.card; border.color: Theme.line
             RowLayout { anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 8
-                Text { text: "ACCOUNT:"; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
-                Text { text: "PROFILE: " + page.roleName(access.role); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
-                Text { text: access.surfaceLocked ? "SURFACE LOCKED" : "SURFACE OPEN"; color: access.surfaceLocked ? Theme.danger : Theme.emerald; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                Text { text: i18n.t("ACCOUNT:", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
+                Text { text: i18n.t("PROFILE: ", i18n.lang) + page.roleName(access.role); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
+                Text { text: access.surfaceLocked ? i18n.t("SURFACE LOCKED", i18n.lang) : i18n.t("SURFACE OPEN", i18n.lang); color: access.surfaceLocked ? Theme.danger : Theme.emerald; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                 Item { Layout.fillWidth: true }
                 Text { text: access.message; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; elide: Text.ElideLeft; Layout.maximumWidth: 420 }
-                Btn { label: access.surfaceLocked ? "LOCKED" : "LOCK CONSOLE"; on: !access.surfaceLocked; onColor: Theme.danger; onClicked: if (!access.surfaceLocked) access.lock() } } }
+                Btn { label: access.surfaceLocked ? i18n.t("LOCKED", i18n.lang) : i18n.t("LOCK CONSOLE", i18n.lang); on: !access.surfaceLocked; onColor: Theme.danger; onClicked: if (!access.surfaceLocked) access.lock() } } }
         RowLayout { Layout.fillWidth: true; Layout.fillHeight: true; spacing: 8
             // profiles
             Rectangle { Layout.fillWidth: true; Layout.fillHeight: true; radius: Theme.radius; color: Theme.card; border.color: Theme.line
                 ColumnLayout { anchors.fill: parent; anchors.margins: 12; spacing: 6
-                    Head { text: "SELECT ACTIVE OPERATOR PROFILE" }
+                    Head { text: i18n.t("SELECT ACTIVE OPERATOR PROFILE", i18n.lang) }
                     Repeater { model: access.roles; delegate: Rectangle { Layout.fillWidth: true; implicitHeight: 58; radius: 6; color: access.role === modelData.id ? Qt.rgba(0.98, 0.75, 0.14, 0.14) : Theme.ov(0.04); border.color: access.role === modelData.id ? Theme.amber : (page.wantRole === modelData.id ? Theme.cyan : Theme.lineSoft)
                         ColumnLayout { anchors.fill: parent; anchors.margins: 8; spacing: 2
                             RowLayout { Text { text: modelData.name; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 10; font.bold: true } Item { Layout.fillWidth: true } }
                             Text { Layout.fillWidth: true; text: modelData.blurb; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap }
                             Text { text: page.permLine(page.mx[modelData.id]); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
                         MouseArea { anchors.fill: parent; onClicked: { if (!access.setRole(modelData.id, "")) page.wantRole = modelData.id; else page.wantRole = "" } } } }
-                    Text { visible: page.wantRole !== ""; text: "Enter the PIN on the pad to switch to " + page.roleName(page.wantRole); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8 }
+                    Text { visible: page.wantRole !== ""; text: i18n.t("Enter the PIN on the pad to switch to ", i18n.lang) + page.roleName(page.wantRole); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8 }
                     Item { Layout.fillHeight: true }
-                    Text { Layout.fillWidth: true; text: "Switching down (fewer rights) is free; switching up asks for the PIN. The pages a profile may not use disappear from the rail; ACCESS shows and edits the matrix."; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap } } }
+                    Text { Layout.fillWidth: true; text: i18n.t("Switching down (fewer rights) is free; switching up asks for the PIN. The pages a profile may not use disappear from the rail; ACCESS shows and edits the matrix.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap } } }
             // pin
             Rectangle { Layout.preferredWidth: 230; Layout.fillHeight: true; radius: Theme.radius; color: Theme.card; border.color: Theme.line
                 ColumnLayout { anchors.fill: parent; anchors.margins: 12; spacing: 8
-                    Head { text: "CONSOLE SURFACE PIN" }
-                    Text { visible: access.pinIsDefault; Layout.fillWidth: true; text: "DEFAULT PIN 1234 IS STILL ACTIVE: set your own below before a show."; color: Theme.danger; font.family: Theme.mono; font.pixelSize: 7; font.bold: true; wrapMode: Text.WordWrap }
-                    PinPad { Layout.alignment: Qt.AlignHCenter; hint: page.wantRole !== "" ? "PIN FOR " + page.roleName(page.wantRole) : (access.surfaceLocked ? "PIN TO UNLOCK" : "PIN TO LOCK / CHECK")
+                    Head { text: i18n.t("CONSOLE SURFACE PIN", i18n.lang) }
+                    Text { visible: access.pinIsDefault; Layout.fillWidth: true; text: i18n.t("DEFAULT PIN 1234 IS STILL ACTIVE: set your own below before a show.", i18n.lang); color: Theme.danger; font.family: Theme.mono; font.pixelSize: 7; font.bold: true; wrapMode: Text.WordWrap }
+                    PinPad { Layout.alignment: Qt.AlignHCenter; hint: page.wantRole !== "" ? i18n.t("PIN FOR ", i18n.lang) + page.roleName(page.wantRole) : (access.surfaceLocked ? i18n.t("PIN TO UNLOCK", i18n.lang) : i18n.t("PIN TO LOCK / CHECK", i18n.lang))
                         onEntered: function (pin) { if (page.wantRole !== "") { if (access.setRole(page.wantRole, pin)) page.wantRole = "" } else if (access.surfaceLocked) access.unlock(pin); else if (access.unlock(pin)) access.lock() } }
-                    Text { text: access.failedPins > 0 ? access.failedPins + " wrong PIN(s) in a row" : "Tap digits, then ENTER. Locked: faders, mutes and solos do not react."; color: access.failedPins > 0 ? Theme.danger : Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+                    Text { text: access.failedPins > 0 ? access.failedPins + i18n.t(" wrong PIN(s) in a row", i18n.lang) : i18n.t("Tap digits, then ENTER. Locked: faders, mutes and solos do not react.", i18n.lang); color: access.failedPins > 0 ? Theme.danger : Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap; Layout.fillWidth: true }
                     Rectangle { Layout.fillWidth: true; height: 1; color: Theme.lineSoft }
-                    Text { text: "CHANGE PIN"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.letterSpacing: 1 }
-                    TextField { id: oldPin; Layout.fillWidth: true; placeholderText: "current PIN"; echoMode: TextInput.Password; inputMethodHints: Qt.ImhDigitsOnly; font.family: Theme.mono; font.pixelSize: 9 }
-                    TextField { id: newPin; Layout.fillWidth: true; placeholderText: "new PIN (4-8 digits)"; echoMode: TextInput.Password; inputMethodHints: Qt.ImhDigitsOnly; font.family: Theme.mono; font.pixelSize: 9 }
-                    Btn { label: "SET PIN"; on: newPin.text.length >= 4; onColor: Theme.cyan; onClicked: if (access.setPin(oldPin.text, newPin.text)) { oldPin.text = ""; newPin.text = "" } }
+                    Text { text: i18n.t("CHANGE PIN", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.letterSpacing: 1 }
+                    TextField { id: oldPin; Layout.fillWidth: true; placeholderText: i18n.t("current PIN", i18n.lang); echoMode: TextInput.Password; inputMethodHints: Qt.ImhDigitsOnly; font.family: Theme.mono; font.pixelSize: 9 }
+                    TextField { id: newPin; Layout.fillWidth: true; placeholderText: i18n.t("new PIN (4-8 digits)", i18n.lang); echoMode: TextInput.Password; inputMethodHints: Qt.ImhDigitsOnly; font.family: Theme.mono; font.pixelSize: 9 }
+                    Btn { label: i18n.t("SET PIN", i18n.lang); on: newPin.text.length >= 4; onColor: Theme.cyan; onClicked: if (access.setPin(oldPin.text, newPin.text)) { oldPin.text = ""; newPin.text = "" } }
                     Item { Layout.fillHeight: true } } }
             // audit
             Rectangle { Layout.preferredWidth: 420; Layout.fillHeight: true; radius: Theme.radius; color: Theme.card; border.color: Theme.line; clip: true
                 ColumnLayout { anchors.fill: parent; anchors.margins: 12; spacing: 6
-                    RowLayout { Head { text: "OPERATOR AUDIT TRAIL" } Item { Layout.fillWidth: true } Btn { label: "EXPORT CSV"; onClicked: access.exportAudit() } }
+                    RowLayout { Head { text: i18n.t("OPERATOR AUDIT TRAIL", i18n.lang) } Item { Layout.fillWidth: true } Btn { label: i18n.t("EXPORT CSV", i18n.lang); onClicked: access.exportAudit() } }
                     ListView { id: lv; Layout.fillWidth: true; Layout.fillHeight: true; clip: true; model: access.audit; spacing: 2; onCountChanged: positionViewAtEnd()
                         delegate: RowLayout { width: lv.width; spacing: 6
                             Text { text: modelData.at.replace("T", " "); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
                             Text { text: modelData.who; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
                             Text { Layout.fillWidth: true; text: modelData.text; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap } } }
-                    Text { visible: access.audit.length === 0; text: "No events yet. Role switches, locks, PIN changes and admin actions are written to ~/.amixos/audit.log."; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap; Layout.fillWidth: true } } }
+                    Text { visible: access.audit.length === 0; text: i18n.t("No events yet. Role switches, locks, PIN changes and admin actions are written to ~/.amixos/audit.log.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap; Layout.fillWidth: true } } }
         }
     }
 }
