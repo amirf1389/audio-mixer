@@ -106,7 +106,7 @@ class S16Meter {
 };
 
 // ───────── mixer ─────────
-struct Strip { double gainDb = 0, gainLin = 1, pan = 0; bool mute = false, solo = false; Meter meter; double inPk = 0; };   // inPk: pre-fader input peak of the last block
+struct Strip { double gainDb = 0, gainLin = 1, pan = 0; bool mute = false, solo = false; Meter meter; double inPk = 0; bool automix = false; double amWeight = 1, amLevel = 0, amGain = 1; };   // inPk: pre-fader input peak of the last block; automix: gain-sharing member, amGain its share (linear)
 // AUX SENDS: kMaxBuses stereo buses. Each strip sends to each bus at its own level, pre-fader (the raw input: monitor mixes) or post-fader
 // (after gain, mute and solo: effects sends). A bus has a level, a mute, a meter and a RETURN level into the master (an effects return or a
 // way to hear a monitor mix); its own stereo output is handed to the caller through process()'s busOut (the runtime maps it to output channels).
@@ -134,6 +134,14 @@ class Mixer {
   void setBusReturn(int bus, double db);                     // -60 and below = none (default)
   void setBusProcessor(int bus, BusProcessor* p);            // nullptr = none; the caller keeps it alive while set
   void setWidth(double w);                                   // master stereo width: 0 mono, 1 as is, 2 wide (mid / side), before the master gain
+  // AUTOMIX (gain sharing, Dugan-style): the member strips share one unity gain in proportion to their weighted input level, so an
+  // open microphone that is spoken into takes the gain and the quiet ones fall back (10 ms attack, 300 ms release, -40 dB floor)
+  void setAutomix(int strip, bool on, double weight);        // weight 0.25 .. 4 (1 = equal)
+  double automixGainDb(int strip) const;
+  // AUTO LEVEL ("no low, but loud"): a slow gain after the width stage that steers the short-term loudness toward a target (LUFS),
+  // never above maxGainDb, +1 dB/s up and -6 dB/s down; the brick-wall limiter after it keeps the true peak in check
+  void setAutoLevel(bool on, double targetLufs, double maxGainDb);
+  double autoLevelGainDb() const { return autoDb_; }
   const Bus& bus(int k) const { return buses_[static_cast<std::size_t>(k)]; }
   const Send& send(int strip, int bus) const { return sends_[static_cast<std::size_t>(strip)][static_cast<std::size_t>(bus)]; }
   // inputs[strip] -> outL / outR (frames samples each). Meters, loudness and phase are updated once per call.
@@ -150,6 +158,7 @@ class Mixer {
   std::vector<Strip> strips_;
   double masterDb_ = 0, masterLin_ = 1;
   double width_ = 1.0;   // master stereo width
+  bool autoOn_ = false; double autoTarget_ = -16, autoMax_ = 12, autoDb_ = 0, autoSec_ = 0; int automixN_ = 0;
   bool limOn_ = false; double limCeil_, limGain_ = 1, limReleaseMs_ = 100;
   ClipConfig clip_; Meter master_[2]; Loudness loudness_; PhaseResult phase_{0, 0, 0, 0, true};
   Send sends_[kMaxStrips][kMaxBuses]{}; Bus buses_[kMaxBuses]; bool anySend_ = false;

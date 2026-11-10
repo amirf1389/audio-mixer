@@ -60,10 +60,10 @@ std::vector<DeviceInfo> listDevices();                       // every device of 
 
 // the meters, copied out consistently
 struct Snapshot {
-  struct StripMeter { double pk, rms, hold; std::uint32_t clipN; double compGrDb, gateDb, inPk; };   // compGrDb <= 0 (the channel compressor), gateDb <= 0 (the channel gate)
+  struct StripMeter { double pk, rms, hold; std::uint32_t clipN; double compGrDb, gateDb, inPk, amGainDb; };   // compGrDb <= 0 (the channel compressor), gateDb <= 0 (the channel gate), amGainDb <= 0 (automix share)
   StripMeter strips[kMaxStrips]; StripMeter master[2]; StripMeter buses[kMaxBuses];
   double monitorPk[2];                       // what the control room hears, after the monitor section
-  double momentary, shortTerm, integrated, lra, truePeak, correlation;
+  double momentary, shortTerm, integrated, lra, truePeak, correlation, autoLevelDb;
   std::uint64_t blocks, frames, xruns;
 };
 
@@ -103,6 +103,8 @@ class Runtime {
   void setBusReturn(int bus, double db);
   void setBusProcessor(int bus, BusProcessor* p);   // an effect on a bus (app/fx); keep it alive while set, detach with nullptr before deleting
   void setWidth(double w);                           // master stereo width 0..2
+  void setAutomix(int strip, bool on, double weight);   // gain-sharing automixer membership
+  void setAutoLevel(bool on, double targetLufs, double maxGainDb);
   // the monitor section (control room): what goes to output channels 0 / 1 after the master meters. source 0 = master, 1..kMaxBuses = that bus
   // (post level, pre return); level in dB, dim = -20 dB, mono sums L+R, mute = silence. The master meters and loudness are not affected.
   void setMonitor(int source, double db, bool dim, bool mono, bool mute);

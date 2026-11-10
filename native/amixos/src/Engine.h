@@ -132,6 +132,15 @@ class Engine : public QObject {
   // WAVEFORM / PHASE: the scope tap
   Q_PROPERTY(double width READ width WRITE setWidth NOTIFY stripsChanged)   // master stereo width 0..2
   double width() const { return width_; } void setWidth(double w);
+  // AI MIX: gain-sharing automixer membership per strip and the master AUTO LEVEL (short-term loudness toward a target under the limiter)
+  Q_INVOKABLE void setAutomix(int strip, bool on, double weight);
+  Q_PROPERTY(bool autoLevelOn READ autoLevelOn WRITE setAutoLevelOn NOTIFY stripsChanged)
+  Q_PROPERTY(double autoLevelTarget READ autoLevelTarget WRITE setAutoLevelTarget NOTIFY stripsChanged)   // LUFS, -30 .. -6
+  Q_PROPERTY(double autoLevelMax READ autoLevelMax WRITE setAutoLevelMax NOTIFY stripsChanged)         // dB of lift at most, 0 .. 24
+  bool autoLevelOn() const { return autoOn_; } void setAutoLevelOn(bool v) { autoOn_ = v; pushAutoLevel(); emit stripsChanged(); }
+  double autoLevelTarget() const { return autoTarget_; } void setAutoLevelTarget(double v) { autoTarget_ = std::clamp(v, -30.0, -6.0); pushAutoLevel(); emit stripsChanged(); }
+  double autoLevelMax() const { return autoMax_; } void setAutoLevelMax(double v) { autoMax_ = std::clamp(v, 0.0, 24.0); pushAutoLevel(); emit stripsChanged(); }
+  void pushAutoLevel() { if (rt_) rt_->setAutoLevel(autoOn_, autoTarget_, autoMax_); }
   Q_INVOKABLE QVariantMap scopeFrame(int channel, double windowMs, int points, bool trigger);   // {samples: [..], vpp, vrms, freq, crest}
   Q_INVOKABLE QVariantList lissajous(int points);                                                // [l0, r0, l1, r1, ...]
   Q_INVOKABLE void setScopeStrip(int strip) { scope_.setStrip(strip); }
@@ -307,12 +316,12 @@ class Engine : public QObject {
   bool loadVst(int strip, int slot);                      // from kind + state at the runtime's rate; false -> error set
   void rebuildInserts(int strip);                         // the strip's VST chain into the runtime
   void reloadAllVst();                                    // after open (new rate / block)
-  struct StripUi { QString name; double db = 0, pan = 0; bool mute = false, solo = false; am::dsp::Channel dsp{48000}; SendUi sends[kBuses]; int dca = 0; unsigned muteGroups = 0; int color = 0; PluginUi plugins[kPluginSlots]; bool link = false; double trimDb = 0; };
+  struct StripUi { QString name; double db = 0, pan = 0; bool mute = false, solo = false; am::dsp::Channel dsp{48000}; SendUi sends[kBuses]; int dca = 0; unsigned muteGroups = 0; int color = 0; PluginUi plugins[kPluginSlots]; bool automix = false; double amWeight = 1; bool link = false; double trimDb = 0; };
   std::vector<QJsonObject> history_; int histPos_ = -1; bool restoring_ = false; QTimer histTimer_; QJsonObject abOther_; QString abSlot_ = "A";
   int partner(int i) const { return (i ^ 1) < kStrips ? (i ^ 1) : -1; }
   void applyPluginStage(int strip, const QString& kind, bool on);   // a built-in stage follows its slot
   struct BusUi { QString name; double db = 0, returnDb = -60; bool mute = false; QString fxKind; std::unique_ptr<am::fx::Effect> fx; double fxMix = 1; bool fxBypass = false; std::map<QString, double> fxValues; };
-  std::vector<std::unique_ptr<am::fx::Effect>> fxGraveyard_; double width_ = 1.0; ScopeTap scope_; TapFanout taps_; Generator gen_; SourceFanout sources_; int blockFrames_ = 0;
+  std::vector<std::unique_ptr<am::fx::Effect>> fxGraveyard_; double width_ = 1.0; ScopeTap scope_; TapFanout taps_; Generator gen_; SourceFanout sources_; int blockFrames_ = 0; bool autoOn_ = false; double autoTarget_ = -16, autoMax_ = 12;
   void makeBusFx(int k);   // (re)creates the bus effect at the runtime's rate from kind + values and attaches it
   struct DcaUi { QString name; double db = 0; bool mute = false; };
   struct MuteGroupUi { QString name; bool active = false; };
