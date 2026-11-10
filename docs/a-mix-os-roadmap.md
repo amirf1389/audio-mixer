@@ -184,6 +184,12 @@ decided, what exists, what is next, and what was asked for but is not possible a
   `Engine::setNullTestInput` gives the null device a -12 dBFS test signal so `--shots` show real meters. Checks: engine tests, clang-tidy
   (bugprone + analyzer: no finding in project code), MinGW -Werror on every Windows source, console smoke with screenshots in both themes.
 
+- **Real-time check, device-named strips, no boot screen, setup alert**: `--shots` now measures the live path on the null device's test
+  input: strip 1 reads -12.0 dBFS in (as fed), out = in + fader, an unrouted strip is silent, re-routing it to input 1 brings -12.0, and the
+  INPUT chip label ends in the channel. The strip INPUT chip names the open device ("UM2 · IN 3", `Engine::inputLabel`, `inputDeviceName`
+  / `outputDeviceName`) with the full driver name in the tooltip. The BOOT screen is gone (asked for). An amber alert bar under the header
+  appears when no sound card is remembered and the engine is idle, with FACTORY SETUP and CONNECTIONS buttons.
+
 ## Next, in order
 
 1. **Windows .exe in hand**: run the Actions workflow, download `amixos-windows-x64.zip`, test ASIO (UM2, Focusrite, ASIO4ALL, Realtek) on the user's PC. Fix what the real drivers show.

@@ -51,6 +51,9 @@ class Engine : public QObject {
   Q_PROPERTY(QVariantList outputRoutes READ outputRoutes NOTIFY routingChanged)   // per device output: the source index (see outputSources)
   Q_PROPERTY(QVariantList outputSources READ outputSources NOTIFY busesChanged)              // [{index, name, group}] off, master L/R, monitor L/R, bus k L/R
   Q_PROPERTY(int deviceInputs READ deviceInputs NOTIFY stateChanged)
+  Q_PROPERTY(QString inputDeviceName READ inputDeviceName NOTIFY stateChanged)    // the open input device, as the driver names it ("" when none)
+  Q_PROPERTY(QString outputDeviceName READ outputDeviceName NOTIFY stateChanged)
+
   Q_PROPERTY(int deviceOutputs READ deviceOutputs NOTIFY stateChanged)
   Q_PROPERTY(QVariantMap monitor READ monitor NOTIFY monitorChanged)                 // control room: source (0 master, 1..16 bus), db, dim, mono, mute
   Q_PROPERTY(bool channelClipboard READ channelClipboard NOTIFY clipboardChanged)   // a channel has been copied (MORE > COPY)
@@ -232,6 +235,8 @@ class Engine : public QObject {
   QVariantMap monitor() const;
   QVariantList inputRoutes() const; QVariantList outputRoutes() const; QVariantList outputSources() const;
   int deviceInputs() const { return devIn_; } int deviceOutputs() const { return devOut_; }
+  Q_INVOKABLE QString inputLabel(int input) const;   // "UM2 · IN 3": the short device name + the channel, for a strip's INPUT chip
+  QString inputDeviceName() const { return inDevName_; } QString outputDeviceName() const { return outDevName_; }
   Q_INVOKABLE void setInputRoute(int strip, int input);
   Q_INVOKABLE void setOutputRoute(int out, int source);
   Q_INVOKABLE void resetRouting();                      // input s -> strip s, monitor on 1-2, bus k on 3+2k / 4+2k
@@ -386,7 +391,7 @@ class Engine : public QObject {
   std::vector<StripUi> strips_;
   double masterDb_ = 0; bool masterLim_ = true; double masterCeil_ = -0.5;
   static constexpr int kOutputs = 32;
-  int inRoute_[kStrips] = {}; int outRoute_[kOutputs] = {}; int devIn_ = 0, devOut_ = 0;
+  int inRoute_[kStrips] = {}; int outRoute_[kOutputs] = {}; int devIn_ = 0, devOut_ = 0; QString inDevName_, outDevName_; void rememberDeviceNames(const std::string& backend, const std::string& in, const std::string& out);
   QVariantMap license_; int licensedChannels_ = 8;
   struct EqPresetUi { QString name; am::dsp::EqBand bands[10]; int hpOrder = 0; double hpFreq = 80; int lpOrder = 0; double lpFreq = 16000; bool used = false; };
   static const EqPresetUi* factoryEqPreset(int slot); EqPresetUi userEq_[10]; void loadUserEq(); void storeUserEq() const;
