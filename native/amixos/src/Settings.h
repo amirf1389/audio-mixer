@@ -28,6 +28,7 @@ class Settings : public QObject {
   Q_PROPERTY(bool vuDefault READ vuDefault WRITE setVuDefault NOTIFY changed)
   Q_PROPERTY(bool monitorPanelDefault READ monitorPanelDefault WRITE setMonitorPanelDefault NOTIFY changed)
   Q_PROPERTY(bool rackDefault READ rackDefault WRITE setRackDefault NOTIFY changed)
+  Q_PROPERTY(bool rackCompactDefault READ rackCompactDefault WRITE setRackCompactDefault NOTIFY changed)
   Q_PROPERTY(bool channelPanelDefault READ channelPanelDefault WRITE setChannelPanelDefault NOTIFY changed)
   Q_PROPERTY(QVariantList dataFiles READ dataFiles NOTIFY changed)              // [{name, path, exists, bytes}]
   Q_PROPERTY(QStringList vstDirs READ vstDirs NOTIFY changed)                      // extra VST3 folders besides the platform ones
@@ -50,11 +51,12 @@ class Settings : public QObject {
   int peakHoldMs() const { return s_.value("audio/peakHoldMs", 1400).toInt(); } void setPeakHoldMs(int v);
   bool vuDefault() const { return s_.value("mixer/vu", false).toBool(); } void setVuDefault(bool v) { set("mixer/vu", v); }
   bool monitorPanelDefault() const { return s_.value("mixer/monitor", true).toBool(); } void setMonitorPanelDefault(bool v) { set("mixer/monitor", v); }
+  bool rackCompactDefault() const { return s_.value("mixer/rackCompact", false).toBool(); } void setRackCompactDefault(bool v) { set("mixer/rackCompact", v); }
   bool rackDefault() const { return s_.value("mixer/rack", true).toBool(); } void setRackDefault(bool v) { set("mixer/rack", v); }
   bool channelPanelDefault() const { return s_.value("mixer/channelPanel", true).toBool(); } void setChannelPanelDefault(bool v) { set("mixer/channelPanel", v); }
   QVariantList dataFiles() const;
   QStringList vstDirs() const { return s_.value("vst3/dirs").toStringList(); }
-  QStringList vstDefaultDirs() const;
+  QStringList vstDefaultDirs() const;   // VST3 and VST2 platform folders
   Q_INVOKABLE int addVstDir(const QString& dir);      // adds and rescans; returns the plug-in count
   Q_INVOKABLE int removeVstDir(const QString& dir);
   Q_INVOKABLE int rescanVst();

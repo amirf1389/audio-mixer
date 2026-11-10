@@ -33,7 +33,7 @@ Engine::Engine(QObject* parent) : QObject(parent) {
   for (auto sig : {&Engine::stripsChanged, &Engine::busesChanged, &Engine::groupsChanged, &Engine::monitorChanged, &Engine::routingChanged}) connect(this, sig, this, [this] { if (!restoring_) histTimer_.start(); });
   history_.push_back(consoleJson()); histPos_ = 0;
   graveTimer_.setSingleShot(true); graveTimer_.setInterval(1500); connect(&graveTimer_, &QTimer::timeout, this, [this] { graveyard_.clear(); });   // removed plug-ins die on the UI thread, after the audio thread has let go
-  rescanVst(settings_.value("vst3/dirs").toStringList());
+  rescanVst(settings_.value("vst3/dirs").toStringList() + settings_.value("vst2/dirs").toStringList());
   connect(&timer_, &QTimer::timeout, this, &Engine::tick);
   tick();
 }
@@ -285,38 +285,41 @@ void Engine::setLink(int i, bool on) { if (i < 0 || i >= kStrips || partner(i) <
 bool Engine::linked(int i) const { return i >= 0 && i < kStrips && strips_[static_cast<std::size_t>(i)].link; }
 void Engine::setTrim(int i, double db) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].trimDb = std::clamp(db, -24.0, 24.0); if (rt_) rt_->setTrimDb(i, strips_[static_cast<std::size_t>(i)].trimDb); emit stripsChanged(); }
 double Engine::trim(int i) const { return i >= 0 && i < kStrips ? strips_[static_cast<std::size_t>(i)].trimDb : 0; }
+static bool isVstKind(const QString& k) { return k.startsWith("vst3:") || k.startsWith("vst2:"); }
 void Engine::muteAll(bool on) { for (int i = 0; i < kStrips; ++i) { strips_[static_cast<std::size_t>(i)].mute = on; pushStrip(i); } emit stripsChanged(); }
 void Engine::clearSolo() { for (int i = 0; i < kStrips; ++i) { strips_[static_cast<std::size_t>(i)].solo = false; if (rt_) rt_->setSolo(i, false); } emit stripsChanged(); }
 void Engine::resetFaders() { for (int i = 0; i < kStrips; ++i) { StripUi& s = strips_[static_cast<std::size_t>(i)]; s.db = 0; s.pan = 0; pushStrip(i); if (rt_) rt_->setPan(i, 0); } masterDb_ = 0; if (rt_) rt_->setMasterDb(0); emit stripsChanged(); }
-void Engine::flattenAllDsp() { for (int i = 0; i < kStrips; ++i) { strips_[static_cast<std::size_t>(i)].dsp.set(am::dsp::ChannelParams{}); for (PluginUi& p : strips_[static_cast<std::size_t>(i)].plugins) if (!p.kind.startsWith("vst3:")) p = PluginUi{}; } if (rt_) pushAll(); emit stripsChanged(); }
+void Engine::flattenAllDsp() { for (int i = 0; i < kStrips; ++i) { strips_[static_cast<std::size_t>(i)].dsp.set(am::dsp::ChannelParams{}); for (PluginUi& p : strips_[static_cast<std::size_t>(i)].plugins) if (!isVstKind(p.kind)) p = PluginUi{}; } if (rt_) pushAll(); emit stripsChanged(); }
 
 static const struct { const char* kind; const char* name; } kBuiltIns[] = {{"gate", "NOISE GATE"}, {"eq", "EQ"}, {"xover", "X-OVER"}, {"comp", "COMPRESSOR"}, {"limiter", "LIMITER"}, {"delay", "DELAY"}, {"polarity", "POLARITY Ø"}};
 QVariantList Engine::pluginCatalog() const { QVariantList l; for (const auto& b : kBuiltIns) { QVariantMap m; m["kind"] = b.kind; m["name"] = b.name; m["builtIn"] = true; l << m; } for (const QVariantMap& v : vstCatalog_) l << v; return l; }
 QVariantList Engine::vstCatalog() const { QVariantList l; for (const QVariantMap& v : vstCatalog_) l << v; return l; }
 int Engine::rescanVst(const QStringList& extraDirs) {
-  std::vector<std::string> dirs = am::vst3::defaultDirs(); for (const QString& d : extraDirs) if (!d.trimmed().isEmpty()) dirs.push_back(d.trimmed().toStdString());
+  std::vector<std::string> dirs3 = am::vst3::defaultDirs(), dirs2 = am::vst2::defaultDirs(); for (const QString& d : extraDirs) if (!d.trimmed().isEmpty()) { dirs3.push_back(d.trimmed().toStdString()); dirs2.push_back(d.trimmed().toStdString()); }
   vstCatalog_.clear();
-  for (const std::string& mod : am::vst3::scan(dirs)) { std::vector<am::vst3::ClassInfo> cls; std::string err; if (!am::vst3::inspect(mod, cls, err)) continue;
-    for (const auto& c : cls) { QVariantMap m; m["kind"] = QStringLiteral("vst3:%1|%2").arg(QString::fromStdString(mod), QString::fromStdString(c.cid)); m["name"] = QString::fromStdString(c.name); m["vendor"] = QString::fromStdString(c.vendor); m["module"] = QString::fromStdString(mod); m["cid"] = QString::fromStdString(c.cid); m["subCategories"] = QString::fromStdString(c.subCategories); m["builtIn"] = false; vstCatalog_.push_back(m); } }
+  for (const std::string& mod : am::vst3::scan(dirs3)) { std::vector<am::vst3::ClassInfo> cls; std::string err; if (!am::vst3::inspect(mod, cls, err)) continue;
+    for (const auto& c : cls) { QVariantMap m; m["kind"] = QStringLiteral("vst3:%1|%2").arg(QString::fromStdString(mod), QString::fromStdString(c.cid)); m["name"] = QString::fromStdString(c.name); m["vendor"] = QString::fromStdString(c.vendor); m["module"] = QString::fromStdString(mod); m["cid"] = QString::fromStdString(c.cid); m["subCategories"] = QString::fromStdString(c.subCategories); m["format"] = "VST3"; m["builtIn"] = false; vstCatalog_.push_back(m); } }
+  for (const std::string& mod : am::vst2::scan(dirs2)) { am::host::Info info; std::string err; if (!am::vst2::inspect(mod, info, err)) continue;   // a .dll / .so that is not a VST2 plug-in is skipped quietly
+    QVariantMap m; m["kind"] = QStringLiteral("vst2:%1").arg(QString::fromStdString(mod)); m["name"] = QString::fromStdString(info.name); m["vendor"] = QString::fromStdString(info.vendor); m["module"] = QString::fromStdString(mod); m["cid"] = QString::fromStdString(info.uid); m["subCategories"] = QString::fromStdString(info.category); m["format"] = "VST2"; m["builtIn"] = false; vstCatalog_.push_back(m); }
   emit stripsChanged(); return static_cast<int>(vstCatalog_.size());
 }
 static void splitVstKind(const QString& kind, QString& module, QString& cid) { const QString k = kind.mid(5); const int bar = k.lastIndexOf('|'); module = bar >= 0 ? k.left(bar) : k; cid = bar >= 0 ? k.mid(bar + 1) : QString(); }
 bool Engine::loadVst(int i, int slot) {
   PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[slot]; p.vst.reset(); p.error.clear();
-  if (!p.kind.startsWith("vst3:")) return false;
+  if (!isVstKind(p.kind)) return false;
   QString module, cid; splitVstKind(p.kind, module, cid); std::string err;
-  const double rate = rt_ ? rt_->sampleRate() : 48000; const int block = 1024;   // the runtime hands out up to 8 periods; 1024 covers any period up to 128 at 8x, larger blocks are split by the insert adapter
-  std::unique_ptr<am::vst3::Plugin> pl = am::vst3::Plugin::load(module.toStdString(), cid.toStdString(), rate, block, err);
+  const double rate = rt_ ? rt_->sampleRate() : 48000; const int block = 1024;   // larger runtime blocks are split by the insert adapter
+  std::unique_ptr<am::host::Plugin> pl; if (p.kind.startsWith("vst3:")) pl = am::vst3::Plugin::load(module.toStdString(), cid.toStdString(), rate, block, err); else pl = am::vst2::Plugin::load(module.toStdString(), rate, block, err);
   if (!pl) { p.error = QString::fromStdString(err); return false; }
   if (!p.state.isEmpty()) pl->setState(p.state.toStdString());
   pl->setBypass(p.bypass); p.vst = std::move(pl); return true;
 }
 void Engine::rebuildInserts(int i) {
   if (!rt_) return; auto chain = std::make_shared<am::Runtime::InsertChain>();
-  for (const PluginUi& p : strips_[static_cast<std::size_t>(i)].plugins) if (p.vst) chain->push_back(std::make_shared<am::vst3::MonoInsert>(p.vst, 1024));
+  for (const PluginUi& p : strips_[static_cast<std::size_t>(i)].plugins) if (p.vst) chain->push_back(std::make_shared<am::host::MonoInsert>(p.vst, 1024));
   rt_->setInserts(i, chain->empty() ? nullptr : chain);
 }
-void Engine::reloadAllVst() { for (int i = 0; i < kStrips; ++i) { bool any = false; for (int k = 0; k < kPluginSlots; ++k) { PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[k]; if (p.kind.startsWith("vst3:")) { if (p.vst) p.state = QString::fromStdString(p.vst->state()); if (p.vst) graveyard_.push_back(p.vst); loadVst(i, k); any = true; } } if (any) rebuildInserts(i); } graveTimer_.start(); }
+void Engine::reloadAllVst() { for (int i = 0; i < kStrips; ++i) { bool any = false; for (int k = 0; k < kPluginSlots; ++k) { PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[k]; if (isVstKind(p.kind)) { if (p.vst) p.state = QString::fromStdString(p.vst->state()); if (p.vst) graveyard_.push_back(p.vst); loadVst(i, k); any = true; } } if (any) rebuildInserts(i); } graveTimer_.start(); }
 QVariantList Engine::pluginParams(int i, int slot) const {
   QVariantList l; if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots) return l; const PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[slot]; if (!p.vst) return l;
   for (const auto& q : p.vst->params()) { if (q.hidden) continue; QVariantMap m; m["id"] = static_cast<int>(q.id); m["title"] = QString::fromStdString(q.title); m["units"] = QString::fromStdString(q.units); m["value"] = q.normalized; m["default"] = q.defaultNormalized; m["text"] = QString::fromStdString(p.vst->paramText(q.id, q.normalized)); m["stepCount"] = q.stepCount; m["bypass"] = q.bypass; m["readOnly"] = q.readOnly; l << m; }
@@ -326,10 +329,10 @@ void Engine::setPluginParam(int i, int slot, int id, double v) { if (i < 0 || i 
 QString Engine::pluginError(int i, int slot) const { if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots) return QString(); return strips_[static_cast<std::size_t>(i)].plugins[slot].error; }
 QVariantList Engine::plugins(int i) const {
   QVariantList l; if (i < 0 || i >= kStrips) return l; const StripUi& s = strips_[static_cast<std::size_t>(i)];
-  for (int k = 0; k < kPluginSlots; ++k) { const PluginUi& p = s.plugins[k]; QVariantMap m; m["slot"] = k; m["kind"] = p.kind; m["bypass"] = p.bypass; const bool vst = p.kind.startsWith("vst3:"); m["builtIn"] = !p.kind.isEmpty() && !vst; m["pending"] = vst;
+  for (int k = 0; k < kPluginSlots; ++k) { const PluginUi& p = s.plugins[k]; QVariantMap m; m["slot"] = k; m["kind"] = p.kind; m["bypass"] = p.bypass; const bool vst = isVstKind(p.kind); m["builtIn"] = !p.kind.isEmpty() && !vst; m["pending"] = vst;
     QString name; for (const auto& b : kBuiltIns) if (p.kind == b.kind) name = b.name;
     if (vst) { if (p.vst) name = QString::fromStdString(p.vst->info().name); else { QString mod, cid; splitVstKind(p.kind, mod, cid); name = QFileInfo(mod).completeBaseName(); } }
-    m["pending"] = vst && !p.vst; m["vst"] = vst; m["error"] = p.error; m["latency"] = p.vst ? static_cast<int>(p.vst->latencySamples()) : 0; m["name"] = name; l << m; }
+    m["pending"] = vst && !p.vst; m["vst"] = vst; m["format"] = p.vst ? QString::fromStdString(p.vst->info().format) : (p.kind.startsWith("vst2:") ? "VST2" : vst ? "VST3" : ""); m["error"] = p.error; m["latency"] = p.vst ? static_cast<int>(p.vst->latencySamples()) : 0; m["name"] = name; l << m; }
   return l;
 }
 void Engine::applyPluginStage(int i, const QString& kind, bool on) {
@@ -344,19 +347,19 @@ void Engine::applyPluginStage(int i, const QString& kind, bool on) {
 }
 void Engine::setPlugin(int i, int slot, const QString& kind) {
   if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots) return; StripUi& s = strips_[static_cast<std::size_t>(i)]; PluginUi& p = s.plugins[slot];
-  bool known = kind.isEmpty() || kind.startsWith("vst3:"); for (const auto& b : kBuiltIns) if (kind == b.kind) known = true; if (!known) return;
-  if (!kind.isEmpty() && !kind.startsWith("vst3:")) for (int k = 0; k < kPluginSlots; ++k) if (k != slot && s.plugins[k].kind == kind) s.plugins[k] = PluginUi{};   // one slot per built-in stage
-  if (!p.kind.isEmpty() && !p.kind.startsWith("vst3:") && p.kind != kind) applyPluginStage(i, p.kind, false);
+  bool known = kind.isEmpty() || isVstKind(kind); for (const auto& b : kBuiltIns) if (kind == b.kind) known = true; if (!known) return;
+  if (!kind.isEmpty() && !isVstKind(kind)) for (int k = 0; k < kPluginSlots; ++k) if (k != slot && s.plugins[k].kind == kind) s.plugins[k] = PluginUi{};   // one slot per built-in stage
+  if (!p.kind.isEmpty() && !isVstKind(p.kind) && p.kind != kind) applyPluginStage(i, p.kind, false);
   if (p.vst) { graveyard_.push_back(p.vst); p.vst.reset(); graveTimer_.start(); }
   p.kind = kind.left(1024); p.bypass = false; p.state.clear(); p.error.clear();
-  if (!kind.isEmpty() && !kind.startsWith("vst3:")) applyPluginStage(i, kind, true);
-  if (kind.startsWith("vst3:")) loadVst(i, slot);
+  if (!kind.isEmpty() && !isVstKind(kind)) applyPluginStage(i, kind, true);
+  if (isVstKind(kind)) loadVst(i, slot);
   rebuildInserts(i);
   emit stripsChanged();
 }
 void Engine::setPluginBypass(int i, int slot, bool bypass) {
   if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots) return; PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[slot]; if (p.kind.isEmpty()) return;
-  p.bypass = bypass; if (!p.kind.startsWith("vst3:")) applyPluginStage(i, p.kind, !bypass); else if (p.vst) p.vst->setBypass(bypass); emit stripsChanged();
+  p.bypass = bypass; if (!isVstKind(p.kind)) applyPluginStage(i, p.kind, !bypass); else if (p.vst) p.vst->setBypass(bypass); emit stripsChanged();
 }
 void Engine::movePlugin(int i, int from, int to) { if (i < 0 || i >= kStrips || from < 0 || from >= kPluginSlots || to < 0 || to >= kPluginSlots || from == to) return; std::swap(strips_[static_cast<std::size_t>(i)].plugins[from], strips_[static_cast<std::size_t>(i)].plugins[to]); rebuildInserts(i); emit stripsChanged(); }
 int Engine::pluginCount(int i) const { if (i < 0 || i >= kStrips) return 0; int n = 0; for (const PluginUi& p : strips_[static_cast<std::size_t>(i)].plugins) if (!p.kind.isEmpty()) ++n; return n; }
@@ -523,7 +526,7 @@ void Engine::applyConsoleJson(const QJsonObject& root, bool respectSafe) {
   const QJsonArray buses = root.value("buses").toArray(); for (int k = 0; k < kBuses && k < buses.size(); ++k) { const QJsonObject o = buses[k].toObject(); if (o.contains("name")) buses_[k].name = o.value("name").toString().left(16); buses_[k].db = std::clamp(o.value("db").toDouble(0), -60.0, 10.0); buses_[k].returnDb = std::clamp(o.value("returnDb").toDouble(-60), -60.0, 10.0); buses_[k].mute = o.value("mute").toBool(); }
   const QJsonArray dcas = root.value("dcas").toArray(); for (int g = 0; g < kGroups && g < dcas.size(); ++g) { const QJsonObject o = dcas[g].toObject(); if (o.contains("name")) dcas_[g].name = o.value("name").toString().left(16); dcas_[g].db = std::clamp(o.value("db").toDouble(0), -60.0, 10.0); dcas_[g].mute = o.value("mute").toBool(); }
   const QJsonArray mgs = root.value("muteGroups").toArray(); for (int g = 0; g < kGroups && g < mgs.size(); ++g) { const QJsonObject o = mgs[g].toObject(); if (o.contains("name")) muteGroups_[g].name = o.value("name").toString().left(16); muteGroups_[g].active = o.value("active").toBool(); }
-  for (int i = 0; i < kStrips; ++i) for (int k = 0; k < kPluginSlots; ++k) { PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[k]; if (p.kind.startsWith("vst3:") && !p.vst) loadVst(i, k); else if (p.vst && !p.state.isEmpty()) { p.vst->setState(p.state.toStdString()); p.vst->setBypass(p.bypass); } }
+  for (int i = 0; i < kStrips; ++i) for (int k = 0; k < kPluginSlots; ++k) { PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[k]; if (isVstKind(p.kind) && !p.vst) loadVst(i, k); else if (p.vst && !p.state.isEmpty()) { p.vst->setState(p.state.toStdString()); p.vst->setBypass(p.bypass); } }
   if (rt_) { for (auto& s : strips_) s.dsp.setSampleRate(s.dsp.sampleRate()); pushAll(); }
   emit stripsChanged(); emit busesChanged(); emit groupsChanged();
 }

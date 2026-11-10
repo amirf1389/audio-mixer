@@ -226,7 +226,7 @@ std::unique_ptr<Plugin> Plugin::load(const std::string& modulePath, const std::s
   const std::vector<ClassInfo> classes = classesOf(m->factory); if (classes.empty()) { err = "no Audio Module class in " + modulePath; return nullptr; }
   const ClassInfo* pick = &classes[0]; if (!cidHex.empty()) { pick = nullptr; for (const auto& c : classes) if (c.cid == cidHex) pick = &c; if (!pick) { err = "class " + cidHex + " is not in " + modulePath; return nullptr; } }
   TUID cid; hexTo(pick->cid, cid);
-  std::unique_ptr<Plugin> p(new Plugin()); p->impl_ = std::make_unique<Impl>(); Impl& I = *p->impl_; I.module = std::move(m); I.rate = rate; I.maxBlock = std::max(16, maxBlock); p->info_ = *pick; p->path_ = modulePath;
+  std::unique_ptr<Plugin> p(new Plugin()); p->impl_ = std::make_unique<Impl>(); Impl& I = *p->impl_; I.module = std::move(m); I.rate = rate; I.maxBlock = std::max(16, maxBlock); p->info_ = *pick; p->path_ = modulePath; p->hinfo_.format = "VST3"; p->hinfo_.name = pick->name; p->hinfo_.vendor = pick->vendor; p->hinfo_.version = pick->version; p->hinfo_.category = pick->category; p->hinfo_.subCategories = pick->subCategories; p->hinfo_.uid = pick->cid;
   I.host = new HostApp(); I.handler = new Handler(); I.handler->restart = &I.restart; I.changes = new Changes();
   if (I.module->factory->createInstance(cid, IComponent_iid, reinterpret_cast<void**>(&I.comp)) != kResultOk || !I.comp) { err = pick->name + ": the component could not be created"; return nullptr; }
   if (I.comp->initialize(I.host) != kResultOk) { err = pick->name + ": initialize failed"; return nullptr; }
@@ -312,15 +312,6 @@ bool Plugin::setState(const std::string& s) {
   bool ok = I.comp->setState(c) == kResultOk;
   if (I.ctrl) { std::lock_guard<std::mutex> g(I.ctrlMutex); c->pos = 0; I.ctrl->setComponentState(c); if (!I.ctrlIsComp && kl) { MemStream* k = new MemStream(); k->d.assign(blob.begin() + 8 + cl, blob.begin() + 8 + cl + kl); I.ctrl->setState(k); k->release(); } if (hasBypass()) bypassOn_ = I.ctrl->getParamNormalized(bypassId_) >= 0.5; }
   c->release(); return ok;
-}
-
-// ---------------------------------------------------------------- mono insert adapter
-MonoInsert::MonoInsert(std::shared_ptr<Plugin> p, int maxBlock) : p_(std::move(p)), l_(static_cast<std::size_t>(maxBlock)), r_(static_cast<std::size_t>(maxBlock)), ol_(static_cast<std::size_t>(maxBlock)), or_(static_cast<std::size_t>(maxBlock)) {}
-void MonoInsert::process(float* mono, std::size_t frames) {
-  const std::size_t n = std::min(frames, l_.size()); if (!n) return;
-  const float* in[2] = {mono, mono}; float* out[2] = {ol_.data(), or_.data()};
-  p_->process(p_->inputChannels() > 0 ? in : nullptr, out, static_cast<int>(n));
-  std::memcpy(mono, ol_.data(), n * sizeof(float));
 }
 
 }  // namespace am::vst3

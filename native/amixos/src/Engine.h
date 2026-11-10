@@ -17,6 +17,7 @@
 #include "audiomixer/dsp.hpp"
 #include "audiomixer/runtime.hpp"
 #include "vst3/vst3_host.hpp"
+#include "vst2/vst2_host.hpp"
 #include "record/recorder.hpp"
 
 class Engine : public QObject {
@@ -176,7 +177,7 @@ class Engine : public QObject {
   Q_INVOKABLE QVariantList pluginCatalog() const;     // the built-in stages, for the chooser
   Q_INVOKABLE void movePlugin(int strip, int from, int to);   // reorder the rack (swap two slots)
   // VST3 (engine/cpp/app/vst3): plug-ins found in the VST3 folders (Settings adds more), loaded into a slot as "vst3:<module path>|<class id>"
-  Q_INVOKABLE QVariantList vstCatalog() const;        // [{kind, name, vendor, module, cid}] from the last scan
+  Q_INVOKABLE QVariantList vstCatalog() const;        // [{kind, name, vendor, module, cid, format}] from the last scan: VST3 and VST2
   Q_INVOKABLE int rescanVst(const QStringList& extraDirs);   // scans the platform folders + extraDirs; returns the plug-in count
   Q_INVOKABLE QVariantList pluginParams(int strip, int slot) const;   // [{id, title, units, value (normalized), text, stepCount, bypass, hidden, readOnly}]
   Q_INVOKABLE void setPluginParam(int strip, int slot, int id, double normalized);
@@ -255,8 +256,8 @@ class Engine : public QObject {
   static constexpr int kStrips = 32;
   static constexpr int kBuses = 8, kGroups = 8;
   struct SendUi { double db = -60; bool pre = false; };
-  struct PluginUi { QString kind; bool bypass = false; std::shared_ptr<am::vst3::Plugin> vst; QString state, error; };   // vst: loaded instance (null = pending with error)
-  std::vector<QVariantMap> vstCatalog_; std::vector<std::shared_ptr<am::vst3::Plugin>> graveyard_; QTimer graveTimer_;
+  struct PluginUi { QString kind; bool bypass = false; std::shared_ptr<am::host::Plugin> vst; QString state, error; };   // vst: loaded instance (null = pending with error)
+  std::vector<QVariantMap> vstCatalog_; std::vector<std::shared_ptr<am::host::Plugin>> graveyard_; QTimer graveTimer_;
   bool loadVst(int strip, int slot);                      // from kind + state at the runtime's rate; false -> error set
   void rebuildInserts(int strip);                         // the strip's VST chain into the runtime
   void reloadAllVst();                                    // after open (new rate / block)

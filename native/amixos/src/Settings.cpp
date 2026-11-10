@@ -10,6 +10,7 @@
 
 #include "Engine.h"
 #include "vst3/vst3_host.hpp"
+#include "vst2/vst2_host.hpp"
 
 Settings::Settings(Engine* engine, QObject* parent) : QObject(parent), engine_(engine) {
   if (engine_) { engine_->setClipThreshold(clipDb()); engine_->setPeakHold(peakHoldMs()); }
@@ -17,10 +18,10 @@ Settings::Settings(Engine* engine, QObject* parent) : QObject(parent), engine_(e
 void Settings::setPeakHoldMs(int v) { set("audio/peakHoldMs", v); if (engine_) engine_->setPeakHold(v); }
 void Settings::setClipDb(double v) { v = std::clamp(v, -12.0, 0.0); set("audio/clipDb", v); if (engine_) engine_->setClipThreshold(v); }
 
-QStringList Settings::vstDefaultDirs() const { QStringList l; for (const auto& d : am::vst3::defaultDirs()) l << QString::fromStdString(d); return l; }
+QStringList Settings::vstDefaultDirs() const { QStringList l; for (const auto& d : am::vst3::defaultDirs()) l << QString::fromStdString(d) + "  (VST3)"; for (const auto& d : am::vst2::defaultDirs()) l << QString::fromStdString(d) + "  (VST2)"; return l; }
 int Settings::addVstDir(const QString& dir) { QStringList l = vstDirs(); const QString d = dir.trimmed(); if (!d.isEmpty() && !l.contains(d)) l << d; s_.setValue("vst3/dirs", l); s_.sync(); emit changed(); return rescanVst(); }
 int Settings::removeVstDir(const QString& dir) { QStringList l = vstDirs(); l.removeAll(dir); s_.setValue("vst3/dirs", l); s_.sync(); emit changed(); return rescanVst(); }
-int Settings::rescanVst() { const int n = engine_ ? engine_->rescanVst(vstDirs()) : 0; note(QStringLiteral("%1 VST3 plug-in(s) found in %2 folder(s).").arg(n).arg(vstDefaultDirs().size() + vstDirs().size())); return n; }
+int Settings::rescanVst() { const int n = engine_ ? engine_->rescanVst(vstDirs()) : 0; note(QStringLiteral("%1 VST3 / VST2 plug-in(s) found in %2 folder(s).").arg(n).arg(vstDefaultDirs().size() + vstDirs().size())); return n; }
 QString Settings::dataFolder() const { return QDir::homePath() + "/.amixos"; }
 QVariantList Settings::dataFiles() const {
   QVariantList l;

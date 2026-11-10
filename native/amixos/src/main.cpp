@@ -88,8 +88,8 @@ int main(int argc, char* argv[]) {
       // a little more for the screenshot: a second track with the same file later, a marker, two automation points, the head in the middle
       const int t2 = arrange.addTrack("Pad"); arrange.importFile(wav, t2); arrange.moveClip(arrange.clips()[1].toMap().value("id").toInt(), 1.0); arrange.setTrack(t2, "pan", 0.5);
       engine.setPlugin(0, 0, "gate"); engine.setPlugin(0, 1, "eq"); engine.setPlugin(0, 2, "comp"); engine.setPluginBypass(0, 2, true);   // the rack in the screenshot: three built-in stages, the test VST3 loaded, a missing VST3 pending
-      engine.rescanVst({QCoreApplication::applicationDirPath() + "/engine/vst3"});   // the engine build's test plug-in, for the rack in the picture
-      if (!engine.vstCatalog().isEmpty()) engine.setPlugin(0, 3, engine.vstCatalog()[0].toMap()["kind"].toString());
+      engine.rescanVst({QCoreApplication::applicationDirPath() + "/engine/vst3", QCoreApplication::applicationDirPath() + "/engine/vst2"});   // the engine build's test plug-ins, for the rack in the picture
+      for (const QVariant& v : engine.vstCatalog()) { const QVariantMap m = v.toMap(); engine.setPlugin(0, m["format"].toString() == "VST2" ? 5 : 3, m["kind"].toString()); }
       engine.setPlugin(0, 4, "vst3:/plugins/Example.vst3|00");
       arrange.seek(0.75); arrange.addMarker("Verse"); arrange.addAutomation(t2, 1.0, 0); arrange.addAutomation(t2, 1.5, -20); arrange.setSelectedClip(clip); }
     // the mixer action bar: plugin slots drive the built-in stages, global actions touch every strip
@@ -116,8 +116,8 @@ int main(int argc, char* argv[]) {
       engine.setName(11, "Changed"); if (!settings.importConsole(ex) || engine.stripState()[11].toMap().value("name").toString() != "ExportMe") { std::fprintf(stderr, "amixos --smoke: import console did not restore the name\n"); return 36; }
       engine.setName(11, "CH 12"); QFile::remove(ex); if (settings.dataFiles().size() < 5 || settings.factoryResetPreview().size() < 5) { std::fprintf(stderr, "amixos --smoke: settings lists\n"); return 37; } }
     // VST3: the engine build's test plug-in (amixtest.vst3) loads into a slot, exposes parameters, keeps them through a reload; a missing module is pending with a reason
-    { const QString vstDir = QCoreApplication::applicationDirPath() + "/engine/vst3"; const int n = engine.rescanVst({vstDir});
-      if (n < 1) { std::fprintf(stderr, "amixos --smoke: the test VST3 plug-in was not found in %s\n", qPrintable(vstDir)); return 38; }
+    { const QString vstDir = QCoreApplication::applicationDirPath() + "/engine/vst3"; const int n = engine.rescanVst({vstDir, QCoreApplication::applicationDirPath() + "/engine/vst2"});
+      if (n < 2) { std::fprintf(stderr, "amixos --smoke: the test VST3 plug-in was not found in %s\n", qPrintable(vstDir)); return 38; }
       const QVariantMap first = engine.vstCatalog()[0].toMap(); engine.setPlugin(4, 0, first["kind"].toString());
       QVariantMap slot = engine.plugins(4)[0].toMap(); if (slot["pending"].toBool() || slot["name"].toString() != "AMIX Test Gain") { std::fprintf(stderr, "amixos --smoke: VST3 load failed: %s\n", qPrintable(engine.pluginError(4, 0))); return 39; }
       const QVariantList pp = engine.pluginParams(4, 0); if (pp.size() != 2 || pp[0].toMap()["title"].toString() != "Gain") { std::fprintf(stderr, "amixos --smoke: VST3 params\n"); return 40; }
@@ -126,7 +126,10 @@ int main(int argc, char* argv[]) {
       engine.open("null", "", "", 44100, 128, 2, 2);   // a re-open reloads the plug-in at the new rate and keeps its state
       if (engine.plugins(4)[0].toMap()["pending"].toBool() || std::fabs(engine.pluginParams(4, 0)[0].toMap()["value"].toDouble() - 0.75) > 1e-9) { std::fprintf(stderr, "amixos --smoke: VST3 state lost across re-open\n"); return 43; }
       engine.setPlugin(4, 1, "vst3:/nowhere/missing.vst3|00"); if (!engine.plugins(4)[1].toMap()["pending"].toBool() || engine.pluginError(4, 1).isEmpty()) { std::fprintf(stderr, "amixos --smoke: missing VST3 not reported\n"); return 44; }
-      engine.setPlugin(4, 0, ""); engine.setPlugin(4, 1, ""); engine.open("null", "", "", 48000, 256, 2, 2); }
+      QString kind2; for (const QVariant& v : engine.vstCatalog()) if (v.toMap()["format"].toString() == "VST2") kind2 = v.toMap()["kind"].toString();
+      if (kind2.isEmpty()) { std::fprintf(stderr, "amixos --smoke: the VST2 test plug-in was not found\n"); return 50; }
+      engine.setPlugin(4, 2, kind2); if (engine.plugins(4)[2].toMap()["pending"].toBool() || engine.plugins(4)[2].toMap()["name"].toString() != "AMIX Test Gain 2" || engine.pluginParams(4, 2).size() != 1) { std::fprintf(stderr, "amixos --smoke: VST2 load failed: %s\n", qPrintable(engine.pluginError(4, 2))); return 51; }
+      engine.setPlugin(4, 0, ""); engine.setPlugin(4, 1, ""); engine.setPlugin(4, 2, ""); engine.open("null", "", "", 48000, 256, 2, 2); }
     engine.setInputRoute(3, 0); engine.setOutputRoute(0, 1);   // the routing matrix: CH 4 reads input 1, OUT 1 carries MASTER L
     if (engine.inputRoutes()[3].toInt() != 0 || engine.outputRoutes()[0].toInt() != 1) { std::fprintf(stderr, "amixos --smoke: routing did not take\n"); return 11; }
     engine.resetRouting(); if (engine.inputRoutes()[3].toInt() != 3 || engine.outputRoutes()[0].toInt() != 3) { std::fprintf(stderr, "amixos --smoke: routing defaults wrong\n"); return 12; }
@@ -142,6 +145,7 @@ int main(int argc, char* argv[]) {
           }
           if (QString::fromLatin1(id) == "mixer") {   // the same page with the analogue VU faces
             if (QObject* mixer = win->findChild<QObject*>("mixerPage")) {
+              mixer->setProperty("rackCompact", true); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + "/mixer-compact.png"); mixer->setProperty("rackCompact", false); std::printf("amixos --shots: mixer-compact\n");
               if (QObject* pop = mixer->findChild<QObject*>("mixerQuick")) { QMetaObject::invokeMethod(pop, "open"); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + "/mixer-settings.png"); QMetaObject::invokeMethod(pop, "close"); std::printf("amixos --shots: mixer-settings\n"); }
               mixer->setProperty("vuMode", true); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + "/mixer-vu.png"); mixer->setProperty("vuMode", false); std::printf("amixos --shots: mixer-vu\n"); }
           }
@@ -155,7 +159,7 @@ int main(int argc, char* argv[]) {
       const qulonglong blocks = m.value("blocks").toULongLong();
       std::printf("amixos --smoke: interface loaded, %s backend, %llu blocks in 1.2 s, xruns %llu, master %.1f dBFS, %d pages\n", qPrintable(engine.backend()), blocks, m.value("xruns").toULongLong(), m.value("masterPeakDb").toDouble(), engine.pageCount());
       arrange.newProject(); QFile::remove(smokeWav); QFile::remove(smokeOut);   // the smoke's demo arrangement is not kept
-      for (int k = 0; k < 5; ++k) engine.setPlugin(0, k, "");
+      for (int k = 0; k < 6; ++k) engine.setPlugin(0, k, "");
       engine.stop();
       QCoreApplication::exit(blocks > 100 && engine.pageCount() >= 30 ? 0 : 4);
     });

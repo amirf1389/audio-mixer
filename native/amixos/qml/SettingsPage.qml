@@ -69,8 +69,8 @@ Flickable {
         }
         Panel {
             Layout.fillWidth: true
-            title: "VST3 PLUG-INS"
-            subtitle: "Where A mix OS looks for .vst3 plug-ins. The platform folders are always scanned; add your own below. Plug-ins are loaded into the PLUGIN RACK on the MIXER (generic controls, no plug-in window yet)."
+            title: "VST3 / VST2 PLUG-INS"
+            subtitle: "Where A mix OS looks for plug-ins: .vst3 bundles, and VST2 .dll (Windows) / .so (Linux) files. The platform folders are always scanned; add your own below. Plug-ins load into the PLUGIN RACK on the MIXER (generic controls, no plug-in window yet)."
             Repeater { model: settings.vstDefaultDirs; delegate: RowLayout { Layout.fillWidth: true; Rectangle { implicitWidth: 8; implicitHeight: 8; radius: 4; color: Theme.emerald } Text { text: modelData; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; Layout.fillWidth: true; elide: Text.ElideMiddle } Text { text: "platform"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } } }
             Repeater { model: settings.vstDirs; delegate: RowLayout { Layout.fillWidth: true; Rectangle { implicitWidth: 8; implicitHeight: 8; radius: 4; color: Theme.cyan } Text { text: modelData; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; Layout.fillWidth: true; elide: Text.ElideMiddle } Rectangle { implicitWidth: 60; implicitHeight: 18; radius: 3; color: Qt.rgba(1, 1, 1, 0.08); Text { anchors.centerIn: parent; text: "REMOVE"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: settings.removeVstDir(modelData) } } } }
             RowLayout { Layout.fillWidth: true; spacing: 6
@@ -78,9 +78,9 @@ Flickable {
                 Rectangle { implicitWidth: 90; implicitHeight: 26; radius: 5; color: Theme.amber; Text { anchors.centerIn: parent; text: "ADD FOLDER"; color: "#000"; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: { settings.addVstDir(vstDirIn.text); vstDirIn.text = "" } } }
                 Rectangle { implicitWidth: 80; implicitHeight: 26; radius: 5; color: Qt.rgba(0, 0.95, 1, 0.18); border.color: Theme.cyan; Text { anchors.centerIn: parent; text: "RESCAN"; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: settings.rescanVst() } } }
             Flow { Layout.fillWidth: true; spacing: 4
-                Repeater { model: engine.vstCatalog(); delegate: Rectangle { implicitWidth: vt.implicitWidth + 12; implicitHeight: 18; radius: 3; color: Qt.rgba(0.6, 0.4, 1, 0.18); border.color: "#a78bfa"; Text { id: vt; anchors.centerIn: parent; text: modelData.name + (modelData.vendor ? " · " + modelData.vendor : ""); color: "#a78bfa"; font.family: Theme.mono; font.pixelSize: 7 } } }
+                Repeater { model: engine.vstCatalog(); delegate: Rectangle { implicitWidth: vt.implicitWidth + 12; implicitHeight: 18; radius: 3; color: Qt.rgba(0.6, 0.4, 1, 0.18); border.color: "#a78bfa"; Text { id: vt; anchors.centerIn: parent; text: modelData.format + " · " + modelData.name + (modelData.vendor ? " · " + modelData.vendor : ""); color: "#a78bfa"; font.family: Theme.mono; font.pixelSize: 7 } } }
                 Text { visible: engine.vstCatalog().length === 0; text: "No VST3 plug-ins found yet."; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
-            Text { text: "VST is a trademark of Steinberg Media Technologies GmbH. A mix OS hosts VST3 plug-ins through the VST 3 interface headers under their licence (drivers/vst3/sdk/LICENSE.txt); it is not badged as VST and ships no plug-ins."; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+            Text { text: "VST is a trademark of Steinberg Media Technologies GmbH. A mix OS hosts VST3 plug-ins through the VST 3 interface headers under their licence (drivers/vst3/sdk/LICENSE.txt) and VST2 plug-ins through the public VST 2.4 binary interface written clean-room (no Steinberg VST2 SDK file is used or shipped). It is not badged as VST and ships no plug-ins."; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap; Layout.fillWidth: true }
         }
         Panel {
             Layout.fillWidth: true

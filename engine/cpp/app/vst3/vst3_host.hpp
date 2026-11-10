@@ -11,7 +11,7 @@
 #include <string>
 #include <vector>
 
-#include "audiomixer/runtime.hpp"
+#include "plugin/plugin.hpp"
 
 namespace am::vst3 {
 
@@ -21,46 +21,39 @@ std::vector<std::string> scan(const std::vector<std::string>& dirs);            
 bool inspect(const std::string& modulePath, std::vector<ClassInfo>& classes, std::string& err);   // loads the module, lists Audio Module classes, unloads
 std::string binaryOf(const std::string& modulePath);                                     // the shared library inside a bundle ("" when none fits this platform)
 
-struct ParamInfo { std::uint32_t id = 0; std::string title, units; double normalized = 0, defaultNormalized = 0; int stepCount = 0; bool automatable = true, readOnly = false, bypass = false, hidden = false; };
+using ParamInfo = host::ParamInfo;
 
-class Plugin {
+class Plugin final : public host::Plugin {
  public:
   // cid: one of inspect()'s, or "" for the first Audio Module class. rate / maxBlock: the engine's. Fails with a reason in err.
   static std::unique_ptr<Plugin> load(const std::string& modulePath, const std::string& cid, double rate, int maxBlock, std::string& err);
-  ~Plugin();
-  const ClassInfo& info() const { return info_; }
-  const std::string& modulePath() const { return path_; }
-  int inputChannels() const { return inCh_; }      // of the main input bus after arrangement (0 for a generator)
-  int outputChannels() const { return outCh_; }
-  std::uint32_t latencySamples() const { return latency_; }
+  ~Plugin() override;
+  const host::Info& info() const override { return hinfo_; }
+  const ClassInfo& classInfo() const { return info_; }
+  const std::string& modulePath() const override { return path_; }
+  int inputChannels() const override { return inCh_; }      // of the main input bus after arrangement (0 for a generator)
+  int outputChannels() const override { return outCh_; }
+  std::uint32_t latencySamples() const override { return latency_; }
   // parameters (UI thread): the controller's list; set queues the change for the next audio block and updates the controller
-  std::vector<ParamInfo> params() const;
-  double param(std::uint32_t id) const;
-  void setParam(std::uint32_t id, double normalized);
-  std::string paramText(std::uint32_t id, double normalized) const;   // the plug-in's own display string ("-6.0 dB")
-  bool hasBypass() const { return bypassId_ != 0xffffffffu; }
-  void setBypass(bool on);
-  bool bypass() const { return bypassOn_; }
+  std::vector<ParamInfo> params() const override;
+  double param(std::uint32_t id) const override;
+  void setParam(std::uint32_t id, double normalized) override;
+  std::string paramText(std::uint32_t id, double normalized) const override;   // the plug-in's own display string ("-6.0 dB")
+  bool hasBypass() const override { return bypassId_ != 0xffffffffu; }
+  void setBypass(bool on) override;
+  bool bypass() const override { return bypassOn_; }
   // audio thread: in / out have inputChannels() / outputChannels() pointers of `frames` samples (in may be nullptr when no input bus)
-  void process(const float* const* in, float* const* out, int frames);
+  void process(const float* const* in, float* const* out, int frames) override;
   // state (component + controller), base64, for saving with the console
-  std::string state() const;
-  bool setState(const std::string& base64);
+  std::string state() const override;
+  bool setState(const std::string& base64) override;
 
   struct Impl;
  private:
   Plugin() = default;
-  std::unique_ptr<Impl> impl_; ClassInfo info_; std::string path_; int inCh_ = 0, outCh_ = 0; std::uint32_t latency_ = 0, bypassId_ = 0xffffffffu; std::atomic<bool> bypassOn_{false};
+  std::unique_ptr<Impl> impl_; ClassInfo info_; host::Info hinfo_; std::string path_; int inCh_ = 0, outCh_ = 0; std::uint32_t latency_ = 0, bypassId_ = 0xffffffffu; std::atomic<bool> bypassOn_{false};
 };
 
-// A plug-in as a Runtime::Insert on a mono strip: a mono plug-in gets the strip, a stereo one gets it on both sides and gives back the left.
-class MonoInsert : public Runtime::Insert {
- public:
-  explicit MonoInsert(std::shared_ptr<Plugin> p, int maxBlock);
-  void process(float* mono, std::size_t frames) override;
-  const std::shared_ptr<Plugin>& plugin() const { return p_; }
- private:
-  std::shared_ptr<Plugin> p_; std::vector<float> l_, r_, ol_, or_;
-};
+using MonoInsert = host::MonoInsert;
 
 }  // namespace am::vst3
