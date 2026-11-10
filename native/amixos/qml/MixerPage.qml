@@ -44,6 +44,48 @@ Item {
                 Text { text: engine.running ? engine.status : "ENGINE IDLE: connect a sound card"; color: engine.running ? Theme.emerald : Theme.amber; font.family: Theme.mono; font.pixelSize: 8 }
             }
         }
+        // the action bar: global mixer actions, four quick scenes, and the 10 PLUGIN slots of the selected channel
+        Rectangle {
+            Layout.fillWidth: true; implicitHeight: 34; radius: 8; color: Theme.card; border.color: Theme.line
+            RowLayout {
+                anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 5
+                property bool anyMute: { var m = false; for (var i = 0; i < engine.stripState.length; i++) if (engine.stripState[i].mute) m = true; return m }
+                property bool anySolo: { var m = false; for (var i = 0; i < engine.stripState.length; i++) if (engine.stripState[i].solo) m = true; return m }
+                id: bar
+                Text { text: "ACTIONS:"; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
+                Rectangle { implicitWidth: 72; implicitHeight: 20; radius: 4; color: bar.anyMute ? Theme.danger : Qt.rgba(1, 1, 1, 0.06); Text { anchors.centerIn: parent; text: bar.anyMute ? "UNMUTE ALL" : "MUTE ALL"; color: bar.anyMute ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.muteAll(!bar.anyMute) } }
+                Rectangle { implicitWidth: 72; implicitHeight: 20; radius: 4; color: bar.anySolo ? Theme.amber : Qt.rgba(1, 1, 1, 0.06); Text { anchors.centerIn: parent; text: "CLEAR SOLO"; color: bar.anySolo ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; enabled: bar.anySolo; onClicked: engine.clearSolo() } }
+                Rectangle { implicitWidth: 80; implicitHeight: 20; radius: 4; color: Qt.rgba(1, 1, 1, 0.06); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: "RESET FADERS"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: confirmReset.open() } }
+                Rectangle { implicitWidth: 78; implicitHeight: 20; radius: 4; color: Qt.rgba(1, 1, 1, 0.06); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: "FLATTEN DSP"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: confirmFlatten.open() } }
+                Rectangle { implicitWidth: 70; implicitHeight: 20; radius: 4; color: Qt.rgba(1, 1, 1, 0.06); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: "CLEAR CLIPS"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.clearClips() } }
+                Rectangle { width: 1; implicitHeight: 20; color: Theme.lineSoft }
+                Text { text: "SCENES"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
+                Repeater { model: 4
+                    delegate: RowLayout { spacing: 1
+                        readonly property var sc: engine.scenes[index]
+                        Rectangle { implicitWidth: 34; implicitHeight: 20; radius: 3; color: sc && !sc.empty ? Qt.rgba(0, 0.95, 1, 0.18) : Qt.rgba(1, 1, 1, 0.05); border.color: sc && !sc.empty ? Theme.cyan : Theme.lineSoft
+                            Text { anchors.centerIn: parent; text: "S" + (index + 1); color: sc && !sc.empty ? Theme.cyan : Theme.dim; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                            MouseArea { anchors.fill: parent; onClicked: { if (sc && !sc.empty) engine.recallScene(index) } } }
+                        Rectangle { implicitWidth: 14; implicitHeight: 20; radius: 3; color: Qt.rgba(1, 1, 1, 0.05); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: "●"; color: Theme.danger; font.pixelSize: 7 } MouseArea { anchors.fill: parent; onClicked: engine.storeScene(index, "") } } } }
+                Rectangle { width: 1; implicitHeight: 20; color: Theme.lineSoft }
+                Text { text: "PLUGINS  CH " + (page.sel + 1); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
+                Repeater { model: engine.plugins(page.sel)
+                    delegate: Rectangle { implicitWidth: modelData.kind ? Math.max(40, pt.implicitWidth + 10) : 22; implicitHeight: 20; radius: 3
+                        color: !modelData.kind ? Qt.rgba(1, 1, 1, 0.04) : modelData.pending ? Qt.rgba(0.984, 0.749, 0.141, 0.15) : modelData.bypass ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0.95, 1, 0.2); border.color: !modelData.kind ? Theme.lineSoft : modelData.pending ? Theme.amber : modelData.bypass ? Theme.lineSoft : Theme.cyan
+                        Text { id: pt; anchors.centerIn: parent; text: modelData.kind ? modelData.name.split(" ")[0] : "+"; color: !modelData.kind ? Theme.dim : modelData.pending ? Theme.amber : modelData.bypass ? Theme.dim : Theme.cyan; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
+                        MouseArea { anchors.fill: parent; acceptedButtons: Qt.LeftButton | Qt.RightButton
+                            onClicked: function (m) { if (m.button === Qt.RightButton && modelData.kind) { engine.setPluginBypass(page.sel, modelData.slot, !modelData.bypass); return } chooser.slot = modelData.slot; chooser.open() } }
+                        ToolTip.visible: hov.hovered && !!modelData.kind; ToolTip.text: (modelData.name || "") + (modelData.bypass ? " (bypassed)" : "") + "  ·  right-click: bypass"; HoverHandler { id: hov } } }
+            }
+            Menu { id: chooser; property int slot: 0; width: 260
+                Repeater { model: engine.pluginCatalog(); delegate: MenuItem { text: modelData.name; enabled: modelData.builtIn; onTriggered: engine.setPlugin(page.sel, chooser.slot, modelData.kind) } }
+                MenuSeparator {}
+                MenuItem { text: "Bypass / enable"; onTriggered: { var p = engine.plugins(page.sel)[chooser.slot]; if (p.kind) engine.setPluginBypass(page.sel, chooser.slot, !p.bypass) } }
+                MenuItem { text: "Clear slot"; onTriggered: engine.setPlugin(page.sel, chooser.slot, "") }
+            }
+            Dialog { id: confirmReset; title: "Reset every fader?"; modal: true; standardButtons: Dialog.Ok | Dialog.Cancel; anchors.centerIn: Overlay.overlay; onAccepted: engine.resetFaders(); Text { text: "All 32 strips and the master go to 0 dB, pans to centre. Mutes, solos and DSP stay."; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; wrapMode: Text.WordWrap; width: 300 } }
+            Dialog { id: confirmFlatten; title: "Flatten the DSP of every channel?"; modal: true; standardButtons: Dialog.Ok | Dialog.Cancel; anchors.centerIn: Overlay.overlay; onAccepted: engine.flattenAllDsp(); Text { text: "Gate, EQ, crossover, compressor, limiter, delay and polarity are switched off on all 32 channels. Faders, sends and names stay."; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; wrapMode: Text.WordWrap; width: 300 } }
+        }
         RowLayout {
             Layout.fillWidth: true; Layout.fillHeight: true; spacing: 8
             Rectangle {

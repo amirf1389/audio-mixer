@@ -59,7 +59,7 @@ decided, what exists, what is next, and what was asked for but is not possible a
 6. **ARRANGE**: timeline, clips, automation, markers, offline WAV export (no recording), native.
 7. **VST3 hosting** (Windows first): the VST3 SDK host with the plug-in's own window (HWND) on a separate thread, lock-free audio hand-off; then VST2 / DLL where licences allow (VST2 SDK is no longer distributed by Steinberg: only plug-ins the user already owns).
 8. **Bluetooth** as ordinary inputs / outputs (they appear through WASAPI / Core Audio / ALSA already; the page shows codec and latency).
-9. **Spatial**: 360 binaural (Resonance Audio, already optional in the engine), detection of Windows spatial formats and PCM hand-off (never claiming or decoding Dolby / DTS / THX / Auro / Sony / IMAX), height panning, Cinema DSP presets, AMFB DNA.
+9. ~~Spatial / 360~~: removed 2026-11-10 at the user's request (the SURROUND page and the Resonance Audio path are gone; no spatial rendering is built in).
 10. **Volume optimise ("no low, but loud")**: a master loudness stage = loudness-normalising gain + look-ahead true-peak limiter to a target (−14 LUFS streaming / −1 dBTP), with the "quiet source" detector raising gain smoothly; never clipping, always measured on the LOUDNESS page.
 11. **High-resolution engine**: 96 / 192 kHz paths are already native (double precision, device rate); add sample-rate conversion for mixed-rate sources and 32-bit float / 24-bit WAV export.
 12. **Low noise from the media player**: dither on output when the device is 16-bit, DC removal, denormal protection, and a "player gain" stage so the OS mixer is never needed.

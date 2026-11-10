@@ -18,7 +18,6 @@
 
 #include "audiomixer/dsp.hpp"
 #include "audiomixer/engine.hpp"
-#include "audiomixer/spatial.hpp"
 
 namespace am {
 
@@ -116,10 +115,6 @@ class Runtime {
   // with the block size; set nullptr to detach. The pointer must stay valid until setExtraSource(nullptr) has returned.
   struct ExtraSource { virtual ~ExtraSource() = default; virtual void render(float* L, float* R, std::size_t frames, double sampleRate) = 0; };
   void setExtraSource(ExtraSource* s) { extra_.store(s); }
-  // 360 degree output (Resonance Audio, only when Spatial::available()): the stereo master after the meters becomes two virtual speakers in a binaural scene; off by default.
-  // The audio is then delayed by Spatial::block() frames. Returns false when this binary has no Resonance Audio.
-  bool setSpatial(bool on);
-  void setSpatialPosition(double azimuthDeg, double elevationDeg, double distanceM, double spreadDeg = 30);
   Snapshot snapshot() const;
   void onBlock(const float* const* in, float* const* out, std::size_t frames);   // the audio callback; public so a test can clock the runtime itself
  private:
@@ -129,7 +124,6 @@ class Runtime {
 
   Mixer mixer_; std::unique_ptr<Backend> backend_; std::string backendName_;
   int nIn_ = 0, nOut_ = 0; bool running_ = false;
-  std::unique_ptr<Spatial> spatial_; bool spatialOn_ = false; double spAz_ = 0, spEl_ = 0, spDist_ = 2, spSpread_ = 30;     // spatial_ is created in open(); spatialOn_ is only touched by the audio thread
   std::vector<float> silence_, left_, right_;
   int monSrc_ = 0; double monGainTarget_ = 1, monGain_ = 1; bool monMono_ = false; double monPk_[2] = {0, 0};   // audio thread only
   std::vector<float> monL_, monR_, extL_, extR_; std::atomic<ExtraSource*> extra_{nullptr}; int inRoute_[kMaxStrips]; int outRoute_[kMaxOutputs];                            // audio thread only (set in open, then by ops)

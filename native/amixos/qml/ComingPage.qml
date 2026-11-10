@@ -9,7 +9,7 @@ Item {
         arrange: "Timeline with clips, tracks, automation, markers, offline WAV export (no recording).",
         dyn: "Per-channel compressor with the curve display.", gate: "Noise gate with threshold, attack, hold, release.",
         fx: "The 300-preset FX library, VST3 / VST2 / DLL inserts (Windows).", bus: "Aux sends pre / post fader, 16 buses.",
-        dca: "Group faders (DCA) and mute groups.", stereopan: "Surround master pages (stereo / quad / 7.1.2), 360 binaural, crossfeed.",
+        dca: "Group faders (DCA) and mute groups.",
         routing: "Input / output routing matrix and the virtual patchbay.", osc: "Oscilloscope and spectrum (RTA).", phase: "Goniometer and correlation history.",
         media: "Media player with the now-playing readout.", live: "Live sources and network audio inputs.", miceq: "Microphone EQ presets.",
         ai: "AI MIX: notches, auto-fader, AI driver lock.", tools: "Calculators, colour picker, scene slots.", plugins: "Plugin host pages.",

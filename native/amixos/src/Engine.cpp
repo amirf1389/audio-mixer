@@ -7,6 +7,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QDateTime>
+#include <QFileInfo>
 #include <cmath>
 
 using am::dsp::FilterType;
@@ -215,6 +216,42 @@ void Engine::resetStrip(int i) {
   s.db = 0; s.pan = 0; s.mute = false; s.solo = false; s.dca = 0; s.muteGroups = 0; for (SendUi& sd : s.sends) sd = SendUi{}; s.dsp.set(am::dsp::ChannelParams{});
   if (rt_) pushAll(); emit stripsChanged(); emit groupsChanged();
 }
+void Engine::muteAll(bool on) { for (int i = 0; i < kStrips; ++i) { strips_[static_cast<std::size_t>(i)].mute = on; pushStrip(i); } emit stripsChanged(); }
+void Engine::clearSolo() { for (int i = 0; i < kStrips; ++i) { strips_[static_cast<std::size_t>(i)].solo = false; if (rt_) rt_->setSolo(i, false); } emit stripsChanged(); }
+void Engine::resetFaders() { for (int i = 0; i < kStrips; ++i) { StripUi& s = strips_[static_cast<std::size_t>(i)]; s.db = 0; s.pan = 0; pushStrip(i); if (rt_) rt_->setPan(i, 0); } masterDb_ = 0; if (rt_) rt_->setMasterDb(0); emit stripsChanged(); }
+void Engine::flattenAllDsp() { for (int i = 0; i < kStrips; ++i) { strips_[static_cast<std::size_t>(i)].dsp.set(am::dsp::ChannelParams{}); for (PluginUi& p : strips_[static_cast<std::size_t>(i)].plugins) if (!p.kind.startsWith("vst3:")) p = PluginUi{}; } if (rt_) pushAll(); emit stripsChanged(); }
+
+static const struct { const char* kind; const char* name; } kBuiltIns[] = {{"gate", "NOISE GATE"}, {"eq", "EQ"}, {"xover", "X-OVER"}, {"comp", "COMPRESSOR"}, {"limiter", "LIMITER"}, {"delay", "DELAY"}, {"polarity", "POLARITY Ø"}};
+QVariantList Engine::pluginCatalog() const { QVariantList l; for (const auto& b : kBuiltIns) { QVariantMap m; m["kind"] = b.kind; m["name"] = b.name; m["builtIn"] = true; l << m; } QVariantMap v; v["kind"] = "vst3:"; v["name"] = "VST3 plug-in… (host not built yet)"; v["builtIn"] = false; l << v; return l; }
+QVariantList Engine::plugins(int i) const {
+  QVariantList l; if (i < 0 || i >= kStrips) return l; const StripUi& s = strips_[static_cast<std::size_t>(i)];
+  for (int k = 0; k < kPluginSlots; ++k) { const PluginUi& p = s.plugins[k]; QVariantMap m; m["slot"] = k; m["kind"] = p.kind; m["bypass"] = p.bypass; const bool vst = p.kind.startsWith("vst3:"); m["builtIn"] = !p.kind.isEmpty() && !vst; m["pending"] = vst;
+    QString name; for (const auto& b : kBuiltIns) if (p.kind == b.kind) name = b.name; if (vst) name = QFileInfo(p.kind.mid(5)).completeBaseName().toUpper() + " (VST3, pending)"; m["name"] = name; l << m; }
+  return l;
+}
+void Engine::applyPluginStage(int i, const QString& kind, bool on) {
+  const am::dsp::ChannelParams& p = strips_[static_cast<std::size_t>(i)].dsp.params();
+  if (kind == "gate") setGate(i, on, p.gateThresholdDb, p.gateRangeDb, p.gateAttackMs, p.gateHoldMs, p.gateReleaseMs);
+  else if (kind == "comp") setCompressor(i, on, p.compThresholdDb, p.compRatio, p.compKneeDb, p.compAttackMs, p.compReleaseMs, p.compMakeupDb);
+  else if (kind == "limiter") setChannelLimiter(i, on, p.limiterCeilDb, p.limiterReleaseMs);
+  else if (kind == "delay") setDelay(i, on ? (p.delayMs > 0 ? p.delayMs : 1.0) : 0);
+  else if (kind == "polarity") setPolarity(i, on);
+  else if (kind == "xover") setCrossover(i, static_cast<int>(p.xoverType), on ? (p.hpOrder > 0 ? p.hpOrder : 2) : 0, p.hpFreq, on ? p.lpOrder : 0, p.lpFreq);
+  else if (kind == "eq") { if (on) { bool any = false; for (const auto& b : p.eq) any = any || b.type != am::dsp::FilterType::Off; if (!any) setEq(i, 0, static_cast<int>(am::dsp::FilterType::Peaking), 1000, 1.0, 0); } else for (int b = 0; b < am::dsp::kEqBands; ++b) setEq(i, b, static_cast<int>(am::dsp::FilterType::Off), p.eq[static_cast<std::size_t>(b)].freq, p.eq[static_cast<std::size_t>(b)].q, 0); }
+}
+void Engine::setPlugin(int i, int slot, const QString& kind) {
+  if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots) return; StripUi& s = strips_[static_cast<std::size_t>(i)]; PluginUi& p = s.plugins[slot];
+  bool known = kind.isEmpty() || kind.startsWith("vst3:"); for (const auto& b : kBuiltIns) if (kind == b.kind) known = true; if (!known) return;
+  if (!kind.isEmpty() && !kind.startsWith("vst3:")) for (int k = 0; k < kPluginSlots; ++k) if (k != slot && s.plugins[k].kind == kind) s.plugins[k] = PluginUi{};   // one slot per built-in stage
+  if (!p.kind.isEmpty() && !p.kind.startsWith("vst3:") && p.kind != kind) applyPluginStage(i, p.kind, false);
+  p.kind = kind.left(1024); p.bypass = false;
+  if (!kind.isEmpty() && !kind.startsWith("vst3:")) applyPluginStage(i, kind, true);
+  emit stripsChanged();
+}
+void Engine::setPluginBypass(int i, int slot, bool bypass) {
+  if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots) return; PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[slot]; if (p.kind.isEmpty()) return;
+  p.bypass = bypass; if (!p.kind.startsWith("vst3:")) applyPluginStage(i, p.kind, !bypass); emit stripsChanged();
+}
 void Engine::copyChannel(int i) { if (i < 0 || i >= kStrips) return; clipboard_ = stripJson(strips_[static_cast<std::size_t>(i)]); emit clipboardChanged(); }
 bool Engine::pasteChannel(int i) {
   if (i < 0 || i >= kStrips || !clipboard_) return false; StripUi& s = strips_[static_cast<std::size_t>(i)]; const QJsonObject& o = *clipboard_;
@@ -285,7 +322,7 @@ QVariantList Engine::pages() const {
   static const P k[] = {
     {"START", "home", "HOME", "⌂", true},
     {"MIX", "mixer", "MIXER", "☰", true}, {"MIX", "arrange", "ARRANGE", "≡", true}, {"MIX", "dsp", "TONE (EQ)", "∿", true}, {"MIX", "dyn", "COMPRESSOR", "⩏", false}, {"MIX", "gate", "NOISE GATE", "▣", false},
-    {"MIX", "fx", "EFFECTS", "✨", false}, {"MIX", "bus", "SEND TO", "⇉", false}, {"MIX", "dca", "GROUP FADERS", "☷", false}, {"MIX", "stereopan", "SURROUND", "⦿", false},
+    {"MIX", "fx", "EFFECTS", "✨", false}, {"MIX", "bus", "SEND TO", "⇉", false}, {"MIX", "dca", "GROUP FADERS", "☷", false},
     {"ROUTE", "io", "CONNECTIONS", "⚡", true}, {"ROUTE", "routing", "ROUTING", "⎇", true},
     {"METER", "meter", "LEVELS", "▓", true}, {"METER", "lufs", "LOUDNESS", "◎", true}, {"METER", "osc", "WAVEFORM", "∽", false}, {"METER", "phase", "PHASE", "☯", false},
     {"SOURCE", "media", "STREAM & MEDIA", "▶", false}, {"SOURCE", "live", "LIVE SOURCES", "☉", false}, {"SOURCE", "miceq", "MIC EQ", "♪", false}, {"SOURCE", "ai", "AI MIX", "⚙", false}, {"SOURCE", "tools", "TOOLS", "⚒", false}, {"SOURCE", "plugins", "PLUGINS", "⬡", false},
@@ -324,6 +361,7 @@ QJsonObject Engine::stripJson(const StripUi& s) const {
   const auto& p = s.dsp.params(); QJsonObject o; o["name"] = s.name; o["db"] = s.db; o["pan"] = s.pan; o["mute"] = s.mute; o["solo"] = s.solo;
   o["dsp"] = dspJson(p);
   QJsonArray sends; for (const SendUi& sd : s.sends) { QJsonObject e; e["db"] = sd.db; e["pre"] = sd.pre; sends << e; } o["sends"] = sends; o["dca"] = s.dca; o["muteGroups"] = static_cast<int>(s.muteGroups); o["color"] = s.color;
+  QJsonArray pl; for (const PluginUi& p : s.plugins) { QJsonObject e; e["kind"] = p.kind; e["bypass"] = p.bypass; pl << e; } o["plugins"] = pl;
   return o;
 }
 QJsonObject Engine::dspJson(const am::dsp::ChannelParams& p) {
@@ -352,6 +390,7 @@ void Engine::stripFromJson(StripUi& s, const QJsonObject& o) {
   s.dsp.set(dspFromJson(o.value("dsp").toObject()));
   const QJsonArray sends = o.value("sends").toArray(); for (int k = 0; k < kBuses; ++k) { if (k < sends.size()) { const QJsonObject e = sends[k].toObject(); s.sends[k].db = std::clamp(e.value("db").toDouble(-60), -60.0, 10.0); s.sends[k].pre = e.value("pre").toBool(); } else s.sends[k] = SendUi{}; }
   s.dca = std::clamp(o.value("dca").toInt(0), 0, kGroups); s.muteGroups = static_cast<unsigned>(std::clamp(o.value("muteGroups").toInt(0), 0, 255)); s.color = std::clamp(o.value("color").toInt(0), 0, 7);
+  const QJsonArray pl = o.value("plugins").toArray(); for (int k = 0; k < kPluginSlots; ++k) { if (k < pl.size()) { const QJsonObject e = pl[k].toObject(); s.plugins[k].kind = e.value("kind").toString().left(1024); s.plugins[k].bypass = e.value("bypass").toBool(); } else s.plugins[k] = PluginUi{}; }
 }
 QJsonObject Engine::consoleJson() const {
   QJsonArray arr; for (const StripUi& s : strips_) arr << stripJson(s);

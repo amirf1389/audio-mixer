@@ -39,7 +39,7 @@ std::unique_ptr<Backend> createBackend(const std::string& name) {
   return nullptr;
 }
 
-enum Op { kGain, kPan, kMute, kSolo, kMaster, kLimiter, kClipDb, kClear, kSpatialOn, kSpatialPos, kSpatialSpread, kEq, kDelay, kPolarity, kXover, kChLimiter, kComp, kGate, kSend, kBusLevel, kBusMute, kBusReturn, kMonitor, kInRoute, kOutRoute };
+enum Op { kGain, kPan, kMute, kSolo, kMaster, kLimiter, kClipDb, kClear, kEq, kDelay, kPolarity, kXover, kChLimiter, kComp, kGate, kSend, kBusLevel, kBusMute, kBusReturn, kMonitor, kInRoute, kOutRoute };
 
 Runtime::Runtime(int strips) : mixer_(strips, 48000) { std::memset(&pub_, 0, sizeof pub_); }
 Runtime::~Runtime() { stop(); }
@@ -50,8 +50,6 @@ bool Runtime::open(const DeviceConfig& cfg, std::string& err) {
   if (name == "auto") name = availableBackends().front();
   backend_ = createBackend(name);
   if (!backend_) { err = "the backend \"" + name + "\" is not built into this binary"; return false; }
-  spatial_.reset(); spatialOn_ = false;
-  if (Spatial::available()) spatial_.reset(new Spatial(cfg.sampleRate, 256));
   backendName_ = name; nIn_ = std::max(0, cfg.inChannels); nOut_ = std::max(0, cfg.outChannels);
   mixer_ = Mixer(mixer_.strips(), cfg.sampleRate);                                  // the mixer runs at the device rate
   const std::size_t n = std::max<std::size_t>(cfg.frames, 16) * 8;                  // scratch for blocks up to 8 periods (devices may hand out more than the period)
@@ -97,8 +95,6 @@ void Runtime::setMonitor(int source, double db, bool dim, bool mono, bool mute) 
   double lin = std::pow(10.0, std::clamp(db, -120.0, 10.0) / 20); if (dim) lin *= 0.1; if (mute || db <= -119) lin = 0;
   post({kMonitor, std::clamp(source, 0, kMaxBuses), lin, 0, 0, mono ? 1 : 0});
 }
-bool Runtime::setSpatial(bool on) { if (!spatial_ || !spatial_->ok()) return false; post({kSpatialOn, on ? 1 : 0, 0, 0, 0}); return true; }
-void Runtime::setSpatialPosition(double az, double el, double d, double spread) { post({kSpatialPos, 0, az, el, d}); post({kSpatialSpread, 0, spread, 0, 0}); }
 
 void Runtime::onBlock(const float* const* in, float* const* out, std::size_t frames) {
   for (unsigned t = tail_.load(std::memory_order_relaxed), h = head_.load(std::memory_order_acquire); t != h; ++t) {   // control changes of this block
@@ -112,9 +108,6 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
       case kLimiter: mixer_.setLimiter(c.a != 0, c.x, c.y); break;
       case kClipDb: mixer_.setClipDb(c.x); break;
       case kClear: mixer_.clearClips(); break;
-      case kSpatialOn: spatialOn_ = c.a != 0; break;
-      case kSpatialPos: if (spatial_) { spAz_ = c.x; spEl_ = c.y; spDist_ = c.z; spatial_->setPosition(spAz_, spEl_, spDist_, spSpread_); } break;
-      case kSpatialSpread: if (spatial_) { spSpread_ = c.x; spatial_->setPosition(spAz_, spEl_, spDist_, spSpread_); } break;
       case kEq: if (c.a >= 0 && c.a < static_cast<int>(ch_.size())) ch_[static_cast<std::size_t>(c.a)].setEqBand(c.b, {static_cast<dsp::FilterType>(static_cast<int>(c.w)), c.x, c.y, c.z}); break;
       case kDelay: if (c.a >= 0 && c.a < static_cast<int>(ch_.size())) ch_[static_cast<std::size_t>(c.a)].setDelayMs(c.x); break;
       case kPolarity: if (c.a >= 0 && c.a < static_cast<int>(ch_.size())) ch_[static_cast<std::size_t>(c.a)].setPolarity(c.x != 0); break;
@@ -145,7 +138,6 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
   ExtraSource* ext = extra_.load();
   if (ext) { ext->render(extL_.data(), extR_.data(), frames, mixer_.sampleRate()); }
   mixer_.process(ins, frames, left_.data(), right_.data(), busOut, ext ? extL_.data() : nullptr, ext ? extR_.data() : nullptr);
-  if (spatialOn_ && spatial_) spatial_->process(left_.data(), right_.data(), left_.data(), right_.data(), frames);     // after the meters: they show the stereo master
   // the monitor section: source, level (smoothed over the block, no clicks), mono, mute -> outputs 0 / 1, with its own peak
   { const float* ml = monSrc_ > 0 ? busOut[2 * (monSrc_ - 1)] : left_.data(); const float* mr = monSrc_ > 0 ? busOut[2 * (monSrc_ - 1) + 1] : right_.data();
     const double g0 = monGain_, g1 = monGainTarget_; monGain_ = g1; const double step = frames ? (g1 - g0) / static_cast<double>(frames) : 0; double pl = 0, pr = 0;

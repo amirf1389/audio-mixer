@@ -114,6 +114,18 @@ class Engine : public QObject {
   // MORE menu on a strip
   Q_INVOKABLE void resetStrip(int strip);            // fader 0, pan centre, unmuted, DSP flat, sends off, no groups; the name and colour stay
   Q_INVOKABLE void resetStripDsp(int strip);         // only the channel DSP
+  // global mixer actions (the MIXER toolbar)
+  Q_INVOKABLE void muteAll(bool on);
+  Q_INVOKABLE void clearSolo();
+  Q_INVOKABLE void resetFaders();                     // every strip and the master to 0 dB, pans centre
+  Q_INVOKABLE void flattenAllDsp();
+  // PLUGIN slots: 10 per strip. A slot holds a built-in stage (gate | eq | xover | comp | limiter | delay | polarity: inserting it switches that
+  // stage on, removing it switches it off) or a VST3 reference ("vst3:<path>"), kept for the VST3 host that is not built yet (shown as pending).
+  static constexpr int kPluginSlots = 10;
+  Q_INVOKABLE QVariantList plugins(int strip) const;  // [{slot, kind, name, bypass, builtIn, pending}]
+  Q_INVOKABLE void setPlugin(int strip, int slot, const QString& kind);   // "" clears the slot
+  Q_INVOKABLE void setPluginBypass(int strip, int slot, bool bypass);
+  Q_INVOKABLE QVariantList pluginCatalog() const;     // the built-in stages, for the chooser
   Q_INVOKABLE void copyChannel(int strip);
   Q_INVOKABLE bool pasteChannel(int strip);          // the copied DSP + sends + pan onto this strip (not the name, colour, fader or groups)
   bool channelClipboard() const { return clipboard_.has_value(); }
@@ -185,7 +197,9 @@ class Engine : public QObject {
   static constexpr int kStrips = 32;
   static constexpr int kBuses = 8, kGroups = 8;
   struct SendUi { double db = -60; bool pre = false; };
-  struct StripUi { QString name; double db = 0, pan = 0; bool mute = false, solo = false; am::dsp::Channel dsp{48000}; SendUi sends[kBuses]; int dca = 0; unsigned muteGroups = 0; int color = 0; };
+  struct PluginUi { QString kind; bool bypass = false; };
+  struct StripUi { QString name; double db = 0, pan = 0; bool mute = false, solo = false; am::dsp::Channel dsp{48000}; SendUi sends[kBuses]; int dca = 0; unsigned muteGroups = 0; int color = 0; PluginUi plugins[kPluginSlots]; };
+  void applyPluginStage(int strip, const QString& kind, bool on);   // a built-in stage follows its slot
   struct BusUi { QString name; double db = 0, returnDb = -60; bool mute = false; };
   struct DcaUi { QString name; double db = 0; bool mute = false; };
   struct MuteGroupUi { QString name; bool active = false; };
