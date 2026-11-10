@@ -11,19 +11,15 @@
 #include <thread>
 
 #include "daemon.hpp"
+#include "paths/paths.hpp"
 
 namespace {
 std::atomic<bool> g_quit{false};
 void onSignal(int) { g_quit = true; }
-std::string home() {
-  if (const char* h = std::getenv("HOME")) return h;
-  if (const char* h = std::getenv("USERPROFILE")) return h;
-  return ".";
-}
 }  // namespace
 
 int main(int argc, char** argv) {
-  am::Daemon::Options o; std::string tokenFile = home() + "/.amixos/daemon.token", openBackend; bool lan = false, tokenArg = false;
+  am::Daemon::Options o; std::string tokenFile = am::paths::file("daemon.token"), openBackend; bool lan = false, tokenArg = false;
   for (int i = 1; i < argc; ++i) {
     const std::string a = argv[i]; auto next = [&]() -> std::string { return i + 1 < argc ? argv[++i] : ""; };
     if (a == "--port") o.port = static_cast<unsigned short>(std::atoi(next().c_str()));

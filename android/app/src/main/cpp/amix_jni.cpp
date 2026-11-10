@@ -14,6 +14,8 @@ jstring str(JNIEnv* env, char* s) { jstring j = env->NewStringUTF(s ? s : ""); a
 
 extern "C" {
 JNIEXPORT jstring JNICALL Java_com_amfb_amixos_Engine_version(JNIEnv* env, jclass) { return env->NewStringUTF(amix_version()); }
+JNIEXPORT void JNICALL Java_com_amfb_amixos_Engine_setDirs(JNIEnv* env, jclass, jstring d, jstring c, jstring t) { const char* a = env->GetStringUTFChars(d, nullptr); const char* b = env->GetStringUTFChars(c, nullptr); const char* e = env->GetStringUTFChars(t, nullptr); amix_set_dirs(a, b, e); env->ReleaseStringUTFChars(d, a); env->ReleaseStringUTFChars(c, b); env->ReleaseStringUTFChars(t, e); }
+JNIEXPORT jstring JNICALL Java_com_amfb_amixos_Engine_pathsJson(JNIEnv* env, jclass) { return str(env, amix_paths_json()); }
 JNIEXPORT jstring JNICALL Java_com_amfb_amixos_Engine_devicesJson(JNIEnv* env, jclass) { return str(env, amix_devices_json()); }
 JNIEXPORT jstring JNICALL Java_com_amfb_amixos_Engine_licenseJson(JNIEnv* env, jclass) { return str(env, amix_license_json()); }
 JNIEXPORT jlong JNICALL Java_com_amfb_amixos_Engine_create(JNIEnv*, jclass, jint strips, jdouble rate) { return reinterpret_cast<jlong>(amix_mixer_create(strips, rate)); }

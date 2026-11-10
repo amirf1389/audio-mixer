@@ -1,5 +1,5 @@
 // The ARRANGE page's model for QML: the project (tracks, clips, markers, automation), the decoded audio files, the transport and the
-// realtime player (an ExtraSource of the Engine's runtime). Saved in ~/.amixos/arrangement.json; clips reference WAV files by path and are
+// realtime player (an ExtraSource of the Engine's runtime). Saved in <data>/arrangement.json (am::paths); clips reference WAV files by path and are
 // re-loaded at start (a file that cannot be read makes its clips MISSING and silent). Export renders offline to a 24-bit WAV. No recording.
 #pragma once
 #include <QObject>

@@ -8,7 +8,7 @@
 //   Windows setting or scheduled task is touched.
 //   AI DRIVER LOCK: when a start had to fall back (ASIO busy, refused, silent), the step that worked is LOCKED for that interface and tried first
 //   next time; a lock on a lower step is retried after kRetryMs; FORGET clears it. A clean ASIO run locks ASIO.
-// Store: ~/.amixos/driver-lock.json (AMIXOS_DRIVER_LOCK_FILE): device names and modes only, nothing personal. Pure functions over device lists,
+// Store: <data>/driver-lock.json (am::paths, per OS) (AMIXOS_DRIVER_LOCK_FILE): device names and modes only, nothing personal. Pure functions over device lists,
 // so everything is testable without hardware (test/driver_intel_test.cpp).
 #pragma once
 #include <cstdint>

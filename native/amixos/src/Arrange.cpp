@@ -1,4 +1,5 @@
 #include "Arrange.h"
+#include "paths/paths.hpp"
 
 #include <QDateTime>
 #include <QDir>
@@ -18,7 +19,7 @@ Arrange::Arrange(Engine* engine, QObject* parent) : QObject(parent), engine_(eng
 }
 Arrange::~Arrange() { engine_->setExtraSource(nullptr); save(); }
 
-QString Arrange::projectFile() const { return QDir::homePath() + "/.amixos/arrangement.json"; }
+QString Arrange::projectFile() const { return QString::fromStdString(am::paths::file("arrangement.json")); }
 void Arrange::note(const QString& m) { msg_ = m; emit messageChanged(); }
 void Arrange::push() { player_.setProject(p_, bufs_); player_.setLoop(p_.loop); emit projectChanged(); }
 

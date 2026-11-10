@@ -9,7 +9,7 @@ fn main() {
     println!("cargo:rustc-link-search=native={}", dir.display());
     if env::var("AMIX_STATIC").map(|v| v == "1").unwrap_or(false) {
         println!("cargo:rustc-link-lib=static=amix_static");
-        for l in ["audiomixer_runtime", "audiomixer_engine", "amixos_license"] { println!("cargo:rustc-link-lib=static={l}"); }
+        for l in ["audiomixer_runtime", "audiomixer_engine", "amixos_license", "amixos_paths"] { println!("cargo:rustc-link-lib=static={l}"); }
         println!("cargo:rustc-link-lib=stdc++");
     } else {
         println!("cargo:rustc-link-lib=dylib=amix");

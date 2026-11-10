@@ -1,4 +1,5 @@
 #include "Settings.h"
+#include "paths/paths.hpp"
 
 #include <QDesktopServices>
 #include <QDir>
@@ -33,7 +34,11 @@ QStringList Settings::vstDefaultDirs() const { QStringList l; for (const auto& d
 int Settings::addVstDir(const QString& dir) { QStringList l = vstDirs(); const QString d = dir.trimmed(); if (!d.isEmpty() && !l.contains(d)) l << d; s_.setValue("vst3/dirs", l); s_.sync(); emit changed(); return rescanVst(); }
 int Settings::removeVstDir(const QString& dir) { QStringList l = vstDirs(); l.removeAll(dir); s_.setValue("vst3/dirs", l); s_.sync(); emit changed(); return rescanVst(); }
 int Settings::rescanVst() { const int n = engine_ ? engine_->rescanVst(vstDirs()) : 0; note(QStringLiteral("%1 VST3 / VST2 plug-in(s) found in %2 folder(s).").arg(n).arg(vstDefaultDirs().size() + vstDirs().size())); return n; }
-QString Settings::dataFolder() const { return QDir::homePath() + "/.amixos"; }
+QString Settings::dataFolder() const { return QString::fromStdString(am::paths::dataDir()); }
+QVariantMap Settings::folders() const {
+  QVariantMap m; m["os"] = am::paths::osName(); m["program"] = QString::fromStdString(am::paths::programDir()); m["data"] = QString::fromStdString(am::paths::dataDir()); m["cache"] = QString::fromStdString(am::paths::cacheDir());
+  m["prefetch"] = QString::fromStdString(am::paths::prefetchDir()); m["temp"] = QString::fromStdString(am::paths::tempDir()); m["downloads"] = QString::fromStdString(am::paths::downloadsDir()); m["legacy"] = QString::fromStdString(am::paths::legacyHome()); return m;
+}
 QVariantList Settings::dataFiles() const {
   QVariantList l;
   auto add = [&](const QString& name, const QString& path, const QString& what) { QFileInfo fi(path); QVariantMap m; m["name"] = name; m["path"] = path; m["exists"] = fi.exists(); m["bytes"] = fi.exists() ? static_cast<qlonglong>(fi.size()) : 0; m["what"] = what; l << m; };

@@ -1,4 +1,5 @@
 #include "Update.h"
+#include "paths/paths.hpp"
 
 #include <QCryptographicHash>
 #include <QDateTime>
@@ -58,7 +59,7 @@ void Update::check() {
 void Update::download() {
   if (file_.isEmpty()) { set("error", "no file for this platform in the manifest"); return; }
   const QString u = file_["url"].toString(); if (!am::upd::hostAllowed(u.toStdString())) { set("error", "the download URL is not on one of the project's hosts"); return; }
-  const QString dir = QDir::homePath() + "/.amixos/downloads"; QDir().mkpath(dir); const QString dest = dir + "/" + QFileInfo(file_["name"].toString()).fileName();
+  const QString dir = QString::fromStdString(am::paths::downloadsDir()); const QString dest = dir + "/" + QFileInfo(file_["name"].toString()).fileName();
   progress_ = 0; set("downloading", "downloading " + file_["name"].toString());
   QNetworkRequest req{QUrl(u)}; req.setTransferTimeout(600000); req.setHeader(QNetworkRequest::UserAgentHeader, "AmF-X1-console"); req.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::SameOriginRedirectPolicy);
   QNetworkReply* r = net_.get(req); auto* out = new QFile(dest, r); if (!out->open(QIODevice::WriteOnly | QIODevice::Truncate)) { set("error", "cannot write " + dest); r->abort(); return; }
@@ -72,4 +73,4 @@ void Update::download() {
     downloaded_ = dest; progress_ = 100; set("downloaded", "verified and saved: " + dest + ". Open it to install; the console does not run installers itself.");
   });
 }
-void Update::openDownloadFolder() { QDesktopServices::openUrl(QUrl::fromLocalFile(QDir::homePath() + "/.amixos/downloads")); }
+void Update::openDownloadFolder() { QDesktopServices::openUrl(QUrl::fromLocalFile(QString::fromStdString(am::paths::downloadsDir()))); }

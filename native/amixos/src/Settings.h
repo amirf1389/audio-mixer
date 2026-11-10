@@ -35,6 +35,7 @@ class Settings : public QObject {
   Q_PROPERTY(QStringList vstDirs READ vstDirs NOTIFY changed)                      // extra VST3 folders besides the platform ones
   Q_PROPERTY(QStringList vstDefaultDirs READ vstDefaultDirs CONSTANT)
   Q_PROPERTY(QString dataFolder READ dataFolder CONSTANT)
+  Q_PROPERTY(QVariantMap folders READ folders CONSTANT)   // {os, program, data, cache, prefetch, temp, downloads, legacy}: where this build keeps its files
   Q_PROPERTY(QString message READ message NOTIFY messageChanged)
   Q_PROPERTY(bool setupDone READ setupDone NOTIFY changed)                       // the factory setup (first run) was completed
   Q_PROPERTY(bool lastSessionCrashed READ lastSessionCrashed CONSTANT)          // the previous run did not close cleanly
@@ -64,7 +65,7 @@ class Settings : public QObject {
   Q_INVOKABLE int addVstDir(const QString& dir);      // adds and rescans; returns the plug-in count
   Q_INVOKABLE int removeVstDir(const QString& dir);
   Q_INVOKABLE int rescanVst();
-  QString dataFolder() const;
+  QString dataFolder() const; QVariantMap folders() const;
   QString message() const { return msg_; }
 
   Q_INVOKABLE void rememberDevice(const QString& backend, const QString& in, const QString& out, double rate, int frames, int inCh, int outCh);

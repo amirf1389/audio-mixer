@@ -134,6 +134,18 @@ decided, what exists, what is next, and what was asked for but is not possible a
   GAIN sliders for the selected band (click a diamond or B1-B10), ISO CENTRE, BAND OFF; the diamonds read the real bands.
   None of the Windows backends has run on a Windows PC from here: the UM2 run needs the user's computer (Remote Control) or a Windows build.
 
+- **One install layout** (`engine/cpp/app/paths`, `install/layout.json`, `docs/install-layout.md`): program / data / cache / prefetch / temp per
+  OS (Windows: Program Files + %APPDATA% + %LOCALAPPDATA% + %TEMP%, installer script `install/windows/amfx1.iss`; Android: filesDir + cacheDir
+  through `Engine.setDirs` / `amix_set_dirs`; Linux and macOS: data next to the program when writable). Licence, driver lock, daemon token,
+  audit, arrangement, key request, samples export and downloads all go through it; `~/.amixos` from earlier builds keeps working.
+
+- **AmF X1.exe, built clean for Defender** (`scripts/build-native.js`): the engine program is now "AmF X1.exe" (+ "AmF X1 (32-bit).exe") with a
+  version resource (CompanyName AMFB Audio, ProductName, description, version, OriginalFilename) and a manifest (asInvoker, Windows 8.1-11,
+  DPI aware) from `install/windows/amfx1.rc`; the ASIO driver DLL is no longer embedded and written out at run time (the PUP trigger) but
+  ships next to the program and `--install-driver` registers it in place (`embedDriver` stays opt-in). `scripts/sign-windows.js` signs with
+  the vendor's own certificate (osslsigncode / signtool, never creates one); `docs/windows-defender.md` lists the release steps (sign, installer,
+  false-positive submission). The installer script installs AmF X1.exe + the DLL into Program Files; make-update.js knows the new names.
+
 ## Next, in order
 
 1. **Windows .exe in hand**: run the Actions workflow, download `amixos-windows-x64.zip`, test ASIO (UM2, Focusrite, ASIO4ALL, Realtek) on the user's PC. Fix what the real drivers show.

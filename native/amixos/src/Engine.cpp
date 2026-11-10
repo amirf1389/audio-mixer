@@ -1,6 +1,7 @@
 #include "Engine.h"
 
 #include "license/license.hpp"
+#include "paths/paths.hpp"
 #include "fx/presets.hpp"
 #include <QFileSystemWatcher>
 static bool looksBluetooth(const QString& n);
@@ -184,14 +185,14 @@ bool Engine::applyFxPreset(int k, int id) {
   emit busesChanged(); return true;
 }
 // ---- AUTO LICENCE
-static QString amixHome() { return QDir::homePath() + "/.amixos"; }
+static QString amixHome() { return QString::fromStdString(am::paths::dataDir()); }
 bool Engine::autoLicense() const { return settings_.value("license/auto", true).toBool(); }
 QString Engine::autoLicenseRequestPath() const { return amixHome() + "/key-request.json"; }
 void Engine::setAutoLicense(bool on) {
   settings_.setValue("license/auto", on);
   if (!on) { delete keyWatch_; keyWatch_ = nullptr; keyScan_.stop(); autoStatus_ = "off"; emit licenseChanged(); return; }
   if (!keyWatch_) {
-    QDir().mkpath(amixHome()); keyWatch_ = new QFileSystemWatcher(this);
+    keyWatch_ = new QFileSystemWatcher(this);
     for (const QString& d : {amixHome(), QStandardPaths::writableLocation(QStandardPaths::DownloadLocation)}) if (!d.isEmpty() && QDir(d).exists()) keyWatch_->addPath(d);
     connect(keyWatch_, &QFileSystemWatcher::directoryChanged, this, [this](const QString&) { keyScan_.start(); });
     keyScan_.setSingleShot(true); keyScan_.setInterval(600); connect(&keyScan_, &QTimer::timeout, this, [this] { scanForKeys(); });
@@ -200,7 +201,7 @@ void Engine::setAutoLicense(bool on) {
   emit licenseChanged(); scanForKeys();
 }
 QString Engine::writeLicenseRequest(const QString& plan, const QString& name, const QString& email) {
-  QDir().mkpath(amixHome()); QFile f(autoLicenseRequestPath());
+  QFile f(autoLicenseRequestPath());
   if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) { autoStatus_ = "cannot write " + autoLicenseRequestPath(); emit licenseChanged(); return QString(); }
   f.write(licenseRequest(plan, name, email).toUtf8()); f.close(); autoStatus_ = "request written; waiting for the vendor's key file"; emit licenseChanged(); return autoLicenseRequestPath();
 }

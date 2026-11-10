@@ -23,6 +23,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Engine.setDirs(filesDir.absolutePath, cacheDir.absolutePath, cacheDir.absolutePath)   // data in the app's files, everything else in its cache (cleared by Android when space is short)
         setContentView(R.layout.activity_main)
         findViewById<TextView>(R.id.version).text = getString(R.string.engine_version, Engine.version())
         engine.setLimiter(true, -0.5, 100.0)

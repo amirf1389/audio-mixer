@@ -10,6 +10,7 @@
 
 int main(void) {
   CHECK(amix_api_version() == 2 && amix_api_version() == AMIX_API_VERSION && strlen(amix_version()) >= 5);
+  { amix_set_dirs("/tmp/amix-sdk-paths/data", "/tmp/amix-sdk-paths/cache", NULL); char* pj = amix_paths_json(); CHECK(pj && strstr(pj, "\"data\":\"/tmp/amix-sdk-paths/data\"") && strstr(pj, "\"downloads\":\"/tmp/amix-sdk-paths/cache/downloads\"") && strstr(pj, "\"os\":")); amix_free(pj); }
   char* devs = amix_devices_json(); CHECK(devs && strstr(devs, "\"null\"")); amix_free(devs);
   char* bk = amix_backends_json(); CHECK(bk && bk[0] == '['); amix_free(bk);
   amix_mixer* m = amix_mixer_create(4, 48000.0); CHECK(m && amix_mixer_strips(m) == 4);

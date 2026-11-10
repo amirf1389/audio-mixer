@@ -11,6 +11,7 @@
 #include "audiomixer/engine.hpp"
 #include "audiomixer/runtime.hpp"
 #include "license/license.hpp"
+#include "paths/paths.hpp"
 
 #ifndef AMIX_VERSION_STRING
 #define AMIX_VERSION_STRING "0.1.0"
@@ -37,7 +38,8 @@ char* amix_backends_json(void) { std::string o = "["; bool first = true; for (co
 char* amix_devices_json(void) {
   std::string o = "["; bool first = true;
   for (const am::DeviceInfo& d : am::listDevices()) {
-    if (!first) o += ","; first = false;
+    if (!first) o += ",";
+    first = false;
     o += "{\"backend\":" + jstr(d.backend) + ",\"id\":" + jstr(d.id) + ",\"name\":" + jstr(d.name) + ",\"inChannels\":" + std::to_string(d.inChannels) + ",\"outChannels\":" + std::to_string(d.outChannels) + ",\"defaultRate\":" + std::to_string(static_cast<int>(d.defaultRate)) + ",\"defaultIn\":" + (d.defaultIn ? "true" : "false") + ",\"defaultOut\":" + (d.defaultOut ? "true" : "false") + "}";
   }
   return dup(o + "]");
@@ -64,7 +66,8 @@ int amix_mixer_process(amix_mixer* m, const float* const* in, int frames, float*
   return frames;
 }
 void amix_mixer_levels(const amix_mixer* m, amix_levels* o) {
-  if (!m || !o) return; std::memset(o, 0, sizeof *o);
+  if (!m || !o) return;
+  std::memset(o, 0, sizeof *o);
   for (int i = 0; i < m->mixer.strips(); ++i) { const am::Strip& s = m->mixer.strip(i); fillMeter(o->strips[i], s.meter.state()); o->strips[i].in_peak = s.inPk; }
   for (int c = 0; c < 2; ++c) fillMeter(o->master[c], m->mixer.masterMeter(c));
   for (int k = 0; k < AMIX_MAX_BUSES; ++k) fillMeter(o->buses[k], m->mixer.bus(k).meter.state());
@@ -74,7 +77,8 @@ void amix_mixer_levels(const amix_mixer* m, amix_levels* o) {
 amix_rt* amix_rt_create(int strips) { return new (std::nothrow) amix_rt(strips < 1 ? 1 : strips > AMIX_MAX_STRIPS ? AMIX_MAX_STRIPS : strips); }
 void amix_rt_destroy(amix_rt* r) { delete r; }
 int amix_rt_open(amix_rt* r, const amix_config* c, char* err, size_t errLen) {
-  if (err && errLen) err[0] = 0; if (!r || !c) return -1;
+  if (err && errLen) err[0] = 0;
+  if (!r || !c) return -1;
   am::DeviceConfig cfg; cfg.backend = c->backend && *c->backend ? c->backend : "auto"; cfg.inDevice = c->in_device ? c->in_device : ""; cfg.outDevice = c->out_device ? c->out_device : "";
   cfg.sampleRate = c->sample_rate > 0 ? c->sample_rate : 48000; cfg.frames = c->frames > 0 ? static_cast<unsigned>(c->frames) : 256; cfg.inChannels = c->in_channels > 0 ? c->in_channels : 2; cfg.outChannels = c->out_channels > 0 ? c->out_channels : 2; cfg.exclusive = c->exclusive != 0;
   std::string e; r->rt.stop();
@@ -105,13 +109,20 @@ void amix_rt_set_input_route(amix_rt* r, int s, int in) { if (r) r->rt.setInputR
 void amix_rt_set_output_route(amix_rt* r, int out, int src) { if (r) r->rt.setOutputRoute(out, src); }
 void amix_rt_clear_clips(amix_rt* r) { if (r) r->rt.clearClips(); }
 void amix_rt_levels(const amix_rt* r, amix_levels* o) {
-  if (!r || !o) return; std::memset(o, 0, sizeof *o); const am::Snapshot s = r->rt.snapshot();
+  if (!r || !o) return;
+  std::memset(o, 0, sizeof *o); const am::Snapshot s = r->rt.snapshot();
   for (int i = 0; i < AMIX_MAX_STRIPS; ++i) fillMeter(o->strips[i], s.strips[i]);
   for (int c = 0; c < 2; ++c) fillMeter(o->master[c], s.master[c]);
   for (int k = 0; k < AMIX_MAX_BUSES; ++k) fillMeter(o->buses[k], s.buses[k]);
   o->monitor_peak[0] = s.monitorPk[0]; o->monitor_peak[1] = s.monitorPk[1]; o->momentary_lufs = s.momentary; o->short_term_lufs = s.shortTerm; o->integrated_lufs = s.integrated; o->lra_lu = s.lra; o->true_peak_dbtp = s.truePeak; o->correlation = s.correlation; o->blocks = s.blocks; o->frames = s.frames; o->xruns = s.xruns;
 }
 
+void amix_set_dirs(const char* data, const char* cache, const char* temp) { am::paths::setDirs(data ? data : "", cache ? cache : "", temp ? temp : ""); }
+static std::string jsonStr(const std::string& v) { std::string o = "\""; for (char c : v) { if (c == '"' || c == '\\') o += '\\'; o += c; } return o + "\""; }
+char* amix_paths_json(void) {
+  std::string j = "{\"os\":" + jsonStr(am::paths::osName()) + ",\"program\":" + jsonStr(am::paths::programDir()) + ",\"data\":" + jsonStr(am::paths::dataDir()) + ",\"cache\":" + jsonStr(am::paths::cacheDir()) + ",\"prefetch\":" + jsonStr(am::paths::prefetchDir()) + ",\"temp\":" + jsonStr(am::paths::tempDir()) + ",\"downloads\":" + jsonStr(am::paths::downloadsDir()) + "}";
+  char* out = static_cast<char*>(std::malloc(j.size() + 1)); std::memcpy(out, j.c_str(), j.size() + 1); return out;
+}
 char* amix_license_json(void) {
   const am::lic::Status st = am::lic::status(nowMs());
   return dup("{\"state\":" + jstr(st.state) + ",\"plan\":" + jstr(st.planId) + ",\"planName\":" + jstr(st.planName) + ",\"channels\":" + std::to_string(st.channels) + ",\"source\":" + jstr(st.source) + ",\"expires\":" + std::to_string(st.expires) + ",\"machine\":" + jstr(st.machine) + ",\"message\":" + jstr(st.message) + "}");

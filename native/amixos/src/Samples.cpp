@@ -1,6 +1,7 @@
 #include "Samples.h"
 
 #include "Engine.h"
+#include "paths/paths.hpp"
 #include "samples/samples.hpp"
 #include <QDir>
 #include <QStandardPaths>
@@ -33,7 +34,7 @@ QVariantList Samples::list() const { QVariantList l; for (const auto& s : am::sa
 QStringList Samples::categories() const { QStringList c; for (const auto& s : am::samples::list()) { const QString k = QString::fromStdString(s.category); if (!c.contains(k)) c << k; } return c; }
 void Samples::setGainDb(double db) { db = std::clamp(db, -40.0, 12.0); player_.gainDb.store(db); s_.setValue("samples/gainDb", db); emit changed(); }
 double Samples::peakDb() const { const float p = player_.peak.load(); return p > 1e-6f ? 20 * std::log10(p) : -120; }
-QString Samples::folder() const { return QDir::homePath() + "/.amixos/samples"; }
+QString Samples::folder() const { return QString::fromStdString(am::paths::cacheDir()) + "/samples"; }
 void Samples::prepare(double rate) {
   auto bank = std::make_shared<std::array<SamplePlayer::Clip, SamplePlayer::kCount>>();
   for (int id = 1; id <= SamplePlayer::kCount; ++id) am::samples::render(id, rate, (*bank)[id - 1].L, (*bank)[id - 1].R);

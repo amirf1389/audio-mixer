@@ -26,6 +26,7 @@ Item {
         let clips = 0; for (let i = 0; i < engine.meters.length; ++i) if (engine.meters[i].clip) ++clips
         add("CLIPPING", "strips and master", clips === 0 && !t.masterClip, clips === 0 && !t.masterClip ? "none" : clips + " strip(s)" + (t.masterClip ? " + master" : ""))
         const files = settings.dataFiles; let missing = []; for (let i = 0; i < files.length; ++i) if (!files[i].exists) missing.push(files[i].name)
+        add("FOLDERS", settings.folders.os.toUpperCase() + " · program " + settings.folders.program, true, "data " + settings.folders.data + " · cache " + settings.folders.cache + " · temp " + settings.folders.temp)
         add("DATA FILES", settings.dataFolder, true, files.length + " known · " + (missing.length ? missing.length + " not written yet (" + missing.join(", ") + ")" : "all present"))
         add("AUTOSAVE", "console every 60 s", settings.autosave.exists, settings.autosave.exists ? settings.autosave.at : "none yet")
         add("LICENCE", lic.planName, lic.state === "ok" || lic.state === "licensed", engine.licensedChannels + " channels · " + lic.state + (lic.expires ? " · until " + lic.expires : ""))

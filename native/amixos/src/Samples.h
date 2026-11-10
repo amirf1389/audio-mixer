@@ -1,5 +1,5 @@
 // SAMPLES: the 100 built-in one-shots (engine/cpp/app/samples) on 100 pads. Rendered once at the engine rate into memory, exported to
-// ~/.amixos/samples/NNN-name.wav on request, and played polyphonically (8 voices) into the master as a fourth Runtime::ExtraSource. The
+// <cache>/samples/NNN-name.wav (am::paths: the OS cache folder, Android clears it when space is short) on request, and played polyphonically (8 voices) into the master as a fourth Runtime::ExtraSource. The
 // trigger path is lock-free: the UI pushes ids into a small ring, the audio thread starts voices from it.
 #pragma once
 #include <QObject>

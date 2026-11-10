@@ -29,6 +29,9 @@ class Engine(strips: Int, val sampleRate: Double) : AutoCloseable {
         const val MAX_FRAMES = 4096
         init { System.loadLibrary("amix") }
         @JvmStatic external fun version(): String
+        /** Where the library keeps its files: the app's filesDir for data, cacheDir for cache / prefetch / temp (Android clears it when space is short). Call once at start. */
+        @JvmStatic external fun setDirs(data: String, cache: String, temp: String)
+        @JvmStatic external fun pathsJson(): String
         @JvmStatic external fun devicesJson(): String
         @JvmStatic external fun licenseJson(): String
         @JvmStatic private external fun create(strips: Int, rate: Double): Long
