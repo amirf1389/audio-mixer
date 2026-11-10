@@ -1,5 +1,7 @@
 // Audio Mixer runtime: see include/audiomixer/runtime.hpp.
 #include "audiomixer/runtime.hpp"
+
+#include <chrono>
 #include <cmath>
 
 #include <algorithm>
@@ -39,7 +41,7 @@ std::unique_ptr<Backend> createBackend(const std::string& name) {
   return nullptr;
 }
 
-enum Op { kGain, kPan, kMute, kSolo, kMaster, kLimiter, kClipDb, kClear, kEq, kDelay, kPolarity, kXover, kChLimiter, kComp, kGate, kSend, kBusLevel, kBusMute, kBusReturn, kMonitor, kInRoute, kOutRoute, kTrim, kPeakHold, kBusFx, kWidth, kAutomix, kAutoLevel };
+enum Op { kGain, kPan, kMute, kSolo, kMaster, kLimiter, kClipDb, kClear, kEq, kDelay, kPolarity, kXover, kChLimiter, kComp, kGate, kSend, kBusLevel, kBusMute, kBusReturn, kMonitor, kInRoute, kOutRoute, kTrim, kPeakHold, kBusFx, kWidth, kAutomix, kAutoLevel, kOutBits, kProfReset, kDcBlock };
 
 Runtime::Runtime(int strips) : mixer_(strips, 48000) { std::memset(&pub_, 0, sizeof pub_); }
 Runtime::~Runtime() { stop(); }
@@ -92,6 +94,9 @@ void Runtime::setBusMute(int b, bool on) { post({kBusMute, b, on ? 1.0 : 0.0, 0,
 void Runtime::setBusReturn(int b, double db) { post({kBusReturn, b, db, 0, 0}); }
 void Runtime::setInputRoute(int strip, int input) { if (strip < 0 || strip >= kMaxStrips) return; post({kInRoute, strip, 0, 0, 0, std::max(-1, std::min(kMaxStrips - 1, input))}); }
 void Runtime::setOutputRoute(int out, int source) { if (out < 0 || out >= kMaxOutputs) return; post({kOutRoute, out, 0, 0, 0, std::max(0, std::min(kSrcBus0L + 2 * kMaxBuses - 1, source))}); }
+void Runtime::setOutputBits(int bits) { post({kOutBits, bits, 0, 0, 0}); }
+void Runtime::setDcBlock(bool on) { post({kDcBlock, on ? 1 : 0, 0, 0, 0}); }
+void Runtime::resetProfiler() { post({kProfReset, 0, 0, 0, 0}); }
 void Runtime::setAutomix(int s, bool on, double w) { post({kAutomix, s, on ? 1.0 : 0.0, w, 0}); }
 void Runtime::setAutoLevel(bool on, double t, double m) { post({kAutoLevel, on ? 1 : 0, t, m, 0}); }
 void Runtime::setBusProcessor(int b, BusProcessor* p) { Cmd c{kBusFx, b, 0, 0, 0}; c.p = p; post(c); }
@@ -104,6 +109,9 @@ void Runtime::setMonitor(int source, double db, bool dim, bool mono, bool mute) 
 }
 
 void Runtime::onBlock(const float* const* in, float* const* out, std::size_t frames) {
+  const std::int64_t t0 = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+  if (lastStartNs_) { const double period = static_cast<double>(frames) * 1e6 / mixer_.sampleRate(); const double gap = static_cast<double>(t0 - lastStartNs_) / 1000.0; jitterUs_ += (std::fabs(gap - period) - jitterUs_) * 0.1; }
+  lastStartNs_ = t0;
   for (unsigned t = tail_.load(std::memory_order_relaxed), h = head_.load(std::memory_order_acquire); t != h; ++t) {   // control changes of this block
     const Cmd& c = ring_[t % kRing];
     switch (c.op) {
@@ -135,6 +143,9 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
       case kWidth: mixer_.setWidth(c.x); break;
       case kAutomix: mixer_.setAutomix(c.a, c.x != 0, c.y); break;
       case kAutoLevel: mixer_.setAutoLevel(c.a != 0, c.x, c.y); break;
+      case kOutBits: mixer_.setOutputBits(c.a); break;
+      case kDcBlock: mixer_.setDcBlock(c.a != 0); break;
+      case kProfReset: maxBlockUs_ = 0; jitterUs_ = 0; break;
       default: break;
     }
     tail_.store(t + 1, std::memory_order_release);
@@ -182,6 +193,7 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
     if (from) std::memcpy(out[c], from, frames * sizeof(float)); else std::memset(out[c], 0, frames * sizeof(float));
   }
   ++blocks_; frames_ += frames;
+  { const std::int64_t t1 = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count(); blockUs_ = static_cast<double>(t1 - t0) / 1000.0; if (blockUs_ > maxBlockUs_) maxBlockUs_ = blockUs_; loadPct_ = 100.0 * blockUs_ / (static_cast<double>(frames) * 1e6 / mixer_.sampleRate()); }
   publish();
 }
 
@@ -192,7 +204,7 @@ void Runtime::publish() {
   for (int k = 0; k < kMaxBuses; ++k) { const MeterState& m = mixer_.bus(k).meter.state(); s.buses[k] = {m.pk, m.rms, m.hold, m.clipN, 0.0, 0.0, 0.0, 0.0}; }
   s.momentary = mixer_.loudness().momentary(); s.shortTerm = mixer_.loudness().shortTerm(); s.integrated = mixer_.loudness().integrated(); s.lra = mixer_.loudness().range(); s.truePeak = mixer_.loudness().truePeak(); s.autoLevelDb = mixer_.autoLevelGainDb();
   s.monitorPk[0] = monPk_[0]; s.monitorPk[1] = monPk_[1];
-  s.correlation = mixer_.phase().corr; s.blocks = blocks_; s.frames = frames_; s.xruns = backend_ ? backend_->xruns() : 0;
+  s.correlation = mixer_.phase().corr; s.blocks = blocks_; s.frames = frames_; s.loadPct = loadPct_; s.blockUs = blockUs_; s.maxBlockUs = maxBlockUs_; s.jitterUs = jitterUs_; s.xruns = backend_ ? backend_->xruns() : 0;
   const unsigned q = seq_.load(std::memory_order_relaxed);
   seq_.store(q + 1, std::memory_order_release);                                    // odd: being written
   std::memcpy(&pub_, &s, sizeof s);

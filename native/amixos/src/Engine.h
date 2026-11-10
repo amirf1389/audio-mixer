@@ -150,6 +150,13 @@ class Engine : public QObject {
   Q_INVOKABLE bool autoStart(int frames);           // detect and SMART START it
   // an extra stereo source summed into the master (the ARRANGE player): attached to every runtime this Engine opens
   void setExtraSource(am::Runtime::ExtraSource* s) { extra_ = s; sources_.a.store(s); }
+  void setMediaSource(am::Runtime::ExtraSource* s) { sources_.c.store(s); }
+  // OUTPUT STAGE + PROFILER (SOUND CARD page): DC removal before the limiter, TPDF dither for 16 / 24-bit devices, block-time figures in telemetry
+  Q_PROPERTY(bool dcBlock READ dcBlock WRITE setDcBlock NOTIFY stateChanged)
+  Q_PROPERTY(int outputBits READ outputBits WRITE setOutputBits NOTIFY stateChanged)   // 0 float, 16, 24
+  bool dcBlock() const { return settings_.value("audio/dcBlock", true).toBool(); } void setDcBlock(bool v) { settings_.setValue("audio/dcBlock", v); if (rt_) rt_->setDcBlock(v); emit stateChanged(); }
+  int outputBits() const { return settings_.value("audio/outputBits", 0).toInt(); } void setOutputBits(int b) { b = b == 16 || b == 24 ? b : 0; settings_.setValue("audio/outputBits", b); if (rt_) rt_->setOutputBits(b); emit stateChanged(); }
+  Q_INVOKABLE void resetProfiler() { if (rt_) rt_->resetProfiler(); }
   Q_INVOKABLE QVariantList spectrum(int channel);
   Q_INVOKABLE QVariantMap roundTrip() const { double ms = 0, db = -120; QVariantMap m; m["ok"] = scope_.roundTrip(ms, db); m["ms"] = ms; m["returnDb"] = db; m["frames"] = blockFrames(); m["rate"] = sampleRate(); return m; }
   Q_PROPERTY(double sampleRate READ sampleRate NOTIFY stateChanged)

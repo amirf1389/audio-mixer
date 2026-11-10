@@ -25,6 +25,7 @@ qt_add_executable(amixos
     src/Settings.cpp src/Settings.h
     src/Access.cpp src/Access.h
     src/Osc.cpp src/Osc.h
+    src/Media.cpp src/Media.h
     src/Scope.cpp src/Scope.h
     src/Generator.cpp src/Generator.h
     src/I18n.cpp src/I18n.h)
@@ -61,6 +62,8 @@ qt_add_qml_module(amixos
         qml/AiMixPage.qml
         qml/PluginsPage.qml
         qml/NetworkPage.qml
+        qml/MediaPage.qml
+        qml/SoundCardPage.qml
         qml/HomePage.qml
         qml/MixerPage.qml
         qml/TonePage.qml

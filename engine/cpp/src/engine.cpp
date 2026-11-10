@@ -269,6 +269,10 @@ void Mixer::process(const float* const* in, std::size_t frames, float* outL, flo
     }
     if (extL && extR) for (std::size_t i = 0; i < n; ++i) { outL[done + i] += extL[done + i]; outR[done + i] += extR[done + i]; }   // the arrangement player, pre master
     if (width_ != 1.0) for (std::size_t i = 0; i < n; ++i) { const float mid = 0.5f * (outL[done + i] + outR[done + i]), side = 0.5f * (outL[done + i] - outR[done + i]) * static_cast<float>(width_); outL[done + i] = mid + side; outR[done + i] = mid - side; }
+    if (dcOn_) {   // DC blocker before the auto level and the limiter: y[n] = x[n] - x[n-1] + R y[n-1], R for 5 Hz
+      const double R = 1.0 - 2 * kPi * 5.0 / fs_; float* ch[2] = {outL + done, outR + done};
+      for (int c = 0; c < 2; ++c) for (std::size_t i = 0; i < n; ++i) { const double x = ch[c][i]; const double y = x - dcX_[c] + R * dcY_[c]; dcX_[c] = x; dcY_[c] = y; ch[c][i] = static_cast<float>(y); }
+    }
     if (autoOn_) {   // steer the short-term loudness toward the target, slowly, within [-12, +max] dB, once the 3 s window has filled
       const double step = static_cast<double>(n) / fs_; autoSec_ += step; const double st = loudness_.shortTerm();
       if (autoSec_ >= 3.0 && st > -70 && st < -1) { const double want = std::max(-12.0, std::min(autoMax_, autoDb_ + (autoTarget_ - st))); autoDb_ += want > autoDb_ ? std::min(want - autoDb_, 1.0 * step) : std::max(want - autoDb_, -6.0 * step); }
@@ -283,6 +287,10 @@ void Mixer::process(const float* const* in, std::size_t frames, float* outL, flo
         l *= limGain_; r *= limGain_;
       }
       outL[done + i] = static_cast<float>(l); outR[done + i] = static_cast<float>(r);
+    }
+    if (outBits_) {   // TPDF dither at the device depth: the last thing before the converter (after the limiter; adds at most one LSB)
+      float* ch[2] = {outL + done, outR + done}; const double q = 1.0 / static_cast<double>(1u << (outBits_ - 1));
+      for (int c = 0; c < 2; ++c) for (std::size_t i = 0; i < n; ++i) { rng_ ^= rng_ << 13; rng_ ^= rng_ >> 17; rng_ ^= rng_ << 5; const double r1 = static_cast<double>(rng_) / 4294967296.0; rng_ ^= rng_ << 13; rng_ ^= rng_ >> 17; rng_ ^= rng_ << 5; const double r2 = static_cast<double>(rng_) / 4294967296.0; ch[c][i] = static_cast<float>(std::floor((ch[c][i] + (r1 - r2) * q) / q + 0.5) * q); }
     }
     master_[0].add(outL + done, n); master_[1].add(outR + done, n);
     loudness_.feed(outL + done, outR + done, n);

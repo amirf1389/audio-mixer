@@ -84,6 +84,10 @@ decided, what exists, what is next, and what was asked for but is not possible a
   roadmap item 10), **PLUGINS** (manager: search, folders, rescan, INSERT into the selected strip), **NETWORK** (an OSC 1.0 UDP server:
   faders, mutes, solos, pans, master, buses in; meters out; this computer only unless LAN is allowed, and the page says it is
   unauthenticated). COMPRESSOR / NOISE GATE / SEND TO / GROUP FADERS / PRESETS / SCENES were long ported and are now marked so.
+- **STREAM & MEDIA** (a WAV playlist player into the master: third extra source, resampled to the engine rate, gain, loop, auto-next,
+  peak), **SOUND CARD** (device state, re-open at another rate / block, AUTO ASIO and SMART START switches, the driver ladder, the
+  DSP profiler: block time, worst case, load %, jitter, overruns, roadmap 14; the output stage: DC removal before the limiter and
+  TPDF dither at 16 / 24 bit after it, roadmap 12). output_stage_test covers the blocker, the dither grid and the profiler.
 
 ## Next, in order
 
@@ -98,9 +102,9 @@ decided, what exists, what is next, and what was asked for but is not possible a
 9. ~~Spatial / 360~~: removed 2026-11-10 at the user's request (the SURROUND page and the Resonance Audio path are gone; no spatial rendering is built in).
 10. ~~Volume optimise ("no low, but loud")~~ done 2026-11-10 as AUTO LEVEL on AI MIX: a master loudness stage = loudness-normalising gain + look-ahead true-peak limiter to a target (−14 LUFS streaming / −1 dBTP), with the "quiet source" detector raising gain smoothly; never clipping, always measured on the LOUDNESS page.
 11. **High-resolution engine**: 96 / 192 kHz paths are already native (double precision, device rate); add sample-rate conversion for mixed-rate sources and 32-bit float / 24-bit WAV export.
-12. **Low noise from the media player**: dither on output when the device is 16-bit, DC removal, denormal protection, and a "player gain" stage so the OS mixer is never needed.
+12. ~~Low noise from the media player~~ done 2026-11-10 (DC removal, TPDF dither, player gain; denormals were already flushed): dither on output when the device is 16-bit, DC removal, denormal protection, and a "player gain" stage so the OS mixer is never needed.
 13. **Factory reset**: a SETTINGS / BOOT page action that wipes the saved console state (QSettings), presets and licence cache after a confirmation, and a `--factory-reset` command line switch.
-14. **Telemetry and diagnostics**: the DIAGNOSTICS log (plain language) and the profiler (block time, jitter, xruns per device) natively; crash-safe dumps.
+14. ~~Telemetry and diagnostics~~ profiler done 2026-11-10 on SOUND CARD; the plain-language log is DIAGNOSTICS: the DIAGNOSTICS log (plain language) and the profiler (block time, jitter, xruns per device) natively; crash-safe dumps.
 15. **Remote / network**: TCP / UDP control and metering (standalone Asio or Qt Network), mTLS where it leaves the machine; OSC and MIDI learn.
 16. **Android / iOS** builds of the same Qt code (HAL detection and battery policy were already designed in the retired Android app: `Hal.java`, `Power.java` at `html-app-final`).
 17. Later research items from the master prompt: SIMD kernels, amp modelling / convolution, ambisonics encoder-decoder with head tracking, an embedded C++ plug-in SDK, hot-swappable DSP modules, "40-bit" summing (double is 53-bit mantissa: already better), a custom lossless codec (FLAC exists; evaluate before inventing).

@@ -65,6 +65,7 @@ struct Snapshot {
   double monitorPk[2];                       // what the control room hears, after the monitor section
   double momentary, shortTerm, integrated, lra, truePeak, correlation, autoLevelDb;
   std::uint64_t blocks, frames, xruns;
+  double loadPct, blockUs, maxBlockUs, jitterUs;   // DSP time of the last block as % of its duration, its microseconds, the worst since start, the period jitter
 };
 
 class Runtime {
@@ -105,6 +106,9 @@ class Runtime {
   void setWidth(double w);                           // master stereo width 0..2
   void setAutomix(int strip, bool on, double weight);   // gain-sharing automixer membership
   void setAutoLevel(bool on, double targetLufs, double maxGainDb);
+  void setOutputBits(int bits);                       // 0 = float out (no dither); 16 / 24 = TPDF dither to that depth
+  void setDcBlock(bool on);
+  void resetProfiler();
   // the monitor section (control room): what goes to output channels 0 / 1 after the master meters. source 0 = master, 1..kMaxBuses = that bus
   // (post level, pre return); level in dB, dim = -20 dB, mono sums L+R, mute = silence. The master meters and loudness are not affected.
   void setMonitor(int source, double db, bool dim, bool mono, bool mute);
@@ -149,6 +153,7 @@ class Runtime {
   Cmd ring_[kRing]; std::atomic<unsigned> head_{0}, tail_{0}; std::mutex producers_;
   // published meters (sequence counter)
   mutable std::atomic<unsigned> seq_{0}; Snapshot pub_{}; std::uint64_t blocks_ = 0, frames_ = 0;
+  double loadPct_ = 0, blockUs_ = 0, maxBlockUs_ = 0, jitterUs_ = 0; std::int64_t lastStartNs_ = 0;   // profiler (audio thread)
 };
 
 }  // namespace am
