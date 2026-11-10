@@ -128,3 +128,14 @@ profiles/
 
 # a paid edition's signed token is made per sale and goes only into that edition's installer (scripts/build-edition.js)
 bridge/edition-token.json
+
+# Perl XS binding: ExtUtils::MakeMaker build output (bindings/perl/Audio-AmixOS)
+bindings/perl/Audio-AmixOS/MYMETA.json
+bindings/perl/Audio-AmixOS/MYMETA.yml
+bindings/perl/Audio-AmixOS/Makefile
+bindings/perl/Audio-AmixOS/Makefile.old
+bindings/perl/Audio-AmixOS/blib/
+bindings/perl/Audio-AmixOS/pm_to_blib
+bindings/perl/Audio-AmixOS/*.o
+bindings/perl/Audio-AmixOS/*.c
+bindings/perl/Audio-AmixOS/*.bs
