@@ -91,11 +91,26 @@ qt_add_qml_module(amixos
         i18n/verified-22.json
         i18n/auto-58.json
         i18n/ui/fa.json
+        i18n/ui/ar.json
+        i18n/ui/ur.json
         i18n/ui/es.json
+        i18n/ui/fr.json
+        i18n/ui/de.json
         i18n/ui/pt.json
         i18n/ui/ru.json
+        i18n/ui/tr.json
+        i18n/ui/hi.json
+        i18n/ui/zh.json
+        i18n/ui/ja.json
+        i18n/ui/ko.json
+        i18n/ui/ms.json
+        i18n/ui/id.json
         i18n/ui/it.json
-        i18n/ui/vi.json)
+        i18n/ui/nl.json
+        i18n/ui/pl.json
+        i18n/ui/vi.json
+        i18n/ui/th.json
+        i18n/ui/uk.json)
 target_compile_definitions(amixos PRIVATE AMIX_VERSION="${AMIX_VERSION}")
 target_compile_definitions(amixos PRIVATE AMIX_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(amixos PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::QuickControls2 Qt6::Network audiomixer_runtime audiomixer_engine amixos_license amixos_arrange amixos_vst3 amixos_vst2 amixos_record amixos_fx amixos_samples amixos_measure)
