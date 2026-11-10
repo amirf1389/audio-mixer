@@ -94,6 +94,7 @@ target_link_libraries(amixos PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::QuickCon
 
 if(WIN32)
     set_target_properties(amixos PROPERTIES WIN32_EXECUTABLE TRUE)
+    target_sources(amixos PRIVATE win/amixos.rc)   # version information + manifest (company, product, asInvoker, DPI aware)
 endif()
 if(APPLE AND NOT IOS)
     set_target_properties(amixos PROPERTIES MACOSX_BUNDLE TRUE)

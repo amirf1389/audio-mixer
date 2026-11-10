@@ -139,3 +139,5 @@ bindings/perl/Audio-AmixOS/pm_to_blib
 bindings/perl/Audio-AmixOS/*.o
 bindings/perl/Audio-AmixOS/*.c
 bindings/perl/Audio-AmixOS/*.bs
+.qt-win/
+build-win/

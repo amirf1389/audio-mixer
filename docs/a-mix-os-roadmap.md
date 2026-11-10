@@ -146,6 +146,12 @@ decided, what exists, what is next, and what was asked for but is not possible a
   the vendor's own certificate (osslsigncode / signtool, never creates one); `docs/windows-defender.md` lists the release steps (sign, installer,
   false-positive submission). The installer script installs AmF X1.exe + the DLL into Program Files; make-update.js knows the new names.
 
+- **The console .exe, cross-built** (`scripts/build-console-windows.sh`, `install/windows/mingw-cross.cmake`): amixos.exe for Windows x64
+  from Linux with mingw-w64 and the official Qt 6.4.2 win64_mingw kit (download.qt.io reachable again; the kit's moc / rcc / qmlcachegen /
+  qmltyperegistrar are replaced by the host's of the same version), with a version resource + manifest (`native/amixos/win/amixos.rc`).
+  `releases/windows/AmF-X1-<version>-windows-x64.zip`: amixos.exe, amixos-daemon.exe, AmF X1.exe, the ASIO DLL, the Qt runtime (DLLs,
+  qwindows platform plugin, image plugins, QML modules), qt.conf, README. Unsigned, and not run on Windows from the build machine.
+
 ## Next, in order
 
 1. **Windows .exe in hand**: run the Actions workflow, download `amixos-windows-x64.zip`, test ASIO (UM2, Focusrite, ASIO4ALL, Realtek) on the user's PC. Fix what the real drivers show.
