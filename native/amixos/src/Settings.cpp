@@ -7,6 +7,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QUrl>
+#include <QRegularExpression>
+#include <QDateTime>
 
 #include "Engine.h"
 #include "vst3/vst3_host.hpp"
@@ -14,6 +16,15 @@
 
 Settings::Settings(Engine* engine, QObject* parent) : QObject(parent), engine_(engine) {
   if (engine_) { engine_->setClipThreshold(clipDb()); engine_->setPeakHold(peakHoldMs()); }
+  crashed_ = s_.value("session/open", false).toBool(); s_.setValue("session/open", true); s_.sync();   // cleared by sessionClosed(); still set at the next start = the last run died
+  autosave_.setInterval(60000); connect(&autosave_, &QTimer::timeout, this, [this] { if (!engine_) return; QDir().mkpath(dataFolder()); if (!exportConsole(dataFolder() + "/autosave.json").isEmpty()) emit autosaveChanged(); }); autosave_.start();
+}
+void Settings::sessionClosed() { s_.setValue("session/open", false); s_.sync(); }
+QVariantMap Settings::autosave() const { QVariantMap m; QFileInfo fi(dataFolder() + "/autosave.json"); m["exists"] = fi.exists(); m["path"] = fi.filePath(); m["at"] = fi.exists() ? fi.lastModified().toString("yyyy-MM-dd HH:mm:ss") : QString(); m["bytes"] = fi.exists() ? static_cast<qlonglong>(fi.size()) : 0; return m; }
+bool Settings::restoreAutosave() { const QString p = dataFolder() + "/autosave.json"; if (!QFileInfo::exists(p)) { note("No autosave yet"); return false; } exportConsole(dataFolder() + "/before-restore.json"); const bool ok = importConsole(p); if (ok) note("Console restored from the autosave; the console before it is in before-restore.json"); return ok; }
+QString Settings::saveText(const QString& name, const QString& text) {
+  QString n = name; n.replace(QRegularExpression("[^A-Za-z0-9._-]"), "_"); if (n.isEmpty()) n = "export.txt"; QDir().mkpath(dataFolder()); const QString p = dataFolder() + "/" + n;
+  QFile f(p); if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) { note(QStringLiteral("Cannot write %1").arg(p)); return QString(); } f.write(text.toUtf8()); note(QStringLiteral("Saved %1").arg(p)); return p;
 }
 void Settings::setPeakHoldMs(int v) { set("audio/peakHoldMs", v); if (engine_) engine_->setPeakHold(v); }
 void Settings::setClipDb(double v) { v = std::clamp(v, -12.0, 0.0); set("audio/clipDb", v); if (engine_) engine_->setClipThreshold(v); }

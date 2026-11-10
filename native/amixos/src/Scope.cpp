@@ -49,3 +49,15 @@ void ScopeTap::spectrum(int ch, std::vector<float>& bands) const {
     bands[static_cast<std::size_t>(b)] = static_cast<float>(p > 1e-12 ? 10 * std::log10(p) : -120.0);
   }
 }
+
+bool ScopeTap::roundTrip(double& ms, double& returnDb) const {
+  const std::size_t span = static_cast<std::size_t>(std::min<double>(fs_, kRing / 2.0)); const std::size_t h = head_.load(std::memory_order_acquire), start = h - span;
+  const std::vector<float>& m = ring_[0]; const std::vector<float>& s = ring_[2];
+  std::size_t onset = 0; float mpk = 0; for (std::size_t i = 0; i + static_cast<std::size_t>(fs_ * 0.5) < span; ++i) { const float v = std::fabs(m[(start + i) & (kRing - 1)]); if (v > mpk * 1.5f && v > 0.05f) { mpk = v; onset = i; } }   // the first clear pulse of the window with half a second after it
+  if (mpk < 0.05f) return false;
+  const std::size_t win = static_cast<std::size_t>(fs_ * 0.5); std::size_t echo = 0; float spk = 0;
+  for (std::size_t i = onset + 1; i < onset + win && i < span; ++i) { const float v = std::fabs(s[(start + i) & (kRing - 1)]); if (v > spk) { spk = v; echo = i; } }
+  if (spk < mpk / 40.f) return false;
+  for (std::size_t i = onset + 1; i < echo; ++i) { const float v = std::fabs(s[(start + i) & (kRing - 1)]); if (v > spk * 0.5f) { echo = i; break; } }   // the echo's onset, not its peak
+  ms = static_cast<double>(echo - onset) * 1000.0 / fs_; returnDb = 20 * std::log10(spk); return true;
+}

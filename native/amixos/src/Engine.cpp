@@ -57,7 +57,7 @@ bool Engine::open(const QString& backend, const QString& inDevice, const QString
   stop();
   rt_ = std::make_unique<am::Runtime>(kStrips);
   am::DeviceConfig cfg; cfg.backend = backend.isEmpty() ? "auto" : backend.toStdString(); cfg.inDevice = inDevice.toStdString(); cfg.outDevice = outDevice.toStdString();
-  cfg.sampleRate = sampleRate > 0 ? sampleRate : 48000; cfg.frames = static_cast<unsigned>(frames > 0 ? frames : 256); cfg.inChannels = inChannels; cfg.outChannels = outChannels;
+  cfg.sampleRate = sampleRate > 0 ? sampleRate : 48000; cfg.frames = static_cast<unsigned>(frames > 0 ? frames : 256); blockFrames_ = static_cast<int>(cfg.frames); cfg.inChannels = inChannels; cfg.outChannels = outChannels;
   devIn_ = std::clamp(inChannels, 0, kStrips); devOut_ = std::clamp(outChannels, 0, kOutputs);
   std::string err;
   if (!rt_->open(cfg, err) || !rt_->start(err)) { status_ = QStringLiteral("Could not open the sound card: %1").arg(QString::fromStdString(err)); rt_.reset(); emit stateChanged(); return false; }
@@ -184,7 +184,7 @@ bool Engine::openSmart(const QString& backend, const QString& in, const QString&
   for (std::size_t i = 0; i < steps.size(); ++i) {
     const auto& a = steps[i];
     stop(); rt_ = std::make_unique<am::Runtime>(kStrips);
-    am::DeviceConfig cfg; cfg.backend = a.backend; cfg.inDevice = a.inDevice; cfg.outDevice = a.outDevice; cfg.sampleRate = rate > 0 ? rate : 48000; cfg.frames = static_cast<unsigned>(frames > 0 ? frames : 256); cfg.inChannels = inCh; cfg.outChannels = outCh; cfg.exclusive = a.exclusive;
+    am::DeviceConfig cfg; cfg.backend = a.backend; cfg.inDevice = a.inDevice; cfg.outDevice = a.outDevice; cfg.sampleRate = rate > 0 ? rate : 48000; cfg.frames = static_cast<unsigned>(frames > 0 ? frames : 256); blockFrames_ = static_cast<int>(cfg.frames); cfg.inChannels = inCh; cfg.outChannels = outCh; cfg.exclusive = a.exclusive;
     devIn_ = std::clamp(inCh, 0, kStrips); devOut_ = std::clamp(outCh, 0, kOutputs);
     std::string err;
     if (rt_->open(cfg, err) && rt_->start(err)) {
@@ -480,8 +480,8 @@ QVariantList Engine::pages() const {
     {"METER", "meter", "LEVELS", "▓", true}, {"METER", "lufs", "LOUDNESS", "◎", true}, {"METER", "osc", "WAVEFORM", "∽", true}, {"METER", "phase", "PHASE", "☯", true},
     {"SOURCE", "media", "STREAM & MEDIA", "▶", false}, {"SOURCE", "live", "LIVE SOURCES", "☉", true}, {"SOURCE", "miceq", "MIC EQ", "♪", true}, {"SOURCE", "ai", "AI MIX", "⚙", false}, {"SOURCE", "tools", "TOOLS", "⚒", true}, {"SOURCE", "plugins", "PLUGINS", "⬡", false},
     {"DEVICE", "asio", "SOUND CARD", "◉", false}, {"DEVICE", "bluetooth", "BLUETOOTH", "⮁", false}, {"DEVICE", "network", "NETWORK", "⮞", false}, {"DEVICE", "cloud", "CLOUD", "☁", false}, {"DEVICE", "cascade", "CASCADE", "⚭", false},
-    {"SYSTEM", "presets", "PRESETS", "⬇", false}, {"SYSTEM", "sys", "SETTINGS", "⚙", true}, {"SYSTEM", "acct", "ACCOUNT", "☺", false}, {"SYSTEM", "access", "ACCESS", "⚿", false}, {"SYSTEM", "renew", "LICENSE", "★", true}, {"SYSTEM", "admin", "ADMIN", "⚑", false}, {"SYSTEM", "calib", "CALIBRATE", "⌖", false},
-    {"HELP", "help", "HELP", "?", false}, {"HELP", "scenes", "SCENES", "⚐", false}, {"SYSTEM", "boot", "BOOT / RESET", "⏻", false},
+    {"SYSTEM", "presets", "PRESETS", "⬇", false}, {"SYSTEM", "sys", "SETTINGS", "⚙", true}, {"SYSTEM", "acct", "ACCOUNT", "☺", false}, {"SYSTEM", "access", "ACCESS", "⚿", false}, {"SYSTEM", "renew", "LICENSE", "★", true}, {"SYSTEM", "admin", "ADMIN", "⚑", false}, {"SYSTEM", "calib", "CALIBRATE", "⌖", true},
+    {"HELP", "help", "HELP", "?", true}, {"HELP", "scenes", "SCENES", "⚐", false}, {"SYSTEM", "boot", "DIAGNOSTICS", "⏻", true},
   };
   QVariantList l; for (const P& p : k) { QVariantMap m; m["group"] = p.group; m["id"] = p.id; m["text"] = p.text; m["icon"] = QString::fromUtf8(p.icon); m["ready"] = p.ready; l << m; }
   return l;

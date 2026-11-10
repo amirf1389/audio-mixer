@@ -24,6 +24,9 @@ class ScopeTap : public am::Runtime::Tap {
   // a 1/3-octave spectrum of the newest 4096 samples: 31 bands, 20 Hz .. 20 kHz, dBFS (a full-scale sine reads about 0 in its band)
   static constexpr int kBands = 31;
   void spectrum(int ch, std::vector<float>& bandsDb) const;
+  // CALIBRATE: with the polarity pulse on the master and a loopback cable into the scope strip, the delay from the master's pulse to the
+  // strip's echo within the last second; false when no pulse or no echo (echo threshold: 1/40 of the master pulse)
+  bool roundTrip(double& ms, double& returnDb) const;
  private:
   static constexpr std::size_t kRing = 1 << 16;           // 65536 samples: 1.36 s at 48 k
   std::vector<float> ring_[3]; std::atomic<std::size_t> head_{0}; std::atomic<int> strip_{0}; double fs_ = 48000;

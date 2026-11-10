@@ -55,7 +55,7 @@ ApplicationWindow {
                     sourceComponent: {
                         switch (root.current) {
                         case "home": return homeC; case "mixer": return mixerC; case "dsp": return toneC; case "io": return connC;
-                        case "meter": return levelsC; case "lufs": return loudC; case "sys": return settingsC; case "dyn": return compC; case "gate": return gateC; case "bus": return sendC; case "dca": return dcaC; case "scenes": return scenesC; case "presets": return presetsC; case "routing": return routingC; case "renew": return licenseC; case "arrange": return arrangeC; case "fx": return fxC; case "osc": return oscC; case "phase": return phaseC; case "miceq": return miceqC; case "live": return liveC; case "tools": return toolsC; default: return comingC
+                        case "meter": return levelsC; case "lufs": return loudC; case "sys": return settingsC; case "dyn": return compC; case "gate": return gateC; case "bus": return sendC; case "dca": return dcaC; case "scenes": return scenesC; case "presets": return presetsC; case "routing": return routingC; case "renew": return licenseC; case "arrange": return arrangeC; case "fx": return fxC; case "osc": return oscC; case "phase": return phaseC; case "miceq": return miceqC; case "live": return liveC; case "tools": return toolsC; case "calib": return calibC; case "boot": return bootC; case "help": return helpC; default: return comingC
                         }
                     }
                 }
@@ -81,6 +81,9 @@ ApplicationWindow {
                 Component { id: miceqC; MicEqPage {} }
                 Component { id: liveC; LiveSourcesPage {} }
                 Component { id: toolsC; ToolsPage {} }
+                Component { id: calibC; CalibratePage {} }
+                Component { id: bootC; DiagnosticsPage {} }
+                Component { id: helpC; HelpPage { onGo: function (id) { root.current = id } } }
                 Component { id: comingC; ComingPage { page: root.pageOf(root.current) } }
             }
         }

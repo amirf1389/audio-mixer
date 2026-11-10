@@ -49,6 +49,9 @@ qt_add_qml_module(amixos
         qml/MicEqPage.qml
         qml/LiveSourcesPage.qml
         qml/ToolsPage.qml
+        qml/CalibratePage.qml
+        qml/DiagnosticsPage.qml
+        qml/HelpPage.qml
         qml/HomePage.qml
         qml/MixerPage.qml
         qml/TonePage.qml

@@ -141,7 +141,11 @@ class Engine : public QObject {
   Q_INVOKABLE bool autoStart(int frames);           // detect and SMART START it
   // an extra stereo source summed into the master (the ARRANGE player): attached to every runtime this Engine opens
   void setExtraSource(am::Runtime::ExtraSource* s) { extra_ = s; sources_.a.store(s); }
-  Q_INVOKABLE QVariantList spectrum(int channel);    // 31 third-octave bands in dBFS, 20 Hz .. 20 kHz; channel 0 master L, 1 R, 2 the scope strip
+  Q_INVOKABLE QVariantList spectrum(int channel);
+  Q_INVOKABLE QVariantMap roundTrip() const { double ms = 0, db = -120; QVariantMap m; m["ok"] = scope_.roundTrip(ms, db); m["ms"] = ms; m["returnDb"] = db; m["frames"] = blockFrames(); m["rate"] = sampleRate(); return m; }
+  Q_PROPERTY(double sampleRate READ sampleRate NOTIFY stateChanged)
+  Q_PROPERTY(int blockFrames READ blockFrames NOTIFY stateChanged)
+  double sampleRate() const { return rt_ ? rt_->sampleRate() : 0.0; } int blockFrames() const { return rt_ ? blockFrames_ : 0; }    // 31 third-octave bands in dBFS, 20 Hz .. 20 kHz; channel 0 master L, 1 R, 2 the scope strip
   // TOOLS: test generator and metronome, summed into the master (pre master fader) with the ARRANGE player
   Q_PROPERTY(bool testOn READ testOn WRITE setTestOn NOTIFY genChanged)
   Q_PROPERTY(int testType READ testType WRITE setTestType NOTIFY genChanged)        // 0 sine, 1 pink, 2 white, 3 polarity pulse
@@ -308,7 +312,7 @@ class Engine : public QObject {
   int partner(int i) const { return (i ^ 1) < kStrips ? (i ^ 1) : -1; }
   void applyPluginStage(int strip, const QString& kind, bool on);   // a built-in stage follows its slot
   struct BusUi { QString name; double db = 0, returnDb = -60; bool mute = false; QString fxKind; std::unique_ptr<am::fx::Effect> fx; double fxMix = 1; bool fxBypass = false; std::map<QString, double> fxValues; };
-  std::vector<std::unique_ptr<am::fx::Effect>> fxGraveyard_; double width_ = 1.0; ScopeTap scope_; TapFanout taps_; Generator gen_; SourceFanout sources_;
+  std::vector<std::unique_ptr<am::fx::Effect>> fxGraveyard_; double width_ = 1.0; ScopeTap scope_; TapFanout taps_; Generator gen_; SourceFanout sources_; int blockFrames_ = 0;
   void makeBusFx(int k);   // (re)creates the bus effect at the runtime's rate from kind + values and attaches it
   struct DcaUi { QString name; double db = 0; bool mute = false; };
   struct MuteGroupUi { QString name; bool active = false; };

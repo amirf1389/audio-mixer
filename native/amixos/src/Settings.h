@@ -8,6 +8,7 @@
 #pragma once
 #include <QObject>
 #include <QSettings>
+#include <QTimer>
 #include <QVariant>
 
 class Engine;
@@ -35,6 +36,8 @@ class Settings : public QObject {
   Q_PROPERTY(QStringList vstDefaultDirs READ vstDefaultDirs CONSTANT)
   Q_PROPERTY(QString dataFolder READ dataFolder CONSTANT)
   Q_PROPERTY(QString message READ message NOTIFY messageChanged)
+  Q_PROPERTY(bool lastSessionCrashed READ lastSessionCrashed CONSTANT)          // the previous run did not close cleanly
+  Q_PROPERTY(QVariantMap autosave READ autosave NOTIFY autosaveChanged)          // {exists, path, at, bytes}: the console written every 60 s
 
  public:
   explicit Settings(Engine* engine, QObject* parent = nullptr);
@@ -71,13 +74,19 @@ class Settings : public QObject {
   Q_INVOKABLE QStringList factoryResetPreview() const;      // what FACTORY RESET removes
   Q_INVOKABLE void factoryReset();                           // settings, console, scenes, presets, arrangement, driver locks; the licence and the token stay
   Q_INVOKABLE QString settingsFile() const { return s_.fileName(); }
+  bool lastSessionCrashed() const { return crashed_; }
+  QVariantMap autosave() const;
+  Q_INVOKABLE bool restoreAutosave();                        // the console as it was at the last autosave (a backup of the current one is written first)
+  Q_INVOKABLE QString saveText(const QString& name, const QString& text);   // writes a text file into the data folder; returns its path ("" on failure)
+  Q_INVOKABLE void sessionClosed();                          // called on a clean quit
 
  signals:
   void changed();
   void messageChanged();
+  void autosaveChanged();
 
  private:
   void set(const QString& k, const QVariant& v) { if (s_.value(k) == v) return; s_.setValue(k, v); s_.sync(); emit changed(); }
   void note(const QString& m) { msg_ = m; emit messageChanged(); }
-  Engine* engine_; QSettings s_; QString msg_;
+  Engine* engine_; QSettings s_; QString msg_; bool crashed_ = false; QTimer autosave_;
 };

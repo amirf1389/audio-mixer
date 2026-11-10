@@ -29,19 +29,19 @@ void Reverb::setSampleRate(double fs) {
   prei_ = 0; design();
 }
 void Reverb::design() {
-  const double decaySec = 0.3 + decay_ * decay_ * 11.7;                           // 0.3 .. 12 s, square law for fine control at the short end
+  const double d = decay_.load(); const double decaySec = 0.3 + d * d * 11.7;                           // 0.3 .. 12 s, square law for fine control at the short end
   const double len = 1557.0 / 44100.0 * (fs_ / 44100.0) * 44100.0 / fs_;          // the reference comb length in seconds (~35 ms)
   fbGain_ = static_cast<float>(std::pow(10.0, -3.0 * len / decaySec));             // -60 dB in decaySec
-  dampA_ = static_cast<float>(0.05 + damp_ * 0.9); preSamples_ = static_cast<std::size_t>(pre_ * 0.2 * fs_);
+  dampA_ = static_cast<float>(0.05 + damp_.load() * 0.9); preSamples_ = static_cast<std::size_t>(pre_.load() * 0.2 * fs_);
 }
 void Reverb::reset() { for (int s = 0; s < 2; ++s) { for (auto& c : comb_[s]) { std::fill(c.buf.begin(), c.buf.end(), 0.f); c.store = 0; } for (auto& a : ap_[s]) std::fill(a.begin(), a.end(), 0.f); std::fill(pre_buf_[s].begin(), pre_buf_[s].end(), 0.f); } }
-std::vector<Param> Reverb::params() const { return {{"decay", "DECAY", "s", decay_, 0.35}, {"damp", "DAMP", "", damp_, 0.5}, {"pre", "PRE-DELAY", "ms", pre_, 0.1}, {"width", "WIDTH", "", width_, 1.0}}; }
+std::vector<Param> Reverb::params() const { return {{"decay", "DECAY", "s", decay_.load(), 0.35}, {"damp", "DAMP", "", damp_.load(), 0.5}, {"pre", "PRE-DELAY", "ms", pre_.load(), 0.1}, {"width", "WIDTH", "", width_.load(), 1.0}}; }
 void Reverb::set(const std::string& id, double v) { v = clamp01(v); if (id == "decay") decay_ = v; else if (id == "damp") damp_ = v; else if (id == "pre") pre_ = v; else if (id == "width") width_ = v; design(); }
 std::string Reverb::text(const std::string& id, double v) const { v = clamp01(v); if (id == "decay") return fmt("%.1f s", 0.3 + v * v * 11.7); if (id == "pre") return fmt("%.0f ms", v * 200); return fmt("%.0f %%", v * 100); }
 void Reverb::process(float* L, float* R, std::size_t n) {
-  if (bypass_) return;
-  const float fb = fbGain_, damp = dampA_, wet = static_cast<float>(mix_), dry = 1.f - wet, width = static_cast<float>(width_);
-  const std::size_t pre = preSamples_, preLen = pre_buf_[0].size();
+  if (bypass_.load()) return;
+  const float fb = fbGain_.load(), damp = dampA_.load(), wet = static_cast<float>(mix_.load()), dry = 1.f - wet, width = static_cast<float>(width_.load());
+  const std::size_t pre = preSamples_.load(), preLen = pre_buf_[0].size();
   for (std::size_t i = 0; i < n; ++i) {
     const float inL = L[i], inR = R[i]; float x[2] = {inL, inR};
     for (int s = 0; s < 2; ++s) { pre_buf_[s][prei_] = x[s]; x[s] = pre_buf_[s][(prei_ + preLen - pre) % preLen]; }
@@ -63,13 +63,13 @@ void Reverb::process(float* L, float* R, std::size_t n) {
 TapeDelay::TapeDelay(double fs) : fs_(fs) { setSampleRate(fs); }
 void TapeDelay::setSampleRate(double fs) { fs_ = fs > 0 ? fs : 48000; for (auto& b : buf_) b.assign(static_cast<std::size_t>(fs_ * 2.1), 0.f); w_ = 0; lp_[0] = lp_[1] = 0; }
 void TapeDelay::reset() { for (auto& b : buf_) std::fill(b.begin(), b.end(), 0.f); lp_[0] = lp_[1] = 0; }
-std::vector<Param> TapeDelay::params() const { return {{"time", "TIME", "ms", time_, 0.3}, {"fb", "FEEDBACK", "", fb_, 0.4}, {"tone", "TONE", "", tone_, 0.5}, {"pingpong", "PING-PONG", "", pingpong_, 0}}; }
+std::vector<Param> TapeDelay::params() const { return {{"time", "TIME", "ms", time_.load(), 0.3}, {"fb", "FEEDBACK", "", fb_.load(), 0.4}, {"tone", "TONE", "", tone_.load(), 0.5}, {"pingpong", "PING-PONG", "", pingpong_.load(), 0}}; }
 void TapeDelay::set(const std::string& id, double v) { v = clamp01(v); if (id == "time") time_ = v; else if (id == "fb") fb_ = v; else if (id == "tone") tone_ = v; else if (id == "pingpong") pingpong_ = v; }
 std::string TapeDelay::text(const std::string& id, double v) const { v = clamp01(v); if (id == "time") return fmt("%.0f ms", 20 + v * 1980); if (id == "pingpong") return v >= 0.5 ? "ON" : "OFF"; return fmt("%.0f %%", v * 100); }
 void TapeDelay::process(float* L, float* R, std::size_t n) {
-  if (bypass_) return;
-  const std::size_t len = buf_[0].size(), d = std::min(len - 1, static_cast<std::size_t>((0.02 + time_ * 1.98) * fs_)); const float fb = static_cast<float>(fb_ * 0.95), wet = static_cast<float>(mix_), dry = 1.f - wet;
-  const float a = static_cast<float>(std::exp(-2.0 * kPi * (500.0 + tone_ * tone_ * 11500.0) / fs_)); const bool pp = pingpong_ >= 0.5;
+  if (bypass_.load()) return;
+  const std::size_t len = buf_[0].size(), d = std::min(len - 1, static_cast<std::size_t>((0.02 + time_.load() * 1.98) * fs_)); const float fb = static_cast<float>(fb_.load() * 0.95), wet = static_cast<float>(mix_.load()), dry = 1.f - wet;
+  const float a = static_cast<float>(std::exp(-2.0 * kPi * (500.0 + tone_.load() * tone_.load() * 11500.0) / fs_)); const bool pp = pingpong_.load() >= 0.5;
   for (std::size_t i = 0; i < n; ++i) {
     const std::size_t r = (w_ + len - d) % len; const float dl = buf_[0][r], dr = buf_[1][r];
     lp_[0] = dl * (1 - a) + lp_[0] * a; lp_[1] = dr * (1 - a) + lp_[1] * a;
@@ -84,12 +84,12 @@ void TapeDelay::process(float* L, float* R, std::size_t n) {
 Chorus::Chorus(double fs) : fs_(fs) { setSampleRate(fs); }
 void Chorus::setSampleRate(double fs) { fs_ = fs > 0 ? fs : 48000; for (auto& b : buf_) b.assign(static_cast<std::size_t>(fs_ * 0.05), 0.f); w_ = 0; phase_ = 0; }
 void Chorus::reset() { for (auto& b : buf_) std::fill(b.begin(), b.end(), 0.f); }
-std::vector<Param> Chorus::params() const { return {{"rate", "RATE", "Hz", rate_, 0.25}, {"depth", "DEPTH", "", depth_, 0.5}, {"spread", "SPREAD", "", spread_, 0.5}}; }
+std::vector<Param> Chorus::params() const { return {{"rate", "RATE", "Hz", rate_.load(), 0.25}, {"depth", "DEPTH", "", depth_.load(), 0.5}, {"spread", "SPREAD", "", spread_.load(), 0.5}}; }
 void Chorus::set(const std::string& id, double v) { v = clamp01(v); if (id == "rate") rate_ = v; else if (id == "depth") depth_ = v; else if (id == "spread") spread_ = v; }
 std::string Chorus::text(const std::string& id, double v) const { v = clamp01(v); if (id == "rate") return fmt("%.2f Hz", 0.1 + v * 4.9); return fmt("%.0f %%", v * 100); }
 void Chorus::process(float* L, float* R, std::size_t n) {
-  if (bypass_) return;
-  const std::size_t len = buf_[0].size(); const double hz = 0.1 + rate_ * 4.9, inc = 2 * kPi * hz / fs_, base = 0.012 * fs_, depth = depth_ * 0.008 * fs_, off = spread_ * kPi; const float wet = static_cast<float>(mix_), dry = 1.f - wet;
+  if (bypass_.load()) return;
+  const std::size_t len = buf_[0].size(); const double hz = 0.1 + rate_.load() * 4.9, inc = 2 * kPi * hz / fs_, base = 0.012 * fs_, depth = depth_.load() * 0.008 * fs_, off = spread_.load() * kPi; const float wet = static_cast<float>(mix_.load()), dry = 1.f - wet;
   for (std::size_t i = 0; i < n; ++i) {
     buf_[0][w_] = L[i]; buf_[1][w_] = R[i];
     float out[2];
@@ -104,12 +104,12 @@ void Chorus::process(float* L, float* R, std::size_t n) {
 Drive::Drive(double fs) : fs_(fs) { setSampleRate(fs); }
 void Drive::setSampleRate(double fs) { fs_ = fs > 0 ? fs : 48000; lp_[0] = lp_[1] = last_[0] = last_[1] = 0; }
 void Drive::reset() { lp_[0] = lp_[1] = last_[0] = last_[1] = 0; }
-std::vector<Param> Drive::params() const { return {{"drive", "DRIVE", "", drive_, 0.4}, {"tone", "TONE", "", tone_, 0.6}, {"out", "OUTPUT", "dB", out_, 0.7}}; }
+std::vector<Param> Drive::params() const { return {{"drive", "DRIVE", "", drive_.load(), 0.4}, {"tone", "TONE", "", tone_.load(), 0.6}, {"out", "OUTPUT", "dB", out_.load(), 0.7}}; }
 void Drive::set(const std::string& id, double v) { v = clamp01(v); if (id == "drive") drive_ = v; else if (id == "tone") tone_ = v; else if (id == "out") out_ = v; }
 std::string Drive::text(const std::string& id, double v) const { v = clamp01(v); if (id == "drive") return fmt("%.1f dB", v * 36); if (id == "out") return fmt("%.1f dB", -24 + v * 30); return fmt("%.0f %%", v * 100); }
 void Drive::process(float* L, float* R, std::size_t n) {
-  if (bypass_) return;
-  const float g = static_cast<float>(std::pow(10.0, drive_ * 36 / 20)), outG = static_cast<float>(std::pow(10.0, (-24 + out_ * 30) / 20)); const float a = static_cast<float>(std::exp(-2.0 * kPi * (800.0 + tone_ * tone_ * 15000.0) / fs_)); const float wet = static_cast<float>(mix_), dry = 1.f - wet;
+  if (bypass_.load()) return;
+  const float g = static_cast<float>(std::pow(10.0, drive_.load() * 36 / 20)), outG = static_cast<float>(std::pow(10.0, (-24 + out_.load() * 30) / 20)); const float tn = tone_.load(); const float a = static_cast<float>(std::exp(-2.0 * kPi * (800.0 + tn * tn * 15000.0) / fs_)); const float wet = static_cast<float>(mix_.load()), dry = 1.f - wet;
   float* ch[2] = {L, R};
   for (int s = 0; s < 2; ++s) for (std::size_t i = 0; i < n; ++i) {
     const float x = ch[s][i]; const float mid = 0.5f * (last_[s] + x); last_[s] = x;   // 2x: the shaper sees the in-between sample too, then averages

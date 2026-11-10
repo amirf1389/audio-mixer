@@ -65,6 +65,13 @@ decided, what exists, what is next, and what was asked for but is not possible a
   web NOW PLAYING in the native build) and **TOOLS** (tap tempo, metronome click and test generator as a second `ExtraSource` summed with
   the ARRANGE player, delay tower calculator -> strip delay, scribble strips + colours, scene snapshots, diagnostic scan; the browser
   build's DAW LINK and SQL vault were mock-ups and are not ported).
+- **CALIBRATE** (clock & engine, round-trip latency with the polarity pulse through a loopback cable, noise floor, loudness log to CSV,
+  session: autosave every 60 s, restore, backup, crash notice), **DIAGNOSTICS** (an honest power-on self test of what the build has, SAFE
+  MODE, SOFT RESTART, FAST BOOT, FACTORY RESET with preview) and **HELP** (ten steps with a button to each page, keyboard, no-sound
+  checklist, where the files live). The browser build's POST screen listed SHARC / Dante / AES50 hardware the app does not have; the
+  native one lists only what is real.
+- Fixed: the smoke harness used two file-name strings after their scope had ended (a dangling reference since the ARRANGE smoke),
+  which corrupted the heap and crashed the console at exit about one run in three on Release builds. Effect parameters are atomics now.
 
 ## Next, in order
 
