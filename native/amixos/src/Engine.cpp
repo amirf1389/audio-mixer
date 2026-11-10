@@ -73,7 +73,7 @@ void Engine::pushAll() {
   if (!rt_) return;
   for (int k = 0; k < kBuses; ++k) { rt_->setBusLevel(k, buses_[k].db); rt_->setBusMute(k, buses_[k].mute); rt_->setBusReturn(k, buses_[k].returnDb); }
   for (int i = 0; i < kStrips; ++i) if (strips_[static_cast<std::size_t>(i)].automix) rt_->setAutomix(i, true, strips_[static_cast<std::size_t>(i)].amWeight);
-  pushAutoLevel();
+  pushAutoLevel(); rt_->setDcBlock(dcBlock()); rt_->setOutputBits(outputBits());
   for (int i = 0; i < kStrips; ++i) {
     const StripUi& s = strips_[static_cast<std::size_t>(i)];
     pushStrip(i); rt_->setPan(i, s.pan); rt_->setSolo(i, s.solo); rt_->setTrimDb(i, s.trimDb);
@@ -481,8 +481,8 @@ QVariantList Engine::pages() const {
     {"MIX", "fx", "EFFECTS", "✨", true}, {"MIX", "bus", "SEND TO", "⇉", true}, {"MIX", "dca", "GROUP FADERS", "☷", true},
     {"ROUTE", "io", "CONNECTIONS", "⚡", true}, {"ROUTE", "routing", "ROUTING", "⎇", true},
     {"METER", "meter", "LEVELS", "▓", true}, {"METER", "lufs", "LOUDNESS", "◎", true}, {"METER", "osc", "WAVEFORM", "∽", true}, {"METER", "phase", "PHASE", "☯", true},
-    {"SOURCE", "media", "STREAM & MEDIA", "▶", false}, {"SOURCE", "live", "LIVE SOURCES", "☉", true}, {"SOURCE", "miceq", "MIC EQ", "♪", true}, {"SOURCE", "ai", "AI MIX", "⚙", true}, {"SOURCE", "tools", "TOOLS", "⚒", true}, {"SOURCE", "plugins", "PLUGINS", "⬡", true},
-    {"DEVICE", "asio", "SOUND CARD", "◉", false}, {"DEVICE", "bluetooth", "BLUETOOTH", "⮁", false}, {"DEVICE", "network", "NETWORK", "⮞", true}, {"DEVICE", "cloud", "CLOUD", "☁", false}, {"DEVICE", "cascade", "CASCADE", "⚭", false},
+    {"SOURCE", "media", "STREAM & MEDIA", "▶", true}, {"SOURCE", "live", "LIVE SOURCES", "☉", true}, {"SOURCE", "miceq", "MIC EQ", "♪", true}, {"SOURCE", "ai", "AI MIX", "⚙", true}, {"SOURCE", "tools", "TOOLS", "⚒", true}, {"SOURCE", "plugins", "PLUGINS", "⬡", true},
+    {"DEVICE", "asio", "SOUND CARD", "◉", true}, {"DEVICE", "bluetooth", "BLUETOOTH", "⮁", false}, {"DEVICE", "network", "NETWORK", "⮞", true}, {"DEVICE", "cloud", "CLOUD", "☁", false}, {"DEVICE", "cascade", "CASCADE", "⚭", false},
     {"SYSTEM", "presets", "PRESETS", "⬇", true}, {"SYSTEM", "sys", "SETTINGS", "⚙", true}, {"SYSTEM", "acct", "ACCOUNT", "☺", true}, {"SYSTEM", "access", "ACCESS", "⚿", true}, {"SYSTEM", "renew", "LICENSE", "★", true}, {"SYSTEM", "admin", "ADMIN", "⚑", true}, {"SYSTEM", "calib", "CALIBRATE", "⌖", true},
     {"HELP", "help", "HELP", "?", true}, {"HELP", "scenes", "SCENES", "⚐", true}, {"SYSTEM", "boot", "DIAGNOSTICS", "⏻", true},
   };
@@ -500,13 +500,13 @@ void Engine::tick() {
     t["monitorLDb"] = toDb(s.monitorPk[0]); t["monitorRDb"] = toDb(s.monitorPk[1]);
     t["masterPeakDb"] = toDb(std::max(s.master[0].pk, s.master[1].pk)); t["masterLDb"] = toDb(s.master[0].pk); t["masterRDb"] = toDb(s.master[1].pk); t["masterRmsDb"] = toDb(std::max(s.master[0].rms, s.master[1].rms));
     t["masterClip"] = s.master[0].clipN + s.master[1].clipN > 0; t["momentary"] = s.momentary; t["shortTerm"] = s.shortTerm; t["integrated"] = s.integrated; t["lra"] = s.lra; t["truePeak"] = s.truePeak; t["correlation"] = s.correlation; t["autoLevelDb"] = s.autoLevelDb;
-    t["blocks"] = static_cast<qulonglong>(s.blocks); t["frames"] = static_cast<qulonglong>(s.frames); t["xruns"] = static_cast<qulonglong>(s.xruns);
+    t["blocks"] = static_cast<qulonglong>(s.blocks); t["frames"] = static_cast<qulonglong>(s.frames); t["xruns"] = static_cast<qulonglong>(s.xruns); t["loadPct"] = s.loadPct; t["blockUs"] = s.blockUs; t["maxBlockUs"] = s.maxBlockUs; t["jitterUs"] = s.jitterUs;
     QVariantList bm; for (int k = 0; k < kBuses; ++k) { QVariantMap x; x["peakDb"] = toDb(s.buses[k].pk); x["rmsDb"] = toDb(s.buses[k].rms); x["holdDb"] = toDb(s.buses[k].hold); x["clip"] = s.buses[k].clipN > 0; bm << x; } busMeters_ = bm;
   } else {
     QVariantList bm; for (int k = 0; k < kBuses; ++k) { QVariantMap x; x["peakDb"] = -120.0; x["rmsDb"] = -120.0; x["holdDb"] = -120.0; x["clip"] = false; bm << x; } busMeters_ = bm;
     for (int i = 0; i < kStrips; ++i) { vu_[i] = 0; QVariantMap x; x["peakDb"] = -120.0; x["rmsDb"] = -120.0; x["holdDb"] = -120.0; x["clip"] = false; x["compGrDb"] = 0.0; x["gateDb"] = 0.0; x["inDb"] = -120.0; x["vuDb"] = -120.0; m << x; }
     vuMaster_ = 0; t["masterVuDb"] = -120.0; t["monitorLDb"] = -120.0; t["monitorRDb"] = -120.0;
-    t["masterPeakDb"] = -120.0; t["masterLDb"] = -120.0; t["masterRDb"] = -120.0; t["masterRmsDb"] = -120.0; t["masterClip"] = false; t["momentary"] = -120.0; t["shortTerm"] = -120.0; t["integrated"] = -120.0; t["lra"] = 0.0; t["truePeak"] = -120.0; t["correlation"] = 0.0; t["autoLevelDb"] = 0.0; t["blocks"] = 0; t["frames"] = 0; t["xruns"] = 0;
+    t["masterPeakDb"] = -120.0; t["masterLDb"] = -120.0; t["masterRDb"] = -120.0; t["masterRmsDb"] = -120.0; t["masterClip"] = false; t["momentary"] = -120.0; t["shortTerm"] = -120.0; t["integrated"] = -120.0; t["lra"] = 0.0; t["truePeak"] = -120.0; t["correlation"] = 0.0; t["autoLevelDb"] = 0.0; t["blocks"] = 0; t["frames"] = 0; t["xruns"] = 0; t["loadPct"] = 0.0; t["blockUs"] = 0.0; t["maxBlockUs"] = 0.0; t["jitterUs"] = 0.0;
   }
   meters_ = m; telemetry_ = t; emit metersChanged();
 }

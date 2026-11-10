@@ -142,6 +142,11 @@ class Mixer {
   // never above maxGainDb, +1 dB/s up and -6 dB/s down; the brick-wall limiter after it keeps the true peak in check
   void setAutoLevel(bool on, double targetLufs, double maxGainDb);
   double autoLevelGainDb() const { return autoDb_; }
+  // OUTPUT STAGE (roadmap 12): an optional DC blocker (first-order high-pass at 5 Hz) before the auto level and the limiter, and TPDF
+  // dither after the limiter when the device takes 16 or 24-bit integers (0 = float, no dither): the last thing before the converter.
+  void setOutputBits(int bits) { outBits_ = bits == 16 || bits == 24 ? bits : 0; }
+  int outputBits() const { return outBits_; }
+  void setDcBlock(bool on) { dcOn_ = on; if (!on) { dcX_[0] = dcX_[1] = dcY_[0] = dcY_[1] = 0; } }   // off by default: the reference vectors are bit-exact
   const Bus& bus(int k) const { return buses_[static_cast<std::size_t>(k)]; }
   const Send& send(int strip, int bus) const { return sends_[static_cast<std::size_t>(strip)][static_cast<std::size_t>(bus)]; }
   // inputs[strip] -> outL / outR (frames samples each). Meters, loudness and phase are updated once per call.
@@ -159,6 +164,7 @@ class Mixer {
   double masterDb_ = 0, masterLin_ = 1;
   double width_ = 1.0;   // master stereo width
   bool autoOn_ = false; double autoTarget_ = -16, autoMax_ = 12, autoDb_ = 0, autoSec_ = 0; int automixN_ = 0;
+  int outBits_ = 0; bool dcOn_ = false; double dcX_[2] = {0, 0}, dcY_[2] = {0, 0}; std::uint32_t rng_ = 0x2545F491u;
   bool limOn_ = false; double limCeil_, limGain_ = 1, limReleaseMs_ = 100;
   ClipConfig clip_; Meter master_[2]; Loudness loudness_; PhaseResult phase_{0, 0, 0, 0, true};
   Send sends_[kMaxStrips][kMaxBuses]{}; Bus buses_[kMaxBuses]; bool anySend_ = false;
