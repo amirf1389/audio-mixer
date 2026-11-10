@@ -23,7 +23,7 @@ Item {
     property bool showPan: true
     property bool showGroups: true
     property bool showAi: true      // the AI chip: automix (gain sharing between open microphones) + the gain it applies right now
-    Connections { target: engine; function onBusesChanged() { page.sendsTick++ } function onRoutingChanged() { page.sendsTick++ } }
+    Connections { target: engine; function onBusesChanged() { page.sendsTick++ } function onRoutingChanged() { page.sendsTick++ } function onStateChanged() { page.sendsTick++ } }
     readonly property var selPlugins: engine.plugins(sel)
     Connections { target: engine; function onStripsChanged() { page.selPlugins = engine.plugins(page.sel) } function onSelectedStripChanged() { page.selPlugins = engine.plugins(page.sel) } }
     // keyboard: ← → select strip, M mute, S solo, 0 fader to 0 dB, Ctrl+Z / Ctrl+Y undo / redo, A A/B, R plugin rack, Esc clear solo
@@ -271,7 +271,8 @@ Item {
                                     // INPUT: which device input feeds this strip (click: pick another, or none)
                                     Rectangle { visible: page.showInput; Layout.fillWidth: true; implicitHeight: 11; radius: 2; color: Qt.rgba(0.2, 0.9, 0.5, 0.12); border.color: inPop.visible ? Theme.emerald : "transparent"
                                         property int route: page.sendsTick >= 0 && engine.inputRoutes[index] !== undefined ? engine.inputRoutes[index] : -1
-                                        Text { anchors.centerIn: parent; text: parent.route >= 0 ? "IN " + (parent.route + 1) : "IN —"; color: parent.route >= 0 ? Theme.emerald : Theme.dim; font.family: Theme.mono; font.pixelSize: 6; font.bold: true }
+                                        Text { anchors.centerIn: parent; width: parent.width - 4; elide: Text.ElideMiddle; horizontalAlignment: Text.AlignHCenter; text: parent.route >= 0 ? (page.sendsTick >= 0 ? engine.inputLabel(parent.route) : "") : "IN —"; color: parent.route >= 0 && engine.running ? Theme.emerald : Theme.dim; font.family: Theme.mono; font.pixelSize: 6; font.bold: true }
+                                        ToolTip.visible: inH.hovered && settings.tooltips; ToolTip.text: parent.route >= 0 ? (engine.running ? "Input " + (parent.route + 1) + " of " + engine.inputDeviceName + " (" + engine.backend.toUpperCase() + ")" : "Input " + (parent.route + 1) + ": the engine is not running") : "No input: this strip takes no device channel"; HoverHandler { id: inH }
                                         MouseArea { anchors.fill: parent; onClicked: { engine.selectedStrip = index; inPop.open() } }
                                         Popup { id: inPop; y: parent.height + 2; width: 150; padding: 6; modal: false; closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
                                             background: Rectangle { radius: 6; color: Theme.cardRaised; border.color: Theme.emerald }

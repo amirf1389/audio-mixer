@@ -83,7 +83,6 @@ int main(int argc, char* argv[]) {
   if (!lang.isEmpty()) i18n.setLang(lang);   // --lang fa: start in that language (also for --shots)
   QQmlApplicationEngine qml;
   qml.rootContext()->setContextProperty("engine", &engine);
-  qml.setInitialProperties({{"bootFast", smoke}});
   qml.rootContext()->setContextProperty("arrange", &arrange);
   qml.rootContext()->setContextProperty("settings", &settings);
   qml.rootContext()->setContextProperty("access", &access);
@@ -272,9 +271,12 @@ int main(int argc, char* argv[]) {
         QDir().mkpath(shots);
         auto* win = qobject_cast<QQuickWindow*>(qml.rootObjects().first());
         engine.setNullTestInput(true); engine.open("null", "", "", 48000, 256, 2, 2); waitMs(300);   // the null device with the -12 dBFS test input: meters, fader IN / OUT columns and VU faces show a signal on the shots
+        { const QVariantList mm = engine.meters(); const double in0 = mm[0].toMap()["inDb"].toDouble(), out0 = mm[0].toMap()["peakDb"].toDouble(), in2 = mm[2].toMap()["inDb"].toDouble();
+          if (std::fabs(in0 + 12.0) > 1.0 || std::fabs(out0 - (in0 + engine.stripState()[0].toMap()["db"].toDouble())) > 1.5 || in2 > -100) { std::fprintf(stderr, "amixos --shots: real-time meters wrong: strip 1 in %.1f (want -12) out %.1f (want in + fader %.1f), strip 3 in %.1f (want silence)\n", in0, out0, engine.stripState()[0].toMap()["db"].toDouble(), in2); QCoreApplication::exit(9); return; }
+          const int was2 = engine.inputRoutes()[2].toInt(); engine.setInputRoute(2, 0); waitMs(250); const double in2b = engine.meters()[2].toMap()["inDb"].toDouble(); engine.setInputRoute(2, was2); if (std::fabs(in2b + 12.0) > 1.0) { std::fprintf(stderr, "amixos --shots: input routing: strip 3 on input 1 reads %.1f dBFS (want -12)\n", in2b); QCoreApplication::exit(9); return; }
+          if (engine.inputLabel(0).isEmpty() || !engine.inputLabel(0).endsWith("IN 1")) { std::fprintf(stderr, "amixos --shots: input label %s\n", qPrintable(engine.inputLabel(0))); QCoreApplication::exit(9); return; }
+          std::printf("amixos --shots: real-time meters OK: in1 %.1f dBFS, out1 %.1f dBFS (fader %.1f), strip 3 silent then %.1f on input 1; label \"%s\"\n", in0, out0, engine.stripState()[0].toMap()["db"].toDouble(), in2b, qPrintable(engine.inputLabel(0))); }
         if (engine.meters().size() > 0 && engine.meters()[0].toMap()["inDb"].toDouble() < -20) { std::fprintf(stderr, "amixos --shots: the null test input is not reaching the strips (%.1f dBFS)\n", engine.meters()[0].toMap()["inDb"].toDouble()); QCoreApplication::exit(8); return; }
-        { // the BOOT screen at its third stage, then off again
-          win->setProperty("booting", true); if (QObject* bp = win->findChild<QObject*>("bootPage")) { bp->setProperty("stage", 3); } waitMs(350); win->grabWindow().save(shots + "/boot-screen.png"); win->setProperty("booting", false); waitMs(100); std::printf("amixos --shots: boot-screen\n"); }
         if (QObject* wiz = win->findChild<QObject*>("setupPage")) {   // the factory setup, every step
           win->setProperty("forceSetup", true);
           for (int step = 0; step < 7; ++step) { wiz->setProperty("step", step); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + QStringLiteral("/setup-%1.png").arg(step + 1)); std::printf("amixos --shots: setup-%d\n", step + 1); }

@@ -14,8 +14,6 @@ ApplicationWindow {
     minimumHeight: 480
     title: Theme.product + " " + appVersion + " · " + Theme.vendor
     property bool forceSetup: false   // the smoke / shots show the wizard on demand
-    property bool booting: true       // the BOOT screen covers everything until the start-up stages are through
-    property bool bootFast: false     // --smoke / --shots: no waiting
     color: Theme.obsidian
     property string current: settings.startPage
     LayoutMirroring.enabled: i18n.rtl
@@ -54,6 +52,13 @@ ApplicationWindow {
                 }
             }
         }
+        // ALERT: no sound card remembered and the engine idle (the AUDIO step of the factory setup was skipped): say so, lead to SETUP / CONNECTIONS
+        Rectangle { Layout.fillWidth: true; implicitHeight: 30; visible: settings.setupDone && !engine.running && !(settings.lastDevice && settings.lastDevice.backend); color: Qt.rgba(0.984, 0.749, 0.141, 0.14); border.color: Theme.amber
+            RowLayout { anchors.fill: parent; anchors.leftMargin: 12; anchors.rightMargin: 12; spacing: 10
+                Text { text: "⚠"; color: Theme.amber; font.pixelSize: 13 }
+                Text { Layout.fillWidth: true; text: "No sound card is set up yet: the faders show no input or output until one is. Run the FACTORY SETUP (AUDIO step) or pick a device on CONNECTIONS."; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; elide: Text.ElideRight }
+                Rectangle { implicitWidth: 110; implicitHeight: 20; radius: 4; color: Theme.amber; Text { anchors.centerIn: parent; text: "FACTORY SETUP"; color: "#000"; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: root.forceSetup = true } }
+                Rectangle { implicitWidth: 100; implicitHeight: 20; radius: 4; color: Theme.ov(0.1); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: "CONNECTIONS"; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: root.current = "io" } } } }
         RowLayout {
             Layout.fillWidth: true; Layout.fillHeight: true; spacing: 0
             NavRail { Layout.fillHeight: true; pages: engine.pages; current: root.current; onPicked: function (id) { root.current = id } }
@@ -109,6 +114,5 @@ ApplicationWindow {
             }
         }
     }
-    BootPage { anchors.fill: parent; z: 200; visible: root.booting; fast: root.bootFast; onFinished: root.booting = false }
     SetupPage { anchors.fill: parent; z: 100; visible: root.forceSetup || !settings.setupDone; onFinished: { settings.finishSetup(); root.forceSetup = false; root.current = settings.startPage } }
 }
