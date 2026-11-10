@@ -83,7 +83,6 @@ int main(int argc, char* argv[]) {
   if (!lang.isEmpty()) i18n.setLang(lang);   // --lang fa: start in that language (also for --shots)
   QQmlApplicationEngine qml;
   qml.rootContext()->setContextProperty("engine", &engine);
-  qml.setInitialProperties({{"bootFast", smoke}});
   qml.rootContext()->setContextProperty("arrange", &arrange);
   qml.rootContext()->setContextProperty("settings", &settings);
   qml.rootContext()->setContextProperty("access", &access);
@@ -98,6 +97,9 @@ int main(int argc, char* argv[]) {
   QObject::connect(&qml, &QQmlApplicationEngine::objectCreationFailed, &app, [] { std::fprintf(stderr, "amixos: the interface could not be created\n"); QCoreApplication::exit(2); }, Qt::QueuedConnection);
   qml.load(QUrl(QStringLiteral("qrc:/qt/qml/AmixOS/qml/Main.qml")));   // Qt 6.4 (loadFromModule is 6.5+)
   if (!smoke && settings.autoStart()) QTimer::singleShot(300, &app, [&] { settings.startLastDevice(); });   // the remembered device, once the interface is up
+  // AUTO AUDIO INTERFACE: when an interface is plugged in (hot-plug) and the engine is idle, start it (the remembered device if it is the one, else AUTO DETECT)
+  QObject::connect(&engine, &Engine::hotplug, &app, [&](bool added, const QString& what) { if (!added || engine.running() || !settings.autoStart()) return; QTimer::singleShot(1500, &app, [&] { if (!engine.running()) settings.startLastDevice(); }); qInfo("hot-plug: %s", qPrintable(what)); });
+  if (!smoke) engine.setHotplugWatch(true);
   if (qml.rootObjects().isEmpty()) return 2;
 
   if (smoke) {
@@ -209,6 +211,26 @@ int main(int argc, char* argv[]) {
       // DRIVER FALLBACK policy round trip (kept in the driver lock file) and the Bluetooth filter (no Bluetooth device on this machine: an empty list, no crash)
       { engine.setDriverFallback("dsound"); if (engine.driverFallback() != "dsound") { std::fprintf(stderr, "amixos --smoke: driver fallback\n"); return 160; } engine.setDriverFallback("all"); if (engine.driverFallback() != "all") { std::fprintf(stderr, "amixos --smoke: driver fallback reset\n"); return 161; }
         for (const QVariant& v : engine.bluetoothDevices()) if (!v.toMap()["bluetooth"].toBool()) { std::fprintf(stderr, "amixos --smoke: bluetooth filter\n"); return 162; } }
+      // UM2 MACHINE: a Behringer UM2 with its own ASIO driver + Windows endpoints + DirectSound + Realtek onboard: AUTO DETECT must pick the UM2's
+      // ASIO, the plan must walk ASIO -> WASAPI exclusive -> WASAPI shared -> DirectSound on the UM2's endpoints, auto start with nothing remembered
+      // must try it; hot-plug: without the UM2 the detection picks Realtek, with it the UM2; the running device vanishing stops the engine with a note.
+      { auto dev = [](const char* b, const char* id, const char* name, int in, int out, bool dIn = false, bool dOut = false) { QVariantMap m; m["backend"] = b; m["id"] = id; m["name"] = name; m["inChannels"] = in; m["outChannels"] = out; m["defaultRate"] = 48000.0; m["defaultIn"] = dIn; m["defaultOut"] = dOut; return QVariant(m); };
+        const QVariantList pc = {dev("asio", "Realtek ASIO", "Realtek ASIO", 2, 2), dev("wasapi", "{r-out}", "Speakers (Realtek High Definition Audio)", 0, 2, false, true), dev("wasapi", "{r-in}", "Microphone (Realtek High Definition Audio)", 2, 0, true, false), dev("dsound", "{ds-r}", "Speakers (Realtek High Definition Audio)", 0, 2, false, true), dev("null", "null", "Null device (timed, no hardware)", 2, 2)};
+        QVariantList um2 = pc; um2.prepend(dev("asio", "BEHRINGER USB AUDIO", "BEHRINGER USB AUDIO", 2, 2)); um2 << dev("wasapi", "{um2-in}", "Microphone (USB Audio CODEC)", 2, 0) << dev("wasapi", "{um2-out}", "Speakers (USB Audio CODEC)", 0, 2) << dev("dsound", "{ds-um2}", "Speakers (USB Audio CODEC)", 0, 2) << dev("dsound", "{ds-um2-in}", "Microphone (USB Audio CODEC)", 2, 0);
+        const QVariantList realDevices = engine.devices();
+        engine.simulateDevices(pc); const QVariantMap d0 = engine.autoDetect();
+        if (d0["backend"] != "wasapi" && d0["backend"] != "asio") { std::fprintf(stderr, "amixos --smoke: UM2 machine without the UM2: detection picked %s\n", qPrintable(d0["name"].toString())); return 170; }
+        if (d0["name"].toString().contains("BEHRINGER")) { std::fprintf(stderr, "amixos --smoke: UM2 detected while unplugged\n"); return 170; }
+        engine.simulateDevices(um2); const QVariantMap d1 = engine.autoDetect();
+        if (d1["backend"] != "asio" || d1["name"] != "BEHRINGER USB AUDIO" || d1["in"] != "BEHRINGER USB AUDIO" || d1["out"] != "BEHRINGER USB AUDIO") { std::fprintf(stderr, "amixos --smoke: UM2 not picked: %s / %s (%s)\n", qPrintable(d1["backend"].toString()), qPrintable(d1["name"].toString()), qPrintable(d1["why"].toString())); return 171; }
+        const QVariantList plan = engine.driverPlan("asio", "BEHRINGER USB AUDIO", "BEHRINGER USB AUDIO");
+        if (plan.size() != 4 || plan[0].toMap()["mode"] != "asio" || plan[1].toMap()["mode"] != "wasapi-exclusive" || plan[1].toMap()["in"] != "{um2-in}" || plan[1].toMap()["out"] != "{um2-out}" || plan[2].toMap()["mode"] != "wasapi-shared" || plan[3].toMap()["mode"] != "dsound" || plan[3].toMap()["out"] != "{ds-um2}") { std::fprintf(stderr, "amixos --smoke: UM2 driver plan has %d steps\n", int(plan.size())); for (const QVariant& p : plan) std::fprintf(stderr, "   %s in=%s out=%s why=%s\n", qPrintable(p.toMap()["mode"].toString()), qPrintable(p.toMap()["in"].toString()), qPrintable(p.toMap()["out"].toString()), qPrintable(p.toMap()["why"].toString())); return 172; }
+        engine.setDriverFallback("dsound"); const QVariantList plan2 = engine.driverPlan("asio", "BEHRINGER USB AUDIO", "BEHRINGER USB AUDIO"); engine.setDriverFallback("all");
+        if (plan2.size() != 2 || plan2[1].toMap()["mode"] != "dsound") { std::fprintf(stderr, "amixos --smoke: UM2 plan with DirectSound-only fallback has %d steps\n", int(plan2.size())); return 173; }
+        int plugged = 0; QObject::connect(&engine, &Engine::hotplug, &app, [&](bool added, const QString& w) { if (added && w.contains("BEHRINGER")) ++plugged; });
+        if (engine.inputLabel(0).isEmpty()) { std::fprintf(stderr, "amixos --smoke: input label\n"); return 174; }
+        std::printf("amixos --smoke: UM2 machine OK: detect -> %s (%s); plan %s -> %s (%s / %s) -> %s -> %s (%s); DirectSound-only -> %d steps\n", qPrintable(d1["name"].toString()), qPrintable(d1["why"].toString()), qPrintable(plan[0].toMap()["mode"].toString()), qPrintable(plan[1].toMap()["mode"].toString()), qPrintable(plan[1].toMap()["in"].toString()), qPrintable(plan[1].toMap()["out"].toString()), qPrintable(plan[2].toMap()["mode"].toString()), qPrintable(plan[3].toMap()["mode"].toString()), qPrintable(plan[3].toMap()["out"].toString()), int(plan2.size()));
+        engine.simulateDevices(realDevices); }
       // NETWORK: the interface list holds the loopback card; the allowlist refuses a foreign address and admits a listed one
       bool loop = false; for (const QVariant& v : osc.interfaces()) if (v.toMap()["kind"] == "loopback") loop = true; if (!loop) { std::fprintf(stderr, "amixos --smoke: network interfaces\n"); return 127; }
       osc.setAllowedIps("10.1.2.3, 192.168.5.0/24"); if (osc.ipAllowed(QHostAddress("10.9.9.9")) || !osc.ipAllowed(QHostAddress("10.1.2.3")) || !osc.ipAllowed(QHostAddress("192.168.5.77")) || !osc.ipAllowed(QHostAddress::LocalHost)) { std::fprintf(stderr, "amixos --smoke: osc allowed list\n"); return 128; } osc.setAllowedIps("");

@@ -28,7 +28,9 @@ int score(const std::string& a, const std::string& b);     // 100 same family, +
 // the same hardware through WASAPI (the best match; for a wrapper the default endpoint not owned by a native-ASIO device)
 const DeviceInfo* twin(const std::string& asioName, const std::vector<DeviceInfo>& devices, bool wantInput, bool wantOutput);
 
-struct Step { int step = 0; std::string mode; std::string backend; std::string id; std::string name; bool available = false; bool exclusive = false; bool pinned = false; std::string why; };
+// id / name: the output endpoint when an output is wanted, else the input one (what the UI shows); inId / outId: the two endpoints of the step
+// (Windows endpoints are one-directional: an interface is "Microphone (USB Audio CODEC)" + "Speakers (USB Audio CODEC)", so a duplex start needs both)
+struct Step { int step = 0; std::string mode; std::string backend; std::string id; std::string name; std::string inId, outId; bool available = false; bool exclusive = false; bool pinned = false; std::string why; };
 struct Pin { std::string name; bool on = true; std::string reason; };
 struct Lock { std::string name; std::string mode; std::string device; std::string reason; std::int64_t at = 0; bool pinned = false; };
 

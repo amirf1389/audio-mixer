@@ -47,7 +47,20 @@ Engine::~Engine() { save(); stop(); }
 
 QStringList Engine::backends() const { QStringList l; for (const auto& b : am::availableBackends()) l << QString::fromStdString(b); return l; }
 
+void Engine::setHotplugWatch(bool on) { if (on) { if (!hotplug_.isActive()) { hotplug_.setInterval(1500); connect(&hotplug_, &QTimer::timeout, this, &Engine::checkHotplug, Qt::UniqueConnection); hotplug_.start(); } } else hotplug_.stop(); emit stateChanged(); }
+void Engine::checkHotplug() {
+  if (simulated_) return; const std::string f = am::deviceFingerprint(); if (f == fingerprint_) return;
+  const bool first = fingerprint_.empty(); fingerprint_ = f; if (first) return;   // the first poll only learns the baseline
+  const QStringList before = [&] { QStringList l; for (const QVariant& v : devices_) l << v.toMap()["name"].toString(); return l; }();
+  refreshDevices();
+  QStringList after; for (const QVariant& v : devices_) after << v.toMap()["name"].toString();
+  QStringList added, gone; for (const QString& n : after) if (!before.contains(n)) added << n; for (const QString& n : before) if (!after.contains(n)) gone << n;
+  if (rt_ && !gone.isEmpty() && (gone.contains(inDevName_) || gone.contains(outDevName_))) { stop(); status_ = QStringLiteral("The sound card was unplugged: %1").arg(gone.join(", ")); emit stateChanged(); }
+  if (!added.isEmpty()) emit hotplug(true, added.join(", ")); else if (!gone.isEmpty()) emit hotplug(false, gone.join(", "));
+}
+void Engine::simulateDevices(const QVariantList& devices) { simulated_ = true; devices_ = devices; emit devicesChanged(); }
 void Engine::refreshDevices() {
+  if (simulated_) { emit devicesChanged(); return; }
   devices_.clear();
   for (const am::DeviceInfo& d : am::listDevices()) {
     QVariantMap m; m["backend"] = QString::fromStdString(d.backend); m["id"] = QString::fromStdString(d.id); m["name"] = QString::fromStdString(d.name);

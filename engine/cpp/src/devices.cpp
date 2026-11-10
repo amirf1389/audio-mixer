@@ -174,6 +174,19 @@ void addAlsa(std::vector<DeviceInfo>& out) {
 
 }  // namespace
 
+std::string deviceFingerprint() {
+  std::string f;
+#ifdef _WIN32
+  { std::vector<DeviceInfo> v; addWasapi(v); for (const auto& d : v) { f += d.id; f += d.inChannels > 0 ? 'i' : 'o'; f += '|'; } }
+  for (const auto& d : listAsioDrivers()) { f += "asio:"; f += d.name; f += '|'; }   // registry only: the driver is not loaded
+  { std::vector<DeviceInfo> v; addDsound(v); for (const auto& d : v) { f += d.id; f += '|'; } }
+#endif
+#ifdef AM_HAVE_ALSA
+  { void** hints = nullptr; if (snd_device_name_hint(-1, "pcm", &hints) >= 0) { for (void** h = hints; *h; ++h) { char* name = snd_device_name_get_hint(*h, "NAME"); if (name) { f += name; f += '|'; std::free(name); } } snd_device_name_free_hint(hints); } }
+#endif
+  return f;
+}
+
 std::vector<DeviceInfo> listDevices() {
   std::vector<DeviceInfo> v;
 #ifdef AM_HAVE_ALSA

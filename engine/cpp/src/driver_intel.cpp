@@ -132,15 +132,18 @@ std::vector<Step> ladder(const DeviceInfo& asio, const std::vector<DeviceInfo>& 
   (void)nowMs;
   bool nativeAsio = false; for (const auto& d : devices) if (isAsio(d) && !isWrapper(d.name)) nativeAsio = true;
   const bool wrapper = isWrapper(asio.name), wrapperOk = wrapper && !nativeAsio;
-  const DeviceInfo* w = twin(asio.name, devices, wantInput, wantOutput);
+  // one twin per direction: an input endpoint when an input is wanted, an output endpoint when an output is wanted (both for a duplex start)
+  const DeviceInfo* wIn = wantInput ? twin(asio.name, devices, true, false) : nullptr; const DeviceInfo* wOut = wantOutput ? twin(asio.name, devices, false, true) : nullptr;
+  const bool twinsOk = (!wantInput || wIn) && (!wantOutput || wOut); const DeviceInfo* w = wantOutput ? wOut : wIn;
   const Pin pin = pinOf(asio.name); const bool pinned = pin.on && pinRule(asio.name) && w != nullptr;
   std::vector<Step> out;
   { Step s; s.step = 1; s.mode = "asio"; s.backend = "asio"; s.id = asio.id; s.name = asio.name; s.available = offers(asio, wantInput, wantOutput) && !pinned && (!wrapper || wrapperOk); s.pinned = pinned;
     if (!offers(asio, wantInput, wantOutput)) s.why = "the ASIO driver has no channels in this direction"; else if (pinned) s.why = std::string("pinned: ") + kPinReason; else if (wrapper && !wrapperOk) s.why = "a wrapper (ASIO4ALL-style): a device with its own ASIO driver is present, so that driver is used first"; out.push_back(s); }
-  { Step s; s.step = 2; s.mode = "wasapi-exclusive"; s.backend = "wasapi"; s.exclusive = true; if (w) { s.id = w->id; s.name = w->name; } s.available = w != nullptr; if (!w) s.why = "no Windows endpoint of this hardware"; out.push_back(s); }
-  { Step s; s.step = 3; s.mode = "wasapi-shared"; s.backend = "wasapi"; if (w) { s.id = w->id; s.name = w->name; } s.available = w != nullptr; if (!w) s.why = "no Windows endpoint of this hardware"; out.push_back(s); }
-  const DeviceInfo* ds = dsTwin(asio.name, w, devices, wantInput, wantOutput);
-  { Step s; s.step = 4; s.mode = "dsound"; s.backend = "dsound"; if (ds) { s.id = ds->id; s.name = ds->name; } s.available = ds != nullptr; if (!ds) s.why = "no DirectSound device of this hardware"; out.push_back(s); }
+  auto wasapiStep = [&](int n, const char* mode, bool excl) { Step s; s.step = n; s.mode = mode; s.backend = "wasapi"; s.exclusive = excl; if (w) { s.id = w->id; s.name = w->name; } if (wIn) s.inId = wIn->id; if (wOut) s.outId = wOut->id; s.available = twinsOk && w; if (!s.available) s.why = std::string("no Windows ") + (wantInput && !wIn ? "input" : "output") + " endpoint of this hardware"; out.push_back(s); };
+  wasapiStep(2, "wasapi-exclusive", true); wasapiStep(3, "wasapi-shared", false);
+  const DeviceInfo* dsIn = wantInput ? dsTwin(asio.name, wIn, devices, true, false) : nullptr; const DeviceInfo* dsOut = wantOutput ? dsTwin(asio.name, wOut, devices, false, true) : nullptr;
+  const bool dsOk = (!wantInput || dsIn) && (!wantOutput || dsOut); const DeviceInfo* ds = wantOutput ? dsOut : dsIn;
+  { Step s; s.step = 4; s.mode = "dsound"; s.backend = "dsound"; if (ds) { s.id = ds->id; s.name = ds->name; } if (dsIn) s.inId = dsIn->id; if (dsOut) s.outId = dsOut->id; s.available = dsOk && ds; if (!s.available) s.why = "no DirectSound device of this hardware"; out.push_back(s); }
   // the fallback policy: "all" = WASAPI exclusive, WASAPI shared, then DirectSound; "dsound" = DirectSound only (WASAPI is optional, never a lock); "none" = ASIO only
   const std::string fb = fallback();
   for (Step& s : out) { if (fb == "none" && s.step > 1 && s.available) { s.available = false; s.why = "fallback policy: ASIO only"; } if (fb == "dsound" && (s.step == 2 || s.step == 3) && s.available) { s.available = false; s.why = "fallback policy: DirectSound, not WASAPI"; } }
@@ -165,7 +168,7 @@ std::vector<Attempt> plan(const std::string& backend, const std::string& inId, c
   if (backend == "asio") { const std::string want = !outId.empty() && outId != "-" ? outId : inId; for (const auto& d : devices) if (isAsio(d) && (want.empty() || d.id == want || d.name == want)) { asio = &d; break; } }
   if (!asio) { Attempt a; a.mode = backend; a.backend = backend; a.inDevice = inId; a.outDevice = outId; a.why = "as asked"; out.push_back(a); return out; }
   const std::vector<Step> steps = ladder(*asio, devices, wantIn, wantOut, nowMs);
-  auto attemptOf = [&](const Step& s) { Attempt a; a.mode = s.mode; a.backend = s.backend; a.exclusive = s.exclusive; a.pinned = s.pinned; a.inDevice = wantIn ? s.id : "-"; a.outDevice = wantOut ? s.id : "-"; a.why = s.why; return a; };
+  auto attemptOf = [&](const Step& s) { Attempt a; a.mode = s.mode; a.backend = s.backend; a.exclusive = s.exclusive; a.pinned = s.pinned; a.inDevice = wantIn ? (s.inId.empty() ? s.id : s.inId) : "-"; a.outDevice = wantOut ? (s.outId.empty() ? s.id : s.outId) : "-"; a.why = s.why; return a; };
   // the pin first, then a learned lock, then the ladder in order (each step once)
   std::vector<std::string> done;
   auto push = [&](const Step& s, const std::string& why, bool fromLock) { if (std::find(done.begin(), done.end(), s.mode) != done.end()) return; done.push_back(s.mode); Attempt a = attemptOf(s); if (!why.empty()) a.why = why; a.fromLock = fromLock; out.push_back(a); };

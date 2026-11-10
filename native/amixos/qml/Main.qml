@@ -14,8 +14,6 @@ ApplicationWindow {
     minimumHeight: 480
     title: Theme.product + " " + appVersion + " · " + Theme.vendor
     property bool forceSetup: false   // the smoke / shots show the wizard on demand
-    property bool booting: true       // the BOOT screen covers everything until the start-up stages are through
-    property bool bootFast: false     // --smoke / --shots: no waiting
     color: Theme.obsidian
     property string current: settings.startPage
     LayoutMirroring.enabled: i18n.rtl
@@ -116,6 +114,5 @@ ApplicationWindow {
             }
         }
     }
-    BootPage { anchors.fill: parent; z: 200; visible: root.booting; fast: root.bootFast; onFinished: root.booting = false }
     SetupPage { anchors.fill: parent; z: 100; visible: root.forceSetup || !settings.setupDone; onFinished: { settings.finishSetup(); root.forceSetup = false; root.current = settings.startPage } }
 }

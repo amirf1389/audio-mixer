@@ -57,6 +57,9 @@ struct DeviceInfo {
   bool defaultIn = false, defaultOut = false;
 };
 std::vector<DeviceInfo> listDevices();                       // every device of every backend built in ("null" last)
+// A cheap signature of what is plugged in (WASAPI / DirectSound endpoint ids + ASIO driver names from the registry, ALSA card names): no driver
+// is loaded, so it can be polled every second or two for hot-plug; when it changes, call listDevices().
+std::string deviceFingerprint();
 
 // the meters, copied out consistently
 struct Snapshot {
