@@ -101,6 +101,8 @@ class Runtime {
   void setBusLevel(int bus, double db);
   void setBusMute(int bus, bool on);
   void setBusReturn(int bus, double db);
+  void setBusProcessor(int bus, BusProcessor* p);   // an effect on a bus (app/fx); keep it alive while set, detach with nullptr before deleting
+  void setWidth(double w);                           // master stereo width 0..2
   // the monitor section (control room): what goes to output channels 0 / 1 after the master meters. source 0 = master, 1..kMaxBuses = that bus
   // (post level, pre return); level in dB, dim = -20 dB, mono sums L+R, mute = silence. The master meters and loudness are not affected.
   void setMonitor(int source, double db, bool dim, bool mono, bool mute);
@@ -129,7 +131,7 @@ class Runtime {
   Snapshot snapshot() const;
   void onBlock(const float* const* in, float* const* out, std::size_t frames);   // the audio callback; public so a test can clock the runtime itself
  private:
-  struct Cmd { int op; int a; double x, y, z; int b = 0; double w = 0, v = 0, u = 0; };
+  struct Cmd { int op; int a; double x, y, z; int b = 0; double w = 0, v = 0, u = 0; void* p = nullptr; };
   void post(const Cmd& c);
   void publish();
 

@@ -55,7 +55,7 @@ ApplicationWindow {
                     sourceComponent: {
                         switch (root.current) {
                         case "home": return homeC; case "mixer": return mixerC; case "dsp": return toneC; case "io": return connC;
-                        case "meter": return levelsC; case "lufs": return loudC; case "sys": return settingsC; case "dyn": return compC; case "gate": return gateC; case "bus": return sendC; case "dca": return dcaC; case "scenes": return scenesC; case "presets": return presetsC; case "routing": return routingC; case "renew": return licenseC; case "arrange": return arrangeC; default: return comingC
+                        case "meter": return levelsC; case "lufs": return loudC; case "sys": return settingsC; case "dyn": return compC; case "gate": return gateC; case "bus": return sendC; case "dca": return dcaC; case "scenes": return scenesC; case "presets": return presetsC; case "routing": return routingC; case "renew": return licenseC; case "arrange": return arrangeC; case "fx": return fxC; case "osc": return oscC; case "phase": return phaseC; default: return comingC
                         }
                     }
                 }
@@ -75,6 +75,9 @@ ApplicationWindow {
                 Component { id: routingC; RoutingPage {} }
                 Component { id: licenseC; LicensePage {} }
                 Component { id: arrangeC; ArrangePage {} }
+                Component { id: fxC; EffectsPage {} }
+                Component { id: oscC; WaveformPage {} }
+                Component { id: phaseC; PhasePage {} }
                 Component { id: comingC; ComingPage { page: root.pageOf(root.current) } }
             }
         }

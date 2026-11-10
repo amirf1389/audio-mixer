@@ -1,0 +1,38 @@
+// The bus effects: an impulse through the reverb rings and decays, the delay repeats at its time, the chorus modulates, the drive saturates,
+// bypass passes through, and an effect on a Runtime bus reaches the master through the return.
+#include <cmath>
+#include <cstdio>
+#include <string>
+#include <vector>
+
+#include "fx/fx.hpp"
+#include "audiomixer/runtime.hpp"
+
+#define CHECK(c) do { if (!(c)) { std::fprintf(stderr, "FAIL %s:%d %s\n", __FILE__, __LINE__, #c); return 1; } } while (0)
+using namespace am;
+static float peak(const std::vector<float>& v, std::size_t a, std::size_t b) { float p = 0; for (std::size_t i = a; i < b && i < v.size(); ++i) p = std::max(p, std::fabs(v[i])); return p; }
+
+int main() {
+  CHECK(fx::catalog().size() == 4 && fx::make("nope", 48000) == nullptr);
+  { auto r = fx::make("reverb", 48000); CHECK(r && std::string(r->kind()) == "reverb" && r->params().size() == 4 && r->text("decay", 0) == "0.3 s");
+    std::vector<float> L(48000, 0.f), R(48000, 0.f); L[0] = R[0] = 1.f; r->set("decay", 0.2); r->process(L.data(), R.data(), L.size());
+    CHECK(peak(L, 1000, 6000) > 0.02f && peak(L, 30000, 48000) < peak(L, 2000, 6000) * 0.5f);   // rings, then decays
+    std::vector<float> L2(4800, 0.3f), R2(4800, 0.3f); r->setBypass(true); r->process(L2.data(), R2.data(), L2.size()); CHECK(L2[100] == 0.3f); }
+  { auto d = fx::make("delay", 48000); d->set("time", (0.5 - 0.02) / 1.98); d->set("fb", 0.5); d->set("tone", 1.0); CHECK(d->text("time", (0.5 - 0.02) / 1.98) == "500 ms");
+    std::vector<float> L(96000, 0.f), R(96000, 0.f); L[0] = 1.f; d->process(L.data(), R.data(), L.size());
+    CHECK(peak(L, 23500, 24500) > 0.3f && peak(L, 10000, 20000) < 0.05f && peak(L, 47500, 48500) > 0.1f && peak(L, 47500, 48500) < peak(L, 23500, 24500));   // first repeat at 0.5 s, the second quieter
+    d->set("pingpong", 1); d->reset(); std::fill(L.begin(), L.end(), 0.f); std::fill(R.begin(), R.end(), 0.f); L[0] = 1.f; d->process(L.data(), R.data(), L.size()); CHECK(peak(R, 47500, 48500) > 0.05f); }   // the second repeat crossed to the right
+  { auto c = fx::make("chorus", 48000); std::vector<float> L(48000), R(48000); for (std::size_t i = 0; i < L.size(); ++i) L[i] = R[i] = std::sin(static_cast<float>(i) * 0.05f); c->process(L.data(), R.data(), L.size());
+    bool differs = false; for (std::size_t i = 10000; i < 48000; i += 997) if (std::fabs(L[i] - R[i]) > 1e-3f) differs = true; CHECK(differs && peak(L, 1000, 48000) > 0.5f); }   // the two sides modulate apart
+  { auto dr = fx::make("drive", 48000); dr->set("drive", 1.0); dr->set("out", 0.8); std::vector<float> L(4800), R(4800); for (std::size_t i = 0; i < L.size(); ++i) L[i] = R[i] = 0.5f * std::sin(static_cast<float>(i) * 0.1f); dr->process(L.data(), R.data(), L.size());
+    float crest = 0; { float pk = peak(L, 100, 4800), sq = 0; for (std::size_t i = 100; i < 4800; ++i) sq += L[i] * L[i]; crest = pk / std::sqrt(sq / 4700); } CHECK(crest < 1.35f); }   // a sine's crest is 1.41; saturation flattens it
+  // on a Runtime bus: strip 0 sends to bus 1, the reverb rings on the bus, the return carries the tail to the master after the input stops
+  { Runtime rt(2); DeviceConfig c; c.backend = "null"; c.frames = 64; std::string err; CHECK(rt.open(c, err));
+    auto rv = fx::make("reverb", 48000); rv->set("decay", 0.3); rt.setBusProcessor(0, rv.get()); rt.setSend(0, 0, 0, true); rt.setBusLevel(0, 0); rt.setBusReturn(0, 0); rt.setGainDb(0, -120);   // pre-fader send, fader down: only the bus return reaches the master
+    const std::size_t n = 64; std::vector<float> tone(n), z(n, 0.f), o0(n), o1(n); for (std::size_t i = 0; i < n; ++i) tone[i] = 0.5f * ((i / 8) % 2 ? 1.f : -1.f); const float* ins[2] = {tone.data(), z.data()}; const float* quiet[2] = {z.data(), z.data()}; float* outs[2] = {o0.data(), o1.data()};
+    for (int k = 0; k < 400; ++k) rt.onBlock(ins, outs, n); CHECK(rt.snapshot().master[0].pk > 0.05);
+    for (int k = 0; k < 40; ++k) rt.onBlock(quiet, outs, n); CHECK(peak(o0, 0, n) > 0.001f);   // the tail is still sounding 50 ms after the input stopped
+    rt.setBusProcessor(0, nullptr); for (int k = 0; k < 2; ++k) rt.onBlock(quiet, outs, n); }
+  std::printf("fx_test: reverb rings and decays, delay repeats on time (ping-pong crosses), chorus modulates, drive saturates, bypass, bus return OK\n");
+  return 0;
+}

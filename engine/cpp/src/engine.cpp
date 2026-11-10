@@ -222,6 +222,8 @@ void Mixer::setSend(int s, int b, double db, bool pre) {
 }
 void Mixer::setBusLevel(int b, double db) { if (b >= 0 && b < kMaxBuses) buses_[b].levelLin = db <= -60.0 ? 0.0 : linOf(std::min(db, 10.0)); }
 void Mixer::setBusMute(int b, bool on) { if (b >= 0 && b < kMaxBuses) buses_[b].mute = on; }
+void Mixer::setBusProcessor(int k, BusProcessor* p) { if (k >= 0 && k < kMaxBuses) buses_[k].fx = p; }
+void Mixer::setWidth(double w) { width_ = w < 0 ? 0 : w > 2 ? 2 : w; }
 void Mixer::setBusReturn(int b, double db) { if (b >= 0 && b < kMaxBuses) buses_[b].returnLin = db <= -60.0 ? 0.0 : linOf(std::min(db, 10.0)); }
 void Mixer::clearClips() { for (auto& s : strips_) s.meter.state().clearClip(); master_[0].state().clearClip(); master_[1].state().clearClip(); }
 
@@ -252,11 +254,13 @@ void Mixer::process(const float* const* in, std::size_t frames, float* outL, flo
     if (buses) for (int k = 0; k < kMaxBuses; ++k) {   // bus level and mute, meter (the louder side), return into the master, the bus's own output
       Bus& b = buses_[k]; const double g = b.mute ? 0.0 : b.levelLin;
       for (std::size_t i = 0; i < n; ++i) { busL[k][i] = static_cast<float>(busL[k][i] * g); busR[k][i] = static_cast<float>(busR[k][i] * g); busM[i] = std::fabs(busL[k][i]) > std::fabs(busR[k][i]) ? busL[k][i] : busR[k][i]; }
+      if (b.fx) { b.fx->process(busL[k], busR[k], n); for (std::size_t i = 0; i < n; ++i) busM[i] = std::fabs(busL[k][i]) > std::fabs(busR[k][i]) ? busL[k][i] : busR[k][i]; }
       b.meter.add(busM, n);
       if (b.returnLin > 0) for (std::size_t i = 0; i < n; ++i) { outL[done + i] += static_cast<float>(busL[k][i] * b.returnLin); outR[done + i] += static_cast<float>(busR[k][i] * b.returnLin); }
       if (busOut) { if (busOut[2 * k]) std::copy(busL[k], busL[k] + n, busOut[2 * k] + done); if (busOut[2 * k + 1]) std::copy(busR[k], busR[k] + n, busOut[2 * k + 1] + done); }
     }
     if (extL && extR) for (std::size_t i = 0; i < n; ++i) { outL[done + i] += extL[done + i]; outR[done + i] += extR[done + i]; }   // the arrangement player, pre master
+    if (width_ != 1.0) for (std::size_t i = 0; i < n; ++i) { const float mid = 0.5f * (outL[done + i] + outR[done + i]), side = 0.5f * (outL[done + i] - outR[done + i]) * static_cast<float>(width_); outL[done + i] = mid + side; outR[done + i] = mid - side; }
     for (std::size_t i = 0; i < n; ++i) {
       double l = static_cast<double>(outL[done + i]) * masterLin_, r = static_cast<double>(outR[done + i]) * masterLin_;
       if (limOn_) {

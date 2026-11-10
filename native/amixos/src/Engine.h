@@ -10,6 +10,7 @@
 #include <QVariantList>
 #include <QVariantMap>
 #include <QJsonObject>
+#include <map>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -19,6 +20,8 @@
 #include "vst3/vst3_host.hpp"
 #include "vst2/vst2_host.hpp"
 #include "record/recorder.hpp"
+#include "fx/fx.hpp"
+#include "Scope.h"
 
 class Engine : public QObject {
   Q_OBJECT
@@ -118,6 +121,19 @@ class Engine : public QObject {
   Q_INVOKABLE void setArmed(int strip, bool on);
   Q_INVOKABLE bool armed(int strip) const { return strip >= 0 && strip < kStrips && ((armed_ >> strip) & 1u); }
   Q_INVOKABLE int armedCount() const { int n = 0; for (int i = 0; i < kStrips; ++i) if ((armed_ >> i) & 1u) ++n; return n; }
+  // EFFECTS: one built-in effect per bus (reverb / delay / chorus / drive), before the bus returns to the master
+  Q_INVOKABLE QVariantList fxCatalog() const;                 // [{kind, name}]
+  Q_INVOKABLE QVariantMap busFx(int bus) const;               // {kind, name, bypass, mix, params: [{id, title, units, value, text, default}]}
+  Q_INVOKABLE void setBusFx(int bus, const QString& kind);    // "" removes
+  Q_INVOKABLE void setBusFxParam(int bus, const QString& id, double value);
+  Q_INVOKABLE void setBusFxBypass(int bus, bool on);
+  Q_INVOKABLE void setBusFxMix(int bus, double wet);
+  // WAVEFORM / PHASE: the scope tap
+  Q_PROPERTY(double width READ width WRITE setWidth NOTIFY stripsChanged)   // master stereo width 0..2
+  double width() const { return width_; } void setWidth(double w);
+  Q_INVOKABLE QVariantMap scopeFrame(int channel, double windowMs, int points, bool trigger);   // {samples: [..], vpp, vrms, freq, crest}
+  Q_INVOKABLE QVariantList lissajous(int points);                                                // [l0, r0, l1, r1, ...]
+  Q_INVOKABLE void setScopeStrip(int strip) { scope_.setStrip(strip); }
   // AUTO DETECT: the best device to start with, without a remembered one: a native ASIO driver (not a wrapper, Realtek pinned) >
   // ASIO4ALL-style wrapper > WASAPI / Core Audio / ALSA default endpoints > nothing (null is never auto-picked)
   Q_INVOKABLE QVariantMap autoDetect() const;      // {backend, in, out, name, why, inChannels, outChannels, rate} or empty
@@ -265,7 +281,9 @@ class Engine : public QObject {
   std::vector<QJsonObject> history_; int histPos_ = -1; bool restoring_ = false; QTimer histTimer_; QJsonObject abOther_; QString abSlot_ = "A";
   int partner(int i) const { return (i ^ 1) < kStrips ? (i ^ 1) : -1; }
   void applyPluginStage(int strip, const QString& kind, bool on);   // a built-in stage follows its slot
-  struct BusUi { QString name; double db = 0, returnDb = -60; bool mute = false; };
+  struct BusUi { QString name; double db = 0, returnDb = -60; bool mute = false; QString fxKind; std::unique_ptr<am::fx::Effect> fx; double fxMix = 1; bool fxBypass = false; std::map<QString, double> fxValues; };
+  std::vector<std::unique_ptr<am::fx::Effect>> fxGraveyard_; double width_ = 1.0; ScopeTap scope_; TapFanout taps_;
+  void makeBusFx(int k);   // (re)creates the bus effect at the runtime's rate from kind + values and attaches it
   struct DcaUi { QString name; double db = 0; bool mute = false; };
   struct MuteGroupUi { QString name; bool active = false; };
   void pushStrip(int i);   // the strip's effective gain and mute (its own + DCA + mute groups) into the runtime

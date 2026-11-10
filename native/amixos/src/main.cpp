@@ -130,6 +130,12 @@ int main(int argc, char* argv[]) {
       if (kind2.isEmpty()) { std::fprintf(stderr, "amixos --smoke: the VST2 test plug-in was not found\n"); return 50; }
       engine.setPlugin(4, 2, kind2); if (engine.plugins(4)[2].toMap()["pending"].toBool() || engine.plugins(4)[2].toMap()["name"].toString() != "AMIX Test Gain 2" || engine.pluginParams(4, 2).size() != 1) { std::fprintf(stderr, "amixos --smoke: VST2 load failed: %s\n", qPrintable(engine.pluginError(4, 2))); return 51; }
       engine.setPlugin(4, 0, ""); engine.setPlugin(4, 1, ""); engine.setPlugin(4, 2, ""); engine.open("null", "", "", 48000, 256, 2, 2); }
+    engine.setBusFx(0, "reverb"); if (engine.busFx(0)["name"].toString().isEmpty() || engine.busFx(0)["params"].toList().isEmpty() || engine.busState()[0].toMap()["fx"].toString() != "reverb") { std::fprintf(stderr, "amixos --smoke: bus effect did not load\n"); return 60; }
+    { const QString pid = engine.busFx(0)["params"].toList()[0].toMap()["id"].toString(); engine.setBusFxParam(0, pid, 0.8); if (std::fabs(engine.busFx(0)["params"].toList()[0].toMap()["value"].toDouble() - 0.8) > 1e-9) { std::fprintf(stderr, "amixos --smoke: bus effect param\n"); return 61; } }
+    engine.setBusFxMix(0, 0.5); engine.setBusFxBypass(0, true); if (std::fabs(engine.busFx(0)["mix"].toDouble() - 0.5) > 1e-9 || !engine.busFx(0)["bypass"].toBool()) { std::fprintf(stderr, "amixos --smoke: bus effect mix / bypass\n"); return 62; } engine.setBusFxBypass(0, false);
+    engine.setBusFx(1, "delay"); engine.setBusFx(2, "chorus"); engine.setBusFx(3, "drive"); if (engine.busFx(3)["params"].toList().isEmpty()) { std::fprintf(stderr, "amixos --smoke: drive\n"); return 63; }
+    engine.setWidth(1.5); if (std::fabs(engine.width() - 1.5) > 1e-9) { std::fprintf(stderr, "amixos --smoke: width\n"); return 64; } engine.setWidth(1.0);
+    if (engine.scopeFrame(0, 20, 256, true)["samples"].toList().size() != 256 || engine.lissajous(128).size() != 256) { std::fprintf(stderr, "amixos --smoke: scope frame size\n"); return 65; }
     engine.setInputRoute(3, 0); engine.setOutputRoute(0, 1);   // the routing matrix: CH 4 reads input 1, OUT 1 carries MASTER L
     if (engine.inputRoutes()[3].toInt() != 0 || engine.outputRoutes()[0].toInt() != 1) { std::fprintf(stderr, "amixos --smoke: routing did not take\n"); return 11; }
     engine.resetRouting(); if (engine.inputRoutes()[3].toInt() != 3 || engine.outputRoutes()[0].toInt() != 3) { std::fprintf(stderr, "amixos --smoke: routing defaults wrong\n"); return 12; }
@@ -137,7 +143,7 @@ int main(int argc, char* argv[]) {
       if (!shots.isEmpty()) {   // one picture per ported page
         QDir().mkpath(shots);
         auto* win = qobject_cast<QQuickWindow*>(qml.rootObjects().first());
-        for (const char* id : {"home", "mixer", "dsp", "dyn", "gate", "bus", "dca", "scenes", "presets", "routing", "renew", "arrange", "io", "meter", "lufs", "sys", "fx"}) {
+        for (const char* id : {"home", "mixer", "dsp", "dyn", "gate", "bus", "dca", "scenes", "presets", "routing", "renew", "arrange", "io", "meter", "lufs", "sys", "fx", "osc", "phase"}) {
           win->setProperty("current", QString::fromLatin1(id)); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
           const QImage img = win->grabWindow(); img.save(shots + "/" + id + ".png"); std::printf("amixos --shots: %s %dx%d\n", id, img.width(), img.height());
           if (QString::fromLatin1(id) == "routing") {

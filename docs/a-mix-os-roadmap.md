@@ -53,6 +53,13 @@ decided, what exists, what is next, and what was asked for but is not possible a
 - **Settings system**, **console features** (undo / redo, A/B, stereo link, trim, shortcuts), **MIXER action bar + PLUGIN RACK + SETTINGS gear**.
 - **ASIO host hardening**: reset / resync / buffer-size requests handled on a worker thread, time-info, channel clamping, latencies;
   verified by mingw cross-compile only — the first run against real drivers is on the user's Windows PC.
+- **Recording** (`engine/cpp/app/record`: lock-free tap ring, writer thread, 24-bit / float WAV per armed strip + master), **auto detect /
+  smart start** of the interface, **VST2 hosting** (`engine/cpp/app/vst2`, clean-room ABI from the public documentation, no Steinberg VST2
+  file) and the **compact rack view**.
+- **EFFECTS** (`engine/cpp/app/fx`: plate reverb, tape delay, stereo chorus, tube drive as `Mixer::BusProcessor` on each aux bus, params with
+  display text, MIX, BYPASS), **WAVEFORM** (oscilloscope on master L / R / strip, timebase 1..500 ms, trigger, freeze, Vpp / Vrms / freq /
+  crest) and **PHASE** (goniometer, correlation meter, master STEREO WIDTH 0..200 % mid/side). The scope reads from a `Runtime::Tap` shared
+  with the recorder through a fan-out.
 
 ## Next, in order
 
@@ -62,7 +69,7 @@ decided, what exists, what is next, and what was asked for but is not possible a
 4. **Licence / editions**: the AMFXE1 edition tokens and the vendor public key (`bridge/license-public.json`) verified natively (Ed25519 / ECDSA as the Node code does); hardware-bound keys; Lite / Pro tiers unlock pages and strip counts. "JWT / authenticator" from the request = signed tokens + a TOTP second factor for the vendor's Key Generator, not for end users' audio.
 5. **Driver intelligence**: the AI driver lock ladder, the Realtek WASAPI pin and the ASIO4ALL default-endpoint fallback, ported from `bridge/driver-lock.js` into the runtime's device layer (in-app routing only, never OS or driver tampering).
 6. **ARRANGE**: timeline, clips, automation, markers, offline WAV export (no recording), native.
-7. ~~VST3 hosting~~ done 2026-11-10 (generic controls; still open: the plug-in's own editor window, macOS bundles). VST2 stays out: Steinberg no longer licenses the VST2 SDK.
+7. ~~VST3 hosting~~ done 2026-11-10 (generic controls; still open: the plug-in's own editor window, macOS bundles). VST2 hosting added 2026-11-10 as a clean-room host of the public ABI (no Steinberg VST2 SDK file is used).
 8. **Bluetooth** as ordinary inputs / outputs (they appear through WASAPI / Core Audio / ALSA already; the page shows codec and latency).
 9. ~~Spatial / 360~~: removed 2026-11-10 at the user's request (the SURROUND page and the Resonance Audio path are gone; no spatial rendering is built in).
 10. **Volume optimise ("no low, but loud")**: a master loudness stage = loudness-normalising gain + look-ahead true-peak limiter to a target (−14 LUFS streaming / −1 dBTP), with the "quiet source" detector raising gain smoothly; never clipping, always measured on the LOUDNESS page.
