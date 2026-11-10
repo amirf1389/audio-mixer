@@ -31,7 +31,7 @@ class I18n : public QObject {
   void langChanged();
  private:
   struct Meta { QString name; bool rtl = false; bool autoTr = false; };
-  void loadVerified(); void loadAuto();
+  void loadVerified(); void loadAuto(); void loadUi();
   QHash<QString, Meta> meta_; QStringList order_;
   QHash<QString, QHash<QString, QString>> words_;   // key -> (lang -> text)
   QStringList keys_; QString lang_ = "en"; QSettings settings_;

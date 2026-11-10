@@ -8,7 +8,7 @@
 static QJsonDocument readJson(const QString& path) { QFile f(path); if (!f.open(QIODevice::ReadOnly)) return {}; return QJsonDocument::fromJson(f.readAll()); }
 
 I18n::I18n(QObject* parent) : QObject(parent) {
-  loadVerified(); loadAuto();
+  loadVerified(); loadAuto(); loadUi();
   const QString saved = settings_.value("ui/lang", "en").toString();
   lang_ = meta_.contains(saved) ? saved : "en";
 }
@@ -41,6 +41,12 @@ void I18n::loadAuto() {
   }
 }
 
+void I18n::loadUi() {
+  // the interface strings (English text = key), one file per language under i18n/ui/; a missing word falls back to English
+  const QStringList langs = {"fa", "ar", "ur", "es", "fr", "de", "pt", "ru", "tr", "hi", "zh", "ja", "ko", "ms", "id", "it", "nl", "pl", "vi", "th", "uk"};
+  for (const QString& l : langs) { const QJsonObject o = readJson(":/qt/qml/AmixOS/i18n/ui/" + l + ".json").object(); if (o.isEmpty()) continue;
+    for (auto it = o.begin(); it != o.end(); ++it) { if (!words_.contains(it.key())) { words_.insert(it.key(), {}); keys_ << it.key(); } words_[it.key()].insert(l, it.value().toString()); } }
+}
 void I18n::setLang(const QString& code) { if (!meta_.contains(code) || code == lang_) return; lang_ = code; settings_.setValue("ui/lang", code); emit langChanged(); }
 
 QVariantList I18n::languages() const {
