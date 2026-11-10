@@ -145,7 +145,9 @@ class Runtime {
   int nIn_ = 0, nOut_ = 0; bool running_ = false;
   std::vector<float> silence_, left_, right_;
   int monSrc_ = 0; double monGainTarget_ = 1, monGain_ = 1; bool monMono_ = false; double monPk_[2] = {0, 0};   // audio thread only
-  std::vector<float> monL_, monR_, extL_, extR_; std::atomic<ExtraSource*> extra_{nullptr}; std::atomic<Tap*> tap_{nullptr}; int inRoute_[kMaxStrips]; int outRoute_[kMaxOutputs]; double trim_[kMaxStrips]; std::atomic<std::shared_ptr<const InsertChain>> inserts_[kMaxStrips];                            // audio thread only (set in open, then by ops)
+  std::vector<float> monL_, monR_, extL_, extR_; std::atomic<ExtraSource*> extra_{nullptr}; std::atomic<Tap*> tap_{nullptr}; int inRoute_[kMaxStrips]; int outRoute_[kMaxOutputs]; double trim_[kMaxStrips]; // the insert chain of each strip, swapped from the UI thread and read on the audio thread: a shared_ptr with the free atomic
+  // functions (std::atomic_load / atomic_store), which every standard library has; std::atomic<std::shared_ptr> is missing from libc++ (Android, macOS)
+  std::shared_ptr<const InsertChain> inserts_[kMaxStrips];                            // audio thread only (set in open, then by ops)
   std::vector<dsp::Channel> ch_; std::vector<std::vector<float>> chBuf_;
   std::vector<std::vector<float>> busBuf_;   // 2 * kMaxBuses blocks for the aux bus outputs   // one channel DSP and one scratch block per strip (sized in open())
   // control ring: many producers (under a mutex), one consumer (the audio thread)
