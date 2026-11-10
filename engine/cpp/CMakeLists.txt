@@ -63,6 +63,12 @@ if(WIN32)
 endif()
 
 # the licence check (AMIX1 keys, AMFXE1 edition tokens, TOTP), self-contained crypto (engine/cpp/app/license)
+add_library(amixos_measure STATIC app/measure/measure.cpp)
+target_include_directories(amixos_measure PUBLIC app)
+add_executable(measure_test test/measure_test.cpp)
+target_link_libraries(measure_test amixos_measure)
+add_test(NAME measure COMMAND measure_test)
+
 add_library(amixos_paths STATIC app/paths/paths.cpp)
 target_include_directories(amixos_paths PUBLIC app)
 add_executable(paths_test test/paths_test.cpp)

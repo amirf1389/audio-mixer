@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">
+<title>AmF X1 release manager</title>
+<style>:root{--bg:#f6f6f7;--ink:#111;--muted:#555;--line:#ccc;--card:#fff;--accent:#ea580c}@media(prefers-color-scheme:dark){:root{--bg:#121214;--ink:#eee;--muted:#aaa;--line:#333;--card:#1b1b1f}}
+body{margin:0;padding:16px;font:14px/1.45 system-ui,sans-serif;background:var(--bg);color:var(--ink)}h1{font-size:18px;letter-spacing:2px;color:var(--accent)}.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin:12px 0}
+label{display:block;font-size:11px;letter-spacing:1px;color:var(--muted);margin-top:8px}input,textarea{width:100%;box-sizing:border-box;padding:7px;border:1px solid var(--line);border-radius:6px;background:transparent;color:var(--ink);font:inherit}textarea{min-height:90px}
+button{margin-top:10px;padding:8px 14px;border:0;border-radius:6px;background:var(--accent);color:#fff;font-weight:600;cursor:pointer}button.alt{background:transparent;color:var(--ink);border:1px solid var(--line)}pre{white-space:pre-wrap;font-size:12px;background:rgba(127,127,127,.1);padding:10px;border-radius:6px}.entry{border-top:1px solid var(--line);padding-top:8px;margin-top:8px}small{color:var(--muted)}</style></head>
+<body><h1>AMF X1 · RELEASE MANAGER</h1>
+<p>Edits <code>releases/features.json</code>, the feature feed the console shows under WHAT'S NEW (NEW badge in the header). Nothing here is sent anywhere: the page runs in your browser only. Save the file into the repository, then sign the manifest on the vendor machine with <code>node scripts/make-update.js</code> (the key never leaves that machine). Clients accept only a manifest signed with the vendor key.</p>
+<div class="card"><label>LOAD AN EXISTING features.json</label><input type="file" id="file" accept="application/json">
+<div id="list"></div><button class="alt" id="add">+ ADD VERSION ENTRY</button></div>
+<div class="card"><button id="gen">GENERATE features.json</button> <button class="alt" id="dl">DOWNLOAD</button><pre id="out"></pre>
+<small>Then: <code>git add releases/features.json &amp;&amp; node scripts/make-update.js &amp;&amp; git commit -am "release feed"</code> on the vendor machine.</small></div>
+<script>
+'use strict';
+const list=document.getElementById('list'),out=document.getElementById('out');let entries=[];
+function render(){list.innerHTML='';entries.forEach((e,i)=>{const d=document.createElement('div');d.className='entry';d.innerHTML=`<label>VERSION</label><input value="${esc(e.version)}" data-k="version" data-i="${i}"><label>DATE (YYYY-MM-DD)</label><input value="${esc(e.date)}" data-k="date" data-i="${i}"><label>TITLE</label><input value="${esc(e.title)}" data-k="title" data-i="${i}"><label>ITEMS (one per line)</label><textarea data-k="items" data-i="${i}">${esc((e.items||[]).join('\n'))}</textarea><button class="alt" data-del="${i}">REMOVE</button>`;list.appendChild(d)});}
+function esc(s){return String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+list.addEventListener('input',ev=>{const t=ev.target,i=+t.dataset.i,k=t.dataset.k;if(k==='items')entries[i].items=t.value.split('\n').map(s=>s.trim()).filter(Boolean);else entries[i][k]=t.value.trim()});
+list.addEventListener('click',ev=>{if(ev.target.dataset.del!==undefined){entries.splice(+ev.target.dataset.del,1);render()}});
+document.getElementById('add').onclick=()=>{entries.unshift({version:'',date:new Date().toISOString().slice(0,10),title:'',items:[]});render()};
+document.getElementById('file').onchange=async ev=>{try{const j=JSON.parse(await ev.target.files[0].text());entries=Array.isArray(j.features)?j.features:[];render()}catch(e){out.textContent='not a features.json: '+e.message}};
+function gen(){const ok=entries.every(e=>/^\d+(\.\d+){1,3}$/.test(e.version)&&/^\d{4}-\d\d-\d\d$/.test(e.date));if(!ok){out.textContent='every entry needs a numeric version (1.23.0.1) and a date (YYYY-MM-DD)';return null}
+const sorted=[...entries].sort((a,b)=>cmp(b.version,a.version));const txt=JSON.stringify({_:'The feature feed: newest first. scripts/make-update.js embeds it in the signed update.json; the console shows a NEW badge for entries newer than the version last looked at.',features:sorted},null,2)+'\n';out.textContent=txt;return txt}
+function cmp(a,b){const x=a.split('.').map(Number),y=b.split('.').map(Number);for(let i=0;i<4;i++){const d=(x[i]||0)-(y[i]||0);if(d)return d}return 0}
+document.getElementById('gen').onclick=gen;
+document.getElementById('dl').onclick=()=>{const t=gen();if(!t)return;const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'application/json'}));a.download='features.json';a.click()};
+</script></body></html>

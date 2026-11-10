@@ -44,6 +44,8 @@ bool Update::applyManifest(const QString& text) {
   latest_ = m.value("version").toString(); channel_ = m.value("channel").toString("stable"); released_ = m.value("released").toString(); notes_.clear(); for (const QJsonValue& n : m.value("notes").toArray()) notes_ << n.toString();
   file_.clear(); const QJsonObject files = m.value("files").toObject(); const QJsonObject f = files.value(platformKey()).toObject();
   if (!f.isEmpty() && am::upd::hostAllowed(f.value("url").toString().toStdString()) && am::upd::isHex64(f.value("sha256").toString().toStdString())) { file_["key"] = platformKey(); file_["name"] = f.value("name").toString(); file_["url"] = f.value("url").toString(); file_["size"] = f.value("size").toDouble(); file_["sha256"] = f.value("sha256").toString(); }
+  features_.clear();
+  for (const QJsonValue& v : m.value("features").toArray()) { const QJsonObject o = v.toObject(); QVariantMap e; e["version"] = o.value("version").toString(); e["date"] = o.value("date").toString(); e["title"] = o.value("title").toString(); QStringList items; for (const QJsonValue& i : o.value("items").toArray()) items << i.toString(); e["items"] = items; features_ << e; }
   s_.setValue("update/lastCheck", QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm"));
   const int cmp = compareVersions(latest_, current_);
   if (cmp > 0) set("available", QStringLiteral("%1 %2 (%3) is available; this is %4").arg(latest_, channel_, released_, current_)); else set("upToDate", QStringLiteral("this %1 is current (manifest %2)").arg(current_, latest_));
@@ -74,3 +76,9 @@ void Update::download() {
   });
 }
 void Update::openDownloadFolder() { QDesktopServices::openUrl(QUrl::fromLocalFile(QString::fromStdString(am::paths::downloadsDir()))); }
+int Update::newFeatures() const {
+  const QString seen = s_.value("update/featuresSeen", current_).toString(); int n = 0;
+  for (const QVariant& v : features_) if (compareVersions(v.toMap().value("version").toString(), seen) > 0) ++n;
+  return n;
+}
+void Update::markFeaturesSeen() { QString top = current_; for (const QVariant& v : features_) { const QString ver = v.toMap().value("version").toString(); if (compareVersions(ver, top) > 0) top = ver; } s_.setValue("update/featuresSeen", top); emit changed(); }

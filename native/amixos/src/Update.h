@@ -23,6 +23,8 @@ class Update : public QObject {
   Q_PROPERTY(QString lastCheck READ lastCheck NOTIFY changed)
   Q_PROPERTY(QString current READ current CONSTANT)
   Q_PROPERTY(int progress READ progress NOTIFY changed)
+  Q_PROPERTY(QVariantList features READ features NOTIFY changed)   // the signed feature feed: [{version, date, title, items[]}], newest first
+  Q_PROPERTY(int newFeatures READ newFeatures NOTIFY changed)      // entries newer than the last version the person looked at (the NEW badge)
  public:
   explicit Update(const QString& currentVersion, QObject* parent = nullptr);
   QString state() const { return state_; } QString message() const { return msg_; } QString latest() const { return latest_; } QString channel() const { return channel_; } QString released() const { return released_; }
@@ -34,6 +36,9 @@ class Update : public QObject {
   Q_INVOKABLE bool applyManifest(const QString& envelopeText);      // the same without the network (a file, the smoke test); false = rejected, with the reason in message
   Q_INVOKABLE void download();                                      // this platform's file into the data folder, sha256 checked
   Q_INVOKABLE void openDownloadFolder();
+  QVariantList features() const { return features_; }
+  int newFeatures() const;
+  Q_INVOKABLE void markFeaturesSeen();                              // the badge goes out until a newer entry arrives
   Q_INVOKABLE static int compareVersions(const QString& a, const QString& b);
   static const char* kDefaultUrl;
  signals:
@@ -41,5 +46,5 @@ class Update : public QObject {
  private:
   void set(const QString& state, const QString& msg) { state_ = state; msg_ = msg; emit changed(); }
   static QString platformKey();
-  QSettings s_; QNetworkAccessManager net_; QString current_, state_ = "idle", msg_, latest_, channel_, released_, downloaded_; QStringList notes_; QVariantMap file_; int progress_ = 0;
+  QSettings s_; QNetworkAccessManager net_; QString current_, state_ = "idle", msg_, latest_, channel_, released_, downloaded_; QStringList notes_; QVariantMap file_; QVariantList features_; int progress_ = 0;
 };

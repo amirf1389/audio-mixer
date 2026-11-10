@@ -21,11 +21,11 @@ Flickable {
         id: col; width: parent.width - 20; x: 10; y: 10; spacing: 10
         Panel {
             Layout.fillWidth: true
-            title: "COMPRESSOR • CHANNEL DYNAMICS"
+            title: i18n.t("COMPRESSOR • CHANNEL DYNAMICS", i18n.lang)
             subtitle: "Feed-forward peak detector, soft knee, attack and release in the dB domain, make-up gain. The dot is the live input and output of this channel."
             RowLayout {
                 Layout.fillWidth: true; spacing: 8
-                Text { text: "CHANNEL"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9 }
+                Text { text: i18n.t("CHANNEL", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9 }
                 ComboBox {
                     implicitWidth: 150; model: engine.strips; currentIndex: page.strip
                     displayText: engine.stripState[currentIndex] ? engine.stripState[currentIndex].name : ""
@@ -33,17 +33,17 @@ Flickable {
                     onActivated: page.strip = currentIndex
                 }
                 Item { Layout.fillWidth: true }
-                Rectangle { implicitWidth: 70; implicitHeight: 24; radius: 4; color: page.ch.compOn ? Theme.emerald : Theme.ov(0.08); Text { anchors.centerIn: parent; text: page.ch.compOn ? "ON" : "OFF"; color: page.ch.compOn ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.apply("compOn", !page.ch.compOn) } }
+                Rectangle { implicitWidth: 70; implicitHeight: 24; radius: 4; color: page.ch.compOn ? Theme.emerald : Theme.ov(0.08); Text { anchors.centerIn: parent; text: page.ch.compOn ? i18n.t("ON", i18n.lang) : i18n.t("OFF", i18n.lang); color: page.ch.compOn ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.apply("compOn", !page.ch.compOn) } }
             }
             RowLayout {
                 Layout.fillWidth: true; spacing: 10
                 DynCurve { Layout.fillWidth: true; curve: page.curve; thresholdDb: page.ch.compThresholdDb === undefined ? -20 : page.ch.compThresholdDb; liveInDb: page.mt ? page.mt.peakDb : -120; liveGainDb: page.mt ? page.mt.compGrDb : 0; lineColor: Theme.emerald }
                 ColumnLayout {   // gain reduction meter
                     Layout.preferredWidth: 56; spacing: 4
-                    Text { Layout.alignment: Qt.AlignHCenter; text: "GR"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                    Text { Layout.alignment: Qt.AlignHCenter; text: i18n.t("GR", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                     Rectangle { Layout.alignment: Qt.AlignHCenter; implicitWidth: 16; Layout.fillHeight: true; implicitHeight: 200; radius: 3; color: Theme.deep; border.color: Theme.lineSoft
                         Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 2; height: Math.min(1, Math.max(0, -(page.mt ? page.mt.compGrDb : 0) / 24)) * (parent.height - 4); radius: 2; color: Theme.amber; Behavior on height { NumberAnimation { duration: 40 } } } }
-                    Text { Layout.alignment: Qt.AlignHCenter; text: (page.mt ? page.mt.compGrDb : 0).toFixed(1) + " dB"; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8 }
+                    Text { Layout.alignment: Qt.AlignHCenter; text: (page.mt ? page.mt.compGrDb : 0).toFixed(1) + i18n.t(" dB", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8 }
                 }
             }
             GridLayout {

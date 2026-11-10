@@ -87,7 +87,13 @@ qt_add_qml_module(amixos
         qml/ComingPage.qml
     RESOURCES
         i18n/verified-22.json
-        i18n/auto-58.json)
+        i18n/auto-58.json
+        i18n/ui/fa.json
+        i18n/ui/es.json
+        i18n/ui/pt.json
+        i18n/ui/ru.json
+        i18n/ui/it.json
+        i18n/ui/vi.json)
 target_compile_definitions(amixos PRIVATE AMIX_VERSION="${AMIX_VERSION}")
 target_compile_definitions(amixos PRIVATE AMIX_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(amixos PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::QuickControls2 Qt6::Network audiomixer_runtime audiomixer_engine amixos_license amixos_arrange amixos_vst3 amixos_vst2 amixos_record amixos_fx amixos_samples)

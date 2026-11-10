@@ -106,7 +106,7 @@ class S16Meter {
 };
 
 // ───────── mixer ─────────
-struct Strip { double gainDb = 0, gainLin = 1, pan = 0; bool mute = false, solo = false; Meter meter; double inPk = 0; bool automix = false; double amWeight = 1, amLevel = 0, amGain = 1; };   // inPk: pre-fader input peak of the last block; automix: gain-sharing member, amGain its share (linear)
+struct Strip { double gainDb = 0, gainLin = 1, pan = 0, depth = 1; bool mute = false, solo = false; Meter meter; double inPk = 0; bool automix = false; double amWeight = 1, amLevel = 0, amGain = 1; };   // inPk: pre-fader input peak of the last block; automix: gain-sharing member, amGain its share (linear)
 // AUX SENDS: kMaxBuses stereo buses. Each strip sends to each bus at its own level, pre-fader (the raw input: monitor mixes) or post-fader
 // (after gain, mute and solo: effects sends). A bus has a level, a mute, a meter and a RETURN level into the master (an effects return or a
 // way to hear a monitor mix); its own stereo output is handed to the caller through process()'s busOut (the runtime maps it to output channels).
@@ -152,6 +152,12 @@ class Mixer {
   // inputs[strip] -> outL / outR (frames samples each). Meters, loudness and phase are updated once per call.
   // busOut (optional): 2 * kMaxBuses pointers (L, R per bus, any may be null) that receive each bus's stereo output.
   // extL / extR: an optional stereo signal summed into the master before master gain / limiter / meters (the ARRANGE player)
+  // SURROUND 5.0 (the SDK's surround mode): each strip has a depth, +1 = front, 0 = between, -1 = rear; pan places it left / right in that
+  // row; a centred front strip also feeds the CENTRE. outs: L, R, C, Ls, Rs. Master gain, limiter and meters apply; buses, effects and the
+  // extra sources stay with the stereo process(). The stereo meters follow L / R.
+  void setDepth(int strip, double depth);
+  double depth(int strip) const { return strip >= 0 && strip < n_ ? strips_[static_cast<std::size_t>(strip)].depth : 1; }
+  void process5(const float* const* inputs, std::size_t frames, float* const* outs);
   void process(const float* const* inputs, std::size_t frames, float* outL, float* outR, float* const* busOut = nullptr, const float* extL = nullptr, const float* extR = nullptr);
   const Strip& strip(int i) const { return strips_[i]; }
   const MeterState& masterMeter(int ch) const { return master_[ch].state(); }

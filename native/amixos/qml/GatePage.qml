@@ -22,11 +22,11 @@ Flickable {
         id: col; width: parent.width - 20; x: 10; y: 10; spacing: 10
         Panel {
             Layout.fillWidth: true
-            title: "NOISE GATE • CHANNEL DYNAMICS"
+            title: i18n.t("NOISE GATE • CHANNEL DYNAMICS", i18n.lang)
             subtitle: "Opens above the threshold, closes 3 dB under it after the hold time; closed, the channel is turned down by the range. The lamp shows the live state."
             RowLayout {
                 Layout.fillWidth: true; spacing: 8
-                Text { text: "CHANNEL"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9 }
+                Text { text: i18n.t("CHANNEL", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9 }
                 ComboBox {
                     implicitWidth: 150; model: engine.strips; currentIndex: page.strip
                     displayText: engine.stripState[currentIndex] ? engine.stripState[currentIndex].name : ""
@@ -35,18 +35,18 @@ Flickable {
                 }
                 Item { Layout.fillWidth: true }
                 Rectangle { implicitWidth: 90; implicitHeight: 24; radius: 12; color: page.ch.gateOn ? (page.open ? Qt.rgba(0.063, 0.725, 0.506, 0.2) : Qt.rgba(1, 0.165, 0.373, 0.2)) : Theme.ov(0.05); border.color: page.ch.gateOn ? (page.open ? Theme.emerald : Theme.danger) : Theme.lineSoft
-                    Text { anchors.centerIn: parent; text: page.ch.gateOn ? (page.open ? "OPEN" : "CLOSED") : "BYPASS"; color: page.ch.gateOn ? (page.open ? Theme.emerald : Theme.danger) : Theme.dim; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } }
-                Rectangle { implicitWidth: 70; implicitHeight: 24; radius: 4; color: page.ch.gateOn ? Theme.pink : Theme.ov(0.08); Text { anchors.centerIn: parent; text: page.ch.gateOn ? "ON" : "OFF"; color: page.ch.gateOn ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.apply("gateOn", !page.ch.gateOn) } }
+                    Text { anchors.centerIn: parent; text: page.ch.gateOn ? (page.open ? i18n.t("OPEN", i18n.lang) : i18n.t("CLOSED", i18n.lang)) : i18n.t("BYPASS", i18n.lang); color: page.ch.gateOn ? (page.open ? Theme.emerald : Theme.danger) : Theme.dim; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } }
+                Rectangle { implicitWidth: 70; implicitHeight: 24; radius: 4; color: page.ch.gateOn ? Theme.pink : Theme.ov(0.08); Text { anchors.centerIn: parent; text: page.ch.gateOn ? i18n.t("ON", i18n.lang) : i18n.t("OFF", i18n.lang); color: page.ch.gateOn ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.apply("gateOn", !page.ch.gateOn) } }
             }
             RowLayout {
                 Layout.fillWidth: true; spacing: 10
                 DynCurve { Layout.fillWidth: true; curve: page.curve; minDb: -90; thresholdDb: page.ch.gateThresholdDb === undefined ? -50 : page.ch.gateThresholdDb; liveInDb: page.mt ? page.mt.peakDb : -120; liveGainDb: page.mt ? page.mt.gateDb : 0; lineColor: Theme.pink }
                 ColumnLayout {
                     Layout.preferredWidth: 56; spacing: 4
-                    Text { Layout.alignment: Qt.AlignHCenter; text: "GAIN"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                    Text { Layout.alignment: Qt.AlignHCenter; text: i18n.t("GAIN", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                     Rectangle { Layout.alignment: Qt.AlignHCenter; implicitWidth: 16; Layout.fillHeight: true; implicitHeight: 200; radius: 3; color: Theme.deep; border.color: Theme.lineSoft
                         Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 2; height: Math.min(1, Math.max(0, -(page.mt ? page.mt.gateDb : 0) / 90)) * (parent.height - 4); radius: 2; color: Theme.pink; Behavior on height { NumberAnimation { duration: 40 } } } }
-                    Text { Layout.alignment: Qt.AlignHCenter; text: (page.mt ? page.mt.gateDb : 0).toFixed(1) + " dB"; color: Theme.pink; font.family: Theme.mono; font.pixelSize: 8 }
+                    Text { Layout.alignment: Qt.AlignHCenter; text: (page.mt ? page.mt.gateDb : 0).toFixed(1) + i18n.t(" dB", i18n.lang); color: Theme.pink; font.family: Theme.mono; font.pixelSize: 8 }
                 }
             }
             GridLayout {

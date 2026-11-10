@@ -35,10 +35,10 @@ Item {
             id: col; width: parent.width; spacing: 8
             Rectangle { Layout.fillWidth: true; implicitHeight: 34; radius: 8; color: Theme.card; border.color: Theme.line
                 RowLayout { anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10
-                    Text { text: "HELP:"; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
-                    Text { text: "step by step, in plain words"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
+                    Text { text: i18n.t("HELP:", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
+                    Text { text: i18n.t("step by step, in plain words", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                     Item { Layout.fillWidth: true }
-                    Text { text: "A mix OS " + appVersion + " · " + engine.edition; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 } } }
+                    Text { text: i18n.t("A mix OS ", i18n.lang) + appVersion + " · " + engine.edition; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 } } }
             GridLayout { Layout.fillWidth: true; columns: 2; columnSpacing: 8; rowSpacing: 8
                 Repeater { model: page.steps; delegate: Rectangle { Layout.fillWidth: true; implicitHeight: 96; radius: Theme.radius; color: Theme.card; border.color: Theme.line
                     RowLayout { anchors.fill: parent; anchors.margins: 12; spacing: 12
@@ -51,17 +51,17 @@ Item {
             RowLayout { Layout.fillWidth: true; spacing: 8
                 Rectangle { Layout.fillWidth: true; Layout.preferredWidth: 1; implicitHeight: kc.implicitHeight + 24; radius: Theme.radius; color: Theme.card; border.color: Theme.line
                     ColumnLayout { id: kc; anchors.fill: parent; anchors.margins: 12; spacing: 4
-                        Head { text: "KEYBOARD (MIXER PAGE)" }
+                        Head { text: i18n.t("KEYBOARD (MIXER PAGE)", i18n.lang) }
                         Repeater { model: page.keys; delegate: RowLayout { spacing: 10; Rectangle { implicitWidth: 110; implicitHeight: 20; radius: 4; color: Theme.ov(0.08); Text { anchors.centerIn: parent; text: modelData[0]; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } } Text { text: modelData[1]; color: Theme.muted; font.family: Theme.sans; font.pixelSize: 10 } } } } }
                 Rectangle { Layout.fillWidth: true; Layout.preferredWidth: 1; implicitHeight: nc.implicitHeight + 24; radius: Theme.radius; color: Theme.card; border.color: Theme.line
                     ColumnLayout { id: nc; anchors.fill: parent; anchors.margins: 12; spacing: 4
-                        Head { text: "NO SOUND?" }
+                        Head { text: i18n.t("NO SOUND?", i18n.lang) }
                         Repeater { model: page.noSound; delegate: RowLayout { spacing: 8; Layout.fillWidth: true; Rectangle { width: 6; height: 6; radius: 3; color: Theme.cyan; Layout.alignment: Qt.AlignTop; Layout.topMargin: 5 } Text { Layout.fillWidth: true; text: modelData; color: Theme.muted; font.family: Theme.sans; font.pixelSize: 10; wrapMode: Text.WordWrap } } } } } }
             Rectangle { Layout.fillWidth: true; implicitHeight: fc.implicitHeight + 24; radius: Theme.radius; color: Theme.card; border.color: Theme.line
                 ColumnLayout { id: fc; anchors.fill: parent; anchors.margins: 12; spacing: 4
-                    Head { text: "WHERE THINGS LIVE" }
-                    Text { Layout.fillWidth: true; text: "Console, scenes, presets, arrangement, autosave and exported CSVs: " + settings.dataFolder + ".  Recordings: " + engine.recordFolder + ".  Settings file: " + settings.settingsFile() + ".  A backup of everything: CALIBRATE > SESSION > BACKUP CONSOLE."; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.WordWrap }
-                    Text { Layout.fillWidth: true; text: "Licence and editions: LICENSE. Languages: the box at the top right. The console never sends anything over the network on its own; the remote app and the daemon are separate programs you start yourself."; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.WordWrap } } }
+                    Head { text: i18n.t("WHERE THINGS LIVE", i18n.lang) }
+                    Text { Layout.fillWidth: true; text: i18n.t("Console, scenes, presets, arrangement, autosave and exported CSVs: ", i18n.lang) + settings.dataFolder + i18n.t(".  Recordings: ", i18n.lang) + engine.recordFolder + i18n.t(".  Settings file: ", i18n.lang) + settings.settingsFile() + i18n.t(".  A backup of everything: CALIBRATE > SESSION > BACKUP CONSOLE.", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.WordWrap }
+                    Text { Layout.fillWidth: true; text: i18n.t("Licence and editions: LICENSE. Languages: the box at the top right. The console never sends anything over the network on its own; the remote app and the daemon are separate programs you start yourself.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.WordWrap } } }
         }
     }
 }

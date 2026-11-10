@@ -21,11 +21,11 @@ Item {
         anchors.fill: parent; anchors.margins: 10; spacing: 8
         Rectangle { Layout.fillWidth: true; implicitHeight: 34; radius: 8; color: Theme.card; border.color: Theme.line
             RowLayout { anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 6
-                Text { text: "SAMPLES:"; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
+                Text { text: i18n.t("SAMPLES:", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
                 Repeater { model: ["ALL"].concat(samples.categories); delegate: Rectangle { implicitWidth: cl.implicitWidth + 14; implicitHeight: 20; radius: 4; color: page.cat === modelData ? Theme.amber : Theme.ov(0.06)
                     Text { id: cl; anchors.centerIn: parent; text: modelData.toUpperCase(); color: page.cat === modelData ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.cat = modelData } } }
                 Item { Layout.fillWidth: true }
-                Text { text: samples.voices + " playing · peak " + (samples.peakDb > -100 ? samples.peakDb.toFixed(1) : "−∞") + " dBFS"; color: samples.voices > 0 ? Theme.emerald : Theme.dim; font.family: Theme.mono; font.pixelSize: 8 }
+                Text { text: samples.voices + i18n.t(" playing · peak ", i18n.lang) + (samples.peakDb > -100 ? samples.peakDb.toFixed(1) : "−∞") + i18n.t(" dBFS", i18n.lang); color: samples.voices > 0 ? Theme.emerald : Theme.dim; font.family: Theme.mono; font.pixelSize: 8 }
                 Text { text: samples.message; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; elide: Text.ElideRight; Layout.maximumWidth: 300 } } }
         RowLayout { Layout.fillWidth: true; Layout.fillHeight: true; spacing: 8
             Rectangle { Layout.fillWidth: true; Layout.fillHeight: true; radius: Theme.radius; color: Theme.card; border.color: Theme.line
@@ -39,19 +39,19 @@ Item {
                                 Text { Layout.fillWidth: true; elide: Text.ElideRight; text: modelData.name; color: pad.hot ? "#000" : Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                                 Text { text: modelData.category.toUpperCase() + " · " + modelData.seconds.toFixed(1) + " s"; color: pad.hot ? "#222" : Theme.dim; font.family: Theme.mono; font.pixelSize: 6 }
                                 Item { Layout.fillHeight: true }
-                                Text { text: (index < 10 ? "KEY " + ((index + 1) % 10) + " · " : "") + "#" + modelData.id; color: pad.hot ? "#222" : Theme.dim; font.family: Theme.mono; font.pixelSize: 6 } }
+                                Text { text: (index < 10 ? i18n.t("KEY ", i18n.lang) + ((index + 1) % 10) + " · " : "") + "#" + modelData.id; color: pad.hot ? "#222" : Theme.dim; font.family: Theme.mono; font.pixelSize: 6 } }
                             MouseArea { anchors.fill: parent; onPressed: samples.play(modelData.id) } } } } }
             Rectangle { Layout.preferredWidth: 230; Layout.fillHeight: true; radius: Theme.radius; color: Theme.card; border.color: Theme.line
                 ColumnLayout { anchors.fill: parent; anchors.margins: 12; spacing: 8
-                    Text { text: "PLAYER"; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
-                    Text { text: "GAIN  " + (samples.gainDb > 0 ? "+" : "") + samples.gainDb.toFixed(1) + " dB"; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8 }
+                    Text { text: i18n.t("PLAYER", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
+                    Text { text: i18n.t("GAIN  ", i18n.lang) + (samples.gainDb > 0 ? "+" : "") + samples.gainDb.toFixed(1) + i18n.t(" dB", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8 }
                     Slider { Layout.fillWidth: true; from: -40; to: 12; stepSize: 0.5; value: samples.gainDb; onMoved: samples.gainDb = value }
-                    Btn { label: "STOP ALL  (Esc)"; onColor: Theme.danger; on: samples.voices > 0; onClicked: samples.stopAll() }
+                    Btn { label: i18n.t("STOP ALL  (Esc)", i18n.lang); onColor: Theme.danger; on: samples.voices > 0; onClicked: samples.stopAll() }
                     Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.lineSoft }
-                    Text { text: "EXPORT"; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
-                    Text { Layout.fillWidth: true; text: "Writes the 100 samples as 24-bit WAV into\n" + samples.folder + "\nfor ARRANGE, STREAM & MEDIA or any other program. Files that exist are kept."; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WrapAnywhere }
-                    Btn { label: "EXPORT 100 WAV"; on: true; onColor: Theme.cyan; onClicked: samples.exportAll() }
+                    Text { text: i18n.t("EXPORT", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
+                    Text { Layout.fillWidth: true; text: i18n.t("Writes the 100 samples as 24-bit WAV into\n", i18n.lang) + samples.folder + i18n.t("\nfor ARRANGE, STREAM & MEDIA or any other program. Files that exist are kept.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WrapAnywhere }
+                    Btn { label: i18n.t("EXPORT 100 WAV", i18n.lang); on: true; onColor: Theme.cyan; onClicked: samples.exportAll() }
                     Item { Layout.fillHeight: true }
-                    Text { Layout.fillWidth: true; text: "8 voices; a ninth trigger steals the oldest. Rendered in the program (sine, FM, noise, filters, envelopes): no sample files are shipped, nothing to download, identical on every computer."; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap } } } }
+                    Text { Layout.fillWidth: true; text: i18n.t("8 voices; a ninth trigger steals the oldest. Rendered in the program (sine, FM, noise, filters, envelopes): no sample files are shipped, nothing to download, identical on every computer.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap } } } }
     }
 }

@@ -209,6 +209,31 @@ Mixer::Mixer(int strips, double sampleRate)
 
 void Mixer::setGainDb(int s, double db) { if (s < 0 || s >= n_) return; db = std::min(db, 10.0); strips_[s].gainDb = db; strips_[s].gainLin = db <= -60.0 ? 0.0 : linOf(db); }
 void Mixer::setPan(int s, double p) { if (s >= 0 && s < n_) strips_[s].pan = clampd(p, -1.0, 1.0); }
+void Mixer::setDepth(int s, double d) { if (s >= 0 && s < n_) strips_[s].depth = clampd(d, -1.0, 1.0); }
+void Mixer::process5(const float* const* in, std::size_t frames, float* const* outs) {
+  constexpr std::size_t kChunk = 512; bool anySolo = false; for (const auto& s : strips_) anySolo = anySolo || s.solo;
+  const double rel = 1.0 - std::exp(-1.0 / (limReleaseMs_ * 0.001 * fs_)); float tmp[kChunk];
+  for (std::size_t done = 0; done < frames; done += kChunk) {
+    const std::size_t n = std::min(kChunk, frames - done);
+    for (int c = 0; c < 5; ++c) for (std::size_t i = 0; i < n; ++i) outs[c][done + i] = 0.0f;
+    for (int s = 0; s < n_; ++s) {
+      Strip& st = strips_[static_cast<std::size_t>(s)]; const bool audible = !st.mute && (!anySolo || st.solo);
+      const double ang = (st.pan + 1.0) * kPi * 0.25, gl = std::cos(ang), gr = std::sin(ang), front = std::sqrt((st.depth + 1.0) * 0.5), rear = std::sqrt((1.0 - st.depth) * 0.5), centre = front * std::max(0.0, 1.0 - std::fabs(st.pan)) * 0.7071;
+      const double gL = gl * front * std::sqrt(1.0 - centre * centre * 0.5), gR = gr * front * std::sqrt(1.0 - centre * centre * 0.5), gC = centre, gLs = gl * rear, gRs = gr * rear;   // the centre takes part of a centred front strip, constant power
+      double ipk = done == 0 ? 0.0 : st.inPk; const double g = st.gainLin * (st.automix ? st.amGain : 1.0);
+      for (std::size_t i = 0; i < n; ++i) { const double x = static_cast<double>(in[s][done + i]); if (std::fabs(x) > ipk) ipk = std::fabs(x); tmp[i] = static_cast<float>(x * g); }
+      st.inPk = ipk; st.meter.add(tmp, n);
+      if (audible) for (std::size_t i = 0; i < n; ++i) { outs[0][done + i] += static_cast<float>(tmp[i] * gL); outs[1][done + i] += static_cast<float>(tmp[i] * gR); outs[2][done + i] += static_cast<float>(tmp[i] * gC); outs[3][done + i] += static_cast<float>(tmp[i] * gLs); outs[4][done + i] += static_cast<float>(tmp[i] * gRs); }
+    }
+    for (std::size_t i = 0; i < n; ++i) {
+      double v[5]; double pk = 0; for (int c = 0; c < 5; ++c) { v[c] = static_cast<double>(outs[c][done + i]) * masterLin_; pk = std::max(pk, std::fabs(v[c])); }
+      if (limOn_) { const double need = pk > limCeil_ ? limCeil_ / pk : 1.0; if (need < limGain_) limGain_ = need; else limGain_ += (1.0 - limGain_) * rel; if (limGain_ > need) limGain_ = need; for (double& x : v) x *= limGain_; }
+      for (int c = 0; c < 5; ++c) outs[c][done + i] = static_cast<float>(v[c]);
+    }
+    master_[0].add(outs[0] + done, n); master_[1].add(outs[1] + done, n); loudness_.feed(outs[0] + done, outs[1] + done, n);
+  }
+  timeMs_ += static_cast<double>(frames) * 1000.0 / fs_; for (auto& s : strips_) s.meter.end(timeMs_);
+}
 void Mixer::setMute(int s, bool on) { if (s >= 0 && s < n_) strips_[s].mute = on; }
 void Mixer::setSolo(int s, bool on) { if (s >= 0 && s < n_) strips_[s].solo = on; }
 void Mixer::setMasterDb(double db) { db = std::min(db, 10.0); masterDb_ = db; masterLin_ = db <= -60.0 ? 0.0 : linOf(db); }

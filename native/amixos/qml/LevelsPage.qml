@@ -8,7 +8,7 @@ Item {
         anchors.fill: parent; anchors.margins: 10; spacing: 8
         Panel {
             Layout.fillWidth: true; Layout.fillHeight: true
-            title: "LEVELS"
+            title: i18n.t("LEVELS", i18n.lang)
             subtitle: "Peak (white line), RMS (bar), hold (amber), clip lamp. The master meters follow the limiter."
             RowLayout {
                 Layout.fillWidth: true; Layout.fillHeight: true; spacing: 3
@@ -25,7 +25,7 @@ Item {
                     RowLayout { Layout.fillHeight: true; spacing: 4
                         MeterBar { Layout.fillHeight: true; implicitWidth: 18; Layout.topMargin: 10; peakDb: engine.telemetry.masterLDb; rmsDb: engine.telemetry.masterRmsDb; clip: engine.telemetry.masterClip }
                         MeterBar { Layout.fillHeight: true; implicitWidth: 18; Layout.topMargin: 10; peakDb: engine.telemetry.masterRDb; rmsDb: engine.telemetry.masterRmsDb; clip: engine.telemetry.masterClip } }
-                    Text { Layout.alignment: Qt.AlignHCenter; text: "MASTER"; color: Theme.orange; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
+                    Text { Layout.alignment: Qt.AlignHCenter; text: i18n.t("MASTER", i18n.lang); color: Theme.orange; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
                     Text { Layout.alignment: Qt.AlignHCenter; text: Theme.dbText(engine.telemetry.masterPeakDb); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8 } }
             }
         }

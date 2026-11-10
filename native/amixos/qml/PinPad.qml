@@ -6,7 +6,7 @@ import QtQuick.Layouts
 Item {
     id: pad
     property string pin: ""
-    property string hint: "ENTER PIN"
+    property string hint: i18n.t("ENTER PIN", i18n.lang)
     signal entered(string pin)
     implicitWidth: 170; implicitHeight: col.implicitHeight
     ColumnLayout {

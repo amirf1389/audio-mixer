@@ -14,7 +14,7 @@ Flickable {
         y: 24
         spacing: 16
         Text { text: Theme.product; color: Theme.ink; font.family: Theme.sans; font.pixelSize: 30; font.weight: Font.Black }
-        Text { text: "Native console, version " + appVersion + " • " + engine.edition + " tier • engine " + (engine.running ? engine.backend : "idle"); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 10 }
+        Text { text: i18n.t("Native console, version ", i18n.lang) + appVersion + " • " + engine.edition + i18n.t(" tier • engine ", i18n.lang) + (engine.running ? engine.backend : i18n.t("idle", i18n.lang)); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 10 }
         Text { text: engine.status; color: engine.running ? Theme.emerald : Theme.amber; font.family: Theme.mono; font.pixelSize: 10; Layout.fillWidth: true; wrapMode: Text.WordWrap }
         GridLayout {
             columns: page.width > 900 ? 3 : (page.width > 560 ? 2 : 1)
@@ -40,7 +40,7 @@ Flickable {
         }
         Panel {
             Layout.fillWidth: true
-            title: "WHAT THIS BUILD CARRIES OVER"
+            title: i18n.t("WHAT THIS BUILD CARRIES OVER", i18n.lang)
             subtitle: "The web console (AmF X1 1.22.1.0 Beta) is retired; its pages return here one by one as native pages. Dimmed pages on the rail are not ported yet."
         }
     }

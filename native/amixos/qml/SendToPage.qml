@@ -17,7 +17,7 @@ Item {
             Layout.fillWidth: true; implicitHeight: 34; radius: 8; color: Theme.card; border.color: Theme.line
             RowLayout {
                 anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 6
-                Text { text: "SEND TO:"; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
+                Text { text: i18n.t("SEND TO:", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
                 Repeater { model: engine.busState; delegate: Rectangle { implicitWidth: bl.implicitWidth + 12; implicitHeight: 20; radius: 4; color: page.bus === index ? (modelData.kind === "fx" ? "#a78bfa" : Theme.emerald) : Theme.ov(0.06); border.color: modelData.kind === "fx" ? Qt.rgba(0.65, 0.55, 1, 0.4) : Qt.rgba(0.2, 0.9, 0.5, 0.35)
                     Text { id: bl; anchors.centerIn: parent; text: modelData.name; color: page.bus === index ? "#000" : (modelData.kind === "fx" ? "#a78bfa" : Theme.emerald); font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.bus = index } } }
                 Item { Layout.fillWidth: true }
@@ -43,10 +43,10 @@ Item {
                                 anchors.fill: parent; anchors.margins: 4; spacing: 4
                                 Text { Layout.fillWidth: true; text: st ? st.name : ""; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight }
                                 Rectangle { Layout.alignment: Qt.AlignHCenter; implicitWidth: 34; implicitHeight: 16; radius: 3; color: sd && sd.pre ? Theme.cyan : Theme.ov(0.08)
-                                    Text { anchors.centerIn: parent; text: sd && sd.pre ? "PRE" : "POST"; color: sd && sd.pre ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
+                                    Text { anchors.centerIn: parent; text: sd && sd.pre ? i18n.t("PRE", i18n.lang) : i18n.t("POST", i18n.lang); color: sd && sd.pre ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
                                     MouseArea { anchors.fill: parent; onClicked: engine.setSend(strip, page.bus, sd ? sd.db : -60, !(sd && sd.pre)) } }
                                 Fader { Layout.fillHeight: true; Layout.alignment: Qt.AlignHCenter; value: sd ? sd.db : -60; onMoved: function (db) { engine.setSend(strip, page.bus, db, sd ? sd.pre : false) } }
-                                Text { Layout.alignment: Qt.AlignHCenter; text: sd && sd.db > -60 ? Theme.dbText(sd.db) : "OFF"; color: sd && sd.db > -60 ? Theme.amber : Theme.dim; font.family: Theme.mono; font.pixelSize: 8 }
+                                Text { Layout.alignment: Qt.AlignHCenter; text: sd && sd.db > -60 ? Theme.dbText(sd.db) : i18n.t("OFF", i18n.lang); color: sd && sd.db > -60 ? Theme.amber : Theme.dim; font.family: Theme.mono; font.pixelSize: 8 }
                             }
                         }
                     }
@@ -61,9 +61,9 @@ Item {
                     RowLayout { Layout.fillHeight: true; Layout.alignment: Qt.AlignHCenter; spacing: 8
                         Fader { Layout.fillHeight: true; value: page.b ? page.b.db : 0; onMoved: function (db) { engine.setBusLevel(page.bus, db) } }
                         MeterBar { Layout.fillHeight: true; Layout.topMargin: 8; peakDb: page.bm ? page.bm.peakDb : -120; rmsDb: page.bm ? page.bm.rmsDb : -120; holdDb: page.bm ? page.bm.holdDb : -120; clip: page.bm ? page.bm.clip : false } }
-                    Text { Layout.alignment: Qt.AlignHCenter; text: Theme.dbText(page.b ? page.b.db : 0) + " dB"; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9 }
-                    Rectangle { Layout.fillWidth: true; implicitHeight: 20; radius: 3; color: page.b && page.b.mute ? Theme.danger : Theme.ov(0.08); Text { anchors.centerIn: parent; text: "MUTE"; color: page.b && page.b.mute ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setBusMute(page.bus, !(page.b && page.b.mute)) } }
-                    Text { text: "RETURN TO MASTER  " + (page.b && page.b.returnDb > -60 ? Theme.dbText(page.b.returnDb) + " dB" : "OFF"); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7 }
+                    Text { Layout.alignment: Qt.AlignHCenter; text: Theme.dbText(page.b ? page.b.db : 0) + i18n.t(" dB", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9 }
+                    Rectangle { Layout.fillWidth: true; implicitHeight: 20; radius: 3; color: page.b && page.b.mute ? Theme.danger : Theme.ov(0.08); Text { anchors.centerIn: parent; text: i18n.t("MUTE", i18n.lang); color: page.b && page.b.mute ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setBusMute(page.bus, !(page.b && page.b.mute)) } }
+                    Text { text: i18n.t("RETURN TO MASTER  ", i18n.lang) + (page.b && page.b.returnDb > -60 ? Theme.dbText(page.b.returnDb) + i18n.t(" dB", i18n.lang) : i18n.t("OFF", i18n.lang)); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7 }
                     Slider { Layout.fillWidth: true; from: -60; to: 10; stepSize: 0.5; value: page.b ? page.b.returnDb : -60; onMoved: engine.setBusReturn(page.bus, value) }
                 }
             }

@@ -42,16 +42,16 @@ Item {
         Rectangle {
             Layout.fillWidth: true; implicitHeight: 34; radius: 8; color: Theme.card; border.color: Theme.line
             RowLayout { anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 6
-                Text { text: "DIAGNOSTICS:"; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
-                Text { text: "power-on self test · safe mode · restart · factory reset"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
+                Text { text: i18n.t("DIAGNOSTICS:", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
+                Text { text: i18n.t("power-on self test · safe mode · restart · factory reset", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                 Item { Layout.fillWidth: true }
-                Text { readonly property int bad: { let n = 0; for (let i = 0; i < page.rows.length; ++i) if (!page.rows[i].ok) ++n; return n } text: page.rows.length ? (bad === 0 ? "ALL CHECKS OK" : bad + " CHECK(S) NEED ATTENTION") : ""; color: bad === 0 ? Theme.emerald : Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-                Btn { label: "RUN AUDIT"; on: true; onColor: Theme.cyan; onClicked: page.audit() } }
+                Text { readonly property int bad: { let n = 0; for (let i = 0; i < page.rows.length; ++i) if (!page.rows[i].ok) ++n; return n } text: page.rows.length ? (bad === 0 ? i18n.t("ALL CHECKS OK", i18n.lang) : bad + i18n.t(" CHECK(S) NEED ATTENTION", i18n.lang)) : ""; color: bad === 0 ? Theme.emerald : Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                Btn { label: i18n.t("RUN AUDIT", i18n.lang); on: true; onColor: Theme.cyan; onClicked: page.audit() } }
         }
         Rectangle {
             Layout.fillWidth: true; Layout.fillHeight: true; radius: Theme.radius; color: Theme.card; border.color: Theme.line; clip: true
             ColumnLayout { anchors.fill: parent; anchors.margins: 12; spacing: 4
-                Text { text: "POWER-ON SELF TEST"; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
+                Text { text: i18n.t("POWER-ON SELF TEST", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
                 Repeater { model: page.rows; delegate: Rectangle { Layout.fillWidth: true; implicitHeight: 30; radius: 4; color: Theme.ov(0.03)
                     RowLayout { anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 8; spacing: 10
                         Rectangle { width: 8; height: 8; radius: 4; color: modelData.ok ? Theme.emerald : Theme.amber }

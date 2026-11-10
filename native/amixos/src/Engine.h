@@ -274,7 +274,9 @@ class Engine : public QObject {
   Q_INVOKABLE void flattenAllDsp();
   // PLUGIN slots: 10 per strip. A slot holds a built-in stage (gate | eq | xover | comp | limiter | delay | polarity: inserting it switches that
   // stage on, removing it switches it off) or a VST3 reference ("vst3:<path>"), kept for the VST3 host that is not built yet (shown as pending).
-  static constexpr int kPluginSlots = 10;
+  static constexpr int kPluginSlots = 64;   // the rack's capacity; what an edition may fill: pluginSlotLimit() (BASIC 10, PRO / STUDIO / MASTER all 64 = unlimited in practice)
+  Q_PROPERTY(int pluginSlotLimit READ pluginSlotLimit NOTIFY licenseChanged)
+  int pluginSlotLimit() const { const QString p = license_.value("plan", "basic").toString(); return p == "basic" ? 10 : kPluginSlots; }
   Q_INVOKABLE QVariantList plugins(int strip) const;  // [{slot, kind, name, bypass, builtIn, pending}]
   Q_INVOKABLE void setPlugin(int strip, int slot, const QString& kind);   // "" clears the slot
   Q_INVOKABLE void setPluginBypass(int strip, int slot, bool bypass);

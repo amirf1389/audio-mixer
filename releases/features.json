@@ -1,0 +1,12 @@
+{
+  "_": "The feature feed: newest first. scripts/make-update.js embeds it in the signed update.json; the console shows a NEW badge for entries newer than the version last looked at. Edit on the website's manage.html (Release manager) or by hand, then run node scripts/make-update.js.",
+  "features": [
+    { "version": "1.23.0.1", "date": "2026-11-10", "title": "Release 1.23.0.1 stable", "items": [
+      "ACOUSTICS extension: log sine sweep and stepped sine (amplitude, phase, THD, THD+N, SMPTE IMD), RTA to 1/48 octave with RMS averaging and level alignment, impulse response, ETC, RT60 / Topt, delay compensation, waterfall, spectrogram, room simulator, auto EQ with parametric target curves (20 - 400 Hz) exported to REW / miniDSP text and JSON, mic calibration files, SPL offset, offline sweep WAV",
+      "5.0 surround in the SDK (API v3): per-strip DEPTH, amix_mixer_process5",
+      "Plug-in slots: 10 on BASIC, unlimited on PRO, STUDIO and MASTER",
+      "Every console text follows the language menu (21 languages with full interface tables)",
+      "WHAT'S NEW feed with a NEW badge in the header, managed from the website's release manager"
+    ] }
+  ]
+}

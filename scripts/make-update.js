@@ -10,11 +10,13 @@ const { signManifest } = require('../bridge/update');
 const { keyFor, vendorDir } = require('./license');
 
 const { ROOT, osOfKey, releasesRel, findRelease } = require('./layout');
+function readFeatures() { try { const f = JSON.parse(fs.readFileSync(path.join(ROOT, 'releases', 'features.json'), 'utf8')); return Array.isArray(f.features) ? f.features : []; } catch (_) { return []; } }
 const arg = (a, n, d) => { const i = a.indexOf(n); return i >= 0 ? a[i + 1] : d; };
 
 // `releases`: one flat folder that holds all the files (URLs are base/<file>); without it the files are looked up in <os>/releases/ and the URLs follow that layout,
 // unless `flatUrls` is set (a server that serves every file from one /releases/ folder, see scripts/ota.js).
-function build({ releases, flatUrls = false, version, base, notes = [], now = new Date() } = {}) {
+// `features`: releases/features.json (the feature feed the console shows as WHAT'S NEW with a NEW badge; edited on the website's manage page or by hand)
+function build({ releases, flatUrls = false, version, base, notes = [], features = readFeatures(), now = new Date() } = {}) {
   const sha = f => crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex');
   const want = {
     // the setup program: its name since the rename to AmF X1, then the one before it
@@ -34,7 +36,7 @@ function build({ releases, flatUrls = false, version, base, notes = [], now = ne
     files[key] = { name, url: `${base}/${rel}${encodeURIComponent(name)}`, size: fs.statSync(f).size, sha256: sha(f) };
   }
   if (!Object.keys(files).length) throw new Error('no release files for version ' + version + ' in ' + (releases || '<os>/releases'));
-  return { product: 'audio-mixer', version, channel: require('./release-label').channel() || 'stable', released: now.toISOString().slice(0, 10), notes, files };
+  return { product: 'audio-mixer', version, channel: require('./release-label').channel() || 'stable', released: now.toISOString().slice(0, 10), notes, features, files };
 }
 
 if (require.main === module) (async () => {
