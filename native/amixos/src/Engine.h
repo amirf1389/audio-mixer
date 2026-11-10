@@ -207,7 +207,11 @@ class Engine : public QObject {
   Q_INVOKABLE bool saveEqPreset(int slot, const QString& name, int strip);   // user slots only
   Q_INVOKABLE bool clearEqPreset(int slot);
   Q_INVOKABLE int stripEqPreset(int strip) const { return strip >= 0 && strip < kStrips ? strips_[static_cast<std::size_t>(strip)].eqPreset : 0; }   // the last preset applied (0 after an edit)
-  Q_INVOKABLE QVariantList eqPresetCurve(int slot, int points) const;        // [{f, db}] the preset's response, for the picker                                          // EQ bands + high-pass of this strip onto every other strip
+  Q_INVOKABLE QVariantList eqPresetCurve(int slot, int points) const;        // [{f, db}] the preset's response, for the picker
+  // RTA EQ (the beta's "10-band program bus EQ & diamond RTA"): ten custom graphic-EQ slots, each a name + 10 ISO band gains
+  Q_INVOKABLE QVariantList geqSlots() const;                                 // [{slot 1..10, name, gains: [10], empty}]
+  Q_INVOKABLE bool saveGeqSlot(int slot, const QString& name, const QVariantList& gains);
+  Q_INVOKABLE bool clearGeqSlot(int slot);                                          // EQ bands + high-pass of this strip onto every other strip
   am::Runtime* runtime() { return rt_.get(); }
   // strips
   Q_INVOKABLE void setGain(int strip, double db);

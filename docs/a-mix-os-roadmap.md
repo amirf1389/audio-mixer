@@ -118,6 +118,12 @@ decided, what exists, what is next, and what was asked for but is not possible a
   "another one is already open"), a driver reset waits for the bufferSwitch in flight before disposing buffers, stop() does the same,
   and a stopped or resetting stream writes silence into the driver's buffers instead of stale output. Cross-compiled with mingw -Werror.
 
+- **RTA EQ** (`RtaEqPage.qml`, page id `rtaeq`, after TONE): the beta's "10-BAND PROGRAM BUS EQ & DIAMOND RTA" on the native engine:
+  PAGE 1 the DIAMOND response curve (drag a diamond, wheel for 0.5 dB) over a 64-bar spectrum behind it (the strip after its DSP, from
+  the engine analyser; RTA ON/OFF, FREEZE), PAGE 2 the ten ISO faders +-12 dB, SPLIT both; the toolbar with GOLDEN EQ (Amix by AMFB
+  tuned +1,+5,+3,+3,+4,+2,+2,+3,+3,+1), CUSTOM EQ / SAVE CUSTOM (slot 1), ANIX W-SHAPE, the 15 standard + 15 MIC presets, FLAT; ten
+  CUSTOM PRESET USER SLOTS (LOAD / SAVE / DELETE, `geqSlots` in QSettings). The bands are the strip's own ten (TONE / MIC EQ edit the same).
+
 ## Next, in order
 
 1. **Windows .exe in hand**: run the Actions workflow, download `amixos-windows-x64.zip`, test ASIO (UM2, Focusrite, ASIO4ALL, Realtek) on the user's PC. Fix what the real drivers show.

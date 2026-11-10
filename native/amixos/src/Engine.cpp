@@ -567,6 +567,21 @@ QVariantList Engine::eqPresetCurve(int slot, int points) const {
   for (int k = 0; k < points; ++k) { const double f = 20.0 * std::pow(1000.0, static_cast<double>(k) / (points - 1)); QVariantMap m; m["f"] = f; m["db"] = ch.gainDbAt(f); l << m; }
   return l;
 }
+QVariantList Engine::geqSlots() const {
+  const QJsonArray arr = QJsonDocument::fromJson(settings_.value("eq/geqSlots").toByteArray()).array(); QVariantList l;
+  for (int u = 0; u < 10; ++u) { const QJsonObject o = u < arr.size() ? arr[u].toObject() : QJsonObject(); QVariantMap m; m["slot"] = u + 1; const QString n = o.value("name").toString(); m["empty"] = n.isEmpty(); m["name"] = n.isEmpty() ? QStringLiteral("Custom %1").arg(u + 1) : n;
+    QVariantList g; const QJsonArray ga = o.value("gains").toArray(); for (int b = 0; b < 10; ++b) g << (b < ga.size() ? std::clamp(ga[b].toDouble(), -12.0, 12.0) : 0.0); m["gains"] = g; l << m; }
+  return l;
+}
+bool Engine::saveGeqSlot(int slot, const QString& name, const QVariantList& gains) {
+  if (slot < 1 || slot > 10) return false; QJsonArray arr = QJsonDocument::fromJson(settings_.value("eq/geqSlots").toByteArray()).array(); while (arr.size() < 10) arr << QJsonObject();
+  QJsonObject o; o["name"] = name.trimmed().isEmpty() ? QStringLiteral("Custom %1").arg(slot) : name.trimmed().left(24); QJsonArray g; for (int b = 0; b < 10; ++b) g << (b < gains.size() ? std::clamp(gains[b].toDouble(), -12.0, 12.0) : 0.0); o["gains"] = g; arr[slot - 1] = o;
+  settings_.setValue("eq/geqSlots", QJsonDocument(arr).toJson(QJsonDocument::Compact)); emit presetsChanged(); return true;
+}
+bool Engine::clearGeqSlot(int slot) {
+  if (slot < 1 || slot > 10) return false; QJsonArray arr = QJsonDocument::fromJson(settings_.value("eq/geqSlots").toByteArray()).array(); while (arr.size() < 10) arr << QJsonObject(); arr[slot - 1] = QJsonObject();
+  settings_.setValue("eq/geqSlots", QJsonDocument(arr).toJson(QJsonDocument::Compact)); emit presetsChanged(); return true;
+}
 QVariantList Engine::responseCurve(int i, int points) const {
   QVariantList l; if (i < 0 || i >= kStrips) return l; points = std::clamp(points, 8, 512);
   for (int k = 0; k < points; ++k) { const double f = 20.0 * std::pow(1000.0, static_cast<double>(k) / (points - 1)); QVariantMap m; m["f"] = f; m["db"] = strips_[static_cast<std::size_t>(i)].dsp.gainDbAt(f); l << m; }
@@ -578,7 +593,7 @@ QVariantList Engine::pages() const {
   struct P { const char* group; const char* id; const char* text; const char* icon; bool ready; };
   static const P k[] = {
     {"START", "home", "HOME", "⌂", true},
-    {"MIX", "mixer", "MIXER", "☰", true}, {"MIX", "arrange", "ARRANGE", "≡", true}, {"MIX", "dsp", "TONE (EQ)", "∿", true}, {"MIX", "dyn", "COMPRESSOR", "⩏", true}, {"MIX", "gate", "NOISE GATE", "▣", true},
+    {"MIX", "mixer", "MIXER", "☰", true}, {"MIX", "arrange", "ARRANGE", "≡", true}, {"MIX", "dsp", "TONE (EQ)", "∿", true}, {"MIX", "rtaeq", "RTA EQ", "◭", true}, {"MIX", "dyn", "COMPRESSOR", "⩏", true}, {"MIX", "gate", "NOISE GATE", "▣", true},
     {"MIX", "fx", "EFFECTS", "✨", true}, {"MIX", "bus", "SEND TO", "⇉", true}, {"MIX", "dca", "GROUP FADERS", "☷", true},
     {"ROUTE", "io", "CONNECTIONS", "⚡", true}, {"ROUTE", "routing", "ROUTING", "⎇", true},
     {"METER", "meter", "LEVELS", "▓", true}, {"METER", "lufs", "LOUDNESS", "◎", true}, {"METER", "osc", "WAVEFORM", "∽", true}, {"METER", "phase", "PHASE", "☯", true},
