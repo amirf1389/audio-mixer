@@ -37,7 +37,15 @@
 // real time passes (processEvents alone returns at once when the queue is empty)
 static void waitMs(int ms) { QElapsedTimer t; t.start(); while (t.elapsed() < ms) { QCoreApplication::processEvents(QEventLoop::AllEvents, 10); QThread::msleep(5); } }
 
+// Every Qt / QML message also goes to <data>/console.log (the console has no terminal on Windows): QML errors, missing imports, the render
+// backend. The last 500 lines are kept; --software draws with the CPU raster renderer when the graphics driver refuses D3D11 / OpenGL.
+static QFile* g_log = nullptr;
+static void logToFile(QtMsgType t, const QMessageLogContext&, const QString& m) {
+  static const char* kind[] = {"debug", "warning", "critical", "fatal", "info"}; const QByteArray line = QDateTime::currentDateTime().toString("HH:mm:ss.zzz ").toUtf8() + kind[int(t) < 5 ? int(t) : 0] + ": " + m.toUtf8() + "\n";
+  std::fputs(line.constData(), stderr); if (g_log && g_log->isOpen()) { g_log->write(line); g_log->flush(); }
+}
 int main(int argc, char* argv[]) {
+  for (int i = 1; i < argc; ++i) { const QByteArray a(argv[i]); if (a == "--software") QQuickWindow::setGraphicsApi(QSGRendererInterface::Software); else if (a == "--opengl") QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL); }
   QGuiApplication app(argc, argv);
   app.setOrganizationName("AMFB Audio");
   am::lic::setProgramDir(QCoreApplication::applicationDirPath().toStdString());   // edition-token.json next to the program (paid editions)
@@ -51,6 +59,7 @@ int main(int argc, char* argv[]) {
   for (int i = 1; i < argc; ++i) { const QString a = QString::fromLocal8Bit(argv[i]); if (a == "--smoke") smoke = true; else if (a == "--shots" && i + 1 < argc) { smoke = true; shots = QString::fromLocal8Bit(argv[++i]); } else if (a == "--lang" && i + 1 < argc) lang = QString::fromLocal8Bit(argv[++i]); }
 
   am::paths::setProgramDir(QCoreApplication::applicationDirPath().toStdString());
+  if (!smoke) { QFile* lf = new QFile(QString::fromStdString(am::paths::file("console.log"))); if (lf->size() > 256 * 1024) lf->remove(); if (lf->open(QIODevice::Append | QIODevice::Text)) { g_log = lf; qInstallMessageHandler(logToFile); qInfo("AmF X1 %s starting: %s, Qt %s, render %s", AMIX_VERSION, am::paths::osName(), qVersion(), QQuickWindow::graphicsApi() == QSGRendererInterface::Software ? "software" : "auto"); } }
   Engine engine; I18n i18n; Arrange arrange(&engine); Settings settings(&engine); if (smoke) settings.finishSetup(); Access access(&engine); Osc osc(&engine); Media media(&engine); Samples samples(&engine); Update update(QStringLiteral(AMIX_VERSION));
   if (!lang.isEmpty()) i18n.setLang(lang);   // --lang fa: start in that language (also for --shots)
   QQmlApplicationEngine qml;

@@ -152,6 +152,12 @@ decided, what exists, what is next, and what was asked for but is not possible a
   `releases/windows/AmF-X1-<version>-windows-x64.zip`: amixos.exe, amixos-daemon.exe, AmF X1.exe, the ASIO DLL, the Qt runtime (DLLs,
   qwindows platform plugin, image plugins, QML modules), qt.conf, README. Unsigned, and not run on Windows from the build machine.
 
+- **Packages** (`scripts/build-all-packages.sh`): the Windows setup (`install/windows/amfx1.nsi`, NSIS: Program Files, shortcuts, uninstaller
+  that asks before removing the data, optional ASIO driver registration), the console zip, the APK (`android/`, Gradle + NDK 26: the
+  engine's `std::atomic<std::shared_ptr>` became `std::atomic_load / atomic_store` on a shared_ptr, which libc++ lacks; app name AmF X1;
+  signed with the debug key until the vendor's keystore is set) and the Linux tarball, all under `releases/` with checksums. The console
+  writes `<data>/console.log` (every Qt / QML message) and takes `--software` / `--opengl` for the render backend.
+
 ## Next, in order
 
 1. **Windows .exe in hand**: run the Actions workflow, download `amixos-windows-x64.zip`, test ASIO (UM2, Focusrite, ASIO4ALL, Realtek) on the user's PC. Fix what the real drivers show.

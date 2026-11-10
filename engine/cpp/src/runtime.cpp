@@ -103,7 +103,7 @@ void Runtime::setAutomix(int s, bool on, double w) { post({kAutomix, s, on ? 1.0
 void Runtime::setAutoLevel(bool on, double t, double m) { post({kAutoLevel, on ? 1 : 0, t, m, 0}); }
 void Runtime::setBusProcessor(int b, BusProcessor* p) { Cmd c{kBusFx, b, 0, 0, 0}; c.p = p; post(c); }
 void Runtime::setWidth(double w) { post({kWidth, 0, w, 0, 0}); }
-void Runtime::setInserts(int strip, std::shared_ptr<const InsertChain> chain) { if (strip >= 0 && strip < kMaxStrips) inserts_[strip].store(std::move(chain)); }
+void Runtime::setInserts(int strip, std::shared_ptr<const InsertChain> chain) { if (strip >= 0 && strip < kMaxStrips) std::atomic_store(&inserts_[strip], std::move(chain)); }
 void Runtime::setTrimDb(int strip, double db) { if (strip < 0 || strip >= kMaxStrips) return; post({kTrim, strip, std::pow(10.0, std::clamp(db, -24.0, 24.0) / 20), 0, 0}); }
 void Runtime::setMonitor(int source, double db, bool dim, bool mono, bool mute) {
   double lin = std::pow(10.0, std::clamp(db, -120.0, 10.0) / 20); if (dim) lin *= 0.1; if (mute || db <= -119) lin = 0;
@@ -159,7 +159,7 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
     ins[s] = (src >= 0 && src < nIn_ && in && in[src]) ? in[src] : silence_.data();
     dsp::Channel& ch = ch_[static_cast<std::size_t>(s)];
     const double tr = trim_[s];
-    const std::shared_ptr<const InsertChain> chain = inserts_[s].load();
+    const std::shared_ptr<const InsertChain> chain = std::atomic_load(&inserts_[s]);
     const bool anyInsert = chain && !chain->empty();
     if (ch.active() || tr != 1.0 || anyInsert) {   // the strip's input trim, channel DSP and inserts, in a scratch block
       float* b = chBuf_[static_cast<std::size_t>(s)].data();

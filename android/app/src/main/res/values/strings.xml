@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">A mix OS</string>
-    <string name="engine_version">A mix OS · engine %1$s</string>
+    <string name="app_name">AmF X1</string>
+    <string name="engine_version">AmF X1 · engine %1$s</string>
     <string name="mic_in">MICROPHONE → CH 1</string>
     <string name="fader">FADER</string>
     <string name="pan">PAN</string>
@@ -11,7 +11,7 @@
     <string name="start">START</string>
     <string name="stop">STOP</string>
     <string name="note">Use headphones: the microphone plays back through the speaker otherwise. The engine is the same C++ as the desktop console (libamix); audio I/O goes through AudioRecord / AudioTrack.</string>
-    <string name="remote_title">A mix OS remote</string>
+    <string name="remote_title">AmF X1 remote</string>
     <string name="open_remote">REMOTE CONTROL (console on the LAN)</string>
     <string name="connect">CONNECT</string>
     <string name="devices">DEVICES</string>
