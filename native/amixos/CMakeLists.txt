@@ -72,6 +72,7 @@ qt_add_qml_module(amixos
         qml/MixerPage.qml
         qml/TonePage.qml
         qml/RtaEqPage.qml
+        qml/BluetoothPage.qml
         qml/CompressorPage.qml
         qml/GatePage.qml
         qml/DynCurve.qml

@@ -124,6 +124,16 @@ decided, what exists, what is next, and what was asked for but is not possible a
   tuned +1,+5,+3,+3,+4,+2,+2,+3,+3,+1), CUSTOM EQ / SAVE CUSTOM (slot 1), ANIX W-SHAPE, the 15 standard + 15 MIC presets, FLAT; ten
   CUSTOM PRESET USER SLOTS (LOAD / SAVE / DELETE, `geqSlots` in QSettings). The bands are the strip's own ten (TONE / MIC EQ edit the same).
 
+- **DirectSound backend** (`backend_dsound.cpp`, backend id `dsound`): render + capture through DirectSound, 16-bit, 8 periods, no
+  exclusive lock, the path every Bluetooth headset / speaker answers to; listed by `listDevices` ("{guid}" ids, "default"), in the C SDK
+  (`amix.h` backend "dsound"), the VS projects, build-native.js (`-ldsound -lwinmm`) and the Windows .exe. **Driver ladder step 4** =
+  DirectSound twin; the **fallback policy** (`drv::fallback` / `setFallback`, kept in the lock file: "all" = WASAPI exclusive, shared,
+  DirectSound; "dsound" = DirectSound only, WASAPI optional and never a lock; "none" = ASIO only) with AFTER ASIO chips on SOUND CARD.
+  **BLUETOOTH page** (ready): the endpoints whose name says Bluetooth / hands-free / A2DP / brand, DirectSound first, USE AS OUTPUT /
+  INPUT, START ENGINE ON BLUETOOTH, what to expect (A2DP vs HFP, codec latency). **RTA EQ parametric control**: TYPE / FREQUENCY / Q /
+  GAIN sliders for the selected band (click a diamond or B1-B10), ISO CENTRE, BAND OFF; the diamonds read the real bands.
+  None of the Windows backends has run on a Windows PC from here: the UM2 run needs the user's computer (Remote Control) or a Windows build.
+
 ## Next, in order
 
 1. **Windows .exe in hand**: run the Actions workflow, download `amixos-windows-x64.zip`, test ASIO (UM2, Focusrite, ASIO4ALL, Realtek) on the user's PC. Fix what the real drivers show.

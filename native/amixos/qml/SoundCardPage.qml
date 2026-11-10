@@ -36,6 +36,12 @@ Item {
                     Btn { label: "AUTO DETECT"; onClicked: engine.autoStart(settings.defaultFrames) }
                     Btn { label: settings.autoAsio ? "AUTO ASIO: ON" : "AUTO ASIO: OFF"; on: settings.autoAsio; onColor: Theme.cyan; onClicked: settings.autoAsio = !settings.autoAsio }
                     Btn { label: settings.smartStart ? "SMART START: ON" : "SMART START: OFF"; on: settings.smartStart; onColor: Theme.cyan; onClicked: settings.smartStart = !settings.smartStart } }
+                RowLayout { spacing: 6
+                    Text { text: "AFTER ASIO:"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
+                    Btn { label: "WASAPI + DIRECTSOUND"; on: engine.driverFallback === "all"; onColor: Theme.emerald; onClicked: engine.driverFallback = "all" }
+                    Btn { label: "DIRECTSOUND ONLY"; on: engine.driverFallback === "dsound"; onColor: Theme.emerald; onClicked: engine.driverFallback = "dsound" }
+                    Btn { label: "ASIO ONLY"; on: engine.driverFallback === "none"; onColor: Theme.amber; onClicked: engine.driverFallback = "none" }
+                    Text { text: engine.driverFallback === "all" ? "ASIO → WASAPI exclusive → WASAPI shared → DirectSound" : engine.driverFallback === "dsound" ? "ASIO → DirectSound (WASAPI is optional, never a lock)" : "ASIO, nothing else"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
                 Note { text: "Pick the interface itself on CONNECTIONS or LIVE SOURCES. AUTO ASIO opens the best driver (native ASIO before wrappers, Realtek pinned to WASAPI) when nothing is remembered; SMART START walks the driver ladder when the first choice fails. The ASIO control panel of a driver opens from the driver's own tray tool; the engine does not pop it up." } }
             Card { Head { text: "CLOCK & BLOCK" }
                 KV { k: "SAMPLE RATE"; v: engine.running ? engine.sampleRate + " Hz" : "—" }

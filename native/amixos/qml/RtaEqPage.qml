@@ -18,6 +18,9 @@ Flickable {
     property var gains: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     property var spec: []
     property string presetName: ""
+    property int band: 0                        // the band the PARAMETRIC sliders edit (click a diamond or a fader label)
+    property var bandNow: ({ type: 0, freq: 1000, q: 1.41, gainDb: 0 })
+    readonly property var typeNames: ["OFF", "PEAK", "LOW SHELF", "HIGH SHELF", "LOW PASS", "HIGH PASS", "NOTCH", "ALL-PASS 1", "ALL-PASS 2"]
     property int slotSel: 0
     property int slotTick: 0
     readonly property var bands: [31, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]
@@ -38,13 +41,15 @@ Flickable {
     clip: true
     boundsBehavior: Flickable.StopAtBounds
     ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
-    function reload() { const g = engine.graphicEq(strip); const o = []; for (let b = 0; b < 10; ++b) o.push(Math.max(-12, Math.min(12, g[b] || 0))); gains = o; curve.requestPaint() }
+    function reload() { const o = []; for (let b = 0; b < 10; ++b) { const e = engine.eqBand(strip, b); o.push(e.type > 0 ? Math.max(-12, Math.min(12, e.gainDb)) : 0) } gains = o; bandNow = engine.eqBand(strip, band); curve.requestPaint() }
+    function setParam(type, f, q, g) { engine.setEq(strip, band, type, f, q, g); presetName = "" }
     function apply(g) { const o = []; let any = false; for (let b = 0; b < 10; ++b) { o.push(Math.max(-12, Math.min(12, Number(g[b]) || 0))); if (o[b] !== 0) any = true } gains = o; engine.setGraphicEq(strip, o, any || true); curve.requestPaint() }
-    function setBand(b, v) { const o = gains.slice(); o[b] = Math.round(Math.max(-12, Math.min(12, v)) * 2) / 2; apply(o) }
+    function setBand(b, v) { const e = engine.eqBand(strip, b); const g = Math.round(Math.max(-12, Math.min(12, v)) * 2) / 2; band = b; engine.setEq(strip, b, g === 0 && e.type <= 1 ? 0 : (e.type > 0 ? e.type : 1), e.type > 0 ? e.freq : bands[b], e.type > 0 ? e.q : 1.41, g); presetName = "" }
     function loadPreset(name) { for (let i = 0; i < presets.length; ++i) if (presets[i].n === name) { apply(presets[i].g); presetName = name; return } }
     function dbText(v) { return (v > 0 ? "+" : "") + Number(v).toFixed(1) + "dB" }
     Component.onCompleted: { engine.setScopeStrip(strip); reload() }
     onStripChanged: { engine.setScopeStrip(strip); reload() }
+    onBandChanged: bandNow = engine.eqBand(strip, band)
     Connections { target: engine; function onStripsChanged() { page.reload() } function onPresetsChanged() { page.slotTick++ } }
     Timer { interval: 16; running: page.visible && page.rtaOn && !page.frozen; repeat: true; onTriggered: { page.spec = engine.spectrum(2); rta.requestPaint() } }
     component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; property color offColor: Qt.rgba(1, 1, 1, 0.08); signal clicked(); implicitWidth: bl.implicitWidth + 16; implicitHeight: 22; radius: 4; color: on ? onColor : offColor; border.color: on ? onColor : Theme.lineSoft
@@ -102,7 +107,7 @@ Flickable {
                         c.fillStyle = "#fbbf24"; c.fillText(page.dbText(page.gains[i]), p.x - 14, p.y - 11) } }
                 MouseArea { id: drag; anchors.fill: parent; property int band: -1
                     function bandAt(x) { const step = width / 11; let best = 0, bd = 1e9; for (let i = 0; i < 10; i++) { const d = Math.abs(x - step * (i + 1)); if (d < bd) { bd = d; best = i } } return best }
-                    onPressed: function (m) { band = bandAt(m.x); move(m) } onPositionChanged: function (m) { if (pressed) move(m) } onReleased: { band = -1; curve.requestPaint() }
+                    onPressed: function (m) { band = bandAt(m.x); page.band = band; move(m) } onPositionChanged: function (m) { if (pressed) move(m) } onReleased: { band = -1; curve.requestPaint() }
                     function move(m) { const midY = height / 2; page.setBand(band, (midY - m.y) / (height * 0.42) * 12) }
                     onWheel: function (w) { const b = bandAt(w.x); page.setBand(b, page.gains[b] + (w.angleDelta.y > 0 ? 0.5 : -0.5)) } } }
             Row { anchors.left: parent.left; anchors.top: parent.top; anchors.margins: 8; spacing: 6
@@ -124,6 +129,30 @@ Flickable {
                                 Rectangle { width: parent.width; y: Math.min(parent.height / 2, sl.visualPosition * parent.height); height: Math.abs(parent.height / 2 - sl.visualPosition * parent.height); radius: 3; color: page.gains[index] >= 0 ? Theme.amber : Theme.cyan } }
                             handle: Rectangle { x: sl.leftPadding + sl.availableWidth / 2 - width / 2; y: sl.topPadding + sl.visualPosition * (sl.availableHeight - height); width: 26; height: 14; radius: 3; color: "#1b2230"; border.color: Theme.ink; Rectangle { anchors.centerIn: parent; width: 18; height: 2; color: Theme.amber } } }
                         Text { Layout.alignment: Qt.AlignHCenter; text: page.dbText(page.gains[index]); color: page.gains[index] !== 0 ? Theme.amber : Theme.dim; font.family: Theme.mono; font.pixelSize: 8 } } } } }
+        // 2b. PARAMETRIC: the selected band's type, frequency, Q and gain as sliders (the diamond moves the gain; this moves everything)
+        Rectangle { Layout.fillWidth: true; implicitHeight: par.implicitHeight + 20; radius: Theme.radius; color: Theme.card; border.color: Theme.line
+            ColumnLayout { id: par; anchors.fill: parent; anchors.margins: 10; spacing: 6
+                RowLayout { Layout.fillWidth: true; spacing: 6
+                    Text { text: "PARAMETRIC CONTROL"; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 1 }
+                    Text { text: "band"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
+                    Repeater { model: 10; delegate: Rectangle { implicitWidth: 30; implicitHeight: 20; radius: 4; color: page.band === index ? Theme.amber : Qt.rgba(1, 1, 1, 0.08); border.color: page.gains[index] !== 0 ? Theme.cyan : "transparent"
+                        Text { anchors.centerIn: parent; text: "B" + (index + 1); color: page.band === index ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.band = index } } }
+                    Item { Layout.fillWidth: true }
+                    Text { text: page.typeNames[page.bandNow.type] + " · " + Math.round(page.bandNow.freq) + " Hz · Q " + Number(page.bandNow.q).toFixed(2) + " · " + page.dbText(page.bandNow.gainDb); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8 } }
+                GridLayout { columns: 4; columnSpacing: 10; rowSpacing: 2; Layout.fillWidth: true
+                    Text { text: "TYPE"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
+                    Text { text: "FREQUENCY  " + Math.round(page.bandNow.freq) + " Hz"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
+                    Text { text: "Q  " + Number(page.bandNow.q).toFixed(2) + "  (bandwidth " + (page.bandNow.q > 0 ? (1.44 / page.bandNow.q).toFixed(2) : "-") + " oct)"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
+                    Text { text: "GAIN  " + page.dbText(page.bandNow.gainDb); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
+                    ComboBox { Layout.fillWidth: true; implicitHeight: 24; font.family: Theme.mono; font.pixelSize: 8; model: page.typeNames; currentIndex: page.bandNow.type; onActivated: page.setParam(currentIndex, page.bandNow.freq, page.bandNow.q, page.bandNow.gainDb) }
+                    Slider { Layout.fillWidth: true; from: Math.log(20); to: Math.log(20000); value: Math.log(Math.max(20, page.bandNow.freq)); onMoved: page.setParam(page.bandNow.type || 1, Math.exp(value), page.bandNow.q, page.bandNow.gainDb) }
+                    Slider { Layout.fillWidth: true; from: 0.1; to: 12; value: page.bandNow.q; onMoved: page.setParam(page.bandNow.type || 1, page.bandNow.freq, value, page.bandNow.gainDb) }
+                    Slider { Layout.fillWidth: true; from: -12; to: 12; stepSize: 0.5; value: page.bandNow.gainDb; onMoved: page.setParam(page.bandNow.type || 1, page.bandNow.freq, page.bandNow.q, value) } }
+                RowLayout { spacing: 6
+                    Btn { label: "ISO CENTRE"; onClicked: page.setParam(page.bandNow.type || 1, page.bands[page.band], 1.41, page.bandNow.gainDb) }
+                    Btn { label: "Q 1.41 (2/3 oct)"; onClicked: page.setParam(page.bandNow.type || 1, page.bandNow.freq, 1.41, page.bandNow.gainDb) }
+                    Btn { label: "BAND OFF"; onClicked: page.setParam(0, page.bandNow.freq, page.bandNow.q, 0) }
+                    Text { text: "A band moved off its ISO centre keeps its gain on the diamond; the FREQUENCY and Q here are the band's real ones (the same ten bands as TONE (EQ))."; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } } } }
         // 3. CUSTOM PRESET USER SLOTS
         Rectangle { Layout.fillWidth: true; implicitHeight: slots.implicitHeight + 20; radius: Theme.radius; color: Theme.card; border.color: Theme.line
             ColumnLayout { id: slots; anchors.fill: parent; anchors.margins: 10; spacing: 6

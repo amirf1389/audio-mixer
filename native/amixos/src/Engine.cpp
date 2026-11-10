@@ -3,6 +3,7 @@
 #include "license/license.hpp"
 #include "fx/presets.hpp"
 #include <QFileSystemWatcher>
+static bool looksBluetooth(const QString& n);
 #include <QRegularExpression>
 #include "audiomixer/driver_intel.hpp"
 #include <QDir>
@@ -49,7 +50,7 @@ void Engine::refreshDevices() {
   devices_.clear();
   for (const am::DeviceInfo& d : am::listDevices()) {
     QVariantMap m; m["backend"] = QString::fromStdString(d.backend); m["id"] = QString::fromStdString(d.id); m["name"] = QString::fromStdString(d.name);
-    m["inChannels"] = d.inChannels; m["outChannels"] = d.outChannels; m["defaultRate"] = d.defaultRate; m["defaultIn"] = d.defaultIn; m["defaultOut"] = d.defaultOut;
+    m["inChannels"] = d.inChannels; m["outChannels"] = d.outChannels; m["defaultRate"] = d.defaultRate; m["defaultIn"] = d.defaultIn; m["defaultOut"] = d.defaultOut; m["bluetooth"] = looksBluetooth(m["name"].toString());
     QVariantList rates; for (double r : d.sampleRates) rates << r; m["sampleRates"] = rates;
     devices_ << m;
   }
@@ -225,6 +226,14 @@ QVariantList Engine::driverPlan(const QString& backend, const QString& in, const
 QVariantList Engine::driverLocks() const { QVariantList l; for (const auto& k : am::drv::locks()) { QVariantMap m; m["name"] = QString::fromStdString(k.name); m["mode"] = QString::fromStdString(k.mode); m["device"] = QString::fromStdString(k.device); m["reason"] = QString::fromStdString(k.reason); m["at"] = static_cast<qlonglong>(k.at); m["retryAt"] = k.mode == "asio" ? 0 : static_cast<qlonglong>(k.at + am::drv::kRetryMs); l << m; } return l; }
 QVariantList Engine::driverPins() const { QVariantList l; for (const auto& p : am::drv::pins(devInfos(devices_))) { QVariantMap m; m["name"] = QString::fromStdString(p.name); m["on"] = p.on; m["reason"] = QString::fromStdString(p.reason); l << m; } return l; }
 void Engine::setDriverPin(const QString& name, bool on) { am::drv::setPin(name.toStdString(), on); emit devicesChanged(); }
+QString Engine::driverFallback() const { return QString::fromStdString(am::drv::fallback()); }
+void Engine::setDriverFallback(const QString& f) { am::drv::setFallback(f.toStdString()); emit devicesChanged(); }
+static bool looksBluetooth(const QString& n) { static const QRegularExpression re("bluetooth|hands-free|hands free|\\bhfp\\b|a2dp|airpods|\\bbt\\b|wireless|headset|earbuds|buds|jbl|bose|sony wh|wf-|galaxy buds|soundcore|boat|beats", QRegularExpression::CaseInsensitiveOption); return re.match(n).hasMatch(); }
+QVariantList Engine::bluetoothDevices() const {
+  QVariantList l; for (const QVariant& v : devices_) { const QVariantMap d = v.toMap(); if (d["backend"] == "null" || d["backend"] == "asio") continue; if (!looksBluetooth(d["name"].toString())) continue; l << d; }
+  std::stable_sort(l.begin(), l.end(), [](const QVariant& a, const QVariant& b) { return (a.toMap()["backend"] == "dsound") > (b.toMap()["backend"] == "dsound"); });
+  return l;
+}
 int Engine::forgetDriverLocks(const QString& name) { const int n = am::drv::forget(name.toStdString()); emit devicesChanged(); return n; }
 bool Engine::openSmart(const QString& backend, const QString& in, const QString& out, double rate, int frames, int inCh, int outCh) {
   const qint64 now = QDateTime::currentMSecsSinceEpoch();
@@ -354,6 +363,7 @@ QVariantMap Engine::autoDetect() const {
     if (b == "asio") { const bool wrapper = am::drv::isWrapper(name.toStdString()); const bool pinned = am::drv::pinOf(name.toStdString()).on; rank = wrapper ? 60 : pinned ? 50 : 100; why = wrapper ? "an ASIO wrapper (ASIO4ALL-style): used when nothing has its own driver" : pinned ? "Realtek onboard: pinned to its Windows endpoint, SMART START routes it" : "the device's own ASIO driver"; }
     else if (b == "wasapi" || b == "coreaudio") { rank = (d["defaultOut"].toBool() ? 40 : 30) + (in && out ? 2 : 0); why = "the system's " + QString(d["defaultOut"].toBool() ? "default " : "") + "endpoint"; }
     else if (b == "alsa") { rank = (name.contains("default") ? 25 : 20); why = "an ALSA device"; }
+    else if (b == "dsound") { rank = (d["defaultOut"].toBool() ? 12 : 10) + (in && out ? 2 : 0); why = "DirectSound (no lock; the Bluetooth path)"; }
     if (rank > bestRank) { bestRank = rank; best = d; best["why"] = why; }
   }
   if (best.isEmpty()) return best;
@@ -598,7 +608,7 @@ QVariantList Engine::pages() const {
     {"ROUTE", "io", "CONNECTIONS", "⚡", true}, {"ROUTE", "routing", "ROUTING", "⎇", true},
     {"METER", "meter", "LEVELS", "▓", true}, {"METER", "lufs", "LOUDNESS", "◎", true}, {"METER", "osc", "WAVEFORM", "∽", true}, {"METER", "phase", "PHASE", "☯", true},
     {"SOURCE", "media", "STREAM & MEDIA", "▶", true}, {"SOURCE", "live", "LIVE SOURCES", "☉", true}, {"SOURCE", "miceq", "MIC EQ", "♪", true}, {"SOURCE", "ai", "AI MIX", "⚙", true}, {"SOURCE", "tools", "TOOLS", "⚒", true}, {"SOURCE", "plugins", "PLUGINS", "⬡", true}, {"SOURCE", "samples", "SAMPLES", "▦", true},
-    {"DEVICE", "asio", "SOUND CARD", "◉", true}, {"DEVICE", "bluetooth", "BLUETOOTH", "⮁", false}, {"DEVICE", "network", "NETWORK", "⮞", true}, {"DEVICE", "cloud", "CLOUD", "☁", false}, {"DEVICE", "cascade", "CASCADE", "⚭", false},
+    {"DEVICE", "asio", "SOUND CARD", "◉", true}, {"DEVICE", "bluetooth", "BLUETOOTH", "⮁", true}, {"DEVICE", "network", "NETWORK", "⮞", true}, {"DEVICE", "cloud", "CLOUD", "☁", false}, {"DEVICE", "cascade", "CASCADE", "⚭", false},
     {"SYSTEM", "presets", "PRESETS", "⬇", true}, {"SYSTEM", "sys", "SETTINGS", "⚙", true}, {"SYSTEM", "acct", "ACCOUNT", "☺", true}, {"SYSTEM", "access", "ACCESS", "⚿", true}, {"SYSTEM", "renew", "LICENSE", "★", true}, {"SYSTEM", "admin", "ADMIN", "⚑", true}, {"SYSTEM", "calib", "CALIBRATE", "⌖", true},
     {"HELP", "help", "HELP", "?", true}, {"HELP", "scenes", "SCENES", "⚐", true}, {"SYSTEM", "boot", "DIAGNOSTICS", "⏻", true},
   };
