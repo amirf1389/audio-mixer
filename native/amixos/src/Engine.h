@@ -22,6 +22,7 @@
 #include "record/recorder.hpp"
 #include "fx/fx.hpp"
 #include "Scope.h"
+#include "Generator.h"
 
 class Engine : public QObject {
   Q_OBJECT
@@ -139,7 +140,31 @@ class Engine : public QObject {
   Q_INVOKABLE QVariantMap autoDetect() const;      // {backend, in, out, name, why, inChannels, outChannels, rate} or empty
   Q_INVOKABLE bool autoStart(int frames);           // detect and SMART START it
   // an extra stereo source summed into the master (the ARRANGE player): attached to every runtime this Engine opens
-  void setExtraSource(am::Runtime::ExtraSource* s) { extra_ = s; if (rt_) rt_->setExtraSource(s); }
+  void setExtraSource(am::Runtime::ExtraSource* s) { extra_ = s; sources_.a.store(s); }
+  Q_INVOKABLE QVariantList spectrum(int channel);    // 31 third-octave bands in dBFS, 20 Hz .. 20 kHz; channel 0 master L, 1 R, 2 the scope strip
+  // TOOLS: test generator and metronome, summed into the master (pre master fader) with the ARRANGE player
+  Q_PROPERTY(bool testOn READ testOn WRITE setTestOn NOTIFY genChanged)
+  Q_PROPERTY(int testType READ testType WRITE setTestType NOTIFY genChanged)        // 0 sine, 1 pink, 2 white, 3 polarity pulse
+  Q_PROPERTY(double testFreq READ testFreq WRITE setTestFreq NOTIFY genChanged)
+  Q_PROPERTY(double testDb READ testDb WRITE setTestDb NOTIFY genChanged)
+  Q_PROPERTY(bool clickOn READ clickOn WRITE setClickOn NOTIFY genChanged)
+  Q_PROPERTY(double clickBpm READ clickBpm WRITE setClickBpm NOTIFY genChanged)
+  Q_PROPERTY(int clickBeats READ clickBeats WRITE setClickBeats NOTIFY genChanged)
+  Q_PROPERTY(double clickDb READ clickDb WRITE setClickDb NOTIFY genChanged)
+  Q_PROPERTY(int clickBeat READ clickBeat NOTIFY metersChanged)
+  bool testOn() const { return gen_.testOn.load(); } void setTestOn(bool v) { gen_.testOn.store(v); emit genChanged(); }
+  int testType() const { return gen_.testType.load(); } void setTestType(int v) { gen_.testType.store(std::clamp(v, 0, 3)); emit genChanged(); }
+  double testFreq() const { return gen_.testFreq.load(); } void setTestFreq(double v) { gen_.testFreq.store(std::clamp(v, 10.0, 20000.0)); emit genChanged(); }
+  double testDb() const { return gen_.testDb.load(); } void setTestDb(double v) { gen_.testDb.store(std::clamp(v, -60.0, 0.0)); emit genChanged(); }
+  bool clickOn() const { return gen_.clickOn.load(); } void setClickOn(bool v) { gen_.clickOn.store(v); emit genChanged(); }
+  double clickBpm() const { return gen_.bpm.load(); } void setClickBpm(double v) { gen_.bpm.store(std::clamp(v, 20.0, 300.0)); emit genChanged(); }
+  int clickBeats() const { return gen_.beatsPerBar.load(); } void setClickBeats(int v) { gen_.beatsPerBar.store(std::clamp(v, 1, 12)); emit genChanged(); }
+  double clickDb() const { return gen_.clickDb.load(); } void setClickDb(double v) { gen_.clickDb.store(std::clamp(v, -60.0, 0.0)); emit genChanged(); }
+  int clickBeat() const { return gen_.beat.load(); }
+  // MIC EQ: the 10 bands of a strip as a graphic equaliser on the ISO octave centres (31.5 Hz .. 16 kHz)
+  Q_INVOKABLE void setGraphicEq(int strip, const QVariantList& gainsDb, bool on);   // 10 gains; on = false keeps them but switches the bands off
+  Q_INVOKABLE QVariantList graphicEq(int strip) const;                             // the 10 gains (0 for a band that is not on an octave centre)
+  Q_INVOKABLE void copyEqToAll(int strip);                                          // EQ bands + high-pass of this strip onto every other strip
   am::Runtime* runtime() { return rt_.get(); }
   // strips
   Q_INVOKABLE void setGain(int strip, double db);
@@ -266,6 +291,7 @@ class Engine : public QObject {
   void licenseChanged();
   void historyChanged();
   void recordChanged();
+  void genChanged();
   void clipboardChanged();
 
  private:
@@ -282,7 +308,7 @@ class Engine : public QObject {
   int partner(int i) const { return (i ^ 1) < kStrips ? (i ^ 1) : -1; }
   void applyPluginStage(int strip, const QString& kind, bool on);   // a built-in stage follows its slot
   struct BusUi { QString name; double db = 0, returnDb = -60; bool mute = false; QString fxKind; std::unique_ptr<am::fx::Effect> fx; double fxMix = 1; bool fxBypass = false; std::map<QString, double> fxValues; };
-  std::vector<std::unique_ptr<am::fx::Effect>> fxGraveyard_; double width_ = 1.0; ScopeTap scope_; TapFanout taps_;
+  std::vector<std::unique_ptr<am::fx::Effect>> fxGraveyard_; double width_ = 1.0; ScopeTap scope_; TapFanout taps_; Generator gen_; SourceFanout sources_;
   void makeBusFx(int k);   // (re)creates the bus effect at the runtime's rate from kind + values and attaches it
   struct DcaUi { QString name; double db = 0; bool mute = false; };
   struct MuteGroupUi { QString name; bool active = false; };

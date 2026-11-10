@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <complex>
 
 ScopeTap::ScopeTap() { for (auto& r : ring_) r.assign(kRing, 0.f); }
 
@@ -32,4 +33,19 @@ ScopeTap::Figures ScopeTap::figures(int ch, std::size_t span) const {
   Figures f; f.vpp = mx - mn; f.vrms = std::sqrt(sq / static_cast<double>(span)); f.crest = f.vrms > 1e-9 ? 20 * std::log10(std::max(std::fabs(mn), std::fabs(mx)) / f.vrms) : 0;
   f.freq = crossings >= 2 ? static_cast<double>(crossings - 1) * fs_ / static_cast<double>(lastX - firstX) : 0;
   return f;
+}
+
+void ScopeTap::spectrum(int ch, std::vector<float>& bands) const {
+  ch = std::clamp(ch, 0, 2); constexpr std::size_t N = 4096; const std::size_t h = head_.load(std::memory_order_acquire); const std::vector<float>& r = ring_[ch];
+  std::vector<std::complex<double>> x(N);
+  for (std::size_t i = 0; i < N; ++i) { const double w = 0.5 - 0.5 * std::cos(2 * M_PI * static_cast<double>(i) / N); x[i] = r[(h - N + i) & (kRing - 1)] * w; }
+  for (std::size_t i = 1, j = 0; i < N; ++i) { std::size_t bit = N >> 1; for (; j & bit; bit >>= 1) j ^= bit; j ^= bit; if (i < j) std::swap(x[i], x[j]); }   // radix-2, in place
+  for (std::size_t len = 2; len <= N; len <<= 1) { const std::complex<double> wl = std::polar(1.0, -2 * M_PI / static_cast<double>(len)); for (std::size_t i = 0; i < N; i += len) { std::complex<double> w = 1; for (std::size_t k = 0; k < len / 2; ++k) { const std::complex<double> u = x[i + k], v = x[i + k + len / 2] * w; x[i + k] = u + v; x[i + k + len / 2] = u - v; w *= wl; } } }
+  bands.assign(kBands, -120.f); const double scale = 2.0 / (N * 0.5);   // Hann coherent gain 0.5
+  for (int b = 0; b < kBands; ++b) {
+    const double fc = 20.0 * std::pow(2.0, b / 3.0), lo = fc / std::pow(2.0, 1.0 / 6), hi = fc * std::pow(2.0, 1.0 / 6);
+    std::size_t k0 = static_cast<std::size_t>(std::floor(lo * N / fs_)), k1 = static_cast<std::size_t>(std::ceil(hi * N / fs_)); k0 = std::max<std::size_t>(1, k0); k1 = std::min(k1, N / 2 - 1); if (k1 < k0) k1 = k0;
+    double p = 0; for (std::size_t k = k0; k <= k1; ++k) { const double a = std::abs(x[k]) * scale; p += a * a; }
+    bands[static_cast<std::size_t>(b)] = static_cast<float>(p > 1e-12 ? 10 * std::log10(p) : -120.0);
+  }
 }

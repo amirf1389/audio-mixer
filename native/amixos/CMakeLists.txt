@@ -24,6 +24,7 @@ qt_add_executable(amixos
     src/Arrange.cpp src/Arrange.h
     src/Settings.cpp src/Settings.h
     src/Scope.cpp src/Scope.h
+    src/Generator.cpp src/Generator.h
     src/I18n.cpp src/I18n.h)
 set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)   # before qt_add_qml_module, or Theme is a plain type and every Theme.* colour is undefined
 qt_add_qml_module(amixos
@@ -45,6 +46,9 @@ qt_add_qml_module(amixos
         qml/EffectsPage.qml
         qml/WaveformPage.qml
         qml/PhasePage.qml
+        qml/MicEqPage.qml
+        qml/LiveSourcesPage.qml
+        qml/ToolsPage.qml
         qml/HomePage.qml
         qml/MixerPage.qml
         qml/TonePage.qml

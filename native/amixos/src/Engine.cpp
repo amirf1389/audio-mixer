@@ -33,7 +33,7 @@ Engine::Engine(QObject* parent) : QObject(parent) {
   for (auto sig : {&Engine::stripsChanged, &Engine::busesChanged, &Engine::groupsChanged, &Engine::monitorChanged, &Engine::routingChanged}) connect(this, sig, this, [this] { if (!restoring_) histTimer_.start(); });
   history_.push_back(consoleJson()); histPos_ = 0;
   graveTimer_.setSingleShot(true); graveTimer_.setInterval(1500); connect(&graveTimer_, &QTimer::timeout, this, [this] { graveyard_.clear(); fxGraveyard_.clear(); });
-  taps_.b.store(&scope_);   // removed plug-ins die on the UI thread, after the audio thread has let go
+  taps_.b.store(&scope_); sources_.b.store(&gen_);   // removed plug-ins die on the UI thread, after the audio thread has let go
   rescanVst(settings_.value("vst3/dirs").toStringList() + settings_.value("vst2/dirs").toStringList());
   connect(&timer_, &QTimer::timeout, this, &Engine::tick);
   tick();
@@ -61,7 +61,7 @@ bool Engine::open(const QString& backend, const QString& inDevice, const QString
   devIn_ = std::clamp(inChannels, 0, kStrips); devOut_ = std::clamp(outChannels, 0, kOutputs);
   std::string err;
   if (!rt_->open(cfg, err) || !rt_->start(err)) { status_ = QStringLiteral("Could not open the sound card: %1").arg(QString::fromStdString(err)); rt_.reset(); emit stateChanged(); return false; }
-  rt_->setExtraSource(extra_);
+  rt_->setExtraSource(&sources_);
   for (auto& s : strips_) s.dsp.setSampleRate(cfg.sampleRate);
   reloadAllVst(); pushAll();
   status_ = QStringLiteral("%1 • %2 Hz • %3 frames • %4 in / %5 out").arg(QString::fromStdString(rt_->backendName())).arg(cfg.sampleRate).arg(cfg.frames).arg(inChannels).arg(outChannels);
@@ -188,7 +188,7 @@ bool Engine::openSmart(const QString& backend, const QString& in, const QString&
     devIn_ = std::clamp(inCh, 0, kStrips); devOut_ = std::clamp(outCh, 0, kOutputs);
     std::string err;
     if (rt_->open(cfg, err) && rt_->start(err)) {
-      rt_->setExtraSource(extra_);
+      rt_->setExtraSource(&sources_);
       for (auto& st : strips_) st.dsp.setSampleRate(cfg.sampleRate);
       reloadAllVst(); pushAll();
       status_ = QStringLiteral("%1 • %2 Hz • %3 frames • %4 in / %5 out").arg(QString::fromStdString(rt_->backendName())).arg(cfg.sampleRate).arg(cfg.frames).arg(inCh).arg(outCh);
@@ -237,6 +237,21 @@ QVariantMap Engine::scopeFrame(int ch, double windowMs, int points, bool trigger
   scope_.window(ch, span, points, trigger, w); QVariantList l; l.reserve(static_cast<int>(w.size())); for (float v : w) l << v; m["samples"] = l;
   const ScopeTap::Figures f = scope_.figures(ch, span); m["vpp"] = f.vpp; m["vrms"] = f.vrms; m["freq"] = f.freq; m["crest"] = f.crest; m["running"] = rt_ != nullptr;
   return m;
+}
+QVariantList Engine::spectrum(int ch) { std::vector<float> b; scope_.spectrum(ch, b); QVariantList l; for (float v : b) l << v; return l; }
+static constexpr double kIsoCentres[10] = {31.5, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000};
+void Engine::setGraphicEq(int i, const QVariantList& gains, bool on) {
+  if (i < 0 || i >= kStrips) return;
+  for (int b = 0; b < 10 && b < am::dsp::kEqBands; ++b) { const double g = b < gains.size() ? std::clamp(gains[b].toDouble(), -24.0, 24.0) : 0.0; setEq(i, b, on && std::fabs(g) > 0.01 ? static_cast<int>(FilterType::Peaking) : static_cast<int>(FilterType::Off), kIsoCentres[b], 1.41, g); }
+}
+QVariantList Engine::graphicEq(int i) const {
+  QVariantList l; if (i < 0 || i >= kStrips) return l; const auto& p = strips_[static_cast<std::size_t>(i)].dsp.params();
+  for (int b = 0; b < 10 && b < am::dsp::kEqBands; ++b) { const auto& e = p.eq[static_cast<std::size_t>(b)]; l << (std::fabs(e.freq - kIsoCentres[b]) < 1.0 ? e.gainDb : 0.0); }
+  return l;
+}
+void Engine::copyEqToAll(int i) {
+  if (i < 0 || i >= kStrips) return; const auto src = strips_[static_cast<std::size_t>(i)].dsp.params();
+  for (int j = 0; j < kStrips; ++j) { if (j == i) continue; for (int b = 0; b < am::dsp::kEqBands; ++b) { const auto& e = src.eq[static_cast<std::size_t>(b)]; setEq(j, b, static_cast<int>(e.type), e.freq, e.q, e.gainDb); } setCrossover(j, static_cast<int>(src.xoverType), src.hpOrder, src.hpFreq, src.lpOrder, src.lpFreq); }
 }
 QVariantList Engine::lissajous(int points) { std::vector<float> lr; scope_.pairs(points, lr); QVariantList l; l.reserve(static_cast<int>(lr.size())); for (float v : lr) l << v; return l; }
 QVariantMap Engine::monitor() const { QVariantMap m; m["source"] = mon_.source; m["db"] = mon_.db; m["dim"] = mon_.dim; m["mono"] = mon_.mono; m["mute"] = mon_.mute; return m; }
@@ -463,7 +478,7 @@ QVariantList Engine::pages() const {
     {"MIX", "fx", "EFFECTS", "✨", true}, {"MIX", "bus", "SEND TO", "⇉", false}, {"MIX", "dca", "GROUP FADERS", "☷", false},
     {"ROUTE", "io", "CONNECTIONS", "⚡", true}, {"ROUTE", "routing", "ROUTING", "⎇", true},
     {"METER", "meter", "LEVELS", "▓", true}, {"METER", "lufs", "LOUDNESS", "◎", true}, {"METER", "osc", "WAVEFORM", "∽", true}, {"METER", "phase", "PHASE", "☯", true},
-    {"SOURCE", "media", "STREAM & MEDIA", "▶", false}, {"SOURCE", "live", "LIVE SOURCES", "☉", false}, {"SOURCE", "miceq", "MIC EQ", "♪", false}, {"SOURCE", "ai", "AI MIX", "⚙", false}, {"SOURCE", "tools", "TOOLS", "⚒", false}, {"SOURCE", "plugins", "PLUGINS", "⬡", false},
+    {"SOURCE", "media", "STREAM & MEDIA", "▶", false}, {"SOURCE", "live", "LIVE SOURCES", "☉", true}, {"SOURCE", "miceq", "MIC EQ", "♪", true}, {"SOURCE", "ai", "AI MIX", "⚙", false}, {"SOURCE", "tools", "TOOLS", "⚒", true}, {"SOURCE", "plugins", "PLUGINS", "⬡", false},
     {"DEVICE", "asio", "SOUND CARD", "◉", false}, {"DEVICE", "bluetooth", "BLUETOOTH", "⮁", false}, {"DEVICE", "network", "NETWORK", "⮞", false}, {"DEVICE", "cloud", "CLOUD", "☁", false}, {"DEVICE", "cascade", "CASCADE", "⚭", false},
     {"SYSTEM", "presets", "PRESETS", "⬇", false}, {"SYSTEM", "sys", "SETTINGS", "⚙", true}, {"SYSTEM", "acct", "ACCOUNT", "☺", false}, {"SYSTEM", "access", "ACCESS", "⚿", false}, {"SYSTEM", "renew", "LICENSE", "★", true}, {"SYSTEM", "admin", "ADMIN", "⚑", false}, {"SYSTEM", "calib", "CALIBRATE", "⌖", false},
     {"HELP", "help", "HELP", "?", false}, {"HELP", "scenes", "SCENES", "⚐", false}, {"SYSTEM", "boot", "BOOT / RESET", "⏻", false},

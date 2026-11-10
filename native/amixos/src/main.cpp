@@ -14,6 +14,7 @@
 #include <cstdio>
 
 #include <QElapsedTimer>
+#include <QThread>
 #include <QFileInfo>
 #include <QFile>
 #include <vector>
@@ -22,6 +23,9 @@
 #include "Engine.h"
 #include "license/license.hpp"
 #include "I18n.h"
+
+// real time passes (processEvents alone returns at once when the queue is empty)
+static void waitMs(int ms) { QElapsedTimer t; t.start(); while (t.elapsed() < ms) { QCoreApplication::processEvents(QEventLoop::AllEvents, 10); QThread::msleep(5); } }
 
 int main(int argc, char* argv[]) {
   QGuiApplication app(argc, argv);
@@ -136,6 +140,14 @@ int main(int argc, char* argv[]) {
     engine.setBusFx(1, "delay"); engine.setBusFx(2, "chorus"); engine.setBusFx(3, "drive"); if (engine.busFx(3)["params"].toList().isEmpty()) { std::fprintf(stderr, "amixos --smoke: drive\n"); return 63; }
     engine.setWidth(1.5); if (std::fabs(engine.width() - 1.5) > 1e-9) { std::fprintf(stderr, "amixos --smoke: width\n"); return 64; } engine.setWidth(1.0);
     if (engine.scopeFrame(0, 20, 256, true)["samples"].toList().size() != 256 || engine.lissajous(128).size() != 256) { std::fprintf(stderr, "amixos --smoke: scope frame size\n"); return 65; }
+    { QVariantList g; for (int b = 0; b < 10; ++b) g << (b == 7 ? 4.0 : 0.0); engine.setGraphicEq(2, g, true); if (std::fabs(engine.graphicEq(2)[7].toDouble() - 4.0) > 1e-9 || engine.eqBand(2, 7)["type"].toInt() != 1 || std::fabs(engine.eqBand(2, 7)["freq"].toDouble() - 4000) > 1e-6) { std::fprintf(stderr, "amixos --smoke: graphic EQ\n"); return 70; }
+      engine.setGraphicEq(2, g, false); if (engine.eqBand(2, 7)["type"].toInt() != 0 || std::fabs(engine.graphicEq(2)[7].toDouble() - 4.0) > 1e-9) { std::fprintf(stderr, "amixos --smoke: graphic EQ bypass keeps gains\n"); return 71; }
+      engine.setGraphicEq(2, g, true); engine.copyEqToAll(2); if (std::fabs(engine.graphicEq(9)[7].toDouble() - 4.0) > 1e-9) { std::fprintf(stderr, "amixos --smoke: copy EQ to all\n"); return 72; }
+      for (int s = 0; s < 32; ++s) engine.setGraphicEq(s, QVariantList(), true); }
+    engine.setTestOn(true); engine.setTestType(0); engine.setTestFreq(1000); engine.setTestDb(-6); waitMs(500);
+    { const double pk = engine.telemetry()["masterPeakDb"].toDouble(); if (pk < -9 || pk > -3) { std::fprintf(stderr, "amixos --smoke: test sine at -6 dBFS reads %.1f dBFS on the master\n", pk); return 73; }
+      const QVariantList sp = engine.spectrum(0); if (sp.size() != 31) { std::fprintf(stderr, "amixos --smoke: spectrum bands\n"); return 74; } int best = 0; for (int b = 1; b < 31; ++b) if (sp[b].toDouble() > sp[best].toDouble()) best = b; if (best != 17) { std::fprintf(stderr, "amixos --smoke: 1 kHz sine peaks in band %d, expected 17\n", best); return 75; } }
+    engine.setTestOn(false); engine.setClickOn(true); engine.setClickBpm(240); waitMs(500); if (engine.clickBeat() < 1) { std::fprintf(stderr, "amixos --smoke: metronome beat\n"); return 76; } engine.setClickOn(false); engine.setClickBpm(120);
     engine.setInputRoute(3, 0); engine.setOutputRoute(0, 1);   // the routing matrix: CH 4 reads input 1, OUT 1 carries MASTER L
     if (engine.inputRoutes()[3].toInt() != 0 || engine.outputRoutes()[0].toInt() != 1) { std::fprintf(stderr, "amixos --smoke: routing did not take\n"); return 11; }
     engine.resetRouting(); if (engine.inputRoutes()[3].toInt() != 3 || engine.outputRoutes()[0].toInt() != 3) { std::fprintf(stderr, "amixos --smoke: routing defaults wrong\n"); return 12; }
@@ -143,7 +155,7 @@ int main(int argc, char* argv[]) {
       if (!shots.isEmpty()) {   // one picture per ported page
         QDir().mkpath(shots);
         auto* win = qobject_cast<QQuickWindow*>(qml.rootObjects().first());
-        for (const char* id : {"home", "mixer", "dsp", "dyn", "gate", "bus", "dca", "scenes", "presets", "routing", "renew", "arrange", "io", "meter", "lufs", "sys", "fx", "osc", "phase"}) {
+        for (const char* id : {"home", "mixer", "dsp", "dyn", "gate", "bus", "dca", "scenes", "presets", "routing", "renew", "arrange", "io", "meter", "lufs", "sys", "fx", "osc", "phase", "miceq", "live", "tools"}) {
           win->setProperty("current", QString::fromLatin1(id)); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
           const QImage img = win->grabWindow(); img.save(shots + "/" + id + ".png"); std::printf("amixos --shots: %s %dx%d\n", id, img.width(), img.height());
           if (QString::fromLatin1(id) == "routing") {

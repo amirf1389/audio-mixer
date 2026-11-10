@@ -60,6 +60,11 @@ decided, what exists, what is next, and what was asked for but is not possible a
   display text, MIX, BYPASS), **WAVEFORM** (oscilloscope on master L / R / strip, timebase 1..500 ms, trigger, freeze, Vpp / Vrms / freq /
   crest) and **PHASE** (goniometer, correlation meter, master STEREO WIDTH 0..200 % mid/side). The scope reads from a `Runtime::Tap` shared
   with the recorder through a fan-out.
+- **MIC EQ** (the strip's 10 EQ bands as a graphic equaliser on the ISO octave centres + high-pass, live 1/3-octave spectrum after the DSP,
+  presets, COPY TO ALL), **LIVE SOURCES** (interface auto-scan, READ through the driver ladder, master / strip spectra, auto-patch; no
+  web NOW PLAYING in the native build) and **TOOLS** (tap tempo, metronome click and test generator as a second `ExtraSource` summed with
+  the ARRANGE player, delay tower calculator -> strip delay, scribble strips + colours, scene snapshots, diagnostic scan; the browser
+  build's DAW LINK and SQL vault were mock-ups and are not ported).
 
 ## Next, in order
 

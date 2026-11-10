@@ -21,6 +21,9 @@ class ScopeTap : public am::Runtime::Tap {
   void pairs(int points, std::vector<float>& lr) const;   // the most recent L / R pairs, interleaved
   struct Figures { double vpp = 0, vrms = 0, freq = 0, crest = 0; };
   Figures figures(int ch, std::size_t spanSamples) const;
+  // a 1/3-octave spectrum of the newest 4096 samples: 31 bands, 20 Hz .. 20 kHz, dBFS (a full-scale sine reads about 0 in its band)
+  static constexpr int kBands = 31;
+  void spectrum(int ch, std::vector<float>& bandsDb) const;
  private:
   static constexpr std::size_t kRing = 1 << 16;           // 65536 samples: 1.36 s at 48 k
   std::vector<float> ring_[3]; std::atomic<std::size_t> head_{0}; std::atomic<int> strip_{0}; double fs_ = 48000;
