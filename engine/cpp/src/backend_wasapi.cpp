@@ -66,7 +66,8 @@ class WasapiBackend : public Backend {
     if (FAILED(r)) { err = hr("device enumerator", r); return false; }
     const bool wantOut = cfg.outChannels > 0 && cfg.outDevice != "-", wantIn = cfg.inChannels > 0 && cfg.inDevice != "-";
     bool ok = true;
-    captureEvent_ = wantIn && !wantOut;                                        // an input-only stream is clocked by the capture event (there is no render event to wait for)
+    loopback_ = wantIn && cfg.inDevice.rfind("loopback:", 0) == 0;              // the input is what Windows plays on a render endpoint (app audio: a player, a browser, a streaming app)
+    captureEvent_ = wantIn && !wantOut && !loopback_;                          // an input-only stream is clocked by the capture event; a loopback stream signals none, it is polled
     if (wantOut) ok = client(en, eRender, cfg.outChannels, &out_, &render_, nullptr, &sOut_, err);
     if (ok && wantIn) ok = client(en, eCapture, cfg.inChannels, &in_, nullptr, &capture_, &sIn_, err);
     en->Release();
@@ -97,7 +98,8 @@ class WasapiBackend : public Backend {
   }
   bool client(IMMDeviceEnumerator* en, EDataFlow flow, int ch, IAudioClient** ac, IAudioRenderClient** rc, IAudioCaptureClient** cc, Sample* used, std::string& err) {
     // the endpoint: the one named by its id string (from --list-devices), else the default one of this direction
-    const std::string& want = flow == eRender ? cfg_.outDevice : cfg_.inDevice;
+    const bool loop = flow == eCapture && loopback_; std::string want = flow == eRender ? cfg_.outDevice : cfg_.inDevice; if (loop) want = want.substr(9);
+    if (loop) flow = eRender;   // a loopback capture opens the RENDER endpoint and reads what is mixed into it
     IMMDevice* dev = nullptr; HRESULT r;
     if (!want.empty() && want != "-") {
       const int n = MultiByteToWideChar(CP_UTF8, 0, want.c_str(), -1, nullptr, 0);
@@ -110,8 +112,12 @@ class WasapiBackend : public Backend {
     if (FAILED(r)) { err = hr(want.empty() || want == "-" ? "default endpoint" : "endpoint", r); return false; }
     r = dev->Activate(kIidAudioClient, CLSCTX_ALL, nullptr, reinterpret_cast<void**>(ac));
     if (FAILED(r)) { dev->Release(); err = hr("audio client", r); return false; }
-    const DWORD evt = (flow == eRender || captureEvent_) ? AUDCLNT_STREAMFLAGS_EVENTCALLBACK : 0;
-    if (!cfg_.exclusive) {
+    const DWORD evt = ((flow == eRender && !loop) || captureEvent_) ? AUDCLNT_STREAMFLAGS_EVENTCALLBACK : 0;
+    if (loop) {   // always shared: the system mix of that endpoint, converted to our rate and channel count
+      dev->Release(); WAVEFORMATEXTENSIBLE f = makeFormat(ch, cfg_.sampleRate, Sample()); const REFERENCE_TIME dur = static_cast<REFERENCE_TIME>(cfg_.frames * 3.0 / cfg_.sampleRate * 1e7);
+      r = (*ac)->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK | AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY, dur, 0, &f.Format, nullptr);
+      if (FAILED(r)) { err = hr("Initialize (loopback)", r); return false; }
+    } else if (!cfg_.exclusive) {
       dev->Release();
       WAVEFORMATEXTENSIBLE f = makeFormat(ch, cfg_.sampleRate, Sample());
       const REFERENCE_TIME dur = static_cast<REFERENCE_TIME>(cfg_.frames * 3.0 / cfg_.sampleRate * 1e7);
@@ -178,7 +184,7 @@ class WasapiBackend : public Backend {
   void closeAll() { release(render_); release(capture_); release(out_); release(in_); if (ev_) { CloseHandle(ev_); ev_ = nullptr; } }
   DeviceConfig cfg_; AudioCallback cb_; IAudioClient *out_ = nullptr, *in_ = nullptr; IAudioRenderClient* render_ = nullptr; IAudioCaptureClient* capture_ = nullptr; HANDLE ev_ = nullptr; Sample sOut_, sIn_;
   std::vector<std::vector<float>> inBuf_, outBuf_; std::vector<const float*> inp_; std::vector<float*> outp_; std::vector<Fifo> fifo_;
-  bool captureEvent_ = false; std::thread thread_; std::atomic<bool> stop_{false}; std::atomic<std::uint64_t> xruns_{0};
+  bool captureEvent_ = false, loopback_ = false; std::thread thread_; std::atomic<bool> stop_{false}; std::atomic<std::uint64_t> xruns_{0};
 };
 }  // namespace
 std::unique_ptr<Backend> makeWasapiBackend() { return std::make_unique<WasapiBackend>(); }

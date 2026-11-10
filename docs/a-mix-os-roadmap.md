@@ -168,6 +168,14 @@ decided, what exists, what is next, and what was asked for but is not possible a
   system: 83 languages, RTL mirroring (LayoutMirroring from i18n.rtl); only the navigation (page and group names) is translated, the pages
   themselves are English.
 
+- **Dual theme, orange faders, app audio**: Theme.qml has `dark` (Main.qml binds it to settings.darkTheme; a ☾ / ☀ button in the header);
+  every page colour that assumed dark (209 white overlays, 28 hard-coded backgrounds) now comes from Theme.ov() / deep / chrome, and the Qt
+  palette follows the switch; `--shots` renders home / mixer / dsp in the light look too. The fader 0 dB tick and the fader readout are
+  orange. **APP AUDIO** (STREAM & MEDIA): every WASAPI render endpoint is also listed as the input `loopback:<id>` ("App audio: what plays on
+  ..."), opened with AUDCLNT_STREAMFLAGS_LOOPBACK (shared, polled); CAPTURE INTO THE MIXER feeds a player, a browser (YouTube / YouTube
+  Music), Spotify, Apple Music, TIDAL, Deezer, Roon ... into CH 1-2 and on to the ASIO / WASAPI / DirectSound output. Secure by construction:
+  no account, no decoding, no DRM, nothing leaves the computer; AUTO DETECT never picks a loopback as the device.
+
 ## Next, in order
 
 1. **Windows .exe in hand**: run the Actions workflow, download `amixos-windows-x64.zip`, test ASIO (UM2, Focusrite, ASIO4ALL, Realtek) on the user's PC. Fix what the real drivers show.

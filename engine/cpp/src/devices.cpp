@@ -1,5 +1,6 @@
 // listDevices(): every device the backends of this binary can open, for `audiomixer-native --list-devices` (the bridge's device list).
-//   WASAPI   active render and capture endpoints: id = the endpoint id string, channels and rate from the shared-mode mix format
+//   WASAPI   active render and capture endpoints: id = the endpoint id string, channels and rate from the shared-mode mix format; every render endpoint
+//            also as "loopback:<id>", an input that captures what Windows plays on it (app audio: players, browsers, streaming apps)
 //   DirectSound  every render and capture device DirectSound enumerates (Bluetooth headsets / speakers included); id = the device GUID "{...}", "default" for the Windows default
 //   ASIO     the registered drivers, probed through the Steinberg interface (real channel counts and rates); id = the driver name
 //   ALSA     the PCM names ALSA advertises (snd_device_name_hint), each opened for a moment (non-blocking) to read its real channel count;
@@ -87,6 +88,8 @@ void addWasapi(std::vector<DeviceInfo>& out) {
       else { info.inChannels = ch; info.defaultIn = info.id == def; }
       if (info.name.empty()) info.name = info.id;
       out.push_back(info);
+      if (flow == eRender) {   // APP AUDIO: the same endpoint as an INPUT in loopback mode = everything Windows plays on it (a music player, a browser, a streaming app)
+        DeviceInfo lb; lb.backend = "wasapi"; lb.id = "loopback:" + info.id; lb.name = "App audio: what plays on " + info.name; lb.inChannels = ch; lb.defaultRate = info.defaultRate; out.push_back(lb); }
       d->Release();
     }
     col->Release();

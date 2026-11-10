@@ -9,11 +9,11 @@ Flickable {
     contentHeight: col.implicitHeight + 24; clip: true
     component Opt: RowLayout { property string label: ""; property string hint: ""; Layout.fillWidth: true; spacing: 10
         ColumnLayout { Layout.preferredWidth: 260; spacing: 1; Text { text: label; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } Text { visible: hint.length > 0; text: hint; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap; Layout.preferredWidth: 260 } } }
-    component Toggle: Rectangle { property bool on: false; signal toggled(bool v); implicitWidth: 44; implicitHeight: 20; radius: 10; color: on ? Theme.emerald : Qt.rgba(1, 1, 1, 0.1); border.color: on ? Theme.emerald : Theme.lineSoft
+    component Toggle: Rectangle { property bool on: false; signal toggled(bool v); implicitWidth: 44; implicitHeight: 20; radius: 10; color: on ? Theme.emerald : Theme.ov(0.1); border.color: on ? Theme.emerald : Theme.lineSoft
         Rectangle { width: 16; height: 16; radius: 8; y: 2; x: parent.on ? parent.width - 18 : 2; color: parent.on ? "#000" : Theme.muted; Behavior on x { NumberAnimation { duration: 90 } } }
         MouseArea { anchors.fill: parent; onClicked: parent.toggled(!parent.on) } }
     component Choice: RowLayout { property var options: []; property var value; signal picked(var v); spacing: 3
-        Repeater { model: parent.options; delegate: Rectangle { implicitWidth: ct.implicitWidth + 12; implicitHeight: 20; radius: 4; color: parent.parent.value === modelData.v ? Theme.amber : Qt.rgba(1, 1, 1, 0.08); Text { id: ct; anchors.centerIn: parent; text: modelData.t; color: parent.parent.parent.value === modelData.v ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.parent.picked(modelData.v) } } } }
+        Repeater { model: parent.options; delegate: Rectangle { implicitWidth: ct.implicitWidth + 12; implicitHeight: 20; radius: 4; color: parent.parent.value === modelData.v ? Theme.amber : Theme.ov(0.08); Text { id: ct; anchors.centerIn: parent; text: modelData.t; color: parent.parent.parent.value === modelData.v ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.parent.picked(modelData.v) } } } }
     ColumnLayout {
         id: col; width: parent.width - 20; x: 10; y: 10; spacing: 10
         Panel {
@@ -62,7 +62,7 @@ Flickable {
             title: i18n.t("LANGUAGE", i18n.lang) + " • " + i18n.count + " LANGUAGES"
             subtitle: "22 languages come from the web console and were checked; 58 are machine translations marked \"auto\" until a native speaker reviews them. Right-to-left languages mirror the layout."
             Flow { Layout.fillWidth: true; spacing: 4
-                Repeater { model: i18n.languages; delegate: Rectangle { implicitWidth: lt.implicitWidth + 14; implicitHeight: 22; radius: 4; color: i18n.lang === modelData.code ? Theme.amber : Qt.rgba(1, 1, 1, 0.06)
+                Repeater { model: i18n.languages; delegate: Rectangle { implicitWidth: lt.implicitWidth + 14; implicitHeight: 22; radius: 4; color: i18n.lang === modelData.code ? Theme.amber : Theme.ov(0.06)
                     Text { id: lt; anchors.centerIn: parent; text: modelData.name + (modelData.auto ? " ·auto" : ""); color: i18n.lang === modelData.code ? "#000" : (modelData.auto ? Theme.muted : Theme.ink); font.family: Theme.mono; font.pixelSize: 8 }
                     MouseArea { anchors.fill: parent; onClicked: i18n.lang = modelData.code } } }
             }
@@ -72,7 +72,7 @@ Flickable {
             title: "VST3 / VST2 PLUG-INS"
             subtitle: "Where A mix OS looks for plug-ins: .vst3 bundles, and VST2 .dll (Windows) / .so (Linux) files. The platform folders are always scanned; add your own below. Plug-ins load into the PLUGIN RACK on the MIXER (generic controls, no plug-in window yet)."
             Repeater { model: settings.vstDefaultDirs; delegate: RowLayout { Layout.fillWidth: true; Rectangle { implicitWidth: 8; implicitHeight: 8; radius: 4; color: Theme.emerald } Text { text: modelData; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; Layout.fillWidth: true; elide: Text.ElideMiddle } Text { text: "platform"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } } }
-            Repeater { model: settings.vstDirs; delegate: RowLayout { Layout.fillWidth: true; Rectangle { implicitWidth: 8; implicitHeight: 8; radius: 4; color: Theme.cyan } Text { text: modelData; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; Layout.fillWidth: true; elide: Text.ElideMiddle } Rectangle { implicitWidth: 60; implicitHeight: 18; radius: 3; color: Qt.rgba(1, 1, 1, 0.08); Text { anchors.centerIn: parent; text: "REMOVE"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: settings.removeVstDir(modelData) } } } }
+            Repeater { model: settings.vstDirs; delegate: RowLayout { Layout.fillWidth: true; Rectangle { implicitWidth: 8; implicitHeight: 8; radius: 4; color: Theme.cyan } Text { text: modelData; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; Layout.fillWidth: true; elide: Text.ElideMiddle } Rectangle { implicitWidth: 60; implicitHeight: 18; radius: 3; color: Theme.ov(0.08); Text { anchors.centerIn: parent; text: "REMOVE"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: settings.removeVstDir(modelData) } } } }
             RowLayout { Layout.fillWidth: true; spacing: 6
                 TextField { id: vstDirIn; Layout.fillWidth: true; placeholderText: "another folder with .vst3 plug-ins"; font.family: Theme.mono; font.pixelSize: 9; implicitHeight: 26; onAccepted: { settings.addVstDir(text); text = "" } }
                 Rectangle { implicitWidth: 90; implicitHeight: 26; radius: 5; color: Theme.amber; Text { anchors.centerIn: parent; text: "ADD FOLDER"; color: "#000"; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: { settings.addVstDir(vstDirIn.text); vstDirIn.text = "" } } }
@@ -96,8 +96,8 @@ Flickable {
                 Rectangle { implicitWidth: 120; implicitHeight: 26; radius: 5; color: Theme.amber; Text { anchors.centerIn: parent; text: "EXPORT CONSOLE"; color: "#000"; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: settings.exportConsole(ioPath.text) } }
                 Rectangle { implicitWidth: 120; implicitHeight: 26; radius: 5; color: Qt.rgba(0, 0.95, 1, 0.18); border.color: Theme.cyan; Text { anchors.centerIn: parent; text: "IMPORT CONSOLE"; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: settings.importConsole(ioPath.text) } }
                 TextField { id: ioPath; Layout.fillWidth: true; placeholderText: "path of the JSON file (empty = ~/amixos-console.json)"; font.family: Theme.mono; font.pixelSize: 9; implicitHeight: 26 }
-                Rectangle { implicitWidth: 100; implicitHeight: 26; radius: 5; color: Qt.rgba(1, 1, 1, 0.08); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: "OPEN FOLDER"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: settings.openDataFolder() } }
-                Rectangle { implicitWidth: 100; implicitHeight: 26; radius: 5; color: Qt.rgba(1, 1, 1, 0.08); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: "SAVE NOW"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.save() } } }
+                Rectangle { implicitWidth: 100; implicitHeight: 26; radius: 5; color: Theme.ov(0.08); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: "OPEN FOLDER"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: settings.openDataFolder() } }
+                Rectangle { implicitWidth: 100; implicitHeight: 26; radius: 5; color: Theme.ov(0.08); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: "SAVE NOW"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.save() } } }
             Text { visible: settings.message.length > 0; text: settings.message; color: Theme.emerald; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.WordWrap; Layout.fillWidth: true }
             Rectangle { Layout.fillWidth: true; height: 1; color: Theme.lineSoft }
             RowLayout { Layout.fillWidth: true; spacing: 10
@@ -112,7 +112,7 @@ Flickable {
             subtitle: "A mix OS " + appVersion + " • native console by AMFB Audio • C++20 engine + Qt Quick interface, no web runtime"
             Text { text: "Engine drivers built into this copy: " + engine.backends.join(", ").toUpperCase() + " • strips: " + engine.strips + " • edition: " + engine.edition; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9 }
             Flow { Layout.fillWidth: true; spacing: 4
-                Repeater { model: engine.pages; delegate: Rectangle { implicitWidth: t.implicitWidth + 12; implicitHeight: 18; radius: 3; color: modelData.ready ? Qt.rgba(0.063, 0.725, 0.506, 0.2) : Qt.rgba(1, 1, 1, 0.05); Text { id: t; anchors.centerIn: parent; text: modelData.text; color: modelData.ready ? Theme.emerald : Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } } } }
+                Repeater { model: engine.pages; delegate: Rectangle { implicitWidth: t.implicitWidth + 12; implicitHeight: 18; radius: 3; color: modelData.ready ? Qt.rgba(0.063, 0.725, 0.506, 0.2) : Theme.ov(0.05); Text { id: t; anchors.centerIn: parent; text: modelData.text; color: modelData.ready ? Theme.emerald : Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } } } }
         }
     }
 }

@@ -23,12 +23,12 @@ Item {
             RowLayout {
                 anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 6
                 Text { text: "ROUTING:"; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
-                Repeater { model: ["INPUTS → STRIPS", "SOURCES → OUTPUTS"]; delegate: Rectangle { implicitWidth: tl.implicitWidth + 16; implicitHeight: 20; radius: 4; color: page.tab === index ? Theme.amber : Qt.rgba(1, 1, 1, 0.06)
+                Repeater { model: ["INPUTS → STRIPS", "SOURCES → OUTPUTS"]; delegate: Rectangle { implicitWidth: tl.implicitWidth + 16; implicitHeight: 20; radius: 4; color: page.tab === index ? Theme.amber : Theme.ov(0.06)
                     Text { id: tl; anchors.centerIn: parent; text: modelData; color: page.tab === index ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.tab = index } } }
-                Repeater { model: page.tab === 0 ? ["CH 01-16", "CH 17-32"] : ["OUT 1-16", "OUT 17-32"]; delegate: Rectangle { implicitWidth: 66; implicitHeight: 20; radius: 4; color: page.bank === index ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(1, 1, 1, 0.06); Text { anchors.centerIn: parent; text: modelData; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.bank = index } } }
+                Repeater { model: page.tab === 0 ? ["CH 01-16", "CH 17-32"] : ["OUT 1-16", "OUT 17-32"]; delegate: Rectangle { implicitWidth: 66; implicitHeight: 20; radius: 4; color: page.bank === index ? Theme.ov(0.16) : Theme.ov(0.06); Text { anchors.centerIn: parent; text: modelData; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.bank = index } } }
                 Item { Layout.fillWidth: true }
                 Text { text: engine.running ? (engine.deviceInputs + " device inputs · " + engine.deviceOutputs + " outputs") : "no device open: the matrix is stored and applied when one opens"; color: engine.running ? Theme.emerald : Theme.amber; font.family: Theme.mono; font.pixelSize: 8 }
-                Rectangle { implicitWidth: 70; implicitHeight: 20; radius: 4; color: Qt.rgba(1, 1, 1, 0.08); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: "DEFAULTS"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.resetRouting() } }
+                Rectangle { implicitWidth: 70; implicitHeight: 20; radius: 4; color: Theme.ov(0.08); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: "DEFAULTS"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.resetRouting() } }
             }
         }
         // INPUTS -> STRIPS: rows = strips of this bank, columns = device inputs 1..32 (+ NONE)
@@ -47,17 +47,17 @@ Item {
                             readonly property int strip: page.bank * 16 + index
                             readonly property var st: engine.stripState[strip]
                             readonly property int route: page.inRoutes[strip] === undefined ? strip : page.inRoutes[strip]
-                            Rectangle { Layout.preferredWidth: 96; implicitHeight: page.cell; radius: 3; color: Qt.rgba(1, 1, 1, 0.04)
+                            Rectangle { Layout.preferredWidth: 96; implicitHeight: page.cell; radius: 3; color: Theme.ov(0.04)
                                 Rectangle { anchors.left: parent.left; anchors.top: parent.top; anchors.bottom: parent.bottom; width: 3; radius: 1; color: Theme.stripColors[st ? st.color : 0] }
                                 Text { anchors.centerIn: parent; text: "CH " + (strip + 1 < 10 ? "0" : "") + (strip + 1) + "  " + (st ? st.name : ""); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 7; elide: Text.ElideRight; width: parent.width - 10; horizontalAlignment: Text.AlignHCenter } }
-                            Rectangle { implicitWidth: page.cell + 8; implicitHeight: page.cell; radius: 3; color: route < 0 ? Theme.danger : Qt.rgba(1, 1, 1, 0.04); border.color: Theme.lineSoft
+                            Rectangle { implicitWidth: page.cell + 8; implicitHeight: page.cell; radius: 3; color: route < 0 ? Theme.danger : Theme.ov(0.04); border.color: Theme.lineSoft
                                 Text { anchors.centerIn: parent; text: route < 0 ? "—" : ""; color: "#000"; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
                                 MouseArea { anchors.fill: parent; onClicked: engine.setInputRoute(strip, -1) } }
                             Repeater { model: 32
                                 delegate: Rectangle { implicitWidth: page.cell; implicitHeight: page.cell; radius: 3
                                     readonly property bool on: route === index
                                     readonly property bool avail: index < engine.deviceInputs
-                                    color: on ? (avail ? Theme.cyan : Theme.amber) : (avail ? Qt.rgba(1, 1, 1, 0.05) : Qt.rgba(1, 1, 1, 0.015)); border.color: on ? "transparent" : Theme.lineSoft
+                                    color: on ? (avail ? Theme.cyan : Theme.amber) : (avail ? Theme.ov(0.05) : Theme.ov(0.015)); border.color: on ? "transparent" : Theme.lineSoft
                                     Rectangle { anchors.centerIn: parent; width: 8; height: 8; radius: 4; color: "#000"; visible: on }
                                     MouseArea { anchors.fill: parent; onClicked: engine.setInputRoute(strip, index) } } } } }
                     Text { text: "A dot on an unavailable input (amber) is kept and becomes live when a device with that many inputs opens. One input may feed several strips (a mic to two channels with different processing)."; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap; Layout.preferredWidth: 700; Layout.topMargin: 6 }
@@ -79,12 +79,12 @@ Item {
                             readonly property int out: page.bank * 16 + index
                             readonly property int route: page.outRoutes[out] === undefined ? 0 : page.outRoutes[out]
                             readonly property bool avail: out < engine.deviceOutputs
-                            Rectangle { Layout.preferredWidth: 96; implicitHeight: page.cell; radius: 3; color: Qt.rgba(1, 1, 1, 0.04)
+                            Rectangle { Layout.preferredWidth: 96; implicitHeight: page.cell; radius: 3; color: Theme.ov(0.04)
                                 Text { anchors.centerIn: parent; text: "OUT " + (out + 1) + (avail ? "" : "  ·"); color: avail ? Theme.ink : Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.bold: avail } }
                             Repeater { model: page.sources
                                 delegate: Rectangle { implicitWidth: page.cell + 6; implicitHeight: page.cell; radius: 3
                                     readonly property bool on: route === modelData.index
-                                    color: on ? page.srcColor(modelData.group) : (avail ? Qt.rgba(1, 1, 1, 0.05) : Qt.rgba(1, 1, 1, 0.015)); border.color: on ? "transparent" : Theme.lineSoft
+                                    color: on ? page.srcColor(modelData.group) : (avail ? Theme.ov(0.05) : Theme.ov(0.015)); border.color: on ? "transparent" : Theme.lineSoft
                                     Rectangle { anchors.centerIn: parent; width: 8; height: 8; radius: 4; color: "#000"; visible: on && modelData.group !== "off" }
                                     Text { anchors.centerIn: parent; text: "—"; color: "#000"; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; visible: on && modelData.group === "off" }
                                     MouseArea { anchors.fill: parent; onClicked: engine.setOutputRoute(out, modelData.index) } } } } }

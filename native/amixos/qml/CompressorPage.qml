@@ -33,7 +33,7 @@ Flickable {
                     onActivated: page.strip = currentIndex
                 }
                 Item { Layout.fillWidth: true }
-                Rectangle { implicitWidth: 70; implicitHeight: 24; radius: 4; color: page.ch.compOn ? Theme.emerald : Qt.rgba(1, 1, 1, 0.08); Text { anchors.centerIn: parent; text: page.ch.compOn ? "ON" : "OFF"; color: page.ch.compOn ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.apply("compOn", !page.ch.compOn) } }
+                Rectangle { implicitWidth: 70; implicitHeight: 24; radius: 4; color: page.ch.compOn ? Theme.emerald : Theme.ov(0.08); Text { anchors.centerIn: parent; text: page.ch.compOn ? "ON" : "OFF"; color: page.ch.compOn ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.apply("compOn", !page.ch.compOn) } }
             }
             RowLayout {
                 Layout.fillWidth: true; spacing: 10
@@ -41,7 +41,7 @@ Flickable {
                 ColumnLayout {   // gain reduction meter
                     Layout.preferredWidth: 56; spacing: 4
                     Text { Layout.alignment: Qt.AlignHCenter; text: "GR"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-                    Rectangle { Layout.alignment: Qt.AlignHCenter; implicitWidth: 16; Layout.fillHeight: true; implicitHeight: 200; radius: 3; color: "#05070a"; border.color: Theme.lineSoft
+                    Rectangle { Layout.alignment: Qt.AlignHCenter; implicitWidth: 16; Layout.fillHeight: true; implicitHeight: 200; radius: 3; color: Theme.deep; border.color: Theme.lineSoft
                         Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 2; height: Math.min(1, Math.max(0, -(page.mt ? page.mt.compGrDb : 0) / 24)) * (parent.height - 4); radius: 2; color: Theme.amber; Behavior on height { NumberAnimation { duration: 40 } } } }
                     Text { Layout.alignment: Qt.AlignHCenter; text: (page.mt ? page.mt.compGrDb : 0).toFixed(1) + " dB"; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8 }
                 }
@@ -60,7 +60,7 @@ Flickable {
             Flow { Layout.fillWidth: true; spacing: 4
                 Repeater {
                     model: [ { n: "VOCAL", p: [-18, 3, 6, 5, 80, 3] }, { n: "DRUM BUS", p: [-12, 4, 2, 1, 120, 2] }, { n: "GENTLE GLUE", p: [-24, 2, 12, 20, 300, 2] }, { n: "LIMIT", p: [-6, 20, 0, 0.1, 60, 0] }, { n: "BASS", p: [-20, 5, 4, 10, 150, 4] } ]
-                    delegate: Rectangle { implicitWidth: pl.implicitWidth + 14; implicitHeight: 20; radius: 4; color: Qt.rgba(1, 1, 1, 0.08); Text { id: pl; anchors.centerIn: parent; text: modelData.n; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setCompressor(page.strip, true, modelData.p[0], modelData.p[1], modelData.p[2], modelData.p[3], modelData.p[4], modelData.p[5]) } }
+                    delegate: Rectangle { implicitWidth: pl.implicitWidth + 14; implicitHeight: 20; radius: 4; color: Theme.ov(0.08); Text { id: pl; anchors.centerIn: parent; text: modelData.n; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setCompressor(page.strip, true, modelData.p[0], modelData.p[1], modelData.p[2], modelData.p[3], modelData.p[4], modelData.p[5]) } }
                 }
             }
         }

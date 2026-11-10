@@ -34,9 +34,9 @@ Flickable {
                     onActivated: page.strip = currentIndex
                 }
                 Item { Layout.fillWidth: true }
-                Rectangle { implicitWidth: 90; implicitHeight: 24; radius: 12; color: page.ch.gateOn ? (page.open ? Qt.rgba(0.063, 0.725, 0.506, 0.2) : Qt.rgba(1, 0.165, 0.373, 0.2)) : Qt.rgba(1, 1, 1, 0.05); border.color: page.ch.gateOn ? (page.open ? Theme.emerald : Theme.danger) : Theme.lineSoft
+                Rectangle { implicitWidth: 90; implicitHeight: 24; radius: 12; color: page.ch.gateOn ? (page.open ? Qt.rgba(0.063, 0.725, 0.506, 0.2) : Qt.rgba(1, 0.165, 0.373, 0.2)) : Theme.ov(0.05); border.color: page.ch.gateOn ? (page.open ? Theme.emerald : Theme.danger) : Theme.lineSoft
                     Text { anchors.centerIn: parent; text: page.ch.gateOn ? (page.open ? "OPEN" : "CLOSED") : "BYPASS"; color: page.ch.gateOn ? (page.open ? Theme.emerald : Theme.danger) : Theme.dim; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } }
-                Rectangle { implicitWidth: 70; implicitHeight: 24; radius: 4; color: page.ch.gateOn ? Theme.pink : Qt.rgba(1, 1, 1, 0.08); Text { anchors.centerIn: parent; text: page.ch.gateOn ? "ON" : "OFF"; color: page.ch.gateOn ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.apply("gateOn", !page.ch.gateOn) } }
+                Rectangle { implicitWidth: 70; implicitHeight: 24; radius: 4; color: page.ch.gateOn ? Theme.pink : Theme.ov(0.08); Text { anchors.centerIn: parent; text: page.ch.gateOn ? "ON" : "OFF"; color: page.ch.gateOn ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.apply("gateOn", !page.ch.gateOn) } }
             }
             RowLayout {
                 Layout.fillWidth: true; spacing: 10
@@ -44,7 +44,7 @@ Flickable {
                 ColumnLayout {
                     Layout.preferredWidth: 56; spacing: 4
                     Text { Layout.alignment: Qt.AlignHCenter; text: "GAIN"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-                    Rectangle { Layout.alignment: Qt.AlignHCenter; implicitWidth: 16; Layout.fillHeight: true; implicitHeight: 200; radius: 3; color: "#05070a"; border.color: Theme.lineSoft
+                    Rectangle { Layout.alignment: Qt.AlignHCenter; implicitWidth: 16; Layout.fillHeight: true; implicitHeight: 200; radius: 3; color: Theme.deep; border.color: Theme.lineSoft
                         Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 2; height: Math.min(1, Math.max(0, -(page.mt ? page.mt.gateDb : 0) / 90)) * (parent.height - 4); radius: 2; color: Theme.pink; Behavior on height { NumberAnimation { duration: 40 } } } }
                     Text { Layout.alignment: Qt.AlignHCenter; text: (page.mt ? page.mt.gateDb : 0).toFixed(1) + " dB"; color: Theme.pink; font.family: Theme.mono; font.pixelSize: 8 }
                 }
@@ -63,7 +63,7 @@ Flickable {
             Flow { Layout.fillWidth: true; spacing: 4
                 Repeater {
                     model: [ { n: "VOCAL MIC", p: [-45, -60, 1, 80, 150] }, { n: "DRUM CLOSE MIC", p: [-30, -80, 0.3, 30, 60] }, { n: "GUITAR AMP HUM", p: [-50, -40, 2, 120, 250] }, { n: "GENTLE EXPAND", p: [-55, -12, 5, 200, 400] } ]
-                    delegate: Rectangle { implicitWidth: pl.implicitWidth + 14; implicitHeight: 20; radius: 4; color: Qt.rgba(1, 1, 1, 0.08); Text { id: pl; anchors.centerIn: parent; text: modelData.n; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setGate(page.strip, true, modelData.p[0], modelData.p[1], modelData.p[2], modelData.p[3], modelData.p[4]) } }
+                    delegate: Rectangle { implicitWidth: pl.implicitWidth + 14; implicitHeight: 20; radius: 4; color: Theme.ov(0.08); Text { id: pl; anchors.centerIn: parent; text: modelData.n; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setGate(page.strip, true, modelData.p[0], modelData.p[1], modelData.p[2], modelData.p[3], modelData.p[4]) } }
                 }
             }
         }

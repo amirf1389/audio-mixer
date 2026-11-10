@@ -38,7 +38,7 @@ Item {
         r.push({ ok: !engine.testOn, t: engine.testOn ? "TEST SIGNAL is ON and goes to the master: switch it off before a show." : "TEST SIGNAL: off" })
         report = r
     }
-    component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(56, bl.implicitWidth + 16); implicitHeight: 22; radius: 4; color: on ? onColor : Qt.rgba(1, 1, 1, 0.08); border.color: Theme.lineSoft
+    component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(56, bl.implicitWidth + 16); implicitHeight: 22; radius: 4; color: on ? onColor : Theme.ov(0.08); border.color: Theme.lineSoft
         Text { id: bl; anchors.centerIn: parent; text: label; color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
     component Head: Text { color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
     component Note: Text { Layout.fillWidth: true; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap }
@@ -67,7 +67,7 @@ Item {
                         Text { text: "SIGNATURE"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                         Repeater { model: [{ t: "4/4", b: 4 }, { t: "3/4", b: 3 }, { t: "6/8", b: 6 }, { t: "2/2", b: 2 }, { t: "5/4", b: 5 }, { t: "7/8", b: 7 }]; delegate: Btn { label: modelData.t; on: engine.clickBeats === modelData.b; onClicked: engine.clickBeats = modelData.b } }
                         Item { Layout.fillWidth: true }
-                        Repeater { model: engine.clickBeats; delegate: Rectangle { width: 12; height: 12; radius: 6; color: engine.clickBeat === index + 1 ? (index === 0 ? Theme.amber : Theme.cyan) : Qt.rgba(1, 1, 1, 0.1) } } }
+                        Repeater { model: engine.clickBeats; delegate: Rectangle { width: 12; height: 12; radius: 6; color: engine.clickBeat === index + 1 ? (index === 0 ? Theme.amber : Theme.cyan) : Theme.ov(0.1) } } }
                     RowLayout { spacing: 8; Layout.fillWidth: true
                         Text { text: "LEVEL"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                         Slider { Layout.fillWidth: true; from: -40; to: 0; stepSize: 1; value: engine.clickDb; onMoved: engine.clickDb = value }
@@ -125,7 +125,7 @@ Item {
                 ColumnLayout { id: sCol; anchors.fill: parent; anchors.margins: 12; spacing: 8
                     Head { text: "32-CHANNEL SCRIBBLE STRIP & COLOUR" }
                     Grid { columns: 16; spacing: 3
-                        Repeater { model: engine.stripState; delegate: Rectangle { width: 30; height: 24; radius: 3; color: page.scribble === index ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(1, 1, 1, 0.05); border.color: page.scribble === index ? Theme.ink : "transparent"
+                        Repeater { model: engine.stripState; delegate: Rectangle { width: 30; height: 24; radius: 3; color: page.scribble === index ? Theme.ov(0.18) : Theme.ov(0.05); border.color: page.scribble === index ? Theme.ink : "transparent"
                             Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; height: 3; radius: 1; color: Theme.stripColors[modelData.color] }
                             Text { anchors.centerIn: parent; anchors.verticalCenterOffset: 2; text: index + 1; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
                             MouseArea { anchors.fill: parent; onClicked: { page.scribble = index; engine.selectedStrip = index } } } } }
@@ -141,11 +141,11 @@ Item {
                 ColumnLayout { id: scCol; anchors.fill: parent; anchors.margins: 12; spacing: 8
                     Head { text: "SCENE SNAPSHOTS (TOTAL CONSOLE RECALL)" }
                     Grid { columns: 4; spacing: 4
-                        Repeater { model: 8; delegate: Rectangle { readonly property var sc: engine.scenes[index]; width: 112; height: 40; radius: 6; color: sc && sc.current ? Qt.rgba(0.98, 0.75, 0.14, 0.18) : Qt.rgba(1, 1, 1, 0.05); border.color: sc && sc.current ? Theme.amber : Theme.lineSoft
+                        Repeater { model: 8; delegate: Rectangle { readonly property var sc: engine.scenes[index]; width: 112; height: 40; radius: 6; color: sc && sc.current ? Qt.rgba(0.98, 0.75, 0.14, 0.18) : Theme.ov(0.05); border.color: sc && sc.current ? Theme.amber : Theme.lineSoft
                             Text { anchors.left: parent.left; anchors.top: parent.top; anchors.margins: 6; text: sc ? sc.name : ""; color: sc && !sc.empty ? Theme.ink : Theme.dim; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; elide: Text.ElideRight; width: parent.width - 12 }
                             Row { anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.margins: 4; spacing: 3
                                 Rectangle { width: 36; height: 14; radius: 3; color: Theme.cyan; Text { anchors.centerIn: parent; text: "STORE"; color: "#000"; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.storeScene(index, sc && !sc.empty ? sc.name : "") } }
-                                Rectangle { width: 36; height: 14; radius: 3; color: sc && !sc.empty ? Theme.emerald : Qt.rgba(1, 1, 1, 0.08); Text { anchors.centerIn: parent; text: "RECALL"; color: sc && !sc.empty ? "#000" : Theme.dim; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } MouseArea { anchors.fill: parent; onClicked: if (sc && !sc.empty) engine.recallScene(index) } } } } } }
+                                Rectangle { width: 36; height: 14; radius: 3; color: sc && !sc.empty ? Theme.emerald : Theme.ov(0.08); Text { anchors.centerIn: parent; text: "RECALL"; color: sc && !sc.empty ? "#000" : Theme.dim; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } MouseArea { anchors.fill: parent; onClicked: if (sc && !sc.empty) engine.recallScene(index) } } } } } }
                     Note { text: "Faders, mutes, solos, pans, DSP, sends, names and colours of all 32 strips. All slots, names and the export / import are on SCENES; the whole console file is on SETTINGS." }
                 }
             }

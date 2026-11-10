@@ -35,10 +35,10 @@ Flickable {
             RowLayout {
                 Layout.fillWidth: true; spacing: 8
                 Text { text: "SLOT " + (page.sel + 1); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
-                TextField { id: nameField; Layout.preferredWidth: 220; placeholderText: "scene name"; text: page.scene && !page.scene.empty ? page.scene.name : ""; font.family: Theme.mono; font.pixelSize: 10; color: Theme.ink; background: Rectangle { color: "#05070a"; radius: 4; border.color: Theme.line } onEditingFinished: if (page.scene && !page.scene.empty) engine.renameScene(page.sel, text) }
+                TextField { id: nameField; Layout.preferredWidth: 220; placeholderText: "scene name"; text: page.scene && !page.scene.empty ? page.scene.name : ""; font.family: Theme.mono; font.pixelSize: 10; color: Theme.ink; background: Rectangle { color: Theme.deep; radius: 4; border.color: Theme.line } onEditingFinished: if (page.scene && !page.scene.empty) engine.renameScene(page.sel, text) }
                 Rectangle { implicitWidth: 90; implicitHeight: 28; radius: 6; color: Theme.amber; Text { anchors.centerIn: parent; text: "STORE"; color: "#000"; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.storeScene(page.sel, nameField.text) } }
-                Rectangle { implicitWidth: 90; implicitHeight: 28; radius: 6; color: page.scene && !page.scene.empty ? Theme.emerald : Qt.rgba(1, 1, 1, 0.05); Text { anchors.centerIn: parent; text: "RECALL"; color: page.scene && !page.scene.empty ? "#000" : Theme.dim; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; enabled: page.scene && !page.scene.empty; onClicked: engine.recallScene(page.sel) } }
-                Rectangle { implicitWidth: 70; implicitHeight: 28; radius: 6; color: page.scene && !page.scene.empty ? Qt.rgba(1, 0.165, 0.373, 0.2) : Qt.rgba(1, 1, 1, 0.05); border.color: page.scene && !page.scene.empty ? Theme.danger : "transparent"; Text { anchors.centerIn: parent; text: "CLEAR"; color: page.scene && !page.scene.empty ? Theme.danger : Theme.dim; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; enabled: page.scene && !page.scene.empty; onClicked: engine.clearScene(page.sel) } }
+                Rectangle { implicitWidth: 90; implicitHeight: 28; radius: 6; color: page.scene && !page.scene.empty ? Theme.emerald : Theme.ov(0.05); Text { anchors.centerIn: parent; text: "RECALL"; color: page.scene && !page.scene.empty ? "#000" : Theme.dim; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; enabled: page.scene && !page.scene.empty; onClicked: engine.recallScene(page.sel) } }
+                Rectangle { implicitWidth: 70; implicitHeight: 28; radius: 6; color: page.scene && !page.scene.empty ? Qt.rgba(1, 0.165, 0.373, 0.2) : Theme.ov(0.05); border.color: page.scene && !page.scene.empty ? Theme.danger : "transparent"; Text { anchors.centerIn: parent; text: "CLEAR"; color: page.scene && !page.scene.empty ? Theme.danger : Theme.dim; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; enabled: page.scene && !page.scene.empty; onClicked: engine.clearScene(page.sel) } }
                 Item { Layout.fillWidth: true }
                 Text { text: "double-click a slot = recall"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 }
             }
@@ -51,7 +51,7 @@ Flickable {
                 Repeater { model: engine.stripState; delegate: Rectangle { implicitWidth: 64; implicitHeight: 24; radius: 4
                     property bool safe: engine.recallSafe(index)
                     Connections { target: engine; function onScenesChanged() { safe = engine.recallSafe(index) } }
-                    color: safe ? Theme.cyan : Qt.rgba(1, 1, 1, 0.06)
+                    color: safe ? Theme.cyan : Theme.ov(0.06)
                     Text { anchors.centerIn: parent; text: modelData.name; color: safe ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; elide: Text.ElideRight; width: parent.width - 6; horizontalAlignment: Text.AlignHCenter }
                     MouseArea { anchors.fill: parent; onClicked: engine.setRecallSafe(index, !safe) } } }
             }

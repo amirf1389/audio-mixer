@@ -15,14 +15,14 @@ Item {
     readonly property var padColors: ({ "Drums": Theme.amber, "Percussion": "#fb7185", "Bass": Theme.emerald, "Lead": Theme.cyan, "Pad": "#a78bfa", "Keys": "#f472b6", "FX": "#38bdf8", "Test": Theme.muted })
     focus: true
     Keys.onPressed: function (e) { const k = e.key; const n = k === Qt.Key_0 ? 9 : k >= Qt.Key_1 && k <= Qt.Key_9 ? k - Qt.Key_1 : -1; if (n >= 0) { const l = shown(); if (n < l.length) samples.play(l[n].id); e.accepted = true } else if (k === Qt.Key_Escape) samples.stopAll() }
-    component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(56, bl.implicitWidth + 16); implicitHeight: 24; radius: 5; color: on ? onColor : Qt.rgba(1, 1, 1, 0.08); border.color: Theme.lineSoft
+    component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(56, bl.implicitWidth + 16); implicitHeight: 24; radius: 5; color: on ? onColor : Theme.ov(0.08); border.color: Theme.lineSoft
         Text { id: bl; anchors.centerIn: parent; text: label; color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
     ColumnLayout {
         anchors.fill: parent; anchors.margins: 10; spacing: 8
         Rectangle { Layout.fillWidth: true; implicitHeight: 34; radius: 8; color: Theme.card; border.color: Theme.line
             RowLayout { anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 6
                 Text { text: "SAMPLES:"; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
-                Repeater { model: ["ALL"].concat(samples.categories); delegate: Rectangle { implicitWidth: cl.implicitWidth + 14; implicitHeight: 20; radius: 4; color: page.cat === modelData ? Theme.amber : Qt.rgba(1, 1, 1, 0.06)
+                Repeater { model: ["ALL"].concat(samples.categories); delegate: Rectangle { implicitWidth: cl.implicitWidth + 14; implicitHeight: 20; radius: 4; color: page.cat === modelData ? Theme.amber : Theme.ov(0.06)
                     Text { id: cl; anchors.centerIn: parent; text: modelData.toUpperCase(); color: page.cat === modelData ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.cat = modelData } } }
                 Item { Layout.fillWidth: true }
                 Text { text: samples.voices + " playing · peak " + (samples.peakDb > -100 ? samples.peakDb.toFixed(1) : "−∞") + " dBFS"; color: samples.voices > 0 ? Theme.emerald : Theme.dim; font.family: Theme.mono; font.pixelSize: 8 }
@@ -33,7 +33,7 @@ Item {
                     ScrollBar.vertical: ScrollBar {}
                     delegate: Item { width: grid.cellWidth; height: grid.cellHeight
                         Rectangle { id: pad; anchors.fill: parent; anchors.margins: 3; radius: 7; property color pc: page.padColors[modelData.category] || Theme.muted; property bool hot: samples.lastPlayed === modelData.id && samples.voices > 0
-                            color: hot ? pc : Qt.rgba(1, 1, 1, 0.05); border.color: hot ? pc : Qt.rgba(pc.r, pc.g, pc.b, 0.45); border.width: 1
+                            color: hot ? pc : Theme.ov(0.05); border.color: hot ? pc : Qt.rgba(pc.r, pc.g, pc.b, 0.45); border.width: 1
                             Rectangle { anchors.top: parent.top; anchors.left: parent.left; anchors.right: parent.right; anchors.margins: 1; height: 3; radius: 2; color: pad.pc }
                             ColumnLayout { anchors.fill: parent; anchors.margins: 6; anchors.topMargin: 8; spacing: 1
                                 Text { Layout.fillWidth: true; elide: Text.ElideRight; text: modelData.name; color: pad.hot ? "#000" : Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }

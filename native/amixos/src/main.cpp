@@ -54,16 +54,18 @@ int main(int argc, char* argv[]) {
 #endif
   for (int i = 1; i < argc; ++i) { const QByteArray a(argv[i]); if (a == "--software") QQuickWindow::setGraphicsApi(QSGRendererInterface::Software); else if (a == "--opengl") QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL); }
   QGuiApplication app(argc, argv);
-  // One explicit dark palette for every stock control (Slider, ComboBox, TextField, Menu, Dialog, ScrollBar, ToolTip): the Basic style draws
-  // them from the application palette, which Windows and macOS hand over light. The custom panels use Theme.qml's own colours; this keeps the
-  // rest in the same obsidian / ink / amber language instead of light grey boxes. Every value is an explicit #RRGGBB.
-  { QPalette pal;
-    const QColor obsidian("#040507"), card("#0f141c"), raised("#141b26"), ink("#f1f5f9"), muted("#94a3b8"), dim("#64748b"), amber("#fbbf24"), line("#242c3a");
-    pal.setColor(QPalette::Window, obsidian); pal.setColor(QPalette::WindowText, ink); pal.setColor(QPalette::Base, card); pal.setColor(QPalette::AlternateBase, raised); pal.setColor(QPalette::Text, ink);
-    pal.setColor(QPalette::Button, raised); pal.setColor(QPalette::ButtonText, ink); pal.setColor(QPalette::Highlight, amber); pal.setColor(QPalette::HighlightedText, QColor("#000000"));
-    pal.setColor(QPalette::ToolTipBase, raised); pal.setColor(QPalette::ToolTipText, ink); pal.setColor(QPalette::PlaceholderText, dim); pal.setColor(QPalette::Mid, line); pal.setColor(QPalette::Dark, obsidian); pal.setColor(QPalette::Light, line); pal.setColor(QPalette::Midlight, line); pal.setColor(QPalette::Shadow, obsidian);
-    pal.setColor(QPalette::Disabled, QPalette::Text, dim); pal.setColor(QPalette::Disabled, QPalette::ButtonText, dim); pal.setColor(QPalette::Disabled, QPalette::WindowText, dim); pal.setColor(QPalette::Link, QColor("#00f2ff"));
-    QGuiApplication::setPalette(pal); (void)muted; }
+  // One explicit palette for every stock control (Slider, ComboBox, TextField, Menu, Dialog, ScrollBar, ToolTip): the Fusion style draws
+  // them from the application palette, which Windows and macOS hand over in their own colours. The values are Theme.qml's (every one an
+  // explicit #RRGGBB), for the dark and the light look; applied now and again whenever SETTINGS flips the theme.
+  auto applyPalette = [](bool dark) {
+    QPalette pal;
+    const QColor window(dark ? "#040507" : "#f3f5f9"), card(dark ? "#0f141c" : "#ffffff"), raised(dark ? "#141b26" : "#eef1f6"), ink(dark ? "#f1f5f9" : "#0f172a"), dim("#64748b"), amber(dark ? "#fbbf24" : "#d97706"), line(dark ? "#242c3a" : "#cfd5df");
+    pal.setColor(QPalette::Window, window); pal.setColor(QPalette::WindowText, ink); pal.setColor(QPalette::Base, card); pal.setColor(QPalette::AlternateBase, raised); pal.setColor(QPalette::Text, ink);
+    pal.setColor(QPalette::Button, raised); pal.setColor(QPalette::ButtonText, ink); pal.setColor(QPalette::Highlight, amber); pal.setColor(QPalette::HighlightedText, QColor(dark ? "#000000" : "#ffffff"));
+    pal.setColor(QPalette::ToolTipBase, raised); pal.setColor(QPalette::ToolTipText, ink); pal.setColor(QPalette::PlaceholderText, dim); pal.setColor(QPalette::Mid, line); pal.setColor(QPalette::Dark, window); pal.setColor(QPalette::Light, line); pal.setColor(QPalette::Midlight, line); pal.setColor(QPalette::Shadow, window);
+    pal.setColor(QPalette::Disabled, QPalette::Text, dim); pal.setColor(QPalette::Disabled, QPalette::ButtonText, dim); pal.setColor(QPalette::Disabled, QPalette::WindowText, dim); pal.setColor(QPalette::Link, QColor(dark ? "#00f2ff" : "#0e7490"));
+    QGuiApplication::setPalette(pal);
+  };
   app.setOrganizationName("AMFB Audio");
   am::lic::setProgramDir(QCoreApplication::applicationDirPath().toStdString());   // edition-token.json next to the program (paid editions)
   app.setOrganizationDomain("amfb.audio");
@@ -77,7 +79,7 @@ int main(int argc, char* argv[]) {
 
   am::paths::setProgramDir(QCoreApplication::applicationDirPath().toStdString());
   if (!smoke) { QFile* lf = new QFile(QString::fromStdString(am::paths::file("console.log"))); if (lf->size() > 256 * 1024) lf->remove(); if (lf->open(QIODevice::Append | QIODevice::Text)) { g_log = lf; qInstallMessageHandler(logToFile); qInfo("AmF X1 %s starting: %s, Qt %s, render %s", AMIX_VERSION, am::paths::osName(), qVersion(), QQuickWindow::graphicsApi() == QSGRendererInterface::Software ? "software" : "auto"); } }
-  Engine engine; I18n i18n; Arrange arrange(&engine); Settings settings(&engine); if (smoke) settings.finishSetup(); Access access(&engine); Osc osc(&engine); Media media(&engine); Samples samples(&engine); Update update(QStringLiteral(AMIX_VERSION));
+  Engine engine; I18n i18n; Arrange arrange(&engine); Settings settings(&engine); applyPalette(settings.darkTheme()); QObject::connect(&settings, &Settings::changed, &app, [&] { static bool last = settings.darkTheme(); if (last != settings.darkTheme()) { last = settings.darkTheme(); applyPalette(last); } }); if (smoke) settings.finishSetup(); Access access(&engine); Osc osc(&engine); Media media(&engine); Samples samples(&engine); Update update(QStringLiteral(AMIX_VERSION));
   if (!lang.isEmpty()) i18n.setLang(lang);   // --lang fa: start in that language (also for --shots)
   QQmlApplicationEngine qml;
   qml.rootContext()->setContextProperty("engine", &engine);
@@ -295,6 +297,8 @@ int main(int argc, char* argv[]) {
           }
         }
       }
+      if (!shots.isEmpty()) {   // the light theme on three pages
+        auto* lw = qobject_cast<QQuickWindow*>(qml.rootObjects().first()); settings.setDarkTheme(false); for (const char* id : {"home", "mixer", "dsp"}) { lw->setProperty("current", QString::fromLatin1(id)); waitMs(350); lw->grabWindow().save(shots + "/" + id + "-light.png"); } settings.setDarkTheme(true); waitMs(200); std::printf("amixos --shots: home-light, mixer-light, dsp-light\n"); }
       // the language tables: 80 languages, every one covers the page names
       int full = 0; for (const QVariant& l : i18n.languages()) if (l.toMap().value("coverage").toInt() >= 44) ++full;
       std::printf("amixos --smoke: %d languages, %d cover all page names; MIXER in fa = %s\n", i18n.count(), full, qPrintable(i18n.t("MIXER", "fa")));

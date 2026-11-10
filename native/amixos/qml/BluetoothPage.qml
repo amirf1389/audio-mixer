@@ -19,7 +19,7 @@ Item {
     function open() { const i = page.inId !== "-" ? 2 : 0; const ok = engine.open(page.backend, page.inId, page.outId, settings.defaultRate || 48000, Math.max(256, settings.defaultFrames || 512), i, 2); if (ok) settings.rememberDevice(page.backend, page.inId, page.outId, settings.defaultRate || 48000, Math.max(256, settings.defaultFrames || 512), i, 2) }
     component Head: Text { color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
     component Note: Text { Layout.fillWidth: true; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap }
-    component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(56, bl.implicitWidth + 16); implicitHeight: 24; radius: 5; color: on ? onColor : Qt.rgba(1, 1, 1, 0.08); border.color: Theme.lineSoft
+    component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(56, bl.implicitWidth + 16); implicitHeight: 24; radius: 5; color: on ? onColor : Theme.ov(0.08); border.color: Theme.lineSoft
         Text { id: bl; anchors.centerIn: parent; text: label; color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
     ColumnLayout {
         anchors.fill: parent; anchors.margins: 10; spacing: 8
@@ -37,7 +37,7 @@ Item {
                     Note { text: "Every endpoint whose name says Bluetooth, hands-free, A2DP, headset or a known brand. DirectSound entries first (the path with no lock); WASAPI shared entries also work. Pair a new device in Windows Settings › Bluetooth, then RESCAN." }
                     ListView { Layout.fillWidth: true; Layout.fillHeight: true; clip: true; model: page.bt; spacing: 4
                         delegate: Rectangle { width: ListView.view.width; height: 44; radius: 6; property bool pickedOut: page.outId === modelData.id && page.backend === modelData.backend; property bool pickedIn: page.inId === modelData.id && page.backend === modelData.backend
-                            color: pickedOut || pickedIn ? Qt.rgba(0.2, 0.9, 0.5, 0.12) : Qt.rgba(1, 1, 1, 0.04); border.color: pickedOut || pickedIn ? Theme.emerald : Theme.lineSoft
+                            color: pickedOut || pickedIn ? Qt.rgba(0.2, 0.9, 0.5, 0.12) : Theme.ov(0.04); border.color: pickedOut || pickedIn ? Theme.emerald : Theme.lineSoft
                             RowLayout { anchors.fill: parent; anchors.margins: 8; spacing: 8
                                 Text { text: "⮁"; color: Theme.cyan; font.pixelSize: 14 }
                                 ColumnLayout { spacing: 1; Layout.fillWidth: true

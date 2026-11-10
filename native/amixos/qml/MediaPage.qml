@@ -9,8 +9,9 @@ import QtQuick.Layouts
 Item {
     id: page
     objectName: "mediaPage"
+    property var appPanel: null
     function mmss(s) { const m = Math.floor(s / 60), r = Math.floor(s % 60); return m + ":" + (r < 10 ? "0" : "") + r }
-    component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(56, bl.implicitWidth + 16); implicitHeight: 26; radius: 4; color: on ? onColor : Qt.rgba(1, 1, 1, 0.08); border.color: Theme.lineSoft
+    component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(56, bl.implicitWidth + 16); implicitHeight: 26; radius: 4; color: on ? onColor : Theme.ov(0.08); border.color: Theme.lineSoft
         Text { id: bl; anchors.centerIn: parent; text: label; color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
     ColumnLayout {
         anchors.fill: parent; anchors.margins: 10; spacing: 8
@@ -19,6 +20,29 @@ Item {
                 Text { text: "STREAM & MEDIA:"; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
                 Text { text: media.playlist.length + " in the playlist · " + media.message; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; elide: Text.ElideRight; Layout.fillWidth: true }
                 Text { text: media.playing ? "PLAYING" : "STOPPED"; color: media.playing ? Theme.emerald : Theme.dim; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } } }
+        // APP AUDIO: what another program plays (a music player, YouTube / YouTube Music in a browser, Spotify, Apple Music, TIDAL, Deezer, Roon ...)
+        // taken into the mixer as an input, through WASAPI loopback of the output it plays on. Secure by construction: nothing is decoded,
+        // unlocked or logged in; the console only reads what Windows already mixes for the speakers. The apps keep their own accounts and DRM.
+        Rectangle { Layout.fillWidth: true; implicitHeight: appCol.implicitHeight + 24; radius: Theme.radius; color: Theme.card; border.color: Theme.line
+            property var loops: { const l = []; for (let i = 0; i < engine.devices.length; ++i) if (String(engine.devices[i].id).indexOf("loopback:") === 0) l.push(engine.devices[i]); return l }
+            property int pick: -1
+            ColumnLayout { id: appCol; anchors.fill: parent; anchors.margins: 12; spacing: 6
+                RowLayout { Layout.fillWidth: true; spacing: 8
+                    Text { text: "APP AUDIO  ·  PLAYERS & STREAMING INTO THE MIXER"; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
+                    Item { Layout.fillWidth: true }
+                    Text { text: parent.parent.parent.loops.length ? parent.parent.parent.loops.length + " output" + (parent.parent.parent.loops.length === 1 ? "" : "s") + " can be captured" : (engine.backends.indexOf("wasapi") >= 0 ? "no output endpoint seen: RESCAN on CONNECTIONS" : "Windows only (WASAPI loopback)"); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 } }
+                Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7
+                    text: "Play in any app: Windows Media Player, YouTube / YouTube Music, Spotify, Apple Music, TIDAL, Deezer, Roon, Qobuz, Amazon Music, a browser tab. Pick the output that app plays on and CAPTURE: the console opens WASAPI in loopback mode on that output and feeds the mix into the strips, from where it goes to EQ, dynamics, effects, recording and the ASIO / WASAPI / DirectSound output you chose. Secure mode: no account, no decoding, no DRM, nothing leaves this computer; the apps keep playing exactly as before." }
+                Flow { Layout.fillWidth: true; spacing: 4
+                    Repeater { model: parent.parent.parent.loops
+                        delegate: Btn { label: String(modelData.name).replace("App audio: what plays on ", "⟲ "); on: appPanel.pick === index; onColor: Theme.cyan; onClicked: appPanel.pick = index } } }
+                RowLayout { spacing: 6
+                    Btn { label: "▶ CAPTURE INTO THE MIXER"; on: appPanel.pick >= 0; onColor: Theme.emerald
+                        onClicked: { if (appPanel.pick < 0) return; const d = appPanel.loops[appPanel.pick]; const last = settings.lastDevice; const out = last && last.backend === "wasapi" && last.out ? last.out : ""; const ok = engine.open("wasapi", d.id, out, settings.defaultRate || 48000, settings.defaultFrames || 256, Math.min(32, d.inChannels || 2), 2); if (ok) settings.rememberDevice("wasapi", d.id, out, settings.defaultRate || 48000, settings.defaultFrames || 256, Math.min(32, d.inChannels || 2), 2) } }
+                    Btn { label: "⏹ STOP"; visible: engine.running; onClicked: engine.stop() }
+                    Text { Layout.fillWidth: true; text: engine.running ? engine.status : "The captured app lands on CH 1-2 (its left / right); route it on ROUTING. To hear it, the output must be a different device than the one captured, or you get a loop."; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap } } }
+            Component.onCompleted: appPanel = this
+        }
         // transport
         Rectangle { Layout.fillWidth: true; implicitHeight: 118; radius: Theme.radius; color: Theme.card; border.color: Theme.line
             ColumnLayout { anchors.fill: parent; anchors.margins: 12; spacing: 8
@@ -50,7 +74,7 @@ Item {
                     Btn { label: "ADD"; on: true; onClicked: { media.add(pathIn.text); pathIn.text = "" } }
                     Btn { label: "CLEAR"; onClicked: media.clear() } }
                 ListView { id: lv; Layout.fillWidth: true; Layout.fillHeight: true; clip: true; spacing: 3; model: media.playlist
-                    delegate: Rectangle { width: lv.width; height: 36; radius: 6; color: index === media.current ? Qt.rgba(0.98, 0.75, 0.14, 0.14) : Qt.rgba(1, 1, 1, 0.03); border.color: index === media.current ? Theme.amber : (modelData.ok ? Theme.lineSoft : Theme.danger)
+                    delegate: Rectangle { width: lv.width; height: 36; radius: 6; color: index === media.current ? Qt.rgba(0.98, 0.75, 0.14, 0.14) : Theme.ov(0.03); border.color: index === media.current ? Theme.amber : (modelData.ok ? Theme.lineSoft : Theme.danger)
                         RowLayout { anchors.fill: parent; anchors.margins: 8; spacing: 10
                             Text { text: (index + 1) + "."; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 }
                             ColumnLayout { Layout.fillWidth: true; spacing: 1

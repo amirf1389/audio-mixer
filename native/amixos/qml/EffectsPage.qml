@@ -28,10 +28,10 @@ Item {
             RowLayout {
                 anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 6
                 Text { text: "EFFECTS:"; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
-                Repeater { model: engine.busState; delegate: Rectangle { implicitWidth: bl.implicitWidth + 16; implicitHeight: 20; radius: 4; color: page.bus === index ? Theme.amber : Qt.rgba(1, 1, 1, 0.06); border.color: modelData.fx !== "" ? Theme.violet : "transparent"
+                Repeater { model: engine.busState; delegate: Rectangle { implicitWidth: bl.implicitWidth + 16; implicitHeight: 20; radius: 4; color: page.bus === index ? Theme.amber : Theme.ov(0.06); border.color: modelData.fx !== "" ? Theme.violet : "transparent"
                     Text { id: bl; anchors.centerIn: parent; text: modelData.name + (modelData.fx !== "" ? " ·" : ""); color: page.bus === index ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.bus = index } } }
                 Item { Layout.fillWidth: true }
-                Rectangle { implicitWidth: 100; implicitHeight: 20; radius: 4; color: page.browse ? Theme.violet : Qt.rgba(1, 1, 1, 0.08); border.color: Theme.lineSoft
+                Rectangle { implicitWidth: 100; implicitHeight: 20; radius: 4; color: page.browse ? Theme.violet : Theme.ov(0.08); border.color: Theme.lineSoft
                     Text { anchors.centerIn: parent; text: "300 PRESETS"; color: page.browse ? "#000" : Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.browse = !page.browse } }
                 Text { visible: page.fx.preset > 0; text: "preset #" + page.fx.preset; color: Theme.violet; font.family: Theme.mono; font.pixelSize: 8 }
                 Text { text: page.fx.kind !== "" ? page.fx.name + " on " + (page.b ? page.b.name : "") : "no effect on this bus"; color: page.fx.kind !== "" ? Theme.violet : Theme.dim; font.family: Theme.mono; font.pixelSize: 8 }
@@ -45,9 +45,9 @@ Item {
                 ColumnLayout {
                     anchors.fill: parent; anchors.margins: 10; spacing: 4
                     Text { text: "EFFECT"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.letterSpacing: 2 }
-                    Rectangle { Layout.fillWidth: true; implicitHeight: 30; radius: 6; color: page.fx.kind === "" ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(1, 1, 1, 0.05); border.color: Theme.lineSoft
+                    Rectangle { Layout.fillWidth: true; implicitHeight: 30; radius: 6; color: page.fx.kind === "" ? Theme.ov(0.16) : Theme.ov(0.05); border.color: Theme.lineSoft
                         Text { anchors.centerIn: parent; text: "NONE"; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setBusFx(page.bus, "") } }
-                    Repeater { model: page.catalog; delegate: Rectangle { Layout.fillWidth: true; implicitHeight: 30; radius: 6; color: page.fx.kind === modelData.kind ? Theme.violet : Qt.rgba(1, 1, 1, 0.05); border.color: Theme.lineSoft
+                    Repeater { model: page.catalog; delegate: Rectangle { Layout.fillWidth: true; implicitHeight: 30; radius: 6; color: page.fx.kind === modelData.kind ? Theme.violet : Theme.ov(0.05); border.color: Theme.lineSoft
                         Text { anchors.centerIn: parent; text: modelData.name; color: page.fx.kind === modelData.kind ? "#000" : Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setBusFx(page.bus, modelData.kind) } } }
                     Item { Layout.fillHeight: true }
                     Text { Layout.fillWidth: true; text: "Send strips to this bus on SEND TO (POST for effects). The wet signal returns to the master at RETURN and to the bus outputs " + (page.b ? page.b.outputs : "") + "."; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap }
@@ -60,17 +60,17 @@ Item {
                     anchors.fill: parent; anchors.margins: 12; spacing: 8
                     RowLayout { Layout.fillWidth: true; spacing: 6
                         Text { text: "PRESETS · " + page.allPresets.length; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 12; font.bold: true; font.letterSpacing: 2 }
-                        Repeater { model: page.presetCats; delegate: Rectangle { implicitWidth: pcl.implicitWidth + 14; implicitHeight: 20; radius: 4; color: page.presetCat === modelData ? Theme.violet : Qt.rgba(1, 1, 1, 0.06)
+                        Repeater { model: page.presetCats; delegate: Rectangle { implicitWidth: pcl.implicitWidth + 14; implicitHeight: 20; radius: 4; color: page.presetCat === modelData ? Theme.violet : Theme.ov(0.06)
                             Text { id: pcl; anchors.centerIn: parent; text: modelData.toUpperCase(); color: page.presetCat === modelData ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.presetCat = modelData } } }
                         Item { Layout.fillWidth: true }
-                        Rectangle { implicitWidth: 160; implicitHeight: 22; radius: 4; color: "#05070a"; border.color: Theme.lineSoft
+                        Rectangle { implicitWidth: 160; implicitHeight: 22; radius: 4; color: Theme.deep; border.color: Theme.lineSoft
                             TextInput { anchors.fill: parent; anchors.margins: 5; text: page.presetFilter; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; selectByMouse: true; onTextChanged: page.presetFilter = text
                                 Text { visible: !parent.text.length; text: "search…"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 9 } } } }
                     Text { Layout.fillWidth: true; text: "Load onto " + (page.b ? page.b.name : "") + ". The preset sets the effect, its values and MIX; the bus RETURN opens if it was down. Values can then be edited on the parameter panel (the preset number clears when you do)."; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap }
                     GridView { id: grid; Layout.fillWidth: true; Layout.fillHeight: true; clip: true; cellWidth: 150; cellHeight: 34; model: page.presetsShown()
                         ScrollBar.vertical: ScrollBar {}
                         delegate: Item { width: grid.cellWidth; height: grid.cellHeight
-                            Rectangle { anchors.fill: parent; anchors.margins: 2; radius: 5; color: page.fx.preset === modelData.id ? Theme.violet : Qt.rgba(1, 1, 1, 0.05); border.color: page.fx.preset === modelData.id ? Theme.violet : Theme.lineSoft
+                            Rectangle { anchors.fill: parent; anchors.margins: 2; radius: 5; color: page.fx.preset === modelData.id ? Theme.violet : Theme.ov(0.05); border.color: page.fx.preset === modelData.id ? Theme.violet : Theme.lineSoft
                                 ColumnLayout { anchors.fill: parent; anchors.margins: 5; spacing: 0
                                     Text { Layout.fillWidth: true; elide: Text.ElideRight; text: modelData.name; color: page.fx.preset === modelData.id ? "#000" : Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                                     Text { text: "#" + modelData.id + " · " + modelData.kind + " · mix " + Math.round(modelData.mix * 100) + "%"; color: page.fx.preset === modelData.id ? "#222" : Theme.dim; font.family: Theme.mono; font.pixelSize: 6 } }
@@ -86,9 +86,9 @@ Item {
                         Layout.fillWidth: true
                         Text { text: page.fx.kind !== "" ? page.fx.name.toUpperCase() : "NO EFFECT"; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 12; font.bold: true; font.letterSpacing: 1.5 }
                         Item { Layout.fillWidth: true }
-                        Rectangle { visible: page.fx.kind !== ""; implicitWidth: 64; implicitHeight: 22; radius: 4; color: page.fx.bypass ? Theme.amber : Qt.rgba(1, 1, 1, 0.08); border.color: Theme.lineSoft
+                        Rectangle { visible: page.fx.kind !== ""; implicitWidth: 64; implicitHeight: 22; radius: 4; color: page.fx.bypass ? Theme.amber : Theme.ov(0.08); border.color: Theme.lineSoft
                             Text { anchors.centerIn: parent; text: "BYPASS"; color: page.fx.bypass ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setBusFxBypass(page.bus, !page.fx.bypass) } }
-                        Rectangle { visible: page.fx.kind !== ""; implicitWidth: 64; implicitHeight: 22; radius: 4; color: Qt.rgba(1, 1, 1, 0.08); border.color: Theme.lineSoft
+                        Rectangle { visible: page.fx.kind !== ""; implicitWidth: 64; implicitHeight: 22; radius: 4; color: Theme.ov(0.08); border.color: Theme.lineSoft
                             Text { anchors.centerIn: parent; text: "DEFAULTS"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                             MouseArea { anchors.fill: parent; onClicked: { const ps = page.fx.params; for (let i = 0; i < ps.length; ++i) engine.setBusFxParam(page.bus, ps[i].id, ps[i]["default"]); engine.setBusFxMix(page.bus, 1) } } }
                     }

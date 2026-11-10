@@ -10,7 +10,7 @@ Item {
     objectName: "networkPage"
     component Head: Text { color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
     component Note: Text { Layout.fillWidth: true; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap }
-    component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(56, bl.implicitWidth + 16); implicitHeight: 24; radius: 4; color: on ? onColor : Qt.rgba(1, 1, 1, 0.08); border.color: Theme.lineSoft
+    component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(56, bl.implicitWidth + 16); implicitHeight: 24; radius: 4; color: on ? onColor : Theme.ov(0.08); border.color: Theme.lineSoft
         Text { id: bl; anchors.centerIn: parent; text: label; color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
     ColumnLayout {
         anchors.fill: parent; anchors.margins: 10; spacing: 8
@@ -36,7 +36,7 @@ Item {
                     RowLayout { spacing: 8; Text { Layout.preferredWidth: 110; text: "REACH"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 } Btn { label: "THIS COMPUTER"; on: !osc.allowLan; onColor: Theme.emerald; onClicked: osc.allowLan = false } Btn { label: "LAN"; on: osc.allowLan; onColor: Theme.danger; onClicked: osc.allowLan = true } }
                     RowLayout { spacing: 8; Text { Layout.preferredWidth: 110; text: "REMOTE ADDRESS"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 } Text { text: osc.remoteAddress; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 10; font.bold: true } Text { text: "← type this into the remote (TouchOSC, Mixing Station, the Android app)"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
                     RowLayout { visible: osc.allowLan; spacing: 8; Text { Layout.preferredWidth: 110; text: "ALLOWED IPs"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
-                        Rectangle { Layout.fillWidth: true; implicitHeight: 22; radius: 4; color: "#05070a"; border.color: Theme.lineSoft
+                        Rectangle { Layout.fillWidth: true; implicitHeight: 22; radius: 4; color: Theme.deep; border.color: Theme.lineSoft
                             TextInput { anchors.fill: parent; anchors.margins: 5; text: osc.allowedIps; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; selectByMouse: true; onEditingFinished: osc.allowedIps = text
                                 Text { visible: !parent.text.length; text: "empty = any address on the LAN · e.g. 192.168.1.20, 10.0.0.0/24"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 } } } }
                     Text { visible: osc.allowLan; Layout.fillWidth: true; text: "LAN: anyone on the network can move the faders. OSC over UDP has no password and no encryption. Use it only on a network you own, and switch back to THIS COMPUTER afterwards."; color: Theme.danger; font.family: Theme.mono; font.pixelSize: 7; font.bold: true; wrapMode: Text.WordWrap }

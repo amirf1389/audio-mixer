@@ -32,21 +32,21 @@ Item {
             RowLayout {
                 anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 6
                 Text { text: "WAVEFORM:"; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
-                Repeater { model: ["MASTER L", "MASTER R", "L + R", "STRIP"]; delegate: Rectangle { implicitWidth: tl.implicitWidth + 16; implicitHeight: 20; radius: 4; color: page.source === index ? Theme.amber : Qt.rgba(1, 1, 1, 0.06)
+                Repeater { model: ["MASTER L", "MASTER R", "L + R", "STRIP"]; delegate: Rectangle { implicitWidth: tl.implicitWidth + 16; implicitHeight: 20; radius: 4; color: page.source === index ? Theme.amber : Theme.ov(0.06)
                     Text { id: tl; anchors.centerIn: parent; text: modelData; color: page.source === index ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: { page.source = index; page.refresh() } } } }
-                Rectangle { visible: page.source === 3; implicitWidth: 22; implicitHeight: 20; radius: 4; color: Qt.rgba(1, 1, 1, 0.08); Text { anchors.centerIn: parent; text: "‹"; color: Theme.ink; font.pixelSize: 12 } MouseArea { anchors.fill: parent; onClicked: page.strip = Math.max(0, page.strip - 1) } }
+                Rectangle { visible: page.source === 3; implicitWidth: 22; implicitHeight: 20; radius: 4; color: Theme.ov(0.08); Text { anchors.centerIn: parent; text: "‹"; color: Theme.ink; font.pixelSize: 12 } MouseArea { anchors.fill: parent; onClicked: page.strip = Math.max(0, page.strip - 1) } }
                 Text { visible: page.source === 3; text: "CH " + (page.strip + 1 < 10 ? "0" : "") + (page.strip + 1) + " " + (page.stripSt ? page.stripSt.name : ""); color: Theme.stripColors[page.stripSt ? page.stripSt.color : 0]; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-                Rectangle { visible: page.source === 3; implicitWidth: 22; implicitHeight: 20; radius: 4; color: Qt.rgba(1, 1, 1, 0.08); Text { anchors.centerIn: parent; text: "›"; color: Theme.ink; font.pixelSize: 12 } MouseArea { anchors.fill: parent; onClicked: page.strip = Math.min(engine.stripState.length - 1, page.strip + 1) } }
+                Rectangle { visible: page.source === 3; implicitWidth: 22; implicitHeight: 20; radius: 4; color: Theme.ov(0.08); Text { anchors.centerIn: parent; text: "›"; color: Theme.ink; font.pixelSize: 12 } MouseArea { anchors.fill: parent; onClicked: page.strip = Math.min(engine.stripState.length - 1, page.strip + 1) } }
                 Item { Layout.fillWidth: true }
                 Text { text: "TIME"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.letterSpacing: 2 }
-                Repeater { model: [1, 5, 20, 100, 500]; delegate: Rectangle { implicitWidth: 42; implicitHeight: 20; radius: 4; color: page.windowMs === modelData ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(1, 1, 1, 0.06)
+                Repeater { model: [1, 5, 20, 100, 500]; delegate: Rectangle { implicitWidth: 42; implicitHeight: 20; radius: 4; color: page.windowMs === modelData ? Theme.ov(0.16) : Theme.ov(0.06)
                     Text { anchors.centerIn: parent; text: modelData + " ms"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: { page.windowMs = modelData; page.refresh() } } } }
-                Rectangle { implicitWidth: 60; implicitHeight: 20; radius: 4; color: page.trigger ? Theme.cyan : Qt.rgba(1, 1, 1, 0.06); Text { anchors.centerIn: parent; text: "TRIGGER"; color: page.trigger ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.trigger = !page.trigger } }
-                Rectangle { implicitWidth: 60; implicitHeight: 20; radius: 4; color: page.frozen ? Theme.danger : Qt.rgba(1, 1, 1, 0.06); Text { anchors.centerIn: parent; text: "FREEZE"; color: page.frozen ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.frozen = !page.frozen } }
+                Rectangle { implicitWidth: 60; implicitHeight: 20; radius: 4; color: page.trigger ? Theme.cyan : Theme.ov(0.06); Text { anchors.centerIn: parent; text: "TRIGGER"; color: page.trigger ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.trigger = !page.trigger } }
+                Rectangle { implicitWidth: 60; implicitHeight: 20; radius: 4; color: page.frozen ? Theme.danger : Theme.ov(0.06); Text { anchors.centerIn: parent; text: "FREEZE"; color: page.frozen ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.frozen = !page.frozen } }
             }
         }
         Rectangle {
-            Layout.fillWidth: true; Layout.fillHeight: true; radius: Theme.radius; color: "#070a0e"; border.color: Theme.line; clip: true
+            Layout.fillWidth: true; Layout.fillHeight: true; radius: Theme.radius; color: Theme.chrome; border.color: Theme.line; clip: true
             Canvas {
                 id: canvas
                 anchors.fill: parent; anchors.margins: 8

@@ -9,7 +9,7 @@ Rectangle {
     property var pages: []
     property string current: "home"
     signal picked(string id)
-    color: "#070a10"
+    color: Theme.chrome
     width: 76
     Rectangle { anchors.right: parent.right; width: 1; height: parent.height; color: Theme.lineSoft }
     Flickable {

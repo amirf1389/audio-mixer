@@ -46,13 +46,13 @@ Item {
                         ColumnLayout { Layout.fillWidth: true; spacing: 3
                             Text { text: modelData.t; color: Theme.ink; font.family: Theme.sans; font.pixelSize: 13; font.bold: true }
                             Text { Layout.fillWidth: true; text: modelData.d; color: Theme.muted; font.family: Theme.sans; font.pixelSize: 10; wrapMode: Text.WordWrap } }
-                        Rectangle { implicitWidth: 92; implicitHeight: 24; radius: 4; color: Qt.rgba(1, 1, 1, 0.08); border.color: Theme.lineSoft; Layout.alignment: Qt.AlignVCenter
+                        Rectangle { implicitWidth: 92; implicitHeight: 24; radius: 4; color: Theme.ov(0.08); border.color: Theme.lineSoft; Layout.alignment: Qt.AlignVCenter
                             Text { anchors.centerIn: parent; text: modelData.l + " →"; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.go(modelData.p) } } } } } }
             RowLayout { Layout.fillWidth: true; spacing: 8
                 Rectangle { Layout.fillWidth: true; Layout.preferredWidth: 1; implicitHeight: kc.implicitHeight + 24; radius: Theme.radius; color: Theme.card; border.color: Theme.line
                     ColumnLayout { id: kc; anchors.fill: parent; anchors.margins: 12; spacing: 4
                         Head { text: "KEYBOARD (MIXER PAGE)" }
-                        Repeater { model: page.keys; delegate: RowLayout { spacing: 10; Rectangle { implicitWidth: 110; implicitHeight: 20; radius: 4; color: Qt.rgba(1, 1, 1, 0.08); Text { anchors.centerIn: parent; text: modelData[0]; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } } Text { text: modelData[1]; color: Theme.muted; font.family: Theme.sans; font.pixelSize: 10 } } } } }
+                        Repeater { model: page.keys; delegate: RowLayout { spacing: 10; Rectangle { implicitWidth: 110; implicitHeight: 20; radius: 4; color: Theme.ov(0.08); Text { anchors.centerIn: parent; text: modelData[0]; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } } Text { text: modelData[1]; color: Theme.muted; font.family: Theme.sans; font.pixelSize: 10 } } } } }
                 Rectangle { Layout.fillWidth: true; Layout.preferredWidth: 1; implicitHeight: nc.implicitHeight + 24; radius: Theme.radius; color: Theme.card; border.color: Theme.line
                     ColumnLayout { id: nc; anchors.fill: parent; anchors.margins: 12; spacing: 4
                         Head { text: "NO SOUND?" }
