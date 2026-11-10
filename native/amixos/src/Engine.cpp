@@ -64,7 +64,7 @@ bool Engine::open(const QString& backend, const QString& inDevice, const QString
   am::DeviceConfig cfg; cfg.backend = backend.isEmpty() ? "auto" : backend.toStdString(); cfg.inDevice = inDevice.toStdString(); cfg.outDevice = outDevice.toStdString();
   cfg.sampleRate = sampleRate > 0 ? sampleRate : 48000; cfg.frames = static_cast<unsigned>(frames > 0 ? frames : 256); blockFrames_ = static_cast<int>(cfg.frames); cfg.inChannels = inChannels; cfg.outChannels = outChannels;
   devIn_ = std::clamp(inChannels, 0, kStrips); devOut_ = std::clamp(outChannels, 0, kOutputs);
-  std::string err;
+  std::string err; nullInputFor(cfg);
   if (!rt_->open(cfg, err) || !rt_->start(err)) { status_ = QStringLiteral("Could not open the sound card: %1").arg(QString::fromStdString(err)); rt_.reset(); emit stateChanged(); return false; }
   rt_->setExtraSource(&sources_);
   for (auto& s : strips_) s.dsp.setSampleRate(cfg.sampleRate);
@@ -223,6 +223,10 @@ QString Engine::vendorKeyFingerprint() const { return QString::fromStdString(am:
 // ---- driver intelligence
 static QVariantMap attemptMap(const am::drv::Attempt& a) { QVariantMap m; m["mode"] = QString::fromStdString(a.mode); m["backend"] = QString::fromStdString(a.backend); m["in"] = QString::fromStdString(a.inDevice); m["out"] = QString::fromStdString(a.outDevice); m["exclusive"] = a.exclusive; m["why"] = QString::fromStdString(a.why); m["fromLock"] = a.fromLock; m["pinned"] = a.pinned; return m; }
 static std::vector<am::DeviceInfo> devInfos(const QVariantList& l) { std::vector<am::DeviceInfo> v; for (const QVariant& x : l) { const QVariantMap m = x.toMap(); am::DeviceInfo d; d.backend = m["backend"].toString().toStdString(); d.id = m["id"].toString().toStdString(); d.name = m["name"].toString().toStdString(); d.inChannels = m["inChannels"].toInt(); d.outChannels = m["outChannels"].toInt(); d.defaultIn = m["defaultIn"].toBool(); d.defaultOut = m["defaultOut"].toBool(); d.defaultRate = m["defaultRate"].toDouble(); v.push_back(d); } return v; }
+void Engine::nullInputFor(am::DeviceConfig& cfg) const {
+  if (cfg.backend != "null" || !nullTone_) return; const double fs = cfg.sampleRate > 0 ? cfg.sampleRate : 48000;
+  cfg.nullInput = [fs](float* const* in, std::size_t frames, std::uint64_t frame0) { for (std::size_t i = 0; i < frames; ++i) { const double t = static_cast<double>(frame0 + i) / fs; in[0][i] = static_cast<float>(0.25 * std::sin(6.283185307 * 440 * t)); if (in[1]) in[1][i] = static_cast<float>(0.25 * std::sin(6.283185307 * 660 * t)); } };
+}
 QVariantList Engine::driverPlan(const QString& backend, const QString& in, const QString& out) const { QVariantList l; for (const auto& a : am::drv::plan(backend.toStdString(), in.toStdString(), out.toStdString(), devInfos(devices_), QDateTime::currentMSecsSinceEpoch())) l << attemptMap(a); return l; }
 QVariantList Engine::driverLocks() const { QVariantList l; for (const auto& k : am::drv::locks()) { QVariantMap m; m["name"] = QString::fromStdString(k.name); m["mode"] = QString::fromStdString(k.mode); m["device"] = QString::fromStdString(k.device); m["reason"] = QString::fromStdString(k.reason); m["at"] = static_cast<qlonglong>(k.at); m["retryAt"] = k.mode == "asio" ? 0 : static_cast<qlonglong>(k.at + am::drv::kRetryMs); l << m; } return l; }
 QVariantList Engine::driverPins() const { QVariantList l; for (const auto& p : am::drv::pins(devInfos(devices_))) { QVariantMap m; m["name"] = QString::fromStdString(p.name); m["on"] = p.on; m["reason"] = QString::fromStdString(p.reason); l << m; } return l; }
@@ -245,7 +249,7 @@ bool Engine::openSmart(const QString& backend, const QString& in, const QString&
     stop(); rt_ = std::make_unique<am::Runtime>(kStrips);
     am::DeviceConfig cfg; cfg.backend = a.backend; cfg.inDevice = a.inDevice; cfg.outDevice = a.outDevice; cfg.sampleRate = rate > 0 ? rate : 48000; cfg.frames = static_cast<unsigned>(frames > 0 ? frames : 256); blockFrames_ = static_cast<int>(cfg.frames); cfg.inChannels = inCh; cfg.outChannels = outCh; cfg.exclusive = a.exclusive;
     devIn_ = std::clamp(inCh, 0, kStrips); devOut_ = std::clamp(outCh, 0, kOutputs);
-    std::string err;
+    std::string err; nullInputFor(cfg);
     if (rt_->open(cfg, err) && rt_->start(err)) {
       rt_->setExtraSource(&sources_);
       for (auto& st : strips_) st.dsp.setSampleRate(cfg.sampleRate);

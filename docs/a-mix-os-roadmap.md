@@ -176,6 +176,14 @@ decided, what exists, what is next, and what was asked for but is not possible a
   Music), Spotify, Apple Music, TIDAL, Deezer, Roon ... into CH 1-2 and on to the ASIO / WASAPI / DirectSound output. Secure by construction:
   no account, no decoding, no DRM, nothing leaves the computer; AUTO DETECT never picks a loopback as the device.
 
+- **Fader = input / output indicator, boot screen, auto on**: the fader track carries two level columns, cyan = the input as the driver
+  delivers it (post-converter, pre-fader, `inDb` from the device block), orange = the output after the fader (`peakDb`), red above 0 dBFS or
+  on a clip; the master fader shows RMS / peak, the monitor fader the control-room level. **BOOT** (`BootPage.qml`): the mark, 32 strips
+  lighting up, a progress bar and the stages (interface, folders, sound cards and drivers, audio engine, licence) with what each found; at
+  least 1.6 s, fades to the start page; `--smoke` skips the wait. AUTO START is on by default (the remembered device, else AUTO DETECT).
+  `Engine::setNullTestInput` gives the null device a -12 dBFS test signal so `--shots` show real meters. Checks: engine tests, clang-tidy
+  (bugprone + analyzer: no finding in project code), MinGW -Werror on every Windows source, console smoke with screenshots in both themes.
+
 ## Next, in order
 
 1. **Windows .exe in hand**: run the Actions workflow, download `amixos-windows-x64.zip`, test ASIO (UM2, Focusrite, ASIO4ALL, Realtek) on the user's PC. Fix what the real drivers show.

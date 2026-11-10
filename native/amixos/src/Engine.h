@@ -175,6 +175,8 @@ class Engine : public QObject {
   bool dcBlock() const { return settings_.value("audio/dcBlock", true).toBool(); } void setDcBlock(bool v) { settings_.setValue("audio/dcBlock", v); if (rt_) rt_->setDcBlock(v); emit stateChanged(); }
   int outputBits() const { return settings_.value("audio/outputBits", 0).toInt(); } void setOutputBits(int b) { b = b == 16 || b == 24 ? b : 0; settings_.setValue("audio/outputBits", b); if (rt_) rt_->setOutputBits(b); emit stateChanged(); }
   Q_INVOKABLE void resetProfiler() { if (rt_) rt_->resetProfiler(); }
+  Q_INVOKABLE void setNullTestInput(bool on) { nullTone_ = on; }   // the null device delivers a -12 dBFS test signal on inputs 1-2 (sine 440 / 660 Hz) instead of silence: meters and faders show something (--shots, demos)
+  bool nullTestInput() const { return nullTone_; }
   Q_INVOKABLE QVariantList spectrum(int channel);
   Q_INVOKABLE QVariantMap roundTrip() const { double ms = 0, db = -120; QVariantMap m; m["ok"] = scope_.roundTrip(ms, db); m["ms"] = ms; m["returnDb"] = db; m["frames"] = blockFrames(); m["rate"] = sampleRate(); return m; }
   Q_PROPERTY(double sampleRate READ sampleRate NOTIFY stateChanged)
@@ -388,6 +390,7 @@ class Engine : public QObject {
   QVariantMap license_; int licensedChannels_ = 8;
   struct EqPresetUi { QString name; am::dsp::EqBand bands[10]; int hpOrder = 0; double hpFreq = 80; int lpOrder = 0; double lpFreq = 16000; bool used = false; };
   static const EqPresetUi* factoryEqPreset(int slot); EqPresetUi userEq_[10]; void loadUserEq(); void storeUserEq() const;
+  bool nullTone_ = false; void nullInputFor(am::DeviceConfig& cfg) const;
   QString autoStatus_ = "off"; class QFileSystemWatcher* keyWatch_ = nullptr; QTimer keyScan_;
   QString lastRoute_; am::Runtime::ExtraSource* extra_ = nullptr; am::rec::Recorder recorder_; unsigned armed_ = 0; QString recMsg_; double clipDb_ = -0.1; int peakHoldMs_ = 1400;
   struct MonitorUi { int source = 0; double db = 0; bool dim = false, mono = false, mute = false; } mon_;
