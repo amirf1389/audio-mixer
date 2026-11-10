@@ -1,4 +1,5 @@
 #include "audiomixer/driver_intel.hpp"
+#include "paths/paths.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -146,7 +147,7 @@ std::vector<Step> ladder(const DeviceInfo& asio, const std::vector<DeviceInfo>& 
   return out;
 }
 
-std::string lockFile() { if (const char* f = std::getenv("AMIXOS_DRIVER_LOCK_FILE")) return f; const char* h = std::getenv("HOME"); if (!h) h = std::getenv("USERPROFILE"); return std::string(h ? h : ".") + "/.amixos/driver-lock.json"; }
+std::string lockFile() { if (const char* f = std::getenv("AMIXOS_DRIVER_LOCK_FILE")) return f; return am::paths::file("driver-lock.json"); }
 void resetCache() { g_store = Store(); }
 bool getLock(const std::string& name, Lock& out, std::int64_t nowMs) { load(); const auto it = g_store.locks.find(keyOf(name)); if (it == g_store.locks.end()) return false; if (it->second.mode != "asio" && nowMs - it->second.at > kRetryMs) return false; out = it->second; return true; }
 Lock learn(const std::string& name, const std::string& mode, const std::string& device, const std::string& reason, std::int64_t nowMs) {

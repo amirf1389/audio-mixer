@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../../../../..)
 add_library(amix SHARED
   ${ROOT}/engine/cpp/src/engine.cpp ${ROOT}/engine/cpp/src/runtime.cpp ${ROOT}/engine/cpp/src/backend_null.cpp ${ROOT}/engine/cpp/src/devices.cpp ${ROOT}/engine/cpp/src/driver_intel.cpp
-  ${ROOT}/engine/cpp/app/license/license.cpp ${ROOT}/engine/cpp/app/license/crypto.cpp
+  ${ROOT}/engine/cpp/app/license/license.cpp ${ROOT}/engine/cpp/app/license/crypto.cpp ${ROOT}/engine/cpp/app/paths/paths.cpp
   ${ROOT}/engine/cpp/app/sdk/amix_c.cpp
   amix_jni.cpp)
 target_include_directories(amix PRIVATE ${ROOT}/engine/cpp/include ${ROOT}/engine/cpp/src ${ROOT}/engine/cpp/app ${ROOT}/sdk/c/include)

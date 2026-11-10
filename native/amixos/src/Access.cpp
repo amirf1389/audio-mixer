@@ -1,4 +1,5 @@
 #include "Access.h"
+#include "paths/paths.hpp"
 
 #include <QDateTime>
 #include <QDir>
@@ -81,9 +82,9 @@ bool Access::setPin(const QString& oldPin, const QString& newPin) {
   if (!checkPin(oldPin)) { note("The current PIN is wrong"); return false; }
   s_.setValue("access/pinHash", hashPin(newPin)); s_.sync(); log("PIN changed"); note("PIN changed"); emit changed(); return true;
 }
-QString Access::auditPath() const { return QDir::homePath() + "/.amixos/audit.log"; }
+QString Access::auditPath() const { return QString::fromStdString(am::paths::file("audit.log")); }
 void Access::log(const QString& text) {
-  QDir().mkpath(QDir::homePath() + "/.amixos"); QFile f(auditPath()); if (!f.open(QIODevice::Append | QIODevice::Text)) return;
+  QFile f(auditPath()); if (!f.open(QIODevice::Append | QIODevice::Text)) return;
   QTextStream(&f) << QDateTime::currentDateTime().toString(Qt::ISODate) << '\t' << kRoles[roleIndex(role())].name << '\t' << QString(text).replace('\n', ' ') << '\n';
   f.close(); emit auditChanged();
 }
@@ -95,7 +96,7 @@ QVariantList Access::audit() const {
 }
 void Access::clearAudit() { if (!adminMode()) { note("ADMIN mode (PIN) is needed to clear the log"); return; } QFile::remove(auditPath()); log("Audit log cleared"); }
 QString Access::exportAudit() {
-  const QString out = QDir::homePath() + "/.amixos/audit-export-" + QDateTime::currentDateTime().toString("yyyyMMdd-HHmmss") + ".csv";
+  const QString out = QString::fromStdString(am::paths::dataDir()) + "/audit-export-" + QDateTime::currentDateTime().toString("yyyyMMdd-HHmmss") + ".csv";
   QFile in(auditPath()), o(out); if (!in.open(QIODevice::ReadOnly | QIODevice::Text) || !o.open(QIODevice::WriteOnly | QIODevice::Truncate)) { note("Nothing to export yet"); return QString(); }
   QTextStream ts(&o); ts << "time,role,event\n"; while (!in.atEnd()) { const QStringList p = QString::fromUtf8(in.readLine()).trimmed().split('\t'); if (p.size() >= 3) ts << p[0] << ',' << p[1] << ",\"" << QString(p.mid(2).join(' ')).replace('"', "'") << "\"\n"; }
   note(QStringLiteral("Audit log exported to %1").arg(out)); return out;

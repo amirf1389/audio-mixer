@@ -89,7 +89,7 @@ class Engine : public QObject {
   Q_INVOKABLE bool deactivateKey();
   Q_INVOKABLE QString licenseRequest(const QString& plan, const QString& name, const QString& email) const;   // JSON to send the vendor
   Q_INVOKABLE QString vendorKeyFingerprint() const;
-  // AUTO LICENCE: the console writes its key request to ~/.amixos/key-request.json on its own and watches ~/.amixos and ~/Downloads for a
+  // AUTO LICENCE: the console writes its key request to <data>/key-request.json on its own and watches the data folder and ~/Downloads for a
   // key file (*.amixkey / *.key / key.txt holding an AMIX1 key) and activates it on sight. Keys are never made here: only the vendor's
   // Key Generator signs them; the console only asks and listens.
   Q_PROPERTY(bool autoLicense READ autoLicense WRITE setAutoLicense NOTIFY licenseChanged)

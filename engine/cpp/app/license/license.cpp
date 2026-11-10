@@ -1,4 +1,5 @@
 #include "license.hpp"
+#include "paths/paths.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -125,8 +126,8 @@ std::string machineId() {
 }
 
 std::string homeDir() { if (const char* h = std::getenv("HOME")) return h; if (const char* h = std::getenv("USERPROFILE")) return h; return "."; }
-std::string licenseFile() { if (const char* f = std::getenv("AMIXOS_LICENSE_FILE")) return f; return homeDir() + "/.amixos/license.json"; }
-std::string editionFile() { if (const char* f = std::getenv("AMIXOS_EDITION_FILE")) return f; return homeDir() + "/.amixos/edition.json"; }
+std::string licenseFile() { if (const char* f = std::getenv("AMIXOS_LICENSE_FILE")) return f; return am::paths::file("license.json"); }
+std::string editionFile() { if (const char* f = std::getenv("AMIXOS_EDITION_FILE")) return f; return am::paths::file("edition.json"); }
 void setProgramDir(const std::string& dir) { programDir_ = dir; }
 std::string shippedTokenFile() { if (const char* f = std::getenv("AMIXOS_EDITION_TOKEN_FILE")) return f; return (programDir_.empty() ? std::string(".") : programDir_) + "/edition-token.json"; }
 

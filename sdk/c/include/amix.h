@@ -107,6 +107,8 @@ AMIX_API void     amix_rt_clear_clips(amix_rt*);
 AMIX_API void     amix_rt_levels(const amix_rt*, amix_levels* out);
 
 /* ---- licence (read-only) ---- */
+AMIX_API void  amix_set_dirs(const char* data, const char* cache, const char* temp);   /* where the library keeps its files (Android: filesDir, cacheDir, cacheDir); NULL leaves one alone */
+AMIX_API char* amix_paths_json(void);             /* {"os","program","data","cache","prefetch","temp","downloads"} */
 AMIX_API char* amix_license_json(void);           /* {"state","plan","planName","channels","source","expires","machine","message"} */
 AMIX_API char* amix_machine_id(void);
 

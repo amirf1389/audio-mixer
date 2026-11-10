@@ -52,6 +52,7 @@
     <ClCompile Include="..\..\..\engine\cpp\src\backend_asio.cpp" />
     <ClCompile Include="..\..\..\engine\cpp\src\backend_dsound.cpp" />
     <ClCompile Include="..\..\..\engine\cpp\app\license\license.cpp" />
+    <ClCompile Include="..\..\..\engine\cpp\app\paths\paths.cpp" />
     <ClCompile Include="..\..\..\engine\cpp\app\license\crypto.cpp" />
     <ClCompile Include="..\..\..\engine\cpp\app\daemon\daemon.cpp" />
     <ClCompile Include="..\..\..\engine\cpp\app\daemon\httpd.cpp" />

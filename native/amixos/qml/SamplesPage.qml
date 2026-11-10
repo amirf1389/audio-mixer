@@ -1,5 +1,5 @@
 // SAMPLES: 100 built-in one-shots (drums, percussion, bass, leads, pads, keys, FX, test signals) on pads, played polyphonically into the
-// master. Rendered in this program at the engine's rate (no files needed); EXPORT writes them as WAV into ~/.amixos/samples for ARRANGE
+// master. Rendered in this program at the engine's rate (no files needed); EXPORT writes them as WAV into the cache folder (samples/) for ARRANGE
 // or any other program. Keys 1-9 / 0 play the first ten pads of the shown category.
 import QtQuick
 import AmixOS   // this module: brings the Theme singleton (a plain directory import would see Theme as an ordinary type)

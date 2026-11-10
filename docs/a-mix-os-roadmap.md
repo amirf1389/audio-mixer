@@ -134,6 +134,11 @@ decided, what exists, what is next, and what was asked for but is not possible a
   GAIN sliders for the selected band (click a diamond or B1-B10), ISO CENTRE, BAND OFF; the diamonds read the real bands.
   None of the Windows backends has run on a Windows PC from here: the UM2 run needs the user's computer (Remote Control) or a Windows build.
 
+- **One install layout** (`engine/cpp/app/paths`, `install/layout.json`, `docs/install-layout.md`): program / data / cache / prefetch / temp per
+  OS (Windows: Program Files + %APPDATA% + %LOCALAPPDATA% + %TEMP%, installer script `install/windows/amfx1.iss`; Android: filesDir + cacheDir
+  through `Engine.setDirs` / `amix_set_dirs`; Linux and macOS: data next to the program when writable). Licence, driver lock, daemon token,
+  audit, arrangement, key request, samples export and downloads all go through it; `~/.amixos` from earlier builds keeps working.
+
 ## Next, in order
 
 1. **Windows .exe in hand**: run the Actions workflow, download `amixos-windows-x64.zip`, test ASIO (UM2, Focusrite, ASIO4ALL, Realtek) on the user's PC. Fix what the real drivers show.
