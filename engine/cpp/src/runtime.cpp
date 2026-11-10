@@ -92,6 +92,7 @@ void Runtime::setBusMute(int b, bool on) { post({kBusMute, b, on ? 1.0 : 0.0, 0,
 void Runtime::setBusReturn(int b, double db) { post({kBusReturn, b, db, 0, 0}); }
 void Runtime::setInputRoute(int strip, int input) { if (strip < 0 || strip >= kMaxStrips) return; post({kInRoute, strip, 0, 0, 0, std::max(-1, std::min(kMaxStrips - 1, input))}); }
 void Runtime::setOutputRoute(int out, int source) { if (out < 0 || out >= kMaxOutputs) return; post({kOutRoute, out, 0, 0, 0, std::max(0, std::min(kSrcBus0L + 2 * kMaxBuses - 1, source))}); }
+void Runtime::setInserts(int strip, std::shared_ptr<const InsertChain> chain) { if (strip >= 0 && strip < kMaxStrips) inserts_[strip].store(std::move(chain)); }
 void Runtime::setTrimDb(int strip, double db) { if (strip < 0 || strip >= kMaxStrips) return; post({kTrim, strip, std::pow(10.0, std::clamp(db, -24.0, 24.0) / 20), 0, 0}); }
 void Runtime::setMonitor(int source, double db, bool dim, bool mono, bool mute) {
   double lin = std::pow(10.0, std::clamp(db, -120.0, 10.0) / 20); if (dim) lin *= 0.1; if (mute || db <= -119) lin = 0;
@@ -137,10 +138,13 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
     ins[s] = (src >= 0 && src < nIn_ && in && in[src]) ? in[src] : silence_.data();
     dsp::Channel& ch = ch_[static_cast<std::size_t>(s)];
     const double tr = trim_[s];
-    if (ch.active() || tr != 1.0) {   // the strip's input trim and channel DSP, in a scratch block
+    const std::shared_ptr<const InsertChain> chain = inserts_[s].load();
+    const bool anyInsert = chain && !chain->empty();
+    if (ch.active() || tr != 1.0 || anyInsert) {   // the strip's input trim, channel DSP and inserts, in a scratch block
       float* b = chBuf_[static_cast<std::size_t>(s)].data();
       if (tr != 1.0) { const float g = static_cast<float>(tr); for (std::size_t i = 0; i < frames; ++i) b[i] = ins[s][i] * g; } else std::memcpy(b, ins[s], frames * sizeof(float));
       if (ch.active()) ch.process(b, frames);
+      if (anyInsert) for (const auto& ins_ : *chain) if (ins_) ins_->process(b, frames);
       ins[s] = b;
     }
   }

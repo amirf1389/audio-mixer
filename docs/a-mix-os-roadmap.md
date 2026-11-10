@@ -46,6 +46,11 @@ decided, what exists, what is next, and what was asked for but is not possible a
 - **ARRANGE native** (`engine/cpp/app/arrange`, `native/amixos/src/Arrange.cpp`, `ArrangePage.qml`): WAV clips on tracks, gain / pan / M / S,
   volume automation, markers, snap to bars / beats, transport through the master chain (`Runtime::ExtraSource`), 24-bit WAV export, project in
   `~/.amixos/arrangement.json`. WAV only for now (no decoder for MP3 / FLAC in the native build); no recording, by design.
+- **VST3 hosting** (`engine/cpp/app/vst3`, headers in `drivers/vst3/sdk` under Steinberg's dual licence): loads .vst3 modules (Linux and
+  Windows bundles, single-file DLLs), lists classes, mono / stereo main buses, lock-free parameter changes, state save / restore, a
+  `Runtime::Insert` chain per strip after the built-in DSP. Tested against a self-written test plug-in (vst3_test, smoke). The PLUGIN RACK
+  loads real plug-ins with generic controls; no plug-in editor window yet; macOS bundle loading not yet.
+- **Settings system**, **console features** (undo / redo, A/B, stereo link, trim, shortcuts), **MIXER action bar + PLUGIN RACK + SETTINGS gear**.
 - **ASIO host hardening**: reset / resync / buffer-size requests handled on a worker thread, time-info, channel clamping, latencies;
   verified by mingw cross-compile only — the first run against real drivers is on the user's Windows PC.
 
@@ -57,7 +62,7 @@ decided, what exists, what is next, and what was asked for but is not possible a
 4. **Licence / editions**: the AMFXE1 edition tokens and the vendor public key (`bridge/license-public.json`) verified natively (Ed25519 / ECDSA as the Node code does); hardware-bound keys; Lite / Pro tiers unlock pages and strip counts. "JWT / authenticator" from the request = signed tokens + a TOTP second factor for the vendor's Key Generator, not for end users' audio.
 5. **Driver intelligence**: the AI driver lock ladder, the Realtek WASAPI pin and the ASIO4ALL default-endpoint fallback, ported from `bridge/driver-lock.js` into the runtime's device layer (in-app routing only, never OS or driver tampering).
 6. **ARRANGE**: timeline, clips, automation, markers, offline WAV export (no recording), native.
-7. **VST3 hosting** (Windows first): the VST3 SDK host with the plug-in's own window (HWND) on a separate thread, lock-free audio hand-off; then VST2 / DLL where licences allow (VST2 SDK is no longer distributed by Steinberg: only plug-ins the user already owns).
+7. ~~VST3 hosting~~ done 2026-11-10 (generic controls; still open: the plug-in's own editor window, macOS bundles). VST2 stays out: Steinberg no longer licenses the VST2 SDK.
 8. **Bluetooth** as ordinary inputs / outputs (they appear through WASAPI / Core Audio / ALSA already; the page shows codec and latency).
 9. ~~Spatial / 360~~: removed 2026-11-10 at the user's request (the SURROUND page and the Resonance Audio path are gone; no spatial rendering is built in).
 10. **Volume optimise ("no low, but loud")**: a master loudness stage = loudness-normalising gain + look-ahead true-peak limiter to a target (−14 LUFS streaming / −1 dBTP), with the "quiet source" detector raising gain smoothly; never clipping, always measured on the LOUDNESS page.

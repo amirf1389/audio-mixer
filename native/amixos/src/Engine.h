@@ -16,6 +16,7 @@
 
 #include "audiomixer/dsp.hpp"
 #include "audiomixer/runtime.hpp"
+#include "vst3/vst3_host.hpp"
 
 class Engine : public QObject {
   Q_OBJECT
@@ -149,6 +150,12 @@ class Engine : public QObject {
   Q_INVOKABLE void setPluginBypass(int strip, int slot, bool bypass);
   Q_INVOKABLE QVariantList pluginCatalog() const;     // the built-in stages, for the chooser
   Q_INVOKABLE void movePlugin(int strip, int from, int to);   // reorder the rack (swap two slots)
+  // VST3 (engine/cpp/app/vst3): plug-ins found in the VST3 folders (Settings adds more), loaded into a slot as "vst3:<module path>|<class id>"
+  Q_INVOKABLE QVariantList vstCatalog() const;        // [{kind, name, vendor, module, cid}] from the last scan
+  Q_INVOKABLE int rescanVst(const QStringList& extraDirs);   // scans the platform folders + extraDirs; returns the plug-in count
+  Q_INVOKABLE QVariantList pluginParams(int strip, int slot) const;   // [{id, title, units, value (normalized), text, stepCount, bypass, hidden, readOnly}]
+  Q_INVOKABLE void setPluginParam(int strip, int slot, int id, double normalized);
+  Q_INVOKABLE QString pluginError(int strip, int slot) const;
   Q_INVOKABLE int pluginCount(int strip) const;
   Q_INVOKABLE void copyChannel(int strip);
   Q_INVOKABLE bool pasteChannel(int strip);          // the copied DSP + sends + pan onto this strip (not the name, colour, fader or groups)
@@ -222,7 +229,11 @@ class Engine : public QObject {
   static constexpr int kStrips = 32;
   static constexpr int kBuses = 8, kGroups = 8;
   struct SendUi { double db = -60; bool pre = false; };
-  struct PluginUi { QString kind; bool bypass = false; };
+  struct PluginUi { QString kind; bool bypass = false; std::shared_ptr<am::vst3::Plugin> vst; QString state, error; };   // vst: loaded instance (null = pending with error)
+  std::vector<QVariantMap> vstCatalog_; std::vector<std::shared_ptr<am::vst3::Plugin>> graveyard_; QTimer graveTimer_;
+  bool loadVst(int strip, int slot);                      // from kind + state at the runtime's rate; false -> error set
+  void rebuildInserts(int strip);                         // the strip's VST chain into the runtime
+  void reloadAllVst();                                    // after open (new rate / block)
   struct StripUi { QString name; double db = 0, pan = 0; bool mute = false, solo = false; am::dsp::Channel dsp{48000}; SendUi sends[kBuses]; int dca = 0; unsigned muteGroups = 0; int color = 0; PluginUi plugins[kPluginSlots]; bool link = false; double trimDb = 0; };
   std::vector<QJsonObject> history_; int histPos_ = -1; bool restoring_ = false; QTimer histTimer_; QJsonObject abOther_; QString abSlot_ = "A";
   int partner(int i) const { return (i ^ 1) < kStrips ? (i ^ 1) : -1; }

@@ -60,8 +60,8 @@ Item {
                 Item { Layout.fillWidth: true }
                 Text { text: engine.running ? engine.status : "ENGINE IDLE: connect a sound card"; color: engine.running ? Theme.emerald : Theme.amber; font.family: Theme.mono; font.pixelSize: 8 }
                 // SETTINGS: a quick popover with the mixer's own options, and a link to the full SETTINGS page
-                Rectangle { id: gear; implicitWidth: 26; implicitHeight: 20; radius: 4; color: quick.visible ? Theme.amber : Qt.rgba(1, 1, 1, 0.08); border.color: Theme.lineSoft
-                    Text { anchors.centerIn: parent; text: "⚙"; color: quick.visible ? "#000" : Theme.ink; font.pixelSize: 12 }
+                Rectangle { id: gear; implicitWidth: gearT.implicitWidth + 16; implicitHeight: 20; radius: 4; color: quick.visible ? Theme.amber : Qt.rgba(1, 1, 1, 0.08); border.color: Theme.lineSoft
+                    Text { id: gearT; anchors.centerIn: parent; text: "⚙ SETTINGS"; color: quick.visible ? "#000" : Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                     MouseArea { anchors.fill: parent; onClicked: quick.visible ? quick.close() : quick.open() }
                     ToolTip.visible: gearHov.hovered && !quick.visible; ToolTip.text: "Mixer settings"; HoverHandler { id: gearHov }
                     Popup { id: quick; objectName: "mixerQuick"; x: parent.width - width; y: parent.height + 6; width: 300; padding: 10; modal: false; focus: true; closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
@@ -122,8 +122,24 @@ Item {
                 Item { Layout.fillWidth: true }
                 Rectangle { implicitWidth: 92; implicitHeight: 20; radius: 4; color: page.rack ? Qt.rgba(0.6, 0.4, 1, 0.22) : Qt.rgba(1, 1, 1, 0.06); border.color: page.rack ? "#a78bfa" : "transparent"; Text { anchors.centerIn: parent; text: "PLUGIN RACK"; color: page.rack ? "#a78bfa" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.rack = !page.rack } }
             }
-            Menu { id: chooser; property int slot: 0; width: 260
-                Repeater { model: engine.pluginCatalog(); delegate: MenuItem { text: modelData.name; enabled: modelData.builtIn; onTriggered: engine.setPlugin(page.sel, chooser.slot, modelData.kind) } }
+            // generic parameter panel for a VST3 plug-in (no plug-in GUI is opened): one slider per parameter, the plug-in's own value text
+            Popup { id: paramsPop; property int slot: 0; property string title: ""; property var model: []; x: (parent.width - width) / 2; y: 80; width: 460; height: Math.min(520, 70 + model.length * 30); modal: true; focus: true; closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+                background: Rectangle { radius: 8; color: Theme.cardRaised; border.color: "#a78bfa" }
+                Connections { target: engine; function onStripsChanged() { if (paramsPop.visible) paramsPop.model = engine.pluginParams(page.sel, paramsPop.slot) } }
+                contentItem: ColumnLayout { spacing: 4
+                    RowLayout { Layout.fillWidth: true; Text { text: paramsPop.title; color: "#a78bfa"; font.family: Theme.mono; font.pixelSize: 10; font.bold: true; Layout.fillWidth: true; elide: Text.ElideRight } Text { text: "VST3 · generic controls"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } Rectangle { implicitWidth: 20; implicitHeight: 18; radius: 3; color: Qt.rgba(1, 1, 1, 0.08); Text { anchors.centerIn: parent; text: "×"; color: Theme.muted } MouseArea { anchors.fill: parent; onClicked: paramsPop.close() } } }
+                    Flickable { Layout.fillWidth: true; Layout.fillHeight: true; contentHeight: pcol.implicitHeight; clip: true
+                        ColumnLayout { id: pcol; width: parent.width; spacing: 2
+                            Repeater { model: paramsPop.model
+                                delegate: RowLayout { Layout.fillWidth: true; spacing: 8
+                                    Text { text: modelData.title; color: modelData.bypass ? Theme.amber : Theme.ink; font.family: Theme.mono; font.pixelSize: 8; Layout.preferredWidth: 130; elide: Text.ElideRight }
+                                    Slider { Layout.fillWidth: true; from: 0; to: 1; stepSize: modelData.stepCount > 0 ? 1 / modelData.stepCount : 0; value: modelData.value; enabled: !modelData.readOnly; onMoved: engine.setPluginParam(page.sel, paramsPop.slot, modelData.id, value) }
+                                    Text { text: modelData.text + (modelData.units ? " " + modelData.units : ""); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8; Layout.preferredWidth: 90; elide: Text.ElideRight }
+                                    Rectangle { implicitWidth: 16; implicitHeight: 14; radius: 2; color: Qt.rgba(1, 1, 1, 0.08); Text { anchors.centerIn: parent; text: "↺"; color: Theme.muted; font.pixelSize: 9 } MouseArea { anchors.fill: parent; onClicked: engine.setPluginParam(page.sel, paramsPop.slot, modelData.id, modelData.default) } } } } } }
+                    Text { visible: paramsPop.model.length === 0; text: "This plug-in exposes no parameters."; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 } } }
+            Menu { id: chooser; property int slot: 0; width: 300
+                Repeater { model: engine.pluginCatalog(); delegate: MenuItem { text: (modelData.builtIn ? "" : "VST3 · ") + modelData.name + (modelData.vendor ? "  — " + modelData.vendor : ""); onTriggered: engine.setPlugin(page.sel, chooser.slot, modelData.kind) } }
+                MenuItem { visible: engine.vstCatalog().length === 0; enabled: false; text: "No VST3 plug-ins found: add folders on SETTINGS" }
                 MenuSeparator {}
                 MenuItem { text: "Bypass / enable"; onTriggered: { var p = engine.plugins(page.sel)[chooser.slot]; if (p.kind) engine.setPluginBypass(page.sel, chooser.slot, !p.bypass) } }
                 MenuItem { text: "Clear slot"; onTriggered: engine.setPlugin(page.sel, chooser.slot, "") }
@@ -160,6 +176,8 @@ Item {
                                 Rectangle { implicitWidth: 14; implicitHeight: 12; radius: 2; color: Qt.rgba(1, 1, 1, 0.08); Text { anchors.centerIn: parent; text: "›"; color: Theme.muted; font.pixelSize: 9 } MouseArea { anchors.fill: parent; enabled: modelData.slot < 9; onClicked: engine.movePlugin(page.sel, modelData.slot, modelData.slot + 1) } }
                                 Item { Layout.fillWidth: true }
                                 Rectangle { visible: modelData.builtIn; implicitWidth: 30; implicitHeight: 12; radius: 2; color: Qt.rgba(0, 0.95, 1, 0.18); Text { anchors.centerIn: parent; text: "OPEN"; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.go(modelData.kind === "gate" ? "gate" : modelData.kind === "comp" ? "dyn" : "dsp") } }
+                                Rectangle { visible: modelData.vst && !modelData.pending; implicitWidth: 36; implicitHeight: 12; radius: 2; color: Qt.rgba(0.6, 0.4, 1, 0.3); Text { anchors.centerIn: parent; text: "PARAMS"; color: "#a78bfa"; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } MouseArea { anchors.fill: parent; onClicked: { paramsPop.slot = modelData.slot; paramsPop.title = modelData.name; paramsPop.model = engine.pluginParams(page.sel, modelData.slot); paramsPop.open() } } }
+                                Rectangle { visible: modelData.pending; implicitWidth: 30; implicitHeight: 12; radius: 2; color: Qt.rgba(0.984, 0.749, 0.141, 0.3); Text { anchors.centerIn: parent; text: "WHY?"; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } ToolTip.visible: whyHov.hovered; ToolTip.text: modelData.error || "The plug-in could not be loaded."; HoverHandler { id: whyHov } }
                                 Rectangle { implicitWidth: 14; implicitHeight: 12; radius: 2; color: Qt.rgba(1, 0.165, 0.373, 0.25); Text { anchors.centerIn: parent; text: "×"; color: Theme.danger; font.pixelSize: 9 } MouseArea { anchors.fill: parent; onClicked: engine.setPlugin(page.sel, modelData.slot, "") } } } } } }
             }
         }

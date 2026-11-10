@@ -111,7 +111,12 @@ class Runtime {
   static constexpr int kSrcOff = 0, kSrcMasterL = 1, kSrcMasterR = 2, kSrcMonL = 3, kSrcMonR = 4, kSrcBus0L = 5;
   void setInputRoute(int strip, int input);
   void setOutputRoute(int out, int source);
-  void setTrimDb(int strip, double db);                     // input trim, before the channel DSP and the input meter (-24 .. +24 dB)
+  void setTrimDb(int strip, double db);
+  // INSERTS: external processors (VST3 plug-ins) on a strip, after the built-in channel DSP and before the fader. The chain is swapped
+  // whole from the UI thread; the audio thread keeps its own reference for the block, so a removed plug-in stays alive until the block ends.
+  struct Insert { virtual ~Insert() = default; virtual void process(float* mono, std::size_t frames) = 0; };
+  using InsertChain = std::vector<std::shared_ptr<Insert>>;
+  void setInserts(int strip, std::shared_ptr<const InsertChain> chain);                     // input trim, before the channel DSP and the input meter (-24 .. +24 dB)
   static int defaultOutputSource(int out) { return out < 2 ? kSrcMonL + out : (out - 2 < 2 * kMaxBuses ? kSrcBus0L + (out - 2) : kSrcOff); }
   // an extra stereo source summed into the master before the master chain (the ARRANGE player): render() is called on the audio thread
   // with the block size; set nullptr to detach. The pointer must stay valid until setExtraSource(nullptr) has returned.
@@ -128,7 +133,7 @@ class Runtime {
   int nIn_ = 0, nOut_ = 0; bool running_ = false;
   std::vector<float> silence_, left_, right_;
   int monSrc_ = 0; double monGainTarget_ = 1, monGain_ = 1; bool monMono_ = false; double monPk_[2] = {0, 0};   // audio thread only
-  std::vector<float> monL_, monR_, extL_, extR_; std::atomic<ExtraSource*> extra_{nullptr}; int inRoute_[kMaxStrips]; int outRoute_[kMaxOutputs]; double trim_[kMaxStrips];                            // audio thread only (set in open, then by ops)
+  std::vector<float> monL_, monR_, extL_, extR_; std::atomic<ExtraSource*> extra_{nullptr}; int inRoute_[kMaxStrips]; int outRoute_[kMaxOutputs]; double trim_[kMaxStrips]; std::atomic<std::shared_ptr<const InsertChain>> inserts_[kMaxStrips];                            // audio thread only (set in open, then by ops)
   std::vector<dsp::Channel> ch_; std::vector<std::vector<float>> chBuf_;
   std::vector<std::vector<float>> busBuf_;   // 2 * kMaxBuses blocks for the aux bus outputs   // one channel DSP and one scratch block per strip (sized in open())
   // control ring: many producers (under a mutex), one consumer (the audio thread)

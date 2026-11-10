@@ -29,6 +29,8 @@ class Settings : public QObject {
   Q_PROPERTY(bool rackDefault READ rackDefault WRITE setRackDefault NOTIFY changed)
   Q_PROPERTY(bool channelPanelDefault READ channelPanelDefault WRITE setChannelPanelDefault NOTIFY changed)
   Q_PROPERTY(QVariantList dataFiles READ dataFiles NOTIFY changed)              // [{name, path, exists, bytes}]
+  Q_PROPERTY(QStringList vstDirs READ vstDirs NOTIFY changed)                      // extra VST3 folders besides the platform ones
+  Q_PROPERTY(QStringList vstDefaultDirs READ vstDefaultDirs CONSTANT)
   Q_PROPERTY(QString dataFolder READ dataFolder CONSTANT)
   Q_PROPERTY(QString message READ message NOTIFY messageChanged)
 
@@ -49,6 +51,11 @@ class Settings : public QObject {
   bool rackDefault() const { return s_.value("mixer/rack", true).toBool(); } void setRackDefault(bool v) { set("mixer/rack", v); }
   bool channelPanelDefault() const { return s_.value("mixer/channelPanel", true).toBool(); } void setChannelPanelDefault(bool v) { set("mixer/channelPanel", v); }
   QVariantList dataFiles() const;
+  QStringList vstDirs() const { return s_.value("vst3/dirs").toStringList(); }
+  QStringList vstDefaultDirs() const;
+  Q_INVOKABLE int addVstDir(const QString& dir);      // adds and rescans; returns the plug-in count
+  Q_INVOKABLE int removeVstDir(const QString& dir);
+  Q_INVOKABLE int rescanVst();
   QString dataFolder() const;
   QString message() const { return msg_; }
 
