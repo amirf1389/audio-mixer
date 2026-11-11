@@ -19,6 +19,9 @@ ApplicationWindow {
     LayoutMirroring.enabled: i18n.rtl
     Binding { target: Theme; property: "dark"; value: settings.darkTheme }
     LayoutMirroring.childrenInherit: true
+    // SOFT RESTART: the console starts over without closing: engine off, sound cards scanned again, the remembered device (or the best one) started, the page rebuilt, the boot screen shown
+    function softRestart() { engine.stop(); engine.refreshDevices(); if (!settings.startLastDevice()) engine.autoStart(settings.defaultFrames); const c = root.current; root.current = "home"; root.current = c; pageLoader.active = false; pageLoader.active = true; root.bootOn = settings.bootAnimation && !noBoot }
+    Shortcut { sequence: "Ctrl+Shift+R"; context: Qt.ApplicationShortcut; onActivated: root.softRestart() }
     function pageOf(id) { for (var i = 0; i < engine.pages.length; i++) if (engine.pages[i].id === id) return engine.pages[i]; return engine.pages[0] }
 
     ColumnLayout {
@@ -34,6 +37,18 @@ ApplicationWindow {
                 Item { Layout.fillWidth: true }
                 Rectangle { implicitWidth: statusText.implicitWidth + 20; implicitHeight: 24; radius: 12; color: engine.running ? Qt.rgba(0.063, 0.725, 0.506, 0.15) : Qt.rgba(0.984, 0.749, 0.141, 0.12); border.color: engine.running ? Theme.emerald : Theme.amber
                     Text { id: statusText; anchors.centerIn: parent; text: engine.running ? i18n.t("ENGINE ON • ", i18n.lang) + engine.backend.toUpperCase() : i18n.t("ENGINE OFF", i18n.lang); color: engine.running ? Theme.emerald : Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } }
+                Rectangle { visible: engine.busy; implicitWidth: busyT.implicitWidth + 20; implicitHeight: 24; radius: 12; color: Qt.rgba(0.984, 0.749, 0.141, 0.14); border.color: Theme.amber   // a scan or a driver start is running: the console stays usable
+                    Text { id: busyT; anchors.centerIn: parent; text: "⟳ " + i18n.t(engine.busyText(), i18n.lang) + " …"; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } }
+                Rectangle { implicitWidth: 26; implicitHeight: 26; radius: 13; color: Theme.cardRaised; border.color: Theme.line   // SOFT RESTART
+                    Text { anchors.centerIn: parent; text: "↻"; color: Theme.cyan; font.pixelSize: 14; font.bold: true }
+                    MouseArea { anchors.fill: parent; onClicked: root.softRestart() }
+                    ToolTip.visible: srH.hovered; ToolTip.text: i18n.t("SOFT RESTART (Ctrl+Shift+R): scan the sound cards and start the engine again without closing the console", i18n.lang); HoverHandler { id: srH } }
+                Rectangle {   // WHAT IS CONNECTED: the output's kind (headphones, speakers, interface ...) and the input's, with the channel counts
+                    readonly property var io: { engine.running; engine.devices; return engine.ioInfo() }
+                    visible: engine.running; implicitWidth: ioT.implicitWidth + 18; implicitHeight: 24; radius: 12; color: Theme.ov(0.06); border.color: Theme.lineSoft
+                    Text { id: ioT; anchors.centerIn: parent; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true
+                        text: Theme.kindIcon(parent.io.outKind) + " " + i18n.t(Theme.kindName(parent.io.outKind), i18n.lang) + " · " + (parent.io.outputs || 0) + " " + i18n.t("OUT", i18n.lang) + (parent.io.inputs > 0 ? "   " + Theme.kindIcon(parent.io.inKind) + " " + i18n.t(Theme.kindName(parent.io.inKind), i18n.lang) + " · " + parent.io.inputs + " " + i18n.t("IN", i18n.lang) : "   ⚠ " + i18n.t("NO INPUT", i18n.lang)) }
+                    ToolTip.visible: ioH.hovered; ToolTip.text: (parent ? "" : "") + i18n.t("OUTPUT", i18n.lang) + ": " + (io.outName || "—") + "\n" + i18n.t("INPUT", i18n.lang) + ": " + (io.inName || "—") + "\n" + (io.blockMs ? io.blockMs.toFixed(1) + " ms / block" : ""); HoverHandler { id: ioH } }
                 Text { text: i18n.t("MASTER ", i18n.lang) + Theme.dbText(engine.telemetry.masterPeakDb) + i18n.t(" dBFS", i18n.lang); color: engine.telemetry.masterClip ? Theme.danger : Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                 Rectangle {   // UPDATES: a NEW badge when the signed feature feed has entries newer than what was last looked at; click = what's new
                     visible: updater.newFeatures > 0 || updater.state === "available"; implicitWidth: newTxt.implicitWidth + 16; implicitHeight: 22; radius: 11; color: Theme.orange
@@ -74,7 +89,7 @@ ApplicationWindow {
                     sourceComponent: {
                         switch (root.current) {
                         case "home": return homeC; case "mixer": return mixerC; case "dsp": return toneC; case "rtaeq": return rtaEqC; case "bluetooth": return bluetoothC; case "io": return connC;
-                        case "meter": return levelsC; case "lufs": return loudC; case "sys": return settingsC; case "dyn": return compC; case "gate": return gateC; case "bus": return sendC; case "dca": return dcaC; case "scenes": return scenesC; case "presets": return presetsC; case "routing": return routingC; case "renew": return licenseC; case "arrange": return arrangeC; case "fx": return fxC; case "osc": return oscC; case "phase": return phaseC; case "miceq": return miceqC; case "live": return liveC; case "tools": return toolsC; case "calib": return calibC; case "boot": return bootC; case "help": return helpC; case "acct": return acctC; case "access": return accessC; case "admin": return adminC; case "ai": return aiC; case "plugins": return pluginsC; case "network": return networkC; case "media": return mediaC; case "samples": return samplesC; case "asio": return soundC; default: return comingC
+                        case "meter": return levelsC; case "lufs": return loudC; case "sys": return settingsC; case "dyn": return compC; case "gate": return gateC; case "bus": return sendC; case "dca": return dcaC; case "scenes": return scenesC; case "presets": return presetsC; case "routing": return routingC; case "renew": return licenseC; case "arrange": return arrangeC; case "fx": return fxC; case "osc": return oscC; case "phase": return phaseC; case "miceq": return miceqC; case "live": return liveC; case "tools": return toolsC; case "calib": return calibC; case "boot": return bootC; case "help": return helpC; case "acct": return acctC; case "access": return accessC; case "admin": return adminC; case "ai": return aiC; case "plugins": return pluginsC; case "network": return networkC; case "media": return mediaC; case "samples": return samplesC; case "asio": return soundC; case "acoustics": return acousticsC; case "master": return masteringC; case "surround": return spatialC; default: return comingC
                         }
                     }
                 }
@@ -114,6 +129,9 @@ ApplicationWindow {
                 Component { id: mediaC; MediaPage {} }
                 Component { id: samplesC; SamplesPage {} }
                 Component { id: soundC; SoundCardPage {} }
+                Component { id: acousticsC; AcousticsPage {} }
+                Component { id: masteringC; MasteringPage {} }
+                Component { id: spatialC; SpatialPage {} }
                 Component { id: comingC; ComingPage { page: root.pageOf(root.current) } }
             }
         }
@@ -133,7 +151,27 @@ ApplicationWindow {
                         RowLayout { Text { text: modelData.version; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 10; font.bold: true } Text { text: modelData.date + "  " + modelData.title; color: Theme.muted; font.family: Theme.sans; font.pixelSize: 11 } }
                         Repeater { model: modelData.items; delegate: Text { Layout.fillWidth: true; text: "• " + modelData; color: Theme.ink; font.family: Theme.sans; font.pixelSize: 11; wrapMode: Text.WordWrap } } } } } }
             RowLayout { Item { Layout.fillWidth: true }
+                Text { visible: updater.state === "downloading"; text: i18n.t("DOWNLOADING ", i18n.lang) + updater.progress + " %"; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
+                Rectangle { visible: updater.canInstall; implicitWidth: instT.implicitWidth + 24; implicitHeight: 24; radius: 5; color: Theme.emerald; Text { id: instT; anchors.centerIn: parent; text: i18n.t("INSTALL AND RESTART", i18n.lang); color: "#000"; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: updater.installAndRestart() } }
+                Rectangle { visible: updater.state === "downloaded" && !updater.canInstall; implicitWidth: 150; implicitHeight: 24; radius: 5; color: Theme.ov(0.1); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: i18n.t("OPEN DOWNLOAD FOLDER", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: updater.openDownloadFolder() } }
                 Rectangle { visible: updater.state === "available" && updater.file.url !== undefined; implicitWidth: 120; implicitHeight: 24; radius: 5; color: Theme.amber; Text { anchors.centerIn: parent; text: i18n.t("DOWNLOAD", i18n.lang); color: "#000"; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: updater.download() } }
                 Rectangle { implicitWidth: 80; implicitHeight: 24; radius: 5; color: Theme.ov(0.1); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: i18n.t("CLOSE", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: whatsNew.close() } } } } }
+    property bool bootOn: settings.bootAnimation && !noBoot   // noBoot: the smoke / shots run without it
+    Loader { anchors.fill: parent; z: 200; active: root.bootOn; sourceComponent: BootSplash { onDone: root.bootOn = false } }
+    Rectangle {   // UPDATING: the console is about to close; the setup installs and starts it again (like a mixer's firmware update)
+        anchors.fill: parent; z: 300; visible: updater.state === "installing"; color: Theme.obsidian
+        MouseArea { anchors.fill: parent }
+        Column { anchors.centerIn: parent; spacing: 16
+            Text { anchors.horizontalCenter: parent.horizontalCenter; text: Theme.product.toUpperCase(); color: Theme.orange; font.family: Theme.mono; font.pixelSize: 40; font.weight: Font.Black; font.letterSpacing: 6 }
+            Text { anchors.horizontalCenter: parent.horizontalCenter; text: i18n.t("UPDATING TO ", i18n.lang) + updater.latest; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 16; font.bold: true; font.letterSpacing: 3 }
+            Rectangle { anchors.horizontalCenter: parent.horizontalCenter; width: 320; height: 4; radius: 2; color: Theme.ov(0.12); clip: true
+                Rectangle { width: 90; height: 4; radius: 2; color: Theme.orange; NumberAnimation on x { from: -90; to: 320; duration: 1100; loops: Animation.Infinite; running: updater.state === "installing" } } }
+            Text { anchors.horizontalCenter: parent.horizontalCenter; text: i18n.t("The console closes, installs and starts again by itself. Do not switch the computer off.", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 10 } } }
+    Rectangle {   // back from an update: one line at the bottom until it is clicked
+        z: 150; visible: updater.justUpdated !== "" || updater.failedUpdate !== ""; anchors.bottom: parent.bottom; anchors.horizontalCenter: parent.horizontalCenter; anchors.bottomMargin: 18; width: updT.implicitWidth + 60; height: 34; radius: 17
+        color: updater.failedUpdate !== "" ? Theme.danger : Theme.emerald
+        Text { id: updT; anchors.centerIn: parent; color: "#000"; font.family: Theme.mono; font.pixelSize: 10; font.bold: true
+            text: updater.failedUpdate !== "" ? i18n.t("The update to ", i18n.lang) + updater.failedUpdate + i18n.t(" did not complete: this is still ", i18n.lang) + updater.current : i18n.t("UPDATED TO ", i18n.lang) + updater.justUpdated + "  ·  " + i18n.t("click to see what is new", i18n.lang) }
+        MouseArea { anchors.fill: parent; onClicked: { const ok = updater.failedUpdate === ""; updater.acknowledgeUpdate(); if (ok) whatsNew.open() } } }
     SetupPage { anchors.fill: parent; z: 100; visible: root.forceSetup || !settings.setupDone; onFinished: { settings.finishSetup(); root.forceSetup = false; root.current = settings.startPage } }
 }

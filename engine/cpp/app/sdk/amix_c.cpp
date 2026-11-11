@@ -40,7 +40,7 @@ char* amix_devices_json(void) {
   for (const am::DeviceInfo& d : am::listDevices()) {
     if (!first) o += ",";
     first = false;
-    o += "{\"backend\":" + jstr(d.backend) + ",\"id\":" + jstr(d.id) + ",\"name\":" + jstr(d.name) + ",\"inChannels\":" + std::to_string(d.inChannels) + ",\"outChannels\":" + std::to_string(d.outChannels) + ",\"defaultRate\":" + std::to_string(static_cast<int>(d.defaultRate)) + ",\"defaultIn\":" + (d.defaultIn ? "true" : "false") + ",\"defaultOut\":" + (d.defaultOut ? "true" : "false") + "}";
+    o += "{\"backend\":" + jstr(d.backend) + ",\"id\":" + jstr(d.id) + ",\"name\":" + jstr(d.name) + ",\"inChannels\":" + std::to_string(d.inChannels) + ",\"outChannels\":" + std::to_string(d.outChannels) + ",\"defaultRate\":" + std::to_string(static_cast<int>(d.defaultRate)) + ",\"defaultIn\":" + (d.defaultIn ? "true" : "false") + ",\"defaultOut\":" + (d.defaultOut ? "true" : "false") + ",\"kind\":" + jstr(d.kind) + "}";
   }
   return dup(o + "]");
 }
@@ -58,6 +58,7 @@ void amix_mixer_set_send(amix_mixer* m, int s, int b, double db, int pre) { if (
 void amix_mixer_set_bus_level(amix_mixer* m, int b, double db) { if (m) m->mixer.setBusLevel(b, db); }
 void amix_mixer_set_bus_return(amix_mixer* m, int b, double db) { if (m) m->mixer.setBusReturn(b, db); }
 void amix_mixer_set_width(amix_mixer* m, double w) { if (m) m->mixer.setWidth(w); }
+void amix_mixer_set_spatial(amix_mixer* m, int strip, int on, double az, double el, double dist, double spread) { if (m) m->mixer.setSpatial(strip, on != 0, az, el, dist, spread); }
 void amix_mixer_set_depth(amix_mixer* m, int strip, double depth) { if (m) m->mixer.setDepth(strip, depth); }
 int amix_mixer_process5(amix_mixer* m, const float* const* in, int frames, float* const* outs) {
   if (!m || frames <= 0 || !outs) return 0;

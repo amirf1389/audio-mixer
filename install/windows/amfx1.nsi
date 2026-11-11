@@ -27,6 +27,8 @@ VIAddVersionKey "FileDescription" "AmF X1 setup"
 VIAddVersionKey "FileVersion" "${VERSION}"
 VIAddVersionKey "ProductVersion" "${VERSION}"
 VIAddVersionKey "LegalCopyright" "Copyright AMFB Audio. MIT License."
+!define MUI_ICON "..\..\native\amixos\win\amfx1.ico"
+!define MUI_UNICON "..\..\native\amixos\win\amfx1.ico"
 !define MUI_ABORTWARNING
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_LICENSE "..\..\LICENSE"
@@ -38,8 +40,30 @@ VIAddVersionKey "LegalCopyright" "Copyright AMFB Audio. MIT License."
 !insertmacro MUI_UNPAGE_CONFIRM
 !insertmacro MUI_UNPAGE_INSTFILES
 !insertmacro MUI_LANGUAGE "English"
+!include "FileFunc.nsh"
+Var Restart
+Function .onInit
+  ; AUTO UPDATE: the console starts this setup with  /S /RESTART  and quits; wait for it to let go of its files, install silently, start it again
+  ${GetParameters} $R0
+  ${GetOptions} $R0 "/RESTART" $R1
+  IfErrors +2 0
+  StrCpy $Restart "1"
+FunctionEnd
 Section "AmF X1" SecMain
   SectionIn RO
+  StrCmp $Restart "1" 0 nowait
+  StrCpy $R2 0
+  waitloop:
+    ClearErrors
+    FileOpen $R3 "$INSTDIR\amixos.exe" a
+    IfErrors 0 closed
+    IntOp $R2 $R2 + 1
+    IntCmp $R2 40 nowait 0 nowait   ; 20 s at most
+    Sleep 500
+    Goto waitloop
+  closed:
+    FileClose $R3
+  nowait:
   SetOutPath "$INSTDIR"
   File /r "${SRC}\*.*"
   CreateDirectory "$APPDATA\AMFB Audio\AmF X1"
@@ -63,6 +87,10 @@ SectionEnd
 Section "ASIO driver (register AudioMixerASIO64.dll)" SecAsio
   ; the DLL stays in the program folder; it is registered in place (the program's --install-driver does the same)
   ExecWait '"$INSTDIR\AmF X1.exe" --install-driver'
+SectionEnd
+Section "-Restart after an update"
+  StrCmp $Restart "1" 0 +2
+  Exec '"$WINDIR\explorer.exe" "$INSTDIR\amixos.exe"'   ; through the shell: the console starts as the normal user, not elevated
 SectionEnd
 Section "Uninstall"
   ExecWait '"$INSTDIR\AmF X1.exe" --uninstall-driver'

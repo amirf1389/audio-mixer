@@ -28,7 +28,7 @@ qt_add_executable(amixos
     src/Media.cpp src/Media.h
     src/Samples.cpp src/Samples.h
     src/Update.cpp src/Update.h
-    src/Scope.cpp src/Scope.h
+    src/Scope.cpp src/Scope.h src/Measure.cpp src/Measure.h src/Remote.cpp src/Remote.h
     src/Generator.cpp src/Generator.h
     src/I18n.cpp src/I18n.h)
 set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)   # before qt_add_qml_module, or Theme is a plain type and every Theme.* colour is undefined
@@ -51,6 +51,14 @@ qt_add_qml_module(amixos
         qml/EffectsPage.qml
         qml/WaveformPage.qml
         qml/PhasePage.qml
+        qml/Combo.qml
+        qml/Knob.qml
+        qml/PluginEditor.qml
+        qml/Field.qml
+        qml/BootSplash.qml
+        qml/AcousticsPage.qml
+        qml/MasteringPage.qml
+        qml/SpatialPage.qml
         qml/MicEqPage.qml
         qml/LiveSourcesPage.qml
         qml/ToolsPage.qml
@@ -86,17 +94,48 @@ qt_add_qml_module(amixos
         qml/SettingsPage.qml
         qml/ComingPage.qml
     RESOURCES
+        icons/amfx1.png
+        skin/wood.png
+        skin/key.png
+        skin/key-down.png
+        skin/badge.png
+        skin/serial.png
+        skin/plate.png
+        skin/knob.png
+        skin/knob-pointer.png
+        skin/selector.png
+        skin/screw.png
+        skin/meter.png
+        skin/meter-glass.png
+        skin/toggle.png
+        skin/lamp-on.png
+        skin/lamp-off.png
         i18n/verified-22.json
         i18n/auto-58.json
         i18n/ui/fa.json
+        i18n/ui/ar.json
+        i18n/ui/ur.json
         i18n/ui/es.json
+        i18n/ui/fr.json
+        i18n/ui/de.json
         i18n/ui/pt.json
         i18n/ui/ru.json
+        i18n/ui/tr.json
+        i18n/ui/hi.json
+        i18n/ui/zh.json
+        i18n/ui/ja.json
+        i18n/ui/ko.json
+        i18n/ui/ms.json
+        i18n/ui/id.json
         i18n/ui/it.json
-        i18n/ui/vi.json)
+        i18n/ui/nl.json
+        i18n/ui/pl.json
+        i18n/ui/vi.json
+        i18n/ui/th.json
+        i18n/ui/uk.json)
 target_compile_definitions(amixos PRIVATE AMIX_VERSION="${AMIX_VERSION}")
 target_compile_definitions(amixos PRIVATE AMIX_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
-target_link_libraries(amixos PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::QuickControls2 Qt6::Network audiomixer_runtime audiomixer_engine amixos_license amixos_arrange amixos_vst3 amixos_vst2 amixos_record amixos_fx amixos_samples)
+target_link_libraries(amixos PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::QuickControls2 Qt6::Network audiomixer_runtime audiomixer_engine amixos_license amixos_arrange amixos_vst3 amixos_vst2 amixos_record amixos_fx amixos_samples amixos_measure)
 
 if(WIN32)
     set_target_properties(amixos PROPERTIES WIN32_EXECUTABLE TRUE)

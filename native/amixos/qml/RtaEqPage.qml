@@ -14,7 +14,9 @@ Flickable {
     property string view: "diamond"          // diamond | faders | both
     property bool rtaOn: true
     property bool frozen: false
-    property int strip: engine.selectedStrip
+    property string apoNote: ""
+    property bool program: true                 // the page's own rack: the PROGRAM EQ on the master (false = the selected channel's EQ)
+    property int strip: program ? -1 : engine.selectedStrip
     property var gains: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     property var spec: []
     property string presetName: ""
@@ -47,11 +49,11 @@ Flickable {
     function setBand(b, v) { const e = engine.eqBand(strip, b); const g = Math.round(Math.max(-12, Math.min(12, v)) * 2) / 2; band = b; engine.setEq(strip, b, g === 0 && e.type <= 1 ? 0 : (e.type > 0 ? e.type : 1), e.type > 0 ? e.freq : bands[b], e.type > 0 ? e.q : 1.41, g); presetName = "" }
     function loadPreset(name) { for (let i = 0; i < presets.length; ++i) if (presets[i].n === name) { apply(presets[i].g); presetName = name; return } }
     function dbText(v) { return (v > 0 ? "+" : "") + Number(v).toFixed(1) + "dB" }
-    Component.onCompleted: { engine.setScopeStrip(strip); reload() }
-    onStripChanged: { engine.setScopeStrip(strip); reload() }
+    Component.onCompleted: { if (strip >= 0) engine.setScopeStrip(strip); reload() }
+    onStripChanged: { if (strip >= 0) engine.setScopeStrip(strip); reload() }
     onBandChanged: bandNow = engine.eqBand(strip, band)
     Connections { target: engine; function onStripsChanged() { page.reload() } function onPresetsChanged() { page.slotTick++ } }
-    Timer { interval: 16; running: page.visible && page.rtaOn && !page.frozen; repeat: true; onTriggered: { page.spec = engine.spectrum(2); rta.requestPaint() } }
+    Timer { interval: 16; running: page.visible && page.rtaOn && !page.frozen; repeat: true; onTriggered: { page.spec = engine.spectrum(page.program ? 0 : 2); rta.requestPaint() } }
     component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; property color offColor: Theme.ov(0.08); signal clicked(); implicitWidth: bl.implicitWidth + 16; implicitHeight: 22; radius: 4; color: on ? onColor : offColor; border.color: on ? onColor : Theme.lineSoft
         Text { id: bl; anchors.centerIn: parent; text: label; color: parent.on ? "#000" : Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
     ColumnLayout {
@@ -64,7 +66,15 @@ Flickable {
             ColumnLayout { id: hdr; anchors.fill: parent; anchors.margins: 10; spacing: 6
                 RowLayout { Layout.fillWidth: true; spacing: 8
                     Text { text: i18n.t("◭ 10-BAND PROGRAM BUS EQ & DIAMOND RTA", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
-                    Text { text: i18n.t("CH ", i18n.lang) + (page.strip + 1); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
+                    Rectangle { implicitWidth: rackT.implicitWidth + 16; implicitHeight: 20; radius: 4; color: page.program ? Theme.orange : Theme.ov(0.08); border.color: Theme.lineSoft
+                        Text { id: rackT; anchors.centerIn: parent; text: page.program ? i18n.t("EQ RACK: PROGRAM (MASTER)", i18n.lang) : i18n.t("EQ RACK: CHANNEL", i18n.lang); color: page.program ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                        MouseArea { anchors.fill: parent; onClicked: page.program = !page.program } }
+                    Rectangle { implicitWidth: apoE.implicitWidth + 14; implicitHeight: 20; radius: 4; color: Theme.ov(0.08); border.color: Theme.lineSoft; Text { id: apoE; anchors.centerIn: parent; text: i18n.t("APO EXPORT", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                        MouseArea { anchors.fill: parent; onClicked: { const f = engine.exportApo(page.strip, ""); page.apoNote = f ? i18n.t("Equalizer APO file: ", i18n.lang) + f : i18n.t("could not write the file", i18n.lang) } } }
+                    Rectangle { implicitWidth: apoI.implicitWidth + 14; implicitHeight: 20; radius: 4; color: Theme.ov(0.08); border.color: Theme.lineSoft; Text { id: apoI; anchors.centerIn: parent; text: i18n.t("APO IMPORT", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                        MouseArea { anchors.fill: parent; onClicked: { const n = engine.importApo(page.strip, ""); page.apoNote = n ? n + i18n.t(" filters read from equalizer-apo.txt in the data folder", i18n.lang) : i18n.t("no equalizer-apo.txt with filters in the data folder", i18n.lang); page.reload() } } }
+                    Text { visible: page.apoNote !== ""; text: page.apoNote; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; elide: Text.ElideMiddle; Layout.maximumWidth: 320 }
+                    Text { visible: !page.program; text: i18n.t("CH ", i18n.lang) + (page.strip + 1); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
                     Item { Layout.fillWidth: true }
                     Text { text: i18n.t("PAGES:", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; font.letterSpacing: 2 }
                     Btn { label: i18n.t("PAGE 1: DIAMOND + FFT RTA", i18n.lang); on: page.view === "diamond"; onClicked: page.view = "diamond" }
@@ -77,7 +87,7 @@ Flickable {
                         ToolTip.visible: ch.hovered; ToolTip.text: i18n.t("Load custom slot 1 (the user profile)", i18n.lang); HoverHandler { id: ch } }
                     Btn { label: i18n.t("💾 SAVE CUSTOM", i18n.lang); offColor: Qt.rgba(0, 0.95, 1, 0.14); onClicked: engine.saveGeqSlot(1, "Custom EQ", page.gains) }
                     Btn { label: i18n.t("ANIX W-SHAPE", i18n.lang); onColor: Theme.amber; offColor: Qt.rgba(0.984, 0.749, 0.141, 0.18); on: page.presetName === "Anix W Shape"; onClicked: page.loadPreset("Anix W Shape") }
-                    ComboBox { id: presetBox; implicitWidth: 290; implicitHeight: 22; font.family: Theme.mono; font.pixelSize: 8; displayText: page.presetName ? page.presetName : "Standard + Mic Presets (30+)"
+                    Combo { id: presetBox; implicitWidth: 290; implicitHeight: 22; font.family: Theme.mono; font.pixelSize: 8; displayText: page.presetName ? page.presetName : "Standard + Mic Presets (30+)"
                         model: { const l = []; for (let i = 0; i < page.presets.length; ++i) l.push((i < 2 ? "★ " : "") + page.presets[i].n); return l }
                         onActivated: function (i) { page.loadPreset(page.presets[i].n) } }
                     Btn { label: i18n.t("FLAT", i18n.lang); onClicked: { page.apply([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]); page.presetName = "Flat" } } } } }
@@ -92,12 +102,12 @@ Flickable {
                         for (let b = b0; b <= b1; b++) if (sp[b] > val) val = sp[b]
                         const h = Math.max(0, Math.min(1, (val + 72) / 72)) * height * 0.85
                         const g = c.createLinearGradient(0, height - h, 0, height); g.addColorStop(0, "rgba(255,106,0,0.45)"); g.addColorStop(1, "rgba(0,242,255,0.08)"); c.fillStyle = g; c.fillRect(i * bw, height - h, bw - 1, h)
-                        c.fillStyle = "rgba(255,255,255,0.7)"; c.fillRect(i * bw, height - h, bw - 1, 1.5) } } }
+                        c.fillStyle = Theme.ov(0.7); c.fillRect(i * bw, height - h, bw - 1, 1.5) } } }
             Canvas { id: curve; anchors.fill: parent
                 onPaint: { const c = getContext("2d"); c.reset(); const midY = height / 2, step = width / 11
                     c.lineWidth = 1; c.font = "7px monospace"
-                    for (const db of [-12, -6, 0, 6, 12]) { const y = midY - db / 12 * height * 0.42; c.strokeStyle = "rgba(255,255,255,0.08)"; c.beginPath(); c.moveTo(0, y); c.lineTo(width, y); c.stroke(); c.fillStyle = "rgba(255,255,255,0.3)"; c.fillText((db > 0 ? "+" : "") + db + "dB", 4, y - 2) }
-                    const pts = []; for (let i = 0; i < 10; i++) { const x = step * (i + 1), y = midY - page.gains[i] / 12 * height * 0.42; pts.push({ x: x, y: y }); c.strokeStyle = "rgba(255,255,255,0.04)"; c.beginPath(); c.moveTo(x, 0); c.lineTo(x, height); c.stroke(); c.fillStyle = "rgba(255,255,255,0.35)"; c.fillText(page.bandText[i] + "Hz", x - 8, height - 6) }
+                    for (const db of [-12, -6, 0, 6, 12]) { const y = midY - db / 12 * height * 0.42; c.strokeStyle = Theme.ov(0.08); c.beginPath(); c.moveTo(0, y); c.lineTo(width, y); c.stroke(); c.fillStyle = Theme.ov(0.3); c.fillText((db > 0 ? "+" : "") + db + "dB", 4, y - 2) }
+                    const pts = []; for (let i = 0; i < 10; i++) { const x = step * (i + 1), y = midY - page.gains[i] / 12 * height * 0.42; pts.push({ x: x, y: y }); c.strokeStyle = Theme.ov(0.04); c.beginPath(); c.moveTo(x, 0); c.lineTo(x, height); c.stroke(); c.fillStyle = Theme.ov(0.35); c.fillText(page.bandText[i] + "Hz", x - 8, height - 6) }
                     const grad = c.createLinearGradient(0, 0, width, 0); grad.addColorStop(0, "#00f2ff"); grad.addColorStop(0.5, "#ffb020"); grad.addColorStop(1, "#ff6a00")
                     c.strokeStyle = grad; c.lineWidth = 3; c.beginPath(); c.moveTo(0, midY)
                     for (let i = 0; i < pts.length; i++) { if (i === 0) c.quadraticCurveTo(pts[0].x / 2, midY, pts[0].x, pts[0].y); else { const p = pts[i - 1]; c.quadraticCurveTo(p.x, p.y, (p.x + pts[i].x) / 2, (p.y + pts[i].y) / 2) } }
@@ -144,7 +154,7 @@ Flickable {
                     Text { text: i18n.t("FREQUENCY  ", i18n.lang) + Math.round(page.bandNow.freq) + i18n.t(" Hz", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                     Text { text: "Q  " + Number(page.bandNow.q).toFixed(2) + i18n.t("  (bandwidth ", i18n.lang) + (page.bandNow.q > 0 ? (1.44 / page.bandNow.q).toFixed(2) : "-") + i18n.t(" oct)", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                     Text { text: i18n.t("GAIN  ", i18n.lang) + page.dbText(page.bandNow.gainDb); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
-                    ComboBox { Layout.fillWidth: true; implicitHeight: 24; font.family: Theme.mono; font.pixelSize: 8; model: page.typeNames; currentIndex: page.bandNow.type; onActivated: page.setParam(currentIndex, page.bandNow.freq, page.bandNow.q, page.bandNow.gainDb) }
+                    Combo { Layout.fillWidth: true; implicitHeight: 24; font.family: Theme.mono; font.pixelSize: 8; model: page.typeNames; currentIndex: page.bandNow.type; onActivated: page.setParam(currentIndex, page.bandNow.freq, page.bandNow.q, page.bandNow.gainDb) }
                     Slider { Layout.fillWidth: true; from: Math.log(20); to: Math.log(20000); value: Math.log(Math.max(20, page.bandNow.freq)); onMoved: page.setParam(page.bandNow.type || 1, Math.exp(value), page.bandNow.q, page.bandNow.gainDb) }
                     Slider { Layout.fillWidth: true; from: 0.1; to: 12; value: page.bandNow.q; onMoved: page.setParam(page.bandNow.type || 1, page.bandNow.freq, value, page.bandNow.gainDb) }
                     Slider { Layout.fillWidth: true; from: -12; to: 12; stepSize: 0.5; value: page.bandNow.gainDb; onMoved: page.setParam(page.bandNow.type || 1, page.bandNow.freq, page.bandNow.q, value) } }
@@ -178,6 +188,6 @@ Flickable {
                                     Btn { label: i18n.t("SAVE", i18n.lang); implicitHeight: 18; onClicked: { engine.saveGeqSlot(modelData.slot, nameIn.text.length ? nameIn.text : modelData.name, page.gains); page.slotSel = modelData.slot; nameIn.text = "" } }
                                     Btn { label: i18n.t("DELETE", i18n.lang); implicitHeight: 18; offColor: Qt.rgba(1, 0.165, 0.373, 0.15); onClicked: { engine.clearGeqSlot(modelData.slot); if (page.slotSel === modelData.slot) page.slotSel = 0 } } } }
                             MouseArea { anchors.fill: parent; z: -1; onClicked: page.slotSel = modelData.slot } } } }
-                Text { Layout.fillWidth: true; text: i18n.t("The ten bands are the strip's own equaliser (peaking, Q 1.41 on the ISO centres), the same ten that TONE (EQ) and MIC EQ edit; the spectrum is the strip after its DSP, from the engine's analyser. Golden EQ and Anix W-Shape are the AmF X1 beta curves.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap } } }
+                Text { Layout.fillWidth: true; text: (page.program ? i18n.t("EQ RACK PROGRAM: ten bands of its own on the master (before MASTERING, the master fader and the limiter); the spectrum is the master. The microphone channels keep their own EQ on TONE (EQ) and MIC EQ. ", i18n.lang) : i18n.t("EQ RACK CHANNEL: the selected channel's own ten bands (the same that TONE (EQ) and MIC EQ edit); the spectrum is that strip after its DSP. ", i18n.lang)) + i18n.t("Golden EQ and Anix W-Shape are the AmF X1 beta curves.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap } } }
     }
 }

@@ -38,5 +38,8 @@ QtObject {
         case "DEVICE": return "#f59e0b"; case "SYSTEM": return dark ? "#a1a1aa" : "#52525b"; case "HELP": return dark ? "#38bdf8" : "#0369a1"; default: return orange;
         }
     }
+    // device kinds (engine: classifyDevice): a sign and a word for the lists and the header
+    function kindIcon(k) { switch (k) { case "headphones": return "🎧"; case "headset": return "🎧"; case "speakers": return "🔊"; case "microphone": return "🎤"; case "interface": return "🎛"; case "bluetooth": return "ᛒ"; case "digital": return "⎚"; case "line": return "⇄"; case "app": return "▶"; case "wrapper": return "◇"; default: return "◌" } }
+    function kindName(k) { switch (k) { case "headphones": return "HEADPHONES"; case "headset": return "HEADSET"; case "speakers": return "SPEAKERS"; case "microphone": return "MICROPHONE"; case "interface": return "AUDIO INTERFACE"; case "bluetooth": return "BLUETOOTH"; case "digital": return "DIGITAL OUT"; case "line": return "LINE"; case "app": return "APP AUDIO"; case "wrapper": return "ASIO WRAPPER"; default: return "DEVICE" } }
     function dbText(v) { return v <= -119 ? "-inf" : (v > 0 ? "+" : "") + v.toFixed(1); }
 }

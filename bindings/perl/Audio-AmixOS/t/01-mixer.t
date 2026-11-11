@@ -1,7 +1,7 @@
 use strict; use warnings; use Test::More tests => 9;
 use Audio::AmixOS;
 ok(length(Audio::AmixOS::version()) >= 5, 'version');
-is(Audio::AmixOS::api_version(), 3, 'api version 3');
+is(Audio::AmixOS::api_version(), 4, 'api version 4');
 like(Audio::AmixOS::devices_json(), qr/"null"/, 'devices json lists the null device');
 like(Audio::AmixOS::license_json(), qr/"state"/, 'licence json');
 my $m = Audio::AmixOS::Mixer->new(4, 48000);

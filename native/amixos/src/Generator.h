@@ -24,13 +24,14 @@ class Generator : public am::Runtime::ExtraSource {
 };
 
 struct SourceFanout : am::Runtime::ExtraSource {
-  std::atomic<am::Runtime::ExtraSource*> a{nullptr}, b{nullptr}, c{nullptr}, d{nullptr};   // a: ARRANGE player, b: generator, c: media player, d: sample pads
+  std::atomic<am::Runtime::ExtraSource*> a{nullptr}, b{nullptr}, c{nullptr}, d{nullptr}, e{nullptr};   // a: ARRANGE player, b: generator, c: media player, d: sample pads
   SourceFanout() { tL_.assign(kMax, 0.f); tR_.assign(kMax, 0.f); }
   void render(float* L, float* R, std::size_t frames, double fs) override {
     am::Runtime::ExtraSource* pa = a.load(); am::Runtime::ExtraSource* pb = b.load();
     if (pa) pa->render(L, R, frames, fs); else for (std::size_t i = 0; i < frames; ++i) { L[i] = 0.f; R[i] = 0.f; }
     if (pb && frames <= kMax) { pb->render(tL_.data(), tR_.data(), frames, fs); for (std::size_t i = 0; i < frames; ++i) { L[i] += tL_[i]; R[i] += tR_[i]; } }
     am::Runtime::ExtraSource* pc = c.load(); if (pc && frames <= kMax) { pc->render(tL_.data(), tR_.data(), frames, fs); for (std::size_t i = 0; i < frames; ++i) { L[i] += tL_[i]; R[i] += tR_[i]; } }
+    am::Runtime::ExtraSource* pe = e.load(); if (pe && frames <= kMax) { pe->render(tL_.data(), tR_.data(), frames, fs); for (std::size_t i = 0; i < frames; ++i) { L[i] += tL_[i]; R[i] += tR_[i]; } }   // e: ACOUSTICS test signal
     am::Runtime::ExtraSource* pd = d.load(); if (pd && frames <= kMax) { pd->render(tL_.data(), tR_.data(), frames, fs); for (std::size_t i = 0; i < frames; ++i) { L[i] += tL_[i]; R[i] += tR_[i]; } }
   }
  private:

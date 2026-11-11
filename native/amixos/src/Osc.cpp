@@ -38,7 +38,8 @@ QString Osc::remoteAddress() const {
   for (const QVariant& v : interfaces()) { const QVariantMap m = v.toMap(); if (m["kind"] != "loopback" && m["up"].toBool()) return m["ip"].toString() + ":" + QString::number(port()); } return "0.0.0.0:" + QString::number(port());
 }
 bool Osc::ipAllowed(const QHostAddress& a) const {
-  const QString list = allowedIps(); if (list.isEmpty() || a.isLoopback()) return true; QHostAddress v4(a.toIPv4Address());
+  const QString list = allowedIps(); if (a.isLoopback()) return true; QHostAddress v4(a.toIPv4Address());
+  if (list.isEmpty()) { const quint32 ip = a.toIPv4Address(); const unsigned x = ip >> 24, y = (ip >> 16) & 255; return x == 10 || (x == 172 && y >= 16 && y <= 31) || (x == 192 && y == 168) || (x == 169 && y == 254); }   // LOCAL POLICY: with no list, only private-network senders; a public address must be listed by hand
   for (const QString& ip : list.split(',', Qt::SkipEmptyParts)) { const QString t = ip.trimmed(); if (t.isEmpty()) continue; if (QHostAddress(t) == v4 || QHostAddress(t) == a) return true;
     if (t.contains('/')) { auto sub = QHostAddress::parseSubnet(t); if (sub.second >= 0 && (v4.isInSubnet(sub) || a.isInSubnet(sub))) return true; } }
   return false;

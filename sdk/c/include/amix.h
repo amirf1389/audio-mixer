@@ -24,7 +24,7 @@ extern "C" {
 #define AMIX_API __attribute__((visibility("default")))
 #endif
 
-#define AMIX_API_VERSION 3   // 2: 16 buses (8 AUX + 8 FX)
+#define AMIX_API_VERSION 4   // 2: 16 buses (8 AUX + 8 FX)
 #define AMIX_MAX_STRIPS 32
 #define AMIX_MAX_BUSES 16
 
@@ -69,6 +69,9 @@ AMIX_API int         amix_mixer_process(amix_mixer*, const float* const* in, int
    effects stay with the stereo process. Added in API version 3. */
 AMIX_API void        amix_mixer_set_depth(amix_mixer*, int strip, double depth);
 AMIX_API int         amix_mixer_process5(amix_mixer*, const float* const* in, int frames, float* const* outs5);
+/* 360 AUDIO (v4): place a strip around the head for headphones in amix_mixer_process (binaural: time and level difference, head shadow).
+   az degrees (0 front, 90 right, 180 behind), el -90..90, dist metres (1 = unity), spread 0..1. on = 0 returns the strip to its pan. */
+AMIX_API void        amix_mixer_set_spatial(amix_mixer* m, int strip, int on, double az_deg, double el_deg, double dist_m, double spread);
 AMIX_API void        amix_mixer_levels(const amix_mixer*, amix_levels* out);
 
 /* ---- live runtime ---- */

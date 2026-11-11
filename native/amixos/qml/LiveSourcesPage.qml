@@ -30,7 +30,7 @@ Item {
         property color col: Theme.cyan
         onPaint: {
             const ctx = getContext("2d"); const w = width, h = height; ctx.clearRect(0, 0, w, h)
-            ctx.strokeStyle = "rgba(255,255,255,0.07)"; for (let j = 0; j <= 6; ++j) { const y = Math.round(h * j / 6) + 0.5; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke() }
+            ctx.strokeStyle = Theme.ov(0.07); for (let j = 0; j <= 6; ++j) { const y = Math.round(h * j / 6) + 0.5; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke() }
             const sp = data; if (!sp || sp.length !== 31) return; const bw = w / 31; ctx.fillStyle = col
             for (let b = 0; b < 31; ++b) { const db = Math.max(-72, Math.min(0, sp[b])); const bh = (db + 72) / 72 * h; ctx.globalAlpha = 0.55; ctx.fillRect(b * bw + 1, h - bh, bw - 2, bh); ctx.globalAlpha = 1; ctx.fillRect(b * bw + 1, h - bh, bw - 2, 2) }
         }

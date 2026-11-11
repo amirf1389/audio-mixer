@@ -24,7 +24,11 @@ class Update : public QObject {
   Q_PROPERTY(QString current READ current CONSTANT)
   Q_PROPERTY(int progress READ progress NOTIFY changed)
   Q_PROPERTY(QVariantList features READ features NOTIFY changed)   // the signed feature feed: [{version, date, title, items[]}], newest first
-  Q_PROPERTY(int newFeatures READ newFeatures NOTIFY changed)      // entries newer than the last version the person looked at (the NEW badge)
+  Q_PROPERTY(int newFeatures READ newFeatures NOTIFY changed)
+  Q_PROPERTY(bool canInstall READ canInstall NOTIFY changed)        // a verified installer is downloaded and this platform can install it and restart (Windows)
+  Q_PROPERTY(QString justUpdated READ justUpdated NOTIFY changed)  // the version an update just brought (shown once at boot), else empty
+  Q_PROPERTY(QString failedUpdate READ failedUpdate NOTIFY changed) // an INSTALL AND RESTART that came back on the old version
+  Q_PROPERTY(bool autoDownload READ autoDownload WRITE setAutoDownload NOTIFY changed)   // fetch a found update by itself (the install still asks)      // entries newer than the last version the person looked at (the NEW badge)
  public:
   explicit Update(const QString& currentVersion, QObject* parent = nullptr);
   QString state() const { return state_; } QString message() const { return msg_; } QString latest() const { return latest_; } QString channel() const { return channel_; } QString released() const { return released_; }
@@ -36,6 +40,13 @@ class Update : public QObject {
   Q_INVOKABLE bool applyManifest(const QString& envelopeText);      // the same without the network (a file, the smoke test); false = rejected, with the reason in message
   Q_INVOKABLE void download();                                      // this platform's file into the data folder, sha256 checked
   Q_INVOKABLE void openDownloadFolder();
+  bool canInstall() const; QString justUpdated() const { return justUpdated_; } QString failedUpdate() const { return failed_; }
+  bool autoDownload() const { return s_.value("update/autoDownload", false).toBool(); } void setAutoDownload(bool v) { s_.setValue("update/autoDownload", v); emit changed(); }
+  Q_INVOKABLE bool installAndRestart();                             // re-checks the file's sha256, starts the setup silently with /RESTART and quits the console; the setup starts it again
+  Q_INVOKABLE void acknowledgeUpdate() { justUpdated_.clear(); failed_.clear(); emit changed(); }
+ signals:
+  void restarting();
+ public:
   QVariantList features() const { return features_; }
   int newFeatures() const;
   Q_INVOKABLE void markFeaturesSeen();                              // the badge goes out until a newer entry arrives
@@ -46,5 +57,5 @@ class Update : public QObject {
  private:
   void set(const QString& state, const QString& msg) { state_ = state; msg_ = msg; emit changed(); }
   static QString platformKey();
-  QSettings s_; QNetworkAccessManager net_; QString current_, state_ = "idle", msg_, latest_, channel_, released_, downloaded_; QStringList notes_; QVariantMap file_; QVariantList features_; int progress_ = 0;
+  QSettings s_; QNetworkAccessManager net_; QString current_, state_ = "idle", msg_, latest_, channel_, released_, downloaded_; QStringList notes_; QVariantMap file_; QVariantList features_; QString justUpdated_, failed_; int progress_ = 0;
 };

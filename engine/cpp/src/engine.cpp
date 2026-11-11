@@ -209,6 +209,20 @@ Mixer::Mixer(int strips, double sampleRate)
 
 void Mixer::setGainDb(int s, double db) { if (s < 0 || s >= n_) return; db = std::min(db, 10.0); strips_[s].gainDb = db; strips_[s].gainLin = db <= -60.0 ? 0.0 : linOf(db); }
 void Mixer::setPan(int s, double p) { if (s >= 0 && s < n_) strips_[s].pan = clampd(p, -1.0, 1.0); }
+void Mixer::setSpatial(int strip, bool on, double azDeg, double elDeg, double distM, double spread) {
+  if (strip < 0 || strip >= n_) return;
+  Spatial& sp = strips_[static_cast<std::size_t>(strip)].sp; const bool was = sp.on;
+  sp.on = on; sp.az = std::fmod(azDeg, 360.0); sp.el = std::max(-90.0, std::min(90.0, elDeg)); sp.dist = std::max(0.3, std::min(20.0, distM)); sp.spread = std::max(0.0, std::min(1.0, spread));
+  const double az = sp.az * kPi / 180.0, el = sp.el * kPi / 180.0, s = std::sin(az) * std::cos(el) * (1.0 - sp.spread), back = std::max(0.0, -std::cos(az) * std::cos(el)) * (1.0 - sp.spread);
+  const double itd = (0.0875 / 343.0) * (std::asin(std::max(-1.0, std::min(1.0, s))) + s) * fs_;   // samples; + = the source is on the right, the left ear hears it later
+  sp.tgtL = itd > 0 ? itd : 0; sp.tgtR = itd < 0 ? -itd : 0;
+  const double a = std::fabs(s), gd = 1.0 / std::max(1.0, sp.dist), near = 0.70710678 + 0.29289322 * a, far = 0.70710678 - 0.20710678 * a;
+  sp.gL = gd * (s > 0 ? far : near); sp.gR = gd * (s > 0 ? near : far);
+  auto pole = [this](double fc) { return fc >= 0.45 * fs_ ? 1.0 : 1.0 - std::exp(-2.0 * kPi * fc / fs_); };
+  const double shadow = pole(20000.0 * std::pow(1500.0 / 20000.0, a)); sp.aL = s > 0 ? shadow : 1.0; sp.aR = s < 0 ? shadow : 1.0; sp.aRear = pole(20000.0 * std::pow(7000.0 / 20000.0, back));
+  if (!was && on) { sp.dL = sp.tgtL; sp.dR = sp.tgtR; sp.lpL = sp.lpR = sp.rrL = sp.rrR = 0; sp.w = 0; for (float& v : sp.ring) v = 0.f; }
+}
+
 void Mixer::setDepth(int s, double d) { if (s >= 0 && s < n_) strips_[s].depth = clampd(d, -1.0, 1.0); }
 void Mixer::process5(const float* const* in, std::size_t frames, float* const* outs) {
   constexpr std::size_t kChunk = 512; bool anySolo = false; for (const auto& s : strips_) anySolo = anySolo || s.solo;
@@ -256,6 +270,7 @@ void Mixer::setBusReturn(int b, double db) { if (b >= 0 && b < kMaxBuses) buses_
 void Mixer::clearClips() { for (auto& s : strips_) s.meter.state().clearClip(); master_[0].state().clearClip(); master_[1].state().clearClip(); }
 
 void Mixer::process(const float* const* in, std::size_t frames, float* outL, float* outR, float* const* busOut, const float* extL, const float* extR) {
+  double limMin = 1.0;   // the lowest limiter gain of this call, for the reduction meter
   constexpr std::size_t kChunk = 512;
   bool anySolo = false; for (const auto& s : strips_) anySolo = anySolo || s.solo;
   const double rel = 1.0 - std::exp(-1.0 / (limReleaseMs_ * 0.001 * fs_));   // one-pole release: the time constant is the release time
@@ -277,7 +292,15 @@ void Mixer::process(const float* const* in, std::size_t frames, float* outL, flo
       double ipk = done == 0 ? 0.0 : st.inPk; const double g = st.gainLin * (st.automix ? st.amGain : 1.0);
       for (std::size_t i = 0; i < n; ++i) { const double x = static_cast<double>(in[s][done + i]); if (std::fabs(x) > ipk) ipk = std::fabs(x); tmp[i] = static_cast<float>(x * g); }   // post-fader signal: what the strip meter shows
       st.inPk = ipk; st.meter.add(tmp, n);
-      if (audible) for (std::size_t i = 0; i < n; ++i) { outL[done + i] += static_cast<float>(tmp[i] * gl); outR[done + i] += static_cast<float>(tmp[i] * gr); }
+      if (st.sp.on) {   // 360 audio: the ring always runs (so un-muting does not click), the ears are summed when audible
+        Spatial& sp = st.sp;
+        for (std::size_t i = 0; i < n; ++i) {
+          sp.ring[sp.w & 511u] = tmp[i]; sp.dL += (sp.tgtL - sp.dL) * 0.002; sp.dR += (sp.tgtR - sp.dR) * 0.002;
+          auto tap = [&sp](double d) { const double p = static_cast<double>(sp.w) - d; const double fl = std::floor(p); const unsigned k = static_cast<unsigned>(static_cast<long long>(fl)); const double fr = p - fl; return sp.ring[k & 511u] * (1.0 - fr) + sp.ring[(k + 1u) & 511u] * fr; };
+          sp.lpL += (tap(sp.dL) - sp.lpL) * sp.aL; sp.lpR += (tap(sp.dR) - sp.lpR) * sp.aR; sp.rrL += (sp.lpL - sp.rrL) * sp.aRear; sp.rrR += (sp.lpR - sp.rrR) * sp.aRear; ++sp.w;
+          if (audible) { outL[done + i] += static_cast<float>(sp.rrL * sp.gL); outR[done + i] += static_cast<float>(sp.rrR * sp.gR); }
+        }
+      } else if (audible) for (std::size_t i = 0; i < n; ++i) { outL[done + i] += static_cast<float>(tmp[i] * gl); outR[done + i] += static_cast<float>(tmp[i] * gr); }
       if (anySend_) for (int k = 0; k < kMaxBuses; ++k) {
         const Send& sd = sends_[s][k]; if (sd.lin <= 0) continue;
         if (sd.pre) { for (std::size_t i = 0; i < n; ++i) { const double v = static_cast<double>(in[s][done + i]) * sd.lin; busL[k][i] += static_cast<float>(v * gl); busR[k][i] += static_cast<float>(v * gr); } }
@@ -293,6 +316,7 @@ void Mixer::process(const float* const* in, std::size_t frames, float* outL, flo
       if (busOut) { if (busOut[2 * k]) std::copy(busL[k], busL[k] + n, busOut[2 * k] + done); if (busOut[2 * k + 1]) std::copy(busR[k], busR[k] + n, busOut[2 * k + 1] + done); }
     }
     if (extL && extR) for (std::size_t i = 0; i < n; ++i) { outL[done + i] += extL[done + i]; outR[done + i] += extR[done + i]; }   // the arrangement player, pre master
+    if (masterFx_) masterFx_->process(outL + done, outR + done, n);   // the master chain (program EQ, mastering)
     if (width_ != 1.0) for (std::size_t i = 0; i < n; ++i) { const float mid = 0.5f * (outL[done + i] + outR[done + i]), side = 0.5f * (outL[done + i] - outR[done + i]) * static_cast<float>(width_); outL[done + i] = mid + side; outR[done + i] = mid - side; }
     if (dcOn_) {   // DC blocker before the auto level and the limiter: y[n] = x[n] - x[n-1] + R y[n-1], R for 5 Hz
       const double R = 1.0 - 2 * kPi * 5.0 / fs_; float* ch[2] = {outL + done, outR + done};
@@ -309,7 +333,7 @@ void Mixer::process(const float* const* in, std::size_t frames, float* outL, flo
         const double pk = std::max(std::fabs(l), std::fabs(r)), need = pk > limCeil_ ? limCeil_ / pk : 1.0;
         if (need < limGain_) limGain_ = need; else limGain_ += (1.0 - limGain_) * rel;
         if (limGain_ > need) limGain_ = need;                           // instant attack: never above what this sample needs
-        l *= limGain_; r *= limGain_;
+        l *= limGain_; r *= limGain_; if (limGain_ < limMin) limMin = limGain_;
       }
       outL[done + i] = static_cast<float>(l); outR[done + i] = static_cast<float>(r);
     }
@@ -325,6 +349,7 @@ void Mixer::process(const float* const* in, std::size_t frames, float* outL, flo
   for (auto& s : strips_) s.meter.end(timeMs_);
   for (auto& b : buses_) b.meter.end(timeMs_);
   master_[0].end(timeMs_); master_[1].end(timeMs_);
+  limGrDb_ = limOn_ && limMin < 1.0 ? -20.0 * std::log10(std::max(limMin, 1e-6)) : 0.0;
 }
 
 }  // namespace am

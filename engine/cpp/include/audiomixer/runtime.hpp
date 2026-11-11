@@ -55,8 +55,17 @@ struct DeviceInfo {
   double defaultRate = 48000;
   std::vector<double> sampleRates;   // empty: not known without opening the device
   bool defaultIn = false, defaultOut = false;
+  std::string kind;                  // what it is: headphones | headset | speakers | microphone | line | digital | interface | bluetooth | app | wrapper | unknown
 };
-std::vector<DeviceInfo> listDevices();                       // every device of every backend built in ("null" last)
+// WINDOWS SOUND (the system's own volume of the default output, through the documented endpoint-volume interface: no driver, no registry):
+// read and set its mute. Used so that the master fader at -inf also silences what Windows itself plays. false on other systems or on failure.
+bool systemMuteGet(bool& muted);
+bool systemMuteSet(bool muted);
+// WHAT A DEVICE IS, from the system's own form factor when it has one (WASAPI: 1 speakers, 2 line, 3 headphones, 4 microphone, 5 headset,
+// 6 handset, 8 S/PDIF, 9 display audio; -1 = not known) and otherwise from the name. capture: the entry is an input.
+std::string classifyDevice(const std::string& backend, const std::string& name, int formFactor, bool capture);
+std::vector<DeviceInfo> listDevices(bool probeAsio = true);   // probeAsio false: ASIO drivers are listed from the registry without loading them (2 in / 2 out assumed): the list a hung driver cannot block
+                       // every device of every backend built in ("null" last)
 // A cheap signature of what is plugged in (WASAPI / DirectSound endpoint ids + ASIO driver names from the registry, ALSA card names): no driver
 // is loaded, so it can be polled every second or two for hot-plug; when it changes, call listDevices().
 std::string deviceFingerprint();
@@ -84,6 +93,7 @@ class Runtime {
   // control: any thread, takes effect at the start of the next block
   void setGainDb(int strip, double db);
   void setPan(int strip, double pan);
+  void setSpatial(int strip, bool on, double azDeg, double elDeg, double distM, double spread);   // 360 audio (headphones)
   void setMute(int strip, bool on);
   void setSolo(int strip, bool on);
   void setMasterDb(double db);
@@ -106,6 +116,8 @@ class Runtime {
   void setBusMute(int bus, bool on);
   void setBusReturn(int bus, double db);
   void setBusProcessor(int bus, BusProcessor* p);   // an effect on a bus (app/fx); keep it alive while set, detach with nullptr before deleting
+  double limiterReductionDb() const { return mixer_.limiterReductionDb(); }   // read from the interface thread: a meter value, one block old at most
+  void setMasterProcessor(BusProcessor* p);          // the master chain; the caller keeps it alive while set
   void setWidth(double w);                           // master stereo width 0..2
   void setAutomix(int strip, bool on, double weight);   // gain-sharing automixer membership
   void setAutoLevel(bool on, double targetLufs, double maxGainDb);

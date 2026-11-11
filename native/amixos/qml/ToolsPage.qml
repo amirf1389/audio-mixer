@@ -115,7 +115,7 @@ Item {
                         ColumnLayout { spacing: 1; Text { text: i18n.t("ACOUSTIC DELAY", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } Text { text: page.delayMs.toFixed(2) + i18n.t(" ms", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 11; font.bold: true } }
                         Item { Layout.fillWidth: true }
                         Text { text: i18n.t("CH", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
-                        SpinBox { from: 1; to: engine.stripState.length; value: page.delayStrip + 1; onValueModified: page.delayStrip = value - 1; implicitWidth: 90 }
+                        SpinBox { palette.base: Theme.deep; palette.text: Theme.ink; palette.button: Theme.cardRaised; palette.buttonText: Theme.ink; palette.highlight: Theme.orange; palette.mid: Theme.line; from: 1; to: engine.stripState.length; value: page.delayStrip + 1; onValueModified: page.delayStrip = value - 1; implicitWidth: 90 }
                         Btn { label: i18n.t("APPLY DELAY", i18n.lang); on: true; onColor: Theme.cyan; onClicked: engine.setDelay(page.delayStrip, Math.min(500, page.delayMs)) } }
                     Note { text: i18n.t("Delay the fill / tower feed by the time the main PA's sound needs to reach it (plus a few ms so the main arrives first). The strip delay (DELAY stage, up to 500 ms) takes the value; the current value for CH ", i18n.lang) + (page.delayStrip + 1) + i18n.t(" is ", i18n.lang) + engine.channelParams(page.delayStrip).delayMs.toFixed(2) + i18n.t(" ms.", i18n.lang) }
                 }
@@ -131,7 +131,7 @@ Item {
                             MouseArea { anchors.fill: parent; onClicked: { page.scribble = index; engine.selectedStrip = index } } } } }
                     RowLayout { spacing: 8; Layout.fillWidth: true
                         Text { text: i18n.t("CH ", i18n.lang) + (page.scribble + 1); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
-                        TextField { id: nameField; Layout.fillWidth: true; text: engine.stripState[page.scribble] ? engine.stripState[page.scribble].name : ""; font.family: Theme.mono; font.pixelSize: 9; maximumLength: 12; onEditingFinished: engine.setName(page.scribble, text) }
+                        Field { id: nameField; Layout.fillWidth: true; text: engine.stripState[page.scribble] ? engine.stripState[page.scribble].name : ""; font.family: Theme.mono; font.pixelSize: 9; maximumLength: 12; onEditingFinished: engine.setName(page.scribble, text) }
                         Repeater { model: Theme.stripColors; delegate: Rectangle { width: 20; height: 20; radius: 10; color: modelData; border.width: engine.stripState[page.scribble] && engine.stripState[page.scribble].color === index ? 3 : 0; border.color: Theme.ink; MouseArea { anchors.fill: parent; onClicked: engine.setColor(page.scribble, index) } } } }
                     Note { text: i18n.t("The name shows on the strip and the LED colour on its fader; both go into scenes and presets.", i18n.lang) }
                 }

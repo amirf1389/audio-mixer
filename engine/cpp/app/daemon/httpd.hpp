@@ -39,12 +39,16 @@ class Server {
   unsigned short port() const { return port_; }
   void route(Handler h) { handler_ = std::move(h); }
   void websocket(const std::string& path, WsHandler h) { ws_[path] = std::move(h); }
+  // LOCAL POLICY (on by default): only this computer and private-network addresses are served (127/8, 10/8, 172.16/12, 192.168/16, 169.254/16);
+  // a connection from any other address is closed before a byte is read. Off only on an explicit request (behind a TLS proxy that filters itself).
+  void setLocalOnly(bool on) { localOnly_ = on; }
+  static bool localPeer(unsigned long ipv4HostOrder);
   void start();   // the accept loop on its own thread
   void stop();
   static std::string sha1Base64(const std::string& s);   // for the WebSocket accept key (and tests)
  private:
   void serve(int fd);
-  int lfd_ = -1; unsigned short port_ = 0; std::thread acceptor_; std::atomic<bool> running_{false};
+  int lfd_ = -1; unsigned short port_ = 0; std::thread acceptor_; std::atomic<bool> running_{false}; bool localOnly_ = true;
   Handler handler_; std::map<std::string, WsHandler> ws_;
   std::mutex threads_; std::vector<std::thread> threads_v_;
 };

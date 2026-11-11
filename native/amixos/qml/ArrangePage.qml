@@ -38,7 +38,7 @@ Item {
                 Rectangle { implicitWidth: 44; implicitHeight: 22; radius: 4; color: arrange.loop ? Theme.cyan : Theme.ov(0.08); Text { anchors.centerIn: parent; text: i18n.t("LOOP", i18n.lang); color: arrange.loop ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: arrange.loop = !arrange.loop } }
                 Text { text: page.fmt(arrange.position); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; Layout.preferredWidth: 120 }
                 Text { text: i18n.t("BPM", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 }
-                SpinBox { from: 20; to: 300; value: Math.round(arrange.bpm); onValueModified: arrange.bpm = value; implicitWidth: 90; implicitHeight: 24; font.pixelSize: 9 }
+                SpinBox { palette.base: Theme.deep; palette.text: Theme.ink; palette.button: Theme.cardRaised; palette.buttonText: Theme.ink; palette.highlight: Theme.orange; palette.mid: Theme.line; from: 20; to: 300; value: Math.round(arrange.bpm); onValueModified: arrange.bpm = value; implicitWidth: 90; implicitHeight: 24; font.pixelSize: 9 }
                 Text { text: i18n.t("SNAP", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 }
                 Repeater { model: [[0, "OFF"], [1, "BAR"], [4, "1/4"], [8, "1/8"], [16, "1/16"]]; delegate: Rectangle { implicitWidth: 34; implicitHeight: 20; radius: 3; color: arrange.snap === modelData[0] ? Theme.amber : Theme.ov(0.06); Text { anchors.centerIn: parent; text: modelData[1]; color: arrange.snap === modelData[0] ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: arrange.snap = modelData[0] } } }
                 Text { text: i18n.t("ZOOM", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 }
@@ -60,7 +60,7 @@ Item {
                     width: page.hdrW; spacing: 0
                     Item { width: parent.width; height: page.head; Text { anchors.centerIn: parent; text: arrange.tracks.length + i18n.t(" TRACKS · ", i18n.lang) + arrange.clips.length + i18n.t(" CLIPS · END ", i18n.lang) + arrange.end.toFixed(1) + " s"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
                     Repeater { model: arrange.tracks
-                        delegate: Rectangle { width: parent.width - 4; height: page.lane; color: Qt.rgba(1, 1, 1, index % 2 ? 0.025 : 0.05); border.color: Theme.lineSoft
+                        delegate: Rectangle { width: parent.width - 4; height: page.lane; color: Theme.ov(index % 2 ? 0.025 : 0.05); border.color: Theme.lineSoft
                             Rectangle { anchors.left: parent.left; anchors.top: parent.top; anchors.bottom: parent.bottom; width: 4; color: Theme.stripColors[modelData.color] }
                             ColumnLayout { anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 4; anchors.topMargin: 3; spacing: 2
                                 RowLayout { Layout.fillWidth: true; spacing: 3
@@ -88,13 +88,13 @@ Item {
                             const w = width, h = height, bar = page.beat * 4, pxBar = page.xOf(bar), lane = page.lane, head = page.head;
                             ctx.fillStyle = Theme.chrome; ctx.fillRect(0, 0, w, h);
                             // lanes
-                            for (let i = 0; i < arrange.tracks.length; i++) { ctx.fillStyle = i % 2 ? "rgba(255,255,255,0.02)" : "rgba(255,255,255,0.04)"; ctx.fillRect(0, head + i * lane, w, lane - 1) }
+                            for (let i = 0; i < arrange.tracks.length; i++) { ctx.fillStyle = i % 2 ? Theme.ov(0.02) : Theme.ov(0.04); ctx.fillRect(0, head + i * lane, w, lane - 1) }
                             // grid: bars (strong) and beats (faint) when there is room
                             const step = pxBar >= 24 ? 1 : pxBar >= 12 ? 2 : pxBar >= 6 ? 4 : 8;
                             ctx.font = "7px monospace"; ctx.textBaseline = "top";
                             for (let b = 0; b * pxBar < w; b += step) {
-                                const x = b * pxBar; ctx.fillStyle = "rgba(255,255,255,0.14)"; ctx.fillRect(x, 0, 1, h); ctx.fillStyle = "#8b93a7"; ctx.fillText(String(b + 1), x + 3, 3);
-                                if (pxBar >= 60) for (let k = 1; k < 4; k++) { ctx.fillStyle = "rgba(255,255,255,0.05)"; ctx.fillRect(x + k * pxBar / 4, head, 1, h - head) }
+                                const x = b * pxBar; ctx.fillStyle = Theme.ov(0.14); ctx.fillRect(x, 0, 1, h); ctx.fillStyle = "#8b93a7"; ctx.fillText(String(b + 1), x + 3, 3);
+                                if (pxBar >= 60) for (let k = 1; k < 4; k++) { ctx.fillStyle = Theme.ov(0.05); ctx.fillRect(x + k * pxBar / 4, head, 1, h - head) }
                             }
                             // clips
                             for (const c of arrange.clips) {
@@ -149,7 +149,7 @@ Item {
             ColumnLayout { anchors.fill: parent; anchors.margins: 8; spacing: 4
                 RowLayout { Layout.fillWidth: true; spacing: 6
                     Text { text: i18n.t("IMPORT WAV", i18n.lang); color: Theme.emerald; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-                    TextField { id: folderIn; Layout.fillWidth: true; placeholderText: i18n.t("folder with .wav files (empty = your Music folder); or a single .wav path", i18n.lang); font.family: Theme.mono; font.pixelSize: 9; implicitHeight: 24; onAccepted: page.scan() }
+                    Field { id: folderIn; Layout.fillWidth: true; placeholderText: i18n.t("folder with .wav files (empty = your Music folder); or a single .wav path", i18n.lang); font.family: Theme.mono; font.pixelSize: 9; implicitHeight: 24; onAccepted: page.scan() }
                     Rectangle { implicitWidth: 60; implicitHeight: 24; radius: 4; color: Qt.rgba(0, 0.95, 1, 0.18); border.color: Theme.cyan; Text { anchors.centerIn: parent; text: i18n.t("SCAN", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.scan() } }
                     Text { text: i18n.t("Selected clip: ", i18n.lang) + (arrange.selectedClip ? "#" + arrange.selectedClip : i18n.t("none", i18n.lang)) + i18n.t("  ·  S split · M marker · Del remove · right-click a lane = automation point", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
                 Flow { Layout.fillWidth: true; spacing: 4

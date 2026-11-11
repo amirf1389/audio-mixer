@@ -16,7 +16,8 @@ Item {
     property string inId: "-"
     property string backend: "dsound"
     Connections { target: engine; function onDevicesChanged() { page.tick++ } }
-    function open() { const i = page.inId !== "-" ? 2 : 0; const ok = engine.open(page.backend, page.inId, page.outId, settings.defaultRate || 48000, Math.max(256, settings.defaultFrames || 512), i, 2); if (ok) settings.rememberDevice(page.backend, page.inId, page.outId, settings.defaultRate || 48000, Math.max(256, settings.defaultFrames || 512), i, 2) }
+    function open() { const ok = engine.openBluetooth(page.backend, page.inId, page.outId, Math.max(512, settings.defaultFrames || 512)); page.note = engine.bluetoothNote(); if (ok) { const io = engine.ioInfo(); settings.rememberDevice(engine.backend, io.inputs > 0 ? page.inId : "-", page.outId, engine.sampleRate, engine.blockFrames, io.inputs > 0 ? 2 : 0, 2) } }
+    property string note: ""
     component Head: Text { color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
     component Note: Text { Layout.fillWidth: true; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap }
     component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(56, bl.implicitWidth + 16); implicitHeight: 24; radius: 5; color: on ? onColor : Theme.ov(0.08); border.color: Theme.lineSoft
@@ -54,6 +55,7 @@ Item {
                     Text { text: i18n.t("PATH  ", i18n.lang) + page.backend.toUpperCase() + " · " + (settings.defaultRate || 48000) + i18n.t(" Hz · ", i18n.lang) + Math.max(256, settings.defaultFrames || 512) + i18n.t(" frames", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                     Btn { label: i18n.t("▶ START ENGINE ON BLUETOOTH", i18n.lang); on: page.outId !== ""; onColor: Theme.emerald; onClicked: if (page.outId) page.open() }
                     Btn { label: i18n.t("⏹ STOP", i18n.lang); visible: engine.running; onClicked: engine.stop() }
+                    Text { Layout.fillWidth: true; visible: page.note !== ""; text: page.note; color: engine.running ? Theme.emerald : Theme.danger; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; wrapMode: Text.WordWrap }
                     Text { Layout.fillWidth: true; text: engine.lastRoute; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap }
                     Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.lineSoft }
                     Head { text: i18n.t("WHAT TO EXPECT", i18n.lang) }

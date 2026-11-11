@@ -9,7 +9,9 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QFileInfo>
 #include <QNetworkReply>
+#include <QProcess>
 #include <QNetworkRequest>
 #include <QUrl>
 
@@ -19,7 +21,27 @@
 
 const char* Update::kDefaultUrl = "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/update.json";
 
-Update::Update(const QString& currentVersion, QObject* parent) : QObject(parent), current_(currentVersion) {}
+Update::Update(const QString& currentVersion, QObject* parent) : QObject(parent), current_(currentVersion) {
+  // back from INSTALL AND RESTART: the version we were installing is now the running one (or it is not: say so once)
+  const QString pending = s_.value("update/installing").toString();
+  if (!pending.isEmpty()) { s_.remove("update/installing"); if (compareVersions(current_, pending) >= 0) justUpdated_ = current_; else failed_ = pending; }
+}
+bool Update::canInstall() const {
+#if defined(_WIN32)
+  return state_ == "downloaded" && !downloaded_.isEmpty() && downloaded_.endsWith(".exe", Qt::CaseInsensitive) && QFileInfo::exists(downloaded_);
+#else
+  return false;
+#endif
+}
+bool Update::installAndRestart() {
+  if (!canInstall()) { set(state_, "nothing to install: download the update first (this works on Windows; on other systems open the download folder)"); return false; }
+  QFile f(downloaded_); if (!f.open(QIODevice::ReadOnly)) { set("error", "cannot open the downloaded setup"); return false; }
+  QCryptographicHash h(QCryptographicHash::Sha256); h.addData(&f); f.close();
+  if (QString::fromLatin1(h.result().toHex()) != file_["sha256"].toString().toLower()) { QFile::remove(downloaded_); downloaded_.clear(); set("error", "the setup on disk no longer matches the signed manifest: deleted, download it again"); return false; }
+  s_.setValue("update/installing", latest_); s_.sync();
+  if (!QProcess::startDetached(downloaded_, {"/S", "/RESTART"})) { s_.remove("update/installing"); set("error", "the setup could not be started"); return false; }
+  set("installing", QStringLiteral("installing %1: the console closes and starts again by itself").arg(latest_)); emit restarting(); return true;
+}
 void Update::setUrl(const QString& u) { const QString t = u.trimmed(); if (!am::upd::hostAllowed(t.toStdString())) { set("error", "the manifest URL must be https on one of the project's own hosts"); return; } s_.setValue("update/url", t); emit changed(); }
 int Update::compareVersions(const QString& a, const QString& b) { return am::upd::cmpVersion(a.toStdString(), b.toStdString()); }
 QString Update::platformKey() {
@@ -48,6 +70,7 @@ bool Update::applyManifest(const QString& text) {
   for (const QJsonValue& v : m.value("features").toArray()) { const QJsonObject o = v.toObject(); QVariantMap e; e["version"] = o.value("version").toString(); e["date"] = o.value("date").toString(); e["title"] = o.value("title").toString(); QStringList items; for (const QJsonValue& i : o.value("items").toArray()) items << i.toString(); e["items"] = items; features_ << e; }
   s_.setValue("update/lastCheck", QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm"));
   const int cmp = compareVersions(latest_, current_);
+  if (cmp > 0 && autoDownload() && !file_.isEmpty() && state_ != "downloading" && state_ != "downloaded") { set("available", QStringLiteral("%1 is available: downloading").arg(latest_)); QMetaObject::invokeMethod(this, &Update::download, Qt::QueuedConnection); return true; }
   if (cmp > 0) set("available", QStringLiteral("%1 %2 (%3) is available; this is %4").arg(latest_, channel_, released_, current_)); else set("upToDate", QStringLiteral("this %1 is current (manifest %2)").arg(current_, latest_));
   return true;
 }

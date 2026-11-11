@@ -28,6 +28,8 @@ class Settings : public QObject {
   Q_PROPERTY(double clipDb READ clipDb WRITE setClipDb NOTIFY changed)
   Q_PROPERTY(int peakHoldMs READ peakHoldMs WRITE setPeakHoldMs NOTIFY changed)
   Q_PROPERTY(bool vuDefault READ vuDefault WRITE setVuDefault NOTIFY changed)
+  Q_PROPERTY(bool bootAnimation READ bootAnimation WRITE setBootAnimation NOTIFY changed)   // the opening animation
+  Q_PROPERTY(bool bootSound READ bootSound WRITE setBootSound NOTIFY changed)               // its chord on the master (only when the engine is already running)
   Q_PROPERTY(bool monitorPanelDefault READ monitorPanelDefault WRITE setMonitorPanelDefault NOTIFY changed)
   Q_PROPERTY(bool rackDefault READ rackDefault WRITE setRackDefault NOTIFY changed)
   Q_PROPERTY(bool rackCompactDefault READ rackCompactDefault WRITE setRackCompactDefault NOTIFY changed)
@@ -56,6 +58,8 @@ class Settings : public QObject {
   bool smartStart() const { return s_.value("audio/smartStart", true).toBool(); } void setSmartStart(bool v) { set("audio/smartStart", v); }
   double clipDb() const { return s_.value("audio/clipDb", -0.1).toDouble(); } void setClipDb(double v);
   int peakHoldMs() const { return s_.value("audio/peakHoldMs", 1400).toInt(); } void setPeakHoldMs(int v);
+  bool bootAnimation() const { return s_.value("ui/bootAnimation", true).toBool(); } void setBootAnimation(bool v) { set("ui/bootAnimation", v); }
+  bool bootSound() const { return s_.value("ui/bootSound", true).toBool(); } void setBootSound(bool v) { set("ui/bootSound", v); }
   bool vuDefault() const { return s_.value("mixer/vu", false).toBool(); } void setVuDefault(bool v) { set("mixer/vu", v); }
   bool monitorPanelDefault() const { return s_.value("mixer/monitor", true).toBool(); } void setMonitorPanelDefault(bool v) { set("mixer/monitor", v); }
   bool rackCompactDefault() const { return s_.value("mixer/rackCompact", false).toBool(); } void setRackCompactDefault(bool v) { set("mixer/rackCompact", v); }

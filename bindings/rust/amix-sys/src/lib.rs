@@ -1,8 +1,8 @@
-//! Raw bindings to `sdk/c/include/amix.h`. Hand-written: the header is small and stable (AMIX_API_VERSION 3).
+//! Raw bindings to `sdk/c/include/amix.h`. Hand-written: the header is small and stable (AMIX_API_VERSION 4).
 #![allow(non_camel_case_types)]
 use std::os::raw::{c_char, c_int, c_void};
 
-pub const AMIX_API_VERSION: c_int = 3;
+pub const AMIX_API_VERSION: c_int = 4;
 pub const AMIX_MAX_STRIPS: usize = 32;
 pub const AMIX_MAX_BUSES: usize = 16;
 

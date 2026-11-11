@@ -106,7 +106,12 @@ class S16Meter {
 };
 
 // ───────── mixer ─────────
-struct Strip { double gainDb = 0, gainLin = 1, pan = 0, depth = 1; bool mute = false, solo = false; Meter meter; double inPk = 0; bool automix = false; double amWeight = 1, amLevel = 0, amGain = 1; };   // inPk: pre-fader input peak of the last block; automix: gain-sharing member, amGain its share (linear)
+// 360 AUDIO: a strip placed around the listener's head for headphones (binaural): interaural time difference (Woodworth, head radius 8.75 cm),
+// head shadow on the far ear (level and a one-pole low-pass that closes with the angle), a rear low-pass, distance gain. Our own model: no
+// HRTF data set, no licensed format. Off = the strip pans as before (bit-exact).
+struct Spatial { bool on = false; double az = 0, el = 0, dist = 1, spread = 0;   // degrees (0 front, +90 right, 180 behind), elevation -90..90, metres, 0..1 (1 = no direction)
+  double tgtL = 0, tgtR = 0, dL = 0, dR = 0, gL = 0.7071, gR = 0.7071, aL = 1, aR = 1, aRear = 1, lpL = 0, lpR = 0, rrL = 0, rrR = 0; unsigned w = 0; float ring[512] = {}; };
+struct Strip { Spatial sp; double gainDb = 0, gainLin = 1, pan = 0, depth = 1; bool mute = false, solo = false; Meter meter; double inPk = 0; bool automix = false; double amWeight = 1, amLevel = 0, amGain = 1; };   // inPk: pre-fader input peak of the last block; automix: gain-sharing member, amGain its share (linear)
 // AUX SENDS: kMaxBuses stereo buses. Each strip sends to each bus at its own level, pre-fader (the raw input: monitor mixes) or post-fader
 // (after gain, mute and solo: effects sends). A bus has a level, a mute, a meter and a RETURN level into the master (an effects return or a
 // way to hear a monitor mix); its own stereo output is handed to the caller through process()'s busOut (the runtime maps it to output channels).
@@ -132,6 +137,8 @@ class Mixer {
   void setBusLevel(int bus, double db);
   void setBusMute(int bus, bool on);
   void setBusReturn(int bus, double db);                     // -60 and below = none (default)
+  double limiterReductionDb() const { return limGrDb_; }   // how far the master limiter pulled the last block down (dB, >= 0; 0 = idle)
+  void setMasterProcessor(BusProcessor* p) { masterFx_ = p; }  // on the summed master (after the buses' returns and the extra source), before width, fader and limiter; nullptr = none
   void setBusProcessor(int bus, BusProcessor* p);            // nullptr = none; the caller keeps it alive while set
   void setWidth(double w);                                   // master stereo width: 0 mono, 1 as is, 2 wide (mid / side), before the master gain
   // AUTOMIX (gain sharing, Dugan-style): the member strips share one unity gain in proportion to their weighted input level, so an
@@ -155,6 +162,8 @@ class Mixer {
   // SURROUND 5.0 (the SDK's surround mode): each strip has a depth, +1 = front, 0 = between, -1 = rear; pan places it left / right in that
   // row; a centred front strip also feeds the CENTRE. outs: L, R, C, Ls, Rs. Master gain, limiter and meters apply; buses, effects and the
   // extra sources stay with the stereo process(). The stereo meters follow L / R.
+  void setSpatial(int strip, bool on, double azDeg, double elDeg, double distM, double spread);   // 360 audio (headphones) for this strip in the stereo process()
+  const Spatial& spatial(int strip) const { return strips_[static_cast<std::size_t>(strip)].sp; }
   void setDepth(int strip, double depth);
   double depth(int strip) const { return strip >= 0 && strip < n_ ? strips_[static_cast<std::size_t>(strip)].depth : 1; }
   void process5(const float* const* inputs, std::size_t frames, float* const* outs);
@@ -171,9 +180,9 @@ class Mixer {
   double width_ = 1.0;   // master stereo width
   bool autoOn_ = false; double autoTarget_ = -16, autoMax_ = 12, autoDb_ = 0, autoSec_ = 0; int automixN_ = 0;
   int outBits_ = 0; bool dcOn_ = false; double dcX_[2] = {0, 0}, dcY_[2] = {0, 0}; std::uint32_t rng_ = 0x2545F491u;
-  bool limOn_ = false; double limCeil_, limGain_ = 1, limReleaseMs_ = 100;
+  bool limOn_ = false; double limCeil_, limGain_ = 1, limReleaseMs_ = 100, limGrDb_ = 0;
   ClipConfig clip_; Meter master_[2]; Loudness loudness_; PhaseResult phase_{0, 0, 0, 0, true};
-  Send sends_[kMaxStrips][kMaxBuses]{}; Bus buses_[kMaxBuses]; bool anySend_ = false;
+  Send sends_[kMaxStrips][kMaxBuses]{}; Bus buses_[kMaxBuses]; bool anySend_ = false; BusProcessor* masterFx_ = nullptr;
 };
 
 }  // namespace am

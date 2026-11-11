@@ -98,7 +98,7 @@ mod tests {
     use super::*;
     #[test]
     fn offline_mixer_fader_pan_and_meters() {
-        assert_eq!(api_version(), 3); assert!(version().len() >= 5); assert!(devices_json().contains("\"null\""));
+        assert_eq!(api_version(), 4); assert!(version().len() >= 5); assert!(devices_json().contains("\"null\""));
         let mut m = Mixer::new(4, 48000.0).unwrap(); assert_eq!(m.strips(), 4);
         let tone: Vec<f32> = (0..256).map(|i| 0.5 * (2.0 * std::f64::consts::PI * 1000.0 * i as f64 / 48000.0).sin() as f32).collect();
         m.set_limiter(false, -0.5, 100.0); m.set_gain(0, -6.0); m.set_pan(0, 0.0);

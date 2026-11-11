@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstdio>
 #include <vector>
+#include "audiomixer/master_chain.hpp"
 static int fails = 0;
 #define CHECK(c, w) do { if (!(c)) { std::fprintf(stderr, "FAIL %s (%d)\n", w, __LINE__); ++fails; } } while (0)
 static bool near(double a, double b, double t) { return std::fabs(a - b) <= t; }
@@ -35,5 +36,23 @@ int main() {
     m.setDepth(0, 1); m.process5(in, n, outs); CHECK(near(peak(o[0]), peak(o[1]), 1e-3) && peak(o[0]) > 0.25, "5.0 front L = R (centre takes a share, constant power)"); CHECK(peak(o[2]) > 0.3, "5.0 centre carries a centred strip"); CHECK(peak(o[3]) == 0 && peak(o[4]) == 0, "5.0 depth +1: rears silent");
     m.setDepth(0, -1); m.process5(in, n, outs); CHECK(peak(o[0]) == 0 && peak(o[2]) == 0, "5.0 depth -1: fronts silent"); CHECK(near(peak(o[3]), 0.5 * c45, 2e-3), "5.0 rear Ls");
     m.setDepth(0, 0); m.setPan(0, -1); m.process5(in, n, outs); CHECK(peak(o[2]) == 0, "5.0 hard-left pan leaves the centre"); CHECK(peak(o[0]) > peak(o[1]), "5.0 hard left favours L"); CHECK(near(m.depth(0), 0, 1e-9), "depth getter"); }
-  if (fails) return 1; std::printf("bus_test: ok (incl. 5.0 surround)\n"); return 0;
+  // 6. 360 AUDIO: straight ahead = the centre pan; at +90 degrees the right ear is louder and the left ear hears it about 0.65 ms later; 2 m = half
+  { am::Mixer m(2, fs); m.setSpatial(0, true, 0, 0, 1, 0); m.process(in, n, L.data(), R.data()); CHECK(near(peak(L), 0.5 * c45, 2e-3) && near(peak(R), peak(L), 1e-6), "360: front = centre");
+    m.setSpatial(0, true, 0, 0, 2, 0); m.process(in, n, L.data(), R.data()); m.process(in, n, L.data(), R.data()); CHECK(near(peak(L), 0.25 * c45, 2e-3), "360: 2 m is half");
+    am::Mixer q(2, fs); std::vector<float> ck(n, 0.f); ck[100] = 1.f; const float* cin[2] = {ck.data(), s1.data()}; q.setSpatial(0, true, 90, 0, 1, 0); q.process(cin, n, L.data(), R.data());
+    std::size_t pl = 0, pr = 0; for (std::size_t i = 0; i < n; ++i) { if (std::fabs(L[i]) > std::fabs(L[pl])) pl = i; if (std::fabs(R[i]) > std::fabs(R[pr])) pr = i; }
+    CHECK(pr == 100 && pl > pr + 25 && pl < pr + 40, "360: the far ear is 0.5 - 0.8 ms late"); CHECK(std::fabs(R[pr]) > 2 * std::fabs(L[pl]), "360: the far ear is quieter and duller");
+    CHECK(q.spatial(0).on && !q.spatial(1).on, "360 getter"); }
+  // 7. MASTER CHAIN: nothing switched on = untouched; +6 dB at 1 kHz on the program EQ doubles the 1 kHz sine; the mastering compressor pulls a loud master down and reports it
+  { am::Mixer m(2, fs); am::MasterChain mc; m.setMasterProcessor(&mc); m.process(in, n, L.data(), R.data()); CHECK(near(peak(L), 0.5 * c45, 1e-6), "master chain idle = untouched");
+    am::MasterChain::Params p; p.fs = fs; p.eq[5] = {am::dsp::FilterType::Peaking, 1000, 1.41, 6}; mc.set(p); m.process(in, n, L.data(), R.data()); m.process(in, n, L.data(), R.data()); CHECK(near(peak(L), 0.5 * c45 * 1.995, 0.01), "program EQ +6 dB at 1 kHz");
+    p.eq[5].type = am::dsp::FilterType::Off; p.on = true; p.thrDb = -20; p.ratio = 4; p.attackMs = 1; mc.set(p); m.process(in, n, L.data(), R.data()); m.process(in, n, L.data(), R.data());
+    CHECK(peak(L) < 0.5 * c45 * 0.7 && mc.reductionDb() > 3, "mastering compressor reduces and reports"); p.on = false; mc.set(p); m.process(in, n, L.data(), R.data()); CHECK(near(peak(L), 0.5 * c45, 1e-6), "mastering off = untouched"); }
+  // 8. LIMITER METER and the extra mastering modules: +12 dB into a -6 dBFS ceiling shows about 9 dB of reduction and holds the ceiling; BASS MONO removes a 60 Hz side signal; the DE-ESSER pulls an 8 kHz tone down and leaves 1 kHz alone
+  { am::Mixer m(2, fs); m.setGainDb(0, 10); m.setMasterDb(5); m.setLimiter(true, -6, 100); m.process(in, n, L.data(), R.data()); m.process(in, n, L.data(), R.data());
+    CHECK(peak(L) <= 0.5012 + 1e-4, "limiter holds the ceiling"); CHECK(m.limiterReductionDb() > 5 && m.limiterReductionDb() < 12, "limiter reduction meter"); m.setLimiter(false, -6, 100); m.process(in, n, L.data(), R.data()); CHECK(m.limiterReductionDb() == 0, "limiter off: no reduction");
+    auto run = [&](double hz, double pan, am::MasterChain::Params p) { am::Mixer q(2, fs); am::MasterChain c; q.setMasterProcessor(&c); p.fs = fs; p.on = true; p.toneOn = p.compOn = p.satOn = false; c.set(p); std::vector<float> t(n); for (std::size_t i = 0; i < n; ++i) t[i] = 0.5f * static_cast<float>(std::sin(2 * 3.14159265358979 * hz * static_cast<double>(i) / fs)); const float* ti[2] = {t.data(), s1.data()}; q.setPan(0, pan); for (int k = 0; k < 4; ++k) q.process(ti, n, L.data(), R.data()); return std::make_pair(peak(L), peak(R)); };
+    am::MasterChain::Params off, bm; bm.bassMonoOn = true; const auto a = run(60, -1, off), b = run(60, -1, bm); CHECK(a.second < 0.01 && b.second > 0.15 && near(b.first, b.second, 0.06), "bass mono centres a hard-left 60 Hz");
+    am::MasterChain::Params de; de.deessOn = true; de.deessThrDb = -30; const auto h0 = run(8000, 0, off), h1 = run(8000, 0, de), m0 = run(1000, 0, off), m1 = run(1000, 0, de); CHECK(h1.first < h0.first * 0.85, "de-esser reduces 8 kHz"); CHECK(near(m1.first, m0.first, 0.01), "de-esser leaves 1 kHz"); }
+  if (fails) return 1; std::printf("bus_test: ok (incl. 5.0 surround, 360 audio, master chain, limiter meter, de-esser, bass mono)\n"); return 0;
 }

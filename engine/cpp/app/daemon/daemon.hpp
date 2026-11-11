@@ -27,7 +27,7 @@ namespace am {
 
 class Daemon {
  public:
-  struct Options { std::string bind = "127.0.0.1"; unsigned short port = 8765; std::string token; int strips = 32; std::string version = "0.1.0"; };
+  struct Options { std::string bind = "127.0.0.1"; unsigned short port = 8765; std::string token; int strips = 32; std::string version = "0.1.0"; bool localOnly = true; };   // localOnly: the local policy (private-network peers only)
   explicit Daemon(Options o);
   ~Daemon();
   bool start(std::string& err);

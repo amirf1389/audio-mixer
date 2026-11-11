@@ -8,7 +8,7 @@ import QtQuick.Layouts
 Flickable {
     id: page
     objectName: "tonePage"
-    property bool rta: false      // real-time analyser: the strip's 1/3-octave spectrum after its DSP, under the EQ curve
+    property bool rta: true       // real-time analyser: the strip's 1/3-octave spectrum after its DSP, under the EQ curve
     property var spec: []
     Timer { interval: 60; running: page.visible && page.rta; repeat: true; onTriggered: { page.spec = engine.spectrum(2); canvas.requestPaint() } }
     onRtaChanged: { if (rta) engine.setScopeStrip(strip); canvas.requestPaint() }
@@ -38,12 +38,12 @@ Flickable {
         spacing: 10
         Panel {
             Layout.fillWidth: true
-            title: i18n.t("TONE (EQ) • CHANNEL DSP", i18n.lang)
+            title: i18n.t("TONE (EQ) • MIC / CHANNEL EQ", i18n.lang)
             subtitle: "Per channel: polarity → delay → crossover → 10-band parametric EQ → limiter. Double precision inside the engine; changes land at the next audio block."
             RowLayout {
                 Layout.fillWidth: true; spacing: 8
                 Text { text: i18n.t("CHANNEL", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9 }
-                ComboBox {
+                Combo {
                     implicitWidth: 150; model: engine.strips; currentIndex: page.strip
                     displayText: engine.stripState[currentIndex] ? engine.stripState[currentIndex].name : ""
                     delegate: ItemDelegate { width: parent.width; text: engine.stripState[index] ? engine.stripState[index].name : index; font.family: Theme.mono }
@@ -63,12 +63,12 @@ Flickable {
                     var L = 40, R = width - 10, T = 10, B = height - 22, dbTop = 24, dbBot = -24;
                     if (page.rta && page.spec && page.spec.length === 31) {   // RTA: 31 bands 20 Hz .. 20 kHz, 0 .. -72 dBFS over the full height
                         var bw = (R - L) / 31; for (var k = 0; k < 31; k++) { var sdb = Math.max(-72, Math.min(0, page.spec[k])); var bh = (sdb + 72) / 72 * (B - T); c.fillStyle = sdb > -6 ? "rgba(251,191,36,0.5)" : "rgba(0,242,255,0.35)"; c.fillRect(L + k * bw + 1, B - bh, bw - 2, bh) }
-                        c.fillStyle = "rgba(255,255,255,0.5)"; c.font = "7px monospace"; c.fillText("RTA 1/3 oct  0 .. -72 dBFS", L + 4, T + 10) }
+                        c.fillStyle = Theme.ov(0.5); c.font = "7px monospace"; c.fillText("RTA 1/3 oct  0 .. -72 dBFS", L + 4, T + 10) }
                     function fx(f) { return L + (Math.log(f / 20) / Math.log(1000)) * (R - L) }
                     function fy(db) { return T + (dbTop - db) / (dbTop - dbBot) * (B - T) }
-                    c.strokeStyle = "rgba(255,255,255,0.08)"; c.lineWidth = 1; c.fillStyle = "#64748b"; c.font = "8px monospace";
+                    c.strokeStyle = Theme.ov(0.08); c.lineWidth = 1; c.fillStyle = "#64748b"; c.font = "8px monospace";
                     [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000].forEach(function (f) { c.beginPath(); c.moveTo(fx(f), T); c.lineTo(fx(f), B); c.stroke(); c.fillText(f >= 1000 ? (f / 1000) + "k" : f, fx(f) - 8, height - 8) });
-                    [-24, -12, -6, 0, 6, 12, 24].forEach(function (d) { c.strokeStyle = d === 0 ? "rgba(251,191,36,0.5)" : "rgba(255,255,255,0.08)"; c.beginPath(); c.moveTo(L, fy(d)); c.lineTo(R, fy(d)); c.stroke(); c.fillText((d > 0 ? "+" : "") + d, 6, fy(d) + 3) });
+                    [-24, -12, -6, 0, 6, 12, 24].forEach(function (d) { c.strokeStyle = d === 0 ? "rgba(251,191,36,0.5)" : Theme.ov(0.08); c.beginPath(); c.moveTo(L, fy(d)); c.lineTo(R, fy(d)); c.stroke(); c.fillText((d > 0 ? "+" : "") + d, 6, fy(d) + 3) });
                     if (page.curve.length) {
                         c.beginPath(); c.strokeStyle = "#00f2ff"; c.lineWidth = 2;
                         for (var i = 0; i < page.curve.length; i++) { var p = page.curve[i], x = fx(p.f), y = fy(Math.max(dbBot - 2, Math.min(dbTop + 2, p.db))); if (i === 0) c.moveTo(x, y); else c.lineTo(x, y) }
@@ -94,7 +94,7 @@ Flickable {
                 Text { text: i18n.t("FREQUENCY  ", i18n.lang) + Math.round(page.bandNow.freq) + i18n.t(" Hz", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                 Text { text: "Q  " + Number(page.bandNow.q).toFixed(2); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                 Text { text: i18n.t("GAIN  ", i18n.lang) + Theme.dbText(page.bandNow.gainDb) + i18n.t(" dB", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
-                ComboBox { Layout.fillWidth: true; model: page.typeNames; currentIndex: page.bandNow.type; onActivated: engine.setEq(page.strip, page.band, currentIndex, page.bandNow.freq, page.bandNow.q, page.bandNow.gainDb) }
+                Combo { Layout.fillWidth: true; model: page.typeNames; currentIndex: page.bandNow.type; onActivated: engine.setEq(page.strip, page.band, currentIndex, page.bandNow.freq, page.bandNow.q, page.bandNow.gainDb) }
                 Slider { Layout.fillWidth: true; from: Math.log(20); to: Math.log(20000); value: Math.log(Math.max(20, page.bandNow.freq)); onMoved: engine.setEq(page.strip, page.band, page.bandNow.type || 1, Math.exp(value), page.bandNow.q, page.bandNow.gainDb) }
                 Slider { Layout.fillWidth: true; from: 0.1; to: 12; value: page.bandNow.q; onMoved: engine.setEq(page.strip, page.band, page.bandNow.type || 1, page.bandNow.freq, value, page.bandNow.gainDb) }
                 Slider { Layout.fillWidth: true; from: -24; to: 24; value: page.bandNow.gainDb; onMoved: engine.setEq(page.strip, page.band, page.bandNow.type || 1, page.bandNow.freq, page.bandNow.q, value) }
@@ -141,12 +141,12 @@ Flickable {
                 subtitle: "Linkwitz-Riley, Butterworth or Bessel, 6 to 48 dB per octave"
                 readonly property var types: ["BUTTERWORTH", "LINKWITZ-RILEY", "BESSEL"]
                 readonly property var slopes: ["OFF", "6 dB", "12 dB", "18 dB", "24 dB", "30 dB", "36 dB", "42 dB", "48 dB"]
-                ComboBox { Layout.fillWidth: true; model: xo.types; currentIndex: page.ch.xoverType === undefined ? 1 : page.ch.xoverType; onActivated: engine.setCrossover(page.strip, currentIndex, page.ch.hpOrder, page.ch.hpFreq, page.ch.lpOrder, page.ch.lpFreq) }
+                Combo { Layout.fillWidth: true; model: xo.types; currentIndex: page.ch.xoverType === undefined ? 1 : page.ch.xoverType; onActivated: engine.setCrossover(page.strip, currentIndex, page.ch.hpOrder, page.ch.hpFreq, page.ch.lpOrder, page.ch.lpFreq) }
                 Text { text: i18n.t("HIGH PASS  ", i18n.lang) + Math.round(page.ch.hpFreq || 80) + i18n.t(" Hz", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
-                RowLayout { ComboBox { implicitWidth: 90; model: xo.slopes; currentIndex: page.ch.hpOrder || 0; onActivated: engine.setCrossover(page.strip, page.ch.xoverType, currentIndex, page.ch.hpFreq, page.ch.lpOrder, page.ch.lpFreq) }
+                RowLayout { Combo { implicitWidth: 90; model: xo.slopes; currentIndex: page.ch.hpOrder || 0; onActivated: engine.setCrossover(page.strip, page.ch.xoverType, currentIndex, page.ch.hpFreq, page.ch.lpOrder, page.ch.lpFreq) }
                     Slider { Layout.fillWidth: true; from: Math.log(20); to: Math.log(20000); value: Math.log(page.ch.hpFreq || 80); onMoved: engine.setCrossover(page.strip, page.ch.xoverType, page.ch.hpOrder, Math.exp(value), page.ch.lpOrder, page.ch.lpFreq) } }
                 Text { text: i18n.t("LOW PASS  ", i18n.lang) + Math.round(page.ch.lpFreq || 4000) + i18n.t(" Hz", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
-                RowLayout { ComboBox { implicitWidth: 90; model: xo.slopes; currentIndex: page.ch.lpOrder || 0; onActivated: engine.setCrossover(page.strip, page.ch.xoverType, page.ch.hpOrder, page.ch.hpFreq, currentIndex, page.ch.lpFreq) }
+                RowLayout { Combo { implicitWidth: 90; model: xo.slopes; currentIndex: page.ch.lpOrder || 0; onActivated: engine.setCrossover(page.strip, page.ch.xoverType, page.ch.hpOrder, page.ch.hpFreq, currentIndex, page.ch.lpFreq) }
                     Slider { Layout.fillWidth: true; from: Math.log(20); to: Math.log(20000); value: Math.log(page.ch.lpFreq || 4000); onMoved: engine.setCrossover(page.strip, page.ch.xoverType, page.ch.hpOrder, page.ch.hpFreq, page.ch.lpOrder, Math.exp(value)) } }
             }
             Panel {

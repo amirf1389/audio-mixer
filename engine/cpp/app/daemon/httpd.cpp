@@ -120,12 +120,17 @@ bool Server::listen(const std::string& bind, unsigned short port, std::string& e
   socklen_t len = sizeof a; getsockname(lfd_, reinterpret_cast<sockaddr*>(&a), &len); port_ = ntohs(a.sin_port);
   return true;
 }
+bool Server::localPeer(unsigned long ip) {
+  const unsigned a = static_cast<unsigned>((ip >> 24) & 255u), b = static_cast<unsigned>((ip >> 16) & 255u);
+  return a == 127 || a == 10 || (a == 172 && b >= 16 && b <= 31) || (a == 192 && b == 168) || (a == 169 && b == 254);
+}
 void Server::start() {
   running_ = true;
   acceptor_ = std::thread([this] {
     while (running_) {
       sockaddr_in c{}; socklen_t len = sizeof c; const int fd = static_cast<int>(::accept(lfd_, reinterpret_cast<sockaddr*>(&c), &len));
       if (fd < 0) { if (!running_) break; continue; }
+      if (localOnly_ && !localPeer(ntohl(c.sin_addr.s_addr))) { CLOSESOCK(fd); continue; }   // the local policy: not from this network, not served
       int one = 1; setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<const char*>(&one), sizeof one);
       std::lock_guard<std::mutex> g(threads_); threads_v_.emplace_back([this, fd] { serve(fd); });
     }

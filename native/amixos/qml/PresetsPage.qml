@@ -20,14 +20,14 @@ Flickable {
             RowLayout {
                 Layout.fillWidth: true; spacing: 8
                 Text { text: i18n.t("APPLY TO", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9 }
-                ComboBox {
+                Combo {
                     implicitWidth: 150; model: engine.strips; currentIndex: page.strip
                     displayText: engine.stripState[currentIndex] ? engine.stripState[currentIndex].name : ""
                     delegate: ItemDelegate { width: parent.width; text: engine.stripState[index] ? engine.stripState[index].name : index; font.family: Theme.mono }
                     onActivated: page.strip = currentIndex
                 }
                 Item { Layout.fillWidth: true }
-                TextField { id: saveName; Layout.preferredWidth: 200; placeholderText: i18n.t("new preset name", i18n.lang); font.family: Theme.mono; font.pixelSize: 10; color: Theme.ink; background: Rectangle { color: Theme.deep; radius: 4; border.color: Theme.line } }
+                Field { id: saveName; Layout.preferredWidth: 200; placeholderText: i18n.t("new preset name", i18n.lang); font.family: Theme.mono; font.pixelSize: 10; color: Theme.ink; background: Rectangle { color: Theme.deep; radius: 4; border.color: Theme.line } }
                 Rectangle { implicitWidth: 120; implicitHeight: 28; radius: 6; color: saveName.text.trim().length ? Theme.amber : Theme.ov(0.05); Text { anchors.centerIn: parent; text: i18n.t("SAVE CHANNEL AS", i18n.lang); color: saveName.text.trim().length ? "#000" : Theme.dim; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; enabled: saveName.text.trim().length > 0; onClicked: { if (engine.savePreset(saveName.text, page.strip)) saveName.text = "" } } }
             }
             Flow { Layout.fillWidth: true; spacing: 4

@@ -9,7 +9,7 @@
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "FAIL %s:%d %s\n", __FILE__, __LINE__, #c); return 1; } } while (0)
 
 int main(void) {
-  CHECK(amix_api_version() == 3 && amix_api_version() == AMIX_API_VERSION && strlen(amix_version()) >= 5);
+  CHECK(amix_api_version() == 4 && amix_api_version() == AMIX_API_VERSION && strlen(amix_version()) >= 5);
   { amix_set_dirs("/tmp/amix-sdk-paths/data", "/tmp/amix-sdk-paths/cache", NULL); char* pj = amix_paths_json(); CHECK(pj && strstr(pj, "\"data\":\"/tmp/amix-sdk-paths/data\"") && strstr(pj, "\"downloads\":\"/tmp/amix-sdk-paths/cache/downloads\"") && strstr(pj, "\"os\":")); amix_free(pj); }
   char* devs = amix_devices_json(); CHECK(devs && strstr(devs, "\"null\"")); amix_free(devs);
   char* bk = amix_backends_json(); CHECK(bk && bk[0] == '['); amix_free(bk);

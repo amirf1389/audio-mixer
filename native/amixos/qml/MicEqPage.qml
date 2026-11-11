@@ -58,12 +58,12 @@ Item {
                         id: canvas; anchors.fill: parent; anchors.margins: 8
                         onPaint: {
                             const ctx = getContext("2d"); const w = width, h = height; ctx.clearRect(0, 0, w, h)
-                            ctx.strokeStyle = "rgba(255,255,255,0.07)"; ctx.lineWidth = 1
+                            ctx.strokeStyle = Theme.ov(0.07); ctx.lineWidth = 1
                             for (let j = 0; j <= 6; ++j) { const y = Math.round(h * j / 6) + 0.5; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke() }
                             const sp = page.spec; const bw = w / 31
                             if (sp && sp.length === 31) { for (let b = 0; b < 31; ++b) { const db = Math.max(-72, Math.min(0, sp[b])); const bh = (db + 72) / 72 * h; ctx.fillStyle = "rgba(0,242,255,0.45)"; ctx.fillRect(b * bw + 1, h - bh, bw - 2, bh) } }
                             const cv = page.curve; if (cv && cv.length > 1) { ctx.strokeStyle = "#fbbf24"; ctx.lineWidth = 2; ctx.beginPath(); for (let i = 0; i < cv.length; ++i) { const x = w * Math.log(cv[i].f / 20) / Math.log(1000), y = h / 2 - Math.max(-24, Math.min(24, cv[i].db)) / 24 * h / 2; if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y) } ctx.stroke() }
-                            ctx.strokeStyle = "rgba(255,255,255,0.25)"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, h / 2 + 0.5); ctx.lineTo(w, h / 2 + 0.5); ctx.stroke()
+                            ctx.strokeStyle = Theme.ov(0.25); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, h / 2 + 0.5); ctx.lineTo(w, h / 2 + 0.5); ctx.stroke()
                         }
                     }
                     Text { anchors.left: parent.left; anchors.top: parent.top; anchors.margins: 10; text: i18n.t("CYAN  the strip after its DSP (1/3-octave, 0 .. -72 dBFS)     AMBER  what the EQ + high-pass do (±24 dB)", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }

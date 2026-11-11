@@ -72,6 +72,7 @@ bool Daemon::start(std::string& err) {
     while (running_ && ws.open()) { if (!ws.send(meters().dump())) break; std::this_thread::sleep_for(std::chrono::milliseconds(50)); }
     ws.close(); reader.join();
   });
+  http_.setLocalOnly(opt_.localOnly);
   if (!http_.listen(opt_.bind, opt_.port, err)) return false;
   running_ = true; http_.start();
   return true;

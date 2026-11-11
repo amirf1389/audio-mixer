@@ -1,12 +1,38 @@
 {
   "_": "The feature feed: newest first. scripts/make-update.js embeds it in the signed update.json; the console shows a NEW badge for entries newer than the version last looked at. Edit on the website's manage.html (Release manager) or by hand, then run node scripts/make-update.js.",
   "features": [
-    { "version": "1.23.0.1", "date": "2026-11-10", "title": "Release 1.23.0.1 stable", "items": [
-      "ACOUSTICS extension: log sine sweep and stepped sine (amplitude, phase, THD, THD+N, SMPTE IMD), RTA to 1/48 octave with RMS averaging and level alignment, impulse response, ETC, RT60 / Topt, delay compensation, waterfall, spectrogram, room simulator, auto EQ with parametric target curves (20 - 400 Hz) exported to REW / miniDSP text and JSON, mic calibration files, SPL offset, offline sweep WAV",
-      "5.0 surround in the SDK (API v3): per-strip DEPTH, amix_mixer_process5",
-      "Plug-in slots: 10 on BASIC, unlimited on PRO, STUDIO and MASTER",
-      "Every console text follows the language menu (21 languages with full interface tables)",
-      "WHAT'S NEW feed with a NEW badge in the header, managed from the website's release manager"
-    ] }
+    {
+      "version": "1.23.0.1",
+      "date": "2026-11-10",
+      "title": "Release 1.23.0.1 stable",
+      "items": [
+        "ACOUSTICS page: log sine sweep and stepped sine (amplitude, phase, THD, THD+N), RTA to 1/48 octave with RMS averaging and level alignment, impulse response, ETC, RT60 / Topt, delay compensation, waterfall, spectrogram, room simulator, auto EQ with target curves (20 - 400 Hz) set on a strip or exported as REW / miniDSP text and JSON, mic calibration files, SPL offset, offline sweep WAV",
+        "360 AUDIO: binaural placement of every strip for headphones (azimuth, elevation, distance, spread), also in the SDK (API v4)",
+        "RTA EQ has its own EQ rack on the master (PROGRAM EQ); TONE (EQ) stays the microphone channel EQ",
+        "MASTERING rack after the program EQ, one card per module: tone shelves, bass mono, de-esser, glue compressor, exciter, saturation and output, and the master limiter with ceiling, release and a gain-reduction meter; six presets",
+        "Input / output detection names what is connected (headphones, headset, speakers, microphone, audio interface, Bluetooth, digital out) on ASIO, WASAPI and DirectSound, shows it in the header, and always pairs an input with the output so every channel meters in real time",
+        "5.0 surround in the SDK (API v3): per-strip DEPTH, amix_mixer_process5",
+        "Plug-in slots: 10 on BASIC, unlimited on PRO, STUDIO and MASTER",
+        "Every console text follows the language menu: 21 languages with full interface tables",
+        "WHAT'S NEW feed with a NEW badge in the header, managed from the website's release manager",
+        "Windows: the colours load correctly (the theme was missing in the Windows build), drop-downs follow the theme, the update check has its TLS plug-in",
+        "Boot animation with a soft chord on the master (each can be switched off on SETTINGS); factory setup: text fields follow the theme, the PIN can be changed again once set, the language list scrolls",
+        "Updates like a mixing console: a found update downloads (optionally by itself), INSTALL AND RESTART closes the console, installs silently and boots it again with UPDATED TO on the boot screen; the setup is checked against the signed manifest's sha256 again before it runs",
+        "Never stuck: sound-card scans and driver starts run beside the interface with a time limit; a driver that does not answer is left behind and the console carries on",
+        "SOFT RESTART in the header (Ctrl+Shift+R): rescan, restart the engine and replay the boot screen without closing the console",
+        "AMFB SIGNATURE sound (the house sound on the master), offered in the factory setup and on MASTERING",
+        "Equalizer APO: export and import of the EQ as its filter text, from the RTA EQ page",
+        "The mixer logo on the program, the window, the task bar, the installer and the shortcuts",
+        "Master fader at -inf switches everything off, the Windows default output included (its own volume control; put back when the fader comes up or the console closes)",
+        "The real-time analyser on TONE (EQ) is on from the start",
+        "Bluetooth start that does not give up at the first refusal: the device's own rate, 48 kHz, without the hands-free microphone, then the other Windows path, with a note of what was tried",
+        "Phone remote over Wi-Fi from the NETWORK page, with a local policy: only this computer and private-network addresses are answered, and every control call needs the token (not encrypted: for your own network)",
+        "OSC remote: with no address list only private-network senders are accepted",
+        "Fifteen effects for every channel's rack, now with TUBE AMP (valve stage, tone stack, sagging power stage, cabinet), PRE AMP, POST AMP, HALL REVERB and ROOM REVERB beside reverb, delay, chorus, drive, flanger, phaser, tremolo, auto wah, bit crusher and exciter",
+        "Fixed: the rack did not refresh by itself when a plug-in was added or removed",
+        "VST3 / VST2 plug-ins are looked for after the window is up, beside the interface and with a time limit, so a slow or hanging plug-in cannot delay the start; the rack menu shows the format, the count and a rescan",
+        "Plug-in editor as a vintage rack unit: wooden frame, cream faceplate, outlined sections with skirted knobs and scale marks, a PROGRAM window with - / + for the presets, an A / B selector, a lamp with an ON / OFF switch and a needle meter; hosted VST plug-ins open in the same panel"
+      ]
+    }
   ]
 }

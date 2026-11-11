@@ -5,6 +5,7 @@
 #pragma once
 #include <algorithm>
 #include <QObject>
+#include <functional>
 #include <QSettings>
 #include <QTimer>
 #include <QVariantList>
@@ -17,6 +18,7 @@
 
 #include "audiomixer/dsp.hpp"
 #include "audiomixer/runtime.hpp"
+#include "audiomixer/master_chain.hpp"
 #include "vst3/vst3_host.hpp"
 #include "vst2/vst2_host.hpp"
 #include "record/recorder.hpp"
@@ -109,8 +111,20 @@ class Engine : public QObject {
   // hotplug(added) fires; main() then auto-starts when the engine is idle and AUTO START is on. The running device vanishing stops the engine with a note.
   Q_PROPERTY(bool hotplugWatch READ hotplugWatch WRITE setHotplugWatch NOTIFY stateChanged)
   bool hotplugWatch() const { return hotplug_.isActive(); } void setHotplugWatch(bool on);
+  // NEVER STUCK: device scans and driver starts run on a worker while the interface keeps painting; a driver that does not answer in time is
+  // left behind (its thread is abandoned) and the console carries on: a scan falls back to the list without loading ASIO drivers, a start reports it.
+  bool guarded(std::function<bool()> work, int timeoutMs);
+  Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
+  bool busy() const { return scanning_ || opening_; }
+  Q_INVOKABLE QString busyText() const { return opening_ ? QStringLiteral("starting the sound card") : scanning_ ? QStringLiteral("looking for sound cards") : QString(); }
+  Q_SIGNAL void busyChanged();
+  Q_INVOKABLE QVariantMap ioInfo() const;   // the running device: {backend, inName, inKind, inputs, outName, outKind, outputs, blockMs}; kinds: headphones, headset, speakers, microphone, line, digital, interface, bluetooth ...
   Q_INVOKABLE void simulateDevices(const QVariantList& devices);   // tests: replace the scanned list with this one (devicesChanged fires; the fingerprint poll is paused)
   Q_INVOKABLE void checkHotplug();                                 // one poll now
+  // BLUETOOTH START that does not give up at the first refusal: the endpoint's own sample rate, then without the hands-free microphone (opening
+  // it drops a headset to phone quality or fails outright), then the same device on the other Windows path (DirectSound <-> WASAPI shared).
+  Q_INVOKABLE bool openBluetooth(const QString& backend, const QString& inId, const QString& outId, int frames);
+  Q_INVOKABLE QString bluetoothNote() const { return btNote_; }
   Q_INVOKABLE bool open(const QString& backend, const QString& inDevice, const QString& outDevice, double sampleRate, int frames, int inChannels, int outChannels);
   // DRIVER INTELLIGENCE (engine/cpp/include/audiomixer/driver_intel.hpp): the ladder for an ASIO device, the Realtek pin and the locks learned
   Q_INVOKABLE bool openSmart(const QString& backend, const QString& inDevice, const QString& outDevice, double sampleRate, int frames, int inChannels, int outChannels);   // walks the plan until a step opens
@@ -178,6 +192,20 @@ class Engine : public QObject {
   void setExtraSource(am::Runtime::ExtraSource* s) { extra_ = s; sources_.a.store(s); }
   void setMediaSource(am::Runtime::ExtraSource* s) { sources_.c.store(s); }
   void setSampleSource(am::Runtime::ExtraSource* s) { sources_.d.store(s); }
+  void setMeasureIo(am::Runtime::Tap* t, am::Runtime::ExtraSource* s) { taps_.c.store(t); sources_.e.store(s); }
+  // 360 AUDIO: a strip around the head (headphones). az degrees (0 front, 90 right), el -90..90, dist metres, spread 0..1
+  // MASTER CHAIN: the PROGRAM EQ (strip index -1 in setEq / eqBand / setGraphicEq: the RTA EQ page's own rack) and MASTERING after it
+  // EQUALIZER APO: the filter text that Equalizer APO (the open-source system-wide equaliser for Windows) reads and writes: "Preamp: -3 dB",
+  // "Filter 1: ON PK Fc 100 Hz Gain 3 dB Q 1.41" (PK, LSC, HSC, LPQ, HPQ, NO). strip -1 = the PROGRAM EQ. Empty path = equalizer-apo.txt in the data folder.
+  Q_INVOKABLE QString exportApo(int strip, const QString& path);   // returns the file written ("" on failure)
+  Q_INVOKABLE int importApo(int strip, const QString& path);       // returns how many filters were taken (0 = none / unreadable)
+  Q_INVOKABLE QVariantMap mastering() const;                       // {eqOn, on, low, air, thr, ratio, attack, release, makeup, drive, gain, preset}
+  Q_INVOKABLE void setMastering(const QVariantMap& m);             // any subset of those keys
+  Q_INVOKABLE QStringList masteringPresets() const;
+  Q_INVOKABLE void applyMasteringPreset(const QString& name);
+  Q_INVOKABLE double masteringReductionDb() const { return master_.reductionDb(); }
+  Q_INVOKABLE void setSpatial(int strip, bool on, double az, double el, double dist, double spread);
+  Q_INVOKABLE QVariantMap spatial(int strip) const;
   // OUTPUT STAGE + PROFILER (SOUND CARD page): DC removal before the limiter, TPDF dither for 16 / 24-bit devices, block-time figures in telemetry
   Q_PROPERTY(bool dcBlock READ dcBlock WRITE setDcBlock NOTIFY stateChanged)
   Q_PROPERTY(int outputBits READ outputBits WRITE setOutputBits NOTIFY stateChanged)   // 0 float, 16, 24
@@ -234,10 +262,24 @@ class Engine : public QObject {
   Q_INVOKABLE void setSolo(int strip, bool on);
   Q_INVOKABLE void setName(int strip, const QString& name);
   Q_INVOKABLE void setMaster(double db);
+  // WINDOWS SOUND SYNC: with the master fader at -inf the console also mutes the Windows default output (the system's own endpoint volume, the
+  // documented interface: no driver and no registry are touched), so nothing at all is heard; raising the fader puts the Windows mute back as it was.
+  Q_PROPERTY(bool windowsMuteSync READ windowsMuteSync WRITE setWindowsMuteSync NOTIFY systemSoundChanged)
+  Q_PROPERTY(bool windowsMuted READ windowsMuted NOTIFY systemSoundChanged)             // the Windows default output is muted now (by the fader or by Windows itself)
+  Q_PROPERTY(bool windowsSoundAvailable READ windowsSoundAvailable NOTIFY systemSoundChanged)
+  bool windowsMuteSync() const { return winSync_; } void setWindowsMuteSync(bool on);
+  bool windowsMuted() const { return winMuted_; } bool windowsSoundAvailable() const { return winAvail_; }
+  void setSystemMuteBackend(std::function<bool(bool&)> get, std::function<bool(bool)> set) { sysGet_ = std::move(get); sysSet_ = std::move(set); }   // tests
+  void syncSystemSound();                 // applies the rule and reads the state (called on fader moves and twice a second)
+  void restoreSystemSound();              // on exit: a mute the console set is taken back
+  Q_SIGNAL void systemSoundChanged();
   Q_INVOKABLE void setColor(int strip, int color);           // 0..7 (Theme.stripColors)
   int selectedStrip() const { return selected_; }
   void setSelectedStrip(int i) { if (i < 0 || i >= kStrips || i == selected_) return; selected_ = i; emit selectedStripChanged(); }
-  Q_INVOKABLE void setMasterLimiter(bool on, double ceilingDb);
+  Q_INVOKABLE void setMasterLimiter(bool on, double ceilingDb, double releaseMs = -1);   // releaseMs < 0 keeps the current release
+  Q_INVOKABLE QVariantMap masterLimiter() const;                    // {on, ceiling, release}
+  Q_INVOKABLE double masterLimiterReductionDb() const { return rt_ ? rt_->limiterReductionDb() : 0.0; }
+  Q_INVOKABLE double masteringDeessDb() const { return master_.deessReductionDb(); }
   QVariantMap monitor() const;
   QVariantList inputRoutes() const; QVariantList outputRoutes() const; QVariantList outputSources() const;
   int deviceInputs() const { return devIn_; } int deviceOutputs() const { return devOut_; }
@@ -284,10 +326,17 @@ class Engine : public QObject {
   Q_INVOKABLE void movePlugin(int strip, int from, int to);   // reorder the rack (swap two slots)
   // VST3 (engine/cpp/app/vst3): plug-ins found in the VST3 folders (Settings adds more), loaded into a slot as "vst3:<module path>|<class id>"
   Q_INVOKABLE QVariantList vstCatalog() const;        // [{kind, name, vendor, module, cid, format}] from the last scan: VST3 and VST2
+  Q_PROPERTY(int vstCount READ vstCount NOTIFY vstCatalogChanged)          // hosted VST3 / VST2 plug-ins found by the last scan
+  Q_PROPERTY(bool vstScanning READ vstScanning NOTIFY vstCatalogChanged)
+  int vstCount() const { return static_cast<int>(vstCatalog_.size()); } bool vstScanning() const { return vstScanning_; }
+  Q_SIGNAL void vstCatalogChanged();
+  Q_INVOKABLE QVariantList rackPresets(const QString& kind) const;       // factory presets of a built-in effect ("fx:reverb" ...): [{id, name, category}]
+  Q_INVOKABLE bool applyRackPreset(int strip, int slot, int presetId);   // sets that slot's knobs (not its MIX)
   Q_INVOKABLE int rescanVst(const QStringList& extraDirs);   // scans the platform folders + extraDirs; returns the plug-in count
   Q_INVOKABLE QVariantList pluginParams(int strip, int slot) const;   // [{id, title, units, value (normalized), text, stepCount, bypass, hidden, readOnly}]
   Q_INVOKABLE void setPluginParam(int strip, int slot, int id, double normalized);
   Q_INVOKABLE QString pluginError(int strip, int slot) const;
+  Q_INVOKABLE QString pluginParamText(int strip, int slot, int id, double normalized) const;   // what the plug-in calls that position ("250 ms", "+12 dB"): for a knob's printed scale
   Q_INVOKABLE int pluginCount(int strip) const;
   Q_INVOKABLE void copyChannel(int strip);
   Q_INVOKABLE bool pasteChannel(int strip);          // the copied DSP + sends + pan onto this strip (not the name, colour, fader or groups)
@@ -346,6 +395,7 @@ class Engine : public QObject {
   void devicesChanged();
   void hotplug(bool added, const QString& what);   // a device appeared (added) or went away
   void stripsChanged();
+  void masterChainChanged();
   void metersChanged();
   void busesChanged();
   void groupsChanged();
@@ -365,12 +415,16 @@ class Engine : public QObject {
   static constexpr int kBuses = 16, kGroups = 8;   // buses 0-7 AUX, 8-15 FX
   struct SendUi { double db = -60; bool pre = false; };
   struct PluginUi { QString kind; bool bypass = false; std::shared_ptr<am::host::Plugin> vst; QString state, error; };   // vst: loaded instance (null = pending with error)
-  std::vector<QVariantMap> vstCatalog_; std::vector<std::shared_ptr<am::host::Plugin>> graveyard_; QTimer graveTimer_;
+  bool vstScanning_ = false; std::vector<QVariantMap> vstCatalog_; std::vector<std::shared_ptr<am::host::Plugin>> graveyard_; QTimer graveTimer_;
   bool loadVst(int strip, int slot);                      // from kind + state at the runtime's rate; false -> error set
   void rebuildInserts(int strip);                         // the strip's VST chain into the runtime
   void reloadAllVst();                                    // after open (new rate / block)
-  struct StripUi { QString name; double db = 0, pan = 0; bool mute = false, solo = false; am::dsp::Channel dsp{48000}; SendUi sends[kBuses]; int dca = 0; unsigned muteGroups = 0; int color = 0; PluginUi plugins[kPluginSlots]; bool automix = false; double amWeight = 1; bool link = false; double trimDb = 0; int eqPreset = 0; };
+  struct StripUi { bool spOn = false; double spAz = 0, spEl = 0, spDist = 1, spSpread = 0; QString name; double db = 0, pan = 0; bool mute = false, solo = false; am::dsp::Channel dsp{48000}; SendUi sends[kBuses]; int dca = 0; unsigned muteGroups = 0; int color = 0; PluginUi plugins[kPluginSlots]; bool automix = false; double amWeight = 1; bool link = false; double trimDb = 0; int eqPreset = 0; };
   std::vector<QJsonObject> history_; int histPos_ = -1; bool restoring_ = false; QTimer histTimer_; QJsonObject abOther_; QString abSlot_ = "A";
+  QString btNote_;
+  bool scanning_ = false, opening_ = false, timedOut_ = false;
+  bool winSync_ = true, winMuted_ = false, winAvail_ = false, weMuted_ = false, winBefore_ = false; std::function<bool(bool&)> sysGet_; std::function<bool(bool)> sysSet_; QTimer sysTimer_;
+  am::MasterChain master_; am::MasterChain::Params mp_; QString masterPreset_; void pushMaster();
   int partner(int i) const { return (i ^ 1) < kStrips ? (i ^ 1) : -1; }
   void applyPluginStage(int strip, const QString& kind, bool on);   // a built-in stage follows its slot
   struct BusUi { QString name; double db = 0, returnDb = -60; bool mute = false; QString fxKind; std::unique_ptr<am::fx::Effect> fx; double fxMix = 1; bool fxBypass = false; std::map<QString, double> fxValues; int fxPreset = 0; };
@@ -398,7 +452,7 @@ class Engine : public QObject {
   BusUi buses_[kBuses]; DcaUi dcas_[kGroups]; MuteGroupUi muteGroups_[kGroups];
   QVariantMap telemetry_;
   std::vector<StripUi> strips_;
-  double masterDb_ = 0; bool masterLim_ = true; double masterCeil_ = -0.5;
+  double masterDb_ = 0; bool masterLim_ = true; double masterCeil_ = -0.5, masterRel_ = 100;
   static constexpr int kOutputs = 32;
   int inRoute_[kStrips] = {}; int outRoute_[kOutputs] = {}; int devIn_ = 0, devOut_ = 0; QString inDevName_, outDevName_; void rememberDeviceNames(const std::string& backend, const std::string& in, const std::string& out);
   QVariantMap license_; int licensedChannels_ = 8;
