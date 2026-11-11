@@ -65,7 +65,7 @@ Item {
                 Head { text: i18n.t("ROUND-TRIP LATENCY", i18n.lang) }
                 RowLayout { spacing: 8
                     Text { text: i18n.t("LISTEN ON CH", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
-                    SpinBox { from: 1; to: engine.stripState.length; value: page.strip + 1; onValueModified: page.strip = value - 1; implicitWidth: 90 }
+                    SpinBox { palette.base: Theme.deep; palette.text: Theme.ink; palette.button: Theme.cardRaised; palette.buttonText: Theme.ink; palette.highlight: Theme.orange; palette.mid: Theme.line; from: 1; to: engine.stripState.length; value: page.strip + 1; onValueModified: page.strip = value - 1; implicitWidth: 90 }
                     Btn { label: page.measuring ? i18n.t("MEASURING", i18n.lang) : i18n.t("MEASURE", i18n.lang); on: !page.measuring; onColor: Theme.cyan; onClicked: if (!page.measuring) page.measureRt() } }
                 Text { Layout.fillWidth: true; text: page.rtText; color: page.rtColor; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; wrapMode: Text.WordWrap }
                 Note { text: i18n.t("Connect a cable from an output that carries MASTER (OUT 1 by default on ROUTING? no: MONITOR is on 1-2; set an output to MASTER L) to the device input this strip reads. The pulse is sent at -12 dBFS for 1.5 s and the delay to its echo is the whole path: output buffers, converters, cable, input buffers.", i18n.lang) }

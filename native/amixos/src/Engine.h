@@ -121,6 +121,10 @@ class Engine : public QObject {
   Q_INVOKABLE QVariantMap ioInfo() const;   // the running device: {backend, inName, inKind, inputs, outName, outKind, outputs, blockMs}; kinds: headphones, headset, speakers, microphone, line, digital, interface, bluetooth ...
   Q_INVOKABLE void simulateDevices(const QVariantList& devices);   // tests: replace the scanned list with this one (devicesChanged fires; the fingerprint poll is paused)
   Q_INVOKABLE void checkHotplug();                                 // one poll now
+  // BLUETOOTH START that does not give up at the first refusal: the endpoint's own sample rate, then without the hands-free microphone (opening
+  // it drops a headset to phone quality or fails outright), then the same device on the other Windows path (DirectSound <-> WASAPI shared).
+  Q_INVOKABLE bool openBluetooth(const QString& backend, const QString& inId, const QString& outId, int frames);
+  Q_INVOKABLE QString bluetoothNote() const { return btNote_; }
   Q_INVOKABLE bool open(const QString& backend, const QString& inDevice, const QString& outDevice, double sampleRate, int frames, int inChannels, int outChannels);
   // DRIVER INTELLIGENCE (engine/cpp/include/audiomixer/driver_intel.hpp): the ladder for an ASIO device, the Realtek pin and the locks learned
   Q_INVOKABLE bool openSmart(const QString& backend, const QString& inDevice, const QString& outDevice, double sampleRate, int frames, int inChannels, int outChannels);   // walks the plan until a step opens
@@ -410,6 +414,7 @@ class Engine : public QObject {
   void reloadAllVst();                                    // after open (new rate / block)
   struct StripUi { bool spOn = false; double spAz = 0, spEl = 0, spDist = 1, spSpread = 0; QString name; double db = 0, pan = 0; bool mute = false, solo = false; am::dsp::Channel dsp{48000}; SendUi sends[kBuses]; int dca = 0; unsigned muteGroups = 0; int color = 0; PluginUi plugins[kPluginSlots]; bool automix = false; double amWeight = 1; bool link = false; double trimDb = 0; int eqPreset = 0; };
   std::vector<QJsonObject> history_; int histPos_ = -1; bool restoring_ = false; QTimer histTimer_; QJsonObject abOther_; QString abSlot_ = "A";
+  QString btNote_;
   bool scanning_ = false, opening_ = false, timedOut_ = false;
   bool winSync_ = true, winMuted_ = false, winAvail_ = false, weMuted_ = false, winBefore_ = false; std::function<bool(bool&)> sysGet_; std::function<bool(bool)> sysSet_; QTimer sysTimer_;
   am::MasterChain master_; am::MasterChain::Params mp_; QString masterPreset_; void pushMaster();

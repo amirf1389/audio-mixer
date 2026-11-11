@@ -26,7 +26,7 @@ class Osc : public QObject {
   Q_PROPERTY(QStringList addresses READ addresses CONSTANT)
   Q_PROPERTY(QVariantList interfaces READ interfaces NOTIFY changed)     // the network cards: [{name, ip, mask, up, kind}]
   Q_PROPERTY(QString bindAddress READ bindAddress WRITE setBindAddress NOTIFY changed)   // "" = every card (LAN) / 127.0.0.1; else one card's IP
-  Q_PROPERTY(QString allowedIps READ allowedIps WRITE setAllowedIps NOTIFY changed)      // comma list of remote IPs allowed to control (LAN); empty = any
+  Q_PROPERTY(QString allowedIps READ allowedIps WRITE setAllowedIps NOTIFY changed)      // comma list of remote IPs allowed to control (LAN); empty = the local policy: any private-network address, no public one
   Q_PROPERTY(QString remoteAddress READ remoteAddress NOTIFY changed)                    // what to type into the remote: ip:port
  public:
   explicit Osc(Engine* engine, QObject* parent = nullptr);

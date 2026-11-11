@@ -39,6 +39,7 @@
 #include <QIcon>
 #include "Update.h"
 #include "Measure.h"
+#include "Remote.h"
 #include "measure/measure.hpp"
 #include "Engine.h"
 #include "license/license.hpp"
@@ -86,7 +87,7 @@ int main(int argc, char* argv[]) {
 
   am::paths::setProgramDir(QCoreApplication::applicationDirPath().toStdString());
   if (!smoke) { QFile* lf = new QFile(QString::fromStdString(am::paths::file("console.log"))); if (lf->size() > 256 * 1024) lf->remove(); if (lf->open(QIODevice::Append | QIODevice::Text)) { g_log = lf; qInstallMessageHandler(logToFile); qInfo("AmF X1 %s starting: %s, Qt %s, render %s", AMIX_VERSION, am::paths::osName(), qVersion(), QQuickWindow::graphicsApi() == QSGRendererInterface::Software ? "software" : "auto"); } }
-  Engine engine; I18n i18n; Arrange arrange(&engine); Settings settings(&engine); applyPalette(settings.darkTheme()); QObject::connect(&settings, &Settings::changed, &app, [&] { static bool last = settings.darkTheme(); if (last != settings.darkTheme()) { last = settings.darkTheme(); applyPalette(last); } }); if (smoke) settings.finishSetup(); Access access(&engine); Osc osc(&engine); Media media(&engine); Samples samples(&engine); Update update(QStringLiteral(AMIX_VERSION)); Measure measure(&engine);
+  Engine engine; I18n i18n; Arrange arrange(&engine); Settings settings(&engine); applyPalette(settings.darkTheme()); QObject::connect(&settings, &Settings::changed, &app, [&] { static bool last = settings.darkTheme(); if (last != settings.darkTheme()) { last = settings.darkTheme(); applyPalette(last); } }); if (smoke) settings.finishSetup(); Access access(&engine); Osc osc(&engine); Media media(&engine); Samples samples(&engine); Update update(QStringLiteral(AMIX_VERSION)); Measure measure(&engine); Remote remote(&engine);
   if (!lang.isEmpty()) i18n.setLang(lang);   // --lang fa: start in that language (also for --shots)
   QQmlApplicationEngine qml;
   qml.rootContext()->setContextProperty("engine", &engine);
@@ -99,6 +100,8 @@ int main(int argc, char* argv[]) {
   qml.rootContext()->setContextProperty("updater", &update);
   QObject::connect(&update, &Update::restarting, &app, [&] { settings.sessionClosed(); engine.stop(); QTimer::singleShot(1800, &app, &QCoreApplication::quit); });   // INSTALL AND RESTART: save, release the sound card, show the notice, quit; the setup starts the console again
   qml.rootContext()->setContextProperty("measure", &measure);
+  qml.rootContext()->setContextProperty("remote", &remote);
+  QObject::connect(&remote, &Remote::stopped, &app, [&] { if (!engine.running()) settings.startLastDevice(); });   // the remote service has let the sound card go: the console takes it back
   QObject::connect(&app, &QGuiApplication::aboutToQuit, &settings, &Settings::sessionClosed);
   QObject::connect(&app, &QGuiApplication::aboutToQuit, &engine, &Engine::restoreSystemSound);   // a Windows mute set by the fader at -inf is taken back on exit
   if (!smoke && update.checkAtStart() && settings.setupDone()) QTimer::singleShot(3000, &update, &Update::check);
@@ -200,6 +203,7 @@ int main(int argc, char* argv[]) {
           if (pl.value("pending").toBool() || pl.value("format").toString() != "FX" || engine.pluginParams(ch, slot).size() < 4) { std::fprintf(stderr, "amixos --smoke: effect %s did not load into CH %d slot %d\n", qPrintable(m.value("kind").toString()), ch + 1, slot + 1); return 85; } ++slot; }
         engine.setPluginParam(ch, 0, 0, 0.9); engine.setPluginBypass(ch, 0, true); if (!engine.plugins(ch)[0].toMap().value("bypass").toBool()) { std::fprintf(stderr, "amixos --smoke: effect bypass\n"); return 86; }
         for (int k = 0; k < 10; ++k) engine.setPlugin(ch, k, ""); if (engine.pluginCount(ch) != 0) { std::fprintf(stderr, "amixos --smoke: effects not cleared\n"); return 87; } } }
+    { (void)remote.addresses(); if (remote.running()) { std::fprintf(stderr, "amixos --smoke: the remote service must be off until asked\n"); return 88; } }
     if (!measure.chime()) { std::fprintf(stderr, "amixos --smoke: the boot chord did not start on a running engine\n"); return 69; } measure.cancel();
     engine.setPlugin(4, 0, "comp"); if (!engine.channelParams(4).value("compOn").toBool() || engine.plugins(4)[0].toMap().value("kind").toString() != "comp") { std::fprintf(stderr, "amixos --smoke: plugin slot did not switch the compressor on\n"); return 21; }
     engine.setPluginBypass(4, 0, true); if (engine.channelParams(4).value("compOn").toBool()) { std::fprintf(stderr, "amixos --smoke: plugin bypass left the compressor on\n"); return 22; }
@@ -291,6 +295,12 @@ int main(int argc, char* argv[]) {
           if (l["out"] != "{spk}" || l["in"] != "{mic}" || l["inChannels"].toInt() != 2 || l["inKind"] != "microphone" || l["outKind"] != "speakers") { std::fprintf(stderr, "amixos --smoke: laptop detection: out %s in %s (%d in, %s / %s)\n", qPrintable(l["out"].toString()), qPrintable(l["in"].toString()), l["inChannels"].toInt(), qPrintable(l["inKind"].toString()), qPrintable(l["outKind"].toString())); return 175; }
           if (kinds != QStringList({"speakers", "microphone", "headphones", "bluetooth", "speakers", "microphone"})) { std::fprintf(stderr, "amixos --smoke: device kinds: %s\n", qPrintable(kinds.join(", "))); return 176; }
           std::printf("amixos --smoke: laptop without ASIO: %s + %s (%d in / %d out); kinds %s\n", qPrintable(l["outName"].toString()), qPrintable(l["inName"].toString()), l["inChannels"].toInt(), l["outChannels"].toInt(), qPrintable(kinds.join(", "))); }
+        { // BLUETOOTH START: a refusal is followed by the next way in (own rate, 48 kHz, without the hands-free microphone, the other Windows path), and the note says what was tried
+          const QVariantList bt = {dev("dsound", "{ds-bt}", "Headphones (WH-1000XM4 Stereo)", 0, 2), dev("dsound", "{ds-btmic}", "Headset (WH-1000XM4 Hands-Free)", 1, 0), dev("wasapi", "{w-bt}", "Headphones (WH-1000XM4 Stereo)", 0, 2)};
+          engine.simulateDevices(bt); const bool started = engine.openBluetooth("dsound", "{ds-btmic}", "{ds-bt}", 512); const QString note = engine.bluetoothNote();
+          if (started || !note.contains("without the hands-free microphone") || !note.contains("on WASAPI instead")) { std::fprintf(stderr, "amixos --smoke: Bluetooth start did not walk its fallbacks: %s\n", qPrintable(note)); return 177; }
+          if (engine.openBluetooth("dsound", "-", "{gone}", 512) || !engine.bluetoothNote().contains("RESCAN")) { std::fprintf(stderr, "amixos --smoke: a vanished Bluetooth device was not reported\n"); return 178; }
+          if (!engine.open("null", "", "", 48000, 256, 2, 2)) { std::fprintf(stderr, "amixos --smoke: the null device did not reopen after the Bluetooth check\n"); return 179; } }
         engine.simulateDevices(realDevices); }
       // NETWORK: the interface list holds the loopback card; the allowlist refuses a foreign address and admits a listed one
       bool loop = false; for (const QVariant& v : osc.interfaces()) if (v.toMap()["kind"] == "loopback") loop = true; if (!loop) { std::fprintf(stderr, "amixos --smoke: network interfaces\n"); return 127; }

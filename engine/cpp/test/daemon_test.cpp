@@ -70,6 +70,9 @@ int main() {
   CHECK(!d.state()["running"].asBool());
   CHECK(am::httpd::Client::request("127.0.0.1", port, "GET", "/nothing", "", {}, status, body) && status == 404);
   d.stop();
-  std::printf("daemon_test: json, token gate, control/state, HTTP meters, WebSocket meters OK on port %u\n", port);
+  { using S = am::httpd::Server; auto ip = [](unsigned a, unsigned b, unsigned c, unsigned d) { return static_cast<unsigned long>((a << 24) | (b << 16) | (c << 8) | d); };   // the local policy
+    CHECK(S::localPeer(ip(127, 0, 0, 1)) && S::localPeer(ip(192, 168, 1, 20)) && S::localPeer(ip(10, 4, 5, 6)) && S::localPeer(ip(172, 16, 0, 9)) && S::localPeer(ip(172, 31, 255, 1)) && S::localPeer(ip(169, 254, 3, 3)));
+    CHECK(!S::localPeer(ip(8, 8, 8, 8)) && !S::localPeer(ip(172, 32, 0, 1)) && !S::localPeer(ip(172, 15, 0, 1)) && !S::localPeer(ip(192, 169, 1, 1)) && !S::localPeer(ip(100, 64, 0, 1)) && !S::localPeer(ip(203, 0, 113, 7))); }
+  std::printf("daemon_test: json, local policy, token gate, control/state, HTTP meters, WebSocket meters OK on port %u\n", port);
   return 0;
 }

@@ -28,7 +28,7 @@ qt_add_executable(amixos
     src/Media.cpp src/Media.h
     src/Samples.cpp src/Samples.h
     src/Update.cpp src/Update.h
-    src/Scope.cpp src/Scope.h src/Measure.cpp src/Measure.h
+    src/Scope.cpp src/Scope.h src/Measure.cpp src/Measure.h src/Remote.cpp src/Remote.h
     src/Generator.cpp src/Generator.h
     src/I18n.cpp src/I18n.h)
 set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)   # before qt_add_qml_module, or Theme is a plain type and every Theme.* colour is undefined

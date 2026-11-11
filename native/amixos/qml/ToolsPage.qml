@@ -115,7 +115,7 @@ Item {
                         ColumnLayout { spacing: 1; Text { text: i18n.t("ACOUSTIC DELAY", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } Text { text: page.delayMs.toFixed(2) + i18n.t(" ms", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 11; font.bold: true } }
                         Item { Layout.fillWidth: true }
                         Text { text: i18n.t("CH", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
-                        SpinBox { from: 1; to: engine.stripState.length; value: page.delayStrip + 1; onValueModified: page.delayStrip = value - 1; implicitWidth: 90 }
+                        SpinBox { palette.base: Theme.deep; palette.text: Theme.ink; palette.button: Theme.cardRaised; palette.buttonText: Theme.ink; palette.highlight: Theme.orange; palette.mid: Theme.line; from: 1; to: engine.stripState.length; value: page.delayStrip + 1; onValueModified: page.delayStrip = value - 1; implicitWidth: 90 }
                         Btn { label: i18n.t("APPLY DELAY", i18n.lang); on: true; onColor: Theme.cyan; onClicked: engine.setDelay(page.delayStrip, Math.min(500, page.delayMs)) } }
                     Note { text: i18n.t("Delay the fill / tower feed by the time the main PA's sound needs to reach it (plus a few ms so the main arrives first). The strip delay (DELAY stage, up to 500 ms) takes the value; the current value for CH ", i18n.lang) + (page.delayStrip + 1) + i18n.t(" is ", i18n.lang) + engine.channelParams(page.delayStrip).delayMs.toFixed(2) + i18n.t(" ms.", i18n.lang) }
                 }

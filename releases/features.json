@@ -25,7 +25,10 @@
         "The mixer logo on the program, the window, the task bar, the installer and the shortcuts",
         "Ten effects for every channel's rack: plate reverb, tape delay, chorus, tube drive, flanger, phaser, tremolo, auto wah, bit crusher, exciter, each with its knobs, MIX and bypass; the rack opens from each channel's menu",
         "Master fader at -inf switches everything off, the Windows default output included (its own volume control; put back when the fader comes up or the console closes)",
-        "The real-time analyser on TONE (EQ) is on from the start"
+        "The real-time analyser on TONE (EQ) is on from the start",
+        "Bluetooth start that does not give up at the first refusal: the device's own rate, 48 kHz, without the hands-free microphone, then the other Windows path, with a note of what was tried",
+        "Phone remote over Wi-Fi from the NETWORK page, with a local policy: only this computer and private-network addresses are answered, and every control call needs the token (not encrypted: for your own network)",
+        "OSC remote: with no address list only private-network senders are accepted"
       ]
     }
   ]
