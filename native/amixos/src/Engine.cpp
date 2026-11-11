@@ -58,13 +58,13 @@ void Engine::checkHotplug() {
   if (rt_ && !gone.isEmpty() && (gone.contains(inDevName_) || gone.contains(outDevName_))) { stop(); status_ = QStringLiteral("The sound card was unplugged: %1").arg(gone.join(", ")); emit stateChanged(); }
   if (!added.isEmpty()) emit hotplug(true, added.join(", ")); else if (!gone.isEmpty()) emit hotplug(false, gone.join(", "));
 }
-void Engine::simulateDevices(const QVariantList& devices) { simulated_ = true; devices_ = devices; emit devicesChanged(); }
+void Engine::simulateDevices(const QVariantList& devices) { simulated_ = true; devices_.clear(); for (const QVariant& v : devices) { QVariantMap m = v.toMap(); if (!m.contains("kind")) m["kind"] = QString::fromStdString(am::classifyDevice(m["backend"].toString().toStdString(), m["name"].toString().toStdString(), -1, m["inChannels"].toInt() > 0 && m["outChannels"].toInt() == 0)); devices_ << m; } emit devicesChanged(); }
 void Engine::refreshDevices() {
   if (simulated_) { emit devicesChanged(); return; }
   devices_.clear();
   for (const am::DeviceInfo& d : am::listDevices()) {
     QVariantMap m; m["backend"] = QString::fromStdString(d.backend); m["id"] = QString::fromStdString(d.id); m["name"] = QString::fromStdString(d.name);
-    m["inChannels"] = d.inChannels; m["outChannels"] = d.outChannels; m["defaultRate"] = d.defaultRate; m["defaultIn"] = d.defaultIn; m["defaultOut"] = d.defaultOut; m["bluetooth"] = looksBluetooth(m["name"].toString());
+    m["inChannels"] = d.inChannels; m["outChannels"] = d.outChannels; m["defaultRate"] = d.defaultRate; m["defaultIn"] = d.defaultIn; m["defaultOut"] = d.defaultOut; m["bluetooth"] = looksBluetooth(m["name"].toString()); m["kind"] = QString::fromStdString(d.kind);
     QVariantList rates; for (double r : d.sampleRates) rates << r; m["sampleRates"] = rates;
     devices_ << m;
   }
@@ -264,6 +264,12 @@ void Engine::rememberDeviceNames(const std::string& backend, const std::string& 
   auto nameOf = [&](const std::string& id, bool wantIn) { if (id == "-") return QString(); for (const QVariant& v : devices_) { const QVariantMap d = v.toMap(); if (d["backend"].toString().toStdString() != backend) continue; if (wantIn ? d["inChannels"].toInt() <= 0 : d["outChannels"].toInt() <= 0) continue; if (id.empty() ? (wantIn ? d["defaultIn"].toBool() : d["defaultOut"].toBool()) : (d["id"].toString().toStdString() == id || d["name"].toString().toStdString() == id)) return d["name"].toString(); } return QString::fromStdString(id.empty() ? backend + " default" : id); };
   inDevName_ = nameOf(in, true); outDevName_ = nameOf(out, false);
 }
+QVariantMap Engine::ioInfo() const {
+  QVariantMap m; if (!rt_ || !running()) return m; const QString b = backend();
+  auto kindOf = [&](const QString& name, bool wantIn) { for (const QVariant& v : devices_) { const QVariantMap d = v.toMap(); if (d["backend"].toString() == b && d["name"].toString() == name && (wantIn ? d["inChannels"] : d["outChannels"]).toInt() > 0) return d["kind"].toString(); } return QString::fromStdString(am::classifyDevice(b.toStdString(), name.toStdString(), -1, wantIn)); };
+  m["backend"] = b; m["inName"] = inDevName_; m["outName"] = outDevName_; m["inKind"] = devIn_ > 0 ? kindOf(inDevName_, true) : QString(); m["outKind"] = kindOf(outDevName_, false); m["inputs"] = devIn_; m["outputs"] = devOut_;
+  m["blockMs"] = sampleRate() > 0 ? 1000.0 * blockFrames_ / sampleRate() : 0.0; return m;
+}
 QString Engine::inputLabel(int input) const {
   if (input < 0 || !rt_) return QStringLiteral("—"); QString n = inDevName_; n.remove(QRegularExpression("\\s*\\(.*\\)$")); if (n.size() > 14) n = n.left(14);
   return (n.isEmpty() ? QString() : n + " · ") + "IN " + QString::number(input + 1);
@@ -418,7 +424,18 @@ QVariantMap Engine::autoDetect() const {
     if (rank > bestRank) { bestRank = rank; best = d; best["why"] = why; }
   }
   if (best.isEmpty()) return best;
-  const QString id = best["id"].toString(); best["in"] = best["inChannels"].toInt() > 0 ? id : "-"; best["out"] = best["outChannels"].toInt() > 0 ? id : "-"; best["rate"] = best["defaultRate"].toDouble() > 0 ? best["defaultRate"].toDouble() : 48000.0;
+  const QString id = best["id"].toString(); best["in"] = best["inChannels"].toInt() > 0 ? id : "-"; best["out"] = best["outChannels"].toInt() > 0 ? id : "-";
+  best["outName"] = best["outChannels"].toInt() > 0 ? best["name"] : QVariant(QString()); best["inName"] = best["inChannels"].toInt() > 0 ? best["name"] : QVariant(QString()); best["outKind"] = best["outChannels"].toInt() > 0 ? best["kind"] : QVariant(QString()); best["inKind"] = best["inChannels"].toInt() > 0 ? best["kind"] : QVariant(QString());
+  // endpoint systems list each direction on its own (WASAPI, DirectSound): pair the pick with the other direction's endpoint of the same backend,
+  // the same device by name first (a headset's microphone with its earphones), then the system default, then any. Without this a start had 0 inputs.
+  for (const bool wantIn : {true, false}) {
+    if (best[wantIn ? "in" : "out"].toString() != "-") continue;
+    QVariantMap pick; int pr = -1; QString stem = best["name"].toString(); const int par = stem.indexOf('('); if (par >= 0) stem = stem.mid(par + 1).remove(')').trimmed();   // "Speakers (USB Audio CODEC)" -> "USB Audio CODEC"
+    for (const QVariant& v : devices_) { const QVariantMap d = v.toMap(); if (d["backend"] != best["backend"] || d["id"].toString().startsWith("loopback:")) continue; if ((wantIn ? d["inChannels"] : d["outChannels"]).toInt() <= 0) continue;
+      const int r = (!stem.isEmpty() && d["name"].toString().contains(stem, Qt::CaseInsensitive) ? 4 : 0) + ((wantIn ? d["defaultIn"] : d["defaultOut"]).toBool() ? 2 : 0) + 1; if (r > pr) { pr = r; pick = d; } }
+    if (pick.isEmpty()) continue;
+    best[wantIn ? "in" : "out"] = pick["id"]; best[wantIn ? "inChannels" : "outChannels"] = pick[wantIn ? "inChannels" : "outChannels"]; best[wantIn ? "inName" : "outName"] = pick["name"]; best[wantIn ? "inKind" : "outKind"] = pick["kind"];
+  } best["rate"] = best["defaultRate"].toDouble() > 0 ? best["defaultRate"].toDouble() : 48000.0;
   return best;
 }
 bool Engine::autoStart(int frames) {

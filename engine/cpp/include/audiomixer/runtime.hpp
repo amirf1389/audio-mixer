@@ -55,7 +55,11 @@ struct DeviceInfo {
   double defaultRate = 48000;
   std::vector<double> sampleRates;   // empty: not known without opening the device
   bool defaultIn = false, defaultOut = false;
+  std::string kind;                  // what it is: headphones | headset | speakers | microphone | line | digital | interface | bluetooth | app | wrapper | unknown
 };
+// WHAT A DEVICE IS, from the system's own form factor when it has one (WASAPI: 1 speakers, 2 line, 3 headphones, 4 microphone, 5 headset,
+// 6 handset, 8 S/PDIF, 9 display audio; -1 = not known) and otherwise from the name. capture: the entry is an input.
+std::string classifyDevice(const std::string& backend, const std::string& name, int formFactor, bool capture);
 std::vector<DeviceInfo> listDevices();                       // every device of every backend built in ("null" last)
 // A cheap signature of what is plugged in (WASAPI / DirectSound endpoint ids + ASIO driver names from the registry, ALSA card names): no driver
 // is loaded, so it can be polled every second or two for hot-plug; when it changes, call listDevices().

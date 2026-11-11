@@ -71,7 +71,7 @@ int main(int argc, char** argv) {
       std::printf("%s{\"backend\":%s,\"id\":%s,\"name\":%s,\"inChannels\":%d,\"outChannels\":%d,\"defaultRate\":%.0f,\"sampleRates\":[",
                   i ? "," : "", text(d.backend).c_str(), text(d.id).c_str(), text(d.name).c_str(), d.inChannels, d.outChannels, d.defaultRate);
       for (std::size_t k = 0; k < d.sampleRates.size(); ++k) std::printf("%s%.0f", k ? "," : "", d.sampleRates[k]);
-      std::printf("],\"defaultIn\":%s,\"defaultOut\":%s}", d.defaultIn ? "true" : "false", d.defaultOut ? "true" : "false");
+      std::printf("],\"defaultIn\":%s,\"defaultOut\":%s,\"kind\":\"%s\"}", d.defaultIn ? "true" : "false", d.defaultOut ? "true" : "false", d.kind.c_str());
     }
     std::printf("]\n");
     return 0;

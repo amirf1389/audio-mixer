@@ -9,6 +9,8 @@
 //   null     one timed device that needs no hardware
 // Probing an ASIO driver loads it: a caller must not list while one of its ASIO streams is open (ASIO drivers serve one client).
 #ifdef _WIN32
+#include <cctype>
+#include <initializer_list>
 #include <windows.h>
 #include <audioclient.h>
 #include <mmdeviceapi.h>
@@ -29,12 +31,29 @@
 #include "audiomixer/runtime.hpp"
 
 namespace am {
+std::string classifyDevice(const std::string& backend, const std::string& name, int formFactor, bool capture) {
+  std::string n; for (char c : name) n += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+  auto has = [&n](std::initializer_list<const char*> w) { for (const char* x : w) if (n.find(x) != std::string::npos) return true; return false; };
+  if (n.rfind("app audio", 0) == 0) return "app";
+  if (has({"bluetooth", "hands-free", "handsfree", "a2dp", "airpods", "buds", " bt ", "wh-1000", "wf-1000", "jbl tune", "jbl flip", "bose qc", "soundcore"})) return "bluetooth";
+  if (backend == "asio") return has({"asio4all", "flexasio", "asio2ks", "generic low latency", "voicemeeter"}) ? "wrapper" : "interface";
+  if (has({"behringer", "umc", "um2", "u-phoria", "focusrite", "scarlett", "motu", "presonus", "audiobox", "steinberg ur", "audient", "rme ", "fireface", "babyface", "zoom ", "tascam", "m-audio", "m-track", "yamaha ag", "universal audio", "apollo", "ssl 2", "komplete audio", "roland rubix", "usb audio codec", "audio interface"})) return "interface";
+  switch (formFactor) { case 3: return "headphones"; case 5: case 6: return "headset"; case 1: return "speakers"; case 4: return "microphone"; case 2: return "line"; case 7: case 8: case 9: return "digital"; default: break; }
+  if (has({"headset"})) return "headset";
+  if (has({"headphone", "earphone", "earbud", "kopfh"})) return "headphones";
+  if (has({"microphone", "mic ", "mic)", "mikrofon", "webcam", "camera"}) || n == "mic") return "microphone";
+  if (has({"spdif", "s/pdif", "digital", "hdmi", "displayport", "nvidia high", "monitor"})) return "digital";
+  if (has({"line in", "line out", "line (", "stereo mix", "aux"})) return "line";
+  if (has({"speaker", "lautsprecher", "realtek", "high definition audio"})) return capture ? "microphone" : "speakers";
+  return "unknown";
+}
 namespace {
 
 #ifdef _WIN32
 const GUID kClsidDeviceEnumerator = {0xBCDE0395, 0xE52F, 0x467C, {0x8E, 0x3D, 0xC4, 0x57, 0x92, 0x91, 0x69, 0x2E}};
 const GUID kIidDeviceEnumerator = {0xA95664D2, 0x9614, 0x4F35, {0xA7, 0x46, 0xDE, 0x8D, 0xB6, 0x36, 0x17, 0xE6}};
 const GUID kIidClient = {0x1CB9AD4C, 0xDBFA, 0x4C32, {0xB1, 0x78, 0xC2, 0xF5, 0x68, 0xA7, 0x03, 0xB2}};
+const PROPERTYKEY kFormFactor = {{0x1DA5D803, 0xD492, 0x4EDD, {0x8C, 0x23, 0xE0, 0xC0, 0xFF, 0xEE, 0x7F, 0x0E}}, 0};      // PKEY_AudioEndpoint_FormFactor
 const PROPERTYKEY kFriendlyName = {{0xA45C254E, 0xDF1C, 0x4EFD, {0x80, 0x20, 0x67, 0xD1, 0x46, 0xA8, 0x50, 0xE0}}, 14};   // PKEY_Device_FriendlyName
 
 std::string utf8(const wchar_t* w) {
@@ -70,11 +89,13 @@ void addWasapi(std::vector<DeviceInfo>& out) {
     for (UINT i = 0; i < n; ++i) {
       IMMDevice* d = nullptr;
       if (FAILED(col->Item(i, &d))) continue;
-      DeviceInfo info; info.backend = "wasapi"; info.id = endpointId(d);
+      DeviceInfo info; info.backend = "wasapi"; info.id = endpointId(d); int form = -1;
       IPropertyStore* ps = nullptr;
       if (SUCCEEDED(d->OpenPropertyStore(STGM_READ, &ps))) {
         PROPVARIANT v; PropVariantInit(&v);
         if (SUCCEEDED(ps->GetValue(kFriendlyName, &v)) && v.vt == VT_LPWSTR) info.name = utf8(v.pwszVal);
+        PropVariantClear(&v); PropVariantInit(&v);
+        if (SUCCEEDED(ps->GetValue(kFormFactor, &v)) && v.vt == VT_UI4) form = static_cast<int>(v.ulVal);
         PropVariantClear(&v); ps->Release();
       }
       int ch = 2;
@@ -87,9 +108,10 @@ void addWasapi(std::vector<DeviceInfo>& out) {
       if (flow == eRender) { info.outChannels = ch; info.defaultOut = info.id == def; }
       else { info.inChannels = ch; info.defaultIn = info.id == def; }
       if (info.name.empty()) info.name = info.id;
+      info.kind = classifyDevice("wasapi", info.name, form, flow == eCapture);
       out.push_back(info);
       if (flow == eRender) {   // APP AUDIO: the same endpoint as an INPUT in loopback mode = everything Windows plays on it (a music player, a browser, a streaming app)
-        DeviceInfo lb; lb.backend = "wasapi"; lb.id = "loopback:" + info.id; lb.name = "App audio: what plays on " + info.name; lb.inChannels = ch; lb.defaultRate = info.defaultRate; out.push_back(lb); }
+        DeviceInfo lb; lb.backend = "wasapi"; lb.id = "loopback:" + info.id; lb.name = "App audio: what plays on " + info.name; lb.inChannels = ch; lb.defaultRate = info.defaultRate; lb.kind = "app"; out.push_back(lb); }
       d->Release();
     }
     col->Release();
@@ -203,6 +225,7 @@ std::vector<DeviceInfo> listDevices() {
 #endif
   DeviceInfo nul; nul.backend = "null"; nul.id = "null"; nul.name = "Null device (timed, no hardware)"; nul.inChannels = 2; nul.outChannels = 2;
   v.push_back(nul);
+  for (DeviceInfo& d : v) if (d.kind.empty()) d.kind = d.backend == "null" ? "unknown" : classifyDevice(d.backend, d.name, -1, d.inChannels > 0 && d.outChannels == 0);   // every backend that has no form factor of its own: by name
   return v;
 }
 

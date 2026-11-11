@@ -60,7 +60,7 @@ Rectangle {
                     Text { text: i18n.t("INTERFACES FOUND: ", i18n.lang) + engine.devices.length; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.letterSpacing: 2 }
                     Flickable { Layout.fillWidth: true; Layout.fillHeight: true; contentHeight: devCol.implicitHeight; clip: true
                         ColumnLayout { id: devCol; width: parent.width; spacing: 2
-                            Repeater { model: engine.devices; delegate: Text { text: "• " + modelData.backend.toUpperCase() + "  " + modelData.name + "  (" + modelData.inChannels + i18n.t(" in / ", i18n.lang) + modelData.outChannels + i18n.t(" out)", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; elide: Text.ElideRight; Layout.fillWidth: true } } } } }
+                            Repeater { model: engine.devices; delegate: Text { text: Theme.kindIcon(modelData.kind) + " " + modelData.backend.toUpperCase() + "  " + i18n.t(Theme.kindName(modelData.kind), i18n.lang) + "  " + modelData.name + "  (" + modelData.inChannels + i18n.t(" in / ", i18n.lang) + modelData.outChannels + i18n.t(" out)", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; elide: Text.ElideRight; Layout.fillWidth: true } } } } }
                 // 3 CONSOLE
                 ColumnLayout { spacing: 12
                     Head { text: i18n.t("Console defaults", i18n.lang) }
