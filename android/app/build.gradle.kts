@@ -10,7 +10,8 @@ android {
         applicationId = "com.amfb.amixos"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
+        // from the version (a.b.c.d -> a * 1 000 000 + b * 10 000 + c * 100 + d): every release is an upgrade of the one before
+        versionCode = rootProject.file("../native/amixos/version.txt").readText().trim().split(".").map { it.toIntOrNull() ?: 0 }.let { v -> (v.getOrElse(0) { 0 }) * 1_000_000 + (v.getOrElse(1) { 0 }) * 10_000 + (v.getOrElse(2) { 0 }) * 100 + (v.getOrElse(3) { 0 }) }
         versionName = rootProject.file("../native/amixos/version.txt").readText().trim()
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
         externalNativeBuild { cmake { cppFlags += listOf("-std=c++20", "-fexceptions", "-frtti"); arguments += listOf("-DANDROID_STL=c++_shared") } }
