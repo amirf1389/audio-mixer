@@ -202,7 +202,7 @@ int main(int argc, char* argv[]) {
       engine.setWindowsMuteSync(true); if (!sysMute) { std::fprintf(stderr, "amixos --smoke: switching sync on at -inf did not mute\n"); return 82; } engine.restoreSystemSound(); if (sysMute) { std::fprintf(stderr, "amixos --smoke: exit did not take the mute back\n"); return 83; }
       engine.setMaster(keep); engine.setSystemMuteBackend([](bool&) { return false; }, [](bool) { return false; }); engine.syncSystemSound(); }
     { // the ten effects in the rack of any channel: listed, loaded into a slot, a knob moves, bypass, cleared; a late channel too
-      int fxn = 0; for (const QVariant& v : engine.pluginCatalog()) if (v.toMap().value("fx").toBool()) ++fxn; if (fxn != 15) { std::fprintf(stderr, "amixos --smoke: %d effects in the rack catalogue (want 15)\n", fxn); return 84; }
+      int fxn = 0; for (const QVariant& v : engine.pluginCatalog()) if (v.toMap().value("fx").toBool()) ++fxn; if (fxn != 17) { std::fprintf(stderr, "amixos --smoke: %d effects in the rack catalogue (want 17)\n", fxn); return 84; }
       for (const int ch : {6, 7}) { int slot = 0; for (const QVariant& v : engine.pluginCatalog()) { const QVariantMap m = v.toMap(); if (!m.value("fx").toBool()) continue; engine.setPlugin(ch, slot % 10, m.value("kind").toString()); const QVariantMap pl = engine.plugins(ch)[slot % 10].toMap();
           if (pl.value("pending").toBool() || pl.value("format").toString() != "FX" || engine.pluginParams(ch, slot % 10).size() < 4) { std::fprintf(stderr, "amixos --smoke: effect %s did not load into CH %d slot %d\n", qPrintable(m.value("kind").toString()), ch + 1, slot + 1); return 85; } ++slot; }
         engine.setPluginParam(ch, 0, 0, 0.9); engine.setPluginBypass(ch, 0, true); if (!engine.plugins(ch)[0].toMap().value("bypass").toBool()) { std::fprintf(stderr, "amixos --smoke: effect bypass\n"); return 86; }
@@ -360,6 +360,70 @@ int main(int argc, char* argv[]) {
         if (thr > -1 || thr < -30.01 || !ch["gateOn"].toBool() || std::fabs(ch["gateThresholdDb"].toDouble() - thr) > 1e-6) { std::fprintf(stderr, "amixos --smoke: CLOSE NOISE did not set the gate (%.1f)\n", thr); return 209; }
         engine.setGate(0, false, -50, -80, 1, 50, 100); if (engine.closeNoise(30) != 0) { std::fprintf(stderr, "amixos --smoke: CLOSE NOISE on a silent channel must do nothing\n"); return 210; } engine.setNullTestInput(false); engine.stop(); engine.open("null", "", "", 48000, 256, 2, 2);
         if (!settings.setupDone()) { std::fprintf(stderr, "amixos --smoke: the factory setup must not be asked for without a factory reset\n"); return 211; } }
+      { // MASTER MUTE comes back to where the fader was; LIMIT CHANNELS switches every channel limiter; AUTO -INF pulls down the strips without an input
+        engine.setMaster(-4.5); engine.setMasterMuted(true); const bool down = engine.masterDb() <= -59.9; engine.setMasterMuted(false);
+        if (!down || std::fabs(engine.masterDb() + 4.5) > 1e-6 || engine.masterMuted()) { std::fprintf(stderr, "amixos --smoke: master mute\n"); return 212; } engine.setMaster(0);
+        engine.limitAllChannels(true); const bool allOn = engine.allChannelsLimited(); engine.limitAllChannels(false); if (!allOn || engine.allChannelsLimited() || engine.channelParams(7)["limiterOn"].toBool()) { std::fprintf(stderr, "amixos --smoke: limit channels\n"); return 213; }
+        engine.resetRouting(); const int pulled = engine.infUnused();   // the null device has 2 inputs: strips 3-32 have none
+        if (pulled != 30 || engine.stripState()[0].toMap()["db"].toDouble() < -100 || engine.stripState()[9].toMap()["db"].toDouble() > -59.9 || engine.infUnused() != 0) { std::fprintf(stderr, "amixos --smoke: AUTO -INF pulled %d\n", pulled); return 214; }
+        for (int i = 2; i < 32; ++i) engine.setGain(i, 0);
+        bool sync = false, fbk = false; for (const QVariant& v : engine.pluginCatalog()) { sync = sync || v.toMap()["kind"].toString() == "fx:syncdelay"; fbk = fbk || v.toMap()["kind"].toString() == "fx:antifeedback"; } if (!sync || !fbk) { std::fprintf(stderr, "amixos --smoke: SYNC DELAY / FEEDBACK KILLER are not in the rack list\n"); return 215; }
+        engine.setPlugin(22, 0, "fx:antifeedback"); const QVariantList fp = engine.pluginParams(22, 0); const bool fbOk = fp.size() >= 4 && !engine.plugins(22)[0].toMap()["pending"].toBool() && engine.pluginParamText(22, 0, fp[3].toMap()["id"].toInt(), 1.0) == "LIVE"; engine.setPlugin(22, 0, "");
+        if (!fbOk) { std::fprintf(stderr, "amixos --smoke: FEEDBACK KILLER did not load in a rack slot\n"); return 216; } }
+      { // 360 SCENE: the cinema hall puts 10 fixed points and 10 travelling objects on strips 1-20; the travelling ones move by themselves; a turned head
+        // shifts what is heard, not where the objects are; switching the hall off stops and clears it
+        engine.setCinemaHall(true); const QVariantList sc0 = engine.spatialScene(); const double az10 = engine.spatial(10)["az"].toDouble(), az0 = engine.spatial(0)["az"].toDouble();
+        if (sc0.size() != 20 || engine.spatialMoving() != 10 || !engine.spatial(19)["on"].toBool() || engine.busFx(15)["kind"].toString() != "hall") { std::fprintf(stderr, "amixos --smoke: cinema hall scene (%d objects, %d moving)\n", int(sc0.size()), engine.spatialMoving()); return 217; }
+        QElapsedTimer ct; ct.start(); while (ct.elapsed() < 500) QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+        if (std::fabs(engine.spatial(10)["az"].toDouble() - az10) < 3 || std::fabs(engine.spatial(0)["az"].toDouble() - az0) > 1e-9) { std::fprintf(stderr, "amixos --smoke: the travelling objects did not move / a fixed point moved\n"); return 218; }
+        engine.setHeadTrack(true); engine.setHeadYaw(90); const QVariantMap c = engine.spatialScene()[1].toMap();   // the centre point, head turned right: heard from the left
+        if (std::fabs(c["az"].toDouble()) > 1e-9 || std::fabs(c["heardAz"].toDouble() + 90) > 1e-6) { std::fprintf(stderr, "amixos --smoke: head tracking (heard at %.1f)\n", c["heardAz"].toDouble()); return 219; }
+        engine.setHeadYaw(0); engine.setHeadTrack(false); engine.setCinemaHall(false);
+        if (engine.spatialMoving() != 0 || !engine.spatialScene().isEmpty() || engine.spatial(3)["on"].toBool()) { std::fprintf(stderr, "amixos --smoke: cinema hall off\n"); return 220; } engine.setBusFx(15, ""); }
+      { // STEREO PAIR: the partner gets the same processing and rack, panned opposite; while linked, rack changes follow. AUTO SELECT narrows auto detect.
+        const int A = 24, B = 25; engine.setLink(A, false); engine.setPan(A, -0.6); engine.setChannelEq(A, 3, -2, 1800, 1.5, true); engine.setCompressor(A, true, -22, 3, 6, 10, 120, 2); engine.setPlugin(A, 0, "fx:tubeamp");
+        engine.setPluginParam(A, 0, engine.pluginParams(A, 0)[0].toMap()["id"].toInt(), 0.7); if (!engine.matchStereoPair(A)) return 221;
+        const QVariantMap pb = engine.channelParams(B); const QVariantList rb = engine.plugins(B);
+        if (std::fabs(engine.channelEq(B)["mid"].toDouble() + 2) > 1e-6 || !pb["compOn"].toBool() || std::fabs(pb["compThresholdDb"].toDouble() + 22) > 1e-6 || rb[0].toMap()["kind"].toString() != "fx:tubeamp" || std::fabs(engine.pluginParams(B, 0)[0].toMap()["value"].toDouble() - 0.7) > 0.02 || std::fabs(engine.stripState()[B].toMap()["pan"].toDouble() - 0.6) > 1e-6) { std::fprintf(stderr, "amixos --smoke: stereo pair match\n"); return 222; }
+        engine.setLink(A, true); engine.setPlugin(A, 1, "fx:syncdelay"); engine.setPluginBypass(A, 0, true); engine.setPluginParam(A, 1, engine.pluginParams(A, 1)[2].toMap()["id"].toInt(), 0.9);
+        if (engine.plugins(B)[1].toMap()["kind"].toString() != "fx:syncdelay" || !engine.plugins(B)[0].toMap()["bypass"].toBool() || std::fabs(engine.pluginParams(B, 1)[2].toMap()["value"].toDouble() - 0.9) > 0.02) { std::fprintf(stderr, "amixos --smoke: a linked pair did not keep the same rack\n"); return 223; }
+        engine.setPlugin(A, 0, ""); engine.setPlugin(A, 1, ""); if (engine.pluginCount(B) != 0) { std::fprintf(stderr, "amixos --smoke: removing a plug-in on a linked pair\n"); return 224; }
+        engine.setLink(A, false); engine.resetStrip(A); engine.resetStrip(B);
+        const QVariantList real = engine.devices(); QVariantList rig;
+        for (const auto& [bk, id, nm, kind] : {std::tuple<const char*, const char*, const char*, const char*>{"asio", "Focusrite USB ASIO", "Focusrite USB ASIO", "interface"}, {"wasapi", "{w-out}", "Speakers (Realtek High Definition Audio)", "speakers"}, {"dsound", "{d-out}", "Speakers (USB Audio)", "speakers"}, {"dsound", "{bt}", "Headphones (WH-1000XM4 Stereo)", "bluetooth"}}) { QVariantMap d; d["backend"] = bk; d["id"] = id; d["name"] = nm; d["kind"] = kind; d["inChannels"] = QString::fromLatin1(bk) == "asio" ? 2 : 0; d["outChannels"] = 2; d["defaultOut"] = QString::fromLatin1(bk) == "wasapi"; d["defaultRate"] = 48000.0; rig << d; }
+        engine.simulateDevices(rig); const QString keep = engine.autoPrefer(); QStringList got;
+        for (const char* pf : {"best", "asio", "wasapi", "dsound", "bluetooth"}) { engine.setAutoPrefer(pf); got << engine.autoDetect()["id"].toString(); }
+        rig.removeLast(); engine.simulateDevices(rig); engine.setAutoPrefer("bluetooth"); const QVariantMap fb = engine.autoDetect(); engine.setAutoPrefer(keep); engine.simulateDevices(real);
+        if (got != QStringList{"Focusrite USB ASIO", "Focusrite USB ASIO", "{w-out}", "{d-out}", "{bt}"} || fb["id"].toString() != "Focusrite USB ASIO" || !fb["why"].toString().contains("no BLUETOOTH device")) { std::fprintf(stderr, "amixos --smoke: auto select picked %s / fallback %s\n", qPrintable(got.join(", ")), qPrintable(fb["id"].toString())); return 225; } }
+      { // INPUT / OUTPUT CHECK: with the test tone on inputs 1-2 both are live on strips 1-2, the outputs carry the monitor mix, and real time holds
+        engine.resetRouting(); engine.setNullTestInput(true); engine.stop(); engine.open("null", "", "", 48000, 256, 2, 2); QElapsedTimer t; t.start(); while (t.elapsed() < 500) QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+    { engine.muteAll(false); engine.setMute(2, true); engine.toggleMuteAll();
+      if (!engine.allMuted()) { std::fprintf(stderr, "MUTE ALL with one channel already muted did not mute the rest\n"); return 236; }
+      engine.toggleMuteAll(); const QVariantList st = engine.stripState();
+      if (engine.allMuted() || !st[2].toMap()["mute"].toBool() || st[0].toMap()["mute"].toBool()) { std::fprintf(stderr, "UNMUTE ALL did not give the earlier mutes back\n"); return 237; }
+      engine.setMute(2, false); }
+        const QVariantMap io = engine.ioCheck(); const QVariantList ii = io["inputs"].toList(), oo = io["outputs"].toList();
+        if (!io["running"].toBool() || !io["realtime"].toBool() || ii.size() != 2 || oo.size() != 2 || io["liveInputs"].toInt() != 2 || io["sameChannel"].toInt() != 2 || ii[1].toMap()["strip"].toInt() != 2 || !ii[0].toMap()["live"].toBool() || !oo[0].toMap()["source"].toString().startsWith("MONITOR") || !oo[0].toMap()["live"].toBool() || io["blockMs"].toDouble() < 5 || !io["verdict"].toString().contains("2 of 2")) { std::fprintf(stderr, "amixos --smoke: input / output check: %s\n", qPrintable(io["verdict"].toString())); return 226; }
+        engine.setInputRoute(1, 0); const QVariantMap io2 = engine.ioCheck(); engine.resetRouting(); if (io2["sameChannel"].toInt() != 1) { std::fprintf(stderr, "amixos --smoke: the check did not notice a channel on another strip\n"); return 227; }
+        engine.setNullTestInput(false); engine.stop(); const bool off = !engine.ioCheck()["running"].toBool(); engine.open("null", "", "", 48000, 256, 2, 2); if (!off) return 228; }
+      { // A PLUG-IN'S OWN WINDOW: the test VST2 has an editor; it opens once in a window of its own, is idled, and is closed when the window is closed or the plug-in leaves its slot
+        QString k2, k3; for (const QVariant& v : engine.vstCatalog()) { const QString k = v.toMap()["kind"].toString(); if (k2.isEmpty() && k.startsWith("vst2:")) k2 = k; if (k3.isEmpty() && k.startsWith("vst3:")) k3 = k; }
+        engine.setPlugin(26, 0, k2); engine.setPlugin(26, 1, k3); engine.setPlugin(26, 2, "fx:hall");
+        if (engine.openPluginWindow(26, 0)) {
+#ifndef _WIN32
+          std::fprintf(stderr, "amixos --smoke: plug-in windows must stay off on this system unless asked\n"); return 229;
+#endif
+        }
+        engine.closePluginWindows();
+        if (!engine.openPluginWindow(26, 0, true) || engine.pluginWindows() != 1 || !engine.openPluginWindow(26, 0, true) || engine.pluginWindows() != 1) { std::fprintf(stderr, "amixos --smoke: the plug-in's own window did not open once\n"); return 230; }
+        if (engine.openPluginWindow(26, 1, true) || engine.openPluginWindow(26, 2, true)) { std::fprintf(stderr, "amixos --smoke: a plug-in without an editor must fall back to the knob view\n"); return 231; }
+        const double v0 = engine.pluginParams(26, 0)[0].toMap()["value"].toDouble(); engine.setPluginParam(26, 0, engine.pluginParams(26, 0)[0].toMap()["id"].toInt(), 1.0);
+        QElapsedTimer t; t.start(); while (t.elapsed() < 250) QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+        if (std::fabs(engine.pluginParams(26, 0)[0].toMap()["value"].toDouble() - 1.0) < 0.05) { std::fprintf(stderr, "amixos --smoke: the open editor was not idled (%.2f)\n", v0); return 232; }
+        engine.setPlugin(26, 0, ""); t.restart(); while (t.elapsed() < 200) QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+        if (engine.pluginWindows() != 0) { std::fprintf(stderr, "amixos --smoke: the window stayed open after its plug-in was removed\n"); return 233; }
+        engine.setPlugin(26, 0, k2); if (!engine.openPluginWindow(26, 0, true)) return 234; engine.closePluginWindows(); if (engine.pluginWindows() != 0) return 235;
+        for (int k = 0; k < 3; ++k) engine.setPlugin(26, k, ""); }
       { // VST FOLDER: the console's own plug-in folder is created and saved among the scanned folders, once
         const QStringList before = settings.vstDirs(); const QString vf = settings.vstUserFolder(); settings.vstUserFolder();
         if (vf.isEmpty() || !QDir(vf).exists() || settings.vstDirs().count(vf) != 1 || QSettings().value("vst3/dirs").toStringList().count(vf) != 1) { std::fprintf(stderr, "amixos --smoke: the VST folder was not created and saved\n"); return 198; }
@@ -478,7 +542,8 @@ int main(int argc, char* argv[]) {
             access.enterAdmin("1234"); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + "/admin-open.png"); access.leaveAdmin(); std::printf("amixos --shots: admin-open\n"); }
           if (QString::fromLatin1(id) == "mixer") {   // FILE / VIEW / INFO and the About box
             { QVariant r; QMetaObject::invokeMethod(win, "menuSelfTest", Q_RETURN_ARG(QVariant, r)); const QStringList badMenu = r.toStringList(); waitMs(200);
-              if (!badMenu.isEmpty()) std::fprintf(stderr, "amixos --shots: FAILED menu entries: %s\n", qPrintable(badMenu.join(" | "))); else std::printf("amixos --shots: every FILE / VIEW / INFO entry does its job\n");
+              if (!badMenu.isEmpty()) std::fprintf(stderr, "amixos --shots: FAILED menu entries: %s\n", qPrintable(badMenu.join(" | "))); else std::printf("amixos --shots: every FILE / EDIT / VIEW / TOOLS / HELP entry does its job\n");
+              if (!win->findChild<QObject*>("menuAbout") || !win->findChild<QObject*>("menuEdit") || !win->findChild<QObject*>("menuTools")) std::fprintf(stderr, "amixos --shots: FAILED the EDIT / TOOLS / ABOUT buttons are missing\n");
               win->setProperty("current", QStringLiteral("mixer")); waitMs(200); }
             if (QObject* ve = win->findChild<QObject*>("volumeEnhancer")) {   // AMFB VOLUME ENHANCER: a preset loaded through its own button path, then the panel on the shot
               const QVariantMap keepM = engine.mastering(), keepL = engine.masterLimiter(); const double keepW = engine.width();
@@ -497,7 +562,20 @@ int main(int argc, char* argv[]) {
             if (QObject* ab = win->findChild<QObject*>("aboutPop")) { QMetaObject::invokeMethod(ab, "open"); waitMs(400); win->grabWindow().save(shots + "/menu-about.png"); QMetaObject::invokeMethod(ab, "close"); waitMs(200); std::printf("amixos --shots: menu-about\n"); } }
           if (QString::fromLatin1(id) == "acoustics") { measure.runSweep(0, 0.5, 100, 8000, -12, 12); QElapsedTimer mt; mt.start(); while (measure.state() == "measuring" && mt.elapsed() < 8000) QCoreApplication::processEvents(QEventLoop::AllEvents, 20); waitMs(300); win->grabWindow().save(shots + "/acoustics-sweep-info.png"); std::printf("amixos --shots: acoustics-sweep-info\n"); }
           if (QString::fromLatin1(id) == "dsp") { engine.setChannelEq(engine.selectedStrip(), 4.0, -3.0, 2500.0, 2.0, true); waitMs(300); win->grabWindow().save(shots + "/channel-eq-3band.png"); engine.setChannelEq(engine.selectedStrip(), 0, 0, 1000, 0, false); std::printf("amixos --shots: channel-eq-3band\n");
-            if (!win->findChild<QObject*>("channelEq3")) std::fprintf(stderr, "amixos --shots: FAILED the 3-band channel EQ is missing\n"); }
+            if (!win->findChild<QObject*>("channelEq3")) std::fprintf(stderr, "amixos --shots: FAILED the 3-band channel EQ is missing\n");
+            if (QObject* tp = win->findChild<QObject*>("tonePage")) { engine.setGraphicEq(engine.selectedStrip(), QVariantList{3.0, 0.0, -2.0, 0.0, 0.0, 4.0, 0.0, 0.0, -3.0, 1.0}, true); tp->setProperty("graphic", true); waitMs(400); win->grabWindow().save(shots + "/tone-mic-eq-faders.png"); tp->setProperty("graphic", false); engine.setGraphicEq(engine.selectedStrip(), QVariantList{0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, false); std::printf("amixos --shots: tone-mic-eq-faders\n"); } }
+          if (QString::fromLatin1(id) == "surround") { engine.setCinemaHall(true); engine.setHeadTrack(true); engine.setHeadYaw(35); waitMs(700); win->grabWindow().save(shots + "/360-cinema-hall.png"); std::printf("amixos --shots: 360-cinema-hall\n");
+            if (!win->findChild<QObject*>("sceneMap")) std::fprintf(stderr, "amixos --shots: FAILED the 360 scene map is missing\n"); engine.setHeadYaw(0); engine.setHeadTrack(false); engine.setCinemaHall(false); engine.setBusFx(15, ""); }
+          if (QString::fromLatin1(id) == "rtaeq") { QObject* rp = nullptr; int shown = 0; for (QObject* o : win->findChildren<QObject*>("rtaEqPage")) if (o->property("visible").toBool()) { rp = o; ++shown; }   // the page on screen (an earlier one may still be on its way out)
+            if (shown != 1) std::fprintf(stderr, "amixos --shots: FAILED %d RTA EQ pages on screen\n", shown); if (rp) {   // the sliders of the MASTER EQ: after a move the page shows the new value (it used to snap back)
+            const QVariantList keep = rp->property("gains").toList(); QMetaObject::invokeMethod(rp, "setBand", Q_ARG(QVariant, 3), Q_ARG(QVariant, 6.0)); waitMs(120);
+            const double g3 = rp->property("gains").toList().value(3).toDouble(), now = rp->property("bandNow").toMap()["gainDb"].toDouble();
+            QMetaObject::invokeMethod(rp, "setParam", Q_ARG(QVariant, 1), Q_ARG(QVariant, 250.0), Q_ARG(QVariant, 2.5), Q_ARG(QVariant, -4.0)); waitMs(120);
+            const QVariantMap bn = rp->property("bandNow").toMap(); const double g3b = rp->property("gains").toList().value(3).toDouble();
+            if (!rp->property("program").toBool() || std::fabs(g3 - 6) > 1e-6 || std::fabs(now - 6) > 1e-6 || std::fabs(bn["gainDb"].toDouble() + 4) > 1e-6 || std::fabs(bn["q"].toDouble() - 2.5) > 1e-6 || std::fabs(g3b + 4) > 1e-6 || std::fabs(engine.eqBand(-1, 3)["gainDb"].toDouble() + 4) > 1e-6)
+              std::fprintf(stderr, "amixos --shots: FAILED the RTA EQ sliders do not follow on the master EQ (fader %.1f, band %.1f, then %.1f q %.2f; program %d strip %d band %d engine %.1f visible %d)\n", g3, now, bn["gainDb"].toDouble(), bn["q"].toDouble(), int(rp->property("program").toBool()), rp->property("strip").toInt(), rp->property("band").toInt(), engine.eqBand(-1, 3)["gainDb"].toDouble(), int(rp->property("visible").toBool()));
+            else std::printf("amixos --shots: RTA EQ sliders follow on the master EQ\n");
+            QMetaObject::invokeMethod(rp, "apply", Q_ARG(QVariant, QVariant(keep))); waitMs(80); } }
           if (QString::fromLatin1(id) == "network") { if (QObject* np = win->findChild<QObject*>("networkPage")) {   // the AUDIO + MIDI view with a stream running to this machine and back
             const QString rxA = net.rxAddress(), txA = net.txAddress(); const int rxP = net.rxPort(), txP = net.txPort(), first = net.rxFirstStrip();
             net.setRxAddress("127.0.0.1"); net.setRxPort(47422); net.setTxAddress("127.0.0.1"); net.setTxPort(47422); net.startReceive(); net.startSend(); net.setRxFirstStrip(7); net.midiIn(0xb1, 7, 96);

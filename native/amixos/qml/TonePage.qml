@@ -14,6 +14,7 @@ Flickable {
     onRtaChanged: { if (rta) engine.setScopeStrip(strip); canvas.requestPaint() }
     property int strip: engine.selectedStrip
     property int ch3Tick: 0
+    property bool graphic: false   // the ten MIC EQ faders shown on this page
     readonly property var ch3: { ch3Tick; const c = engine.channelEq(strip); return c.low === undefined ? { low: 0, mid: 0, midFreq: 1000, high: 0, on: false } : c }
     function put3(key, v) { const c = Object.assign({}, ch3); c[key] = v; if (key !== "on") c.on = true; engine.setChannelEq(strip, c.low, c.mid, c.midFreq, c.high, c.on) }
     Connections { target: engine; function onStripsChanged() { page.ch3Tick++ } }
@@ -59,6 +60,27 @@ Flickable {
                 Knob { label: i18n.t("HIGH 10 kHz", i18n.lang); value: (page.ch3.high - (-15)) / 30; defaultValue: 0.5; valueText: (page.ch3.high > 0 ? "+" : "") + Number(page.ch3.high).toFixed(1) + " dB"; onMoved: function (v) { page.put3("high", Math.round((-15 + v * 30) * 2) / 2) } }
                 Item { Layout.fillWidth: true } } }
         Text { text: i18n.t("MIC EQ RACK · 10 PARAMETRIC BANDS", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 1.5 }
+        Rectangle {   // MIC EQ and TONE in one place: the same ten bands as ten faders (the MIC EQ page's graphic view), next to the parametric controls below
+            id: gcard; objectName: "toneGraphic"; Layout.fillWidth: true; implicitHeight: page.graphic ? 150 : 34; radius: Theme.radius; color: Theme.card; border.color: Theme.line; clip: true
+            property int tick: 0
+            readonly property var gains: { tick; page.ch3Tick; return engine.graphicEq(page.strip) }
+            Row { x: 12; y: 7; spacing: 8
+                Rectangle { objectName: "toneGraphicBtn"; width: 150; height: 20; radius: 4; color: page.graphic ? Theme.amber : Theme.ov(0.08); border.color: Theme.lineSoft
+                    Text { anchors.centerIn: parent; text: page.graphic ? i18n.t("MIC EQ FADERS: SHOWN", i18n.lang) : i18n.t("SHOW MIC EQ FADERS", i18n.lang); color: page.graphic ? "#000" : Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                    MouseArea { anchors.fill: parent; onClicked: page.graphic = !page.graphic } }
+                Rectangle { visible: page.graphic; width: 60; height: 20; radius: 4; color: Theme.ov(0.08); border.color: Theme.lineSoft
+                    Text { anchors.centerIn: parent; text: i18n.t("FLAT", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                    MouseArea { anchors.fill: parent; onClicked: { engine.setGraphicEq(page.strip, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], false); gcard.tick++ } } }
+                Text { anchors.verticalCenter: parent.verticalCenter; text: i18n.t("The same ten bands as the MIC EQ page and the parametric controls below: move any of them.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
+            Row { visible: page.graphic; x: 12; y: 34; spacing: 14
+                Repeater { model: ["31", "63", "125", "250", "500", "1k", "2k", "4k", "8k", "16k"]
+                    delegate: Column { spacing: 2; width: 44
+                        Text { anchors.horizontalCenter: parent.horizontalCenter; text: { const g = toneGraphicGain(index); return (g > 0 ? "+" : "") + g.toFixed(1) } color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 7
+                            function toneGraphicGain(i) { const l = gcard.gains; return l && l[i] !== undefined ? Number(l[i]) : 0 } }
+                        Slider { anchors.horizontalCenter: parent.horizontalCenter; orientation: Qt.Vertical; height: 78; from: -12; to: 12; stepSize: 0.5
+                            value: { const l = gcard.gains; return l && l[index] !== undefined ? Number(l[index]) : 0 }
+                            onMoved: { const card = gcard; const l = []; for (let b = 0; b < 10; ++b) l.push(b === index ? value : (card.gains[b] !== undefined ? Number(card.gains[b]) : 0)); engine.setGraphicEq(page.strip, l, true); card.tick++ } }
+                        Text { anchors.horizontalCenter: parent.horizontalCenter; text: modelData; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7 } } } } }
         spacing: 10
         Panel {
             Layout.fillWidth: true

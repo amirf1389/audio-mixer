@@ -90,6 +90,30 @@ class Simple : public Effect {
   virtual int count() const = 0; virtual const char* knobId(int i) const = 0; virtual const char* knobTitle(int i) const = 0; virtual double knobDef(int i) const = 0;
   double fs_; std::atomic<double> k_[6]{{0.5}, {0.5}, {0.5}, {0.5}, {0.5}, {0.5}};
 };
+// SYNC DELAY: an echo in time with the song: TEMPO (60 .. 200 BPM) and NOTE (1/2, 1/4, dotted 1/8, 1/8, 1/8 triplet, 1/16) give the delay
+// time; FEEDBACK, TONE (the echoes get darker) and WIDTH (0 = both sides together, 1 = the echoes bounce left / right)
+class SyncDelay final : public Simple { public: explicit SyncDelay(double fs); const char* kind() const override { return "syncdelay"; } const char* name() const override { return "SYNC DELAY"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void setSampleRate(double fs) override; void process(float* L, float* R, std::size_t n) override;
+  static double bpmOf(double v) { return 60.0 + (v < 0 ? 0 : v > 1 ? 1 : v) * 140.0; } static int noteOf(double v) { const int k = static_cast<int>((v < 0 ? 0 : v > 1 ? 1 : v) * 5.999); return k; } static double beatsOf(int note);
+ protected: int count() const override { return 5; } const char* knobId(int i) const override { static const char* k[] = {"tempo", "note", "feedback", "tone", "width"}; return k[i]; } const char* knobTitle(int i) const override { static const char* k[] = {"TEMPO", "NOTE", "FEEDBACK", "TONE", "WIDTH"}; return k[i]; } double knobDef(int i) const override { static const double d[] = {0.4286, 0.5, 0.35, 0.6, 0.5}; return d[i]; }
+ private: std::vector<float> buf_[2]; std::size_t w_ = 0; float lp_[2] = {0, 0}; };
+// FEEDBACK KILLER: finds the howl of a microphone that hears its own loudspeaker and notches it out. Every 1024 samples the spectrum of
+// the sum is taken; a single narrow peak that stands far above the rest of the spectrum and stays on the same frequency for several
+// frames in a row (a third of a second), with no overtone, is taken for feedback, and one of six notch filters is put on it. A peak that
+// keeps ringing is cut deeper. A long, pure, steady note of an instrument (a flute, a test tone) looks the same and will be notched too.
+//   SENSITIVITY  how far above the rest a peak must stand (24 dB .. 9 dB)      DEPTH  how deep a notch may go (-6 .. -30 dB)
+//   WIDTH        how narrow the notches are (Q 60 .. 10)                       MODE   HOLD: a notch stays until RESET (a fixed installation);
+//                                                                                     LIVE: a notch not needed for 8 seconds is given back
+class FeedbackKiller final : public Simple { public: explicit FeedbackKiller(double fs); const char* kind() const override { return "antifeedback"; } const char* name() const override { return "FEEDBACK KILLER"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void setSampleRate(double fs) override; void process(float* L, float* R, std::size_t n) override;
+  int notches() const { return active_.load(); }                       // how many notches are set now
+  double notchHz(int i) const { return i >= 0 && i < kNotches && n_[i].on ? n_[i].hz : 0.0; }
+ protected: int count() const override { return 4; } const char* knobId(int i) const override { static const char* k[] = {"sens", "depth", "width", "mode"}; return k[i]; } const char* knobTitle(int i) const override { static const char* k[] = {"SENSITIVITY", "DEPTH", "WIDTH", "MODE"}; return k[i]; } double knobDef(int i) const override { static const double d[] = {0.5, 0.5, 0.5, 0.0}; return d[i]; }
+ private:
+  static constexpr int kNotches = 6, kN = 1024;
+  struct Notch { bool on = false; double hz = 0, depthDb = 0, b0 = 1, b1 = 0, b2 = 0, a1 = 0, a2 = 0, z[2][2] = {{0, 0}, {0, 0}}; long idle = 0; };
+  void design(Notch& n) const; void analyse();
+  Notch n_[kNotches]; std::vector<float> frame_; std::size_t fill_ = 0; int lastBin_ = -1, streak_ = 0; std::atomic<int> active_{0}; };
 // FLANGER: a 1..8 ms delay swept by an LFO with feedback: RATE, DEPTH, FEEDBACK
 class Flanger final : public Simple { public: explicit Flanger(double fs); const char* kind() const override { return "flanger"; } const char* name() const override { return "FLANGER"; }
   std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;

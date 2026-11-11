@@ -31,6 +31,12 @@ int main(int argc, char** argv) {
     for (int k = 0; k < 200; ++k) rt.onBlock(i2, o2, n); CHECK(std::fabs(rt.snapshot().strips[0].pk - 0.5) < 0.02);
     plug->setParam(0, 0.25); for (int k = 0; k < 800; ++k) rt.onBlock(i2, o2, n); CHECK(std::fabs(rt.snapshot().strips[0].pk - 0.25) < 0.02);
     rt.setInserts(0, nullptr); }
+  { // the plug-in's own editor: opened in the window the host gives it, its size read, idled, closed; never opened twice or without a window
+    std::string err; auto p = vst2::Plugin::load(found[0], 48000, 256, err); CHECK(p && p->hasEditor() && !p->editorOpen());
+    int w = 0, h = 0, fake = 0; CHECK(!p->openEditor(nullptr, w, h)); CHECK(p->openEditor(&fake, w, h) && w == 400 && h == 240 && p->editorOpen()); CHECK(!p->openEditor(&fake, w, h));
+    p->setParam(0, 1.0); const double set = p->param(0); p->editorIdle(); const double idled = p->param(0); CHECK(std::fabs(idled - set) > 0.05);   // the test editor moves its gain when it is idled
+    p->closeEditor(); CHECK(!p->editorOpen()); p->setParam(0, 1.0); p->editorIdle(); CHECK(std::fabs(p->param(0) - set) < 1e-6);   // no idle reaches it after close
+    CHECK(p->openEditor(&fake, w, h)); }   // left open on purpose: releasing the plug-in must close it first
   std::printf("vst2_test: scan / inspect / load (clean-room ABI), params + text, bypass via the plug-in, chunk state round trip, MonoInsert on a strip OK\n");
   return 0;
 }

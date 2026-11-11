@@ -32,6 +32,14 @@ class Plugin {
   virtual void process(const float* const* in, float* const* out, int frames) = 0;   // audio thread
   virtual std::string state() const = 0;           // opaque, base64
   virtual bool setState(const std::string& base64) = 0;
+  // THE PLUG-IN'S OWN WINDOW: the editor its maker drew, shown inside a native window the host gives it (an HWND on Windows). All on the
+  // interface thread. openEditor() reports the size the editor wants; editorIdle() is called about 30 times a second while it is open (VST2
+  // editors redraw there); closeEditor() must be called before the window goes or the plug-in is released.
+  virtual bool hasEditor() const { return false; }
+  virtual bool openEditor(void* parentWindow, int& width, int& height) { (void)parentWindow; (void)width; (void)height; return false; }
+  virtual void closeEditor() {}
+  virtual void editorIdle() {}
+  virtual bool editorOpen() const { return false; }
 };
 
 // A plug-in as a Runtime::Insert on a mono strip: a mono plug-in gets the strip, a stereo one gets it on both sides and gives back the left.

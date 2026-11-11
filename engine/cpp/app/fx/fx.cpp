@@ -11,10 +11,12 @@ double clamp01(double v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
 std::string fmt(const char* f, double v) { char b[32]; std::snprintf(b, sizeof b, f, v); return b; }
 }  // namespace
 
-std::vector<std::pair<std::string, std::string>> catalog() { return {{"reverb", "PLATE REVERB"}, {"delay", "TAPE DELAY"}, {"chorus", "STEREO CHORUS"}, {"drive", "TUBE DRIVE"}, {"flanger", "FLANGER"}, {"phaser", "PHASER"}, {"tremolo", "TREMOLO"}, {"wah", "AUTO WAH"}, {"crusher", "BIT CRUSHER"}, {"exciter", "EXCITER"}, {"tubeamp", "TUBE AMP"}, {"preamp", "PRE AMP"}, {"postamp", "POST AMP"}, {"hall", "HALL REVERB"}, {"room", "ROOM REVERB"}}; }
+std::vector<std::pair<std::string, std::string>> catalog() { return {{"reverb", "PLATE REVERB"}, {"delay", "TAPE DELAY"}, {"syncdelay", "SYNC DELAY"}, {"antifeedback", "FEEDBACK KILLER"}, {"chorus", "STEREO CHORUS"}, {"drive", "TUBE DRIVE"}, {"flanger", "FLANGER"}, {"phaser", "PHASER"}, {"tremolo", "TREMOLO"}, {"wah", "AUTO WAH"}, {"crusher", "BIT CRUSHER"}, {"exciter", "EXCITER"}, {"tubeamp", "TUBE AMP"}, {"preamp", "PRE AMP"}, {"postamp", "POST AMP"}, {"hall", "HALL REVERB"}, {"room", "ROOM REVERB"}}; }
 std::unique_ptr<Effect> make(const std::string& k, double fs) {
   if (k == "reverb") return std::make_unique<Reverb>(fs);
   if (k == "delay") return std::make_unique<TapeDelay>(fs);
+  if (k == "syncdelay") return std::make_unique<SyncDelay>(fs);
+  if (k == "antifeedback") return std::make_unique<FeedbackKiller>(fs);
   if (k == "chorus") return std::make_unique<Chorus>(fs);
   if (k == "flanger") return std::make_unique<Flanger>(fs);
   if (k == "phaser") return std::make_unique<Phaser>(fs);
@@ -153,6 +155,89 @@ void Phaser::process(float* L, float* R, std::size_t n) {
     for (int s = 0; s < 2; ++s) { const double f = 300.0 * std::pow(8.0, 0.5 + 0.5 * depth * std::sin(ph_ + (s ? kPi * 0.25 : 0))), t = std::tan(kPi * std::min(f, fs_ * 0.45) / fs_); const float a = static_cast<float>((t - 1) / (t + 1));
       float x = ch[s][i] + fb_[s] * fb; for (int k = 0; k < 6; ++k) { const float y = a * x + z_[s][k]; z_[s][k] = x - a * y; x = y; } fb_[s] = x; ch[s][i] = dry * ch[s][i] + wet * x; }
     ph_ += inc; if (ph_ > 2 * kPi) ph_ -= 2 * kPi;
+  }
+}
+FeedbackKiller::FeedbackKiller(double fs) : Simple(fs) { for (int i = 0; i < 4; ++i) k_[i] = knobDef(i); setSampleRate(fs); }
+void FeedbackKiller::setSampleRate(double fs) { fs_ = fs > 0 ? fs : 48000; frame_.assign(kN, 0.f); reset(); }
+void FeedbackKiller::reset() { for (Notch& n : n_) n = Notch{}; fill_ = 0; lastBin_ = -1; streak_ = 0; active_ = 0; }
+std::string FeedbackKiller::text(const std::string& id, double v) const {
+  v = clamp01(v); if (id == "sens") return fmt("%.0f dB", 24.0 - v * 15.0); if (id == "depth") return fmt("-%.0f dB", 6.0 + v * 24.0);
+  if (id == "width") return fmt("Q %.0f", 60.0 - v * 50.0); if (id == "mode") return v >= 0.5 ? "LIVE" : "HOLD"; return fmt("%.0f %%", v * 100);
+}
+void FeedbackKiller::design(Notch& n) const {   // a peaking cut (RBJ): gain depthDb at hz, the band as narrow as WIDTH says
+  const double q = 60.0 - clamp01(k_[2].load()) * 50.0, A = std::pow(10.0, n.depthDb / 40.0), w = 2.0 * kPi * std::min(n.hz, fs_ * 0.45) / fs_, al = std::sin(w) / (2.0 * q), c = std::cos(w), a0 = 1.0 + al / A;
+  n.b0 = (1.0 + al * A) / a0; n.b1 = -2.0 * c / a0; n.b2 = (1.0 - al * A) / a0; n.a1 = -2.0 * c / a0; n.a2 = (1.0 - al / A) / a0;
+}
+void FeedbackKiller::analyse() {
+  // the spectrum of the frame, Hann window (a plain radix-2 FFT on the stack: 1024 points, once every 21 ms)
+  static thread_local double re[kN], im[kN];
+  for (int i = 0; i < kN; ++i) { re[i] = frame_[static_cast<std::size_t>(i)] * (0.5 - 0.5 * std::cos(2.0 * kPi * i / (kN - 1))); im[i] = 0; }
+  for (int i = 1, j = 0; i < kN; ++i) { int bit = kN >> 1; for (; j & bit; bit >>= 1) j ^= bit; j ^= bit; if (i < j) { std::swap(re[i], re[j]); std::swap(im[i], im[j]); } }
+  for (int len = 2; len <= kN; len <<= 1) { const double ang = -2.0 * kPi / len, wr = std::cos(ang), wi = std::sin(ang);
+    for (int i = 0; i < kN; i += len) { double cr = 1, ci = 0; for (int k = 0; k < len / 2; ++k) { const int a = i + k, b = a + len / 2; const double xr = re[b] * cr - im[b] * ci, xi = re[b] * ci + im[b] * cr; re[b] = re[a] - xr; im[b] = im[a] - xi; re[a] += xr; im[a] += xi; const double t = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = t; } } }
+  // the loudest bin between 80 Hz and 12 kHz, and the level of everything else
+  const int lo = std::max(2, static_cast<int>(80.0 * kN / fs_)), hi = std::min(kN / 2 - 2, static_cast<int>(12000.0 * kN / fs_)); int pk = -1; double pv = 0, total = 0;
+  static thread_local double mag[kN / 2];
+  for (int k = lo; k <= hi; ++k) { mag[k] = re[k] * re[k] + im[k] * im[k]; total += mag[k]; if (mag[k] > pv) { pv = mag[k]; pk = k; } }
+  for (Notch& n : n_) if (n.on) ++n.idle;
+  if (pk < 0 || pv <= 0) { streak_ = 0; lastBin_ = -1; return; }
+  const double peak = mag[pk - 1 < lo ? pk : pk - 1] + mag[pk] + mag[pk + 1 > hi ? pk : pk + 1], rest = std::max(1e-18, (total - peak) / std::max(1, hi - lo - 2));   // the peak's own three bins against the average of the others
+  const double standDb = 10.0 * std::log10(pv / rest), levelDb = 10.0 * std::log10(pv / (0.25 * kN * kN * 0.25) + 1e-18);   // 0 dB = a full-scale sine
+  const double need = 24.0 - clamp01(k_[0].load()) * 15.0;
+  if (standDb < need || levelDb < -50.0) { streak_ = 0; lastBin_ = -1; return; }
+  // a howl is a PURE tone (no overtone an octave up worth mentioning) that does not move: measured against the bin where the run
+  // started, so that a slow glide (a voice sliding, a sweep) breaks the run even though each frame is close to the one before
+  const bool pure = 2 * pk > hi || mag[2 * pk] + mag[2 * pk - 1] + mag[2 * pk + 1] < pv * 0.01;
+  if (pure && lastBin_ >= 0 && std::abs(pk - lastBin_) <= 1) ++streak_; else { streak_ = pure ? 1 : 0; lastBin_ = pure ? pk : -1; }
+  if (streak_ < 16) return;                                           // a third of a second on one frequency
+  streak_ = 13;                                                       // keeps ringing: act again in three frames
+  const double l = std::sqrt(mag[pk - 1]), c = std::sqrt(mag[pk]), r = std::sqrt(mag[pk + 1]), den = l - 2 * c + r, off = std::fabs(den) > 1e-12 ? 0.5 * (l - r) / den : 0.0;
+  const double hz = (pk + std::max(-0.5, std::min(0.5, off))) * fs_ / kN, maxDepth = -(6.0 + clamp01(k_[1].load()) * 24.0);
+  Notch* use = nullptr;
+  for (Notch& n : n_) if (n.on && std::fabs(n.hz - hz) < std::max(12.0, hz * 0.03)) use = &n;      // the same howl: deepen its notch
+  if (!use) { for (Notch& n : n_) if (!n.on) { use = &n; break; }
+    if (!use) { use = &n_[0]; for (Notch& n : n_) if (n.idle > use->idle) use = &n; *use = Notch{}; }   // all six in use: the one that was needed longest ago
+    use->on = true; use->hz = hz; use->depthDb = 0; }
+  use->hz = 0.7 * use->hz + 0.3 * hz; use->depthDb = std::max(maxDepth, use->depthDb - 6.0); use->idle = 0; design(*use);
+}
+void FeedbackKiller::process(float* L, float* R, std::size_t n) {
+  if (bypass_.load() || frame_.empty()) return;
+  const bool live = k_[3].load() >= 0.5; const long giveBack = static_cast<long>(8.0 * fs_ / kN);
+  for (std::size_t i = 0; i < n; ++i) {
+    frame_[fill_++] = 0.5f * (L[i] + R[i]);                           // what is analysed is the input: a notch does not hide the howl from the detector's own memory of where it was
+    if (fill_ >= static_cast<std::size_t>(kN)) { fill_ = 0; analyse();
+      if (live) for (Notch& nt : n_) if (nt.on && nt.idle > giveBack) nt = Notch{};
+      int on = 0; for (const Notch& nt : n_) on += nt.on ? 1 : 0; active_.store(on); }
+    double x[2] = {L[i], R[i]};
+    for (Notch& nt : n_) { if (!nt.on) continue;
+      for (int ch = 0; ch < 2; ++ch) { const double y = nt.b0 * x[ch] + nt.z[ch][0]; nt.z[ch][0] = nt.b1 * x[ch] - nt.a1 * y + nt.z[ch][1]; nt.z[ch][1] = nt.b2 * x[ch] - nt.a2 * y; x[ch] = y; } }
+    L[i] = static_cast<float>(x[0]); R[i] = static_cast<float>(x[1]);
+  }
+}
+SyncDelay::SyncDelay(double fs) : Simple(fs) { for (int i = 0; i < 5; ++i) k_[i] = knobDef(i); setSampleRate(fs); }
+double SyncDelay::beatsOf(int note) { static const double b[] = {2.0, 1.0, 0.75, 0.5, 1.0 / 3.0, 0.25}; return b[note < 0 ? 0 : note > 5 ? 5 : note]; }   // in quarter notes
+void SyncDelay::setSampleRate(double fs) { fs_ = fs > 0 ? fs : 48000; for (auto& b : buf_) b.assign(static_cast<std::size_t>(fs_ * 2.1), 0.f); reset(); }   // the longest: a half note at 60 BPM = 2 s
+void SyncDelay::reset() { for (auto& b : buf_) std::fill(b.begin(), b.end(), 0.f); w_ = 0; lp_[0] = lp_[1] = 0; }
+std::string SyncDelay::text(const std::string& id, double v) const {
+  v = clamp01(v); if (id == "tempo") return fmt("%.0f BPM", bpmOf(v));
+  if (id == "note") { static const char* n[] = {"1/2", "1/4", "1/8 dotted", "1/8", "1/8 triplet", "1/16"}; return n[noteOf(v)]; }
+  return fmt("%.0f %%", v * 100);
+}
+void SyncDelay::process(float* L, float* R, std::size_t n) {
+  if (bypass_.load() || buf_[0].empty()) return;
+  const std::size_t len = buf_[0].size(); const double sec = 60.0 / bpmOf(k_[0].load()) * beatsOf(noteOf(k_[1].load()));
+  const std::size_t d = std::max<std::size_t>(1, std::min(len - 1, static_cast<std::size_t>(sec * fs_ + 0.5)));
+  const float fb = static_cast<float>(k_[2].load() * 0.92), wet = static_cast<float>(mix_.load()), dry = 1.f - wet, width = static_cast<float>(k_[4].load());
+  const float a = static_cast<float>(std::exp(-2.0 * kPi * (600.0 + k_[3].load() * k_[3].load() * 11400.0) / fs_));
+  for (std::size_t i = 0; i < n; ++i) {
+    const std::size_t r = (w_ + len - d) % len; const float dl = buf_[0][r], dr = buf_[1][r];
+    lp_[0] = dl * (1 - a) + lp_[0] * a; lp_[1] = dr * (1 - a) + lp_[1] * a;
+    const float in = 0.5f * (L[i] + R[i]);
+    // WIDTH 0: each side feeds itself; WIDTH 1: the input goes to the left line only and the lines feed each other, so the echoes alternate
+    buf_[0][w_] = (L[i] * (1 - width) + in * width) + fb * (lp_[0] * (1 - width) + lp_[1] * width);
+    buf_[1][w_] = (R[i] * (1 - width)) + fb * (lp_[1] * (1 - width) + lp_[0] * width);
+    w_ = (w_ + 1) % len;
+    L[i] = L[i] * dry + dl * wet; R[i] = R[i] * dry + dr * wet;
   }
 }
 Tremolo::Tremolo(double fs) : Simple(fs) { for (int i = 0; i < 3; ++i) k_[i] = knobDef(i); }

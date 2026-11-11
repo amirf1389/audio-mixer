@@ -29,6 +29,33 @@ Item {
                 Text { text: page.t("binaural placement for headphones · azimuth · elevation · distance · spread"); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                 Item { Layout.fillWidth: true }
                 Btn { label: page.t("ALL OFF"); onClicked: { for (let i = 0; i < 32; i++) { const s = engine.spatial(i); if (s.on) engine.setSpatial(i, false, s.az, s.el, s.dist, s.spread) } page.rev++ } } } }
+        Rectangle {   // THE SCENE: cinema hall (10 fixed points + 10 travelling objects), head tracking, and a map of every object from above
+            objectName: "spatialScene"; Layout.fillWidth: true; implicitHeight: 150; radius: 8; color: Theme.card; border.color: engine.cinemaHall ? Theme.emerald : Theme.line
+            Connections { target: engine; function onSpatialMoved() { sceneMap.requestPaint(); page.rev++ } }
+            RowLayout { anchors.fill: parent; anchors.margins: 10; spacing: 14
+                ColumnLayout { Layout.preferredWidth: 420; Layout.maximumWidth: 420; spacing: 6
+                    RowLayout { spacing: 6
+                        Btn { objectName: "cinemaBtn"; label: engine.cinemaHall ? page.t("CINEMA HALL: ON") : page.t("CINEMA HALL"); on: engine.cinemaHall; onColor: Theme.emerald; onClicked: engine.cinemaHall = !engine.cinemaHall }
+                        Text { text: engine.cinemaHall ? page.t("10 points · ") + engine.spatialMoving + page.t(" objects travelling · strips 1-20") : page.t("10 fixed points + 10 travelling objects on strips 1-20, hall reverb on FX 8"); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 } }
+                    RowLayout { spacing: 6
+                        Btn { objectName: "headTrackBtn"; label: engine.headTrack ? page.t("HEAD TRACK: ON") : page.t("HEAD TRACK: OFF"); on: engine.headTrack; onColor: Theme.cyan; onClicked: engine.headTrack = !engine.headTrack }
+                        Btn { label: page.t("FACE FRONT"); onClicked: { engine.headYaw = 0; engine.headPitch = 0 } }
+                        Text { text: page.t("yaw ") + Math.round(engine.headYaw) + "°  ·  " + page.t("pitch ") + Math.round(engine.headPitch) + "°"; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } }
+                    RowLayout { spacing: 6; Text { Layout.preferredWidth: 40; text: page.t("TURN"); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
+                        Slider { Layout.fillWidth: true; from: -180; to: 180; value: engine.headYaw; onMoved: engine.headYaw = value } }
+                    RowLayout { spacing: 6; Text { Layout.preferredWidth: 40; text: page.t("NOD"); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
+                        Slider { Layout.fillWidth: true; from: -60; to: 60; value: engine.headPitch; onMoved: engine.headPitch = value } }
+                    Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; text: page.t("With HEAD TRACK on, the scene stays in the room while the head turns: drag on the map or use TURN and NOD. For headphones."); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
+                Canvas { id: sceneMap; objectName: "sceneMap"; Layout.fillWidth: true; Layout.fillHeight: true
+                    onPaint: { const g = getContext("2d"); g.clearRect(0, 0, width, height); const cx = width / 2, cy = height / 2, R = Math.min(width * 0.5, height) / 2 - 6, sx = (width / 2 - 8) / R;
+                        g.strokeStyle = "rgba(255,255,255,0.10)"; g.lineWidth = 1; for (const f of [0.5, 1]) { g.beginPath(); g.ellipse(cx - R * f * sx, cy - R * f, 2 * R * f * sx, 2 * R * f); g.stroke() }
+                        // the listener, and where the head points (up = the front of the room)
+                        const hy = (engine.headTrack ? engine.headYaw : 0) * Math.PI / 180; g.strokeStyle = "#37c6e8"; g.lineWidth = 2; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.sin(hy) * 16, cy - Math.cos(hy) * 16); g.stroke(); g.fillStyle = "#37c6e8"; g.beginPath(); g.arc(cx, cy, 4, 0, 6.3); g.fill();
+                        const sc = engine.spatialScene(); g.font = "8px monospace";
+                        for (let i = 0; i < sc.length; ++i) { const o = sc[i], a = o.az * Math.PI / 180, d = Math.min(1, o.dist / 10) * Math.cos(o.el * Math.PI / 180), x = cx + Math.sin(a) * d * R * sx, y = cy - Math.cos(a) * d * R;
+                            g.fillStyle = o.orbit !== 0 ? "#f5b524" : "#19b97f"; if (o.orbit !== 0) { g.beginPath(); g.arc(x, y, 3 + o.el / 30, 0, 6.3); g.fill() } else g.fillRect(x - 4, y - 4, 8, 8);
+                            g.fillStyle = "rgba(255,255,255,0.6)"; g.fillText(o.strip + 1, x + 6, y + 3) } }
+                    MouseArea { anchors.fill: parent; onPositionChanged: function (m) { if (pressed && engine.headTrack) engine.headYaw = Math.atan2(m.x - width / 2, height / 2 - m.y) * 180 / Math.PI } onPressed: function (m) { if (engine.headTrack) engine.headYaw = Math.atan2(m.x - width / 2, height / 2 - m.y) * 180 / Math.PI } } } } }
         RowLayout { id: body; Layout.fillWidth: true; Layout.fillHeight: true; spacing: 8
             Rectangle { Layout.fillHeight: true; Layout.preferredWidth: Math.max(260, Math.min(page.height - 70, page.width * 0.5)); Layout.minimumWidth: 260; radius: Theme.radius; color: Theme.chrome; border.color: Theme.line; clip: true
                 Canvas { id: dial; anchors.fill: parent; anchors.margins: 10

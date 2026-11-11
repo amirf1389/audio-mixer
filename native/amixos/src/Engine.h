@@ -8,6 +8,7 @@
 #include <functional>
 #include <QSettings>
 #include <QTimer>
+#include <QWindow>
 #include <QVariantList>
 #include <QVariantMap>
 #include <QJsonObject>
@@ -128,6 +129,11 @@ class Engine : public QObject {
   Q_INVOKABLE bool open(const QString& backend, const QString& inDevice, const QString& outDevice, double sampleRate, int frames, int inChannels, int outChannels);
   // DRIVER INTELLIGENCE (engine/cpp/include/audiomixer/driver_intel.hpp): the ladder for an ASIO device, the Realtek pin and the locks learned
   // A MIXER OF ANOTHER MAKER connected through its ASIO driver, used as a multichannel sound card (am::drv::mixerProfile)
+  // INPUT / OUTPUT CHECK of the running sound card (an audio interface or a mixer on its ASIO driver): every input channel with the strip that
+  // listens to it and the level arriving now, every output channel with what it carries and its level, and whether the engine keeps up in real
+  // time (dropouts, load, block time). {running, backend, device, inputs: [{ch, strip, name, db, live}], outputs: [{ch, source, db, live}],
+  // liveInputs, sameChannel, xruns, loadPct, blockMs, latencyMs, realtime, verdict}
+  Q_INVOKABLE QVariantMap ioCheck() const;
   Q_INVOKABLE QVariantList mixersFound() const;          // [{id, name, maker, model, prefix, note, inChannels, outChannels, running}]
   Q_INVOKABLE bool connectMixer(const QString& id, int frames);   // opens ALL its channels (32 at most) through ASIO and assigns them
   Q_INVOKABLE int assignMixerChannels(const QString& prefix, bool nameStrips);   // desk channel n -> strip n for every input the running device has; the other strips get no input; returns how many
@@ -192,6 +198,16 @@ class Engine : public QObject {
   Q_INVOKABLE void setScopeStrip(int strip) { scope_.setStrip(strip); }
   // AUTO DETECT: the best device to start with, without a remembered one: a native ASIO driver (not a wrapper, Realtek pinned) >
   // ASIO4ALL-style wrapper > WASAPI / Core Audio / ALSA default endpoints > nothing (null is never auto-picked)
+  // AUTO SELECT: which audio system AUTO DETECT may pick from: "best" (ASIO, then Windows audio, then DirectSound), or only "asio", "wasapi",
+  // "dsound" or "bluetooth". When the chosen system has no device, the best of the others is taken and the note says so.
+  Q_PROPERTY(QString autoPrefer READ autoPrefer WRITE setAutoPrefer NOTIFY devicesChanged)
+  QString autoPrefer() const { return settings_.value("audio/autoPrefer", "best").toString(); } void setAutoPrefer(const QString& p);
+  QVariantMap autoDetectFor(const QString& prefer) const;
+  // STEREO PAIR: strips 1+2, 3+4 ... as one stereo channel. matchStereoPair() gives the partner the same channel processing (EQ, gate, compressor,
+  // limiter, crossover, delay) and the same rack (every plug-in with its settings and bypass), panned to the other side. While the two are
+  // LINKED, a plug-in put in, taken out, bypassed or adjusted on one is done on the other too. Each side runs its own copy of a plug-in
+  // (two mono instances): the two sides are not processed together by one stereo plug-in.
+  Q_INVOKABLE bool matchStereoPair(int strip);
   Q_INVOKABLE QVariantMap autoDetect() const;      // {backend, in, out, name, why, inChannels, outChannels, rate} or empty
   Q_INVOKABLE bool autoStart(int frames);           // detect and SMART START it
   // an extra stereo source summed into the master (the ARRANGE player): attached to every runtime this Engine opens
@@ -212,6 +228,25 @@ class Engine : public QObject {
   Q_INVOKABLE double masteringReductionDb() const { return master_.reductionDb(); }
   Q_INVOKABLE void setSpatial(int strip, bool on, double az, double el, double dist, double spread);
   Q_INVOKABLE QVariantMap spatial(int strip) const;
+  // 360 AUDIO, THE LISTENER AND A SCENE. HEAD TRACK: the listener's head direction (yaw to the right, pitch up, in degrees) is taken off every
+  // object's direction, so the scene stays where it is in the room while the head turns. The angles come from the page (or anything that
+  // sets these properties); this program reads no head-tracking sensor by itself.
+  // CINEMA HALL: 20 objects on the first 20 strips. Ten FIXED POINTS, the loudspeaker places of a cinema (left, centre, right, two sides,
+  // two rear, two overhead, one high centre), and ten MOVING objects that travel around the listener in the background, each on its own
+  // path and speed, updated 30 times a second while the engine runs. A hall reverb on FX 8 gives the room.
+  Q_PROPERTY(bool headTrack READ headTrack WRITE setHeadTrack NOTIFY spatialMoved)
+  Q_PROPERTY(double headYaw READ headYaw WRITE setHeadYaw NOTIFY spatialMoved)
+  Q_PROPERTY(double headPitch READ headPitch WRITE setHeadPitch NOTIFY spatialMoved)
+  Q_PROPERTY(bool cinemaHall READ cinemaHall WRITE setCinemaHall NOTIFY spatialMoved)
+  Q_PROPERTY(int spatialMoving READ spatialMoving NOTIFY spatialMoved)      // how many objects are travelling now
+  bool headTrack() const { return headOn_; } void setHeadTrack(bool on);
+  double headYaw() const { return headYaw_; } void setHeadYaw(double deg);
+  double headPitch() const { return headPitch_; } void setHeadPitch(double deg);
+  bool cinemaHall() const { return cinema_; } void setCinemaHall(bool on);
+  int spatialMoving() const;
+  Q_INVOKABLE void setSpatialOrbit(int strip, double degPerSecond);         // 0 stops the object where it is
+  Q_INVOKABLE QVariantList spatialScene() const;                             // every 360 object: [{strip, az, el, dist, orbit, heardAz, heardEl}]
+  Q_SIGNAL void spatialMoved();
   // OUTPUT STAGE + PROFILER (SOUND CARD page): DC removal before the limiter, TPDF dither for 16 / 24-bit devices, block-time figures in telemetry
   Q_PROPERTY(bool dcBlock READ dcBlock WRITE setDcBlock NOTIFY stateChanged)
   Q_PROPERTY(int outputBits READ outputBits WRITE setOutputBits NOTIFY stateChanged)   // 0 float, 16, 24
@@ -317,6 +352,9 @@ class Engine : public QObject {
   Q_INVOKABLE double trim(int strip) const;
   // global mixer actions (the MIXER toolbar)
   Q_INVOKABLE void muteAll(bool on);
+  Q_INVOKABLE void toggleMuteAll();
+  Q_PROPERTY(bool allMuted READ allMuted NOTIFY stripsChanged)
+  bool allMuted() const;
   Q_INVOKABLE void clearSolo();
   Q_INVOKABLE void resetFaders();                     // every strip and the master to 0 dB, pans centre
   Q_INVOKABLE void flattenAllDsp();
@@ -344,6 +382,12 @@ class Engine : public QObject {
   Q_INVOKABLE QString pluginError(int strip, int slot) const;
   Q_INVOKABLE QString pluginParamText(int strip, int slot, int id, double normalized) const;   // what the plug-in calls that position ("250 ms", "+12 dB"): for a knob's printed scale
   Q_INVOKABLE int pluginCount(int strip) const;
+  // A PLUG-IN'S OWN WINDOW: the editor its maker made, in a window of its own that can be moved and closed like any other. True when the
+  // plug-in has an editor and it opened (Windows; a plug-in without one, or another system, gets the console's own knob view instead).
+  Q_INVOKABLE bool openPluginWindow(int strip, int slot, bool evenHere = false);   // evenHere: also off Windows (the tests)
+  Q_INVOKABLE void closePluginWindows();
+  Q_INVOKABLE int pluginWindows() const { return static_cast<int>(pluginWins_.size()); }
+  bool eventFilter(QObject* o, QEvent* e) override;
   Q_INVOKABLE int retryPlugins();   // tries again every plug-in slot that is waiting (its file was missing, busy or not scanned yet); returns how many came back
   Q_INVOKABLE void saveNow() { save(); settings_.sync(); }   // the console (faders, DSP, racks and what their plug-ins hold) to the settings, now
   Q_INVOKABLE void copyChannel(int strip);
@@ -361,6 +405,15 @@ class Engine : public QObject {
   Q_INVOKABLE void setCrossover(int strip, int type, int hpOrder, double hpFreq, int lpOrder, double lpFreq);
   Q_INVOKABLE void setChannelLimiter(int strip, bool on, double ceilingDb, double releaseMs);
   Q_INVOKABLE void setCompressor(int strip, bool on, double thresholdDb, double ratio, double kneeDb, double attackMs, double releaseMs, double makeupDb);
+  // LIMIT CHANNELS: the channel limiter of every strip on (at each strip's own ceiling, -1 dB when it was never set) or off, in one press
+  Q_INVOKABLE void limitAllChannels(bool on);
+  Q_INVOKABLE bool allChannelsLimited() const;
+  // AUTO -INF: every strip that has no real input on the running sound card (no input picked, or an input the card does not have) gets its
+  // fader at -inf, so an unused channel cannot add noise; returns how many were pulled down
+  Q_INVOKABLE int infUnused();
+  // MASTER MUTE: the master to -inf and back to where it was
+  Q_PROPERTY(bool masterMuted READ masterMuted WRITE setMasterMuted NOTIFY stripsChanged)
+  bool masterMuted() const { return masterMuted_; } void setMasterMuted(bool on);
   Q_INVOKABLE double closeNoise(int strip);   // with nobody playing: reads the strip's input level now (hum, hiss, room) and sets the gate 6 dB above it; returns the threshold, or 0 when there is no signal to read
   Q_INVOKABLE void setGate(int strip, bool on, double thresholdDb, double rangeDb, double attackMs, double holdMs, double releaseMs);
   Q_INVOKABLE QVariantList compressorCurve(int strip, int points) const;   // [{in, out}] dB, -60..0, the static transfer without make-up
@@ -427,7 +480,8 @@ class Engine : public QObject {
   static constexpr int kBuses = 16, kGroups = 8;   // buses 0-7 AUX, 8-15 FX
   struct SendUi { double db = -60; bool pre = false; };
   struct PluginUi { QString kind; bool bypass = false; std::shared_ptr<am::host::Plugin> vst; QString state, error; };   // vst: loaded instance (null = pending with error)
-  bool vstScanning_ = false; std::vector<QVariantMap> vstCatalog_; std::vector<std::shared_ptr<am::host::Plugin>> graveyard_; QTimer graveTimer_; QTimer saveTimer_;
+  std::vector<bool> muteKeep_;
+  bool vstScanning_ = false; std::vector<QVariantMap> vstCatalog_; std::vector<std::shared_ptr<am::host::Plugin>> graveyard_; QTimer graveTimer_; QTimer saveTimer_; QTimer motionTimer_; struct PluginWin { QWindow* win; std::shared_ptr<am::host::Plugin> pl; int strip, slot; }; QList<PluginWin> pluginWins_; QTimer pluginIdle_; void closePluginWin(int index); bool mirror_ = false; bool headOn_ = false, cinema_ = false; double headYaw_ = 0, headPitch_ = 0; double orbit_[32] = {0}; qint64 motionAt_ = 0; void pushSpatial(int i); void moveObjects(); bool masterMuted_ = false; double masterKeepDb_ = 0;
   bool loadVst(int strip, int slot);                      // from kind + state at the runtime's rate; false -> error set
   void rebuildInserts(int strip);                         // the strip's VST chain into the runtime
   void reloadAllVst();                                    // after open (new rate / block)

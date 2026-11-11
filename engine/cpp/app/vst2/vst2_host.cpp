@@ -80,7 +80,7 @@ std::intptr_t hostCallback(AEffect* e, std::int32_t opcode, std::int32_t, std::i
 }  // namespace
 
 struct Plugin::Impl {
-  std::unique_ptr<Module> module; AEffect* fx = nullptr; double rate = 48000; int maxBlock = 256; bool started = false;
+  std::unique_ptr<Module> module; AEffect* fx = nullptr; double rate = 48000; int maxBlock = 256; bool started = false; bool editing = false;
   struct Change { std::int32_t index; float v; }; static constexpr unsigned kRing = 256; Change ring[kRing]; std::atomic<unsigned> head{0}, tail{0};
   std::vector<float*> inPtrs, outPtrs; std::vector<std::vector<float>> scratch;   // extra channels the plug-in has beyond our mono / stereo
   std::mutex m;
@@ -88,7 +88,7 @@ struct Plugin::Impl {
   std::string str(std::int32_t op, std::int32_t idx = 0) { char b[kStringMax] = {0}; call(op, idx, 0, b); b[kStringMax - 1] = 0; return b; }
   bool canDo(const char* what) { return call(effCanDo, 0, 0, const_cast<char*>(what)) > 0; }
   ~Impl() {
-    if (fx) { if (started) { call(effStopProcess); call(effMainsChanged, 0, 0); } call(effClose); fx = nullptr; }
+    if (fx) { if (editing) { call(effEditClose); editing = false; } if (started) { call(effStopProcess); call(effMainsChanged, 0, 0); } call(effClose); fx = nullptr; }
     module.reset();
   }
 };
@@ -164,6 +164,20 @@ std::unique_ptr<Plugin> Plugin::load(const std::string& path, double rate, int m
   return p;
 }
 Plugin::~Plugin() = default;
+// the plug-in's own editor: effFlagsHasEditor is bit 0 of the flags; the rectangle is { top, left, bottom, right } as 16-bit numbers
+bool Plugin::hasEditor() const { return impl_->fx && (impl_->fx->flags & 1) != 0; }
+bool Plugin::editorOpen() const { return impl_->editing; }
+bool Plugin::openEditor(void* parent, int& w, int& h) {
+  if (!hasEditor() || impl_->editing || !parent) return false;
+  struct Rect { std::int16_t top, left, bottom, right; }; Rect* r = nullptr;
+  impl_->call(effEditGetRect, 0, 0, &r);                                 // some editors only know their size after this first question
+  if (impl_->call(effEditOpen, 0, 0, parent) == 0) return false;
+  impl_->editing = true; r = nullptr; impl_->call(effEditGetRect, 0, 0, &r);
+  if (r && r->right > r->left && r->bottom > r->top) { w = r->right - r->left; h = r->bottom - r->top; }
+  return true;
+}
+void Plugin::closeEditor() { if (impl_->editing) { impl_->call(effEditClose); impl_->editing = false; } }
+void Plugin::editorIdle() { if (impl_->editing) impl_->call(effEditIdle); }
 
 std::vector<host::ParamInfo> Plugin::params() const {
   std::vector<host::ParamInfo> out; Impl& I = *impl_; std::lock_guard<std::mutex> g(I.m);

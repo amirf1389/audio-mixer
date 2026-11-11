@@ -196,7 +196,38 @@ bool inspect(const std::string& modulePath, std::vector<ClassInfo>& classes, std
 }
 
 // ---------------------------------------------------------------- the plug-in instance
+}  // namespace am::vst3
+// The editor interface of VST3 (pluginterfaces/gui/iplugview.h is not among the interface headers kept in this repository, so the two types
+// the host needs are declared here, in the order the plug-in's own table has them).
+namespace Steinberg {
+struct ViewRect { int32 left = 0, top = 0, right = 0, bottom = 0; };
+class IPlugFrame;
+class IPlugView : public FUnknown {
+ public:
+  virtual tresult PLUGIN_API isPlatformTypeSupported(FIDString type) = 0;
+  virtual tresult PLUGIN_API attached(void* parent, FIDString type) = 0;
+  virtual tresult PLUGIN_API removed() = 0;
+  virtual tresult PLUGIN_API onWheel(float distance) = 0;
+  virtual tresult PLUGIN_API onKeyDown(char16 key, int16 keyCode, int16 modifiers) = 0;
+  virtual tresult PLUGIN_API onKeyUp(char16 key, int16 keyCode, int16 modifiers) = 0;
+  virtual tresult PLUGIN_API getSize(ViewRect* size) = 0;
+  virtual tresult PLUGIN_API onSize(ViewRect* newSize) = 0;
+  virtual tresult PLUGIN_API onFocus(TBool state) = 0;
+  virtual tresult PLUGIN_API setFrame(IPlugFrame* frame) = 0;
+  virtual tresult PLUGIN_API canResize() = 0;
+  virtual tresult PLUGIN_API checkSizeConstraint(ViewRect* rect) = 0;
+};
+}  // namespace Steinberg
+namespace am::vst3 {
+#ifdef _WIN32
+static const char* const kEditorWindowType = "HWND";
+#elif defined(__APPLE__)
+static const char* const kEditorWindowType = "NSView";
+#else
+static const char* const kEditorWindowType = "X11EmbedWindowID";
+#endif
 struct Plugin::Impl {
+  Steinberg::IPlugView* view = nullptr; bool viewChecked = false, viewOk = false;
   std::unique_ptr<Module> module; IComponent* comp = nullptr; IAudioProcessor* proc = nullptr; IEditController* ctrl = nullptr; bool ctrlIsComp = false;
   HostApp* host = nullptr; Handler* handler = nullptr; std::atomic<bool> restart{false};
   IConnectionPoint* cpComp = nullptr; IConnectionPoint* cpCtrl = nullptr;
@@ -206,6 +237,7 @@ struct Plugin::Impl {
   Changes* changes = nullptr; AudioBusBuffers inBus{}, outBus{}; std::vector<float*> inPtrs, outPtrs; std::vector<std::vector<float>> silence;
   std::mutex ctrlMutex;   // controller calls from the UI thread
   ~Impl() {
+    if (view) { view->removed(); view->release(); view = nullptr; }
     if (proc && processing) proc->setProcessing(false);
     if (comp) comp->setActive(false);
     if (cpComp && cpCtrl) { cpComp->disconnect(cpCtrl); cpCtrl->disconnect(cpComp); }
@@ -313,5 +345,23 @@ bool Plugin::setState(const std::string& s) {
   if (I.ctrl) { std::lock_guard<std::mutex> g(I.ctrlMutex); c->pos = 0; I.ctrl->setComponentState(c); if (!I.ctrlIsComp && kl) { MemStream* k = new MemStream(); k->d.assign(blob.begin() + 8 + cl, blob.begin() + 8 + cl + kl); I.ctrl->setState(k); k->release(); } if (hasBypass()) bypassOn_ = I.ctrl->getParamNormalized(bypassId_) >= 0.5; }
   c->release(); return ok;
 }
+
+// the plug-in's own editor: the controller makes a view, the view is attached to the host's native window
+bool Plugin::hasEditor() const {
+  Impl& I = *impl_; if (I.viewChecked) return I.viewOk; I.viewChecked = true;
+  if (!I.ctrl) return false;
+  Steinberg::IPlugView* v = I.ctrl->createView("editor"); if (!v) return false;
+  I.viewOk = v->isPlatformTypeSupported(kEditorWindowType) == Steinberg::kResultTrue; v->release(); return I.viewOk;
+}
+bool Plugin::editorOpen() const { return impl_->view != nullptr; }
+bool Plugin::openEditor(void* parent, int& w, int& h) {
+  Impl& I = *impl_; if (!parent || I.view || !hasEditor()) return false;
+  Steinberg::IPlugView* v = I.ctrl->createView("editor"); if (!v) return false;
+  Steinberg::ViewRect r; if (v->getSize(&r) == Steinberg::kResultOk && r.right > r.left && r.bottom > r.top) { w = r.right - r.left; h = r.bottom - r.top; }
+  if (v->attached(parent, kEditorWindowType) != Steinberg::kResultOk) { v->release(); return false; }
+  if (v->getSize(&r) == Steinberg::kResultOk && r.right > r.left && r.bottom > r.top) { w = r.right - r.left; h = r.bottom - r.top; }
+  I.view = v; return true;
+}
+void Plugin::closeEditor() { Impl& I = *impl_; if (I.view) { I.view->removed(); I.view->release(); I.view = nullptr; } }
 
 }  // namespace am::vst3
