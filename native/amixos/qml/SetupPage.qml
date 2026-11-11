@@ -1,6 +1,6 @@
 // FACTORY SETUP: the first-run wizard (and RERUN SETUP from SETTINGS / DIAGNOSTICS; FACTORY RESET brings it back too), the way a phone
 // sets itself up: WELCOME (language) -> TERMS -> AUDIO (auto detect) -> CONSOLE (rate, block, start page, licence key) -> OPERATOR (PIN,
-// profile) -> UPDATES (signed manifest check) -> DONE. The setup is mandatory: there is no SKIP SETUP; the wizard stays until FINISH on the last step (AUDIO alone may be left for CONNECTIONS later).
+// profile) -> UPDATES (signed manifest check) -> DONE. The setup is mandatory: there is no SKIP anywhere; the wizard stays until FINISH on the last step (when no sound card starts on AUDIO, NEXT still goes on). The AUDIO step also sets the ASIO routing, the CONSOLE step the opening animation and its sound.
 import QtQuick
 import AmixOS   // this module: brings the Theme singleton (a plain directory import would see Theme as an ordinary type)
 import QtQuick.Controls
@@ -59,11 +59,16 @@ Rectangle {
                 // 2 AUDIO
                 ColumnLayout { spacing: 12
                     Head { text: i18n.t("Your sound card", i18n.lang) }
-                    Body { text: i18n.t("AUTO DETECT picks the best driver on this machine (a native ASIO driver first on Windows, then WASAPI / Core Audio / ALSA) and starts it. You can also skip this and choose on CONNECTIONS later.", i18n.lang) }
+                    Body { text: i18n.t("AUTO DETECT picks the best driver on this machine (a native ASIO driver first on Windows, then WASAPI / Core Audio / ALSA) and starts it. If nothing starts, NEXT still goes on: pick the device on CONNECTIONS later.", i18n.lang) }
                     RowLayout { spacing: 8
                         Btn { label: i18n.t("AUTO DETECT AND START", i18n.lang); on: true; onColor: Theme.cyan; onClicked: { const ok = engine.autoStart(settings.defaultFrames); wiz.audioNote = ok ? "Started: " + engine.lastRoute : "Nothing started: " + engine.status } }
-                        Btn { label: engine.running ? i18n.t("STOP", i18n.lang) : i18n.t("SKIP", i18n.lang); onClicked: if (engine.running) engine.stop(); else wiz.step = 3 }
+                        Btn { visible: engine.running; label: i18n.t("STOP", i18n.lang); onClicked: engine.stop() }
                         Btn { label: settings.autoAsio ? i18n.t("AUTO DETECT AT START: ON", i18n.lang) : i18n.t("AUTO DETECT AT START: OFF", i18n.lang); on: settings.autoAsio; onColor: Theme.emerald; onClicked: settings.autoAsio = !settings.autoAsio } }
+                    RowLayout { spacing: 8
+                        Body { Layout.fillWidth: false; text: i18n.t("ASIO ROUTING", i18n.lang) }
+                        Btn { objectName: "setupOpenRouting"; label: i18n.t("OPEN", i18n.lang); on: engine.openRouting; onColor: Theme.emerald; onClicked: engine.openRouting = true }
+                        Btn { label: i18n.t("GUARDED", i18n.lang); on: !engine.openRouting; onClicked: engine.openRouting = false }
+                        Body { text: engine.openRouting ? i18n.t("The ASIO driver you pick is opened first (ASIO4ALL, FlexASIO, the manufacturer's own); if none starts, the console tries the Realtek driver and Windows shared mode by itself.", i18n.lang) : i18n.t("ASIO4ALL is passed over when a manufacturer driver is present; onboard Realtek goes to its Windows endpoint.", i18n.lang) } }
                     Text { text: engine.running ? i18n.t("ENGINE RUNNING on ", i18n.lang) + engine.backend.toUpperCase() + " · " + engine.sampleRate + i18n.t(" Hz · ", i18n.lang) + engine.blockFrames + i18n.t(" frames · ", i18n.lang) + engine.deviceInputs + i18n.t(" in / ", i18n.lang) + engine.deviceOutputs + i18n.t(" out", i18n.lang) : i18n.t("engine stopped", i18n.lang); color: engine.running ? Theme.emerald : Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
                     Body { text: wiz.audioNote }
                     Text { text: i18n.t("INTERFACES FOUND: ", i18n.lang) + engine.devices.length; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.letterSpacing: 2 }
@@ -73,6 +78,11 @@ Rectangle {
                 // 3 CONSOLE
                 ColumnLayout { spacing: 12
                     Head { text: i18n.t("Console defaults", i18n.lang) }
+                    RowLayout { spacing: 8
+                        Body { Layout.fillWidth: false; text: i18n.t("OPENING", i18n.lang) }
+                        Btn { objectName: "setupBootAnim"; label: settings.bootAnimation ? i18n.t("ANIMATION: ON", i18n.lang) : i18n.t("ANIMATION: OFF", i18n.lang); on: settings.bootAnimation; onColor: Theme.emerald; onClicked: settings.bootAnimation = !settings.bootAnimation }
+                        Btn { objectName: "setupBootSound"; label: settings.bootSound ? i18n.t("SOUND: ON", i18n.lang) : i18n.t("SOUND: OFF", i18n.lang); on: settings.bootSound; onColor: Theme.emerald; onClicked: settings.bootSound = !settings.bootSound }
+                        Body { text: i18n.t("The opening animation plays for 3 seconds at every start and cannot be skipped; switch it off here if you want the console at once.", i18n.lang) } }
                     RowLayout { spacing: 6; Text { text: i18n.t("SAMPLE RATE", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; Layout.preferredWidth: 110 } Repeater { model: [44100, 48000, 96000]; delegate: Btn { label: modelData / 1000 + i18n.t(" kHz", i18n.lang); on: settings.defaultRate === modelData; onClicked: settings.defaultRate = modelData } } }
                     RowLayout { spacing: 6; Text { text: i18n.t("BLOCK", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; Layout.preferredWidth: 110 } Repeater { model: [64, 128, 256, 512]; delegate: Btn { label: modelData + ""; on: settings.defaultFrames === modelData; onClicked: settings.defaultFrames = modelData } } Text { text: "(" + (settings.defaultFrames / settings.defaultRate * 1000).toFixed(1) + i18n.t(" ms; smaller = less latency, more load)", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
                     RowLayout { spacing: 6; Text { text: i18n.t("START PAGE", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; Layout.preferredWidth: 110 } Repeater { model: [["home", "HOME"], ["mixer", "MIXER"], ["io", "CONNECTIONS"]]; delegate: Btn { label: modelData[1]; on: settings.startPage === modelData[0]; onClicked: settings.startPage = modelData[0] } } }

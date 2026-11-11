@@ -52,7 +52,7 @@ ApplicationWindow {
                         MItem { text: i18n.t("Media files", i18n.lang); onTriggered: root.current = "media" }
                         MenuSeparator {}
                         MItem { text: i18n.t("Soft restart", i18n.lang) + "   Ctrl+Shift+R"; onTriggered: root.softRestart() }
-                        MItem { text: i18n.t("Quit", i18n.lang); onTriggered: Qt.quit() } }
+                        }
                     Menu { id: viewMenu; objectName: "viewMenu"; width: 260
                         MItem { text: i18n.t("Mixer", i18n.lang); onTriggered: root.current = "mixer" }
                         MItem { text: i18n.t("Meters", i18n.lang); onTriggered: root.current = "meter" }
@@ -175,6 +175,29 @@ ApplicationWindow {
     }
     function say(text) { sayText.text = text; sayPop.open() }
     function openEnhancer() { enhancer.open() }
+    // Presses every entry of FILE, VIEW and INFO (not Quit, Soft restart or Full screen, which would end or reshape the test) and says which did not do its job.
+    function menuSelfTest() {
+        const bad = [], keepPage = root.current, pages = { "Scenes": "scenes", "Presets": "presets", "Media files": "media", "Mixer": "mixer", "Meters": "meter", "Routing": "routing", "Connections": "io", "Network": "network", "Acoustics": "acoustics", "Help": "help", "Licence and account": "acct" }
+        let pressed = 0
+        const pops = [sayPop, aboutPop, whatsNew], shut = function () { for (const p of pops) p.close() }
+        for (const m of [fileMenu, viewMenu, infoMenu]) for (let i = 0; i < m.count; ++i) {
+            const it = m.itemAt(i); if (!it || !it.text) continue
+            const t = it.text; if (t.indexOf("Soft restart") === 0 || t.indexOf("ull screen") > 0) continue
+            ++pressed; shut()
+            if (pages[t] !== undefined) { root.current = "home"; it.triggered(); if (root.current !== pages[t]) bad.push(t + " -> " + root.current) }
+            else if (t === "Light look" || t === "Dark look") { const d = settings.darkTheme; it.triggered(); if (settings.darkTheme === d) bad.push(t); settings.darkTheme = d }
+            else if (t.indexOf("Tooltips") >= 0) { const d = settings.tooltips; it.triggered(); if (settings.tooltips === d) bad.push(t); settings.tooltips = d }
+            else if (t === "About this console") { it.triggered(); if (!aboutPop.opened && !aboutPop.visible) bad.push(t) }
+            else if (t === "What's new") { it.triggered(); if (!whatsNew.opened && !whatsNew.visible) bad.push(t) }
+            else if (t === "Save the console to a file") { sayText.text = ""; it.triggered(); if (sayText.text.indexOf("Saved: ") !== 0) bad.push(t + ": " + sayText.text) }
+            else if (t === "Load the console from that file") { sayText.text = ""; it.triggered(); if (sayText.text.indexOf("was loaded") < 0) bad.push(t + ": " + sayText.text) }
+            else if (t === "Sound card in use") { sayText.text = ""; it.triggered(); if (sayText.text === "") bad.push(t) }
+            else bad.push("not covered: " + t)
+        }
+        shut(); root.current = keepPage
+        if (pressed < 18) bad.push("only " + pressed + " menu entries found")
+        return bad
+    }
     function openAnalyzer() { analyzer.open() }
     MasterAnalyzer { id: analyzer }   // AMFB MASTER ANALYZER: opened from the master strip's ANALYZER button
     VolumeEnhancer { id: enhancer }   // AMFB VOLUME ENHANCER: opened from the master strip's ENHANCER button

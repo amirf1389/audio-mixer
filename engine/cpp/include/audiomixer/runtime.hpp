@@ -178,7 +178,7 @@ class Runtime {
   std::vector<dsp::Channel> ch_; std::vector<std::vector<float>> chBuf_;
   std::vector<std::vector<float>> busBuf_;   // 2 * kMaxBuses blocks for the aux bus outputs   // one channel DSP and one scratch block per strip (sized in open())
   // control ring: many producers (under a mutex), one consumer (the audio thread)
-  static constexpr unsigned kRing = 1024;
+  static constexpr unsigned kRing = 8192;   // room for a whole console pushed at once (32 strips x their EQ bands, sends and dynamics)
   Cmd ring_[kRing]; std::atomic<unsigned> head_{0}, tail_{0}; std::mutex producers_;
   // published meters (sequence counter)
   mutable std::atomic<unsigned> seq_{0}; Snapshot pub_{}; std::uint64_t blocks_ = 0, frames_ = 0;

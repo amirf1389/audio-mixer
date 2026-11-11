@@ -448,7 +448,7 @@ void Engine::resetRouting() { for (int i = 0; i < kStrips; ++i) inRoute_[i] = i;
 // ---- bus effects
 QVariantList Engine::fxCatalog() const { QVariantList l; for (const auto& [k, n] : am::fx::catalog()) { QVariantMap m; m["kind"] = QString::fromStdString(k); m["name"] = QString::fromStdString(n); l << m; } return l; }
 void Engine::makeBusFx(int k) {
-  BusUi& b = buses_[k]; if (rt_) rt_->setBusProcessor(k, nullptr); if (b.fx) fxGraveyard_.push_back(std::move(b.fx));
+  BusUi& b = buses_[k]; if (rt_) rt_->setBusProcessor(k, nullptr); if (b.fx) { fxGraveyard_.push_back(std::move(b.fx)); graveTimer_.start(); }   // restart the timer: an effect retired now must outlive the block that still runs it (a timer started for an earlier one could fire a moment later)
   if (!b.fxKind.isEmpty()) { b.fx = am::fx::make(b.fxKind.toStdString(), rt_ ? rt_->sampleRate() : 48000); if (b.fx) { for (const auto& [id, v] : b.fxValues) b.fx->set(id.toStdString(), v); b.fx->setMix(b.fxMix); b.fx->setBypass(b.fxBypass); if (rt_) rt_->setBusProcessor(k, b.fx.get()); } }
   graveTimer_.start();
 }
@@ -509,7 +509,7 @@ void Engine::consoleImport(const QJsonObject& console, const QJsonArray& scenes,
 }
 void Engine::factoryReset() {
   for (int i = 0; i < kStrips; ++i) { StripUi& s = strips_[static_cast<std::size_t>(i)]; for (PluginUi& p : s.plugins) if (p.vst) graveyard_.push_back(p.vst); s = StripUi{}; s.name = QStringLiteral("CH %1").arg(i + 1, 2, 10, QLatin1Char('0')); s.dsp.setSampleRate(48000); }
-  for (int k = 0; k < kBuses; ++k) { if (rt_) rt_->setBusProcessor(k, nullptr); if (buses_[k].fx) fxGraveyard_.push_back(std::move(buses_[k].fx)); buses_[k] = BusUi{}; buses_[k].name = k < 8 ? QStringLiteral("AUX %1").arg(k + 1) : QStringLiteral("FX %1").arg(k - 7); } width_ = 1.0;
+  for (int k = 0; k < kBuses; ++k) { if (rt_) rt_->setBusProcessor(k, nullptr); if (buses_[k].fx) { fxGraveyard_.push_back(std::move(buses_[k].fx)); graveTimer_.start(); } buses_[k] = BusUi{}; buses_[k].name = k < 8 ? QStringLiteral("AUX %1").arg(k + 1) : QStringLiteral("FX %1").arg(k - 7); } width_ = 1.0;
   for (DcaUi& d : dcas_) d = DcaUi{}; for (int g = 0; g < kGroups; ++g) dcas_[g].name = QStringLiteral("DCA %1").arg(g + 1);
   for (MuteGroupUi& m : muteGroups_) m = MuteGroupUi{}; for (int g = 0; g < kGroups; ++g) muteGroups_[g].name = QStringLiteral("MUTE %1").arg(g + 1);
   masterDb_ = 0; masterLim_ = true; masterCeil_ = -0.5; masterRel_ = 100; mp_ = am::MasterChain::Params(); masterPreset_.clear(); mon_ = MonitorUi{}; for (int i = 0; i < kStrips; ++i) inRoute_[i] = i; for (int o = 0; o < kOutputs; ++o) outRoute_[o] = am::Runtime::defaultOutputSource(o);
