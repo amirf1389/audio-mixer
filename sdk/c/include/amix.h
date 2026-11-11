@@ -24,7 +24,7 @@ extern "C" {
 #define AMIX_API __attribute__((visibility("default")))
 #endif
 
-#define AMIX_API_VERSION 4   // 2: 16 buses (8 AUX + 8 FX)
+#define AMIX_API_VERSION 5   // 2: 16 buses (8 AUX + 8 FX); 4: 360 audio; 5: network audio (AES67) and MIDI
 #define AMIX_MAX_STRIPS 32
 #define AMIX_MAX_BUSES 16
 
@@ -112,6 +112,30 @@ AMIX_API void     amix_rt_set_input_route(amix_rt*, int strip, int device_input)
 AMIX_API void     amix_rt_set_output_route(amix_rt*, int device_output, int source); /* 0 off, 1 master L, 2 master R, 3 monitor L, 4 monitor R, 5.. bus k L/R */
 AMIX_API void     amix_rt_clear_clips(amix_rt*);
 AMIX_API void     amix_rt_levels(const amix_rt*, amix_levels* out);
+
+/* ---- network audio over IP: the open AES67 profile (RTP, L16 / L24 big-endian, 1 ms packets, SAP / SDP announcements) ----
+ * SEND: the master as channels 1 / 2 of one stream (1 channel = the mono sum; more than 2 = the strips before their faders follow).
+ * RECEIVE: one stream as up to AMIX_NET_INPUTS extra inputs; amix_rt_set_input_route(rt, strip, AMIX_NET_INPUT_BASE + k) makes a strip
+ * listen to network channel k. address: a multicast group (239.x.x.x) or, to send, one receiver / to receive, "0.0.0.0" for packets
+ * sent straight to this machine. iface: the local IPv4 address of the network card to use, NULL or "" for the system's choice.
+ * No PTP clock is run (the receiver follows each stream's own clock) and nothing is encrypted: the audio is in clear on the network.
+ * Other makers' own protocols are not implemented; amix_net_transports_json() says what this build can do. 0 = ok, negative = failed. */
+#define AMIX_NET_INPUT_BASE 256
+#define AMIX_NET_INPUTS 16
+AMIX_API int   amix_rt_net_send_start(amix_rt*, const char* name, const char* address, int port, int channels, int bits, const char* iface, int announce, char* err, size_t err_len);
+AMIX_API void  amix_rt_net_send_stop(amix_rt*);
+AMIX_API int   amix_rt_net_receive_start(amix_rt*, const char* address, int port, int channels, int bits, int rate, int latency_ms, const char* iface, char* err, size_t err_len);
+AMIX_API void  amix_rt_net_receive_stop(amix_rt*);
+AMIX_API char* amix_rt_net_stats_json(amix_rt*);         /* {"send":{"running","packets","droppedFrames",...},"receive":{"running","packets","lost","late","underruns","fillMs","idleMs","from",...}} */
+AMIX_API char* amix_net_discover_json(int wait_ms, const char* iface);   /* listens for announcements for wait_ms: [{"name","origin","address","port","channels","bits","rate","ptimeMs","refClock"}] */
+AMIX_API char* amix_net_transports_json(void);           /* [{"id","name","available","note"}] */
+AMIX_API char* amix_net_addresses_json(void);            /* ["192.168.1.20"]: the IPv4 addresses of this machine */
+
+/* ---- MIDI: controllers move the mixer. Default map: CC 7 on MIDI channel n = fader of strip n (channel 16 = master), CC 10 = pan,
+ * notes 0..31 = mute, 32..63 = solo. amix_midi_action() turns one message into what it means; the application applies it. ---- */
+typedef struct amix_midi_action { int kind; int strip; double value; } amix_midi_action;   /* kind: 0 nothing, 1 fader (dB), 2 pan (-1..+1), 3 mute toggle, 4 solo toggle, 5 master (dB) */
+AMIX_API void  amix_midi_action_default(int status, int data1, int data2, amix_midi_action* out);
+AMIX_API char* amix_midi_inputs_json(void);              /* [{"id","name"}]: the MIDI inputs of this computer */
 
 /* ---- licence (read-only) ---- */
 AMIX_API void  amix_set_dirs(const char* data, const char* cache, const char* temp);   /* where the library keeps its files (Android: filesDir, cacheDir, cacheDir); NULL leaves one alone */

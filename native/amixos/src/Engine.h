@@ -135,6 +135,8 @@ class Engine : public QObject {
   Q_INVOKABLE int forgetDriverLocks(const QString& name);   // "*" = all
   Q_PROPERTY(QString driverFallback READ driverFallback WRITE setDriverFallback NOTIFY devicesChanged)   // after ASIO: "all" (WASAPI exclusive, shared, DirectSound), "dsound" (DirectSound only; WASAPI never a lock), "none"
   QString driverFallback() const; void setDriverFallback(const QString& f);
+  Q_PROPERTY(bool openRouting READ openRouting WRITE setOpenRouting NOTIFY devicesChanged)   // the ASIO driver that was picked is opened first: ASIO4ALL although a manufacturer driver is there, the Realtek driver instead of its pin (default on)
+  bool openRouting() const; void setOpenRouting(bool on);
   Q_INVOKABLE QVariantList bluetoothDevices() const;        // the devices whose name says Bluetooth (headset, hands-free, A2DP, AirPods...), DirectSound first
   Q_PROPERTY(QString lastRoute READ lastRoute NOTIFY stateChanged)   // what the last start did, in plain words
   QString lastRoute() const { return lastRoute_; }

@@ -42,6 +42,11 @@ Item {
                     Btn { label: i18n.t("DIRECTSOUND ONLY", i18n.lang); on: engine.driverFallback === "dsound"; onColor: Theme.emerald; onClicked: engine.driverFallback = "dsound" }
                     Btn { label: i18n.t("ASIO ONLY", i18n.lang); on: engine.driverFallback === "none"; onColor: Theme.amber; onClicked: engine.driverFallback = "none" }
                     Text { text: engine.driverFallback === "all" ? i18n.t("ASIO → WASAPI exclusive → WASAPI shared → DirectSound", i18n.lang) : engine.driverFallback === "dsound" ? i18n.t("ASIO → DirectSound (WASAPI is optional, never a lock)", i18n.lang) : i18n.t("ASIO, nothing else", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
+                RowLayout { spacing: 6
+                    Text { text: i18n.t("ASIO ROUTING", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
+                    Btn { objectName: "openRoutingBtn"; label: i18n.t("OPEN", i18n.lang); on: engine.openRouting; onColor: Theme.emerald; onClicked: engine.openRouting = true }
+                    Btn { label: i18n.t("GUARDED", i18n.lang); on: !engine.openRouting; onColor: Theme.amber; onClicked: engine.openRouting = false }
+                    Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; text: engine.openRouting ? i18n.t("The ASIO driver you pick is opened first: ASIO4ALL, FlexASIO or the manufacturer's own (Realtek included). The other paths stay as the fallback.", i18n.lang) : i18n.t("ASIO4ALL is passed over when a manufacturer driver is present, and onboard Realtek goes to its Windows endpoint.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
                 Note { text: i18n.t("Pick the interface itself on CONNECTIONS or LIVE SOURCES. AUTO ASIO opens the best driver (native ASIO before wrappers, Realtek pinned to WASAPI) when nothing is remembered; SMART START walks the driver ladder when the first choice fails. The ASIO control panel of a driver opens from the driver's own tray tool; the engine does not pop it up.", i18n.lang) } }
             Card { Head { text: i18n.t("CLOCK & BLOCK", i18n.lang) }
                 KV { k: "SAMPLE RATE"; v: engine.running ? engine.sampleRate + " Hz" : "—" }

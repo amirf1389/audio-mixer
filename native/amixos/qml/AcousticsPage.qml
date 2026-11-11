@@ -74,6 +74,9 @@ Item {
             Num { id: calPath; Layout.fillWidth: true; placeholderText: page.t("path of the microphone calibration file (.txt / .cal: frequency dB per line)") }
             Btn { label: page.t("LOAD"); on: calPath.text.length > 2; onClicked: if (measure.loadCalibration(calPath.text)) calRow.visible = false } }
         Text { Layout.fillWidth: true; text: measure.message; visible: measure.message.length > 0; color: measure.state === "measuring" ? Theme.amber : Theme.emerald; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; elide: Text.ElideRight }
+        Rectangle { objectName: "measureInfo"; visible: measure.info.lines !== undefined && measure.state !== "measuring"; Layout.fillWidth: true; implicitHeight: infoCol.implicitHeight + 10; radius: 5; color: Theme.ov(0.05); border.color: measure.info.ok ? Theme.lineSoft : Theme.amber
+            Column { id: infoCol; anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 5; spacing: 1
+                Repeater { model: measure.info.lines || []; delegate: Text { width: infoCol.width; wrapMode: Text.WordWrap; text: (index < 2 ? "ⓘ " : "⚠ ") + modelData; color: index < 2 ? Theme.muted : Theme.amber; font.family: Theme.mono; font.pixelSize: 8 } } } }
         StackLayout { Layout.fillWidth: true; Layout.fillHeight: true; currentIndex: page.tab
             // 0 MEASURE
             ColumnLayout { spacing: 8

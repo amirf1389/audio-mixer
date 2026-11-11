@@ -1,6 +1,7 @@
 #include "audiomixer/driver_intel.hpp"
 #include "paths/paths.hpp"
 
+#include <atomic>
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
@@ -120,6 +121,9 @@ const DeviceInfo* dsTwin(const std::string& asioName, const DeviceInfo* w, const
   for (const auto& d : devices) { if (!isDsound(d) || !offers(d, wantInput, wantOutput)) continue; int sc = 0; if (w && lower(d.name) == lower(w->name)) sc = 1000; else if (w) sc = score(w->name, d.name); if (sc < 10) sc = std::max(sc, score(asioName, d.name)); if (sc > bs) { bs = sc; best = &d; } }
   return bs >= 10 ? best : nullptr;
 }
+static std::atomic<bool> g_openRouting{false};
+bool openRouting() { return g_openRouting.load(); }
+void setOpenRouting(bool on) { g_openRouting.store(on); }
 std::string fallback() { load(); return g_store.fallback; }
 void setFallback(const std::string& f) { load(); if (f == "all" || f == "dsound" || f == "none") { g_store.fallback = f; save(); } }
 
@@ -131,11 +135,11 @@ std::vector<Pin> pins(const std::vector<DeviceInfo>& devices) { std::vector<Pin>
 std::vector<Step> ladder(const DeviceInfo& asio, const std::vector<DeviceInfo>& devices, bool wantInput, bool wantOutput, std::int64_t nowMs) {
   (void)nowMs;
   bool nativeAsio = false; for (const auto& d : devices) if (isAsio(d) && !isWrapper(d.name)) nativeAsio = true;
-  const bool wrapper = isWrapper(asio.name), wrapperOk = wrapper && !nativeAsio;
+  const bool open = openRouting(); const bool wrapper = isWrapper(asio.name), wrapperOk = wrapper && (!nativeAsio || open);
   // one twin per direction: an input endpoint when an input is wanted, an output endpoint when an output is wanted (both for a duplex start)
   const DeviceInfo* wIn = wantInput ? twin(asio.name, devices, true, false) : nullptr; const DeviceInfo* wOut = wantOutput ? twin(asio.name, devices, false, true) : nullptr;
   const bool twinsOk = (!wantInput || wIn) && (!wantOutput || wOut); const DeviceInfo* w = wantOutput ? wOut : wIn;
-  const Pin pin = pinOf(asio.name); const bool pinned = pin.on && pinRule(asio.name) && w != nullptr;
+  const Pin pin = pinOf(asio.name); const bool pinned = pin.on && pinRule(asio.name) && w != nullptr && !open;
   std::vector<Step> out;
   { Step s; s.step = 1; s.mode = "asio"; s.backend = "asio"; s.id = asio.id; s.name = asio.name; s.available = offers(asio, wantInput, wantOutput) && !pinned && (!wrapper || wrapperOk); s.pinned = pinned;
     if (!offers(asio, wantInput, wantOutput)) s.why = "the ASIO driver has no channels in this direction"; else if (pinned) s.why = std::string("pinned: ") + kPinReason; else if (wrapper && !wrapperOk) s.why = "a wrapper (ASIO4ALL-style): a device with its own ASIO driver is present, so that driver is used first"; out.push_back(s); }
@@ -177,6 +181,34 @@ std::vector<Attempt> plan(const std::string& backend, const std::string& inId, c
   Lock l; if (getLock(asio->name, l, nowMs)) { for (const Step& s : steps) if (s.mode == l.mode && s.available && (s.mode == "asio" || s.name == l.device)) push(s, "locked: " + l.reason, true); }
   for (const Step& s : steps) if (s.available) push(s, "", false);
   if (out.empty()) { Attempt a; a.mode = "asio"; a.backend = "asio"; a.inDevice = inId; a.outDevice = outId; a.why = "no alternative known for this interface"; out.push_back(a); }
+  return out;
+}
+
+std::vector<Attempt> rescue(const std::vector<DeviceInfo>& devices, bool wantInput, bool wantOutput, const std::vector<Attempt>& tried) {
+  std::vector<Attempt> out;
+  auto add = [&](const Attempt& a) {
+    if (a.inDevice == "-" && a.outDevice == "-") return;
+    for (const std::vector<Attempt>* list : std::initializer_list<const std::vector<Attempt>*>{&tried, &out}) for (const Attempt& t : *list) if (t.backend == a.backend && t.inDevice == a.inDevice && t.outDevice == a.outDevice && t.exclusive == a.exclusive) return;
+    out.push_back(a);
+  };
+  // one endpoint per direction of `backend`: Realtek only when asked, never a loopback, the system default first
+  auto endpoint = [&](const char* backend, bool input, bool realtekOnly) -> std::string {
+    const DeviceInfo* best = nullptr; int br = -1;
+    for (const auto& d : devices) {
+      if (d.backend != backend || (input ? d.inChannels : d.outChannels) <= 0 || std::regex_search(d.name, kLoopback) || d.id.rfind("loopback:", 0) == 0) continue;
+      if (realtekOnly && family(d.name) != "realtek") continue;
+      const int r = (input ? d.defaultIn : d.defaultOut) ? 2 : 1; if (r > br) { br = r; best = &d; }
+    }
+    return best ? best->id : std::string("-");
+  };
+  for (const auto& d : devices) if (isAsio(d) && !isWrapper(d.name) && family(d.name) == "realtek") {
+    Attempt a; a.mode = "realtek-asio"; a.backend = "asio"; a.inDevice = wantInput && d.inChannels > 0 ? d.id : "-"; a.outDevice = wantOutput && d.outChannels > 0 ? d.id : "-";
+    a.why = "rescue: the Realtek ASIO driver found on this computer, opened directly"; add(a);
+  }
+  struct Row { const char* mode; const char* backend; bool realtek; const char* why; };
+  for (const Row& r : {Row{"rws", "wasapi", true, "rescue: Realtek through Windows shared mode (no lock)"}, Row{"wasapi-shared", "wasapi", false, "rescue: the system's default endpoints, Windows shared mode"}, Row{"dsound", "dsound", false, "rescue: the system's default endpoints, DirectSound"}}) {
+    Attempt a; a.mode = r.mode; a.backend = r.backend; a.inDevice = wantInput ? endpoint(r.backend, true, r.realtek) : "-"; a.outDevice = wantOutput ? endpoint(r.backend, false, r.realtek) : "-"; a.why = r.why; add(a);
+  }
   return out;
 }
 

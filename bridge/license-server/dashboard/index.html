@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Licence management</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>AmF X1 <span>licence management</span></h1>
+  <div id="who" class="muted"></div>
+  <button id="signOut" type="button" class="ghost" hidden>Sign out</button>
+</header>
+
+<main>
+  <section id="login" class="card narrow">
+    <h2>Sign in</h2>
+    <p class="muted">Type the admin token of this server (LICENSE_ADMIN_TOKEN). It stays in this tab's memory and is sent only to this server.</p>
+    <form id="loginForm" autocomplete="off">
+      <label for="token">Admin token</label>
+      <input id="token" type="password" autocomplete="off" spellcheck="false" required>
+      <label class="check"><input id="remember" type="checkbox"> Keep it until this tab is closed</label>
+      <button id="signIn" type="submit">Sign in</button>
+    </form>
+    <p id="loginMsg" class="msg" role="status"></p>
+  </section>
+
+  <div id="app" hidden>
+    <section class="stats" id="stats" aria-label="Totals"></section>
+
+    <section class="card">
+      <h2>Issue a key</h2>
+      <form id="issueForm" class="grid" autocomplete="off">
+        <div><label for="iName">Customer name</label><input id="iName" maxlength="80" required></div>
+        <div><label for="iEmail">E-mail (optional)</label><input id="iEmail" type="email" maxlength="120"></div>
+        <div><label for="iPlan">Plan</label><select id="iPlan"></select></div>
+        <div><label for="iDays">Valid for (days, 0 = no expiry)</label><input id="iDays" type="number" min="0" max="3650" value="365" required></div>
+        <div><label for="iSeats">Computers</label><input id="iSeats" type="number" min="1" max="4" value="1" required></div>
+        <div><label for="iMachine">Machine code (optional: locks the key to one computer)</label><input id="iMachine" maxlength="64" spellcheck="false"></div>
+        <div class="wide"><label for="iNote">Note (optional)</label><input id="iNote" maxlength="200"></div>
+        <div class="wide actions"><button id="issueBtn" type="submit">Issue key</button><span id="issueMsg" class="msg" role="status"></span></div>
+      </form>
+      <div id="newKey" class="newkey" hidden>
+        <p><strong>The key is shown once.</strong> It is not stored on the server: copy it now and send it to the customer.</p>
+        <textarea id="keyText" readonly rows="4" spellcheck="false" aria-label="The issued key"></textarea>
+        <div class="actions"><button id="copyKey" type="button">Copy key</button><button id="hideKey" type="button" class="ghost">Done, hide it</button><span id="copyMsg" class="msg" role="status"></span></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="bar">
+        <h2>Keys on record</h2>
+        <input id="filter" type="search" placeholder="Search name, e-mail, id, machine" aria-label="Search">
+        <select id="stateFilter" aria-label="State"><option value="">Every state</option><option value="active">Active</option><option value="expired">Expired</option><option value="revoked">Revoked</option></select>
+        <button id="refresh" type="button" class="ghost">Refresh</button>
+        <button id="exportCsv" type="button" class="ghost">Export CSV</button>
+      </div>
+      <p id="listMsg" class="msg" role="status"></p>
+      <div class="scroll"><table id="table"><thead><tr><th>Customer</th><th>Plan</th><th>Issued</th><th>Expires</th><th>Computers</th><th>State</th><th>Actions</th></tr></thead><tbody id="rows"></tbody></table></div>
+    </section>
+
+    <section class="card">
+      <div class="bar"><h2>Activity</h2><button id="auditRefresh" type="button" class="ghost">Refresh</button><button id="auditVerify" type="button" class="ghost">Check the log is intact</button><span id="auditMsg" class="msg" role="status"></span></div>
+      <div class="scroll"><table><thead><tr><th>When</th><th>What</th><th>Key id</th><th>From</th><th>Detail</th></tr></thead><tbody id="auditRows"></tbody></table></div>
+    </section>
+  </div>
+</main>
+<script src="app.js"></script>
+</body>
+</html>

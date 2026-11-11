@@ -57,7 +57,7 @@ bool Runtime::open(const DeviceConfig& cfg, std::string& err) {
   backendName_ = name; nIn_ = std::max(0, cfg.inChannels); nOut_ = std::max(0, cfg.outChannels);
   mixer_ = Mixer(mixer_.strips(), cfg.sampleRate);                                  // the mixer runs at the device rate
   const std::size_t n = std::max<std::size_t>(cfg.frames, 16) * 8;                  // scratch for blocks up to 8 periods (devices may hand out more than the period)
-  silence_.assign(n, 0.0f); left_.assign(n, 0.0f); right_.assign(n, 0.0f); monL_.assign(n, 0.0f); monR_.assign(n, 0.0f); extL_.assign(n, 0.0f); extR_.assign(n, 0.0f);
+  silence_.assign(n, 0.0f); left_.assign(n, 0.0f); right_.assign(n, 0.0f); monL_.assign(n, 0.0f); monR_.assign(n, 0.0f); extL_.assign(n, 0.0f); extR_.assign(n, 0.0f); netBuf_.assign(kNetInputs, std::vector<float>(n, 0.0f));
   for (int s = 0; s < kMaxStrips; ++s) { inRoute_[s] = s; trim_[s] = 1.0; }
   for (int o = 0; o < kMaxOutputs; ++o) outRoute_[o] = defaultOutputSource(o);
   ch_.assign(static_cast<std::size_t>(mixer_.strips()), dsp::Channel(cfg.sampleRate)); chBuf_.assign(ch_.size(), std::vector<float>(n, 0.0f));
@@ -95,7 +95,7 @@ void Runtime::setSend(int s, int b, double db, bool pre) { Cmd c{kSend, s, db, p
 void Runtime::setBusLevel(int b, double db) { post({kBusLevel, b, db, 0, 0}); }
 void Runtime::setBusMute(int b, bool on) { post({kBusMute, b, on ? 1.0 : 0.0, 0, 0}); }
 void Runtime::setBusReturn(int b, double db) { post({kBusReturn, b, db, 0, 0}); }
-void Runtime::setInputRoute(int strip, int input) { if (strip < 0 || strip >= kMaxStrips) return; post({kInRoute, strip, 0, 0, 0, std::max(-1, std::min(kMaxStrips - 1, input))}); }
+void Runtime::setInputRoute(int strip, int input) { if (strip < 0 || strip >= kMaxStrips) return; post({kInRoute, strip, 0, 0, 0, (input >= kNetInBase && input < kNetInBase + kNetInputs) ? input : std::max(-1, std::min(kMaxStrips - 1, input))}); }
 void Runtime::setOutputRoute(int out, int source) { if (out < 0 || out >= kMaxOutputs) return; post({kOutRoute, out, 0, 0, 0, std::max(0, std::min(kSrcBus0L + 2 * kMaxBuses - 1, source))}); }
 void Runtime::setOutputBits(int bits) { post({kOutBits, bits, 0, 0, 0}); }
 void Runtime::setDcBlock(bool on) { post({kDcBlock, on ? 1 : 0, 0, 0, 0}); }
@@ -158,9 +158,14 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
   }
   frames = std::min(frames, left_.size());
   const float* ins[kMaxStrips];
+  NetInput* netIn = netIn_.load();
+  if (netIn) { float* nb[kNetInputs]; for (int k = 0; k < kNetInputs; ++k) nb[k] = netBuf_[static_cast<std::size_t>(k)].data(); netIn->pull(nb, kNetInputs, frames, mixer_.sampleRate()); }
+  const int tapRaw = tapRaw_.load(std::memory_order_relaxed); const float* rawIn = nullptr;
   for (int s = 0; s < mixer_.strips(); ++s) {
     const int src = inRoute_[s];
-    ins[s] = (src >= 0 && src < nIn_ && in && in[src]) ? in[src] : silence_.data();
+    ins[s] = (src >= kNetInBase && src < kNetInBase + kNetInputs) ? (netIn ? netBuf_[static_cast<std::size_t>(src - kNetInBase)].data() : silence_.data())
+           : (src >= 0 && src < nIn_ && in && in[src]) ? in[src] : silence_.data();
+    if (s == tapRaw) rawIn = ins[s];
     dsp::Channel& ch = ch_[static_cast<std::size_t>(s)];
     const double tr = trim_[s];
     const std::shared_ptr<const InsertChain> chain = std::atomic_load(&inserts_[s]);
@@ -177,7 +182,9 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
   ExtraSource* ext = extra_.load();
   if (ext) { ext->render(extL_.data(), extR_.data(), frames, mixer_.sampleRate()); }
   mixer_.process(ins, frames, left_.data(), right_.data(), busOut, ext ? extL_.data() : nullptr, ext ? extR_.data() : nullptr);
+  if (rawIn) ins[tapRaw] = rawIn;   // from here on only the taps read ins: the measured strip as the device delivered it
   if (Tap* tap = tap_.load()) tap->onBlock(ins, mixer_.strips(), left_.data(), right_.data(), frames, mixer_.sampleRate());
+  if (Tap* tap = netTap_.load()) tap->onBlock(ins, mixer_.strips(), left_.data(), right_.data(), frames, mixer_.sampleRate());
   // the monitor section: source, level (smoothed over the block, no clicks), mono, mute -> outputs 0 / 1, with its own peak
   { const float* ml = monSrc_ > 0 ? busOut[2 * (monSrc_ - 1)] : left_.data(); const float* mr = monSrc_ > 0 ? busOut[2 * (monSrc_ - 1) + 1] : right_.data();
     const double g0 = monGain_, g1 = monGainTarget_; monGain_ = g1; const double step = frames ? (g1 - g0) / static_cast<double>(frames) : 0; double pl = 0, pr = 0;

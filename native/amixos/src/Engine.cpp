@@ -37,6 +37,7 @@ static double toDb(double lin) { return lin > 1e-9 ? 20.0 * std::log10(lin) : -1
 
 static constexpr double kIsoCentres[10] = {31.5, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000};
 Engine::Engine(QObject* parent) : QObject(parent) {
+  am::drv::setOpenRouting(QSettings().value("audio/openRouting", true).toBool());
   winSync_ = QSettings().value("mixer/windowsMuteSync", true).toBool(); sysGet_ = [](bool& m) { return am::systemMuteGet(m); }; sysSet_ = [](bool m) { return am::systemMuteSet(m); };
   sysTimer_.setInterval(500); connect(&sysTimer_, &QTimer::timeout, this, &Engine::syncSystemSound); sysTimer_.start();
 #ifdef _WIN32
@@ -386,6 +387,8 @@ QVariantList Engine::driverPlan(const QString& backend, const QString& in, const
 QVariantList Engine::driverLocks() const { QVariantList l; for (const auto& k : am::drv::locks()) { QVariantMap m; m["name"] = QString::fromStdString(k.name); m["mode"] = QString::fromStdString(k.mode); m["device"] = QString::fromStdString(k.device); m["reason"] = QString::fromStdString(k.reason); m["at"] = static_cast<qlonglong>(k.at); m["retryAt"] = k.mode == "asio" ? 0 : static_cast<qlonglong>(k.at + am::drv::kRetryMs); l << m; } return l; }
 QVariantList Engine::driverPins() const { QVariantList l; for (const auto& p : am::drv::pins(devInfos(devices_))) { QVariantMap m; m["name"] = QString::fromStdString(p.name); m["on"] = p.on; m["reason"] = QString::fromStdString(p.reason); l << m; } return l; }
 void Engine::setDriverPin(const QString& name, bool on) { am::drv::setPin(name.toStdString(), on); emit devicesChanged(); }
+bool Engine::openRouting() const { return am::drv::openRouting(); }
+void Engine::setOpenRouting(bool on) { am::drv::setOpenRouting(on); settings_.setValue("audio/openRouting", on); emit devicesChanged(); }
 QString Engine::driverFallback() const { return QString::fromStdString(am::drv::fallback()); }
 void Engine::setDriverFallback(const QString& f) { am::drv::setFallback(f.toStdString()); emit devicesChanged(); }
 static bool looksBluetooth(const QString& n) { static const QRegularExpression re("bluetooth|hands-free|hands free|\\bhfp\\b|a2dp|airpods|\\bbt\\b|wireless|headset|earbuds|buds|jbl|bose|sony wh|wf-|galaxy buds|soundcore|boat|beats", QRegularExpression::CaseInsensitiveOption); return re.match(n).hasMatch(); }
@@ -398,7 +401,11 @@ int Engine::forgetDriverLocks(const QString& name) { const int n = am::drv::forg
 bool Engine::openSmart(const QString& backend, const QString& in, const QString& out, double rate, int frames, int inCh, int outCh) {
   if (opening_) return false;   // a start is already under way (the interface stays live during it)
   const qint64 now = QDateTime::currentMSecsSinceEpoch();
-  const auto steps = am::drv::plan(backend.toStdString(), in.toStdString(), out.toStdString(), devInfos(devices_), now);
+  auto steps = am::drv::plan(backend.toStdString(), in.toStdString(), out.toStdString(), devInfos(devices_), now);
+  // RESCUE: when the whole plan fails the console must not stay without input and output. After the planned steps come the Realtek ASIO
+  // driver (scanned from the device list, opened even when pinned), Realtek Windows shared (RWS) and the system's default endpoints.
+  const std::size_t firstRescue = steps.size();
+  if (backend != "null") { const auto more = am::drv::rescue(devInfos(devices_), in != "-", out != "-", steps); steps.insert(steps.end(), more.begin(), more.end()); }
   QStringList tried; const QString asioName = backend == "asio" ? (out.isEmpty() || out == "-" ? in : out) : QString();
   for (std::size_t i = 0; i < steps.size(); ++i) {
     const auto& a = steps[i];
@@ -415,7 +422,8 @@ bool Engine::openSmart(const QString& backend, const QString& in, const QString&
       reloadAllVst(); pushAll();
       status_ = QStringLiteral("%1 • %2 Hz • %3 frames • %4 in / %5 out").arg(QString::fromStdString(rt_->backendName())).arg(cfg.sampleRate).arg(cfg.frames).arg(inCh).arg(outCh);
       const QString mode = QString::fromStdString(a.mode).toUpper();
-      if (a.pinned) lastRoute_ = QStringLiteral("REALTEK PIN: %1 → %2 (%3). The ASIO driver was not opened.").arg(asioName, mode, QString::fromStdString(a.inDevice != "-" ? a.inDevice : a.outDevice));
+      if (i >= firstRescue) lastRoute_ = QStringLiteral("RESCUE: %1 failed (%2) → %3 works (%4).").arg(tried.join("; "), QString::fromStdString(err), mode == "RWS" ? QStringLiteral("RWS · Realtek Windows shared") : mode, QString::fromStdString(a.outDevice != "-" ? a.outDevice : a.inDevice));
+      else if (a.pinned) lastRoute_ = QStringLiteral("REALTEK PIN: %1 → %2 (%3). The ASIO driver was not opened.").arg(asioName, mode, QString::fromStdString(a.inDevice != "-" ? a.inDevice : a.outDevice));
       else if (a.fromLock) lastRoute_ = QStringLiteral("AI DRIVER LOCK: %1 went straight to %2 (learned earlier: %3).").arg(asioName, mode, QString::fromStdString(a.why));
       else if (i > 0) { lastRoute_ = QStringLiteral("FALLBACK: %1 failed (%2) → %3 works. Locked for next time.").arg(tried.join("; "), QString::fromStdString(err), mode); if (!asioName.isEmpty()) am::drv::learn(asioName.toStdString(), a.mode, a.inDevice != "-" ? a.inDevice : a.outDevice, tried.join("; ").toStdString(), now); }
       else { lastRoute_ = QStringLiteral("%1 opened first try.").arg(mode); if (!asioName.isEmpty() && a.mode == "asio") am::drv::learn(asioName.toStdString(), "asio", asioName.toStdString(), "clean run", now); }
@@ -434,7 +442,7 @@ QVariantList Engine::outputSources() const {
   for (int k = 0; k < kBuses; ++k) { add(am::Runtime::kSrcBus0L + 2 * k, buses_[k].name + " L", "bus"); add(am::Runtime::kSrcBus0L + 2 * k + 1, buses_[k].name + " R", "bus"); }
   return l;
 }
-void Engine::setInputRoute(int strip, int input) { if (strip < 0 || strip >= kStrips) return; inRoute_[strip] = std::clamp(input, -1, kStrips - 1); if (rt_) rt_->setInputRoute(strip, inRoute_[strip]); emit routingChanged(); }
+void Engine::setInputRoute(int strip, int input) { if (strip < 0 || strip >= kStrips) return; inRoute_[strip] = (input >= am::Runtime::kNetInBase && input < am::Runtime::kNetInBase + am::Runtime::kNetInputs) ? input : std::clamp(input, -1, kStrips - 1); if (rt_) rt_->setInputRoute(strip, inRoute_[strip]); emit routingChanged(); }
 void Engine::setOutputRoute(int out, int source) { if (out < 0 || out >= kOutputs) return; outRoute_[out] = std::clamp(source, 0, am::Runtime::kSrcBus0L + 2 * kBuses - 1); if (rt_) rt_->setOutputRoute(out, outRoute_[out]); emit routingChanged(); }
 void Engine::resetRouting() { for (int i = 0; i < kStrips; ++i) inRoute_[i] = i; for (int o = 0; o < kOutputs; ++o) outRoute_[o] = am::Runtime::defaultOutputSource(o); if (rt_) { for (int i = 0; i < kStrips; ++i) rt_->setInputRoute(i, inRoute_[i]); for (int o = 0; o < kOutputs; ++o) rt_->setOutputRoute(o, outRoute_[o]); } emit routingChanged(); }
 // ---- bus effects
@@ -519,6 +527,9 @@ bool Engine::startRecording() {
 }
 void Engine::stopRecording() { if (!recorder_.recording()) return; taps_.a.store(nullptr); recorder_.stop(); recMsg_ = QStringLiteral("Recorded %1 s, %2 file(s)%3 in %4").arg(recorder_.seconds(), 0, 'f', 1).arg(recorder_.files().size()).arg(recorder_.dropped() ? QStringLiteral(" (%1 blocks DROPPED: disk too slow)").arg(recorder_.dropped()) : QString()).arg(recordFolder()); emit recordChanged(); }
 void Engine::setArmed(int i, bool on) { if (i < 0 || i >= kStrips) return; if (on) armed_ |= 1u << i; else armed_ &= ~(1u << i); emit stripsChanged(); emit recordChanged(); }
+// DirectSound lists a Bluetooth or USB headset twice: the music side and the HANDS-FREE side (telephone quality, and opening its microphone
+// switches the whole headset to that mode). Auto detect leaves the hands-free side off; it can still be picked by hand on CONNECTIONS.
+static bool handsFree(const QVariantMap& d) { static const QRegularExpression re("hands[- ]?free|\\bhfp\\b|\\bag audio\\b|headset", QRegularExpression::CaseInsensitiveOption); return d["kind"].toString() == "headset" || re.match(d["name"].toString()).hasMatch(); }
 QVariantMap Engine::autoDetect() const {
   QVariantMap best; int bestRank = -1;
   for (const QVariant& v : devices_) { const QVariantMap d = v.toMap(); const QString b = d["backend"].toString(), name = d["name"].toString(); if (b == "null" || d["id"].toString().startsWith("loopback:")) continue;
@@ -527,7 +538,8 @@ QVariantMap Engine::autoDetect() const {
     if (b == "asio") { const bool wrapper = am::drv::isWrapper(name.toStdString()); const bool pinned = am::drv::pinOf(name.toStdString()).on; rank = wrapper ? 60 : pinned ? 50 : 100; why = wrapper ? "an ASIO wrapper (ASIO4ALL-style): used when nothing has its own driver" : pinned ? "Realtek onboard: pinned to its Windows endpoint, SMART START routes it" : "the device's own ASIO driver"; }
     else if (b == "wasapi" || b == "coreaudio") { rank = (d["defaultOut"].toBool() ? 40 : 30) + (in && out ? 2 : 0); why = "the system's " + QString(d["defaultOut"].toBool() ? "default " : "") + "endpoint"; }
     else if (b == "alsa") { rank = (name.contains("default") ? 25 : 20); why = "an ALSA device"; }
-    else if (b == "dsound") { rank = (d["defaultOut"].toBool() ? 12 : 10) + (in && out ? 2 : 0); why = "DirectSound (no lock; the Bluetooth path)"; }
+    else if (b == "dsound") { rank = (d["defaultOut"].toBool() ? 12 : 10) + (in && out ? 2 : 0); why = "DirectSound (no lock; the Bluetooth path)";
+      if (handsFree(d)) { rank = 1; why = "DirectSound, a headset's hands-free side: used only when nothing else is there"; } }
     if (rank > bestRank) { bestRank = rank; best = d; best["why"] = why; }
   }
   if (best.isEmpty()) return best;
@@ -539,6 +551,7 @@ QVariantMap Engine::autoDetect() const {
     if (best[wantIn ? "in" : "out"].toString() != "-") continue;
     QVariantMap pick; int pr = -1; QString stem = best["name"].toString(); const int par = stem.indexOf('('); if (par >= 0) stem = stem.mid(par + 1).remove(')').trimmed();   // "Speakers (USB Audio CODEC)" -> "USB Audio CODEC"
     for (const QVariant& v : devices_) { const QVariantMap d = v.toMap(); if (d["backend"] != best["backend"] || d["id"].toString().startsWith("loopback:")) continue; if ((wantIn ? d["inChannels"] : d["outChannels"]).toInt() <= 0) continue;
+      if (best["backend"] == "dsound" && handsFree(d)) continue;   // DirectSound: the headset's hands-free microphone stays off (opening it drops the headset to telephone quality)
       const int r = (!stem.isEmpty() && d["name"].toString().contains(stem, Qt::CaseInsensitive) ? 4 : 0) + ((wantIn ? d["defaultIn"] : d["defaultOut"]).toBool() ? 2 : 0) + 1; if (r > pr) { pr = r; pick = d; } }
     if (pick.isEmpty()) continue;
     best[wantIn ? "in" : "out"] = pick["id"]; best[wantIn ? "inChannels" : "outChannels"] = pick[wantIn ? "inChannels" : "outChannels"]; best[wantIn ? "inName" : "outName"] = pick["name"]; best[wantIn ? "inKind" : "outKind"] = pick["kind"];
