@@ -486,7 +486,8 @@ int main(int argc, char* argv[]) {
             access.enterAdmin("1234"); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + "/admin-open.png"); access.leaveAdmin(); std::printf("amixos --shots: admin-open\n"); }
           if (QString::fromLatin1(id) == "mixer") {   // FILE / VIEW / INFO and the About box
             { QVariant r; QMetaObject::invokeMethod(win, "menuSelfTest", Q_RETURN_ARG(QVariant, r)); const QStringList badMenu = r.toStringList(); waitMs(200);
-              if (!badMenu.isEmpty()) std::fprintf(stderr, "amixos --shots: FAILED menu entries: %s\n", qPrintable(badMenu.join(" | "))); else std::printf("amixos --shots: every FILE / VIEW / INFO entry does its job\n");
+              if (!badMenu.isEmpty()) std::fprintf(stderr, "amixos --shots: FAILED menu entries: %s\n", qPrintable(badMenu.join(" | "))); else std::printf("amixos --shots: every FILE / EDIT / VIEW / TOOLS / HELP entry does its job\n");
+              if (!win->findChild<QObject*>("menuAbout") || !win->findChild<QObject*>("menuEdit") || !win->findChild<QObject*>("menuTools")) std::fprintf(stderr, "amixos --shots: FAILED the EDIT / TOOLS / ABOUT buttons are missing\n");
               win->setProperty("current", QStringLiteral("mixer")); waitMs(200); }
             if (QObject* ve = win->findChild<QObject*>("volumeEnhancer")) {   // AMFB VOLUME ENHANCER: a preset loaded through its own button path, then the panel on the shot
               const QVariantMap keepM = engine.mastering(), keepL = engine.masterLimiter(); const double keepW = engine.width();

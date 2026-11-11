@@ -26,7 +26,7 @@ Item {
     property string eqTarget: "flat"
     property real eqLo: 20
     property real eqHi: 400
-    readonly property var tabs: ["MEASURE", "RTA", "IMPULSE", "ROOM"]   // AUTO EQ was taken out of the page on request (the engine function stays for the SDK)
+    readonly property var tabs: ["MEASURE", "RTA", "IMPULSE", "ROOM", "AUTO EQ"]
     function t(s) { return i18n.t(s, i18n.lang) }
     function fx(f, lo, hi, w) { return Math.log(f / lo) / Math.log(hi / lo) * w }
     function axes(ctx, w, h, lo, hi, dLo, dHi) {

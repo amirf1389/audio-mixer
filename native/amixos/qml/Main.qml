@@ -41,8 +41,33 @@ ApplicationWindow {
                         HoverHandler { id: mbH } MouseArea { anchors.fill: parent; onClicked: parent.menu.popup(parent, 0, parent.height + 2) } }
                     component MItem: MenuItem { font.family: Theme.mono; font.pixelSize: 10; implicitHeight: 26 }
                     MenuBtn { objectName: "menuFile"; label: i18n.t("FILE", i18n.lang); menu: fileMenu }
+                    MenuBtn { objectName: "menuEdit"; label: i18n.t("EDIT", i18n.lang); menu: editMenu }
                     MenuBtn { objectName: "menuView"; label: i18n.t("VIEW", i18n.lang); menu: viewMenu }
-                    MenuBtn { objectName: "menuInfo"; label: i18n.t("INFO", i18n.lang); menu: infoMenu }
+                    MenuBtn { objectName: "menuTools"; label: i18n.t("TOOLS", i18n.lang); menu: toolsMenu }
+                    MenuBtn { objectName: "menuInfo"; label: i18n.t("HELP", i18n.lang); menu: infoMenu }
+                    Rectangle { objectName: "menuAbout"; implicitWidth: abT.implicitWidth + 18; height: 24; width: implicitWidth; radius: 4; color: abH.hovered || aboutPop.visible ? Theme.ov(0.10) : "transparent"   // ABOUT: straight to the About box
+                        Text { id: abT; anchors.centerIn: parent; text: i18n.t("ABOUT", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 1 }
+                        HoverHandler { id: abH } MouseArea { anchors.fill: parent; onClicked: aboutPop.open() } }
+                    Menu { id: editMenu; objectName: "editMenu"; width: 260
+                        MItem { text: i18n.t("Undo", i18n.lang); onTriggered: engine.undo() }
+                        MItem { text: i18n.t("Redo", i18n.lang); onTriggered: engine.redo() }
+                        MItem { text: i18n.t("Compare A / B", i18n.lang); onTriggered: engine.toggleAB() }
+                        MenuSeparator {}
+                        MItem { text: i18n.t("Mute all channels", i18n.lang); onTriggered: engine.muteAll(true) }
+                        MItem { text: i18n.t("Unmute all channels", i18n.lang); onTriggered: engine.muteAll(false) }
+                        MItem { text: i18n.t("Clear solo", i18n.lang); onTriggered: engine.clearSolo() }
+                        MItem { text: i18n.t("Clear clip lamps", i18n.lang); onTriggered: engine.clearClips() } }
+                    Menu { id: toolsMenu; objectName: "toolsMenu"; width: 260
+                        MItem { text: i18n.t("Plug-ins", i18n.lang); onTriggered: root.current = "plugins" }
+                        MItem { text: i18n.t("Sound card", i18n.lang); onTriggered: root.current = "asio" }
+                        MItem { text: i18n.t("Effects", i18n.lang); onTriggered: root.current = "fx" }
+                        MItem { text: i18n.t("Mastering", i18n.lang); onTriggered: root.current = "master" }
+                        MItem { text: i18n.t("Samples", i18n.lang); onTriggered: root.current = "samples" }
+                        MenuSeparator {}
+                        MItem { text: i18n.t("Volume Enhancer", i18n.lang); onTriggered: enhancer.open() }
+                        MItem { text: i18n.t("Master Analyzer", i18n.lang); onTriggered: analyzer.open() }
+                        MenuSeparator {}
+                        MItem { text: i18n.t("Settings", i18n.lang); onTriggered: root.current = "sys" } }
                     Menu { id: fileMenu; objectName: "fileMenu"; width: 300
                         MItem { text: i18n.t("Save the console to a file", i18n.lang); onTriggered: { const f = settings.exportConsole(""); root.say(f !== "" ? i18n.t("Saved: ", i18n.lang) + f : i18n.t("The console could not be saved.", i18n.lang)) } }
                         MItem { text: i18n.t("Load the console from that file", i18n.lang); onTriggered: root.say(settings.importConsole("") ? i18n.t("The console was loaded from its file.", i18n.lang) : i18n.t("No saved console file was found.", i18n.lang)) }
@@ -177,16 +202,21 @@ ApplicationWindow {
     function openEnhancer() { enhancer.open() }
     // Presses every entry of FILE, VIEW and INFO (not Quit, Soft restart or Full screen, which would end or reshape the test) and says which did not do its job.
     function menuSelfTest() {
-        const bad = [], keepPage = root.current, pages = { "Scenes": "scenes", "Presets": "presets", "Media files": "media", "Mixer": "mixer", "Meters": "meter", "Routing": "routing", "Connections": "io", "Network": "network", "Acoustics": "acoustics", "Help": "help", "Licence and account": "acct" }
+        const bad = [], keepPage = root.current, pages = { "Plug-ins": "plugins", "Sound card": "asio", "Effects": "fx", "Mastering": "master", "Samples": "samples", "Settings": "sys", "Scenes": "scenes", "Presets": "presets", "Media files": "media", "Mixer": "mixer", "Meters": "meter", "Routing": "routing", "Connections": "io", "Network": "network", "Acoustics": "acoustics", "Help": "help", "Licence and account": "acct" }
         let pressed = 0
-        const pops = [sayPop, aboutPop, whatsNew], shut = function () { for (const p of pops) p.close() }
-        for (const m of [fileMenu, viewMenu, infoMenu]) for (let i = 0; i < m.count; ++i) {
+        const pops = [sayPop, aboutPop, whatsNew, enhancer, analyzer], shut = function () { for (const p of pops) p.close() }
+        for (const m of [fileMenu, editMenu, viewMenu, toolsMenu, infoMenu]) for (let i = 0; i < m.count; ++i) {
             const it = m.itemAt(i); if (!it || !it.text) continue
             const t = it.text; if (t.indexOf("Soft restart") === 0 || t.indexOf("ull screen") > 0) continue
             ++pressed; shut()
             if (pages[t] !== undefined) { root.current = "home"; it.triggered(); if (root.current !== pages[t]) bad.push(t + " -> " + root.current) }
             else if (t === "Light look" || t === "Dark look") { const d = settings.darkTheme; it.triggered(); if (settings.darkTheme === d) bad.push(t); settings.darkTheme = d }
             else if (t.indexOf("Tooltips") >= 0) { const d = settings.tooltips; it.triggered(); if (settings.tooltips === d) bad.push(t); settings.tooltips = d }
+            else if (t === "Volume Enhancer") { it.triggered(); if (!enhancer.opened && !enhancer.visible) bad.push(t) }
+            else if (t === "Master Analyzer") { it.triggered(); if (!analyzer.opened && !analyzer.visible) bad.push(t) }
+            else if (t === "Mute all channels") { it.triggered(); if (!engine.stripState[3].mute) bad.push(t) }
+            else if (t === "Unmute all channels") { it.triggered(); if (engine.stripState[3].mute) bad.push(t) }
+            else if (t === "Undo" || t === "Redo" || t === "Compare A / B" || t === "Clear solo" || t === "Clear clip lamps") { it.triggered() }   // must run without an error; their effect is checked in the engine's own tests
             else if (t === "About this console") { it.triggered(); if (!aboutPop.opened && !aboutPop.visible) bad.push(t) }
             else if (t === "What's new") { it.triggered(); if (!whatsNew.opened && !whatsNew.visible) bad.push(t) }
             else if (t === "Save the console to a file") { sayText.text = ""; it.triggered(); if (sayText.text.indexOf("Saved: ") !== 0) bad.push(t + ": " + sayText.text) }
@@ -195,7 +225,7 @@ ApplicationWindow {
             else bad.push("not covered: " + t)
         }
         shut(); root.current = keepPage
-        if (pressed < 18) bad.push("only " + pressed + " menu entries found")
+        if (pressed < 33) bad.push("only " + pressed + " menu entries found")
         return bad
     }
     function openAnalyzer() { analyzer.open() }
