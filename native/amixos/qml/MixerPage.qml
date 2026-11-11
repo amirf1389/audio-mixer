@@ -350,7 +350,7 @@ Item {
                                             MenuItem { text: i18n.t("Listen here: monitor = master", i18n.lang); onTriggered: engine.setMonitor(0, page.mon.db, page.mon.dim, page.mon.mono, page.mon.mute) }
                                             MenuItem { text: (st && st.armed ? "✓ " : "") + i18n.t("Arm for recording (pre-fader WAV)", i18n.lang); onTriggered: engine.setArmed(index, !(st && st.armed)) }
                                         } } }
-                                    VuMeter { visible: page.vuMode; Layout.fillWidth: true; Layout.preferredHeight: 40; vuDb: mt ? mt.vuDb : -120; refDb: engine.vuRefDb; peakLamp: mt ? mt.clip : false; label: i18n.t("VU", i18n.lang) }
+                                    VuMeter { visible: page.vuMode; Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: 62; Layout.preferredHeight: 36; vuDb: mt ? mt.vuDb : -120; refDb: engine.vuRefDb; peakLamp: mt ? mt.clip : false; label: i18n.t("VU", i18n.lang) }
                                     // SENDS ON STRIPS: 8 mini faders (AUX 1-8 or FX 1-8), each with its PRE/POST switch
                                     RowLayout { visible: page.sendView > 0; Layout.fillHeight: true; Layout.fillWidth: true; spacing: 2
                                     Fader { Layout.fillHeight: true; Layout.preferredWidth: 22; value: st ? st.db : 0; inDb: mt ? mt.inDb : -120; outDb: mt ? mt.peakDb : -120; clip: mt ? mt.clip : false; onMoved: function (db) { engine.setGain(index, db) } }   // the channel fader stays next to its sends
