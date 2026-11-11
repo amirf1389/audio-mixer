@@ -125,3 +125,95 @@ test('the app asks the license server before activating (device lock); without a
     assert.strictEqual(offline.offline, true);
   } finally { if (saved === undefined) delete process.env.LICENSE_SERVER_URL; else process.env.LICENSE_SERVER_URL = saved; }
 });
+
+// ---- licence management: records, revocation, the admin API, the management page
+const fsT = require('node:fs'), osT = require('node:os'), pathT = require('node:path');
+const { createApp, rateLimiter } = require('./framework');
+async function withServer(fn) {
+  const dir = fsT.mkdtempSync(pathT.join(osT.tmpdir(), 'amfx1-lic-')), dataFile = pathT.join(dir, 'licenses.json');
+  const srv = createServer({ privateKey: pair.privateKey, token: TOKEN, dataFile, quiet: true });
+  await new Promise(r => srv.listen(0, '127.0.0.1', r));
+  const base = 'http://127.0.0.1:' + srv.address().port;
+  const call = async (method, p, body, tok = TOKEN) => { const r = await fetch(base + p, { method, headers: { ...(tok ? { authorization: 'Bearer ' + tok } : {}), 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined }); let j = null; const text = await r.text(); try { j = JSON.parse(text); } catch (_) { /* a page */ } return { status: r.status, headers: r.headers, json: j, text }; };
+  try { await fn({ call, dataFile, base }); } finally { await new Promise(r => srv.close(r)); fsT.rmSync(dir, { recursive: true, force: true }); }
+}
+
+test('management: an issued key is on record with its customer, the key itself and the customer details are not readable in the file', async () => {
+  await withServer(async ({ call, dataFile }) => {
+    const r = await call('POST', '/admin/licenses', { plan: 'pro', name: 'Zebra Sound Ltd', email: 'ops@zebra.example', note: 'festival rig', days: 30, seats: 2 });
+    assert.strictEqual(r.status, 200); assert.ok(r.json.key && r.json.id);
+    const raw = fsT.readFileSync(dataFile, 'utf8');
+    assert.ok(!raw.includes('Zebra') && !raw.includes('zebra.example') && !raw.includes('festival'), 'customer details must be encrypted at rest');
+    assert.ok(!raw.includes(r.json.key) && !raw.includes(r.json.key.split('.')[2]), 'the key must not be stored');
+    const l = (await call('GET', '/admin/licenses')).json;
+    assert.strictEqual(l.licenses.length, 1);
+    assert.deepStrictEqual([l.licenses[0].name, l.licenses[0].email, l.licenses[0].note, l.licenses[0].plan, l.licenses[0].seats, l.licenses[0].state], ['Zebra Sound Ltd', 'ops@zebra.example', 'festival rig', 'pro', 2, 'active']);
+    assert.ok(!JSON.stringify(l).includes(r.json.key.split('.')[2]));
+    assert.strictEqual((await call('GET', '/admin/licenses', null, 'y'.repeat(40))).status, 401);
+    assert.strictEqual((await call('GET', '/admin/licenses', null, '')).status, 401);
+  });
+});
+
+test('management: a revoked key cannot be activated and says so; restoring it works again; a seat can be freed by the admin', async () => {
+  await withServer(async ({ call }) => {
+    const k = (await call('POST', '/issue', { plan: 'pro', name: 'Ann', days: 30, seats: 2 })).json;
+    const A = 'AAAA-1111-BBBB-2222', B = 'CCCC-3333-DDDD-4444';
+    assert.strictEqual((await call('POST', '/activate', { key: k.key, machine: A }, '')).status, 200);
+    let s = (await call('POST', '/status', { key: k.key, machine: A }, '')).json;
+    assert.deepStrictEqual([s.ok, s.revoked, s.devices, s.limit, s.thisComputer, s.expired], [true, false, 1, 2, true, false]);
+    assert.strictEqual((await call('POST', '/admin/licenses/' + k.id + '/revoke', { reason: 'refund' })).status, 200);
+    const refused = await call('POST', '/activate', { key: k.key, machine: B }, '');
+    assert.strictEqual(refused.status, 403); assert.match(refused.json.error, /revoked/);
+    assert.strictEqual((await call('POST', '/status', { key: k.key, machine: A }, '')).json.revoked, true);
+    let row = (await call('GET', '/admin/licenses')).json.licenses[0];
+    assert.deepStrictEqual([row.state, row.reason, row.devices], ['revoked', 'refund', [A]]);
+    assert.strictEqual((await call('POST', '/admin/licenses/' + k.id + '/restore', {})).status, 200);
+    assert.strictEqual((await call('POST', '/activate', { key: k.key, machine: B }, '')).status, 200);
+    assert.strictEqual((await call('DELETE', '/admin/licenses/' + k.id + '/devices/' + A)).status, 200);
+    assert.strictEqual((await call('DELETE', '/admin/licenses/' + k.id + '/devices/' + A)).status, 404);
+    row = (await call('GET', '/admin/licenses')).json.licenses[0]; assert.deepStrictEqual(row.devices, [B]);
+    assert.strictEqual((await call('POST', '/admin/licenses/FFFFFFFFFFFF/revoke', {})).status, 404);
+    assert.strictEqual((await call('POST', '/admin/licenses/..%2F..%2Fetc/revoke', {})).status, 404);
+    assert.strictEqual((await call('POST', '/status', { key: 'not.a.key', machine: A }, '')).status, 400);
+    const st = (await call('GET', '/admin/stats')).json; assert.deepStrictEqual([st.total, st.active, st.revoked, st.devices, st.plans.pro], [1, 1, 0, 1, 1]);
+  });
+});
+
+test('management: every action is in the audit trail without keys or names, and a changed line is detected', async () => {
+  await withServer(async ({ call, dataFile }) => {
+    const k = (await call('POST', '/issue', { plan: 'pro', name: 'Secret Name', days: 1 })).json;
+    await call('POST', '/admin/licenses/' + k.id + '/revoke', { reason: 'test' }); await call('GET', '/admin/licenses', null, 'z'.repeat(40));
+    const a = (await call('GET', '/admin/audit?limit=10')).json.entries;
+    assert.deepStrictEqual(a.map(e => e.action), ['auth.denied', 'license.revoke', 'license.issue']);
+    const log = fsT.readFileSync(dataFile + '.audit.log', 'utf8'); assert.ok(!log.includes('Secret Name') && !log.includes(k.key.split('.')[2]) && !log.includes(TOKEN));
+    assert.deepStrictEqual((await call('GET', '/admin/audit/verify')).json.chain, { ok: true, entries: 3 });
+    fsT.writeFileSync(dataFile + '.audit.log', log.replace('license.revoke', 'license.restore'));
+    const v = (await call('GET', '/admin/audit/verify')).json.chain; assert.strictEqual(v.ok, false); assert.strictEqual(v.brokenAt, 2);
+  });
+});
+
+test('management: the page is served with a strict policy and nothing secret; wrong tokens are slowed down; unknown paths and methods are refused', async () => {
+  await withServer(async ({ call }) => {
+    const page = await call('GET', '/admin/', null, '');
+    assert.strictEqual(page.status, 200); assert.match(page.headers.get('content-security-policy'), /default-src 'none'/); assert.strictEqual(page.headers.get('x-frame-options'), 'DENY');
+    assert.ok(page.text.includes('Licence management') && !page.text.includes(TOKEN) && !/<script>[^<]/.test(page.text) && !/ on\w+="/.test(page.text), 'no inline script or handler');
+    for (const f of ['/admin/app.js', '/admin/style.css']) assert.strictEqual((await call('GET', f, null, '')).status, 200);
+    assert.strictEqual((await call('GET', '/admin/../server.js', null, '')).status, 404);
+    assert.strictEqual((await call('GET', '/nothing')).status, 404); assert.strictEqual((await call('GET', '/issue')).status, 405);
+    assert.strictEqual((await call('POST', '/issue', null)).status, 400);
+    let last = 0; for (let i = 0; i < 12; i++) last = (await call('GET', '/admin/stats', null, 'w'.repeat(40))).status;
+    assert.strictEqual(last, 429);
+  });
+});
+
+test('framework: routes with parameters, the body limit, the limiter window', async () => {
+  const app = createApp({ maxBody: 16 }); app.post('/a/:x', async c => c.json(200, { x: c.params.x, b: await c.body() }));
+  const srv = require('node:http').createServer(app.handler); await new Promise(r => srv.listen(0, '127.0.0.1', r)); const base = 'http://127.0.0.1:' + srv.address().port;
+  try {
+    let r = await fetch(base + '/a/hello%20there', { method: 'POST', body: '{"k":1}' }); assert.deepStrictEqual(await r.json(), { x: 'hello there', b: { k: 1 } });
+    r = await fetch(base + '/a/1', { method: 'POST', body: JSON.stringify({ long: 'x'.repeat(64) }) }); assert.strictEqual(r.status, 413);
+    r = await fetch(base + '/a/1', { method: 'POST', body: '[1]' }); assert.strictEqual(r.status, 400);
+    r = await fetch(base + '/a/%E0%A4%A', { method: 'POST', body: '{}' }); assert.strictEqual(r.status, 404);
+  } finally { await new Promise(r => srv.close(r)); }
+  let t = 0; const lim = rateLimiter({ now: () => t }); assert.ok(lim.allow('k', 2).ok && lim.allow('k', 2).ok); const no = lim.allow('k', 2); assert.ok(!no.ok && no.retryAfter === 60); t = 60000; assert.ok(lim.allow('k', 2).ok);
+});

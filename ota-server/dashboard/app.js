@@ -52,10 +52,10 @@
     return { version, map: version ? found[version] : {} };
   }
   // same shape as scripts/make-update.js: files { key: { name, url, size, sha256 } }
-  function buildManifest({ version, channel, notes, map, files, base, released }) {
+  function buildManifest({ version, channel, notes, map, files, base, released, features = [] }) {   // features: releases/features.json's list (WHAT'S NEW in the console), the same field scripts/make-update.js writes
     const byName = Object.fromEntries(files.map(f => [f.name, f])), out = {};
     for (const [key, name] of Object.entries(map)) { const f = byName[name]; if (name && f) out[key] = { name, url: base.replace(/\/+$/, '') + '/releases/' + encodeURIComponent(name), size: f.size, sha256: f.sha256 }; }
-    return { product: 'audio-mixer', version, channel, released, notes: notes.map(s => s.trim()).filter(Boolean), files: out };
+    return { product: 'audio-mixer', version, channel, released, notes: notes.map(s => s.trim()).filter(Boolean), features: Array.isArray(features) ? features : [], files: out };
   }
   // audit log: readable names and a one-line summary of the details of an entry
   const ACTIONS = { 'file.upload': 'Upload file', 'file.delete': 'Delete file', 'manifest.publish': 'Publish', 'manifest.rollback': 'Roll back', 'manifest.unpublish': 'Unpublish', 'files.verify': 'Verify files', 'auth.denied': 'Sign-in refused', 'admin.rate_limited': 'Rate limited', 'session.open': 'Dashboard opened', 'audit.export': 'Audit exported' };
@@ -164,9 +164,16 @@
   function publish() {
     const g = guess(S.files), channel = h('input', { type: 'text', value: 'stable', list: 'chs', 'aria-label': 'Channel' }), version = h('input', { type: 'text', value: g.version || '', 'aria-label': 'Version' });
     const notes = h('textarea', { 'aria-label': 'Notes', placeholder: 'One line per note shown to the user' }), key = h('input', { type: 'file', accept: '.pem,text/plain', 'aria-label': 'Vendor private key' });
+    let features = []; const feat = h('input', { type: 'file', accept: '.json,application/json', 'aria-label': 'Feature feed' }), featNote = h('span', { class: 'muted' }, ' none chosen: the manifest carries an empty feed');
+    feat.addEventListener('change', async () => {
+      features = []; const f = feat.files && feat.files[0]; if (!f) { featNote.textContent = ' none chosen: the manifest carries an empty feed'; upd(); return; }
+      try { const j = JSON.parse(await f.text()); if (!Array.isArray(j.features)) throw new Error('no "features" list in it'); features = j.features; featNote.textContent = ' ' + features.length + ' entries'; }
+      catch (e) { feat.value = ''; featNote.textContent = ' not a feature feed: ' + e.message; }
+      upd();
+    });
     const force = h('input', { type: 'checkbox' }), preview = h('pre', null, 'Choose the files to see the manifest.'), result = h('div');
     const maps = PLATFORMS.map(p => { const s = h('select', { 'aria-label': p.label }, h('option', { value: '' }, '— not offered —'), S.files.filter(f => p.re.test(f.name)).map(f => h('option', { value: f.name }, f.name))); s.value = g.map[p.key] || ''; return [p, s]; });
-    const manifest = () => buildManifest({ version: version.value.trim(), channel: channel.value.trim(), notes: notes.value.split('\n'), map: Object.fromEntries(maps.map(([p, s]) => [p.key, s.value]).filter(x => x[1])), files: S.files, base: base(), released: new Date().toISOString().slice(0, 10) });
+    const manifest = () => buildManifest({ version: version.value.trim(), channel: channel.value.trim(), notes: notes.value.split('\n'), map: Object.fromEntries(maps.map(([p, s]) => [p.key, s.value]).filter(x => x[1])), files: S.files, base: base(), released: new Date().toISOString().slice(0, 10), features });
     const upd = () => { preview.textContent = JSON.stringify(manifest(), null, 2); };
     [channel, version, notes, ...maps.map(x => x[1])].forEach(e => { e.addEventListener('input', upd); e.addEventListener('change', upd); }); upd();
     const go = h('button', { class: 'btn primary', onclick: async () => {
@@ -183,6 +190,7 @@
       h('datalist', { id: 'chs' }, h('option', { value: 'stable' }), h('option', { value: 'beta' }), Object.keys(S.config.channels).map(c => h('option', { value: c }))),
       h('div', { class: 'grid' }, h('label', null, 'Channel', channel), h('label', null, 'Version', version)), h('label', null, 'Notes', notes),
       h('div', { class: 'grid' }, maps.map(([p, s]) => h('label', null, p.label, s))),
+      h('label', null, "Feature feed (releases/features.json: WHAT'S NEW in the console; optional)", feat, featNote),
       h('label', null, 'Vendor private key (private.pem, stays in this browser)', key), h('label', { style: 'display:flex;gap:8px;align-items:center' }, force, 'replace a version that is already published (same or older)'),
       h('h2', null, 'Manifest preview'), preview, go, result);
   }
