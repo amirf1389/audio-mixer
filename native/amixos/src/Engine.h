@@ -17,6 +17,7 @@
 
 #include "audiomixer/dsp.hpp"
 #include "audiomixer/runtime.hpp"
+#include "audiomixer/master_chain.hpp"
 #include "vst3/vst3_host.hpp"
 #include "vst2/vst2_host.hpp"
 #include "record/recorder.hpp"
@@ -180,6 +181,12 @@ class Engine : public QObject {
   void setSampleSource(am::Runtime::ExtraSource* s) { sources_.d.store(s); }
   void setMeasureIo(am::Runtime::Tap* t, am::Runtime::ExtraSource* s) { taps_.c.store(t); sources_.e.store(s); }
   // 360 AUDIO: a strip around the head (headphones). az degrees (0 front, 90 right), el -90..90, dist metres, spread 0..1
+  // MASTER CHAIN: the PROGRAM EQ (strip index -1 in setEq / eqBand / setGraphicEq: the RTA EQ page's own rack) and MASTERING after it
+  Q_INVOKABLE QVariantMap mastering() const;                       // {eqOn, on, low, air, thr, ratio, attack, release, makeup, drive, gain, preset}
+  Q_INVOKABLE void setMastering(const QVariantMap& m);             // any subset of those keys
+  Q_INVOKABLE QStringList masteringPresets() const;
+  Q_INVOKABLE void applyMasteringPreset(const QString& name);
+  Q_INVOKABLE double masteringReductionDb() const { return master_.reductionDb(); }
   Q_INVOKABLE void setSpatial(int strip, bool on, double az, double el, double dist, double spread);
   Q_INVOKABLE QVariantMap spatial(int strip) const;
   // OUTPUT STAGE + PROFILER (SOUND CARD page): DC removal before the limiter, TPDF dither for 16 / 24-bit devices, block-time figures in telemetry
@@ -350,6 +357,7 @@ class Engine : public QObject {
   void devicesChanged();
   void hotplug(bool added, const QString& what);   // a device appeared (added) or went away
   void stripsChanged();
+  void masterChainChanged();
   void metersChanged();
   void busesChanged();
   void groupsChanged();
@@ -375,6 +383,7 @@ class Engine : public QObject {
   void reloadAllVst();                                    // after open (new rate / block)
   struct StripUi { bool spOn = false; double spAz = 0, spEl = 0, spDist = 1, spSpread = 0; QString name; double db = 0, pan = 0; bool mute = false, solo = false; am::dsp::Channel dsp{48000}; SendUi sends[kBuses]; int dca = 0; unsigned muteGroups = 0; int color = 0; PluginUi plugins[kPluginSlots]; bool automix = false; double amWeight = 1; bool link = false; double trimDb = 0; int eqPreset = 0; };
   std::vector<QJsonObject> history_; int histPos_ = -1; bool restoring_ = false; QTimer histTimer_; QJsonObject abOther_; QString abSlot_ = "A";
+  am::MasterChain master_; am::MasterChain::Params mp_; QString masterPreset_; void pushMaster();
   int partner(int i) const { return (i ^ 1) < kStrips ? (i ^ 1) : -1; }
   void applyPluginStage(int strip, const QString& kind, bool on);   // a built-in stage follows its slot
   struct BusUi { QString name; double db = 0, returnDb = -60; bool mute = false; QString fxKind; std::unique_ptr<am::fx::Effect> fx; double fxMix = 1; bool fxBypass = false; std::map<QString, double> fxValues; int fxPreset = 0; };

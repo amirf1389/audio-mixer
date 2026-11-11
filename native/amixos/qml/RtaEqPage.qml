@@ -14,7 +14,8 @@ Flickable {
     property string view: "diamond"          // diamond | faders | both
     property bool rtaOn: true
     property bool frozen: false
-    property int strip: engine.selectedStrip
+    property bool program: true                 // the page's own rack: the PROGRAM EQ on the master (false = the selected channel's EQ)
+    property int strip: program ? -1 : engine.selectedStrip
     property var gains: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     property var spec: []
     property string presetName: ""
@@ -47,11 +48,11 @@ Flickable {
     function setBand(b, v) { const e = engine.eqBand(strip, b); const g = Math.round(Math.max(-12, Math.min(12, v)) * 2) / 2; band = b; engine.setEq(strip, b, g === 0 && e.type <= 1 ? 0 : (e.type > 0 ? e.type : 1), e.type > 0 ? e.freq : bands[b], e.type > 0 ? e.q : 1.41, g); presetName = "" }
     function loadPreset(name) { for (let i = 0; i < presets.length; ++i) if (presets[i].n === name) { apply(presets[i].g); presetName = name; return } }
     function dbText(v) { return (v > 0 ? "+" : "") + Number(v).toFixed(1) + "dB" }
-    Component.onCompleted: { engine.setScopeStrip(strip); reload() }
-    onStripChanged: { engine.setScopeStrip(strip); reload() }
+    Component.onCompleted: { if (strip >= 0) engine.setScopeStrip(strip); reload() }
+    onStripChanged: { if (strip >= 0) engine.setScopeStrip(strip); reload() }
     onBandChanged: bandNow = engine.eqBand(strip, band)
     Connections { target: engine; function onStripsChanged() { page.reload() } function onPresetsChanged() { page.slotTick++ } }
-    Timer { interval: 16; running: page.visible && page.rtaOn && !page.frozen; repeat: true; onTriggered: { page.spec = engine.spectrum(2); rta.requestPaint() } }
+    Timer { interval: 16; running: page.visible && page.rtaOn && !page.frozen; repeat: true; onTriggered: { page.spec = engine.spectrum(page.program ? 0 : 2); rta.requestPaint() } }
     component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; property color offColor: Theme.ov(0.08); signal clicked(); implicitWidth: bl.implicitWidth + 16; implicitHeight: 22; radius: 4; color: on ? onColor : offColor; border.color: on ? onColor : Theme.lineSoft
         Text { id: bl; anchors.centerIn: parent; text: label; color: parent.on ? "#000" : Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
     ColumnLayout {
@@ -64,7 +65,10 @@ Flickable {
             ColumnLayout { id: hdr; anchors.fill: parent; anchors.margins: 10; spacing: 6
                 RowLayout { Layout.fillWidth: true; spacing: 8
                     Text { text: i18n.t("◭ 10-BAND PROGRAM BUS EQ & DIAMOND RTA", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
-                    Text { text: i18n.t("CH ", i18n.lang) + (page.strip + 1); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
+                    Rectangle { implicitWidth: rackT.implicitWidth + 16; implicitHeight: 20; radius: 4; color: page.program ? Theme.orange : Theme.ov(0.08); border.color: Theme.lineSoft
+                        Text { id: rackT; anchors.centerIn: parent; text: page.program ? i18n.t("EQ RACK: PROGRAM (MASTER)", i18n.lang) : i18n.t("EQ RACK: CHANNEL", i18n.lang); color: page.program ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                        MouseArea { anchors.fill: parent; onClicked: page.program = !page.program } }
+                    Text { visible: !page.program; text: i18n.t("CH ", i18n.lang) + (page.strip + 1); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
                     Item { Layout.fillWidth: true }
                     Text { text: i18n.t("PAGES:", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; font.letterSpacing: 2 }
                     Btn { label: i18n.t("PAGE 1: DIAMOND + FFT RTA", i18n.lang); on: page.view === "diamond"; onClicked: page.view = "diamond" }
@@ -77,7 +81,7 @@ Flickable {
                         ToolTip.visible: ch.hovered; ToolTip.text: i18n.t("Load custom slot 1 (the user profile)", i18n.lang); HoverHandler { id: ch } }
                     Btn { label: i18n.t("💾 SAVE CUSTOM", i18n.lang); offColor: Qt.rgba(0, 0.95, 1, 0.14); onClicked: engine.saveGeqSlot(1, "Custom EQ", page.gains) }
                     Btn { label: i18n.t("ANIX W-SHAPE", i18n.lang); onColor: Theme.amber; offColor: Qt.rgba(0.984, 0.749, 0.141, 0.18); on: page.presetName === "Anix W Shape"; onClicked: page.loadPreset("Anix W Shape") }
-                    ComboBox { id: presetBox; implicitWidth: 290; implicitHeight: 22; font.family: Theme.mono; font.pixelSize: 8; displayText: page.presetName ? page.presetName : "Standard + Mic Presets (30+)"
+                    Combo { id: presetBox; implicitWidth: 290; implicitHeight: 22; font.family: Theme.mono; font.pixelSize: 8; displayText: page.presetName ? page.presetName : "Standard + Mic Presets (30+)"
                         model: { const l = []; for (let i = 0; i < page.presets.length; ++i) l.push((i < 2 ? "★ " : "") + page.presets[i].n); return l }
                         onActivated: function (i) { page.loadPreset(page.presets[i].n) } }
                     Btn { label: i18n.t("FLAT", i18n.lang); onClicked: { page.apply([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]); page.presetName = "Flat" } } } } }
@@ -144,7 +148,7 @@ Flickable {
                     Text { text: i18n.t("FREQUENCY  ", i18n.lang) + Math.round(page.bandNow.freq) + i18n.t(" Hz", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                     Text { text: "Q  " + Number(page.bandNow.q).toFixed(2) + i18n.t("  (bandwidth ", i18n.lang) + (page.bandNow.q > 0 ? (1.44 / page.bandNow.q).toFixed(2) : "-") + i18n.t(" oct)", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                     Text { text: i18n.t("GAIN  ", i18n.lang) + page.dbText(page.bandNow.gainDb); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
-                    ComboBox { Layout.fillWidth: true; implicitHeight: 24; font.family: Theme.mono; font.pixelSize: 8; model: page.typeNames; currentIndex: page.bandNow.type; onActivated: page.setParam(currentIndex, page.bandNow.freq, page.bandNow.q, page.bandNow.gainDb) }
+                    Combo { Layout.fillWidth: true; implicitHeight: 24; font.family: Theme.mono; font.pixelSize: 8; model: page.typeNames; currentIndex: page.bandNow.type; onActivated: page.setParam(currentIndex, page.bandNow.freq, page.bandNow.q, page.bandNow.gainDb) }
                     Slider { Layout.fillWidth: true; from: Math.log(20); to: Math.log(20000); value: Math.log(Math.max(20, page.bandNow.freq)); onMoved: page.setParam(page.bandNow.type || 1, Math.exp(value), page.bandNow.q, page.bandNow.gainDb) }
                     Slider { Layout.fillWidth: true; from: 0.1; to: 12; value: page.bandNow.q; onMoved: page.setParam(page.bandNow.type || 1, page.bandNow.freq, value, page.bandNow.gainDb) }
                     Slider { Layout.fillWidth: true; from: -12; to: 12; stepSize: 0.5; value: page.bandNow.gainDb; onMoved: page.setParam(page.bandNow.type || 1, page.bandNow.freq, page.bandNow.q, value) } }
@@ -178,6 +182,6 @@ Flickable {
                                     Btn { label: i18n.t("SAVE", i18n.lang); implicitHeight: 18; onClicked: { engine.saveGeqSlot(modelData.slot, nameIn.text.length ? nameIn.text : modelData.name, page.gains); page.slotSel = modelData.slot; nameIn.text = "" } }
                                     Btn { label: i18n.t("DELETE", i18n.lang); implicitHeight: 18; offColor: Qt.rgba(1, 0.165, 0.373, 0.15); onClicked: { engine.clearGeqSlot(modelData.slot); if (page.slotSel === modelData.slot) page.slotSel = 0 } } } }
                             MouseArea { anchors.fill: parent; z: -1; onClicked: page.slotSel = modelData.slot } } } }
-                Text { Layout.fillWidth: true; text: i18n.t("The ten bands are the strip's own equaliser (peaking, Q 1.41 on the ISO centres), the same ten that TONE (EQ) and MIC EQ edit; the spectrum is the strip after its DSP, from the engine's analyser. Golden EQ and Anix W-Shape are the AmF X1 beta curves.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap } } }
+                Text { Layout.fillWidth: true; text: (page.program ? i18n.t("EQ RACK PROGRAM: ten bands of its own on the master (before MASTERING, the master fader and the limiter); the spectrum is the master. The microphone channels keep their own EQ on TONE (EQ) and MIC EQ. ", i18n.lang) : i18n.t("EQ RACK CHANNEL: the selected channel's own ten bands (the same that TONE (EQ) and MIC EQ edit); the spectrum is that strip after its DSP. ", i18n.lang)) + i18n.t("Golden EQ and Anix W-Shape are the AmF X1 beta curves.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap } } }
     }
 }

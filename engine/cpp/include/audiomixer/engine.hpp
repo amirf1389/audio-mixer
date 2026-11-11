@@ -137,6 +137,7 @@ class Mixer {
   void setBusLevel(int bus, double db);
   void setBusMute(int bus, bool on);
   void setBusReturn(int bus, double db);                     // -60 and below = none (default)
+  void setMasterProcessor(BusProcessor* p) { masterFx_ = p; }  // on the summed master (after the buses' returns and the extra source), before width, fader and limiter; nullptr = none
   void setBusProcessor(int bus, BusProcessor* p);            // nullptr = none; the caller keeps it alive while set
   void setWidth(double w);                                   // master stereo width: 0 mono, 1 as is, 2 wide (mid / side), before the master gain
   // AUTOMIX (gain sharing, Dugan-style): the member strips share one unity gain in proportion to their weighted input level, so an
@@ -180,7 +181,7 @@ class Mixer {
   int outBits_ = 0; bool dcOn_ = false; double dcX_[2] = {0, 0}, dcY_[2] = {0, 0}; std::uint32_t rng_ = 0x2545F491u;
   bool limOn_ = false; double limCeil_, limGain_ = 1, limReleaseMs_ = 100;
   ClipConfig clip_; Meter master_[2]; Loudness loudness_; PhaseResult phase_{0, 0, 0, 0, true};
-  Send sends_[kMaxStrips][kMaxBuses]{}; Bus buses_[kMaxBuses]; bool anySend_ = false;
+  Send sends_[kMaxStrips][kMaxBuses]{}; Bus buses_[kMaxBuses]; bool anySend_ = false; BusProcessor* masterFx_ = nullptr;
 };
 
 }  // namespace am

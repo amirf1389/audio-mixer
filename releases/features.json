@@ -8,10 +8,13 @@
       "items": [
         "ACOUSTICS page: log sine sweep and stepped sine (amplitude, phase, THD, THD+N), RTA to 1/48 octave with RMS averaging and level alignment, impulse response, ETC, RT60 / Topt, delay compensation, waterfall, spectrogram, room simulator, auto EQ with target curves (20 - 400 Hz) set on a strip or exported as REW / miniDSP text and JSON, mic calibration files, SPL offset, offline sweep WAV",
         "360 AUDIO: binaural placement of every strip for headphones (azimuth, elevation, distance, spread), also in the SDK (API v4)",
+        "RTA EQ has its own EQ rack on the master (PROGRAM EQ); TONE (EQ) stays the microphone channel EQ",
+        "MASTERING plug-in after the program EQ: low and air shelves, glue compressor, saturation, output into the limiter, six presets",
         "5.0 surround in the SDK (API v3): per-strip DEPTH, amix_mixer_process5",
         "Plug-in slots: 10 on BASIC, unlimited on PRO, STUDIO and MASTER",
         "Every console text follows the language menu: 21 languages with full interface tables",
-        "WHAT'S NEW feed with a NEW badge in the header, managed from the website's release manager"
+        "WHAT'S NEW feed with a NEW badge in the header, managed from the website's release manager",
+        "Windows: the colours load correctly (the theme was missing in the Windows build), drop-downs follow the theme, the update check has its TLS plug-in"
       ]
     }
   ]

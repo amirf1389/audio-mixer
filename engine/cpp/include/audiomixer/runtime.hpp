@@ -107,6 +107,7 @@ class Runtime {
   void setBusMute(int bus, bool on);
   void setBusReturn(int bus, double db);
   void setBusProcessor(int bus, BusProcessor* p);   // an effect on a bus (app/fx); keep it alive while set, detach with nullptr before deleting
+  void setMasterProcessor(BusProcessor* p);          // the master chain; the caller keeps it alive while set
   void setWidth(double w);                           // master stereo width 0..2
   void setAutomix(int strip, bool on, double weight);   // gain-sharing automixer membership
   void setAutoLevel(bool on, double targetLufs, double maxGainDb);

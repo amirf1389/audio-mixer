@@ -35,12 +35,20 @@ cp "$KIT/plugins/platforms/qwindows.dll" "$D/platforms/"; mkdir -p "$D/tls"; cp 
 cp -r "$KIT/qml/QtQml" "$KIT/qml/QtQuick" "$KIT/qml/Qt" "$D/qml/" 2>/dev/null || true
 rm -rf "$D/qml/QtQuick/Controls/Imagine" "$D/qml/QtQuick/Controls/Material" "$D/qml/QtQuick/Controls/Universal" "$D/qml/QtQuick/Controls/Windows" "$D/qml/QtQuick/Controls/designer" "$D/qml/QtQuick/Particles"
 printf '[Paths]\nPrefix = .\nPlugins = .\nQml2Imports = qml\n' > "$D/qt.conf"; cp "$ROOT/LICENSE" "$D/" 2>/dev/null || true
+# the driver folder and its documents travel with the program: the 32-bit ASIO DLL, the Steinberg ASIO licence / usage guidelines / change list, third-party licences
+mkdir -p "$D/drivers/asio" "$D/licenses"
+[ -f "$ROOT/releases/windows/AudioMixerASIO32.dll" ] && cp "$ROOT/releases/windows/AudioMixerASIO32.dll" "$D/drivers/asio/"
+for f in "LICENSE.txt" "Steinberg ASIO Licensing Agreement.pdf" "Steinberg ASIO Usage Guidelines.pdf" "changes.txt"; do [ -f "$ROOT/$f" ] && cp "$ROOT/$f" "$D/drivers/asio/"; done
+cp "$ROOT/drivers/asio/sdk/README.txt" "$D/drivers/asio/SDK-HEADERS.txt" 2>/dev/null || true; cp "$ROOT/drivers/vst3/sdk/LICENSE.txt" "$D/licenses/VST3-SDK-LICENSE.txt" 2>/dev/null || true
+cp "$ROOT"/licenses/* "$D/licenses/" 2>/dev/null || true; cp "$ROOT/Additional Terms & Conditions" "$D/licenses/Additional Terms and Conditions.txt" 2>/dev/null || true
 cat > "$D/README.txt" <<TXT
 AmF X1 by AMFB Audio $VER - Windows x64
   amixos.exe            the console (Qt 6 Quick): start this
   AmF X1.exe            the engine command line (--list-devices, --backend asio|wasapi|dsound, --update, --install-driver)
   amixos-daemon.exe     the engine as a local HTTP / WebSocket service for the Android remote (binds 127.0.0.1)
   AudioMixerASIO64.dll  the ASIO driver: register from an administrator prompt with  "AmF X1.exe" --install-driver
+  drivers\\asio\\         the 32-bit ASIO driver DLL and the Steinberg ASIO licence, usage guidelines and change list
+  licenses\\              third-party licences and the additional terms
   Qt6*.dll, platforms\\, imageformats\\, qml\\   the Qt $HOSTQT runtime (MinGW build) the console needs; keep them next to amixos.exe
 Data goes to %APPDATA%\\AMFB Audio\\AmF X1, cache to %LOCALAPPDATA%\\AMFB Audio\\AmF X1 (docs/install-layout.md). Unsigned: sign with scripts/sign-windows.js.
 TXT

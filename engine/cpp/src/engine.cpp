@@ -315,6 +315,7 @@ void Mixer::process(const float* const* in, std::size_t frames, float* outL, flo
       if (busOut) { if (busOut[2 * k]) std::copy(busL[k], busL[k] + n, busOut[2 * k] + done); if (busOut[2 * k + 1]) std::copy(busR[k], busR[k] + n, busOut[2 * k + 1] + done); }
     }
     if (extL && extR) for (std::size_t i = 0; i < n; ++i) { outL[done + i] += extL[done + i]; outR[done + i] += extR[done + i]; }   // the arrangement player, pre master
+    if (masterFx_) masterFx_->process(outL + done, outR + done, n);   // the master chain (program EQ, mastering)
     if (width_ != 1.0) for (std::size_t i = 0; i < n; ++i) { const float mid = 0.5f * (outL[done + i] + outR[done + i]), side = 0.5f * (outL[done + i] - outR[done + i]) * static_cast<float>(width_); outL[done + i] = mid + side; outR[done + i] = mid - side; }
     if (dcOn_) {   // DC blocker before the auto level and the limiter: y[n] = x[n] - x[n-1] + R y[n-1], R for 5 Hz
       const double R = 1.0 - 2 * kPi * 5.0 / fs_; float* ch[2] = {outL + done, outR + done};

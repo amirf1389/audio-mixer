@@ -43,7 +43,7 @@ std::unique_ptr<Backend> createBackend(const std::string& name) {
   return nullptr;
 }
 
-enum Op { kGain, kPan, kMute, kSolo, kMaster, kLimiter, kClipDb, kClear, kEq, kDelay, kPolarity, kXover, kChLimiter, kComp, kGate, kSend, kBusLevel, kBusMute, kBusReturn, kMonitor, kInRoute, kOutRoute, kTrim, kPeakHold, kBusFx, kWidth, kAutomix, kAutoLevel, kOutBits, kProfReset, kDcBlock, kSpatial };
+enum Op { kGain, kPan, kMute, kSolo, kMaster, kLimiter, kClipDb, kClear, kEq, kDelay, kPolarity, kXover, kChLimiter, kComp, kGate, kSend, kBusLevel, kBusMute, kBusReturn, kMonitor, kInRoute, kOutRoute, kTrim, kPeakHold, kBusFx, kWidth, kAutomix, kAutoLevel, kOutBits, kProfReset, kDcBlock, kSpatial, kMasterFx };
 
 Runtime::Runtime(int strips) : mixer_(strips, 48000) { std::memset(&pub_, 0, sizeof pub_); }
 Runtime::~Runtime() { stop(); }
@@ -103,6 +103,7 @@ void Runtime::resetProfiler() { post({kProfReset, 0, 0, 0, 0}); }
 void Runtime::setAutomix(int s, bool on, double w) { post({kAutomix, s, on ? 1.0 : 0.0, w, 0}); }
 void Runtime::setAutoLevel(bool on, double t, double m) { post({kAutoLevel, on ? 1 : 0, t, m, 0}); }
 void Runtime::setBusProcessor(int b, BusProcessor* p) { Cmd c{kBusFx, b, 0, 0, 0}; c.p = p; post(c); }
+void Runtime::setMasterProcessor(BusProcessor* p) { Cmd c{kMasterFx, 0, 0, 0, 0}; c.p = p; post(c); }
 void Runtime::setWidth(double w) { post({kWidth, 0, w, 0, 0}); }
 void Runtime::setInserts(int strip, std::shared_ptr<const InsertChain> chain) { if (strip >= 0 && strip < kMaxStrips) std::atomic_store(&inserts_[strip], std::move(chain)); }
 void Runtime::setTrimDb(int strip, double db) { if (strip < 0 || strip >= kMaxStrips) return; post({kTrim, strip, std::pow(10.0, std::clamp(db, -24.0, 24.0) / 20), 0, 0}); }
@@ -143,6 +144,7 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
       case kInRoute: inRoute_[c.a] = c.b; break;
       case kOutRoute: outRoute_[c.a] = c.b; break;
       case kTrim: trim_[c.a] = c.x; break;
+      case kMasterFx: mixer_.setMasterProcessor(static_cast<BusProcessor*>(c.p)); break;
       case kBusFx: mixer_.setBusProcessor(c.a, static_cast<BusProcessor*>(c.p)); break;
       case kWidth: mixer_.setWidth(c.x); break;
       case kAutomix: mixer_.setAutomix(c.a, c.x != 0, c.y); break;

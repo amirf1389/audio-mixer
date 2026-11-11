@@ -26,7 +26,7 @@ Flickable {
             RowLayout {
                 Layout.fillWidth: true; spacing: 8
                 Text { text: i18n.t("CHANNEL", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9 }
-                ComboBox {
+                Combo {
                     implicitWidth: 150; model: engine.strips; currentIndex: page.strip
                     displayText: engine.stripState[currentIndex] ? engine.stripState[currentIndex].name : ""
                     delegate: ItemDelegate { width: parent.width; text: engine.stripState[index] ? engine.stripState[index].name : index; font.family: Theme.mono }

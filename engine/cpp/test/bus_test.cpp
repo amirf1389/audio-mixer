@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstdio>
 #include <vector>
+#include "audiomixer/master_chain.hpp"
 static int fails = 0;
 #define CHECK(c, w) do { if (!(c)) { std::fprintf(stderr, "FAIL %s (%d)\n", w, __LINE__); ++fails; } } while (0)
 static bool near(double a, double b, double t) { return std::fabs(a - b) <= t; }
@@ -42,5 +43,10 @@ int main() {
     std::size_t pl = 0, pr = 0; for (std::size_t i = 0; i < n; ++i) { if (std::fabs(L[i]) > std::fabs(L[pl])) pl = i; if (std::fabs(R[i]) > std::fabs(R[pr])) pr = i; }
     CHECK(pr == 100 && pl > pr + 25 && pl < pr + 40, "360: the far ear is 0.5 - 0.8 ms late"); CHECK(std::fabs(R[pr]) > 2 * std::fabs(L[pl]), "360: the far ear is quieter and duller");
     CHECK(q.spatial(0).on && !q.spatial(1).on, "360 getter"); }
-  if (fails) return 1; std::printf("bus_test: ok (incl. 5.0 surround, 360 audio)\n"); return 0;
+  // 7. MASTER CHAIN: nothing switched on = untouched; +6 dB at 1 kHz on the program EQ doubles the 1 kHz sine; the mastering compressor pulls a loud master down and reports it
+  { am::Mixer m(2, fs); am::MasterChain mc; m.setMasterProcessor(&mc); m.process(in, n, L.data(), R.data()); CHECK(near(peak(L), 0.5 * c45, 1e-6), "master chain idle = untouched");
+    am::MasterChain::Params p; p.fs = fs; p.eq[5] = {am::dsp::FilterType::Peaking, 1000, 1.41, 6}; mc.set(p); m.process(in, n, L.data(), R.data()); m.process(in, n, L.data(), R.data()); CHECK(near(peak(L), 0.5 * c45 * 1.995, 0.01), "program EQ +6 dB at 1 kHz");
+    p.eq[5].type = am::dsp::FilterType::Off; p.on = true; p.thrDb = -20; p.ratio = 4; p.attackMs = 1; mc.set(p); m.process(in, n, L.data(), R.data()); m.process(in, n, L.data(), R.data());
+    CHECK(peak(L) < 0.5 * c45 * 0.7 && mc.reductionDb() > 3, "mastering compressor reduces and reports"); p.on = false; mc.set(p); m.process(in, n, L.data(), R.data()); CHECK(near(peak(L), 0.5 * c45, 1e-6), "mastering off = untouched"); }
+  if (fails) return 1; std::printf("bus_test: ok (incl. 5.0 surround, 360 audio, master chain)\n"); return 0;
 }
