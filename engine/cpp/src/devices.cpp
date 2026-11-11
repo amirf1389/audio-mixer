@@ -131,9 +131,9 @@ BOOL CALLBACK dsEnum(LPGUID guid, LPCSTR desc, LPCSTR, LPVOID ctx) {
 }
 void addDsound(std::vector<DeviceInfo>& out) { DsList r{&out, false}; DirectSoundEnumerateA(&dsEnum, &r); DsList c{&out, true}; DirectSoundCaptureEnumerateA(&dsEnum, &c); }
 
-void addAsio(std::vector<DeviceInfo>& out) {
+void addAsio(std::vector<DeviceInfo>& out, bool probe) {
   for (const auto& d : listAsioDrivers()) {
-    const AsioProbeInfo p = probeAsioDriver(d);   // a driver of the other bitness is not loaded: it comes back with error set and no channels
+    AsioProbeInfo p; if (probe) p = probeAsioDriver(d); else { p.inChannels = 2; p.outChannels = 2; }   // a driver of the other bitness is not loaded: it comes back with error set and no channels
     DeviceInfo info; info.backend = "asio"; info.id = d.name; info.name = d.bits == static_cast<int>(sizeof(void*) * 8) ? d.name : d.name + " (" + std::to_string(d.bits) + "-bit driver)";
     info.inChannels = static_cast<int>(p.inChannels); info.outChannels = static_cast<int>(p.outChannels);
     info.sampleRates = p.sampleRates;
@@ -209,14 +209,15 @@ std::string deviceFingerprint() {
   return f;
 }
 
-std::vector<DeviceInfo> listDevices() {
+std::vector<DeviceInfo> listDevices(bool probeAsio) {
+  (void)probeAsio;
   std::vector<DeviceInfo> v;
 #ifdef AM_HAVE_ALSA
   addAlsa(v);
 #endif
 #ifdef _WIN32
   addWasapi(v);
-  addAsio(v);
+  addAsio(v, probeAsio);
   addDsound(v);
 #endif
 #ifdef __APPLE__

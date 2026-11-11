@@ -17,7 +17,12 @@
         "WHAT'S NEW feed with a NEW badge in the header, managed from the website's release manager",
         "Windows: the colours load correctly (the theme was missing in the Windows build), drop-downs follow the theme, the update check has its TLS plug-in",
         "Boot animation with a soft chord on the master (each can be switched off on SETTINGS); factory setup: text fields follow the theme, the PIN can be changed again once set, the language list scrolls",
-        "Updates like a mixing console: a found update downloads (optionally by itself), INSTALL AND RESTART closes the console, installs silently and boots it again with UPDATED TO on the boot screen; the setup is checked against the signed manifest's sha256 again before it runs"
+        "Updates like a mixing console: a found update downloads (optionally by itself), INSTALL AND RESTART closes the console, installs silently and boots it again with UPDATED TO on the boot screen; the setup is checked against the signed manifest's sha256 again before it runs",
+        "Never stuck: sound-card scans and driver starts run beside the interface with a time limit; a driver that does not answer is left behind and the console carries on",
+        "SOFT RESTART in the header (Ctrl+Shift+R): rescan, restart the engine and replay the boot screen without closing the console",
+        "AMFB SIGNATURE sound (the house sound on the master), offered in the factory setup and on MASTERING",
+        "Equalizer APO: export and import of the EQ as its filter text, from the RTA EQ page",
+        "The mixer logo on the program, the window, the task bar, the installer and the shortcuts"
       ]
     }
   ]

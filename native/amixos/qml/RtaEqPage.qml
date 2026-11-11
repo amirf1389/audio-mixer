@@ -14,6 +14,7 @@ Flickable {
     property string view: "diamond"          // diamond | faders | both
     property bool rtaOn: true
     property bool frozen: false
+    property string apoNote: ""
     property bool program: true                 // the page's own rack: the PROGRAM EQ on the master (false = the selected channel's EQ)
     property int strip: program ? -1 : engine.selectedStrip
     property var gains: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
@@ -68,6 +69,11 @@ Flickable {
                     Rectangle { implicitWidth: rackT.implicitWidth + 16; implicitHeight: 20; radius: 4; color: page.program ? Theme.orange : Theme.ov(0.08); border.color: Theme.lineSoft
                         Text { id: rackT; anchors.centerIn: parent; text: page.program ? i18n.t("EQ RACK: PROGRAM (MASTER)", i18n.lang) : i18n.t("EQ RACK: CHANNEL", i18n.lang); color: page.program ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                         MouseArea { anchors.fill: parent; onClicked: page.program = !page.program } }
+                    Rectangle { implicitWidth: apoE.implicitWidth + 14; implicitHeight: 20; radius: 4; color: Theme.ov(0.08); border.color: Theme.lineSoft; Text { id: apoE; anchors.centerIn: parent; text: i18n.t("APO EXPORT", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                        MouseArea { anchors.fill: parent; onClicked: { const f = engine.exportApo(page.strip, ""); page.apoNote = f ? i18n.t("Equalizer APO file: ", i18n.lang) + f : i18n.t("could not write the file", i18n.lang) } } }
+                    Rectangle { implicitWidth: apoI.implicitWidth + 14; implicitHeight: 20; radius: 4; color: Theme.ov(0.08); border.color: Theme.lineSoft; Text { id: apoI; anchors.centerIn: parent; text: i18n.t("APO IMPORT", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                        MouseArea { anchors.fill: parent; onClicked: { const n = engine.importApo(page.strip, ""); page.apoNote = n ? n + i18n.t(" filters read from equalizer-apo.txt in the data folder", i18n.lang) : i18n.t("no equalizer-apo.txt with filters in the data folder", i18n.lang); page.reload() } } }
+                    Text { visible: page.apoNote !== ""; text: page.apoNote; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; elide: Text.ElideMiddle; Layout.maximumWidth: 320 }
                     Text { visible: !page.program; text: i18n.t("CH ", i18n.lang) + (page.strip + 1); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
                     Item { Layout.fillWidth: true }
                     Text { text: i18n.t("PAGES:", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; font.letterSpacing: 2 }

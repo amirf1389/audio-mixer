@@ -1,3 +1,5 @@
+#include <chrono>
+#include <thread>
 // A mix OS: the native console. Qt Quick interface (qml/) on the C++20 engine (Engine.h -> am::Runtime). No browser, no web runtime.
 //   amixos              the console
 //   amixos --smoke      offscreen: load the interface, open the null device, run one second, print the meters, exit 0 (the automated check)
@@ -34,6 +36,7 @@
 #include "samples/samples.hpp"
 #include <QHostAddress>
 #include <QSettings>
+#include <QIcon>
 #include "Update.h"
 #include "Measure.h"
 #include "measure/measure.hpp"
@@ -74,6 +77,7 @@ int main(int argc, char* argv[]) {
   app.setOrganizationDomain("amfb.audio");
   app.setApplicationName("A mix OS"); app.setApplicationDisplayName("AmF X1");
   app.setApplicationVersion(QStringLiteral(AMIX_VERSION));
+  app.setWindowIcon(QIcon(QStringLiteral(":/qt/qml/AmixOS/icons/amfx1.png")));   // the mixer logo in the title bar and the task bar
   QQuickStyle::setStyle("Fusion");   // the one stock style that draws from the application palette (set dark below); Basic ignores the palette and paints light grey boxes on Windows
 
   bool smoke = false; QString shots, lang;
@@ -174,6 +178,13 @@ int main(int argc, char* argv[]) {
       if (update.installAndRestart() || update.canInstall()) { std::fprintf(stderr, "amixos --smoke: install and restart must refuse without a verified download\n"); return 70; }
       { QSettings qs; qs.setValue("update/installing", QStringLiteral("0.0.1")); qs.sync(); } { Update u2(QStringLiteral(AMIX_VERSION)); if (u2.justUpdated() != QStringLiteral(AMIX_VERSION) || !u2.failedUpdate().isEmpty()) { std::fprintf(stderr, "amixos --smoke: the update was not recognised after the restart\n"); return 71; } }
       { QSettings qs; if (qs.contains("update/installing")) { std::fprintf(stderr, "amixos --smoke: the pending-update mark was not cleared\n"); return 72; } qs.setValue("update/installing", QStringLiteral("999.0")); qs.sync(); } { Update u3(QStringLiteral(AMIX_VERSION)); if (u3.failedUpdate() != "999.0" || !u3.justUpdated().isEmpty()) { std::fprintf(stderr, "amixos --smoke: a failed update was not reported\n"); return 73; } } }
+    { QElapsedTimer gt; gt.start(); const bool r = engine.guarded([] { std::this_thread::sleep_for(std::chrono::milliseconds(600)); return true; }, 120); if (r || gt.elapsed() > 450) { std::fprintf(stderr, "amixos --smoke: a stuck driver call was not left behind (%lld ms)\n", static_cast<long long>(gt.elapsed())); return 74; }
+      if (!engine.guarded([] { return true; }, 2000)) { std::fprintf(stderr, "amixos --smoke: a quick guarded call failed\n"); return 75; } }
+    { // EQUALIZER APO round trip on the program EQ; the signature sound preset
+      engine.setEq(-1, 0, 2, 80, 0.7, 3); engine.setEq(-1, 1, 1, 2500, 2, -4); const QString apo = engine.exportApo(-1, QDir::tempPath() + "/amixos-smoke-apo.txt"); engine.setEq(-1, 0, 0, 31.5, 1.41, 0); engine.setEq(-1, 1, 0, 63, 1.41, 0);
+      if (apo.isEmpty() || engine.importApo(-1, apo) != 2 || engine.eqBand(-1, 0).value("type").toInt() != 2 || std::fabs(engine.eqBand(-1, 1).value("gainDb").toDouble() + 4) > 0.05 || std::fabs(engine.eqBand(-1, 1).value("freq").toDouble() - 2500) > 1) { std::fprintf(stderr, "amixos --smoke: Equalizer APO export / import round trip failed\n"); return 76; }
+      QFile::remove(apo); engine.setEq(-1, 0, 0, 31.5, 1.41, 0); engine.setEq(-1, 1, 0, 63, 1.41, 0);
+      engine.applyMasteringPreset("AMFB SIGNATURE"); if (engine.mastering().value("preset").toString() != "AMFB SIGNATURE" || !engine.mastering().value("bassMonoOn").toBool()) { std::fprintf(stderr, "amixos --smoke: signature preset\n"); return 77; } QVariantMap so; so["on"] = false; so["preset"] = ""; so["bassMonoOn"] = false; so["exciterOn"] = false; engine.setMastering(so); }
     if (!measure.chime()) { std::fprintf(stderr, "amixos --smoke: the boot chord did not start on a running engine\n"); return 69; } measure.cancel();
     engine.setPlugin(4, 0, "comp"); if (!engine.channelParams(4).value("compOn").toBool() || engine.plugins(4)[0].toMap().value("kind").toString() != "comp") { std::fprintf(stderr, "amixos --smoke: plugin slot did not switch the compressor on\n"); return 21; }
     engine.setPluginBypass(4, 0, true); if (engine.channelParams(4).value("compOn").toBool()) { std::fprintf(stderr, "amixos --smoke: plugin bypass left the compressor on\n"); return 22; }

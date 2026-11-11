@@ -19,6 +19,9 @@ ApplicationWindow {
     LayoutMirroring.enabled: i18n.rtl
     Binding { target: Theme; property: "dark"; value: settings.darkTheme }
     LayoutMirroring.childrenInherit: true
+    // SOFT RESTART: the console starts over without closing: engine off, sound cards scanned again, the remembered device (or the best one) started, the page rebuilt, the boot screen shown
+    function softRestart() { engine.stop(); engine.refreshDevices(); if (!settings.startLastDevice()) engine.autoStart(settings.defaultFrames); const c = root.current; root.current = "home"; root.current = c; pageLoader.active = false; pageLoader.active = true; root.bootOn = settings.bootAnimation && !noBoot }
+    Shortcut { sequence: "Ctrl+Shift+R"; context: Qt.ApplicationShortcut; onActivated: root.softRestart() }
     function pageOf(id) { for (var i = 0; i < engine.pages.length; i++) if (engine.pages[i].id === id) return engine.pages[i]; return engine.pages[0] }
 
     ColumnLayout {
@@ -34,6 +37,12 @@ ApplicationWindow {
                 Item { Layout.fillWidth: true }
                 Rectangle { implicitWidth: statusText.implicitWidth + 20; implicitHeight: 24; radius: 12; color: engine.running ? Qt.rgba(0.063, 0.725, 0.506, 0.15) : Qt.rgba(0.984, 0.749, 0.141, 0.12); border.color: engine.running ? Theme.emerald : Theme.amber
                     Text { id: statusText; anchors.centerIn: parent; text: engine.running ? i18n.t("ENGINE ON • ", i18n.lang) + engine.backend.toUpperCase() : i18n.t("ENGINE OFF", i18n.lang); color: engine.running ? Theme.emerald : Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } }
+                Rectangle { visible: engine.busy; implicitWidth: busyT.implicitWidth + 20; implicitHeight: 24; radius: 12; color: Qt.rgba(0.984, 0.749, 0.141, 0.14); border.color: Theme.amber   // a scan or a driver start is running: the console stays usable
+                    Text { id: busyT; anchors.centerIn: parent; text: "⟳ " + i18n.t(engine.busyText(), i18n.lang) + " …"; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } }
+                Rectangle { implicitWidth: 26; implicitHeight: 26; radius: 13; color: Theme.cardRaised; border.color: Theme.line   // SOFT RESTART
+                    Text { anchors.centerIn: parent; text: "↻"; color: Theme.cyan; font.pixelSize: 14; font.bold: true }
+                    MouseArea { anchors.fill: parent; onClicked: root.softRestart() }
+                    ToolTip.visible: srH.hovered; ToolTip.text: i18n.t("SOFT RESTART (Ctrl+Shift+R): scan the sound cards and start the engine again without closing the console", i18n.lang); HoverHandler { id: srH } }
                 Rectangle {   // WHAT IS CONNECTED: the output's kind (headphones, speakers, interface ...) and the input's, with the channel counts
                     readonly property var io: { engine.running; engine.devices; return engine.ioInfo() }
                     visible: engine.running; implicitWidth: ioT.implicitWidth + 18; implicitHeight: 24; radius: 12; color: Theme.ov(0.06); border.color: Theme.lineSoft

@@ -11,6 +11,7 @@ Rectangle {
     objectName: "setupPage"
     property int step: 0
     property bool accepted: false
+    property bool signature: !settings.setupDone || engine.mastering().preset === "AMFB SIGNATURE"   // the house sound: on for a new console
     property bool termsAlert: false   // NEXT was pressed on TERMS without the tick: the box turns red and says why
     property string audioNote: ""
     readonly property var steps: ["WELCOME", "TERMS", "AUDIO", "CONSOLE", "OPERATOR", "UPDATES", "DONE"]
@@ -75,6 +76,9 @@ Rectangle {
                     RowLayout { spacing: 6; Text { text: i18n.t("SAMPLE RATE", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; Layout.preferredWidth: 110 } Repeater { model: [44100, 48000, 96000]; delegate: Btn { label: modelData / 1000 + i18n.t(" kHz", i18n.lang); on: settings.defaultRate === modelData; onClicked: settings.defaultRate = modelData } } }
                     RowLayout { spacing: 6; Text { text: i18n.t("BLOCK", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; Layout.preferredWidth: 110 } Repeater { model: [64, 128, 256, 512]; delegate: Btn { label: modelData + ""; on: settings.defaultFrames === modelData; onClicked: settings.defaultFrames = modelData } } Text { text: "(" + (settings.defaultFrames / settings.defaultRate * 1000).toFixed(1) + i18n.t(" ms; smaller = less latency, more load)", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
                     RowLayout { spacing: 6; Text { text: i18n.t("START PAGE", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; Layout.preferredWidth: 110 } Repeater { model: [["home", "HOME"], ["mixer", "MIXER"], ["io", "CONNECTIONS"]]; delegate: Btn { label: modelData[1]; on: settings.startPage === modelData[0]; onClicked: settings.startPage = modelData[0] } } }
+                    RowLayout { spacing: 6; Text { text: i18n.t("SOUND", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; Layout.preferredWidth: 110 }
+                        Btn { label: wiz.signature ? i18n.t("AMFB SIGNATURE: ON", i18n.lang) : i18n.t("AMFB SIGNATURE: OFF (FLAT)", i18n.lang); on: wiz.signature; onColor: Theme.orange; onClicked: wiz.signature = !wiz.signature }
+                        Text { text: i18n.t("the house sound on the master: firm bass, open air, gentle glue (MASTERING changes or removes it)", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; Layout.fillWidth: true; elide: Text.ElideRight } }
                     RowLayout { spacing: 6; Text { text: i18n.t("VU METERS", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; Layout.preferredWidth: 110 } Btn { label: settings.vuDefault ? i18n.t("ANALOGUE VU", i18n.lang) : i18n.t("BAR METERS", i18n.lang); on: settings.vuDefault; onClicked: settings.vuDefault = !settings.vuDefault } }
                     Rectangle { Layout.fillWidth: true; height: 1; color: Theme.lineSoft }
                     Text { text: i18n.t("LICENCE: ", i18n.lang) + engine.license.planName + " · " + engine.licensedChannels + i18n.t(" channels", i18n.lang) + (engine.license.state === "basic" ? i18n.t(" (free). Have a key? Paste it:", i18n.lang) : ""); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
@@ -115,6 +119,6 @@ Rectangle {
         RowLayout { spacing: 8
             Btn { label: i18n.t("BACK", i18n.lang); visible: wiz.step > 0; onClicked: wiz.step-- }
             Item { Layout.fillWidth: true }
-            Btn { label: wiz.step === 6 ? i18n.t("FINISH", i18n.lang) : i18n.t("NEXT", i18n.lang); on: wiz.step !== 1 || wiz.accepted; onColor: wiz.step === 6 ? Theme.emerald : Theme.amber; onClicked: { if (wiz.step === 1 && !wiz.accepted) { wiz.termsAlert = true; shake.restart(); return } wiz.termsAlert = false; if (wiz.step === 6) wiz.finished(); else wiz.step++ } } }
+            Btn { label: wiz.step === 6 ? i18n.t("FINISH", i18n.lang) : i18n.t("NEXT", i18n.lang); on: wiz.step !== 1 || wiz.accepted; onColor: wiz.step === 6 ? Theme.emerald : Theme.amber; onClicked: { if (wiz.step === 1 && !wiz.accepted) { wiz.termsAlert = true; shake.restart(); return } wiz.termsAlert = false; if (wiz.step === 6) { const has = engine.mastering().preset === "AMFB SIGNATURE"; if (wiz.signature && !has) engine.applyMasteringPreset("AMFB SIGNATURE"); else if (!wiz.signature && has) engine.setMastering({ on: false, preset: "" }); wiz.finished() } else wiz.step++ } } }
     }
 }

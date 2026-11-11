@@ -27,6 +27,8 @@ VIAddVersionKey "FileDescription" "AmF X1 setup"
 VIAddVersionKey "FileVersion" "${VERSION}"
 VIAddVersionKey "ProductVersion" "${VERSION}"
 VIAddVersionKey "LegalCopyright" "Copyright AMFB Audio. MIT License."
+!define MUI_ICON "..\..\native\amixos\win\amfx1.ico"
+!define MUI_UNICON "..\..\native\amixos\win\amfx1.ico"
 !define MUI_ABORTWARNING
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_LICENSE "..\..\LICENSE"

@@ -92,6 +92,7 @@ qt_add_qml_module(amixos
         qml/SettingsPage.qml
         qml/ComingPage.qml
     RESOURCES
+        icons/amfx1.png
         i18n/verified-22.json
         i18n/auto-58.json
         i18n/ui/fa.json

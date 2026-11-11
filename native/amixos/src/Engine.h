@@ -5,6 +5,7 @@
 #pragma once
 #include <algorithm>
 #include <QObject>
+#include <functional>
 #include <QSettings>
 #include <QTimer>
 #include <QVariantList>
@@ -110,6 +111,13 @@ class Engine : public QObject {
   // hotplug(added) fires; main() then auto-starts when the engine is idle and AUTO START is on. The running device vanishing stops the engine with a note.
   Q_PROPERTY(bool hotplugWatch READ hotplugWatch WRITE setHotplugWatch NOTIFY stateChanged)
   bool hotplugWatch() const { return hotplug_.isActive(); } void setHotplugWatch(bool on);
+  // NEVER STUCK: device scans and driver starts run on a worker while the interface keeps painting; a driver that does not answer in time is
+  // left behind (its thread is abandoned) and the console carries on: a scan falls back to the list without loading ASIO drivers, a start reports it.
+  bool guarded(std::function<bool()> work, int timeoutMs);
+  Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
+  bool busy() const { return scanning_ || opening_; }
+  Q_INVOKABLE QString busyText() const { return opening_ ? QStringLiteral("starting the sound card") : scanning_ ? QStringLiteral("looking for sound cards") : QString(); }
+  Q_SIGNAL void busyChanged();
   Q_INVOKABLE QVariantMap ioInfo() const;   // the running device: {backend, inName, inKind, inputs, outName, outKind, outputs, blockMs}; kinds: headphones, headset, speakers, microphone, line, digital, interface, bluetooth ...
   Q_INVOKABLE void simulateDevices(const QVariantList& devices);   // tests: replace the scanned list with this one (devicesChanged fires; the fingerprint poll is paused)
   Q_INVOKABLE void checkHotplug();                                 // one poll now
@@ -183,6 +191,10 @@ class Engine : public QObject {
   void setMeasureIo(am::Runtime::Tap* t, am::Runtime::ExtraSource* s) { taps_.c.store(t); sources_.e.store(s); }
   // 360 AUDIO: a strip around the head (headphones). az degrees (0 front, 90 right), el -90..90, dist metres, spread 0..1
   // MASTER CHAIN: the PROGRAM EQ (strip index -1 in setEq / eqBand / setGraphicEq: the RTA EQ page's own rack) and MASTERING after it
+  // EQUALIZER APO: the filter text that Equalizer APO (the open-source system-wide equaliser for Windows) reads and writes: "Preamp: -3 dB",
+  // "Filter 1: ON PK Fc 100 Hz Gain 3 dB Q 1.41" (PK, LSC, HSC, LPQ, HPQ, NO). strip -1 = the PROGRAM EQ. Empty path = equalizer-apo.txt in the data folder.
+  Q_INVOKABLE QString exportApo(int strip, const QString& path);   // returns the file written ("" on failure)
+  Q_INVOKABLE int importApo(int strip, const QString& path);       // returns how many filters were taken (0 = none / unreadable)
   Q_INVOKABLE QVariantMap mastering() const;                       // {eqOn, on, low, air, thr, ratio, attack, release, makeup, drive, gain, preset}
   Q_INVOKABLE void setMastering(const QVariantMap& m);             // any subset of those keys
   Q_INVOKABLE QStringList masteringPresets() const;
@@ -387,6 +399,7 @@ class Engine : public QObject {
   void reloadAllVst();                                    // after open (new rate / block)
   struct StripUi { bool spOn = false; double spAz = 0, spEl = 0, spDist = 1, spSpread = 0; QString name; double db = 0, pan = 0; bool mute = false, solo = false; am::dsp::Channel dsp{48000}; SendUi sends[kBuses]; int dca = 0; unsigned muteGroups = 0; int color = 0; PluginUi plugins[kPluginSlots]; bool automix = false; double amWeight = 1; bool link = false; double trimDb = 0; int eqPreset = 0; };
   std::vector<QJsonObject> history_; int histPos_ = -1; bool restoring_ = false; QTimer histTimer_; QJsonObject abOther_; QString abSlot_ = "A";
+  bool scanning_ = false, opening_ = false, timedOut_ = false;
   am::MasterChain master_; am::MasterChain::Params mp_; QString masterPreset_; void pushMaster();
   int partner(int i) const { return (i ^ 1) < kStrips ? (i ^ 1) : -1; }
   void applyPluginStage(int strip, const QString& kind, bool on);   // a built-in stage follows its slot

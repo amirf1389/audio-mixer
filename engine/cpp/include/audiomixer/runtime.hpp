@@ -60,7 +60,8 @@ struct DeviceInfo {
 // WHAT A DEVICE IS, from the system's own form factor when it has one (WASAPI: 1 speakers, 2 line, 3 headphones, 4 microphone, 5 headset,
 // 6 handset, 8 S/PDIF, 9 display audio; -1 = not known) and otherwise from the name. capture: the entry is an input.
 std::string classifyDevice(const std::string& backend, const std::string& name, int formFactor, bool capture);
-std::vector<DeviceInfo> listDevices();                       // every device of every backend built in ("null" last)
+std::vector<DeviceInfo> listDevices(bool probeAsio = true);   // probeAsio false: ASIO drivers are listed from the registry without loading them (2 in / 2 out assumed): the list a hung driver cannot block
+                       // every device of every backend built in ("null" last)
 // A cheap signature of what is plugged in (WASAPI / DirectSound endpoint ids + ASIO driver names from the registry, ALSA card names): no driver
 // is loaded, so it can be polled every second or two for hot-plug; when it changes, call listDevices().
 std::string deviceFingerprint();
