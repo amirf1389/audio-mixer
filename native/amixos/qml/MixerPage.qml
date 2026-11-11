@@ -447,6 +447,7 @@ Item {
                 ColumnLayout {
                     anchors.fill: parent; anchors.margins: 8; spacing: 6
                     Text { Layout.alignment: Qt.AlignHCenter; text: i18n.t("MASTER", i18n.lang); color: Theme.orange; font.family: Theme.mono; font.pixelSize: 10; font.bold: true; font.letterSpacing: 2 }
+                    VuMeter { objectName: "masterVu"; visible: page.vuMode; Layout.fillWidth: true; Layout.preferredHeight: 60; vuDb: engine.telemetry.masterVuDb === undefined ? -120 : engine.telemetry.masterVuDb; refDb: engine.vuRefDb; peakLamp: engine.telemetry.masterClip === true; label: i18n.t("VU  MASTER", i18n.lang) }
                     Rectangle { objectName: "masterEqBtn"; Layout.alignment: Qt.AlignHCenter; implicitWidth: 64; implicitHeight: 18; radius: 4; color: engine.mastering().eqOn ? Theme.orange : Theme.ov(0.08); border.color: Theme.orange   // RTA EQ: the main (master) equaliser
                         Text { anchors.centerIn: parent; text: i18n.t("RTA EQ", i18n.lang); color: engine.mastering().eqOn ? "#000" : Theme.orange; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                         MouseArea { anchors.fill: parent; onClicked: page.go("rtaeq") } }
@@ -459,7 +460,6 @@ Item {
                     Rectangle { objectName: "analyzerBtn"; Layout.alignment: Qt.AlignHCenter; implicitWidth: 64; implicitHeight: 18; radius: 4; color: Theme.ov(0.08); border.color: Theme.cyan   // AMFB MASTER ANALYZER
                         Text { anchors.centerIn: parent; text: i18n.t("ANALYZER", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                         MouseArea { anchors.fill: parent; onClicked: page.Window.window.openAnalyzer() } }
-                    VuMeter { visible: page.vuMode; Layout.fillWidth: true; Layout.preferredHeight: 60; vuDb: engine.telemetry.masterVuDb === undefined ? -120 : engine.telemetry.masterVuDb; refDb: engine.vuRefDb; peakLamp: engine.telemetry.masterClip === true; label: i18n.t("VU  MASTER", i18n.lang) }
                     RowLayout { Layout.fillHeight: true; Layout.alignment: Qt.AlignHCenter; spacing: 8
                         Fader { Layout.fillHeight: true; value: engine.masterDb; inDb: engine.telemetry.masterRmsDb === undefined ? -120 : engine.telemetry.masterRmsDb; outDb: engine.telemetry.masterPeakDb === undefined ? -120 : engine.telemetry.masterPeakDb; clip: engine.telemetry.masterClip === true; onMoved: function (db) { engine.setMaster(db) } }
                         MeterBar { Layout.fillHeight: true; Layout.topMargin: 8; peakDb: engine.telemetry.masterLDb; rmsDb: engine.telemetry.masterRmsDb; clip: engine.telemetry.masterClip }

@@ -2,18 +2,6 @@
   "_": "The feature feed: newest first. scripts/make-update.js embeds it in the signed update.json; the console shows a NEW badge for entries newer than the version last looked at. Edit on the website's manage.html (Release manager) or by hand, then run node scripts/make-update.js.",
   "features": [
     {
-      "version": "1.24.1",
-      "date": "2026-11-18",
-      "title": "Delay panel and automatic updates",
-      "items": [
-        "SYNC DELAY has a DELAY TIME panel: the delay in milliseconds, the tempo, six note keys, TAP TEMPO and the echoes as they die away.",
-        "Updates are now fetched automatically when the signed manifest shows a newer version. INSTALL AND RESTART still asks first.",
-        "MIXER: MUTE ALL mutes every channel and gives the earlier mutes back.",
-        "PLUGIN RACK: every edition, BASIC included, can now fill all 64 slots on a channel.",
-        "PLUGINS: a large plug-in folder gets 3 minutes to scan instead of 30 seconds, so ADD and RESCAN no longer give up on a big collection."
-      ]
-    },
-    {
       "version": "1.23.0.1",
       "date": "2026-11-10",
       "title": "Release 1.23.0.1 stable",
@@ -69,7 +57,12 @@
         "BLUETOOTH: find audio devices by WASAPI or DirectSound, CONNECT to the best one, PAIR A DEVICE opens the system pairing page.",
         "Third-party VST plug-ins open their own editor window, which can be moved and closed; right click on EDIT shows the knob view.",
         "All pages translated: 1230 interface strings in 21 languages.",
-        "MIXER: MUTE ALL now mutes every channel even when some were already muted, and UNMUTE ALL gives the earlier mutes back."
+        "MIXER: MUTE ALL now mutes every channel even when some were already muted, and UNMUTE ALL gives the earlier mutes back.",
+        "SYNC DELAY has a DELAY TIME panel: the delay in milliseconds, the tempo, six note keys, TAP TEMPO and the echoes as they die away.",
+        "Updates are now fetched automatically when the signed manifest shows a newer version. INSTALL AND RESTART still asks first.",
+        "PLUGIN RACK: every edition, BASIC included, can now fill all 64 slots on a channel.",
+        "PLUGINS: a large plug-in folder gets 3 minutes to scan instead of 30 seconds, so ADD and RESCAN no longer give up on a big collection.",
+        "MIXER: the master VU meter is back at the top of the MASTER strip, above the buttons."
       ]
     }
   ]

@@ -595,7 +595,8 @@ int main(int argc, char* argv[]) {
             if (QObject* rp = win->findChild<QObject*>("routingPage")) { rp->setProperty("tab", 1); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + "/routing-outputs.png"); std::printf("amixos --shots: routing-outputs\n"); }
           }
           if (QString::fromLatin1(id) == "mixer") {   // the same page with the analogue VU faces
-            if (QObject* mixer = win->findChild<QObject*>("mixerPage")) {
+            QObject* mixerShown = nullptr; for (QObject* o : win->findChildren<QObject*>("mixerPage")) if (o->property("visible").toBool()) mixerShown = o;   // the page on screen (an earlier one may still be on its way out)
+            if (QObject* mixer = mixerShown) {
               mixer->setProperty("rackCompact", true); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + "/mixer-compact.png"); mixer->setProperty("rackCompact", false); std::printf("amixos --shots: mixer-compact\n");
               if (QObject* pop = mixer->findChild<QObject*>("mixerQuick")) { QMetaObject::invokeMethod(pop, "open"); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + "/mixer-settings.png"); QMetaObject::invokeMethod(pop, "close"); std::printf("amixos --shots: mixer-settings\n"); }
               mixer->setProperty("sendView", 1); waitMs(400); win->grabWindow().save(shots + "/mixer-aux.png"); mixer->setProperty("sendView", 2); waitMs(400); win->grabWindow().save(shots + "/mixer-fx.png"); mixer->setProperty("sendView", 0); std::printf("amixos --shots: mixer-aux, mixer-fx\n");
