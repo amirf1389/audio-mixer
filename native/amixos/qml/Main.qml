@@ -34,6 +34,43 @@ ApplicationWindow {
                 anchors.fill: parent; anchors.leftMargin: 14; anchors.rightMargin: 14; spacing: 12
                 Text { text: Theme.product.toUpperCase(); color: Theme.orange; font.family: Theme.mono; font.pixelSize: 15; font.weight: Font.Black; font.letterSpacing: 4 }
                 Text { text: i18n.t("BY AMFB AUDIO", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8; font.letterSpacing: 2 }
+                Row {   // FILE · VIEW · INFO: the menus of a desktop program, in the console's own look
+                    objectName: "menuBar"; spacing: 2
+                    component MenuBtn: Rectangle { property string label; property var menu; implicitWidth: mbT.implicitWidth + 18; height: 24; width: implicitWidth; radius: 4; color: (menu && menu.visible) || mbH.hovered ? Theme.ov(0.10) : "transparent"
+                        Text { id: mbT; anchors.centerIn: parent; text: parent.label; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 1 }
+                        HoverHandler { id: mbH } MouseArea { anchors.fill: parent; onClicked: parent.menu.popup(parent, 0, parent.height + 2) } }
+                    component MItem: MenuItem { font.family: Theme.mono; font.pixelSize: 10; implicitHeight: 26 }
+                    MenuBtn { objectName: "menuFile"; label: i18n.t("FILE", i18n.lang); menu: fileMenu }
+                    MenuBtn { objectName: "menuView"; label: i18n.t("VIEW", i18n.lang); menu: viewMenu }
+                    MenuBtn { objectName: "menuInfo"; label: i18n.t("INFO", i18n.lang); menu: infoMenu }
+                    Menu { id: fileMenu; objectName: "fileMenu"; width: 300
+                        MItem { text: i18n.t("Save the console to a file", i18n.lang); onTriggered: { const f = settings.exportConsole(""); root.say(f !== "" ? i18n.t("Saved: ", i18n.lang) + f : i18n.t("The console could not be saved.", i18n.lang)) } }
+                        MItem { text: i18n.t("Load the console from that file", i18n.lang); onTriggered: root.say(settings.importConsole("") ? i18n.t("The console was loaded from its file.", i18n.lang) : i18n.t("No saved console file was found.", i18n.lang)) }
+                        MenuSeparator {}
+                        MItem { text: i18n.t("Scenes", i18n.lang); onTriggered: root.current = "scenes" }
+                        MItem { text: i18n.t("Presets", i18n.lang); onTriggered: root.current = "presets" }
+                        MItem { text: i18n.t("Media files", i18n.lang); onTriggered: root.current = "media" }
+                        MenuSeparator {}
+                        MItem { text: i18n.t("Soft restart", i18n.lang) + "   Ctrl+Shift+R"; onTriggered: root.softRestart() }
+                        MItem { text: i18n.t("Quit", i18n.lang); onTriggered: Qt.quit() } }
+                    Menu { id: viewMenu; objectName: "viewMenu"; width: 260
+                        MItem { text: i18n.t("Mixer", i18n.lang); onTriggered: root.current = "mixer" }
+                        MItem { text: i18n.t("Meters", i18n.lang); onTriggered: root.current = "meter" }
+                        MItem { text: i18n.t("Routing", i18n.lang); onTriggered: root.current = "routing" }
+                        MItem { text: i18n.t("Connections", i18n.lang); onTriggered: root.current = "io" }
+                        MItem { text: i18n.t("Network", i18n.lang); onTriggered: root.current = "network" }
+                        MItem { text: i18n.t("Acoustics", i18n.lang); onTriggered: root.current = "acoustics" }
+                        MenuSeparator {}
+                        MItem { text: settings.darkTheme ? i18n.t("Light look", i18n.lang) : i18n.t("Dark look", i18n.lang); onTriggered: settings.darkTheme = !settings.darkTheme }
+                        MItem { text: (settings.tooltips ? "✓ " : "") + i18n.t("Tooltips", i18n.lang); onTriggered: settings.tooltips = !settings.tooltips }
+                        MItem { text: root.visibility === Window.FullScreen ? i18n.t("Leave full screen", i18n.lang) : i18n.t("Full screen", i18n.lang); onTriggered: root.visibility = root.visibility === Window.FullScreen ? Window.Windowed : Window.FullScreen } }
+                    Menu { id: infoMenu; objectName: "infoMenu"; width: 260
+                        MItem { text: i18n.t("About this console", i18n.lang); onTriggered: aboutPop.open() }
+                        MItem { text: i18n.t("Sound card in use", i18n.lang); onTriggered: root.say(engine.running ? engine.status + "\n\n" + engine.lastRoute : i18n.t("No sound card is running. Open one on CONNECTIONS, or use SOFT RESTART.", i18n.lang)) }
+                        MItem { text: i18n.t("What's new", i18n.lang); onTriggered: whatsNew.open() }
+                        MItem { text: i18n.t("Help", i18n.lang); onTriggered: root.current = "help" }
+                        MItem { text: i18n.t("Licence and account", i18n.lang); onTriggered: root.current = "acct" } }
+                }
                 Item { Layout.fillWidth: true }
                 Rectangle { implicitWidth: statusText.implicitWidth + 20; implicitHeight: 24; radius: 12; color: engine.running ? Qt.rgba(0.063, 0.725, 0.506, 0.15) : Qt.rgba(0.984, 0.749, 0.141, 0.12); border.color: engine.running ? Theme.emerald : Theme.amber
                     Text { id: statusText; anchors.centerIn: parent; text: engine.running ? i18n.t("ENGINE ON • ", i18n.lang) + engine.backend.toUpperCase() : i18n.t("ENGINE OFF", i18n.lang); color: engine.running ? Theme.emerald : Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } }
@@ -136,6 +173,26 @@ ApplicationWindow {
             }
         }
     }
+    function say(text) { sayText.text = text; sayPop.open() }
+    Popup { id: sayPop; objectName: "sayPop"; modal: true; anchors.centerIn: parent; width: Math.min(560, root.width - 80); padding: 18
+        background: Rectangle { radius: 10; color: Theme.card; border.color: Theme.line }
+        contentItem: Column { spacing: 12
+            Text { id: sayText; width: parent.width; wrapMode: Text.WordWrap; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 10 }
+            Rectangle { width: 70; height: 24; radius: 4; color: Theme.amber; Text { anchors.centerIn: parent; text: i18n.t("OK", i18n.lang); color: "#000"; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: sayPop.close() } } } }
+    Popup { id: aboutPop; objectName: "aboutPop"; modal: true; anchors.centerIn: parent; width: Math.min(520, root.width - 80); padding: 22
+        readonly property var io: { engine.running; return engine.ioInfo() }
+        background: Rectangle { radius: 10; color: Theme.card; border.color: Theme.line }
+        contentItem: Column { spacing: 8
+            Text { text: Theme.product.toUpperCase(); color: Theme.orange; font.family: Theme.mono; font.pixelSize: 20; font.weight: Font.Black; font.letterSpacing: 5 }
+            Text { text: i18n.t("BY AMFB AUDIO", i18n.lang) + "  ·  " + i18n.t("version ", i18n.lang) + appVersion; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 10 }
+            Rectangle { width: parent.width; height: 1; color: Theme.lineSoft }
+            Text { width: parent.width; wrapMode: Text.WordWrap; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9
+                text: i18n.t("Engine: ", i18n.lang) + (engine.running ? engine.status : i18n.t("off", i18n.lang)) }
+            Text { visible: engine.running; width: parent.width; wrapMode: Text.WordWrap; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9
+                text: i18n.t("Output: ", i18n.lang) + (aboutPop.io.outName || "—") + "\n" + i18n.t("Input: ", i18n.lang) + (aboutPop.io.inName || "—") }
+            Text { width: parent.width; wrapMode: Text.WordWrap; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8
+                text: i18n.t("ASIO is a trademark and software of Steinberg Media Technologies GmbH. VST is a trademark of Steinberg Media Technologies GmbH. Third-party licences are in the licenses folder next to the program.", i18n.lang) }
+            Rectangle { width: 70; height: 24; radius: 4; color: Theme.amber; Text { anchors.centerIn: parent; text: i18n.t("OK", i18n.lang); color: "#000"; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: aboutPop.close() } } } }
     Popup {   // WHAT'S NEW: the feature feed from the signed manifest, newest first
         id: whatsNew; modal: true; anchors.centerIn: parent; width: Math.min(640, root.width - 80); height: Math.min(520, root.height - 80); padding: 18
         background: Rectangle { radius: 12; color: Theme.card; border.color: Theme.line }

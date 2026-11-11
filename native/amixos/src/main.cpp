@@ -310,6 +310,12 @@ int main(int argc, char* argv[]) {
           if (engine.openBluetooth("dsound", "-", "{gone}", 512) || !engine.bluetoothNote().contains("RESCAN")) { std::fprintf(stderr, "amixos --smoke: a vanished Bluetooth device was not reported\n"); return 178; }
           if (!engine.open("null", "", "", 48000, 256, 2, 2)) { std::fprintf(stderr, "amixos --smoke: the null device did not reopen after the Bluetooth check\n"); return 179; } }
         engine.simulateDevices(realDevices); }
+      { // MIC SWEEP: the measured strip is muted in the mix while the sweep plays and comes back afterwards; the recording is described (level, noise, input)
+        engine.setMute(0, false); if (!measure.runSweep(0, 0.5, 100, 8000, -12, 6) || !engine.stripState()[0].toMap()["mute"].toBool()) { std::fprintf(stderr, "amixos --smoke: the sweep did not start or the measured strip was not muted\n"); return 192; }
+        QElapsedTimer mt; mt.start(); while (measure.state() == "measuring" && mt.elapsed() < 8000) QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+        const QVariantMap mi = measure.info();
+        if (measure.state() != "done" || engine.stripState()[0].toMap()["mute"].toBool() || mi["lines"].toStringList().size() < 2 || !mi.contains("snrDb") || mi["input"].toString() != "input 1") { std::fprintf(stderr, "amixos --smoke: sweep info (%s, %d lines)\n", qPrintable(measure.state()), int(mi["lines"].toStringList().size())); return 193; }
+        if (!engine.openRouting()) { std::fprintf(stderr, "amixos --smoke: open ASIO routing must be on by default\n"); return 194; } }
       { // NETWORK AUDIO + MIDI: everything off at start; a stream to this machine comes back on a network input and reaches a strip; MIDI moves a fader and learns a control
         if (net.txOn() || net.rxOn() || net.midiNetOn() || net.discoverOn()) { std::fprintf(stderr, "amixos --smoke: network audio must be off until asked\n"); return 181; }
         if (net.transports().size() < 5 || !net.transports()[0].toMap()["available"].toBool()) { std::fprintf(stderr, "amixos --smoke: transports list\n"); return 182; }
@@ -416,6 +422,10 @@ int main(int argc, char* argv[]) {
           const QImage img = win->grabWindow(); img.save(shots + "/" + id + ".png"); std::printf("amixos --shots: %s %dx%d\n", id, img.width(), img.height());
           if (QString::fromLatin1(id) == "admin") {   // the same page with the PIN entered
             access.enterAdmin("1234"); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + "/admin-open.png"); access.leaveAdmin(); std::printf("amixos --shots: admin-open\n"); }
+          if (QString::fromLatin1(id) == "mixer") {   // FILE / VIEW / INFO and the About box
+            if (!win->findChild<QObject*>("menuFile") || !win->findChild<QObject*>("menuView") || !win->findChild<QObject*>("menuInfo")) std::fprintf(stderr, "amixos --shots: FAILED the FILE / VIEW / INFO menus are missing\n");
+            if (QObject* ab = win->findChild<QObject*>("aboutPop")) { QMetaObject::invokeMethod(ab, "open"); waitMs(400); win->grabWindow().save(shots + "/menu-about.png"); QMetaObject::invokeMethod(ab, "close"); waitMs(200); std::printf("amixos --shots: menu-about\n"); } }
+          if (QString::fromLatin1(id) == "acoustics") { measure.runSweep(0, 0.5, 100, 8000, -12, 12); QElapsedTimer mt; mt.start(); while (measure.state() == "measuring" && mt.elapsed() < 8000) QCoreApplication::processEvents(QEventLoop::AllEvents, 20); waitMs(300); win->grabWindow().save(shots + "/acoustics-sweep-info.png"); std::printf("amixos --shots: acoustics-sweep-info\n"); }
           if (QString::fromLatin1(id) == "network") { if (QObject* np = win->findChild<QObject*>("networkPage")) {   // the AUDIO + MIDI view with a stream running to this machine and back
             const QString rxA = net.rxAddress(), txA = net.txAddress(); const int rxP = net.rxPort(), txP = net.txPort(), first = net.rxFirstStrip();
             net.setRxAddress("127.0.0.1"); net.setRxPort(47422); net.setTxAddress("127.0.0.1"); net.setTxPort(47422); net.startReceive(); net.startSend(); net.setRxFirstStrip(7); net.midiIn(0xb1, 7, 96);

@@ -75,6 +75,15 @@ int main(int argc, char** argv) {
     CHECK(P.size() == 4 && P[1].mode == "wasapi-exclusive" && P[1].inDevice == "{um2-in}" && P[1].outDevice == "{um2-out}" && P[2].inDevice == "{um2-in}" && P[2].outDevice == "{um2-out}" && P[3].mode == "dsound" && P[3].inDevice == "{ds-um2-in}" && P[3].outDevice == "{ds-um2}");
     std::vector<DeviceInfo> outOnly = {um[0], um[2], um[3]}; P = drv::plan("asio", "BEHRINGER USB AUDIO", "BEHRINGER USB AUDIO", outOnly, now); CHECK(P.size() == 1 && P[0].mode == "asio");   // no input endpoint: the duplex ladder has no WASAPI / DirectSound step
     P = drv::plan("asio", "-", "BEHRINGER USB AUDIO", outOnly, now); CHECK(P.size() == 4 && P[1].inDevice == "-" && P[1].outDevice == "{um2-out}"); }
+  { // OPEN ROUTING: what was picked is opened first: the wrapper although a manufacturer driver is present, the Realtek driver instead of its pin
+    drv::forget("*"); drv::setPin("Realtek ASIO", true);
+    auto P = drv::plan("asio", "ASIO4ALL v2", "ASIO4ALL v2", pc, now); CHECK(!P.empty() && P[0].mode != "asio");          // closed routing: the wrapper is passed over
+    P = drv::plan("asio", "Realtek ASIO", "Realtek ASIO", pc, now); CHECK(P[0].pinned && P[0].mode == "wasapi-shared");
+    drv::setOpenRouting(true); CHECK(drv::openRouting());
+    P = drv::plan("asio", "ASIO4ALL v2", "ASIO4ALL v2", pc, now); CHECK(P[0].mode == "asio" && P[0].outDevice == "ASIO4ALL v2" && P.size() >= 2);
+    P = drv::plan("asio", "Realtek ASIO", "Realtek ASIO", pc, now); CHECK(P[0].mode == "asio" && !P[0].pinned && P[0].outDevice == "Realtek ASIO" && P.size() >= 2 && P[1].backend == "wasapi");
+    P = drv::plan("asio", "BEHRINGER USB AUDIO", "BEHRINGER USB AUDIO", pc, now); CHECK(P[0].mode == "asio");
+    drv::setOpenRouting(false); }
   { // RESCUE after every planned step failed: the Realtek ASIO driver, Realtek Windows shared (RWS), the default endpoints
     auto R = drv::rescue(pc, true, true, {});
     CHECK(R.size() >= 2 && R[0].mode == "realtek-asio" && R[0].backend == "asio" && R[0].inDevice == "Realtek ASIO" && R[0].outDevice == "Realtek ASIO" && !R[0].exclusive);

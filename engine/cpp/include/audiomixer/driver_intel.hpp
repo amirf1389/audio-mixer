@@ -41,6 +41,11 @@ std::vector<Pin> pins(const std::vector<DeviceInfo>& devices);
 
 // the ladder for one ASIO device over the device list; wantInput / wantOutput say which directions the step must offer
 // The fallback policy after ASIO: "all" (WASAPI exclusive, WASAPI shared, DirectSound), "dsound" (DirectSound only: WASAPI is optional, never a lock), "none" (ASIO only). Kept in the lock file.
+// OPEN ROUTING (off by default here; the console switches it on): the ASIO driver that was picked is the one that is opened first, whatever it
+// is. A wrapper (ASIO4ALL, FlexASIO) is opened even when a device with its own ASIO driver is present, and the manufacturer's driver of an
+// onboard Realtek is opened instead of being pinned to its Windows endpoint. The steps after it stay as the fallback when it does not start.
+bool openRouting();
+void setOpenRouting(bool on);
 std::string fallback();
 void setFallback(const std::string& policy);
 std::vector<Step> ladder(const DeviceInfo& asio, const std::vector<DeviceInfo>& devices, bool wantInput, bool wantOutput, std::int64_t nowMs);

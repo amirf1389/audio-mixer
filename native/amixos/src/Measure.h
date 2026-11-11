@@ -45,6 +45,7 @@ class Measure : public QObject {
   Q_OBJECT
   Q_PROPERTY(QString state READ state NOTIFY changed)        // idle | measuring | done
   Q_PROPERTY(QString message READ message NOTIFY changed)
+  Q_PROPERTY(QVariantMap info READ info NOTIFY changed)       // the last recording: {peakDb, noiseDb, snrDb, clipped, input, lines: [text]}
   Q_PROPERTY(double progress READ progress NOTIFY changed)
   Q_PROPERTY(QVariantMap result READ result NOTIFY changed)   // {freq, mag, phase, thd, thdn, kind}
   Q_PROPERTY(QVariantMap decay READ decay NOTIFY changed)     // {etc, schroeder, t20, t30, topt, toptRange, delayMs, seconds}
@@ -55,7 +56,7 @@ class Measure : public QObject {
  public:
   explicit Measure(Engine* engine, QObject* parent = nullptr);
   ~Measure() override;
-  QString state() const { return state_; } QString message() const { return msg_; } double progress() const { return io_.progress(); }
+  QString state() const { return state_; } QString message() const { return msg_; } QVariantMap info() const { return info_; } double progress() const { return io_.progress(); }
   QVariantMap result() const { return result_; } QVariantMap decay() const { return decay_; } QVariantList filters() const { return filters_; } QVariantMap eqCurve() const { return eqCurve_; }
   bool calibrated() const { return cal_.freq.size() >= 2; } double splOffset() const { return spl_; } void setSplOffset(double v) { spl_ = v; emit changed(); }
   Q_INVOKABLE bool runSweep(int strip, double seconds, double f1, double f2, double levelDb, int pointsPerOctave);
@@ -83,5 +84,7 @@ class Measure : public QObject {
   void publish(const am::measure::Response& r, const std::vector<double>& thd, const std::vector<double>& thdn, const QString& kind);
   Engine* engine_; MeasIo io_; QTimer poll_; QString state_ = "idle", msg_; QVariantMap result_, decay_, eqCurve_; QVariantList filters_;
   am::measure::Sweep sweep_; am::measure::Impulse ir_; am::measure::Response resp_; am::measure::Calibration cal_; std::vector<am::measure::Filter> eq_; am::measure::RtaAverager rta_; am::measure::Rta lastRta_;
+  void begin(int strip); void end(); void describe(const std::vector<float>& rec, double fs, double leadSec, double delayMs);
+  QVariantMap info_; int measStrip_ = -1; bool unmuteAfter_ = false;
   std::vector<float> lastRec_; double lastFs_ = 48000, spl_ = 0; int ppo_ = 48; bool stepped_ = false; std::vector<double> stepFreqs_; double stepSec_ = 0.25;
 };

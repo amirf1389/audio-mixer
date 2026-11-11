@@ -28,14 +28,52 @@ bool Measure::chime() {
   const std::size_t fade = static_cast<std::size_t>(fs * 0.25); for (std::size_t i = 0; i < fade; ++i) sig[n - 1 - i] *= static_cast<float>(i) / static_cast<float>(fade);
   io_.arm(std::move(sig), 0); return true;
 }
-void Measure::cancel() { io_.cancel(); poll_.stop(); set("idle", "cancelled"); }
+void Measure::cancel() { io_.cancel(); poll_.stop(); end(); set("idle", "cancelled"); }
+// A measurement of a microphone: the strip is recorded as the sound card delivers it (before its trim, EQ, gate, compressor and plug-ins) and is
+// muted in the mix while the signal plays, so the microphone does not come back out of the loudspeaker it is measuring. Both are undone at the end.
+void Measure::begin(int strip) {
+  end(); measStrip_ = strip; info_.clear();
+  if (am::Runtime* rt = engine_->runtime()) rt->setTapRawStrip(strip);
+  const QVariantList st = engine_->stripState();
+  if (strip >= 0 && strip < st.size() && !st[strip].toMap()["mute"].toBool()) { engine_->setMute(strip, true); unmuteAfter_ = true; }
+}
+void Measure::end() {
+  if (measStrip_ < 0) return;
+  if (am::Runtime* rt = engine_->runtime()) rt->setTapRawStrip(-1);
+  if (unmuteAfter_) engine_->setMute(measStrip_, false);
+  unmuteAfter_ = false; measStrip_ = -1;
+}
+// What the recording itself says: its peak, the noise before the signal started, the distance between them, and what to do about it.
+void Measure::describe(const std::vector<float>& rec, double fs, double leadSec, double delayMs) {
+  QVariantMap o; QStringList lines; double pk = 0, e = 0; for (float v : rec) { pk = std::max(pk, std::fabs(static_cast<double>(v))); e += static_cast<double>(v) * v; }
+  const std::size_t quiet = std::min(rec.size(), static_cast<std::size_t>(fs * leadSec * 0.75)); double ne = 0; for (std::size_t i = 0; i < quiet; ++i) ne += static_cast<double>(rec[i]) * rec[i];
+  const double peakDb = pk > 0 ? 20 * std::log10(pk) : -180, rmsDb = e > 0 && !rec.empty() ? 10 * std::log10(e / static_cast<double>(rec.size())) : -180, noiseDb = quiet > 0 && ne > 0 ? 10 * std::log10(ne / static_cast<double>(quiet)) : -180;
+  const double snr = rmsDb - noiseDb; const bool clipped = pk >= 0.985; const int strip = measStrip_;
+  const QVariantList routes = engine_->inputRoutes(); const int route = strip >= 0 && strip < routes.size() ? routes[strip].toInt() : -1; const int devIn = engine_->ioInfo()["inputs"].toInt();
+  const QString input = route < 0 ? QStringLiteral("none") : route >= am::Runtime::kNetInBase ? QStringLiteral("network %1").arg(route - am::Runtime::kNetInBase + 1) : QStringLiteral("input %1").arg(route + 1);
+  o["peakDb"] = peakDb; o["rmsDb"] = rmsDb; o["noiseDb"] = noiseDb; o["snrDb"] = snr; o["clipped"] = clipped; o["input"] = input; o["delayMs"] = delayMs; o["strip"] = strip + 1; o["rate"] = fs;
+  if (strip < 0) lines << QStringLiteral("a recording made elsewhere · %1 Hz").arg(fs, 0, 'f', 0); else
+  lines << QStringLiteral("CH %1 · %2 · %3 Hz · recorded before the channel's EQ and dynamics").arg(strip + 1).arg(input).arg(fs, 0, 'f', 0);
+  lines << QStringLiteral("peak %1 dBFS · level %2 dBFS · noise %3 dBFS · signal to noise %4 dB").arg(peakDb, 0, 'f', 1).arg(rmsDb, 0, 'f', 1).arg(noiseDb, 0, 'f', 1).arg(noiseDb <= -179 ? 99.0 : snr, 0, 'f', 0);
+  if (strip < 0) {} else if (route < 0) lines << QStringLiteral("This strip has no input: give it one on ROUTING.");
+  else if (route < am::Runtime::kNetInBase && route >= devIn) lines << QStringLiteral("The sound card has %1 input(s) but this strip listens to input %2: pick a strip that has a real input, or open a device with a microphone on CONNECTIONS.").arg(devIn).arg(route + 1);
+  if (clipped) lines << QStringLiteral("CLIPPED: the input reached full scale. Lower the microphone gain or the sweep level and measure again.");
+  else if (pk < 1e-6) lines << QStringLiteral("Silent: no signal arrived. Check the microphone, its gain and phantom power, and that Windows allows this program to use the microphone.");
+  else if (peakDb < -50) lines << QStringLiteral("Very quiet: raise the microphone gain or the sweep level (aim for a peak between -20 and -6 dBFS).");
+  if (pk >= 1e-6 && noiseDb > -179 && snr < 20) lines << QStringLiteral("Noisy: the signal is less than 20 dB above the room noise; the curve below is not reliable. Play louder or measure in a quieter moment.");
+  if (delayMs > 250) lines << QStringLiteral("Long delay (%1 ms): this driver buffers a lot. Timing and decay are still measured from the arrival.").arg(delayMs, 0, 'f', 0);
+  o["lines"] = lines; o["ok"] = pk >= 1e-6 && !clipped && (noiseDb <= -179 || snr >= 20); info_ = o;
+}
 
 bool Measure::runSweep(int strip, double seconds, double f1, double f2, double levelDb, int ppo) {
   if (!engine_->running()) { set("idle", "Start the engine on CONNECTIONS first: the sweep plays on the master and is recorded from the strip."); return false; }
   if (io_.busy()) return false;
   const double fs = engine_->sampleRate(); seconds = std::clamp(seconds, 0.5, 30.0); f1 = std::clamp(f1, 5.0, fs * 0.4); f2 = std::clamp(f2, f1 * 2, fs * 0.45); ppo_ = std::clamp(ppo, 1, 96);
   sweep_ = m::makeSweep(fs, f1, f2, seconds, std::pow(10.0, std::clamp(levelDb, -60.0, 0.0) / 20)); stepped_ = false; lastFs_ = fs;
-  io_.arm(sweep_.signal, strip); poll_.start(); set("measuring", QStringLiteral("log sweep %1 - %2 Hz, %3 s, on the master; recording CH %4").arg(f1, 0, 'f', 0).arg(f2, 0, 'f', 0).arg(seconds, 0, 'f', 1).arg(strip + 1)); return true;
+  begin(strip);
+  { std::vector<float> sig = sweep_.signal; sig.resize(sig.size() + static_cast<std::size_t>(fs * 1.0), 0.f);   // one more second of recording: a slow driver's delay must not cut the top of the sweep or the room's decay
+    io_.arm(std::move(sig), strip); }
+  poll_.start(); set("measuring", QStringLiteral("log sweep %1 - %2 Hz, %3 s, on the master; recording CH %4").arg(f1, 0, 'f', 0).arg(f2, 0, 'f', 0).arg(seconds, 0, 'f', 1).arg(strip + 1)); return true;
 }
 bool Measure::runStepped(int strip, int ppo, double f1, double f2, double levelDb) {
   if (!engine_->running()) { set("idle", "Start the engine on CONNECTIONS first."); return false; }
@@ -45,11 +83,13 @@ bool Measure::runStepped(int strip, int ppo, double f1, double f2, double levelD
   const double amp = std::pow(10.0, std::clamp(levelDb, -60.0, 0.0) / 20); std::vector<float> sig; sig.reserve(static_cast<std::size_t>(fs * stepSec_ * static_cast<double>(stepFreqs_.size() + 1)));
   for (double f : stepFreqs_) { std::vector<float> t = m::tone(fs, f, stepSec_, amp); const std::size_t fade = static_cast<std::size_t>(fs * 0.005); for (std::size_t i = 0; i < fade && i < t.size(); ++i) { const float g = static_cast<float>(i) / static_cast<float>(fade); t[i] *= g; t[t.size() - 1 - i] *= g; } sig.insert(sig.end(), t.begin(), t.end()); }
   sig.resize(sig.size() + static_cast<std::size_t>(fs * 0.3), 0.f); stepped_ = true; lastFs_ = fs;
+  begin(strip);
   io_.arm(std::move(sig), strip); poll_.start(); set("measuring", QStringLiteral("stepped sine, %1 tones (%2 per octave), recording CH %3").arg(stepFreqs_.size()).arg(ppo_).arg(strip + 1)); return true;
 }
 void Measure::finish() {
   lastRec_ = io_.recorded();
-  if (!stepped_) { analyseSweep(lastRec_, lastFs_); return; }
+  if (!stepped_) { analyseSweep(lastRec_, lastFs_); end(); return; }
+  describe(lastRec_, lastFs_, 0.0, 0.0); end();
   // each tone's own quarter second, read from where the loudest tone says the path delay is (up to 100 ms)
   const std::size_t seg = static_cast<std::size_t>(lastFs_ * stepSec_); m::Response r; std::vector<double> thd, thdn;
   for (std::size_t k = 0; k < stepFreqs_.size(); ++k) { const std::size_t from = k * seg + seg / 4; if (from + seg / 2 > lastRec_.size()) break; std::vector<float> x(lastRec_.begin() + static_cast<long>(from), lastRec_.begin() + static_cast<long>(from + seg / 2 + seg / 8));
@@ -58,13 +98,14 @@ void Measure::finish() {
 }
 void Measure::analyseSweep(const std::vector<float>& rec, double fs) {
   double pk = 0; for (float v : rec) pk = std::max(pk, std::fabs(static_cast<double>(v)));
-  if (pk < 1e-6) { result_.clear(); decay_.clear(); set("done", "The recording is silent: route an input to that strip (ROUTING) and connect the microphone or the loopback cable."); return; }
+  if (pk < 1e-6) { describe(rec, fs, sweep_.leadSec, 0.0); result_.clear(); decay_.clear(); set("done", "The recording is silent: route an input to that strip (ROUTING) and connect the microphone or the loopback cable."); return; }
   ir_ = m::deconvolve(rec, sweep_); ir_.fs = fs; resp_ = m::response(ir_, ppo_, sweep_.f1, sweep_.f2); const std::vector<double> thd = m::thdPercent(ir_, resp_.freq);
   publish(resp_, thd, {}, "sweep");
   const m::Decay d = m::decay(ir_, 2.0); QVariantMap o; const std::size_t step = std::max<std::size_t>(1, d.etcDb.size() / 600); QVariantList etc, sch;
   for (std::size_t i = 0; i < d.etcDb.size(); i += step) { double mx = -240; for (std::size_t j = i; j < std::min(d.etcDb.size(), i + step); ++j) mx = std::max(mx, d.etcDb[j]); etc << mx; sch << d.schroederDb[i]; }
   const std::size_t base = static_cast<std::size_t>(sweep_.leadSec * fs) + sweep_.inverse.size() - 1;
   o["etc"] = etc; o["schroeder"] = sch; o["t20"] = d.t20; o["t30"] = d.t30; o["topt"] = d.topt; o["toptRange"] = d.toptRange; o["seconds"] = d.seconds; o["delayMs"] = ir_.peak >= base ? static_cast<double>(ir_.peak - base) / fs * 1000 : 0.0; decay_ = o;
+  describe(rec, fs, sweep_.leadSec, o["delayMs"].toDouble());
   set("done", QStringLiteral("sweep: peak %1 dBFS, delay %2 ms, RT60 (T30) %3 s").arg(20 * std::log10(pk), 0, 'f', 1).arg(o["delayMs"].toDouble(), 0, 'f', 2).arg(d.t30, 0, 'f', 2));
 }
 void Measure::publish(const m::Response& in, const std::vector<double>& thd, const std::vector<double>& thdn, const QString& kind) {

@@ -160,10 +160,12 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
   const float* ins[kMaxStrips];
   NetInput* netIn = netIn_.load();
   if (netIn) { float* nb[kNetInputs]; for (int k = 0; k < kNetInputs; ++k) nb[k] = netBuf_[static_cast<std::size_t>(k)].data(); netIn->pull(nb, kNetInputs, frames, mixer_.sampleRate()); }
+  const int tapRaw = tapRaw_.load(std::memory_order_relaxed); const float* rawIn = nullptr;
   for (int s = 0; s < mixer_.strips(); ++s) {
     const int src = inRoute_[s];
     ins[s] = (src >= kNetInBase && src < kNetInBase + kNetInputs) ? (netIn ? netBuf_[static_cast<std::size_t>(src - kNetInBase)].data() : silence_.data())
            : (src >= 0 && src < nIn_ && in && in[src]) ? in[src] : silence_.data();
+    if (s == tapRaw) rawIn = ins[s];
     dsp::Channel& ch = ch_[static_cast<std::size_t>(s)];
     const double tr = trim_[s];
     const std::shared_ptr<const InsertChain> chain = std::atomic_load(&inserts_[s]);
@@ -180,6 +182,7 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
   ExtraSource* ext = extra_.load();
   if (ext) { ext->render(extL_.data(), extR_.data(), frames, mixer_.sampleRate()); }
   mixer_.process(ins, frames, left_.data(), right_.data(), busOut, ext ? extL_.data() : nullptr, ext ? extR_.data() : nullptr);
+  if (rawIn) ins[tapRaw] = rawIn;   // from here on only the taps read ins: the measured strip as the device delivered it
   if (Tap* tap = tap_.load()) tap->onBlock(ins, mixer_.strips(), left_.data(), right_.data(), frames, mixer_.sampleRate());
   if (Tap* tap = netTap_.load()) tap->onBlock(ins, mixer_.strips(), left_.data(), right_.data(), frames, mixer_.sampleRate());
   // the monitor section: source, level (smoothed over the block, no clicks), mono, mute -> outputs 0 / 1, with its own peak

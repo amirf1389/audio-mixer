@@ -37,6 +37,7 @@ static double toDb(double lin) { return lin > 1e-9 ? 20.0 * std::log10(lin) : -1
 
 static constexpr double kIsoCentres[10] = {31.5, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000};
 Engine::Engine(QObject* parent) : QObject(parent) {
+  am::drv::setOpenRouting(QSettings().value("audio/openRouting", true).toBool());
   winSync_ = QSettings().value("mixer/windowsMuteSync", true).toBool(); sysGet_ = [](bool& m) { return am::systemMuteGet(m); }; sysSet_ = [](bool m) { return am::systemMuteSet(m); };
   sysTimer_.setInterval(500); connect(&sysTimer_, &QTimer::timeout, this, &Engine::syncSystemSound); sysTimer_.start();
 #ifdef _WIN32
@@ -386,6 +387,8 @@ QVariantList Engine::driverPlan(const QString& backend, const QString& in, const
 QVariantList Engine::driverLocks() const { QVariantList l; for (const auto& k : am::drv::locks()) { QVariantMap m; m["name"] = QString::fromStdString(k.name); m["mode"] = QString::fromStdString(k.mode); m["device"] = QString::fromStdString(k.device); m["reason"] = QString::fromStdString(k.reason); m["at"] = static_cast<qlonglong>(k.at); m["retryAt"] = k.mode == "asio" ? 0 : static_cast<qlonglong>(k.at + am::drv::kRetryMs); l << m; } return l; }
 QVariantList Engine::driverPins() const { QVariantList l; for (const auto& p : am::drv::pins(devInfos(devices_))) { QVariantMap m; m["name"] = QString::fromStdString(p.name); m["on"] = p.on; m["reason"] = QString::fromStdString(p.reason); l << m; } return l; }
 void Engine::setDriverPin(const QString& name, bool on) { am::drv::setPin(name.toStdString(), on); emit devicesChanged(); }
+bool Engine::openRouting() const { return am::drv::openRouting(); }
+void Engine::setOpenRouting(bool on) { am::drv::setOpenRouting(on); settings_.setValue("audio/openRouting", on); emit devicesChanged(); }
 QString Engine::driverFallback() const { return QString::fromStdString(am::drv::fallback()); }
 void Engine::setDriverFallback(const QString& f) { am::drv::setFallback(f.toStdString()); emit devicesChanged(); }
 static bool looksBluetooth(const QString& n) { static const QRegularExpression re("bluetooth|hands-free|hands free|\\bhfp\\b|a2dp|airpods|\\bbt\\b|wireless|headset|earbuds|buds|jbl|bose|sony wh|wf-|galaxy buds|soundcore|boat|beats", QRegularExpression::CaseInsensitiveOption); return re.match(n).hasMatch(); }
@@ -524,6 +527,9 @@ bool Engine::startRecording() {
 }
 void Engine::stopRecording() { if (!recorder_.recording()) return; taps_.a.store(nullptr); recorder_.stop(); recMsg_ = QStringLiteral("Recorded %1 s, %2 file(s)%3 in %4").arg(recorder_.seconds(), 0, 'f', 1).arg(recorder_.files().size()).arg(recorder_.dropped() ? QStringLiteral(" (%1 blocks DROPPED: disk too slow)").arg(recorder_.dropped()) : QString()).arg(recordFolder()); emit recordChanged(); }
 void Engine::setArmed(int i, bool on) { if (i < 0 || i >= kStrips) return; if (on) armed_ |= 1u << i; else armed_ &= ~(1u << i); emit stripsChanged(); emit recordChanged(); }
+// DirectSound lists a Bluetooth or USB headset twice: the music side and the HANDS-FREE side (telephone quality, and opening its microphone
+// switches the whole headset to that mode). Auto detect leaves the hands-free side off; it can still be picked by hand on CONNECTIONS.
+static bool handsFree(const QVariantMap& d) { static const QRegularExpression re("hands[- ]?free|\\bhfp\\b|\\bag audio\\b|headset", QRegularExpression::CaseInsensitiveOption); return d["kind"].toString() == "headset" || re.match(d["name"].toString()).hasMatch(); }
 QVariantMap Engine::autoDetect() const {
   QVariantMap best; int bestRank = -1;
   for (const QVariant& v : devices_) { const QVariantMap d = v.toMap(); const QString b = d["backend"].toString(), name = d["name"].toString(); if (b == "null" || d["id"].toString().startsWith("loopback:")) continue;
@@ -532,7 +538,8 @@ QVariantMap Engine::autoDetect() const {
     if (b == "asio") { const bool wrapper = am::drv::isWrapper(name.toStdString()); const bool pinned = am::drv::pinOf(name.toStdString()).on; rank = wrapper ? 60 : pinned ? 50 : 100; why = wrapper ? "an ASIO wrapper (ASIO4ALL-style): used when nothing has its own driver" : pinned ? "Realtek onboard: pinned to its Windows endpoint, SMART START routes it" : "the device's own ASIO driver"; }
     else if (b == "wasapi" || b == "coreaudio") { rank = (d["defaultOut"].toBool() ? 40 : 30) + (in && out ? 2 : 0); why = "the system's " + QString(d["defaultOut"].toBool() ? "default " : "") + "endpoint"; }
     else if (b == "alsa") { rank = (name.contains("default") ? 25 : 20); why = "an ALSA device"; }
-    else if (b == "dsound") { rank = (d["defaultOut"].toBool() ? 12 : 10) + (in && out ? 2 : 0); why = "DirectSound (no lock; the Bluetooth path)"; }
+    else if (b == "dsound") { rank = (d["defaultOut"].toBool() ? 12 : 10) + (in && out ? 2 : 0); why = "DirectSound (no lock; the Bluetooth path)";
+      if (handsFree(d)) { rank = 1; why = "DirectSound, a headset's hands-free side: used only when nothing else is there"; } }
     if (rank > bestRank) { bestRank = rank; best = d; best["why"] = why; }
   }
   if (best.isEmpty()) return best;
@@ -544,6 +551,7 @@ QVariantMap Engine::autoDetect() const {
     if (best[wantIn ? "in" : "out"].toString() != "-") continue;
     QVariantMap pick; int pr = -1; QString stem = best["name"].toString(); const int par = stem.indexOf('('); if (par >= 0) stem = stem.mid(par + 1).remove(')').trimmed();   // "Speakers (USB Audio CODEC)" -> "USB Audio CODEC"
     for (const QVariant& v : devices_) { const QVariantMap d = v.toMap(); if (d["backend"] != best["backend"] || d["id"].toString().startsWith("loopback:")) continue; if ((wantIn ? d["inChannels"] : d["outChannels"]).toInt() <= 0) continue;
+      if (best["backend"] == "dsound" && handsFree(d)) continue;   // DirectSound: the headset's hands-free microphone stays off (opening it drops the headset to telephone quality)
       const int r = (!stem.isEmpty() && d["name"].toString().contains(stem, Qt::CaseInsensitive) ? 4 : 0) + ((wantIn ? d["defaultIn"] : d["defaultOut"]).toBool() ? 2 : 0) + 1; if (r > pr) { pr = r; pick = d; } }
     if (pick.isEmpty()) continue;
     best[wantIn ? "in" : "out"] = pick["id"]; best[wantIn ? "inChannels" : "outChannels"] = pick[wantIn ? "inChannels" : "outChannels"]; best[wantIn ? "inName" : "outName"] = pick["name"]; best[wantIn ? "inKind" : "outKind"] = pick["kind"];
