@@ -84,7 +84,7 @@ class Settings : public QObject {
   Q_INVOKABLE QStringList factoryResetPreview() const;      // what FACTORY RESET removes
   Q_INVOKABLE void factoryReset();                           // settings, console, scenes, presets, arrangement, driver locks; the licence and the token stay
   Q_INVOKABLE QString settingsFile() const { return s_.fileName(); }
-  bool setupDone() const { return s_.value("general/setupDone", false).toBool(); }
+  bool setupDone() const { return s_.value("general/setupDone", true).toBool(); }   // true unless a FACTORY RESET asked for the setup: a new installation goes straight to the console
   Q_INVOKABLE void finishSetup() { set("general/setupDone", true); }
   Q_INVOKABLE void rerunSetup() { set("general/setupDone", false); }   // the wizard shows again at the next start (or at once: Main.qml watches it)
   bool lastSessionCrashed() const { return crashed_; }

@@ -63,6 +63,12 @@ Popup {
         Text { anchors.horizontalCenter: parent.horizontalCenter; y: (ka.pressed ? 4.5 : 3) + (parent.label === "✕" ? 2.5 : 0); text: parent.label; color: "#ece8dc"; font.pixelSize: parent.label === "✕" ? 9 : 14; font.bold: true }
         MouseArea { id: ka; anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: parent.clicked() } }
     contentItem: Item {
+        // MOVE: drag the unit by its top strip; it stays where it is put until it is closed
+        Item { z: 50; x: 60; width: parent.width - 180; height: 30
+            DragHandler { target: null; property real sx: 0; property real sy: 0
+                onActiveChanged: if (active) { sx = ed.x; sy = ed.y }
+                onTranslationChanged: if (active) { ed.x = Math.max(-ed.width + 120, Math.min(ed.parent ? ed.parent.width - 120 : sx, sx + translation.x)); ed.y = Math.max(0, Math.min(ed.parent ? ed.parent.height - 60 : sy, sy + translation.y)) } }
+            HoverHandler { cursorShape: Qt.SizeAllCursor } }
         Repeater { model: 6; delegate: Rectangle { x: (-4 - index * 3) * ed.fit + 4; y: (2 + index * 3) * ed.fit; width: (wood.width + 8 + index * 6) * ed.fit - 8; height: (wood.height + 6 + index * 5) * ed.fit; radius: 10 + index * 4; color: "#000"; opacity: 0.11 - index * 0.015 } }   // the unit's shadow
         Rectangle { id: wood; width: face.implicitWidth + 36; height: ed.panelH + 36; transformOrigin: Item.TopLeft; scale: ed.fit; radius: 5   // the wooden frame
             color: "#7d5225"; border.color: "#2e1b0b"; border.width: 2; clip: true

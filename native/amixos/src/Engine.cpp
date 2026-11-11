@@ -718,6 +718,14 @@ void Engine::setEq(int i, int band, int type, double f, double q, double g) {
   if (rt_) rt_->setEqBand(i, band, b.type, b.freq, b.q, b.gainDb);
   emit stripsChanged();
 }
+double Engine::closeNoise(int i) {
+  if (i < 0 || i >= kStrips || !rt_) return 0;
+  const am::Snapshot sn = rt_->snapshot(); const double pk = std::max(sn.strips[i].inPk, sn.strips[i].rms);
+  if (pk < 1e-6) return 0;                                             // digital silence: nothing to close
+  const double thr = std::clamp(20.0 * std::log10(pk) + 6.0, -80.0, -20.0);
+  const am::dsp::ChannelParams& p = strips_[static_cast<std::size_t>(i)].dsp.params();
+  setGate(i, true, thr, std::min(p.gateRangeDb, -40.0), 2.0, 150.0, 250.0); return thr;
+}
 QVariantMap Engine::channelEq(int i) const {
   QVariantMap m; if (i < 0 || i >= kStrips) return m; const auto& e = strips_[static_cast<std::size_t>(i)].dsp.params().eq; const int f = am::dsp::kChannelEqFirst;
   const auto& lo = e[static_cast<std::size_t>(f)]; const auto& mid = e[static_cast<std::size_t>(f + 1)]; const auto& hi = e[static_cast<std::size_t>(f + 2)];
