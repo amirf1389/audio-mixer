@@ -581,7 +581,7 @@ void Engine::clearSolo() { for (int i = 0; i < kStrips; ++i) { strips_[static_ca
 void Engine::resetFaders() { for (int i = 0; i < kStrips; ++i) { StripUi& s = strips_[static_cast<std::size_t>(i)]; s.db = 0; s.pan = 0; pushStrip(i); if (rt_) rt_->setPan(i, 0); } masterDb_ = 0; if (rt_) rt_->setMasterDb(0); emit stripsChanged(); }
 void Engine::flattenAllDsp() { for (int i = 0; i < kStrips; ++i) { strips_[static_cast<std::size_t>(i)].dsp.set(am::dsp::ChannelParams{}); for (PluginUi& p : strips_[static_cast<std::size_t>(i)].plugins) if (!isVstKind(p.kind)) p = PluginUi{}; } if (rt_) pushAll(); emit stripsChanged(); }
 
-static const struct { const char* kind; const char* name; } kBuiltIns[] = {{"gate", "NOISE GATE"}, {"eq", "EQ"}, {"xover", "X-OVER"}, {"comp", "COMPRESSOR"}, {"limiter", "LIMITER"}, {"delay", "DELAY"}, {"polarity", "POLARITY Ø"}};
+static const struct { const char* kind; const char* name; } kBuiltIns[] = {{"gate", "NOISE GATE"}, {"eq", "CHANNEL EQ (3-BAND)"}, {"miceq", "MIC EQ (10-BAND)"}, {"xover", "X-OVER"}, {"comp", "COMPRESSOR"}, {"limiter", "LIMITER"}, {"delay", "DELAY"}, {"polarity", "POLARITY Ø"}};
 QVariantList Engine::pluginCatalog() const { QVariantList l; for (const auto& b : kBuiltIns) { QVariantMap m; m["kind"] = b.kind; m["name"] = b.name; m["builtIn"] = true; l << m; } for (const auto& [k, n] : am::fx::catalog()) { QVariantMap m; m["kind"] = QStringLiteral("fx:") + QString::fromStdString(k); m["name"] = QString::fromStdString(n); m["builtIn"] = false; m["fx"] = true; m["vendor"] = QStringLiteral("AMFB Audio"); l << m; }
   for (const QVariantMap& v : vstCatalog_) l << v; return l; }
 QVariantList Engine::vstCatalog() const { QVariantList l; for (const QVariantMap& v : vstCatalog_) l << v; return l; }
@@ -643,7 +643,12 @@ void Engine::applyPluginStage(int i, const QString& kind, bool on) {
   else if (kind == "delay") setDelay(i, on ? (p.delayMs > 0 ? p.delayMs : 1.0) : 0);
   else if (kind == "polarity") setPolarity(i, on);
   else if (kind == "xover") setCrossover(i, static_cast<int>(p.xoverType), on ? (p.hpOrder > 0 ? p.hpOrder : 2) : 0, p.hpFreq, on ? p.lpOrder : 0, p.lpFreq);
-  else if (kind == "eq") { if (on) { bool any = false; for (const auto& b : p.eq) any = any || b.type != am::dsp::FilterType::Off; if (!any) setEq(i, 0, static_cast<int>(am::dsp::FilterType::Peaking), 1000, 1.0, 0); } else for (int b = 0; b < am::dsp::kEqBands; ++b) setEq(i, b, static_cast<int>(am::dsp::FilterType::Off), p.eq[static_cast<std::size_t>(b)].freq, p.eq[static_cast<std::size_t>(b)].q, 0); }
+  else if (kind == "eq" || kind == "miceq") {   // "eq": the CHANNEL EQ's three bands; "miceq": the ten MIC EQ bands. Off keeps every setting and only switches the bands off.
+    const int from = kind == "eq" ? am::dsp::kChannelEqFirst : 0, to = kind == "eq" ? am::dsp::kEqBands : am::dsp::kChannelEqFirst;
+    if (kind == "eq") { const QVariantMap c = channelEq(i); setChannelEq(i, c["low"].toDouble(), c["mid"].toDouble(), c["midFreq"].toDouble(), c["high"].toDouble(), on); }
+    else if (on) setGraphicEq(i, graphicEq(i), true);
+    else for (int b = from; b < to; ++b) { const auto e = p.eq[static_cast<std::size_t>(b)]; setEq(i, b, static_cast<int>(FilterType::Off), e.freq, e.q, e.gainDb); }
+  }
 }
 void Engine::setPlugin(int i, int slot, const QString& kind) {
   if (slot >= pluginSlotLimit() && !kind.isEmpty()) return;   // beyond the edition's slots: the rack shows them locked
@@ -679,6 +684,18 @@ void Engine::setEq(int i, int band, int type, double f, double q, double g) {
   strips_[static_cast<std::size_t>(i)].dsp.setEqBand(band, b); strips_[static_cast<std::size_t>(i)].eqPreset = 0;
   if (rt_) rt_->setEqBand(i, band, b.type, b.freq, b.q, b.gainDb);
   emit stripsChanged();
+}
+QVariantMap Engine::channelEq(int i) const {
+  QVariantMap m; if (i < 0 || i >= kStrips) return m; const auto& e = strips_[static_cast<std::size_t>(i)].dsp.params().eq; const int f = am::dsp::kChannelEqFirst;
+  const auto& lo = e[static_cast<std::size_t>(f)]; const auto& mid = e[static_cast<std::size_t>(f + 1)]; const auto& hi = e[static_cast<std::size_t>(f + 2)];
+  const bool set = mid.freq >= 100 && mid.freq <= 8000 && lo.type != FilterType::Peaking;   // untouched bands hold the engine's defaults, not a 3-band setting
+  m["low"] = set ? lo.gainDb : 0.0; m["mid"] = set ? mid.gainDb : 0.0; m["midFreq"] = set ? mid.freq : 1000.0; m["high"] = set ? hi.gainDb : 0.0;
+  m["on"] = lo.type != FilterType::Off || mid.type != FilterType::Off || hi.type != FilterType::Off; return m;
+}
+void Engine::setChannelEq(int i, double lowDb, double midDb, double midFreq, double highDb, bool on) {
+  if (i < 0 || i >= kStrips) return; const int f = am::dsp::kChannelEqFirst; const bool keep = restoring_; (void)keep;
+  auto put = [&](int b, FilterType t, double freq, double q, double g) { g = std::clamp(g, -15.0, 15.0); setEq(i, b, static_cast<int>(on && std::fabs(g) > 0.01 ? t : FilterType::Off), freq, q, g); };
+  put(f, FilterType::LowShelf, 100, 0.71, lowDb); put(f + 1, FilterType::Peaking, std::clamp(midFreq, 100.0, 8000.0), 0.9, midDb); put(f + 2, FilterType::HighShelf, 10000, 0.71, highDb);
 }
 QVariantMap Engine::eqBand(int i, int band) const {
   if (i == -1 && band >= 0 && band < am::MasterChain::kBands) { const auto& b = mp_.eq[band]; QVariantMap m; m["type"] = static_cast<int>(b.type); m["freq"] = b.freq; m["q"] = b.q; m["gainDb"] = b.gainDb; return m; }

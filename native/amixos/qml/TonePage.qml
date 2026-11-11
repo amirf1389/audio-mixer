@@ -13,6 +13,10 @@ Flickable {
     Timer { interval: 60; running: page.visible && page.rta; repeat: true; onTriggered: { page.spec = engine.spectrum(2); canvas.requestPaint() } }
     onRtaChanged: { if (rta) engine.setScopeStrip(strip); canvas.requestPaint() }
     property int strip: engine.selectedStrip
+    property int ch3Tick: 0
+    readonly property var ch3: { ch3Tick; const c = engine.channelEq(strip); return c.low === undefined ? { low: 0, mid: 0, midFreq: 1000, high: 0, on: false } : c }
+    function put3(key, v) { const c = Object.assign({}, ch3); c[key] = v; if (key !== "on") c.on = true; engine.setChannelEq(strip, c.low, c.mid, c.midFreq, c.high, c.on) }
+    Connections { target: engine; function onStripsChanged() { page.ch3Tick++ } }
     property int band: 0
     property var curve: []
     property var bandNow: ({ type: 0, freq: 1000, q: 1, gainDb: 0 })
@@ -35,6 +39,26 @@ Flickable {
         id: col
         width: parent.width - 20
         x: 10; y: 10
+        Rectangle {   // CHANNEL EQ: the strip's own three bands. The ten parametric bands below are the MIC EQ rack.
+            objectName: "channelEq3"; Layout.fillWidth: true; implicitHeight: 118; radius: Theme.radius; color: Theme.card; border.color: page.ch3.on ? Theme.emerald : Theme.line
+            RowLayout { anchors.fill: parent; anchors.margins: 12; spacing: 18
+                ColumnLayout { Layout.preferredWidth: 210; spacing: 4
+                    Text { text: i18n.t("CHANNEL EQ · 3-BAND", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
+                    Text { text: i18n.t("CH ", i18n.lang) + (page.strip + 1); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
+                    Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; text: i18n.t("Low, mid and high of this channel. The 10-band MIC EQ is a rack item (PLUG-INS), and RTA EQ is the master's.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
+                    Row { spacing: 6
+                        Rectangle { objectName: "ch3OnBtn"; width: 52; height: 20; radius: 4; color: page.ch3.on ? Theme.emerald : Theme.ov(0.08); border.color: Theme.lineSoft
+                            Text { anchors.centerIn: parent; text: page.ch3.on ? i18n.t("ON", i18n.lang) : i18n.t("OFF", i18n.lang); color: page.ch3.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                            MouseArea { anchors.fill: parent; onClicked: page.put3("on", !page.ch3.on) } }
+                        Rectangle { objectName: "ch3FlatBtn"; width: 52; height: 20; radius: 4; color: Theme.ov(0.08); border.color: Theme.lineSoft
+                            Text { anchors.centerIn: parent; text: i18n.t("FLAT", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                            MouseArea { anchors.fill: parent; onClicked: engine.setChannelEq(page.strip, 0, 0, 1000, 0, false) } } } }
+                Knob { label: i18n.t("LOW 100 Hz", i18n.lang); value: (page.ch3.low - (-15)) / 30; defaultValue: 0.5; valueText: (page.ch3.low > 0 ? "+" : "") + Number(page.ch3.low).toFixed(1) + " dB"; onMoved: function (v) { page.put3("low", Math.round((-15 + v * 30) * 2) / 2) } }
+                Knob { label: i18n.t("MID", i18n.lang); value: (page.ch3.mid - (-15)) / 30; defaultValue: 0.5; valueText: (page.ch3.mid > 0 ? "+" : "") + Number(page.ch3.mid).toFixed(1) + " dB"; onMoved: function (v) { page.put3("mid", Math.round((-15 + v * 30) * 2) / 2) } }
+                Knob { label: i18n.t("MID FREQ", i18n.lang); value: Math.log(page.ch3.midFreq / 100) / Math.log(80); defaultValue: Math.log(10) / Math.log(80); valueText: Math.round(page.ch3.midFreq) + " Hz"; onMoved: function (v) { page.put3("midFreq", Math.round(100 * Math.pow(80, v))) } }
+                Knob { label: i18n.t("HIGH 10 kHz", i18n.lang); value: (page.ch3.high - (-15)) / 30; defaultValue: 0.5; valueText: (page.ch3.high > 0 ? "+" : "") + Number(page.ch3.high).toFixed(1) + " dB"; onMoved: function (v) { page.put3("high", Math.round((-15 + v * 30) * 2) / 2) } }
+                Item { Layout.fillWidth: true } } }
+        Text { text: i18n.t("MIC EQ RACK · 10 PARAMETRIC BANDS", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 1.5 }
         spacing: 10
         Panel {
             Layout.fillWidth: true

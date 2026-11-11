@@ -15,7 +15,7 @@ Flickable {
     property bool rtaOn: true
     property bool frozen: false
     property string apoNote: ""
-    property bool program: true                 // the page's own rack: the PROGRAM EQ on the master (false = the selected channel's EQ)
+    readonly property bool program: true        // RTA EQ is the main (master) equaliser: ten bands of its own on the master. A channel has its 3-band CHANNEL EQ on TONE and the MIC EQ in its rack.
     property int strip: program ? -1 : engine.selectedStrip
     property var gains: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     property var spec: []
@@ -67,8 +67,8 @@ Flickable {
                 RowLayout { Layout.fillWidth: true; spacing: 8
                     Text { text: i18n.t("◭ 10-BAND PROGRAM BUS EQ & DIAMOND RTA", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
                     Rectangle { implicitWidth: rackT.implicitWidth + 16; implicitHeight: 20; radius: 4; color: page.program ? Theme.orange : Theme.ov(0.08); border.color: Theme.lineSoft
-                        Text { id: rackT; anchors.centerIn: parent; text: page.program ? i18n.t("EQ RACK: PROGRAM (MASTER)", i18n.lang) : i18n.t("EQ RACK: CHANNEL", i18n.lang); color: page.program ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-                        MouseArea { anchors.fill: parent; onClicked: page.program = !page.program } }
+                        Text { id: rackT; anchors.centerIn: parent; text: page.program ? i18n.t("MAIN EQ · MASTER", i18n.lang) : i18n.t("EQ RACK: CHANNEL", i18n.lang); color: page.program ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                        }
                     Rectangle { implicitWidth: apoE.implicitWidth + 14; implicitHeight: 20; radius: 4; color: Theme.ov(0.08); border.color: Theme.lineSoft; Text { id: apoE; anchors.centerIn: parent; text: i18n.t("APO EXPORT", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                         MouseArea { anchors.fill: parent; onClicked: { const f = engine.exportApo(page.strip, ""); page.apoNote = f ? i18n.t("Equalizer APO file: ", i18n.lang) + f : i18n.t("could not write the file", i18n.lang) } } }
                     Rectangle { implicitWidth: apoI.implicitWidth + 14; implicitHeight: 20; radius: 4; color: Theme.ov(0.08); border.color: Theme.lineSoft; Text { id: apoI; anchors.centerIn: parent; text: i18n.t("APO IMPORT", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
