@@ -30,7 +30,8 @@ cp "$B/amixos.exe" "$D/"; cp "$(find "$B" -name amixos-daemon.exe | head -1)" "$
 if [ -f "$ROOT/releases/windows/AmF X1.exe" ]; then cp "$ROOT/releases/windows/AmF X1.exe" "$ROOT/releases/windows/AudioMixerASIO64.dll" "$D/"; else node "$ROOT/scripts/build-native.js" --out "$D" >/dev/null; rm -f "$D/AmF X1 (32-bit).exe" "$D/AudioMixerASIO32.dll"; fi
 for l in Qt6Core Qt6Gui Qt6Network Qt6OpenGL Qt6Qml Qt6QmlModels Qt6QmlWorkerScript Qt6Quick Qt6QuickControls2 Qt6QuickControls2Impl Qt6QuickTemplates2 Qt6QuickLayouts Qt6QuickShapes libgcc_s_seh-1 libstdc++-6 libwinpthread-1; do cp "$KIT/bin/$l.dll" "$D/"; done
 for l in Qt6QuickControls2Fusion Qt6QuickControls2FusionStyleImpl; do [ -f "$KIT/bin/$l.dll" ] && cp "$KIT/bin/$l.dll" "$D/"; done   # the Fusion style (the console uses it: palette-driven, dark)
-cp "$KIT/plugins/platforms/qwindows.dll" "$D/platforms/"; cp "$KIT/plugins/imageformats/"*.dll "$D/imageformats/"
+cp "$KIT/plugins/platforms/qwindows.dll" "$D/platforms/"; mkdir -p "$D/tls"; cp "$KIT/plugins/tls/qschannelbackend.dll" "$D/tls/" 2>/dev/null || true;   # TLS for the update check (Windows Schannel)
+ cp "$KIT/plugins/imageformats/"*.dll "$D/imageformats/"
 cp -r "$KIT/qml/QtQml" "$KIT/qml/QtQuick" "$KIT/qml/Qt" "$D/qml/" 2>/dev/null || true
 rm -rf "$D/qml/QtQuick/Controls/Imagine" "$D/qml/QtQuick/Controls/Material" "$D/qml/QtQuick/Controls/Universal" "$D/qml/QtQuick/Controls/Windows" "$D/qml/QtQuick/Controls/designer" "$D/qml/QtQuick/Particles"
 printf '[Paths]\nPrefix = .\nPlugins = .\nQml2Imports = qml\n' > "$D/qt.conf"; cp "$ROOT/LICENSE" "$D/" 2>/dev/null || true
