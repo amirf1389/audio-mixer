@@ -41,6 +41,7 @@
 #include "Update.h"
 #include "Measure.h"
 #include "Remote.h"
+#include "Net.h"
 #include "measure/measure.hpp"
 #include "Engine.h"
 #include "license/license.hpp"
@@ -88,7 +89,7 @@ int main(int argc, char* argv[]) {
 
   am::paths::setProgramDir(QCoreApplication::applicationDirPath().toStdString());
   if (!smoke) { QFile* lf = new QFile(QString::fromStdString(am::paths::file("console.log"))); if (lf->size() > 256 * 1024) lf->remove(); if (lf->open(QIODevice::Append | QIODevice::Text)) { g_log = lf; qInstallMessageHandler(logToFile); qInfo("AmF X1 %s starting: %s, Qt %s, render %s", AMIX_VERSION, am::paths::osName(), qVersion(), QQuickWindow::graphicsApi() == QSGRendererInterface::Software ? "software" : "auto"); } }
-  Engine engine; I18n i18n; Arrange arrange(&engine); Settings settings(&engine); applyPalette(settings.darkTheme()); QObject::connect(&settings, &Settings::changed, &app, [&] { static bool last = settings.darkTheme(); if (last != settings.darkTheme()) { last = settings.darkTheme(); applyPalette(last); } }); if (smoke) settings.finishSetup(); Access access(&engine); Osc osc(&engine); Media media(&engine); Samples samples(&engine); Update update(QStringLiteral(AMIX_VERSION)); Measure measure(&engine); Remote remote(&engine);
+  Engine engine; I18n i18n; Arrange arrange(&engine); Settings settings(&engine); applyPalette(settings.darkTheme()); QObject::connect(&settings, &Settings::changed, &app, [&] { static bool last = settings.darkTheme(); if (last != settings.darkTheme()) { last = settings.darkTheme(); applyPalette(last); } }); if (smoke) settings.finishSetup(); Access access(&engine); Osc osc(&engine); Media media(&engine); Samples samples(&engine); Update update(QStringLiteral(AMIX_VERSION)); Measure measure(&engine); Remote remote(&engine); Net net(&engine);
   if (!lang.isEmpty()) i18n.setLang(lang);   // --lang fa: start in that language (also for --shots)
   QQmlApplicationEngine qml;
   qml.rootContext()->setContextProperty("engine", &engine);
@@ -102,6 +103,7 @@ int main(int argc, char* argv[]) {
   QObject::connect(&update, &Update::restarting, &app, [&] { settings.sessionClosed(); engine.stop(); QTimer::singleShot(1800, &app, &QCoreApplication::quit); });   // INSTALL AND RESTART: save, release the sound card, show the notice, quit; the setup starts the console again
   qml.rootContext()->setContextProperty("measure", &measure);
   qml.rootContext()->setContextProperty("remote", &remote);
+  qml.rootContext()->setContextProperty("net", &net);
   QObject::connect(&remote, &Remote::stopped, &app, [&] { if (!engine.running()) settings.startLastDevice(); });   // the remote service has let the sound card go: the console takes it back
   QObject::connect(&app, &QGuiApplication::aboutToQuit, &settings, &Settings::sessionClosed);
   QObject::connect(&app, &QGuiApplication::aboutToQuit, &engine, &Engine::restoreSystemSound);   // a Windows mute set by the fader at -inf is taken back on exit
@@ -308,6 +310,24 @@ int main(int argc, char* argv[]) {
           if (engine.openBluetooth("dsound", "-", "{gone}", 512) || !engine.bluetoothNote().contains("RESCAN")) { std::fprintf(stderr, "amixos --smoke: a vanished Bluetooth device was not reported\n"); return 178; }
           if (!engine.open("null", "", "", 48000, 256, 2, 2)) { std::fprintf(stderr, "amixos --smoke: the null device did not reopen after the Bluetooth check\n"); return 179; } }
         engine.simulateDevices(realDevices); }
+      { // NETWORK AUDIO + MIDI: everything off at start; a stream to this machine comes back on a network input and reaches a strip; MIDI moves a fader and learns a control
+        if (net.txOn() || net.rxOn() || net.midiNetOn() || net.discoverOn()) { std::fprintf(stderr, "amixos --smoke: network audio must be off until asked\n"); return 181; }
+        if (net.transports().size() < 5 || !net.transports()[0].toMap()["available"].toBool()) { std::fprintf(stderr, "amixos --smoke: transports list\n"); return 182; }
+        const int keepFirst = net.rxFirstStrip(); const QString keepRx = net.rxAddress(), keepTx = net.txAddress(); const int keepRxPort = net.rxPort(), keepTxPort = net.txPort();
+        net.setRxAddress("127.0.0.1"); net.setRxPort(47420); net.setRxChannels(2); net.setRxBits(24); net.setRxRate(48000); net.setRxLatency(20); net.setTxAddress("127.0.0.1"); net.setTxPort(47420); net.setTxChannels(2); net.setTxBits(24);
+        if (!net.startReceive() || !net.startSend()) { std::fprintf(stderr, "amixos --smoke: network stream start: %s\n", qPrintable(net.message())); return 183; }
+        net.setRxFirstStrip(7); if (engine.inputRoutes()[6].toInt() != 256 || engine.inputRoutes()[7].toInt() != 257) { std::fprintf(stderr, "amixos --smoke: network inputs not patched\n"); return 184; }
+        QElapsedTimer nt; nt.start(); while (nt.elapsed() < 600) QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+        const QVariantMap ns = net.stats();
+        if (ns["txPackets"].toULongLong() < 200 || ns["rxPackets"].toULongLong() < 200 || ns["rxLost"].toULongLong() != 0 || !ns["rxLive"].toBool()) { std::fprintf(stderr, "amixos --smoke: network stream did not flow (tx %llu rx %llu)\n", ns["txPackets"].toULongLong(), ns["rxPackets"].toULongLong()); return 185; }
+        net.stopReceive(); net.stopSend(); if (net.txOn() || net.rxOn() || engine.inputRoutes()[6].toInt() != 6) { std::fprintf(stderr, "amixos --smoke: network stream stop / strips back to their inputs\n"); return 186; }
+        net.setRxFirstStrip(keepFirst); net.setRxAddress(keepRx); net.setTxAddress(keepTx); net.setRxPort(keepRxPort); net.setTxPort(keepTxPort);
+        const double before = engine.stripState()[2].toMap()["db"].toDouble(); net.midiIn(0xb2, 7, 100); if (std::fabs(engine.stripState()[2].toMap()["db"].toDouble()) > 1e-6) { std::fprintf(stderr, "amixos --smoke: MIDI fader\n"); return 187; }
+        const bool m0 = engine.stripState()[5].toMap()["mute"].toBool(); net.midiIn(0x90, 5, 100); if (engine.stripState()[5].toMap()["mute"].toBool() == m0) { std::fprintf(stderr, "amixos --smoke: MIDI mute\n"); return 188; } net.midiIn(0x90, 5, 100);
+        const QString keepMap = QSettings().value("net/midiMap").toString(); net.learn("fader", 3); net.midiIn(0xb0, 44, 1); net.midiIn(0xb0, 44, 127);
+        if (net.midiLearning() || net.midiLearned() < 1 || std::fabs(engine.stripState()[3].toMap()["db"].toDouble() - 10) > 1e-6) { std::fprintf(stderr, "amixos --smoke: MIDI learn\n"); return 189; }
+        net.clearLearned(); QSettings().setValue("net/midiMap", keepMap); engine.setGain(2, before); engine.setGain(3, 0);
+        if (!net.setMidiNet(true)) { net.setMidiNetPort(47430); if (!net.setMidiNet(true)) { std::fprintf(stderr, "amixos --smoke: network MIDI: %s\n", qPrintable(net.message())); return 190; } } net.setMidiNet(false); }
       // NETWORK: the interface list holds the loopback card; the allowlist refuses a foreign address and admits a listed one
       bool loop = false; for (const QVariant& v : osc.interfaces()) if (v.toMap()["kind"] == "loopback") loop = true; if (!loop) { std::fprintf(stderr, "amixos --smoke: network interfaces\n"); return 127; }
       osc.setAllowedIps("10.1.2.3, 192.168.5.0/24"); if (osc.ipAllowed(QHostAddress("10.9.9.9")) || !osc.ipAllowed(QHostAddress("10.1.2.3")) || !osc.ipAllowed(QHostAddress("192.168.5.77")) || !osc.ipAllowed(QHostAddress::LocalHost)) { std::fprintf(stderr, "amixos --smoke: osc allowed list\n"); return 128; } osc.setAllowedIps("");
@@ -396,6 +416,12 @@ int main(int argc, char* argv[]) {
           const QImage img = win->grabWindow(); img.save(shots + "/" + id + ".png"); std::printf("amixos --shots: %s %dx%d\n", id, img.width(), img.height());
           if (QString::fromLatin1(id) == "admin") {   // the same page with the PIN entered
             access.enterAdmin("1234"); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + "/admin-open.png"); access.leaveAdmin(); std::printf("amixos --shots: admin-open\n"); }
+          if (QString::fromLatin1(id) == "network") { if (QObject* np = win->findChild<QObject*>("networkPage")) {   // the AUDIO + MIDI view with a stream running to this machine and back
+            const QString rxA = net.rxAddress(), txA = net.txAddress(); const int rxP = net.rxPort(), txP = net.txPort(), first = net.rxFirstStrip();
+            net.setRxAddress("127.0.0.1"); net.setRxPort(47422); net.setTxAddress("127.0.0.1"); net.setTxPort(47422); net.startReceive(); net.startSend(); net.setRxFirstStrip(7); net.midiIn(0xb1, 7, 96);
+            np->setProperty("view", 1); waitMs(900); win->grabWindow().save(shots + "/network-audio-midi.png"); std::printf("amixos --shots: network-audio-midi\n");
+            if (!win->findChild<QObject*>("aoipPanel")) { std::fprintf(stderr, "amixos --shots: FAILED the AUDIO + MIDI panel is missing\n"); }
+            net.stopSend(); net.stopReceive(); net.setRxFirstStrip(first); net.setRxAddress(rxA); net.setTxAddress(txA); net.setRxPort(rxP); net.setTxPort(txP); engine.setGain(1, 0); np->setProperty("view", 0); } }
           if (QString::fromLatin1(id) == "fx") { if (QObject* fp = win->findChild<QObject*>("effectsPage")) { fp->setProperty("browse", true); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + "/fx-presets.png"); fp->setProperty("browse", false); std::printf("amixos --shots: fx-presets\n"); } }
           if (QString::fromLatin1(id) == "dsp") { if (QObject* tp = win->findChild<QObject*>("tonePage")) { tp->setProperty("rta", true); waitMs(500); win->grabWindow().save(shots + "/tone-rta.png"); tp->setProperty("rta", false);
             engine.applyEqPreset(1, 0); tp->setProperty("contentY", 400); waitMs(300); win->grabWindow().save(shots + "/tone-presets.png"); tp->setProperty("contentY", 0); for (int b = 0; b < 10; ++b) engine.setEq(0, b, 0, 1000, 1, 0); engine.setCrossover(0, 0, 0, 80, 0, 16000); std::printf("amixos --shots: tone-rta, tone-presets\n"); } }

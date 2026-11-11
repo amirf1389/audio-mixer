@@ -1,5 +1,5 @@
 // NETWORK: the network cards of this computer, the remote address to type into a controller, an allowed-IP list, and the OSC remote-control server (UDP). Off by default; binds this computer only unless LAN is allowed, and says plainly that
-// OSC over UDP has no authentication or encryption. Dante / AES67 / PTP from the browser mock-up are not part of this build.
+// OSC over UDP has no authentication or encryption. The AUDIO + MIDI view (AoipPanel.qml) holds network audio on the open AES67 profile and MIDI.
 import QtQuick
 import AmixOS   // this module: brings the Theme singleton (a plain directory import would see Theme as an ordinary type)
 import QtQuick.Controls
@@ -8,6 +8,7 @@ import QtQuick.Layouts
 Item {
     id: page
     objectName: "networkPage"
+    property int view: 0   // 0 = remote control (OSC, phone remote), 1 = network audio and MIDI
     component Head: Text { color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
     component Note: Text { Layout.fillWidth: true; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap }
     component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(56, bl.implicitWidth + 16); implicitHeight: 24; radius: 4; color: on ? onColor : Theme.ov(0.08); border.color: Theme.lineSoft
@@ -17,11 +18,14 @@ Item {
         Rectangle { Layout.fillWidth: true; implicitHeight: 34; radius: 8; color: Theme.card; border.color: Theme.line
             RowLayout { anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 8
                 Text { text: i18n.t("NETWORK:", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
+                Btn { objectName: "netViewControl"; label: i18n.t("REMOTE CONTROL", i18n.lang); on: page.view === 0; onClicked: page.view = 0 }
+                Btn { objectName: "netViewAudio"; label: i18n.t("AUDIO + MIDI", i18n.lang); on: page.view === 1; onColor: Theme.cyan; onClicked: page.view = 1 }
                 Text { text: i18n.t("OSC ", i18n.lang) + osc.status; color: osc.enabled ? Theme.emerald : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                 Item { Layout.fillWidth: true }
                 Text { text: i18n.t("RX ", i18n.lang) + osc.rx + i18n.t(" · TX ", i18n.lang) + osc.tx + (osc.lastClient ? i18n.t(" · client ", i18n.lang) + osc.lastClient : ""); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                 Btn { label: osc.enabled ? i18n.t("STOP SERVER", i18n.lang) : i18n.t("START SERVER", i18n.lang); on: !osc.enabled; onColor: Theme.emerald; onClicked: osc.enabled = !osc.enabled } } }
-        RowLayout { Layout.fillWidth: true; Layout.fillHeight: true; spacing: 8
+        AoipPanel { visible: page.view === 1; Layout.fillWidth: true; Layout.fillHeight: true }
+        RowLayout { visible: page.view === 0; Layout.fillWidth: true; Layout.fillHeight: true; spacing: 8
             Rectangle { Layout.preferredWidth: 400; Layout.fillHeight: true; radius: Theme.radius; color: Theme.card; border.color: Theme.line
                 ColumnLayout { anchors.fill: parent; anchors.margins: 12; spacing: 8
                     Head { text: i18n.t("NETWORK CARDS", i18n.lang) }

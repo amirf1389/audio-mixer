@@ -28,7 +28,7 @@ qt_add_executable(amixos
     src/Media.cpp src/Media.h
     src/Samples.cpp src/Samples.h
     src/Update.cpp src/Update.h
-    src/Scope.cpp src/Scope.h src/Measure.cpp src/Measure.h src/Remote.cpp src/Remote.h
+    src/Scope.cpp src/Scope.h src/Measure.cpp src/Measure.h src/Remote.cpp src/Remote.h src/Net.cpp src/Net.h
     src/Generator.cpp src/Generator.h
     src/I18n.cpp src/I18n.h)
 set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)   # before qt_add_qml_module, or Theme is a plain type and every Theme.* colour is undefined
@@ -59,6 +59,7 @@ qt_add_qml_module(amixos
         qml/AcousticsPage.qml
         qml/MasteringPage.qml
         qml/SpatialPage.qml
+        qml/AoipPanel.qml
         qml/MicEqPage.qml
         qml/LiveSourcesPage.qml
         qml/ToolsPage.qml
@@ -135,7 +136,7 @@ qt_add_qml_module(amixos
         i18n/ui/uk.json)
 target_compile_definitions(amixos PRIVATE AMIX_VERSION="${AMIX_VERSION}")
 target_compile_definitions(amixos PRIVATE AMIX_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
-target_link_libraries(amixos PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::QuickControls2 Qt6::Network audiomixer_runtime audiomixer_engine amixos_license amixos_arrange amixos_vst3 amixos_vst2 amixos_record amixos_fx amixos_samples amixos_measure)
+target_link_libraries(amixos PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::QuickControls2 Qt6::Network audiomixer_runtime audiomixer_engine amixos_net amixos_license amixos_arrange amixos_vst3 amixos_vst2 amixos_record amixos_fx amixos_samples amixos_measure)
 
 if(WIN32)
     set_target_properties(amixos PROPERTIES WIN32_EXECUTABLE TRUE)

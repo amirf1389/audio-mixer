@@ -27,6 +27,36 @@ the daemon, the bindings and the packages all run the same DSP. Nothing is dupli
 Build: `cmake -S engine/cpp -B build && cmake --build build` gives `libamix.so` (Linux), `amix.dll` (Windows: `windows/vs/AmixOS.sln` or MinGW),
 `libamix.dylib` (macOS) and the static twin `amix_static`. Only `amix_*` symbols are exported. `sdk_c_test` (plain C) is part of `ctest`.
 
+### Network audio and MIDI (API version 5)
+
+The engine carries network audio on the open **AES67** profile: RTP with L24 or L16 linear PCM, 1 ms packets, announced and found
+with SAP / SDP. The same wire format carries RAVENNA and SMPTE ST 2110-30 streams, and equipment of other makers is reached through
+its AES67 mode.
+
+| Call | What it does |
+| --- | --- |
+| `amix_rt_net_send_start(rt, name, address, port, channels, bits, iface, announce, err, n)` | The master as one stream (1 = mono sum, 2 = master, more = the strips before their faders follow) |
+| `amix_rt_net_receive_start(rt, address, port, channels, bits, rate, latency_ms, iface, err, n)` | One stream as up to `AMIX_NET_INPUTS` extra inputs: `amix_rt_set_input_route(rt, strip, AMIX_NET_INPUT_BASE + k)` |
+| `amix_rt_net_stats_json(rt)` | Packets, lost, late, gaps, buffer fill |
+| `amix_net_discover_json(wait_ms, iface)` | The streams announced on the network |
+| `amix_net_transports_json()` | What this build can carry, and what it cannot and why |
+| `amix_midi_action_default(status, d1, d2, &action)` | What a MIDI message means on the default map (CC 7 = fader, CC 10 = pan, notes = mute / solo) |
+| `amix_midi_inputs_json()` | The MIDI inputs of the computer |
+
+Limits, stated plainly:
+
+- **No PTP clock.** The sender's media clock is the sound card's; the receiver follows each stream's own clock by resampling (0.3 % at
+  most). Equipment that insists on PTP lock may refuse the sender.
+- **No encryption, no password.** The audio is in clear on the local network. Nothing runs until it is switched on.
+- **Dante** is its maker's own licensed protocol and is not implemented; Dante devices are reached through their AES67 mode.
+  **NDI** needs its maker's SDK and runtime under their licence. **SRT** needs the open-source SRT library built in. None of the
+  three is in this build, and `amix_net_transports_json()` says so.
+- Network MIDI is RTP-MIDI (RFC 6295) as a session others connect to by address; it is not announced by Bonjour, and the recovery
+  journal is ignored.
+
+The C++ classes are in `engine/cpp/app/net` (`am::net::Sender`, `Receiver`, `Discovery`, `Aoip`, `RtpMidi`, `MidiPorts`, `MidiMap`),
+tested by `engine/cpp/test/net_test.cpp` with a real stream through UDP on the test machine.
+
 ## Bindings
 
 - **Perl** (`bindings/perl/Audio-AmixOS`): XS over the C API. `AMIX_LIB=../../build perl Makefile.PL && make && make test`.
