@@ -57,6 +57,10 @@ Engine::Engine(QObject* parent) : QObject(parent) {
   histTimer_.setSingleShot(true); histTimer_.setInterval(400); connect(&histTimer_, &QTimer::timeout, this, &Engine::recordHistory);
   for (auto sig : {&Engine::stripsChanged, &Engine::busesChanged, &Engine::groupsChanged, &Engine::monitorChanged, &Engine::routingChanged}) connect(this, sig, this, [this] { if (!restoring_) histTimer_.start(); });
   history_.push_back(consoleJson()); histPos_ = 0;
+  // THE CONSOLE IS WRITTEN AS IT CHANGES, not only when the program closes: two seconds after the last change of a fader, a rack, a bus,
+  // the master chain or the routing. A crash, a forced shutdown or an update that restarts the program then loses nothing.
+  saveTimer_.setSingleShot(true); saveTimer_.setInterval(2000); connect(&saveTimer_, &QTimer::timeout, this, [this] { if (!restoring_) { save(); settings_.sync(); } });
+  for (auto sig : {&Engine::stripsChanged, &Engine::busesChanged, &Engine::masterChainChanged, &Engine::routingChanged, &Engine::groupsChanged}) connect(this, sig, &saveTimer_, qOverload<>(&QTimer::start));
   graveTimer_.setSingleShot(true); graveTimer_.setInterval(1500); connect(&graveTimer_, &QTimer::timeout, this, [this] { graveyard_.clear(); fxGraveyard_.clear(); });
   taps_.b.store(&scope_); sources_.b.store(&gen_);   // removed plug-ins die on the UI thread, after the audio thread has let go
   QTimer::singleShot(0, this, [this] { rescanVst(settings_.value("vst3/dirs").toStringList() + settings_.value("vst2/dirs").toStringList()); });   // after the window is up: the first scan never delays the start
@@ -598,6 +602,7 @@ int Engine::rescanVst(const QStringList& extraDirs) {
     done->store(true); return true; }, 30000);
   vstScanning_ = false;
   if (done->load()) vstCatalog_ = *found; else { status_ = QStringLiteral("The plug-in scan did not finish in 30 s (a plug-in is hanging): the list was left as it was. Move that plug-in out of the folder and RESCAN."); qWarning("VST scan timed out"); }
+  if (done->load()) retryPlugins();   // a plug-in that was not there when the console was loaded may be there now
   emit vstCatalogChanged();
   emit stripsChanged(); return static_cast<int>(vstCatalog_.size());
 }
@@ -612,6 +617,14 @@ bool Engine::loadVst(int i, int slot) {
   if (!pl) { p.error = QString::fromStdString(err); return false; }
   if (!p.state.isEmpty()) pl->setState(p.state.toStdString());
   pl->setBypass(p.bypass); p.vst = std::move(pl); return true;
+}
+int Engine::retryPlugins() {
+  int back = 0;
+  for (int i = 0; i < kStrips; ++i) { bool any = false;
+    for (int k = 0; k < kPluginSlots; ++k) { PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[k]; if (isVstKind(p.kind) && !p.vst) { if (loadVst(i, k)) { ++back; any = true; } } }
+    if (any) rebuildInserts(i); }
+  if (back) emit stripsChanged();
+  return back;
 }
 void Engine::rebuildInserts(int i) {
   if (!rt_) return; auto chain = std::make_shared<am::Runtime::InsertChain>();
@@ -917,7 +930,7 @@ void Engine::applyConsoleJson(const QJsonObject& root, bool respectSafe) {
     buses_[k].fxKind = o.value("fx").toString(); buses_[k].fxMix = std::clamp(o.value("fxMix").toDouble(1), 0.0, 1.0); buses_[k].fxBypass = o.value("fxBypass").toBool(); buses_[k].fxValues.clear(); const QJsonObject fv = o.value("fxValues").toObject(); for (auto it = fv.begin(); it != fv.end(); ++it) buses_[k].fxValues[it.key()] = std::clamp(it.value().toDouble(), 0.0, 1.0); makeBusFx(k); }
   const QJsonArray dcas = root.value("dcas").toArray(); for (int g = 0; g < kGroups && g < dcas.size(); ++g) { const QJsonObject o = dcas[g].toObject(); if (o.contains("name")) dcas_[g].name = o.value("name").toString().left(16); dcas_[g].db = std::clamp(o.value("db").toDouble(0), -60.0, 10.0); dcas_[g].mute = o.value("mute").toBool(); }
   const QJsonArray mgs = root.value("muteGroups").toArray(); for (int g = 0; g < kGroups && g < mgs.size(); ++g) { const QJsonObject o = mgs[g].toObject(); if (o.contains("name")) muteGroups_[g].name = o.value("name").toString().left(16); muteGroups_[g].active = o.value("active").toBool(); }
-  for (int i = 0; i < kStrips; ++i) for (int k = 0; k < kPluginSlots; ++k) { PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[k]; if (isVstKind(p.kind) && !p.vst) loadVst(i, k); else if (p.vst && !p.state.isEmpty()) { p.vst->setState(p.state.toStdString()); p.vst->setBypass(p.bypass); } }
+  for (int i = 0; i < kStrips; ++i) for (int k = 0; k < kPluginSlots; ++k) { PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[k]; if (isVstKind(p.kind) && !p.vst) loadVst(i, k); else if (p.vst) { if (!p.state.isEmpty()) p.vst->setState(p.state.toStdString()); p.vst->setBypass(p.bypass); } }
   if (rt_) { for (auto& s : strips_) s.dsp.setSampleRate(s.dsp.sampleRate()); pushAll(); }
   emit stripsChanged(); emit busesChanged(); emit groupsChanged();
 }

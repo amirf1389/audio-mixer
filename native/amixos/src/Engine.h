@@ -340,6 +340,8 @@ class Engine : public QObject {
   Q_INVOKABLE QString pluginError(int strip, int slot) const;
   Q_INVOKABLE QString pluginParamText(int strip, int slot, int id, double normalized) const;   // what the plug-in calls that position ("250 ms", "+12 dB"): for a knob's printed scale
   Q_INVOKABLE int pluginCount(int strip) const;
+  Q_INVOKABLE int retryPlugins();   // tries again every plug-in slot that is waiting (its file was missing, busy or not scanned yet); returns how many came back
+  Q_INVOKABLE void saveNow() { save(); settings_.sync(); }   // the console (faders, DSP, racks and what their plug-ins hold) to the settings, now
   Q_INVOKABLE void copyChannel(int strip);
   Q_INVOKABLE bool pasteChannel(int strip);          // the copied DSP + sends + pan onto this strip (not the name, colour, fader or groups)
   bool channelClipboard() const { return clipboard_.has_value(); }
@@ -420,7 +422,7 @@ class Engine : public QObject {
   static constexpr int kBuses = 16, kGroups = 8;   // buses 0-7 AUX, 8-15 FX
   struct SendUi { double db = -60; bool pre = false; };
   struct PluginUi { QString kind; bool bypass = false; std::shared_ptr<am::host::Plugin> vst; QString state, error; };   // vst: loaded instance (null = pending with error)
-  bool vstScanning_ = false; std::vector<QVariantMap> vstCatalog_; std::vector<std::shared_ptr<am::host::Plugin>> graveyard_; QTimer graveTimer_;
+  bool vstScanning_ = false; std::vector<QVariantMap> vstCatalog_; std::vector<std::shared_ptr<am::host::Plugin>> graveyard_; QTimer graveTimer_; QTimer saveTimer_;
   bool loadVst(int strip, int slot);                      // from kind + state at the runtime's rate; false -> error set
   void rebuildInserts(int strip);                         // the strip's VST chain into the runtime
   void reloadAllVst();                                    // after open (new rate / block)

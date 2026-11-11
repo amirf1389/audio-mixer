@@ -43,7 +43,8 @@
         "AMFB MASTER ANALYZER (ANALYZER button on the master strip): short-term, integrated and momentary loudness against a target (streaming, broadcast, podcast, live), range and true peak, left / right peak and RMS, stereo correlation, a spectrogram of the last 15 seconds and the loudness history of the last 3 minutes, with PAUSE and CLEAR.",
         "Stability: a rare crash of the audio engine is fixed (a burst of changes, such as loading a whole console, could lose the message that detaches an effect); the acoustics distortion analysis no longer reads past its spectrum.",
         "FILE > Load the console from that file now finds the file FILE > Save writes. The opening animation plays to its end (no skip) and can be switched off in the FACTORY SETUP, which also sets the ASIO routing and no longer has a SKIP button. The FILE menu has no Quit entry: close the window to leave.",
-        "PLUG-INS: OPEN VST FOLDER opens the console's own plug-in folder (created on first use and saved, so it is scanned at every start); each listed folder has an OPEN button."
+        "PLUG-INS: OPEN VST FOLDER opens the console's own plug-in folder (created on first use and saved, so it is scanned at every start); each listed folder has an OPEN button.",
+        "Plug-ins come back properly: the console (faders, racks and what each plug-in holds) is now written two seconds after any change and again when the window closes, not only on a clean exit, so a crash, a forced shutdown or an update restart loses nothing; a plug-in whose file was missing waits in its slot with its settings and is tried again after every scan or with a click on WHY?; a loaded plug-in's bypass is restored with a console."
       ]
     }
   ]
