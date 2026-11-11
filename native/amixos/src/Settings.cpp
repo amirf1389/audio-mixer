@@ -33,6 +33,16 @@ void Settings::setClipDb(double v) { v = std::clamp(v, -12.0, 0.0); set("audio/c
 QStringList Settings::vstDefaultDirs() const { QStringList l; for (const auto& d : am::vst3::defaultDirs()) l << QString::fromStdString(d) + "  (VST3)"; for (const auto& d : am::vst2::defaultDirs()) l << QString::fromStdString(d) + "  (VST2)"; return l; }
 int Settings::addVstDir(const QString& dir) { QStringList l = vstDirs(); const QString d = dir.trimmed(); if (!d.isEmpty() && !l.contains(d)) l << d; s_.setValue("vst3/dirs", l); s_.sync(); emit changed(); return rescanVst(); }
 int Settings::removeVstDir(const QString& dir) { QStringList l = vstDirs(); l.removeAll(dir); s_.setValue("vst3/dirs", l); s_.sync(); emit changed(); return rescanVst(); }
+QString Settings::vstUserFolder() {
+  const QString d = QDir::toNativeSeparators(dataFolder() + "/vst"); QDir().mkpath(d);
+  QStringList l = vstDirs(); if (!l.contains(d)) { l << d; s_.setValue("vst3/dirs", l); s_.sync(); emit changed(); }   // saved: scanned at every start from now on
+  return d;
+}
+bool Settings::openVstFolder(const QString& dir) {
+  const QString d = dir.trimmed().isEmpty() ? vstUserFolder() : dir.trimmed();
+  if (!QDir(d).exists()) { note(QStringLiteral("The folder %1 does not exist.").arg(d)); return false; }
+  return QDesktopServices::openUrl(QUrl::fromLocalFile(d));
+}
 int Settings::rescanVst() { const int n = engine_ ? engine_->rescanVst(vstDirs()) : 0; note(QStringLiteral("%1 VST3 / VST2 plug-in(s) found in %2 folder(s).").arg(n).arg(vstDefaultDirs().size() + vstDirs().size())); return n; }
 QString Settings::dataFolder() const { return QString::fromStdString(am::paths::dataDir()); }
 QVariantMap Settings::folders() const {

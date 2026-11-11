@@ -318,6 +318,10 @@ int main(int argc, char* argv[]) {
         engine.setPlugin(4, 0, "miceq"); engine.setPlugin(4, 0, ""); const QVariantList g2 = engine.graphicEq(4);
         if (!hasMic || !hasCh || engine.eqBand(4, 0)["type"].toInt() != 0 || std::fabs(g2[0].toDouble() - 3) > 1e-6 || !engine.channelEq(4)["on"].toBool()) { std::fprintf(stderr, "amixos --smoke: MIC EQ rack item (removing it must switch the ten bands off, keep their gains and leave the channel EQ on)\n"); return 196; }
         engine.setChannelEq(4, 0, 0, 1000, 0, false); engine.setGraphicEq(4, QVariantList{0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, false); if (engine.channelEq(4)["on"].toBool()) { std::fprintf(stderr, "amixos --smoke: channel EQ flat\n"); return 197; } }
+      { // VST FOLDER: the console's own plug-in folder is created and saved among the scanned folders, once
+        const QStringList before = settings.vstDirs(); const QString vf = settings.vstUserFolder(); settings.vstUserFolder();
+        if (vf.isEmpty() || !QDir(vf).exists() || settings.vstDirs().count(vf) != 1 || QSettings().value("vst3/dirs").toStringList().count(vf) != 1) { std::fprintf(stderr, "amixos --smoke: the VST folder was not created and saved\n"); return 198; }
+        if (!before.contains(vf)) settings.removeVstDir(vf); }
       { // MIC SWEEP: the measured strip is muted in the mix while the sweep plays and comes back afterwards; the recording is described (level, noise, input)
         engine.setMute(0, false); if (!measure.runSweep(0, 0.5, 100, 8000, -12, 6) || !engine.stripState()[0].toMap()["mute"].toBool()) { std::fprintf(stderr, "amixos --smoke: the sweep did not start or the measured strip was not muted\n"); return 192; }
         QElapsedTimer mt; mt.start(); while (measure.state() == "measuring" && mt.elapsed() < 8000) QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
