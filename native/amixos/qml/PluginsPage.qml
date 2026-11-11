@@ -26,6 +26,7 @@ Item {
                 Field { Layout.preferredWidth: 220; placeholderText: i18n.t("search name, vendor, file", i18n.lang); text: page.filter; onTextChanged: page.filter = text; font.family: Theme.mono; font.pixelSize: 9; implicitHeight: 24 }
                 Item { Layout.fillWidth: true }
                 Text { text: i18n.t("INSERT target: CH ", i18n.lang) + (engine.selectedStrip + 1); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                Btn { objectName: "openVstFolderBtn"; label: i18n.t("OPEN VST FOLDER", i18n.lang); on: true; onColor: Theme.amber; onClicked: { settings.openVstFolder(""); page.tick++ } }
                 Btn { label: i18n.t("RESCAN", i18n.lang); on: true; onColor: Theme.cyan; onClicked: { settings.rescanVst(); page.tick++ } } } }
         RowLayout { Layout.fillWidth: true; Layout.fillHeight: true; spacing: 8
             Rectangle { Layout.fillWidth: true; Layout.fillHeight: true; radius: Theme.radius; color: Theme.card; border.color: Theme.line; clip: true
@@ -42,7 +43,7 @@ Item {
                 ColumnLayout { anchors.fill: parent; anchors.margins: 12; spacing: 6
                     Text { text: i18n.t("FOLDERS", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
                     Repeater { model: settings.vstDefaultDirs; delegate: Text { text: "• " + modelData; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; elide: Text.ElideMiddle; Layout.fillWidth: true } }
-                    Repeater { model: settings.vstDirs; delegate: RowLayout { Layout.fillWidth: true; Text { text: "• " + modelData; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 7; elide: Text.ElideMiddle; Layout.fillWidth: true } Btn { label: i18n.t("REMOVE", i18n.lang); onClicked: { settings.removeVstDir(modelData); page.tick++ } } } }
+                    Repeater { model: settings.vstDirs; delegate: RowLayout { Layout.fillWidth: true; Text { text: "• " + modelData; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 7; elide: Text.ElideMiddle; Layout.fillWidth: true } Btn { label: i18n.t("OPEN", i18n.lang); onClicked: settings.openVstFolder(modelData) } Btn { label: i18n.t("REMOVE", i18n.lang); onClicked: { settings.removeVstDir(modelData); page.tick++ } } } }
                     RowLayout { Layout.fillWidth: true; spacing: 6
                         Field { id: dirIn; Layout.fillWidth: true; placeholderText: i18n.t("another folder with .vst3 / .dll / .so", i18n.lang); font.family: Theme.mono; font.pixelSize: 8; implicitHeight: 24; onAccepted: { settings.addVstDir(text); text = ""; page.tick++ } }
                         Btn { label: i18n.t("ADD", i18n.lang); on: true; onClicked: { settings.addVstDir(dirIn.text); dirIn.text = ""; page.tick++ } } }

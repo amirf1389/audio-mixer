@@ -42,7 +42,8 @@
         "AMFB VOLUME ENHANCER on the master (ENHANCER button on the master strip): LOUDNESS into the limiter with a CEILING, ANALOG drive, SOFTEN and MIX of the glue compressor, LOW / MID / HIGH, MONO BELOW and WIDTH, output and limiting meters, six presets, INIT and bypass. The master chain gained a 1 kHz mid band and a parallel compressor mix for it.",
         "AMFB MASTER ANALYZER (ANALYZER button on the master strip): short-term, integrated and momentary loudness against a target (streaming, broadcast, podcast, live), range and true peak, left / right peak and RMS, stereo correlation, a spectrogram of the last 15 seconds and the loudness history of the last 3 minutes, with PAUSE and CLEAR.",
         "Stability: a rare crash of the audio engine is fixed (a burst of changes, such as loading a whole console, could lose the message that detaches an effect); the acoustics distortion analysis no longer reads past its spectrum.",
-        "FILE > Load the console from that file now finds the file FILE > Save writes. The opening animation plays to its end (no skip) and can be switched off in the FACTORY SETUP, which also sets the ASIO routing and no longer has a SKIP button. The FILE menu has no Quit entry: close the window to leave."
+        "FILE > Load the console from that file now finds the file FILE > Save writes. The opening animation plays to its end (no skip) and can be switched off in the FACTORY SETUP, which also sets the ASIO routing and no longer has a SKIP button. The FILE menu has no Quit entry: close the window to leave.",
+        "PLUG-INS: OPEN VST FOLDER opens the console's own plug-in folder (created on first use and saved, so it is scanned at every start); each listed folder has an OPEN button."
       ]
     }
   ]
