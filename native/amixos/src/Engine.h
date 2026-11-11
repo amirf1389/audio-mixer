@@ -326,6 +326,12 @@ class Engine : public QObject {
   Q_INVOKABLE void movePlugin(int strip, int from, int to);   // reorder the rack (swap two slots)
   // VST3 (engine/cpp/app/vst3): plug-ins found in the VST3 folders (Settings adds more), loaded into a slot as "vst3:<module path>|<class id>"
   Q_INVOKABLE QVariantList vstCatalog() const;        // [{kind, name, vendor, module, cid, format}] from the last scan: VST3 and VST2
+  Q_PROPERTY(int vstCount READ vstCount NOTIFY vstCatalogChanged)          // hosted VST3 / VST2 plug-ins found by the last scan
+  Q_PROPERTY(bool vstScanning READ vstScanning NOTIFY vstCatalogChanged)
+  int vstCount() const { return static_cast<int>(vstCatalog_.size()); } bool vstScanning() const { return vstScanning_; }
+  Q_SIGNAL void vstCatalogChanged();
+  Q_INVOKABLE QVariantList rackPresets(const QString& kind) const;       // factory presets of a built-in effect ("fx:reverb" ...): [{id, name, category}]
+  Q_INVOKABLE bool applyRackPreset(int strip, int slot, int presetId);   // sets that slot's knobs (not its MIX)
   Q_INVOKABLE int rescanVst(const QStringList& extraDirs);   // scans the platform folders + extraDirs; returns the plug-in count
   Q_INVOKABLE QVariantList pluginParams(int strip, int slot) const;   // [{id, title, units, value (normalized), text, stepCount, bypass, hidden, readOnly}]
   Q_INVOKABLE void setPluginParam(int strip, int slot, int id, double normalized);
@@ -408,7 +414,7 @@ class Engine : public QObject {
   static constexpr int kBuses = 16, kGroups = 8;   // buses 0-7 AUX, 8-15 FX
   struct SendUi { double db = -60; bool pre = false; };
   struct PluginUi { QString kind; bool bypass = false; std::shared_ptr<am::host::Plugin> vst; QString state, error; };   // vst: loaded instance (null = pending with error)
-  std::vector<QVariantMap> vstCatalog_; std::vector<std::shared_ptr<am::host::Plugin>> graveyard_; QTimer graveTimer_;
+  bool vstScanning_ = false; std::vector<QVariantMap> vstCatalog_; std::vector<std::shared_ptr<am::host::Plugin>> graveyard_; QTimer graveTimer_;
   bool loadVst(int strip, int slot);                      // from kind + state at the runtime's rate; false -> error set
   void rebuildInserts(int strip);                         // the strip's VST chain into the runtime
   void reloadAllVst();                                    // after open (new rate / block)

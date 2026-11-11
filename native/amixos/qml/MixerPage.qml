@@ -168,8 +168,9 @@ Item {
                                     Rectangle { implicitWidth: 16; implicitHeight: 14; radius: 2; color: Theme.ov(0.08); Text { anchors.centerIn: parent; text: "↺"; color: Theme.muted; font.pixelSize: 9 } MouseArea { anchors.fill: parent; onClicked: engine.setPluginParam(page.sel, paramsPop.slot, modelData.id, modelData.default) } } } } } }
                     Text { visible: paramsPop.model.length === 0; text: i18n.t("This plug-in exposes no parameters.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 } } }
             Menu { id: chooser; property int slot: 0; width: 300
-                Repeater { model: engine.pluginCatalog(); delegate: MenuItem { text: (modelData.builtIn ? "" : modelData.fx ? i18n.t("FX · ", i18n.lang) : i18n.t("VST3 · ", i18n.lang)) + modelData.name + (modelData.vendor ? "  — " + modelData.vendor : ""); onTriggered: engine.setPlugin(page.sel, chooser.slot, modelData.kind) } }
-                MenuItem { visible: engine.vstCatalog().length === 0; enabled: false; text: i18n.t("No VST3 plug-ins found: add folders on SETTINGS", i18n.lang) }
+                Repeater { model: { engine.vstCount; return engine.pluginCatalog() } delegate: MenuItem { text: (modelData.builtIn ? "" : modelData.fx ? i18n.t("FX · ", i18n.lang) : (modelData.format || "VST3") + " · ") + modelData.name + (modelData.vendor ? "  — " + modelData.vendor : ""); onTriggered: engine.setPlugin(page.sel, chooser.slot, modelData.kind) } }
+                MenuItem { visible: engine.vstCount === 0; enabled: false; text: engine.vstScanning ? i18n.t("Looking for VST plug-ins …", i18n.lang) : i18n.t("No VST3 / VST2 plug-ins found: add folders on PLUGINS", i18n.lang) }
+                MenuItem { text: i18n.t("Rescan VST plug-ins", i18n.lang) + "  (" + engine.vstCount + ")"; onTriggered: settings.rescanVst() }
                 MenuSeparator {}
                 MenuItem { text: i18n.t("Bypass / enable", i18n.lang); onTriggered: { var p = engine.plugins(page.sel)[chooser.slot]; if (p.kind) engine.setPluginBypass(page.sel, chooser.slot, !p.bypass) } }
                 MenuItem { text: i18n.t("Clear slot", i18n.lang); onTriggered: engine.setPlugin(page.sel, chooser.slot, "") }

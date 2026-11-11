@@ -29,8 +29,9 @@
         "Phone remote over Wi-Fi from the NETWORK page, with a local policy: only this computer and private-network addresses are answered, and every control call needs the token (not encrypted: for your own network)",
         "OSC remote: with no address list only private-network senders are accepted",
         "Fifteen effects for every channel's rack, now with TUBE AMP (valve stage, tone stack, sagging power stage, cabinet), PRE AMP, POST AMP, HALL REVERB and ROOM REVERB beside reverb, delay, chorus, drive, flanger, phaser, tremolo, auto wah, bit crusher and exciter",
-        "Plug-in editor window: every rack plug-in opens as a faceplate with rotary knobs, a power lamp and a bypass switch; the tube amp's valves glow with the gain",
-        "Fixed: the rack did not refresh by itself when a plug-in was added or removed"
+        "Fixed: the rack did not refresh by itself when a plug-in was added or removed",
+        "Plug-in editor in the studio layout: header with a preset browser (the plate reverb, delay, chorus and drive carry their factory presets), A / B compare and bypass, a display that draws the amp curve, the reverb decay, the echoes or the sweep, a knob per parameter and an input meter; hosted VST plug-ins open in the same window",
+        "VST3 / VST2 plug-ins are looked for after the window is up, beside the interface and with a time limit, so a slow or hanging plug-in cannot delay the start; the rack menu shows the format, the count and a rescan"
       ]
     }
   ]

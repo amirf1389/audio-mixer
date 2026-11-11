@@ -205,6 +205,11 @@ int main(int argc, char* argv[]) {
         engine.setPluginParam(ch, 0, 0, 0.9); engine.setPluginBypass(ch, 0, true); if (!engine.plugins(ch)[0].toMap().value("bypass").toBool()) { std::fprintf(stderr, "amixos --smoke: effect bypass\n"); return 86; }
         for (int k = 0; k < 16; ++k) engine.setPlugin(ch, k, ""); if (engine.pluginCount(ch) != 0) { std::fprintf(stderr, "amixos --smoke: effects not cleared\n"); return 87; } } }
     { (void)remote.addresses(); if (remote.running()) { std::fprintf(stderr, "amixos --smoke: the remote service must be off until asked\n"); return 88; } }
+    { // rack presets: the plate reverb's factory presets set its knobs in a rack slot; the wrong effect's preset is refused
+      const QVariantList rp = engine.rackPresets("fx:reverb"); engine.setPlugin(6, 0, "fx:reverb"); const double before = engine.pluginParams(6, 0)[0].toMap().value("value").toDouble();
+      bool moved = false; for (const QVariant& v : rp) { if (!engine.applyRackPreset(6, 0, v.toMap().value("id").toInt())) { std::fprintf(stderr, "amixos --smoke: rack preset refused\n"); return 89; } if (std::fabs(engine.pluginParams(6, 0)[0].toMap().value("value").toDouble() - before) > 0.01) { moved = true; break; } }
+      const QVariantList dp = engine.rackPresets("fx:delay"); if (rp.size() < 50 || !moved || dp.isEmpty() || engine.applyRackPreset(6, 0, dp[0].toMap().value("id").toInt()) || !engine.rackPresets("fx:tubeamp").isEmpty()) { std::fprintf(stderr, "amixos --smoke: rack presets (%d reverb, moved %d)\n", int(rp.size()), moved); return 90; }
+      engine.setPlugin(6, 0, ""); }
     if (!measure.chime()) { std::fprintf(stderr, "amixos --smoke: the boot chord did not start on a running engine\n"); return 69; } measure.cancel();
     engine.setPlugin(4, 0, "comp"); if (!engine.channelParams(4).value("compOn").toBool() || engine.plugins(4)[0].toMap().value("kind").toString() != "comp") { std::fprintf(stderr, "amixos --smoke: plugin slot did not switch the compressor on\n"); return 21; }
     engine.setPluginBypass(4, 0, true); if (engine.channelParams(4).value("compOn").toBool()) { std::fprintf(stderr, "amixos --smoke: plugin bypass left the compressor on\n"); return 22; }

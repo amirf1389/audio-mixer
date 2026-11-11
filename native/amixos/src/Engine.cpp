@@ -58,7 +58,7 @@ Engine::Engine(QObject* parent) : QObject(parent) {
   history_.push_back(consoleJson()); histPos_ = 0;
   graveTimer_.setSingleShot(true); graveTimer_.setInterval(1500); connect(&graveTimer_, &QTimer::timeout, this, [this] { graveyard_.clear(); fxGraveyard_.clear(); });
   taps_.b.store(&scope_); sources_.b.store(&gen_);   // removed plug-ins die on the UI thread, after the audio thread has let go
-  rescanVst(settings_.value("vst3/dirs").toStringList() + settings_.value("vst2/dirs").toStringList());
+  QTimer::singleShot(0, this, [this] { rescanVst(settings_.value("vst3/dirs").toStringList() + settings_.value("vst2/dirs").toStringList()); });   // after the window is up: the first scan never delays the start
   connect(&timer_, &QTimer::timeout, this, &Engine::tick);
   tick();
 }
@@ -216,6 +216,17 @@ int Engine::importApo(int strip, const QString& path) {
   if (got.isEmpty()) return 0;
   for (int b = 0; b < 10; ++b) { if (b < got.size()) { setEq(strip, b, got[b][0].toInt(), got[b][1].toDouble(), got[b][2].toDouble(), got[b][3].toDouble()); ++n; } else setEq(strip, b, 0, kIsoCentres[b], 1.41, 0); }
   return n;
+}
+QVariantList Engine::rackPresets(const QString& kind) const {
+  QVariantList l; if (!kind.startsWith("fx:")) return l; const std::string k = kind.mid(3).toStdString();
+  for (const auto& p : am::fx::presets()) if (p.kind == k) { QVariantMap m; m["id"] = p.id; m["name"] = QString::fromStdString(p.name); m["category"] = QString::fromStdString(p.category); l << m; }
+  return l;
+}
+bool Engine::applyRackPreset(int i, int slot, int presetId) {
+  if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots) return false; PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[slot]; const am::fx::Preset* pr = am::fx::preset(presetId);
+  if (!pr || !p.vst || p.kind != QStringLiteral("fx:") + QString::fromStdString(pr->kind)) return false;
+  std::string st; char b[64]; for (const auto& [id, v] : pr->values) { std::snprintf(b, sizeof b, "%s=%.4f;", id.c_str(), v); st += b; }   // the knobs of the preset; MIX stays where the insert has it
+  const bool ok = p.vst->setState(st); if (ok) emit stripsChanged(); return ok;
 }
 QVariantMap Engine::mastering() const {
   QVariantMap m; m["eqOn"] = mp_.eqOn; m["on"] = mp_.on; m["low"] = mp_.lowDb; m["air"] = mp_.airDb; m["thr"] = mp_.thrDb; m["ratio"] = mp_.ratio; m["attack"] = mp_.attackMs; m["release"] = mp_.releaseMs; m["makeup"] = mp_.makeupDb; m["drive"] = mp_.drive; m["gain"] = mp_.gainDb; m["toneOn"] = mp_.toneOn; m["compOn"] = mp_.compOn; m["satOn"] = mp_.satOn; m["deessOn"] = mp_.deessOn; m["deessThr"] = mp_.deessThrDb; m["deessMax"] = mp_.deessMaxDb; m["exciterOn"] = mp_.exciterOn; m["exciter"] = mp_.exciterAmt; m["bassMonoOn"] = mp_.bassMonoOn; m["bassMonoHz"] = mp_.bassMonoHz; m["preset"] = masterPreset_; return m;
@@ -563,11 +574,18 @@ QVariantList Engine::pluginCatalog() const { QVariantList l; for (const auto& b 
 QVariantList Engine::vstCatalog() const { QVariantList l; for (const QVariantMap& v : vstCatalog_) l << v; return l; }
 int Engine::rescanVst(const QStringList& extraDirs) {
   std::vector<std::string> dirs3 = am::vst3::defaultDirs(), dirs2 = am::vst2::defaultDirs(); for (const QString& d : extraDirs) if (!d.trimmed().isEmpty()) { dirs3.push_back(d.trimmed().toStdString()); dirs2.push_back(d.trimmed().toStdString()); }
-  vstCatalog_.clear();
+  // every plug-in file is loaded once to read its name: on a worker with a time limit, so a slow or broken plug-in cannot hold the console up
+  if (vstScanning_) return static_cast<int>(vstCatalog_.size());
+  vstScanning_ = true; emit vstCatalogChanged(); auto found = std::make_shared<std::vector<QVariantMap>>(); auto done = std::make_shared<std::atomic<bool>>(false);
+  guarded([found, done, dirs3, dirs2] {
   for (const std::string& mod : am::vst3::scan(dirs3)) { std::vector<am::vst3::ClassInfo> cls; std::string err; if (!am::vst3::inspect(mod, cls, err)) continue;
-    for (const auto& c : cls) { QVariantMap m; m["kind"] = QStringLiteral("vst3:%1|%2").arg(QString::fromStdString(mod), QString::fromStdString(c.cid)); m["name"] = QString::fromStdString(c.name); m["vendor"] = QString::fromStdString(c.vendor); m["module"] = QString::fromStdString(mod); m["cid"] = QString::fromStdString(c.cid); m["subCategories"] = QString::fromStdString(c.subCategories); m["format"] = "VST3"; m["builtIn"] = false; vstCatalog_.push_back(m); } }
-  for (const std::string& mod : am::vst2::scan(dirs2)) { am::host::Info info; std::string err; if (!am::vst2::inspect(mod, info, err)) continue;   // a .dll / .so that is not a VST2 plug-in is skipped quietly
-    QVariantMap m; m["kind"] = QStringLiteral("vst2:%1").arg(QString::fromStdString(mod)); m["name"] = QString::fromStdString(info.name); m["vendor"] = QString::fromStdString(info.vendor); m["module"] = QString::fromStdString(mod); m["cid"] = QString::fromStdString(info.uid); m["subCategories"] = QString::fromStdString(info.category); m["format"] = "VST2"; m["builtIn"] = false; vstCatalog_.push_back(m); }
+    for (const auto& c : cls) { QVariantMap m; m["kind"] = QStringLiteral("vst3:%1|%2").arg(QString::fromStdString(mod), QString::fromStdString(c.cid)); m["name"] = QString::fromStdString(c.name); m["vendor"] = QString::fromStdString(c.vendor); m["module"] = QString::fromStdString(mod); m["cid"] = QString::fromStdString(c.cid); m["subCategories"] = QString::fromStdString(c.subCategories); m["format"] = "VST3"; m["builtIn"] = false; found->push_back(m); } }
+    for (const std::string& mod : am::vst2::scan(dirs2)) { am::host::Info info; std::string err; if (!am::vst2::inspect(mod, info, err)) continue;   // a .dll / .so that is not a VST2 plug-in is skipped quietly
+    QVariantMap m; m["kind"] = QStringLiteral("vst2:%1").arg(QString::fromStdString(mod)); m["name"] = QString::fromStdString(info.name); m["vendor"] = QString::fromStdString(info.vendor); m["module"] = QString::fromStdString(mod); m["cid"] = QString::fromStdString(info.uid); m["subCategories"] = QString::fromStdString(info.category); m["format"] = "VST2"; m["builtIn"] = false; found->push_back(m); }
+    done->store(true); return true; }, 30000);
+  vstScanning_ = false;
+  if (done->load()) vstCatalog_ = *found; else { status_ = QStringLiteral("The plug-in scan did not finish in 30 s (a plug-in is hanging): the list was left as it was. Move that plug-in out of the folder and RESCAN."); qWarning("VST scan timed out"); }
+  emit vstCatalogChanged();
   emit stripsChanged(); return static_cast<int>(vstCatalog_.size());
 }
 static void splitVstKind(const QString& kind, QString& module, QString& cid) { const QString k = kind.mid(5); const int bar = k.lastIndexOf('|'); module = bar >= 0 ? k.left(bar) : k; cid = bar >= 0 ? k.mid(bar + 1) : QString(); }
