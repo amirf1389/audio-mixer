@@ -337,6 +337,7 @@ int main(int argc, char* argv[]) {
         if (engine.meters().size() > 0 && engine.meters()[0].toMap()["inDb"].toDouble() < -20) { std::fprintf(stderr, "amixos --shots: the null test input is not reaching the strips (%.1f dBFS)\n", engine.meters()[0].toMap()["inDb"].toDouble()); QCoreApplication::exit(8); return; }
         if (QObject* wiz = win->findChild<QObject*>("setupPage")) {   // the factory setup, every step
           win->setProperty("forceSetup", true);
+          wiz->setProperty("step", 1); wiz->setProperty("termsAlert", true); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + QStringLiteral("/setup-2-alert.png")); wiz->setProperty("termsAlert", false);
           for (int step = 0; step < 7; ++step) { wiz->setProperty("step", step); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + QStringLiteral("/setup-%1.png").arg(step + 1)); std::printf("amixos --shots: setup-%d\n", step + 1); }
           win->setProperty("forceSetup", false); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
           win->setProperty("bootOn", true); { QElapsedTimer bt; bt.start(); while (bt.elapsed() < 1700) QCoreApplication::processEvents(QEventLoop::AllEvents, 20); } win->grabWindow().save(shots + QStringLiteral("/boot-splash.png")); win->setProperty("bootOn", false); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50);

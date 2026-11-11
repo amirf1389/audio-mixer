@@ -11,6 +11,7 @@ Rectangle {
     objectName: "setupPage"
     property int step: 0
     property bool accepted: false
+    property bool termsAlert: false   // NEXT was pressed on TERMS without the tick: the box turns red and says why
     property string audioNote: ""
     readonly property var steps: ["WELCOME", "TERMS", "AUDIO", "CONSOLE", "OPERATOR", "UPDATES", "DONE"]
     signal finished()
@@ -44,9 +45,16 @@ Rectangle {
                     Head { text: i18n.t("Terms and licences", i18n.lang) }
                     Flickable { Layout.fillWidth: true; Layout.fillHeight: true; contentHeight: terms.implicitHeight; clip: true
                         Body { id: terms; width: parent.width; text: "• " + Theme.product + i18n.t(" is published by ", i18n.lang) + Theme.vendor + i18n.t(" under the repository licence; the BASIC plan (8 channels) is free, PRO / STUDIO / MASTER unlock more with a key bound to this computer.\n\n• The Windows ASIO support uses the Steinberg ASIO SDK under Steinberg's licence terms; VST3 hosting uses the Steinberg VST3 interface headers under their dual licence. ASIO and VST are trademarks of Steinberg Media Technologies GmbH. Plug-ins you load are governed by their own licences.\n\n• Nothing is sent anywhere by itself: no telemetry, no account. The update check reads one signed file from the project's own hosts when you ask (or at start, if you switch it on below). Licence keys are verified offline against the vendor's public key.\n\n• The remote control (phone app, OSC, the daemon) serves this computer only unless you open it to your network; those paths are not encrypted without your own TLS proxy, and the pages say so.", i18n.lang) } }
-                    RowLayout { spacing: 10
-                        Rectangle { width: 22; height: 22; radius: 4; color: wiz.accepted ? Theme.emerald : Theme.ov(0.08); border.color: Theme.line; Text { anchors.centerIn: parent; text: wiz.accepted ? "✓" : ""; color: "#000"; font.bold: true } MouseArea { anchors.fill: parent; onClicked: wiz.accepted = !wiz.accepted } }
-                        Text { text: i18n.t("I have read the terms", i18n.lang); color: Theme.ink; font.family: Theme.sans; font.pixelSize: 12 } } }
+                    RowLayout { id: termsRow; Layout.fillWidth: true; spacing: 10
+                        Rectangle { id: tick; implicitWidth: 24; implicitHeight: 24; Layout.preferredWidth: 24; Layout.preferredHeight: 24; Layout.alignment: Qt.AlignVCenter; radius: 5; color: wiz.accepted ? Theme.emerald : Theme.ov(0.08); border.width: wiz.termsAlert ? 2 : 1; border.color: wiz.termsAlert ? Theme.danger : wiz.accepted ? Theme.emerald : Theme.line
+                            Text { anchors.centerIn: parent; text: "✓"; visible: wiz.accepted; color: "#000"; font.pixelSize: 15; font.bold: true }
+                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { wiz.accepted = !wiz.accepted; if (wiz.accepted) wiz.termsAlert = false } }
+                            SequentialAnimation { id: shake; loops: 2; NumberAnimation { target: tick; property: "scale"; to: 1.35; duration: 90 } NumberAnimation { target: tick; property: "scale"; to: 1; duration: 90 } } }
+                        Text { Layout.alignment: Qt.AlignVCenter; text: i18n.t("I have read the terms", i18n.lang); color: wiz.termsAlert ? Theme.danger : Theme.ink; font.family: Theme.sans; font.pixelSize: 12; font.bold: wiz.termsAlert; MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { wiz.accepted = !wiz.accepted; if (wiz.accepted) wiz.termsAlert = false } } }
+                        Rectangle { opacity: wiz.termsAlert ? 1 : 0; Layout.alignment: Qt.AlignVCenter; Layout.preferredWidth: alertT.implicitWidth + 20; Layout.preferredHeight: 24; implicitWidth: alertT.implicitWidth + 20; implicitHeight: 24; radius: 12; color: Qt.rgba(1, 0.165, 0.373, 0.16); border.color: Theme.danger
+                            Text { id: alertT; anchors.centerIn: parent; text: "⚠ " + i18n.t("Tick the box to continue: the setup cannot go on without it.", i18n.lang); color: Theme.danger; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } }
+                        Item { Layout.fillWidth: true }
+                        } }
                 // 2 AUDIO
                 ColumnLayout { spacing: 12
                     Head { text: i18n.t("Your sound card", i18n.lang) }
@@ -107,6 +115,6 @@ Rectangle {
         RowLayout { spacing: 8
             Btn { label: i18n.t("BACK", i18n.lang); visible: wiz.step > 0; onClicked: wiz.step-- }
             Item { Layout.fillWidth: true }
-            Btn { label: wiz.step === 6 ? i18n.t("FINISH", i18n.lang) : i18n.t("NEXT", i18n.lang); on: wiz.step !== 1 || wiz.accepted; onColor: wiz.step === 6 ? Theme.emerald : Theme.amber; onClicked: { if (wiz.step === 1 && !wiz.accepted) return; if (wiz.step === 6) wiz.finished(); else wiz.step++ } } }
+            Btn { label: wiz.step === 6 ? i18n.t("FINISH", i18n.lang) : i18n.t("NEXT", i18n.lang); on: wiz.step !== 1 || wiz.accepted; onColor: wiz.step === 6 ? Theme.emerald : Theme.amber; onClicked: { if (wiz.step === 1 && !wiz.accepted) { wiz.termsAlert = true; shake.restart(); return } wiz.termsAlert = false; if (wiz.step === 6) wiz.finished(); else wiz.step++ } } }
     }
 }
