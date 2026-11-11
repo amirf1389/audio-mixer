@@ -9,6 +9,7 @@
 //   null     one timed device that needs no hardware
 // Probing an ASIO driver loads it: a caller must not list while one of its ASIO streams is open (ASIO drivers serve one client).
 #ifdef _WIN32
+#include <endpointvolume.h>
 #include <cctype>
 #include <initializer_list>
 #include <windows.h>
@@ -230,4 +231,22 @@ std::vector<DeviceInfo> listDevices(bool probeAsio) {
   return v;
 }
 
+
+#ifdef _WIN32
+namespace {
+const GUID kIidEndpointVolume = {0x5CDF2C82, 0x841E, 0x4546, {0x97, 0x22, 0x0C, 0xF7, 0x40, 0x78, 0x22, 0x9A}};   // IAudioEndpointVolume
+IAudioEndpointVolume* defaultRenderVolume() {
+  CoInitializeEx(nullptr, COINIT_MULTITHREADED);   // already initialised by the caller: fine
+  IMMDeviceEnumerator* en = nullptr; IMMDevice* d = nullptr; IAudioEndpointVolume* v = nullptr;
+  if (FAILED(CoCreateInstance(kClsidDeviceEnumerator, nullptr, CLSCTX_ALL, kIidDeviceEnumerator, reinterpret_cast<void**>(&en)))) return nullptr;
+  if (SUCCEEDED(en->GetDefaultAudioEndpoint(eRender, eConsole, &d))) { d->Activate(kIidEndpointVolume, CLSCTX_ALL, nullptr, reinterpret_cast<void**>(&v)); d->Release(); }
+  en->Release(); return v;
+}
+}  // namespace
+bool systemMuteGet(bool& muted) { IAudioEndpointVolume* v = defaultRenderVolume(); if (!v) return false; BOOL m = FALSE; const bool ok = SUCCEEDED(v->GetMute(&m)); v->Release(); muted = m != FALSE; return ok; }
+bool systemMuteSet(bool muted) { IAudioEndpointVolume* v = defaultRenderVolume(); if (!v) return false; const HRESULT r = v->SetMute(muted ? TRUE : FALSE, nullptr); v->Release(); return SUCCEEDED(r); }
+#else
+bool systemMuteGet(bool&) { return false; }
+bool systemMuteSet(bool) { return false; }
+#endif
 }  // namespace am

@@ -258,6 +258,17 @@ class Engine : public QObject {
   Q_INVOKABLE void setSolo(int strip, bool on);
   Q_INVOKABLE void setName(int strip, const QString& name);
   Q_INVOKABLE void setMaster(double db);
+  // WINDOWS SOUND SYNC: with the master fader at -inf the console also mutes the Windows default output (the system's own endpoint volume, the
+  // documented interface: no driver and no registry are touched), so nothing at all is heard; raising the fader puts the Windows mute back as it was.
+  Q_PROPERTY(bool windowsMuteSync READ windowsMuteSync WRITE setWindowsMuteSync NOTIFY systemSoundChanged)
+  Q_PROPERTY(bool windowsMuted READ windowsMuted NOTIFY systemSoundChanged)             // the Windows default output is muted now (by the fader or by Windows itself)
+  Q_PROPERTY(bool windowsSoundAvailable READ windowsSoundAvailable NOTIFY systemSoundChanged)
+  bool windowsMuteSync() const { return winSync_; } void setWindowsMuteSync(bool on);
+  bool windowsMuted() const { return winMuted_; } bool windowsSoundAvailable() const { return winAvail_; }
+  void setSystemMuteBackend(std::function<bool(bool&)> get, std::function<bool(bool)> set) { sysGet_ = std::move(get); sysSet_ = std::move(set); }   // tests
+  void syncSystemSound();                 // applies the rule and reads the state (called on fader moves and twice a second)
+  void restoreSystemSound();              // on exit: a mute the console set is taken back
+  Q_SIGNAL void systemSoundChanged();
   Q_INVOKABLE void setColor(int strip, int color);           // 0..7 (Theme.stripColors)
   int selectedStrip() const { return selected_; }
   void setSelectedStrip(int i) { if (i < 0 || i >= kStrips || i == selected_) return; selected_ = i; emit selectedStripChanged(); }
@@ -400,6 +411,7 @@ class Engine : public QObject {
   struct StripUi { bool spOn = false; double spAz = 0, spEl = 0, spDist = 1, spSpread = 0; QString name; double db = 0, pan = 0; bool mute = false, solo = false; am::dsp::Channel dsp{48000}; SendUi sends[kBuses]; int dca = 0; unsigned muteGroups = 0; int color = 0; PluginUi plugins[kPluginSlots]; bool automix = false; double amWeight = 1; bool link = false; double trimDb = 0; int eqPreset = 0; };
   std::vector<QJsonObject> history_; int histPos_ = -1; bool restoring_ = false; QTimer histTimer_; QJsonObject abOther_; QString abSlot_ = "A";
   bool scanning_ = false, opening_ = false, timedOut_ = false;
+  bool winSync_ = true, winMuted_ = false, winAvail_ = false, weMuted_ = false, winBefore_ = false; std::function<bool(bool&)> sysGet_; std::function<bool(bool)> sysSet_; QTimer sysTimer_;
   am::MasterChain master_; am::MasterChain::Params mp_; QString masterPreset_; void pushMaster();
   int partner(int i) const { return (i ^ 1) < kStrips ? (i ^ 1) : -1; }
   void applyPluginStage(int strip, const QString& kind, bool on);   // a built-in stage follows its slot

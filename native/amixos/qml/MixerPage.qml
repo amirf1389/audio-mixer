@@ -442,7 +442,10 @@ Item {
                         MeterBar { Layout.fillHeight: true; Layout.topMargin: 8; peakDb: engine.telemetry.masterRDb; rmsDb: engine.telemetry.masterRmsDb; clip: engine.telemetry.masterClip } }
                     Text { Layout.alignment: Qt.AlignHCenter; text: Theme.dbText(engine.masterDb) + i18n.t(" dB", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9 }
                     Text { Layout.alignment: Qt.AlignHCenter; text: (engine.telemetry.shortTerm <= -119 ? i18n.t("-inf", i18n.lang) : engine.telemetry.shortTerm.toFixed(1)) + i18n.t(" LUFS", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8 }
-                    Text { Layout.alignment: Qt.AlignHCenter; text: i18n.t("LIMITER -0.5 dBFS", i18n.lang); color: Theme.emerald; font.family: Theme.mono; font.pixelSize: 7 }
+                    Text { Layout.alignment: Qt.AlignHCenter; readonly property var lim: { engine.stripState; return engine.masterLimiter() }
+                        text: lim.on ? i18n.t("LIMITER ", i18n.lang) + Number(lim.ceiling).toFixed(1) + i18n.t(" dBFS", i18n.lang) : i18n.t("LIMITER OFF", i18n.lang); color: lim.on ? Theme.emerald : Theme.amber; font.family: Theme.mono; font.pixelSize: 7 }
+                    Rectangle { Layout.fillWidth: true; implicitHeight: 16; radius: 3; visible: engine.windowsSoundAvailable && (engine.windowsMuted || engine.masterDb <= -60); color: Qt.rgba(1, 0.165, 0.373, 0.18); border.color: Theme.danger   // -inf = everything off, Windows' own sound included
+                        Text { anchors.centerIn: parent; text: engine.windowsMuted ? i18n.t("ALL OFF · WINDOWS MUTED", i18n.lang) : i18n.t("MASTER OFF", i18n.lang); color: Theme.danger; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } }
                     Rectangle { Layout.fillWidth: true; implicitHeight: 18; radius: 3; color: Theme.ov(0.08); Text { anchors.centerIn: parent; text: i18n.t("CLEAR CLIPS", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.clearClips() } }
                 }
             }

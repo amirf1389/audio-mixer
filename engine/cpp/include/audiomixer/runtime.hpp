@@ -57,6 +57,10 @@ struct DeviceInfo {
   bool defaultIn = false, defaultOut = false;
   std::string kind;                  // what it is: headphones | headset | speakers | microphone | line | digital | interface | bluetooth | app | wrapper | unknown
 };
+// WINDOWS SOUND (the system's own volume of the default output, through the documented endpoint-volume interface: no driver, no registry):
+// read and set its mute. Used so that the master fader at -inf also silences what Windows itself plays. false on other systems or on failure.
+bool systemMuteGet(bool& muted);
+bool systemMuteSet(bool muted);
 // WHAT A DEVICE IS, from the system's own form factor when it has one (WASAPI: 1 speakers, 2 line, 3 headphones, 4 microphone, 5 headset,
 // 6 handset, 8 S/PDIF, 9 display audio; -1 = not known) and otherwise from the name. capture: the entry is an input.
 std::string classifyDevice(const std::string& backend, const std::string& name, int formFactor, bool capture);
