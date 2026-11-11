@@ -35,8 +35,8 @@ Rectangle {
                     Head { text: i18n.t("Welcome to ", i18n.lang) + Theme.product }
                     Body { text: i18n.t("A mixing console and DSP workstation: 32 channels, 16 buses (8 AUX + 8 FX), EQ with RTA, dynamics, 300 effect presets, 100 samples, VST plug-ins, recording, remote control. Pick your language; everything else can be changed later on SETTINGS.", i18n.lang) }
                     Text { text: i18n.t("LANGUAGE", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.letterSpacing: 2 }
-                    Flickable { Layout.fillWidth: true; Layout.fillHeight: true; contentHeight: langFlow.implicitHeight; clip: true
-                        Flow { id: langFlow; width: parent.width; spacing: 6
+                    Flickable { Layout.fillWidth: true; Layout.fillHeight: true; contentHeight: langFlow.implicitHeight; clip: true; boundsBehavior: Flickable.StopAtBounds; ScrollBar.vertical: ScrollBar { policy: ScrollBar.AlwaysOn }
+                        Flow { id: langFlow; width: parent.width - 14; spacing: 6
                             Repeater { model: i18n.languages; delegate: Btn { label: modelData.name; on: i18n.lang === modelData.code; onClicked: i18n.lang = modelData.code } } } }
                     Small { text: i18n.t("22 languages are checked by people; the rest are machine translations and say so in the menu. Right-to-left languages mirror the layout.", i18n.lang) } }
                 // 1 TERMS
@@ -71,7 +71,7 @@ Rectangle {
                     Rectangle { Layout.fillWidth: true; height: 1; color: Theme.lineSoft }
                     Text { text: i18n.t("LICENCE: ", i18n.lang) + engine.license.planName + " · " + engine.licensedChannels + i18n.t(" channels", i18n.lang) + (engine.license.state === "basic" ? i18n.t(" (free). Have a key? Paste it:", i18n.lang) : ""); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
                     RowLayout { spacing: 6; Layout.fillWidth: true
-                        TextField { id: keyIn; Layout.fillWidth: true; placeholderText: i18n.t("AMIX1-... licence key (optional)", i18n.lang); font.family: Theme.mono; font.pixelSize: 9 }
+                        Field { id: keyIn; Layout.fillWidth: true; placeholderText: i18n.t("AMIX1-... licence key (optional)", i18n.lang); font.family: Theme.mono; font.pixelSize: 9 }
                         Btn { label: i18n.t("ACTIVATE", i18n.lang); on: keyIn.text.length > 8; onClicked: { const r = engine.activateKey(keyIn.text); wiz.audioNote = r.message; if (r.ok) keyIn.text = "" } } }
                     Small { text: i18n.t("The machine code for a key bound to this computer is on LICENSE. Keys are checked offline; nothing is sent.", i18n.lang) } }
                 // 4 OPERATOR
@@ -79,9 +79,10 @@ Rectangle {
                     Head { text: i18n.t("Operator and PIN", i18n.lang) }
                     Body { text: i18n.t("The PIN locks the fader surface and guards the admin pages. The default is 1234 until you set one; set it now, or leave it for later on ACCOUNT.", i18n.lang) }
                     RowLayout { spacing: 6; Layout.fillWidth: true
-                        TextField { id: pin1; Layout.preferredWidth: 160; placeholderText: i18n.t("new PIN (4-8 digits)", i18n.lang); echoMode: TextInput.Password; inputMethodHints: Qt.ImhDigitsOnly; font.family: Theme.mono; font.pixelSize: 9 }
-                        TextField { id: pin2; Layout.preferredWidth: 160; placeholderText: i18n.t("again", i18n.lang); echoMode: TextInput.Password; inputMethodHints: Qt.ImhDigitsOnly; font.family: Theme.mono; font.pixelSize: 9 }
-                        Btn { label: i18n.t("SET PIN", i18n.lang); on: pin1.text.length >= 4 && pin1.text === pin2.text; onColor: Theme.cyan; onClicked: { if (access.setPin(access.pinIsDefault ? "1234" : pin1.text, pin1.text)) { pin1.text = ""; pin2.text = "" } } }
+                        Field { id: pin0; visible: !access.pinIsDefault; Layout.preferredWidth: 130; placeholderText: i18n.t("current PIN", i18n.lang); echoMode: TextInput.Password; inputMethodHints: Qt.ImhDigitsOnly }
+                        Field { id: pin1; Layout.preferredWidth: 160; placeholderText: i18n.t("new PIN (4-8 digits)", i18n.lang); echoMode: TextInput.Password; inputMethodHints: Qt.ImhDigitsOnly; font.family: Theme.mono; font.pixelSize: 9 }
+                        Field { id: pin2; Layout.preferredWidth: 160; placeholderText: i18n.t("again", i18n.lang); echoMode: TextInput.Password; inputMethodHints: Qt.ImhDigitsOnly; font.family: Theme.mono; font.pixelSize: 9 }
+                        Btn { label: i18n.t("SET PIN", i18n.lang); on: pin1.text.length >= 4 && pin1.text === pin2.text && (access.pinIsDefault || pin0.text.length >= 4); onColor: Theme.cyan; onClicked: { if (!on) return; if (access.setPin(access.pinIsDefault ? "1234" : pin0.text, pin1.text)) { pin0.text = ""; pin1.text = ""; pin2.text = "" } } }
                         Text { text: access.pinIsDefault ? i18n.t("default 1234 still active", i18n.lang) : i18n.t("PIN set", i18n.lang); color: access.pinIsDefault ? Theme.amber : Theme.emerald; font.family: Theme.mono; font.pixelSize: 8 } }
                     Text { text: i18n.t("PROFILE", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.letterSpacing: 2 }
                     Repeater { model: access.roles; delegate: RowLayout { spacing: 8; Btn { label: modelData.name; on: access.role === modelData.id; onClicked: access.setRole(modelData.id, access.pinIsDefault ? "1234" : "") } Text { text: modelData.blurb; color: Theme.muted; font.family: Theme.sans; font.pixelSize: 11; Layout.fillWidth: true; elide: Text.ElideRight } } }

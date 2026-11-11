@@ -61,6 +61,7 @@ class Measure : public QObject {
   Q_INVOKABLE bool runSweep(int strip, double seconds, double f1, double f2, double levelDb, int pointsPerOctave);
   Q_INVOKABLE bool runStepped(int strip, int pointsPerOctave, double f1, double f2, double levelDb);
   Q_INVOKABLE void cancel();
+  Q_INVOKABLE bool chime();   // the boot chord on the master: a major ninth, note by note and then together, soft (-20 dBFS), 2.6 s; false when the engine is not running or a measurement is
   Q_INVOKABLE bool importSweep(const QString& wavPath, double seconds, double f1, double f2, int pointsPerOctave);   // OFFLINE: a recording of the same sweep made elsewhere
   Q_INVOKABLE QString exportSweep(const QString& wavPath, double seconds, double f1, double f2, double levelDb);     // the sweep as a WAV, to play on another system
   Q_INVOKABLE QVariantMap rta(int strip, int bandsPerOctave, double averaging);          // {freq, db} of the strip's newest samples (live)

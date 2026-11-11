@@ -131,7 +131,7 @@ Item {
                             MouseArea { anchors.fill: parent; onClicked: { page.scribble = index; engine.selectedStrip = index } } } } }
                     RowLayout { spacing: 8; Layout.fillWidth: true
                         Text { text: i18n.t("CH ", i18n.lang) + (page.scribble + 1); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
-                        TextField { id: nameField; Layout.fillWidth: true; text: engine.stripState[page.scribble] ? engine.stripState[page.scribble].name : ""; font.family: Theme.mono; font.pixelSize: 9; maximumLength: 12; onEditingFinished: engine.setName(page.scribble, text) }
+                        Field { id: nameField; Layout.fillWidth: true; text: engine.stripState[page.scribble] ? engine.stripState[page.scribble].name : ""; font.family: Theme.mono; font.pixelSize: 9; maximumLength: 12; onEditingFinished: engine.setName(page.scribble, text) }
                         Repeater { model: Theme.stripColors; delegate: Rectangle { width: 20; height: 20; radius: 10; color: modelData; border.width: engine.stripState[page.scribble] && engine.stripState[page.scribble].color === index ? 3 : 0; border.color: Theme.ink; MouseArea { anchors.fill: parent; onClicked: engine.setColor(page.scribble, index) } } } }
                     Note { text: i18n.t("The name shows on the strip and the LED colour on its fader; both go into scenes and presets.", i18n.lang) }
                 }

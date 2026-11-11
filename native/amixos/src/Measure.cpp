@@ -18,6 +18,16 @@ Measure::Measure(Engine* engine, QObject* parent) : QObject(parent), engine_(eng
   poll_.setInterval(100); connect(&poll_, &QTimer::timeout, this, [this] { if (io_.busy()) { emit changed(); return; } poll_.stop(); finish(); });
 }
 Measure::~Measure() { io_.cancel(); engine_->setMeasureIo(nullptr, nullptr); }
+bool Measure::chime() {
+  if (!engine_->running() || io_.busy() || state_ == "measuring") return false;
+  const double fs = engine_->sampleRate(); const std::size_t n = static_cast<std::size_t>(fs * 2.6); std::vector<float> sig(n, 0.f);
+  const double notes[5] = {261.63, 329.63, 392.00, 493.88, 587.33};   // C4 E4 G4 B4 D5: C major ninth
+  for (int k = 0; k < 5; ++k) { const std::size_t start = static_cast<std::size_t>(fs * 0.16 * k);
+    for (std::size_t i = start; i < n; ++i) { const double t = static_cast<double>(i - start) / fs, env = std::min(1.0, t / 0.012) * std::exp(-t * 1.5), ph = 2 * 3.14159265358979 * notes[k] * t;
+      sig[i] += static_cast<float>(0.028 * env * (std::sin(ph) + 0.35 * std::sin(2 * ph) * std::exp(-t * 3) + 0.12 * std::sin(3 * ph) * std::exp(-t * 5))); } }
+  const std::size_t fade = static_cast<std::size_t>(fs * 0.25); for (std::size_t i = 0; i < fade; ++i) sig[n - 1 - i] *= static_cast<float>(i) / static_cast<float>(fade);
+  io_.arm(std::move(sig), 0); return true;
+}
 void Measure::cancel() { io_.cancel(); poll_.stop(); set("idle", "cancelled"); }
 
 bool Measure::runSweep(int strip, double seconds, double f1, double f2, double levelDb, int ppo) {

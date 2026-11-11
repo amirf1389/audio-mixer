@@ -23,7 +23,7 @@ Item {
                 Text { text: i18n.t("PLUGINS:", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
                 Text { text: page.all.length + i18n.t(" found · ", i18n.lang) + page.builtIns.length + i18n.t(" built-in stages", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                 Repeater { model: [["", "ALL"], ["VST3", "VST3"], ["VST2", "VST2 / DLL"]]; delegate: Btn { label: modelData[1]; on: page.format === modelData[0]; onClicked: page.format = modelData[0] } }
-                TextField { Layout.preferredWidth: 220; placeholderText: i18n.t("search name, vendor, file", i18n.lang); text: page.filter; onTextChanged: page.filter = text; font.family: Theme.mono; font.pixelSize: 9; implicitHeight: 24 }
+                Field { Layout.preferredWidth: 220; placeholderText: i18n.t("search name, vendor, file", i18n.lang); text: page.filter; onTextChanged: page.filter = text; font.family: Theme.mono; font.pixelSize: 9; implicitHeight: 24 }
                 Item { Layout.fillWidth: true }
                 Text { text: i18n.t("INSERT target: CH ", i18n.lang) + (engine.selectedStrip + 1); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                 Btn { label: i18n.t("RESCAN", i18n.lang); on: true; onColor: Theme.cyan; onClicked: { settings.rescanVst(); page.tick++ } } } }
@@ -44,7 +44,7 @@ Item {
                     Repeater { model: settings.vstDefaultDirs; delegate: Text { text: "• " + modelData; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; elide: Text.ElideMiddle; Layout.fillWidth: true } }
                     Repeater { model: settings.vstDirs; delegate: RowLayout { Layout.fillWidth: true; Text { text: "• " + modelData; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 7; elide: Text.ElideMiddle; Layout.fillWidth: true } Btn { label: i18n.t("REMOVE", i18n.lang); onClicked: { settings.removeVstDir(modelData); page.tick++ } } } }
                     RowLayout { Layout.fillWidth: true; spacing: 6
-                        TextField { id: dirIn; Layout.fillWidth: true; placeholderText: i18n.t("another folder with .vst3 / .dll / .so", i18n.lang); font.family: Theme.mono; font.pixelSize: 8; implicitHeight: 24; onAccepted: { settings.addVstDir(text); text = ""; page.tick++ } }
+                        Field { id: dirIn; Layout.fillWidth: true; placeholderText: i18n.t("another folder with .vst3 / .dll / .so", i18n.lang); font.family: Theme.mono; font.pixelSize: 8; implicitHeight: 24; onAccepted: { settings.addVstDir(text); text = ""; page.tick++ } }
                         Btn { label: i18n.t("ADD", i18n.lang); on: true; onClicked: { settings.addVstDir(dirIn.text); dirIn.text = ""; page.tick++ } } }
                     Rectangle { Layout.fillWidth: true; height: 1; color: Theme.lineSoft }
                     Text { text: i18n.t("BUILT-IN STAGES", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }

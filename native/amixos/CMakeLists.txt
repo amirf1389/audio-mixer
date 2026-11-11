@@ -52,6 +52,8 @@ qt_add_qml_module(amixos
         qml/WaveformPage.qml
         qml/PhasePage.qml
         qml/Combo.qml
+        qml/Field.qml
+        qml/BootSplash.qml
         qml/AcousticsPage.qml
         qml/MasteringPage.qml
         qml/SpatialPage.qml

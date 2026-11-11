@@ -48,8 +48,8 @@ Item {
                     Text { text: access.failedPins > 0 ? access.failedPins + i18n.t(" wrong PIN(s) in a row", i18n.lang) : i18n.t("Tap digits, then ENTER. Locked: faders, mutes and solos do not react.", i18n.lang); color: access.failedPins > 0 ? Theme.danger : Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap; Layout.fillWidth: true }
                     Rectangle { Layout.fillWidth: true; height: 1; color: Theme.lineSoft }
                     Text { text: i18n.t("CHANGE PIN", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.letterSpacing: 1 }
-                    TextField { id: oldPin; Layout.fillWidth: true; placeholderText: i18n.t("current PIN", i18n.lang); echoMode: TextInput.Password; inputMethodHints: Qt.ImhDigitsOnly; font.family: Theme.mono; font.pixelSize: 9 }
-                    TextField { id: newPin; Layout.fillWidth: true; placeholderText: i18n.t("new PIN (4-8 digits)", i18n.lang); echoMode: TextInput.Password; inputMethodHints: Qt.ImhDigitsOnly; font.family: Theme.mono; font.pixelSize: 9 }
+                    Field { id: oldPin; Layout.fillWidth: true; placeholderText: i18n.t("current PIN", i18n.lang); echoMode: TextInput.Password; inputMethodHints: Qt.ImhDigitsOnly; font.family: Theme.mono; font.pixelSize: 9 }
+                    Field { id: newPin; Layout.fillWidth: true; placeholderText: i18n.t("new PIN (4-8 digits)", i18n.lang); echoMode: TextInput.Password; inputMethodHints: Qt.ImhDigitsOnly; font.family: Theme.mono; font.pixelSize: 9 }
                     Btn { label: i18n.t("SET PIN", i18n.lang); on: newPin.text.length >= 4; onColor: Theme.cyan; onClicked: if (access.setPin(oldPin.text, newPin.text)) { oldPin.text = ""; newPin.text = "" } }
                     Item { Layout.fillHeight: true } } }
             // audit

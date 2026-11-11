@@ -70,8 +70,8 @@ Flickable {
                 Text { text: i18n.t("PLAN", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 }
                 Repeater { model: ["pro", "studio", "master"]; delegate: Rectangle { implicitWidth: 70; implicitHeight: 20; radius: 4; color: reqPlan.plan === modelData ? Theme.amber : Theme.ov(0.06); Text { anchors.centerIn: parent; text: modelData.toUpperCase(); color: reqPlan.plan === modelData ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: reqPlan.plan = modelData } } }
                 Item { id: reqPlan; property string plan: "pro" }
-                TextField { id: reqName; placeholderText: i18n.t("your name", i18n.lang); Layout.preferredWidth: 160; font.family: Theme.mono; font.pixelSize: 9 }
-                TextField { id: reqMail; placeholderText: i18n.t("e-mail", i18n.lang); Layout.preferredWidth: 180; font.family: Theme.mono; font.pixelSize: 9 }
+                Field { id: reqName; placeholderText: i18n.t("your name", i18n.lang); Layout.preferredWidth: 160; font.family: Theme.mono; font.pixelSize: 9 }
+                Field { id: reqMail; placeholderText: i18n.t("e-mail", i18n.lang); Layout.preferredWidth: 180; font.family: Theme.mono; font.pixelSize: 9 }
                 Rectangle { implicitWidth: 120; implicitHeight: 26; radius: 5; color: Qt.rgba(0, 0.95, 1, 0.18); border.color: Theme.cyan; Text { anchors.centerIn: parent; text: i18n.t("MAKE REQUEST", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: { reqOut.text = engine.licenseRequest(reqPlan.plan, reqName.text, reqMail.text); reqOut.selectAll() } } } }
             TextEdit { id: reqOut; Layout.fillWidth: true; readOnly: true; selectByMouse: true; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; wrapMode: TextEdit.WrapAnywhere; visible: text.length > 0 }
         }
