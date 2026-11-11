@@ -33,6 +33,12 @@ Flickable {
                     delegate: ItemDelegate { width: parent.width; text: engine.stripState[index] ? engine.stripState[index].name : index; font.family: Theme.mono }
                     onActivated: page.strip = currentIndex
                 }
+                Rectangle { objectName: "closeNoiseBtn"; implicitWidth: cnT.implicitWidth + 20; implicitHeight: 24; radius: 4; color: Theme.ov(0.08); border.color: Theme.cyan   // CLOSE NOISE: gate set from the noise that is there now
+                    property string said: ""
+                    Text { id: cnT; anchors.centerIn: parent; text: parent.said !== "" ? parent.said : i18n.t("CLOSE NOISE", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
+                    MouseArea { anchors.fill: parent; onClicked: { const t = engine.closeNoise(page.strip); parent.said = t < 0 ? i18n.t("GATE AT ", i18n.lang) + t.toFixed(0) + " dB" : i18n.t("NO SIGNAL TO READ", i18n.lang); cnReset.restart() } }
+                    Timer { id: cnReset; interval: 2500; onTriggered: parent.said = "" }
+                    ToolTip.visible: cnH.hovered; ToolTip.text: i18n.t("With nobody playing, press this: the gate is set 6 dB above the hum, hiss and room noise on this channel, so it closes when the channel is not in use.", i18n.lang); HoverHandler { id: cnH } }
                 Item { Layout.fillWidth: true }
                 Rectangle { implicitWidth: 90; implicitHeight: 24; radius: 12; color: page.ch.gateOn ? (page.open ? Qt.rgba(0.063, 0.725, 0.506, 0.2) : Qt.rgba(1, 0.165, 0.373, 0.2)) : Theme.ov(0.05); border.color: page.ch.gateOn ? (page.open ? Theme.emerald : Theme.danger) : Theme.lineSoft
                     Text { anchors.centerIn: parent; text: page.ch.gateOn ? (page.open ? i18n.t("OPEN", i18n.lang) : i18n.t("CLOSED", i18n.lang)) : i18n.t("BYPASS", i18n.lang); color: page.ch.gateOn ? (page.open ? Theme.emerald : Theme.danger) : Theme.dim; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } }

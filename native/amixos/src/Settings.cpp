@@ -98,7 +98,7 @@ QStringList Settings::factoryResetPreview() const {
 void Settings::factoryReset() {
   const QString lang = s_.value("ui/lang").toString();
   engine_->stop(); engine_->factoryReset();
-  s_.clear(); if (!lang.isEmpty()) s_.setValue("ui/lang", lang); s_.sync();
+  s_.clear(); if (!lang.isEmpty()) s_.setValue("ui/lang", lang); s_.setValue("general/setupDone", false); s_.sync();   // the factory setup is part of the reset: it runs once, right after it
   for (const QString& f : {dataFolder() + "/arrangement.json", dataFolder() + "/driver-lock.json"}) QFile::remove(f);
   if (engine_) { engine_->setClipThreshold(clipDb()); engine_->setPeakHold(peakHoldMs()); }
   emit changed(); note(QStringLiteral("Factory reset done. The licence, the edition and the daemon token were kept."));

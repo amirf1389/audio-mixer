@@ -84,6 +84,12 @@ int main(int argc, char** argv) {
     P = drv::plan("asio", "Realtek ASIO", "Realtek ASIO", pc, now); CHECK(P[0].mode == "asio" && !P[0].pinned && P[0].outDevice == "Realtek ASIO" && P.size() >= 2 && P[1].backend == "wasapi");
     P = drv::plan("asio", "BEHRINGER USB AUDIO", "BEHRINGER USB AUDIO", pc, now); CHECK(P[0].mode == "asio");
     drv::setOpenRouting(false); }
+  { // MIXERS as multichannel sound cards: recognised from the ASIO driver's name; an ordinary interface, a wrapper and onboard audio are not mixers
+    CHECK(drv::mixerProfile("X-USB ASIO Driver").known && drv::mixerProfile("X-USB ASIO Driver").maker == "Behringer" && drv::mixerProfile("X-USB ASIO Driver").prefix == "X32");
+    CHECK(drv::mixerProfile("Yamaha Steinberg USB ASIO").maker == "Yamaha" && drv::mixerProfile("Allen&Heath Qu-16 ASIO").maker == "Allen & Heath" && drv::mixerProfile("ZOOM L-12 ASIO").maker == "Zoom" && drv::mixerProfile("PreSonus StudioLive 16.0.2").maker == "PreSonus" && drv::mixerProfile("Soundcraft USB Audio ASIO").maker == "Soundcraft" && drv::mixerProfile("TASCAM Model 16").maker == "Tascam" && drv::mixerProfile("X-AIR ASIO Driver").model.find("XR18") != std::string::npos);
+    CHECK(!drv::mixerProfile("Realtek ASIO").known && !drv::mixerProfile("ASIO4ALL v2").known && !drv::mixerProfile("Focusrite USB ASIO").known && !drv::mixerProfile("").known);
+    std::vector<DeviceInfo> rig = {dev("asio", "Realtek ASIO", "Realtek ASIO", 2, 2), dev("asio", "X-USB ASIO Driver", "X-USB ASIO Driver", 32, 32), dev("wasapi", "{x}", "Line (X-USB)", 2, 0), dev("null", "", "null", 32, 32)};
+    const auto M = drv::mixers(rig); CHECK(M.size() == 1 && M[0]->name == "X-USB ASIO Driver" && M[0]->inChannels == 32); }
   { // RESCUE after every planned step failed: the Realtek ASIO driver, Realtek Windows shared (RWS), the default endpoints
     auto R = drv::rescue(pc, true, true, {});
     CHECK(R.size() >= 2 && R[0].mode == "realtek-asio" && R[0].backend == "asio" && R[0].inDevice == "Realtek ASIO" && R[0].outDevice == "Realtek ASIO" && !R[0].exclusive);

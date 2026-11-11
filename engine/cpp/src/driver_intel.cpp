@@ -184,6 +184,33 @@ std::vector<Attempt> plan(const std::string& backend, const std::string& inId, c
   return out;
 }
 
+MixerProfile mixerProfile(const std::string& name) {
+  struct Row { const char* re; const char* maker; const char* model; const char* prefix; const char* note; };
+  static const Row rows[] = {
+    {"x-?usb|\\bx32\\b", "Behringer", "X32 family (X-USB card)", "X32", "32 channels to the computer, 32 returns; set the card's routing on the desk (CARD OUT)"},
+    {"\\bm32\\b|dn32", "Midas", "M32 family", "M32", "32 channels to the computer, 32 returns; set CARD OUT on the desk"},
+    {"x-?air|\\bxr ?1[268]\\b|\\bx18\\b", "Behringer", "X AIR XR18 / X18", "XR", "18 channels each way over USB"},
+    {"\\bmr ?18\\b", "Midas", "MR18", "MR", "18 channels each way over USB"},
+    {"\\bwing\\b", "Behringer", "WING", "WING", "48 channels each way over USB"},
+    {"umc ?(1820|404|204|202)|uphoria", "Behringer", "U-PHORIA interface", "UMC", "a multichannel interface"},
+    {"yamaha steinberg|\\btf ?[135]\\b|tf-?rack|\\bmg ?[0-9]+xu|\\bag0[36]|\\bdm[37]\\b", "Yamaha", "TF / DM / MG-XU / AG", "YAM", "channel count depends on the model and its USB mode"},
+    {"soundcraft|\\bui ?24|signature .*mtk|\\bnotepad", "Soundcraft", "Ui24R / Signature MTK / Notepad", "SC", "MTK and Ui24R send every channel over USB"},
+    {"allen ?& ?heath|\\bqu-?(16|24|32|pac|sb)|\\bsq-?[567]\\b|\\bcq-?(12|18|20)|zedi?-?[0-9]", "Allen & Heath", "Qu / SQ / CQ / ZEDi", "AH", "Qu and SQ send 32 channels over USB-B"},
+    {"studiolive|presonus", "PreSonus", "StudioLive", "SL", "every channel plus the main mix over USB"},
+    {"livetrak|\\bzoom l-?(8|12|20)", "Zoom", "LiveTrak L-8 / L-12 / L-20", "ZOOM", "switch the desk to AUDIO INTERFACE mode"},
+    {"model ?(12|16|24)\\b|tascam", "Tascam", "Model 12 / 16 / 24", "TAS", "every channel plus the stereo mix over USB"},
+    {"onyx|profx|\\bdl ?(16|32)", "Mackie", "Onyx / ProFX / DL", "MK", "channel count depends on the model"},
+    {"\\btouchmix|qsc", "QSC", "TouchMix", "TM", "channel count depends on the model"},
+    {"\\brodecaster|r[oø]de", "RODE", "RODECaster", "RC", "multitrack mode sends every channel"},
+  };
+  MixerProfile p; if (name.empty() || isWrapper(name)) return p;
+  for (const Row& r : rows) if (std::regex_search(name, std::regex(r.re, std::regex::icase))) { p.known = true; p.maker = r.maker; p.model = r.model; p.prefix = r.prefix; p.note = r.note; return p; }
+  return p;
+}
+std::vector<const DeviceInfo*> mixers(const std::vector<DeviceInfo>& devices) {
+  std::vector<const DeviceInfo*> out; for (const auto& d : devices) if (isAsio(d) && mixerProfile(d.name).known) out.push_back(&d); return out;
+}
+
 std::vector<Attempt> rescue(const std::vector<DeviceInfo>& devices, bool wantInput, bool wantOutput, const std::vector<Attempt>& tried) {
   std::vector<Attempt> out;
   auto add = [&](const Attempt& a) {

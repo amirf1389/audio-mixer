@@ -127,6 +127,10 @@ class Engine : public QObject {
   Q_INVOKABLE QString bluetoothNote() const { return btNote_; }
   Q_INVOKABLE bool open(const QString& backend, const QString& inDevice, const QString& outDevice, double sampleRate, int frames, int inChannels, int outChannels);
   // DRIVER INTELLIGENCE (engine/cpp/include/audiomixer/driver_intel.hpp): the ladder for an ASIO device, the Realtek pin and the locks learned
+  // A MIXER OF ANOTHER MAKER connected through its ASIO driver, used as a multichannel sound card (am::drv::mixerProfile)
+  Q_INVOKABLE QVariantList mixersFound() const;          // [{id, name, maker, model, prefix, note, inChannels, outChannels, running}]
+  Q_INVOKABLE bool connectMixer(const QString& id, int frames);   // opens ALL its channels (32 at most) through ASIO and assigns them
+  Q_INVOKABLE int assignMixerChannels(const QString& prefix, bool nameStrips);   // desk channel n -> strip n for every input the running device has; the other strips get no input; returns how many
   Q_INVOKABLE bool openSmart(const QString& backend, const QString& inDevice, const QString& outDevice, double sampleRate, int frames, int inChannels, int outChannels);   // walks the plan until a step opens
   Q_INVOKABLE QVariantList driverPlan(const QString& backend, const QString& inDevice, const QString& outDevice) const;   // [{mode, backend, in, out, exclusive, why, fromLock, pinned}]
   Q_INVOKABLE QVariantList driverLocks() const;
@@ -340,6 +344,8 @@ class Engine : public QObject {
   Q_INVOKABLE QString pluginError(int strip, int slot) const;
   Q_INVOKABLE QString pluginParamText(int strip, int slot, int id, double normalized) const;   // what the plug-in calls that position ("250 ms", "+12 dB"): for a knob's printed scale
   Q_INVOKABLE int pluginCount(int strip) const;
+  Q_INVOKABLE int retryPlugins();   // tries again every plug-in slot that is waiting (its file was missing, busy or not scanned yet); returns how many came back
+  Q_INVOKABLE void saveNow() { save(); settings_.sync(); }   // the console (faders, DSP, racks and what their plug-ins hold) to the settings, now
   Q_INVOKABLE void copyChannel(int strip);
   Q_INVOKABLE bool pasteChannel(int strip);          // the copied DSP + sends + pan onto this strip (not the name, colour, fader or groups)
   bool channelClipboard() const { return clipboard_.has_value(); }
@@ -355,6 +361,7 @@ class Engine : public QObject {
   Q_INVOKABLE void setCrossover(int strip, int type, int hpOrder, double hpFreq, int lpOrder, double lpFreq);
   Q_INVOKABLE void setChannelLimiter(int strip, bool on, double ceilingDb, double releaseMs);
   Q_INVOKABLE void setCompressor(int strip, bool on, double thresholdDb, double ratio, double kneeDb, double attackMs, double releaseMs, double makeupDb);
+  Q_INVOKABLE double closeNoise(int strip);   // with nobody playing: reads the strip's input level now (hum, hiss, room) and sets the gate 6 dB above it; returns the threshold, or 0 when there is no signal to read
   Q_INVOKABLE void setGate(int strip, bool on, double thresholdDb, double rangeDb, double attackMs, double holdMs, double releaseMs);
   Q_INVOKABLE QVariantList compressorCurve(int strip, int points) const;   // [{in, out}] dB, -60..0, the static transfer without make-up
   Q_INVOKABLE QVariantList gateCurve(int strip, int points) const;
@@ -420,7 +427,7 @@ class Engine : public QObject {
   static constexpr int kBuses = 16, kGroups = 8;   // buses 0-7 AUX, 8-15 FX
   struct SendUi { double db = -60; bool pre = false; };
   struct PluginUi { QString kind; bool bypass = false; std::shared_ptr<am::host::Plugin> vst; QString state, error; };   // vst: loaded instance (null = pending with error)
-  bool vstScanning_ = false; std::vector<QVariantMap> vstCatalog_; std::vector<std::shared_ptr<am::host::Plugin>> graveyard_; QTimer graveTimer_;
+  bool vstScanning_ = false; std::vector<QVariantMap> vstCatalog_; std::vector<std::shared_ptr<am::host::Plugin>> graveyard_; QTimer graveTimer_; QTimer saveTimer_;
   bool loadVst(int strip, int slot);                      // from kind + state at the runtime's rate; false -> error set
   void rebuildInserts(int strip);                         // the strip's VST chain into the runtime
   void reloadAllVst();                                    // after open (new rate / block)

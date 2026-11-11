@@ -42,6 +42,19 @@ Item {
                     Btn { label: i18n.t("DIRECTSOUND ONLY", i18n.lang); on: engine.driverFallback === "dsound"; onColor: Theme.emerald; onClicked: engine.driverFallback = "dsound" }
                     Btn { label: i18n.t("ASIO ONLY", i18n.lang); on: engine.driverFallback === "none"; onColor: Theme.amber; onClicked: engine.driverFallback = "none" }
                     Text { text: engine.driverFallback === "all" ? i18n.t("ASIO → WASAPI exclusive → WASAPI shared → DirectSound", i18n.lang) : engine.driverFallback === "dsound" ? i18n.t("ASIO → DirectSound (WASAPI is optional, never a lock)", i18n.lang) : i18n.t("ASIO, nothing else", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
+                Repeater {   // A MIXER OF ANOTHER MAKER on its ASIO driver: open every channel and put desk channel n on strip n
+                    model: { engine.devices; engine.running; return engine.mixersFound() }
+                    delegate: Rectangle { objectName: "mixerCard"; Layout.fillWidth: true; implicitHeight: mxCol.implicitHeight + 16; radius: 6; color: Theme.ov(0.05); border.color: modelData.running ? Theme.emerald : Theme.cyan
+                        ColumnLayout { id: mxCol; anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 8; spacing: 4
+                            RowLayout { spacing: 8
+                                Text { text: i18n.t("MIXER FOUND", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; font.letterSpacing: 1.5 }
+                                Text { text: modelData.maker + " " + modelData.model; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 10; font.bold: true }
+                                Text { text: modelData.inChannels + i18n.t(" in / ", i18n.lang) + modelData.outChannels + i18n.t(" out · ASIO: ", i18n.lang) + modelData.name; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
+                                Item { Layout.fillWidth: true }
+                                Btn { label: modelData.running ? i18n.t("ASSIGN CHANNELS AGAIN", i18n.lang) : i18n.t("CONNECT + ASSIGN CHANNELS", i18n.lang); on: true; onColor: modelData.running ? Theme.emerald : Theme.cyan
+                                    onClicked: { if (modelData.running) engine.assignMixerChannels(modelData.prefix, true); else engine.connectMixer(modelData.id, settings.defaultFrames) } } }
+                            Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7
+                                text: i18n.t("Opens every channel of the desk through its own ASIO driver (32 at most): desk channel 1 on strip 1, 2 on 2 and so on, the master on the desk's USB returns 1-2. ", i18n.lang) + i18n.t(modelData.note, i18n.lang) } } } }
                 RowLayout { spacing: 6
                     Text { text: i18n.t("ASIO ROUTING", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                     Btn { objectName: "openRoutingBtn"; label: i18n.t("OPEN", i18n.lang); on: engine.openRouting; onColor: Theme.emerald; onClicked: engine.openRouting = true }
