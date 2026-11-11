@@ -1,5 +1,9 @@
 // The C SDK over the engine (sdk/c/include/amix.h): thin, allocation-free in the audio path, strings as malloc'd JSON.
 #define AMIX_BUILD_DLL
+#include "net/aoip.hpp"
+#include "net/midi.hpp"
+#include <thread>
+#include <chrono>
 #include "amix.h"
 
 #include <chrono>
@@ -26,7 +30,7 @@ std::int64_t nowMs() { return std::chrono::duration_cast<std::chrono::millisecon
 }  // namespace
 
 struct amix_mixer { am::Mixer mixer; std::vector<float> silence; int frames = 0; explicit amix_mixer(int n, double fs) : mixer(n, fs) {} };
-struct amix_rt { am::Runtime rt; std::string backend; explicit amix_rt(int n) : rt(n) {} };
+struct amix_rt { am::Runtime rt; std::string backend; am::net::Aoip net; explicit amix_rt(int n) : rt(n), net(rt) {} };
 
 extern "C" {
 
@@ -137,5 +141,35 @@ char* amix_license_json(void) {
   return dup("{\"state\":" + jstr(st.state) + ",\"plan\":" + jstr(st.planId) + ",\"planName\":" + jstr(st.planName) + ",\"channels\":" + std::to_string(st.channels) + ",\"source\":" + jstr(st.source) + ",\"expires\":" + std::to_string(st.expires) + ",\"machine\":" + jstr(st.machine) + ",\"message\":" + jstr(st.message) + "}");
 }
 char* amix_machine_id(void) { return dup(am::lic::machineId()); }
+
+static int netFail(const std::string& e, char* err, size_t n) { if (err && n) std::snprintf(err, n, "%s", e.c_str()); return -1; }
+int amix_rt_net_send_start(amix_rt* r, const char* name, const char* address, int port, int channels, int bits, const char* iface, int announce, char* err, size_t n) {
+  if (!r || !address) return netFail("no runtime or address", err, n);
+  am::net::StreamDesc d; if (name && *name) d.name = name; d.address = address; d.port = port; d.channels = channels; d.bits = bits; std::string e;
+  return r->net.sendStart(d, iface ? iface : "", announce != 0, e) ? 0 : netFail(e, err, n);
+}
+void amix_rt_net_send_stop(amix_rt* r) { if (r) r->net.sendStop(); }
+int amix_rt_net_receive_start(amix_rt* r, const char* address, int port, int channels, int bits, int rate, int latency_ms, const char* iface, char* err, size_t n) {
+  if (!r || !address) return netFail("no runtime or address", err, n);
+  am::net::StreamDesc d; d.address = address; d.port = port; d.channels = channels; d.bits = bits; d.rate = rate; std::string e;
+  return r->net.receiveStart(d, iface ? iface : "", latency_ms, e) ? 0 : netFail(e, err, n);
+}
+void amix_rt_net_receive_stop(amix_rt* r) { if (r) r->net.receiveStop(); }
+char* amix_rt_net_stats_json(amix_rt* r) { return dup(r ? r->net.statsJson() : std::string("{}")); }
+char* amix_net_discover_json(int wait_ms, const char* iface) {
+  am::net::Discovery d; std::string e, o = "[";
+  if (d.start(iface ? iface : "", e)) { std::this_thread::sleep_for(std::chrono::milliseconds(wait_ms < 0 ? 0 : (wait_ms > 60000 ? 60000 : wait_ms))); bool first = true;
+    for (const auto& f : d.list()) { if (!first) o += ","; first = false; char b[160]; std::snprintf(b, sizeof b, ",\"port\":%d,\"channels\":%d,\"bits\":%d,\"rate\":%d,\"ptimeMs\":%g,", f.d.port, f.d.channels, f.d.bits, f.d.rate, f.d.ptimeMs);
+      o += "{\"name\":" + jstr(f.d.name) + ",\"origin\":" + jstr(f.d.origin) + ",\"address\":" + jstr(f.d.address) + b + "\"refClock\":" + jstr(f.d.refClock) + "}"; } }
+  return dup(o + "]");
+}
+char* amix_net_transports_json(void) { return dup(am::net::transportsJson()); }
+char* amix_net_addresses_json(void) { std::string o = "["; bool first = true; for (const auto& a : am::net::localAddresses()) { if (!first) o += ","; first = false; o += jstr(a); } return dup(o + "]"); }
+void amix_midi_action_default(int status, int d1, int d2, amix_midi_action* out) {
+  if (!out) return; static const am::net::MidiMap map;
+  const am::net::MidiAction a = map.apply({static_cast<std::uint8_t>(status), static_cast<std::uint8_t>(d1 & 0x7f), static_cast<std::uint8_t>(d2 & 0x7f)});
+  out->kind = static_cast<int>(a.kind); out->strip = a.strip; out->value = a.value;
+}
+char* amix_midi_inputs_json(void) { std::string o = "["; bool first = true; for (const auto& p : am::net::midiInputs()) { if (!first) o += ","; first = false; o += "{\"id\":" + jstr(p.id) + ",\"name\":" + jstr(p.name) + "}"; } return dup(o + "]"); }
 
 }  // extern "C"

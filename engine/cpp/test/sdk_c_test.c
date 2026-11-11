@@ -3,13 +3,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "amix.h"
 
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "FAIL %s:%d %s\n", __FILE__, __LINE__, #c); return 1; } } while (0)
 
 int main(void) {
-  CHECK(amix_api_version() == 4 && amix_api_version() == AMIX_API_VERSION && strlen(amix_version()) >= 5);
+  CHECK(amix_api_version() == 5 && amix_api_version() == AMIX_API_VERSION && strlen(amix_version()) >= 5);
   { amix_set_dirs("/tmp/amix-sdk-paths/data", "/tmp/amix-sdk-paths/cache", NULL); char* pj = amix_paths_json(); CHECK(pj && strstr(pj, "\"data\":\"/tmp/amix-sdk-paths/data\"") && strstr(pj, "\"downloads\":\"/tmp/amix-sdk-paths/cache/downloads\"") && strstr(pj, "\"os\":")); amix_free(pj); }
   char* devs = amix_devices_json(); CHECK(devs && strstr(devs, "\"null\"")); amix_free(devs);
   char* bk = amix_backends_json(); CHECK(bk && bk[0] == '['); amix_free(bk);
@@ -27,6 +28,21 @@ int main(void) {
   amix_config cfg; memset(&cfg, 0, sizeof cfg); cfg.backend = "null"; cfg.in_device = ""; cfg.out_device = ""; cfg.sample_rate = 48000; cfg.frames = 128; cfg.in_channels = 2; cfg.out_channels = 2;
   char err[256]; CHECK(amix_rt_open(rt, &cfg, err, sizeof err) == 0 && amix_rt_running(rt) && strcmp(amix_rt_backend(rt), "null") == 0 && fabs(amix_rt_sample_rate(rt) - 48000) < 1e-6);
   amix_rt_set_gain(rt, 0, -3); amix_rt_set_eq(rt, 0, 0, 1, 1000, 1.0, 3); amix_rt_set_master(rt, 0); amix_rt_levels(rt, &lv);
+  { /* network audio: send to this machine and receive it back on the network inputs */
+    char e[128] = ""; char* j;
+    CHECK(amix_rt_net_receive_start(rt, "127.0.0.1", 47318, 2, 24, 48000, 20, NULL, e, sizeof e) == 0);
+    CHECK(amix_rt_net_send_start(rt, "SDK test", "127.0.0.1", 47318, 2, 24, NULL, 0, e, sizeof e) == 0);
+    CHECK(amix_rt_net_send_start(rt, "bad", "nowhere", 1, 2, 24, NULL, 0, e, sizeof e) < 0 && strlen(e) > 3);
+    CHECK(amix_rt_net_send_start(rt, "SDK test", "127.0.0.1", 47318, 2, 24, NULL, 0, e, sizeof e) == 0);
+    amix_rt_set_input_route(rt, 1, AMIX_NET_INPUT_BASE);
+    { struct timespec ts = {0, 300000000}; nanosleep(&ts, NULL); }
+    j = amix_rt_net_stats_json(rt); CHECK(strstr(j, "\"send\":{\"running\":true") && strstr(j, "\"receive\":{\"running\":true") && !strstr(j, "\"packets\":0,\"lost\"")); amix_free(j);
+    amix_rt_net_send_stop(rt); amix_rt_net_receive_stop(rt);
+    j = amix_net_transports_json(); CHECK(strstr(j, "aes67") && strstr(j, "rtpmidi")); amix_free(j);
+    j = amix_net_addresses_json(); CHECK(j[0] == '['); amix_free(j);
+    j = amix_midi_inputs_json(); CHECK(j[0] == '['); amix_free(j);
+    { amix_midi_action a; amix_midi_action_default(0xB2, 7, 100, &a); CHECK(a.kind == 1 && a.strip == 2 && fabs(a.value) < 1e-9); amix_midi_action_default(0x90, 33, 100, &a); CHECK(a.kind == 4 && a.strip == 1); }
+  }
   amix_rt_stop(rt); CHECK(!amix_rt_running(rt)); amix_rt_destroy(rt);
   char* lic = amix_license_json(); CHECK(lic && strstr(lic, "\"state\"")); amix_free(lic);
   char* mid = amix_machine_id(); CHECK(mid && strlen(mid) > 4); amix_free(mid);
