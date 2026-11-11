@@ -79,7 +79,7 @@ class Drive final : public Effect {
   double fs_; std::atomic<double> drive_{0.4}, tone_{0.6}, out_{0.7}; float lp_[2] = {0, 0}, last_[2] = {0, 0};
 };
 
-// The simple modulation / colour effects share one shape: up to three knobs (0..1) and a per-channel state.
+// The knob effects share one shape: up to six knobs (0..1) and a per-channel state.
 class Simple : public Effect {
  public:
   explicit Simple(double fs) : fs_(fs > 0 ? fs : 48000) {}
@@ -88,7 +88,7 @@ class Simple : public Effect {
   void setSampleRate(double fs) override { fs_ = fs > 0 ? fs : 48000; reset(); }
  protected:
   virtual int count() const = 0; virtual const char* knobId(int i) const = 0; virtual const char* knobTitle(int i) const = 0; virtual double knobDef(int i) const = 0;
-  double fs_; std::atomic<double> k_[3]{{0.5}, {0.5}, {0.5}};
+  double fs_; std::atomic<double> k_[6]{{0.5}, {0.5}, {0.5}, {0.5}, {0.5}, {0.5}};
 };
 // FLANGER: a 1..8 ms delay swept by an LFO with feedback: RATE, DEPTH, FEEDBACK
 class Flanger final : public Simple { public: explicit Flanger(double fs); const char* kind() const override { return "flanger"; } const char* name() const override { return "FLANGER"; }
@@ -120,5 +120,30 @@ class Exciter final : public Simple { public: explicit Exciter(double fs); const
   std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
  protected: int count() const override { return 3; } const char* knobId(int i) const override { static const char* k[] = {"amount", "freq", "harm"}; return k[i]; } const char* knobTitle(int i) const override { static const char* k[] = {"AMOUNT", "FREQUENCY", "HARMONICS"}; return k[i]; } double knobDef(int i) const override { static const double d[] = {0.4, 0.5, 0.5}; return d[i]; }
  private: float lp_[2] = {0, 0}; };
+
+// TUBE AMP: a guitar / bass / vocal amplifier in three parts: a pre-amp valve stage (asymmetric clipping with a bias), the tone stack
+// (BASS, MID, TREBLE), a power stage that sags under load, PRESENCE, and a 4x12 cabinet roll-off. GAIN, BASS, MID, TREBLE, PRESENCE, MASTER
+class TubeAmp final : public Simple { public: explicit TubeAmp(double fs); const char* kind() const override { return "tubeamp"; } const char* name() const override { return "TUBE AMP"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
+ protected: int count() const override { return 6; } const char* knobId(int i) const override { static const char* k[] = {"gain", "bass", "mid", "treble", "presence", "master"}; return k[i]; } const char* knobTitle(int i) const override { static const char* k[] = {"GAIN", "BASS", "MID", "TREBLE", "PRESENCE", "MASTER"}; return k[i]; } double knobDef(int i) const override { static const double d[] = {0.45, 0.5, 0.5, 0.55, 0.4, 0.5}; return d[i]; }
+ private: float hp_[2] = {}, lo_[2] = {}, hi_[2] = {}, pr_[2] = {}, c1_[2] = {}, c2_[2] = {}, dc_[2] = {}; double sag_ = 0; };
+// PRE AMP: the first gain stage of a channel: GAIN (-12 .. +36 dB), LOW CUT, WARMTH (even harmonics, like a transformer or a valve run gently), OUTPUT
+class PreAmp final : public Simple { public: explicit PreAmp(double fs); const char* kind() const override { return "preamp"; } const char* name() const override { return "PRE AMP"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
+ protected: int count() const override { return 4; } const char* knobId(int i) const override { static const char* k[] = {"gain", "lowcut", "warmth", "out"}; return k[i]; } const char* knobTitle(int i) const override { static const char* k[] = {"GAIN", "LOW CUT", "WARMTH", "OUTPUT"}; return k[i]; } double knobDef(int i) const override { static const double d[] = {0.25, 0.2, 0.3, 0.6667}; return d[i]; }
+ private: float hp_[2] = {}, dc_[2] = {}; };
+// POST AMP: the last stage of a channel's rack: LEVEL (-24 .. +12 dB), TILT (dark .. bright around 1 kHz), CLIP (a soft ceiling that keeps peaks in)
+class PostAmp final : public Simple { public: explicit PostAmp(double fs); const char* kind() const override { return "postamp"; } const char* name() const override { return "POST AMP"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
+ protected: int count() const override { return 3; } const char* knobId(int i) const override { static const char* k[] = {"level", "tilt", "clip"}; return k[i]; } const char* knobTitle(int i) const override { static const char* k[] = {"LEVEL", "TILT", "CLIP"}; return k[i]; } double knobDef(int i) const override { static const double d[] = {0.6667, 0.5, 0.0}; return d[i]; }
+ private: float lp_[2] = {}; };
+// HALL REVERB: an eight-line feedback delay network (long, dense, slowly modulated): SIZE, DECAY (0.5 .. 20 s), DAMP, PRE-DELAY, MODULATION
+// ROOM REVERB: the same network with four short lines and early reflections: SIZE, DECAY (0.1 .. 3 s), DAMP, EARLY
+class Fdn : public Simple { public: Fdn(double fs, int lines, bool hall); std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
+ protected: int lines_; bool hall_; std::vector<float> d_[8], pre_, er_; std::size_t w_[8] = {}, pw_ = 0, ew_ = 0; float lp_[8] = {}; double ph_ = 0; };
+class Hall final : public Fdn { public: explicit Hall(double fs) : Fdn(fs, 8, true) { for (int i = 0; i < 5; ++i) k_[i] = knobDef(i); } const char* kind() const override { return "hall"; } const char* name() const override { return "HALL REVERB"; }
+ protected: int count() const override { return 5; } const char* knobId(int i) const override { static const char* k[] = {"size", "decay", "damp", "predelay", "mod"}; return k[i]; } const char* knobTitle(int i) const override { static const char* k[] = {"SIZE", "DECAY", "DAMP", "PRE-DELAY", "MODULATION"}; return k[i]; } double knobDef(int i) const override { static const double d[] = {0.7, 0.45, 0.4, 0.2, 0.3}; return d[i]; } };
+class Room final : public Fdn { public: explicit Room(double fs) : Fdn(fs, 4, false) { for (int i = 0; i < 4; ++i) k_[i] = knobDef(i); } const char* kind() const override { return "room"; } const char* name() const override { return "ROOM REVERB"; }
+ protected: int count() const override { return 4; } const char* knobId(int i) const override { static const char* k[] = {"size", "decay", "damp", "early"}; return k[i]; } const char* knobTitle(int i) const override { static const char* k[] = {"SIZE", "DECAY", "DAMP", "EARLY"}; return k[i]; } double knobDef(int i) const override { static const double d[] = {0.4, 0.3, 0.5, 0.5}; return d[i]; } };
 
 }  // namespace am::fx

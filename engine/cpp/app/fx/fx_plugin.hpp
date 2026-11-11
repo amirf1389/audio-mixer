@@ -28,7 +28,7 @@ class FxPlugin final : public host::Plugin {
   bool setState(const std::string& st) override { std::size_t pos = 0; bool any = false; while (pos < st.size()) { const std::size_t eq = st.find('=', pos), end = st.find(';', pos); if (eq == std::string::npos || end == std::string::npos || eq > end) break; const std::string k = st.substr(pos, eq - pos); const double v = std::atof(st.substr(eq + 1, end - eq - 1).c_str()); if (k == "mix") e_->setMix(v); else e_->set(k, v); any = true; pos = end + 1; } return any; }
  private:
   FxPlugin(std::unique_ptr<Effect> e, const std::string& kind) : e_(std::move(e)), path_("fx:" + kind) { info_.format = "FX"; info_.name = e_->name(); info_.vendor = "AMFB Audio"; info_.category = "Fx"; info_.uid = kind;
-    defMix_ = kind == "reverb" || kind == "delay" || kind == "chorus" || kind == "flanger" || kind == "phaser" || kind == "wah" ? 0.35 : 1.0; if (kind == "flanger" || kind == "phaser") defMix_ = 0.7; if (kind == "wah") defMix_ = 0.8; e_->setMix(defMix_); }
+    defMix_ = kind == "reverb" || kind == "hall" || kind == "room" || kind == "delay" || kind == "chorus" || kind == "flanger" || kind == "phaser" || kind == "wah" ? 0.35 : 1.0; if (kind == "flanger" || kind == "phaser") defMix_ = 0.7; if (kind == "wah") defMix_ = 0.8; e_->setMix(defMix_); }
   std::unique_ptr<Effect> e_; host::Info info_; std::string path_; double defMix_ = 1;
 };
 }  // namespace am::fx

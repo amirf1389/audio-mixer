@@ -11,7 +11,7 @@ double clamp01(double v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
 std::string fmt(const char* f, double v) { char b[32]; std::snprintf(b, sizeof b, f, v); return b; }
 }  // namespace
 
-std::vector<std::pair<std::string, std::string>> catalog() { return {{"reverb", "PLATE REVERB"}, {"delay", "TAPE DELAY"}, {"chorus", "STEREO CHORUS"}, {"drive", "TUBE DRIVE"}, {"flanger", "FLANGER"}, {"phaser", "PHASER"}, {"tremolo", "TREMOLO"}, {"wah", "AUTO WAH"}, {"crusher", "BIT CRUSHER"}, {"exciter", "EXCITER"}}; }
+std::vector<std::pair<std::string, std::string>> catalog() { return {{"reverb", "PLATE REVERB"}, {"delay", "TAPE DELAY"}, {"chorus", "STEREO CHORUS"}, {"drive", "TUBE DRIVE"}, {"flanger", "FLANGER"}, {"phaser", "PHASER"}, {"tremolo", "TREMOLO"}, {"wah", "AUTO WAH"}, {"crusher", "BIT CRUSHER"}, {"exciter", "EXCITER"}, {"tubeamp", "TUBE AMP"}, {"preamp", "PRE AMP"}, {"postamp", "POST AMP"}, {"hall", "HALL REVERB"}, {"room", "ROOM REVERB"}}; }
 std::unique_ptr<Effect> make(const std::string& k, double fs) {
   if (k == "reverb") return std::make_unique<Reverb>(fs);
   if (k == "delay") return std::make_unique<TapeDelay>(fs);
@@ -22,6 +22,11 @@ std::unique_ptr<Effect> make(const std::string& k, double fs) {
   if (k == "wah") return std::make_unique<AutoWah>(fs);
   if (k == "crusher") return std::make_unique<Crusher>(fs);
   if (k == "exciter") return std::make_unique<Exciter>(fs);
+  if (k == "tubeamp") return std::make_unique<TubeAmp>(fs);
+  if (k == "preamp") return std::make_unique<PreAmp>(fs);
+  if (k == "postamp") return std::make_unique<PostAmp>(fs);
+  if (k == "hall") return std::make_unique<Hall>(fs);
+  if (k == "room") return std::make_unique<Room>(fs);
   if (k == "drive") return std::make_unique<Drive>(fs);
   return nullptr;
 }
@@ -184,6 +189,77 @@ void Exciter::process(float* L, float* R, std::size_t n) {
   if (bypass_.load()) return;
   const float a = static_cast<float>(1 - std::exp(-2 * kPi * (1000.0 + k_[1].load() * 7000.0) / fs_)), drive = static_cast<float>(2.0 + k_[2].load() * 10.0), amt = static_cast<float>(k_[0].load() * mix_.load()); float* ch[2] = {L, R};
   for (std::size_t i = 0; i < n; ++i) for (int s = 0; s < 2; ++s) { lp_[s] += (ch[s][i] - lp_[s]) * a; const float hi = ch[s][i] - lp_[s]; ch[s][i] += amt * (std::tanh(drive * hi) / drive * 2.f - hi * 0.5f); }
+}
+
+
+// ---------------------------------------------------------------- Tube amp, Pre amp, Post amp, Hall, Room
+TubeAmp::TubeAmp(double fs) : Simple(fs) { for (int i = 0; i < 6; ++i) k_[i] = knobDef(i); }
+void TubeAmp::reset() { for (int s = 0; s < 2; ++s) hp_[s] = lo_[s] = hi_[s] = pr_[s] = c1_[s] = c2_[s] = dc_[s] = 0; sag_ = 0; }
+std::string TubeAmp::text(const std::string& id, double v) const { v = clamp01(v); if (id == "gain") return fmt("%.1f", v * 10); if (id == "master") return fmt("%.1f dB", -30 + v * 36); if (id == "presence") return fmt("%.1f", v * 10); return fmt("%+.1f dB", (v - 0.5) * 24); }
+void TubeAmp::process(float* L, float* R, std::size_t n) {
+  if (bypass_.load()) return;
+  const float pre = static_cast<float>(std::pow(10.0, (k_[0].load() * 46.0) / 20.0)), gB = static_cast<float>(std::pow(10.0, (k_[1].load() - 0.5) * 24 / 20)), gM = static_cast<float>(std::pow(10.0, (k_[2].load() - 0.5) * 24 / 20)), gT = static_cast<float>(std::pow(10.0, (k_[3].load() - 0.5) * 24 / 20));
+  const float pres = static_cast<float>(k_[4].load() * 1.5), master = static_cast<float>(std::pow(10.0, (-30 + k_[5].load() * 36) / 20)), wet = static_cast<float>(mix_.load()), dry = 1.f - wet;
+  auto pole = [this](double f) { return static_cast<float>(1 - std::exp(-2 * kPi * f / fs_)); }; const float aHp = pole(90), aLo = pole(220), aHi = pole(2200), aPr = pole(3500), aCab = pole(4800), aDc = pole(12); const double sagA = 1 - std::exp(-1.0 / (0.004 * fs_)), sagR = 1 - std::exp(-1.0 / (0.12 * fs_));
+  const float bias = 0.18f, b0 = std::tanh(bias); float* ch[2] = {L, R};
+  for (std::size_t i = 0; i < n; ++i) {
+    double pk = 0;
+    for (int s = 0; s < 2; ++s) { const float x = ch[s][i]; hp_[s] += (x - hp_[s]) * aHp; float v = (x - hp_[s]) * pre;
+      v = std::tanh(v + bias) - b0;                                                          // the pre-amp valve: asymmetric, so even harmonics
+      lo_[s] += (v - lo_[s]) * aLo; hi_[s] += (v - hi_[s]) * aHi; const float low = lo_[s], high = v - hi_[s], mid = hi_[s] - lo_[s]; v = low * gB + mid * gM + high * gT;   // tone stack
+      v = std::tanh(v * static_cast<float>(1.6 - 0.9 * sag_)) * 0.9f;                         // the power stage, softer while it sags
+      pr_[s] += (v - pr_[s]) * aPr; v += (v - pr_[s]) * pres;                                 // presence
+      c1_[s] += (v - c1_[s]) * aCab; c2_[s] += (c1_[s] - c2_[s]) * aCab; v = c2_[s];           // the cabinet: 12 dB / octave above 4.8 kHz
+      dc_[s] += (v - dc_[s]) * aDc; v -= dc_[s]; pk = std::max(pk, static_cast<double>(std::fabs(v)));
+      ch[s][i] = dry * x + wet * v * master; }
+    sag_ += (std::min(1.0, pk) - sag_) * (pk > sag_ ? sagA : sagR);
+  }
+}
+PreAmp::PreAmp(double fs) : Simple(fs) { for (int i = 0; i < 4; ++i) k_[i] = knobDef(i); }
+void PreAmp::reset() { hp_[0] = hp_[1] = dc_[0] = dc_[1] = 0; }
+std::string PreAmp::text(const std::string& id, double v) const { v = clamp01(v); if (id == "gain") return fmt("%+.1f dB", -12 + v * 48); if (id == "lowcut") return v < 0.02 ? std::string("off") : fmt("%.0f Hz", 20 + v * 280); if (id == "out") return fmt("%+.1f dB", -24 + v * 36); return fmt("%.0f %%", v * 100); }
+void PreAmp::process(float* L, float* R, std::size_t n) {
+  if (bypass_.load()) return;
+  const float g = static_cast<float>(std::pow(10.0, (-12 + k_[0].load() * 48) / 20)), out = static_cast<float>(std::pow(10.0, (-24 + k_[3].load() * 36) / 20)), warm = static_cast<float>(k_[2].load()); const double lc = k_[1].load();
+  const float aHp = lc < 0.02 ? 0.f : static_cast<float>(1 - std::exp(-2 * kPi * (20 + lc * 280) / fs_)), aDc = static_cast<float>(1 - std::exp(-2 * kPi * 8 / fs_)); float* ch[2] = {L, R};
+  for (std::size_t i = 0; i < n; ++i) for (int s = 0; s < 2; ++s) { float v = ch[s][i]; if (aHp > 0) { hp_[s] += (v - hp_[s]) * aHp; v -= hp_[s]; } v *= g;
+    if (warm > 0) { const float sat = std::tanh(v * (1 + 2 * warm)) / (1 + 2 * warm) + 0.25f * warm * v * v / (1 + v * v); v = v * (1 - warm) + sat * warm; dc_[s] += (v - dc_[s]) * aDc; v -= dc_[s]; }   // second harmonic from the squared term, its offset removed
+    ch[s][i] = v * out; }
+}
+PostAmp::PostAmp(double fs) : Simple(fs) { for (int i = 0; i < 3; ++i) k_[i] = knobDef(i); }
+void PostAmp::reset() { lp_[0] = lp_[1] = 0; }
+std::string PostAmp::text(const std::string& id, double v) const { v = clamp01(v); if (id == "level") return fmt("%+.1f dB", -24 + v * 36); if (id == "tilt") return fmt("%+.1f dB", (v - 0.5) * 12); return v < 0.01 ? std::string("off") : fmt("%.1f dBFS", -v * 12); }
+void PostAmp::process(float* L, float* R, std::size_t n) {
+  if (bypass_.load()) return;
+  const float g = static_cast<float>(std::pow(10.0, (-24 + k_[0].load() * 36) / 20)), tilt = static_cast<float>((k_[1].load() - 0.5) * 12), gLo = static_cast<float>(std::pow(10.0, -tilt / 40)), gHi = static_cast<float>(std::pow(10.0, tilt / 40)), a = static_cast<float>(1 - std::exp(-2 * kPi * 1000 / fs_));
+  const double c = k_[2].load(); const float ceil = static_cast<float>(std::pow(10.0, -c * 12 / 20)); float* ch[2] = {L, R};
+  for (std::size_t i = 0; i < n; ++i) for (int s = 0; s < 2; ++s) { float v = ch[s][i]; lp_[s] += (v - lp_[s]) * a; v = (lp_[s] * gLo + (v - lp_[s]) * gHi) * g; if (c >= 0.01) v = ceil * std::tanh(v / ceil); ch[s][i] = v; }
+}
+Fdn::Fdn(double fs, int lines, bool hall) : Simple(fs), lines_(lines), hall_(hall) { reset(); }
+void Fdn::reset() {
+  static const double hallMs[8] = {37.1, 43.7, 53.3, 61.9, 71.3, 79.7, 89.1, 97.3}, roomMs[4] = {11.3, 14.9, 19.1, 23.3};
+  for (int i = 0; i < lines_; ++i) { d_[i].assign(static_cast<std::size_t>(fs_ * (hall_ ? hallMs[i] : roomMs[i]) * 0.001 * 1.6) + 64, 0.f); w_[i] = 0; lp_[i] = 0; }
+  pre_.assign(static_cast<std::size_t>(fs_ * 0.26) + 8, 0.f); er_.assign(static_cast<std::size_t>(fs_ * 0.09) + 8, 0.f); pw_ = ew_ = 0; ph_ = 0;
+}
+std::string Fdn::text(const std::string& id, double v) const { v = clamp01(v); if (id == "decay") return hall_ ? fmt("%.1f s", 0.5 + v * v * 19.5) : fmt("%.2f s", 0.1 + v * 2.9); if (id == "predelay") return fmt("%.0f ms", v * 250); return fmt("%.0f %%", v * 100); }
+void Fdn::process(float* L, float* R, std::size_t n) {
+  if (bypass_.load()) return;
+  static const double hallMs[8] = {37.1, 43.7, 53.3, 61.9, 71.3, 79.7, 89.1, 97.3}, roomMs[4] = {11.3, 14.9, 19.1, 23.3};
+  const double size = 0.4 + k_[0].load() * 1.2, v1 = k_[1].load(), rt = hall_ ? 0.5 + v1 * v1 * 19.5 : 0.1 + v1 * 2.9; const float damp = static_cast<float>(1 - std::exp(-2 * kPi * (16000.0 * std::pow(0.08, k_[2].load())) / fs_));
+  const double mod = hall_ ? k_[4].load() * 0.0012 * fs_ : 0, early = hall_ ? 0.25 : k_[3].load(); const std::size_t preN = hall_ ? static_cast<std::size_t>(k_[3].load() * 0.25 * fs_) : 0;
+  double len[8]; float g[8]; for (int i = 0; i < lines_; ++i) { len[i] = std::min(static_cast<double>(d_[i].size() - 8), fs_ * (hall_ ? hallMs[i] : roomMs[i]) * 0.001 * size); g[i] = static_cast<float>(std::pow(10.0, -3.0 * (len[i] / fs_) / rt)); }
+  const float wet = static_cast<float>(mix_.load()), dry = 1.f - wet, norm = 2.f / static_cast<float>(lines_), inG = hall_ ? 0.35f : 0.5f; const double inc = 2 * kPi * 0.6 / fs_;
+  for (std::size_t i = 0; i < n; ++i) {
+    float in = 0.5f * (L[i] + R[i]); const std::size_t pl = pre_.size(); pre_[pw_] = in; if (preN) in = pre_[(pw_ + pl - std::min(preN, pl - 1)) % pl]; pw_ = (pw_ + 1) % pl;
+    const std::size_t el = er_.size(); er_[ew_] = in; float e = 0; if (early > 0) { static const double tap[4] = {0.0113, 0.0197, 0.0311, 0.0437}; for (int t = 0; t < 4; ++t) e += er_[(ew_ + el - static_cast<std::size_t>(tap[t] * fs_ * size) % el) % el] * (0.7f - 0.12f * static_cast<float>(t)); } ew_ = (ew_ + 1) % el;
+    float o[8], sum = 0;
+    for (int k = 0; k < lines_; ++k) { const std::size_t dl = d_[k].size(); double rd = len[k]; if (mod > 0 && (k & 1)) rd += mod * (1 + std::sin(ph_ + k)); const double rp = static_cast<double>(w_[k]) + static_cast<double>(dl) - rd; const std::size_t r0 = static_cast<std::size_t>(rp) % dl, r1 = (r0 + 1) % dl; const float fr = static_cast<float>(rp - std::floor(rp));
+      const float y = d_[k][r0] * (1 - fr) + d_[k][r1] * fr; lp_[k] += (y - lp_[k]) * damp; o[k] = lp_[k] * g[k]; sum += o[k]; }
+    for (int k = 0; k < lines_; ++k) { d_[k][w_[k]] = in * inG + o[k] - norm * sum; w_[k] = (w_[k] + 1) % d_[k].size(); }   // Householder feedback: lossless mixing, the decay comes from g
+    ph_ += inc; if (ph_ > 2 * kPi) ph_ -= 2 * kPi;
+    float l = 0, r = 0; for (int k = 0; k < lines_; ++k) { if (k & 1) r += o[k]; else l += o[k]; } const float sc = hall_ ? 0.5f : 0.7f, ee = static_cast<float>(early) * e * 0.5f;
+    L[i] = dry * L[i] + wet * (l * sc + ee); R[i] = dry * R[i] + wet * (r * sc + ee);
+  }
 }
 
 }  // namespace am::fx

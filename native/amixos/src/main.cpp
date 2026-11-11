@@ -1,3 +1,4 @@
+#include <tuple>
 #include <chrono>
 #include <thread>
 // A mix OS: the native console. Qt Quick interface (qml/) on the C++20 engine (Engine.h -> am::Runtime). No browser, no web runtime.
@@ -198,11 +199,11 @@ int main(int argc, char* argv[]) {
       engine.setWindowsMuteSync(true); if (!sysMute) { std::fprintf(stderr, "amixos --smoke: switching sync on at -inf did not mute\n"); return 82; } engine.restoreSystemSound(); if (sysMute) { std::fprintf(stderr, "amixos --smoke: exit did not take the mute back\n"); return 83; }
       engine.setMaster(keep); engine.setSystemMuteBackend([](bool&) { return false; }, [](bool) { return false; }); engine.syncSystemSound(); }
     { // the ten effects in the rack of any channel: listed, loaded into a slot, a knob moves, bypass, cleared; a late channel too
-      int fxn = 0; for (const QVariant& v : engine.pluginCatalog()) if (v.toMap().value("fx").toBool()) ++fxn; if (fxn != 10) { std::fprintf(stderr, "amixos --smoke: %d effects in the rack catalogue (want 10)\n", fxn); return 84; }
-      for (const int ch : {6, 7}) { int slot = 0; for (const QVariant& v : engine.pluginCatalog()) { const QVariantMap m = v.toMap(); if (!m.value("fx").toBool()) continue; engine.setPlugin(ch, slot, m.value("kind").toString()); const QVariantMap pl = engine.plugins(ch)[slot].toMap();
-          if (pl.value("pending").toBool() || pl.value("format").toString() != "FX" || engine.pluginParams(ch, slot).size() < 4) { std::fprintf(stderr, "amixos --smoke: effect %s did not load into CH %d slot %d\n", qPrintable(m.value("kind").toString()), ch + 1, slot + 1); return 85; } ++slot; }
+      int fxn = 0; for (const QVariant& v : engine.pluginCatalog()) if (v.toMap().value("fx").toBool()) ++fxn; if (fxn != 15) { std::fprintf(stderr, "amixos --smoke: %d effects in the rack catalogue (want 15)\n", fxn); return 84; }
+      for (const int ch : {6, 7}) { int slot = 0; for (const QVariant& v : engine.pluginCatalog()) { const QVariantMap m = v.toMap(); if (!m.value("fx").toBool()) continue; engine.setPlugin(ch, slot % 10, m.value("kind").toString()); const QVariantMap pl = engine.plugins(ch)[slot % 10].toMap();
+          if (pl.value("pending").toBool() || pl.value("format").toString() != "FX" || engine.pluginParams(ch, slot % 10).size() < 4) { std::fprintf(stderr, "amixos --smoke: effect %s did not load into CH %d slot %d\n", qPrintable(m.value("kind").toString()), ch + 1, slot + 1); return 85; } ++slot; }
         engine.setPluginParam(ch, 0, 0, 0.9); engine.setPluginBypass(ch, 0, true); if (!engine.plugins(ch)[0].toMap().value("bypass").toBool()) { std::fprintf(stderr, "amixos --smoke: effect bypass\n"); return 86; }
-        for (int k = 0; k < 10; ++k) engine.setPlugin(ch, k, ""); if (engine.pluginCount(ch) != 0) { std::fprintf(stderr, "amixos --smoke: effects not cleared\n"); return 87; } } }
+        for (int k = 0; k < 16; ++k) engine.setPlugin(ch, k, ""); if (engine.pluginCount(ch) != 0) { std::fprintf(stderr, "amixos --smoke: effects not cleared\n"); return 87; } } }
     { (void)remote.addresses(); if (remote.running()) { std::fprintf(stderr, "amixos --smoke: the remote service must be off until asked\n"); return 88; } }
     if (!measure.chime()) { std::fprintf(stderr, "amixos --smoke: the boot chord did not start on a running engine\n"); return 69; } measure.cancel();
     engine.setPlugin(4, 0, "comp"); if (!engine.channelParams(4).value("compOn").toBool() || engine.plugins(4)[0].toMap().value("kind").toString() != "comp") { std::fprintf(stderr, "amixos --smoke: plugin slot did not switch the compressor on\n"); return 21; }
@@ -376,6 +377,12 @@ int main(int argc, char* argv[]) {
           wiz->setProperty("step", 1); wiz->setProperty("termsAlert", true); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + QStringLiteral("/setup-2-alert.png")); wiz->setProperty("termsAlert", false);
           for (int step = 0; step < 7; ++step) { wiz->setProperty("step", step); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + QStringLiteral("/setup-%1.png").arg(step + 1)); std::printf("amixos --shots: setup-%d\n", step + 1); }
           win->setProperty("forceSetup", false); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+          { win->setProperty("current", "mixer"); for (int k = 0; k < 10; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50);   // the plug-in editor on a tube amp and on the hall reverb
+            if (QObject* edw = win->findChild<QObject*>("plugEd")) { for (const auto& [kind, name, file] : {std::tuple<const char*, const char*, const char*>{"fx:tubeamp", "TUBE AMP", "plugin-editor-tubeamp.png"}, {"fx:hall", "HALL REVERB", "plugin-editor-hall.png"}}) {
+                engine.setPlugin(0, 8, kind); QMetaObject::invokeMethod(edw, "openFor", Q_ARG(QVariant, 0), Q_ARG(QVariant, 8), Q_ARG(QVariant, QString::fromLatin1(kind)), Q_ARG(QVariant, QString::fromLatin1(name)));
+                { QElapsedTimer bt; bt.start(); while (bt.elapsed() < 500) QCoreApplication::processEvents(QEventLoop::AllEvents, 20); } win->grabWindow().save(shots + "/" + file); QMetaObject::invokeMethod(edw, "close"); }
+              engine.setPlugin(0, 8, ""); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); }
+            else { std::fprintf(stderr, "amixos --shots: the plug-in editor was not found\n"); } }
           win->setProperty("bootOn", true); { QElapsedTimer bt; bt.start(); while (bt.elapsed() < 1700) QCoreApplication::processEvents(QEventLoop::AllEvents, 20); } win->grabWindow().save(shots + QStringLiteral("/boot-splash.png")); win->setProperty("bootOn", false); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
         }
         for (const char* id : {"home", "mixer", "dsp", "dyn", "gate", "bus", "dca", "scenes", "presets", "routing", "renew", "arrange", "io", "meter", "lufs", "sys", "fx", "osc", "phase", "acoustics", "surround", "master", "rtaeq", "miceq", "live", "tools", "calib", "boot", "help", "acct", "access", "admin", "ai", "plugins", "network", "media", "asio", "samples", "rtaeq", "bluetooth"}) {

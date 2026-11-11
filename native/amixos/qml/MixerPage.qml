@@ -25,7 +25,7 @@ Item {
     property bool showGroups: true
     property bool showAi: true      // the AI chip: automix (gain sharing between open microphones) + the gain it applies right now
     Connections { target: engine; function onBusesChanged() { page.sendsTick++ } function onRoutingChanged() { page.sendsTick++ } function onStateChanged() { page.sendsTick++ } }
-    readonly property var selPlugins: engine.plugins(sel)
+    property var selPlugins: engine.plugins(sel)
     Connections { target: engine; function onStripsChanged() { page.selPlugins = engine.plugins(page.sel) } function onSelectedStripChanged() { page.selPlugins = engine.plugins(page.sel) } }
     // keyboard: ← → select strip, M mute, S solo, 0 fader to 0 dB, Ctrl+Z / Ctrl+Y undo / redo, A A/B, R plugin rack, Esc clear solo
     focus: true
@@ -152,6 +152,7 @@ Item {
                 Rectangle { implicitWidth: 92; implicitHeight: 20; radius: 4; color: page.rack ? Qt.rgba(0.6, 0.4, 1, 0.22) : Theme.ov(0.06); border.color: page.rack ? "#a78bfa" : "transparent"; Text { anchors.centerIn: parent; text: i18n.t("PLUGIN RACK", i18n.lang); color: page.rack ? "#a78bfa" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.rack = !page.rack } }
             }
             // generic parameter panel for a VST3 plug-in (no plug-in GUI is opened): one slider per parameter, the plug-in's own value text
+            PluginEditor { id: plugEd; parent: Overlay.overlay }
             Popup { id: paramsPop; property int slot: 0; property string title: ""; property var model: []; x: (parent.width - width) / 2; y: 80; width: 460; height: Math.min(520, 70 + model.length * 30); modal: true; focus: true; closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
                 background: Rectangle { radius: 8; color: Theme.cardRaised; border.color: "#a78bfa" }
                 Connections { target: engine; function onStripsChanged() { if (paramsPop.visible) paramsPop.model = engine.pluginParams(page.sel, paramsPop.slot) } }
@@ -230,7 +231,7 @@ Item {
                                 Rectangle { implicitWidth: 14; implicitHeight: 12; radius: 2; color: Theme.ov(0.08); Text { anchors.centerIn: parent; text: "›"; color: Theme.muted; font.pixelSize: 9 } MouseArea { anchors.fill: parent; enabled: modelData.slot < engine.pluginSlotLimit - 1; onClicked: engine.movePlugin(page.sel, modelData.slot, modelData.slot + 1) } }
                                 Item { Layout.fillWidth: true }
                                 Rectangle { visible: modelData.builtIn; implicitWidth: 30; implicitHeight: 12; radius: 2; color: Qt.rgba(0, 0.95, 1, 0.18); Text { anchors.centerIn: parent; text: i18n.t("OPEN", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.go(modelData.kind === "gate" ? "gate" : modelData.kind === "comp" ? "dyn" : "dsp") } }
-                                Rectangle { visible: modelData.vst && !modelData.pending; implicitWidth: 36; implicitHeight: 12; radius: 2; color: Qt.rgba(0.6, 0.4, 1, 0.3); Text { anchors.centerIn: parent; text: i18n.t("PARAMS", i18n.lang); color: "#a78bfa"; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } MouseArea { anchors.fill: parent; onClicked: { paramsPop.slot = modelData.slot; paramsPop.title = modelData.name; paramsPop.model = engine.pluginParams(page.sel, modelData.slot); paramsPop.open() } } }
+                                Rectangle { visible: modelData.vst && !modelData.pending; implicitWidth: 36; implicitHeight: 12; radius: 2; color: Qt.rgba(0.6, 0.4, 1, 0.3); Text { anchors.centerIn: parent; text: i18n.t("EDIT", i18n.lang); color: "#a78bfa"; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } MouseArea { anchors.fill: parent; onClicked: plugEd.openFor(page.sel, modelData.slot, modelData.kind, modelData.name) } }
                                 Rectangle { visible: modelData.pending; implicitWidth: 30; implicitHeight: 12; radius: 2; color: Qt.rgba(0.984, 0.749, 0.141, 0.3); Text { anchors.centerIn: parent; text: i18n.t("WHY?", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } ToolTip.visible: whyHov.hovered; ToolTip.text: modelData.error || i18n.t("The plug-in could not be loaded.", i18n.lang); HoverHandler { id: whyHov } }
                                 Rectangle { implicitWidth: 14; implicitHeight: 12; radius: 2; color: Qt.rgba(1, 0.165, 0.373, 0.25); Text { anchors.centerIn: parent; text: "×"; color: Theme.danger; font.pixelSize: 9 } MouseArea { anchors.fill: parent; onClicked: engine.setPlugin(page.sel, modelData.slot, "") } } } } } }
             }
