@@ -51,7 +51,8 @@
         "Top bar: FILE, EDIT (undo, redo, A / B, mute all, clear solo, clear clips), VIEW, TOOLS (plug-ins, sound card, effects, mastering, samples, Volume Enhancer, Master Analyzer, settings), HELP and ABOUT. Back again: the MASTER / CHANNEL switch on RTA EQ and the AUTO EQ tab on ACOUSTICS.",
         "FEEDBACK KILLER: a new rack effect that finds the howl of a microphone hearing its own loudspeaker (one pure, steady tone standing out for a third of a second) and notches it out with up to six filters; SENSITIVITY, DEPTH, WIDTH and HOLD / LIVE mode.",
         "360 AUDIO: CINEMA HALL puts 20 objects on strips 1-20, ten fixed points (left, centre, right, sides, rear, overhead) and ten objects that travel around the listener in real time, with a hall reverb on FX 8; HEAD TRACK keeps the scene in the room while the head turns (TURN, NOD, or drag on the map); a live map shows every object.",
-        "STEREO PAIRS: 'Match the stereo partner' in a strip's menu gives channels 1+2, 3+4 ... the same processing and rack, panned to the other side; while LINKED, a plug-in put in, removed, bypassed or adjusted on one side is done on the other (two mono copies, not one stereo plug-in). SOUND CARD: AUTO SELECT chooses which audio system auto detect picks from: BEST, ASIO, WASAPI, DIRECTSOUND or BLUETOOTH."
+        "STEREO PAIRS: 'Match the stereo partner' in a strip's menu gives channels 1+2, 3+4 ... the same processing and rack, panned to the other side; while LINKED, a plug-in put in, removed, bypassed or adjusted on one side is done on the other (two mono copies, not one stereo plug-in). SOUND CARD: AUTO SELECT chooses which audio system auto detect picks from: BEST, ASIO, WASAPI, DIRECTSOUND or BLUETOOTH.",
+        "RTA EQ fixed: on the master EQ the faders, diamonds and the FREQUENCY / Q / GAIN sliders now stay where they are moved (the page was not told about changes to the master's EQ, so they snapped back)."
       ]
     }
   ]

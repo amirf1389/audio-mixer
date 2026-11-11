@@ -15,6 +15,7 @@ Flickable {
     property bool rtaOn: true
     property bool frozen: false
     property string apoNote: ""
+    onProgramChanged: reload()
     property bool program: true                 // RTA EQ opens on the main (master) equaliser; the button beside the title switches to the selected channel's ten bands and back.  // ten bands of its own on the master. A channel has its 3-band CHANNEL EQ on TONE and the MIC EQ in its rack.
     property int strip: program ? -1 : engine.selectedStrip
     property var gains: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
@@ -54,7 +55,7 @@ Flickable {
     Component.onCompleted: { if (strip >= 0) engine.setScopeStrip(strip); reload() }
     onStripChanged: { if (strip >= 0) engine.setScopeStrip(strip); reload() }
     onBandChanged: bandNow = engine.eqBand(strip, band)
-    Connections { target: engine; function onStripsChanged() { page.reload() } function onPresetsChanged() { page.slotTick++ } }
+    Connections { target: engine; function onStripsChanged() { page.reload() } function onMasterChainChanged() { page.reload() } function onPresetsChanged() { page.slotTick++ } }   // the master's EQ reports through masterChainChanged: without it the sliders and diamonds snapped back after every move
     Timer { interval: 16; running: page.visible && page.rtaOn && !page.frozen; repeat: true; onTriggered: { page.spec = engine.spectrum(page.program ? 0 : 2); rta.requestPaint() } }
     component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; property color offColor: Theme.ov(0.08); signal clicked(); implicitWidth: bl.implicitWidth + 16; implicitHeight: 22; radius: 4; color: on ? onColor : offColor; border.color: on ? onColor : Theme.lineSoft
         Text { id: bl; anchors.centerIn: parent; text: label; color: parent.on ? "#000" : Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
