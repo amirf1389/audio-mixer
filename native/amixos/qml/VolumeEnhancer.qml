@@ -11,7 +11,7 @@ import QtQuick.Layouts
 Popup {
     id: pop
     objectName: "volumeEnhancer"
-    modal: true; padding: 0; width: 900; height: 536; anchors.centerIn: Overlay.overlay
+    modal: true; padding: 0; width: 940; height: 520; anchors.centerIn: Overlay.overlay
     property int tick: 0
     readonly property var m: { tick; return engine.mastering() }
     readonly property var lim: { tick; return engine.masterLimiter() }
@@ -37,68 +37,84 @@ Popup {
         engine.setMasterLimiter(true, p.ceiling); engine.width = p.width; tick++
     }
     function db(v, digits) { return (v > 0.004 ? "+" : "") + Number(v).toFixed(digits === undefined ? 1 : digits) + " dB" }
+    property real limRed: 0
+    property real compRed: 0
     onOpened: tick++
     Connections { target: engine; function onMasterChainChanged() { pop.tick++ } function onStripsChanged() { pop.tick++ } }
-    Timer { interval: 60; running: pop.visible; repeat: true; onTriggered: { grBar.red = engine.masteringReductionDb(); limBar.red = engine.masterLimiterReductionDb() } }
+    Timer { interval: 60; running: pop.visible; repeat: true; onTriggered: { pop.compRed = engine.masteringReductionDb(); pop.limRed = engine.masterLimiterReductionDb() } }
 
-    component Head: Text { color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
-    component Pill: Rectangle { property string label; property bool on: false; property color onColor: Theme.orange; signal clicked(); implicitWidth: Math.max(58, pl.implicitWidth + 18); implicitHeight: 24; radius: 5; color: on ? onColor : Theme.ov(0.08); border.color: on ? onColor : Theme.line
-        Text { id: pl; anchors.centerIn: parent; text: parent.label; color: parent.on ? "#000" : Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
-    component RedBar: Rectangle { property real red: 0; property real span: 12; implicitWidth: 8; implicitHeight: 70; radius: 2; color: Theme.deep; border.color: Theme.lineSoft
-        Rectangle { anchors.top: parent.top; anchors.horizontalCenter: parent.horizontalCenter; width: parent.width - 2; y: 1; height: Math.max(0, Math.min(1, parent.red / parent.span)) * (parent.height - 2); radius: 2; color: Theme.amber } }
-    component LevelBar: Rectangle { property real level: -120; implicitWidth: 9; implicitHeight: 96; radius: 2; color: Theme.deep; border.color: Theme.lineSoft
+    component Head: Text { color: Theme.muted; font.family: Theme.mono; font.pixelSize: 10; font.bold: true; font.letterSpacing: 2 }
+    component Hint: Text { color: Theme.dim; font.family: Theme.mono; font.pixelSize: 9; wrapMode: Text.WordWrap }
+    component Pill: Rectangle { property string label; property bool on: false; property color onColor: Theme.orange; signal clicked(); implicitWidth: Math.max(60, pl.implicitWidth + 20); implicitHeight: 26; radius: 6; color: on ? onColor : (ph.hovered ? Theme.ov(0.14) : Theme.ov(0.08)); border.color: on ? onColor : Theme.line
+        Text { id: pl; anchors.centerIn: parent; text: parent.label; color: parent.on ? "#000" : Theme.ink; font.family: Theme.mono; font.pixelSize: 10; font.bold: true } HoverHandler { id: ph } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
+    // a level meter with its scale: green to -9, amber to -1, red above
+    component LevelBar: Rectangle { property real level: -120; implicitWidth: 12; radius: 3; color: Theme.deep; border.color: Theme.lineSoft
         Rectangle { anchors.bottom: parent.bottom; anchors.horizontalCenter: parent.horizontalCenter; anchors.bottomMargin: 1; width: parent.width - 2; height: Math.max(0, Math.min(1, (parent.level + 36) / 36)) * (parent.height - 2); radius: 2; color: parent.level > -1 ? Theme.danger : parent.level > -9 ? Theme.amber : Theme.emerald } }
-    component Group: Rectangle { default property alias content: inner.data; property string title; Layout.fillWidth: true; Layout.fillHeight: true; Layout.preferredWidth: 250; Layout.minimumWidth: 220; implicitHeight: 170; radius: 8; color: Theme.ov(0.035); border.color: Theme.lineSoft
-        Head { x: 14; y: 10; text: parent.title }
-        Row { id: inner; anchors.horizontalCenter: parent.horizontalCenter; y: 34; spacing: 26 } }
+    // gain reduction, from the top down
+    component RedBar: Rectangle { property real red: 0; property real span: 12; implicitWidth: 12; radius: 3; color: Theme.deep; border.color: Theme.lineSoft
+        Rectangle { anchors.top: parent.top; anchors.topMargin: 1; anchors.horizontalCenter: parent.horizontalCenter; width: parent.width - 2; height: Math.max(0, Math.min(1, parent.red / parent.span)) * (parent.height - 2); radius: 2; color: Theme.amber } }
+    component Card: Rectangle { default property alias content: inner.data; property string title; property string note; Layout.fillHeight: true; radius: 10; color: Theme.ov(0.04); border.color: Theme.lineSoft
+        Head { x: 16; y: 12; text: parent.title }
+        Hint { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.margins: 14; horizontalAlignment: Text.AlignHCenter; text: parent.note; visible: text !== "" }
+        Item { id: inner; anchors.fill: parent; anchors.topMargin: 36; anchors.bottomMargin: parent.note !== "" ? 40 : 10; anchors.leftMargin: 10; anchors.rightMargin: 10 } }
 
-    background: Rectangle { radius: 12; color: Theme.card; border.color: pop.m.on ? Theme.orange : Theme.line
-        Rectangle { anchors.fill: parent; anchors.margins: 1; radius: 11; gradient: Gradient { GradientStop { position: 0; color: Theme.ov(0.05) } GradientStop { position: 0.4; color: "transparent" } } } }
-    contentItem: ColumnLayout { spacing: 0
-        RowLayout { Layout.fillWidth: true; Layout.margins: 14; Layout.bottomMargin: 6; spacing: 10
-            Text { text: "AMFB"; color: Theme.orange; font.family: Theme.mono; font.pixelSize: 15; font.weight: Font.Black; font.letterSpacing: 4 }
-            Text { text: i18n.t("VOLUME ENHANCER", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 13; font.bold: true; font.letterSpacing: 3 }
-            Text { text: i18n.t("on the master", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 }
-            Item { Layout.fillWidth: true }
-            Pill { objectName: "veBypass"; label: pop.m.on ? i18n.t("ACTIVE", i18n.lang) : i18n.t("BYPASSED", i18n.lang); on: pop.m.on; onColor: Theme.emerald; onClicked: { engine.setMastering({ on: !pop.m.on, preset: "" }); pop.tick++ } }
-            Pill { objectName: "veClose"; label: i18n.t("CLOSE", i18n.lang); onClicked: pop.close() } }
-        RowLayout { Layout.fillWidth: true; Layout.leftMargin: 20; Layout.rightMargin: 20; Layout.preferredHeight: 230; Layout.maximumHeight: 230; spacing: 18; opacity: pop.m.on ? 1 : 0.55
-            ColumnLayout { Layout.preferredWidth: 200; spacing: 8
-                Head { text: i18n.t("ANALOG", i18n.lang) }
-                RowLayout { spacing: 14
-                    Pill { objectName: "veAnalog"; label: pop.m.satOn && pop.m.drive > 0 ? i18n.t("ON", i18n.lang) : i18n.t("OFF", i18n.lang); on: pop.m.satOn && pop.m.drive > 0; onClicked: pop.put(on ? { satOn: true, drive: 0 } : { satOn: true, drive: 0.25 }) }
-                    Knob { size: 58; label: i18n.t("DRIVE", i18n.lang); value: pop.m.drive; defaultValue: 0; valueText: Math.round(pop.m.drive * 100) + " %"; onMoved: function (v) { pop.put({ satOn: true, drive: v }) } } }
-                Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; text: i18n.t("Soft saturation: adds harmonics and rounds the peaks before the limiter.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
-            Item { Layout.fillWidth: true; Layout.fillHeight: true; Layout.minimumWidth: 240
-                Knob { objectName: "veLoudness"; anchors.centerIn: parent; size: 132; label: i18n.t("LOUDNESS", i18n.lang); value: Math.max(0, pop.m.gain) / 12; defaultValue: 0; valueText: pop.db(Math.max(0, pop.m.gain), 2); onMoved: function (v) { pop.put({ gain: Math.round(v * 12 * 20) / 20, satOn: true }); if (!pop.lim.on) pop.setCeiling(pop.lim.ceiling === undefined ? -0.3 : pop.lim.ceiling) } } }
-            RowLayout { Layout.preferredWidth: 220; spacing: 14
-                Knob { size: 58; label: i18n.t("CEILING", i18n.lang); value: (Math.max(-6, Math.min(0, pop.lim.ceiling === undefined ? -0.3 : pop.lim.ceiling)) + 6) / 6; defaultValue: 0.95; valueText: Number(pop.lim.ceiling === undefined ? -0.3 : pop.lim.ceiling).toFixed(2) + " dB"; onMoved: function (v) { pop.setCeiling(Math.round((-6 + v * 6) * 20) / 20) } }
-                ColumnLayout { spacing: 3
-                    RowLayout { spacing: 3; LevelBar { level: pop.tel.masterLDb === undefined ? -120 : pop.tel.masterLDb } LevelBar { level: pop.tel.masterRDb === undefined ? -120 : pop.tel.masterRDb } RedBar { id: limBar; implicitHeight: 96 } }
-                    Text { text: i18n.t("OUT · LIMIT", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
-                    Text { text: (pop.tel.masterPeakDb === undefined ? "—" : Number(Math.max(-99, pop.tel.masterPeakDb)).toFixed(1)) + " dBFS"; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8 } } } }
-        RowLayout { Layout.fillWidth: true; Layout.preferredHeight: 178; Layout.maximumHeight: 178; Layout.margins: 14; Layout.topMargin: 6; spacing: 10; opacity: pop.m.on ? 1 : 0.55
-            Group { title: i18n.t("COMPRESSION", i18n.lang)
-                Knob { size: 56; label: i18n.t("SOFTEN", i18n.lang); value: Math.min(1, pop.soften / 12); defaultValue: 0; valueText: pop.m.compOn ? pop.db(pop.soften, 1) : i18n.t("off", i18n.lang); onMoved: function (v) { pop.setSoften(Math.round(v * 12 * 10) / 10) } }
-                Knob { size: 56; label: i18n.t("MIX", i18n.lang); value: pop.m.compMix === undefined ? 1 : pop.m.compMix; defaultValue: 1; valueText: Math.round((pop.m.compMix === undefined ? 1 : pop.m.compMix) * 100) + " %"; onMoved: function (v) { pop.put({ compMix: v }) } }
-                RedBar { id: grBar } }
-            Group { title: i18n.t("EQ", i18n.lang); Layout.preferredWidth: 330
-                Knob { size: 56; label: i18n.t("LOW", i18n.lang); value: (pop.m.low + 12) / 24; defaultValue: 0.5; valueText: pop.db(pop.m.low); onMoved: function (v) { pop.put({ toneOn: true, low: Math.round((v * 24 - 12) * 10) / 10 }) } }
-                Knob { size: 56; label: i18n.t("MID", i18n.lang); value: ((pop.m.mid || 0) + 12) / 24; defaultValue: 0.5; valueText: pop.db(pop.m.mid || 0); onMoved: function (v) { pop.put({ toneOn: true, mid: Math.round((v * 24 - 12) * 10) / 10 }) } }
-                Knob { size: 56; label: i18n.t("HIGH", i18n.lang); value: (pop.m.air + 12) / 24; defaultValue: 0.5; valueText: pop.db(pop.m.air); onMoved: function (v) { pop.put({ toneOn: true, air: Math.round((v * 24 - 12) * 10) / 10 }) } } }
-            Group { title: i18n.t("STEREO IMAGE", i18n.lang)
-                Knob { size: 56; label: i18n.t("MONO BELOW", i18n.lang); value: pop.m.bassMonoOn ? Math.min(1, pop.m.bassMonoHz / 300) : 0; defaultValue: 0; valueText: pop.m.bassMonoOn ? Math.round(pop.m.bassMonoHz) + " Hz" : i18n.t("off", i18n.lang); onMoved: function (v) { pop.setMono(Math.round(v * 300)) } }
-                Knob { size: 56; label: i18n.t("WIDTH", i18n.lang); value: engine.width / 2; defaultValue: 0.5; valueText: Math.round(engine.width * 100) + " %"; onMoved: function (v) { engine.width = Math.round(v * 200) / 100; pop.tick++ } } } }
-        Item { Layout.fillHeight: true }
-        Rectangle { Layout.fillWidth: true; implicitHeight: 44; color: Theme.ov(0.04)
-            Rectangle { width: parent.width; height: 1; color: Theme.lineSoft }
-            RowLayout { anchors.fill: parent; anchors.leftMargin: 14; anchors.rightMargin: 14; spacing: 8
-                Head { text: i18n.t("PRESET", i18n.lang) }
-                Pill { objectName: "vePrev"; label: "◀"; implicitWidth: 30; onClicked: pop.load(pop.presetIndex - 1) }
-                Rectangle { implicitWidth: 220; implicitHeight: 24; radius: 5; color: Theme.deep; border.color: Theme.line; Text { objectName: "vePresetName"; anchors.centerIn: parent; text: pop.presets[pop.presetIndex].n; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 10; font.bold: true } }
-                Pill { objectName: "veNext"; label: "▶"; implicitWidth: 30; onClicked: pop.load(pop.presetIndex + 1) }
+    background: Rectangle { radius: 14; color: Theme.card; border.color: pop.m.on ? Theme.orange : Theme.line; border.width: 1 }
+    contentItem: ColumnLayout { spacing: 10
+        // ---- title, presets, bypass
+        Rectangle { Layout.fillWidth: true; implicitHeight: 54; color: Theme.ov(0.05); radius: 14
+            Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 14; color: Theme.ov(0.0) }
+            RowLayout { anchors.fill: parent; anchors.leftMargin: 18; anchors.rightMargin: 14; spacing: 10
+                Text { text: "AMFB"; color: Theme.orange; font.family: Theme.mono; font.pixelSize: 17; font.weight: Font.Black; font.letterSpacing: 4 }
+                Text { text: i18n.t("VOLUME ENHANCER", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 14; font.bold: true; font.letterSpacing: 3 }
+                Item { Layout.fillWidth: true }
+                Pill { objectName: "vePrev"; label: "◀"; implicitWidth: 32; onClicked: pop.load(pop.presetIndex - 1) }
+                Rectangle { implicitWidth: 200; implicitHeight: 26; radius: 6; color: Theme.deep; border.color: Theme.line
+                    Text { objectName: "vePresetName"; anchors.centerIn: parent; text: pop.presets[pop.presetIndex].n; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true } }
+                Pill { objectName: "veNext"; label: "▶"; implicitWidth: 32; onClicked: pop.load(pop.presetIndex + 1) }
                 Pill { objectName: "veInit"; label: i18n.t("INIT", i18n.lang); onClicked: pop.load(0) }
                 Item { Layout.fillWidth: true }
-                Text { text: i18n.t("The limiter holds the ceiling: louder means more limiting, not clipping.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } } }
+                Pill { objectName: "veBypass"; label: pop.m.on ? i18n.t("● ACTIVE", i18n.lang) : i18n.t("○ BYPASSED", i18n.lang); on: pop.m.on; onColor: Theme.emerald; onClicked: { engine.setMastering({ on: !pop.m.on, preset: "" }); pop.tick++ } }
+                Pill { objectName: "veClose"; label: "✕"; implicitWidth: 32; onClicked: pop.close() } } }
+        // ---- character, loudness, output
+        RowLayout { Layout.fillWidth: true; Layout.leftMargin: 14; Layout.rightMargin: 14; Layout.preferredHeight: 250; Layout.maximumHeight: 250; spacing: 10; opacity: pop.m.on ? 1 : 0.5
+            Card { title: i18n.t("ANALOG", i18n.lang); note: i18n.t("Soft saturation: harmonics, and rounder peaks into the limiter.", i18n.lang); Layout.preferredWidth: 230; Layout.maximumWidth: 230
+                Column { anchors.centerIn: parent; spacing: 12
+                    Knob { anchors.horizontalCenter: parent.horizontalCenter; size: 70; label: i18n.t("DRIVE", i18n.lang); value: pop.m.drive; defaultValue: 0; valueText: Math.round(pop.m.drive * 100) + " %"; onMoved: function (v) { pop.put({ satOn: true, drive: v }) } }
+                    Pill { objectName: "veAnalog"; anchors.horizontalCenter: parent.horizontalCenter; label: pop.m.satOn && pop.m.drive > 0 ? i18n.t("ANALOG ON", i18n.lang) : i18n.t("ANALOG OFF", i18n.lang); on: pop.m.satOn && pop.m.drive > 0; onClicked: pop.put(on ? { satOn: true, drive: 0 } : { satOn: true, drive: 0.25 }) } } }
+            Card { title: i18n.t("LOUDNESS", i18n.lang); Layout.fillWidth: true; border.color: pop.m.on ? Theme.orange : Theme.lineSoft
+                Knob { objectName: "veLoudness"; anchors.horizontalCenter: parent.horizontalCenter; y: -6; size: 140; label: ""; value: Math.max(0, pop.m.gain) / 12; defaultValue: 0; valueText: ""; onMoved: function (v) { pop.put({ gain: Math.round(v * 12 * 20) / 20, satOn: true }); if (!pop.lim.on) pop.setCeiling(pop.lim.ceiling === undefined ? -0.3 : pop.lim.ceiling) } }
+                Column { anchors.horizontalCenter: parent.horizontalCenter; anchors.bottom: parent.bottom; anchors.bottomMargin: 4; spacing: 2
+                    Text { anchors.horizontalCenter: parent.horizontalCenter; text: pop.db(Math.max(0, pop.m.gain), 2); color: Theme.orange; font.family: Theme.mono; font.pixelSize: 20; font.bold: true }
+                    Text { anchors.horizontalCenter: parent.horizontalCenter; text: pop.limRed > 0.05 ? i18n.t("limiting ", i18n.lang) + Number(pop.limRed).toFixed(1) + " dB" : i18n.t("not limiting", i18n.lang); color: pop.limRed > 6 ? Theme.danger : pop.limRed > 0.05 ? Theme.amber : Theme.dim; font.family: Theme.mono; font.pixelSize: 10 } } }
+            Card { title: i18n.t("OUTPUT", i18n.lang); Layout.preferredWidth: 270; Layout.maximumWidth: 270
+                RowLayout { anchors.fill: parent; spacing: 14
+                    Knob { Layout.alignment: Qt.AlignVCenter; size: 70; label: i18n.t("CEILING", i18n.lang); value: (Math.max(-6, Math.min(0, pop.lim.ceiling === undefined ? -0.3 : pop.lim.ceiling)) + 6) / 6; defaultValue: 0.95; valueText: Number(pop.lim.ceiling === undefined ? -0.3 : pop.lim.ceiling).toFixed(2) + " dB"; onMoved: function (v) { pop.setCeiling(Math.round((-6 + v * 6) * 20) / 20) } }
+                    Item { Layout.fillHeight: true; Layout.fillWidth: true
+                        Row { id: bars; anchors.top: parent.top; anchors.bottom: outNum.top; anchors.bottomMargin: 20; anchors.horizontalCenter: parent.horizontalCenter; spacing: 5
+                            Item { height: parent.height; width: 22
+                                Repeater { model: [0, -9, -18, -27, -36]; delegate: Text { y: (-modelData / 36) * (parent.height - 2) - 4; text: modelData; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8; width: 22; horizontalAlignment: Text.AlignRight } } }
+                            LevelBar { height: parent.height; level: pop.tel.masterLDb === undefined ? -120 : pop.tel.masterLDb }
+                            LevelBar { height: parent.height; level: pop.tel.masterRDb === undefined ? -120 : pop.tel.masterRDb }
+                            Item { width: 6; height: 1 }
+                            RedBar { height: parent.height; red: pop.limRed } }
+                        Row { anchors.top: bars.bottom; anchors.topMargin: 3; anchors.horizontalCenter: parent.horizontalCenter; spacing: 6
+                            Text { text: "      L   R   " + i18n.t("LIMIT", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 } }
+                        Text { id: outNum; anchors.bottom: parent.bottom; anchors.horizontalCenter: parent.horizontalCenter; text: (pop.tel.masterPeakDb === undefined ? "—" : Number(Math.max(-99, pop.tel.masterPeakDb)).toFixed(1)) + " dBFS"; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 11; font.bold: true } } } } }
+        // ---- compression, tone, stereo
+        RowLayout { Layout.fillWidth: true; Layout.fillHeight: true; Layout.leftMargin: 14; Layout.rightMargin: 14; Layout.bottomMargin: 14; spacing: 10; opacity: pop.m.on ? 1 : 0.5
+            Card { title: i18n.t("COMPRESSION", i18n.lang); Layout.preferredWidth: 300; Layout.fillWidth: true
+                Row { anchors.centerIn: parent; spacing: 22
+                    Knob { size: 60; label: i18n.t("SOFTEN", i18n.lang); value: Math.min(1, pop.soften / 12); defaultValue: 0; valueText: pop.m.compOn ? pop.db(pop.soften, 1) : i18n.t("off", i18n.lang); onMoved: function (v) { pop.setSoften(Math.round(v * 12 * 10) / 10) } }
+                    Knob { size: 60; label: i18n.t("MIX", i18n.lang); value: pop.m.compMix === undefined ? 1 : pop.m.compMix; defaultValue: 1; valueText: Math.round((pop.m.compMix === undefined ? 1 : pop.m.compMix) * 100) + " %"; onMoved: function (v) { pop.put({ compMix: v }) } }
+                    Column { spacing: 3; RedBar { id: grBar; height: 70; red: pop.compRed } Text { text: "GR"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 } } } }
+            Card { title: i18n.t("EQ", i18n.lang); Layout.preferredWidth: 330; Layout.fillWidth: true
+                Row { anchors.centerIn: parent; spacing: 22
+                    Knob { size: 60; label: i18n.t("LOW", i18n.lang); value: (pop.m.low + 12) / 24; defaultValue: 0.5; valueText: pop.db(pop.m.low); onMoved: function (v) { pop.put({ toneOn: true, low: Math.round((v * 24 - 12) * 10) / 10 }) } }
+                    Knob { size: 60; label: i18n.t("MID", i18n.lang); value: ((pop.m.mid || 0) + 12) / 24; defaultValue: 0.5; valueText: pop.db(pop.m.mid || 0); onMoved: function (v) { pop.put({ toneOn: true, mid: Math.round((v * 24 - 12) * 10) / 10 }) } }
+                    Knob { size: 60; label: i18n.t("HIGH", i18n.lang); value: (pop.m.air + 12) / 24; defaultValue: 0.5; valueText: pop.db(pop.m.air); onMoved: function (v) { pop.put({ toneOn: true, air: Math.round((v * 24 - 12) * 10) / 10 }) } } } }
+            Card { title: i18n.t("STEREO IMAGE", i18n.lang); Layout.preferredWidth: 250; Layout.fillWidth: true
+                Row { anchors.centerIn: parent; spacing: 22
+                    Knob { size: 60; label: i18n.t("MONO BELOW", i18n.lang); value: pop.m.bassMonoOn ? Math.min(1, pop.m.bassMonoHz / 300) : 0; defaultValue: 0; valueText: pop.m.bassMonoOn ? Math.round(pop.m.bassMonoHz) + " Hz" : i18n.t("off", i18n.lang); onMoved: function (v) { pop.setMono(Math.round(v * 300)) } }
+                    Knob { size: 60; label: i18n.t("WIDTH", i18n.lang); value: engine.width / 2; defaultValue: 0.5; valueText: Math.round(engine.width * 100) + " %"; onMoved: function (v) { engine.width = Math.round(v * 200) / 100; pop.tick++ } } } } }
     }
 }

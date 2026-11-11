@@ -42,6 +42,8 @@ Flickable {
     contentHeight: col.implicitHeight + 24
     clip: true
     boundsBehavior: Flickable.StopAtBounds
+    interactive: false   // no sliding: a drag on a diamond or a fader moves that band, never the page; the wheel and the scroll bar still reach what a small window cuts off
+    WheelHandler { onWheel: function (e) { page.contentY = Math.max(0, Math.min(Math.max(0, page.contentHeight - page.height), page.contentY - e.angleDelta.y)) } }
     ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
     function reload() { const o = []; for (let b = 0; b < 10; ++b) { const e = engine.eqBand(strip, b); o.push(e.type > 0 ? Math.max(-12, Math.min(12, e.gainDb)) : 0) } gains = o; bandNow = engine.eqBand(strip, band); curve.requestPaint() }
     function setParam(type, f, q, g) { engine.setEq(strip, band, type, f, q, g); presetName = "" }
