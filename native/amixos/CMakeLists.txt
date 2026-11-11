@@ -95,6 +95,17 @@ qt_add_qml_module(amixos
         qml/ComingPage.qml
     RESOURCES
         icons/amfx1.png
+        skin/wood.png
+        skin/plate.png
+        skin/knob.png
+        skin/knob-pointer.png
+        skin/selector.png
+        skin/screw.png
+        skin/meter.png
+        skin/meter-glass.png
+        skin/toggle.png
+        skin/lamp-on.png
+        skin/lamp-off.png
         i18n/verified-22.json
         i18n/auto-58.json
         i18n/ui/fa.json

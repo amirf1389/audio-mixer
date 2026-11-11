@@ -20,6 +20,8 @@ Item {
     implicitWidth: Math.max(size + 16, lab.implicitWidth + 6); implicitHeight: size + (vintage ? 40 : 34)
     onValueChanged: face.requestPaint(); onTintChanged: face.requestPaint()
     Canvas { id: face; width: k.size; height: k.size; anchors.horizontalCenter: parent.horizontalCenter
+        y: k.vintage ? k.size * 0.18 : 0   // room for the rendered knob's rim above the dial
+        opacity: k.vintage ? 0 : 1
         onPaint: { const c = getContext("2d"), w = width, r = w / 2, a0 = Math.PI * 0.75, a1 = Math.PI * 2.25, a = a0 + (a1 - a0) * k.value; c.clearRect(0, 0, w, w)
             if (k.vintage) { for (let i = 0; i <= 10; i++) { const t = a0 + (a1 - a0) * i / 10; c.fillStyle = k.paper; c.beginPath(); c.arc(r + Math.cos(t) * (r - 2.5), r + Math.sin(t) * (r - 2.5), i % 5 === 0 ? 1.8 : 1.1, 0, 2 * Math.PI); c.fill() }
                 c.fillStyle = "rgba(0,0,0,0.35)"; c.beginPath(); c.arc(r + 1.5, r + 3, r * 0.74, 0, 2 * Math.PI); c.fill()
@@ -39,8 +41,13 @@ Item {
             onPositionChanged: function (m) { if (!pressed) return; const v = Math.max(0, Math.min(1, v0 + (y0 - m.y) / ((m.modifiers & Qt.ShiftModifier) ? 900 : 180))); if (v !== k.value) { k.value = v; k.moved(v) } }
             onDoubleClicked: { k.value = k.defaultValue; k.moved(k.value) }
             onWheel: function (w) { const v = Math.max(0, Math.min(1, k.value + (w.angleDelta.y > 0 ? 0.02 : -0.02))); k.value = v; k.moved(v) } } }
-    Text { visible: k.vintage; anchors.top: face.bottom; anchors.topMargin: -4; x: face.x - 2; text: k.minText; color: k.paper; font.family: Theme.sans; font.pixelSize: 8 }
-    Text { visible: k.vintage; anchors.top: face.bottom; anchors.topMargin: -4; anchors.right: face.right; anchors.rightMargin: -2; text: k.maxText; color: k.paper; font.family: Theme.sans; font.pixelSize: 8 }
+    // vintage: the rendered knob (its light and shadow stay put) with the pointer turning on it, and printed scale marks around it
+    Repeater { model: k.vintage ? 11 : 0; delegate: Rectangle { readonly property real t: (135 + 27 * index) * Math.PI / 180; width: index % 5 === 0 ? 3.2 : 2.2; height: width; radius: width / 2; color: k.paper; opacity: 0.9
+            x: face.x + k.size / 2 + Math.cos(t) * (k.size * 0.52) - width / 2; y: face.y + k.size / 2 + Math.sin(t) * (k.size * 0.52) - height / 2 } }
+    Image { visible: k.vintage; source: "qrc:/qt/qml/AmixOS/skin/knob.png"; width: k.size * 1.32; height: width; x: face.x + k.size / 2 - width / 2; y: face.y + k.size / 2 - height / 2; smooth: true; mipmap: true }
+    Image { visible: k.vintage; source: "qrc:/qt/qml/AmixOS/skin/knob-pointer.png"; width: k.size * 1.32; height: width; x: face.x + k.size / 2 - width / 2; y: face.y + k.size / 2 - height / 2; smooth: true; mipmap: true; rotation: -135 + 270 * k.value }
+    Text { visible: k.vintage; anchors.top: face.bottom; anchors.topMargin: 0; x: face.x - 6; text: k.minText; color: k.paper; opacity: 0.9; font.family: Theme.sans; font.pixelSize: 8; style: Text.Sunken; styleColor: "#60ffffff" }
+    Text { visible: k.vintage; anchors.top: face.bottom; anchors.topMargin: 0; anchors.right: face.right; anchors.rightMargin: -6; text: k.maxText; color: k.paper; opacity: 0.9; font.family: Theme.sans; font.pixelSize: 8; style: Text.Sunken; styleColor: "#60ffffff" }
     Text { id: lab; anchors.top: face.bottom; anchors.topMargin: k.vintage ? 7 : 3; anchors.horizontalCenter: parent.horizontalCenter; text: k.label; color: k.vintage ? k.paper : k.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; font.letterSpacing: 1 }
     Text { anchors.top: lab.bottom; anchors.topMargin: 1; anchors.horizontalCenter: parent.horizontalCenter; text: k.valueText; color: k.vintage ? k.paper : k.tint; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
 }
