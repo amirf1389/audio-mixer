@@ -398,7 +398,11 @@ int Engine::forgetDriverLocks(const QString& name) { const int n = am::drv::forg
 bool Engine::openSmart(const QString& backend, const QString& in, const QString& out, double rate, int frames, int inCh, int outCh) {
   if (opening_) return false;   // a start is already under way (the interface stays live during it)
   const qint64 now = QDateTime::currentMSecsSinceEpoch();
-  const auto steps = am::drv::plan(backend.toStdString(), in.toStdString(), out.toStdString(), devInfos(devices_), now);
+  auto steps = am::drv::plan(backend.toStdString(), in.toStdString(), out.toStdString(), devInfos(devices_), now);
+  // RESCUE: when the whole plan fails the console must not stay without input and output. After the planned steps come the Realtek ASIO
+  // driver (scanned from the device list, opened even when pinned), Realtek Windows shared (RWS) and the system's default endpoints.
+  const std::size_t firstRescue = steps.size();
+  if (backend != "null") { const auto more = am::drv::rescue(devInfos(devices_), in != "-", out != "-", steps); steps.insert(steps.end(), more.begin(), more.end()); }
   QStringList tried; const QString asioName = backend == "asio" ? (out.isEmpty() || out == "-" ? in : out) : QString();
   for (std::size_t i = 0; i < steps.size(); ++i) {
     const auto& a = steps[i];
@@ -415,7 +419,8 @@ bool Engine::openSmart(const QString& backend, const QString& in, const QString&
       reloadAllVst(); pushAll();
       status_ = QStringLiteral("%1 • %2 Hz • %3 frames • %4 in / %5 out").arg(QString::fromStdString(rt_->backendName())).arg(cfg.sampleRate).arg(cfg.frames).arg(inCh).arg(outCh);
       const QString mode = QString::fromStdString(a.mode).toUpper();
-      if (a.pinned) lastRoute_ = QStringLiteral("REALTEK PIN: %1 → %2 (%3). The ASIO driver was not opened.").arg(asioName, mode, QString::fromStdString(a.inDevice != "-" ? a.inDevice : a.outDevice));
+      if (i >= firstRescue) lastRoute_ = QStringLiteral("RESCUE: %1 failed (%2) → %3 works (%4).").arg(tried.join("; "), QString::fromStdString(err), mode == "RWS" ? QStringLiteral("RWS · Realtek Windows shared") : mode, QString::fromStdString(a.outDevice != "-" ? a.outDevice : a.inDevice));
+      else if (a.pinned) lastRoute_ = QStringLiteral("REALTEK PIN: %1 → %2 (%3). The ASIO driver was not opened.").arg(asioName, mode, QString::fromStdString(a.inDevice != "-" ? a.inDevice : a.outDevice));
       else if (a.fromLock) lastRoute_ = QStringLiteral("AI DRIVER LOCK: %1 went straight to %2 (learned earlier: %3).").arg(asioName, mode, QString::fromStdString(a.why));
       else if (i > 0) { lastRoute_ = QStringLiteral("FALLBACK: %1 failed (%2) → %3 works. Locked for next time.").arg(tried.join("; "), QString::fromStdString(err), mode); if (!asioName.isEmpty()) am::drv::learn(asioName.toStdString(), a.mode, a.inDevice != "-" ? a.inDevice : a.outDevice, tried.join("; ").toStdString(), now); }
       else { lastRoute_ = QStringLiteral("%1 opened first try.").arg(mode); if (!asioName.isEmpty() && a.mode == "asio") am::drv::learn(asioName.toStdString(), "asio", asioName.toStdString(), "clean run", now); }

@@ -75,6 +75,16 @@ int main(int argc, char** argv) {
     CHECK(P.size() == 4 && P[1].mode == "wasapi-exclusive" && P[1].inDevice == "{um2-in}" && P[1].outDevice == "{um2-out}" && P[2].inDevice == "{um2-in}" && P[2].outDevice == "{um2-out}" && P[3].mode == "dsound" && P[3].inDevice == "{ds-um2-in}" && P[3].outDevice == "{ds-um2}");
     std::vector<DeviceInfo> outOnly = {um[0], um[2], um[3]}; P = drv::plan("asio", "BEHRINGER USB AUDIO", "BEHRINGER USB AUDIO", outOnly, now); CHECK(P.size() == 1 && P[0].mode == "asio");   // no input endpoint: the duplex ladder has no WASAPI / DirectSound step
     P = drv::plan("asio", "-", "BEHRINGER USB AUDIO", outOnly, now); CHECK(P.size() == 4 && P[1].inDevice == "-" && P[1].outDevice == "{um2-out}"); }
+  { // RESCUE after every planned step failed: the Realtek ASIO driver, Realtek Windows shared (RWS), the default endpoints
+    auto R = drv::rescue(pc, true, true, {});
+    CHECK(R.size() >= 2 && R[0].mode == "realtek-asio" && R[0].backend == "asio" && R[0].inDevice == "Realtek ASIO" && R[0].outDevice == "Realtek ASIO" && !R[0].exclusive);
+    CHECK(R[1].mode == "rws" && R[1].backend == "wasapi" && R[1].inDevice == "{r-in}" && R[1].outDevice == "{r-out}");   // the microphone array, never the Stereo Mix loopback
+    for (const auto& a : R) CHECK(a.mode != "wasapi-shared");                                                            // the defaults here are the Realtek pair: not tried twice
+    drv::Attempt done; done.backend = "wasapi"; done.inDevice = "{r-in}"; done.outDevice = "{r-out}"; R = drv::rescue(pc, true, true, {done}); CHECK(R.size() == 1 && R[0].mode == "realtek-asio");
+    R = drv::rescue(pc, false, true, {}); CHECK(R[0].inDevice == "-" && R[1].inDevice == "-" && R[1].outDevice == "{r-out}");
+    std::vector<DeviceInfo> usb = {dev("asio", "BEHRINGER USB AUDIO", "BEHRINGER USB AUDIO", 2, 2), dev("wasapi", "{um2-out}", "Speakers (USB Audio CODEC)", 0, 2, false, true), dev("dsound", "{ds-out}", "Speakers (USB Audio CODEC)", 0, 2, false, true), dev("null", "", "null", 32, 32)};
+    R = drv::rescue(usb, true, true, {}); CHECK(R.size() == 2 && R[0].mode == "wasapi-shared" && R[0].outDevice == "{um2-out}" && R[0].inDevice == "-" && R[1].mode == "dsound" && R[1].outDevice == "{ds-out}");   // no Realtek here: no Realtek step
+    CHECK(drv::rescue({dev("null", "", "null", 32, 32)}, true, true, {}).empty()); }
   std::printf("driver_intel_test: hardware match, Realtek pin (default on, opt-out saved), ASIO4ALL rule, ladder, locks, plan OK\n");
   return 0;
 }

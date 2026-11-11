@@ -57,5 +57,13 @@ void resetCache();                                           // tests: re-read t
 struct Attempt { std::string mode; std::string backend; std::string inDevice; std::string outDevice; bool exclusive = false; std::string why; bool fromLock = false; bool pinned = false; };
 // What to try for a start on `backend` / `in` / `out`: for an ASIO device the ladder (pin and lock applied), else the plain request.
 std::vector<Attempt> plan(const std::string& backend, const std::string& inId, const std::string& outId, const std::vector<DeviceInfo>& devices, std::int64_t nowMs);
+// RESCUE: what to try when every step of the plan failed, so that the console does not stay without input and output. Read from the device
+// list only (nothing is installed, registered or changed), in this order:
+//   "realtek-asio"  the onboard Realtek's own ASIO driver, opened directly even when the Realtek pin would normally keep it closed
+//   "rws"           Realtek Windows Shared: the Realtek endpoints through WASAPI shared (no lock; other programs keep their sound)
+//   "wasapi-shared" the system's default endpoints through WASAPI shared
+//   "dsound"        the system's default endpoints through DirectSound
+// A step is left out when the list has no such device or `tried` already holds the same backend and devices.
+std::vector<Attempt> rescue(const std::vector<DeviceInfo>& devices, bool wantInput, bool wantOutput, const std::vector<Attempt>& tried);
 
 }  // namespace am::drv

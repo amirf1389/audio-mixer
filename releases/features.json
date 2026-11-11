@@ -32,7 +32,8 @@
         "Fixed: the rack did not refresh by itself when a plug-in was added or removed",
         "VST3 / VST2 plug-ins are looked for after the window is up, beside the interface and with a time limit, so a slow or hanging plug-in cannot delay the start; the rack menu shows the format, the count and a rescan",
         "Plug-in editor as a vintage rack unit: wooden frame, cream faceplate, outlined sections with skirted knobs and scale marks, a PROGRAM window with - / + for the presets, an A / B selector, a lamp with an ON / OFF switch and a needle meter; hosted VST plug-ins open in the same panel",
-        "NETWORK > AUDIO + MIDI: network audio on the open AES67 profile (send the master, receive a stream into strips, list the streams announced on the network), network MIDI (RTP-MIDI) and the computer's MIDI ports with a default controller map and LEARN. C SDK version 5 adds the same calls. No PTP clock and no encryption; Dante, NDI and SRT are not in this build (Dante devices are reached through their AES67 mode)."
+        "NETWORK > AUDIO + MIDI: network audio on the open AES67 profile (send the master, receive a stream into strips, list the streams announced on the network), network MIDI (RTP-MIDI) and the computer's MIDI ports with a default controller map and LEARN. C SDK version 5 adds the same calls. No PTP clock and no encryption; Dante, NDI and SRT are not in this build (Dante devices are reached through their AES67 mode).",
+        "Sound card RESCUE: when no path of the start plan opens (ASIO will not lock, the endpoint is refused), the console now scans the device list and tries the Realtek ASIO driver directly, then RWS (Realtek through Windows shared mode), then the system's default endpoints, so it does not stay without input and output. Nothing is installed or changed on the system."
       ]
     }
   ]

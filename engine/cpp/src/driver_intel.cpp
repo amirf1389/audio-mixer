@@ -180,4 +180,32 @@ std::vector<Attempt> plan(const std::string& backend, const std::string& inId, c
   return out;
 }
 
+std::vector<Attempt> rescue(const std::vector<DeviceInfo>& devices, bool wantInput, bool wantOutput, const std::vector<Attempt>& tried) {
+  std::vector<Attempt> out;
+  auto add = [&](const Attempt& a) {
+    if (a.inDevice == "-" && a.outDevice == "-") return;
+    for (const std::vector<Attempt>* list : std::initializer_list<const std::vector<Attempt>*>{&tried, &out}) for (const Attempt& t : *list) if (t.backend == a.backend && t.inDevice == a.inDevice && t.outDevice == a.outDevice && t.exclusive == a.exclusive) return;
+    out.push_back(a);
+  };
+  // one endpoint per direction of `backend`: Realtek only when asked, never a loopback, the system default first
+  auto endpoint = [&](const char* backend, bool input, bool realtekOnly) -> std::string {
+    const DeviceInfo* best = nullptr; int br = -1;
+    for (const auto& d : devices) {
+      if (d.backend != backend || (input ? d.inChannels : d.outChannels) <= 0 || std::regex_search(d.name, kLoopback) || d.id.rfind("loopback:", 0) == 0) continue;
+      if (realtekOnly && family(d.name) != "realtek") continue;
+      const int r = (input ? d.defaultIn : d.defaultOut) ? 2 : 1; if (r > br) { br = r; best = &d; }
+    }
+    return best ? best->id : std::string("-");
+  };
+  for (const auto& d : devices) if (isAsio(d) && !isWrapper(d.name) && family(d.name) == "realtek") {
+    Attempt a; a.mode = "realtek-asio"; a.backend = "asio"; a.inDevice = wantInput && d.inChannels > 0 ? d.id : "-"; a.outDevice = wantOutput && d.outChannels > 0 ? d.id : "-";
+    a.why = "rescue: the Realtek ASIO driver found on this computer, opened directly"; add(a);
+  }
+  struct Row { const char* mode; const char* backend; bool realtek; const char* why; };
+  for (const Row& r : {Row{"rws", "wasapi", true, "rescue: Realtek through Windows shared mode (no lock)"}, Row{"wasapi-shared", "wasapi", false, "rescue: the system's default endpoints, Windows shared mode"}, Row{"dsound", "dsound", false, "rescue: the system's default endpoints, DirectSound"}}) {
+    Attempt a; a.mode = r.mode; a.backend = r.backend; a.inDevice = wantInput ? endpoint(r.backend, true, r.realtek) : "-"; a.outDevice = wantOutput ? endpoint(r.backend, false, r.realtek) : "-"; a.why = r.why; add(a);
+  }
+  return out;
+}
+
 }  // namespace am::drv
