@@ -1,4 +1,6 @@
 // amixos-daemon on the null backend: the JSON parser, the token gate, control -> state, the meters frame over HTTP and over WebSocket.
+#include <fstream>
+#include <iterator>
 #include <cassert>
 #include <chrono>
 #include <cstdio>
@@ -20,7 +22,7 @@ int main() {
   Value::parse("{\"a\":}", ok); CHECK(!ok); Value::parse("[1,]", ok); CHECK(!ok); Value::parse("{} x", ok); CHECK(!ok);
   CHECK(am::httpd::Server::sha1Base64("dGhlIHNhbXBsZSBub25jZQ==258EAFA5-E914-47DA-95CA-C5AB0DC85B11") == "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=");   // RFC 6455 example
 
-  am::Daemon::Options o; o.port = 0; o.token = "testtoken-0123456789abcdef0123456789"; o.strips = 8;
+  am::Daemon::Options o; o.port = 0; o.token = "testtoken-0123456789abcdef0123456789"; o.strips = 8; o.tokenStore = "daemon_test.tokens.json"; std::remove(o.tokenStore.c_str());
   am::Daemon d(o); std::string err;
   CHECK(d.start(err));
   const unsigned short port = d.port(); CHECK(port != 0);
@@ -53,6 +55,31 @@ int main() {
   CHECK(s["monitor"]["source"].asInt() == 1 && s["monitor"]["db"].asNumber() == -6 && s["monitor"]["dim"].asBool() && !s["monitor"]["mute"].asBool());
   CHECK(s["strips"].items()[2]["db"].asNumber() == -6.5 && s["strips"].items()[2]["name"].asString() == "Vox" && s["strips"].items()[3]["mute"].asBool() && s["buses"].items()[1]["db"].asNumber() == -3 && s["running"].asBool());
 
+  // THE NAMED TOKENS: only the master token makes them; a control token changes the console, a view token does not; a revoked one is refused;
+  // the file holds hashes, never the token; the tokens survive a reload
+  { const char* T = "/api/tokens";
+    CHECK(am::httpd::Client::request("127.0.0.1", port, "GET", T, "", {}, status, body) && status == 401);
+    CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", T, "{\"name\":\"Phone\",\"role\":\"control\",\"days\":7}", auth, status, body) && status == 200);
+    Value a = Value::parse(body, ok); const std::string ctl = a["token"].asString(), ctlId = a["id"].asString(); CHECK(ok && a["ok"].asBool() && ctl.size() == 68 && ctl.compare(0, 4, "amx_") == 0);
+    CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", T, "{\"name\":\"Stage screen\",\"role\":\"view\"}", auth, status, body) && status == 200);
+    const std::string view = Value::parse(body, ok)["token"].asString(); CHECK(view.size() == 68 && view != ctl);
+    CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", T, "{\"name\":\"x\",\"role\":\"owner\"}", auth, status, body) && status == 400);
+    CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", T, "{\"role\":\"view\"}", auth, status, body) && status == 400);
+    const char* G = "{\"op\":\"gain\",\"strip\":4,\"db\":-9}";
+    CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", G, {{"X-Amix-Token", ctl}}, status, body) && status == 200);
+    CHECK(d.state()["strips"].items()[4]["db"].asNumber() == -9);
+    CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"gain\",\"strip\":4,\"db\":-1}", {{"X-Amix-Token", view}}, status, body) && status == 403);
+    CHECK(d.state()["strips"].items()[4]["db"].asNumber() == -9);
+    CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", T, "{\"name\":\"y\",\"role\":\"control\"}", {{"X-Amix-Token", ctl}}, status, body) && status == 403);   // a control token cannot make tokens
+    CHECK(am::httpd::Client::request("127.0.0.1", port, "GET", T, "", auth, status, body) && status == 200);
+    CHECK(body.find(ctl) == std::string::npos && body.find(view) == std::string::npos && body.find("hash") == std::string::npos && Value::parse(body, ok)["tokens"].size() == 2);
+    { std::ifstream f(o.tokenStore); std::string all((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>()); CHECK(!all.empty() && all.find(ctl) == std::string::npos && all.find(view) == std::string::npos && all.find(am::TokenStore::hashOf(ctl)) != std::string::npos); }
+    { am::TokenStore again(o.tokenStore); std::string e; CHECK(again.load(e) && again.roleOf(ctl) == "control" && again.roleOf(view) == "view" && again.roleOf(ctl, 4102444800LL).empty() && again.roleOf(view, 4102444800LL) == "view"); }   // the 7-day token has ended by 2100, the endless one has not
+    CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/tokens/revoke", "{\"id\":\"" + ctlId + "\"}", auth, status, body) && status == 200);
+    CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", G, {{"X-Amix-Token", ctl}}, status, body) && status == 401);
+    CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/tokens/revoke", "{\"id\":\"nope\"}", auth, status, body) && status == 400);
+    CHECK(am::TokenStore::same("abc", "abc") && !am::TokenStore::same("abc", "abd") && !am::TokenStore::same("abc", "abcd"));
+    std::remove(o.tokenStore.c_str()); }
   // the meters run (the null backend clocks blocks)
   std::this_thread::sleep_for(std::chrono::milliseconds(300));
   CHECK(am::httpd::Client::request("127.0.0.1", port, "GET", "/api/meters", "", {}, status, body) && status == 200);
