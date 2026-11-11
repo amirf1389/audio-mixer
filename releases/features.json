@@ -22,7 +22,10 @@
         "SOFT RESTART in the header (Ctrl+Shift+R): rescan, restart the engine and replay the boot screen without closing the console",
         "AMFB SIGNATURE sound (the house sound on the master), offered in the factory setup and on MASTERING",
         "Equalizer APO: export and import of the EQ as its filter text, from the RTA EQ page",
-        "The mixer logo on the program, the window, the task bar, the installer and the shortcuts"
+        "The mixer logo on the program, the window, the task bar, the installer and the shortcuts",
+        "Ten effects for every channel's rack: plate reverb, tape delay, chorus, tube drive, flanger, phaser, tremolo, auto wah, bit crusher, exciter, each with its knobs, MIX and bypass; the rack opens from each channel's menu",
+        "Master fader at -inf switches everything off, the Windows default output included (its own volume control; put back when the fader comes up or the console closes)",
+        "The real-time analyser on TONE (EQ) is on from the start"
       ]
     }
   ]

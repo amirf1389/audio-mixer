@@ -167,7 +167,7 @@ Item {
                                     Rectangle { implicitWidth: 16; implicitHeight: 14; radius: 2; color: Theme.ov(0.08); Text { anchors.centerIn: parent; text: "↺"; color: Theme.muted; font.pixelSize: 9 } MouseArea { anchors.fill: parent; onClicked: engine.setPluginParam(page.sel, paramsPop.slot, modelData.id, modelData.default) } } } } } }
                     Text { visible: paramsPop.model.length === 0; text: i18n.t("This plug-in exposes no parameters.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 } } }
             Menu { id: chooser; property int slot: 0; width: 300
-                Repeater { model: engine.pluginCatalog(); delegate: MenuItem { text: (modelData.builtIn ? "" : i18n.t("VST3 · ", i18n.lang)) + modelData.name + (modelData.vendor ? "  — " + modelData.vendor : ""); onTriggered: engine.setPlugin(page.sel, chooser.slot, modelData.kind) } }
+                Repeater { model: engine.pluginCatalog(); delegate: MenuItem { text: (modelData.builtIn ? "" : modelData.fx ? i18n.t("FX · ", i18n.lang) : i18n.t("VST3 · ", i18n.lang)) + modelData.name + (modelData.vendor ? "  — " + modelData.vendor : ""); onTriggered: engine.setPlugin(page.sel, chooser.slot, modelData.kind) } }
                 MenuItem { visible: engine.vstCatalog().length === 0; enabled: false; text: i18n.t("No VST3 plug-ins found: add folders on SETTINGS", i18n.lang) }
                 MenuSeparator {}
                 MenuItem { text: i18n.t("Bypass / enable", i18n.lang); onTriggered: { var p = engine.plugins(page.sel)[chooser.slot]; if (p.kind) engine.setPluginBypass(page.sel, chooser.slot, !p.bypass) } }
@@ -321,6 +321,7 @@ Item {
                                             MouseArea { anchors.fill: parent; onClicked: { engine.selectedStrip = index; more.popup() } }
                                         Menu { id: more; width: 190
                                             MenuItem { text: i18n.t("Channel panel ›", i18n.lang); onTriggered: { page.sidePanel = true } }
+                                            MenuItem { text: i18n.t("Plugin rack ›", i18n.lang); onTriggered: { engine.selectedStrip = index; page.rack = true } }
                                             MenuItem { text: i18n.t("Open EQ / tone", i18n.lang); onTriggered: page.go("dsp") }
                                             MenuItem { text: i18n.t("Open compressor", i18n.lang); onTriggered: page.go("dyn") }
                                             MenuItem { text: i18n.t("Open gate", i18n.lang); onTriggered: page.go("gate") }

@@ -79,4 +79,46 @@ class Drive final : public Effect {
   double fs_; std::atomic<double> drive_{0.4}, tone_{0.6}, out_{0.7}; float lp_[2] = {0, 0}, last_[2] = {0, 0};
 };
 
+// The simple modulation / colour effects share one shape: up to three knobs (0..1) and a per-channel state.
+class Simple : public Effect {
+ public:
+  explicit Simple(double fs) : fs_(fs > 0 ? fs : 48000) {}
+  std::vector<Param> params() const override { std::vector<Param> v; for (int i = 0; i < count(); ++i) v.push_back({knobId(i), knobTitle(i), "", k_[i].load(), knobDef(i)}); return v; }
+  void set(const std::string& id, double v) override { for (int i = 0; i < count(); ++i) if (id == knobId(i)) k_[i] = v < 0 ? 0 : v > 1 ? 1 : v; }
+  void setSampleRate(double fs) override { fs_ = fs > 0 ? fs : 48000; reset(); }
+ protected:
+  virtual int count() const = 0; virtual const char* knobId(int i) const = 0; virtual const char* knobTitle(int i) const = 0; virtual double knobDef(int i) const = 0;
+  double fs_; std::atomic<double> k_[3]{{0.5}, {0.5}, {0.5}};
+};
+// FLANGER: a 1..8 ms delay swept by an LFO with feedback: RATE, DEPTH, FEEDBACK
+class Flanger final : public Simple { public: explicit Flanger(double fs); const char* kind() const override { return "flanger"; } const char* name() const override { return "FLANGER"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
+ protected: int count() const override { return 3; } const char* knobId(int i) const override { static const char* k[] = {"rate", "depth", "feedback"}; return k[i]; } const char* knobTitle(int i) const override { static const char* k[] = {"RATE", "DEPTH", "FEEDBACK"}; return k[i]; } double knobDef(int i) const override { static const double d[] = {0.2, 0.6, 0.5}; return d[i]; }
+ private: std::vector<float> buf_[2]; std::size_t w_ = 0; double ph_ = 0; float fb_[2] = {0, 0}; };
+// PHASER: six all-pass stages swept by an LFO: RATE, DEPTH, FEEDBACK
+class Phaser final : public Simple { public: explicit Phaser(double fs); const char* kind() const override { return "phaser"; } const char* name() const override { return "PHASER"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
+ protected: int count() const override { return 3; } const char* knobId(int i) const override { static const char* k[] = {"rate", "depth", "feedback"}; return k[i]; } const char* knobTitle(int i) const override { static const char* k[] = {"RATE", "DEPTH", "FEEDBACK"}; return k[i]; } double knobDef(int i) const override { static const double d[] = {0.25, 0.7, 0.4}; return d[i]; }
+ private: float z_[2][6] = {}; float fb_[2] = {0, 0}; double ph_ = 0; };
+// TREMOLO: the level moved by an LFO: RATE, DEPTH, SHAPE (sine .. square)
+class Tremolo final : public Simple { public: explicit Tremolo(double fs); const char* kind() const override { return "tremolo"; } const char* name() const override { return "TREMOLO"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
+ protected: int count() const override { return 3; } const char* knobId(int i) const override { static const char* k[] = {"rate", "depth", "shape"}; return k[i]; } const char* knobTitle(int i) const override { static const char* k[] = {"RATE", "DEPTH", "SHAPE"}; return k[i]; } double knobDef(int i) const override { static const double d[] = {0.4, 0.6, 0.0}; return d[i]; }
+ private: double ph_ = 0; };
+// AUTO WAH: a resonant band-pass whose frequency follows the level: SENSITIVITY, RANGE, RESONANCE
+class AutoWah final : public Simple { public: explicit AutoWah(double fs); const char* kind() const override { return "wah"; } const char* name() const override { return "AUTO WAH"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
+ protected: int count() const override { return 3; } const char* knobId(int i) const override { static const char* k[] = {"sens", "range", "reso"}; return k[i]; } const char* knobTitle(int i) const override { static const char* k[] = {"SENSITIVITY", "RANGE", "RESONANCE"}; return k[i]; } double knobDef(int i) const override { static const double d[] = {0.6, 0.6, 0.5}; return d[i]; }
+ private: float lp_[2] = {0, 0}, bp_[2] = {0, 0}; double env_ = 0; };
+// BIT CRUSHER: fewer bits and a lower sample rate: BITS, DOWNSAMPLE, TONE
+class Crusher final : public Simple { public: explicit Crusher(double fs); const char* kind() const override { return "crusher"; } const char* name() const override { return "BIT CRUSHER"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
+ protected: int count() const override { return 3; } const char* knobId(int i) const override { static const char* k[] = {"bits", "down", "tone"}; return k[i]; } const char* knobTitle(int i) const override { static const char* k[] = {"BITS", "DOWNSAMPLE", "TONE"}; return k[i]; } double knobDef(int i) const override { static const double d[] = {0.6, 0.2, 0.8}; return d[i]; }
+ private: float hold_[2] = {0, 0}, lp_[2] = {0, 0}; double cnt_ = 0; };
+// EXCITER: harmonics made from the band above a frequency, added to the signal: AMOUNT, FREQUENCY, HARMONICS
+class Exciter final : public Simple { public: explicit Exciter(double fs); const char* kind() const override { return "exciter"; } const char* name() const override { return "EXCITER"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
+ protected: int count() const override { return 3; } const char* knobId(int i) const override { static const char* k[] = {"amount", "freq", "harm"}; return k[i]; } const char* knobTitle(int i) const override { static const char* k[] = {"AMOUNT", "FREQUENCY", "HARMONICS"}; return k[i]; } double knobDef(int i) const override { static const double d[] = {0.4, 0.5, 0.5}; return d[i]; }
+ private: float lp_[2] = {0, 0}; };
+
 }  // namespace am::fx

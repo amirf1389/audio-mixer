@@ -1,3 +1,4 @@
+#include "fx/fx_plugin.hpp"
 #include <QSettings>
 #include <QFile>
 #ifdef _WIN32
@@ -535,14 +536,15 @@ void Engine::setLink(int i, bool on) { if (i < 0 || i >= kStrips || partner(i) <
 bool Engine::linked(int i) const { return i >= 0 && i < kStrips && strips_[static_cast<std::size_t>(i)].link; }
 void Engine::setTrim(int i, double db) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].trimDb = std::clamp(db, -24.0, 24.0); if (rt_) rt_->setTrimDb(i, strips_[static_cast<std::size_t>(i)].trimDb); emit stripsChanged(); }
 double Engine::trim(int i) const { return i >= 0 && i < kStrips ? strips_[static_cast<std::size_t>(i)].trimDb : 0; }
-static bool isVstKind(const QString& k) { return k.startsWith("vst3:") || k.startsWith("vst2:"); }
+static bool isVstKind(const QString& k) { return k.startsWith("vst3:") || k.startsWith("vst2:") || k.startsWith("fx:"); }   // everything that runs as a rack insert: hosted plug-ins and the ten built-in effects (fx:<kind>)
 void Engine::muteAll(bool on) { for (int i = 0; i < kStrips; ++i) { strips_[static_cast<std::size_t>(i)].mute = on; pushStrip(i); } emit stripsChanged(); }
 void Engine::clearSolo() { for (int i = 0; i < kStrips; ++i) { strips_[static_cast<std::size_t>(i)].solo = false; if (rt_) rt_->setSolo(i, false); } emit stripsChanged(); }
 void Engine::resetFaders() { for (int i = 0; i < kStrips; ++i) { StripUi& s = strips_[static_cast<std::size_t>(i)]; s.db = 0; s.pan = 0; pushStrip(i); if (rt_) rt_->setPan(i, 0); } masterDb_ = 0; if (rt_) rt_->setMasterDb(0); emit stripsChanged(); }
 void Engine::flattenAllDsp() { for (int i = 0; i < kStrips; ++i) { strips_[static_cast<std::size_t>(i)].dsp.set(am::dsp::ChannelParams{}); for (PluginUi& p : strips_[static_cast<std::size_t>(i)].plugins) if (!isVstKind(p.kind)) p = PluginUi{}; } if (rt_) pushAll(); emit stripsChanged(); }
 
 static const struct { const char* kind; const char* name; } kBuiltIns[] = {{"gate", "NOISE GATE"}, {"eq", "EQ"}, {"xover", "X-OVER"}, {"comp", "COMPRESSOR"}, {"limiter", "LIMITER"}, {"delay", "DELAY"}, {"polarity", "POLARITY Ø"}};
-QVariantList Engine::pluginCatalog() const { QVariantList l; for (const auto& b : kBuiltIns) { QVariantMap m; m["kind"] = b.kind; m["name"] = b.name; m["builtIn"] = true; l << m; } for (const QVariantMap& v : vstCatalog_) l << v; return l; }
+QVariantList Engine::pluginCatalog() const { QVariantList l; for (const auto& b : kBuiltIns) { QVariantMap m; m["kind"] = b.kind; m["name"] = b.name; m["builtIn"] = true; l << m; } for (const auto& [k, n] : am::fx::catalog()) { QVariantMap m; m["kind"] = QStringLiteral("fx:") + QString::fromStdString(k); m["name"] = QString::fromStdString(n); m["builtIn"] = false; m["fx"] = true; m["vendor"] = QStringLiteral("AMFB Audio"); l << m; }
+  for (const QVariantMap& v : vstCatalog_) l << v; return l; }
 QVariantList Engine::vstCatalog() const { QVariantList l; for (const QVariantMap& v : vstCatalog_) l << v; return l; }
 int Engine::rescanVst(const QStringList& extraDirs) {
   std::vector<std::string> dirs3 = am::vst3::defaultDirs(), dirs2 = am::vst2::defaultDirs(); for (const QString& d : extraDirs) if (!d.trimmed().isEmpty()) { dirs3.push_back(d.trimmed().toStdString()); dirs2.push_back(d.trimmed().toStdString()); }
@@ -557,6 +559,7 @@ static void splitVstKind(const QString& kind, QString& module, QString& cid) { c
 bool Engine::loadVst(int i, int slot) {
   PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[slot]; p.vst.reset(); p.error.clear();
   if (!isVstKind(p.kind)) return false;
+  if (p.kind.startsWith("fx:")) { auto fxp = am::fx::FxPlugin::make(p.kind.mid(3).toStdString(), rt_ ? rt_->sampleRate() : 48000); if (!fxp) { p.error = QStringLiteral("unknown effect"); return false; } if (!p.state.isEmpty()) fxp->setState(p.state.toStdString()); fxp->setBypass(p.bypass); p.vst = std::move(fxp); return true; }
   QString module, cid; splitVstKind(p.kind, module, cid); std::string err;
   const double rate = rt_ ? rt_->sampleRate() : 48000; const int block = 1024;   // larger runtime blocks are split by the insert adapter
   std::unique_ptr<am::host::Plugin> pl; if (p.kind.startsWith("vst3:")) pl = am::vst3::Plugin::load(module.toStdString(), cid.toStdString(), rate, block, err); else pl = am::vst2::Plugin::load(module.toStdString(), rate, block, err);
