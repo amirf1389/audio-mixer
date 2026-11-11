@@ -100,12 +100,15 @@ Popup {
                         Rectangle { anchors.horizontalCenter: parent.horizontalCenter; y: 34; width: 26; height: 26; radius: 2; color: ed.red; border.color: "#6b0f0f"; Text { anchors.centerIn: parent; text: "A"; color: "#f3e9b8"; font.family: ed.face1; style: Text.Sunken; styleColor: "#70ffffff"; font.pixelSize: 15; font.weight: Font.Black } }
                         Text { anchors.horizontalCenter: parent.horizontalCenter; y: 68; width: parent.width - 6; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap; text: ed.title.toUpperCase(); color: ed.ink; font.family: ed.face1; style: Text.Sunken; styleColor: "#70ffffff"; font.pixelSize: 12; font.weight: Font.Bold; font.letterSpacing: 1 }
                         Image { anchors.horizontalCenter: parent.horizontalCenter; y: 100; width: 70; height: 70; source: ed.bypass ? "qrc:/qt/qml/AmixOS/skin/lamp-off.png" : "qrc:/qt/qml/AmixOS/skin/lamp-on.png"; smooth: true }
-                        Row { anchors.horizontalCenter: parent.horizontalCenter; y: 160; spacing: 4
-                            Text { anchors.verticalCenter: parent.verticalCenter; text: "OFF"; color: ed.ink; font.family: ed.face1; style: Text.Sunken; styleColor: "#70ffffff"; font.pixelSize: 9; font.weight: Font.DemiBold }
-                            Item { width: 46; height: 40
-                                Image { anchors.centerIn: parent; width: 52; height: 52; source: "qrc:/qt/qml/AmixOS/skin/toggle.png"; smooth: true; mipmap: true; mirror: ed.bypass }
-                                MouseArea { anchors.fill: parent; anchors.margins: -4; onClicked: { engine.setPluginBypass(ed.strip, ed.slot, !ed.bypass); ed.bypass = !ed.bypass } } }
-                            Text { anchors.verticalCenter: parent.verticalCenter; text: "ON"; color: ed.ink; font.family: ed.face1; style: Text.Sunken; styleColor: "#70ffffff"; font.pixelSize: 9; font.weight: Font.DemiBold } }
+                        Item { anchors.horizontalCenter: parent.horizontalCenter; y: 156; width: 128; height: 44   // the ON / OFF switch: marks with a ring (off) and a dot (on), the miniature toggle between them
+                            Column { x: 4; y: 4; spacing: 2
+                                Row { anchors.horizontalCenter: parent.horizontalCenter; spacing: 3; Rectangle { width: 6; height: 6; radius: 3; color: "transparent"; border.color: ed.ink; border.width: 1.2 } Rectangle { width: 3; height: 3; radius: 1.5; y: 1.5; color: ed.ink } }
+                                Text { text: "OFF"; color: ed.ink; font.family: ed.face1; font.pixelSize: 10; font.weight: Font.DemiBold; style: Text.Sunken; styleColor: "#70ffffff" } }
+                            Image { anchors.horizontalCenter: parent.horizontalCenter; y: -6; width: 56; height: 56; source: "qrc:/qt/qml/AmixOS/skin/toggle.png"; smooth: true; mipmap: true; mirror: ed.bypass }
+                            Column { x: parent.width - width - 6; y: 4; spacing: 2
+                                Rectangle { anchors.horizontalCenter: parent.horizontalCenter; width: 6; height: 6; radius: 3; color: ed.ink; Rectangle { anchors.centerIn: parent; width: 2.4; height: 2.4; radius: 1.2; color: ed.bypass ? ed.ink : "#f5f5f0" } }
+                                Text { text: "ON"; color: ed.ink; font.family: ed.face1; font.pixelSize: 10; font.weight: Font.DemiBold; style: Text.Sunken; styleColor: "#70ffffff" } }
+                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { engine.setPluginBypass(ed.strip, ed.slot, !ed.bypass); ed.bypass = !ed.bypass } } }
                         Text { anchors.horizontalCenter: parent.horizontalCenter; y: 204; horizontalAlignment: Text.AlignHCenter; text: "AMFB AUDIO\n" + (ed.fx ? "CH " + (ed.strip + 1) + " · SLOT " + (ed.slot + 1) : (ed.kind.indexOf("vst2:") === 0 ? "VST2" : "VST3") + " HOSTED"); color: ed.ink; font.family: ed.face1; style: Text.Sunken; styleColor: "#70ffffff"; font.pixelSize: 9; font.letterSpacing: 2; lineHeight: 1.2 } }
                     // the meter and BLEND
                     Column { spacing: 6; width: 150

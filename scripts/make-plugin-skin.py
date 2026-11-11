@@ -123,13 +123,35 @@ g = np.zeros((H, W, 4), dtype=np.float32); yy, xx = np.mgrid[0:H, 0:W].astype(np
 g[:, :, :3] = 255; g[:, :, 3] = band + (yy < 5) * 60; inner = np.minimum(np.minimum(xx, W - 1 - xx), np.minimum(yy, H - 1 - yy)); dark = np.zeros((H, W, 4), dtype=np.float32); dark[:, :, 3] = (1 - (inner / 16).clip(0, 1)) ** 2 * 150
 gl = Image.alpha_composite(Image.fromarray(np.uint8(dark.clip(0, 255)), 'RGBA'), Image.fromarray(np.uint8(g.clip(0, 255)), 'RGBA')); save(gl, 'meter-glass.png')
 
-# ---- toggle: a chromed bat lever in its nut (the lever points right = ON; the editor mirrors it for OFF)
-N = 64 * S; c = N / 2; im = Image.new('RGBA', (N, N), (0, 0, 0, 0)); d = ImageDraw.Draw(im)
-shd = Image.new('RGBA', (N, N), (0, 0, 0, 0)); ds = ImageDraw.Draw(shd); ds.ellipse([c - 17 * S + 2 * S, c - 17 * S + 4 * S, c + 17 * S + 2 * S, c + 17 * S + 4 * S], fill=(0, 0, 0, 140)); ds.line([c + 3 * S, c + 5 * S, c + 27 * S, c + 1 * S], fill=(0, 0, 0, 120), width=9 * S); im.alpha_composite(shd.filter(ImageFilter.GaussianBlur(3 * S))); d = ImageDraw.Draw(im)
-hexp = [(c + math.cos(math.radians(a)) * 17 * S, c + math.sin(math.radians(a)) * 17 * S) for a in range(0, 360, 60)]; d.polygon(hexp, fill=(150, 150, 146, 255), outline=(70, 70, 66, 255)); d.line([hexp[3], hexp[4], hexp[5]], fill=(232, 232, 226, 255), width=2 * S)
-d.ellipse([c - 10 * S, c - 10 * S, c + 10 * S, c + 10 * S], fill=(96, 96, 92, 255), outline=(40, 40, 38, 255), width=S); d.ellipse([c - 7 * S, c - 7 * S, c + 7 * S, c + 7 * S], fill=(30, 30, 28, 255))
-d.line([c, c, c + 22 * S, c - 6 * S], fill=(120, 120, 116, 255), width=8 * S); d.line([c + S, c - 2 * S, c + 22 * S, c - 8 * S], fill=(244, 244, 238, 255), width=3 * S); d.ellipse([c + 16 * S, c - 13 * S, c + 30 * S, c + 1 * S], fill=(176, 176, 170, 255), outline=(84, 84, 80, 255), width=S); d.ellipse([c + 19 * S, c - 11 * S, c + 24 * S, c - 6 * S], fill=(255, 255, 250, 235))
-save(im.filter(ImageFilter.GaussianBlur(0.45 * S)).resize((N // S, N // S), Image.LANCZOS), 'toggle.png')
+# ---- toggle: a miniature panel switch seen from the front: a round knurled chrome collar, the dark throat, and a short bat lever leaning
+#      to one side with a rounded tip (the lever points right = ON; the editor mirrors it for OFF)
+S3 = 6; N = 56 * S3; c = N / 2
+yy, xx = np.mgrid[0:N, 0:N].astype(np.float32); dx, dy = xx - c, yy - c; rad = np.hypot(dx, dy); ang = np.arctan2(dy, dx)
+a = np.zeros((N, N, 4), dtype=np.float32)
+sh = Image.new('L', (N, N), 0); dsh = ImageDraw.Draw(sh); dsh.ellipse([c - 13 * S3 + 2 * S3, c - 13 * S3 + 4 * S3, c + 13 * S3 + 2 * S3, c + 13 * S3 + 4 * S3], fill=165); dsh.line([c + 2 * S3, c + 5 * S3, c + 17 * S3, c + 4 * S3], fill=120, width=8 * S3)
+a[:, :, 3] = np.asarray(sh.filter(ImageFilter.GaussianBlur(2.4 * S3)), dtype=np.float32)
+Rn, Rw, Rt = 12.5 * S3, 9.2 * S3, 5.6 * S3                         # collar, its flat washer face, the throat
+lightd = (-(dx * 0.55 + dy * 0.83) / Rn).clip(-1, 1)
+collar = (rad <= Rn) & (rad > Rw); knurl = (np.sin(ang * 30) * 0.5 + 0.5)
+tc = 150 + lightd * 62 + knurl * 34 - ((rad - Rw) / (Rn - Rw)) ** 2 * 26 + np.sin(ang * 2 + 0.9) * 18
+face_ = (rad <= Rw) & (rad > Rt); tf = 196 + lightd * 30 + np.sin(ang * 2 + 0.9) * 26 - ((rad > Rw - 0.8 * S3)) * 46
+throat = rad <= Rt; tt = 26 + (rad / Rt) * 22 + lightd * -10
+for k, tint in enumerate([1.0, 0.995, 0.97]):
+    a[:, :, k] = np.where(collar, tc * tint, a[:, :, k]); a[:, :, k] = np.where(face_, tf * tint, a[:, :, k]); a[:, :, k] = np.where(throat, tt, a[:, :, k])
+a[:, :, 3] = np.where(rad <= Rn, 255, a[:, :, 3]); a[:, :, :3] += rng.normal(0, 2.0, (N, N, 1)) * (rad <= Rn)[:, :, None]
+im = Image.fromarray(np.uint8(a.clip(0, 255)), 'RGBA')
+# the lever: a tapered cylinder from the throat to a rounded tip, lit along its upper edge
+lev = np.zeros((N, N, 4), dtype=np.float32); x0, y0, x1, y1 = c + 0.5 * S3, c + 0.3 * S3, c + 15.5 * S3, c - 2.2 * S3; L = math.hypot(x1 - x0, y1 - y0); ux, uy = (x1 - x0) / L, (y1 - y0) / L
+t = ((xx - x0) * ux + (yy - y0) * uy); n_ = (-(xx - x0) * uy + (yy - y0) * ux); wdt = (2.6 + 1.5 * (t / L).clip(0, 1)) * S3
+body = (t >= 0) & (t <= L) & (np.abs(n_) <= wdt); tip = np.hypot(xx - x1, yy - y1) <= 4.1 * S3
+prof = (n_ / np.maximum(wdt, 1)).clip(-1, 1)
+shade = 168 + (-prof) * 74 - np.abs(prof) ** 3 * 40 + np.exp(-((prof + 0.45) / 0.16) ** 2) * 70
+tipd = np.hypot(xx - x1, yy - y1) / (4.1 * S3); shade_tip = 188 - tipd ** 2 * 82 + np.exp(-(((xx - x1 + 1.4 * S3) ** 2 + (yy - y1 + 1.6 * S3) ** 2) / (2 * (1.1 * S3) ** 2))) * 90
+for k, tint in enumerate([1.0, 0.995, 0.965]):
+    lev[:, :, k] = np.where(body, shade * tint, 0); lev[:, :, k] = np.where(tip, shade_tip * tint, lev[:, :, k])
+lev[:, :, 3] = np.where(body | tip, 255, 0)
+im.alpha_composite(Image.fromarray(np.uint8(lev.clip(0, 255)), 'RGBA').filter(ImageFilter.GaussianBlur(0.35 * S3)))
+save(im.resize((N // S3, N // S3), Image.LANCZOS), 'toggle.png')
 
 # ---- lamp: the jewel (lit and dark) with its glow
 for name, lit in (('lamp-on.png', True), ('lamp-off.png', False)):
