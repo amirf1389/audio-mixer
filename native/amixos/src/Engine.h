@@ -192,6 +192,16 @@ class Engine : public QObject {
   Q_INVOKABLE void setScopeStrip(int strip) { scope_.setStrip(strip); }
   // AUTO DETECT: the best device to start with, without a remembered one: a native ASIO driver (not a wrapper, Realtek pinned) >
   // ASIO4ALL-style wrapper > WASAPI / Core Audio / ALSA default endpoints > nothing (null is never auto-picked)
+  // AUTO SELECT: which audio system AUTO DETECT may pick from: "best" (ASIO, then Windows audio, then DirectSound), or only "asio", "wasapi",
+  // "dsound" or "bluetooth". When the chosen system has no device, the best of the others is taken and the note says so.
+  Q_PROPERTY(QString autoPrefer READ autoPrefer WRITE setAutoPrefer NOTIFY devicesChanged)
+  QString autoPrefer() const { return settings_.value("audio/autoPrefer", "best").toString(); } void setAutoPrefer(const QString& p);
+  QVariantMap autoDetectFor(const QString& prefer) const;
+  // STEREO PAIR: strips 1+2, 3+4 ... as one stereo channel. matchStereoPair() gives the partner the same channel processing (EQ, gate, compressor,
+  // limiter, crossover, delay) and the same rack (every plug-in with its settings and bypass), panned to the other side. While the two are
+  // LINKED, a plug-in put in, taken out, bypassed or adjusted on one is done on the other too. Each side runs its own copy of a plug-in
+  // (two mono instances): the two sides are not processed together by one stereo plug-in.
+  Q_INVOKABLE bool matchStereoPair(int strip);
   Q_INVOKABLE QVariantMap autoDetect() const;      // {backend, in, out, name, why, inChannels, outChannels, rate} or empty
   Q_INVOKABLE bool autoStart(int frames);           // detect and SMART START it
   // an extra stereo source summed into the master (the ARRANGE player): attached to every runtime this Engine opens
@@ -455,7 +465,7 @@ class Engine : public QObject {
   static constexpr int kBuses = 16, kGroups = 8;   // buses 0-7 AUX, 8-15 FX
   struct SendUi { double db = -60; bool pre = false; };
   struct PluginUi { QString kind; bool bypass = false; std::shared_ptr<am::host::Plugin> vst; QString state, error; };   // vst: loaded instance (null = pending with error)
-  bool vstScanning_ = false; std::vector<QVariantMap> vstCatalog_; std::vector<std::shared_ptr<am::host::Plugin>> graveyard_; QTimer graveTimer_; QTimer saveTimer_; QTimer motionTimer_; bool headOn_ = false, cinema_ = false; double headYaw_ = 0, headPitch_ = 0; double orbit_[32] = {0}; qint64 motionAt_ = 0; void pushSpatial(int i); void moveObjects(); bool masterMuted_ = false; double masterKeepDb_ = 0;
+  bool vstScanning_ = false; std::vector<QVariantMap> vstCatalog_; std::vector<std::shared_ptr<am::host::Plugin>> graveyard_; QTimer graveTimer_; QTimer saveTimer_; QTimer motionTimer_; bool mirror_ = false; bool headOn_ = false, cinema_ = false; double headYaw_ = 0, headPitch_ = 0; double orbit_[32] = {0}; qint64 motionAt_ = 0; void pushSpatial(int i); void moveObjects(); bool masterMuted_ = false; double masterKeepDb_ = 0;
   bool loadVst(int strip, int slot);                      // from kind + state at the runtime's rate; false -> error set
   void rebuildInserts(int strip);                         // the strip's VST chain into the runtime
   void reloadAllVst();                                    // after open (new rate / block)

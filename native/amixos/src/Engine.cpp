@@ -580,10 +580,17 @@ void Engine::setArmed(int i, bool on) { if (i < 0 || i >= kStrips) return; if (o
 // DirectSound lists a Bluetooth or USB headset twice: the music side and the HANDS-FREE side (telephone quality, and opening its microphone
 // switches the whole headset to that mode). Auto detect leaves the hands-free side off; it can still be picked by hand on CONNECTIONS.
 static bool handsFree(const QVariantMap& d) { static const QRegularExpression re("hands[- ]?free|\\bhfp\\b|\\bag audio\\b|headset", QRegularExpression::CaseInsensitiveOption); return d["kind"].toString() == "headset" || re.match(d["name"].toString()).hasMatch(); }
+void Engine::setAutoPrefer(const QString& p) { static const QStringList ok = {"best", "asio", "wasapi", "dsound", "bluetooth"}; settings_.setValue("audio/autoPrefer", ok.contains(p) ? p : QStringLiteral("best")); emit devicesChanged(); }
 QVariantMap Engine::autoDetect() const {
+  const QString prefer = autoPrefer(); QVariantMap d = autoDetectFor(prefer);
+  if (d.isEmpty() && prefer != "best") { d = autoDetectFor(QStringLiteral("best")); if (!d.isEmpty()) d["why"] = QStringLiteral("no %1 device here, so the best of the others: ").arg(prefer.toUpper()) + d["why"].toString(); }
+  return d;
+}
+QVariantMap Engine::autoDetectFor(const QString& prefer) const {
   QVariantMap best; int bestRank = -1;
   for (const QVariant& v : devices_) { const QVariantMap d = v.toMap(); const QString b = d["backend"].toString(), name = d["name"].toString(); if (b == "null" || d["id"].toString().startsWith("loopback:")) continue;
     const bool in = d["inChannels"].toInt() > 0, out = d["outChannels"].toInt() > 0; if (!in && !out) continue;
+    if (prefer == "bluetooth") { if (d["kind"].toString() != "bluetooth" && !looksBluetooth(name)) continue; } else if (prefer != "best" && b != prefer) continue;
     int rank = 0; QString why;
     if (b == "asio") { const bool wrapper = am::drv::isWrapper(name.toStdString()); const bool pinned = am::drv::pinOf(name.toStdString()).on; rank = wrapper ? 60 : pinned ? 50 : 100; why = wrapper ? "an ASIO wrapper (ASIO4ALL-style): used when nothing has its own driver" : pinned ? "Realtek onboard: pinned to its Windows endpoint, SMART START routes it" : "the device's own ASIO driver"; }
     else if (b == "wasapi" || b == "coreaudio") { rank = (d["defaultOut"].toBool() ? 40 : 30) + (in && out ? 2 : 0); why = "the system's " + QString(d["defaultOut"].toBool() ? "default " : "") + "endpoint"; }
@@ -704,7 +711,9 @@ QVariantList Engine::pluginParams(int i, int slot) const {
   for (const auto& q : p.vst->params()) { if (q.hidden) continue; QVariantMap m; m["id"] = static_cast<int>(q.id); m["title"] = QString::fromStdString(q.title); m["units"] = QString::fromStdString(q.units); m["value"] = q.normalized; m["default"] = q.defaultNormalized; m["text"] = QString::fromStdString(p.vst->paramText(q.id, q.normalized)); m["stepCount"] = q.stepCount; m["bypass"] = q.bypass; m["readOnly"] = q.readOnly; l << m; }
   return l;
 }
-void Engine::setPluginParam(int i, int slot, int id, double v) { if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots) return; PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[slot]; if (!p.vst) return; p.vst->setParam(static_cast<std::uint32_t>(id), v); if (p.vst->hasBypass()) p.bypass = p.vst->bypass(); emit stripsChanged(); }
+void Engine::setPluginParam(int i, int slot, int id, double v) { if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots) return; PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[slot]; if (!p.vst) return; p.vst->setParam(static_cast<std::uint32_t>(id), v); if (p.vst->hasBypass()) p.bypass = p.vst->bypass();
+  if (linked(i) && !mirror_ && partner(i) >= 0 && strips_[static_cast<std::size_t>(partner(i))].plugins[slot].kind == p.kind) { mirror_ = true; setPluginParam(partner(i), slot, id, v); mirror_ = false; }
+  emit stripsChanged(); }
 QString Engine::pluginError(int i, int slot) const { if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots) return QString(); return strips_[static_cast<std::size_t>(i)].plugins[slot].error; }
 QVariantList Engine::plugins(int i) const {
   QVariantList l; if (i < 0 || i >= kStrips) return l; const StripUi& s = strips_[static_cast<std::size_t>(i)];
@@ -729,7 +738,18 @@ void Engine::applyPluginStage(int i, const QString& kind, bool on) {
     else for (int b = from; b < to; ++b) { const auto e = p.eq[static_cast<std::size_t>(b)]; setEq(i, b, static_cast<int>(FilterType::Off), e.freq, e.q, e.gainDb); }
   }
 }
+bool Engine::matchStereoPair(int i) {
+  const int j = partner(i); if (i < 0 || i >= kStrips || j < 0) return false;
+  StripUi& a = strips_[static_cast<std::size_t>(i)]; StripUi& b = strips_[static_cast<std::size_t>(j)];
+  b.dsp.set(a.dsp.params()); b.pan = -a.pan; b.trimDb = a.trimDb;
+  for (int k = 0; k < kPluginSlots; ++k) { PluginUi& q = b.plugins[k]; const PluginUi& p = a.plugins[k];
+    if (q.vst) graveyard_.push_back(q.vst);
+    q = PluginUi{}; q.kind = p.kind; q.bypass = p.bypass; q.state = p.vst ? QString::fromStdString(p.vst->state()) : p.state;
+    if (isVstKind(q.kind)) loadVst(j, k); }                             // its own instance: a plug-in keeps the memory of one channel only
+  graveTimer_.start(); if (rt_) pushAll(); emit stripsChanged(); return true;
+}
 void Engine::setPlugin(int i, int slot, const QString& kind) {
+  if (linked(i) && !mirror_ && partner(i) >= 0) { mirror_ = true; setPlugin(partner(i), slot, kind); mirror_ = false; }   // a linked pair keeps the same rack
   if (slot >= pluginSlotLimit() && !kind.isEmpty()) return;   // beyond the edition's slots: the rack shows them locked
   if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots) return; StripUi& s = strips_[static_cast<std::size_t>(i)]; PluginUi& p = s.plugins[slot];
   bool known = kind.isEmpty() || isVstKind(kind); for (const auto& b : kBuiltIns) if (kind == b.kind) known = true; if (!known) return;
@@ -743,6 +763,7 @@ void Engine::setPlugin(int i, int slot, const QString& kind) {
   emit stripsChanged();
 }
 void Engine::setPluginBypass(int i, int slot, bool bypass) {
+  if (linked(i) && !mirror_ && partner(i) >= 0) { mirror_ = true; setPluginBypass(partner(i), slot, bypass); mirror_ = false; }
   if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots) return; PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[slot]; if (p.kind.isEmpty()) return;
   p.bypass = bypass; if (!isVstKind(p.kind)) applyPluginStage(i, p.kind, !bypass); else if (p.vst) p.vst->setBypass(bypass); emit stripsChanged();
 }

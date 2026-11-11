@@ -329,10 +329,11 @@ Item {
                                         Rectangle { implicitWidth: 16; implicitHeight: 13; radius: 3; color: more.visible ? Theme.cyan : Theme.ov(0.06); border.color: Theme.lineSoft
                                             Text { anchors.centerIn: parent; text: "⋯"; color: more.visible ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                                             MouseArea { anchors.fill: parent; onClicked: { engine.selectedStrip = index; more.popup() } }
-                                        Menu { id: more; width: 190
+                                        Menu { id: more; width: 300
                                             MenuItem { text: i18n.t("Channel panel ›", i18n.lang); onTriggered: { page.sidePanel = true } }
                                             MenuItem { text: i18n.t("Plugin rack ›", i18n.lang); onTriggered: { engine.selectedStrip = index; page.rack = true } }
                                             MenuItem { text: i18n.t("Open EQ / tone", i18n.lang); onTriggered: page.go("dsp") }
+                                            MenuItem { text: i18n.t("Match the stereo partner (processing + rack)", i18n.lang); onTriggered: engine.matchStereoPair(index) }
                                             MenuItem { text: i18n.t("Open compressor", i18n.lang); onTriggered: page.go("dyn") }
                                             MenuItem { text: i18n.t("Open gate", i18n.lang); onTriggered: page.go("gate") }
                                             MenuItem { text: i18n.t("Sends to buses", i18n.lang); onTriggered: page.go("bus") }

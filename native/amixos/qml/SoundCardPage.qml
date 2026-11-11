@@ -56,6 +56,12 @@ Item {
                             Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7
                                 text: i18n.t("Opens every channel of the desk through its own ASIO driver (32 at most): desk channel 1 on strip 1, 2 on 2 and so on, the master on the desk's USB returns 1-2. ", i18n.lang) + i18n.t(modelData.note, i18n.lang) } } } }
                 RowLayout { spacing: 6
+                    Text { text: i18n.t("AUTO SELECT", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
+                    Repeater { model: [["best", "BEST"], ["asio", "ASIO"], ["wasapi", "WASAPI"], ["dsound", "DIRECTSOUND"], ["bluetooth", "BLUETOOTH"]]
+                        delegate: Btn { objectName: "autoPrefer_" + modelData[0]; label: i18n.t(modelData[1], i18n.lang); on: engine.autoPrefer === modelData[0]; onColor: Theme.cyan; onClicked: engine.autoPrefer = modelData[0] } }
+                    Btn { label: i18n.t("DETECT + START NOW", i18n.lang); on: true; onColor: Theme.emerald; onClicked: engine.autoStart(settings.defaultFrames) }
+                    Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; text: i18n.t("Which audio system AUTO DETECT picks from. BEST takes ASIO first, then Windows audio, then DirectSound. If the chosen one has no device, the best of the others is used.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
+                RowLayout { spacing: 6
                     Text { text: i18n.t("ASIO ROUTING", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                     Btn { objectName: "openRoutingBtn"; label: i18n.t("OPEN", i18n.lang); on: engine.openRouting; onColor: Theme.emerald; onClicked: engine.openRouting = true }
                     Btn { label: i18n.t("GUARDED", i18n.lang); on: !engine.openRouting; onColor: Theme.amber; onClicked: engine.openRouting = false }
