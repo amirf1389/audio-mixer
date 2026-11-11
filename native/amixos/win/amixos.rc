@@ -3,8 +3,8 @@
 IDI_ICON1 ICON "amfx1.ico"   // the mixer logo: the program file, the task bar, the shortcuts
 1 24 "amixos.manifest"
 1 VERSIONINFO
- FILEVERSION 1,23,0,1
- PRODUCTVERSION 1,23,0,1
+ FILEVERSION 1,24,1,0
+ PRODUCTVERSION 1,24,1,0
  FILEOS VOS_NT_WINDOWS32
  FILETYPE VFT_APP
 BEGIN
@@ -15,8 +15,8 @@ BEGIN
       VALUE "CompanyName", "AMFB Audio"
       VALUE "ProductName", "AmF X1"
       VALUE "FileDescription", "AmF X1 console by AMFB Audio"
-      VALUE "FileVersion", "1.23.0.1"
-      VALUE "ProductVersion", "1.23.0.1"
+      VALUE "FileVersion", "1.24.1"
+      VALUE "ProductVersion", "1.24.1"
       VALUE "InternalName", "amixos"
       VALUE "OriginalFilename", "amixos.exe"
       VALUE "LegalCopyright", "Copyright AMFB Audio. Licensed under the MIT License."

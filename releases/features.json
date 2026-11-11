@@ -2,6 +2,16 @@
   "_": "The feature feed: newest first. scripts/make-update.js embeds it in the signed update.json; the console shows a NEW badge for entries newer than the version last looked at. Edit on the website's manage.html (Release manager) or by hand, then run node scripts/make-update.js.",
   "features": [
     {
+      "version": "1.24.1",
+      "date": "2026-11-18",
+      "title": "Delay panel and automatic updates",
+      "items": [
+        "SYNC DELAY has a DELAY TIME panel: the delay in milliseconds, the tempo, six note keys, TAP TEMPO and the echoes as they die away.",
+        "Updates are now fetched automatically when the signed manifest shows a newer version. INSTALL AND RESTART still asks first.",
+        "MIXER: MUTE ALL mutes every channel and gives the earlier mutes back."
+      ]
+    },
+    {
       "version": "1.23.0.1",
       "date": "2026-11-10",
       "title": "Release 1.23.0.1 stable",
