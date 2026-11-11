@@ -370,6 +370,16 @@ int main(int argc, char* argv[]) {
         bool sync = false, fbk = false; for (const QVariant& v : engine.pluginCatalog()) { sync = sync || v.toMap()["kind"].toString() == "fx:syncdelay"; fbk = fbk || v.toMap()["kind"].toString() == "fx:antifeedback"; } if (!sync || !fbk) { std::fprintf(stderr, "amixos --smoke: SYNC DELAY / FEEDBACK KILLER are not in the rack list\n"); return 215; }
         engine.setPlugin(22, 0, "fx:antifeedback"); const QVariantList fp = engine.pluginParams(22, 0); const bool fbOk = fp.size() >= 4 && !engine.plugins(22)[0].toMap()["pending"].toBool() && engine.pluginParamText(22, 0, fp[3].toMap()["id"].toInt(), 1.0) == "LIVE"; engine.setPlugin(22, 0, "");
         if (!fbOk) { std::fprintf(stderr, "amixos --smoke: FEEDBACK KILLER did not load in a rack slot\n"); return 216; } }
+      { // 360 SCENE: the cinema hall puts 10 fixed points and 10 travelling objects on strips 1-20; the travelling ones move by themselves; a turned head
+        // shifts what is heard, not where the objects are; switching the hall off stops and clears it
+        engine.setCinemaHall(true); const QVariantList sc0 = engine.spatialScene(); const double az10 = engine.spatial(10)["az"].toDouble(), az0 = engine.spatial(0)["az"].toDouble();
+        if (sc0.size() != 20 || engine.spatialMoving() != 10 || !engine.spatial(19)["on"].toBool() || engine.busFx(15)["kind"].toString() != "hall") { std::fprintf(stderr, "amixos --smoke: cinema hall scene (%d objects, %d moving)\n", int(sc0.size()), engine.spatialMoving()); return 217; }
+        QElapsedTimer ct; ct.start(); while (ct.elapsed() < 500) QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+        if (std::fabs(engine.spatial(10)["az"].toDouble() - az10) < 3 || std::fabs(engine.spatial(0)["az"].toDouble() - az0) > 1e-9) { std::fprintf(stderr, "amixos --smoke: the travelling objects did not move / a fixed point moved\n"); return 218; }
+        engine.setHeadTrack(true); engine.setHeadYaw(90); const QVariantMap c = engine.spatialScene()[1].toMap();   // the centre point, head turned right: heard from the left
+        if (std::fabs(c["az"].toDouble()) > 1e-9 || std::fabs(c["heardAz"].toDouble() + 90) > 1e-6) { std::fprintf(stderr, "amixos --smoke: head tracking (heard at %.1f)\n", c["heardAz"].toDouble()); return 219; }
+        engine.setHeadYaw(0); engine.setHeadTrack(false); engine.setCinemaHall(false);
+        if (engine.spatialMoving() != 0 || !engine.spatialScene().isEmpty() || engine.spatial(3)["on"].toBool()) { std::fprintf(stderr, "amixos --smoke: cinema hall off\n"); return 220; } engine.setBusFx(15, ""); }
       { // VST FOLDER: the console's own plug-in folder is created and saved among the scanned folders, once
         const QStringList before = settings.vstDirs(); const QString vf = settings.vstUserFolder(); settings.vstUserFolder();
         if (vf.isEmpty() || !QDir(vf).exists() || settings.vstDirs().count(vf) != 1 || QSettings().value("vst3/dirs").toStringList().count(vf) != 1) { std::fprintf(stderr, "amixos --smoke: the VST folder was not created and saved\n"); return 198; }
@@ -510,6 +520,8 @@ int main(int argc, char* argv[]) {
           if (QString::fromLatin1(id) == "dsp") { engine.setChannelEq(engine.selectedStrip(), 4.0, -3.0, 2500.0, 2.0, true); waitMs(300); win->grabWindow().save(shots + "/channel-eq-3band.png"); engine.setChannelEq(engine.selectedStrip(), 0, 0, 1000, 0, false); std::printf("amixos --shots: channel-eq-3band\n");
             if (!win->findChild<QObject*>("channelEq3")) std::fprintf(stderr, "amixos --shots: FAILED the 3-band channel EQ is missing\n");
             if (QObject* tp = win->findChild<QObject*>("tonePage")) { engine.setGraphicEq(engine.selectedStrip(), QVariantList{3.0, 0.0, -2.0, 0.0, 0.0, 4.0, 0.0, 0.0, -3.0, 1.0}, true); tp->setProperty("graphic", true); waitMs(400); win->grabWindow().save(shots + "/tone-mic-eq-faders.png"); tp->setProperty("graphic", false); engine.setGraphicEq(engine.selectedStrip(), QVariantList{0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, false); std::printf("amixos --shots: tone-mic-eq-faders\n"); } }
+          if (QString::fromLatin1(id) == "surround") { engine.setCinemaHall(true); engine.setHeadTrack(true); engine.setHeadYaw(35); waitMs(700); win->grabWindow().save(shots + "/360-cinema-hall.png"); std::printf("amixos --shots: 360-cinema-hall\n");
+            if (!win->findChild<QObject*>("sceneMap")) std::fprintf(stderr, "amixos --shots: FAILED the 360 scene map is missing\n"); engine.setHeadYaw(0); engine.setHeadTrack(false); engine.setCinemaHall(false); engine.setBusFx(15, ""); }
           if (QString::fromLatin1(id) == "network") { if (QObject* np = win->findChild<QObject*>("networkPage")) {   // the AUDIO + MIDI view with a stream running to this machine and back
             const QString rxA = net.rxAddress(), txA = net.txAddress(); const int rxP = net.rxPort(), txP = net.txPort(), first = net.rxFirstStrip();
             net.setRxAddress("127.0.0.1"); net.setRxPort(47422); net.setTxAddress("127.0.0.1"); net.setTxPort(47422); net.startReceive(); net.startSend(); net.setRxFirstStrip(7); net.midiIn(0xb1, 7, 96);

@@ -212,6 +212,25 @@ class Engine : public QObject {
   Q_INVOKABLE double masteringReductionDb() const { return master_.reductionDb(); }
   Q_INVOKABLE void setSpatial(int strip, bool on, double az, double el, double dist, double spread);
   Q_INVOKABLE QVariantMap spatial(int strip) const;
+  // 360 AUDIO, THE LISTENER AND A SCENE. HEAD TRACK: the listener's head direction (yaw to the right, pitch up, in degrees) is taken off every
+  // object's direction, so the scene stays where it is in the room while the head turns. The angles come from the page (or anything that
+  // sets these properties); this program reads no head-tracking sensor by itself.
+  // CINEMA HALL: 20 objects on the first 20 strips. Ten FIXED POINTS, the loudspeaker places of a cinema (left, centre, right, two sides,
+  // two rear, two overhead, one high centre), and ten MOVING objects that travel around the listener in the background, each on its own
+  // path and speed, updated 30 times a second while the engine runs. A hall reverb on FX 8 gives the room.
+  Q_PROPERTY(bool headTrack READ headTrack WRITE setHeadTrack NOTIFY spatialMoved)
+  Q_PROPERTY(double headYaw READ headYaw WRITE setHeadYaw NOTIFY spatialMoved)
+  Q_PROPERTY(double headPitch READ headPitch WRITE setHeadPitch NOTIFY spatialMoved)
+  Q_PROPERTY(bool cinemaHall READ cinemaHall WRITE setCinemaHall NOTIFY spatialMoved)
+  Q_PROPERTY(int spatialMoving READ spatialMoving NOTIFY spatialMoved)      // how many objects are travelling now
+  bool headTrack() const { return headOn_; } void setHeadTrack(bool on);
+  double headYaw() const { return headYaw_; } void setHeadYaw(double deg);
+  double headPitch() const { return headPitch_; } void setHeadPitch(double deg);
+  bool cinemaHall() const { return cinema_; } void setCinemaHall(bool on);
+  int spatialMoving() const;
+  Q_INVOKABLE void setSpatialOrbit(int strip, double degPerSecond);         // 0 stops the object where it is
+  Q_INVOKABLE QVariantList spatialScene() const;                             // every 360 object: [{strip, az, el, dist, orbit, heardAz, heardEl}]
+  Q_SIGNAL void spatialMoved();
   // OUTPUT STAGE + PROFILER (SOUND CARD page): DC removal before the limiter, TPDF dither for 16 / 24-bit devices, block-time figures in telemetry
   Q_PROPERTY(bool dcBlock READ dcBlock WRITE setDcBlock NOTIFY stateChanged)
   Q_PROPERTY(int outputBits READ outputBits WRITE setOutputBits NOTIFY stateChanged)   // 0 float, 16, 24
@@ -436,7 +455,7 @@ class Engine : public QObject {
   static constexpr int kBuses = 16, kGroups = 8;   // buses 0-7 AUX, 8-15 FX
   struct SendUi { double db = -60; bool pre = false; };
   struct PluginUi { QString kind; bool bypass = false; std::shared_ptr<am::host::Plugin> vst; QString state, error; };   // vst: loaded instance (null = pending with error)
-  bool vstScanning_ = false; std::vector<QVariantMap> vstCatalog_; std::vector<std::shared_ptr<am::host::Plugin>> graveyard_; QTimer graveTimer_; QTimer saveTimer_; bool masterMuted_ = false; double masterKeepDb_ = 0;
+  bool vstScanning_ = false; std::vector<QVariantMap> vstCatalog_; std::vector<std::shared_ptr<am::host::Plugin>> graveyard_; QTimer graveTimer_; QTimer saveTimer_; QTimer motionTimer_; bool headOn_ = false, cinema_ = false; double headYaw_ = 0, headPitch_ = 0; double orbit_[32] = {0}; qint64 motionAt_ = 0; void pushSpatial(int i); void moveObjects(); bool masterMuted_ = false; double masterKeepDb_ = 0;
   bool loadVst(int strip, int slot);                      // from kind + state at the runtime's rate; false -> error set
   void rebuildInserts(int strip);                         // the strip's VST chain into the runtime
   void reloadAllVst();                                    // after open (new rate / block)

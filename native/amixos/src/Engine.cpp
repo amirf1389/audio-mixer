@@ -59,6 +59,7 @@ Engine::Engine(QObject* parent) : QObject(parent) {
   history_.push_back(consoleJson()); histPos_ = 0;
   // THE CONSOLE IS WRITTEN AS IT CHANGES, not only when the program closes: two seconds after the last change of a fader, a rack, a bus,
   // the master chain or the routing. A crash, a forced shutdown or an update that restarts the program then loses nothing.
+  connect(&motionTimer_, &QTimer::timeout, this, &Engine::moveObjects);
   saveTimer_.setSingleShot(true); saveTimer_.setInterval(2000); connect(&saveTimer_, &QTimer::timeout, this, [this] { if (!restoring_) { save(); settings_.sync(); } });
   for (auto sig : {&Engine::stripsChanged, &Engine::busesChanged, &Engine::masterChainChanged, &Engine::routingChanged, &Engine::groupsChanged}) connect(this, sig, this, [this] { if (!saveTimer_.isActive()) saveTimer_.start(); });   // two seconds after the FIRST change: a stream of changes (a controller being moved for a minute) cannot keep pushing the save away
   graveTimer_.setSingleShot(true); graveTimer_.setInterval(1500); connect(&graveTimer_, &QTimer::timeout, this, [this] { graveyard_.clear(); fxGraveyard_.clear(); });
@@ -138,7 +139,7 @@ void Engine::pushAll() {
   pushMaster(); rt_->setMasterProcessor(&master_);   // the master chain: program EQ (the RTA EQ rack) and mastering
   for (int i = 0; i < kStrips; ++i) {
     const StripUi& s = strips_[static_cast<std::size_t>(i)];
-    pushStrip(i); rt_->setPan(i, s.pan); rt_->setSpatial(i, s.spOn, s.spAz, s.spEl, s.spDist, s.spSpread); rt_->setSolo(i, s.solo); rt_->setTrimDb(i, s.trimDb);
+    pushStrip(i); rt_->setPan(i, s.pan); pushSpatial(i); rt_->setSolo(i, s.solo); rt_->setTrimDb(i, s.trimDb);
     for (int k = 0; k < kBuses; ++k) rt_->setSend(i, k, s.sends[k].db, s.sends[k].pre);
     const am::dsp::ChannelParams& p = s.dsp.params();
     for (int b = 0; b < am::dsp::kEqBands; ++b) { const auto& e = p.eq[static_cast<std::size_t>(b)]; rt_->setEqBand(i, b, e.type, e.freq, e.q, e.gainDb); }
@@ -195,7 +196,52 @@ void Engine::setGain(int i, double db) { if (i < 0 || i >= kStrips) return; stri
 void Engine::setSpatial(int i, bool on, double az, double el, double dist, double spread) {
   if (i < 0 || i >= kStrips) return; StripUi& s = strips_[static_cast<std::size_t>(i)];
   s.spOn = on; s.spAz = std::fmod(az, 360.0); s.spEl = std::clamp(el, -90.0, 90.0); s.spDist = std::clamp(dist, 0.3, 20.0); s.spSpread = std::clamp(spread, 0.0, 1.0);
-  if (rt_) rt_->setSpatial(i, s.spOn, s.spAz, s.spEl, s.spDist, s.spSpread); emit stripsChanged();
+  pushSpatial(i); emit stripsChanged(); emit spatialMoved();
+}
+// what the engine is given: the object's place in the room, seen from a head that may be turned
+void Engine::pushSpatial(int i) {
+  if (!rt_ || i < 0 || i >= kStrips) return; const StripUi& s = strips_[static_cast<std::size_t>(i)];
+  double az = s.spAz, el = s.spEl;
+  if (headOn_) { az = std::fmod(az - headYaw_ + 540.0, 360.0) - 180.0; el = std::clamp(el - headPitch_, -90.0, 90.0); }
+  rt_->setSpatial(i, s.spOn, az, el, s.spDist, s.spSpread);
+}
+void Engine::setHeadTrack(bool on) { if (on == headOn_) return; headOn_ = on; for (int i = 0; i < kStrips; ++i) if (strips_[static_cast<std::size_t>(i)].spOn) pushSpatial(i); emit spatialMoved(); }
+void Engine::setHeadYaw(double d) { d = std::fmod(d + 540.0, 360.0) - 180.0; if (d == headYaw_) return; headYaw_ = d; if (headOn_) for (int i = 0; i < kStrips; ++i) if (strips_[static_cast<std::size_t>(i)].spOn) pushSpatial(i); emit spatialMoved(); }
+void Engine::setHeadPitch(double d) { d = std::clamp(d, -60.0, 60.0); if (d == headPitch_) return; headPitch_ = d; if (headOn_) for (int i = 0; i < kStrips; ++i) if (strips_[static_cast<std::size_t>(i)].spOn) pushSpatial(i); emit spatialMoved(); }
+int Engine::spatialMoving() const { int n = 0; for (int i = 0; i < kStrips; ++i) if (orbit_[i] != 0 && strips_[static_cast<std::size_t>(i)].spOn) ++n; return n; }
+void Engine::setSpatialOrbit(int i, double dps) {
+  if (i < 0 || i >= kStrips) return; orbit_[i] = std::clamp(dps, -180.0, 180.0);
+  if (spatialMoving() > 0) { if (!motionTimer_.isActive()) { motionAt_ = QDateTime::currentMSecsSinceEpoch(); motionTimer_.start(33); } } else motionTimer_.stop();
+  emit spatialMoved();
+}
+// the moving objects, 30 times a second on the interface thread: a new direction goes through the engine's control ring like a knob turn, and
+// the engine glides to it inside the audio thread. The console is not rewritten for this (no stripsChanged): only the 360 page is told.
+void Engine::moveObjects() {
+  const qint64 now = QDateTime::currentMSecsSinceEpoch(); const double dt = std::clamp(static_cast<double>(now - motionAt_) / 1000.0, 0.0, 0.25); motionAt_ = now; bool any = false;
+  for (int i = 0; i < kStrips; ++i) { StripUi& s = strips_[static_cast<std::size_t>(i)]; if (orbit_[i] == 0 || !s.spOn) continue;
+    s.spAz = std::fmod(s.spAz + orbit_[i] * dt + 540.0, 360.0) - 180.0; pushSpatial(i); any = true; }
+  if (any) emit spatialMoved(); else motionTimer_.stop();
+}
+void Engine::setCinemaHall(bool on) {
+  if (on == cinema_) return; cinema_ = on;
+  // ten fixed points: azimuth (right is positive), elevation, distance in metres
+  static const double pts[10][3] = {{-30, 0, 9}, {0, 0, 9}, {30, 0, 9}, {-90, 0, 6}, {90, 0, 6}, {-140, 0, 8}, {140, 0, 8}, {-60, 50, 5}, {60, 50, 5}, {0, 70, 5}};
+  // ten travelling objects: where each starts, its height, its distance and its speed in degrees a second (a negative one goes the other way round)
+  static const double mov[10][4] = {{0, 5, 4, 24}, {36, 20, 6, -18}, {72, -10, 3, 40}, {108, 35, 7, -12}, {144, 0, 5, 30}, {180, 15, 8, -36}, {-144, 45, 4, 15}, {-108, -5, 6, -27}, {-72, 25, 3, 50}, {-36, 60, 7, -9}};
+  for (int k = 0; k < 20 && k < kStrips; ++k) {
+    if (on) { if (k < 10) { setSpatial(k, true, pts[k][0], pts[k][1], pts[k][2], 0.15); orbit_[k] = 0; } else { setSpatial(k, true, mov[k - 10][0], mov[k - 10][1], mov[k - 10][2], 0.05); orbit_[k] = mov[k - 10][3]; }
+      setSend(k, 15, -18.0, false); }
+    else { const StripUi& s = strips_[static_cast<std::size_t>(k)]; orbit_[k] = 0; setSpatial(k, false, s.spAz, s.spEl, s.spDist, s.spSpread); setSend(k, 15, -60.0, false); }
+  }
+  if (on) { setBusFx(15, QStringLiteral("hall")); setBusFxMix(15, 1.0); setBusReturn(15, -6.0); } else setBusReturn(15, -60.0);   // the room: the hall reverb on FX 8, returned under the objects
+  if (on) { motionAt_ = QDateTime::currentMSecsSinceEpoch(); motionTimer_.start(33); } else motionTimer_.stop();
+  emit spatialMoved();
+}
+QVariantList Engine::spatialScene() const {
+  QVariantList l;
+  for (int i = 0; i < kStrips; ++i) { const StripUi& s = strips_[static_cast<std::size_t>(i)]; if (!s.spOn) continue; QVariantMap m; m["strip"] = i; m["az"] = s.spAz; m["el"] = s.spEl; m["dist"] = s.spDist; m["orbit"] = orbit_[i];
+    m["heardAz"] = headOn_ ? std::fmod(s.spAz - headYaw_ + 540.0, 360.0) - 180.0 : s.spAz; m["heardEl"] = headOn_ ? std::clamp(s.spEl - headPitch_, -90.0, 90.0) : s.spEl; l << m; }
+  return l;
 }
 QVariantMap Engine::spatial(int i) const { QVariantMap m; if (i < 0 || i >= kStrips) return m; const StripUi& s = strips_[static_cast<std::size_t>(i)]; m["on"] = s.spOn; m["az"] = s.spAz; m["el"] = s.spEl; m["dist"] = s.spDist; m["spread"] = s.spSpread; return m; }
 void Engine::pushMaster() { mp_.fs = rt_ && running() ? sampleRate() : (mp_.fs > 0 ? mp_.fs : 48000); master_.set(mp_); }
