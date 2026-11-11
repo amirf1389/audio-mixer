@@ -1,6 +1,7 @@
 // Audio Mixer runtime: see include/audiomixer/runtime.hpp.
 #include "audiomixer/runtime.hpp"
 
+#include <thread>
 #include <chrono>
 #include <cmath>
 
@@ -70,8 +71,14 @@ void Runtime::stop() { if (backend_ && running_) backend_->stop(); running_ = fa
 
 void Runtime::post(const Cmd& c) {
   std::lock_guard<std::mutex> g(producers_);
-  const unsigned h = head_.load(std::memory_order_relaxed);
-  if (h - tail_.load(std::memory_order_acquire) >= kRing) return;                   // full: the newest change is dropped (the audio thread is not running)
+  // A full ring while the audio thread runs means a burst (a whole console loaded at once): wait for the next block to empty it. Dropping a
+  // change here once lost "detach this effect", and the audio thread went on using an effect that was then deleted. Only when nothing is
+  // emptying the ring (not started, or stalled for 200 ms) is the change given up.
+  unsigned h = head_.load(std::memory_order_relaxed);
+  for (int tries = 0; h - tail_.load(std::memory_order_acquire) >= kRing; ++tries) {
+    if (!running_ || tries >= 400) return;
+    std::this_thread::sleep_for(std::chrono::microseconds(500));
+  }
   ring_[h % kRing] = c; head_.store(h + 1, std::memory_order_release);
 }
 void Runtime::setGainDb(int s, double db) { post({kGain, s, db, 0, 0}); }

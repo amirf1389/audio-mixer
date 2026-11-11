@@ -346,6 +346,9 @@ class Engine : public QObject {
   Q_INVOKABLE void clearClips();
   // channel DSP; type: 0 off, 1 peaking, 2 low shelf, 3 high shelf, 4 low pass, 5 high pass, 6 notch, 7 all-pass 1st, 8 all-pass 2nd
   Q_INVOKABLE void setEq(int strip, int band, int type, double freq, double q, double gainDb);
+  // CHANNEL EQ: three bands of the strip's own (LOW shelf 100 Hz, MID bell with its frequency, HIGH shelf 10 kHz), apart from the ten MIC EQ bands
+  Q_INVOKABLE QVariantMap channelEq(int strip) const;                       // {low, mid, midFreq, high, on}
+  Q_INVOKABLE void setChannelEq(int strip, double lowDb, double midDb, double midFreq, double highDb, bool on = true);
   Q_INVOKABLE QVariantMap eqBand(int strip, int band) const;
   Q_INVOKABLE void setDelay(int strip, double ms);
   Q_INVOKABLE void setPolarity(int strip, bool invert);

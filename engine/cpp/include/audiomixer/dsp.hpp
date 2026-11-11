@@ -15,7 +15,8 @@
 namespace am::dsp {
 
 constexpr double kPi = 3.14159265358979323846;
-constexpr int kEqBands = 10;
+constexpr int kEqBands = 13;        // 0..9: the ten bands of the MIC EQ / parametric rack; 10..12: the CHANNEL EQ (low shelf, mid, high shelf)
+constexpr int kChannelEqFirst = 10;  // the first of the three channel EQ bands
 constexpr int kMaxXoverOrder = 8;          // 48 dB/octave
 constexpr std::size_t kMaxDelayFrames = 9600;   // 50 ms at 192 kHz
 

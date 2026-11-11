@@ -2,6 +2,7 @@
 // the meters of the audio thread. Exit 0 = all good.
 #include "audiomixer/runtime.hpp"
 
+#include <atomic>
 #include <chrono>
 #include <algorithm>
 #include <cmath>
@@ -86,6 +87,16 @@ int main() {
 #ifdef AM_HAVE_ALSA
   run("alsa", "null", "null", false);                                                     // ALSA's own null device: no hardware needed (skipped where it is not configured)
 #endif
+  { // a burst far larger than the control ring while the audio runs: nothing is lost, and the LAST change (detach the effect) arrives
+    struct Count : am::BusProcessor { std::atomic<long> n{0}; void process(float*, float*, std::size_t) override { n.fetch_add(1); } } fx;
+    am::Runtime rt(8); am::DeviceConfig cfg; cfg.backend = "null"; cfg.frames = 256; std::string err;
+    expect(rt.open(cfg, err) && rt.start(err), "burst: null device starts");
+    rt.setBusProcessor(0, &fx); std::this_thread::sleep_for(std::chrono::milliseconds(60)); expect(fx.n.load() > 0, "burst: the effect runs");
+    for (int i = 0; i < 40000; ++i) rt.setGainDb(i % 8, -(i % 30));
+    rt.setMasterDb(-7.0); rt.setBusProcessor(0, nullptr);
+    std::this_thread::sleep_for(std::chrono::milliseconds(80)); const long after = fx.n.load();
+    std::this_thread::sleep_for(std::chrono::milliseconds(80)); expect(fx.n.load() == after, "burst: the detach at the end of 40 000 changes was not dropped");
+    rt.stop(); }
   std::printf(failures ? "runtime: %d failed\n" : "runtime: all good\n", failures);
   return failures ? 1 : 0;
 }

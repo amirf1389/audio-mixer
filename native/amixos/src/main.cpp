@@ -310,6 +310,14 @@ int main(int argc, char* argv[]) {
           if (engine.openBluetooth("dsound", "-", "{gone}", 512) || !engine.bluetoothNote().contains("RESCAN")) { std::fprintf(stderr, "amixos --smoke: a vanished Bluetooth device was not reported\n"); return 178; }
           if (!engine.open("null", "", "", 48000, 256, 2, 2)) { std::fprintf(stderr, "amixos --smoke: the null device did not reopen after the Bluetooth check\n"); return 179; } }
         engine.simulateDevices(realDevices); }
+      { // CHANNEL EQ (3 bands of its own) apart from the MIC EQ (ten bands, a rack item): one does not touch the other
+        engine.setGraphicEq(4, QVariantList{3.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -2.0}, true); engine.setChannelEq(4, 4.0, -3.0, 2500.0, 2.0, true);
+        const QVariantMap c3 = engine.channelEq(4); const QVariantList g = engine.graphicEq(4);
+        if (std::fabs(c3["low"].toDouble() - 4) > 1e-6 || std::fabs(c3["mid"].toDouble() + 3) > 1e-6 || std::fabs(c3["midFreq"].toDouble() - 2500) > 1e-6 || std::fabs(c3["high"].toDouble() - 2) > 1e-6 || !c3["on"].toBool() || std::fabs(g[0].toDouble() - 3) > 1e-6 || std::fabs(g[9].toDouble() + 2) > 1e-6) { std::fprintf(stderr, "amixos --smoke: channel EQ / MIC EQ are not separate\n"); return 195; }
+        bool hasMic = false, hasCh = false; for (const QVariant& v : engine.pluginCatalog()) { const QString k = v.toMap()["kind"].toString(); hasMic = hasMic || k == "miceq"; hasCh = hasCh || k == "eq"; }
+        engine.setPlugin(4, 0, "miceq"); engine.setPlugin(4, 0, ""); const QVariantList g2 = engine.graphicEq(4);
+        if (!hasMic || !hasCh || engine.eqBand(4, 0)["type"].toInt() != 0 || std::fabs(g2[0].toDouble() - 3) > 1e-6 || !engine.channelEq(4)["on"].toBool()) { std::fprintf(stderr, "amixos --smoke: MIC EQ rack item (removing it must switch the ten bands off, keep their gains and leave the channel EQ on)\n"); return 196; }
+        engine.setChannelEq(4, 0, 0, 1000, 0, false); engine.setGraphicEq(4, QVariantList{0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, false); if (engine.channelEq(4)["on"].toBool()) { std::fprintf(stderr, "amixos --smoke: channel EQ flat\n"); return 197; } }
       { // MIC SWEEP: the measured strip is muted in the mix while the sweep plays and comes back afterwards; the recording is described (level, noise, input)
         engine.setMute(0, false); if (!measure.runSweep(0, 0.5, 100, 8000, -12, 6) || !engine.stripState()[0].toMap()["mute"].toBool()) { std::fprintf(stderr, "amixos --smoke: the sweep did not start or the measured strip was not muted\n"); return 192; }
         QElapsedTimer mt; mt.start(); while (measure.state() == "measuring" && mt.elapsed() < 8000) QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
@@ -423,9 +431,27 @@ int main(int argc, char* argv[]) {
           if (QString::fromLatin1(id) == "admin") {   // the same page with the PIN entered
             access.enterAdmin("1234"); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + "/admin-open.png"); access.leaveAdmin(); std::printf("amixos --shots: admin-open\n"); }
           if (QString::fromLatin1(id) == "mixer") {   // FILE / VIEW / INFO and the About box
+            { QVariant r; QMetaObject::invokeMethod(win, "menuSelfTest", Q_RETURN_ARG(QVariant, r)); const QStringList badMenu = r.toStringList(); waitMs(200);
+              if (!badMenu.isEmpty()) std::fprintf(stderr, "amixos --shots: FAILED menu entries: %s\n", qPrintable(badMenu.join(" | "))); else std::printf("amixos --shots: every FILE / VIEW / INFO entry does its job\n");
+              win->setProperty("current", QStringLiteral("mixer")); waitMs(200); }
+            if (QObject* ve = win->findChild<QObject*>("volumeEnhancer")) {   // AMFB VOLUME ENHANCER: a preset loaded through its own button path, then the panel on the shot
+              const QVariantMap keepM = engine.mastering(), keepL = engine.masterLimiter(); const double keepW = engine.width();
+              QMetaObject::invokeMethod(ve, "open"); QMetaObject::invokeMethod(ve, "load", Q_ARG(QVariant, 2)); waitMs(500);
+              const QVariantMap mm = engine.mastering();
+              if (!mm["on"].toBool() || std::fabs(mm["gain"].toDouble() - 6) > 1e-6 || std::fabs(mm["mid"].toDouble() + 0.5) > 1e-6 || std::fabs(mm["compMix"].toDouble() - 0.7) > 1e-6 || !mm["bassMonoOn"].toBool() || !engine.masterLimiter()["on"].toBool() || std::fabs(engine.width() - 1.1) > 1e-6) std::fprintf(stderr, "amixos --shots: FAILED the volume enhancer preset did not reach the master chain\n");
+              win->grabWindow().save(shots + "/volume-enhancer.png"); std::printf("amixos --shots: volume-enhancer\n");
+              QMetaObject::invokeMethod(ve, "load", Q_ARG(QVariant, 0)); QMetaObject::invokeMethod(ve, "close"); QVariantMap back = keepM; engine.setMastering(back); engine.setMasterLimiter(keepL["on"].toBool(), keepL["ceiling"].toDouble()); engine.setWidth(keepW); waitMs(200);
+            } else std::fprintf(stderr, "amixos --shots: FAILED the volume enhancer is missing\n");
+            if (QObject* ma = win->findChild<QObject*>("masterAnalyzer")) { QMetaObject::invokeMethod(ma, "open"); waitMs(2600);
+              if (ma->property("history").toList().size() < 6 || ma->property("columns").toList().size() < 10) std::fprintf(stderr, "amixos --shots: FAILED the master analyzer collected no history / spectrogram\n");
+              ma->setProperty("targetIndex", 3); waitMs(300); win->grabWindow().save(shots + "/master-analyzer.png"); std::printf("amixos --shots: master-analyzer\n");
+              QMetaObject::invokeMethod(ma, "clearAll"); if (!ma->property("history").toList().isEmpty()) std::fprintf(stderr, "amixos --shots: FAILED analyzer CLEAR\n"); ma->setProperty("targetIndex", 0); QMetaObject::invokeMethod(ma, "close"); waitMs(200);
+            } else std::fprintf(stderr, "amixos --shots: FAILED the master analyzer is missing\n");
             if (!win->findChild<QObject*>("menuFile") || !win->findChild<QObject*>("menuView") || !win->findChild<QObject*>("menuInfo")) std::fprintf(stderr, "amixos --shots: FAILED the FILE / VIEW / INFO menus are missing\n");
             if (QObject* ab = win->findChild<QObject*>("aboutPop")) { QMetaObject::invokeMethod(ab, "open"); waitMs(400); win->grabWindow().save(shots + "/menu-about.png"); QMetaObject::invokeMethod(ab, "close"); waitMs(200); std::printf("amixos --shots: menu-about\n"); } }
           if (QString::fromLatin1(id) == "acoustics") { measure.runSweep(0, 0.5, 100, 8000, -12, 12); QElapsedTimer mt; mt.start(); while (measure.state() == "measuring" && mt.elapsed() < 8000) QCoreApplication::processEvents(QEventLoop::AllEvents, 20); waitMs(300); win->grabWindow().save(shots + "/acoustics-sweep-info.png"); std::printf("amixos --shots: acoustics-sweep-info\n"); }
+          if (QString::fromLatin1(id) == "dsp") { engine.setChannelEq(engine.selectedStrip(), 4.0, -3.0, 2500.0, 2.0, true); waitMs(300); win->grabWindow().save(shots + "/channel-eq-3band.png"); engine.setChannelEq(engine.selectedStrip(), 0, 0, 1000, 0, false); std::printf("amixos --shots: channel-eq-3band\n");
+            if (!win->findChild<QObject*>("channelEq3")) std::fprintf(stderr, "amixos --shots: FAILED the 3-band channel EQ is missing\n"); }
           if (QString::fromLatin1(id) == "network") { if (QObject* np = win->findChild<QObject*>("networkPage")) {   // the AUDIO + MIDI view with a stream running to this machine and back
             const QString rxA = net.rxAddress(), txA = net.txAddress(); const int rxP = net.rxPort(), txP = net.txPort(), first = net.rxFirstStrip();
             net.setRxAddress("127.0.0.1"); net.setRxPort(47422); net.setTxAddress("127.0.0.1"); net.setTxPort(47422); net.startReceive(); net.startSend(); net.setRxFirstStrip(7); net.midiIn(0xb1, 7, 96);

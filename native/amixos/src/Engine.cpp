@@ -230,12 +230,12 @@ bool Engine::applyRackPreset(int i, int slot, int presetId) {
   const bool ok = p.vst->setState(st); if (ok) emit stripsChanged(); return ok;
 }
 QVariantMap Engine::mastering() const {
-  QVariantMap m; m["eqOn"] = mp_.eqOn; m["on"] = mp_.on; m["low"] = mp_.lowDb; m["air"] = mp_.airDb; m["thr"] = mp_.thrDb; m["ratio"] = mp_.ratio; m["attack"] = mp_.attackMs; m["release"] = mp_.releaseMs; m["makeup"] = mp_.makeupDb; m["drive"] = mp_.drive; m["gain"] = mp_.gainDb; m["toneOn"] = mp_.toneOn; m["compOn"] = mp_.compOn; m["satOn"] = mp_.satOn; m["deessOn"] = mp_.deessOn; m["deessThr"] = mp_.deessThrDb; m["deessMax"] = mp_.deessMaxDb; m["exciterOn"] = mp_.exciterOn; m["exciter"] = mp_.exciterAmt; m["bassMonoOn"] = mp_.bassMonoOn; m["bassMonoHz"] = mp_.bassMonoHz; m["preset"] = masterPreset_; return m;
+  QVariantMap m; m["eqOn"] = mp_.eqOn; m["on"] = mp_.on; m["low"] = mp_.lowDb; m["air"] = mp_.airDb; m["mid"] = mp_.midDb; m["compMix"] = mp_.compMix; m["bassMonoOn"] = mp_.bassMonoOn; m["bassMonoHz"] = mp_.bassMonoHz; m["thr"] = mp_.thrDb; m["ratio"] = mp_.ratio; m["attack"] = mp_.attackMs; m["release"] = mp_.releaseMs; m["makeup"] = mp_.makeupDb; m["drive"] = mp_.drive; m["gain"] = mp_.gainDb; m["toneOn"] = mp_.toneOn; m["compOn"] = mp_.compOn; m["satOn"] = mp_.satOn; m["deessOn"] = mp_.deessOn; m["deessThr"] = mp_.deessThrDb; m["deessMax"] = mp_.deessMaxDb; m["exciterOn"] = mp_.exciterOn; m["exciter"] = mp_.exciterAmt; m["bassMonoOn"] = mp_.bassMonoOn; m["bassMonoHz"] = mp_.bassMonoHz; m["preset"] = masterPreset_; return m;
 }
 void Engine::setMastering(const QVariantMap& m) {
   auto d = [&m](const char* k, double cur, double lo, double hi) { return m.contains(k) ? std::clamp(m.value(k).toDouble(), lo, hi) : cur; };
   if (m.contains("eqOn")) mp_.eqOn = m.value("eqOn").toBool(); if (m.contains("on")) mp_.on = m.value("on").toBool();
-  mp_.lowDb = d("low", mp_.lowDb, -12, 12); mp_.airDb = d("air", mp_.airDb, -12, 12); mp_.thrDb = d("thr", mp_.thrDb, -40, 0); mp_.ratio = d("ratio", mp_.ratio, 1, 10); mp_.attackMs = d("attack", mp_.attackMs, 0.5, 200); mp_.releaseMs = d("release", mp_.releaseMs, 20, 2000);
+  mp_.lowDb = d("low", mp_.lowDb, -12, 12); mp_.airDb = d("air", mp_.airDb, -12, 12); mp_.midDb = d("mid", mp_.midDb, -12, 12); mp_.compMix = d("compMix", mp_.compMix, 0, 1); mp_.thrDb = d("thr", mp_.thrDb, -40, 0); mp_.ratio = d("ratio", mp_.ratio, 1, 10); mp_.attackMs = d("attack", mp_.attackMs, 0.5, 200); mp_.releaseMs = d("release", mp_.releaseMs, 20, 2000);
   mp_.makeupDb = d("makeup", mp_.makeupDb, 0, 18); mp_.drive = d("drive", mp_.drive, 0, 1); mp_.gainDb = d("gain", mp_.gainDb, -12, 12); for (auto [k, b] : std::initializer_list<std::pair<const char*, bool*>>{{"toneOn", &mp_.toneOn}, {"compOn", &mp_.compOn}, {"satOn", &mp_.satOn}, {"deessOn", &mp_.deessOn}, {"exciterOn", &mp_.exciterOn}, {"bassMonoOn", &mp_.bassMonoOn}}) if (m.contains(k)) *b = m.value(k).toBool();
   mp_.deessThrDb = d("deessThr", mp_.deessThrDb, -50, 0); mp_.deessMaxDb = d("deessMax", mp_.deessMaxDb, 0, 18); mp_.exciterAmt = d("exciter", mp_.exciterAmt, 0, 1); mp_.bassMonoHz = d("bassMonoHz", mp_.bassMonoHz, 40, 400);
   masterPreset_ = m.value("preset").toString(); pushMaster(); emit masterChainChanged();
@@ -448,7 +448,7 @@ void Engine::resetRouting() { for (int i = 0; i < kStrips; ++i) inRoute_[i] = i;
 // ---- bus effects
 QVariantList Engine::fxCatalog() const { QVariantList l; for (const auto& [k, n] : am::fx::catalog()) { QVariantMap m; m["kind"] = QString::fromStdString(k); m["name"] = QString::fromStdString(n); l << m; } return l; }
 void Engine::makeBusFx(int k) {
-  BusUi& b = buses_[k]; if (rt_) rt_->setBusProcessor(k, nullptr); if (b.fx) fxGraveyard_.push_back(std::move(b.fx));
+  BusUi& b = buses_[k]; if (rt_) rt_->setBusProcessor(k, nullptr); if (b.fx) { fxGraveyard_.push_back(std::move(b.fx)); graveTimer_.start(); }   // restart the timer: an effect retired now must outlive the block that still runs it (a timer started for an earlier one could fire a moment later)
   if (!b.fxKind.isEmpty()) { b.fx = am::fx::make(b.fxKind.toStdString(), rt_ ? rt_->sampleRate() : 48000); if (b.fx) { for (const auto& [id, v] : b.fxValues) b.fx->set(id.toStdString(), v); b.fx->setMix(b.fxMix); b.fx->setBypass(b.fxBypass); if (rt_) rt_->setBusProcessor(k, b.fx.get()); } }
   graveTimer_.start();
 }
@@ -509,7 +509,7 @@ void Engine::consoleImport(const QJsonObject& console, const QJsonArray& scenes,
 }
 void Engine::factoryReset() {
   for (int i = 0; i < kStrips; ++i) { StripUi& s = strips_[static_cast<std::size_t>(i)]; for (PluginUi& p : s.plugins) if (p.vst) graveyard_.push_back(p.vst); s = StripUi{}; s.name = QStringLiteral("CH %1").arg(i + 1, 2, 10, QLatin1Char('0')); s.dsp.setSampleRate(48000); }
-  for (int k = 0; k < kBuses; ++k) { if (rt_) rt_->setBusProcessor(k, nullptr); if (buses_[k].fx) fxGraveyard_.push_back(std::move(buses_[k].fx)); buses_[k] = BusUi{}; buses_[k].name = k < 8 ? QStringLiteral("AUX %1").arg(k + 1) : QStringLiteral("FX %1").arg(k - 7); } width_ = 1.0;
+  for (int k = 0; k < kBuses; ++k) { if (rt_) rt_->setBusProcessor(k, nullptr); if (buses_[k].fx) { fxGraveyard_.push_back(std::move(buses_[k].fx)); graveTimer_.start(); } buses_[k] = BusUi{}; buses_[k].name = k < 8 ? QStringLiteral("AUX %1").arg(k + 1) : QStringLiteral("FX %1").arg(k - 7); } width_ = 1.0;
   for (DcaUi& d : dcas_) d = DcaUi{}; for (int g = 0; g < kGroups; ++g) dcas_[g].name = QStringLiteral("DCA %1").arg(g + 1);
   for (MuteGroupUi& m : muteGroups_) m = MuteGroupUi{}; for (int g = 0; g < kGroups; ++g) muteGroups_[g].name = QStringLiteral("MUTE %1").arg(g + 1);
   masterDb_ = 0; masterLim_ = true; masterCeil_ = -0.5; masterRel_ = 100; mp_ = am::MasterChain::Params(); masterPreset_.clear(); mon_ = MonitorUi{}; for (int i = 0; i < kStrips; ++i) inRoute_[i] = i; for (int o = 0; o < kOutputs; ++o) outRoute_[o] = am::Runtime::defaultOutputSource(o);
@@ -581,7 +581,7 @@ void Engine::clearSolo() { for (int i = 0; i < kStrips; ++i) { strips_[static_ca
 void Engine::resetFaders() { for (int i = 0; i < kStrips; ++i) { StripUi& s = strips_[static_cast<std::size_t>(i)]; s.db = 0; s.pan = 0; pushStrip(i); if (rt_) rt_->setPan(i, 0); } masterDb_ = 0; if (rt_) rt_->setMasterDb(0); emit stripsChanged(); }
 void Engine::flattenAllDsp() { for (int i = 0; i < kStrips; ++i) { strips_[static_cast<std::size_t>(i)].dsp.set(am::dsp::ChannelParams{}); for (PluginUi& p : strips_[static_cast<std::size_t>(i)].plugins) if (!isVstKind(p.kind)) p = PluginUi{}; } if (rt_) pushAll(); emit stripsChanged(); }
 
-static const struct { const char* kind; const char* name; } kBuiltIns[] = {{"gate", "NOISE GATE"}, {"eq", "EQ"}, {"xover", "X-OVER"}, {"comp", "COMPRESSOR"}, {"limiter", "LIMITER"}, {"delay", "DELAY"}, {"polarity", "POLARITY Ø"}};
+static const struct { const char* kind; const char* name; } kBuiltIns[] = {{"gate", "NOISE GATE"}, {"eq", "CHANNEL EQ (3-BAND)"}, {"miceq", "MIC EQ (10-BAND)"}, {"xover", "X-OVER"}, {"comp", "COMPRESSOR"}, {"limiter", "LIMITER"}, {"delay", "DELAY"}, {"polarity", "POLARITY Ø"}};
 QVariantList Engine::pluginCatalog() const { QVariantList l; for (const auto& b : kBuiltIns) { QVariantMap m; m["kind"] = b.kind; m["name"] = b.name; m["builtIn"] = true; l << m; } for (const auto& [k, n] : am::fx::catalog()) { QVariantMap m; m["kind"] = QStringLiteral("fx:") + QString::fromStdString(k); m["name"] = QString::fromStdString(n); m["builtIn"] = false; m["fx"] = true; m["vendor"] = QStringLiteral("AMFB Audio"); l << m; }
   for (const QVariantMap& v : vstCatalog_) l << v; return l; }
 QVariantList Engine::vstCatalog() const { QVariantList l; for (const QVariantMap& v : vstCatalog_) l << v; return l; }
@@ -643,7 +643,12 @@ void Engine::applyPluginStage(int i, const QString& kind, bool on) {
   else if (kind == "delay") setDelay(i, on ? (p.delayMs > 0 ? p.delayMs : 1.0) : 0);
   else if (kind == "polarity") setPolarity(i, on);
   else if (kind == "xover") setCrossover(i, static_cast<int>(p.xoverType), on ? (p.hpOrder > 0 ? p.hpOrder : 2) : 0, p.hpFreq, on ? p.lpOrder : 0, p.lpFreq);
-  else if (kind == "eq") { if (on) { bool any = false; for (const auto& b : p.eq) any = any || b.type != am::dsp::FilterType::Off; if (!any) setEq(i, 0, static_cast<int>(am::dsp::FilterType::Peaking), 1000, 1.0, 0); } else for (int b = 0; b < am::dsp::kEqBands; ++b) setEq(i, b, static_cast<int>(am::dsp::FilterType::Off), p.eq[static_cast<std::size_t>(b)].freq, p.eq[static_cast<std::size_t>(b)].q, 0); }
+  else if (kind == "eq" || kind == "miceq") {   // "eq": the CHANNEL EQ's three bands; "miceq": the ten MIC EQ bands. Off keeps every setting and only switches the bands off.
+    const int from = kind == "eq" ? am::dsp::kChannelEqFirst : 0, to = kind == "eq" ? am::dsp::kEqBands : am::dsp::kChannelEqFirst;
+    if (kind == "eq") { const QVariantMap c = channelEq(i); setChannelEq(i, c["low"].toDouble(), c["mid"].toDouble(), c["midFreq"].toDouble(), c["high"].toDouble(), on); }
+    else if (on) setGraphicEq(i, graphicEq(i), true);
+    else for (int b = from; b < to; ++b) { const auto e = p.eq[static_cast<std::size_t>(b)]; setEq(i, b, static_cast<int>(FilterType::Off), e.freq, e.q, e.gainDb); }
+  }
 }
 void Engine::setPlugin(int i, int slot, const QString& kind) {
   if (slot >= pluginSlotLimit() && !kind.isEmpty()) return;   // beyond the edition's slots: the rack shows them locked
@@ -679,6 +684,18 @@ void Engine::setEq(int i, int band, int type, double f, double q, double g) {
   strips_[static_cast<std::size_t>(i)].dsp.setEqBand(band, b); strips_[static_cast<std::size_t>(i)].eqPreset = 0;
   if (rt_) rt_->setEqBand(i, band, b.type, b.freq, b.q, b.gainDb);
   emit stripsChanged();
+}
+QVariantMap Engine::channelEq(int i) const {
+  QVariantMap m; if (i < 0 || i >= kStrips) return m; const auto& e = strips_[static_cast<std::size_t>(i)].dsp.params().eq; const int f = am::dsp::kChannelEqFirst;
+  const auto& lo = e[static_cast<std::size_t>(f)]; const auto& mid = e[static_cast<std::size_t>(f + 1)]; const auto& hi = e[static_cast<std::size_t>(f + 2)];
+  const bool set = mid.freq >= 100 && mid.freq <= 8000 && lo.type != FilterType::Peaking;   // untouched bands hold the engine's defaults, not a 3-band setting
+  m["low"] = set ? lo.gainDb : 0.0; m["mid"] = set ? mid.gainDb : 0.0; m["midFreq"] = set ? mid.freq : 1000.0; m["high"] = set ? hi.gainDb : 0.0;
+  m["on"] = lo.type != FilterType::Off || mid.type != FilterType::Off || hi.type != FilterType::Off; return m;
+}
+void Engine::setChannelEq(int i, double lowDb, double midDb, double midFreq, double highDb, bool on) {
+  if (i < 0 || i >= kStrips) return; const int f = am::dsp::kChannelEqFirst; const bool keep = restoring_; (void)keep;
+  auto put = [&](int b, FilterType t, double freq, double q, double g) { g = std::clamp(g, -15.0, 15.0); setEq(i, b, static_cast<int>(on && std::fabs(g) > 0.01 ? t : FilterType::Off), freq, q, g); };
+  put(f, FilterType::LowShelf, 100, 0.71, lowDb); put(f + 1, FilterType::Peaking, std::clamp(midFreq, 100.0, 8000.0), 0.9, midDb); put(f + 2, FilterType::HighShelf, 10000, 0.71, highDb);
 }
 QVariantMap Engine::eqBand(int i, int band) const {
   if (i == -1 && band >= 0 && band < am::MasterChain::kBands) { const auto& b = mp_.eq[band]; QVariantMap m; m["type"] = static_cast<int>(b.type); m["freq"] = b.freq; m["q"] = b.q; m["gainDb"] = b.gainDb; return m; }
@@ -825,7 +842,7 @@ void Engine::tick() {
     for (int i = 0; i < kStrips; ++i) { vu_[i] += (s.strips[i].rms - vu_[i]) * vuA; QVariantMap x; x["peakDb"] = toDb(s.strips[i].pk); x["rmsDb"] = toDb(s.strips[i].rms); x["holdDb"] = toDb(s.strips[i].hold); x["clip"] = s.strips[i].clipN > 0; x["compGrDb"] = s.strips[i].compGrDb; x["gateDb"] = s.strips[i].gateDb; x["inDb"] = toDb(s.strips[i].inPk); x["vuDb"] = toDb(vu_[i]); x["amGainDb"] = s.strips[i].amGainDb; m << x; }
     vuMaster_ += (std::max(s.master[0].rms, s.master[1].rms) - vuMaster_) * vuA; t["masterVuDb"] = toDb(vuMaster_);
     t["monitorLDb"] = toDb(s.monitorPk[0]); t["monitorRDb"] = toDb(s.monitorPk[1]);
-    t["masterPeakDb"] = toDb(std::max(s.master[0].pk, s.master[1].pk)); t["masterLDb"] = toDb(s.master[0].pk); t["masterRDb"] = toDb(s.master[1].pk); t["masterRmsDb"] = toDb(std::max(s.master[0].rms, s.master[1].rms));
+    t["masterPeakDb"] = toDb(std::max(s.master[0].pk, s.master[1].pk)); t["masterLDb"] = toDb(s.master[0].pk); t["masterRDb"] = toDb(s.master[1].pk); t["masterRmsDb"] = toDb(std::max(s.master[0].rms, s.master[1].rms)); t["masterLRmsDb"] = toDb(s.master[0].rms); t["masterRRmsDb"] = toDb(s.master[1].rms);
     t["masterClip"] = s.master[0].clipN + s.master[1].clipN > 0; t["momentary"] = s.momentary; t["shortTerm"] = s.shortTerm; t["integrated"] = s.integrated; t["lra"] = s.lra; t["truePeak"] = s.truePeak; t["correlation"] = s.correlation; t["autoLevelDb"] = s.autoLevelDb;
     t["blocks"] = static_cast<qulonglong>(s.blocks); t["frames"] = static_cast<qulonglong>(s.frames); t["xruns"] = static_cast<qulonglong>(s.xruns); t["loadPct"] = s.loadPct; t["blockUs"] = s.blockUs; t["maxBlockUs"] = s.maxBlockUs; t["jitterUs"] = s.jitterUs;
     QVariantList bm; for (int k = 0; k < kBuses; ++k) { QVariantMap x; x["peakDb"] = toDb(s.buses[k].pk); x["rmsDb"] = toDb(s.buses[k].rms); x["holdDb"] = toDb(s.buses[k].hold); x["clip"] = s.buses[k].clipN > 0; bm << x; } busMeters_ = bm;

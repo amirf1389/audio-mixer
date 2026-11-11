@@ -54,5 +54,13 @@ int main() {
     auto run = [&](double hz, double pan, am::MasterChain::Params p) { am::Mixer q(2, fs); am::MasterChain c; q.setMasterProcessor(&c); p.fs = fs; p.on = true; p.toneOn = p.compOn = p.satOn = false; c.set(p); std::vector<float> t(n); for (std::size_t i = 0; i < n; ++i) t[i] = 0.5f * static_cast<float>(std::sin(2 * 3.14159265358979 * hz * static_cast<double>(i) / fs)); const float* ti[2] = {t.data(), s1.data()}; q.setPan(0, pan); for (int k = 0; k < 4; ++k) q.process(ti, n, L.data(), R.data()); return std::make_pair(peak(L), peak(R)); };
     am::MasterChain::Params off, bm; bm.bassMonoOn = true; const auto a = run(60, -1, off), b = run(60, -1, bm); CHECK(a.second < 0.01 && b.second > 0.15 && near(b.first, b.second, 0.06), "bass mono centres a hard-left 60 Hz");
     am::MasterChain::Params de; de.deessOn = true; de.deessThrDb = -30; const auto h0 = run(8000, 0, off), h1 = run(8000, 0, de), m0 = run(1000, 0, off), m1 = run(1000, 0, de); CHECK(h1.first < h0.first * 0.85, "de-esser reduces 8 kHz"); CHECK(near(m1.first, m0.first, 0.01), "de-esser leaves 1 kHz"); }
+  { // the master chain's mid bell and the compressor's parallel mix (the VOLUME ENHANCER's MID and COMP MIX)
+    auto lvl = [](am::MasterChain::Params p, double hz, double amp) { am::MasterChain c; p.fs = 48000; p.on = true; c.set(p); const std::size_t N = 24000; std::vector<float> l(N), r(N);
+      for (std::size_t i = 0; i < N; ++i) l[i] = r[i] = static_cast<float>(amp * std::sin(2 * 3.14159265358979 * hz * static_cast<double>(i) / 48000.0)); c.process(l.data(), r.data(), N); double pk = 0; for (std::size_t i = N / 2; i < N; ++i) pk = std::max(pk, std::fabs(static_cast<double>(l[i]))); return pk; };
+    am::MasterChain::Params flat; flat.compOn = false; flat.satOn = false; am::MasterChain::Params mid = flat; mid.midDb = 6;
+    CHECK(near(lvl(mid, 1000, 0.1) / lvl(flat, 1000, 0.1), std::pow(10.0, 6.0 / 20), 0.03), "mid bell +6 dB at 1 kHz"); CHECK(near(lvl(mid, 60, 0.1) / lvl(flat, 60, 0.1), 1.0, 0.03) && near(lvl(mid, 12000, 0.1) / lvl(flat, 12000, 0.1), 1.0, 0.05), "mid bell leaves the ends alone");
+    am::MasterChain::Params c1; c1.satOn = false; c1.thrDb = -20; c1.ratio = 4; am::MasterChain::Params c0 = c1; c0.compMix = 0; am::MasterChain::Params ch = c1; ch.compMix = 0.5;
+    const double full = lvl(c1, 1000, 0.5), none = lvl(c0, 1000, 0.5), half = lvl(ch, 1000, 0.5);
+    CHECK(near(none, 0.5, 0.005) && full < 0.25 && half > full + 0.05 && half < none - 0.05, "compressor mix: 0 = untouched, 1 = compressed, 0.5 in between"); }
   if (fails) return 1; std::printf("bus_test: ok (incl. 5.0 surround, 360 audio, master chain, limiter meter, de-esser, bass mono)\n"); return 0;
 }

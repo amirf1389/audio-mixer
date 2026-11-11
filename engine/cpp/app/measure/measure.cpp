@@ -25,7 +25,8 @@ std::vector<double> logGrid(int ppo, double fLo, double fHi) { std::vector<doubl
 void spectrumOnGrid(const std::vector<double>& x, double fs, const std::vector<double>& grid, int ppo, std::vector<double>& magDb, std::vector<double>* phaseDeg) {
   const std::size_t N = pow2(std::max<std::size_t>(x.size(), 8)); std::vector<cd> X(N); for (std::size_t i = 0; i < x.size(); ++i) X[i] = x[i]; fft(X, false);
   const double binHz = fs / static_cast<double>(N), half = std::pow(2.0, 0.5 / std::max(1, ppo)); magDb.assign(grid.size(), -240); if (phaseDeg) phaseDeg->assign(grid.size(), 0);
-  for (std::size_t g = 0; g < grid.size(); ++g) { const double f = grid[g]; std::size_t k0 = static_cast<std::size_t>(std::floor(f / half / binHz)), k1 = static_cast<std::size_t>(std::ceil(f * half / binHz)); k0 = std::max<std::size_t>(1, k0); k1 = std::min(k1, N / 2 - 1); if (k1 < k0) k1 = k0;
+  for (std::size_t g = 0; g < grid.size(); ++g) { const double f = grid[g]; std::size_t k0 = static_cast<std::size_t>(std::floor(f / half / binHz)), k1 = static_cast<std::size_t>(std::ceil(f * half / binHz)); if (f >= fs * 0.5 || k0 > N / 2 - 1) continue;   // a point above half the sample rate (a harmonic of a high tone) has no bin: it stays at -240 dB instead of reading past the spectrum
+    k0 = std::max<std::size_t>(1, k0); k1 = std::min(k1, N / 2 - 1); if (k1 < k0) k1 = k0;
     double p = 0; for (std::size_t k = k0; k <= k1; ++k) p += std::norm(X[k]); magDb[g] = dbp(p / static_cast<double>(k1 - k0 + 1));
     if (phaseDeg) { const std::size_t kc = std::min(N / 2 - 1, std::max<std::size_t>(1, static_cast<std::size_t>(std::llround(f / binHz)))); (*phaseDeg)[g] = std::arg(X[kc]) * 180 / kPi; } }
 }

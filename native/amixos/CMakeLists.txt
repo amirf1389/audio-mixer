@@ -60,6 +60,8 @@ qt_add_qml_module(amixos
         qml/MasteringPage.qml
         qml/SpatialPage.qml
         qml/AoipPanel.qml
+        qml/VolumeEnhancer.qml
+        qml/MasterAnalyzer.qml
         qml/MicEqPage.qml
         qml/LiveSourcesPage.qml
         qml/ToolsPage.qml

@@ -70,7 +70,8 @@ QString Settings::exportConsole(const QString& path) {
   QFile f(out); if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) { note(QStringLiteral("Cannot write %1").arg(out)); return QString(); }
   f.write(QJsonDocument(root).toJson(QJsonDocument::Indented)); note(QStringLiteral("Console exported: %1").arg(out)); return out;
 }
-bool Settings::importConsole(const QString& path) {
+bool Settings::importConsole(const QString& given) {
+  const QString path = given.isEmpty() ? QDir::homePath() + "/amixos-console.json" : given;   // the same default file exportConsole("") writes
   QFile f(path); if (!f.open(QIODevice::ReadOnly)) { note(QStringLiteral("Cannot read %1").arg(path)); return false; }
   const QJsonObject root = QJsonDocument::fromJson(f.readAll()).object();
   if (root.value("kind").toString() != "console-export" || !root.contains("console")) { note(QStringLiteral("%1 is not an A mix OS console export.").arg(QFileInfo(path).fileName())); return false; }
