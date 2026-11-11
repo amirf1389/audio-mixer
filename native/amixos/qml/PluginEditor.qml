@@ -58,8 +58,10 @@ Popup {
     component Section: Rectangle { property string head; default property alias body: inner.data; height: ed.panelH - 16; color: "transparent"; border.color: "#c022201b"; border.width: 1; radius: 6
         Text { id: st; anchors.horizontalCenter: parent.horizontalCenter; y: 7; text: parent.head; color: ed.ink; font.family: ed.face1; style: Text.Sunken; styleColor: "#70ffffff"; font.pixelSize: 11; font.weight: Font.DemiBold; font.letterSpacing: 1 }
         Item { id: inner; x: 0; y: 26; width: parent.width; height: parent.height - 26 } }
-    component Key: Rectangle { property string label; signal clicked(); width: 22; height: 20; radius: 3; border.color: "#000"; gradient: Gradient { GradientStop { position: 0; color: ka.pressed ? "#1a1a1a" : "#4a4a4a" } GradientStop { position: 0.12; color: ka.pressed ? "#141414" : "#262626" } GradientStop { position: 1; color: "#0e0e0e" } }
-        Text { anchors.centerIn: parent; text: label; color: "#f5f5f0"; font.pixelSize: 13; font.bold: true } MouseArea { id: ka; anchors.fill: parent; onClicked: parent.clicked() } }
+    component Key: Item { property string label; signal clicked(); width: 30; height: 26
+        Image { anchors.fill: parent; source: ka.pressed ? "qrc:/qt/qml/AmixOS/skin/key-down.png" : "qrc:/qt/qml/AmixOS/skin/key.png"; smooth: true }
+        Text { anchors.horizontalCenter: parent.horizontalCenter; y: (ka.pressed ? 4.5 : 3) + (parent.label === "✕" ? 2.5 : 0); text: parent.label; color: "#ece8dc"; font.pixelSize: parent.label === "✕" ? 9 : 14; font.bold: true }
+        MouseArea { id: ka; anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: parent.clicked() } }
     contentItem: Item {
         Repeater { model: 6; delegate: Rectangle { x: (-4 - index * 3) * ed.fit + 4; y: (2 + index * 3) * ed.fit; width: (wood.width + 8 + index * 6) * ed.fit - 8; height: (wood.height + 6 + index * 5) * ed.fit; radius: 10 + index * 4; color: "#000"; opacity: 0.11 - index * 0.015 } }   // the unit's shadow
         Rectangle { id: wood; width: face.implicitWidth + 36; height: ed.panelH + 36; transformOrigin: Item.TopLeft; scale: ed.fit; radius: 5   // the wooden frame
@@ -78,19 +80,25 @@ Popup {
                             Rectangle { x: 6; y: 5; width: parent.width - 12; height: 28; radius: 2; gradient: Gradient { GradientStop { position: 0; color: "#f3e9b8" } GradientStop { position: 1; color: "#d9c98a" } }
                                 Text { anchors.centerIn: parent; width: parent.width - 8; horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight; text: ed.presetAt >= 0 ? ed.presets[ed.presetAt].name : "—  " + ed.presets.length + "  —"; color: "#2a2410"; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                                 Rectangle { y: parent.height / 2; width: parent.width; height: 1; color: ed.red; opacity: 0.5 } }
-                            Key { x: 22; y: 38; label: "–"; onClicked: ed.preset(-1) } Key { x: parent.width - 44; y: 38; label: "+"; onClicked: ed.preset(1) } }
+                            Key { x: 20; y: 35; label: "–"; onClicked: ed.preset(-1) } Key { x: parent.width - 50; y: 35; label: "+"; onClicked: ed.preset(1) } }
                         Item { visible: ed.presets.length === 0; x: 13; y: 12; width: 112; height: 50   // the serial plate: brass, stamped with the channel and the slot
                             Image { width: 112; height: 30; source: "qrc:/qt/qml/AmixOS/skin/serial.png"; smooth: true; mipmap: true }
                             Text { x: 0; y: 3; width: 112; horizontalAlignment: Text.AlignHCenter; text: "TYPE  X1 – " + (ed.fx ? ed.fx.toUpperCase().substring(0, 6) : "VST"); color: "#3a2c0e"; font.family: Theme.mono; font.pixelSize: 7; font.bold: true; font.letterSpacing: 1 }
                             Text { x: 0; y: 14; width: 112; horizontalAlignment: Text.AlignHCenter; text: "SER. No.  " + (ed.strip + 1 < 10 ? "0" : "") + (ed.strip + 1) + " – " + (ed.slot + 1 < 10 ? "0" : "") + (ed.slot + 1); color: "#3a2c0e"; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; font.letterSpacing: 1 } }
                         Text { anchors.horizontalCenter: parent.horizontalCenter; y: 84; text: "SELECT"; color: ed.ink; font.family: ed.face1; style: Text.Sunken; styleColor: "#70ffffff"; font.pixelSize: 10; font.weight: Font.DemiBold }
-                        Item { anchors.horizontalCenter: parent.horizontalCenter; y: 102; width: 90; height: 96   // the A / B selector: a pointer knob
-                            Text { x: 6; y: 0; text: "A"; color: ed.side === "A" ? ed.red : ed.ink; font.family: ed.face1; style: Text.Sunken; styleColor: "#70ffffff"; font.pixelSize: 12; font.bold: true } Text { x: 74; y: 0; text: "B"; color: ed.side === "B" ? ed.red : ed.ink; font.family: ed.face1; style: Text.Sunken; styleColor: "#70ffffff"; font.pixelSize: 12; font.bold: true }
-                            Image { anchors.horizontalCenter: parent.horizontalCenter; y: 6; width: 86; height: 86; source: "qrc:/qt/qml/AmixOS/skin/selector.png"; smooth: true; mipmap: true; rotation: ed.side === "A" ? -30 : 30; Behavior on rotation { NumberAnimation { duration: 140; easing.type: Easing.OutBack } } }
-                            MouseArea { anchors.fill: parent; onClicked: ed.pick(ed.side === "A" ? "B" : "A") } } }
+                        Item { anchors.horizontalCenter: parent.horizontalCenter; y: 112; width: 118; height: 60   // the A / B switch: the same miniature toggle, thrown left for A and right for B
+                            Column { x: 6; y: 12; spacing: 2
+                                Rectangle { anchors.horizontalCenter: parent.horizontalCenter; width: 6; height: 6; radius: 3; color: ed.side === "A" ? ed.red : "transparent"; border.color: ed.side === "A" ? ed.red : ed.ink; border.width: 1.2 }
+                                Text { text: "A"; color: ed.side === "A" ? ed.red : ed.ink; font.family: ed.face1; font.pixelSize: 13; font.weight: Font.Bold; style: Text.Sunken; styleColor: "#70ffffff" } }
+                            Image { anchors.horizontalCenter: parent.horizontalCenter; y: 0; width: 58; height: 58; source: "qrc:/qt/qml/AmixOS/skin/toggle.png"; smooth: true; mipmap: true; mirror: ed.side === "A" }
+                            Column { x: parent.width - width - 6; y: 12; spacing: 2
+                                Rectangle { anchors.horizontalCenter: parent.horizontalCenter; width: 6; height: 6; radius: 3; color: ed.side === "B" ? ed.red : "transparent"; border.color: ed.side === "B" ? ed.red : ed.ink; border.width: 1.2 }
+                                Text { text: "B"; color: ed.side === "B" ? ed.red : ed.ink; font.family: ed.face1; font.pixelSize: 13; font.weight: Font.Bold; style: Text.Sunken; styleColor: "#70ffffff" } }
+                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: ed.pick(ed.side === "A" ? "B" : "A") } }
+                        Text { anchors.horizontalCenter: parent.horizontalCenter; y: 184; width: parent.width - 16; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap; text: "TWO SETTINGS\nTO COMPARE"; color: ed.ink; opacity: 0.8; font.family: ed.face1; font.pixelSize: 8; font.letterSpacing: 1; lineHeight: 1.15; style: Text.Sunken; styleColor: "#70ffffff" } }
                     // the sections of the effect
                     Repeater { model: ed.sections
-                        delegate: Section { head: modelData[0]; readonly property var idx: modelData[1]; readonly property int cols: Math.ceil(idx.length / 2); width: Math.max(96, cols * 86 + 14)
+                        delegate: Section { head: modelData[0]; readonly property var idx: modelData[1]; readonly property int cols: Math.ceil(idx.length / 2); width: Math.max(96, cols * 86 + 14, modelData[0].length * 8.4 + 26)
                             Grid { anchors.horizontalCenter: parent.horizontalCenter; y: idx.length <= cols ? 56 : 4; columns: cols; columnSpacing: 2; rowSpacing: 6
                                 Repeater { model: idx
                                     delegate: Column { width: 84; spacing: 0; readonly property int pi: modelData
@@ -136,7 +144,7 @@ Popup {
                                     readonly property int rev: ed.rev; onRevChanged: sync(); Component.onCompleted: sync(); function sync() { if (ed.params[ed.mixIndex]) value = ed.params[ed.mixIndex].value } onMoved: function (v) { ed.setParam(ed.mixIndex, v) } } }
                             Text { visible: ed.mixIndex < 0; anchors.centerIn: parent; text: "—"; color: ed.ink } } }
                 }
-                Rectangle { x: parent.width - 26; y: 6; width: 18; height: 14; radius: 2; color: "#161616"; Text { anchors.centerIn: parent; text: "✕"; color: "#f5f5f0"; font.pixelSize: 9 } MouseArea { anchors.fill: parent; anchors.margins: -4; onClicked: ed.close() } }
+                Key { x: parent.width - 36; y: 4; width: 24; height: 21; label: "✕"; onClicked: ed.close() }
             }
         }
     }

@@ -96,6 +96,8 @@ qt_add_qml_module(amixos
     RESOURCES
         icons/amfx1.png
         skin/wood.png
+        skin/key.png
+        skin/key-down.png
         skin/badge.png
         skin/serial.png
         skin/plate.png

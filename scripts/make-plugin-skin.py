@@ -181,4 +181,20 @@ im = Image.fromarray(np.uint8(pl.clip(0, 255)), 'RGBA'); mask = Image.new('L', (
 d.rounded_rectangle([S4, S4, W - S4 - 1, H - S4 - 1], 2 * S4, outline=(96, 74, 30, 255), width=max(1, S4 // 2))
 for px in (6 * S4, W - 6 * S4): d.ellipse([px - 2.2 * S4, H / 2 - 2.2 * S4, px + 2.2 * S4, H / 2 + 2.2 * S4], fill=(120, 96, 44, 255), outline=(70, 54, 22, 255)); d.line([px - 1.5 * S4, H / 2 - 0.8 * S4, px + 1.5 * S4, H / 2 + 0.8 * S4], fill=(50, 38, 14, 255), width=max(1, S4 // 2))
 save(im.resize((W // S4, H // S4), Image.LANCZOS), 'serial.png')
+# ---- push keys: a square bakelite key in a recessed bezel (up and pressed), and a small round one for the frame
+def key(name, pressed, w=30, h=26, S5=6):
+    Wk, Hk = w * S5, h * S5; im = Image.new('RGBA', (Wk, Hk), (0, 0, 0, 0)); d = ImageDraw.Draw(im)
+    d.rounded_rectangle([0, 0, Wk - 1, Hk - 1], 3.5 * S5, fill=(12, 12, 12, 255)); d.rounded_rectangle([0, 0, Wk - 1, Hk - 1], 3.5 * S5, outline=(70, 68, 62, 255), width=max(1, S5 // 2))   # the bezel
+    off = 1.6 * S5 if pressed else 0
+    yy, xx = np.mgrid[0:Hk, 0:Wk].astype(np.float32); x0, y0, x1, y1 = 3 * S5, 2.6 * S5 + off, Wk - 3 * S5, Hk - 4.2 * S5 + off
+    inside = (xx >= x0) & (xx <= x1) & (yy >= y0) & (yy <= y1); u = ((xx - x0) / (x1 - x0)).clip(0, 1); v = ((yy - y0) / (y1 - y0)).clip(0, 1)
+    top = (46 if not pressed else 30) + (1 - v) * (26 if not pressed else 10) + np.exp(-((v - 0.12) / 0.10) ** 2) * (40 if not pressed else 12) - (np.abs(u - 0.5) * 2) ** 4 * 14
+    arr = np.asarray(im, dtype=np.float32).copy()
+    for k in range(3): arr[:, :, k] = np.where(inside, top, arr[:, :, k])
+    if not pressed:                                                   # the key's front edge, seen because it stands proud
+        front = (xx >= x0) & (xx <= x1) & (yy > y1) & (yy <= y1 + 1.8 * S5)
+        for k in range(3): arr[:, :, k] = np.where(front, 14, arr[:, :, k])
+    arr[:, :, :3] += rng.normal(0, 1.6, (Hk, Wk, 1)) * inside[:, :, None]
+    save(Image.fromarray(np.uint8(arr.clip(0, 255)), 'RGBA').filter(ImageFilter.GaussianBlur(0.3 * S5)).resize((w, h), Image.LANCZOS), name)
+key('key.png', False); key('key-down.png', True)
 print('skin written to', os.path.normpath(OUT), sorted(os.listdir(OUT)))
