@@ -1,6 +1,6 @@
 // DIAGNOSTICS: a power-on self test of what this build really has (engine, device, clock, buffer, interfaces, plug-ins, data files,
 // licence, recording folder), SAFE MODE (every fader at -inf and all strips muted, to protect the speakers), SOFT RESTART of the engine,
-// FAST BOOT (auto-start the last device) and FACTORY RESET with a preview of what goes.
+// FACTORY RESET with a preview of what goes.
 import QtQuick
 import AmixOS   // this module: brings the Theme singleton (a plain directory import would see Theme as an ordinary type)
 import QtQuick.Controls
@@ -68,7 +68,6 @@ Item {
                     { t: "SAFE MODE", d: "Every fader to -inf and every strip muted: nothing reaches the speakers until you bring faders up.", b: "ENGAGE SAFE MODE", c: Theme.amber, a: 0 },
                     { t: "SOFT RESTART", d: "Stops the engine and opens the remembered device again (SMART START). Plug-ins and effects are rebuilt.", b: "RESTART ENGINE", c: Theme.cyan, a: 1 },
                     { t: "FACTORY SETUP", d: "Runs the first-start wizard again: language, terms, sound card, console defaults, operator PIN, updates.", b: "RERUN SETUP", c: Theme.cyan, a: 4 },
-                    { t: "FAST BOOT", d: settings.autoStart ? "On: the last device opens when the console starts." : "Off: the console starts silent and waits for START.", b: settings.autoStart ? "SWITCH OFF" : "SWITCH ON", c: Theme.emerald, a: 2 },
                     { t: "FACTORY RESET", d: page.confirmReset ? "Removes: " + settings.factoryResetPreview().join(", ") + ". The licence stays. Press again to confirm." : "Settings, console, scenes, presets, arrangement and driver locks back to zero. The licence stays.", b: page.confirmReset ? "YES, RESET NOW" : "FACTORY RESET", c: Theme.danger, a: 3 }]
                 delegate: Rectangle { Layout.fillWidth: true; implicitHeight: 110; radius: Theme.radius; color: Theme.card; border.color: Theme.line
                     ColumnLayout { anchors.fill: parent; anchors.margins: 12; spacing: 6

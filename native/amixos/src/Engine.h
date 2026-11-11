@@ -361,6 +361,15 @@ class Engine : public QObject {
   Q_INVOKABLE void setCrossover(int strip, int type, int hpOrder, double hpFreq, int lpOrder, double lpFreq);
   Q_INVOKABLE void setChannelLimiter(int strip, bool on, double ceilingDb, double releaseMs);
   Q_INVOKABLE void setCompressor(int strip, bool on, double thresholdDb, double ratio, double kneeDb, double attackMs, double releaseMs, double makeupDb);
+  // LIMIT CHANNELS: the channel limiter of every strip on (at each strip's own ceiling, -1 dB when it was never set) or off, in one press
+  Q_INVOKABLE void limitAllChannels(bool on);
+  Q_INVOKABLE bool allChannelsLimited() const;
+  // AUTO -INF: every strip that has no real input on the running sound card (no input picked, or an input the card does not have) gets its
+  // fader at -inf, so an unused channel cannot add noise; returns how many were pulled down
+  Q_INVOKABLE int infUnused();
+  // MASTER MUTE: the master to -inf and back to where it was
+  Q_PROPERTY(bool masterMuted READ masterMuted WRITE setMasterMuted NOTIFY stripsChanged)
+  bool masterMuted() const { return masterMuted_; } void setMasterMuted(bool on);
   Q_INVOKABLE double closeNoise(int strip);   // with nobody playing: reads the strip's input level now (hum, hiss, room) and sets the gate 6 dB above it; returns the threshold, or 0 when there is no signal to read
   Q_INVOKABLE void setGate(int strip, bool on, double thresholdDb, double rangeDb, double attackMs, double holdMs, double releaseMs);
   Q_INVOKABLE QVariantList compressorCurve(int strip, int points) const;   // [{in, out}] dB, -60..0, the static transfer without make-up
@@ -427,7 +436,7 @@ class Engine : public QObject {
   static constexpr int kBuses = 16, kGroups = 8;   // buses 0-7 AUX, 8-15 FX
   struct SendUi { double db = -60; bool pre = false; };
   struct PluginUi { QString kind; bool bypass = false; std::shared_ptr<am::host::Plugin> vst; QString state, error; };   // vst: loaded instance (null = pending with error)
-  bool vstScanning_ = false; std::vector<QVariantMap> vstCatalog_; std::vector<std::shared_ptr<am::host::Plugin>> graveyard_; QTimer graveTimer_; QTimer saveTimer_;
+  bool vstScanning_ = false; std::vector<QVariantMap> vstCatalog_; std::vector<std::shared_ptr<am::host::Plugin>> graveyard_; QTimer graveTimer_; QTimer saveTimer_; bool masterMuted_ = false; double masterKeepDb_ = 0;
   bool loadVst(int strip, int slot);                      // from kind + state at the runtime's rate; false -> error set
   void rebuildInserts(int strip);                         // the strip's VST chain into the runtime
   void reloadAllVst();                                    // after open (new rate / block)

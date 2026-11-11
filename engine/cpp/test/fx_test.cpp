@@ -16,7 +16,7 @@ using namespace am;
 static float peak(const std::vector<float>& v, std::size_t a, std::size_t b) { float p = 0; for (std::size_t i = a; i < b && i < v.size(); ++i) p = std::max(p, std::fabs(v[i])); return p; }
 
 int main() {
-  CHECK(fx::catalog().size() == 15 && fx::make("nope", 48000) == nullptr);
+  CHECK(fx::catalog().size() == 16 && fx::make("nope", 48000) == nullptr);
   { auto r = fx::make("reverb", 48000); CHECK(r && std::string(r->kind()) == "reverb" && r->params().size() == 4 && r->text("decay", 0) == "0.3 s");
     std::vector<float> L(48000, 0.f), R(48000, 0.f); L[0] = R[0] = 1.f; r->set("decay", 0.2); r->process(L.data(), R.data(), L.size());
     CHECK(peak(L, 1000, 6000) > 0.02f && peak(L, 30000, 48000) < peak(L, 2000, 6000) * 0.5f);   // rings, then decays
@@ -38,7 +38,7 @@ int main() {
     rt.setBusProcessor(0, nullptr); for (int k = 0; k < 2; ++k) rt.onBlock(quiet, outs, n); }
   std::printf("fx_test: reverb rings and decays, delay repeats on time (ping-pong crosses), chorus modulates, drive saturates, bypass, bus return OK\n");
   { // the ten effects as rack plug-ins: each changes a tone, stays finite and below +12 dB, passes it untouched when bypassed, and keeps its state through a save / load
-    CHECK(am::fx::catalog().size() == 15); const std::size_t n = 4800; std::vector<float> src(n), l(n), r(n); for (std::size_t i = 0; i < n; ++i) src[i] = 0.4f * static_cast<float>(std::sin(2 * 3.14159265 * 440 * static_cast<double>(i) / 48000) + 0.5 * std::sin(2 * 3.14159265 * 5000 * static_cast<double>(i) / 48000));
+    CHECK(am::fx::catalog().size() == 16); const std::size_t n = 4800; std::vector<float> src(n), l(n), r(n); for (std::size_t i = 0; i < n; ++i) src[i] = 0.4f * static_cast<float>(std::sin(2 * 3.14159265 * 440 * static_cast<double>(i) / 48000) + 0.5 * std::sin(2 * 3.14159265 * 5000 * static_cast<double>(i) / 48000));
     for (const auto& [kind, name] : am::fx::catalog()) { auto p = am::fx::FxPlugin::make(kind, 48000); CHECK(p && p->info().format == "FX" && p->params().size() >= 3);
       if (kind == "postamp") p->setParam(0, 0.9); if (kind == "preamp") p->setParam(0, 0.4);   // these two are neutral (unity) until a knob is turned
       const float* in[2] = {src.data(), src.data()}; float* out[2] = {l.data(), r.data()}; for (int k = 0; k < 3; ++k) p->process(in, out, static_cast<int>(n));
@@ -57,5 +57,12 @@ int main() {
       perKind[p.kind == "reverb" ? 0 : p.kind == "delay" ? 1 : p.kind == "chorus" ? 2 : 3]++; }
     CHECK(names.size() == 300 && perKind[0] == 110 && perKind[1] == 100 && perKind[2] == 50 && perKind[3] == 40 && am::fx::preset(1) && !am::fx::preset(301));
     std::printf("fx_test: 300 presets, unique names, every parameter known to its effect\n"); }
+  { // SYNC DELAY: 120 BPM and a quarter note is half a second; an eighth is a quarter second; WIDTH 1 sends the first echo left and the second right
+    auto echoAt = [](double note, double width, std::size_t at, int side) { auto d = am::fx::make("syncdelay", 48000); d->set("tempo", (120.0 - 60.0) / 140.0); d->set("note", note); d->set("feedback", 0.5); d->set("tone", 1.0); d->set("width", width); d->setMix(1.0);
+      std::vector<float> l(60000, 0.f), r(60000, 0.f); l[0] = r[0] = 1.f; d->process(l.data(), r.data(), l.size()); return std::fabs(side == 0 ? l[at] : r[at]); };
+    CHECK(echoAt(0.2, 0, 24000, 0) > 0.5 && echoAt(0.2, 0, 24000, 1) > 0.5 && echoAt(0.2, 0, 12000, 0) < 1e-6 && echoAt(0.2, 0, 48000, 0) > 0.1);   // 1/4: first echo at 0.5 s, the next at 1 s
+    CHECK(echoAt(0.6, 0, 12000, 0) > 0.5 && echoAt(0.6, 0, 24000, 0) > 0.1 && echoAt(0.6, 0, 6000, 0) < 1e-6);                                       // 1/8: 0.25 s
+    CHECK(echoAt(0.2, 1, 24000, 0) > 0.5 && echoAt(0.2, 1, 24000, 1) < 1e-6 && echoAt(0.2, 1, 48000, 1) > 0.1 && echoAt(0.2, 1, 48000, 0) < 0.05);   // ping-pong
+    auto d = am::fx::make("syncdelay", 48000); CHECK(d && d->params().size() == 5 && d->text("tempo", (120.0 - 60.0) / 140.0) == "120 BPM" && d->text("note", 0.2) == "1/4" && d->text("note", 1.0) == "1/16"); }
   return 0;
 }

@@ -16,6 +16,12 @@ Item {
         Text { id: bl; anchors.centerIn: parent; text: parent.label; color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
     component Card: Rectangle { Layout.fillWidth: true; Layout.fillHeight: true; radius: Theme.radius; color: Theme.card; border.color: Theme.line; clip: true }
     readonly property var st: net.stats
+    function cascade(sendTo, receiveFrom) {
+        net.stopSend(); net.stopReceive()
+        net.txAddress = sendTo; net.txPort = 5004; net.txChannels = 2; net.txBits = 24
+        net.rxAddress = receiveFrom; net.rxPort = 5004; net.rxChannels = 2; net.rxBits = 24; net.rxRate = 48000; net.rxLatency = 20; net.rxFirstStrip = 31
+        net.startReceive(); net.startSend()
+    }
 
     ColumnLayout {
         anchors.fill: parent; spacing: 8
@@ -39,6 +45,11 @@ Item {
                     RowLayout { spacing: 4; Lab { text: i18n.t("SAMPLE FORMAT", i18n.lang) }
                         Repeater { model: [24, 16]; delegate: Btn { label: "L" + modelData; on: net.txBits === modelData; onClicked: if (!net.txOn) net.txBits = modelData } } }
                     Note { text: net.txChannels === 1 ? i18n.t("1 channel: left and right of the master summed to mono.", i18n.lang) : net.txChannels === 2 ? i18n.t("2 channels: master left and right.", i18n.lang) : i18n.t("Channels 1-2: master. Channels 3 and up: strips 1, 2, 3 … before their faders (a multitrack feed).", i18n.lang) }
+                    RowLayout { spacing: 4; Lab { text: i18n.t("CASCADE", i18n.lang) }   // two consoles as one: each sends its master to the other and receives the other's master on strips 31-32
+                        Btn { objectName: "cascadeA"; label: i18n.t("CONSOLE A", i18n.lang); onColor: Theme.cyan; on: net.txOn && net.rxOn && net.txAddress === "239.69.0.1" && net.rxAddress === "239.69.0.2"; onClicked: panel.cascade("239.69.0.1", "239.69.0.2") }
+                        Btn { objectName: "cascadeB"; label: i18n.t("CONSOLE B", i18n.lang); onColor: Theme.cyan; on: net.txOn && net.rxOn && net.txAddress === "239.69.0.2" && net.rxAddress === "239.69.0.1"; onClicked: panel.cascade("239.69.0.2", "239.69.0.1") }
+                        Btn { visible: net.txOn || net.rxOn; label: i18n.t("OFF", i18n.lang); onClicked: { net.stopSend(); net.stopReceive() } } }
+                    Note { text: i18n.t("CASCADE links two consoles on one network: press CONSOLE A on one and CONSOLE B on the other. Each hears the other's master on its strips 31-32. Do not send those two strips back to the master of the other side at full level in a loop.", i18n.lang) }
                     Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.lineSoft }
                     RowLayout { spacing: 6; Lab { text: i18n.t("PACKETS SENT", i18n.lang) } Val { text: panel.st.txPackets } }
                     RowLayout { spacing: 6; Lab { text: i18n.t("SAMPLE RATE", i18n.lang) } Val { text: net.txOn ? panel.st.txRate + " Hz" : "—" } }

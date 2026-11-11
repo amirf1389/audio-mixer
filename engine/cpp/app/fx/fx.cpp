@@ -11,10 +11,11 @@ double clamp01(double v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
 std::string fmt(const char* f, double v) { char b[32]; std::snprintf(b, sizeof b, f, v); return b; }
 }  // namespace
 
-std::vector<std::pair<std::string, std::string>> catalog() { return {{"reverb", "PLATE REVERB"}, {"delay", "TAPE DELAY"}, {"chorus", "STEREO CHORUS"}, {"drive", "TUBE DRIVE"}, {"flanger", "FLANGER"}, {"phaser", "PHASER"}, {"tremolo", "TREMOLO"}, {"wah", "AUTO WAH"}, {"crusher", "BIT CRUSHER"}, {"exciter", "EXCITER"}, {"tubeamp", "TUBE AMP"}, {"preamp", "PRE AMP"}, {"postamp", "POST AMP"}, {"hall", "HALL REVERB"}, {"room", "ROOM REVERB"}}; }
+std::vector<std::pair<std::string, std::string>> catalog() { return {{"reverb", "PLATE REVERB"}, {"delay", "TAPE DELAY"}, {"syncdelay", "SYNC DELAY"}, {"chorus", "STEREO CHORUS"}, {"drive", "TUBE DRIVE"}, {"flanger", "FLANGER"}, {"phaser", "PHASER"}, {"tremolo", "TREMOLO"}, {"wah", "AUTO WAH"}, {"crusher", "BIT CRUSHER"}, {"exciter", "EXCITER"}, {"tubeamp", "TUBE AMP"}, {"preamp", "PRE AMP"}, {"postamp", "POST AMP"}, {"hall", "HALL REVERB"}, {"room", "ROOM REVERB"}}; }
 std::unique_ptr<Effect> make(const std::string& k, double fs) {
   if (k == "reverb") return std::make_unique<Reverb>(fs);
   if (k == "delay") return std::make_unique<TapeDelay>(fs);
+  if (k == "syncdelay") return std::make_unique<SyncDelay>(fs);
   if (k == "chorus") return std::make_unique<Chorus>(fs);
   if (k == "flanger") return std::make_unique<Flanger>(fs);
   if (k == "phaser") return std::make_unique<Phaser>(fs);
@@ -153,6 +154,32 @@ void Phaser::process(float* L, float* R, std::size_t n) {
     for (int s = 0; s < 2; ++s) { const double f = 300.0 * std::pow(8.0, 0.5 + 0.5 * depth * std::sin(ph_ + (s ? kPi * 0.25 : 0))), t = std::tan(kPi * std::min(f, fs_ * 0.45) / fs_); const float a = static_cast<float>((t - 1) / (t + 1));
       float x = ch[s][i] + fb_[s] * fb; for (int k = 0; k < 6; ++k) { const float y = a * x + z_[s][k]; z_[s][k] = x - a * y; x = y; } fb_[s] = x; ch[s][i] = dry * ch[s][i] + wet * x; }
     ph_ += inc; if (ph_ > 2 * kPi) ph_ -= 2 * kPi;
+  }
+}
+SyncDelay::SyncDelay(double fs) : Simple(fs) { for (int i = 0; i < 5; ++i) k_[i] = knobDef(i); setSampleRate(fs); }
+double SyncDelay::beatsOf(int note) { static const double b[] = {2.0, 1.0, 0.75, 0.5, 1.0 / 3.0, 0.25}; return b[note < 0 ? 0 : note > 5 ? 5 : note]; }   // in quarter notes
+void SyncDelay::setSampleRate(double fs) { fs_ = fs > 0 ? fs : 48000; for (auto& b : buf_) b.assign(static_cast<std::size_t>(fs_ * 2.1), 0.f); reset(); }   // the longest: a half note at 60 BPM = 2 s
+void SyncDelay::reset() { for (auto& b : buf_) std::fill(b.begin(), b.end(), 0.f); w_ = 0; lp_[0] = lp_[1] = 0; }
+std::string SyncDelay::text(const std::string& id, double v) const {
+  v = clamp01(v); if (id == "tempo") return fmt("%.0f BPM", bpmOf(v));
+  if (id == "note") { static const char* n[] = {"1/2", "1/4", "1/8 dotted", "1/8", "1/8 triplet", "1/16"}; return n[noteOf(v)]; }
+  return fmt("%.0f %%", v * 100);
+}
+void SyncDelay::process(float* L, float* R, std::size_t n) {
+  if (bypass_.load() || buf_[0].empty()) return;
+  const std::size_t len = buf_[0].size(); const double sec = 60.0 / bpmOf(k_[0].load()) * beatsOf(noteOf(k_[1].load()));
+  const std::size_t d = std::max<std::size_t>(1, std::min(len - 1, static_cast<std::size_t>(sec * fs_ + 0.5)));
+  const float fb = static_cast<float>(k_[2].load() * 0.92), wet = static_cast<float>(mix_.load()), dry = 1.f - wet, width = static_cast<float>(k_[4].load());
+  const float a = static_cast<float>(std::exp(-2.0 * kPi * (600.0 + k_[3].load() * k_[3].load() * 11400.0) / fs_));
+  for (std::size_t i = 0; i < n; ++i) {
+    const std::size_t r = (w_ + len - d) % len; const float dl = buf_[0][r], dr = buf_[1][r];
+    lp_[0] = dl * (1 - a) + lp_[0] * a; lp_[1] = dr * (1 - a) + lp_[1] * a;
+    const float in = 0.5f * (L[i] + R[i]);
+    // WIDTH 0: each side feeds itself; WIDTH 1: the input goes to the left line only and the lines feed each other, so the echoes alternate
+    buf_[0][w_] = (L[i] * (1 - width) + in * width) + fb * (lp_[0] * (1 - width) + lp_[1] * width);
+    buf_[1][w_] = (R[i] * (1 - width)) + fb * (lp_[1] * (1 - width) + lp_[0] * width);
+    w_ = (w_ + 1) % len;
+    L[i] = L[i] * dry + dl * wet; R[i] = R[i] * dry + dr * wet;
   }
 }
 Tremolo::Tremolo(double fs) : Simple(fs) { for (int i = 0; i < 3; ++i) k_[i] = knobDef(i); }

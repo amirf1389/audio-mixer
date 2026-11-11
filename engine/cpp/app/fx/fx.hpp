@@ -90,6 +90,13 @@ class Simple : public Effect {
   virtual int count() const = 0; virtual const char* knobId(int i) const = 0; virtual const char* knobTitle(int i) const = 0; virtual double knobDef(int i) const = 0;
   double fs_; std::atomic<double> k_[6]{{0.5}, {0.5}, {0.5}, {0.5}, {0.5}, {0.5}};
 };
+// SYNC DELAY: an echo in time with the song: TEMPO (60 .. 200 BPM) and NOTE (1/2, 1/4, dotted 1/8, 1/8, 1/8 triplet, 1/16) give the delay
+// time; FEEDBACK, TONE (the echoes get darker) and WIDTH (0 = both sides together, 1 = the echoes bounce left / right)
+class SyncDelay final : public Simple { public: explicit SyncDelay(double fs); const char* kind() const override { return "syncdelay"; } const char* name() const override { return "SYNC DELAY"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void setSampleRate(double fs) override; void process(float* L, float* R, std::size_t n) override;
+  static double bpmOf(double v) { return 60.0 + (v < 0 ? 0 : v > 1 ? 1 : v) * 140.0; } static int noteOf(double v) { const int k = static_cast<int>((v < 0 ? 0 : v > 1 ? 1 : v) * 5.999); return k; } static double beatsOf(int note);
+ protected: int count() const override { return 5; } const char* knobId(int i) const override { static const char* k[] = {"tempo", "note", "feedback", "tone", "width"}; return k[i]; } const char* knobTitle(int i) const override { static const char* k[] = {"TEMPO", "NOTE", "FEEDBACK", "TONE", "WIDTH"}; return k[i]; } double knobDef(int i) const override { static const double d[] = {0.4286, 0.5, 0.35, 0.6, 0.5}; return d[i]; }
+ private: std::vector<float> buf_[2]; std::size_t w_ = 0; float lp_[2] = {0, 0}; };
 // FLANGER: a 1..8 ms delay swept by an LFO with feedback: RATE, DEPTH, FEEDBACK
 class Flanger final : public Simple { public: explicit Flanger(double fs); const char* kind() const override { return "flanger"; } const char* name() const override { return "FLANGER"; }
   std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;

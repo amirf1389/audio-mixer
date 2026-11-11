@@ -718,6 +718,19 @@ void Engine::setEq(int i, int band, int type, double f, double q, double g) {
   if (rt_) rt_->setEqBand(i, band, b.type, b.freq, b.q, b.gainDb);
   emit stripsChanged();
 }
+void Engine::limitAllChannels(bool on) { for (int i = 0; i < kStrips; ++i) { const am::dsp::ChannelParams& p = strips_[static_cast<std::size_t>(i)].dsp.params(); setChannelLimiter(i, on, p.limiterCeilDb, p.limiterReleaseMs); } }
+bool Engine::allChannelsLimited() const { for (int i = 0; i < kStrips; ++i) if (!strips_[static_cast<std::size_t>(i)].dsp.params().limiterOn) return false; return true; }
+int Engine::infUnused() {
+  int n = 0;
+  for (int i = 0; i < kStrips; ++i) { const int r = inRoute_[i]; const bool net = r >= am::Runtime::kNetInBase && r < am::Runtime::kNetInBase + am::Runtime::kNetInputs;
+    if (!net && (r < 0 || r >= devIn_) && strips_[static_cast<std::size_t>(i)].db > -59.9) { setGain(i, -60.0); ++n; } }   // -60 is the bottom of the fader: the engine treats it as silence
+  return n;
+}
+void Engine::setMasterMuted(bool on) {
+  if (on == masterMuted_) return;
+  if (on) { masterKeepDb_ = masterDb(); masterMuted_ = true; setMaster(-60.0); } else { masterMuted_ = false; setMaster(masterKeepDb_); }
+  emit stripsChanged();
+}
 double Engine::closeNoise(int i) {
   if (i < 0 || i >= kStrips || !rt_) return 0;
   const am::Snapshot sn = rt_->snapshot(); const double pk = std::max(sn.strips[i].inPk, sn.strips[i].rms);
