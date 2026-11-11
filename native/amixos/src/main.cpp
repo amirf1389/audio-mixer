@@ -345,6 +345,15 @@ int main(int argc, char* argv[]) {
         { QSettings().remove("console/state"); engine.setGain(S, -7.5); QElapsedTimer st; st.start(); while (st.elapsed() < 2600) QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
           if (!QSettings().value("console/state").toString().contains("-7.5")) { std::fprintf(stderr, "amixos --smoke: the console was not written by itself after a change\n"); return 205; } engine.setGain(S, 0); }
         for (int k = 0; k < 3; ++k) engine.setPlugin(S, k, ""); engine.saveNow(); QFile::remove(file); }
+      { // A MIXER ON ITS ASIO DRIVER: found by name in the device list; ASSIGN puts device input n on strip n and names the strips
+        const QVariantList real = engine.devices(); QVariantList rig = real;
+        { QVariantMap d; d["backend"] = "asio"; d["id"] = "X-USB ASIO Driver"; d["name"] = "X-USB ASIO Driver"; d["inChannels"] = 32; d["outChannels"] = 32; d["defaultRate"] = 48000.0; d["kind"] = "interface"; rig << d; }
+        engine.simulateDevices(rig); const QVariantList mx = engine.mixersFound();
+        if (mx.size() != 1 || mx[0].toMap()["maker"].toString() != "Behringer" || mx[0].toMap()["inChannels"].toInt() != 32 || mx[0].toMap()["running"].toBool()) { std::fprintf(stderr, "amixos --smoke: the mixer was not found in the device list\n"); return 206; }
+        const QString n0 = engine.stripState()[0].toMap()["name"].toString(), n1 = engine.stripState()[1].toMap()["name"].toString(); engine.setInputRoute(0, 1); engine.setInputRoute(5, 0);
+        const int got = engine.assignMixerChannels("X32", true);   // the null device has 2 inputs: strips 1-2 get them, the others none
+        if (got != engine.deviceInputs() || engine.inputRoutes()[0].toInt() != 0 || engine.inputRoutes()[1].toInt() != 1 || engine.inputRoutes()[5].toInt() != -1 || engine.stripState()[1].toMap()["name"].toString() != "X32 02") { std::fprintf(stderr, "amixos --smoke: mixer channel assignment (%d)\n", got); return 207; }
+        engine.resetRouting(); engine.setName(0, n0); engine.setName(1, n1); engine.simulateDevices(real); if (!engine.mixersFound().isEmpty()) return 208; }
       { // VST FOLDER: the console's own plug-in folder is created and saved among the scanned folders, once
         const QStringList before = settings.vstDirs(); const QString vf = settings.vstUserFolder(); settings.vstUserFolder();
         if (vf.isEmpty() || !QDir(vf).exists() || settings.vstDirs().count(vf) != 1 || QSettings().value("vst3/dirs").toStringList().count(vf) != 1) { std::fprintf(stderr, "amixos --smoke: the VST folder was not created and saved\n"); return 198; }

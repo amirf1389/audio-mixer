@@ -562,6 +562,26 @@ QVariantMap Engine::autoDetect() const {
   } best["rate"] = best["defaultRate"].toDouble() > 0 ? best["defaultRate"].toDouble() : 48000.0;
   return best;
 }
+QVariantList Engine::mixersFound() const {
+  QVariantList l; const auto infos = devInfos(devices_);
+  for (const am::DeviceInfo* d : am::drv::mixers(infos)) { const am::drv::MixerProfile p = am::drv::mixerProfile(d->name); QVariantMap m;
+    m["id"] = QString::fromStdString(d->id); m["name"] = QString::fromStdString(d->name); m["maker"] = QString::fromStdString(p.maker); m["model"] = QString::fromStdString(p.model); m["prefix"] = QString::fromStdString(p.prefix); m["note"] = QString::fromStdString(p.note);
+    m["inChannels"] = d->inChannels; m["outChannels"] = d->outChannels; m["running"] = rt_ != nullptr && backend() == QStringLiteral("asio") && (outDevName_ == QString::fromStdString(d->name) || inDevName_ == QString::fromStdString(d->name)); l << m; }
+  return l;
+}
+int Engine::assignMixerChannels(const QString& prefix, bool nameStrips) {
+  const int n = std::clamp(devIn_, 0, kStrips);
+  for (int i = 0; i < kStrips; ++i) { setInputRoute(i, i < n ? i : -1); if (nameStrips && i < n) setName(i, QStringLiteral("%1 %2").arg(prefix.left(6)).arg(i + 1, 2, 10, QLatin1Char('0'))); }
+  return n;
+}
+bool Engine::connectMixer(const QString& id, int frames) {
+  for (const QVariant& v : mixersFound()) { const QVariantMap m = v.toMap(); if (m["id"].toString() != id) continue;
+    const int in = std::clamp(m["inChannels"].toInt(), 0, kStrips), out = std::clamp(m["outChannels"].toInt(), 2, 32);
+    if (!openSmart("asio", in > 0 ? id : QStringLiteral("-"), id, 48000, frames > 0 ? frames : 256, in, out)) return false;
+    const int n = assignMixerChannels(m["prefix"].toString(), true);
+    lastRoute_ = QStringLiteral("MIXER: %1 %2 · %3 channel(s) on strips 1-%3, master on its returns 1-2  ·  ").arg(m["maker"].toString(), m["model"].toString()).arg(n) + lastRoute_; emit stateChanged(); return true; }
+  status_ = QStringLiteral("That mixer is not in the device list any more: RESCAN."); emit stateChanged(); return false;
+}
 bool Engine::autoStart(int frames) {
   const QVariantMap d = autoDetect(); if (d.isEmpty()) { status_ = QStringLiteral("AUTO DETECT: no real sound card found (only the null test device)."); emit stateChanged(); return false; }
   const bool ok = openSmart(d["backend"].toString(), d["in"].toString(), d["out"].toString(), d["rate"].toDouble(), frames > 0 ? frames : 256, std::min(32, std::max(0, d["inChannels"].toInt())), std::min(32, std::max(2, d["outChannels"].toInt())));

@@ -62,6 +62,15 @@ void resetCache();                                           // tests: re-read t
 struct Attempt { std::string mode; std::string backend; std::string inDevice; std::string outDevice; bool exclusive = false; std::string why; bool fromLock = false; bool pinned = false; };
 // What to try for a start on `backend` / `in` / `out`: for an ASIO device the ladder (pin and lock applied), else the plain request.
 std::vector<Attempt> plan(const std::string& backend, const std::string& inId, const std::string& outId, const std::vector<DeviceInfo>& devices, std::int64_t nowMs);
+// MIXERS OF OTHER MAKERS as multichannel sound cards. A digital or USB mixer that has its maker's ASIO driver shows up as one device with
+// many inputs (every channel of the desk) and many outputs (its USB returns). mixerProfile() recognises it from the driver's name, so the
+// console can open ALL its channels and put desk channel n on strip n. Recognition is by name only: nothing is sent to the desk, and the
+// channel counts used are the ones the driver itself reports. The names are their owners' trademarks, used here to say what is supported.
+struct MixerProfile { bool known = false; std::string maker, model, prefix, note; };   // prefix: a short label for the strips ("X32", "TF", "QU")
+MixerProfile mixerProfile(const std::string& deviceName);
+// the ASIO devices of the list that are recognised mixers, in list order
+std::vector<const DeviceInfo*> mixers(const std::vector<DeviceInfo>& devices);
+
 // RESCUE: what to try when every step of the plan failed, so that the console does not stay without input and output. Read from the device
 // list only (nothing is installed, registered or changed), in this order:
 //   "realtek-asio"  the onboard Realtek's own ASIO driver, opened directly even when the Realtek pin would normally keep it closed

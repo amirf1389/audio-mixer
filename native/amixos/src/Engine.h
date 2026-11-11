@@ -127,6 +127,10 @@ class Engine : public QObject {
   Q_INVOKABLE QString bluetoothNote() const { return btNote_; }
   Q_INVOKABLE bool open(const QString& backend, const QString& inDevice, const QString& outDevice, double sampleRate, int frames, int inChannels, int outChannels);
   // DRIVER INTELLIGENCE (engine/cpp/include/audiomixer/driver_intel.hpp): the ladder for an ASIO device, the Realtek pin and the locks learned
+  // A MIXER OF ANOTHER MAKER connected through its ASIO driver, used as a multichannel sound card (am::drv::mixerProfile)
+  Q_INVOKABLE QVariantList mixersFound() const;          // [{id, name, maker, model, prefix, note, inChannels, outChannels, running}]
+  Q_INVOKABLE bool connectMixer(const QString& id, int frames);   // opens ALL its channels (32 at most) through ASIO and assigns them
+  Q_INVOKABLE int assignMixerChannels(const QString& prefix, bool nameStrips);   // desk channel n -> strip n for every input the running device has; the other strips get no input; returns how many
   Q_INVOKABLE bool openSmart(const QString& backend, const QString& inDevice, const QString& outDevice, double sampleRate, int frames, int inChannels, int outChannels);   // walks the plan until a step opens
   Q_INVOKABLE QVariantList driverPlan(const QString& backend, const QString& inDevice, const QString& outDevice) const;   // [{mode, backend, in, out, exclusive, why, fromLock, pinned}]
   Q_INVOKABLE QVariantList driverLocks() const;
