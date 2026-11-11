@@ -31,7 +31,7 @@ void Settings::setPeakHoldMs(int v) { set("audio/peakHoldMs", v); if (engine_) e
 void Settings::setClipDb(double v) { v = std::clamp(v, -12.0, 0.0); set("audio/clipDb", v); if (engine_) engine_->setClipThreshold(v); }
 
 QStringList Settings::vstDefaultDirs() const { QStringList l; for (const auto& d : am::vst3::defaultDirs()) l << QString::fromStdString(d) + "  (VST3)"; for (const auto& d : am::vst2::defaultDirs()) l << QString::fromStdString(d) + "  (VST2)"; return l; }
-int Settings::addVstDir(const QString& dir) { QStringList l = vstDirs(); const QString d = dir.trimmed(); if (!d.isEmpty() && !l.contains(d)) l << d; s_.setValue("vst3/dirs", l); s_.sync(); emit changed(); return rescanVst(); }
+int Settings::addVstDir(const QString& dir) { QStringList l = vstDirs(); QString d = dir.trimmed(); if (d.size() >= 2 && d.startsWith('"') && d.endsWith('"')) d = d.mid(1, d.size() - 2).trimmed();   /* "Copy as path" on Windows puts the path in quotes */ while (d.size() > 3 && (d.endsWith('/') || d.endsWith('\\'))) d.chop(1); if (!d.isEmpty() && !l.contains(d)) l << d; s_.setValue("vst3/dirs", l); s_.sync(); emit changed(); return rescanVst(); }
 int Settings::removeVstDir(const QString& dir) { QStringList l = vstDirs(); l.removeAll(dir); s_.setValue("vst3/dirs", l); s_.sync(); emit changed(); return rescanVst(); }
 QString Settings::vstUserFolder() {
   const QString d = QDir::toNativeSeparators(dataFolder() + "/vst"); QDir().mkpath(d);

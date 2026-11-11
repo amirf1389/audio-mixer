@@ -16,6 +16,7 @@
 #include <QQuickWindow>
 #include <QPalette>
 #include <QDir>
+#include <QTemporaryDir>
 #include <QTimer>
 #include <cmath>
 #include <cstdio>
@@ -428,6 +429,15 @@ int main(int argc, char* argv[]) {
         const QStringList before = settings.vstDirs(); const QString vf = settings.vstUserFolder(); settings.vstUserFolder();
         if (vf.isEmpty() || !QDir(vf).exists() || settings.vstDirs().count(vf) != 1 || QSettings().value("vst3/dirs").toStringList().count(vf) != 1) { std::fprintf(stderr, "amixos --smoke: the VST folder was not created and saved\n"); return 198; }
         if (!before.contains(vf)) settings.removeVstDir(vf); }
+      { // ADD FOLDER + RESCAN: a plug-in two folders down (maker / product) is found; the path may come in quotes with a slash at the end; removing the folder takes it away again
+        const QString src = QCoreApplication::applicationDirPath() + "/engine/vst2/amixtest2.so";
+        if (QFile::exists(src)) {
+          QTemporaryDir td; const QString deep = td.path() + "/Maker/Product"; QDir().mkpath(deep); QFile::copy(src, deep + "/amixtest2.so");
+          const auto has = [&] { for (const QVariant& v : engine.pluginCatalog()) if (v.toMap()["module"].toString().startsWith(td.path())) return true; return false; };
+          settings.addVstDir("\"" + td.path() + "/\"");
+          if (!settings.vstDirs().contains(td.path()) || !has()) { std::fprintf(stderr, "amixos --smoke: ADD FOLDER did not find a plug-in in a sub-folder\n"); return 239; }
+          settings.rescanVst(); if (!has()) { std::fprintf(stderr, "amixos --smoke: RESCAN lost the plug-in\n"); return 240; }
+          settings.removeVstDir(td.path()); if (has() || settings.vstDirs().contains(td.path())) { std::fprintf(stderr, "amixos --smoke: removing the folder left its plug-in in the list\n"); return 241; } } }
       { // MIC SWEEP: the measured strip is muted in the mix while the sweep plays and comes back afterwards; the recording is described (level, noise, input)
         engine.setMute(0, false); if (!measure.runSweep(0, 0.5, 100, 8000, -12, 6) || !engine.stripState()[0].toMap()["mute"].toBool()) { std::fprintf(stderr, "amixos --smoke: the sweep did not start or the measured strip was not muted\n"); return 192; }
         QElapsedTimer mt; mt.start(); while (measure.state() == "measuring" && mt.elapsed() < 8000) QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
