@@ -174,6 +174,10 @@ ApplicationWindow {
         }
     }
     function say(text) { sayText.text = text; sayPop.open() }
+    function openEnhancer() { enhancer.open() }
+    function openAnalyzer() { analyzer.open() }
+    MasterAnalyzer { id: analyzer }   // AMFB MASTER ANALYZER: opened from the master strip's ANALYZER button
+    VolumeEnhancer { id: enhancer }   // AMFB VOLUME ENHANCER: opened from the master strip's ENHANCER button
     Popup { id: sayPop; objectName: "sayPop"; modal: true; anchors.centerIn: parent; width: Math.min(560, root.width - 80); padding: 18
         background: Rectangle { radius: 10; color: Theme.card; border.color: Theme.line }
         contentItem: Column { spacing: 12

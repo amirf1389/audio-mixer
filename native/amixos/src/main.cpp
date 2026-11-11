@@ -431,6 +431,19 @@ int main(int argc, char* argv[]) {
           if (QString::fromLatin1(id) == "admin") {   // the same page with the PIN entered
             access.enterAdmin("1234"); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + "/admin-open.png"); access.leaveAdmin(); std::printf("amixos --shots: admin-open\n"); }
           if (QString::fromLatin1(id) == "mixer") {   // FILE / VIEW / INFO and the About box
+            if (QObject* ve = win->findChild<QObject*>("volumeEnhancer")) {   // AMFB VOLUME ENHANCER: a preset loaded through its own button path, then the panel on the shot
+              const QVariantMap keepM = engine.mastering(), keepL = engine.masterLimiter(); const double keepW = engine.width();
+              QMetaObject::invokeMethod(ve, "open"); QMetaObject::invokeMethod(ve, "load", Q_ARG(QVariant, 2)); waitMs(500);
+              const QVariantMap mm = engine.mastering();
+              if (!mm["on"].toBool() || std::fabs(mm["gain"].toDouble() - 6) > 1e-6 || std::fabs(mm["mid"].toDouble() + 0.5) > 1e-6 || std::fabs(mm["compMix"].toDouble() - 0.7) > 1e-6 || !mm["bassMonoOn"].toBool() || !engine.masterLimiter()["on"].toBool() || std::fabs(engine.width() - 1.1) > 1e-6) std::fprintf(stderr, "amixos --shots: FAILED the volume enhancer preset did not reach the master chain\n");
+              win->grabWindow().save(shots + "/volume-enhancer.png"); std::printf("amixos --shots: volume-enhancer\n");
+              QMetaObject::invokeMethod(ve, "load", Q_ARG(QVariant, 0)); QMetaObject::invokeMethod(ve, "close"); QVariantMap back = keepM; engine.setMastering(back); engine.setMasterLimiter(keepL["on"].toBool(), keepL["ceiling"].toDouble()); engine.setWidth(keepW); waitMs(200);
+            } else std::fprintf(stderr, "amixos --shots: FAILED the volume enhancer is missing\n");
+            if (QObject* ma = win->findChild<QObject*>("masterAnalyzer")) { QMetaObject::invokeMethod(ma, "open"); waitMs(2600);
+              if (ma->property("history").toList().size() < 6 || ma->property("columns").toList().size() < 10) std::fprintf(stderr, "amixos --shots: FAILED the master analyzer collected no history / spectrogram\n");
+              ma->setProperty("targetIndex", 3); waitMs(300); win->grabWindow().save(shots + "/master-analyzer.png"); std::printf("amixos --shots: master-analyzer\n");
+              QMetaObject::invokeMethod(ma, "clearAll"); if (!ma->property("history").toList().isEmpty()) std::fprintf(stderr, "amixos --shots: FAILED analyzer CLEAR\n"); ma->setProperty("targetIndex", 0); QMetaObject::invokeMethod(ma, "close"); waitMs(200);
+            } else std::fprintf(stderr, "amixos --shots: FAILED the master analyzer is missing\n");
             if (!win->findChild<QObject*>("menuFile") || !win->findChild<QObject*>("menuView") || !win->findChild<QObject*>("menuInfo")) std::fprintf(stderr, "amixos --shots: FAILED the FILE / VIEW / INFO menus are missing\n");
             if (QObject* ab = win->findChild<QObject*>("aboutPop")) { QMetaObject::invokeMethod(ab, "open"); waitMs(400); win->grabWindow().save(shots + "/menu-about.png"); QMetaObject::invokeMethod(ab, "close"); waitMs(200); std::printf("amixos --shots: menu-about\n"); } }
           if (QString::fromLatin1(id) == "acoustics") { measure.runSweep(0, 0.5, 100, 8000, -12, 12); QElapsedTimer mt; mt.start(); while (measure.state() == "measuring" && mt.elapsed() < 8000) QCoreApplication::processEvents(QEventLoop::AllEvents, 20); waitMs(300); win->grabWindow().save(shots + "/acoustics-sweep-info.png"); std::printf("amixos --shots: acoustics-sweep-info\n"); }
