@@ -186,9 +186,17 @@ std::vector<std::string> defaultDirs() {
   std::vector<std::string> ok; for (const auto& d : out) if (isDir(d)) ok.push_back(d);
   return ok;
 }
+// Sub-folders are searched too (the VST3 folder is normally sorted by maker), four levels deep; a .vst3 bundle itself is not entered.
+static void walk3(const std::string& d, int depth, std::vector<std::string>& out) {
+  for (const auto& e : listDir(d)) {
+    if (e.size() > 5 && e.compare(e.size() - 5, 5, ".vst3") == 0) { if (!binaryOf(e).empty()) out.push_back(e); continue; }
+    if (depth < 4) walk3(e, depth + 1, out);
+  }
+}
 std::vector<std::string> scan(const std::vector<std::string>& dirs) {
   std::vector<std::string> out;
-  for (const auto& d : dirs) for (const auto& e : listDir(d)) { if (e.size() > 5 && e.compare(e.size() - 5, 5, ".vst3") == 0 && !binaryOf(e).empty()) out.push_back(e); }
+  for (const auto& d : dirs) walk3(d, 0, out);
+  std::sort(out.begin(), out.end()); out.erase(std::unique(out.begin(), out.end()), out.end());
   return out;
 }
 bool inspect(const std::string& modulePath, std::vector<ClassInfo>& classes, std::string& err) {

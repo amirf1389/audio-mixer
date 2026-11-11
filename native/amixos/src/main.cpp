@@ -16,6 +16,7 @@
 #include <QQuickWindow>
 #include <QPalette>
 #include <QDir>
+#include <QTemporaryDir>
 #include <QTimer>
 #include <cmath>
 #include <cstdio>
@@ -428,6 +429,15 @@ int main(int argc, char* argv[]) {
         const QStringList before = settings.vstDirs(); const QString vf = settings.vstUserFolder(); settings.vstUserFolder();
         if (vf.isEmpty() || !QDir(vf).exists() || settings.vstDirs().count(vf) != 1 || QSettings().value("vst3/dirs").toStringList().count(vf) != 1) { std::fprintf(stderr, "amixos --smoke: the VST folder was not created and saved\n"); return 198; }
         if (!before.contains(vf)) settings.removeVstDir(vf); }
+      { // ADD FOLDER + RESCAN: a plug-in two folders down (maker / product) is found; the path may come in quotes with a slash at the end; removing the folder takes it away again
+        const QString src = QCoreApplication::applicationDirPath() + "/engine/vst2/amixtest2.so";
+        if (QFile::exists(src)) {
+          QTemporaryDir td; const QString deep = td.path() + "/Maker/Product"; QDir().mkpath(deep); QFile::copy(src, deep + "/amixtest2.so");
+          const auto has = [&] { for (const QVariant& v : engine.pluginCatalog()) if (v.toMap()["module"].toString().startsWith(td.path())) return true; return false; };
+          settings.addVstDir("\"" + td.path() + "/\"");
+          if (!settings.vstDirs().contains(td.path()) || !has()) { std::fprintf(stderr, "amixos --smoke: ADD FOLDER did not find a plug-in in a sub-folder\n"); return 239; }
+          settings.rescanVst(); if (!has()) { std::fprintf(stderr, "amixos --smoke: RESCAN lost the plug-in\n"); return 240; }
+          settings.removeVstDir(td.path()); if (has() || settings.vstDirs().contains(td.path())) { std::fprintf(stderr, "amixos --smoke: removing the folder left its plug-in in the list\n"); return 241; } } }
       { // MIC SWEEP: the measured strip is muted in the mix while the sweep plays and comes back afterwards; the recording is described (level, noise, input)
         engine.setMute(0, false); if (!measure.runSweep(0, 0.5, 100, 8000, -12, 6) || !engine.stripState()[0].toMap()["mute"].toBool()) { std::fprintf(stderr, "amixos --smoke: the sweep did not start or the measured strip was not muted\n"); return 192; }
         QElapsedTimer mt; mt.start(); while (measure.state() == "measuring" && mt.elapsed() < 8000) QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
@@ -527,9 +537,14 @@ int main(int argc, char* argv[]) {
           for (int step = 0; step < 7; ++step) { wiz->setProperty("step", step); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + QStringLiteral("/setup-%1.png").arg(step + 1)); std::printf("amixos --shots: setup-%d\n", step + 1); }
           win->setProperty("forceSetup", false); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
           { win->setProperty("current", "mixer"); for (int k = 0; k < 10; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50);   // the plug-in editor on a tube amp and on the hall reverb
-            if (QObject* edw = win->findChild<QObject*>("plugEd")) { for (const auto& [kind, name, file] : {std::tuple<const char*, const char*, const char*>{"fx:tubeamp", "TUBE AMP", "plugin-editor-tubeamp.png"}, {"fx:hall", "HALL REVERB", "plugin-editor-hall.png"}, {"fx:reverb", "PLATE REVERB", "plugin-editor-plate.png"}}) {
+            if (QObject* edw = win->findChild<QObject*>("plugEd")) { for (const auto& [kind, name, file] : {std::tuple<const char*, const char*, const char*>{"fx:tubeamp", "TUBE AMP", "plugin-editor-tubeamp.png"}, {"fx:hall", "HALL REVERB", "plugin-editor-hall.png"}, {"fx:reverb", "PLATE REVERB", "plugin-editor-plate.png"}, {"fx:syncdelay", "SYNC DELAY", "plugin-editor-delay.png"}}) {
                 engine.setPlugin(0, 8, kind); QMetaObject::invokeMethod(edw, "openFor", Q_ARG(QVariant, 0), Q_ARG(QVariant, 8), Q_ARG(QVariant, QString::fromLatin1(kind)), Q_ARG(QVariant, QString::fromLatin1(name)));
-                { QElapsedTimer bt; bt.start(); while (bt.elapsed() < 500) QCoreApplication::processEvents(QEventLoop::AllEvents, 20); } win->grabWindow().save(shots + "/" + file); QMetaObject::invokeMethod(edw, "close"); }
+                { QElapsedTimer bt; bt.start(); while (bt.elapsed() < 500) QCoreApplication::processEvents(QEventLoop::AllEvents, 20); } win->grabWindow().save(shots + "/" + file);
+                if (QString::fromLatin1(kind) == "fx:syncdelay") {   // 120 BPM and a quarter note must read 500 ms on the delay panel
+                  { const QVariantList pp = engine.pluginParams(0, 8); engine.setPluginParam(0, 8, pp[0].toMap()["id"].toInt(), (120.0 - 60.0) / 140.0); engine.setPluginParam(0, 8, pp[1].toMap()["id"].toInt(), 1.5 / 6.0); } QMetaObject::invokeMethod(edw, "reload"); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+                  QObject* ms = win->findChild<QObject*>("delayMs"); QObject* panel = win->findChild<QObject*>("delayTime");
+                  if (!ms || !panel || !panel->property("visible").toBool() || ms->property("text").toString() != "500") { std::fprintf(stderr, "the delay panel does not read 500 ms at 120 BPM, 1/4 (reads %s)\n", ms ? qPrintable(ms->property("text").toString()) : "nothing"); std::exit(238); } }
+                QMetaObject::invokeMethod(edw, "close"); }
               engine.setPlugin(0, 8, ""); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); }
             else { std::fprintf(stderr, "amixos --shots: the plug-in editor was not found\n"); } }
           win->setProperty("bootOn", true); { QElapsedTimer bt; bt.start(); while (bt.elapsed() < 1700) QCoreApplication::processEvents(QEventLoop::AllEvents, 20); } win->grabWindow().save(shots + QStringLiteral("/boot-splash.png")); win->setProperty("bootOn", false); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
@@ -590,7 +605,8 @@ int main(int argc, char* argv[]) {
             if (QObject* rp = win->findChild<QObject*>("routingPage")) { rp->setProperty("tab", 1); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + "/routing-outputs.png"); std::printf("amixos --shots: routing-outputs\n"); }
           }
           if (QString::fromLatin1(id) == "mixer") {   // the same page with the analogue VU faces
-            if (QObject* mixer = win->findChild<QObject*>("mixerPage")) {
+            QObject* mixerShown = nullptr; for (QObject* o : win->findChildren<QObject*>("mixerPage")) if (o->property("visible").toBool()) mixerShown = o;   // the page on screen (an earlier one may still be on its way out)
+            if (QObject* mixer = mixerShown) {
               mixer->setProperty("rackCompact", true); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + "/mixer-compact.png"); mixer->setProperty("rackCompact", false); std::printf("amixos --shots: mixer-compact\n");
               if (QObject* pop = mixer->findChild<QObject*>("mixerQuick")) { QMetaObject::invokeMethod(pop, "open"); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + "/mixer-settings.png"); QMetaObject::invokeMethod(pop, "close"); std::printf("amixos --shots: mixer-settings\n"); }
               mixer->setProperty("sendView", 1); waitMs(400); win->grabWindow().save(shots + "/mixer-aux.png"); mixer->setProperty("sendView", 2); waitMs(400); win->grabWindow().save(shots + "/mixer-fx.png"); mixer->setProperty("sendView", 0); std::printf("amixos --shots: mixer-aux, mixer-fx\n");

@@ -41,7 +41,7 @@ class Update : public QObject {
   Q_INVOKABLE void download();                                      // this platform's file into the data folder, sha256 checked
   Q_INVOKABLE void openDownloadFolder();
   bool canInstall() const; QString justUpdated() const { return justUpdated_; } QString failedUpdate() const { return failed_; }
-  bool autoDownload() const { return s_.value("update/autoDownload", false).toBool(); } void setAutoDownload(bool v) { s_.setValue("update/autoDownload", v); emit changed(); }
+  bool autoDownload() const { return s_.value("update/autoDownload", true).toBool(); } void setAutoDownload(bool v) { s_.setValue("update/autoDownload", v); emit changed(); }
   Q_INVOKABLE bool installAndRestart();                             // re-checks the file's sha256, starts the setup silently with /RESTART and quits the console; the setup starts it again
   Q_INVOKABLE void acknowledgeUpdate() { justUpdated_.clear(); failed_.clear(); emit changed(); }
  signals:

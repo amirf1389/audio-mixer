@@ -47,8 +47,9 @@ Item {
     }
     Connections { target: vu; function onLabelChanged() { face.requestPaint() } }
     // the needle, pivoting below the face
-    Item { x: parent.width / 2; y: parent.height * 1.35; rotation: vu.angle
-        Rectangle { x: -0.75; y: -vu.height * 1.22; width: 1.5; height: vu.height * 1.22; color: "#1e1a12"; antialiasing: true } }
+    Item { anchors.fill: parent; clip: true   // the pivot is below the face: only the part of the needle over the face is drawn
+        Item { x: parent.width / 2; y: parent.height * 1.35; rotation: vu.angle
+            Rectangle { x: -0.75; y: -vu.height * 1.22; width: 1.5; height: vu.height * 1.22; color: "#1e1a12"; antialiasing: true } } }
     Rectangle { anchors.horizontalCenter: parent.horizontalCenter; anchors.bottom: parent.bottom; anchors.bottomMargin: -4; width: 10; height: 10; radius: 5; color: "#3a3326" }
     Rectangle { anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 3; width: 6; height: 6; radius: 3; color: vu.peakLamp ? "#ff2a2a" : "#6b2b2b"; border.color: "#3a3326" }
 }

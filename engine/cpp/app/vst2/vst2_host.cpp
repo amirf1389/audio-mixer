@@ -127,15 +127,21 @@ std::vector<std::string> defaultDirs() {
 #endif
   std::vector<std::string> ok; for (const auto& d : out) if (isDir(d)) ok.push_back(d); return ok;
 }
+// Sub-folders are searched too (a plug-in folder is normally sorted by maker), four levels deep; a .vst3 bundle is not a VST2 folder.
+static void walk2(const std::string& d, int depth, std::vector<std::string>& out) {
+  for (const auto& e : listDir(d)) {
+#ifdef _WIN32
+    if (endsWith(e, ".dll") || endsWith(e, ".DLL")) { out.push_back(e); continue; }
+#else
+    if (endsWith(e, ".so")) { out.push_back(e); continue; }
+#endif
+    if (depth < 4 && !endsWith(e, ".vst3")) walk2(e, depth + 1, out);
+  }
+}
 std::vector<std::string> scan(const std::vector<std::string>& dirs) {
   std::vector<std::string> out;
-  for (const auto& d : dirs) for (const auto& e : listDir(d)) {
-#ifdef _WIN32
-    if (endsWith(e, ".dll") || endsWith(e, ".DLL")) out.push_back(e);
-#else
-    if (endsWith(e, ".so")) out.push_back(e);
-#endif
-  }
+  for (const auto& d : dirs) walk2(d, 0, out);
+  std::sort(out.begin(), out.end()); out.erase(std::unique(out.begin(), out.end()), out.end());
   return out;
 }
 bool inspect(const std::string& path, host::Info& info, std::string& err) {

@@ -350,7 +350,7 @@ Item {
                                             MenuItem { text: i18n.t("Listen here: monitor = master", i18n.lang); onTriggered: engine.setMonitor(0, page.mon.db, page.mon.dim, page.mon.mono, page.mon.mute) }
                                             MenuItem { text: (st && st.armed ? "✓ " : "") + i18n.t("Arm for recording (pre-fader WAV)", i18n.lang); onTriggered: engine.setArmed(index, !(st && st.armed)) }
                                         } } }
-                                    VuMeter { visible: page.vuMode; Layout.fillWidth: true; Layout.preferredHeight: 40; vuDb: mt ? mt.vuDb : -120; refDb: engine.vuRefDb; peakLamp: mt ? mt.clip : false; label: i18n.t("VU", i18n.lang) }
+                                    VuMeter { visible: page.vuMode; Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: 62; Layout.preferredHeight: 36; vuDb: mt ? mt.vuDb : -120; refDb: engine.vuRefDb; peakLamp: mt ? mt.clip : false; label: i18n.t("VU", i18n.lang) }
                                     // SENDS ON STRIPS: 8 mini faders (AUX 1-8 or FX 1-8), each with its PRE/POST switch
                                     RowLayout { visible: page.sendView > 0; Layout.fillHeight: true; Layout.fillWidth: true; spacing: 2
                                     Fader { Layout.fillHeight: true; Layout.preferredWidth: 22; value: st ? st.db : 0; inDb: mt ? mt.inDb : -120; outDb: mt ? mt.peakDb : -120; clip: mt ? mt.clip : false; onMoved: function (db) { engine.setGain(index, db) } }   // the channel fader stays next to its sends
@@ -447,6 +447,7 @@ Item {
                 ColumnLayout {
                     anchors.fill: parent; anchors.margins: 8; spacing: 6
                     Text { Layout.alignment: Qt.AlignHCenter; text: i18n.t("MASTER", i18n.lang); color: Theme.orange; font.family: Theme.mono; font.pixelSize: 10; font.bold: true; font.letterSpacing: 2 }
+                    VuMeter { objectName: "masterVu"; visible: page.vuMode; Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: 96; Layout.preferredHeight: 54; vuDb: engine.telemetry.masterVuDb === undefined ? -120 : engine.telemetry.masterVuDb; refDb: engine.vuRefDb; peakLamp: engine.telemetry.masterClip === true; label: i18n.t("VU  MASTER", i18n.lang) }
                     Rectangle { objectName: "masterEqBtn"; Layout.alignment: Qt.AlignHCenter; implicitWidth: 64; implicitHeight: 18; radius: 4; color: engine.mastering().eqOn ? Theme.orange : Theme.ov(0.08); border.color: Theme.orange   // RTA EQ: the main (master) equaliser
                         Text { anchors.centerIn: parent; text: i18n.t("RTA EQ", i18n.lang); color: engine.mastering().eqOn ? "#000" : Theme.orange; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                         MouseArea { anchors.fill: parent; onClicked: page.go("rtaeq") } }
@@ -459,7 +460,6 @@ Item {
                     Rectangle { objectName: "analyzerBtn"; Layout.alignment: Qt.AlignHCenter; implicitWidth: 64; implicitHeight: 18; radius: 4; color: Theme.ov(0.08); border.color: Theme.cyan   // AMFB MASTER ANALYZER
                         Text { anchors.centerIn: parent; text: i18n.t("ANALYZER", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                         MouseArea { anchors.fill: parent; onClicked: page.Window.window.openAnalyzer() } }
-                    VuMeter { visible: page.vuMode; Layout.fillWidth: true; Layout.preferredHeight: 60; vuDb: engine.telemetry.masterVuDb === undefined ? -120 : engine.telemetry.masterVuDb; refDb: engine.vuRefDb; peakLamp: engine.telemetry.masterClip === true; label: i18n.t("VU  MASTER", i18n.lang) }
                     RowLayout { Layout.fillHeight: true; Layout.alignment: Qt.AlignHCenter; spacing: 8
                         Fader { Layout.fillHeight: true; value: engine.masterDb; inDb: engine.telemetry.masterRmsDb === undefined ? -120 : engine.telemetry.masterRmsDb; outDb: engine.telemetry.masterPeakDb === undefined ? -120 : engine.telemetry.masterPeakDb; clip: engine.telemetry.masterClip === true; onMoved: function (db) { engine.setMaster(db) } }
                         MeterBar { Layout.fillHeight: true; Layout.topMargin: 8; peakDb: engine.telemetry.masterLDb; rmsDb: engine.telemetry.masterRmsDb; clip: engine.telemetry.masterClip }

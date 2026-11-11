@@ -113,6 +113,33 @@ Popup {
                                         Knob { anchors.horizontalCenter: parent.horizontalCenter; width: 84; size: 44; vintage: true; paper: ed.ink; minText: ed.ends(pi, 0); maxText: ed.ends(pi, 1); label: ""; valueText: ""
                                             defaultValue: ed.params[pi] ? ed.params[pi]["default"] : 0.5; readonly property int rev: ed.rev; onRevChanged: sync(); Component.onCompleted: sync()
                                             function sync() { if (ed.params[pi]) value = ed.params[pi].value } onMoved: function (v) { ed.setParam(pi, v) } height: 74 } } } } } }
+                    // SYNC DELAY: the time read-out. The delay in milliseconds, the tempo, the note keys, TAP and the echoes as they die away
+                    Section { id: dly; objectName: "delayTime"; visible: ed.fx === "syncdelay" && ed.params.length >= 3; head: "DELAY TIME"; width: 236
+                        readonly property real bpm: ed.params[0] ? 60 + ed.params[0].value * 140 : 120
+                        readonly property int note: ed.params[1] ? Math.min(5, Math.floor(ed.params[1].value * 5.999)) : 1
+                        readonly property real ms: 60000 / bpm * [2, 1, 0.75, 0.5, 1 / 3, 0.25][note]
+                        readonly property real fb: ed.params[2] ? ed.params[2].value * 0.92 : 0
+                        property var taps: []
+                        function tap() { const now = Date.now(); let t = taps.filter(function (x) { return now - x < 2200 }); t.push(now); if (t.length > 5) t = t.slice(t.length - 5); taps = t
+                            if (t.length >= 2) { const b = 60000 * (t.length - 1) / (t[t.length - 1] - t[0]); ed.setParam(0, Math.max(0, Math.min(1, (b - 60) / 140))); ed.rev++ } }
+                        Rectangle { x: 10; y: 2; width: 216; height: 86; radius: 4; color: "#0d1410"; border.color: "#22201b"; border.width: 1.5
+                            Text { objectName: "delayMs"; x: 10; y: 4; text: dly.ms.toFixed(0); color: "#7dffa8"; font.family: Theme.mono; font.pixelSize: 30; font.bold: true }
+                            Text { x: 10; y: 40; text: "ms"; color: "#4fae74"; font.family: Theme.mono; font.pixelSize: 9 }
+                            Text { anchors.right: parent.right; anchors.rightMargin: 10; y: 6; text: dly.bpm.toFixed(0) + " BPM"; color: "#7dffa8"; font.family: Theme.mono; font.pixelSize: 12; font.bold: true }
+                            Text { anchors.right: parent.right; anchors.rightMargin: 10; y: 24; text: ["1/2", "1/4", "1/8 .", "1/8", "1/8 T", "1/16"][dly.note]; color: "#4fae74"; font.family: Theme.mono; font.pixelSize: 11 }
+                            Row { x: 10; y: 54; spacing: 4; height: 26
+                                Repeater { model: 12
+                                    delegate: Item { width: 13; height: 26
+                                        Rectangle { anchors.bottom: parent.bottom; width: 13; radius: 1; height: Math.max(1, 26 * Math.pow(dly.fb, index)); color: index === 0 ? "#7dffa8" : "#4fae74"; opacity: Math.pow(dly.fb, index) > 0.02 ? 1 : 0.25 } } } } }
+                        Grid { x: 10; y: 96; columns: 3; columnSpacing: 6; rowSpacing: 6
+                            Repeater { model: ["1/2", "1/4", "1/8 .", "1/8", "1/8 T", "1/16"]
+                                delegate: Rectangle { width: 68; height: 24; radius: 3; color: dly.note === index ? ed.ink : "transparent"; border.color: ed.ink; border.width: 1.2
+                                    Text { anchors.centerIn: parent; text: modelData; color: dly.note === index ? ed.paper : ed.ink; font.family: ed.face1; font.pixelSize: 12; font.weight: Font.DemiBold }
+                                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { ed.setParam(1, (index + 0.5) / 6); ed.rev++ } } } } }
+                        Rectangle { x: 10; y: 160; width: 216; height: 34; radius: 4; color: tapA.pressed ? ed.red : "transparent"; border.color: ed.red; border.width: 1.5
+                            Text { anchors.centerIn: parent; text: "TAP TEMPO"; color: tapA.pressed ? ed.paper : ed.red; font.family: ed.face1; font.pixelSize: 13; font.weight: Font.Bold; font.letterSpacing: 2 }
+                            MouseArea { id: tapA; objectName: "delayTap"; anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onPressed: dly.tap() } }
+                        Text { x: 10; y: 198; width: 216; horizontalAlignment: Text.AlignHCenter; text: "TAP IN TIME WITH THE MUSIC"; color: ed.ink; opacity: 0.7; font.family: ed.face1; font.pixelSize: 8; font.letterSpacing: 1 } }
                     // the name plate, the lamp and the ON / OFF switch
                     Item { width: 150; height: ed.panelH - 16
                         MouseArea { anchors.fill: parent; property point p0; cursorShape: Qt.SizeAllCursor; onPressed: function (m) { p0 = Qt.point(m.x, m.y) } onPositionChanged: function (m) { if (pressed) { ed.x += (m.x - p0.x) * ed.fit; ed.y += (m.y - p0.y) * ed.fit } } }
