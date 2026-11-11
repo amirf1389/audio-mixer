@@ -1,11 +1,10 @@
-// The editor window of a rack plug-in, in the layout studio plug-ins share: a header bar (name, preset browser with previous / next,
-// A / B compare, bypass), a display that draws what the plug-in is doing (the amp's transfer curve, a reverb's decay, a delay's echoes, a
-// modulation's sweep), one knob per parameter with its value under it, and an input level meter. Flat and dark, one accent colour per
-// effect. Hosted VST plug-ins get the same window with one knob per parameter. Drag the header to move it.
+// The editor window of a rack plug-in, drawn as a vintage rack unit: a wooden frame, a cream faceplate, the controls in outlined
+// sections with their titles, black skirted knobs with scale marks, a PROGRAM window with - / + for the presets, an A / B selector, a lamp
+// with an ON / OFF switch (bypass) and a needle meter for the input level. Our own design in that tradition; no other maker's name, badge
+// or panel is copied. Hosted VST plug-ins get the same panel with their parameters in sections of four. Drag the name plate to move it.
 import QtQuick
 import AmixOS   // this module: brings the Theme singleton (a plain directory import would see Theme as an ordinary type)
 import QtQuick.Controls
-import QtQuick.Layouts
 
 Popup {
     id: ed
@@ -19,96 +18,110 @@ Popup {
     property int rev: 0
     property var presets: []
     property int presetAt: -1
-    property var stateA: null     // A / B: the knob values kept on the other side
+    property var stateA: null
     property var stateB: null
     property string side: "A"
     property real level: -120
+    property real needle: -40
     readonly property string fx: kind.indexOf("fx:") === 0 ? kind.substring(3) : ""
-    readonly property var accents: ({ tubeamp: "#f59e0b", preamp: "#f87171", postamp: "#38bdf8", hall: "#60a5fa", room: "#2dd4bf", reverb: "#818cf8", delay: "#fbbf24", chorus: "#a78bfa", flanger: "#e879f9", phaser: "#fb923c", tremolo: "#4ade80", wah: "#facc15", crusher: "#22d3ee", exciter: "#fb7185", drive: "#f97316" })
-    readonly property color accent: accents[fx] || "#a78bfa"
-    readonly property color panel: "#15171c"
-    readonly property color panelHi: "#1d2027"
-    readonly property color edge: "#2a2e37"
-    readonly property color text: "#e6e8ec"
-    readonly property color sub: "#8b93a1"
-    function openFor(strip_, slot_, kind_, title_) { strip = strip_; slot = slot_; kind = kind_; title = title_; presets = engine.rackPresets(kind_); presetAt = -1; stateA = null; stateB = null; side = "A"; reload(); x = Math.max(8, (parent.width - width) / 2); y = Math.max(8, (parent.height - height) / 2); open() }
-    function reload() { params = engine.pluginParams(strip, slot); const p = engine.plugins(strip)[slot]; bypass = p ? p.bypass : false; rev++; screen.requestPaint() }
-    function setParam(i, v) { engine.setPluginParam(strip, slot, params[i].id, v); const t = engine.pluginParams(strip, slot); if (t.length === params.length) params = t; presetAt = -1; screen.requestPaint() }
-    function val(i) { return params[i] ? params[i].value : 0.5 }
+    readonly property color paper: "#e8e3d3"
+    readonly property color paperLo: "#d6d0be"
+    readonly property color ink: "#1b1b1b"
+    readonly property color red: "#b91c1c"
+    // the sections of each panel: [title, [parameter indices]] (the last parameter of a built-in effect is MIX: it lives in BLEND)
+    readonly property var layouts: ({
+        tubeamp: [["PRE AMP", [0]], ["TONE STACK", [1, 2, 3]], ["POWER AMP", [4, 5]]], preamp: [["INPUT", [0, 1]], ["COLOUR", [2]], ["OUTPUT", [3]]], postamp: [["OUTPUT", [0]], ["TONE", [1]], ["PROTECT", [2]]],
+        hall: [["SPACE", [0, 1]], ["DAMPING", [2]], ["PRE DELAY", [3]], ["MOD", [4]]], room: [["SPACE", [0, 1]], ["DAMPING", [2]], ["REFLECTIONS", [3]]], reverb: [["REVERBERATION", [0, 1]], ["PRE DELAY", [2]], ["STEREO", [3]]],
+        delay: [["ECHO", [0, 1]], ["TONE", [2]], ["STEREO", [3]]], chorus: [["MOD", [0, 1]], ["STEREO", [2]]], flanger: [["MOD", [0, 1]], ["REGEN", [2]]], phaser: [["MOD", [0, 1]], ["REGEN", [2]]], tremolo: [["MOD", [0, 1]], ["WAVE", [2]]],
+        wah: [["FOLLOWER", [0, 1]], ["FILTER", [2]]], crusher: [["DIGITAL", [0, 1]], ["FILTER", [2]]], exciter: [["HARMONICS", [0, 2]], ["TUNE", [1]]], drive: [["VALVE", [0]], ["TONE", [1]], ["OUTPUT", [2]]] })
+    readonly property var sections: { const n = params.length; if (!n) return []; const l = layouts[fx]; if (l) return l
+        const out = [], m = Math.min(n, 24); for (let i = 0; i < m; i += 4) { const idx = []; for (let j = i; j < Math.min(m, i + 4); j++) idx.push(j); out.push([(i + 1) + " – " + Math.min(m, i + 4), idx]) } return out }
+    readonly property int mixIndex: fx && params.length ? params.length - 1 : -1
+    function openFor(strip_, slot_, kind_, title_) { strip = strip_; slot = slot_; kind = kind_; title = title_; presets = engine.rackPresets(kind_); presetAt = -1; stateA = null; stateB = null; side = "A"; reload(); x = Math.max(4, (parent.width - width) / 2); y = Math.max(4, (parent.height - height) / 2); open() }
+    function reload() { params = engine.pluginParams(strip, slot); const p = engine.plugins(strip)[slot]; bypass = p ? p.bypass : false; rev++ }
+    function setParam(i, v) { engine.setPluginParam(strip, slot, params[i].id, v); const t = engine.pluginParams(strip, slot); if (t.length === params.length) params = t; presetAt = -1 }
     function snapshot() { const a = []; for (let i = 0; i < params.length; i++) a.push(params[i].value); return a }
     function restore(a) { if (!a) return; for (let i = 0; i < params.length && i < a.length; i++) engine.setPluginParam(strip, slot, params[i].id, a[i]); reload() }
-    function flip() { if (side === "A") { stateA = snapshot(); side = "B"; if (stateB) restore(stateB) } else { stateB = snapshot(); side = "A"; if (stateA) restore(stateA) } }
+    function pick(s) { if (s === side) return; if (side === "A") stateA = snapshot(); else stateB = snapshot(); side = s; restore(s === "A" ? stateA : stateB) }
     function preset(step) { if (!presets.length) return; presetAt = (presetAt + step + presets.length) % presets.length; engine.applyRackPreset(strip, slot, presets[presetAt].id); const at = presetAt; reload(); presetAt = at }
-    readonly property int cols: Math.min(7, Math.max(3, params.length <= 7 ? params.length : Math.ceil(params.length / Math.ceil(params.length / 7))))
-    width: Math.max(560, cols * 92 + 96); height: Math.min(parent.height - 16, 300 + Math.ceil(Math.max(1, params.length) / cols) * 104)
+    readonly property real fit: Math.min(1, (parent ? parent.width - 12 : 1200) / (face.implicitWidth + 36))
+    width: (face.implicitWidth + 36) * fit; height: (panelH + 36) * fit
+    readonly property int panelH: 262
     modal: false; closePolicy: Popup.CloseOnEscape; padding: 0
-    Timer { interval: 60; running: ed.visible; repeat: true; onTriggered: { const m = engine.meters[ed.strip]; ed.level = m ? (m.inDb !== undefined ? m.inDb : m.peakDb) : -120; if (["chorus", "flanger", "phaser", "tremolo"].indexOf(ed.fx) >= 0) screen.requestPaint() } }
-    background: Rectangle { radius: 10; color: ed.panel; border.color: ed.edge; border.width: 1
-        Rectangle { width: parent.width; height: 3; radius: 2; color: ed.accent; opacity: ed.bypass ? 0.25 : 1 } }
-    component Chip: Rectangle { property string label; property bool on: false; signal clicked(); implicitWidth: Math.max(30, ct.implicitWidth + 16); implicitHeight: 24; radius: 5; color: on ? ed.accent : ed.panelHi; border.color: on ? ed.accent : ed.edge
-        Text { id: ct; anchors.centerIn: parent; text: label; color: parent.on ? "#0b0c0f" : ed.text; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
+    Timer { interval: 40; running: ed.visible; repeat: true; onTriggered: { const m = engine.meters[ed.strip]; const l = m ? (m.inDb !== undefined ? m.inDb : m.peakDb) : -120; ed.level = l; const tgt = ed.bypass ? -40 : Math.max(-40, Math.min(3, l + 12)); ed.needle += (tgt - ed.needle) * (tgt > ed.needle ? 0.35 : 0.12); vu.requestPaint() } }
+    background: Item {}
+    component Section: Rectangle { property string head; default property alias body: inner.data; height: ed.panelH - 16; color: "transparent"; border.color: ed.ink; border.width: 1; radius: 7
+        Text { id: st; anchors.horizontalCenter: parent.horizontalCenter; y: 7; text: parent.head; color: ed.ink; font.family: Theme.sans; font.pixelSize: 11; font.weight: Font.DemiBold; font.letterSpacing: 1 }
+        Item { id: inner; x: 0; y: 26; width: parent.width; height: parent.height - 26 } }
+    component Key: Rectangle { property string label; signal clicked(); width: 22; height: 20; radius: 3; color: ka.pressed ? "#3a3a3a" : "#161616"; border.color: "#000"
+        Text { anchors.centerIn: parent; text: label; color: "#f5f5f0"; font.pixelSize: 13; font.bold: true } MouseArea { id: ka; anchors.fill: parent; onClicked: parent.clicked() } }
     contentItem: Item {
-        // header bar
-        Rectangle { id: bar; x: 1; y: 4; width: parent.width - 2; height: 44; color: "transparent"
-            MouseArea { anchors.fill: parent; property point p0; cursorShape: Qt.SizeAllCursor; onPressed: function (m) { p0 = Qt.point(m.x, m.y) } onPositionChanged: function (m) { if (pressed) { ed.x += m.x - p0.x; ed.y += m.y - p0.y } } }
-            RowLayout { anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 12; spacing: 8
-                Column { spacing: 1
-                    Text { text: ed.title.toUpperCase(); color: ed.text; font.family: Theme.sans; font.pixelSize: 15; font.weight: Font.DemiBold; font.letterSpacing: 2 }
-                    Text { text: (ed.fx ? "AMFB AUDIO" : i18n.t("HOSTED PLUG-IN", i18n.lang)) + "  ·  CH " + (ed.strip + 1 < 10 ? "0" : "") + (ed.strip + 1) + "  ·  " + i18n.t("SLOT ", i18n.lang) + (ed.slot + 1); color: ed.sub; font.family: Theme.mono; font.pixelSize: 7; font.letterSpacing: 1.5 } }
-                Item { Layout.fillWidth: true }
-                RowLayout { visible: ed.presets.length > 0; spacing: 0   // the preset browser
-                    Chip { label: "‹"; onClicked: ed.preset(-1) }
-                    Rectangle { implicitWidth: 190; implicitHeight: 24; color: "#0d0e12"; border.color: ed.edge
-                        Text { anchors.centerIn: parent; width: parent.width - 12; horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight; text: ed.presetAt >= 0 ? ed.presets[ed.presetAt].name : i18n.t("presets", i18n.lang) + "  (" + ed.presets.length + ")"; color: ed.presetAt >= 0 ? ed.accent : ed.sub; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
-                        MouseArea { anchors.fill: parent; onClicked: presetMenu.open() }
-                        Menu { id: presetMenu; y: parent.height; width: 240; height: Math.min(360, implicitHeight)
-                            Repeater { model: ed.presets; delegate: MenuItem { text: modelData.name; font.pixelSize: 11; onTriggered: { ed.presetAt = index - 1; ed.preset(1) } } } } }
-                    Chip { label: "›"; onClicked: ed.preset(1) } }
-                Chip { label: "A"; on: ed.side === "A"; onClicked: if (ed.side !== "A") ed.flip() }
-                Chip { label: "B"; on: ed.side === "B"; onClicked: if (ed.side !== "B") ed.flip() }
-                Chip { label: ed.bypass ? i18n.t("BYPASSED", i18n.lang) : i18n.t("ON", i18n.lang); on: !ed.bypass; onClicked: { engine.setPluginBypass(ed.strip, ed.slot, !ed.bypass); ed.bypass = !ed.bypass } }
-                Chip { label: "✕"; onClicked: ed.close() } } }
-        Rectangle { x: 0; y: 50; width: parent.width; height: 1; color: ed.edge }
-        // the display + the level meter
-        Rectangle { id: scr; x: 16; y: 62; width: parent.width - 60; height: 150; radius: 6; color: "#0b0c10"; border.color: ed.edge; clip: true
-            Canvas { id: screen; anchors.fill: parent; anchors.margins: 1; opacity: ed.bypass ? 0.35 : 1
-                property real t: 0
-                onPaint: { const c = getContext("2d"), w = width, h = height; c.clearRect(0, 0, w, h); c.lineWidth = 1; c.strokeStyle = "rgba(255,255,255,0.05)"
-                    for (let i = 1; i < 8; i++) { c.beginPath(); c.moveTo(w * i / 8, 0); c.lineTo(w * i / 8, h); c.stroke() } for (let i = 1; i < 4; i++) { c.beginPath(); c.moveTo(0, h * i / 4); c.lineTo(w, h * i / 4); c.stroke() }
-                    const f = ed.fx, v = ed.val, col = ed.accent; t += 0.06; c.strokeStyle = col; c.fillStyle = Qt.rgba(col.r, col.g, col.b, 0.14); c.lineWidth = 2; c.lineJoin = "round"
-                    const line = function (fn, fill) { c.beginPath(); for (let x = 0; x <= w; x += 2) { const y = fn(x / w); if (x === 0) c.moveTo(x, y); else c.lineTo(x, y) } c.stroke(); if (fill) { c.lineTo(w, h); c.lineTo(0, h); c.closePath(); c.fill() } }
-                    if (f === "tubeamp" || f === "drive" || f === "preamp" || f === "postamp" || f === "exciter" || f === "crusher") {   // the transfer curve: input left to right, output bottom to top
-                        const g = f === "tubeamp" ? Math.pow(10, v(0) * 46 / 20) * 0.08 : f === "drive" ? Math.pow(10, v(0) * 36 / 20) * 0.25 : f === "preamp" ? 1 + 2 * v(2) : f === "postamp" ? 1 / Math.max(0.25, Math.pow(10, -v(2) * 12 / 20)) : f === "exciter" ? 1 + 6 * v(0) : 1
-                        const steps = f === "crusher" ? Math.pow(2, Math.floor(4 + v(0) * 12) - 1) : 0
-                        c.strokeStyle = "rgba(255,255,255,0.18)"; c.lineWidth = 1; c.beginPath(); c.moveTo(0, h); c.lineTo(w, 0); c.stroke(); c.strokeStyle = col; c.lineWidth = 2
-                        line(function (u) { const x = u * 2 - 1; let y = f === "tubeamp" ? Math.tanh(x * g * 4 + 0.18) - Math.tanh(0.18) : Math.tanh(x * g) / Math.tanh(Math.max(1, g)); if (steps) y = Math.round(x * Math.min(steps, 24)) / Math.min(steps, 24); return h / 2 - Math.max(-1, Math.min(1, y)) * (h / 2 - 8) }, false) }
-                    else if (f === "reverb" || f === "hall" || f === "room") {   // the decay: level against time
-                        const rt = f === "hall" ? 0.5 + v(1) * v(1) * 19.5 : f === "room" ? 0.1 + v(1) * 2.9 : 0.3 + v(0) * 11.7, span = f === "room" ? 3 : f === "hall" ? 12 : 8, pre = f === "hall" ? v(3) * 0.25 / span : f === "reverb" ? v(2) * 0.1 / span : 0
-                        line(function (u) { if (u < pre) return h - 4; const s = (u - pre) * span; return 10 + (h - 20) * Math.min(1, s / rt * 0.9 + 0.0) * 1 }, false)
-                        c.beginPath(); c.moveTo(pre * w, h); c.lineTo(pre * w, 10); for (let x = pre * w; x <= w; x += 2) { const s = (x / w - pre) * span; c.lineTo(x, 10 + (h - 12) * (1 - Math.exp(-6.9 * s / rt))) } c.lineTo(w, h); c.closePath(); c.fill()
-                        c.fillStyle = ed.sub; c.font = "9px monospace"; c.fillText("RT60 " + rt.toFixed(1) + " s", 8, 14) }
-                    else if (f === "delay") {   // the echoes
-                        const fb = v(1), n = 9; for (let k = 0; k < n; k++) { const a = Math.pow(0.25 + fb * 0.7, k), x = 20 + k * (w - 40) / n * (0.5 + v(0)); if (x > w - 6) break; c.fillStyle = Qt.rgba(col.r, col.g, col.b, 0.25 + 0.75 * a); c.fillRect(x, h - 8 - a * (h - 24), 7, a * (h - 24)) } }
-                    else if (f === "chorus" || f === "flanger" || f === "phaser" || f === "tremolo") {   // the sweep, moving
-                        const rate = 1 + v(0) * 5, depth = 0.15 + v(1) * 0.8; line(function (u) { return h / 2 - Math.sin(u * rate * 6.283 + t) * depth * (h / 2 - 10) }, true) }
-                    else if (f === "wah") { const fc = 0.15 + v(1) * 0.6, q = 4 + v(2) * 30; line(function (u) { const d = (u - fc) * q; return h - 10 - (h - 24) / (1 + d * d) }, true) }
-                    else { const n = ed.params.length; for (let i = 0; i < n; i++) { const bw = (w - 16) / Math.max(1, n); c.fillStyle = Qt.rgba(col.r, col.g, col.b, 0.35 + 0.5 * v(i)); c.fillRect(8 + i * bw + 2, h - 8 - v(i) * (h - 20), bw - 4, v(i) * (h - 20)) } } } }
-            Text { anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 8; text: ed.bypass ? i18n.t("BYPASSED", i18n.lang) : ""; color: ed.sub; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } }
-        Rectangle { x: parent.width - 36; y: 62; width: 20; height: 150; radius: 4; color: "#0b0c10"; border.color: ed.edge; clip: true   // input level, 0 .. -60 dBFS
-            Rectangle { anchors.bottom: parent.bottom; anchors.horizontalCenter: parent.horizontalCenter; width: 12; height: Math.max(0, Math.min(1, (ed.level + 60) / 60)) * (parent.height - 4); y: 2; radius: 2
-                gradient: Gradient { GradientStop { position: 0; color: ed.level > -3 ? "#ef4444" : "#facc15" } GradientStop { position: 0.35; color: "#22c55e" } GradientStop { position: 1; color: "#15803d" } } } }
-        Text { x: parent.width - 40; y: 216; width: 28; horizontalAlignment: Text.AlignHCenter; text: i18n.t("IN", i18n.lang); color: ed.sub; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
-        // the knobs
-        Flickable { x: 16; y: 232; width: parent.width - 32; height: parent.height - y - 30; contentHeight: grid.implicitHeight; clip: true
-            Grid { id: grid; columns: ed.cols; columnSpacing: Math.max(4, (parent.width - ed.cols * 84) / Math.max(1, ed.cols - 1) - 0.01); rowSpacing: 6
-                Repeater { model: ed.params.length
-                    delegate: Knob { width: 84; size: 56; tint: ed.accent; cap: "#262a33"; ink: ed.text
-                        label: ed.params[index] ? ed.params[index].title : ""; valueText: ed.params[index] ? ed.params[index].text : ""; defaultValue: ed.params[index] ? ed.params[index]["default"] : 0.5
-                        readonly property int rev: ed.rev; onRevChanged: sync(); Component.onCompleted: sync()
-                        function sync() { if (ed.params[index]) value = ed.params[index].value }
-                        onMoved: function (v) { ed.setParam(index, v) } } } } }
-        Rectangle { x: 0; y: parent.height - 26; width: parent.width; height: 1; color: ed.edge }
-        Text { x: 16; y: parent.height - 19; text: i18n.t("drag a knob up or down · Shift = fine · double-click = default · wheel", i18n.lang); color: ed.sub; font.family: Theme.mono; font.pixelSize: 7 }
-        Text { anchors.right: parent.right; anchors.rightMargin: 16; y: parent.height - 19; text: ed.fx ? "AMFB AUDIO" : (ed.kind.indexOf("vst2:") === 0 ? "VST2" : "VST3") + "  ·  " + i18n.t("generic controls", i18n.lang); color: ed.sub; font.family: Theme.mono; font.pixelSize: 7; font.letterSpacing: 2 }
+        Rectangle { id: wood; width: face.implicitWidth + 36; height: ed.panelH + 36; transformOrigin: Item.TopLeft; scale: ed.fit; radius: 5   // the wooden frame
+            gradient: Gradient { GradientStop { position: 0; color: "#9a6a36" } GradientStop { position: 0.5; color: "#7d5225" } GradientStop { position: 1; color: "#8c5d2c" } } border.color: "#3b2410"; border.width: 2
+            Rectangle { x: 14; y: 14; width: parent.width - 28; height: parent.height - 28; radius: 4; border.color: "#8d897c"   // the faceplate
+                gradient: Gradient { GradientStop { position: 0; color: ed.paper } GradientStop { position: 1; color: ed.paperLo } }
+                Repeater { model: 4; delegate: Rectangle { width: 9; height: 9; radius: 4.5; x: index % 2 ? parent.width - 14 : 5; y: index < 2 ? 5 : parent.height - 14; color: "#8a8a84"; border.color: "#44443f"; Rectangle { anchors.centerIn: parent; width: 6; height: 1.3; color: "#3a3a36"; rotation: 20 + index * 50 } } }
+                Row { id: face; x: 8; y: 8; spacing: 6
+                    // PROGRAM (presets) + the A / B selector
+                    Section { head: ed.presets.length ? "PROGRAM" : "SETTING"; width: 138
+                        Rectangle { visible: ed.presets.length > 0; x: 10; y: 4; width: parent.width - 20; height: 62; radius: 5; color: "#0e0e0e"; border.color: "#000"
+                            Rectangle { x: 6; y: 5; width: parent.width - 12; height: 28; radius: 2; gradient: Gradient { GradientStop { position: 0; color: "#f3e9b8" } GradientStop { position: 1; color: "#d9c98a" } }
+                                Text { anchors.centerIn: parent; width: parent.width - 8; horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight; text: ed.presetAt >= 0 ? ed.presets[ed.presetAt].name : "—  " + ed.presets.length + "  —"; color: "#2a2410"; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                                Rectangle { y: parent.height / 2; width: parent.width; height: 1; color: ed.red; opacity: 0.5 } }
+                            Key { x: 22; y: 38; label: "–"; onClicked: ed.preset(-1) } Key { x: parent.width - 44; y: 38; label: "+"; onClicked: ed.preset(1) } }
+                        Text { visible: ed.presets.length === 0; x: 10; y: 16; width: parent.width - 20; wrapMode: Text.WordWrap; horizontalAlignment: Text.AlignHCenter; text: "CH " + (ed.strip + 1) + "\nSLOT " + (ed.slot + 1); color: ed.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true }
+                        Text { anchors.horizontalCenter: parent.horizontalCenter; y: 84; text: "SELECT"; color: ed.ink; font.family: Theme.sans; font.pixelSize: 10; font.weight: Font.DemiBold }
+                        Item { anchors.horizontalCenter: parent.horizontalCenter; y: 102; width: 90; height: 96   // the A / B selector: a pointer knob
+                            Text { x: 6; y: 0; text: "A"; color: ed.side === "A" ? ed.red : ed.ink; font.family: Theme.sans; font.pixelSize: 12; font.bold: true } Text { x: 74; y: 0; text: "B"; color: ed.side === "B" ? ed.red : ed.ink; font.family: Theme.sans; font.pixelSize: 12; font.bold: true }
+                            Rectangle { anchors.horizontalCenter: parent.horizontalCenter; y: 22; width: 54; height: 54; radius: 27; color: "#101010"; border.color: "#000"
+                                Rectangle { anchors.centerIn: parent; width: 16; height: 56; radius: 6; color: "#1d1d1d"; border.color: "#3a3a3a"; rotation: ed.side === "A" ? -32 : 32; Behavior on rotation { NumberAnimation { duration: 120 } } Rectangle { anchors.horizontalCenter: parent.horizontalCenter; y: 3; width: 3; height: 16; radius: 1; color: "#f5f5f0" } } }
+                            MouseArea { anchors.fill: parent; onClicked: ed.pick(ed.side === "A" ? "B" : "A") } } }
+                    // the sections of the effect
+                    Repeater { model: ed.sections
+                        delegate: Section { head: modelData[0]; readonly property var idx: modelData[1]; readonly property int cols: Math.ceil(idx.length / 2); width: Math.max(96, cols * 86 + 14)
+                            Grid { anchors.horizontalCenter: parent.horizontalCenter; y: idx.length <= 1 ? 54 : idx.length <= cols ? 54 : 2; columns: cols; columnSpacing: 2; rowSpacing: 2
+                                Repeater { model: idx
+                                    delegate: Column { width: 84; spacing: 0; readonly property int pi: modelData
+                                        Text { anchors.horizontalCenter: parent.horizontalCenter; text: ed.params[pi] ? ed.params[pi].title : ""; color: ed.ink; font.family: Theme.sans; font.pixelSize: 10; font.weight: Font.DemiBold }
+                                        Text { anchors.horizontalCenter: parent.horizontalCenter; text: ed.params[pi] ? ed.params[pi].text : ""; color: ed.ink; font.family: Theme.sans; font.pixelSize: 9 }
+                                        Knob { anchors.horizontalCenter: parent.horizontalCenter; width: 84; size: 50; vintage: true; paper: ed.ink; minText: "0"; maxText: "10"; label: ""; valueText: ""
+                                            defaultValue: ed.params[pi] ? ed.params[pi]["default"] : 0.5; readonly property int rev: ed.rev; onRevChanged: sync(); Component.onCompleted: sync()
+                                            function sync() { if (ed.params[pi]) value = ed.params[pi].value } onMoved: function (v) { ed.setParam(pi, v) } height: 70 } } } } } }
+                    // the name plate, the lamp and the ON / OFF switch
+                    Item { width: 150; height: ed.panelH - 16
+                        MouseArea { anchors.fill: parent; property point p0; cursorShape: Qt.SizeAllCursor; onPressed: function (m) { p0 = Qt.point(m.x, m.y) } onPositionChanged: function (m) { if (pressed) { ed.x += (m.x - p0.x) * ed.fit; ed.y += (m.y - p0.y) * ed.fit } } }
+                        Text { anchors.horizontalCenter: parent.horizontalCenter; y: 6; text: "AMFB  X1"; color: ed.ink; font.family: Theme.sans; font.pixelSize: 17; font.weight: Font.Bold; font.letterSpacing: 2 }
+                        Rectangle { anchors.horizontalCenter: parent.horizontalCenter; y: 34; width: 26; height: 26; radius: 2; color: ed.red; border.color: "#6b0f0f"; Text { anchors.centerIn: parent; text: "A"; color: "#f3e9b8"; font.family: Theme.sans; font.pixelSize: 15; font.weight: Font.Black } }
+                        Text { anchors.horizontalCenter: parent.horizontalCenter; y: 68; width: parent.width - 6; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap; text: ed.title.toUpperCase(); color: ed.ink; font.family: Theme.sans; font.pixelSize: 12; font.weight: Font.Bold; font.letterSpacing: 1 }
+                        Rectangle { anchors.horizontalCenter: parent.horizontalCenter; y: 112; width: 46; height: 46; radius: 23; color: "#ef4444"; opacity: ed.bypass ? 0 : 0.22 }
+                        Rectangle { anchors.horizontalCenter: parent.horizontalCenter; y: 123; width: 24; height: 24; radius: 12; border.color: "#3b0a0a"; border.width: 2   // the lamp
+                            gradient: Gradient { GradientStop { position: 0; color: ed.bypass ? "#5b1414" : "#ff6b6b" } GradientStop { position: 1; color: ed.bypass ? "#3a0c0c" : "#dc2626" } } }
+                        Row { anchors.horizontalCenter: parent.horizontalCenter; y: 166; spacing: 8
+                            Text { anchors.verticalCenter: parent.verticalCenter; text: "OFF"; color: ed.ink; font.family: Theme.sans; font.pixelSize: 9; font.weight: Font.DemiBold }
+                            Rectangle { width: 34; height: 22; radius: 11; color: "#bdb8a8"; border.color: "#5a574d"   // the toggle
+                                Rectangle { width: 12; height: 26; radius: 5; y: -2; x: ed.bypass ? 4 : 18; color: "#d9d9d6"; border.color: "#55554f"; Behavior on x { NumberAnimation { duration: 90 } } }
+                                MouseArea { anchors.fill: parent; anchors.margins: -6; onClicked: { engine.setPluginBypass(ed.strip, ed.slot, !ed.bypass); ed.bypass = !ed.bypass } } }
+                            Text { anchors.verticalCenter: parent.verticalCenter; text: "ON"; color: ed.ink; font.family: Theme.sans; font.pixelSize: 9; font.weight: Font.DemiBold } }
+                        Text { anchors.horizontalCenter: parent.horizontalCenter; y: 204; horizontalAlignment: Text.AlignHCenter; text: "AMFB AUDIO\n" + (ed.fx ? "CH " + (ed.strip + 1) + " · SLOT " + (ed.slot + 1) : (ed.kind.indexOf("vst2:") === 0 ? "VST2" : "VST3") + " HOSTED"); color: ed.ink; font.family: Theme.sans; font.pixelSize: 9; font.letterSpacing: 2; lineHeight: 1.2 } }
+                    // the meter and BLEND
+                    Column { spacing: 6; width: 150
+                        Rectangle { width: 150; height: 104; radius: 5; color: "#77736a"; border.color: "#3e3c36"   // the needle meter (input level; 0 = -12 dBFS)
+                            Canvas { id: vu; x: 6; y: 6; width: 138; height: 92
+                                onPaint: { const c = getContext("2d"), w = width, h = height; c.clearRect(0, 0, w, h); const g = c.createRadialGradient(w / 2, h * 0.9, 4, w / 2, h * 0.6, w * 0.8); g.addColorStop(0, ed.bypass ? "#cfc79a" : "#fff3b8"); g.addColorStop(1, ed.bypass ? "#a39b73" : "#e2c873"); c.fillStyle = g; c.fillRect(0, 0, w, h)
+                                    const cx = w / 2, cy = h * 1.05, r = h * 0.86, a0 = Math.PI * 1.25, a1 = Math.PI * 1.75, at = function (db) { return a0 + (a1 - a0) * (Math.max(-40, Math.min(3, db)) + 40) / 43 }
+                                    c.lineWidth = 2; c.strokeStyle = "#1b1b1b"; c.beginPath(); c.arc(cx, cy, r, a0, at(0)); c.stroke(); c.strokeStyle = "#b91c1c"; c.lineWidth = 4; c.beginPath(); c.arc(cx, cy, r, at(0), a1); c.stroke()
+                                    c.font = "7px sans-serif"; c.fillStyle = "#1b1b1b"; const marks = [-40, -20, -10, -5, 0, 3]; for (let i = 0; i < marks.length; i++) { const t = at(marks[i]); c.strokeStyle = marks[i] >= 0 ? "#b91c1c" : "#1b1b1b"; c.lineWidth = 1.2; c.beginPath(); c.moveTo(cx + Math.cos(t) * (r - 7), cy + Math.sin(t) * (r - 7)); c.lineTo(cx + Math.cos(t) * (r + 3), cy + Math.sin(t) * (r + 3)); c.stroke(); c.fillText((marks[i] > 0 ? "+" : "") + marks[i], cx + Math.cos(t) * (r - 17) - 5, cy + Math.sin(t) * (r - 17) + 2) }
+                                    c.fillText("VU", cx - 5, h * 0.62); const n = at(ed.needle); c.strokeStyle = "#111"; c.lineWidth = 1.6; c.beginPath(); c.moveTo(cx + Math.cos(n) * 12, cy + Math.sin(n) * 12); c.lineTo(cx + Math.cos(n) * (r + 1), cy + Math.sin(n) * (r + 1)); c.stroke()
+                                    c.fillStyle = "#2a2a2a"; c.fillRect(0, h - 12, w, 12) } } }
+                        Section { head: "BLEND"; width: 150; height: ed.panelH - 16 - 110
+                            Column { visible: ed.mixIndex >= 0; anchors.horizontalCenter: parent.horizontalCenter; y: 0; width: 84; spacing: 0
+                                Text { anchors.horizontalCenter: parent.horizontalCenter; text: "MIX  " + (ed.params[ed.mixIndex] ? ed.params[ed.mixIndex].text : ""); color: ed.ink; font.family: Theme.sans; font.pixelSize: 9; font.weight: Font.DemiBold }
+                                Knob { anchors.horizontalCenter: parent.horizontalCenter; width: 84; height: 68; size: 48; vintage: true; paper: ed.ink; minText: "0"; maxText: "100"; defaultValue: ed.params[ed.mixIndex] ? ed.params[ed.mixIndex]["default"] : 1
+                                    readonly property int rev: ed.rev; onRevChanged: sync(); Component.onCompleted: sync(); function sync() { if (ed.params[ed.mixIndex]) value = ed.params[ed.mixIndex].value } onMoved: function (v) { ed.setParam(ed.mixIndex, v) } } }
+                            Text { visible: ed.mixIndex < 0; anchors.centerIn: parent; text: "—"; color: ed.ink } } }
+                }
+                Rectangle { x: parent.width - 26; y: 6; width: 18; height: 14; radius: 2; color: "#161616"; Text { anchors.centerIn: parent; text: "✕"; color: "#f5f5f0"; font.pixelSize: 9 } MouseArea { anchors.fill: parent; anchors.margins: -4; onClicked: ed.close() } }
+            }
+        }
     }
 }

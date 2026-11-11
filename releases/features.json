@@ -30,8 +30,8 @@
         "OSC remote: with no address list only private-network senders are accepted",
         "Fifteen effects for every channel's rack, now with TUBE AMP (valve stage, tone stack, sagging power stage, cabinet), PRE AMP, POST AMP, HALL REVERB and ROOM REVERB beside reverb, delay, chorus, drive, flanger, phaser, tremolo, auto wah, bit crusher and exciter",
         "Fixed: the rack did not refresh by itself when a plug-in was added or removed",
-        "Plug-in editor in the studio layout: header with a preset browser (the plate reverb, delay, chorus and drive carry their factory presets), A / B compare and bypass, a display that draws the amp curve, the reverb decay, the echoes or the sweep, a knob per parameter and an input meter; hosted VST plug-ins open in the same window",
-        "VST3 / VST2 plug-ins are looked for after the window is up, beside the interface and with a time limit, so a slow or hanging plug-in cannot delay the start; the rack menu shows the format, the count and a rescan"
+        "VST3 / VST2 plug-ins are looked for after the window is up, beside the interface and with a time limit, so a slow or hanging plug-in cannot delay the start; the rack menu shows the format, the count and a rescan",
+        "Plug-in editor as a vintage rack unit: wooden frame, cream faceplate, outlined sections with skirted knobs and scale marks, a PROGRAM window with - / + for the presets, an A / B selector, a lamp with an ON / OFF switch and a needle meter; hosted VST plug-ins open in the same panel"
       ]
     }
   ]
