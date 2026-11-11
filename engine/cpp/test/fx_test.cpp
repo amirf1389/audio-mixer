@@ -16,7 +16,7 @@ using namespace am;
 static float peak(const std::vector<float>& v, std::size_t a, std::size_t b) { float p = 0; for (std::size_t i = a; i < b && i < v.size(); ++i) p = std::max(p, std::fabs(v[i])); return p; }
 
 int main() {
-  CHECK(fx::catalog().size() == 16 && fx::make("nope", 48000) == nullptr);
+  CHECK(fx::catalog().size() == 17 && fx::make("nope", 48000) == nullptr);
   { auto r = fx::make("reverb", 48000); CHECK(r && std::string(r->kind()) == "reverb" && r->params().size() == 4 && r->text("decay", 0) == "0.3 s");
     std::vector<float> L(48000, 0.f), R(48000, 0.f); L[0] = R[0] = 1.f; r->set("decay", 0.2); r->process(L.data(), R.data(), L.size());
     CHECK(peak(L, 1000, 6000) > 0.02f && peak(L, 30000, 48000) < peak(L, 2000, 6000) * 0.5f);   // rings, then decays
@@ -38,12 +38,13 @@ int main() {
     rt.setBusProcessor(0, nullptr); for (int k = 0; k < 2; ++k) rt.onBlock(quiet, outs, n); }
   std::printf("fx_test: reverb rings and decays, delay repeats on time (ping-pong crosses), chorus modulates, drive saturates, bypass, bus return OK\n");
   { // the ten effects as rack plug-ins: each changes a tone, stays finite and below +12 dB, passes it untouched when bypassed, and keeps its state through a save / load
-    CHECK(am::fx::catalog().size() == 16); const std::size_t n = 4800; std::vector<float> src(n), l(n), r(n); for (std::size_t i = 0; i < n; ++i) src[i] = 0.4f * static_cast<float>(std::sin(2 * 3.14159265 * 440 * static_cast<double>(i) / 48000) + 0.5 * std::sin(2 * 3.14159265 * 5000 * static_cast<double>(i) / 48000));
+    CHECK(am::fx::catalog().size() == 17); const std::size_t n = 4800; std::vector<float> src(n), l(n), r(n); for (std::size_t i = 0; i < n; ++i) src[i] = 0.4f * static_cast<float>(std::sin(2 * 3.14159265 * 440 * static_cast<double>(i) / 48000) + 0.5 * std::sin(2 * 3.14159265 * 5000 * static_cast<double>(i) / 48000));
     for (const auto& [kind, name] : am::fx::catalog()) { auto p = am::fx::FxPlugin::make(kind, 48000); CHECK(p && p->info().format == "FX" && p->params().size() >= 3);
       if (kind == "postamp") p->setParam(0, 0.9); if (kind == "preamp") p->setParam(0, 0.4);   // these two are neutral (unity) until a knob is turned
       const float* in[2] = {src.data(), src.data()}; float* out[2] = {l.data(), r.data()}; for (int k = 0; k < 3; ++k) p->process(in, out, static_cast<int>(n));
       double diff = 0, pk = 0; bool finite = true; for (std::size_t i = 0; i < n; ++i) { finite = finite && std::isfinite(l[i]); diff += std::fabs(l[i] - src[i]); pk = std::max(pk, std::fabs(static_cast<double>(l[i]))); }
-      if (!(finite && pk < 4.0 && diff / n > 1e-4)) std::fprintf(stderr, "effect %s: finite %d peak %.2f diff %.5f\n", kind.c_str(), finite, pk, diff / n); CHECK(finite && pk < 4.0 && diff / n > 1e-4);
+      const bool waits = kind == "antifeedback";   // the feedback killer does nothing until a howl has stood for a third of a second: on this short signal it must leave the sound alone
+      if (!(finite && pk < 4.0 && (waits ? diff / n < 1e-6 : diff / n > 1e-4))) std::fprintf(stderr, "effect %s: finite %d peak %.2f diff %.5f\n", kind.c_str(), finite, pk, diff / n); CHECK(finite && pk < 4.0 && (waits ? diff / n < 1e-6 : diff / n > 1e-4));
       p->setParam(0, 0.83); const std::string st = p->state(); auto q = am::fx::FxPlugin::make(kind, 48000); CHECK(q->setState(st) && std::fabs(q->param(0) - 0.83) < 1e-3);
       p->setBypass(true); p->process(in, out, static_cast<int>(n)); double d2 = 0; for (std::size_t i = 0; i < n; ++i) d2 += std::fabs(l[i] - src[i]); CHECK(d2 == 0); }
     { // the tube amp distorts (harmonics appear) and its MASTER sets the level; the hall rings for seconds after the input stops; the pre amp's +36 dB is +36 dB
@@ -51,7 +52,7 @@ int main() {
       double h1 = 0, h3 = 0; for (std::size_t i = 0; i < n; ++i) { const double t = static_cast<double>(i) / 48000; h1 += a[i] * std::sin(2 * 3.14159265 * 220 * t); h3 += a[i] * std::sin(2 * 3.14159265 * 660 * t); } CHECK(std::fabs(h3) > 0.02 * std::fabs(h1));
       auto hall = am::fx::make("hall", 48000); hall->setMix(1); hall->set("decay", 0.5); std::vector<float> hl(n, 0.f), hr(n, 0.f); hl[0] = hr[0] = 1.f; hall->process(hl.data(), hr.data(), n); double tail = 0; for (int k = 0; k < 9; ++k) { std::fill(hl.begin(), hl.end(), 0.f); std::fill(hr.begin(), hr.end(), 0.f); hall->process(hl.data(), hr.data(), n); } for (float v : hl) tail = std::max(tail, std::fabs(static_cast<double>(v))); CHECK(tail > 1e-4 && tail < 1.0);   // one second on: still sounding, not growing
       auto pre = am::fx::make("preamp", 48000); pre->set("gain", 1.0); pre->set("warmth", 0); pre->set("lowcut", 0); pre->set("out", 24.0 / 36.0); std::vector<float> pa(n, 0.001f), pb(n, 0.001f); pre->process(pa.data(), pb.data(), n); CHECK(std::fabs(pa[n - 1] / 0.001f - 63.1f) < 1.0f); }
-    std::printf("fx_test: fifteen effects as rack plug-ins (reverb, delay, chorus, drive, flanger, phaser, tremolo, auto wah, bit crusher, exciter, tube amp, pre amp, post amp, hall, room): audible, finite, bypass, state\n"); }
+    std::printf("fx_test: seventeen effects as rack plug-ins (reverb, delay, sync delay, feedback killer, chorus, drive, flanger, phaser, tremolo, auto wah, bit crusher, exciter, tube amp, pre amp, post amp, hall, room): audible, finite, bypass, state\n"); }
   { const auto& all = am::fx::presets(); CHECK(all.size() == 300); std::set<std::string> names; int perKind[4] = {0, 0, 0, 0};
     for (const auto& p : all) { names.insert(p.name); auto e = am::fx::make(p.kind, 48000); CHECK(e); for (const auto& [id, v] : p.values) { CHECK(v >= 0 && v <= 1); e->set(id, v); } e->setMix(p.mix); bool known = false; for (const auto& prm : e->params()) for (const auto& [id, v] : p.values) if (prm.id == id) known = true; CHECK(known);
       perKind[p.kind == "reverb" ? 0 : p.kind == "delay" ? 1 : p.kind == "chorus" ? 2 : 3]++; }
@@ -64,5 +65,18 @@ int main() {
     CHECK(echoAt(0.6, 0, 12000, 0) > 0.5 && echoAt(0.6, 0, 24000, 0) > 0.1 && echoAt(0.6, 0, 6000, 0) < 1e-6);                                       // 1/8: 0.25 s
     CHECK(echoAt(0.2, 1, 24000, 0) > 0.5 && echoAt(0.2, 1, 24000, 1) < 1e-6 && echoAt(0.2, 1, 48000, 1) > 0.1 && echoAt(0.2, 1, 48000, 0) < 0.05);   // ping-pong
     auto d = am::fx::make("syncdelay", 48000); CHECK(d && d->params().size() == 5 && d->text("tempo", (120.0 - 60.0) / 140.0) == "120 BPM" && d->text("note", 0.2) == "1/4" && d->text("note", 1.0) == "1/16"); }
+  { // FEEDBACK KILLER: a howl (one steady tone standing out of the room noise) is found and cut; noise alone and a moving tone are left alone
+    auto run = [](int kindOf, double& before, double& after, int& notches, double& hz) {
+      auto fx = am::fx::make("antifeedback", 48000); auto* fk = dynamic_cast<am::fx::FeedbackKiller*>(fx.get()); const std::size_t N = 96000, B = 256; std::vector<float> l(N), r(N); unsigned seed = 7;
+      for (std::size_t i = 0; i < N; ++i) { seed = seed * 1664525u + 1013904223u; const double noise = (static_cast<double>(seed >> 8) / 8388608.0 - 1.0) * 0.02;
+        const double f = kindOf == 2 ? 300.0 + 2700.0 * static_cast<double>(i) / N : 2137.0; const double tone = kindOf == 0 ? 0.0 : 0.3 * std::sin(2 * 3.14159265358979 * f * static_cast<double>(i) / 48000.0 * (kindOf == 2 ? 0.5 : 1.0));
+        l[i] = r[i] = static_cast<float>(noise + tone); }
+      auto rms = [&](std::size_t a, std::size_t b) { double e = 0; for (std::size_t i = a; i < b; ++i) e += static_cast<double>(l[i]) * l[i]; return std::sqrt(e / static_cast<double>(b - a)); };
+      before = rms(0, 4800); for (std::size_t o = 0; o + B <= N; o += B) fx->process(l.data() + o, r.data() + o, B); after = rms(N - 9600, N); notches = fk ? fk->notches() : -1; hz = fk ? fk->notchHz(0) : 0; };
+    double b = 0, a = 0, hz = 0; int n = 0;
+    run(1, b, a, n, hz); CHECK(n >= 1 && std::fabs(hz - 2137.0) < 25.0 && a < b * 0.25);       // the howl at 2137 Hz: found within 25 Hz and cut by more than 12 dB
+    run(0, b, a, n, hz); CHECK(n == 0 && std::fabs(a / b - 1.0) < 0.1);                         // room noise only: nothing is touched
+    run(2, b, a, n, hz); CHECK(n == 0 && a > b * 0.8);                                         // a tone that keeps moving (a melody, a sweep) is not feedback
+    auto fx = am::fx::make("antifeedback", 48000); CHECK(fx && fx->params().size() == 4 && fx->text("mode", 1.0) == "LIVE" && fx->text("mode", 0.0) == "HOLD" && fx->text("depth", 1.0) == "-30 dB"); }
   return 0;
 }

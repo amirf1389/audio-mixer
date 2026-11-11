@@ -202,7 +202,7 @@ int main(int argc, char* argv[]) {
       engine.setWindowsMuteSync(true); if (!sysMute) { std::fprintf(stderr, "amixos --smoke: switching sync on at -inf did not mute\n"); return 82; } engine.restoreSystemSound(); if (sysMute) { std::fprintf(stderr, "amixos --smoke: exit did not take the mute back\n"); return 83; }
       engine.setMaster(keep); engine.setSystemMuteBackend([](bool&) { return false; }, [](bool) { return false; }); engine.syncSystemSound(); }
     { // the ten effects in the rack of any channel: listed, loaded into a slot, a knob moves, bypass, cleared; a late channel too
-      int fxn = 0; for (const QVariant& v : engine.pluginCatalog()) if (v.toMap().value("fx").toBool()) ++fxn; if (fxn != 16) { std::fprintf(stderr, "amixos --smoke: %d effects in the rack catalogue (want 16)\n", fxn); return 84; }
+      int fxn = 0; for (const QVariant& v : engine.pluginCatalog()) if (v.toMap().value("fx").toBool()) ++fxn; if (fxn != 17) { std::fprintf(stderr, "amixos --smoke: %d effects in the rack catalogue (want 17)\n", fxn); return 84; }
       for (const int ch : {6, 7}) { int slot = 0; for (const QVariant& v : engine.pluginCatalog()) { const QVariantMap m = v.toMap(); if (!m.value("fx").toBool()) continue; engine.setPlugin(ch, slot % 10, m.value("kind").toString()); const QVariantMap pl = engine.plugins(ch)[slot % 10].toMap();
           if (pl.value("pending").toBool() || pl.value("format").toString() != "FX" || engine.pluginParams(ch, slot % 10).size() < 4) { std::fprintf(stderr, "amixos --smoke: effect %s did not load into CH %d slot %d\n", qPrintable(m.value("kind").toString()), ch + 1, slot + 1); return 85; } ++slot; }
         engine.setPluginParam(ch, 0, 0, 0.9); engine.setPluginBypass(ch, 0, true); if (!engine.plugins(ch)[0].toMap().value("bypass").toBool()) { std::fprintf(stderr, "amixos --smoke: effect bypass\n"); return 86; }
@@ -367,7 +367,9 @@ int main(int argc, char* argv[]) {
         engine.resetRouting(); const int pulled = engine.infUnused();   // the null device has 2 inputs: strips 3-32 have none
         if (pulled != 30 || engine.stripState()[0].toMap()["db"].toDouble() < -100 || engine.stripState()[9].toMap()["db"].toDouble() > -59.9 || engine.infUnused() != 0) { std::fprintf(stderr, "amixos --smoke: AUTO -INF pulled %d\n", pulled); return 214; }
         for (int i = 2; i < 32; ++i) engine.setGain(i, 0);
-        bool sync = false; for (const QVariant& v : engine.pluginCatalog()) sync = sync || v.toMap()["kind"].toString() == "fx:syncdelay"; if (!sync) { std::fprintf(stderr, "amixos --smoke: SYNC DELAY is not in the rack list\n"); return 215; } }
+        bool sync = false, fbk = false; for (const QVariant& v : engine.pluginCatalog()) { sync = sync || v.toMap()["kind"].toString() == "fx:syncdelay"; fbk = fbk || v.toMap()["kind"].toString() == "fx:antifeedback"; } if (!sync || !fbk) { std::fprintf(stderr, "amixos --smoke: SYNC DELAY / FEEDBACK KILLER are not in the rack list\n"); return 215; }
+        engine.setPlugin(22, 0, "fx:antifeedback"); const QVariantList fp = engine.pluginParams(22, 0); const bool fbOk = fp.size() >= 4 && !engine.plugins(22)[0].toMap()["pending"].toBool() && engine.pluginParamText(22, 0, fp[3].toMap()["id"].toInt(), 1.0) == "LIVE"; engine.setPlugin(22, 0, "");
+        if (!fbOk) { std::fprintf(stderr, "amixos --smoke: FEEDBACK KILLER did not load in a rack slot\n"); return 216; } }
       { // VST FOLDER: the console's own plug-in folder is created and saved among the scanned folders, once
         const QStringList before = settings.vstDirs(); const QString vf = settings.vstUserFolder(); settings.vstUserFolder();
         if (vf.isEmpty() || !QDir(vf).exists() || settings.vstDirs().count(vf) != 1 || QSettings().value("vst3/dirs").toStringList().count(vf) != 1) { std::fprintf(stderr, "amixos --smoke: the VST folder was not created and saved\n"); return 198; }

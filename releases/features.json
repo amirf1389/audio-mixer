@@ -48,7 +48,8 @@
         "SOUND CARD: a mixer of another maker connected through its own ASIO driver is recognised (Behringer X32 / X AIR / WING, Midas M32 / MR18, Yamaha, Soundcraft, Allen & Heath, PreSonus, Zoom LiveTrak, Tascam Model, Mackie, QSC, RODE); CONNECT + ASSIGN CHANNELS opens every channel (32 at most) and puts desk channel n on strip n, the master on the desk's USB returns 1-2.",
         "NOISE GATE: CLOSE NOISE sets the gate 6 dB above the hum and hiss the channel carries while nobody plays. The plug-in editor can be moved by its top edge. ACOUSTICS no longer has the AUTO EQ tab. A new installation goes straight to the console; the factory setup runs after a FACTORY RESET.",
         "MIXER: MUTE on the master strip; LIMIT CHANNELS (every channel limiter on or off in one press) and AUTO -INF (channels without an input on this sound card go to -inf) in the actions bar. SYNC DELAY: a new effect with TEMPO, NOTE value, FEEDBACK, TONE and WIDTH. TONE shows the ten MIC EQ faders on the same page. NETWORK: CASCADE links two consoles (A / B), each hearing the other's master on strips 31-32.",
-        "Top bar: FILE, EDIT (undo, redo, A / B, mute all, clear solo, clear clips), VIEW, TOOLS (plug-ins, sound card, effects, mastering, samples, Volume Enhancer, Master Analyzer, settings), HELP and ABOUT. Back again: the MASTER / CHANNEL switch on RTA EQ and the AUTO EQ tab on ACOUSTICS."
+        "Top bar: FILE, EDIT (undo, redo, A / B, mute all, clear solo, clear clips), VIEW, TOOLS (plug-ins, sound card, effects, mastering, samples, Volume Enhancer, Master Analyzer, settings), HELP and ABOUT. Back again: the MASTER / CHANNEL switch on RTA EQ and the AUTO EQ tab on ACOUSTICS.",
+        "FEEDBACK KILLER: a new rack effect that finds the howl of a microphone hearing its own loudspeaker (one pure, steady tone standing out for a third of a second) and notches it out with up to six filters; SENSITIVITY, DEPTH, WIDTH and HOLD / LIVE mode."
       ]
     }
   ]
