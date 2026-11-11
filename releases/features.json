@@ -16,7 +16,8 @@
         "Every console text follows the language menu: 21 languages with full interface tables",
         "WHAT'S NEW feed with a NEW badge in the header, managed from the website's release manager",
         "Windows: the colours load correctly (the theme was missing in the Windows build), drop-downs follow the theme, the update check has its TLS plug-in",
-        "Boot animation with a soft chord on the master (each can be switched off on SETTINGS); factory setup: text fields follow the theme, the PIN can be changed again once set, the language list scrolls"
+        "Boot animation with a soft chord on the master (each can be switched off on SETTINGS); factory setup: text fields follow the theme, the PIN can be changed again once set, the language list scrolls",
+        "Updates like a mixing console: a found update downloads (optionally by itself), INSTALL AND RESTART closes the console, installs silently and boots it again with UPDATED TO on the boot screen; the setup is checked against the signed manifest's sha256 again before it runs"
       ]
     }
   ]

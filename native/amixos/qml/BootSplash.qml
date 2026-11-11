@@ -32,7 +32,7 @@ Rectangle {
                 readonly property real k: Math.max(0, Math.min(1, boot.t * 4 - 0.6 - index * 0.22)); opacity: k; scale: 1.6 - 0.6 * k; transform: Translate { y: (1 - k) * 18 } } } }
     Rectangle { anchors.top: title.bottom; anchors.topMargin: 10; anchors.horizontalCenter: parent.horizontalCenter; height: 3; radius: 2; color: Theme.orange
         width: Math.max(0, Math.min(1, boot.t * 2.2 - 0.9)) * (title.width + 40) }
-    Text { anchors.top: title.bottom; anchors.topMargin: 26; anchors.horizontalCenter: parent.horizontalCenter; text: i18n.t("by ", i18n.lang) + Theme.vendor + "  ·  " + appVersion
+    Text { anchors.top: title.bottom; anchors.topMargin: 26; anchors.horizontalCenter: parent.horizontalCenter; text: updater.justUpdated !== "" ? i18n.t("UPDATED TO ", i18n.lang) + updater.justUpdated : i18n.t("by ", i18n.lang) + Theme.vendor + "  ·  " + appVersion
         color: Theme.muted; font.family: Theme.mono; font.pixelSize: 11; font.letterSpacing: 4; opacity: Math.max(0, Math.min(1, boot.t * 3 - 1.6)) }
     Text { anchors.bottom: parent.bottom; anchors.bottomMargin: 22; anchors.horizontalCenter: parent.horizontalCenter; text: i18n.t("click or press a key to skip", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8; opacity: 0.7 }
 }

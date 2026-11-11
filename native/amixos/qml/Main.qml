@@ -142,9 +142,27 @@ ApplicationWindow {
                         RowLayout { Text { text: modelData.version; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 10; font.bold: true } Text { text: modelData.date + "  " + modelData.title; color: Theme.muted; font.family: Theme.sans; font.pixelSize: 11 } }
                         Repeater { model: modelData.items; delegate: Text { Layout.fillWidth: true; text: "• " + modelData; color: Theme.ink; font.family: Theme.sans; font.pixelSize: 11; wrapMode: Text.WordWrap } } } } } }
             RowLayout { Item { Layout.fillWidth: true }
+                Text { visible: updater.state === "downloading"; text: i18n.t("DOWNLOADING ", i18n.lang) + updater.progress + " %"; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
+                Rectangle { visible: updater.canInstall; implicitWidth: instT.implicitWidth + 24; implicitHeight: 24; radius: 5; color: Theme.emerald; Text { id: instT; anchors.centerIn: parent; text: i18n.t("INSTALL AND RESTART", i18n.lang); color: "#000"; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: updater.installAndRestart() } }
+                Rectangle { visible: updater.state === "downloaded" && !updater.canInstall; implicitWidth: 150; implicitHeight: 24; radius: 5; color: Theme.ov(0.1); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: i18n.t("OPEN DOWNLOAD FOLDER", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: updater.openDownloadFolder() } }
                 Rectangle { visible: updater.state === "available" && updater.file.url !== undefined; implicitWidth: 120; implicitHeight: 24; radius: 5; color: Theme.amber; Text { anchors.centerIn: parent; text: i18n.t("DOWNLOAD", i18n.lang); color: "#000"; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: updater.download() } }
                 Rectangle { implicitWidth: 80; implicitHeight: 24; radius: 5; color: Theme.ov(0.1); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: i18n.t("CLOSE", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: whatsNew.close() } } } } }
     property bool bootOn: settings.bootAnimation && !noBoot   // noBoot: the smoke / shots run without it
     Loader { anchors.fill: parent; z: 200; active: root.bootOn; sourceComponent: BootSplash { onDone: root.bootOn = false } }
+    Rectangle {   // UPDATING: the console is about to close; the setup installs and starts it again (like a mixer's firmware update)
+        anchors.fill: parent; z: 300; visible: updater.state === "installing"; color: Theme.obsidian
+        MouseArea { anchors.fill: parent }
+        Column { anchors.centerIn: parent; spacing: 16
+            Text { anchors.horizontalCenter: parent.horizontalCenter; text: Theme.product.toUpperCase(); color: Theme.orange; font.family: Theme.mono; font.pixelSize: 40; font.weight: Font.Black; font.letterSpacing: 6 }
+            Text { anchors.horizontalCenter: parent.horizontalCenter; text: i18n.t("UPDATING TO ", i18n.lang) + updater.latest; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 16; font.bold: true; font.letterSpacing: 3 }
+            Rectangle { anchors.horizontalCenter: parent.horizontalCenter; width: 320; height: 4; radius: 2; color: Theme.ov(0.12); clip: true
+                Rectangle { width: 90; height: 4; radius: 2; color: Theme.orange; NumberAnimation on x { from: -90; to: 320; duration: 1100; loops: Animation.Infinite; running: updater.state === "installing" } } }
+            Text { anchors.horizontalCenter: parent.horizontalCenter; text: i18n.t("The console closes, installs and starts again by itself. Do not switch the computer off.", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 10 } } }
+    Rectangle {   // back from an update: one line at the bottom until it is clicked
+        z: 150; visible: updater.justUpdated !== "" || updater.failedUpdate !== ""; anchors.bottom: parent.bottom; anchors.horizontalCenter: parent.horizontalCenter; anchors.bottomMargin: 18; width: updT.implicitWidth + 60; height: 34; radius: 17
+        color: updater.failedUpdate !== "" ? Theme.danger : Theme.emerald
+        Text { id: updT; anchors.centerIn: parent; color: "#000"; font.family: Theme.mono; font.pixelSize: 10; font.bold: true
+            text: updater.failedUpdate !== "" ? i18n.t("The update to ", i18n.lang) + updater.failedUpdate + i18n.t(" did not complete: this is still ", i18n.lang) + updater.current : i18n.t("UPDATED TO ", i18n.lang) + updater.justUpdated + "  ·  " + i18n.t("click to see what is new", i18n.lang) }
+        MouseArea { anchors.fill: parent; onClicked: { const ok = updater.failedUpdate === ""; updater.acknowledgeUpdate(); if (ok) whatsNew.open() } } }
     SetupPage { anchors.fill: parent; z: 100; visible: root.forceSetup || !settings.setupDone; onFinished: { settings.finishSetup(); root.forceSetup = false; root.current = settings.startPage } }
 }

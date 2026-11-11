@@ -33,6 +33,7 @@
 #include "paths/paths.hpp"
 #include "samples/samples.hpp"
 #include <QHostAddress>
+#include <QSettings>
 #include "Update.h"
 #include "Measure.h"
 #include "measure/measure.hpp"
@@ -92,6 +93,7 @@ int main(int argc, char* argv[]) {
   qml.rootContext()->setContextProperty("media", &media);
   qml.rootContext()->setContextProperty("samples", &samples);
   qml.rootContext()->setContextProperty("updater", &update);
+  QObject::connect(&update, &Update::restarting, &app, [&] { settings.sessionClosed(); engine.stop(); QTimer::singleShot(1800, &app, &QCoreApplication::quit); });   // INSTALL AND RESTART: save, release the sound card, show the notice, quit; the setup starts the console again
   qml.rootContext()->setContextProperty("measure", &measure);
   QObject::connect(&app, &QGuiApplication::aboutToQuit, &settings, &Settings::sessionClosed);
   if (!smoke && update.checkAtStart() && settings.setupDone()) QTimer::singleShot(3000, &update, &Update::check);
@@ -168,6 +170,10 @@ int main(int argc, char* argv[]) {
       engine.setMasterLimiter(true, -0.5); if (engine.masterLimiter().value("release").toDouble() != 250) { std::fprintf(stderr, "amixos --smoke: the two-value limiter call lost the release\n"); return 67; } engine.setMasterLimiter(true, -0.5, 100);
       { QVariantMap mods; mods["deessOn"] = true; mods["bassMonoOn"] = true; mods["exciterOn"] = true; engine.setMastering(mods); const QVariantMap mm = engine.mastering(); if (!mm.value("deessOn").toBool() || !mm.value("bassMonoOn").toBool() || !mm.value("exciterOn").toBool()) { std::fprintf(stderr, "amixos --smoke: mastering modules did not switch\n"); return 68; } mods["deessOn"] = false; mods["bassMonoOn"] = false; mods["exciterOn"] = false; engine.setMastering(mods); }
       QVariantMap off; off["on"] = false; engine.setMastering(off); engine.setEq(-1, 5, 0, 1000, 1.41, 0); }
+    { // AUTO UPDATE: nothing downloaded = nothing to install; coming back on the new version says UPDATED once; coming back on the old one says it did not complete
+      if (update.installAndRestart() || update.canInstall()) { std::fprintf(stderr, "amixos --smoke: install and restart must refuse without a verified download\n"); return 70; }
+      { QSettings qs; qs.setValue("update/installing", QStringLiteral("0.0.1")); qs.sync(); } { Update u2(QStringLiteral(AMIX_VERSION)); if (u2.justUpdated() != QStringLiteral(AMIX_VERSION) || !u2.failedUpdate().isEmpty()) { std::fprintf(stderr, "amixos --smoke: the update was not recognised after the restart\n"); return 71; } }
+      { QSettings qs; if (qs.contains("update/installing")) { std::fprintf(stderr, "amixos --smoke: the pending-update mark was not cleared\n"); return 72; } qs.setValue("update/installing", QStringLiteral("999.0")); qs.sync(); } { Update u3(QStringLiteral(AMIX_VERSION)); if (u3.failedUpdate() != "999.0" || !u3.justUpdated().isEmpty()) { std::fprintf(stderr, "amixos --smoke: a failed update was not reported\n"); return 73; } } }
     if (!measure.chime()) { std::fprintf(stderr, "amixos --smoke: the boot chord did not start on a running engine\n"); return 69; } measure.cancel();
     engine.setPlugin(4, 0, "comp"); if (!engine.channelParams(4).value("compOn").toBool() || engine.plugins(4)[0].toMap().value("kind").toString() != "comp") { std::fprintf(stderr, "amixos --smoke: plugin slot did not switch the compressor on\n"); return 21; }
     engine.setPluginBypass(4, 0, true); if (engine.channelParams(4).value("compOn").toBool()) { std::fprintf(stderr, "amixos --smoke: plugin bypass left the compressor on\n"); return 22; }
