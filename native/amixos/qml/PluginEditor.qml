@@ -48,7 +48,8 @@ Popup {
     readonly property real fit: Math.min(1, (parent ? parent.width - 12 : 1200) / (face.implicitWidth + 36))
     width: (face.implicitWidth + 36) * fit; height: (panelH + 36) * fit
     readonly property int panelH: 262
-    modal: false; closePolicy: Popup.CloseOnEscape; padding: 0
+    modal: false; dim: true; closePolicy: Popup.CloseOnEscape; padding: 0
+    Overlay.modeless: Rectangle { color: "#b3000000" }   // the console steps back while a plug-in is open: the unit is seen against dark, not against the mixer
     Timer { interval: 40; running: ed.visible; repeat: true; onTriggered: { const m = engine.meters[ed.strip]; const l = m ? (m.inDb !== undefined ? m.inDb : m.peakDb) : -120; ed.level = l; const tgt = ed.bypass ? -20 : Math.max(-20, Math.min(3, l + 12)); ed.needle += (tgt - ed.needle) * (tgt > ed.needle ? 0.35 : 0.12); vu.requestPaint() } }
     background: Item {}
     component Section: Rectangle { property string head; default property alias body: inner.data; height: ed.panelH - 16; color: "transparent"; border.color: "#c022201b"; border.width: 1; radius: 6
@@ -57,6 +58,7 @@ Popup {
     component Key: Rectangle { property string label; signal clicked(); width: 22; height: 20; radius: 3; border.color: "#000"; gradient: Gradient { GradientStop { position: 0; color: ka.pressed ? "#1a1a1a" : "#4a4a4a" } GradientStop { position: 0.12; color: ka.pressed ? "#141414" : "#262626" } GradientStop { position: 1; color: "#0e0e0e" } }
         Text { anchors.centerIn: parent; text: label; color: "#f5f5f0"; font.pixelSize: 13; font.bold: true } MouseArea { id: ka; anchors.fill: parent; onClicked: parent.clicked() } }
     contentItem: Item {
+        Repeater { model: 6; delegate: Rectangle { x: (-4 - index * 3) * ed.fit + 4; y: (2 + index * 3) * ed.fit; width: (wood.width + 8 + index * 6) * ed.fit - 8; height: (wood.height + 6 + index * 5) * ed.fit; radius: 10 + index * 4; color: "#000"; opacity: 0.11 - index * 0.015 } }   // the unit's shadow
         Rectangle { id: wood; width: face.implicitWidth + 36; height: ed.panelH + 36; transformOrigin: Item.TopLeft; scale: ed.fit; radius: 5   // the wooden frame
             color: "#7d5225"; border.color: "#2e1b0b"; border.width: 2; clip: true
             Image { anchors.fill: parent; anchors.margins: 2; source: "qrc:/qt/qml/AmixOS/skin/wood.png"; fillMode: Image.PreserveAspectCrop; smooth: true }

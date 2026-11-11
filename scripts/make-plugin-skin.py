@@ -18,35 +18,43 @@ def font(size, bold=True):
     try: return ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans%s.ttf' % ('-Bold' if bold else ''), size)
     except Exception: return ImageFont.load_default()
 
-# ---- wood: long grain along x, pores, darker edges
+# ---- wood: walnut, long grain along x with a few cathedral figures, open pores, an oiled sheen, darker towards the edges
 W, H = 1400, 420
 x = np.linspace(0, 1, W)[None, :]; y = np.linspace(0, 1, H)[:, None]
-warp = noise(W, H, 90, 30) * 0.06 + noise(W, H, 300, 80) * 0.10
-grain = np.sin((y + warp) * 150 + noise(W, H, 40, 12) * 2.2) * 0.5 + np.sin((y + warp * 1.7) * 37) * 0.5
-fine = np.asarray(Image.fromarray(np.uint8(rng.uniform(0, 255, (H, W // 14)))).resize((W, H), Image.BICUBIC), dtype=np.float32) / 255 - 0.5
-base = np.array([146, 96, 48], dtype=np.float32)
-v = 1 + grain * 0.11 + fine * 0.16 + noise(W, H, 2) * 0.03
-edge = np.minimum(np.minimum(x, 1 - x) * 26, np.minimum(y, 1 - y) * 9).clip(0, 1) * 0.28 + 0.72
-wood = base[None, None, :] * (v * edge)[:, :, None]; wood[:, :, 2] *= 0.92
-save(rgb(wood), 'wood.png')
+warp = noise(W, H, 260, 90) * 0.16 + noise(W, H, 70, 26) * 0.035
+rings = np.sin((y + warp) * 95 + noise(W, H, 500, 160) * 5.0)
+grain = np.sign(rings) * np.abs(rings) ** 0.55 * 0.5 + np.sin((y + warp * 1.4) * 23) * 0.5
+pores = np.asarray(Image.fromarray(np.uint8(rng.uniform(0, 255, (H, W // 22)))).resize((W, H), Image.BICUBIC), dtype=np.float32) / 255
+pores = (pores < 0.30) * (0.30 - pores) * 1.6
+v = 0.94 + grain * 0.15 - pores * 0.5 + noise(W, H, 1.5) * 0.025 + noise(W, H, 400, 150) * 0.07
+edge = np.minimum(np.minimum(x, 1 - x) * 30, np.minimum(y, 1 - y) * 10).clip(0, 1) * 0.34 + 0.66
+sheen = 1 + np.exp(-((y - 0.16) / 0.10) ** 2) * 0.10
+wood = np.array([118, 72, 36], dtype=np.float32)[None, None, :] * (v * edge * sheen)[:, :, None]; wood[:, :, 0] *= 1.04; wood[:, :, 2] *= 0.86
+save(rgb(wood).filter(ImageFilter.GaussianBlur(0.4)), 'wood.png')
 
-# ---- faceplate: cream enamel, uneven, speckled, scratched, a soft sheen from above
+# ---- faceplate: sprayed cream enamel on steel. Fine orange-peel, slow drift in tone, nicotine yellowing towards the top, grime gathered
+#      along the bottom edge and in the corners, paint worn thin at the rim, a handful of faint handling marks (no random scratch field)
 W, H = 1400, 380
 x = np.linspace(0, 1, W)[None, :]; y = np.linspace(0, 1, H)[:, None]
-tone = 1 + noise(W, H, 160, 60) * 0.045 + noise(W, H, 30, 8) * 0.018 + noise(W, H, 1.3) * 0.022
-sheen = 1.04 - y * 0.10
-edge = np.minimum(np.minimum(x, 1 - x) * 60, np.minimum(y, 1 - y) * 16).clip(0, 1) * 0.10 + 0.90
-plate = np.array([233, 227, 208], dtype=np.float32)[None, None, :] * (tone * sheen * edge)[:, :, None]
-plate[:, :, 2] *= 1 - (noise(W, H, 220, 90) * 0.03 + 0.02)          # yellowing in patches
+peel = noise(W, H, 3.2, 1.1) * 0.010 + noise(W, H, 1.2) * 0.008
+drift = noise(W, H, 420, 170) * 0.035 + noise(W, H, 120, 50) * 0.012
+rim = np.minimum(np.minimum(x, 1 - x) * (W / 14), np.minimum(y, 1 - y) * (H / 14)).clip(0, 1)
+corner = (1 - np.minimum(x, 1 - x) * 9).clip(0, 1) * (1 - np.minimum(y, 1 - y) * 3.2).clip(0, 1)
+grime = (y ** 6) * 0.07 + corner * 0.10 + (1 - rim) * 0.07
+light = 1.035 - y * 0.075 - (x - 0.5) ** 2 * 0.05
+lum = (1 + peel + drift - grime) * light
+plate = np.array([232, 225, 204], dtype=np.float32)[None, None, :] * lum[:, :, None]
+yellow = 0.035 + (1 - y) * 0.02 + grime * 0.9 + noise(W, H, 300, 120) * 0.02
+plate[:, :, 2] *= 1 - yellow; plate[:, :, 1] *= 1 - yellow * 0.28
+bare = ((1 - rim) ** 3) * (noise(W, H, 6, 2) > 0.25)                      # the rim: paint rubbed through to grey primer in small patches
+for k, c in enumerate([150, 146, 136]): plate[:, :, k] = plate[:, :, k] * (1 - bare * 0.45) + c * bare * 0.45
 im = rgb(plate); d = ImageDraw.Draw(im, 'RGBA')
-for _ in range(260):                                               # specks of dirt and chipped paint
-    px, py, r = rng.integers(0, W), rng.integers(0, H), rng.choice([0.6, 0.8, 1.0, 1.4, 2.2], p=[.4, .3, .18, .09, .03]); a = int(rng.integers(30, 110))
-    d.ellipse([px - r, py - r, px + r, py + r], fill=(70, 60, 45, a))
-for _ in range(46):                                                # hairline scratches
-    px, py, ln, ang = rng.integers(0, W), rng.integers(0, H), rng.integers(20, 160), rng.uniform(-0.35, 0.35) + (0 if rng.random() < .7 else 1.3)
-    col = (255, 252, 240, int(rng.integers(40, 90))) if rng.random() < .55 else (90, 80, 60, int(rng.integers(25, 60)))
-    d.line([px, py, px + math.cos(ang) * ln, py + math.sin(ang) * ln], fill=col, width=1)
-save(im.filter(ImageFilter.GaussianBlur(0.35)), 'plate.png')
+for _ in range(70):                                                      # pinhead specks, mostly low and near the edges
+    py = int(H * (1 - rng.random() ** 2.2 * 0.98)); px = int(rng.integers(0, W)); r = float(rng.choice([0.5, 0.7, 1.0], p=[.5, .35, .15])); d.ellipse([px - r, py - r, px + r, py + r], fill=(84, 72, 50, int(rng.integers(26, 70))))
+for _ in range(7):                                                       # a few soft handling marks, short and curved
+    px, py = int(rng.integers(60, W - 60)), int(rng.integers(30, H - 30)); ang = rng.uniform(-0.5, 0.5); pts = [(px + t * 9 * math.cos(ang), py + t * 9 * math.sin(ang) + math.sin(t * 0.7) * 2) for t in range(int(rng.integers(4, 11)))]
+    d.line(pts, fill=(100, 90, 68, int(rng.integers(14, 30))), width=1)
+save(im.filter(ImageFilter.GaussianBlur(0.45)), 'plate.png')
 
 # ---- knob: a bakelite skirt with a knurled edge, a domed cap, light from the upper left, its shadow on the plate
 S = 4; N = 132 * S; c = N / 2
