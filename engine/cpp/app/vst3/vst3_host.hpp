@@ -47,6 +47,7 @@ class Plugin final : public host::Plugin {
   // state (component + controller), base64, for saving with the console
   std::string state() const override;
   bool setState(const std::string& base64) override;
+  bool hasEditor() const override; bool openEditor(void* parentWindow, int& width, int& height) override; void closeEditor() override; bool editorOpen() const override;
 
   struct Impl;
  private:

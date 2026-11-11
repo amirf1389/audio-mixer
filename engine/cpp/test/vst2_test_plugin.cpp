@@ -9,7 +9,7 @@
 using namespace am::vst2::abi;
 
 namespace {
-struct Gain2 { AEffect fx{}; float gain = 1.f; bool bypass = false; float chunk = 1.f; };
+struct Gain2 { AEffect fx{}; float gain = 1.f; bool bypass = false; float chunk = 1.f; void* editorParent = nullptr; int idles = 0; std::int16_t rect[4] = {0, 0, 240, 400}; };   // rect: top, left, bottom, right (a 400 x 240 editor)
 Gain2* of(AEffect* e) { return static_cast<Gain2*>(e->object); }
 
 std::intptr_t dispatch(AEffect* e, std::int32_t op, std::int32_t idx, std::intptr_t val, void* ptr, float) {
@@ -30,6 +30,10 @@ std::intptr_t dispatch(AEffect* e, std::int32_t op, std::int32_t idx, std::intpt
     case effSetBypass: g->bypass = val != 0; return 1;
     case effGetChunk: { g->chunk = g->gain; if (ptr) *static_cast<void**>(ptr) = &g->chunk; return sizeof(float); }
     case effSetChunk: if (ptr && val >= static_cast<std::intptr_t>(sizeof(float))) std::memcpy(&g->gain, ptr, sizeof(float)); return 1;
+    case effEditGetRect: if (ptr) *static_cast<std::int16_t**>(ptr) = g->rect; return 1;
+    case effEditOpen: if (!ptr || g->editorParent) return 0; g->editorParent = ptr; return 1;
+    case effEditClose: g->editorParent = nullptr; return 0;
+    case effEditIdle: if (g->editorParent) { ++g->idles; g->gain = 0.5f; } return 0;   // the test sees the idle call through the parameter
     default: return 0;
   }
 }
@@ -47,7 +51,7 @@ __attribute__((visibility("default")))
 AEffect* VSTPluginMain(HostCallback host) {
   if (host && host(nullptr, audioMasterVersion, 0, 0, nullptr, 0) < 2) return nullptr;
   Gain2* g = new Gain2(); AEffect& e = g->fx; e.magic = kMagic; e.dispatcher = dispatch; e.setParameter = setParam; e.getParameter = getParam; e.processReplacing = processReplacing;
-  e.numPrograms = 1; e.numParams = 1; e.numInputs = 2; e.numOutputs = 2; e.flags = kCanReplacing | kProgramChunks; e.uniqueID = 0x414D5832; e.version = 1000; e.object = g;
+  e.numPrograms = 1; e.numParams = 1; e.numInputs = 2; e.numOutputs = 2; e.flags = kCanReplacing | kProgramChunks | 1 /* has an editor */; e.uniqueID = 0x414D5832; e.version = 1000; e.object = g;
   return &e;
 }
 }

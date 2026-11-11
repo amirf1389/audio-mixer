@@ -15,6 +15,17 @@ Item {
     property string outId: ""
     property string inId: "-"
     property string backend: "dsound"
+    property string via: ""            // "" = any path, "wasapi" = Windows audio (shared), "dsound" = DirectSound
+    readonly property var shown: bt.filter(function (d) { return page.via === "" || d.backend === page.via })
+    // DISCOVERY: a Bluetooth device is paired and connected by the operating system; once it is, it appears here by itself (the device list is
+    // watched for changes). PAIR A DEVICE opens the system's own Bluetooth page. CONNECT picks the first output shown (and its own microphone) and starts.
+    function pair() { if (Qt.platform.os === "windows") Qt.openUrlExternally("ms-settings:bluetooth"); else if (Qt.platform.os === "osx") Qt.openUrlExternally("x-apple.systempreferences:com.apple.preferences.Bluetooth"); else page.note = "Pair the device in the system's Bluetooth settings: it then appears here." }
+    function connectBest() {
+        let out = null; for (let i = 0; i < shown.length && !out; ++i) if (shown[i].outChannels > 0 && shown[i].kind !== "headset") out = shown[i]
+        for (let i = 0; i < shown.length && !out; ++i) if (shown[i].outChannels > 0) out = shown[i]
+        if (!out) { page.note = "No Bluetooth output on this path. Pair and connect the device, then RESCAN."; return }
+        page.backend = out.backend; page.outId = out.id; page.inId = "-"; page.open()
+    }
     Connections { target: engine; function onDevicesChanged() { page.tick++ } }
     function open() { const ok = engine.openBluetooth(page.backend, page.inId, page.outId, Math.max(512, settings.defaultFrames || 512)); page.note = engine.bluetoothNote(); if (ok) { const io = engine.ioInfo(); settings.rememberDevice(engine.backend, io.inputs > 0 ? page.inId : "-", page.outId, engine.sampleRate, engine.blockFrames, io.inputs > 0 ? 2 : 0, 2) } }
     property string note: ""
@@ -30,13 +41,17 @@ Item {
                 Text { text: page.bt.length + i18n.t(" Bluetooth audio device", i18n.lang) + (page.bt.length === 1 ? "" : "s") + i18n.t(" seen", i18n.lang); color: page.bt.length ? Theme.emerald : Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                 Item { Layout.fillWidth: true }
                 Text { text: engine.running ? engine.status : i18n.t("ENGINE IDLE", i18n.lang); color: engine.running ? Theme.emerald : Theme.dim; font.family: Theme.mono; font.pixelSize: 8 }
+                Text { text: i18n.t("VIA", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
+                Repeater { model: [["", "ANY"], ["wasapi", "WASAPI"], ["dsound", "DIRECTSOUND"]]; delegate: Btn { objectName: "btVia_" + (modelData[0] || "any"); label: i18n.t(modelData[1], i18n.lang); on: page.via === modelData[0]; onColor: Theme.cyan; onClicked: page.via = modelData[0] } }
+                Btn { objectName: "btConnectBtn"; label: i18n.t("CONNECT", i18n.lang); on: page.shown.length > 0; onColor: Theme.emerald; onClicked: page.connectBest() }
+                Btn { objectName: "btPairBtn"; label: i18n.t("PAIR A DEVICE", i18n.lang); onClicked: page.pair() }
                 Btn { label: i18n.t("RESCAN", i18n.lang); onClicked: engine.refreshDevices() } } }
         RowLayout { Layout.fillWidth: true; Layout.fillHeight: true; spacing: 8
             Rectangle { Layout.fillWidth: true; Layout.fillHeight: true; radius: Theme.radius; color: Theme.card; border.color: Theme.line
                 ColumnLayout { anchors.fill: parent; anchors.margins: 12; spacing: 8
                     Head { text: i18n.t("PAIRED & CONNECTED", i18n.lang) }
                     Note { text: i18n.t("Every endpoint whose name says Bluetooth, hands-free, A2DP, headset or a known brand. DirectSound entries first (the path with no lock); WASAPI shared entries also work. Pair a new device in Windows Settings › Bluetooth, then RESCAN.", i18n.lang) }
-                    ListView { Layout.fillWidth: true; Layout.fillHeight: true; clip: true; model: page.bt; spacing: 4
+                    ListView { Layout.fillWidth: true; Layout.fillHeight: true; clip: true; model: page.shown; spacing: 4
                         delegate: Rectangle { width: ListView.view.width; height: 44; radius: 6; property bool pickedOut: page.outId === modelData.id && page.backend === modelData.backend; property bool pickedIn: page.inId === modelData.id && page.backend === modelData.backend
                             color: pickedOut || pickedIn ? Qt.rgba(0.2, 0.9, 0.5, 0.12) : Theme.ov(0.04); border.color: pickedOut || pickedIn ? Theme.emerald : Theme.lineSoft
                             RowLayout { anchors.fill: parent; anchors.margins: 8; spacing: 8

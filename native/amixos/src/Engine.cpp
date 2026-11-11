@@ -60,6 +60,9 @@ Engine::Engine(QObject* parent) : QObject(parent) {
   // THE CONSOLE IS WRITTEN AS IT CHANGES, not only when the program closes: two seconds after the last change of a fader, a rack, a bus,
   // the master chain or the routing. A crash, a forced shutdown or an update that restarts the program then loses nothing.
   connect(&motionTimer_, &QTimer::timeout, this, &Engine::moveObjects);
+  // plug-in windows: their editors are idled (VST2 editors redraw there), and a window whose plug-in left its slot (removed, replaced, reloaded) is closed
+  connect(&pluginIdle_, &QTimer::timeout, this, [this] { for (int k = pluginWins_.size() - 1; k >= 0; --k) { const PluginWin& w = pluginWins_[k];
+      if (strips_[static_cast<std::size_t>(w.strip)].plugins[w.slot].vst != w.pl) closePluginWin(k); else w.pl->editorIdle(); } });
   saveTimer_.setSingleShot(true); saveTimer_.setInterval(2000); connect(&saveTimer_, &QTimer::timeout, this, [this] { if (!restoring_) { save(); settings_.sync(); } });
   for (auto sig : {&Engine::stripsChanged, &Engine::busesChanged, &Engine::masterChainChanged, &Engine::routingChanged, &Engine::groupsChanged}) connect(this, sig, this, [this] { if (!saveTimer_.isActive()) saveTimer_.start(); });   // two seconds after the FIRST change: a stream of changes (a controller being moved for a minute) cannot keep pushing the save away
   graveTimer_.setSingleShot(true); graveTimer_.setInterval(1500); connect(&graveTimer_, &QTimer::timeout, this, [this] { graveyard_.clear(); fxGraveyard_.clear(); });
@@ -68,7 +71,7 @@ Engine::Engine(QObject* parent) : QObject(parent) {
   connect(&timer_, &QTimer::timeout, this, &Engine::tick);
   tick();
 }
-Engine::~Engine() { save(); stop(); }
+Engine::~Engine() { closePluginWindows(); save(); stop(); }
 
 QStringList Engine::backends() const { QStringList l; for (const auto& b : am::availableBackends()) l << QString::fromStdString(b); return l; }
 
@@ -615,6 +618,27 @@ QVariantMap Engine::autoDetectFor(const QString& prefer) const {
   } best["rate"] = best["defaultRate"].toDouble() > 0 ? best["defaultRate"].toDouble() : 48000.0;
   return best;
 }
+QVariantMap Engine::ioCheck() const {
+  QVariantMap m; m["running"] = rt_ != nullptr; QVariantList ins, outs; if (!rt_) { m["verdict"] = QStringLiteral("The sound card is not running."); m["inputs"] = ins; m["outputs"] = outs; m["realtime"] = false; return m; }
+  const am::Snapshot sn = rt_->snapshot(); auto db = [](double v) { return v > 1e-6 ? 20.0 * std::log10(v) : -120.0; };
+  int live = 0, same = 0;
+  for (int ch = 0; ch < devIn_; ++ch) { int strip = -1; for (int i = 0; i < kStrips && strip < 0; ++i) if (inRoute_[i] == ch) strip = i;
+    QVariantMap e; e["ch"] = ch + 1; e["strip"] = strip + 1; e["name"] = strip >= 0 ? strips_[static_cast<std::size_t>(strip)].name : QString();
+    const double level = strip >= 0 ? db(std::max(sn.strips[strip].inPk, sn.strips[strip].rms)) : -120.0; e["db"] = level; e["live"] = level > -70.0; if (level > -70.0) ++live; if (strip == ch) ++same; ins << e; }
+  for (int o = 0; o < devOut_; ++o) { const int src = outRoute_[o]; QVariantMap e; e["ch"] = o + 1; double level = -120.0; QString what = QStringLiteral("nothing");
+    if (src == am::Runtime::kSrcMasterL || src == am::Runtime::kSrcMonL) { what = src == am::Runtime::kSrcMasterL ? QStringLiteral("MASTER L") : QStringLiteral("MONITOR L"); level = db(src == am::Runtime::kSrcMasterL ? sn.master[0].pk : sn.monitorPk[0]); }
+    else if (src == am::Runtime::kSrcMasterR || src == am::Runtime::kSrcMonR) { what = src == am::Runtime::kSrcMasterR ? QStringLiteral("MASTER R") : QStringLiteral("MONITOR R"); level = db(src == am::Runtime::kSrcMasterR ? sn.master[1].pk : sn.monitorPk[1]); }
+    else if (src >= am::Runtime::kSrcBus0L) { const int k = (src - am::Runtime::kSrcBus0L) / 2; if (k < kBuses) { what = buses_[k].name + ((src - am::Runtime::kSrcBus0L) % 2 ? QStringLiteral(" R") : QStringLiteral(" L")); level = db(sn.buses[k].pk); } }
+    e["source"] = what; e["db"] = level; e["live"] = level > -70.0; outs << e; }
+  const double blockMs = blockFrames_ > 0 && rt_->sampleRate() > 0 ? 1000.0 * blockFrames_ / rt_->sampleRate() : 0.0; const bool rtOk = sn.loadPct < 80.0 && sn.blocks > 0;
+  m["backend"] = backend(); m["device"] = !outDevName_.isEmpty() ? outDevName_ : inDevName_; m["inputs"] = ins; m["outputs"] = outs; m["liveInputs"] = live; m["sameChannel"] = same;
+  m["xruns"] = static_cast<qulonglong>(sn.xruns); m["loadPct"] = sn.loadPct; m["blockMs"] = blockMs; m["latencyMs"] = 2.0 * blockMs; m["realtime"] = rtOk;
+  m["verdict"] = !rtOk ? QStringLiteral("The engine is not keeping up (load %1 %): use a larger block or close other programs.").arg(sn.loadPct, 0, 'f', 0)
+               : devIn_ == 0 ? QStringLiteral("Real time is fine, but this device has no inputs: open it with its input side on CONNECTIONS.")
+               : live == 0 ? QStringLiteral("Real time is fine. No signal is arriving on any input right now: play or speak into the device and look again.")
+               : QStringLiteral("Real time is fine: %1 of %2 input(s) carry signal, %3 on the strip of the same number; about %4 ms through the console.").arg(live).arg(devIn_).arg(same).arg(2.0 * blockMs, 0, 'f', 1);
+  return m;
+}
 QVariantList Engine::mixersFound() const {
   QVariantList l; const auto infos = devInfos(devices_);
   for (const am::DeviceInfo* d : am::drv::mixers(infos)) { const am::drv::MixerProfile p = am::drv::mixerProfile(d->name); QVariantMap m;
@@ -690,6 +714,34 @@ bool Engine::loadVst(int i, int slot) {
   if (!pl) { p.error = QString::fromStdString(err); return false; }
   if (!p.state.isEmpty()) pl->setState(p.state.toStdString());
   pl->setBypass(p.bypass); p.vst = std::move(pl); return true;
+}
+bool Engine::openPluginWindow(int i, int slot, bool evenHere) {
+  if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots) return false;
+#ifndef _WIN32
+  if (!evenHere) return false;   // the editors of plug-ins need a native window of the kind their system gives; this build does that on Windows
+#else
+  (void)evenHere;
+#endif
+  const PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[slot]; if (!p.vst || !p.vst->hasEditor()) return false;
+  for (const PluginWin& w : pluginWins_) if (w.pl == p.vst) { w.win->raise(); w.win->requestActivate(); return true; }   // already open: bring it to the front
+  auto* win = new QWindow; win->setFlags(Qt::Window | Qt::WindowTitleHint | Qt::WindowSystemMenuHint | Qt::WindowCloseButtonHint | Qt::MSWindowsFixedSizeDialogHint);
+  win->setTitle(QStringLiteral("%1  ·  CH %2").arg(QString::fromStdString(p.vst->info().name)).arg(i + 1)); win->resize(640, 400); win->create();
+  int w = 640, h = 400;
+  if (!p.vst->openEditor(reinterpret_cast<void*>(win->winId()), w, h)) { delete win; return false; }
+  w = std::clamp(w, 120, 4000); h = std::clamp(h, 60, 3000); win->setMinimumSize(QSize(w, h)); win->setMaximumSize(QSize(w, h)); win->resize(w, h);
+  win->installEventFilter(this); win->show(); pluginWins_.push_back({win, p.vst, i, slot});
+  if (!pluginIdle_.isActive()) pluginIdle_.start(33);
+  return true;
+}
+void Engine::closePluginWin(int k) {
+  if (k < 0 || k >= pluginWins_.size()) return; PluginWin w = pluginWins_.takeAt(k);
+  w.pl->closeEditor(); w.win->removeEventFilter(this); w.win->hide(); w.win->deleteLater();   // the editor leaves the window before the window goes
+  if (pluginWins_.isEmpty()) pluginIdle_.stop();
+}
+void Engine::closePluginWindows() { while (!pluginWins_.isEmpty()) closePluginWin(0); }
+bool Engine::eventFilter(QObject* o, QEvent* e) {
+  if (e->type() == QEvent::Close) for (int k = 0; k < pluginWins_.size(); ++k) if (pluginWins_[k].win == o) { closePluginWin(k); return true; }
+  return QObject::eventFilter(o, e);
 }
 int Engine::retryPlugins() {
   int back = 0;

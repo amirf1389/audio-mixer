@@ -8,6 +8,7 @@
 #include <functional>
 #include <QSettings>
 #include <QTimer>
+#include <QWindow>
 #include <QVariantList>
 #include <QVariantMap>
 #include <QJsonObject>
@@ -128,6 +129,11 @@ class Engine : public QObject {
   Q_INVOKABLE bool open(const QString& backend, const QString& inDevice, const QString& outDevice, double sampleRate, int frames, int inChannels, int outChannels);
   // DRIVER INTELLIGENCE (engine/cpp/include/audiomixer/driver_intel.hpp): the ladder for an ASIO device, the Realtek pin and the locks learned
   // A MIXER OF ANOTHER MAKER connected through its ASIO driver, used as a multichannel sound card (am::drv::mixerProfile)
+  // INPUT / OUTPUT CHECK of the running sound card (an audio interface or a mixer on its ASIO driver): every input channel with the strip that
+  // listens to it and the level arriving now, every output channel with what it carries and its level, and whether the engine keeps up in real
+  // time (dropouts, load, block time). {running, backend, device, inputs: [{ch, strip, name, db, live}], outputs: [{ch, source, db, live}],
+  // liveInputs, sameChannel, xruns, loadPct, blockMs, latencyMs, realtime, verdict}
+  Q_INVOKABLE QVariantMap ioCheck() const;
   Q_INVOKABLE QVariantList mixersFound() const;          // [{id, name, maker, model, prefix, note, inChannels, outChannels, running}]
   Q_INVOKABLE bool connectMixer(const QString& id, int frames);   // opens ALL its channels (32 at most) through ASIO and assigns them
   Q_INVOKABLE int assignMixerChannels(const QString& prefix, bool nameStrips);   // desk channel n -> strip n for every input the running device has; the other strips get no input; returns how many
@@ -373,6 +379,12 @@ class Engine : public QObject {
   Q_INVOKABLE QString pluginError(int strip, int slot) const;
   Q_INVOKABLE QString pluginParamText(int strip, int slot, int id, double normalized) const;   // what the plug-in calls that position ("250 ms", "+12 dB"): for a knob's printed scale
   Q_INVOKABLE int pluginCount(int strip) const;
+  // A PLUG-IN'S OWN WINDOW: the editor its maker made, in a window of its own that can be moved and closed like any other. True when the
+  // plug-in has an editor and it opened (Windows; a plug-in without one, or another system, gets the console's own knob view instead).
+  Q_INVOKABLE bool openPluginWindow(int strip, int slot, bool evenHere = false);   // evenHere: also off Windows (the tests)
+  Q_INVOKABLE void closePluginWindows();
+  Q_INVOKABLE int pluginWindows() const { return static_cast<int>(pluginWins_.size()); }
+  bool eventFilter(QObject* o, QEvent* e) override;
   Q_INVOKABLE int retryPlugins();   // tries again every plug-in slot that is waiting (its file was missing, busy or not scanned yet); returns how many came back
   Q_INVOKABLE void saveNow() { save(); settings_.sync(); }   // the console (faders, DSP, racks and what their plug-ins hold) to the settings, now
   Q_INVOKABLE void copyChannel(int strip);
@@ -465,7 +477,7 @@ class Engine : public QObject {
   static constexpr int kBuses = 16, kGroups = 8;   // buses 0-7 AUX, 8-15 FX
   struct SendUi { double db = -60; bool pre = false; };
   struct PluginUi { QString kind; bool bypass = false; std::shared_ptr<am::host::Plugin> vst; QString state, error; };   // vst: loaded instance (null = pending with error)
-  bool vstScanning_ = false; std::vector<QVariantMap> vstCatalog_; std::vector<std::shared_ptr<am::host::Plugin>> graveyard_; QTimer graveTimer_; QTimer saveTimer_; QTimer motionTimer_; bool mirror_ = false; bool headOn_ = false, cinema_ = false; double headYaw_ = 0, headPitch_ = 0; double orbit_[32] = {0}; qint64 motionAt_ = 0; void pushSpatial(int i); void moveObjects(); bool masterMuted_ = false; double masterKeepDb_ = 0;
+  bool vstScanning_ = false; std::vector<QVariantMap> vstCatalog_; std::vector<std::shared_ptr<am::host::Plugin>> graveyard_; QTimer graveTimer_; QTimer saveTimer_; QTimer motionTimer_; struct PluginWin { QWindow* win; std::shared_ptr<am::host::Plugin> pl; int strip, slot; }; QList<PluginWin> pluginWins_; QTimer pluginIdle_; void closePluginWin(int index); bool mirror_ = false; bool headOn_ = false, cinema_ = false; double headYaw_ = 0, headPitch_ = 0; double orbit_[32] = {0}; qint64 motionAt_ = 0; void pushSpatial(int i); void moveObjects(); bool masterMuted_ = false; double masterKeepDb_ = 0;
   bool loadVst(int strip, int slot);                      // from kind + state at the runtime's rate; false -> error set
   void rebuildInserts(int strip);                         // the strip's VST chain into the runtime
   void reloadAllVst();                                    // after open (new rate / block)

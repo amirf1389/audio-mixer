@@ -36,6 +36,7 @@ class Plugin final : public host::Plugin {
   void process(const float* const* in, float* const* out, int frames) override;
   std::string state() const override;
   bool setState(const std::string& base64) override;
+  bool hasEditor() const override; bool openEditor(void* parentWindow, int& width, int& height) override; void closeEditor() override; void editorIdle() override; bool editorOpen() const override;
   struct Impl;
  private:
   Plugin() = default;

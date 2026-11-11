@@ -42,6 +42,28 @@ Item {
                     Btn { label: i18n.t("DIRECTSOUND ONLY", i18n.lang); on: engine.driverFallback === "dsound"; onColor: Theme.emerald; onClicked: engine.driverFallback = "dsound" }
                     Btn { label: i18n.t("ASIO ONLY", i18n.lang); on: engine.driverFallback === "none"; onColor: Theme.amber; onClicked: engine.driverFallback = "none" }
                     Text { text: engine.driverFallback === "all" ? i18n.t("ASIO → WASAPI exclusive → WASAPI shared → DirectSound", i18n.lang) : engine.driverFallback === "dsound" ? i18n.t("ASIO → DirectSound (WASAPI is optional, never a lock)", i18n.lang) : i18n.t("ASIO, nothing else", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
+                Rectangle {   // INPUT / OUTPUT CHECK: every channel of the running interface or mixer, live, with the real-time verdict
+                    id: ioCard; objectName: "ioCheckCard"; Layout.fillWidth: true; implicitHeight: ioCol.implicitHeight + 16; radius: 6; color: Theme.ov(0.05); border.color: io.realtime ? Theme.emerald : Theme.amber; visible: engine.running
+                    property int tick: 0
+                    readonly property var io: { tick; engine.running; return engine.ioCheck() }
+                    Timer { interval: 250; running: ioCard.visible && page.visible; repeat: true; onTriggered: ioCard.tick++ }
+                    ColumnLayout { id: ioCol; anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 8; spacing: 5
+                        RowLayout { spacing: 8
+                            Text { text: i18n.t("INPUT / OUTPUT CHECK", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; font.letterSpacing: 1.5 }
+                            Text { text: (ioCard.io.backend || "").toUpperCase() + " · " + (ioCard.io.device || ""); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
+                            Item { Layout.fillWidth: true }
+                            Text { text: i18n.t("dropouts ", i18n.lang) + (ioCard.io.xruns || 0) + "  ·  " + i18n.t("load ", i18n.lang) + Number(ioCard.io.loadPct || 0).toFixed(0) + " %  ·  " + i18n.t("block ", i18n.lang) + Number(ioCard.io.blockMs || 0).toFixed(1) + " ms"; color: ioCard.io.realtime ? Theme.emerald : Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } }
+                        RowLayout { spacing: 6; Text { Layout.preferredWidth: 26; text: i18n.t("IN", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                            Flow { Layout.fillWidth: true; spacing: 3
+                                Repeater { model: ioCard.io.inputs || []; delegate: Rectangle { width: 46; height: 26; radius: 3; color: modelData.live ? Qt.rgba(0.063, 0.725, 0.506, 0.25) : Theme.ov(0.06); border.color: modelData.strip === modelData.ch ? Theme.emerald : modelData.strip > 0 ? Theme.amber : Theme.lineSoft
+                                    Text { anchors.horizontalCenter: parent.horizontalCenter; y: 2; text: modelData.ch + (modelData.strip > 0 ? "→" + modelData.strip : ""); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                                    Text { anchors.horizontalCenter: parent.horizontalCenter; y: 14; text: modelData.live ? Number(modelData.db).toFixed(0) + " dB" : "—"; color: modelData.live ? Theme.emerald : Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } } } } }
+                        RowLayout { spacing: 6; Text { Layout.preferredWidth: 26; text: i18n.t("OUT", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                            Flow { Layout.fillWidth: true; spacing: 3
+                                Repeater { model: ioCard.io.outputs || []; delegate: Rectangle { width: 86; height: 26; radius: 3; color: modelData.live ? Qt.rgba(0.063, 0.725, 0.506, 0.25) : Theme.ov(0.06); border.color: Theme.lineSoft
+                                    Text { anchors.horizontalCenter: parent.horizontalCenter; y: 2; text: modelData.ch + " · " + modelData.source; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                                    Text { anchors.horizontalCenter: parent.horizontalCenter; y: 14; text: modelData.live ? Number(modelData.db).toFixed(0) + " dB" : "—"; color: modelData.live ? Theme.emerald : Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } } } } }
+                        Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; text: i18n.t(ioCard.io.verdict || "", i18n.lang); color: ioCard.io.realtime ? Theme.ink : Theme.amber; font.family: Theme.mono; font.pixelSize: 8 } } }
                 Repeater {   // A MIXER OF ANOTHER MAKER on its ASIO driver: open every channel and put desk channel n on strip n
                     model: { engine.devices; engine.running; return engine.mixersFound() }
                     delegate: Rectangle { objectName: "mixerCard"; Layout.fillWidth: true; implicitHeight: mxCol.implicitHeight + 16; radius: 6; color: Theme.ov(0.05); border.color: modelData.running ? Theme.emerald : Theme.cyan

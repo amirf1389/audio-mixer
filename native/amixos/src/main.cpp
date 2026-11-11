@@ -395,6 +395,30 @@ int main(int argc, char* argv[]) {
         for (const char* pf : {"best", "asio", "wasapi", "dsound", "bluetooth"}) { engine.setAutoPrefer(pf); got << engine.autoDetect()["id"].toString(); }
         rig.removeLast(); engine.simulateDevices(rig); engine.setAutoPrefer("bluetooth"); const QVariantMap fb = engine.autoDetect(); engine.setAutoPrefer(keep); engine.simulateDevices(real);
         if (got != QStringList{"Focusrite USB ASIO", "Focusrite USB ASIO", "{w-out}", "{d-out}", "{bt}"} || fb["id"].toString() != "Focusrite USB ASIO" || !fb["why"].toString().contains("no BLUETOOTH device")) { std::fprintf(stderr, "amixos --smoke: auto select picked %s / fallback %s\n", qPrintable(got.join(", ")), qPrintable(fb["id"].toString())); return 225; } }
+      { // INPUT / OUTPUT CHECK: with the test tone on inputs 1-2 both are live on strips 1-2, the outputs carry the monitor mix, and real time holds
+        engine.resetRouting(); engine.setNullTestInput(true); engine.stop(); engine.open("null", "", "", 48000, 256, 2, 2); QElapsedTimer t; t.start(); while (t.elapsed() < 500) QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+        const QVariantMap io = engine.ioCheck(); const QVariantList ii = io["inputs"].toList(), oo = io["outputs"].toList();
+        if (!io["running"].toBool() || !io["realtime"].toBool() || ii.size() != 2 || oo.size() != 2 || io["liveInputs"].toInt() != 2 || io["sameChannel"].toInt() != 2 || ii[1].toMap()["strip"].toInt() != 2 || !ii[0].toMap()["live"].toBool() || !oo[0].toMap()["source"].toString().startsWith("MONITOR") || !oo[0].toMap()["live"].toBool() || io["blockMs"].toDouble() < 5 || !io["verdict"].toString().contains("2 of 2")) { std::fprintf(stderr, "amixos --smoke: input / output check: %s\n", qPrintable(io["verdict"].toString())); return 226; }
+        engine.setInputRoute(1, 0); const QVariantMap io2 = engine.ioCheck(); engine.resetRouting(); if (io2["sameChannel"].toInt() != 1) { std::fprintf(stderr, "amixos --smoke: the check did not notice a channel on another strip\n"); return 227; }
+        engine.setNullTestInput(false); engine.stop(); const bool off = !engine.ioCheck()["running"].toBool(); engine.open("null", "", "", 48000, 256, 2, 2); if (!off) return 228; }
+      { // A PLUG-IN'S OWN WINDOW: the test VST2 has an editor; it opens once in a window of its own, is idled, and is closed when the window is closed or the plug-in leaves its slot
+        QString k2, k3; for (const QVariant& v : engine.vstCatalog()) { const QString k = v.toMap()["kind"].toString(); if (k2.isEmpty() && k.startsWith("vst2:")) k2 = k; if (k3.isEmpty() && k.startsWith("vst3:")) k3 = k; }
+        engine.setPlugin(26, 0, k2); engine.setPlugin(26, 1, k3); engine.setPlugin(26, 2, "fx:hall");
+        if (engine.openPluginWindow(26, 0)) {
+#ifndef _WIN32
+          std::fprintf(stderr, "amixos --smoke: plug-in windows must stay off on this system unless asked\n"); return 229;
+#endif
+        }
+        engine.closePluginWindows();
+        if (!engine.openPluginWindow(26, 0, true) || engine.pluginWindows() != 1 || !engine.openPluginWindow(26, 0, true) || engine.pluginWindows() != 1) { std::fprintf(stderr, "amixos --smoke: the plug-in's own window did not open once\n"); return 230; }
+        if (engine.openPluginWindow(26, 1, true) || engine.openPluginWindow(26, 2, true)) { std::fprintf(stderr, "amixos --smoke: a plug-in without an editor must fall back to the knob view\n"); return 231; }
+        const double v0 = engine.pluginParams(26, 0)[0].toMap()["value"].toDouble(); engine.setPluginParam(26, 0, engine.pluginParams(26, 0)[0].toMap()["id"].toInt(), 1.0);
+        QElapsedTimer t; t.start(); while (t.elapsed() < 250) QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+        if (std::fabs(engine.pluginParams(26, 0)[0].toMap()["value"].toDouble() - 1.0) < 0.05) { std::fprintf(stderr, "amixos --smoke: the open editor was not idled (%.2f)\n", v0); return 232; }
+        engine.setPlugin(26, 0, ""); t.restart(); while (t.elapsed() < 200) QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+        if (engine.pluginWindows() != 0) { std::fprintf(stderr, "amixos --smoke: the window stayed open after its plug-in was removed\n"); return 233; }
+        engine.setPlugin(26, 0, k2); if (!engine.openPluginWindow(26, 0, true)) return 234; engine.closePluginWindows(); if (engine.pluginWindows() != 0) return 235;
+        for (int k = 0; k < 3; ++k) engine.setPlugin(26, k, ""); }
       { // VST FOLDER: the console's own plug-in folder is created and saved among the scanned folders, once
         const QStringList before = settings.vstDirs(); const QString vf = settings.vstUserFolder(); settings.vstUserFolder();
         if (vf.isEmpty() || !QDir(vf).exists() || settings.vstDirs().count(vf) != 1 || QSettings().value("vst3/dirs").toStringList().count(vf) != 1) { std::fprintf(stderr, "amixos --smoke: the VST folder was not created and saved\n"); return 198; }
