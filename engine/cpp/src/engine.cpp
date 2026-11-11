@@ -270,6 +270,7 @@ void Mixer::setBusReturn(int b, double db) { if (b >= 0 && b < kMaxBuses) buses_
 void Mixer::clearClips() { for (auto& s : strips_) s.meter.state().clearClip(); master_[0].state().clearClip(); master_[1].state().clearClip(); }
 
 void Mixer::process(const float* const* in, std::size_t frames, float* outL, float* outR, float* const* busOut, const float* extL, const float* extR) {
+  double limMin = 1.0;   // the lowest limiter gain of this call, for the reduction meter
   constexpr std::size_t kChunk = 512;
   bool anySolo = false; for (const auto& s : strips_) anySolo = anySolo || s.solo;
   const double rel = 1.0 - std::exp(-1.0 / (limReleaseMs_ * 0.001 * fs_));   // one-pole release: the time constant is the release time
@@ -332,7 +333,7 @@ void Mixer::process(const float* const* in, std::size_t frames, float* outL, flo
         const double pk = std::max(std::fabs(l), std::fabs(r)), need = pk > limCeil_ ? limCeil_ / pk : 1.0;
         if (need < limGain_) limGain_ = need; else limGain_ += (1.0 - limGain_) * rel;
         if (limGain_ > need) limGain_ = need;                           // instant attack: never above what this sample needs
-        l *= limGain_; r *= limGain_;
+        l *= limGain_; r *= limGain_; if (limGain_ < limMin) limMin = limGain_;
       }
       outL[done + i] = static_cast<float>(l); outR[done + i] = static_cast<float>(r);
     }
@@ -348,6 +349,7 @@ void Mixer::process(const float* const* in, std::size_t frames, float* outL, flo
   for (auto& s : strips_) s.meter.end(timeMs_);
   for (auto& b : buses_) b.meter.end(timeMs_);
   master_[0].end(timeMs_); master_[1].end(timeMs_);
+  limGrDb_ = limOn_ && limMin < 1.0 ? -20.0 * std::log10(std::max(limMin, 1e-6)) : 0.0;
 }
 
 }  // namespace am

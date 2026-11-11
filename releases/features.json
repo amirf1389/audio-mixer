@@ -9,7 +9,7 @@
         "ACOUSTICS page: log sine sweep and stepped sine (amplitude, phase, THD, THD+N), RTA to 1/48 octave with RMS averaging and level alignment, impulse response, ETC, RT60 / Topt, delay compensation, waterfall, spectrogram, room simulator, auto EQ with target curves (20 - 400 Hz) set on a strip or exported as REW / miniDSP text and JSON, mic calibration files, SPL offset, offline sweep WAV",
         "360 AUDIO: binaural placement of every strip for headphones (azimuth, elevation, distance, spread), also in the SDK (API v4)",
         "RTA EQ has its own EQ rack on the master (PROGRAM EQ); TONE (EQ) stays the microphone channel EQ",
-        "MASTERING plug-in after the program EQ: low and air shelves, glue compressor, saturation, output into the limiter, six presets",
+        "MASTERING rack after the program EQ, one card per module: tone shelves, bass mono, de-esser, glue compressor, exciter, saturation and output, and the master limiter with ceiling, release and a gain-reduction meter; six presets",
         "Input / output detection names what is connected (headphones, headset, speakers, microphone, audio interface, Bluetooth, digital out) on ASIO, WASAPI and DirectSound, shows it in the header, and always pairs an input with the output so every channel meters in real time",
         "5.0 surround in the SDK (API v3): per-strip DEPTH, amix_mixer_process5",
         "Plug-in slots: 10 on BASIC, unlimited on PRO, STUDIO and MASTER",

@@ -249,7 +249,10 @@ class Engine : public QObject {
   Q_INVOKABLE void setColor(int strip, int color);           // 0..7 (Theme.stripColors)
   int selectedStrip() const { return selected_; }
   void setSelectedStrip(int i) { if (i < 0 || i >= kStrips || i == selected_) return; selected_ = i; emit selectedStripChanged(); }
-  Q_INVOKABLE void setMasterLimiter(bool on, double ceilingDb);
+  Q_INVOKABLE void setMasterLimiter(bool on, double ceilingDb, double releaseMs = -1);   // releaseMs < 0 keeps the current release
+  Q_INVOKABLE QVariantMap masterLimiter() const;                    // {on, ceiling, release}
+  Q_INVOKABLE double masterLimiterReductionDb() const { return rt_ ? rt_->limiterReductionDb() : 0.0; }
+  Q_INVOKABLE double masteringDeessDb() const { return master_.deessReductionDb(); }
   QVariantMap monitor() const;
   QVariantList inputRoutes() const; QVariantList outputRoutes() const; QVariantList outputSources() const;
   int deviceInputs() const { return devIn_; } int deviceOutputs() const { return devOut_; }
@@ -412,7 +415,7 @@ class Engine : public QObject {
   BusUi buses_[kBuses]; DcaUi dcas_[kGroups]; MuteGroupUi muteGroups_[kGroups];
   QVariantMap telemetry_;
   std::vector<StripUi> strips_;
-  double masterDb_ = 0; bool masterLim_ = true; double masterCeil_ = -0.5;
+  double masterDb_ = 0; bool masterLim_ = true; double masterCeil_ = -0.5, masterRel_ = 100;
   static constexpr int kOutputs = 32;
   int inRoute_[kStrips] = {}; int outRoute_[kOutputs] = {}; int devIn_ = 0, devOut_ = 0; QString inDevName_, outDevName_; void rememberDeviceNames(const std::string& backend, const std::string& in, const std::string& out);
   QVariantMap license_; int licensedChannels_ = 8;
