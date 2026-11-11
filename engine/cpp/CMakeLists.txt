@@ -50,9 +50,9 @@ if(WIN32)
 endif()
 
 # amixos-daemon: the engine as a background service with a local JSON API (engine/cpp/app/daemon). The Kotlin remote (android/) talks to it.
-add_library(amixos_daemon_lib STATIC app/daemon/daemon.cpp app/daemon/httpd.cpp)
+add_library(amixos_daemon_lib STATIC app/daemon/daemon.cpp app/daemon/httpd.cpp app/daemon/tokens.cpp)
 target_include_directories(amixos_daemon_lib PUBLIC app)
-target_link_libraries(amixos_daemon_lib PUBLIC audiomixer_runtime)
+target_link_libraries(amixos_daemon_lib PUBLIC audiomixer_runtime amixos_license)
 if(WIN32)
   target_link_libraries(amixos_daemon_lib PUBLIC ws2_32)
 endif()

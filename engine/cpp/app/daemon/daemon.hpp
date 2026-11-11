@@ -7,6 +7,9 @@
 //        name {strip,name} | master {db} | limiter {on,ceilingDb} | send {strip,bus,db,pre} | busLevel {bus,db} | busMute {bus,on} | busReturn {bus,db}
 //        eq {strip,band,type,freq,q,gainDb} | delay {strip,ms} | polarity {strip,on} | compressor {strip,on,thresholdDb,ratio,kneeDb,attackMs,releaseMs,makeupDb}
 //        gate {strip,on,thresholdDb,rangeDb,attackMs,holdMs,releaseMs} | monitor {source,db,dim,mono,mute} | inRoute {strip,input} | outRoute {out,source} | trim {strip,db} | clearClips
+//   GET  /api/tokens              the named tokens, without their secrets (master token)
+//   POST /api/tokens              {"name":..,"role":"control"|"view","days":N} makes one and returns it once (master token)
+//   POST /api/tokens/revoke       {"id":..} (master token)
 //   WS   /ws/meters?token=...     a JSON frame 20 times a second: strips [{pk,rms,hold,clip,gr,gate,in}], master {l,r,rms,clip}, loudness, correlation, blocks, xruns
 // Token: <data>/daemon.token (am::paths: %APPDATA%\AMFB Audio\AmF X1 on Windows, the program's data folder on Linux, ...) (created on first start, 0600, 32 random bytes as hex); --token-file / --token override it.
 // Binds 127.0.0.1 by default. --allow-lan binds 0.0.0.0 for a phone on the same network: the token still protects control, but nothing is
@@ -22,18 +25,22 @@
 #include "audiomixer/runtime.hpp"
 #include "httpd.hpp"
 #include "json.hpp"
+#include "tokens.hpp"
 
 namespace am {
 
 class Daemon {
  public:
-  struct Options { std::string bind = "127.0.0.1"; unsigned short port = 8765; std::string token; int strips = 32; std::string version = "0.1.0"; bool localOnly = true; };   // localOnly: the local policy (private-network peers only)
+  struct Options { std::string bind = "127.0.0.1"; unsigned short port = 8765; std::string token; int strips = 32; std::string version = "0.1.0"; bool localOnly = true; std::string tokenStore; };   // tokenStore: the file of the named tokens ("" = only the master token)   // localOnly: the local policy (private-network peers only)
   explicit Daemon(Options o);
   ~Daemon();
   bool start(std::string& err);
   void stop();
   unsigned short port() const { return http_.port(); }
   const std::string& token() const { return opt_.token; }
+  TokenStore& tokens() { return tokens_; }
+  // "admin" (the master token), "control", "view" or "" for what a request carries
+  std::string roleOf(const httpd::Request& r) const;
   // the API itself, also callable without HTTP (tests)
   json::Value status() const;
   json::Value devices() const;
@@ -49,7 +56,7 @@ class Daemon {
   struct Monitor { int source = 0; double db = 0; bool dim = false, mono = false, mute = false; } mon_;
   httpd::Response handle(const httpd::Request& r);
   bool authorised(const httpd::Request& r) const;
-  Options opt_; httpd::Server http_;
+  Options opt_; TokenStore tokens_; httpd::Server http_;
   mutable std::mutex m_; std::unique_ptr<Runtime> rt_; std::string backend_, lastError_; std::vector<Strip> strips_; Bus buses_[kMaxBuses]; double masterDb_ = 0; bool limiter_ = true; double ceiling_ = -0.5;
   std::chrono::steady_clock::time_point started_ = std::chrono::steady_clock::now(); std::atomic<bool> running_{false};
 };

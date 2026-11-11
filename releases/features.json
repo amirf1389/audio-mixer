@@ -63,7 +63,8 @@
         "PLUGIN RACK: every edition, BASIC included, can now fill all 64 slots on a channel.",
         "PLUGINS: a large plug-in folder gets 3 minutes to scan instead of 30 seconds, so ADD and RESCAN no longer give up on a big collection.",
         "MIXER: the master VU meter is back at the top of the MASTER strip, above the buttons.",
-        "PLUGINS: ADD and RESCAN now search sub-folders (plug-ins sorted by maker are found), and a path pasted in quotes is accepted."
+        "PLUGINS: ADD and RESCAN now search sub-folders (plug-ins sorted by maker are found), and a path pasted in quotes is accepted.",
+        "DAEMON: named access tokens beside the master token. --new-token NAME [--role control|view] [--days N], --list-tokens, --revoke-token ID; a view token only reads the meters; tokens are stored as hashes and shown once."
       ]
     }
   ]
