@@ -60,6 +60,12 @@ add_executable(amixos-daemon app/daemon/main.cpp)
 target_link_libraries(amixos-daemon amixos_daemon_lib)
 if(WIN32)
   target_link_options(amixos-daemon PRIVATE -static)
+  if(MINGW)
+    # A toolchain file may leave the linker in dynamic mode (-Bdynamic) for the programs that need Qt's DLLs; the C++ runtime would then
+    # come from whatever libstdc++-6.dll lies beside the program, and an older one lacks symbols ("entry point not found"). The daemon
+    # carries its own runtime: these go last on the link line.
+    target_link_libraries(amixos-daemon -Wl,-Bstatic,-lstdc++,-lwinpthread)
+  endif()
 endif()
 
 # the licence check (AMIX1 keys, AMFXE1 edition tokens, TOTP), self-contained crypto (engine/cpp/app/license)
