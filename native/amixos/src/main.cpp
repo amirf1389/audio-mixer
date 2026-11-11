@@ -397,6 +397,11 @@ int main(int argc, char* argv[]) {
         if (got != QStringList{"Focusrite USB ASIO", "Focusrite USB ASIO", "{w-out}", "{d-out}", "{bt}"} || fb["id"].toString() != "Focusrite USB ASIO" || !fb["why"].toString().contains("no BLUETOOTH device")) { std::fprintf(stderr, "amixos --smoke: auto select picked %s / fallback %s\n", qPrintable(got.join(", ")), qPrintable(fb["id"].toString())); return 225; } }
       { // INPUT / OUTPUT CHECK: with the test tone on inputs 1-2 both are live on strips 1-2, the outputs carry the monitor mix, and real time holds
         engine.resetRouting(); engine.setNullTestInput(true); engine.stop(); engine.open("null", "", "", 48000, 256, 2, 2); QElapsedTimer t; t.start(); while (t.elapsed() < 500) QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+    { engine.muteAll(false); engine.setMute(2, true); engine.toggleMuteAll();
+      if (!engine.allMuted()) { std::fprintf(stderr, "MUTE ALL with one channel already muted did not mute the rest\n"); return 236; }
+      engine.toggleMuteAll(); const QVariantList st = engine.stripState();
+      if (engine.allMuted() || !st[2].toMap()["mute"].toBool() || st[0].toMap()["mute"].toBool()) { std::fprintf(stderr, "UNMUTE ALL did not give the earlier mutes back\n"); return 237; }
+      engine.setMute(2, false); }
         const QVariantMap io = engine.ioCheck(); const QVariantList ii = io["inputs"].toList(), oo = io["outputs"].toList();
         if (!io["running"].toBool() || !io["realtime"].toBool() || ii.size() != 2 || oo.size() != 2 || io["liveInputs"].toInt() != 2 || io["sameChannel"].toInt() != 2 || ii[1].toMap()["strip"].toInt() != 2 || !ii[0].toMap()["live"].toBool() || !oo[0].toMap()["source"].toString().startsWith("MONITOR") || !oo[0].toMap()["live"].toBool() || io["blockMs"].toDouble() < 5 || !io["verdict"].toString().contains("2 of 2")) { std::fprintf(stderr, "amixos --smoke: input / output check: %s\n", qPrintable(io["verdict"].toString())); return 226; }
         engine.setInputRoute(1, 0); const QVariantMap io2 = engine.ioCheck(); engine.resetRouting(); if (io2["sameChannel"].toInt() != 1) { std::fprintf(stderr, "amixos --smoke: the check did not notice a channel on another strip\n"); return 227; }

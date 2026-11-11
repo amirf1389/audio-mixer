@@ -56,7 +56,8 @@
         "SOUND CARD: I/O CHECK shows what arrives on each input and leaves on each output of the audio interface, and whether the console keeps real time.",
         "BLUETOOTH: find audio devices by WASAPI or DirectSound, CONNECT to the best one, PAIR A DEVICE opens the system pairing page.",
         "Third-party VST plug-ins open their own editor window, which can be moved and closed; right click on EDIT shows the knob view.",
-        "All pages translated: 1230 interface strings in 21 languages."
+        "All pages translated: 1230 interface strings in 21 languages.",
+        "MIXER: MUTE ALL now mutes every channel even when some were already muted, and UNMUTE ALL gives the earlier mutes back."
       ]
     }
   ]

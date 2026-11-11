@@ -352,6 +352,9 @@ class Engine : public QObject {
   Q_INVOKABLE double trim(int strip) const;
   // global mixer actions (the MIXER toolbar)
   Q_INVOKABLE void muteAll(bool on);
+  Q_INVOKABLE void toggleMuteAll();
+  Q_PROPERTY(bool allMuted READ allMuted NOTIFY stripsChanged)
+  bool allMuted() const;
   Q_INVOKABLE void clearSolo();
   Q_INVOKABLE void resetFaders();                     // every strip and the master to 0 dB, pans centre
   Q_INVOKABLE void flattenAllDsp();
@@ -477,6 +480,7 @@ class Engine : public QObject {
   static constexpr int kBuses = 16, kGroups = 8;   // buses 0-7 AUX, 8-15 FX
   struct SendUi { double db = -60; bool pre = false; };
   struct PluginUi { QString kind; bool bypass = false; std::shared_ptr<am::host::Plugin> vst; QString state, error; };   // vst: loaded instance (null = pending with error)
+  std::vector<bool> muteKeep_;
   bool vstScanning_ = false; std::vector<QVariantMap> vstCatalog_; std::vector<std::shared_ptr<am::host::Plugin>> graveyard_; QTimer graveTimer_; QTimer saveTimer_; QTimer motionTimer_; struct PluginWin { QWindow* win; std::shared_ptr<am::host::Plugin> pl; int strip, slot; }; QList<PluginWin> pluginWins_; QTimer pluginIdle_; void closePluginWin(int index); bool mirror_ = false; bool headOn_ = false, cinema_ = false; double headYaw_ = 0, headPitch_ = 0; double orbit_[32] = {0}; qint64 motionAt_ = 0; void pushSpatial(int i); void moveObjects(); bool masterMuted_ = false; double masterKeepDb_ = 0;
   bool loadVst(int strip, int slot);                      // from kind + state at the runtime's rate; false -> error set
   void rebuildInserts(int strip);                         // the strip's VST chain into the runtime

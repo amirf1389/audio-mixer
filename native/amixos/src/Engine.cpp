@@ -677,7 +677,15 @@ bool Engine::linked(int i) const { return i >= 0 && i < kStrips && strips_[stati
 void Engine::setTrim(int i, double db) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].trimDb = std::clamp(db, -24.0, 24.0); if (rt_) rt_->setTrimDb(i, strips_[static_cast<std::size_t>(i)].trimDb); emit stripsChanged(); }
 double Engine::trim(int i) const { return i >= 0 && i < kStrips ? strips_[static_cast<std::size_t>(i)].trimDb : 0; }
 static bool isVstKind(const QString& k) { return k.startsWith("vst3:") || k.startsWith("vst2:") || k.startsWith("fx:"); }   // everything that runs as a rack insert: hosted plug-ins and the ten built-in effects (fx:<kind>)
-void Engine::muteAll(bool on) { for (int i = 0; i < kStrips; ++i) { strips_[static_cast<std::size_t>(i)].mute = on; pushStrip(i); } emit stripsChanged(); }
+void Engine::muteAll(bool on) { muteKeep_.clear(); for (int i = 0; i < kStrips; ++i) { strips_[static_cast<std::size_t>(i)].mute = on; pushStrip(i); } emit stripsChanged(); }
+bool Engine::allMuted() const { for (int i = 0; i < kStrips; ++i) if (!strips_[static_cast<std::size_t>(i)].mute) return false; return true; }
+// MUTE ALL remembers which channels were muted before, so pressing it again gives the console back as it was
+void Engine::toggleMuteAll() {
+  if (!allMuted()) { std::vector<bool> keep(kStrips); for (int i = 0; i < kStrips; ++i) keep[static_cast<std::size_t>(i)] = strips_[static_cast<std::size_t>(i)].mute; muteAll(true); muteKeep_ = keep; return; }
+  const std::vector<bool> keep = muteKeep_; muteKeep_.clear();
+  for (int i = 0; i < kStrips; ++i) { strips_[static_cast<std::size_t>(i)].mute = keep.size() == static_cast<std::size_t>(kStrips) && keep[static_cast<std::size_t>(i)]; pushStrip(i); }
+  emit stripsChanged();
+}
 void Engine::clearSolo() { for (int i = 0; i < kStrips; ++i) { strips_[static_cast<std::size_t>(i)].solo = false; if (rt_) rt_->setSolo(i, false); } emit stripsChanged(); }
 void Engine::resetFaders() { for (int i = 0; i < kStrips; ++i) { StripUi& s = strips_[static_cast<std::size_t>(i)]; s.db = 0; s.pan = 0; pushStrip(i); if (rt_) rt_->setPan(i, 0); } masterDb_ = 0; if (rt_) rt_->setMasterDb(0); emit stripsChanged(); }
 void Engine::flattenAllDsp() { for (int i = 0; i < kStrips; ++i) { strips_[static_cast<std::size_t>(i)].dsp.set(am::dsp::ChannelParams{}); for (PluginUi& p : strips_[static_cast<std::size_t>(i)].plugins) if (!isVstKind(p.kind)) p = PluginUi{}; } if (rt_) pushAll(); emit stripsChanged(); }
