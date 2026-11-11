@@ -41,6 +41,9 @@ Popup {
     function openFor(strip_, slot_, kind_, title_) { strip = strip_; slot = slot_; kind = kind_; title = title_; presets = engine.rackPresets(kind_); presetAt = -1; stateA = null; stateB = null; side = "A"; reload(); x = Math.max(4, (parent.width - width) / 2); y = Math.max(4, (parent.height - height) / 2); open() }
     function reload() { params = engine.pluginParams(strip, slot); const p = engine.plugins(strip)[slot]; bypass = p ? p.bypass : false; rev++ }
     function setParam(i, v) { engine.setPluginParam(strip, slot, params[i].id, v); const t = engine.pluginParams(strip, slot); if (t.length === params.length) params = t; presetAt = -1 }
+    // the printed ends of a knob's scale: what the plug-in itself calls its lowest and highest position, without the unit when both share it
+    function ends(i, hi) { if (!params[i]) return ""; rev; const lo = engine.pluginParamText(strip, slot, params[i].id, 0), up = engine.pluginParamText(strip, slot, params[i].id, 1); if (!lo && !up) return hi ? "10" : "0"
+        const strip_ = function (t) { return t.replace(/^\+/, "+").replace(/\.0(?=\D|$)/, "").replace(/ ?(dBFS|dB|Hz|ms|%|s|bit)$/, "") }; return hi ? up.replace(/\.0(?=\D|$)/, "") : strip_(lo) }
     function snapshot() { const a = []; for (let i = 0; i < params.length; i++) a.push(params[i].value); return a }
     function restore(a) { if (!a) return; for (let i = 0; i < params.length && i < a.length; i++) engine.setPluginParam(strip, slot, params[i].id, a[i]); reload() }
     function pick(s) { if (s === side) return; if (side === "A") stateA = snapshot(); else stateB = snapshot(); side = s; restore(s === "A" ? stateA : stateB) }
@@ -70,13 +73,16 @@ Popup {
                 Repeater { model: 4; delegate: Image { source: "qrc:/qt/qml/AmixOS/skin/screw.png"; width: 15; height: 15; x: index % 2 ? parent.width - 17 : 2; y: index < 2 ? 2 : parent.height - 17; rotation: 20 + index * 67; smooth: true } }
                 Row { id: face; x: 8; y: 8; spacing: 6
                     // PROGRAM (presets) + the A / B selector
-                    Section { head: ed.presets.length ? "PROGRAM" : "SETTING"; width: 138
+                    Section { head: ed.presets.length ? "PROGRAM" : "COMPARE"; width: 138
                         Rectangle { visible: ed.presets.length > 0; x: 10; y: 4; width: parent.width - 20; height: 62; radius: 5; color: "#0e0e0e"; border.color: "#000"
                             Rectangle { x: 6; y: 5; width: parent.width - 12; height: 28; radius: 2; gradient: Gradient { GradientStop { position: 0; color: "#f3e9b8" } GradientStop { position: 1; color: "#d9c98a" } }
                                 Text { anchors.centerIn: parent; width: parent.width - 8; horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight; text: ed.presetAt >= 0 ? ed.presets[ed.presetAt].name : "—  " + ed.presets.length + "  —"; color: "#2a2410"; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                                 Rectangle { y: parent.height / 2; width: parent.width; height: 1; color: ed.red; opacity: 0.5 } }
                             Key { x: 22; y: 38; label: "–"; onClicked: ed.preset(-1) } Key { x: parent.width - 44; y: 38; label: "+"; onClicked: ed.preset(1) } }
-                        Text { visible: ed.presets.length === 0; x: 10; y: 16; width: parent.width - 20; wrapMode: Text.WordWrap; horizontalAlignment: Text.AlignHCenter; text: "CH " + (ed.strip + 1) + "\nSLOT " + (ed.slot + 1); color: ed.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true }
+                        Item { visible: ed.presets.length === 0; x: 13; y: 12; width: 112; height: 50   // the serial plate: brass, stamped with the channel and the slot
+                            Image { width: 112; height: 30; source: "qrc:/qt/qml/AmixOS/skin/serial.png"; smooth: true; mipmap: true }
+                            Text { x: 0; y: 3; width: 112; horizontalAlignment: Text.AlignHCenter; text: "TYPE  X1 – " + (ed.fx ? ed.fx.toUpperCase().substring(0, 6) : "VST"); color: "#3a2c0e"; font.family: Theme.mono; font.pixelSize: 7; font.bold: true; font.letterSpacing: 1 }
+                            Text { x: 0; y: 14; width: 112; horizontalAlignment: Text.AlignHCenter; text: "SER. No.  " + (ed.strip + 1 < 10 ? "0" : "") + (ed.strip + 1) + " – " + (ed.slot + 1 < 10 ? "0" : "") + (ed.slot + 1); color: "#3a2c0e"; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; font.letterSpacing: 1 } }
                         Text { anchors.horizontalCenter: parent.horizontalCenter; y: 84; text: "SELECT"; color: ed.ink; font.family: ed.face1; style: Text.Sunken; styleColor: "#70ffffff"; font.pixelSize: 10; font.weight: Font.DemiBold }
                         Item { anchors.horizontalCenter: parent.horizontalCenter; y: 102; width: 90; height: 96   // the A / B selector: a pointer knob
                             Text { x: 6; y: 0; text: "A"; color: ed.side === "A" ? ed.red : ed.ink; font.family: ed.face1; style: Text.Sunken; styleColor: "#70ffffff"; font.pixelSize: 12; font.bold: true } Text { x: 74; y: 0; text: "B"; color: ed.side === "B" ? ed.red : ed.ink; font.family: ed.face1; style: Text.Sunken; styleColor: "#70ffffff"; font.pixelSize: 12; font.bold: true }
@@ -90,14 +96,14 @@ Popup {
                                     delegate: Column { width: 84; spacing: 0; readonly property int pi: modelData
                                         Text { anchors.horizontalCenter: parent.horizontalCenter; text: ed.params[pi] ? ed.params[pi].title : ""; color: ed.ink; font.family: ed.face1; style: Text.Sunken; styleColor: "#70ffffff"; font.pixelSize: 10; font.weight: Font.DemiBold }
                                         Text { anchors.horizontalCenter: parent.horizontalCenter; text: ed.params[pi] ? ed.params[pi].text : ""; color: ed.ink; font.family: ed.face1; style: Text.Sunken; styleColor: "#70ffffff"; font.pixelSize: 9 }
-                                        Knob { anchors.horizontalCenter: parent.horizontalCenter; width: 84; size: 44; vintage: true; paper: ed.ink; minText: "0"; maxText: "10"; label: ""; valueText: ""
+                                        Knob { anchors.horizontalCenter: parent.horizontalCenter; width: 84; size: 44; vintage: true; paper: ed.ink; minText: ed.ends(pi, 0); maxText: ed.ends(pi, 1); label: ""; valueText: ""
                                             defaultValue: ed.params[pi] ? ed.params[pi]["default"] : 0.5; readonly property int rev: ed.rev; onRevChanged: sync(); Component.onCompleted: sync()
                                             function sync() { if (ed.params[pi]) value = ed.params[pi].value } onMoved: function (v) { ed.setParam(pi, v) } height: 74 } } } } } }
                     // the name plate, the lamp and the ON / OFF switch
                     Item { width: 150; height: ed.panelH - 16
                         MouseArea { anchors.fill: parent; property point p0; cursorShape: Qt.SizeAllCursor; onPressed: function (m) { p0 = Qt.point(m.x, m.y) } onPositionChanged: function (m) { if (pressed) { ed.x += (m.x - p0.x) * ed.fit; ed.y += (m.y - p0.y) * ed.fit } } }
                         Text { anchors.horizontalCenter: parent.horizontalCenter; y: 6; text: "AMFB  X1"; color: ed.ink; font.family: ed.face1; style: Text.Sunken; styleColor: "#70ffffff"; font.pixelSize: 17; font.weight: Font.Bold; font.letterSpacing: 2 }
-                        Rectangle { anchors.horizontalCenter: parent.horizontalCenter; y: 34; width: 26; height: 26; radius: 2; color: ed.red; border.color: "#6b0f0f"; Text { anchors.centerIn: parent; text: "A"; color: "#f3e9b8"; font.family: ed.face1; style: Text.Sunken; styleColor: "#70ffffff"; font.pixelSize: 15; font.weight: Font.Black } }
+                        Image { anchors.horizontalCenter: parent.horizontalCenter; y: 28; width: 40; height: 40; source: "qrc:/qt/qml/AmixOS/skin/badge.png"; smooth: true; mipmap: true }
                         Text { anchors.horizontalCenter: parent.horizontalCenter; y: 68; width: parent.width - 6; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap; text: ed.title.toUpperCase(); color: ed.ink; font.family: ed.face1; style: Text.Sunken; styleColor: "#70ffffff"; font.pixelSize: 12; font.weight: Font.Bold; font.letterSpacing: 1 }
                         Image { anchors.horizontalCenter: parent.horizontalCenter; y: 100; width: 70; height: 70; source: ed.bypass ? "qrc:/qt/qml/AmixOS/skin/lamp-off.png" : "qrc:/qt/qml/AmixOS/skin/lamp-on.png"; smooth: true }
                         Item { anchors.horizontalCenter: parent.horizontalCenter; y: 156; width: 128; height: 44   // the ON / OFF switch: marks with a ring (off) and a dot (on), the miniature toggle between them
@@ -126,7 +132,7 @@ Popup {
                         Section { head: "BLEND"; width: 150; height: ed.panelH - 16 - 110
                             Column { visible: ed.mixIndex >= 0; anchors.horizontalCenter: parent.horizontalCenter; y: 0; width: 84; spacing: 0
                                 Text { anchors.horizontalCenter: parent.horizontalCenter; text: "MIX  " + (ed.params[ed.mixIndex] ? ed.params[ed.mixIndex].text : ""); color: ed.ink; font.family: ed.face1; style: Text.Sunken; styleColor: "#70ffffff"; font.pixelSize: 9; font.weight: Font.DemiBold }
-                                Knob { anchors.horizontalCenter: parent.horizontalCenter; width: 84; height: 74; size: 44; vintage: true; paper: ed.ink; minText: "0"; maxText: "100"; defaultValue: ed.params[ed.mixIndex] ? ed.params[ed.mixIndex]["default"] : 1
+                                Knob { anchors.horizontalCenter: parent.horizontalCenter; width: 84; height: 74; size: 44; vintage: true; paper: ed.ink; minText: "0"; maxText: "100 %"; defaultValue: ed.params[ed.mixIndex] ? ed.params[ed.mixIndex]["default"] : 1
                                     readonly property int rev: ed.rev; onRevChanged: sync(); Component.onCompleted: sync(); function sync() { if (ed.params[ed.mixIndex]) value = ed.params[ed.mixIndex].value } onMoved: function (v) { ed.setParam(ed.mixIndex, v) } } }
                             Text { visible: ed.mixIndex < 0; anchors.centerIn: parent; text: "—"; color: ed.ink } } }
                 }

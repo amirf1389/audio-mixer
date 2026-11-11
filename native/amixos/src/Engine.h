@@ -336,6 +336,7 @@ class Engine : public QObject {
   Q_INVOKABLE QVariantList pluginParams(int strip, int slot) const;   // [{id, title, units, value (normalized), text, stepCount, bypass, hidden, readOnly}]
   Q_INVOKABLE void setPluginParam(int strip, int slot, int id, double normalized);
   Q_INVOKABLE QString pluginError(int strip, int slot) const;
+  Q_INVOKABLE QString pluginParamText(int strip, int slot, int id, double normalized) const;   // what the plug-in calls that position ("250 ms", "+12 dB"): for a knob's printed scale
   Q_INVOKABLE int pluginCount(int strip) const;
   Q_INVOKABLE void copyChannel(int strip);
   Q_INVOKABLE bool pasteChannel(int strip);          // the copied DSP + sends + pan onto this strip (not the name, colour, fader or groups)

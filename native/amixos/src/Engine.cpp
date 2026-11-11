@@ -606,6 +606,7 @@ void Engine::rebuildInserts(int i) {
   rt_->setInserts(i, chain->empty() ? nullptr : chain);
 }
 void Engine::reloadAllVst() { for (int i = 0; i < kStrips; ++i) { bool any = false; for (int k = 0; k < kPluginSlots; ++k) { PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[k]; if (isVstKind(p.kind)) { if (p.vst) p.state = QString::fromStdString(p.vst->state()); if (p.vst) graveyard_.push_back(p.vst); loadVst(i, k); any = true; } } if (any) rebuildInserts(i); } graveTimer_.start(); }
+QString Engine::pluginParamText(int i, int slot, int id, double v) const { if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots) return {}; const PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[slot]; return p.vst ? QString::fromStdString(p.vst->paramText(static_cast<std::uint32_t>(id), std::clamp(v, 0.0, 1.0))) : QString(); }
 QVariantList Engine::pluginParams(int i, int slot) const {
   QVariantList l; if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots) return l; const PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[slot]; if (!p.vst) return l;
   for (const auto& q : p.vst->params()) { if (q.hidden) continue; QVariantMap m; m["id"] = static_cast<int>(q.id); m["title"] = QString::fromStdString(q.title); m["units"] = QString::fromStdString(q.units); m["value"] = q.normalized; m["default"] = q.defaultNormalized; m["text"] = QString::fromStdString(p.vst->paramText(q.id, q.normalized)); m["stepCount"] = q.stepCount; m["bypass"] = q.bypass; m["readOnly"] = q.readOnly; l << m; }

@@ -163,4 +163,22 @@ for name, lit in (('lamp-on.png', True), ('lamp-off.png', False)):
     col = (np.array([255, 70, 50]) if lit else np.array([96, 18, 16])); hi = np.exp(-(((dx + 4) ** 2 + (dy + 5) ** 2) / 14)) * (150 if lit else 90)
     for k in range(3): a[:, :, k] = np.where(jewel, col[k] * (0.62 + 0.38 * core) + (120 * core if lit and k > 0 else 0) + hi, a[:, :, k])
     a[:, :, 3] = np.where(jewel, 255, a[:, :, 3]); save(Image.fromarray(np.uint8(a.clip(0, 255)), 'RGBA'), name)
+# ---- badge: a stamped enamel maker's plate (red enamel in a brass frame, the monogram raised in brass), and a brass serial plate
+S4 = 6; N = 44 * S4; im = Image.new('RGBA', (N, N), (0, 0, 0, 0)); d = ImageDraw.Draw(im)
+shd = Image.new('RGBA', (N, N), (0, 0, 0, 0)); ImageDraw.Draw(shd).rounded_rectangle([7 * S4, 8 * S4, N - 5 * S4, N - 3 * S4], 4 * S4, fill=(0, 0, 0, 150)); im.alpha_composite(shd.filter(ImageFilter.GaussianBlur(1.6 * S4))); d = ImageDraw.Draw(im)
+d.rounded_rectangle([5 * S4, 5 * S4, N - 6 * S4, N - 6 * S4], 4 * S4, fill=(196, 160, 84, 255)); d.rounded_rectangle([5 * S4, 5 * S4, N - 6 * S4, N - 6 * S4], 4 * S4, outline=(246, 226, 160, 255), width=S4)
+d.rounded_rectangle([8 * S4, 8 * S4, N - 9 * S4, N - 9 * S4], 2 * S4, fill=(150, 18, 20, 255))
+arr = np.asarray(im, dtype=np.float32).copy(); yy, xx = np.mgrid[0:N, 0:N].astype(np.float32); en = (xx > 8 * S4) & (xx < N - 9 * S4) & (yy > 8 * S4) & (yy < N - 9 * S4)
+gl = np.exp(-(((xx - N * 0.36) / (N * 0.30)) ** 2 + ((yy - N * 0.30) / (N * 0.16)) ** 2)) * 70 - ((yy - 8 * S4) / (N - 17 * S4)).clip(0, 1) * 30
+for k, m in enumerate([1.0, 0.45, 0.4]): arr[:, :, k] = np.where(en, arr[:, :, k] + gl * m, arr[:, :, k])
+im = Image.fromarray(np.uint8(arr.clip(0, 255)), 'RGBA'); d = ImageDraw.Draw(im); f = font(21 * S4)
+tw = d.textlength('A', font=f); d.text(((N - S4) / 2 - tw / 2 + S4 * 0.7, 9.5 * S4 + S4 * 0.7), 'A', font=f, fill=(70, 10, 10, 255)); d.text(((N - S4) / 2 - tw / 2, 9.5 * S4), 'A', font=f, fill=(236, 208, 132, 255))
+d.line([13 * S4, N - 13.5 * S4, N - 14 * S4, N - 13.5 * S4], fill=(236, 208, 132, 255), width=S4)
+save(im.filter(ImageFilter.GaussianBlur(0.35 * S4)).resize((N // S4, N // S4), Image.LANCZOS), 'badge.png')
+W, H = 112 * S4, 30 * S4; yy, xx = np.mgrid[0:H, 0:W].astype(np.float32); brush = np.asarray(Image.fromarray(np.uint8(rng.uniform(0, 255, (H, W // 60)))).resize((W, H), Image.BICUBIC), dtype=np.float32) / 255 - 0.5
+t = 178 + brush * 46 - (yy / H) * 26 + np.exp(-((yy - H * 0.2) / (H * 0.12)) ** 2) * 26; pl = np.dstack([t * 1.0, t * 0.84, t * 0.48, np.full((H, W), 255.0)])
+im = Image.fromarray(np.uint8(pl.clip(0, 255)), 'RGBA'); mask = Image.new('L', (W, H), 0); ImageDraw.Draw(mask).rounded_rectangle([0, 0, W - 1, H - 1], 2 * S4, fill=255); im.putalpha(mask); d = ImageDraw.Draw(im)
+d.rounded_rectangle([S4, S4, W - S4 - 1, H - S4 - 1], 2 * S4, outline=(96, 74, 30, 255), width=max(1, S4 // 2))
+for px in (6 * S4, W - 6 * S4): d.ellipse([px - 2.2 * S4, H / 2 - 2.2 * S4, px + 2.2 * S4, H / 2 + 2.2 * S4], fill=(120, 96, 44, 255), outline=(70, 54, 22, 255)); d.line([px - 1.5 * S4, H / 2 - 0.8 * S4, px + 1.5 * S4, H / 2 + 0.8 * S4], fill=(50, 38, 14, 255), width=max(1, S4 // 2))
+save(im.resize((W // S4, H // S4), Image.LANCZOS), 'serial.png')
 print('skin written to', os.path.normpath(OUT), sorted(os.listdir(OUT)))
