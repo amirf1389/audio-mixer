@@ -17,7 +17,6 @@ hybrid/
   node/addon.cc           N-API add-on (attaches to the shared memory)
   node/server.js          control server: pairing PIN, sessions, meters   (127.0.0.1:8377)
   node/public/            the control page
-  qt/MixerBridge.*        Qt 6 bridge        qt/MixerStrip.qml   one strip
   deploy/                 nginx front and ngrok example
   test/                   core_test.cpp, server.test.js
 ```
@@ -40,11 +39,6 @@ Add-on and control server (Node 18 or newer; on Windows also the "Desktop develo
     npm install -g node-gyp
     npm run build
     npm start
-
-Qt 6 strip demo:
-
-    cmake -S hybrid/qt -B build-hybrid-qt -DCMAKE_PREFIX_PATH=C:\Qt\6.x\msvc2022_64
-    cmake --build build-hybrid-qt --config Release
 
 ## Run
 
