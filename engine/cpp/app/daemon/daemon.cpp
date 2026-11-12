@@ -1,6 +1,7 @@
 // amixos-daemon: see daemon.hpp. The console model (names, gains, sends ...) lives here so that /api/state can answer without a round trip
 // to the audio thread; every change goes to the Runtime's lock-free control ring and is mirrored in the model under m_.
 #include "daemon.hpp"
+#include "audiomixer/bluetooth.hpp"
 
 #include <chrono>
 #include <cstdio>
@@ -133,6 +134,17 @@ httpd::Response Daemon::handle(const httpd::Request& r) {
   if (r.method == "OPTIONS") { res.status = cors ? 204 : 403; if (cors) { res.headers.push_back({"Access-Control-Allow-Headers", "Content-Type, X-Amix-Token"}); res.headers.push_back({"Access-Control-Allow-Methods", "GET, POST, OPTIONS"}); } return res; }
   if (r.method == "GET" && r.path == "/api/status") { res.body = status().dump(); return res; }
   if (r.method == "GET" && r.path == "/api/devices") { res.body = devices().dump(); return res; }
+  if (r.method == "GET" && (r.path == "/api/bluetooth" || r.path.rfind("/api/bluetooth?", 0) == 0)) {   // ?scan=SECONDS also listens for devices in range
+    int scan = 0; const auto q = r.path.find("scan="); if (q != std::string::npos) scan = std::clamp(std::atoi(r.path.c_str() + q + 5), 0, 20);
+    std::string note; json::Value o = json::Value::object(), a = json::Value::array();
+    const BluetoothRadio radio = bluetoothRadio();
+    json::Value rj = json::Value::object(); rj.set("present", radio.present); rj.set("name", radio.name); rj.set("address", radio.address); o.set("radio", rj);
+    for (const auto& d : bluetoothDevices(scan, &note)) {
+      json::Value x = json::Value::object(); x.set("address", d.address); x.set("name", d.name); x.set("kind", d.kind); x.set("audio", d.audio);
+      x.set("connected", d.connected); x.set("paired", d.paired); x.set("remembered", d.remembered); x.set("classOfDevice", double(d.classOfDevice)); x.set("rssi", double(d.rssi)); a.push(x);
+    }
+    o.set("devices", a); o.set("note", note); res.body = o.dump(); return res;
+  }
   if (r.method == "GET" && r.path == "/api/state") { res.body = state().dump(); return res; }
   if (r.method == "GET" && r.path == "/api/meters") { res.body = meters().dump(); return res; }
   if (r.method == "POST" && r.path == "/api/pair") {   // a phone trades the minute's PIN for a token of its own
