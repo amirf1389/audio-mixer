@@ -145,7 +145,7 @@ function start(opts = {}) {
       if (url.pathname === '/api/state') return send(res, 200, { ...mixer.state(), alive: true });
       if (url.pathname === '/api/meters') {
         const m = mixer.meters(), out = [];
-        for (let i = 0; i < m.length; i += 8) out.push(Array.from(m.subarray(i, i + 8), v => Math.round(v * 1e5) / 1e5));
+        for (let i = 0; i < m.length; i += 9) out.push(Array.from(m.subarray(i, i + 9), v => Math.round(v * 1e5) / 1e5));
         return send(res, 200, { meters: out });
       }
       return send(res, 404, { error: 'not found' });

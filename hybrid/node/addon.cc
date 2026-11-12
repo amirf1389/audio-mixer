@@ -69,6 +69,7 @@ napi_value SetStrip(napi_env env, napi_callback_info info) {
   if (!optBool(env, a[1], "mute", &has, &bv)) return fail(env, "mute must be true or false"); if (has) p.mute = bv;
   if (!optBool(env, a[1], "solo", &has, &bv)) return fail(env, "solo must be true or false"); if (has) p.solo = bv;
   if (!optBool(env, a[1], "eqOn", &has, &bv)) return fail(env, "eqOn must be true or false"); if (has) p.eqOn = bv;
+  if (!optNumber(env, a[1], "compLevel", 0, 10, &has, &d)) return fail(env, "compLevel must be a number"); if (has) p.compLevel = float(d);
   g_b->paramGen.fetch_add(1, std::memory_order_release);
   return boolean(env, true);
 }
@@ -119,6 +120,7 @@ napi_value State(napi_env env, napi_callback_info) {
     put(env, s, "width", number(env, p.width.load()));
     put(env, s, "mute", boolean(env, p.mute.load() != 0)); put(env, s, "solo", boolean(env, p.solo.load() != 0));
     put(env, s, "eqOn", boolean(env, p.eqOn.load() != 0));
+    put(env, s, "compLevel", number(env, p.compLevel.load()));
     for (int k = 0; k < amfb::kBands; ++k) {
       napi_value b; napi_create_object(env, &b);
       put(env, b, "freq", number(env, p.eqFreq[k].load())); put(env, b, "gainDb", number(env, p.eqGain[k].load()));
@@ -132,19 +134,19 @@ napi_value State(napi_env env, napi_callback_info) {
   return o;
 }
 
-// meters() -> Float32Array, 8 values per bus (16 strips, then the master):
-// peakL, peakR, rmsL, rmsR, truePeak, hold, phase, active
+// meters() -> Float32Array, 9 values per bus (16 strips, then the master):
+// peakL, peakR, rmsL, rmsR, truePeak, hold, phase, active, reductionDb
 napi_value Meters(napi_env env, napi_callback_info) {
   if (!g_b) return fail(env, "the engine is not running");
-  const size_t n = (amfb::kStrips + 1) * 8;
+  const size_t n = (amfb::kStrips + 1) * 9;
   void* data = nullptr; napi_value buf, arr;
   if (napi_create_arraybuffer(env, n * sizeof(float), &data, &buf) != napi_ok) return fail(env, "out of memory");
   float* f = static_cast<float*>(data);
   for (int i = 0; i <= amfb::kStrips; ++i) {
     const auto& m = g_b->m[i];
-    const float v[8] = {m.peakL.load(), m.peakR.load(), m.rmsL.load(), m.rmsR.load(), m.truePeak.load(), m.hold.load(), m.phase.load(),
-                        float(m.active.load())};
-    std::copy(v, v + 8, f + i * 8);
+    const float v[9] = {m.peakL.load(), m.peakR.load(), m.rmsL.load(), m.rmsR.load(), m.truePeak.load(), m.hold.load(), m.phase.load(),
+                        float(m.active.load()), m.reductionDb.load()};
+    std::copy(v, v + 9, f + i * 9);
   }
   napi_create_typedarray(env, napi_float32_array, n, buf, 0, &arr);
   return arr;
