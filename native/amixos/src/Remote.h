@@ -7,6 +7,7 @@
 #include <QProcess>
 #include <QStringList>
 #include <QVariantList>
+#include "Extension.h"
 
 class Engine;
 
@@ -23,7 +24,8 @@ class Remote : public QObject {
  public:
   explicit Remote(Engine* engine, QObject* parent = nullptr);
   ~Remote() override;
-  bool running() const { return proc_.state() != QProcess::NotRunning; }
+  bool running() const { return ext_.running() || proc_.state() != QProcess::NotRunning; }
+  bool inProcess() const { return ext_.running(); }   // the service runs as an extension inside the console
   bool available() const; QString status() const { return status_; } int port() const { return 8765; }
   QStringList addresses() const; QString tokenFile() const;
   Q_INVOKABLE bool start(bool wifi);        // wifi false = this computer only (127.0.0.1)
@@ -40,7 +42,7 @@ class Remote : public QObject {
   void changed();
   void stopped();
  private:
-  Engine* engine_; QProcess proc_; QString status_ = "off";
+  Engine* engine_; QProcess proc_; Extension ext_{QStringLiteral("AmF X1 Network")}; QString status_ = "off";
   QString runTool(const QStringList& args, bool* ok) const; void restartIfRunning();
   QVariantList tokens_; QString tokenNote_; bool wifi_ = false;
 };

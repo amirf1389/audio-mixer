@@ -48,6 +48,13 @@ Add-on and control server (Node 18 or newer; on Windows also the "Desktop develo
 Without `--app` the usual players are put on the strips after the device's inputs.
 `--tone 3` puts a 440 Hz test tone on strip 3; `--backend null` runs without a sound card.
 
+## Compression level
+
+Each strip has one compression control, 0 (off) to 10. It sets threshold, ratio and make-up
+together: level 1 is a gentle 1.5:1 from -6 dBFS, level 10 is 8:1 from about -28 dBFS. The gain
+reduction is in the meters (`reductionDb`). The level is set by you only; nothing in the engine
+measures a source and picks a level for it.
+
 ## Network control
 
 `server.js` listens on this PC only. It prints a six-digit pairing PIN (also in

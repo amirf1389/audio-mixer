@@ -15,6 +15,8 @@ Remote::Remote(Engine* engine, QObject* parent) : QObject(parent), engine_(engin
   proc_.setProcessChannelMode(QProcess::MergedChannels);
   connect(&proc_, &QProcess::readyRead, this, [this] { const QString out = QString::fromLocal8Bit(proc_.readAll()).trimmed(); if (!out.isEmpty()) { status_ = out.section('\n', -1).left(200); emit changed(); } });
   connect(&proc_, &QProcess::finished, this, [this](int code, QProcess::ExitStatus) { status_ = code == 0 ? QStringLiteral("off") : QStringLiteral("stopped (%1): %2").arg(code).arg(status_); emit changed(); emit stopped(); });
+  connect(&ext_, &Extension::changed, this, [this] { const QString out = ext_.takeOutput().trimmed(); if (!out.isEmpty()) status_ = out.section('\n', -1).left(200); emit changed(); });
+  connect(&ext_, &Extension::stopped, this, [this] { if (status_.isEmpty() || status_ == "off") status_ = QStringLiteral("off"); emit changed(); emit stopped(); });
   connect(&proc_, &QProcess::errorOccurred, this, [this](QProcess::ProcessError e) { if (e == QProcess::FailedToStart) { status_ = QStringLiteral("the remote service could not be started: ") + program(); emit changed(); } });
 }
 Remote::~Remote() { if (running()) { proc_.terminate(); if (!proc_.waitForFinished(1500)) proc_.kill(); } }
@@ -63,7 +65,7 @@ bool Remote::revokeToken(const QString& id) {
   bool ok = false; const QString out = runTool({"--revoke-token", id}, &ok); tokenNote_ = ok ? QStringLiteral("Revoked: that phone is out.") : out.trimmed().left(160);
   refreshTokens(); if (ok) restartIfRunning(); return ok;
 }
-bool Remote::available() const { return QFileInfo::exists(program()); }
+bool Remote::available() const { return ext_.available() || QFileInfo::exists(program()); }
 QString Remote::tokenFile() const { return QString::fromStdString(am::paths::file("daemon.token")); }
 QString Remote::token() const { QFile f(tokenFile()); if (!f.open(QIODevice::ReadOnly) || f.size() > 256) return {}; return QString::fromLatin1(f.readAll()).trimmed(); }
 QStringList Remote::addresses() const {
@@ -78,7 +80,12 @@ bool Remote::start(bool wifi) {
   engine_->stop();   // the service opens the sound card itself
   wifi_ = wifi;
   QStringList args{"--port", QString::number(port()), "--open", "auto", "--version", QCoreApplication::applicationVersion()}; if (wifi) args << "--allow-lan";   // local policy stays on: private addresses only
-  proc_.start(program(), args); if (!proc_.waitForStarted(3000)) { status_ = QStringLiteral("the remote service did not start"); emit changed(); return false; }
+  if (ext_.available()) {                       // the extension runs inside the console: same process, same rights on the sound card
+    const int rc = ext_.start(args);
+    if (rc == 0 && ext_.running()) { status_ = wifi ? QStringLiteral("starting for the phones on this network (extension)") : QStringLiteral("starting for this computer only (extension)"); emit changed(); return true; }
+    status_ = QStringLiteral("the network extension did not start (%1): %2").arg(rc).arg(ext_.takeOutput().trimmed().section('\n', -1).left(160)); emit changed();   // then the program next to it, if there is one
+  }
+  proc_.start(program(), args); if (!proc_.waitForStarted(3000)) { if (status_.isEmpty() || status_ == "off") status_ = QStringLiteral("the remote service did not start"); emit changed(); return false; }
   status_ = wifi ? QStringLiteral("starting for the phones on this network") : QStringLiteral("starting for this computer only"); emit changed(); return true;
 }
-void Remote::stop() { if (!running()) return; proc_.terminate(); if (!proc_.waitForFinished(2000)) proc_.kill(); }
+void Remote::stop() { if (!running()) return; if (ext_.running()) { ext_.stop(); return; } proc_.terminate(); if (!proc_.waitForFinished(2000)) proc_.kill(); }

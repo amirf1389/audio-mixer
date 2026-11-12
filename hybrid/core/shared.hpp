@@ -23,7 +23,7 @@ namespace amfb {
 constexpr int kStrips = 16;
 constexpr int kBands = 7;
 constexpr std::uint32_t kMagic = 0x414D4642;   // "AMFB"
-constexpr std::uint32_t kVersion = 1;
+constexpr std::uint32_t kVersion = 2;
 constexpr float kDefaultFreq[kBands] = {60.f, 150.f, 400.f, 1000.f, 2500.f, 6000.f, 12000.f};
 
 static_assert(std::atomic<float>::is_always_lock_free && std::atomic<std::uint32_t>::is_always_lock_free &&
@@ -32,10 +32,12 @@ static_assert(std::atomic<float>::is_always_lock_free && std::atomic<std::uint32
 struct StripParams {
   std::atomic<float> gainDb, pan, width;        // -90..+12 dB, -1..+1, 0 (mono) .. 2 (wide)
   std::atomic<std::uint32_t> mute, solo, eqOn;
+  std::atomic<float> compLevel;                 // 0 = off .. 10 = hardest; set by the user only, never detected
   std::atomic<float> eqFreq[kBands], eqGain[kBands], eqQ[kBands];
 };
 struct StripMeters {                            // linear values, 1.0 = 0 dBFS
   std::atomic<float> peakL, peakR, rmsL, rmsR, truePeak, hold, phase;   // phase: -1..+1 correlation
+  std::atomic<float> reductionDb;               // compressor gain reduction, 0 or negative
   std::atomic<std::uint32_t> active;            // 1 while the source delivers audio
   char source[32];                              // written once by the engine before audio starts
 };
@@ -54,7 +56,7 @@ inline void initBlock(SharedBlock* b) {
   b->version = kVersion;
   b->masterGainDb = 0.f;
   for (auto& s : b->p) {
-    s.gainDb = 0.f; s.pan = 0.f; s.width = 1.f; s.mute = 0; s.solo = 0; s.eqOn = 1;
+    s.gainDb = 0.f; s.pan = 0.f; s.width = 1.f; s.mute = 0; s.solo = 0; s.eqOn = 1; s.compLevel = 0.f;
     for (int k = 0; k < kBands; ++k) { s.eqFreq[k] = kDefaultFreq[k]; s.eqGain[k] = 0.f; s.eqQ[k] = 0.9f; }
   }
   b->magic = kMagic;                            // last: a reader that sees the magic sees a whole block

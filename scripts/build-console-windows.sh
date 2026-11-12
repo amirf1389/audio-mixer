@@ -24,11 +24,12 @@ fi
 # the kit's build tools are Windows programs: point them at the host's (same version)
 for t in moc rcc uic qmlcachegen qmltyperegistrar qmlimportscanner cmake_automoc_parser qlalr tracegen qvkgen; do h="/usr/lib/qt6/libexec/$t"; [ -x "$h" ] && { [ -L "$KIT/bin/$t.exe" ] || mv -f "$KIT/bin/$t.exe" "$KIT/bin/$t.exe.win"; ln -sf "$h" "$KIT/bin/$t.exe"; }; done
 B="$ROOT/build-win"; cmake -S "$ROOT/native/amixos" -B "$B" -DCMAKE_TOOLCHAIN_FILE="$ROOT/install/windows/mingw-cross.cmake" -DQT_WIN_KIT="$KIT" -DQT_HOST_PATH=/usr -DCMAKE_BUILD_TYPE=Release >/dev/null
-cmake --build "$B" -j"$(nproc)" --target amixos amixos-daemon amfb-hybrid >/dev/null
+cmake --build "$B" -j"$(nproc)" --target amixos amixos-daemon amfb-hybrid amfb_network amfb_hybrid >/dev/null
 D="$OUT/$NAME"; rm -rf "$D"; mkdir -p "$D/platforms" "$D/imageformats" "$D/qml"
-cp "$B/amixos.exe" "$D/"; cp "$(find "$B" -name amixos-daemon.exe | head -1)" "$D/AmF X1 Network.exe"; cp "$(find "$B" -name amfb-hybrid.exe | head -1)" "$D/AmF X1 Hybrid.exe"   # the service program under the product's name
+cp "$B/amixos.exe" "$D/"; cp "$(find "$B" -name amixos-daemon.exe | head -1)" "$D/AmF X1 Network.exe"; cp "$(find "$B" -name amfb-hybrid.exe | head -1)" "$D/AmF X1 Hybrid.exe"
+cp "$(find "$B" -name "AmF X1 Network.dll" | head -1)" "$(find "$B" -name "AmF X1 Hybrid.dll" | head -1)" "$D/"   # the extensions the console loads into its own process   # the service program under the product's name
 # our own programs must not lean on the C++ runtime DLLs of the Qt kit (an older libstdc++-6.dll lacks symbols the compiler here uses)
-for p in amixos.exe "AmF X1 Network.exe" "AmF X1 Hybrid.exe"; do if x86_64-w64-mingw32-objdump -p "$D/$p" | grep -qiE "DLL Name: (libstdc.*|libgcc_s.*|libwinpthread.*)"; then echo "$p needs a compiler runtime DLL: link it statically"; exit 1; fi; done
+for p in amixos.exe "AmF X1 Network.exe" "AmF X1 Hybrid.exe" "AmF X1 Network.dll" "AmF X1 Hybrid.dll"; do if x86_64-w64-mingw32-objdump -p "$D/$p" | grep -qiE "DLL Name: (libstdc.*|libgcc_s.*|libwinpthread.*)"; then echo "$p needs a compiler runtime DLL: link it statically"; exit 1; fi; done
 if [ -f "$ROOT/releases/windows/AmF X1.exe" ]; then cp "$ROOT/releases/windows/AmF X1.exe" "$ROOT/releases/windows/AudioMixerASIO64.dll" "$D/"; else node "$ROOT/scripts/build-native.js" --out "$D" >/dev/null; rm -f "$D/AmF X1 (32-bit).exe" "$D/AudioMixerASIO32.dll"; fi
 for l in Qt6Core Qt6Gui Qt6Network Qt6OpenGL Qt6Qml Qt6QmlModels Qt6QmlWorkerScript Qt6Quick Qt6QuickControls2 Qt6QuickControls2Impl Qt6QuickTemplates2 Qt6QuickLayouts Qt6QuickShapes libgcc_s_seh-1 libstdc++-6 libwinpthread-1; do cp "$KIT/bin/$l.dll" "$D/"; done
 for l in Qt6QuickControls2Fusion Qt6QuickControls2FusionStyleImpl; do [ -f "$KIT/bin/$l.dll" ] && cp "$KIT/bin/$l.dll" "$D/"; done   # the Fusion style (the console uses it: palette-driven, dark)

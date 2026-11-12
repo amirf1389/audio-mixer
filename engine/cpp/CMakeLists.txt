@@ -56,8 +56,15 @@ target_link_libraries(amixos_daemon_lib PUBLIC audiomixer_runtime amixos_license
 if(WIN32)
   target_link_libraries(amixos_daemon_lib PUBLIC ws2_32)
 endif()
-add_executable(amixos-daemon app/daemon/main.cpp)
-target_link_libraries(amixos-daemon amixos_daemon_lib)
+# the network service as an extension (a shared library the console loads) and as a stand-alone program
+add_library(amfb_network_ext STATIC app/daemon/main.cpp)
+target_link_libraries(amfb_network_ext PUBLIC amixos_daemon_lib)
+set_target_properties(amfb_network_ext PROPERTIES POSITION_INDEPENDENT_CODE ON)
+add_library(amfb_network SHARED app/ext/ext_shared.cpp)
+target_link_libraries(amfb_network PRIVATE amfb_network_ext)
+set_target_properties(amfb_network PROPERTIES OUTPUT_NAME "AmF X1 Network" PREFIX "")
+add_executable(amixos-daemon app/ext/ext_main.cpp)
+target_link_libraries(amixos-daemon amfb_network_ext)
 if(WIN32)
   target_link_options(amixos-daemon PRIVATE -static)
   if(MINGW)
@@ -65,6 +72,7 @@ if(WIN32)
     # come from whatever libstdc++-6.dll lies beside the program, and an older one lacks symbols ("entry point not found"). The daemon
     # carries its own runtime: these go last on the link line.
     target_link_libraries(amixos-daemon -Wl,-Bstatic,-lstdc++,-lwinpthread)
+    target_link_libraries(amfb_network PRIVATE -Wl,-Bstatic,-lstdc++,-lwinpthread)
   endif()
 endif()
 
@@ -219,3 +227,8 @@ install(TARGETS amix amixos-daemon LIBRARY DESTINATION lib RUNTIME DESTINATION b
 
 # the hybrid mixer (sixteen strips, programs captured next to the device inputs)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../hybrid ${CMAKE_BINARY_DIR}/hybrid)
+add_executable(ext_test test/ext_test.c)
+if(UNIX)
+  target_link_libraries(ext_test PRIVATE ${CMAKE_DL_LIBS})
+endif()
+add_test(NAME ext_test COMMAND ext_test $<TARGET_FILE:amfb_network> $<TARGET_FILE:amfb_hybrid>)

@@ -40,7 +40,7 @@ class HybridMixer {
 
  private:
   struct Strip {
-    Eq7 eq; StereoMeter meter;
+    Eq7 eq; StereoMeter meter; Compressor comp;
     double gl = 0, gr = 0, tgl = 0, tgr = 0, width = 1;
     bool eqOn = true, started = false;
   };
@@ -58,6 +58,7 @@ class HybridMixer {
       }
       s.eq.design(rate_, f, g, q);
       s.eqOn = p.eqOn.load(std::memory_order_relaxed) != 0;
+      s.comp.set(rate_, p.compLevel.load(std::memory_order_relaxed));
       s.width = std::clamp(double(p.width.load(std::memory_order_relaxed)), 0.0, 2.0);
       const bool on = !p.mute.load(std::memory_order_relaxed) && (!anySolo || p.solo.load(std::memory_order_relaxed));
       const double g0 = on ? dbToLin(std::clamp(double(p.gainDb.load(std::memory_order_relaxed)), -90.0, 12.0)) : 0.0;
@@ -97,6 +98,7 @@ class HybridMixer {
         double l = xl_[i], r = xr_[i];
         if (eq) st.eq.run(l, r);
         if (ms) midSide(l, r, st.width);
+        st.comp.run(l, r);
         st.gl += dl; st.gr += dr;
         l *= st.gl; r *= st.gr;
         st.meter.feed(l, r);
@@ -104,6 +106,7 @@ class HybridMixer {
       }
       st.gl = st.tgl; st.gr = st.tgr;
       st.meter.publish(sh_->m[s], n);
+      sh_->m[s].reductionDb.store(float(st.comp.reductionDb), std::memory_order_relaxed);
     }
 
     const double dm = (tMaster_ - gMaster_) / double(n);

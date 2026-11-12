@@ -88,6 +88,11 @@ test('controls reach the audio', async () => {
   await call('/api/strip/3', { body: { mute: false } }); await call('/api/master', { body: { gainDb: -20 } }); await sleep(400);
   m = (await call('/api/meters')).json.meters; assert.ok(Math.abs(db(m[16][0]) + 32) < 0.3, 'master gain ' + db(m[16][0]));
   await call('/api/master', { body: { gainDb: 0 } });
+  assert.strictEqual((await call('/api/strip/3', { body: { compLevel: 8 } })).status, 200); await sleep(500);
+  m = (await call('/api/meters')).json.meters; assert.ok(m[2].length === 9 && m[2][8] < -1, 'gain reduction ' + m[2][8]);
+  assert.strictEqual((await call('/api/state')).json.strips[2].compLevel, 8);
+  await call('/api/strip/3', { body: { compLevel: 0 } }); await sleep(400);
+  m = (await call('/api/meters')).json.meters; assert.ok(m[2][8] === 0, 'no reduction when off');
   assert.strictEqual((await call('/api/eq/3/2', { body: { freq: 440, gainDb: 6, q: 1 } })).status, 200); await sleep(500);
   m = (await call('/api/meters')).json.meters; assert.ok(Math.abs(db(m[2][0]) + 6) < 0.3, 'eq ' + db(m[2][0]));
   assert.strictEqual((await call('/api/state')).json.strips[2].eq[1].gainDb, 6);

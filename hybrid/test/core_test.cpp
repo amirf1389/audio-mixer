@@ -87,6 +87,17 @@ int main() {
     CHECK(blk.m[0].peakL < 1e-9, "solo must silence the others");
     const auto u = blk.underruns.load(); run(5, false); CHECK(blk.underruns.load() >= u && blk.m[5].active == 0, "a dry ring gives silence");
     CHECK(blk.heartbeat.load() > 0, "heartbeat");
+    {  // compressor: level 0 is bit-exact off; level 5 on a loud strip pulls the peak down and reports the reduction
+      blk.p[5].solo = 0; blk.p[5].eqGain[3] = 0; blk.p[0].gainDb = 0; blk.p[0].pan = 0; blk.p[0].compLevel = 0; blk.paramGen++;
+      run(4, false); bool exact = true; for (int i = 0; i < 480; ++i) exact = exact && oL[i] == inL[i];
+      CHECK(exact, "compressor level 0 must be off");
+      blk.p[0].compLevel = 5; blk.paramGen++;
+      run(60, false);
+      const double gr = blk.m[0].reductionDb.load();
+      CHECK(gr < -3 && gr > -12, "reduction %.2f dB at level 5 on -6 dBFS", gr);
+      CHECK(blk.m[0].peakL > 0.3f && blk.m[0].peakL < 0.9f, "compressed peak %.3f", blk.m[0].peakL.load());
+      blk.p[0].compLevel = 0; blk.paramGen++;
+    }
   }
   std::printf(fails ? "core_test: %d FAILED\n" : "core_test: all passed\n", fails);
   return fails ? 1 : 0;

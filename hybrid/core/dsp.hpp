@@ -78,4 +78,35 @@ inline void midSide(double& l, double& r, double width) noexcept {
   l = m + s; r = m - s;
 }
 
+// Stereo feed-forward compressor with one control. Level 0 is off; 1..10 lowers the threshold
+// from -6 to -30 dBFS, raises the ratio from 1.5:1 to 8:1 and adds make-up so a full-scale signal
+// still comes out near full scale. Peak detector, 5 ms attack, 120 ms release, soft knee 6 dB.
+struct Compressor {
+  double thrDb = 0, ratio = 1, makeup = 1, attack = 0, release = 0, env = 0, reductionDb = 0;
+  bool on = false;
+  void set(double rate, double level) {
+    level = std::clamp(level, 0.0, 10.0);
+    on = level > 0;
+    thrDb = -6.0 - 2.4 * (level - 1);                       // level 1 -> -6, level 10 -> -27.6
+    ratio = 1.5 + (level - 1) * (6.5 / 9.0);                // 1.5:1 .. 8:1
+    const double outAtFull = thrDb + (0 - thrDb) / ratio;   // where 0 dBFS lands
+    makeup = dbToLin(-outAtFull * 0.8);                     // most of the loss back, a little headroom kept
+    attack = 1.0 - std::exp(-1.0 / (0.005 * rate));
+    release = 1.0 - std::exp(-1.0 / (0.120 * rate));
+    if (!on) { env = 0; reductionDb = 0; }
+  }
+  inline void run(double& l, double& r) noexcept {
+    if (!on) return;
+    const double x = std::max(std::abs(l), std::abs(r));
+    env += (x > env ? attack : release) * (x - env);
+    const double inDb = linToDb(env), knee = 6.0, over = inDb - thrDb;
+    double gDb = 0;
+    if (over > knee / 2) gDb = -(over - over / ratio);
+    else if (over > -knee / 2) { const double t = over + knee / 2; gDb = -(1 - 1 / ratio) * t * t / (2 * knee); }
+    reductionDb = gDb;
+    const double g = dbToLin(gDb) * makeup;
+    l *= g; r *= g;
+  }
+};
+
 }  // namespace amfb
