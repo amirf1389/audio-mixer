@@ -98,7 +98,8 @@
         "Licence server: portal management in the admin page. Product keys made, used and unused, activations and refusals of the last day, what the portal's Updates tab shows, and a new product key per licence that replaces the old one.",
         "OTA server: the management page is a portal with a side bar. Dashboard (live version, channels, files, update checks and downloads of the week, licence requests), Channels, Releases, Publish, Files, Requests (search, copy the machine code, export CSV), Reach, Health and Audit.",
         "Licence server: a hardened nginx front (deploy/license/nginx-license.conf). Only the app's four calls, the customer portal and /health are open over https; management is never published.",
-        "The console knows the vendor's domain: licence.amirfakhribadri.my is the licence server unless another is typed, and amirfakhribadri.my / ota.amirfakhribadri.my are accepted for updates."
+        "The console knows the vendor's domain: licence.amirfakhribadri.my is the licence server unless another is typed, and amirfakhribadri.my / ota.amirfakhribadri.my are accepted for updates.",
+        "Licence server: the management page is a portal with a side bar (Dashboard, Ending soon, Issue a key, Keys on record, Customer portal, Activity) and lists the licences that end within 30 days, the nearest first."
       ]
     }
   ]
