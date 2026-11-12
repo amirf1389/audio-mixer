@@ -623,9 +623,26 @@ bool Engine::openAsioDriver(const QString& id, int frames) {
       stop(); asioReread_ = true; refreshDevices(); const bool ok = openAsioDriver(id, frames); asioReread_ = false; return ok; }
     const bool unknown = d["inChannels"].toInt() + d["outChannels"].toInt() == 0;   // still unknown: ask for everything, the driver gives what the device has
     const double rate = d["defaultRate"].toDouble() > 0 ? d["defaultRate"].toDouble() : 48000.0;
-    if (unknown) { const bool ok = open(QStringLiteral("asio"), id, id, rate, frames > 0 ? frames : 256, 32, 32); asioOpenId_ = ok ? id : QString(); emit devicesChanged(); return ok; }
-    const bool ok = open(QStringLiteral("asio"), id, id, rate, frames > 0 ? frames : 256, std::min(32, std::max(0, d["inChannels"].toInt())), std::min(32, std::max(2, d["outChannels"].toInt()))); asioOpenId_ = ok ? id : QString(); emit devicesChanged(); return ok; }   // this driver or nothing: no other driver is tried in its place
+    if (unknown) { const bool ok = open(QStringLiteral("asio"), id, id, rate, frames > 0 ? frames : asioFrames(rate), 32, 32); asioOpenId_ = ok ? id : QString(); emit devicesChanged(); return ok; }
+    const bool ok = open(QStringLiteral("asio"), id, id, rate, frames > 0 ? frames : asioFrames(rate), std::min(32, std::max(0, d["inChannels"].toInt())), std::min(32, std::max(2, d["outChannels"].toInt()))); asioOpenId_ = ok ? id : QString(); emit devicesChanged(); return ok; }   // this driver or nothing: no other driver is tried in its place
   status_ = QStringLiteral("That ASIO driver is not in the list any more: press RESCAN."); emit stateChanged(); return false;
+}
+// ASIO runs on a 10 ms buffer: the number of frames that is 10 ms at this rate (480 at 48 kHz). The driver then takes the nearest size it
+// offers (512 on most), so the real figure is shown once it runs.
+int Engine::asioFrames(double rate) const { return std::max(16, static_cast<int>((rate > 0 ? rate : 48000.0) * 0.010 + 0.5)); }
+// AUTO DETECT for ASIO: the interface's own driver before a wrapper (ASIO4ALL, FlexASIO), the one with more channels among equals.
+// It only picks; pressing the button is still the operator's decision.
+QString Engine::bestAsioDriver() const {
+  QString best; int bestRank = -1;
+  for (const QVariant& v : asioDrivers()) { const QVariantMap m = v.toMap(); const QString k = m["kind"].toString();
+    const int rank = (k == "interface" ? 200 : k == "wrapper" ? 0 : 100) + std::min(64, m["inChannels"].toInt() + m["outChannels"].toInt());
+    if (rank > bestRank) { bestRank = rank; best = m["id"].toString(); } }
+  return best;
+}
+bool Engine::autoOpenAsio() {
+  const QString id = bestAsioDriver();
+  if (id.isEmpty()) { status_ = QStringLiteral("AUTO DETECT: no ASIO driver was found. Install the interface's own driver, then SCAN."); emit stateChanged(); return false; }
+  return openAsioDriver(id, 0);
 }
 QVariantMap Engine::autoDetect() const {
   const QString prefer = autoPrefer(); if (prefer == "manual") return {};
