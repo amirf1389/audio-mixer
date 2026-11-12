@@ -33,6 +33,7 @@ int main() {
   Value st = Value::parse(body, ok); CHECK(ok && st["name"].asString() == "A mix OS" && st["strips"].asInt() == 8 && !st["running"].asBool());
   CHECK(am::httpd::Client::request("127.0.0.1", port, "GET", "/api/devices", "", {}, status, body) && status == 200);
   Value dv = Value::parse(body, ok); CHECK(ok && dv.isArray());
+  CHECK(am::httpd::Client::request("127.0.0.1", port, "GET", "/api/bluetooth", "", {}, status, body) && status == 200 && body.find("\"devices\"") != std::string::npos && body.find("\"radio\"") != std::string::npos);
 
   // control without the token: 401 and nothing changes
   CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"gain\",\"strip\":0,\"db\":-6}", {{"Content-Type", "application/json"}}, status, body) && status == 401);
