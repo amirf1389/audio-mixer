@@ -34,7 +34,7 @@ Item {
                 RowLayout { spacing: 6
                     Btn { label: engine.running ? i18n.t("STOP", i18n.lang) : i18n.t("START (SMART)", i18n.lang); on: true; onColor: engine.running ? Theme.danger : Theme.emerald; onClicked: engine.running ? engine.stop() : settings.startLastDevice() }
                     Btn { label: i18n.t("AUTO DETECT", i18n.lang); onClicked: engine.autoStart(settings.defaultFrames) }
-                    Btn { label: settings.autoAsio ? i18n.t("AUTO ASIO: ON", i18n.lang) : i18n.t("AUTO ASIO: OFF", i18n.lang); on: settings.autoAsio; onColor: Theme.cyan; onClicked: settings.autoAsio = !settings.autoAsio }
+                    Btn { label: engine.autoPrefer === "manual" ? i18n.t("AUTO ASIO: OFF (MANUAL)", i18n.lang) : settings.autoAsio ? i18n.t("AUTO ASIO: ON", i18n.lang) : i18n.t("AUTO ASIO: OFF", i18n.lang); on: settings.autoAsio && engine.autoPrefer !== "manual"; onColor: Theme.cyan; onClicked: settings.autoAsio = !settings.autoAsio }
                     Btn { label: settings.smartStart ? i18n.t("SMART START: ON", i18n.lang) : i18n.t("SMART START: OFF", i18n.lang); on: settings.smartStart; onColor: Theme.cyan; onClicked: settings.smartStart = !settings.smartStart } }
                 RowLayout { spacing: 6
                     Text { text: i18n.t("AFTER ASIO:", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
@@ -95,8 +95,8 @@ Item {
                     Text { text: i18n.t("AUTO SELECT", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                     Repeater { model: [["best", "BEST"], ["asio", "ASIO"], ["wasapi", "WASAPI"], ["dsound", "DIRECTSOUND"], ["bluetooth", "BLUETOOTH"], ["manual", "MANUAL"]]
                         delegate: Btn { objectName: "autoPrefer_" + modelData[0]; label: i18n.t(modelData[1], i18n.lang); on: engine.autoPrefer === modelData[0]; onColor: Theme.cyan; onClicked: engine.autoPrefer = modelData[0] } }
-                    Btn { label: i18n.t("DETECT + START NOW", i18n.lang); on: true; onColor: Theme.emerald; onClicked: engine.autoStart(settings.defaultFrames) }
-                    Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; text: i18n.t("Which audio system AUTO DETECT picks from. BEST takes ASIO first, then Windows audio, then DirectSound. If the chosen one has no device, the best of the others is used.", i18n.lang) + " " + i18n.t("MANUAL opens nothing by itself: you pick the driver in the ASIO DRIVERS list.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
+                    Btn { label: i18n.t("DETECT + START NOW", i18n.lang); on: engine.autoPrefer !== "manual"; onColor: Theme.emerald; onClicked: engine.autoStart(settings.defaultFrames) } }
+                Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; text: i18n.t("Which audio system AUTO DETECT picks from. BEST takes ASIO first, then Windows audio, then DirectSound. If the chosen one has no device, the best of the others is used.", i18n.lang) + " " + i18n.t("MANUAL opens nothing by itself: you pick the driver in the ASIO DRIVERS list.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
                 RowLayout { spacing: 6
                     Text { text: i18n.t("ASIO ROUTING", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                     Btn { objectName: "openRoutingBtn"; label: i18n.t("OPEN", i18n.lang); on: engine.openRouting; onColor: Theme.emerald; onClicked: engine.openRouting = true }

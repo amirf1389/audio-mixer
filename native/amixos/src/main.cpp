@@ -634,6 +634,15 @@ int main(int argc, char* argv[]) {
                 waitMs(1600); if (engine.testToneActive()) { std::fprintf(stderr, "amixos --shots: the test tone did not end after its second\n"); std::exit(247); }
                 engine.setMonitor(0, 0, false, false, false);
                 QMetaObject::invokeMethod(as, "close"); waitMs(200); }
+              { // THE ASIO SECTION with three simulated drivers: the list shows them all, MANUAL picks none, OPEN on one that cannot start leaves none marked as running
+                const QVariantList real = engine.devices(); const QString keepPrefer = engine.autoPrefer(); QVariantList rig;
+                const auto dev = [](const char* b, const char* id, const char* name, int in, int out) { QVariantMap m; m["backend"] = b; m["id"] = id; m["name"] = name; m["inChannels"] = in; m["outChannels"] = out; m["defaultRate"] = 48000.0; return m; };
+                rig << dev("asio", "{a1}", "Focusrite USB ASIO", 18, 20) << dev("asio", "{a2}", "ASIO4ALL v2", 2, 2) << dev("asio", "{a3}", "Realtek ASIO", 2, 2) << dev("wasapi", "{w1}", "Speakers (Realtek(R) Audio)", 0, 2);
+                engine.simulateDevices(rig); engine.setAutoPrefer("manual"); win->setProperty("current", "asio"); waitMs(500); win->grabWindow().save(shots + "/asio-drivers.png");
+                const QVariantList l = engine.asioDrivers(); bool any = false; for (const QVariant& v : l) any = any || v.toMap()["current"].toBool();
+                if (l.size() != 3 || l[0].toMap()["name"].toString() != "Focusrite USB ASIO" || l[0].toMap()["inChannels"].toInt() != 18 || any || !engine.autoDetect().isEmpty()) { std::fprintf(stderr, "amixos --shots: the ASIO DRIVERS list is wrong\n"); std::exit(253); }
+                engine.openAsioDriver("{a2}", 256); for (const QVariant& v : engine.asioDrivers()) if (v.toMap()["current"].toBool() && engine.backend() != "asio") { std::fprintf(stderr, "amixos --shots: a driver that did not start is shown as running\n"); std::exit(254); }
+                engine.setAutoPrefer(keepPrefer); engine.simulateDevices(real); if (!engine.running()) engine.open("null", "", "", 48000, 256, 2, 2); win->setProperty("current", "mixer"); waitMs(300); }
               mixer->setProperty("vuMode", true); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + "/mixer-vu.png"); mixer->setProperty("vuMode", false); std::printf("amixos --shots: mixer-vu\n"); }
           }
         }
