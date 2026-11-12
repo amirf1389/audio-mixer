@@ -65,15 +65,15 @@ and keeps it for five minutes; the page does not verify the list's signature, th
 In nginx, publish only what customers need:
 
 ```nginx
-location = /redeem          { proxy_pass http://127.0.0.1:8790; }
-location = /status          { proxy_pass http://127.0.0.1:8790; }
-location = /activate        { proxy_pass http://127.0.0.1:8790; }
-location = /deactivate      { proxy_pass http://127.0.0.1:8790; }
-location /portal/           { proxy_pass http://127.0.0.1:8790; }
+location = /redeem          { proxy_pass http://127.0.0.1:8787; }
+location = /status          { proxy_pass http://127.0.0.1:8787; }
+location = /activate        { proxy_pass http://127.0.0.1:8787; }
+location = /deactivate      { proxy_pass http://127.0.0.1:8787; }
+location /portal/           { proxy_pass http://127.0.0.1:8787; }
 location /admin             { return 404; }   # management stays off the public site
 ```
 
-Use the port your server listens on in place of 8790.
+A complete, hardened file is `deploy/license/nginx-license.conf` (TLS, limits, security headers, POST-only calls); use that one.
 
 ## Portal management (in `/admin/`)
 
@@ -86,3 +86,36 @@ The management page has a **Customer portal** card:
 
 Each licence row shows whether its product key was used and when, and has **New product key**: it makes a fresh one and the old one stops
 working at once (for a customer who lost it, or when it was passed on).
+
+## Going online through nginx (`deploy/license/nginx-license.conf`)
+
+This is how the AmF X1 app reaches the licence server over the internet:
+
+    AmF X1 app / portal  --https-->  nginx  --http on 127.0.0.1-->  licence server
+
+1. Run the licence server on the same machine, bound to this computer only, and tell it that it is behind a proxy:
+
+       LICENSE_HOST=127.0.0.1 LICENSE_PORT=8787 LICENSE_TRUST_PROXY=1 node bridge/license-server/server.js
+
+2. Copy `deploy/license/nginx-license.conf` to `/etc/nginx/conf.d/`, replace `licence.example.com` and the two certificate paths
+   (for example from Let's Encrypt), run `nginx -t`, then reload nginx.
+3. In AmF X1, on LICENCE, type `https://licence.example.com` into LICENCE SERVER. Customers use `https://licence.example.com/portal/`.
+
+What the file lets through, and nothing else:
+
+| Open | For |
+|---|---|
+| `POST /redeem`, `/status`, `/activate`, `/deactivate` | the app |
+| `GET /portal/…` | the customer page |
+| `GET /health` | monitoring |
+
+`/admin`, `/issue` and every other path answer 404 from nginx, with or without the admin token. Management is done on the server itself
+or through an SSH tunnel.
+
+It was run against the real server with a test certificate, and these held: a product key redeems over https and the key is genuine;
+`/admin` and `/issue` are not served even with the token; GET on a call and POST on the portal are refused; a body over 8 kB is
+refused; plain http is redirected; TLS 1.1 is refused; the security headers are set; a caller cannot fake its address through
+`X-Forwarded-For`; the portal works in a browser under the Content-Security-Policy; a flood of calls gets 429.
+
+Keep in mind: the firewall should allow 80 and 443 only; port 8787 must not be reachable from outside; keep the private key file and
+the admin token readable by the service user only; renew the certificate before it runs out.

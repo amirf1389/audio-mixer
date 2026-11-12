@@ -96,7 +96,8 @@
         "Updates: the update server link is open to any https address; the update list must still carry the vendor's signature.",
         "Licence server: a customer portal at /portal/ to activate a product key (copy the key or save it as a key file the console picks up), check a key, and see the newest release with its checksums.",
         "Licence server: portal management in the admin page. Product keys made, used and unused, activations and refusals of the last day, what the portal's Updates tab shows, and a new product key per licence that replaces the old one.",
-        "OTA server: the management page is a portal with a side bar. Dashboard (live version, channels, files, update checks and downloads of the week, licence requests), Channels, Releases, Publish, Files, Requests (search, copy the machine code, export CSV), Reach, Health and Audit."
+        "OTA server: the management page is a portal with a side bar. Dashboard (live version, channels, files, update checks and downloads of the week, licence requests), Channels, Releases, Publish, Files, Requests (search, copy the machine code, export CSV), Reach, Health and Audit.",
+        "Licence server: a hardened nginx front (deploy/license/nginx-license.conf). Only the app's four calls, the customer portal and /health are open over https; management is never published."
       ]
     }
   ]
