@@ -75,7 +75,8 @@
         "SOUND CARD: DAC detection. USB DACs and headphone DACs are listed with their output count and top sample rate, with OPEN for outputs only.",
         "SOUND CARD: DSP MODE. DIGITAL leaves the mix as computed; ANALOG rounds the peaks off softly on the master.",
         "ACCOUNT: PIN AT START. With your own PIN set, the console starts locked until the PIN is entered.",
-        "Licence server: PRO TRIAL · 1 YEAR. A trial key always ends (one year at most) and is for one computer."
+        "Licence server: PRO TRIAL · 1 YEAR. A trial key always ends (one year at most) and is for one computer.",
+        "PLUGIN RACK: ANALOG CHANNEL. DRIVE into a soft saturation that leaves quiet signals at their level, BIAS for even harmonics, TONE for the treble loss of transformers and tape, OUTPUT trim."
       ]
     }
   ]

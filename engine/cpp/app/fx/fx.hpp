@@ -114,6 +114,13 @@ class FeedbackKiller final : public Simple { public: explicit FeedbackKiller(dou
   struct Notch { bool on = false; double hz = 0, depthDb = 0, b0 = 1, b1 = 0, b2 = 0, a1 = 0, a2 = 0, z[2][2] = {{0, 0}, {0, 0}}; long idle = 0; };
   void design(Notch& n) const; void analyse();
   Notch n_[kNotches]; std::vector<float> frame_; std::size_t fill_ = 0; int lastBin_ = -1, streak_ = 0; std::atomic<int> active_{0}; };
+// ANALOG CHANNEL: what an analogue channel strip does to a signal that is pushed. DRIVE pushes the level into a soft saturation
+// (tanh; quiet signals keep their level), BIAS moves the working point off centre so that even harmonics appear beside the odd ones,
+// TONE is the gentle treble loss of transformers and tape (3 kHz .. 21 kHz, one pole), OUTPUT trims the level (-12 .. +12 dB).
+class Analog final : public Simple { public: explicit Analog(double fs); const char* kind() const override { return "analog"; } const char* name() const override { return "ANALOG CHANNEL"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
+ protected: int count() const override { return 4; } const char* knobId(int i) const override { static const char* k[] = {"drive", "bias", "tone", "output"}; return k[i]; } const char* knobTitle(int i) const override { static const char* k[] = {"DRIVE", "BIAS", "TONE", "OUTPUT"}; return k[i]; } double knobDef(int i) const override { static const double d[] = {0.35, 0.2, 0.8, 0.5}; return d[i]; }
+ private: float lp_[2] = {0, 0}; };
 // FLANGER: a 1..8 ms delay swept by an LFO with feedback: RATE, DEPTH, FEEDBACK
 class Flanger final : public Simple { public: explicit Flanger(double fs); const char* kind() const override { return "flanger"; } const char* name() const override { return "FLANGER"; }
   std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;

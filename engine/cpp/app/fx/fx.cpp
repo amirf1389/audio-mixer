@@ -11,13 +11,14 @@ double clamp01(double v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
 std::string fmt(const char* f, double v) { char b[32]; std::snprintf(b, sizeof b, f, v); return b; }
 }  // namespace
 
-std::vector<std::pair<std::string, std::string>> catalog() { return {{"reverb", "PLATE REVERB"}, {"delay", "TAPE DELAY"}, {"syncdelay", "SYNC DELAY"}, {"antifeedback", "FEEDBACK KILLER"}, {"chorus", "STEREO CHORUS"}, {"drive", "TUBE DRIVE"}, {"flanger", "FLANGER"}, {"phaser", "PHASER"}, {"tremolo", "TREMOLO"}, {"wah", "AUTO WAH"}, {"crusher", "BIT CRUSHER"}, {"exciter", "EXCITER"}, {"tubeamp", "TUBE AMP"}, {"preamp", "PRE AMP"}, {"postamp", "POST AMP"}, {"hall", "HALL REVERB"}, {"room", "ROOM REVERB"}}; }
+std::vector<std::pair<std::string, std::string>> catalog() { return {{"reverb", "PLATE REVERB"}, {"delay", "TAPE DELAY"}, {"syncdelay", "SYNC DELAY"}, {"antifeedback", "FEEDBACK KILLER"}, {"analog", "ANALOG CHANNEL"}, {"chorus", "STEREO CHORUS"}, {"drive", "TUBE DRIVE"}, {"flanger", "FLANGER"}, {"phaser", "PHASER"}, {"tremolo", "TREMOLO"}, {"wah", "AUTO WAH"}, {"crusher", "BIT CRUSHER"}, {"exciter", "EXCITER"}, {"tubeamp", "TUBE AMP"}, {"preamp", "PRE AMP"}, {"postamp", "POST AMP"}, {"hall", "HALL REVERB"}, {"room", "ROOM REVERB"}}; }
 std::unique_ptr<Effect> make(const std::string& k, double fs) {
   if (k == "reverb") return std::make_unique<Reverb>(fs);
   if (k == "delay") return std::make_unique<TapeDelay>(fs);
   if (k == "syncdelay") return std::make_unique<SyncDelay>(fs);
   if (k == "antifeedback") return std::make_unique<FeedbackKiller>(fs);
   if (k == "chorus") return std::make_unique<Chorus>(fs);
+  if (k == "analog") return std::make_unique<Analog>(fs);
   if (k == "flanger") return std::make_unique<Flanger>(fs);
   if (k == "phaser") return std::make_unique<Phaser>(fs);
   if (k == "tremolo") return std::make_unique<Tremolo>(fs);
@@ -132,6 +133,23 @@ void Drive::process(float* L, float* R, std::size_t n) {
 }
 
 
+// ---------------------------------------------------------------- Analog channel
+Analog::Analog(double fs) : Simple(fs) { for (int i = 0; i < 4; ++i) k_[i] = knobDef(i); reset(); }
+void Analog::reset() { lp_[0] = lp_[1] = 0; }
+std::string Analog::text(const std::string& id, double v) const {
+  v = clamp01(v); if (id == "drive") return fmt("+%.0f dB", v * 18.0); if (id == "tone") return fmt("%.1f kHz", 3.0 * std::pow(7.0, v)); if (id == "output") return fmt("%+.1f dB", (v - 0.5) * 24.0);
+  return fmt("%.0f %%", v * 100);
+}
+void Analog::process(float* L, float* R, std::size_t n) {
+  if (bypass_.load()) return;
+  const double g = std::pow(10.0, k_[0].load() * 18.0 / 20.0), b = k_[1].load() * 0.4, tb = std::tanh(b), norm = 1.0 / (g * (1.0 - tb * tb));   // unity gain for a quiet signal
+  const float a = static_cast<float>(std::exp(-2.0 * kPi * std::min(0.45 * fs_, 3000.0 * std::pow(7.0, k_[2].load())) / fs_)), out = static_cast<float>(std::pow(10.0, (k_[3].load() - 0.5) * 24.0 / 20.0));
+  const float wet = static_cast<float>(mix_.load()), dry = 1.f - wet; float* ch[2] = {L, R};
+  for (int c = 0; c < 2; ++c) { float lp = lp_[c];
+    for (std::size_t i = 0; i < n; ++i) { const float x = ch[c][i]; const float y = static_cast<float>((std::tanh(g * static_cast<double>(x) + b) - tb) * norm);
+      lp = y + a * (lp - y); ch[c][i] = dry * x + wet * lp * out; }
+    lp_[c] = std::fabs(lp) < 1e-20f ? 0.f : lp; }
+}
 // ---------------------------------------------------------------- Flanger, Phaser, Tremolo, Auto wah, Bit crusher, Exciter
 Flanger::Flanger(double fs) : Simple(fs) { for (int i = 0; i < 3; ++i) k_[i] = knobDef(i); reset(); }
 void Flanger::reset() { for (auto& b : buf_) b.assign(static_cast<std::size_t>(fs_ * 0.02) + 8, 0.f); w_ = 0; fb_[0] = fb_[1] = 0; }
