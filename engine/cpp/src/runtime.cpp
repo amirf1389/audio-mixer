@@ -249,8 +249,8 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
 void Runtime::publish() {
   Snapshot s; std::memset(&s, 0, sizeof s);
   for (int i = 0; i < mixer_.strips(); ++i) { const MeterState& m = mixer_.strip(i).meter.state(); const std::size_t k = static_cast<std::size_t>(i); s.strips[i] = {m.pk, m.rms, m.hold, m.clipN, k < ch_.size() ? ch_[k].compressor().gainReductionDb() : 0.0, k < ch_.size() ? ch_[k].gate().gainDb() : 0.0, mixer_.strip(i).inPk, mixer_.automixGainDb(i), apCorr_[i], k < ch_.size() && ch_[k].params().polarityInvert}; }
-  for (int c = 0; c < 2; ++c) { const MeterState& m = mixer_.masterMeter(c); s.master[c] = {m.pk, m.rms, m.hold, m.clipN, 0.0, 0.0, 0.0, 0.0}; }
-  for (int k = 0; k < kMaxBuses; ++k) { const MeterState& m = mixer_.bus(k).meter.state(); s.buses[k] = {m.pk, m.rms, m.hold, m.clipN, 0.0, 0.0, 0.0, 0.0}; }
+  for (int c = 0; c < 2; ++c) { const MeterState& m = mixer_.masterMeter(c); s.master[c] = {m.pk, m.rms, m.hold, m.clipN, 0.0, 0.0, 0.0, 0.0, 0.0, false}; }
+  for (int k = 0; k < kMaxBuses; ++k) { const MeterState& m = mixer_.bus(k).meter.state(); s.buses[k] = {m.pk, m.rms, m.hold, m.clipN, 0.0, 0.0, 0.0, 0.0, 0.0, false}; }
   s.momentary = mixer_.loudness().momentary(); s.shortTerm = mixer_.loudness().shortTerm(); s.integrated = mixer_.loudness().integrated(); s.lra = mixer_.loudness().range(); s.truePeak = mixer_.loudness().truePeak(); s.autoLevelDb = mixer_.autoLevelGainDb();
   s.monitorPk[0] = monPk_[0]; s.monitorPk[1] = monPk_[1];
   s.correlation = mixer_.phase().corr; s.blocks = blocks_; s.frames = frames_; s.loadPct = loadPct_; s.blockUs = blockUs_; s.maxBlockUs = maxBlockUs_; s.jitterUs = jitterUs_; s.xruns = backend_ ? backend_->xruns() : 0;

@@ -135,6 +135,7 @@ httpd::Response Daemon::handle(const httpd::Request& r) {
   if (r.method == "GET" && r.path == "/api/status") { res.body = status().dump(); return res; }
   if (r.method == "GET" && r.path == "/api/devices") { res.body = devices().dump(); return res; }
   if (r.method == "GET" && (r.path == "/api/bluetooth" || r.path.rfind("/api/bluetooth?", 0) == 0)) {   // ?scan=SECONDS also listens for devices in range
+    if (!authorised(r)) { res.status = roleOf(r, false) == "view" ? 403 : (noteRefused() ? 429 : 401); res.body = "{\"ok\":false,\"error\":\"X-Amix-Token missing or wrong\"}"; return res; }   // device names and a radio scan: control only
     int scan = 0; const auto q = r.path.find("scan="); if (q != std::string::npos) scan = std::clamp(std::atoi(r.path.c_str() + q + 5), 0, 20);
     std::string note; json::Value o = json::Value::object(), a = json::Value::array();
     const BluetoothRadio radio = bluetoothRadio();
