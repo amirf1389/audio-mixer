@@ -149,6 +149,10 @@ class Runtime {
   // after its chain and meters (what the show hears, before the monitor section). Must not block or allocate. nullptr detaches.
   struct Tap { virtual ~Tap() = default; virtual void onBlock(const float* const* strips, int nStrips, const float* L, const float* R, std::size_t frames, double sampleRate) = 0; };
   void setTap(Tap* t) { tap_.store(t); }
+  // TEST TONE: a 1 kHz sine at -20 dBFS on outputs 1-2 for the given time, with a short fade in and out, added after the monitor level
+  // (so it is heard whatever the faders say). For the Test button of the audio settings: "does sound come out of this device?"
+  void testTone(double seconds = 1.0) { const long n = static_cast<long>((seconds < 0.1 ? 0.1 : seconds > 5 ? 5 : seconds) * sampleRate()); toneTotal_.store(n); toneLeft_.store(n); }
+  bool toneActive() const { return toneLeft_.load() > 0; }
   // NETWORK AUDIO (engine/cpp/app/net). A second tap for the network sender, so that it and the recorder can run together, and up to
   // kNetInputs extra input channels filled by a network receiver: setInputRoute(strip, kNetInBase + k) makes a strip listen to network
   // channel k. pull() runs on the audio thread at the start of each block and must fill every channel (silence when it has nothing).
@@ -172,6 +176,7 @@ class Runtime {
   int nIn_ = 0, nOut_ = 0; bool running_ = false;
   std::vector<float> silence_, left_, right_;
   int monSrc_ = 0; double monGainTarget_ = 1, monGain_ = 1; bool monMono_ = false; double monPk_[2] = {0, 0};   // audio thread only
+  std::atomic<long> toneLeft_{0}, toneTotal_{0}; double tonePhase_ = 0;
   std::vector<float> monL_, monR_, extL_, extR_; std::atomic<ExtraSource*> extra_{nullptr}; std::atomic<Tap*> tap_{nullptr}, netTap_{nullptr}; std::atomic<NetInput*> netIn_{nullptr}; std::atomic<int> tapRaw_{-1}; std::vector<std::vector<float>> netBuf_; int inRoute_[kMaxStrips]; int outRoute_[kMaxOutputs]; double trim_[kMaxStrips]; // the insert chain of each strip, swapped from the UI thread and read on the audio thread: a shared_ptr with the free atomic
   // functions (std::atomic_load / atomic_store), which every standard library has; std::atomic<std::shared_ptr> is missing from libc++ (Android, macOS)
   std::shared_ptr<const InsertChain> inserts_[kMaxStrips];                            // audio thread only (set in open, then by ops)

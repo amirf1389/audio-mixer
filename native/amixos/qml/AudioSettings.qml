@@ -56,8 +56,7 @@ Popup {
             Line { label: i18n.t("Output:", i18n.lang)
                 Combo { Layout.fillWidth: true; readonly property var l: pop.devs(true); model: l.map(function (d) { return d.name }); currentIndex: { for (let k = 0; k < l.length; k++) if (l[k].id === pop.outId) return k; return l.length ? 0 : -1 }
                     onActivated: function (i) { pop.outId = l[i].id; pop.outCh = Math.max(2, Math.min(pop.outCh, l[i].outChannels)) } }
-                Rectangle { implicitWidth: 60; implicitHeight: 24; radius: 5; color: Theme.ov(0.06); border.color: engine.running ? Theme.emerald : Theme.line
-                    Text { anchors.centerIn: parent; text: engine.running ? i18n.t("LIVE", i18n.lang) : i18n.t("OFF", i18n.lang); color: engine.running ? Theme.emerald : Theme.dim; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } } }
+                Btn { objectName: "asTest"; label: i18n.t("Test", i18n.lang); onClicked: { if (!engine.testTone()) pop.note = i18n.t("Start the device with APPLY first, then press Test.", i18n.lang); else pop.note = i18n.t("Test tone: 1 kHz for one second on outputs 1 + 2.", i18n.lang) } } }
             Line { label: i18n.t("Input:", i18n.lang)
                 Combo { Layout.fillWidth: true; enabled: !pop.muteIn; opacity: enabled ? 1 : 0.4; readonly property var l: pop.devs(false); model: l.map(function (d) { return d.name }); currentIndex: { for (let k = 0; k < l.length; k++) if (l[k].id === pop.inId) return k; return l.length ? 0 : -1 }
                     onActivated: function (i) { pop.inId = l[i].id; pop.inCh = Math.max(1, Math.min(Math.max(pop.inCh, 2), l[i].inChannels)) } }

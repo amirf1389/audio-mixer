@@ -208,6 +208,8 @@ class Engine : public QObject {
   // LINKED, a plug-in put in, taken out, bypassed or adjusted on one is done on the other too. Each side runs its own copy of a plug-in
   // (two mono instances): the two sides are not processed together by one stereo plug-in.
   Q_INVOKABLE bool matchStereoPair(int strip);
+  Q_INVOKABLE bool testTone() { if (!rt_ || !rt_->running()) return false; rt_->testTone(1.0); return true; }   // one second of 1 kHz at -20 dBFS on outputs 1-2
+  Q_INVOKABLE bool testToneActive() const { return rt_ && rt_->toneActive(); }
   Q_INVOKABLE QVariantList asioDrivers() const;                 // discovery only: every ASIO driver found {id, name, inChannels, outChannels, rate, kind, current}
   Q_INVOKABLE bool openAsioDriver(const QString& id, int frames);   // the manual choice: exactly this driver, no fallback to another
   Q_INVOKABLE QVariantMap autoDetect() const;      // {backend, in, out, name, why, inChannels, outChannels, rate} or empty

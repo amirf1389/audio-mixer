@@ -619,6 +619,12 @@ int main(int argc, char* argv[]) {
                 QObject* as = win->findChild<QObject*>("audioSettings");
                 if (!as || !as->property("opened").toBool() || as->property("type").toString().isEmpty()) { std::fprintf(stderr, "amixos --shots: AUDIO / MIDI SETTINGS did not open\n"); std::exit(244); }
                 QMetaObject::invokeMethod(as, "apply"); waitMs(300); if (!engine.running()) { std::fprintf(stderr, "amixos --shots: APPLY in AUDIO / MIDI SETTINGS left the engine stopped\n"); std::exit(245); }
+                engine.setMonitor(0, 0, false, false, true); waitMs(300);   // the monitor muted: the only thing on the outputs is the test tone, at -20 dBFS
+                if (!engine.testTone() || !engine.testToneActive()) { std::fprintf(stderr, "amixos --shots: the test tone did not start\n"); std::exit(246); }
+                waitMs(500); { const double l = engine.telemetry()["monitorLDb"].toDouble(), r = engine.telemetry()["monitorRDb"].toDouble();
+                  if (std::fabs(l + 20.0) > 1.5 || std::fabs(r + 20.0) > 1.5) { std::fprintf(stderr, "amixos --shots: the test tone is not at -20 dBFS on outputs 1-2 (%.1f / %.1f)\n", l, r); std::exit(248); } }
+                waitMs(1600); if (engine.testToneActive()) { std::fprintf(stderr, "amixos --shots: the test tone did not end after its second\n"); std::exit(247); }
+                engine.setMonitor(0, 0, false, false, false);
                 QMetaObject::invokeMethod(as, "close"); waitMs(200); }
               mixer->setProperty("vuMode", true); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + "/mixer-vu.png"); mixer->setProperty("vuMode", false); std::printf("amixos --shots: mixer-vu\n"); }
           }
