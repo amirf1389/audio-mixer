@@ -57,7 +57,7 @@ int main(int argc, char** argv) {
   if (!d.start(err)) { std::fprintf(stderr, "amixos-daemon: %s\n", err.c_str()); return 1; }
   if (!openBackend.empty()) { am::json::Value c = am::json::Value::object(); c.set("op", "open"); c.set("backend", openBackend); std::string e; d.control(c, e); if (!e.empty()) std::fprintf(stderr, "amixos-daemon: open %s: %s\n", openBackend.c_str(), e.c_str()); }
   std::signal(SIGINT, onSignal); std::signal(SIGTERM, onSignal);
-  std::printf("amixos-daemon listening on %s:%u (token in %s)%s\n", o.bind.c_str(), d.port(), tokenArg ? "--token" : tokenFile.c_str(), lan ? (o.localOnly ? " — LAN mode, local policy: private-network addresses only; unencrypted, put deploy/nginx in front for TLS" : " — LAN mode, ANY address: unencrypted, put deploy/nginx in front for TLS") : "");
+  std::printf("AmF X1 Network listening on %s:%u (token in %s)%s\n", o.bind.c_str(), d.port(), tokenArg ? "--token" : tokenFile.c_str(), lan ? (o.localOnly ? " - LAN mode, local policy: private-network addresses only; unencrypted, put deploy/nginx in front for TLS" : " - LAN mode, ANY address: unencrypted, put deploy/nginx in front for TLS") : "");
   std::fflush(stdout);
   while (!g_quit) std::this_thread::sleep_for(std::chrono::milliseconds(100));
   d.stop();

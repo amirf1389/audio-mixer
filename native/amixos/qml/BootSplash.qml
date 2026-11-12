@@ -11,10 +11,15 @@ Rectangle {
     property bool chimed: false
     signal done()
     function finish() { if (fade.running || !visible) return; fade.start() }
-    NumberAnimation on t { id: run; from: 0; to: 1; duration: 3000; running: true; onFinished: boot.finish() }
-    NumberAnimation { id: fade; target: boot; property: "opacity"; to: 0; duration: 350; onFinished: { boot.visible = false; boot.done() } }
+    NumberAnimation on t { id: run; from: 0; to: 1; duration: 1800; running: true; onFinished: boot.finish() }
+    NumberAnimation { id: fade; target: boot; property: "opacity"; to: 0; duration: 350; onFinished: boot.enter() }
     Timer { interval: 150; running: boot.visible && !boot.chimed && settings.bootSound; repeat: true; onTriggered: if (engine.running && boot.t < 0.6) { boot.chimed = measure.chime() } }
-    MouseArea { anchors.fill: parent }   // takes the clicks so nothing under the animation is pressed; the animation plays to its end (3 s)
+    // THE WAY IN IS CERTAIN: the animation runs 1.8 s and fades; a click goes straight in; and if an animation ever stalls (a
+    // slow graphics driver), this timer opens the interface anyway after 3 s
+    property bool gone: false
+    function enter() { if (gone) return; gone = true; run.stop(); fade.stop(); boot.visible = false; boot.done() }
+    Timer { interval: 3000; running: true; onTriggered: boot.enter() }
+    MouseArea { anchors.fill: parent; onClicked: boot.enter() }
     focus: true; Keys.onPressed: function (e) { e.accepted = true }
     Repeater { model: 4
         delegate: Rectangle { anchors.centerIn: parent; readonly property real k: Math.max(0, Math.min(1, boot.t * 2.2 - index * 0.18))

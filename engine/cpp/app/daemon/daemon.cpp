@@ -101,7 +101,7 @@ bool Daemon::noteRefused() {
 std::string Daemon::roleOf(const httpd::Request& r, bool allowQuery) const {
   std::string t = r.header("x-amix-token"); if (t.empty() && allowQuery) t = r.param("token"); if (t.empty()) return "";
   if (TokenStore::same(t, opt_.token)) return "admin";
-  return tokens_.roleOf(t);
+  return tokens_.roleFor(t, r.peer);   // a named token works from the address that used it first, and from no other
 }
 bool Daemon::authorised(const httpd::Request& r) const { const std::string role = roleOf(r, false); return role == "admin" || role == "control"; }
 
@@ -135,7 +135,7 @@ httpd::Response Daemon::handle(const httpd::Request& r) {
     json::Value out = json::Value::object(); std::string terr;
     if (r.method == "GET" && r.path == "/api/tokens") {
       json::Value arr = json::Value::array();
-      for (const auto& e : tokens_.list()) { json::Value t = json::Value::object(); t.set("id", e.id); t.set("name", e.name); t.set("role", e.role); t.set("created", e.created); t.set("expires", e.expires); t.set("revoked", e.revoked); arr.push(t); }
+      for (const auto& e : tokens_.list()) { json::Value t = json::Value::object(); t.set("id", e.id); t.set("name", e.name); t.set("role", e.role); t.set("created", e.created); t.set("expires", e.expires); t.set("revoked", e.revoked); t.set("ip", e.ip); arr.push(t); }
       out.set("ok", true); out.set("tokens", arr); res.body = out.dump(); return res; }
     bool ok = false; const json::Value b = json::Value::parse(r.body, ok);
     if (r.method != "POST" || !ok || !b.isObject()) { res.status = 400; res.body = "{\"ok\":false,\"error\":\"the body is not a JSON object\"}"; return res; }

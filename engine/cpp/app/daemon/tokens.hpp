@@ -13,7 +13,7 @@ namespace am {
 
 class TokenStore {
  public:
-  struct Entry { std::string id, name, role, hash; long long created = 0, expires = 0; bool revoked = false; };
+  struct Entry { std::string id, name, role, hash, ip;   /* ip: the address that used it first; from then on only that address may */ long long created = 0, expires = 0; bool revoked = false; };
   explicit TokenStore(std::string file = "") : file_(std::move(file)) {}
   void setFile(std::string file) { std::lock_guard<std::mutex> g(m_); file_ = std::move(file); }
   bool load(std::string& err);   // a missing file is an empty store
@@ -22,6 +22,8 @@ class TokenStore {
   bool revoke(const std::string& id, std::string& err);
   std::vector<Entry> list() const;
   std::string roleOf(const std::string& token, long long now = 0) const;   // "control", "view" or "" (unknown, revoked, ended)
+  // SAME ADDRESS ONLY: the first address that shows the token owns it (saved); the token from any other address is refused
+  std::string roleFor(const std::string& token, const std::string& ip, long long now = 0);
   static std::string hashOf(const std::string& token);
   static bool same(const std::string& a, const std::string& b);   // compares without stopping at the first difference
  private:

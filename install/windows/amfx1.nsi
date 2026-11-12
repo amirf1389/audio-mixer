@@ -97,10 +97,31 @@ Section "Uninstall"
   Delete "$DESKTOP\AmF X1.lnk"
   RMDir /r "$SMPROGRAMS\AmF X1"
   RMDir /r "$INSTDIR"
+  ; EVERY UNINSTALL IS A FACTORY RESET: the settings (registry), the console, scenes, presets, caches and network tokens of this user
+  ; are removed, so that a later install starts exactly as from the factory. Only the licence key is asked about.
+  SetShellVarContext current
+  DeleteRegKey HKCU "Software\AMFB Audio\A mix OS"
+  DeleteRegKey /ifempty HKCU "Software\AMFB Audio"
   RMDir /r "$LOCALAPPDATA\AMFB Audio\AmF X1"
-  MessageBox MB_YESNO "Also remove your AmF X1 data (licence, scenes, presets) from $APPDATA\AMFB Audio\AmF X1?" IDNO keep
-    RMDir /r "$APPDATA\AMFB Audio\AmF X1"
-  keep:
+  StrCpy $0 "$APPDATA\AMFB Audio"
+  Delete "$0\amfx1-license.keep"
+  Delete "$0\amfx1-edition.keep"
+  Rename "$0\AmF X1\license.json" "$0\amfx1-license.keep"
+  Rename "$0\AmF X1\edition.json" "$0\amfx1-edition.keep"
+  RMDir /r "$0\AmF X1"
+  IfFileExists "$0\amfx1-license.keep" askLicence 0
+  IfFileExists "$0\amfx1-edition.keep" askLicence licenceDone
+  askLicence:
+  MessageBox MB_YESNO "AmF X1 is back to its factory state on this computer.$\n$\nKeep the licence key here for a later install?" IDYES keepLicence
+    Delete "$0\amfx1-license.keep"
+    Delete "$0\amfx1-edition.keep"
+    Goto licenceDone
+  keepLicence:
+    CreateDirectory "$0\AmF X1"
+    Rename "$0\amfx1-license.keep" "$0\AmF X1\license.json"
+    Rename "$0\amfx1-edition.keep" "$0\AmF X1\edition.json"
+  licenceDone:
+  RMDir "$0"
   DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\AmFX1"
   DeleteRegKey HKLM "Software\AMFB Audio\AmF X1"
 SectionEnd

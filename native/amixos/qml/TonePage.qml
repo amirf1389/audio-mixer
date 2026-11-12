@@ -59,7 +59,11 @@ Flickable {
                 Knob { label: i18n.t("MID FREQ", i18n.lang); value: Math.log(page.ch3.midFreq / 100) / Math.log(80); defaultValue: Math.log(10) / Math.log(80); valueText: Math.round(page.ch3.midFreq) + " Hz"; onMoved: function (v) { page.put3("midFreq", Math.round(100 * Math.pow(80, v))) } }
                 Knob { label: i18n.t("HIGH 10 kHz", i18n.lang); value: (page.ch3.high - (-15)) / 30; defaultValue: 0.5; valueText: (page.ch3.high > 0 ? "+" : "") + Number(page.ch3.high).toFixed(1) + " dB"; onMoved: function (v) { page.put3("high", Math.round((-15 + v * 30) * 2) / 2) } }
                 Item { Layout.fillWidth: true } } }
-        Text { text: i18n.t("MIC EQ RACK · 10 PARAMETRIC BANDS", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 1.5 }
+        RowLayout { spacing: 10
+            Text { text: i18n.t("DYNAMIC MIC · 10 BANDS", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 1.5 }
+            Rectangle { objectName: "dynMicBtn"; implicitWidth: dmT.implicitWidth + 20; implicitHeight: 22; radius: 4; color: "transparent"; border.color: Theme.cyan
+                Text { id: dmT; anchors.centerIn: parent; text: i18n.t("MIC PRESETS + HIGH-PASS", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                MouseArea { anchors.fill: parent; onClicked: page.Window.window.current = "miceq" } } }
         Rectangle {   // MIC EQ and TONE in one place: the same ten bands as ten faders (the MIC EQ page's graphic view), next to the parametric controls below
             id: gcard; objectName: "toneGraphic"; Layout.fillWidth: true; implicitHeight: page.graphic ? 150 : 34; radius: Theme.radius; color: Theme.card; border.color: Theme.line; clip: true
             property int tick: 0

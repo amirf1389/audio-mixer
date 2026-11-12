@@ -498,6 +498,12 @@ int main(int argc, char* argv[]) {
         QString bad = env; bad.replace("\"version\":\"", "\"version\":\"9"); if (update.applyManifest(bad) || update.state() != "error") { std::fprintf(stderr, "amixos --smoke: a tampered manifest was accepted\n"); return 121; }
         if (Update::compareVersions("1.2.10", "1.2.9") <= 0 || Update::compareVersions("0.1.0", "0.1.0") != 0) { std::fprintf(stderr, "amixos --smoke: version compare\n"); return 122; } }
       else std::printf("amixos --smoke: releases/update.json not found next to the build; manifest check skipped\n");
+      { // FACTORY RESET is complete: language, PIN-at-start, device choices and network tokens all go; only the licence stays; the factory setup is due again
+        QSettings qs; qs.setValue("ui/lang", "de"); qs.setValue("audio/autoPrefer", "manual"); qs.setValue("vst3/dirs", QStringList{"C:/x"}); qs.sync();
+        { QFile f(settings.dataFolder() + "/daemon.tokens.json"); if (f.open(QIODevice::WriteOnly)) f.write("{}"); } { QFile f(settings.dataFolder() + "/license.json"); if (f.open(QIODevice::WriteOnly)) f.write("{}"); }
+        settings.factoryReset(); QSettings after;
+        if (after.contains("ui/lang") || after.contains("audio/autoPrefer") || after.contains("vst3/dirs") || settings.setupDone() || QFile::exists(settings.dataFolder() + "/daemon.tokens.json") || !QFile::exists(settings.dataFolder() + "/license.json")) { std::fprintf(stderr, "amixos --smoke: the factory reset is not complete\n"); return 204; }
+        QFile::remove(settings.dataFolder() + "/license.json"); settings.finishSetup(); engine.open("null", "", "", 48000, 256, 2, 2); }
       const bool wasDone = settings.setupDone(); settings.rerunSetup(); if (settings.setupDone()) { std::fprintf(stderr, "amixos --smoke: rerunSetup\n"); return 124; } settings.finishSetup(); if (!settings.setupDone()) { std::fprintf(stderr, "amixos --smoke: finishSetup\n"); return 125; } (void)wasDone; }
     engine.setBusFx(0, "reverb"); if (engine.busFx(0)["name"].toString().isEmpty() || engine.busFx(0)["params"].toList().isEmpty() || engine.busState()[0].toMap()["fx"].toString() != "reverb") { std::fprintf(stderr, "amixos --smoke: bus effect did not load\n"); return 60; }
     { const QString pid = engine.busFx(0)["params"].toList()[0].toMap()["id"].toString(); engine.setBusFxParam(0, pid, 0.8); if (std::fabs(engine.busFx(0)["params"].toList()[0].toMap()["value"].toDouble() - 0.8) > 1e-9) { std::fprintf(stderr, "amixos --smoke: bus effect param\n"); return 61; } }

@@ -132,7 +132,8 @@ void Server::start() {
       if (fd < 0) { if (!running_) break; continue; }
       if (localOnly_ && !localPeer(ntohl(c.sin_addr.s_addr))) { CLOSESOCK(fd); continue; }   // the local policy: not from this network, not served
       int one = 1; setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<const char*>(&one), sizeof one);
-      std::lock_guard<std::mutex> g(threads_); threads_v_.emplace_back([this, fd] { serve(fd); });
+      std::lock_guard<std::mutex> g(threads_); const std::uint32_t ip4 = ntohl(c.sin_addr.s_addr); const std::string peer = std::to_string(ip4 >> 24) + "." + std::to_string((ip4 >> 16) & 255) + "." + std::to_string((ip4 >> 8) & 255) + "." + std::to_string(ip4 & 255);
+      threads_v_.emplace_back([this, fd, peer] { serve(fd, peer); });
     }
   });
 }
@@ -149,8 +150,8 @@ void Server::stop() {
   std::vector<std::thread> t; { std::lock_guard<std::mutex> g(threads_); t.swap(threads_v_); }
   for (auto& th : t) if (th.joinable()) th.join();
 }
-void Server::serve(int fd) {
-  Request r; std::string err;
+void Server::serve(int fd, const std::string& peer) {
+  Request r; std::string err; r.peer = peer;
   if (!readRequest(fd, r, err)) { Response e; e.status = err == "body too large" ? 413 : 400; e.body = "{\"ok\":false,\"error\":\"" + err + "\"}"; if (err != "closed") writeResponse(fd, e); CLOSESOCK(fd); return; }
   const auto ws = ws_.find(r.path);
   if (ws != ws_.end() && lower(r.header("upgrade")) == "websocket") {

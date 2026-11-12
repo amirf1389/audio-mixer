@@ -96,10 +96,9 @@ QStringList Settings::factoryResetPreview() const {
           QStringLiteral("The arrangement project (the audio files themselves are not touched)"), QStringLiteral("AI driver locks and the Realtek pin choice"), QStringLiteral("Kept: the licence key, the edition activation, the daemon token, the language")};
 }
 void Settings::factoryReset() {
-  const QString lang = s_.value("ui/lang").toString();
   engine_->stop(); engine_->factoryReset();
-  s_.clear(); if (!lang.isEmpty()) s_.setValue("ui/lang", lang); s_.setValue("general/setupDone", false); s_.sync();   // the factory setup is part of the reset: it runs once, right after it
-  for (const QString& f : {dataFolder() + "/arrangement.json", dataFolder() + "/driver-lock.json"}) QFile::remove(f);
+  s_.clear(); s_.setValue("general/setupDone", false); s_.sync();   // everything back to the factory state, the language too: the factory setup runs once, right after it, and asks for it again
+  for (const QString& f : {dataFolder() + "/arrangement.json", dataFolder() + "/driver-lock.json", dataFolder() + "/daemon.token", dataFolder() + "/daemon.tokens.json"}) QFile::remove(f);   // the network tokens go too: every phone has to be let in again
   if (engine_) { engine_->setClipThreshold(clipDb()); engine_->setPeakHold(peakHoldMs()); }
-  emit changed(); note(QStringLiteral("Factory reset done. The licence, the edition and the daemon token were kept."));
+  emit changed(); note(QStringLiteral("Factory reset done: everything is as it left the factory. Only the licence and the edition were kept."));
 }

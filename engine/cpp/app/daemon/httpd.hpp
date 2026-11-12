@@ -14,7 +14,7 @@
 
 namespace am::httpd {
 
-struct Request { std::string method, path, query, body; std::map<std::string, std::string> headers; std::string header(const std::string& k) const; std::string param(const std::string& k) const; };
+struct Request { std::string peer;   /* the caller's IPv4 address */ std::string method, path, query, body; std::map<std::string, std::string> headers; std::string header(const std::string& k) const; std::string param(const std::string& k) const; };
 struct Response { int status = 200; std::string type = "application/json; charset=utf-8", body; std::vector<std::pair<std::string, std::string>> headers; };
 
 class WebSocket {   // one upgraded connection; send() from any thread, the reader loop runs on the connection's own thread
@@ -47,7 +47,7 @@ class Server {
   void stop();
   static std::string sha1Base64(const std::string& s);   // for the WebSocket accept key (and tests)
  private:
-  void serve(int fd);
+  void serve(int fd, const std::string& peer);
   int lfd_ = -1; unsigned short port_ = 0; std::thread acceptor_; std::atomic<bool> running_{false}; bool localOnly_ = true;
   Handler handler_; std::map<std::string, WsHandler> ws_;
   std::mutex threads_; std::vector<std::thread> threads_v_;

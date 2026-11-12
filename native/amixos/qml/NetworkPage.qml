@@ -53,7 +53,7 @@ Item {
             Rectangle { Layout.fillWidth: true; implicitHeight: remCol.implicitHeight + 24; radius: Theme.radius; color: Theme.card; border.color: remote.running ? Theme.emerald : Theme.line
                 property string shown: ""
                 id: remCard
-                Timer { id: hideTok; interval: 20000; onTriggered: remCard.shown = "" }
+                Timer { id: hideTok; interval: 600000; onTriggered: remCard.shown = "" }
                 Component.onCompleted: remote.refreshTokens()
                 ColumnLayout { id: remCol; anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 12; spacing: 6
                     RowLayout { spacing: 8
@@ -63,7 +63,7 @@ Item {
                         Btn { visible: !remote.running; label: i18n.t("START FOR PHONES ON THIS NETWORK", i18n.lang); on: remote.available; onColor: Theme.emerald; onClicked: remote.start(true) }
                         Btn { visible: !remote.running; label: i18n.t("THIS COMPUTER ONLY", i18n.lang); on: remote.available; onClicked: remote.start(false) }
                         Btn { visible: remote.running; label: i18n.t("STOP", i18n.lang); on: true; onColor: Theme.danger; onClicked: remote.stop() }
-                        Btn { label: remCard.shown ? i18n.t("HIDE TOKEN", i18n.lang) : i18n.t("SHOW TOKEN (20 s)", i18n.lang); onClicked: { if (remCard.shown) remCard.shown = ""; else { remCard.shown = remote.token() || i18n.t("no token yet: start the service once", i18n.lang); hideTok.restart() } } } }
+                        Btn { label: remCard.shown ? i18n.t("HIDE TOKEN", i18n.lang) : i18n.t("SHOW TOKEN (10 min)", i18n.lang); onClicked: { if (remCard.shown) remCard.shown = ""; else { remCard.shown = remote.token() || i18n.t("no token yet: start the service once", i18n.lang); hideTok.restart() } } } }
                     Text { Layout.fillWidth: true; text: remote.available ? remote.status : i18n.t("The remote service program (amixos-daemon) is not installed next to the console.", i18n.lang); color: remote.running ? Theme.emerald : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.WordWrap }
                     Repeater { model: remote.running ? remote.addresses : []; delegate: Text { text: modelData + "   " + i18n.t("← type this into the phone app", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } }
                     Text { visible: remCard.shown !== ""; text: i18n.t("TOKEN  ", i18n.lang) + remCard.shown; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; Layout.fillWidth: true; wrapMode: Text.WrapAnywhere }
@@ -79,7 +79,7 @@ Item {
                             Btn { visible: modelData.state === "active"; label: i18n.t("REVOKE", i18n.lang); on: true; onColor: Theme.danger; onClicked: remote.revokeToken(modelData.id) } } }
                     Text { visible: remote.tokens.length === 0; text: i18n.t("No named tokens yet. The master token (SHOW TOKEN) still works.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 }
                     RowLayout { id: tokNew; spacing: 6; property string role: "control"; property int days: 0; property string fresh: ""
-                        Timer { id: hideNew; interval: 30000; onTriggered: tokNew.fresh = "" }
+                        Timer { id: hideNew; interval: 600000; onTriggered: tokNew.fresh = "" }
                         Field { id: tokName; objectName: "tokName"; Layout.preferredWidth: 150; implicitHeight: 24; placeholderText: i18n.t("name (whose phone)", i18n.lang); font.family: Theme.mono; font.pixelSize: 8 }
                         Btn { label: i18n.t("CONTROL", i18n.lang); on: tokNew.role === "control"; onColor: Theme.cyan; onClicked: tokNew.role = "control" }
                         Btn { label: i18n.t("VIEW", i18n.lang); on: tokNew.role === "view"; onColor: Theme.cyan; onClicked: tokNew.role = "view" }

@@ -61,7 +61,7 @@ class Daemon {
   struct Monitor { int source = 0; double db = 0; bool dim = false, mono = false, mute = false; } mon_;
   httpd::Response handle(const httpd::Request& r);
   bool authorised(const httpd::Request& r) const;
-  Options opt_; TokenStore tokens_; httpd::Server http_;
+  Options opt_; mutable TokenStore tokens_; httpd::Server http_;
   bool noteRefused();   // a wrong token: counted and slowed down; true when there were too many in the last minute
   std::atomic<int> refused_{0}, refusedNow_{0}; std::atomic<long long> refusedSince_{0};
   mutable std::mutex m_; std::unique_ptr<Runtime> rt_; std::string backend_, lastError_; std::vector<Strip> strips_; Bus buses_[kMaxBuses]; double masterDb_ = 0; bool limiter_ = true; double ceiling_ = -0.5;
