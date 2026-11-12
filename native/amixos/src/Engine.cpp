@@ -326,7 +326,7 @@ QVariantMap Engine::masterLimiter() const { QVariantMap m; m["on"] = masterLim_;
 void Engine::clearClips() { if (rt_) rt_->clearClips(); }
 // ---- licence (engine/cpp/app/license): the vendor public key is compiled in; keys and tokens are verified offline
 static QVariantMap licenseMap(const am::lic::Status& st) {
-  QVariantMap m; m["state"] = QString::fromStdString(st.state); m["plan"] = QString::fromStdString(st.planId); m["planName"] = QString::fromStdString(st.planName); m["channels"] = st.channels; m["source"] = QString::fromStdString(st.source);
+  QVariantMap m; m["state"] = QString::fromStdString(st.state); m["plan"] = QString::fromStdString(st.planId); m["planName"] = QString::fromStdString(st.planName); m["channels"] = 32;   /* every edition runs all the strips */ m["source"] = QString::fromStdString(st.source);
   m["id"] = QString::fromStdString(st.id); m["name"] = QString::fromStdString(st.name); m["serial"] = QString::fromStdString(st.serial); m["editionName"] = QString::fromStdString(st.editionName); m["expires"] = static_cast<qlonglong>(st.expires); m["boundToThisPc"] = st.boundToThisPc; m["machine"] = QString::fromStdString(st.machine); m["message"] = QString::fromStdString(st.message);
   return m;
 }
