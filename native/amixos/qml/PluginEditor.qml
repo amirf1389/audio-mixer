@@ -26,7 +26,9 @@ Popup {
     readonly property string fx: kind.indexOf("fx:") === 0 ? kind.substring(3) : ""
     readonly property color paper: "#e8e3d3"
     readonly property color paperLo: "#d6d0be"
-    readonly property color ink: "#22201b"
+    // lettering: dark on the light plates, cream / silver / gold on the dark ones
+    readonly property color ink: family === "echo" ? "#ece4c6" : family === "mod" ? "#e4e8f3" : family === "heat" ? "#d9b76c" : family === "guard" ? "#f1f1ee" : family === "space" ? "#16181b" : "#22201b"
+    readonly property bool darkPlate: family === "echo" || family === "mod" || family === "heat" || family === "guard"
     readonly property string face1: "Bahnschrift Condensed, Arial Narrow, Roboto Condensed, DejaVu Sans Condensed, " + Theme.sans   // a narrow engraver's face where the system has one
     readonly property color red: "#b91c1c"
     // THE LOOK OF EACH FAMILY: reverbs steel blue, delays sage green, modulation lavender, saturation and amps copper, the feedback killer signal red,
@@ -34,9 +36,14 @@ Popup {
     readonly property var families: ({ reverb: "space", hall: "space", room: "space", delay: "echo", syncdelay: "echo", chorus: "mod", flanger: "mod", phaser: "mod", tremolo: "mod", wah: "mod",
         analog: "heat", drive: "heat", tubeamp: "heat", preamp: "heat", postamp: "heat", exciter: "heat", antifeedback: "guard" })
     readonly property string family: families[fx] || ""
-    readonly property color tint: family === "space" ? "#7f9fc4" : family === "echo" ? "#8fb98a" : family === "mod" ? "#a893d1" : family === "heat" ? "#d08a4a" : family === "guard" ? "#d06a6a" : "#000000"
-    readonly property real tintAmount: family === "" ? 0 : 0.34
-    readonly property string hi: "#70ffffff"
+    // THE FINISH, as on real rack gear: reverbs brushed aluminium, delays the deep green enamel of tape echoes, modulation midnight blue,
+    // saturation and amps black with gold lettering, the feedback killer workshop grey. The plate's own grain shows through the paint.
+    readonly property color tint: family === "space" ? "#b4bac1" : family === "echo" ? "#1f3527" : family === "mod" ? "#1b2640" : family === "heat" ? "#161616" : family === "guard" ? "#454a50" : "#000000"
+    readonly property real tintAmount: family === "" ? 0 : family === "space" ? 0.72 : 0.86
+    readonly property string hi: darkPlate ? "#90000000" : "#70ffffff"   // the engraving: a light edge on light plates, a shadow on dark ones
+    readonly property color onInk: darkPlate ? "#14171a" : paper       // lettering on a key that is lit in the ink colour
+    readonly property color accent: darkPlate ? "#ff6b5a" : red        // the signal red, brighter where the plate is dark
+    readonly property color rule: Qt.rgba(ink.r, ink.g, ink.b, darkPlate ? 0.55 : 0.75)
     readonly property string view: family === "space" ? "decay" : family === "mod" ? "lfo" : (fx === "analog" || fx === "drive" || fx === "tubeamp" || fx === "preamp") ? "curve" : ""
     function pv(i, d) { return params[i] ? params[i].value : d }
     // the sections of each panel: [title, [parameter indices]] (the last parameter of a built-in effect is MIX: it lives in BLEND)
@@ -65,7 +72,7 @@ Popup {
     Overlay.modeless: Rectangle { color: "#b3000000" }   // the console steps back while a plug-in is open: the unit is seen against dark, not against the mixer
     Timer { interval: 40; running: ed.visible; repeat: true; onTriggered: { const m = engine.meters[ed.strip]; const l = m ? (m.inDb !== undefined ? m.inDb : m.peakDb) : -120; ed.level = l; const tgt = ed.bypass ? -20 : Math.max(-20, Math.min(3, l + 12)); ed.needle += (tgt - ed.needle) * (tgt > ed.needle ? 0.35 : 0.12); vu.requestPaint() } }
     background: Item {}
-    component Section: Rectangle { property string head; default property alias body: inner.data; height: ed.panelH - 16; color: "transparent"; border.color: "#c022201b"; border.width: 1; radius: 6
+    component Section: Rectangle { property string head; default property alias body: inner.data; height: ed.panelH - 16; color: "transparent"; border.color: ed.rule; border.width: 1; radius: 6
         Text { id: st; anchors.horizontalCenter: parent.horizontalCenter; y: 7; text: parent.head; color: ed.ink; font.family: ed.face1; style: Text.Sunken; styleColor: ed.hi; font.pixelSize: 11; font.weight: Font.DemiBold; font.letterSpacing: 1 }
         Item { id: inner; x: 0; y: 26; width: parent.width; height: parent.height - 26 } }
     component Key: Item { property string label; signal clicked(); width: 30; height: 26
@@ -96,7 +103,7 @@ Popup {
                         Rectangle { visible: ed.presets.length > 0; x: 10; y: 4; width: parent.width - 20; height: 62; radius: 5; color: "#0e0e0e"; border.color: "#000"
                             Rectangle { x: 6; y: 5; width: parent.width - 12; height: 28; radius: 2; gradient: Gradient { GradientStop { position: 0; color: "#f3e9b8" } GradientStop { position: 1; color: "#d9c98a" } }
                                 Text { anchors.centerIn: parent; width: parent.width - 8; horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight; text: ed.presetAt >= 0 ? ed.presets[ed.presetAt].name : "—  " + ed.presets.length + "  —"; color: "#2a2410"; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-                                Rectangle { y: parent.height / 2; width: parent.width; height: 1; color: ed.red; opacity: 0.5 } }
+                                Rectangle { y: parent.height / 2; width: parent.width; height: 1; color: ed.accent; opacity: 0.5 } }
                             Key { x: 20; y: 35; label: "–"; onClicked: ed.preset(-1) } Key { x: parent.width - 50; y: 35; label: "+"; onClicked: ed.preset(1) } }
                         Item { visible: ed.presets.length === 0; x: 13; y: 12; width: 112; height: 50   // the serial plate: brass, stamped with the channel and the slot
                             Image { width: 112; height: 30; source: "qrc:/qt/qml/AmixOS/skin/serial.png"; smooth: true; mipmap: true }
@@ -105,12 +112,12 @@ Popup {
                         Text { anchors.horizontalCenter: parent.horizontalCenter; y: 84; text: "SELECT"; color: ed.ink; font.family: ed.face1; style: Text.Sunken; styleColor: ed.hi; font.pixelSize: 10; font.weight: Font.DemiBold }
                         Item { anchors.horizontalCenter: parent.horizontalCenter; y: 112; width: 118; height: 60   // the A / B switch: the same miniature toggle, thrown left for A and right for B
                             Column { x: 6; y: 12; spacing: 2
-                                Rectangle { anchors.horizontalCenter: parent.horizontalCenter; width: 6; height: 6; radius: 3; color: ed.side === "A" ? ed.red : "transparent"; border.color: ed.side === "A" ? ed.red : ed.ink; border.width: 1.2 }
-                                Text { text: "A"; color: ed.side === "A" ? ed.red : ed.ink; font.family: ed.face1; font.pixelSize: 13; font.weight: Font.Bold; style: Text.Sunken; styleColor: ed.hi } }
+                                Rectangle { anchors.horizontalCenter: parent.horizontalCenter; width: 6; height: 6; radius: 3; color: ed.side === "A" ? ed.accent : "transparent"; border.color: ed.side === "A" ? ed.accent : ed.ink; border.width: 1.2 }
+                                Text { text: "A"; color: ed.side === "A" ? ed.accent : ed.ink; font.family: ed.face1; font.pixelSize: 13; font.weight: Font.Bold; style: Text.Sunken; styleColor: ed.hi } }
                             Image { anchors.horizontalCenter: parent.horizontalCenter; y: 0; width: 58; height: 58; source: "qrc:/qt/qml/AmixOS/skin/toggle.png"; smooth: true; mipmap: true; mirror: ed.side === "A" }
                             Column { x: parent.width - width - 6; y: 12; spacing: 2
-                                Rectangle { anchors.horizontalCenter: parent.horizontalCenter; width: 6; height: 6; radius: 3; color: ed.side === "B" ? ed.red : "transparent"; border.color: ed.side === "B" ? ed.red : ed.ink; border.width: 1.2 }
-                                Text { text: "B"; color: ed.side === "B" ? ed.red : ed.ink; font.family: ed.face1; font.pixelSize: 13; font.weight: Font.Bold; style: Text.Sunken; styleColor: ed.hi } }
+                                Rectangle { anchors.horizontalCenter: parent.horizontalCenter; width: 6; height: 6; radius: 3; color: ed.side === "B" ? ed.accent : "transparent"; border.color: ed.side === "B" ? ed.accent : ed.ink; border.width: 1.2 }
+                                Text { text: "B"; color: ed.side === "B" ? ed.accent : ed.ink; font.family: ed.face1; font.pixelSize: 13; font.weight: Font.Bold; style: Text.Sunken; styleColor: ed.hi } }
                             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: ed.pick(ed.side === "A" ? "B" : "A") } }
                         Text { anchors.horizontalCenter: parent.horizontalCenter; y: 184; width: parent.width - 16; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap; text: "TWO SETTINGS\nTO COMPARE"; color: ed.ink; opacity: 0.8; font.family: ed.face1; font.pixelSize: 8; font.letterSpacing: 1; lineHeight: 1.15; style: Text.Sunken; styleColor: ed.hi } }
                     // the sections of the effect
@@ -145,10 +152,10 @@ Popup {
                         Grid { x: 10; y: 96; columns: 3; columnSpacing: 6; rowSpacing: 6
                             Repeater { model: ["1/2", "1/4", "1/8 .", "1/8", "1/8 T", "1/16"]
                                 delegate: Rectangle { width: 68; height: 24; radius: 3; color: dly.note === index ? ed.ink : "transparent"; border.color: ed.ink; border.width: 1.2
-                                    Text { anchors.centerIn: parent; text: modelData; color: dly.note === index ? ed.paper : ed.ink; font.family: ed.face1; font.pixelSize: 12; font.weight: Font.DemiBold }
+                                    Text { anchors.centerIn: parent; text: modelData; color: dly.note === index ? ed.onInk : ed.ink; font.family: ed.face1; font.pixelSize: 12; font.weight: Font.DemiBold }
                                     MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { ed.setParam(1, (index + 0.5) / 6); ed.rev++ } } } } }
-                        Rectangle { x: 10; y: 160; width: 216; height: 34; radius: 4; color: tapA.pressed ? ed.red : "transparent"; border.color: ed.red; border.width: 1.5
-                            Text { anchors.centerIn: parent; text: "TAP TEMPO"; color: tapA.pressed ? ed.paper : ed.red; font.family: ed.face1; font.pixelSize: 13; font.weight: Font.Bold; font.letterSpacing: 2 }
+                        Rectangle { x: 10; y: 160; width: 216; height: 34; radius: 4; color: tapA.pressed ? ed.accent : "transparent"; border.color: ed.accent; border.width: 1.5
+                            Text { anchors.centerIn: parent; text: "TAP TEMPO"; color: tapA.pressed ? ed.onInk : ed.accent; font.family: ed.face1; font.pixelSize: 13; font.weight: Font.Bold; font.letterSpacing: 2 }
                             MouseArea { id: tapA; objectName: "delayTap"; anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onPressed: dly.tap() } }
                         Text { x: 10; y: 198; width: 216; horizontalAlignment: Text.AlignHCenter; text: "TAP IN TIME WITH THE MUSIC"; color: ed.ink; opacity: 0.7; font.family: ed.face1; font.pixelSize: 8; font.letterSpacing: 1 } }
                     // THE LIVE DISPLAY of a family: the saturation curve, the reverb tail, or the sweep of the modulation
