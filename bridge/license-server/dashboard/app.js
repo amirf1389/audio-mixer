@@ -44,7 +44,31 @@
     say($('loginMsg'), ''); $('login').hidden = true; $('app').hidden = false; $('signOut').hidden = false; $('who').textContent = location.host; $('iName').focus();
   }
 
-  async function loadAll() { await Promise.all([loadLicences(), loadStats(), loadAudit()]); }
+  async function loadAll() { await Promise.all([loadLicences(), loadStats(), loadAudit(), loadPortal()]); }
+  // CUSTOMER PORTAL: what it did in the last day, how many product keys are out, and what its Updates tab shows
+  async function loadPortal() {
+    try {
+      const p = await api('GET', '/admin/portal'), box = $('portalStats'); box.replaceChildren();
+      for (const [n, label] of [[p.productKeys.made, 'product keys made'], [p.productKeys.redeemed, 'used at least once'], [p.productKeys.neverUsed, 'never used'], [p.last24h.redeemed, 'activations in 24 h'], [p.last24h.refused, 'refused in 24 h']]) {
+        const c = el('div', 'stat'); c.append(el('b', '', String(n)), el('span', '', label)); box.append(c);
+      }
+      const u = p.update;
+      $('portalUpdate').textContent = 'Update list: ' + p.updateUrl + ' — ' + (!u ? 'not read yet (it is read when a customer opens the Updates tab)' : u.ok ? 'shows version ' + u.version + (u.signed ? ', carries a signature' : ', NOT signed') + ', ' + (u.files || []).length + ' file(s)' : u.error);
+    } catch (e) { say($('portalMsg'), e.message, 'err'); }
+  }
+  $('pkCopyBtn').addEventListener('click', async () => { try { await navigator.clipboard.writeText($('pkCode').textContent); say($('issueMsg'), 'Product key copied.', 'ok'); } catch (_) { say($('issueMsg'), 'Select the product key and press Ctrl+C.'); } });
+  $('hideKey').addEventListener('click', () => { $('pkCode').textContent = ''; $('pkLine').hidden = true; });
+  $('portalRefresh').addEventListener('click', async () => {
+    try { await api('POST', '/admin/portal/refresh', {}); await fetch('/portal/updates'); await loadPortal(); say($('portalMsg'), 'Read again.', 'ok'); } catch (e) { say($('portalMsg'), e.message, 'err'); }
+  });
+  async function newProductKey(b, l) {
+    if (!window.confirm('Make a new product key for "' + (l.name || l.id) + '"?\nThe old product key stops working at once.')) return;
+    b.disabled = true;
+    try { const r = await api('POST', '/admin/licenses/' + encodeURIComponent(l.id) + '/product-key', {});
+      $('keyText').value = ''; $('pkCode').textContent = r.productKey; $('pkLine').hidden = false; $('newKey').hidden = false; $('newKey').scrollIntoView({ block: 'center' });
+      await loadAll(); say($('listMsg'), 'New product key made for ' + l.id + '.', 'ok'); } catch (e) { say($('listMsg'), e.message, 'err'); }
+    b.disabled = false;
+  }
   async function loadStats() {
     const s = await api('GET', '/admin/stats'), box = $('stats'); box.replaceChildren();
     for (const [n, label] of [[s.total, 'keys on record'], [s.active, 'active'], [s.expiringSoon, 'expire within 30 days'], [s.expired, 'expired'], [s.revoked, 'revoked'], [s.devices, 'computers activated']]) {
@@ -77,9 +101,11 @@
       const devs = el('td'); devs.append(el('div', 'sub', l.devices.length + ' of ' + (l.seats || maxDevices)));
       for (const m of l.devices) { const row = el('div', 'dev'); row.append(el('span', '', m)); const b = el('button', 'ghost small', 'Remove'); b.type = 'button'; b.title = 'Free this computer\'s seat'; b.addEventListener('click', () => removeDevice(b, l, m)); row.append(b); devs.append(row); }
       const state = el('td'); state.append(el('span', 'tag ' + l.state, l.state)); if (l.state === 'revoked') state.append(el('div', 'sub', day(l.revoked) + (l.reason ? ' · ' + l.reason : '')));
+      who.append(el('div', 'sub', l.productKey ? 'product key: ' + (l.redeems ? 'used ' + l.redeems + ' time(s), last ' + day(l.redeemedAt) : 'not used yet') : 'no product key'));
       const acts = el('td', 'acts');
       if (l.state === 'revoked') { const b = el('button', 'ghost small', 'Restore'); b.type = 'button'; b.addEventListener('click', () => restore(b, l)); acts.append(b); }
       else { const b = el('button', 'danger small', 'Revoke'); b.type = 'button'; b.addEventListener('click', () => revoke(b, l)); acts.append(b); }
+      { const b = el('button', 'ghost small', 'New product key'); b.type = 'button'; b.title = 'The old product key stops working'; b.addEventListener('click', () => newProductKey(b, l)); acts.append(b); }
       tr.append(who, el('td', '', l.plan || '—'), el('td', '', day(l.issued)), el('td', '', l.expires ? day(l.expires) : 'never'), devs, state, acts); body.append(tr);
     }
   }
@@ -127,7 +153,7 @@
       $('issueBtn').textContent = 'Issuing …'; say($('issueMsg'), '');
       try {
         const r = await api('POST', '/admin/licenses', body);
-        $('keyText').value = (r.productKey ? 'PRODUCT KEY (25 characters, shown once: this is what the customer types)\n' + r.productKey + '\n\nFULL KEY (works without the server: paste it whole)\n' : '') + r.key; $('newKey').hidden = false; say($('issueMsg'), 'Issued ' + r.id + '.', 'ok'); $('issueForm').reset(); $('keyText').focus(); $('keyText').select();
+        $('keyText').value = r.key; $('pkCode').textContent = r.productKey || ''; $('pkLine').hidden = !r.productKey; $('newKey').hidden = false; say($('issueMsg'), 'Issued ' + r.id + '.', 'ok'); $('issueForm').reset(); $('keyText').focus(); $('keyText').select();
         await loadAll();
       } catch (err) { say($('issueMsg'), err.message, 'err'); }
     });

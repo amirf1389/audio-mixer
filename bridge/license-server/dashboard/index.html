@@ -30,6 +30,13 @@
   <div id="app" hidden>
     <section class="stats" id="stats" aria-label="Totals"></section>
 
+    <section class="card" id="portalCard">
+      <div class="bar"><h2>Customer portal</h2><a id="portalLink" href="/portal/" target="_blank" rel="noopener">Open the portal</a><button id="portalRefresh" type="button" class="ghost">Read the update list again</button></div>
+      <div class="stats" id="portalStats" aria-label="Portal totals"></div>
+      <p id="portalUpdate" class="muted"></p>
+      <p id="portalMsg" class="msg" role="status"></p>
+    </section>
+
     <section class="card">
       <h2>Issue a key</h2>
       <form id="issueForm" class="grid" autocomplete="off">
@@ -45,6 +52,7 @@
       </form>
       <div id="newKey" class="newkey" hidden>
         <p><strong>The key is shown once.</strong> It is not stored on the server: copy it now and send it to the customer.</p>
+        <p id="pkLine" class="muted" hidden>Product key (25 characters, shown once: this is what the customer types): <code id="pkCode"></code> <button id="pkCopyBtn" type="button" class="ghost small">Copy product key</button></p>
         <textarea id="keyText" readonly rows="4" spellcheck="false" aria-label="The issued key"></textarea>
         <div class="actions"><button id="copyKey" type="button">Copy key</button><button id="hideKey" type="button" class="ghost">Done, hide it</button><span id="copyMsg" class="msg" role="status"></span></div>
       </div>

@@ -46,3 +46,4 @@ td .sub { color: var(--muted); font-size: 12px; word-break: break-all; }
 td.acts { white-space: nowrap; } td.acts button { margin-right: 6px; }
 [hidden] { display: none !important; }
 @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } header { flex-wrap: wrap; } }
+a { color: var(--cyan); } #pkCode { color: var(--amber); font: 15px ui-monospace, Consolas, monospace; letter-spacing: 1px; }

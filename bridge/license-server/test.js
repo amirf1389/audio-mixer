@@ -270,3 +270,30 @@ test('the customer portal is served, reads the update list through the server, a
     assert.strictEqual(b.ok, false);                                                                   // a plain http list from elsewhere is not read
   } finally { server.close(); feed.close(); fsx.rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('portal management: counts product keys and their use, makes a new product key that replaces the old one, admin only', async () => {
+  const fsx = require('node:fs'), osx = require('node:os'), pathx = require('node:path');
+  const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'lic-manage-'));
+  const server = createServer({ privateKey: pair.privateKey, token: TOKEN, dataFile: pathx.join(dir, 'licenses.json'), updateUrl: 'http://127.0.0.1:9/none' });
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${server.address().port}`, H = { 'content-type': 'application/json', authorization: 'Bearer ' + TOKEN };
+  const post = (p, b, auth = true) => fetch(base + p, { method: 'POST', body: JSON.stringify(b), headers: auth ? H : { 'content-type': 'application/json' } });
+  try {
+    const a = await (await post('/issue', { plan: 'pro', name: 'First', days: 30 })).json(), b = await (await post('/issue', { plan: 'studio', name: 'Second', days: 0 })).json();
+    assert.strictEqual((await fetch(base + '/admin/portal')).status === 200, false);                       // not without the token
+    assert.strictEqual((await post('/redeem', { code: a.productKey }, false)).status, 200);
+    assert.strictEqual((await post('/redeem', { code: a.productKey }, false)).status, 200);
+    assert.strictEqual((await post('/redeem', { code: 'ZZZZZ-ZZZZZ-ZZZZZ-ZZZZZ-ZZZZZ' }, false)).status, 404);
+    const p = await (await fetch(base + '/admin/portal', { headers: H })).json();
+    assert.deepStrictEqual(p.productKeys, { made: 2, redeemed: 1, neverUsed: 1 }); assert.strictEqual(p.last24h.redeemed, 2); assert.strictEqual(p.last24h.refused, 1); assert.strictEqual(p.path, '/portal/');
+    const list = (await (await fetch(base + '/admin/licenses', { headers: H })).json()).licenses, la = list.find(l => l.id === a.id);
+    assert.strictEqual(la.redeems, 2); assert.ok(la.redeemedAt > 0); assert.strictEqual(la.productKey, true);
+    assert.strictEqual((await post(`/admin/licenses/${a.id}/product-key`, {}, false)).status === 200, false);  // admin only
+    const n = await (await post(`/admin/licenses/${a.id}/product-key`, {})).json();
+    assert.match(n.productKey, /^[0-9A-Z]{5}(-[0-9A-Z]{5}){4}$/); assert.notStrictEqual(n.productKey, a.productKey);
+    assert.strictEqual((await post('/redeem', { code: a.productKey }, false)).status, 404);                // the old one is dead
+    assert.strictEqual((await post('/redeem', { code: n.productKey }, false)).status, 200);                // the new one works
+    assert.strictEqual((await post('/redeem', { code: b.productKey }, false)).status, 200);                // the other licence is untouched
+    assert.strictEqual((await post('/admin/licenses/NOPE/product-key', {})).status, 404);
+  } finally { server.close(); fsx.rmSync(dir, { recursive: true, force: true }); }
+});

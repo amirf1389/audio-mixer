@@ -94,7 +94,8 @@
         "PLUGIN RACK: PITCH SHIFTER, up or down 12 semitones with a fine control, without changing the speed.",
         "Licence: BASIC runs channels 1 to 8, PRO 1 to 16, STUDIO and MASTER all 32. A product key (XXXXX-XXXXX-XXXXX-XXXXX-XXXXX) can be typed on LICENCE and is traded at the licence server for the full key.",
         "Updates: the update server link is open to any https address; the update list must still carry the vendor's signature.",
-        "Licence server: a customer portal at /portal/ to activate a product key (copy the key or save it as a key file the console picks up), check a key, and see the newest release with its checksums."
+        "Licence server: a customer portal at /portal/ to activate a product key (copy the key or save it as a key file the console picks up), check a key, and see the newest release with its checksums.",
+        "Licence server: portal management in the admin page. Product keys made, used and unused, activations and refusals of the last day, what the portal's Updates tab shows, and a new product key per licence that replaces the old one."
       ]
     }
   ]

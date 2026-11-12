@@ -74,3 +74,15 @@ location /admin             { return 404; }   # management stays off the public 
 ```
 
 Use the port your server listens on in place of 8790.
+
+## Portal management (in `/admin/`)
+
+The management page has a **Customer portal** card:
+
+- how many product keys are out, how many were used, how many never;
+- activations and refused tries in the last 24 hours;
+- what the portal's Updates tab is showing (version, signed or not, number of files), with **Read the update list again** after you
+  publish a release.
+
+Each licence row shows whether its product key was used and when, and has **New product key**: it makes a fresh one and the old one stops
+working at once (for a customer who lost it, or when it was passed on).

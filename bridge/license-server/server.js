@@ -157,7 +157,15 @@ function redeemProductKey({ code, file = DATA_FILE, secret, now = Date.now() }) 
   const d = rec.enc ? unseal(rec.enc, dataKey(reg, secret)) : null;
   const payload = { v: 1, id, plan: m.plan, name: (d && d.name) || 'Licensed user', issued: m.issued, expires: m.expires || null, seats: m.seats || 1 };
   if (m.trial) payload.trial = true; if (m.mid) payload.mid = m.mid;
+  rec.redeems = (rec.redeems || 0) + 1; rec.redeemedAt = now; saveRegistry(file, reg);   // how often and when last: the management page shows it
   return { ok: true, status: 200, id, payload };
+}
+
+// A NEW PRODUCT KEY for a licence on record: the old one stops working at once (lost, or passed on by mistake). Shown once.
+function renewProductKey({ id, file = DATA_FILE }) {
+  const reg = loadRegistry(file), rec = reg[id]; if (!rec || String(id).startsWith('_')) return { ok: false, status: 404, error: 'no such licence' };
+  const productKey = newProductKey(); rec.code = productKeyHash(productKey); rec.redeems = 0; rec.redeemedAt = null; saveRegistry(file, reg);
+  return { ok: true, status: 200, id, productKey };
 }
 
 // Puts a newly issued key on record. The key itself is not stored.
@@ -175,7 +183,7 @@ function listLicenses({ file = DATA_FILE, secret, now = Date.now() }) {
   return ids(reg).map(id => {
     const r = reg[id] || {}, m = r.meta || {}, c = r.enc ? unseal(r.enc, key) : null;
     const state = r.revoked ? 'revoked' : (m.expires && m.expires < now ? 'expired' : 'active');
-    return { id, plan: m.plan || null, issued: m.issued || null, expires: m.expires || null, seats: m.seats || null, machine: m.mid || null, devices: Array.isArray(r.devices) ? r.devices : [],
+    return { id, plan: m.plan || null, issued: m.issued || null, expires: m.expires || null, seats: m.seats || null, machine: m.mid || null, devices: Array.isArray(r.devices) ? r.devices : [], productKey: !!r.code, redeems: r.redeems || 0, redeemedAt: r.redeemedAt || null, trial: !!m.trial,
       name: c ? c.name : '', email: c ? c.email : '', note: c ? c.note : '', readable: !r.enc || !!c, onRecord: !!r.meta, state, revoked: r.revoked || null, reason: r.reason || '' };
   }).sort((a, b) => (b.issued || 0) - (a.issued || 0));
 }
@@ -281,6 +289,17 @@ function createServer({ privateKey, token, dataFile = DATA_FILE, dataSecret, tru
     } catch (e) { body = { ok: false, error: 'The update list could not be read: ' + clean(e.message, 120) }; }
     upd.at = Date.now(); upd.body = body; return c.json(200, body);
   });
+  // PORTAL MANAGEMENT (admin): what the customer portal is doing, and the two things an operator does to it
+  app.get('/admin/portal', admin, limit('adm', 120), c => {
+    const all = listLicenses({ file: dataFile, secret }), since = Date.now() - 86400000, log = audit.list(500);
+    const when = e => Number(e.t) || 0, what = e => e.action || '';
+    return c.json(200, { ok: true, path: '/portal/', updateUrl, update: upd.body, updateReadAt: upd.at || null,
+      productKeys: { made: all.filter(l => l.productKey).length, redeemed: all.filter(l => l.redeems > 0).length, neverUsed: all.filter(l => l.productKey && !l.redeems).length },
+      last24h: { redeemed: log.filter(e => what(e) === 'license.redeem' && when(e) >= since).length, refused: log.filter(e => what(e) === 'license.redeem.refused' && when(e) >= since).length } });
+  });
+  app.post('/admin/portal/refresh', admin, limit('adm', 30), async c => { upd.at = 0; upd.body = null; audit.add('portal.refresh', '', c.ip); return c.json(200, { ok: true }); });
+  app.post('/admin/licenses/:id/product-key', admin, limit('adm', 60), async c => { const r = renewProductKey({ id: c.params.id, file: dataFile });
+    if (!r.ok) return c.json(r.status, { ok: false, error: r.error }); audit.add('license.productkey.new', r.id, c.ip); return c.json(200, { ok: true, id: r.id, productKey: r.productKey }); });
   const portal = path.join(__dirname, 'portal');
   app.get('/portal', c => c.send(301, '', { location: '/portal/' }));
   app.static({ '/portal/': [path.join(portal, 'index.html'), 'text/html; charset=utf-8'], '/portal/app.js': [path.join(portal, 'app.js'), 'text/javascript; charset=utf-8'], '/portal/portal.css': [path.join(portal, 'portal.css'), 'text/css; charset=utf-8'], '/portal/base.css': [path.join(__dirname, 'dashboard', 'style.css'), 'text/css; charset=utf-8'] });
@@ -291,7 +310,7 @@ function createServer({ privateKey, token, dataFile = DATA_FILE, dataSecret, tru
   return http.createServer(app.handler);
 }
 
-module.exports = { newProductKey, normProductKey, redeemProductKey, buildPayload, createServer, authorized, activateDevice, deactivateDevice, keyStatus, listLicenses, setRevoked, removeDevice, recordIssue, MAX_DEVICES };
+module.exports = { renewProductKey, newProductKey, normProductKey, redeemProductKey, buildPayload, createServer, authorized, activateDevice, deactivateDevice, keyStatus, listLicenses, setRevoked, removeDevice, recordIssue, MAX_DEVICES };
 
 if (require.main === module) {
   const token = process.env.LICENSE_ADMIN_TOKEN;
