@@ -82,13 +82,18 @@
         "DIAGNOSTICS: the FACTORY SETUP card is gone. FACTORY RESET is now complete: every setting including the language and the network tokens goes back to the factory state and the first-start setup runs again; only the licence stays.",
         "Uninstall (Windows): every uninstall is a factory reset. Settings, console, scenes, presets and caches are removed, so a later install starts as new; the uninstaller only asks whether to keep the licence key.",
         "SOUND CARD: automatic selection is gone. The device is always chosen by hand: OPEN starts a driver, the same button turns it off; a driver whose device was in use is read again when it is opened, so the real channel count is used.",
-        "Every edition runs all 32 channels: strips are no longer locked by the licence.",
         "SETTINGS holds FACTORY RESET (moved from DIAGNOSTICS). MIC EQ is reached from TONE as DYNAMIC MIC. AI MIX has a brain icon.",
         "NETWORK: a token stays on screen for 10 minutes, and a named token works only from the address that used it first.",
         "SOUND CARD: SMART START and the AFTER ASIO fallback are gone. SCAN is discovery only: it lists what is there and opens nothing; START opens exactly the device you chose.",
         "Start: the opening animation is shorter (1.8 s), a click goes straight into the interface, and the interface opens after 3 s even if the animation stalls.",
-        "LICENCE page: the texts say what is true now (all 32 channels in every edition) and how to activate a key: paste, CHECK, ACTIVATE.",
-        "NETWORK: the service's status line is readable (no stray characters) and names AmF X1 Network."
+        "NETWORK: the service's status line is readable (no stray characters) and names AmF X1 Network.",
+        "WASAPI: the headset's microphone is always kept off. A headset or Bluetooth microphone is never opened on WASAPI, and with headphones as the output the system's default microphone is not opened; SOUND CARD says so when it happens.",
+        "NETWORK: pairing PIN for the remote. Six digits, a new one every minute, shown while the service runs. A phone sends it once and gets its own 30-day token tied to its address; one phone per PIN, and five wrong tries close pairing until the next PIN.",
+        "SOUND CARD and SETTINGS redesigned: SOUND CARD opens with one status strip (what runs, channels, rate, block, latency, START / STOP, AUDIO / MIDI SETTINGS) and a DEVICES card; the driver ladder and routing rows are gone. SETTINGS is in two columns with FACTORY RESET in its own panel.",
+        "ENGINE CONTROL page: heat (the audio load, two minutes of it), audio, updates with the update server link, upgrades, and one-press modulation, noise control and pitch control for the selected channel.",
+        "PLUGIN RACK: PITCH SHIFTER, up or down 12 semitones with a fine control, without changing the speed.",
+        "Licence: BASIC runs channels 1 to 8, PRO 1 to 16, STUDIO and MASTER all 32. A product key (XXXXX-XXXXX-XXXXX-XXXXX-XXXXX) can be typed on LICENCE and is traded at the licence server for the full key.",
+        "Updates: the update server link is open to any https address; the update list must still carry the vendor's signature."
       ]
     }
   ]

@@ -67,6 +67,12 @@ Item {
                     Text { Layout.fillWidth: true; text: remote.available ? remote.status : i18n.t("The remote service program (amixos-daemon) is not installed next to the console.", i18n.lang); color: remote.running ? Theme.emerald : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.WordWrap }
                     Repeater { model: remote.running ? remote.addresses : []; delegate: Text { text: modelData + "   " + i18n.t("← type this into the phone app", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } }
                     Text { visible: remCard.shown !== ""; text: i18n.t("TOKEN  ", i18n.lang) + remCard.shown; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; Layout.fillWidth: true; wrapMode: Text.WrapAnywhere }
+                    RowLayout { id: pinRow; objectName: "pairPinRow"; visible: remote.running; spacing: 10; property string pin: ""; property int secs: 0
+                        Timer { interval: 1000; running: pinRow.visible; repeat: true; triggeredOnStart: true; onTriggered: { pinRow.pin = remote.pairPin(); pinRow.secs = remote.pairSecondsLeft() } }
+                        Head { text: i18n.t("PAIRING PIN", i18n.lang) }
+                        Text { objectName: "pairPin"; text: pinRow.pin.substring(0, 3) + " " + pinRow.pin.substring(3); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 22; font.bold: true; font.letterSpacing: 3 }
+                        Text { text: i18n.t("changes in ", i18n.lang) + pinRow.secs + " s"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9 }
+                        Note { text: i18n.t("Type this PIN into the phone once. It gets its own token for 30 days, tied to that phone's address. A new PIN every minute; one phone per PIN; five wrong tries close pairing until the next PIN.", i18n.lang) } }
                     Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.lineSoft }
                     RowLayout { spacing: 8
                         Head { text: i18n.t("AMF X1 NETWORK · TOKENS", i18n.lang) }

@@ -1,4 +1,6 @@
 #include "Remote.h"
+#include <QCryptographicHash>
+#include <QDateTime>
 #include <QVariantMap>
 
 #include <QCoreApplication>
@@ -33,6 +35,12 @@ QString Remote::runTool(const QStringList& args, bool* ok) const {
   if (ok) *ok = fin && p.exitStatus() == QProcess::NormalExit && p.exitCode() == 0;
   return QString::fromUtf8(fin ? (p.exitCode() == 0 ? p.readAllStandardOutput() : p.readAllStandardError()) : QByteArray("the service program did not answer"));
 }
+QString Remote::pairPin() const {
+  const QString t = token(); if (t.isEmpty()) return {};
+  const QByteArray h = QCryptographicHash::hash((t + "|pair|" + QString::number(QDateTime::currentSecsSinceEpoch() / 60)).toUtf8(), QCryptographicHash::Sha256).toHex();
+  return QString::number(h.left(8).toULong(nullptr, 16) % 1000000UL).rightJustified(6, '0');
+}
+int Remote::pairSecondsLeft() const { return 60 - static_cast<int>(QDateTime::currentSecsSinceEpoch() % 60); }
 void Remote::refreshTokens() {
   tokens_.clear(); if (!available()) { emit changed(); return; }
   bool ok = false; const QString out = runTool({"--list-tokens"}, &ok);

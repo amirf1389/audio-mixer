@@ -226,3 +226,24 @@ test('a trial key always ends within a year and is for one computer', () => {
   const c = buildPayload({ plan: 'pro', name: 'Trial user', days: 30, trial: true }, 1000); assert.strictEqual(c.payload.expires, 1000 + 30 * 86400000);
   const d = buildPayload({ plan: 'pro', name: 'Paying user', days: 0 }, 1000); assert.strictEqual(d.payload.trial, undefined); assert.strictEqual(d.payload.expires, null);
 });
+
+test('a product key is made with the licence, redeems into a genuine key, and the register never holds it', async () => {
+  const fsx = require('node:fs'), osx = require('node:os'), pathx = require('node:path');
+  const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'lic-code-')), file = pathx.join(dir, 'licenses.json');
+  const server = createServer({ privateKey: pair.privateKey, token: TOKEN, dataFile: file });
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${server.address().port}`, post = (path, body, auth) => fetch(base + path, { method: 'POST', body: JSON.stringify(body), headers: Object.assign({ 'content-type': 'application/json' }, auth ? { authorization: 'Bearer ' + TOKEN } : {}) });
+  try {
+    const made = await (await post('/issue', { plan: 'pro', name: 'Boxed customer', days: 365 }, true)).json();
+    assert.match(made.productKey, /^[0-9A-HJKMNP-TV-Z]{5}(-[0-9A-HJKMNP-TV-Z]{5}){4}$/);
+    assert.ok(!fsx.readFileSync(file, 'utf8').includes(made.productKey.replace(/-/g, '')) && !fsx.readFileSync(file, 'utf8').includes(made.productKey));
+    const typed = made.productKey.toLowerCase().replace(/-/g, ' ');                      // typed in lower case with spaces: still the same key
+    const got = await post('/redeem', { code: typed }); assert.strictEqual(got.status, 200);
+    const j = await got.json(), v = verifyKey(j.key, { jwk });
+    assert.strictEqual(v.ok, true); assert.strictEqual(j.id, made.id); assert.strictEqual(j.plan, 'pro');
+    assert.strictEqual((await post('/redeem', { code: 'AAAAA-BBBBB-CCCCC-DDDDD-EEEEE' })).status, 404);
+    assert.strictEqual((await post('/redeem', { code: 'TOO-SHORT' })).status, 400);
+    await post(`/admin/licenses/${made.id}/revoke`, { reason: 'test' }, true);
+    assert.strictEqual((await post('/redeem', { code: made.productKey })).status, 403);   // a revoked licence gives no key
+  } finally { server.close(); fsx.rmSync(dir, { recursive: true, force: true }); }
+});

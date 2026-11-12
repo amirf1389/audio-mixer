@@ -114,9 +114,20 @@ void Engine::refreshDevices() {
 
 bool Engine::open(const QString& backend, const QString& inDevice, const QString& outDevice, double sampleRate, int frames, int inChannels, int outChannels) {
   stop();
+  // WASAPI: THE HEADSET'S MICROPHONE STAYS OFF, always. A capture device that is a headset or Bluetooth microphone is never opened on
+  // WASAPI, and with headphones or a headset as the output the system's default microphone (which is the headset's own when one is
+  // plugged in) is not opened either. A microphone picked by name that is not a headset's is opened as asked.
+  QString inDev = inDevice; int inCh = inChannels; micOffNote_.clear();
+  if (backend == "wasapi" && inCh > 0) {
+    const auto kindOf = [this](const QString& id, bool capture) { for (const QVariant& v : devices_) { const QVariantMap m = v.toMap(); if (m["backend"].toString() != "wasapi") continue;
+        if (id.isEmpty() ? (capture ? m["defaultIn"].toBool() && m["inChannels"].toInt() > 0 : m["defaultOut"].toBool() && m["outChannels"].toInt() > 0) : m["id"].toString() == id) return m["kind"].toString(); } return QString(); };
+    const QString ik = kindOf(inDevice, true), ok = kindOf(outDevice, false);
+    if (ik == "headset" || ik == "bluetooth" || (inDevice.isEmpty() && (ok == "headphones" || ok == "headset" || ok == "bluetooth"))) {
+      inCh = 0; inDev.clear(); micOffNote_ = QStringLiteral("WASAPI: the headset's microphone is kept off. Outputs only."); }
+  }
   rt_ = std::make_unique<am::Runtime>(kStrips);
-  am::DeviceConfig cfg; cfg.backend = backend.isEmpty() ? "auto" : backend.toStdString(); cfg.inDevice = inDevice.toStdString(); cfg.outDevice = outDevice.toStdString();
-  cfg.sampleRate = sampleRate > 0 ? sampleRate : 48000; cfg.frames = static_cast<unsigned>(frames > 0 ? frames : 256); blockFrames_ = static_cast<int>(cfg.frames); cfg.inChannels = inChannels; cfg.outChannels = outChannels;
+  am::DeviceConfig cfg; cfg.backend = backend.isEmpty() ? "auto" : backend.toStdString(); cfg.inDevice = inDev.toStdString(); cfg.outDevice = outDevice.toStdString();
+  cfg.sampleRate = sampleRate > 0 ? sampleRate : 48000; cfg.frames = static_cast<unsigned>(frames > 0 ? frames : 256); blockFrames_ = static_cast<int>(cfg.frames); cfg.inChannels = inCh; cfg.outChannels = outChannels;
   devIn_ = std::clamp(inChannels, 0, kStrips); devOut_ = std::clamp(outChannels, 0, kOutputs);
   std::string err; nullInputFor(cfg); rememberDeviceNames(cfg.backend, cfg.inDevice, cfg.outDevice);
   if (opening_) return false;
@@ -326,14 +337,14 @@ QVariantMap Engine::masterLimiter() const { QVariantMap m; m["on"] = masterLim_;
 void Engine::clearClips() { if (rt_) rt_->clearClips(); }
 // ---- licence (engine/cpp/app/license): the vendor public key is compiled in; keys and tokens are verified offline
 static QVariantMap licenseMap(const am::lic::Status& st) {
-  QVariantMap m; m["state"] = QString::fromStdString(st.state); m["plan"] = QString::fromStdString(st.planId); m["planName"] = QString::fromStdString(st.planName); m["channels"] = 32;   /* every edition runs all the strips */ m["source"] = QString::fromStdString(st.source);
+  QVariantMap m; m["state"] = QString::fromStdString(st.state); m["plan"] = QString::fromStdString(st.planId); m["planName"] = QString::fromStdString(st.planName); m["channels"] = st.channels; m["source"] = QString::fromStdString(st.source);
   m["id"] = QString::fromStdString(st.id); m["name"] = QString::fromStdString(st.name); m["serial"] = QString::fromStdString(st.serial); m["editionName"] = QString::fromStdString(st.editionName); m["expires"] = static_cast<qlonglong>(st.expires); m["boundToThisPc"] = st.boundToThisPc; m["machine"] = QString::fromStdString(st.machine); m["message"] = QString::fromStdString(st.message);
   return m;
 }
 QString Engine::edition() const { return license_.value("planName", "BASIC").toString(); }
 void Engine::refreshLicense() {
   const am::lic::Status st = am::lic::status(QDateTime::currentMSecsSinceEpoch());
-  license_ = licenseMap(st); const int before = licensedChannels_; licensedChannels_ = kStrips;   // every edition runs all the channels: the licence no longer locks strips
+  license_ = licenseMap(st); const int before = licensedChannels_; licensedChannels_ = std::clamp(st.channels, 1, kStrips);   // BASIC 1-8, PRO 1-16, STUDIO and MASTER all 32
   if (before != licensedChannels_ && rt_) for (int i = 0; i < kStrips; ++i) pushStrip(i);
   emit licenseChanged(); if (before != licensedChannels_) emit stripsChanged();
 }
@@ -1040,7 +1051,7 @@ QVariantList Engine::pages() const {
     {"MIX", "fx", "EFFECTS", "✨", true}, {"MIX", "surround", "360 AUDIO", "◍", true}, {"MIX", "bus", "SEND TO", "⇉", true}, {"MIX", "dca", "GROUP FADERS", "☷", true},
     {"ROUTE", "io", "CONNECTIONS", "⚡", true}, {"ROUTE", "routing", "ROUTING", "⎇", true},
     {"METER", "meter", "LEVELS", "▓", true}, {"METER", "lufs", "LOUDNESS", "◎", true}, {"METER", "osc", "WAVEFORM", "∽", true}, {"METER", "phase", "PHASE", "☯", true}, {"METER", "acoustics", "ACOUSTICS", "⌇", true},
-    {"SOURCE", "media", "STREAM & MEDIA", "▶", true}, {"SOURCE", "live", "LIVE SOURCES", "☉", true}, {"SOURCE", "ai", "AI MIX", "🧠", true}, {"SOURCE", "tools", "TOOLS", "⚒", true}, {"SOURCE", "plugins", "PLUGINS", "⬡", true}, {"SOURCE", "samples", "SAMPLES", "▦", true},
+    {"SOURCE", "media", "STREAM & MEDIA", "▶", true}, {"SOURCE", "live", "LIVE SOURCES", "☉", true}, {"SOURCE", "ai", "AI MIX", "🧠", true}, {"SOURCE", "engctl", "ENGINE CONTROL", "⚡", true}, {"SOURCE", "tools", "TOOLS", "⚒", true}, {"SOURCE", "plugins", "PLUGINS", "⬡", true}, {"SOURCE", "samples", "SAMPLES", "▦", true},
     {"DEVICE", "asio", "SOUND CARD", "◉", true}, {"DEVICE", "bluetooth", "BLUETOOTH", "⮁", true}, {"DEVICE", "network", "NETWORK", "⮞", true}, {"DEVICE", "cloud", "CLOUD", "☁", false}, {"DEVICE", "cascade", "CASCADE", "⚭", false},
     {"SYSTEM", "presets", "PRESETS", "⬇", true}, {"SYSTEM", "sys", "SETTINGS", "⚙", true}, {"SYSTEM", "acct", "ACCOUNT", "☺", true}, {"SYSTEM", "access", "ACCESS", "⚿", true}, {"SYSTEM", "renew", "LICENSE", "★", true}, {"SYSTEM", "admin", "ADMIN", "⚑", true}, {"SYSTEM", "calib", "CALIBRATE", "⌖", true},
     {"HELP", "help", "HELP", "?", true}, {"HELP", "scenes", "SCENES", "⚐", true}, {"SYSTEM", "boot", "DIAGNOSTICS", "⏻", true},

@@ -1,3 +1,4 @@
+#include <ctime>
 // amixos-daemon on the null backend: the JSON parser, the token gate, control -> state, the meters frame over HTTP and over WebSocket.
 #include <fstream>
 #include <iterator>
@@ -87,6 +88,15 @@ int main() {
       const std::string f = "daemon_test.pin.json"; std::remove(f.c_str()); am::TokenStore ts(f); std::string e, id; CHECK(ts.load(e)); const std::string t = ts.issue("Pinned", "control", 0, id, e);
       CHECK(ts.roleFor(t, "192.168.1.20") == "control" && ts.roleFor(t, "192.168.1.21").empty() && ts.roleFor(t, "192.168.1.20") == "control");
       am::TokenStore again(f); CHECK(again.load(e) && again.roleFor(t, "192.168.1.21").empty() && again.roleFor(t, "192.168.1.20") == "control" && again.list()[0].ip == "192.168.1.20"); std::remove(f.c_str()); }
+    { // PAIRING PIN: six digits, another one each minute, the same within a minute; a wrong PIN is refused, the right one gives a control token that works, and the PIN is spent
+      const std::string p1 = am::Daemon::pinFor(o.token, 600), p2 = am::Daemon::pinFor(o.token, 659), p3 = am::Daemon::pinFor(o.token, 660);
+      CHECK(p1.size() == 6 && p1 == p2 && p1 != p3 && p1.find_first_not_of("0123456789") == std::string::npos && am::Daemon::pinFor("another-master-token-123", 600) != p1);
+      const std::string P = "/api/pair"; const std::string pin = am::Daemon::pinFor(o.token, static_cast<long long>(std::time(nullptr)));
+      CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", P, "{\"pin\":\"000000x\"}", {}, status, body) && status == 401);
+      CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", P, "{\"pin\":\"" + pin + "\",\"name\":\"Paired phone\"}", {}, status, body) && (status == 200 || status == 401));   // 401 only if the minute turned twice in between
+      if (status == 200) { const std::string pt = Value::parse(body, ok)["token"].asString(); CHECK(pt.size() == 68);
+        CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"gain\",\"strip\":5,\"db\":-3}", {{"X-Amix-Token", pt}}, status, body) && status == 200);
+        CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", P, "{\"pin\":\"" + pin + "\"}", {}, status, body) && status == 429); } }   // spent: the next phone needs the next PIN
     CHECK(am::TokenStore::same("abc", "abc") && !am::TokenStore::same("abc", "abd") && !am::TokenStore::same("abc", "abcd"));
     // SECURITY: a token in the URL does not open control (header only); after more than 20 wrong tokens in a minute the wrong ones get 429
     // while the right one still works

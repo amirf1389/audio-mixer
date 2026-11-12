@@ -28,6 +28,8 @@ class Remote : public QObject {
   QStringList addresses() const; QString tokenFile() const;
   Q_INVOKABLE bool start(bool wifi);        // wifi false = this computer only (127.0.0.1)
   Q_INVOKABLE void stop();
+  Q_INVOKABLE QString pairPin() const;      // the pairing PIN of this minute (six digits; made from the master token and the clock, as the service makes it)
+  Q_INVOKABLE int pairSecondsLeft() const;  // until the PIN changes
   Q_INVOKABLE void refreshTokens();
   Q_INVOKABLE QString newToken(const QString& name, const QString& role, int days);   // returns the token once ("" on failure); days 0 = no end
   Q_INVOKABLE bool revokeToken(const QString& id);

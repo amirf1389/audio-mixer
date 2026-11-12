@@ -203,7 +203,7 @@ int main(int argc, char* argv[]) {
       engine.setWindowsMuteSync(true); if (!sysMute) { std::fprintf(stderr, "amixos --smoke: switching sync on at -inf did not mute\n"); return 82; } engine.restoreSystemSound(); if (sysMute) { std::fprintf(stderr, "amixos --smoke: exit did not take the mute back\n"); return 83; }
       engine.setMaster(keep); engine.setSystemMuteBackend([](bool&) { return false; }, [](bool) { return false; }); engine.syncSystemSound(); }
     { // the ten effects in the rack of any channel: listed, loaded into a slot, a knob moves, bypass, cleared; a late channel too
-      int fxn = 0; for (const QVariant& v : engine.pluginCatalog()) if (v.toMap().value("fx").toBool()) ++fxn; if (fxn != 18) { std::fprintf(stderr, "amixos --smoke: %d effects in the rack catalogue (want 17)\n", fxn); return 84; }
+      int fxn = 0; for (const QVariant& v : engine.pluginCatalog()) if (v.toMap().value("fx").toBool()) ++fxn; if (fxn != 19) { std::fprintf(stderr, "amixos --smoke: %d effects in the rack catalogue (want 19)\n", fxn); return 84; }
       for (const int ch : {6, 7}) { int slot = 0; for (const QVariant& v : engine.pluginCatalog()) { const QVariantMap m = v.toMap(); if (!m.value("fx").toBool()) continue; engine.setPlugin(ch, slot % 10, m.value("kind").toString()); const QVariantMap pl = engine.plugins(ch)[slot % 10].toMap();
           if (pl.value("pending").toBool() || pl.value("format").toString() != "FX" || engine.pluginParams(ch, slot % 10).size() < 4) { std::fprintf(stderr, "amixos --smoke: effect %s did not load into CH %d slot %d\n", qPrintable(m.value("kind").toString()), ch + 1, slot + 1); return 85; } ++slot; }
         engine.setPluginParam(ch, 0, 0, 0.9); engine.setPluginBypass(ch, 0, true); if (!engine.plugins(ch)[0].toMap().value("bypass").toBool()) { std::fprintf(stderr, "amixos --smoke: effect bypass\n"); return 86; }
@@ -434,6 +434,16 @@ int main(int argc, char* argv[]) {
         const QStringList before = settings.vstDirs(); const QString vf = settings.vstUserFolder(); settings.vstUserFolder();
         if (vf.isEmpty() || !QDir(vf).exists() || settings.vstDirs().count(vf) != 1 || QSettings().value("vst3/dirs").toStringList().count(vf) != 1) { std::fprintf(stderr, "amixos --smoke: the VST folder was not created and saved\n"); return 198; }
         if (!before.contains(vf)) settings.removeVstDir(vf); }
+      { // the update link is open to any https host (and to nothing else); the licence server takes https or this computer; a product key needs 25 characters and a server
+        const QString keepUrl = update.url(), keepLic = update.licenseServer();
+        if (update.setServerLink("http://updates.example.org/update.json") || update.setServerLink("https://user@updates.example.org/x") || !update.setServerLink("https://updates.example.org/amfx1/update.json") || update.url() != "https://updates.example.org/amfx1/update.json") { std::fprintf(stderr, "amixos --smoke: the update link rule is wrong\n"); return 207; }
+        update.setLicenseServer("http://licence.example.org"); if (update.licenseServer() == "http://licence.example.org") return 208;
+        update.setLicenseServer(""); update.redeemProductKey("AAAAA-BBBBB-CCCCC-DDDDD-EEEEE"); if (update.redeemState().isEmpty() || update.redeemState() == "asking") return 209;
+        update.setLicenseServer("https://licence.example.org/"); if (update.licenseServer() != "https://licence.example.org") return 210;
+        update.redeemProductKey("TOO-SHORT"); if (update.redeemState() == "asking") return 211;
+        QSettings().remove("update/hosts"); QSettings().setValue("update/url", keepUrl); update.setLicenseServer(keepLic); }
+      { const QString pin = remote.pairPin(); const int left = remote.pairSecondsLeft();   // the pairing PIN: six digits once the master token exists, 1..60 s to the next
+        if ((!pin.isEmpty() && (pin.size() != 6 || pin.toInt() < 0)) || left < 1 || left > 60) { std::fprintf(stderr, "amixos --smoke: the pairing PIN is wrong (%s, %d s)\n", qPrintable(pin), left); return 206; } }
       if (remote.available()) {   // AMF X1 NETWORK tokens from the console: made, listed without the secret, revoked; a nameless one is refused
         remote.refreshTokens(); const int n0 = remote.tokens().size();
         if (!remote.newToken("  ", "control", 0).isEmpty()) return 249;
@@ -561,7 +571,7 @@ int main(int argc, char* argv[]) {
           for (int step = 0; step < 7; ++step) { wiz->setProperty("step", step); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + QStringLiteral("/setup-%1.png").arg(step + 1)); std::printf("amixos --shots: setup-%d\n", step + 1); }
           win->setProperty("forceSetup", false); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
           { win->setProperty("current", "mixer"); for (int k = 0; k < 10; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50);   // the plug-in editor on a tube amp and on the hall reverb
-            if (QObject* edw = win->findChild<QObject*>("plugEd")) { for (const auto& [kind, name, file] : {std::tuple<const char*, const char*, const char*>{"fx:tubeamp", "TUBE AMP", "plugin-editor-tubeamp.png"}, {"fx:hall", "HALL REVERB", "plugin-editor-hall.png"}, {"fx:reverb", "PLATE REVERB", "plugin-editor-plate.png"}, {"fx:syncdelay", "SYNC DELAY", "plugin-editor-delay.png"}, {"fx:analog", "ANALOG CHANNEL", "plugin-editor-analog.png"}, {"fx:chorus", "STEREO CHORUS", "plugin-editor-chorus.png"}}) {
+            if (QObject* edw = win->findChild<QObject*>("plugEd")) { for (const auto& [kind, name, file] : {std::tuple<const char*, const char*, const char*>{"fx:tubeamp", "TUBE AMP", "plugin-editor-tubeamp.png"}, {"fx:hall", "HALL REVERB", "plugin-editor-hall.png"}, {"fx:reverb", "PLATE REVERB", "plugin-editor-plate.png"}, {"fx:syncdelay", "SYNC DELAY", "plugin-editor-delay.png"}, {"fx:analog", "ANALOG CHANNEL", "plugin-editor-analog.png"}, {"fx:chorus", "STEREO CHORUS", "plugin-editor-chorus.png"}, {"fx:pitch", "PITCH SHIFTER", "plugin-editor-pitch.png"}}) {
                 engine.setPlugin(0, 8, kind); QMetaObject::invokeMethod(edw, "openFor", Q_ARG(QVariant, 0), Q_ARG(QVariant, 8), Q_ARG(QVariant, QString::fromLatin1(kind)), Q_ARG(QVariant, QString::fromLatin1(name)));
                 { QElapsedTimer bt; bt.start(); while (bt.elapsed() < 500) QCoreApplication::processEvents(QEventLoop::AllEvents, 20); } win->grabWindow().save(shots + "/" + file);
                 { QObject* lv = win->findChild<QObject*>("liveView"); QObject* tint = win->findChild<QObject*>("plateTint"); const QString k = QString::fromLatin1(kind);   // each family: its own plate colour, and its display where it has one
@@ -576,7 +586,7 @@ int main(int argc, char* argv[]) {
             else { std::fprintf(stderr, "amixos --shots: the plug-in editor was not found\n"); } }
           win->setProperty("bootOn", true); { QElapsedTimer bt; bt.start(); while (bt.elapsed() < 1700) QCoreApplication::processEvents(QEventLoop::AllEvents, 20); } win->grabWindow().save(shots + QStringLiteral("/boot-splash.png")); win->setProperty("bootOn", false); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
         }
-        for (const char* id : {"home", "mixer", "dsp", "dyn", "gate", "bus", "dca", "scenes", "presets", "routing", "renew", "arrange", "io", "meter", "lufs", "sys", "fx", "osc", "phase", "acoustics", "surround", "master", "rtaeq", "miceq", "live", "tools", "calib", "boot", "help", "acct", "access", "admin", "ai", "plugins", "network", "media", "asio", "samples", "rtaeq", "bluetooth"}) {
+        for (const char* id : {"home", "engctl", "mixer", "dsp", "dyn", "gate", "bus", "dca", "scenes", "presets", "routing", "renew", "arrange", "io", "meter", "lufs", "sys", "fx", "osc", "phase", "acoustics", "surround", "master", "rtaeq", "miceq", "live", "tools", "calib", "boot", "help", "acct", "access", "admin", "ai", "plugins", "network", "media", "asio", "samples", "rtaeq", "bluetooth"}) {
           if (QString::fromLatin1(id) == "rtaeq") { QVariantList golden; for (double g : {1.0, 5.0, 3.0, 3.0, 4.0, 2.0, 2.0, 3.0, 3.0, 1.0}) golden << g; engine.setGraphicEq(0, golden, true); }   // the beta's Golden EQ on the shot
           win->setProperty("current", QString::fromLatin1(id)); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
           const QImage img = win->grabWindow(); img.save(shots + "/" + id + ".png"); std::printf("amixos --shots: %s %dx%d\n", id, img.width(), img.height());
@@ -658,6 +668,17 @@ int main(int argc, char* argv[]) {
                 if (dl.size() != 1 || dl[0].toMap()["name"].toString() != "FiiO K7 USB DAC" || dl[0].toMap()["maxRate"].toDouble() != 192000.0 || dl[0].toMap()["current"].toBool()) { std::fprintf(stderr, "amixos --shots: DAC detection is wrong (%d found)\n", int(dl.size())); std::exit(256 - 1); }
                 if (engine.openDac("wasapi", "{nope}", 256)) std::exit(255);
                 engine.simulateDevices(real); if (!engine.running()) engine.open("null", "", "", 48000, 256, 2, 2); }
+              { // WASAPI: a headset microphone is never opened; with headphones out the default microphone stays off; a desk microphone picked by name is left alone
+                const QVariantList real = engine.devices(); QVariantList rig;
+                const auto dev = [](const char* id, const char* name, int in, int out, bool def) { QVariantMap m; m["backend"] = "wasapi"; m["id"] = id; m["name"] = name; m["inChannels"] = in; m["outChannels"] = out; m["defaultRate"] = 48000.0; m["defaultIn"] = def && in > 0; m["defaultOut"] = def && out > 0; return m; };
+                rig << dev("{hp}", "Headphones (Realtek(R) Audio)", 0, 2, true) << dev("{hm}", "Headset Microphone (Realtek(R) Audio)", 1, 0, true) << dev("{dm}", "Microphone (USB Condenser)", 1, 0, false) << dev("{sp}", "Speakers (Realtek(R) Audio)", 0, 2, false);
+                engine.simulateDevices(rig);
+                engine.open("wasapi", "{hm}", "{sp}", 48000, 256, 1, 2); const bool a1 = !engine.micOffNote().isEmpty();   // a headset microphone, named
+                engine.open("wasapi", "", "{hp}", 48000, 256, 2, 2); const bool a2 = !engine.micOffNote().isEmpty();        // headphones out, the default microphone
+                engine.open("wasapi", "{dm}", "{hp}", 48000, 256, 1, 2); const bool a3 = engine.micOffNote().isEmpty();     // a desk microphone picked by name
+                engine.open("wasapi", "", "{sp}", 48000, 256, 0, 2); const bool a4 = engine.micOffNote().isEmpty();          // no input asked for
+                if (!a1 || !a2 || !a3 || !a4) { std::fprintf(stderr, "amixos --shots: the WASAPI headset microphone rule is wrong (%d %d %d %d)\n", a1, a2, a3, a4); std::exit(205); }
+                engine.simulateDevices(real); engine.open("null", "", "", 48000, 256, 2, 2); }
               { // THE ASIO SECTION with three simulated drivers: the list shows them all, MANUAL picks none, OPEN on one that cannot start leaves none marked as running
                 const QVariantList real = engine.devices(); const QString keepPrefer = engine.autoPrefer(); QVariantList rig;
                 const auto dev = [](const char* b, const char* id, const char* name, int in, int out) { QVariantMap m; m["backend"] = b; m["id"] = id; m["name"] = name; m["inChannels"] = in; m["outChannels"] = out; m["defaultRate"] = 48000.0; return m; };

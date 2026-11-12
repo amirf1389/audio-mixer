@@ -11,7 +11,7 @@ double clamp01(double v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
 std::string fmt(const char* f, double v) { char b[32]; std::snprintf(b, sizeof b, f, v); return b; }
 }  // namespace
 
-std::vector<std::pair<std::string, std::string>> catalog() { return {{"reverb", "PLATE REVERB"}, {"delay", "TAPE DELAY"}, {"syncdelay", "SYNC DELAY"}, {"antifeedback", "FEEDBACK KILLER"}, {"analog", "ANALOG CHANNEL"}, {"chorus", "STEREO CHORUS"}, {"drive", "TUBE DRIVE"}, {"flanger", "FLANGER"}, {"phaser", "PHASER"}, {"tremolo", "TREMOLO"}, {"wah", "AUTO WAH"}, {"crusher", "BIT CRUSHER"}, {"exciter", "EXCITER"}, {"tubeamp", "TUBE AMP"}, {"preamp", "PRE AMP"}, {"postamp", "POST AMP"}, {"hall", "HALL REVERB"}, {"room", "ROOM REVERB"}}; }
+std::vector<std::pair<std::string, std::string>> catalog() { return {{"reverb", "PLATE REVERB"}, {"delay", "TAPE DELAY"}, {"syncdelay", "SYNC DELAY"}, {"antifeedback", "FEEDBACK KILLER"}, {"analog", "ANALOG CHANNEL"}, {"pitch", "PITCH SHIFTER"}, {"chorus", "STEREO CHORUS"}, {"drive", "TUBE DRIVE"}, {"flanger", "FLANGER"}, {"phaser", "PHASER"}, {"tremolo", "TREMOLO"}, {"wah", "AUTO WAH"}, {"crusher", "BIT CRUSHER"}, {"exciter", "EXCITER"}, {"tubeamp", "TUBE AMP"}, {"preamp", "PRE AMP"}, {"postamp", "POST AMP"}, {"hall", "HALL REVERB"}, {"room", "ROOM REVERB"}}; }
 std::unique_ptr<Effect> make(const std::string& k, double fs) {
   if (k == "reverb") return std::make_unique<Reverb>(fs);
   if (k == "delay") return std::make_unique<TapeDelay>(fs);
@@ -19,6 +19,7 @@ std::unique_ptr<Effect> make(const std::string& k, double fs) {
   if (k == "antifeedback") return std::make_unique<FeedbackKiller>(fs);
   if (k == "chorus") return std::make_unique<Chorus>(fs);
   if (k == "analog") return std::make_unique<Analog>(fs);
+  if (k == "pitch") return std::make_unique<Pitch>(fs);
   if (k == "flanger") return std::make_unique<Flanger>(fs);
   if (k == "phaser") return std::make_unique<Phaser>(fs);
   if (k == "tremolo") return std::make_unique<Tremolo>(fs);
@@ -133,6 +134,29 @@ void Drive::process(float* L, float* R, std::size_t n) {
 }
 
 
+// ---------------------------------------------------------------- Pitch shifter
+Pitch::Pitch(double fs) : Simple(fs) { for (int i = 0; i < 3; ++i) k_[i] = knobDef(i); reset(); }
+void Pitch::setSampleRate(double fs) { fs_ = fs > 0 ? fs : 48000; reset(); }
+void Pitch::reset() { for (auto& b : buf_) b.assign(static_cast<std::size_t>(fs_ * 0.09) + 32, 0.f); w_ = 0; ph_ = 0; }   // room for the longest window
+std::string Pitch::text(const std::string& id, double v) const { v = clamp01(v); if (id == "pitch") return fmt("%+.0f st", std::round((v - 0.5) * 24.0)); if (id == "window") return fmt("%.0f ms", 20.0 + v * 70.0); return fmt("%+.0f cents", (v - 0.5) * 100.0); }
+void Pitch::process(float* L, float* R, std::size_t n) {
+  if (bypass_.load()) return;
+  const std::size_t len = buf_[0].size(); win_ = std::max(64, std::min(static_cast<int>(len) - 16, static_cast<int>(fs_ * (0.02 + k_[2].load() * 0.07))));
+  const double ratio = std::pow(2.0, semitones(k_[0].load(), k_[1].load()) / 12.0), inc = (1.0 - ratio) / static_cast<double>(win_);
+  const float wet = static_cast<float>(mix_.load()), dry = 1.f - wet; float* ch[2] = {L, R};
+  for (std::size_t i = 0; i < n; ++i) {
+    for (int c = 0; c < 2; ++c) buf_[c][w_] = ch[c][i];
+    float out[2] = {0, 0};
+    for (int tap = 0; tap < 2; ++tap) {
+      double p = ph_ + 0.5 * tap; p -= std::floor(p);
+      const double d = p * static_cast<double>(win_) + 2.0; double rp = static_cast<double>(w_) - d; if (rp < 0) rp += static_cast<double>(len);
+      const std::size_t i0 = static_cast<std::size_t>(rp) % len, i1 = (i0 + 1) % len; const float fr = static_cast<float>(rp - std::floor(rp)), g = static_cast<float>(0.5 - 0.5 * std::cos(2.0 * kPi * p));
+      for (int c = 0; c < 2; ++c) out[c] += g * (buf_[c][i0] + fr * (buf_[c][i1] - buf_[c][i0]));
+    }
+    for (int c = 0; c < 2; ++c) ch[c][i] = dry * ch[c][i] + wet * out[c];
+    ph_ += inc; ph_ -= std::floor(ph_); w_ = (w_ + 1) % len;
+  }
+}
 // ---------------------------------------------------------------- Analog channel
 Analog::Analog(double fs) : Simple(fs) { for (int i = 0; i < 4; ++i) k_[i] = knobDef(i); reset(); }
 void Analog::reset() { lp_[0] = lp_[1] = 0; }

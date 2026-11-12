@@ -21,18 +21,22 @@ Item {
     component Note: Text { Layout.fillWidth: true; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap }
     component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(50, bl.implicitWidth + 16); implicitHeight: 24; radius: 4; color: on ? onColor : Theme.ov(0.08); border.color: Theme.lineSoft
         Text { id: bl; anchors.centerIn: parent; text: label; color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
-    component Card: Rectangle { default property alias content: body.data; Layout.fillWidth: true; radius: Theme.radius; color: Theme.card; border.color: Theme.line; implicitHeight: body.implicitHeight + 24; ColumnLayout { id: body; anchors.fill: parent; anchors.margins: 12; spacing: 8 } }
+    component Card: Rectangle { default property alias content: body.data; Layout.fillWidth: true; Layout.alignment: Qt.AlignTop; radius: Theme.radius; color: Theme.card; border.color: Theme.line; implicitHeight: body.implicitHeight + 24; ColumnLayout { id: body; anchors.fill: parent; anchors.margins: 12; spacing: 8 } }
     component KV: RowLayout { property string k; property string v; property color c: Theme.cyan; spacing: 10; Text { Layout.preferredWidth: 120; text: k; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 } Text { text: v; color: c; font.family: Theme.mono; font.pixelSize: 10; font.bold: true } }
     Flickable { anchors.fill: parent; anchors.margins: 10; contentHeight: grid.implicitHeight; clip: true; boundsBehavior: Flickable.StopAtBounds
         GridLayout { id: grid; width: parent.width; columns: 2; columnSpacing: 8; rowSpacing: 8
-            Card { Head { text: i18n.t("DEVICE", i18n.lang) }
-                KV { k: "STATE"; v: engine.running ? "RUNNING on " + engine.backend.toUpperCase() : "STOPPED"; c: engine.running ? Theme.emerald : Theme.amber }
-                KV { k: "INPUT"; v: page.last && page.last.in ? page.last.in : "—" }
-                KV { k: "OUTPUT"; v: page.last && page.last.out ? page.last.out : "—" }
-                KV { k: "CHANNELS"; v: engine.running ? engine.deviceInputs + " in / " + engine.deviceOutputs + " out" : "—" }
-                KV { k: "LAST START"; v: engine.lastRoute ? engine.lastRoute : "—"; c: Theme.muted }
-                RowLayout { spacing: 6
-                    Btn { label: engine.running ? i18n.t("STOP", i18n.lang) : i18n.t("START", i18n.lang); on: true; onColor: engine.running ? Theme.danger : Theme.emerald; onClicked: engine.running ? engine.stop() : settings.startLastDevice() } }
+            Card { Layout.columnSpan: 2
+                RowLayout { spacing: 14
+                    Rectangle { width: 14; height: 14; radius: 7; color: engine.running ? Theme.emerald : Theme.ov(0.2); border.color: engine.running ? Theme.emerald : Theme.line
+                        SequentialAnimation on opacity { running: engine.running; loops: Animation.Infinite; NumberAnimation { to: 0.45; duration: 900 } NumberAnimation { to: 1; duration: 900 } } }
+                    ColumnLayout { spacing: 2
+                        Text { objectName: "cardState"; text: engine.running ? engine.backend.toUpperCase() + "  ·  " + engine.deviceInputs + " IN  /  " + engine.deviceOutputs + " OUT" : i18n.t("NO DEVICE RUNNING", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 20; font.bold: true; font.letterSpacing: 1.5 }
+                        Text { text: engine.running ? (page.last && page.last.out ? page.last.out + "  ·  " : "") + (engine.sampleRate / 1000) + " kHz  ·  " + engine.blockFrames + i18n.t(" frames", i18n.lang) + "  ·  " + (engine.blockFrames * 1000 / engine.sampleRate).toFixed(1) + " ms" : i18n.t("Pick a driver below and press OPEN, or use AUDIO / MIDI SETTINGS.", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 10; elide: Text.ElideRight; Layout.maximumWidth: 700 } }
+                    Item { Layout.fillWidth: true }
+                    Btn { objectName: "audioSettingsBtn"; label: i18n.t("AUDIO / MIDI SETTINGS", i18n.lang); on: true; onColor: Theme.amber; onClicked: page.Window.window.openAudioSettings() }
+                    Btn { label: engine.running ? i18n.t("STOP", i18n.lang) : i18n.t("START", i18n.lang); on: true; onColor: engine.running ? Theme.danger : Theme.emerald; onClicked: engine.running ? engine.stop() : settings.startLastDevice() } } }
+            Card { Head { text: i18n.t("DEVICES", i18n.lang) }
+                Text { objectName: "micOffNote"; visible: engine.micOffNote !== ""; Layout.fillWidth: true; wrapMode: Text.WordWrap; text: i18n.t(engine.micOffNote, i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
                 Rectangle {   // INPUT / OUTPUT CHECK: every channel of the running interface or mixer, live, with the real-time verdict
                     id: ioCard; objectName: "ioCheckCard"; Layout.fillWidth: true; implicitHeight: ioCol.implicitHeight + 16; radius: 6; color: Theme.ov(0.05); border.color: io.realtime ? Theme.emerald : Theme.amber; visible: engine.running
                     property int tick: 0
@@ -73,7 +77,6 @@ Item {
                         RowLayout { spacing: 6
                             Text { text: i18n.t("ASIO DRIVERS", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 1 }
                             Text { Layout.fillWidth: true; text: i18n.t("Manual only: nothing is picked or opened by itself. OPEN starts a driver, the same button turns it off.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; elide: Text.ElideRight }
-                            Btn { objectName: "audioSettingsBtn"; label: i18n.t("AUDIO / MIDI SETTINGS", i18n.lang); on: true; onColor: Theme.amber; onClicked: page.Window.window.openAudioSettings() }
                             Btn { objectName: "asioScanBtn"; label: i18n.t("SCAN (DISCOVERY ONLY)", i18n.lang); onClicked: engine.refreshDevices() } }
                         Repeater { model: { engine.devices; engine.running; return engine.asioDrivers() }
                             delegate: RowLayout { Layout.fillWidth: true; spacing: 6
@@ -88,13 +91,7 @@ Item {
                                 Text { Layout.fillWidth: true; text: modelData.name; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; elide: Text.ElideRight }
                                 Text { text: modelData.backend.toUpperCase() + " · " + modelData.outChannels + i18n.t(" out", i18n.lang) + " · " + (modelData.maxRate / 1000) + " kHz"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                                 Btn { objectName: "dacOpen_" + index; label: modelData.current ? i18n.t("ON · TURN OFF", i18n.lang) : i18n.t("OPEN", i18n.lang); on: true; onColor: modelData.current ? Theme.emerald : Theme.cyan; onClicked: { if (modelData.current) engine.stop(); else engine.openDac(modelData.backend, modelData.id, settings.defaultFrames) } } } }
-                        Text { visible: engine.asioDrivers().length === 0 && (engine.devices, true); text: i18n.t("No ASIO driver found on this computer. Install the interface's own ASIO driver, then press RESCAN.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 } } }
-                RowLayout { spacing: 6
-                    Text { text: i18n.t("ASIO ROUTING", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
-                    Btn { objectName: "openRoutingBtn"; label: i18n.t("OPEN", i18n.lang); on: engine.openRouting; onColor: Theme.emerald; onClicked: engine.openRouting = true }
-                    Btn { label: i18n.t("GUARDED", i18n.lang); on: !engine.openRouting; onColor: Theme.amber; onClicked: engine.openRouting = false }
-                    Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; text: engine.openRouting ? i18n.t("The ASIO driver you pick is opened first: ASIO4ALL, FlexASIO or the manufacturer's own (Realtek included). The other paths stay as the fallback.", i18n.lang) : i18n.t("ASIO4ALL is passed over when a manufacturer driver is present, and onboard Realtek goes to its Windows endpoint.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
-                Note { text: i18n.t("Pick the interface itself on CONNECTIONS or LIVE SOURCES. AUTO ASIO opens the best driver (native ASIO before wrappers, Realtek pinned to WASAPI) when nothing is remembered; SMART START walks the driver ladder when the first choice fails. The ASIO control panel of a driver opens from the driver's own tray tool; the engine does not pop it up.", i18n.lang) } }
+                        Text { visible: engine.asioDrivers().length === 0 && (engine.devices, true); text: i18n.t("No ASIO driver found on this computer. Install the interface's own ASIO driver, then press RESCAN.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 } } } }
             Card { Head { text: i18n.t("CLOCK & BLOCK", i18n.lang) }
                 KV { k: "SAMPLE RATE"; v: engine.running ? engine.sampleRate + " Hz" : "—" }
                 KV { k: "BLOCK"; v: engine.running ? engine.blockFrames + " frames = " + (engine.blockFrames / engine.sampleRate * 1000).toFixed(2) + " ms" : "—" }
@@ -119,11 +116,5 @@ Item {
                 RowLayout { spacing: 6; Text { text: i18n.t("DITHER", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; Layout.preferredWidth: 120 }
                     Repeater { model: [{ t: "FLOAT (none)", v: 0 }, { t: "16-BIT", v: 16 }, { t: "24-BIT", v: 24 }]; delegate: Btn { label: modelData.t; on: engine.outputBits === modelData.v; onColor: Theme.cyan; onClicked: engine.outputBits = modelData.v } } }
                 Note { text: i18n.t("DC removal is a 5 Hz high-pass on the master before the auto level and the limiter: an offset from a player or a plug-in never eats headroom. Dither (TPDF) is the last thing before the converter: pick the depth your device takes in integer mode (WASAPI shared and most ASIO drivers take float: leave FLOAT). Denormals are flushed in the DSP already.", i18n.lang) } }
-            Card { Layout.columnSpan: 2; Head { text: i18n.t("DRIVER LADDER (what the next start tries, in order)", i18n.lang) }
-                Repeater { model: page.plan; delegate: RowLayout { spacing: 8
-                    Text { text: (index + 1) + "."; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 }
-                    Text { text: modelData.mode + "  " + modelData.backend.toUpperCase() + (modelData.exclusive ? i18n.t(" exclusive", i18n.lang) : ""); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; Layout.preferredWidth: 220 }
-                    Text { text: modelData.why + (modelData.fromLock ? i18n.t("  [learned]", i18n.lang) : "") + (modelData.pinned ? i18n.t("  [pinned]", i18n.lang) : ""); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; Layout.fillWidth: true; elide: Text.ElideRight } } }
-                Text { visible: page.plan.length === 0; text: i18n.t("No device remembered yet: start one on CONNECTIONS.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 } }
         } }
 }

@@ -10,6 +10,7 @@
 //   GET  /api/tokens              the named tokens, without their secrets (master token)
 //   POST /api/tokens              {"name":..,"role":"control"|"view","days":N} makes one and returns it once (master token)
 //   POST /api/tokens/revoke       {"id":..} (master token)
+//   POST /api/pair                {"pin":"123456","name":..} the minute's PIN for a control token of its own (no token needed)
 //   WS   /ws/meters?token=...     a JSON frame 20 times a second: strips [{pk,rms,hold,clip,gr,gate,in}], master {l,r,rms,clip}, loudness, correlation, blocks, xruns
 // Token: <data>/daemon.token (am::paths: %APPDATA%\AMFB Audio\AmF X1 on Windows, the program's data folder on Linux, ...) (created on first start, 0600, 32 random bytes as hex); --token-file / --token override it.
 // Binds 127.0.0.1 by default. --allow-lan binds 0.0.0.0 for a phone on the same network: the token still protects control, but nothing is
@@ -50,6 +51,10 @@ class Daemon {
   json::Value meters() const;
   // SECURITY: which web pages may read the replies (only pages served from this computer), and which Host a request may name while the
   // local policy is on (an address or localhost: a made-up domain pointed at 127.0.0.1 by a hostile page is refused)
+  // PAIRING PIN: six digits that change every minute, made from the master token and the minute (so the console can show the same PIN
+  // without asking the service). A phone sends it once to POST /api/pair {"pin":..,"name":..} and gets its own control token (30 days,
+  // tied to its address). The PIN of the minute before is still taken; five wrong PINs close pairing until the next minute.
+  static std::string pinFor(const std::string& masterToken, long long unixSeconds);
   static bool originAllowed(const std::string& origin);
   static bool hostAllowed(const std::string& host);
   static std::string randomToken();
@@ -64,6 +69,7 @@ class Daemon {
   Options opt_; mutable TokenStore tokens_; httpd::Server http_;
   bool noteRefused();   // a wrong token: counted and slowed down; true when there were too many in the last minute
   std::atomic<int> refused_{0}, refusedNow_{0}; std::atomic<long long> refusedSince_{0};
+  std::atomic<int> pairFails_{0}; std::atomic<long long> pairMinute_{0};
   mutable std::mutex m_; std::unique_ptr<Runtime> rt_; std::string backend_, lastError_; std::vector<Strip> strips_; Bus buses_[kMaxBuses]; double masterDb_ = 0; bool limiter_ = true; double ceiling_ = -0.5;
   std::chrono::steady_clock::time_point started_ = std::chrono::steady_clock::now(); std::atomic<bool> running_{false};
 };

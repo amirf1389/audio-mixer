@@ -2,6 +2,7 @@
 // each is a BusProcessor that runs in place on a bus before its return into the master and its output. Parameters are 0..1 (normalized)
 // with a plain-value text, like a plug-in's, so the same generic controls serve them. All state is per instance, no allocation in process().
 #pragma once
+#include <cmath>
 #include <atomic>
 #include <cstdint>
 #include <memory>
@@ -121,6 +122,14 @@ class Analog final : public Simple { public: explicit Analog(double fs); const c
   std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
  protected: int count() const override { return 4; } const char* knobId(int i) const override { static const char* k[] = {"drive", "bias", "tone", "output"}; return k[i]; } const char* knobTitle(int i) const override { static const char* k[] = {"DRIVE", "BIAS", "TONE", "OUTPUT"}; return k[i]; } double knobDef(int i) const override { static const double d[] = {0.35, 0.2, 0.8, 0.5}; return d[i]; }
  private: float lp_[2] = {0, 0}; };
+// PITCH SHIFTER: moves the pitch without changing the speed. The signal runs into a short delay line that is read by two heads moving
+// faster or slower than it is written; each head fades in and out (a raised cosine) while the other covers its jump back, half a window
+// apart. PITCH -12 .. +12 semitones in whole steps, FINE 50 cents either way, WINDOW 20 .. 90 ms (short: tighter and rougher; long: smoother, more delay).
+class Pitch final : public Simple { public: explicit Pitch(double fs); const char* kind() const override { return "pitch"; } const char* name() const override { return "PITCH SHIFTER"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void setSampleRate(double fs) override; void process(float* L, float* R, std::size_t n) override;
+  static double semitones(double pitch, double fine) { return std::round((pitch - 0.5) * 24.0) + (fine - 0.5); }
+ protected: int count() const override { return 3; } const char* knobId(int i) const override { static const char* k[] = {"pitch", "fine", "window"}; return k[i]; } const char* knobTitle(int i) const override { static const char* k[] = {"PITCH", "FINE", "WINDOW"}; return k[i]; } double knobDef(int i) const override { static const double d[] = {0.5, 0.5, 0.36}; return d[i]; }
+ private: std::vector<float> buf_[2]; std::size_t w_ = 0; double ph_ = 0; int win_ = 2048; };
 // FLANGER: a 1..8 ms delay swept by an LFO with feedback: RATE, DEPTH, FEEDBACK
 class Flanger final : public Simple { public: explicit Flanger(double fs); const char* kind() const override { return "flanger"; } const char* name() const override { return "FLANGER"; }
   std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;

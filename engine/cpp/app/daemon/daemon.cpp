@@ -5,6 +5,7 @@
 #include <chrono>
 #include <cstdio>
 #include <cstring>
+#include <ctime>
 #include <fstream>
 #include <random>
 #include <thread>
@@ -105,6 +106,11 @@ std::string Daemon::roleOf(const httpd::Request& r, bool allowQuery) const {
 }
 bool Daemon::authorised(const httpd::Request& r) const { const std::string role = roleOf(r, false); return role == "admin" || role == "control"; }
 
+std::string Daemon::pinFor(const std::string& masterToken, long long unixSeconds) {
+  const std::string h = TokenStore::hashOf(masterToken + "|pair|" + std::to_string(unixSeconds / 60));
+  unsigned long v = 0; for (int i = 0; i < 8; ++i) { const char c = h[static_cast<std::size_t>(i)]; v = v * 16 + static_cast<unsigned long>(c <= '9' ? c - '0' : c - 'a' + 10); }
+  char b[8]; std::snprintf(b, sizeof b, "%06lu", v % 1000000UL); return b;
+}
 bool Daemon::originAllowed(const std::string& o) {
   for (const char* p : {"http://127.0.0.1", "http://localhost", "http://[::1]", "https://127.0.0.1", "https://localhost"}) { const std::size_t n = std::strlen(p); if (o.compare(0, n, p) == 0 && (o.size() == n || o[n] == ':')) return true; }
   return false;
@@ -129,6 +135,20 @@ httpd::Response Daemon::handle(const httpd::Request& r) {
   if (r.method == "GET" && r.path == "/api/devices") { res.body = devices().dump(); return res; }
   if (r.method == "GET" && r.path == "/api/state") { res.body = state().dump(); return res; }
   if (r.method == "GET" && r.path == "/api/meters") { res.body = meters().dump(); return res; }
+  if (r.method == "POST" && r.path == "/api/pair") {   // a phone trades the minute's PIN for a token of its own
+    if (opt_.tokenStore.empty()) { res.status = 400; res.body = "{\"ok\":false,\"error\":\"this service was started without a token file\"}"; return res; }
+    const long long now = static_cast<long long>(std::time(nullptr)), minute = now / 60;
+    if (pairMinute_.load() != minute) { pairMinute_ = minute; pairFails_ = 0; }
+    if (pairFails_.load() >= 5) { res.status = 429; res.body = "{\"ok\":false,\"error\":\"too many wrong PINs: wait for the next PIN\"}"; return res; }
+    bool ok = false; const json::Value b = json::Value::parse(r.body, ok); const std::string pin = ok ? b["pin"].asString() : std::string();
+    if (pin.size() != 6 || !(TokenStore::same(pin, pinFor(opt_.token, now)) || TokenStore::same(pin, pinFor(opt_.token, now - 60)))) {
+      ++pairFails_; std::this_thread::sleep_for(std::chrono::milliseconds(300)); res.status = 401; res.body = "{\"ok\":false,\"error\":\"wrong PIN\"}"; return res; }
+    std::string id, terr, name = b["name"].asString(); if (name.empty()) name = "Phone " + r.peer;
+    const std::string t = tokens_.issue(name, "control", 30, id, terr);
+    if (t.empty()) { res.status = 400; json::Value e = json::Value::object(); e.set("ok", false); e.set("error", terr); res.body = e.dump(); return res; }
+    tokens_.roleFor(t, r.peer);   // it belongs to this phone's address from the start
+    pairFails_ = 5;               // one pairing per PIN: the next phone waits for the next PIN
+    json::Value out = json::Value::object(); out.set("ok", true); out.set("id", id); out.set("token", t); out.set("role", "control"); out.set("days", 30); res.body = out.dump(); return res; }
   if (r.path == "/api/tokens" || r.path == "/api/tokens/revoke") {   // the named tokens: only the master token manages them
     if (roleOf(r, false) != "admin") { const bool known = !roleOf(r, false).empty(); res.status = known ? 403 : (noteRefused() ? 429 : 401); res.body = "{\"ok\":false,\"error\":\"the master token is needed to manage tokens\"}"; return res; }
     if (opt_.tokenStore.empty()) { res.status = 400; res.body = "{\"ok\":false,\"error\":\"this daemon was started without a token file\"}"; return res; }
@@ -152,7 +172,7 @@ httpd::Response Daemon::handle(const httpd::Request& r) {
     res.body = out.dump(); return res;
   }
   if (r.method == "GET" && (r.path == "/" || r.path == "/api")) {
-    res.body = "{\"name\":\"amixos-daemon\",\"api\":[\"GET /api/status\",\"GET /api/devices\",\"GET /api/state\",\"GET /api/meters\",\"POST /api/control (X-Amix-Token)\",\"GET /api/tokens\",\"POST /api/tokens\",\"POST /api/tokens/revoke\",\"WS /ws/meters?token=\"]}"; return res;
+    res.body = "{\"name\":\"amixos-daemon\",\"api\":[\"GET /api/status\",\"GET /api/devices\",\"GET /api/state\",\"GET /api/meters\",\"POST /api/control (X-Amix-Token)\",\"POST /api/pair\",\"GET /api/tokens\",\"POST /api/tokens\",\"POST /api/tokens/revoke\",\"WS /ws/meters?token=\"]}"; return res;
   }
   res.status = 404; res.body = "{\"ok\":false,\"error\":\"not found\"}"; return res;
 }
