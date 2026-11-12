@@ -78,7 +78,9 @@
         "Licence server: PRO TRIAL · 1 YEAR. A trial key always ends (one year at most) and is for one computer.",
         "PLUGIN RACK: ANALOG CHANNEL. DRIVE into a soft saturation that leaves quiet signals at their level, BIAS for even harmonics, TONE for the treble loss of transformers and tape, OUTPUT trim.",
         "Security (AmF X1 Network): web pages from other sites can no longer read the console's state or meters through the browser, and requests that name a made-up host are refused (DNS rebinding).",
-        "PLUGIN RACK: panels finished like real rack gear. Reverbs in brushed aluminium, delays in deep green enamel with cream lettering, modulation in midnight blue, saturation and amps in black with gold lettering, the feedback killer in workshop grey; each with its live display (saturation curve, reverb tail, modulation sweep)."
+        "PLUGIN RACK: panels finished like real rack gear. Reverbs in brushed aluminium, delays in deep green enamel with cream lettering, modulation in midnight blue, saturation and amps in black with gold lettering, the feedback killer in workshop grey; each with its live display (saturation curve, reverb tail, modulation sweep).",
+        "DIAGNOSTICS: the FACTORY SETUP card is gone. FACTORY RESET is now complete: every setting including the language and the network tokens goes back to the factory state and the first-start setup runs again; only the licence stays.",
+        "Uninstall (Windows): every uninstall is a factory reset. Settings, console, scenes, presets and caches are removed, so a later install starts as new; the uninstaller only asks whether to keep the licence key."
       ]
     }
   ]
