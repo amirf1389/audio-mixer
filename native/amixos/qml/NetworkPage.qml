@@ -54,6 +54,7 @@ Item {
                 property string shown: ""
                 id: remCard
                 Timer { id: hideTok; interval: 20000; onTriggered: remCard.shown = "" }
+                Component.onCompleted: remote.refreshTokens()
                 ColumnLayout { id: remCol; anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 12; spacing: 6
                     RowLayout { spacing: 8
                         Head { text: i18n.t("PHONE REMOTE · WI-FI", i18n.lang) }
@@ -66,6 +67,26 @@ Item {
                     Text { Layout.fillWidth: true; text: remote.available ? remote.status : i18n.t("The remote service program (amixos-daemon) is not installed next to the console.", i18n.lang); color: remote.running ? Theme.emerald : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.WordWrap }
                     Repeater { model: remote.running ? remote.addresses : []; delegate: Text { text: modelData + "   " + i18n.t("← type this into the phone app", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } }
                     Text { visible: remCard.shown !== ""; text: i18n.t("TOKEN  ", i18n.lang) + remCard.shown; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; Layout.fillWidth: true; wrapMode: Text.WrapAnywhere }
+                    Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.lineSoft }
+                    RowLayout { spacing: 8
+                        Head { text: i18n.t("AMF X1 NETWORK · TOKENS", i18n.lang) }
+                        Note { text: i18n.t("One token per phone or operator. CONTROL may change the console, VIEW only watches the meters. Revoke one and the others keep working.", i18n.lang) } }
+                    Repeater { model: remote.tokens
+                        delegate: RowLayout { Layout.fillWidth: true; spacing: 8
+                            Rectangle { width: 6; height: 6; radius: 3; color: modelData.state === "active" ? Theme.emerald : Theme.ov(0.25) }
+                            Text { Layout.fillWidth: true; text: modelData.name; color: modelData.state === "active" ? Theme.ink : Theme.dim; font.family: Theme.mono; font.pixelSize: 9; elide: Text.ElideRight }
+                            Text { text: modelData.role.toUpperCase() + " · " + modelData.state.toUpperCase() + " · " + modelData.id; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
+                            Btn { visible: modelData.state === "active"; label: i18n.t("REVOKE", i18n.lang); on: true; onColor: Theme.danger; onClicked: remote.revokeToken(modelData.id) } } }
+                    Text { visible: remote.tokens.length === 0; text: i18n.t("No named tokens yet. The master token (SHOW TOKEN) still works.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 }
+                    RowLayout { id: tokNew; spacing: 6; property string role: "control"; property int days: 0; property string fresh: ""
+                        Timer { id: hideNew; interval: 30000; onTriggered: tokNew.fresh = "" }
+                        Field { id: tokName; objectName: "tokName"; Layout.preferredWidth: 150; implicitHeight: 24; placeholderText: i18n.t("name (whose phone)", i18n.lang); font.family: Theme.mono; font.pixelSize: 8 }
+                        Btn { label: i18n.t("CONTROL", i18n.lang); on: tokNew.role === "control"; onColor: Theme.cyan; onClicked: tokNew.role = "control" }
+                        Btn { label: i18n.t("VIEW", i18n.lang); on: tokNew.role === "view"; onColor: Theme.cyan; onClicked: tokNew.role = "view" }
+                        Repeater { model: [[0, "NO END"], [1, "1 DAY"], [30, "30 DAYS"]]; delegate: Btn { label: i18n.t(modelData[1], i18n.lang); on: tokNew.days === modelData[0]; onClicked: tokNew.days = modelData[0] } }
+                        Btn { objectName: "tokMake"; label: i18n.t("MAKE TOKEN", i18n.lang); on: remote.available; onColor: Theme.emerald; onClicked: { tokNew.fresh = remote.newToken(tokName.text, tokNew.role, tokNew.days); if (tokNew.fresh !== "") { tokName.text = ""; hideNew.restart() } } } }
+                    Text { visible: tokNew.fresh !== ""; Layout.fillWidth: true; text: tokNew.fresh; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; wrapMode: Text.WrapAnywhere }
+                    Text { visible: remote.tokenNote !== ""; Layout.fillWidth: true; text: i18n.t(remote.tokenNote, i18n.lang) + (remote.running ? " " + i18n.t("The service was restarted to take the change.", i18n.lang) : ""); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.WordWrap }
                     Note { text: i18n.t("LOCAL POLICY: the service answers this computer and private-network addresses only (10.x, 172.16-31.x, 192.168.x); every control call needs the token. Nothing is encrypted on the wire: use it on your own Wi-Fi only; beyond that put the nginx TLS front (deploy/nginx) before it. While the service runs it holds the sound card with its own engine: the console stops its engine and takes the card back when the service stops.", i18n.lang) } } }
             Rectangle { Layout.fillWidth: true; Layout.fillHeight: true; radius: Theme.radius; color: Theme.card; border.color: Theme.line; clip: true
                 ColumnLayout { anchors.fill: parent; anchors.margins: 12; spacing: 6

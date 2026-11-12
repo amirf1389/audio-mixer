@@ -1,4 +1,5 @@
 #include "Remote.h"
+#include <QVariantMap>
 
 #include <QCoreApplication>
 #include <QFile>
@@ -15,12 +16,44 @@ Remote::Remote(Engine* engine, QObject* parent) : QObject(parent), engine_(engin
   connect(&proc_, &QProcess::errorOccurred, this, [this](QProcess::ProcessError e) { if (e == QProcess::FailedToStart) { status_ = QStringLiteral("the remote service could not be started: ") + program(); emit changed(); } });
 }
 Remote::~Remote() { if (running()) { proc_.terminate(); if (!proc_.waitForFinished(1500)) proc_.kill(); } }
+// The service program: "AmF X1 Network" next to the console (its name in the release); the build's own name is the fallback.
 QString Remote::program() const {
+  const QString d = QCoreApplication::applicationDirPath();
 #ifdef _WIN32
-  return QCoreApplication::applicationDirPath() + "/amixos-daemon.exe";
+  const QStringList names{"/AmF X1 Network.exe", "/amixos-daemon.exe"};
 #else
-  return QCoreApplication::applicationDirPath() + "/amixos-daemon";
+  const QStringList names{"/AmF X1 Network", "/amixos-daemon", "/engine/amixos-daemon"};
 #endif
+  for (const QString& n : names) if (QFileInfo::exists(d + n)) return d + n;
+  return d + names.first();
+}
+// THE NAMED TOKENS (one per phone or operator): the service program keeps them (hashes only); the console asks it to list, make and revoke.
+QString Remote::runTool(const QStringList& args, bool* ok) const {
+  QProcess p; p.start(program(), args); const bool fin = p.waitForStarted(3000) && p.waitForFinished(8000); if (!fin) p.kill();
+  if (ok) *ok = fin && p.exitStatus() == QProcess::NormalExit && p.exitCode() == 0;
+  return QString::fromUtf8(fin ? (p.exitCode() == 0 ? p.readAllStandardOutput() : p.readAllStandardError()) : QByteArray("the service program did not answer"));
+}
+void Remote::refreshTokens() {
+  tokens_.clear(); if (!available()) { emit changed(); return; }
+  bool ok = false; const QString out = runTool({"--list-tokens"}, &ok);
+  if (ok) for (const QString& line : out.split('\n', Qt::SkipEmptyParts)) {   // id  role  state  name
+    const QStringList f = line.simplified().split(' '); if (f.size() < 4 || f[0].size() != 8) continue;
+    QVariantMap m; m["id"] = f[0]; m["role"] = f[1]; m["state"] = f[2]; m["name"] = QStringList(f.mid(3)).join(' '); tokens_ << m; }
+  emit changed();
+}
+void Remote::restartIfRunning() { if (!running()) return; const bool w = wifi_; stop(); start(w); }   // the service reads its tokens when it starts
+QString Remote::newToken(const QString& name, const QString& role, int days) {
+  if (!available()) { tokenNote_ = QStringLiteral("the service program is not installed next to the console"); emit changed(); return {}; }
+  QString n; for (const QChar c : name.trimmed()) if (c.isPrint() && c != '"' && n.size() < 40) n += c;
+  if (n.isEmpty()) { tokenNote_ = QStringLiteral("Give the token a name first (whose phone it is)."); emit changed(); return {}; }
+  bool ok = false; const QString out = runTool({"--new-token", n, "--role", role == "view" ? "view" : "control", "--days", QString::number(qBound(0, days, 3650))}, &ok);
+  QString tok; if (ok) for (const QString& line : out.split('\n', Qt::SkipEmptyParts)) if (line.trimmed().startsWith("amx_")) tok = line.trimmed();
+  tokenNote_ = tok.isEmpty() ? out.trimmed().left(160) : QStringLiteral("Made. It is shown once, for 30 seconds: type it into the phone now.");
+  refreshTokens(); if (!tok.isEmpty()) restartIfRunning(); return tok;   // the token itself is returned to the page only: never stored or logged here
+}
+bool Remote::revokeToken(const QString& id) {
+  bool ok = false; const QString out = runTool({"--revoke-token", id}, &ok); tokenNote_ = ok ? QStringLiteral("Revoked: that phone is out.") : out.trimmed().left(160);
+  refreshTokens(); if (ok) restartIfRunning(); return ok;
 }
 bool Remote::available() const { return QFileInfo::exists(program()); }
 QString Remote::tokenFile() const { return QString::fromStdString(am::paths::file("daemon.token")); }
@@ -35,6 +68,7 @@ bool Remote::start(bool wifi) {
   if (running()) return true;
   if (!available()) { status_ = QStringLiteral("the remote service program is not installed next to the console"); emit changed(); return false; }
   engine_->stop();   // the service opens the sound card itself
+  wifi_ = wifi;
   QStringList args{"--port", QString::number(port()), "--open", "auto", "--version", QCoreApplication::applicationVersion()}; if (wifi) args << "--allow-lan";   // local policy stays on: private addresses only
   proc_.start(program(), args); if (!proc_.waitForStarted(3000)) { status_ = QStringLiteral("the remote service did not start"); emit changed(); return false; }
   status_ = wifi ? QStringLiteral("starting for the phones on this network") : QStringLiteral("starting for this computer only"); emit changed(); return true;

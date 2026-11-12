@@ -434,6 +434,14 @@ int main(int argc, char* argv[]) {
         const QStringList before = settings.vstDirs(); const QString vf = settings.vstUserFolder(); settings.vstUserFolder();
         if (vf.isEmpty() || !QDir(vf).exists() || settings.vstDirs().count(vf) != 1 || QSettings().value("vst3/dirs").toStringList().count(vf) != 1) { std::fprintf(stderr, "amixos --smoke: the VST folder was not created and saved\n"); return 198; }
         if (!before.contains(vf)) settings.removeVstDir(vf); }
+      if (remote.available()) {   // AMF X1 NETWORK tokens from the console: made, listed without the secret, revoked; a nameless one is refused
+        remote.refreshTokens(); const int n0 = remote.tokens().size();
+        if (!remote.newToken("  ", "control", 0).isEmpty()) return 249;
+        const QString t = remote.newToken("Smoke phone", "view", 1);
+        if (t.size() != 68 || !t.startsWith("amx_") || remote.tokens().size() != n0 + 1) { std::fprintf(stderr, "amixos --smoke: the console could not make a network token (%s)\n", qPrintable(remote.tokenNote())); return 250; }
+        const QVariantMap m = remote.tokens().last().toMap(); bool leak = false; for (const QVariant& v : m) leak = leak || v.toString().contains(t.mid(4, 20));
+        if (leak || m["name"].toString() != "Smoke phone" || m["role"].toString() != "view" || m["state"].toString() != "active") { std::fprintf(stderr, "amixos --smoke: the token list is wrong\n"); return 251; }
+        if (!remote.revokeToken(m["id"].toString()) || remote.tokens().last().toMap()["state"].toString() != "revoked") { std::fprintf(stderr, "amixos --smoke: the token was not revoked\n"); return 252; } }
       { // ADD FOLDER + RESCAN: a plug-in two folders down (maker / product) is found; the path may come in quotes with a slash at the end; removing the folder takes it away again
         const QString src = QCoreApplication::applicationDirPath() + "/engine/vst2/amixtest2.so";
         if (QFile::exists(src)) {
