@@ -14,13 +14,12 @@
 #include "audiomixer/runtime.hpp"
 #include "../core/mixer.hpp"
 #include "app_capture.hpp"
+#include "ext/ext_host.hpp"
 
 namespace {
-std::atomic<bool> g_quit{false};
-void onSignal(int) { g_quit = true; }
 
-void usage() {
-  std::puts(
+std::string usage() {
+  return (
       "amfb-hybrid [options]\n"
       "  --backend NAME   asio | wasapi | alsa | null | auto (default auto)\n"
       "  --device ID      the device to open (default: the system's)\n"
@@ -31,16 +30,16 @@ void usage() {
       "  --tone S         a 440 Hz test tone at -12 dBFS on strip S\n"
       "  --seconds N      stop after N seconds (default: run until Ctrl+C)");
 }
-}  // namespace
 
-int main(int argc, char** argv) {
+int run(int argc, char** argv, std::atomic<bool>& g_quit, std::function<void(const std::string&)> say) {
+  using amfb_ext::fmt;
   am::DeviceConfig cfg; cfg.frames = 480; cfg.inChannels = 2; cfg.outChannels = 2;
   std::map<int, std::string> apps; int tone = 0; double seconds = 0; bool defaults = true;
   for (int i = 1; i < argc; ++i) {
     const std::string a = argv[i];
     const char* v = i + 1 < argc ? argv[i + 1] : nullptr;
-    if (a == "--help" || a == "-h") { usage(); return 0; }
-    if (!v) { std::fprintf(stderr, "%s needs a value\n", a.c_str()); return 2; }
+    if (a == "--help" || a == "-h") { say(usage()); return 0; }
+    if (!v) { say(fmt("%s needs a value", a.c_str())); return 2; }
     ++i;
     if (a == "--backend") cfg.backend = v;
     else if (a == "--device") cfg.outDevice = cfg.inDevice = v;
@@ -52,12 +51,12 @@ int main(int argc, char** argv) {
     else if (a == "--app") {
       const char* eq = std::strchr(v, '=');
       const int s = std::atoi(v);
-      if (!eq || s < 1 || s > amfb::kStrips || !eq[1]) { std::fprintf(stderr, "--app wants STRIP=PROGRAM, strip 1-%d\n", amfb::kStrips); return 2; }
+      if (!eq || s < 1 || s > amfb::kStrips || !eq[1]) { say(fmt("--app wants STRIP=PROGRAM, strip 1-%d", amfb::kStrips)); return 2; }
       apps[s] = eq + 1; defaults = false;
-    } else { std::fprintf(stderr, "unknown option %s\n", a.c_str()); usage(); return 2; }
+    } else { say(fmt("unknown option %s", a.c_str())); say(usage()); return 2; }
   }
   if (cfg.sampleRate < 32000 || cfg.sampleRate > 192000 || cfg.frames < 16 || cfg.frames > 8192 || cfg.inChannels < 0 || cfg.inChannels > 32 ||
-      tone < 0 || tone > amfb::kStrips) { std::fprintf(stderr, "a value is out of range\n"); return 2; }
+      tone < 0 || tone > amfb::kStrips) { say(fmt("a value is out of range")); return 2; }
 
   if (cfg.backend == "auto") {
     cfg.backend = "null";
@@ -73,12 +72,12 @@ int main(int argc, char** argv) {
   }
 #else
   (void)defaults;
-  if (!apps.empty()) std::fprintf(stderr, "note: capturing a program is a Windows function; --app is ignored here\n");
+  if (!apps.empty()) say(fmt("note: capturing a program is a Windows function; --app is ignored here"));
 #endif
 
   amfb::SharedMem shm; std::string err;
   amfb::SharedBlock* block = shm.open(true, &err);
-  if (!block) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
+  if (!block) { say(fmt("error: %s", err.c_str())); return 1; }
   for (int s = 0; s < amfb::kStrips; ++s) {
     std::string label = s < hwStrips ? "IN " + std::to_string(2 * s + 1) + "-" + std::to_string(2 * s + 2) : "";
     if (apps.count(s + 1) && s >= hwStrips) label = apps[s + 1];
@@ -89,10 +88,10 @@ int main(int argc, char** argv) {
 
   amfb::HybridMixer mixer(block, cfg.sampleRate, hwStrips);
   auto backend = am::createBackend(cfg.backend);
-  if (!backend) { std::fprintf(stderr, "error: this build has no %s backend\n", cfg.backend.c_str()); return 1; }
+  if (!backend) { say(fmt("error: this build has no %s backend", cfg.backend.c_str())); return 1; }
   if (!backend->open(cfg, [&](const float* const* in, float* const* out, std::size_t frames) {
         mixer.process(in, cfg.inChannels, out, cfg.outChannels, frames);
-      }, err)) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
+      }, err)) { say(fmt("error: %s", err.c_str())); return 1; }
 
 #ifdef _WIN32
   std::vector<std::unique_ptr<amfb::AppCapture>> captures;
@@ -115,11 +114,9 @@ int main(int argc, char** argv) {
     }
   });
 
-  std::signal(SIGINT, onSignal); std::signal(SIGTERM, onSignal);
-  if (!backend->start(err)) { std::fprintf(stderr, "error: %s\n", err.c_str()); g_quit = true; if (toneThread.joinable()) toneThread.join(); return 1; }
-  std::printf("amfb-hybrid: %s, %.0f Hz, %u frames, %d device strips, shared memory %s\n", backend->name(), cfg.sampleRate, cfg.frames,
-              hwStrips, amfb::sharedName().c_str());
-  std::fflush(stdout);
+  if (!backend->start(err)) { say(fmt("error: %s", err.c_str())); g_quit = true; if (toneThread.joinable()) toneThread.join(); return 1; }
+  say(fmt("amfb-hybrid: %s, %.0f Hz, %u frames, %d device strips, shared memory %s", backend->name(), cfg.sampleRate, cfg.frames,
+              hwStrips, amfb::sharedName().c_str()));
   const auto t0 = std::chrono::steady_clock::now();
   while (!g_quit) {
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
@@ -130,7 +127,10 @@ int main(int argc, char** argv) {
 #ifdef _WIN32
   captures.clear();
 #endif
-  std::printf("amfb-hybrid: stopped, device overruns %llu, source underruns %u\n", static_cast<unsigned long long>(backend->xruns()),
-              block->underruns.load());
+  say(fmt("amfb-hybrid: stopped, device overruns %llu, source underruns %u", static_cast<unsigned long long>(backend->xruns()),
+              block->underruns.load()));
   return 0;
 }
+}  // namespace
+
+AMFB_EXTENSION("AmF X1 Hybrid", run)
