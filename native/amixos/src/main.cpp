@@ -615,6 +615,11 @@ int main(int argc, char* argv[]) {
               mixer->setProperty("rackCompact", true); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + "/mixer-compact.png"); mixer->setProperty("rackCompact", false); std::printf("amixos --shots: mixer-compact\n");
               if (QObject* pop = mixer->findChild<QObject*>("mixerQuick")) { QMetaObject::invokeMethod(pop, "open"); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + "/mixer-settings.png"); QMetaObject::invokeMethod(pop, "close"); std::printf("amixos --shots: mixer-settings\n"); }
               mixer->setProperty("sendView", 1); waitMs(400); win->grabWindow().save(shots + "/mixer-aux.png"); mixer->setProperty("sendView", 2); waitMs(400); win->grabWindow().save(shots + "/mixer-fx.png"); mixer->setProperty("sendView", 0); std::printf("amixos --shots: mixer-aux, mixer-fx\n");
+              { QMetaObject::invokeMethod(win, "openAudioSettings"); waitMs(500); win->grabWindow().save(shots + "/audio-midi-settings.png");   // AUDIO / MIDI SETTINGS: opens, shows the running device type, APPLY keeps the engine running
+                QObject* as = win->findChild<QObject*>("audioSettings");
+                if (!as || !as->property("opened").toBool() || as->property("type").toString().isEmpty()) { std::fprintf(stderr, "amixos --shots: AUDIO / MIDI SETTINGS did not open\n"); std::exit(244); }
+                QMetaObject::invokeMethod(as, "apply"); waitMs(300); if (!engine.running()) { std::fprintf(stderr, "amixos --shots: APPLY in AUDIO / MIDI SETTINGS left the engine stopped\n"); std::exit(245); }
+                QMetaObject::invokeMethod(as, "close"); waitMs(200); }
               mixer->setProperty("vuMode", true); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + "/mixer-vu.png"); mixer->setProperty("vuMode", false); std::printf("amixos --shots: mixer-vu\n"); }
           }
         }

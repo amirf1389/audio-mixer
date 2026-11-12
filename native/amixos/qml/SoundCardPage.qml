@@ -82,6 +82,7 @@ Item {
                         RowLayout { spacing: 6
                             Text { text: i18n.t("ASIO DRIVERS", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 1 }
                             Text { Layout.fillWidth: true; text: i18n.t("Found by discovery. Nothing here is opened until you press OPEN on one.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; elide: Text.ElideRight }
+                            Btn { objectName: "audioSettingsBtn"; label: i18n.t("AUDIO / MIDI SETTINGS", i18n.lang); on: true; onColor: Theme.amber; onClicked: page.Window.window.openAudioSettings() }
                             Btn { label: i18n.t("RESCAN", i18n.lang); onClicked: engine.refreshDevices() } }
                         Repeater { model: { engine.devices; engine.running; return engine.asioDrivers() }
                             delegate: RowLayout { Layout.fillWidth: true; spacing: 6
