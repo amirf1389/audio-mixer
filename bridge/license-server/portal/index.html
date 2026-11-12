@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>AmF X1 · Licence and updates</title>
+<link rel="stylesheet" href="/portal/base.css">
+<link rel="stylesheet" href="/portal/portal.css">
+</head>
+<body>
+<header><h1>AMF X1 <span>Licence and updates</span></h1><span class="muted" id="srv"></span></header>
+<main>
+  <nav class="tabs" role="tablist">
+    <button class="tab on" data-tab="activate" role="tab">Activate</button>
+    <button class="tab" data-tab="check" role="tab">Check a key</button>
+    <button class="tab" data-tab="updates" role="tab">Updates</button>
+  </nav>
+
+  <section class="card" id="tab-activate">
+    <h2>Activate with a product key</h2>
+    <p class="muted">Type the 25-character product key you received. You get the full licence key for AmF X1.</p>
+    <label for="pk">Product key</label>
+    <input id="pk" class="big" autocomplete="off" spellcheck="false" maxlength="29" placeholder="XXXXX-XXXXX-XXXXX-XXXXX-XXXXX">
+    <div class="row"><button id="pkGo" class="primary">Get my licence key</button><span id="pkMsg" class="msg"></span></div>
+    <div id="pkOut" hidden>
+      <label for="pkKey">Your licence key (<span id="pkPlan"></span>)</label>
+      <textarea id="pkKey" rows="5" readonly></textarea>
+      <div class="row"><button id="pkCopy">Copy</button><button id="pkSave">Save as a key file</button></div>
+      <ol class="steps">
+        <li><b>Easiest:</b> press <i>Save as a key file</i> and leave the file in Downloads. With AUTO on (LICENCE page), AmF X1 finds it and activates by itself.</li>
+        <li><b>Or:</b> copy the key, open AmF X1 → LICENCE, paste it, press CHECK, then ACTIVATE.</li>
+        <li>In AmF X1 you can also type the product key itself on LICENCE and press ACTIVATE PRODUCT KEY.</li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="card" id="tab-check" hidden>
+    <h2>Check a licence key</h2>
+    <p class="muted">Paste a full key (it starts with AMIX1) to see its edition, when it ends and whether it is still valid.</p>
+    <label for="ckKey">Licence key</label>
+    <textarea id="ckKey" rows="4" spellcheck="false" placeholder="AMIX1.…"></textarea>
+    <label for="ckMid">Machine code (optional, from the LICENCE page)</label>
+    <input id="ckMid" autocomplete="off" spellcheck="false" placeholder="XXXX-XXXX-XXXX-XXXX-XXXX">
+    <div class="row"><button id="ckGo" class="primary">Check</button><span id="ckMsg" class="msg"></span></div>
+    <table id="ckOut" hidden><tbody></tbody></table>
+  </section>
+
+  <section class="card" id="tab-updates" hidden>
+    <h2>Updates</h2>
+    <p class="muted">The newest release. AmF X1 installs an update only when its list carries the vendor's signature and the file matches the checksum shown here.</p>
+    <div id="upMsg" class="msg">Reading the update list…</div>
+    <div id="upOut" hidden>
+      <div class="ver"><span id="upVer"></span><span class="muted" id="upDate"></span></div>
+      <div class="box">
+        <label for="myVer">Is my copy up to date? Type the version from HELP → ABOUT in AmF X1</label>
+        <div class="row"><input id="myVer" class="short" autocomplete="off" spellcheck="false" placeholder="1.23.0.1"><button id="myVerGo">Compare</button><span id="myVerMsg" class="msg"></span></div>
+      </div>
+      <h3>In this release</h3>
+      <ul id="upNotes"></ul>
+      <h3>Downloads</h3>
+      <div class="row"><label class="inline" for="upSys">Show</label><select id="upSys"></select></div>
+      <div class="scroll"><table><thead><tr><th>System</th><th>File</th><th>Size</th><th>SHA-256</th><th></th></tr></thead><tbody id="upFiles"></tbody></table></div>
+      <details class="box"><summary>How to check a download (Windows)</summary>
+        <p class="muted">Open PowerShell in the folder of the file and run the line below. The long number it prints must be the same as the SHA-256 shown here. If it differs, do not run the file: download it again.</p>
+        <pre id="upCmd">Get-FileHash .\AmF-X1-setup.exe -Algorithm SHA256</pre>
+      </details>
+      <div id="upNewBox" hidden><h3>What is new, release by release</h3><div id="upNew"></div></div>
+    </div>
+  </section>
+</main>
+<script src="/portal/app.js"></script>
+</body>
+</html>

@@ -28,9 +28,37 @@
   </section>
 
   <div id="app" hidden>
+   <div class="shell">
+    <aside class="side" aria-label="Sections">
+      <div class="grpname">Overview</div>
+      <a class="navi on" href="#secDash" data-nav="secDash"><i>◧</i>Dashboard</a>
+      <a class="navi" href="#expCard" data-nav="expCard"><i>⏳</i>Ending soon<em id="expBadge" hidden></em></a>
+      <div class="grpname">Licences</div>
+      <a class="navi" href="#issueCard" data-nav="issueCard"><i>✚</i>Issue a key</a>
+      <a class="navi" href="#keysCard" data-nav="keysCard"><i>≡</i>Keys on record</a>
+      <div class="grpname">Customers</div>
+      <a class="navi" href="#portalCard" data-nav="portalCard"><i>✉</i>Customer portal</a>
+      <div class="grpname">System</div>
+      <a class="navi" href="#auditCard" data-nav="auditCard"><i>☰</i>Activity</a>
+    </aside>
+    <div class="work">
+    <h2 class="sec" id="secDash">Dashboard</h2>
     <section class="stats" id="stats" aria-label="Totals"></section>
 
-    <section class="card">
+    <section class="card" id="expCard">
+      <h2>Ending within 30 days</h2>
+      <div class="scroll"><table><thead><tr><th>Customer</th><th>Plan</th><th>Ends</th><th>Days left</th></tr></thead><tbody id="expRows"></tbody></table></div>
+      <p id="expNone" class="muted" hidden>No licence ends in the next 30 days.</p>
+    </section>
+
+    <section class="card" id="portalCard">
+      <div class="bar"><h2>Customer portal</h2><a id="portalLink" href="/portal/" target="_blank" rel="noopener">Open the portal</a><button id="portalRefresh" type="button" class="ghost">Read the update list again</button></div>
+      <div class="stats" id="portalStats" aria-label="Portal totals"></div>
+      <p id="portalUpdate" class="muted"></p>
+      <p id="portalMsg" class="msg" role="status"></p>
+    </section>
+
+    <section class="card" id="issueCard">
       <h2>Issue a key</h2>
       <form id="issueForm" class="grid" autocomplete="off">
         <div><label for="iName">Customer name</label><input id="iName" maxlength="80" required></div>
@@ -45,12 +73,13 @@
       </form>
       <div id="newKey" class="newkey" hidden>
         <p><strong>The key is shown once.</strong> It is not stored on the server: copy it now and send it to the customer.</p>
+        <p id="pkLine" class="muted" hidden>Product key (25 characters, shown once: this is what the customer types): <code id="pkCode"></code> <button id="pkCopyBtn" type="button" class="ghost small">Copy product key</button></p>
         <textarea id="keyText" readonly rows="4" spellcheck="false" aria-label="The issued key"></textarea>
         <div class="actions"><button id="copyKey" type="button">Copy key</button><button id="hideKey" type="button" class="ghost">Done, hide it</button><span id="copyMsg" class="msg" role="status"></span></div>
       </div>
     </section>
 
-    <section class="card">
+    <section class="card" id="keysCard">
       <div class="bar">
         <h2>Keys on record</h2>
         <input id="filter" type="search" placeholder="Search name, e-mail, id, machine" aria-label="Search">
@@ -62,10 +91,12 @@
       <div class="scroll"><table id="table"><thead><tr><th>Customer</th><th>Plan</th><th>Issued</th><th>Expires</th><th>Computers</th><th>State</th><th>Actions</th></tr></thead><tbody id="rows"></tbody></table></div>
     </section>
 
-    <section class="card">
+    <section class="card" id="auditCard">
       <div class="bar"><h2>Activity</h2><button id="auditRefresh" type="button" class="ghost">Refresh</button><button id="auditVerify" type="button" class="ghost">Check the log is intact</button><span id="auditMsg" class="msg" role="status"></span></div>
       <div class="scroll"><table><thead><tr><th>When</th><th>What</th><th>Key id</th><th>From</th><th>Detail</th></tr></thead><tbody id="auditRows"></tbody></table></div>
     </section>
+    </div>
+   </div>
   </div>
 </main>
 <script src="app.js"></script>

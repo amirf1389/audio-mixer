@@ -8,7 +8,8 @@
 //
 // LICENCE MANAGEMENT. Every key issued here is kept on record: its id, plan, dates, seats and the computers it runs on, and (encrypted with
 // AES-256-GCM) the customer's name, e-mail and a note. The key itself is NOT kept: it is shown once, when it is issued. A key can be REVOKED:
-// a revoked key cannot be activated on a computer any more and /status reports it. The management page is at /admin/ of this server and
+// a revoked key cannot be activated on a computer any more and /status reports it. Customers use /portal/ (product key, key check, updates).
+// The management page is at /admin/ of this server and
 // needs the admin token; it is meant to be opened on the server itself or through an SSH tunnel, never published on the public website.
 //   public (the app; the key is the proof)   POST /activate  POST /deactivate  POST /status   { key, machine }
 //   admin (Authorization: Bearer <token>)    POST /issue | POST /admin/licenses        issue a key
@@ -156,7 +157,15 @@ function redeemProductKey({ code, file = DATA_FILE, secret, now = Date.now() }) 
   const d = rec.enc ? unseal(rec.enc, dataKey(reg, secret)) : null;
   const payload = { v: 1, id, plan: m.plan, name: (d && d.name) || 'Licensed user', issued: m.issued, expires: m.expires || null, seats: m.seats || 1 };
   if (m.trial) payload.trial = true; if (m.mid) payload.mid = m.mid;
+  rec.redeems = (rec.redeems || 0) + 1; rec.redeemedAt = now; saveRegistry(file, reg);   // how often and when last: the management page shows it
   return { ok: true, status: 200, id, payload };
+}
+
+// A NEW PRODUCT KEY for a licence on record: the old one stops working at once (lost, or passed on by mistake). Shown once.
+function renewProductKey({ id, file = DATA_FILE }) {
+  const reg = loadRegistry(file), rec = reg[id]; if (!rec || String(id).startsWith('_')) return { ok: false, status: 404, error: 'no such licence' };
+  const productKey = newProductKey(); rec.code = productKeyHash(productKey); rec.redeems = 0; rec.redeemedAt = null; saveRegistry(file, reg);
+  return { ok: true, status: 200, id, productKey };
 }
 
 // Puts a newly issued key on record. The key itself is not stored.
@@ -174,7 +183,7 @@ function listLicenses({ file = DATA_FILE, secret, now = Date.now() }) {
   return ids(reg).map(id => {
     const r = reg[id] || {}, m = r.meta || {}, c = r.enc ? unseal(r.enc, key) : null;
     const state = r.revoked ? 'revoked' : (m.expires && m.expires < now ? 'expired' : 'active');
-    return { id, plan: m.plan || null, issued: m.issued || null, expires: m.expires || null, seats: m.seats || null, machine: m.mid || null, devices: Array.isArray(r.devices) ? r.devices : [],
+    return { id, plan: m.plan || null, issued: m.issued || null, expires: m.expires || null, seats: m.seats || null, machine: m.mid || null, devices: Array.isArray(r.devices) ? r.devices : [], productKey: !!r.code, redeems: r.redeems || 0, redeemedAt: r.redeemedAt || null, trial: !!m.trial,
       name: c ? c.name : '', email: c ? c.email : '', note: c ? c.note : '', readable: !r.enc || !!c, onRecord: !!r.meta, state, revoked: r.revoked || null, reason: r.reason || '' };
   }).sort((a, b) => (b.issued || 0) - (a.issued || 0));
 }
@@ -217,7 +226,7 @@ function auditLog(file) {
   };
 }
 
-function createServer({ privateKey, token, dataFile = DATA_FILE, dataSecret, trustProxy = process.env.LICENSE_TRUST_PROXY === '1', quiet = false }) {
+function createServer({ privateKey, token, dataFile = DATA_FILE, dataSecret, trustProxy = process.env.LICENSE_TRUST_PROXY === '1', quiet = false, updateUrl = process.env.LICENSE_UPDATE_URL || 'https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/update.json' }) {
   const jwk = crypto.createPublicKey(privateKey).export({ format: 'jwk' });   // checks the keys this server issued, for the device lock
   const secret = dataSecret || token, audit = auditLog(dataFile), limiter = rateLimiter(), started = Date.now();
   const app = createApp({ maxBody: MAX_BODY, trustProxy });
@@ -264,6 +273,37 @@ function createServer({ privateKey, token, dataFile = DATA_FILE, dataSecret, tru
   });
   app.get('/admin/audit', admin, limit('adm', 120), c => c.json(200, { ok: true, entries: audit.list(c.query.get('limit')) }));
   app.get('/admin/audit/verify', admin, limit('adm', 120), c => c.json(200, { ok: true, chain: audit.verify() }));
+  // THE CUSTOMER PORTAL (/portal/): activate a product key, check a key, see the newest release. Public: it uses only /redeem, /status and
+  // the route below, which reads the published update list (LICENSE_UPDATE_URL, https) for the page and keeps it for five minutes.
+  const upd = { at: 0, body: null };
+  app.get('/portal/updates', limit('pub', 60), async c => {
+    if (upd.body && Date.now() - upd.at < 300000) return c.json(200, upd.body);
+    let body;
+    try {
+      const u = new URL(updateUrl);
+      if (!(u.protocol === 'https:' || (u.protocol === 'http:' && (u.hostname === '127.0.0.1' || u.hostname === 'localhost')))) throw new Error('the update list must be an https address');
+      const r = await fetch(u, { signal: AbortSignal.timeout(6000) }); if (!r.ok) throw new Error('the update list answered ' + r.status);
+      const j = JSON.parse((await r.text()).slice(0, 262144)), p = typeof j.payload === 'string' ? JSON.parse(j.payload) : j, files = [];
+      for (const [platform, f] of Object.entries(p.files || {})) if (f && typeof f === 'object') files.push({ platform: clean(platform, 40), name: clean(f.name || String(f.url || '').split('/').pop(), 120), url: clean(f.url, 400), sha256: clean(f.sha256, 64), size: Number.isFinite(Number(f.size)) ? Number(f.size) : null });
+      body = { ok: true, version: clean(p.version, 32), channel: clean(p.channel, 24), released: clean(p.released, 24), notes: (Array.isArray(p.notes) ? p.notes : []).slice(0, 20).map(n => clean(n, 300)), files,
+        features: (Array.isArray(p.features) ? p.features : []).slice(0, 8).map(f => ({ version: clean(f && f.version, 32), date: clean(f && f.date, 24), title: clean(f && f.title, 120), items: (Array.isArray(f && f.items) ? f.items : []).slice(0, 60).map(i => clean(i, 400)) })), signed: typeof j.signature === 'string' && j.signature.length > 40 };
+    } catch (e) { body = { ok: false, error: 'The update list could not be read: ' + clean(e.message, 120) }; }
+    upd.at = Date.now(); upd.body = body; return c.json(200, body);
+  });
+  // PORTAL MANAGEMENT (admin): what the customer portal is doing, and the two things an operator does to it
+  app.get('/admin/portal', admin, limit('adm', 120), c => {
+    const all = listLicenses({ file: dataFile, secret }), since = Date.now() - 86400000, log = audit.list(500);
+    const when = e => Number(e.t) || 0, what = e => e.action || '';
+    return c.json(200, { ok: true, path: '/portal/', updateUrl, update: upd.body, updateReadAt: upd.at || null,
+      productKeys: { made: all.filter(l => l.productKey).length, redeemed: all.filter(l => l.redeems > 0).length, neverUsed: all.filter(l => l.productKey && !l.redeems).length },
+      last24h: { redeemed: log.filter(e => what(e) === 'license.redeem' && when(e) >= since).length, refused: log.filter(e => what(e) === 'license.redeem.refused' && when(e) >= since).length } });
+  });
+  app.post('/admin/portal/refresh', admin, limit('adm', 30), async c => { upd.at = 0; upd.body = null; audit.add('portal.refresh', '', c.ip); return c.json(200, { ok: true }); });
+  app.post('/admin/licenses/:id/product-key', admin, limit('adm', 60), async c => { const r = renewProductKey({ id: c.params.id, file: dataFile });
+    if (!r.ok) return c.json(r.status, { ok: false, error: r.error }); audit.add('license.productkey.new', r.id, c.ip); return c.json(200, { ok: true, id: r.id, productKey: r.productKey }); });
+  const portal = path.join(__dirname, 'portal');
+  app.get('/portal', c => c.send(301, '', { location: '/portal/' }));
+  app.static({ '/portal/': [path.join(portal, 'index.html'), 'text/html; charset=utf-8'], '/portal/app.js': [path.join(portal, 'app.js'), 'text/javascript; charset=utf-8'], '/portal/portal.css': [path.join(portal, 'portal.css'), 'text/css; charset=utf-8'], '/portal/base.css': [path.join(__dirname, 'dashboard', 'style.css'), 'text/css; charset=utf-8'] });
   // the management page: three fixed files; it asks for the token itself, so the files carry nothing secret
   const dash = path.join(__dirname, 'dashboard');
   app.get('/admin', c => c.send(301, '', { location: '/admin/' }));
@@ -271,7 +311,7 @@ function createServer({ privateKey, token, dataFile = DATA_FILE, dataSecret, tru
   return http.createServer(app.handler);
 }
 
-module.exports = { newProductKey, normProductKey, redeemProductKey, buildPayload, createServer, authorized, activateDevice, deactivateDevice, keyStatus, listLicenses, setRevoked, removeDevice, recordIssue, MAX_DEVICES };
+module.exports = { renewProductKey, newProductKey, normProductKey, redeemProductKey, buildPayload, createServer, authorized, activateDevice, deactivateDevice, keyStatus, listLicenses, setRevoked, removeDevice, recordIssue, MAX_DEVICES };
 
 if (require.main === module) {
   const token = process.env.LICENSE_ADMIN_TOKEN;

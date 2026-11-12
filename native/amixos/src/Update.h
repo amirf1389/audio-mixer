@@ -38,7 +38,7 @@ class Update : public QObject {
   QString lastCheck() const { return s_.value("update/lastCheck").toString(); }
   Q_PROPERTY(QString licenseServer READ licenseServer WRITE setLicenseServer NOTIFY changed)   // where a product key is traded for the full key (https)
   Q_PROPERTY(QString redeemState READ redeemState NOTIFY changed)                              // "" | asking | done | the reason it failed
-  QString licenseServer() const { return s_.value("licence/server").toString(); } void setLicenseServer(const QString& u);
+  QString licenseServer() const { return s_.value("licence/server", QStringLiteral("https://licence.amirfakhribadri.my")).toString(); }   /* the vendor's licence server unless another is typed */ void setLicenseServer(const QString& u);
   QString redeemState() const { return redeem_; }
   Q_INVOKABLE bool setServerLink(const QString& url);          // the update server link: any https host; its list must still be signed
   Q_INVOKABLE void redeemProductKey(const QString& code);      // POST <licence server>/redeem; redeemed(key) when the server answers with a key

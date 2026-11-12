@@ -122,6 +122,35 @@ class Analog final : public Simple { public: explicit Analog(double fs); const c
   std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
  protected: int count() const override { return 4; } const char* knobId(int i) const override { static const char* k[] = {"drive", "bias", "tone", "output"}; return k[i]; } const char* knobTitle(int i) const override { static const char* k[] = {"DRIVE", "BIAS", "TONE", "OUTPUT"}; return k[i]; } double knobDef(int i) const override { static const double d[] = {0.35, 0.2, 0.8, 0.5}; return d[i]; }
  private: float lp_[2] = {0, 0}; };
+// SOUND BARRIER: loud, with impact, and never past the ceiling. Four stages in a row:
+//   IMPACT   the first milliseconds of each hit in the bass and middle are lifted (a fast level follower against a slow one), so that
+//            drums keep their punch when everything is pushed
+//   SMOOTH   the treble (over 5 kHz) is held back the more it sticks out, so that pushing does not turn harsh
+//   PUSH     the whole signal is raised 0 .. 18 dB into a soft knee
+//   CEILING  the barrier: a limiter that sees every peak 3 ms before it arrives and has the gain down in time; nothing leaves above
+//            the ceiling (-6 .. 0 dBFS). The effect delays the signal by those 3 ms.
+//   AUTO     the run-up: like a train brought up to the speed its line allows, the push follows the music by itself until the barrier
+//            is working by the amount asked for (0 = off .. 6 dB), whatever the level coming in. It climbs over a second or two,
+//            backs off faster, never adds more than 24 dB, and waits in silence. MACH is the level against the ceiling: 1.0 is at it.
+class Barrier final : public Simple { public: explicit Barrier(double fs); const char* kind() const override { return "barrier"; } const char* name() const override { return "SOUND BARRIER"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void setSampleRate(double fs) override; void process(float* L, float* R, std::size_t n) override;
+  double reductionDb() const { return grDb_.load(); }   // how hard the barrier works now (0 = not at all)
+  double autoDb() const { return autoDb_.load(); }      // what the run-up adds now
+  double mach() const { return mach_.load(); }          // the level arriving at the barrier against the ceiling (1.0 = at it)
+  static double ceilingOf(double v) { return std::pow(10.0, (-6.0 + (v < 0 ? 0 : v > 1 ? 1 : v) * 6.0) / 20.0); }
+ protected: int count() const override { return 5; } const char* knobId(int i) const override { static const char* k[] = {"push", "impact", "smooth", "ceiling", "auto"}; return k[i]; } const char* knobTitle(int i) const override { static const char* k[] = {"PUSH", "IMPACT", "SMOOTH", "CEILING", "AUTO"}; return k[i]; } double knobDef(int i) const override { static const double d[] = {0.33, 0.5, 0.5, 0.83, 0.0}; return d[i]; }
+ private: std::vector<float> dl_[2]; std::size_t w_ = 0; int look_ = 144, hold_ = 0; float lp_[2] = {0, 0}, hp_[2] = {0, 0}, hp2_[2] = {0, 0}; double fast_ = 0, slow_ = 0, eHigh_ = 0, eBody_ = 0, g_ = 1, auto_ = 1, peakIn_ = 0; std::atomic<double> grDb_{0}, autoDb_{0}, mach_{0}; };
+// DUAL LISTEN EQ: two frequency ranges, bass (under 200 Hz) and treble (over 4 kHz), that listen to the music and set themselves.
+// The signal is split into bass, middle and treble (the three add up to the signal again exactly). The loudness of each is followed
+// slowly, and the bass and treble gains move until bass and treble stand where BASS and TREBLE ask against the middle. A bass-heavy
+// song is eased, a thin one is filled; a dull one is opened, a harsh one is calmed. In quiet passages it holds what it had.
+//   BASS / TREBLE  where each range should stand against the middle (-6 .. +6 dB around a natural balance)
+//   RANGE          how far a gain may move (0 .. 12 dB either way)        SPEED  how fast it follows (4 s .. 0.3 s)
+class DualEq final : public Simple { public: explicit DualEq(double fs); const char* kind() const override { return "dualeq"; } const char* name() const override { return "DUAL LISTEN EQ"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
+  double bassDb() const { return gLowDb_.load(); } double trebleDb() const { return gHighDb_.load(); }   // what it is doing now
+ protected: int count() const override { return 4; } const char* knobId(int i) const override { static const char* k[] = {"bass", "treble", "range", "speed"}; return k[i]; } const char* knobTitle(int i) const override { static const char* k[] = {"BASS", "TREBLE", "RANGE", "SPEED"}; return k[i]; } double knobDef(int i) const override { static const double d[] = {0.5, 0.5, 0.5, 0.4}; return d[i]; }
+ private: float lp_[2] = {0, 0}, hp_[2] = {0, 0}; double eLow_ = 0, eMid_ = 0, eHigh_ = 0, gl_ = 1, gh_ = 1; std::atomic<double> gLowDb_{0}, gHighDb_{0}; };
 // PITCH SHIFTER: moves the pitch without changing the speed. The signal runs into a short delay line that is read by two heads moving
 // faster or slower than it is written; each head fades in and out (a raised cosine) while the other covers its jump back, half a window
 // apart. PITCH -12 .. +12 semitones in whole steps, FINE 50 cents either way, WINDOW 20 .. 90 ms (short: tighter and rougher; long: smoother, more delay).

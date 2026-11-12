@@ -12,6 +12,7 @@ static int fails = 0;
 int main(int argc, char** argv) {
   CHECK(cmpVersion("1.10.0", "1.9.0") > 0); CHECK(cmpVersion("1.18.0.0", "1.18.0.0") == 0); CHECK(cmpVersion("1.12.2.0", "1.18.0.0") < 0); CHECK(cmpVersion("2", "1.99.99") > 0); CHECK(cmpVersion("1.0", "1.0.0.0") == 0);
   CHECK(hostAllowed("https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/update.json")); CHECK(hostAllowed("https://github.com/x/y/releases/download/v/a.exe"));
+  CHECK(hostAllowed("https://ota.amirfakhribadri.my/update.json") && hostAllowed("https://amirfakhribadri.my/x") && !hostAllowed("http://ota.amirfakhribadri.my/update.json") && !hostAllowed("https://amirfakhribadri.my.evil.example/x") && !hostAllowed("https://evil-amirfakhribadri.my/x"));
   CHECK(!hostAllowed("http://github.com/x")); CHECK(!hostAllowed("https://evil.example/a.exe")); CHECK(!hostAllowed("https://github.com.evil.example/a")); CHECK(!hostAllowed("https://user@github.com/a")); CHECK(!hostAllowed("https://evilgithub.com/a"));
   CHECK(b64url("AAECAw").size() == 4 && b64url("AAECAw")[3] == 3); CHECK(b64url("a b").empty());
   std::string s; std::size_t p = 0; CHECK(readString(std::string("\"a\\\"b\\\\c\\u0041\\/\""), p, s) && s == "a\"b\\cA/");

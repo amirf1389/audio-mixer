@@ -11,7 +11,7 @@ double clamp01(double v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
 std::string fmt(const char* f, double v) { char b[32]; std::snprintf(b, sizeof b, f, v); return b; }
 }  // namespace
 
-std::vector<std::pair<std::string, std::string>> catalog() { return {{"reverb", "PLATE REVERB"}, {"delay", "TAPE DELAY"}, {"syncdelay", "SYNC DELAY"}, {"antifeedback", "FEEDBACK KILLER"}, {"analog", "ANALOG CHANNEL"}, {"pitch", "PITCH SHIFTER"}, {"chorus", "STEREO CHORUS"}, {"drive", "TUBE DRIVE"}, {"flanger", "FLANGER"}, {"phaser", "PHASER"}, {"tremolo", "TREMOLO"}, {"wah", "AUTO WAH"}, {"crusher", "BIT CRUSHER"}, {"exciter", "EXCITER"}, {"tubeamp", "TUBE AMP"}, {"preamp", "PRE AMP"}, {"postamp", "POST AMP"}, {"hall", "HALL REVERB"}, {"room", "ROOM REVERB"}}; }
+std::vector<std::pair<std::string, std::string>> catalog() { return {{"reverb", "PLATE REVERB"}, {"delay", "TAPE DELAY"}, {"syncdelay", "SYNC DELAY"}, {"antifeedback", "FEEDBACK KILLER"}, {"analog", "ANALOG CHANNEL"}, {"barrier", "SOUND BARRIER"}, {"dualeq", "DUAL LISTEN EQ"}, {"pitch", "PITCH SHIFTER"}, {"chorus", "STEREO CHORUS"}, {"drive", "TUBE DRIVE"}, {"flanger", "FLANGER"}, {"phaser", "PHASER"}, {"tremolo", "TREMOLO"}, {"wah", "AUTO WAH"}, {"crusher", "BIT CRUSHER"}, {"exciter", "EXCITER"}, {"tubeamp", "TUBE AMP"}, {"preamp", "PRE AMP"}, {"postamp", "POST AMP"}, {"hall", "HALL REVERB"}, {"room", "ROOM REVERB"}}; }
 std::unique_ptr<Effect> make(const std::string& k, double fs) {
   if (k == "reverb") return std::make_unique<Reverb>(fs);
   if (k == "delay") return std::make_unique<TapeDelay>(fs);
@@ -19,6 +19,8 @@ std::unique_ptr<Effect> make(const std::string& k, double fs) {
   if (k == "antifeedback") return std::make_unique<FeedbackKiller>(fs);
   if (k == "chorus") return std::make_unique<Chorus>(fs);
   if (k == "analog") return std::make_unique<Analog>(fs);
+  if (k == "barrier") return std::make_unique<Barrier>(fs);
+  if (k == "dualeq") return std::make_unique<DualEq>(fs);
   if (k == "pitch") return std::make_unique<Pitch>(fs);
   if (k == "flanger") return std::make_unique<Flanger>(fs);
   if (k == "phaser") return std::make_unique<Phaser>(fs);
@@ -134,6 +136,85 @@ void Drive::process(float* L, float* R, std::size_t n) {
 }
 
 
+// ---------------------------------------------------------------- Sound barrier
+Barrier::Barrier(double fs) : Simple(fs) { for (int i = 0; i < 5; ++i) k_[i] = knobDef(i); reset(); }
+void Barrier::setSampleRate(double fs) { fs_ = fs > 0 ? fs : 48000; reset(); }
+void Barrier::reset() { look_ = std::max(8, static_cast<int>(fs_ * 0.003)); for (auto& d : dl_) d.assign(static_cast<std::size_t>(look_) + 1, 0.f); w_ = 0; hold_ = 0; lp_[0] = lp_[1] = hp_[0] = hp_[1] = hp2_[0] = hp2_[1] = 0; fast_ = slow_ = eHigh_ = eBody_ = 0; g_ = 1; grDb_ = 0; auto_ = 1; peakIn_ = 0; autoDb_ = 0; mach_ = 0; }
+std::string Barrier::text(const std::string& id, double v) const {
+  v = clamp01(v); if (id == "push") return fmt("+%.1f dB", v * 18.0); if (id == "ceiling") return fmt("%.1f dBFS", -6.0 + v * 6.0); if (id == "auto") return v <= 0.001 ? std::string("OFF") : fmt("%.1f dB", v * 6.0); return fmt("%.0f %%", v * 100);
+}
+void Barrier::process(float* L, float* R, std::size_t n) {
+  if (bypass_.load()) return;
+  const double manual = std::pow(10.0, k_[0].load() * 18.0 / 20.0), impact = k_[1].load(), smooth = k_[2].load(), ceil = ceilingOf(k_[3].load()), autoAmt = k_[4].load();
+  const double push = manual * auto_, aPk = std::exp(-1.0 / (0.5 * fs_)); double pkBlock = 0;
+  const float aH = static_cast<float>(std::exp(-2.0 * kPi * 5000.0 / fs_));
+  const double aFastUp = std::exp(-1.0 / (0.001 * fs_)), aFastDn = std::exp(-1.0 / (0.020 * fs_)), aSlow = std::exp(-1.0 / (0.060 * fs_)), aE = std::exp(-1.0 / (0.050 * fs_)), rel = 1.0 - std::exp(-1.0 / (0.120 * fs_));
+  const std::size_t len = dl_[0].size(); const float wet = static_cast<float>(mix_.load()), dry = 1.f - wet; double worst = 1.0;
+  for (std::size_t i = 0; i < n; ++i) {
+    float body[2], high[2]; double pb = 0, sh = 0, sb = 0;
+    for (int c = 0; c < 2; ++c) { const float x = (c ? R : L)[i]; hp_[c] = x + aH * (hp_[c] - x); hp2_[c] = hp_[c] + aH * (hp2_[c] - hp_[c]); body[c] = hp2_[c]; high[c] = x - body[c];   // body: under 5 kHz (two poles, so little treble leaks into it); the two add up to the signal
+      pb = std::max(pb, static_cast<double>(std::fabs(body[c]))); sh += static_cast<double>(high[c]) * high[c]; sb += static_cast<double>(body[c]) * body[c]; }
+    // IMPACT: a hit is where the fast follower runs ahead of the slow one
+    fast_ = pb > fast_ ? pb + aFastUp * (fast_ - pb) : pb + aFastDn * (fast_ - pb); slow_ = pb + aSlow * (slow_ - pb);
+    const double hit = slow_ > 1e-5 ? std::min(1.5, std::max(0.0, fast_ / slow_ - 1.0)) : 0.0, gi = 1.0 + impact * hit * 0.6;   // up to about +5.6 dB on the attack
+    // SMOOTH: the treble is held back by how far it stands out against the body (a natural treble sits about 12 dB under it)
+    eHigh_ = sh + aE * (eHigh_ - sh); eBody_ = sb + aE * (eBody_ - sb);
+    const double over = eBody_ > 1e-9 ? 10.0 * std::log10((eHigh_ + 1e-12) / eBody_) + 12.0 : 0.0, gs = std::pow(10.0, -smooth * std::min(12.0, std::max(0.0, over) * 0.75 + (push - 1.0) * 0.35) / 20.0);
+    float y[2]; double pk = 0;
+    for (int c = 0; c < 2; ++c) { const double pre = static_cast<double>(body[c]) * gi + static_cast<double>(high[c]) * gs; pkBlock = std::max(pkBlock, std::fabs(pre)); double v = pre * push;
+      const double knee = ceil * 1.5; if (std::fabs(v) > ceil * 0.5) { const double s = v < 0 ? -1.0 : 1.0, a = std::fabs(v) - ceil * 0.5; v = s * (ceil * 0.5 + (knee - ceil * 0.5) * std::tanh(a / (knee - ceil * 0.5))); }   // a soft knee from half the ceiling up
+      y[c] = static_cast<float>(v); pk = std::max(pk, std::fabs(v)); }
+    // CEILING: the gain needed for this sample is taken at once and held until the sample has left the delay; then it recovers
+    const double need = pk > ceil ? ceil / pk : 1.0;
+    if (need < g_) { g_ = need; hold_ = look_; } else if (hold_ > 0) --hold_; else g_ += rel * (1.0 - g_);
+    worst = std::min(worst, g_);
+    const std::size_t rd = (w_ + 1) % len;
+    for (int c = 0; c < 2; ++c) { const float x = (c ? R : L)[i]; const float old = dl_[c][rd]; dl_[c][w_] = y[c];
+      float o = static_cast<float>(static_cast<double>(old) * g_); const float cf = static_cast<float>(ceil); o = o > cf ? cf : o < -cf ? -cf : o;   // the last word: nothing above the ceiling
+      (c ? R : L)[i] = dry * x + wet * o; }
+    w_ = rd;
+  }
+  for (int c = 0; c < 2; ++c) { if (std::fabs(hp_[c]) < 1e-20f) hp_[c] = 0; if (std::fabs(hp2_[c]) < 1e-20f) hp2_[c] = 0; }
+  grDb_ = -20.0 * std::log10(std::max(1e-6, worst));
+  // AUTO, the run-up: the loudest of the last half second is brought to where the barrier works by the amount asked for
+  const double decay = std::pow(aPk, static_cast<double>(n)); peakIn_ = std::max(pkBlock, peakIn_ * decay);
+  mach_ = peakIn_ * push / ceil;
+  if (autoAmt <= 0.001) auto_ = 1.0;
+  else if (peakIn_ > 1e-4) {   // there is music (above -80 dBFS): climb in about 1.5 s, back off in 0.3 s; in silence, wait
+    const double want = std::max(1.0, std::min(15.85, ceil * std::pow(10.0, autoAmt * 6.0 / 20.0) / (peakIn_ * manual)));
+    const double tau = want > auto_ ? 1.5 : 0.3, a = std::exp(-static_cast<double>(n) / (tau * fs_)); auto_ = want + a * (auto_ - want);
+  }
+  autoDb_ = 20.0 * std::log10(auto_);
+}
+// ---------------------------------------------------------------- Dual listen EQ
+DualEq::DualEq(double fs) : Simple(fs) { for (int i = 0; i < 4; ++i) k_[i] = knobDef(i); reset(); }
+void DualEq::reset() { lp_[0] = lp_[1] = hp_[0] = hp_[1] = 0; eLow_ = eMid_ = eHigh_ = 0; gl_ = gh_ = 1; gLowDb_ = 0; gHighDb_ = 0; }
+std::string DualEq::text(const std::string& id, double v) const {
+  v = clamp01(v); if (id == "bass" || id == "treble") return fmt("%+.1f dB", (v - 0.5) * 12.0); if (id == "range") return fmt("%.0f dB", v * 12.0); return fmt("%.1f s", 4.0 * std::pow(0.075, v));
+}
+void DualEq::process(float* L, float* R, std::size_t n) {
+  if (bypass_.load()) return;
+  // a natural balance of music against its middle: the bass about level with it, the treble about 12 dB under; BASS / TREBLE move those marks
+  const double wantLow = 0.0 + (k_[0].load() - 0.5) * 12.0, wantHigh = -12.0 + (k_[1].load() - 0.5) * 12.0, range = k_[2].load() * 12.0, tau = 4.0 * std::pow(0.075, k_[3].load());
+  const float aL = static_cast<float>(std::exp(-2.0 * kPi * 200.0 / fs_)), aH = static_cast<float>(std::exp(-2.0 * kPi * 4000.0 / fs_));
+  const double aE = std::exp(-1.0 / (0.3 * fs_)), aG = std::exp(-static_cast<double>(n) / (tau * fs_));   // loudness over 0.3 s; the gains move once a block
+  const float wet = static_cast<float>(mix_.load()), dry = 1.f - wet; float* ch[2] = {L, R};
+  const float gl = static_cast<float>(gl_), gh = static_cast<float>(gh_);
+  for (std::size_t i = 0; i < n; ++i) {
+    double sl = 0, sm = 0, sh = 0;
+    for (int c = 0; c < 2; ++c) { const float x = ch[c][i]; lp_[c] = x + aL * (lp_[c] - x); hp_[c] = x + aH * (hp_[c] - x);   // lp_: under 200 Hz; hp_: under 4 kHz
+      const float low = lp_[c], high = x - hp_[c], mid = x - low - high; sl += static_cast<double>(low) * low; sm += static_cast<double>(mid) * mid; sh += static_cast<double>(high) * high;
+      ch[c][i] = dry * x + wet * (low * gl + mid + high * gh); }
+    eLow_ = sl + aE * (eLow_ - sl); eMid_ = sm + aE * (eMid_ - sm); eHigh_ = sh + aE * (eHigh_ - sh);
+  }
+  for (int c = 0; c < 2; ++c) { if (std::fabs(lp_[c]) < 1e-20f) lp_[c] = 0; if (std::fabs(hp_[c]) < 1e-20f) hp_[c] = 0; }
+  if (eMid_ > 2e-6) {   // the middle is there (above about -54 dBFS): listen and move; below that, hold
+    const double lowDb = 10.0 * std::log10((eLow_ + 1e-12) / eMid_), highDb = 10.0 * std::log10((eHigh_ + 1e-12) / eMid_);
+    const double tl = std::max(-range, std::min(range, wantLow - lowDb)), th = std::max(-range, std::min(range, wantHigh - highDb));
+    const double nowL = 20.0 * std::log10(gl_), nowH = 20.0 * std::log10(gh_), nl = tl + aG * (nowL - tl), nh = th + aG * (nowH - th);
+    gl_ = std::pow(10.0, nl / 20.0); gh_ = std::pow(10.0, nh / 20.0); gLowDb_ = nl; gHighDb_ = nh;
+  }
+}
 // ---------------------------------------------------------------- Pitch shifter
 Pitch::Pitch(double fs) : Simple(fs) { for (int i = 0; i < 3; ++i) k_[i] = knobDef(i); reset(); }
 void Pitch::setSampleRate(double fs) { fs_ = fs > 0 ? fs : 48000; reset(); }
