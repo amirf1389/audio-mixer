@@ -79,6 +79,7 @@ Item {
                             Text { Layout.fillWidth: true; text: i18n.t("ASIO opens on a 10 ms buffer. OPEN starts the driver you choose; AUTO DETECT + OPEN picks the interface's own driver for you.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; elide: Text.ElideRight }
                             Btn { objectName: "asioAutoBtn"; label: i18n.t("AUTO DETECT + OPEN", i18n.lang); on: true; onColor: Theme.emerald; onClicked: engine.autoOpenAsio() }
                             Btn { objectName: "asioScanBtn"; label: i18n.t("SCAN (DISCOVERY ONLY)", i18n.lang); onClicked: engine.refreshDevices() } }
+                        Text { objectName: "asioNote"; visible: engine.asioNote !== "" && engine.running && engine.backend === "asio"; Layout.fillWidth: true; wrapMode: Text.WordWrap; text: i18n.t(engine.asioNote, i18n.lang); color: Theme.emerald; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
                         Repeater { model: { engine.devices; engine.running; return engine.asioDrivers() }
                             delegate: RowLayout { Layout.fillWidth: true; spacing: 6
                                 Rectangle { width: 6; height: 6; radius: 3; color: modelData.current ? Theme.emerald : Theme.ov(0.2) }

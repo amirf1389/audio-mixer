@@ -689,7 +689,11 @@ int main(int argc, char* argv[]) {
                 if (engine.bestAsioDriver() != "{a1}" || engine.asioFrames(48000) != 480 || engine.asioFrames(44100) != 441 || engine.asioFrames(96000) != 960) { std::fprintf(stderr, "amixos --shots: ASIO auto detect or the 10 ms buffer is wrong (%s, %d)\n", qPrintable(engine.bestAsioDriver()), engine.asioFrames(48000)); std::exit(212); }
                 { QVariantList only; only << dev("asio", "{w1}", "ASIO4ALL v2", 2, 2) << dev("asio", "{w2}", "FlexASIO", 0, 0); engine.simulateDevices(only); if (engine.bestAsioDriver() != "{w1}") std::exit(213); engine.simulateDevices(QVariantList{dev("wasapi", "{x}", "Speakers", 0, 2)}); if (!engine.bestAsioDriver().isEmpty() || engine.autoOpenAsio()) std::exit(214); engine.simulateDevices(rig); }
                 engine.openAsioDriver("{a2}", 256); for (const QVariant& v : engine.asioDrivers()) if (v.toMap()["current"].toBool() && engine.backend() != "asio") { std::fprintf(stderr, "amixos --shots: a driver that did not start is shown as running\n"); std::exit(254); }
-                engine.setAutoPrefer(keepPrefer); engine.simulateDevices(real); if (!engine.running()) engine.open("null", "", "", 48000, 256, 2, 2); win->setProperty("current", "mixer"); waitMs(300); }
+                engine.setAutoPrefer(keepPrefer); engine.simulateDevices(real); if (!engine.running()) engine.open("null", "", "", 48000, 256, 2, 2); win->setProperty("current", "mixer"); waitMs(300);
+                { // the channels are read by themselves: with a device of 2 inputs running, 2 are put on strips 1 and 2 and the note says so; with no inputs it says outputs only
+                  const int got = engine.readAsioChannels("{a1}"); if (got != engine.deviceInputs() || got != 2 || !engine.asioNote().contains("2 input channel")) { std::fprintf(stderr, "amixos --shots: the device's channels were not read (%d of %d: %s)\n", got, engine.deviceInputs(), qPrintable(engine.asioNote())); std::exit(215); }
+                  engine.open("null", "", "", 48000, 256, 0, 2); if (engine.readAsioChannels("{a1}") != 0 || !engine.asioNote().contains("outputs only")) std::exit(216);
+                  engine.open("null", "", "", 48000, 256, 2, 2); engine.resetRouting(); } }
               mixer->setProperty("vuMode", true); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + "/mixer-vu.png"); mixer->setProperty("vuMode", false); std::printf("amixos --shots: mixer-vu\n"); }
           }
         }

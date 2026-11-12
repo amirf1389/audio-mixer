@@ -102,7 +102,8 @@
         "PLUGIN RACK: DUAL LISTEN EQ. Bass and treble listen to the music and set themselves against the middle; BASS and TREBLE say where they should stand, RANGE how far they may move, SPEED how fast. One press on ENGINE CONTROL puts it on the selected channel.",
         "Customer portal, Updates: a version check (is my copy up to date?), downloads by system with size and a copy button for the checksum, how to check a download, and what is new release by release.",
         "PLUGIN RACK: SOUND BARRIER. PUSH raises the level up to 18 dB, IMPACT keeps the attack of each hit, SMOOTH holds a sticking-out treble back so that loud does not turn harsh, CEILING is a look-ahead limiter nothing passes. AUTO is the run-up: the push follows the music by itself until the barrier is working by the amount asked for, whatever the level coming in. One press on ENGINE CONTROL puts it on the selected channel.",
-        "SOUND CARD: ASIO opens on a 10 ms buffer (480 frames at 48 kHz; the driver takes the nearest size it offers). AUTO DETECT + OPEN picks the interface's own ASIO driver before a wrapper and opens it."
+        "SOUND CARD: ASIO opens on a 10 ms buffer (480 frames at 48 kHz; the driver takes the nearest size it offers). AUTO DETECT + OPEN picks the interface's own ASIO driver before a wrapper and opens it.",
+        "SOUND CARD: when an ASIO driver opens, the device's channels are read by themselves: input n goes on strip n, strips beyond get no input, and a known desk also names its strips. The card says how many were read."
       ]
     }
   ]
