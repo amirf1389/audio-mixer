@@ -283,12 +283,13 @@ bool Engine::applyRackPreset(int i, int slot, int presetId) {
   const bool ok = p.vst->setState(st); if (ok) emit stripsChanged(); return ok;
 }
 QVariantMap Engine::mastering() const {
-  QVariantMap m; m["eqOn"] = mp_.eqOn; m["on"] = mp_.on; m["low"] = mp_.lowDb; m["air"] = mp_.airDb; m["mid"] = mp_.midDb; m["compMix"] = mp_.compMix; m["bassMonoOn"] = mp_.bassMonoOn; m["bassMonoHz"] = mp_.bassMonoHz; m["thr"] = mp_.thrDb; m["ratio"] = mp_.ratio; m["attack"] = mp_.attackMs; m["release"] = mp_.releaseMs; m["makeup"] = mp_.makeupDb; m["drive"] = mp_.drive; m["gain"] = mp_.gainDb; m["toneOn"] = mp_.toneOn; m["compOn"] = mp_.compOn; m["satOn"] = mp_.satOn; m["deessOn"] = mp_.deessOn; m["deessThr"] = mp_.deessThrDb; m["deessMax"] = mp_.deessMaxDb; m["exciterOn"] = mp_.exciterOn; m["exciter"] = mp_.exciterAmt; m["bassMonoOn"] = mp_.bassMonoOn; m["bassMonoHz"] = mp_.bassMonoHz; m["preset"] = masterPreset_; return m;
+  QVariantMap m; m["eqOn"] = mp_.eqOn; m["analog"] = mp_.analog; m["on"] = mp_.on; m["low"] = mp_.lowDb; m["air"] = mp_.airDb; m["mid"] = mp_.midDb; m["compMix"] = mp_.compMix; m["bassMonoOn"] = mp_.bassMonoOn; m["bassMonoHz"] = mp_.bassMonoHz; m["thr"] = mp_.thrDb; m["ratio"] = mp_.ratio; m["attack"] = mp_.attackMs; m["release"] = mp_.releaseMs; m["makeup"] = mp_.makeupDb; m["drive"] = mp_.drive; m["gain"] = mp_.gainDb; m["toneOn"] = mp_.toneOn; m["compOn"] = mp_.compOn; m["satOn"] = mp_.satOn; m["deessOn"] = mp_.deessOn; m["deessThr"] = mp_.deessThrDb; m["deessMax"] = mp_.deessMaxDb; m["exciterOn"] = mp_.exciterOn; m["exciter"] = mp_.exciterAmt; m["bassMonoOn"] = mp_.bassMonoOn; m["bassMonoHz"] = mp_.bassMonoHz; m["preset"] = masterPreset_; return m;
 }
 void Engine::setMastering(const QVariantMap& m) {
   auto d = [&m](const char* k, double cur, double lo, double hi) { return m.contains(k) ? std::clamp(m.value(k).toDouble(), lo, hi) : cur; };
   if (m.contains("eqOn")) mp_.eqOn = m.value("eqOn").toBool(); if (m.contains("on")) mp_.on = m.value("on").toBool();
   mp_.lowDb = d("low", mp_.lowDb, -12, 12); mp_.airDb = d("air", mp_.airDb, -12, 12); mp_.midDb = d("mid", mp_.midDb, -12, 12); mp_.compMix = d("compMix", mp_.compMix, 0, 1); mp_.thrDb = d("thr", mp_.thrDb, -40, 0); mp_.ratio = d("ratio", mp_.ratio, 1, 10); mp_.attackMs = d("attack", mp_.attackMs, 0.5, 200); mp_.releaseMs = d("release", mp_.releaseMs, 20, 2000);
+  if (m.contains("analog")) mp_.analog = m["analog"].toBool();
   mp_.makeupDb = d("makeup", mp_.makeupDb, 0, 18); mp_.drive = d("drive", mp_.drive, 0, 1); mp_.gainDb = d("gain", mp_.gainDb, -12, 12); for (auto [k, b] : std::initializer_list<std::pair<const char*, bool*>>{{"toneOn", &mp_.toneOn}, {"compOn", &mp_.compOn}, {"satOn", &mp_.satOn}, {"deessOn", &mp_.deessOn}, {"exciterOn", &mp_.exciterOn}, {"bassMonoOn", &mp_.bassMonoOn}}) if (m.contains(k)) *b = m.value(k).toBool();
   mp_.deessThrDb = d("deessThr", mp_.deessThrDb, -50, 0); mp_.deessMaxDb = d("deessMax", mp_.deessMaxDb, 0, 18); mp_.exciterAmt = d("exciter", mp_.exciterAmt, 0, 1); mp_.bassMonoHz = d("bassMonoHz", mp_.bassMonoHz, 40, 400);
   masterPreset_ = m.value("preset").toString(); pushMaster(); emit masterChainChanged();
@@ -584,6 +585,20 @@ void Engine::setArmed(int i, bool on) { if (i < 0 || i >= kStrips) return; if (o
 // switches the whole headset to that mode). Auto detect leaves the hands-free side off; it can still be picked by hand on CONNECTIONS.
 static bool handsFree(const QVariantMap& d) { static const QRegularExpression re("hands[- ]?free|\\bhfp\\b|\\bag audio\\b|headset", QRegularExpression::CaseInsensitiveOption); return d["kind"].toString() == "headset" || re.match(d["name"].toString()).hasMatch(); }
 void Engine::setAutoPrefer(const QString& p) { static const QStringList ok = {"best", "asio", "wasapi", "dsound", "bluetooth", "manual"}; settings_.setValue("audio/autoPrefer", ok.contains(p) ? p : QStringLiteral("best")); emit devicesChanged(); }
+// DAC DETECTION: the playback-only converters among the devices (kind "dac"), listed for a manual OPEN as outputs only
+QVariantList Engine::dacsFound() const {
+  QVariantList l; for (const QVariant& v : devices_) { const QVariantMap d = v.toMap(); if (d["kind"].toString() != "dac" || d["outChannels"].toInt() < 1) continue;
+    QVariantMap m; m["backend"] = d["backend"]; m["id"] = d["id"]; m["name"] = d["name"]; m["outChannels"] = d["outChannels"]; m["rate"] = d["defaultRate"];
+    QVariantList rates = d["sampleRates"].toList(); double top = d["defaultRate"].toDouble(); for (const QVariant& r : rates) top = std::max(top, r.toDouble()); m["maxRate"] = top;
+    m["current"] = running() && dacOpenId_ == d["backend"].toString() + "|" + d["id"].toString(); l << m; }
+  return l;
+}
+bool Engine::openDac(const QString& backendName, const QString& id, int frames) {
+  for (const QVariant& v : devices_) { const QVariantMap d = v.toMap(); if (d["kind"].toString() != "dac" || d["backend"].toString() != backendName || d["id"].toString() != id) continue;
+    const double rate = d["defaultRate"].toDouble() > 0 ? d["defaultRate"].toDouble() : 48000.0;
+    const bool ok = open(backendName, QString(), id, rate, frames > 0 ? frames : 256, 0, std::min(32, std::max(2, d["outChannels"].toInt()))); dacOpenId_ = ok ? backendName + "|" + id : QString(); emit devicesChanged(); return ok; }
+  status_ = QStringLiteral("That DAC is not in the list any more: press RESCAN."); emit stateChanged(); return false;
+}
 // MANUAL: the drivers are only listed (discovery); nothing is picked or opened until the operator chooses one
 QVariantList Engine::asioDrivers() const {
   QVariantList l; for (const QVariant& v : devices_) { const QVariantMap d = v.toMap(); if (d["backend"].toString() != "asio") continue;

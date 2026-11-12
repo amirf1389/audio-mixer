@@ -24,6 +24,7 @@ Item {
                 Item { Layout.fillWidth: true }
                 Text { text: access.message; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; elide: Text.ElideLeft; Layout.maximumWidth: 420 }
                 Btn { label: access.surfaceLocked ? i18n.t("LOCKED", i18n.lang) : i18n.t("LOCK CONSOLE", i18n.lang); on: !access.surfaceLocked; onColor: Theme.danger; onClicked: if (!access.surfaceLocked) access.lock() } } }
+                Btn { objectName: "pinAtStartBtn"; label: access.pinAtStart ? i18n.t("PIN AT START: ON", i18n.lang) : i18n.t("PIN AT START: OFF", i18n.lang); on: access.pinAtStart; onColor: Theme.amber; onClicked: access.pinAtStart = !access.pinAtStart }
         RowLayout { Layout.fillWidth: true; Layout.fillHeight: true; spacing: 8
             // profiles
             Rectangle { Layout.fillWidth: true; Layout.fillHeight: true; radius: Theme.radius; color: Theme.card; border.color: Theme.line

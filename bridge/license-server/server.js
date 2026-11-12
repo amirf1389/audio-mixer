@@ -66,6 +66,8 @@ function buildPayload(body, now = Date.now()) {
     v: 1, id: crypto.randomBytes(6).toString('hex').toUpperCase(), plan, name,
     issued: now, expires: days ? now + days * 86400000 : null, seats,
   };
+  // TRIAL: a key marked as a trial always ends (one year unless fewer days are asked for) and is for one computer
+  if (body.trial === true) { payload.trial = true; payload.seats = 1; const d = days && days <= 365 ? days : 365; payload.expires = now + d * 86400000; }
   if (machine) payload.mid = machine;
   return { payload };
 }

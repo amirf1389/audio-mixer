@@ -18,6 +18,7 @@ class Access : public QObject {
   Q_PROPERTY(bool surfaceLocked READ surfaceLocked NOTIFY changed)
   Q_PROPERTY(bool adminMode READ adminMode NOTIFY changed)                // PIN verified for ADMIN; cleared by lock() and after 30 min
   Q_PROPERTY(bool pinIsDefault READ pinIsDefault NOTIFY changed)
+  Q_PROPERTY(bool pinAtStart READ pinAtStart WRITE setPinAtStart NOTIFY changed)   // the console starts locked: faders, mutes and solos wait for the PIN
   Q_PROPERTY(bool consumerEdition READ consumerEdition WRITE setConsumerEdition NOTIFY changed)   // hides ACCOUNT / ACCESS / ADMIN / DIAGNOSTICS
   Q_PROPERTY(QVariantList audit READ audit NOTIFY auditChanged)           // newest last: [{at, who, text}]
   Q_PROPERTY(QString message READ message NOTIFY messageChanged)
@@ -31,6 +32,7 @@ class Access : public QObject {
   bool surfaceLocked() const { return locked_; }
   bool adminMode() const;
   bool pinIsDefault() const { return !s_.contains("access/pinHash"); }
+  bool pinAtStart() const { return s_.value("access/pinAtStart", false).toBool() && !pinIsDefault(); } void setPinAtStart(bool on);
   bool consumerEdition() const { return s_.value("access/consumer", false).toBool(); } void setConsumerEdition(bool v);
   QVariantList audit() const;
   QString message() const { return msg_; }

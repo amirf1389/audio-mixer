@@ -71,7 +71,11 @@
         "DAEMON security: control accepts the token in the header only (not in the URL), wrong tokens are slowed and refused with 429 after 20 in a minute, short master tokens are refused, and replies carry nosniff / no-frame / no-referrer headers.",
         "SOUND CARD: AUDIO / MIDI SETTINGS window. Mute audio input, audio device type, output, input with level, active output and input channel pairs, sample rate, buffer size and MIDI inputs, all chosen by hand and started with APPLY.",
         "AUDIO / MIDI SETTINGS: a Test button plays 1 kHz at -20 dBFS for one second on outputs 1 + 2. The window, the ASIO DRIVERS list and MANUAL are translated into all 21 languages.",
-        "NETWORK: the service program is now AmF X1 Network.exe, and its tokens are managed in the console (NETWORK > REMOTE CONTROL): make a token per phone with CONTROL or VIEW and an end date, see the list, revoke one."
+        "NETWORK: the service program is now AmF X1 Network.exe, and its tokens are managed in the console (NETWORK > REMOTE CONTROL): make a token per phone with CONTROL or VIEW and an end date, see the list, revoke one.",
+        "SOUND CARD: DAC detection. USB DACs and headphone DACs are listed with their output count and top sample rate, with OPEN for outputs only.",
+        "SOUND CARD: DSP MODE. DIGITAL leaves the mix as computed; ANALOG rounds the peaks off softly on the master.",
+        "ACCOUNT: PIN AT START. With your own PIN set, the console starts locked until the PIN is entered.",
+        "Licence server: PRO TRIAL · 1 YEAR. A trial key always ends (one year at most) and is for one computer."
       ]
     }
   ]

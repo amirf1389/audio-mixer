@@ -442,6 +442,11 @@ int main(int argc, char* argv[]) {
         const QVariantMap m = remote.tokens().last().toMap(); bool leak = false; for (const QVariant& v : m) leak = leak || v.toString().contains(t.mid(4, 20));
         if (leak || m["name"].toString() != "Smoke phone" || m["role"].toString() != "view" || m["state"].toString() != "active") { std::fprintf(stderr, "amixos --smoke: the token list is wrong\n"); return 251; }
         if (!remote.revokeToken(m["id"].toString()) || remote.tokens().last().toMap()["state"].toString() != "revoked") { std::fprintf(stderr, "amixos --smoke: the token was not revoked\n"); return 252; } }
+      { // PIN AT START: refused with the factory PIN; with an own PIN it sticks and a new Access starts locked
+        const bool keep = access.pinAtStart(); access.setPinAtStart(true);
+        if (access.pinIsDefault() && access.pinAtStart()) { std::fprintf(stderr, "amixos --smoke: PIN AT START switched on with the factory PIN\n"); return 201; }
+        if (!access.pinIsDefault()) { Access again(&engine); if (!again.surfaceLocked()) { std::fprintf(stderr, "amixos --smoke: PIN AT START did not lock the console at start\n"); return 202; } }
+        access.setPinAtStart(keep); }
       { // ADD FOLDER + RESCAN: a plug-in two folders down (maker / product) is found; the path may come in quotes with a slash at the end; removing the folder takes it away again
         const QString src = QCoreApplication::applicationDirPath() + "/engine/vst2/amixtest2.so";
         if (QFile::exists(src)) {
@@ -634,6 +639,16 @@ int main(int argc, char* argv[]) {
                 waitMs(1600); if (engine.testToneActive()) { std::fprintf(stderr, "amixos --shots: the test tone did not end after its second\n"); std::exit(247); }
                 engine.setMonitor(0, 0, false, false, false);
                 QMetaObject::invokeMethod(as, "close"); waitMs(200); }
+              { // DSP MODE: ANALOG leaves a quiet tone alone and rounds a loud one off; DIGITAL is exact again. DAC DETECTION: a USB DAC is listed, its microphone side is not
+                engine.setDspMode("analog"); if (engine.dspMode() != "analog" || !engine.mastering()["analog"].toBool()) { std::fprintf(stderr, "amixos --shots: DSP MODE ANALOG did not switch on\n"); std::exit(255); }
+                engine.setDspMode("digital"); if (engine.dspMode() != "digital") std::exit(255);
+                const QVariantList real = engine.devices(); QVariantList rig;
+                const auto dev = [](const char* b, const char* id, const char* name, int in, int out) { QVariantMap m; m["backend"] = b; m["id"] = id; m["name"] = name; m["inChannels"] = in; m["outChannels"] = out; m["defaultRate"] = 48000.0; m["sampleRates"] = QVariantList{44100.0, 48000.0, 96000.0, 192000.0}; return m; };
+                rig << dev("wasapi", "{d1}", "FiiO K7 USB DAC", 0, 2) << dev("wasapi", "{s1}", "Speakers (Realtek(R) Audio)", 0, 2) << dev("wasapi", "{m1}", "Microphone (USB DAC mic)", 1, 0);
+                engine.simulateDevices(rig); const QVariantList dl = engine.dacsFound();
+                if (dl.size() != 1 || dl[0].toMap()["name"].toString() != "FiiO K7 USB DAC" || dl[0].toMap()["maxRate"].toDouble() != 192000.0 || dl[0].toMap()["current"].toBool()) { std::fprintf(stderr, "amixos --shots: DAC detection is wrong (%d found)\n", int(dl.size())); std::exit(256 - 1); }
+                if (engine.openDac("wasapi", "{nope}", 256)) std::exit(255);
+                engine.simulateDevices(real); if (!engine.running()) engine.open("null", "", "", 48000, 256, 2, 2); }
               { // THE ASIO SECTION with three simulated drivers: the list shows them all, MANUAL picks none, OPEN on one that cannot start leaves none marked as running
                 const QVariantList real = engine.devices(); const QString keepPrefer = engine.autoPrefer(); QVariantList rig;
                 const auto dev = [](const char* b, const char* id, const char* name, int in, int out) { QVariantMap m; m["backend"] = b; m["id"] = id; m["name"] = name; m["inChannels"] = in; m["outChannels"] = out; m["defaultRate"] = 48000.0; return m; };
