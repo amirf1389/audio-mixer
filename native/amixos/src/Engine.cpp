@@ -114,9 +114,20 @@ void Engine::refreshDevices() {
 
 bool Engine::open(const QString& backend, const QString& inDevice, const QString& outDevice, double sampleRate, int frames, int inChannels, int outChannels) {
   stop();
+  // WASAPI: THE HEADSET'S MICROPHONE STAYS OFF, always. A capture device that is a headset or Bluetooth microphone is never opened on
+  // WASAPI, and with headphones or a headset as the output the system's default microphone (which is the headset's own when one is
+  // plugged in) is not opened either. A microphone picked by name that is not a headset's is opened as asked.
+  QString inDev = inDevice; int inCh = inChannels; micOffNote_.clear();
+  if (backend == "wasapi" && inCh > 0) {
+    const auto kindOf = [this](const QString& id, bool capture) { for (const QVariant& v : devices_) { const QVariantMap m = v.toMap(); if (m["backend"].toString() != "wasapi") continue;
+        if (id.isEmpty() ? (capture ? m["defaultIn"].toBool() && m["inChannels"].toInt() > 0 : m["defaultOut"].toBool() && m["outChannels"].toInt() > 0) : m["id"].toString() == id) return m["kind"].toString(); } return QString(); };
+    const QString ik = kindOf(inDevice, true), ok = kindOf(outDevice, false);
+    if (ik == "headset" || ik == "bluetooth" || (inDevice.isEmpty() && (ok == "headphones" || ok == "headset" || ok == "bluetooth"))) {
+      inCh = 0; inDev.clear(); micOffNote_ = QStringLiteral("WASAPI: the headset's microphone is kept off. Outputs only."); }
+  }
   rt_ = std::make_unique<am::Runtime>(kStrips);
-  am::DeviceConfig cfg; cfg.backend = backend.isEmpty() ? "auto" : backend.toStdString(); cfg.inDevice = inDevice.toStdString(); cfg.outDevice = outDevice.toStdString();
-  cfg.sampleRate = sampleRate > 0 ? sampleRate : 48000; cfg.frames = static_cast<unsigned>(frames > 0 ? frames : 256); blockFrames_ = static_cast<int>(cfg.frames); cfg.inChannels = inChannels; cfg.outChannels = outChannels;
+  am::DeviceConfig cfg; cfg.backend = backend.isEmpty() ? "auto" : backend.toStdString(); cfg.inDevice = inDev.toStdString(); cfg.outDevice = outDevice.toStdString();
+  cfg.sampleRate = sampleRate > 0 ? sampleRate : 48000; cfg.frames = static_cast<unsigned>(frames > 0 ? frames : 256); blockFrames_ = static_cast<int>(cfg.frames); cfg.inChannels = inCh; cfg.outChannels = outChannels;
   devIn_ = std::clamp(inChannels, 0, kStrips); devOut_ = std::clamp(outChannels, 0, kOutputs);
   std::string err; nullInputFor(cfg); rememberDeviceNames(cfg.backend, cfg.inDevice, cfg.outDevice);
   if (opening_) return false;

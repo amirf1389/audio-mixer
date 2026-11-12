@@ -88,7 +88,9 @@
         "SOUND CARD: SMART START and the AFTER ASIO fallback are gone. SCAN is discovery only: it lists what is there and opens nothing; START opens exactly the device you chose.",
         "Start: the opening animation is shorter (1.8 s), a click goes straight into the interface, and the interface opens after 3 s even if the animation stalls.",
         "LICENCE page: the texts say what is true now (all 32 channels in every edition) and how to activate a key: paste, CHECK, ACTIVATE.",
-        "NETWORK: the service's status line is readable (no stray characters) and names AmF X1 Network."
+        "NETWORK: the service's status line is readable (no stray characters) and names AmF X1 Network.",
+        "WASAPI: the headset's microphone is always kept off. A headset or Bluetooth microphone is never opened on WASAPI, and with headphones as the output the system's default microphone is not opened; SOUND CARD says so when it happens.",
+        "NETWORK: pairing PIN for the remote. Six digits, a new one every minute, shown while the service runs. A phone sends it once and gets its own 30-day token tied to its address; one phone per PIN, and five wrong tries close pairing until the next PIN."
       ]
     }
   ]

@@ -434,6 +434,8 @@ int main(int argc, char* argv[]) {
         const QStringList before = settings.vstDirs(); const QString vf = settings.vstUserFolder(); settings.vstUserFolder();
         if (vf.isEmpty() || !QDir(vf).exists() || settings.vstDirs().count(vf) != 1 || QSettings().value("vst3/dirs").toStringList().count(vf) != 1) { std::fprintf(stderr, "amixos --smoke: the VST folder was not created and saved\n"); return 198; }
         if (!before.contains(vf)) settings.removeVstDir(vf); }
+      { const QString pin = remote.pairPin(); const int left = remote.pairSecondsLeft();   // the pairing PIN: six digits once the master token exists, 1..60 s to the next
+        if ((!pin.isEmpty() && (pin.size() != 6 || pin.toInt() < 0)) || left < 1 || left > 60) { std::fprintf(stderr, "amixos --smoke: the pairing PIN is wrong (%s, %d s)\n", qPrintable(pin), left); return 206; } }
       if (remote.available()) {   // AMF X1 NETWORK tokens from the console: made, listed without the secret, revoked; a nameless one is refused
         remote.refreshTokens(); const int n0 = remote.tokens().size();
         if (!remote.newToken("  ", "control", 0).isEmpty()) return 249;
@@ -658,6 +660,17 @@ int main(int argc, char* argv[]) {
                 if (dl.size() != 1 || dl[0].toMap()["name"].toString() != "FiiO K7 USB DAC" || dl[0].toMap()["maxRate"].toDouble() != 192000.0 || dl[0].toMap()["current"].toBool()) { std::fprintf(stderr, "amixos --shots: DAC detection is wrong (%d found)\n", int(dl.size())); std::exit(256 - 1); }
                 if (engine.openDac("wasapi", "{nope}", 256)) std::exit(255);
                 engine.simulateDevices(real); if (!engine.running()) engine.open("null", "", "", 48000, 256, 2, 2); }
+              { // WASAPI: a headset microphone is never opened; with headphones out the default microphone stays off; a desk microphone picked by name is left alone
+                const QVariantList real = engine.devices(); QVariantList rig;
+                const auto dev = [](const char* id, const char* name, int in, int out, bool def) { QVariantMap m; m["backend"] = "wasapi"; m["id"] = id; m["name"] = name; m["inChannels"] = in; m["outChannels"] = out; m["defaultRate"] = 48000.0; m["defaultIn"] = def && in > 0; m["defaultOut"] = def && out > 0; return m; };
+                rig << dev("{hp}", "Headphones (Realtek(R) Audio)", 0, 2, true) << dev("{hm}", "Headset Microphone (Realtek(R) Audio)", 1, 0, true) << dev("{dm}", "Microphone (USB Condenser)", 1, 0, false) << dev("{sp}", "Speakers (Realtek(R) Audio)", 0, 2, false);
+                engine.simulateDevices(rig);
+                engine.open("wasapi", "{hm}", "{sp}", 48000, 256, 1, 2); const bool a1 = !engine.micOffNote().isEmpty();   // a headset microphone, named
+                engine.open("wasapi", "", "{hp}", 48000, 256, 2, 2); const bool a2 = !engine.micOffNote().isEmpty();        // headphones out, the default microphone
+                engine.open("wasapi", "{dm}", "{hp}", 48000, 256, 1, 2); const bool a3 = engine.micOffNote().isEmpty();     // a desk microphone picked by name
+                engine.open("wasapi", "", "{sp}", 48000, 256, 0, 2); const bool a4 = engine.micOffNote().isEmpty();          // no input asked for
+                if (!a1 || !a2 || !a3 || !a4) { std::fprintf(stderr, "amixos --shots: the WASAPI headset microphone rule is wrong (%d %d %d %d)\n", a1, a2, a3, a4); std::exit(205); }
+                engine.simulateDevices(real); engine.open("null", "", "", 48000, 256, 2, 2); }
               { // THE ASIO SECTION with three simulated drivers: the list shows them all, MANUAL picks none, OPEN on one that cannot start leaves none marked as running
                 const QVariantList real = engine.devices(); const QString keepPrefer = engine.autoPrefer(); QVariantList rig;
                 const auto dev = [](const char* b, const char* id, const char* name, int in, int out) { QVariantMap m; m["backend"] = b; m["id"] = id; m["name"] = name; m["inChannels"] = in; m["outChannels"] = out; m["defaultRate"] = 48000.0; return m; };
