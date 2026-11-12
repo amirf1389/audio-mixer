@@ -1,4 +1,5 @@
 #include "fx.hpp"
+#include "samples/samples.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -11,7 +12,7 @@ double clamp01(double v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
 std::string fmt(const char* f, double v) { char b[32]; std::snprintf(b, sizeof b, f, v); return b; }
 }  // namespace
 
-std::vector<std::pair<std::string, std::string>> catalog() { return {{"reverb", "PLATE REVERB"}, {"delay", "TAPE DELAY"}, {"syncdelay", "SYNC DELAY"}, {"antifeedback", "FEEDBACK KILLER"}, {"analog", "ANALOG CHANNEL"}, {"barrier", "SOUND BARRIER"}, {"dualeq", "DUAL LISTEN EQ"}, {"pitch", "PITCH SHIFTER"}, {"chorus", "STEREO CHORUS"}, {"drive", "TUBE DRIVE"}, {"flanger", "FLANGER"}, {"phaser", "PHASER"}, {"tremolo", "TREMOLO"}, {"wah", "AUTO WAH"}, {"crusher", "BIT CRUSHER"}, {"exciter", "EXCITER"}, {"tubeamp", "TUBE AMP"}, {"preamp", "PRE AMP"}, {"postamp", "POST AMP"}, {"hall", "HALL REVERB"}, {"room", "ROOM REVERB"}}; }
+std::vector<std::pair<std::string, std::string>> catalog() { return {{"reverb", "PLATE REVERB"}, {"delay", "TAPE DELAY"}, {"syncdelay", "SYNC DELAY"}, {"antifeedback", "FEEDBACK KILLER"}, {"analog", "ANALOG CHANNEL"}, {"barrier", "SOUND BARRIER"}, {"dualeq", "DUAL LISTEN EQ"}, {"pitch", "PITCH SHIFTER"}, {"sampler", "SAMPLE PLAYER"}, {"desquash", "DE-SQUASH"}, {"chorus", "STEREO CHORUS"}, {"drive", "TUBE DRIVE"}, {"flanger", "FLANGER"}, {"phaser", "PHASER"}, {"tremolo", "TREMOLO"}, {"wah", "AUTO WAH"}, {"crusher", "BIT CRUSHER"}, {"exciter", "EXCITER"}, {"tubeamp", "TUBE AMP"}, {"preamp", "PRE AMP"}, {"postamp", "POST AMP"}, {"hall", "HALL REVERB"}, {"room", "ROOM REVERB"}}; }
 std::unique_ptr<Effect> make(const std::string& k, double fs) {
   if (k == "reverb") return std::make_unique<Reverb>(fs);
   if (k == "delay") return std::make_unique<TapeDelay>(fs);
@@ -22,6 +23,8 @@ std::unique_ptr<Effect> make(const std::string& k, double fs) {
   if (k == "barrier") return std::make_unique<Barrier>(fs);
   if (k == "dualeq") return std::make_unique<DualEq>(fs);
   if (k == "pitch") return std::make_unique<Pitch>(fs);
+  if (k == "sampler") return std::make_unique<SamplePlayer>(fs);
+  if (k == "desquash") return std::make_unique<DeSquash>(fs);
   if (k == "flanger") return std::make_unique<Flanger>(fs);
   if (k == "phaser") return std::make_unique<Phaser>(fs);
   if (k == "tremolo") return std::make_unique<Tremolo>(fs);
@@ -470,4 +473,65 @@ void Fdn::process(float* L, float* R, std::size_t n) {
   }
 }
 
+}  // namespace am::fx
+
+namespace am::fx {
+// ── SAMPLE PLAYER ──
+SamplePlayer::SamplePlayer(double fs) : Simple(fs) { for (int i = 0; i < count(); ++i) k_[i] = knobDef(i); load(); }
+void SamplePlayer::load() {
+  const int id = sampleOf(k_[0].load()); auto b = std::make_shared<Buf>(); b->id = id;
+  if (!am::samples::render(id, fs_, b->L, b->R)) { b->L.clear(); b->R.clear(); }
+  std::atomic_store(&buf_, std::shared_ptr<const Buf>(std::move(b))); loaded_ = id;
+}
+void SamplePlayer::set(const std::string& id, double v) { Simple::set(id, v); if (id == "sample" && sampleOf(k_[0].load()) != loaded_) load(); }
+void SamplePlayer::setSampleRate(double fs) { fs_ = fs > 0 ? fs : 48000; load(); reset(); }
+void SamplePlayer::reset() { pos_ = 0; wasOn_ = false; playing_ = false; }
+std::string SamplePlayer::text(const std::string& id, double v) const {
+  v = clamp01(v);
+  if (id == "sample") { const int n = sampleOf(v); for (const auto& i : am::samples::list()) if (i.id == n) return std::to_string(n) + " " + i.name; return std::to_string(n); }
+  if (id == "play" || id == "loop") return v >= 0.5 ? "ON" : "OFF";
+  return v <= 0 ? std::string("-inf dB") : fmt("%+.1f dB", -40.0 + v * 46.0);
+}
+void SamplePlayer::process(float* L, float* R, std::size_t n) {
+  if (bypass()) return;
+  const bool on = k_[1].load() >= 0.5, loop = k_[2].load() >= 0.5; const double lv = k_[3].load();
+  if (on && !wasOn_) pos_ = 0;   // switched on: from the top
+  wasOn_ = on;
+  const std::shared_ptr<const Buf> b = std::atomic_load(&buf_);
+  if (!on || !b || b->L.empty() || lv <= 0) { playing_ = false; return; }
+  if (b->id != sampleOf(k_[0].load())) pos_ = 0;   // a new sample arrived: start it
+  const float g = static_cast<float>(std::pow(10.0, (-40.0 + lv * 46.0) / 20.0)); const std::size_t len = b->L.size();
+  bool play = pos_ < len;
+  for (std::size_t i = 0; i < n; ++i) {
+    if (pos_ >= len) { if (loop) pos_ = 0; else { play = false; break; } }
+    L[i] += g * b->L[pos_]; if (R && R != L) R[i] += g * (b->R.empty() ? b->L[pos_] : b->R[pos_]); ++pos_;
+  }
+  playing_ = play || (loop && len > 0);
+}
+// ── DE-SQUASH ──
+DeSquash::DeSquash(double fs) : Simple(fs) { for (int i = 0; i < count(); ++i) k_[i] = knobDef(i); }
+void DeSquash::reset() { fast_ = slow_ = 0; g_ = 1; lift_ = 0; }
+std::string DeSquash::text(const std::string& id, double v) const {
+  v = clamp01(v);
+  if (id == "amount") return fmt("%.0f %%", v * 100.0);
+  if (id == "range") return fmt("%.1f dB", v * 12.0);
+  return fmt("%.1f ms", 1.0 + (1.0 - v) * 19.0);
+}
+void DeSquash::process(float* L, float* R, std::size_t n) {
+  if (bypass()) return;
+  const double amount = k_[0].load(), rangeDb = k_[1].load() * 12.0, atkMs = 1.0 + (1.0 - k_[2].load()) * 19.0;
+  const double aF = 1.0 - std::exp(-1.0 / (atkMs * 1e-3 * fs_)), rF = 1.0 - std::exp(-1.0 / (0.050 * fs_)), aS = 1.0 - std::exp(-1.0 / (0.300 * fs_)), rS = 1.0 - std::exp(-1.0 / (0.300 * fs_));
+  const double gMax = std::pow(10.0, rangeDb / 20.0), gSmooth = 1.0 - std::exp(-1.0 / (0.002 * fs_));
+  double peak = 0;
+  for (std::size_t i = 0; i < n; ++i) {
+    const double x = std::max(std::fabs(static_cast<double>(L[i])), R && R != L ? std::fabs(static_cast<double>(R[i])) : 0.0);
+    fast_ += (x > fast_ ? aF : rF) * (x - fast_); slow_ += (fast_ > slow_ ? aS : rS) * (fast_ - slow_);   // the slow one follows the fast one: on a steady sound they meet, on an attack the fast one leads
+    double target = 1.0;
+    if (slow_ > 1e-4 && fast_ > slow_) target = std::min(gMax, std::pow(fast_ / slow_, amount));   // only lifts: an attack above the body
+    g_ += gSmooth * (target - g_);
+    L[i] = static_cast<float>(L[i] * g_); if (R && R != L) R[i] = static_cast<float>(R[i] * g_);
+    peak = std::max(peak, g_);
+  }
+  lift_ = 20.0 * std::log10(peak);
+}
 }  // namespace am::fx

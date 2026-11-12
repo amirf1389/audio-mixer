@@ -1370,5 +1370,12 @@
 "Sample player on a channel: click, switch on, choose the sample": "Pemutar sampel di saluran: klik, nyalakan, pilih sampel",
 "Room correction curve and microphone calibration files on ACOUSTICS": "Kurva koreksi ruangan dan berkas kalibrasi mikrofon di ACOUSTICS",
 "Online store for extensions": "Toko daring untuk ekstensi perangkat lunak",
-"CASCADE: two consoles as one desk": "CASCADE: dua konsol yang menyatu menjadi satu meja"
+"CASCADE: two consoles as one desk": "CASCADE: dua konsol yang menyatu menjadi satu meja",
+"OVER-COMPRESSED": "TERLALU TERKOMPRESI",
+"This channel loses more than 12 dB to the compressor: raise the threshold or lower the ratio, or add DE-SQUASH to give the attacks back.": "Saluran ini kehilangan lebih dari 12 dB pada kompresor: naikkan ambang batas atau turunkan rasio, atau tambahkan DE-SQUASH untuk mengembalikan serangan suara.",
+"ADD DE-SQUASH": "TAMBAHKAN DE-SQUASH",
+"More than 12 dB of compression: click to add DE-SQUASH to this channel": "Kompresi lebih dari 12 dB: klik untuk menambahkan DE-SQUASH ke saluran ini",
+"Sample player (play a sample in this channel)": "Pemutar sampel (putar sampel di saluran ini)",
+"De-squash (give back what a heavy compressor took)": "DE-SQUASH (kembalikan apa yang diambil kompresor yang terlalu kuat)",
+"CHANNEL EQ · DUAL LISTEN": "EQ SALURAN · DENGAR GANDA"
 }

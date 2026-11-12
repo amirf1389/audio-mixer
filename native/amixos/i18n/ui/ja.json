@@ -1367,5 +1367,12 @@
 "Sample player on a channel: click, switch on, choose the sample": "チャンネル上のサンプルプレーヤー：クリックして起動し、サンプルを選択します",
 "Room correction curve and microphone calibration files on ACOUSTICS": "ACOUSTICS上のルーム補正カーブおよびマイクキャリブレーションファイル",
 "Online store for extensions": "ソフトウェア拡張機能のオンラインストア",
-"CASCADE: two consoles as one desk": "CASCADE：2つのコンソールを1つのデスクとして"
+"CASCADE: two consoles as one desk": "CASCADE：2つのコンソールを1つのデスクとして",
+"OVER-COMPRESSED": "圧縮しすぎ",
+"This channel loses more than 12 dB to the compressor: raise the threshold or lower the ratio, or add DE-SQUASH to give the attacks back.": "このチャンネルはコンプレッサーで12 dB以上失っています。スレッショルドを上げるかレシオを下げるか、DE-SQUASHを追加してアタックを取り戻してください。",
+"ADD DE-SQUASH": "DE-SQUASH を追加",
+"More than 12 dB of compression: click to add DE-SQUASH to this channel": "12 dBを超える圧縮：クリックしてこのチャンネルにDE-SQUASHを追加",
+"Sample player (play a sample in this channel)": "サンプルプレーヤー（このチャンネルでサンプルを再生）",
+"De-squash (give back what a heavy compressor took)": "DE-SQUASH（強いコンプレッサーで失われたものを戻す）",
+"CHANNEL EQ · DUAL LISTEN": "チャンネルEQ・デュアルリスン"
 }

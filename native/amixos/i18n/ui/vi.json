@@ -1371,5 +1371,12 @@
 "Sample player on a channel: click, switch on, choose the sample": "Phát mẫu trên kênh: nhấp chuột, bật, chọn mẫu",
 "Room correction curve and microphone calibration files on ACOUSTICS": "Các tệp đường cong hiệu chỉnh phòng và hiệu chuẩn micro trên ACOUSTICS",
 "Online store for extensions": "Cửa hàng trực tuyến tiện ích mở rộng phần mềm",
-"CASCADE: two consoles as one desk": "CASCADE: hai bàn điều khiển hợp thành một chiếc bàn"
+"CASCADE: two consoles as one desk": "CASCADE: hai bàn điều khiển hợp thành một chiếc bàn",
+"OVER-COMPRESSED": "NÉN QUÁ MỨC",
+"This channel loses more than 12 dB to the compressor: raise the threshold or lower the ratio, or add DE-SQUASH to give the attacks back.": "Kênh này mất hơn 12 dB ở bộ nén: hãy tăng ngưỡng hoặc giảm tỷ lệ, hoặc thêm DE-SQUASH để lấy lại độ bật của âm.",
+"ADD DE-SQUASH": "THÊM DE-SQUASH",
+"More than 12 dB of compression: click to add DE-SQUASH to this channel": "Nén hơn 12 dB: nhấp để thêm DE-SQUASH vào kênh này",
+"Sample player (play a sample in this channel)": "Trình phát mẫu (phát mẫu trong kênh này)",
+"De-squash (give back what a heavy compressor took)": "DE-SQUASH (trả lại những gì bộ nén mạnh đã lấy đi)",
+"CHANNEL EQ · DUAL LISTEN": "EQ KÊNH · NGHE KÉP"
 }

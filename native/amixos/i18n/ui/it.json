@@ -1369,5 +1369,12 @@
 "Sample player on a channel: click, switch on, choose the sample": "Lettore di campioni su un canale: clicca, attiva, scegli il campione",
 "Room correction curve and microphone calibration files on ACOUSTICS": "Curva di correzione ambientale e file di calibrazione del microfono su ACOUSTICS",
 "Online store for extensions": "Negozio online di estensioni software",
-"CASCADE: two consoles as one desk": "CASCADE: due console che formano un’unica scrivania"
+"CASCADE: two consoles as one desk": "CASCADE: due console che formano un’unica scrivania",
+"OVER-COMPRESSED": "COMPRESSIONE ECCESSIVA",
+"This channel loses more than 12 dB to the compressor: raise the threshold or lower the ratio, or add DE-SQUASH to give the attacks back.": "Questo canale perde più di 12 dB nel compressore: alza la soglia o riduci il rapporto, oppure aggiungi DE-SQUASH per ripristinare gli attacchi.",
+"ADD DE-SQUASH": "AGGIUNGI DE-SQUASH",
+"More than 12 dB of compression: click to add DE-SQUASH to this channel": "Compressione superiore a 12 dB: clicca per aggiungere DE-SQUASH a questo canale",
+"Sample player (play a sample in this channel)": "Lettore di campioni (riproduci un campione su questo canale)",
+"De-squash (give back what a heavy compressor took)": "DE-SQUASH (restituisce ciò che un compressore troppo forte ha tolto)",
+"CHANNEL EQ · DUAL LISTEN": "EQ DI CANALE · ASCOLTO DOPPIO"
 }

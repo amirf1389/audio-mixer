@@ -1371,5 +1371,12 @@
 "Sample player on a channel: click, switch on, choose the sample": "Bir kanaldaki örnek oynatıcı: tıklayın, açın, örneği seçin",
 "Room correction curve and microphone calibration files on ACOUSTICS": "ACOUSTICS'teki oda düzeltme eğrisi ve mikrofon kalibrasyon dosyaları",
 "Online store for extensions": "Yazılım eklentileri için çevrimiçi mağaza",
-"CASCADE: two consoles as one desk": "CASCADE: tek bir masa gibi birleşen iki konsol"
+"CASCADE: two consoles as one desk": "CASCADE: tek bir masa gibi birleşen iki konsol",
+"OVER-COMPRESSED": "AŞIRI SIKIŞTIRILMIŞ",
+"This channel loses more than 12 dB to the compressor: raise the threshold or lower the ratio, or add DE-SQUASH to give the attacks back.": "Bu kanal kompresörde 12 dB'den fazla kaybediyor: eşiği yükseltin veya oranı düşürün ya da atakları geri getirmek için DE-SQUASH ekleyin.",
+"ADD DE-SQUASH": "DE-SQUASH EKLE",
+"More than 12 dB of compression: click to add DE-SQUASH to this channel": "12 dB'den fazla sıkıştırma: bu kanala DE-SQUASH eklemek için tıklayın",
+"Sample player (play a sample in this channel)": "Örnek çalar (bu kanalda bir örnek çal)",
+"De-squash (give back what a heavy compressor took)": "DE-SQUASH (ağır bir kompresörün aldığını geri ver)",
+"CHANNEL EQ · DUAL LISTEN": "KANAL EQ · ÇIFT DINLEME"
 }

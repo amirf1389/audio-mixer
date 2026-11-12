@@ -1371,5 +1371,12 @@
 "Sample player on a channel: click, switch on, choose the sample": "مشغل العينات في القناة: انقر، شغّل، اختر العينة",
 "Room correction curve and microphone calibration files on ACOUSTICS": "ملفات منحنى تصحيح الغرفة ومعايرة الميكروفون على موقع ACOUSTICS",
 "Online store for extensions": "متجر إلكتروني لملحقات البرامج",
-"CASCADE: two consoles as one desk": "CASCADE: وحدة تحكمان في شكل مكتب واحد"
+"CASCADE: two consoles as one desk": "CASCADE: وحدة تحكمان في شكل مكتب واحد",
+"OVER-COMPRESSED": "مضغوط بشكل مفرط",
+"This channel loses more than 12 dB to the compressor: raise the threshold or lower the ratio, or add DE-SQUASH to give the attacks back.": "تفقد هذه القناة أكثر من 12 ديسيبل بسبب الضاغط: قم برفع عتبة الضغط أو خفض النسبة، أو أضف DE-SQUASH لاستعادة الضربات.",
+"ADD DE-SQUASH": "أضف DE-SQUASH",
+"More than 12 dB of compression: click to add DE-SQUASH to this channel": "ضغط يزيد عن 12 ديسيبل: انقر لإضافة DE-SQUASH إلى هذه القناة",
+"Sample player (play a sample in this channel)": "مشغل العينات (تشغيل عينة في هذه القناة)",
+"De-squash (give back what a heavy compressor took)": "DE-SQUASH (إعادة ما أخذه الضاغط القوي)",
+"CHANNEL EQ · DUAL LISTEN": "معادل القناة · الاستماع المزدوج"
 }

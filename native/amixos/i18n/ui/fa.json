@@ -1371,5 +1371,12 @@
 "Sample player on a channel: click, switch on, choose the sample": "نمونه‌نوازی روی یک کانال: کلیک، روشن کردن، انتخاب نمونه",
 "Room correction curve and microphone calibration files on ACOUSTICS": "منحنی اصلاح اتاق و فایل‌های کالیبراسیون میکروفون در ACOUSTICS",
 "Online store for extensions": "فروشگاه آنلاین افزونه‌های نرم‌افزاری",
-"CASCADE: two consoles as one desk": "کَسکِیْد: دو کنسول به‌مثابه یک میز"
+"CASCADE: two consoles as one desk": "کَسکِیْد: دو کنسول به‌مثابه یک میز",
+"OVER-COMPRESSED": "بیش از حد فشرده",
+"This channel loses more than 12 dB to the compressor: raise the threshold or lower the ratio, or add DE-SQUASH to give the attacks back.": "این کانال بیش از ۱۲ دسی‌بل به کمپرسور از دست می‌دهد: آستانه را بالا ببرید یا نسبت را کم کنید، یا DE-SQUASH را اضافه کنید تا ضربه‌ها برگردند.",
+"ADD DE-SQUASH": "افزودن DE-SQUASH",
+"More than 12 dB of compression: click to add DE-SQUASH to this channel": "بیش از ۱۲ دسی‌بل فشرده‌سازی: برای افزودن DE-SQUASH به این کانال کلیک کنید",
+"Sample player (play a sample in this channel)": "پخش‌کنندهٔ نمونه (پخش یک نمونه در این کانال)",
+"De-squash (give back what a heavy compressor took)": "DE-SQUASH (آنچه کمپرسور سنگین گرفته را پس بدهد)",
+"CHANNEL EQ · DUAL LISTEN": "اکولایزر کانال · شنیدن دوگانه"
 }

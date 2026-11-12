@@ -19,6 +19,17 @@ Flickable {
     readonly property var mt: engine.meters[strip]
     ColumnLayout {
         id: col; width: parent.width - 20; x: 10; y: 10; spacing: 10
+        Rectangle {   // the compression level alert: more than 12 dB of reduction for half a second
+            visible: page.mt !== undefined && !!page.mt.overComp
+            Layout.fillWidth: true; implicitHeight: ocRow.implicitHeight + 16; radius: 6; color: Qt.rgba(1, 0.3, 0.3, 0.14); border.color: Theme.danger
+            RowLayout { id: ocRow; anchors.fill: parent; anchors.margins: 8; spacing: 10
+                Text { text: i18n.t("OVER-COMPRESSED", i18n.lang); color: Theme.danger; font.family: Theme.mono; font.pixelSize: 10; font.bold: true }
+                Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.ink; font.pixelSize: 10
+                       text: i18n.t("This channel loses more than 12 dB to the compressor: raise the threshold or lower the ratio, or add DE-SQUASH to give the attacks back.", i18n.lang) }
+                Rectangle { implicitWidth: dsT.implicitWidth + 20; implicitHeight: 24; radius: 4; color: Theme.ov(0.06); border.color: Theme.danger
+                    Text { id: dsT; anchors.centerIn: parent; text: i18n.t("ADD DE-SQUASH", i18n.lang); color: Theme.danger; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
+                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: engine.addToRack(page.strip, "fx:desquash") } } }
+        }
         Panel {
             Layout.fillWidth: true
             title: i18n.t("COMPRESSOR • CHANNEL DYNAMICS", i18n.lang)
