@@ -72,7 +72,7 @@ qt_add_qml_module(amixos
         qml/AccessPage.qml
         qml/AdminPage.qml
         qml/PinPad.qml
-        qml/AiMixPage.qml qml/EngineControlPage.qml
+        qml/AiMixPage.qml qml/EngineControlPage.qml qml/DelayPage.qml qml/CloudPage.qml qml/CascadePage.qml
         qml/PluginsPage.qml
         qml/NetworkPage.qml
         qml/MediaPage.qml
