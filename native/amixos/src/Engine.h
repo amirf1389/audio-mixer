@@ -220,7 +220,10 @@ class Engine : public QObject {
   QString dspMode() const { return mastering()["analog"].toBool() ? QStringLiteral("analog") : QStringLiteral("digital"); }
   void setDspMode(const QString& m) { QVariantMap v; v["analog"] = (m == "analog"); setMastering(v); }
   Q_INVOKABLE QVariantList asioDrivers() const;                 // discovery only: every ASIO driver found {id, name, inChannels, outChannels, rate, kind, current}
-  Q_INVOKABLE bool openAsioDriver(const QString& id, int frames);   // the manual choice: exactly this driver, no fallback to another
+  Q_INVOKABLE bool openAsioDriver(const QString& id, int frames);
+  Q_INVOKABLE int asioFrames(double rate) const;     // 10 ms at this rate
+  Q_INVOKABLE QString bestAsioDriver() const;        // the id AUTO DETECT would pick ("" = none)
+  Q_INVOKABLE bool autoOpenAsio();                   // picks the best ASIO driver and opens it on a 10 ms buffer   // the manual choice: exactly this driver, no fallback to another
   Q_INVOKABLE QVariantMap autoDetect() const;      // {backend, in, out, name, why, inChannels, outChannels, rate} or empty
   Q_INVOKABLE bool autoStart(int frames);           // detect and SMART START it
   // an extra stereo source summed into the master (the ARRANGE player): attached to every runtime this Engine opens

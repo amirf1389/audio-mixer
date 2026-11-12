@@ -76,14 +76,15 @@ Item {
                     ColumnLayout { id: asioCol; anchors.fill: parent; anchors.margins: 8; spacing: 4
                         RowLayout { spacing: 6
                             Text { text: i18n.t("ASIO DRIVERS", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 1 }
-                            Text { Layout.fillWidth: true; text: i18n.t("Manual only: nothing is picked or opened by itself. OPEN starts a driver, the same button turns it off.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; elide: Text.ElideRight }
+                            Text { Layout.fillWidth: true; text: i18n.t("ASIO opens on a 10 ms buffer. OPEN starts the driver you choose; AUTO DETECT + OPEN picks the interface's own driver for you.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; elide: Text.ElideRight }
+                            Btn { objectName: "asioAutoBtn"; label: i18n.t("AUTO DETECT + OPEN", i18n.lang); on: true; onColor: Theme.emerald; onClicked: engine.autoOpenAsio() }
                             Btn { objectName: "asioScanBtn"; label: i18n.t("SCAN (DISCOVERY ONLY)", i18n.lang); onClicked: engine.refreshDevices() } }
                         Repeater { model: { engine.devices; engine.running; return engine.asioDrivers() }
                             delegate: RowLayout { Layout.fillWidth: true; spacing: 6
                                 Rectangle { width: 6; height: 6; radius: 3; color: modelData.current ? Theme.emerald : Theme.ov(0.2) }
                                 Text { Layout.fillWidth: true; text: modelData.name; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; elide: Text.ElideRight }
                                 Text { text: modelData.inChannels + modelData.outChannels === 0 ? i18n.t("in use elsewhere: channels are read when you press OPEN", i18n.lang) : modelData.inChannels + i18n.t(" in / ", i18n.lang) + modelData.outChannels + i18n.t(" out", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
-                                Btn { objectName: "asioOpen_" + index; label: modelData.current ? i18n.t("ON · TURN OFF", i18n.lang) : i18n.t("OPEN", i18n.lang); on: true; onColor: modelData.current ? Theme.emerald : Theme.cyan; onClicked: { if (modelData.current) engine.stop(); else engine.openAsioDriver(modelData.id, settings.defaultFrames) } } } }
+                                Btn { objectName: "asioOpen_" + index; label: modelData.current ? i18n.t("ON · TURN OFF", i18n.lang) : i18n.t("OPEN", i18n.lang); on: true; onColor: modelData.current ? Theme.emerald : Theme.cyan; onClicked: { if (modelData.current) engine.stop(); else engine.openAsioDriver(modelData.id, 0) } } } }
                         Repeater { model: { engine.devices; engine.running; return engine.dacsFound() }
                             delegate: RowLayout { Layout.fillWidth: true; spacing: 6
                                 Rectangle { width: 6; height: 6; radius: 3; color: modelData.current ? Theme.emerald : Theme.ov(0.2) }
