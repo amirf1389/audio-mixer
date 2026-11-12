@@ -102,6 +102,12 @@ Flickable {
                 Item { Layout.fillWidth: true }
                 Rectangle { implicitWidth: 44; implicitHeight: 22; radius: 4; color: page.rta ? Theme.cyan : Theme.ov(0.08); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: i18n.t("RTA", i18n.lang); color: page.rta ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.rta = !page.rta } ToolTip.visible: rtaH.hovered; ToolTip.text: i18n.t("Real-time analyser under the curve: this strip after its DSP", i18n.lang); HoverHandler { id: rtaH } }
                 Rectangle { implicitWidth: 60; implicitHeight: 22; radius: 4; color: page.ch.polarityInvert ? Theme.violet : Theme.ov(0.08); Text { anchors.centerIn: parent; text: "Ø 180°"; color: page.ch.polarityInvert ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setPolarity(page.strip, !page.ch.polarityInvert) } }
+                Rectangle { readonly property bool on: engine.stripState[page.strip] !== undefined && !!engine.stripState[page.strip].autoPol
+                            implicitWidth: 70; implicitHeight: 22; radius: 4; color: on ? Theme.violet : Theme.ov(0.08); border.color: Theme.lineSoft
+                            Text { anchors.centerIn: parent; text: i18n.t("Ø AUTO", i18n.lang); color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
+                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: engine.setAutoPolarity(page.strip, !parent.on) }
+                            ToolTip.visible: hov.hovered; ToolTip.text: i18n.t("AUTO PHASE: compares this channel with the rest of the mix and turns it round when it stays out of phase", i18n.lang)
+                            HoverHandler { id: hov } }
             }
             // the curve
             Canvas {
