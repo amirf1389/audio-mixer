@@ -247,3 +247,26 @@ test('a product key is made with the licence, redeems into a genuine key, and th
     assert.strictEqual((await post('/redeem', { code: made.productKey })).status, 403);   // a revoked licence gives no key
   } finally { server.close(); fsx.rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('the customer portal is served, reads the update list through the server, and holds nothing of the admin side', async () => {
+  const http = require('node:http'), fsx = require('node:fs'), osx = require('node:os'), pathx = require('node:path');
+  const manifest = { payload: JSON.stringify({ product: 'audio-mixer', version: '1.23.0.1', channel: 'stable', released: '2026-11-12', notes: ['one', 'two'], files: { 'win-x64-exe': { name: 'AmF-X1-setup.exe', url: 'https://example.org/AmF-X1-setup.exe', sha256: 'a'.repeat(64) } } }), signature: 's'.repeat(86) };
+  const feed = http.createServer((q, r) => { r.setHeader('content-type', 'application/json'); r.end(JSON.stringify(manifest)); });
+  await new Promise(r => feed.listen(0, '127.0.0.1', r));
+  const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'lic-portal-'));
+  const server = createServer({ privateKey: pair.privateKey, token: TOKEN, dataFile: pathx.join(dir, 'licenses.json'), updateUrl: `http://127.0.0.1:${feed.address().port}/update.json` });
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const page = await fetch(base + '/portal/'); assert.strictEqual(page.status, 200);
+    const html = await page.text(); assert.ok(html.includes('Activate with a product key') && !html.includes(TOKEN) && !/<script>[^<]/.test(html));   // no inline script, no secret
+    for (const f of ['/portal/app.js', '/portal/portal.css', '/portal/base.css']) assert.strictEqual((await fetch(base + f)).status, 200);
+    const js = await (await fetch(base + '/portal/app.js')).text(); assert.ok(!js.includes('/admin') && !js.includes('Bearer'));
+    const u = await (await fetch(base + '/portal/updates')).json();
+    assert.strictEqual(u.ok, true); assert.strictEqual(u.version, '1.23.0.1'); assert.strictEqual(u.signed, true); assert.strictEqual(u.files[0].platform, 'win-x64-exe'); assert.strictEqual(u.files[0].sha256.length, 64);
+    const bad = createServer({ privateKey: pair.privateKey, token: TOKEN, dataFile: pathx.join(dir, 'l2.json'), updateUrl: 'http://example.org/update.json' });
+    await new Promise(r => bad.listen(0, '127.0.0.1', r));
+    const b = await (await fetch(`http://127.0.0.1:${bad.address().port}/portal/updates`)).json(); bad.close();
+    assert.strictEqual(b.ok, false);                                                                   // a plain http list from elsewhere is not read
+  } finally { server.close(); feed.close(); fsx.rmSync(dir, { recursive: true, force: true }); }
+});

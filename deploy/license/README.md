@@ -47,3 +47,30 @@ Limits per address and minute: 30 public calls, 120 admin calls, 10 wrong tokens
 Revocation reaches a computer when it next activates or asks `/status`; a key already activated keeps verifying offline, because the
 signature check needs no server. Tests: `cd bridge && node --test license-server/test.js`; every button of the page in a real browser:
 `node scripts/check-licence-dashboard.js`.
+
+## The customer portal (`/portal/`)
+
+The licence server also serves a small public page for customers at `/portal/`:
+
+- **Activate**: the customer types the 25-character product key and gets the full licence key, to copy or to save as `AmF-X1.amixkey`.
+- **Check a key**: shows the edition, end date and state of a full key.
+- **Updates**: shows the newest release from the published update list, with each file's SHA-256.
+
+It uses only the public routes (`/redeem`, `/status`, `/portal/updates`) and carries no admin data. `/admin/` stays where it was: reach it
+on the server itself or through an SSH tunnel, and do not publish it.
+
+Set `LICENSE_UPDATE_URL` to the https address of your update list (default: the list in this repository). The server reads it for the page
+and keeps it for five minutes; the page does not verify the list's signature, the console does that before it installs anything.
+
+In nginx, publish only what customers need:
+
+```nginx
+location = /redeem          { proxy_pass http://127.0.0.1:8790; }
+location = /status          { proxy_pass http://127.0.0.1:8790; }
+location = /activate        { proxy_pass http://127.0.0.1:8790; }
+location = /deactivate      { proxy_pass http://127.0.0.1:8790; }
+location /portal/           { proxy_pass http://127.0.0.1:8790; }
+location /admin             { return 404; }   # management stays off the public site
+```
+
+Use the port your server listens on in place of 8790.
