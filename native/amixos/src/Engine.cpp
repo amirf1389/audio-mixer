@@ -445,8 +445,9 @@ QString Engine::inputLabel(int input) const {
   return (n.isEmpty() ? QString() : n + " · ") + "IN " + QString::number(input + 1);
 }
 void Engine::nullInputFor(am::DeviceConfig& cfg) const {
-  if (cfg.backend != "null" || !nullTone_) return; const double fs = cfg.sampleRate > 0 ? cfg.sampleRate : 48000;
-  cfg.nullInput = [fs](float* const* in, std::size_t frames, std::uint64_t frame0) { for (std::size_t i = 0; i < frames; ++i) { const double t = static_cast<double>(frame0 + i) / fs; in[0][i] = static_cast<float>(0.25 * std::sin(6.283185307 * 440 * t)); if (in[1]) in[1][i] = static_cast<float>(0.25 * std::sin(6.283185307 * 660 * t)); } };
+  if (cfg.backend != "null" || !nullTone_) return; const double fs = cfg.sampleRate > 0 ? cfg.sampleRate : 48000; const int ch = cfg.inChannels;
+  if (ch < 1) return;   // opened with no inputs: there is no channel to put the tone on
+  cfg.nullInput = [fs, ch](float* const* in, std::size_t frames, std::uint64_t frame0) { for (std::size_t i = 0; i < frames; ++i) { const double t = static_cast<double>(frame0 + i) / fs; in[0][i] = static_cast<float>(0.25 * std::sin(6.283185307 * 440 * t)); if (ch > 1) in[1][i] = static_cast<float>(0.25 * std::sin(6.283185307 * 660 * t)); } };   // the second tone only where a second channel exists
 }
 QVariantList Engine::driverPlan(const QString& backend, const QString& in, const QString& out) const { QVariantList l; for (const auto& a : am::drv::plan(backend.toStdString(), in.toStdString(), out.toStdString(), devInfos(devices_), QDateTime::currentMSecsSinceEpoch())) l << attemptMap(a); return l; }
 QVariantList Engine::driverLocks() const { QVariantList l; for (const auto& k : am::drv::locks()) { QVariantMap m; m["name"] = QString::fromStdString(k.name); m["mode"] = QString::fromStdString(k.mode); m["device"] = QString::fromStdString(k.device); m["reason"] = QString::fromStdString(k.reason); m["at"] = static_cast<qlonglong>(k.at); m["retryAt"] = k.mode == "asio" ? 0 : static_cast<qlonglong>(k.at + am::drv::kRetryMs); l << m; } return l; }
@@ -617,14 +618,25 @@ QVariantList Engine::asioDrivers() const {
     m["current"] = running() && backend() == "asio" && asioOpenId_ == d["id"].toString(); l << m; }
   return l;
 }
+// THE CHANNELS ARE READ BY THEMSELVES: as soon as an ASIO driver runs, every input the device really has is put on the strip of the same
+// number (desk channel n on strip n) and the strips beyond get no input. A desk the console knows by name also names its strips.
+int Engine::readAsioChannels(const QString& id) {
+  QString prefix = QStringLiteral("CH"), name; bool desk = false;
+  for (const QVariant& v : mixersFound()) { const QVariantMap m = v.toMap(); if (m["id"].toString() == id) { desk = true; prefix = m["prefix"].toString(); name = m["name"].toString(); } }
+  if (name.isEmpty()) for (const QVariant& v : devices_) { const QVariantMap d = v.toMap(); if (d["backend"].toString() == "asio" && d["id"].toString() == id) name = d["name"].toString(); }
+  const int n = assignMixerChannels(prefix, desk);
+  asioNote_ = n > 0 ? QStringLiteral("%1 input channel(s) read from %2: channel n is on strip n.").arg(n).arg(name.isEmpty() ? QStringLiteral("the device") : name) + (n > licensedChannels_ ? QStringLiteral(" This edition runs strips 1 to %1.").arg(licensedChannels_) : QString())
+                   : QStringLiteral("%1 has no inputs: outputs only.").arg(name.isEmpty() ? QStringLiteral("The device") : name);
+  emit stateChanged(); return n;
+}
 bool Engine::openAsioDriver(const QString& id, int frames) {
   for (const QVariant& v : devices_) { const QVariantMap d = v.toMap(); if (d["backend"].toString() != "asio" || d["id"].toString() != id) continue;
     if (d["inChannels"].toInt() + d["outChannels"].toInt() == 0 && !asioReread_) {   // its device was held by the running stream when the list was read: let go of it and read the real device
       stop(); asioReread_ = true; refreshDevices(); const bool ok = openAsioDriver(id, frames); asioReread_ = false; return ok; }
     const bool unknown = d["inChannels"].toInt() + d["outChannels"].toInt() == 0;   // still unknown: ask for everything, the driver gives what the device has
     const double rate = d["defaultRate"].toDouble() > 0 ? d["defaultRate"].toDouble() : 48000.0;
-    if (unknown) { const bool ok = open(QStringLiteral("asio"), id, id, rate, frames > 0 ? frames : asioFrames(rate), 32, 32); asioOpenId_ = ok ? id : QString(); emit devicesChanged(); return ok; }
-    const bool ok = open(QStringLiteral("asio"), id, id, rate, frames > 0 ? frames : asioFrames(rate), std::min(32, std::max(0, d["inChannels"].toInt())), std::min(32, std::max(2, d["outChannels"].toInt()))); asioOpenId_ = ok ? id : QString(); emit devicesChanged(); return ok; }   // this driver or nothing: no other driver is tried in its place
+    if (unknown) { const bool ok = open(QStringLiteral("asio"), id, id, rate, frames > 0 ? frames : asioFrames(rate), 32, 32); asioOpenId_ = ok ? id : QString(); if (ok) readAsioChannels(id); else asioNote_.clear(); emit devicesChanged(); return ok; }
+    const bool ok = open(QStringLiteral("asio"), id, id, rate, frames > 0 ? frames : asioFrames(rate), std::min(32, std::max(0, d["inChannels"].toInt())), std::min(32, std::max(2, d["outChannels"].toInt()))); asioOpenId_ = ok ? id : QString(); if (ok) readAsioChannels(id); else asioNote_.clear(); emit devicesChanged(); return ok; }   // this driver or nothing: no other driver is tried in its place
   status_ = QStringLiteral("That ASIO driver is not in the list any more: press RESCAN."); emit stateChanged(); return false;
 }
 // ASIO runs on a 10 ms buffer: the number of frames that is 10 ms at this rate (480 at 48 kHz). The driver then takes the nearest size it
@@ -715,7 +727,7 @@ int Engine::assignMixerChannels(const QString& prefix, bool nameStrips) {
 bool Engine::connectMixer(const QString& id, int frames) {
   for (const QVariant& v : mixersFound()) { const QVariantMap m = v.toMap(); if (m["id"].toString() != id) continue;
     const int in = std::clamp(m["inChannels"].toInt(), 0, kStrips), out = std::clamp(m["outChannels"].toInt(), 2, 32);
-    if (!openSmart("asio", in > 0 ? id : QStringLiteral("-"), id, 48000, frames > 0 ? frames : 256, in, out)) return false;
+    if (!openSmart("asio", in > 0 ? id : QStringLiteral("-"), id, 48000, frames > 0 ? frames : asioFrames(48000), in, out)) return false;
     const int n = assignMixerChannels(m["prefix"].toString(), true);
     lastRoute_ = QStringLiteral("MIXER: %1 %2 · %3 channel(s) on strips 1-%3, master on its returns 1-2  ·  ").arg(m["maker"].toString(), m["model"].toString()).arg(n) + lastRoute_; emit stateChanged(); return true; }
   status_ = QStringLiteral("That mixer is not in the device list any more: RESCAN."); emit stateChanged(); return false;

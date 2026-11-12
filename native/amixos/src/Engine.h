@@ -221,6 +221,9 @@ class Engine : public QObject {
   void setDspMode(const QString& m) { QVariantMap v; v["analog"] = (m == "analog"); setMastering(v); }
   Q_INVOKABLE QVariantList asioDrivers() const;                 // discovery only: every ASIO driver found {id, name, inChannels, outChannels, rate, kind, current}
   Q_INVOKABLE bool openAsioDriver(const QString& id, int frames);
+  Q_INVOKABLE int readAsioChannels(const QString& id);   // input n of the running device -> strip n; returns how many (done by itself after an ASIO open)
+  Q_PROPERTY(QString asioNote READ asioNote NOTIFY stateChanged)   // what was read from the device last
+  QString asioNote() const { return asioNote_; }
   Q_INVOKABLE int asioFrames(double rate) const;     // 10 ms at this rate
   Q_INVOKABLE QString bestAsioDriver() const;        // the id AUTO DETECT would pick ("" = none)
   Q_INVOKABLE bool autoOpenAsio();                   // picks the best ASIO driver and opens it on a 10 ms buffer   // the manual choice: exactly this driver, no fallback to another
@@ -496,7 +499,7 @@ class Engine : public QObject {
   static constexpr int kBuses = 16, kGroups = 8;   // buses 0-7 AUX, 8-15 FX
   struct SendUi { double db = -60; bool pre = false; };
   struct PluginUi { QString kind; bool bypass = false; std::shared_ptr<am::host::Plugin> vst; QString state, error; };   // vst: loaded instance (null = pending with error)
-  std::vector<bool> muteKeep_; QString asioOpenId_, dacOpenId_, micOffNote_; bool asioReread_ = false;
+  std::vector<bool> muteKeep_; QString asioOpenId_, dacOpenId_, micOffNote_, asioNote_; bool asioReread_ = false;
   bool vstScanning_ = false; std::vector<QVariantMap> vstCatalog_; std::vector<std::shared_ptr<am::host::Plugin>> graveyard_; QTimer graveTimer_; QTimer saveTimer_; QTimer motionTimer_; struct PluginWin { QWindow* win; std::shared_ptr<am::host::Plugin> pl; int strip, slot; }; QList<PluginWin> pluginWins_; QTimer pluginIdle_; void closePluginWin(int index); bool mirror_ = false; bool headOn_ = false, cinema_ = false; double headYaw_ = 0, headPitch_ = 0; double orbit_[32] = {0}; qint64 motionAt_ = 0; void pushSpatial(int i); void moveObjects(); bool masterMuted_ = false; double masterKeepDb_ = 0;
   bool loadVst(int strip, int slot);                      // from kind + state at the runtime's rate; false -> error set
   void rebuildInserts(int strip);                         // the strip's VST chain into the runtime
