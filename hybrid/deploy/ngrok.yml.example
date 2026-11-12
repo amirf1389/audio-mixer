@@ -1,0 +1,14 @@
+# ngrok tunnel to the loopback door of nginx (127.0.0.1:8378), never straight to the control server.
+# The account token does NOT belong in this file or in the repository. Store it once with
+#     ngrok config add-authtoken <your token>
+# then start the tunnel with this file merged in:
+#     ngrok start --config "%LOCALAPPDATA%\ngrok\ngrok.yml" --config ngrok.yml amfb-hybrid
+# or without a file:
+#     ngrok http 127.0.0.1:8378 --url https://YOUR-NAME.ngrok.app
+# Give server.js the same host name:  AMFB_HOSTS=YOUR-NAME.ngrok.app
+version: 3
+endpoints:
+  - name: amfb-hybrid
+    url: https://YOUR-NAME.ngrok.app
+    upstream:
+      url: http://127.0.0.1:8378

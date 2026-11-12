@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AmF X1 Hybrid Mixer</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header><h1>AmF X1 <span>HYBRID MIXER</span></h1><p id="status">Not paired</p><button id="out" hidden>Sign out</button></header>
+<form id="pair">
+  <label for="pin">Pairing PIN shown on the mixer PC</label>
+  <input id="pin" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="\d{6}" required>
+  <button>Pair</button>
+  <p id="pairNote" role="alert"></p>
+</form>
+<main id="desk" hidden></main>
+<script src="app.js"></script>
+</body>
+</html>

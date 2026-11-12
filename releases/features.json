@@ -103,7 +103,8 @@
         "Customer portal, Updates: a version check (is my copy up to date?), downloads by system with size and a copy button for the checksum, how to check a download, and what is new release by release.",
         "PLUGIN RACK: SOUND BARRIER. PUSH raises the level up to 18 dB, IMPACT keeps the attack of each hit, SMOOTH holds a sticking-out treble back so that loud does not turn harsh, CEILING is a look-ahead limiter nothing passes. AUTO is the run-up: the push follows the music by itself until the barrier is working by the amount asked for, whatever the level coming in. One press on ENGINE CONTROL puts it on the selected channel.",
         "SOUND CARD: ASIO opens on a 10 ms buffer (480 frames at 48 kHz; the driver takes the nearest size it offers). AUTO DETECT + OPEN picks the interface's own ASIO driver before a wrapper and opens it.",
-        "SOUND CARD: when an ASIO driver opens, the device's channels are read by themselves: input n goes on strip n, strips beyond get no input, and a known desk also names its strips. The card says how many were read."
+        "SOUND CARD: when an ASIO driver opens, the device's channels are read by themselves: input n goes on strip n, strips beyond get no input, and a known desk also names its strips. The card says how many were read.",
+        "HYBRID MIXER (new program, AmF X1 Hybrid.exe): sixteen stereo strips into one stereo bus. The first strips are the audio device's input pairs (ASIO or WASAPI), the others carry programs playing on the same PC, captured with Windows' own process loopback. Per strip: seven-band EQ, balance, stereo width, mute, solo; meters with RMS, true peak, peak hold and phase. Network control with a six-digit pairing PIN that changes every minute, behind nginx or an ngrok tunnel. No VST in it: plugins stay in the plugin rack."
       ]
     }
   ]
