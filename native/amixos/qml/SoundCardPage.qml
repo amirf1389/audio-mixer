@@ -32,14 +32,7 @@ Item {
                 KV { k: "CHANNELS"; v: engine.running ? engine.deviceInputs + " in / " + engine.deviceOutputs + " out" : "—" }
                 KV { k: "LAST START"; v: engine.lastRoute ? engine.lastRoute : "—"; c: Theme.muted }
                 RowLayout { spacing: 6
-                    Btn { label: engine.running ? i18n.t("STOP", i18n.lang) : i18n.t("START (SMART)", i18n.lang); on: true; onColor: engine.running ? Theme.danger : Theme.emerald; onClicked: engine.running ? engine.stop() : settings.startLastDevice() }
-                    Btn { label: settings.smartStart ? i18n.t("SMART START: ON", i18n.lang) : i18n.t("SMART START: OFF", i18n.lang); on: settings.smartStart; onColor: Theme.cyan; onClicked: settings.smartStart = !settings.smartStart } }
-                RowLayout { spacing: 6
-                    Text { text: i18n.t("AFTER ASIO:", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
-                    Btn { label: i18n.t("WASAPI + DIRECTSOUND", i18n.lang); on: engine.driverFallback === "all"; onColor: Theme.emerald; onClicked: engine.driverFallback = "all" }
-                    Btn { label: i18n.t("DIRECTSOUND ONLY", i18n.lang); on: engine.driverFallback === "dsound"; onColor: Theme.emerald; onClicked: engine.driverFallback = "dsound" }
-                    Btn { label: i18n.t("ASIO ONLY", i18n.lang); on: engine.driverFallback === "none"; onColor: Theme.amber; onClicked: engine.driverFallback = "none" }
-                    Text { text: engine.driverFallback === "all" ? i18n.t("ASIO → WASAPI exclusive → WASAPI shared → DirectSound", i18n.lang) : engine.driverFallback === "dsound" ? i18n.t("ASIO → DirectSound (WASAPI is optional, never a lock)", i18n.lang) : i18n.t("ASIO, nothing else", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
+                    Btn { label: engine.running ? i18n.t("STOP", i18n.lang) : i18n.t("START", i18n.lang); on: true; onColor: engine.running ? Theme.danger : Theme.emerald; onClicked: engine.running ? engine.stop() : settings.startLastDevice() } }
                 Rectangle {   // INPUT / OUTPUT CHECK: every channel of the running interface or mixer, live, with the real-time verdict
                     id: ioCard; objectName: "ioCheckCard"; Layout.fillWidth: true; implicitHeight: ioCol.implicitHeight + 16; radius: 6; color: Theme.ov(0.05); border.color: io.realtime ? Theme.emerald : Theme.amber; visible: engine.running
                     property int tick: 0
@@ -81,7 +74,7 @@ Item {
                             Text { text: i18n.t("ASIO DRIVERS", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 1 }
                             Text { Layout.fillWidth: true; text: i18n.t("Manual only: nothing is picked or opened by itself. OPEN starts a driver, the same button turns it off.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; elide: Text.ElideRight }
                             Btn { objectName: "audioSettingsBtn"; label: i18n.t("AUDIO / MIDI SETTINGS", i18n.lang); on: true; onColor: Theme.amber; onClicked: page.Window.window.openAudioSettings() }
-                            Btn { label: i18n.t("RESCAN", i18n.lang); onClicked: engine.refreshDevices() } }
+                            Btn { objectName: "asioScanBtn"; label: i18n.t("SCAN (DISCOVERY ONLY)", i18n.lang); onClicked: engine.refreshDevices() } }
                         Repeater { model: { engine.devices; engine.running; return engine.asioDrivers() }
                             delegate: RowLayout { Layout.fillWidth: true; spacing: 6
                                 Rectangle { width: 6; height: 6; radius: 3; color: modelData.current ? Theme.emerald : Theme.ov(0.2) }

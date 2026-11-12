@@ -55,7 +55,7 @@ class Settings : public QObject {
   int defaultRate() const { return s_.value("audio/rate", 48000).toInt(); } void setDefaultRate(int v) { set("audio/rate", v); }
   int defaultFrames() const { return s_.value("audio/frames", 256).toInt(); } void setDefaultFrames(int v) { set("audio/frames", v); }
   bool autoAsio() const { return false; }   /* automatic selection was removed: the device is always chosen by hand */ void setAutoAsio(bool v) { set("audio/autoDetect", v); }
-  bool smartStart() const { return s_.value("audio/smartStart", true).toBool(); } void setSmartStart(bool v) { set("audio/smartStart", v); }
+  bool smartStart() const { return false; }   /* the driver ladder was removed: the chosen device is opened, and no other in its place */ void setSmartStart(bool v) { set("audio/smartStart", v); }
   double clipDb() const { return s_.value("audio/clipDb", -0.1).toDouble(); } void setClipDb(double v);
   int peakHoldMs() const { return s_.value("audio/peakHoldMs", 1400).toInt(); } void setPeakHoldMs(int v);
   bool bootAnimation() const { return s_.value("ui/bootAnimation", true).toBool(); } void setBootAnimation(bool v) { set("ui/bootAnimation", v); }

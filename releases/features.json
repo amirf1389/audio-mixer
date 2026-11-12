@@ -84,7 +84,8 @@
         "SOUND CARD: automatic selection is gone. The device is always chosen by hand: OPEN starts a driver, the same button turns it off; a driver whose device was in use is read again when it is opened, so the real channel count is used.",
         "Every edition runs all 32 channels: strips are no longer locked by the licence.",
         "SETTINGS holds FACTORY RESET (moved from DIAGNOSTICS). MIC EQ is reached from TONE as DYNAMIC MIC. AI MIX has a brain icon.",
-        "NETWORK: a token stays on screen for 10 minutes, and a named token works only from the address that used it first."
+        "NETWORK: a token stays on screen for 10 minutes, and a named token works only from the address that used it first.",
+        "SOUND CARD: SMART START and the AFTER ASIO fallback are gone. SCAN is discovery only: it lists what is there and opens nothing; START opens exactly the device you chose."
       ]
     }
   ]
