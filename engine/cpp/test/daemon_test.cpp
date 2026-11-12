@@ -79,6 +79,12 @@ int main() {
     CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", G, {{"X-Amix-Token", ctl}}, status, body) && status == 401);
     CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/tokens/revoke", "{\"id\":\"nope\"}", auth, status, body) && status == 400);
     CHECK(am::TokenStore::same("abc", "abc") && !am::TokenStore::same("abc", "abd") && !am::TokenStore::same("abc", "abcd"));
+    // SECURITY: a token in the URL does not open control (header only); after more than 20 wrong tokens in a minute the wrong ones get 429
+    // while the right one still works
+    CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control?token=" + o.token, G, {}, status, body) && status == 401);
+    for (int k = 0; k < 24; ++k) am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", G, {{"X-Amix-Token", "wrong"}}, status, body);
+    CHECK(status == 429 && d.refusedTokens() > 20);
+    CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", G, auth, status, body) && status == 200);
     std::remove(o.tokenStore.c_str()); }
   // the meters run (the null backend clocks blocks)
   std::this_thread::sleep_for(std::chrono::milliseconds(300));

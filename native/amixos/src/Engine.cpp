@@ -583,9 +583,23 @@ void Engine::setArmed(int i, bool on) { if (i < 0 || i >= kStrips) return; if (o
 // DirectSound lists a Bluetooth or USB headset twice: the music side and the HANDS-FREE side (telephone quality, and opening its microphone
 // switches the whole headset to that mode). Auto detect leaves the hands-free side off; it can still be picked by hand on CONNECTIONS.
 static bool handsFree(const QVariantMap& d) { static const QRegularExpression re("hands[- ]?free|\\bhfp\\b|\\bag audio\\b|headset", QRegularExpression::CaseInsensitiveOption); return d["kind"].toString() == "headset" || re.match(d["name"].toString()).hasMatch(); }
-void Engine::setAutoPrefer(const QString& p) { static const QStringList ok = {"best", "asio", "wasapi", "dsound", "bluetooth"}; settings_.setValue("audio/autoPrefer", ok.contains(p) ? p : QStringLiteral("best")); emit devicesChanged(); }
+void Engine::setAutoPrefer(const QString& p) { static const QStringList ok = {"best", "asio", "wasapi", "dsound", "bluetooth", "manual"}; settings_.setValue("audio/autoPrefer", ok.contains(p) ? p : QStringLiteral("best")); emit devicesChanged(); }
+// MANUAL: the drivers are only listed (discovery); nothing is picked or opened until the operator chooses one
+QVariantList Engine::asioDrivers() const {
+  QVariantList l; for (const QVariant& v : devices_) { const QVariantMap d = v.toMap(); if (d["backend"].toString() != "asio") continue;
+    QVariantMap m; m["id"] = d["id"]; m["name"] = d["name"]; m["inChannels"] = d["inChannels"]; m["outChannels"] = d["outChannels"]; m["rate"] = d["defaultRate"]; m["kind"] = d["kind"];
+    m["current"] = running() && backend() == "asio" && asioOpenId_ == d["id"].toString(); l << m; }
+  return l;
+}
+bool Engine::openAsioDriver(const QString& id, int frames) {
+  for (const QVariant& v : devices_) { const QVariantMap d = v.toMap(); if (d["backend"].toString() != "asio" || d["id"].toString() != id) continue;
+    const double rate = d["defaultRate"].toDouble() > 0 ? d["defaultRate"].toDouble() : 48000.0;
+    const bool ok = open(QStringLiteral("asio"), id, id, rate, frames > 0 ? frames : 256, std::min(32, std::max(0, d["inChannels"].toInt())), std::min(32, std::max(2, d["outChannels"].toInt()))); asioOpenId_ = ok ? id : QString(); emit devicesChanged(); return ok; }   // this driver or nothing: no other driver is tried in its place
+  status_ = QStringLiteral("That ASIO driver is not in the list any more: press RESCAN."); emit stateChanged(); return false;
+}
 QVariantMap Engine::autoDetect() const {
-  const QString prefer = autoPrefer(); QVariantMap d = autoDetectFor(prefer);
+  const QString prefer = autoPrefer(); if (prefer == "manual") return {};
+  QVariantMap d = autoDetectFor(prefer);
   if (d.isEmpty() && prefer != "best") { d = autoDetectFor(QStringLiteral("best")); if (!d.isEmpty()) d["why"] = QStringLiteral("no %1 device here, so the best of the others: ").arg(prefer.toUpper()) + d["why"].toString(); }
   return d;
 }
@@ -660,6 +674,7 @@ bool Engine::connectMixer(const QString& id, int frames) {
   status_ = QStringLiteral("That mixer is not in the device list any more: RESCAN."); emit stateChanged(); return false;
 }
 bool Engine::autoStart(int frames) {
+  if (autoPrefer() == "manual") { status_ = QStringLiteral("MANUAL selection is on: nothing is opened by itself. Pick the driver in the ASIO DRIVERS list."); emit stateChanged(); return false; }
   const QVariantMap d = autoDetect(); if (d.isEmpty()) { status_ = QStringLiteral("AUTO DETECT: no real sound card found (only the null test device)."); emit stateChanged(); return false; }
   const bool ok = openSmart(d["backend"].toString(), d["in"].toString(), d["out"].toString(), d["rate"].toDouble(), frames > 0 ? frames : 256, std::min(32, std::max(0, d["inChannels"].toInt())), std::min(32, std::max(2, d["outChannels"].toInt())));
   if (ok) lastRoute_ = QStringLiteral("AUTO DETECT picked %1 (%2): %3").arg(d["name"].toString(), d["backend"].toString().toUpper(), d["why"].toString()) + "  ·  " + lastRoute_;

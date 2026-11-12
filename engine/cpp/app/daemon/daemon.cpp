@@ -65,6 +65,7 @@ std::string Daemon::loadOrCreateToken(const std::string& file, std::string& err)
 
 bool Daemon::start(std::string& err) {
   if (opt_.token.empty()) { err = "no token: pass --token or --token-file"; return false; }
+  if (opt_.token.size() < 12) { err = "the token is too short: 12 characters at least (the daemon makes a 64-character one by itself)"; return false; }
   if (!opt_.tokenStore.empty()) { tokens_.setFile(opt_.tokenStore); if (!tokens_.load(err)) return false; }
   http_.route([this](const httpd::Request& r) { return handle(r); });
   http_.websocket("/ws/meters", [this](const httpd::Request& r, httpd::WebSocket& ws) {
@@ -86,16 +87,28 @@ void Daemon::stop() {
   if (rt_) { rt_->stop(); rt_.reset(); }
 }
 
-std::string Daemon::roleOf(const httpd::Request& r) const {
-  std::string t = r.header("x-amix-token"); if (t.empty()) t = r.param("token"); if (t.empty()) return "";
+// SECURITY: a wrong token costs 100 ms and is counted; more than 20 in a minute and further wrong ones get 429 (a right token is never
+// held back, so a noisy guesser cannot lock the owner out). A token of 256 random bits cannot be guessed; this keeps the log honest and
+// a flood cheap to refuse.
+bool Daemon::noteRefused() {
+  const long long now = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+  if (now - refusedSince_.load() >= 60) { refusedSince_ = now; refusedNow_ = 0; }
+  const int n = ++refusedNow_; ++refused_;
+  if (n == 21) std::fprintf(stderr, "amixos-daemon: more than 20 wrong tokens in a minute: further wrong ones are refused with 429\n");
+  if (n <= 20) std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  return n > 20;
+}
+std::string Daemon::roleOf(const httpd::Request& r, bool allowQuery) const {
+  std::string t = r.header("x-amix-token"); if (t.empty() && allowQuery) t = r.param("token"); if (t.empty()) return "";
   if (TokenStore::same(t, opt_.token)) return "admin";
   return tokens_.roleOf(t);
 }
-bool Daemon::authorised(const httpd::Request& r) const { const std::string role = roleOf(r); return role == "admin" || role == "control"; }
+bool Daemon::authorised(const httpd::Request& r) const { const std::string role = roleOf(r, false); return role == "admin" || role == "control"; }
 
 httpd::Response Daemon::handle(const httpd::Request& r) {
   httpd::Response res;
   res.headers.push_back({"Cache-Control", "no-store"});
+  res.headers.push_back({"X-Content-Type-Options", "nosniff"}); res.headers.push_back({"X-Frame-Options", "DENY"}); res.headers.push_back({"Referrer-Policy", "no-referrer"});
   if (r.method == "OPTIONS") { res.status = 204; res.headers.push_back({"Access-Control-Allow-Origin", "*"}); res.headers.push_back({"Access-Control-Allow-Headers", "Content-Type, X-Amix-Token"}); res.headers.push_back({"Access-Control-Allow-Methods", "GET, POST, OPTIONS"}); return res; }
   res.headers.push_back({"Access-Control-Allow-Origin", "*"});   // the phone app is not a browser; a local web page on this machine may read the meters
   if (r.method == "GET" && r.path == "/api/status") { res.body = status().dump(); return res; }
@@ -103,7 +116,7 @@ httpd::Response Daemon::handle(const httpd::Request& r) {
   if (r.method == "GET" && r.path == "/api/state") { res.body = state().dump(); return res; }
   if (r.method == "GET" && r.path == "/api/meters") { res.body = meters().dump(); return res; }
   if (r.path == "/api/tokens" || r.path == "/api/tokens/revoke") {   // the named tokens: only the master token manages them
-    if (roleOf(r) != "admin") { res.status = roleOf(r).empty() ? 401 : 403; res.body = "{\"ok\":false,\"error\":\"the master token is needed to manage tokens\"}"; return res; }
+    if (roleOf(r, false) != "admin") { const bool known = !roleOf(r, false).empty(); res.status = known ? 403 : (noteRefused() ? 429 : 401); res.body = "{\"ok\":false,\"error\":\"the master token is needed to manage tokens\"}"; return res; }
     if (opt_.tokenStore.empty()) { res.status = 400; res.body = "{\"ok\":false,\"error\":\"this daemon was started without a token file\"}"; return res; }
     json::Value out = json::Value::object(); std::string terr;
     if (r.method == "GET" && r.path == "/api/tokens") {
@@ -117,7 +130,7 @@ httpd::Response Daemon::handle(const httpd::Request& r) {
     if (!terr.empty()) { res.status = 400; out.set("ok", false); out.set("error", terr); }
     res.body = out.dump(); return res; }
   if (r.method == "POST" && r.path == "/api/control") {
-    if (!authorised(r)) { res.status = roleOf(r) == "view" ? 403 : 401; res.body = "{\"ok\":false,\"error\":\"X-Amix-Token missing or wrong\"}"; return res; }
+    if (!authorised(r)) { res.status = roleOf(r, false) == "view" ? 403 : (noteRefused() ? 429 : 401); res.body = "{\"ok\":false,\"error\":\"X-Amix-Token missing or wrong\"}"; return res; }
     bool ok = false; const json::Value cmd = json::Value::parse(r.body, ok);
     if (!ok || !cmd.isObject()) { res.status = 400; res.body = "{\"ok\":false,\"error\":\"the body is not a JSON object\"}"; return res; }
     std::string err; json::Value out = control(cmd, err);

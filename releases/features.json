@@ -65,7 +65,10 @@
         "MIXER: the master VU meter is back at the top of the MASTER strip, above the buttons.",
         "PLUGINS: ADD and RESCAN now search sub-folders (plug-ins sorted by maker are found), and a path pasted in quotes is accepted.",
         "DAEMON: named access tokens beside the master token. --new-token NAME [--role control|view] [--days N], --list-tokens, --revoke-token ID; a view token only reads the meters; tokens are stored as hashes and shown once.",
-        "DAEMON (Windows): amixos-daemon.exe no longer fails with \"entry point not found\"; it carries its own C++ runtime."
+        "DAEMON (Windows): amixos-daemon.exe no longer fails with \"entry point not found\"; it carries its own C++ runtime.",
+        "SOUND CARD: MANUAL selection. The ASIO DRIVERS list shows every driver found; nothing is opened until you press OPEN on one, and no other driver is tried in its place.",
+        "MIXER: the VU needle turns on the cap in the middle of the meter and stays on the scale.",
+        "DAEMON security: control accepts the token in the header only (not in the URL), wrong tokens are slowed and refused with 429 after 20 in a minute, short master tokens are refused, and replies carry nosniff / no-frame / no-referrer headers."
       ]
     }
   ]

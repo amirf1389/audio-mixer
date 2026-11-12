@@ -393,6 +393,11 @@ int main(int argc, char* argv[]) {
         const QVariantList real = engine.devices(); QVariantList rig;
         for (const auto& [bk, id, nm, kind] : {std::tuple<const char*, const char*, const char*, const char*>{"asio", "Focusrite USB ASIO", "Focusrite USB ASIO", "interface"}, {"wasapi", "{w-out}", "Speakers (Realtek High Definition Audio)", "speakers"}, {"dsound", "{d-out}", "Speakers (USB Audio)", "speakers"}, {"dsound", "{bt}", "Headphones (WH-1000XM4 Stereo)", "bluetooth"}}) { QVariantMap d; d["backend"] = bk; d["id"] = id; d["name"] = nm; d["kind"] = kind; d["inChannels"] = QString::fromLatin1(bk) == "asio" ? 2 : 0; d["outChannels"] = 2; d["defaultOut"] = QString::fromLatin1(bk) == "wasapi"; d["defaultRate"] = 48000.0; rig << d; }
         engine.simulateDevices(rig); const QString keep = engine.autoPrefer(); QStringList got;
+        { int asioN = 0; for (const QVariant& v : rig) if (v.toMap()["backend"].toString() == "asio") ++asioN;   // MANUAL: discovery lists the ASIO drivers, nothing is picked or started
+          engine.setAutoPrefer("manual");
+          if (!engine.autoDetect().isEmpty() || engine.autoStart(256) || engine.asioDrivers().size() != asioN) { std::fprintf(stderr, "amixos --smoke: MANUAL selection picked a driver by itself, or the ASIO list is wrong (%d of %d)\n", int(engine.asioDrivers().size()), asioN); return 242; }
+          if (engine.openAsioDriver("no-such-driver", 256)) return 243;
+          engine.setAutoPrefer(keep); }
         for (const char* pf : {"best", "asio", "wasapi", "dsound", "bluetooth"}) { engine.setAutoPrefer(pf); got << engine.autoDetect()["id"].toString(); }
         rig.removeLast(); engine.simulateDevices(rig); engine.setAutoPrefer("bluetooth"); const QVariantMap fb = engine.autoDetect(); engine.setAutoPrefer(keep); engine.simulateDevices(real);
         if (got != QStringList{"Focusrite USB ASIO", "Focusrite USB ASIO", "{w-out}", "{d-out}", "{bt}"} || fb["id"].toString() != "Focusrite USB ASIO" || !fb["why"].toString().contains("no BLUETOOTH device")) { std::fprintf(stderr, "amixos --smoke: auto select picked %s / fallback %s\n", qPrintable(got.join(", ")), qPrintable(fb["id"].toString())); return 225; } }
