@@ -1,0 +1,24 @@
+:root { --bg:#14161a; --panel:#1e2228; --line:#313741; --text:#e8eaee; --dim:#9aa3b0; --accent:#e0a340; --ok:#4cc38a; --hot:#e5534b; }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--text); font:14px/1.4 system-ui, sans-serif; }
+header { display:flex; align-items:center; gap:16px; padding:12px 16px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+h1 { font-size:16px; margin:0; letter-spacing:.06em; } h1 span { color:var(--accent); font-weight:400; }
+#status { margin:0; color:var(--dim); flex:1; }
+button { background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:6px; padding:6px 12px; font:inherit; cursor:pointer; }
+button:focus-visible, input:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+button.on { background:var(--accent); color:#17130a; border-color:var(--accent); }
+button.solo.on { background:var(--ok); border-color:var(--ok); }
+#pair { max-width:320px; margin:48px auto; padding:0 16px; display:grid; gap:10px; }
+#pin { font-size:28px; letter-spacing:.3em; text-align:center; padding:8px; background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:6px; }
+#pairNote { color:var(--hot); min-height:1.4em; margin:0; }
+#desk { display:flex; gap:8px; padding:16px; overflow-x:auto; }
+.strip { flex:0 0 92px; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:8px; display:grid; gap:6px; justify-items:center; }
+.strip.master { border-color:var(--accent); }
+.strip h2 { font-size:11px; margin:0; color:var(--dim); text-align:center; width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.strip .n { font-weight:700; }
+.meter { width:22px; height:150px; background:#0c0d10; border-radius:3px; position:relative; overflow:hidden; display:flex; gap:2px; }
+.meter i { flex:1; align-self:flex-end; background:linear-gradient(to top, var(--ok) 0 70%, var(--accent) 70% 90%, var(--hot) 90%); background-size:100% 150px; background-position:bottom; }
+.tp { font-size:11px; color:var(--dim); font-variant-numeric:tabular-nums; } .tp.over { color:var(--hot); }
+input[type=range] { width:76px; accent-color:var(--accent); }
+.row { display:flex; gap:4px; } .row button { padding:3px 8px; font-size:12px; }
+.idle { opacity:.5; }

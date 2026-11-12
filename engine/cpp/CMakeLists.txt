@@ -216,3 +216,6 @@ add_executable(sdk_c_test test/sdk_c_test.c)
 target_link_libraries(sdk_c_test PRIVATE amix m)
 add_test(NAME sdk_c_test COMMAND sdk_c_test)
 install(TARGETS amix amixos-daemon LIBRARY DESTINATION lib RUNTIME DESTINATION bin PUBLIC_HEADER DESTINATION include)
+
+# the hybrid mixer (sixteen strips, programs captured next to the device inputs)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../hybrid ${CMAKE_BINARY_DIR}/hybrid)
