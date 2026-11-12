@@ -70,7 +70,16 @@ int main() {
       auto treble = [&]() { double s2 = 0, a = 0; float hp = 0; const float k = static_cast<float>(std::exp(-PI2 * 5000.0 / 48000.0)); for (std::size_t i = 0; i < n; ++i) { hp = l[i] + k * (hp - l[i]); const double hgh = l[i] - hp; if (i > 24000) { s2 += hgh * hgh; a += 1; } } return std::sqrt(s2 / a); };
       b.set("impact", 0.0); b.set("push", 0.3); b.set("smooth", 0.0); run(harsh); const double bright = treble();
       b.set("smooth", 1.0); run(harsh); const double tamed = treble(); CHECK(tamed < bright * 0.6);      // the treble that stuck out is more than 4 dB down
-      b.set("push", 0.0); b.set("impact", 0.0); b.set("smooth", 0.0); b.set("ceiling", 1.0); run([&](double t, std::size_t) { return 0.05 * std::sin(PI2 * 400.0 * t); }); CHECK(std::fabs(rms(4800) - 0.05 / std::sqrt(2.0)) < 0.002); }
+      b.set("push", 0.0); b.set("impact", 0.0); b.set("smooth", 0.0); b.set("ceiling", 1.0); run([&](double t, std::size_t) { return 0.05 * std::sin(PI2 * 400.0 * t); }); CHECK(std::fabs(rms(4800) - 0.05 / std::sqrt(2.0)) < 0.002);
+      // AUTO, the run-up: a quiet programme is brought up to the barrier by itself and never past it; a loud one gets no more than it needs; in silence it waits
+      const auto soft = [&](double t, std::size_t) { return 0.06 * std::sin(PI2 * 200.0 * t) + 0.03 * std::sin(PI2 * 1200.0 * t); };   // about 21 dB under the ceiling
+      b.set("auto", 1.0); b.set("ceiling", 0.5); b.reset();
+      for (int pass = 0; pass < 8; ++pass) { for (std::size_t i = 0; i < n; ++i) l[i] = r[i] = static_cast<float>(soft(static_cast<double>(i + static_cast<std::size_t>(pass) * n) / 48000.0, i)); for (std::size_t o = 0; o < n; o += 256) b.process(l.data() + o, r.data() + o, std::min<std::size_t>(256, n - o)); }
+      const double c05 = am::fx::Barrier::ceilingOf(0.5); CHECK(peak(0) <= c05 * 1.0001 && peak(0) > c05 * 0.8); CHECK(b.autoDb() > 18.0 && b.autoDb() <= 24.01); CHECK(b.mach() > 1.0 && b.reductionDb() > 1.0);
+      const double had = b.autoDb(); for (std::size_t i = 0; i < n; ++i) l[i] = r[i] = 0; for (std::size_t o = 0; o < n; o += 256) b.process(l.data() + o, r.data() + o, std::min<std::size_t>(256, n - o)); CHECK(std::fabs(b.autoDb() - had) < 0.5);   // silence: it waits, it does not run away
+      for (int pass = 0; pass < 3; ++pass) { for (std::size_t i = 0; i < n; ++i) l[i] = r[i] = static_cast<float>(0.7 * std::sin(PI2 * 200.0 * static_cast<double>(i) / 48000.0)); for (std::size_t o = 0; o < n; o += 256) b.process(l.data() + o, r.data() + o, std::min<std::size_t>(256, n - o)); }
+      CHECK(b.autoDb() < 7.0 && peak(0) <= c05 * 1.0001);                                                                            // a loud programme: the run-up backs off
+      b.set("auto", 0.0); b.process(l.data(), r.data(), 256); CHECK(b.autoDb() == 0.0); }
     { // DUAL LISTEN EQ: it listens. A bass-heavy mix has its bass eased, a thin one has it filled; a harsh one has its treble calmed; with RANGE at 0
       // it changes nothing; in silence it holds the gains it had
       am::fx::DualEq q(48000); const std::size_t n = 48000 * 6; std::vector<float> l(n), r(n);

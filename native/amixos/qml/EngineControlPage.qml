@@ -102,7 +102,7 @@ Flickable {
         Card { title: i18n.t("LOUDNESS · SOUND BARRIER", i18n.lang); tone: Theme.orange
             Flow { Layout.fillWidth: true; spacing: 6
                 Btn { objectName: "ecBarrier"; label: i18n.t("SOUND BARRIER", i18n.lang); on: true; tone: Theme.orange; onClicked: page.insert("fx:barrier", "SOUND BARRIER") } }
-            Small { text: i18n.t("Loud, with impact, and never past the ceiling: PUSH raises the level, IMPACT keeps the punch of each hit, SMOOTH holds the treble back so it does not turn harsh, CEILING is the level nothing passes. It delays the channel by 3 ms.", i18n.lang) } }
+            Small { text: i18n.t("Loud, with impact, and never past the ceiling: PUSH raises the level, IMPACT keeps the punch of each hit, SMOOTH holds the treble back so it does not turn harsh, CEILING is the level nothing passes. AUTO is the run-up: the push follows the music by itself until the barrier is working. It delays the channel by 3 ms.", i18n.lang) } }
 
         Card { title: i18n.t("LISTENING EQ", i18n.lang); tone: Theme.cyan
             Flow { Layout.fillWidth: true; spacing: 6

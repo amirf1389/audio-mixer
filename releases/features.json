@@ -101,7 +101,7 @@
         "Licence server: the management page is a portal with a side bar (Dashboard, Ending soon, Issue a key, Keys on record, Customer portal, Activity) and lists the licences that end within 30 days, the nearest first.",
         "PLUGIN RACK: DUAL LISTEN EQ. Bass and treble listen to the music and set themselves against the middle; BASS and TREBLE say where they should stand, RANGE how far they may move, SPEED how fast. One press on ENGINE CONTROL puts it on the selected channel.",
         "Customer portal, Updates: a version check (is my copy up to date?), downloads by system with size and a copy button for the checksum, how to check a download, and what is new release by release.",
-        "PLUGIN RACK: SOUND BARRIER. PUSH raises the level up to 18 dB, IMPACT keeps the attack of each hit, SMOOTH holds a sticking-out treble back so that loud does not turn harsh, CEILING is a look-ahead limiter nothing passes. One press on ENGINE CONTROL puts it on the selected channel."
+        "PLUGIN RACK: SOUND BARRIER. PUSH raises the level up to 18 dB, IMPACT keeps the attack of each hit, SMOOTH holds a sticking-out treble back so that loud does not turn harsh, CEILING is a look-ahead limiter nothing passes. AUTO is the run-up: the push follows the music by itself until the barrier is working by the amount asked for, whatever the level coming in. One press on ENGINE CONTROL puts it on the selected channel."
       ]
     }
   ]
