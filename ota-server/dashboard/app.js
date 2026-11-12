@@ -71,7 +71,7 @@
 
   // ───────────────────────── UI ─────────────────────────
   const $app = document.getElementById('app');
-  const S = { token: '', config: null, view: 'overview', files: [], stats: null, manifests: {}, histChannel: '', msg: null };
+  const S = { token: '', config: null, view: 'home', files: [], stats: null, manifests: {}, histChannel: '', msg: null, requests: [], reqFilter: '' };
   const h = (tag, attrs, ...kids) => {
     const e = document.createElement(tag);
     for (const [k, v] of Object.entries(attrs || {})) { if (k === 'class') e.className = v; else if (k === 'style') e.style.cssText = v; else if (k.startsWith('on')) e.addEventListener(k.slice(2), v); else if (v === true) e.setAttribute(k, ''); else if (v !== false && v != null) e.setAttribute(k, v); }
@@ -96,6 +96,7 @@
     S.config = await api('GET', '/admin/config');
     S.files = (await api('GET', '/admin/files')).files;
     S.stats = (await api('GET', '/admin/stats')).days;
+    try { S.requests = (await api('GET', '/admin/license-requests?limit=500')).requests || []; } catch (_) { S.requests = []; }
     S.manifests = {};
     for (const ch of Object.keys(S.config.channels)) {
       const r = await fetch((ch === 'stable' ? '' : '/' + ch) + '/update.json', { cache: 'no-store' });
@@ -266,12 +267,62 @@
       h('div', { class: 'tbl' }, h('table', null, h('thead', null, h('tr', null, ['When', 'Who', 'Action', 'Target', 'Details', 'Result'].map(x => h('th', null, x)))), body)), more);
   }
 
-  const VIEWS = { overview: ['Overview', overview], files: ['Files', files], publish: ['Publish', publish], history: ['History', historyView], audit: ['Audit', auditView], stats: ['Stats', statsView], health: ['Health', health] };
+  // THE PORTAL: a side bar in three groups, as a customer-management desk has it. label, view, group, sign.
+  const VIEWS = { home: ['Dashboard', home], overview: ['Channels', overview], history: ['Releases', historyView], publish: ['Publish', publish], files: ['Files', files], requests: ['Requests', requestsView], stats: ['Reach', statsView], health: ['Health', health], audit: ['Audit', auditView] };
+  const PLACE = { home: ['Workspace', '◧'], overview: ['Workspace', '◉'], history: ['Workspace', '≡'], publish: ['Workspace', '➤'], files: ['Workspace', '▤'], requests: ['Customers', '✉'], stats: ['Customers', '◔'], health: ['System', '✚'], audit: ['System', '☰'] };
+  const reqWhen = r => r.at || r.time || r.received || r.t || '';
+  const dayOf = v => { const d = typeof v === 'number' ? new Date(v) : new Date(String(v)); return isNaN(d) ? String(v || '') : d.toISOString().slice(0, 16).replace('T', ' '); };
+  // DASHBOARD: the numbers of the day, the release that is live, and who asked for a licence last
+  function home() {
+    const days = Object.keys(S.stats || {}).sort().slice(-7), sum = o => Object.values(o || {}).reduce((a, b) => a + b, 0);
+    const checks = days.reduce((a, d) => a + sum(S.stats[d].manifest), 0), dls = days.reduce((a, d) => a + sum(S.stats[d].download), 0);
+    const chans = Object.keys(S.config.channels), live = S.manifests.stable || S.manifests[chans[0]];
+    const unsigned = Object.values(S.manifests).filter(m => !m.valid).length;
+    const tile = (n, label, kind, go) => h('button', { class: 'kpi ' + (kind || ''), onclick: go ? () => { S.view = go; render(); } : null }, h('b', null, String(n)), h('span', null, label));
+    return h('div', null,
+      h('div', { class: 'kpis' },
+        tile(live ? live.manifest.version : '—', 'live version (stable)', live && live.valid ? 'ok' : 'warn', 'overview'),
+        tile(chans.length, 'channel(s) published', '', 'overview'),
+        tile(S.files.length, 'file(s) on the server', '', 'files'),
+        tile(checks, 'update checks, 7 days', '', 'stats'),
+        tile(dls, 'downloads, 7 days', '', 'stats'),
+        tile(S.requests.length, 'licence request(s)', S.requests.length ? 'hot' : '', 'requests')),
+      unsigned ? h('div', { class: 'card err' }, unsigned + ' channel(s) carry a list whose signature does not check: apps will refuse it. Publish again with your vendor key.') : null,
+      h('div', { class: 'cols' },
+        h('div', { class: 'card' }, h('h2', null, 'Live release'),
+          live ? h('div', null, h('p', { class: 'big' }, live.manifest.version, ' ', pill(live.valid ? 'signature checks' : 'signature fails', live.valid ? 'ok' : 'bad')), h('p', { class: 'dim' }, 'released ' + (live.manifest.released || '?') + ' · ' + Object.keys(live.manifest.files || {}).length + ' file(s)'),
+            h('ul', null, (live.manifest.notes || []).slice(0, 6).map(n => h('li', null, n))), h('div', { class: 'row' }, h('button', { class: 'btn primary', onclick: () => { S.view = 'publish'; render(); } }, 'Publish a new release'), h('button', { class: 'btn', onclick: () => { S.view = 'history'; render(); } }, 'All releases')))
+          : h('div', null, h('p', { class: 'dim' }, 'Nothing is published yet.'), h('button', { class: 'btn primary', onclick: () => { S.view = 'files'; render(); } }, 'Upload the first files'))),
+        h('div', { class: 'card' }, h('h2', null, 'Latest licence requests'),
+          S.requests.length ? h('div', { class: 'tbl' }, h('table', null, h('tbody', null, S.requests.slice(0, 6).map(r => h('tr', null, h('td', null, r.name || '—', h('div', { class: 'dim' }, r.email || '')), h('td', null, pill(String(r.plan || '?').toUpperCase(), 'plan')), h('td', { class: 'dim' }, dayOf(reqWhen(r))))))))
+            : h('p', { class: 'dim' }, 'No one has asked yet. Requests sent from the app (LICENCE → request) arrive here.'),
+          h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => { S.view = 'requests'; render(); } }, 'Open requests')))));
+  }
+  // REQUESTS: everyone who asked for a licence from the app, newest first, to search, copy from and export
+  function requestsView() {
+    const f = S.reqFilter.toLowerCase(), rows = S.requests.filter(r => !f || [r.name, r.email, r.plan, r.machineId, r.platform, r.version].some(v => String(v || '').toLowerCase().includes(f)));
+    const search = h('input', { type: 'search', placeholder: 'Search name, e-mail, plan, machine code', value: S.reqFilter, 'aria-label': 'Search requests', oninput: e => { S.reqFilter = e.target.value; const pos = e.target.selectionStart; render(); const n = document.querySelector('input[type=search]'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } } });
+    const copy = async (text, what) => { try { await navigator.clipboard.writeText(text); say(what + ' copied.'); } catch (_) { say('Copy is blocked in this browser: select the text instead.', true); } };
+    const csv = () => { const esc = v => '"' + String(v == null ? '' : v).replace(/"/g, '""').replace(/^([=+\-@])/, "'$1") + '"';
+      const text = ['when,name,email,plan,machine,platform,arch,version'].concat(rows.map(r => [dayOf(reqWhen(r)), r.name, r.email, r.plan, r.machineId, r.platform, r.arch, r.version].map(esc).join(','))).join('\r\n');
+      const a = h('a', { href: URL.createObjectURL(new Blob([text], { type: 'text/csv' })), download: 'licence-requests.csv' }); document.body.append(a); a.click(); a.remove(); };
+    return h('div', null,
+      h('div', { class: 'card' }, h('div', { class: 'row' }, h('h2', { style: 'margin:0;flex:1' }, 'Licence requests (' + rows.length + (rows.length !== S.requests.length ? ' of ' + S.requests.length : '') + ')'), search, h('button', { class: 'btn', onclick: csv, disabled: !rows.length }, 'Export CSV')),
+        rows.length ? h('div', { class: 'tbl' }, h('table', null, h('thead', null, h('tr', null, ['When', 'Customer', 'Plan', 'Machine code', 'System', ''].map(t => h('th', null, t)))),
+          h('tbody', null, rows.map(r => h('tr', null, h('td', { class: 'dim' }, dayOf(reqWhen(r))), h('td', null, r.name || '—', h('div', { class: 'dim' }, r.email || '')), h('td', null, pill(String(r.plan || '?').toUpperCase(), 'plan')),
+            h('td', { class: 'mono' }, r.machineId || '—'), h('td', { class: 'dim' }, [r.platform, r.arch, r.version].filter(Boolean).join(' · ')),
+            h('td', null, h('button', { class: 'btn', onclick: () => copy(r.machineId || '', 'Machine code'), disabled: !r.machineId }, 'Copy code'), ' ', r.email ? h('button', { class: 'btn', onclick: () => copy(r.email, 'E-mail') }, 'Copy e-mail') : null))))))
+          : h('p', { class: 'dim' }, S.requests.length ? 'Nothing matches the search.' : 'No requests yet.')),
+      h('p', { class: 'dim' }, 'To answer a request: issue the key on the licence server for this machine code and plan, then send the product key or the key to the customer.'));
+  }
   function render() {
     if (!S.token) { $app.replaceChildren(login()); return; }
-    const nav = h('nav', null, Object.entries(VIEWS).map(([k, [label]]) => h('button', { 'aria-current': k === S.view ? 'page' : null, onclick: () => { S.view = k; say(null); render(); } }, label)));
-    const head = h('header', null, h('h1', null, 'Audio Mixer ', h('b', null, 'OTA'), ' server'), h('span', null, h('button', { class: 'btn', onclick: refresh }, 'Refresh'), ' ', h('button', { class: 'btn', onclick: () => { S.token = ''; try { sessionStorage.removeItem('ota-token'); } catch (_) { /* storage blocked */ } render(); } }, 'Sign out')));
-    $app.replaceChildren(head, nav, h('main', null, msgBox, VIEWS[S.view][1]()));
+    const groups = {}; for (const [k, [label]] of Object.entries(VIEWS)) { const [group, sign] = PLACE[k]; (groups[group] = groups[group] || []).push([k, label, sign]); }
+    const side = h('aside', { class: 'side' }, h('div', { class: 'brand' }, h('b', null, 'AmF X1'), h('span', null, 'update management')),
+      Object.entries(groups).map(([g, items]) => h('div', { class: 'grp' }, h('div', { class: 'grpname' }, g), items.map(([k, label, sign]) => h('button', { class: 'navi', 'aria-current': k === S.view ? 'page' : null, onclick: () => { S.view = k; say(null); render(); } }, h('i', null, sign), label, k === 'requests' && S.requests.length ? h('em', null, String(S.requests.length)) : null)))),
+      h('div', { class: 'sidefoot' }, h('button', { class: 'btn', onclick: () => { S.token = ''; try { sessionStorage.removeItem('ota-token'); } catch (_) { /* storage blocked */ } render(); } }, 'Sign out')));
+    const top = h('header', { class: 'top' }, h('h1', null, VIEWS[S.view][0]), h('span', null, h('span', { class: 'dim', style: 'margin-right:12px' }, base().replace(/^https?:\/\//, '')), h('button', { class: 'btn', onclick: refresh }, 'Refresh')));
+    $app.replaceChildren(h('div', { class: 'shell' }, side, h('div', { class: 'work' }, top, h('main', null, msgBox, VIEWS[S.view][1]()))));
     paintMsg();
   }
   let saved = ''; try { saved = sessionStorage.getItem('ota-token') || ''; } catch (_) { /* storage blocked */ }
