@@ -121,6 +121,7 @@
     e.preventDefault();
     guard($('issueBtn'), async () => {
       const body = { name: $('iName').value.trim(), plan: $('iPlan').value, days: Number($('iDays').value), seats: Number($('iSeats').value) };
+      if ($('iTrial') && $('iTrial').checked) { body.trial = true; }
       if ($('iEmail').value.trim()) body.email = $('iEmail').value.trim(); if ($('iMachine').value.trim()) body.machine = $('iMachine').value.trim(); if ($('iNote').value.trim()) body.note = $('iNote').value.trim();
       if (!body.name) { say($('issueMsg'), 'Type the customer name.', 'err'); return; }
       $('issueBtn').textContent = 'Issuing …'; say($('issueMsg'), '');
@@ -145,3 +146,6 @@
   let saved = ''; try { saved = sessionStorage.getItem('amfx1-licence-token') || ''; } catch (_) { /* storage may be off */ }
   if (saved) { $('remember').checked = true; signIn(saved, true); } else $('token').focus();
 })();
+
+// PRO TRIAL · 1 YEAR: fills the form for a one-year PRO trial key (one computer); the key is still issued with the button below
+(function () { const b = document.getElementById('bTrial'); if (!b) return; b.addEventListener('click', function () { document.getElementById('iPlan').value = 'pro'; document.getElementById('iDays').value = 365; document.getElementById('iSeats').value = 1; document.getElementById('iTrial').checked = true; }); })();

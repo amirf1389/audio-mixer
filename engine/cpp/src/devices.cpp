@@ -37,6 +37,8 @@ std::string classifyDevice(const std::string& backend, const std::string& name, 
   auto has = [&n](std::initializer_list<const char*> w) { for (const char* x : w) if (n.find(x) != std::string::npos) return true; return false; };
   if (n.rfind("app audio", 0) == 0) return "app";
   if (has({"bluetooth", "hands-free", "handsfree", "a2dp", "airpods", "buds", " bt ", "wh-1000", "wf-1000", "jbl tune", "jbl flip", "bose qc", "soundcore"})) return "bluetooth";
+  // a DAC: a playback-only converter (a USB DAC, a headphone DAC / amp, a dongle). Told by its name; the capture side of a device is never one.
+  if (!capture && backend != "asio" && has({"dac", "dragonfly", "topping", "fiio", "smsl", "schiit", "ifi ", "hidizs", "chord mojo", "hip-dac", "qudelix", "hi-res audio", "hifi"})) return "dac";
   if (backend == "asio") return has({"asio4all", "flexasio", "asio2ks", "generic low latency", "voicemeeter"}) ? "wrapper" : "interface";
   if (has({"behringer", "umc", "um2", "u-phoria", "focusrite", "scarlett", "motu", "presonus", "audiobox", "steinberg ur", "audient", "rme ", "fireface", "babyface", "zoom ", "tascam", "m-audio", "m-track", "yamaha ag", "universal audio", "apollo", "ssl 2", "komplete audio", "roland rubix", "usb audio codec", "audio interface"})) return "interface";
   switch (formFactor) { case 3: return "headphones"; case 5: case 6: return "headset"; case 1: return "speakers"; case 4: return "microphone"; case 2: return "line"; case 7: case 8: case 9: return "digital"; default: break; }

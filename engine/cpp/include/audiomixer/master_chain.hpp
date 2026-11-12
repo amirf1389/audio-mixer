@@ -18,6 +18,7 @@ class MasterChain : public BusProcessor {
   struct Params {
     double fs = 48000; bool eqOn = true; dsp::EqBand eq[kBands];
     bool on = false; double lowDb = 0, airDb = 0, thrDb = -12, ratio = 2, attackMs = 30, releaseMs = 200, makeupDb = 0, drive = 0, gainDb = 0;
+    bool analog = false;                                             // DSP MODE ANALOG: tanh(0.8 x) / 0.8 on the output, also with MASTERING off
     double midDb = 0;                                                // TONE: a wide bell at 1 kHz between the low and the air shelf
     double compMix = 1;                                              // COMPRESSOR: 1 = all of it compressed, 0 = none (parallel compression in between)
     bool toneOn = true, compOn = true, satOn = true;                 // the modules of the plug-in, each with its own switch
@@ -33,7 +34,9 @@ class MasterChain : public BusProcessor {
     const unsigned v = version_.load();
     if (v != applied_ && mx_.try_lock()) { p_ = pending_; mx_.unlock(); applied_ = v; design(); }
     const bool eq = p_.eqOn && anyEq_;
-    if (!eq && !p_.on) { gr_.store(0); ds_.store(0); return; }
+    if (!eq && !p_.on) { gr_.store(0); ds_.store(0);
+      if (p_.analog) for (std::size_t i = 0; i < n; ++i) { L[i] = static_cast<float>(std::tanh(0.8 * static_cast<double>(L[i])) * 1.25); R[i] = static_cast<float>(std::tanh(0.8 * static_cast<double>(R[i])) * 1.25); }
+      return; }
     double grMax = 0, dsMax = 0;
     for (std::size_t i = 0; i < n; ++i) {
       double l = L[i], r = R[i];
@@ -52,6 +55,7 @@ class MasterChain : public BusProcessor {
         if (p_.exciterOn) { const double hl = exL_.tick(l), hr = exR_.tick(r); l += p_.exciterAmt * (std::tanh(4.0 * hl) * 0.25); r += p_.exciterAmt * (std::tanh(4.0 * hr) * 0.25); }
         if (p_.satOn) { if (k_ > 1.0) { l = std::tanh(k_ * l) * kNorm_; r = std::tanh(k_ * r) * kNorm_; } l *= out_; r *= out_; }
       }
+      if (p_.analog) { l = std::tanh(0.8 * l) * 1.25; r = std::tanh(0.8 * r) * 1.25; }
       L[i] = static_cast<float>(l); R[i] = static_cast<float>(r);
     }
     gr_.store(grMax); ds_.store(dsMax);

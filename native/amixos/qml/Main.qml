@@ -200,6 +200,7 @@ ApplicationWindow {
     }
     function say(text) { sayText.text = text; sayPop.open() }
     function openEnhancer() { enhancer.open() }
+    function openAudioSettings() { audioSettings.open() }
     // Presses every entry of FILE, VIEW and INFO (not Quit, Soft restart or Full screen, which would end or reshape the test) and says which did not do its job.
     function menuSelfTest() {
         const bad = [], keepPage = root.current, pages = { "Plug-ins": "plugins", "Sound card": "asio", "Effects": "fx", "Mastering": "master", "Samples": "samples", "Settings": "sys", "Scenes": "scenes", "Presets": "presets", "Media files": "media", "Mixer": "mixer", "Meters": "meter", "Routing": "routing", "Connections": "io", "Network": "network", "Acoustics": "acoustics", "Help": "help", "Licence and account": "acct" }
@@ -230,6 +231,7 @@ ApplicationWindow {
     }
     function openAnalyzer() { analyzer.open() }
     MasterAnalyzer { id: analyzer }   // AMFB MASTER ANALYZER: opened from the master strip's ANALYZER button
+    AudioSettings { id: audioSettings }   // AUDIO / MIDI SETTINGS: opened from the SOUND CARD page
     VolumeEnhancer { id: enhancer }   // AMFB VOLUME ENHANCER: opened from the master strip's ENHANCER button
     Popup { id: sayPop; objectName: "sayPop"; modal: true; anchors.centerIn: parent; width: Math.min(560, root.width - 80); padding: 18
         background: Rectangle { radius: 10; color: Theme.card; border.color: Theme.line }

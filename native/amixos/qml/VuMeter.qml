@@ -14,8 +14,9 @@ Item {
     readonly property real valueVu: Math.max(-20, Math.min(3, vuDb - refDb))
     // the scale is not linear: -20 at the far left, -10 at ~27 %, -7, -5, -3, -2, -1, 0 at 72 %, +1, +2, +3 at the right (the classic face)
     function pos(v) { return v <= -10 ? 0.27 * (v + 20) / 10 : v <= 0 ? 0.27 + 0.45 * (v + 10) / 10 : 0.72 + 0.28 * v / 3 }
-    // the needle angle: -45 .. +45 degrees over the arc
-    property real angle: -45 + 90 * pos(valueVu)
+    // the needle angle over the arc; the pivot is the cap at the bottom of the face, in the middle
+    readonly property real span: 44   // degrees each side of the middle
+    property real angle: -span + 2 * span * pos(valueVu)
     Behavior on angle { NumberAnimation { duration: 60 } }
     Rectangle { anchors.fill: parent; radius: 4; color: "#f4ead8"; border.color: "#3a3326"; border.width: 1
         gradient: Gradient { GradientStop { position: 0; color: "#fbf4e4" } GradientStop { position: 1; color: "#e9dcc2" } } }
@@ -24,10 +25,10 @@ Item {
         anchors.fill: parent
         onPaint: {
             const ctx = getContext("2d"); ctx.reset();
-            const w = width, h = height, cx = w / 2, cy = h * 1.35, r = h * 1.12;
+            const w = width, h = height, cx = w / 2, cy = h * 1.0, r = h * 0.86;
             ctx.lineWidth = 1.5;
             // the arc: black to 0 VU, red above
-            const a = v => (-45 + 90 * vu.pos(v)) * Math.PI / 180 - Math.PI / 2;
+            const a = v => (-vu.span + 2 * vu.span * vu.pos(v)) * Math.PI / 180 - Math.PI / 2;
             ctx.strokeStyle = "#1e1a12"; ctx.beginPath(); ctx.arc(cx, cy, r, a(-20), a(0)); ctx.stroke();
             ctx.strokeStyle = "#c8102e"; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(cx, cy, r, a(0), a(3)); ctx.stroke();
             ctx.lineWidth = 1; ctx.font = "bold " + Math.max(5, Math.round(h * 0.13)) + "px sans-serif"; ctx.textAlign = "center";
@@ -40,7 +41,7 @@ Item {
                 const show = h >= 56 ? (big || v === -3 || v === -7) : (v === -20 || v === -10 || v === 0 || v === 3);
                 if (show) ctx.fillText(v === 0 ? "0" : (v > 0 ? "+" + v : String(v)), cx + Math.cos(t) * (r - 11), cy + Math.sin(t) * (r - 11) + 3);
             }
-            ctx.fillStyle = "#1e1a12"; ctx.font = "bold " + Math.max(6, Math.round(h * 0.15)) + "px sans-serif"; ctx.fillText(vu.label, cx, h * 0.88);
+            ctx.fillStyle = "#1e1a12"; ctx.font = "bold " + Math.max(6, Math.round(h * 0.15)) + "px sans-serif"; ctx.fillText(vu.label, cx, h * 0.84);
         }
         Component.onCompleted: requestPaint()
         onWidthChanged: requestPaint(); onHeightChanged: requestPaint()
@@ -48,8 +49,8 @@ Item {
     Connections { target: vu; function onLabelChanged() { face.requestPaint() } }
     // the needle, pivoting below the face
     Item { anchors.fill: parent; clip: true   // the pivot is below the face: only the part of the needle over the face is drawn
-        Item { x: parent.width / 2; y: parent.height * 1.35; rotation: vu.angle
-            Rectangle { x: -0.75; y: -vu.height * 1.22; width: 1.5; height: vu.height * 1.22; color: "#1e1a12"; antialiasing: true } } }
-    Rectangle { anchors.horizontalCenter: parent.horizontalCenter; anchors.bottom: parent.bottom; anchors.bottomMargin: -4; width: 10; height: 10; radius: 5; color: "#3a3326" }
+        Item { x: parent.width / 2; y: parent.height * 1.0; rotation: vu.angle
+            Rectangle { x: -0.75; y: -vu.height * 0.90; width: 1.5; height: vu.height * 0.90; color: "#1e1a12"; antialiasing: true } } }
+    Rectangle { anchors.horizontalCenter: parent.horizontalCenter; anchors.verticalCenter: parent.bottom; width: 10; height: 10; radius: 5; color: "#3a3326" }
     Rectangle { anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 3; width: 6; height: 6; radius: 3; color: vu.peakLamp ? "#ff2a2a" : "#6b2b2b"; border.color: "#3a3326" }
 }

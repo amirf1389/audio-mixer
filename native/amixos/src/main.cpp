@@ -203,7 +203,7 @@ int main(int argc, char* argv[]) {
       engine.setWindowsMuteSync(true); if (!sysMute) { std::fprintf(stderr, "amixos --smoke: switching sync on at -inf did not mute\n"); return 82; } engine.restoreSystemSound(); if (sysMute) { std::fprintf(stderr, "amixos --smoke: exit did not take the mute back\n"); return 83; }
       engine.setMaster(keep); engine.setSystemMuteBackend([](bool&) { return false; }, [](bool) { return false; }); engine.syncSystemSound(); }
     { // the ten effects in the rack of any channel: listed, loaded into a slot, a knob moves, bypass, cleared; a late channel too
-      int fxn = 0; for (const QVariant& v : engine.pluginCatalog()) if (v.toMap().value("fx").toBool()) ++fxn; if (fxn != 17) { std::fprintf(stderr, "amixos --smoke: %d effects in the rack catalogue (want 17)\n", fxn); return 84; }
+      int fxn = 0; for (const QVariant& v : engine.pluginCatalog()) if (v.toMap().value("fx").toBool()) ++fxn; if (fxn != 18) { std::fprintf(stderr, "amixos --smoke: %d effects in the rack catalogue (want 17)\n", fxn); return 84; }
       for (const int ch : {6, 7}) { int slot = 0; for (const QVariant& v : engine.pluginCatalog()) { const QVariantMap m = v.toMap(); if (!m.value("fx").toBool()) continue; engine.setPlugin(ch, slot % 10, m.value("kind").toString()); const QVariantMap pl = engine.plugins(ch)[slot % 10].toMap();
           if (pl.value("pending").toBool() || pl.value("format").toString() != "FX" || engine.pluginParams(ch, slot % 10).size() < 4) { std::fprintf(stderr, "amixos --smoke: effect %s did not load into CH %d slot %d\n", qPrintable(m.value("kind").toString()), ch + 1, slot + 1); return 85; } ++slot; }
         engine.setPluginParam(ch, 0, 0, 0.9); engine.setPluginBypass(ch, 0, true); if (!engine.plugins(ch)[0].toMap().value("bypass").toBool()) { std::fprintf(stderr, "amixos --smoke: effect bypass\n"); return 86; }
@@ -393,6 +393,11 @@ int main(int argc, char* argv[]) {
         const QVariantList real = engine.devices(); QVariantList rig;
         for (const auto& [bk, id, nm, kind] : {std::tuple<const char*, const char*, const char*, const char*>{"asio", "Focusrite USB ASIO", "Focusrite USB ASIO", "interface"}, {"wasapi", "{w-out}", "Speakers (Realtek High Definition Audio)", "speakers"}, {"dsound", "{d-out}", "Speakers (USB Audio)", "speakers"}, {"dsound", "{bt}", "Headphones (WH-1000XM4 Stereo)", "bluetooth"}}) { QVariantMap d; d["backend"] = bk; d["id"] = id; d["name"] = nm; d["kind"] = kind; d["inChannels"] = QString::fromLatin1(bk) == "asio" ? 2 : 0; d["outChannels"] = 2; d["defaultOut"] = QString::fromLatin1(bk) == "wasapi"; d["defaultRate"] = 48000.0; rig << d; }
         engine.simulateDevices(rig); const QString keep = engine.autoPrefer(); QStringList got;
+        { int asioN = 0; for (const QVariant& v : rig) if (v.toMap()["backend"].toString() == "asio") ++asioN;   // MANUAL: discovery lists the ASIO drivers, nothing is picked or started
+          engine.setAutoPrefer("manual");
+          if (!engine.autoDetect().isEmpty() || engine.autoStart(256) || engine.asioDrivers().size() != asioN) { std::fprintf(stderr, "amixos --smoke: MANUAL selection picked a driver by itself, or the ASIO list is wrong (%d of %d)\n", int(engine.asioDrivers().size()), asioN); return 242; }
+          if (engine.openAsioDriver("no-such-driver", 256)) return 243;
+          engine.setAutoPrefer(keep); }
         for (const char* pf : {"best", "asio", "wasapi", "dsound", "bluetooth"}) { engine.setAutoPrefer(pf); got << engine.autoDetect()["id"].toString(); }
         rig.removeLast(); engine.simulateDevices(rig); engine.setAutoPrefer("bluetooth"); const QVariantMap fb = engine.autoDetect(); engine.setAutoPrefer(keep); engine.simulateDevices(real);
         if (got != QStringList{"Focusrite USB ASIO", "Focusrite USB ASIO", "{w-out}", "{d-out}", "{bt}"} || fb["id"].toString() != "Focusrite USB ASIO" || !fb["why"].toString().contains("no BLUETOOTH device")) { std::fprintf(stderr, "amixos --smoke: auto select picked %s / fallback %s\n", qPrintable(got.join(", ")), qPrintable(fb["id"].toString())); return 225; } }
@@ -429,6 +434,19 @@ int main(int argc, char* argv[]) {
         const QStringList before = settings.vstDirs(); const QString vf = settings.vstUserFolder(); settings.vstUserFolder();
         if (vf.isEmpty() || !QDir(vf).exists() || settings.vstDirs().count(vf) != 1 || QSettings().value("vst3/dirs").toStringList().count(vf) != 1) { std::fprintf(stderr, "amixos --smoke: the VST folder was not created and saved\n"); return 198; }
         if (!before.contains(vf)) settings.removeVstDir(vf); }
+      if (remote.available()) {   // AMF X1 NETWORK tokens from the console: made, listed without the secret, revoked; a nameless one is refused
+        remote.refreshTokens(); const int n0 = remote.tokens().size();
+        if (!remote.newToken("  ", "control", 0).isEmpty()) return 249;
+        const QString t = remote.newToken("Smoke phone", "view", 1);
+        if (t.size() != 68 || !t.startsWith("amx_") || remote.tokens().size() != n0 + 1) { std::fprintf(stderr, "amixos --smoke: the console could not make a network token (%s)\n", qPrintable(remote.tokenNote())); return 250; }
+        const QVariantMap m = remote.tokens().last().toMap(); bool leak = false; for (const QVariant& v : m) leak = leak || v.toString().contains(t.mid(4, 20));
+        if (leak || m["name"].toString() != "Smoke phone" || m["role"].toString() != "view" || m["state"].toString() != "active") { std::fprintf(stderr, "amixos --smoke: the token list is wrong\n"); return 251; }
+        if (!remote.revokeToken(m["id"].toString()) || remote.tokens().last().toMap()["state"].toString() != "revoked") { std::fprintf(stderr, "amixos --smoke: the token was not revoked\n"); return 252; } }
+      { // PIN AT START: refused with the factory PIN; with an own PIN it sticks and a new Access starts locked
+        const bool keep = access.pinAtStart(); access.setPinAtStart(true);
+        if (access.pinIsDefault() && access.pinAtStart()) { std::fprintf(stderr, "amixos --smoke: PIN AT START switched on with the factory PIN\n"); return 201; }
+        if (!access.pinIsDefault()) { Access again(&engine); if (!again.surfaceLocked()) { std::fprintf(stderr, "amixos --smoke: PIN AT START did not lock the console at start\n"); return 202; } }
+        access.setPinAtStart(keep); }
       { // ADD FOLDER + RESCAN: a plug-in two folders down (maker / product) is found; the path may come in quotes with a slash at the end; removing the folder takes it away again
         const QString src = QCoreApplication::applicationDirPath() + "/engine/vst2/amixtest2.so";
         if (QFile::exists(src)) {
@@ -537,7 +555,7 @@ int main(int argc, char* argv[]) {
           for (int step = 0; step < 7; ++step) { wiz->setProperty("step", step); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + QStringLiteral("/setup-%1.png").arg(step + 1)); std::printf("amixos --shots: setup-%d\n", step + 1); }
           win->setProperty("forceSetup", false); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
           { win->setProperty("current", "mixer"); for (int k = 0; k < 10; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50);   // the plug-in editor on a tube amp and on the hall reverb
-            if (QObject* edw = win->findChild<QObject*>("plugEd")) { for (const auto& [kind, name, file] : {std::tuple<const char*, const char*, const char*>{"fx:tubeamp", "TUBE AMP", "plugin-editor-tubeamp.png"}, {"fx:hall", "HALL REVERB", "plugin-editor-hall.png"}, {"fx:reverb", "PLATE REVERB", "plugin-editor-plate.png"}, {"fx:syncdelay", "SYNC DELAY", "plugin-editor-delay.png"}}) {
+            if (QObject* edw = win->findChild<QObject*>("plugEd")) { for (const auto& [kind, name, file] : {std::tuple<const char*, const char*, const char*>{"fx:tubeamp", "TUBE AMP", "plugin-editor-tubeamp.png"}, {"fx:hall", "HALL REVERB", "plugin-editor-hall.png"}, {"fx:reverb", "PLATE REVERB", "plugin-editor-plate.png"}, {"fx:syncdelay", "SYNC DELAY", "plugin-editor-delay.png"}, {"fx:analog", "ANALOG CHANNEL", "plugin-editor-analog.png"}}) {
                 engine.setPlugin(0, 8, kind); QMetaObject::invokeMethod(edw, "openFor", Q_ARG(QVariant, 0), Q_ARG(QVariant, 8), Q_ARG(QVariant, QString::fromLatin1(kind)), Q_ARG(QVariant, QString::fromLatin1(name)));
                 { QElapsedTimer bt; bt.start(); while (bt.elapsed() < 500) QCoreApplication::processEvents(QEventLoop::AllEvents, 20); } win->grabWindow().save(shots + "/" + file);
                 if (QString::fromLatin1(kind) == "fx:syncdelay") {   // 120 BPM and a quarter note must read 500 ms on the delay panel
@@ -610,6 +628,36 @@ int main(int argc, char* argv[]) {
               mixer->setProperty("rackCompact", true); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + "/mixer-compact.png"); mixer->setProperty("rackCompact", false); std::printf("amixos --shots: mixer-compact\n");
               if (QObject* pop = mixer->findChild<QObject*>("mixerQuick")) { QMetaObject::invokeMethod(pop, "open"); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + "/mixer-settings.png"); QMetaObject::invokeMethod(pop, "close"); std::printf("amixos --shots: mixer-settings\n"); }
               mixer->setProperty("sendView", 1); waitMs(400); win->grabWindow().save(shots + "/mixer-aux.png"); mixer->setProperty("sendView", 2); waitMs(400); win->grabWindow().save(shots + "/mixer-fx.png"); mixer->setProperty("sendView", 0); std::printf("amixos --shots: mixer-aux, mixer-fx\n");
+              { QMetaObject::invokeMethod(win, "openAudioSettings"); waitMs(500); win->grabWindow().save(shots + "/audio-midi-settings.png");   // AUDIO / MIDI SETTINGS: opens, shows the running device type, APPLY keeps the engine running
+                QObject* as = win->findChild<QObject*>("audioSettings");
+                if (!as || !as->property("opened").toBool() || as->property("type").toString().isEmpty()) { std::fprintf(stderr, "amixos --shots: AUDIO / MIDI SETTINGS did not open\n"); std::exit(244); }
+                QMetaObject::invokeMethod(as, "apply"); waitMs(300); if (!engine.running()) { std::fprintf(stderr, "amixos --shots: APPLY in AUDIO / MIDI SETTINGS left the engine stopped\n"); std::exit(245); }
+                engine.setMonitor(0, 0, false, false, true); waitMs(300);   // the monitor muted: the only thing on the outputs is the test tone, at -20 dBFS
+                if (!engine.testTone() || !engine.testToneActive()) { std::fprintf(stderr, "amixos --shots: the test tone did not start\n"); std::exit(246); }
+                waitMs(500); { const double l = engine.telemetry()["monitorLDb"].toDouble(), r = engine.telemetry()["monitorRDb"].toDouble();
+                  if (std::fabs(l + 20.0) > 1.5 || std::fabs(r + 20.0) > 1.5) { std::fprintf(stderr, "amixos --shots: the test tone is not at -20 dBFS on outputs 1-2 (%.1f / %.1f)\n", l, r); std::exit(248); } }
+                waitMs(1600); if (engine.testToneActive()) { std::fprintf(stderr, "amixos --shots: the test tone did not end after its second\n"); std::exit(247); }
+                engine.setMonitor(0, 0, false, false, false);
+                QMetaObject::invokeMethod(as, "close"); waitMs(200); }
+              { // DSP MODE: ANALOG leaves a quiet tone alone and rounds a loud one off; DIGITAL is exact again. DAC DETECTION: a USB DAC is listed, its microphone side is not
+                engine.setDspMode("analog"); if (engine.dspMode() != "analog" || !engine.mastering()["analog"].toBool()) { std::fprintf(stderr, "amixos --shots: DSP MODE ANALOG did not switch on\n"); std::exit(255); }
+                engine.setDspMode("digital"); if (engine.dspMode() != "digital") std::exit(255);
+                const QVariantList real = engine.devices(); QVariantList rig;
+                const auto dev = [](const char* b, const char* id, const char* name, int in, int out) { QVariantMap m; m["backend"] = b; m["id"] = id; m["name"] = name; m["inChannels"] = in; m["outChannels"] = out; m["defaultRate"] = 48000.0; m["sampleRates"] = QVariantList{44100.0, 48000.0, 96000.0, 192000.0}; return m; };
+                rig << dev("wasapi", "{d1}", "FiiO K7 USB DAC", 0, 2) << dev("wasapi", "{s1}", "Speakers (Realtek(R) Audio)", 0, 2) << dev("wasapi", "{m1}", "Microphone (USB DAC mic)", 1, 0);
+                engine.simulateDevices(rig); const QVariantList dl = engine.dacsFound();
+                if (dl.size() != 1 || dl[0].toMap()["name"].toString() != "FiiO K7 USB DAC" || dl[0].toMap()["maxRate"].toDouble() != 192000.0 || dl[0].toMap()["current"].toBool()) { std::fprintf(stderr, "amixos --shots: DAC detection is wrong (%d found)\n", int(dl.size())); std::exit(256 - 1); }
+                if (engine.openDac("wasapi", "{nope}", 256)) std::exit(255);
+                engine.simulateDevices(real); if (!engine.running()) engine.open("null", "", "", 48000, 256, 2, 2); }
+              { // THE ASIO SECTION with three simulated drivers: the list shows them all, MANUAL picks none, OPEN on one that cannot start leaves none marked as running
+                const QVariantList real = engine.devices(); const QString keepPrefer = engine.autoPrefer(); QVariantList rig;
+                const auto dev = [](const char* b, const char* id, const char* name, int in, int out) { QVariantMap m; m["backend"] = b; m["id"] = id; m["name"] = name; m["inChannels"] = in; m["outChannels"] = out; m["defaultRate"] = 48000.0; return m; };
+                rig << dev("asio", "{a1}", "Focusrite USB ASIO", 18, 20) << dev("asio", "{a2}", "ASIO4ALL v2", 2, 2) << dev("asio", "{a3}", "Realtek ASIO", 2, 2) << dev("wasapi", "{w1}", "Speakers (Realtek(R) Audio)", 0, 2);
+                engine.simulateDevices(rig); engine.setAutoPrefer("manual"); win->setProperty("current", "asio"); waitMs(500); win->grabWindow().save(shots + "/asio-drivers.png");
+                const QVariantList l = engine.asioDrivers(); bool any = false; for (const QVariant& v : l) any = any || v.toMap()["current"].toBool();
+                if (l.size() != 3 || l[0].toMap()["name"].toString() != "Focusrite USB ASIO" || l[0].toMap()["inChannels"].toInt() != 18 || any || !engine.autoDetect().isEmpty()) { std::fprintf(stderr, "amixos --shots: the ASIO DRIVERS list is wrong\n"); std::exit(253); }
+                engine.openAsioDriver("{a2}", 256); for (const QVariant& v : engine.asioDrivers()) if (v.toMap()["current"].toBool() && engine.backend() != "asio") { std::fprintf(stderr, "amixos --shots: a driver that did not start is shown as running\n"); std::exit(254); }
+                engine.setAutoPrefer(keepPrefer); engine.simulateDevices(real); if (!engine.running()) engine.open("null", "", "", 48000, 256, 2, 2); win->setProperty("current", "mixer"); waitMs(300); }
               mixer->setProperty("vuMode", true); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + "/mixer-vu.png"); mixer->setProperty("vuMode", false); std::printf("amixos --shots: mixer-vu\n"); }
           }
         }

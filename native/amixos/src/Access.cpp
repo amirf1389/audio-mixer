@@ -22,7 +22,12 @@ const char* kPerms[6] = {"faders", "dsp", "routing", "loudness", "archive", "sys
 int roleIndex(const QString& id) { for (int i = 0; i < 4; ++i) if (id == kRoles[i].id) return i; return 0; }
 }  // namespace
 
-Access::Access(Engine* engine, QObject* parent) : QObject(parent), engine_(engine) {}
+Access::Access(Engine* engine, QObject* parent) : QObject(parent), engine_(engine) { if (pinAtStart()) locked_ = true; }
+// PIN AT START needs a PIN of your own: with the factory PIN the lock would keep nobody out
+void Access::setPinAtStart(bool on) {
+  if (on && pinIsDefault()) { msg_ = QStringLiteral("Set your own PIN first: the factory PIN keeps nobody out."); emit messageChanged(); emit changed(); return; }
+  s_.setValue("access/pinAtStart", on); s_.sync(); log(on ? QStringLiteral("PIN at start switched on") : QStringLiteral("PIN at start switched off")); emit changed();
+}
 
 QVariantList Access::roles() const { QVariantList l; for (const Role& r : kRoles) { QVariantMap m; m["id"] = r.id; m["name"] = r.name; m["blurb"] = r.blurb; l << m; } return l; }
 QVariantMap Access::matrix() const {

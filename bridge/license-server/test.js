@@ -217,3 +217,12 @@ test('framework: routes with parameters, the body limit, the limiter window', as
   } finally { await new Promise(r => srv.close(r)); }
   let t = 0; const lim = rateLimiter({ now: () => t }); assert.ok(lim.allow('k', 2).ok && lim.allow('k', 2).ok); const no = lim.allow('k', 2); assert.ok(!no.ok && no.retryAfter === 60); t = 60000; assert.ok(lim.allow('k', 2).ok);
 });
+
+test('a trial key always ends within a year and is for one computer', () => {
+  const y = 365 * 86400000;
+  const a = buildPayload({ plan: 'pro', name: 'Trial user', days: 0, seats: 2, trial: true }, 1000);
+  assert.ok(!a.error); assert.strictEqual(a.payload.trial, true); assert.strictEqual(a.payload.seats, 1); assert.strictEqual(a.payload.expires, 1000 + y);
+  const b = buildPayload({ plan: 'pro', name: 'Trial user', days: 3650, trial: true }, 1000); assert.strictEqual(b.payload.expires, 1000 + y);
+  const c = buildPayload({ plan: 'pro', name: 'Trial user', days: 30, trial: true }, 1000); assert.strictEqual(c.payload.expires, 1000 + 30 * 86400000);
+  const d = buildPayload({ plan: 'pro', name: 'Paying user', days: 0 }, 1000); assert.strictEqual(d.payload.trial, undefined); assert.strictEqual(d.payload.expires, null);
+});

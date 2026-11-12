@@ -1,11 +1,11 @@
 #!/bin/sh
 # Cross-builds the AmF X1 console (native/amixos, Qt 6 Quick) for Windows x64 on Linux with mingw-w64 and the official Qt MinGW kit of the
 # SAME version as the host's Qt 6 (the host's moc / rcc / qmlcachegen / qmltyperegistrar run here, the kit's libraries are linked), then
-# assembles a runnable folder: amixos.exe, amixos-daemon.exe, "AmF X1.exe" + the ASIO DLL (from releases/windows or build-native.js), the
+# assembles a runnable folder: amixos.exe, "AmF X1 Network.exe" (the service, built as amixos-daemon), "AmF X1.exe" + the ASIO DLL (from releases/windows or build-native.js), the
 # Qt DLLs, the platform / image plugins, the QML modules and qt.conf. Usage: scripts/build-console-windows.sh [kit-dir] [out-dir]
 #   kit-dir  the extracted win64_mingw kit (.../6.4.2/mingw_64). Without it, the script downloads the qtbase / qtdeclarative / qttools
 #            7z archives of the host's Qt version from download.qt.io into ./.qt-win and extracts them (needs 7z and curl).
-# The result is unsigned: sign amixos.exe, "AmF X1.exe", amixos-daemon.exe and the DLL with scripts/sign-windows.js before release.
+# The result is unsigned: sign amixos.exe, "AmF X1.exe", "AmF X1 Network.exe" and the DLL with scripts/sign-windows.js before release.
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"; VER="$(tr -d ' \n' < "$ROOT/native/amixos/version.txt")"
 HOSTQT="$(grep -ho 'PACKAGE_VERSION "[0-9.]*"' /usr/lib/x86_64-linux-gnu/cmake/Qt6/Qt6ConfigVersion.cmake | head -1 | tr -dc '0-9.')"
@@ -26,9 +26,9 @@ for t in moc rcc uic qmlcachegen qmltyperegistrar qmlimportscanner cmake_automoc
 B="$ROOT/build-win"; cmake -S "$ROOT/native/amixos" -B "$B" -DCMAKE_TOOLCHAIN_FILE="$ROOT/install/windows/mingw-cross.cmake" -DQT_WIN_KIT="$KIT" -DQT_HOST_PATH=/usr -DCMAKE_BUILD_TYPE=Release >/dev/null
 cmake --build "$B" -j"$(nproc)" --target amixos amixos-daemon >/dev/null
 D="$OUT/$NAME"; rm -rf "$D"; mkdir -p "$D/platforms" "$D/imageformats" "$D/qml"
-cp "$B/amixos.exe" "$D/"; cp "$(find "$B" -name amixos-daemon.exe | head -1)" "$D/"
+cp "$B/amixos.exe" "$D/"; cp "$(find "$B" -name amixos-daemon.exe | head -1)" "$D/AmF X1 Network.exe"   # the service program under the product's name
 # our own programs must not lean on the C++ runtime DLLs of the Qt kit (an older libstdc++-6.dll lacks symbols the compiler here uses)
-for p in amixos.exe amixos-daemon.exe; do if x86_64-w64-mingw32-objdump -p "$D/$p" | grep -qiE "DLL Name: (libstdc.*|libgcc_s.*|libwinpthread.*)"; then echo "$p needs a compiler runtime DLL: link it statically"; exit 1; fi; done
+for p in amixos.exe "AmF X1 Network.exe"; do if x86_64-w64-mingw32-objdump -p "$D/$p" | grep -qiE "DLL Name: (libstdc.*|libgcc_s.*|libwinpthread.*)"; then echo "$p needs a compiler runtime DLL: link it statically"; exit 1; fi; done
 if [ -f "$ROOT/releases/windows/AmF X1.exe" ]; then cp "$ROOT/releases/windows/AmF X1.exe" "$ROOT/releases/windows/AudioMixerASIO64.dll" "$D/"; else node "$ROOT/scripts/build-native.js" --out "$D" >/dev/null; rm -f "$D/AmF X1 (32-bit).exe" "$D/AudioMixerASIO32.dll"; fi
 for l in Qt6Core Qt6Gui Qt6Network Qt6OpenGL Qt6Qml Qt6QmlModels Qt6QmlWorkerScript Qt6Quick Qt6QuickControls2 Qt6QuickControls2Impl Qt6QuickTemplates2 Qt6QuickLayouts Qt6QuickShapes libgcc_s_seh-1 libstdc++-6 libwinpthread-1; do cp "$KIT/bin/$l.dll" "$D/"; done
 for l in Qt6QuickControls2Fusion Qt6QuickControls2FusionStyleImpl; do [ -f "$KIT/bin/$l.dll" ] && cp "$KIT/bin/$l.dll" "$D/"; done   # the Fusion style (the console uses it: palette-driven, dark)
@@ -47,7 +47,7 @@ cat > "$D/README.txt" <<TXT
 AmF X1 by AMFB Audio $VER - Windows x64
   amixos.exe            the console (Qt 6 Quick): start this
   AmF X1.exe            the engine command line (--list-devices, --backend asio|wasapi|dsound, --update, --install-driver)
-  amixos-daemon.exe     the engine as a local HTTP / WebSocket service for the Android remote (binds 127.0.0.1)
+  AmF X1 Network.exe    the engine as a local HTTP / WebSocket service for the Android remote (binds 127.0.0.1)
   AudioMixerASIO64.dll  the ASIO driver: register from an administrator prompt with  "AmF X1.exe" --install-driver
   drivers\\asio\\         the 32-bit ASIO driver DLL and the Steinberg ASIO licence, usage guidelines and change list
   licenses\\              third-party licences and the additional terms

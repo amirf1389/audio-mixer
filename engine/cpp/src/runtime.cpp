@@ -196,12 +196,16 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
   { const float* ml = monSrc_ > 0 ? busOut[2 * (monSrc_ - 1)] : left_.data(); const float* mr = monSrc_ > 0 ? busOut[2 * (monSrc_ - 1) + 1] : right_.data();
     const double g0 = monGain_, g1 = monGainTarget_; monGain_ = g1; const double step = frames ? (g1 - g0) / static_cast<double>(frames) : 0; double pl = 0, pr = 0;
     float* ol = monL_.data(); float* or_ = monR_.data();
+    long tone = toneLeft_.load(); const long tone0 = tone, toneAll = toneTotal_.load(); const double toneStep = 6.283185307179586 * 1000.0 / mixer_.sampleRate();
     for (std::size_t i = 0; i < frames; ++i) {
       const float g = static_cast<float>(g0 + step * static_cast<double>(i));
       float l = ml[i] * g, r = mr[i] * g; if (monMono_) { l = r = 0.5f * (l + r); }
+      if (tone > 0) { const long done = toneAll - tone; const long edge = std::min<long>(480, toneAll / 4 + 1); const float env = done < edge ? static_cast<float>(done) / static_cast<float>(edge) : tone < edge ? static_cast<float>(tone) / static_cast<float>(edge) : 1.f;
+        const float t = 0.1f * env * static_cast<float>(std::sin(tonePhase_)); tonePhase_ += toneStep; if (tonePhase_ > 6.283185307179586) tonePhase_ -= 6.283185307179586; l += t; r += t; --tone; }
       ol[i] = l; or_[i] = r;
       pl = std::max(pl, static_cast<double>(std::fabs(l))); pr = std::max(pr, static_cast<double>(std::fabs(r)));
     }
+    if (tone0 > 0) { long expect = tone0; toneLeft_.compare_exchange_strong(expect, tone); }   // a new testTone() during the block wins
     monPk_[0] = std::max(pl, monPk_[0] * 0.8); monPk_[1] = std::max(pr, monPk_[1] * 0.8); }
   // the output matrix: every device output carries one source
   for (int c = 0; c < nOut_; ++c) {
