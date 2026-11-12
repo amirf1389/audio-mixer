@@ -122,6 +122,19 @@ class Analog final : public Simple { public: explicit Analog(double fs); const c
   std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
  protected: int count() const override { return 4; } const char* knobId(int i) const override { static const char* k[] = {"drive", "bias", "tone", "output"}; return k[i]; } const char* knobTitle(int i) const override { static const char* k[] = {"DRIVE", "BIAS", "TONE", "OUTPUT"}; return k[i]; } double knobDef(int i) const override { static const double d[] = {0.35, 0.2, 0.8, 0.5}; return d[i]; }
  private: float lp_[2] = {0, 0}; };
+// SOUND BARRIER: loud, with impact, and never past the ceiling. Four stages in a row:
+//   IMPACT   the first milliseconds of each hit in the bass and middle are lifted (a fast level follower against a slow one), so that
+//            drums keep their punch when everything is pushed
+//   SMOOTH   the treble (over 5 kHz) is held back the more it sticks out, so that pushing does not turn harsh
+//   PUSH     the whole signal is raised 0 .. 18 dB into a soft knee
+//   CEILING  the barrier: a limiter that sees every peak 3 ms before it arrives and has the gain down in time; nothing leaves above
+//            the ceiling (-6 .. 0 dBFS). The effect delays the signal by those 3 ms.
+class Barrier final : public Simple { public: explicit Barrier(double fs); const char* kind() const override { return "barrier"; } const char* name() const override { return "SOUND BARRIER"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void setSampleRate(double fs) override; void process(float* L, float* R, std::size_t n) override;
+  double reductionDb() const { return grDb_.load(); }   // how hard the barrier works now (0 = not at all)
+  static double ceilingOf(double v) { return std::pow(10.0, (-6.0 + (v < 0 ? 0 : v > 1 ? 1 : v) * 6.0) / 20.0); }
+ protected: int count() const override { return 4; } const char* knobId(int i) const override { static const char* k[] = {"push", "impact", "smooth", "ceiling"}; return k[i]; } const char* knobTitle(int i) const override { static const char* k[] = {"PUSH", "IMPACT", "SMOOTH", "CEILING"}; return k[i]; } double knobDef(int i) const override { static const double d[] = {0.33, 0.5, 0.5, 0.83}; return d[i]; }
+ private: std::vector<float> dl_[2]; std::size_t w_ = 0; int look_ = 144, hold_ = 0; float lp_[2] = {0, 0}, hp_[2] = {0, 0}, hp2_[2] = {0, 0}; double fast_ = 0, slow_ = 0, eHigh_ = 0, eBody_ = 0, g_ = 1; std::atomic<double> grDb_{0}; };
 // DUAL LISTEN EQ: two frequency ranges, bass (under 200 Hz) and treble (over 4 kHz), that listen to the music and set themselves.
 // The signal is split into bass, middle and treble (the three add up to the signal again exactly). The loudness of each is followed
 // slowly, and the bass and treble gains move until bass and treble stand where BASS and TREBLE ask against the middle. A bass-heavy

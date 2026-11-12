@@ -8,13 +8,14 @@ This document lists the upgrades made to AmF X1 and to its two servers, says how
 
 - The sound card is chosen by hand. Automatic detection, automatic ASIO selection and SMART START were removed; a scan only lists what is there.
 - A new ENGINE CONTROL page gathers load, audio state, updates, upgrades and one-press tools for the selected channel.
-- Four new rack effects: ANALOG CHANNEL, PITCH SHIFTER, DUAL LISTEN EQ, and the earlier SYNC DELAY and FEEDBACK KILLER with their own panels.
+- Five new rack effects: SOUND BARRIER (loudness with impact under a ceiling), ANALOG CHANNEL, PITCH SHIFTER and DUAL LISTEN EQ, beside the earlier SYNC DELAY and FEEDBACK KILLER, each with its own panel.
 - Licences can be activated with a 25-character product key, like boxed software. BASIC runs 8 channels, PRO 16, STUDIO and MASTER 32.
 - The network service is named AmF X1 Network. Phones pair with a six-digit PIN that changes every minute and get their own token.
 - The licence server has a customer portal, a management portal and a hardened nginx front for licence.amirfakhribadri.my. The OTA server has a management portal.
 
 ## 2. The console: mixer and plug-ins
 
+- PLUGIN RACK: SOUND BARRIER. PUSH raises the level up to 18 dB, IMPACT keeps the attack of each hit, SMOOTH holds a sticking-out treble back so that loud does not turn harsh, CEILING is a look-ahead limiter nothing passes. It delays the channel by 3 ms. One press on ENGINE CONTROL puts it on the selected channel.
 - ACOUSTICS page: log sine sweep and stepped sine (amplitude, phase, THD, THD+N), RTA to 1/48 octave with RMS averaging and level alignment, impulse response, ETC, RT60 / Topt, delay compensation, waterfall, spectrogram, room simulator, auto EQ with target curves (20 - 400 Hz) set on a strip or exported as REW / miniDSP text and JSON, mic calibration files, SPL offset, offline sweep WAV
 - MIXER: MUTE on the master strip; LIMIT CHANNELS (every channel limiter on or off in one press) and AUTO -INF (channels without an input on this sound card go to -inf) in the actions bar. SYNC DELAY: a new effect with TEMPO, NOTE value, FEEDBACK, TONE and WIDTH. TONE shows the ten MIC EQ faders on the same page. NETWORK: CASCADE links two consoles (A / B), each hearing the other's master on strips 31-32.
 - MIXER: MUTE ALL now mutes every channel even when some were already muted, and UNMUTE ALL gives the earlier mutes back.
