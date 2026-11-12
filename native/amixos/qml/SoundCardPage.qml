@@ -33,8 +33,6 @@ Item {
                 KV { k: "LAST START"; v: engine.lastRoute ? engine.lastRoute : "—"; c: Theme.muted }
                 RowLayout { spacing: 6
                     Btn { label: engine.running ? i18n.t("STOP", i18n.lang) : i18n.t("START (SMART)", i18n.lang); on: true; onColor: engine.running ? Theme.danger : Theme.emerald; onClicked: engine.running ? engine.stop() : settings.startLastDevice() }
-                    Btn { label: i18n.t("AUTO DETECT", i18n.lang); onClicked: engine.autoStart(settings.defaultFrames) }
-                    Btn { label: engine.autoPrefer === "manual" ? i18n.t("AUTO ASIO: OFF (MANUAL)", i18n.lang) : settings.autoAsio ? i18n.t("AUTO ASIO: ON", i18n.lang) : i18n.t("AUTO ASIO: OFF", i18n.lang); on: settings.autoAsio && engine.autoPrefer !== "manual"; onColor: Theme.cyan; onClicked: settings.autoAsio = !settings.autoAsio }
                     Btn { label: settings.smartStart ? i18n.t("SMART START: ON", i18n.lang) : i18n.t("SMART START: OFF", i18n.lang); on: settings.smartStart; onColor: Theme.cyan; onClicked: settings.smartStart = !settings.smartStart } }
                 RowLayout { spacing: 6
                     Text { text: i18n.t("AFTER ASIO:", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
@@ -77,33 +75,27 @@ Item {
                                     onClicked: { if (modelData.running) engine.assignMixerChannels(modelData.prefix, true); else engine.connectMixer(modelData.id, settings.defaultFrames) } } }
                             Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7
                                 text: i18n.t("Opens every channel of the desk through its own ASIO driver (32 at most): desk channel 1 on strip 1, 2 on 2 and so on, the master on the desk's USB returns 1-2. ", i18n.lang) + i18n.t(modelData.note, i18n.lang) } } } }
-                Rectangle { objectName: "asioDriversCard"; Layout.fillWidth: true; implicitHeight: asioCol.implicitHeight + 16; radius: 6; color: Theme.ov(0.03); border.color: engine.autoPrefer === "manual" ? Theme.amber : Theme.lineSoft; border.width: 1
+                Rectangle { objectName: "asioDriversCard"; Layout.fillWidth: true; implicitHeight: asioCol.implicitHeight + 16; radius: 6; color: Theme.ov(0.03); border.color: Theme.amber; border.width: 1
                     ColumnLayout { id: asioCol; anchors.fill: parent; anchors.margins: 8; spacing: 4
                         RowLayout { spacing: 6
                             Text { text: i18n.t("ASIO DRIVERS", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 1 }
-                            Text { Layout.fillWidth: true; text: i18n.t("Found by discovery. Nothing here is opened until you press OPEN on one.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; elide: Text.ElideRight }
+                            Text { Layout.fillWidth: true; text: i18n.t("Manual only: nothing is picked or opened by itself. OPEN starts a driver, the same button turns it off.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; elide: Text.ElideRight }
                             Btn { objectName: "audioSettingsBtn"; label: i18n.t("AUDIO / MIDI SETTINGS", i18n.lang); on: true; onColor: Theme.amber; onClicked: page.Window.window.openAudioSettings() }
                             Btn { label: i18n.t("RESCAN", i18n.lang); onClicked: engine.refreshDevices() } }
                         Repeater { model: { engine.devices; engine.running; return engine.asioDrivers() }
                             delegate: RowLayout { Layout.fillWidth: true; spacing: 6
                                 Rectangle { width: 6; height: 6; radius: 3; color: modelData.current ? Theme.emerald : Theme.ov(0.2) }
                                 Text { Layout.fillWidth: true; text: modelData.name; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; elide: Text.ElideRight }
-                                Text { text: modelData.inChannels + i18n.t(" in / ", i18n.lang) + modelData.outChannels + i18n.t(" out", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
-                                Btn { objectName: "asioOpen_" + index; label: modelData.current ? i18n.t("RUNNING", i18n.lang) : i18n.t("OPEN", i18n.lang); on: modelData.current; onColor: Theme.emerald; onClicked: engine.openAsioDriver(modelData.id, settings.defaultFrames) } } }
+                                Text { text: modelData.inChannels + modelData.outChannels === 0 ? i18n.t("in use elsewhere: channels are read when you press OPEN", i18n.lang) : modelData.inChannels + i18n.t(" in / ", i18n.lang) + modelData.outChannels + i18n.t(" out", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
+                                Btn { objectName: "asioOpen_" + index; label: modelData.current ? i18n.t("ON · TURN OFF", i18n.lang) : i18n.t("OPEN", i18n.lang); on: true; onColor: modelData.current ? Theme.emerald : Theme.cyan; onClicked: { if (modelData.current) engine.stop(); else engine.openAsioDriver(modelData.id, settings.defaultFrames) } } } }
                         Repeater { model: { engine.devices; engine.running; return engine.dacsFound() }
                             delegate: RowLayout { Layout.fillWidth: true; spacing: 6
                                 Rectangle { width: 6; height: 6; radius: 3; color: modelData.current ? Theme.emerald : Theme.ov(0.2) }
                                 Text { text: i18n.t("DAC", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                                 Text { Layout.fillWidth: true; text: modelData.name; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; elide: Text.ElideRight }
                                 Text { text: modelData.backend.toUpperCase() + " · " + modelData.outChannels + i18n.t(" out", i18n.lang) + " · " + (modelData.maxRate / 1000) + " kHz"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
-                                Btn { objectName: "dacOpen_" + index; label: modelData.current ? i18n.t("RUNNING", i18n.lang) : i18n.t("OPEN", i18n.lang); on: modelData.current; onColor: Theme.emerald; onClicked: engine.openDac(modelData.backend, modelData.id, settings.defaultFrames) } } }
+                                Btn { objectName: "dacOpen_" + index; label: modelData.current ? i18n.t("ON · TURN OFF", i18n.lang) : i18n.t("OPEN", i18n.lang); on: true; onColor: modelData.current ? Theme.emerald : Theme.cyan; onClicked: { if (modelData.current) engine.stop(); else engine.openDac(modelData.backend, modelData.id, settings.defaultFrames) } } } }
                         Text { visible: engine.asioDrivers().length === 0 && (engine.devices, true); text: i18n.t("No ASIO driver found on this computer. Install the interface's own ASIO driver, then press RESCAN.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 } } }
-                RowLayout { spacing: 6
-                    Text { text: i18n.t("AUTO SELECT", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
-                    Repeater { model: [["best", "BEST"], ["asio", "ASIO"], ["wasapi", "WASAPI"], ["dsound", "DIRECTSOUND"], ["bluetooth", "BLUETOOTH"], ["manual", "MANUAL"]]
-                        delegate: Btn { objectName: "autoPrefer_" + modelData[0]; label: i18n.t(modelData[1], i18n.lang); on: engine.autoPrefer === modelData[0]; onColor: Theme.cyan; onClicked: engine.autoPrefer = modelData[0] } }
-                    Btn { label: i18n.t("DETECT + START NOW", i18n.lang); on: engine.autoPrefer !== "manual"; onColor: Theme.emerald; onClicked: engine.autoStart(settings.defaultFrames) } }
-                Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; text: i18n.t("Which audio system AUTO DETECT picks from. BEST takes ASIO first, then Windows audio, then DirectSound. If the chosen one has no device, the best of the others is used.", i18n.lang) + " " + i18n.t("MANUAL opens nothing by itself: you pick the driver in the ASIO DRIVERS list.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
                 RowLayout { spacing: 6
                     Text { text: i18n.t("ASIO ROUTING", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                     Btn { objectName: "openRoutingBtn"; label: i18n.t("OPEN", i18n.lang); on: engine.openRouting; onColor: Theme.emerald; onClicked: engine.openRouting = true }

@@ -54,7 +54,7 @@ class Settings : public QObject {
   QVariantMap lastDevice() const { return s_.value("audio/lastDevice").toMap(); }
   int defaultRate() const { return s_.value("audio/rate", 48000).toInt(); } void setDefaultRate(int v) { set("audio/rate", v); }
   int defaultFrames() const { return s_.value("audio/frames", 256).toInt(); } void setDefaultFrames(int v) { set("audio/frames", v); }
-  bool autoAsio() const { return s_.value("audio/autoDetect", true).toBool(); } void setAutoAsio(bool v) { set("audio/autoDetect", v); }
+  bool autoAsio() const { return false; }   /* automatic selection was removed: the device is always chosen by hand */ void setAutoAsio(bool v) { set("audio/autoDetect", v); }
   bool smartStart() const { return s_.value("audio/smartStart", true).toBool(); } void setSmartStart(bool v) { set("audio/smartStart", v); }
   double clipDb() const { return s_.value("audio/clipDb", -0.1).toDouble(); } void setClipDb(double v);
   int peakHoldMs() const { return s_.value("audio/peakHoldMs", 1400).toInt(); } void setPeakHoldMs(int v);

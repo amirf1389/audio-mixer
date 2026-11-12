@@ -83,6 +83,10 @@ int main() {
     CHECK(am::Daemon::hostAllowed("127.0.0.1:8765") && am::Daemon::hostAllowed("192.168.1.20:8765") && am::Daemon::hostAllowed("localhost:8765") && am::Daemon::hostAllowed("[::1]:8765") && am::Daemon::hostAllowed(""));
     CHECK(!am::Daemon::hostAllowed("evil.example:8765") && !am::Daemon::hostAllowed("127.0.0.1.evil.example") && !am::Daemon::hostAllowed("1234.1.1.1") && !am::Daemon::hostAllowed("1..1.1"));
     CHECK(am::httpd::Client::request("127.0.0.1", port, "GET", "/api/state", "", {}, status, body) && status == 200);
+    { // SAME ADDRESS ONLY: the first address owns a named token, another address is refused, and it stays so after a reload
+      const std::string f = "daemon_test.pin.json"; std::remove(f.c_str()); am::TokenStore ts(f); std::string e, id; CHECK(ts.load(e)); const std::string t = ts.issue("Pinned", "control", 0, id, e);
+      CHECK(ts.roleFor(t, "192.168.1.20") == "control" && ts.roleFor(t, "192.168.1.21").empty() && ts.roleFor(t, "192.168.1.20") == "control");
+      am::TokenStore again(f); CHECK(again.load(e) && again.roleFor(t, "192.168.1.21").empty() && again.roleFor(t, "192.168.1.20") == "control" && again.list()[0].ip == "192.168.1.20"); std::remove(f.c_str()); }
     CHECK(am::TokenStore::same("abc", "abc") && !am::TokenStore::same("abc", "abd") && !am::TokenStore::same("abc", "abcd"));
     // SECURITY: a token in the URL does not open control (header only); after more than 20 wrong tokens in a minute the wrong ones get 429
     // while the right one still works

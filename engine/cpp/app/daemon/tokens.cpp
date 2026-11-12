@@ -26,6 +26,7 @@ bool TokenStore::load(std::string& err) {
   if (!ok || !v.isObject()) { err = file_ + " is not a token file"; return false; }
   for (const json::Value& t : v["tokens"].items()) {
     Entry e; e.id = t["id"].asString(); e.name = t["name"].asString(); e.role = t["role"].asString(); e.hash = t["hash"].asString();
+    e.ip = t["ip"].asString();
     e.created = static_cast<long long>(t["created"].asNumber()); e.expires = static_cast<long long>(t["expires"].asNumber()); e.revoked = t["revoked"].asBool();
     if (e.id.empty() || e.hash.size() != 64 || (e.role != "control" && e.role != "view")) continue;
     e_.push_back(e);
@@ -36,7 +37,7 @@ bool TokenStore::load(std::string& err) {
 bool TokenStore::save(std::string& err) const {
   if (file_.empty()) { err = "no token file"; return false; }
   json::Value root = json::Value::object(); json::Value arr = json::Value::array();
-  for (const Entry& e : e_) { json::Value t = json::Value::object(); t.set("id", e.id); t.set("name", e.name); t.set("role", e.role); t.set("hash", e.hash); t.set("created", e.created); t.set("expires", e.expires); t.set("revoked", e.revoked); arr.push(t); }
+  for (const Entry& e : e_) { json::Value t = json::Value::object(); t.set("id", e.id); t.set("name", e.name); t.set("role", e.role); t.set("hash", e.hash); t.set("created", e.created); t.set("expires", e.expires); t.set("revoked", e.revoked); if (!e.ip.empty()) t.set("ip", e.ip); arr.push(t); }
   root.set("tokens", arr); const std::string text = root.dump() + "\n", tmp = file_ + ".tmp";
 #ifdef _WIN32
   FILE* f = std::fopen(tmp.c_str(), "wb"); if (!f) { err = "cannot write " + tmp; return false; }
@@ -79,6 +80,17 @@ std::string TokenStore::roleOf(const std::string& token, long long now) const {
   const std::string h = hashOf(token); std::string role; std::lock_guard<std::mutex> g(m_);
   for (const Entry& e : e_) if (same(e.hash, h) && !e.revoked && (e.expires == 0 || now < e.expires)) role = e.role;
   return role;
+}
+
+std::string TokenStore::roleFor(const std::string& token, const std::string& ip, long long now) {
+  if (token.size() != 68 || token.compare(0, 4, "amx_") != 0) return "";
+  if (now == 0) now = static_cast<long long>(std::time(nullptr));
+  const std::string h = hashOf(token); std::lock_guard<std::mutex> g(m_);
+  for (Entry& e : e_) { if (!same(e.hash, h) || e.revoked || (e.expires != 0 && now >= e.expires)) continue;
+    if (ip.empty()) return e.role;                       // no address known (a direct call, not a connection)
+    if (e.ip.empty()) { e.ip = ip; std::string err; save(err); return e.role; }
+    return e.ip == ip ? e.role : std::string(); }
+  return "";
 }
 
 }  // namespace am
