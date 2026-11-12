@@ -48,6 +48,10 @@ class Daemon {
   json::Value state() const;
   json::Value control(const json::Value& cmd, std::string& err);
   json::Value meters() const;
+  // SECURITY: which web pages may read the replies (only pages served from this computer), and which Host a request may name while the
+  // local policy is on (an address or localhost: a made-up domain pointed at 127.0.0.1 by a hostile page is refused)
+  static bool originAllowed(const std::string& origin);
+  static bool hostAllowed(const std::string& host);
   static std::string randomToken();
   static std::string loadOrCreateToken(const std::string& file, std::string& err);   // 0600; created when missing
 

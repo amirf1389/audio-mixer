@@ -76,7 +76,9 @@
         "SOUND CARD: DSP MODE. DIGITAL leaves the mix as computed; ANALOG rounds the peaks off softly on the master.",
         "ACCOUNT: PIN AT START. With your own PIN set, the console starts locked until the PIN is entered.",
         "Licence server: PRO TRIAL · 1 YEAR. A trial key always ends (one year at most) and is for one computer.",
-        "PLUGIN RACK: ANALOG CHANNEL. DRIVE into a soft saturation that leaves quiet signals at their level, BIAS for even harmonics, TONE for the treble loss of transformers and tape, OUTPUT trim."
+        "PLUGIN RACK: ANALOG CHANNEL. DRIVE into a soft saturation that leaves quiet signals at their level, BIAS for even harmonics, TONE for the treble loss of transformers and tape, OUTPUT trim.",
+        "PLUGIN RACK: each family of built-in plug-ins has its own panel colour (reverbs steel blue, delays sage, modulation lavender, saturation copper) and a live display: the saturation curve, the reverb tail or the modulation sweep.",
+        "Security (AmF X1 Network): web pages from other sites can no longer read the console's state or meters through the browser, and requests that name a made-up host are refused (DNS rebinding)."
       ]
     }
   ]
