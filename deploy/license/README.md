@@ -97,9 +97,9 @@ This is how the AmF X1 app reaches the licence server over the internet:
 
        LICENSE_HOST=127.0.0.1 LICENSE_PORT=8787 LICENSE_TRUST_PROXY=1 node bridge/license-server/server.js
 
-2. Copy `deploy/license/nginx-license.conf` to `/etc/nginx/conf.d/`, replace `licence.example.com` and the two certificate paths
+2. Copy `deploy/license/nginx-license.conf` to `/etc/nginx/conf.d/`, replace `licence.amirfakhribadri.my` and the two certificate paths
    (for example from Let's Encrypt), run `nginx -t`, then reload nginx.
-3. In AmF X1, on LICENCE, type `https://licence.example.com` into LICENCE SERVER. Customers use `https://licence.example.com/portal/`.
+3. In AmF X1, on LICENCE, type `https://licence.amirfakhribadri.my` into LICENCE SERVER. Customers use `https://licence.amirfakhribadri.my/portal/`.
 
 What the file lets through, and nothing else:
 
@@ -119,3 +119,18 @@ refused; plain http is redirected; TLS 1.1 is refused; the security headers are 
 
 Keep in mind: the firewall should allow 80 and 443 only; port 8787 must not be reachable from outside; keep the private key file and
 the admin token readable by the service user only; renew the certificate before it runs out.
+
+## The domain: amirfakhribadri.my
+
+| Name | Points at | Serves |
+|---|---|---|
+| `licence.amirfakhribadri.my` | the machine that runs the licence server and nginx | the app's licence calls and `/portal/` |
+| `ota.amirfakhribadri.my` | the machine that runs the OTA server (`deploy/ota`) | update lists and downloads |
+| `amirfakhribadri.my` | your website, as it is | not touched by these files |
+
+Make an `A` record (and `AAAA` if the machine has IPv6) for `licence` at your DNS provider, then get the certificate, for example:
+
+    sudo certbot certonly --nginx -d licence.amirfakhribadri.my
+
+The paths in `nginx-license.conf` already match what certbot writes. AmF X1 uses `https://licence.amirfakhribadri.my` as its licence
+server unless another address is typed on the LICENCE page.
