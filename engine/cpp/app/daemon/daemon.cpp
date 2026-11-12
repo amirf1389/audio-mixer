@@ -105,12 +105,26 @@ std::string Daemon::roleOf(const httpd::Request& r, bool allowQuery) const {
 }
 bool Daemon::authorised(const httpd::Request& r) const { const std::string role = roleOf(r, false); return role == "admin" || role == "control"; }
 
+bool Daemon::originAllowed(const std::string& o) {
+  for (const char* p : {"http://127.0.0.1", "http://localhost", "http://[::1]", "https://127.0.0.1", "https://localhost"}) { const std::size_t n = std::strlen(p); if (o.compare(0, n, p) == 0 && (o.size() == n || o[n] == ':')) return true; }
+  return false;
+}
+bool Daemon::hostAllowed(const std::string& hostHeader) {
+  std::string h = hostHeader; if (h.empty()) return true;   // HTTP/1.0 clients send none
+  if (h[0] == '[') return h.find(']') != std::string::npos;   // an IPv6 literal
+  const std::size_t c = h.rfind(':'); if (c != std::string::npos) h.resize(c);
+  if (h == "localhost") return true;
+  int dots = 0, digits = 0; for (char ch : h) { if (ch == '.') { if (!digits) return false; ++dots; digits = 0; } else if (ch >= '0' && ch <= '9') { if (++digits > 3) return false; } else return false; }
+  return dots == 3 && digits > 0;   // an IPv4 address: how a phone on the network names this computer
+}
 httpd::Response Daemon::handle(const httpd::Request& r) {
   httpd::Response res;
   res.headers.push_back({"Cache-Control", "no-store"});
   res.headers.push_back({"X-Content-Type-Options", "nosniff"}); res.headers.push_back({"X-Frame-Options", "DENY"}); res.headers.push_back({"Referrer-Policy", "no-referrer"});
-  if (r.method == "OPTIONS") { res.status = 204; res.headers.push_back({"Access-Control-Allow-Origin", "*"}); res.headers.push_back({"Access-Control-Allow-Headers", "Content-Type, X-Amix-Token"}); res.headers.push_back({"Access-Control-Allow-Methods", "GET, POST, OPTIONS"}); return res; }
-  res.headers.push_back({"Access-Control-Allow-Origin", "*"});   // the phone app is not a browser; a local web page on this machine may read the meters
+  if (opt_.localOnly && !hostAllowed(r.header("host"))) { res.status = 403; res.body = "{\"ok\":false,\"error\":\"this host name is not served: use the address\"}"; return res; }
+  const std::string origin = r.header("origin"); const bool cors = !origin.empty() && originAllowed(origin);   // the phone app is not a browser and sends no Origin; a page from elsewhere gets no permission to read
+  if (cors) { res.headers.push_back({"Access-Control-Allow-Origin", origin}); res.headers.push_back({"Vary", "Origin"}); }
+  if (r.method == "OPTIONS") { res.status = cors ? 204 : 403; if (cors) { res.headers.push_back({"Access-Control-Allow-Headers", "Content-Type, X-Amix-Token"}); res.headers.push_back({"Access-Control-Allow-Methods", "GET, POST, OPTIONS"}); } return res; }
   if (r.method == "GET" && r.path == "/api/status") { res.body = status().dump(); return res; }
   if (r.method == "GET" && r.path == "/api/devices") { res.body = devices().dump(); return res; }
   if (r.method == "GET" && r.path == "/api/state") { res.body = state().dump(); return res; }

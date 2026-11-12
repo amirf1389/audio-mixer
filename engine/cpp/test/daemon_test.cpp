@@ -78,6 +78,11 @@ int main() {
     CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/tokens/revoke", "{\"id\":\"" + ctlId + "\"}", auth, status, body) && status == 200);
     CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", G, {{"X-Amix-Token", ctl}}, status, body) && status == 401);
     CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/tokens/revoke", "{\"id\":\"nope\"}", auth, status, body) && status == 400);
+    // SECURITY: only pages of this computer may read replies; a made-up host name is refused, addresses and localhost are served
+    CHECK(am::Daemon::originAllowed("http://127.0.0.1:5173") && am::Daemon::originAllowed("http://localhost") && !am::Daemon::originAllowed("https://evil.example") && !am::Daemon::originAllowed("http://127.0.0.1.evil.example") && !am::Daemon::originAllowed("http://localhost.evil.example"));
+    CHECK(am::Daemon::hostAllowed("127.0.0.1:8765") && am::Daemon::hostAllowed("192.168.1.20:8765") && am::Daemon::hostAllowed("localhost:8765") && am::Daemon::hostAllowed("[::1]:8765") && am::Daemon::hostAllowed(""));
+    CHECK(!am::Daemon::hostAllowed("evil.example:8765") && !am::Daemon::hostAllowed("127.0.0.1.evil.example") && !am::Daemon::hostAllowed("1234.1.1.1") && !am::Daemon::hostAllowed("1..1.1"));
+    CHECK(am::httpd::Client::request("127.0.0.1", port, "GET", "/api/state", "", {}, status, body) && status == 200);
     CHECK(am::TokenStore::same("abc", "abc") && !am::TokenStore::same("abc", "abd") && !am::TokenStore::same("abc", "abcd"));
     // SECURITY: a token in the URL does not open control (header only); after more than 20 wrong tokens in a minute the wrong ones get 429
     // while the right one still works
