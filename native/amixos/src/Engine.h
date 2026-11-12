@@ -385,6 +385,7 @@ class Engine : public QObject {
   int pluginSlotLimit() const { return kPluginSlots; }   // every edition, BASIC included, may fill the whole rack
   Q_INVOKABLE QVariantList plugins(int strip) const;  // [{slot, kind, name, bypass, builtIn, pending}]
   Q_INVOKABLE void setPlugin(int strip, int slot, const QString& kind);   // "" clears the slot
+  Q_INVOKABLE int addToRack(int strip, const QString& kind);   // the slot that holds that kind (already there, or put in the first free slot); -1 = the rack is full
   Q_INVOKABLE void setPluginBypass(int strip, int slot, bool bypass);
   Q_INVOKABLE QVariantList pluginCatalog() const;     // the built-in stages, for the chooser
   Q_INVOKABLE void movePlugin(int strip, int from, int to);   // reorder the rack (swap two slots)
@@ -506,7 +507,7 @@ class Engine : public QObject {
   bool loadVst(int strip, int slot);                      // from kind + state at the runtime's rate; false -> error set
   void rebuildInserts(int strip);                         // the strip's VST chain into the runtime
   void reloadAllVst();                                    // after open (new rate / block)
-  struct StripUi { bool spOn = false; double spAz = 0, spEl = 0, spDist = 1, spSpread = 0; QString name; double db = 0, pan = 0; bool autoPol = false; bool mute = false, solo = false; am::dsp::Channel dsp{48000}; SendUi sends[kBuses]; int dca = 0; unsigned muteGroups = 0; int color = 0; PluginUi plugins[kPluginSlots]; bool automix = false; double amWeight = 1; bool link = false; double trimDb = 0; int eqPreset = 0; };
+  struct StripUi { bool spOn = false; double spAz = 0, spEl = 0, spDist = 1, spSpread = 0; QString name; double db = 0, pan = 0; bool autoPol = false; int overComp = 0; bool mute = false, solo = false; am::dsp::Channel dsp{48000}; SendUi sends[kBuses]; int dca = 0; unsigned muteGroups = 0; int color = 0; PluginUi plugins[kPluginSlots]; bool automix = false; double amWeight = 1; bool link = false; double trimDb = 0; int eqPreset = 0; };
   std::vector<QJsonObject> history_; int histPos_ = -1; bool restoring_ = false; QTimer histTimer_; QJsonObject abOther_; QString abSlot_ = "A";
   QString btNote_;
   bool scanning_ = false, opening_ = false, timedOut_ = false;

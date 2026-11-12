@@ -1371,5 +1371,12 @@
 "Sample player on a channel: click, switch on, choose the sample": "Відтворення семпла на каналі: клацніть, увімкніть, виберіть семпл",
 "Room correction curve and microphone calibration files on ACOUSTICS": "Файли кривої корекції приміщення та калібрування мікрофона на ACOUSTICS",
 "Online store for extensions": "Інтернет-магазин програмних розширень",
-"CASCADE: two consoles as one desk": "CASCADE: дві консолі, що утворюють один стіл"
+"CASCADE: two consoles as one desk": "CASCADE: дві консолі, що утворюють один стіл",
+"OVER-COMPRESSED": "НАДМІРНО СТИСНЕНЕ",
+"This channel loses more than 12 dB to the compressor: raise the threshold or lower the ratio, or add DE-SQUASH to give the attacks back.": "Цей канал втрачає понад 12 дБ у компресорі: підвищіть поріг або зменшіть співвідношення, або додайте DE-SQUASH, щоб повернути атаки.",
+"ADD DE-SQUASH": "ДОДАТИ DE-SQUASH",
+"More than 12 dB of compression: click to add DE-SQUASH to this channel": "Стиснення понад 12 дБ: натисніть, щоб додати DE-SQUASH до цього каналу",
+"Sample player (play a sample in this channel)": "Програвач семплів (відтворити семпл у цьому каналі)",
+"De-squash (give back what a heavy compressor took)": "DE-SQUASH (повертає те, що забрав сильний компресор)",
+"CHANNEL EQ · DUAL LISTEN": "ЕКВАЛАЙЗЕР КАНАЛУ · ПОДВІЙНЕ ПРОСЛУХОВУВАННЯ"
 }

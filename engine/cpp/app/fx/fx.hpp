@@ -151,6 +151,23 @@ class DualEq final : public Simple { public: explicit DualEq(double fs); const c
   double bassDb() const { return gLowDb_.load(); } double trebleDb() const { return gHighDb_.load(); }   // what it is doing now
  protected: int count() const override { return 4; } const char* knobId(int i) const override { static const char* k[] = {"bass", "treble", "range", "speed"}; return k[i]; } const char* knobTitle(int i) const override { static const char* k[] = {"BASS", "TREBLE", "RANGE", "SPEED"}; return k[i]; } double knobDef(int i) const override { static const double d[] = {0.5, 0.5, 0.5, 0.4}; return d[i]; }
  private: float lp_[2] = {0, 0}, hp_[2] = {0, 0}; double eLow_ = 0, eMid_ = 0, eHigh_ = 0, gl_ = 1, gh_ = 1; std::atomic<double> gLowDb_{0}, gHighDb_{0}; };
+// SAMPLE PLAYER: plays one of the 100 built-in samples (SAMPLES page) into the channel, alongside what the channel carries.
+//   SAMPLE  which one (1 .. 100)     PLAY  off / on: switching it on starts the sample from the top     LOOP  off / on     LEVEL  -40 .. +6 dB
+// The sample is made on the control thread when it is chosen and handed to the audio thread whole (a shared pointer swap, no allocation there).
+class SamplePlayer final : public Simple { public: explicit SamplePlayer(double fs); const char* kind() const override { return "sampler"; } const char* name() const override { return "SAMPLE PLAYER"; }
+  void set(const std::string& id, double v) override; std::string text(const std::string& id, double v) const override; void reset() override; void setSampleRate(double fs) override; void process(float* L, float* R, std::size_t n) override;
+  static int sampleOf(double v) { return 1 + static_cast<int>(std::lround((v < 0 ? 0 : v > 1 ? 1 : v) * 99.0)); }
+  bool playing() const { return playing_.load(); }
+ protected: int count() const override { return 4; } const char* knobId(int i) const override { static const char* k[] = {"sample", "play", "loop", "level"}; return k[i]; } const char* knobTitle(int i) const override { static const char* k[] = {"SAMPLE", "PLAY", "LOOP", "LEVEL"}; return k[i]; } double knobDef(int i) const override { static const double d[] = {0.0, 0.0, 0.0, 0.87}; return d[i]; }
+ private: struct Buf { std::vector<float> L, R; int id = 0; }; void load(); std::shared_ptr<const Buf> buf_; std::size_t pos_ = 0; bool wasOn_ = false; std::atomic<bool> playing_{false}; int loaded_ = 0; };
+// DE-SQUASH: gives back some of the life a heavy compressor took. It compares a fast envelope (the attacks) with a slow one (the body)
+// and lets the attacks stand out again by up to RANGE dB; AMOUNT is how much of the difference it restores, SPEED how quick the attacks are.
+// Quiet passages and steady tones are left as they are. Use it on a channel that shows the OVER-COMPRESSED alert.
+class DeSquash final : public Simple { public: explicit DeSquash(double fs); const char* kind() const override { return "desquash"; } const char* name() const override { return "DE-SQUASH"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
+  double liftDb() const { return lift_.load(); }
+ protected: int count() const override { return 3; } const char* knobId(int i) const override { static const char* k[] = {"amount", "range", "speed"}; return k[i]; } const char* knobTitle(int i) const override { static const char* k[] = {"AMOUNT", "RANGE", "SPEED"}; return k[i]; } double knobDef(int i) const override { static const double d[] = {0.5, 0.5, 0.5}; return d[i]; }
+ private: double fast_ = 0, slow_ = 0, g_ = 1; std::atomic<double> lift_{0}; };
 // PITCH SHIFTER: moves the pitch without changing the speed. The signal runs into a short delay line that is read by two heads moving
 // faster or slower than it is written; each head fades in and out (a raised cosine) while the other covers its jump back, half a window
 // apart. PITCH -12 .. +12 semitones in whole steps, FINE 50 cents either way, WINDOW 20 .. 90 ms (short: tighter and rougher; long: smoother, more delay).

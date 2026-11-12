@@ -1372,5 +1372,12 @@
 "Sample player on a channel: click, switch on, choose the sample": "چینل پر سیمپل پلیئر: کلک کریں، آن کریں، سیمپل منتخب کریں۔",
 "Room correction curve and microphone calibration files on ACOUSTICS": "کمرے کی اصلاحی منحنی اور مائیکروفون کی کیلیبریشن فائلیں آکوسٹکس پر",
 "Online store for extensions": "سافٹ ویئر توسیعات کے لیے آن لائن اسٹور",
-"CASCADE: two consoles as one desk": "کیسکیڈ: دو کنسول ایک میز کے طور پر"
+"CASCADE: two consoles as one desk": "کیسکیڈ: دو کنسول ایک میز کے طور پر",
+"OVER-COMPRESSED": "زیادہ کمپریس شدہ",
+"This channel loses more than 12 dB to the compressor: raise the threshold or lower the ratio, or add DE-SQUASH to give the attacks back.": "یہ چینل کمپریسر میں 12 dB سے زیادہ کھو دیتا ہے: تھریشولڈ بڑھائیں یا تناسب کم کریں، یا اٹیک واپس لانے کے لیے DE-SQUASH شامل کریں۔",
+"ADD DE-SQUASH": "DE-SQUASH شامل کریں",
+"More than 12 dB of compression: click to add DE-SQUASH to this channel": "12 dB سے زیادہ کمپریشن: اس چینل میں DE-SQUASH شامل کرنے کے لیے کلک کریں",
+"Sample player (play a sample in this channel)": "سیمپل پلیئر (اس چینل میں سیمپل چلائیں)",
+"De-squash (give back what a heavy compressor took)": "DE-SQUASH (جو بھاری کمپریسر نے لیا، واپس دیں)",
+"CHANNEL EQ · DUAL LISTEN": "چینل EQ · دوہری سماعت"
 }

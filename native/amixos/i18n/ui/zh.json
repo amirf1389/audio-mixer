@@ -1369,5 +1369,12 @@
 "Sample player on a channel: click, switch on, choose the sample": "频道中的采样播放器：点击、开启、选择采样",
 "Room correction curve and microphone calibration files on ACOUSTICS": "ACOUSTICS 上的房间校正曲线和麦克风校准文件",
 "Online store for extensions": "软件扩展在线商店",
-"CASCADE: two consoles as one desk": "CASCADE：两张控制台合二为一"
+"CASCADE: two consoles as one desk": "CASCADE：两张控制台合二为一",
+"OVER-COMPRESSED": "压缩过度",
+"This channel loses more than 12 dB to the compressor: raise the threshold or lower the ratio, or add DE-SQUASH to give the attacks back.": "此通道在压缩器中损失超过 12 dB：请提高阈值或降低压缩比，或添加 DE-SQUASH 以恢复瞬态。",
+"ADD DE-SQUASH": "添加 DE-SQUASH",
+"More than 12 dB of compression: click to add DE-SQUASH to this channel": "压缩超过 12 dB：点击为此通道添加 DE-SQUASH",
+"Sample player (play a sample in this channel)": "采样播放器（在此通道播放采样）",
+"De-squash (give back what a heavy compressor took)": "DE-SQUASH（找回强压缩器压掉的部分）",
+"CHANNEL EQ · DUAL LISTEN": "通道 EQ · 双重聆听"
 }

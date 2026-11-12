@@ -15,6 +15,11 @@ Flickable {
     property int strip: engine.selectedStrip
     property int ch3Tick: 0
     property bool graphic: false   // the ten MIC EQ faders shown on this page
+    // DUAL LISTEN mode of the channel EQ: the DUAL LISTEN EQ in this channel's rack; its four knobs take the place of the three bands
+    readonly property int dualSlot: { ch3Tick; const sl = engine.plugins(strip); for (let k = 0; k < sl.length; ++k) if (sl[k].kind === "fx:dualeq") return k; return -1 }
+    readonly property var dualP: { ch3Tick; dualTick; return dualSlot >= 0 ? engine.pluginParams(strip, dualSlot) : [] }
+    property int dualTick: 0
+    property string eqNote: ""
     readonly property var ch3: { ch3Tick; const c = engine.channelEq(strip); return c.low === undefined ? { low: 0, mid: 0, midFreq: 1000, high: 0, on: false } : c }
     function put3(key, v) { const c = Object.assign({}, ch3); c[key] = v; if (key !== "on") c.on = true; engine.setChannelEq(strip, c.low, c.mid, c.midFreq, c.high, c.on) }
     Connections { target: engine; function onStripsChanged() { page.ch3Tick++ } }
@@ -44,7 +49,14 @@ Flickable {
             objectName: "channelEq3"; Layout.fillWidth: true; implicitHeight: 118; radius: Theme.radius; color: Theme.card; border.color: page.ch3.on ? Theme.emerald : Theme.line
             RowLayout { anchors.fill: parent; anchors.margins: 12; spacing: 18
                 ColumnLayout { Layout.preferredWidth: 210; spacing: 4
-                    Text { text: i18n.t("CHANNEL EQ · 3-BAND", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
+                    Text { text: page.dualSlot >= 0 ? i18n.t("CHANNEL EQ · DUAL LISTEN", i18n.lang) : i18n.t("CHANNEL EQ · 3-BAND", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
+                    Row { spacing: 4
+                        Repeater { model: [{ t: "3-BAND", dual: false }, { t: "DUAL LISTEN", dual: true }]
+                            Rectangle { required property var modelData; readonly property bool on: (page.dualSlot >= 0) === modelData.dual
+                                objectName: modelData.dual ? "eqModeDual" : "eqMode3"; width: mT.implicitWidth + 14; height: 18; radius: 3; color: on ? Theme.cyan : Theme.ov(0.08); border.color: Theme.lineSoft
+                                Text { id: mT; anchors.centerIn: parent; text: i18n.t(modelData.t, i18n.lang); color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                    onClicked: { if (modelData.dual) { if (page.dualSlot < 0 && engine.addToRack(page.strip, "fx:dualeq") < 0) page.eqNote = i18n.t("The rack of this channel is full.", i18n.lang) } else if (page.dualSlot >= 0) engine.setPlugin(page.strip, page.dualSlot, "") } } } } }
                     Text { text: i18n.t("CH ", i18n.lang) + (page.strip + 1); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
                     Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; text: i18n.t("Low, mid and high of this channel. The 10-band MIC EQ is a rack item (PLUG-INS), and RTA EQ is the master's.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
                     Row { spacing: 6
@@ -54,10 +66,15 @@ Flickable {
                         Rectangle { objectName: "ch3FlatBtn"; width: 52; height: 20; radius: 4; color: Theme.ov(0.08); border.color: Theme.lineSoft
                             Text { anchors.centerIn: parent; text: i18n.t("FLAT", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                             MouseArea { anchors.fill: parent; onClicked: engine.setChannelEq(page.strip, 0, 0, 1000, 0, false) } } } }
-                Knob { label: i18n.t("LOW 100 Hz", i18n.lang); value: (page.ch3.low - (-15)) / 30; defaultValue: 0.5; valueText: (page.ch3.low > 0 ? "+" : "") + Number(page.ch3.low).toFixed(1) + " dB"; onMoved: function (v) { page.put3("low", Math.round((-15 + v * 30) * 2) / 2) } }
-                Knob { label: i18n.t("MID", i18n.lang); value: (page.ch3.mid - (-15)) / 30; defaultValue: 0.5; valueText: (page.ch3.mid > 0 ? "+" : "") + Number(page.ch3.mid).toFixed(1) + " dB"; onMoved: function (v) { page.put3("mid", Math.round((-15 + v * 30) * 2) / 2) } }
-                Knob { label: i18n.t("MID FREQ", i18n.lang); value: Math.log(page.ch3.midFreq / 100) / Math.log(80); defaultValue: Math.log(10) / Math.log(80); valueText: Math.round(page.ch3.midFreq) + " Hz"; onMoved: function (v) { page.put3("midFreq", Math.round(100 * Math.pow(80, v))) } }
-                Knob { label: i18n.t("HIGH 10 kHz", i18n.lang); value: (page.ch3.high - (-15)) / 30; defaultValue: 0.5; valueText: (page.ch3.high > 0 ? "+" : "") + Number(page.ch3.high).toFixed(1) + " dB"; onMoved: function (v) { page.put3("high", Math.round((-15 + v * 30) * 2) / 2) } }
+                Knob { visible: page.dualSlot < 0; label: i18n.t("LOW 100 Hz", i18n.lang); value: (page.ch3.low - (-15)) / 30; defaultValue: 0.5; valueText: (page.ch3.low > 0 ? "+" : "") + Number(page.ch3.low).toFixed(1) + " dB"; onMoved: function (v) { page.put3("low", Math.round((-15 + v * 30) * 2) / 2) } }
+                Knob { visible: page.dualSlot < 0; label: i18n.t("MID", i18n.lang); value: (page.ch3.mid - (-15)) / 30; defaultValue: 0.5; valueText: (page.ch3.mid > 0 ? "+" : "") + Number(page.ch3.mid).toFixed(1) + " dB"; onMoved: function (v) { page.put3("mid", Math.round((-15 + v * 30) * 2) / 2) } }
+                Knob { visible: page.dualSlot < 0; label: i18n.t("MID FREQ", i18n.lang); value: Math.log(page.ch3.midFreq / 100) / Math.log(80); defaultValue: Math.log(10) / Math.log(80); valueText: Math.round(page.ch3.midFreq) + " Hz"; onMoved: function (v) { page.put3("midFreq", Math.round(100 * Math.pow(80, v))) } }
+                Knob { visible: page.dualSlot < 0; label: i18n.t("HIGH 10 kHz", i18n.lang); value: (page.ch3.high - (-15)) / 30; defaultValue: 0.5; valueText: (page.ch3.high > 0 ? "+" : "") + Number(page.ch3.high).toFixed(1) + " dB"; onMoved: function (v) { page.put3("high", Math.round((-15 + v * 30) * 2) / 2) } }
+                Repeater { model: page.dualSlot >= 0 ? page.dualP : []
+                    Knob { required property var modelData; required property int index
+                           label: i18n.t(modelData.title, i18n.lang); value: modelData.value; defaultValue: 0.5; valueText: modelData.text
+                           onMoved: function (v) { engine.setPluginParam(page.strip, page.dualSlot, index, v); page.dualTick++ } } }
+                Text { visible: page.eqNote !== ""; text: page.eqNote; color: Theme.amber; font.pixelSize: 9 }
                 Item { Layout.fillWidth: true } } }
         RowLayout { spacing: 10
             Text { text: i18n.t("DYNAMIC MIC · 10 BANDS", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 1.5 }

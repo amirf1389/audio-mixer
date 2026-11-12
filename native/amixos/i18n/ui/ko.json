@@ -1369,5 +1369,12 @@
 "Sample player on a channel: click, switch on, choose the sample": "채널의 샘플 플레이어: 클릭, 켜기, 샘플 선택",
 "Room correction curve and microphone calibration files on ACOUSTICS": "ACOUSTICS의 실내 보정 곡선 및 마이크 보정 파일",
 "Online store for extensions": "소프트웨어 확장 기능 온라인 스토어",
-"CASCADE: two consoles as one desk": "CASCADE: 두 개의 콘솔이 하나로 합쳐진 책상"
+"CASCADE: two consoles as one desk": "CASCADE: 두 개의 콘솔이 하나로 합쳐진 책상",
+"OVER-COMPRESSED": "과도하게 압축됨",
+"This channel loses more than 12 dB to the compressor: raise the threshold or lower the ratio, or add DE-SQUASH to give the attacks back.": "이 채널은 컴프레서에서 12 dB 이상 손실됩니다. 임계값을 높이거나 비율을 낮추거나, DE-SQUASH를 추가해 어택을 되살리세요.",
+"ADD DE-SQUASH": "DE-SQUASH 추가",
+"More than 12 dB of compression: click to add DE-SQUASH to this channel": "12 dB 이상의 압축: 클릭하여 이 채널에 DE-SQUASH 추가",
+"Sample player (play a sample in this channel)": "샘플 플레이어 (이 채널에서 샘플 재생)",
+"De-squash (give back what a heavy compressor took)": "DE-SQUASH (강한 컴프레서가 가져간 것을 되돌림)",
+"CHANNEL EQ · DUAL LISTEN": "채널 EQ · 듀얼 리스닝"
 }

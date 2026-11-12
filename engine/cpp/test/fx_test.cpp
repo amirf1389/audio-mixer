@@ -1,5 +1,6 @@
 // The bus effects: an impulse through the reverb rings and decays, the delay repeats at its time, the chorus modulates, the drive saturates,
 // bypass passes through, and an effect on a Runtime bus reaches the master through the return.
+#include <algorithm>
 #include <cmath>
 #include <set>
 #include <cstdio>
@@ -16,7 +17,7 @@ using namespace am;
 static float peak(const std::vector<float>& v, std::size_t a, std::size_t b) { float p = 0; for (std::size_t i = a; i < b && i < v.size(); ++i) p = std::max(p, std::fabs(v[i])); return p; }
 
 int main() {
-  CHECK(fx::catalog().size() == 21 && fx::make("nope", 48000) == nullptr);
+  CHECK(fx::catalog().size() == 23 && fx::make("nope", 48000) == nullptr);
   { auto r = fx::make("reverb", 48000); CHECK(r && std::string(r->kind()) == "reverb" && r->params().size() == 4 && r->text("decay", 0) == "0.3 s");
     std::vector<float> L(48000, 0.f), R(48000, 0.f); L[0] = R[0] = 1.f; r->set("decay", 0.2); r->process(L.data(), R.data(), L.size());
     CHECK(peak(L, 1000, 6000) > 0.02f && peak(L, 30000, 48000) < peak(L, 2000, 6000) * 0.5f);   // rings, then decays
@@ -38,12 +39,12 @@ int main() {
     rt.setBusProcessor(0, nullptr); for (int k = 0; k < 2; ++k) rt.onBlock(quiet, outs, n); }
   std::printf("fx_test: reverb rings and decays, delay repeats on time (ping-pong crosses), chorus modulates, drive saturates, bypass, bus return OK\n");
   { // the ten effects as rack plug-ins: each changes a tone, stays finite and below +12 dB, passes it untouched when bypassed, and keeps its state through a save / load
-    CHECK(am::fx::catalog().size() == 21); const std::size_t n = 4800; std::vector<float> src(n), l(n), r(n); for (std::size_t i = 0; i < n; ++i) src[i] = 0.4f * static_cast<float>(std::sin(2 * 3.14159265 * 440 * static_cast<double>(i) / 48000) + 0.5 * std::sin(2 * 3.14159265 * 5000 * static_cast<double>(i) / 48000));
+    CHECK(am::fx::catalog().size() == 23); const std::size_t n = 4800; std::vector<float> src(n), l(n), r(n); for (std::size_t i = 0; i < n; ++i) src[i] = 0.4f * static_cast<float>(std::sin(2 * 3.14159265 * 440 * static_cast<double>(i) / 48000) + 0.5 * std::sin(2 * 3.14159265 * 5000 * static_cast<double>(i) / 48000));
     for (const auto& [kind, name] : am::fx::catalog()) { auto p = am::fx::FxPlugin::make(kind, 48000); CHECK(p && p->info().format == "FX" && p->params().size() >= 3);
       if (kind == "postamp") p->setParam(0, 0.9); if (kind == "preamp") p->setParam(0, 0.4);   // these two are neutral (unity) until a knob is turned
       const float* in[2] = {src.data(), src.data()}; float* out[2] = {l.data(), r.data()}; for (int k = 0; k < 3; ++k) p->process(in, out, static_cast<int>(n));
       double diff = 0, pk = 0; bool finite = true; for (std::size_t i = 0; i < n; ++i) { finite = finite && std::isfinite(l[i]); diff += std::fabs(l[i] - src[i]); pk = std::max(pk, std::fabs(static_cast<double>(l[i]))); }
-      const bool waits = kind == "antifeedback";   // the feedback killer does nothing until a howl has stood for a third of a second: on this short signal it must leave the sound alone
+      const bool waits = kind == "antifeedback" || kind == "sampler";   // the sample player adds nothing until PLAY is switched on;   // the feedback killer does nothing until a howl has stood for a third of a second: on this short signal it must leave the sound alone
       if (!(finite && pk < 4.0 && (waits ? diff / n < 1e-6 : diff / n > 1e-4))) std::fprintf(stderr, "effect %s: finite %d peak %.2f diff %.5f\n", kind.c_str(), finite, pk, diff / n); CHECK(finite && pk < 4.0 && (waits ? diff / n < 1e-6 : diff / n > 1e-4));
       p->setParam(0, 0.83); const std::string st = p->state(); auto q = am::fx::FxPlugin::make(kind, 48000); CHECK(q->setState(st) && std::fabs(q->param(0) - 0.83) < 1e-3);
       p->setBypass(true); p->process(in, out, static_cast<int>(n)); double d2 = 0; for (std::size_t i = 0; i < n; ++i) d2 += std::fabs(l[i] - src[i]); CHECK(d2 == 0); }
@@ -112,7 +113,7 @@ int main() {
         CHECK(quiet > 0.008f && quiet < 0.012f);          // within 2 dB of its own level
         CHECK(loud > 0.2f && loud < 0.95f);               // rounded off, not clipped hard and not silent
         for (std::size_t i = 0; i < n; ++i) CHECK(std::isfinite(l[i]) && std::fabs(l[i]) < 4.f); } }
-    std::printf("fx_test: twenty-one effects as rack plug-ins (reverb, delay, analog channel, pitch shifter, dual listen eq, sound barrier, sync delay, feedback killer, chorus, drive, flanger, phaser, tremolo, auto wah, bit crusher, exciter, tube amp, pre amp, post amp, hall, room): audible, finite, bypass, state\n"); }
+    std::printf("fx_test: twenty-three effects as rack plug-ins (sample player, de-squash, reverb, delay, analog channel, pitch shifter, dual listen eq, sound barrier, sync delay, feedback killer, chorus, drive, flanger, phaser, tremolo, auto wah, bit crusher, exciter, tube amp, pre amp, post amp, hall, room): audible, finite, bypass, state\n"); }
   { const auto& all = am::fx::presets(); CHECK(all.size() == 300); std::set<std::string> names; int perKind[4] = {0, 0, 0, 0};
     for (const auto& p : all) { names.insert(p.name); auto e = am::fx::make(p.kind, 48000); CHECK(e); for (const auto& [id, v] : p.values) { CHECK(v >= 0 && v <= 1); e->set(id, v); } e->setMix(p.mix); bool known = false; for (const auto& prm : e->params()) for (const auto& [id, v] : p.values) if (prm.id == id) known = true; CHECK(known);
       perKind[p.kind == "reverb" ? 0 : p.kind == "delay" ? 1 : p.kind == "chorus" ? 2 : 3]++; }
@@ -138,5 +139,32 @@ int main() {
     run(0, b, a, n, hz); CHECK(n == 0 && std::fabs(a / b - 1.0) < 0.1);                         // room noise only: nothing is touched
     run(2, b, a, n, hz); CHECK(n == 0 && a > b * 0.8);                                         // a tone that keeps moving (a melody, a sweep) is not feedback
     auto fx = am::fx::make("antifeedback", 48000); CHECK(fx && fx->params().size() == 4 && fx->text("mode", 1.0) == "LIVE" && fx->text("mode", 0.0) == "HOLD" && fx->text("depth", 1.0) == "-30 dB"); }
+  {   // SAMPLE PLAYER: off = silence added; PLAY on = the chosen sample added from the top; it stops at its end without LOOP and goes round with it
+    auto fx = am::fx::make("sampler", 48000); CHECK(fx && fx->params().size() == 4);
+    CHECK(fx->text("sample", 0.0).rfind("1 ", 0) == 0 && fx->text("play", 1.0) == "ON" && fx->text("level", 0.0) == "-inf dB");
+    std::vector<float> L(4800, 0.0f), R(4800, 0.0f);
+    fx->set("sample", 0.0); fx->set("level", 40.0 / 46.0);   // sample 1 at 0 dB
+    fx->process(L.data(), R.data(), L.size()); double e = 0; for (float v : L) e += std::fabs(v); CHECK(e == 0.0);   // PLAY off
+    fx->set("play", 1.0); fx->process(L.data(), R.data(), L.size()); e = 0; for (float v : L) e += std::fabs(v); CHECK(e > 1.0);
+    auto* sp = dynamic_cast<am::fx::SamplePlayer*>(fx.get()); CHECK(sp && sp->playing());
+    std::vector<float> big(48000 * 8, 0.0f); fx->process(big.data(), big.data(), big.size()); CHECK(!sp->playing());   // longer than any sample: it ended
+    fx->set("loop", 1.0); fx->set("play", 0.0); { float z[64] = {}; fx->process(z, z, 64); } fx->set("play", 1.0);
+    std::fill(big.begin(), big.end(), 0.0f); fx->process(big.data(), big.data(), big.size()); CHECK(sp->playing());
+    double tail = 0; for (std::size_t i = big.size() - 48000; i < big.size(); ++i) tail += std::fabs(big[i]); CHECK(tail > 0.0);   // still sounding at the end: it went round
+    fx->set("sample", 0.5); CHECK(fx->text("sample", 0.5).rfind("51 ", 0) == 0);
+  }
+  {   // DE-SQUASH: a squashed drum (sharp hits on a constant bed) gets its hits back; a steady tone is left alone
+    auto fx = am::fx::make("desquash", 48000); CHECK(fx && fx->params().size() == 3 && fx->text("range", 1.0) == "12.0 dB");
+    const std::size_t n = 48000 * 2; std::vector<float> x(n), y(n);
+    for (std::size_t i = 0; i < n; ++i) { const double t = static_cast<double>(i) / 48000.0; const double env = 0.25 + ((i % 12000) < 600 ? 0.25 : 0.0); x[i] = static_cast<float>(env * std::sin(2 * 3.14159265358979 * 120.0 * t)); }
+    y = x; fx->process(y.data(), y.data(), n);
+    auto peakIn = [](const std::vector<float>& v, std::size_t a, std::size_t b) { double p = 0; for (std::size_t i = a; i < b; ++i) p = std::max(p, static_cast<double>(std::fabs(v[i]))); return p; };
+    const double hitIn = peakIn(x, 48000, 48600), hitOut = peakIn(y, 48000, 48600), bedIn = peakIn(x, 54000, 59000), bedOut = peakIn(y, 54000, 59000);
+    std::fprintf(stderr, "de-squash: hit %.3f -> %.3f, bed %.3f -> %.3f\n", hitIn, hitOut, bedIn, bedOut);
+    CHECK(hitOut / hitIn > 1.15 && hitOut / hitIn < 4.0);   // the hits stand out again, within RANGE
+    CHECK(std::fabs(bedOut / bedIn - 1.0) < 0.08);          // the bed is left where it was
+    auto fx2 = am::fx::make("desquash", 48000); std::vector<float> s(n); for (std::size_t i = 0; i < n; ++i) s[i] = static_cast<float>(0.3 * std::sin(2 * 3.14159265358979 * 440.0 * i / 48000.0));
+    std::vector<float> s2 = s; fx2->process(s2.data(), s2.data(), n); CHECK(std::fabs(peakIn(s2, 48000, n) / peakIn(s, 48000, n) - 1.0) < 0.05);   // a steady tone: untouched
+  }
   return 0;
 }

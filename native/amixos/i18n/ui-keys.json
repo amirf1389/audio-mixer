@@ -1375,5 +1375,12 @@
 "Sample player on a channel: click, switch on, choose the sample",
 "Room correction curve and microphone calibration files on ACOUSTICS",
 "Online store for extensions",
-"CASCADE: two consoles as one desk"
+"CASCADE: two consoles as one desk",
+"OVER-COMPRESSED",
+"This channel loses more than 12 dB to the compressor: raise the threshold or lower the ratio, or add DE-SQUASH to give the attacks back.",
+"ADD DE-SQUASH",
+"More than 12 dB of compression: click to add DE-SQUASH to this channel",
+"Sample player (play a sample in this channel)",
+"De-squash (give back what a heavy compressor took)",
+"CHANNEL EQ · DUAL LISTEN"
 ]

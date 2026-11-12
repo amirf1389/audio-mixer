@@ -42,6 +42,8 @@ Item {
         else if (e.key === Qt.Key_Escape) engine.clearSolo()
     }
     readonly property var mon: engine.monitor
+    property string note: ""   // a short line in the ACTIONS bar (the rack is full ...)
+    Timer { running: page.note !== ""; interval: 5000; onTriggered: page.note = "" }
     signal go(string id)
     readonly property int sel: engine.selectedStrip
     readonly property var selSt: engine.stripState[sel]
@@ -124,6 +126,7 @@ Item {
                 property bool anySolo: { var m = false; for (var i = 0; i < engine.stripState.length; i++) if (engine.stripState[i].solo) m = true; return m }
                 id: bar
                 Text { text: i18n.t("ACTIONS:", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
+                Text { visible: page.note !== ""; text: page.note; color: Theme.amber; font.pixelSize: 9 }
                 Rectangle { implicitWidth: 44; implicitHeight: 20; radius: 4; color: engine.canUndo ? Theme.ov(0.1) : Theme.ov(0.03); Text { anchors.centerIn: parent; text: i18n.t("↶ UNDO", i18n.lang); color: engine.canUndo ? Theme.ink : Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; enabled: engine.canUndo; onClicked: engine.undo() } }
                 Rectangle { implicitWidth: 44; implicitHeight: 20; radius: 4; color: engine.canRedo ? Theme.ov(0.1) : Theme.ov(0.03); Text { anchors.centerIn: parent; text: i18n.t("REDO ↷", i18n.lang); color: engine.canRedo ? Theme.ink : Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; enabled: engine.canRedo; onClicked: engine.redo() } }
                 Rectangle { implicitWidth: 44; implicitHeight: 20; radius: 4; color: engine.abSlot === "B" ? Theme.pink : Theme.ov(0.06); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: "A / B: " + engine.abSlot; color: engine.abSlot === "B" ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.toggleAB() } ToolTip.visible: abHov.hovered; ToolTip.text: i18n.t("Compare two console states: the first press keeps the current console as B and shows A; press again to swap", i18n.lang); HoverHandler { id: abHov } }
@@ -321,6 +324,10 @@ Item {
                                         Rectangle { implicitWidth: 26; implicitHeight: 16; radius: 3; color: st && st.solo ? Theme.amber : Theme.ov(0.08); Text { anchors.centerIn: parent; text: "S"; color: st && st.solo ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setSolo(index, !(st && st.solo)) } } }
                                     // AI: automix (gain sharing between open channels) on this strip, with the gain it applies right now; ⋯ = the strip menu (also right-click)
                                     RowLayout { Layout.fillWidth: true; spacing: 2
+                                        Rectangle { visible: mt !== undefined && !!mt.overComp; Layout.fillWidth: true; implicitHeight: 13; radius: 3; color: Qt.rgba(1, 0.3, 0.3, 0.25); border.color: Theme.danger
+                                            Text { anchors.centerIn: parent; text: i18n.t("OVER-COMPRESSED", i18n.lang); color: Theme.danger; font.family: Theme.mono; font.pixelSize: 6; font.bold: true }
+                                            ToolTip.visible: ocHov.hovered; ToolTip.text: i18n.t("More than 12 dB of compression: click to add DE-SQUASH to this channel", i18n.lang); HoverHandler { id: ocHov }
+                                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { const k = engine.addToRack(index, "fx:desquash"); if (k >= 0) plugEd.openFor(index, k, "fx:desquash", "DE-SQUASH"); else page.note = i18n.t("The rack of this channel is full.", i18n.lang) } } }
                                         Rectangle { visible: page.showAi; Layout.fillWidth: true; implicitHeight: 13; radius: 3; color: st && st.automix ? Qt.rgba(0.2, 0.9, 0.5, 0.22) : Theme.ov(0.05); border.color: st && st.automix ? Theme.emerald : Theme.lineSoft
                                             Text { anchors.centerIn: parent; text: st && st.automix ? i18n.t("AI ", i18n.lang) + (mt && mt.amGainDb !== undefined && mt.amGainDb < -0.05 ? mt.amGainDb.toFixed(1) : "0.0") : i18n.t("AI", i18n.lang); color: st && st.automix ? Theme.emerald : Theme.dim; font.family: Theme.mono; font.pixelSize: 6; font.bold: true }
                                             Rectangle { anchors.left: parent.left; anchors.bottom: parent.bottom; anchors.margins: 1; height: 2; radius: 1; color: Theme.emerald; visible: st && st.automix; width: Math.max(0, Math.min(1, 1 + (mt && mt.amGainDb !== undefined ? mt.amGainDb : 0) / 30)) * (parent.width - 2) }
@@ -341,6 +348,8 @@ Item {
                                             MenuItem { text: i18n.t("Fader to 0 dB", i18n.lang); onTriggered: engine.setGain(index, 0) }
                                             MenuItem { text: i18n.t("Pan to centre", i18n.lang); onTriggered: engine.setPan(index, 0) }
                                             MenuItem { text: (st && st.autoPol ? "✓ " : "") + i18n.t("Phase: AUTO (turn round when out of phase with the mix)", i18n.lang); onTriggered: engine.setAutoPolarity(index, !(st && st.autoPol)) }
+                                            MenuItem { text: i18n.t("Sample player (play a sample in this channel)", i18n.lang); onTriggered: { const k = engine.addToRack(index, "fx:sampler"); if (k >= 0) plugEd.openFor(index, k, "fx:sampler", "SAMPLE PLAYER"); else page.note = i18n.t("The rack of this channel is full.", i18n.lang) } }
+                                            MenuItem { text: i18n.t("De-squash (give back what a heavy compressor took)", i18n.lang); onTriggered: { const k = engine.addToRack(index, "fx:desquash"); if (k >= 0) plugEd.openFor(index, k, "fx:desquash", "DE-SQUASH"); else page.note = i18n.t("The rack of this channel is full.", i18n.lang) } }
                                             MenuItem { text: i18n.t("Flatten DSP (EQ, dyn, delay, Ø)", i18n.lang); onTriggered: engine.resetStripDsp(index) }
                                             MenuItem { text: i18n.t("Reset channel (keep name, colour)", i18n.lang); onTriggered: engine.resetStrip(index) }
                                             MenuSeparator {}
