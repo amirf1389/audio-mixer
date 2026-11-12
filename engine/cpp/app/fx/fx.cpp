@@ -11,7 +11,7 @@ double clamp01(double v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
 std::string fmt(const char* f, double v) { char b[32]; std::snprintf(b, sizeof b, f, v); return b; }
 }  // namespace
 
-std::vector<std::pair<std::string, std::string>> catalog() { return {{"reverb", "PLATE REVERB"}, {"delay", "TAPE DELAY"}, {"syncdelay", "SYNC DELAY"}, {"antifeedback", "FEEDBACK KILLER"}, {"analog", "ANALOG CHANNEL"}, {"pitch", "PITCH SHIFTER"}, {"chorus", "STEREO CHORUS"}, {"drive", "TUBE DRIVE"}, {"flanger", "FLANGER"}, {"phaser", "PHASER"}, {"tremolo", "TREMOLO"}, {"wah", "AUTO WAH"}, {"crusher", "BIT CRUSHER"}, {"exciter", "EXCITER"}, {"tubeamp", "TUBE AMP"}, {"preamp", "PRE AMP"}, {"postamp", "POST AMP"}, {"hall", "HALL REVERB"}, {"room", "ROOM REVERB"}}; }
+std::vector<std::pair<std::string, std::string>> catalog() { return {{"reverb", "PLATE REVERB"}, {"delay", "TAPE DELAY"}, {"syncdelay", "SYNC DELAY"}, {"antifeedback", "FEEDBACK KILLER"}, {"analog", "ANALOG CHANNEL"}, {"dualeq", "DUAL LISTEN EQ"}, {"pitch", "PITCH SHIFTER"}, {"chorus", "STEREO CHORUS"}, {"drive", "TUBE DRIVE"}, {"flanger", "FLANGER"}, {"phaser", "PHASER"}, {"tremolo", "TREMOLO"}, {"wah", "AUTO WAH"}, {"crusher", "BIT CRUSHER"}, {"exciter", "EXCITER"}, {"tubeamp", "TUBE AMP"}, {"preamp", "PRE AMP"}, {"postamp", "POST AMP"}, {"hall", "HALL REVERB"}, {"room", "ROOM REVERB"}}; }
 std::unique_ptr<Effect> make(const std::string& k, double fs) {
   if (k == "reverb") return std::make_unique<Reverb>(fs);
   if (k == "delay") return std::make_unique<TapeDelay>(fs);
@@ -19,6 +19,7 @@ std::unique_ptr<Effect> make(const std::string& k, double fs) {
   if (k == "antifeedback") return std::make_unique<FeedbackKiller>(fs);
   if (k == "chorus") return std::make_unique<Chorus>(fs);
   if (k == "analog") return std::make_unique<Analog>(fs);
+  if (k == "dualeq") return std::make_unique<DualEq>(fs);
   if (k == "pitch") return std::make_unique<Pitch>(fs);
   if (k == "flanger") return std::make_unique<Flanger>(fs);
   if (k == "phaser") return std::make_unique<Phaser>(fs);
@@ -134,6 +135,35 @@ void Drive::process(float* L, float* R, std::size_t n) {
 }
 
 
+// ---------------------------------------------------------------- Dual listen EQ
+DualEq::DualEq(double fs) : Simple(fs) { for (int i = 0; i < 4; ++i) k_[i] = knobDef(i); reset(); }
+void DualEq::reset() { lp_[0] = lp_[1] = hp_[0] = hp_[1] = 0; eLow_ = eMid_ = eHigh_ = 0; gl_ = gh_ = 1; gLowDb_ = 0; gHighDb_ = 0; }
+std::string DualEq::text(const std::string& id, double v) const {
+  v = clamp01(v); if (id == "bass" || id == "treble") return fmt("%+.1f dB", (v - 0.5) * 12.0); if (id == "range") return fmt("%.0f dB", v * 12.0); return fmt("%.1f s", 4.0 * std::pow(0.075, v));
+}
+void DualEq::process(float* L, float* R, std::size_t n) {
+  if (bypass_.load()) return;
+  // a natural balance of music against its middle: the bass about level with it, the treble about 12 dB under; BASS / TREBLE move those marks
+  const double wantLow = 0.0 + (k_[0].load() - 0.5) * 12.0, wantHigh = -12.0 + (k_[1].load() - 0.5) * 12.0, range = k_[2].load() * 12.0, tau = 4.0 * std::pow(0.075, k_[3].load());
+  const float aL = static_cast<float>(std::exp(-2.0 * kPi * 200.0 / fs_)), aH = static_cast<float>(std::exp(-2.0 * kPi * 4000.0 / fs_));
+  const double aE = std::exp(-1.0 / (0.3 * fs_)), aG = std::exp(-static_cast<double>(n) / (tau * fs_));   // loudness over 0.3 s; the gains move once a block
+  const float wet = static_cast<float>(mix_.load()), dry = 1.f - wet; float* ch[2] = {L, R};
+  const float gl = static_cast<float>(gl_), gh = static_cast<float>(gh_);
+  for (std::size_t i = 0; i < n; ++i) {
+    double sl = 0, sm = 0, sh = 0;
+    for (int c = 0; c < 2; ++c) { const float x = ch[c][i]; lp_[c] = x + aL * (lp_[c] - x); hp_[c] = x + aH * (hp_[c] - x);   // lp_: under 200 Hz; hp_: under 4 kHz
+      const float low = lp_[c], high = x - hp_[c], mid = x - low - high; sl += static_cast<double>(low) * low; sm += static_cast<double>(mid) * mid; sh += static_cast<double>(high) * high;
+      ch[c][i] = dry * x + wet * (low * gl + mid + high * gh); }
+    eLow_ = sl + aE * (eLow_ - sl); eMid_ = sm + aE * (eMid_ - sm); eHigh_ = sh + aE * (eHigh_ - sh);
+  }
+  for (int c = 0; c < 2; ++c) { if (std::fabs(lp_[c]) < 1e-20f) lp_[c] = 0; if (std::fabs(hp_[c]) < 1e-20f) hp_[c] = 0; }
+  if (eMid_ > 2e-6) {   // the middle is there (above about -54 dBFS): listen and move; below that, hold
+    const double lowDb = 10.0 * std::log10((eLow_ + 1e-12) / eMid_), highDb = 10.0 * std::log10((eHigh_ + 1e-12) / eMid_);
+    const double tl = std::max(-range, std::min(range, wantLow - lowDb)), th = std::max(-range, std::min(range, wantHigh - highDb));
+    const double nowL = 20.0 * std::log10(gl_), nowH = 20.0 * std::log10(gh_), nl = tl + aG * (nowL - tl), nh = th + aG * (nowH - th);
+    gl_ = std::pow(10.0, nl / 20.0); gh_ = std::pow(10.0, nh / 20.0); gLowDb_ = nl; gHighDb_ = nh;
+  }
+}
 // ---------------------------------------------------------------- Pitch shifter
 Pitch::Pitch(double fs) : Simple(fs) { for (int i = 0; i < 3; ++i) k_[i] = knobDef(i); reset(); }
 void Pitch::setSampleRate(double fs) { fs_ = fs > 0 ? fs : 48000; reset(); }

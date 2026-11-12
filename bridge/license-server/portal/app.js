@@ -55,22 +55,48 @@ $('ckGo').addEventListener('click', async () => {
   $('ckGo').disabled = false;
 });
 
-// updates
-let updatesLoaded = false;
+// updates: the newest release, a version check, downloads by system with size and checksum, and what is new release by release
+let updatesLoaded = false, latest = null;
+const cmpVersion = (a, b) => { const x = String(a).split('.').map(n => parseInt(n, 10) || 0), y = String(b).split('.').map(n => parseInt(n, 10) || 0); for (let i = 0; i < Math.max(x.length, y.length); i++) { const d = (x[i] || 0) - (y[i] || 0); if (d) return d < 0 ? -1 : 1; } return 0; };
+const sizeOf = n => n ? (n / 1048576).toFixed(n < 10485760 ? 2 : 1) + ' MB' : '';
+const SYSTEMS = [['win', 'Windows'], ['mac', 'macOS'], ['linux', 'Linux'], ['android', 'Android']];
+const systemOf = p => { const k = String(p).toLowerCase(); for (const [id, name] of SYSTEMS) if (k.includes(id) || (id === 'mac' && k.includes('darwin'))) return name; return 'Other'; };
+function paintFiles() {
+  const want = $('upSys').value, tb = $('upFiles'); tb.textContent = '';
+  for (const f of (latest.files || []).filter(f => !want || systemOf(f.platform) === want)) {
+    const tr = document.createElement('tr'), cells = [0, 1, 2, 3, 4].map(() => document.createElement('td'));
+    cells[0].textContent = systemOf(f.platform) + ' · ' + f.platform; cells[2].textContent = sizeOf(f.size); cells[3].className = 'mono'; cells[3].textContent = f.sha256 || '';
+    if (/^https:\/\//.test(f.url || '')) { const a = document.createElement('a'); a.href = f.url; a.rel = 'noopener'; a.textContent = f.name || f.url.split('/').pop(); cells[1].appendChild(a); } else cells[1].textContent = f.name || '';
+    if (f.sha256) { const b = document.createElement('button'); b.className = 'small'; b.textContent = 'Copy'; b.addEventListener('click', async () => { try { await navigator.clipboard.writeText(f.sha256); b.textContent = 'Copied'; } catch (_) { b.textContent = 'Select it'; } setTimeout(() => { b.textContent = 'Copy'; }, 1500); }); cells[4].appendChild(b); }
+    tr.append(...cells); tb.appendChild(tr);
+  }
+  if (!tb.children.length) { const tr = document.createElement('tr'), td = document.createElement('td'); td.colSpan = 5; td.className = 'muted'; td.textContent = 'No file for this system in this release.'; tr.appendChild(td); tb.appendChild(tr); }
+}
+$('upSys').addEventListener('change', paintFiles);
+$('myVerGo').addEventListener('click', () => {
+  const v = $('myVer').value.trim(); if (!/^\d+(\.\d+){1,3}$/.test(v)) { say($('myVerMsg'), 'Type a version like 1.23.0.1.', 'err'); return; }
+  const c = cmpVersion(v, latest.version);
+  say($('myVerMsg'), c < 0 ? 'An update is waiting: ' + latest.version + ' is newer than ' + v + '. In AmF X1: ENGINE CONTROL → CHECK NOW.' : c === 0 ? 'You have the newest version.' : 'Your copy (' + v + ') is newer than the published one (' + latest.version + ').', c < 0 ? 'err' : 'ok');
+});
+$('myVer').addEventListener('keydown', e => { if (e.key === 'Enter') $('myVerGo').click(); });
 async function loadUpdates() {
   if (updatesLoaded) return; updatesLoaded = true;
   try {
     const r = await fetch('/portal/updates'), j = await r.json();
     if (!j.ok) { say($('upMsg'), j.error || 'No update list is published yet.', 'err'); updatesLoaded = false; return; }
+    latest = j;
     $('upVer').textContent = 'AmF X1 ' + j.version; $('upDate').textContent = (j.released || '') + (j.channel ? ' · ' + j.channel : '') + (j.signed ? ' · the list carries a signature' : ' · the list is not signed');
     const ul = $('upNotes'); ul.textContent = ''; for (const n of (j.notes || []).slice(0, 12)) { const li = document.createElement('li'); li.textContent = n; ul.appendChild(li); }
-    const tb = $('upFiles'); tb.textContent = '';
-    for (const f of j.files || []) {
-      const tr = document.createElement('tr'), s = document.createElement('td'), n = document.createElement('td'), h = document.createElement('td'); h.className = 'mono';
-      s.textContent = f.platform; h.textContent = f.sha256 || '';
-      if (/^https:\/\//.test(f.url || '')) { const a = document.createElement('a'); a.href = f.url; a.rel = 'noopener'; a.textContent = f.name || f.url.split('/').pop(); n.appendChild(a); } else n.textContent = f.name || '';
-      tr.append(s, n, h); tb.appendChild(tr);
-    }
+    if (!ul.children.length) { const li = document.createElement('li'); li.className = 'muted'; li.textContent = 'No notes were published with this release.'; ul.appendChild(li); }
+    const sys = $('upSys'), present = [...new Set((j.files || []).map(f => systemOf(f.platform)))]; sys.textContent = '';
+    for (const [v, t] of [['', 'every system (' + (j.files || []).length + ' files)']].concat(present.map(p => [p, p]))) { const o = document.createElement('option'); o.value = v; o.textContent = t; sys.appendChild(o); }
+    const ua = navigator.userAgent, mine = /Windows/.test(ua) ? 'Windows' : /Android/.test(ua) ? 'Android' : /Mac OS X/.test(ua) ? 'macOS' : /Linux/.test(ua) ? 'Linux' : ''; if (present.includes(mine)) sys.value = mine;   // start on the visitor's own system
+    paintFiles();
+    const exe = (j.files || []).find(f => /\.exe$/i.test(f.name || '') && systemOf(f.platform) === 'Windows'); if (exe) $('upCmd').textContent = 'Get-FileHash ".\\' + exe.name + '" -Algorithm SHA256';
+    const box = $('upNew'); box.textContent = '';
+    for (const f of j.features || []) { if (!f.items || !f.items.length) continue; const d = document.createElement('details'), sum = document.createElement('summary'), b = document.createElement('b'), ul2 = document.createElement('ul'); d.className = 'rel';
+      b.textContent = f.version; sum.append(b, document.createTextNode((f.title || '') + (f.date ? ' · ' + f.date : ''))); for (const it of f.items) { const li = document.createElement('li'); li.textContent = it; ul2.appendChild(li); } d.append(sum, ul2); if (!box.children.length) d.open = true; box.appendChild(d); }
+    $('upNewBox').hidden = !box.children.length;
     $('upMsg').hidden = true; $('upOut').hidden = false;
   } catch (_) { say($('upMsg'), 'The update list could not be read.', 'err'); updatesLoaded = false; }
 }

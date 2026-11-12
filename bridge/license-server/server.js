@@ -284,8 +284,9 @@ function createServer({ privateKey, token, dataFile = DATA_FILE, dataSecret, tru
       if (!(u.protocol === 'https:' || (u.protocol === 'http:' && (u.hostname === '127.0.0.1' || u.hostname === 'localhost')))) throw new Error('the update list must be an https address');
       const r = await fetch(u, { signal: AbortSignal.timeout(6000) }); if (!r.ok) throw new Error('the update list answered ' + r.status);
       const j = JSON.parse((await r.text()).slice(0, 262144)), p = typeof j.payload === 'string' ? JSON.parse(j.payload) : j, files = [];
-      for (const [platform, f] of Object.entries(p.files || {})) if (f && typeof f === 'object') files.push({ platform: clean(platform, 40), name: clean(f.name || String(f.url || '').split('/').pop(), 120), url: clean(f.url, 400), sha256: clean(f.sha256, 64) });
-      body = { ok: true, version: clean(p.version, 32), channel: clean(p.channel, 24), released: clean(p.released, 24), notes: (Array.isArray(p.notes) ? p.notes : []).slice(0, 20).map(n => clean(n, 300)), files, signed: typeof j.signature === 'string' && j.signature.length > 40 };
+      for (const [platform, f] of Object.entries(p.files || {})) if (f && typeof f === 'object') files.push({ platform: clean(platform, 40), name: clean(f.name || String(f.url || '').split('/').pop(), 120), url: clean(f.url, 400), sha256: clean(f.sha256, 64), size: Number.isFinite(Number(f.size)) ? Number(f.size) : null });
+      body = { ok: true, version: clean(p.version, 32), channel: clean(p.channel, 24), released: clean(p.released, 24), notes: (Array.isArray(p.notes) ? p.notes : []).slice(0, 20).map(n => clean(n, 300)), files,
+        features: (Array.isArray(p.features) ? p.features : []).slice(0, 8).map(f => ({ version: clean(f && f.version, 32), date: clean(f && f.date, 24), title: clean(f && f.title, 120), items: (Array.isArray(f && f.items) ? f.items : []).slice(0, 60).map(i => clean(i, 400)) })), signed: typeof j.signature === 'string' && j.signature.length > 40 };
     } catch (e) { body = { ok: false, error: 'The update list could not be read: ' + clean(e.message, 120) }; }
     upd.at = Date.now(); upd.body = body; return c.json(200, body);
   });

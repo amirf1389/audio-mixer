@@ -263,7 +263,7 @@ test('the customer portal is served, reads the update list through the server, a
     for (const f of ['/portal/app.js', '/portal/portal.css', '/portal/base.css']) assert.strictEqual((await fetch(base + f)).status, 200);
     const js = await (await fetch(base + '/portal/app.js')).text(); assert.ok(!js.includes('/admin') && !js.includes('Bearer'));
     const u = await (await fetch(base + '/portal/updates')).json();
-    assert.strictEqual(u.ok, true); assert.strictEqual(u.version, '1.23.0.1'); assert.strictEqual(u.signed, true); assert.strictEqual(u.files[0].platform, 'win-x64-exe'); assert.strictEqual(u.files[0].sha256.length, 64);
+    assert.strictEqual(u.ok, true); assert.strictEqual(u.version, '1.23.0.1'); assert.strictEqual(u.files[0].size, null); assert.deepStrictEqual(u.features, []); assert.strictEqual(u.signed, true); assert.strictEqual(u.files[0].platform, 'win-x64-exe'); assert.strictEqual(u.files[0].sha256.length, 64);
     const bad = createServer({ privateKey: pair.privateKey, token: TOKEN, dataFile: pathx.join(dir, 'l2.json'), updateUrl: 'http://example.org/update.json' });
     await new Promise(r => bad.listen(0, '127.0.0.1', r));
     const b = await (await fetch(`http://127.0.0.1:${bad.address().port}/portal/updates`)).json(); bad.close();

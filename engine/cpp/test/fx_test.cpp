@@ -16,7 +16,7 @@ using namespace am;
 static float peak(const std::vector<float>& v, std::size_t a, std::size_t b) { float p = 0; for (std::size_t i = a; i < b && i < v.size(); ++i) p = std::max(p, std::fabs(v[i])); return p; }
 
 int main() {
-  CHECK(fx::catalog().size() == 19 && fx::make("nope", 48000) == nullptr);
+  CHECK(fx::catalog().size() == 20 && fx::make("nope", 48000) == nullptr);
   { auto r = fx::make("reverb", 48000); CHECK(r && std::string(r->kind()) == "reverb" && r->params().size() == 4 && r->text("decay", 0) == "0.3 s");
     std::vector<float> L(48000, 0.f), R(48000, 0.f); L[0] = R[0] = 1.f; r->set("decay", 0.2); r->process(L.data(), R.data(), L.size());
     CHECK(peak(L, 1000, 6000) > 0.02f && peak(L, 30000, 48000) < peak(L, 2000, 6000) * 0.5f);   // rings, then decays
@@ -38,7 +38,7 @@ int main() {
     rt.setBusProcessor(0, nullptr); for (int k = 0; k < 2; ++k) rt.onBlock(quiet, outs, n); }
   std::printf("fx_test: reverb rings and decays, delay repeats on time (ping-pong crosses), chorus modulates, drive saturates, bypass, bus return OK\n");
   { // the ten effects as rack plug-ins: each changes a tone, stays finite and below +12 dB, passes it untouched when bypassed, and keeps its state through a save / load
-    CHECK(am::fx::catalog().size() == 19); const std::size_t n = 4800; std::vector<float> src(n), l(n), r(n); for (std::size_t i = 0; i < n; ++i) src[i] = 0.4f * static_cast<float>(std::sin(2 * 3.14159265 * 440 * static_cast<double>(i) / 48000) + 0.5 * std::sin(2 * 3.14159265 * 5000 * static_cast<double>(i) / 48000));
+    CHECK(am::fx::catalog().size() == 20); const std::size_t n = 4800; std::vector<float> src(n), l(n), r(n); for (std::size_t i = 0; i < n; ++i) src[i] = 0.4f * static_cast<float>(std::sin(2 * 3.14159265 * 440 * static_cast<double>(i) / 48000) + 0.5 * std::sin(2 * 3.14159265 * 5000 * static_cast<double>(i) / 48000));
     for (const auto& [kind, name] : am::fx::catalog()) { auto p = am::fx::FxPlugin::make(kind, 48000); CHECK(p && p->info().format == "FX" && p->params().size() >= 3);
       if (kind == "postamp") p->setParam(0, 0.9); if (kind == "preamp") p->setParam(0, 0.4);   // these two are neutral (unity) until a knob is turned
       const float* in[2] = {src.data(), src.data()}; float* out[2] = {l.data(), r.data()}; for (int k = 0; k < 3; ++k) p->process(in, out, static_cast<int>(n));
@@ -52,6 +52,20 @@ int main() {
       double h1 = 0, h3 = 0; for (std::size_t i = 0; i < n; ++i) { const double t = static_cast<double>(i) / 48000; h1 += a[i] * std::sin(2 * 3.14159265 * 220 * t); h3 += a[i] * std::sin(2 * 3.14159265 * 660 * t); } CHECK(std::fabs(h3) > 0.02 * std::fabs(h1));
       auto hall = am::fx::make("hall", 48000); hall->setMix(1); hall->set("decay", 0.5); std::vector<float> hl(n, 0.f), hr(n, 0.f); hl[0] = hr[0] = 1.f; hall->process(hl.data(), hr.data(), n); double tail = 0; for (int k = 0; k < 9; ++k) { std::fill(hl.begin(), hl.end(), 0.f); std::fill(hr.begin(), hr.end(), 0.f); hall->process(hl.data(), hr.data(), n); } for (float v : hl) tail = std::max(tail, std::fabs(static_cast<double>(v))); CHECK(tail > 1e-4 && tail < 1.0);   // one second on: still sounding, not growing
       auto pre = am::fx::make("preamp", 48000); pre->set("gain", 1.0); pre->set("warmth", 0); pre->set("lowcut", 0); pre->set("out", 24.0 / 36.0); std::vector<float> pa(n, 0.001f), pb(n, 0.001f); pre->process(pa.data(), pb.data(), n); CHECK(std::fabs(pa[n - 1] / 0.001f - 63.1f) < 1.0f); }
+    { // DUAL LISTEN EQ: it listens. A bass-heavy mix has its bass eased, a thin one has it filled; a harsh one has its treble calmed; with RANGE at 0
+      // it changes nothing; in silence it holds the gains it had
+      am::fx::DualEq q(48000); const std::size_t n = 48000 * 6; std::vector<float> l(n), r(n);
+      auto feed = [&](double bass, double mid, double treble) { for (std::size_t i = 0; i < n; ++i) { const double t = static_cast<double>(i) / 48000.0; l[i] = r[i] = static_cast<float>(bass * std::sin(2 * 3.14159265358979 * 60.0 * t) + mid * std::sin(2 * 3.14159265358979 * 1000.0 * t) + treble * std::sin(2 * 3.14159265358979 * 9000.0 * t)); }
+        for (std::size_t o = 0; o < n; o += 256) q.process(l.data() + o, r.data() + o, std::min<std::size_t>(256, n - o)); };
+      q.set("speed", 1.0);
+      q.reset(); feed(0.5, 0.05, 0.0125); const double heavy = q.bassDb();        // bass 20 dB over the middle
+      q.reset(); feed(0.005, 0.05, 0.0125); const double thin = q.bassDb();       // bass 20 dB under it
+      q.reset(); feed(0.05, 0.05, 0.2); const double harsh = q.trebleDb();        // treble 12 dB over the middle
+      CHECK(heavy < -4.0 && heavy >= -6.01); CHECK(thin > 4.0 && thin <= 6.01); CHECK(harsh < -4.0);
+      const double held = q.trebleDb(); for (std::size_t i = 0; i < n; ++i) l[i] = r[i] = 0; for (std::size_t o = 0; o < 48000; o += 256) q.process(l.data() + o, r.data() + o, 256); CHECK(std::fabs(q.trebleDb() - held) < 0.01);
+      q.reset(); q.set("range", 0.0); feed(0.5, 0.05, 0.2); CHECK(std::fabs(q.bassDb()) < 0.01 && std::fabs(q.trebleDb()) < 0.01);
+      q.reset(); q.set("range", 0.0); for (std::size_t i = 0; i < 4800; ++i) l[i] = r[i] = 0.3f * static_cast<float>(std::sin(2 * 3.14159265358979 * 700.0 * static_cast<double>(i) / 48000.0)); std::vector<float> in(l.begin(), l.begin() + 4800);
+      q.process(l.data(), r.data(), 4800); double worst = 0; for (std::size_t i = 0; i < 4800; ++i) worst = std::max(worst, static_cast<double>(std::fabs(l[i] - in[i]))); CHECK(worst < 1e-5); }   // with no gain the three ranges add up to the signal again
     { // PITCH SHIFTER: at 0 the tone comes out at its own pitch, +12 semitones doubles it, -12 halves it (counted by its zero crossings), and the level stays
       auto fxp = am::fx::make("pitch", 48000); CHECK(fxp != nullptr);
       if (fxp) { const std::size_t n = 48000; std::vector<float> l(n), r(n);
@@ -70,7 +84,7 @@ int main() {
         CHECK(quiet > 0.008f && quiet < 0.012f);          // within 2 dB of its own level
         CHECK(loud > 0.2f && loud < 0.95f);               // rounded off, not clipped hard and not silent
         for (std::size_t i = 0; i < n; ++i) CHECK(std::isfinite(l[i]) && std::fabs(l[i]) < 4.f); } }
-    std::printf("fx_test: nineteen effects as rack plug-ins (reverb, delay, analog channel, pitch shifter, sync delay, feedback killer, chorus, drive, flanger, phaser, tremolo, auto wah, bit crusher, exciter, tube amp, pre amp, post amp, hall, room): audible, finite, bypass, state\n"); }
+    std::printf("fx_test: twenty effects as rack plug-ins (reverb, delay, analog channel, pitch shifter, dual listen eq, sync delay, feedback killer, chorus, drive, flanger, phaser, tremolo, auto wah, bit crusher, exciter, tube amp, pre amp, post amp, hall, room): audible, finite, bypass, state\n"); }
   { const auto& all = am::fx::presets(); CHECK(all.size() == 300); std::set<std::string> names; int perKind[4] = {0, 0, 0, 0};
     for (const auto& p : all) { names.insert(p.name); auto e = am::fx::make(p.kind, 48000); CHECK(e); for (const auto& [id, v] : p.values) { CHECK(v >= 0 && v <= 1); e->set(id, v); } e->setMix(p.mix); bool known = false; for (const auto& prm : e->params()) for (const auto& [id, v] : p.values) if (prm.id == id) known = true; CHECK(known);
       perKind[p.kind == "reverb" ? 0 : p.kind == "delay" ? 1 : p.kind == "chorus" ? 2 : 3]++; }

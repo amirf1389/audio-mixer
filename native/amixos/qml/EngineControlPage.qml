@@ -99,6 +99,11 @@ Flickable {
                 Btn { label: i18n.t("NOISE GATE PAGE", i18n.lang); onClicked: page.Window.window.current = "gate" } }
             Small { text: i18n.t("CLOSE GROUND NOISE listens to the channel with nobody playing and sets its gate 6 dB above the hum and hiss it hears.", i18n.lang) } }
 
+        Card { title: i18n.t("LISTENING EQ", i18n.lang); tone: Theme.cyan
+            Flow { Layout.fillWidth: true; spacing: 6
+                Btn { objectName: "ecDualEq"; label: i18n.t("DUAL LISTEN EQ", i18n.lang); on: true; tone: Theme.cyan; onClicked: page.insert("fx:dualeq", "DUAL LISTEN EQ") } }
+            Small { text: i18n.t("Two ranges, bass and treble, that listen to the music on the channel and set themselves: a bass-heavy song is eased, a thin one filled, a dull one opened, a harsh one calmed. Put it on the channel the music plays through.", i18n.lang) } }
+
         Card { title: i18n.t("PITCH CONTROL", i18n.lang); tone: Theme.amber
             Flow { Layout.fillWidth: true; spacing: 6
                 Btn { objectName: "ecPitch"; label: i18n.t("PITCH SHIFTER", i18n.lang); on: true; tone: Theme.amber; onClicked: page.insert("fx:pitch", "PITCH SHIFTER") } }

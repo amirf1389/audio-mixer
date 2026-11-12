@@ -14,3 +14,10 @@ table { width: 100%; border-collapse: collapse; } th, td { text-align: left; pad
 th { color: var(--muted); font-weight: 500; font-size: 12px; } td.mono { font: 12px ui-monospace, Consolas, monospace; word-break: break-all; }
 .ver { font-size: 26px; font-weight: 700; margin-bottom: 8px; } .ver .muted { font-size: 14px; font-weight: 400; margin-left: 12px; }
 a { color: var(--cyan); }
+h3 { font-size: 13px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin: 18px 0 8px; }
+.box { border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin: 10px 0; }
+input.short { max-width: 180px; margin-bottom: 0; } select { background: #0b0e13; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); padding: 8px 10px; font: inherit; }
+label.inline { display: inline; margin: 0; } .scroll { overflow-x: auto; }
+pre { background: #0b0e13; border: 1px solid var(--line); border-radius: 8px; padding: 10px; overflow-x: auto; font: 12px ui-monospace, Consolas, monospace; }
+summary { cursor: pointer; } details.rel { border-bottom: 1px solid var(--line); padding: 8px 0; } details.rel summary b { color: var(--amber); margin-right: 8px; }
+button.small { padding: 4px 10px; font-size: 12px; }

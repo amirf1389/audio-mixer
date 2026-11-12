@@ -52,8 +52,20 @@
     <div id="upMsg" class="msg">Reading the update list…</div>
     <div id="upOut" hidden>
       <div class="ver"><span id="upVer"></span><span class="muted" id="upDate"></span></div>
+      <div class="box">
+        <label for="myVer">Is my copy up to date? Type the version from HELP → ABOUT in AmF X1</label>
+        <div class="row"><input id="myVer" class="short" autocomplete="off" spellcheck="false" placeholder="1.23.0.1"><button id="myVerGo">Compare</button><span id="myVerMsg" class="msg"></span></div>
+      </div>
+      <h3>In this release</h3>
       <ul id="upNotes"></ul>
-      <table><thead><tr><th>System</th><th>File</th><th>SHA-256</th></tr></thead><tbody id="upFiles"></tbody></table>
+      <h3>Downloads</h3>
+      <div class="row"><label class="inline" for="upSys">Show</label><select id="upSys"></select></div>
+      <div class="scroll"><table><thead><tr><th>System</th><th>File</th><th>Size</th><th>SHA-256</th><th></th></tr></thead><tbody id="upFiles"></tbody></table></div>
+      <details class="box"><summary>How to check a download (Windows)</summary>
+        <p class="muted">Open PowerShell in the folder of the file and run the line below. The long number it prints must be the same as the SHA-256 shown here. If it differs, do not run the file: download it again.</p>
+        <pre id="upCmd">Get-FileHash .\AmF-X1-setup.exe -Algorithm SHA256</pre>
+      </details>
+      <div id="upNewBox" hidden><h3>What is new, release by release</h3><div id="upNew"></div></div>
     </div>
   </section>
 </main>
