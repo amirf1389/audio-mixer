@@ -72,7 +72,7 @@ std::string deviceFingerprint();
 
 // the meters, copied out consistently
 struct Snapshot {
-  struct StripMeter { double pk, rms, hold; std::uint32_t clipN; double compGrDb, gateDb, inPk, amGainDb; };   // compGrDb <= 0 (the channel compressor), gateDb <= 0 (the channel gate), amGainDb <= 0 (automix share)
+  struct StripMeter { double pk, rms, hold; std::uint32_t clipN; double compGrDb, gateDb, inPk, amGainDb, polCorr; bool polInv; };   // polCorr: the strip against the rest of the mix (-1..1, AUTO PHASE strips), polInv: its polarity now   // compGrDb <= 0 (the channel compressor), gateDb <= 0 (the channel gate), amGainDb <= 0 (automix share)
   StripMeter strips[kMaxStrips]; StripMeter master[2]; StripMeter buses[kMaxBuses];
   double monitorPk[2];                       // what the control room hears, after the monitor section
   double momentary, shortTerm, integrated, lra, truePeak, correlation, autoLevelDb;
@@ -120,6 +120,9 @@ class Runtime {
   void setMasterProcessor(BusProcessor* p);          // the master chain; the caller keeps it alive while set
   void setWidth(double w);                           // master stereo width 0..2
   void setAutomix(int strip, bool on, double weight);   // gain-sharing automixer membership
+  // AUTO PHASE: the strip is compared with the rest of the mix (correlation, ~1 s); when it stays out of phase (below -0.35 for 1 s,
+  // both carrying signal) its polarity is flipped, then left alone for 3 s. The current polarity is in the strip's meter (polInv).
+  void setAutoPolarity(int strip, bool on);
   void setAutoLevel(bool on, double targetLufs, double maxGainDb);
   void setOutputBits(int bits);                       // 0 = float out (no dither); 16 / 24 = TPDF dither to that depth
   void setDcBlock(bool on);
@@ -181,6 +184,8 @@ class Runtime {
   // functions (std::atomic_load / atomic_store), which every standard library has; std::atomic<std::shared_ptr> is missing from libc++ (Android, macOS)
   std::shared_ptr<const InsertChain> inserts_[kMaxStrips];                            // audio thread only (set in open, then by ops)
   std::vector<dsp::Channel> ch_; std::vector<std::vector<float>> chBuf_;
+  std::vector<float> sumBuf_;   // AUTO PHASE: the mix of every strip, mono, for the comparison
+  bool autoPol_[kMaxStrips] = {}; double apXY_[kMaxStrips] = {}, apXX_[kMaxStrips] = {}, apYY_[kMaxStrips] = {}, apBad_[kMaxStrips] = {}, apHold_[kMaxStrips] = {}, apCorr_[kMaxStrips] = {};
   std::vector<std::vector<float>> busBuf_;   // 2 * kMaxBuses blocks for the aux bus outputs   // one channel DSP and one scratch block per strip (sized in open())
   // control ring: many producers (under a mutex), one consumer (the audio thread)
   static constexpr unsigned kRing = 8192;   // room for a whole console pushed at once (32 strips x their EQ bands, sends and dynamics)

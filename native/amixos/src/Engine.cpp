@@ -149,6 +149,7 @@ void Engine::pushAll() {
   if (!rt_) return;
   for (int k = 0; k < kBuses; ++k) { rt_->setBusLevel(k, buses_[k].db); rt_->setBusMute(k, buses_[k].mute); rt_->setBusReturn(k, buses_[k].returnDb); }
   for (int i = 0; i < kStrips; ++i) if (strips_[static_cast<std::size_t>(i)].automix) rt_->setAutomix(i, true, strips_[static_cast<std::size_t>(i)].amWeight);
+  for (int i = 0; i < kStrips; ++i) if (strips_[static_cast<std::size_t>(i)].autoPol) rt_->setAutoPolarity(i, true);
   pushAutoLevel(); rt_->setDcBlock(dcBlock()); rt_->setOutputBits(outputBits());
   pushMaster(); rt_->setMasterProcessor(&master_);   // the master chain: program EQ (the RTA EQ rack) and mastering
   for (int i = 0; i < kStrips; ++i) {
@@ -171,7 +172,7 @@ void Engine::pushAll() {
 
 QVariantList Engine::stripState() const {
   QVariantList l;
-  for (int i = 0; i < kStrips; ++i) { const StripUi& s = strips_[static_cast<std::size_t>(i)]; QVariantMap m; m["index"] = i; m["name"] = s.name; m["db"] = s.db; m["pan"] = s.pan; m["mute"] = s.mute; m["solo"] = s.solo; m["dsp"] = s.dsp.active(); m["dca"] = s.dca; m["muteGroups"] = static_cast<int>(s.muteGroups); m["effectiveDb"] = effectiveDb(i); m["effectiveMute"] = effectiveMute(i); m["color"] = s.color; m["plugins"] = pluginCount(i); m["link"] = s.link; m["trimDb"] = s.trimDb; m["armed"] = ((armed_ >> i) & 1u) != 0; m["automix"] = s.automix; m["amWeight"] = s.amWeight;
+  for (int i = 0; i < kStrips; ++i) { const StripUi& s = strips_[static_cast<std::size_t>(i)]; QVariantMap m; m["index"] = i; m["autoPol"] = s.autoPol; m["name"] = s.name; m["db"] = s.db; m["pan"] = s.pan; m["mute"] = s.mute; m["solo"] = s.solo; m["dsp"] = s.dsp.active(); m["dca"] = s.dca; m["muteGroups"] = static_cast<int>(s.muteGroups); m["effectiveDb"] = effectiveDb(i); m["effectiveMute"] = effectiveMute(i); m["color"] = s.color; m["plugins"] = pluginCount(i); m["link"] = s.link; m["trimDb"] = s.trimDb; m["armed"] = ((armed_ >> i) & 1u) != 0; m["automix"] = s.automix; m["amWeight"] = s.amWeight;
     const auto& p = s.dsp.params(); bool eqOn = false; for (const auto& b : p.eq) eqOn = eqOn || b.type != am::dsp::FilterType::Off;
     m["gateOn"] = p.gateOn; m["compOn"] = p.compOn; m["limOn"] = p.limiterOn; m["eqOn"] = eqOn; m["xoverOn"] = p.hpOrder > 0 || p.lpOrder > 0; m["delayOn"] = p.delayMs > 0; m["polarity"] = p.polarityInvert;
     QVariantList sb; for (int k = 0; k < kBuses; ++k) if (s.sends[k].db > -60) sb << (k + 1); m["sendsTo"] = sb; l << m; }
@@ -959,6 +960,7 @@ QVariantMap Engine::eqBand(int i, int band) const {
   m["type"] = static_cast<int>(b.type); m["freq"] = b.freq; m["q"] = b.q; m["gainDb"] = b.gainDb; return m;
 }
 void Engine::setDelay(int i, double ms) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].dsp.setDelayMs(ms); if (rt_) rt_->setDelayMs(i, strips_[static_cast<std::size_t>(i)].dsp.params().delayMs); emit stripsChanged(); }
+void Engine::setAutoPolarity(int i, bool on) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].autoPol = on; if (rt_) rt_->setAutoPolarity(i, on); emit stripsChanged(); }
 void Engine::setPolarity(int i, bool inv) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].dsp.setPolarity(inv); if (rt_) rt_->setPolarity(i, inv); emit stripsChanged(); }
 void Engine::setCrossover(int i, int type, int hpO, double hpF, int lpO, double lpF) {
   if (i < 0 || i >= kStrips) return; const XoverType t = static_cast<XoverType>(std::clamp(type, 0, 2));
@@ -1094,7 +1096,10 @@ void Engine::tick() {
   if (rt_) {
     const am::Snapshot s = rt_->snapshot();
     const double vuA = 1.0 - std::exp(-timer_.interval() / 65.0);   // a VU reaches 99 % of a step in 300 ms: a one-pole with tau = 65 ms, run at the timer rate
-    for (int i = 0; i < kStrips; ++i) { vu_[i] += (s.strips[i].rms - vu_[i]) * vuA; QVariantMap x; x["peakDb"] = toDb(s.strips[i].pk); x["rmsDb"] = toDb(s.strips[i].rms); x["holdDb"] = toDb(s.strips[i].hold); x["clip"] = s.strips[i].clipN > 0; x["compGrDb"] = s.strips[i].compGrDb; x["gateDb"] = s.strips[i].gateDb; x["inDb"] = toDb(s.strips[i].inPk); x["vuDb"] = toDb(vu_[i]); x["amGainDb"] = s.strips[i].amGainDb; m << x; }
+    bool polFlipped = false;   // AUTO PHASE turned a strip round: keep the saved setting the same as what is heard
+    for (int i = 0; i < kStrips; ++i) { StripUi& su = strips_[static_cast<std::size_t>(i)]; if (su.autoPol && s.strips[i].polInv != su.dsp.params().polarityInvert) { su.dsp.setPolarity(s.strips[i].polInv); polFlipped = true; } }
+    if (polFlipped) emit stripsChanged();
+    for (int i = 0; i < kStrips; ++i) { vu_[i] += (s.strips[i].rms - vu_[i]) * vuA; QVariantMap x; x["polCorr"] = s.strips[i].polCorr; x["polInv"] = s.strips[i].polInv; x["peakDb"] = toDb(s.strips[i].pk); x["rmsDb"] = toDb(s.strips[i].rms); x["holdDb"] = toDb(s.strips[i].hold); x["clip"] = s.strips[i].clipN > 0; x["compGrDb"] = s.strips[i].compGrDb; x["gateDb"] = s.strips[i].gateDb; x["inDb"] = toDb(s.strips[i].inPk); x["vuDb"] = toDb(vu_[i]); x["amGainDb"] = s.strips[i].amGainDb; m << x; }
     vuMaster_ += (std::max(s.master[0].rms, s.master[1].rms) - vuMaster_) * vuA; t["masterVuDb"] = toDb(vuMaster_);
     t["monitorLDb"] = toDb(s.monitorPk[0]); t["monitorRDb"] = toDb(s.monitorPk[1]);
     t["masterPeakDb"] = toDb(std::max(s.master[0].pk, s.master[1].pk)); t["masterLDb"] = toDb(s.master[0].pk); t["masterRDb"] = toDb(s.master[1].pk); t["masterRmsDb"] = toDb(std::max(s.master[0].rms, s.master[1].rms)); t["masterLRmsDb"] = toDb(s.master[0].rms); t["masterRRmsDb"] = toDb(s.master[1].rms);
@@ -1116,7 +1121,7 @@ QJsonObject Engine::stripJson(const StripUi& s) const {
   const auto& p = s.dsp.params(); QJsonObject o; o["name"] = s.name; o["db"] = s.db; o["pan"] = s.pan; if (s.spOn || s.spAz != 0 || s.spEl != 0 || s.spDist != 1 || s.spSpread != 0) { QJsonObject sp; sp["on"] = s.spOn; sp["az"] = s.spAz; sp["el"] = s.spEl; sp["dist"] = s.spDist; sp["spread"] = s.spSpread; o["spatial"] = sp; } o["mute"] = s.mute; o["solo"] = s.solo;
   o["dsp"] = dspJson(p);
   QJsonArray sends; for (const SendUi& sd : s.sends) { QJsonObject e; e["db"] = sd.db; e["pre"] = sd.pre; sends << e; } o["sends"] = sends; o["dca"] = s.dca; o["muteGroups"] = static_cast<int>(s.muteGroups); o["color"] = s.color;
-  QJsonArray pl; for (const PluginUi& p : s.plugins) { QJsonObject e; e["kind"] = p.kind; e["bypass"] = p.bypass; if (p.vst) e["state"] = QString::fromStdString(p.vst->state()); else if (!p.state.isEmpty()) e["state"] = p.state; pl << e; } o["plugins"] = pl; o["link"] = s.link; o["trimDb"] = s.trimDb; o["automix"] = s.automix; o["amWeight"] = s.amWeight;
+  QJsonArray pl; for (const PluginUi& p : s.plugins) { QJsonObject e; e["kind"] = p.kind; e["bypass"] = p.bypass; if (p.vst) e["state"] = QString::fromStdString(p.vst->state()); else if (!p.state.isEmpty()) e["state"] = p.state; pl << e; } o["plugins"] = pl; o["link"] = s.link; o["trimDb"] = s.trimDb; o["automix"] = s.automix; o["autoPol"] = s.autoPol; o["amWeight"] = s.amWeight;
   return o;
 }
 QJsonObject Engine::dspJson(const am::dsp::ChannelParams& p) {
@@ -1145,7 +1150,7 @@ void Engine::stripFromJson(StripUi& s, const QJsonObject& o) {
   s.dsp.set(dspFromJson(o.value("dsp").toObject()));
   const QJsonArray sends = o.value("sends").toArray(); for (int k = 0; k < kBuses; ++k) { if (k < sends.size()) { const QJsonObject e = sends[k].toObject(); s.sends[k].db = std::clamp(e.value("db").toDouble(-60), -60.0, 10.0); s.sends[k].pre = e.value("pre").toBool(); } else s.sends[k] = SendUi{}; }
   s.dca = std::clamp(o.value("dca").toInt(0), 0, kGroups); s.muteGroups = static_cast<unsigned>(std::clamp(o.value("muteGroups").toInt(0), 0, 255)); s.color = std::clamp(o.value("color").toInt(0), 0, 7);
-  s.link = o.value("link").toBool(); s.trimDb = std::clamp(o.value("trimDb").toDouble(0), -24.0, 24.0); s.automix = o.value("automix").toBool(); s.amWeight = std::clamp(o.value("amWeight").toDouble(1), 0.25, 4.0);
+  s.link = o.value("link").toBool(); s.trimDb = std::clamp(o.value("trimDb").toDouble(0), -24.0, 24.0); s.automix = o.value("automix").toBool(); s.autoPol = o.value("autoPol").toBool(); s.amWeight = std::clamp(o.value("amWeight").toDouble(1), 0.25, 4.0);
   const QJsonArray pl = o.value("plugins").toArray(); for (int k = 0; k < kPluginSlots; ++k) { if (k < pl.size()) { const QJsonObject e = pl[k].toObject(); const QString kind = e.value("kind").toString().left(1024); if (s.plugins[k].kind != kind) s.plugins[k].vst.reset(); s.plugins[k].kind = kind; s.plugins[k].bypass = e.value("bypass").toBool(); s.plugins[k].state = e.value("state").toString(); } else s.plugins[k] = PluginUi{}; }
 }
 QJsonObject Engine::consoleJson() const {

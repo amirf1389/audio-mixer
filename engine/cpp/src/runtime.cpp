@@ -44,7 +44,7 @@ std::unique_ptr<Backend> createBackend(const std::string& name) {
   return nullptr;
 }
 
-enum Op { kGain, kPan, kMute, kSolo, kMaster, kLimiter, kClipDb, kClear, kEq, kDelay, kPolarity, kXover, kChLimiter, kComp, kGate, kSend, kBusLevel, kBusMute, kBusReturn, kMonitor, kInRoute, kOutRoute, kTrim, kPeakHold, kBusFx, kWidth, kAutomix, kAutoLevel, kOutBits, kProfReset, kDcBlock, kSpatial, kMasterFx };
+enum Op { kGain, kPan, kMute, kSolo, kMaster, kLimiter, kClipDb, kClear, kEq, kDelay, kPolarity, kXover, kChLimiter, kComp, kGate, kSend, kBusLevel, kBusMute, kBusReturn, kMonitor, kInRoute, kOutRoute, kTrim, kPeakHold, kBusFx, kWidth, kAutomix, kAutoLevel, kOutBits, kProfReset, kDcBlock, kSpatial, kMasterFx, kAutoPol };
 
 Runtime::Runtime(int strips) : mixer_(strips, 48000) { std::memset(&pub_, 0, sizeof pub_); }
 Runtime::~Runtime() { stop(); }
@@ -61,7 +61,7 @@ bool Runtime::open(const DeviceConfig& cfg, std::string& err) {
   silence_.assign(n, 0.0f); left_.assign(n, 0.0f); right_.assign(n, 0.0f); monL_.assign(n, 0.0f); monR_.assign(n, 0.0f); extL_.assign(n, 0.0f); extR_.assign(n, 0.0f); netBuf_.assign(kNetInputs, std::vector<float>(n, 0.0f));
   for (int s = 0; s < kMaxStrips; ++s) { inRoute_[s] = s; trim_[s] = 1.0; }
   for (int o = 0; o < kMaxOutputs; ++o) outRoute_[o] = defaultOutputSource(o);
-  ch_.assign(static_cast<std::size_t>(mixer_.strips()), dsp::Channel(cfg.sampleRate)); chBuf_.assign(ch_.size(), std::vector<float>(n, 0.0f));
+  ch_.assign(static_cast<std::size_t>(mixer_.strips()), dsp::Channel(cfg.sampleRate)); chBuf_.assign(ch_.size(), std::vector<float>(n, 0.0f)); sumBuf_.assign(n, 0.0f);
   busBuf_.assign(2 * kMaxBuses, std::vector<float>(n, 0.0f));
   head_ = 0; tail_ = 0; blocks_ = 0; frames_ = 0; std::memset(&pub_, 0, sizeof pub_);
   return backend_->open(cfg, [this](const float* const* in, float* const* out, std::size_t frames) { onBlock(in, out, frames); }, err);
@@ -108,6 +108,7 @@ void Runtime::setOutputBits(int bits) { post({kOutBits, bits, 0, 0, 0}); }
 void Runtime::setDcBlock(bool on) { post({kDcBlock, on ? 1 : 0, 0, 0, 0}); }
 void Runtime::resetProfiler() { post({kProfReset, 0, 0, 0, 0}); }
 void Runtime::setAutomix(int s, bool on, double w) { post({kAutomix, s, on ? 1.0 : 0.0, w, 0}); }
+void Runtime::setAutoPolarity(int s, bool on) { post({kAutoPol, s, on ? 1.0 : 0.0, 0, 0}); }
 void Runtime::setAutoLevel(bool on, double t, double m) { post({kAutoLevel, on ? 1 : 0, t, m, 0}); }
 void Runtime::setBusProcessor(int b, BusProcessor* p) { Cmd c{kBusFx, b, 0, 0, 0}; c.p = p; post(c); }
 void Runtime::setMasterProcessor(BusProcessor* p) { Cmd c{kMasterFx, 0, 0, 0, 0}; c.p = p; post(c); }
@@ -155,6 +156,7 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
       case kBusFx: mixer_.setBusProcessor(c.a, static_cast<BusProcessor*>(c.p)); break;
       case kWidth: mixer_.setWidth(c.x); break;
       case kAutomix: mixer_.setAutomix(c.a, c.x != 0, c.y); break;
+      case kAutoPol: if (c.a >= 0 && c.a < kMaxStrips) { autoPol_[c.a] = c.x != 0; apXY_[c.a] = apXX_[c.a] = apYY_[c.a] = apBad_[c.a] = apHold_[c.a] = apCorr_[c.a] = 0; } break;
       case kAutoLevel: mixer_.setAutoLevel(c.a != 0, c.x, c.y); break;
       case kOutBits: mixer_.setOutputBits(c.a); break;
       case kDcBlock: mixer_.setDcBlock(c.a != 0); break;
@@ -183,6 +185,29 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
       if (ch.active()) ch.process(b, frames);
       if (anyInsert) for (const auto& ins_ : *chain) if (ins_) ins_->process(b, frames);
       ins[s] = b;
+    }
+  }
+  {   // AUTO PHASE: each strip that asks for it against the rest of the mix
+    bool any = false; for (int s = 0; s < mixer_.strips(); ++s) any = any || autoPol_[s];
+    if (any && frames <= sumBuf_.size()) {
+      float* sum = sumBuf_.data(); std::fill(sum, sum + frames, 0.0f);
+      for (int s = 0; s < mixer_.strips(); ++s) if (ins[s] != silence_.data()) for (std::size_t i = 0; i < frames; ++i) sum[i] += ins[s][i];
+      const double dt = static_cast<double>(frames) / mixer_.sampleRate(), a = std::min(1.0, dt / 1.0);   // about one second of memory
+      for (int s = 0; s < mixer_.strips(); ++s) {
+        if (!autoPol_[s]) continue;
+        double xy = 0, xx = 0, yy = 0; const float* x = ins[s];
+        for (std::size_t i = 0; i < frames; ++i) { const double xs = x[i], ys = static_cast<double>(sum[i]) - xs; xy += xs * ys; xx += xs * xs; yy += ys * ys; }
+        const double fn = static_cast<double>(frames);
+        apXY_[s] += a * (xy / fn - apXY_[s]); apXX_[s] += a * (xx / fn - apXX_[s]); apYY_[s] += a * (yy / fn - apYY_[s]);
+        const bool signal = apXX_[s] > 1e-7 && apYY_[s] > 1e-7;   // both above about -70 dBFS
+        apCorr_[s] = signal ? std::clamp(apXY_[s] / std::sqrt(apXX_[s] * apYY_[s]), -1.0, 1.0) : 0.0;
+        if (apHold_[s] > 0) { apHold_[s] -= dt; continue; }
+        apBad_[s] = signal && apCorr_[s] < -0.35 ? apBad_[s] + dt : std::max(0.0, apBad_[s] - dt);
+        if (apBad_[s] >= 1.0) {   // out of phase for a second: turn it round; it takes effect from the next block
+          dsp::Channel& ch = ch_[static_cast<std::size_t>(s)]; ch.setPolarity(!ch.params().polarityInvert);
+          apBad_[s] = 0; apHold_[s] = 3.0; apXY_[s] = -apXY_[s]; apCorr_[s] = -apCorr_[s];
+        }
+      }
     }
   }
   float* busOut[2 * kMaxBuses]; for (int k = 0; k < 2 * kMaxBuses; ++k) busOut[k] = busBuf_[static_cast<std::size_t>(k)].data();
@@ -223,7 +248,7 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
 
 void Runtime::publish() {
   Snapshot s; std::memset(&s, 0, sizeof s);
-  for (int i = 0; i < mixer_.strips(); ++i) { const MeterState& m = mixer_.strip(i).meter.state(); const std::size_t k = static_cast<std::size_t>(i); s.strips[i] = {m.pk, m.rms, m.hold, m.clipN, k < ch_.size() ? ch_[k].compressor().gainReductionDb() : 0.0, k < ch_.size() ? ch_[k].gate().gainDb() : 0.0, mixer_.strip(i).inPk, mixer_.automixGainDb(i)}; }
+  for (int i = 0; i < mixer_.strips(); ++i) { const MeterState& m = mixer_.strip(i).meter.state(); const std::size_t k = static_cast<std::size_t>(i); s.strips[i] = {m.pk, m.rms, m.hold, m.clipN, k < ch_.size() ? ch_[k].compressor().gainReductionDb() : 0.0, k < ch_.size() ? ch_[k].gate().gainDb() : 0.0, mixer_.strip(i).inPk, mixer_.automixGainDb(i), apCorr_[i], k < ch_.size() && ch_[k].params().polarityInvert}; }
   for (int c = 0; c < 2; ++c) { const MeterState& m = mixer_.masterMeter(c); s.master[c] = {m.pk, m.rms, m.hold, m.clipN, 0.0, 0.0, 0.0, 0.0}; }
   for (int k = 0; k < kMaxBuses; ++k) { const MeterState& m = mixer_.bus(k).meter.state(); s.buses[k] = {m.pk, m.rms, m.hold, m.clipN, 0.0, 0.0, 0.0, 0.0}; }
   s.momentary = mixer_.loudness().momentary(); s.shortTerm = mixer_.loudness().shortTerm(); s.integrated = mixer_.loudness().integrated(); s.lra = mixer_.loudness().range(); s.truePeak = mixer_.loudness().truePeak(); s.autoLevelDb = mixer_.autoLevelGainDb();

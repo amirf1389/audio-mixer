@@ -421,6 +421,7 @@ class Engine : public QObject {
   Q_INVOKABLE QVariantMap eqBand(int strip, int band) const;
   Q_INVOKABLE void setDelay(int strip, double ms);
   Q_INVOKABLE void setPolarity(int strip, bool invert);
+  Q_INVOKABLE void setAutoPolarity(int strip, bool on);   // AUTO PHASE: the engine turns the strip round when it is out of phase with the mix
   Q_INVOKABLE void setCrossover(int strip, int type, int hpOrder, double hpFreq, int lpOrder, double lpFreq);
   Q_INVOKABLE void setChannelLimiter(int strip, bool on, double ceilingDb, double releaseMs);
   Q_INVOKABLE void setCompressor(int strip, bool on, double thresholdDb, double ratio, double kneeDb, double attackMs, double releaseMs, double makeupDb);
@@ -504,7 +505,7 @@ class Engine : public QObject {
   bool loadVst(int strip, int slot);                      // from kind + state at the runtime's rate; false -> error set
   void rebuildInserts(int strip);                         // the strip's VST chain into the runtime
   void reloadAllVst();                                    // after open (new rate / block)
-  struct StripUi { bool spOn = false; double spAz = 0, spEl = 0, spDist = 1, spSpread = 0; QString name; double db = 0, pan = 0; bool mute = false, solo = false; am::dsp::Channel dsp{48000}; SendUi sends[kBuses]; int dca = 0; unsigned muteGroups = 0; int color = 0; PluginUi plugins[kPluginSlots]; bool automix = false; double amWeight = 1; bool link = false; double trimDb = 0; int eqPreset = 0; };
+  struct StripUi { bool spOn = false; double spAz = 0, spEl = 0, spDist = 1, spSpread = 0; QString name; double db = 0, pan = 0; bool autoPol = false; bool mute = false, solo = false; am::dsp::Channel dsp{48000}; SendUi sends[kBuses]; int dca = 0; unsigned muteGroups = 0; int color = 0; PluginUi plugins[kPluginSlots]; bool automix = false; double amWeight = 1; bool link = false; double trimDb = 0; int eqPreset = 0; };
   std::vector<QJsonObject> history_; int histPos_ = -1; bool restoring_ = false; QTimer histTimer_; QJsonObject abOther_; QString abSlot_ = "A";
   QString btNote_;
   bool scanning_ = false, opening_ = false, timedOut_ = false;

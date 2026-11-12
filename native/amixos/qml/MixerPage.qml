@@ -309,7 +309,7 @@ Item {
                                         Repeater {
                                             model: [ { k: "gateOn", t: "GATE", p: "gate" }, { k: "eqOn", t: "EQ", p: "dsp" }, { k: "xoverOn", t: "X", p: "dsp" }, { k: "compOn", t: "COMP", p: "dyn" }, { k: "limOn", t: "LIM", p: "dsp" }, { k: "delayOn", t: "DLY", p: "dsp" }, { k: "polarity", t: "Ø", p: "dsp" } ]
                                             delegate: Rectangle { implicitWidth: bt.implicitWidth + 6; implicitHeight: 11; radius: 2; color: st && st[modelData.k] ? Qt.rgba(0, 0.95, 1, 0.22) : Theme.ov(0.04); border.color: st && st[modelData.k] ? Theme.cyan : "transparent"
-                                                Text { id: bt; anchors.centerIn: parent; text: modelData.t; color: st && st[modelData.k] ? Theme.cyan : Theme.dim; font.family: Theme.mono; font.pixelSize: 6; font.bold: true }
+                                                Text { id: bt; anchors.centerIn: parent; text: modelData.k === "polarity" && st && st.autoPol ? "ØA" : modelData.t; color: st && st[modelData.k] ? Theme.cyan : Theme.dim; font.family: Theme.mono; font.pixelSize: 6; font.bold: true }
                                                 MouseArea { anchors.fill: parent; onClicked: { engine.selectedStrip = index; page.go(modelData.p) } } }
                                         }
                                     }
@@ -340,6 +340,7 @@ Item {
                                             MenuSeparator {}
                                             MenuItem { text: i18n.t("Fader to 0 dB", i18n.lang); onTriggered: engine.setGain(index, 0) }
                                             MenuItem { text: i18n.t("Pan to centre", i18n.lang); onTriggered: engine.setPan(index, 0) }
+                                            MenuItem { text: (st && st.autoPol ? "✓ " : "") + i18n.t("Phase: AUTO (turn round when out of phase with the mix)", i18n.lang); onTriggered: engine.setAutoPolarity(index, !(st && st.autoPol)) }
                                             MenuItem { text: i18n.t("Flatten DSP (EQ, dyn, delay, Ø)", i18n.lang); onTriggered: engine.resetStripDsp(index) }
                                             MenuItem { text: i18n.t("Reset channel (keep name, colour)", i18n.lang); onTriggered: engine.resetStrip(index) }
                                             MenuSeparator {}
