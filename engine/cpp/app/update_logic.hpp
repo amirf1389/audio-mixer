@@ -94,11 +94,15 @@ inline std::string hostOf(const std::string& url) {
   for (auto& c : h) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
   return h;
 }
-// https only, and only the hosts the project's releases are served from
+// Hosts the owner of this console added by hand (the update server link). The list a release comes from must still carry the vendor's
+// signature and each file its checksum: a host on this list can offer, it cannot make the console install.
+inline std::vector<std::string>& extraHosts() { static std::vector<std::string> v; return v; }
+// https only: the hosts the project's releases are served from, and those the owner added
 inline bool hostAllowed(const std::string& url) {
   static const char* const ok[] = {"github.com", "raw.githubusercontent.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com"};
   const std::string h = hostOf(url); if (h.empty() || url.find('@') != std::string::npos) return false;
   for (const char* o : ok) if (h == o) return true;
+  for (const std::string& e : extraHosts()) if (h == e) return true;
   return false;
 }
 

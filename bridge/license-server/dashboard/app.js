@@ -127,7 +127,7 @@
       $('issueBtn').textContent = 'Issuing …'; say($('issueMsg'), '');
       try {
         const r = await api('POST', '/admin/licenses', body);
-        $('keyText').value = r.key; $('newKey').hidden = false; say($('issueMsg'), 'Issued ' + r.id + '.', 'ok'); $('issueForm').reset(); $('keyText').focus(); $('keyText').select();
+        $('keyText').value = (r.productKey ? 'PRODUCT KEY (25 characters, shown once: this is what the customer types)\n' + r.productKey + '\n\nFULL KEY (works without the server: paste it whole)\n' : '') + r.key; $('newKey').hidden = false; say($('issueMsg'), 'Issued ' + r.id + '.', 'ok'); $('issueForm').reset(); $('keyText').focus(); $('keyText').select();
         await loadAll();
       } catch (err) { say($('issueMsg'), err.message, 'err'); }
     });

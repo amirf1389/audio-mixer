@@ -138,12 +138,36 @@ function unseal(text, key) {
 const ids = reg => Object.keys(reg).filter(k => !k.startsWith('_'));
 const clean = (v, n) => String(v === undefined || v === null ? '' : v).replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, n);
 
+// PRODUCT KEY: the short form of a licence, as boxed software has it: 25 characters in five groups (XXXXX-XXXXX-XXXXX-XXXXX-XXXXX, no
+// I, L, O or U). It is made with the licence and shown once; the register keeps only its SHA-256. The console sends it to /redeem and
+// gets the full signed key, which it then checks offline like any other. 125 bits of chance: it cannot be guessed.
+const CODE_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+function newProductKey() { const b = crypto.randomBytes(25); let o = ''; for (let i = 0; i < 25; i++) { o += CODE_ALPHABET[b[i] & 31]; if (i % 5 === 4 && i < 24) o += '-'; } return o; }
+const normProductKey = v => String(v || '').toUpperCase().replace(/[^0-9A-Z]/g, '').replace(/O/g, '0').replace(/[IL]/g, '1').replace(/U/g, 'V');
+const productKeyHash = v => crypto.createHash('sha256').update(normProductKey(v)).digest('hex');
+// Finds the licence a product key belongs to and builds its payload again (the same id, plan, dates and seats), ready to be signed.
+function redeemProductKey({ code, file = DATA_FILE, secret, now = Date.now() }) {
+  const n = normProductKey(code); if (n.length !== 25) return { ok: false, status: 400, error: 'a product key has 25 characters' };
+  const reg = loadRegistry(file), h = productKeyHash(n), id = ids(reg).find(k => reg[k].code && crypto.timingSafeEqual(Buffer.from(reg[k].code, 'hex'), Buffer.from(h, 'hex')));
+  if (!id) return { ok: false, status: 404, error: 'this product key is not known' };
+  const rec = reg[id], m = rec.meta || {};
+  if (rec.revoked) return { ok: false, status: 403, error: 'this licence was revoked' };
+  if (m.expires && m.expires < now) return { ok: false, status: 403, error: 'this licence has ended' };
+  const d = rec.enc ? unseal(rec.enc, dataKey(reg, secret)) : null;
+  const payload = { v: 1, id, plan: m.plan, name: (d && d.name) || 'Licensed user', issued: m.issued, expires: m.expires || null, seats: m.seats || 1 };
+  if (m.trial) payload.trial = true; if (m.mid) payload.mid = m.mid;
+  return { ok: true, status: 200, id, payload };
+}
+
 // Puts a newly issued key on record. The key itself is not stored.
 function recordIssue({ payload, email, note, file = DATA_FILE, secret }) {
   const reg = loadRegistry(file), key = dataKey(reg, secret), rec = reg[payload.id] || { devices: [] };
   rec.meta = { plan: payload.plan, issued: payload.issued, expires: payload.expires, seats: payload.seats, mid: payload.mid || null };
+  if (payload.trial) rec.meta.trial = true;
+  const productKey = rec.code ? null : newProductKey(); if (productKey) rec.code = productKeyHash(productKey);
   rec.enc = seal({ name: payload.name, email: clean(email, 120), note: clean(note, 200) }, key);
   rec.revoked = null; reg[payload.id] = rec; saveRegistry(file, reg);
+  return { productKey };
 }
 function listLicenses({ file = DATA_FILE, secret, now = Date.now() }) {
   const reg = loadRegistry(file), key = ids(reg).length ? dataKey(reg, secret) : null;
@@ -217,11 +241,15 @@ function createServer({ privateKey, token, dataFile = DATA_FILE, dataSecret, tru
     const body = await c.body(), built = buildPayload(body);
     if (built.error) return c.json(400, { ok: false, error: built.error });
     const key = signKey(built.payload, privateKey);
-    recordIssue({ payload: built.payload, email: body.email, note: body.note, file: dataFile, secret });
+    const rec = recordIssue({ payload: built.payload, email: body.email, note: body.note, file: dataFile, secret }) || {};
     audit.add('license.issue', built.payload.id, c.ip, `${built.payload.plan} seats=${built.payload.seats}`);
     if (!quiet) console.log(`issued ${built.payload.id} plan=${built.payload.plan} seats=${built.payload.seats}`);   // id only: never the key
-    return c.json(200, { ok: true, id: built.payload.id, plan: built.payload.plan, expires: built.payload.expires, key });
+    return c.json(200, { ok: true, id: built.payload.id, plan: built.payload.plan, expires: built.payload.expires, key, productKey: rec.productKey || null });
   };
+  // the console trades a product key for the signed key (public, rate limited; the key it returns is checked offline by the console)
+  app.post('/redeem', limit('pub', 30), async c => { const b = await c.body(); const r = redeemProductKey({ code: b.code, file: dataFile, secret });
+    if (!r.ok) { audit.add('license.redeem.refused', '-', c.ip, r.error); return c.json(r.status, { ok: false, error: r.error }); }
+    audit.add('license.redeem', r.id, c.ip, r.payload.plan); return c.json(200, { ok: true, id: r.id, plan: r.payload.plan, key: signKey(r.payload, privateKey) }); });
   app.post('/issue', admin, issue);
   app.post('/admin/licenses', admin, limit('adm', 120), issue);
   app.get('/admin/licenses', admin, limit('adm', 120), c => c.json(200, { ok: true, maxDevices: MAX_DEVICES, plans: Object.keys(PLANS), licenses: listLicenses({ file: dataFile, secret }) }));
@@ -243,7 +271,7 @@ function createServer({ privateKey, token, dataFile = DATA_FILE, dataSecret, tru
   return http.createServer(app.handler);
 }
 
-module.exports = { buildPayload, createServer, authorized, activateDevice, deactivateDevice, keyStatus, listLicenses, setRevoked, removeDevice, recordIssue, MAX_DEVICES };
+module.exports = { newProductKey, normProductKey, redeemProductKey, buildPayload, createServer, authorized, activateDevice, deactivateDevice, keyStatus, listLicenses, setRevoked, removeDevice, recordIssue, MAX_DEVICES };
 
 if (require.main === module) {
   const token = process.env.LICENSE_ADMIN_TOKEN;

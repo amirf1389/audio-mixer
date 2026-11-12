@@ -27,18 +27,18 @@ Popup {
     readonly property color paper: "#e8e3d3"
     readonly property color paperLo: "#d6d0be"
     // lettering: dark on the light plates, cream / silver / gold on the dark ones
-    readonly property color ink: family === "echo" ? "#ece4c6" : family === "mod" ? "#e4e8f3" : family === "heat" ? "#d9b76c" : family === "guard" ? "#f1f1ee" : family === "space" ? "#16181b" : "#22201b"
-    readonly property bool darkPlate: family === "echo" || family === "mod" || family === "heat" || family === "guard"
+    readonly property color ink: family === "tune" ? "#f1e3d6" : family === "echo" ? "#ece4c6" : family === "mod" ? "#e4e8f3" : family === "heat" ? "#d9b76c" : family === "guard" ? "#f1f1ee" : family === "space" ? "#16181b" : "#22201b"
+    readonly property bool darkPlate: family === "tune" || family === "echo" || family === "mod" || family === "heat" || family === "guard"
     readonly property string face1: "Bahnschrift Condensed, Arial Narrow, Roboto Condensed, DejaVu Sans Condensed, " + Theme.sans   // a narrow engraver's face where the system has one
     readonly property color red: "#b91c1c"
     // THE LOOK OF EACH FAMILY: reverbs steel blue, delays sage green, modulation lavender, saturation and amps copper, the feedback killer signal red,
     // everything else the cream plate. tint lies over the plate; view names the live display the panel carries.
     readonly property var families: ({ reverb: "space", hall: "space", room: "space", delay: "echo", syncdelay: "echo", chorus: "mod", flanger: "mod", phaser: "mod", tremolo: "mod", wah: "mod",
-        analog: "heat", drive: "heat", tubeamp: "heat", preamp: "heat", postamp: "heat", exciter: "heat", antifeedback: "guard" })
+        analog: "heat", drive: "heat", tubeamp: "heat", preamp: "heat", postamp: "heat", exciter: "heat", antifeedback: "guard", pitch: "tune" })
     readonly property string family: families[fx] || ""
     // THE FINISH, as on real rack gear: reverbs brushed aluminium, delays the deep green enamel of tape echoes, modulation midnight blue,
-    // saturation and amps black with gold lettering, the feedback killer workshop grey. The plate's own grain shows through the paint.
-    readonly property color tint: family === "space" ? "#b4bac1" : family === "echo" ? "#1f3527" : family === "mod" ? "#1b2640" : family === "heat" ? "#161616" : family === "guard" ? "#454a50" : "#000000"
+    // saturation and amps black with gold lettering, the feedback killer workshop grey, the pitch shifter oxblood. The plate's own grain shows through the paint.
+    readonly property color tint: family === "tune" ? "#3b1420" : family === "space" ? "#b4bac1" : family === "echo" ? "#1f3527" : family === "mod" ? "#1b2640" : family === "heat" ? "#161616" : family === "guard" ? "#454a50" : "#000000"
     readonly property real tintAmount: family === "" ? 0 : family === "space" ? 0.72 : 0.86
     readonly property string hi: darkPlate ? "#90000000" : "#70ffffff"   // the engraving: a light edge on light plates, a shadow on dark ones
     readonly property color onInk: darkPlate ? "#14171a" : paper       // lettering on a key that is lit in the ink colour
@@ -50,7 +50,7 @@ Popup {
     readonly property var layouts: ({
         tubeamp: [["PRE AMP", [0]], ["TONE STACK", [1, 2, 3]], ["POWER AMP", [4, 5]]], preamp: [["INPUT", [0, 1]], ["COLOUR", [2]], ["OUTPUT", [3]]], postamp: [["OUTPUT", [0]], ["TONE", [1]], ["PROTECT", [2]]],
         hall: [["SPACE", [0, 1]], ["DAMPING", [2]], ["PRE DELAY", [3]], ["MOD", [4]]], room: [["SPACE", [0, 1]], ["DAMPING", [2]], ["REFLECTIONS", [3]]], reverb: [["REVERBERATION", [0, 1]], ["PRE DELAY", [2]], ["STEREO", [3]]],
-        delay: [["ECHO", [0, 1]], ["TONE", [2]], ["STEREO", [3]]], syncdelay: [["TIME", [0, 1]], ["ECHO", [2, 3]], ["STEREO", [4]]], analog: [["INPUT STAGE", [0, 1]], ["TRANSFORMER", [2]], ["OUTPUT", [3]]], antifeedback: [["DETECT", [0]], ["NOTCH", [1, 2]], ["MODE", [3]]], chorus: [["MOD", [0, 1]], ["STEREO", [2]]], flanger: [["MOD", [0, 1]], ["REGEN", [2]]], phaser: [["MOD", [0, 1]], ["REGEN", [2]]], tremolo: [["MOD", [0, 1]], ["WAVE", [2]]],
+        delay: [["ECHO", [0, 1]], ["TONE", [2]], ["STEREO", [3]]], syncdelay: [["TIME", [0, 1]], ["ECHO", [2, 3]], ["STEREO", [4]]], analog: [["INPUT STAGE", [0, 1]], ["TRANSFORMER", [2]], ["OUTPUT", [3]]], pitch: [["PITCH", [0, 1]], ["GRAIN", [2]]], antifeedback: [["DETECT", [0]], ["NOTCH", [1, 2]], ["MODE", [3]]], chorus: [["MOD", [0, 1]], ["STEREO", [2]]], flanger: [["MOD", [0, 1]], ["REGEN", [2]]], phaser: [["MOD", [0, 1]], ["REGEN", [2]]], tremolo: [["MOD", [0, 1]], ["WAVE", [2]]],
         wah: [["FOLLOWER", [0, 1]], ["FILTER", [2]]], crusher: [["DIGITAL", [0, 1]], ["FILTER", [2]]], exciter: [["HARMONICS", [0, 2]], ["TUNE", [1]]], drive: [["VALVE", [0]], ["TONE", [1]], ["OUTPUT", [2]]] })
     readonly property var sections: { const n = params.length; if (!n) return []; const l = layouts[fx]; if (l) return l
         const out = [], m = Math.min(n, 24); for (let i = 0; i < m; i += 4) { const idx = []; for (let j = i; j < Math.min(m, i + 4); j++) idx.push(j); out.push([(i + 1) + " – " + Math.min(m, i + 4), idx]) } return out }

@@ -22,6 +22,7 @@
 const char* Update::kDefaultUrl = "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/update.json";
 
 Update::Update(const QString& currentVersion, QObject* parent) : QObject(parent), current_(currentVersion) {
+  for (const QString& h : s_.value("update/hosts").toStringList()) am::upd::extraHosts().push_back(h.toStdString());   // the hosts the owner added
   // back from INSTALL AND RESTART: the version we were installing is now the running one (or it is not: say so once)
   const QString pending = s_.value("update/installing").toString();
   if (!pending.isEmpty()) { s_.remove("update/installing"); if (compareVersions(current_, pending) >= 0) justUpdated_ = current_; else failed_ = pending; }
@@ -43,6 +44,36 @@ bool Update::installAndRestart() {
   set("installing", QStringLiteral("installing %1: the console closes and starts again by itself").arg(latest_)); emit restarting(); return true;
 }
 void Update::setUrl(const QString& u) { const QString t = u.trimmed(); if (!am::upd::hostAllowed(t.toStdString())) { set("error", "the manifest URL must be https on one of the project's own hosts"); return; } s_.setValue("update/url", t); emit changed(); }
+// THE UPDATE LINK IS OPEN: any https address may hold the update list. Its host joins the allowed ones; what the list offers is still
+// only installed when the list is signed by the vendor and the file matches its checksum.
+bool Update::setServerLink(const QString& link) {
+  const QUrl u(link.trimmed()); const QString h = u.host().toLower();
+  if (u.scheme() != "https" || h.isEmpty() || !u.userInfo().isEmpty() || link.contains('@')) { set("error", "the update link must be an https address"); return false; }
+  QStringList hosts = s_.value("update/hosts").toStringList();
+  if (!am::upd::hostAllowed(u.toString().toStdString())) { if (hosts.size() >= 8) hosts.removeFirst(); hosts << h; s_.setValue("update/hosts", hosts); am::upd::extraHosts().push_back(h.toStdString()); }
+  s_.setValue("update/url", u.toString()); s_.sync(); emit changed(); return true;
+}
+void Update::setLicenseServer(const QString& link) {
+  QString t = link.trimmed(); while (t.endsWith('/')) t.chop(1); const QUrl u(t);
+  const bool local = u.scheme() == "http" && (u.host() == "127.0.0.1" || u.host() == "localhost");   // a server on this computer (the vendor's own desk)
+  if (!t.isEmpty() && !(u.scheme() == "https" || local)) { redeem_ = QStringLiteral("The licence server must be an https address."); emit changed(); return; }
+  s_.setValue("licence/server", t); s_.sync(); if (redeem_ != "asking") redeem_.clear(); emit changed();
+}
+void Update::redeemProductKey(const QString& code) {
+  const QString server = licenseServer();
+  if (server.isEmpty()) { redeem_ = QStringLiteral("Type the address of the licence server first (the vendor gives it with the product key)."); emit changed(); return; }
+  if (redeem_ == "asking") return;
+  QString c; for (const QChar ch : code.toUpper()) if (ch.isLetterOrNumber()) c += ch;
+  if (c.size() != 25) { redeem_ = QStringLiteral("A product key has 25 characters."); emit changed(); return; }
+  QNetworkRequest req{QUrl(server + "/redeem")}; req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json"); req.setTransferTimeout(15000);
+  redeem_ = "asking"; emit changed();
+  QNetworkReply* r = net_.post(req, QJsonDocument(QJsonObject{{"code", c}}).toJson(QJsonDocument::Compact));
+  connect(r, &QNetworkReply::finished, this, [this, r] {
+    r->deleteLater(); const QJsonObject o = QJsonDocument::fromJson(r->readAll().left(16384)).object(); const QString key = o.value("key").toString();
+    if (o.value("ok").toBool() && key.startsWith("AMIX1")) { redeem_ = "done"; emit changed(); emit redeemed(key); return; }   // the console still checks this key itself before it stores it
+    redeem_ = !o.value("error").toString().isEmpty() ? QStringLiteral("The licence server says: ") + o.value("error").toString().left(120) : QStringLiteral("The licence server did not answer (") + r->errorString().left(80) + ")";
+    emit changed(); });
+}
 int Update::compareVersions(const QString& a, const QString& b) { return am::upd::cmpVersion(a.toStdString(), b.toStdString()); }
 QString Update::platformKey() {
 #if defined(_WIN32)

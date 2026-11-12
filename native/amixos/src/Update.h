@@ -36,6 +36,12 @@ class Update : public QObject {
   QString url() const { return s_.value("update/url", kDefaultUrl).toString(); } void setUrl(const QString& u);
   bool checkAtStart() const { return s_.value("update/checkAtStart", true).toBool(); } void setCheckAtStart(bool v) { s_.setValue("update/checkAtStart", v); emit changed(); }
   QString lastCheck() const { return s_.value("update/lastCheck").toString(); }
+  Q_PROPERTY(QString licenseServer READ licenseServer WRITE setLicenseServer NOTIFY changed)   // where a product key is traded for the full key (https)
+  Q_PROPERTY(QString redeemState READ redeemState NOTIFY changed)                              // "" | asking | done | the reason it failed
+  QString licenseServer() const { return s_.value("licence/server").toString(); } void setLicenseServer(const QString& u);
+  QString redeemState() const { return redeem_; }
+  Q_INVOKABLE bool setServerLink(const QString& url);          // the update server link: any https host; its list must still be signed
+  Q_INVOKABLE void redeemProductKey(const QString& code);      // POST <licence server>/redeem; redeemed(key) when the server answers with a key
   Q_INVOKABLE void check();                                         // GET the manifest, verify, compare
   Q_INVOKABLE bool applyManifest(const QString& envelopeText);      // the same without the network (a file, the smoke test); false = rejected, with the reason in message
   Q_INVOKABLE void download();                                      // this platform's file into the data folder, sha256 checked
@@ -54,8 +60,10 @@ class Update : public QObject {
   static const char* kDefaultUrl;
  signals:
   void changed();
+  void redeemed(const QString& key);
  private:
   void set(const QString& state, const QString& msg) { state_ = state; msg_ = msg; emit changed(); }
   static QString platformKey();
+  QString redeem_;
   QSettings s_; QNetworkAccessManager net_; QString current_, state_ = "idle", msg_, latest_, channel_, released_, downloaded_; QStringList notes_; QVariantMap file_; QVariantList features_; QString justUpdated_, failed_; int progress_ = 0;
 };
