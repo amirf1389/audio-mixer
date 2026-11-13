@@ -453,7 +453,7 @@ void PreAmp::process(float* L, float* R, std::size_t n) {
   const float aHp = lc < 0.02 ? 0.f : static_cast<float>(1 - std::exp(-2 * kPi * (20 + lc * 280) / fs_)), aDc = static_cast<float>(1 - std::exp(-2 * kPi * 8 / fs_)); float* ch[2] = {L, R};
   for (std::size_t i = 0; i < n; ++i) for (int s = 0; s < 2; ++s) { float v = ch[s][i]; if (aHp > 0) { hp_[s] += (v - hp_[s]) * aHp; v -= hp_[s]; } v *= g;
     if (warm > 0) { const float sat = std::tanh(v * (1 + 2 * warm)) / (1 + 2 * warm) + 0.25f * warm * v * v / (1 + v * v); v = v * (1 - warm) + sat * warm; dc_[s] += (v - dc_[s]) * aDc; v -= dc_[s]; }   // second harmonic from the squared term, its offset removed
-    ch[s][i] = v * out; }
+    const float y = v * out; ch[s][i] = 8.f * std::tanh(y / 8.f); }   // the supply rails: like a real preamp it runs out of voltage near +18 dBFS instead of passing any level
 }
 PostAmp::PostAmp(double fs) : Simple(fs) { for (int i = 0; i < 3; ++i) k_[i] = knobDef(i); }
 void PostAmp::reset() { lp_[0] = lp_[1] = 0; }

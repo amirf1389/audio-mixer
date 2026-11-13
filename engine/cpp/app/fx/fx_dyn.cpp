@@ -68,7 +68,7 @@ Tape::Tape(double fs) : Multi(fs, kTape, 5) { reset(); }
 std::string Tape::text(const std::string& id, double v) const { v = clamp01(v); const int i = index(id);
   if (i == 0) return fmt("%+.1f dB", v * 18 - 6); if (i == 1) { static const char* t[] = {"7.5 ips", "15 ips", "30 ips"}; return t[speedOf(v)]; } if (i == 2) return v < 0.45 ? "DARK" : v > 0.55 ? "BRIGHT" : "NORMAL";
   if (i == 4) return fmt("%+.1f dB", (v - 0.5) * 24); return fmt("%.0f %%", v * 100); }
-void Tape::reset() { for (auto& b : buf_) b.assign(static_cast<std::size_t>(fs_ * 0.012) + 8, 0.f); w_ = 0; ph1_ = ph2_ = 0; for (int c = 0; c < 2; ++c) { bump_[c].clear(); roll_[c].clear(); bias_[c].clear(); } dirty_ = true; }
+void Tape::reset() { for (auto& b : buf_) b.assign(static_cast<std::size_t>(fs_ * 0.012) + 8, 0.f); w_ = 0; ph1_ = ph2_ = 0; for (int c = 0; c < 2; ++c) { dcx_[c] = dcy_[c] = 0; bump_[c].clear(); roll_[c].clear(); bias_[c].clear(); } dirty_ = true; }
 void Tape::design() {
   const int sp = speedOf(k_[1]); const double bumpF[] = {45, 65, 95}, rollF[] = {9000, 15000, 20000};
   for (int c = 0; c < 2; ++c) { bump_[c].design(Biquad::Peak, fs_, bumpF[sp], 1.2, 2.5); roll_[c].design(Biquad::LowPass, fs_, rollF[sp], 0.65, 0); bias_[c].design(Biquad::HighShelf, fs_, 6000, 0.7, (k_[2] - 0.5) * 6); }
@@ -81,7 +81,7 @@ void Tape::process(float* L, float* R, std::size_t n) {
   for (std::size_t i = 0; i < n; ++i) {
     const double ms = 3 + wow * (1.6 * std::sin(ph1_) + 0.25 * std::sin(ph2_)); const double dl = std::min(ms * fs_ / 1000.0, static_cast<double>(N - 3));
     for (int c = 0; c < 2; ++c) {
-      const double x = ch[c][i]; double v = x * drive; v = std::tanh(v + 0.08 * v * v) - 0.08 * std::tanh(0.08); v = bias_[c].run(roll_[c].run(bump_[c].run(static_cast<float>(v))));
+      const double x = ch[c][i]; double v = x * drive; v = std::tanh(v + 0.08 * v * v); { const double hp = v - dcx_[c] + 0.9995 * dcy_[c]; dcx_[c] = v; dcy_[c] = hp; v = hp; }   // the even harmonic adds an offset: a DC blocker takes it out (silence stays silent) v = bias_[c].run(roll_[c].run(bump_[c].run(static_cast<float>(v))));
       double y = v;
       if (wow > 0.001) { buf_[c][w_] = static_cast<float>(v); const double rp = static_cast<double>(w_) + N - dl; const std::size_t i0 = static_cast<std::size_t>(rp) % N, i1 = (i0 + 1) % N; const double fr = rp - std::floor(rp); y = buf_[c][i0] * (1 - fr) + buf_[c][i1] * fr; }
       y *= out; ch[c][i] = static_cast<float>(x + (y - x) * wet);

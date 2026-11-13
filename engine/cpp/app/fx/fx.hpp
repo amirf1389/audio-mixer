@@ -296,7 +296,7 @@ class Glue final : public Multi { public: explicit Glue(double fs); const char* 
 class Tape final : public Multi { public: explicit Tape(double fs); const char* kind() const override { return "tape"; } const char* name() const override { return "TAPE MACHINE"; }
   std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
   static int speedOf(double v) { return static_cast<int>((v < 0 ? 0 : v > 1 ? 1 : v) * 2.999); }
- private: void design(); Biquad bump_[2], roll_[2], bias_[2]; std::vector<float> buf_[2]; std::size_t w_ = 0; double ph1_ = 0, ph2_ = 0; };
+ private: void design(); Biquad bump_[2], roll_[2], bias_[2]; std::vector<float> buf_[2]; std::size_t w_ = 0; double ph1_ = 0, ph2_ = 0, dcx_[2] = {0, 0}, dcy_[2] = {0, 0}; };
 // TRANSIENT SHAPER: ATTACK (-100 .. +100 %) makes the start of each note harder or softer, SUSTAIN (-100 .. +100 %) the ring after it, OUTPUT.
 // It follows the difference between a fast and a slow envelope, so it works at any level (no threshold).
 class Transient final : public Multi { public: explicit Transient(double fs); const char* kind() const override { return "transient"; } const char* name() const override { return "TRANSIENT SHAPER"; }
