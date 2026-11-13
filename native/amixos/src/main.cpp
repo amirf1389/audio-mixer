@@ -16,6 +16,8 @@
 #include <QQuickWindow>
 #include <QPalette>
 #include <QDir>
+#include "arrange/arrange.hpp"
+#include <QUrl>
 #include <QTemporaryDir>
 #include <QTimer>
 #include <cmath>
@@ -137,7 +139,7 @@ int main(int argc, char* argv[]) {
     engine.copyChannel(1); if (!engine.channelClipboard() || !engine.pasteChannel(2) || !engine.channelParams(2).value("compOn").toBool()) { std::fprintf(stderr, "amixos --smoke: copy / paste channel failed\n"); return 9; }
     engine.resetStrip(2); if (engine.channelParams(2).value("compOn").toBool()) { std::fprintf(stderr, "amixos --smoke: reset channel left the compressor on\n"); return 10; }
     engine.setMonitor(0, 0, false, false, false);
-    // the licence: this test machine has no key, so BASIC with 8 channels; a malformed key is refused without storing anything
+    // the licence: this test machine has no key, so BASIC with 10 channels; a malformed key is refused without storing anything
     if (engine.license().value("state").toString() != "basic" && engine.license().value("source").toString().isEmpty()) { std::fprintf(stderr, "amixos --smoke: licence state unexpected\n"); return 13; }
     if (engine.checkKey("not a key").value("valid").toBool() || engine.activateKey("AMIX1.x.y").value("ok").toBool()) { std::fprintf(stderr, "amixos --smoke: a bad key was accepted\n"); return 14; }
     if (engine.vendorKeyFingerprint() != "3D0E-717F-366A-EA41") { std::fprintf(stderr, "amixos --smoke: vendor key fingerprint changed\n"); return 15; }
@@ -174,6 +176,15 @@ int main(int argc, char* argv[]) {
       if (measure.room(5, 4, 2.7, 0.5, 1, 1, 1.2, 2.5, 3, 1.2).value("modes").toList().isEmpty() || !measure.autoEq("house", 0, 4, 20, 400, 8) || measure.waterfall(12).value("rows").toList().isEmpty()) { std::fprintf(stderr, "amixos --smoke: acoustics room / auto EQ / waterfall failed\n"); return 62; }
       QFile::remove(mw);
       engine.setSpatial(5, true, 90, 0, 2, 0); if (!engine.spatial(5).value("on").toBool() || engine.spatial(5).value("az").toDouble() != 90) { std::fprintf(stderr, "amixos --smoke: 360 audio state did not take\n"); return 63; } engine.setSpatial(5, false, 0, 0, 1, 0);
+      { // 360 AND IAMF ARE ONE PLACE: an IAMF ELEMENT takes over the strip's position; the 360 controls move its knobs and its knobs move the 360 view
+        const int S = 6; int k = -1; const QVariantList pl = engine.plugins(S); for (int j = 0; j < pl.size(); ++j) if (pl[j].toMap()["kind"].toString().isEmpty()) { k = j; break; }
+        engine.setSpatial(S, true, 45, 0, 2, 0.2); engine.setPlugin(S, k, "fx:iamfelement");
+        const QVariantMap a = engine.spatial(S); const bool took = a["iamf"].toBool() && std::fabs(a["az"].toDouble() - 45) < 0.6 && std::fabs(a["dist"].toDouble() - 2) < 0.05;
+        engine.setSpatial(S, true, 90, 10, 3, 0.3); const QVariantList pp = engine.pluginParams(S, k); const bool knob = pp.size() > 2 && std::fabs(pp[0].toMap()["value"].toDouble() - 0.75) < 0.002 && std::fabs(pp[1].toMap()["value"].toDouble() - 100.0 / 180) < 0.002;
+        engine.setPluginParam(S, k, 0, 0.25); const bool back = std::fabs(engine.spatial(S)["az"].toDouble() + 90) < 0.6;
+        engine.setPlugin(S, k, ""); const QVariantMap c = engine.spatial(S); const bool held = !c["iamf"].toBool() && c["on"].toBool() && std::fabs(c["az"].toDouble() + 90) < 0.6;
+        engine.setSpatial(S, false, 0, 0, 1, 0);
+        if (!took || !knob || !back || !held) { std::fprintf(stderr, "amixos --smoke: 360 / IAMF link (took %d, knobs %d, back %d, held %d)\n", took, knob, back, held); return 167; } }
       std::fprintf(stderr, "amixos --smoke: acoustics offline sweep %.2f dB at 1 kHz, delay 5 ms, room modes, auto EQ; 360 audio state OK\n", at1k); }
     { // MASTER CHAIN: the program EQ is its own rack (strip -1), not CH 1's EQ; a mastering preset switches the plug-in on
       const int before = engine.eqBand(0, 5).value("type").toInt(); engine.setEq(-1, 5, 1, 1000, 1.41, 4);
@@ -208,6 +219,12 @@ int main(int argc, char* argv[]) {
         engine.open("null", "", "", 48000, 256, 0, 0); const int in0 = engine.deviceInputs();   // 0 asked, not "-": the first pair opens engine.stop(); engine.open("null", "", "", r0 > 0 ? r0 : 48000, f0 > 0 ? f0 : 256, 2, 2);
         const QVariantList st = engine.stripState(); const bool names = st.size() > 1 && st[0].toMap()["name"].toString() == "DIGITAL AUDIO" && st[1].toMap()["name"].toString() == "MIC" && !st[0].toMap()["link"].toBool();
         if (in0 < 2 || !names) { std::fprintf(stderr, "amixos --smoke: 2 in / 2 out (got %d in), CH 1-2 DIGITAL AUDIO / MIC %d\n", in0, names); return 160; } }
+      { // YOUR FILE in the SAMPLE PLAYER: a file the user picks plays instead of the built-in sample; BUILT-IN goes back; a missing file is reported, not a crash
+        const QString wav = QDir::tempPath() + "/amfx1-smoke-own.wav"; { std::vector<float> l(4410, 0.25f); std::string e; am::arr::writeWav24(wav.toStdString(), l, l, 44100, e); }
+        const int k = engine.addToRack(22, "fx:sampler"); const QString e1 = engine.loadSampleFile(22, k, QUrl::fromLocalFile(wav).toString()); const QString shown = engine.sampleFileOf(22, k);
+        const QString e2 = engine.loadSampleFile(22, k, QDir::tempPath() + "/amfx1-no-such-file.flac"); engine.loadSampleFile(22, k, ""); const QString back = engine.sampleFileOf(22, k);
+        if (k >= 0) engine.setPlugin(22, k, ""); QFile::remove(wav);
+        if (k < 0 || !e1.isEmpty() || shown != "amfx1-smoke-own.wav" || e2.isEmpty() || !back.isEmpty()) { std::fprintf(stderr, "amixos --smoke: own sample file (slot %d, \"%s\", shown \"%s\", missing \"%s\")\n", k, qPrintable(e1), qPrintable(shown), qPrintable(e2)); return 161; } }
       { // the strip menu's PLAY A SAMPLE: the channel's SAMPLE PLAYER is set to that sample and playing
         const int k = engine.playSampleOnStrip(21, 7); const QVariantList p = k >= 0 ? engine.pluginParams(21, k) : QVariantList();
         const bool ok = k >= 0 && p.size() >= 2 && p[0].toMap()["text"].toString().startsWith("7 ") && p[1].toMap()["text"].toString() == "ON" && engine.playSampleOnStrip(21, 0) == -1;
@@ -240,7 +257,7 @@ int main(int argc, char* argv[]) {
         const QVariantList sp = engine.pluginParams(20, a); const bool txt = sp.size() >= 4 && sp[0].toMap()["text"].toString().startsWith("1 ");
         if (a < 0 || a != b || n != 1 || d < 0 || dual != d || !txt) { std::fprintf(stderr, "amixos --smoke: rack helpers (sampler %d/%d x%d, dual %d/%d, text %d: %d params, first \"%s\")\n", a, b, n, d, dual, txt, static_cast<int>(sp.size()), sp.isEmpty() ? "" : qPrintable(sp[0].toMap()["text"].toString())); return 154; }
         engine.setPlugin(20, a, ""); engine.setPlugin(20, d, ""); }
-      int fxn = 0; for (const QVariant& v : engine.pluginCatalog()) if (v.toMap().value("fx").toBool()) ++fxn; if (fxn != 23) { std::fprintf(stderr, "amixos --smoke: %d effects in the rack catalogue (want 23)\n", fxn); return 84; }
+      int fxn = 0; for (const QVariant& v : engine.pluginCatalog()) if (v.toMap().value("fx").toBool()) ++fxn; if (fxn != 40) { std::fprintf(stderr, "amixos --smoke: %d effects in the rack catalogue (want 40)\n", fxn); return 84; }
       for (const int ch : {6, 7}) { int slot = 0; for (const QVariant& v : engine.pluginCatalog()) { const QVariantMap m = v.toMap(); if (!m.value("fx").toBool()) continue; engine.setPlugin(ch, slot % 10, m.value("kind").toString()); const QVariantMap pl = engine.plugins(ch)[slot % 10].toMap();
           if (pl.value("pending").toBool() || pl.value("format").toString() != "FX" || engine.pluginParams(ch, slot % 10).size() < 4) { std::fprintf(stderr, "amixos --smoke: effect %s did not load into CH %d slot %d\n", qPrintable(m.value("kind").toString()), ch + 1, slot + 1); return 85; } ++slot; }
         engine.setPluginParam(ch, 0, 0, 0.9); engine.setPluginBypass(ch, 0, true); if (!engine.plugins(ch)[0].toMap().value("bypass").toBool()) { std::fprintf(stderr, "amixos --smoke: effect bypass\n"); return 86; }
@@ -613,11 +630,11 @@ int main(int argc, char* argv[]) {
           for (int step = 0; step < 7; ++step) { wiz->setProperty("step", step); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + QStringLiteral("/setup-%1.png").arg(step + 1)); std::printf("amixos --shots: setup-%d\n", step + 1); }
           win->setProperty("forceSetup", false); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
           { win->setProperty("current", "mixer"); for (int k = 0; k < 10; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50);   // the plug-in editor on a tube amp and on the hall reverb
-            if (QObject* edw = win->findChild<QObject*>("plugEd")) { for (const auto& [kind, name, file] : {std::tuple<const char*, const char*, const char*>{"fx:tubeamp", "TUBE AMP", "plugin-editor-tubeamp.png"}, {"fx:hall", "HALL REVERB", "plugin-editor-hall.png"}, {"fx:reverb", "PLATE REVERB", "plugin-editor-plate.png"}, {"fx:syncdelay", "SYNC DELAY", "plugin-editor-delay.png"}, {"fx:analog", "ANALOG CHANNEL", "plugin-editor-analog.png"}, {"fx:chorus", "STEREO CHORUS", "plugin-editor-chorus.png"}, {"fx:pitch", "PITCH SHIFTER", "plugin-editor-pitch.png"}, {"fx:barrier", "SOUND BARRIER", "plugin-editor-barrier.png"}, {"fx:sampler", "SAMPLE PLAYER", "plugin-editor-sampler.png"}, {"fx:desquash", "DE-SQUASH", "plugin-editor-desquash.png"}}) {
+            if (QObject* edw = win->findChild<QObject*>("plugEd")) { for (const auto& [kind, name, file] : {std::tuple<const char*, const char*, const char*>{"fx:tubeamp", "TUBE AMP", "plugin-editor-tubeamp.png"}, {"fx:hall", "HALL REVERB", "plugin-editor-hall.png"}, {"fx:reverb", "PLATE REVERB", "plugin-editor-plate.png"}, {"fx:syncdelay", "SYNC DELAY", "plugin-editor-delay.png"}, {"fx:analog", "ANALOG CHANNEL", "plugin-editor-analog.png"}, {"fx:chorus", "STEREO CHORUS", "plugin-editor-chorus.png"}, {"fx:pitch", "PITCH SHIFTER", "plugin-editor-pitch.png"}, {"fx:barrier", "SOUND BARRIER", "plugin-editor-barrier.png"}, {"fx:sampler", "SAMPLE PLAYER", "plugin-editor-sampler.png"}, {"fx:desquash", "DE-SQUASH", "plugin-editor-desquash.png"}, {"fx:mseq", "MS COLOUR EQ", "plugin-editor-mseq.png"}, {"fx:isoeq", "ISO EQ 10", "plugin-editor-isoeq.png"}, {"fx:mod", "MOD MACHINE", "plugin-editor-mod.png"}, {"fx:opto", "OPTO LEVELER", "plugin-editor-opto.png"}, {"fx:glue", "GLUE COMP", "plugin-editor-glue.png"}, {"fx:tape", "TAPE MACHINE", "plugin-editor-tape.png"}, {"fx:transient", "TRANSIENT SHAPER", "plugin-editor-transient.png"}, {"fx:deesser", "DE-ESSER", "plugin-editor-deesser.png"}, {"fx:maximizer", "MAXIMIZER", "plugin-editor-maximizer.png"}, {"fx:multiband", "MULTIBAND COMP", "plugin-editor-multiband.png"}, {"fx:imager", "STEREO IMAGER", "plugin-editor-imager.png"}, {"fx:autopan", "AUTO PAN", "plugin-editor-autopan.png"}, {"fx:doubler", "VOCAL DOUBLER", "plugin-editor-doubler.png"}, {"fx:iamfelement", "IAMF ELEMENT", "plugin-editor-iamfelement.png"}, {"fx:iamfrender", "IAMF RENDERER", "plugin-editor-iamfrender.png"}, {"fx:wshape", "W-SHAPE TUNER", "plugin-editor-wshape.png"}, {"fx:convclip", "CONVERTER CLIP", "plugin-editor-convclip.png"}}) {
                 engine.setPlugin(0, 8, kind); QMetaObject::invokeMethod(edw, "openFor", Q_ARG(QVariant, 0), Q_ARG(QVariant, 8), Q_ARG(QVariant, QString::fromLatin1(kind)), Q_ARG(QVariant, QString::fromLatin1(name)));
                 { QElapsedTimer bt; bt.start(); while (bt.elapsed() < 500) QCoreApplication::processEvents(QEventLoop::AllEvents, 20); } win->grabWindow().save(shots + "/" + file);
                 { QObject* lv = win->findChild<QObject*>("liveView"); QObject* tint = win->findChild<QObject*>("plateTint"); const QString k = QString::fromLatin1(kind);   // each family: its own plate colour, and its display where it has one
-                  const bool wantView = k == "fx:tubeamp" || k == "fx:hall" || k == "fx:reverb" || k == "fx:analog" || k == "fx:chorus";
+                  const bool wantView = k == "fx:tubeamp" || k == "fx:hall" || k == "fx:reverb" || k == "fx:analog" || k == "fx:chorus" || k == "fx:mod" || k == "fx:autopan";
                   if (!lv || !tint || lv->property("visible").toBool() != wantView || tint->property("opacity").toDouble() < 0.2) { std::fprintf(stderr, "amixos --shots: the panel of %s has the wrong look\n", kind); std::exit(203); } }
                 if (QString::fromLatin1(kind) == "fx:syncdelay") {   // 120 BPM and a quarter note must read 500 ms on the delay panel
                   { const QVariantList pp = engine.pluginParams(0, 8); engine.setPluginParam(0, 8, pp[0].toMap()["id"].toInt(), (120.0 - 60.0) / 140.0); engine.setPluginParam(0, 8, pp[1].toMap()["id"].toInt(), 1.5 / 6.0); } QMetaObject::invokeMethod(edw, "reload"); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
@@ -659,7 +676,11 @@ int main(int argc, char* argv[]) {
             if (!win->findChild<QObject*>("channelEq3")) std::fprintf(stderr, "amixos --shots: FAILED the 3-band channel EQ is missing\n");
             if (QObject* tp = win->findChild<QObject*>("tonePage")) { engine.setGraphicEq(engine.selectedStrip(), QVariantList{3.0, 0.0, -2.0, 0.0, 0.0, 4.0, 0.0, 0.0, -3.0, 1.0}, true); tp->setProperty("graphic", true); waitMs(400); win->grabWindow().save(shots + "/tone-mic-eq-faders.png"); tp->setProperty("graphic", false); engine.setGraphicEq(engine.selectedStrip(), QVariantList{0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, false); std::printf("amixos --shots: tone-mic-eq-faders\n"); } }
           if (QString::fromLatin1(id) == "surround") { engine.setCinemaHall(true); engine.setHeadTrack(true); engine.setHeadYaw(35); waitMs(700); win->grabWindow().save(shots + "/360-cinema-hall.png"); std::printf("amixos --shots: 360-cinema-hall\n");
-            if (!win->findChild<QObject*>("sceneMap")) std::fprintf(stderr, "amixos --shots: FAILED the 360 scene map is missing\n"); engine.setHeadYaw(0); engine.setHeadTrack(false); engine.setCinemaHall(false); engine.setBusFx(15, ""); }
+            if (!win->findChild<QObject*>("sceneMap")) std::fprintf(stderr, "amixos --shots: FAILED the 360 scene map is missing\n"); engine.setHeadYaw(0); engine.setHeadTrack(false); engine.setCinemaHall(false); engine.setBusFx(15, "");
+            { int k = -1; const QVariantList pl = engine.plugins(0); for (int j = 0; j < pl.size(); ++j) if (pl[j].toMap()["kind"].toString().isEmpty()) { k = j; break; }   // CH 1 placed by an IAMF ELEMENT, CH 2 by the 360 stage
+              engine.setPlugin(0, k, "fx:iamfelement"); engine.setSpatial(0, true, -40, 15, 2.5, 0.2); engine.setSpatial(1, true, 70, 0, 4, 0.1);
+              if (QObject* sp = win->findChild<QObject*>("spatialPage")) sp->setProperty("sel", 0); waitMs(500); win->grabWindow().save(shots + "/360-iamf.png"); std::printf("amixos --shots: 360-iamf\n");
+              engine.setPlugin(0, k, ""); engine.setSpatial(0, false, 0, 0, 1, 0); engine.setSpatial(1, false, 0, 0, 1, 0); } }
           if (QString::fromLatin1(id) == "rtaeq") { QObject* rp = nullptr; int shown = 0; for (QObject* o : win->findChildren<QObject*>("rtaEqPage")) if (o->property("visible").toBool()) { rp = o; ++shown; }   // the page on screen (an earlier one may still be on its way out)
             if (shown != 1) std::fprintf(stderr, "amixos --shots: FAILED %d RTA EQ pages on screen\n", shown); if (rp) {   // the sliders of the MASTER EQ: after a move the page shows the new value (it used to snap back)
             const QVariantList keep = rp->property("gains").toList(); QMetaObject::invokeMethod(rp, "setBand", Q_ARG(QVariant, 3), Q_ARG(QVariant, 6.0)); waitMs(120);
@@ -683,6 +704,11 @@ int main(int argc, char* argv[]) {
           if (QString::fromLatin1(id) == "routing") {
             if (QObject* rp = win->findChild<QObject*>("routingPage")) { rp->setProperty("tab", 1); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + "/routing-outputs.png"); std::printf("amixos --shots: routing-outputs\n"); }
           }
+          if (QString::fromLatin1(id) == "mixer") {   // SOUND SCORE: the badge and its breakdown
+            QObject* pop = nullptr; for (QObject* o : win->findChildren<QObject*>("soundScorePop")) pop = o;
+            if (!win->findChild<QObject*>("soundScore") || !pop) { std::fprintf(stderr, "amixos --shots: FAILED the sound score is missing\n"); std::exit(168); }
+            waitMs(1500); QMetaObject::invokeMethod(pop, "open"); waitMs(400); win->grabWindow().save(shots + "/mixer-score.png"); std::printf("amixos --shots: mixer-score\n"); QMetaObject::invokeMethod(pop, "close"); waitMs(150);
+            const QVariantMap sc = engine.soundScore(); if (!sc.contains("parts") || !sc.contains("valid")) { std::fprintf(stderr, "amixos --shots: FAILED sound score shape\n"); std::exit(168); } }
           if (QString::fromLatin1(id) == "mixer") {   // the same page with the analogue VU faces
             QObject* mixerShown = nullptr; for (QObject* o : win->findChildren<QObject*>("mixerPage")) if (o->property("visible").toBool()) mixerShown = o;   // the page on screen (an earlier one may still be on its way out)
             if (QObject* mixer = mixerShown) {

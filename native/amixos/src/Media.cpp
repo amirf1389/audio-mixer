@@ -1,4 +1,6 @@
+#include "arrange/decode.hpp"
 #include "Media.h"
+static QStringList audioPatterns() { QStringList l; for (const std::string& e : am::arr::audioExtensions()) { l << "*." + QString::fromStdString(e) << "*." + QString::fromStdString(e).toUpper(); } return l; }   // WAV, FLAC, AIFF, M4A, MP3 ...
 
 #include <QDir>
 #include <QFileInfo>
@@ -35,7 +37,7 @@ void Media::setGainDb(double db) { src_.gainDb.store(std::clamp(db, -60.0, 12.0)
 void Media::save() { QStringList l; for (const QVariant& v : list_) l << v.toMap()["path"].toString(); s_.setValue("media/playlist", l); }
 int Media::add(const QString& path) {
   const QString p = path.trimmed(); if (p.isEmpty()) return 0; int added = 0; QStringList files;
-  if (QFileInfo(p).isDir()) { for (const QFileInfo& fi : QDir(p).entryInfoList({"*.wav", "*.WAV"}, QDir::Files, QDir::Name)) files << fi.filePath(); } else files << p;
+  if (QFileInfo(p).isDir()) { for (const QFileInfo& fi : QDir(p).entryInfoList(audioPatterns(), QDir::Files, QDir::Name)) files << fi.filePath(); } else files << p;
   for (const QString& f : files) { QVariantMap m; m["path"] = f; m["name"] = QFileInfo(f).fileName(); m["seconds"] = 0.0; m["ok"] = QFileInfo::exists(f); m["error"] = QFileInfo::exists(f) ? QString() : QStringLiteral("file not found"); list_ << m; ++added; }
   if (added) { save(); msg_ = QStringLiteral("%1 file(s) added").arg(added); if (current_ < 0) select(0); emit playlistChanged(); emit transportChanged(); }
   else msg_ = QStringLiteral("no WAV at %1").arg(p);
@@ -45,7 +47,7 @@ void Media::remove(int i) { if (i < 0 || i >= list_.size()) return; list_.remove
 void Media::clear() { stop(); list_.clear(); current_ = -1; src_.set(nullptr); duration_ = 0; save(); emit playlistChanged(); emit transportChanged(); }
 bool Media::load(int i, QString& err) {
   const QString path = list_[i].toMap()["path"].toString(); am::arr::Audio a; std::string e;
-  if (!am::arr::readWav(path.toStdString(), a, e)) { err = QString::fromStdString(e); return false; }
+  if (!am::arr::readAudio(path.toStdString(), a, e)) { err = QString::fromStdString(e); return false; }
   const double fs = engine_->running() ? engine_->sampleRate() : (engine_->sampleRate() > 0 ? engine_->sampleRate() : 48000);
   auto clip = std::make_shared<MediaSource::Clip>(); clip->rate = fs;
   if (std::fabs(a.rate - fs) > 1) { clip->L = am::arr::resampleLinear(a.L, a.rate, fs); clip->R = am::arr::resampleLinear(a.R, a.rate, fs); } else { clip->L = a.L; clip->R = a.R; }

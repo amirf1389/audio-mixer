@@ -24,7 +24,7 @@ namespace am::lic {
 const Jwk kVendorJwk = {"qs3G8HQmgXrE0oAJn9Vj9jNg15YaPWuclESZ01899Fw", "sugiBjJ1wcFHZRerQRq4VMEFSWrGDc6ts9cnD0x-_i0"};   // bridge/license-public.json
 
 namespace {
-const Plan kPlans[] = {{"basic", "BASIC", 8, 0}, {"pro", "PRO", 16, 1}, {"studio", "STUDIO", 32, 2}, {"master", "MASTER", 32, 3}};
+const Plan kPlans[] = {{"basic", "BASIC", 10, 0}, {"pro", "PRO", 20, 1}, {"studio", "STUDIO", 32, 2}, {"master", "MASTER", 32, 3}};
 std::string programDir_;
 std::string strip(const std::string& s) { std::string o; for (char c : s) if (c != ' ' && c != '\n' && c != '\r' && c != '\t') o += c; return o; }
 std::string noDash(const std::string& s) { std::string o; for (char c : s) if (c != '-') o += c; return o; }

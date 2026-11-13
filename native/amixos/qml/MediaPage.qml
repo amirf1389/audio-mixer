@@ -70,7 +70,7 @@ Item {
             ColumnLayout { anchors.fill: parent; anchors.margins: 12; spacing: 6
                 RowLayout { spacing: 6; Layout.fillWidth: true
                     Text { text: i18n.t("PLAYLIST", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
-                    Field { id: pathIn; Layout.fillWidth: true; placeholderText: i18n.t("path of a .wav file or a folder of WAVs", i18n.lang); font.family: Theme.mono; font.pixelSize: 9; implicitHeight: 26; onAccepted: { media.add(text); text = "" } }
+                    Field { id: pathIn; Layout.fillWidth: true; placeholderText: i18n.t("an audio file (WAV, FLAC, AIFF, M4A, MP3 ...) or a folder of them", i18n.lang); font.family: Theme.mono; font.pixelSize: 9; implicitHeight: 26; onAccepted: { media.add(text); text = "" } }
                     Btn { label: i18n.t("ADD", i18n.lang); on: true; onClicked: { media.add(pathIn.text); pathIn.text = "" } }
                     Btn { label: i18n.t("CLEAR", i18n.lang); onClicked: media.clear() } }
                 ListView { id: lv; Layout.fillWidth: true; Layout.fillHeight: true; clip: true; spacing: 3; model: media.playlist

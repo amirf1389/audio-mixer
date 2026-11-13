@@ -268,6 +268,7 @@ class Engine : public QObject {
   Q_INVOKABLE double masteringReductionDb() const { return master_.reductionDb(); }
   Q_INVOKABLE void setSpatial(int strip, bool on, double az, double el, double dist, double spread);
   Q_INVOKABLE QVariantMap spatial(int strip) const;
+  int iamfSlot(int strip) const;   // the rack slot of the strip's IAMF ELEMENT, -1 when it has none
   // 360 AUDIO, THE LISTENER AND A SCENE. HEAD TRACK: the listener's head direction (yaw to the right, pitch up, in degrees) is taken off every
   // object's direction, so the scene stays where it is in the room while the head turns. The angles come from the page (or anything that
   // sets these properties); this program reads no head-tracking sensor by itself.
@@ -296,6 +297,7 @@ class Engine : public QObject {
   Q_INVOKABLE void setNullTestInput(bool on) { nullTone_ = on; }   // the null device delivers a -12 dBFS test signal on inputs 1-2 (sine 440 / 660 Hz) instead of silence: meters and faders show something (--shots, demos)
   bool nullTestInput() const { return nullTone_; }
   Q_INVOKABLE QVariantList spectrum(int channel);
+  Q_INVOKABLE QVariantMap soundScore();   // SOUND SCORE of the master, 0 .. 100, with its six parts and a tip each (empty "valid" false while silent)
   Q_INVOKABLE QVariantMap roundTrip() const { double ms = 0, db = -120; QVariantMap m; m["ok"] = scope_.roundTrip(ms, db); m["ms"] = ms; m["returnDb"] = db; m["frames"] = blockFrames(); m["rate"] = sampleRate(); return m; }
   Q_PROPERTY(double sampleRate READ sampleRate NOTIFY stateChanged)
   Q_PROPERTY(int blockFrames READ blockFrames NOTIFY stateChanged)
@@ -407,7 +409,9 @@ class Engine : public QObject {
   Q_INVOKABLE QVariantList plugins(int strip) const;  // [{slot, kind, name, bypass, builtIn, pending}]
   Q_INVOKABLE void setPlugin(int strip, int slot, const QString& kind);   // "" clears the slot
   Q_INVOKABLE int addToRack(int strip, const QString& kind);
-  Q_INVOKABLE int playSampleOnStrip(int strip, int sampleId);   // the SAMPLE PLAYER of that channel (added if needed) set to that sample and started; the slot, or -1   // the slot that holds that kind (already there, or put in the first free slot); -1 = the rack is full
+  Q_INVOKABLE int playSampleOnStrip(int strip, int sampleId);
+  Q_INVOKABLE QString loadSampleFile(int strip, int slot, const QString& pathOrUrl);   // that slot's SAMPLE PLAYER plays the user's file ("" = back to the built-in samples); "" or the error
+  Q_INVOKABLE QString sampleFileOf(int strip, int slot) const;   // the SAMPLE PLAYER of that channel (added if needed) set to that sample and started; the slot, or -1   // the slot that holds that kind (already there, or put in the first free slot); -1 = the rack is full
   Q_INVOKABLE void setPluginBypass(int strip, int slot, bool bypass);
   Q_INVOKABLE QVariantList pluginCatalog() const;     // the built-in stages, for the chooser
   Q_INVOKABLE void movePlugin(int strip, int from, int to);   // reorder the rack (swap two slots)
@@ -574,7 +578,7 @@ class Engine : public QObject {
   double masterDb_ = 0; bool masterLim_ = true; double masterCeil_ = -0.5, masterRel_ = 100;
   static constexpr int kOutputs = 32;
   int inRoute_[kStrips] = {}; int outRoute_[kOutputs] = {}; int devIn_ = 0, devOut_ = 0; QString inDevName_, outDevName_; void rememberDeviceNames(const std::string& backend, const std::string& in, const std::string& out);
-  QVariantMap license_; int licensedChannels_ = 8;
+  QVariantMap license_; int licensedChannels_ = 10;
   struct EqPresetUi { QString name; am::dsp::EqBand bands[10]; int hpOrder = 0; double hpFreq = 80; int lpOrder = 0; double lpFreq = 16000; bool used = false; };
   static const EqPresetUi* factoryEqPreset(int slot); EqPresetUi userEq_[10]; void loadUserEq(); void storeUserEq() const;
   bool nullTone_ = false; void nullInputFor(am::DeviceConfig& cfg) const;

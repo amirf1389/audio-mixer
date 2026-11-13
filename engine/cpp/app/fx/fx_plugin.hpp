@@ -26,6 +26,8 @@ class FxPlugin final : public host::Plugin {
   void process(const float* const* in, float* const* out, int frames) override { for (int i = 0; i < frames; ++i) { out[0][i] = in ? in[0][i] : 0.f; out[1][i] = in ? in[1][i] : 0.f; } e_->process(out[0], out[1], static_cast<std::size_t>(frames)); }
   std::string state() const override { std::string s; for (const Param& p : e_->params()) { char b[48]; std::snprintf(b, sizeof b, "%s=%.4f;", p.id.c_str(), p.value); s += b; } char b[32]; std::snprintf(b, sizeof b, "mix=%.4f;", e_->mix()); return s + b; }
   bool setState(const std::string& st) override { std::size_t pos = 0; bool any = false; while (pos < st.size()) { const std::size_t eq = st.find('=', pos), end = st.find(';', pos); if (eq == std::string::npos || end == std::string::npos || eq > end) break; const std::string k = st.substr(pos, eq - pos); const double v = std::atof(st.substr(eq + 1, end - eq - 1).c_str()); if (k == "mix") e_->setMix(v); else e_->set(k, v); any = true; pos = end + 1; } return any; }
+ public:
+  Effect* effect() const { return e_.get(); }   // for the effects that do more than knobs (the SAMPLE PLAYER's own file)
  private:
   FxPlugin(std::unique_ptr<Effect> e, const std::string& kind) : e_(std::move(e)), path_("fx:" + kind) { info_.format = "FX"; info_.name = e_->name(); info_.vendor = "AMFB Audio"; info_.category = "Fx"; info_.uid = kind;
     defMix_ = kind == "reverb" || kind == "hall" || kind == "room" || kind == "delay" || kind == "chorus" || kind == "flanger" || kind == "phaser" || kind == "wah" ? 0.35 : 1.0; if (kind == "flanger" || kind == "phaser") defMix_ = 0.7; if (kind == "wah") defMix_ = 0.8; e_->setMix(defMix_); }

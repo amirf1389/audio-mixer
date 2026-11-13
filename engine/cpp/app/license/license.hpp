@@ -4,7 +4,7 @@
 //   Edition token  "AMFXE1." + base64url(payload JSON) + "." + base64url(signature), payload { v: 1, kind: "amfx1-edition", edition: pro|studio-master,
 //                  plan, serial: AMFX-PRO-XXXX-XXXX-XXXX | AMFX-SM-..., issued, order?, expires? }
 // The app holds only the vendor PUBLIC key (bridge/license-public.json, embedded below as kVendorJwkX / Y). Without a valid key or token the app
-// runs BASIC (8 channels). As in the Node code: the signature stops forged keys; it does not stop someone who edits a locally running program.
+// runs BASIC (10 channels). As in the Node code: the signature stops forged keys; it does not stop someone who edits a locally running program.
 // TOTP (RFC 6238) is here for the vendor's Key Generator second factor and tests, not for end users.
 #pragma once
 #include <cstdint>
@@ -41,7 +41,7 @@ std::string machineId();
 // activation recorded in ~/.amixos/edition.json bound to this machine). The higher plan wins. An invalid or expired key never raises the plan.
 struct Status {
   std::string state = "basic";                          // basic | active | expired | invalid
-  std::string planId = "basic"; std::string planName = "BASIC"; int channels = 8;
+  std::string planId = "basic"; std::string planName = "BASIC"; int channels = 10;
   std::string source;                                    // key | edition | ""
   std::string id, name, serial, editionName, message; std::int64_t expires = 0; bool boundToThisPc = false;
   std::string machine;

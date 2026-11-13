@@ -158,8 +158,11 @@ class SamplePlayer final : public Simple { public: explicit SamplePlayer(double 
   void set(const std::string& id, double v) override; std::string text(const std::string& id, double v) const override; void reset() override; void setSampleRate(double fs) override; void process(float* L, float* R, std::size_t n) override;
   static int sampleOf(double v) { return 1 + static_cast<int>(std::lround((v < 0 ? 0 : v > 1 ? 1 : v) * 99.0)); }
   bool playing() const { return playing_.load(); }
+  bool loadFile(const std::string& path, std::string& err);   // the user's own file (WAV, FLAC, AIFF, M4A, MP3 ...), resampled to this rate; SAMPLE then has no effect until cleared
+  void clearFile();
+  std::string fileName() const { const std::shared_ptr<const Buf> b = std::atomic_load(&buf_); return b ? b->file : std::string(); }
  protected: int count() const override { return 4; } const char* knobId(int i) const override { static const char* k[] = {"sample", "play", "loop", "level"}; return k[i]; } const char* knobTitle(int i) const override { static const char* k[] = {"SAMPLE", "PLAY", "LOOP", "LEVEL"}; return k[i]; } double knobDef(int i) const override { static const double d[] = {0.0, 0.0, 0.0, 0.87}; return d[i]; }
- private: struct Buf { std::vector<float> L, R; int id = 0; }; void load(); std::shared_ptr<const Buf> buf_; std::size_t pos_ = 0; bool wasOn_ = false; std::atomic<bool> playing_{false}; int loaded_ = 0; };
+ private: struct Buf { std::vector<float> L, R; int id = 0; std::string file; }; void load(); std::shared_ptr<const Buf> buf_; std::size_t pos_ = 0; bool wasOn_ = false; std::atomic<bool> playing_{false}; int loaded_ = 0; };
 // DE-SQUASH: gives back some of the life a heavy compressor took. It compares a fast envelope (the attacks) with a slow one (the body)
 // and lets the attacks stand out again by up to RANGE dB; AMOUNT is how much of the difference it restores, SPEED how quick the attacks are.
 // Quiet passages and steady tones are left as they are. Use it on a channel that shows the OVER-COMPRESSED alert.
@@ -231,5 +234,156 @@ class Hall final : public Fdn { public: explicit Hall(double fs) : Fdn(fs, 8, tr
  protected: int count() const override { return 5; } const char* knobId(int i) const override { static const char* k[] = {"size", "decay", "damp", "predelay", "mod"}; return k[i]; } const char* knobTitle(int i) const override { static const char* k[] = {"SIZE", "DECAY", "DAMP", "PRE-DELAY", "MODULATION"}; return k[i]; } double knobDef(int i) const override { static const double d[] = {0.7, 0.45, 0.4, 0.2, 0.3}; return d[i]; } };
 class Room final : public Fdn { public: explicit Room(double fs) : Fdn(fs, 4, false) { for (int i = 0; i < 4; ++i) k_[i] = knobDef(i); } const char* kind() const override { return "room"; } const char* name() const override { return "ROOM REVERB"; }
  protected: int count() const override { return 4; } const char* knobId(int i) const override { static const char* k[] = {"size", "decay", "damp", "early"}; return k[i]; } const char* knobTitle(int i) const override { static const char* k[] = {"SIZE", "DECAY", "DAMP", "EARLY"}; return k[i]; } double knobDef(int i) const override { static const double d[] = {0.4, 0.3, 0.5, 0.5}; return d[i]; } };
+
+// A plug-in with many controls (more than Simple's six): its controls are listed once as {id, title, default}.
+class Multi : public Effect {
+ public:
+  struct Def { const char* id; const char* title; double def; };
+  Multi(double fs, const Def* d, int n) : fs_(fs > 0 ? fs : 48000), d_(d), n_(n < 32 ? n : 32) { for (int i = 0; i < n_; ++i) k_[i] = d_[i].def; }
+  std::vector<Param> params() const override { std::vector<Param> v; for (int i = 0; i < n_; ++i) v.push_back({d_[i].id, d_[i].title, "", k_[i].load(), d_[i].def}); return v; }
+  void set(const std::string& id, double v) override { for (int i = 0; i < n_; ++i) if (id == d_[i].id) { k_[i] = v < 0 ? 0 : v > 1 ? 1 : v; dirty_ = true; } }
+  void setSampleRate(double fs) override { fs_ = fs > 0 ? fs : 48000; dirty_ = true; reset(); }
+ protected:
+  int index(const std::string& id) const { for (int i = 0; i < n_; ++i) if (id == d_[i].id) return i; return -1; }
+  double fs_; const Def* d_; int n_; std::atomic<double> k_[32]; std::atomic<bool> dirty_{true};
+};
+// One RBJ biquad (transposed direct form II), one channel.
+struct Biquad { double b0 = 1, b1 = 0, b2 = 0, a1 = 0, a2 = 0, z1 = 0, z2 = 0;
+  float run(float x) { const double y = b0 * x + z1; z1 = b1 * x - a1 * y + z2; z2 = b2 * x - a2 * y; return static_cast<float>(y); }
+  void clear() { z1 = z2 = 0; }
+  enum Kind { Peak, LowShelf, HighShelf, HighPass, LowPass, BandPass };
+  void design(Kind k, double fs, double f, double q, double db); };
+
+// MS COLOUR EQ: a parallel saturating mid-side equalizer in the manner of a mastering rack. The signal is split into MID (what both
+// sides share) and SIDE (what differs); four bands (LOW shelf, CONTOUR and MID bells with BANDWIDTH, HIGH shelf) each have a
+// M/S OFFSET that sends the band to the side only (-), both (centre) or the mid only (+). HPF / LPF trim the ends. SATURATION runs in
+// parallel: DRIVE sets how hard a band around FOCUS is pushed through a valve-like curve before it is blended back; XFORMER adds the
+// soft asymmetric colour of an output transformer to the whole signal. SOLO (OFF, MID, SIDE, DELTA = only what the unit changed),
+// MONO (the side below this frequency is made mono, OFF .. 300 Hz) and WIDTH (0 .. 200 %). MOVE: an LFO (RATE, DEPTH) that breathes the width.
+class MsEq final : public Multi { public: explicit MsEq(double fs); const char* kind() const override { return "mseq"; } const char* name() const override { return "MS COLOUR EQ"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
+  static double offsetMid(double v) { const double o = v * 2 - 1; return o < 0 ? 1 + o : 1; } static double offsetSide(double v) { const double o = v * 2 - 1; return o > 0 ? 1 - o : 1; }
+ private: void design(); Biquad m_[6], s_[6], hp_[2], lp_[2], satM_, satS_, mono_; double ph_ = 0; float dcX_[2] = {0, 0}, dcY_[2] = {0, 0}; };
+// ISO EQ 10: a ten-band graphic equalizer on the ISO octave centres (31.5 Hz .. 16 kHz), +-12 dB per band. Q: CONSTANT (every band one
+// octave wide) or PROPORTIONAL (narrow at small boosts, wider as the slider moves, like a console graphic). COLOUR adds the gentle
+// saturation of an analog output stage; OUTPUT -12 .. +12 dB.
+class IsoEq final : public Multi { public: explicit IsoEq(double fs); const char* kind() const override { return "isoeq"; } const char* name() const override { return "ISO EQ 10"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
+  static constexpr double kFreq[10] = {31.5, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000};
+  static double gainDb(double v) { return (v - 0.5) * 24.0; }
+ private: void design(); Biquad f_[2][10]; };
+// MOD MACHINE: one modulation unit with five modes: CHORUS, FLANGER, PHASER, TREMOLO and VIBRATO, on a bucket-brigade style delay
+// (the wet path is darkened by TONE and softly saturated by COLOUR like an analog delay chip). RATE 0.05 .. 10 Hz, DEPTH, FEEDBACK
+// (flanger and phaser), SPREAD (the right side's LFO 0 .. 180 degrees behind the left: wide stereo motion).
+class ModMachine final : public Multi { public: explicit ModMachine(double fs); const char* kind() const override { return "mod"; } const char* name() const override { return "MOD MACHINE"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
+  static int modeOf(double v) { const int m = static_cast<int>((v < 0 ? 0 : v > 1 ? 1 : v) * 4.999); return m; }
+ private: std::vector<float> buf_[2]; std::size_t w_ = 0; double ph_ = 0; float fb_[2] = {0, 0}, lp_[2] = {0, 0}, ap_[2][6] = {}; };
+
+// OPTO LEVELER: a leveling amplifier after the optical kind: PEAK REDUCTION sets how hard it works, GAIN makes up the level, MODE
+// COMPRESS (about 3:1) or LIMIT (about 10:1), EMPHASIS lets the highs push the detector harder. The release follows the programme:
+// quick after a short peak, slow (seconds) after a long passage, like a light cell that has to cool.
+class Opto final : public Multi { public: explicit Opto(double fs); const char* kind() const override { return "opto"; } const char* name() const override { return "OPTO LEVELER"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override; double grDb() const { return gr_.load(); }
+ private: double env_ = 0, fast_ = 0, slow_ = 0, lp_ = 0; std::atomic<double> gr_{0}; };
+// GLUE COMP: a stereo bus compressor with the soft knee and second-harmonic colour of a valve gain stage: THRESHOLD, RATIO (1.2 .. 10),
+// ATTACK 0.1 .. 30 ms, RELEASE 50 ms .. 1.2 s, MAKEUP 0 .. 18 dB, COLOUR. Both sides share one detector, so the image does not move.
+class Glue final : public Multi { public: explicit Glue(double fs); const char* kind() const override { return "glue"; } const char* name() const override { return "GLUE COMP"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override; double grDb() const { return gr_.load(); }
+ private: double env_ = 0; std::atomic<double> gr_{0}; };
+// TAPE MACHINE: a tape recorder's sound without the tape: DRIVE into a soft magnetic curve, SPEED 7.5 / 15 / 30 ips (the head bump and
+// how early the highs roll off move with it), BIAS (dark .. bright), WOW & FLUTTER (a slow and a fast pitch wander), OUTPUT.
+class Tape final : public Multi { public: explicit Tape(double fs); const char* kind() const override { return "tape"; } const char* name() const override { return "TAPE MACHINE"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
+  static int speedOf(double v) { return static_cast<int>((v < 0 ? 0 : v > 1 ? 1 : v) * 2.999); }
+ private: void design(); Biquad bump_[2], roll_[2], bias_[2]; std::vector<float> buf_[2]; std::size_t w_ = 0; double ph1_ = 0, ph2_ = 0; };
+// TRANSIENT SHAPER: ATTACK (-100 .. +100 %) makes the start of each note harder or softer, SUSTAIN (-100 .. +100 %) the ring after it, OUTPUT.
+// It follows the difference between a fast and a slow envelope, so it works at any level (no threshold).
+class Transient final : public Multi { public: explicit Transient(double fs); const char* kind() const override { return "transient"; } const char* name() const override { return "TRANSIENT SHAPER"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
+ private: double fast_ = 0, slow_ = 0, g_ = 1; };
+// DE-ESSER: turns down only the highs above FREQUENCY (3 .. 12 kHz) when they pass THRESHOLD, by up to RANGE dB; LISTEN plays only what is taken away.
+class DeEsser final : public Multi { public: explicit DeEsser(double fs); const char* kind() const override { return "deesser"; } const char* name() const override { return "DE-ESSER"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override; double grDb() const { return gr_.load(); }
+ private: void design(); Biquad hp_[2], det_; double env_ = 0; std::atomic<double> gr_{0}; };
+
+// MAXIMIZER: a look-ahead brick-wall limiter: THRESHOLD (0 .. -12 dB: how much louder it makes the music), CEILING (-3 .. 0 dBFS, the
+// highest sample it lets out), RELEASE 5 .. 500 ms. It sees 1.5 ms ahead, so the gain is already down when a peak arrives (no overshoot).
+class Maximizer final : public Multi { public: explicit Maximizer(double fs); const char* kind() const override { return "maximizer"; } const char* name() const override { return "MAXIMIZER"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void setSampleRate(double fs) override; void process(float* L, float* R, std::size_t n) override; double grDb() const { return gr_.load(); }
+ private: std::vector<float> buf_[2]; std::vector<float> need_; std::size_t w_ = 0; double g_ = 1; std::atomic<double> gr_{0}; };
+// MULTIBAND COMP: three bands (LOW / MID / HIGH) split at LOW X and HIGH X with an exact (complementary) split; each band has its own
+// AMOUNT (how far its threshold comes down), all share SPEED; OUTPUT. Untouched it adds back to the original exactly.
+class Multiband final : public Multi { public: explicit Multiband(double fs); const char* kind() const override { return "multiband"; } const char* name() const override { return "MULTIBAND COMP"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
+ private: void design(); Biquad lo_[2][2], hi_[2][2]; double env_[3] = {0, 0, 0}; };
+// STEREO IMAGER: width below and above the CROSSOVER set apart (LOW WIDTH, HIGH WIDTH 0 .. 200 %): keep the bass centred, open the top.
+class Imager final : public Multi { public: explicit Imager(double fs); const char* kind() const override { return "imager"; } const char* name() const override { return "STEREO IMAGER"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
+ private: void design(); Biquad lp_; };
+// AUTO PAN: moves the sound between the speakers: RATE 0.05 .. 10 Hz, DEPTH, SHAPE (sine .. triangle .. square). Equal-power.
+class AutoPan final : public Multi { public: explicit AutoPan(double fs); const char* kind() const override { return "autopan"; } const char* name() const override { return "AUTO PAN"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
+ private: double ph_ = 0; };
+// VOCAL DOUBLER: two slightly retuned, slightly late copies of the voice, one each side, as if it were sung twice:
+// DETUNE 0 .. 25 cents, DELAY 8 .. 40 ms, WIDTH, TONE (darker copies sit behind the lead).
+class Doubler final : public Multi { public: explicit Doubler(double fs); const char* kind() const override { return "doubler"; } const char* name() const override { return "VOCAL DOUBLER"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
+ private: std::vector<float> buf_; std::size_t w_ = 0; double ph_[2] = {0, 0}; float lp_[2] = {0, 0}; };
+
+// The two ears of a listener, for placing a sound around the head (IAMF ELEMENT / IAMF RENDERER). A model, not measured HRTFs:
+// the time difference between the ears (Woodworth's sphere, head radius 8.75 cm), the head's shadow on the far ear (Brown and Duda's
+// one-pole / one-zero shelf), a pinna notch that moves with elevation and the dulling of sounds from behind.
+struct Ears {
+  void setSampleRate(double fs);
+  void reset();
+  void place(double azDeg, double elDeg);              // control rate: works out the delays and filters for a direction
+  void run(float x, float& l, float& r);               // one mono sample in, the two ears out
+ private:
+  struct Side { double b0 = 1, b1 = 0, a1 = 0, z = 0; double delay = 0; Biquad notch, back; };
+  double fs_ = 48000; std::vector<float> buf_; std::size_t w_ = 0; Side e_[2];
+};
+// IAMF ELEMENT: places a channel in 3D, after the audio elements of IAMF (the open immersive format of the Eclipsa plug-ins):
+// AZIMUTH -180 .. 180 degrees (0 in front, + to the right), ELEVATION -90 .. 90, DISTANCE 0.5 .. 20 m (level and air), SPREAD (how much
+// of the original stereo stays around the point), RENDER: BINAURAL (headphones, through the ear model) or SPEAKERS (an equal-power pan).
+class IamfElement final : public Multi { public: explicit IamfElement(double fs); const char* kind() const override { return "iamfelement"; } const char* name() const override { return "IAMF ELEMENT"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void setSampleRate(double fs) override; void process(float* L, float* R, std::size_t n) override;
+  static double azOf(double v) { return (v - 0.5) * 360; } static double elOf(double v) { return (v - 0.5) * 180; } static double distOf(double v) { return 0.5 * std::pow(40.0, v); }
+ private: Ears ears_; float air_[2] = {0, 0}; double placedAz_ = 1e9, placedEl_ = 1e9; };
+// IAMF RENDERER: the monitoring end of the chain (put it on the master): LAYOUT STEREO (as is) or BINAURAL (the two speakers heard
+// as two virtual speakers at -30 / +30 degrees through the ear model, for headphones), TARGET loudness -27 .. -14 LKFS and NORMALIZE (a
+// slow gain, at most 12 dB either way, that brings the programme to TARGET; IAMF carries loudness so players can do the same), OUTPUT.
+class IamfRenderer final : public Multi { public: explicit IamfRenderer(double fs); const char* kind() const override { return "iamfrender"; } const char* name() const override { return "IAMF RENDERER"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void setSampleRate(double fs) override; void process(float* L, float* R, std::size_t n) override;
+  double loudness() const { return lufs_.load(); }   // short-term loudness (3 s, K-weighted), LKFS
+  static double targetOf(double v) { return -27 + v * 13; }
+ private: void design(); Ears left_, right_; Biquad kShelf_[2], kHp_[2]; double ms_ = 0, g_ = 1; std::atomic<double> lufs_{-70}; };
+
+// W-SHAPE TUNER: the "W" signature of a tuned speaker or in-ear monitor, made smooth: three gentle rises (BASS shelf at 90 Hz, PRESENCE
+// bell at 1.8 kHz, AIR shelf at 10 kHz) with two soft valleys between them (LOW-MID DIP at 350 Hz, which clears the mud, and UPPER DIP
+// at 5 kHz, which takes the edge off harshness). AMOUNT scales the whole curve, SMOOTH widens every band (wide = smooth, no peaky
+// resonances). The level is kept the same when the curve changes (automatic loudness compensation on a pink spectrum), so a louder W
+// never just sounds "better" because it is louder; OUTPUT trims after that.
+class WShape final : public Multi { public: explicit WShape(double fs); const char* kind() const override { return "wshape"; } const char* name() const override { return "W-SHAPE TUNER"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
+  double compensationDb() const { return comp_.load(); }
+  struct Band { Biquad::Kind kind; double f, q, db; };
+  static void bands(const double* k, Band out[5]);     // the five bands for the knobs k[0..6]
+ private: void design(); Biquad f_[2][5]; std::atomic<double> comp_{0}; };
+
+// CONVERTER CLIP: the last stage before the file: the colour of an analog-to-digital and a digital-to-analog converter around a soft
+// clipper. ADC and DAC (on / off) each add the faint harmonics and the gentle top-end band limit of a converter's analog stage; INPUT and
+// DRIVE push into the clipper (a soft knee that ends exactly at CEILING, -3 .. 0 dBFS, never over it); OVS runs the clipper at 1x / 2x / 4x the
+// rate so its edges do not fold back as aliasing; DE-CORRELATE lets the two sides drift apart in phase a little (width without a widener);
+// DRIFT (on / off) makes the two channels wander by a hair, like analog parts warming up; DITHER (OFF / TPDF / SHAPED) and BITS (16 / 20 / 24)
+// for the final word length; OUTPUT; MONITOR: LR, M (mid), S (side) or Δ (only what the unit added or took away).
+class ConvClip final : public Multi { public: explicit ConvClip(double fs); const char* kind() const override { return "convclip"; } const char* name() const override { return "CONVERTER CLIP"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void setSampleRate(double fs) override; void process(float* L, float* R, std::size_t n) override;
+  double grDb() const { return gr_.load(); }
+  static int ovsOf(double v) { const int k = static_cast<int>((v < 0 ? 0 : v > 1 ? 1 : v) * 2.999); return 1 << k; }
+  static int bitsOf(double v) { static const int b[] = {16, 20, 24}; return b[static_cast<int>((v < 0 ? 0 : v > 1 ? 1 : v) * 2.999)]; }
+  static int pickOf(double v, int n) { return static_cast<int>((v < 0 ? 0 : v > 1 ? 1 : v) * (n - 0.001)); }
+ private: void design(); Biquad up_[2][2], down_[2][2], adc_[2], dac_[2]; double ap_[2] = {0, 0}, apIn_[2] = {0, 0}, drift_[2] = {1, 1}, driftT_[2] = {1, 1}, err_[2] = {0, 0};
+  std::uint32_t rng_ = 0x9e3779b9u; int ovsDesigned_ = 0; std::atomic<double> gr_{0}; double rnd(); };
 
 }  // namespace am::fx
