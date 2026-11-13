@@ -43,6 +43,32 @@ Flickable {
                    text: page.t("The list comes from the update server and is checked against the vendor's signature before it is shown. Nothing from this computer is uploaded.") }
         }
         Card {
+            title: page.t("LOCAL STORE · ON THIS COMPUTER"); tone: Theme.cyan
+            property int rev: 0
+            Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.muted; font.pixelSize: 10
+                   text: page.t("Extensions and built-in effects installed with AmF X1. Switch one off to take it out of the console; switch it on to bring it back. Nothing is downloaded from here.") }
+            GridLayout {
+                id: storeGrid; Layout.fillWidth: true; columns: page.width > 1100 ? 3 : 2; columnSpacing: 8; rowSpacing: 6
+                Repeater {
+                    model: { storeGrid.parent.rev; return engine.storeItems() }
+                    Rectangle {
+                        required property var modelData
+                        Layout.fillWidth: true; implicitHeight: 46; radius: 6; color: Theme.card; border.color: modelData.on && modelData.installed ? Theme.cyan : Theme.line
+                        RowLayout { anchors.fill: parent; anchors.margins: 8; spacing: 8
+                            Text { text: parent.parent.modelData.kind === "extension" ? "⬢" : "✦"; color: Theme.amber; font.pixelSize: 14 }
+                            ColumnLayout { Layout.fillWidth: true; spacing: 1
+                                Text { text: parent.parent.parent.modelData.name; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 10; font.bold: true; elide: Text.ElideRight; Layout.fillWidth: true }
+                                Text { text: !parent.parent.parent.modelData.installed ? page.t("not installed next to the console") : page.t(parent.parent.parent.modelData.note); color: Theme.dim; font.pixelSize: 8; elide: Text.ElideRight; Layout.fillWidth: true } }
+                            Rectangle { readonly property var it: parent.parent.modelData
+                                objectName: "store_" + it.id; enabled: it.installed; opacity: it.installed ? 1 : 0.4
+                                implicitWidth: 46; implicitHeight: 20; radius: 10; color: it.on ? Theme.cyan : Theme.ov(0.1)
+                                Text { anchors.centerIn: parent; text: parent.it.on ? page.t("ON") : page.t("OFF"); color: parent.it.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { engine.setStoreEnabled(parent.it.id, !parent.it.on); storeGrid.parent.rev++ } } } }
+                    }
+                }
+            }
+        }
+        Card {
             title: page.t("UPCOMING UPDATES"); tone: Theme.amber
             Repeater { model: page.upcoming
                 Text { required property string modelData; Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.ink; font.pixelSize: 11; text: "•  " + page.t(modelData) } }

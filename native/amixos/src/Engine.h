@@ -167,10 +167,21 @@ class Engine : public QObject {
   QStringList recordFiles() const { QStringList l; for (const auto& f : recorder_.files()) l << QString::fromStdString(f); return l; }
   QString recordFolder() const; void setRecordFolder(const QString& f) { settings_.setValue("record/folder", f); emit recordChanged(); }
   // record format: 0 = 24-bit PCM, 1 = 32-bit float, 2 = 64-bit float, 3 = 32-bit PCM (the old float32 switch still reads and writes 0 / 1)
-  int recordFormat() const { const int f = settings_.value("record/format", -1).toInt(); return f >= 0 && f <= 3 ? f : (settings_.value("record/float32", false).toBool() ? 1 : 0); }
+  int recordFormat() const { const int f = settings_.value("record/format", -1).toInt(); if (f >= 0 && f <= 3) return f; return settings_.contains("record/float32") ? (settings_.value("record/float32").toBool() ? 1 : 0) : 2; }   // new installs: 64-bit float
   void setRecordFormat(int f) { f = std::clamp(f, 0, 3); settings_.setValue("record/format", f); settings_.setValue("record/float32", f == 1 || f == 2); emit recordChanged(); }
   bool recordFloat() const { const int f = recordFormat(); return f == 1 || f == 2; } void setRecordFloat(bool v) { setRecordFormat(v ? 1 : 0); }
-  QString deviceFormat() const;   // what the open device itself carries (16 / 24 / 32-bit integer, 32 / 64-bit float); the engine mixes in 64-bit float
+  QString deviceFormat() const;
+  // OUTPUT word length (WASAPI exclusive): 32-bit integer first (the device's own word length) or 32-bit float first
+  Q_PROPERTY(bool preferInt32 READ preferInt32 WRITE setPreferInt32 NOTIFY recordChanged)
+  bool preferInt32() const { return settings_.value("audio/preferInt32", true).toBool(); } void setPreferInt32(bool v) { settings_.setValue("audio/preferInt32", v); emit recordChanged(); }
+  // BLUETOOTH AUDIO in the device lists: on (default) or off (hidden from the lists and AUTO DETECT; a device already open stays open)
+  Q_PROPERTY(bool bluetoothAudio READ bluetoothAudio WRITE setBluetoothAudio NOTIFY devicesChanged)
+  bool bluetoothAudio() const { return settings_.value("audio/bluetooth", true).toBool(); } void setBluetoothAudio(bool v) { settings_.setValue("audio/bluetooth", v); refreshDevices(); }
+  // LOCAL STORE (CLOUD page): what is installed on this computer and can be switched on or off — the extension libraries next to the console and the
+  // built-in rack effects. A switched-off effect leaves the rack chooser (a slot that already holds it keeps working); nothing is downloaded or installed here.
+  Q_INVOKABLE QVariantList storeItems() const;   // [{id, name, kind: "extension" | "effect", installed, on, note}]
+  Q_INVOKABLE void setStoreEnabled(const QString& id, bool on);
+  Q_INVOKABLE QVariantList ratesFor(const QString& backend, const QString& outDevice) const;   // the rates that device takes (44.1 kHz .. 768 kHz), [] when unknown   // what the open device itself carries (16 / 24 / 32-bit integer, 32 / 64-bit float); the engine mixes in 64-bit float
   bool recordMaster() const { return settings_.value("record/master", true).toBool(); } void setRecordMaster(bool v) { settings_.setValue("record/master", v); emit recordChanged(); }
   QString recordMessage() const { return recMsg_; }
   Q_INVOKABLE bool startRecording();

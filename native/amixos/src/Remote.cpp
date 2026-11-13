@@ -1,4 +1,5 @@
 #include "Remote.h"
+#include <QSettings>
 #include <QCryptographicHash>
 #include <QDateTime>
 #include <QVariantMap>
@@ -80,7 +81,7 @@ bool Remote::start(bool wifi) {
   engine_->stop();   // the service opens the sound card itself
   wifi_ = wifi;
   QStringList args{"--port", QString::number(port()), "--open", "auto", "--version", QCoreApplication::applicationVersion()}; if (wifi) args << "--allow-lan";   // local policy stays on: private addresses only
-  if (ext_.available()) {                       // the extension runs inside the console: same process, same rights on the sound card
+  if (ext_.available() && !QSettings().value("store/off").toStringList().contains(QStringLiteral("ext:AmF X1 Network"))) {   // the extension runs inside the console (unless switched off in the LOCAL STORE): same process, same rights on the sound card
     const int rc = ext_.start(args);
     if (rc == 0 && ext_.running()) { status_ = wifi ? QStringLiteral("starting for the phones on this network (extension)") : QStringLiteral("starting for this computer only (extension)"); emit changed(); return true; }
     status_ = QStringLiteral("the network extension did not start (%1): %2").arg(rc).arg(ext_.takeOutput().trimmed().section('\n', -1).left(160)); emit changed();   // then the program next to it, if there is one

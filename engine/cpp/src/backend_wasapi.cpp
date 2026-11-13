@@ -132,7 +132,9 @@ class WasapiBackend : public Backend {
       if (FAILED(r)) { err = hr("Initialize", r); return false; }
     } else {
       // take control: the first format the device accepts exclusively, at exactly the requested rate and channel count
-      static const Sample kTry[] = { {true, 32, 32}, {false, 32, 32}, {false, 32, 24}, {false, 24, 24}, {false, 16, 16} };
+      static const Sample kFloatFirst[] = { {true, 32, 32}, {false, 32, 32}, {false, 32, 24}, {false, 24, 24}, {false, 16, 16} };
+      static const Sample kIntFirst[] = { {false, 32, 32}, {true, 32, 32}, {false, 32, 24}, {false, 24, 24}, {false, 16, 16} };
+      const auto& kTry = cfg_.preferInt32 ? kIntFirst : kFloatFirst;
       bool found = false; WAVEFORMATEXTENSIBLE f;
       for (const Sample& t : kTry) { f = makeFormat(ch, cfg_.sampleRate, t); if ((*ac)->IsFormatSupported(AUDCLNT_SHAREMODE_EXCLUSIVE, &f.Format, nullptr) == S_OK) { *used = t; found = true; break; } }
       if (!found) { dev->Release(); err = "exclusive mode: the device accepts none of float32 / int32 / int24 / int16 at " + std::to_string(static_cast<long>(cfg_.sampleRate)) + " Hz with " + std::to_string(ch) + " channels (is \"Allow applications to take exclusive control of this device\" on, and no other program holding it?)"; return false; }

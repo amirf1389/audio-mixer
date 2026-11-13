@@ -12,6 +12,7 @@
 #include <QThread>
 #include <QElapsedTimer>
 #include "Engine.h"
+#include "Extension.h"
 
 #include "license/license.hpp"
 #include "paths/paths.hpp"
@@ -107,6 +108,7 @@ void Engine::refreshDevices() {
     QVariantMap m; m["backend"] = QString::fromStdString(d.backend); m["id"] = QString::fromStdString(d.id); m["name"] = QString::fromStdString(d.name);
     m["inChannels"] = d.inChannels; m["outChannels"] = d.outChannels; m["defaultRate"] = d.defaultRate; m["defaultIn"] = d.defaultIn; m["defaultOut"] = d.defaultOut; m["bluetooth"] = looksBluetooth(m["name"].toString()); m["kind"] = QString::fromStdString(d.kind);
     QVariantList rates; for (double r : d.sampleRates) rates << r; m["sampleRates"] = rates;
+    if (!bluetoothAudio() && (m["bluetooth"].toBool() || d.kind == "bluetooth")) continue;   // BLUETOOTH AUDIO switched off
     devices_ << m;
   }
   emit devicesChanged();
@@ -481,7 +483,7 @@ bool Engine::openSmart(const QString& backend, const QString& in, const QString&
   for (std::size_t i = 0; i < steps.size(); ++i) {
     const auto& a = steps[i];
     stop(); rt_ = std::make_unique<am::Runtime>(kStrips);
-    am::DeviceConfig cfg; cfg.backend = a.backend; cfg.inDevice = a.inDevice; cfg.outDevice = a.outDevice; cfg.sampleRate = rate > 0 ? rate : 48000; cfg.frames = static_cast<unsigned>(frames > 0 ? frames : 256); blockFrames_ = static_cast<int>(cfg.frames); cfg.inChannels = inCh; cfg.outChannels = outCh; cfg.exclusive = a.exclusive;
+    am::DeviceConfig cfg; cfg.backend = a.backend; cfg.inDevice = a.inDevice; cfg.outDevice = a.outDevice; cfg.sampleRate = rate > 0 ? rate : 48000; cfg.frames = static_cast<unsigned>(frames > 0 ? frames : 256); blockFrames_ = static_cast<int>(cfg.frames); cfg.inChannels = inCh; cfg.outChannels = outCh; cfg.exclusive = a.exclusive; cfg.preferInt32 = preferInt32();
     devIn_ = std::clamp(inCh, 0, kStrips); devOut_ = std::clamp(outCh, 0, kOutputs);
     std::string err; nullInputFor(cfg); rememberDeviceNames(cfg.backend, cfg.inDevice, cfg.outDevice);
     bool started = false;
@@ -788,7 +790,7 @@ void Engine::resetFaders() { for (int i = 0; i < kStrips; ++i) { StripUi& s = st
 void Engine::flattenAllDsp() { for (int i = 0; i < kStrips; ++i) { strips_[static_cast<std::size_t>(i)].dsp.set(am::dsp::ChannelParams{}); for (PluginUi& p : strips_[static_cast<std::size_t>(i)].plugins) if (!isVstKind(p.kind)) p = PluginUi{}; } if (rt_) pushAll(); emit stripsChanged(); }
 
 static const struct { const char* kind; const char* name; } kBuiltIns[] = {{"gate", "NOISE GATE"}, {"eq", "CHANNEL EQ (3-BAND)"}, {"miceq", "MIC EQ (10-BAND)"}, {"xover", "X-OVER"}, {"comp", "COMPRESSOR"}, {"limiter", "LIMITER"}, {"delay", "DELAY"}, {"polarity", "POLARITY Ø"}};
-QVariantList Engine::pluginCatalog() const { QVariantList l; for (const auto& b : kBuiltIns) { QVariantMap m; m["kind"] = b.kind; m["name"] = b.name; m["builtIn"] = true; l << m; } for (const auto& [k, n] : am::fx::catalog()) { QVariantMap m; m["kind"] = QStringLiteral("fx:") + QString::fromStdString(k); m["name"] = QString::fromStdString(n); m["builtIn"] = false; m["fx"] = true; m["vendor"] = QStringLiteral("AMFB Audio"); l << m; }
+QVariantList Engine::pluginCatalog() const { QVariantList l; const QStringList off = settings_.value("store/off").toStringList(); for (const auto& b : kBuiltIns) { QVariantMap m; m["kind"] = b.kind; m["name"] = b.name; m["builtIn"] = true; l << m; } for (const auto& [k, n] : am::fx::catalog()) { if (off.contains(QStringLiteral("fx:") + QString::fromStdString(k))) continue; QVariantMap m; m["kind"] = QStringLiteral("fx:") + QString::fromStdString(k); m["name"] = QString::fromStdString(n); m["builtIn"] = false; m["fx"] = true; m["vendor"] = QStringLiteral("AMFB Audio"); l << m; }
   for (const QVariantMap& v : vstCatalog_) l << v; return l; }
 QVariantList Engine::vstCatalog() const { QVariantList l; for (const QVariantMap& v : vstCatalog_) l << v; return l; }
 int Engine::rescanVst(const QStringList& extraDirs) {
@@ -983,6 +985,24 @@ QVariantMap Engine::eqBand(int i, int band) const {
   m["type"] = static_cast<int>(b.type); m["freq"] = b.freq; m["q"] = b.q; m["gainDb"] = b.gainDb; return m;
 }
 void Engine::setDelay(int i, double ms) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].dsp.setDelayMs(ms); if (rt_) rt_->setDelayMs(i, strips_[static_cast<std::size_t>(i)].dsp.params().delayMs); emit stripsChanged(); }
+QVariantList Engine::storeItems() const {
+  QVariantList l; const QStringList off = settings_.value("store/off").toStringList();
+  for (const auto& [id, name, note] : {std::tuple<const char*, const char*, const char*>{"ext:AmF X1 Network", "AmF X1 Network", "phone remote and network control, run inside the console"},
+                                       {"ext:AmF X1 Hybrid", "AmF X1 Hybrid", "sixteen-strip hybrid mixer with captured programs"}}) {
+    QVariantMap m; m["id"] = id; m["name"] = name; m["kind"] = "extension"; m["note"] = note; m["installed"] = !Extension::path(QString::fromLatin1(name)).isEmpty();
+    m["on"] = !off.contains(QString::fromLatin1(id)); l << m; }
+  for (const auto& [k, n] : am::fx::catalog()) { const QString id = QStringLiteral("fx:") + QString::fromStdString(k);
+    QVariantMap m; m["id"] = id; m["name"] = QString::fromStdString(n); m["kind"] = "effect"; m["note"] = "built-in rack effect"; m["installed"] = true; m["on"] = !off.contains(id); l << m; }
+  return l;
+}
+void Engine::setStoreEnabled(const QString& id, bool on) {
+  if (!id.startsWith("fx:") && !id.startsWith("ext:")) return;
+  QStringList off = settings_.value("store/off").toStringList(); off.removeAll(id); if (!on) off << id; settings_.setValue("store/off", off); emit devicesChanged();
+}
+QVariantList Engine::ratesFor(const QString& backend, const QString& outDevice) const {
+  for (const QVariant& v : devices_) { const QVariantMap m = v.toMap(); if (m["backend"].toString() == backend && (outDevice.isEmpty() || m["id"].toString() == outDevice) && !m["sampleRates"].toList().isEmpty()) return m["sampleRates"].toList(); }
+  return {};
+}
 QString Engine::deviceFormat() const { return rt_ && running() ? QString::fromStdString(rt_->sampleFormat()) : QString(); }
 QVariantMap Engine::compSuggestion(int i) const {
   QVariantMap m; if (i < 0 || i >= kStrips) return m; const am::CompSuggestion c = strips_[static_cast<std::size_t>(i)].dyn.suggest(compTargetDb_);

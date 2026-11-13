@@ -70,7 +70,7 @@ AsioProbeInfo probeAsioDriver(const AsioDriverInfo& d) {
   long nIn = 0, nOut = 0;
   if (drv->getChannels(&nIn, &nOut) != ASE_OK) { info.error = "getChannels failed"; drv->Release(); return info; }
   info.inChannels = nIn; info.outChannels = nOut;
-  static const double kRates[] = {8000, 11025, 16000, 22050, 32000, 44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000};
+  static const double kRates[] = {8000, 11025, 16000, 22050, 32000, 44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000, 705600, 768000};
   for (double rate : kRates) if (drv->canSampleRate(rate) == ASE_OK) info.sampleRates.push_back(rate);
   drv->Release();
   return info;
