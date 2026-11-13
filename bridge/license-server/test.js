@@ -371,3 +371,44 @@ test('staff sign-in, JWT, staff accounts and the CRM (encrypted at rest)', async
     assert.ok(limited >= 2, 'sign-in is limited (' + limited + ')');
   } finally { srv.close(); fsx.rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('SYSTEM page: health without secrets, validated settings, session ending, safe CSV export, public notice', async () => {
+  const os = require('node:os'), fsx = require('node:fs'), pathx = require('node:path');
+  const dir = fsx.mkdtempSync(pathx.join(os.tmpdir(), 'system-'));
+  const JWT_SECRET = 'j'.repeat(48);
+  const srv = createServer({ privateKey: pair.privateKey, token: TOKEN, dataFile: pathx.join(dir, 'licenses.json'), portalDb: pathx.join(dir, 'portal.db'), portalSecret: JWT_SECRET, quiet: true });
+  await new Promise(r => srv.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${srv.address().port}`;
+  const call = async (p, { method, body, tok } = {}) => { const r = await fetch(base + p, { method: method || (body ? 'POST' : 'GET'), headers: { ...(tok ? { authorization: 'Bearer ' + tok } : {}), ...(body ? { 'content-type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined }); const t = await r.text(); let j = null; try { j = JSON.parse(t); } catch (_) {} return { status: r.status, json: j, text: t, headers: r.headers }; };
+  try {
+    const page = await fetch(base + '/admin/system'); assert.strictEqual(page.status, 200); assert.match(page.headers.get('content-security-policy'), /bootstrap@5\.3\.3\/dist\//);
+    assert.ok(!/style="/.test(await page.text()));
+    for (const p of ['/admin/system/info', '/admin/settings']) assert.strictEqual((await call(p)).status, 401);
+    await call('/admin/staff', { body: { email: 'sam@amfb.my', name: 'Sam', password: 'sam long password' }, tok: TOKEN });
+    const jwt = (await call('/admin/auth/login', { body: { email: 'sam@amfb.my', password: 'sam long password' } })).json.token;
+    const info = await call('/admin/system/info', { tok: jwt });
+    assert.strictEqual(info.status, 200); assert.strictEqual(info.json.you.email, 'sam@amfb.my'); assert.strictEqual(info.json.data.db.integrity, 'ok'); assert.ok(info.json.data.auditChain.ok);
+    for (const secret of [TOKEN, JWT_SECRET, 'sam long password']) assert.ok(!info.text.includes(secret), 'a secret in /admin/system/info');
+    // settings: defaults, validation of every kind, unknown keys refused, saved and audited
+    const s0 = (await call('/admin/settings', { tok: jwt })).json; assert.strictEqual(s0.settings.defaultPlan, 'pro'); assert.ok(s0.schema.defaultDays);
+    for (const bad of [{ defaultDays: -1 }, { defaultDays: 2.5 }, { defaultSeats: 9 }, { defaultPlan: 'gold' }, { supportEmail: 'nope' }, { maintenance: 'yes' }, { adminToken: 'x' }])
+      assert.strictEqual((await call('/admin/settings', { method: 'PUT', body: bad, tok: jwt })).status, 400, JSON.stringify(bad));
+    const ok = await call('/admin/settings', { method: 'PUT', body: { defaultPlan: 'studio', defaultDays: 90, supportEmail: 'Help@AMFB.my', portalNotice: '<b>Hi</b> all', maintenance: true }, tok: jwt });
+    assert.strictEqual(ok.status, 200); assert.deepStrictEqual(ok.json.changed.sort(), ['defaultDays', 'defaultPlan', 'maintenance', 'portalNotice', 'supportEmail']);
+    assert.strictEqual((await call('/admin/settings', { tok: TOKEN })).json.settings.supportEmail, 'help@amfb.my');
+    assert.ok((await call('/admin/audit?limit=20', { tok: jwt })).json.entries.some(e => e.action === 'settings.change'));
+    // the public notice carries those four fields and nothing else
+    const n = (await call('/portal/notice')).json; assert.deepStrictEqual(Object.keys(n).sort(), ['maintenance', 'notice', 'ok', 'orgName', 'supportEmail']); assert.strictEqual(n.notice, '<b>Hi</b> all'); assert.strictEqual(n.maintenance, true);
+    // CSV: a cell a spreadsheet would run as a formula is quoted as text
+    await call('/admin/crm/customers', { body: { name: '=HYPERLINK("http://evil","x")', company: '+cmd', email: 'a@b.co', tags: '@sum' }, tok: jwt });
+    const csv = await call('/admin/crm/export.csv', { tok: jwt });
+    assert.strictEqual(csv.status, 200); assert.match(csv.headers.get('content-type'), /text\/csv/); assert.match(csv.headers.get('content-disposition'), /attachment/);
+    assert.ok(csv.text.includes('"\'=HYPERLINK(""http://evil"",""x"")"') && csv.text.includes('"\'+cmd"') && csv.text.includes('"\'@sum"'));
+    assert.strictEqual((await call('/admin/crm/export.csv')).status, 401);
+    // ending a staff member's sessions stops their token
+    const sam = (await call('/admin/staff', { tok: TOKEN })).json.staff.find(x => x.email === 'sam@amfb.my');
+    assert.strictEqual((await call('/admin/staff/' + sam.id + '/end-sessions', { method: 'POST', body: {}, tok: TOKEN })).status, 200);
+    assert.strictEqual((await call('/admin/system/info', { tok: jwt })).status, 401);
+    assert.strictEqual((await call('/admin/staff/stf_none/end-sessions', { method: 'POST', body: {}, tok: TOKEN })).status, 404);
+  } finally { srv.close(); fsx.rmSync(dir, { recursive: true, force: true }); }
+});

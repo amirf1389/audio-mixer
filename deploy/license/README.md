@@ -159,6 +159,7 @@ disable other staff accounts (disabling ends that account's sessions at once). P
 | `/admin/login` | staff sign-in (both servers) | Tailwind Play CDN 3.4.16 + Font Awesome 6.5.2 |
 | `/admin/` | licence keys (and `/admin/` on the OTA server: releases) | existing dashboards, now also open with the staff token |
 | `/admin/crm` | customers, notes, staff accounts | Bootstrap 5.3.3 + Font Awesome 6.5.2 |
+| `/admin/system` | health and configuration (never a secret), settings, staff and their sessions, activity log with chain check, customers as CSV | Bootstrap 5.3.3 + Font Awesome 6.5.2 |
 
 Customer name, e-mail, phone, company and notes are stored encrypted (AES-256-GCM) under a CRM key that only the
 licence server holds (`PORTAL_CRM_SECRET`, or derived from its own data key): the OTA server shares the sign-in but
@@ -169,3 +170,10 @@ Bootstrap and Font Awesome are pinned with SRI hashes, and each page's CSP names
 script cannot carry an SRI hash: the page's CSP allows that one host only. Tailwind describes the Play CDN as a
 development tool; it is used here for the internal sign-in page only. These pages stay behind the same rule as the
 rest of `/admin/`: on the server or through the SSH tunnel, never on the public website.
+
+### Settings (SYSTEM → Settings)
+
+Company name, support e-mail, the default plan / days / computers for new keys (the licence dashboard's issue form
+starts with them), how many days before its end a key shows under "Ending soon", a notice and a maintenance switch
+for the customer portal (`GET /portal/notice` gives the portal those four public fields and nothing else). Every
+change is in the activity log. The CSV export quotes cells that start with = + - @ so a spreadsheet shows them as text.

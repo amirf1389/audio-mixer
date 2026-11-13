@@ -290,6 +290,24 @@ function createServer({ privateKey, token, dataFile = DATA_FILE, dataSecret, por
     if (off && c.state.staff && c.state.staff.id === c.params.id) return c.json(400, { ok: false, error: 'you cannot disable your own account' });
     const r = staffAuth().setStaffDisabled(c.params.id, off); if (r.ok) audit.add('staff.' + verb, c.params.id, c.ip, 'by ' + who(c)); return out(c, { status: r.ok ? 200 : r.status, ...r });
   });
+  // ── SYSTEM page: health and configuration (never a secret's value), settings, sessions, export ──
+  app.get('/admin/system/info', admin, limit('adm', 120), c => {
+    const l = listLicenses({ file: dataFile, secret }), m = process.memoryUsage(), fsize = f => { try { return fs.statSync(f).size; } catch (_) { return 0; } };
+    return c.json(200, { ok: true,
+      server: { node: process.version, platform: process.platform + ' ' + process.arch, upSince: started, uptimeS: Math.round((Date.now() - started) / 1000), memoryMB: Math.round(m.rss / 1048576), pid: process.pid },
+      data: { licences: l.length, active: l.filter(x => x.state === 'active').length, devices: l.reduce((n, x) => n + x.devices.length, 0), licenceFileBytes: fsize(dataFile), auditFileBytes: fsize(dataFile + '.audit.log'), auditChain: audit.verify(), db: staffAuth().dbInfo() },
+      config: { trustProxy: !!trustProxy, sharedSignIn: !!(portalDb && portalSecret), crmKey: process.env.PORTAL_CRM_SECRET ? 'PORTAL_CRM_SECRET' : 'derived from the licence data key', dataKey: dataSecret ? 'separate key file' : 'derived from the admin token', updateFeed: updateUrl, maxDevices: MAX_DEVICES, plans: Object.keys(PLANS) },
+      you: c.state.staff ? { kind: 'staff', ...c.state.staff } : { kind: 'admin token' } });
+  });
+  app.get('/admin/settings', admin, limit('adm', 120), c => c.json(200, { ok: true, settings: staffAuth().getSettings(), schema: staffAuth().settingsSchema() }));
+  app.put('/admin/settings', admin, limit('adm', 60), async c => { const r = staffAuth().setSettings(await c.body(), who(c)); if (r.ok && r.changed.length) audit.add('settings.change', '', c.ip, r.changed.join(',') + ' by ' + who(c)); return out(c, { status: r.ok ? 200 : r.status, ...r }); });
+  app.post('/admin/staff/:id/end-sessions', admin, limit('adm', 120), c => { const ok = staffAuth().endSessions(c.params.id); if (ok) audit.add('staff.end-sessions', c.params.id, c.ip, 'by ' + who(c)); return ok ? c.json(200, { ok: true }) : c.json(404, { ok: false, error: 'no such account' }); });
+  app.get('/admin/crm/export.csv', admin, limit('adm', 20), c => {   // a spreadsheet of the customers; cells that a spreadsheet would run as a formula are quoted as text
+    const cell = v => { let t = String(v == null ? '' : v); if (/^[=+\-@\t\r]/.test(t)) t = "'" + t; return '"' + t.replace(/"/g, '""') + '"'; };
+    const rows = staffAuth().listCustomers().map(x => [x.name, x.company, x.email, x.phone, x.country, x.tags, x.status, new Date(x.created).toISOString(), new Date(x.updated).toISOString()].map(cell).join(','));
+    audit.add('crm.export', '', c.ip, rows.length + ' rows by ' + who(c));
+    return c.send(200, '\ufeff' + ['name,company,email,phone,country,tags,status,created,updated', ...rows].join('\r\n') + '\r\n', { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': 'attachment; filename="amfx1-customers.csv"' });
+  });
   app.get('/admin/crm/stats', admin, limit('adm', 120), c => c.json(200, { ok: true, stats: staffAuth().stats(), statuses: staffAuth().STATUSES }));
   app.get('/admin/crm/customers', admin, limit('adm', 120), c => c.json(200, { ok: true, customers: staffAuth().listCustomers({ q: c.query.get('q') || '', status: c.query.get('status') || '' }) }));
   app.post('/admin/crm/customers', admin, limit('adm', 120), async c => { const r = staffAuth().saveCustomer(await c.body(), who(c)); if (r.ok) audit.add('crm.add', r.id, c.ip, 'by ' + who(c)); return out(c, { status: r.ok ? 200 : r.status, ...r }); });
@@ -316,6 +334,8 @@ function createServer({ privateKey, token, dataFile = DATA_FILE, dataSecret, por
   // THE CUSTOMER PORTAL (/portal/): activate a product key, check a key, see the newest release. Public: it uses only /redeem, /status and
   // the route below, which reads the published update list (LICENSE_UPDATE_URL, https) for the page and keeps it for five minutes.
   const upd = { at: 0, body: null };
+  // what the vendor wants every customer to see (SYSTEM → Settings): public by design, nothing else from the settings
+  app.get('/portal/notice', limit('pub', 60), c => { const st = staffAuth().getSettings(); return c.json(200, { ok: true, orgName: st.orgName, supportEmail: st.supportEmail, notice: st.portalNotice, maintenance: !!st.maintenance }); });
   app.get('/portal/updates', limit('pub', 60), async c => {
     if (upd.body && Date.now() - upd.at < 300000) return c.json(200, upd.body);
     let body;
@@ -354,7 +374,8 @@ function createServer({ privateKey, token, dataFile = DATA_FILE, dataSecret, por
   const page = (file, csp) => c => { let data; try { data = fs.readFileSync(path.join(dash, file)); } catch (_) { throw new HttpError(404, 'not found'); } return c.send(200, data, { 'content-type': 'text/html; charset=utf-8', 'content-security-policy': csp }); };
   app.get('/admin/login', page('login.html', CDN_CSP.login));
   app.get('/admin/crm', page('crm.html', CDN_CSP.crm));
-  app.static({ '/admin/login.js': [path.join(dash, 'login.js'), 'text/javascript; charset=utf-8'], '/admin/crm.js': [path.join(dash, 'crm.js'), 'text/javascript; charset=utf-8'] });
+  app.get('/admin/system', page('system.html', CDN_CSP.crm));
+  app.static({ '/admin/login.js': [path.join(dash, 'login.js'), 'text/javascript; charset=utf-8'], '/admin/crm.js': [path.join(dash, 'crm.js'), 'text/javascript; charset=utf-8'], '/admin/system.js': [path.join(dash, 'system.js'), 'text/javascript; charset=utf-8'] });
   app.get('/admin', c => c.send(301, '', { location: '/admin/' }));
   app.static({ '/admin/': [path.join(dash, 'index.html'), 'text/html; charset=utf-8'], '/admin/app.js': [path.join(dash, 'app.js'), 'text/javascript; charset=utf-8'], '/admin/style.css': [path.join(dash, 'style.css'), 'text/css; charset=utf-8'] });
   return http.createServer(app.handler);

@@ -27,6 +27,7 @@ function createPortalAuth({ dbFile, secret, crmSecret = '' }) {
       created INTEGER NOT NULL, disabled INTEGER NOT NULL DEFAULT 0, last_login INTEGER, token_gen INTEGER NOT NULL DEFAULT 0);
     CREATE TABLE IF NOT EXISTS customers (id TEXT PRIMARY KEY, email_hash TEXT, data TEXT NOT NULL, status TEXT NOT NULL, created INTEGER NOT NULL, updated INTEGER NOT NULL, updated_by TEXT);
     CREATE INDEX IF NOT EXISTS customers_email ON customers (email_hash);
+    CREATE TABLE IF NOT EXISTS settings (k TEXT PRIMARY KEY, v TEXT NOT NULL, updated INTEGER NOT NULL, by TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS customer_notes (id TEXT PRIMARY KEY, customer_id TEXT NOT NULL REFERENCES customers(id) ON DELETE CASCADE, data TEXT NOT NULL, at INTEGER NOT NULL, by TEXT NOT NULL);`);
   const keyOf = label => crypto.createHmac('sha256', String(secret)).update(label).digest();
   const jwtKey = keyOf('jwt-hs256');
@@ -146,7 +147,43 @@ function createPortalAuth({ dbFile, secret, crmSecret = '' }) {
   }
   const stats = () => { const o = { total: 0 }; for (const s of STATUSES) o[s] = 0; for (const r of db.prepare('SELECT status, COUNT(*) AS n FROM customers GROUP BY status').all()) { o[r.status] = r.n; o.total += r.n; } return o; };
 
-  return { staffCount, addStaff, listStaff, setStaffDisabled, setPassword, checkPassword, endSessions, login, sign, verify, bearer, saveCustomer, listCustomers, getCustomer, findByEmail, deleteCustomer, addNote, stats, STATUSES, close: () => db.close() };
+  // ── settings: a fixed list of keys with their kind and limits; anything else is refused ──
+  const SETTINGS = {
+    orgName: { kind: 'text', max: 80, def: 'AMFB Audio' },
+    supportEmail: { kind: 'email', def: '' },
+    defaultPlan: { kind: 'choice', choices: ['basic', 'pro', 'studio', 'master'], def: 'pro' },
+    defaultDays: { kind: 'int', min: 0, max: 3650, def: 365 },
+    defaultSeats: { kind: 'int', min: 1, max: 4, def: 1 },
+    expiringWarnDays: { kind: 'int', min: 1, max: 180, def: 30 },
+    portalNotice: { kind: 'text', max: 300, def: '' },
+    maintenance: { kind: 'bool', def: false },
+  };
+  function getSettings() {
+    const o = {}; for (const [k, d] of Object.entries(SETTINGS)) o[k] = d.def;
+    for (const r of db.prepare('SELECT k, v FROM settings').all()) if (SETTINGS[r.k]) { try { o[r.k] = JSON.parse(r.v); } catch (_) { /* keep the default */ } }
+    return o;
+  }
+  function setSettings(b, by) {
+    const bad = [], put = [];
+    for (const [k, v] of Object.entries(b || {})) {
+      const d = SETTINGS[k]; if (!d) { bad.push(k + ': unknown setting'); continue; }
+      let x = v;
+      if (d.kind === 'text') x = clean(v, d.max);
+      else if (d.kind === 'email') { x = clean(v, 254).toLowerCase(); if (x && !okEmail(x)) { bad.push(k + ': not an e-mail'); continue; } }
+      else if (d.kind === 'choice') { if (!d.choices.includes(v)) { bad.push(k + ': one of ' + d.choices.join(', ')); continue; } }
+      else if (d.kind === 'int') { x = Number(v); if (!Number.isInteger(x) || x < d.min || x > d.max) { bad.push(k + `: a whole number ${d.min}..${d.max}`); continue; } }
+      else if (d.kind === 'bool') { if (typeof v !== 'boolean') { bad.push(k + ': true or false'); continue; } }
+      put.push([k, x]);
+    }
+    if (bad.length) return { ok: false, status: 400, error: bad.join('; ') };
+    const st = db.prepare('INSERT INTO settings (k, v, updated, by) VALUES (?, ?, ?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v, updated = excluded.updated, by = excluded.by');
+    for (const [k, x] of put) st.run(k, JSON.stringify(x), Date.now(), String(by || ''));
+    return { ok: true, settings: getSettings(), changed: put.map(p => p[0]) };
+  }
+  const settingsSchema = () => Object.fromEntries(Object.entries(SETTINGS).map(([k, d]) => [k, { ...d }]));
+  const dbInfo = () => { const page = db.prepare('PRAGMA page_count').get(), size = db.prepare('PRAGMA page_size').get(); return { bytes: (page.page_count || 0) * (size.page_size || 0), staff: staffCount(), customers: db.prepare('SELECT COUNT(*) AS n FROM customers').get().n, notes: db.prepare('SELECT COUNT(*) AS n FROM customer_notes').get().n, integrity: db.prepare('PRAGMA quick_check').get().quick_check }; };
+
+  return { getSettings, setSettings, settingsSchema, dbInfo, staffCount, addStaff, listStaff, setStaffDisabled, setPassword, checkPassword, endSessions, login, sign, verify, bearer, saveCustomer, listCustomers, getCustomer, findByEmail, deleteCustomer, addNote, stats, STATUSES, close: () => db.close() };
 }
 
 module.exports = { createPortalAuth, STATUSES };

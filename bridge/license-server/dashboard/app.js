@@ -44,10 +44,17 @@
     say($('loginMsg'), ''); $('login').hidden = true; $('app').hidden = false; $('signOut').hidden = false; $('who').textContent = location.host; $('iName').focus();
   }
 
-  async function loadAll() { await Promise.all([loadLicences(), loadStats(), loadAudit(), loadPortal()]); paintEnding(); }
+  let warnDays = 30, defaultsSet = false;   // from SYSTEM → Settings
+  async function loadSettings() {
+    try { const r = await api('GET', '/admin/settings'); const st = r.settings || {}; warnDays = st.expiringWarnDays || 30;
+      if (!defaultsSet) { defaultsSet = true; if (st.defaultPlan && [...$('iPlan').options].some(o => o.value === st.defaultPlan)) $('iPlan').value = st.defaultPlan;
+        if (Number.isInteger(st.defaultDays) && !$('iDays').dataset.touched) $('iDays').value = st.defaultDays; if (Number.isInteger(st.defaultSeats) && !$('iSeats').dataset.touched) $('iSeats').value = st.defaultSeats; }
+    } catch (_) { /* older server or no settings yet: keep the form's own defaults */ }
+  }
+  async function loadAll() { await Promise.all([loadLicences(), loadStats(), loadAudit(), loadPortal(), loadSettings()]); paintEnding(); }
   // ENDING SOON: the licences that run out within 30 days, the nearest first: the customers to write to this month
   function paintEnding() {
-    const now = Date.now(), soon = licences.filter(l => l.state === 'active' && l.expires && l.expires - now < 30 * 86400000).sort((a, b) => a.expires - b.expires), body = $('expRows'); body.replaceChildren();
+    const now = Date.now(), soon = licences.filter(l => l.state === 'active' && l.expires && l.expires - now < warnDays * 86400000).sort((a, b) => a.expires - b.expires), body = $('expRows'); body.replaceChildren();
     for (const l of soon) { const left = Math.max(0, Math.ceil((l.expires - now) / 86400000)), tr = el('tr'), who = el('td'); who.append(el('div', '', l.name || '—')); if (l.email) who.append(el('div', 'sub', l.email));
       tr.append(who, el('td', '', String(l.plan || '').toUpperCase() + (l.trial ? ' · trial' : '')), el('td', '', day(l.expires)), el('td', left <= 7 ? 'now' : 'soon', left + (left === 1 ? ' day' : ' days'))); body.append(tr); }
     $('expNone').hidden = soon.length > 0; body.parentElement.hidden = soon.length === 0; $('expBadge').hidden = soon.length === 0; $('expBadge').textContent = String(soon.length);
@@ -154,6 +161,7 @@
 
   $('loginForm').addEventListener('submit', e => { e.preventDefault(); guard($('signIn'), () => signIn($('token').value, $('remember').checked)); });
   $('signOut').addEventListener('click', () => signOut(''));
+  for (const id of ['iDays', 'iSeats']) $(id).addEventListener('input', () => { $(id).dataset.touched = '1'; });
   $('issueForm').addEventListener('submit', e => {
     e.preventDefault();
     guard($('issueBtn'), async () => {

@@ -3,7 +3,7 @@
 // The licence and OTA dashboards read the same tab storage, so no token has to be typed or copied.
 (() => {
   const $ = id => document.getElementById(id);
-  fetch('crm', { method: 'HEAD', credentials: 'omit' }).then(r => { if (!r.ok) for (const o of [...$('go').options]) if (o.value === './crm') o.remove(); }, () => {});   // the OTA server has no CRM page
+  fetch('crm', { method: 'HEAD', credentials: 'omit' }).then(r => { if (!r.ok) for (const o of [...$('go').options]) if (o.value === './crm' || o.value === './system') o.remove(); }, () => {});   // the OTA server has no CRM page
   $('f').addEventListener('submit', async ev => {
     ev.preventDefault(); $('msg').textContent = '';
     try {
@@ -12,7 +12,7 @@
       if (!r.ok || !j.token) { $('msg').textContent = r.status === 429 ? 'Too many tries: wait a minute.' : (j.error || 'Sign-in failed.'); return; }
       try { sessionStorage.setItem('amfx1-licence-token', j.token); sessionStorage.setItem('ota-token', j.token); sessionStorage.setItem('amfx1-staff', JSON.stringify(j.staff || {})); } catch (_) { $('msg').textContent = 'This browser blocks tab storage: allow it for this site.'; return; }
       $('pw').value = '';
-      location.assign($('go').value === './crm' ? './crm' : './');
+      location.assign(['./crm', './system'].includes($('go').value) ? $('go').value : './');
     } catch (_) { $('msg').textContent = 'The server did not answer.'; }
   });
 })();
