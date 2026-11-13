@@ -177,6 +177,11 @@ class Engine : public QObject {
   // BLUETOOTH AUDIO in the device lists: on (default) or off (hidden from the lists and AUTO DETECT; a device already open stays open)
   // HEADSET MICROPHONE OFF (WASAPI): when on, a headset's own microphone is not opened with headphones / headset / Bluetooth output. Off by default: inputs 1-2 open.
   Q_PROPERTY(bool headsetMicOff READ headsetMicOff WRITE setHeadsetMicOff NOTIFY recordChanged)
+  // MIC ACCESS OFF: on Windows' own audio (WASAPI, DirectSound, MME, Bluetooth) no capture device of any kind is opened: built-in microphone
+  // array, headset, Bluetooth hands-free, webcam, line-in. Outputs keep playing; Windows shows no "microphone in use". ASIO interfaces are not
+  // touched (their inputs are the studio's, chosen on purpose). Takes effect at the next open (the switch re-opens at once).
+  Q_PROPERTY(bool micAccessOff READ micAccessOff WRITE setMicAccessOff NOTIFY recordChanged)
+  bool micAccessOff() const { return settings_.value("audio/micAccessOff", false).toBool(); } void setMicAccessOff(bool v) { settings_.setValue("audio/micAccessOff", v); emit recordChanged(); }
   bool headsetMicOff() const { return settings_.value("audio/headsetMicOff", false).toBool(); } void setHeadsetMicOff(bool v) { settings_.setValue("audio/headsetMicOff", v); emit recordChanged(); }
   Q_PROPERTY(bool bluetoothAudio READ bluetoothAudio WRITE setBluetoothAudio NOTIFY devicesChanged)
   bool bluetoothAudio() const { return settings_.value("audio/bluetooth", true).toBool(); } void setBluetoothAudio(bool v) { settings_.setValue("audio/bluetooth", v); refreshDevices(); }
@@ -234,7 +239,13 @@ class Engine : public QObject {
   Q_PROPERTY(QString micOffNote READ micOffNote NOTIFY stateChanged)   // set when the last open left a headset microphone off (WASAPI)
   QString micOffNote() const { return micOffNote_; }
   Q_INVOKABLE QVariantList dacsFound() const;                    // DAC detection: [{backend, id, name, outChannels, rate, maxRate, current}]
-  Q_INVOKABLE bool openDac(const QString& backend, const QString& id, int frames);   // outputs only, exactly this DAC
+  // outputs only, exactly this DAC; rate 0 = its own rate (any up to 1100 kHz may be asked; the DAC says whether it takes it), bits 0 = automatic,
+  // 16 / 24 / 32 integer, -32 float. A chosen rate or word length opens WASAPI exclusively (bit-perfect: Windows' mixer does not convert it).
+  Q_INVOKABLE bool openDac(const QString& backend, const QString& id, int frames, double rate = 0, int bits = 0);
+  Q_PROPERTY(double dacRate READ dacRate WRITE setDacRate NOTIFY recordChanged)
+  double dacRate() const { return settings_.value("audio/dacRate", 0).toDouble(); } void setDacRate(double v) { settings_.setValue("audio/dacRate", std::clamp(v, 0.0, 1100000.0)); emit recordChanged(); }
+  Q_PROPERTY(int dacBits READ dacBits WRITE setDacBits NOTIFY recordChanged)
+  int dacBits() const { return settings_.value("audio/dacBits", 0).toInt(); } void setDacBits(int v) { settings_.setValue("audio/dacBits", v); emit recordChanged(); }
   // DSP MODE: "digital" = the mix leaves the master exactly as computed; "analog" = a gentle soft saturation on the master (unity gain for quiet
   // signals, peaks rounded off the way an analogue output stage does), independent of the MASTERING switch
   Q_PROPERTY(QString dspMode READ dspMode WRITE setDspMode NOTIFY masterChainChanged)
@@ -268,6 +279,13 @@ class Engine : public QObject {
   Q_INVOKABLE double masteringReductionDb() const { return master_.reductionDb(); }
   Q_INVOKABLE void setSpatial(int strip, bool on, double az, double el, double dist, double spread);
   Q_INVOKABLE QVariantMap spatial(int strip) const;
+  // FRONT 180° · 10 SPEAKERS: ten real speakers in a dome in front (ear level -90 .. +90, three above, two below) on outputs 1-10. While on,
+  // buses AUX 1-8 and FX 1-2 are the ten speaker feeds (their earlier sends, names, levels, returns and outputs 1-10 are kept and given back
+  // when it is switched off); every strip feeds them by its 360 place (a strip without one sits in the centre), and the binaural stage rests.
+  Q_PROPERTY(bool speakerArray READ speakerArray WRITE setSpeakerArray NOTIFY spatialMoved)
+  bool speakerArray() const { return spkOn_; }
+  void setSpeakerArray(bool on);
+  Q_INVOKABLE QVariantList speakerLayout() const;   // [{name, az, el, out}]
   int iamfSlot(int strip) const;   // the rack slot of the strip's IAMF ELEMENT, -1 when it has none
   // 360 AUDIO, THE LISTENER AND A SCENE. HEAD TRACK: the listener's head direction (yaw to the right, pitch up, in degrees) is taken off every
   // object's direction, so the scene stays where it is in the room while the head turns. The angles come from the page (or anything that
@@ -578,6 +596,8 @@ class Engine : public QObject {
   double masterDb_ = 0; bool masterLim_ = true; double masterCeil_ = -0.5, masterRel_ = 100;
   static constexpr int kOutputs = 32;
   int inRoute_[kStrips] = {}; int outRoute_[kOutputs] = {}; int devIn_ = 0, devOut_ = 0; QString inDevName_, outDevName_; void rememberDeviceNames(const std::string& backend, const std::string& in, const std::string& out);
+  int openBits_ = 0; bool openExclusive_ = false;
+  bool spkOn_ = false; QVariantMap spkSaved_; void feedSpeakers(int strip);
   QVariantMap license_; int licensedChannels_ = 10;
   struct EqPresetUi { QString name; am::dsp::EqBand bands[10]; int hpOrder = 0; double hpFreq = 80; int lpOrder = 0; double lpFreq = 16000; bool used = false; };
   static const EqPresetUi* factoryEqPreset(int slot); EqPresetUi userEq_[10]; void loadUserEq(); void storeUserEq() const;

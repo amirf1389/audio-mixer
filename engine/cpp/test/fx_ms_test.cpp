@@ -1,5 +1,6 @@
 // MS COLOUR EQ, ISO EQ 10, MOD MACHINE: measured with sines.
 #include "fx/fx.hpp"
+#include "fx/speakers.hpp"
 #include <cmath>
 #include <cstdio>
 #include <vector>
@@ -72,5 +73,13 @@ int main() {
     { auto e = make("convclip", 48000); double r; const double d = run(*e, 1000, 0.0, 0.0, &r); CHECK(d < -200, "silence without dither %f", d); }
     { auto e = make("convclip", 48000); e->set("dither", 0.5); e->set("bits", 0.0); double r; const double d = run(*e, 1000, 0.0, 0.0, &r); CHECK(d > -110 && d < -85, "16-bit TPDF floor %f", d); }
     { auto e = make("convclip", 48000); e->set("adc", 0); e->set("dac", 0); e->set("drive", 0); e->set("ovs", 0.0); e->set("monitor", 1.0); const double d = run(*e, 1000, 0.05, 0.05); CHECK(d < -60, "delta of a clean pass %f", d); } }
+  { // FRONT 180 / 10 speakers: the nearest speaker carries the sound, energy is 1 at 1 m, 4 m is a quarter
+    auto best = [](double az, double el) { double g[10]; front10Gains(az, el, 0, 1, g); int b = 0; double e = 0; for (int i = 0; i < 10; ++i) { e += g[i] * g[i]; if (g[i] > g[b]) b = i; } return std::make_pair(b, e); };
+    CHECK(best(0, 0).first == 2 && std::fabs(best(0, 0).second - 1) < 1e-9, "front -> CENTRE, energy 1");
+    CHECK(best(90, 0).first == 4 && best(-90, 0).first == 0 && best(-45, 0).first == 1, "the ear-level arc");
+    CHECK(best(0, 45).first == 6 && best(60, 40).first == 7 && best(45, -30).first == 9, "up and down");
+    double g[10]; front10Gains(0, 0, 0, 1, g); CHECK(g[2] * g[2] > 0.9, "front is focused: centre carries %f of the energy", g[2] * g[2]);
+    double h[10]; front10Gains(0, 0, 0, 4, h); CHECK(std::fabs(h[2] - g[2] / 4) < 1e-9, "4 m is a quarter");
+    double w[10]; front10Gains(0, 0, 1, 1, w); CHECK(w[0] > 0.1, "full spread reaches the wide speakers %f", w[0]); }
   std::printf(fails ? "fx_ms: %d failed\n" : "fx_ms: all passed\n", fails); return fails ? 1 : 0;
 }

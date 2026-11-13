@@ -122,7 +122,7 @@ void ConvClip::process(float* L, float* R, std::size_t n) {
   const double gin = ccLin((k_[2] - 0.5) * 24) * ccLin(k_[3] * 18), gout = ccLin((k_[5] - 0.5) * 24), ceil = ccLin((k_[7] - 1) * 3), dec = k_[4] * 0.35, wet = mix_.load();
   const double lsb = std::ldexp(1.0, -(bits - 1));
   if (drift) for (int c = 0; c < 2; ++c) if (rnd() < 0.02) driftT_[c] = ccLin((rnd() - 0.5) * 0.3);   // now and then a new resting point, within +-0.15 dB
-  double minGr = 0;
+  double minRatio = 1;
   for (std::size_t i = 0; i < n; ++i) {
     const double in[2] = {L[i], R[i]}; double o[2];
     for (int c = 0; c < 2; ++c) {
@@ -133,7 +133,7 @@ void ConvClip::process(float* L, float* R, std::size_t n) {
       double y = 0, pre = std::fabs(x);
       for (int j = 0; j < N; ++j) { double u = j == 0 ? x * N : 0.0; if (N > 1) { u = up_[c][1].run(up_[c][0].run(static_cast<float>(u))); } else u = x;
         double cl = softClip(u, ceil); if (N > 1) cl = down_[c][1].run(down_[c][0].run(static_cast<float>(cl))); if (j == N - 1) y = cl; }
-      if (pre > 1e-6) minGr = std::min(minGr, 20 * std::log10(std::max(std::fabs(y), 1e-9) / pre));
+      if (pre > 1e-6) minRatio = std::min(minRatio, std::fabs(y) / pre);   // the deepest cut of the block; its dB worked out once, below
       if (dac) { y = dac_[c].run(static_cast<float>(y)); y = y + 0.002 * y * y - 0.004 * y * y * y; }
       y *= gout;
       if (dith > 0) { const double tp = (rnd() - rnd()) * lsb; double v = y + tp - (dith == 2 ? err_[c] : 0.0); const double q = std::round(v / lsb) * lsb; err_[c] = q - v + tp; y = q; }   // TPDF, or with first-order noise shaping
@@ -144,6 +144,6 @@ void ConvClip::process(float* L, float* R, std::size_t n) {
     if (mon == 1) { const double m = 0.5 * (l + r); l = r = m; } else if (mon == 2) { const double s = 0.5 * (l - r); l = s; r = -s; } else if (mon == 3) { l -= in[0]; r -= in[1]; }
     L[i] = static_cast<float>(in[0] + (l - in[0]) * wet); R[i] = static_cast<float>(in[1] + (r - in[1]) * wet);
   }
-  gr_ = minGr;
+  gr_ = 20 * std::log10(std::max(minRatio, 1e-9));
 }
 }  // namespace am::fx

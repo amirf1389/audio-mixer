@@ -26,8 +26,9 @@ Item {
         Rectangle { Layout.fillWidth: true; implicitHeight: 34; radius: 8; color: Theme.card; border.color: Theme.line
             RowLayout { anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 6
                 Text { text: page.t("360 AUDIO:"); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
-                Text { text: page.t("binaural placement for headphones · azimuth · elevation · distance · spread · IAMF elements (violet)"); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
+                Text { text: (engine.speakerArray ? page.t("10 SPEAKERS in front on outputs 1-10 (ear level 1-5, above 6-8, below 9-10) · the binaural stage rests") : page.t("binaural placement for headphones · azimuth · elevation · distance · spread · IAMF elements (violet)")); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                 Item { Layout.fillWidth: true }
+                Btn { objectName: "front10Btn"; label: engine.speakerArray ? page.t("SPEAKERS: FRONT 180° · 10 ON") : page.t("SPEAKERS: FRONT 180° · 10"); on: engine.speakerArray; onColor: "#f472b6"; onClicked: engine.speakerArray = !engine.speakerArray }
                 Btn { label: page.t("ALL OFF"); onClicked: { for (let i = 0; i < 32; i++) { const s = engine.spatial(i); if (s.on) engine.setSpatial(i, false, s.az, s.el, s.dist, s.spread) } page.rev++ } } } }
         Rectangle {   // THE SCENE: cinema hall (10 fixed points + 10 travelling objects), head tracking, and a map of every object from above
             objectName: "spatialScene"; Layout.fillWidth: true; implicitHeight: 150; radius: 8; color: Theme.card; border.color: engine.cinemaHall ? Theme.emerald : Theme.line
@@ -67,6 +68,8 @@ Item {
                         ctx.beginPath(); ctx.moveTo(cx - rad, cy); ctx.lineTo(cx + rad, cy); ctx.moveTo(cx, cy - rad); ctx.lineTo(cx, cy + rad); ctx.stroke()
                         ctx.fillStyle = Theme.dim; ctx.font = "9px monospace"; ctx.fillText(page.t("FRONT"), cx - 14, cy - rad - 3); ctx.fillText(page.t("BEHIND"), cx - 16, cy + rad + 11); ctx.fillText("L", cx - rad - 10, cy + 3); ctx.fillText("R", cx + rad + 4, cy + 3)
                         ctx.fillStyle = Theme.ov(0.5); ctx.beginPath(); ctx.arc(cx, cy, 7, 0, 2 * Math.PI); ctx.fill(); ctx.beginPath(); ctx.moveTo(cx - 4, cy - 6); ctx.lineTo(cx, cy - 12); ctx.lineTo(cx + 4, cy - 6); ctx.fill()
+                        if (engine.speakerArray) { const L = engine.speakerLayout(); for (let k = 0; k < L.length; k++) { const sp = L[k], a = sp.az * Math.PI / 180, r = rad * 0.98 * Math.cos(sp.el * Math.PI / 180), x = cx + Math.sin(a) * r, y = cy - Math.cos(a) * r
+                            ctx.fillStyle = sp.el > 0 ? "#f9a8d4" : sp.el < 0 ? "#be185d" : "#f472b6"; ctx.fillRect(x - 7, y - 5, 14, 10); ctx.fillStyle = "#000"; ctx.font = "bold 7px monospace"; ctx.fillText(sp.out, x - (sp.out > 9 ? 5 : 2.5), y + 3) } }   // the ten speakers: ear level pink, above light, below dark; the number is the output
                         for (let i = 0; i < 32; i++) { const s = engine.spatial(i); if (!s.on && i !== page.sel) continue; const a = s.az * Math.PI / 180, r = Math.min(1, Math.log(1 + s.dist) / Math.log(11)) * rad * Math.cos(s.el * Math.PI / 180), x = cx + Math.sin(a) * r, y = cy - Math.cos(a) * r
                             ctx.fillStyle = i === page.sel ? Theme.orange : Theme.cyan; ctx.globalAlpha = s.on ? 1 : 0.4; ctx.beginPath(); ctx.arc(x, y, i === page.sel ? 9 : 6, 0, 2 * Math.PI); ctx.fill(); ctx.globalAlpha = 1; ctx.fillStyle = "#000"; ctx.font = "bold 8px monospace"; ctx.fillText(i + 1, x - (i > 8 ? 5 : 2.5), y + 3) } }
                     MouseArea { anchors.fill: parent
