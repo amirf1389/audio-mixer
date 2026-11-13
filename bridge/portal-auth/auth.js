@@ -17,7 +17,7 @@ function openSqlite(file) {
   try { const { DatabaseSync } = require('node:sqlite'); return new DatabaseSync(file); } finally { process.emitWarning = prev; }
 }
 
-function createPortalAuth({ dbFile, secret }) {
+function createPortalAuth({ dbFile, secret, crmSecret = '' }) {
   if (!secret || String(secret).length < 32) throw new Error('PORTAL_JWT_SECRET must be at least 32 characters');
   if (dbFile !== ':memory:') fs.mkdirSync(path.dirname(dbFile), { recursive: true, mode: 0o700 });
   const db = openSqlite(dbFile);
@@ -29,10 +29,13 @@ function createPortalAuth({ dbFile, secret }) {
     CREATE INDEX IF NOT EXISTS customers_email ON customers (email_hash);
     CREATE TABLE IF NOT EXISTS customer_notes (id TEXT PRIMARY KEY, customer_id TEXT NOT NULL REFERENCES customers(id) ON DELETE CASCADE, data TEXT NOT NULL, at INTEGER NOT NULL, by TEXT NOT NULL);`);
   const keyOf = label => crypto.createHmac('sha256', String(secret)).update(label).digest();
-  const jwtKey = keyOf('jwt-hs256'), encKey = keyOf('crm-aes-256-gcm'), idxKey = keyOf('crm-email-index');
-  const enc = obj => { const iv = crypto.randomBytes(12), c = crypto.createCipheriv('aes-256-gcm', encKey, iv); const ct = Buffer.concat([c.update(JSON.stringify(obj), 'utf8'), c.final()]); return 'v1.' + b64u(iv) + '.' + b64u(c.getAuthTag()) + '.' + b64u(ct); };
-  const dec = s => { const [v, iv, tag, ct] = String(s).split('.'); if (v !== 'v1') throw new Error('unknown record format'); const d = crypto.createDecipheriv('aes-256-gcm', encKey, Buffer.from(iv, 'base64url')); d.setAuthTag(Buffer.from(tag, 'base64url')); return JSON.parse(Buffer.concat([d.update(Buffer.from(ct, 'base64url')), d.final()]).toString('utf8')); };
-  const emailHash = e => e ? crypto.createHmac('sha256', idxKey).update(String(e).trim().toLowerCase()).digest('hex') : null;
+  const jwtKey = keyOf('jwt-hs256');
+  // the CRM has its own secret, held only by the licence server: the OTA server shares the sign-in but can never read customers
+  const crmKeyOf = label => { if (!crmSecret || String(crmSecret).length < 32) throw Object.assign(new Error('the CRM is not available on this server'), { status: 404 }); return crypto.createHmac('sha256', String(crmSecret)).update(label).digest(); };
+  let encKeyC = null, idxKeyC = null; const encKeyF = () => encKeyC || (encKeyC = crmKeyOf('crm-aes-256-gcm')), idxKeyF = () => idxKeyC || (idxKeyC = crmKeyOf('crm-email-index'));
+  const enc = obj => { const iv = crypto.randomBytes(12), c = crypto.createCipheriv('aes-256-gcm', encKeyF(), iv); const ct = Buffer.concat([c.update(JSON.stringify(obj), 'utf8'), c.final()]); return 'v1.' + b64u(iv) + '.' + b64u(c.getAuthTag()) + '.' + b64u(ct); };
+  const dec = s => { const [v, iv, tag, ct] = String(s).split('.'); if (v !== 'v1') throw new Error('unknown record format'); const d = crypto.createDecipheriv('aes-256-gcm', encKeyF(), Buffer.from(iv, 'base64url')); d.setAuthTag(Buffer.from(tag, 'base64url')); return JSON.parse(Buffer.concat([d.update(Buffer.from(ct, 'base64url')), d.final()]).toString('utf8')); };
+  const emailHash = e => e ? crypto.createHmac('sha256', idxKeyF()).update(String(e).trim().toLowerCase()).digest('hex') : null;
   const clean = (v, n) => String(v == null ? '' : v).replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, n);
   const okEmail = e => /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,24}$/.test(e);
   const newId = p => p + '_' + crypto.randomBytes(9).toString('base64url');
@@ -41,6 +44,9 @@ function createPortalAuth({ dbFile, secret }) {
   const hashPw = (pw, salt) => crypto.scryptSync(String(pw), Buffer.from(salt, 'base64url'), 32, { N: 16384, r: 8, p: 1 }).toString('base64url');
   const dummy = { salt: b64u(crypto.randomBytes(16)) }; dummy.hash = hashPw('x', dummy.salt);
 
+  // guesses spread over many addresses: 10 wrong passwords for one e-mail in 15 minutes lock that e-mail for 15 minutes (even with the right password)
+  const fails = new Map(), LOCK_N = 10, LOCK_MS = 15 * 60 * 1000;
+  const failsOf = (e, now) => (fails.get(e) || []).filter(t => now - t < LOCK_MS);
   // ── staff ──
   const staffCount = () => db.prepare('SELECT COUNT(*) AS n FROM staff').get().n;
   function addStaff({ email, name, password }) {
@@ -58,6 +64,14 @@ function createPortalAuth({ dbFile, secret }) {
     const r = db.prepare('UPDATE staff SET disabled = ?, token_gen = token_gen + 1 WHERE id = ?').run(disabled ? 1 : 0, String(id));   // old tokens die either way
     return r.changes ? { ok: true } : { ok: false, status: 404, error: 'no such account' };
   }
+  function checkPassword(id, password, now = Date.now()) {   // the current password, for changes made from a signed-in session: under the same per-account lock as sign-in
+    const s = db.prepare('SELECT email, salt, hash FROM staff WHERE id = ?').get(String(id)); if (!s) return false;
+    const recent = failsOf(s.email, now); if (recent.length >= LOCK_N) return false;
+    const ok = crypto.timingSafeEqual(Buffer.from(hashPw(String(password || ''), s.salt)), Buffer.from(s.hash));
+    if (!ok) { recent.push(now); fails.set(s.email, recent); }
+    return ok;
+  }
+  const endSessions = id => db.prepare('UPDATE staff SET token_gen = token_gen + 1 WHERE id = ?').run(String(id)).changes > 0;   // every token of that account stops
   function setPassword(id, password) {
     if (String(password || '').length < 12) return { ok: false, status: 400, error: 'the password needs at least 12 characters' };
     const salt = b64u(crypto.randomBytes(16));
@@ -83,10 +97,13 @@ function createPortalAuth({ dbFile, secret }) {
     return { id: s.id, email: s.email, name: s.name };
   }
   function login(email, password, now = Date.now()) {
-    const s = db.prepare('SELECT * FROM staff WHERE email = ?').get(clean(email, 254).toLowerCase());
+    const e = clean(email, 254).toLowerCase(), recent = failsOf(e, now);
+    if (recent.length >= LOCK_N) { hashPw(String(password || ''), dummy.salt); return { ok: false, status: 429, error: 'too many wrong passwords for this account: try again in 15 minutes' }; }
+    const s = db.prepare('SELECT * FROM staff WHERE email = ?').get(e);
     const h = hashPw(String(password || ''), s ? s.salt : dummy.salt), want = s ? s.hash : dummy.hash;   // the same work whether or not the e-mail exists
     const same = crypto.timingSafeEqual(Buffer.from(h), Buffer.from(want));
-    if (!s || !same || s.disabled) return { ok: false, status: 401, error: 'wrong e-mail or password' };
+    if (!s || !same || s.disabled) { recent.push(now); fails.set(e, recent); if (fails.size > 10000) for (const k of fails.keys()) { if (!failsOf(k, now).length) fails.delete(k); } return { ok: false, status: 401, error: 'wrong e-mail or password' }; }
+    fails.delete(e);
     db.prepare('UPDATE staff SET last_login = ? WHERE id = ?').run(now, s.id);
     return { ok: true, token: sign({ sub: s.id, gen: s.token_gen, name: s.name, email: s.email }, now), expiresIn: TTL_S, staff: { id: s.id, email: s.email, name: s.name } };
   }
@@ -94,7 +111,7 @@ function createPortalAuth({ dbFile, secret }) {
 
   // ── CRM ──
   const fields = b => ({ name: clean(b.name, 120), email: clean(b.email, 254).toLowerCase(), phone: clean(b.phone, 40), company: clean(b.company, 120), country: clean(b.country, 60), tags: clean(b.tags, 200) });
-  const rowOut = r => { const d = dec(r.data); return { id: r.id, ...d, status: r.status, created: r.created, updated: r.updated, updatedBy: r.updated_by || '' }; };
+  const rowOut = r => { let d; try { d = dec(r.data); } catch (_) { d = { name: '(unreadable: encrypted with another key)', email: '', phone: '', company: '', country: '', tags: '' }; } return { id: r.id, ...d, status: r.status, created: r.created, updated: r.updated, updatedBy: r.updated_by || '' }; };
   function saveCustomer(b, by, id) {
     const f = fields(b || {}); const status = STATUSES.includes(b && b.status) ? b.status : 'lead';
     if (!f.name) return { ok: false, status: 400, error: 'a name is needed' };
@@ -115,7 +132,7 @@ function createPortalAuth({ dbFile, secret }) {
   }
   function getCustomer(id) {
     const r = db.prepare('SELECT * FROM customers WHERE id = ?').get(String(id)); if (!r) return null;
-    const notes = db.prepare('SELECT * FROM customer_notes WHERE customer_id = ? ORDER BY at DESC').all(r.id).map(n => ({ id: n.id, text: dec(n.data).text, at: n.at, by: n.by }));
+    const notes = db.prepare('SELECT * FROM customer_notes WHERE customer_id = ? ORDER BY at DESC').all(r.id).map(n => { let t; try { t = dec(n.data).text; } catch (_) { t = '(unreadable)'; } return { id: n.id, text: t, at: n.at, by: n.by }; });
     return { ...rowOut(r), notes };
   }
   const findByEmail = e => db.prepare('SELECT * FROM customers WHERE email_hash = ?').all(emailHash(e)).map(rowOut);
@@ -129,7 +146,7 @@ function createPortalAuth({ dbFile, secret }) {
   }
   const stats = () => { const o = { total: 0 }; for (const s of STATUSES) o[s] = 0; for (const r of db.prepare('SELECT status, COUNT(*) AS n FROM customers GROUP BY status').all()) { o[r.status] = r.n; o.total += r.n; } return o; };
 
-  return { staffCount, addStaff, listStaff, setStaffDisabled, setPassword, login, sign, verify, bearer, saveCustomer, listCustomers, getCustomer, findByEmail, deleteCustomer, addNote, stats, STATUSES, close: () => db.close() };
+  return { staffCount, addStaff, listStaff, setStaffDisabled, setPassword, checkPassword, endSessions, login, sign, verify, bearer, saveCustomer, listCustomers, getCustomer, findByEmail, deleteCustomer, addNote, stats, STATUSES, close: () => db.close() };
 }
 
 module.exports = { createPortalAuth, STATUSES };

@@ -308,10 +308,10 @@ test('staff sign-in, JWT, staff accounts and the CRM (encrypted at rest)', async
   try {
     // the pages: each with its own CSP naming only the CDN hosts it uses, files pinned by SRI
     const login = await fetch(base + '/admin/login'); const lh = await login.text();
-    assert.strictEqual(login.status, 200); assert.match(login.headers.get('content-security-policy'), /script-src 'self' https:\/\/cdn\.tailwindcss\.com;/);
+    assert.strictEqual(login.status, 200); assert.match(login.headers.get('content-security-policy'), /script-src 'self' https:\/\/cdn\.tailwindcss\.com\/3\.4\.16;/);
     assert.match(lh, /cdn\.tailwindcss\.com\/3\.4\.16"/); assert.match(lh, /font-awesome\/6\.5\.2\/css\/all\.min\.css" integrity="sha384-/);
     const crm = await fetch(base + '/admin/crm'); const ch = await crm.text();
-    assert.match(crm.headers.get('content-security-policy'), /script-src 'self' https:\/\/cdn\.jsdelivr\.net;/); assert.ok(!/unsafe-inline/.test(crm.headers.get('content-security-policy')));
+    assert.match(crm.headers.get('content-security-policy'), /script-src 'self' https:\/\/cdn\.jsdelivr\.net\/npm\/bootstrap@5\.3\.3\/dist\/;/); assert.ok(!/unsafe-inline/.test(crm.headers.get('content-security-policy')));
     assert.match(ch, /bootstrap@5\.3\.3\/dist\/css\/bootstrap\.min\.css" integrity="sha384-/); assert.ok(!/style="/.test(ch), 'no inline style attributes under a CSP without unsafe-inline');
     for (const f of ['/admin/login.js', '/admin/crm.js']) assert.strictEqual((await fetch(base + f)).status, 200);
     // nothing without a token; the first staff account is made with the admin token
@@ -358,6 +358,14 @@ test('staff sign-in, JWT, staff accounts and the CRM (encrypted at rest)', async
     const dis = await fetch(base2 + '/admin/staff/' + made.json.id + '/disable', { method: 'POST', headers: { authorization: 'Bearer ' + TOKEN, 'content-type': 'application/json' }, body: '{}' });
     assert.strictEqual(dis.status, 200);
     assert.strictEqual((await fetch(base2 + '/admin/licenses', { headers: { authorization: 'Bearer ' + jwt } })).status, 401);
+    // the password changes only with the current one; sign-out ends the token on the server
+    await fetch(base2 + '/admin/staff/' + made.json.id + '/enable', { method: 'POST', headers: { authorization: 'Bearer ' + TOKEN, 'content-type': 'application/json' }, body: '{}' });
+    const j2 = (await (await fetch(base2 + '/admin/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'ana@studio.my', password: 'correct horse battery' }) })).json()).token;
+    const pw = (body) => fetch(base2 + '/admin/auth/password', { method: 'POST', headers: { authorization: 'Bearer ' + j2, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    assert.strictEqual((await pw({ current: 'not it at all', password: 'a brand new password' })).status, 403);
+    assert.strictEqual((await pw({ current: 'correct horse battery', password: 'short' })).status, 400);
+    const out2 = await fetch(base2 + '/admin/auth/logout', { method: 'POST', headers: { authorization: 'Bearer ' + j2 } }); assert.strictEqual(out2.status, 200);
+    assert.strictEqual((await fetch(base2 + '/admin/licenses', { headers: { authorization: 'Bearer ' + j2 } })).status, 401);
     // sign-in is rate limited
     let limited = 0; for (let i = 0; i < 14; i++) { const r = await fetch(base2 + '/admin/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'x@y.zz', password: 'nopenopenope' }) }); if (r.status === 429) limited++; }
     assert.ok(limited >= 2, 'sign-in is limited (' + limited + ')');

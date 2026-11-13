@@ -160,8 +160,12 @@ disable other staff accounts (disabling ends that account's sessions at once). P
 | `/admin/` | licence keys (and `/admin/` on the OTA server: releases) | existing dashboards, now also open with the staff token |
 | `/admin/crm` | customers, notes, staff accounts | Bootstrap 5.3.3 + Font Awesome 6.5.2 |
 
-Customer name, e-mail, phone, company and notes are stored encrypted (AES-256-GCM); passwords are scrypt hashes.
-Bootstrap and Font Awesome are pinned with SRI hashes. The Tailwind Play CDN host sends no CORS header, so its
+Customer name, e-mail, phone, company and notes are stored encrypted (AES-256-GCM) under a CRM key that only the
+licence server holds (`PORTAL_CRM_SECRET`, or derived from its own data key): the OTA server shares the sign-in but
+cannot read customers. Passwords are scrypt hashes. Ten wrong passwords for one account in 15 minutes lock it for
+15 minutes (sign-in and password change alike); a password change needs the current one; SIGN OUT ends every
+session of that account. Behind a proxy, only the address the proxy itself adds is used for the per-address limits.
+Bootstrap and Font Awesome are pinned with SRI hashes, and each page's CSP names the exact CDN paths, not whole hosts. The Tailwind Play CDN host sends no CORS header, so its
 script cannot carry an SRI hash: the page's CSP allows that one host only. Tailwind describes the Play CDN as a
 development tool; it is used here for the internal sign-in page only. These pages stay behind the same rule as the
 rest of `/admin/`: on the server or through the SSH tunnel, never on the public website.

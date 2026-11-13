@@ -102,10 +102,10 @@ function createOta({ dataDir, token = '', publicUrl = '', jwk, portalDb = '', po
 
   const send = (res, code, body, headers = {}) => { if (code >= 400 && body && typeof body === 'object' && !Buffer.isBuffer(body)) res.auditNote = String(body.error || '') + (body.problems ? ': ' + body.problems.join('; ') : ''); const t = typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body); res.writeHead(code, { 'Content-Type': typeof body === 'object' && !Buffer.isBuffer(body) ? 'application/json; charset=utf-8' : 'text/plain; charset=utf-8', 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store', ...headers }); res.end(t); };
   const fail = (res, code, error) => send(res, code, { ok: false, error });
-  const addr = req => (trustProxy && String(req.headers['x-forwarded-for'] || '').split(',')[0].trim()) || req.socket.remoteAddress || '?';
+  const addr = req => (trustProxy && String(req.headers['x-forwarded-for'] || '').split(',').pop().trim()) || req.socket.remoteAddress || '?';   // the last entry: the one our own proxy added (earlier ones are the client's to forge)
   // staff sign-in shared with the licence server (bridge/portal-auth): on when both PORTAL_DB and PORTAL_JWT_SECRET are set
   let staffDb = null; const staffOn = !!(portalDb && portalSecret);
-  const staffAuth = () => staffDb || (staffDb = require('../bridge/portal-auth/auth').createPortalAuth({ dbFile: portalDb, secret: portalSecret }));
+  const staffAuth = () => staffDb || (staffDb = require('../bridge/portal-auth/auth').createPortalAuth({ dbFile: portalDb, secret: portalSecret })   /* no CRM key here: the OTA server never reads customers */);
   const staffOf = req => staffOn && /^Bearer [A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(String(req.headers.authorization || '')) ? staffAuth().bearer(req) : null;
   const tokenOk = req => { const m = /^Bearer (.+)$/.exec(String(req.headers.authorization || '')); if (!m || !token) return false; const a = crypto.createHash('sha256').update(m[1]).digest(), b = crypto.createHash('sha256').update(token).digest(); return crypto.timingSafeEqual(a, b); };
   const authed = req => tokenOk(req) || !!(req.staff = staffOf(req));
@@ -303,7 +303,7 @@ function createOta({ dataDir, token = '', publicUrl = '', jwk, portalDb = '', po
       if (staffOn && token && p === '/admin/login' && (req.method === 'GET' || req.method === 'HEAD')) {   // the staff sign-in page (the same page as the licence server's)
         const body = fs.readFileSync(path.join(__dirname, '..', 'bridge', 'license-server', 'dashboard', 'login.html'));
         return send(res, 200, req.method === 'HEAD' ? '' : body, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Length': body.length, 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer', 'Cache-Control': 'no-store',
-          'Content-Security-Policy': "default-src 'none'; script-src 'self' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; font-src https://cdnjs.cloudflare.com; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'" });
+          'Content-Security-Policy': "default-src 'none'; script-src 'self' https://cdn.tailwindcss.com/3.4.16; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/; font-src https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'" });
       }
       if (staffOn && token && p === '/admin/login.js' && req.method === 'GET') { const body = fs.readFileSync(path.join(__dirname, '..', 'bridge', 'license-server', 'dashboard', 'login.js')); return send(res, 200, body, { 'Content-Type': 'text/javascript; charset=utf-8', 'Content-Length': body.length, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }); }
       if (staffOn && token && p === '/admin/auth/login' && req.method === 'POST') {

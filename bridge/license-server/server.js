@@ -235,7 +235,8 @@ function createServer({ privateKey, token, dataFile = DATA_FILE, dataSecret, por
   // staff sign-in (bridge/portal-auth): one database and one secret shared with the OTA server, so one sign-in opens both dashboards
   let staffDb = null;   // opened on first use, so a server that never signs anyone in never creates the file
   const staffAuth = () => staffDb || (staffDb = createPortalAuth({ dbFile: portalDb || path.join(path.dirname(path.resolve(dataFile)), 'portal.db'),
-    secret: portalSecret || crypto.createHmac('sha256', String(secret)).update('amfx1-portal-jwt').digest('hex') }));
+    secret: portalSecret || crypto.createHmac('sha256', String(secret)).update('amfx1-portal-jwt').digest('hex'),
+    crmSecret: process.env.PORTAL_CRM_SECRET || crypto.createHmac('sha256', String(secret)).update('amfx1-portal-crm').digest('hex') }));   // the CRM key never leaves this server
   const admin = c => {
     if (bearerOk(c.req, token)) { c.state.staff = null; return undefined; }
     const st = /^Bearer [A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(String(c.req.headers.authorization || '')) ? staffAuth().bearer(c.req) : null; if (st) { c.state.staff = st; return undefined; }
@@ -274,9 +275,11 @@ function createServer({ privateKey, token, dataFile = DATA_FILE, dataSecret, por
     return r.ok ? c.json(200, { ok: true, token: r.token, expiresIn: r.expiresIn, staff: r.staff }) : c.json(r.status, { ok: false, error: r.error });
   });
   app.get('/admin/auth/me', admin, c => c.json(200, { ok: true, staff: c.state.staff }));
+  app.post('/admin/auth/logout', admin, c => { if (c.state.staff) { staffAuth().endSessions(c.state.staff.id); audit.add('staff.logout', c.state.staff.id, c.ip); } return c.json(200, { ok: true }); });   // ends every session of the account, not just this tab
   app.post('/admin/auth/password', admin, limit('adm', 120), async c => {
     if (!c.state.staff) return c.json(400, { ok: false, error: 'sign in with a staff account to change its password' });
-    const r = staffAuth().setPassword(c.state.staff.id, (await c.body()).password); if (r.ok) audit.add('staff.password', c.state.staff.id, c.ip); return out(c, { status: r.ok ? 200 : r.status, ...r });
+    const b = await c.body(); if (!staffAuth().checkPassword(c.state.staff.id, b.current)) { audit.add('staff.password.refused', c.state.staff.id, c.ip); return c.json(403, { ok: false, error: 'the current password is wrong' }); }
+    const r = staffAuth().setPassword(c.state.staff.id, b.password); if (r.ok) audit.add('staff.password', c.state.staff.id, c.ip); return out(c, { status: r.ok ? 200 : r.status, ...r });
   });
   app.get('/admin/staff', admin, limit('adm', 120), c => c.json(200, { ok: true, staff: staffAuth().listStaff() }));
   app.post('/admin/staff', admin, limit('adm', 120), async c => {
@@ -345,8 +348,8 @@ function createServer({ privateKey, token, dataFile = DATA_FILE, dataSecret, por
   const dash = path.join(__dirname, 'dashboard');
   // the staff pages load pinned CDN files (Tailwind Play CDN, Bootstrap, Font Awesome) checked by their SRI hash; each page gets a CSP naming exactly those hosts
   const CDN_CSP = {
-    login: "default-src 'none'; script-src 'self' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; font-src https://cdnjs.cloudflare.com; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
-    crm: "default-src 'none'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; font-src https://cdnjs.cloudflare.com; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+    login: "default-src 'none'; script-src 'self' https://cdn.tailwindcss.com/3.4.16; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/; font-src https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+    crm: "default-src 'none'; script-src 'self' https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/; style-src 'self' https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/ https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/; font-src https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
   };
   const page = (file, csp) => c => { let data; try { data = fs.readFileSync(path.join(dash, file)); } catch (_) { throw new HttpError(404, 'not found'); } return c.send(200, data, { 'content-type': 'text/html; charset=utf-8', 'content-security-policy': csp }); };
   app.get('/admin/login', page('login.html', CDN_CSP.login));

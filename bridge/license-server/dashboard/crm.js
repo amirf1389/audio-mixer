@@ -74,7 +74,7 @@
   });
   const show = staff => { $('custSec').classList.toggle('d-none', staff); $('staffSec').classList.toggle('d-none', !staff); $('staffTab').classList.toggle('active', staff); if (staff) loadStaff().catch(e => say(e.message)); };
   $('staffTab').addEventListener('click', e => { e.preventDefault(); show(true); });
-  $('out').addEventListener('click', () => { try { sessionStorage.removeItem('amfx1-licence-token'); sessionStorage.removeItem('ota-token'); sessionStorage.removeItem('amfx1-staff'); } catch (_) {} location.replace('./login'); });
+  $('out').addEventListener('click', async () => { try { await fetch('auth/logout', { method: 'POST', headers: { authorization: 'Bearer ' + token }, credentials: 'omit' }); } catch (_) { /* signed out here either way */ } try { sessionStorage.removeItem('amfx1-licence-token'); sessionStorage.removeItem('ota-token'); sessionStorage.removeItem('amfx1-staff'); } catch (_) {} location.replace('./login'); });
 
   (async () => {
     try {
