@@ -175,6 +175,9 @@ class Engine : public QObject {
   Q_PROPERTY(bool preferInt32 READ preferInt32 WRITE setPreferInt32 NOTIFY recordChanged)
   bool preferInt32() const { return settings_.value("audio/preferInt32", true).toBool(); } void setPreferInt32(bool v) { settings_.setValue("audio/preferInt32", v); emit recordChanged(); }
   // BLUETOOTH AUDIO in the device lists: on (default) or off (hidden from the lists and AUTO DETECT; a device already open stays open)
+  // HEADSET MICROPHONE OFF (WASAPI): when on, a headset's own microphone is not opened with headphones / headset / Bluetooth output. Off by default: inputs 1-2 open.
+  Q_PROPERTY(bool headsetMicOff READ headsetMicOff WRITE setHeadsetMicOff NOTIFY recordChanged)
+  bool headsetMicOff() const { return settings_.value("audio/headsetMicOff", false).toBool(); } void setHeadsetMicOff(bool v) { settings_.setValue("audio/headsetMicOff", v); emit recordChanged(); }
   Q_PROPERTY(bool bluetoothAudio READ bluetoothAudio WRITE setBluetoothAudio NOTIFY devicesChanged)
   bool bluetoothAudio() const { return settings_.value("audio/bluetooth", true).toBool(); } void setBluetoothAudio(bool v) { settings_.setValue("audio/bluetooth", v); refreshDevices(); }
   // LOCAL STORE (CLOUD page): what is installed on this computer and can be switched on or off — the extension libraries next to the console and the

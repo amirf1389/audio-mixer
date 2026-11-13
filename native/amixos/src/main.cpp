@@ -203,6 +203,11 @@ int main(int argc, char* argv[]) {
       engine.setWindowsMuteSync(true); if (!sysMute) { std::fprintf(stderr, "amixos --smoke: switching sync on at -inf did not mute\n"); return 82; } engine.restoreSystemSound(); if (sysMute) { std::fprintf(stderr, "amixos --smoke: exit did not take the mute back\n"); return 83; }
       engine.setMaster(keep); engine.setSystemMuteBackend([](bool&) { return false; }, [](bool) { return false; }); engine.syncSystemSound(); }
     { // the ten effects in the rack of any channel: listed, loaded into a slot, a knob moves, bypass, cleared; a late channel too
+      { // 2 IN / 2 OUT at least on every driver: asking for none opens the first pair all the same (a device that reported 0 channels is not left silent)
+        const double r0 = engine.sampleRate(); const int f0 = engine.blockFrames(); engine.stop();
+        engine.open("null", "", "", 48000, 256, 0, 0); const int in0 = engine.deviceInputs();   // 0 asked, not "-": the first pair opens engine.stop(); engine.open("null", "", "", r0 > 0 ? r0 : 48000, f0 > 0 ? f0 : 256, 2, 2);
+        const QVariantList st = engine.stripState(); const bool names = st.size() > 1 && st[0].toMap()["name"].toString() == "DIGITAL AUDIO" && st[1].toMap()["name"].toString() == "MIC" && !st[0].toMap()["link"].toBool();
+        if (in0 < 2 || !names) { std::fprintf(stderr, "amixos --smoke: 2 in / 2 out (got %d in), CH 1-2 DIGITAL AUDIO / MIC %d\n", in0, names); return 160; } }
       { // the strip menu's PLAY A SAMPLE: the channel's SAMPLE PLAYER is set to that sample and playing
         const int k = engine.playSampleOnStrip(21, 7); const QVariantList p = k >= 0 ? engine.pluginParams(21, k) : QVariantList();
         const bool ok = k >= 0 && p.size() >= 2 && p[0].toMap()["text"].toString().startsWith("7 ") && p[1].toMap()["text"].toString() == "ON" && engine.playSampleOnStrip(21, 0) == -1;
@@ -711,11 +716,14 @@ int main(int argc, char* argv[]) {
                 const auto dev = [](const char* id, const char* name, int in, int out, bool def) { QVariantMap m; m["backend"] = "wasapi"; m["id"] = id; m["name"] = name; m["inChannels"] = in; m["outChannels"] = out; m["defaultRate"] = 48000.0; m["defaultIn"] = def && in > 0; m["defaultOut"] = def && out > 0; return m; };
                 rig << dev("{hp}", "Headphones (Realtek(R) Audio)", 0, 2, true) << dev("{hm}", "Headset Microphone (Realtek(R) Audio)", 1, 0, true) << dev("{dm}", "Microphone (USB Condenser)", 1, 0, false) << dev("{sp}", "Speakers (Realtek(R) Audio)", 0, 2, false);
                 engine.simulateDevices(rig);
+                engine.setHeadsetMicOff(false); engine.open("wasapi", "", "{hp}", 48000, 256, 2, 2); const bool a0 = engine.micOffNote().isEmpty();   // the switch off (the default): 2 in stay open
+                engine.setHeadsetMicOff(true);
                 engine.open("wasapi", "{hm}", "{sp}", 48000, 256, 1, 2); const bool a1 = !engine.micOffNote().isEmpty();   // a headset microphone, named
                 engine.open("wasapi", "", "{hp}", 48000, 256, 2, 2); const bool a2 = !engine.micOffNote().isEmpty();        // headphones out, the default microphone
                 engine.open("wasapi", "{dm}", "{hp}", 48000, 256, 1, 2); const bool a3 = engine.micOffNote().isEmpty();     // a desk microphone picked by name
-                engine.open("wasapi", "", "{sp}", 48000, 256, 0, 2); const bool a4 = engine.micOffNote().isEmpty();          // no input asked for
-                if (!a1 || !a2 || !a3 || !a4) { std::fprintf(stderr, "amixos --shots: the WASAPI headset microphone rule is wrong (%d %d %d %d)\n", a1, a2, a3, a4); std::exit(205); }
+                engine.setHeadsetMicOff(false);
+                engine.open("wasapi", "", "{sp}", 48000, 256, 0, 2); const bool a4 = engine.micOffNote().isEmpty();          // no input asked for, switch off: 2 in all the same, nothing turned off
+                if (!a0 || !a1 || !a2 || !a3 || !a4) { std::fprintf(stderr, "amixos --shots: the WASAPI headset microphone rule is wrong (%d %d %d %d %d)\n", a0, a1, a2, a3, a4); std::exit(205); }
                 engine.simulateDevices(real); engine.open("null", "", "", 48000, 256, 2, 2); }
               { // THE ASIO SECTION with three simulated drivers: the list shows them all, MANUAL picks none, OPEN on one that cannot start leaves none marked as running
                 const QVariantList real = engine.devices(); const QString keepPrefer = engine.autoPrefer(); QVariantList rig;
@@ -730,7 +738,7 @@ int main(int argc, char* argv[]) {
                 engine.setAutoPrefer(keepPrefer); engine.simulateDevices(real); if (!engine.running()) engine.open("null", "", "", 48000, 256, 2, 2); win->setProperty("current", "mixer"); waitMs(300);
                 { // the channels are read by themselves: with a device of 2 inputs running, 2 are put on strips 1 and 2 and the note says so; with no inputs it says outputs only
                   const int got = engine.readAsioChannels("{a1}"); if (got != engine.deviceInputs() || got != 2 || !engine.asioNote().contains("2 input channel")) { std::fprintf(stderr, "amixos --shots: the device's channels were not read (%d of %d: %s)\n", got, engine.deviceInputs(), qPrintable(engine.asioNote())); std::exit(215); }
-                  engine.open("null", "", "", 48000, 256, 0, 2); if (engine.readAsioChannels("{a1}") != 0 || !engine.asioNote().contains("outputs only")) std::exit(216);
+                  engine.open("null", "-", "", 48000, 256, 0, 2); if (engine.readAsioChannels("{a1}") != 0 || !engine.asioNote().contains("outputs only")) std::exit(216);   // no input asked for by name ("-"): outputs only
                   engine.open("null", "", "", 48000, 256, 2, 2); engine.resetRouting(); } }
               mixer->setProperty("vuMode", true); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + "/mixer-vu.png"); mixer->setProperty("vuMode", false); std::printf("amixos --shots: mixer-vu\n"); }
           }
