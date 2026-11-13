@@ -14,7 +14,8 @@
 
 namespace am::rec {
 
-struct Options { std::string folder; std::string session; bool master = true; std::vector<int> strips; bool float32 = false; };   // strips: indices to record (mono, pre-fader)
+struct Options { std::string folder; std::string session; bool master = true; std::vector<int> strips; bool float32 = false;
+                 int format = 0; };   // 0 = 24-bit PCM, 1 = 32-bit float, 2 = 64-bit float, 3 = 32-bit PCM (float32 = true is the same as format 1)   // strips: indices to record (mono, pre-fader)
 
 class Recorder : public Runtime::Tap {
  public:

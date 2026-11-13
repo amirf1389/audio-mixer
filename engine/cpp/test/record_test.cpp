@@ -29,6 +29,18 @@ int main(int argc, char** argv) {
   // nothing armed is refused; a second start while recording is refused
   rec::Recorder r2; rec::Options none; none.folder = dir; none.master = false; CHECK(!r2.start(none, 48000, err) && err.find("arm") != std::string::npos);
   for (const auto& f : r.files()) std::remove(f.c_str());
-  std::printf("record_test: master + armed strip to 24-bit WAV through the Runtime tap, 1 s, no drops, pre-fader strip, read back OK\n");
+  // every recording format writes a WAV that reads back to the same sound: 24-bit, 32-bit float, 64-bit float, 32-bit integer
+  for (int fmt = 0; fmt <= 3; ++fmt) {
+    rec::Recorder rf; rec::Options of; of.folder = dir; of.session = "fmt" + std::to_string(fmt); of.master = true; of.format = fmt; CHECK(rf.start(of, 48000, err)); rt.setTap(&rf);
+    for (int k = 0; k < 75; ++k) rt.onBlock(ins, outs, n);
+    rt.setTap(nullptr); rf.stop(); CHECK(rf.files().size() == 1);
+    FILE* hf = std::fopen(rf.files()[0].c_str(), "rb"); unsigned char h[44] = {}; CHECK(hf && std::fread(h, 1, 44, hf) == 44); if (hf) std::fclose(hf);
+    const int tag = h[20] | (h[21] << 8), bits = h[34] | (h[35] << 8); const int wantTag = fmt == 1 || fmt == 2 ? 3 : 1, wantBits = fmt == 0 ? 24 : fmt == 2 ? 64 : 32;
+    if (tag != wantTag || bits != wantBits) std::printf("format %d: tag %d bits %d\n", fmt, tag, bits); CHECK(tag == wantTag && bits == wantBits);
+    arr::Audio a; CHECK(arr::readWav(rf.files()[0], a, err) && a.L.size() == 4800);
+    float pk = 0; for (std::size_t i = 100; i < a.L.size(); ++i) pk = std::max(pk, std::fabs(a.L[i])); CHECK(std::fabs(pk - pl) < 0.002f);
+    std::remove(rf.files()[0].c_str());
+  }
+  std::printf("record_test: master + armed strip to 24-bit WAV through the Runtime tap, 1 s, no drops, pre-fader strip, read back OK; 24-bit, 32-bit float, 64-bit float and 32-bit integer WAV read back the same\n");
   return 0;
 }

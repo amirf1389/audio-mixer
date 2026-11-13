@@ -96,6 +96,13 @@ class WasapiBackend : public Backend {
     f.dwChannelMask = ch == 1 ? SPEAKER_FRONT_CENTER : ch == 2 ? (SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT) : 0; f.SubFormat = s.isFloat ? kFloatSubFormat : kPcmSubFormat;
     return f;
   }
+  static std::string name(const Sample& f) { return std::to_string(f.valid ? f.valid : f.bits) + (f.isFloat ? "-bit float" : "-bit integer"); }
+  std::string sampleFormat() const override {
+    const std::string mode = cfg_.exclusive ? " (WASAPI exclusive)" : " (WASAPI shared: Windows converts)";
+    const std::string in = in_ ? name(sIn_) : "", out = out_ ? name(sOut_) : "";
+    if (!in.empty() && in == out) return in + mode;
+    return (in.empty() ? "" : "in " + in) + (in.empty() || out.empty() ? "" : " · ") + (out.empty() ? "" : "out " + out) + mode;
+  }
   bool client(IMMDeviceEnumerator* en, EDataFlow flow, int ch, IAudioClient** ac, IAudioRenderClient** rc, IAudioCaptureClient** cc, Sample* used, std::string& err) {
     // the endpoint: the one named by its id string (from --list-devices), else the default one of this direction
     const bool loop = flow == eCapture && loopback_; std::string want = flow == eRender ? cfg_.outDevice : cfg_.inDevice; if (loop) want = want.substr(9);

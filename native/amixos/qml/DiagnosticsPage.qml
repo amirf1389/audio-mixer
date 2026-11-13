@@ -30,7 +30,7 @@ Item {
         add("DATA FILES", settings.dataFolder, true, files.length + " known · " + (missing.length ? missing.length + " not written yet (" + missing.join(", ") + ")" : "all present"))
         add("AUTOSAVE", "console every 60 s", settings.autosave.exists, settings.autosave.exists ? settings.autosave.at : "none yet")
         add("LICENCE", lic.planName, lic.state === "ok" || lic.state === "licensed", engine.licensedChannels + " channels · " + lic.state + (lic.expires ? " · until " + lic.expires : ""))
-        add("RECORDING", engine.recordFolder, true, engine.recording ? "RECORDING NOW" : "idle · " + (engine.recordFloat ? "32-bit float" : "24-bit") + " WAV")
+        add("RECORDING", engine.recordFolder, true, engine.recording ? "RECORDING NOW" : "idle · " + (["24-bit", "32-bit float", "64-bit float", "32-bit"][engine.recordFormat] || "24-bit") + " WAV")
         add("LAST SESSION", "clean close", !settings.lastSessionCrashed, settings.lastSessionCrashed ? "ended unexpectedly (CALIBRATE > SESSION)" : "closed cleanly")
         rows = r
     }

@@ -158,13 +158,19 @@ class Engine : public QObject {
   Q_PROPERTY(QStringList recordFiles READ recordFiles NOTIFY recordChanged)
   Q_PROPERTY(QString recordFolder READ recordFolder WRITE setRecordFolder NOTIFY recordChanged)
   Q_PROPERTY(bool recordFloat READ recordFloat WRITE setRecordFloat NOTIFY recordChanged)
+  Q_PROPERTY(int recordFormat READ recordFormat WRITE setRecordFormat NOTIFY recordChanged)
+  Q_PROPERTY(QString deviceFormat READ deviceFormat NOTIFY stateChanged)
   Q_PROPERTY(bool recordMaster READ recordMaster WRITE setRecordMaster NOTIFY recordChanged)
   Q_PROPERTY(QString recordMessage READ recordMessage NOTIFY recordChanged)
   bool recording() const { return recorder_.recording(); }
   double recordSeconds() const { return recorder_.seconds(); }
   QStringList recordFiles() const { QStringList l; for (const auto& f : recorder_.files()) l << QString::fromStdString(f); return l; }
   QString recordFolder() const; void setRecordFolder(const QString& f) { settings_.setValue("record/folder", f); emit recordChanged(); }
-  bool recordFloat() const { return settings_.value("record/float32", false).toBool(); } void setRecordFloat(bool v) { settings_.setValue("record/float32", v); emit recordChanged(); }
+  // record format: 0 = 24-bit PCM, 1 = 32-bit float, 2 = 64-bit float, 3 = 32-bit PCM (the old float32 switch still reads and writes 0 / 1)
+  int recordFormat() const { const int f = settings_.value("record/format", -1).toInt(); return f >= 0 && f <= 3 ? f : (settings_.value("record/float32", false).toBool() ? 1 : 0); }
+  void setRecordFormat(int f) { f = std::clamp(f, 0, 3); settings_.setValue("record/format", f); settings_.setValue("record/float32", f == 1 || f == 2); emit recordChanged(); }
+  bool recordFloat() const { const int f = recordFormat(); return f == 1 || f == 2; } void setRecordFloat(bool v) { setRecordFormat(v ? 1 : 0); }
+  QString deviceFormat() const;   // what the open device itself carries (16 / 24 / 32-bit integer, 32 / 64-bit float); the engine mixes in 64-bit float
   bool recordMaster() const { return settings_.value("record/master", true).toBool(); } void setRecordMaster(bool v) { settings_.setValue("record/master", v); emit recordChanged(); }
   QString recordMessage() const { return recMsg_; }
   Q_INVOKABLE bool startRecording();

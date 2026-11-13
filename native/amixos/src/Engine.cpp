@@ -610,7 +610,7 @@ QString Engine::recordFolder() const { const QString d = settings_.value("record
 bool Engine::startRecording() {
   if (!rt_) { recMsg_ = QStringLiteral("Start the engine on CONNECTIONS first."); emit recordChanged(); return false; }
   if (recorder_.recording()) return true;
-  am::rec::Options o; o.folder = recordFolder().toStdString(); o.master = recordMaster(); o.float32 = recordFloat(); for (int i = 0; i < kStrips; ++i) if ((armed_ >> i) & 1u) o.strips.push_back(i);
+  am::rec::Options o; o.folder = recordFolder().toStdString(); o.master = recordMaster(); o.float32 = recordFloat(); o.format = recordFormat(); for (int i = 0; i < kStrips; ++i) if ((armed_ >> i) & 1u) o.strips.push_back(i);
   std::string err; if (!recorder_.start(o, rt_->sampleRate(), err)) { recMsg_ = QString::fromStdString(err); emit recordChanged(); return false; }
   taps_.a.store(&recorder_); recMsg_ = QStringLiteral("Recording %1 file(s) into %2").arg(recorder_.files().size()).arg(recordFolder()); emit recordChanged(); return true;
 }
@@ -983,6 +983,7 @@ QVariantMap Engine::eqBand(int i, int band) const {
   m["type"] = static_cast<int>(b.type); m["freq"] = b.freq; m["q"] = b.q; m["gainDb"] = b.gainDb; return m;
 }
 void Engine::setDelay(int i, double ms) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].dsp.setDelayMs(ms); if (rt_) rt_->setDelayMs(i, strips_[static_cast<std::size_t>(i)].dsp.params().delayMs); emit stripsChanged(); }
+QString Engine::deviceFormat() const { return rt_ && running() ? QString::fromStdString(rt_->sampleFormat()) : QString(); }
 QVariantMap Engine::compSuggestion(int i) const {
   QVariantMap m; if (i < 0 || i >= kStrips) return m; const am::CompSuggestion c = strips_[static_cast<std::size_t>(i)].dyn.suggest(compTargetDb_);
   m["ready"] = c.ready; m["spreadDb"] = c.spreadDb; m["medianDb"] = c.medianDb; m["targetDb"] = c.targetDb; m["thresholdDb"] = c.thresholdDb; m["ratio"] = c.ratio; m["verdict"] = QString::fromLatin1(c.verdict);
