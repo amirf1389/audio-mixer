@@ -26,7 +26,7 @@ Flickable {
                         border.color: page.sel === index ? Theme.amber : (modelData.current ? Theme.emerald : (modelData.empty ? Theme.lineSoft : Theme.line))
                         ColumnLayout { anchors.fill: parent; anchors.margins: 8; spacing: 2
                             RowLayout { Text { text: (index + 1).toString().padStart(2, "0"); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 } Text { visible: modelData.current; text: i18n.t("LIVE", i18n.lang); color: Theme.emerald; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } }
-                            Text { Layout.fillWidth: true; text: modelData.empty ? i18n.t("empty", i18n.lang) : modelData.name; color: modelData.empty ? Theme.dim : Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: !modelData.empty; elide: Text.ElideRight }
+                            Text { Layout.fillWidth: true; text: modelData.empty ? i18n.t("empty", i18n.lang) : i18n.t(modelData.name ?? "", i18n.lang); color: modelData.empty ? Theme.dim : Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: !modelData.empty; elide: Text.ElideRight }
                             Text { text: modelData.at; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
                         MouseArea { anchors.fill: parent; onClicked: page.sel = index; onDoubleClicked: engine.recallScene(index) }
                     }
@@ -52,7 +52,7 @@ Flickable {
                     property bool safe: engine.recallSafe(index)
                     Connections { target: engine; function onScenesChanged() { safe = engine.recallSafe(index) } }
                     color: safe ? Theme.cyan : Theme.ov(0.06)
-                    Text { anchors.centerIn: parent; text: modelData.name; color: safe ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; elide: Text.ElideRight; width: parent.width - 6; horizontalAlignment: Text.AlignHCenter }
+                    Text { anchors.centerIn: parent; text: i18n.t(modelData.name ?? "", i18n.lang); color: safe ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; elide: Text.ElideRight; width: parent.width - 6; horizontalAlignment: Text.AlignHCenter }
                     MouseArea { anchors.fill: parent; onClicked: engine.setRecallSafe(index, !safe) } } }
             }
         }

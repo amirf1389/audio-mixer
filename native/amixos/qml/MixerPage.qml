@@ -99,7 +99,7 @@ Item {
                                     { t: "VU faces instead of bars", k: "vu" }, { t: "Monitor (control room) panel", k: "monitor" }, { t: "Plugin rack", k: "rack" }, { t: "Channel panel", k: "channel" }, { t: "Confirm reset / flatten", k: "confirm" }, { t: "Tooltips", k: "tips" }, { t: "Strip: INPUT chip", k: "sInput" }, { t: "Strip: DSP badges", k: "sBadges" }, { t: "Strip: pan", k: "sPan" }, { t: "Strip: AI chip", k: "sAi" }, { t: "Strip: groups / sends readout", k: "sGroups" } ]
                                 delegate: RowLayout { Layout.fillWidth: true
                                     readonly property bool on: modelData.k === "vu" ? page.vuMode : modelData.k === "monitor" ? page.monitorPanel : modelData.k === "rack" ? page.rack : modelData.k === "channel" ? page.sidePanel : modelData.k === "confirm" ? settings.confirmDestructive : modelData.k === "sInput" ? page.showInput : modelData.k === "sBadges" ? page.showBadges : modelData.k === "sPan" ? page.showPan : modelData.k === "sAi" ? page.showAi : modelData.k === "sGroups" ? page.showGroups : settings.tooltips
-                                    Text { text: modelData.t; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; Layout.fillWidth: true }
+                                    Text { text: i18n.t(modelData.t ?? "", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; Layout.fillWidth: true }
                                     Rectangle { implicitWidth: 40; implicitHeight: 18; radius: 9; color: on ? Theme.emerald : Theme.ov(0.1); Rectangle { width: 14; height: 14; radius: 7; y: 2; x: on ? 24 : 2; color: on ? "#000" : Theme.muted }
                                         MouseArea { anchors.fill: parent; onClicked: {
                                             var v = !on
@@ -185,7 +185,7 @@ Item {
                                         Rectangle { width: 230; height: 8; radius: 4; anchors.verticalCenter: parent.verticalCenter; color: Theme.ov(0.08)
                                             Rectangle { width: parent.width * modelData.points / modelData.max; height: 8; radius: 4; color: modelData.points >= modelData.max * 0.9 ? Theme.emerald : modelData.points >= modelData.max * 0.6 ? Theme.amber : Theme.danger } }
                                         Text { text: modelData.points.toFixed(0) + " / " + modelData.max; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9 } }
-                                    Text { width: 396; wrapMode: Text.WordWrap; text: modelData.tip; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 } } } } } }
+                                    Text { width: 396; wrapMode: Text.WordWrap; text: i18n.t(modelData.tip ?? "", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 } } } } } }
                 Rectangle { implicitWidth: 92; implicitHeight: 20; radius: 4; color: page.rack ? Qt.rgba(0.6, 0.4, 1, 0.22) : Theme.ov(0.06); border.color: page.rack ? "#a78bfa" : "transparent"; Text { anchors.centerIn: parent; text: i18n.t("PLUGIN RACK", i18n.lang); color: page.rack ? "#a78bfa" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.rack = !page.rack } }
             }
             // generic parameter panel for a VST3 plug-in (no plug-in GUI is opened): one slider per parameter, the plug-in's own value text
@@ -199,13 +199,13 @@ Item {
                         ColumnLayout { id: pcol; width: parent.width; spacing: 2
                             Repeater { model: paramsPop.model
                                 delegate: RowLayout { Layout.fillWidth: true; spacing: 8
-                                    Text { text: modelData.title; color: modelData.bypass ? Theme.amber : Theme.ink; font.family: Theme.mono; font.pixelSize: 8; Layout.preferredWidth: 130; elide: Text.ElideRight }
+                                    Text { text: i18n.t(modelData.title ?? "", i18n.lang); color: modelData.bypass ? Theme.amber : Theme.ink; font.family: Theme.mono; font.pixelSize: 8; Layout.preferredWidth: 130; elide: Text.ElideRight }
                                     Slider { Layout.fillWidth: true; from: 0; to: 1; stepSize: modelData.stepCount > 0 ? 1 / modelData.stepCount : 0; value: modelData.value; enabled: !modelData.readOnly; onMoved: engine.setPluginParam(page.sel, paramsPop.slot, modelData.id, value) }
-                                    Text { text: modelData.text + (modelData.units ? " " + modelData.units : ""); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8; Layout.preferredWidth: 90; elide: Text.ElideRight }
+                                    Text { text: i18n.t(modelData.text ?? "", i18n.lang) + (modelData.units ? " " + modelData.units : ""); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8; Layout.preferredWidth: 90; elide: Text.ElideRight }
                                     Rectangle { implicitWidth: 16; implicitHeight: 14; radius: 2; color: Theme.ov(0.08); Text { anchors.centerIn: parent; text: "↺"; color: Theme.muted; font.pixelSize: 9 } MouseArea { anchors.fill: parent; onClicked: engine.setPluginParam(page.sel, paramsPop.slot, modelData.id, modelData.default) } } } } } }
                     Text { visible: paramsPop.model.length === 0; text: i18n.t("This plug-in exposes no parameters.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 } } }
             Menu { id: chooser; property int slot: 0; width: 300
-                Repeater { model: { engine.vstCount; return engine.pluginCatalog() } delegate: MenuItem { text: (modelData.builtIn ? "" : modelData.fx ? i18n.t("FX · ", i18n.lang) : (modelData.format || "VST3") + " · ") + modelData.name + (modelData.vendor ? "  — " + modelData.vendor : ""); onTriggered: engine.setPlugin(page.sel, chooser.slot, modelData.kind) } }
+                Repeater { model: { engine.vstCount; return engine.pluginCatalog() } delegate: MenuItem { text: (modelData.builtIn ? "" : modelData.fx ? i18n.t("FX · ", i18n.lang) : (modelData.format || "VST3") + " · ") + i18n.t(modelData.name ?? "", i18n.lang) + (modelData.vendor ? "  — " + modelData.vendor : ""); onTriggered: engine.setPlugin(page.sel, chooser.slot, modelData.kind) } }
                 MenuItem { visible: engine.vstCount === 0; enabled: false; text: engine.vstScanning ? i18n.t("Looking for VST plug-ins …", i18n.lang) : i18n.t("No VST3 / VST2 plug-ins found: add folders on PLUGINS", i18n.lang) }
                 MenuItem { text: i18n.t("Rescan VST plug-ins", i18n.lang) + "  (" + engine.vstCount + ")"; onTriggered: settings.rescanVst() }
                 MenuSeparator {}
@@ -227,9 +227,9 @@ Item {
                 Repeater { model: page.selPlugins
                     delegate: Rectangle { visible: !!modelData.kind; implicitWidth: chipT.implicitWidth + 14; implicitHeight: 18; radius: 9
                         color: modelData.pending ? Qt.rgba(0.984, 0.749, 0.141, 0.18) : modelData.bypass ? Theme.ov(0.06) : Qt.rgba(0.6, 0.4, 1, 0.22); border.color: modelData.pending ? Theme.amber : modelData.bypass ? Theme.lineSoft : "#a78bfa"
-                        Text { id: chipT; anchors.centerIn: parent; text: (modelData.slot + 1) + " " + (modelData.name.length > 14 ? modelData.name.slice(0, 13) + "…" : modelData.name) + (modelData.format ? " ·" + modelData.format : ""); color: modelData.pending ? Theme.amber : modelData.bypass ? Theme.dim : Theme.ink; font.family: Theme.mono; font.pixelSize: 7; font.bold: !modelData.bypass }
+                        Text { id: chipT; anchors.centerIn: parent; text: (modelData.slot + 1) + " " + (modelData.name.length > 14 ? i18n.t(modelData.name ?? "", i18n.lang).slice(0, 13) + "…" : i18n.t(modelData.name ?? "", i18n.lang)) + (modelData.format ? " ·" + modelData.format : ""); color: modelData.pending ? Theme.amber : modelData.bypass ? Theme.dim : Theme.ink; font.family: Theme.mono; font.pixelSize: 7; font.bold: !modelData.bypass }
                         MouseArea { anchors.fill: parent; acceptedButtons: Qt.LeftButton | Qt.RightButton; onClicked: function (m) { if (m.button === Qt.RightButton) { engine.setPlugin(page.sel, modelData.slot, ""); return } if (modelData.vst && !modelData.pending) { paramsPop.slot = modelData.slot; paramsPop.title = modelData.name; paramsPop.model = engine.pluginParams(page.sel, modelData.slot); paramsPop.open() } else engine.setPluginBypass(page.sel, modelData.slot, !modelData.bypass) } }
-                        ToolTip.visible: chipHov.hovered; ToolTip.text: modelData.name + (modelData.bypass ? i18n.t(" (bypassed)", i18n.lang) : "") + i18n.t("  ·  click: ", i18n.lang) + (modelData.vst ? i18n.t("parameters", i18n.lang) : i18n.t("bypass", i18n.lang)) + i18n.t("  ·  right-click: remove", i18n.lang); HoverHandler { id: chipHov } } }
+                        ToolTip.visible: chipHov.hovered; ToolTip.text: i18n.t(modelData.name ?? "", i18n.lang) + (modelData.bypass ? i18n.t(" (bypassed)", i18n.lang) : "") + i18n.t("  ·  click: ", i18n.lang) + (modelData.vst ? i18n.t("parameters", i18n.lang) : i18n.t("bypass", i18n.lang)) + i18n.t("  ·  right-click: remove", i18n.lang); HoverHandler { id: chipHov } } }
                 Rectangle { implicitWidth: 22; implicitHeight: 18; radius: 9; color: Theme.ov(0.06); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: "+"; color: Theme.muted; font.pixelSize: 11 }
                     MouseArea { anchors.fill: parent; onClicked: { var free = -1; for (var k = 0; k < page.selPlugins.length; k++) if (!page.selPlugins[k].kind) { free = k; break } if (free >= 0) { chooser.slot = free; chooser.open() } } } }
                 Item { Layout.fillWidth: true }
@@ -338,7 +338,7 @@ Item {
                                         Repeater {
                                             model: [ { k: "gateOn", t: "GATE", p: "gate" }, { k: "eqOn", t: "EQ", p: "dsp" }, { k: "xoverOn", t: "X", p: "dsp" }, { k: "compOn", t: "COMP", p: "dyn" }, { k: "limOn", t: "LIM", p: "dsp" }, { k: "delayOn", t: "DLY", p: "delay" }, { k: "polarity", t: "Ø", p: "dsp" } ]
                                             delegate: Rectangle { implicitWidth: bt.implicitWidth + 6; implicitHeight: 11; radius: 2; color: st && st[modelData.k] ? Qt.rgba(0, 0.95, 1, 0.22) : Theme.ov(0.04); border.color: st && st[modelData.k] ? Theme.cyan : "transparent"
-                                                Text { id: bt; anchors.centerIn: parent; text: modelData.k === "polarity" && st && st.autoPol ? "ØA" : modelData.t; color: st && st[modelData.k] ? Theme.cyan : Theme.dim; font.family: Theme.mono; font.pixelSize: 6; font.bold: true }
+                                                Text { id: bt; anchors.centerIn: parent; text: modelData.k === "polarity" && st && st.autoPol ? "ØA" : i18n.t(modelData.t ?? "", i18n.lang); color: st && st[modelData.k] ? Theme.cyan : Theme.dim; font.family: Theme.mono; font.pixelSize: 6; font.bold: true }
                                                 MouseArea { anchors.fill: parent; onClicked: { engine.selectedStrip = index; page.go(modelData.p) } } }
                                         }
                                     }
@@ -377,16 +377,24 @@ Item {
                                             MenuItem { text: (st && st.autoPol ? "✓ " : "") + i18n.t("Phase: AUTO (turn round when out of phase with the mix)", i18n.lang); onTriggered: engine.setAutoPolarity(index, !(st && st.autoPol)) }
                                             Menu {   // ADD AN EFFECT: every built-in effect the LOCAL STORE has on, into this channel's rack, with its panel opened
                                                 id: fxMenu; objectName: "stripFxMenu" + index; property int strip: index; title: i18n.t("Add an effect", i18n.lang)
-                                                Instantiator { model: engine.pluginCatalog().filter(x => x.fx)
-                                                    delegate: MenuItem { required property var modelData; text: modelData.name
-                                                        onTriggered: { const k = engine.addToRack(fxMenu.strip, modelData.kind); if (k >= 0) plugEd.openFor(fxMenu.strip, k, modelData.kind, modelData.name); else page.note = i18n.t("The rack of this channel is full.", i18n.lang) } }
-                                                    onObjectAdded: function (i, o) { fxMenu.insertItem(i, o) } onObjectRemoved: function (i, o) { fxMenu.removeItem(o) } } }
+                                                // by kind, six short lists (forty effects in one list run off the bottom of the screen); anything new lands in OTHER
+                                                readonly property var groups: ({ "EQ / TONE": ["dualeq", "mseq", "isoeq", "wshape", "exciter"], "DYNAMICS": ["opto", "glue", "multiband", "maximizer", "transient", "deesser", "desquash", "barrier", "antifeedback"],
+                                                    "SATURATION / AMPS": ["analog", "drive", "tubeamp", "preamp", "postamp", "tape", "convclip", "crusher"], "MODULATION": ["chorus", "flanger", "phaser", "tremolo", "wah", "mod", "autopan", "pitch", "doubler"],
+                                                    "SPACE / DELAY": ["reverb", "hall", "room", "delay", "syncdelay"], "SPATIAL / UTILITY": ["iamfelement", "iamfrender", "imager", "sampler"] })
+                                                function groupOf(kind) { const k = kind.replace("fx:", ""); for (const g in groups) if (groups[g].indexOf(k) >= 0) return g; return "OTHER" }
+                                                Instantiator { model: { const all = engine.pluginCatalog().filter(x => x.fx), names = ["EQ / TONE", "DYNAMICS", "SATURATION / AMPS", "MODULATION", "SPACE / DELAY", "SPATIAL / UTILITY", "OTHER"]; return names.filter(n => all.some(x => fxMenu.groupOf(x.kind) === n)) }
+                                                    delegate: Menu { id: fxGroup; required property string modelData; title: i18n.t(modelData, i18n.lang)
+                                                        Instantiator { model: engine.pluginCatalog().filter(x => x.fx && fxMenu.groupOf(x.kind) === fxGroup.modelData)
+                                                            delegate: MenuItem { required property var modelData; text: i18n.t(modelData.name ?? "", i18n.lang)
+                                                                onTriggered: { const k = engine.addToRack(fxMenu.strip, modelData.kind); if (k >= 0) plugEd.openFor(fxMenu.strip, k, modelData.kind, modelData.name); else page.note = i18n.t("The rack of this channel is full.", i18n.lang) } }
+                                                            onObjectAdded: function (i, o) { fxGroup.insertItem(i, o) } onObjectRemoved: function (i, o) { fxGroup.removeItem(o) } } }
+                                                    onObjectAdded: function (i, o) { fxMenu.insertMenu(i, o) } onObjectRemoved: function (i, o) { fxMenu.removeMenu(o) } } }
                                             Menu {   // PLAY A SAMPLE: the 100 built-in samples by category; the pick plays in this channel through its SAMPLE PLAYER
                                                 id: smpMenu; property int strip: index; title: i18n.t("Play a sample", i18n.lang)
                                                 Instantiator { model: samples.categories
                                                     delegate: Menu { id: catMenu; required property string modelData; title: modelData
                                                         Instantiator { model: samples.list.filter(x => x.category === catMenu.modelData)
-                                                            delegate: MenuItem { required property var modelData; text: modelData.id + "  " + modelData.name
+                                                            delegate: MenuItem { required property var modelData; text: modelData.id + "  " + i18n.t(modelData.name ?? "", i18n.lang)
                                                                 onTriggered: { if (engine.playSampleOnStrip(smpMenu.strip, modelData.id) < 0) page.note = i18n.t("The rack of this channel is full.", i18n.lang) } }
                                                             onObjectAdded: function (i, o) { catMenu.insertItem(i, o) } onObjectRemoved: function (i, o) { catMenu.removeItem(o) } } }
                                                     onObjectAdded: function (i, o) { smpMenu.insertMenu(i, o) } onObjectRemoved: function (i, o) { smpMenu.removeMenu(o) } } }
@@ -484,7 +492,7 @@ Item {
                         Repeater { model: engine.busState; delegate: RowLayout { Layout.fillWidth: true; spacing: 4
                             property var sd: engine.send(page.sel, index)
                             Connections { target: engine; function onStripsChanged() { sd = engine.send(page.sel, index) } function onSelectedStripChanged() { sd = engine.send(page.sel, index) } }
-                            Text { text: modelData.name; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; Layout.preferredWidth: 44; elide: Text.ElideRight }
+                            Text { text: i18n.t(modelData.name ?? "", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; Layout.preferredWidth: 44; elide: Text.ElideRight }
                             Slider { Layout.fillWidth: true; from: -60; to: 10; value: sd ? sd.db : -60; onMoved: engine.setSend(page.sel, index, value, sd ? sd.pre : false) }
                             Rectangle { implicitWidth: 28; implicitHeight: 14; radius: 2; color: sd && sd.pre ? Theme.cyan : Theme.ov(0.08); Text { anchors.centerIn: parent; text: sd && sd.pre ? i18n.t("PRE", i18n.lang) : i18n.t("POST", i18n.lang); color: sd && sd.pre ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setSend(page.sel, index, sd ? sd.db : -60, !(sd && sd.pre)) } } } }
                         Rectangle { Layout.fillWidth: true; height: 1; color: Theme.lineSoft }

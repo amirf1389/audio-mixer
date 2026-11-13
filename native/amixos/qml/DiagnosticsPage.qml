@@ -55,8 +55,8 @@ Item {
                 Repeater { model: page.rows; delegate: Rectangle { Layout.fillWidth: true; implicitHeight: 30; radius: 4; color: Theme.ov(0.03)
                     RowLayout { anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 8; spacing: 10
                         Rectangle { width: 8; height: 8; radius: 4; color: modelData.ok ? Theme.emerald : Theme.amber }
-                        Text { Layout.preferredWidth: 110; text: modelData.name; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-                        Text { Layout.fillWidth: true; text: modelData.what; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; elide: Text.ElideRight }
+                        Text { Layout.preferredWidth: 110; text: i18n.t(modelData.name ?? "", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                        Text { Layout.fillWidth: true; text: i18n.t(modelData.what ?? "", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; elide: Text.ElideRight }
                         Text { text: modelData.result; color: modelData.ok ? Theme.cyan : Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } } } }
                 Item { Layout.fillHeight: true }
             }
@@ -70,8 +70,8 @@ Item {
                     { t: "FAST BOOT", d: settings.autoStart ? "On: the last device opens when the console starts." : "Off: the console starts silent and waits for START.", b: settings.autoStart ? "SWITCH OFF" : "SWITCH ON", c: Theme.emerald, a: 2 }]
                 delegate: Rectangle { Layout.fillWidth: true; implicitHeight: 110; radius: Theme.radius; color: Theme.card; border.color: Theme.line
                     ColumnLayout { anchors.fill: parent; anchors.margins: 12; spacing: 6
-                        Text { text: modelData.t; color: modelData.c; font.family: Theme.mono; font.pixelSize: 10; font.bold: true; font.letterSpacing: 1.5 }
-                        Text { Layout.fillWidth: true; Layout.fillHeight: true; text: modelData.d; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap }
+                        Text { text: i18n.t(modelData.t ?? "", i18n.lang); color: modelData.c; font.family: Theme.mono; font.pixelSize: 10; font.bold: true; font.letterSpacing: 1.5 }
+                        Text { Layout.fillWidth: true; Layout.fillHeight: true; text: i18n.t(modelData.d ?? "", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap }
                         Btn { label: modelData.b; on: true; onColor: modelData.c; onClicked: {
                             if (modelData.a === 0) { for (let s = 0; s < engine.stripState.length; ++s) engine.setGain(s, -120); engine.muteAll(true); engine.setMaster(-120) }
                             else if (modelData.a === 1) { engine.stop(); settings.startLastDevice() }

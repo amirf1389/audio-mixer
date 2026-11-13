@@ -62,14 +62,14 @@ Flickable {
                         { k: "gateThresholdDb", t: "THRESHOLD", u: " dB", from: -90, to: 0, step: 0.5 }, { k: "gateRangeDb", t: "RANGE", u: " dB", from: -90, to: 0, step: 1 },
                         { k: "gateAttackMs", t: "ATTACK", u: " ms", from: 0.1, to: 100, step: 0.1 }, { k: "gateHoldMs", t: "HOLD", u: " ms", from: 0, to: 2000, step: 1 }, { k: "gateReleaseMs", t: "RELEASE", u: " ms", from: 5, to: 3000, step: 1 } ]
                     delegate: ColumnLayout { Layout.fillWidth: true; spacing: 0
-                        Text { text: modelData.t + "  " + Number(page.ch[modelData.k] === undefined ? modelData.from : page.ch[modelData.k]).toFixed(modelData.step < 1 ? 1 : 0) + modelData.u; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
+                        Text { text: i18n.t(modelData.t ?? "", i18n.lang) + "  " + Number(page.ch[modelData.k] === undefined ? modelData.from : page.ch[modelData.k]).toFixed(modelData.step < 1 ? 1 : 0) + modelData.u; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                         Slider { Layout.fillWidth: true; from: modelData.from; to: modelData.to; stepSize: modelData.step; value: page.ch[modelData.k] === undefined ? modelData.from : page.ch[modelData.k]; onMoved: page.apply(modelData.k, value) } }
                 }
             }
             Flow { Layout.fillWidth: true; spacing: 4
                 Repeater {
                     model: [ { n: "VOCAL MIC", p: [-45, -60, 1, 80, 150] }, { n: "DRUM CLOSE MIC", p: [-30, -80, 0.3, 30, 60] }, { n: "GUITAR AMP HUM", p: [-50, -40, 2, 120, 250] }, { n: "GENTLE EXPAND", p: [-55, -12, 5, 200, 400] } ]
-                    delegate: Rectangle { implicitWidth: pl.implicitWidth + 14; implicitHeight: 20; radius: 4; color: Theme.ov(0.08); Text { id: pl; anchors.centerIn: parent; text: modelData.n; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setGate(page.strip, true, modelData.p[0], modelData.p[1], modelData.p[2], modelData.p[3], modelData.p[4]) } }
+                    delegate: Rectangle { implicitWidth: pl.implicitWidth + 14; implicitHeight: 20; radius: 4; color: Theme.ov(0.08); Text { id: pl; anchors.centerIn: parent; text: i18n.t(modelData.n ?? "", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setGate(page.strip, true, modelData.p[0], modelData.p[1], modelData.p[2], modelData.p[3], modelData.p[4]) } }
                 }
             }
         }

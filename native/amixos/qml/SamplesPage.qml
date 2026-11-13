@@ -36,7 +36,7 @@ Item {
                             color: hot ? pc : Theme.ov(0.05); border.color: hot ? pc : Qt.rgba(pc.r, pc.g, pc.b, 0.45); border.width: 1
                             Rectangle { anchors.top: parent.top; anchors.left: parent.left; anchors.right: parent.right; anchors.margins: 1; height: 3; radius: 2; color: pad.pc }
                             ColumnLayout { anchors.fill: parent; anchors.margins: 6; anchors.topMargin: 8; spacing: 1
-                                Text { Layout.fillWidth: true; elide: Text.ElideRight; text: modelData.name; color: pad.hot ? "#000" : Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                                Text { Layout.fillWidth: true; elide: Text.ElideRight; text: i18n.t(modelData.name ?? "", i18n.lang); color: pad.hot ? "#000" : Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                                 Text { text: modelData.category.toUpperCase() + " · " + modelData.seconds.toFixed(1) + " s"; color: pad.hot ? "#222" : Theme.dim; font.family: Theme.mono; font.pixelSize: 6 }
                                 Item { Layout.fillHeight: true }
                                 Text { text: (index < 10 ? i18n.t("KEY ", i18n.lang) + ((index + 1) % 10) + " · " : "") + "#" + modelData.id; color: pad.hot ? "#222" : Theme.dim; font.family: Theme.mono; font.pixelSize: 6 } }

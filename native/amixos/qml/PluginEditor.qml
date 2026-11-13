@@ -124,7 +124,7 @@ Popup {
     component Section: Rectangle { property string head; default property alias body: inner.data; height: ed.panelH - 16; radius: 12; border.color: "#05060a"; border.width: 1.5   // a dark inset panel in the brushed plate
         gradient: Gradient { GradientStop { position: 0; color: "#101216" } GradientStop { position: 1; color: "#1c1f25" } }
         Rectangle { anchors.fill: parent; anchors.margins: 1.5; radius: 11; color: "transparent"; border.color: "#14ffffff"; border.width: 1 }
-        Text { id: st; anchors.horizontalCenter: parent.horizontalCenter; y: 7; text: parent.head; color: ed.ink; font.family: ed.face1; style: Text.Sunken; styleColor: ed.hi; font.pixelSize: 11; font.weight: Font.DemiBold; font.letterSpacing: 1 }
+        Text { id: st; anchors.horizontalCenter: parent.horizontalCenter; y: 7; text: i18n.t(parent.head, i18n.lang); color: ed.ink; font.family: ed.face1; style: Text.Sunken; styleColor: ed.hi; font.pixelSize: 11; font.weight: Font.DemiBold; font.letterSpacing: 1 }
         Item { id: inner; x: 0; y: 26; width: parent.width; height: parent.height - 26 } }
     // one rack unit: brushed aluminium in the family's anodised colour, rack ears with their slots and screws, a bevel along the edges
     component RackUnit: Item { id: ru; default property alias body: plate.data; width: wood.width
@@ -150,7 +150,7 @@ Popup {
         MouseArea { id: lka; anchors.fill: parent; enabled: lk.enabled; cursorShape: Qt.PointingHandCursor; onClicked: lk.clicked() } }
     component Key: Item { property string label; signal clicked(); width: 30; height: 26
         Image { anchors.fill: parent; source: ka.pressed ? "qrc:/qt/qml/AmixOS/skin/key-down.png" : "qrc:/qt/qml/AmixOS/skin/key.png"; smooth: true }
-        Text { anchors.horizontalCenter: parent.horizontalCenter; y: (ka.pressed ? 4.5 : 3) + (parent.label === "✕" ? 2.5 : 0); text: parent.label; color: "#ece8dc"; font.pixelSize: parent.label === "✕" ? 9 : 14; font.bold: true }
+        Text { anchors.horizontalCenter: parent.horizontalCenter; y: (ka.pressed ? 4.5 : 3) + (parent.label === "✕" ? 2.5 : 0); text: i18n.t(parent.label, i18n.lang); color: "#ece8dc"; font.pixelSize: parent.label === "✕" ? 9 : 14; font.bold: true }
         MouseArea { id: ka; anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: parent.clicked() } }
     contentItem: Item {
         // MOVE: drag the unit by its top strip; it stays where it is put until it is closed
@@ -169,11 +169,11 @@ Popup {
                     Repeater { model: ed.sectionRows
                     delegate: Row { spacing: 6; readonly property var rowSecs: modelData
                     Repeater { model: rowSecs
-                        delegate: Section { head: modelData[0]; readonly property var idx: modelData[1]; readonly property int cols: Math.ceil(idx.length / 2); height: ed.rowH - 16 - (ed.rows > 1 ? 3 : 0); width: Math.max(96, cols * 86 + 14, modelData[0].length * 8.4 + 26)
+                        delegate: Section { head: i18n.t(modelData[0], i18n.lang); readonly property var idx: modelData[1]; readonly property int cols: Math.ceil(idx.length / 2); height: ed.rowH - 16 - (ed.rows > 1 ? 3 : 0); width: Math.max(96, cols * 86 + 14, modelData[0].length * 8.4 + 26)
                             Grid { anchors.horizontalCenter: parent.horizontalCenter; y: idx.length <= cols ? 56 : 4; columns: cols; columnSpacing: 2; rowSpacing: 6
                                 Repeater { model: idx
                                     delegate: Column { width: 84; spacing: 0; readonly property int pi: modelData
-                                        Text { anchors.horizontalCenter: parent.horizontalCenter; text: ed.params[pi] ? ed.params[pi].title : ""; color: ed.ink; font.family: ed.face1; style: Text.Sunken; styleColor: ed.hi; font.pixelSize: 10; font.weight: Font.DemiBold }
+                                        Text { anchors.horizontalCenter: parent.horizontalCenter; text: ed.params[pi] ? i18n.t(ed.params[pi].title, i18n.lang) : ""; color: ed.ink; font.family: ed.face1; style: Text.Sunken; styleColor: ed.hi; font.pixelSize: 10; font.weight: Font.DemiBold }
                                         Text { anchors.horizontalCenter: parent.horizontalCenter; text: ed.params[pi] ? ed.params[pi].text : ""; color: ed.ink; font.family: ed.face1; style: Text.Sunken; styleColor: ed.hi; font.pixelSize: 9 }
                                         Knob { anchors.horizontalCenter: parent.horizontalCenter; width: 84; size: 44; vintage: true; paper: ed.ink; minText: ed.ends(pi, 0); maxText: ed.ends(pi, 1); label: ""; valueText: ""
                                             defaultValue: ed.params[pi] ? ed.params[pi]["default"] : 0.5; readonly property int rev: ed.rev; onRevChanged: sync(); Component.onCompleted: sync()
@@ -248,7 +248,7 @@ Popup {
                         MouseArea { anchors.fill: parent; property point p0; cursorShape: Qt.SizeAllCursor; onPressed: function (m) { p0 = Qt.point(m.x, m.y) } onPositionChanged: function (m) { if (pressed) { ed.x += (m.x - p0.x) * ed.fit; ed.y += (m.y - p0.y) * ed.fit } } }
                         Text { anchors.horizontalCenter: parent.horizontalCenter; y: 6; text: "AMFB  X1"; color: ed.plateInk; font.family: ed.face1; style: Text.Sunken; styleColor: ed.hi; font.pixelSize: 17; font.weight: Font.Bold; font.letterSpacing: 2 }
                         Image { anchors.horizontalCenter: parent.horizontalCenter; y: 28; width: 40; height: 40; source: "qrc:/qt/qml/AmixOS/skin/badge.png"; smooth: true; mipmap: true }
-                        Text { anchors.horizontalCenter: parent.horizontalCenter; y: 68; width: parent.width - 6; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap; text: ed.title.toUpperCase(); color: ed.plateInk; font.family: ed.face1; style: Text.Sunken; styleColor: ed.hi; font.pixelSize: 12; font.weight: Font.Bold; font.letterSpacing: 1 }
+                        Text { anchors.horizontalCenter: parent.horizontalCenter; y: 68; width: parent.width - 6; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap; text: i18n.t(ed.title.toUpperCase(), i18n.lang); color: ed.plateInk; font.family: ed.face1; style: Text.Sunken; styleColor: ed.hi; font.pixelSize: 12; font.weight: Font.Bold; font.letterSpacing: 1 }
                         // THE POWER BUTTON: a backlit round key with the power symbol; its ring glows while the unit works and goes dark when bypassed
                         Item { id: pwr; objectName: "powerButton"; anchors.horizontalCenter: parent.horizontalCenter; y: 100; width: 76; height: 76
                             readonly property bool on: !ed.bypass; readonly property color glow: "#46c8ff"
@@ -261,7 +261,7 @@ Popup {
                                 onPaint: { const c = getContext("2d"); c.reset(); c.strokeStyle = on ? "#bfeeff" : "#59606a"; c.lineWidth = 3; c.lineCap = "round"
                                     c.beginPath(); c.arc(15, 16, 11, -Math.PI / 2 + 0.75, Math.PI * 1.5 - 0.75, false); c.stroke(); c.beginPath(); c.moveTo(15, 2); c.lineTo(15, 14); c.stroke() } }
                             MouseArea { id: pa; anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { engine.setPluginBypass(ed.strip, ed.slot, !ed.bypass); ed.bypass = !ed.bypass } } }
-                        Text { anchors.horizontalCenter: parent.horizontalCenter; y: 182; text: ed.bypass ? "BYPASSED" : "ACTIVE"; color: ed.bypass ? "#8a9099" : "#46c8ff"; font.family: ed.face1; font.pixelSize: 10; font.weight: Font.Bold; font.letterSpacing: 2 }
+                        Text { anchors.horizontalCenter: parent.horizontalCenter; y: 182; text: ed.bypass ? i18n.t("BYPASSED", i18n.lang) : i18n.t("ACTIVE", i18n.lang); color: ed.bypass ? "#8a9099" : "#46c8ff"; font.family: ed.face1; font.pixelSize: 10; font.weight: Font.Bold; font.letterSpacing: 2 }
                         Text { anchors.horizontalCenter: parent.horizontalCenter; y: 204; horizontalAlignment: Text.AlignHCenter; text: "AMFB AUDIO\n" + (ed.fx ? "CH " + (ed.strip + 1) + " · SLOT " + (ed.slot + 1) : (ed.kind.indexOf("vst2:") === 0 ? "VST2" : "VST3") + " HOSTED"); color: ed.plateInk; font.family: ed.face1; style: Text.Sunken; styleColor: ed.hi; font.pixelSize: 9; font.letterSpacing: 2; lineHeight: 1.2 } }
                     // the meter and BLEND
                     Column { spacing: 6; width: 150
@@ -276,9 +276,9 @@ Popup {
                                 Rectangle { y: parent.height * 0.87; width: parent.width; height: parent.height * 0.13; color: "#1a1814" }
                                 Image { anchors.fill: parent; source: "qrc:/qt/qml/AmixOS/skin/meter-glass.png"; smooth: true } }
                             Rectangle { x: 6; y: 6; width: 138; height: 92; radius: 2; color: "transparent"; border.color: "#1c1a16"; border.width: 2 } }
-                        Section { head: "BLEND"; width: 150; height: ed.panelH - 16 - 110
+                        Section { head: i18n.t("BLEND", i18n.lang); width: 150; height: ed.panelH - 16 - 110
                             Column { visible: ed.mixIndex >= 0; anchors.horizontalCenter: parent.horizontalCenter; y: 0; width: 84; spacing: 0
-                                Text { anchors.horizontalCenter: parent.horizontalCenter; text: "MIX  " + (ed.params[ed.mixIndex] ? ed.params[ed.mixIndex].text : ""); color: ed.ink; font.family: ed.face1; style: Text.Sunken; styleColor: ed.hi; font.pixelSize: 9; font.weight: Font.DemiBold }
+                                Text { anchors.horizontalCenter: parent.horizontalCenter; text: i18n.t("MIX", i18n.lang) + "  " + (ed.params[ed.mixIndex] ? ed.params[ed.mixIndex].text : ""); color: ed.ink; font.family: ed.face1; style: Text.Sunken; styleColor: ed.hi; font.pixelSize: 9; font.weight: Font.DemiBold }
                                 Knob { anchors.horizontalCenter: parent.horizontalCenter; width: 84; height: 74; size: 44; vintage: true; paper: ed.ink; minText: "0"; maxText: "100 %"; defaultValue: ed.params[ed.mixIndex] ? ed.params[ed.mixIndex]["default"] : 1
                                     readonly property int rev: ed.rev; onRevChanged: sync(); Component.onCompleted: sync(); function sync() { if (ed.params[ed.mixIndex]) value = ed.params[ed.mixIndex].value } onMoved: function (v) { ed.setParam(ed.mixIndex, v) } } }
                             Text { visible: ed.mixIndex < 0; anchors.centerIn: parent; text: "—"; color: ed.ink } } }
@@ -289,21 +289,21 @@ Popup {
             RackUnit { id: stripUnit; objectName: "controlStrip"; height: 66
                 Row { id: stripRow; x: 14; y: 9; spacing: 10
                     Inset { width: 150; Row { anchors.centerIn: parent; spacing: 8
-                        Text { anchors.verticalCenter: parent.verticalCenter; text: "COMPARE"; color: ed.ink; font.family: ed.face1; font.pixelSize: 10; font.weight: Font.DemiBold; font.letterSpacing: 1 }
+                        Text { anchors.verticalCenter: parent.verticalCenter; text: i18n.t("COMPARE", i18n.lang); color: ed.ink; font.family: ed.face1; font.pixelSize: 10; font.weight: Font.DemiBold; font.letterSpacing: 1 }
                         LitKey { label: "A"; lit: ed.side === "A"; onClicked: ed.pick("A") } LitKey { label: "B"; lit: ed.side === "B"; onClicked: ed.pick("B") } } }
                     Inset { width: 330; Row { anchors.centerIn: parent; spacing: 8
-                        Text { anchors.verticalCenter: parent.verticalCenter; text: "PROGRAM"; color: ed.ink; font.family: ed.face1; font.pixelSize: 10; font.weight: Font.DemiBold; font.letterSpacing: 1 }
+                        Text { anchors.verticalCenter: parent.verticalCenter; text: i18n.t("PROGRAM", i18n.lang); color: ed.ink; font.family: ed.face1; font.pixelSize: 10; font.weight: Font.DemiBold; font.letterSpacing: 1 }
                         LitKey { label: "◁"; enabled: ed.presets.length > 0; onClicked: ed.preset(-1) }
                         Rectangle { objectName: "programWindow"; anchors.verticalCenter: parent.verticalCenter; width: 150; height: 32; radius: 3; color: "#120805"; border.color: "#000"   // amber segments behind smoked glass
                             Text { anchors.centerIn: parent; width: parent.width - 10; horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight
-                                text: ed.presetAt >= 0 ? (ed.presetAt + 1 < 10 ? "0" : "") + (ed.presetAt + 1) + "  " + ed.presets[ed.presetAt].name.toUpperCase() : ed.presets.length ? "-- " + ed.presets.length + " PROGRAMS" : "-- MANUAL --"
+                                text: ed.presetAt >= 0 ? (ed.presetAt + 1 < 10 ? "0" : "") + (ed.presetAt + 1) + "  " + ed.presets[ed.presetAt].name.toUpperCase() : ed.presets.length ? "-- " + ed.presets.length + " PROGRAMS" : i18n.t("-- MANUAL --", i18n.lang)
                                 color: "#ff9a3c"; style: Text.Outline; styleColor: "#40ff6a00"; font.family: Theme.mono; font.pixelSize: 12; font.bold: true } }
                         LitKey { label: "▷"; enabled: ed.presets.length > 0; onClicked: ed.preset(1) } } }
                     Inset { width: 104; Row { anchors.centerIn: parent; spacing: 8
-                        Text { anchors.verticalCenter: parent.verticalCenter; text: "RESET"; color: ed.ink; font.family: ed.face1; font.pixelSize: 10; font.weight: Font.DemiBold; font.letterSpacing: 1 }
+                        Text { anchors.verticalCenter: parent.verticalCenter; text: i18n.t("RESET", i18n.lang); color: ed.ink; font.family: ed.face1; font.pixelSize: 10; font.weight: Font.DemiBold; font.letterSpacing: 1 }
                         LitKey { objectName: "resetKey"; label: "↺"; onClicked: ed.resetAll() } } }
                     Inset { width: 118; Row { anchors.centerIn: parent; spacing: 8
-                        Text { anchors.verticalCenter: parent.verticalCenter; text: "BYPASS"; color: ed.ink; font.family: ed.face1; font.pixelSize: 10; font.weight: Font.DemiBold; font.letterSpacing: 1 }
+                        Text { anchors.verticalCenter: parent.verticalCenter; text: i18n.t("BYPASS", i18n.lang); color: ed.ink; font.family: ed.face1; font.pixelSize: 10; font.weight: Font.DemiBold; font.letterSpacing: 1 }
                         LitKey { label: ""; lit: ed.bypass; litColor: "#ff4a3a"; onClicked: { engine.setPluginBypass(ed.strip, ed.slot, !ed.bypass); ed.bypass = !ed.bypass } } } } } }
             // THE DISPLAY: what is playing (the spectrum of the channel), the curve the unit draws (EQs) and the levels in and out
             RackUnit { id: dispUnit; objectName: "displayUnit"; height: 214
@@ -324,9 +324,9 @@ Popup {
                             for (let k = 0; k < curves.length; k++) { c.fillStyle = curves[k].color; c.fillText(curves[k].name, w - 70, 14 + k * 13) } } }
                     // the meters: input and output, peak bars with a scale, like the right-hand side of a mastering display
                     Row { x: parent.width - 232; y: 14; spacing: 14
-                        Repeater { model: [{ t: "INPUT", k: "in" }, { t: "OUTPUT", k: "out" }]
+                        Repeater { model: [{ t: i18n.t("INPUT", i18n.lang), k: "in" }, { t: i18n.t("OUTPUT", i18n.lang), k: "out" }]
                             delegate: Column { spacing: 4; required property var modelData
-                                Text { anchors.horizontalCenter: parent.horizontalCenter; text: modelData.t; color: "#9fb7c9"; font.family: ed.face1; font.pixelSize: 10; font.weight: Font.DemiBold; font.letterSpacing: 1 }
+                                Text { anchors.horizontalCenter: parent.horizontalCenter; text: i18n.t(modelData.t ?? "", i18n.lang); color: "#9fb7c9"; font.family: ed.face1; font.pixelSize: 10; font.weight: Font.DemiBold; font.letterSpacing: 1 }
                                 Row { spacing: 4; anchors.horizontalCenter: parent.horizontalCenter
                                     Repeater { model: 2; delegate: Rectangle { width: 14; height: 150; color: "#0a0f14"; border.color: "#1f2b36"
                                         readonly property real db: modelData.k === "in" ? ed.inDb : ed.outDb

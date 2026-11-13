@@ -69,7 +69,7 @@ Item {
                 model: [{ t: "Vpp", v: page.frameL.vpp.toFixed(3) + " FS" }, { t: "Vrms", v: page.frameL.vrms.toFixed(3) + " FS  " + page.dbOf(page.frameL.vrms) }, { t: "FREQ", v: page.frameL.freq > 0 ? page.frameL.freq.toFixed(1) + " Hz" : "—" }, { t: "CREST", v: page.frameL.crest > 0 ? page.frameL.crest.toFixed(1) + " dB" : "—" }]
                 delegate: Rectangle { Layout.fillWidth: true; implicitHeight: 44; radius: 8; color: Theme.card; border.color: Theme.line
                     Column { anchors.centerIn: parent; spacing: 2
-                        Text { text: modelData.t; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.letterSpacing: 2; anchors.horizontalCenter: parent.horizontalCenter }
+                        Text { text: i18n.t(modelData.t ?? "", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.letterSpacing: 2; anchors.horizontalCenter: parent.horizontalCenter }
                         Text { text: modelData.v; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 12; font.bold: true; anchors.horizontalCenter: parent.horizontalCenter } } }
             }
         }

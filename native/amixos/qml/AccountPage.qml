@@ -32,7 +32,7 @@ Item {
                     Head { text: i18n.t("SELECT ACTIVE OPERATOR PROFILE", i18n.lang) }
                     Repeater { model: access.roles; delegate: Rectangle { Layout.fillWidth: true; implicitHeight: 58; radius: 6; color: access.role === modelData.id ? Qt.rgba(0.98, 0.75, 0.14, 0.14) : Theme.ov(0.04); border.color: access.role === modelData.id ? Theme.amber : (page.wantRole === modelData.id ? Theme.cyan : Theme.lineSoft)
                         ColumnLayout { anchors.fill: parent; anchors.margins: 8; spacing: 2
-                            RowLayout { Text { text: modelData.name; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 10; font.bold: true } Item { Layout.fillWidth: true } }
+                            RowLayout { Text { text: i18n.t(modelData.name ?? "", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 10; font.bold: true } Item { Layout.fillWidth: true } }
                             Text { Layout.fillWidth: true; text: modelData.blurb; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap }
                             Text { text: page.permLine(page.mx[modelData.id]); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
                         MouseArea { anchors.fill: parent; onClicked: { if (!access.setRole(modelData.id, "")) page.wantRole = modelData.id; else page.wantRole = "" } } } }
@@ -61,7 +61,7 @@ Item {
                         delegate: RowLayout { width: lv.width; spacing: 6
                             Text { text: modelData.at.replace("T", " "); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
                             Text { text: modelData.who; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
-                            Text { Layout.fillWidth: true; text: modelData.text; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap } } }
+                            Text { Layout.fillWidth: true; text: i18n.t(modelData.text ?? "", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap } } }
                     Text { visible: access.audit.length === 0; text: i18n.t("No events yet. Role switches, locks, PIN changes and admin actions are written to ~/.amixos/audit.log.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap; Layout.fillWidth: true } } }
         }
     }

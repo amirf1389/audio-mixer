@@ -73,7 +73,7 @@ Item {
                     RowLayout { spacing: 2
                         Text { Layout.preferredWidth: 96; text: i18n.t("OUTPUT  ⟵  SOURCE", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
                         Repeater { model: page.sources; delegate: Item { implicitWidth: page.cell + 6; implicitHeight: 62
-                            Text { x: (parent.width + 6) / 2; y: parent.height - 4; text: modelData.name; color: page.srcColor(modelData.group); font.family: Theme.mono; font.pixelSize: 6; font.bold: true; rotation: -90; transformOrigin: Item.BottomLeft } } } }
+                            Text { x: (parent.width + 6) / 2; y: parent.height - 4; text: i18n.t(modelData.name ?? "", i18n.lang); color: page.srcColor(modelData.group); font.family: Theme.mono; font.pixelSize: 6; font.bold: true; rotation: -90; transformOrigin: Item.BottomLeft } } } }
                     Repeater { model: 16
                         delegate: RowLayout { spacing: 2
                             readonly property int out: page.bank * 16 + index

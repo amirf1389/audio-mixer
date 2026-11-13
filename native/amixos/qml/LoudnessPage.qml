@@ -20,7 +20,7 @@ Flickable {
                     delegate: Rectangle { Layout.fillWidth: true; implicitHeight: 86; radius: 8; color: Qt.rgba(0, 0, 0, 0.3); border.color: Theme.lineSoft
                         property real v: engine.telemetry[modelData.k] === undefined ? -120 : engine.telemetry[modelData.k]
                         ColumnLayout { anchors.centerIn: parent; spacing: 2
-                            Text { Layout.alignment: Qt.AlignHCenter; text: modelData.t; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.letterSpacing: 1.5 }
+                            Text { Layout.alignment: Qt.AlignHCenter; text: i18n.t(modelData.t ?? "", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.letterSpacing: 1.5 }
                             Text { Layout.alignment: Qt.AlignHCenter; text: modelData.k === "correlation" ? (v > 0 ? "+" : "") + v.toFixed(2) : (v <= -119 ? i18n.t("-inf", i18n.lang) : v.toFixed(1)); color: modelData.c; font.family: Theme.mono; font.pixelSize: 22; font.bold: true }
                             Text { Layout.alignment: Qt.AlignHCenter; text: modelData.u; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 } } }
                 }

@@ -13,7 +13,7 @@ Item {
     component Lab: Text { Layout.preferredWidth: 92; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
     component Val: Text { color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8 }
     component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(34, bl.implicitWidth + 14); implicitHeight: 22; radius: 4; color: on ? onColor : Theme.ov(0.07); border.color: on ? onColor : Theme.line
-        Text { id: bl; anchors.centerIn: parent; text: parent.label; color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
+        Text { id: bl; anchors.centerIn: parent; text: i18n.t(parent.label, i18n.lang); color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
     component Card: Rectangle { Layout.fillWidth: true; Layout.fillHeight: true; radius: Theme.radius; color: Theme.card; border.color: Theme.line; clip: true }
     readonly property var st: net.stats
     function cascade(sendTo, receiveFrom) {
@@ -96,7 +96,7 @@ Item {
                         delegate: Rectangle { width: ListView.view.width; implicitHeight: 30; radius: 4; color: Theme.ov(0.05); border.color: Theme.lineSoft
                             RowLayout { anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 6; spacing: 8
                                 ColumnLayout { Layout.fillWidth: true; spacing: 0
-                                    Text { Layout.fillWidth: true; elide: Text.ElideRight; text: modelData.name; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
+                                    Text { Layout.fillWidth: true; elide: Text.ElideRight; text: i18n.t(modelData.name ?? "", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
                                     Text { Layout.fillWidth: true; elide: Text.ElideRight; text: modelData.address + ":" + modelData.port + "  ·  " + modelData.channels + " ch L" + modelData.bits + " " + modelData.rate / 1000 + "k  ·  " + modelData.origin; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7 } }
                                 Btn { label: i18n.t("USE", i18n.lang); on: true; onColor: Theme.emerald; onClicked: if (!net.rxOn) net.useStream(index) } } } }
                     Note { visible: net.streams.length === 0; text: net.discoverOn ? i18n.t("Nothing announced yet. Senders announce every 30 seconds or so.", i18n.lang) : i18n.t("LISTEN shows the AES67 streams other equipment announces (SAP), ready to pick.", i18n.lang) } } }
@@ -109,7 +109,7 @@ Item {
                         RowLayout { spacing: 4; Lab { Layout.preferredWidth: 78; text: i18n.t("THIS COMPUTER", i18n.lang) }
                             Flow { Layout.fillWidth: true; spacing: 4
                                 Btn { label: i18n.t("NONE", i18n.lang); on: net.midiPort === ""; onClicked: net.openMidi("") }
-                                Repeater { model: net.midiInputs; delegate: Btn { label: modelData.name; on: net.midiPort === modelData.id; onColor: Theme.emerald; onClicked: net.openMidi(modelData.id) } }
+                                Repeater { model: net.midiInputs; delegate: Btn { label: i18n.t(modelData.name ?? "", i18n.lang); on: net.midiPort === modelData.id; onColor: Theme.emerald; onClicked: net.openMidi(modelData.id) } }
                                 Btn { label: "⟳"; onClicked: net.rescanMidi() } } }
                         RowLayout { spacing: 4; Lab { Layout.preferredWidth: 78; text: i18n.t("NETWORK MIDI", i18n.lang) }
                             Btn { objectName: "midiNetBtn"; label: net.midiNetOn ? i18n.t("ON", i18n.lang) : i18n.t("OFF", i18n.lang); on: net.midiNetOn; onColor: Theme.emerald; onClicked: net.setMidiNet(!net.midiNetOn) }
@@ -131,7 +131,7 @@ Item {
                             delegate: ColumnLayout { width: ListView.view.width; spacing: 1
                                 RowLayout { spacing: 6
                                     Rectangle { implicitWidth: 7; implicitHeight: 7; radius: 4; color: modelData.available ? Theme.emerald : Theme.dim }
-                                    Text { text: modelData.name; color: modelData.available ? Theme.ink : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } }
+                                    Text { text: i18n.t(modelData.name ?? "", i18n.lang); color: modelData.available ? Theme.ink : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } }
                                 Text { Layout.fillWidth: true; Layout.leftMargin: 13; wrapMode: Text.WordWrap; text: i18n.t(modelData.note, i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } } } } }
             }
         }

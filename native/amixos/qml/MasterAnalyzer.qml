@@ -30,10 +30,10 @@ Popup {
     component Head: Text { color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
     component Small: Text { color: Theme.muted; font.family: Theme.mono; font.pixelSize: 10 }
     component Pill: Rectangle { property string label; property bool on: false; property color onColor: Theme.cyan; signal clicked(); implicitWidth: Math.max(50, pl.implicitWidth + 18); implicitHeight: 26; radius: 6; color: on ? onColor : (ph.hovered ? Theme.ov(0.14) : Theme.ov(0.08)); border.color: on ? onColor : Theme.line
-        Text { id: pl; anchors.centerIn: parent; text: parent.label; color: parent.on ? "#000" : Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } HoverHandler { id: ph } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
+        Text { id: pl; anchors.centerIn: parent; text: i18n.t(parent.label, i18n.lang); color: parent.on ? "#000" : Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } HoverHandler { id: ph } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
     component Card: Rectangle { radius: 8; color: Theme.ov(0.035); border.color: Theme.lineSoft }
     component Big: Column { property string title; property real v: -120; property string unit: "LUFS"; spacing: 0
-        Small { anchors.horizontalCenter: parent.horizontalCenter; text: parent.title }
+        Small { anchors.horizontalCenter: parent.horizontalCenter; text: i18n.t(parent.title, i18n.lang) }
         Row { anchors.horizontalCenter: parent.horizontalCenter; spacing: 3
             Text { text: pop.num(parent.parent.v); color: pop.tone(parent.parent.v, pop.target.lufs); font.family: Theme.mono; font.pixelSize: 34; font.bold: true }
             Small { anchors.baseline: parent.children[0].baseline; text: parent.parent.unit } } }

@@ -34,7 +34,7 @@ Item {
                     Note { text: i18n.t("The IPv4 cards of this computer. With REACH = LAN, pick the card the remote is on (or ANY to listen on all of them).", i18n.lang) }
                     Flow { Layout.fillWidth: true; spacing: 4
                         Btn { label: i18n.t("ANY CARD", i18n.lang); on: osc.allowLan && osc.bindAddress === ""; onColor: Theme.cyan; onClicked: osc.bindAddress = "" }
-                        Repeater { model: osc.interfaces; delegate: Btn { label: (modelData.kind === "wifi" ? "📶 " : modelData.kind === "ethernet" ? "🖧 " : modelData.kind === "loopback" ? "⟲ " : "") + modelData.name + "  " + modelData.ip; on: osc.bindAddress === modelData.ip; onColor: modelData.up ? Theme.emerald : Theme.amber; onClicked: osc.bindAddress = modelData.ip } } }
+                        Repeater { model: osc.interfaces; delegate: Btn { label: (modelData.kind === "wifi" ? "📶 " : modelData.kind === "ethernet" ? "🖧 " : modelData.kind === "loopback" ? "⟲ " : "") + i18n.t(modelData.name ?? "", i18n.lang) + "  " + modelData.ip; on: osc.bindAddress === modelData.ip; onColor: modelData.up ? Theme.emerald : Theme.amber; onClicked: osc.bindAddress = modelData.ip } } }
                     Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.lineSoft }
                     Head { text: i18n.t("OPEN SOUND CONTROL (UDP)", i18n.lang) }
                     RowLayout { spacing: 8; Text { Layout.preferredWidth: 110; text: i18n.t("RECEIVE PORT", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 } SpinBox { palette.base: Theme.deep; palette.text: Theme.ink; palette.button: Theme.cardRaised; palette.buttonText: Theme.ink; palette.highlight: Theme.orange; palette.mid: Theme.line; from: 1; to: 65535; value: osc.port; editable: true; onValueModified: osc.port = value; implicitWidth: 120 } }
@@ -82,7 +82,7 @@ Item {
                     Repeater { model: remote.tokens
                         delegate: RowLayout { Layout.fillWidth: true; spacing: 8
                             Rectangle { width: 6; height: 6; radius: 3; color: modelData.state === "active" ? Theme.emerald : Theme.ov(0.25) }
-                            Text { Layout.fillWidth: true; text: modelData.name; color: modelData.state === "active" ? Theme.ink : Theme.dim; font.family: Theme.mono; font.pixelSize: 9; elide: Text.ElideRight }
+                            Text { Layout.fillWidth: true; text: i18n.t(modelData.name ?? "", i18n.lang); color: modelData.state === "active" ? Theme.ink : Theme.dim; font.family: Theme.mono; font.pixelSize: 9; elide: Text.ElideRight }
                             Text { text: modelData.role.toUpperCase() + " · " + modelData.state.toUpperCase() + " · " + modelData.id; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                             Btn { visible: modelData.state === "active"; label: i18n.t("REVOKE", i18n.lang); on: true; onColor: Theme.danger; onClicked: remote.revokeToken(modelData.id) } } }
                     Text { visible: remote.tokens.length === 0; text: i18n.t("No named tokens yet. The master token (SHOW TOKEN) still works.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 }

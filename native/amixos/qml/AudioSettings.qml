@@ -35,7 +35,7 @@ Popup {
         Text { id: btT; anchors.centerIn: parent; text: bt.label; color: bt.on ? bt.onColor : Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
         MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: bt.clicked() } }
     component Line: RowLayout { property string label; Layout.fillWidth: true; spacing: 10
-        Text { Layout.preferredWidth: 170; Layout.alignment: Qt.AlignTop; topPadding: 5; horizontalAlignment: Text.AlignRight; text: parent.label; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 10 } }
+        Text { Layout.preferredWidth: 170; Layout.alignment: Qt.AlignTop; topPadding: 5; horizontalAlignment: Text.AlignRight; text: i18n.t(parent.label, i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 10 } }
     component Check: RowLayout { id: ck; property bool on; property string label; signal toggled(); Layout.fillWidth: true; spacing: 8
         Rectangle { width: 16; height: 16; radius: 3; color: ck.on ? Theme.amber : Theme.ov(0.06); border.color: ck.on ? Theme.amber : Theme.line
             Text { anchors.centerIn: parent; visible: ck.on; text: "✓"; color: "#000"; font.pixelSize: 11; font.bold: true } }
@@ -81,7 +81,7 @@ Popup {
             Item { height: 2 }
             Line { label: i18n.t("Active MIDI inputs:", i18n.lang)
                 Box { Repeater { model: net.midiInputs
-                        delegate: Check { on: net.midiPort === modelData.id; label: modelData.name; onToggled: net.openMidi(on ? "" : modelData.id) } }
+                        delegate: Check { on: net.midiPort === modelData.id; label: i18n.t(modelData.name ?? "", i18n.lang); onToggled: net.openMidi(on ? "" : modelData.id) } }
                     Text { visible: net.midiInputs.length === 0; text: i18n.t("(No MIDI inputs available)", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 10 } } }
             RowLayout { Layout.fillWidth: true; Layout.topMargin: 4; spacing: 8
                 Text { Layout.fillWidth: true; text: pop.note !== "" ? pop.note : i18n.t("Channel pairs are used in order from 1: ticking a pair turns on every pair up to it.", i18n.lang); color: pop.note !== "" ? Theme.amber : Theme.dim; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.WordWrap }

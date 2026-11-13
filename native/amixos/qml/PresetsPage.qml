@@ -42,7 +42,7 @@ Flickable {
                         Layout.fillWidth: true; implicitHeight: visible ? 56 : 0; radius: 8; color: Qt.rgba(0, 0, 0, 0.25); border.color: modelData.factory ? Theme.lineSoft : Qt.rgba(0, 0.95, 1, 0.35)
                         RowLayout { anchors.fill: parent; anchors.margins: 8; spacing: 8
                             ColumnLayout { Layout.fillWidth: true; spacing: 2
-                                Text { text: modelData.name; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 10; font.bold: true; elide: Text.ElideRight; Layout.fillWidth: true }
+                                Text { text: i18n.t(modelData.name ?? "", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 10; font.bold: true; elide: Text.ElideRight; Layout.fillWidth: true }
                                 Text { text: modelData.category + (modelData.factory ? i18n.t(" • factory", i18n.lang) : i18n.t(" • yours", i18n.lang)); color: modelData.factory ? Theme.dim : Theme.cyan; font.family: Theme.mono; font.pixelSize: 7 } }
                             Rectangle { implicitWidth: 60; implicitHeight: 24; radius: 5; color: Theme.emerald; Text { anchors.centerIn: parent; text: i18n.t("APPLY", i18n.lang); color: "#000"; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.applyPreset(modelData.name, page.strip) } }
                             Rectangle { visible: !modelData.factory; implicitWidth: 24; implicitHeight: 24; radius: 5; color: Qt.rgba(1, 0.165, 0.373, 0.2); border.color: Theme.danger; Text { anchors.centerIn: parent; text: "×"; color: Theme.danger; font.pixelSize: 12; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.deletePreset(modelData.name) } }

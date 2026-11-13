@@ -35,7 +35,7 @@ Item {
                         RowLayout { anchors.fill: parent; anchors.margins: 8; spacing: 10
                             Rectangle { implicitWidth: 44; implicitHeight: 18; radius: 3; color: modelData.format === "VST3" ? Theme.violet : Theme.amber; Text { anchors.centerIn: parent; text: modelData.format; color: "#000"; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } }
                             ColumnLayout { Layout.fillWidth: true; spacing: 1
-                                Text { text: modelData.name + (modelData.vendor ? "  ·  " + modelData.vendor : ""); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; elide: Text.ElideRight; Layout.fillWidth: true }
+                                Text { text: i18n.t(modelData.name ?? "", i18n.lang) + (modelData.vendor ? "  ·  " + modelData.vendor : ""); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; elide: Text.ElideRight; Layout.fillWidth: true }
                                 Text { text: modelData.module + (modelData.subCategories ? "   [" + modelData.subCategories + "]" : ""); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; elide: Text.ElideMiddle; Layout.fillWidth: true } }
                             Btn { label: i18n.t("INSERT", i18n.lang); on: true; onColor: Theme.cyan; onClicked: page.insert(modelData.kind) } } }
                     Text { visible: page.shown.length === 0; anchors.centerIn: parent; text: page.all.length === 0 ? i18n.t("No plug-ins found yet. Add the folders on the right and press RESCAN.", i18n.lang) : i18n.t("Nothing matches the filter.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 9 } } }
@@ -50,7 +50,7 @@ Item {
                     Rectangle { Layout.fillWidth: true; height: 1; color: Theme.lineSoft }
                     Text { text: i18n.t("BUILT-IN STAGES", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
                     Flow { Layout.fillWidth: true; spacing: 4
-                        Repeater { model: page.builtIns; delegate: Btn { label: modelData.name; onClicked: page.insert(modelData.kind) } } }
+                        Repeater { model: page.builtIns; delegate: Btn { label: i18n.t(modelData.name ?? "", i18n.lang); onClicked: page.insert(modelData.kind) } } }
                     Item { Layout.fillHeight: true }
                     Text { Layout.fillWidth: true; text: i18n.t("INSERT puts the plug-in into the first free slot of the selected strip (pick the strip on the MIXER). A plug-in that fails to load shows red in the rack with the reason. VST2 .dll / .so and VST3 bundles are both hosted; no plug-in editor window yet, parameters appear as generic controls.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap } } } }
     }
