@@ -3,6 +3,7 @@
 // exact rate and channel count, with the device-aligned period; no other program can use it meanwhile. The default render / capture endpoints are used; a device is chosen by its endpoint id string ("" = default).
 // Compiled with mingw-w64 in the tests (scripts/build-engine.js --io); it has not been run on a Windows PC.
 #ifdef _WIN32
+#include <vector>
 #include <audioclient.h>
 #include <mmdeviceapi.h>
 #include <windows.h>
@@ -134,7 +135,10 @@ class WasapiBackend : public Backend {
       // take control: the first format the device accepts exclusively, at exactly the requested rate and channel count
       static const Sample kFloatFirst[] = { {true, 32, 32}, {false, 32, 32}, {false, 32, 24}, {false, 24, 24}, {false, 16, 16} };
       static const Sample kIntFirst[] = { {false, 32, 32}, {true, 32, 32}, {false, 32, 24}, {false, 24, 24}, {false, 16, 16} };
-      const auto& kTry = cfg_.preferInt32 ? kIntFirst : kFloatFirst;
+      const auto& kBase = cfg_.preferInt32 ? kIntFirst : kFloatFirst;
+      std::vector<Sample> kTry(std::begin(kBase), std::end(kBase));   // a word length the user asked for goes first; the rest stay as the fallback
+      if (cfg_.bits != 0) { const Sample want = cfg_.bits == -32 ? Sample{true, 32, 32} : cfg_.bits == 32 ? Sample{false, 32, 32} : cfg_.bits == 24 ? Sample{false, 24, 24} : Sample{false, 16, 16};
+        kTry.insert(kTry.begin(), want); }
       bool found = false; WAVEFORMATEXTENSIBLE f;
       for (const Sample& t : kTry) { f = makeFormat(ch, cfg_.sampleRate, t); if ((*ac)->IsFormatSupported(AUDCLNT_SHAREMODE_EXCLUSIVE, &f.Format, nullptr) == S_OK) { *used = t; found = true; break; } }
       if (!found) { dev->Release(); err = "exclusive mode: the device accepts none of float32 / int32 / int24 / int16 at " + std::to_string(static_cast<long>(cfg_.sampleRate)) + " Hz with " + std::to_string(ch) + " channels (is \"Allow applications to take exclusive control of this device\" on, and no other program holding it?)"; return false; }
