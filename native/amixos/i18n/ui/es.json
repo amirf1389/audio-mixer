@@ -1382,5 +1382,7 @@
 "Suggested: threshold ": "Sugerencia: umbral ",
 " dB, ratio ": " dB, relación ",
 "No compression needed": "No hace falta compresión",
-"Measured on the channel's input over the last 10 seconds: how far the loud and the quiet moments sit apart. Nothing changes until you press APPLY.": "Medido en la entrada del canal durante los últimos 10 segundos: cuánto se separan los momentos fuertes de los suaves. Nada cambia hasta que pulses APPLY."
+"Measured on the channel's input over the last 10 seconds: how far the loud and the quiet moments sit apart. Nothing changes until you press APPLY.": "Medido en la entrada del canal durante los últimos 10 segundos: cuánto se separan los momentos fuertes de los suaves. Nada cambia hasta que pulses APPLY.",
+"Add an effect": "Añadir un efecto",
+"Play a sample": "Reproducir un sample"
 }

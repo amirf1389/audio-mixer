@@ -1384,5 +1384,7 @@
 "Suggested: threshold ": "Đề xuất: ngưỡng ",
 " dB, ratio ": " dB, tỷ lệ ",
 "No compression needed": "Không cần nén",
-"Measured on the channel's input over the last 10 seconds: how far the loud and the quiet moments sit apart. Nothing changes until you press APPLY.": "Đo trên đầu vào của kênh trong 10 giây qua: khoảng cách giữa lúc to và lúc nhỏ. Không có gì thay đổi cho đến khi bạn nhấn APPLY."
+"Measured on the channel's input over the last 10 seconds: how far the loud and the quiet moments sit apart. Nothing changes until you press APPLY.": "Đo trên đầu vào của kênh trong 10 giây qua: khoảng cách giữa lúc to và lúc nhỏ. Không có gì thay đổi cho đến khi bạn nhấn APPLY.",
+"Add an effect": "Thêm hiệu ứng",
+"Play a sample": "Phát mẫu âm thanh"
 }

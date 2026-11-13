@@ -203,6 +203,11 @@ int main(int argc, char* argv[]) {
       engine.setWindowsMuteSync(true); if (!sysMute) { std::fprintf(stderr, "amixos --smoke: switching sync on at -inf did not mute\n"); return 82; } engine.restoreSystemSound(); if (sysMute) { std::fprintf(stderr, "amixos --smoke: exit did not take the mute back\n"); return 83; }
       engine.setMaster(keep); engine.setSystemMuteBackend([](bool&) { return false; }, [](bool) { return false; }); engine.syncSystemSound(); }
     { // the ten effects in the rack of any channel: listed, loaded into a slot, a knob moves, bypass, cleared; a late channel too
+      { // the strip menu's PLAY A SAMPLE: the channel's SAMPLE PLAYER is set to that sample and playing
+        const int k = engine.playSampleOnStrip(21, 7); const QVariantList p = k >= 0 ? engine.pluginParams(21, k) : QVariantList();
+        const bool ok = k >= 0 && p.size() >= 2 && p[0].toMap()["text"].toString().startsWith("7 ") && p[1].toMap()["text"].toString() == "ON" && engine.playSampleOnStrip(21, 0) == -1;
+        if (k >= 0) engine.setPlugin(21, k, "");
+        if (!ok) { std::fprintf(stderr, "amixos --smoke: play a sample on a strip (slot %d)\n", k); return 159; } }
       { // a custom rate as high as 1100 kHz opens on the null device and runs (the engine has no rate ceiling of its own)
         const double r0 = engine.sampleRate(); const int f0 = engine.blockFrames(); engine.stop();
         const bool ok = engine.open("null", "", "", 1100000, 1024, 2, 2); QElapsedTimer t; t.start(); while (t.elapsed() < 300) QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
@@ -678,6 +683,7 @@ int main(int argc, char* argv[]) {
             if (QObject* mixer = mixerShown) {
               mixer->setProperty("rackCompact", true); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + "/mixer-compact.png"); mixer->setProperty("rackCompact", false); std::printf("amixos --shots: mixer-compact\n");
               if (QObject* pop = mixer->findChild<QObject*>("mixerQuick")) { QMetaObject::invokeMethod(pop, "open"); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + "/mixer-settings.png"); QMetaObject::invokeMethod(pop, "close"); std::printf("amixos --shots: mixer-settings\n"); }
+              mixer->setProperty("stripMenuDemo", true); waitMs(600); win->grabWindow().save(shots + "/mixer-strip-menu.png"); mixer->setProperty("stripMenuDemo", false); waitMs(200);   // the strip menu with ADD AN EFFECT open
               mixer->setProperty("sendView", 1); waitMs(400); win->grabWindow().save(shots + "/mixer-aux.png"); mixer->setProperty("sendView", 2); waitMs(400); win->grabWindow().save(shots + "/mixer-fx.png"); mixer->setProperty("sendView", 0); std::printf("amixos --shots: mixer-aux, mixer-fx\n");
               { QMetaObject::invokeMethod(win, "openAudioSettings"); waitMs(500); win->grabWindow().save(shots + "/audio-midi-settings.png");   // AUDIO / MIDI SETTINGS: opens, shows the running device type, APPLY keeps the engine running
                 QObject* as = win->findChild<QObject*>("audioSettings");

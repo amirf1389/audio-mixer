@@ -403,7 +403,8 @@ class Engine : public QObject {
   int pluginSlotLimit() const { return kPluginSlots; }   // every edition, BASIC included, may fill the whole rack
   Q_INVOKABLE QVariantList plugins(int strip) const;  // [{slot, kind, name, bypass, builtIn, pending}]
   Q_INVOKABLE void setPlugin(int strip, int slot, const QString& kind);   // "" clears the slot
-  Q_INVOKABLE int addToRack(int strip, const QString& kind);   // the slot that holds that kind (already there, or put in the first free slot); -1 = the rack is full
+  Q_INVOKABLE int addToRack(int strip, const QString& kind);
+  Q_INVOKABLE int playSampleOnStrip(int strip, int sampleId);   // the SAMPLE PLAYER of that channel (added if needed) set to that sample and started; the slot, or -1   // the slot that holds that kind (already there, or put in the first free slot); -1 = the rack is full
   Q_INVOKABLE void setPluginBypass(int strip, int slot, bool bypass);
   Q_INVOKABLE QVariantList pluginCatalog() const;     // the built-in stages, for the chooser
   Q_INVOKABLE void movePlugin(int strip, int from, int to);   // reorder the rack (swap two slots)

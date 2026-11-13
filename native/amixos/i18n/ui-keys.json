@@ -1388,5 +1388,7 @@
 "Suggested: threshold ",
 " dB, ratio ",
 "No compression needed",
-"Measured on the channel's input over the last 10 seconds: how far the loud and the quiet moments sit apart. Nothing changes until you press APPLY."
+"Measured on the channel's input over the last 10 seconds: how far the loud and the quiet moments sit apart. Nothing changes until you press APPLY.",
+"Add an effect",
+"Play a sample"
 ]

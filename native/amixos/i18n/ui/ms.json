@@ -1383,5 +1383,7 @@
 "Suggested: threshold ": "Cadangan: ambang ",
 " dB, ratio ": " dB, nisbah ",
 "No compression needed": "Tiada pemampatan diperlukan",
-"Measured on the channel's input over the last 10 seconds: how far the loud and the quiet moments sit apart. Nothing changes until you press APPLY.": "Diukur pada input saluran dalam 10 saat terakhir: sejauh mana detik yang kuat dan yang perlahan berbeza. Tiada apa berubah sehingga anda menekan APPLY."
+"Measured on the channel's input over the last 10 seconds: how far the loud and the quiet moments sit apart. Nothing changes until you press APPLY.": "Diukur pada input saluran dalam 10 saat terakhir: sejauh mana detik yang kuat dan yang perlahan berbeza. Tiada apa berubah sehingga anda menekan APPLY.",
+"Add an effect": "Tambah kesan",
+"Play a sample": "Mainkan sampel"
 }

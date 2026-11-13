@@ -1382,5 +1382,7 @@
 "Suggested: threshold ": "제안: 스레숄드 ",
 " dB, ratio ": " dB, 비율 ",
 "No compression needed": "압축 필요 없음",
-"Measured on the channel's input over the last 10 seconds: how far the loud and the quiet moments sit apart. Nothing changes until you press APPLY.": "지난 10초 동안 채널 입력에서 측정: 큰 순간과 조용한 순간의 차이. APPLY를 누르기 전에는 아무것도 바뀌지 않습니다."
+"Measured on the channel's input over the last 10 seconds: how far the loud and the quiet moments sit apart. Nothing changes until you press APPLY.": "지난 10초 동안 채널 입력에서 측정: 큰 순간과 조용한 순간의 차이. APPLY를 누르기 전에는 아무것도 바뀌지 않습니다.",
+"Add an effect": "효과 추가",
+"Play a sample": "샘플 재생"
 }

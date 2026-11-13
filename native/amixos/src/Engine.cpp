@@ -1016,6 +1016,12 @@ bool Engine::applyCompSuggestion(int i) {
   setCompressor(i, c.ratio > 1.0, c.thresholdDb, c.ratio, p.compKneeDb, p.compAttackMs, p.compReleaseMs, c.ratio > 1.0 ? makeup : p.compMakeupDb);
   return true;
 }
+int Engine::playSampleOnStrip(int i, int id) {
+  if (id < 1 || id > 100) return -1; const int k = addToRack(i, QStringLiteral("fx:sampler")); if (k < 0) return -1;
+  setPluginParam(i, k, 0, (id - 1) / 99.0);   // SAMPLE
+  setPluginParam(i, k, 1, 0.0); setPluginParam(i, k, 1, 1.0);   // PLAY off, then on: from the top
+  return k;
+}
 int Engine::addToRack(int i, const QString& kind) {
   if (i < 0 || i >= kStrips || kind.isEmpty()) return -1; const StripUi& s = strips_[static_cast<std::size_t>(i)];
   for (int k = 0; k < kPluginSlots; ++k) if (s.plugins[k].kind == kind) return k;

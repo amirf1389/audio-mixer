@@ -1385,5 +1385,7 @@
 "Suggested: threshold ": "सुझाव: थ्रेशोल्ड ",
 " dB, ratio ": " dB, रेशियो ",
 "No compression needed": "कम्प्रेशन की ज़रूरत नहीं",
-"Measured on the channel's input over the last 10 seconds: how far the loud and the quiet moments sit apart. Nothing changes until you press APPLY.": "पिछले 10 सेकंड में चैनल के इनपुट पर मापा गया: तेज़ और धीमे पलों के बीच कितनी दूरी है। APPLY दबाने तक कुछ नहीं बदलता।"
+"Measured on the channel's input over the last 10 seconds: how far the loud and the quiet moments sit apart. Nothing changes until you press APPLY.": "पिछले 10 सेकंड में चैनल के इनपुट पर मापा गया: तेज़ और धीमे पलों के बीच कितनी दूरी है। APPLY दबाने तक कुछ नहीं बदलता।",
+"Add an effect": "एक प्रभाव जोड़ें",
+"Play a sample": "एक सैंपल चलाएँ"
 }

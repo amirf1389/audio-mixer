@@ -1384,5 +1384,7 @@
 "Suggested: threshold ": "Предложение: порог ",
 " dB, ratio ": " дБ, степень ",
 "No compression needed": "Компрессия не нужна",
-"Measured on the channel's input over the last 10 seconds: how far the loud and the quiet moments sit apart. Nothing changes until you press APPLY.": "Измерено на входе канала за последние 10 секунд: насколько громкие моменты отстоят от тихих. Ничего не меняется, пока вы не нажмёте APPLY."
+"Measured on the channel's input over the last 10 seconds: how far the loud and the quiet moments sit apart. Nothing changes until you press APPLY.": "Измерено на входе канала за последние 10 секунд: насколько громкие моменты отстоят от тихих. Ничего не меняется, пока вы не нажмёте APPLY.",
+"Add an effect": "Добавить эффект",
+"Play a sample": "Воспроизвести сэмпл"
 }

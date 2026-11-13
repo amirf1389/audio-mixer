@@ -1382,5 +1382,7 @@
 "Suggested: threshold ": "Propozycja: próg ",
 " dB, ratio ": " dB, ratio ",
 "No compression needed": "Kompresja niepotrzebna",
-"Measured on the channel's input over the last 10 seconds: how far the loud and the quiet moments sit apart. Nothing changes until you press APPLY.": "Mierzone na wejściu kanału przez ostatnie 10 sekund: jak daleko od siebie są głośne i ciche momenty. Nic się nie zmienia, dopóki nie naciśniesz APPLY."
+"Measured on the channel's input over the last 10 seconds: how far the loud and the quiet moments sit apart. Nothing changes until you press APPLY.": "Mierzone na wejściu kanału przez ostatnie 10 sekund: jak daleko od siebie są głośne i ciche momenty. Nic się nie zmienia, dopóki nie naciśniesz APPLY.",
+"Add an effect": "Dodaj efekt",
+"Play a sample": "Odtwórz sampel"
 }

@@ -1384,5 +1384,7 @@
 "Suggested: threshold ": "Пропозиція: поріг ",
 " dB, ratio ": " дБ, співвідношення ",
 "No compression needed": "Компресія не потрібна",
-"Measured on the channel's input over the last 10 seconds: how far the loud and the quiet moments sit apart. Nothing changes until you press APPLY.": "Виміряно на вході каналу за останні 10 секунд: наскільки гучні моменти віддалені від тихих. Нічого не змінюється, доки ви не натиснете APPLY."
+"Measured on the channel's input over the last 10 seconds: how far the loud and the quiet moments sit apart. Nothing changes until you press APPLY.": "Виміряно на вході каналу за останні 10 секунд: наскільки гучні моменти віддалені від тихих. Нічого не змінюється, доки ви не натиснете APPLY.",
+"Add an effect": "Додати ефект",
+"Play a sample": "Відтворити семпл"
 }
