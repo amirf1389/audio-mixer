@@ -11,6 +11,7 @@ Item {
     readonly property var tel: engine.telemetry
     readonly property var last: settings.lastDevice
     property var plan: []
+    property string rateNote: ""
     function reopen(rate, frames) {
         const d = page.last; if (!d || (!d.in && !d.out)) { return }
         const ok = engine.openSmart(d.backend, d.in, d.out, rate, frames, d.inChannels || 2, d.outChannels || 2)
@@ -98,10 +99,21 @@ Item {
                 KV { k: "SAMPLE RATE"; v: engine.running ? engine.sampleRate + " Hz" : "—" }
                 KV { k: "BLOCK"; v: engine.running ? engine.blockFrames + " frames = " + (engine.blockFrames / engine.sampleRate * 1000).toFixed(2) + " ms" : "—" }
                 RowLayout { spacing: 4; Text { text: i18n.t("RATE", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; Layout.preferredWidth: 40 }
-                    Repeater { model: [44100, 48000, 88200, 96000, 192000]; delegate: Btn { label: modelData / 1000 + "k"; on: engine.running && engine.sampleRate === modelData; onClicked: page.reopen(modelData, engine.blockFrames || settings.defaultFrames) } } }
+                    // the rates this device takes (44.1 kHz up to 768 kHz); a device that does not report them shows the usual five
+                    Repeater { model: { const r = page.last ? engine.ratesFor(page.last.backend || "", page.last.out || "") : []; const all = [44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000, 705600, 768000];
+                                        return r.length ? all.filter(x => r.indexOf(x) >= 0) : [44100, 48000, 88200, 96000, 192000] }
+                        delegate: Btn { label: (modelData % 1000 ? (modelData / 1000).toFixed(1) : modelData / 1000) + "k"; on: engine.running && engine.sampleRate === modelData; onClicked: page.reopen(modelData, engine.blockFrames || settings.defaultFrames) } }
+                    // CUSTOM: any rate the user types, 8 kHz up to 1100 kHz; the device itself says whether it takes it (the open reports a refusal)
+                    TextField { id: customRate; objectName: "customRate"; implicitWidth: 78; implicitHeight: 24; font.family: Theme.mono; font.pixelSize: 9; placeholderText: i18n.t("kHz", i18n.lang)
+                                inputMethodHints: Qt.ImhFormattedNumbersOnly; validator: DoubleValidator { bottom: 8; top: 1100; decimals: 3; notation: DoubleValidator.StandardNotation }
+                                Accessible.name: i18n.t("Custom sample rate in kHz, 8 to 1100", i18n.lang); onAccepted: customSet.clicked() }
+                    Btn { id: customSet; objectName: "customRateSet"; label: i18n.t("SET", i18n.lang)
+                          onClicked: { const k = Number(customRate.text.replace(",", ".")); if (!(k >= 8 && k <= 1100)) { page.rateNote = i18n.t("Type a rate from 8 to 1100 kHz.", i18n.lang); return }
+                                       page.rateNote = ""; page.reopen(Math.round(k * 1000), engine.blockFrames || settings.defaultFrames) } } }
+                Text { visible: page.rateNote !== ""; text: page.rateNote; color: Theme.amber; font.pixelSize: 9 }
                 RowLayout { spacing: 4; Text { text: i18n.t("BLOCK", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; Layout.preferredWidth: 40 }
                     Repeater { model: [32, 64, 128, 256, 512, 1024]; delegate: Btn { label: modelData; on: engine.running && engine.blockFrames === modelData; onClicked: page.reopen(engine.sampleRate || settings.defaultRate, modelData) } } }
-                Note { text: i18n.t("A click re-opens the remembered device at that rate or block (SMART START). Lower blocks mean less latency and more risk of overruns; watch the profiler below. 96 / 192 kHz run natively in double precision.", i18n.lang) } }
+                Note { text: i18n.t("A click re-opens the remembered device at that rate or block (SMART START). Lower blocks mean less latency and more risk of overruns; watch the profiler below. Every rate the device takes is offered, up to 768 kHz; they run natively in double precision.", i18n.lang) } }
             Card { RowLayout { Head { text: i18n.t("DSP PROFILER", i18n.lang) } Item { Layout.fillWidth: true } Btn { label: i18n.t("RESET", i18n.lang); onClicked: engine.resetProfiler() } }
                 KV { k: "LOAD"; v: engine.running ? page.tel.loadPct.toFixed(1) + " % of the block" : "—"; c: page.tel.loadPct > 70 ? Theme.danger : page.tel.loadPct > 40 ? Theme.amber : Theme.emerald }
                 Rectangle { Layout.fillWidth: true; implicitHeight: 10; radius: 3; color: Theme.ov(0.06); Rectangle { width: parent.width * Math.min(1, page.tel.loadPct / 100); height: parent.height; radius: 3; color: page.tel.loadPct > 70 ? Theme.danger : page.tel.loadPct > 40 ? Theme.amber : Theme.emerald } }

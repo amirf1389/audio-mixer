@@ -14,6 +14,8 @@
 #include <initializer_list>
 #include <windows.h>
 #include <audioclient.h>
+#include <mmreg.h>
+#include <ksmedia.h>
 #include <mmdeviceapi.h>
 #include <propsys.h>
 #include <mmsystem.h>
@@ -105,7 +107,27 @@ void addWasapi(std::vector<DeviceInfo>& out) {
       IAudioClient* ac = nullptr;
       if (SUCCEEDED(d->Activate(kIidClient, CLSCTX_ALL, nullptr, reinterpret_cast<void**>(&ac)))) {
         WAVEFORMATEX* f = nullptr;
-        if (SUCCEEDED(ac->GetMixFormat(&f)) && f) { ch = f->nChannels; info.defaultRate = f->nSamplesPerSec; CoTaskMemFree(f); }
+        if (SUCCEEDED(ac->GetMixFormat(&f)) && f) {
+          ch = f->nChannels; info.defaultRate = f->nSamplesPerSec;
+          // the rates this endpoint takes on its own (exclusive mode), 44.1 kHz up to 768 kHz, in any of the usual sample formats; the shared-mode rate is always in
+          static const DWORD kRates[] = {44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000, 705600, 768000};
+          static const WORD kBits[][2] = {{32, 32}, {32, 24}, {24, 24}, {16, 16}};
+          for (DWORD r : kRates) {
+            bool ok = r == f->nSamplesPerSec;
+            for (int k = 0; k < 5 && !ok; ++k) {
+              WAVEFORMATEXTENSIBLE x{}; x.Format.wFormatTag = WAVE_FORMAT_EXTENSIBLE; x.Format.nChannels = f->nChannels; x.Format.nSamplesPerSec = r;
+              const bool isFloat = k == 0; const WORD bits = isFloat ? 32 : kBits[k - 1][0], valid = isFloat ? 32 : kBits[k - 1][1];
+              x.Format.wBitsPerSample = bits; x.Format.nBlockAlign = static_cast<WORD>(f->nChannels * bits / 8); x.Format.nAvgBytesPerSec = r * x.Format.nBlockAlign;
+              x.Format.cbSize = sizeof(WAVEFORMATEXTENSIBLE) - sizeof(WAVEFORMATEX); x.Samples.wValidBitsPerSample = valid;
+              x.dwChannelMask = f->nChannels == 1 ? SPEAKER_FRONT_CENTER : SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT;
+              static const GUID kPcm = {0x00000001, 0x0000, 0x0010, {0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71}}, kFloat = {0x00000003, 0x0000, 0x0010, {0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71}};
+              x.SubFormat = isFloat ? kFloat : kPcm;
+              ok = ac->IsFormatSupported(AUDCLNT_SHAREMODE_EXCLUSIVE, &x.Format, nullptr) == S_OK;
+            }
+            if (ok) info.sampleRates.push_back(static_cast<double>(r));
+          }
+          CoTaskMemFree(f);
+        }
         ac->Release();
       }
       if (flow == eRender) { info.outChannels = ch; info.defaultOut = info.id == def; }

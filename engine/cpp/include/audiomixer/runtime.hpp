@@ -28,6 +28,7 @@ struct DeviceConfig {
   unsigned frames = 256;                 // frames per block (the period)
   int inChannels = 2, outChannels = 2;
   bool exclusive = false;                // WASAPI: take exclusive control of the device (no Windows mixer, no other program; float32 / int32 / int24 / int16, whatever the device accepts); an error says why it was refused
+  bool preferInt32 = true;               // WASAPI exclusive: try 32-bit integer before 32-bit float (the device's own word length first)
   // null backend only: what the "device" delivers as input (default silence); called on the audio thread before each block, frameIndex = first frame of the block
   std::function<void(float* const* in, std::size_t frames, std::uint64_t frameIndex)> nullInput;
 };
