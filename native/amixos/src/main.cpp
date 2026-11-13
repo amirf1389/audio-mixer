@@ -203,6 +203,11 @@ int main(int argc, char* argv[]) {
       engine.setWindowsMuteSync(true); if (!sysMute) { std::fprintf(stderr, "amixos --smoke: switching sync on at -inf did not mute\n"); return 82; } engine.restoreSystemSound(); if (sysMute) { std::fprintf(stderr, "amixos --smoke: exit did not take the mute back\n"); return 83; }
       engine.setMaster(keep); engine.setSystemMuteBackend([](bool&) { return false; }, [](bool) { return false; }); engine.syncSystemSound(); }
     { // the ten effects in the rack of any channel: listed, loaded into a slot, a knob moves, bypass, cleared; a late channel too
+      { // a custom rate as high as 1100 kHz opens on the null device and runs (the engine has no rate ceiling of its own)
+        const double r0 = engine.sampleRate(); const int f0 = engine.blockFrames(); engine.stop();
+        const bool ok = engine.open("null", "", "", 1100000, 1024, 2, 2); QElapsedTimer t; t.start(); while (t.elapsed() < 300) QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+        const bool at = std::fabs(engine.sampleRate() - 1100000) < 1; engine.stop(); engine.open("null", "", "", r0 > 0 ? r0 : 48000, f0 > 0 ? f0 : 256, 2, 2);
+        if (!ok || !at) { std::fprintf(stderr, "amixos --smoke: 1100 kHz custom rate (open %d, rate %.0f)\n", ok, engine.sampleRate()); return 158; } }
       { // LOCAL STORE: an effect switched off leaves the rack chooser and comes back when switched on; unknown ids are ignored
         auto has = [&](const char* k) { for (const QVariant& v : engine.pluginCatalog()) if (v.toMap()["kind"].toString() == k) return true; return false; };
         const int n0 = engine.storeItems().size(); engine.setStoreEnabled("fx:chorus", false); const bool gone = !has("fx:chorus"); engine.setStoreEnabled("fx:chorus", true); const bool back = has("fx:chorus");
