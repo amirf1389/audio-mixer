@@ -185,6 +185,13 @@ int main(int argc, char* argv[]) {
         engine.setPlugin(S, k, ""); const QVariantMap c = engine.spatial(S); const bool held = !c["iamf"].toBool() && c["on"].toBool() && std::fabs(c["az"].toDouble() + 90) < 0.6;
         engine.setSpatial(S, false, 0, 0, 1, 0);
         if (!took || !knob || !back || !held) { std::fprintf(stderr, "amixos --smoke: 360 / IAMF link (took %d, knobs %d, back %d, held %d)\n", took, knob, back, held); return 167; } }
+      { // FRONT 180 · 10 SPEAKERS: on, a sound at the right feeds WIDE R (out 5) loudest and outputs 1-10 carry the ten feeds; off, everything comes back
+        const QVariantMap s0 = engine.send(3, 4); engine.setSpeakerArray(true); engine.setSpatial(3, true, 90, 0, 1, 0);
+        double best = -100; int at = -1; for (int k = 0; k < 10; ++k) { const double d = engine.send(3, k)["db"].toDouble(); if (d > best) { best = d; at = k; } }
+        const bool routed = engine.outputRoutes()[0].toInt() == am::Runtime::kSrcBus0L && engine.outputRoutes()[9].toInt() == am::Runtime::kSrcBus0L + 18;
+        engine.setSpatial(3, false, 0, 0, 1, 0); engine.setSpeakerArray(false);
+        const bool back = std::fabs(engine.send(3, 4)["db"].toDouble() - s0["db"].toDouble()) < 1e-6 && engine.outputRoutes()[0].toInt() != am::Runtime::kSrcBus0L;
+        if (at != 4 || !routed || !back) { std::fprintf(stderr, "amixos --smoke: front 10 speakers (loudest %d, routed %d, given back %d)\n", at, routed, back); return 170; } }
       std::fprintf(stderr, "amixos --smoke: acoustics offline sweep %.2f dB at 1 kHz, delay 5 ms, room modes, auto EQ; 360 audio state OK\n", at1k); }
     { // MASTER CHAIN: the program EQ is its own rack (strip -1), not CH 1's EQ; a mastering preset switches the plug-in on
       const int before = engine.eqBand(0, 5).value("type").toInt(); engine.setEq(-1, 5, 1, 1000, 1.41, 4);
@@ -359,6 +366,11 @@ int main(int argc, char* argv[]) {
           if (l["out"] != "{spk}" || l["in"] != "{mic}" || l["inChannels"].toInt() != 2 || l["inKind"] != "microphone" || l["outKind"] != "speakers") { std::fprintf(stderr, "amixos --smoke: laptop detection: out %s in %s (%d in, %s / %s)\n", qPrintable(l["out"].toString()), qPrintable(l["in"].toString()), l["inChannels"].toInt(), qPrintable(l["inKind"].toString()), qPrintable(l["outKind"].toString())); return 175; }
           if (kinds != QStringList({"speakers", "microphone", "headphones", "bluetooth", "speakers", "microphone"})) { std::fprintf(stderr, "amixos --smoke: device kinds: %s\n", qPrintable(kinds.join(", "))); return 176; }
           std::printf("amixos --smoke: laptop without ASIO: %s + %s (%d in / %d out); kinds %s\n", qPrintable(l["outName"].toString()), qPrintable(l["inName"].toString()), l["inChannels"].toInt(), l["outChannels"].toInt(), qPrintable(kinds.join(", "))); }
+        { // MIC ACCESS OFF: on Windows audio no microphone of any kind is opened (the note says so); an ASIO interface keeps its inputs
+          engine.setMicAccessOff(true); engine.open("wasapi", "{mic}", "{spk}", 48000, 256, 2, 2); const bool blocked = engine.micOffNote().contains("MIC ACCESS OFF");
+          engine.open("asio", "{mic}", "{spk}", 48000, 256, 2, 2); const bool asioKept = !engine.micOffNote().contains("MIC ACCESS OFF"); engine.setMicAccessOff(false);
+          engine.open("wasapi", "{mic}", "{spk}", 48000, 256, 2, 2); const bool back = !engine.micOffNote().contains("MIC ACCESS OFF");
+          if (!blocked || !asioKept || !back) { std::fprintf(stderr, "amixos --smoke: mic access off (blocked %d, asio kept %d, back on %d)\n", blocked, asioKept, back); return 169; } }
         { // BLUETOOTH START: a refusal is followed by the next way in (own rate, 48 kHz, without the hands-free microphone, the other Windows path), and the note says what was tried
           const QVariantList bt = {dev("dsound", "{ds-bt}", "Headphones (WH-1000XM4 Stereo)", 0, 2), dev("dsound", "{ds-btmic}", "Headset (WH-1000XM4 Hands-Free)", 1, 0), dev("wasapi", "{w-bt}", "Headphones (WH-1000XM4 Stereo)", 0, 2)};
           engine.simulateDevices(bt); const bool started = engine.openBluetooth("dsound", "{ds-btmic}", "{ds-bt}", 512); const QString note = engine.bluetoothNote();
@@ -680,6 +692,7 @@ int main(int argc, char* argv[]) {
             { int k = -1; const QVariantList pl = engine.plugins(0); for (int j = 0; j < pl.size(); ++j) if (pl[j].toMap()["kind"].toString().isEmpty()) { k = j; break; }   // CH 1 placed by an IAMF ELEMENT, CH 2 by the 360 stage
               engine.setPlugin(0, k, "fx:iamfelement"); engine.setSpatial(0, true, -40, 15, 2.5, 0.2); engine.setSpatial(1, true, 70, 0, 4, 0.1);
               if (QObject* sp = win->findChild<QObject*>("spatialPage")) sp->setProperty("sel", 0); waitMs(500); win->grabWindow().save(shots + "/360-iamf.png"); std::printf("amixos --shots: 360-iamf\n");
+              engine.setSpeakerArray(true); engine.setSpatial(2, true, 30, 30, 1.5, 0.1); waitMs(500); win->grabWindow().save(shots + "/360-front10.png"); std::printf("amixos --shots: 360-front10\n"); engine.setSpatial(2, false, 0, 0, 1, 0); engine.setSpeakerArray(false);
               engine.setPlugin(0, k, ""); engine.setSpatial(0, false, 0, 0, 1, 0); engine.setSpatial(1, false, 0, 0, 1, 0); } }
           if (QString::fromLatin1(id) == "rtaeq") { QObject* rp = nullptr; int shown = 0; for (QObject* o : win->findChildren<QObject*>("rtaEqPage")) if (o->property("visible").toBool()) { rp = o; ++shown; }   // the page on screen (an earlier one may still be on its way out)
             if (shown != 1) std::fprintf(stderr, "amixos --shots: FAILED %d RTA EQ pages on screen\n", shown); if (rp) {   // the sliders of the MASTER EQ: after a move the page shows the new value (it used to snap back)

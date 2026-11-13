@@ -13,6 +13,7 @@
 #include <QElapsedTimer>
 #include "Engine.h"
 #include "measure/score.hpp"
+#include "fx/speakers.hpp"
 #include <QUrl>
 #include "Extension.h"
 
@@ -73,6 +74,7 @@ Engine::Engine(QObject* parent) : QObject(parent) {
   QTimer::singleShot(0, this, [this] { rescanVst(settings_.value("vst3/dirs").toStringList() + settings_.value("vst2/dirs").toStringList()); });   // after the window is up: the first scan never delays the start
   connect(&timer_, &QTimer::timeout, this, &Engine::tick);
   tick();
+  if (settings_.value("spatial/front10", false).toBool()) { spkOn_ = true; spkSaved_ = settings_.value("spatial/front10Saved").toMap(); }   // the speaker array was on when the program closed: the saved console already holds its feeds
 }
 Engine::~Engine() { closePluginWindows(); save(); stop(); }
 
@@ -133,6 +135,7 @@ bool Engine::open(const QString& backend, const QString& inDevice, const QString
     if (ik == "headset" || ik == "bluetooth" || (inDevice.isEmpty() && (ok == "headphones" || ok == "headset" || ok == "bluetooth"))) {
       inCh = 0; inDev.clear(); micOffNote_ = QStringLiteral("WASAPI: the headset's microphone is kept off. Outputs only."); }
   }
+  if (micAccessOff() && inCh > 0 && backend != "asio") { inCh = 0; inDev.clear(); micOffNote_ = QStringLiteral("MIC ACCESS OFF: no microphone is opened on Windows audio. Outputs only."); }
   rt_ = std::make_unique<am::Runtime>(kStrips);
   am::DeviceConfig cfg; cfg.backend = backend.isEmpty() ? "auto" : backend.toStdString(); cfg.inDevice = inDev.toStdString(); cfg.outDevice = outDevice.toStdString();
   cfg.sampleRate = sampleRate > 0 ? sampleRate : 48000; cfg.frames = static_cast<unsigned>(frames > 0 ? frames : 256); blockFrames_ = static_cast<int>(cfg.frames); cfg.inChannels = inCh; cfg.outChannels = outChannels;
@@ -225,7 +228,7 @@ void Engine::setSpatial(int i, bool on, double az, double el, double dist, doubl
   if (const int k = iamfSlot(i); k >= 0) { PluginUi& p = s.plugins[k]; const double a = std::fmod(az + 540.0, 360.0) - 180.0;
     s.spAz = a; s.spEl = std::clamp(el, -90.0, 90.0); s.spDist = std::clamp(dist, 0.5, 20.0); s.spSpread = std::clamp(spread, 0.0, 1.0); s.spOn = false; pushSpatial(i);
     p.vst->setParam(0, (s.spAz + 180) / 360); p.vst->setParam(1, (s.spEl + 90) / 180); p.vst->setParam(2, std::log(s.spDist / 0.5) / std::log(40.0)); p.vst->setParam(3, s.spSpread);
-    p.bypass = !on; p.vst->setBypass(!on); emit stripsChanged(); emit spatialMoved(); return; }
+    p.bypass = !on; p.vst->setBypass(!on); if (spkOn_) feedSpeakers(i); emit stripsChanged(); emit spatialMoved(); return; }
   s.spOn = on; s.spAz = std::fmod(az, 360.0); s.spEl = std::clamp(el, -90.0, 90.0); s.spDist = std::clamp(dist, 0.3, 20.0); s.spSpread = std::clamp(spread, 0.0, 1.0);
   pushSpatial(i); emit stripsChanged(); emit spatialMoved();
 }
@@ -234,7 +237,36 @@ void Engine::pushSpatial(int i) {
   if (!rt_ || i < 0 || i >= kStrips) return; const StripUi& s = strips_[static_cast<std::size_t>(i)];
   double az = s.spAz, el = s.spEl;
   if (headOn_) { az = std::fmod(az - headYaw_ + 540.0, 360.0) - 180.0; el = std::clamp(el - headPitch_, -90.0, 90.0); }
-  rt_->setSpatial(i, s.spOn, az, el, s.spDist, s.spSpread);
+  rt_->setSpatial(i, s.spOn && !spkOn_, az, el, s.spDist, s.spSpread);
+  if (spkOn_) feedSpeakers(i);
+}
+QVariantList Engine::speakerLayout() const { QVariantList l; for (int k = 0; k < am::fx::kFront10; ++k) { QVariantMap m; m["name"] = QString::fromLatin1(am::fx::kFront10Layout[k].name); m["az"] = am::fx::kFront10Layout[k].az; m["el"] = am::fx::kFront10Layout[k].el; m["out"] = k + 1; l << m; } return l; }
+void Engine::feedSpeakers(int i) {
+  if (i < 0 || i >= kStrips) return; const QVariantMap sp = spatial(i); const bool placed = sp.value("on").toBool();
+  double az = placed ? sp["az"].toDouble() : 0, el = placed ? sp["el"].toDouble() : 0;
+  if (placed && headOn_) { az = std::fmod(az - headYaw_ + 540.0, 360.0) - 180.0; el = std::clamp(el - headPitch_, -90.0, 90.0); }
+  double g[am::fx::kFront10]; am::fx::front10Gains(az, el, placed ? sp["spread"].toDouble() : 0.3, placed ? sp["dist"].toDouble() : 1, g);
+  for (int k = 0; k < am::fx::kFront10; ++k) setSend(i, k, g[k] > 0.001 ? 20 * std::log10(g[k]) : -60.0, false);
+}
+void Engine::setSpeakerArray(bool on) {
+  if (on == spkOn_) return; constexpr int N = am::fx::kFront10;
+  if (on) {   // keep what the ten buses and outputs 1-10 were, then make them the speaker feeds
+    QVariantList sends, buses, outs;
+    for (int i = 0; i < kStrips; ++i) { QVariantList r; for (int k = 0; k < N; ++k) { const SendUi& sd = strips_[static_cast<std::size_t>(i)].sends[k]; r << sd.db << sd.pre; } sends << QVariant(r); }
+    for (int k = 0; k < N; ++k) { const BusUi& b = buses_[k]; buses << QVariant(QVariantList{b.name, b.db, b.returnDb, b.mute}); outs << outRoute_[k]; }
+    spkSaved_ = QVariantMap{{"sends", sends}, {"buses", buses}, {"outs", outs}}; settings_.setValue("spatial/front10Saved", spkSaved_);
+    spkOn_ = true; settings_.setValue("spatial/front10", true);
+    for (int k = 0; k < N; ++k) { buses_[k].name = QStringLiteral("SPK ") + QString::fromLatin1(am::fx::kFront10Layout[k].name); setBusLevel(k, 0); setBusMute(k, false); setBusReturn(k, -60); setOutputRoute(k, am::Runtime::kSrcBus0L + 2 * k); }
+    for (int i = 0; i < kStrips; ++i) pushSpatial(i), feedSpeakers(i);
+  } else {      // give everything back as it was
+    spkOn_ = false; settings_.setValue("spatial/front10", false); const QVariantMap sv = spkSaved_.isEmpty() ? settings_.value("spatial/front10Saved").toMap() : spkSaved_;
+    const QVariantList sends = sv["sends"].toList(), buses = sv["buses"].toList(), outs = sv["outs"].toList();
+    for (int i = 0; i < kStrips && i < sends.size(); ++i) { const QVariantList r = sends[i].toList(); for (int k = 0; k < N && 2 * k + 1 < r.size(); ++k) setSend(i, k, r[2 * k].toDouble(), r[2 * k + 1].toBool()); }
+    for (int k = 0; k < N && k < buses.size(); ++k) { const QVariantList b = buses[k].toList(); if (b.size() < 4) continue; buses_[k].name = b[0].toString(); setBusLevel(k, b[1].toDouble()); setBusReturn(k, b[2].toDouble()); setBusMute(k, b[3].toBool()); }
+    for (int k = 0; k < N && k < outs.size(); ++k) setOutputRoute(k, outs[k].toInt());
+    spkSaved_.clear(); for (int i = 0; i < kStrips; ++i) pushSpatial(i);
+  }
+  emit busesChanged(); emit spatialMoved();
 }
 void Engine::setHeadTrack(bool on) { if (on == headOn_) return; headOn_ = on; for (int i = 0; i < kStrips; ++i) if (strips_[static_cast<std::size_t>(i)].spOn) pushSpatial(i); emit spatialMoved(); }
 void Engine::setHeadYaw(double d) { d = std::fmod(d + 540.0, 360.0) - 180.0; if (d == headYaw_) return; headYaw_ = d; if (headOn_) for (int i = 0; i < kStrips; ++i) if (strips_[static_cast<std::size_t>(i)].spOn) pushSpatial(i); emit spatialMoved(); }
@@ -902,7 +934,7 @@ QVariantList Engine::pluginParams(int i, int slot) const {
 }
 void Engine::setPluginParam(int i, int slot, int id, double v) { if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots) return; PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[slot]; if (!p.vst) return; p.vst->setParam(static_cast<std::uint32_t>(id), v); if (p.vst->hasBypass()) p.bypass = p.vst->bypass();
   if (p.kind == QStringLiteral("fx:iamfelement")) { StripUi& st = strips_[static_cast<std::size_t>(i)];   // the 360 dial follows the plug-in's knobs, and the strip keeps the place for when it is taken out
-    st.spAz = p.vst->param(0) * 360 - 180; st.spEl = p.vst->param(1) * 180 - 90; st.spDist = 0.5 * std::pow(40.0, p.vst->param(2)); st.spSpread = p.vst->param(3); emit spatialMoved(); }
+    st.spAz = p.vst->param(0) * 360 - 180; st.spEl = p.vst->param(1) * 180 - 90; st.spDist = 0.5 * std::pow(40.0, p.vst->param(2)); st.spSpread = p.vst->param(3); if (spkOn_) feedSpeakers(i); emit spatialMoved(); }
   if (linked(i) && !mirror_ && partner(i) >= 0 && strips_[static_cast<std::size_t>(partner(i))].plugins[slot].kind == p.kind) { mirror_ = true; setPluginParam(partner(i), slot, id, v); mirror_ = false; }
   emit stripsChanged(); }
 QString Engine::pluginError(int i, int slot) const { if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots) return QString(); return strips_[static_cast<std::size_t>(i)].plugins[slot].error; }
