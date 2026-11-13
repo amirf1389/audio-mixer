@@ -158,8 +158,11 @@ class SamplePlayer final : public Simple { public: explicit SamplePlayer(double 
   void set(const std::string& id, double v) override; std::string text(const std::string& id, double v) const override; void reset() override; void setSampleRate(double fs) override; void process(float* L, float* R, std::size_t n) override;
   static int sampleOf(double v) { return 1 + static_cast<int>(std::lround((v < 0 ? 0 : v > 1 ? 1 : v) * 99.0)); }
   bool playing() const { return playing_.load(); }
+  bool loadFile(const std::string& path, std::string& err);   // the user's own file (WAV, FLAC, AIFF, M4A, MP3 ...), resampled to this rate; SAMPLE then has no effect until cleared
+  void clearFile();
+  std::string fileName() const { const std::shared_ptr<const Buf> b = std::atomic_load(&buf_); return b ? b->file : std::string(); }
  protected: int count() const override { return 4; } const char* knobId(int i) const override { static const char* k[] = {"sample", "play", "loop", "level"}; return k[i]; } const char* knobTitle(int i) const override { static const char* k[] = {"SAMPLE", "PLAY", "LOOP", "LEVEL"}; return k[i]; } double knobDef(int i) const override { static const double d[] = {0.0, 0.0, 0.0, 0.87}; return d[i]; }
- private: struct Buf { std::vector<float> L, R; int id = 0; }; void load(); std::shared_ptr<const Buf> buf_; std::size_t pos_ = 0; bool wasOn_ = false; std::atomic<bool> playing_{false}; int loaded_ = 0; };
+ private: struct Buf { std::vector<float> L, R; int id = 0; std::string file; }; void load(); std::shared_ptr<const Buf> buf_; std::size_t pos_ = 0; bool wasOn_ = false; std::atomic<bool> playing_{false}; int loaded_ = 0; };
 // DE-SQUASH: gives back some of the life a heavy compressor took. It compares a fast envelope (the attacks) with a slow one (the body)
 // and lets the attacks stand out again by up to RANGE dB; AMOUNT is how much of the difference it restores, SPEED how quick the attacks are.
 // Quiet passages and steady tones are left as they are. Use it on a channel that shows the OVER-COMPRESSED alert.

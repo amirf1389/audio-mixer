@@ -12,6 +12,7 @@
 #include <QThread>
 #include <QElapsedTimer>
 #include "Engine.h"
+#include <QUrl>
 #include "Extension.h"
 
 #include "license/license.hpp"
@@ -1020,6 +1021,20 @@ bool Engine::applyCompSuggestion(int i) {
   const double makeup = std::clamp(-c.thresholdDb * (1.0 - 1.0 / c.ratio) * 0.5, 0.0, 12.0);   // gives back about half of what the louder parts lose
   setCompressor(i, c.ratio > 1.0, c.thresholdDb, c.ratio, p.compKneeDb, p.compAttackMs, p.compReleaseMs, c.ratio > 1.0 ? makeup : p.compMakeupDb);
   return true;
+}
+QString Engine::loadSampleFile(int i, int slot, const QString& pathOrUrl) {
+  if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots) return QStringLiteral("no such slot");
+  auto* fp = dynamic_cast<am::fx::FxPlugin*>(strips_[static_cast<std::size_t>(i)].plugins[slot].vst.get()); auto* sp = fp ? dynamic_cast<am::fx::SamplePlayer*>(fp->effect()) : nullptr;
+  if (!sp) return QStringLiteral("that slot holds no SAMPLE PLAYER");
+  if (pathOrUrl.isEmpty()) { sp->clearFile(); return {}; }
+  const QString path = pathOrUrl.startsWith("file:") ? QUrl(pathOrUrl).toLocalFile() : pathOrUrl;
+  std::string err; if (!sp->loadFile(path.toStdString(), err)) return QString::fromStdString(err);
+  return {};
+}
+QString Engine::sampleFileOf(int i, int slot) const {
+  if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots) return {};
+  auto* fp = dynamic_cast<am::fx::FxPlugin*>(strips_[static_cast<std::size_t>(i)].plugins[slot].vst.get()); auto* sp = fp ? dynamic_cast<am::fx::SamplePlayer*>(fp->effect()) : nullptr;
+  return sp ? QString::fromStdString(sp->fileName()) : QString();
 }
 int Engine::playSampleOnStrip(int i, int id) {
   if (id < 1 || id > 100) return -1; const int k = addToRack(i, QStringLiteral("fx:sampler")); if (k < 0) return -1;

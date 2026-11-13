@@ -133,6 +133,27 @@ Popup {
                                             defaultValue: ed.params[pi] ? ed.params[pi]["default"] : 0.5; readonly property int rev: ed.rev; onRevChanged: sync(); Component.onCompleted: sync()
                                             function sync() { if (ed.params[pi]) value = ed.params[pi].value } onMoved: function (v) { ed.setParam(pi, v) } height: 74 } } } } } }
                     // SYNC DELAY: the time read-out. The delay in milliseconds, the tempo, the note keys, TAP and the echoes as they die away
+                    // the SAMPLE PLAYER's own file: any WAV / FLAC / AIFF / M4A / MP3 ... instead of a built-in sample
+                    Section { id: smpFile; objectName: "samplerFile"; visible: ed.fx === "sampler"; head: "YOUR FILE"; width: 236
+                        property string note: ""
+                        property var dlg: null   // the system file picker, made only where Qt has QtQuick.Dialogs (the Windows build does)
+                        readonly property string current: { ed.rev; return ed.fx === "sampler" ? engine.sampleFileOf(ed.strip, ed.slot) : "" }
+                        function load(p) { const e = engine.loadSampleFile(ed.strip, ed.slot, p); smpFile.note = e === "" ? "Loaded: press PLAY" : e; ed.rev++ }
+                        function browse() {
+                            if (!dlg) { try { dlg = Qt.createQmlObject('import QtQuick.Dialogs; FileDialog { title: "Choose an audio file"; nameFilters: ["Audio files (*.wav *.flac *.aif *.aiff *.aifc *.m4a *.aac *.mp4 *.mp3 *.wma *.ogg *.oga *.opus *.caf)", "All files (*)"] }', smpFile, "samplerFileDialog")
+                                              dlg.accepted.connect(function () { smpFile.load(dlg.selectedFile.toString()) }) } catch (e) { smpFile.note = "Type the file's path and press LOAD."; return } }
+                            dlg.open() }
+                        Text { x: 10; y: 4; width: 216; text: smpFile.current !== "" ? smpFile.current : "Built-in sample (SAMPLE knob)"; color: ed.ink; font.family: ed.face1; font.pixelSize: 11; font.bold: true; elide: Text.ElideMiddle }
+                        TextField { id: smpPath; objectName: "samplerPath"; x: 10; y: 24; width: 216; height: 26; font.pixelSize: 9; placeholderText: "path: WAV, FLAC, AIFF, M4A, MP3 ..."; onAccepted: smpFile.load(text.trim()) }
+                        Text { x: 10; y: 56; width: 216; wrapMode: Text.WordWrap; text: smpFile.note; color: ed.ink; opacity: 0.75; font.family: ed.face1; font.pixelSize: 8; maximumLineCount: 3; elide: Text.ElideRight }
+                        Row { x: 10; y: 96; spacing: 6
+                            Repeater { model: [{ t: "BROWSE…", k: "browse" }, { t: "LOAD", k: "load" }, { t: "BUILT-IN", k: "builtin" }]
+                                Rectangle { required property var modelData; objectName: "sampler_" + modelData.k; width: 68; height: 28; radius: 4; color: "transparent"; border.color: modelData.k === "builtin" ? ed.ink : ed.accent; border.width: 1.5
+                                    opacity: modelData.k === "builtin" && smpFile.current === "" ? 0.4 : 1
+                                    Text { anchors.centerIn: parent; text: parent.modelData.t; color: parent.modelData.k === "builtin" ? ed.ink : ed.accent; font.family: ed.face1; font.pixelSize: 10; font.bold: true }
+                                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                        onClicked: { const k = parent.modelData.k; if (k === "browse") smpFile.browse(); else if (k === "load") smpFile.load(smpPath.text.trim()); else if (smpFile.current !== "") { engine.loadSampleFile(ed.strip, ed.slot, ""); smpFile.note = ""; ed.rev++ } } } } } }
+                    }
                     Section { id: dly; objectName: "delayTime"; visible: ed.fx === "syncdelay" && ed.params.length >= 3; head: "DELAY TIME"; width: 236
                         readonly property real bpm: ed.params[0] ? 60 + ed.params[0].value * 140 : 120
                         readonly property int note: ed.params[1] ? Math.min(5, Math.floor(ed.params[1].value * 5.999)) : 1

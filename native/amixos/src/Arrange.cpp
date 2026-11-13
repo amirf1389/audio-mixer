@@ -1,5 +1,7 @@
+#include "arrange/decode.hpp"
 #include "Arrange.h"
 #include "paths/paths.hpp"
+static QStringList audioPatterns() { QStringList l; for (const std::string& e : am::arr::audioExtensions()) { l << "*." + QString::fromStdString(e) << "*." + QString::fromStdString(e).toUpper(); } return l; }   // WAV, FLAC, AIFF, M4A, MP3 ...
 
 #include <QDateTime>
 #include <QDir>
@@ -26,7 +28,7 @@ void Arrange::push() { player_.setProject(p_, bufs_); player_.setLoop(p_.loop); 
 bool Arrange::loadFile(const std::string& path) {
   if (bufs_.count(path)) return true;
   auto a = std::make_shared<arr::Audio>(); std::string err;
-  if (!arr::readWav(path, *a, err)) { note(QString::fromStdString(err)); return false; }
+  if (!arr::readAudio(path, *a, err)) { note(QString::fromStdString(err)); return false; }
   bufs_[path] = a; return true;
 }
 void Arrange::load() {
@@ -81,7 +83,7 @@ void Arrange::setTrack(int id, const QString& key, const QVariant& value) {
 }
 QStringList Arrange::wavFilesIn(const QString& folder) const {
   QDir d(folder.isEmpty() ? QStandardPaths::writableLocation(QStandardPaths::MusicLocation) : folder); QStringList out;
-  for (const QFileInfo& fi : d.entryInfoList({"*.wav", "*.WAV"}, QDir::Files, QDir::Name)) out << fi.absoluteFilePath();
+  for (const QFileInfo& fi : d.entryInfoList(audioPatterns(), QDir::Files, QDir::Name)) out << fi.absoluteFilePath();
   return out;
 }
 int Arrange::importFile(const QString& path, int trackId) {

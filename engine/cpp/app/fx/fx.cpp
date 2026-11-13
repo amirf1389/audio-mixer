@@ -1,5 +1,6 @@
 #include "fx.hpp"
 #include "samples/samples.hpp"
+#include "arrange/decode.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -483,12 +484,24 @@ void SamplePlayer::load() {
   if (!am::samples::render(id, fs_, b->L, b->R)) { b->L.clear(); b->R.clear(); }
   std::atomic_store(&buf_, std::shared_ptr<const Buf>(std::move(b))); loaded_ = id;
 }
-void SamplePlayer::set(const std::string& id, double v) { Simple::set(id, v); if (id == "sample" && sampleOf(k_[0].load()) != loaded_) load(); }
+void SamplePlayer::set(const std::string& id, double v) { Simple::set(id, v); if (id == "sample" && sampleOf(k_[0].load()) != loaded_ && fileName().empty()) load(); }
+bool SamplePlayer::loadFile(const std::string& path, std::string& err) {
+  am::arr::Audio a; if (!am::arr::readAudio(path, a, err)) return false;
+  if (a.L.size() > static_cast<std::size_t>(a.rate * 600)) { err = "the file is longer than 10 minutes"; return false; }
+  auto b = std::make_shared<Buf>(); b->id = sampleOf(k_[0].load()); b->file = path.substr(path.find_last_of("/\\") == std::string::npos ? 0 : path.find_last_of("/\\") + 1);
+  const double ratio = a.rate / fs_; const std::size_t n = static_cast<std::size_t>(static_cast<double>(a.L.size()) / ratio);
+  b->L.resize(n); b->R.resize(n);
+  for (std::size_t i = 0; i < n; ++i) { const double x = static_cast<double>(i) * ratio; const std::size_t j = static_cast<std::size_t>(x); const double f = x - static_cast<double>(j);   // linear: enough for a cue or a jingle
+    const std::size_t j1 = std::min(j + 1, a.L.size() - 1); b->L[i] = static_cast<float>(a.L[j] + (a.L[j1] - a.L[j]) * f); b->R[i] = static_cast<float>(a.R[j] + (a.R[j1] - a.R[j]) * f); }
+  std::atomic_store(&buf_, std::shared_ptr<const Buf>(std::move(b)));
+  return true;
+}
+void SamplePlayer::clearFile() { loaded_ = 0; load(); }
 void SamplePlayer::setSampleRate(double fs) { fs_ = fs > 0 ? fs : 48000; load(); reset(); }
 void SamplePlayer::reset() { pos_ = 0; wasOn_ = false; playing_ = false; }
 std::string SamplePlayer::text(const std::string& id, double v) const {
   v = clamp01(v);
-  if (id == "sample") { const int n = sampleOf(v); for (const auto& i : am::samples::list()) if (i.id == n) return std::to_string(n) + " " + i.name; return std::to_string(n); }
+  if (id == "sample") { const std::string f = fileName(); if (!f.empty()) return "FILE " + f; const int n = sampleOf(v); for (const auto& i : am::samples::list()) if (i.id == n) return std::to_string(n) + " " + i.name; return std::to_string(n); }
   if (id == "play" || id == "loop") return v >= 0.5 ? "ON" : "OFF";
   return v <= 0 ? std::string("-inf dB") : fmt("%+.1f dB", -40.0 + v * 46.0);
 }
@@ -499,7 +512,7 @@ void SamplePlayer::process(float* L, float* R, std::size_t n) {
   wasOn_ = on;
   const std::shared_ptr<const Buf> b = std::atomic_load(&buf_);
   if (!on || !b || b->L.empty() || lv <= 0) { playing_ = false; return; }
-  if (b->id != sampleOf(k_[0].load())) pos_ = 0;   // a new sample arrived: start it
+  if (b->file.empty() && b->id != sampleOf(k_[0].load())) pos_ = 0;   // a new sample arrived: start it
   const float g = static_cast<float>(std::pow(10.0, (-40.0 + lv * 46.0) / 20.0)); const std::size_t len = b->L.size();
   bool play = pos_ < len;
   for (std::size_t i = 0; i < n; ++i) {

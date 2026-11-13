@@ -16,6 +16,8 @@
 #include <QQuickWindow>
 #include <QPalette>
 #include <QDir>
+#include "arrange/arrange.hpp"
+#include <QUrl>
 #include <QTemporaryDir>
 #include <QTimer>
 #include <cmath>
@@ -208,6 +210,12 @@ int main(int argc, char* argv[]) {
         engine.open("null", "", "", 48000, 256, 0, 0); const int in0 = engine.deviceInputs();   // 0 asked, not "-": the first pair opens engine.stop(); engine.open("null", "", "", r0 > 0 ? r0 : 48000, f0 > 0 ? f0 : 256, 2, 2);
         const QVariantList st = engine.stripState(); const bool names = st.size() > 1 && st[0].toMap()["name"].toString() == "DIGITAL AUDIO" && st[1].toMap()["name"].toString() == "MIC" && !st[0].toMap()["link"].toBool();
         if (in0 < 2 || !names) { std::fprintf(stderr, "amixos --smoke: 2 in / 2 out (got %d in), CH 1-2 DIGITAL AUDIO / MIC %d\n", in0, names); return 160; } }
+      { // YOUR FILE in the SAMPLE PLAYER: a file the user picks plays instead of the built-in sample; BUILT-IN goes back; a missing file is reported, not a crash
+        const QString wav = QDir::tempPath() + "/amfx1-smoke-own.wav"; { std::vector<float> l(4410, 0.25f); std::string e; am::arr::writeWav24(wav.toStdString(), l, l, 44100, e); }
+        const int k = engine.addToRack(22, "fx:sampler"); const QString e1 = engine.loadSampleFile(22, k, QUrl::fromLocalFile(wav).toString()); const QString shown = engine.sampleFileOf(22, k);
+        const QString e2 = engine.loadSampleFile(22, k, QDir::tempPath() + "/amfx1-no-such-file.flac"); engine.loadSampleFile(22, k, ""); const QString back = engine.sampleFileOf(22, k);
+        if (k >= 0) engine.setPlugin(22, k, ""); QFile::remove(wav);
+        if (k < 0 || !e1.isEmpty() || shown != "amfx1-smoke-own.wav" || e2.isEmpty() || !back.isEmpty()) { std::fprintf(stderr, "amixos --smoke: own sample file (slot %d, \"%s\", shown \"%s\", missing \"%s\")\n", k, qPrintable(e1), qPrintable(shown), qPrintable(e2)); return 161; } }
       { // the strip menu's PLAY A SAMPLE: the channel's SAMPLE PLAYER is set to that sample and playing
         const int k = engine.playSampleOnStrip(21, 7); const QVariantList p = k >= 0 ? engine.pluginParams(21, k) : QVariantList();
         const bool ok = k >= 0 && p.size() >= 2 && p[0].toMap()["text"].toString().startsWith("7 ") && p[1].toMap()["text"].toString() == "ON" && engine.playSampleOnStrip(21, 0) == -1;

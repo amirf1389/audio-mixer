@@ -149,7 +149,7 @@ Item {
             ColumnLayout { anchors.fill: parent; anchors.margins: 8; spacing: 4
                 RowLayout { Layout.fillWidth: true; spacing: 6
                     Text { text: i18n.t("IMPORT WAV", i18n.lang); color: Theme.emerald; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-                    Field { id: folderIn; Layout.fillWidth: true; placeholderText: i18n.t("folder with .wav files (empty = your Music folder); or a single .wav path", i18n.lang); font.family: Theme.mono; font.pixelSize: 9; implicitHeight: 24; onAccepted: page.scan() }
+                    Field { id: folderIn; Layout.fillWidth: true; placeholderText: i18n.t("folder of audio files: WAV, FLAC, AIFF, M4A, MP3 ... (empty = your Music folder); or one file path", i18n.lang); font.family: Theme.mono; font.pixelSize: 9; implicitHeight: 24; onAccepted: page.scan() }
                     Rectangle { implicitWidth: 60; implicitHeight: 24; radius: 4; color: Qt.rgba(0, 0.95, 1, 0.18); border.color: Theme.cyan; Text { anchors.centerIn: parent; text: i18n.t("SCAN", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.scan() } }
                     Text { text: i18n.t("Selected clip: ", i18n.lang) + (arrange.selectedClip ? "#" + arrange.selectedClip : i18n.t("none", i18n.lang)) + i18n.t("  ·  S split · M marker · Del remove · right-click a lane = automation point", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
                 Flow { Layout.fillWidth: true; spacing: 4
@@ -160,5 +160,5 @@ Item {
             }
         }
     }
-    function scan() { const p = folderIn.text.trim(); if (/\.wav$/i.test(p)) { arrange.importFile(p, 0); return } page.files = arrange.wavFilesIn(p) }
+    function scan() { const p = folderIn.text.trim(); if (/\.(wav|flac|aiff?|aifc|m4a|aac|mp4|mp3|wma|ogg|oga|opus|caf)$/i.test(p)) { arrange.importFile(p, 0); return } page.files = arrange.wavFilesIn(p) }
 }
