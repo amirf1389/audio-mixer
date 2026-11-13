@@ -29,7 +29,7 @@ Item {
         const r = []; const t = engine.telemetry
         r.push({ ok: engine.running, t: engine.running ? "AUDIO ENGINE: running on " + engine.backend + " (" + t.frames + " frames / block, " + t.blocks + " blocks)" : "AUDIO ENGINE: stopped. Open a device on CONNECTIONS or LIVE SOURCES." })
         r.push({ ok: t.xruns === 0, t: t.xruns === 0 ? "BUFFER: no overruns since start" : "BUFFER: " + t.xruns + " overruns. Raise the buffer size (CONNECTIONS) or close other audio software." })
-        let clips = 0; for (let i = 0; i < engine.meters.length; ++i) if (engine.meters[i].clip) ++clips
+        const clips = engine.clippedStrips()
         r.push({ ok: clips === 0 && !t.masterClip, t: clips === 0 && !t.masterClip ? "CLIPPING: none" : "CLIPPING: " + clips + " strip(s)" + (t.masterClip ? " and the master" : "") + " clipped. Lower the trims or faders (CLEAR CLIPS on LEVELS)." })
         r.push({ ok: engine.devices.length > 0, t: engine.devices.length > 0 ? "INTERFACES: " + engine.devices.length + " found" : "INTERFACES: none found" })
         const lic = engine.license; r.push({ ok: lic.state === "ok" || lic.state === "licensed", t: "LICENCE: " + lic.planName + " · " + engine.licensedChannels + " channels" + (lic.message ? " · " + lic.message : "") })

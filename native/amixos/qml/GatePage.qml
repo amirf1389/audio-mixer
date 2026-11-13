@@ -16,7 +16,7 @@ Flickable {
     Component.onCompleted: reload()
     onStripChanged: reload()
     Connections { target: engine; function onStripsChanged() { page.reload() } }
-    readonly property var mt: engine.meters[strip]
+    readonly property var mt: (engine.meterTick, engine.meterAt(strip))
     readonly property bool open: !page.ch.gateOn || (page.mt && page.mt.gateDb > -3)
     ColumnLayout {
         id: col; width: parent.width - 20; x: 10; y: 10; spacing: 10

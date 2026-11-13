@@ -17,7 +17,7 @@ Item {
     property var curve: []
     property var ch: ({})
     readonly property var st: engine.stripState[strip]
-    readonly property var meter: engine.meters[strip]
+    readonly property var meter: (engine.meterTick, engine.meterAt(strip))
     readonly property var centres: ["31", "63", "125", "250", "500", "1k", "2k", "4k", "8k", "16k"]
     readonly property var presets: [
         { n: "FLAT", g: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], hp: 0 },

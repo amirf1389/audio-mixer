@@ -23,7 +23,7 @@ Item {
         let asio = 0; for (let i = 0; i < engine.devices.length; ++i) if (engine.devices[i].backend === "asio") ++asio
         add("ASIO", "native drivers", true, asio > 0 ? asio + " ASIO driver(s)" : (Qt.platform.os === "windows" ? "none installed" : "not on " + Qt.platform.os))
         add("PLUG-INS", "VST3 / VST2 found by the scan", true, engine.vstCatalog().length + " plug-in(s)")
-        let clips = 0; for (let i = 0; i < engine.meters.length; ++i) if (engine.meters[i].clip) ++clips
+        const clips = engine.clippedStrips()
         add("CLIPPING", "strips and master", clips === 0 && !t.masterClip, clips === 0 && !t.masterClip ? "none" : clips + " strip(s)" + (t.masterClip ? " + master" : ""))
         const files = settings.dataFiles; let missing = []; for (let i = 0; i < files.length; ++i) if (!files[i].exists) missing.push(files[i].name)
         add("FOLDERS", settings.folders.os.toUpperCase() + " · program " + settings.folders.program, true, "data " + settings.folders.data + " · cache " + settings.folders.cache + " · temp " + settings.folders.temp)

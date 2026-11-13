@@ -16,7 +16,7 @@ Flickable {
     Component.onCompleted: reload()
     onStripChanged: reload()
     Connections { target: engine; function onStripsChanged() { page.reload() } }
-    readonly property var mt: engine.meters[strip]
+    readonly property var mt: (engine.meterTick, engine.meterAt(strip))
     ColumnLayout {
         id: col; width: parent.width - 20; x: 10; y: 10; spacing: 10
         Rectangle {   // COMPRESSION TARGET: what this channel's input does, and the setting that would bring it to the chosen target; applied only on the click

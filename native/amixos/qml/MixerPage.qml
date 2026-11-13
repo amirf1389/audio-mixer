@@ -295,7 +295,7 @@ Item {
                                 width: visible ? (page.sendView ? 118 : 74) : 0
                                 height: strips.height
                                 property var st: engine.stripState[index]
-                                property var mt: engine.meters[index]
+                                property var mt: (engine.meterTick, engine.meterAt(index))
                                 property color sc: Theme.stripColors[st ? st.color : 0]
                                 property bool selected: page.sel === index
                                 Rectangle { anchors.fill: parent; radius: 6; color: selected ? Theme.ov(0.06) : (index % 2 ? Theme.ov(0.025) : (Theme.dark ? Qt.rgba(0, 0, 0, 0.25) : Qt.rgba(0, 0, 0, 0.05))); border.color: selected ? Theme.ink : Theme.lineSoft; border.width: selected ? 1.5 : 1
