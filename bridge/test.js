@@ -1272,9 +1272,9 @@ test('license: signed keys verify, tampering / expiry / wrong computer are refus
   const now = Date.now();
   const mk = (over = {}) => lic.signKey({ v: 1, id: 'T1', plan: 'pro', name: 'Jane', issued: now - 1000, expires: now + 86400000, seats: 1, ...over }, privateKey);
   const ok = lic.verifyKey(mk(), { jwk, now });
-  assert.strictEqual(ok.ok, true); assert.strictEqual(ok.plan.channels, 16); assert.ok(ok.plan.features.includes('plugins'));
+  assert.strictEqual(ok.ok, true); assert.strictEqual(ok.plan.channels, 20); assert.ok(ok.plan.features.includes('plugins'));
   assert.strictEqual(lic.verifyKey(mk({ plan: 'studio', expires: null }), { jwk, now }).plan.channels, 32);
-  assert.strictEqual(lic.PLANS.basic.channels, 8);
+  assert.strictEqual(lic.PLANS.basic.channels, 10);
   // another vendor's key, a flipped payload, junk
   assert.strictEqual(lic.verifyKey(mk(), { jwk: vendorKeys().jwk, now }).reason, 'bad-signature');
   const k = mk(), parts = k.split('.');
@@ -1306,7 +1306,7 @@ test('license: activation is stored per user, status falls back to BASIC when ex
     const st = lic.status({ jwk, now });
     assert.strictEqual(st.state, 'active'); assert.strictEqual(st.plan.id, 'pro'); assert.strictEqual(st.license.name, 'Jane');
     const late = lic.status({ jwk, now: now + 3600000 });
-    assert.strictEqual(late.state, 'expired'); assert.strictEqual(late.plan.id, 'basic'); assert.strictEqual(late.plan.channels, 8);
+    assert.strictEqual(late.state, 'expired'); assert.strictEqual(late.plan.id, 'basic'); assert.strictEqual(late.plan.channels, 10);
     assert.strictEqual(lic.status({ jwk: vendorKeys().jwk, now }).state, 'invalid');                 // key of another vendor never raises the plan
     assert.strictEqual(lic.deactivate({ file }).removed, true); assert.strictEqual(lic.status({ jwk }).state, 'basic');
     assert.strictEqual(lic.hasFeature(lic.status({ key: key, jwk, now }), 'ota'), true);
@@ -1561,7 +1561,7 @@ test('endpoints: /api/license (BASIC by default), activation needs a valid key, 
   const post = (p, headers = {}, body) => fetch(base + p, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body });
   try {
     const st = await (await fetch(base + '/api/license')).json();
-    assert.strictEqual(st.ok, true); assert.strictEqual(st.state, 'basic'); assert.strictEqual(st.plan.channels, 8); assert.match(st.machineId, /^[0-9A-F]{4}(-[0-9A-F]{4}){4}$/);
+    assert.strictEqual(st.ok, true); assert.strictEqual(st.state, 'basic'); assert.strictEqual(st.plan.channels, 10); assert.match(st.machineId, /^[0-9A-F]{4}(-[0-9A-F]{4}){4}$/);
     assert.strictEqual((await post('/api/license/activate', {}, '{"key":"x"}')).status, 400);                         // custom header required
     const bad = await post('/api/license/activate', { 'X-Mixer-Action': 'license' }, '{"key":"AMIX1.abc.def"}');
     assert.strictEqual(bad.status, 400); assert.strictEqual((await bad.json()).reason, 'bad-signature');
@@ -3268,7 +3268,7 @@ test('license CHECK KEY: genuine / upgrade / same / downgrade / wrong PC / forge
   const jwk = publicKey.export({ format: 'jwk' });
   const key = (plan, extra = {}) => license.signKey({ v: 1, plan, issued: 1000, ...extra }, privateKey);
   const up = license.check(key('studio'), { jwk, machine: 'AAAA-BBBB', current: 'basic', now: 5000 });
-  assert.strictEqual(up.valid, true); assert.strictEqual(up.change, 'upgrade'); assert.deepStrictEqual(up.channels, [8, 32]);
+  assert.strictEqual(up.valid, true); assert.strictEqual(up.change, 'upgrade'); assert.deepStrictEqual(up.channels, [10, 32]);
   assert.deepStrictEqual(up.adds, ['plugins', 'ota', 'studio']); assert.strictEqual(up.canActivate, true); assert.strictEqual(up.anyPc, true);
   assert.strictEqual(license.check(key('pro'), { jwk, machine: 'X', current: 'pro', now: 5000 }).change, 'same');
   const down = license.check(key('pro'), { jwk, machine: 'X', current: 'master', now: 5000 });

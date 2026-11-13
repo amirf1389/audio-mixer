@@ -48,7 +48,7 @@ int main(int argc, char** argv) {
   setenv("AMIXOS_LICENSE_FILE", (dir + "/license.json").c_str(), 1); setenv("AMIXOS_EDITION_FILE", (dir + "/edition.json").c_str(), 1); setenv("AMIXOS_EDITION_TOKEN_FILE", (dir + "/edition-token.json").c_str(), 1);
   std::remove((dir + "/license.json").c_str()); std::remove((dir + "/edition.json").c_str()); std::remove((dir + "/edition-token.json").c_str());
   CHECK(lic::machineId().size() == 24);
-  { const lic::Status s = lic::status(now, {test}); CHECK(s.state == "basic" && s.channels == 8); }
+  { const lic::Status s = lic::status(now, {test}); CHECK(s.state == "basic" && s.channels == 10); }
   { const lic::Verdict v = lic::activate(vec["keyAny"].asString(), now, {test}); CHECK(v.ok); const lic::Status s = lic::status(now, {test}); CHECK(s.state == "active" && s.planId == "studio" && s.channels == 32 && s.source == "key" && !s.boundToThisPc); }
   { const lic::Verdict v = lic::activate(vec["key"].asString(), now, {test}); CHECK(!v.ok && v.reason == "wrong-machine"); }   // bound to another PC: refused, the stored key stays
   { const lic::Status s = lic::status(now + 400LL * 86400000LL, {test}); CHECK(s.state == "active"); }   // keyAny never expires

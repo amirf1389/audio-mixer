@@ -33,8 +33,8 @@ function adminJwk({ file = path.join(__dirname, 'license-admin-public.json') } =
 
 // One table drives everything: the mixer page, the bridge and the vendor tool.
 const PLANS = {
-  basic:  { id: 'basic',  name: 'BASIC',  channels: 8,  features: ['core'] },
-  pro:    { id: 'pro',    name: 'PRO',    channels: 16, features: ['core', 'plugins', 'ota'] },
+  basic:  { id: 'basic',  name: 'BASIC',  channels: 10, features: ['core'] },
+  pro:    { id: 'pro',    name: 'PRO',    channels: 20, features: ['core', 'plugins', 'ota'] },
   studio: { id: 'studio', name: 'STUDIO', channels: 32, features: ['core', 'plugins', 'ota', 'studio'] },
   master: { id: 'master', name: 'MASTER', channels: 32, features: ['core', 'plugins', 'ota', 'studio', 'master'] },   // all access: every feature, every channel
 };

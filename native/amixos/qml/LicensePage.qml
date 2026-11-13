@@ -1,4 +1,4 @@
-// LICENSE: what this copy runs as (BASIC 8 ch / PRO 16 / STUDIO 32 / MASTER), the machine code, paste a key to CHECK it (nothing stored) and
+// LICENSE: what this copy runs as (BASIC 10 ch / PRO 20 / STUDIO 32 / MASTER), the machine code, paste a key to CHECK it (nothing stored) and
 // ACTIVATE it, deactivate, and a ready-made licence request to send the vendor. Keys and edition tokens are verified offline with the vendor's
 // PUBLIC key compiled into the program (fingerprint shown); the private key never leaves the vendor. A paid edition (edition-token.json next to
 // the program) activates by itself on first start and is bound to this computer.
@@ -24,9 +24,9 @@ Flickable {
             subtitle: page.lic.state === "active" ? (page.lic.source === "edition" ? page.lic.editionName + " · serial " + page.lic.serial + " · bound to this computer" : "Key " + page.lic.id + (page.lic.name ? " for " + page.lic.name : "") + (page.lic.boundToThisPc ? " · bound to this computer" : " · any computer") + (page.lic.expires > 0 ? " · until " + page.dateOf(page.lic.expires) : " · no expiry"))
                     : page.lic.state === "expired" ? "The stored key has expired: this copy runs BASIC. " + page.lic.message
                     : page.lic.state === "invalid" ? "The stored key is not valid here: this copy runs BASIC. " + page.lic.message
-                    : "No key: this copy runs BASIC with 8 channels. Strips 9-32 are shown but locked."
+                    : "No key: this copy runs BASIC with 10 channels. Strips 11-32 are shown but locked."
             RowLayout { spacing: 8
-                Repeater { model: [["BASIC", 8, "basic"], ["PRO", 16, "pro"], ["STUDIO", 32, "studio"], ["MASTER", 32, "master"]]
+                Repeater { model: [["BASIC", 10, "basic"], ["PRO", 20, "pro"], ["STUDIO", 32, "studio"], ["MASTER", 32, "master"]]
                     delegate: Rectangle { implicitWidth: 120; implicitHeight: 54; radius: 6; color: page.lic.plan === modelData[2] ? Qt.rgba(0.984, 0.749, 0.141, 0.18) : Theme.ov(0.04); border.color: page.lic.plan === modelData[2] ? Theme.amber : Theme.lineSoft
                         ColumnLayout { anchors.centerIn: parent; spacing: 2
                             Text { Layout.alignment: Qt.AlignHCenter; text: modelData[0]; color: page.lic.plan === modelData[2] ? Theme.amber : Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 2 }

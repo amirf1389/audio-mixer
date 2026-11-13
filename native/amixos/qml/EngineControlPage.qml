@@ -84,7 +84,7 @@ Flickable {
             Text { text: engine.licensedChannels + i18n.t(" channels", i18n.lang) + (engine.license.expires ? " · " + i18n.t("until ", i18n.lang) + engine.license.expires : ""); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9 }
             RowLayout { spacing: 6
                 Btn { label: i18n.t("ENTER A PRODUCT KEY", i18n.lang); on: true; tone: Theme.violet; onClicked: page.Window.window.current = "renew" } }
-            Small { text: i18n.t("BASIC runs channels 1 to 8, PRO 1 to 16, STUDIO and MASTER all 32. A product key (five groups of five characters) or a full licence key is entered on LICENCE.", i18n.lang) } }
+            Small { text: i18n.t("BASIC runs channels 1 to 10, PRO 1 to 20, STUDIO and MASTER all 32. A product key (five groups of five characters) or a full licence key is entered on LICENCE.", i18n.lang) } }
 
         Card { title: i18n.t("MODULATION", i18n.lang); tone: Theme.pink
             Flow { Layout.fillWidth: true; spacing: 6

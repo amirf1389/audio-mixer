@@ -372,7 +372,7 @@ static QVariantMap licenseMap(const am::lic::Status& st) {
 QString Engine::edition() const { return license_.value("planName", "BASIC").toString(); }
 void Engine::refreshLicense() {
   const am::lic::Status st = am::lic::status(QDateTime::currentMSecsSinceEpoch());
-  license_ = licenseMap(st); const int before = licensedChannels_; licensedChannels_ = std::clamp(st.channels, 1, kStrips);   // BASIC 1-8, PRO 1-16, STUDIO and MASTER all 32
+  license_ = licenseMap(st); const int before = licensedChannels_; licensedChannels_ = std::clamp(st.channels, 1, kStrips);   // BASIC 1-10, PRO 1-20, STUDIO and MASTER all 32
   if (before != licensedChannels_ && rt_) for (int i = 0; i < kStrips; ++i) pushStrip(i);
   emit licenseChanged(); if (before != licensedChannels_) emit stripsChanged();
 }

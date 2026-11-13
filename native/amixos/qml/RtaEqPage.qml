@@ -29,7 +29,7 @@ Flickable {
     readonly property var bands: [31, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]
     readonly property var bandText: ["31", "63", "125", "250", "500", "1k", "2k", "4k", "8k", "16k"]
     readonly property var presets: [
-        { n: "Golden EQ (Amix by AMFB tuned)", g: [1, 5, 3, 3, 4, 2, 2, 3, 3, 1] }, { n: "Anix W Shape", g: [6, 3.5, -2, -4.5, 4, 3.5, -3, -1, 5, 6.5] }, { n: "Flat", g: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
+        { n: "Golden EQ (Amix by AMFB tuned)", g: [1, 5, 3, 3, 4, 2, 2, 3, 3, 1] }, { n: "Anix W Shape", g: [6, 3.5, -2, -4.5, 4, 3.5, -3, -1, 5, 6.5] }, { n: "W-Shape Tuner (smooth)", g: [3.5, 2.4, -0.1, -2.5, -2.5, -0.5, 0.8, -2.1, -0.6, 2.9] }, { n: "Flat", g: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
         { n: "Vocal Air", g: [0, -1.5, -1, 0, 1.5, 2.5, 3.5, 5, 6.5, 7] }, { n: "Bass Punch", g: [6.5, 5, 3.5, 1.5, 0, -1, 0, 1, 2, 0] }, { n: "Club / Dance", g: [5, 4, 2, 0, -2, 0, 2, 3.5, 4.5, 4] },
         { n: "Rock Drive", g: [4, 3, 1, -1, -2, 0, 2, 3.5, 4, 4.5] }, { n: "Jazz Warm", g: [3, 2, 1, 1, 2, 2, 1, 1, 2, 1.5] }, { n: "Acoustic Clean", g: [2, 1, 0, -1, 0, 1, 2, 3, 4, 3.5] },
         { n: "Speech / Broadcast", g: [-4, -2, 0, 2, 3, 3.5, 2, 1, -1, -3] }, { n: "Warm Master", g: [2, 2, 1, 0, 0, 0, 1, 1.5, 2, 2] }, { n: "Treble Boost", g: [-2, -1, 0, 0, 0, 1, 3, 5, 7, 8] },
@@ -90,6 +90,15 @@ Flickable {
                         ToolTip.visible: ch.hovered; ToolTip.text: i18n.t("Load custom slot 1 (the user profile)", i18n.lang); HoverHandler { id: ch } }
                     Btn { label: i18n.t("💾 SAVE CUSTOM", i18n.lang); offColor: Qt.rgba(0, 0.95, 1, 0.14); onClicked: engine.saveGeqSlot(1, "Custom EQ", page.gains) }
                     Btn { label: i18n.t("ANIX W-SHAPE", i18n.lang); onColor: Theme.amber; offColor: Qt.rgba(0.984, 0.749, 0.141, 0.18); on: page.presetName === "Anix W Shape"; onClicked: page.loadPreset("Anix W Shape") }
+                    // W-SHAPE TUNER: on a channel, the plug-in itself goes into its rack (continuous shelves and bells, level kept the same: the better
+                    // choice); on the program bus, which has no rack, the same curve is laid on the ten bands (the tuner's W read at the ISO centres)
+                    Btn { objectName: "rtaWShape"; readonly property int slot: { engine.stripState; if (page.strip < 0) return -1; const pl = engine.plugins(page.strip); for (let k = 0; k < pl.length; k++) if (pl[k].kind === "fx:wshape") return k; return -1 }
+                        label: page.strip < 0 ? i18n.t("W-SHAPE TUNER CURVE", i18n.lang) : slot >= 0 ? i18n.t("W-SHAPE TUNER: IN RACK ✓", i18n.lang) : i18n.t("+ W-SHAPE TUNER", i18n.lang)
+                        onColor: "#c084fc"; offColor: Qt.rgba(0.75, 0.52, 0.99, 0.18); on: slot >= 0 || page.presetName === "W-Shape Tuner (smooth)"
+                        onClicked: { if (page.strip < 0) { page.loadPreset("W-Shape Tuner (smooth)"); return }
+                            if (slot >= 0) { engine.setPlugin(page.strip, slot, ""); return }
+                            const pl = engine.plugins(page.strip); for (let k = 0; k < pl.length; k++) if (!pl[k].kind) { engine.setPlugin(page.strip, k, "fx:wshape"); page.apply([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]); page.presetName = "Flat"; return } }   // the tuner does the shaping: the ten bands go flat so it is not done twice
+                        ToolTip.visible: wh.hovered; ToolTip.text: i18n.t("Smooth W: bass, presence and air up, low-mid mud and upper harshness down, level kept the same. On a channel it is the W-SHAPE TUNER plug-in (open it from the PLUGIN RACK).", i18n.lang); HoverHandler { id: wh } }
                     Combo { id: presetBox; implicitWidth: 290; implicitHeight: 22; font.family: Theme.mono; font.pixelSize: 8; displayText: page.presetName ? page.presetName : "Standard + Mic Presets (30+)"
                         model: { const l = []; for (let i = 0; i < page.presets.length; ++i) l.push((i < 2 ? "★ " : "") + page.presets[i].n); return l }
                         onActivated: function (i) { page.loadPreset(page.presets[i].n) } }

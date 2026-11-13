@@ -306,7 +306,7 @@ Item {
                                     ColumnLayout { anchors.centerIn: parent; spacing: 6
                                         Text { Layout.alignment: Qt.AlignHCenter; text: "🔒"; color: Theme.amber; font.pixelSize: 18 }
                                         Text { Layout.alignment: Qt.AlignHCenter; text: i18n.t("CH ", i18n.lang) + (index + 1); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-                                        Text { Layout.alignment: Qt.AlignHCenter; text: index < 16 ? i18n.t("PRO", i18n.lang) : i18n.t("STUDIO", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
+                                        Text { Layout.alignment: Qt.AlignHCenter; text: index < 20 ? i18n.t("PRO", i18n.lang) : i18n.t("STUDIO", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
                                         Text { Layout.alignment: Qt.AlignHCenter; text: i18n.t("UNLOCK ›", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 7 } }
                                     MouseArea { anchors.fill: parent; onClicked: page.go("renew") } }
                                 ColumnLayout {
