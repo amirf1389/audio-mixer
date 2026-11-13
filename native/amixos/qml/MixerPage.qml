@@ -377,10 +377,18 @@ Item {
                                             MenuItem { text: (st && st.autoPol ? "✓ " : "") + i18n.t("Phase: AUTO (turn round when out of phase with the mix)", i18n.lang); onTriggered: engine.setAutoPolarity(index, !(st && st.autoPol)) }
                                             Menu {   // ADD AN EFFECT: every built-in effect the LOCAL STORE has on, into this channel's rack, with its panel opened
                                                 id: fxMenu; objectName: "stripFxMenu" + index; property int strip: index; title: i18n.t("Add an effect", i18n.lang)
-                                                Instantiator { model: engine.pluginCatalog().filter(x => x.fx)
-                                                    delegate: MenuItem { required property var modelData; text: modelData.name
-                                                        onTriggered: { const k = engine.addToRack(fxMenu.strip, modelData.kind); if (k >= 0) plugEd.openFor(fxMenu.strip, k, modelData.kind, modelData.name); else page.note = i18n.t("The rack of this channel is full.", i18n.lang) } }
-                                                    onObjectAdded: function (i, o) { fxMenu.insertItem(i, o) } onObjectRemoved: function (i, o) { fxMenu.removeItem(o) } } }
+                                                // by kind, six short lists (forty effects in one list run off the bottom of the screen); anything new lands in OTHER
+                                                readonly property var groups: ({ "EQ & TONE": ["dualeq", "mseq", "isoeq", "wshape", "exciter"], "DYNAMICS": ["opto", "glue", "multiband", "maximizer", "transient", "deesser", "desquash", "barrier", "antifeedback"],
+                                                    "SATURATION & AMPS": ["analog", "drive", "tubeamp", "preamp", "postamp", "tape", "convclip", "crusher"], "MODULATION": ["chorus", "flanger", "phaser", "tremolo", "wah", "mod", "autopan", "pitch", "doubler"],
+                                                    "SPACE & DELAY": ["reverb", "hall", "room", "delay", "syncdelay"], "SPATIAL & UTILITY": ["iamfelement", "iamfrender", "imager", "sampler"] })
+                                                function groupOf(kind) { const k = kind.replace("fx:", ""); for (const g in groups) if (groups[g].indexOf(k) >= 0) return g; return "OTHER" }
+                                                Instantiator { model: { const all = engine.pluginCatalog().filter(x => x.fx), names = ["EQ & TONE", "DYNAMICS", "SATURATION & AMPS", "MODULATION", "SPACE & DELAY", "SPATIAL & UTILITY", "OTHER"]; return names.filter(n => all.some(x => fxMenu.groupOf(x.kind) === n)) }
+                                                    delegate: Menu { id: fxGroup; required property string modelData; title: i18n.t(modelData, i18n.lang)
+                                                        Instantiator { model: engine.pluginCatalog().filter(x => x.fx && fxMenu.groupOf(x.kind) === fxGroup.modelData)
+                                                            delegate: MenuItem { required property var modelData; text: modelData.name
+                                                                onTriggered: { const k = engine.addToRack(fxMenu.strip, modelData.kind); if (k >= 0) plugEd.openFor(fxMenu.strip, k, modelData.kind, modelData.name); else page.note = i18n.t("The rack of this channel is full.", i18n.lang) } }
+                                                            onObjectAdded: function (i, o) { fxGroup.insertItem(i, o) } onObjectRemoved: function (i, o) { fxGroup.removeItem(o) } } }
+                                                    onObjectAdded: function (i, o) { fxMenu.insertMenu(i, o) } onObjectRemoved: function (i, o) { fxMenu.removeMenu(o) } } }
                                             Menu {   // PLAY A SAMPLE: the 100 built-in samples by category; the pick plays in this channel through its SAMPLE PLAYER
                                                 id: smpMenu; property int strip: index; title: i18n.t("Play a sample", i18n.lang)
                                                 Instantiator { model: samples.categories
