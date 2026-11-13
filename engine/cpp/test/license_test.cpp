@@ -46,19 +46,48 @@ int main(int argc, char** argv) {
   // the store: a temp home, activate, status, deactivate
   const std::string dir = std::string(argc > 2 ? argv[2] : "/tmp") + "/amixos-lic-test"; 
   setenv("AMIXOS_LICENSE_FILE", (dir + "/license.json").c_str(), 1); setenv("AMIXOS_EDITION_FILE", (dir + "/edition.json").c_str(), 1); setenv("AMIXOS_EDITION_TOKEN_FILE", (dir + "/edition-token.json").c_str(), 1);
-  std::remove((dir + "/license.json").c_str()); std::remove((dir + "/edition.json").c_str()); std::remove((dir + "/edition-token.json").c_str());
+  setenv("AMIXOS_ACTIVATION_FILE", (dir + "/activation.json").c_str(), 1); setenv("AMIXOS_REVOCATIONS_FILE", (dir + "/revocations.json").c_str(), 1); setenv("AMIXOS_CLOCK_FILE", (dir + "/clock.json").c_str(), 1);
+  auto clockReset = [&]() { std::remove((dir + "/clock.json").c_str()); };
+  std::remove((dir + "/license.json").c_str()); std::remove((dir + "/edition.json").c_str()); std::remove((dir + "/edition-token.json").c_str()); std::remove((dir + "/activation.json").c_str()); std::remove((dir + "/revocations.json").c_str()); clockReset();
   CHECK(lic::machineId().size() == 24);
   { const lic::Status s = lic::status(now, {test}); CHECK(s.state == "basic" && s.channels == 10); }
-  { const lic::Verdict v = lic::activate(vec["keyAny"].asString(), now, {test}); CHECK(v.ok); const lic::Status s = lic::status(now, {test}); CHECK(s.state == "active" && s.planId == "studio" && s.channels == 32 && s.source == "key" && !s.boundToThisPc); }
+  { const lic::Verdict v = lic::activate(vec["keyAny"].asString(), now, {test}); CHECK(v.ok); const lic::Status s = lic::status(now, {test}); CHECK(s.state == "active" && s.planId == "studio" && s.channels == 32 && s.source == "key" && !s.boundToThisPc && s.needsActivation && s.graceDaysLeft == 60); }   // unbound: runs, but must be activated within 60 days
   { const lic::Verdict v = lic::activate(vec["key"].asString(), now, {test}); CHECK(!v.ok && v.reason == "wrong-machine"); }   // bound to another PC: refused, the stored key stays
-  { const lic::Status s = lic::status(now + 400LL * 86400000LL, {test}); CHECK(s.state == "active"); }   // keyAny never expires
+  { const lic::Status s = lic::status(now + 61LL * 86400000LL, {test}); CHECK(s.state == "needs-activation" && s.planId == "basic" && s.channels == 10); }   // the grace period is over: BASIC until activated
+  clockReset();
   // a shipped edition token: activated on first status(), recorded, wins over a lower key
   { std::ofstream t(dir + "/edition-token.json"); t << "{\"token\":\"" << vec["token"].asString() << "\"}\n"; }
-  { const lic::Status s = lic::status(now, {test}); CHECK(s.state == "active" && s.source == "edition" && s.planId == "master" && s.editionName == "A mix OS Studio Master"); std::ifstream rec(dir + "/edition.json"); CHECK(rec.good()); }
+  { const lic::Status s = lic::status(now, {test}); CHECK(s.state == "active" && s.source == "edition" && s.planId == "master" && s.editionName == "A mix OS Studio Master" && s.needsActivation); std::ifstream rec(dir + "/edition.json"); CHECK(rec.good()); }   // recorded as pending
   std::remove((dir + "/edition-token.json").c_str());
-  { const lic::Status s = lic::status(now, {test}); CHECK(s.source == "edition"); }   // from the recorded activation, the installer file is gone
+  { const lic::Status s = lic::status(now, {test}); CHECK(s.source == "edition" && s.needsActivation); }   // from the record, the installer file is gone
+  { const lic::Status s = lic::status(now + 61LL * 86400000LL, {test}); CHECK(s.state != "active" || s.source != "edition"); } clockReset();   // a copied install does not run PRO past the grace
   CHECK(lic::deactivate()); { const lic::Status s = lic::status(now, {test}); CHECK(s.source == "edition" && s.planId == "master"); }
   std::remove((dir + "/edition.json").c_str()); { const lic::Status s = lic::status(now, {test}); CHECK(s.state == "basic"); }
+
+  // ACTIVATION for this computer (signed by the throwaway key at test time), revocation list, clock roll-back
+  { const lic::Verdict v = lic::verifyActivation(vec["activationOther"].asString(), now, lic::machineId(), {test}); CHECK(!v.ok && v.reason == "wrong-machine"); }
+  { const lic::Verdict v = lic::verifyActivation(vec["activationOther"].asString(), now, "ABCD-EF01-2345-6789-ABCD", {test}); CHECK(v.ok && v.planId == "master"); }
+  { const lic::Verdict v = lic::verifyActivation(vec["keyAny"].asString(), now, "x", {test}); CHECK(!v.ok && v.reason == "malformed"); }   // a licence key is not an activation
+  if (const char* gen = std::getenv("AMIX_LICENSE_VECTOR_GEN")) {
+    for (const char* term : {"perpetual", "annual"}) {
+      const std::string out = dir + "/act-" + term + ".json", cmd = std::string("node \"") + gen + "\" --mid " + lic::machineId() + " --term " + term + " --revoke TEST-0004 --out \"" + out + "\" > /dev/null";
+      CHECK(std::system(cmd.c_str()) == 0); std::ifstream f(out); std::ostringstream t; t << f.rdbuf(); bool aok = false; const json::Value av = json::Value::parse(t.str(), aok); CHECK(aok);
+      const lic::Jwk tk{av["jwk"]["x"].asString(), av["jwk"]["y"].asString()};
+      std::remove((dir + "/activation.json").c_str()); std::remove((dir + "/revocations.json").c_str()); clockReset();
+      CHECK(lic::storeActivation(av["activation"].asString(), now, {tk}).ok);
+      { const lic::Status s = lic::status(now, {tk}); CHECK(s.state == "active" && s.source == "activation" && s.term == term && s.planId == "studio" && s.boundToThisPc); }
+      if (std::string(term) == "perpetual") {
+        { const lic::Status s = lic::status(now + 3650LL * 86400000LL, {tk}); CHECK(s.state == "active"); }   // perpetual: offline for good
+        clockReset(); CHECK(lic::storeRevocations(av["revocations"].asString(), {tk}));
+        CHECK(!lic::storeRevocations(av["revocationsOld"].asString(), {tk}));   // an older list never replaces a newer one
+        { const lic::Status s = lic::status(now, {tk}); CHECK(s.state == "revoked" && s.channels == 10); }
+      } else {
+        { const lic::Status s = lic::status(now + 400LL * 86400000LL, {tk}); CHECK(s.state == "expired" && s.channels == 10); }   // the year is over
+        { const lic::Status s = lic::status(now, {tk}); CHECK(s.state == "expired"); }   // and setting the clock back does not bring it back
+      }
+    }
+    std::printf("license_test: activation (perpetual / annual), revocation list, clock roll-back OK\n");
+  } else std::printf("license_test: AMIX_LICENSE_VECTOR_GEN not set: activation store tests skipped\n");
   const json::Value r = lic::request("pro", "Someone <x>", "a@b.c", now, "0.1.0"); CHECK(r["machineId"].asString() == lic::machineId() && r["name"].asString() == "Someone x" && r["plan"].asString() == "pro");
   std::printf("license_test: sha256 / sha1 / hmac / totp vectors, P-256 verify of Node-made key + token, tampered and wrong-key refused, store round trip OK (machine %s)\n", lic::machineId().c_str());
   return 0;

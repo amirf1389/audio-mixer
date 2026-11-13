@@ -399,8 +399,13 @@ void Engine::clearClips() { if (rt_) rt_->clearClips(); }
 static QVariantMap licenseMap(const am::lic::Status& st) {
   QVariantMap m; m["state"] = QString::fromStdString(st.state); m["plan"] = QString::fromStdString(st.planId); m["planName"] = QString::fromStdString(st.planName); m["channels"] = st.channels; m["source"] = QString::fromStdString(st.source);
   m["id"] = QString::fromStdString(st.id); m["name"] = QString::fromStdString(st.name); m["serial"] = QString::fromStdString(st.serial); m["editionName"] = QString::fromStdString(st.editionName); m["expires"] = static_cast<qlonglong>(st.expires); m["boundToThisPc"] = st.boundToThisPc; m["machine"] = QString::fromStdString(st.machine); m["message"] = QString::fromStdString(st.message);
+  m["term"] = QString::fromStdString(st.term); m["needsActivation"] = st.needsActivation; m["graceDaysLeft"] = st.graceDaysLeft;
   return m;
 }
+QVariantMap Engine::storeActivation(const QString& activation) {
+  const am::lic::Verdict v = am::lic::storeActivation(activation.toStdString(), QDateTime::currentMSecsSinceEpoch()); refreshLicense();
+  QVariantMap m; m["ok"] = v.ok; m["reason"] = QString::fromStdString(v.reason); m["message"] = QString::fromStdString(v.message); return m; }
+bool Engine::storeRevocations(const QString& list) { const bool ok = am::lic::storeRevocations(list.toStdString()); if (ok) refreshLicense(); return ok; }
 QString Engine::edition() const { return license_.value("planName", "BASIC").toString(); }
 void Engine::refreshLicense() {
   const am::lic::Status st = am::lic::status(QDateTime::currentMSecsSinceEpoch());

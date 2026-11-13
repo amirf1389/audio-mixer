@@ -46,6 +46,7 @@ class Value {
   Value& set(const std::string& k, Value v) { if (type_ != Object) { *this = object(); } for (auto& m : o_) if (m.first == k) { m.second = std::move(v); return m.second; } o_.emplace_back(k, std::move(v)); return o_.back().second; }
   Value& push(Value v) { if (type_ != Array) *this = array(); a_.push_back(std::move(v)); return a_.back(); }
   std::size_t size() const { return type_ == Array ? a_.size() : type_ == Object ? o_.size() : 0; }
+  const Value& at(std::size_t i) const { static const Value none; return type_ == Array && i < a_.size() ? a_[i] : none; }   // an array element (Null when out of range)
 
   std::string dump() const { std::string out; dumpTo(out); return out; }
   void dumpTo(std::string& out) const {

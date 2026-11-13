@@ -46,15 +46,19 @@ Flickable {
                         Text { anchors.fill: parent; text: i18n.t("AMIX1.eyJ2IjoxLCJwbGFuIjoicHJvIi…", i18n.lang); color: Theme.dim; font: parent.font; visible: !parent.text.length } } } }
             // PRODUCT KEY: five groups of five characters. It is traded at the licence server for the full key, which is then checked here as always.
             Rectangle { id: pkBox; objectName: "productKeyBox"; Layout.fillWidth: true; implicitHeight: pkCol.implicitHeight + 16; radius: 6; color: Theme.ov(0.03); border.color: Theme.violet
-                readonly property bool looksLikeOne: keyIn.text.replace(/[^0-9A-Za-z]/g, "").length === 25 && keyIn.text.indexOf("AMIX1") !== 0
-                Connections { target: updater; function onRedeemed(key) { keyIn.text = key; const r = engine.activateKey(key); page.check = engine.checkKey(key); pkNote.text = r.ok ? i18n.t("Activated.", i18n.lang) : r.message } }
+                readonly property bool looksLikeOne: keyIn.text.replace(/[^0-9A-Za-z]/g, "").length === 25 || keyIn.text.trim().indexOf("AMIX1.") === 0 || keyIn.text.trim().indexOf("AMFXE1.") === 0
+                Connections { target: updater; function onActivated(a) { const r = engine.storeActivation(a); pkNote.text = r.ok ? i18n.t("Activated on this computer.", i18n.lang) : r.message }
+                    function onRedeemed(key) { keyIn.text = key; const r = engine.activateKey(key); page.check = engine.checkKey(key); pkNote.text = r.ok ? i18n.t("Activated.", i18n.lang) : r.message } }
                 ColumnLayout { id: pkCol; anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 8; spacing: 6
                     RowLayout { spacing: 8
                         Text { text: i18n.t("PRODUCT KEY", i18n.lang); color: Theme.violet; font.family: Theme.mono; font.pixelSize: 10; font.bold: true; font.letterSpacing: 1.5 }
-                        Text { Layout.fillWidth: true; text: i18n.t("XXXXX-XXXXX-XXXXX-XXXXX-XXXXX: type it in the box above and press ACTIVATE PRODUCT KEY.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8; elide: Text.ElideRight }
+                        Text { Layout.fillWidth: true; text: i18n.t("Product key (XXXXX-XXXXX-XXXXX-XXXXX-XXXXX), licence key or edition token: type it above and press ACTIVATE ONLINE. It is bound to this computer; after that it works offline for the whole licence term.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8; elide: Text.ElideRight }
                         Rectangle { objectName: "productKeyBtn"; implicitWidth: pkT.implicitWidth + 22; implicitHeight: 26; radius: 5; color: pkBox.looksLikeOne ? Theme.violet : "transparent"; border.color: Theme.violet; opacity: pkBox.looksLikeOne ? 1 : 0.5
-                            Text { id: pkT; anchors.centerIn: parent; text: updater.redeemState === "asking" ? i18n.t("ASKING THE SERVER…", i18n.lang) : i18n.t("ACTIVATE PRODUCT KEY", i18n.lang); color: pkBox.looksLikeOne ? "#fff" : Theme.violet; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
-                            MouseArea { anchors.fill: parent; enabled: pkBox.looksLikeOne; onClicked: { pkNote.text = ""; updater.redeemProductKey(keyIn.text) } } } }
+                            Text { id: pkT; anchors.centerIn: parent; text: updater.redeemState === "asking" ? i18n.t("ASKING THE SERVER…", i18n.lang) : i18n.t("ACTIVATE ONLINE", i18n.lang); color: pkBox.looksLikeOne ? "#fff" : Theme.violet; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
+                            MouseArea { anchors.fill: parent; enabled: pkBox.looksLikeOne; onClicked: { pkNote.text = ""; updater.activateOnline(keyIn.text, engine.license.machine) } } }
+                        Rectangle { objectName: "trialBtn"; implicitWidth: trT.implicitWidth + 22; implicitHeight: 26; radius: 5; color: "transparent"; border.color: Theme.cyan
+                            Text { id: trT; anchors.centerIn: parent; text: i18n.t("START 30-DAY TRIAL", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
+                            MouseArea { anchors.fill: parent; onClicked: { pkNote.text = ""; updater.startTrial(engine.license.machine) } } } }
                     RowLayout { spacing: 8
                         Text { text: i18n.t("LICENCE SERVER", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                         Field { objectName: "licServer"; Layout.fillWidth: true; implicitHeight: 24; text: updater.licenseServer; placeholderText: "https://…"; font.family: Theme.mono; font.pixelSize: 8; selectByMouse: true; onEditingFinished: updater.licenseServer = text } }
