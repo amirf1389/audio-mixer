@@ -1382,5 +1382,11 @@
 "More than 12 dB of compression: click to add DE-SQUASH to this channel",
 "Sample player (play a sample in this channel)",
 "De-squash (give back what a heavy compressor took)",
-"CHANNEL EQ · DUAL LISTEN"
+"CHANNEL EQ · DUAL LISTEN",
+"COMPRESSION TARGET",
+"Listening: play or speak into this channel for a few seconds.",
+"Suggested: threshold ",
+" dB, ratio ",
+"No compression needed",
+"Measured on the channel's input over the last 10 seconds: how far the loud and the quiet moments sit apart. Nothing changes until you press APPLY."
 ]

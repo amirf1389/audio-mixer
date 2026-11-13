@@ -91,6 +91,10 @@ class HybridMixer {
         for (std::size_t i = 0; i < n; ++i) { xl_[i] = i < got ? tmp_[2 * i] : 0.0; xr_[i] = i < got ? tmp_[2 * i + 1] : 0.0; }
       }
       sh_->m[s].active.store(live ? 1u : 0u, std::memory_order_relaxed);
+      {   // the input peak for the COMPRESSION TARGET (the control loop takes it with exchange(0))
+        double ip = 0; for (std::size_t i = 0; i < n; ++i) ip = std::max(ip, std::max(std::abs(xl_[i]), std::abs(xr_[i])));
+        auto& slot = sh_->m[s].inPeak; if (static_cast<float>(ip) > slot.load(std::memory_order_relaxed)) slot.store(static_cast<float>(ip), std::memory_order_relaxed);
+      }
 
       const double dl = (st.tgl - st.gl) / double(n), dr = (st.tgr - st.gr) / double(n);   // gains glide over the block
       const bool eq = st.eqOn && !st.eq.flat, ms = st.width != 1.0;

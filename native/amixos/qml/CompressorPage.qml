@@ -19,6 +19,37 @@ Flickable {
     readonly property var mt: engine.meters[strip]
     ColumnLayout {
         id: col; width: parent.width - 20; x: 10; y: 10; spacing: 10
+        Rectangle {   // COMPRESSION TARGET: what this channel's input does, and the setting that would bring it to the chosen target; applied only on the click
+            id: tgt
+            property var sug: ({})
+            Timer { interval: 1000; running: page.visible; repeat: true; triggeredOnStart: true; onTriggered: tgt.sug = engine.compSuggestion(page.strip) }
+            Layout.fillWidth: true; implicitHeight: tgtCol.implicitHeight + 20; radius: 6; color: Theme.card; border.color: tgt.sug.verdict === "too dynamic" ? Theme.amber : tgt.sug.verdict === "on target" ? Theme.emerald : Theme.line
+            ColumnLayout {
+                id: tgtCol; anchors.fill: parent; anchors.margins: 10; spacing: 6
+                RowLayout { Layout.fillWidth: true; spacing: 8
+                    Text { text: i18n.t("COMPRESSION TARGET", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 10; font.bold: true; font.letterSpacing: 1.5 }
+                    Item { Layout.fillWidth: true }
+                    Repeater { model: [{ t: "VOCAL 6 dB", v: 6 }, { t: "INSTRUMENT 9 dB", v: 9 }, { t: "MUSIC 12 dB", v: 12 }]
+                        Rectangle { required property var modelData; readonly property bool on: Math.abs(engine.compTargetDb - modelData.v) < 0.01
+                            objectName: "compTarget" + modelData.v; implicitWidth: tT.implicitWidth + 16; implicitHeight: 20; radius: 3; color: on ? Theme.cyan : Theme.ov(0.08); border.color: Theme.lineSoft
+                            Text { id: tT; anchors.centerIn: parent; text: i18n.t(modelData.t, i18n.lang); color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { engine.compTargetDb = modelData.v; tgt.sug = engine.compSuggestion(page.strip) } } } }
+                }
+                RowLayout { Layout.fillWidth: true; spacing: 14
+                    Text { color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9
+                           text: !tgt.sug.ready ? i18n.t("Listening: play or speak into this channel for a few seconds.", i18n.lang)
+                                : i18n.t("Spread ", i18n.lang) + Number(tgt.sug.spreadDb).toFixed(1) + i18n.t(" dB (target ", i18n.lang) + Number(tgt.sug.targetDb).toFixed(0) + " dB) · " + i18n.t(tgt.sug.verdict, i18n.lang) }
+                    Item { Layout.fillWidth: true }
+                    Text { visible: !!tgt.sug.ready; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; font.bold: true
+                           text: tgt.sug.ratio > 1 ? i18n.t("Suggested: threshold ", i18n.lang) + Number(tgt.sug.thresholdDb).toFixed(1) + i18n.t(" dB, ratio ", i18n.lang) + Number(tgt.sug.ratio).toFixed(1) + ":1" : i18n.t("No compression needed", i18n.lang) }
+                    Rectangle { objectName: "compTargetApply"; visible: !!tgt.sug.ready && tgt.sug.ratio > 1; implicitWidth: apT.implicitWidth + 20; implicitHeight: 22; radius: 4; color: Qt.rgba(0, 0.95, 1, 0.15); border.color: Theme.cyan
+                        Text { id: apT; anchors.centerIn: parent; text: i18n.t("APPLY", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
+                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { engine.applyCompSuggestion(page.strip); page.reload() } } }
+                }
+                Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.dim; font.pixelSize: 8
+                       text: i18n.t("Measured on the channel's input over the last 10 seconds: how far the loud and the quiet moments sit apart. Nothing changes until you press APPLY.", i18n.lang) }
+            }
+        }
         Rectangle {   // the compression level alert: more than 12 dB of reduction for half a second
             visible: page.mt !== undefined && !!page.mt.overComp
             Layout.fillWidth: true; implicitHeight: ocRow.implicitHeight + 16; radius: 6; color: Qt.rgba(1, 0.3, 0.3, 0.14); border.color: Theme.danger

@@ -89,6 +89,14 @@ napi_value SetEq(napi_env env, napi_callback_info info) {
   return boolean(env, true);
 }
 
+napi_value SetTarget(napi_env env, napi_callback_info info) {   // the spread (dB) the compression suggestions aim for
+  napi_value a[1]; double d;
+  if (!g_b) return fail(env, "the engine is not running");
+  if (!args(env, info, 1, a) || !asNumber(env, a[0], &d)) return fail(env, "setTarget(spreadDb)");
+  g_b->compTargetDb = float(std::clamp(d, 2.0, 30.0));
+  return boolean(env, true);
+}
+
 napi_value SetMaster(napi_env env, napi_callback_info info) {
   napi_value a[1]; double d;
   if (!g_b) return fail(env, "the engine is not running");
@@ -106,6 +114,7 @@ napi_value State(napi_env env, napi_callback_info) {
   napi_create_object(env, &o); napi_create_array_with_length(env, amfb::kStrips, &strips);
   put(env, o, "sampleRate", number(env, g_b->sampleRate.load()));
   put(env, o, "masterGainDb", number(env, g_b->masterGainDb.load()));
+  put(env, o, "compTargetDb", number(env, g_b->compTargetDb.load()));
   put(env, o, "heartbeat", number(env, double(g_b->heartbeat.load())));
   put(env, o, "underruns", number(env, g_b->underruns.load()));
   for (int i = 0; i < amfb::kStrips; ++i) {
@@ -134,19 +143,19 @@ napi_value State(napi_env env, napi_callback_info) {
   return o;
 }
 
-// meters() -> Float32Array, 9 values per bus (16 strips, then the master):
-// peakL, peakR, rmsL, rmsR, truePeak, hold, phase, active, reductionDb
+// meters() -> Float32Array, 11 values per bus (16 strips, then the master):
+// peakL, peakR, rmsL, rmsR, truePeak, hold, phase, active, reductionDb, spreadDb, suggestLevel (-1 = listening)
 napi_value Meters(napi_env env, napi_callback_info) {
   if (!g_b) return fail(env, "the engine is not running");
-  const size_t n = (amfb::kStrips + 1) * 9;
+  const size_t n = (amfb::kStrips + 1) * 11;
   void* data = nullptr; napi_value buf, arr;
   if (napi_create_arraybuffer(env, n * sizeof(float), &data, &buf) != napi_ok) return fail(env, "out of memory");
   float* f = static_cast<float*>(data);
   for (int i = 0; i <= amfb::kStrips; ++i) {
     const auto& m = g_b->m[i];
-    const float v[9] = {m.peakL.load(), m.peakR.load(), m.rmsL.load(), m.rmsR.load(), m.truePeak.load(), m.hold.load(), m.phase.load(),
-                        float(m.active.load()), m.reductionDb.load()};
-    std::copy(v, v + 9, f + i * 9);
+    const float v[11] = {m.peakL.load(), m.peakR.load(), m.rmsL.load(), m.rmsR.load(), m.truePeak.load(), m.hold.load(), m.phase.load(),
+                        float(m.active.load()), m.reductionDb.load(), m.spreadDb.load(), float(m.suggestLevel.load())};
+    std::copy(v, v + 11, f + i * 11);
   }
   napi_create_typedarray(env, napi_float32_array, n, buf, 0, &arr);
   return arr;
@@ -159,6 +168,7 @@ napi_value Init(napi_env env, napi_value exports) {
       {"setStrip", nullptr, SetStrip, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"setEq", nullptr, SetEq, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"setMaster", nullptr, SetMaster, nullptr, nullptr, nullptr, napi_default, nullptr},
+      {"setTarget", nullptr, SetTarget, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"state", nullptr, State, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"meters", nullptr, Meters, nullptr, nullptr, nullptr, napi_default, nullptr},
   };

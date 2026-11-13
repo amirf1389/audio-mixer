@@ -1378,5 +1378,11 @@
 "More than 12 dB of compression: click to add DE-SQUASH to this channel": "Nén hơn 12 dB: nhấp để thêm DE-SQUASH vào kênh này",
 "Sample player (play a sample in this channel)": "Trình phát mẫu (phát mẫu trong kênh này)",
 "De-squash (give back what a heavy compressor took)": "DE-SQUASH (trả lại những gì bộ nén mạnh đã lấy đi)",
-"CHANNEL EQ · DUAL LISTEN": "EQ KÊNH · NGHE KÉP"
+"CHANNEL EQ · DUAL LISTEN": "EQ KÊNH · NGHE KÉP",
+"COMPRESSION TARGET": "MỤC TIÊU NÉN",
+"Listening: play or speak into this channel for a few seconds.": "Đang nghe: phát hoặc nói vào kênh này trong vài giây.",
+"Suggested: threshold ": "Đề xuất: ngưỡng ",
+" dB, ratio ": " dB, tỷ lệ ",
+"No compression needed": "Không cần nén",
+"Measured on the channel's input over the last 10 seconds: how far the loud and the quiet moments sit apart. Nothing changes until you press APPLY.": "Đo trên đầu vào của kênh trong 10 giây qua: khoảng cách giữa lúc to và lúc nhỏ. Không có gì thay đổi cho đến khi bạn nhấn APPLY."
 }

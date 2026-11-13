@@ -15,6 +15,7 @@
 #include "../core/mixer.hpp"
 #include "app_capture.hpp"
 #include "ext/ext_host.hpp"
+#include "audiomixer/dynamics.hpp"
 
 namespace {
 
@@ -118,8 +119,15 @@ int run(int argc, char** argv, std::atomic<bool>& g_quit, std::function<void(con
   say(fmt("amfb-hybrid: %s, %.0f Hz, %u frames, %d device strips, shared memory %s", backend->name(), cfg.sampleRate, cfg.frames,
               hwStrips, amfb::sharedName().c_str()));
   const auto t0 = std::chrono::steady_clock::now();
+  am::DynamicsTracker dyn[amfb::kStrips]; int tick = 0;
   while (!g_quit) {
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    if (++tick % 2 == 0) for (int i = 0; i < amfb::kStrips; ++i) {   // ten a second, off the audio thread: COMPRESSION TARGET suggestions (never applied here)
+      const float pk = block->m[i].inPeak.exchange(0.f, std::memory_order_relaxed);
+      dyn[i].push(pk > 1e-6f ? 20.0 * std::log10(static_cast<double>(pk)) : -120.0);
+      const am::CompSuggestion c = dyn[i].suggest(block->compTargetDb.load(std::memory_order_relaxed));
+      block->m[i].spreadDb.store(c.ready ? static_cast<float>(c.spreadDb) : 0.f, std::memory_order_relaxed); block->m[i].suggestLevel.store(c.ready ? c.level : -1, std::memory_order_relaxed);
+    }
     if (seconds > 0 && std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() >= seconds) g_quit = true;
   }
   backend->stop();

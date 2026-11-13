@@ -1374,5 +1374,11 @@
 "More than 12 dB of compression: click to add DE-SQUASH to this channel": "12 dBを超える圧縮：クリックしてこのチャンネルにDE-SQUASHを追加",
 "Sample player (play a sample in this channel)": "サンプルプレーヤー（このチャンネルでサンプルを再生）",
 "De-squash (give back what a heavy compressor took)": "DE-SQUASH（強いコンプレッサーで失われたものを戻す）",
-"CHANNEL EQ · DUAL LISTEN": "チャンネルEQ・デュアルリスン"
+"CHANNEL EQ · DUAL LISTEN": "チャンネルEQ・デュアルリスン",
+"COMPRESSION TARGET": "圧縮ターゲット",
+"Listening: play or speak into this channel for a few seconds.": "測定中：このチャンネルで数秒間、再生するか話してください。",
+"Suggested: threshold ": "推奨：スレッショルド ",
+" dB, ratio ": " dB、レシオ ",
+"No compression needed": "圧縮は不要です",
+"Measured on the channel's input over the last 10 seconds: how far the loud and the quiet moments sit apart. Nothing changes until you press APPLY.": "過去10秒間のチャンネル入力で測定：大きい瞬間と静かな瞬間の差。APPLYを押すまで何も変わりません。"
 }

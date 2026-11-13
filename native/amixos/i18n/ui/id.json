@@ -1377,5 +1377,11 @@
 "More than 12 dB of compression: click to add DE-SQUASH to this channel": "Kompresi lebih dari 12 dB: klik untuk menambahkan DE-SQUASH ke saluran ini",
 "Sample player (play a sample in this channel)": "Pemutar sampel (putar sampel di saluran ini)",
 "De-squash (give back what a heavy compressor took)": "DE-SQUASH (kembalikan apa yang diambil kompresor yang terlalu kuat)",
-"CHANNEL EQ · DUAL LISTEN": "EQ SALURAN · DENGAR GANDA"
+"CHANNEL EQ · DUAL LISTEN": "EQ SALURAN · DENGAR GANDA",
+"COMPRESSION TARGET": "TARGET KOMPRESI",
+"Listening: play or speak into this channel for a few seconds.": "Mendengarkan: putar atau bicaralah di saluran ini selama beberapa detik.",
+"Suggested: threshold ": "Disarankan: ambang ",
+" dB, ratio ": " dB, rasio ",
+"No compression needed": "Tidak perlu kompresi",
+"Measured on the channel's input over the last 10 seconds: how far the loud and the quiet moments sit apart. Nothing changes until you press APPLY.": "Diukur pada input saluran selama 10 detik terakhir: seberapa jauh momen keras dan pelan terpisah. Tidak ada yang berubah sampai Anda menekan APPLY."
 }

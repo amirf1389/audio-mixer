@@ -1373,5 +1373,11 @@
 "More than 12 dB of compression: click to add DE-SQUASH to this channel": "Mehr als 12 dB Kompression: Klicken Sie hier, um DE-SQUASH zu diesem Kanal hinzuzufügen",
 "Sample player (play a sample in this channel)": "Sample-Player (ein Sample in diesem Kanal abspielen)",
 "De-squash (give back what a heavy compressor took)": "DE-SQUASH (das zurückgeben, was ein starker Kompressor weggenommen hat)",
-"CHANNEL EQ · DUAL LISTEN": "KANAL-EQ · DUAL-LISTEN"
+"CHANNEL EQ · DUAL LISTEN": "KANAL-EQ · DUAL-LISTEN",
+"COMPRESSION TARGET": "KOMPRESSIONSZIEL",
+"Listening: play or speak into this channel for a few seconds.": "Hören: Spielen Sie einige Sekunden lang etwas über diesen Kanal ab oder sprechen Sie hinein.",
+"Suggested: threshold ": "Vorschlag: Schwelle ",
+" dB, ratio ": " dB, Ratio ",
+"No compression needed": "Keine Kompression nötig",
+"Measured on the channel's input over the last 10 seconds: how far the loud and the quiet moments sit apart. Nothing changes until you press APPLY.": "Gemessen am Eingang des Kanals über die letzten 10 Sekunden: wie weit laute und leise Momente auseinanderliegen. Nichts ändert sich, bis Sie APPLY drücken."
 }

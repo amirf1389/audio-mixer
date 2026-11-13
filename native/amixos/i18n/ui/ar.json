@@ -1378,5 +1378,11 @@
 "More than 12 dB of compression: click to add DE-SQUASH to this channel": "ضغط يزيد عن 12 ديسيبل: انقر لإضافة DE-SQUASH إلى هذه القناة",
 "Sample player (play a sample in this channel)": "مشغل العينات (تشغيل عينة في هذه القناة)",
 "De-squash (give back what a heavy compressor took)": "DE-SQUASH (إعادة ما أخذه الضاغط القوي)",
-"CHANNEL EQ · DUAL LISTEN": "معادل القناة · الاستماع المزدوج"
+"CHANNEL EQ · DUAL LISTEN": "معادل القناة · الاستماع المزدوج",
+"COMPRESSION TARGET": "هدف الضغط",
+"Listening: play or speak into this channel for a few seconds.": "الاستماع: قم بالتشغيل أو تحدث عبر هذه القناة لبضع ثوانٍ.",
+"Suggested: threshold ": "مقترح: العتبة ",
+" dB, ratio ": " ديسيبل، النسبة ",
+"No compression needed": "لا حاجة إلى ضغط",
+"Measured on the channel's input over the last 10 seconds: how far the loud and the quiet moments sit apart. Nothing changes until you press APPLY.": "يُقاس على مدخل القناة خلال آخر 10 ثوانٍ: مدى تباعد اللحظات العالية عن الهادئة. لا يتغير شيء حتى تضغط APPLY."
 }
