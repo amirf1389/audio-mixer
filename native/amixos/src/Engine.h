@@ -94,6 +94,8 @@ class Engine : public QObject {
   Q_INVOKABLE QVariantMap checkKey(const QString& key) const;   // genuine? which plan? upgrade / same / downgrade; nothing is stored
   Q_INVOKABLE QVariantMap activateKey(const QString& key);      // verifies and stores; {ok, reason, message}
   Q_INVOKABLE bool deactivateKey();
+  Q_INVOKABLE QVariantMap storeActivation(const QString& activation);   // verifies it for this computer, stores it; {ok, reason, message}
+  Q_INVOKABLE bool storeRevocations(const QString& list);               // keeps the vendor's revocation list when genuine and newer
   Q_INVOKABLE QString licenseRequest(const QString& plan, const QString& name, const QString& email) const;   // JSON to send the vendor
   Q_INVOKABLE QString vendorKeyFingerprint() const;
   // AUTO LICENCE: the console writes its key request to <data>/key-request.json on its own and watches the data folder and ~/Downloads for a

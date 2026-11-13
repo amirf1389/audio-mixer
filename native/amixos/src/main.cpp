@@ -104,6 +104,8 @@ int main(int argc, char* argv[]) {
   qml.rootContext()->setContextProperty("media", &media);
   qml.rootContext()->setContextProperty("samples", &samples);
   qml.rootContext()->setContextProperty("updater", &update);
+  QObject::connect(&update, &Update::revocations, &engine, [&](const QString& l) { engine.storeRevocations(l); });   // the newest revocation list the licence server signs
+  QTimer::singleShot(4000, &update, [&] { update.fetchRevocations(); });   // once a start, quietly (nothing when no licence server is set)
   QObject::connect(&update, &Update::restarting, &app, [&] { settings.sessionClosed(); engine.stop(); QTimer::singleShot(1800, &app, &QCoreApplication::quit); });   // INSTALL AND RESTART: save, release the sound card, show the notice, quit; the setup starts the console again
   qml.rootContext()->setContextProperty("measure", &measure);
   qml.rootContext()->setContextProperty("remote", &remote);

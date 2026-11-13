@@ -69,6 +69,10 @@ function buildPayload(body, now = Date.now()) {
     issued: now, expires: days ? now + days * 86400000 : null, seats,
   };
   // TRIAL: a key marked as a trial always ends (one year unless fewer days are asked for) and is for one computer
+  // TERM: perpetual (never ends), annual (one year), trial (30 days, one computer), limited (the days asked for)
+  const term = body.term === undefined ? (body.trial === true ? 'trial' : days ? 'limited' : 'perpetual') : String(body.term);
+  if (!['perpetual', 'annual', 'trial', 'limited'].includes(term)) return { error: 'term must be perpetual, annual, trial or limited' };
+  payload.term = term; if (term === 'perpetual') payload.expires = null; if (term === 'annual') payload.expires = now + 365 * 86400000; if (term === 'trial') { payload.seats = 1; payload.expires = now + 30 * 86400000; }
   if (body.trial === true) { payload.trial = true; payload.seats = 1; const d = days && days <= 365 ? days : 365; payload.expires = now + d * 86400000; }
   if (machine) payload.mid = machine;
   return { payload };
@@ -119,6 +123,55 @@ function deactivateDevice({ key, machine, file = DATA_FILE, jwk }) {
 // ---- the customer's own details (name, e-mail, note) are kept encrypted: AES-256-GCM under a key derived with scrypt from the data secret and
 // a random salt stored in the file. The file alone, copied off the server, does not give them away.
 const keyCache = new Map();
+// ── ACTIVATION (Windows-style): a product key, licence key or edition token + this computer's machine code -> an activation token bound to
+// that computer, signed with the vendor key. The seat limit and revocation are enforced HERE; the app then runs offline for the whole term.
+const fingerprintHex = pub => crypto.createHash('sha256').update(pub.x + '.' + pub.y).digest('hex').slice(0, 16).toUpperCase();
+function signToken(prefix, payload, privateKey) {
+  const body = Buffer.from(JSON.stringify(payload)).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const sig = crypto.sign('sha256', Buffer.from(body), { key: privateKey, dsaEncoding: 'ieee-p1363' }).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return `${prefix}.${body}.${sig}`;
+}
+const termOf = p => p.term || (p.trial ? 'trial' : p.expires ? 'limited' : 'perpetual');
+function activationFor({ lid, plan, term, expires, machine, privateKey, now }) {
+  const pub = crypto.createPublicKey(privateKey).export({ format: 'jwk' });
+  return signToken('AMXA1', { v: 1, kind: 'amfx1-activation', kid: fingerprintHex(pub), lid, mid: machine, plan, term, iat: now, exp: expires || 0 }, privateKey);
+}
+// one entry point for all three: { code } (product key), { key } (licence key) or { token } (shipped edition token), plus { machine }
+function activateOnline({ code, key, token, machine, file = DATA_FILE, secret, jwk, privateKey, now = Date.now() }) {
+  const m = normMachine(machine); if (!/^[A-Z0-9-]{8,64}$/.test(m)) return { ok: false, status: 400, error: 'machine code format is not valid' };
+  let p;
+  if (code) { const r = redeemProductKey({ code, file, secret, now }); if (!r.ok) return r; p = r.payload; }
+  else if (token) {
+    const v = require('../edition').verifyToken(String(token).trim(), { jwk, now }); if (!v.ok) return { ok: false, status: 400, error: v.message || v.reason };
+    p = { id: v.payload.serial, plan: v.payload.plan, seats: 1, expires: v.payload.expires || null, term: v.payload.expires ? 'limited' : 'perpetual' };
+  } else { const v = verifyKey(String(key || '').trim(), { machine: m, jwk, now }); if (!v.ok) return { ok: false, status: v.reason === 'wrong-machine' ? 403 : 400, error: v.message || v.reason }; p = v.payload; }
+  if (p.mid && p.mid.replace(/-/g, '') !== m.replace(/-/g, '')) return { ok: false, status: 403, error: 'this licence is bound to a different computer' };
+  const reg = loadRegistry(file), rec = reg[p.id] || { devices: [] }; if (!Array.isArray(rec.devices)) rec.devices = [];
+  if (rec.revoked) return { ok: false, status: 403, error: 'this licence was revoked', revoked: true };
+  if (p.expires && p.expires < now) return { ok: false, status: 403, error: 'this licence has ended' };
+  const limit = Math.min(p.seats || 1, MAX_DEVICES);
+  if (!rec.devices.includes(m)) { if (rec.devices.length >= limit) return { ok: false, status: 409, error: `this licence is already active on ${limit} computer${limit > 1 ? 's' : ''}: deactivate one first`, devices: rec.devices.length, limit };
+    rec.devices.push(m); reg[p.id] = rec; saveRegistry(file, reg); }
+  return { ok: true, status: 200, id: p.id, plan: p.plan, term: termOf(p), devices: rec.devices.length, limit,
+    activation: activationFor({ lid: p.id, plan: p.plan, term: termOf(p), expires: p.expires, machine: m, privateKey, now }) };
+}
+// a 30-day trial of STUDIO, once per computer (asking again returns the same end date; the record is the machine code's hash only)
+function startTrial({ machine, file = DATA_FILE, privateKey, now = Date.now(), days = 30, plan = 'studio' }) {
+  const m = normMachine(machine); if (!/^[A-Z0-9-]{8,64}$/.test(m)) return { ok: false, status: 400, error: 'machine code format is not valid' };
+  const reg = loadRegistry(file), t = reg._trials || {}, h = crypto.createHash('sha256').update('trial:' + m).digest('hex').slice(0, 32);
+  if (!t[h]) { t[h] = now; reg._trials = t; saveRegistry(file, reg); }
+  const ends = t[h] + days * 86400000; if (ends < now) return { ok: false, status: 403, error: 'the trial on this computer has ended' };
+  const lid = 'TRIAL-' + h.slice(0, 12).toUpperCase();
+  if ((reg[lid] || {}).revoked) return { ok: false, status: 403, error: 'this trial was revoked' };
+  return { ok: true, status: 200, id: lid, plan, term: 'trial', expires: ends, activation: activationFor({ lid, plan, term: 'trial', expires: ends, machine: m, privateKey, now }) };
+}
+// the revocation list every app keeps: every revoked licence id, signed, newest first by its issue time
+function revocationList({ file = DATA_FILE, privateKey, now = Date.now() }) {
+  const reg = loadRegistry(file), lids = Object.keys(reg).filter(k => !k.startsWith('_') && reg[k] && reg[k].revoked).sort();
+  const pub = crypto.createPublicKey(privateKey).export({ format: 'jwk' });
+  return signToken('AMXR1', { v: 1, kind: 'amfx1-revocations', kid: fingerprintHex(pub), issued: now, lids }, privateKey);
+}
+
 function dataKey(reg, secret) {
   if (!reg._salt) reg._salt = crypto.randomBytes(16).toString('hex');
   const id = reg._salt + ':' + crypto.createHash('sha256').update(String(secret)).digest('hex');
@@ -157,7 +210,7 @@ function redeemProductKey({ code, file = DATA_FILE, secret, now = Date.now() }) 
   if (m.expires && m.expires < now) return { ok: false, status: 403, error: 'this licence has ended' };
   const d = rec.enc ? unseal(rec.enc, dataKey(reg, secret)) : null;
   const payload = { v: 1, id, plan: m.plan, name: (d && d.name) || 'Licensed user', issued: m.issued, expires: m.expires || null, seats: m.seats || 1 };
-  if (m.trial) payload.trial = true; if (m.mid) payload.mid = m.mid;
+  if (m.trial) payload.trial = true; if (m.mid) payload.mid = m.mid; if (m.term) payload.term = m.term;
   rec.redeems = (rec.redeems || 0) + 1; rec.redeemedAt = now; saveRegistry(file, reg);   // how often and when last: the management page shows it
   return { ok: true, status: 200, id, payload };
 }
@@ -172,7 +225,7 @@ function renewProductKey({ id, file = DATA_FILE }) {
 // Puts a newly issued key on record. The key itself is not stored.
 function recordIssue({ payload, email, note, file = DATA_FILE, secret }) {
   const reg = loadRegistry(file), key = dataKey(reg, secret), rec = reg[payload.id] || { devices: [] };
-  rec.meta = { plan: payload.plan, issued: payload.issued, expires: payload.expires, seats: payload.seats, mid: payload.mid || null };
+  rec.meta = { plan: payload.plan, issued: payload.issued, expires: payload.expires, seats: payload.seats, mid: payload.mid || null, term: payload.term || null };
   if (payload.trial) rec.meta.trial = true;
   const productKey = rec.code ? null : newProductKey(); if (productKey) rec.code = productKeyHash(productKey);
   rec.enc = seal({ name: payload.name, email: clean(email, 120), note: clean(note, 200) }, key);
@@ -263,6 +316,12 @@ function createServer({ privateKey, token, dataFile = DATA_FILE, dataSecret, por
     return c.json(200, { ok: true, id: built.payload.id, plan: built.payload.plan, expires: built.payload.expires, key, productKey: rec.productKey || null });
   };
   // the console trades a product key for the signed key (public, rate limited; the key it returns is checked offline by the console)
+  // Windows-style activation: product key / licence key / edition token + machine code -> an activation for that computer (seats enforced here)
+  app.post('/activate-online', limit('pub', 30), async c => { const b = await c.body(); const r = activateOnline({ code: b.code, key: b.key, token: b.token, machine: b.machine, file: dataFile, secret, jwk, privateKey });
+    audit.add(r.ok ? 'device.activate-online' : 'device.activate-online.refused', r.id || '-', c.ip, r.ok ? `${r.plan} ${r.term} ${r.devices}/${r.limit}` : r.error); return r.ok ? c.json(200, r) : c.json(r.status, { ok: false, error: r.error }); });
+  app.post('/trial', limit('pub', 10), async c => { const b = await c.body(); const r = startTrial({ machine: b.machine, file: dataFile, privateKey });
+    audit.add(r.ok ? 'trial.start' : 'trial.refused', r.id || '-', c.ip, r.ok ? '' : r.error); return r.ok ? c.json(200, r) : c.json(r.status, { ok: false, error: r.error }); });
+  app.get('/revocations', limit('pub', 60), c => c.json(200, { ok: true, list: revocationList({ file: dataFile, privateKey }) }));
   app.post('/redeem', limit('pub', 30), async c => { const b = await c.body(); const r = redeemProductKey({ code: b.code, file: dataFile, secret });
     if (!r.ok) { audit.add('license.redeem.refused', '-', c.ip, r.error); return c.json(r.status, { ok: false, error: r.error }); }
     audit.add('license.redeem', r.id, c.ip, r.payload.plan); return c.json(200, { ok: true, id: r.id, plan: r.payload.plan, key: signKey(r.payload, privateKey) }); });
@@ -381,7 +440,7 @@ function createServer({ privateKey, token, dataFile = DATA_FILE, dataSecret, por
   return http.createServer(app.handler);
 }
 
-module.exports = { renewProductKey, newProductKey, normProductKey, redeemProductKey, buildPayload, createServer, authorized, activateDevice, deactivateDevice, keyStatus, listLicenses, setRevoked, removeDevice, recordIssue, MAX_DEVICES };
+module.exports = { activateOnline, startTrial, revocationList, signToken, renewProductKey, newProductKey, normProductKey, redeemProductKey, buildPayload, createServer, authorized, activateDevice, deactivateDevice, keyStatus, listLicenses, setRevoked, removeDevice, recordIssue, MAX_DEVICES };
 
 if (require.main === module) {
   const token = process.env.LICENSE_ADMIN_TOKEN;

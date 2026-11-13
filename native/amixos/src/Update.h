@@ -41,7 +41,11 @@ class Update : public QObject {
   QString licenseServer() const { return s_.value("licence/server", QStringLiteral("https://licence.amirfakhribadri.my")).toString(); }   /* the vendor's licence server unless another is typed */ void setLicenseServer(const QString& u);
   QString redeemState() const { return redeem_; }
   Q_INVOKABLE bool setServerLink(const QString& url);          // the update server link: any https host; its list must still be signed
-  Q_INVOKABLE void redeemProductKey(const QString& code);      // POST <licence server>/redeem; redeemed(key) when the server answers with a key
+  Q_INVOKABLE void redeemProductKey(const QString& code);
+  // ACTIVATION (Windows-style): a product key, licence key (AMIX1.) or edition token (AMFXE1.) + this computer's code -> activated(token)
+  Q_INVOKABLE void activateOnline(const QString& text, const QString& machine);
+  Q_INVOKABLE void startTrial(const QString& machine);       // a 30-day trial for this computer -> activated(token)
+  Q_INVOKABLE void fetchRevocations();                       // GET <licence server>/revocations -> revocations(list)      // POST <licence server>/redeem; redeemed(key) when the server answers with a key
   Q_INVOKABLE void check();                                         // GET the manifest, verify, compare
   Q_INVOKABLE bool applyManifest(const QString& envelopeText);      // the same without the network (a file, the smoke test); false = rejected, with the reason in message
   Q_INVOKABLE void download();                                      // this platform's file into the data folder, sha256 checked
@@ -61,6 +65,8 @@ class Update : public QObject {
  signals:
   void changed();
   void redeemed(const QString& key);
+  void activated(const QString& activation);
+  void revocations(const QString& list);
  private:
   void set(const QString& state, const QString& msg) { state_ = state; msg_ = msg; emit changed(); }
   static QString platformKey();

@@ -74,6 +74,41 @@ void Update::redeemProductKey(const QString& code) {
     redeem_ = !o.value("error").toString().isEmpty() ? QStringLiteral("The licence server says: ") + o.value("error").toString().left(120) : QStringLiteral("The licence server did not answer (") + r->errorString().left(80) + ")";
     emit changed(); });
 }
+void Update::activateOnline(const QString& text, const QString& machine) {
+  const QString server = licenseServer();
+  if (server.isEmpty()) { redeem_ = QStringLiteral("Type the address of the licence server first (the vendor gives it with the product key)."); emit changed(); return; }
+  if (redeem_ == "asking") return;
+  const QString t = text.trimmed(); QJsonObject body{{"machine", machine}};
+  if (t.startsWith("AMIX1.")) body["key"] = t; else if (t.startsWith("AMFXE1.")) body["token"] = t;
+  else { QString c; for (const QChar ch : t.toUpper()) if (ch.isLetterOrNumber()) c += ch; if (c.size() != 25) { redeem_ = QStringLiteral("Type a product key (25 characters), a licence key or an edition token."); emit changed(); return; } body["code"] = c; }
+  QNetworkRequest req{QUrl(server + "/activate-online")}; req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json"); req.setTransferTimeout(15000);
+  redeem_ = "asking"; emit changed();
+  QNetworkReply* r = net_.post(req, QJsonDocument(body).toJson(QJsonDocument::Compact));
+  connect(r, &QNetworkReply::finished, this, [this, r] {
+    r->deleteLater(); const QJsonObject o = QJsonDocument::fromJson(r->readAll().left(16384)).object(); const QString a = o.value("activation").toString();
+    if (o.value("ok").toBool() && a.startsWith("AMXA1.")) { redeem_ = "done"; emit changed(); emit activated(a); return; }   // the console verifies it for this computer before it stores it
+    redeem_ = !o.value("error").toString().isEmpty() ? QStringLiteral("The licence server says: ") + o.value("error").toString().left(160) : QStringLiteral("The licence server did not answer (") + r->errorString().left(80) + ")";
+    emit changed(); });
+}
+void Update::startTrial(const QString& machine) {
+  const QString server = licenseServer();
+  if (server.isEmpty()) { redeem_ = QStringLiteral("Type the address of the licence server first."); emit changed(); return; }
+  if (redeem_ == "asking") return;
+  QNetworkRequest req{QUrl(server + "/trial")}; req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json"); req.setTransferTimeout(15000);
+  redeem_ = "asking"; emit changed();
+  QNetworkReply* r = net_.post(req, QJsonDocument(QJsonObject{{"machine", machine}}).toJson(QJsonDocument::Compact));
+  connect(r, &QNetworkReply::finished, this, [this, r] {
+    r->deleteLater(); const QJsonObject o = QJsonDocument::fromJson(r->readAll().left(16384)).object(); const QString a = o.value("activation").toString();
+    if (o.value("ok").toBool() && a.startsWith("AMXA1.")) { redeem_ = "done"; emit changed(); emit activated(a); return; }
+    redeem_ = !o.value("error").toString().isEmpty() ? QStringLiteral("The licence server says: ") + o.value("error").toString().left(160) : QStringLiteral("The licence server did not answer (") + r->errorString().left(80) + ")";
+    emit changed(); });
+}
+void Update::fetchRevocations() {
+  const QString server = licenseServer(); if (server.isEmpty()) return;
+  QNetworkRequest req{QUrl(server + "/revocations")}; req.setTransferTimeout(15000);
+  QNetworkReply* r = net_.get(req);
+  connect(r, &QNetworkReply::finished, this, [this, r] { r->deleteLater(); const QString l = QJsonDocument::fromJson(r->readAll().left(1 << 20)).object().value("list").toString(); if (l.startsWith("AMXR1.")) emit revocations(l); });   // checked by the console before it is kept
+}
 int Update::compareVersions(const QString& a, const QString& b) { return am::upd::cmpVersion(a.toStdString(), b.toStdString()); }
 QString Update::platformKey() {
 #if defined(_WIN32)
