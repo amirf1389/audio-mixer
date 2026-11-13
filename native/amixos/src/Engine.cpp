@@ -120,7 +120,11 @@ bool Engine::open(const QString& backend, const QString& inDevice, const QString
   // WASAPI, and with headphones or a headset as the output the system's default microphone (which is the headset's own when one is
   // plugged in) is not opened either. A microphone picked by name that is not a headset's is opened as asked.
   QString inDev = inDevice; int inCh = inChannels; micOffNote_.clear();
-  if (backend == "wasapi" && inCh > 0) {
+  // 2 IN / 2 OUT at least, on every driver (ASIO, WASAPI, DirectSound, Bluetooth): a device that reported 0 channels (busy when the list was read, or a
+  // driver that does not say) still opens its first pair; ASIO and DirectSound take only what the device has, so asking for two is safe
+  if (inDevice != "-" && inCh < 2) inCh = 2;
+  if (outChannels < 2 && outDevice != "-") outChannels = 2;
+  if (backend == "wasapi" && inCh > 0 && headsetMicOff()) {
     const auto kindOf = [this](const QString& id, bool capture) { for (const QVariant& v : devices_) { const QVariantMap m = v.toMap(); if (m["backend"].toString() != "wasapi") continue;
         if (id.isEmpty() ? (capture ? m["defaultIn"].toBool() && m["inChannels"].toInt() > 0 : m["defaultOut"].toBool() && m["outChannels"].toInt() > 0) : m["id"].toString() == id) return m["kind"].toString(); } return QString(); };
     const QString ik = kindOf(inDevice, true), ok = kindOf(outDevice, false);
@@ -130,7 +134,7 @@ bool Engine::open(const QString& backend, const QString& inDevice, const QString
   rt_ = std::make_unique<am::Runtime>(kStrips);
   am::DeviceConfig cfg; cfg.backend = backend.isEmpty() ? "auto" : backend.toStdString(); cfg.inDevice = inDev.toStdString(); cfg.outDevice = outDevice.toStdString();
   cfg.sampleRate = sampleRate > 0 ? sampleRate : 48000; cfg.frames = static_cast<unsigned>(frames > 0 ? frames : 256); blockFrames_ = static_cast<int>(cfg.frames); cfg.inChannels = inCh; cfg.outChannels = outChannels;
-  devIn_ = std::clamp(inChannels, 0, kStrips); devOut_ = std::clamp(outChannels, 0, kOutputs);
+  devIn_ = std::clamp(inCh, 0, kStrips); devOut_ = std::clamp(outChannels, 0, kOutputs);
   std::string err; nullInputFor(cfg); rememberDeviceNames(cfg.backend, cfg.inDevice, cfg.outDevice);
   if (opening_) return false;
   { opening_ = true; emit busyChanged(); auto pending = std::move(rt_); am::Runtime* raw = pending.get(); auto e = std::make_shared<std::string>();   // rt_ is empty while the driver starts: nothing in the interface can touch a half-open runtime
@@ -573,11 +577,12 @@ void Engine::resetStripDsp(int i) { if (i < 0 || i >= kStrips) return; strips_[s
 void Engine::factoryLayout() {
   std::vector<StripUi>& st = strips_;
   for (int i = 0; i < kStrips; ++i) st[static_cast<std::size_t>(i)].name = QStringLiteral("CH %1").arg(i + 1, 2, 10, QLatin1Char('0'));
-  st[0].name = QStringLiteral("MAIN L"); st[1].name = QStringLiteral("MAIN R"); st[2].name = QStringLiteral("LIVE L"); st[3].name = QStringLiteral("LIVE R");
-  for (int i : {0, 2}) { st[static_cast<std::size_t>(i)].link = st[static_cast<std::size_t>(i + 1)].link = true; st[static_cast<std::size_t>(i)].pan = -1; st[static_cast<std::size_t>(i + 1)].pan = 1; }
+  // CH 1 DIGITAL AUDIO and CH 2 MIC: the device's inputs 1 and 2, two separate sources, centred; CH 3-4 LIVE L/R a linked pair
+  st[0].name = QStringLiteral("DIGITAL AUDIO"); st[1].name = QStringLiteral("MIC"); st[2].name = QStringLiteral("LIVE L"); st[3].name = QStringLiteral("LIVE R");
+  st[2].link = st[3].link = true; st[2].pan = -1; st[3].pan = 1;
   for (int i = 4; i < 7; ++i) st[static_cast<std::size_t>(i)].name = QStringLiteral("RESERVE %1").arg(i + 1);
   // 360 AUDIO on for the four: MAIN at the front (±30°), LIVE wider (±60°), one metre away
-  const double az[4] = {-30, 30, -60, 60};
+  const double az[4] = {0, 0, -60, 60};   // DIGITAL AUDIO and MIC in front, LIVE wide
   for (int i = 0; i < 4; ++i) { StripUi& u = st[static_cast<std::size_t>(i)]; u.spOn = true; u.spAz = az[i]; u.spEl = 0; u.spDist = 1; u.spSpread = 0; }
   // the sends, after the fader: MAIN and LIVE to AUX 1, every other channel to AUX 2, at 0 dB
   for (int i = 0; i < kStrips; ++i) { SendUi& snd = st[static_cast<std::size_t>(i)].sends[i < 4 ? 0 : 1]; snd.db = 0; snd.pre = false; }
@@ -661,7 +666,7 @@ bool Engine::openAsioDriver(const QString& id, int frames) {
     const bool unknown = d["inChannels"].toInt() + d["outChannels"].toInt() == 0;   // still unknown: ask for everything, the driver gives what the device has
     const double rate = d["defaultRate"].toDouble() > 0 ? d["defaultRate"].toDouble() : 48000.0;
     if (unknown) { const bool ok = open(QStringLiteral("asio"), id, id, rate, frames > 0 ? frames : asioFrames(rate), 32, 32); asioOpenId_ = ok ? id : QString(); if (ok) readAsioChannels(id); else asioNote_.clear(); emit devicesChanged(); return ok; }
-    const bool ok = open(QStringLiteral("asio"), id, id, rate, frames > 0 ? frames : asioFrames(rate), std::min(32, std::max(0, d["inChannels"].toInt())), std::min(32, std::max(2, d["outChannels"].toInt()))); asioOpenId_ = ok ? id : QString(); if (ok) readAsioChannels(id); else asioNote_.clear(); emit devicesChanged(); return ok; }   // this driver or nothing: no other driver is tried in its place
+    const bool ok = open(QStringLiteral("asio"), id, id, rate, frames > 0 ? frames : asioFrames(rate), std::min(32, std::max(2, d["inChannels"].toInt())), std::min(32, std::max(2, d["outChannels"].toInt()))); asioOpenId_ = ok ? id : QString(); if (ok) readAsioChannels(id); else asioNote_.clear(); emit devicesChanged(); return ok; }   // this driver or nothing: no other driver is tried in its place
   status_ = QStringLiteral("That ASIO driver is not in the list any more: press RESCAN."); emit stateChanged(); return false;
 }
 // ASIO runs on a 10 ms buffer: the number of frames that is 10 ms at this rate (480 at 48 kHz). The driver then takes the nearest size it
@@ -1015,6 +1020,12 @@ bool Engine::applyCompSuggestion(int i) {
   const double makeup = std::clamp(-c.thresholdDb * (1.0 - 1.0 / c.ratio) * 0.5, 0.0, 12.0);   // gives back about half of what the louder parts lose
   setCompressor(i, c.ratio > 1.0, c.thresholdDb, c.ratio, p.compKneeDb, p.compAttackMs, p.compReleaseMs, c.ratio > 1.0 ? makeup : p.compMakeupDb);
   return true;
+}
+int Engine::playSampleOnStrip(int i, int id) {
+  if (id < 1 || id > 100) return -1; const int k = addToRack(i, QStringLiteral("fx:sampler")); if (k < 0) return -1;
+  setPluginParam(i, k, 0, (id - 1) / 99.0);   // SAMPLE
+  setPluginParam(i, k, 1, 0.0); setPluginParam(i, k, 1, 1.0);   // PLAY off, then on: from the top
+  return k;
 }
 int Engine::addToRack(int i, const QString& kind) {
   if (i < 0 || i >= kStrips || kind.isEmpty()) return -1; const StripUi& s = strips_[static_cast<std::size_t>(i)];

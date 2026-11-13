@@ -1384,5 +1384,7 @@
 "Suggested: threshold ": "مقترح: العتبة ",
 " dB, ratio ": " ديسيبل، النسبة ",
 "No compression needed": "لا حاجة إلى ضغط",
-"Measured on the channel's input over the last 10 seconds: how far the loud and the quiet moments sit apart. Nothing changes until you press APPLY.": "يُقاس على مدخل القناة خلال آخر 10 ثوانٍ: مدى تباعد اللحظات العالية عن الهادئة. لا يتغير شيء حتى تضغط APPLY."
+"Measured on the channel's input over the last 10 seconds: how far the loud and the quiet moments sit apart. Nothing changes until you press APPLY.": "يُقاس على مدخل القناة خلال آخر 10 ثوانٍ: مدى تباعد اللحظات العالية عن الهادئة. لا يتغير شيء حتى تضغط APPLY.",
+"Add an effect": "إضافة تأثير",
+"Play a sample": "تشغيل عيّنة صوتية"
 }

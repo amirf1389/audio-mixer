@@ -1384,5 +1384,7 @@
 "Suggested: threshold ": "پیشنهادی: آستانه ",
 " dB, ratio ": " دسی‌بل، نسبت ",
 "No compression needed": "نیازی به فشرده‌سازی نیست",
-"Measured on the channel's input over the last 10 seconds: how far the loud and the quiet moments sit apart. Nothing changes until you press APPLY.": "روی ورودی کانال در ۱۰ ثانیهٔ گذشته اندازه‌گیری شده است: فاصلهٔ لحظه‌های بلند و آرام. تا APPLY را نزنید چیزی تغییر نمی‌کند."
+"Measured on the channel's input over the last 10 seconds: how far the loud and the quiet moments sit apart. Nothing changes until you press APPLY.": "روی ورودی کانال در ۱۰ ثانیهٔ گذشته اندازه‌گیری شده است: فاصلهٔ لحظه‌های بلند و آرام. تا APPLY را نزنید چیزی تغییر نمی‌کند.",
+"Add an effect": "یک افکت اضافه کنید",
+"Play a sample": "پخش یک نمونهٔ صوتی"
 }

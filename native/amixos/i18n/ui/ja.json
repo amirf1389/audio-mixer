@@ -1380,5 +1380,7 @@
 "Suggested: threshold ": "推奨：スレッショルド ",
 " dB, ratio ": " dB、レシオ ",
 "No compression needed": "圧縮は不要です",
-"Measured on the channel's input over the last 10 seconds: how far the loud and the quiet moments sit apart. Nothing changes until you press APPLY.": "過去10秒間のチャンネル入力で測定：大きい瞬間と静かな瞬間の差。APPLYを押すまで何も変わりません。"
+"Measured on the channel's input over the last 10 seconds: how far the loud and the quiet moments sit apart. Nothing changes until you press APPLY.": "過去10秒間のチャンネル入力で測定：大きい瞬間と静かな瞬間の差。APPLYを押すまで何も変わりません。",
+"Add an effect": "エフェクトを追加",
+"Play a sample": "サンプルを再生"
 }

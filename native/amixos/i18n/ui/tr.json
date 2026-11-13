@@ -1384,5 +1384,7 @@
 "Suggested: threshold ": "Öneri: eşik ",
 " dB, ratio ": " dB, oran ",
 "No compression needed": "Sıkıştırma gerekmiyor",
-"Measured on the channel's input over the last 10 seconds: how far the loud and the quiet moments sit apart. Nothing changes until you press APPLY.": "Son 10 saniyede kanalın girişinde ölçüldü: yüksek ve sessiz anların birbirinden ne kadar uzak olduğu. APPLY'a basana kadar hiçbir şey değişmez."
+"Measured on the channel's input over the last 10 seconds: how far the loud and the quiet moments sit apart. Nothing changes until you press APPLY.": "Son 10 saniyede kanalın girişinde ölçüldü: yüksek ve sessiz anların birbirinden ne kadar uzak olduğu. APPLY'a basana kadar hiçbir şey değişmez.",
+"Add an effect": "Bir efekt ekle",
+"Play a sample": "Bir sample çal"
 }

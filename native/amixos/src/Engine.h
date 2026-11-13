@@ -175,6 +175,9 @@ class Engine : public QObject {
   Q_PROPERTY(bool preferInt32 READ preferInt32 WRITE setPreferInt32 NOTIFY recordChanged)
   bool preferInt32() const { return settings_.value("audio/preferInt32", true).toBool(); } void setPreferInt32(bool v) { settings_.setValue("audio/preferInt32", v); emit recordChanged(); }
   // BLUETOOTH AUDIO in the device lists: on (default) or off (hidden from the lists and AUTO DETECT; a device already open stays open)
+  // HEADSET MICROPHONE OFF (WASAPI): when on, a headset's own microphone is not opened with headphones / headset / Bluetooth output. Off by default: inputs 1-2 open.
+  Q_PROPERTY(bool headsetMicOff READ headsetMicOff WRITE setHeadsetMicOff NOTIFY recordChanged)
+  bool headsetMicOff() const { return settings_.value("audio/headsetMicOff", false).toBool(); } void setHeadsetMicOff(bool v) { settings_.setValue("audio/headsetMicOff", v); emit recordChanged(); }
   Q_PROPERTY(bool bluetoothAudio READ bluetoothAudio WRITE setBluetoothAudio NOTIFY devicesChanged)
   bool bluetoothAudio() const { return settings_.value("audio/bluetooth", true).toBool(); } void setBluetoothAudio(bool v) { settings_.setValue("audio/bluetooth", v); refreshDevices(); }
   // LOCAL STORE (CLOUD page): what is installed on this computer and can be switched on or off — the extension libraries next to the console and the
@@ -403,7 +406,8 @@ class Engine : public QObject {
   int pluginSlotLimit() const { return kPluginSlots; }   // every edition, BASIC included, may fill the whole rack
   Q_INVOKABLE QVariantList plugins(int strip) const;  // [{slot, kind, name, bypass, builtIn, pending}]
   Q_INVOKABLE void setPlugin(int strip, int slot, const QString& kind);   // "" clears the slot
-  Q_INVOKABLE int addToRack(int strip, const QString& kind);   // the slot that holds that kind (already there, or put in the first free slot); -1 = the rack is full
+  Q_INVOKABLE int addToRack(int strip, const QString& kind);
+  Q_INVOKABLE int playSampleOnStrip(int strip, int sampleId);   // the SAMPLE PLAYER of that channel (added if needed) set to that sample and started; the slot, or -1   // the slot that holds that kind (already there, or put in the first free slot); -1 = the rack is full
   Q_INVOKABLE void setPluginBypass(int strip, int slot, bool bypass);
   Q_INVOKABLE QVariantList pluginCatalog() const;     // the built-in stages, for the chooser
   Q_INVOKABLE void movePlugin(int strip, int from, int to);   // reorder the rack (swap two slots)

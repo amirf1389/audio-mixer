@@ -42,6 +42,7 @@ Item {
         else if (e.key === Qt.Key_Escape) engine.clearSolo()
     }
     readonly property var mon: engine.monitor
+    property bool stripMenuDemo: false   // the screenshots: opens strip 1's menu with ADD AN EFFECT
     property string note: ""   // a short line in the ACTIONS bar (the rack is full ...)
     Timer { running: page.note !== ""; interval: 5000; onTriggered: page.note = "" }
     signal go(string id)
@@ -336,7 +337,8 @@ Item {
                                         Rectangle { implicitWidth: 16; implicitHeight: 13; radius: 3; color: more.visible ? Theme.cyan : Theme.ov(0.06); border.color: Theme.lineSoft
                                             Text { anchors.centerIn: parent; text: "⋯"; color: more.visible ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                                             MouseArea { anchors.fill: parent; onClicked: { engine.selectedStrip = index; more.popup() } }
-                                        Menu { id: more; width: 300
+                                        Connections { target: page; function onStripMenuDemoChanged() { if (index !== 0) return; if (page.stripMenuDemo) { more.popup(120, 40); fxMenu.open() } else { fxMenu.close(); more.close() } } }
+                                        Menu { id: more; width: 300; objectName: "stripMenu" + index
                                             MenuItem { text: i18n.t("Channel panel ›", i18n.lang); onTriggered: { page.sidePanel = true } }
                                             MenuItem { text: i18n.t("Plugin rack ›", i18n.lang); onTriggered: { engine.selectedStrip = index; page.rack = true } }
                                             MenuItem { text: i18n.t("Open EQ / tone", i18n.lang); onTriggered: page.go("dsp") }
@@ -348,6 +350,21 @@ Item {
                                             MenuItem { text: i18n.t("Fader to 0 dB", i18n.lang); onTriggered: engine.setGain(index, 0) }
                                             MenuItem { text: i18n.t("Pan to centre", i18n.lang); onTriggered: engine.setPan(index, 0) }
                                             MenuItem { text: (st && st.autoPol ? "✓ " : "") + i18n.t("Phase: AUTO (turn round when out of phase with the mix)", i18n.lang); onTriggered: engine.setAutoPolarity(index, !(st && st.autoPol)) }
+                                            Menu {   // ADD AN EFFECT: every built-in effect the LOCAL STORE has on, into this channel's rack, with its panel opened
+                                                id: fxMenu; objectName: "stripFxMenu" + index; property int strip: index; title: i18n.t("Add an effect", i18n.lang)
+                                                Instantiator { model: engine.pluginCatalog().filter(x => x.fx)
+                                                    delegate: MenuItem { required property var modelData; text: modelData.name
+                                                        onTriggered: { const k = engine.addToRack(fxMenu.strip, modelData.kind); if (k >= 0) plugEd.openFor(fxMenu.strip, k, modelData.kind, modelData.name); else page.note = i18n.t("The rack of this channel is full.", i18n.lang) } }
+                                                    onObjectAdded: function (i, o) { fxMenu.insertItem(i, o) } onObjectRemoved: function (i, o) { fxMenu.removeItem(o) } } }
+                                            Menu {   // PLAY A SAMPLE: the 100 built-in samples by category; the pick plays in this channel through its SAMPLE PLAYER
+                                                id: smpMenu; property int strip: index; title: i18n.t("Play a sample", i18n.lang)
+                                                Instantiator { model: samples.categories
+                                                    delegate: Menu { id: catMenu; required property string modelData; title: modelData
+                                                        Instantiator { model: samples.list.filter(x => x.category === catMenu.modelData)
+                                                            delegate: MenuItem { required property var modelData; text: modelData.id + "  " + modelData.name
+                                                                onTriggered: { if (engine.playSampleOnStrip(smpMenu.strip, modelData.id) < 0) page.note = i18n.t("The rack of this channel is full.", i18n.lang) } }
+                                                            onObjectAdded: function (i, o) { catMenu.insertItem(i, o) } onObjectRemoved: function (i, o) { catMenu.removeItem(o) } } }
+                                                    onObjectAdded: function (i, o) { smpMenu.insertMenu(i, o) } onObjectRemoved: function (i, o) { smpMenu.removeMenu(o) } } }
                                             MenuItem { text: i18n.t("Sample player (play a sample in this channel)", i18n.lang); onTriggered: { const k = engine.addToRack(index, "fx:sampler"); if (k >= 0) plugEd.openFor(index, k, "fx:sampler", "SAMPLE PLAYER"); else page.note = i18n.t("The rack of this channel is full.", i18n.lang) } }
                                             MenuItem { text: i18n.t("De-squash (give back what a heavy compressor took)", i18n.lang); onTriggered: { const k = engine.addToRack(index, "fx:desquash"); if (k >= 0) plugEd.openFor(index, k, "fx:desquash", "DE-SQUASH"); else page.note = i18n.t("The rack of this channel is full.", i18n.lang) } }
                                             MenuItem { text: i18n.t("Flatten DSP (EQ, dyn, delay, Ø)", i18n.lang); onTriggered: engine.resetStripDsp(index) }

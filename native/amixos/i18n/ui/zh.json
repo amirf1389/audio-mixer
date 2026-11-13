@@ -1382,5 +1382,7 @@
 "Suggested: threshold ": "建议：阈值 ",
 " dB, ratio ": " dB，压缩比 ",
 "No compression needed": "无需压缩",
-"Measured on the channel's input over the last 10 seconds: how far the loud and the quiet moments sit apart. Nothing changes until you press APPLY.": "基于此通道最近 10 秒的输入测量：响亮与安静时刻相差多少。在您按下 APPLY 之前不会改变任何设置。"
+"Measured on the channel's input over the last 10 seconds: how far the loud and the quiet moments sit apart. Nothing changes until you press APPLY.": "基于此通道最近 10 秒的输入测量：响亮与安静时刻相差多少。在您按下 APPLY 之前不会改变任何设置。",
+"Add an effect": "添加效果",
+"Play a sample": "播放采样"
 }

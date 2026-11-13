@@ -1378,5 +1378,7 @@
 "Suggested: threshold ": "Voorstel: drempel ",
 " dB, ratio ": " dB, ratio ",
 "No compression needed": "Geen compressie nodig",
-"Measured on the channel's input over the last 10 seconds: how far the loud and the quiet moments sit apart. Nothing changes until you press APPLY.": "Gemeten op de ingang van het kanaal over de laatste 10 seconden: hoe ver de luide en stille momenten uit elkaar liggen. Er verandert niets tot je op APPLY drukt."
+"Measured on the channel's input over the last 10 seconds: how far the loud and the quiet moments sit apart. Nothing changes until you press APPLY.": "Gemeten op de ingang van het kanaal over de laatste 10 seconden: hoe ver de luide en stille momenten uit elkaar liggen. Er verandert niets tot je op APPLY drukt.",
+"Add an effect": "Een effect toevoegen",
+"Play a sample": "Sample afspelen"
 }
