@@ -268,6 +268,7 @@ class Engine : public QObject {
   Q_INVOKABLE double masteringReductionDb() const { return master_.reductionDb(); }
   Q_INVOKABLE void setSpatial(int strip, bool on, double az, double el, double dist, double spread);
   Q_INVOKABLE QVariantMap spatial(int strip) const;
+  int iamfSlot(int strip) const;   // the rack slot of the strip's IAMF ELEMENT, -1 when it has none
   // 360 AUDIO, THE LISTENER AND A SCENE. HEAD TRACK: the listener's head direction (yaw to the right, pitch up, in degrees) is taken off every
   // object's direction, so the scene stays where it is in the room while the head turns. The angles come from the page (or anything that
   // sets these properties); this program reads no head-tracking sensor by itself.

@@ -215,8 +215,16 @@ double Engine::effectiveDb(int i) const { if (i < 0 || i >= kStrips) return -60;
 bool Engine::effectiveMute(int i) const { if (i < 0 || i >= kStrips) return true; if (i >= licensedChannels_) return true; const StripUi& s = strips_[static_cast<std::size_t>(i)]; if (s.mute) return true; if (s.dca > 0 && dcas_[s.dca - 1].mute) return true; for (int g = 0; g < kGroups; ++g) if ((s.muteGroups >> g) & 1u && muteGroups_[g].active) return true; return false; }
 void Engine::pushStrip(int i) { if (!rt_) return; rt_->setGainDb(i, effectiveDb(i)); rt_->setMute(i, effectiveMute(i)); }
 void Engine::setGain(int i, double db) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].db = std::clamp(db, -60.0, 10.0); pushStrip(i); if (linked(i)) { strips_[static_cast<std::size_t>(partner(i))].db = strips_[static_cast<std::size_t>(i)].db; pushStrip(partner(i)); } emit stripsChanged(); }
+// 360 and IAMF are one place: a strip with an IAMF ELEMENT in its rack is placed by that plug-in (the 360 page moves its knobs and reads
+// them back), and the strip's own 360 stage stays off so the sound is never placed twice. Without one, the 360 stage places it as before.
+int Engine::iamfSlot(int i) const { if (i < 0 || i >= kStrips) return -1; const StripUi& s = strips_[static_cast<std::size_t>(i)];
+  for (int k = 0; k < kPluginSlots; ++k) if (s.plugins[k].kind == QStringLiteral("fx:iamfelement") && s.plugins[k].vst) return k; return -1; }
 void Engine::setSpatial(int i, bool on, double az, double el, double dist, double spread) {
   if (i < 0 || i >= kStrips) return; StripUi& s = strips_[static_cast<std::size_t>(i)];
+  if (const int k = iamfSlot(i); k >= 0) { PluginUi& p = s.plugins[k]; const double a = std::fmod(az + 540.0, 360.0) - 180.0;
+    s.spAz = a; s.spEl = std::clamp(el, -90.0, 90.0); s.spDist = std::clamp(dist, 0.5, 20.0); s.spSpread = std::clamp(spread, 0.0, 1.0); s.spOn = false; pushSpatial(i);
+    p.vst->setParam(0, (s.spAz + 180) / 360); p.vst->setParam(1, (s.spEl + 90) / 180); p.vst->setParam(2, std::log(s.spDist / 0.5) / std::log(40.0)); p.vst->setParam(3, s.spSpread);
+    p.bypass = !on; p.vst->setBypass(!on); emit stripsChanged(); emit spatialMoved(); return; }
   s.spOn = on; s.spAz = std::fmod(az, 360.0); s.spEl = std::clamp(el, -90.0, 90.0); s.spDist = std::clamp(dist, 0.3, 20.0); s.spSpread = std::clamp(spread, 0.0, 1.0);
   pushSpatial(i); emit stripsChanged(); emit spatialMoved();
 }
@@ -240,7 +248,10 @@ void Engine::setSpatialOrbit(int i, double dps) {
 // the engine glides to it inside the audio thread. The console is not rewritten for this (no stripsChanged): only the 360 page is told.
 void Engine::moveObjects() {
   const qint64 now = QDateTime::currentMSecsSinceEpoch(); const double dt = std::clamp(static_cast<double>(now - motionAt_) / 1000.0, 0.0, 0.25); motionAt_ = now; bool any = false;
-  for (int i = 0; i < kStrips; ++i) { StripUi& s = strips_[static_cast<std::size_t>(i)]; if (orbit_[i] == 0 || !s.spOn) continue;
+  for (int i = 0; i < kStrips; ++i) { StripUi& s = strips_[static_cast<std::size_t>(i)]; if (orbit_[i] == 0) continue;
+    if (iamfSlot(i) >= 0) { const QVariantMap sp = spatial(i); if (!sp["on"].toBool()) continue; s.spAz = sp["az"].toDouble(); const double a = std::fmod(s.spAz + orbit_[i] * dt + 540.0, 360.0) - 180.0;
+      const auto& v = s.plugins[iamfSlot(i)].vst; v->setParam(0, (a + 180) / 360); s.spAz = a; any = true; continue; }
+    if (!s.spOn) continue;
     s.spAz = std::fmod(s.spAz + orbit_[i] * dt + 540.0, 360.0) - 180.0; pushSpatial(i); any = true; }
   if (any) emit spatialMoved(); else motionTimer_.stop();
 }
@@ -261,11 +272,15 @@ void Engine::setCinemaHall(bool on) {
 }
 QVariantList Engine::spatialScene() const {
   QVariantList l;
-  for (int i = 0; i < kStrips; ++i) { const StripUi& s = strips_[static_cast<std::size_t>(i)]; if (!s.spOn) continue; QVariantMap m; m["strip"] = i; m["az"] = s.spAz; m["el"] = s.spEl; m["dist"] = s.spDist; m["orbit"] = orbit_[i];
-    m["heardAz"] = headOn_ ? std::fmod(s.spAz - headYaw_ + 540.0, 360.0) - 180.0 : s.spAz; m["heardEl"] = headOn_ ? std::clamp(s.spEl - headPitch_, -90.0, 90.0) : s.spEl; l << m; }
+  for (int i = 0; i < kStrips; ++i) { const QVariantMap sp = spatial(i); if (!sp["on"].toBool()) continue; const double az = sp["az"].toDouble(), el = sp["el"].toDouble();
+    QVariantMap m; m["strip"] = i; m["az"] = az; m["el"] = el; m["dist"] = sp["dist"]; m["orbit"] = orbit_[i]; m["iamf"] = sp["iamf"];
+    m["heardAz"] = headOn_ ? std::fmod(az - headYaw_ + 540.0, 360.0) - 180.0 : az; m["heardEl"] = headOn_ ? std::clamp(el - headPitch_, -90.0, 90.0) : el; l << m; }
   return l;
 }
-QVariantMap Engine::spatial(int i) const { QVariantMap m; if (i < 0 || i >= kStrips) return m; const StripUi& s = strips_[static_cast<std::size_t>(i)]; m["on"] = s.spOn; m["az"] = s.spAz; m["el"] = s.spEl; m["dist"] = s.spDist; m["spread"] = s.spSpread; return m; }
+QVariantMap Engine::spatial(int i) const { QVariantMap m; if (i < 0 || i >= kStrips) return m; const StripUi& s = strips_[static_cast<std::size_t>(i)];
+  if (const int k = iamfSlot(i); k >= 0) { const auto& v = s.plugins[k].vst; m["iamf"] = true; m["iamfSlot"] = k; m["on"] = !s.plugins[k].bypass;
+    m["az"] = v->param(0) * 360 - 180; m["el"] = v->param(1) * 180 - 90; m["dist"] = 0.5 * std::pow(40.0, v->param(2)); m["spread"] = v->param(3); m["render"] = v->param(4) < 0.5 ? "BINAURAL" : "SPEAKERS"; return m; }
+  m["iamf"] = false; m["on"] = s.spOn; m["az"] = s.spAz; m["el"] = s.spEl; m["dist"] = s.spDist; m["spread"] = s.spSpread; return m; }
 void Engine::pushMaster() { mp_.fs = rt_ && running() ? sampleRate() : (mp_.fs > 0 ? mp_.fs : 48000); master_.set(mp_); }
 QString Engine::exportApo(int strip, const QString& path) {
   if (strip < -1 || strip >= kStrips) return {};
@@ -877,6 +892,8 @@ QVariantList Engine::pluginParams(int i, int slot) const {
   return l;
 }
 void Engine::setPluginParam(int i, int slot, int id, double v) { if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots) return; PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[slot]; if (!p.vst) return; p.vst->setParam(static_cast<std::uint32_t>(id), v); if (p.vst->hasBypass()) p.bypass = p.vst->bypass();
+  if (p.kind == QStringLiteral("fx:iamfelement")) { StripUi& st = strips_[static_cast<std::size_t>(i)];   // the 360 dial follows the plug-in's knobs, and the strip keeps the place for when it is taken out
+    st.spAz = p.vst->param(0) * 360 - 180; st.spEl = p.vst->param(1) * 180 - 90; st.spDist = 0.5 * std::pow(40.0, p.vst->param(2)); st.spSpread = p.vst->param(3); emit spatialMoved(); }
   if (linked(i) && !mirror_ && partner(i) >= 0 && strips_[static_cast<std::size_t>(partner(i))].plugins[slot].kind == p.kind) { mirror_ = true; setPluginParam(partner(i), slot, id, v); mirror_ = false; }
   emit stripsChanged(); }
 QString Engine::pluginError(int i, int slot) const { if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots) return QString(); return strips_[static_cast<std::size_t>(i)].plugins[slot].error; }
@@ -921,11 +938,14 @@ void Engine::setPlugin(int i, int slot, const QString& kind) {
   if (!kind.isEmpty() && !isVstKind(kind)) for (int k = 0; k < kPluginSlots; ++k) if (k != slot && s.plugins[k].kind == kind) s.plugins[k] = PluginUi{};   // one slot per built-in stage
   if (!p.kind.isEmpty() && !isVstKind(p.kind) && p.kind != kind) applyPluginStage(i, p.kind, false);
   if (p.vst) { graveyard_.push_back(p.vst); p.vst.reset(); graveTimer_.start(); }
+  const bool wasIamf = p.kind == QStringLiteral("fx:iamfelement"), had360 = s.spOn;
   p.kind = kind.left(1024); p.bypass = false; p.state.clear(); p.error.clear();
   if (!kind.isEmpty() && !isVstKind(kind)) applyPluginStage(i, kind, true);
   if (isVstKind(kind)) loadVst(i, slot);
   rebuildInserts(i);
-  emit stripsChanged();
+  if (kind == QStringLiteral("fx:iamfelement") && p.vst) { if (had360) setSpatial(i, true, s.spAz, s.spEl, s.spDist, s.spSpread); else { s.spOn = false; pushSpatial(i); } }   // the plug-in takes over the strip's place
+  else if (wasIamf && iamfSlot(i) < 0 && kind != QStringLiteral("fx:iamfelement")) { s.spOn = true; pushSpatial(i); }   // taken out: the 360 stage holds the same place
+  emit stripsChanged(); emit spatialMoved();
 }
 void Engine::setPluginBypass(int i, int slot, bool bypass) {
   if (linked(i) && !mirror_ && partner(i) >= 0) { mirror_ = true; setPluginBypass(partner(i), slot, bypass); mirror_ = false; }

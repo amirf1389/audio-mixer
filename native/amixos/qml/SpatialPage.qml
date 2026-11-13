@@ -26,7 +26,7 @@ Item {
         Rectangle { Layout.fillWidth: true; implicitHeight: 34; radius: 8; color: Theme.card; border.color: Theme.line
             RowLayout { anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 6
                 Text { text: page.t("360 AUDIO:"); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
-                Text { text: page.t("binaural placement for headphones · azimuth · elevation · distance · spread"); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
+                Text { text: page.t("binaural placement for headphones · azimuth · elevation · distance · spread · IAMF elements (violet)"); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                 Item { Layout.fillWidth: true }
                 Btn { label: page.t("ALL OFF"); onClicked: { for (let i = 0; i < 32; i++) { const s = engine.spatial(i); if (s.on) engine.setSpatial(i, false, s.az, s.el, s.dist, s.spread) } page.rev++ } } } }
         Rectangle {   // THE SCENE: cinema hall (10 fixed points + 10 travelling objects), head tracking, and a map of every object from above
@@ -53,7 +53,7 @@ Item {
                         const hy = (engine.headTrack ? engine.headYaw : 0) * Math.PI / 180; g.strokeStyle = "#37c6e8"; g.lineWidth = 2; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.sin(hy) * 16, cy - Math.cos(hy) * 16); g.stroke(); g.fillStyle = "#37c6e8"; g.beginPath(); g.arc(cx, cy, 4, 0, 6.3); g.fill();
                         const sc = engine.spatialScene(); g.font = "8px monospace";
                         for (let i = 0; i < sc.length; ++i) { const o = sc[i], a = o.az * Math.PI / 180, d = Math.min(1, o.dist / 10) * Math.cos(o.el * Math.PI / 180), x = cx + Math.sin(a) * d * R * sx, y = cy - Math.cos(a) * d * R;
-                            g.fillStyle = o.orbit !== 0 ? "#f5b524" : "#19b97f"; if (o.orbit !== 0) { g.beginPath(); g.arc(x, y, 3 + o.el / 30, 0, 6.3); g.fill() } else g.fillRect(x - 4, y - 4, 8, 8);
+                            g.fillStyle = o.iamf ? "#9b7bff" : o.orbit !== 0 ? "#f5b524" : "#19b97f"; if (o.orbit !== 0) { g.beginPath(); g.arc(x, y, 3 + o.el / 30, 0, 6.3); g.fill() } else g.fillRect(x - 4, y - 4, 8, 8);
                             g.fillStyle = "rgba(255,255,255,0.6)"; g.fillText(o.strip + 1, x + 6, y + 3) } }
                     MouseArea { anchors.fill: parent; onPositionChanged: function (m) { if (pressed && engine.headTrack) engine.headYaw = Math.atan2(m.x - width / 2, height / 2 - m.y) * 180 / Math.PI } onPressed: function (m) { if (engine.headTrack) engine.headYaw = Math.atan2(m.x - width / 2, height / 2 - m.y) * 180 / Math.PI } } } } }
         RowLayout { id: body; Layout.fillWidth: true; Layout.fillHeight: true; spacing: 8
@@ -76,7 +76,8 @@ Item {
                 Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 92; Layout.maximumHeight: 92; clip: true; radius: Theme.radius; color: Theme.card; border.color: Theme.line
                     Flow { id: chFlow; x: 8; y: 8; width: parent.width - 16; spacing: 4
                         Repeater { model: 32; delegate: Rectangle { width: 42; height: 22; radius: 4; readonly property bool on: { page.rev; return engine.spatial(index).on }
-                                color: page.sel === index ? Theme.orange : on ? Theme.cyan : Theme.ov(0.08); border.color: Theme.lineSoft
+                                readonly property bool iamf: { page.rev; return engine.spatial(index).iamf === true }
+                                color: page.sel === index ? Theme.orange : on ? (iamf ? "#9b7bff" : Theme.cyan) : Theme.ov(0.08); border.color: Theme.lineSoft
                                 Text { anchors.centerIn: parent; text: (page.strips[index] && page.strips[index].name) ? page.strips[index].name.substring(0, 5) : "CH " + (index + 1); color: (page.sel === index || parent.on) ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
                                 MouseArea { anchors.fill: parent; onClicked: page.sel = index } } } } }
                 Rectangle { Layout.fillWidth: true; Layout.fillHeight: true; radius: Theme.radius; color: Theme.card; border.color: Theme.line
@@ -86,6 +87,13 @@ Item {
                             Btn { label: page.cur.on ? page.t("360: ON") : page.t("360: OFF (PAN)"); on: page.cur.on; onColor: Theme.emerald; onClicked: page.put(!page.cur.on, page.cur.az, page.cur.el, page.cur.dist, page.cur.spread) }
                             Repeater { model: [["FRONT", 0], ["RIGHT", 90], ["BEHIND", 180], ["LEFT", -90]]; delegate: Btn { label: page.t(modelData[0]); onClicked: page.put(true, modelData[1], page.cur.el, page.cur.dist, page.cur.spread) } }
                             Item { Layout.fillWidth: true } }
+                        // IAMF: the strip placed by an IAMF ELEMENT in its rack (the immersive format of the Eclipsa plug-ins); the controls here move its knobs
+                        RowLayout { spacing: 8
+                            Btn { objectName: "iamfBtn"; label: page.cur.iamf ? page.t("IAMF ELEMENT: ON") : page.t("USE IAMF ELEMENT"); on: page.cur.iamf === true; onColor: "#9b7bff"
+                                onClicked: { if (page.cur.iamf) engine.setPlugin(page.sel, page.cur.iamfSlot, ""); else { const pl = engine.plugins(page.sel); for (let k = 0; k < pl.length; k++) if (!pl[k].kind) { engine.setPlugin(page.sel, k, "fx:iamfelement"); break } } page.rev++ } }
+                            Btn { objectName: "iamfRender"; visible: page.cur.iamf === true; label: page.cur.render === "SPEAKERS" ? page.t("RENDER: SPEAKERS") : page.t("RENDER: BINAURAL"); on: true; onColor: Theme.cyan
+                                onClicked: { engine.setPluginParam(page.sel, page.cur.iamfSlot, 4, page.cur.render === "SPEAKERS" ? 0.0 : 1.0); page.rev++ } }
+                            Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; text: page.cur.iamf ? page.t("Placed by the IAMF ELEMENT in rack slot ") + (page.cur.iamfSlot + 1) + page.t(": the dial and the sliders move its knobs, its knobs move the dial.") : page.t("IAMF: put an IAMF ELEMENT on this channel; put the IAMF RENDERER on the master bus for binaural monitoring and loudness."); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
                         Knob { label: page.t("AZIMUTH"); from: -180; to: 180; value: page.cur.az > 180 ? page.cur.az - 360 : page.cur.az; unit: "°"; onMoved: function (v) { page.put(true, v, page.cur.el, page.cur.dist, page.cur.spread) } }
                         Knob { label: page.t("ELEVATION"); from: -90; to: 90; value: page.cur.el; unit: "°"; onMoved: function (v) { page.put(true, page.cur.az, v, page.cur.dist, page.cur.spread) } }
                         Knob { label: page.t("DISTANCE"); from: 0.3; to: 10; value: page.cur.dist; unit: "m"; onMoved: function (v) { page.put(true, page.cur.az, page.cur.el, v, page.cur.spread) } }

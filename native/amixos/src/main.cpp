@@ -176,6 +176,15 @@ int main(int argc, char* argv[]) {
       if (measure.room(5, 4, 2.7, 0.5, 1, 1, 1.2, 2.5, 3, 1.2).value("modes").toList().isEmpty() || !measure.autoEq("house", 0, 4, 20, 400, 8) || measure.waterfall(12).value("rows").toList().isEmpty()) { std::fprintf(stderr, "amixos --smoke: acoustics room / auto EQ / waterfall failed\n"); return 62; }
       QFile::remove(mw);
       engine.setSpatial(5, true, 90, 0, 2, 0); if (!engine.spatial(5).value("on").toBool() || engine.spatial(5).value("az").toDouble() != 90) { std::fprintf(stderr, "amixos --smoke: 360 audio state did not take\n"); return 63; } engine.setSpatial(5, false, 0, 0, 1, 0);
+      { // 360 AND IAMF ARE ONE PLACE: an IAMF ELEMENT takes over the strip's position; the 360 controls move its knobs and its knobs move the 360 view
+        const int S = 6; int k = -1; const QVariantList pl = engine.plugins(S); for (int j = 0; j < pl.size(); ++j) if (pl[j].toMap()["kind"].toString().isEmpty()) { k = j; break; }
+        engine.setSpatial(S, true, 45, 0, 2, 0.2); engine.setPlugin(S, k, "fx:iamfelement");
+        const QVariantMap a = engine.spatial(S); const bool took = a["iamf"].toBool() && std::fabs(a["az"].toDouble() - 45) < 0.6 && std::fabs(a["dist"].toDouble() - 2) < 0.05;
+        engine.setSpatial(S, true, 90, 10, 3, 0.3); const QVariantList pp = engine.pluginParams(S, k); const bool knob = pp.size() > 2 && std::fabs(pp[0].toMap()["value"].toDouble() - 0.75) < 0.002 && std::fabs(pp[1].toMap()["value"].toDouble() - 100.0 / 180) < 0.002;
+        engine.setPluginParam(S, k, 0, 0.25); const bool back = std::fabs(engine.spatial(S)["az"].toDouble() + 90) < 0.6;
+        engine.setPlugin(S, k, ""); const QVariantMap c = engine.spatial(S); const bool held = !c["iamf"].toBool() && c["on"].toBool() && std::fabs(c["az"].toDouble() + 90) < 0.6;
+        engine.setSpatial(S, false, 0, 0, 1, 0);
+        if (!took || !knob || !back || !held) { std::fprintf(stderr, "amixos --smoke: 360 / IAMF link (took %d, knobs %d, back %d, held %d)\n", took, knob, back, held); return 167; } }
       std::fprintf(stderr, "amixos --smoke: acoustics offline sweep %.2f dB at 1 kHz, delay 5 ms, room modes, auto EQ; 360 audio state OK\n", at1k); }
     { // MASTER CHAIN: the program EQ is its own rack (strip -1), not CH 1's EQ; a mastering preset switches the plug-in on
       const int before = engine.eqBand(0, 5).value("type").toInt(); engine.setEq(-1, 5, 1, 1000, 1.41, 4);
@@ -667,7 +676,11 @@ int main(int argc, char* argv[]) {
             if (!win->findChild<QObject*>("channelEq3")) std::fprintf(stderr, "amixos --shots: FAILED the 3-band channel EQ is missing\n");
             if (QObject* tp = win->findChild<QObject*>("tonePage")) { engine.setGraphicEq(engine.selectedStrip(), QVariantList{3.0, 0.0, -2.0, 0.0, 0.0, 4.0, 0.0, 0.0, -3.0, 1.0}, true); tp->setProperty("graphic", true); waitMs(400); win->grabWindow().save(shots + "/tone-mic-eq-faders.png"); tp->setProperty("graphic", false); engine.setGraphicEq(engine.selectedStrip(), QVariantList{0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, false); std::printf("amixos --shots: tone-mic-eq-faders\n"); } }
           if (QString::fromLatin1(id) == "surround") { engine.setCinemaHall(true); engine.setHeadTrack(true); engine.setHeadYaw(35); waitMs(700); win->grabWindow().save(shots + "/360-cinema-hall.png"); std::printf("amixos --shots: 360-cinema-hall\n");
-            if (!win->findChild<QObject*>("sceneMap")) std::fprintf(stderr, "amixos --shots: FAILED the 360 scene map is missing\n"); engine.setHeadYaw(0); engine.setHeadTrack(false); engine.setCinemaHall(false); engine.setBusFx(15, ""); }
+            if (!win->findChild<QObject*>("sceneMap")) std::fprintf(stderr, "amixos --shots: FAILED the 360 scene map is missing\n"); engine.setHeadYaw(0); engine.setHeadTrack(false); engine.setCinemaHall(false); engine.setBusFx(15, "");
+            { int k = -1; const QVariantList pl = engine.plugins(0); for (int j = 0; j < pl.size(); ++j) if (pl[j].toMap()["kind"].toString().isEmpty()) { k = j; break; }   // CH 1 placed by an IAMF ELEMENT, CH 2 by the 360 stage
+              engine.setPlugin(0, k, "fx:iamfelement"); engine.setSpatial(0, true, -40, 15, 2.5, 0.2); engine.setSpatial(1, true, 70, 0, 4, 0.1);
+              if (QObject* sp = win->findChild<QObject*>("spatialPage")) sp->setProperty("sel", 0); waitMs(500); win->grabWindow().save(shots + "/360-iamf.png"); std::printf("amixos --shots: 360-iamf\n");
+              engine.setPlugin(0, k, ""); engine.setSpatial(0, false, 0, 0, 1, 0); engine.setSpatial(1, false, 0, 0, 1, 0); } }
           if (QString::fromLatin1(id) == "rtaeq") { QObject* rp = nullptr; int shown = 0; for (QObject* o : win->findChildren<QObject*>("rtaEqPage")) if (o->property("visible").toBool()) { rp = o; ++shown; }   // the page on screen (an earlier one may still be on its way out)
             if (shown != 1) std::fprintf(stderr, "amixos --shots: FAILED %d RTA EQ pages on screen\n", shown); if (rp) {   // the sliders of the MASTER EQ: after a move the page shows the new value (it used to snap back)
             const QVariantList keep = rp->property("gains").toList(); QMetaObject::invokeMethod(rp, "setBand", Q_ARG(QVariant, 3), Q_ARG(QVariant, 6.0)); waitMs(120);
