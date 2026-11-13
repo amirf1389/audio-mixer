@@ -161,6 +161,31 @@ Item {
                             MouseArea { anchors.fill: parent; onClicked: { if (sc && !sc.empty) engine.recallScene(index) } } }
                         Rectangle { implicitWidth: 14; implicitHeight: 20; radius: 3; color: Theme.ov(0.05); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: "●"; color: Theme.danger; font.pixelSize: 7 } MouseArea { anchors.fill: parent; onClicked: engine.storeScene(index, "") } } } }
                 Item { Layout.fillWidth: true }
+                // SOUND SCORE: the master judged on six counts, refreshed twice a second; click for the parts and what to do
+                Rectangle { id: scoreBadge; objectName: "soundScore"; implicitWidth: scoreRow.implicitWidth + 14; implicitHeight: 20; radius: 4
+                    property var sc: ({ valid: false }); readonly property color tone: !sc.valid ? Theme.dim : sc.total >= 90 ? Theme.emerald : sc.total >= 75 ? Theme.cyan : sc.total >= 60 ? Theme.amber : Theme.danger
+                    color: Qt.rgba(tone.r, tone.g, tone.b, 0.16); border.color: tone
+                    Timer { interval: 500; running: page.visible; repeat: true; triggeredOnStart: true; onTriggered: scoreBadge.sc = engine.soundScore() }
+                    Row { id: scoreRow; anchors.centerIn: parent; spacing: 6
+                        Text { text: i18n.t("SOUND SCORE", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; anchors.verticalCenter: parent.verticalCenter }
+                        Text { text: scoreBadge.sc.valid ? Math.round(scoreBadge.sc.total) + "  " + scoreBadge.sc.grade : "—"; color: scoreBadge.tone; font.family: Theme.mono; font.pixelSize: 10; font.bold: true; anchors.verticalCenter: parent.verticalCenter } }
+                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: scorePop.open() }
+                    Popup { id: scorePop; objectName: "soundScorePop"; y: parent.height + 4; x: parent.width - width; width: 420; padding: 12
+                        background: Rectangle { radius: 8; color: Theme.card; border.color: scoreBadge.tone }
+                        contentItem: Column { spacing: 8
+                            Row { spacing: 10
+                                Text { text: scoreBadge.sc.valid ? Math.round(scoreBadge.sc.total) : "—"; color: scoreBadge.tone; font.family: Theme.mono; font.pixelSize: 30; font.bold: true }
+                                Column { anchors.verticalCenter: parent.verticalCenter; spacing: 2
+                                    Text { text: i18n.t("SOUND SCORE", i18n.lang) + (scoreBadge.sc.valid ? "  ·  " + i18n.t("GRADE", i18n.lang) + " " + scoreBadge.sc.grade : ""); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 10; font.bold: true }
+                                    Text { width: 320; wrapMode: Text.WordWrap; text: scoreBadge.sc.valid ? i18n.t("The master right now: loudness, peaks, dynamics, tone, stereo and stability.", i18n.lang) : i18n.t("Play something: silence is not scored.", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 } } }
+                            Repeater { model: scoreBadge.sc.valid ? scoreBadge.sc.parts : []
+                                delegate: Column { spacing: 3; width: 396; required property var modelData
+                                    Row { spacing: 8
+                                        Text { width: 80; text: i18n.t(modelData.name, i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
+                                        Rectangle { width: 230; height: 8; radius: 4; anchors.verticalCenter: parent.verticalCenter; color: Theme.ov(0.08)
+                                            Rectangle { width: parent.width * modelData.points / modelData.max; height: 8; radius: 4; color: modelData.points >= modelData.max * 0.9 ? Theme.emerald : modelData.points >= modelData.max * 0.6 ? Theme.amber : Theme.danger } }
+                                        Text { text: modelData.points.toFixed(0) + " / " + modelData.max; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9 } }
+                                    Text { width: 396; wrapMode: Text.WordWrap; text: modelData.tip; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 } } } } } }
                 Rectangle { implicitWidth: 92; implicitHeight: 20; radius: 4; color: page.rack ? Qt.rgba(0.6, 0.4, 1, 0.22) : Theme.ov(0.06); border.color: page.rack ? "#a78bfa" : "transparent"; Text { anchors.centerIn: parent; text: i18n.t("PLUGIN RACK", i18n.lang); color: page.rack ? "#a78bfa" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.rack = !page.rack } }
             }
             // generic parameter panel for a VST3 plug-in (no plug-in GUI is opened): one slider per parameter, the plug-in's own value text

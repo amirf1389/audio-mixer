@@ -52,5 +52,17 @@ int main() {
     for (int i = 0; i < N; i += 512) e->process(L.data() + i, R.data() + i, static_cast<std::size_t>(std::min(512, N - i)));
     double ms = 0; for (int i = N - 48000; i < N; ++i) ms += L[i] * L[i]; ms /= 48000; const double outLu = -0.691 + 10 * std::log10(2 * ms) + 0.7;   // +0.7: K-weighting at 1 kHz
     CHECK(std::fabs(outLu + 24) < 1.0, "IAMF renderer normalised to %f LKFS (want -24)", outLu); }
+  { // W-SHAPE: rises at 60 Hz, 1.8 kHz and 12 kHz, valleys at 350 Hz and 5 kHz; pink-weighted level kept
+    auto at = [](double f) { auto e = make("wshape", 48000); e->set("amount", 1.0); e->set("bass", 1); e->set("lowmid", 1); e->set("presence", 1); e->set("upper", 1); e->set("air", 1); return run(*e, f, 0.5, 0.5); };
+    const double b = at(60), d1 = at(350), p = at(1800), d2 = at(5000), a = at(12000);
+    CHECK(b > d1 + 4 && p > d1 + 3 && p > d2 + 3 && a > d2 + 4, "W shape: 60 %f, 350 %f, 1.8k %f, 5k %f, 12k %f", b, d1, p, d2, a);
+    // the level stays put: equal tones in every 1/3 octave (a pink-like spectrum) measure the same before and after the full W
+    auto e = make("wshape", 48000); e->set("amount", 1.0); e->set("bass", 1); e->set("lowmid", 1); e->set("presence", 1); e->set("upper", 1); e->set("air", 1);
+    const int N = 96000; std::vector<float> L(N), R(N); double ein = 0, eout = 0;
+    for (int i = 0; i < N; ++i) { double v = 0; int k = 0; for (double f = 40; f <= 16000; f *= std::pow(2.0, 1.0 / 3), ++k) v += std::sin(2 * 3.14159265 * f * i / 48000.0 + k * 1.7); L[i] = R[i] = static_cast<float>(v * 0.03); }
+    for (int i = N / 2; i < N; ++i) ein += L[i] * L[i];
+    for (int i = 0; i < N; i += 256) e->process(L.data() + i, R.data() + i, static_cast<std::size_t>(std::min(256, N - i)));
+    for (int i = N / 2; i < N; ++i) eout += L[i] * L[i];
+    const double change = 10 * std::log10(eout / ein); CHECK(std::fabs(change) < 1.0, "W-SHAPE changed the level by %f dB", change); }
   std::printf(fails ? "fx_ms: %d failed\n" : "fx_ms: all passed\n", fails); return fails ? 1 : 0;
 }

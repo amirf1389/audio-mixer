@@ -12,6 +12,7 @@
 #include <QThread>
 #include <QElapsedTimer>
 #include "Engine.h"
+#include "measure/score.hpp"
 #include <QUrl>
 #include "Extension.h"
 
@@ -562,6 +563,14 @@ QVariantMap Engine::scopeFrame(int ch, double windowMs, int points, bool trigger
   const ScopeTap::Figures f = scope_.figures(ch, span); m["vpp"] = f.vpp; m["vrms"] = f.vrms; m["freq"] = f.freq; m["crest"] = f.crest; m["running"] = rt_ != nullptr;
   return m;
 }
+QVariantMap Engine::soundScore() {
+  am::measure::ScoreInput in; const QVariantMap& t = telemetry_;
+  in.shortTerm = t.value("shortTerm", -120).toDouble(); in.truePeak = t.value("truePeak", -120).toDouble(); in.peakDb = t.value("masterPeakDb", -120).toDouble(); in.rmsDb = t.value("masterRmsDb", -120).toDouble();
+  in.correlation = t.value("correlation", 1).toDouble(); in.xruns = t.value("xruns", 0).toInt(); in.masterClip = t.value("masterClip", false).toBool(); in.target = autoLevelTarget();
+  for (const QVariant& m : meters_) { const QVariantMap x = m.toMap(); if (x.value("clip").toBool()) ++in.clipStrips; if (x.value("overComp").toBool()) ++in.overCompStrips; }
+  std::vector<float> b; scope_.spectrum(0, b); for (float v : b) in.spectrum.push_back(v);
+  const am::measure::Score sc = am::measure::soundScore(in); QVariantMap r; r["valid"] = sc.valid; r["total"] = sc.total; r["grade"] = QString::fromStdString(sc.grade); r["tilt"] = sc.tiltDbPerOct; r["roughness"] = sc.roughnessDb;
+  QVariantList parts; for (const auto& q : sc.parts) { QVariantMap m; m["name"] = QString::fromStdString(q.name); m["points"] = q.points; m["max"] = q.max; m["tip"] = QString::fromStdString(q.tip); parts << m; } r["parts"] = parts; return r; }
 QVariantList Engine::spectrum(int ch) { std::vector<float> b; scope_.spectrum(ch, b); QVariantList l; for (float v : b) l << v; return l; }
 void Engine::setGraphicEq(int i, const QVariantList& gains, bool on) {
   if (i == -1) { for (int b = 0; b < 10; ++b) { const double g = b < gains.size() ? std::clamp(gains[b].toDouble(), -24.0, 24.0) : 0.0; mp_.eq[b] = am::dsp::EqBand{on && std::fabs(g) > 0.01 ? FilterType::Peaking : FilterType::Off, kIsoCentres[b], 1.41, g}; } pushMaster(); emit masterChainChanged(); return; }

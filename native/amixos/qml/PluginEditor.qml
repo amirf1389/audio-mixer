@@ -35,7 +35,7 @@ Popup {
     readonly property color red: "#b91c1c"
     // THE LOOK OF EACH FAMILY: reverbs steel blue, delays sage green, modulation lavender, saturation and amps copper, the feedback killer signal red,
     // everything else the cream plate. tint lies over the plate; view names the live display the panel carries.
-    readonly property var families: ({ iamfelement: "echo", iamfrender: "heat", maximizer: "heat", multiband: "guard", imager: "echo", autopan: "mod", doubler: "tune", opto: "guard", glue: "heat", tape: "echo", transient: "tune", deesser: "guard", mod: "mod", mseq: "heat", isoeq: "guard", reverb: "space", hall: "space", room: "space", delay: "echo", syncdelay: "echo", chorus: "mod", flanger: "mod", phaser: "mod", tremolo: "mod", wah: "mod",
+    readonly property var families: ({ wshape: "tune", iamfelement: "echo", iamfrender: "heat", maximizer: "heat", multiband: "guard", imager: "echo", autopan: "mod", doubler: "tune", opto: "guard", glue: "heat", tape: "echo", transient: "tune", deesser: "guard", mod: "mod", mseq: "heat", isoeq: "guard", reverb: "space", hall: "space", room: "space", delay: "echo", syncdelay: "echo", chorus: "mod", flanger: "mod", phaser: "mod", tremolo: "mod", wah: "mod",
         analog: "heat", drive: "heat", tubeamp: "heat", preamp: "heat", postamp: "heat", exciter: "heat", antifeedback: "guard", desquash: "guard", pitch: "tune", barrier: "heat", sampler: "echo" })
     readonly property string family: families[fx] || ""
     // THE FINISH, as on real rack gear: reverbs brushed aluminium, delays the deep green enamel of tape echoes, modulation midnight blue,
@@ -60,7 +60,8 @@ Popup {
         opto: [["LEVELING", [0, 1]], ["MODE", [2]], ["SIDECHAIN", [3]]], glue: [["THRESHOLD", [0, 1]], ["TIMING", [2, 3]], ["OUTPUT", [4, 5]]],
         tape: [["RECORD", [0]], ["TRANSPORT", [1, 3]], ["ALIGNMENT", [2]], ["REPRO", [4]]], transient: [["SHAPE", [0, 1]], ["OUTPUT", [2]]], deesser: [["DETECT", [0, 1]], ["REDUCE", [2]], ["MONITOR", [3]]],
         maximizer: [["LOUDNESS", [0]], ["CEILING", [1]], ["RELEASE", [2]]], multiband: [["CROSSOVER", [0, 1]], ["BANDS", [2, 3, 4]], ["DYNAMICS", [5, 6]]], imager: [["WIDTH", [0, 1]], ["SPLIT", [2]], ["OUTPUT", [3]]], autopan: [["MOTION", [0, 1]], ["WAVE", [2]]], doubler: [["VOICES", [0, 1]], ["STEREO", [2]], ["TONE", [3]]],
-        iamfelement: [["DIRECTION", [0, 1]], ["DISTANCE", [2, 3]], ["RENDER", [4]]], iamfrender: [["MONITOR", [0]], ["LOUDNESS", [1, 2]], ["OUTPUT", [3]]] })
+        iamfelement: [["DIRECTION", [0, 1]], ["DISTANCE", [2, 3]], ["RENDER", [4]]], iamfrender: [["MONITOR", [0]], ["LOUDNESS", [1, 2]], ["OUTPUT", [3]]],
+        wshape: [["SHAPE", [0, 6]], ["LOW", [1, 2]], ["MID", [3, 4]], ["TOP", [5]], ["OUTPUT", [7]]] })
     readonly property var sections: { const n = params.length; if (!n) return []; const l = layouts[fx]; if (l) return l
         const out = [], m = Math.min(n, 24); for (let i = 0; i < m; i += 4) { const idx = []; for (let j = i; j < Math.min(m, i + 4); j++) idx.push(j); out.push([(i + 1) + " – " + Math.min(m, i + 4), idx]) } return out }
     readonly property int mixIndex: fx && params.length ? params.length - 1 : -1
@@ -103,6 +104,10 @@ Popup {
         if (fx === "isoeq" && params.length >= 13) { const prop = v(10) >= 0.5, F = [31.5, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000], ks = []
             for (let b = 0; b < 10; b++) { const g = db(v(b)); ks.push(biq("peak", F[b], prop ? 0.6 + 2.2 * Math.abs(g) / 12 : 1.414, g)) }
             const out = db(v(12)); return [{ name: "RESPONSE", color: "#e8f4ff", width: 2.2, db: function (f) { let d = out; for (const k of ks) d += magDb(k, f); return d } }] }
+        if (fx === "wshape" && params.length >= 9) { const A = v(0), q = 1.4 - v(6) * 0.9
+            const ks = [biq("ls", 90, 0.6, A * v(1) * 9), biq("peak", 350, q, -A * v(2) * 6), biq("peak", 1800, q, A * v(3) * 6), biq("peak", 5000, q * 1.2, -A * v(4) * 6), biq("hs", 10000, 0.6, A * v(5) * 9)]
+            let sum = 0, n = 0; for (let f = 40; f <= 16000; f *= Math.pow(2, 1 / 3)) { let d = 0; for (const k of ks) d += magDb(k, f); sum += Math.pow(10, d / 10); n++ } const comp = -10 * Math.log10(sum / n) + (v(7) - 0.5) * 24
+            return [{ name: "W CURVE", color: "#e8f4ff", width: 2.4, db: function (f) { let d = comp; for (const k of ks) d += magDb(k, f); return d } }] }
         return [] }
     readonly property int rowH: 262
     readonly property int rows: sections.length > 8 ? 2 : 1   // a unit with many controls stands in two rows

@@ -359,4 +359,16 @@ class IamfRenderer final : public Multi { public: explicit IamfRenderer(double f
   static double targetOf(double v) { return -27 + v * 13; }
  private: void design(); Ears left_, right_; Biquad kShelf_[2], kHp_[2]; double ms_ = 0, g_ = 1; std::atomic<double> lufs_{-70}; };
 
+// W-SHAPE TUNER: the "W" signature of a tuned speaker or in-ear monitor, made smooth: three gentle rises (BASS shelf at 90 Hz, PRESENCE
+// bell at 1.8 kHz, AIR shelf at 10 kHz) with two soft valleys between them (LOW-MID DIP at 350 Hz, which clears the mud, and UPPER DIP
+// at 5 kHz, which takes the edge off harshness). AMOUNT scales the whole curve, SMOOTH widens every band (wide = smooth, no peaky
+// resonances). The level is kept the same when the curve changes (automatic loudness compensation on a pink spectrum), so a louder W
+// never just sounds "better" because it is louder; OUTPUT trims after that.
+class WShape final : public Multi { public: explicit WShape(double fs); const char* kind() const override { return "wshape"; } const char* name() const override { return "W-SHAPE TUNER"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
+  double compensationDb() const { return comp_.load(); }
+  struct Band { Biquad::Kind kind; double f, q, db; };
+  static void bands(const double* k, Band out[5]);     // the five bands for the knobs k[0..6]
+ private: void design(); Biquad f_[2][5]; std::atomic<double> comp_{0}; };
+
 }  // namespace am::fx

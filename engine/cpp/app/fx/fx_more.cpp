@@ -123,3 +123,44 @@ void Doubler::process(float* L, float* R, std::size_t n) {
 }
 
 }  // namespace am::fx
+
+// ---------------------------------------------------------------- W-SHAPE TUNER
+namespace am::fx {
+namespace {
+const Multi::Def kW[] = {{"amount", "AMOUNT", 0.6}, {"bass", "BASS", 0.55}, {"lowmid", "LOW-MID DIP", 0.4}, {"presence", "PRESENCE", 0.4}, {"upper", "UPPER DIP", 0.4}, {"air", "AIR", 0.5}, {"smooth", "SMOOTH", 0.6}, {"output", "OUTPUT", 0.5}};
+double wGain(double b) { return std::pow(10.0, b / 20.0); }
+// |H(f)| of one biquad in dB
+double magDb(const Biquad& q, double f, double fs) { const double w = 2 * 3.14159265358979 * f / fs, cr = std::cos(w), ci = -std::sin(w), c2r = std::cos(2 * w), c2i = -std::sin(2 * w);
+  const double nr = q.b0 + q.b1 * cr + q.b2 * c2r, ni = q.b1 * ci + q.b2 * c2i, dr = 1 + q.a1 * cr + q.a2 * c2r, di = q.a1 * ci + q.a2 * c2i; return 10 * std::log10((nr * nr + ni * ni) / (dr * dr + di * di) + 1e-12); }
+}  // namespace
+void WShape::bands(const double* k, Band o[5]) {
+  const double a = k[0], wide = k[6];   // SMOOTH: 0 -> Q 1.4 (tighter), 1 -> Q 0.5 (very wide)
+  const double q = 1.4 - wide * 0.9;
+  o[0] = {Biquad::LowShelf, 90, 0.6, a * k[1] * 9};           // BASS   0 .. +9 dB
+  o[1] = {Biquad::Peak, 350, q, -a * k[2] * 6};                // LOW-MID DIP  0 .. -6 dB
+  o[2] = {Biquad::Peak, 1800, q, a * k[3] * 6};                // PRESENCE  0 .. +6 dB
+  o[3] = {Biquad::Peak, 5000, q * 1.2, -a * k[4] * 6};         // UPPER DIP  0 .. -6 dB
+  o[4] = {Biquad::HighShelf, 10000, 0.6, a * k[5] * 9};        // AIR  0 .. +9 dB
+}
+WShape::WShape(double fs) : Multi(fs, kW, 8) { reset(); }
+std::string WShape::text(const std::string& id, double v) const { v = v < 0 ? 0 : v > 1 ? 1 : v; char b[40]; const int i = index(id);
+  const double a = k_[0]; switch (i) {
+    case 1: std::snprintf(b, sizeof b, "%+.1f dB", a * v * 9); break; case 2: std::snprintf(b, sizeof b, "%+.1f dB", -a * v * 6); break; case 3: std::snprintf(b, sizeof b, "%+.1f dB", a * v * 6); break;
+    case 4: std::snprintf(b, sizeof b, "%+.1f dB", -a * v * 6); break; case 5: std::snprintf(b, sizeof b, "%+.1f dB", a * v * 9); break; case 6: std::snprintf(b, sizeof b, "Q %.2f", 1.4 - v * 0.9); break;
+    case 7: std::snprintf(b, sizeof b, "%+.1f dB", (v - 0.5) * 24); break; default: std::snprintf(b, sizeof b, "%.0f %%", v * 100); }
+  return b; }
+void WShape::reset() { for (auto& c : f_) for (auto& q : c) q.clear(); dirty_ = true; }
+void WShape::design() {
+  double k[8]; for (int i = 0; i < 8; ++i) k[i] = k_[i].load(); Band b[5]; bands(k, b);
+  for (int c = 0; c < 2; ++c) for (int i = 0; i < 5; ++i) f_[c][i].design(b[i].kind, fs_, b[i].f, b[i].q, b[i].db);
+  // loudness compensation: the curve's average power gain over 1/3-octave bands 40 Hz .. 16 kHz (a pink spectrum), taken back out
+  double sum = 0; int n = 0; for (double f = 40; f <= 16000; f *= std::pow(2.0, 1.0 / 3)) { double d = 0; for (int i = 0; i < 5; ++i) d += magDb(f_[0][i], f, fs_); sum += std::pow(10.0, d / 10); ++n; }
+  comp_ = -10 * std::log10(sum / n);
+}
+void WShape::process(float* L, float* R, std::size_t n) {
+  if (bypass_.load()) return;
+  if (dirty_.exchange(false)) design();
+  const double g = wGain(comp_.load() + (k_[7] - 0.5) * 24), wet = mix_.load(); float* ch[2] = {L, R};
+  for (int c = 0; c < 2; ++c) for (std::size_t i = 0; i < n; ++i) { const float d = ch[c][i]; float x = d; for (int b = 0; b < 5; ++b) x = f_[c][b].run(x); ch[c][i] = static_cast<float>(d + (x * g - d) * wet); }
+}
+}  // namespace am::fx

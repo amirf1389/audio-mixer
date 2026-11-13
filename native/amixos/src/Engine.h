@@ -297,6 +297,7 @@ class Engine : public QObject {
   Q_INVOKABLE void setNullTestInput(bool on) { nullTone_ = on; }   // the null device delivers a -12 dBFS test signal on inputs 1-2 (sine 440 / 660 Hz) instead of silence: meters and faders show something (--shots, demos)
   bool nullTestInput() const { return nullTone_; }
   Q_INVOKABLE QVariantList spectrum(int channel);
+  Q_INVOKABLE QVariantMap soundScore();   // SOUND SCORE of the master, 0 .. 100, with its six parts and a tip each (empty "valid" false while silent)
   Q_INVOKABLE QVariantMap roundTrip() const { double ms = 0, db = -120; QVariantMap m; m["ok"] = scope_.roundTrip(ms, db); m["ms"] = ms; m["returnDb"] = db; m["frames"] = blockFrames(); m["rate"] = sampleRate(); return m; }
   Q_PROPERTY(double sampleRate READ sampleRate NOTIFY stateChanged)
   Q_PROPERTY(int blockFrames READ blockFrames NOTIFY stateChanged)
