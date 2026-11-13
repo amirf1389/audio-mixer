@@ -30,18 +30,19 @@ Popup {
     readonly property color paperLo: "#d6d0be"
     // lettering: dark on the light plates, cream / silver / gold on the dark ones
     readonly property color ink: family === "tune" ? "#f1e3d6" : family === "echo" ? "#e9e4cc" : family === "mod" ? "#e4e8f3" : family === "heat" ? "#e3c27a" : family === "guard" ? "#f1f1ee" : family === "space" ? "#e6ecf2" : "#ece8dc"
+    readonly property color plateInk: family === "silver" ? "#1d2126" : ink   // lettering straight on the plate (the name plate): dark on silver
     readonly property bool darkPlate: true   // every unit is a dark inset panel on brushed metal: light lettering throughout
     readonly property string face1: "Bahnschrift Condensed, Arial Narrow, Roboto Condensed, DejaVu Sans Condensed, " + Theme.sans   // a narrow engraver's face where the system has one
     readonly property color red: "#b91c1c"
     // THE LOOK OF EACH FAMILY: reverbs steel blue, delays sage green, modulation lavender, saturation and amps copper, the feedback killer signal red,
     // everything else the cream plate. tint lies over the plate; view names the live display the panel carries.
-    readonly property var families: ({ wshape: "tune", iamfelement: "echo", iamfrender: "heat", maximizer: "heat", multiband: "guard", imager: "echo", autopan: "mod", doubler: "tune", opto: "guard", glue: "heat", tape: "echo", transient: "tune", deesser: "guard", mod: "mod", mseq: "heat", isoeq: "guard", reverb: "space", hall: "space", room: "space", delay: "echo", syncdelay: "echo", chorus: "mod", flanger: "mod", phaser: "mod", tremolo: "mod", wah: "mod",
+    readonly property var families: ({ convclip: "silver", wshape: "tune", iamfelement: "echo", iamfrender: "heat", maximizer: "heat", multiband: "guard", imager: "echo", autopan: "mod", doubler: "tune", opto: "guard", glue: "heat", tape: "echo", transient: "tune", deesser: "guard", mod: "mod", mseq: "heat", isoeq: "guard", reverb: "space", hall: "space", room: "space", delay: "echo", syncdelay: "echo", chorus: "mod", flanger: "mod", phaser: "mod", tremolo: "mod", wah: "mod",
         analog: "heat", drive: "heat", tubeamp: "heat", preamp: "heat", postamp: "heat", exciter: "heat", antifeedback: "guard", desquash: "guard", pitch: "tune", barrier: "heat", sampler: "echo" })
     readonly property string family: families[fx] || ""
     // THE FINISH, as on real rack gear: reverbs brushed aluminium, delays the deep green enamel of tape echoes, modulation midnight blue,
     // saturation and amps black with gold lettering, the feedback killer workshop grey, the pitch shifter oxblood. The plate's own grain shows through the paint.
-    readonly property color tint: family === "tune" ? "#4a1d28" : family === "space" ? "#3d4652" : family === "echo" ? "#24382b" : family === "mod" ? "#262f48" : family === "heat" ? "#202020" : family === "guard" ? "#4a4f56" : "#3a3f47"
-    readonly property real tintAmount: 0.6   // the anodised colour of the family over the brushed aluminium: the grain shows through
+    readonly property color tint: family === "silver" ? "#e4e7eb" : family === "tune" ? "#4a1d28" : family === "space" ? "#3d4652" : family === "echo" ? "#24382b" : family === "mod" ? "#262f48" : family === "heat" ? "#202020" : family === "guard" ? "#4a4f56" : "#3a3f47"
+    readonly property real tintAmount: family === "silver" ? 0.45 : 0.6   // the anodised colour of the family over the brushed aluminium: the grain shows through
     readonly property string hi: darkPlate ? "#90000000" : "#70ffffff"   // the engraving: a light edge on light plates, a shadow on dark ones
     readonly property color onInk: darkPlate ? "#14171a" : paper       // lettering on a key that is lit in the ink colour
     readonly property color accent: darkPlate ? "#ff6b5a" : red        // the signal red, brighter where the plate is dark
@@ -61,7 +62,8 @@ Popup {
         tape: [["RECORD", [0]], ["TRANSPORT", [1, 3]], ["ALIGNMENT", [2]], ["REPRO", [4]]], transient: [["SHAPE", [0, 1]], ["OUTPUT", [2]]], deesser: [["DETECT", [0, 1]], ["REDUCE", [2]], ["MONITOR", [3]]],
         maximizer: [["LOUDNESS", [0]], ["CEILING", [1]], ["RELEASE", [2]]], multiband: [["CROSSOVER", [0, 1]], ["BANDS", [2, 3, 4]], ["DYNAMICS", [5, 6]]], imager: [["WIDTH", [0, 1]], ["SPLIT", [2]], ["OUTPUT", [3]]], autopan: [["MOTION", [0, 1]], ["WAVE", [2]]], doubler: [["VOICES", [0, 1]], ["STEREO", [2]], ["TONE", [3]]],
         iamfelement: [["DIRECTION", [0, 1]], ["DISTANCE", [2, 3]], ["RENDER", [4]]], iamfrender: [["MONITOR", [0]], ["LOUDNESS", [1, 2]], ["OUTPUT", [3]]],
-        wshape: [["SHAPE", [0, 6]], ["LOW", [1, 2]], ["MID", [3, 4]], ["TOP", [5]], ["OUTPUT", [7]]] })
+        wshape: [["SHAPE", [0, 6]], ["LOW", [1, 2]], ["MID", [3, 4]], ["TOP", [5]], ["OUTPUT", [7]]],
+        convclip: [["CONVERTERS", [0, 1]], ["GAIN", [2, 5]], ["COLOUR", [3, 4, 6]], ["CLIP", [7, 10]], ["WORD LENGTH", [8, 9]], ["MONITOR", [11]]] })
     readonly property var sections: { const n = params.length; if (!n) return []; const l = layouts[fx]; if (l) return l
         const out = [], m = Math.min(n, 24); for (let i = 0; i < m; i += 4) { const idx = []; for (let j = i; j < Math.min(m, i + 4); j++) idx.push(j); out.push([(i + 1) + " – " + Math.min(m, i + 4), idx]) } return out }
     readonly property int mixIndex: fx && params.length ? params.length - 1 : -1
@@ -244,9 +246,9 @@ Popup {
                     // the name plate, the lamp and the ON / OFF switch
                     Item { width: 150; height: ed.panelH - 16
                         MouseArea { anchors.fill: parent; property point p0; cursorShape: Qt.SizeAllCursor; onPressed: function (m) { p0 = Qt.point(m.x, m.y) } onPositionChanged: function (m) { if (pressed) { ed.x += (m.x - p0.x) * ed.fit; ed.y += (m.y - p0.y) * ed.fit } } }
-                        Text { anchors.horizontalCenter: parent.horizontalCenter; y: 6; text: "AMFB  X1"; color: ed.ink; font.family: ed.face1; style: Text.Sunken; styleColor: ed.hi; font.pixelSize: 17; font.weight: Font.Bold; font.letterSpacing: 2 }
+                        Text { anchors.horizontalCenter: parent.horizontalCenter; y: 6; text: "AMFB  X1"; color: ed.plateInk; font.family: ed.face1; style: Text.Sunken; styleColor: ed.hi; font.pixelSize: 17; font.weight: Font.Bold; font.letterSpacing: 2 }
                         Image { anchors.horizontalCenter: parent.horizontalCenter; y: 28; width: 40; height: 40; source: "qrc:/qt/qml/AmixOS/skin/badge.png"; smooth: true; mipmap: true }
-                        Text { anchors.horizontalCenter: parent.horizontalCenter; y: 68; width: parent.width - 6; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap; text: ed.title.toUpperCase(); color: ed.ink; font.family: ed.face1; style: Text.Sunken; styleColor: ed.hi; font.pixelSize: 12; font.weight: Font.Bold; font.letterSpacing: 1 }
+                        Text { anchors.horizontalCenter: parent.horizontalCenter; y: 68; width: parent.width - 6; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap; text: ed.title.toUpperCase(); color: ed.plateInk; font.family: ed.face1; style: Text.Sunken; styleColor: ed.hi; font.pixelSize: 12; font.weight: Font.Bold; font.letterSpacing: 1 }
                         // THE POWER BUTTON: a backlit round key with the power symbol; its ring glows while the unit works and goes dark when bypassed
                         Item { id: pwr; objectName: "powerButton"; anchors.horizontalCenter: parent.horizontalCenter; y: 100; width: 76; height: 76
                             readonly property bool on: !ed.bypass; readonly property color glow: "#46c8ff"
@@ -260,7 +262,7 @@ Popup {
                                     c.beginPath(); c.arc(15, 16, 11, -Math.PI / 2 + 0.75, Math.PI * 1.5 - 0.75, false); c.stroke(); c.beginPath(); c.moveTo(15, 2); c.lineTo(15, 14); c.stroke() } }
                             MouseArea { id: pa; anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { engine.setPluginBypass(ed.strip, ed.slot, !ed.bypass); ed.bypass = !ed.bypass } } }
                         Text { anchors.horizontalCenter: parent.horizontalCenter; y: 182; text: ed.bypass ? "BYPASSED" : "ACTIVE"; color: ed.bypass ? "#8a9099" : "#46c8ff"; font.family: ed.face1; font.pixelSize: 10; font.weight: Font.Bold; font.letterSpacing: 2 }
-                        Text { anchors.horizontalCenter: parent.horizontalCenter; y: 204; horizontalAlignment: Text.AlignHCenter; text: "AMFB AUDIO\n" + (ed.fx ? "CH " + (ed.strip + 1) + " · SLOT " + (ed.slot + 1) : (ed.kind.indexOf("vst2:") === 0 ? "VST2" : "VST3") + " HOSTED"); color: ed.ink; font.family: ed.face1; style: Text.Sunken; styleColor: ed.hi; font.pixelSize: 9; font.letterSpacing: 2; lineHeight: 1.2 } }
+                        Text { anchors.horizontalCenter: parent.horizontalCenter; y: 204; horizontalAlignment: Text.AlignHCenter; text: "AMFB AUDIO\n" + (ed.fx ? "CH " + (ed.strip + 1) + " · SLOT " + (ed.slot + 1) : (ed.kind.indexOf("vst2:") === 0 ? "VST2" : "VST3") + " HOSTED"); color: ed.plateInk; font.family: ed.face1; style: Text.Sunken; styleColor: ed.hi; font.pixelSize: 9; font.letterSpacing: 2; lineHeight: 1.2 } }
                     // the meter and BLEND
                     Column { spacing: 6; width: 150
                         Rectangle { width: 150; height: 104; radius: 5; border.color: "#2b2924"; border.width: 1   // the needle meter (input level; 0 = -12 dBFS)

@@ -90,3 +90,60 @@ void IamfRenderer::process(float* L, float* R, std::size_t n) {
 }
 
 }  // namespace am::fx
+
+// ---------------------------------------------------------------- CONVERTER CLIP
+namespace am::fx {
+namespace {
+const Multi::Def kCc[] = {{"adc", "ADC", 1.0}, {"dac", "DAC", 1.0}, {"input", "INPUT", 0.5}, {"drive", "DRIVE", 0.25}, {"decorrelate", "DE-CORRELATE", 0.0}, {"output", "OUTPUT", 0.5},
+  {"drift", "DRIFT", 0.0}, {"ceiling", "CEILING", 0.9}, {"dither", "DITHER", 0.0}, {"bits", "BITS", 1.0}, {"ovs", "OVS", 0.5}, {"monitor", "MONITOR", 0.0}};
+double ccLin(double d) { return std::pow(10.0, d / 20.0); }
+// the clipper: straight up to 60 % of the ceiling, then a smooth (cubic) bend that lands flat exactly on the ceiling
+double softClip(double x, double c) { const double k = 0.6 * c, a = std::fabs(x); if (a <= k) return x; const double span = c - k, t = std::min(1.0, (a - k) / (2 * span));
+  const double y = k + span * (2 * t - t * t); return x < 0 ? -std::min(y, c) : std::min(y, c); }
+}  // namespace
+ConvClip::ConvClip(double fs) : Multi(fs, kCc, 12) { reset(); }
+void ConvClip::setSampleRate(double fs) { fs_ = fs > 0 ? fs : 48000; reset(); }
+double ConvClip::rnd() { rng_ ^= rng_ << 13; rng_ ^= rng_ >> 17; rng_ ^= rng_ << 5; return static_cast<double>(rng_) / 4294967296.0; }
+std::string ConvClip::text(const std::string& id, double v) const { v = v < 0 ? 0 : v > 1 ? 1 : v; const int i = index(id); char b[40];
+  switch (i) { case 0: case 1: case 6: return v < 0.5 ? "OFF" : "ON"; case 2: case 5: std::snprintf(b, sizeof b, "%+.1f dB", (v - 0.5) * 24); return b; case 3: std::snprintf(b, sizeof b, "+%.1f dB", v * 18); return b;
+    case 7: std::snprintf(b, sizeof b, "%.1f dBFS", (v - 1) * 3); return b; case 8: { static const char* t[] = {"OFF", "TPDF", "SHAPED"}; return t[pickOf(v, 3)]; } case 9: std::snprintf(b, sizeof b, "%d bit", bitsOf(v)); return b;
+    case 10: std::snprintf(b, sizeof b, "%dx", ovsOf(v)); return b; case 11: { static const char* t[] = {"LR", "M", "S", "Δ"}; return t[pickOf(v, 4)]; } default: std::snprintf(b, sizeof b, "%.0f %%", v * 100); return b; } }
+void ConvClip::reset() { for (int c = 0; c < 2; ++c) { for (auto& q : up_[c]) q.clear(); for (auto& q : down_[c]) q.clear(); adc_[c].clear(); dac_[c].clear(); ap_[c] = apIn_[c] = 0; drift_[c] = driftT_[c] = 1; err_[c] = 0; } ovsDesigned_ = 0; dirty_ = true; gr_ = 0; }
+void ConvClip::design() {
+  const int N = ovsOf(k_[10]); const double fo = fs_ * N;
+  for (int c = 0; c < 2; ++c) { for (int s = 0; s < 2; ++s) { up_[c][s].design(Biquad::LowPass, fo, fs_ * 0.45, s ? 1.31 : 0.54, 0); down_[c][s].design(Biquad::LowPass, fo, fs_ * 0.45, s ? 1.31 : 0.54, 0); }   // 4th-order Butterworth around the clipper
+    adc_[c].design(Biquad::LowPass, fs_, std::min(20500.0, fs_ * 0.45), 0.6, 0); dac_[c].design(Biquad::LowPass, fs_, std::min(21500.0, fs_ * 0.46), 0.6, 0); }
+  ovsDesigned_ = N;
+}
+void ConvClip::process(float* L, float* R, std::size_t n) {
+  if (bypass_.load()) return;
+  if (dirty_.exchange(false) || ovsDesigned_ != ovsOf(k_[10])) design();
+  const bool adc = k_[0] >= 0.5, dac = k_[1] >= 0.5, drift = k_[6] >= 0.5; const int N = ovsOf(k_[10]), dith = pickOf(k_[8], 3), mon = pickOf(k_[11], 4), bits = bitsOf(k_[9]);
+  const double gin = ccLin((k_[2] - 0.5) * 24) * ccLin(k_[3] * 18), gout = ccLin((k_[5] - 0.5) * 24), ceil = ccLin((k_[7] - 1) * 3), dec = k_[4] * 0.35, wet = mix_.load();
+  const double lsb = std::ldexp(1.0, -(bits - 1));
+  if (drift) for (int c = 0; c < 2; ++c) if (rnd() < 0.02) driftT_[c] = ccLin((rnd() - 0.5) * 0.3);   // now and then a new resting point, within +-0.15 dB
+  double minGr = 0;
+  for (std::size_t i = 0; i < n; ++i) {
+    const double in[2] = {L[i], R[i]}; double o[2];
+    for (int c = 0; c < 2; ++c) {
+      drift_[c] += 0.00002 * ((drift ? driftT_[c] : 1.0) - drift_[c]);
+      double x = in[c] * gin * drift_[c];
+      if (adc) { x = adc_[c].run(static_cast<float>(x)); x = x + 0.003 * x * x - 0.006 * x * x * x; }   // the input converter's analog stage: a hair of 2nd and 3rd harmonic
+      if (dec > 0) { const double a = c ? dec : -dec, y = a * x + apIn_[c] - a * ap_[c]; apIn_[c] = x; ap_[c] = y; x = y; }   // a first-order all-pass, opposite on the two sides
+      double y = 0, pre = std::fabs(x);
+      for (int j = 0; j < N; ++j) { double u = j == 0 ? x * N : 0.0; if (N > 1) { u = up_[c][1].run(up_[c][0].run(static_cast<float>(u))); } else u = x;
+        double cl = softClip(u, ceil); if (N > 1) cl = down_[c][1].run(down_[c][0].run(static_cast<float>(cl))); if (j == N - 1) y = cl; }
+      if (pre > 1e-6) minGr = std::min(minGr, 20 * std::log10(std::max(std::fabs(y), 1e-9) / pre));
+      if (dac) { y = dac_[c].run(static_cast<float>(y)); y = y + 0.002 * y * y - 0.004 * y * y * y; }
+      y *= gout;
+      if (dith > 0) { const double tp = (rnd() - rnd()) * lsb; double v = y + tp - (dith == 2 ? err_[c] : 0.0); const double q = std::round(v / lsb) * lsb; err_[c] = q - v + tp; y = q; }   // TPDF, or with first-order noise shaping
+      y = std::clamp(y, -ceil * gout, ceil * gout);   // never over the ceiling (times OUTPUT)
+      o[c] = y;
+    }
+    double l = o[0], r = o[1];
+    if (mon == 1) { const double m = 0.5 * (l + r); l = r = m; } else if (mon == 2) { const double s = 0.5 * (l - r); l = s; r = -s; } else if (mon == 3) { l -= in[0]; r -= in[1]; }
+    L[i] = static_cast<float>(in[0] + (l - in[0]) * wet); R[i] = static_cast<float>(in[1] + (r - in[1]) * wet);
+  }
+  gr_ = minGr;
+}
+}  // namespace am::fx

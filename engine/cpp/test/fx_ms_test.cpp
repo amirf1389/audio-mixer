@@ -64,5 +64,13 @@ int main() {
     for (int i = 0; i < N; i += 256) e->process(L.data() + i, R.data() + i, static_cast<std::size_t>(std::min(256, N - i)));
     for (int i = N / 2; i < N; ++i) eout += L[i] * L[i];
     const double change = 10 * std::log10(eout / ein); CHECK(std::fabs(change) < 1.0, "W-SHAPE changed the level by %f dB", change); }
+  { // CONVERTER CLIP: never over the ceiling at any oversampling; dither: silence stays silent without it, a faint floor with it
+    for (double ovs : {0.0, 0.5, 1.0}) { auto e = make("convclip", 48000); e->set("drive", 1.0); e->set("ceiling", 0.9); e->set("ovs", ovs); const int N = 48000; std::vector<float> L(N), R(N);
+      for (int i = 0; i < N; ++i) L[i] = R[i] = static_cast<float>(0.9 * std::sin(2 * 3.14159265 * 3000 * i / 48000.0));
+      for (int i = 0; i < N; i += 256) e->process(L.data() + i, R.data() + i, static_cast<std::size_t>(std::min(256, N - i)));
+      double pk = 0; for (float v : L) pk = std::max(pk, static_cast<double>(std::fabs(v))); CHECK(pk <= std::pow(10.0, -0.3 / 20) + 1e-6, "converter clip ovs %f peak %f", ovs, pk); }
+    { auto e = make("convclip", 48000); double r; const double d = run(*e, 1000, 0.0, 0.0, &r); CHECK(d < -200, "silence without dither %f", d); }
+    { auto e = make("convclip", 48000); e->set("dither", 0.5); e->set("bits", 0.0); double r; const double d = run(*e, 1000, 0.0, 0.0, &r); CHECK(d > -110 && d < -85, "16-bit TPDF floor %f", d); }
+    { auto e = make("convclip", 48000); e->set("adc", 0); e->set("dac", 0); e->set("drive", 0); e->set("ovs", 0.0); e->set("monitor", 1.0); const double d = run(*e, 1000, 0.05, 0.05); CHECK(d < -60, "delta of a clean pass %f", d); } }
   std::printf(fails ? "fx_ms: %d failed\n" : "fx_ms: all passed\n", fails); return fails ? 1 : 0;
 }

@@ -371,4 +371,19 @@ class WShape final : public Multi { public: explicit WShape(double fs); const ch
   static void bands(const double* k, Band out[5]);     // the five bands for the knobs k[0..6]
  private: void design(); Biquad f_[2][5]; std::atomic<double> comp_{0}; };
 
+// CONVERTER CLIP: the last stage before the file: the colour of an analog-to-digital and a digital-to-analog converter around a soft
+// clipper. ADC and DAC (on / off) each add the faint harmonics and the gentle top-end band limit of a converter's analog stage; INPUT and
+// DRIVE push into the clipper (a soft knee that ends exactly at CEILING, -3 .. 0 dBFS, never over it); OVS runs the clipper at 1x / 2x / 4x the
+// rate so its edges do not fold back as aliasing; DE-CORRELATE lets the two sides drift apart in phase a little (width without a widener);
+// DRIFT (on / off) makes the two channels wander by a hair, like analog parts warming up; DITHER (OFF / TPDF / SHAPED) and BITS (16 / 20 / 24)
+// for the final word length; OUTPUT; MONITOR: LR, M (mid), S (side) or Δ (only what the unit added or took away).
+class ConvClip final : public Multi { public: explicit ConvClip(double fs); const char* kind() const override { return "convclip"; } const char* name() const override { return "CONVERTER CLIP"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void setSampleRate(double fs) override; void process(float* L, float* R, std::size_t n) override;
+  double grDb() const { return gr_.load(); }
+  static int ovsOf(double v) { const int k = static_cast<int>((v < 0 ? 0 : v > 1 ? 1 : v) * 2.999); return 1 << k; }
+  static int bitsOf(double v) { static const int b[] = {16, 20, 24}; return b[static_cast<int>((v < 0 ? 0 : v > 1 ? 1 : v) * 2.999)]; }
+  static int pickOf(double v, int n) { return static_cast<int>((v < 0 ? 0 : v > 1 ? 1 : v) * (n - 0.001)); }
+ private: void design(); Biquad up_[2][2], down_[2][2], adc_[2], dac_[2]; double ap_[2] = {0, 0}, apIn_[2] = {0, 0}, drift_[2] = {1, 1}, driftT_[2] = {1, 1}, err_[2] = {0, 0};
+  std::uint32_t rng_ = 0x9e3779b9u; int ovsDesigned_ = 0; std::atomic<double> gr_{0}; double rnd(); };
+
 }  // namespace am::fx
