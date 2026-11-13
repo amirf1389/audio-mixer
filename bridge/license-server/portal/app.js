@@ -100,3 +100,12 @@ async function loadUpdates() {
     $('upMsg').hidden = true; $('upOut').hidden = false;
   } catch (_) { say($('upMsg'), 'The update list could not be read.', 'err'); updatesLoaded = false; }
 }
+
+// the vendor's notice and maintenance message (SYSTEM → Settings), shown as plain text
+fetch('/portal/notice').then(r => r.json()).then(j => {
+  if (!j || !j.ok) return; const box = document.getElementById('notice'); const parts = [];
+  if (j.maintenance) parts.push('Maintenance: some steps may not work right now. Please try again a little later.');
+  if (j.notice) parts.push(j.notice);
+  if (j.supportEmail) parts.push('Help: ' + j.supportEmail);
+  if (parts.length) { box.textContent = parts.join('  ·  '); box.hidden = false; }
+}).catch(() => {});
