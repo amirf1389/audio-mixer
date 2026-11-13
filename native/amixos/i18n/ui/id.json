@@ -754,7 +754,6 @@
 "Version ": "Versi ",
 "WAIT": "TUNGGU",
 "WASAPI + DIRECTSOUND": "WASAPI + DIRECTSOUND",
-"WAV only (8 / 16 / 24 / 32-bit PCM and float); other rates are resampled to the engine rate. MP3 / FLAC decoding is not built in. The SOUND CARD page has DC removal and dither for the output, so the player never needs the OS mixer.": "Hanya WAV (PCM 8 / 16 / 24 / 32-bit dan float); laju lain di-resample ke laju mesin. Decoding MP3 / FLAC tidak tersedia. Halaman KARTU SUARA memiliki penghapus DC dan dither untuk output, jadi pemutar tidak pernah butuh mixer OS.",
 "WAVEFORM:": "BENTUK GELOMBANG:",
 "WHAT THIS BUILD CARRIES OVER": "YANG DIBAWA BUILD INI",
 "WHAT TO EXPECT": "YANG PERLU DIKETAHUI",

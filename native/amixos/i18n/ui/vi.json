@@ -754,7 +754,6 @@
 "Version ": "Phiên bản ",
 "WAIT": "CHỜ",
 "WASAPI + DIRECTSOUND": "WASAPI + DIRECTSOUND",
-"WAV only (8 / 16 / 24 / 32-bit PCM and float); other rates are resampled to the engine rate. MP3 / FLAC decoding is not built in. The SOUND CARD page has DC removal and dither for the output, so the player never needs the OS mixer.": "Chỉ WAV (PCM 8 / 16 / 24 / 32-bit và float); các tốc độ khác được lấy mẫu lại theo tốc độ của engine. Không tích hợp giải mã MP3 / FLAC. Trang CARD ÂM THANH có khử DC và dither cho đầu ra, nên trình phát không bao giờ cần bộ trộn của hệ điều hành.",
 "WAVEFORM:": "DẠNG SÓNG:",
 "WHAT THIS BUILD CARRIES OVER": "BẢN DỰNG NÀY KẾ THỪA NHỮNG GÌ",
 "WHAT TO EXPECT": "ĐIỀU CẦN BIẾT",

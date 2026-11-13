@@ -756,7 +756,6 @@
 "VU faces": "وجوه VU",
 "Version ": "الإصدار ",
 "WAIT": "انتظر",
-"WAV only (8 / 16 / 24 / 32-bit PCM and float); other rates are resampled to the engine rate. MP3 / FLAC decoding is not built in. The SOUND CARD page has DC removal and dither for the output, so the player never needs the OS mixer.": "WAV فقط (PCM ‏8 / 16 / 24 / 32-bit و float)؛ المعدلات الأخرى يُعاد تعيينها إلى معدل المحرك. فك ترميز MP3 / FLAC غير مدمج. صفحة بطاقة الصوت فيها إزالة DC والديذر للخرج، فلا يحتاج المشغّل إلى مازج النظام أبداً.",
 "WAVEFORM:": "شكل الموجة:",
 "WHAT THIS BUILD CARRIES OVER": "ما ينقله هذا الإصدار",
 "WHAT TO EXPECT": "ما يمكن توقعه",

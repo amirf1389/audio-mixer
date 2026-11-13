@@ -29,6 +29,7 @@
 #include <QtEndian>
 #include <QFileInfo>
 #include <QFile>
+#include <QProcess>
 #include <vector>
 #include "Arrange.h"
 #include "Settings.h"
@@ -687,6 +688,12 @@ int main(int argc, char* argv[]) {
           if (QString::fromLatin1(id) == "dsp") { engine.setChannelEq(engine.selectedStrip(), 4.0, -3.0, 2500.0, 2.0, true); waitMs(300); win->grabWindow().save(shots + "/channel-eq-3band.png"); engine.setChannelEq(engine.selectedStrip(), 0, 0, 1000, 0, false); std::printf("amixos --shots: channel-eq-3band\n");
             if (!win->findChild<QObject*>("channelEq3")) std::fprintf(stderr, "amixos --shots: FAILED the 3-band channel EQ is missing\n");
             if (QObject* tp = win->findChild<QObject*>("tonePage")) { engine.setGraphicEq(engine.selectedStrip(), QVariantList{3.0, 0.0, -2.0, 0.0, 0.0, 4.0, 0.0, 0.0, -3.0, 1.0}, true); tp->setProperty("graphic", true); waitMs(400); win->grabWindow().save(shots + "/tone-mic-eq-faders.png"); tp->setProperty("graphic", false); engine.setGraphicEq(engine.selectedStrip(), QVariantList{0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, false); std::printf("amixos --shots: tone-mic-eq-faders\n"); } }
+          if (QString::fromLatin1(id) == "media") {   // the formats FFmpeg adds (OGG Vorbis, Opus, WavPack, APE ...): made with the ffmpeg program when it is here
+            media.clear(); int added = 0;
+            for (const char* f : {"ogg:libvorbis", "opus:libopus", "wv:wavpack", "flac:flac", "m4a:aac", "mp3:libmp3lame"}) { const QString x = QString::fromLatin1(f), ext = x.section(':', 0, 0), codec = x.section(':', 1);
+              const QString path = "/tmp/amfx1-shot-format." + ext; QProcess::execute("ffmpeg", {"-nostdin", "-v", "error", "-y", "-f", "lavfi", "-i", "sine=frequency=440:duration=3", "-ac", "2", "-c:a", codec, path});
+              if (QFile::exists(path)) added += media.add(path); }
+            waitMs(400); win->grabWindow().save(shots + "/media-formats.png"); std::printf("amixos --shots: media-formats (%d files)\n", added); media.clear(); }
           if (QString::fromLatin1(id) == "surround") { engine.setCinemaHall(true); engine.setHeadTrack(true); engine.setHeadYaw(35); waitMs(700); win->grabWindow().save(shots + "/360-cinema-hall.png"); std::printf("amixos --shots: 360-cinema-hall\n");
             if (!win->findChild<QObject*>("sceneMap")) std::fprintf(stderr, "amixos --shots: FAILED the 360 scene map is missing\n"); engine.setHeadYaw(0); engine.setHeadTrack(false); engine.setCinemaHall(false); engine.setBusFx(15, "");
             { int k = -1; const QVariantList pl = engine.plugins(0); for (int j = 0; j < pl.size(); ++j) if (pl[j].toMap()["kind"].toString().isEmpty()) { k = j; break; }   // CH 1 placed by an IAMF ELEMENT, CH 2 by the 360 stage

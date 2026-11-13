@@ -754,7 +754,6 @@
 "Version ": "نسخهٔ ",
 "WAIT": "صبر کنید",
 "WASAPI + DIRECTSOUND": "WASAPI + DIRECTSOUND",
-"WAV only (8 / 16 / 24 / 32-bit PCM and float); other rates are resampled to the engine rate. MP3 / FLAC decoding is not built in. The SOUND CARD page has DC removal and dither for the output, so the player never needs the OS mixer.": "فقط WAV (PCM ‏8 / 16 / 24 / 32 بیتی و ممیز شناور)؛ نرخ‌های دیگر به نرخ موتور بازنمونه‌برداری می‌شوند. رمزگشایی MP3 / FLAC تعبیه نشده. صفحهٔ کارت صدا حذف DC و دیتر برای خروجی دارد، پس پخش‌کننده هرگز به میکسر سیستم‌عامل نیاز ندارد.",
 "WAVEFORM:": "شکل موج:",
 "WHAT THIS BUILD CARRIES OVER": "آنچه این نسخه به ارث می‌برد",
 "WHAT TO EXPECT": "چه انتظاری داشته باشید",
