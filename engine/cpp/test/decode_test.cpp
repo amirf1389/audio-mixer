@@ -51,6 +51,12 @@ int main(int argc, char** argv) {
         if (!ok || std::fabs(a.duration() - 2.0) > 0.1 || std::fabs(rms - 0.0628) > 0.006) { std::printf("FAIL FFmpeg library %s: ok %d err '%s' %.2f s rms %.3f\n", ext, ok, err.c_str(), a.duration(), rms); ++fails; }
         else std::printf("FFmpeg library %s: %.2f s at %.0f Hz\n", ext, a.duration(), a.rate);
         std::remove(p.c_str()); }
+      { // 5.1 AC-3 with the same tone on all six channels: the stereo downmix is normalised (it was 2.4x too loud, so surround files clipped)
+        const std::string p = "/tmp/amfx1-dec-51.ac3";
+        if (std::system(("ffmpeg -nostdin -v error -y -f lavfi -i sine=frequency=1000:sample_rate=48000:duration=2 -af \"pan=5.1|c0=c0|c1=c0|c2=c0|c3=c0|c4=c0|c5=c0\" -c:a ac3 " + p).c_str()) == 0) {
+          am::arr::Audio a; std::string err; const bool ok = am::arr::readFfmpegLib(p, a, err); double e = 0; for (float v : a.L) e += v * v; const double rms = a.L.empty() ? 0 : std::sqrt(e / a.L.size());
+          if (!ok || rms > 0.1 || rms < 0.07) { std::printf("FAIL FFmpeg 5.1 downmix: ok %d rms %.3f (want about 0.088)\n", ok, rms); ++fails; } else std::printf("FFmpeg 5.1 downmix: rms %.3f\n", rms);
+          std::remove(p.c_str()); } }
     } else std::printf("FFmpeg libraries not present: library path not tested\n");
   }
   std::printf(fails ? "decode_test: %d FAILED\n" : "decode_test: all passed\n", fails);
