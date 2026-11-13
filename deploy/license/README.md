@@ -134,3 +134,34 @@ Make an `A` record (and `AAAA` if the machine has IPv6) for `licence` at your DN
 
 The paths in `nginx-license.conf` already match what certbot writes. AmF X1 uses `https://licence.amirfakhribadri.my` as its licence
 server unless another address is typed on the LICENCE page.
+
+## Staff sign-in, CRM and one sign-in for both servers
+
+The licence server and the OTA server share staff accounts (SQLite, built into Node 22) and an 8-hour JWT.
+Set the same two values for both services:
+
+    PORTAL_DB=/secure/amfx1/portal.db                 # one file both services can read and write (mode 600)
+    PORTAL_JWT_SECRET=<64 random characters>          # e.g. openssl rand -hex 32; never in the repository
+
+Without them the licence server keeps its staff database next to its licence data and derives its own secret
+(sign-in then works on the licence server only); the OTA server stays admin-token only.
+
+Make the first staff account with the admin token, on the server or through the SSH tunnel:
+
+    curl -s https://127.0.0.1:8443/admin/staff -H "authorization: Bearer $LICENSE_ADMIN_TOKEN" \
+         -H 'content-type: application/json' -d '{"email":"you@amirfakhribadri.my","name":"You","password":"<12+ characters>"}'
+
+Then open `/admin/login`. Every enabled staff account can edit licences, releases and customers, and add or
+disable other staff accounts (disabling ends that account's sessions at once). Pages:
+
+| page | what | look |
+|---|---|---|
+| `/admin/login` | staff sign-in (both servers) | Tailwind Play CDN 3.4.16 + Font Awesome 6.5.2 |
+| `/admin/` | licence keys (and `/admin/` on the OTA server: releases) | existing dashboards, now also open with the staff token |
+| `/admin/crm` | customers, notes, staff accounts | Bootstrap 5.3.3 + Font Awesome 6.5.2 |
+
+Customer name, e-mail, phone, company and notes are stored encrypted (AES-256-GCM); passwords are scrypt hashes.
+Bootstrap and Font Awesome are pinned with SRI hashes. The Tailwind Play CDN host sends no CORS header, so its
+script cannot carry an SRI hash: the page's CSP allows that one host only. Tailwind describes the Play CDN as a
+development tool; it is used here for the internal sign-in page only. These pages stay behind the same rule as the
+rest of `/admin/`: on the server or through the SSH tunnel, never on the public website.

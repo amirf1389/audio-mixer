@@ -3791,3 +3791,31 @@ test('license-totp: RFC 6238 vectors, base32, setup -> confirm -> verify with th
   assert.throws(() => T.remove(dir, 'wrong-pin!!'), /wrong PIN/); assert.strictEqual(T.remove(dir, pin), true); assert.strictEqual(T.isSet(dir), false);
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+test('OTA server: the staff sign-in shared with the licence server opens the admin API; without PORTAL_* it stays token-only', async () => {
+  const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), http = require('node:http');
+  const { createOta } = require('../ota-server/server'), { createPortalAuth } = require('./portal-auth/auth'), lic = require('../scripts/license');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ota-staff-')), keys = path.join(tmp, 'vendor'); lic.initKeys(keys); const jwk = lic.loadPublic(keys);
+  const db = path.join(tmp, 'portal.db'), secret = 'q'.repeat(48);
+  const staff = createPortalAuth({ dbFile: db, secret }); staff.addStaff({ email: 'ops@amfb.my', name: 'Ops', password: 'a long staff password' });
+  const ota = createOta({ dataDir: path.join(tmp, 'data'), token: 'secret-token-1234567890', jwk, allowHttp: true, portalDb: db, portalSecret: secret });
+  const s = http.createServer(ota.handler); await new Promise(r => s.listen(0, '127.0.0.1', r)); const base = `http://127.0.0.1:${s.address().port}`;
+  const plain = createOta({ dataDir: path.join(tmp, 'data2'), token: 'secret-token-1234567890', jwk, allowHttp: true }), s2 = http.createServer(plain.handler);
+  await new Promise(r => s2.listen(0, '127.0.0.1', r)); const base2 = `http://127.0.0.1:${s2.address().port}`;
+  try {
+    const page = await fetch(base + '/admin/login'); assert.strictEqual(page.status, 200); assert.match(page.headers.get('content-security-policy'), /cdn\.tailwindcss\.com/);
+    assert.strictEqual((await fetch(base + '/admin/login.js')).status, 200);
+    const bad = await fetch(base + '/admin/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'ops@amfb.my', password: 'wrong wrong wrong' }) }); assert.strictEqual(bad.status, 401);
+    const li = await (await fetch(base + '/admin/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'ops@amfb.my', password: 'a long staff password' }) })).json();
+    assert.ok(li.ok && li.token);
+    assert.strictEqual((await fetch(base + '/admin/files', { headers: { authorization: 'Bearer ' + li.token } })).status, 200);
+    const fromLicence = staff.login('ops@amfb.my', 'a long staff password').token;   // a token the licence server gave: the same secret, the same database
+    assert.strictEqual((await fetch(base + '/admin/files', { headers: { authorization: 'Bearer ' + fromLicence } })).status, 200);
+    assert.strictEqual((await fetch(base + '/admin/files', { headers: { authorization: 'Bearer ' + li.token.slice(0, -2) + 'xx' } })).status, 401);
+    assert.strictEqual((await fetch(base + '/admin/files')).status, 401);
+    // without PORTAL_DB / PORTAL_JWT_SECRET: no sign-in page, no login route, a staff token is refused
+    assert.strictEqual((await fetch(base2 + '/admin/login')).status, 401);
+    assert.notStrictEqual((await fetch(base2 + '/admin/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })).status, 200);
+    assert.strictEqual((await fetch(base2 + '/admin/files', { headers: { authorization: 'Bearer ' + li.token } })).status, 401);
+  } finally { s.close(); s2.close(); staff.close(); fs.rmSync(tmp, { recursive: true, force: true }); }
+});

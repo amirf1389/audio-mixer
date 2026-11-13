@@ -58,7 +58,7 @@ const NAME = /^[A-Za-z0-9][A-Za-z0-9._ \-]{0,119}$/;
 const CHANNEL = /^[a-z0-9][a-z0-9-]{0,19}$/;
 const HEX = /^[0-9a-f]{64}$/;
 
-function createOta({ dataDir, token = '', publicUrl = '', jwk, rate = 120, trustProxy = false, allowHttp = false, log = () => {}, now = () => new Date() } = {}) {
+function createOta({ dataDir, token = '', publicUrl = '', jwk, portalDb = '', portalSecret = '', rate = 120, trustProxy = false, allowHttp = false, log = () => {}, now = () => new Date() } = {}) {
   if (!dataDir) throw new Error('dataDir is required');
   const dirs = { releases: path.join(dataDir, 'releases'), manifests: path.join(dataDir, 'manifests'), history: path.join(dataDir, 'manifests', 'history') };
   Object.values(dirs).forEach(d => fs.mkdirSync(d, { recursive: true }));
@@ -103,7 +103,12 @@ function createOta({ dataDir, token = '', publicUrl = '', jwk, rate = 120, trust
   const send = (res, code, body, headers = {}) => { if (code >= 400 && body && typeof body === 'object' && !Buffer.isBuffer(body)) res.auditNote = String(body.error || '') + (body.problems ? ': ' + body.problems.join('; ') : ''); const t = typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body); res.writeHead(code, { 'Content-Type': typeof body === 'object' && !Buffer.isBuffer(body) ? 'application/json; charset=utf-8' : 'text/plain; charset=utf-8', 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store', ...headers }); res.end(t); };
   const fail = (res, code, error) => send(res, code, { ok: false, error });
   const addr = req => (trustProxy && String(req.headers['x-forwarded-for'] || '').split(',')[0].trim()) || req.socket.remoteAddress || '?';
-  const authed = req => { const m = /^Bearer (.+)$/.exec(String(req.headers.authorization || '')); if (!m || !token) return false; const a = crypto.createHash('sha256').update(m[1]).digest(), b = crypto.createHash('sha256').update(token).digest(); return crypto.timingSafeEqual(a, b); };
+  // staff sign-in shared with the licence server (bridge/portal-auth): on when both PORTAL_DB and PORTAL_JWT_SECRET are set
+  let staffDb = null; const staffOn = !!(portalDb && portalSecret);
+  const staffAuth = () => staffDb || (staffDb = require('../bridge/portal-auth/auth').createPortalAuth({ dbFile: portalDb, secret: portalSecret }));
+  const staffOf = req => staffOn && /^Bearer [A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(String(req.headers.authorization || '')) ? staffAuth().bearer(req) : null;
+  const tokenOk = req => { const m = /^Bearer (.+)$/.exec(String(req.headers.authorization || '')); if (!m || !token) return false; const a = crypto.createHash('sha256').update(m[1]).digest(), b = crypto.createHash('sha256').update(token).digest(); return crypto.timingSafeEqual(a, b); };
+  const authed = req => tokenOk(req) || !!(req.staff = staffOf(req));
 
   async function readBody(req, max) {
     const chunks = []; let n = 0;
@@ -295,6 +300,18 @@ function createOta({ dataDir, token = '', publicUrl = '', jwk, rate = 120, trust
     try {
       if (p === '/admin' && token) return send(res, 301, '', { Location: '/admin/' });
       if (DASH[p] && token && (req.method === 'GET' || req.method === 'HEAD')) return serveDashboard(req, res, p);
+      if (staffOn && token && p === '/admin/login' && (req.method === 'GET' || req.method === 'HEAD')) {   // the staff sign-in page (the same page as the licence server's)
+        const body = fs.readFileSync(path.join(__dirname, '..', 'bridge', 'license-server', 'dashboard', 'login.html'));
+        return send(res, 200, req.method === 'HEAD' ? '' : body, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Length': body.length, 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer', 'Cache-Control': 'no-store',
+          'Content-Security-Policy': "default-src 'none'; script-src 'self' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; font-src https://cdnjs.cloudflare.com; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'" });
+      }
+      if (staffOn && token && p === '/admin/login.js' && req.method === 'GET') { const body = fs.readFileSync(path.join(__dirname, '..', 'bridge', 'license-server', 'dashboard', 'login.js')); return send(res, 200, body, { 'Content-Type': 'text/javascript; charset=utf-8', 'Content-Length': body.length, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }); }
+      if (staffOn && token && p === '/admin/auth/login' && req.method === 'POST') {
+        const lim = limiter.allow('login:' + ip, 10); if (!lim.ok) return send(res, 429, { ok: false, error: 'too many requests' }, { 'Retry-After': lim.retryAfter });
+        let b; try { b = JSON.parse((await readBody(req, 4096)).toString('utf8') || '{}'); } catch (e) { return fail(res, e.status || 400, 'bad request'); }
+        const r = staffAuth().login(b.email, b.password); req.audit = { action: r.ok ? 'staff.login' : 'staff.login.refused', target: r.ok ? r.staff.id : '-' };
+        return r.ok ? send(res, 200, { ok: true, token: r.token, expiresIn: r.expiresIn, staff: r.staff }) : fail(res, r.status, r.error);
+      }
       if (p.startsWith('/admin/')) {
         if (!token) return fail(res, 404, 'not found');
         const lim = limiter.allow('a:' + ip, 60); if (!lim.ok) { if (limiter.allow('auditrl:' + ip, 5).ok) req.audit = { action: 'admin.rate_limited', target: p }; return send(res, 429, { ok: false, error: 'too many requests' }, { 'Retry-After': lim.retryAfter }); }
@@ -303,7 +320,7 @@ function createOta({ dataDir, token = '', publicUrl = '', jwk, rate = 120, trust
           if (limiter.allow('auditbad:' + ip, 20).ok) req.audit = { action: 'auth.denied', target: req.method + ' ' + p };      // no token, wrong token or too many tries: who, where from, what for (never the token)
           return send(res, bad.ok ? 401 : 429, { ok: false, error: 'a valid admin token is required' }, bad.ok ? { 'WWW-Authenticate': 'Bearer' } : { 'Retry-After': bad.retryAfter });
         }
-        req.fp = fpOf(token);
+        req.fp = req.staff ? 'staff:' + req.staff.email : fpOf(token);
         let m;
         if ((m = /^\/admin\/files\/([^/]+)$/.exec(p))) {
           let name; try { name = decodeURIComponent(m[1]); } catch (_) { return fail(res, 400, 'bad file name'); }
@@ -385,7 +402,7 @@ function start(opts = {}) {
   const a = process.argv.slice(2), arg = (n, d) => { const i = a.indexOf(n); return i >= 0 ? a[i + 1] : d; };
   const port = Number(arg('--port', process.env.OTA_PORT || 8780)), host = arg('--host', process.env.OTA_HOST || '127.0.0.1'), dataDir = path.resolve(arg('--data', process.env.OTA_DATA || path.join(__dirname, '..', 'ota-data')));
   const jwk = require('../bridge/license').PUBLIC_JWK;
-  const ota = createOta({ dataDir, jwk, token: process.env.OTA_ADMIN_TOKEN || '', publicUrl: process.env.OTA_PUBLIC_URL || '', rate: Number(process.env.OTA_RATE) || 120, trustProxy: process.env.OTA_TRUST_PROXY === '1', allowHttp: process.env.OTA_ALLOW_HTTP === '1', log: o => console.log(JSON.stringify({ t: new Date().toISOString(), ...o })), ...opts });
+  const ota = createOta({ dataDir, jwk, token: process.env.OTA_ADMIN_TOKEN || '', portalDb: process.env.PORTAL_DB || '', portalSecret: process.env.PORTAL_JWT_SECRET || '', publicUrl: process.env.OTA_PUBLIC_URL || '', rate: Number(process.env.OTA_RATE) || 120, trustProxy: process.env.OTA_TRUST_PROXY === '1', allowHttp: process.env.OTA_ALLOW_HTTP === '1', log: o => console.log(JSON.stringify({ t: new Date().toISOString(), ...o })), ...opts });
   const cert = process.env.OTA_TLS_CERT, key = process.env.OTA_TLS_KEY;
   const server = cert && key ? https.createServer({ cert: fs.readFileSync(cert), key: fs.readFileSync(key) }, ota.handler) : http.createServer(ota.handler);
   server.requestTimeout = 0; server.headersTimeout = 30000;                                    // large uploads take a while; headers must come quickly
