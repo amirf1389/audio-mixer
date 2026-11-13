@@ -14,7 +14,7 @@
   }
   function signedOut(note) {
     token = ''; sessionStorage.removeItem('amfb'); clearInterval(timer);
-    $('desk').hidden = true; $('out').hidden = true; $('pair').hidden = false;
+    $('desk').hidden = true; $('out').hidden = true; $('pair').hidden = false; $('targetBar').hidden = true;
     $('status').textContent = 'Not paired'; $('pairNote').textContent = note || '';
   }
   function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
@@ -33,7 +33,9 @@
       if (!s.master) {
         const comp = el('input'); comp.type = 'range'; comp.min = 0; comp.max = 10; comp.step = 1; comp.value = s.compLevel || 0; comp.setAttribute('aria-label', 'Strip ' + (i + 1) + ' compression level');
         comp.addEventListener('input', () => api('/api/strip/' + (i + 1), { compLevel: Number(comp.value) }).catch(() => {}));
-        box.append(el('div', 'tp gr', 'GR —'), comp);
+        const sug = el('button', 'sug', 'listening…'); sug.type = 'button'; sug.disabled = true; sug.setAttribute('aria-label', 'Apply the suggested compression level to strip ' + (i + 1));
+        sug.addEventListener('click', () => { const lv = Number(sug.dataset.level); if (lv > 0) { comp.value = lv; api('/api/strip/' + (i + 1), { compLevel: lv }).catch(() => {}); } });
+        box.append(el('div', 'tp gr', 'GR —'), comp, sug);
         const pan = el('input'); pan.type = 'range'; pan.min = -1; pan.max = 1; pan.step = 0.05; pan.value = s.pan; pan.setAttribute('aria-label', 'Strip ' + (i + 1) + ' balance');
         pan.addEventListener('input', () => api('/api/strip/' + (i + 1), { pan: Number(pan.value) }).catch(() => {}));
         const row = el('div', 'row');
@@ -57,6 +59,7 @@
         const bars = box.querySelectorAll('.meter i'); bars[0].style.height = height(m[0]); bars[1].style.height = height(m[1]);
         const tp = box.querySelector('.tp'); tp.textContent = m[4] > 1e-5 ? db(m[4]).toFixed(1) + ' dBTP' : '—'; tp.classList.toggle('over', m[4] > 1);
         const gr = box.querySelector('.gr'); if (gr) gr.textContent = m[8] < -0.05 ? 'GR ' + m[8].toFixed(1) + ' dB' : 'GR —';
+        const sg = box.querySelector('.sug'); if (sg) { const lv = m[10]; sg.dataset.level = lv; sg.textContent = lv < 0 ? 'listening…' : lv === 0 ? 'no comp needed' : 'suggest ' + lv + ' · apply'; sg.disabled = !(lv > 0); }
         box.classList.toggle('idle', i < 16 && !m[7]);
       });
     } catch (e) { if (e.status === 503) $('status').textContent = 'The mixer engine is not running'; }
@@ -65,6 +68,9 @@
     try { state = await api('/api/state'); } catch (e) { if (e.status === 503) { $('status').textContent = 'The mixer engine is not running'; setTimeout(enter, 2000); } return; }
     $('pair').hidden = true; $('desk').hidden = false; $('out').hidden = false;
     build(); clearInterval(timer); timer = setInterval(tick, 100);
+    $('targetBar').hidden = false;
+    for (const b of document.querySelectorAll('#targetBar button')) { b.classList.toggle('on', Number(b.dataset.t) === Math.round(state.compTargetDb || 6));
+      b.onclick = () => api('/api/target', { spreadDb: Number(b.dataset.t) }).then(() => { for (const x of document.querySelectorAll('#targetBar button')) x.classList.toggle('on', x === b); }).catch(() => {}); }
   }
   $('pair').addEventListener('submit', async ev => {
     ev.preventDefault(); $('pairNote').textContent = '';

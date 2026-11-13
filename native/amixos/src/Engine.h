@@ -15,6 +15,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include "audiomixer/dynamics.hpp"
 #include <vector>
 
 #include "audiomixer/dsp.hpp"
@@ -157,13 +158,19 @@ class Engine : public QObject {
   Q_PROPERTY(QStringList recordFiles READ recordFiles NOTIFY recordChanged)
   Q_PROPERTY(QString recordFolder READ recordFolder WRITE setRecordFolder NOTIFY recordChanged)
   Q_PROPERTY(bool recordFloat READ recordFloat WRITE setRecordFloat NOTIFY recordChanged)
+  Q_PROPERTY(int recordFormat READ recordFormat WRITE setRecordFormat NOTIFY recordChanged)
+  Q_PROPERTY(QString deviceFormat READ deviceFormat NOTIFY stateChanged)
   Q_PROPERTY(bool recordMaster READ recordMaster WRITE setRecordMaster NOTIFY recordChanged)
   Q_PROPERTY(QString recordMessage READ recordMessage NOTIFY recordChanged)
   bool recording() const { return recorder_.recording(); }
   double recordSeconds() const { return recorder_.seconds(); }
   QStringList recordFiles() const { QStringList l; for (const auto& f : recorder_.files()) l << QString::fromStdString(f); return l; }
   QString recordFolder() const; void setRecordFolder(const QString& f) { settings_.setValue("record/folder", f); emit recordChanged(); }
-  bool recordFloat() const { return settings_.value("record/float32", false).toBool(); } void setRecordFloat(bool v) { settings_.setValue("record/float32", v); emit recordChanged(); }
+  // record format: 0 = 24-bit PCM, 1 = 32-bit float, 2 = 64-bit float, 3 = 32-bit PCM (the old float32 switch still reads and writes 0 / 1)
+  int recordFormat() const { const int f = settings_.value("record/format", -1).toInt(); return f >= 0 && f <= 3 ? f : (settings_.value("record/float32", false).toBool() ? 1 : 0); }
+  void setRecordFormat(int f) { f = std::clamp(f, 0, 3); settings_.setValue("record/format", f); settings_.setValue("record/float32", f == 1 || f == 2); emit recordChanged(); }
+  bool recordFloat() const { const int f = recordFormat(); return f == 1 || f == 2; } void setRecordFloat(bool v) { setRecordFormat(v ? 1 : 0); }
+  QString deviceFormat() const;   // what the open device itself carries (16 / 24 / 32-bit integer, 32 / 64-bit float); the engine mixes in 64-bit float
   bool recordMaster() const { return settings_.value("record/master", true).toBool(); } void setRecordMaster(bool v) { settings_.setValue("record/master", v); emit recordChanged(); }
   QString recordMessage() const { return recMsg_; }
   Q_INVOKABLE bool startRecording();
@@ -438,7 +445,13 @@ class Engine : public QObject {
   bool masterMuted() const { return masterMuted_; } void setMasterMuted(bool on);
   Q_INVOKABLE double closeNoise(int strip);   // with nobody playing: reads the strip's input level now (hum, hiss, room) and sets the gate 6 dB above it; returns the threshold, or 0 when there is no signal to read
   Q_INVOKABLE void setGate(int strip, bool on, double thresholdDb, double rangeDb, double attackMs, double holdMs, double releaseMs);
-  Q_INVOKABLE QVariantList compressorCurve(int strip, int points) const;   // [{in, out}] dB, -60..0, the static transfer without make-up
+  Q_INVOKABLE QVariantList compressorCurve(int strip, int points) const;
+  // COMPRESSION TARGET: measures the strip's input (10 s) and suggests the threshold / ratio that would bring its spread to the target; it never applies itself
+  Q_PROPERTY(double compTargetDb READ compTargetDb WRITE setCompTargetDb NOTIFY compTargetChanged)
+  double compTargetDb() const { return compTargetDb_; }
+  void setCompTargetDb(double db) { compTargetDb_ = std::clamp(db, 2.0, 30.0); emit compTargetChanged(); }
+  Q_INVOKABLE QVariantMap compSuggestion(int strip) const;   // {ready, spreadDb, medianDb, targetDb, thresholdDb, ratio, verdict}
+  Q_INVOKABLE bool applyCompSuggestion(int strip);           // the user's click: sets the channel compressor to the suggestion   // [{in, out}] dB, -60..0, the static transfer without make-up
   Q_INVOKABLE QVariantList gateCurve(int strip, int points) const;
   Q_INVOKABLE QVariantMap channelParams(int strip) const;
   Q_INVOKABLE QVariantList responseCurve(int strip, int points) const;   // [{f, db}] 20 Hz .. 20 kHz, log spaced: EQ + crossover of that strip
@@ -478,6 +491,7 @@ class Engine : public QObject {
   Q_INVOKABLE void save();
 
  signals:
+  void compTargetChanged();
   void stateChanged();
   void devicesChanged();
   void hotplug(bool added, const QString& what);   // a device appeared (added) or went away
@@ -507,14 +521,15 @@ class Engine : public QObject {
   bool loadVst(int strip, int slot);                      // from kind + state at the runtime's rate; false -> error set
   void rebuildInserts(int strip);                         // the strip's VST chain into the runtime
   void reloadAllVst();                                    // after open (new rate / block)
-  struct StripUi { bool spOn = false; double spAz = 0, spEl = 0, spDist = 1, spSpread = 0; QString name; double db = 0, pan = 0; bool autoPol = false; int overComp = 0; bool mute = false, solo = false; am::dsp::Channel dsp{48000}; SendUi sends[kBuses]; int dca = 0; unsigned muteGroups = 0; int color = 0; PluginUi plugins[kPluginSlots]; bool automix = false; double amWeight = 1; bool link = false; double trimDb = 0; int eqPreset = 0; };
+  struct StripUi { bool spOn = false; double spAz = 0, spEl = 0, spDist = 1, spSpread = 0; QString name; double db = 0, pan = 0; bool autoPol = false; int overComp = 0; am::DynamicsTracker dyn; bool mute = false, solo = false; am::dsp::Channel dsp{48000}; SendUi sends[kBuses]; int dca = 0; unsigned muteGroups = 0; int color = 0; PluginUi plugins[kPluginSlots]; bool automix = false; double amWeight = 1; bool link = false; double trimDb = 0; int eqPreset = 0; };
   std::vector<QJsonObject> history_; int histPos_ = -1; bool restoring_ = false; QTimer histTimer_; QJsonObject abOther_; QString abSlot_ = "A";
   QString btNote_;
   bool scanning_ = false, opening_ = false, timedOut_ = false;
   bool winSync_ = true, winMuted_ = false, winAvail_ = false, weMuted_ = false, winBefore_ = false; std::function<bool(bool&)> sysGet_; std::function<bool(bool)> sysSet_; QTimer sysTimer_;
   am::MasterChain master_; am::MasterChain::Params mp_; QString masterPreset_; void pushMaster();
   int partner(int i) const { return (i ^ 1) < kStrips ? (i ^ 1) : -1; }
-  void factoryLayout();   // CH 1-2 MAIN, CH 3-4 LIVE (linked pairs), CH 5-7 RESERVE
+  void factoryLayout();
+  double compTargetDb_ = 6; int dynTick_ = 0;   // CH 1-2 MAIN, CH 3-4 LIVE (linked pairs), CH 5-7 RESERVE
   void applyPluginStage(int strip, const QString& kind, bool on);   // a built-in stage follows its slot
   struct BusUi { QString name; double db = 0, returnDb = -60; bool mute = false; QString fxKind; std::unique_ptr<am::fx::Effect> fx; double fxMix = 1; bool fxBypass = false; std::map<QString, double> fxValues; int fxPreset = 0; };
   std::vector<std::unique_ptr<am::fx::Effect>> fxGraveyard_; double width_ = 1.0; ScopeTap scope_; TapFanout taps_; Generator gen_; SourceFanout sources_; int blockFrames_ = 0; bool autoOn_ = false; double autoTarget_ = -16, autoMax_ = 12;

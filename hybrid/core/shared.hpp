@@ -23,7 +23,7 @@ namespace amfb {
 constexpr int kStrips = 16;
 constexpr int kBands = 7;
 constexpr std::uint32_t kMagic = 0x414D4642;   // "AMFB"
-constexpr std::uint32_t kVersion = 2;
+constexpr std::uint32_t kVersion = 3;
 constexpr float kDefaultFreq[kBands] = {60.f, 150.f, 400.f, 1000.f, 2500.f, 6000.f, 12000.f};
 
 static_assert(std::atomic<float>::is_always_lock_free && std::atomic<std::uint32_t>::is_always_lock_free &&
@@ -38,6 +38,9 @@ struct StripParams {
 struct StripMeters {                            // linear values, 1.0 = 0 dBFS
   std::atomic<float> peakL, peakR, rmsL, rmsR, truePeak, hold, phase;   // phase: -1..+1 correlation
   std::atomic<float> reductionDb;               // compressor gain reduction, 0 or negative
+  std::atomic<float> inPeak;                    // input peak before EQ and dynamics, since the engine's control loop last read it
+  std::atomic<float> spreadDb;                  // COMPRESSION TARGET: the input's spread over 10 s (0 while listening)
+  std::atomic<std::int32_t> suggestLevel;       // the compression level (0..10) that would bring it to the target; -1 while listening
   std::atomic<std::uint32_t> active;            // 1 while the source delivers audio
   char source[32];                              // written once by the engine before audio starts
 };
@@ -46,7 +49,7 @@ struct SharedBlock {
   std::atomic<std::uint32_t> paramGen;          // bumped by a controller after it wrote parameters
   std::atomic<std::uint64_t> heartbeat;         // frames processed; stands still when the engine is gone
   std::atomic<std::uint32_t> underruns;         // blocks a capture ring could not fill
-  std::atomic<float> sampleRate, masterGainDb;
+  std::atomic<float> sampleRate, masterGainDb, compTargetDb;   // compTargetDb: the spread the suggestions aim for (dB)
   StripParams p[kStrips];
   StripMeters m[kStrips + 1];                   // [kStrips] is the master bus
 };
@@ -54,7 +57,8 @@ struct SharedBlock {
 inline void initBlock(SharedBlock* b) {
   new (b) SharedBlock{};
   b->version = kVersion;
-  b->masterGainDb = 0.f;
+  b->masterGainDb = 0.f; b->compTargetDb = 6.f;
+  for (auto& m : b->m) m.suggestLevel = -1;
   for (auto& s : b->p) {
     s.gainDb = 0.f; s.pan = 0.f; s.width = 1.f; s.mute = 0; s.solo = 0; s.eqOn = 1; s.compLevel = 0.f;
     for (int k = 0; k < kBands; ++k) { s.eqFreq[k] = kDefaultFreq[k]; s.eqGain[k] = 0.f; s.eqQ[k] = 0.9f; }

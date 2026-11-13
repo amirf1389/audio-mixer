@@ -1372,5 +1372,11 @@
 "More than 12 dB of compression: click to add DE-SQUASH to this channel": "Meer dan 12 dB compressie: klik om DE-SQUASH aan dit kanaal toe te voegen",
 "Sample player (play a sample in this channel)": "Sample-speler (speel een sample af in dit kanaal)",
 "De-squash (give back what a heavy compressor took)": "DE-SQUASH (geef terug wat een zware compressor heeft weggenomen)",
-"CHANNEL EQ · DUAL LISTEN": "KANAAL-EQ · DUBBEL LUISTEREN"
+"CHANNEL EQ · DUAL LISTEN": "KANAAL-EQ · DUBBEL LUISTEREN",
+"COMPRESSION TARGET": "COMPRESSIEDOEL",
+"Listening: play or speak into this channel for a few seconds.": "Luisteren: speel of spreek een paar seconden in dit kanaal.",
+"Suggested: threshold ": "Voorstel: drempel ",
+" dB, ratio ": " dB, ratio ",
+"No compression needed": "Geen compressie nodig",
+"Measured on the channel's input over the last 10 seconds: how far the loud and the quiet moments sit apart. Nothing changes until you press APPLY.": "Gemeten op de ingang van het kanaal over de laatste 10 seconden: hoe ver de luide en stille momenten uit elkaar liggen. Er verandert niets tot je op APPLY drukt."
 }

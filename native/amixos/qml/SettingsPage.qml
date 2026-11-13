@@ -51,7 +51,7 @@ Flickable {
             subtitle: "● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV files, one per source, named by time."
             Opt { label: i18n.t("Folder", i18n.lang); Field { Layout.fillWidth: true; text: engine.recordFolder; font.family: Theme.mono; font.pixelSize: 9; implicitHeight: 26; onEditingFinished: engine.recordFolder = text } }
             Opt { label: i18n.t("Record the master", i18n.lang); hint: i18n.t("Off = only the armed strips", i18n.lang); Toggle { on: engine.recordMaster; onToggled: function (v) { engine.recordMaster = v } } }
-            Opt { label: i18n.t("Format", i18n.lang); Choice { options: [{t: "24-bit PCM", v: false}, {t: "32-bit float", v: true}]; value: engine.recordFloat; onPicked: function (v) { engine.recordFloat = v } } }
+            Opt { label: i18n.t("Format", i18n.lang); Choice { objectName: "recordFormatChoice"; options: [{t: "24-bit PCM", v: 0}, {t: "32-bit PCM", v: 3}, {t: "32-bit float", v: 1}, {t: "64-bit float", v: 2}]; value: engine.recordFormat; onPicked: function (v) { engine.recordFormat = v } } }
             Text { visible: engine.recordMessage.length > 0; text: engine.recordMessage; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.WordWrap; Layout.fillWidth: true }
             Repeater { model: engine.recordFiles; delegate: Text { text: modelData; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; elide: Text.ElideMiddle; Layout.fillWidth: true } }
         }

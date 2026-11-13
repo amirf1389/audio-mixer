@@ -1379,5 +1379,11 @@
 "More than 12 dB of compression: click to add DE-SQUASH to this channel": "12 dB से अधिक कम्प्रेशन: इस चैनल में DE-SQUASH जोड़ने के लिए क्लिक करें",
 "Sample player (play a sample in this channel)": "सैंपल प्लेयर (इस चैनल में एक सैंपल चलाएँ)",
 "De-squash (give back what a heavy compressor took)": "DE-SQUASH (जो भारी कंप्रेसर ने लिया, उसे वापस करें)",
-"CHANNEL EQ · DUAL LISTEN": "चैनल EQ · दोहरा सुनना"
+"CHANNEL EQ · DUAL LISTEN": "चैनल EQ · दोहरा सुनना",
+"COMPRESSION TARGET": "कम्प्रेशन लक्ष्य",
+"Listening: play or speak into this channel for a few seconds.": "सुन रहा है: इस चैनल में कुछ सेकंड बजाएँ या बोलें।",
+"Suggested: threshold ": "सुझाव: थ्रेशोल्ड ",
+" dB, ratio ": " dB, रेशियो ",
+"No compression needed": "कम्प्रेशन की ज़रूरत नहीं",
+"Measured on the channel's input over the last 10 seconds: how far the loud and the quiet moments sit apart. Nothing changes until you press APPLY.": "पिछले 10 सेकंड में चैनल के इनपुट पर मापा गया: तेज़ और धीमे पलों के बीच कितनी दूरी है। APPLY दबाने तक कुछ नहीं बदलता।"
 }

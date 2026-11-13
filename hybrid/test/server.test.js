@@ -89,7 +89,7 @@ test('controls reach the audio', async () => {
   m = (await call('/api/meters')).json.meters; assert.ok(Math.abs(db(m[16][0]) + 32) < 0.3, 'master gain ' + db(m[16][0]));
   await call('/api/master', { body: { gainDb: 0 } });
   assert.strictEqual((await call('/api/strip/3', { body: { compLevel: 8 } })).status, 200); await sleep(500);
-  m = (await call('/api/meters')).json.meters; assert.ok(m[2].length === 9 && m[2][8] < -1, 'gain reduction ' + m[2][8]);
+  m = (await call('/api/meters')).json.meters; assert.ok(m[2].length === 11 && m[2][8] < -1, 'gain reduction ' + m[2][8]);
   assert.strictEqual((await call('/api/state')).json.strips[2].compLevel, 8);
   await call('/api/strip/3', { body: { compLevel: 0 } }); await sleep(400);
   m = (await call('/api/meters')).json.meters; assert.ok(m[2][8] === 0, 'no reduction when off');
@@ -97,6 +97,19 @@ test('controls reach the audio', async () => {
   m = (await call('/api/meters')).json.meters; assert.ok(Math.abs(db(m[2][0]) + 6) < 0.3, 'eq ' + db(m[2][0]));
   assert.strictEqual((await call('/api/state')).json.strips[2].eq[1].gainDb, 6);
 });
+test('compression target: listens, then suggests (a steady tone needs none); the target is clamped; nothing is applied by itself', async () => {
+  let m = (await call('/api/meters')).json.meters; const before = (await call('/api/state')).json.strips[2].compLevel;
+  for (let i = 0; i < 30 && m[2][10] < 0; i++) { await sleep(250); m = (await call('/api/meters')).json.meters; }
+  assert.ok(m[2][10] === 0 && m[2][9] < 1, 'a steady tone: level ' + m[2][10] + ', spread ' + m[2][9]);
+  assert.strictEqual(m[0][10], -1, 'a silent strip keeps listening');
+  assert.strictEqual((await call('/api/target', { body: { spreadDb: 9 } })).status, 200);
+  assert.strictEqual((await call('/api/state')).json.compTargetDb, 9);
+  await call('/api/target', { body: { spreadDb: 500 } }); assert.strictEqual((await call('/api/state')).json.compTargetDb, 30);
+  assert.strictEqual((await call('/api/target', { body: { spreadDb: 'x' } })).status, 400);
+  await call('/api/target', { body: { spreadDb: 6 } });
+  assert.strictEqual((await call('/api/state')).json.strips[2].compLevel, before, 'the suggestion never changes the level by itself');
+});
+
 test('bad input is refused or clamped, never passed on', async () => {
   assert.strictEqual((await call('/api/strip/17', { body: { mute: true } })).status, 400);
   assert.strictEqual((await call('/api/strip/0', { body: { mute: true } })).status, 400);

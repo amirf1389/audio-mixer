@@ -610,7 +610,7 @@ QString Engine::recordFolder() const { const QString d = settings_.value("record
 bool Engine::startRecording() {
   if (!rt_) { recMsg_ = QStringLiteral("Start the engine on CONNECTIONS first."); emit recordChanged(); return false; }
   if (recorder_.recording()) return true;
-  am::rec::Options o; o.folder = recordFolder().toStdString(); o.master = recordMaster(); o.float32 = recordFloat(); for (int i = 0; i < kStrips; ++i) if ((armed_ >> i) & 1u) o.strips.push_back(i);
+  am::rec::Options o; o.folder = recordFolder().toStdString(); o.master = recordMaster(); o.float32 = recordFloat(); o.format = recordFormat(); for (int i = 0; i < kStrips; ++i) if ((armed_ >> i) & 1u) o.strips.push_back(i);
   std::string err; if (!recorder_.start(o, rt_->sampleRate(), err)) { recMsg_ = QString::fromStdString(err); emit recordChanged(); return false; }
   taps_.a.store(&recorder_); recMsg_ = QStringLiteral("Recording %1 file(s) into %2").arg(recorder_.files().size()).arg(recordFolder()); emit recordChanged(); return true;
 }
@@ -983,6 +983,19 @@ QVariantMap Engine::eqBand(int i, int band) const {
   m["type"] = static_cast<int>(b.type); m["freq"] = b.freq; m["q"] = b.q; m["gainDb"] = b.gainDb; return m;
 }
 void Engine::setDelay(int i, double ms) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].dsp.setDelayMs(ms); if (rt_) rt_->setDelayMs(i, strips_[static_cast<std::size_t>(i)].dsp.params().delayMs); emit stripsChanged(); }
+QString Engine::deviceFormat() const { return rt_ && running() ? QString::fromStdString(rt_->sampleFormat()) : QString(); }
+QVariantMap Engine::compSuggestion(int i) const {
+  QVariantMap m; if (i < 0 || i >= kStrips) return m; const am::CompSuggestion c = strips_[static_cast<std::size_t>(i)].dyn.suggest(compTargetDb_);
+  m["ready"] = c.ready; m["spreadDb"] = c.spreadDb; m["medianDb"] = c.medianDb; m["targetDb"] = c.targetDb; m["thresholdDb"] = c.thresholdDb; m["ratio"] = c.ratio; m["verdict"] = QString::fromLatin1(c.verdict);
+  return m;
+}
+bool Engine::applyCompSuggestion(int i) {
+  if (i < 0 || i >= kStrips) return false; const am::CompSuggestion c = strips_[static_cast<std::size_t>(i)].dyn.suggest(compTargetDb_); if (!c.ready) return false;
+  const auto& p = strips_[static_cast<std::size_t>(i)].dsp.params();
+  const double makeup = std::clamp(-c.thresholdDb * (1.0 - 1.0 / c.ratio) * 0.5, 0.0, 12.0);   // gives back about half of what the louder parts lose
+  setCompressor(i, c.ratio > 1.0, c.thresholdDb, c.ratio, p.compKneeDb, p.compAttackMs, p.compReleaseMs, c.ratio > 1.0 ? makeup : p.compMakeupDb);
+  return true;
+}
 int Engine::addToRack(int i, const QString& kind) {
   if (i < 0 || i >= kStrips || kind.isEmpty()) return -1; const StripUi& s = strips_[static_cast<std::size_t>(i)];
   for (int k = 0; k < kPluginSlots; ++k) if (s.plugins[k].kind == kind) return k;
@@ -1125,6 +1138,7 @@ void Engine::tick() {
   if (rt_) {
     const am::Snapshot s = rt_->snapshot();
     const double vuA = 1.0 - std::exp(-timer_.interval() / 65.0);   // a VU reaches 99 % of a step in 300 ms: a one-pole with tau = 65 ms, run at the timer rate
+    if (++dynTick_ >= 3) { dynTick_ = 0; for (int i = 0; i < kStrips; ++i) strips_[static_cast<std::size_t>(i)].dyn.push(s.strips[i].inPk > 1e-6 ? 20.0 * std::log10(s.strips[i].inPk) : -120.0); }   // ten a second: the input, before EQ and dynamics
     bool polFlipped = false;   // AUTO PHASE turned a strip round: keep the saved setting the same as what is heard
     for (int i = 0; i < kStrips; ++i) { StripUi& su = strips_[static_cast<std::size_t>(i)]; if (su.autoPol && s.strips[i].polInv != su.dsp.params().polarityInvert) { su.dsp.setPolarity(s.strips[i].polInv); polFlipped = true; } }
     if (polFlipped) emit stripsChanged();

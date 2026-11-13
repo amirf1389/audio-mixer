@@ -1376,5 +1376,11 @@
 "More than 12 dB of compression: click to add DE-SQUASH to this channel": "压缩超过 12 dB：点击为此通道添加 DE-SQUASH",
 "Sample player (play a sample in this channel)": "采样播放器（在此通道播放采样）",
 "De-squash (give back what a heavy compressor took)": "DE-SQUASH（找回强压缩器压掉的部分）",
-"CHANNEL EQ · DUAL LISTEN": "通道 EQ · 双重聆听"
+"CHANNEL EQ · DUAL LISTEN": "通道 EQ · 双重聆听",
+"COMPRESSION TARGET": "压缩目标",
+"Listening: play or speak into this channel for a few seconds.": "正在聆听：在此通道播放或说话几秒钟。",
+"Suggested: threshold ": "建议：阈值 ",
+" dB, ratio ": " dB，压缩比 ",
+"No compression needed": "无需压缩",
+"Measured on the channel's input over the last 10 seconds: how far the loud and the quiet moments sit apart. Nothing changes until you press APPLY.": "基于此通道最近 10 秒的输入测量：响亮与安静时刻相差多少。在您按下 APPLY 之前不会改变任何设置。"
 }

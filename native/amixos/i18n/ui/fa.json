@@ -1378,5 +1378,11 @@
 "More than 12 dB of compression: click to add DE-SQUASH to this channel": "بیش از ۱۲ دسی‌بل فشرده‌سازی: برای افزودن DE-SQUASH به این کانال کلیک کنید",
 "Sample player (play a sample in this channel)": "پخش‌کنندهٔ نمونه (پخش یک نمونه در این کانال)",
 "De-squash (give back what a heavy compressor took)": "DE-SQUASH (آنچه کمپرسور سنگین گرفته را پس بدهد)",
-"CHANNEL EQ · DUAL LISTEN": "اکولایزر کانال · شنیدن دوگانه"
+"CHANNEL EQ · DUAL LISTEN": "اکولایزر کانال · شنیدن دوگانه",
+"COMPRESSION TARGET": "هدف فشرده‌سازی",
+"Listening: play or speak into this channel for a few seconds.": "گوش دادن: چند ثانیه در این کانال پخش کنید یا صحبت کنید.",
+"Suggested: threshold ": "پیشنهادی: آستانه ",
+" dB, ratio ": " دسی‌بل، نسبت ",
+"No compression needed": "نیازی به فشرده‌سازی نیست",
+"Measured on the channel's input over the last 10 seconds: how far the loud and the quiet moments sit apart. Nothing changes until you press APPLY.": "روی ورودی کانال در ۱۰ ثانیهٔ گذشته اندازه‌گیری شده است: فاصلهٔ لحظه‌های بلند و آرام. تا APPLY را نزنید چیزی تغییر نمی‌کند."
 }

@@ -203,6 +203,17 @@ int main(int argc, char* argv[]) {
       engine.setWindowsMuteSync(true); if (!sysMute) { std::fprintf(stderr, "amixos --smoke: switching sync on at -inf did not mute\n"); return 82; } engine.restoreSystemSound(); if (sysMute) { std::fprintf(stderr, "amixos --smoke: exit did not take the mute back\n"); return 83; }
       engine.setMaster(keep); engine.setSystemMuteBackend([](bool&) { return false; }, [](bool) { return false; }); engine.syncSystemSound(); }
     { // the ten effects in the rack of any channel: listed, loaded into a slot, a knob moves, bypass, cleared; a late channel too
+      { // the device's own sample format is reported while it runs; the record format choice keeps the old 24 / float switch in step
+        const QString df = engine.deviceFormat(); const int rf0 = engine.recordFormat();
+        engine.setRecordFormat(2); const bool f64 = engine.recordFormat() == 2 && engine.recordFloat(); engine.setRecordFormat(3); const bool p32 = engine.recordFormat() == 3 && !engine.recordFloat();
+        engine.setRecordFormat(9); const bool clamp = engine.recordFormat() == 3; engine.setRecordFloat(false); const bool back = engine.recordFormat() == 0; engine.setRecordFormat(rf0);
+        if ((engine.running() && df.isEmpty()) || !f64 || !p32 || !clamp || !back) { std::fprintf(stderr, "amixos --smoke: formats (device \"%s\", 64f %d, 32i %d, clamp %d, back %d)\n", qPrintable(df), f64, p32, clamp, back); return 156; } }
+      { // COMPRESSION TARGET: listens first, then suggests; nothing is applied without the call; the apply sets the channel compressor
+        const QVariantMap before = engine.compSuggestion(0); const QVariantMap ch0 = engine.channelParams(0);
+        engine.setCompTargetDb(6); bool okT = std::fabs(engine.compTargetDb() - 6) < 1e-9; engine.setCompTargetDb(100); okT = okT && std::fabs(engine.compTargetDb() - 30) < 1e-9; engine.setCompTargetDb(6);
+        const bool untouched = engine.channelParams(0)["compOn"] == ch0["compOn"] && engine.channelParams(0)["compThresholdDb"] == ch0["compThresholdDb"];
+        if (!okT || !before.contains("ready") || !untouched) { std::fprintf(stderr, "amixos --smoke: compression target (clamp %d, keys %d, untouched %d)\n", okT, before.contains("ready"), untouched); return 155; }
+        if (before["ready"].toBool() && engine.applyCompSuggestion(0)) { const QVariantMap after = engine.channelParams(0); if (std::fabs(after["compThresholdDb"].toDouble() - before["thresholdDb"].toDouble()) > 1e-6) { std::fprintf(stderr, "amixos --smoke: compression target apply\n"); return 155; } engine.setCompressor(0, ch0["compOn"].toBool(), ch0["compThresholdDb"].toDouble(), ch0["compRatio"].toDouble(), ch0["compKneeDb"].toDouble(), ch0["compAttackMs"].toDouble(), ch0["compReleaseMs"].toDouble(), ch0["compMakeupDb"].toDouble()); } }
       { // the rack helpers of the strip menu and the DUAL LISTEN switch: addToRack finds the slot again, never a second copy
         const int a = engine.addToRack(20, "fx:sampler"), b = engine.addToRack(20, "fx:sampler"), d = engine.addToRack(20, "fx:dualeq"); int dual = -1, n = 0;
         for (const QVariant& v : engine.plugins(20)) { const QVariantMap m = v.toMap(); if (m["kind"].toString() == "fx:sampler") ++n; if (m["kind"].toString() == "fx:dualeq") dual = m["slot"].toInt(); }

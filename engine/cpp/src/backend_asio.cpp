@@ -207,6 +207,16 @@ class AsioBackend : public Backend {
     } else best = std::min(std::max(want, mn), mx);
     return best;
   }
+  static const char* typeName(ASIOSampleType t) {
+    switch (t) { case ASIOSTInt16LSB: return "16-bit integer"; case ASIOSTInt24LSB: return "24-bit integer"; case ASIOSTInt32LSB: return "32-bit integer";
+                 case ASIOSTFloat32LSB: return "32-bit float"; case ASIOSTFloat64LSB: return "64-bit float"; default: return "unknown"; }
+  }
+  std::string sampleFormat() const override {
+    if (types_.empty()) return std::string();
+    const std::string in = nIn_ > 0 ? typeName(types_[0]) : "", out = nOut_ > 0 && static_cast<long>(types_.size()) > nIn_ ? typeName(types_[static_cast<std::size_t>(nIn_)]) : "";
+    if (!in.empty() && in == out) return in + " (ASIO)";
+    return (in.empty() ? "" : "in " + in) + (in.empty() || out.empty() ? "" : " · ") + (out.empty() ? "" : "out " + out) + " (ASIO)";
+  }
   static bool supported(ASIOSampleType t) { return t == ASIOSTInt16LSB || t == ASIOSTInt24LSB || t == ASIOSTInt32LSB || t == ASIOSTFloat32LSB || t == ASIOSTFloat64LSB; }
   static void toFloat(ASIOSampleType t, const void* src, float* dst, long n) {
     switch (t) {

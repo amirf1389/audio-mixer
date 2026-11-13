@@ -92,6 +92,7 @@ class DsoundBackend : public Backend {
   const std::string& inputName() const { return inName_; }
 
  private:
+  std::string sampleFormat() const override { return "16-bit integer (DirectSound)"; }
   WAVEFORMATEX format(int ch) const { WAVEFORMATEX f; std::memset(&f, 0, sizeof f); f.wFormatTag = WAVE_FORMAT_PCM; f.nChannels = static_cast<WORD>(std::max(1, ch)); f.nSamplesPerSec = static_cast<DWORD>(cfg_.sampleRate); f.wBitsPerSample = 16; f.nBlockAlign = static_cast<WORD>(f.nChannels * 2); f.nAvgBytesPerSec = f.nSamplesPerSec * f.nBlockAlign; return f; }
   DWORD periodBytes(int ch) const { return static_cast<DWORD>(frames_) * static_cast<DWORD>(std::max(1, ch)) * 2; }
   DWORD outBytes() const { return periodBytes(nOut_) * kPeriods; }

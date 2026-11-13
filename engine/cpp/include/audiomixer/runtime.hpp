@@ -43,6 +43,7 @@ class Backend {
   virtual bool start(std::string& err) = 0;
   virtual void stop() = 0;               // waits until the callback is no longer running
   virtual std::uint64_t xruns() const { return 0; }
+  virtual std::string sampleFormat() const { return "32-bit float"; }   // what the device itself carries, e.g. "in 24-bit integer · out 32-bit integer" (after open)
 };
 std::vector<std::string> availableBackends();                 // the ones built into this binary, "null" last
 std::unique_ptr<Backend> createBackend(const std::string& name);   // nullptr when it is not built in
@@ -89,6 +90,7 @@ class Runtime {
   void stop();
   bool running() const { return running_; }
   const std::string& backendName() const { return backendName_; }
+  std::string sampleFormat() const;   // the open device's own sample format ("" when nothing is open); the engine itself mixes in 64-bit float
   double sampleRate() const { return mixer_.sampleRate(); }   // the device rate after open()
   // control: any thread, takes effect at the start of the next block
   void setGainDb(int strip, double db);

@@ -1378,5 +1378,11 @@
 "More than 12 dB of compression: click to add DE-SQUASH to this channel": "12 dB'den fazla sıkıştırma: bu kanala DE-SQUASH eklemek için tıklayın",
 "Sample player (play a sample in this channel)": "Örnek çalar (bu kanalda bir örnek çal)",
 "De-squash (give back what a heavy compressor took)": "DE-SQUASH (ağır bir kompresörün aldığını geri ver)",
-"CHANNEL EQ · DUAL LISTEN": "KANAL EQ · ÇIFT DINLEME"
+"CHANNEL EQ · DUAL LISTEN": "KANAL EQ · ÇIFT DINLEME",
+"COMPRESSION TARGET": "SIKIŞTIRMA HEDEFI",
+"Listening: play or speak into this channel for a few seconds.": "Dinleniyor: bu kanalda birkaç saniye çalın veya konuşun.",
+"Suggested: threshold ": "Öneri: eşik ",
+" dB, ratio ": " dB, oran ",
+"No compression needed": "Sıkıştırma gerekmiyor",
+"Measured on the channel's input over the last 10 seconds: how far the loud and the quiet moments sit apart. Nothing changes until you press APPLY.": "Son 10 saniyede kanalın girişinde ölçüldü: yüksek ve sessiz anların birbirinden ne kadar uzak olduğu. APPLY'a basana kadar hiçbir şey değişmez."
 }

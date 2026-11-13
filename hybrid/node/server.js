@@ -145,7 +145,7 @@ function start(opts = {}) {
       if (url.pathname === '/api/state') return send(res, 200, { ...mixer.state(), alive: true });
       if (url.pathname === '/api/meters') {
         const m = mixer.meters(), out = [];
-        for (let i = 0; i < m.length; i += 9) out.push(Array.from(m.subarray(i, i + 9), v => Math.round(v * 1e5) / 1e5));
+        for (let i = 0; i < m.length; i += 11) out.push(Array.from(m.subarray(i, i + 11), v => Math.round(v * 1e5) / 1e5));
         return send(res, 200, { meters: out });
       }
       return send(res, 404, { error: 'not found' });
@@ -156,6 +156,7 @@ function start(opts = {}) {
       if ((m = /^\/api\/strip\/(\d{1,2})$/.exec(url.pathname))) mixer.setStrip(Number(m[1]) - 1, body);
       else if ((m = /^\/api\/eq\/(\d{1,2})\/(\d)$/.exec(url.pathname))) mixer.setEq(Number(m[1]) - 1, Number(m[2]) - 1, body);
       else if (url.pathname === '/api/master') mixer.setMaster(body.gainDb);
+      else if (url.pathname === '/api/target') mixer.setTarget(body.spreadDb);
       else return send(res, 404, { error: 'not found' });
     } catch (e) { return send(res, 400, { error: String(e.message || e) }); }
     return send(res, 200, { ok: true });

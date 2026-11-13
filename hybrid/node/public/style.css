@@ -22,3 +22,6 @@ button.solo.on { background:var(--ok); border-color:var(--ok); }
 input[type=range] { width:76px; accent-color:var(--accent); }
 .row { display:flex; gap:4px; } .row button { padding:3px 8px; font-size:12px; }
 .idle { opacity:.5; }
+#targetBar { display:flex; gap:8px; align-items:center; padding:8px 16px 0; color:var(--dim); font-size:12px; }
+#targetBar button.on { background:var(--accent); color:#17130a; border-color:var(--accent); }
+.sug { font-size:10px; padding:3px 6px; } .sug:disabled { opacity:.55; cursor:default; }

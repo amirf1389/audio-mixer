@@ -1376,5 +1376,11 @@
 "More than 12 dB of compression: click to add DE-SQUASH to this channel": "12 dB 이상의 압축: 클릭하여 이 채널에 DE-SQUASH 추가",
 "Sample player (play a sample in this channel)": "샘플 플레이어 (이 채널에서 샘플 재생)",
 "De-squash (give back what a heavy compressor took)": "DE-SQUASH (강한 컴프레서가 가져간 것을 되돌림)",
-"CHANNEL EQ · DUAL LISTEN": "채널 EQ · 듀얼 리스닝"
+"CHANNEL EQ · DUAL LISTEN": "채널 EQ · 듀얼 리스닝",
+"COMPRESSION TARGET": "압축 목표",
+"Listening: play or speak into this channel for a few seconds.": "측정 중: 이 채널로 몇 초 동안 재생하거나 말하세요.",
+"Suggested: threshold ": "제안: 스레숄드 ",
+" dB, ratio ": " dB, 비율 ",
+"No compression needed": "압축 필요 없음",
+"Measured on the channel's input over the last 10 seconds: how far the loud and the quiet moments sit apart. Nothing changes until you press APPLY.": "지난 10초 동안 채널 입력에서 측정: 큰 순간과 조용한 순간의 차이. APPLY를 누르기 전에는 아무것도 바뀌지 않습니다."
 }
