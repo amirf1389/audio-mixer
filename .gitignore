@@ -141,3 +141,4 @@ bindings/perl/Audio-AmixOS/*.c
 bindings/perl/Audio-AmixOS/*.bs
 .qt-win/
 build-win/
+screenshots-*/
