@@ -17,7 +17,7 @@ using namespace am;
 static float peak(const std::vector<float>& v, std::size_t a, std::size_t b) { float p = 0; for (std::size_t i = a; i < b && i < v.size(); ++i) p = std::max(p, std::fabs(v[i])); return p; }
 
 int main() {
-  CHECK(fx::catalog().size() == 26 && fx::make("nope", 48000) == nullptr);
+  CHECK(fx::catalog().size() == 31 && fx::make("nope", 48000) == nullptr);
   { auto r = fx::make("reverb", 48000); CHECK(r && std::string(r->kind()) == "reverb" && r->params().size() == 4 && r->text("decay", 0) == "0.3 s");
     std::vector<float> L(48000, 0.f), R(48000, 0.f); L[0] = R[0] = 1.f; r->set("decay", 0.2); r->process(L.data(), R.data(), L.size());
     CHECK(peak(L, 1000, 6000) > 0.02f && peak(L, 30000, 48000) < peak(L, 2000, 6000) * 0.5f);   // rings, then decays
@@ -39,7 +39,7 @@ int main() {
     rt.setBusProcessor(0, nullptr); for (int k = 0; k < 2; ++k) rt.onBlock(quiet, outs, n); }
   std::printf("fx_test: reverb rings and decays, delay repeats on time (ping-pong crosses), chorus modulates, drive saturates, bypass, bus return OK\n");
   { // the ten effects as rack plug-ins: each changes a tone, stays finite and below +12 dB, passes it untouched when bypassed, and keeps its state through a save / load
-    CHECK(am::fx::catalog().size() == 26); const std::size_t n = 4800; std::vector<float> src(n), l(n), r(n); for (std::size_t i = 0; i < n; ++i) src[i] = 0.4f * static_cast<float>(std::sin(2 * 3.14159265 * 440 * static_cast<double>(i) / 48000) + 0.5 * std::sin(2 * 3.14159265 * 5000 * static_cast<double>(i) / 48000));
+    CHECK(am::fx::catalog().size() == 31); const std::size_t n = 4800; std::vector<float> src(n), l(n), r(n); for (std::size_t i = 0; i < n; ++i) src[i] = 0.4f * static_cast<float>(std::sin(2 * 3.14159265 * 440 * static_cast<double>(i) / 48000) + 0.5 * std::sin(2 * 3.14159265 * 5000 * static_cast<double>(i) / 48000));
     for (const auto& [kind, name] : am::fx::catalog()) { auto p = am::fx::FxPlugin::make(kind, 48000); CHECK(p && p->info().format == "FX" && p->params().size() >= 3);
       if (kind == "postamp") p->setParam(0, 0.9); if (kind == "preamp") p->setParam(0, 0.4);   // these two are neutral (unity) until a knob is turned
       const float* in[2] = {src.data(), src.data()}; float* out[2] = {l.data(), r.data()}; for (int k = 0; k < 3; ++k) p->process(in, out, static_cast<int>(n));

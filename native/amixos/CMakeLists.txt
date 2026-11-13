@@ -104,6 +104,7 @@ qt_add_qml_module(amixos
         skin/badge.png
         skin/serial.png
         skin/plate.png
+        skin/brushed.png
         skin/knob.png
         skin/knob-pointer.png
         skin/selector.png

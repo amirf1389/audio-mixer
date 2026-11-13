@@ -280,4 +280,31 @@ class ModMachine final : public Multi { public: explicit ModMachine(double fs); 
   static int modeOf(double v) { const int m = static_cast<int>((v < 0 ? 0 : v > 1 ? 1 : v) * 4.999); return m; }
  private: std::vector<float> buf_[2]; std::size_t w_ = 0; double ph_ = 0; float fb_[2] = {0, 0}, lp_[2] = {0, 0}, ap_[2][6] = {}; };
 
+// OPTO LEVELER: a leveling amplifier after the optical kind: PEAK REDUCTION sets how hard it works, GAIN makes up the level, MODE
+// COMPRESS (about 3:1) or LIMIT (about 10:1), EMPHASIS lets the highs push the detector harder. The release follows the programme:
+// quick after a short peak, slow (seconds) after a long passage, like a light cell that has to cool.
+class Opto final : public Multi { public: explicit Opto(double fs); const char* kind() const override { return "opto"; } const char* name() const override { return "OPTO LEVELER"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override; double grDb() const { return gr_.load(); }
+ private: double env_ = 0, fast_ = 0, slow_ = 0, lp_ = 0; std::atomic<double> gr_{0}; };
+// GLUE COMP: a stereo bus compressor with the soft knee and second-harmonic colour of a valve gain stage: THRESHOLD, RATIO (1.2 .. 10),
+// ATTACK 0.1 .. 30 ms, RELEASE 50 ms .. 1.2 s, MAKEUP 0 .. 18 dB, COLOUR. Both sides share one detector, so the image does not move.
+class Glue final : public Multi { public: explicit Glue(double fs); const char* kind() const override { return "glue"; } const char* name() const override { return "GLUE COMP"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override; double grDb() const { return gr_.load(); }
+ private: double env_ = 0; std::atomic<double> gr_{0}; };
+// TAPE MACHINE: a tape recorder's sound without the tape: DRIVE into a soft magnetic curve, SPEED 7.5 / 15 / 30 ips (the head bump and
+// how early the highs roll off move with it), BIAS (dark .. bright), WOW & FLUTTER (a slow and a fast pitch wander), OUTPUT.
+class Tape final : public Multi { public: explicit Tape(double fs); const char* kind() const override { return "tape"; } const char* name() const override { return "TAPE MACHINE"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
+  static int speedOf(double v) { return static_cast<int>((v < 0 ? 0 : v > 1 ? 1 : v) * 2.999); }
+ private: void design(); Biquad bump_[2], roll_[2], bias_[2]; std::vector<float> buf_[2]; std::size_t w_ = 0; double ph1_ = 0, ph2_ = 0; };
+// TRANSIENT SHAPER: ATTACK (-100 .. +100 %) makes the start of each note harder or softer, SUSTAIN (-100 .. +100 %) the ring after it, OUTPUT.
+// It follows the difference between a fast and a slow envelope, so it works at any level (no threshold).
+class Transient final : public Multi { public: explicit Transient(double fs); const char* kind() const override { return "transient"; } const char* name() const override { return "TRANSIENT SHAPER"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
+ private: double fast_ = 0, slow_ = 0, g_ = 1; };
+// DE-ESSER: turns down only the highs above FREQUENCY (3 .. 12 kHz) when they pass THRESHOLD, by up to RANGE dB; LISTEN plays only what is taken away.
+class DeEsser final : public Multi { public: explicit DeEsser(double fs); const char* kind() const override { return "deesser"; } const char* name() const override { return "DE-ESSER"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override; double grDb() const { return gr_.load(); }
+ private: void design(); Biquad hp_[2], det_; double env_ = 0; std::atomic<double> gr_{0}; };
+
 }  // namespace am::fx

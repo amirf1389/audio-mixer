@@ -27,5 +27,11 @@ int main() {
     auto f = make("isoeq", 48000); f->set("colour", 0); const double z = run(*f, 1000, 0.5, 0.5); CHECK(std::fabs(z) < 0.05, "flat iso %f", z); }
   { auto e = make("mod", 48000); e->set("mode", 0.7); e->set("depth", 1.0); e->set("rate", 0.6); const double d = run(*e, 1000, 0.5, 0.5); CHECK(d < -2, "tremolo did not lower the level %f", d); }
   for (const char* k : {"mod"}) for (double m : {0.0, 0.3, 0.5, 0.9}) { auto e = make(k, 48000); e->set("mode", m); e->set("feedback", 1.0); const double d = run(*e, 440, 0.5, 0.5); CHECK(std::isfinite(d) && d < 6, "mode %f level %f", m, d); }
+  { auto e = make("opto", 48000); e->set("reduction", 0.8); e->set("gain", 0); const double d = run(*e, 1000, 0.5, 0.5); CHECK(d < -6, "opto did not level a loud tone %f", d); }
+  { auto e = make("glue", 48000); e->set("threshold", 0.5); e->set("ratio", 1.0); e->set("makeup", 0); e->set("colour", 0); const double d = run(*e, 1000, 0.5, 0.5); CHECK(d < -6 && d > -20, "glue %f", d); }
+  { auto e = make("tape", 48000); const double d = run(*e, 1000, 0.5, 0.5); CHECK(std::isfinite(d) && std::fabs(d) < 6, "tape level %f", d); }
+  { auto e = make("deesser", 48000); e->set("threshold", 0.6); e->set("range", 1.0); const double hi = run(*e, 9000, 0.5, 0.5); auto f = make("deesser", 48000); f->set("threshold", 0.6); f->set("range", 1.0); const double lo = run(*f, 400, 0.5, 0.5);
+    CHECK(hi < -6, "de-esser left 9 kHz at %f", hi); CHECK(std::fabs(lo) < 0.5, "de-esser touched 400 Hz %f", lo); }
+  { auto e = make("transient", 48000); e->set("attack", 0.5); const double d = run(*e, 1000, 0.5, 0.5); CHECK(std::fabs(d) < 0.3, "transient at centre is not neutral on a steady tone %f", d); }
   std::printf(fails ? "fx_ms: %d failed\n" : "fx_ms: all passed\n", fails); return fails ? 1 : 0;
 }

@@ -13,7 +13,7 @@ double clamp01(double v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
 std::string fmt(const char* f, double v) { char b[32]; std::snprintf(b, sizeof b, f, v); return b; }
 }  // namespace
 
-std::vector<std::pair<std::string, std::string>> catalog() { return {{"reverb", "PLATE REVERB"}, {"delay", "TAPE DELAY"}, {"syncdelay", "SYNC DELAY"}, {"antifeedback", "FEEDBACK KILLER"}, {"analog", "ANALOG CHANNEL"}, {"barrier", "SOUND BARRIER"}, {"dualeq", "DUAL LISTEN EQ"}, {"pitch", "PITCH SHIFTER"}, {"sampler", "SAMPLE PLAYER"}, {"desquash", "DE-SQUASH"}, {"chorus", "STEREO CHORUS"}, {"drive", "TUBE DRIVE"}, {"flanger", "FLANGER"}, {"phaser", "PHASER"}, {"tremolo", "TREMOLO"}, {"wah", "AUTO WAH"}, {"crusher", "BIT CRUSHER"}, {"exciter", "EXCITER"}, {"tubeamp", "TUBE AMP"}, {"preamp", "PRE AMP"}, {"postamp", "POST AMP"}, {"hall", "HALL REVERB"}, {"room", "ROOM REVERB"}, {"mseq", "MS COLOUR EQ"}, {"isoeq", "ISO EQ 10"}, {"mod", "MOD MACHINE"}}; }
+std::vector<std::pair<std::string, std::string>> catalog() { return {{"reverb", "PLATE REVERB"}, {"delay", "TAPE DELAY"}, {"syncdelay", "SYNC DELAY"}, {"antifeedback", "FEEDBACK KILLER"}, {"analog", "ANALOG CHANNEL"}, {"barrier", "SOUND BARRIER"}, {"dualeq", "DUAL LISTEN EQ"}, {"pitch", "PITCH SHIFTER"}, {"sampler", "SAMPLE PLAYER"}, {"desquash", "DE-SQUASH"}, {"chorus", "STEREO CHORUS"}, {"drive", "TUBE DRIVE"}, {"flanger", "FLANGER"}, {"phaser", "PHASER"}, {"tremolo", "TREMOLO"}, {"wah", "AUTO WAH"}, {"crusher", "BIT CRUSHER"}, {"exciter", "EXCITER"}, {"tubeamp", "TUBE AMP"}, {"preamp", "PRE AMP"}, {"postamp", "POST AMP"}, {"hall", "HALL REVERB"}, {"room", "ROOM REVERB"}, {"mseq", "MS COLOUR EQ"}, {"isoeq", "ISO EQ 10"}, {"mod", "MOD MACHINE"}, {"opto", "OPTO LEVELER"}, {"glue", "GLUE COMP"}, {"tape", "TAPE MACHINE"}, {"transient", "TRANSIENT SHAPER"}, {"deesser", "DE-ESSER"}}; }
 std::unique_ptr<Effect> make(const std::string& k, double fs) {
   if (k == "reverb") return std::make_unique<Reverb>(fs);
   if (k == "delay") return std::make_unique<TapeDelay>(fs);
@@ -41,6 +41,11 @@ std::unique_ptr<Effect> make(const std::string& k, double fs) {
   if (k == "mseq") return std::make_unique<MsEq>(fs);
   if (k == "isoeq") return std::make_unique<IsoEq>(fs);
   if (k == "mod") return std::make_unique<ModMachine>(fs);
+  if (k == "opto") return std::make_unique<Opto>(fs);
+  if (k == "glue") return std::make_unique<Glue>(fs);
+  if (k == "tape") return std::make_unique<Tape>(fs);
+  if (k == "transient") return std::make_unique<Transient>(fs);
+  if (k == "deesser") return std::make_unique<DeEsser>(fs);
   return nullptr;
 }
 
