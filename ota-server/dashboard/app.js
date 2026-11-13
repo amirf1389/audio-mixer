@@ -113,7 +113,7 @@
     const go = async () => { S.token = t.value.trim(); if (!S.token) return; try { await loadAll(); if (keep.checked) { try { sessionStorage.setItem('ota-token', S.token); } catch (_) { /* storage blocked */ } } say(null); render(); } catch (e) { S.token = ''; say(e.message, true); } };
     t.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
     return h('div', { class: 'login card' }, h('h1', null, 'Audio Mixer ', h('b', null, 'OTA')), h('p', { class: 'dim' }, 'Vendor dashboard. Enter the admin token of this server (OTA_ADMIN_TOKEN).'), t,
-      h('label', { for: 'keep', style: 'display:flex;gap:8px;align-items:center' }, keep, 'remember in this tab'), h('button', { class: 'btn primary', onclick: go }, 'Sign in'), msgBox);
+      h('label', { for: 'keep', style: 'display:flex;gap:8px;align-items:center' }, keep, 'remember in this tab'), h('button', { class: 'btn primary', onclick: go }, 'Sign in'), h('p', { class: 'dim' }, h('a', { href: 'login' }, 'Sign in with a staff account instead')), msgBox);
   }
   function overview() {
     const chs = Object.keys(S.config.channels);

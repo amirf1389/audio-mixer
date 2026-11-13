@@ -297,3 +297,77 @@ test('portal management: counts product keys and their use, makes a new product 
     assert.strictEqual((await post('/admin/licenses/NOPE/product-key', {})).status, 404);
   } finally { server.close(); fsx.rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('staff sign-in, JWT, staff accounts and the CRM (encrypted at rest)', async () => {
+  const os = require('node:os'), fsx = require('node:fs'), pathx = require('node:path');
+  const dir = fsx.mkdtempSync(pathx.join(os.tmpdir(), 'portal-')), portalDb = pathx.join(dir, 'portal.db');
+  const srv = createServer({ privateKey: pair.privateKey, token: TOKEN, dataFile: pathx.join(dir, 'licenses.json'), portalDb, portalSecret: 'p'.repeat(48), quiet: true });
+  await new Promise(r => srv.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${srv.address().port}`;
+  const call = async (p, { method, body, tok } = {}) => { const r = await fetch(base + p, { method: method || (body ? 'POST' : 'GET'), headers: { ...(tok ? { authorization: 'Bearer ' + tok } : {}), ...(body ? { 'content-type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined }); return { status: r.status, json: await r.json().catch(() => null), headers: r.headers }; };
+  try {
+    // the pages: each with its own CSP naming only the CDN hosts it uses, files pinned by SRI
+    const login = await fetch(base + '/admin/login'); const lh = await login.text();
+    assert.strictEqual(login.status, 200); assert.match(login.headers.get('content-security-policy'), /script-src 'self' https:\/\/cdn\.tailwindcss\.com\/3\.4\.16;/);
+    assert.match(lh, /cdn\.tailwindcss\.com\/3\.4\.16"/); assert.match(lh, /font-awesome\/6\.5\.2\/css\/all\.min\.css" integrity="sha384-/);
+    const crm = await fetch(base + '/admin/crm'); const ch = await crm.text();
+    assert.match(crm.headers.get('content-security-policy'), /script-src 'self' https:\/\/cdn\.jsdelivr\.net\/npm\/bootstrap@5\.3\.3\/dist\/;/); assert.ok(!/unsafe-inline/.test(crm.headers.get('content-security-policy')));
+    assert.match(ch, /bootstrap@5\.3\.3\/dist\/css\/bootstrap\.min\.css" integrity="sha384-/); assert.ok(!/style="/.test(ch), 'no inline style attributes under a CSP without unsafe-inline');
+    for (const f of ['/admin/login.js', '/admin/crm.js']) assert.strictEqual((await fetch(base + f)).status, 200);
+    // nothing without a token; the first staff account is made with the admin token
+    assert.strictEqual((await call('/admin/crm/customers')).status, 401);
+    assert.strictEqual((await call('/admin/staff', { body: { email: 'a@b.co', name: 'A', password: 'long enough pass' } })).status, 401);
+    assert.strictEqual((await call('/admin/staff', { body: { email: 'a@b.co', name: 'A', password: 'short' }, tok: TOKEN })).status, 400);
+    const made = await call('/admin/staff', { body: { email: 'Ana@Studio.my', name: 'Ana', password: 'correct horse battery' }, tok: TOKEN });
+    assert.strictEqual(made.status, 200);
+    assert.strictEqual((await call('/admin/staff', { body: { email: 'ana@studio.my', name: 'Ana 2', password: 'correct horse battery' }, tok: TOKEN })).status, 409);
+    // sign-in
+    assert.strictEqual((await call('/admin/auth/login', { body: { email: 'ana@studio.my', password: 'wrong password!!' } })).status, 401);
+    assert.strictEqual((await call('/admin/auth/login', { body: { email: 'nobody@studio.my', password: 'correct horse battery' } })).status, 401);
+    const li = await call('/admin/auth/login', { body: { email: 'ANA@studio.my', password: 'correct horse battery' } });
+    assert.strictEqual(li.status, 200); const jwt = li.json.token; assert.strictEqual(jwt.split('.').length, 3);
+    assert.strictEqual((await call('/admin/auth/me', { tok: jwt })).json.staff.email, 'ana@studio.my');
+    // the JWT opens the existing admin routes too (the licence dashboard) — and a forged or "none" token does not
+    assert.strictEqual((await call('/admin/licenses', { tok: jwt })).status, 200);
+    const [h, b] = jwt.split('.');
+    const none = Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT' })).toString('base64url') + '.' + b + '.' + 'x'.repeat(43);
+    assert.strictEqual((await call('/admin/licenses', { tok: none })).status, 401);
+    const evil = h + '.' + Buffer.from(JSON.stringify({ ...JSON.parse(Buffer.from(b, 'base64url')), sub: 'stf_other' })).toString('base64url') + '.' + jwt.split('.')[2];
+    assert.strictEqual((await call('/admin/licenses', { tok: evil })).status, 401);
+    // CRM: every staff member edits; stored encrypted
+    const add = await call('/admin/crm/customers', { body: { name: 'Studio Rimba', email: 'Boss@Rimba.my', phone: '+60 12 345', company: 'Rimba Sdn Bhd', status: 'trial' }, tok: jwt });
+    assert.strictEqual(add.status, 200); const cid = add.json.id;
+    assert.strictEqual((await call('/admin/crm/customers', { body: { name: '' }, tok: jwt })).status, 400);
+    assert.strictEqual((await call('/admin/crm/customers', { body: { name: 'X', email: 'not-an-email' }, tok: jwt })).status, 400);
+    assert.strictEqual((await call('/admin/crm/customers/' + cid + '/notes', { body: { text: 'Called, wants 3 seats' }, tok: jwt })).status, 200);
+    const one = await call('/admin/crm/customers/' + cid, { tok: jwt });
+    assert.strictEqual(one.json.customer.email, 'boss@rimba.my'); assert.strictEqual(one.json.customer.notes[0].text, 'Called, wants 3 seats'); assert.strictEqual(one.json.customer.notes[0].by, 'ana@studio.my');
+    assert.strictEqual((await call('/admin/crm/customers/' + cid, { method: 'PUT', body: { name: 'Studio Rimba', email: 'boss@rimba.my', status: 'customer' }, tok: jwt })).status, 200);
+    assert.strictEqual((await call('/admin/crm/customers?q=rimba', { tok: jwt })).json.customers.length, 1);
+    assert.strictEqual((await call('/admin/crm/customers?status=lead', { tok: jwt })).json.customers.length, 0);
+    assert.strictEqual((await call('/admin/crm/stats', { tok: jwt })).json.stats.customer, 1);
+    srv.close(); await new Promise(r => setTimeout(r, 50));
+    const raw = fsx.readFileSync(portalDb).toString('latin1') + (fsx.existsSync(portalDb + '-wal') ? fsx.readFileSync(portalDb + '-wal').toString('latin1') : '');
+    for (const plain of ['Rimba', 'boss@rimba', '+60 12 345', 'wants 3 seats', 'correct horse']) assert.ok(!raw.includes(plain), 'stored in the clear: ' + plain);
+    if (process.platform !== 'win32') assert.strictEqual(fsx.statSync(portalDb).mode & 0o077, 0);
+    await new Promise(r => srv.listen(0, '127.0.0.1', r));
+    const base2 = `http://127.0.0.1:${srv.address().port}`;
+    // a disabled account's token stops at once; you cannot disable yourself
+    const self = await fetch(base2 + '/admin/staff/' + made.json.id + '/disable', { method: 'POST', headers: { authorization: 'Bearer ' + jwt, 'content-type': 'application/json' }, body: '{}' });
+    assert.strictEqual(self.status, 400);
+    const dis = await fetch(base2 + '/admin/staff/' + made.json.id + '/disable', { method: 'POST', headers: { authorization: 'Bearer ' + TOKEN, 'content-type': 'application/json' }, body: '{}' });
+    assert.strictEqual(dis.status, 200);
+    assert.strictEqual((await fetch(base2 + '/admin/licenses', { headers: { authorization: 'Bearer ' + jwt } })).status, 401);
+    // the password changes only with the current one; sign-out ends the token on the server
+    await fetch(base2 + '/admin/staff/' + made.json.id + '/enable', { method: 'POST', headers: { authorization: 'Bearer ' + TOKEN, 'content-type': 'application/json' }, body: '{}' });
+    const j2 = (await (await fetch(base2 + '/admin/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'ana@studio.my', password: 'correct horse battery' }) })).json()).token;
+    const pw = (body) => fetch(base2 + '/admin/auth/password', { method: 'POST', headers: { authorization: 'Bearer ' + j2, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    assert.strictEqual((await pw({ current: 'not it at all', password: 'a brand new password' })).status, 403);
+    assert.strictEqual((await pw({ current: 'correct horse battery', password: 'short' })).status, 400);
+    const out2 = await fetch(base2 + '/admin/auth/logout', { method: 'POST', headers: { authorization: 'Bearer ' + j2 } }); assert.strictEqual(out2.status, 200);
+    assert.strictEqual((await fetch(base2 + '/admin/licenses', { headers: { authorization: 'Bearer ' + j2 } })).status, 401);
+    // sign-in is rate limited
+    let limited = 0; for (let i = 0; i < 14; i++) { const r = await fetch(base2 + '/admin/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'x@y.zz', password: 'nopenopenope' }) }); if (r.status === 429) limited++; }
+    assert.ok(limited >= 2, 'sign-in is limited (' + limited + ')');
+  } finally { srv.close(); fsx.rmSync(dir, { recursive: true, force: true }); }
+});

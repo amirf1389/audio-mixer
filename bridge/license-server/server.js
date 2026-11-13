@@ -22,6 +22,7 @@
 // Keys use the same format and signature as scripts/license.js, so every installed copy that trusts the vendor public key accepts them.
 const http = require('node:http');
 const fs = require('node:fs');
+const { createPortalAuth } = require('../portal-auth/auth');
 const crypto = require('node:crypto');
 const path = require('node:path');
 const { PLANS, signKey, verifyKey, unb64u } = require('../license');
@@ -226,13 +227,19 @@ function auditLog(file) {
   };
 }
 
-function createServer({ privateKey, token, dataFile = DATA_FILE, dataSecret, trustProxy = process.env.LICENSE_TRUST_PROXY === '1', quiet = false, updateUrl = process.env.LICENSE_UPDATE_URL || 'https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/update.json' }) {
+function createServer({ privateKey, token, dataFile = DATA_FILE, dataSecret, portalDb = process.env.PORTAL_DB, portalSecret = process.env.PORTAL_JWT_SECRET, trustProxy = process.env.LICENSE_TRUST_PROXY === '1', quiet = false, updateUrl = process.env.LICENSE_UPDATE_URL || 'https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/update.json' }) {
   const jwk = crypto.createPublicKey(privateKey).export({ format: 'jwk' });   // checks the keys this server issued, for the device lock
   const secret = dataSecret || token, audit = auditLog(dataFile), limiter = rateLimiter(), started = Date.now();
   const app = createApp({ maxBody: MAX_BODY, trustProxy });
   const limit = (what, n) => c => { const r = limiter.allow(what + ':' + c.ip, n); if (!r.ok) throw new HttpError(429, 'too many requests', { retryAfter: r.retryAfter }); };
+  // staff sign-in (bridge/portal-auth): one database and one secret shared with the OTA server, so one sign-in opens both dashboards
+  let staffDb = null;   // opened on first use, so a server that never signs anyone in never creates the file
+  const staffAuth = () => staffDb || (staffDb = createPortalAuth({ dbFile: portalDb || path.join(path.dirname(path.resolve(dataFile)), 'portal.db'),
+    secret: portalSecret || crypto.createHmac('sha256', String(secret)).update('amfx1-portal-jwt').digest('hex'),
+    crmSecret: process.env.PORTAL_CRM_SECRET || crypto.createHmac('sha256', String(secret)).update('amfx1-portal-crm').digest('hex') }));   // the CRM key never leaves this server
   const admin = c => {
-    if (bearerOk(c.req, token)) return undefined;
+    if (bearerOk(c.req, token)) { c.state.staff = null; return undefined; }
+    const st = /^Bearer [A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(String(c.req.headers.authorization || '')) ? staffAuth().bearer(c.req) : null; if (st) { c.state.staff = st; return undefined; }
     const bad = limiter.allow('bad:' + c.ip, 10);                         // ten wrong tokens a minute from one address, then it has to wait
     if (limiter.allow('badlog:' + c.ip, 5).ok) audit.add('auth.denied', '', c.ip, c.req.method + ' ' + c.path);
     if (!bad.ok) throw new HttpError(429, 'too many requests', { retryAfter: bad.retryAfter });
@@ -260,6 +267,39 @@ function createServer({ privateKey, token, dataFile = DATA_FILE, dataSecret, tru
     if (!r.ok) { audit.add('license.redeem.refused', '-', c.ip, r.error); return c.json(r.status, { ok: false, error: r.error }); }
     audit.add('license.redeem', r.id, c.ip, r.payload.plan); return c.json(200, { ok: true, id: r.id, plan: r.payload.plan, key: signKey(r.payload, privateKey) }); });
   app.post('/issue', admin, issue);
+  // ── staff sign-in, staff accounts and the CRM (every enabled staff account may edit) ──
+  const who = c => c.state.staff ? c.state.staff.email : 'admin-token';
+  app.post('/admin/auth/login', limit('login', 10), async c => {
+    const b = await c.body(), r = staffAuth().login(b.email, b.password);
+    audit.add(r.ok ? 'staff.login' : 'staff.login.refused', r.ok ? r.staff.id : '-', c.ip);
+    return r.ok ? c.json(200, { ok: true, token: r.token, expiresIn: r.expiresIn, staff: r.staff }) : c.json(r.status, { ok: false, error: r.error });
+  });
+  app.get('/admin/auth/me', admin, c => c.json(200, { ok: true, staff: c.state.staff }));
+  app.post('/admin/auth/logout', admin, c => { if (c.state.staff) { staffAuth().endSessions(c.state.staff.id); audit.add('staff.logout', c.state.staff.id, c.ip); } return c.json(200, { ok: true }); });   // ends every session of the account, not just this tab
+  app.post('/admin/auth/password', admin, limit('adm', 120), async c => {
+    if (!c.state.staff) return c.json(400, { ok: false, error: 'sign in with a staff account to change its password' });
+    const b = await c.body(); if (!staffAuth().checkPassword(c.state.staff.id, b.current)) { audit.add('staff.password.refused', c.state.staff.id, c.ip); return c.json(403, { ok: false, error: 'the current password is wrong' }); }
+    const r = staffAuth().setPassword(c.state.staff.id, b.password); if (r.ok) audit.add('staff.password', c.state.staff.id, c.ip); return out(c, { status: r.ok ? 200 : r.status, ...r });
+  });
+  app.get('/admin/staff', admin, limit('adm', 120), c => c.json(200, { ok: true, staff: staffAuth().listStaff() }));
+  app.post('/admin/staff', admin, limit('adm', 120), async c => {
+    const r = staffAuth().addStaff(await c.body()); if (r.ok) audit.add('staff.add', r.id, c.ip, 'by ' + who(c));
+    return out(c, { status: r.ok ? 200 : r.status, ...r });
+  });
+  for (const [verb, off] of [['disable', true], ['enable', false]]) app.post('/admin/staff/:id/' + verb, admin, limit('adm', 120), c => {
+    if (off && c.state.staff && c.state.staff.id === c.params.id) return c.json(400, { ok: false, error: 'you cannot disable your own account' });
+    const r = staffAuth().setStaffDisabled(c.params.id, off); if (r.ok) audit.add('staff.' + verb, c.params.id, c.ip, 'by ' + who(c)); return out(c, { status: r.ok ? 200 : r.status, ...r });
+  });
+  app.get('/admin/crm/stats', admin, limit('adm', 120), c => c.json(200, { ok: true, stats: staffAuth().stats(), statuses: staffAuth().STATUSES }));
+  app.get('/admin/crm/customers', admin, limit('adm', 120), c => c.json(200, { ok: true, customers: staffAuth().listCustomers({ q: c.query.get('q') || '', status: c.query.get('status') || '' }) }));
+  app.post('/admin/crm/customers', admin, limit('adm', 120), async c => { const r = staffAuth().saveCustomer(await c.body(), who(c)); if (r.ok) audit.add('crm.add', r.id, c.ip, 'by ' + who(c)); return out(c, { status: r.ok ? 200 : r.status, ...r }); });
+  app.get('/admin/crm/customers/:id', admin, limit('adm', 120), c => { const cu = staffAuth().getCustomer(c.params.id); if (!cu) return c.json(404, { ok: false, error: 'no such customer' });
+    const keys = cu.email ? listLicenses({ file: dataFile, secret }).filter(l => String(l.email || '').toLowerCase() === cu.email).map(l => ({ id: l.id, plan: l.plan, expires: l.expires, revoked: !!l.revoked })) : [];
+    return c.json(200, { ok: true, customer: { ...cu, licences: keys } }); });
+  app.put('/admin/crm/customers/:id', admin, limit('adm', 120), async c => { const r = staffAuth().saveCustomer(await c.body(), who(c), c.params.id); if (r.ok) audit.add('crm.edit', r.id, c.ip, 'by ' + who(c)); return out(c, { status: r.ok ? 200 : r.status, ...r }); });
+  app.delete('/admin/crm/customers/:id', admin, limit('adm', 120), c => { const r = staffAuth().deleteCustomer(c.params.id); if (r.ok) audit.add('crm.delete', c.params.id, c.ip, 'by ' + who(c)); return out(c, { status: r.ok ? 200 : r.status, ...r }); });
+  app.post('/admin/crm/customers/:id/notes', admin, limit('adm', 120), async c => { const r = staffAuth().addNote(c.params.id, (await c.body()).text, who(c)); if (r.ok) audit.add('crm.note', c.params.id, c.ip, 'by ' + who(c)); return out(c, { status: r.ok ? 200 : r.status, ...r }); });
+
   app.post('/admin/licenses', admin, limit('adm', 120), issue);
   app.get('/admin/licenses', admin, limit('adm', 120), c => c.json(200, { ok: true, maxDevices: MAX_DEVICES, plans: Object.keys(PLANS), licenses: listLicenses({ file: dataFile, secret }) }));
   app.post('/admin/licenses/:id/revoke', admin, limit('adm', 120), async c => { const b = await c.body(); const r = setRevoked({ id: c.params.id, revoked: true, reason: b.reason, file: dataFile }); if (r.ok) audit.add('license.revoke', r.id, c.ip, b.reason); return out(c, r); });
@@ -306,6 +346,15 @@ function createServer({ privateKey, token, dataFile = DATA_FILE, dataSecret, tru
   app.static({ '/portal/': [path.join(portal, 'index.html'), 'text/html; charset=utf-8'], '/portal/app.js': [path.join(portal, 'app.js'), 'text/javascript; charset=utf-8'], '/portal/portal.css': [path.join(portal, 'portal.css'), 'text/css; charset=utf-8'], '/portal/base.css': [path.join(__dirname, 'dashboard', 'style.css'), 'text/css; charset=utf-8'] });
   // the management page: three fixed files; it asks for the token itself, so the files carry nothing secret
   const dash = path.join(__dirname, 'dashboard');
+  // the staff pages load pinned CDN files (Tailwind Play CDN, Bootstrap, Font Awesome) checked by their SRI hash; each page gets a CSP naming exactly those hosts
+  const CDN_CSP = {
+    login: "default-src 'none'; script-src 'self' https://cdn.tailwindcss.com/3.4.16; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/; font-src https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+    crm: "default-src 'none'; script-src 'self' https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/; style-src 'self' https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/ https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/; font-src https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+  };
+  const page = (file, csp) => c => { let data; try { data = fs.readFileSync(path.join(dash, file)); } catch (_) { throw new HttpError(404, 'not found'); } return c.send(200, data, { 'content-type': 'text/html; charset=utf-8', 'content-security-policy': csp }); };
+  app.get('/admin/login', page('login.html', CDN_CSP.login));
+  app.get('/admin/crm', page('crm.html', CDN_CSP.crm));
+  app.static({ '/admin/login.js': [path.join(dash, 'login.js'), 'text/javascript; charset=utf-8'], '/admin/crm.js': [path.join(dash, 'crm.js'), 'text/javascript; charset=utf-8'] });
   app.get('/admin', c => c.send(301, '', { location: '/admin/' }));
   app.static({ '/admin/': [path.join(dash, 'index.html'), 'text/html; charset=utf-8'], '/admin/app.js': [path.join(dash, 'app.js'), 'text/javascript; charset=utf-8'], '/admin/style.css': [path.join(dash, 'style.css'), 'text/css; charset=utf-8'] });
   return http.createServer(app.handler);
