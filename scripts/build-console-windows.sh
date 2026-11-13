@@ -33,6 +33,13 @@ for p in amixos.exe "AmF X1 Network.exe" "AmF X1 Hybrid.exe" "AmF X1 Network.dll
 if [ -f "$ROOT/releases/windows/AmF X1.exe" ]; then cp "$ROOT/releases/windows/AmF X1.exe" "$ROOT/releases/windows/AudioMixerASIO64.dll" "$D/"; else node "$ROOT/scripts/build-native.js" --out "$D" >/dev/null; rm -f "$D/AmF X1 (32-bit).exe" "$D/AudioMixerASIO32.dll"; fi
 for l in Qt6Core Qt6Gui Qt6Network Qt6OpenGL Qt6Qml Qt6QmlModels Qt6QmlWorkerScript Qt6Quick Qt6QuickControls2 Qt6QuickControls2Impl Qt6QuickTemplates2 Qt6QuickLayouts Qt6QuickShapes libgcc_s_seh-1 libstdc++-6 libwinpthread-1; do cp "$KIT/bin/$l.dll" "$D/"; done
 for l in Qt6QuickControls2Fusion Qt6QuickControls2FusionStyleImpl; do [ -f "$KIT/bin/$l.dll" ] && cp "$KIT/bin/$l.dll" "$D/"; done   # the Fusion style (the console uses it: palette-driven, dark)
+# FFmpeg (LGPL 2.1+, decoders only, built by scripts/third_party/build-ffmpeg.sh windows): separate DLLs next to the program, opened at run
+# time (the program starts without them and anyone may replace them), with the licence and where the exact source is
+FF="$ROOT/third_party/ffmpeg-windows"; if [ -f "$FF/bin/avformat-61.dll" ]; then cp "$FF"/bin/avutil-59.dll "$FF"/bin/swresample-5.dll "$FF"/bin/avcodec-61.dll "$FF"/bin/avformat-61.dll "$D/"
+  mkdir -p "$D/licenses"; cp "$FF/FFMPEG-LICENSE.txt" "$FF/FFMPEG-SOURCE.txt" "$FF/FFMPEG-BUILD.txt" "$D/licenses/" 2>/dev/null || true; echo "FFmpeg decoders: included"; else echo "FFmpeg decoders: not built (scripts/third_party/build-ffmpeg.sh windows), Windows' own decoders only"; fi
+# MPEG-H (Fraunhofer FDK, needs MPEG-H patent licences for commercial use): only when asked for, once those licences are held
+if [ "${AMIX_WITH_MPEGH:-0}" = 1 ] && [ -f "$ROOT/third_party/mpegh-windows/amfb_mpegh.dll" ]; then cp "$ROOT/third_party/mpegh-windows/amfb_mpegh.dll" "$D/"
+  mkdir -p "$D/licenses"; cp "$ROOT/third_party/mpegh-windows/MPEGH-LICENSE.txt" "$ROOT/third_party/mpegh-windows/MPEGH-SOURCE.txt" "$D/licenses/"; echo "MPEG-H extension: included"; else echo "MPEG-H extension: left out"; fi
 cp "$KIT/plugins/platforms/qwindows.dll" "$D/platforms/"; mkdir -p "$D/tls"; cp "$KIT/plugins/tls/qschannelbackend.dll" "$D/tls/" 2>/dev/null || true;   # TLS for the update check (Windows Schannel)
  cp "$KIT/plugins/imageformats/"*.dll "$D/imageformats/"
 cp -r "$KIT/qml/QtQml" "$KIT/qml/QtQuick" "$KIT/qml/Qt" "$D/qml/" 2>/dev/null || true
