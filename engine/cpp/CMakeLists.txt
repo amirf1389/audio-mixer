@@ -134,7 +134,7 @@ target_include_directories(amixos_record PUBLIC app)
 target_link_libraries(amixos_record PUBLIC audiomixer_runtime Threads::Threads)
 
 # EFFECTS: the built-in bus effects (engine/cpp/app/fx)
-add_library(amixos_fx STATIC app/fx/fx.cpp app/fx/fx_ms.cpp app/fx/fx_dyn.cpp app/fx/fx_more.cpp app/fx/presets.cpp)
+add_library(amixos_fx STATIC app/fx/fx.cpp app/fx/fx_ms.cpp app/fx/fx_dyn.cpp app/fx/fx_more.cpp app/fx/fx_iamf.cpp app/fx/presets.cpp)
 target_link_libraries(amixos_fx PUBLIC amixos_samples amixos_arrange)
 add_library(amixos_samples STATIC app/samples/samples.cpp)
 target_include_directories(amixos_samples PUBLIC app)

@@ -42,5 +42,15 @@ int main() {
   { auto e = make("imager", 48000); e->set("lowwidth", 0.0); e->set("crossover", 1.0); double r; run(*e, 200, 0.5, -0.5, &r); CHECK(r < -18, "imager low width 0 kept the side bass %f", r); }
   { auto e = make("autopan", 48000); e->set("depth", 0); const double d = run(*e, 1000, 0.5, 0.5); CHECK(std::fabs(d) < 0.05, "autopan depth 0 %f", d); }
   { auto e = make("doubler", 48000); const double d = run(*e, 440, 0.5, 0.5); CHECK(std::isfinite(d) && d < 6, "doubler %f", d); }
+  { auto e = make("iamfelement", 48000); e->set("azimuth", 0.75); e->set("spread", 0); double r; const double l = run(*e, 1000, 0.5, 0.5, &r); CHECK(r - l > 4, "IAMF element at 90 R, 1 kHz: L %f R %f", l, r);
+    auto h = make("iamfelement", 48000); h->set("azimuth", 0.75); h->set("spread", 0); double r4; const double l4 = run(*h, 6000, 0.5, 0.5, &r4); CHECK(r4 - l4 > 10, "IAMF element at 90 R, 6 kHz: L %f R %f", l4, r4); }
+  { auto e = make("iamfelement", 48000); e->set("spread", 0); double r; const double l = run(*e, 1000, 0.5, 0.5, &r); CHECK(std::fabs(r - l) < 0.1, "IAMF element in front is not centred: %f %f", l, r); }
+  { auto e = make("iamfelement", 48000); e->set("azimuth", 0.25); e->set("render", 1.0); e->set("spread", 0); double r; const double l = run(*e, 1000, 0.5, 0.5, &r); CHECK(r < -60 && std::fabs(l - 3.01) < 0.3, "IAMF speakers hard left: L %f R %f", l, r); }
+  { auto e = make("iamfelement", 48000); e->set("render", 1.0); e->set("spread", 0); e->set("distance", std::log(4.0 / 0.5) / std::log(40.0)); double r; const double l = run(*e, 200, 0.5, 0.5, &r); CHECK(std::fabs(l + 12.04) < 0.6, "IAMF 4 m should be -12 dB: %f", l); }
+  { auto e = make("iamfrender", 48000); e->set("normalize", 1.0); e->set("target", (-24.0 + 27) / 13); const double fs = 48000; const int N = 48000 * 20; std::vector<float> L(N), R(N);
+    const double a = 0.0316; for (int i = 0; i < N; ++i) L[i] = R[i] = static_cast<float>(a * std::sin(2 * 3.14159265 * 1000 * i / fs));
+    for (int i = 0; i < N; i += 512) e->process(L.data() + i, R.data() + i, static_cast<std::size_t>(std::min(512, N - i)));
+    double ms = 0; for (int i = N - 48000; i < N; ++i) ms += L[i] * L[i]; ms /= 48000; const double outLu = -0.691 + 10 * std::log10(2 * ms) + 0.7;   // +0.7: K-weighting at 1 kHz
+    CHECK(std::fabs(outLu + 24) < 1.0, "IAMF renderer normalised to %f LKFS (want -24)", outLu); }
   std::printf(fails ? "fx_ms: %d failed\n" : "fx_ms: all passed\n", fails); return fails ? 1 : 0;
 }

@@ -331,4 +331,32 @@ class Doubler final : public Multi { public: explicit Doubler(double fs); const 
   std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
  private: std::vector<float> buf_; std::size_t w_ = 0; double ph_[2] = {0, 0}; float lp_[2] = {0, 0}; };
 
+// The two ears of a listener, for placing a sound around the head (IAMF ELEMENT / IAMF RENDERER). A model, not measured HRTFs:
+// the time difference between the ears (Woodworth's sphere, head radius 8.75 cm), the head's shadow on the far ear (Brown and Duda's
+// one-pole / one-zero shelf), a pinna notch that moves with elevation and the dulling of sounds from behind.
+struct Ears {
+  void setSampleRate(double fs);
+  void reset();
+  void place(double azDeg, double elDeg);              // control rate: works out the delays and filters for a direction
+  void run(float x, float& l, float& r);               // one mono sample in, the two ears out
+ private:
+  struct Side { double b0 = 1, b1 = 0, a1 = 0, z = 0; double delay = 0; Biquad notch, back; };
+  double fs_ = 48000; std::vector<float> buf_; std::size_t w_ = 0; Side e_[2];
+};
+// IAMF ELEMENT: places a channel in 3D, after the audio elements of IAMF (the open immersive format of the Eclipsa plug-ins):
+// AZIMUTH -180 .. 180 degrees (0 in front, + to the right), ELEVATION -90 .. 90, DISTANCE 0.5 .. 20 m (level and air), SPREAD (how much
+// of the original stereo stays around the point), RENDER: BINAURAL (headphones, through the ear model) or SPEAKERS (an equal-power pan).
+class IamfElement final : public Multi { public: explicit IamfElement(double fs); const char* kind() const override { return "iamfelement"; } const char* name() const override { return "IAMF ELEMENT"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void setSampleRate(double fs) override; void process(float* L, float* R, std::size_t n) override;
+  static double azOf(double v) { return (v - 0.5) * 360; } static double elOf(double v) { return (v - 0.5) * 180; } static double distOf(double v) { return 0.5 * std::pow(40.0, v); }
+ private: Ears ears_; float air_[2] = {0, 0}; double placedAz_ = 1e9, placedEl_ = 1e9; };
+// IAMF RENDERER: the monitoring end of the chain (put it on the master): LAYOUT STEREO (as is) or BINAURAL (the two speakers heard
+// as two virtual speakers at -30 / +30 degrees through the ear model, for headphones), TARGET loudness -27 .. -14 LKFS and NORMALIZE (a
+// slow gain, at most 12 dB either way, that brings the programme to TARGET; IAMF carries loudness so players can do the same), OUTPUT.
+class IamfRenderer final : public Multi { public: explicit IamfRenderer(double fs); const char* kind() const override { return "iamfrender"; } const char* name() const override { return "IAMF RENDERER"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void setSampleRate(double fs) override; void process(float* L, float* R, std::size_t n) override;
+  double loudness() const { return lufs_.load(); }   // short-term loudness (3 s, K-weighted), LKFS
+  static double targetOf(double v) { return -27 + v * 13; }
+ private: void design(); Ears left_, right_; Biquad kShelf_[2], kHp_[2]; double ms_ = 0, g_ = 1; std::atomic<double> lufs_{-70}; };
+
 }  // namespace am::fx
