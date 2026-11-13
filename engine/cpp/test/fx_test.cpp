@@ -17,7 +17,7 @@ using namespace am;
 static float peak(const std::vector<float>& v, std::size_t a, std::size_t b) { float p = 0; for (std::size_t i = a; i < b && i < v.size(); ++i) p = std::max(p, std::fabs(v[i])); return p; }
 
 int main() {
-  CHECK(fx::catalog().size() == 31 && fx::make("nope", 48000) == nullptr);
+  CHECK(fx::catalog().size() == 36 && fx::make("nope", 48000) == nullptr);
   { auto r = fx::make("reverb", 48000); CHECK(r && std::string(r->kind()) == "reverb" && r->params().size() == 4 && r->text("decay", 0) == "0.3 s");
     std::vector<float> L(48000, 0.f), R(48000, 0.f); L[0] = R[0] = 1.f; r->set("decay", 0.2); r->process(L.data(), R.data(), L.size());
     CHECK(peak(L, 1000, 6000) > 0.02f && peak(L, 30000, 48000) < peak(L, 2000, 6000) * 0.5f);   // rings, then decays
@@ -39,12 +39,12 @@ int main() {
     rt.setBusProcessor(0, nullptr); for (int k = 0; k < 2; ++k) rt.onBlock(quiet, outs, n); }
   std::printf("fx_test: reverb rings and decays, delay repeats on time (ping-pong crosses), chorus modulates, drive saturates, bypass, bus return OK\n");
   { // the ten effects as rack plug-ins: each changes a tone, stays finite and below +12 dB, passes it untouched when bypassed, and keeps its state through a save / load
-    CHECK(am::fx::catalog().size() == 31); const std::size_t n = 4800; std::vector<float> src(n), l(n), r(n); for (std::size_t i = 0; i < n; ++i) src[i] = 0.4f * static_cast<float>(std::sin(2 * 3.14159265 * 440 * static_cast<double>(i) / 48000) + 0.5 * std::sin(2 * 3.14159265 * 5000 * static_cast<double>(i) / 48000));
+    CHECK(am::fx::catalog().size() == 36); const std::size_t n = 4800; std::vector<float> src(n), l(n), r(n); for (std::size_t i = 0; i < n; ++i) src[i] = 0.4f * static_cast<float>(std::sin(2 * 3.14159265 * 440 * static_cast<double>(i) / 48000) + 0.5 * std::sin(2 * 3.14159265 * 5000 * static_cast<double>(i) / 48000));
     for (const auto& [kind, name] : am::fx::catalog()) { auto p = am::fx::FxPlugin::make(kind, 48000); CHECK(p && p->info().format == "FX" && p->params().size() >= 3);
       if (kind == "postamp") p->setParam(0, 0.9); if (kind == "preamp") p->setParam(0, 0.4);   // these two are neutral (unity) until a knob is turned
       const float* in[2] = {src.data(), src.data()}; float* out[2] = {l.data(), r.data()}; for (int k = 0; k < 3; ++k) p->process(in, out, static_cast<int>(n));
       double diff = 0, pk = 0; bool finite = true; for (std::size_t i = 0; i < n; ++i) { finite = finite && std::isfinite(l[i]); diff += std::fabs(l[i] - src[i]); pk = std::max(pk, std::fabs(static_cast<double>(l[i]))); }
-      const bool waits = kind == "antifeedback" || kind == "sampler";   // the sample player adds nothing until PLAY is switched on;   // the feedback killer does nothing until a howl has stood for a third of a second: on this short signal it must leave the sound alone
+      const bool waits = kind == "antifeedback" || kind == "sampler" || kind == "imager";   // the imager only shapes what differs between the sides: the same signal on both is left as it is   // the sample player adds nothing until PLAY is switched on;   // the feedback killer does nothing until a howl has stood for a third of a second: on this short signal it must leave the sound alone
       if (!(finite && pk < 4.0 && (waits ? diff / n < 1e-6 : diff / n > 1e-4))) std::fprintf(stderr, "effect %s: finite %d peak %.2f diff %.5f\n", kind.c_str(), finite, pk, diff / n); CHECK(finite && pk < 4.0 && (waits ? diff / n < 1e-6 : diff / n > 1e-4));
       p->setParam(0, 0.83); const std::string st = p->state(); auto q = am::fx::FxPlugin::make(kind, 48000); CHECK(q->setState(st) && std::fabs(q->param(0) - 0.83) < 1e-3);
       p->setBypass(true); p->process(in, out, static_cast<int>(n)); double d2 = 0; for (std::size_t i = 0; i < n; ++i) d2 += std::fabs(l[i] - src[i]); CHECK(d2 == 0); }

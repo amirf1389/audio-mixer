@@ -307,4 +307,28 @@ class DeEsser final : public Multi { public: explicit DeEsser(double fs); const 
   std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override; double grDb() const { return gr_.load(); }
  private: void design(); Biquad hp_[2], det_; double env_ = 0; std::atomic<double> gr_{0}; };
 
+// MAXIMIZER: a look-ahead brick-wall limiter: THRESHOLD (0 .. -12 dB: how much louder it makes the music), CEILING (-3 .. 0 dBFS, the
+// highest sample it lets out), RELEASE 5 .. 500 ms. It sees 1.5 ms ahead, so the gain is already down when a peak arrives (no overshoot).
+class Maximizer final : public Multi { public: explicit Maximizer(double fs); const char* kind() const override { return "maximizer"; } const char* name() const override { return "MAXIMIZER"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void setSampleRate(double fs) override; void process(float* L, float* R, std::size_t n) override; double grDb() const { return gr_.load(); }
+ private: std::vector<float> buf_[2]; std::vector<float> need_; std::size_t w_ = 0; double g_ = 1; std::atomic<double> gr_{0}; };
+// MULTIBAND COMP: three bands (LOW / MID / HIGH) split at LOW X and HIGH X with an exact (complementary) split; each band has its own
+// AMOUNT (how far its threshold comes down), all share SPEED; OUTPUT. Untouched it adds back to the original exactly.
+class Multiband final : public Multi { public: explicit Multiband(double fs); const char* kind() const override { return "multiband"; } const char* name() const override { return "MULTIBAND COMP"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
+ private: void design(); Biquad lo_[2][2], hi_[2][2]; double env_[3] = {0, 0, 0}; };
+// STEREO IMAGER: width below and above the CROSSOVER set apart (LOW WIDTH, HIGH WIDTH 0 .. 200 %): keep the bass centred, open the top.
+class Imager final : public Multi { public: explicit Imager(double fs); const char* kind() const override { return "imager"; } const char* name() const override { return "STEREO IMAGER"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
+ private: void design(); Biquad lp_; };
+// AUTO PAN: moves the sound between the speakers: RATE 0.05 .. 10 Hz, DEPTH, SHAPE (sine .. triangle .. square). Equal-power.
+class AutoPan final : public Multi { public: explicit AutoPan(double fs); const char* kind() const override { return "autopan"; } const char* name() const override { return "AUTO PAN"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
+ private: double ph_ = 0; };
+// VOCAL DOUBLER: two slightly retuned, slightly late copies of the voice, one each side, as if it were sung twice:
+// DETUNE 0 .. 25 cents, DELAY 8 .. 40 ms, WIDTH, TONE (darker copies sit behind the lead).
+class Doubler final : public Multi { public: explicit Doubler(double fs); const char* kind() const override { return "doubler"; } const char* name() const override { return "VOCAL DOUBLER"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
+ private: std::vector<float> buf_; std::size_t w_ = 0; double ph_[2] = {0, 0}; float lp_[2] = {0, 0}; };
+
 }  // namespace am::fx

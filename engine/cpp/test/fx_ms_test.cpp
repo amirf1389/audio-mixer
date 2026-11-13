@@ -33,5 +33,14 @@ int main() {
   { auto e = make("deesser", 48000); e->set("threshold", 0.6); e->set("range", 1.0); const double hi = run(*e, 9000, 0.5, 0.5); auto f = make("deesser", 48000); f->set("threshold", 0.6); f->set("range", 1.0); const double lo = run(*f, 400, 0.5, 0.5);
     CHECK(hi < -6, "de-esser left 9 kHz at %f", hi); CHECK(std::fabs(lo) < 0.5, "de-esser touched 400 Hz %f", lo); }
   { auto e = make("transient", 48000); e->set("attack", 0.5); const double d = run(*e, 1000, 0.5, 0.5); CHECK(std::fabs(d) < 0.3, "transient at centre is not neutral on a steady tone %f", d); }
+  { auto e = make("maximizer", 48000); e->set("threshold", 1.0); e->set("ceiling", 1.0); const double fs = 48000; std::vector<float> L(48000), R(48000);
+    for (int i = 0; i < 48000; ++i) { const double v = 0.9 * std::sin(2 * 3.14159265 * 200 * i / fs) * (i % 4800 < 200 ? 1.0 : 0.3); L[i] = R[i] = static_cast<float>(v); }
+    for (int i = 0; i < 48000; i += 256) e->process(L.data() + i, R.data() + i, static_cast<std::size_t>(std::min(256, 48000 - i)));
+    double pk = 0; for (float v : L) pk = std::max(pk, static_cast<double>(std::fabs(v))); CHECK(pk <= 1.0001, "maximizer let %f through", pk); }
+  { auto e = make("multiband", 48000); e->set("low", 0); e->set("mid", 0); e->set("high", 0); for (double f : {80.0, 1000.0, 9000.0}) { auto g = make("multiband", 48000); g->set("low", 0); g->set("mid", 0); g->set("high", 0); const double d = run(*g, f, 0.3, 0.3); CHECK(std::fabs(d - 20 * std::log10(0.3 / 0.5)) < 0.1, "multiband not transparent at %f Hz: %f", f, d); } }
+  { auto e = make("imager", 48000); e->set("lowwidth", 0.5); e->set("highwidth", 0.5); double r; const double d = run(*e, 1000, 0.5, 0.2, &r); CHECK(std::fabs(d) < 0.05, "imager at 100 %% moved L %f", d); }
+  { auto e = make("imager", 48000); e->set("lowwidth", 0.0); e->set("crossover", 1.0); double r; run(*e, 200, 0.5, -0.5, &r); CHECK(r < -18, "imager low width 0 kept the side bass %f", r); }
+  { auto e = make("autopan", 48000); e->set("depth", 0); const double d = run(*e, 1000, 0.5, 0.5); CHECK(std::fabs(d) < 0.05, "autopan depth 0 %f", d); }
+  { auto e = make("doubler", 48000); const double d = run(*e, 440, 0.5, 0.5); CHECK(std::isfinite(d) && d < 6, "doubler %f", d); }
   std::printf(fails ? "fx_ms: %d failed\n" : "fx_ms: all passed\n", fails); return fails ? 1 : 0;
 }

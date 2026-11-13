@@ -35,7 +35,7 @@ Popup {
     readonly property color red: "#b91c1c"
     // THE LOOK OF EACH FAMILY: reverbs steel blue, delays sage green, modulation lavender, saturation and amps copper, the feedback killer signal red,
     // everything else the cream plate. tint lies over the plate; view names the live display the panel carries.
-    readonly property var families: ({ opto: "guard", glue: "heat", tape: "echo", transient: "tune", deesser: "guard", mod: "mod", mseq: "heat", isoeq: "guard", reverb: "space", hall: "space", room: "space", delay: "echo", syncdelay: "echo", chorus: "mod", flanger: "mod", phaser: "mod", tremolo: "mod", wah: "mod",
+    readonly property var families: ({ maximizer: "heat", multiband: "guard", imager: "echo", autopan: "mod", doubler: "tune", opto: "guard", glue: "heat", tape: "echo", transient: "tune", deesser: "guard", mod: "mod", mseq: "heat", isoeq: "guard", reverb: "space", hall: "space", room: "space", delay: "echo", syncdelay: "echo", chorus: "mod", flanger: "mod", phaser: "mod", tremolo: "mod", wah: "mod",
         analog: "heat", drive: "heat", tubeamp: "heat", preamp: "heat", postamp: "heat", exciter: "heat", antifeedback: "guard", desquash: "guard", pitch: "tune", barrier: "heat", sampler: "echo" })
     readonly property string family: families[fx] || ""
     // THE FINISH, as on real rack gear: reverbs brushed aluminium, delays the deep green enamel of tape echoes, modulation midnight blue,
@@ -58,7 +58,8 @@ Popup {
         isoeq: [["LOW", [0, 1, 2]], ["LOW MID", [3, 4]], ["HIGH MID", [5, 6, 7]], ["HIGH", [8, 9]], ["STAGE", [10, 11, 12]]],
         mod: [["MODE", [0]], ["LFO", [1, 2, 5]], ["REGEN", [3]], ["BBD", [4, 6]]],
         opto: [["LEVELING", [0, 1]], ["MODE", [2]], ["SIDECHAIN", [3]]], glue: [["THRESHOLD", [0, 1]], ["TIMING", [2, 3]], ["OUTPUT", [4, 5]]],
-        tape: [["RECORD", [0]], ["TRANSPORT", [1, 3]], ["ALIGNMENT", [2]], ["REPRO", [4]]], transient: [["SHAPE", [0, 1]], ["OUTPUT", [2]]], deesser: [["DETECT", [0, 1]], ["REDUCE", [2]], ["MONITOR", [3]]] })
+        tape: [["RECORD", [0]], ["TRANSPORT", [1, 3]], ["ALIGNMENT", [2]], ["REPRO", [4]]], transient: [["SHAPE", [0, 1]], ["OUTPUT", [2]]], deesser: [["DETECT", [0, 1]], ["REDUCE", [2]], ["MONITOR", [3]]],
+        maximizer: [["LOUDNESS", [0]], ["CEILING", [1]], ["RELEASE", [2]]], multiband: [["CROSSOVER", [0, 1]], ["BANDS", [2, 3, 4]], ["DYNAMICS", [5, 6]]], imager: [["WIDTH", [0, 1]], ["SPLIT", [2]], ["OUTPUT", [3]]], autopan: [["MOTION", [0, 1]], ["WAVE", [2]]], doubler: [["VOICES", [0, 1]], ["STEREO", [2]], ["TONE", [3]]] })
     readonly property var sections: { const n = params.length; if (!n) return []; const l = layouts[fx]; if (l) return l
         const out = [], m = Math.min(n, 24); for (let i = 0; i < m; i += 4) { const idx = []; for (let j = i; j < Math.min(m, i + 4); j++) idx.push(j); out.push([(i + 1) + " – " + Math.min(m, i + 4), idx]) } return out }
     readonly property int mixIndex: fx && params.length ? params.length - 1 : -1
@@ -240,16 +241,19 @@ Popup {
                         Text { anchors.horizontalCenter: parent.horizontalCenter; y: 6; text: "AMFB  X1"; color: ed.ink; font.family: ed.face1; style: Text.Sunken; styleColor: ed.hi; font.pixelSize: 17; font.weight: Font.Bold; font.letterSpacing: 2 }
                         Image { anchors.horizontalCenter: parent.horizontalCenter; y: 28; width: 40; height: 40; source: "qrc:/qt/qml/AmixOS/skin/badge.png"; smooth: true; mipmap: true }
                         Text { anchors.horizontalCenter: parent.horizontalCenter; y: 68; width: parent.width - 6; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap; text: ed.title.toUpperCase(); color: ed.ink; font.family: ed.face1; style: Text.Sunken; styleColor: ed.hi; font.pixelSize: 12; font.weight: Font.Bold; font.letterSpacing: 1 }
-                        Image { anchors.horizontalCenter: parent.horizontalCenter; y: 100; width: 70; height: 70; source: ed.bypass ? "qrc:/qt/qml/AmixOS/skin/lamp-off.png" : "qrc:/qt/qml/AmixOS/skin/lamp-on.png"; smooth: true }
-                        Item { anchors.horizontalCenter: parent.horizontalCenter; y: 156; width: 128; height: 44   // the ON / OFF switch: marks with a ring (off) and a dot (on), the miniature toggle between them
-                            Column { x: 4; y: 4; spacing: 2
-                                Row { anchors.horizontalCenter: parent.horizontalCenter; spacing: 3; Rectangle { width: 6; height: 6; radius: 3; color: "transparent"; border.color: ed.ink; border.width: 1.2 } Rectangle { width: 3; height: 3; radius: 1.5; y: 1.5; color: ed.ink } }
-                                Text { text: "OFF"; color: ed.ink; font.family: ed.face1; font.pixelSize: 10; font.weight: Font.DemiBold; style: Text.Sunken; styleColor: ed.hi } }
-                            Image { anchors.horizontalCenter: parent.horizontalCenter; y: -6; width: 56; height: 56; source: "qrc:/qt/qml/AmixOS/skin/toggle.png"; smooth: true; mipmap: true; mirror: ed.bypass }
-                            Column { x: parent.width - width - 6; y: 4; spacing: 2
-                                Rectangle { anchors.horizontalCenter: parent.horizontalCenter; width: 6; height: 6; radius: 3; color: ed.ink; Rectangle { anchors.centerIn: parent; width: 2.4; height: 2.4; radius: 1.2; color: ed.bypass ? ed.ink : "#f5f5f0" } }
-                                Text { text: "ON"; color: ed.ink; font.family: ed.face1; font.pixelSize: 10; font.weight: Font.DemiBold; style: Text.Sunken; styleColor: ed.hi } }
-                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { engine.setPluginBypass(ed.strip, ed.slot, !ed.bypass); ed.bypass = !ed.bypass } } }
+                        // THE POWER BUTTON: a backlit round key with the power symbol; its ring glows while the unit works and goes dark when bypassed
+                        Item { id: pwr; objectName: "powerButton"; anchors.horizontalCenter: parent.horizontalCenter; y: 100; width: 76; height: 76
+                            readonly property bool on: !ed.bypass; readonly property color glow: "#46c8ff"
+                            Repeater { model: 3; delegate: Rectangle { anchors.centerIn: parent; width: 76 + index * 8; height: width; radius: width / 2; color: "transparent"; border.color: pwr.glow; border.width: 2; opacity: pwr.on ? 0.32 - index * 0.1 : 0 } }   // the halo
+                            Rectangle { anchors.centerIn: parent; width: 72; height: 72; radius: 36; border.color: "#05060a"; border.width: 1.5   // the bezel
+                                gradient: Gradient { GradientStop { position: 0; color: "#d4d8de" } GradientStop { position: 0.5; color: "#8a9099" } GradientStop { position: 1; color: "#4a4f57" } } }
+                            Rectangle { anchors.centerIn: parent; width: 60; height: 60; radius: 30; border.color: pwr.on ? pwr.glow : "#2a2e35"; border.width: 2.5   // the key
+                                gradient: Gradient { GradientStop { position: 0; color: pa.pressed ? "#0b0d10" : "#2a2e35" } GradientStop { position: 1; color: pa.pressed ? "#181b20" : "#0e1013" } } }
+                            Canvas { id: pwrIcon; anchors.centerIn: parent; width: 30; height: 30; readonly property bool on: pwr.on; onOnChanged: requestPaint(); Component.onCompleted: requestPaint()
+                                onPaint: { const c = getContext("2d"); c.reset(); c.strokeStyle = on ? "#bfeeff" : "#59606a"; c.lineWidth = 3; c.lineCap = "round"
+                                    c.beginPath(); c.arc(15, 16, 11, -Math.PI / 2 + 0.75, Math.PI * 1.5 - 0.75, false); c.stroke(); c.beginPath(); c.moveTo(15, 2); c.lineTo(15, 14); c.stroke() } }
+                            MouseArea { id: pa; anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { engine.setPluginBypass(ed.strip, ed.slot, !ed.bypass); ed.bypass = !ed.bypass } } }
+                        Text { anchors.horizontalCenter: parent.horizontalCenter; y: 182; text: ed.bypass ? "BYPASSED" : "ACTIVE"; color: ed.bypass ? "#8a9099" : "#46c8ff"; font.family: ed.face1; font.pixelSize: 10; font.weight: Font.Bold; font.letterSpacing: 2 }
                         Text { anchors.horizontalCenter: parent.horizontalCenter; y: 204; horizontalAlignment: Text.AlignHCenter; text: "AMFB AUDIO\n" + (ed.fx ? "CH " + (ed.strip + 1) + " · SLOT " + (ed.slot + 1) : (ed.kind.indexOf("vst2:") === 0 ? "VST2" : "VST3") + " HOSTED"); color: ed.ink; font.family: ed.face1; style: Text.Sunken; styleColor: ed.hi; font.pixelSize: 9; font.letterSpacing: 2; lineHeight: 1.2 } }
                     // the meter and BLEND
                     Column { spacing: 6; width: 150
