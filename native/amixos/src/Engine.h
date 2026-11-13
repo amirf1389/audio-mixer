@@ -239,7 +239,13 @@ class Engine : public QObject {
   Q_PROPERTY(QString micOffNote READ micOffNote NOTIFY stateChanged)   // set when the last open left a headset microphone off (WASAPI)
   QString micOffNote() const { return micOffNote_; }
   Q_INVOKABLE QVariantList dacsFound() const;                    // DAC detection: [{backend, id, name, outChannels, rate, maxRate, current}]
-  Q_INVOKABLE bool openDac(const QString& backend, const QString& id, int frames);   // outputs only, exactly this DAC
+  // outputs only, exactly this DAC; rate 0 = its own rate (any up to 1100 kHz may be asked; the DAC says whether it takes it), bits 0 = automatic,
+  // 16 / 24 / 32 integer, -32 float. A chosen rate or word length opens WASAPI exclusively (bit-perfect: Windows' mixer does not convert it).
+  Q_INVOKABLE bool openDac(const QString& backend, const QString& id, int frames, double rate = 0, int bits = 0);
+  Q_PROPERTY(double dacRate READ dacRate WRITE setDacRate NOTIFY recordChanged)
+  double dacRate() const { return settings_.value("audio/dacRate", 0).toDouble(); } void setDacRate(double v) { settings_.setValue("audio/dacRate", std::clamp(v, 0.0, 1100000.0)); emit recordChanged(); }
+  Q_PROPERTY(int dacBits READ dacBits WRITE setDacBits NOTIFY recordChanged)
+  int dacBits() const { return settings_.value("audio/dacBits", 0).toInt(); } void setDacBits(int v) { settings_.setValue("audio/dacBits", v); emit recordChanged(); }
   // DSP MODE: "digital" = the mix leaves the master exactly as computed; "analog" = a gentle soft saturation on the master (unity gain for quiet
   // signals, peaks rounded off the way an analogue output stage does), independent of the MASTERING switch
   Q_PROPERTY(QString dspMode READ dspMode WRITE setDspMode NOTIFY masterChainChanged)
@@ -590,6 +596,7 @@ class Engine : public QObject {
   double masterDb_ = 0; bool masterLim_ = true; double masterCeil_ = -0.5, masterRel_ = 100;
   static constexpr int kOutputs = 32;
   int inRoute_[kStrips] = {}; int outRoute_[kOutputs] = {}; int devIn_ = 0, devOut_ = 0; QString inDevName_, outDevName_; void rememberDeviceNames(const std::string& backend, const std::string& in, const std::string& out);
+  int openBits_ = 0; bool openExclusive_ = false;
   bool spkOn_ = false; QVariantMap spkSaved_; void feedSpeakers(int strip);
   QVariantMap license_; int licensedChannels_ = 10;
   struct EqPresetUi { QString name; am::dsp::EqBand bands[10]; int hpOrder = 0; double hpFreq = 80; int lpOrder = 0; double lpFreq = 16000; bool used = false; };

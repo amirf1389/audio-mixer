@@ -87,13 +87,24 @@ Item {
                                 Text { Layout.fillWidth: true; text: modelData.name; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; elide: Text.ElideRight }
                                 Text { text: modelData.inChannels + modelData.outChannels === 0 ? i18n.t("in use elsewhere: channels are read when you press OPEN", i18n.lang) : modelData.inChannels + i18n.t(" in / ", i18n.lang) + modelData.outChannels + i18n.t(" out", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                                 Btn { objectName: "asioOpen_" + index; label: modelData.current ? i18n.t("ON · TURN OFF", i18n.lang) : i18n.t("OPEN", i18n.lang); on: true; onColor: modelData.current ? Theme.emerald : Theme.cyan; onClicked: { if (modelData.current) engine.stop(); else engine.openAsioDriver(modelData.id, 0) } } } }
+                        // THE DAC'S CLOCK AND WORD LENGTH: its own rate, the usual rates up to 768 kHz, 1100 kHz, or any typed rate (8 .. 1100 kHz); bits AUTO / 16 / 24 / 32 / 32 FLOAT
+                        RowLayout { objectName: "dacFormat"; visible: engine.dacsFound().length > 0 && (engine.devices, true); spacing: 4
+                            Text { text: i18n.t("DAC RATE", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
+                            Repeater { model: [0, 44100, 48000, 96000, 192000, 384000, 768000, 1100000]
+                                delegate: Btn { label: modelData === 0 ? i18n.t("OWN", i18n.lang) : (modelData % 1000 ? (modelData / 1000).toFixed(1) : modelData / 1000) + "k"; on: engine.dacRate === modelData; onClicked: engine.dacRate = modelData } }
+                            TextField { objectName: "dacCustomRate"; implicitWidth: 64; implicitHeight: 22; font.family: Theme.mono; font.pixelSize: 9; placeholderText: i18n.t("kHz", i18n.lang)
+                                validator: DoubleValidator { bottom: 8; top: 1100; decimals: 3; notation: DoubleValidator.StandardNotation }
+                                onAccepted: { const k = Number(text.replace(",", ".")); if (k >= 8 && k <= 1100) engine.dacRate = Math.round(k * 1000) } }
+                            Text { text: i18n.t("BITS", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
+                            Repeater { model: [[0, "AUTO"], [16, "16"], [24, "24"], [32, "32"], [-32, "32F"]]
+                                delegate: Btn { label: i18n.t(modelData[1], i18n.lang); on: engine.dacBits === modelData[0]; onClicked: engine.dacBits = modelData[0] } } }
                         Repeater { model: { engine.devices; engine.running; return engine.dacsFound() }
                             delegate: RowLayout { Layout.fillWidth: true; spacing: 6
                                 Rectangle { width: 6; height: 6; radius: 3; color: modelData.current ? Theme.emerald : Theme.ov(0.2) }
                                 Text { text: i18n.t("DAC", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                                 Text { Layout.fillWidth: true; text: modelData.name; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; elide: Text.ElideRight }
                                 Text { text: modelData.backend.toUpperCase() + " · " + modelData.outChannels + i18n.t(" out", i18n.lang) + " · " + (modelData.maxRate / 1000) + " kHz"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
-                                Btn { objectName: "dacOpen_" + index; label: modelData.current ? i18n.t("ON · TURN OFF", i18n.lang) : i18n.t("OPEN", i18n.lang); on: true; onColor: modelData.current ? Theme.emerald : Theme.cyan; onClicked: { if (modelData.current) engine.stop(); else engine.openDac(modelData.backend, modelData.id, settings.defaultFrames) } } } }
+                                Btn { objectName: "dacOpen_" + index; label: modelData.current ? i18n.t("ON · TURN OFF", i18n.lang) : i18n.t("OPEN", i18n.lang); on: true; onColor: modelData.current ? Theme.emerald : Theme.cyan; onClicked: { if (modelData.current) engine.stop(); else engine.openDac(modelData.backend, modelData.id, settings.defaultFrames, engine.dacRate, engine.dacBits) } } } }
                         Text { visible: engine.asioDrivers().length === 0 && (engine.devices, true); text: i18n.t("No ASIO driver found on this computer. Install the interface's own ASIO driver, then press RESCAN.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 } } } }
             Card { Head { text: i18n.t("CLOCK & BLOCK", i18n.lang) }
                 KV { k: "SAMPLE RATE"; v: engine.running ? engine.sampleRate + " Hz" : "—" }

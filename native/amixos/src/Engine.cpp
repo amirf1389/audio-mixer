@@ -137,7 +137,7 @@ bool Engine::open(const QString& backend, const QString& inDevice, const QString
   }
   if (micAccessOff() && inCh > 0 && backend != "asio") { inCh = 0; inDev.clear(); micOffNote_ = QStringLiteral("MIC ACCESS OFF: no microphone is opened on Windows audio. Outputs only."); }
   rt_ = std::make_unique<am::Runtime>(kStrips);
-  am::DeviceConfig cfg; cfg.backend = backend.isEmpty() ? "auto" : backend.toStdString(); cfg.inDevice = inDev.toStdString(); cfg.outDevice = outDevice.toStdString();
+  am::DeviceConfig cfg; cfg.backend = backend.isEmpty() ? "auto" : backend.toStdString(); cfg.bits = openBits_; if (openExclusive_) cfg.exclusive = true; cfg.inDevice = inDev.toStdString(); cfg.outDevice = outDevice.toStdString();
   cfg.sampleRate = sampleRate > 0 ? sampleRate : 48000; cfg.frames = static_cast<unsigned>(frames > 0 ? frames : 256); blockFrames_ = static_cast<int>(cfg.frames); cfg.inChannels = inCh; cfg.outChannels = outChannels;
   devIn_ = std::clamp(inCh, 0, kStrips); devOut_ = std::clamp(outChannels, 0, kOutputs);
   std::string err; nullInputFor(cfg); rememberDeviceNames(cfg.backend, cfg.inDevice, cfg.outDevice);
@@ -692,10 +692,11 @@ QVariantList Engine::dacsFound() const {
     m["current"] = running() && dacOpenId_ == d["backend"].toString() + "|" + d["id"].toString(); l << m; }
   return l;
 }
-bool Engine::openDac(const QString& backendName, const QString& id, int frames) {
+bool Engine::openDac(const QString& backendName, const QString& id, int frames, double askRate, int bits) {
   for (const QVariant& v : devices_) { const QVariantMap d = v.toMap(); if (d["kind"].toString() != "dac" || d["backend"].toString() != backendName || d["id"].toString() != id) continue;
-    const double rate = d["defaultRate"].toDouble() > 0 ? d["defaultRate"].toDouble() : 48000.0;
-    const bool ok = open(backendName, QString(), id, rate, frames > 0 ? frames : 256, 0, std::min(32, std::max(2, d["outChannels"].toInt()))); dacOpenId_ = ok ? backendName + "|" + id : QString(); emit devicesChanged(); return ok; }
+    const double rate = askRate >= 8000 && askRate <= 1100000 ? askRate : d["defaultRate"].toDouble() > 0 ? d["defaultRate"].toDouble() : 48000.0;
+    openBits_ = bits; openExclusive_ = backendName == "wasapi" && (askRate > 0 || bits != 0);
+    const bool ok = open(backendName, QString(), id, rate, frames > 0 ? frames : 256, 0, std::min(32, std::max(2, d["outChannels"].toInt()))); openBits_ = 0; openExclusive_ = false; dacOpenId_ = ok ? backendName + "|" + id : QString(); emit devicesChanged(); return ok; }
   status_ = QStringLiteral("That DAC is not in the list any more: press RESCAN."); emit stateChanged(); return false;
 }
 // MANUAL: the drivers are only listed (discovery); nothing is picked or opened until the operator chooses one
