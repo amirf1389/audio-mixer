@@ -33,7 +33,7 @@ Popup {
     readonly property color red: "#b91c1c"
     // THE LOOK OF EACH FAMILY: reverbs steel blue, delays sage green, modulation lavender, saturation and amps copper, the feedback killer signal red,
     // everything else the cream plate. tint lies over the plate; view names the live display the panel carries.
-    readonly property var families: ({ reverb: "space", hall: "space", room: "space", delay: "echo", syncdelay: "echo", chorus: "mod", flanger: "mod", phaser: "mod", tremolo: "mod", wah: "mod",
+    readonly property var families: ({ mod: "mod", mseq: "heat", isoeq: "guard", reverb: "space", hall: "space", room: "space", delay: "echo", syncdelay: "echo", chorus: "mod", flanger: "mod", phaser: "mod", tremolo: "mod", wah: "mod",
         analog: "heat", drive: "heat", tubeamp: "heat", preamp: "heat", postamp: "heat", exciter: "heat", antifeedback: "guard", desquash: "guard", pitch: "tune", barrier: "heat", sampler: "echo" })
     readonly property string family: families[fx] || ""
     // THE FINISH, as on real rack gear: reverbs brushed aluminium, delays the deep green enamel of tape echoes, modulation midnight blue,
@@ -51,24 +51,31 @@ Popup {
         tubeamp: [["PRE AMP", [0]], ["TONE STACK", [1, 2, 3]], ["POWER AMP", [4, 5]]], preamp: [["INPUT", [0, 1]], ["COLOUR", [2]], ["OUTPUT", [3]]], postamp: [["OUTPUT", [0]], ["TONE", [1]], ["PROTECT", [2]]],
         hall: [["SPACE", [0, 1]], ["DAMPING", [2]], ["PRE DELAY", [3]], ["MOD", [4]]], room: [["SPACE", [0, 1]], ["DAMPING", [2]], ["REFLECTIONS", [3]]], reverb: [["REVERBERATION", [0, 1]], ["PRE DELAY", [2]], ["STEREO", [3]]],
         delay: [["ECHO", [0, 1]], ["TONE", [2]], ["STEREO", [3]]], syncdelay: [["TIME", [0, 1]], ["ECHO", [2, 3]], ["STEREO", [4]]], analog: [["INPUT STAGE", [0, 1]], ["TRANSFORMER", [2]], ["OUTPUT", [3]]], pitch: [["PITCH", [0, 1]], ["GRAIN", [2]]], barrier: [["LOUDNESS", [0, 3]], ["RUN-UP", [4]], ["IMPACT", [1]], ["SMOOTH", [2]]], dualeq: [["LISTEN FOR", [0, 1]], ["HOW FAR", [2]], ["HOW FAST", [3]]], antifeedback: [["DETECT", [0]], ["NOTCH", [1, 2]], ["MODE", [3]]], chorus: [["MOD", [0, 1]], ["STEREO", [2]]], flanger: [["MOD", [0, 1]], ["REGEN", [2]]], phaser: [["MOD", [0, 1]], ["REGEN", [2]]], tremolo: [["MOD", [0, 1]], ["WAVE", [2]]],
-        wah: [["FOLLOWER", [0, 1]], ["FILTER", [2]]], crusher: [["DIGITAL", [0, 1]], ["FILTER", [2]]], exciter: [["HARMONICS", [0, 2]], ["TUNE", [1]]], drive: [["VALVE", [0]], ["TONE", [1]], ["OUTPUT", [2]]] })
+        wah: [["FOLLOWER", [0, 1]], ["FILTER", [2]]], crusher: [["DIGITAL", [0, 1]], ["FILTER", [2]]], exciter: [["HARMONICS", [0, 2]], ["TUNE", [1]]], drive: [["VALVE", [0]], ["TONE", [1]], ["OUTPUT", [2]]], sampler: [["SAMPLE", [0]], ["TRANSPORT", [1, 2]], ["LEVEL", [3]]],
+        mseq: [["INPUT", [0, 1]], ["LOW", [2, 3, 4]], ["CONTOUR", [5, 6, 7, 8]], ["MID", [9, 10, 11, 12]], ["HIGH", [13, 14, 15]], ["FILTERS", [16, 17]], ["SATURATION", [18, 19]], ["M / S", [20, 21, 22]], ["MOVE", [23, 24]], ["OUTPUT", [25]]],
+        isoeq: [["LOW", [0, 1, 2]], ["LOW MID", [3, 4]], ["HIGH MID", [5, 6, 7]], ["HIGH", [8, 9]], ["STAGE", [10, 11, 12]]],
+        mod: [["MODE", [0]], ["LFO", [1, 2, 5]], ["REGEN", [3]], ["BBD", [4, 6]]] })
     readonly property var sections: { const n = params.length; if (!n) return []; const l = layouts[fx]; if (l) return l
         const out = [], m = Math.min(n, 24); for (let i = 0; i < m; i += 4) { const idx = []; for (let j = i; j < Math.min(m, i + 4); j++) idx.push(j); out.push([(i + 1) + " – " + Math.min(m, i + 4), idx]) } return out }
     readonly property int mixIndex: fx && params.length ? params.length - 1 : -1
     function openFor(strip_, slot_, kind_, title_) { strip = strip_; slot = slot_; kind = kind_; title = title_; presets = engine.rackPresets(kind_); presetAt = -1; stateA = null; stateB = null; side = "A"; reload(); x = Math.max(4, (parent.width - width) / 2); y = Math.max(4, (parent.height - height) / 2); open() }
+    onWidthChanged: if (visible && parent) { x = Math.max(4, (parent.width - width) / 2); y = Math.max(4, Math.min(y, parent.height - height - 4)) }
     function reload() { params = engine.pluginParams(strip, slot); const p = engine.plugins(strip)[slot]; bypass = p ? p.bypass : false; rev++ }
     function setParam(i, v) { engine.setPluginParam(strip, slot, params[i].id, v); const t = engine.pluginParams(strip, slot); if (t.length === params.length) params = t; presetAt = -1 }
     // the printed ends of a knob's scale: what the plug-in itself calls its lowest and highest position, without the unit when both share it
     function ends(i, hi) { if (!params[i]) return ""; rev; if (fx === "sampler" && i === 0) return hi ? "100" : "1";   // the sample number, not two long names
     const lo = engine.pluginParamText(strip, slot, params[i].id, 0), up = engine.pluginParamText(strip, slot, params[i].id, 1); if (!lo && !up) return hi ? "10" : "0"
-        const strip_ = function (t) { return t.replace(/^\+/, "+").replace(/\.0(?=\D|$)/, "").replace(/ ?(dBFS|dB|Hz|ms|%|s|bit)$/, "") }; return hi ? up.replace(/\.0(?=\D|$)/, "") : strip_(lo) }
+        const strip_ = function (t) { return t.replace(/^\+/, "+").replace(/\.0(?=\D|$)/, "").replace(/ ?(dBFS|dB|Hz|ms|%|s|bit)$/, "") }; const t = hi ? up.replace(/\.0(?=\D|$)/, "") : strip_(lo); return !/\d/.test(t) && t.length > 5 ? t.substring(0, 4) + "." : t }   // a word-switch (CONSTANT, VIBRATO ...) is shortened so the two ends do not run into each other
     function snapshot() { const a = []; for (let i = 0; i < params.length; i++) a.push(params[i].value); return a }
     function restore(a) { if (!a) return; for (let i = 0; i < params.length && i < a.length; i++) engine.setPluginParam(strip, slot, params[i].id, a[i]); reload() }
     function pick(s) { if (s === side) return; if (side === "A") stateA = snapshot(); else stateB = snapshot(); side = s; restore(s === "A" ? stateA : stateB) }
     function preset(step) { if (!presets.length) return; presetAt = (presetAt + step + presets.length) % presets.length; engine.applyRackPreset(strip, slot, presets[presetAt].id); const at = presetAt; reload(); presetAt = at }
     readonly property real fit: Math.min(1, (parent ? parent.width - 12 : 1200) / (face.implicitWidth + 36))
     width: (face.implicitWidth + 36) * fit; height: (panelH + 36) * fit
-    readonly property int panelH: 262
+    readonly property int rowH: 262
+    readonly property int rows: sections.length > 8 ? 2 : 1   // a unit with many controls stands in two rows
+    readonly property int panelH: rowH * rows
+    readonly property var sectionRows: { if (rows < 2) return [sections]; const h = Math.ceil(sections.length / 2); return [sections.slice(0, h), sections.slice(h)] }
     modal: false; dim: true; closePolicy: Popup.CloseOnEscape; padding: 0
     Overlay.modeless: Rectangle { color: "#b3000000" }   // the console steps back while a plug-in is open: the unit is seen against dark, not against the mixer
     Timer { interval: 40; running: ed.visible; repeat: true; onTriggered: { const m = engine.meters[ed.strip]; const l = m ? (m.inDb !== undefined ? m.inDb : m.peakDb) : -120; ed.level = l; const tgt = ed.bypass ? -20 : Math.max(-20, Math.min(3, l + 12)); ed.needle += (tgt - ed.needle) * (tgt > ed.needle ? 0.35 : 0.12); vu.requestPaint() } }
@@ -122,8 +129,11 @@ Popup {
                             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: ed.pick(ed.side === "A" ? "B" : "A") } }
                         Text { anchors.horizontalCenter: parent.horizontalCenter; y: 184; width: parent.width - 16; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap; text: "TWO SETTINGS\nTO COMPARE"; color: ed.ink; opacity: 0.8; font.family: ed.face1; font.pixelSize: 8; font.letterSpacing: 1; lineHeight: 1.15; style: Text.Sunken; styleColor: ed.hi } }
                     // the sections of the effect
-                    Repeater { model: ed.sections
-                        delegate: Section { head: modelData[0]; readonly property var idx: modelData[1]; readonly property int cols: Math.ceil(idx.length / 2); width: Math.max(96, cols * 86 + 14, modelData[0].length * 8.4 + 26)
+                    Column { spacing: 6
+                    Repeater { model: ed.sectionRows
+                    delegate: Row { spacing: 6; readonly property var rowSecs: modelData
+                    Repeater { model: rowSecs
+                        delegate: Section { head: modelData[0]; readonly property var idx: modelData[1]; readonly property int cols: Math.ceil(idx.length / 2); height: ed.rowH - 16 - (ed.rows > 1 ? 3 : 0); width: Math.max(96, cols * 86 + 14, modelData[0].length * 8.4 + 26)
                             Grid { anchors.horizontalCenter: parent.horizontalCenter; y: idx.length <= cols ? 56 : 4; columns: cols; columnSpacing: 2; rowSpacing: 6
                                 Repeater { model: idx
                                     delegate: Column { width: 84; spacing: 0; readonly property int pi: modelData
@@ -131,7 +141,7 @@ Popup {
                                         Text { anchors.horizontalCenter: parent.horizontalCenter; text: ed.params[pi] ? ed.params[pi].text : ""; color: ed.ink; font.family: ed.face1; style: Text.Sunken; styleColor: ed.hi; font.pixelSize: 9 }
                                         Knob { anchors.horizontalCenter: parent.horizontalCenter; width: 84; size: 44; vintage: true; paper: ed.ink; minText: ed.ends(pi, 0); maxText: ed.ends(pi, 1); label: ""; valueText: ""
                                             defaultValue: ed.params[pi] ? ed.params[pi]["default"] : 0.5; readonly property int rev: ed.rev; onRevChanged: sync(); Component.onCompleted: sync()
-                                            function sync() { if (ed.params[pi]) value = ed.params[pi].value } onMoved: function (v) { ed.setParam(pi, v) } height: 74 } } } } } }
+                                            function sync() { if (ed.params[pi]) value = ed.params[pi].value } onMoved: function (v) { ed.setParam(pi, v) } height: 74 } } } } } } } } }
                     // SYNC DELAY: the time read-out. The delay in milliseconds, the tempo, the note keys, TAP and the echoes as they die away
                     // the SAMPLE PLAYER's own file: any WAV / FLAC / AIFF / M4A / MP3 ... instead of a built-in sample
                     Section { id: smpFile; objectName: "samplerFile"; visible: ed.fx === "sampler"; head: "YOUR FILE"; width: 236

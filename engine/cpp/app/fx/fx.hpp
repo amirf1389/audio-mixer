@@ -235,4 +235,49 @@ class Hall final : public Fdn { public: explicit Hall(double fs) : Fdn(fs, 8, tr
 class Room final : public Fdn { public: explicit Room(double fs) : Fdn(fs, 4, false) { for (int i = 0; i < 4; ++i) k_[i] = knobDef(i); } const char* kind() const override { return "room"; } const char* name() const override { return "ROOM REVERB"; }
  protected: int count() const override { return 4; } const char* knobId(int i) const override { static const char* k[] = {"size", "decay", "damp", "early"}; return k[i]; } const char* knobTitle(int i) const override { static const char* k[] = {"SIZE", "DECAY", "DAMP", "EARLY"}; return k[i]; } double knobDef(int i) const override { static const double d[] = {0.4, 0.3, 0.5, 0.5}; return d[i]; } };
 
+// A plug-in with many controls (more than Simple's six): its controls are listed once as {id, title, default}.
+class Multi : public Effect {
+ public:
+  struct Def { const char* id; const char* title; double def; };
+  Multi(double fs, const Def* d, int n) : fs_(fs > 0 ? fs : 48000), d_(d), n_(n < 32 ? n : 32) { for (int i = 0; i < n_; ++i) k_[i] = d_[i].def; }
+  std::vector<Param> params() const override { std::vector<Param> v; for (int i = 0; i < n_; ++i) v.push_back({d_[i].id, d_[i].title, "", k_[i].load(), d_[i].def}); return v; }
+  void set(const std::string& id, double v) override { for (int i = 0; i < n_; ++i) if (id == d_[i].id) { k_[i] = v < 0 ? 0 : v > 1 ? 1 : v; dirty_ = true; } }
+  void setSampleRate(double fs) override { fs_ = fs > 0 ? fs : 48000; dirty_ = true; reset(); }
+ protected:
+  int index(const std::string& id) const { for (int i = 0; i < n_; ++i) if (id == d_[i].id) return i; return -1; }
+  double fs_; const Def* d_; int n_; std::atomic<double> k_[32]; std::atomic<bool> dirty_{true};
+};
+// One RBJ biquad (transposed direct form II), one channel.
+struct Biquad { double b0 = 1, b1 = 0, b2 = 0, a1 = 0, a2 = 0, z1 = 0, z2 = 0;
+  float run(float x) { const double y = b0 * x + z1; z1 = b1 * x - a1 * y + z2; z2 = b2 * x - a2 * y; return static_cast<float>(y); }
+  void clear() { z1 = z2 = 0; }
+  enum Kind { Peak, LowShelf, HighShelf, HighPass, LowPass, BandPass };
+  void design(Kind k, double fs, double f, double q, double db); };
+
+// MS COLOUR EQ: a parallel saturating mid-side equalizer in the manner of a mastering rack. The signal is split into MID (what both
+// sides share) and SIDE (what differs); four bands (LOW shelf, CONTOUR and MID bells with BANDWIDTH, HIGH shelf) each have a
+// M/S OFFSET that sends the band to the side only (-), both (centre) or the mid only (+). HPF / LPF trim the ends. SATURATION runs in
+// parallel: DRIVE sets how hard a band around FOCUS is pushed through a valve-like curve before it is blended back; XFORMER adds the
+// soft asymmetric colour of an output transformer to the whole signal. SOLO (OFF, MID, SIDE, DELTA = only what the unit changed),
+// MONO (the side below this frequency is made mono, OFF .. 300 Hz) and WIDTH (0 .. 200 %). MOVE: an LFO (RATE, DEPTH) that breathes the width.
+class MsEq final : public Multi { public: explicit MsEq(double fs); const char* kind() const override { return "mseq"; } const char* name() const override { return "MS COLOUR EQ"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
+  static double offsetMid(double v) { const double o = v * 2 - 1; return o < 0 ? 1 + o : 1; } static double offsetSide(double v) { const double o = v * 2 - 1; return o > 0 ? 1 - o : 1; }
+ private: void design(); Biquad m_[6], s_[6], hp_[2], lp_[2], satM_, satS_, mono_; double ph_ = 0; float dcX_[2] = {0, 0}, dcY_[2] = {0, 0}; };
+// ISO EQ 10: a ten-band graphic equalizer on the ISO octave centres (31.5 Hz .. 16 kHz), +-12 dB per band. Q: CONSTANT (every band one
+// octave wide) or PROPORTIONAL (narrow at small boosts, wider as the slider moves, like a console graphic). COLOUR adds the gentle
+// saturation of an analog output stage; OUTPUT -12 .. +12 dB.
+class IsoEq final : public Multi { public: explicit IsoEq(double fs); const char* kind() const override { return "isoeq"; } const char* name() const override { return "ISO EQ 10"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
+  static constexpr double kFreq[10] = {31.5, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000};
+  static double gainDb(double v) { return (v - 0.5) * 24.0; }
+ private: void design(); Biquad f_[2][10]; };
+// MOD MACHINE: one modulation unit with five modes: CHORUS, FLANGER, PHASER, TREMOLO and VIBRATO, on a bucket-brigade style delay
+// (the wet path is darkened by TONE and softly saturated by COLOUR like an analog delay chip). RATE 0.05 .. 10 Hz, DEPTH, FEEDBACK
+// (flanger and phaser), SPREAD (the right side's LFO 0 .. 180 degrees behind the left: wide stereo motion).
+class ModMachine final : public Multi { public: explicit ModMachine(double fs); const char* kind() const override { return "mod"; } const char* name() const override { return "MOD MACHINE"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
+  static int modeOf(double v) { const int m = static_cast<int>((v < 0 ? 0 : v > 1 ? 1 : v) * 4.999); return m; }
+ private: std::vector<float> buf_[2]; std::size_t w_ = 0; double ph_ = 0; float fb_[2] = {0, 0}, lp_[2] = {0, 0}, ap_[2][6] = {}; };
+
 }  // namespace am::fx
