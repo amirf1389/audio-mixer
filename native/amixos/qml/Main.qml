@@ -37,7 +37,7 @@ ApplicationWindow {
                 Row {   // FILE · VIEW · INFO: the menus of a desktop program, in the console's own look
                     objectName: "menuBar"; spacing: 2
                     component MenuBtn: Rectangle { property string label; property var menu; implicitWidth: mbT.implicitWidth + 18; height: 24; width: implicitWidth; radius: 4; color: (menu && menu.visible) || mbH.hovered ? Theme.ov(0.10) : "transparent"
-                        Text { id: mbT; anchors.centerIn: parent; text: parent.label; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 1 }
+                        Text { id: mbT; anchors.centerIn: parent; text: i18n.t(parent.label, i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 1 }
                         HoverHandler { id: mbH } MouseArea { anchors.fill: parent; onClicked: parent.menu.popup(parent, 0, parent.height + 2) } }
                     component MItem: MenuItem { font.family: Theme.mono; font.pixelSize: 10; implicitHeight: 26 }
                     MenuBtn { objectName: "menuFile"; label: i18n.t("FILE", i18n.lang); menu: fileMenu }
@@ -127,7 +127,7 @@ ApplicationWindow {
                     contentItem: Text { leftPadding: 8; rightPadding: 24; text: langBox.displayText; color: Theme.ink; font: langBox.font; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight }
                     model: i18n.languages; textRole: "name"
                     displayText: (i18n.languages.find(function (l) { return l.code === i18n.lang }) || { name: "English" }).name + (i18n.autoTranslated ? " (auto)" : "")
-                    delegate: ItemDelegate { width: parent.width; text: modelData.name + (modelData.auto ? i18n.t("  · auto", i18n.lang) : ""); font.family: Theme.mono; font.pixelSize: 10 }
+                    delegate: ItemDelegate { width: parent.width; text: i18n.t(modelData.name ?? "", i18n.lang) + (modelData.auto ? i18n.t("  · auto", i18n.lang) : ""); font.family: Theme.mono; font.pixelSize: 10 }
                     Component.onCompleted: currentIndex = i18n.languages.findIndex(function (l) { return l.code === i18n.lang })
                     onActivated: i18n.lang = i18n.languages[currentIndex].code
                 }
@@ -268,7 +268,7 @@ ApplicationWindow {
                 ColumnLayout { id: feedCol; width: parent.width; spacing: 8
                     Text { visible: updater.features.length === 0; text: i18n.t("No feature feed yet: CHECK NOW on SETTINGS reads the signed manifest.", i18n.lang); color: Theme.muted; font.family: Theme.sans; font.pixelSize: 11 }
                     Repeater { model: updater.features; delegate: ColumnLayout { Layout.fillWidth: true; spacing: 3
-                        RowLayout { Text { text: modelData.version; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 10; font.bold: true } Text { text: modelData.date + "  " + modelData.title; color: Theme.muted; font.family: Theme.sans; font.pixelSize: 11 } }
+                        RowLayout { Text { text: modelData.version; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 10; font.bold: true } Text { text: modelData.date + "  " + i18n.t(modelData.title ?? "", i18n.lang); color: Theme.muted; font.family: Theme.sans; font.pixelSize: 11 } }
                         Repeater { model: modelData.items; delegate: Text { Layout.fillWidth: true; text: "• " + modelData; color: Theme.ink; font.family: Theme.sans; font.pixelSize: 11; wrapMode: Text.WordWrap } } } } } }
             RowLayout { Item { Layout.fillWidth: true }
                 Text { visible: updater.state === "downloading"; text: i18n.t("DOWNLOADING ", i18n.lang) + updater.progress + " %"; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }

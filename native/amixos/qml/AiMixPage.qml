@@ -48,7 +48,7 @@ Item {
                     RowLayout { Head { text: i18n.t("AUTO LEVEL", i18n.lang) } Item { Layout.fillWidth: true } Btn { label: engine.autoLevelOn ? i18n.t("ON", i18n.lang) : i18n.t("OFF", i18n.lang); on: engine.autoLevelOn; onColor: Theme.emerald; onClicked: engine.autoLevelOn = !engine.autoLevelOn } }
                     Text { text: i18n.t("TARGET", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.letterSpacing: 1 }
                     Flow { Layout.fillWidth: true; spacing: 4
-                        Repeater { model: [{ t: "-14 STREAMING", v: -14 }, { t: "-16 PODCAST", v: -16 }, { t: "-18 LIVE", v: -18 }, { t: "-23 BROADCAST", v: -23 }]; delegate: Btn { label: modelData.t; on: Math.abs(engine.autoLevelTarget - modelData.v) < 0.01; onColor: Theme.cyan; onClicked: engine.autoLevelTarget = modelData.v } } }
+                        Repeater { model: [{ t: "-14 STREAMING", v: -14 }, { t: "-16 PODCAST", v: -16 }, { t: "-18 LIVE", v: -18 }, { t: "-23 BROADCAST", v: -23 }]; delegate: Btn { label: i18n.t(modelData.t ?? "", i18n.lang); on: Math.abs(engine.autoLevelTarget - modelData.v) < 0.01; onColor: Theme.cyan; onClicked: engine.autoLevelTarget = modelData.v } } }
                     RowLayout { spacing: 8; Layout.fillWidth: true
                         Slider { Layout.fillWidth: true; from: -30; to: -6; stepSize: 0.5; value: engine.autoLevelTarget; onMoved: engine.autoLevelTarget = value }
                         Text { Layout.preferredWidth: 70; text: engine.autoLevelTarget.toFixed(1) + i18n.t(" LUFS", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; horizontalAlignment: Text.AlignRight } }

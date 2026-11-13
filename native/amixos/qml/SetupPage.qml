@@ -39,7 +39,7 @@ Rectangle {
                     Text { text: i18n.t("LANGUAGE", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.letterSpacing: 2 }
                     Flickable { Layout.fillWidth: true; Layout.fillHeight: true; contentHeight: langFlow.implicitHeight; clip: true; boundsBehavior: Flickable.StopAtBounds; ScrollBar.vertical: ScrollBar { policy: ScrollBar.AlwaysOn }
                         Flow { id: langFlow; width: parent.width - 14; spacing: 6
-                            Repeater { model: i18n.languages; delegate: Btn { label: modelData.name; on: i18n.lang === modelData.code; onClicked: i18n.lang = modelData.code } } } }
+                            Repeater { model: i18n.languages; delegate: Btn { label: i18n.t(modelData.name ?? "", i18n.lang); on: i18n.lang === modelData.code; onClicked: i18n.lang = modelData.code } } } }
                     Small { text: i18n.t("22 languages are checked by people; the rest are machine translations and say so in the menu. Right-to-left languages mirror the layout.", i18n.lang) } }
                 // 1 TERMS
                 ColumnLayout { spacing: 12
@@ -74,7 +74,7 @@ Rectangle {
                     Text { text: i18n.t("INTERFACES FOUND: ", i18n.lang) + engine.devices.length; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.letterSpacing: 2 }
                     Flickable { Layout.fillWidth: true; Layout.fillHeight: true; contentHeight: devCol.implicitHeight; clip: true
                         ColumnLayout { id: devCol; width: parent.width; spacing: 2
-                            Repeater { model: engine.devices; delegate: Text { text: Theme.kindIcon(modelData.kind) + " " + modelData.backend.toUpperCase() + "  " + i18n.t(Theme.kindName(modelData.kind), i18n.lang) + "  " + modelData.name + "  (" + modelData.inChannels + i18n.t(" in / ", i18n.lang) + modelData.outChannels + i18n.t(" out)", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; elide: Text.ElideRight; Layout.fillWidth: true } } } } }
+                            Repeater { model: engine.devices; delegate: Text { text: Theme.kindIcon(modelData.kind) + " " + modelData.backend.toUpperCase() + "  " + i18n.t(Theme.kindName(modelData.kind), i18n.lang) + "  " + i18n.t(modelData.name ?? "", i18n.lang) + "  (" + modelData.inChannels + i18n.t(" in / ", i18n.lang) + modelData.outChannels + i18n.t(" out)", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; elide: Text.ElideRight; Layout.fillWidth: true } } } } }
                 // 3 CONSOLE
                 ColumnLayout { spacing: 12
                     Head { text: i18n.t("Console defaults", i18n.lang) }
@@ -107,7 +107,7 @@ Rectangle {
                         Btn { label: i18n.t("SET PIN", i18n.lang); on: pin1.text.length >= 4 && pin1.text === pin2.text && (access.pinIsDefault || pin0.text.length >= 4); onColor: Theme.cyan; onClicked: { if (!on) return; if (access.setPin(access.pinIsDefault ? "1234" : pin0.text, pin1.text)) { pin0.text = ""; pin1.text = ""; pin2.text = "" } } }
                         Text { text: access.pinIsDefault ? i18n.t("default 1234 still active", i18n.lang) : i18n.t("PIN set", i18n.lang); color: access.pinIsDefault ? Theme.amber : Theme.emerald; font.family: Theme.mono; font.pixelSize: 8 } }
                     Text { text: i18n.t("PROFILE", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.letterSpacing: 2 }
-                    Repeater { model: access.roles; delegate: RowLayout { spacing: 8; Btn { label: modelData.name; on: access.role === modelData.id; onClicked: access.setRole(modelData.id, access.pinIsDefault ? "1234" : "") } Text { text: modelData.blurb; color: Theme.muted; font.family: Theme.sans; font.pixelSize: 11; Layout.fillWidth: true; elide: Text.ElideRight } } }
+                    Repeater { model: access.roles; delegate: RowLayout { spacing: 8; Btn { label: i18n.t(modelData.name ?? "", i18n.lang); on: access.role === modelData.id; onClicked: access.setRole(modelData.id, access.pinIsDefault ? "1234" : "") } Text { text: modelData.blurb; color: Theme.muted; font.family: Theme.sans; font.pixelSize: 11; Layout.fillWidth: true; elide: Text.ElideRight } } }
                     Small { text: access.message } }
                 // 5 UPDATES
                 ColumnLayout { spacing: 12

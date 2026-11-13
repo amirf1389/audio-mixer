@@ -20,7 +20,7 @@ Flickable {
                         Layout.fillWidth: true; implicitHeight: 300; radius: 8; color: Qt.rgba(0, 0, 0, 0.25); border.color: modelData.members.length ? Qt.rgba(0.984, 0.749, 0.141, 0.4) : Theme.lineSoft
                         ColumnLayout {
                             anchors.fill: parent; anchors.margins: 6; spacing: 4
-                            TextInput { Layout.fillWidth: true; text: modelData.name; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; horizontalAlignment: Text.AlignHCenter; selectByMouse: true; onEditingFinished: engine.setDcaName(modelData.index, text) }
+                            TextInput { Layout.fillWidth: true; text: i18n.t(modelData.name ?? "", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; horizontalAlignment: Text.AlignHCenter; selectByMouse: true; onEditingFinished: engine.setDcaName(modelData.index, text) }
                             Fader { Layout.fillHeight: true; Layout.alignment: Qt.AlignHCenter; value: modelData.db; onMoved: function (db) { engine.setDcaLevel(modelData.index, db) } }
                             Text { Layout.alignment: Qt.AlignHCenter; text: Theme.dbText(modelData.db); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8 }
                             Rectangle { Layout.fillWidth: true; implicitHeight: 18; radius: 3; color: modelData.mute ? Theme.danger : Theme.ov(0.08); Text { anchors.centerIn: parent; text: "M"; color: modelData.mute ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setDcaMute(modelData.index, !modelData.mute) } }
@@ -54,7 +54,7 @@ Flickable {
                     delegate: Rectangle {
                         Layout.fillWidth: true; implicitHeight: 44; radius: 8; color: modelData.active ? Theme.danger : Qt.rgba(0, 0, 0, 0.25); border.color: mgPick.sel === modelData.index ? Theme.ink : (modelData.members.length ? Qt.rgba(1, 0.165, 0.373, 0.4) : Theme.lineSoft)
                         ColumnLayout { anchors.centerIn: parent; spacing: 1
-                            Text { Layout.alignment: Qt.AlignHCenter; text: modelData.name; color: modelData.active ? "#000" : Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
+                            Text { Layout.alignment: Qt.AlignHCenter; text: i18n.t(modelData.name ?? "", i18n.lang); color: modelData.active ? "#000" : Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
                             Text { Layout.alignment: Qt.AlignHCenter; text: modelData.members.length + i18n.t(" ch", i18n.lang); color: modelData.active ? "#000" : Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
                         MouseArea { anchors.fill: parent; acceptedButtons: Qt.LeftButton | Qt.RightButton; onClicked: function (m) { if (m.button === Qt.RightButton) mgPick.sel = modelData.index; else engine.setMuteGroupActive(modelData.index, !modelData.active) } }
                     }

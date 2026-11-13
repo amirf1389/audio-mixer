@@ -67,7 +67,7 @@ Item {
                             RowLayout { spacing: 8
                                 Text { text: i18n.t("MIXER FOUND", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; font.letterSpacing: 1.5 }
                                 Text { text: modelData.maker + " " + modelData.model; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 10; font.bold: true }
-                                Text { text: modelData.inChannels + i18n.t(" in / ", i18n.lang) + modelData.outChannels + i18n.t(" out · ASIO: ", i18n.lang) + modelData.name; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
+                                Text { text: modelData.inChannels + i18n.t(" in / ", i18n.lang) + modelData.outChannels + i18n.t(" out · ASIO: ", i18n.lang) + i18n.t(modelData.name ?? "", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                                 Item { Layout.fillWidth: true }
                                 Btn { label: modelData.running ? i18n.t("ASSIGN CHANNELS AGAIN", i18n.lang) : i18n.t("CONNECT + ASSIGN CHANNELS", i18n.lang); on: true; onColor: modelData.running ? Theme.emerald : Theme.cyan
                                     onClicked: { if (modelData.running) engine.assignMixerChannels(modelData.prefix, true); else engine.connectMixer(modelData.id, settings.defaultFrames) } } }
@@ -84,7 +84,7 @@ Item {
                         Repeater { model: { engine.devices; engine.running; return engine.asioDrivers() }
                             delegate: RowLayout { Layout.fillWidth: true; spacing: 6
                                 Rectangle { width: 6; height: 6; radius: 3; color: modelData.current ? Theme.emerald : Theme.ov(0.2) }
-                                Text { Layout.fillWidth: true; text: modelData.name; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; elide: Text.ElideRight }
+                                Text { Layout.fillWidth: true; text: i18n.t(modelData.name ?? "", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; elide: Text.ElideRight }
                                 Text { text: modelData.inChannels + modelData.outChannels === 0 ? i18n.t("in use elsewhere: channels are read when you press OPEN", i18n.lang) : modelData.inChannels + i18n.t(" in / ", i18n.lang) + modelData.outChannels + i18n.t(" out", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                                 Btn { objectName: "asioOpen_" + index; label: modelData.current ? i18n.t("ON · TURN OFF", i18n.lang) : i18n.t("OPEN", i18n.lang); on: true; onColor: modelData.current ? Theme.emerald : Theme.cyan; onClicked: { if (modelData.current) engine.stop(); else engine.openAsioDriver(modelData.id, 0) } } } }
                         // THE DAC'S CLOCK AND WORD LENGTH: its own rate, the usual rates up to 768 kHz, 1100 kHz, or any typed rate (8 .. 1100 kHz); bits AUTO / 16 / 24 / 32 / 32 FLOAT
@@ -102,7 +102,7 @@ Item {
                             delegate: RowLayout { Layout.fillWidth: true; spacing: 6
                                 Rectangle { width: 6; height: 6; radius: 3; color: modelData.current ? Theme.emerald : Theme.ov(0.2) }
                                 Text { text: i18n.t("DAC", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-                                Text { Layout.fillWidth: true; text: modelData.name; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; elide: Text.ElideRight }
+                                Text { Layout.fillWidth: true; text: i18n.t(modelData.name ?? "", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; elide: Text.ElideRight }
                                 Text { text: modelData.backend.toUpperCase() + " · " + modelData.outChannels + i18n.t(" out", i18n.lang) + " · " + (modelData.maxRate / 1000) + " kHz"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                                 Btn { objectName: "dacOpen_" + index; label: modelData.current ? i18n.t("ON · TURN OFF", i18n.lang) : i18n.t("OPEN", i18n.lang); on: true; onColor: modelData.current ? Theme.emerald : Theme.cyan; onClicked: { if (modelData.current) engine.stop(); else engine.openDac(modelData.backend, modelData.id, settings.defaultFrames, engine.dacRate, engine.dacBits) } } } }
                         Text { visible: engine.asioDrivers().length === 0 && (engine.devices, true); text: i18n.t("No ASIO driver found on this computer. Install the interface's own ASIO driver, then press RESCAN.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 } } } }
@@ -139,7 +139,7 @@ Item {
                     Btn { objectName: "dspAnalog"; label: i18n.t("ANALOG", i18n.lang); on: engine.dspMode === "analog"; onColor: Theme.amber; onClicked: engine.dspMode = "analog" } }
                 Note { text: i18n.t("DIGITAL leaves the mix exactly as computed. ANALOG rounds the peaks off softly on the master, the way an analogue output stage does; quiet passages are untouched.", i18n.lang) }
                 RowLayout { spacing: 6; Text { text: i18n.t("DITHER", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; Layout.preferredWidth: 120 }
-                    Repeater { model: [{ t: "FLOAT (none)", v: 0 }, { t: "16-BIT", v: 16 }, { t: "24-BIT", v: 24 }]; delegate: Btn { label: modelData.t; on: engine.outputBits === modelData.v; onColor: Theme.cyan; onClicked: engine.outputBits = modelData.v } } }
+                    Repeater { model: [{ t: "FLOAT (none)", v: 0 }, { t: "16-BIT", v: 16 }, { t: "24-BIT", v: 24 }]; delegate: Btn { label: i18n.t(modelData.t ?? "", i18n.lang); on: engine.outputBits === modelData.v; onColor: Theme.cyan; onClicked: engine.outputBits = modelData.v } } }
                 Note { text: i18n.t("DC removal is a 5 Hz high-pass on the master before the auto level and the limiter: an offset from a player or a plug-in never eats headroom. Dither (TPDF) is the last thing before the converter: pick the depth your device takes in integer mode (WASAPI shared and most ASIO drivers take float: leave FLOAT). Denormals are flushed in the DSP already.", i18n.lang) } }
         } }
 }

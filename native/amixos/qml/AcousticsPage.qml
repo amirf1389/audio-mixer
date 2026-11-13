@@ -141,7 +141,7 @@ Item {
                     Rectangle { Layout.preferredWidth: 210; Layout.fillHeight: true; radius: Theme.radius; color: Theme.card; border.color: Theme.line; clip: true
                         ListView { anchors.fill: parent; anchors.margins: 8; model: page.roomData.modes || []; spacing: 1
                             header: Text { text: page.t("ROOM MODES"); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; bottomPadding: 4 }
-                            delegate: Text { text: modelData.freq.toFixed(1) + " Hz   " + modelData.n + "   " + modelData.kind; color: modelData.kind === "axial" ? Theme.orange : Theme.muted; font.family: Theme.mono; font.pixelSize: 8 } } } }
+                            delegate: Text { text: modelData.freq.toFixed(1) + " Hz   " + i18n.t(modelData.n ?? "", i18n.lang) + "   " + modelData.kind; color: modelData.kind === "axial" ? Theme.orange : Theme.muted; font.family: Theme.mono; font.pixelSize: 8 } } } }
                 Note { text: page.t("A rectangular room with rigid walls: the mode frequencies are exact for that shape, the response is a prediction (modal sum with the damping of the RT60). Move the speaker and the listener to see which modes each place excites; real rooms differ, so confirm with a sweep.") } }
             // 4 AUTO EQ
             ColumnLayout { spacing: 8

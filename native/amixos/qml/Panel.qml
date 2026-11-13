@@ -25,8 +25,8 @@ Rectangle {
             Layout.fillWidth: true
             ColumnLayout {
                 spacing: 2
-                Text { text: panel.title; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 12; font.bold: true; font.letterSpacing: 1.5 }
-                Text { visible: panel.subtitle.length > 0; text: panel.subtitle; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+                Text { text: i18n.t(panel.title, i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 12; font.bold: true; font.letterSpacing: 1.5 }
+                Text { visible: panel.subtitle.length > 0; text: i18n.t(panel.subtitle, i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9; wrapMode: Text.WordWrap; Layout.fillWidth: true }
             }
         }
         ColumnLayout { id: body; Layout.fillWidth: true; spacing: 8 }

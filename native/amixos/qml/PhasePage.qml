@@ -77,7 +77,7 @@ Item {
                     RowLayout { spacing: 6
                         Repeater { model: [{ t: "MONO", v: 0 }, { t: "NARROW", v: 0.5 }, { t: "NORMAL", v: 1 }, { t: "WIDE", v: 1.5 }, { t: "MAX", v: 2 }]
                             delegate: Rectangle { implicitWidth: 60; implicitHeight: 22; radius: 4; color: Math.abs(engine.width - modelData.v) < 0.005 ? Theme.amber : Theme.ov(0.06); border.color: Theme.lineSoft
-                                Text { anchors.centerIn: parent; text: modelData.t; color: Math.abs(engine.width - modelData.v) < 0.005 ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.width = modelData.v } } } }
+                                Text { anchors.centerIn: parent; text: i18n.t(modelData.t ?? "", i18n.lang); color: Math.abs(engine.width - modelData.v) < 0.005 ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.width = modelData.v } } } }
                     Text { Layout.fillWidth: true; text: i18n.t("Mid/side on the master before the fader: 100 % leaves the mix as it is, below narrows it toward mono, above lifts the side signal (watch the correlation).", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.WordWrap }
                     Item { Layout.fillHeight: true }
                 }

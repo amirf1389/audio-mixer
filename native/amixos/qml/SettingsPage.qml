@@ -13,7 +13,7 @@ Flickable {
         Rectangle { width: 16; height: 16; radius: 8; y: 2; x: parent.on ? parent.width - 18 : 2; color: parent.on ? "#000" : Theme.muted; Behavior on x { NumberAnimation { duration: 90 } } }
         MouseArea { anchors.fill: parent; onClicked: parent.toggled(!parent.on) } }
     component Choice: RowLayout { property var options: []; property var value; signal picked(var v); spacing: 3
-        Repeater { model: parent.options; delegate: Rectangle { implicitWidth: ct.implicitWidth + 12; implicitHeight: 20; radius: 4; color: parent.parent.value === modelData.v ? Theme.amber : Theme.ov(0.08); Text { id: ct; anchors.centerIn: parent; text: modelData.t; color: parent.parent.parent.value === modelData.v ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.parent.picked(modelData.v) } } } }
+        Repeater { model: parent.options; delegate: Rectangle { implicitWidth: ct.implicitWidth + 12; implicitHeight: 20; radius: 4; color: parent.parent.value === modelData.v ? Theme.amber : Theme.ov(0.08); Text { id: ct; anchors.centerIn: parent; text: i18n.t(modelData.t ?? "", i18n.lang); color: parent.parent.parent.value === modelData.v ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.parent.picked(modelData.v) } } } }
     GridLayout {
         id: col; width: parent.width - 20; x: 10; y: 10; columns: page.width > 1150 ? 2 : 1; columnSpacing: 10; rowSpacing: 10
         Panel {
@@ -82,7 +82,7 @@ Flickable {
             subtitle: "22 languages come from the web console and were checked; 58 are machine translations marked \"auto\" until a native speaker reviews them. Right-to-left languages mirror the layout."
             Flow { Layout.fillWidth: true; spacing: 4
                 Repeater { model: i18n.languages; delegate: Rectangle { implicitWidth: lt.implicitWidth + 14; implicitHeight: 22; radius: 4; color: i18n.lang === modelData.code ? Theme.amber : Theme.ov(0.06)
-                    Text { id: lt; anchors.centerIn: parent; text: modelData.name + (modelData.auto ? i18n.t(" ·auto", i18n.lang) : ""); color: i18n.lang === modelData.code ? "#000" : (modelData.auto ? Theme.muted : Theme.ink); font.family: Theme.mono; font.pixelSize: 8 }
+                    Text { id: lt; anchors.centerIn: parent; text: i18n.t(modelData.name ?? "", i18n.lang) + (modelData.auto ? i18n.t(" ·auto", i18n.lang) : ""); color: i18n.lang === modelData.code ? "#000" : (modelData.auto ? Theme.muted : Theme.ink); font.family: Theme.mono; font.pixelSize: 8 }
                     MouseArea { anchors.fill: parent; onClicked: i18n.lang = modelData.code } } }
             }
         }
@@ -97,7 +97,7 @@ Flickable {
                 Rectangle { implicitWidth: 90; implicitHeight: 26; radius: 5; color: Theme.amber; Text { anchors.centerIn: parent; text: i18n.t("ADD FOLDER", i18n.lang); color: "#000"; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: { settings.addVstDir(vstDirIn.text); vstDirIn.text = "" } } }
                 Rectangle { implicitWidth: 80; implicitHeight: 26; radius: 5; color: Qt.rgba(0, 0.95, 1, 0.18); border.color: Theme.cyan; Text { anchors.centerIn: parent; text: i18n.t("RESCAN", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: settings.rescanVst() } } }
             Flow { Layout.fillWidth: true; spacing: 4
-                Repeater { model: engine.vstCatalog(); delegate: Rectangle { implicitWidth: vt.implicitWidth + 12; implicitHeight: 18; radius: 3; color: Qt.rgba(0.6, 0.4, 1, 0.18); border.color: "#a78bfa"; Text { id: vt; anchors.centerIn: parent; text: modelData.format + " · " + modelData.name + (modelData.vendor ? " · " + modelData.vendor : ""); color: "#a78bfa"; font.family: Theme.mono; font.pixelSize: 7 } } }
+                Repeater { model: engine.vstCatalog(); delegate: Rectangle { implicitWidth: vt.implicitWidth + 12; implicitHeight: 18; radius: 3; color: Qt.rgba(0.6, 0.4, 1, 0.18); border.color: "#a78bfa"; Text { id: vt; anchors.centerIn: parent; text: modelData.format + " · " + i18n.t(modelData.name ?? "", i18n.lang) + (modelData.vendor ? " · " + modelData.vendor : ""); color: "#a78bfa"; font.family: Theme.mono; font.pixelSize: 7 } } }
                 Text { visible: engine.vstCatalog().length === 0; text: i18n.t("No VST3 plug-ins found yet.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
             Text { text: i18n.t("VST is a trademark of Steinberg Media Technologies GmbH. A mix OS hosts VST3 plug-ins through the VST 3 interface headers under their licence (drivers/vst3/sdk/LICENSE.txt) and VST2 plug-ins through the public VST 2.4 binary interface written clean-room (no Steinberg VST2 SDK file is used or shipped). It is not badged as VST and ships no plug-ins.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap; Layout.fillWidth: true }
         }
@@ -107,10 +107,10 @@ Flickable {
             subtitle: "Everything A mix OS keeps lives in " + settings.dataFolder + " and the settings file. Nothing is sent anywhere."
             Repeater { model: settings.dataFiles; delegate: RowLayout { Layout.fillWidth: true; spacing: 8
                 Rectangle { implicitWidth: 8; implicitHeight: 8; radius: 4; color: modelData.exists ? Theme.emerald : Theme.lineSoft }
-                Text { text: modelData.name; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; Layout.preferredWidth: 130 }
+                Text { text: i18n.t(modelData.name ?? "", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; Layout.preferredWidth: 130 }
                 Text { text: modelData.path; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; Layout.preferredWidth: 300; elide: Text.ElideMiddle }
                 Text { text: modelData.exists ? (modelData.bytes / 1024).toFixed(1) + i18n.t(" KB", i18n.lang) : "—"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8; Layout.preferredWidth: 60 }
-                Text { text: modelData.what; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; Layout.fillWidth: true; elide: Text.ElideRight } } }
+                Text { text: i18n.t(modelData.what ?? "", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; Layout.fillWidth: true; elide: Text.ElideRight } } }
             RowLayout { Layout.fillWidth: true; spacing: 6
                 Rectangle { implicitWidth: 120; implicitHeight: 26; radius: 5; color: Theme.amber; Text { anchors.centerIn: parent; text: i18n.t("EXPORT CONSOLE", i18n.lang); color: "#000"; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: settings.exportConsole(ioPath.text) } }
                 Rectangle { implicitWidth: 120; implicitHeight: 26; radius: 5; color: Qt.rgba(0, 0.95, 1, 0.18); border.color: Theme.cyan; Text { anchors.centerIn: parent; text: i18n.t("IMPORT CONSOLE", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: settings.importConsole(ioPath.text) } }
@@ -131,7 +131,7 @@ Flickable {
             subtitle: "AmF X1 " + appVersion + " • native console by AMFB Audio • C++20 engine + Qt Quick interface, no web runtime"
             Text { text: i18n.t("Engine drivers built into this copy: ", i18n.lang) + engine.backends.join(", ").toUpperCase() + i18n.t(" • strips: ", i18n.lang) + engine.strips + i18n.t(" • edition: ", i18n.lang) + engine.edition; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9 }
             Flow { Layout.fillWidth: true; spacing: 4
-                Repeater { model: engine.pages; delegate: Rectangle { implicitWidth: t.implicitWidth + 12; implicitHeight: 18; radius: 3; color: modelData.ready ? Qt.rgba(0.063, 0.725, 0.506, 0.2) : Theme.ov(0.05); Text { id: t; anchors.centerIn: parent; text: modelData.text; color: modelData.ready ? Theme.emerald : Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } } } }
+                Repeater { model: engine.pages; delegate: Rectangle { implicitWidth: t.implicitWidth + 12; implicitHeight: 18; radius: 3; color: modelData.ready ? Qt.rgba(0.063, 0.725, 0.506, 0.2) : Theme.ov(0.05); Text { id: t; anchors.centerIn: parent; text: i18n.t(modelData.text ?? "", i18n.lang); color: modelData.ready ? Theme.emerald : Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } } } }
         }
     }
 }

@@ -32,7 +32,7 @@ Flickable {
                 delegate: Rectangle {
                     Layout.fillWidth: true; implicitHeight: 92; radius: Theme.radius; color: Theme.card; border.color: tileArea.containsMouse ? Theme.orange : Theme.line
                     ColumnLayout { anchors.fill: parent; anchors.margins: 14; spacing: 4
-                        Text { text: modelData.t; color: Theme.ink; font.family: Theme.sans; font.pixelSize: 15; font.bold: true }
+                        Text { text: i18n.t(modelData.t ?? "", i18n.lang); color: Theme.ink; font.family: Theme.sans; font.pixelSize: 15; font.bold: true }
                         Text { text: modelData.s; color: Theme.muted; font.family: Theme.sans; font.pixelSize: 11; wrapMode: Text.WordWrap; Layout.fillWidth: true } }
                     MouseArea { id: tileArea; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: page.go(modelData.id) }
                 }

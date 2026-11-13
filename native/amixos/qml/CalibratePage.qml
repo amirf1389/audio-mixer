@@ -86,7 +86,7 @@ Item {
                     Text { text: page.logRows.length + i18n.t(" s logged · max momentary ", i18n.lang) + (page.maxM > -119 ? page.maxM.toFixed(1) + i18n.t(" LUFS", i18n.lang) : "—") + i18n.t(" · max true peak ", i18n.lang) + (page.maxTp > -119 ? page.maxTp.toFixed(1) + i18n.t(" dBTP", i18n.lang) : "—"); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 } }
                 RowLayout { spacing: 14
                     Repeater { model: [{ t: "MOMENTARY", v: page.tel.momentary, u: " LUFS" }, { t: "SHORT TERM", v: page.tel.shortTerm, u: " LUFS" }, { t: "INTEGRATED", v: page.tel.integrated, u: " LUFS" }, { t: "LRA", v: page.tel.lra, u: " LU" }, { t: "TRUE PEAK", v: page.tel.truePeak, u: " dBTP" }]
-                        delegate: ColumnLayout { spacing: 1; Text { text: modelData.t; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } Text { text: (modelData.v > -119 ? modelData.v.toFixed(1) : "—") + modelData.u; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 10; font.bold: true } } } }
+                        delegate: ColumnLayout { spacing: 1; Text { text: i18n.t(modelData.t ?? "", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } Text { text: (modelData.v > -119 ? modelData.v.toFixed(1) : "—") + modelData.u; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 10; font.bold: true } } } }
                 Note { text: i18n.t("One row per second: seconds, momentary, short-term, integrated, LRA, true peak. The CSV goes to ", i18n.lang) + settings.dataFolder + i18n.t(" (open it from SETTINGS). ", i18n.lang) + settings.message }
             }
             Card {

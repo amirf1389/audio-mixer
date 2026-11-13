@@ -46,7 +46,7 @@ Popup {
     component Head: Text { color: Theme.muted; font.family: Theme.mono; font.pixelSize: 10; font.bold: true; font.letterSpacing: 2 }
     component Hint: Text { color: Theme.dim; font.family: Theme.mono; font.pixelSize: 9; wrapMode: Text.WordWrap }
     component Pill: Rectangle { property string label; property bool on: false; property color onColor: Theme.orange; signal clicked(); implicitWidth: Math.max(60, pl.implicitWidth + 20); implicitHeight: 26; radius: 6; color: on ? onColor : (ph.hovered ? Theme.ov(0.14) : Theme.ov(0.08)); border.color: on ? onColor : Theme.line
-        Text { id: pl; anchors.centerIn: parent; text: parent.label; color: parent.on ? "#000" : Theme.ink; font.family: Theme.mono; font.pixelSize: 10; font.bold: true } HoverHandler { id: ph } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
+        Text { id: pl; anchors.centerIn: parent; text: i18n.t(parent.label, i18n.lang); color: parent.on ? "#000" : Theme.ink; font.family: Theme.mono; font.pixelSize: 10; font.bold: true } HoverHandler { id: ph } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
     // a level meter with its scale: green to -9, amber to -1, red above
     component LevelBar: Rectangle { property real level: -120; implicitWidth: 12; radius: 3; color: Theme.deep; border.color: Theme.lineSoft
         Rectangle { anchors.bottom: parent.bottom; anchors.horizontalCenter: parent.horizontalCenter; anchors.bottomMargin: 1; width: parent.width - 2; height: Math.max(0, Math.min(1, (parent.level + 36) / 36)) * (parent.height - 2); radius: 2; color: parent.level > -1 ? Theme.danger : parent.level > -9 ? Theme.amber : Theme.emerald } }
@@ -54,7 +54,7 @@ Popup {
     component RedBar: Rectangle { property real red: 0; property real span: 12; implicitWidth: 12; radius: 3; color: Theme.deep; border.color: Theme.lineSoft
         Rectangle { anchors.top: parent.top; anchors.topMargin: 1; anchors.horizontalCenter: parent.horizontalCenter; width: parent.width - 2; height: Math.max(0, Math.min(1, parent.red / parent.span)) * (parent.height - 2); radius: 2; color: Theme.amber } }
     component Card: Rectangle { default property alias content: inner.data; property string title; property string note; Layout.fillHeight: true; radius: 10; color: Theme.ov(0.04); border.color: Theme.lineSoft
-        Head { x: 16; y: 12; text: parent.title }
+        Head { x: 16; y: 12; text: i18n.t(parent.title, i18n.lang) }
         Hint { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.margins: 14; horizontalAlignment: Text.AlignHCenter; text: parent.note; visible: text !== "" }
         Item { id: inner; anchors.fill: parent; anchors.topMargin: 36; anchors.bottomMargin: parent.note !== "" ? 40 : 10; anchors.leftMargin: 10; anchors.rightMargin: 10 } }
 

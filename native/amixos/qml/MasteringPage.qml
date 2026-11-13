@@ -33,7 +33,7 @@ Item {
         Rectangle { width: 4; height: parent.height - 16; y: 8; x: 4; radius: 2; color: card.on ? card.tint : Theme.ov(0.12) }
         ColumnLayout { id: body; anchors.fill: parent; anchors.margins: 12; anchors.leftMargin: 16; spacing: 8
             RowLayout { Layout.fillWidth: true; spacing: 8
-                Text { text: card.title; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
+                Text { text: i18n.t(card.title, i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
                 Text { text: card.sub; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; Layout.fillWidth: true; elide: Text.ElideRight }
                 Btn { label: card.on ? page.t("ON") : page.t("OFF"); on: card.on; onColor: card.tint; onClicked: card.toggled() } } } }
     ColumnLayout {

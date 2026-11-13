@@ -186,7 +186,7 @@ Flickable {
                         ColumnLayout { anchors.fill: parent; anchors.margins: 6; spacing: 1
                             RowLayout { Layout.fillWidth: true; spacing: 3
                                 Text { text: modelData.locked ? "🔒" : (modelData.empty ? "＋" : "✎"); color: cur ? "#000" : Theme.dim; font.pixelSize: 7 }
-                                Text { Layout.fillWidth: true; elide: Text.ElideRight; text: modelData.name; color: cur ? "#000" : (modelData.empty ? Theme.dim : Theme.ink); font.family: Theme.mono; font.pixelSize: 8; font.bold: true } }
+                                Text { Layout.fillWidth: true; elide: Text.ElideRight; text: i18n.t(modelData.name ?? "", i18n.lang); color: cur ? "#000" : (modelData.empty ? Theme.dim : Theme.ink); font.family: Theme.mono; font.pixelSize: 8; font.bold: true } }
                             Item { Layout.fillHeight: true }
                             Text { text: (modelData.locked ? i18n.t("FACTORY ", i18n.lang) : i18n.t("CUSTOM ", i18n.lang)) + modelData.slot + (modelData.empty ? i18n.t(" · empty", i18n.lang) : " · " + modelData.bands + i18n.t(" bands", i18n.lang)); color: cur ? "#222" : Theme.dim; font.family: Theme.mono; font.pixelSize: 6 } }
                         MouseArea { anchors.fill: parent; onClicked: { page.presetSel = modelData.slot; if (!modelData.empty) engine.applyEqPreset(modelData.slot, page.strip) }

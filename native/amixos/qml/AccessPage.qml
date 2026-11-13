@@ -28,7 +28,7 @@ Item {
                     Head { text: i18n.t("PERMISSION PERIMETERS", i18n.lang) }
                     GridLayout { columns: 1 + access.roles.length; columnSpacing: 6; rowSpacing: 4; Layout.fillWidth: true
                         Text { text: ""; Layout.preferredWidth: 260 }
-                        Repeater { model: access.roles; delegate: Text { text: modelData.name; color: access.role === modelData.id ? Theme.amber : Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; horizontalAlignment: Text.AlignHCenter; Layout.fillWidth: true } }
+                        Repeater { model: access.roles; delegate: Text { text: i18n.t(modelData.name ?? "", i18n.lang); color: access.role === modelData.id ? Theme.amber : Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; horizontalAlignment: Text.AlignHCenter; Layout.fillWidth: true } }
                         Repeater { model: access.perms.length * (1 + access.roles.length)
                             delegate: Item { readonly property int cols: 1 + access.roles.length; readonly property int c: index % cols; readonly property string pm: access.perms[Math.floor(index / cols)]; Layout.fillWidth: c > 0; Layout.preferredWidth: c === 0 ? 260 : 100; implicitHeight: 34
                                 Text { visible: c === 0; anchors.verticalCenter: parent.verticalCenter; text: pm.toUpperCase() + ":  " + page.permText[pm]; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; width: parent.width; elide: Text.ElideRight }

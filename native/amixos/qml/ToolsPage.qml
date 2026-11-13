@@ -65,7 +65,7 @@ Item {
                         Text { Layout.preferredWidth: 60; text: engine.clickBpm.toFixed(0) + i18n.t(" BPM", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; horizontalAlignment: Text.AlignRight } }
                     RowLayout { spacing: 6
                         Text { text: i18n.t("SIGNATURE", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-                        Repeater { model: [{ t: "4/4", b: 4 }, { t: "3/4", b: 3 }, { t: "6/8", b: 6 }, { t: "2/2", b: 2 }, { t: "5/4", b: 5 }, { t: "7/8", b: 7 }]; delegate: Btn { label: modelData.t; on: engine.clickBeats === modelData.b; onClicked: engine.clickBeats = modelData.b } }
+                        Repeater { model: [{ t: "4/4", b: 4 }, { t: "3/4", b: 3 }, { t: "6/8", b: 6 }, { t: "2/2", b: 2 }, { t: "5/4", b: 5 }, { t: "7/8", b: 7 }]; delegate: Btn { label: i18n.t(modelData.t ?? "", i18n.lang); on: engine.clickBeats === modelData.b; onClicked: engine.clickBeats = modelData.b } }
                         Item { Layout.fillWidth: true }
                         Repeater { model: engine.clickBeats; delegate: Rectangle { width: 12; height: 12; radius: 6; color: engine.clickBeat === index + 1 ? (index === 0 ? Theme.amber : Theme.cyan) : Theme.ov(0.1) } } }
                     RowLayout { spacing: 8; Layout.fillWidth: true
@@ -83,7 +83,7 @@ Item {
                     Text { text: i18n.t("SIGNAL TYPE", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.letterSpacing: 1 }
                     Flow { Layout.fillWidth: true; spacing: 4
                         Repeater { model: [{ t: "1 kHz SINE", ty: 0, f: 1000 }, { t: "100 Hz SUB", ty: 0, f: 100 }, { t: "10 kHz AIR", ty: 0, f: 10000 }, { t: "PINK NOISE (RTA)", ty: 1, f: 0 }, { t: "WHITE NOISE", ty: 2, f: 0 }, { t: "POLARITY PULSE", ty: 3, f: 0 }]
-                            delegate: Btn { label: modelData.t; on: engine.testType === modelData.ty && (modelData.f === 0 || Math.abs(engine.testFreq - modelData.f) < 0.5); onColor: Theme.cyan; onClicked: { engine.testType = modelData.ty; if (modelData.f > 0) engine.testFreq = modelData.f } } } }
+                            delegate: Btn { label: i18n.t(modelData.t ?? "", i18n.lang); on: engine.testType === modelData.ty && (modelData.f === 0 || Math.abs(engine.testFreq - modelData.f) < 0.5); onColor: Theme.cyan; onClicked: { engine.testType = modelData.ty; if (modelData.f > 0) engine.testFreq = modelData.f } } } }
                     RowLayout { visible: engine.testType === 0; spacing: 8; Layout.fillWidth: true
                         Text { text: i18n.t("FREQ", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                         Slider { Layout.fillWidth: true; from: Math.log(20); to: Math.log(20000); value: Math.log(Math.max(20, engine.testFreq)); onMoved: engine.testFreq = Math.round(Math.exp(value)) }
@@ -156,7 +156,7 @@ Item {
                     Text { visible: page.report.length === 0; text: i18n.t("Press RUN FULL SCAN: the engine, the buffer, clipping, the interfaces and the licence are checked and each line says what to do.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 }
                     Repeater { model: page.report; delegate: RowLayout { spacing: 8
                         Rectangle { width: 10; height: 10; radius: 5; color: modelData.ok ? Theme.emerald : Theme.amber }
-                        Text { text: modelData.t; color: modelData.ok ? Theme.muted : Theme.ink; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.WordWrap; Layout.fillWidth: true } } }
+                        Text { text: i18n.t(modelData.t ?? "", i18n.lang); color: modelData.ok ? Theme.muted : Theme.ink; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.WordWrap; Layout.fillWidth: true } } }
                 }
             }
         }

@@ -78,7 +78,7 @@ Item {
                         RowLayout { anchors.fill: parent; anchors.margins: 8; spacing: 10
                             Text { text: (index + 1) + "."; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 }
                             ColumnLayout { Layout.fillWidth: true; spacing: 1
-                                Text { text: modelData.name; color: modelData.ok ? Theme.ink : Theme.danger; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; elide: Text.ElideRight; Layout.fillWidth: true }
+                                Text { text: i18n.t(modelData.name ?? "", i18n.lang); color: modelData.ok ? Theme.ink : Theme.danger; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; elide: Text.ElideRight; Layout.fillWidth: true }
                                 Text { text: modelData.ok ? modelData.path : modelData.error + "  ·  " + modelData.path; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; elide: Text.ElideMiddle; Layout.fillWidth: true } }
                             Text { text: modelData.seconds > 0 ? page.mmss(modelData.seconds) : ""; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                             Btn { label: i18n.t("PLAY", i18n.lang); on: true; onColor: Theme.emerald; onClicked: media.play(index) }

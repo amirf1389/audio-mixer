@@ -124,7 +124,7 @@ Popup {
     component Section: Rectangle { property string head; default property alias body: inner.data; height: ed.panelH - 16; radius: 12; border.color: "#05060a"; border.width: 1.5   // a dark inset panel in the brushed plate
         gradient: Gradient { GradientStop { position: 0; color: "#101216" } GradientStop { position: 1; color: "#1c1f25" } }
         Rectangle { anchors.fill: parent; anchors.margins: 1.5; radius: 11; color: "transparent"; border.color: "#14ffffff"; border.width: 1 }
-        Text { id: st; anchors.horizontalCenter: parent.horizontalCenter; y: 7; text: parent.head; color: ed.ink; font.family: ed.face1; style: Text.Sunken; styleColor: ed.hi; font.pixelSize: 11; font.weight: Font.DemiBold; font.letterSpacing: 1 }
+        Text { id: st; anchors.horizontalCenter: parent.horizontalCenter; y: 7; text: i18n.t(parent.head, i18n.lang); color: ed.ink; font.family: ed.face1; style: Text.Sunken; styleColor: ed.hi; font.pixelSize: 11; font.weight: Font.DemiBold; font.letterSpacing: 1 }
         Item { id: inner; x: 0; y: 26; width: parent.width; height: parent.height - 26 } }
     // one rack unit: brushed aluminium in the family's anodised colour, rack ears with their slots and screws, a bevel along the edges
     component RackUnit: Item { id: ru; default property alias body: plate.data; width: wood.width
@@ -150,7 +150,7 @@ Popup {
         MouseArea { id: lka; anchors.fill: parent; enabled: lk.enabled; cursorShape: Qt.PointingHandCursor; onClicked: lk.clicked() } }
     component Key: Item { property string label; signal clicked(); width: 30; height: 26
         Image { anchors.fill: parent; source: ka.pressed ? "qrc:/qt/qml/AmixOS/skin/key-down.png" : "qrc:/qt/qml/AmixOS/skin/key.png"; smooth: true }
-        Text { anchors.horizontalCenter: parent.horizontalCenter; y: (ka.pressed ? 4.5 : 3) + (parent.label === "✕" ? 2.5 : 0); text: parent.label; color: "#ece8dc"; font.pixelSize: parent.label === "✕" ? 9 : 14; font.bold: true }
+        Text { anchors.horizontalCenter: parent.horizontalCenter; y: (ka.pressed ? 4.5 : 3) + (parent.label === "✕" ? 2.5 : 0); text: i18n.t(parent.label, i18n.lang); color: "#ece8dc"; font.pixelSize: parent.label === "✕" ? 9 : 14; font.bold: true }
         MouseArea { id: ka; anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: parent.clicked() } }
     contentItem: Item {
         // MOVE: drag the unit by its top strip; it stays where it is put until it is closed
@@ -326,7 +326,7 @@ Popup {
                     Row { x: parent.width - 232; y: 14; spacing: 14
                         Repeater { model: [{ t: i18n.t("INPUT", i18n.lang), k: "in" }, { t: i18n.t("OUTPUT", i18n.lang), k: "out" }]
                             delegate: Column { spacing: 4; required property var modelData
-                                Text { anchors.horizontalCenter: parent.horizontalCenter; text: modelData.t; color: "#9fb7c9"; font.family: ed.face1; font.pixelSize: 10; font.weight: Font.DemiBold; font.letterSpacing: 1 }
+                                Text { anchors.horizontalCenter: parent.horizontalCenter; text: i18n.t(modelData.t ?? "", i18n.lang); color: "#9fb7c9"; font.family: ed.face1; font.pixelSize: 10; font.weight: Font.DemiBold; font.letterSpacing: 1 }
                                 Row { spacing: 4; anchors.horizontalCenter: parent.horizontalCenter
                                     Repeater { model: 2; delegate: Rectangle { width: 14; height: 150; color: "#0a0f14"; border.color: "#1f2b36"
                                         readonly property real db: modelData.k === "in" ? ed.inDb : ed.outDb

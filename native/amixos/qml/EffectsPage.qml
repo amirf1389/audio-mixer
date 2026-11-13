@@ -29,7 +29,7 @@ Item {
                 anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 6
                 Text { text: i18n.t("EFFECTS:", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
                 Repeater { model: engine.busState; delegate: Rectangle { implicitWidth: bl.implicitWidth + 16; implicitHeight: 20; radius: 4; color: page.bus === index ? Theme.amber : Theme.ov(0.06); border.color: modelData.fx !== "" ? Theme.violet : "transparent"
-                    Text { id: bl; anchors.centerIn: parent; text: modelData.name + (modelData.fx !== "" ? " ·" : ""); color: page.bus === index ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.bus = index } } }
+                    Text { id: bl; anchors.centerIn: parent; text: i18n.t(modelData.name ?? "", i18n.lang) + (modelData.fx !== "" ? " ·" : ""); color: page.bus === index ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.bus = index } } }
                 Item { Layout.fillWidth: true }
                 Rectangle { implicitWidth: 100; implicitHeight: 20; radius: 4; color: page.browse ? Theme.violet : Theme.ov(0.08); border.color: Theme.lineSoft
                     Text { anchors.centerIn: parent; text: i18n.t("300 PRESETS", i18n.lang); color: page.browse ? "#000" : Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.browse = !page.browse } }
@@ -48,7 +48,7 @@ Item {
                     Rectangle { Layout.fillWidth: true; implicitHeight: 30; radius: 6; color: page.fx.kind === "" ? Theme.ov(0.16) : Theme.ov(0.05); border.color: Theme.lineSoft
                         Text { anchors.centerIn: parent; text: i18n.t("NONE", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setBusFx(page.bus, "") } }
                     Repeater { model: page.catalog; delegate: Rectangle { Layout.fillWidth: true; implicitHeight: 30; radius: 6; color: page.fx.kind === modelData.kind ? Theme.violet : Theme.ov(0.05); border.color: Theme.lineSoft
-                        Text { anchors.centerIn: parent; text: modelData.name; color: page.fx.kind === modelData.kind ? "#000" : Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setBusFx(page.bus, modelData.kind) } } }
+                        Text { anchors.centerIn: parent; text: i18n.t(modelData.name ?? "", i18n.lang); color: page.fx.kind === modelData.kind ? "#000" : Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setBusFx(page.bus, modelData.kind) } } }
                     Item { Layout.fillHeight: true }
                     Text { Layout.fillWidth: true; text: i18n.t("Send strips to this bus on SEND TO (POST for effects). The wet signal returns to the master at RETURN and to the bus outputs ", i18n.lang) + (page.b ? page.b.outputs : "") + "."; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap }
                 }
@@ -72,7 +72,7 @@ Item {
                         delegate: Item { width: grid.cellWidth; height: grid.cellHeight
                             Rectangle { anchors.fill: parent; anchors.margins: 2; radius: 5; color: page.fx.preset === modelData.id ? Theme.violet : Theme.ov(0.05); border.color: page.fx.preset === modelData.id ? Theme.violet : Theme.lineSoft
                                 ColumnLayout { anchors.fill: parent; anchors.margins: 5; spacing: 0
-                                    Text { Layout.fillWidth: true; elide: Text.ElideRight; text: modelData.name; color: page.fx.preset === modelData.id ? "#000" : Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                                    Text { Layout.fillWidth: true; elide: Text.ElideRight; text: i18n.t(modelData.name ?? "", i18n.lang); color: page.fx.preset === modelData.id ? "#000" : Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                                     Text { text: "#" + modelData.id + " · " + modelData.kind + i18n.t(" · mix ", i18n.lang) + Math.round(modelData.mix * 100) + "%"; color: page.fx.preset === modelData.id ? "#222" : Theme.dim; font.family: Theme.mono; font.pixelSize: 6 } }
                                 MouseArea { anchors.fill: parent; onClicked: engine.applyFxPreset(page.bus, modelData.id) } } } }
                 }
@@ -97,9 +97,9 @@ Item {
                         model: page.fx.params
                         delegate: RowLayout {
                             Layout.fillWidth: true; spacing: 10
-                            Text { Layout.preferredWidth: 90; text: modelData.title.toUpperCase(); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                            Text { Layout.preferredWidth: 90; text: i18n.t(modelData.title ?? "", i18n.lang).toUpperCase(); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                             Slider { Layout.fillWidth: true; from: 0; to: 1; stepSize: 0.001; value: modelData.value; onMoved: engine.setBusFxParam(page.bus, modelData.id, value) }
-                            Text { Layout.preferredWidth: 80; text: modelData.text; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; horizontalAlignment: Text.AlignRight }
+                            Text { Layout.preferredWidth: 80; text: i18n.t(modelData.text ?? "", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; horizontalAlignment: Text.AlignRight }
                         }
                     }
                     RowLayout {

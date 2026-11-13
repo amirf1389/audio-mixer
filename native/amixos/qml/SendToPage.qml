@@ -19,7 +19,7 @@ Item {
                 anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 6
                 Text { text: i18n.t("SEND TO:", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
                 Repeater { model: engine.busState; delegate: Rectangle { implicitWidth: bl.implicitWidth + 12; implicitHeight: 20; radius: 4; color: page.bus === index ? (modelData.kind === "fx" ? "#a78bfa" : Theme.emerald) : Theme.ov(0.06); border.color: modelData.kind === "fx" ? Qt.rgba(0.65, 0.55, 1, 0.4) : Qt.rgba(0.2, 0.9, 0.5, 0.35)
-                    Text { id: bl; anchors.centerIn: parent; text: modelData.name; color: page.bus === index ? "#000" : (modelData.kind === "fx" ? "#a78bfa" : Theme.emerald); font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.bus = index } } }
+                    Text { id: bl; anchors.centerIn: parent; text: i18n.t(modelData.name ?? "", i18n.lang); color: page.bus === index ? "#000" : (modelData.kind === "fx" ? "#a78bfa" : Theme.emerald); font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.bus = index } } }
                 Item { Layout.fillWidth: true }
                 Repeater { model: ["CH 01-16", "CH 17-32"]; delegate: Rectangle { implicitWidth: 70; implicitHeight: 20; radius: 4; color: page.bank === index ? Theme.ov(0.16) : Theme.ov(0.06); Text { anchors.centerIn: parent; text: modelData; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.bank = index } } }
             }
