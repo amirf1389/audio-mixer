@@ -41,6 +41,18 @@ int main(int argc, char** argv) {
   { FILE* f = std::fopen((dir + "/junk.flac").c_str(), "wb"); std::fputs("fLaC this is not audio", f); std::fclose(f); CHECK(!readAudio(dir + "/junk.flac", bad, err), "a broken FLAC is an error, not a crash"); }
   CHECK(isAudioFile("x/Song.FLAC") && isAudioFile("a.m4a") && !isAudioFile("a.txt"), "extensions");
   run("rm -rf '" + dir + "'");
+  { // FFmpeg's libraries opened at run time (AMIX_FFMPEG_DIR in the test): the same files decode through them, by level and length
+    if (am::arr::ffmpegAvailable()) {
+      for (const char* ext : {"mp3", "m4a", "ogg", "opus"}) { const std::string p = std::string("/tmp/amfx1-dec-lib.") + ext;
+        const std::string cmd = std::string("ffmpeg -nostdin -v error -y -f lavfi -i sine=frequency=1000:sample_rate=48000:duration=2 -ac 2 ") + (std::string(ext) == "opus" ? "-c:a libopus " : std::string(ext) == "ogg" ? "-c:a libvorbis " : "") + p;
+        if (std::system(cmd.c_str()) != 0) { std::printf("skip %s (no encoder here)\n", ext); continue; }
+        am::arr::Audio a; std::string err; const bool ok = am::arr::readFfmpegLib(p, a, err); double e = 0; for (float v : a.L) e += v * v;
+        const double rms = a.L.empty() ? 0 : std::sqrt(e / a.L.size());
+        if (!ok || std::fabs(a.duration() - 2.0) > 0.1 || std::fabs(rms - 0.0628) > 0.006) { std::printf("FAIL FFmpeg library %s: ok %d err '%s' %.2f s rms %.3f\n", ext, ok, err.c_str(), a.duration(), rms); ++fails; }
+        else std::printf("FFmpeg library %s: %.2f s at %.0f Hz\n", ext, a.duration(), a.rate);
+        std::remove(p.c_str()); }
+    } else std::printf("FFmpeg libraries not present: library path not tested\n");
+  }
   std::printf(fails ? "decode_test: %d FAILED\n" : "decode_test: all passed\n", fails);
   return fails ? 1 : 0;
 }

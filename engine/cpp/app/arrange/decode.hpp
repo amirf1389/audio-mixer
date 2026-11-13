@@ -16,6 +16,8 @@ bool readAudio(const std::string& path, Audio& out, std::string& err);
 bool readFlac(const std::string& path, Audio& out, std::string& err);
 bool readAiff(const std::string& path, Audio& out, std::string& err);
 std::vector<std::string> audioExtensions();   // "wav", "flac", ... : what readAudio is meant for on this platform (for file dialogs and folder scans)
+bool readFfmpegLib(const std::string& path, Audio& out, std::string& err);   // FFmpeg's shared libraries, when they sit next to the program (ffmpeg_dyn.cpp)
+bool ffmpegAvailable();
 bool isAudioFile(const std::string& path);    // by extension
 
 }  // namespace am::arr

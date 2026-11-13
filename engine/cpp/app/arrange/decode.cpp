@@ -235,10 +235,16 @@ bool readAudio(const std::string& path, Audio& out, std::string& err) {
   if (!std::memcmp(m, "RIFF", 4) || !std::memcmp(m, "RF64", 4)) return readWav(path, out, err);
   if (!std::memcmp(m, "fLaC", 4)) return readFlac(path, out, err);
   if (!std::memcmp(m, "FORM", 4) && (!std::memcmp(m + 8, "AIFF", 4) || !std::memcmp(m + 8, "AIFC", 4))) return readAiff(path, out, err);
+#ifdef _WIN32
+  std::string e1; if (readSystem(path, out, e1)) return true;            // Windows' own decoders first; FFmpeg (when installed with the program) for the rest
+  if (readFfmpegLib(path, out, err)) return true; err = e1; return false;
+#else
+  if (readFfmpegLib(path, out, err)) return true;                        // FFmpeg's libraries when present, else the ffmpeg program
   return readSystem(path, out, err);
+#endif
 }
 
-std::vector<std::string> audioExtensions() { return {"wav", "flac", "aif", "aiff", "aifc", "m4a", "aac", "mp4", "mp3", "wma", "ogg", "oga", "opus", "alac", "caf", "mka", "webm"}; }
+std::vector<std::string> audioExtensions() { return {"wav", "w64", "flac", "aif", "aiff", "aifc", "m4a", "aac", "mp4", "mp3", "mp2", "wma", "ogg", "oga", "opus", "alac", "caf", "mka", "webm", "ape", "wv", "tta", "ac3", "eac3", "dts", "amr", "dsf", "dff", "au", "snd"}; }
 bool isAudioFile(const std::string& path) { const std::string e = extOf(path); const auto l = audioExtensions(); return std::find(l.begin(), l.end(), e) != l.end(); }
 
 }  // namespace am::arr
