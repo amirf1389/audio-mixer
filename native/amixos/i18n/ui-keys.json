@@ -754,7 +754,7 @@
 "Version ",
 "WAIT",
 "WASAPI + DIRECTSOUND",
-"WAV only (8 / 16 / 24 / 32-bit PCM and float); other rates are resampled to the engine rate. MP3 / FLAC decoding is not built in. The SOUND CARD page has DC removal and dither for the output, so the player never needs the OS mixer.",
+"WAV, FLAC and AIFF are read by the console itself; M4A, MP3, WMA and ALAC by Windows; OGG, Opus, WavPack, APE, DSD, AC-3, DTS and more by the FFmpeg decoders installed with it. Other rates are resampled to the engine rate. The SOUND CARD page has DC removal and dither for the output, so the player never needs the OS mixer.",
 "WAVEFORM:",
 "WHAT THIS BUILD CARRIES OVER",
 "WHAT TO EXPECT",

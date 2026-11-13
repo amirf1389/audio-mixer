@@ -756,7 +756,6 @@
 "VU faces": "VU डायल",
 "Version ": "संस्करण ",
 "WAIT": "रुकें",
-"WAV only (8 / 16 / 24 / 32-bit PCM and float); other rates are resampled to the engine rate. MP3 / FLAC decoding is not built in. The SOUND CARD page has DC removal and dither for the output, so the player never needs the OS mixer.": "केवल WAV (8 / 16 / 24 / 32-bit PCM और float); दूसरे रेट इंजन रेट पर रीसैंपल होते हैं। MP3 / FLAC डिकोडिंग शामिल नहीं है। साउंड कार्ड पेज पर आउटपुट के लिए DC हटाना और डिदर हैं, इसलिए प्लेयर को कभी OS मिक्सर की ज़रूरत नहीं।",
 "WAVEFORM:": "वेवफ़ॉर्म:",
 "WHAT THIS BUILD CARRIES OVER": "यह बिल्ड क्या साथ लाता है",
 "WHAT TO EXPECT": "क्या उम्मीद करें",

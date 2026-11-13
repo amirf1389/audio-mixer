@@ -756,7 +756,6 @@
 "Version ": "Версія ",
 "WAIT": "ЧЕКАЙТЕ",
 "WASAPI + DIRECTSOUND": "WASAPI + DIRECTSOUND",
-"WAV only (8 / 16 / 24 / 32-bit PCM and float); other rates are resampled to the engine rate. MP3 / FLAC decoding is not built in. The SOUND CARD page has DC removal and dither for the output, so the player never needs the OS mixer.": "Лише WAV (PCM 8 / 16 / 24 / 32 біт і float); інші частоти передискретизуються до частоти рушія. Декодування MP3 / FLAC не вбудовано. Сторінка ЗВУКОВА КАРТА має усунення DC і дизеринг для виходу, тож програвачу ніколи не потрібен мікшер ОС.",
 "WAVEFORM:": "ФОРМА ХВИЛІ:",
 "WHAT THIS BUILD CARRIES OVER": "ЩО ПЕРЕНОСИТЬ ЦЯ ЗБІРКА",
 "WHAT TO EXPECT": "ЧОГО ОЧІКУВАТИ",

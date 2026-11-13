@@ -756,7 +756,6 @@
 "VU faces": "VU ڈائلز",
 "Version ": "ورژن ",
 "WAIT": "انتظار",
-"WAV only (8 / 16 / 24 / 32-bit PCM and float); other rates are resampled to the engine rate. MP3 / FLAC decoding is not built in. The SOUND CARD page has DC removal and dither for the output, so the player never needs the OS mixer.": "صرف WAV (8 / 16 / 24 / 32-bit PCM اور float)؛ دوسرے ریٹس انجن ریٹ پر ری سیمپل ہوتے ہیں۔ MP3 / FLAC ڈی کوڈنگ شامل نہیں۔ ساؤنڈ کارڈ صفحے پر آؤٹ پٹ کے لیے DC اخراج اور ڈِدر ہیں، اس لیے پلیئر کو کبھی OS مکسر کی ضرورت نہیں۔",
 "WAVEFORM:": "ویوفارم:",
 "WHAT THIS BUILD CARRIES OVER": "یہ بلڈ کیا ساتھ لاتی ہے",
 "WHAT TO EXPECT": "کیا توقع رکھیں",

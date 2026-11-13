@@ -754,7 +754,6 @@
 "Version ": "Sürüm ",
 "WAIT": "BEKLE",
 "WASAPI + DIRECTSOUND": "WASAPI + DIRECTSOUND",
-"WAV only (8 / 16 / 24 / 32-bit PCM and float); other rates are resampled to the engine rate. MP3 / FLAC decoding is not built in. The SOUND CARD page has DC removal and dither for the output, so the player never needs the OS mixer.": "Yalnızca WAV (8 / 16 / 24 / 32 bit PCM ve float); diğer hızlar motor hızına yeniden örneklenir. MP3 / FLAC kod çözme yerleşik değildir. SES KARTI sayfasında çıkış için DC giderme ve dither vardır, böylece oynatıcı işletim sistemi mikserine asla ihtiyaç duymaz.",
 "WAVEFORM:": "DALGA FORMU:",
 "WHAT THIS BUILD CARRIES OVER": "BU DERLEMENİN DEVRALDIKLARI",
 "WHAT TO EXPECT": "NE BEKLENMELİ",

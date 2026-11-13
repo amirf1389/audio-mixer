@@ -754,7 +754,6 @@
 "Version ": "Versie ",
 "WAIT": "WACHT",
 "WASAPI + DIRECTSOUND": "WASAPI + DIRECTSOUND",
-"WAV only (8 / 16 / 24 / 32-bit PCM and float); other rates are resampled to the engine rate. MP3 / FLAC decoding is not built in. The SOUND CARD page has DC removal and dither for the output, so the player never needs the OS mixer.": "Alleen WAV (8 / 16 / 24 / 32-bit PCM en float); andere frequenties worden geresampled naar de frequentie van de engine. MP3- / FLAC-decodering is niet ingebouwd. De pagina GELUIDSKAART heeft DC-verwijdering en dither voor de uitgang, dus de speler heeft de mixer van het besturingssysteem nooit nodig.",
 "WAVEFORM:": "GOLFVORM:",
 "WHAT THIS BUILD CARRIES OVER": "WAT DEZE BUILD OVERNEEMT",
 "WHAT TO EXPECT": "WAT JE KUNT VERWACHTEN",

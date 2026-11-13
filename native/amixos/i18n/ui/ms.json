@@ -754,7 +754,6 @@
 "Version ": "Versi ",
 "WAIT": "TUNGGU",
 "WASAPI + DIRECTSOUND": "WASAPI + DIRECTSOUND",
-"WAV only (8 / 16 / 24 / 32-bit PCM and float); other rates are resampled to the engine rate. MP3 / FLAC decoding is not built in. The SOUND CARD page has DC removal and dither for the output, so the player never needs the OS mixer.": "WAV sahaja (PCM 8 / 16 / 24 / 32-bit dan float); kadar lain disampel semula ke kadar enjin. Penyahkodan MP3 / FLAC tidak terbina dalam. Halaman KAD BUNYI mempunyai buang DC dan dither untuk output, jadi pemain tidak memerlukan pengadun OS.",
 "WAVEFORM:": "BENTUK GELOMBANG:",
 "WHAT THIS BUILD CARRIES OVER": "APA YANG DIBAWA BINAAN INI",
 "WHAT TO EXPECT": "APA YANG DIJANGKA",
