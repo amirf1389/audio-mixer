@@ -27,6 +27,7 @@ B="$ROOT/build-win"; cmake -S "$ROOT/native/amixos" -B "$B" -DCMAKE_TOOLCHAIN_FI
 cmake --build "$B" -j"$(nproc)" --target amixos amixos-daemon amfb-hybrid amfb_network amfb_hybrid >/dev/null
 D="$OUT/$NAME"; rm -rf "$D"; mkdir -p "$D/platforms" "$D/imageformats" "$D/qml"
 cp "$B/amixos.exe" "$D/"; cp "$(find "$B" -name amixos-daemon.exe | head -1)" "$D/AmF X1 Network.exe"; cp "$(find "$B" -name amfb-hybrid.exe | head -1)" "$D/AmF X1 Hybrid.exe"
+cp -r "$(find "$B" -maxdepth 2 -type d -name "AMFB Plugin Shell.vst3" | head -1)" "$D/"   # the PLUG-IN BUILDER exports copies of this shell (one VST3 that becomes each design)
 cp "$(find "$B" -name "AmF X1 Network.dll" | head -1)" "$(find "$B" -name "AmF X1 Hybrid.dll" | head -1)" "$D/"   # the extensions the console loads into its own process   # the service program under the product's name
 # our own programs must not lean on the C++ runtime DLLs of the Qt kit (an older libstdc++-6.dll lacks symbols the compiler here uses)
 for p in amixos.exe "AmF X1 Network.exe" "AmF X1 Hybrid.exe" "AmF X1 Network.dll" "AmF X1 Hybrid.dll"; do if x86_64-w64-mingw32-objdump -p "$D/$p" | grep -qiE "DLL Name: (libstdc.*|libgcc_s.*|libwinpthread.*)"; then echo "$p needs a compiler runtime DLL: link it statically"; exit 1; fi; done

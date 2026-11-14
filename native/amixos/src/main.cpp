@@ -51,6 +51,7 @@
 #include "Remote.h"
 #include "Net.h"
 #include "Frame.h"
+#include "Builder.h"
 #include "measure/measure.hpp"
 #include "Engine.h"
 #include "license/license.hpp"
@@ -98,11 +99,12 @@ int main(int argc, char* argv[]) {
 
   am::paths::setProgramDir(QCoreApplication::applicationDirPath().toStdString());
   if (!smoke) { QFile* lf = new QFile(QString::fromStdString(am::paths::file("console.log"))); if (lf->size() > 256 * 1024) lf->remove(); if (lf->open(QIODevice::Append | QIODevice::Text)) { g_log = lf; qInstallMessageHandler(logToFile); qInfo("AmF X1 %s starting: %s, Qt %s, render %s", AMIX_VERSION, am::paths::osName(), qVersion(), QQuickWindow::graphicsApi() == QSGRendererInterface::Software ? "software" : "auto"); } }
-  Engine engine; I18n i18n; Arrange arrange(&engine); Settings settings(&engine); applyPalette(settings.darkTheme()); QObject::connect(&settings, &Settings::changed, &app, [&] { static bool last = settings.darkTheme(); if (last != settings.darkTheme()) { last = settings.darkTheme(); applyPalette(last); } }); if (smoke) settings.finishSetup(); Access access(&engine); Osc osc(&engine); Media media(&engine); Samples samples(&engine); Update update(QStringLiteral(AMIX_VERSION)); Measure measure(&engine); Remote remote(&engine); Net net(&engine); Frame frame(&engine); osc.setFrame(&frame); net.setFrame(&frame); frame.setOsc(&osc);
+  Engine engine; I18n i18n; Arrange arrange(&engine); Settings settings(&engine); applyPalette(settings.darkTheme()); QObject::connect(&settings, &Settings::changed, &app, [&] { static bool last = settings.darkTheme(); if (last != settings.darkTheme()) { last = settings.darkTheme(); applyPalette(last); } }); if (smoke) settings.finishSetup(); Access access(&engine); Osc osc(&engine); Media media(&engine); Samples samples(&engine); Update update(QStringLiteral(AMIX_VERSION)); Measure measure(&engine); Remote remote(&engine); Net net(&engine); Frame frame(&engine); Builder builder(&engine); osc.setFrame(&frame); net.setFrame(&frame); frame.setOsc(&osc);
   if (!lang.isEmpty()) i18n.setLang(lang);   // --lang fa: start in that language (also for --shots)
   QQmlApplicationEngine qml;
   qml.rootContext()->setContextProperty("engine", &engine);
   qml.rootContext()->setContextProperty("frame", &frame);
+  qml.rootContext()->setContextProperty("builder", &builder);
   qml.rootContext()->setContextProperty("arrange", &arrange);
   qml.rootContext()->setContextProperty("settings", &settings);
   qml.rootContext()->setContextProperty("access", &access);
@@ -685,9 +687,11 @@ int main(int argc, char* argv[]) {
             else { std::fprintf(stderr, "amixos --shots: the plug-in editor was not found\n"); } }
           win->setProperty("bootOn", true); { QElapsedTimer bt; bt.start(); while (bt.elapsed() < 1700) QCoreApplication::processEvents(QEventLoop::AllEvents, 20); } win->grabWindow().save(shots + QStringLiteral("/boot-splash.png")); win->setProperty("bootOn", false); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
         }
+        { builder.newDesign(); builder.setName("Vocal Glue"); builder.setCategory("Fx|Dynamics"); builder.setColor("#22D3EE"); for (const char* k : {"barrier", "exciter", "room"}) builder.addBlock(k);   // a design for the PLUG-IN BUILDER picture
+          const QVariantList bl = builder.blocks(); int n = 0; for (int b = 0; b < bl.size(); ++b) { const QVariantList ks = bl[b].toMap()["knobs"].toList(); for (int k = 0; k < ks.size() && k < 2 && n < 5; ++k, ++n) builder.exposeKnob(b, ks[k].toMap()["id"].toString(), true); } }
         frame.setCardType(0, "aec-in"); frame.setCardType(1, "digital-in"); frame.setCardType(2, "analog-out"); frame.setCardType(3, "hybrid");
         frame.setPhantom(0, 0, true); frame.setPhantom(0, 1, true); frame.setChannelStrip(0, 0, 0); frame.setChannelStrip(0, 1, 1); frame.setLogicIn(2, true); frame.setLogicIn(7, true);   // a populated frame for the I/O FRAME picture
-        for (const char* id : {"home", "frame", "engctl", "delay", "cloud", "cascade", "mixer", "dsp", "dyn", "gate", "bus", "dca", "scenes", "presets", "routing", "renew", "arrange", "io", "meter", "lufs", "sys", "fx", "osc", "phase", "acoustics", "surround", "master", "rtaeq", "miceq", "live", "tools", "calib", "boot", "help", "acct", "access", "admin", "ai", "plugins", "network", "media", "asio", "samples", "rtaeq", "bluetooth"}) {
+        for (const char* id : {"home", "frame", "builder", "engctl", "delay", "cloud", "cascade", "mixer", "dsp", "dyn", "gate", "bus", "dca", "scenes", "presets", "routing", "renew", "arrange", "io", "meter", "lufs", "sys", "fx", "osc", "phase", "acoustics", "surround", "master", "rtaeq", "miceq", "live", "tools", "calib", "boot", "help", "acct", "access", "admin", "ai", "plugins", "network", "media", "asio", "samples", "rtaeq", "bluetooth"}) {
           if (QString::fromLatin1(id) == "rtaeq") { QVariantList golden; for (double g : {1.0, 5.0, 3.0, 3.0, 4.0, 2.0, 2.0, 3.0, 3.0, 1.0}) golden << g; engine.setGraphicEq(0, golden, true); }   // the beta's Golden EQ on the shot
           win->setProperty("current", QString::fromLatin1(id)); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
           const QImage img = win->grabWindow(); img.save(shots + "/" + id + ".png"); std::printf("amixos --shots: %s %dx%d\n", id, img.width(), img.height());
@@ -829,6 +833,15 @@ int main(int argc, char* argv[]) {
       if (i18n.count() < 80 || offered < 22 || full < offered || i18n.offered("sw") || i18n.t("MIXER", "fa") == "MIXER") { std::fprintf(stderr, "amixos --smoke: language tables incomplete\n"); QCoreApplication::exit(7); return; }   // (a bare `return 7` here would make the lambda non-void and fall off the end: heap corruption)
       const QVariantMap m = engine.telemetry();
       const qulonglong blocks = m.value("blocks").toULongLong();
+      { // PLUG-IN BUILDER: a two-block design, two knobs to the DAW, exported next to a temporary VST3 folder, rescanned and inserted on CH 8
+        const QString out = QDir::tempPath() + "/amfb-smoke-vst3"; QDir(out).removeRecursively(); qputenv("AMIX_VST3_OUT", out.toLocal8Bit());
+        builder.newDesign(); builder.setName("Smoke Grit"); builder.addBlock("crusher"); builder.addBlock("tubeamp");
+        const QVariantList bl = builder.blocks(); const QString k0 = bl[0].toMap()["knobs"].toList()[0].toMap()["id"].toString(), k1 = bl[1].toMap()["knobs"].toList()[0].toMap()["id"].toString();
+        builder.exposeKnob(0, k0, true); builder.setKnobLabel(0, k0, "Grit"); builder.exposeKnob(1, k1, true); builder.setKnob(0, k0, 0.7);
+        const bool tried = builder.tryOnStrip(7); bool onStrip = false; for (const QVariant& p : engine.plugins(7)) if (p.toMap().value("kind").toString().startsWith("vst3:") && p.toMap().value("kind").toString().contains("Smoke Grit")) onStrip = true;
+        std::printf("amixos --smoke: PLUG-IN BUILDER %s (exported %s, on CH 8 %d, %d DAW knobs)\n", tried && onStrip ? "ok" : "FAILED", qPrintable(builder.lastExport()), onStrip, int(builder.exposed().size()));
+        for (const QVariant& p : engine.plugins(7)) if (p.toMap().value("kind").toString().startsWith("vst3:")) engine.setPlugin(7, p.toMap().value("slot").toInt(), "");
+        if (!(tried && onStrip)) std::fprintf(stderr, "amixos --smoke: builder note: %s\n", qPrintable(builder.note())); }
       { // I/O FRAME: cards, APPLY (routes a strip and puts the echo canceller in its rack), GPIO in from OSC and MIDI, LOCATE both ways
         frame.setCardType(0, "aec-in"); frame.setCardType(1, "analog-out"); frame.setChannelStrip(0, 0, 5); frame.setChannelDevice(0, 0, 1); frame.apply();
         bool aec = false; for (const QVariant& p : engine.plugins(5)) if (p.toMap().value("kind").toString() == "fx:aec") aec = true;
