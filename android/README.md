@@ -7,7 +7,9 @@ mute, solo and meters from the WebSocket stream; master; devices open / stop; a 
 gets a token of its own (30 days, revocable there); no long token to type. **FIND CONSOLE** looks for the computer on this Wi-Fi, so there is no address to type. Also: **BUSES** (AUX / FX level and mute),
 **MONITOR** (control room source, level, DIM, MONO, MUTE), **CLEAR CLIPS**, rename a strip with a long press on its name, and the
 phone follows the console (faders, mutes, solos, names moved on the computer or another phone show up within 3 s; the screen stays on
-while connected). **No app needed:** any browser on the same Wi-Fi can open
+while connected). **SETTINGS** (from the home screen or the remote): connect on open, port, forget the console; strips shown (8 / 16 / 32), pan
+sliders, meter range, how often to follow the console (or off); keep the screen on, vibrate on mute / solo, ask before STOP ENGINE;
+the phone's own mixer's sample rate and block size; reset. **No app needed:** any browser on the same Wi-Fi can open
 `http://<console address>:8765/remote` (shown on the same page) and pair with the same PIN. The
 remote client (`remote/DaemonClient.kt`, `MiniJson.kt`, `MiniWebSocket.kt`) is plain Kotlin with no dependencies and is tested on the
 JVM against the real daemon: `jvm-test/run.sh`. It replaced the earlier React Native / Expo remote.

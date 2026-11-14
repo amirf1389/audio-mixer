@@ -17,7 +17,7 @@ import androidx.core.content.ContextCompat
 
 /** A one-strip mixer: microphone in, fader, pan, mute, master limiter, peak meters. The engine is the same C++ as the desktop console. */
 class MainActivity : AppCompatActivity() {
-    private val engine by lazy { Engine(strips = 2, sampleRate = 48000.0) }
+    private val engine by lazy { Engine(strips = 2, sampleRate = Prefs.localRate(this).toDouble()) }
     private var loop: AudioLoop? = null
     private val ui = Handler(Looper.getMainLooper())
 
@@ -42,12 +42,13 @@ class MainActivity : AppCompatActivity() {
         findViewById<ToggleButton>(R.id.mute).setOnCheckedChangeListener { _, on -> engine.setMute(0, on) }
         findViewById<Button>(R.id.start).setOnClickListener { if (loop == null) startAudio() else stopAudio() }
         findViewById<Button>(R.id.remote).setOnClickListener { startActivity(Intent(this, RemoteActivity::class.java)) }
+        findViewById<Button>(R.id.settings).setOnClickListener { startActivity(Intent(this, SettingsActivity::class.java)) }
         ui.post(object : Runnable { override fun run() { showMeters(); ui.postDelayed(this, 50) } })
     }
 
     private fun startAudio() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) { ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), 1); return }
-        loop = AudioLoop(engine).also { it.start() }
+        loop = AudioLoop(engine, Prefs.localRate(this), Prefs.localFrames(this)).also { it.start() }
         findViewById<Button>(R.id.start).text = getString(R.string.stop)
     }
     private fun stopAudio() { loop?.stop(); loop = null; findViewById<Button>(R.id.start).text = getString(R.string.start) }

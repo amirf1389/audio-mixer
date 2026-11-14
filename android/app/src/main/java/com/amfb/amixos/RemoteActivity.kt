@@ -43,6 +43,14 @@ class RemoteActivity : AppCompatActivity() {
     private val nameLabels = ArrayList<TextView>(); private val mutes = ArrayList<ToggleButton>(); private val solos = ArrayList<ToggleButton>()
     private var touching = 0   // a finger on a fader: the sync does not move it under the finger
     private var masterFaderRef: SeekBar? = null
+    private var connectBtn: Button? = null; private var autoTried = false
+    private fun buzz(v: View) { if (Prefs.haptics(this)) v.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP) }
+    override fun onResume() {   // back from SETTINGS: the mixer is laid out again with the new choices
+        super.onResume()
+        if (!autoTried) { autoTried = true; val p = Prefs.remote(this); if (Prefs.autoConnect(this) && !p.getString("host", "").isNullOrEmpty() && !p.getString("token", "").isNullOrEmpty()) connectBtn?.performClick() }
+        else state?.let { buildStrips(it) }
+        if (client != null) { if (Prefs.keepScreenOn(this)) window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) else window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -51,7 +59,7 @@ class RemoteActivity : AppCompatActivity() {
         val title = TextView(this).apply { text = getString(R.string.remote_title); setTextColor(Color.parseColor("#EA580C")); textSize = 18f; setTypeface(null, android.graphics.Typeface.BOLD) }
         root.addView(title)
         val host = EditText(this).apply { hint = "console address (192.168.1.20)"; setText(prefs.getString("host", "")); setTextColor(Color.WHITE); setHintTextColor(Color.GRAY) }
-        val port = EditText(this).apply { hint = "port"; setText(prefs.getString("port", "8765")); setTextColor(Color.WHITE); setHintTextColor(Color.GRAY) }
+        val port = EditText(this).apply { hint = "port"; setText(prefs.getString("port", Prefs.defaultPort(this@RemoteActivity).toString())); setTextColor(Color.WHITE); setHintTextColor(Color.GRAY) }
         val token = EditText(this).apply { hint = "token (~/.amixos/daemon.token on the console)"; setText(prefs.getString("token", "")); setTextColor(Color.WHITE); setHintTextColor(Color.GRAY); inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD }
         root.addView(host); root.addView(port); root.addView(token)
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
@@ -64,7 +72,10 @@ class RemoteActivity : AppCompatActivity() {
         val monBtn = Button(this).apply { text = getString(R.string.monitor); isEnabled = false }
         val clipBtn = Button(this).apply { text = getString(R.string.clear_clips); isEnabled = false }
         val row2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val settingsBtn = Button(this).apply { text = getString(R.string.settings); setOnClickListener { startActivity(android.content.Intent(this@RemoteActivity, SettingsActivity::class.java)) } }
         row2.addView(find); row2.addView(busesBtn); row2.addView(monBtn); row2.addView(clipBtn); root.addView(row2)
+        root.addView(LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; addView(settingsBtn) })
+        connectBtn = connect
         connected = listOf(busesBtn, monBtn, clipBtn)
         find.setOnClickListener {   // FIND: the consoles on this Wi-Fi that run the phone remote
             val ip = localIp(); if (ip == null) { status.text = getString(R.string.no_wifi); return@setOnClickListener }
@@ -90,13 +101,13 @@ class RemoteActivity : AppCompatActivity() {
         setContentView(root)
 
         connect.setOnClickListener {
-            val ep = Endpoint(host.text.toString().trim(), port.text.toString().trim().toIntOrNull() ?: 8765, token.text.toString().trim())
+            val ep = Endpoint(host.text.toString().trim(), port.text.toString().trim().toIntOrNull() ?: Prefs.defaultPort(this), token.text.toString().trim())
             prefs.edit().putString("host", ep.host).putString("port", ep.port.toString()).putString("token", ep.token).apply()
             status.text = getString(R.string.connecting)
             io.execute {
                 try {
                     val c = DaemonClient(ep); val st = c.status(); val s = c.state()
-                    ui.post { client = c; state = s; devices.isEnabled = true; connected.forEach { it.isEnabled = true }; window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); startSync(c); status.text = st.name + " " + st.version + " · " + (if (st.running) st.backend else "engine stopped") + " · " + st.strips + " strips"; status.setTextColor(Color.parseColor("#10B981")); masterFader.progress = (DaemonClient.dbToPos(s.masterDb) * 1000).toInt(); buildStrips(s); startMeters(c) }
+                    ui.post { client = c; state = s; devices.isEnabled = true; connected.forEach { it.isEnabled = true }; if (Prefs.keepScreenOn(this)) window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); startSync(c); status.text = st.name + " " + st.version + " · " + (if (st.running) st.backend else "engine stopped") + " · " + st.strips + " strips"; status.setTextColor(Color.parseColor("#10B981")); masterFader.progress = (DaemonClient.dbToPos(s.masterDb) * 1000).toInt(); buildStrips(s); startMeters(c) }
                 } catch (e: Exception) { ui.post { status.text = getString(R.string.failed, e.message ?: e.javaClass.simpleName); status.setTextColor(Color.parseColor("#FF2A5F")) } }
             }
         }
@@ -126,20 +137,20 @@ class RemoteActivity : AppCompatActivity() {
 
     private fun buildStrips(s: ConsoleState) {
         strips.removeAllViews(); faders.clear(); meters.clear(); dbLabels.clear(); nameLabels.clear(); mutes.clear(); solos.clear()
-        for (st in s.strips) {
+        for (st in s.strips.take(Prefs.stripCount(this))) {
             val card = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(12, 10, 12, 10); setBackgroundColor(Color.parseColor("#141B26")) }
             val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
             val name = TextView(this).apply { text = String.format("CH %02d  %s", st.id + 1, st.name); setTextColor(Color.WHITE); typeface = android.graphics.Typeface.MONOSPACE; layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f); setOnClickListener { showChannel(st.id, st.name) }; setOnLongClickListener { rename(st.id, this); true } }
             val db = TextView(this).apply { text = DaemonClient.fmtDb(st.db); setTextColor(Color.parseColor("#00F2FF")); typeface = android.graphics.Typeface.MONOSPACE }
-            val mute = ToggleButton(this).apply { textOn = "MUTED"; textOff = "MUTE"; isChecked = st.mute; setOnCheckedChangeListener { b, on -> if (b.tag == null) io.execute { runCatching { client?.mute(st.id, on) } } } }
-            val solo = ToggleButton(this).apply { textOn = "SOLO"; textOff = "solo"; isChecked = st.solo; setOnCheckedChangeListener { b, on -> if (b.tag == null) io.execute { runCatching { client?.solo(st.id, on) } } } }
+            val mute = ToggleButton(this).apply { textOn = "MUTED"; textOff = "MUTE"; isChecked = st.mute; setOnCheckedChangeListener { b, on -> if (b.tag == null) { buzz(b); io.execute { runCatching { client?.mute(st.id, on) } } } } }
+            val solo = ToggleButton(this).apply { textOn = "SOLO"; textOff = "solo"; isChecked = st.solo; setOnCheckedChangeListener { b, on -> if (b.tag == null) { buzz(b); io.execute { runCatching { client?.solo(st.id, on) } } } } }
             head.addView(name); head.addView(db); head.addView(mute); head.addView(solo); card.addView(head)
             val meter = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply { max = 1000; layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 14) }
             card.addView(meter)
             val fader = SeekBar(this).apply { max = 1000; progress = (DaemonClient.dbToPos(st.db) * 1000).toInt(); setOnSeekBarChangeListener(change { p -> val v = DaemonClient.posToDb(p / 1000.0); client?.gain(st.id, v); ui.post { db.text = DaemonClient.fmtDb(v) } }) }
             card.addView(fader)
             val pan = SeekBar(this).apply { max = 200; progress = ((st.pan + 1) * 100).toInt(); setOnSeekBarChangeListener(change { p -> client?.pan(st.id, (p - 100) / 100.0) }) }
-            card.addView(pan)
+            if (Prefs.showPan(this)) card.addView(pan)
             val gap = View(this).apply { layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 8) }
             strips.addView(card); strips.addView(gap); faders.add(fader); meters.add(meter); dbLabels.add(db); nameLabels.add(name); mutes.add(mute); solos.add(solo)
         }
@@ -150,7 +161,7 @@ class RemoteActivity : AppCompatActivity() {
         stream = c.meterStream({ m -> ui.post { showMeters(m) } }, { ok, err -> ui.post { if (!ok && err != null) status.text = getString(R.string.failed, err) } })
     }
     private fun showMeters(m: Meters) {
-        fun bar(v: Double) = ((DaemonClient.lin2db(v) + 60) / 60 * 1000).toInt().coerceIn(0, 1000)
+        val floor = Prefs.meterFloor(this).toDouble(); fun bar(v: Double) = ((DaemonClient.lin2db(v) + floor) / floor * 1000).toInt().coerceIn(0, 1000)
         for (i in meters.indices) if (i < m.strips.size) meters[i].progress = bar(m.strips[i].pk)
         masterMeter.progress = bar(Math.max(m.masterL, m.masterR)); masterLabel.text = "MASTER " + DaemonClient.fmtDb(DaemonClient.lin2db(Math.max(m.masterL, m.masterR))) + (if (m.masterClip) " CLIP" else "")
     }
@@ -163,7 +174,8 @@ class RemoteActivity : AppCompatActivity() {
                 val names = devs.map { it.backend.toUpperCase() + "  " + it.name + "  (" + it.inputs + " in / " + it.outputs + " out)" }.toTypedArray()
                 AlertDialog.Builder(this).setTitle(getString(R.string.devices)).setItems(names) { _, which -> val d = devs[which]
                     io.execute { runCatching { c.open(d.backend, if (d.inputs > 0) d.id else "", if (d.outputs > 0) d.id else "", d.defaultRate, 256, Math.min(32, Math.max(2, d.inputs)), Math.min(2, Math.max(2, d.outputs))) }.onFailure { e -> ui.post { status.text = getString(R.string.failed, e.message ?: "") } }.onSuccess { ui.post { status.text = "opened " + d.name } } } }
-                    .setNegativeButton(getString(R.string.stop_engine)) { _, _ -> io.execute { runCatching { c.stop() }; ui.post { status.text = getString(R.string.stopped) } } }
+                    .setNegativeButton(getString(R.string.stop_engine)) { _, _ -> val doStop = { io.execute { runCatching { c.stop() }; ui.post { status.text = getString(R.string.stopped) } } }
+                        if (Prefs.confirmStop(this)) AlertDialog.Builder(this).setMessage(R.string.stop_q).setPositiveButton(R.string.stop_engine) { _, _ -> doStop() }.setNegativeButton(android.R.string.cancel, null).show() else doStop() }
                     .setNeutralButton(android.R.string.cancel, null).show()
             }
         }
@@ -194,12 +206,13 @@ class RemoteActivity : AppCompatActivity() {
     private var syncing = false
     private fun startSync(c: DaemonClient) { if (syncing) return; syncing = true
         val tick = object : Runnable { override fun run() { if (!syncing) return
-            if (!isFinishing && hasWindowFocus()) io.execute { val s = runCatching { c.state() }.getOrNull(); if (s != null) ui.post { applyState(s) } }
-            ui.postDelayed(this, 3000) } }
-        ui.postDelayed(tick, 3000) }
+            val secs = Prefs.syncSeconds(this@RemoteActivity)
+            if (secs > 0 && !isFinishing && hasWindowFocus()) io.execute { val s = runCatching { c.state() }.getOrNull(); if (s != null) ui.post { applyState(s) } }
+            ui.postDelayed(this, 1000L * maxOf(1, secs)) } }
+        ui.postDelayed(tick, 1000L * maxOf(1, Prefs.syncSeconds(this))) }
     private fun applyState(s: ConsoleState) {
         if (touching > 0) return
-        for (st in s.strips) { val i = st.id; if (i >= faders.size) continue
+        for (st in s.strips) { val i = st.id; if (i >= faders.size || i >= mutes.size) continue
             val pos = (DaemonClient.dbToPos(st.db) * 1000).toInt(); if (Math.abs(faders[i].progress - pos) > 2) { faders[i].progress = pos; dbLabels[i].text = DaemonClient.fmtDb(st.db) }
             if (mutes[i].isChecked != st.mute) { mutes[i].tag = "sync"; mutes[i].isChecked = st.mute; mutes[i].tag = null }
             if (solos[i].isChecked != st.solo) { solos[i].tag = "sync"; solos[i].isChecked = st.solo; solos[i].tag = null }
