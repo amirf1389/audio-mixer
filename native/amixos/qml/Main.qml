@@ -245,6 +245,7 @@ ApplicationWindow {
             else if (t === "Save the console to a file") { sayText.text = ""; it.triggered(); if (sayText.text.indexOf("Saved: ") !== 0) bad.push(t + ": " + sayText.text) }
             else if (t === "Load the console from that file") { sayText.text = ""; it.triggered(); if (sayText.text.indexOf("was loaded") < 0) bad.push(t + ": " + sayText.text) }
             else if (t === "Sound card in use") { sayText.text = ""; it.triggered(); if (sayText.text === "") bad.push(t) }
+            else if (t.indexOf("Plug-in Builder") === 0) { if (typeof settings.openPluginBuilder !== "function") bad.push(t) }   // starts another program: only checked to be wired
             else bad.push("not covered: " + t)
         }
         shut(); root.current = keepPage
