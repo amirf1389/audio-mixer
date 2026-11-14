@@ -31,6 +31,9 @@
 #include <QFile>
 #include <ctime>
 #include <QJsonArray>
+#include <QMetaMethod>
+#include <QMouseEvent>
+#include <algorithm>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QProcess>
@@ -93,9 +96,9 @@ int main(int argc, char* argv[]) {
   app.setWindowIcon(QIcon(QStringLiteral(":/qt/qml/AmixOS/icons/amfx1.png")));   // the mixer logo in the title bar and the task bar
   QQuickStyle::setStyle("Fusion");   // the one stock style that draws from the application palette (set dark below); Basic ignores the palette and paints light grey boxes on Windows
 
-  bool smoke = false, bench = false; QString shots, lang;
+  bool smoke = false, bench = false; QString shots, lang, film, filmScript;
   const QString smokeWav = QDir::tempPath() + "/amixos-smoke-tone.wav", smokeOut = QDir::tempPath() + "/amixos-smoke-export.wav";   // used by the smoke and by its end-of-run lambda: must outlive both
-  for (int i = 1; i < argc; ++i) { const QString a = QString::fromLocal8Bit(argv[i]); if (a == "--smoke") smoke = true; else if (a == "--bench") { smoke = true; bench = true; } else if (a == "--shots" && i + 1 < argc) { smoke = true; shots = QString::fromLocal8Bit(argv[++i]); } else if (a == "--lang" && i + 1 < argc) lang = QString::fromLocal8Bit(argv[++i]); }
+  for (int i = 1; i < argc; ++i) { const QString a = QString::fromLocal8Bit(argv[i]); if (a == "--smoke") smoke = true; else if (a == "--bench") { smoke = true; bench = true; } else if (a == "--shots" && i + 1 < argc) { smoke = true; shots = QString::fromLocal8Bit(argv[++i]); } else if (a == "--lang" && i + 1 < argc) lang = QString::fromLocal8Bit(argv[++i]); else if (a == "--film" && i + 2 < argc) { smoke = true; filmScript = QString::fromLocal8Bit(argv[++i]); film = QString::fromLocal8Bit(argv[++i]); } }
 
   am::paths::setProgramDir(QCoreApplication::applicationDirPath().toStdString());
   if (!smoke) { QFile* lf = new QFile(QString::fromStdString(am::paths::file("console.log"))); if (lf->size() > 256 * 1024) lf->remove(); if (lf->open(QIODevice::Append | QIODevice::Text)) { g_log = lf; qInstallMessageHandler(logToFile); qInfo("AmF X1 %s starting: %s, Qt %s, render %s", AMIX_VERSION, am::paths::osName(), qVersion(), QQuickWindow::graphicsApi() == QSGRendererInterface::Software ? "software" : "auto"); } }
@@ -134,6 +137,86 @@ int main(int argc, char* argv[]) {
   if (!smoke) engine.setHotplugWatch(true);
   if (qml.rootObjects().isEmpty()) return 2;
 
+  if (!film.isEmpty()) {
+    // --film SCRIPT.json DIR: films the running console for the product videos, frame by frame (DIR/<clip>/f0000.png ...). The script
+    // plays a beat through real channels (the built-in samples) and moves the console on a timeline: calls on the engine or on any
+    // named interface object, held or ramped, and properties set or ramped. Nothing here is a mock-up: it is the console, running.
+    auto* win = qobject_cast<QQuickWindow*>(qml.rootObjects().first());
+    QFile sf(filmScript); if (!sf.open(QIODevice::ReadOnly)) { std::fprintf(stderr, "amixos --film: cannot read %s\n", qPrintable(filmScript)); return 2; }
+    const QJsonObject js = QJsonDocument::fromJson(sf.readAll()).object(); const int fps = js["fps"].toInt(30);
+    win->setWidth(js["w"].toInt(1380)); win->setHeight(js["h"].toInt(860));
+    if (!engine.open("null", "", "", 48000, 256, 2, 2)) { std::fprintf(stderr, "amixos --film: %s\n", qPrintable(engine.status())); return 3; }
+    am::setNullManualClock(true);   // the engine hears exactly 1/fps of audio per frame, however long a frame takes to capture
+    auto advance = [&](double sec) { const std::uint64_t target = am::nullClockProcessed() + static_cast<std::uint64_t>(sec * 48000); am::advanceNullClock(static_cast<std::uint64_t>(sec * 48000));
+      QElapsedTimer w; w.start(); while (am::nullClockProcessed() + 256 <= target && w.elapsed() < 2000) QThread::usleep(200); };
+    auto target = [&](const QString& name) -> QObject* { if (name == "engine") return &engine; if (name == "window") return win; return win->findChild<QObject*>(name); };
+    auto call = [&](QObject* o, const QString& method, const QVariantList& args) {
+      if (!o) return false; const QMetaObject* mo = o->metaObject();
+      for (int m = mo->methodOffset() > 0 ? 0 : 0; m < mo->methodCount(); ++m) {
+        const QMetaMethod mm = mo->method(m); if (mm.name() != method.toLatin1() || mm.parameterCount() != args.size()) continue;
+        std::vector<QVariant> v(10); QGenericArgument ga[10];
+        for (int k = 0; k < args.size(); ++k) { v[k] = args[k]; if (mm.parameterMetaType(k).id() != QMetaType::QVariant) v[k].convert(mm.parameterMetaType(k)); ga[k] = QGenericArgument(mm.parameterMetaType(k).id() == QMetaType::QVariant ? "QVariant" : mm.parameterTypeName(k).constData(), mm.parameterMetaType(k).id() == QMetaType::QVariant ? static_cast<const void*>(&args[k]) : v[k].constData()); }
+        return mm.invoke(o, Qt::DirectConnection, ga[0], ga[1], ga[2], ga[3], ga[4], ga[5], ga[6], ga[7], ga[8], ga[9]);
+      }
+      std::fprintf(stderr, "amixos --film: no method %s(%lld args)\n", qPrintable(method), static_cast<long long>(args.size())); return false;
+    };
+    // one action at clip time t (s): fires once when its time passes; with "dur", ramps its "$v" argument (or the property) from -> to
+    auto apply = [&](const QJsonObject& a, double t, double prevT) {
+      const double t0 = a["t"].toDouble(0), dur = a["dur"].toDouble(0);
+      const bool once = dur <= 0, fire = once ? (t0 > prevT && t0 <= t) || (t0 == 0 && prevT < 0) : (t >= t0 && prevT < t0 + dur);
+      if (!fire) return; double k = once ? 1 : std::clamp((t - t0) / dur, 0.0, 1.0); k = k < 0.5 ? 4 * k * k * k : 1 - std::pow(-2 * k + 2, 3) / 2;
+      const double v = a["from"].toDouble() + (a["to"].toDouble() - a["from"].toDouble()) * k; QObject* o = target(a["target"].toString("engine"));
+      if (a["op"] == "prop") { if (o) o->setProperty(a["prop"].toString().toLatin1(), a.contains("value") ? a["value"].toVariant() : QVariant(v)); return; }
+      if (a["op"] == "param") {   // a plug-in knob by its index on the panel
+        const QVariantList pp = engine.pluginParams(a["strip"].toInt(), a["slot"].toInt()); const int ix = a["index"].toInt();
+        if (ix < pp.size()) engine.setPluginParam(a["strip"].toInt(), a["slot"].toInt(), pp[ix].toMap()["id"].toInt(), v);
+        if (QObject* ed = target("plugEd")) QMetaObject::invokeMethod(ed, "reload"); return; }
+      QVariantList args; for (const QJsonValue& x : a["args"].toArray()) args << (x.toString() == "$v" ? QVariant(v) : x.toVariant());
+      call(o, a["method"].toString(), args);
+    };
+    // THE CURSOR: real mouse events into the window (press, drag, release), its place logged per frame for the film to draw it
+    QPointF cur(js["w"].toInt(1380) * 0.6, js["h"].toInt(860) * 0.7); bool down = false;
+    auto mouse = [&](QEvent::Type ty, QPointF p) {
+      QMouseEvent ev(ty, p, win->mapToGlobal(p.toPoint()), ty == QEvent::MouseButtonRelease ? Qt::LeftButton : (ty == QEvent::MouseMove ? Qt::NoButton : Qt::LeftButton),
+                     ty == QEvent::MouseButtonRelease ? Qt::NoButton : (down || ty == QEvent::MouseButtonPress ? Qt::LeftButton : Qt::NoButton), Qt::NoModifier);
+      QCoreApplication::sendEvent(win, &ev); };
+    auto mouseOp = [&](const QJsonObject& a, double t, double prevT) {   // {op: mouse, t, dur, path: [[x, y], ...], press: bool}
+      const double t0 = a["t"].toDouble(0), dur = std::max(1e-3, a["dur"].toDouble(0.5)); if (t < t0 || prevT >= t0 + dur) return;
+      const QJsonArray path = a["path"].toArray(); if (path.isEmpty()) return; const bool press = a["press"].toBool(false);
+      double k = std::clamp((t - t0) / dur, 0.0, 1.0); k = k < 0.5 ? 4 * k * k * k : 1 - std::pow(-2 * k + 2, 3) / 2;
+      const double seg = k * (path.size() - 1); const int i = std::min<int>(path.size() - 2, static_cast<int>(seg)); const double u = path.size() == 1 ? 0 : seg - i;
+      const QJsonArray A = path[std::max(0, i)].toArray(), B = path[std::min<int>(path.size() - 1, i + 1)].toArray();
+      const QPointF p(A[0].toDouble() + (B[0].toDouble() - A[0].toDouble()) * u, A[1].toDouble() + (B[1].toDouble() - A[1].toDouble()) * u);
+      if (press && !down && prevT < t0 + 1e-9) { cur = p; mouse(QEvent::MouseMove, p); down = true; mouse(QEvent::MouseButtonPress, p); }
+      cur = p; mouse(QEvent::MouseMove, p);
+      if (press && down && t >= t0 + dur - 1e-9) { mouse(QEvent::MouseButtonRelease, p); down = false; }
+    };
+    const double bpm = js["bpm"].toDouble(120), step = 60.0 / bpm / 4;   // sixteenth notes
+    for (const QJsonValue& a : js["setup"].toArray()) apply(a.toObject(), 0, -1);
+    advance(0.8); waitMs(800);
+    for (const QJsonValue& cv : js["clips"].toArray()) {
+      const QJsonObject c = cv.toObject(); const QString name = c["name"].toString(); QDir().mkpath(film + "/" + name);
+      win->setProperty("current", c["page"].toString("mixer")); advance(0.3); waitMs(700);
+      const QJsonArray acts = c["actions"].toArray(), pat = c.contains("pattern") ? c["pattern"].toArray() : js["pattern"].toArray();
+      const int n = static_cast<int>(c["seconds"].toDouble(4) * fps); double prevT = -1; QElapsedTimer clock; clock.start(); QJsonArray curLog;
+      for (int f = 0; f < n; ++f) {
+        const double t = static_cast<double>(f) / fps;
+        for (const QJsonValue& a : acts) { const QJsonObject ao = a.toObject(); if (ao["op"] == "mouse") mouseOp(ao, t, prevT); else apply(ao, t, prevT); }
+        for (const QJsonValue& pv : pat) {   // {strip, samples: [id per 16th, 0 = rest], len: 16}
+          const QJsonObject p = pv.toObject(); const QJsonArray sm = p["samples"].toArray(); const int len = sm.size(); if (!len) continue;
+          for (long k = static_cast<long>(std::ceil((prevT < 0 ? -1e-9 : prevT) / step + 1e-9)); k * step <= t + 1e-9; ++k) { const int id = sm[static_cast<int>(k % len)].toInt(); if (id > 0 && k * step > prevT) engine.playSampleOnStrip(p["strip"].toInt(), id); }
+        }
+        prevT = t;
+        advance(1.0 / fps); waitMs(js["settleMs"].toInt(40));   // one frame of audio, then let the interface pick up the new meters
+        win->grabWindow().save(film + "/" + name + QStringLiteral("/f%1.png").arg(f, 4, 10, QChar('0')));
+        curLog.append(QJsonArray{cur.x(), cur.y(), down ? 1 : 0});
+      }
+      { QFile cf(film + "/" + name + "/cursor.json"); if (cf.open(QIODevice::WriteOnly)) cf.write(QJsonDocument(QJsonObject{{"w", win->width()}, {"h", win->height()}, {"cursor", curLog}}).toJson(QJsonDocument::Compact)); }
+      std::printf("amixos --film: %s, %d frames in %.1f s (%.2fx real time)\n", qPrintable(name), n, clock.elapsed() / 1000.0, clock.elapsed() / 1000.0 / (n / static_cast<double>(fps)));
+      for (const QJsonValue& a : c["after"].toArray()) apply(a.toObject(), 0, -1);
+    }
+    am::setNullManualClock(false); engine.stop(); return 0;
+  }
   if (bench) {   // --bench: CPU time of the interface thread on the MIXER page, idle (meters running) and while faders move
     auto* win = qobject_cast<QQuickWindow*>(qml.rootObjects().first());
     engine.setNullTestInput(true); engine.open("null", "", "", 48000, 256, 2, 2); win->setProperty("current", qEnvironmentVariable("AMIX_BENCH_PAGE", "mixer")); waitMs(1500);

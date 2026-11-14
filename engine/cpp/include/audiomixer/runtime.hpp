@@ -20,6 +20,11 @@
 #include "audiomixer/engine.hpp"
 
 namespace am {
+// the null device's FILM CLOCK (product films): on, it processes only the samples handed to it, whatever the wall clock says
+void setNullManualClock(bool on);
+void advanceNullClock(std::uint64_t samples);
+std::uint64_t nullClockProcessed();
+
 
 struct DeviceConfig {
   std::string backend = "auto";          // auto (the first real backend of this system, else null), alsa, asio, wasapi, dsound (DirectSound: Bluetooth and anything else, no lock), coreaudio, null
