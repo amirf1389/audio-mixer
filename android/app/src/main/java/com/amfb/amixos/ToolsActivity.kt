@@ -48,6 +48,7 @@ class ToolsActivity : AppCompatActivity() {
     private lateinit var body: LinearLayout; private val tabs = ArrayList<Button>()
     private val accent = Color.parseColor("#EA580C"); private val cyan = Color.parseColor("#00F2FF"); private val dim = Color.parseColor("#8B98A8")
     var tool = 0; private set
+    private var askedMic = false
     @Volatile private var micOn = false; private var micThread: Thread? = null
     @Volatile private var genOn = false; private var genThread: Thread? = null
     private val gen = SignalMath.Generator(48000)
@@ -115,7 +116,7 @@ class ToolsActivity : AppCompatActivity() {
         }
     }
     private fun startMic() {
-        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) { requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 7); small.text = getString(R.string.tools_need_mic); return }
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) { if (!askedMic) { askedMic = true; requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 7) }; small.text = getString(R.string.tools_need_mic); return }   // asked once per screen: a "no" is not asked again on every return
         if (micOn) return; micOn = true
         micThread = thread(name = "amix-tools-mic") {
             val rate = 48000; val n = 4096

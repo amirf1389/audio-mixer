@@ -29,11 +29,15 @@ class FaderView(ctx: Context, private val accent: Int = 0xFFEA580C.toInt()) : Vi
     private val meter = Paint(); private val holdP = Paint().apply { color = 0xFFFFFFFF.toInt() }; private val clipP = Paint().apply { color = 0xFFEF4444.toInt() }
     private val capH = 64f; private val pad = 40f
 
+    private val capRect = RectF(); private val topRect = RectF(); private val trackRect = RectF()
+    override fun onSizeChanged(w: Int, h: Int, ow: Int, oh: Int) {   // the meter's colours depend on the height only: made once per size, not on every frame
+        meter.shader = LinearGradient(0f, h - pad, 0f, pad, intArrayOf(0xFF16A34A.toInt(), 0xFF16A34A.toInt(), 0xFFEAB308.toInt(), 0xFFEF4444.toInt()), floatArrayOf(0f, 0.7f, 0.86f, 1f), Shader.TileMode.CLAMP)
+    }
     private fun yOf(p: Int) = pad + (1 - p / 1000f) * (height - 2 * pad)
     override fun onMeasure(w: Int, h: Int) { setMeasuredDimension(resolveSize(150, w), resolveSize(620, h)) }
     override fun onDraw(c: Canvas) {
         val w = width.toFloat(); val tx = w * 0.42f; val mx = w * 0.74f; val mw = w * 0.12f
-        c.drawRoundRect(RectF(tx - 6, pad, tx + 6, height - pad), 6f, 6f, track)
+        trackRect.set(tx - 6, pad, tx + 6, height - pad); c.drawRoundRect(trackRect, 6f, 6f, track)
         for (db in listOf(10.0, 5.0, 0.0, -5.0, -10.0, -20.0, -30.0, -40.0, -60.0, -120.0)) {
             val y = yOf((DaemonClient.dbToPos(db) * 1000).toInt()); c.drawLine(tx - 22, y, tx - 10, y, tick)
             if (db == 10.0 || db == 0.0 || db == -10.0 || db == -20.0 || db == -40.0 || db == -120.0) c.drawText(if (db <= -120) "∞" else (if (db > 0) "+" else "") + db.toInt(), tx - 26, y + 8, text)
@@ -41,14 +45,13 @@ class FaderView(ctx: Context, private val accent: Int = 0xFFEA580C.toInt()) : Vi
         // the meter: 0..1000 of the meter range, coloured by where it is
         c.drawRect(mx, pad, mx + mw, height - pad, track)
         val top = pad + (1 - level / 1000f) * (height - 2 * pad)
-        meter.shader = LinearGradient(0f, height - pad, 0f, pad, intArrayOf(0xFF16A34A.toInt(), 0xFF16A34A.toInt(), 0xFFEAB308.toInt(), 0xFFEF4444.toInt()), floatArrayOf(0f, 0.7f, 0.86f, 1f), Shader.TileMode.CLAMP)
         c.drawRect(mx, top, mx + mw, height - pad, meter)
         if (System.currentTimeMillis() - holdAt > 1500) hold = maxOf(level, hold - 8)
         val hy = pad + (1 - hold / 1000f) * (height - 2 * pad); c.drawRect(mx, hy - 2, mx + mw, hy + 2, holdP)
         if (clip) c.drawRect(mx, pad - 18, mx + mw, pad - 6, clipP)
         // the cap
-        val y = yOf(progress); val r = RectF(tx - w * 0.3f, y - capH / 2, tx + w * 0.3f, y + capH / 2)
-        cap.color = 0xFF2A3342.toInt(); c.drawRoundRect(r, 8f, 8f, cap); cap.color = 0xFF3B4658.toInt(); c.drawRoundRect(RectF(r.left, r.top, r.right, r.top + capH / 3), 8f, 8f, cap)
+        val y = yOf(progress); val r = capRect.apply { set(tx - w * 0.3f, y - capH / 2, tx + w * 0.3f, y + capH / 2) }
+        cap.color = 0xFF2A3342.toInt(); c.drawRoundRect(r, 8f, 8f, cap); cap.color = 0xFF3B4658.toInt(); topRect.set(r.left, r.top, r.right, r.top + capH / 3); c.drawRoundRect(topRect, 8f, 8f, cap)
         line.color = accent; c.drawLine(r.left + 6, y, r.right - 6, y, line)
     }
     private var downY = 0f; private var downP = 0; private var lastTap = 0L

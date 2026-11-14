@@ -278,7 +278,7 @@ class RemoteActivity : AppCompatActivity() {
                 row.addView(Button(this).apply { text = getString(R.string.scene_recall); setOnClickListener {
                     AlertDialog.Builder(this@RemoteActivity).setMessage(getString(R.string.scene_recall_q, n)).setPositiveButton(R.string.scene_recall) { _, _ ->
                         io.execute { runCatching {
-                            for (x in strips.mapNotNull { it as? Map<*, *> }) { val id = (x["id"] as Number).toInt(); if (id >= faders.size) continue   // a scene from a bigger plan: the extra channels are skipped
+                            for (x in strips.mapNotNull { it as? Map<*, *> }) { val id = (x["id"] as Number).toInt(); if (id >= (state?.strips?.size ?: 0)) continue   // a scene from a bigger plan: the extra channels are skipped
                                 c.gain(id, (x["db"] as Number).toDouble()); c.pan(id, (x["pan"] as Number).toDouble()); c.mute(id, x["mute"] == true); c.solo(id, x["solo"] == true); c.name(id, x["name"].toString()) }
                             for (x in (o["buses"] as? List<*>).orEmpty().mapNotNull { it as? Map<*, *> }) { val id = (x["id"] as Number).toInt(); c.busLevel(id, (x["db"] as Number).toDouble()); c.busMute(id, x["mute"] == true) }
                             c.master((o["master"] as? Number)?.toDouble() ?: 0.0); c.state() }
