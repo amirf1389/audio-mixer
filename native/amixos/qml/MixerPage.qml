@@ -183,6 +183,9 @@ Item {
                     Popup { id: scorePop; objectName: "soundScorePop"; y: parent.height + 4; x: parent.width - width; width: 420; padding: 12
                         background: Rectangle { radius: 8; color: Theme.card; border.color: scoreBadge.tone }
                         contentItem: Column { spacing: 8
+                            Rectangle { objectName: "scoreFullView"; implicitWidth: fvT.implicitWidth + 16; implicitHeight: 20; radius: 4; color: Theme.ov(0.06); border.color: scoreBadge.tone   // the whole picture: gauge, parts, history, analyzer detail
+                                Text { id: fvT; anchors.centerIn: parent; text: i18n.t("FULL VIEW ›", i18n.lang); color: scoreBadge.tone; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { scorePop.close(); page.go("score") } } }
                             Row { spacing: 10
                                 Text { text: scoreBadge.sc.valid ? Math.round(scoreBadge.sc.total) : "—"; color: scoreBadge.tone; font.family: Theme.mono; font.pixelSize: 30; font.bold: true }
                                 Column { anchors.verticalCenter: parent.verticalCenter; spacing: 2
