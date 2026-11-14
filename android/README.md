@@ -15,7 +15,9 @@ speech, kick, acoustic guitar, loudness, telephone), flat, bypass; remembered pe
 delay times, speaker alignment (distance to ms, temperature), dB ratios and adding sources, wavelength and note, buffer latency,
 recording size. **PLUG-INS** (remote): the console's channel racks (slot, plug-in, ON / BYPASS / ERROR), the VST3 / VST2 plug-ins its scan found
 (search by name or vendor) and its extensions and built-in effects; read-only, saved by the console when the phone remote starts
-(`remote-console.json`, served at `/api/console-info` with the token). **Screenshots on every test run, no phone needed:** `gradle testReleaseUnitTest` draws the real screens with
+(`remote-console.json`, served at `/api/console-info` with the token). **SCENES** (remote): save the console's mix on the phone (levels, pan, mute, solo, names, buses, master) and recall it.
+**TOOLS** (no console needed): TUNER (YIN pitch from the microphone, needle in cents), SOUND LEVEL (estimate with a calibration
+offset, max hold) and GENERATOR (sine, pink, white, sweep through the phone's output). **Screenshots on every test run, no phone needed:** `gradle testReleaseUnitTest` draws the real screens with
 Robolectric into `screenshots-android/` (with `AMFX_DAEMON=<port> AMFX_TOKEN=<token>` and a running amixos-daemon, the remote is shown
 connected, plus the channel and master pages). **No app needed:** any browser on the same Wi-Fi can open
 `http://<console address>:8765/remote` (shown on the same page) and pair with the same PIN. The

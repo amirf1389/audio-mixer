@@ -59,6 +59,13 @@ class ScreenshotTest {
         a.tabTo(2); shot(a.window.decorView.rootView, "plugins-extensions")
     }
 
+    @Test fun tools() {   // the microphone is not there on the JVM: the readings are put on the screen as the microphone thread would
+        val a = Robolectric.buildActivity(ToolsActivity::class.java).setup().get()
+        a.show(0); a.showReading(-20.0, 441.6); shot(a.window.decorView.rootView, "tools-tuner")
+        a.show(1); repeat(5) { a.showReading(-38.0, 0.0) }; shot(a.window.decorView.rootView, "tools-level")
+        a.show(2); shot(a.window.decorView.rootView, "tools-generator")
+    }
+
     @Test fun remote() {
         val port = System.getProperty("amfx.daemon").orEmpty()
         val ctx = org.robolectric.RuntimeEnvironment.getApplication()
@@ -69,6 +76,10 @@ class ScreenshotTest {
         if (port.isNotEmpty()) {   // the channel page and the master page, drawn on their own (they open as dialogs in the app)
             val c = com.amfb.amixos.remote.DaemonClient(com.amfb.amixos.remote.Endpoint("127.0.0.1", port.toInt(), System.getenv("AMFX_TOKEN") ?: ""))
             shot(a.channelPanel(c, 0), "channel"); shot(a.masterPanel(c), "master")
+            ctx.getSharedPreferences("scenes", 0).edit()
+                .putString("Sunday service", "{\"t\":1763090000000,\"master\":-2,\"strips\":[{\"id\":0,\"name\":\"PASTOR\",\"db\":0,\"pan\":0,\"mute\":false,\"solo\":false},{\"id\":1,\"name\":\"CHOIR\",\"db\":-6,\"pan\":0,\"mute\":true,\"solo\":false}],\"buses\":[]}")
+                .putString("Band rehearsal", "{\"t\":1763100000000,\"master\":0,\"strips\":[{\"id\":0,\"name\":\"VOX\",\"db\":-3,\"pan\":0,\"mute\":false,\"solo\":false}],\"buses\":[]}").commit()
+            shot(a.scenesPanel(c), "scenes")
         }
     }
 }
