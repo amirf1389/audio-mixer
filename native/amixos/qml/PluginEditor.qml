@@ -186,17 +186,17 @@ Popup {
                         readonly property string current: { ed.rev; return ed.fx === "sampler" ? engine.sampleFileOf(ed.strip, ed.slot) : "" }
                         function load(p) { const e = engine.loadSampleFile(ed.strip, ed.slot, p); smpFile.note = e === "" ? "Loaded: press PLAY" : e; ed.rev++ }
                         function browse() {
-                            if (!dlg) { try { dlg = Qt.createQmlObject('import QtQuick.Dialogs; FileDialog { title: "Choose an audio file"; nameFilters: ["Audio files (*.wav *.flac *.aif *.aiff *.aifc *.m4a *.aac *.mp4 *.mp3 *.wma *.ogg *.oga *.opus *.caf)", "All files (*)"] }', smpFile, "samplerFileDialog")
+                            if (!dlg) { try { dlg = Qt.createQmlObject('import QtQuick.Dialogs; FileDialog { title: i18n.t("Choose an audio file", i18n.lang); nameFilters: ["Audio files (*.wav *.flac *.aif *.aiff *.aifc *.m4a *.aac *.mp4 *.mp3 *.wma *.ogg *.oga *.opus *.caf)", "All files (*)"] }', smpFile, "samplerFileDialog")
                                               dlg.accepted.connect(function () { smpFile.load(dlg.selectedFile.toString()) }) } catch (e) { smpFile.note = "Type the file's path and press LOAD."; return } }
                             dlg.open() }
                         Text { x: 10; y: 4; width: 216; text: smpFile.current !== "" ? smpFile.current : "Built-in sample (SAMPLE knob)"; color: ed.ink; font.family: ed.face1; font.pixelSize: 11; font.bold: true; elide: Text.ElideMiddle }
-                        TextField { id: smpPath; objectName: "samplerPath"; x: 10; y: 24; width: 216; height: 26; font.pixelSize: 9; placeholderText: "path: WAV, FLAC, AIFF, M4A, MP3 ..."; onAccepted: smpFile.load(text.trim()) }
+                        TextField { id: smpPath; objectName: "samplerPath"; x: 10; y: 24; width: 216; height: 26; font.pixelSize: 9; placeholderText: i18n.t("path: WAV, FLAC, AIFF, M4A, MP3 ...", i18n.lang); onAccepted: smpFile.load(text.trim()) }
                         Text { x: 10; y: 56; width: 216; wrapMode: Text.WordWrap; text: smpFile.note; color: ed.ink; opacity: 0.75; font.family: ed.face1; font.pixelSize: 8; maximumLineCount: 3; elide: Text.ElideRight }
                         Row { x: 10; y: 96; spacing: 6
                             Repeater { model: [{ t: "BROWSE…", k: "browse" }, { t: "LOAD", k: "load" }, { t: "BUILT-IN", k: "builtin" }]
                                 Rectangle { required property var modelData; objectName: "sampler_" + modelData.k; width: 68; height: 28; radius: 4; color: "transparent"; border.color: modelData.k === "builtin" ? ed.ink : ed.accent; border.width: 1.5
                                     opacity: modelData.k === "builtin" && smpFile.current === "" ? 0.4 : 1
-                                    Text { anchors.centerIn: parent; text: parent.modelData.t; color: parent.modelData.k === "builtin" ? ed.ink : ed.accent; font.family: ed.face1; font.pixelSize: 10; font.bold: true }
+                                    Text { anchors.centerIn: parent; text: i18n.t(parent.modelData.t, i18n.lang); color: parent.modelData.k === "builtin" ? ed.ink : ed.accent; font.family: ed.face1; font.pixelSize: 10; font.bold: true }
                                     MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
                                         onClicked: { const k = parent.modelData.k; if (k === "browse") smpFile.browse(); else if (k === "load") smpFile.load(smpPath.text.trim()); else if (smpFile.current !== "") { engine.loadSampleFile(ed.strip, ed.slot, ""); smpFile.note = ""; ed.rev++ } } } } } }
                     }
@@ -210,7 +210,7 @@ Popup {
                             if (t.length >= 2) { const b = 60000 * (t.length - 1) / (t[t.length - 1] - t[0]); ed.setParam(0, Math.max(0, Math.min(1, (b - 60) / 140))); ed.rev++ } }
                         Rectangle { x: 10; y: 2; width: 216; height: 86; radius: 4; color: "#0d1410"; border.color: "#22201b"; border.width: 1.5
                             Text { objectName: "delayMs"; x: 10; y: 4; text: dly.ms.toFixed(0); color: "#7dffa8"; font.family: Theme.mono; font.pixelSize: 30; font.bold: true }
-                            Text { x: 10; y: 40; text: "ms"; color: "#4fae74"; font.family: Theme.mono; font.pixelSize: 9 }
+                            Text { x: 10; y: 40; text: i18n.t("ms", i18n.lang); color: "#4fae74"; font.family: Theme.mono; font.pixelSize: 9 }
                             Text { anchors.right: parent.right; anchors.rightMargin: 10; y: 6; text: dly.bpm.toFixed(0) + " BPM"; color: "#7dffa8"; font.family: Theme.mono; font.pixelSize: 12; font.bold: true }
                             Text { anchors.right: parent.right; anchors.rightMargin: 10; y: 24; text: ["1/2", "1/4", "1/8 .", "1/8", "1/8 T", "1/16"][dly.note]; color: "#4fae74"; font.family: Theme.mono; font.pixelSize: 11 }
                             Row { x: 10; y: 54; spacing: 4; height: 26
@@ -223,9 +223,9 @@ Popup {
                                     Text { anchors.centerIn: parent; text: modelData; color: dly.note === index ? ed.onInk : ed.ink; font.family: ed.face1; font.pixelSize: 12; font.weight: Font.DemiBold }
                                     MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { ed.setParam(1, (index + 0.5) / 6); ed.rev++ } } } } }
                         Rectangle { x: 10; y: 160; width: 216; height: 34; radius: 4; color: tapA.pressed ? ed.accent : "transparent"; border.color: ed.accent; border.width: 1.5
-                            Text { anchors.centerIn: parent; text: "TAP TEMPO"; color: tapA.pressed ? ed.onInk : ed.accent; font.family: ed.face1; font.pixelSize: 13; font.weight: Font.Bold; font.letterSpacing: 2 }
+                            Text { anchors.centerIn: parent; text: i18n.t("TAP TEMPO", i18n.lang); color: tapA.pressed ? ed.onInk : ed.accent; font.family: ed.face1; font.pixelSize: 13; font.weight: Font.Bold; font.letterSpacing: 2 }
                             MouseArea { id: tapA; objectName: "delayTap"; anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onPressed: dly.tap() } }
-                        Text { x: 10; y: 198; width: 216; horizontalAlignment: Text.AlignHCenter; text: "TAP IN TIME WITH THE MUSIC"; color: ed.ink; opacity: 0.7; font.family: ed.face1; font.pixelSize: 8; font.letterSpacing: 1 } }
+                        Text { x: 10; y: 198; width: 216; horizontalAlignment: Text.AlignHCenter; text: i18n.t("TAP IN TIME WITH THE MUSIC", i18n.lang); color: ed.ink; opacity: 0.7; font.family: ed.face1; font.pixelSize: 8; font.letterSpacing: 1 } }
                     // THE LIVE DISPLAY of a family: the saturation curve, the reverb tail, or the sweep of the modulation
                     Section { objectName: "liveView"; visible: ed.view !== ""; head: ed.view === "curve" ? "TRANSFER" : ed.view === "decay" ? "TAIL" : "SWEEP"; width: 176
                         Rectangle { x: 10; y: 6; width: 156; height: 150; radius: 4; color: "#0d1410"; border.color: "#22201b"; border.width: 1.5
@@ -246,7 +246,7 @@ Popup {
                     // the name plate, the lamp and the ON / OFF switch
                     Item { width: 150; height: ed.panelH - 16
                         MouseArea { anchors.fill: parent; property point p0; cursorShape: Qt.SizeAllCursor; onPressed: function (m) { p0 = Qt.point(m.x, m.y) } onPositionChanged: function (m) { if (pressed) { ed.x += (m.x - p0.x) * ed.fit; ed.y += (m.y - p0.y) * ed.fit } } }
-                        Text { anchors.horizontalCenter: parent.horizontalCenter; y: 6; text: "AMFB  X1"; color: ed.plateInk; font.family: ed.face1; style: Text.Sunken; styleColor: ed.hi; font.pixelSize: 17; font.weight: Font.Bold; font.letterSpacing: 2 }
+                        Text { anchors.horizontalCenter: parent.horizontalCenter; y: 6; text: i18n.t("AMFB  X1", i18n.lang); color: ed.plateInk; font.family: ed.face1; style: Text.Sunken; styleColor: ed.hi; font.pixelSize: 17; font.weight: Font.Bold; font.letterSpacing: 2 }
                         Image { anchors.horizontalCenter: parent.horizontalCenter; y: 28; width: 40; height: 40; source: "qrc:/qt/qml/AmixOS/skin/badge.png"; smooth: true; mipmap: true }
                         Text { anchors.horizontalCenter: parent.horizontalCenter; y: 68; width: parent.width - 6; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap; text: i18n.t(ed.title.toUpperCase(), i18n.lang); color: ed.plateInk; font.family: ed.face1; style: Text.Sunken; styleColor: ed.hi; font.pixelSize: 12; font.weight: Font.Bold; font.letterSpacing: 1 }
                         // THE POWER BUTTON: a backlit round key with the power symbol; its ring glows while the unit works and goes dark when bypassed

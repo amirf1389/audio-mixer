@@ -33,13 +33,13 @@ Item {
         r.push({ ok: clips === 0 && !t.masterClip, t: clips === 0 && !t.masterClip ? "CLIPPING: none" : "CLIPPING: " + clips + " strip(s)" + (t.masterClip ? " and the master" : "") + " clipped. Lower the trims or faders (CLEAR CLIPS on LEVELS)." })
         r.push({ ok: engine.devices.length > 0, t: engine.devices.length > 0 ? "INTERFACES: " + engine.devices.length + " found" : "INTERFACES: none found" })
         const lic = engine.license; r.push({ ok: lic.state === "ok" || lic.state === "licensed", t: "LICENCE: " + lic.planName + " · " + engine.licensedChannels + " channels" + (lic.message ? " · " + lic.message : "") })
-        let armed = 0, muted = 0; for (let i = 0; i < engine.stripState.length; ++i) { if (engine.stripState[i].armed) ++armed; if (engine.stripState[i].effectiveMute) ++muted }
+        let armed = 0, muted = 0; for (let i = 0; i < engine.stripState.length; ++i) { if (engine.stripAt(i, engine.stripTick).armed) ++armed; if (engine.stripAt(i, engine.stripTick).effectiveMute) ++muted }
         r.push({ ok: true, t: "CONSOLE: " + engine.stripState.length + " strips, " + muted + " muted, " + armed + " armed, master " + t.masterPeakDb.toFixed(1) + " dBFS, correlation " + t.correlation.toFixed(2) })
         r.push({ ok: !engine.testOn, t: engine.testOn ? "TEST SIGNAL is ON and goes to the master: switch it off before a show." : "TEST SIGNAL: off" })
         report = r
     }
     component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(56, bl.implicitWidth + 16); implicitHeight: 22; radius: 4; color: on ? onColor : Theme.ov(0.08); border.color: Theme.lineSoft
-        Text { id: bl; anchors.centerIn: parent; text: label; color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
+        Text { id: bl; anchors.centerIn: parent; text: i18n.t(label, i18n.lang); color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
     component Head: Text { color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
     component Note: Text { Layout.fillWidth: true; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap }
     Flickable {
@@ -51,7 +51,7 @@ Item {
                 ColumnLayout { id: tapCol; anchors.fill: parent; anchors.margins: 12; spacing: 8
                     Head { text: i18n.t("TAP TEMPO & METRONOME", i18n.lang) }
                     RowLayout { spacing: 10
-                        Rectangle { implicitWidth: 110; implicitHeight: 54; radius: 8; color: Theme.amber; Text { anchors.centerIn: parent; text: i18n.t("TAP", i18n.lang); color: "#000"; font.family: Theme.mono; font.pixelSize: 16; font.bold: true; font.letterSpacing: 3 } MouseArea { anchors.fill: parent; onClicked: page.tap() } }
+                        Rectangle { implicitWidth: Math.max(110, children[0].implicitWidth + 12); implicitHeight: 54; radius: 8; color: Theme.amber; Text { anchors.centerIn: parent; text: i18n.t("TAP", i18n.lang); color: "#000"; font.family: Theme.mono; font.pixelSize: 16; font.bold: true; font.letterSpacing: 3 } MouseArea { anchors.fill: parent; onClicked: page.tap() } }
                         ColumnLayout { spacing: 2
                             Text { text: page.tapBpm > 0 ? page.tapBpm.toFixed(1) + i18n.t(" BPM", i18n.lang) : i18n.t("-- BPM", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 20; font.bold: true }
                             Text { text: i18n.t("interval ", i18n.lang) + page.tapMs.toFixed(0) + i18n.t(" ms · ", i18n.lang) + page.taps.length + i18n.t(" taps (8-tap smoothing)", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
@@ -131,8 +131,8 @@ Item {
                             MouseArea { anchors.fill: parent; onClicked: { page.scribble = index; engine.selectedStrip = index } } } } }
                     RowLayout { spacing: 8; Layout.fillWidth: true
                         Text { text: i18n.t("CH ", i18n.lang) + (page.scribble + 1); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
-                        Field { id: nameField; Layout.fillWidth: true; text: engine.stripState[page.scribble] ? engine.stripState[page.scribble].name : ""; font.family: Theme.mono; font.pixelSize: 9; maximumLength: 12; onEditingFinished: engine.setName(page.scribble, text) }
-                        Repeater { model: Theme.stripColors; delegate: Rectangle { width: 20; height: 20; radius: 10; color: modelData; border.width: engine.stripState[page.scribble] && engine.stripState[page.scribble].color === index ? 3 : 0; border.color: Theme.ink; MouseArea { anchors.fill: parent; onClicked: engine.setColor(page.scribble, index) } } } }
+                        Field { id: nameField; Layout.fillWidth: true; text: engine.stripAt(page.scribble, engine.stripTick) ? engine.stripAt(page.scribble, engine.stripTick).name : ""; font.family: Theme.mono; font.pixelSize: 9; maximumLength: 12; onEditingFinished: engine.setName(page.scribble, text) }
+                        Repeater { model: Theme.stripColors; delegate: Rectangle { width: 20; height: 20; radius: 10; color: modelData; border.width: engine.stripAt(page.scribble, engine.stripTick) && engine.stripAt(page.scribble, engine.stripTick).color === index ? 3 : 0; border.color: Theme.ink; MouseArea { anchors.fill: parent; onClicked: engine.setColor(page.scribble, index) } } } }
                     Note { text: i18n.t("The name shows on the strip and the LED colour on its fader; both go into scenes and presets.", i18n.lang) }
                 }
             }

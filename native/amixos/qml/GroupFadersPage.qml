@@ -11,7 +11,7 @@ Flickable {
         Panel {
             Layout.fillWidth: true
             title: i18n.t("GROUP FADERS • DCA", i18n.lang)
-            subtitle: "A DCA fader moves its members together (added in dB to each channel's own fader, the meters show the result); M mutes the group. A channel is in one DCA at most."
+            subtitle: i18n.t("A DCA fader moves its members together (added in dB to each channel's own fader, the meters show the result); M mutes the group. A channel is in one DCA at most.", i18n.lang)
             RowLayout {
                 Layout.fillWidth: true; spacing: 6
                 Repeater {
@@ -46,7 +46,7 @@ Flickable {
         Panel {
             Layout.fillWidth: true
             title: i18n.t("MUTE GROUPS", i18n.lang)
-            subtitle: "One button mutes every member channel; a channel can be in several groups."
+            subtitle: i18n.t("One button mutes every member channel; a channel can be in several groups.", i18n.lang)
             RowLayout {
                 Layout.fillWidth: true; spacing: 6
                 Repeater {

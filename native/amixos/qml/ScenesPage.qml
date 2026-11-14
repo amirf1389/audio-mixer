@@ -15,7 +15,7 @@ Flickable {
         Panel {
             Layout.fillWidth: true
             title: i18n.t("SCENES", i18n.lang)
-            subtitle: "A scene is the whole console at one moment. Pick a slot, STORE the console into it, RECALL it later. Stored on this computer."
+            subtitle: i18n.t("A scene is the whole console at one moment. Pick a slot, STORE the console into it, RECALL it later. Stored on this computer.", i18n.lang)
             GridLayout {
                 columns: width > 900 ? 8 : 4; columnSpacing: 6; rowSpacing: 6; Layout.fillWidth: true
                 Repeater {
@@ -36,9 +36,9 @@ Flickable {
                 Layout.fillWidth: true; spacing: 8
                 Text { text: i18n.t("SLOT ", i18n.lang) + (page.sel + 1); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
                 Field { id: nameField; Layout.preferredWidth: 220; placeholderText: i18n.t("scene name", i18n.lang); text: page.scene && !page.scene.empty ? page.scene.name : ""; font.family: Theme.mono; font.pixelSize: 10; color: Theme.ink; background: Rectangle { color: Theme.deep; radius: 4; border.color: Theme.line } onEditingFinished: if (page.scene && !page.scene.empty) engine.renameScene(page.sel, text) }
-                Rectangle { implicitWidth: 90; implicitHeight: 28; radius: 6; color: Theme.amber; Text { anchors.centerIn: parent; text: i18n.t("STORE", i18n.lang); color: "#000"; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.storeScene(page.sel, nameField.text) } }
-                Rectangle { implicitWidth: 90; implicitHeight: 28; radius: 6; color: page.scene && !page.scene.empty ? Theme.emerald : Theme.ov(0.05); Text { anchors.centerIn: parent; text: i18n.t("RECALL", i18n.lang); color: page.scene && !page.scene.empty ? "#000" : Theme.dim; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; enabled: page.scene && !page.scene.empty; onClicked: engine.recallScene(page.sel) } }
-                Rectangle { implicitWidth: 70; implicitHeight: 28; radius: 6; color: page.scene && !page.scene.empty ? Qt.rgba(1, 0.165, 0.373, 0.2) : Theme.ov(0.05); border.color: page.scene && !page.scene.empty ? Theme.danger : "transparent"; Text { anchors.centerIn: parent; text: i18n.t("CLEAR", i18n.lang); color: page.scene && !page.scene.empty ? Theme.danger : Theme.dim; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; enabled: page.scene && !page.scene.empty; onClicked: engine.clearScene(page.sel) } }
+                Rectangle { implicitWidth: Math.max(90, children[0].implicitWidth + 12); implicitHeight: 28; radius: 6; color: Theme.amber; Text { anchors.centerIn: parent; text: i18n.t("STORE", i18n.lang); color: "#000"; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.storeScene(page.sel, nameField.text) } }
+                Rectangle { implicitWidth: Math.max(90, children[0].implicitWidth + 12); implicitHeight: 28; radius: 6; color: page.scene && !page.scene.empty ? Theme.emerald : Theme.ov(0.05); Text { anchors.centerIn: parent; text: i18n.t("RECALL", i18n.lang); color: page.scene && !page.scene.empty ? "#000" : Theme.dim; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; enabled: page.scene && !page.scene.empty; onClicked: engine.recallScene(page.sel) } }
+                Rectangle { implicitWidth: Math.max(70, children[0].implicitWidth + 12); implicitHeight: 28; radius: 6; color: page.scene && !page.scene.empty ? Qt.rgba(1, 0.165, 0.373, 0.2) : Theme.ov(0.05); border.color: page.scene && !page.scene.empty ? Theme.danger : "transparent"; Text { anchors.centerIn: parent; text: i18n.t("CLEAR", i18n.lang); color: page.scene && !page.scene.empty ? Theme.danger : Theme.dim; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; enabled: page.scene && !page.scene.empty; onClicked: engine.clearScene(page.sel) } }
                 Item { Layout.fillWidth: true }
                 Text { text: i18n.t("double-click a slot = recall", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 }
             }
@@ -46,7 +46,7 @@ Flickable {
         Panel {
             Layout.fillWidth: true
             title: i18n.t("RECALL SAFE", i18n.lang)
-            subtitle: "Channels marked here are not changed when a scene is recalled (the lead vocal stays where you set it)."
+            subtitle: i18n.t("Channels marked here are not changed when a scene is recalled (the lead vocal stays where you set it).", i18n.lang)
             Flow { Layout.fillWidth: true; spacing: 3
                 Repeater { model: engine.stripState; delegate: Rectangle { implicitWidth: 64; implicitHeight: 24; radius: 4
                     property bool safe: engine.recallSafe(index)

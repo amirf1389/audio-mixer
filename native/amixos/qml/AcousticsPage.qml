@@ -54,7 +54,7 @@ Item {
     Connections { target: measure; function onChanged() { respPlot.requestPaint(); etcPlot.requestPaint(); eqPlot.requestPaint(); if (measure.state === "done") { page.water = measure.waterfall(24); page.spec = measure.spectrogram(); waterPlot.requestPaint(); specPlot.requestPaint() } } }
     Component.onCompleted: { roomData = measure.room(rm[0], rm[1], rm[2], rm[3], rm[4], rm[5], rm[6], rm[7], rm[8], rm[9]) }
     component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(56, bl.implicitWidth + 16); implicitHeight: 22; radius: 4; color: on ? onColor : Theme.ov(0.08); border.color: Theme.lineSoft
-        Text { id: bl; anchors.centerIn: parent; text: label; color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
+        Text { id: bl; anchors.centerIn: parent; text: i18n.t(label, i18n.lang); color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
     component Lab: Text { color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
     component Val: Text { color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
     component Note: Text { Layout.fillWidth: true; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap }
@@ -116,7 +116,7 @@ Item {
             ColumnLayout { spacing: 8
                 RowLayout { spacing: 14
                     Lab { text: page.t("DELAY") } Val { text: measure.decay.delayMs !== undefined ? measure.decay.delayMs.toFixed(2) + " ms  (" + (measure.decay.delayMs * 0.343).toFixed(2) + " m)" : "—" }
-                    Lab { text: "T20" } Val { text: measure.decay.t20 ? measure.decay.t20.toFixed(2) + " s" : "—" } Lab { text: "T30 (RT60)" } Val { text: measure.decay.t30 ? measure.decay.t30.toFixed(2) + " s" : "—" } Lab { text: "Topt" } Val { text: measure.decay.topt ? measure.decay.topt.toFixed(2) + " s" : "—" }
+                    Lab { text: "T20" } Val { text: measure.decay.t20 ? measure.decay.t20.toFixed(2) + " s" : "—" } Lab { text: i18n.t("T30 (RT60)", i18n.lang) } Val { text: measure.decay.t30 ? measure.decay.t30.toFixed(2) + " s" : "—" } Lab { text: i18n.t("Topt", i18n.lang) } Val { text: measure.decay.topt ? measure.decay.topt.toFixed(2) + " s" : "—" }
                     Btn { label: page.t("APPLY DELAY TO CH") + " " + (page.strip + 1); visible: measure.decay.delayMs > 0; onClicked: engine.setDelay(page.strip, Math.min(500, measure.decay.delayMs)) }
                     Item { Layout.fillWidth: true } }
                 Plot { Layout.preferredHeight: 160; Canvas { id: etcPlot; anchors.fill: parent; anchors.margins: 6

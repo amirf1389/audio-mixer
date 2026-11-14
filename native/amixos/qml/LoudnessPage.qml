@@ -10,7 +10,7 @@ Flickable {
         Panel {
             Layout.fillWidth: true
             title: i18n.t("LOUDNESS • EBU R128", i18n.lang)
-            subtitle: "Momentary 400 ms, short-term 3 s, integrated (gated -70 / -10 LU), loudness range, 4x true peak. Target -23 LUFS broadcast, -14 LUFS streaming."
+            subtitle: i18n.t("Momentary 400 ms, short-term 3 s, integrated (gated -70 / -10 LU), loudness range, 4x true peak. Target -23 LUFS broadcast, -14 LUFS streaming.", i18n.lang)
             GridLayout {
                 columns: width > 700 ? 6 : 3; Layout.fillWidth: true; columnSpacing: 10; rowSpacing: 10
                 Repeater {
@@ -27,7 +27,7 @@ Flickable {
             }
             Rectangle {   // the integrated loudness against the two targets
                 Layout.fillWidth: true; implicitHeight: 26; radius: 6; color: Theme.deep; border.color: Theme.lineSoft
-                property real v: engine.telemetry.integrated === undefined ? -120 : engine.telemetry.integrated
+                property real v: engine.telv("integrated", engine.meterTick) === undefined ? -120 : engine.telv("integrated", engine.meterTick)
                 Rectangle { x: 2; y: 2; height: parent.height - 4; radius: 4; width: Math.max(0, Math.min(1, (parent.v + 60) / 60)) * (parent.width - 4); color: parent.v > -12 ? Theme.danger : parent.v > -16 ? Theme.amber : Theme.emerald; Behavior on width { NumberAnimation { duration: 120 } } }
                 Rectangle { x: 2 + (parent.width - 4) * ((-23 + 60) / 60); width: 2; height: parent.height; color: Theme.amber; Text { anchors.bottom: parent.top; text: "-23"; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 7 } }
                 Rectangle { x: 2 + (parent.width - 4) * ((-14 + 60) / 60); width: 2; height: parent.height; color: Theme.cyan; Text { anchors.bottom: parent.top; text: "-14"; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 7 } }

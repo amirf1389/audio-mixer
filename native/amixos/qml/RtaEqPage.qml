@@ -58,7 +58,7 @@ Flickable {
     Connections { target: engine; function onStripsChanged() { page.reload() } function onMasterChainChanged() { page.reload() } function onPresetsChanged() { page.slotTick++ } }   // the master's EQ reports through masterChainChanged: without it the sliders and diamonds snapped back after every move
     Timer { interval: 16; running: page.visible && page.rtaOn && !page.frozen; repeat: true; onTriggered: { page.spec = engine.spectrum(page.program ? 0 : 2); rta.requestPaint() } }
     component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; property color offColor: Theme.ov(0.08); signal clicked(); implicitWidth: bl.implicitWidth + 16; implicitHeight: 22; radius: 4; color: on ? onColor : offColor; border.color: on ? onColor : Theme.lineSoft
-        Text { id: bl; anchors.centerIn: parent; text: label; color: parent.on ? "#000" : Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
+        Text { id: bl; anchors.centerIn: parent; text: i18n.t(label, i18n.lang); color: parent.on ? "#000" : Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
     ColumnLayout {
         id: col
         width: parent.width - 20
@@ -92,7 +92,7 @@ Flickable {
                     Btn { label: i18n.t("ANIX W-SHAPE", i18n.lang); onColor: Theme.amber; offColor: Qt.rgba(0.984, 0.749, 0.141, 0.18); on: page.presetName === "Anix W Shape"; onClicked: page.loadPreset("Anix W Shape") }
                     // W-SHAPE TUNER: on a channel, the plug-in itself goes into its rack (continuous shelves and bells, level kept the same: the better
                     // choice); on the program bus, which has no rack, the same curve is laid on the ten bands (the tuner's W read at the ISO centres)
-                    Btn { objectName: "rtaWShape"; readonly property int slot: { engine.stripState; if (page.strip < 0) return -1; const pl = engine.plugins(page.strip); for (let k = 0; k < pl.length; k++) if (pl[k].kind === "fx:wshape") return k; return -1 }
+                    Btn { objectName: "rtaWShape"; readonly property int slot: { engine.stripTick; if (page.strip < 0) return -1; const pl = engine.plugins(page.strip); for (let k = 0; k < pl.length; k++) if (pl[k].kind === "fx:wshape") return k; return -1 }
                         label: page.strip < 0 ? i18n.t("W-SHAPE TUNER CURVE", i18n.lang) : slot >= 0 ? i18n.t("W-SHAPE TUNER: IN RACK ✓", i18n.lang) : i18n.t("+ W-SHAPE TUNER", i18n.lang)
                         onColor: "#c084fc"; offColor: Qt.rgba(0.75, 0.52, 0.99, 0.18); on: slot >= 0 || page.presetName === "W-Shape Tuner (smooth)"
                         onClicked: { if (page.strip < 0) { page.loadPreset("W-Shape Tuner (smooth)"); return }

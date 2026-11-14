@@ -48,6 +48,6 @@ Item {
     Image { visible: k.vintage; source: "qrc:/qt/qml/AmixOS/skin/knob-pointer.png"; width: k.size * 1.32; height: width; x: face.x + k.size / 2 - width / 2; y: face.y + k.size / 2 - height / 2; smooth: true; mipmap: true; rotation: -135 + 270 * k.value }
     Text { visible: k.vintage; anchors.top: face.bottom; anchors.topMargin: 0; x: face.x - 6; text: k.minText; color: k.paper; opacity: 0.9; font.family: Theme.sans; font.pixelSize: 8; style: Text.Sunken; styleColor: "#60ffffff" }
     Text { visible: k.vintage; anchors.top: face.bottom; anchors.topMargin: 0; anchors.right: face.right; anchors.rightMargin: -6; text: k.maxText; color: k.paper; opacity: 0.9; font.family: Theme.sans; font.pixelSize: 8; style: Text.Sunken; styleColor: "#60ffffff" }
-    Text { id: lab; anchors.top: face.bottom; anchors.topMargin: k.vintage ? 7 : 3; anchors.horizontalCenter: parent.horizontalCenter; text: k.label; color: k.vintage ? k.paper : k.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; font.letterSpacing: 1 }
+    Text { id: lab; anchors.top: face.bottom; anchors.topMargin: k.vintage ? 7 : 3; anchors.horizontalCenter: parent.horizontalCenter; text: i18n.t(k.label, i18n.lang); color: k.vintage ? k.paper : k.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; font.letterSpacing: 1 }
     Text { anchors.top: lab.bottom; anchors.topMargin: 1; anchors.horizontalCenter: parent.horizontalCenter; text: k.valueText; color: k.vintage ? k.paper : k.tint; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
 }

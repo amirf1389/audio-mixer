@@ -17,7 +17,7 @@ Item {
     // the needle angle over the arc; the pivot is the cap at the bottom of the face, in the middle
     readonly property real span: 44   // degrees each side of the middle
     property real angle: -span + 2 * span * pos(valueVu)
-    Behavior on angle { NumberAnimation { duration: 60 } }
+    // the needle ballistics are the engine's VU (300 ms one-pole): no extra animation here, it kept the window redrawing
     Rectangle { anchors.fill: parent; radius: 4; color: "#f4ead8"; border.color: "#3a3326"; border.width: 1
         gradient: Gradient { GradientStop { position: 0; color: "#fbf4e4" } GradientStop { position: 1; color: "#e9dcc2" } } }
     Canvas {

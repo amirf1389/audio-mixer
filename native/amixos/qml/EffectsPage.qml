@@ -31,7 +31,7 @@ Item {
                 Repeater { model: engine.busState; delegate: Rectangle { implicitWidth: bl.implicitWidth + 16; implicitHeight: 20; radius: 4; color: page.bus === index ? Theme.amber : Theme.ov(0.06); border.color: modelData.fx !== "" ? Theme.violet : "transparent"
                     Text { id: bl; anchors.centerIn: parent; text: i18n.t(modelData.name ?? "", i18n.lang) + (modelData.fx !== "" ? " ·" : ""); color: page.bus === index ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.bus = index } } }
                 Item { Layout.fillWidth: true }
-                Rectangle { implicitWidth: 100; implicitHeight: 20; radius: 4; color: page.browse ? Theme.violet : Theme.ov(0.08); border.color: Theme.lineSoft
+                Rectangle { implicitWidth: Math.max(100, children[0].implicitWidth + 12); implicitHeight: 20; radius: 4; color: page.browse ? Theme.violet : Theme.ov(0.08); border.color: Theme.lineSoft
                     Text { anchors.centerIn: parent; text: i18n.t("300 PRESETS", i18n.lang); color: page.browse ? "#000" : Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.browse = !page.browse } }
                 Text { visible: page.fx.preset > 0; text: i18n.t("preset #", i18n.lang) + page.fx.preset; color: Theme.violet; font.family: Theme.mono; font.pixelSize: 8 }
                 Text { text: page.fx.kind !== "" ? page.fx.name + i18n.t(" on ", i18n.lang) + (page.b ? page.b.name : "") : i18n.t("no effect on this bus", i18n.lang); color: page.fx.kind !== "" ? Theme.violet : Theme.dim; font.family: Theme.mono; font.pixelSize: 8 }

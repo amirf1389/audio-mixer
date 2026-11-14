@@ -39,6 +39,9 @@ class Engine : public QObject {
   Q_PROPERTY(QVariantList stripState READ stripState NOTIFY stripsChanged)
   Q_PROPERTY(QVariantList meters READ meters NOTIFY metersChanged)
   Q_PROPERTY(int meterTick READ meterTick NOTIFY metersChanged)
+  Q_PROPERTY(int stripTick READ stripTick NOTIFY stripsChanged)   // counts strip changes: bind "engine.stripAt(i, engine.stripTick)" to follow one strip
+  Q_PROPERTY(bool anyMute READ anyMute NOTIFY stripsChanged)
+  Q_PROPERTY(bool anySolo READ anySolo NOTIFY stripsChanged)
   Q_PROPERTY(QVariantMap telemetry READ telemetry NOTIFY metersChanged)
   Q_PROPERTY(double masterDb READ masterDb WRITE setMaster NOTIFY stripsChanged)
   Q_PROPERTY(QVariantList pages READ pages CONSTANT)
@@ -81,6 +84,17 @@ class Engine : public QObject {
   Q_INVOKABLE QVariantMap meterAt(int i) const { return i >= 0 && i < meters_.size() ? meters_[i].toMap() : QVariantMap{}; }
   Q_INVOKABLE int clippedStrips() const { int n = 0; for (const QVariant& v : meters_) if (v.toMap().value("clip").toBool()) ++n; return n; }
   int meterTick() const { return meterTick_; }
+  // FAST READS for the interface: engine.stripState[i] builds and converts all 32 strips (about 40 values each) on every read, and every
+  // engine.telemetry.x converts the whole telemetry map; a mixer with 32 strips did that thousands of times per fader move. These read one item
+  // from a cache that is rebuilt only after a change (the tick argument makes the binding follow the change).
+  Q_INVOKABLE QVariantMap stripAt(int i, int tick = 0) const { Q_UNUSED(tick); const QVariantList& l = stripCache(); return i >= 0 && i < l.size() ? l[i].toMap() : QVariantMap{}; }
+  Q_INVOKABLE QVariant telv(const QString& key, int tick = 0) const { Q_UNUSED(tick); return telemetry_.value(key); }
+  int stripTick() const { return stripTick_; }
+  // ONE STRIP REDRAWS, NOT 32: "property int ver: engine.stripVer(index, engine.stripTick)" changes only when that strip changed, and
+  // "property var st: { ver; return engine.stripLite(index) }" then converts one small map. QML does not re-run a binding whose input kept its value.
+  Q_INVOKABLE int stripVer(int i, int tick = 0) const { Q_UNUSED(tick); stripCache(); return i >= 0 && i < static_cast<int>(stripVer_.size()) ? stripVer_[static_cast<std::size_t>(i)] : 0; }
+  Q_INVOKABLE QVariantMap stripLite(int i) const { stripCache(); return i >= 0 && i < liteCache_.size() ? liteCache_[i].toMap() : QVariantMap{}; }
+  bool anyMute() const; bool anySolo() const;
   QVariantMap telemetry() const { return telemetry_; }
   double masterDb() const { return masterDb_; }
   QVariantList pages() const;
@@ -558,7 +572,14 @@ class Engine : public QObject {
 
  private:
   static constexpr int kStrips = 32;
-  int meterTick_ = 0;
+  int meterTick_ = 0; int stripTick_ = 0; mutable QVariantList stripCache_, liteCache_; mutable bool stripDirty_ = true; mutable std::vector<int> stripVer_ = std::vector<int>(32, 0);
+  const QVariantList& stripCache() const {
+    if (!stripDirty_) return stripCache_;
+    QVariantList fresh = buildStripState(); QVariantList lite;
+    for (int i = 0; i < fresh.size(); ++i) { QVariantMap m = fresh[i].toMap(); m.remove("dsp"); lite << m;   // the mixer's view: no EQ / dynamics detail
+      if (i >= stripCache_.size() || fresh[i] != stripCache_[i]) ++stripVer_[static_cast<std::size_t>(i)]; }   // only the strips that really changed get a new version
+    stripCache_ = fresh; liteCache_ = lite; stripDirty_ = false; return stripCache_; }
+  QVariantList buildStripState() const;
   static constexpr int kBuses = 16, kGroups = 8;   // buses 0-7 AUX, 8-15 FX
   struct SendUi { double db = -60; bool pre = false; };
   struct PluginUi { QString kind; bool bypass = false; std::shared_ptr<am::host::Plugin> vst; QString state, error; };   // vst: loaded instance (null = pending with error)

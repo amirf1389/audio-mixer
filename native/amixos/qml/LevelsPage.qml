@@ -9,7 +9,7 @@ Item {
         Panel {
             Layout.fillWidth: true; Layout.fillHeight: true
             title: i18n.t("LEVELS", i18n.lang)
-            subtitle: "Peak (white line), RMS (bar), hold (amber), clip lamp. The master meters follow the limiter."
+            subtitle: i18n.t("Peak (white line), RMS (bar), hold (amber), clip lamp. The master meters follow the limiter.", i18n.lang)
             RowLayout {
                 Layout.fillWidth: true; Layout.fillHeight: true; spacing: 3
                 Repeater {
@@ -23,10 +23,10 @@ Item {
                 Rectangle { Layout.fillHeight: true; width: 1; color: Theme.line; Layout.leftMargin: 6; Layout.rightMargin: 6 }
                 ColumnLayout { Layout.fillHeight: true; spacing: 3
                     RowLayout { Layout.fillHeight: true; spacing: 4
-                        MeterBar { Layout.fillHeight: true; implicitWidth: 18; Layout.topMargin: 10; peakDb: engine.telemetry.masterLDb; rmsDb: engine.telemetry.masterRmsDb; clip: engine.telemetry.masterClip }
-                        MeterBar { Layout.fillHeight: true; implicitWidth: 18; Layout.topMargin: 10; peakDb: engine.telemetry.masterRDb; rmsDb: engine.telemetry.masterRmsDb; clip: engine.telemetry.masterClip } }
+                        MeterBar { Layout.fillHeight: true; implicitWidth: 18; Layout.topMargin: 10; peakDb: engine.telv("masterLDb", engine.meterTick); rmsDb: engine.telv("masterRmsDb", engine.meterTick); clip: engine.telv("masterClip", engine.meterTick) }
+                        MeterBar { Layout.fillHeight: true; implicitWidth: 18; Layout.topMargin: 10; peakDb: engine.telv("masterRDb", engine.meterTick); rmsDb: engine.telv("masterRmsDb", engine.meterTick); clip: engine.telv("masterClip", engine.meterTick) } }
                     Text { Layout.alignment: Qt.AlignHCenter; text: i18n.t("MASTER", i18n.lang); color: Theme.orange; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
-                    Text { Layout.alignment: Qt.AlignHCenter; text: Theme.dbText(engine.telemetry.masterPeakDb); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8 } }
+                    Text { Layout.alignment: Qt.AlignHCenter; text: Theme.dbText(engine.telv("masterPeakDb", engine.meterTick)); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8 } }
             }
         }
     }

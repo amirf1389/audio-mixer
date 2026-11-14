@@ -23,14 +23,14 @@ Flickable {
         Panel {
             Layout.fillWidth: true
             title: i18n.t("NOISE GATE • CHANNEL DYNAMICS", i18n.lang)
-            subtitle: "Opens above the threshold, closes 3 dB under it after the hold time; closed, the channel is turned down by the range. The lamp shows the live state."
+            subtitle: i18n.t("Opens above the threshold, closes 3 dB under it after the hold time; closed, the channel is turned down by the range. The lamp shows the live state.", i18n.lang)
             RowLayout {
                 Layout.fillWidth: true; spacing: 8
                 Text { text: i18n.t("CHANNEL", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9 }
                 Combo {
                     implicitWidth: 150; model: engine.strips; currentIndex: page.strip
-                    displayText: engine.stripState[currentIndex] ? engine.stripState[currentIndex].name : ""
-                    delegate: ItemDelegate { width: parent.width; text: engine.stripState[index] ? engine.stripState[index].name : index; font.family: Theme.mono }
+                    displayText: engine.stripAt(currentIndex, engine.stripTick) ? engine.stripAt(currentIndex, engine.stripTick).name : ""
+                    delegate: ItemDelegate { width: parent.width; text: engine.stripAt(index, engine.stripTick) ? engine.stripAt(index, engine.stripTick).name : index; font.family: Theme.mono }
                     onActivated: page.strip = currentIndex
                 }
                 Rectangle { objectName: "closeNoiseBtn"; implicitWidth: cnT.implicitWidth + 20; implicitHeight: 24; radius: 4; color: Theme.ov(0.08); border.color: Theme.cyan   // CLOSE NOISE: gate set from the noise that is there now

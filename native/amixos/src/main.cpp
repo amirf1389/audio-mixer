@@ -29,6 +29,7 @@
 #include <QtEndian>
 #include <QFileInfo>
 #include <QFile>
+#include <ctime>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -90,9 +91,9 @@ int main(int argc, char* argv[]) {
   app.setWindowIcon(QIcon(QStringLiteral(":/qt/qml/AmixOS/icons/amfx1.png")));   // the mixer logo in the title bar and the task bar
   QQuickStyle::setStyle("Fusion");   // the one stock style that draws from the application palette (set dark below); Basic ignores the palette and paints light grey boxes on Windows
 
-  bool smoke = false; QString shots, lang;
+  bool smoke = false, bench = false; QString shots, lang;
   const QString smokeWav = QDir::tempPath() + "/amixos-smoke-tone.wav", smokeOut = QDir::tempPath() + "/amixos-smoke-export.wav";   // used by the smoke and by its end-of-run lambda: must outlive both
-  for (int i = 1; i < argc; ++i) { const QString a = QString::fromLocal8Bit(argv[i]); if (a == "--smoke") smoke = true; else if (a == "--shots" && i + 1 < argc) { smoke = true; shots = QString::fromLocal8Bit(argv[++i]); } else if (a == "--lang" && i + 1 < argc) lang = QString::fromLocal8Bit(argv[++i]); }
+  for (int i = 1; i < argc; ++i) { const QString a = QString::fromLocal8Bit(argv[i]); if (a == "--smoke") smoke = true; else if (a == "--bench") { smoke = true; bench = true; } else if (a == "--shots" && i + 1 < argc) { smoke = true; shots = QString::fromLocal8Bit(argv[++i]); } else if (a == "--lang" && i + 1 < argc) lang = QString::fromLocal8Bit(argv[++i]); }
 
   am::paths::setProgramDir(QCoreApplication::applicationDirPath().toStdString());
   if (!smoke) { QFile* lf = new QFile(QString::fromStdString(am::paths::file("console.log"))); if (lf->size() > 256 * 1024) lf->remove(); if (lf->open(QIODevice::Append | QIODevice::Text)) { g_log = lf; qInstallMessageHandler(logToFile); qInfo("AmF X1 %s starting: %s, Qt %s, render %s", AMIX_VERSION, am::paths::osName(), qVersion(), QQuickWindow::graphicsApi() == QSGRendererInterface::Software ? "software" : "auto"); } }
@@ -130,6 +131,17 @@ int main(int argc, char* argv[]) {
   if (!smoke) engine.setHotplugWatch(true);
   if (qml.rootObjects().isEmpty()) return 2;
 
+  if (bench) {   // --bench: CPU time of the interface thread on the MIXER page, idle (meters running) and while faders move
+    auto* win = qobject_cast<QQuickWindow*>(qml.rootObjects().first());
+    engine.setNullTestInput(true); engine.open("null", "", "", 48000, 256, 2, 2); win->setProperty("current", qEnvironmentVariable("AMIX_BENCH_PAGE", "mixer")); waitMs(1500);
+    auto cpuMs = [] { return 1000.0 * double(std::clock()) / CLOCKS_PER_SEC; };
+    double c0 = cpuMs(); waitMs(5000); const double idle = (cpuMs() - c0) / 5.0;   // ms of CPU per second
+    c0 = cpuMs(); QElapsedTimer t; t.start(); int moves = 0;
+    while (t.elapsed() < 5000) { engine.setGain(moves % 32, -30.0 + (moves % 60) * 0.5); ++moves; QCoreApplication::processEvents(QEventLoop::AllEvents, 5); QThread::msleep(16); }   // a fader moved at 60 Hz, round the strips
+    const double moving = (cpuMs() - c0) / 5.0;
+    std::printf("amixos --bench: MIXER idle %.1f ms CPU per second, faders moving (%d moves) %.1f ms CPU per second\n", idle, moves, moving);
+    engine.stop(); return 0;
+  }
   if (smoke) {
     // the null device: a timed "sound card" that needs no hardware; the strips read silence, the meters must publish blocks
     const bool opened = engine.open("null", "", "", 48000, 256, 2, 2);

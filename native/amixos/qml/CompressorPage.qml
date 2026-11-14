@@ -64,14 +64,14 @@ Flickable {
         Panel {
             Layout.fillWidth: true
             title: i18n.t("COMPRESSOR • CHANNEL DYNAMICS", i18n.lang)
-            subtitle: "Feed-forward peak detector, soft knee, attack and release in the dB domain, make-up gain. The dot is the live input and output of this channel."
+            subtitle: i18n.t("Feed-forward peak detector, soft knee, attack and release in the dB domain, make-up gain. The dot is the live input and output of this channel.", i18n.lang)
             RowLayout {
                 Layout.fillWidth: true; spacing: 8
                 Text { text: i18n.t("CHANNEL", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9 }
                 Combo {
                     implicitWidth: 150; model: engine.strips; currentIndex: page.strip
-                    displayText: engine.stripState[currentIndex] ? engine.stripState[currentIndex].name : ""
-                    delegate: ItemDelegate { width: parent.width; text: engine.stripState[index] ? engine.stripState[index].name : index; font.family: Theme.mono }
+                    displayText: engine.stripAt(currentIndex, engine.stripTick) ? engine.stripAt(currentIndex, engine.stripTick).name : ""
+                    delegate: ItemDelegate { width: parent.width; text: engine.stripAt(index, engine.stripTick) ? engine.stripAt(index, engine.stripTick).name : index; font.family: Theme.mono }
                     onActivated: page.strip = currentIndex
                 }
                 Item { Layout.fillWidth: true }

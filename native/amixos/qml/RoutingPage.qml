@@ -28,7 +28,7 @@ Item {
                 Repeater { model: page.tab === 0 ? ["CH 01-16", "CH 17-32"] : ["OUT 1-16", "OUT 17-32"]; delegate: Rectangle { implicitWidth: 66; implicitHeight: 20; radius: 4; color: page.bank === index ? Theme.ov(0.16) : Theme.ov(0.06); Text { anchors.centerIn: parent; text: modelData; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.bank = index } } }
                 Item { Layout.fillWidth: true }
                 Text { text: engine.running ? (engine.deviceInputs + i18n.t(" device inputs · ", i18n.lang) + engine.deviceOutputs + i18n.t(" outputs", i18n.lang)) : i18n.t("no device open: the matrix is stored and applied when one opens", i18n.lang); color: engine.running ? Theme.emerald : Theme.amber; font.family: Theme.mono; font.pixelSize: 8 }
-                Rectangle { implicitWidth: 70; implicitHeight: 20; radius: 4; color: Theme.ov(0.08); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: i18n.t("DEFAULTS", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.resetRouting() } }
+                Rectangle { implicitWidth: Math.max(70, children[0].implicitWidth + 12); implicitHeight: 20; radius: 4; color: Theme.ov(0.08); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: i18n.t("DEFAULTS", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.resetRouting() } }
             }
         }
         // INPUTS -> STRIPS: rows = strips of this bank, columns = device inputs 1..32 (+ NONE)
@@ -45,7 +45,7 @@ Item {
                     Repeater { model: 16
                         delegate: RowLayout { spacing: 2
                             readonly property int strip: page.bank * 16 + index
-                            readonly property var st: engine.stripState[strip]
+                            readonly property var st: engine.stripAt(strip, engine.stripTick)
                             readonly property int route: page.inRoutes[strip] === undefined ? strip : page.inRoutes[strip]
                             Rectangle { Layout.preferredWidth: 96; implicitHeight: page.cell; radius: 3; color: Theme.ov(0.04)
                                 Rectangle { anchors.left: parent.left; anchors.top: parent.top; anchors.bottom: parent.bottom; width: 3; radius: 1; color: Theme.stripColors[st ? st.color : 0] }

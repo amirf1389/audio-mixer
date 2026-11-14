@@ -34,7 +34,7 @@ Item {
                         model: 16
                         delegate: Item {
                             property int strip: page.bank * 16 + index
-                            property var st: engine.stripState[strip]
+                            property var st: engine.stripAt(strip, engine.stripTick)
                             property var sd: engine.send(strip, page.bus)
                             width: (parent.width - 15 * 4) / 16; height: parent.height
                             Connections { target: engine; function onStripsChanged() { sd = engine.send(strip, page.bus) } }

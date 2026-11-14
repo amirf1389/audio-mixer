@@ -43,6 +43,8 @@ static constexpr double kIsoCentres[10] = {31.5, 63, 125, 250, 500, 1000, 2000, 
 Engine::Engine(QObject* parent) : QObject(parent) {
   am::drv::setOpenRouting(QSettings().value("audio/openRouting", true).toBool());
   winSync_ = QSettings().value("mixer/windowsMuteSync", true).toBool(); sysGet_ = [](bool& m) { return am::systemMuteGet(m); }; sysSet_ = [](bool m) { return am::systemMuteSet(m); };
+  connect(this, &Engine::stripsChanged, this, [this] { stripDirty_ = true; ++stripTick_; });
+  for (auto sig : {&Engine::groupsChanged, &Engine::busesChanged, &Engine::routingChanged, &Engine::recordChanged, &Engine::licenseChanged}) connect(this, sig, this, [this] { stripDirty_ = true; });   // DCA / mute groups, sends, arm and the plan feed the strip state too   // first receiver: the cache is stale before any binding reads it
   sysTimer_.setInterval(500); connect(&sysTimer_, &QTimer::timeout, this, &Engine::syncSystemSound); sysTimer_.start();
 #ifdef _WIN32
   { static std::once_flag once; std::call_once(once, [] { std::thread([] { CoInitializeEx(nullptr, COINIT_MULTITHREADED); for (;;) std::this_thread::sleep_for(std::chrono::hours(1)); }).detach(); }); }   // keeps the multithreaded COM apartment alive: the sound-card objects are made on short-lived worker threads
@@ -181,7 +183,10 @@ void Engine::pushAll() {
   for (int o = 0; o < kOutputs; ++o) rt_->setOutputRoute(o, outRoute_[o]);
 }
 
-QVariantList Engine::stripState() const {
+QVariantList Engine::stripState() const { return stripCache(); }
+bool Engine::anyMute() const { for (const StripUi& s : strips_) if (s.mute) return true; return false; }
+bool Engine::anySolo() const { for (const StripUi& s : strips_) if (s.solo) return true; return false; }
+QVariantList Engine::buildStripState() const {
   QVariantList l;
   for (int i = 0; i < kStrips; ++i) { const StripUi& s = strips_[static_cast<std::size_t>(i)]; QVariantMap m; m["index"] = i; m["autoPol"] = s.autoPol; m["name"] = s.name; m["db"] = s.db; m["pan"] = s.pan; m["mute"] = s.mute; m["solo"] = s.solo; m["dsp"] = s.dsp.active(); m["dca"] = s.dca; m["muteGroups"] = static_cast<int>(s.muteGroups); m["effectiveDb"] = effectiveDb(i); m["effectiveMute"] = effectiveMute(i); m["color"] = s.color; m["plugins"] = pluginCount(i); m["link"] = s.link; m["trimDb"] = s.trimDb; m["armed"] = ((armed_ >> i) & 1u) != 0; m["automix"] = s.automix; m["amWeight"] = s.amWeight;
     const auto& p = s.dsp.params(); bool eqOn = false; for (const auto& b : p.eq) eqOn = eqOn || b.type != am::dsp::FilterType::Off;
