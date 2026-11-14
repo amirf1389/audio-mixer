@@ -40,6 +40,22 @@ class DaemonClient(val ep: Endpoint) {
         return ConsoleState(o.list("strips").map { StripState(it.int("id"), it.str("name"), it.num("db"), it.num("pan"), it.bool("mute"), it.bool("solo")) }, o.list("buses").map { BusState(it.int("id"), it.num("db"), it.num("returnDb", -60.0), it.bool("mute")) }, m.num("db"), m.bool("limiter", true), m.num("ceilingDb", -0.5)) }
     fun meters(): Meters = parseMeters(getObj("/api/meters"))
     companion object {
+        /** FIND THE CONSOLE: ask every address of this phone's /24 network for /api/status on the port (in parallel, short timeouts).
+         *  Returns "address  name version" for each console that answers; nothing is sent but a GET of the public status. */
+        fun discover(localIp: String, port: Int = 8765, timeoutMs: Int = 350): List<Pair<String, String>> {
+            val parts = localIp.split('.'); if (parts.size != 4) return emptyList(); val base = parts.take(3).joinToString(".")
+            val pool = java.util.concurrent.Executors.newFixedThreadPool(48)
+            try {
+                val jobs = (1..254).map { n -> val host = "$base.$n"; pool.submit<Pair<String, String>?> {
+                    runCatching {
+                        val c = URL("http://$host:$port/api/status").openConnection() as HttpURLConnection
+                        c.connectTimeout = timeoutMs; c.readTimeout = 800
+                        if (c.responseCode != 200) null else { @Suppress("UNCHECKED_CAST") val o = MiniJson.parse(c.inputStream.bufferedReader().use { it.readText() }) as Map<String, Any?>
+                            if (o["daemon"] == "amixos-daemon") host to (o["name"]?.toString() ?: "") + " " + (o["version"]?.toString() ?: "") else null }
+                    }.getOrNull() } }
+                return jobs.mapNotNull { runCatching { it.get(3, java.util.concurrent.TimeUnit.SECONDS) }.getOrNull() }
+            } finally { pool.shutdownNow() }
+        }
         /** PAIRING: trade the six-digit PIN the console shows this minute (NETWORK → PHONE REMOTE) for a token of this phone's own.
          *  Needs no token; the service allows one pairing per PIN and five wrong tries a minute. Returns the token. */
         fun pair(host: String, port: Int, pin: String, name: String, secure: Boolean = false): String {
@@ -69,6 +85,7 @@ class DaemonClient(val ep: Endpoint) {
     fun solo(strip: Int, on: Boolean) = control(mapOf("op" to "solo", "strip" to strip, "on" to on))
     fun name(strip: Int, name: String) = control(mapOf("op" to "name", "strip" to strip, "name" to name))
     fun master(db: Double) = control(mapOf("op" to "master", "db" to db))
+    fun busMute(bus: Int, on: Boolean) = control(mapOf("op" to "busMute", "bus" to bus, "on" to on))
     fun busLevel(bus: Int, db: Double) = control(mapOf("op" to "busLevel", "bus" to bus, "db" to db))
     fun send(strip: Int, bus: Int, db: Double, pre: Boolean) = control(mapOf("op" to "send", "strip" to strip, "bus" to bus, "db" to db, "pre" to pre))
     fun eq(strip: Int, band: Int, type: String, freq: Double, q: Double, gainDb: Double) = control(mapOf("op" to "eq", "strip" to strip, "band" to band, "type" to type, "freq" to freq, "q" to q, "gainDb" to gainDb))

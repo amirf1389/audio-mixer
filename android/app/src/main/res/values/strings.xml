@@ -24,4 +24,14 @@
     <string name="pair_go">PAIR</string>
     <string name="pair_help">On the computer: NETWORK → PHONE REMOTE → START. Type the six-digit PIN shown there (it changes every minute).</string>
     <string name="pair_need_host">Type the console address first (shown on the computer under PHONE REMOTE).</string>
+    <string name="find">FIND CONSOLE</string>
+    <string name="buses">BUSES</string>
+    <string name="monitor">MONITOR</string>
+    <string name="clear_clips">CLEAR CLIPS</string>
+    <string name="searching">Looking for consoles on this Wi-Fi…</string>
+    <string name="none_found">No console found. On the computer: NETWORK → PHONE REMOTE → START (Wi-Fi), then FIND again.</string>
+    <string name="found_pair">Found. Now press PAIR (PIN).</string>
+    <string name="no_wifi">Not on a Wi-Fi network.</string>
+    <string name="rename">Rename CH %1$d</string>
+    <string name="source">SOURCE: %1$s</string>
 </resources>
