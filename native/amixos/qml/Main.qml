@@ -16,6 +16,11 @@ ApplicationWindow {
     property bool forceSetup: false   // the smoke / shots show the wizard on demand
     color: Theme.obsidian
     property string current: settings.startPage
+    property bool mixerEver: false   // the mixer has been opened once: from then on it stays built
+    Component.onCompleted: if (current === "mixer") mixerEver = true
+    // MEMORY: a closed page's items are freed, but its JavaScript objects wait for the QML garbage collector, which runs only under
+    // allocation pressure, so every page visit used to add ~5 MB that stayed. Collected once the user has settled on a page.
+    Timer { id: gcTimer; interval: 1200; onTriggered: gc() }
     LayoutMirroring.enabled: i18n.rtl
     Binding { target: Theme; property: "dark"; value: settings.darkTheme }
     LayoutMirroring.childrenInherit: true
@@ -23,10 +28,10 @@ ApplicationWindow {
     property bool autoFailed: false
     readonly property bool testRun: Qt.application.arguments.indexOf("--smoke") >= 0 || Qt.application.arguments.indexOf("--shots") >= 0 || Qt.application.arguments.indexOf("--bench") >= 0   // the checks drive the engine themselves
     function autoAudio() { if (root.testRun || engine.running || engine.busy) return; root.autoFailed = !settings.startLastDevice() }   // the remembered card, else AUTO DETECT (default output + the default microphone)
-    onCurrentChanged: if ((current === "mixer" || current === "home") && !engine.running) autoAudio()
+    onCurrentChanged: { gcTimer.restart(); if (current === "mixer" && !mixerEver) mixerEver = true; if ((current === "mixer" || current === "home") && !engine.running) autoAudio() }
     Connections { target: engine; function onStateChanged() { if (engine.running) root.autoFailed = false } }
     Timer { interval: 1500; running: true; onTriggered: if (!engine.running) root.autoAudio() }   // the first page: the start-up auto start (main.cpp) had its chance; if nothing runs, try once more and tell
-    function softRestart() { engine.stop(); engine.refreshDevices(); if (!settings.startLastDevice()) engine.autoStart(settings.defaultFrames); const c = root.current; root.current = "home"; root.current = c; pageLoader.active = false; pageLoader.active = true; root.bootOn = settings.bootAnimation && !noBoot }
+    function softRestart() { engine.stop(); engine.refreshDevices(); if (!settings.startLastDevice()) engine.autoStart(settings.defaultFrames); const c = root.current; root.current = "home"; root.current = c; pageLoader.active = false; pageLoader.active = true; if (mixerEver) { mixerKeep.active = false; mixerKeep.active = true } root.bootOn = settings.bootAnimation && !noBoot }
     Shortcut { sequence: "Ctrl+Shift+R"; context: Qt.ApplicationShortcut; onActivated: root.softRestart() }
     function pageOf(id) { for (var i = 0; i < engine.pages.length; i++) if (engine.pages[i].id === id) return engine.pages[i]; return engine.pages[0] }
 
@@ -159,11 +164,14 @@ ApplicationWindow {
                     anchors.fill: parent
                     sourceComponent: {
                         switch (root.current) {
-                        case "home": return homeC; case "frame": return frameC; case "delay": return delayC; case "cloud": return cloudC; case "cascade": return cascadeC; case "mixer": return mixerC; case "dsp": return toneC; case "rtaeq": return rtaEqC; case "bluetooth": return bluetoothC; case "io": return connC;
+                        case "home": return homeC; case "frame": return frameC; case "delay": return delayC; case "cloud": return cloudC; case "cascade": return cascadeC; case "mixer": return null; case "dsp": return toneC; case "rtaeq": return rtaEqC; case "bluetooth": return bluetoothC; case "io": return connC;
                         case "meter": return levelsC; case "lufs": return loudC; case "sys": return settingsC; case "dyn": return compC; case "gate": return gateC; case "bus": return sendC; case "dca": return dcaC; case "scenes": return scenesC; case "presets": return presetsC; case "routing": return routingC; case "renew": return licenseC; case "arrange": return arrangeC; case "fx": return fxC; case "osc": return oscC; case "phase": return phaseC; case "miceq": return miceqC; case "live": return liveC; case "tools": return toolsC; case "calib": return calibC; case "boot": return bootC; case "help": return helpC; case "acct": return acctC; case "access": return accessC; case "admin": return adminC; case "ai": return aiC; case "engctl": return engctlC; case "plugins": return pluginsC; case "network": return networkC; case "media": return mediaC; case "samples": return samplesC; case "asio": return soundC; case "acoustics": return acousticsC; case "master": return masteringC; case "surround": return spatialC; default: return comingC
                         }
                     }
                 }
+                // THE MIXER stays built once opened: coming back to it is instant (it took ~270 ms to rebuild 32 strips each visit).
+                // Hidden, its meters and timers stop (they follow the page's visibility). A soft restart rebuilds it.
+                Loader { id: mixerKeep; anchors.fill: parent; active: root.mixerEver; visible: root.current === "mixer"; sourceComponent: mixerC }
                 Component { id: frameC; FramePage {} }
                 Component { id: homeC; HomePage { onGo: function (id) { root.current = id } } }
                 Component { id: mixerC; MixerPage { onGo: function (id) { root.current = id } } }

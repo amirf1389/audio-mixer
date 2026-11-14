@@ -330,9 +330,12 @@ class Engine : public QObject {
   Q_SIGNAL void spatialMoved();
   // OUTPUT STAGE + PROFILER (SOUND CARD page): DC removal before the limiter, TPDF dither for 16 / 24-bit devices, block-time figures in telemetry
   Q_PROPERTY(bool dcBlock READ dcBlock WRITE setDcBlock NOTIFY stateChanged)
-  Q_PROPERTY(int outputBits READ outputBits WRITE setOutputBits NOTIFY stateChanged)   // 0 float, 16, 24
+  Q_PROPERTY(int outputBits READ outputBits WRITE setOutputBits NOTIFY stateChanged)   // -1 AUTO (the device's own word length; the default), 0 float / 32-bit, 16, 24
+  Q_PROPERTY(int effectiveOutputBits READ effectiveOutputBits NOTIFY stateChanged)   // what AUTO resolved to on the open device
   bool dcBlock() const { return settings_.value("audio/dcBlock", true).toBool(); } void setDcBlock(bool v) { settings_.setValue("audio/dcBlock", v); if (rt_) rt_->setDcBlock(v); emit stateChanged(); }
-  int outputBits() const { return settings_.value("audio/outputBits", 0).toInt(); } void setOutputBits(int b) { b = b == 16 || b == 24 ? b : 0; settings_.setValue("audio/outputBits", b); if (rt_) rt_->setOutputBits(b); emit stateChanged(); }
+  int outputBits() const { return settings_.value("audio/outputBitsMode", -1).toInt(); }
+  void setOutputBits(int b) { b = b == 16 || b == 24 || b == -1 ? b : 0; settings_.setValue("audio/outputBitsMode", b); if (rt_) rt_->setOutputBits(effectiveOutputBits()); emit stateChanged(); }
+  int effectiveOutputBits() const { const int b = outputBits(); return b >= 0 ? b : rt_ ? rt_->deviceOutputBits() : 0; }
   Q_INVOKABLE void resetProfiler() { if (rt_) rt_->resetProfiler(); }
   Q_INVOKABLE void setNullTestInput(bool on) { nullTone_ = on; }   // the null device delivers a -12 dBFS test signal on inputs 1-2 (sine 440 / 660 Hz) instead of silence: meters and faders show something (--shots, demos)
   bool nullTestInput() const { return nullTone_; }

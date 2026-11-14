@@ -57,7 +57,8 @@
 #include "I18n.h"
 
 // real time passes (processEvents alone returns at once when the queue is empty)
-static void waitMs(int ms) { QElapsedTimer t; t.start(); while (t.elapsed() < ms) { QCoreApplication::processEvents(QEventLoop::AllEvents, 10); QThread::msleep(5); } }
+// a real event loop (not processEvents): it also runs deferred deletes, as the running application does, so the tests see its memory
+static void waitMs(int ms) { QEventLoop l; QTimer::singleShot(ms, &l, &QEventLoop::quit); l.exec(); }
 
 // Every Qt / QML message also goes to <data>/console.log (the console has no terminal on Windows): QML errors, missing imports, the render
 // backend. The last 500 lines are kept; --software draws with the CPU raster renderer when the graphics driver refuses D3D11 / OpenGL.
@@ -137,6 +138,11 @@ int main(int argc, char* argv[]) {
     auto* win = qobject_cast<QQuickWindow*>(qml.rootObjects().first());
     engine.setNullTestInput(true); engine.open("null", "", "", 48000, 256, 2, 2); win->setProperty("current", qEnvironmentVariable("AMIX_BENCH_PAGE", "mixer")); waitMs(1500);
     auto cpuMs = [] { return 1000.0 * double(std::clock()) / CLOCKS_PER_SEC; };
+    if (qEnvironmentVariableIsSet("AMIX_BENCH_MEM")) {   // memory: every page opened in turn, five rounds; the resident size after each round (a leak grows)
+      auto rssMb = [] { QFile f("/proc/self/statm"); if (!f.open(QIODevice::ReadOnly)) return 0.0; const QList<QByteArray> v = f.readAll().split(' '); return v.size() > 1 ? v[1].toDouble() * 4096.0 / 1048576.0 : 0.0; };
+      std::printf("amixos --bench: memory at start %.0f MB\n", rssMb());
+      for (int r = 0; r < 5; ++r) { for (const QVariant& v : engine.pages()) { win->setProperty("current", v.toMap().value("id").toString()); waitMs(60); } win->setProperty("current", "mixer"); waitMs(1600); if (qEnvironmentVariableIsSet("AMIX_BENCH_GC")) { qml.collectGarbage(); QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete); waitMs(100); } std::printf("amixos --bench: memory after round %d of every page: %.0f MB\n", r + 1, rssMb()); }
+      engine.stop(); return 0; }
     if (qEnvironmentVariableIsSet("AMIX_BENCH_ALL")) {   // the opening time of every page, slowest first
       QList<QPair<double, QString>> t; for (const QVariant& v : engine.pages()) { const QString id = v.toMap().value("id").toString(); win->setProperty("current", "home"); waitMs(150);
         QElapsedTimer o; o.start(); win->setProperty("current", id); QCoreApplication::processEvents(); t << qMakePair(o.nsecsElapsed() / 1e6, id); waitMs(150); }
@@ -346,7 +352,7 @@ int main(int argc, char* argv[]) {
       if (media.position() < 0.2 || engine.telemetry()["masterPeakDb"].toDouble() < -40) { std::fprintf(stderr, "amixos --smoke: media not heard on the master (pos %.2f, master %.1f dBFS)\n", media.position(), engine.telemetry()["masterPeakDb"].toDouble()); return 112; }
       media.stop(); if (media.playing() || media.position() != 0) { std::fprintf(stderr, "amixos --smoke: media stop\n"); return 113; }
       const QVariantMap t = engine.telemetry(); if (!t.contains("loadPct") || t["blocks"].toULongLong() == 0 || t["maxBlockUs"].toDouble() <= 0) { std::fprintf(stderr, "amixos --smoke: profiler telemetry\n"); return 114; }
-      engine.setOutputBits(16); engine.setDcBlock(true); if (engine.outputBits() != 16 || !engine.dcBlock()) { std::fprintf(stderr, "amixos --smoke: output stage settings\n"); return 115; } engine.setOutputBits(0); media.clear(); }
+      engine.setOutputBits(16); engine.setDcBlock(true); if (engine.outputBits() != 16 || !engine.dcBlock()) { std::fprintf(stderr, "amixos --smoke: output stage settings\n"); return 115; } engine.setOutputBits(-1); if (engine.outputBits() != -1 || engine.effectiveOutputBits() != 0) { std::fprintf(stderr, "amixos --smoke: AUTO word length\n"); return 115; } media.clear(); }
     // SAMPLES: the bank is rendered, a pad plays into the master, stops; EXPORT writes 100 WAVs. FX PRESETS: 300 listed, one applied loads the kind.
     { if (!samples.ready() || samples.list().size() != 100) { std::fprintf(stderr, "amixos --smoke: samples bank\n"); return 120; }
       if (!samples.play(1) || !samples.play(7)) { std::fprintf(stderr, "amixos --smoke: sample trigger\n"); return 121; } waitMs(200);

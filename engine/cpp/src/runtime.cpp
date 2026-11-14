@@ -110,6 +110,13 @@ void Runtime::setDcBlock(bool on) { post({kDcBlock, on ? 1 : 0, 0, 0, 0}); }
 void Runtime::resetProfiler() { post({kProfReset, 0, 0, 0, 0}); }
 void Runtime::setAutomix(int s, bool on, double w) { post({kAutomix, s, on ? 1.0 : 0.0, w, 0}); }
 std::string Runtime::sampleFormat() const { return backend_ ? backend_->sampleFormat() : std::string(); }
+int Runtime::deviceOutputBits() const {
+  std::string f = sampleFormat(); const std::size_t o = f.find("out "); if (o != std::string::npos) f = f.substr(o);
+  if (f.find("shared") != std::string::npos) return 0;   // WASAPI shared: Windows mixes in float, the console's output is float
+  if (f.rfind("16-bit integer", 0) == 0 || f.find("out 16-bit integer") == 0) return 16;
+  if (f.rfind("24-bit integer", 0) == 0 || f.find("out 24-bit integer") == 0) return 24;
+  return 0;
+}
 void Runtime::setAutoPolarity(int s, bool on) { post({kAutoPol, s, on ? 1.0 : 0.0, 0, 0}); }
 void Runtime::setAutoLevel(bool on, double t, double m) { post({kAutoLevel, on ? 1 : 0, t, m, 0}); }
 void Runtime::setBusProcessor(int b, BusProcessor* p) { Cmd c{kBusFx, b, 0, 0, 0}; c.p = p; post(c); }
