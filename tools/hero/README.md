@@ -19,3 +19,8 @@ Nothing on the screen is mocked up: the console is filmed running, with real mou
    - For a long 4K render, use `./worker.sh FIRST LAST` instead. It restarts the browser every 40 frames, so memory cannot pile up, and resumes after a crash, skipping frames already on disk.
 4. **Encode:**
    `ffmpeg -framerate 60 -i frames/f%05d.png -i hero_music.wav -c:v libx264 -preset slow -crf 14 -pix_fmt yuv420p -c:a aac -b:a 320k -af loudnorm=I=-14:TP=-1 -shortest -movflags +faststart AmF-X1-hero-4k60.mp4`
+
+**Render cost.** Software WebGL (no GPU) takes about 9–10 s per 4K frame, about 3.5–4 hours for the film. The renderer already uses every core, so extra workers barely help.
+- `OFF=msaa` drops multisampling. It is invisible at 4K under the depth of field.
+- `OFF=` can also switch off `dof`, `bloom`, `mirror`, `shadow` and `screen` for measurement.
+- `PROF=1` prints the time per frame; `JPG=1` saves JPEG frames.

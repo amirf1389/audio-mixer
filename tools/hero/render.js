@@ -23,14 +23,14 @@ server.listen(0, async () => {
   const page = await browser.newPage({ viewport: { width: W, height: H }, deviceScaleFactor: 1 });
   page.on("pageerror", (e) => console.error("page error:", e.message));
   page.on("console", (m) => { if (m.type() === "error") console.error("console:", m.text()); });
-  await page.goto(`http://127.0.0.1:${port}/?w=${W}&h=${H}&fps=${FPS}`);
+  await page.goto(`http://127.0.0.1:${port}/?w=${W}&h=${H}&fps=${FPS}${process.env.OFF ? "&off=" + process.env.OFF : ""}`);
   await page.waitForFunction("window.ready === true", null, { timeout: 180000 });
   const total = await page.evaluate("window.totalFrames"); const t0 = Date.now(); let n = 0;
   const todo = list || Array.from({ length: Math.min(last, total - 1) - first + 1 }, (_, k) => first + k);
   for (const f of todo) {
     const out = path.join(outDir, `f${String(f).padStart(5, "0")}.png`); if (fs.existsSync(out)) continue;
-    await page.evaluate((k) => window.renderAt(k), f);
-    await page.screenshot({ path: out + ".tmp.png", type: "png" }); fs.renameSync(out + ".tmp.png", out); ++n;
+    const ta = Date.now(); await page.evaluate((k) => window.renderAt(k), f); const tb = Date.now();
+    await page.screenshot({ path: out + ".tmp.png", type: process.env.JPG ? "jpeg" : "png", quality: process.env.JPG ? 98 : undefined }); if (process.env.PROF) console.log(`render ${tb - ta} ms, screenshot ${Date.now() - tb} ms`); fs.renameSync(out + ".tmp.png", out); ++n;
     if (process.env.MAXN && n >= Number(process.env.MAXN)) { console.log(`batch of ${n} frames done, restarting the browser`); await browser.close(); server.close(); process.exit(3); }
     if (n % 20 === 0) console.log(`frames ${first}-${last}: ${f} done, ${((Date.now() - t0) / n / 1000).toFixed(2)} s/frame (of ${total})`);
   }
