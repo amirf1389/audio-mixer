@@ -165,6 +165,24 @@ ApplicationWindow {
                 Text { text: "⚠"; color: Theme.amber; font.pixelSize: 13 }
                 Text { Layout.fillWidth: true; text: i18n.t("No sound card could be opened automatically (none found, or all switched OFF): pick one on CONNECTIONS.", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; elide: Text.ElideRight }
                 Rectangle { implicitWidth: Math.max(100, children[0].implicitWidth + 12); implicitHeight: 20; radius: 4; color: Theme.ov(0.1); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: i18n.t("CONNECTIONS", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: root.current = "io" } } } }
+        // NO SOUND, AND WHY: the two silent states a person cannot see at a glance, each with its one-click way out
+        Rectangle { objectName: "masterSilentBanner"; Layout.fillWidth: true; implicitHeight: 30; visible: engine.running && engine.masterDb <= -60; color: Qt.rgba(0.94, 0.27, 0.27, 0.14); border.color: Theme.danger
+            RowLayout { anchors.fill: parent; anchors.leftMargin: 12; anchors.rightMargin: 12; spacing: 10
+                Text { text: "🔇"; font.pixelSize: 12 }
+                Text { Layout.fillWidth: true; text: i18n.t("MASTER is at -inf: nothing is heard (and Windows' own sound is muted with it).", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; elide: Text.ElideRight }
+                Rectangle { objectName: "raiseMasterBtn"; implicitWidth: Math.max(110, rmT.implicitWidth + 14); implicitHeight: 20; radius: 4; color: Theme.danger
+                    Text { id: rmT; anchors.centerIn: parent; text: i18n.t("RAISE TO 0 dB", i18n.lang); color: "#fff"; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: engine.setMaster(0) } } } }
+        Rectangle { objectName: "inputSilentBanner"; Layout.fillWidth: true; implicitHeight: 30; visible: { engine.meterTick; return engine.inputMutedBySystem() } color: Qt.rgba(0.984, 0.749, 0.141, 0.14); border.color: Theme.amber
+            RowLayout { anchors.fill: parent; anchors.leftMargin: 12; anchors.rightMargin: 12; spacing: 10
+                Text { text: "🎙"; font.pixelSize: 12 }
+                Text { Layout.fillWidth: true; text: i18n.t("The microphone gives exact silence: it is muted (mute key or Windows) or Windows microphone privacy blocks desktop apps.", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; elide: Text.ElideRight }
+                Rectangle { implicitWidth: Math.max(120, mpT2.implicitWidth + 14); implicitHeight: 20; radius: 4; color: Theme.ov(0.1); border.color: Theme.amber
+                    Text { id: mpT2; anchors.centerIn: parent; text: i18n.t("WINDOWS MIC PRIVACY…", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: Qt.openUrlExternally("ms-settings:privacy-microphone") } }
+                Rectangle { implicitWidth: Math.max(110, ssT.implicitWidth + 14); implicitHeight: 20; radius: 4; color: Theme.ov(0.1); border.color: Theme.lineSoft
+                    Text { id: ssT; anchors.centerIn: parent; text: i18n.t("SOUND SETTINGS…", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: Qt.openUrlExternally("ms-settings:sound") } } } }
         RowLayout {
             Layout.fillWidth: true; Layout.fillHeight: true; spacing: 0
             NavRail { Layout.fillHeight: true; pages: engine.pages; current: root.current; onPicked: function (id) { root.current = id } }

@@ -43,6 +43,10 @@ static constexpr double kIsoCentres[10] = {31.5, 63, 125, 250, 500, 1000, 2000, 
 Engine::Engine(QObject* parent) : QObject(parent) {
   am::drv::setOpenRouting(QSettings().value("audio/openRouting", true).toBool());
   winSync_ = QSettings().value("mixer/windowsMuteSync", true).toBool(); sysGet_ = [](bool& m) { return am::systemMuteGet(m); }; sysSet_ = [](bool m) { return am::systemMuteSet(m); };
+  // A WINDOWS MUTE LEFT BEHIND: the fader at -inf mutes Windows too; if the console then crashed, was killed or the computer went off,
+  // Windows stayed muted for every program (no sound anywhere) and the console no longer knew. The mute is written down when it is set
+  // and given back here, at the next start.
+  if (QSettings().value("mixer/weMutedWindows", false).toBool()) { sysSet_(QSettings().value("mixer/winBefore", false).toBool()); QSettings().remove("mixer/weMutedWindows"); }
   connect(this, &Engine::stripsChanged, this, [this] { stripDirty_ = true; ++stripTick_; });
   for (auto sig : {&Engine::groupsChanged, &Engine::busesChanged, &Engine::routingChanged, &Engine::recordChanged, &Engine::licenseChanged}) connect(this, sig, this, [this] { stripDirty_ = true; });   // DCA / mute groups, sends, arm and the plan feed the strip state too   // first receiver: the cache is stale before any binding reads it
   sysTimer_.setInterval(500); connect(&sysTimer_, &QTimer::timeout, this, &Engine::syncSystemSound); sysTimer_.start();
@@ -399,13 +403,16 @@ void Engine::setWindowsMuteSync(bool on) { if (winSync_ == on) return; winSync_ 
 void Engine::syncSystemSound() {
   if (!sysGet_ || !sysSet_) return;
   bool now = false; const bool ok = sysGet_(now); const bool want = winSync_ && masterDb_ <= -60.0; bool changed = ok != winAvail_; winAvail_ = ok;
+  const bool had = weMuted_;
   if (ok && want && !weMuted_) { winBefore_ = now; if (sysSet_(true)) { weMuted_ = true; now = true; } }           // fader at -inf: Windows goes silent too
   else if (ok && !want && weMuted_) { if (sysSet_(winBefore_)) now = winBefore_; weMuted_ = false; }               // fader up (or sync off): the mute goes back to what it was
   else if (ok && weMuted_ && !now) weMuted_ = false;                                                                // somebody un-muted Windows by hand: leave it to them
+  if (weMuted_ != had) { QSettings q; if (weMuted_) { q.setValue("mixer/weMutedWindows", true); q.setValue("mixer/winBefore", winBefore_); } else q.remove("mixer/weMutedWindows"); q.sync(); }
   if (ok && now != winMuted_) { winMuted_ = now; changed = true; }
   if (changed) emit systemSoundChanged();
 }
-void Engine::restoreSystemSound() { if (weMuted_ && sysSet_) { sysSet_(winBefore_); weMuted_ = false; } }
+void Engine::restoreSystemSound() { if (weMuted_ && sysSet_) { sysSet_(winBefore_); weMuted_ = false; QSettings().remove("mixer/weMutedWindows"); } }
+bool Engine::inputMutedBySystem() const { return rt_ && running() && rt_->inputSilentSeconds() > 2.0; }
 void Engine::setMasterLimiter(bool on, double c, double rel) { masterLim_ = on; masterCeil_ = std::clamp(c, -24.0, 0.0); if (rel >= 0) masterRel_ = std::clamp(rel, 10.0, 2000.0); if (rt_) rt_->setLimiter(on, masterCeil_, masterRel_); emit stripsChanged(); emit masterChainChanged(); }
 QVariantMap Engine::masterLimiter() const { QVariantMap m; m["on"] = masterLim_; m["ceiling"] = masterCeil_; m["release"] = masterRel_; return m; }
 void Engine::clearClips() { if (rt_) rt_->clearClips(); }

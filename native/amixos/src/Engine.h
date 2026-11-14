@@ -398,6 +398,7 @@ class Engine : public QObject {
   void setSystemMuteBackend(std::function<bool(bool&)> get, std::function<bool(bool)> set) { sysGet_ = std::move(get); sysSet_ = std::move(set); }   // tests
   void syncSystemSound();                 // applies the rule and reads the state (called on fader moves and twice a second)
   void restoreSystemSound();              // on exit: a mute the console set is taken back
+  Q_INVOKABLE bool inputMutedBySystem() const;   // over 2 s of exact silence from the system on the input (WASAPI): muted or blocked by privacy
   Q_SIGNAL void systemSoundChanged();
   Q_INVOKABLE void setColor(int strip, int color);           // 0..7 (Theme.stripColors)
   int selectedStrip() const { return selected_; }

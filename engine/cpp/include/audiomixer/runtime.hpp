@@ -51,6 +51,9 @@ class Backend {
   virtual void stop() = 0;               // waits until the callback is no longer running
   virtual std::uint64_t xruns() const { return 0; }
   virtual std::string sampleFormat() const { return "32-bit float"; }   // what the device itself carries, e.g. "in 24-bit integer · out 32-bit integer" (after open)
+  // how long the input has been EXACT digital silence from the system, in seconds (0 = it carries something). A real microphone always
+  // has some noise: seconds of exact zeros mean the system mutes it (the mute key, Windows' mute, microphone privacy for desktop apps)
+  virtual double inputSilentSeconds() const { return 0.0; }
 };
 std::vector<std::string> availableBackends();                 // the ones built into this binary, "null" last
 std::unique_ptr<Backend> createBackend(const std::string& name);   // nullptr when it is not built in
@@ -98,6 +101,7 @@ class Runtime {
   bool running() const { return running_; }
   const std::string& backendName() const { return backendName_; }
   std::string sampleFormat() const;
+  double inputSilentSeconds() const;   // see Backend::inputSilentSeconds; 0 when nothing is open
   // the integer word length the device takes on its output: 16 or 24 (dither at that depth), 0 for 32-bit integer / float (no dither:
   // a 32-bit converter's LSB is far below its own noise). From sampleFormat(): ASIO / WASAPI exclusive report the driver's own type.
   int deviceOutputBits() const;   // the open device's own sample format ("" when nothing is open); the engine itself mixes in 64-bit float

@@ -14,6 +14,7 @@
 #include <QQmlContext>
 #include <QQuickStyle>
 #include <QQuickWindow>
+#include <QQuickItem>
 #include <QPalette>
 #include <QDir>
 #include "arrange/arrange.hpp"
@@ -335,7 +336,9 @@ int main(int argc, char* argv[]) {
     { // WINDOWS SOUND SYNC on a stand-in for the system volume: -inf mutes it, raising the fader restores what it was, sync off leaves it alone, exit takes the mute back
       bool sysMute = false; int sets = 0; engine.setSystemMuteBackend([&](bool& m) { m = sysMute; return true; }, [&](bool m) { sysMute = m; ++sets; return true; });
       const double keep = engine.masterDb(); engine.setWindowsMuteSync(true); engine.setMaster(-60); if (!sysMute || !engine.windowsMuted()) { std::fprintf(stderr, "amixos --smoke: the fader at -inf did not mute the system sound\n"); return 78; }
+      if (!QSettings().value("mixer/weMutedWindows", false).toBool()) { std::fprintf(stderr, "amixos --smoke: the Windows mute was not written down (a crash would leave Windows silent)\n"); return 83; }
       engine.setMaster(-10); if (sysMute || engine.windowsMuted()) { std::fprintf(stderr, "amixos --smoke: raising the fader did not un-mute the system sound\n"); return 79; }
+      if (QSettings().value("mixer/weMutedWindows", false).toBool()) { std::fprintf(stderr, "amixos --smoke: the Windows mute note was not cleared when the sound came back\n"); return 84; }
       sysMute = true; engine.syncSystemSound(); engine.setMaster(-60); engine.setMaster(0); if (!sysMute) { std::fprintf(stderr, "amixos --smoke: a mute the person had set in Windows was not put back\n"); return 80; } sysMute = false; engine.syncSystemSound();
       engine.setWindowsMuteSync(false); engine.setMaster(-60); if (sysMute) { std::fprintf(stderr, "amixos --smoke: sync off still muted the system sound\n"); return 81; }
       engine.setWindowsMuteSync(true); if (!sysMute) { std::fprintf(stderr, "amixos --smoke: switching sync on at -inf did not mute\n"); return 82; } engine.restoreSystemSound(); if (sysMute) { std::fprintf(stderr, "amixos --smoke: exit did not take the mute back\n"); return 83; }
@@ -952,6 +955,16 @@ int main(int argc, char* argv[]) {
         frame.setCardType(0, ""); frame.setCardType(1, ""); frame.setLogicIn(2, false); frame.setLogicIn(6, false); }
       { remote.writeConsoleInfo(); QFile f(QString::fromStdString(am::paths::file("remote-console.json"))); bool ok = f.open(QIODevice::ReadOnly); const QJsonObject o = ok ? QJsonDocument::fromJson(f.readAll()).object() : QJsonObject();
         std::printf("amixos --smoke: phone PLUG-INS snapshot %s (%d VST, %d store items, %d racks)\n", o.value("available").toBool() ? "written" : "MISSING", int(o.value("vst").toArray().size()), int(o.value("store").toArray().size()), int(o.value("racks").toArray().size())); }
+      if (auto* bw = qobject_cast<QQuickWindow*>(qml.rootObjects().first())) {   // NO SOUND, AND WHY: the master at -inf is shown, and its button gives the sound back
+        QObject* ban = bw->findChild<QObject*>("masterSilentBanner"); const double keepM = engine.masterDb(); engine.setMaster(-60); QCoreApplication::processEvents();
+        const bool shown = ban && ban->property("visible").toBool(); QObject* raise = bw->findChild<QObject*>("raiseMasterBtn");
+        if (auto* it = qobject_cast<QQuickItem*>(raise)) { const QPointF c = it->mapToScene(QPointF(it->width() / 2, it->height() / 2));   // a real click on the button
+          QMouseEvent p(QEvent::MouseButtonPress, c, bw->mapToGlobal(c.toPoint()), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier); QCoreApplication::sendEvent(bw, &p);
+          QMouseEvent r(QEvent::MouseButtonRelease, c, bw->mapToGlobal(c.toPoint()), Qt::LeftButton, Qt::NoButton, Qt::NoModifier); QCoreApplication::sendEvent(bw, &r); QCoreApplication::processEvents(); }
+        const bool raised = engine.masterDb() > -60; engine.setMaster(keepM); QCoreApplication::processEvents(); const bool hidden = ban && !ban->property("visible").toBool();
+        if (!shown || !hidden) { std::fprintf(stderr, "amixos --smoke: the MASTER -inf banner is wrong (shown %d, hidden after %d)\n", shown, hidden); std::exit(85); }
+        if (!raised) { std::fprintf(stderr, "amixos --smoke: RAISE TO 0 dB did not raise the master\n"); std::exit(86); }
+        std::printf("amixos --smoke: MASTER -inf banner shown, RAISE TO 0 dB works, cleared after\n"); }
       std::printf("amixos --smoke: interface loaded, %s backend, %llu blocks in 1.2 s, xruns %llu, master %.1f dBFS, %d pages\n", qPrintable(engine.backend()), blocks, m.value("xruns").toULongLong(), m.value("masterPeakDb").toDouble(), engine.pageCount());
       arrange.newProject(); QFile::remove(smokeWav); QFile::remove(smokeOut);   // the smoke's demo arrangement is not kept
       for (int k = 0; k < 6; ++k) engine.setPlugin(0, k, "");

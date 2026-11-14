@@ -98,6 +98,7 @@ class WasapiBackend : public Backend {
     return f;
   }
   static std::string name(const Sample& f) { return std::to_string(f.valid ? f.valid : f.bits) + (f.isFloat ? "-bit float" : "-bit integer"); }
+  double inputSilentSeconds() const override { return capture_ && !loopback_ ? static_cast<double>(silentFrames_.load()) / (cfg_.sampleRate > 0 ? cfg_.sampleRate : 48000.0) : 0.0; }
   std::string sampleFormat() const override {
     const std::string mode = cfg_.exclusive ? " (WASAPI exclusive)" : " (WASAPI shared: Windows converts)";
     const std::string in = in_ ? name(sIn_) : "", out = out_ ? name(sOut_) : "";
@@ -171,6 +172,9 @@ class WasapiBackend : public Backend {
           BYTE* data; UINT32 got; DWORD fl;
           if (FAILED(capture_->GetBuffer(&data, &got, &fl, nullptr, nullptr))) break;
           const std::size_t sb = sIn_.bytes();
+          { bool zero = (fl & AUDCLNT_BUFFERFLAGS_SILENT) != 0;   // exact silence from the system (flagged, or every byte zero): counted, see inputSilentSeconds
+            if (!zero) { zero = true; const std::size_t nb = static_cast<std::size_t>(got) * static_cast<std::size_t>(ci) * sb; for (std::size_t b = 0; b < nb && zero; ++b) zero = data[b] == 0; }
+            if (zero) silentFrames_ += got; else silentFrames_ = 0; }
           for (UINT32 i = 0; i < got; ++i) for (int c = 0; c < ci; ++c) fifo_[static_cast<std::size_t>(c)].push((fl & AUDCLNT_BUFFERFLAGS_SILENT) ? 0.0f : loadSample(data + (static_cast<std::size_t>(i) * static_cast<std::size_t>(ci) + static_cast<std::size_t>(c)) * sb, sIn_));
           capture_->ReleaseBuffer(got);
         }
@@ -197,7 +201,7 @@ class WasapiBackend : public Backend {
   void closeAll() { release(render_); release(capture_); release(out_); release(in_); if (ev_) { CloseHandle(ev_); ev_ = nullptr; } }
   DeviceConfig cfg_; AudioCallback cb_; IAudioClient *out_ = nullptr, *in_ = nullptr; IAudioRenderClient* render_ = nullptr; IAudioCaptureClient* capture_ = nullptr; HANDLE ev_ = nullptr; Sample sOut_, sIn_;
   std::vector<std::vector<float>> inBuf_, outBuf_; std::vector<const float*> inp_; std::vector<float*> outp_; std::vector<Fifo> fifo_;
-  bool captureEvent_ = false, loopback_ = false; std::thread thread_; std::atomic<bool> stop_{false}; std::atomic<std::uint64_t> xruns_{0};
+  bool captureEvent_ = false, loopback_ = false; std::thread thread_; std::atomic<bool> stop_{false}; std::atomic<std::uint64_t> xruns_{0}, silentFrames_{0};
 };
 }  // namespace
 std::unique_ptr<Backend> makeWasapiBackend() { return std::make_unique<WasapiBackend>(); }
