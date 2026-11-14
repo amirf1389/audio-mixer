@@ -20,6 +20,12 @@ ApplicationWindow {
     Binding { target: Theme; property: "dark"; value: settings.darkTheme }
     LayoutMirroring.childrenInherit: true
     // SOFT RESTART: the console starts over without closing: engine off, sound cards scanned again, the remembered device (or the best one) started, the page rebuilt, the boot screen shown
+    property bool autoFailed: false
+    readonly property bool testRun: Qt.application.arguments.indexOf("--smoke") >= 0 || Qt.application.arguments.indexOf("--shots") >= 0 || Qt.application.arguments.indexOf("--bench") >= 0   // the checks drive the engine themselves
+    function autoAudio() { if (root.testRun || engine.running || engine.busy) return; root.autoFailed = !settings.startLastDevice() }   // the remembered card, else AUTO DETECT (default output + the default microphone)
+    onCurrentChanged: if ((current === "mixer" || current === "home") && !engine.running) autoAudio()
+    Connections { target: engine; function onStateChanged() { if (engine.running) root.autoFailed = false } }
+    Timer { interval: 1500; running: true; onTriggered: if (!engine.running) root.autoAudio() }   // the first page: the start-up auto start (main.cpp) had its chance; if nothing runs, try once more and tell
     function softRestart() { engine.stop(); engine.refreshDevices(); if (!settings.startLastDevice()) engine.autoStart(settings.defaultFrames); const c = root.current; root.current = "home"; root.current = c; pageLoader.active = false; pageLoader.active = true; root.bootOn = settings.bootAnimation && !noBoot }
     Shortcut { sequence: "Ctrl+Shift+R"; context: Qt.ApplicationShortcut; onActivated: root.softRestart() }
     function pageOf(id) { for (var i = 0; i < engine.pages.length; i++) if (engine.pages[i].id === id) return engine.pages[i]; return engine.pages[0] }
@@ -137,12 +143,11 @@ ApplicationWindow {
                 }
             }
         }
-        // ALERT: no sound card remembered and the engine idle (the AUDIO step of the factory setup was skipped): say so, lead to SETUP / CONNECTIONS
-        Rectangle { Layout.fillWidth: true; implicitHeight: 30; visible: settings.setupDone && !engine.running && !(settings.lastDevice && settings.lastDevice.backend); color: Qt.rgba(0.984, 0.749, 0.141, 0.14); border.color: Theme.amber
+        // ALERT: only when the automatic start found / opened no sound card (entering the MIXER or HOME tries it first): lead to CONNECTIONS
+        Rectangle { Layout.fillWidth: true; implicitHeight: 30; visible: root.autoFailed && !engine.running && !engine.busy; color: Qt.rgba(0.984, 0.749, 0.141, 0.14); border.color: Theme.amber
             RowLayout { anchors.fill: parent; anchors.leftMargin: 12; anchors.rightMargin: 12; spacing: 10
                 Text { text: "⚠"; color: Theme.amber; font.pixelSize: 13 }
-                Text { Layout.fillWidth: true; text: i18n.t("No sound card is set up yet: the faders show no input or output until one is. Run the FACTORY SETUP (AUDIO step) or pick a device on CONNECTIONS.", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; elide: Text.ElideRight }
-                Rectangle { implicitWidth: Math.max(110, children[0].implicitWidth + 12); implicitHeight: 20; radius: 4; color: Theme.amber; Text { anchors.centerIn: parent; text: i18n.t("FACTORY SETUP", i18n.lang); color: "#000"; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: root.forceSetup = true } }
+                Text { Layout.fillWidth: true; text: i18n.t("No sound card could be opened automatically (none found, or all switched OFF): pick one on CONNECTIONS.", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; elide: Text.ElideRight }
                 Rectangle { implicitWidth: Math.max(100, children[0].implicitWidth + 12); implicitHeight: 20; radius: 4; color: Theme.ov(0.1); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: i18n.t("CONNECTIONS", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: root.current = "io" } } } }
         RowLayout {
             Layout.fillWidth: true; Layout.fillHeight: true; spacing: 0

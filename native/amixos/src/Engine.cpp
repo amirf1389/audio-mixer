@@ -112,7 +112,7 @@ void Engine::refreshDevices() {
   devices_.clear();
   for (const am::DeviceInfo& d : *found) {
     QVariantMap m; m["backend"] = QString::fromStdString(d.backend); m["id"] = QString::fromStdString(d.id); m["name"] = QString::fromStdString(d.name);
-    m["inChannels"] = d.inChannels; m["outChannels"] = d.outChannels; m["defaultRate"] = d.defaultRate; m["defaultIn"] = d.defaultIn; m["defaultOut"] = d.defaultOut; m["bluetooth"] = looksBluetooth(m["name"].toString()); m["kind"] = QString::fromStdString(d.kind);
+    m["inChannels"] = d.inChannels; m["outChannels"] = d.outChannels; m["defaultRate"] = d.defaultRate; m["defaultIn"] = d.defaultIn; m["defaultOut"] = d.defaultOut; m["bluetooth"] = looksBluetooth(m["name"].toString()); m["kind"] = QString::fromStdString(d.kind); m["enabled"] = deviceEnabled(m["backend"].toString(), m["id"].toString());
     QVariantList rates; for (double r : d.sampleRates) rates << r; m["sampleRates"] = rates;
     if (!bluetoothAudio() && (m["bluetooth"].toBool() || d.kind == "bluetooth")) continue;   // BLUETOOTH AUDIO switched off
     devices_ << m;
@@ -120,7 +120,16 @@ void Engine::refreshDevices() {
   emit devicesChanged();
 }
 
+// DEVICES ON / OFF: a device switched OFF on CONNECTIONS is never picked by AUTO DETECT / auto start (neither as the device nor as the
+// paired microphone) and is not opened by hand either; kept as "backend|id" in audio/offDevices.
+bool Engine::deviceEnabled(const QString& backend, const QString& id) const { return !settings_.value("audio/offDevices").toStringList().contains(backend + "|" + id); }
+void Engine::setDeviceEnabled(const QString& backend, const QString& id, bool on) {
+  QStringList off = settings_.value("audio/offDevices").toStringList(); const QString k = backend + "|" + id; off.removeAll(k); if (!on) off << k; settings_.setValue("audio/offDevices", off);
+  for (QVariant& v : devices_) { QVariantMap m = v.toMap(); if (m["backend"].toString() == backend && m["id"].toString() == id) { m["enabled"] = on; v = m; } }
+  emit devicesChanged();
+}
 bool Engine::open(const QString& backend, const QString& inDevice, const QString& outDevice, double sampleRate, int frames, int inChannels, int outChannels) {
+  for (const QString& dev : {inDevice, outDevice}) if (!dev.isEmpty() && dev != "-" && !deviceEnabled(backend, dev)) { status_ = QStringLiteral("That device is switched OFF on CONNECTIONS: switch it ON to use it."); emit stateChanged(); return false; }
   stop();
   // WASAPI: THE HEADSET'S MICROPHONE STAYS OFF, always. A capture device that is a headset or Bluetooth microphone is never opened on
   // WASAPI, and with headphones or a headset as the output the system's default microphone (which is the headset's own when one is
@@ -763,7 +772,7 @@ QVariantMap Engine::autoDetect() const {
 QVariantMap Engine::autoDetectFor(const QString& prefer) const {
   QVariantMap best; int bestRank = -1;
   for (const QVariant& v : devices_) { const QVariantMap d = v.toMap(); const QString b = d["backend"].toString(), name = d["name"].toString(); if (b == "null" || d["id"].toString().startsWith("loopback:")) continue;
-    const bool in = d["inChannels"].toInt() > 0, out = d["outChannels"].toInt() > 0; if (!in && !out) continue;
+    const bool in = d["inChannels"].toInt() > 0, out = d["outChannels"].toInt() > 0; if (!in && !out) continue; if (!d.value("enabled", true).toBool()) continue;   // switched OFF on CONNECTIONS
     if (prefer == "bluetooth") { if (d["kind"].toString() != "bluetooth" && !looksBluetooth(name)) continue; } else if (prefer != "best" && b != prefer) continue;
     int rank = 0; QString why;
     if (b == "asio") { const bool wrapper = am::drv::isWrapper(name.toStdString()); const bool pinned = am::drv::pinOf(name.toStdString()).on; rank = wrapper ? 60 : pinned ? 50 : 100; why = wrapper ? "an ASIO wrapper (ASIO4ALL-style): used when nothing has its own driver" : pinned ? "Realtek onboard: pinned to its Windows endpoint, SMART START routes it" : "the device's own ASIO driver"; }
@@ -781,9 +790,9 @@ QVariantMap Engine::autoDetectFor(const QString& prefer) const {
   for (const bool wantIn : {true, false}) {
     if (best[wantIn ? "in" : "out"].toString() != "-") continue;
     QVariantMap pick; int pr = -1; QString stem = best["name"].toString(); const int par = stem.indexOf('('); if (par >= 0) stem = stem.mid(par + 1).remove(')').trimmed();   // "Speakers (USB Audio CODEC)" -> "USB Audio CODEC"
-    for (const QVariant& v : devices_) { const QVariantMap d = v.toMap(); if (d["backend"] != best["backend"] || d["id"].toString().startsWith("loopback:")) continue; if ((wantIn ? d["inChannels"] : d["outChannels"]).toInt() <= 0) continue;
+    for (const QVariant& v : devices_) { const QVariantMap d = v.toMap(); if (d["backend"] != best["backend"] || d["id"].toString().startsWith("loopback:")) continue; if ((wantIn ? d["inChannels"] : d["outChannels"]).toInt() <= 0) continue; if (!d.value("enabled", true).toBool()) continue;
       if (best["backend"] == "dsound" && handsFree(d)) continue;   // DirectSound: the headset's hands-free microphone stays off (opening it drops the headset to telephone quality)
-      const int r = (!stem.isEmpty() && d["name"].toString().contains(stem, Qt::CaseInsensitive) ? 4 : 0) + ((wantIn ? d["defaultIn"] : d["defaultOut"]).toBool() ? 2 : 0) + 1; if (r > pr) { pr = r; pick = d; } }
+      const int r = ((wantIn ? d["defaultIn"] : d["defaultOut"]).toBool() ? 4 : 0) + (!stem.isEmpty() && d["name"].toString().contains(stem, Qt::CaseInsensitive) ? 2 : 0) + 1;   /* the system's DEFAULT microphone first (what Windows uses), then the same device by name */ if (r > pr) { pr = r; pick = d; } }
     if (pick.isEmpty()) continue;
     best[wantIn ? "in" : "out"] = pick["id"]; best[wantIn ? "inChannels" : "outChannels"] = pick[wantIn ? "inChannels" : "outChannels"]; best[wantIn ? "inName" : "outName"] = pick["name"]; best[wantIn ? "inKind" : "outKind"] = pick["kind"];
   } best["rate"] = best["defaultRate"].toDouble() > 0 ? best["defaultRate"].toDouble() : 48000.0;

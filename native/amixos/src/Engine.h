@@ -408,6 +408,8 @@ class Engine : public QObject {
   int deviceInputs() const { return devIn_; } int deviceOutputs() const { return devOut_; }
   Q_INVOKABLE QString inputLabel(int input) const;   // "UM2 · IN 3": the short device name + the channel, for a strip's INPUT chip
   QString inputDeviceName() const { return inDevName_; } QString outputDeviceName() const { return outDevName_; }
+  Q_INVOKABLE bool deviceEnabled(const QString& backend, const QString& id) const;
+  Q_INVOKABLE void setDeviceEnabled(const QString& backend, const QString& id, bool on);   // OFF: never auto-picked, not opened
   Q_INVOKABLE void setInputRoute(int strip, int input);
   Q_INVOKABLE void setOutputRoute(int out, int source);
   Q_INVOKABLE void resetRouting();                      // input s -> strip s, monitor on 1-2, bus k on 3+2k / 4+2k
