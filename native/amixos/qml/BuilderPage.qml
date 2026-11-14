@@ -2,6 +2,7 @@
 // right: the faceplate (drag the DAW knobs where you want them), the name, the colour, SAVE / EXPORT / TRY IN THE MIXER, saved designs.
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Controls
 import AmixOS
 
 Item {
@@ -14,6 +15,8 @@ Item {
     component Field: Rectangle { property alias text: ti.text; signal edited(string t); implicitHeight: 26; radius: 4; color: Theme.deep; border.color: ti.activeFocus ? Theme.orange : Theme.line
         TextInput { id: ti; anchors.fill: parent; anchors.margins: 6; color: Theme.ink; font.pixelSize: 11; clip: true; selectByMouse: true; onEditingFinished: parent.edited(text) } }
 
+    DropArea { anchors.fill: parent; z: 50; keys: ["text/uri-list"]
+        onDropped: function (drop) { if (drop.hasUrls && drop.urls.length) { builder.setPreviewFile(drop.urls[0].toString()); if (!builder.previewOn) builder.previewPlay(true) } } }
     RowLayout {
         anchors.fill: parent; anchors.margins: 14; spacing: 12
 
@@ -53,7 +56,7 @@ Item {
 
         // ── THE FACEPLATE, NAME, EXPORT ─────────────────────────────────────────────────────────────────────────────────────────────
         ColumnLayout { Layout.preferredWidth: 430; Layout.maximumWidth: 430; Layout.fillWidth: false; Layout.fillHeight: true; spacing: 10
-            Rectangle { id: plate; objectName: "builderPlate"; Layout.fillWidth: true; implicitHeight: 230; radius: 10; color: "#16191e"; border.color: builder.color; border.width: 2
+            Rectangle { id: plate; objectName: "builderPlate"; Layout.fillWidth: true; implicitHeight: 180; radius: 10; color: "#16191e"; border.color: builder.color; border.width: 2
                 Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; height: 30; radius: 10; color: builder.color
                     Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 10; color: builder.color }
                     Text { x: 12; anchors.verticalCenter: parent.verticalCenter; text: builder.name.toUpperCase(); color: "#000"; font.family: Theme.mono; font.pixelSize: 12; font.weight: Font.Black; font.letterSpacing: 2 }
@@ -68,6 +71,34 @@ Item {
                             Text { anchors.bottom: parent.bottom; anchors.horizontalCenter: parent.horizontalCenter; text: modelData.text; color: Theme.cyan; font.pixelSize: 8; font.family: Theme.mono }
                             MouseArea { anchors.fill: parent; cursorShape: Qt.SizeAllCursor; drag.target: parent; drag.axis: Drag.XAndYAxis
                                 onReleased: builder.placeKnob(modelData.block, modelData.id, parent.x / Math.max(1, area.width - parent.width), parent.y / Math.max(1, area.height - parent.height)) } } } } }
+            // PREVIEW: hear the design live (the program's own engine on the sound card)
+            Rectangle { objectName: "builderPreview"; Layout.fillWidth: true; implicitHeight: pvCol.implicitHeight + 16; radius: 8; color: Theme.card; border.color: builder.previewOn ? Theme.emerald : Theme.line
+                ColumnLayout { id: pvCol; x: 8; y: 8; width: parent.width - 16; spacing: 6
+                    RowLayout { spacing: 6
+                        Text { text: i18n.t("PREVIEW", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 10; font.bold: true; font.letterSpacing: 2 }
+                        Btn { objectName: "previewPlay"; label: builder.previewOn ? "■ STOP" : "▶ PLAY"; on: builder.previewOn; onColor: Theme.emerald; onClicked: builder.previewPlay(!builder.previewOn) }
+                        Btn { label: builder.previewBypass ? "B · BYPASS" : "A · DESIGN"; on: builder.previewBypass; onColor: Theme.amber; onClicked: builder.setPreviewBypass(!builder.previewBypass) }
+                        Item { Layout.fillWidth: true }
+                        // IN / OUT meters
+                        Column { spacing: 2
+                            Repeater { model: [["IN", builder.previewInDb], ["OUT", builder.previewOutDb]]
+                                delegate: Row { spacing: 4; Text { text: modelData[0]; color: Theme.dim; font.pixelSize: 8; font.family: Theme.mono; width: 22 }
+                                    Rectangle { width: 110; height: 6; radius: 3; color: Theme.deep
+                                        Rectangle { height: parent.height; radius: 3; width: parent.width * Math.max(0, Math.min(1, (modelData[1] + 60) / 60)); color: modelData[1] > -1 ? Theme.danger : modelData[1] > -12 ? Theme.amber : Theme.emerald } } } } } }
+                    Flow { Layout.fillWidth: true; spacing: 4
+                        Repeater { model: ["SAMPLE", "PINK NOISE", "SWEEP", "MICROPHONE", "FILE…"]
+                            delegate: Btn { label: modelData; on: builder.previewSource === index; onColor: Theme.cyan; onClicked: { if (index === 4) { builder.setPreviewSource(4); pathBox.forceActiveFocus() } else builder.setPreviewSource(index) } } } }
+                    RowLayout { spacing: 8; visible: builder.previewSource === 0
+                        Text { text: i18n.t("SAMPLE", i18n.lang); color: Theme.muted; font.pixelSize: 9; font.family: Theme.mono }
+                        ComboBox { Layout.fillWidth: true; model: builder.samples.map(x => x.id + "  " + x.category + " · " + x.name); currentIndex: Math.max(0, builder.previewSample - 1); onActivated: function (k) { builder.setPreviewSample(builder.samples[k].id) } } }
+                    RowLayout { visible: builder.previewSource === 4; spacing: 6
+                        Field { id: pathBox; Layout.fillWidth: true; text: builder.previewFile; onEdited: function (t) { if (t.trim() !== "") builder.setPreviewFile(t.trim()) } }
+                        Text { text: i18n.t("or drop a file on the window", i18n.lang); color: Theme.dim; font.pixelSize: 8 } }
+                    RowLayout { spacing: 8
+                        Text { text: i18n.t("LEVEL", i18n.lang); color: Theme.muted; font.pixelSize: 9; font.family: Theme.mono }
+                        Slider { Layout.fillWidth: true; from: -30; to: 6; value: builder.previewGainDb; onMoved: builder.setPreviewGainDb(value) }
+                        Text { text: (builder.previewGainDb > 0 ? "+" : "") + builder.previewGainDb.toFixed(1) + " dB"; color: Theme.ink; font.pixelSize: 9; font.family: Theme.mono } }
+                    Text { visible: builder.previewNote !== ""; text: builder.previewNote; color: builder.previewOn ? Theme.emerald : Theme.amber; font.pixelSize: 9; wrapMode: Text.WordWrap; Layout.fillWidth: true } } }
             GridLayout { columns: 2; columnSpacing: 8; rowSpacing: 6; Layout.fillWidth: true
                 Text { text: i18n.t("NAME", i18n.lang); color: Theme.muted; font.pixelSize: 9; font.family: Theme.mono } Field { Layout.fillWidth: true; text: builder.name; onEdited: function (t) { builder.name = t } }
                 Text { text: i18n.t("VENDOR", i18n.lang); color: Theme.muted; font.pixelSize: 9; font.family: Theme.mono } Field { Layout.fillWidth: true; text: builder.vendor; onEdited: function (t) { builder.vendor = t } }
