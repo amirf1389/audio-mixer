@@ -30,7 +30,7 @@ import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js"
 import { BokehPass } from "three/addons/postprocessing/BokehPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 
-const Q = new URLSearchParams(location.search);
+const Q = new URLSearchParams(location.search); const NOAA = (Q.get("off") || "").split(",").includes("msaa");
 const W = Number(Q.get("w") || 3840), H = Number(Q.get("h") || 2160), FPS = Number(Q.get("fps") || 60);
 document.body.style.width = W + "px"; document.body.style.height = H + "px"; document.body.style.setProperty("--u", (H / 100) + "px");
 const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x)), lin = (t, a, b) => clamp((t - a) / (b - a));
@@ -61,10 +61,10 @@ async function screenAt(f) {
 }
 
 // ---------- renderer, scene ----------
-const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+const renderer = new THREE.WebGLRenderer({ antialias: !NOAA, preserveDrawingBuffer: true });
 renderer.setSize(W, H); renderer.setPixelRatio(1); renderer.domElement.id = "gl";
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0; renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.enabled = !(new URLSearchParams(location.search).get("off") || "").includes("shadow"); renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.body.prepend(renderer.domElement);
 RectAreaLightUniformsLib.init();
 const scene = new THREE.Scene(); scene.background = new THREE.Color(0x030405); scene.fog = new THREE.Fog(0x030405, 9, 22);
@@ -72,8 +72,9 @@ const pmrem = new THREE.PMREMGenerator(renderer); scene.environment = pmrem.from
 const camera = new THREE.PerspectiveCamera(32, W / H, 0.02, 100);
 
 // the desk: a dark, satin top with a soft mirror
+const NO = (k) => (Q.get("off") || "").split(",").includes(k);
 const mirror = new Reflector(new THREE.PlaneGeometry(40, 40), { textureWidth: W / 3, textureHeight: H / 3, color: 0x4a4f58 });
-mirror.rotation.x = -Math.PI / 2; scene.add(mirror);
+mirror.rotation.x = -Math.PI / 2; if (!NO("mirror")) scene.add(mirror);
 const deskTop = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.MeshStandardMaterial({ color: 0x0b0c0f, roughness: 0.55, metalness: 0.1, transparent: true, opacity: 0.88 }));
 deskTop.rotation.x = -Math.PI / 2; deskTop.position.y = 0.002; deskTop.receiveShadow = true; scene.add(deskTop);
 // the back wall: a dark gradient
@@ -141,15 +142,15 @@ const edgeA = new THREE.PointLight(0xf59e0b, 5, 6, 2); edgeA.position.set(2.3, 0
 // ---------- post: bloom, depth of field ----------
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-const bloom = new UnrealBloomPass(new THREE.Vector2(W / 2, H / 2), 0.35, 0.6, 0.82); composer.addPass(bloom);
-const bokehPass = new BokehPass(scene, camera, { focus: 6, aperture: 0.004, maxblur: 0.012 }); composer.addPass(bokehPass);
+const bloom = new UnrealBloomPass(new THREE.Vector2(W / 2, H / 2), 0.35, 0.6, 0.82); if (!NO("bloom")) composer.addPass(bloom);
+const bokehPass = new BokehPass(scene, camera, { focus: 6, aperture: 0.004, maxblur: 0.012 }); if (!NO("dof")) composer.addPass(bokehPass);
 composer.addPass(new OutputPass());
 
 // ---------- the shot: one continuous macro push-in ----------
 const screenWorld = () => { const v = new THREE.Vector3(); screen.getWorldPosition(v); return v; };
 window.renderAt = async (frame) => {
   const t = frame / FPS, T = total / FPS;   // the footage length (20 s); the end card follows
-  await screenAt(Math.round(t * FPS));
+  if (!NO("screen") || frame === 0) await screenAt(Math.round(t * FPS));
   const k = ease(lin(t, 0, T)), sc = screenWorld();
   // from a wide three-quarter view to a macro view of the screen's left half (the faders), then centre for the plug-in
   const start = new THREE.Vector3(4.3, 2.3, 4.9), mid = new THREE.Vector3(1.8, 1.65, 3.0), end = new THREE.Vector3(-0.15, 1.18, 0.75);
@@ -162,7 +163,8 @@ window.renderAt = async (frame) => {
   bokehPass.uniforms.aperture.value = mix(0.0016, 0.0062, k);
   bokehPass.uniforms.maxblur.value = mix(0.006, 0.014, k);
   for (let i = 0; i < bokeh.length; ++i) bokeh[i].scale.setScalar(0.8 + 0.25 * Math.sin(t * 0.8 + i));
-  composer.render();
+  composer.render(); if (renderer.shadowMap.autoUpdate) renderer.shadowMap.autoUpdate = false;   // the lights and the laptop never move: the shadows are drawn once
+  { const gl = renderer.getContext(), px = new Uint8Array(4); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); }   // waits for the GPU: the frame is drawn when renderAt returns
   // the end card
   const e = lin(t, T + 0.1, T + 1.1);
   document.getElementById("shade").style.opacity = (0.82 * ease(e) + 0.18 * lin(t, T + 3.2, T + 4)).toFixed(3);
