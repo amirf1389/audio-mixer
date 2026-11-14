@@ -152,6 +152,9 @@ int main() {
     std::fill(big.begin(), big.end(), 0.0f); fx->process(big.data(), big.data(), big.size()); CHECK(sp->playing());
     double tail = 0; for (std::size_t i = big.size() - 48000; i < big.size(); ++i) tail += std::fabs(big[i]); CHECK(tail > 0.0);   // still sounding at the end: it went round
     fx->set("sample", 0.5); CHECK(fx->text("sample", 0.5).rfind("51 ", 0) == 0);
+    // a retrigger whose OFF and ON both land before the next block (a pad hit twice quickly, a script) still starts from the top
+    fx->set("loop", 0.0); fx->set("sample", 0.0); fx->set("play", 1.0); std::fill(big.begin(), big.end(), 0.0f); fx->process(big.data(), big.data(), big.size()); CHECK(!sp->playing());
+    fx->set("play", 0.0); fx->set("play", 1.0); { std::vector<float> a(480, 0.0f), b(480, 0.0f); fx->process(a.data(), b.data(), a.size()); double e2 = 0; for (float v : a) e2 += std::fabs(v); CHECK(e2 > 0.1 && sp->playing()); }
   }
   {   // DE-SQUASH: a squashed drum (sharp hits on a constant bed) gets its hits back; a steady tone is left alone
     auto fx = am::fx::make("desquash", 48000); CHECK(fx && fx->params().size() == 3 && fx->text("range", 1.0) == "12.0 dB");

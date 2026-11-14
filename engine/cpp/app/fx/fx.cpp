@@ -504,7 +504,9 @@ void SamplePlayer::load() {
   if (!am::samples::render(id, fs_, b->L, b->R)) { b->L.clear(); b->R.clear(); }
   std::atomic_store(&buf_, std::shared_ptr<const Buf>(std::move(b))); loaded_ = id;
 }
-void SamplePlayer::set(const std::string& id, double v) { Simple::set(id, v); if (id == "sample" && sampleOf(k_[0].load()) != loaded_ && fileName().empty()) load(); }
+// PLAY ON is a trigger: every write of ON starts the sample from the top, even when OFF and ON arrive within one audio block (a pad hit
+// twice quickly, a script): the audio thread sees the count change, not only an OFF -> ON edge it may never observe.
+void SamplePlayer::set(const std::string& id, double v) { Simple::set(id, v); if (id == "play" && v >= 0.5) ++trig_; if (id == "sample" && sampleOf(k_[0].load()) != loaded_ && fileName().empty()) load(); }
 bool SamplePlayer::loadFile(const std::string& path, std::string& err) {
   am::arr::Audio a; if (!am::arr::readAudio(path, a, err)) return false;
   if (a.L.size() > static_cast<std::size_t>(a.rate * 600)) { err = "the file is longer than 10 minutes"; return false; }
@@ -518,7 +520,7 @@ bool SamplePlayer::loadFile(const std::string& path, std::string& err) {
 }
 void SamplePlayer::clearFile() { loaded_ = 0; load(); }
 void SamplePlayer::setSampleRate(double fs) { fs_ = fs > 0 ? fs : 48000; load(); reset(); }
-void SamplePlayer::reset() { pos_ = 0; wasOn_ = false; playing_ = false; }
+void SamplePlayer::reset() { pos_ = 0; wasOn_ = false; playing_ = false; seenTrig_ = trig_.load(); }
 std::string SamplePlayer::text(const std::string& id, double v) const {
   v = clamp01(v);
   if (id == "sample") { const std::string f = fileName(); if (!f.empty()) return "FILE " + f; const int n = sampleOf(v); for (const auto& i : am::samples::list()) if (i.id == n) return std::to_string(n) + " " + i.name; return std::to_string(n); }
@@ -528,7 +530,7 @@ std::string SamplePlayer::text(const std::string& id, double v) const {
 void SamplePlayer::process(float* L, float* R, std::size_t n) {
   if (bypass()) return;
   const bool on = k_[1].load() >= 0.5, loop = k_[2].load() >= 0.5; const double lv = k_[3].load();
-  if (on && !wasOn_) pos_ = 0;   // switched on: from the top
+  { const unsigned tr = trig_.load(); if ((on && !wasOn_) || tr != seenTrig_) pos_ = 0; seenTrig_ = tr; }   // switched on, or triggered again: from the top
   wasOn_ = on;
   const std::shared_ptr<const Buf> b = std::atomic_load(&buf_);
   if (!on || !b || b->L.empty() || lv <= 0) { playing_ = false; return; }

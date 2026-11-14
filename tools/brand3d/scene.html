@@ -29,6 +29,23 @@ canvas { position: absolute; left: 0; top: 0; }
 #lock2 { top: 925px; font: 500 38px InterD; color: #00f2ff; letter-spacing: 1px; }
 #lock3 { top: 985px; font: 300 30px InterL; color: #94a3b8; letter-spacing: 3px; }
 #black { position: absolute; inset: 0; background: #000; }
+body.vert { width: 1080px; height: 1920px; }
+.vert #cap { left: 78px; right: 60px; bottom: 250px; }
+.vert #cap .t { font-size: 66px; line-height: 1.08; }
+.vert #cap .s { font-size: 31px; line-height: 1.35; }
+.vert #bar { left: 48px; bottom: 256px; height: 210px; }
+.vert #capShade { height: 820px; }
+.vert #lowShade { height: 1000px; background: linear-gradient(to top, rgba(4,5,7,.98) 0%, rgba(4,5,7,.95) 62%, rgba(4,5,7,0) 100%); }
+.vert #word { top: 1430px; font-size: 40px; letter-spacing: 10px; }
+.vert #title { top: 1300px; font-size: 128px; }
+.vert #tag { top: 1465px; font-size: 38px; }
+.vert #stats { top: 210px; flex-direction: column; align-items: center; gap: 46px; }
+.vert .st { width: 900px; }
+.vert .st .n { font-size: 120px; }
+.vert #statsShade { height: 1350px; background: radial-gradient(ellipse at 50% 40%, rgba(4,5,7,.92) 0%, rgba(4,5,7,.75) 50%, rgba(4,5,7,0) 80%); }
+.vert #lock1 { top: 1290px; }
+.vert #lock2 { top: 1450px; }
+.vert #lock3 { top: 1515px; font-size: 27px; }
 </style>
 <script type="importmap">{ "imports": { "three": "/three/build/three.module.js", "three/addons/": "/three/examples/jsm/" } }</script>
 </head>
@@ -61,7 +78,9 @@ import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 
-const W = 1920, H = 1080, FPS = 30;
+const V = location.search.includes("v=1"); if (V) document.body.classList.add("vert");
+const W = V ? 1080 : 1920, H = V ? 1920 : 1080, FPS = 30;
+const DZ = V ? 1.08 : 1;   // the vertical frame sees less width: the mark comes closer
 const C = { bg: 0x040507, cyan: 0x00f2ff, amber: 0xfbbf24, orange: 0xf26a1b, ink: 0xf1f5f9 };
 const F = await (await fetch("/features.json")).json();
 
@@ -86,7 +105,7 @@ document.body.prepend(renderer.domElement);
 const scene = new THREE.Scene(); scene.background = new THREE.Color(C.bg); scene.fog = new THREE.FogExp2(C.bg, 0.042);
 const pmrem = new THREE.PMREMGenerator(renderer); scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 scene.environmentIntensity = 0.35;
-const camera = new THREE.PerspectiveCamera(35, W / H, 0.05, 200);
+const camera = new THREE.PerspectiveCamera(V ? 60 : 35, W / H, 0.05, 200);
 
 scene.add(new THREE.AmbientLight(0x9fb3c8, 0.25));
 const key = new THREE.DirectionalLight(0xffffff, 1.4); key.position.set(4, 8, 6); scene.add(key);
@@ -96,7 +115,7 @@ const rimA = new THREE.PointLight(C.orange, 14, 30, 2); rimA.position.set(5, 2.5
 // ---------- floor: a dark mirror with a faint grid ----------
 const mirror = new Reflector(new THREE.PlaneGeometry(80, 80), { textureWidth: W / 2, textureHeight: H / 2, color: 0x6a7380 });
 mirror.rotation.x = -Math.PI / 2; scene.add(mirror);
-const dim = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), new THREE.MeshBasicMaterial({ color: C.bg, transparent: true, opacity: 0.86 }));
+const dim = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), new THREE.MeshBasicMaterial({ color: C.bg, transparent: true, opacity: V ? 0.95 : 0.86 }));
 dim.rotation.x = -Math.PI / 2; dim.position.y = 0.003; scene.add(dim);
 const grid = new THREE.GridHelper(80, 80, C.cyan, C.cyan); grid.material.transparent = true; grid.material.opacity = 0.05; grid.position.y = 0.006; scene.add(grid);
 
@@ -105,6 +124,11 @@ const PN = 2600, pp = new Float32Array(PN * 3), pbase = [];
 for (let i = 0; i < PN; ++i) pbase.push([(hash(i) - 0.5) * 40, hash(i + 11) * 9 + 0.2, (hash(i + 23) - 0.5) * 40, hash(i + 37) * 6.28]);
 const pgeo = new THREE.BufferGeometry(); pgeo.setAttribute("position", new THREE.BufferAttribute(pp, 3));
 const pmat = new THREE.PointsMaterial({ color: 0x7fe9ff, size: 0.035, transparent: true, opacity: 0.5, depthWrite: false, blending: THREE.AdditiveBlending });
+if (V) {   // round, soft dots: close to the camera a plain point is a visible square
+  const c = document.createElement("canvas"); c.width = c.height = 64; const g = c.getContext("2d");
+  const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, "rgba(255,255,255,1)"); gr.addColorStop(0.4, "rgba(255,255,255,.5)"); gr.addColorStop(1, "rgba(255,255,255,0)");
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64); pmat.map = new THREE.CanvasTexture(c); pmat.alphaTest = 0.01;
+}
 const dust = new THREE.Points(pgeo, pmat); scene.add(dust);
 
 // ---------- the AmF X1 mark, built in 3D from the app icon ----------
@@ -194,9 +218,9 @@ const cap = $("cap"), capK = cap.querySelector(".k"), capT = cap.querySelector("
 function panelView(i, push) {
   const p = panels[i], n = new THREE.Vector3(-Math.sin(p.a), 0, Math.cos(p.a));   // towards the centre
   const side = new THREE.Vector3(Math.cos(p.a), 0, Math.sin(p.a));
-  const d = mix(7.9, 6.9, push), yaw = 0.16 * (i % 2 ? 1 : -1);
+  const d = V ? mix(7.2, 6.3, push) : mix(7.9, 6.9, push), yaw = 0.16 * (i % 2 ? 1 : -1);
   const pos = p.g.position.clone().addScaledVector(n, d * Math.cos(yaw)).addScaledVector(side, d * Math.sin(yaw)); pos.y = PY + 0.15;
-  const look = p.g.position.clone(); look.y = PY - 0.38;
+  const look = p.g.position.clone(); look.y = V ? PY - 1.0 : PY - 0.38;
   return { pos, look };
 }
 
@@ -255,14 +279,14 @@ window.renderAt = (frameNo) => {
   let pos, look;
   if (t < 8) {   // orbit in towards the mark
     const k = ease(lin(t, 0, 4.2)), ang = mix(0.95, 0, k);
-    const rad = mix(11.5, 7.6, k), ht = mix(0.7, 1.85, k);
+    const rad = mix(11.5, 7.6, k) * DZ, ht = mix(0.7, 1.85, k);
     pos = new THREE.Vector3(Math.sin(ang) * rad, ht, Math.cos(ang) * rad);
-    look = new THREE.Vector3(0, mix(1.2, 1.12, k), 0);
+    look = new THREE.Vector3(0, mix(1.2, 1.12, k) - (V ? 0.55 * k : 0), 0);
     if (t > 4) { pos.z -= (t - 4) * 0.12; pos.x += Math.sin((t - 4) * 0.5) * 0.15; }
   }
   if (t >= 7.2 && t < 32) {   // the gallery: glide to each panel on its beat, then push in
     const i = clamp(Math.floor((t - 8) / 4), 0, 5), local = t - (8 + i * 4);
-    const cur = panelView(i, ease(clamp(local / 4))), prev = i > 0 ? panelView(i - 1, 1) : { pos: new THREE.Vector3(0, 1.85, 7.1), look: new THREE.Vector3(0, 1.12, 0) };
+    const cur = panelView(i, ease(clamp(local / 4))), prev = i > 0 ? panelView(i - 1, 1) : { pos: new THREE.Vector3(0, 1.85, 7.1 * DZ), look: new THREE.Vector3(0, V ? 0.57 : 1.12, 0) };
     const k = t < 8 ? 0 : ease(clamp(local / 1.0));
     let gp = vmix(prev.pos, cur.pos, k), gl = vmix(prev.look, cur.look, k);
     if (i === 0 && t < 9) { const k0 = ease(lin(t, 7.2, 9.0)); gp = vmix(pos || prev.pos, cur.pos, k0); gl = vmix(look || prev.look, cur.look, k0); }
@@ -272,11 +296,11 @@ window.renderAt = (frameNo) => {
   }
   if (t >= 32) {   // orbit high above the sculpture, then come down to the lockup
     const k = ease(lin(t, 32, 33.2)), last = panelView(5, 1);
-    const ang = 0.6 + (t - 32) * 0.22, orbit = new THREE.Vector3(Math.sin(ang) * 11, 5.8, Math.cos(ang) * 11);
-    pos = vmix(last.pos, orbit, k); look = vmix(last.look, new THREE.Vector3(0, 0.6, 0), k);
+    const ang = 0.6 + (t - 32) * 0.22, orbit = new THREE.Vector3(Math.sin(ang) * (V ? 12.5 : 11), V ? 7.5 : 5.8, Math.cos(ang) * (V ? 12.5 : 11));
+    pos = vmix(last.pos, orbit, k); look = vmix(last.look, new THREE.Vector3(0, V ? -1.2 : 0.6, 0), k);
     const k2 = ease(lin(t, 37.4, 39.6));
-    const end = new THREE.Vector3(Math.sin((t - 39.6) * 0.05) * 1.2, 1.85, 7.6 - lin(t, 39.6, 46) * 0.5);
-    pos = vmix(pos, end, k2); look = vmix(look, new THREE.Vector3(0, 1.1, 0), k2);
+    const end = new THREE.Vector3(Math.sin((t - 39.6) * 0.05) * 1.2 * DZ, 1.85, (7.6 - lin(t, 39.6, 46) * 0.5) * DZ);
+    pos = vmix(pos, end, k2); look = vmix(look, new THREE.Vector3(0, V ? 0.55 : 1.1, 0), k2);
   }
   camera.position.copy(pos); camera.lookAt(look);
   // a whisper of handheld life

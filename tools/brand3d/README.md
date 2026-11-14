@@ -10,6 +10,12 @@ A 46-second 3D film rendered frame by frame with Three.js in headless Chromium, 
 4. Encode:
    `ffmpeg -framerate 30 -i frames/f%05d.png -i music.wav -c:v libx264 -crf 16 -preset slow -pix_fmt yuv420p -c:a aac -b:a 256k -shortest -movflags +faststart AmF-X1-brand-3d.mp4`
 
+For the vertical 9:16 version (1080×1920: a wider camera, stacked stats and captions laid out for phones), add `VERT=1` and render into another folder:
+`VERT=1 node render.js 0 689 framesV & VERT=1 node render.js 690 1379 framesV`
+Then encode `framesV` the same way.
+
+To render chosen frames for a check, pass a comma list: `node render.js 150,330,1290 0 keys`.
+
 Timeline in seconds:
 - 0–4: the AmF X1 mark is built in 3D.
 - 4: the hit.
