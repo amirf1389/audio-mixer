@@ -16,5 +16,6 @@ Nothing on the screen is mocked up: the console is filmed running, with real mou
 3. **Render the frames** (Three.js from `../brand3d/node_modules`, after `npm install` there):
    `CAP=CAPDIR node render.js 0 479 frames & CAP=CAPDIR node render.js 480 959 frames & CAP=CAPDIR node render.js 960 1439 frames`
    - Set `W=1920 H=1080` for a quick preview.
+   - For a long 4K render, use `./worker.sh FIRST LAST` instead. It restarts the browser every 40 frames, so memory cannot pile up, and resumes after a crash, skipping frames already on disk.
 4. **Encode:**
    `ffmpeg -framerate 60 -i frames/f%05d.png -i hero_music.wav -c:v libx264 -preset slow -crf 14 -pix_fmt yuv420p -c:a aac -b:a 320k -af loudnorm=I=-14:TP=-1 -shortest -movflags +faststart AmF-X1-hero-4k60.mp4`

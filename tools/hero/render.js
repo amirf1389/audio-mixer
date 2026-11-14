@@ -31,6 +31,7 @@ server.listen(0, async () => {
     const out = path.join(outDir, `f${String(f).padStart(5, "0")}.png`); if (fs.existsSync(out)) continue;
     await page.evaluate((k) => window.renderAt(k), f);
     await page.screenshot({ path: out + ".tmp.png", type: "png" }); fs.renameSync(out + ".tmp.png", out); ++n;
+    if (process.env.MAXN && n >= Number(process.env.MAXN)) { console.log(`batch of ${n} frames done, restarting the browser`); await browser.close(); server.close(); process.exit(3); }
     if (n % 20 === 0) console.log(`frames ${first}-${last}: ${f} done, ${((Date.now() - t0) / n / 1000).toFixed(2)} s/frame (of ${total})`);
   }
   console.log(`done ${first}-${last}: ${n} frames in ${((Date.now() - t0) / 1000).toFixed(0)} s`);
