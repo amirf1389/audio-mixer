@@ -471,7 +471,11 @@ int main(int argc, char* argv[]) {
         const QVariantList pc = {dev("asio", "Realtek ASIO", "Realtek ASIO", 2, 2), dev("wasapi", "{r-out}", "Speakers (Realtek High Definition Audio)", 0, 2, false, true), dev("wasapi", "{r-in}", "Microphone (Realtek High Definition Audio)", 2, 0, true, false), dev("dsound", "{ds-r}", "Speakers (Realtek High Definition Audio)", 0, 2, false, true), dev("null", "null", "Null device (timed, no hardware)", 2, 2)};
         QVariantList um2 = pc; um2.prepend(dev("asio", "BEHRINGER USB AUDIO", "BEHRINGER USB AUDIO", 2, 2)); um2 << dev("wasapi", "{um2-in}", "Microphone (USB Audio CODEC)", 2, 0) << dev("wasapi", "{um2-out}", "Speakers (USB Audio CODEC)", 0, 2) << dev("dsound", "{ds-um2}", "Speakers (USB Audio CODEC)", 0, 2) << dev("dsound", "{ds-um2-in}", "Microphone (USB Audio CODEC)", 2, 0);
         const QVariantList realDevices = engine.devices();
-        engine.simulateDevices(pc); const QVariantMap d0 = engine.autoDetect();
+        const QString keepPref = engine.autoPrefer();
+        engine.simulateDevices(pc); { const QVariantMap w = engine.autoDetect();   // the default: AUTO is the system's WASAPI speakers with the default microphone
+          if (w["backend"] != "wasapi" || w["out"] != "{r-out}" || w["in"] != "{r-in}") { std::fprintf(stderr, "amixos --smoke: AUTO did not pick the WASAPI default speakers + microphone: %s %s / %s\n", qPrintable(w["backend"].toString()), qPrintable(w["out"].toString()), qPrintable(w["in"].toString())); return 169; } }
+        engine.setAutoPrefer("best");   // the UM2 checks below are for BEST (an interface's own ASIO driver first)
+        const QVariantMap d0 = engine.autoDetect();
         if (d0["backend"] != "wasapi" && d0["backend"] != "asio") { std::fprintf(stderr, "amixos --smoke: UM2 machine without the UM2: detection picked %s\n", qPrintable(d0["name"].toString())); return 170; }
         if (d0["name"].toString().contains("BEHRINGER")) { std::fprintf(stderr, "amixos --smoke: UM2 detected while unplugged\n"); return 170; }
         engine.simulateDevices(um2); const QVariantMap d1 = engine.autoDetect();
@@ -482,6 +486,7 @@ int main(int argc, char* argv[]) {
         if (plan2.size() != 2 || plan2[1].toMap()["mode"] != "dsound") { std::fprintf(stderr, "amixos --smoke: UM2 plan with DirectSound-only fallback has %d steps\n", int(plan2.size())); return 173; }
         int plugged = 0; QObject::connect(&engine, &Engine::hotplug, &app, [&](bool added, const QString& w) { if (added && w.contains("BEHRINGER")) ++plugged; });
         if (engine.inputLabel(0).isEmpty()) { std::fprintf(stderr, "amixos --smoke: input label\n"); return 174; }
+        engine.setAutoPrefer(keepPref);
         std::printf("amixos --smoke: UM2 machine OK: detect -> %s (%s); plan %s -> %s (%s / %s) -> %s -> %s (%s); DirectSound-only -> %d steps\n", qPrintable(d1["name"].toString()), qPrintable(d1["why"].toString()), qPrintable(plan[0].toMap()["mode"].toString()), qPrintable(plan[1].toMap()["mode"].toString()), qPrintable(plan[1].toMap()["in"].toString()), qPrintable(plan[1].toMap()["out"].toString()), qPrintable(plan[2].toMap()["mode"].toString()), qPrintable(plan[3].toMap()["mode"].toString()), qPrintable(plan[3].toMap()["out"].toString()), int(plan2.size()));
         { // a laptop with no ASIO: the pick is an output endpoint, and it must come with an input (it used to start with 0 inputs); a headset pairs with its own microphone; kinds are named
           const QVariantList lap = {dev("wasapi", "{spk}", "Speakers (Realtek High Definition Audio)", 0, 2, false, true), dev("wasapi", "{mic}", "Microphone Array (Realtek High Definition Audio)", 2, 0, true, false), dev("wasapi", "{hp}", "Headphones (Realtek High Definition Audio)", 0, 2), dev("wasapi", "{bt}", "Headphones (WH-1000XM4 Stereo)", 0, 2), dev("dsound", "{ds-spk}", "Speakers (Realtek High Definition Audio)", 0, 2, false, true), dev("dsound", "{ds-mic}", "Microphone Array (Realtek High Definition Audio)", 2, 0, true, false)};

@@ -249,7 +249,8 @@ class Engine : public QObject {
   // AUTO SELECT: which audio system AUTO DETECT may pick from: "best" (ASIO, then Windows audio, then DirectSound), or only "asio", "wasapi",
   // "dsound" or "bluetooth". When the chosen system has no device, the best of the others is taken and the note says so.
   Q_PROPERTY(QString autoPrefer READ autoPrefer WRITE setAutoPrefer NOTIFY devicesChanged)
-  QString autoPrefer() const { return settings_.value("audio/autoPrefer", "best").toString(); } void setAutoPrefer(const QString& p);
+  QString autoPrefer() const { return settings_.value("audio/autoPrefer", "wasapi").toString(); }   // AUTO = the system's own WASAPI devices (default speakers + default microphone); ASIO only when picked
+  void setAutoPrefer(const QString& p);
   QVariantMap autoDetectFor(const QString& prefer) const;
   // STEREO PAIR: strips 1+2, 3+4 ... as one stereo channel. matchStereoPair() gives the partner the same channel processing (EQ, gate, compressor,
   // limiter, crossover, delay) and the same rack (every plug-in with its settings and bypass), panned to the other side. While the two are
