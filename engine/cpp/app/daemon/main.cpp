@@ -43,7 +43,7 @@ int run(int argc, char** argv, std::atomic<bool>& g_quit, std::function<void(con
   }
   if (lan) o.bind = "0.0.0.0";
   std::string err;
-  o.tokenStore = tokensFile;
+  o.tokenStore = tokensFile; o.consoleInfo = am::paths::file("remote-console.json");
   if (doNew || doList || doRevoke) {   // token management from the command line: no server is started
     am::TokenStore ts(tokensFile); if (!ts.load(err)) { say(fmt("amixos-daemon: %s\n", err.c_str())); return 1; }
     if (doNew) { std::string id; const std::string t = ts.issue(newName, newRole, newDays, id, err); if (t.empty()) { say(fmt("amixos-daemon: %s\n", err.c_str())); return 1; }

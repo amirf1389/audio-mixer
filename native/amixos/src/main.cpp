@@ -29,6 +29,9 @@
 #include <QtEndian>
 #include <QFileInfo>
 #include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QProcess>
 #include <vector>
 #include "Arrange.h"
@@ -801,6 +804,8 @@ int main(int argc, char* argv[]) {
       if (i18n.count() < 80 || full < 80 || i18n.t("MIXER", "fa") == "MIXER") { std::fprintf(stderr, "amixos --smoke: language tables incomplete\n"); QCoreApplication::exit(7); return; }   // (a bare `return 7` here would make the lambda non-void and fall off the end: heap corruption)
       const QVariantMap m = engine.telemetry();
       const qulonglong blocks = m.value("blocks").toULongLong();
+      { remote.writeConsoleInfo(); QFile f(QString::fromStdString(am::paths::file("remote-console.json"))); bool ok = f.open(QIODevice::ReadOnly); const QJsonObject o = ok ? QJsonDocument::fromJson(f.readAll()).object() : QJsonObject();
+        std::printf("amixos --smoke: phone PLUG-INS snapshot %s (%d VST, %d store items, %d racks)\n", o.value("available").toBool() ? "written" : "MISSING", int(o.value("vst").toArray().size()), int(o.value("store").toArray().size()), int(o.value("racks").toArray().size())); }
       std::printf("amixos --smoke: interface loaded, %s backend, %llu blocks in 1.2 s, xruns %llu, master %.1f dBFS, %d pages\n", qPrintable(engine.backend()), blocks, m.value("xruns").toULongLong(), m.value("masterPeakDb").toDouble(), engine.pageCount());
       arrange.newProject(); QFile::remove(smokeWav); QFile::remove(smokeOut);   // the smoke's demo arrangement is not kept
       for (int k = 0; k < 6; ++k) engine.setPlugin(0, k, "");

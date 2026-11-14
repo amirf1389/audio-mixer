@@ -13,7 +13,9 @@ the phone's own mixer's sample rate and block size; reset. Tap a channel name fo
 the limiter and its ceiling. **EQ CONTROLLER** (channel page): 8 bands on a curve you drag (across = frequency, up / down = gain), type, Q, presets (vocal,
 speech, kick, acoustic guitar, loudness, telephone), flat, bypass; remembered per strip on the phone. **CALCULATOR** (offline): tempo to
 delay times, speaker alignment (distance to ms, temperature), dB ratios and adding sources, wavelength and note, buffer latency,
-recording size. **Screenshots on every test run, no phone needed:** `gradle testReleaseUnitTest` draws the real screens with
+recording size. **PLUG-INS** (remote): the console's channel racks (slot, plug-in, ON / BYPASS / ERROR), the VST3 / VST2 plug-ins its scan found
+(search by name or vendor) and its extensions and built-in effects; read-only, saved by the console when the phone remote starts
+(`remote-console.json`, served at `/api/console-info` with the token). **Screenshots on every test run, no phone needed:** `gradle testReleaseUnitTest` draws the real screens with
 Robolectric into `screenshots-android/` (with `AMFX_DAEMON=<port> AMFX_TOKEN=<token>` and a running amixos-daemon, the remote is shown
 connected, plus the channel and master pages). **No app needed:** any browser on the same Wi-Fi can open
 `http://<console address>:8765/remote` (shown on the same page) and pair with the same PIN. The

@@ -45,6 +45,20 @@ class ScreenshotTest {
         for ((k, n) in listOf(0 to "calc-delay", 1 to "calc-align", 3 to "calc-frequency")) { a.show(k); shot(a.window.decorView.rootView, n) }
     }
 
+    @Test fun plugins() {   // from a sample console snapshot (the same JSON the console writes)
+        val a = Robolectric.buildActivity(PluginsActivity::class.java).setup().get()
+        val s = """{"available":true,"version":"1.23.0.1","written":1763100000000,
+          "racks":[{"strip":0,"name":"VOCAL","plugins":[{"slot":0,"kind":"fx:deesser","name":"De-esser","bypass":false,"builtIn":true},{"slot":1,"kind":"vst3:x","name":"Studio Compressor","bypass":false,"builtIn":false},{"slot":2,"kind":"fx:reverb","name":"Reverb","bypass":true,"builtIn":true}]},
+                   {"strip":3,"name":"GUITAR","plugins":[{"slot":0,"kind":"vst3:y","name":"Amp Sim","bypass":false,"builtIn":false,"error":"not found on this computer"}]}],
+          "vst":[{"name":"Studio Compressor","vendor":"Example Audio","format":"vst3"},{"name":"Amp Sim","vendor":"Sample Labs","format":"vst3"},{"name":"Old Delay","vendor":"Legacy Co","format":"vst2"}],
+          "store":[{"name":"AmF X1 Network","kind":"extension","note":"phone remote and network control","installed":true,"on":true},{"name":"AmF X1 Hybrid","kind":"extension","note":"sixteen-strip hybrid mixer","installed":false,"on":true},
+                   {"name":"Reverb","kind":"effect","note":"built-in rack effect","installed":true,"on":true},{"name":"Chorus","kind":"effect","note":"built-in rack effect","installed":true,"on":false}]}"""
+        @Suppress("UNCHECKED_CAST") a.show(com.amfb.amixos.remote.MiniJson.parse(s) as Map<String, Any?>)
+        shot(a.window.decorView.rootView, "plugins-racks")
+        a.tabTo(1); shot(a.window.decorView.rootView, "plugins-vst")
+        a.tabTo(2); shot(a.window.decorView.rootView, "plugins-extensions")
+    }
+
     @Test fun remote() {
         val port = System.getProperty("amfx.daemon").orEmpty()
         val ctx = org.robolectric.RuntimeEnvironment.getApplication()

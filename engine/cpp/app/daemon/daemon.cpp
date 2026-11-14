@@ -184,6 +184,12 @@ httpd::Response Daemon::handle(const httpd::Request& r) {
     if (!err.empty()) { res.status = 400; json::Value e = json::Value::object(); e.set("ok", false); e.set("error", err); res.body = e.dump(); return res; }
     res.body = out.dump(); return res;
   }
+  if (r.method == "GET" && r.path == "/api/console-info") {   // the console's plug-ins, racks and extensions as it saved them when the service started (read-only)
+    if (roleOf(r).empty()) { res.status = noteRefused() ? 429 : 401; res.body = "{\"ok\":false,\"error\":\"X-Amix-Token missing or wrong\"}"; return res; }
+    std::ifstream f(opt_.consoleInfo, std::ios::binary); std::string s((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    bool ok = false; json::Value::parse(s, ok);   // only well-formed JSON goes out
+    res.body = ok && !s.empty() && s.size() < 4 * 1024 * 1024 ? s : std::string("{\"available\":false}"); return res;
+  }
   if (r.method == "GET" && (r.path == "/remote" || r.path == "/remote/")) {   // THE BROWSER REMOTE: any phone, tablet or computer on the network pairs with the minute's PIN
     static const char kPage[] =
 #include "remote_page.inc"

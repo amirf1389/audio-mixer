@@ -80,4 +80,18 @@
     <string name="eq_bypassed">BYPASSED</string>
     <string name="eq_help">Drag a dot: across for frequency, up and down for gain. Tap 1-8 or a dot to pick a band. Changes go to the console as you move; this phone remembers each strip\'s EQ.</string>
     <string name="eq_offline">Not connected: connect the remote first. You can still shape the curve; it is sent when you come back connected.</string>
+    <string name="plugins">PLUG-INS</string>
+    <string name="plugins_title">PLUG-INS &amp; EXTENSIONS</string>
+    <string name="plugins_racks">RACKS</string>
+    <string name="plugins_vst">VST</string>
+    <string name="plugins_ext">EXTENSIONS</string>
+    <string name="plugins_search">Search name or vendor</string>
+    <string name="plugins_head">Console %1$s · saved %2$s (when the phone remote started)</string>
+    <string name="plugins_none">The console has not saved its plug-in list yet: update the console, then start PHONE REMOTE again.</string>
+    <string name="plugins_no_racks">No plug-ins in any channel rack.</string>
+    <string name="plugins_no_vst">No VST plug-ins found. On the computer: PLUG-IN RACK → SCAN.</string>
+    <string name="plugins_count">%1$d VST3 / VST2 PLUG-INS</string>
+    <string name="plugins_extensions">EXTENSIONS</string>
+    <string name="plugins_effects">BUILT-IN EFFECTS</string>
+    <string name="plugins_note">Read-only. While the phone remote runs, the remote service plays the audio, so racks and plug-ins are changed on the computer.</string>
 </resources>

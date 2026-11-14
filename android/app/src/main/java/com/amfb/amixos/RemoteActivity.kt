@@ -74,7 +74,7 @@ class RemoteActivity : AppCompatActivity() {
         val row2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         val settingsBtn = Button(this).apply { text = getString(R.string.settings); setOnClickListener { startActivity(android.content.Intent(this@RemoteActivity, SettingsActivity::class.java)) } }
         row2.addView(find); row2.addView(busesBtn); row2.addView(monBtn); row2.addView(clipBtn); root.addView(row2)
-        root.addView(LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; addView(settingsBtn); addView(Button(this@RemoteActivity).apply { text = getString(R.string.calculator); setOnClickListener { startActivity(android.content.Intent(this@RemoteActivity, CalculatorActivity::class.java)) } }) })
+        root.addView(LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; addView(settingsBtn); addView(Button(this@RemoteActivity).apply { text = getString(R.string.plugins); setOnClickListener { startActivity(android.content.Intent(this@RemoteActivity, PluginsActivity::class.java)) } }); addView(Button(this@RemoteActivity).apply { text = getString(R.string.calculator); setOnClickListener { startActivity(android.content.Intent(this@RemoteActivity, CalculatorActivity::class.java)) } }) })
         connectBtn = connect
         connected = listOf(busesBtn, monBtn, clipBtn)
         find.setOnClickListener {   // FIND: the consoles on this Wi-Fi that run the phone remote

@@ -6,6 +6,7 @@
 
 #include <QCoreApplication>
 #include <QFile>
+#include <QJsonDocument>
 #include <QFileInfo>
 #include <QNetworkInterface>
 
@@ -78,6 +79,7 @@ QStringList Remote::addresses() const {
 bool Remote::start(bool wifi) {
   if (running()) return true;
   if (!available()) { status_ = QStringLiteral("the remote service program is not installed next to the console"); emit changed(); return false; }
+  writeConsoleInfo();   // what the phone shows under PLUG-INS: the catalogue, the racks and the extensions, as they are now
   engine_->stop();   // the service opens the sound card itself
   wifi_ = wifi;
   QStringList args{"--port", QString::number(port()), "--open", "auto", "--version", QCoreApplication::applicationVersion()}; if (wifi) args << "--allow-lan";   // local policy stays on: private addresses only
@@ -90,3 +92,15 @@ bool Remote::start(bool wifi) {
   status_ = wifi ? QStringLiteral("starting for the phones on this network") : QStringLiteral("starting for this computer only"); emit changed(); return true;
 }
 void Remote::stop() { if (!running()) return; if (ext_.running()) { ext_.stop(); return; } proc_.terminate(); if (!proc_.waitForFinished(2000)) proc_.kill(); }
+
+// remote-console.json: read-only for the phone (served by the service at /api/console-info). Names and states only: no plug-in state data.
+void Remote::writeConsoleInfo() const {
+  QVariantMap o; o["available"] = true; o["written"] = QDateTime::currentMSecsSinceEpoch(); o["version"] = QCoreApplication::applicationVersion();
+  QVariantList vst; for (const QVariant& v : engine_->vstCatalog()) { const QVariantMap m = v.toMap(); QVariantMap x; for (const char* k : {"name", "vendor", "format", "kind"}) x[k] = m.value(k); vst << x; }
+  o["vst"] = vst; o["store"] = engine_->storeItems();
+  QVariantList racks; const QVariantList ss = engine_->stripState();
+  for (int i = 0; i < ss.size(); ++i) { QVariantList used; for (const QVariant& p : engine_->plugins(i)) { QVariantMap m = p.toMap(); if (m.value("kind").toString().isEmpty()) continue; m.remove("state"); used << m; }
+    if (used.isEmpty()) continue; QVariantMap r; r["strip"] = i; r["name"] = ss[i].toMap().value("name"); r["plugins"] = used; racks << r; }
+  o["racks"] = racks;
+  QFile f(QString::fromStdString(am::paths::file("remote-console.json"))); if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) f.write(QJsonDocument::fromVariant(o).toJson(QJsonDocument::Compact));
+}

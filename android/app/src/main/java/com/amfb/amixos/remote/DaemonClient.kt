@@ -38,6 +38,8 @@ class DaemonClient(val ep: Endpoint) {
     fun devices(): List<Device> = getList("/api/devices").map { Device(it.str("backend"), it.str("id"), it.str("name"), it.int("in"), it.int("out"), it.num("defaultRate", 48000.0), it.bool("defaultIn"), it.bool("defaultOut")) }
     fun state(): ConsoleState { val o = getObj("/api/state"); val m = o.obj("master")
         return ConsoleState(o.list("strips").map { StripState(it.int("id"), it.str("name"), it.num("db"), it.num("pan"), it.bool("mute"), it.bool("solo")) }, o.list("buses").map { BusState(it.int("id"), it.num("db"), it.num("returnDb", -60.0), it.bool("mute")) }, m.num("db"), m.bool("limiter", true), m.num("ceilingDb", -0.5)) }
+    /** The console's plug-in catalogue, racks and extensions as saved when the remote started ({available:false} when it never was). */
+    fun consoleInfo(): Map<String, Any?> = getObj("/api/console-info")
     fun meters(): Meters = parseMeters(getObj("/api/meters"))
     companion object {
         /** FIND THE CONSOLE: ask every address of this phone's /24 network for /api/status on the port (in parallel, short timeouts).
