@@ -46,11 +46,14 @@ class Osc : public QObject {
   QString allowedIps() const { return s_.value("osc/allow").toString(); } void setAllowedIps(const QString& list);
   QString remoteAddress() const;
   bool ipAllowed(const QHostAddress& a) const;
-  Q_INVOKABLE bool handle(const QByteArray& datagram);                   // one OSC packet (also used by the smoke test)
+  Q_INVOKABLE bool handle(const QByteArray& datagram);
+  void sendFloat(const QString& address, float v);   // to the last client (the I/O FRAME's GPIO outputs and LOCATE)
+  void setFrame(class Frame* f) { frame_ = f; }                   // one OSC packet (also used by the smoke test)
  signals:
   void changed();
   void statsChanged();
  private:
+  class Frame* frame_ = nullptr;
   void onReadyRead();
   void sendMeters();
   void note(const QString& m);
