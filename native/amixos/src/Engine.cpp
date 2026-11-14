@@ -758,9 +758,13 @@ bool Engine::openAsioDriver(const QString& id, int frames) {
 int Engine::asioFrames(double rate) const { return std::max(16, static_cast<int>((rate > 0 ? rate : 48000.0) * 0.010 + 0.5)); }
 // AUTO DETECT for ASIO: the interface's own driver before a wrapper (ASIO4ALL, FlexASIO), the one with more channels among equals.
 // It only picks; pressing the button is still the operator's decision.
+// AMFB's OWN VIRTUAL ASIO DRIVER ("Audio Mixer", drivers/asio): installed with the console so OTHER programs can reach it. It is not a sound
+// card and carries no signal of its own; while idle it still reports 2 in / 2 out, so ranking by channels picked it over the real interface
+// (whose driver, not running, reports none). It is never chosen automatically; it can still be opened by hand.
+static bool ownVirtualAsio(const QString& name) { return name.trimmed().compare(QStringLiteral("Audio Mixer"), Qt::CaseInsensitive) == 0; }
 QString Engine::bestAsioDriver() const {
   QString best; int bestRank = -1;
-  for (const QVariant& v : asioDrivers()) { const QVariantMap m = v.toMap(); const QString k = m["kind"].toString();
+  for (const QVariant& v : asioDrivers()) { const QVariantMap m = v.toMap(); const QString k = m["kind"].toString(); if (ownVirtualAsio(m["name"].toString()) || ownVirtualAsio(m["id"].toString())) continue;
     const int rank = (k == "interface" ? 200 : k == "wrapper" ? 0 : 100) + std::min(64, m["inChannels"].toInt() + m["outChannels"].toInt());
     if (rank > bestRank) { bestRank = rank; best = m["id"].toString(); } }
   return best;
@@ -780,6 +784,7 @@ QVariantMap Engine::autoDetectFor(const QString& prefer) const {
   QVariantMap best; int bestRank = -1;
   for (const QVariant& v : devices_) { const QVariantMap d = v.toMap(); const QString b = d["backend"].toString(), name = d["name"].toString(); if (b == "null" || d["id"].toString().startsWith("loopback:")) continue;
     const bool in = d["inChannels"].toInt() > 0, out = d["outChannels"].toInt() > 0; if (!in && !out) continue; if (!d.value("enabled", true).toBool()) continue;   // switched OFF on CONNECTIONS
+    if (b == "asio" && ownVirtualAsio(name)) continue;   // our own virtual driver: never automatic
     if (prefer == "bluetooth") { if (d["kind"].toString() != "bluetooth" && !looksBluetooth(name)) continue; } else if (prefer != "best" && b != prefer) continue;
     int rank = 0; QString why;
     if (b == "asio") { const bool wrapper = am::drv::isWrapper(name.toStdString()); const bool pinned = am::drv::pinOf(name.toStdString()).on; rank = wrapper ? 60 : pinned ? 50 : 100; why = wrapper ? "an ASIO wrapper (ASIO4ALL-style): used when nothing has its own driver" : pinned ? "Realtek onboard: pinned to its Windows endpoint, SMART START routes it" : "the device's own ASIO driver"; }
@@ -1084,6 +1089,9 @@ QVariantList Engine::storeItems() const {
   for (const auto& [id, name, note] : {std::tuple<const char*, const char*, const char*>{"ext:AmF X1 Network", "AmF X1 Network", "phone remote and network control, run inside the console"},
                                        {"ext:AmF X1 Hybrid", "AmF X1 Hybrid", "sixteen-strip hybrid mixer with captured programs"}}) {
     QVariantMap m; m["id"] = id; m["name"] = name; m["kind"] = "extension"; m["note"] = note; m["installed"] = !Extension::path(QString::fromLatin1(name)).isEmpty();
+    // installed is not enough: it must load (a wrong C++ runtime or a missing DLL beside it used to fail silently)
+    static QHash<QString, QString> probed; if (!probed.contains(QString::fromLatin1(name))) { QString why; Extension::probe(QString::fromLatin1(name), why); probed[QString::fromLatin1(name)] = why; }
+    m["loads"] = m["installed"].toBool() && probed[QString::fromLatin1(name)].isEmpty(); m["error"] = probed[QString::fromLatin1(name)];
     m["on"] = !off.contains(QString::fromLatin1(id)); l << m; }
   for (const auto& [k, n] : am::fx::catalog()) { const QString id = QStringLiteral("fx:") + QString::fromStdString(k);
     QVariantMap m; m["id"] = id; m["name"] = QString::fromStdString(n); m["kind"] = "effect"; m["note"] = "built-in rack effect"; m["installed"] = true; m["on"] = !off.contains(id); l << m; }

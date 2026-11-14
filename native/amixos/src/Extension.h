@@ -18,6 +18,9 @@ class Extension : public QObject {
   bool loaded() const { return lib_.isLoaded(); }
   bool running() const { return running_ && running_() != 0; }
   QString name() const { return name_ ? QString::fromUtf8(name_()) : base_; }
+  QString error() const { return error_; }   // why the library did not load ("" when it did): shown on PLUG-INS
+  // tries the extension next to the console: loads it and checks its six entry points, without starting it; the reason when it fails
+  static bool probe(const QString& baseName, QString& why);
   QString status() const { return status_ ? QString::fromUtf8(status_()).left(200) : QString(); }
   QString takeOutput() { return output_ ? QString::fromUtf8(output_()) : QString(); }
   // 0 = running on its thread, >0 the program's exit code (it ended at once), -1 the library could not be loaded
@@ -28,6 +31,7 @@ class Extension : public QObject {
   void stopped();
  private:
   bool load();
+  QString error_;
   QString base_; QLibrary lib_; QTimer poll_; bool wasRunning_ = false;
   const char* (*name_)() = nullptr; int (*start_)(int, const char* const*) = nullptr; int (*running_)() = nullptr;
   const char* (*status_)() = nullptr; const char* (*output_)() = nullptr; void (*stop_)() = nullptr;

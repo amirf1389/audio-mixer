@@ -474,6 +474,10 @@ int main(int argc, char* argv[]) {
         const QString keepPref = engine.autoPrefer();
         engine.simulateDevices(pc); { const QVariantMap w = engine.autoDetect();   // the default: AUTO is the system's WASAPI speakers with the default microphone
           if (w["backend"] != "wasapi" || w["out"] != "{r-out}" || w["in"] != "{r-in}") { std::fprintf(stderr, "amixos --smoke: AUTO did not pick the WASAPI default speakers + microphone: %s %s / %s\n", qPrintable(w["backend"].toString()), qPrintable(w["out"].toString()), qPrintable(w["in"].toString())); return 169; } }
+        { QVariantList own = pc; own.prepend(dev("asio", "Audio Mixer", "Audio Mixer", 2, 2)); own.prepend(dev("asio", "BEHRINGER USB AUDIO", "BEHRINGER USB AUDIO", 0, 0)); engine.simulateDevices(own);   // AMFB's own virtual ASIO driver is never automatic
+          for (const char* pf : {"best", "asio", "wasapi"}) { engine.setAutoPrefer(pf); const QVariantMap a = engine.autoDetect();
+            if (a["name"].toString() == "Audio Mixer" || engine.bestAsioDriver() == "Audio Mixer") { std::fprintf(stderr, "amixos --smoke: AUTO (%s) picked AMFB's own virtual ASIO driver\n", pf); return 168; } }
+          engine.simulateDevices(pc); }
         engine.setAutoPrefer("best");   // the UM2 checks below are for BEST (an interface's own ASIO driver first)
         const QVariantMap d0 = engine.autoDetect();
         if (d0["backend"] != "wasapi" && d0["backend"] != "asio") { std::fprintf(stderr, "amixos --smoke: UM2 machine without the UM2: detection picked %s\n", qPrintable(d0["name"].toString())); return 170; }
