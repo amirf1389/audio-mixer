@@ -34,6 +34,17 @@ class ScreenshotTest {
         shot(a.window.decorView.rootView, "settings")
     }
 
+    @Test fun eq() {
+        val i = android.content.Intent(org.robolectric.RuntimeEnvironment.getApplication(), EqActivity::class.java).putExtra("strip", 0).putExtra("name", "VOCAL")
+        val a = Robolectric.buildActivity(EqActivity::class.java, i).setup().get()
+        a.curve.bands = EqActivity.PRESETS["VOCAL"]!!.map { it.copy() }.toMutableList(); a.curve.selected = 4
+        shot(a.window.decorView.rootView, "eq")
+    }
+    @Test fun calculator() {
+        val a = Robolectric.buildActivity(CalculatorActivity::class.java).setup().get()
+        for ((k, n) in listOf(0 to "calc-delay", 1 to "calc-align", 3 to "calc-frequency")) { a.show(k); shot(a.window.decorView.rootView, n) }
+    }
+
     @Test fun remote() {
         val port = System.getProperty("amfx.daemon").orEmpty()
         val ctx = org.robolectric.RuntimeEnvironment.getApplication()

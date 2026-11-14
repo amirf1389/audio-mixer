@@ -74,7 +74,7 @@ class RemoteActivity : AppCompatActivity() {
         val row2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         val settingsBtn = Button(this).apply { text = getString(R.string.settings); setOnClickListener { startActivity(android.content.Intent(this@RemoteActivity, SettingsActivity::class.java)) } }
         row2.addView(find); row2.addView(busesBtn); row2.addView(monBtn); row2.addView(clipBtn); root.addView(row2)
-        root.addView(LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; addView(settingsBtn) })
+        root.addView(LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; addView(settingsBtn); addView(Button(this@RemoteActivity).apply { text = getString(R.string.calculator); setOnClickListener { startActivity(android.content.Intent(this@RemoteActivity, CalculatorActivity::class.java)) } }) })
         connectBtn = connect
         connected = listOf(busesBtn, monBtn, clipBtn)
         find.setOnClickListener {   // FIND: the consoles on this Wi-Fi that run the phone remote
@@ -202,6 +202,7 @@ class RemoteActivity : AppCompatActivity() {
         row("DELAY", 1000, 0, { String.format("%.1f ms", it / 10.0) }) { p -> c.delay(strip, p / 10.0) }
 
         head("EQ")
+        box.addView(Button(this).apply { text = getString(R.string.eq_open); setOnClickListener { startActivity(android.content.Intent(this@RemoteActivity, EqActivity::class.java).putExtra("strip", strip).putExtra("name", state?.strips?.getOrNull(strip)?.name ?: "")) } })
         var eqFreq = 1000.0; var eqGain = 0.0
         fun hz(p: Int) = 20 * Math.pow(1000.0, p / 1000.0)
         row("BAND 1 FREQUENCY", 1000, 566, { val f = hz(it); if (f >= 1000) String.format("%.2f kHz", f / 1000) else String.format("%.0f Hz", f) }) { p -> eqFreq = hz(p); c.eq(strip, 0, "peaking", eqFreq, 1.0, eqGain) }

@@ -42,6 +42,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<ToggleButton>(R.id.mute).setOnCheckedChangeListener { _, on -> engine.setMute(0, on) }
         findViewById<Button>(R.id.start).setOnClickListener { if (loop == null) startAudio() else stopAudio() }
         findViewById<Button>(R.id.remote).setOnClickListener { startActivity(Intent(this, RemoteActivity::class.java)) }
+        findViewById<Button>(R.id.calculator).setOnClickListener { startActivity(Intent(this, CalculatorActivity::class.java)) }
         findViewById<Button>(R.id.settings).setOnClickListener { startActivity(Intent(this, SettingsActivity::class.java)) }
         ui.post(object : Runnable { override fun run() { showMeters(); ui.postDelayed(this, 50) } })
     }

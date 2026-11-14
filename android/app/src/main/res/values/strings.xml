@@ -66,4 +66,18 @@
     <string name="set_reset_q">Put every setting back to its default? The saved console and pairing stay.</string>
     <string name="stop_q">Stop the console\'s engine? All sound stops until a device is opened again.</string>
     <string name="tap_hint">Tap a channel name for trim, delay, EQ, dynamics and sends · tap MASTER for the limiter · long press a name to rename</string>
+    <string name="calculator">CALCULATOR</string>
+    <string name="calc_title">AUDIO CALCULATOR</string>
+    <string name="eq_open">EQ CONTROLLER (8 BANDS, CURVE)</string>
+    <string name="eq_title">EQ · CH %1$d</string>
+    <string name="eq_freq">FREQUENCY</string>
+    <string name="eq_gain">GAIN (±18 dB)</string>
+    <string name="eq_q">Q (WIDTH)</string>
+    <string name="eq_type">TYPE: %1$s</string>
+    <string name="eq_presets">PRESETS</string>
+    <string name="eq_flat">FLAT</string>
+    <string name="eq_bypass">BYPASS</string>
+    <string name="eq_bypassed">BYPASSED</string>
+    <string name="eq_help">Drag a dot: across for frequency, up and down for gain. Tap 1-8 or a dot to pick a band. Changes go to the console as you move; this phone remembers each strip\'s EQ.</string>
+    <string name="eq_offline">Not connected: connect the remote first. You can still shape the curve; it is sent when you come back connected.</string>
 </resources>
