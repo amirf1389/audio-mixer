@@ -1,0 +1,556 @@
+{
+ "fps": 60,
+ "w": 1600,
+ "h": 1000,
+ "bpm": 120,
+ "settleMs": 30,
+ "pattern": [
+  {
+   "strip": 0,
+   "samples": [
+    2,
+    0,
+    0,
+    0,
+    2,
+    0,
+    0,
+    0,
+    2,
+    0,
+    0,
+    0,
+    2,
+    0,
+    0,
+    0
+   ]
+  },
+  {
+   "strip": 1,
+   "samples": [
+    0,
+    0,
+    0,
+    0,
+    7,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    7,
+    0,
+    0,
+    19
+   ]
+  },
+  {
+   "strip": 2,
+   "samples": [
+    11,
+    0,
+    11,
+    0,
+    11,
+    0,
+    11,
+    0,
+    11,
+    0,
+    11,
+    0,
+    11,
+    0,
+    12,
+    0
+   ]
+  },
+  {
+   "strip": 3,
+   "samples": [
+    47,
+    0,
+    0,
+    47,
+    0,
+    0,
+    47,
+    0,
+    0,
+    0,
+    45,
+    0,
+    0,
+    46,
+    0,
+    0,
+    47,
+    0,
+    0,
+    47,
+    0,
+    0,
+    47,
+    0,
+    0,
+    0,
+    43,
+    0,
+    0,
+    44,
+    0,
+    0
+   ]
+  },
+  {
+   "strip": 4,
+   "samples": [
+    61,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    62,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  }
+ ],
+ "setup": [
+  {
+   "method": "setGain",
+   "args": [
+    0,
+    0
+   ]
+  },
+  {
+   "method": "setGain",
+   "args": [
+    1,
+    0
+   ]
+  },
+  {
+   "method": "setGain",
+   "args": [
+    2,
+    0
+   ]
+  },
+  {
+   "method": "setGain",
+   "args": [
+    3,
+    0
+   ]
+  },
+  {
+   "method": "setGain",
+   "args": [
+    4,
+    0
+   ]
+  },
+  {
+   "op": "prop",
+   "target": "engine",
+   "prop": "masterDb",
+   "value": -4
+  },
+  {
+   "op": "prop",
+   "target": "engine",
+   "prop": "recordFolder",
+   "value": "REC_DIR"
+  },
+  {
+   "op": "prop",
+   "target": "engine",
+   "prop": "recordMaster",
+   "value": true
+  },
+  {
+   "op": "prop",
+   "target": "engine",
+   "prop": "recordFormat",
+   "value": 0
+  }
+ ],
+ "clips": [
+  {
+   "name": "mix",
+   "page": "mixer",
+   "seconds": 8,
+   "actions": [
+    {
+     "method": "startRecording",
+     "args": []
+    },
+    {
+     "op": "mouse",
+     "t": 0.2,
+     "dur": 1.2,
+     "path": [
+      [
+       900,
+       760
+      ],
+      [
+       400,
+       640
+      ],
+      [
+       114,
+       480
+      ]
+     ]
+    },
+    {
+     "op": "mouse",
+     "t": 1.6,
+     "dur": 1.4,
+     "press": true,
+     "path": [
+      [
+       114,
+       480
+      ],
+      [
+       116,
+       575
+      ]
+     ]
+    },
+    {
+     "op": "mouse",
+     "t": 3.1,
+     "dur": 1.3,
+     "press": true,
+     "path": [
+      [
+       116,
+       575
+      ],
+      [
+       115,
+       462
+      ]
+     ]
+    },
+    {
+     "op": "mouse",
+     "t": 4.6,
+     "dur": 0.9,
+     "path": [
+      [
+       115,
+       462
+      ],
+      [
+       250,
+       520
+      ],
+      [
+       348,
+       480
+      ]
+     ]
+    },
+    {
+     "op": "mouse",
+     "t": 5.6,
+     "dur": 1.0,
+     "press": true,
+     "path": [
+      [
+       348,
+       480
+      ],
+      [
+       349,
+       520
+      ]
+     ]
+    },
+    {
+     "op": "mouse",
+     "t": 6.7,
+     "dur": 1.0,
+     "press": true,
+     "path": [
+      [
+       349,
+       520
+      ],
+      [
+       348,
+       470
+      ]
+     ]
+    }
+   ],
+   "after": [
+    {
+     "method": "stopRecording",
+     "args": []
+    }
+   ]
+  },
+  {
+   "name": "eq",
+   "page": "dsp",
+   "seconds": 6,
+   "actions": [
+    {
+     "method": "startRecording",
+     "args": []
+    },
+    {
+     "op": "prop",
+     "target": "tonePage",
+     "prop": "rta",
+     "value": true
+    },
+    {
+     "method": "setEq",
+     "args": [
+      0,
+      0,
+      1,
+      1000,
+      1.2,
+      0
+     ]
+    },
+    {
+     "op": "mouse",
+     "t": 0.1,
+     "dur": 1.0,
+     "path": [
+      [
+       600,
+       700
+      ],
+      [
+       1100,
+       660
+      ],
+      [
+       1361,
+       626
+      ]
+     ]
+    },
+    {
+     "op": "mouse",
+     "t": 1.2,
+     "dur": 1.8,
+     "press": true,
+     "path": [
+      [
+       1361,
+       626
+      ],
+      [
+       1470,
+       626
+      ]
+     ]
+    },
+    {
+     "op": "mouse",
+     "t": 3.1,
+     "dur": 0.8,
+     "path": [
+      [
+       1470,
+       626
+      ],
+      [
+       900,
+       640
+      ],
+      [
+       502,
+       626
+      ]
+     ]
+    },
+    {
+     "op": "mouse",
+     "t": 4.0,
+     "dur": 1.8,
+     "press": true,
+     "path": [
+      [
+       502,
+       626
+      ],
+      [
+       380,
+       626
+      ],
+      [
+       440,
+       626
+      ]
+     ]
+    }
+   ],
+   "after": [
+    {
+     "method": "stopRecording",
+     "args": []
+    }
+   ]
+  },
+  {
+   "name": "amp",
+   "page": "mixer",
+   "seconds": 6,
+   "actions": [
+    {
+     "method": "startRecording",
+     "args": []
+    },
+    {
+     "method": "setPlugin",
+     "args": [
+      0,
+      8,
+      "fx:tubeamp"
+     ]
+    },
+    {
+     "target": "plugEd",
+     "method": "openFor",
+     "args": [
+      0,
+      8,
+      "fx:tubeamp",
+      "TUBE AMP"
+     ]
+    },
+    {
+     "op": "mouse",
+     "t": 0.1,
+     "dur": 1.0,
+     "path": [
+      [
+       440,
+       626
+      ],
+      [
+       420,
+       450
+      ],
+      [
+       402,
+       362
+      ]
+     ]
+    },
+    {
+     "op": "mouse",
+     "t": 1.2,
+     "dur": 1.6,
+     "press": true,
+     "path": [
+      [
+       402,
+       362
+      ],
+      [
+       404,
+       290
+      ]
+     ]
+    },
+    {
+     "op": "mouse",
+     "t": 2.9,
+     "dur": 0.9,
+     "path": [
+      [
+       404,
+       290
+      ],
+      [
+       600,
+       360
+      ],
+      [
+       702,
+       413
+      ]
+     ]
+    },
+    {
+     "op": "mouse",
+     "t": 3.9,
+     "dur": 1.5,
+     "press": true,
+     "path": [
+      [
+       702,
+       413
+      ],
+      [
+       703,
+       360
+      ]
+     ]
+    },
+    {
+     "op": "mouse",
+     "t": 5.5,
+     "dur": 0.5,
+     "path": [
+      [
+       703,
+       360
+      ],
+      [
+       760,
+       330
+      ]
+     ]
+    }
+   ],
+   "after": [
+    {
+     "method": "stopRecording",
+     "args": []
+    }
+   ]
+  }
+ ]
+}
