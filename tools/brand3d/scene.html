@@ -1,0 +1,313 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+@font-face { font-family: "InterD"; src: url(/fonts/InterDisplay-Bold.otf); font-weight: 700; }
+@font-face { font-family: "InterD"; src: url(/fonts/InterDisplay-Medium.otf); font-weight: 500; }
+@font-face { font-family: "InterL"; src: url(/fonts/Inter-Light.otf); font-weight: 300; }
+@font-face { font-family: "Mono"; src: url(/mono/DejaVuSansMono.ttf); }
+html, body { margin: 0; width: 1920px; height: 1080px; background: #040507; overflow: hidden; }
+canvas { position: absolute; left: 0; top: 0; }
+.ov { position: absolute; color: #f1f5f9; will-change: opacity, transform; }
+#cap { left: 120px; bottom: 112px; }
+#cap .k { font: 24px Mono; letter-spacing: 6px; color: #00f2ff; }
+#cap .t { font: 700 74px InterD; letter-spacing: -1px; margin-top: 8px; text-shadow: 0 4px 30px rgba(0,0,0,.8); }
+#cap .s { font: 300 32px InterL; color: #a8b5c7; margin-top: 10px; text-shadow: 0 2px 18px rgba(0,0,0,.9); }
+#bar { position: absolute; left: 92px; bottom: 116px; width: 6px; height: 156px; background: #00f2ff; box-shadow: 0 0 22px #00f2ff; transform-origin: bottom; }
+#vignette { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 45%, rgba(0,0,0,0) 55%, rgba(0,0,0,.55) 100%); pointer-events: none; }
+#capShade { position: absolute; left: 0; right: 0; bottom: 0; height: 420px; background: linear-gradient(to top, rgba(4,5,7,.92), rgba(4,5,7,0)); }
+.center { left: 0; right: 0; text-align: center; }
+#word { top: 880px; font: 300 46px InterL; letter-spacing: 14px; color: #c9d4e3; }
+#title { top: 790px; font: 700 132px InterD; letter-spacing: -2px; text-shadow: 0 0 40px rgba(0,242,255,.25); }
+#tag { top: 945px; font: 300 40px InterL; color: #a8b5c7; letter-spacing: 1px; }
+#lowShade { position: absolute; left: 0; right: 0; bottom: 0; height: 470px; background: linear-gradient(to top, rgba(4,5,7,.97) 0%, rgba(4,5,7,.9) 45%, rgba(4,5,7,0) 100%); }
+#statsShade { position: absolute; left: 0; right: 0; top: 0px; height: 560px; background: radial-gradient(ellipse at 50% 50%, rgba(4,5,7,.92) 0%, rgba(4,5,7,.75) 50%, rgba(4,5,7,0) 80%); }
+#stats { top: 120px; display: flex; justify-content: center; gap: 120px; }
+.st { width: 420px; text-align: center; }
+.st .n { font: 700 128px InterD; letter-spacing: -2px; }
+.st .d { font: 300 30px InterL; color: #a8b5c7; margin-top: 4px; }
+#lock1 { top: 770px; font: 700 128px InterD; letter-spacing: -2px; }
+#lock2 { top: 925px; font: 500 38px InterD; color: #00f2ff; letter-spacing: 1px; }
+#lock3 { top: 985px; font: 300 30px InterL; color: #94a3b8; letter-spacing: 3px; }
+#black { position: absolute; inset: 0; background: #000; }
+</style>
+<script type="importmap">{ "imports": { "three": "/three/build/three.module.js", "three/addons/": "/three/examples/jsm/" } }</script>
+</head>
+<body>
+<div id="vignette"></div>
+<div id="capShade" class="ov"></div>
+<div id="lowShade" class="ov"></div>
+<div id="bar"></div>
+<div id="cap" class="ov"><div class="k"></div><div class="t"></div><div class="s"></div></div>
+<div id="word" class="ov center">SOUND, ENGINEERED.</div>
+<div id="title" class="ov center">AmF X1</div>
+<div id="tag" class="ov center">The pro console. Built smart.</div>
+<div id="statsShade" class="ov"></div>
+<div id="stats" class="ov center">
+  <div class="st" id="s0"><div class="n" style="color:#00f2ff">17 ms</div><div class="d">to open the mixer</div></div>
+  <div class="st" id="s1"><div class="n" style="color:#00f2ff">0 bits</div><div class="d">lost at unity gain, 24-bit</div></div>
+  <div class="st" id="s2"><div class="n" style="color:#fbbf24">39 µs</div><div class="d">worst loudness-meter block after 2 hours</div></div>
+</div>
+<div id="lock1" class="ov center">AmF X1</div>
+<div id="lock2" class="ov center">by AMFB Audio &nbsp;·&nbsp; 1.23.0.1</div>
+<div id="lock3" class="ov center">WINDOWS &nbsp;·&nbsp; ASIO &nbsp;·&nbsp; WASAPI &nbsp;·&nbsp; VST3</div>
+<div id="black"></div>
+<script type="module">
+import * as THREE from "three";
+import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
+import { Reflector } from "three/addons/objects/Reflector.js";
+import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+
+const W = 1920, H = 1080, FPS = 30;
+const C = { bg: 0x040507, cyan: 0x00f2ff, amber: 0xfbbf24, orange: 0xf26a1b, ink: 0xf1f5f9 };
+const F = await (await fetch("/features.json")).json();
+
+// ---------- helpers ----------
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const lin = (t, a, b) => clamp((t - a) / (b - a));
+const ease = (x) => x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+const easeOut = (x) => 1 - Math.pow(1 - x, 3);
+const back = (x) => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
+const mix = (a, b, k) => a + (b - a) * k;
+const vmix = (a, b, k) => new THREE.Vector3(mix(a.x, b.x, k), mix(a.y, b.y, k), mix(a.z, b.z, k));
+function hash(n) { const s = Math.sin(n * 127.1) * 43758.5453; return s - Math.floor(s); }
+function feat(t) { const f = clamp(Math.round(t * FPS), 0, F.level.length - 1); return { bands: F.bands[f], level: F.level[f], pulse: F.pulse[f] }; }
+function fadeWin(t, a, b, fi = 0.5, fo = 0.5) { return Math.min(lin(t, a, a + fi), 1 - lin(t, b - fo, b)); }
+
+// ---------- renderer ----------
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(W, H); renderer.setPixelRatio(1);
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.prepend(renderer.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(C.bg); scene.fog = new THREE.FogExp2(C.bg, 0.042);
+const pmrem = new THREE.PMREMGenerator(renderer); scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environmentIntensity = 0.35;
+const camera = new THREE.PerspectiveCamera(35, W / H, 0.05, 200);
+
+scene.add(new THREE.AmbientLight(0x9fb3c8, 0.25));
+const key = new THREE.DirectionalLight(0xffffff, 1.4); key.position.set(4, 8, 6); scene.add(key);
+const rimC = new THREE.PointLight(C.cyan, 18, 30, 2); rimC.position.set(-5, 3, -2); scene.add(rimC);
+const rimA = new THREE.PointLight(C.orange, 14, 30, 2); rimA.position.set(5, 2.5, -1); scene.add(rimA);
+
+// ---------- floor: a dark mirror with a faint grid ----------
+const mirror = new Reflector(new THREE.PlaneGeometry(80, 80), { textureWidth: W / 2, textureHeight: H / 2, color: 0x6a7380 });
+mirror.rotation.x = -Math.PI / 2; scene.add(mirror);
+const dim = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), new THREE.MeshBasicMaterial({ color: C.bg, transparent: true, opacity: 0.86 }));
+dim.rotation.x = -Math.PI / 2; dim.position.y = 0.003; scene.add(dim);
+const grid = new THREE.GridHelper(80, 80, C.cyan, C.cyan); grid.material.transparent = true; grid.material.opacity = 0.05; grid.position.y = 0.006; scene.add(grid);
+
+// ---------- particles: a slow dust field that breathes with the music ----------
+const PN = 2600, pp = new Float32Array(PN * 3), pbase = [];
+for (let i = 0; i < PN; ++i) pbase.push([(hash(i) - 0.5) * 40, hash(i + 11) * 9 + 0.2, (hash(i + 23) - 0.5) * 40, hash(i + 37) * 6.28]);
+const pgeo = new THREE.BufferGeometry(); pgeo.setAttribute("position", new THREE.BufferAttribute(pp, 3));
+const pmat = new THREE.PointsMaterial({ color: 0x7fe9ff, size: 0.035, transparent: true, opacity: 0.5, depthWrite: false, blending: THREE.AdditiveBlending });
+const dust = new THREE.Points(pgeo, pmat); scene.add(dust);
+
+// ---------- the AmF X1 mark, built in 3D from the app icon ----------
+function roundedRect(w, h, r) {
+  const s = new THREE.Shape(), x = -w / 2, y = -h / 2;
+  s.moveTo(x + r, y); s.lineTo(x + w - r, y); s.quadraticCurveTo(x + w, y, x + w, y + r); s.lineTo(x + w, y + h - r);
+  s.quadraticCurveTo(x + w, y + h, x + w - r, y + h); s.lineTo(x + r, y + h); s.quadraticCurveTo(x, y + h, x, y + h - r);
+  s.lineTo(x, y + r); s.quadraticCurveTo(x, y, x + r, y); return s;
+}
+const logo = new THREE.Group(); scene.add(logo);
+const ring = roundedRect(2.4, 2.4, 0.52); ring.holes.push(roundedRect(2.16, 2.16, 0.42));
+const frameMat = new THREE.MeshStandardMaterial({ color: C.orange, emissive: C.orange, emissiveIntensity: 0.9, metalness: 0.5, roughness: 0.3 });
+const frame = new THREE.Mesh(new THREE.ExtrudeGeometry(ring, { depth: 0.22, bevelEnabled: true, bevelSize: 0.025, bevelThickness: 0.03, bevelSegments: 3, curveSegments: 24 }), frameMat);
+frame.position.z = -0.11; logo.add(frame);
+const body = new THREE.Mesh(new THREE.ExtrudeGeometry(roundedRect(2.18, 2.18, 0.43), { depth: 0.12, bevelEnabled: false, curveSegments: 24 }),
+  new THREE.MeshPhysicalMaterial({ color: 0x0d1118, metalness: 0.3, roughness: 0.25, clearcoat: 1, clearcoatRoughness: 0.15 }));
+body.position.z = -0.1; logo.add(body);
+const faders = [];
+const FD = [{ x: -0.55, y: -0.32, c: C.amber }, { x: 0.0, y: 0.32, c: C.orange }, { x: 0.55, y: 0.0, c: 0x22d3ee }];
+for (const f of FD) {
+  const slot = new THREE.Mesh(new RoundedBoxGeometry(0.13, 1.55, 0.05, 3, 0.05), new THREE.MeshStandardMaterial({ color: 0x2a313d, metalness: 0.4, roughness: 0.5 }));
+  slot.position.set(f.x, 0, 0.04); logo.add(slot);
+  const stemMat = new THREE.MeshStandardMaterial({ color: f.c, emissive: f.c, emissiveIntensity: 1.6, roughness: 0.4 });
+  const stem = new THREE.Mesh(new RoundedBoxGeometry(0.1, 1, 0.06, 3, 0.04), stemMat); stem.position.set(f.x, 0, 0.07); logo.add(stem);
+  const cap = new THREE.Group();
+  const capBody = new THREE.Mesh(new RoundedBoxGeometry(0.44, 0.26, 0.2, 4, 0.07), new THREE.MeshStandardMaterial({ color: f.c, emissive: f.c, emissiveIntensity: 0.3, metalness: 0.2, roughness: 0.25 }));
+  const line = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.045, 0.02), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.7 }));
+  line.position.z = 0.105; cap.add(capBody); cap.add(line); cap.position.set(f.x, f.y, 0.12); logo.add(cap);
+  faders.push({ ...f, stem, cap, stemMat });
+}
+function setFader(k, y) {   // the coloured stem runs from the slot's foot to the cap
+  const f = faders[k], foot = -0.74, len = Math.max(0.02, y - foot);
+  f.cap.position.y = y; f.stem.scale.y = len; f.stem.position.y = foot + len / 2;
+}
+const halo = new THREE.Mesh(new THREE.RingGeometry(1.8, 1.86, 96), new THREE.MeshBasicMaterial({ color: C.cyan, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+halo.rotation.x = -Math.PI / 2; halo.position.y = 0.01; scene.add(halo);
+
+// ---------- the console in space: screenshots as glass slabs in a curved gallery ----------
+const SHOTS = [
+  ["mixer-vu", "Mixer", "32 channels. Zero bits lost.", "Bit-transparent 24-bit path  ·  64-bit float engine"],
+  ["asio", "Sound card", "ASIO. Auto 32-bit.", "Follows the driver’s word length  ·  dithers only when it must"],
+  ["plugin-editor-tubeamp", "Analog models", "Warmth on demand.", "Tube amp, tape, opto, plate, hall  ·  43 AMFB processors"],
+  ["master-analyzer", "Master", "Loudness, under control.", "EBU R128 in real time  ·  true peak  ·  spectrogram"],
+  ["360-cinema-hall", "360 audio", "Place sound anywhere.", "Object panning for rooms and cinema halls"],
+  ["routing", "Routing", "Any input. Any output.", "Matrix routing  ·  AUX and FX sends  ·  DCA groups"],
+];
+const R = 10.5, PW = 4.8, PY = 2.2;
+const loader = new THREE.TextureLoader();
+const panels = await Promise.all(SHOTS.map(async (s, i) => {
+  const tex = await loader.loadAsync(`/shots/${s[0]}.png`); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
+  const ph = PW * tex.image.height / tex.image.width;
+  const front = new THREE.MeshBasicMaterial({ map: tex, toneMapped: false, color: 0xc8c8c8 });
+  const edge = new THREE.MeshStandardMaterial({ color: 0x0b0f16, metalness: 0.8, roughness: 0.3 });
+  const slab = new THREE.Mesh(new THREE.BoxGeometry(PW, ph, 0.07), [edge, edge, edge, edge, front, edge]);
+  const glow = new THREE.Mesh(new THREE.PlaneGeometry(PW + 0.16, ph + 0.16), new THREE.MeshBasicMaterial({ color: C.cyan, transparent: true, opacity: 0.25, blending: THREE.AdditiveBlending, depthWrite: false }));
+  glow.position.z = -0.05;
+  const g = new THREE.Group(); g.add(glow); g.add(slab);
+  const a = THREE.MathUtils.degToRad(-50 + i * 20);
+  g.position.set(R * Math.sin(a), PY, -R * Math.cos(a)); g.lookAt(0, PY, 0);
+  scene.add(g); return { g, glow, ph, a, slab };
+}));
+
+// ---------- the spectrum sculpture: concentric rings of bars, newest in the middle, history outwards ----------
+const RINGS = 6, BARS = 64, bars = [];
+const barGeo = new THREE.BoxGeometry(0.16, 1, 0.16); barGeo.translate(0, 0.5, 0);
+const barMats = [];
+for (let r = 0; r < RINGS; ++r) for (let b = 0; b < BARS; ++b) {
+  const m = new THREE.MeshStandardMaterial({ color: 0x0a0d12, emissive: C.cyan, emissiveIntensity: 1, metalness: 0.3, roughness: 0.4 });
+  const mesh = new THREE.Mesh(barGeo, m); const ang = (b / BARS) * Math.PI * 2, rad = 2.4 + r * 0.62;
+  mesh.position.set(Math.cos(ang) * rad, 0, Math.sin(ang) * rad); mesh.rotation.y = -ang; mesh.visible = false;
+  scene.add(mesh); bars.push({ mesh, m, r, b });
+}
+const cA = new THREE.Color(C.cyan), cB = new THREE.Color(C.amber), tmpC = new THREE.Color();
+
+// ---------- bloom ----------
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(W / 2, H / 2), 0.7, 0.5, 0.86); composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+// ---------- overlays ----------
+const $ = (id) => document.getElementById(id);
+function ov(el, a, dy = 0) { el.style.opacity = a.toFixed(3); el.style.transform = `translateY(${dy.toFixed(1)}px)`; }
+const cap = $("cap"), capK = cap.querySelector(".k"), capT = cap.querySelector(".t"), capS = cap.querySelector(".s");
+
+// ---------- camera views of the gallery ----------
+function panelView(i, push) {
+  const p = panels[i], n = new THREE.Vector3(-Math.sin(p.a), 0, Math.cos(p.a));   // towards the centre
+  const side = new THREE.Vector3(Math.cos(p.a), 0, Math.sin(p.a));
+  const d = mix(7.9, 6.9, push), yaw = 0.16 * (i % 2 ? 1 : -1);
+  const pos = p.g.position.clone().addScaledVector(n, d * Math.cos(yaw)).addScaledVector(side, d * Math.sin(yaw)); pos.y = PY + 0.15;
+  const look = p.g.position.clone(); look.y = PY - 0.38;
+  return { pos, look };
+}
+
+// ---------- one frame of the film, from its time alone ----------
+window.renderAt = (frameNo) => {
+  const t = frameNo / FPS, fe = feat(t);
+  // dust
+  for (let i = 0; i < PN; ++i) {
+    const b = pbase[i], burst = t > 4 ? 1 + 1.6 * Math.exp(-(t - 4) * 1.4) * lin(t, 4, 4.05) : 1, burst2 = t > 38 ? 1 + 1.2 * Math.exp(-(t - 38) * 1.4) : 1;
+    pp[i * 3] = b[0] * (t < 8 ? burst : burst2) + Math.sin(t * 0.21 + b[3]) * 0.4;
+    pp[i * 3 + 1] = b[1] + Math.sin(t * 0.33 + b[3] * 2) * 0.25;
+    pp[i * 3 + 2] = b[2] * (t < 8 ? burst : burst2) + Math.cos(t * 0.17 + b[3]) * 0.4;
+  }
+  pgeo.attributes.position.needsUpdate = true; pmat.opacity = 0.28 + 0.4 * fe.level; pmat.size = 0.03 + 0.02 * fe.pulse;
+
+  // the mark
+  const logoIn = t < 8.6 || t > 37.6;
+  logo.visible = logoIn;
+  const out1 = ease(lin(t, 7.4, 8.6)), in2 = ease(lin(t, 37.6, 39.4));
+  const intro = ease(lin(t, 0.3, 4.0));
+  logo.position.set(0, 1.75 + (t < 20 ? out1 * 2.2 : (1 - in2) * 2.2), 0);
+  logo.rotation.y = t < 20 ? mix(-1.05, 0, intro) + Math.sin(t * 0.6) * 0.05 * lin(t, 4, 5) : mix(0.9, 0, in2) + Math.sin(t * 0.5) * 0.04;
+  const sc = t < 20 ? mix(0.55, 1, intro) * (1 - out1 * 0.6) : mix(0.4, 1, in2);
+  logo.scale.setScalar(sc);
+  for (let k = 0; k < 3; ++k) {
+    const a = t < 20 ? back(lin(t, 2.3 + k * 0.25, 3.7 + k * 0.1)) : back(lin(t, 38.3 + k * 0.2, 39.6 + k * 0.1));
+    setFader(k, mix(-0.7, FD[k].y, a) + (t > 4 && t < 8.6 ? Math.sin(t * 2.2 + k) * 0.02 : 0));
+    faders[k].stemMat.emissiveIntensity = 0.9 + 0.9 * Math.exp(-Math.abs(t - 4) * 3) + 0.9 * Math.exp(-Math.abs(t - 38) * 3);
+  }
+  frameMat.emissiveIntensity = 0.45 + 0.7 * Math.exp(-Math.max(0, t - 4) * 2.5) * lin(t, 3.9, 4.0) + 0.6 * Math.exp(-Math.max(0, t - 38) * 2.5) * lin(t, 37.9, 38.0);
+  // the floor shockwave at each hit
+  const hit = t >= 38 ? t - 38 : t >= 4 ? t - 4 : -1;
+  if (hit >= 0 && hit < 2.2) { halo.scale.setScalar(0.6 + hit * 6); halo.material.opacity = 0.9 * (1 - hit / 2.2); } else halo.material.opacity = 0;
+
+  // gallery: hidden in the intro, floats in from 6 s
+  panels.forEach((p, i) => {
+    const show = lin(t, 5.6 + i * 0.12, 7.2 + i * 0.12) * (1 - lin(t, 37.2, 38.2) * 0.75);
+    p.g.visible = show > 0.001; p.g.scale.setScalar(0.85 + 0.15 * easeOut(show));
+    p.g.position.y = PY + Math.sin(t * 0.7 + i) * 0.06 - (1 - easeOut(show)) * 1.2;
+    const active = t >= 8 + i * 4 && t < 12 + i * 4;
+    p.glow.material.opacity = (0.08 + (active ? 0.3 + 0.5 * fe.pulse : 0)) * show;
+  });
+
+  // spectrum sculpture 31..39
+  const sp = lin(t, 31.2, 32.2) * (1 - lin(t, 38.2, 39.6));
+  for (const B of bars) {
+    B.mesh.visible = sp > 0.002;
+    if (!B.mesh.visible) continue;
+    const fr = feat(t - B.r * 0.12), band = B.b < 32 ? B.b : 63 - B.b, v = fr.bands[band];
+    const h = 0.04 + (0.25 + 2.6 * v) * sp * (1 - B.r * 0.11);
+    B.mesh.scale.set(1, h, 1);
+    tmpC.copy(cA).lerp(cB, clamp(v * 1.2 - 0.2)); B.m.emissive.copy(tmpC); B.m.emissiveIntensity = (0.12 + 0.75 * v) * (1 - B.r * 0.13);
+  }
+
+  // camera
+  let pos, look;
+  if (t < 8) {   // orbit in towards the mark
+    const k = ease(lin(t, 0, 4.2)), ang = mix(0.95, 0, k);
+    const rad = mix(11.5, 7.6, k), ht = mix(0.7, 1.85, k);
+    pos = new THREE.Vector3(Math.sin(ang) * rad, ht, Math.cos(ang) * rad);
+    look = new THREE.Vector3(0, mix(1.2, 1.12, k), 0);
+    if (t > 4) { pos.z -= (t - 4) * 0.12; pos.x += Math.sin((t - 4) * 0.5) * 0.15; }
+  }
+  if (t >= 7.2 && t < 32) {   // the gallery: glide to each panel on its beat, then push in
+    const i = clamp(Math.floor((t - 8) / 4), 0, 5), local = t - (8 + i * 4);
+    const cur = panelView(i, ease(clamp(local / 4))), prev = i > 0 ? panelView(i - 1, 1) : { pos: new THREE.Vector3(0, 1.85, 7.1), look: new THREE.Vector3(0, 1.12, 0) };
+    const k = t < 8 ? 0 : ease(clamp(local / 1.0));
+    let gp = vmix(prev.pos, cur.pos, k), gl = vmix(prev.look, cur.look, k);
+    if (i === 0 && t < 9) { const k0 = ease(lin(t, 7.2, 9.0)); gp = vmix(pos || prev.pos, cur.pos, k0); gl = vmix(look || prev.look, cur.look, k0); }
+    // a gentle arc between panels: rise mid-move
+    gp.y += Math.sin(Math.PI * k) * 0.35 * (i > 0 ? 1 : 0);
+    pos = gp; look = gl;
+  }
+  if (t >= 32) {   // orbit high above the sculpture, then come down to the lockup
+    const k = ease(lin(t, 32, 33.2)), last = panelView(5, 1);
+    const ang = 0.6 + (t - 32) * 0.22, orbit = new THREE.Vector3(Math.sin(ang) * 11, 5.8, Math.cos(ang) * 11);
+    pos = vmix(last.pos, orbit, k); look = vmix(last.look, new THREE.Vector3(0, 0.6, 0), k);
+    const k2 = ease(lin(t, 37.4, 39.6));
+    const end = new THREE.Vector3(Math.sin((t - 39.6) * 0.05) * 1.2, 1.85, 7.6 - lin(t, 39.6, 46) * 0.5);
+    pos = vmix(pos, end, k2); look = vmix(look, new THREE.Vector3(0, 1.1, 0), k2);
+  }
+  camera.position.copy(pos); camera.lookAt(look);
+  // a whisper of handheld life
+  camera.rotation.z += Math.sin(t * 0.9) * 0.004;
+
+  bloom.strength = 0.55 + 0.2 * fe.level + 0.55 * Math.exp(-Math.abs(t - 4) * 5) + 0.45 * Math.exp(-Math.abs(t - 38) * 5) - 0.25 * lin(t, 31.5, 32.5) * (1 - lin(t, 37.5, 38.5));
+  rimC.intensity = 14 + 16 * fe.pulse; rimA.intensity = 10 + 10 * fe.level;
+  composer.render();
+
+  // overlays
+  ov($("word"), fadeWin(t, 0.8, 3.7, 0.8, 0.5), (1 - lin(t, 0.8, 1.8)) * 16);
+  ov($("title"), fadeWin(t, 4.25, 7.6, 0.45, 0.6), (1 - easeOut(lin(t, 4.25, 4.9))) * 30);
+  ov($("tag"), fadeWin(t, 4.8, 7.6, 0.5, 0.6), (1 - easeOut(lin(t, 4.8, 5.5))) * 20);
+  const i = Math.floor((t - 8) / 4), local = t - (8 + i * 4);
+  if (i >= 0 && i < 6) {
+    capK.textContent = SHOTS[i][1].toUpperCase(); capT.textContent = SHOTS[i][2]; capS.textContent = SHOTS[i][3];
+    const a = fadeWin(local, 0.35, 3.85, 0.45, 0.35);
+    ov(cap, a, (1 - easeOut(lin(local, 0.35, 0.95))) * 26);
+    $("bar").style.opacity = a; $("bar").style.transform = `scaleY(${easeOut(lin(local, 0.25, 0.7)).toFixed(3)})`;
+  } else { ov(cap, 0); $("bar").style.opacity = 0; }
+  ov($("capShade"), fadeWin(t, 8.2, 31.9, 0.6, 0.5));
+  ov($("statsShade"), fadeWin(t, 32.1, 37.6, 0.5, 0.5));
+  ov($("lowShade"), Math.max(fadeWin(t, 0.6, 7.8, 0.8, 0.6), fadeWin(t, 38.6, 47, 0.8, 0.1)));
+  [0, 1, 2].forEach((k) => ov($("s" + k), fadeWin(t, 32.3 + k * 1.0, 37.5, 0.45, 0.5), (1 - easeOut(lin(t, 32.3 + k, 32.9 + k))) * 34));
+  ov($("lock1"), fadeWin(t, 39.0, 46.5, 0.6, 0.1), (1 - easeOut(lin(t, 39.0, 39.8))) * 30);
+  ov($("lock2"), fadeWin(t, 39.6, 46.5, 0.6, 0.1), (1 - easeOut(lin(t, 39.6, 40.3))) * 20);
+  ov($("lock3"), fadeWin(t, 40.2, 46.5, 0.6, 0.1));
+  $("black").style.opacity = Math.max(1 - lin(t, 0, 0.9), lin(t, 44.6, 46)).toFixed(3);
+  return true;
+};
+await document.fonts.ready;
+window.ready = true;
+</script>
+</body></html>
