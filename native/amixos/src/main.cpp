@@ -128,6 +128,7 @@ int main(int argc, char* argv[]) {
   qml.rootContext()->setContextProperty("i18n", &i18n);
   qml.rootContext()->setContextProperty("appVersion", QStringLiteral(AMIX_VERSION));
   qml.rootContext()->setContextProperty("noBoot", smoke);
+  qml.rootContext()->setContextProperty("asyncPages", !smoke || qEnvironmentVariableIsSet("AMIX_ASYNC_PAGES"));   // pages build without blocking the click (the tests: synchronous, unless asked)
   QObject::connect(&qml, &QQmlApplicationEngine::objectCreationFailed, &app, [] { std::fprintf(stderr, "amixos: the interface could not be created\n"); QCoreApplication::exit(2); }, Qt::QueuedConnection);
   qml.addImportPath(QStringLiteral("qrc:/qt/qml"));   // the console's own module (AmixOS, with the Theme singleton) lives in the resources: Qt 6.4 on Windows does not search there by itself, and every Theme.* colour came out undefined (black on white)
   qml.load(QUrl(QStringLiteral("qrc:/qt/qml/AmixOS/qml/Main.qml")));   // Qt 6.4 (loadFromModule is 6.5+)
@@ -228,7 +229,9 @@ int main(int argc, char* argv[]) {
       engine.stop(); return 0; }
     if (qEnvironmentVariableIsSet("AMIX_BENCH_ALL")) {   // the opening time of every page, slowest first
       QList<QPair<double, QString>> t; for (const QVariant& v : engine.pages()) { const QString id = v.toMap().value("id").toString(); win->setProperty("current", "home"); waitMs(150);
-        QElapsedTimer o; o.start(); win->setProperty("current", id); QCoreApplication::processEvents(); t << qMakePair(o.nsecsElapsed() / 1e6, id); waitMs(150); }
+        QElapsedTimer o; o.start(); win->setProperty("current", id); QCoreApplication::processEvents(); double first = o.nsecsElapsed() / 1e6; waitMs(150);
+        if (qEnvironmentVariable("AMIX_BENCH_ALL") == "2") { win->setProperty("current", "home"); waitMs(150); o.restart(); win->setProperty("current", id); QCoreApplication::processEvents(); first = o.nsecsElapsed() / 1e6; waitMs(150); }   // the second open: the page's own cost, without compiling its QML
+        t << qMakePair(first, id); }
       std::sort(t.begin(), t.end(), [](auto& a, auto& b) { return a.first > b.first; });
       for (const auto& x : t) std::printf("amixos --bench: open %-12s %6.0f ms\n", qPrintable(x.second), x.first);
       engine.stop(); return 0; }

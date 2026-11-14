@@ -123,8 +123,13 @@ Item {
         // the action bar: global mixer actions, four quick scenes, and the 10 PLUGIN slots of the selected channel
         Rectangle {
             Layout.fillWidth: true; implicitHeight: 34; radius: 8; color: Theme.card; border.color: Theme.line
+            // more buttons to the right: a fade and a "›" say so (the bar scrolls sideways; a cut button looked like a bug)
+            Rectangle { z: 5; visible: !actFlick.atXEnd; anchors.right: parent.right; anchors.top: parent.top; anchors.bottom: parent.bottom; anchors.margins: 1; width: 34; radius: 8
+                gradient: Gradient { orientation: Gradient.Horizontal; GradientStop { position: 0; color: "transparent" } GradientStop { position: 0.6; color: Theme.card } }
+                Text { anchors.right: parent.right; anchors.rightMargin: 6; anchors.verticalCenter: parent.verticalCenter; text: "›"; color: Theme.orange; font.pixelSize: 16; font.bold: true }
+                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: actFlick.contentX = Math.max(0, actFlick.contentWidth - actFlick.width) } }
             Flickable {   // the action bar scrolls sideways when a language makes it wider than the window (nothing is cut off)
-                anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; clip: true; contentWidth: bar.implicitWidth; contentHeight: height; flickableDirection: Flickable.HorizontalFlick; boundsBehavior: Flickable.StopAtBounds; interactive: contentWidth > width
+                id: actFlick; anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; clip: true; contentWidth: bar.implicitWidth; contentHeight: height; flickableDirection: Flickable.HorizontalFlick; boundsBehavior: Flickable.StopAtBounds; interactive: contentWidth > width
             RowLayout {
                 height: parent.height; width: Math.max(implicitWidth, parent.width); spacing: 5
                 property bool anyMute: engine.anyMute
@@ -249,14 +254,15 @@ Item {
                 anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 6
                 ColumnLayout { spacing: 2; Layout.preferredWidth: 96
                     Rectangle { implicitWidth: Math.max(60, children[0].implicitWidth + 12); implicitHeight: 12; radius: 3; color: Theme.ov(0.06); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: i18n.t("COMPACT ▴", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } MouseArea { anchors.fill: parent; onClicked: { page.rackCompact = true; settings.rackCompactDefault = true } } }
-                    Text { text: i18n.t("PLUGIN RACK", i18n.lang); color: "#a78bfa"; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
+                    Text { text: i18n.t("PLUGIN RACK", i18n.lang); color: "#a78bfa"; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2
+                        ToolTip.visible: rackTitleHover.hovered; ToolTip.text: i18n.t("chain: Ø → DLY → GATE → X → EQ → COMP → LIM", i18n.lang); HoverHandler { id: rackTitleHover } }
                     Text { text: i18n.t("CH ", i18n.lang) + (page.sel + 1 < 10 ? "0" : "") + (page.sel + 1) + "  " + (page.selSt ? page.selSt.name : ""); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; elide: Text.ElideRight; Layout.preferredWidth: 96 }
                     Text { text: engine.pluginCount(page.sel) + i18n.t(" of ", i18n.lang) + (engine.pluginSlotLimit >= 64 ? i18n.t("unlimited", i18n.lang) : engine.pluginSlotLimit) + i18n.t(" used", i18n.lang) + (engine.pluginSlotLimit < 64 ? i18n.t(" · PRO unlocks unlimited", i18n.lang) : ""); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
                     RowLayout { visible: engine.pluginSlotLimit > 10; spacing: 3
                         Rectangle { implicitWidth: 18; implicitHeight: 14; radius: 3; color: Theme.ov(0.08); Text { anchors.centerIn: parent; text: "‹"; color: Theme.ink; font.pixelSize: 10 } MouseArea { anchors.fill: parent; onClicked: page.rackBank = Math.max(0, page.rackBank - 1) } }
                         Text { text: (page.rackBank * 10 + 1) + " - " + Math.min(engine.pluginSlotLimit, page.rackBank * 10 + 10); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
                         Rectangle { implicitWidth: 18; implicitHeight: 14; radius: 3; color: Theme.ov(0.08); Text { anchors.centerIn: parent; text: "›"; color: Theme.ink; font.pixelSize: 10 } MouseArea { anchors.fill: parent; onClicked: page.rackBank = Math.min(Math.ceil(engine.pluginSlotLimit / 10) - 1, page.rackBank + 1) } } }
-                    Text { text: i18n.t("chain: Ø → DLY → GATE → X → EQ → COMP → LIM", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 6 } }
+ }   // (the signal chain line moved to the title's tooltip: it ran out of the rack bar)
                 Repeater { model: page.selPlugins.slice(page.rackBank * 10, page.rackBank * 10 + 10)   // ten slots at a time; the bank buttons page through the rest
                     delegate: Rectangle { Layout.fillWidth: true; Layout.fillHeight: true; Layout.topMargin: 8; Layout.bottomMargin: 8; radius: 6
                         readonly property bool empty: !modelData.kind
@@ -463,9 +469,10 @@ Item {
                 visible: page.sidePanel
                 Layout.preferredWidth: 230; Layout.fillHeight: true; radius: Theme.radius; color: Theme.cardRaised; border.color: Theme.cyan
                 Flickable {
-                    anchors.fill: parent; anchors.margins: 8; contentHeight: side.implicitHeight; clip: true
+                    id: sideFlick; anchors.fill: parent; anchors.margins: 8; contentWidth: width; contentHeight: side.implicitHeight; clip: true
+                    flickableDirection: Flickable.VerticalFlick
                     ColumnLayout {
-                        id: side; width: parent.width; spacing: 6
+                        id: side; width: sideFlick.width; spacing: 6   // the panel's width, not the content's: long help text wraps instead of widening the column
                         RowLayout { Layout.fillWidth: true
                             Rectangle { implicitWidth: 10; implicitHeight: 10; radius: 5; color: Theme.stripColors[page.selSt ? page.selSt.color : 0] }
                             Text { Layout.fillWidth: true; text: (page.selSt ? page.selSt.name : "") + i18n.t("  ·  CH ", i18n.lang) + (page.sel + 1); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 10; font.bold: true; elide: Text.ElideRight } }
@@ -473,10 +480,10 @@ Item {
                         RowLayout { spacing: 4; Repeater { model: 8; delegate: Rectangle { implicitWidth: 20; implicitHeight: 14; radius: 3; color: Theme.stripColors[index]; border.color: page.selSt && page.selSt.color === index ? Theme.ink : "transparent"; border.width: 2; MouseArea { anchors.fill: parent; onClicked: engine.setColor(page.sel, index) } } } }
                         RowLayout { Layout.fillWidth: true
                             Text { text: i18n.t("INPUT TRIM", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
-                            Slider { Layout.fillWidth: true; from: -24; to: 24; stepSize: 0.5; value: page.selSt ? page.selSt.trimDb : 0; onMoved: engine.setTrim(page.sel, value) }
-                            Text { text: (page.selSt && page.selSt.trimDb > 0 ? "+" : "") + (page.selSt ? page.selSt.trimDb.toFixed(1) : "0.0") + i18n.t(" dB", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 7; Layout.preferredWidth: 46 }
-                            Rectangle { implicitWidth: 18; implicitHeight: 14; radius: 2; color: Theme.ov(0.08); Text { anchors.centerIn: parent; text: "0"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7 } MouseArea { anchors.fill: parent; onClicked: engine.setTrim(page.sel, 0) } } }
-                        Text { text: i18n.t("Gain staging before the gate / EQ / compressor and the IN meter: bring a quiet source up or a hot one down here, keep the fader near 0 dB.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 6; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+                            Slider { Layout.fillWidth: true; Layout.minimumWidth: 40; implicitWidth: 60; from: -24; to: 24; stepSize: 0.5; value: page.selSt ? page.selSt.trimDb : 0; onMoved: engine.setTrim(page.sel, value) }
+                            Text { text: (page.selSt && page.selSt.trimDb > 0 ? "+" : "") + (page.selSt ? page.selSt.trimDb.toFixed(1) : "0.0") + i18n.t(" dB", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 7; Layout.preferredWidth: 40 }
+                            Rectangle { implicitWidth: 16; implicitHeight: 14; radius: 2; color: Theme.ov(0.08); Text { anchors.centerIn: parent; text: "0"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7 } MouseArea { anchors.fill: parent; onClicked: engine.setTrim(page.sel, 0) } } }
+                        Text { text: i18n.t("Gain staging before the gate / EQ / compressor and the IN meter: bring a quiet source up or a hot one down here, keep the fader near 0 dB.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 6; wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.maximumWidth: sideFlick.width }
                         Rectangle { Layout.fillWidth: true; height: 1; color: Theme.lineSoft }
                         // gate
                         RowLayout { Layout.fillWidth: true
@@ -500,13 +507,13 @@ Item {
                         Repeater { model: engine.busState; delegate: RowLayout { Layout.fillWidth: true; spacing: 4
                             property var sd: engine.send(page.sel, index)
                             Connections { target: engine; function onStripsChanged() { sd = engine.send(page.sel, index) } function onSelectedStripChanged() { sd = engine.send(page.sel, index) } }
-                            Text { text: i18n.t(modelData.name ?? "", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; Layout.preferredWidth: 44; elide: Text.ElideRight }
-                            Slider { Layout.fillWidth: true; from: -60; to: 10; value: sd ? sd.db : -60; onMoved: engine.setSend(page.sel, index, value, sd ? sd.pre : false) }
-                            Rectangle { implicitWidth: 28; implicitHeight: 14; radius: 2; color: sd && sd.pre ? Theme.cyan : Theme.ov(0.08); Text { anchors.centerIn: parent; text: sd && sd.pre ? i18n.t("PRE", i18n.lang) : i18n.t("POST", i18n.lang); color: sd && sd.pre ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setSend(page.sel, index, sd ? sd.db : -60, !(sd && sd.pre)) } } } }
+                            Text { text: i18n.t(modelData.name ?? "", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; Layout.preferredWidth: 36; elide: Text.ElideRight }
+                            Slider { Layout.fillWidth: true; Layout.minimumWidth: 40; implicitWidth: 60; from: -60; to: 10; value: sd ? sd.db : -60; onMoved: engine.setSend(page.sel, index, value, sd ? sd.pre : false) }
+                            Rectangle { implicitWidth: 30; Layout.minimumWidth: 30; implicitHeight: 14; radius: 2; color: sd && sd.pre ? Theme.cyan : Theme.ov(0.08); Text { anchors.centerIn: parent; text: sd && sd.pre ? i18n.t("PRE", i18n.lang) : i18n.t("POST", i18n.lang); color: sd && sd.pre ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setSend(page.sel, index, sd ? sd.db : -60, !(sd && sd.pre)) } } } }
                         Rectangle { Layout.fillWidth: true; height: 1; color: Theme.lineSoft }
                         // dca
-                        RowLayout { Layout.fillWidth: true; Text { text: i18n.t("DCA", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
-                            Repeater { model: 9; delegate: Rectangle { implicitWidth: 18; implicitHeight: 14; radius: 2; color: page.selSt && page.selSt.dca === index ? Theme.amber : Theme.ov(0.08); Text { anchors.centerIn: parent; text: index === 0 ? "-" : index; color: page.selSt && page.selSt.dca === index ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setDca(page.sel, index) } } } }
+                        RowLayout { Layout.fillWidth: true; spacing: 2; Text { text: i18n.t("DCA", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; Layout.rightMargin: 2 }
+                            Repeater { model: 9; delegate: Rectangle { implicitWidth: 18; Layout.fillWidth: true; Layout.maximumWidth: 20; implicitHeight: 14; radius: 2; color: page.selSt && page.selSt.dca === index ? Theme.amber : Theme.ov(0.08); Text { anchors.centerIn: parent; text: index === 0 ? "-" : index; color: page.selSt && page.selSt.dca === index ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setDca(page.sel, index) } } } }
                     }
                 }
             }

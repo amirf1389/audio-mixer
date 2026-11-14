@@ -1,3 +1,4 @@
+#include <algorithm>
 #include "Access.h"
 #include "paths/paths.hpp"
 
@@ -91,15 +92,23 @@ QString Access::auditPath() const { return QString::fromStdString(am::paths::fil
 void Access::log(const QString& text) {
   QFile f(auditPath()); if (!f.open(QIODevice::Append | QIODevice::Text)) return;
   QTextStream(&f) << QDateTime::currentDateTime().toString(Qt::ISODate) << '\t' << kRoles[roleIndex(role())].name << '\t' << QString(text).replace('\n', ' ') << '\n';
-  f.close(); emit auditChanged();
+  // the file is kept to its newest ~2000 lines (it used to grow for ever, and the ACCOUNT page read all of it)
+  if (f.size() > 512 * 1024 && f.open(QIODevice::ReadOnly | QIODevice::Text)) { const QStringList all = QString::fromUtf8(f.readAll()).split('\n', Qt::SkipEmptyParts); f.close();
+    if (f.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) { f.write(all.mid(std::max<qsizetype>(0, all.size() - 2000)).join('\n').toUtf8() + '\n'); f.close(); } }
+  else f.close();
+  auditDirty_ = true; emit auditChanged();
 }
 QVariantList Access::audit() const {
-  QVariantList l; QFile f(auditPath()); if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) return l;
-  QStringList lines; while (!f.atEnd()) lines << QString::fromUtf8(f.readLine()).trimmed(); if (lines.size() > 300) lines = lines.mid(lines.size() - 300);
-  for (const QString& ln : lines) { const QStringList p = ln.split('\t'); if (p.size() < 3) continue; QVariantMap m; m["at"] = p[0]; m["who"] = p[1]; m["text"] = p.mid(2).join('\t'); l << m; }
-  return l;
+  // read once and kept until the next entry: the page asks for it several times a build; only the file's tail is read
+  if (!auditDirty_) return auditCache_;
+  auditCache_.clear(); auditDirty_ = false; QFile f(auditPath()); if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) return auditCache_;
+  if (f.size() > 96 * 1024) f.seek(f.size() - 96 * 1024);
+  QStringList lines = QString::fromUtf8(f.readAll()).split('\n', Qt::SkipEmptyParts); if (f.pos() > 0 && f.size() > 96 * 1024 && !lines.isEmpty()) lines.removeFirst();   // a cut first line
+  if (lines.size() > 300) lines = lines.mid(lines.size() - 300);
+  for (const QString& ln : lines) { const QStringList p = ln.trimmed().split('\t'); if (p.size() < 3) continue; QVariantMap m; m["at"] = p[0]; m["who"] = p[1]; m["text"] = p.mid(2).join('\t'); auditCache_ << m; }
+  return auditCache_;
 }
-void Access::clearAudit() { if (!adminMode()) { note("ADMIN mode (PIN) is needed to clear the log"); return; } QFile::remove(auditPath()); log("Audit log cleared"); }
+void Access::clearAudit() { if (!adminMode()) { note("ADMIN mode (PIN) is needed to clear the log"); return; } QFile::remove(auditPath()); auditDirty_ = true; log("Audit log cleared"); }
 QString Access::exportAudit() {
   const QString out = QString::fromStdString(am::paths::dataDir()) + "/audit-export-" + QDateTime::currentDateTime().toString("yyyyMMdd-HHmmss") + ".csv";
   QFile in(auditPath()), o(out); if (!in.open(QIODevice::ReadOnly | QIODevice::Text) || !o.open(QIODevice::WriteOnly | QIODevice::Truncate)) { note("Nothing to export yet"); return QString(); }

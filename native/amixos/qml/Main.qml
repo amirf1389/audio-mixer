@@ -21,6 +21,17 @@ ApplicationWindow {
     // MEMORY: a closed page's items are freed, but its JavaScript objects wait for the QML garbage collector, which runs only under
     // allocation pressure, so every page visit used to add ~5 MB that stayed. Collected once the user has settled on a page.
     Timer { id: gcTimer; interval: 1200; onTriggered: gc() }
+    // WARM-UP: a few seconds after start, every page's QML is compiled in the background (nothing is created, so no page starts a scan
+    // or a service): the first click on any page then costs only building it, not compiling it too.
+    property var warmQueue: ["AccessPage", "AccountPage", "AcousticsPage", "AdminPage", "AiMixPage", "ArrangePage", "BluetoothPage", "CalibratePage", "CascadePage", "CloudPage",
+        "CompressorPage", "ConnectionsPage", "DelayPage", "DiagnosticsPage", "EffectsPage", "EngineControlPage", "FramePage", "GatePage", "GroupFadersPage", "HelpPage",
+        "LevelsPage", "LicensePage", "LiveSourcesPage", "LoudnessPage", "MasteringPage", "MediaPage", "MicEqPage", "MixerPage", "NetworkPage", "PhasePage", "PluginsPage",
+        "PresetsPage", "RoutingPage", "RtaEqPage", "SamplesPage", "ScenesPage", "SendToPage", "SettingsPage", "SoundCardPage", "SpatialPage", "TonePage", "ToolsPage", "WaveformPage"]
+    property var warmKeep: []
+    Timer { id: warmTimer; interval: 60; repeat: true; running: false
+        onTriggered: { if (!root.warmQueue.length) { stop(); return }
+            const n = root.warmQueue.shift(); const c = Qt.createComponent("qrc:/qt/qml/AmixOS/qml/" + n + ".qml", Component.Asynchronous); root.warmKeep.push(c) } }
+    Timer { interval: 3000; running: asyncPages; onTriggered: warmTimer.start() }
     LayoutMirroring.enabled: i18n.rtl
     Binding { target: Theme; property: "dark"; value: settings.darkTheme }
     LayoutMirroring.childrenInherit: true
@@ -162,6 +173,11 @@ ApplicationWindow {
                 Loader {
                     id: pageLoader
                     anchors.fill: parent
+                    // CLICK TO PAGE: the page is built over a few frames instead of in one blocking step, so the rail answers the click at
+                    // once; the new page fades in when ready. (The tests build synchronously unless they ask for this.)
+                    asynchronous: asyncPages
+                    opacity: status === Loader.Ready ? 1 : 0
+                    Behavior on opacity { enabled: asyncPages; NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
                     sourceComponent: {
                         switch (root.current) {
                         case "home": return homeC; case "frame": return frameC; case "delay": return delayC; case "cloud": return cloudC; case "cascade": return cascadeC; case "mixer": return null; case "dsp": return toneC; case "rtaeq": return rtaEqC; case "bluetooth": return bluetoothC; case "io": return connC;
@@ -169,9 +185,15 @@ ApplicationWindow {
                         }
                     }
                 }
+                Rectangle {   // building a page: a thin line runs along the top
+                    id: pageBusy; objectName: "pageBusy"; visible: pageLoader.status === Loader.Loading; z: 50; height: 2; color: Theme.orange
+                    width: parent.width * 0.3; y: 0
+                    SequentialAnimation on x { running: pageLoader.status === Loader.Loading; loops: Animation.Infinite
+                        NumberAnimation { from: -pageBusy.width; to: pageBusy.parent ? pageBusy.parent.width : 0; duration: 700; easing.type: Easing.InOutQuad } }
+                }
                 // THE MIXER stays built once opened: coming back to it is instant (it took ~270 ms to rebuild 32 strips each visit).
                 // Hidden, its meters and timers stop (they follow the page's visibility). A soft restart rebuilds it.
-                Loader { id: mixerKeep; anchors.fill: parent; active: root.mixerEver; visible: root.current === "mixer"; sourceComponent: mixerC }
+                Loader { id: mixerKeep; anchors.fill: parent; asynchronous: asyncPages; active: root.mixerEver; visible: root.current === "mixer"; sourceComponent: mixerC }
                 Component { id: frameC; FramePage {} }
                 Component { id: homeC; HomePage { onGo: function (id) { root.current = id } } }
                 Component { id: mixerC; MixerPage { onGo: function (id) { root.current = id } } }

@@ -30,18 +30,33 @@ Flickable {
                     { id: "sys", t: "Settings", s: "Engine, saved console state, about." }
                 ]
                 delegate: Rectangle {
-                    Layout.fillWidth: true; implicitHeight: 92; radius: Theme.radius; color: Theme.card; border.color: tileArea.containsMouse ? Theme.orange : Theme.line
-                    ColumnLayout { anchors.fill: parent; anchors.margins: 14; spacing: 4
+                    Layout.fillWidth: true; implicitHeight: 92; radius: Theme.radius; color: tileArea.pressed ? Theme.ov(0.08) : Theme.card; border.color: tileArea.containsMouse ? Theme.orange : Theme.line
+                    // top-aligned: every card's title sits on the same line, whatever the length of its description
+                    ColumnLayout { anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 14; spacing: 4
                         Text { text: i18n.t(modelData.t ?? "", i18n.lang); color: Theme.ink; font.family: Theme.sans; font.pixelSize: 15; font.bold: true }
-                        Text { text: i18n.t(modelData.s ?? "", i18n.lang); color: Theme.muted; font.family: Theme.sans; font.pixelSize: 11; wrapMode: Text.WordWrap; Layout.fillWidth: true } }
+                        // the channel count of this licence, not a fixed 32
+                        Text { text: { const s = i18n.t(modelData.s ?? "", i18n.lang); return modelData.id === "mixer" ? s.replace("32", engine.licensedChannels) : s }
+                               color: Theme.muted; font.family: Theme.sans; font.pixelSize: 11; wrapMode: Text.WordWrap; Layout.fillWidth: true } }
                     MouseArea { id: tileArea; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: page.go(modelData.id) }
                 }
             }
         }
-        Panel {
-            Layout.fillWidth: true
-            title: i18n.t("WHAT THIS BUILD CARRIES OVER", i18n.lang)
-            subtitle: i18n.t("The web console (AmF X1 1.22.1.0 Beta) is retired; its pages return here one by one as native pages. Dimmed pages on the rail are not ported yet.", i18n.lang)
+        // START: one click to the pages used most (the rail's own names, already in every language)
+        Text { text: i18n.t("START", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2; Layout.topMargin: 6 }
+        Flow {
+            Layout.fillWidth: true; spacing: 8
+            Repeater {
+                model: { const want = ["mixer", "asio", "scenes", "fx", "master", "media", "plugins", "help"]; const all = engine.pages; const out = [];
+                         for (const id of want) for (const p of all) if (p.id === id) out.push(p); return out }
+                delegate: Rectangle {
+                    implicitWidth: qRow.implicitWidth + 24; implicitHeight: 36; radius: Theme.radius
+                    color: qa.pressed ? Theme.ov(0.12) : (qa.containsMouse ? Theme.ov(0.07) : Theme.card); border.color: qa.containsMouse ? Theme.orange : Theme.line
+                    Row { id: qRow; anchors.centerIn: parent; spacing: 8
+                        Text { text: modelData.icon; color: Theme.orange; font.pixelSize: 13; anchors.verticalCenter: parent.verticalCenter }
+                        Text { text: i18n.t(modelData.text ?? "", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 10; font.bold: true; anchors.verticalCenter: parent.verticalCenter } }
+                    MouseArea { id: qa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: page.go(modelData.id) }
+                }
+            }
         }
     }
 }
