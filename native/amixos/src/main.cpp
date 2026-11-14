@@ -137,6 +137,14 @@ int main(int argc, char* argv[]) {
     auto* win = qobject_cast<QQuickWindow*>(qml.rootObjects().first());
     engine.setNullTestInput(true); engine.open("null", "", "", 48000, 256, 2, 2); win->setProperty("current", qEnvironmentVariable("AMIX_BENCH_PAGE", "mixer")); waitMs(1500);
     auto cpuMs = [] { return 1000.0 * double(std::clock()) / CLOCKS_PER_SEC; };
+    if (qEnvironmentVariableIsSet("AMIX_BENCH_ALL")) {   // the opening time of every page, slowest first
+      QList<QPair<double, QString>> t; for (const QVariant& v : engine.pages()) { const QString id = v.toMap().value("id").toString(); win->setProperty("current", "home"); waitMs(150);
+        QElapsedTimer o; o.start(); win->setProperty("current", id); QCoreApplication::processEvents(); t << qMakePair(o.nsecsElapsed() / 1e6, id); waitMs(150); }
+      std::sort(t.begin(), t.end(), [](auto& a, auto& b) { return a.first > b.first; });
+      for (const auto& x : t) std::printf("amixos --bench: open %-12s %6.0f ms\n", qPrintable(x.second), x.first);
+      engine.stop(); return 0; }
+    { double worst = 0, sum = 0; for (int k = 0; k < 5; ++k) { win->setProperty("current", "home"); waitMs(200); QElapsedTimer o; o.start(); win->setProperty("current", qEnvironmentVariable("AMIX_BENCH_PAGE", "mixer")); QCoreApplication::processEvents(); const double ms = o.nsecsElapsed() / 1e6; worst = std::max(worst, ms); sum += ms; waitMs(300); }
+      std::printf("amixos --bench: opening the page takes %.0f ms on average, %.0f ms at worst\n", sum / 5, worst); }
     double c0 = cpuMs(); waitMs(5000); const double idle = (cpuMs() - c0) / 5.0;   // ms of CPU per second
     c0 = cpuMs(); QElapsedTimer t; t.start(); int moves = 0;
     while (t.elapsed() < 5000) { engine.setGain(moves % 32, -30.0 + (moves % 60) * 0.5); ++moves; QCoreApplication::processEvents(QEventLoop::AllEvents, 5); QThread::msleep(16); }   // a fader moved at 60 Hz, round the strips
@@ -817,7 +825,8 @@ int main(int argc, char* argv[]) {
       // the language tables: 80 languages, every one covers the page names
       int full = 0; for (const QVariant& l : i18n.languages()) if (l.toMap().value("coverage").toInt() >= 44) ++full;
       std::printf("amixos --smoke: %d languages, %d cover all page names; MIXER in fa = %s\n", i18n.count(), full, qPrintable(i18n.t("MIXER", "fa")));
-      if (i18n.count() < 80 || full < 80 || i18n.t("MIXER", "fa") == "MIXER") { std::fprintf(stderr, "amixos --smoke: language tables incomplete\n"); QCoreApplication::exit(7); return; }   // (a bare `return 7` here would make the lambda non-void and fall off the end: heap corruption)
+      const int offered = i18n.languages().size(); std::printf("amixos --smoke: %d languages offered in the menu (the rest only had page names), Swahili offered %d\n", offered, int(i18n.offered("sw")));
+      if (i18n.count() < 80 || offered < 22 || full < offered || i18n.offered("sw") || i18n.t("MIXER", "fa") == "MIXER") { std::fprintf(stderr, "amixos --smoke: language tables incomplete\n"); QCoreApplication::exit(7); return; }   // (a bare `return 7` here would make the lambda non-void and fall off the end: heap corruption)
       const QVariantMap m = engine.telemetry();
       const qulonglong blocks = m.value("blocks").toULongLong();
       { // I/O FRAME: cards, APPLY (routes a strip and puts the echo canceller in its rack), GPIO in from OSC and MIDI, LOCATE both ways

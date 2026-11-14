@@ -67,7 +67,8 @@ Popup {
     readonly property var sections: { const n = params.length; if (!n) return []; const l = layouts[fx]; if (l) return l
         const out = [], m = Math.min(n, 24); for (let i = 0; i < m; i += 4) { const idx = []; for (let j = i; j < Math.min(m, i + 4); j++) idx.push(j); out.push([(i + 1) + " – " + Math.min(m, i + 4), idx]) } return out }
     readonly property int mixIndex: fx && params.length ? params.length - 1 : -1
-    function openFor(strip_, slot_, kind_, title_) { strip = strip_; slot = slot_; kind = kind_; title = title_; presets = engine.rackPresets(kind_); presetAt = -1; stateA = null; stateB = null; side = "A"; reload(); x = Math.max(4, (parent.width - width) / 2); y = Math.max(4, (parent.height - height) / 2); open() }
+    property string nativeNote: ""
+    function openFor(strip_, slot_, kind_, title_) { nativeNote = ""; strip = strip_; slot = slot_; kind = kind_; title = title_; presets = engine.rackPresets(kind_); presetAt = -1; stateA = null; stateB = null; side = "A"; reload(); x = Math.max(4, (parent.width - width) / 2); y = Math.max(4, (parent.height - height) / 2); open() }
     function recentre() { if (visible && parent) { x = Math.max(4, (parent.width - width) / 2); y = Math.max(4, (parent.height - height) / 2) } }
     onWidthChanged: recentre(); onHeightChanged: recentre()
     function reload() { params = engine.pluginParams(strip, slot); const p = engine.plugins(strip)[slot]; bypass = p ? p.bypass : false; rev++ }
@@ -304,7 +305,11 @@ Popup {
                         LitKey { objectName: "resetKey"; label: "↺"; onClicked: ed.resetAll() } } }
                     Inset { width: 118; Row { anchors.centerIn: parent; spacing: 8
                         Text { anchors.verticalCenter: parent.verticalCenter; text: i18n.t("BYPASS", i18n.lang); color: ed.ink; font.family: ed.face1; font.pixelSize: 10; font.weight: Font.DemiBold; font.letterSpacing: 1 }
-                        LitKey { label: ""; lit: ed.bypass; litColor: "#ff4a3a"; onClicked: { engine.setPluginBypass(ed.strip, ed.slot, !ed.bypass); ed.bypass = !ed.bypass } } } } } }
+                        LitKey { label: ""; lit: ed.bypass; litColor: "#ff4a3a"; onClicked: { engine.setPluginBypass(ed.strip, ed.slot, !ed.bypass); ed.bypass = !ed.bypass } } } }
+                    // a hosted VST opens in this AMFB panel (its parameters on our knobs); the plug-in's own window is one press away
+                    Inset { visible: ed.kind.startsWith("vst3:") || ed.kind.startsWith("vst2:"); width: 168; Row { anchors.centerIn: parent; spacing: 8
+                        Text { anchors.verticalCenter: parent.verticalCenter; text: i18n.t("PLUG-IN WINDOW", i18n.lang); color: ed.ink; font.family: ed.face1; font.pixelSize: 10; font.weight: Font.DemiBold; font.letterSpacing: 1 }
+                        LitKey { objectName: "nativeKey"; label: "⧉"; ToolTip.visible: ed.nativeNote !== ""; ToolTip.text: ed.nativeNote; onClicked: { if (!engine.openPluginWindow(ed.strip, ed.slot)) ed.nativeNote = i18n.t("This plug-in has no window of its own here: its controls are on this panel.", i18n.lang) } } } } } }
             // THE DISPLAY: what is playing (the spectrum of the channel), the curve the unit draws (EQs) and the levels in and out
             RackUnit { id: dispUnit; objectName: "displayUnit"; height: 214
                 Rectangle { x: 14; y: 12; width: parent.width - 28; height: parent.height - 24; radius: 10; color: "#06080b"; border.color: "#000"; border.width: 2; clip: true
