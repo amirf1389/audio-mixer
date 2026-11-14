@@ -64,7 +64,7 @@ class ToolsActivity : AppCompatActivity() {
         listOf(R.string.tools_tuner, R.string.tools_spl, R.string.tools_gen).forEachIndexed { i, r -> row.addView(Button(this).apply { text = getString(r); setOnClickListener { show(i) } }.also { tabs.add(it) }) }
         root.addView(row)
         body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0, 16, 0, 0) }; root.addView(body)
-        setContentView(ScrollView(this).apply { setBackgroundColor(Color.parseColor("#0F141C")); addView(root) })
+        setContentView(Nav.wrap(this, ScrollView(this).apply { setBackgroundColor(Color.parseColor("#0F141C")); addView(root) }, Nav.Tab.TOOLS))
         show(intent.getIntExtra("tool", 0))
     }
 

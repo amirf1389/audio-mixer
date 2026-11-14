@@ -17,7 +17,9 @@ recording size. **PLUG-INS** (remote): the console's channel racks (slot, plug-i
 (search by name or vendor) and its extensions and built-in effects; read-only, saved by the console when the phone remote starts
 (`remote-console.json`, served at `/api/console-info` with the token). **SCENES** (remote): save the console's mix on the phone (levels, pan, mute, solo, names, buses, master) and recall it.
 **TOOLS** (no console needed): TUNER (YIN pitch from the microphone, needle in cents), SOUND LEVEL (estimate with a calibration
-offset, max hold) and GENERATOR (sine, pink, white, sweep through the phone's output). **Screenshots on every test run, no phone needed:** `gradle testReleaseUnitTest` draws the real screens with
+offset, max hold) and GENERATOR (sine, pink, white, sweep through the phone's output). **One app:** HOME is a hub (console card with address, pairing and plan; tiles for the console mixer, this phone's mixer, EQ, scenes,
+tools, calculator, plug-ins, settings) and a bottom bar (HOME · MIXER · TOOLS · SETTINGS) is on every main screen; one theme
+(`res/values/themes.xml`) gives every screen the console's colours and the same rounded buttons. **Screenshots on every test run, no phone needed:** `gradle testReleaseUnitTest` draws the real screens with
 Robolectric into `screenshots-android/` (with `AMFX_DAEMON=<port> AMFX_TOKEN=<token>` and a running amixos-daemon, the remote is shown
 connected, plus the channel and master pages). **No app needed:** any browser on the same Wi-Fi can open
 `http://<console address>:8765/remote` (shown on the same page) and pair with the same PIN. The

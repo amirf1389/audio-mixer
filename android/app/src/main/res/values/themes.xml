@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One look for every screen: the console's colours (dark panels, orange accent, cyan values), flat rounded buttons. -->
+<resources>
+    <color name="bg">#0F141C</color>
+    <color name="panel">#161D28</color>
+    <color name="panel_hi">#202938</color>
+    <color name="line">#2A3444</color>
+    <color name="accent">#EA580C</color>
+    <color name="cyan">#00F2FF</color>
+    <color name="dim">#8B98A8</color>
+    <style name="Theme.AmFX1" parent="Theme.AppCompat.NoActionBar">
+        <item name="colorPrimary">@color/accent</item>
+        <item name="colorPrimaryDark">@color/bg</item>
+        <item name="colorAccent">@color/accent</item>
+        <item name="colorControlActivated">@color/accent</item>
+        <item name="colorControlNormal">@color/dim</item>
+        <item name="android:windowBackground">@color/bg</item>
+        <item name="android:statusBarColor">@color/bg</item>
+        <item name="android:navigationBarColor">@color/bg</item>
+        <item name="android:textColorPrimary">#F1F5F9</item>
+        <item name="android:textColorSecondary">@color/dim</item>
+        <item name="android:textColorHint">@color/dim</item>
+        <item name="buttonStyle">@style/Widget.AmFX1.Button</item>
+        <item name="android:buttonStyle">@style/Widget.AmFX1.Button</item>
+        <item name="android:buttonStyleToggle">@style/Widget.AmFX1.Toggle</item>
+        <item name="alertDialogTheme">@style/Theme.AmFX1.Dialog</item>
+    </style>
+    <style name="Theme.AmFX1.Dialog" parent="Theme.AppCompat.Dialog.Alert">
+        <item name="colorAccent">@color/accent</item>
+        <item name="android:windowBackground">@drawable/dialog_bg</item>
+        <item name="android:textColorPrimary">#F1F5F9</item>
+        <item name="buttonStyle">@style/Widget.AmFX1.Button</item>
+        <item name="android:buttonStyleToggle">@style/Widget.AmFX1.Toggle</item>
+        <item name="colorControlActivated">@color/accent</item>
+    </style>
+    <style name="Widget.AmFX1.Button" parent="Widget.AppCompat.Button">
+        <item name="android:background">@drawable/btn_bg</item>
+        <item name="android:textColor">#F1F5F9</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:letterSpacing">0.04</item>
+        <item name="android:minHeight">44dp</item>
+        <item name="android:paddingLeft">14dp</item>
+        <item name="android:paddingRight">14dp</item>
+        <item name="android:stateListAnimator">@null</item>
+    </style>
+    <style name="Widget.AmFX1.Toggle" parent="Widget.AmFX1.Button">
+        <item name="android:background">@drawable/toggle_bg</item>
+    </style>
+</resources>

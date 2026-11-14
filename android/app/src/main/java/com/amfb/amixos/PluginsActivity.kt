@@ -43,7 +43,7 @@ class PluginsActivity : AppCompatActivity() {
             addTextChangedListener(object : TextWatcher { override fun afterTextChanged(e: Editable?) { filter = e.toString().trim().lowercase(); render() }
                 override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}; override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {} }) })
         body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }; root.addView(body)
-        setContentView(ScrollView(this).apply { setBackgroundColor(Color.parseColor("#0F141C")); addView(root) })
+        setContentView(Nav.wrap(this, ScrollView(this).apply { setBackgroundColor(Color.parseColor("#0F141C")); addView(root) }, null))
         load()
     }
     fun load() {

@@ -15,8 +15,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 
-/** A one-strip mixer: microphone in, fader, pan, mute, master limiter, peak meters. The engine is the same C++ as the desktop console. */
-class MainActivity : AppCompatActivity() {
+/** THIS PHONE: a one-strip mixer on the phone itself: microphone in, fader, pan, mute, master limiter, peak meters. The engine is the same C++ as the desktop console. */
+class LocalMixerActivity : AppCompatActivity() {
     private val engine by lazy { Engine(strips = 2, sampleRate = Prefs.localRate(this).toDouble()) }
     private var loop: AudioLoop? = null
     private val ui = Handler(Looper.getMainLooper())
@@ -24,7 +24,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Engine.setDirs(filesDir.absolutePath, cacheDir.absolutePath, cacheDir.absolutePath)   // data in the app's files, everything else in its cache (cleared by Android when space is short)
-        setContentView(R.layout.activity_main)
+        setContentView(Nav.wrap(this, layoutInflater.inflate(R.layout.activity_main, null), null))
         findViewById<TextView>(R.id.version).text = getString(R.string.engine_version, Engine.version())
         engine.setLimiter(true, -0.5, 100.0)
         findViewById<SeekBar>(R.id.fader).apply { max = 700; progress = 600   // -60 .. +10 dB in 0.1 dB
@@ -41,9 +41,6 @@ class MainActivity : AppCompatActivity() {
             }) }
         findViewById<ToggleButton>(R.id.mute).setOnCheckedChangeListener { _, on -> engine.setMute(0, on) }
         findViewById<Button>(R.id.start).setOnClickListener { if (loop == null) startAudio() else stopAudio() }
-        findViewById<Button>(R.id.remote).setOnClickListener { startActivity(Intent(this, RemoteActivity::class.java)) }
-        findViewById<Button>(R.id.calculator).setOnClickListener { startActivity(Intent(this, CalculatorActivity::class.java)) }
-        findViewById<Button>(R.id.settings).setOnClickListener { startActivity(Intent(this, SettingsActivity::class.java)) }
         ui.post(object : Runnable { override fun run() { showMeters(); ui.postDelayed(this, 50) } })
     }
 

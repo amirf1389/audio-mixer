@@ -135,7 +135,7 @@ class EqActivity : AppCompatActivity() {
         row.addView(Button(this).apply { text = getString(R.string.eq_bypass); setOnClickListener { bypass = !bypass; text = getString(if (bypass) R.string.eq_bypassed else R.string.eq_bypass); sendAll() } })
         root.addView(row)
         root.addView(TextView(this).apply { text = getString(if (client == null) R.string.eq_offline else R.string.eq_help); setTextColor(dim); textSize = 12f; setPadding(0, 12, 0, 0) })
-        setContentView(ScrollView(this).apply { setBackgroundColor(Color.parseColor("#0F141C")); addView(root) })
+        setContentView(Nav.wrap(this, ScrollView(this).apply { setBackgroundColor(Color.parseColor("#0F141C")); addView(root) }, null))
         showBand()
     }
     private fun band() = curve.bands[curve.selected]
