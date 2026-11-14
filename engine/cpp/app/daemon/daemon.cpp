@@ -211,7 +211,7 @@ json::Value Daemon::status() const {
   o.set("backend", rt_ ? backend_ : ""); o.set("running", rt_ && rt_->running());
   if (rt_) { const Snapshot s = rt_->snapshot(); o.set("blocks", static_cast<double>(s.blocks)); o.set("frames", static_cast<double>(s.frames)); o.set("xruns", static_cast<double>(s.xruns)); }
   else { o.set("blocks", 0); o.set("frames", 0); o.set("xruns", 0); }
-  o.set("strips", opt_.strips); o.set("buses", kMaxBuses);
+  o.set("strips", opt_.strips); o.set("buses", kMaxBuses); o.set("plan", opt_.plan);
   o.set("uptimeS", std::chrono::duration<double>(std::chrono::steady_clock::now() - started_).count());
   if (!lastError_.empty()) o.set("lastError", lastError_);
   json::Value b = json::Value::array(); for (const auto& n : availableBackends()) b.push(n); o.set("backends", b);

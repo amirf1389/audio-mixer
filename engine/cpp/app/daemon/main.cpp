@@ -36,6 +36,7 @@ int run(int argc, char** argv, std::atomic<bool>& g_quit, std::function<void(con
     else if (a == "--list-tokens") doList = true;
     else if (a == "--revoke-token") { doRevoke = true; revokeId = next(); }
     else if (a == "--strips") o.strips = std::atoi(next().c_str());
+    else if (a == "--plan") o.plan = next();
     else if (a == "--open") openBackend = next();
     else if (a == "--version") o.version = next();
     else if (a == "--help" || a == "-h") { say(fmt("AmF X1 Network (amixos-daemon) [--port 8765] [--allow-lan] [--allow-any-address] [--bind ADDR] [--token-file PATH | --token T] [--strips 32] [--open BACKEND]\n  tokens: --new-token NAME [--role control|view] [--days N] | --list-tokens | --revoke-token ID  [--tokens-file PATH]\n  --allow-lan: phones on the same network may connect (local policy: private addresses only; the token is still needed; not encrypted).\n")); return 0; }

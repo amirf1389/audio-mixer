@@ -82,7 +82,8 @@ bool Remote::start(bool wifi) {
   writeConsoleInfo();   // what the phone shows under PLUG-INS: the catalogue, the racks and the extensions, as they are now
   engine_->stop();   // the service opens the sound card itself
   wifi_ = wifi;
-  QStringList args{"--port", QString::number(port()), "--open", "auto", "--version", QCoreApplication::applicationVersion()}; if (wifi) args << "--allow-lan";   // local policy stays on: private addresses only
+  QStringList args{"--port", QString::number(port()), "--open", "auto", "--version", QCoreApplication::applicationVersion(),
+    "--strips", QString::number(qBound(1, engine_->licensedChannels(), 32)), "--plan", engine_->license().value("planName").toString()};   // the phone gets the channels of the licence plan, no more if (wifi) args << "--allow-lan";   // local policy stays on: private addresses only
   if (ext_.available() && !QSettings().value("store/off").toStringList().contains(QStringLiteral("ext:AmF X1 Network"))) {   // the extension runs inside the console (unless switched off in the LOCAL STORE): same process, same rights on the sound card
     const int rc = ext_.start(args);
     if (rc == 0 && ext_.running()) { status_ = wifi ? QStringLiteral("starting for the phones on this network (extension)") : QStringLiteral("starting for this computer only (extension)"); emit changed(); return true; }
