@@ -65,11 +65,18 @@ class Loudness {
   double truePeak() const { return truePeak_; }     // dBTP
  private:
   void gate();
+  // HISTOGRAMS, not lists: the gated integrated loudness and the loudness range are read from fixed 0.01 LU bins (-70 .. +5 LUFS) that
+  // are allocated once; a session of any length costs the audio thread the same few microseconds per 100 ms (a list of every block,
+  // copied and sorted on the audio thread, took 10-20 ms per update after two hours: drop-outs). Integrated stays exact (each bin keeps
+  // the sum of its blocks' energies); the range is read to 0.01 LU.
+  static constexpr int kBins = 7500; static constexpr double kLo = -70.0, kStep = 0.01;
+  std::vector<std::uint32_t> bCount_, sCount_; std::vector<double> bEnergy_; std::uint64_t bTotal_ = 0, sTotal_ = 0; std::vector<float> scratch_;
+  static int binOf(double lufs) { const int k = static_cast<int>((lufs - kLo) / kStep); return k < 0 ? -1 : k >= kBins ? kBins - 1 : k; }
   double fs_; std::size_t cap_; int subSize_;
   double c1_[5], c2_[5], z_[8] = {0, 0, 0, 0, 0, 0, 0, 0}, tp_[3][12];
   float h_[2][11] = {};
   double subAcc_ = 0; int subN_ = 0;
-  std::vector<double> sub_, blocks_, shorts_;
+  std::vector<double> sub_;
   double momentary_ = -kInf, shortTerm_ = -kInf, integrated_ = -kInf, lra_ = 0, truePeak_ = -kInf;
 };
 
@@ -171,6 +178,7 @@ class Mixer {
   const Strip& strip(int i) const { return strips_[i]; }
   const MeterState& masterMeter(int ch) const { return master_[ch].state(); }
   const Loudness& loudness() const { return loudness_; }
+  std::uint64_t nonFiniteSamples() const { return nonFinite_; }   // NaN / inf samples the master guard turned into silence (diagnostics)
   const PhaseResult& phase() const { return phase_; }
   void clearClips();
  private:
@@ -181,6 +189,7 @@ class Mixer {
   bool autoOn_ = false; double autoTarget_ = -16, autoMax_ = 12, autoDb_ = 0, autoSec_ = 0; int automixN_ = 0;
   int outBits_ = 0; bool dcOn_ = false; double dcX_[2] = {0, 0}, dcY_[2] = {0, 0}; std::uint32_t rng_ = 0x2545F491u;
   bool limOn_ = false; double limCeil_, limGain_ = 1, limReleaseMs_ = 100, limGrDb_ = 0;
+  std::uint64_t nonFinite_ = 0;
   ClipConfig clip_; Meter master_[2]; Loudness loudness_; PhaseResult phase_{0, 0, 0, 0, true};
   Send sends_[kMaxStrips][kMaxBuses]{}; Bus buses_[kMaxBuses]; bool anySend_ = false; BusProcessor* masterFx_ = nullptr;
 };

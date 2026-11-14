@@ -1,4 +1,5 @@
 #include "recorder.hpp"
+#include "audiomixer/sample_format.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -77,7 +78,7 @@ void Recorder::writerLoop() {
     for (File& x : out_) {
       unsigned char* o = scratch_.data(); const std::size_t cols = static_cast<std::size_t>(x.channels);
       for (std::size_t i = 0; i < n; ++i) { const float* src = ring_.data() + ((t + i) % ringFrames_) * ch + fileCol;
-        for (std::size_t c = 0; c < cols; ++c) { const float v = std::max(-1.f, std::min(1.f, src[c])); if (fmt == 1) { std::memcpy(o, &v, 4); o += 4; } else if (fmt == 2) { const double d = v; std::memcpy(o, &d, 8); o += 8; } else if (fmt == 3) { const std::int32_t q = static_cast<std::int32_t>(std::llrint(static_cast<double>(v) * 2147483647.0)); std::memcpy(o, &q, 4); o += 4; } else { const std::int32_t s = static_cast<std::int32_t>(std::lrint(v * 8388607.0)); *o++ = static_cast<unsigned char>(s & 255); *o++ = static_cast<unsigned char>((s >> 8) & 255); *o++ = static_cast<unsigned char>((s >> 16) & 255); } } }
+        for (std::size_t c = 0; c < cols; ++c) { const float v = src[c]; if (fmt == 1) { std::memcpy(o, &v, 4); o += 4; } else if (fmt == 2) { const double d = v; std::memcpy(o, &d, 8); o += 8; } else if (fmt == 3) { const std::int32_t q = am::fmt::toI32(v); std::memcpy(o, &q, 4); o += 4; }   /* FLOAT files keep everything above 0 dBFS (that is what float is for); integer formats round and clamp (sample_format.hpp) */ else { const std::int32_t s = am::fmt::toI24(v); *o++ = static_cast<unsigned char>(s & 255); *o++ = static_cast<unsigned char>((s >> 8) & 255); *o++ = static_cast<unsigned char>((s >> 16) & 255); } } }
       if (x.f) std::fwrite(scratch_.data(), 1, static_cast<std::size_t>(o - scratch_.data()), x.f);
       x.frames += n; fileCol += cols;
     }

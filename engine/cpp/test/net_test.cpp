@@ -25,9 +25,9 @@ static void wire() {
   { std::uint8_t x[32] = {0}; x[0] = 0x80 | 0x20 | 0x10 | 2; x[20] = 0; x[21] = 0; x[22] = 0; x[23] = 1; x[31] = 2;   // 2 CSRC, an extension of one word, 2 bytes of padding
     CHECK(rtpParse(x, 32, g, off, len) && off == 28 && len == 2); x[0] = 0x40; CHECK(!rtpParse(x, 32, g, off, len)); }
   const float in[6] = {0.0f, 1.0f, -1.0f, 0.5f, -0.25f, 2.0f}; std::uint8_t p[18]; float out[6];
-  pcmEncode(in, 3, 2, 24, p); CHECK(p[0] == 0 && p[3] == 0x7f && p[4] == 0xff && p[5] == 0xff && p[6] == 0x80 && p[7] == 0 && p[8] == 1 && p[15] == 0x7f);   // +1 -> 7fffff, -1 -> 800001, 2.0 clipped
+  pcmEncode(in, 3, 2, 24, p); CHECK(p[0] == 0 && p[3] == 0x7f && p[4] == 0xff && p[5] == 0xff && p[6] == 0x80 && p[7] == 0 && p[8] == 0 && p[15] == 0x7f);   // +1 -> 7fffff, -1 -> 800000 (one scale both ways: sample_format.hpp), 2.0 clipped
   pcmDecode(p, 3, 2, 24, out); for (int i = 0; i < 5; ++i) CHECK(std::fabs(out[i] - in[i]) < 2e-7f);
-  pcmEncode(in, 3, 2, 16, p); CHECK(p[2] == 0x7f && p[3] == 0xff && p[4] == 0x80 && p[5] == 0x01);
+  pcmEncode(in, 3, 2, 16, p); CHECK(p[2] == 0x7f && p[3] == 0xff && p[4] == 0x80 && p[5] == 0x00);
   pcmDecode(p, 3, 2, 16, out); for (int i = 0; i < 5; ++i) CHECK(std::fabs(out[i] - in[i]) < 4e-5f);
 
   StreamDesc d; d.name = "Stage left"; d.origin = "192.168.1.20"; d.address = "239.69.1.2"; d.port = 5004; d.channels = 8; d.bits = 24; d.rate = 48000; d.sessionId = 77;

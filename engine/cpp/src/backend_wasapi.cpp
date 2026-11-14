@@ -3,6 +3,7 @@
 // exact rate and channel count, with the device-aligned period; no other program can use it meanwhile. The default render / capture endpoints are used; a device is chosen by its endpoint id string ("" = default).
 // Compiled with mingw-w64 in the tests (scripts/build-engine.js --io); it has not been run on a Windows PC.
 #ifdef _WIN32
+#include "audiomixer/sample_format.hpp"
 #include <vector>
 #include <audioclient.h>
 #include <mmdeviceapi.h>
@@ -39,18 +40,17 @@ struct Fifo {
 
 // one sample format of a stream: what the device takes in exclusive mode (shared mode is always float32)
 struct Sample { bool isFloat = true; WORD bits = 32, valid = 32; std::size_t bytes() const { return bits / 8u; } };
-float loadSample(const BYTE* p, const Sample& s) {
+float loadSample(const BYTE* p, const Sample& s) {   // am::fmt: one scale both ways, rounding, clamping (sample_format.hpp)
   if (s.isFloat) { float v; std::memcpy(&v, p, 4); return v; }
-  if (s.bits == 32) { std::int32_t v; std::memcpy(&v, p, 4); return static_cast<float>(static_cast<double>(v) / 2147483648.0); }
-  if (s.bits == 24) { const std::int32_t v = (p[0] << 8) | (p[1] << 16) | (static_cast<std::int32_t>(p[2]) << 24); return static_cast<float>(v >> 8) / 8388608.0f; }
-  std::int16_t v; std::memcpy(&v, p, 2); return static_cast<float>(v) / 32768.0f;
+  if (s.bits == 32) { std::int32_t v; std::memcpy(&v, p, 4); return am::fmt::fromI32(v); }
+  if (s.bits == 24) return am::fmt::fromI24(am::fmt::unpack24(p));
+  std::int16_t v; std::memcpy(&v, p, 2); return am::fmt::fromI16(v);
 }
 void storeSample(BYTE* p, float x, const Sample& s) {
   if (s.isFloat) { std::memcpy(p, &x, 4); return; }
-  const float c = x > 1.0f ? 1.0f : (x < -1.0f ? -1.0f : x);
-  if (s.bits == 32) { const std::int32_t v = static_cast<std::int32_t>(static_cast<double>(c) * 2147483647.0); std::memcpy(p, &v, 4); }
-  else if (s.bits == 24) { const std::int32_t v = static_cast<std::int32_t>(c * 8388607.0f); p[0] = static_cast<BYTE>(v); p[1] = static_cast<BYTE>(v >> 8); p[2] = static_cast<BYTE>(v >> 16); }
-  else { const std::int16_t v = static_cast<std::int16_t>(c * 32767.0f); std::memcpy(p, &v, 2); }
+  if (s.bits == 32) { const std::int32_t v = am::fmt::toI32(x); std::memcpy(p, &v, 4); }
+  else if (s.bits == 24) am::fmt::pack24(p, am::fmt::toI24(x));
+  else { const std::int16_t v = am::fmt::toI16(x); std::memcpy(p, &v, 2); }
 }
 
 template <class T> void release(T*& p) { if (p) { p->Release(); p = nullptr; } }

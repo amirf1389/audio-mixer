@@ -1,3 +1,4 @@
+#include "audiomixer/fpu.hpp"
 #include "plugin_shell/preview.hpp"
 
 #include <algorithm>
@@ -69,6 +70,7 @@ bool Preview::setFile(const std::string& path, std::string& err) {
 void Preview::setSource(Source s) { source_ = s; }
 
 void Preview::render(const float* const* in, float* L, float* R, std::size_t n) {
+  am::ScopedNoDenormals noDenormals;
   const int src = source_.load(); float ip = 0;
   if (src == Sample || src == File) { const Clip* c = clip_.load();
     for (std::size_t i = 0; i < n; ++i) { if (!c || c->L.empty()) { L[i] = R[i] = 0; continue; } if (pos_ >= c->L.size()) pos_ = 0; L[i] = c->L[pos_]; R[i] = c->R.empty() ? c->L[pos_] : c->R[pos_]; ++pos_; } }

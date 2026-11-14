@@ -52,7 +52,8 @@ void kHp(double* c, double fs, double f0, double q) {
 }
 }  // namespace
 
-Loudness::Loudness(double sampleRate, std::size_t maxBlocks) : fs_(sampleRate), cap_(maxBlocks), subSize_(static_cast<int>(roundHalfUp(sampleRate * 0.1))) {
+Loudness::Loudness(double sampleRate, std::size_t maxBlocks) : bCount_(kBins, 0u), sCount_(kBins, 0u), bEnergy_(kBins, 0.0), scratch_(11 + 8192), fs_(sampleRate), cap_(maxBlocks), subSize_(static_cast<int>(roundHalfUp(sampleRate * 0.1))) {
+  sub_.reserve(32);
   kPre(c1_, fs_, 1681.974450955533, 3.999843853973347, 0.7071752369554196);
   kHp(c2_, fs_, 38.13547087602444, 0.5003270373238773);
   for (int p = 0; p < 3; ++p) {                                       // 4x oversampling: 12-tap windowed sinc, phases 1/4, 2/4, 3/4
@@ -61,27 +62,28 @@ Loudness::Loudness(double sampleRate, std::size_t maxBlocks) : fs_(sampleRate), 
     for (int k = 0; k < 12; ++k) tp_[p][k] /= sum;
   }
 }
-void Loudness::reset() { blocks_.clear(); shorts_.clear(); integrated_ = -kInf; lra_ = 0; truePeak_ = -kInf; }
+void Loudness::reset() { std::fill(bCount_.begin(), bCount_.end(), 0u); std::fill(sCount_.begin(), sCount_.end(), 0u); std::fill(bEnergy_.begin(), bEnergy_.end(), 0.0); bTotal_ = sTotal_ = 0; integrated_ = -kInf; lra_ = 0; truePeak_ = -kInf; }
 
-void Loudness::gate() {
-  std::vector<double> abs;
-  for (double b : blocks_) if (lk(b) > -70.0) abs.push_back(b);
-  if (abs.empty()) integrated_ = -kInf;
+void Loudness::gate() {   // BS.1770 gating on the histograms: absolute -70 LUFS (only blocks above it are binned), then relative -10 LU
+  if (!bTotal_) integrated_ = -kInf;
   else {
-    const double rel = meanLoud(abs.data(), abs.size()) - 10.0; double s = 0; std::size_t np = 0;
-    for (double b : abs) if (lk(b) > rel) { s += b; ++np; }
+    double e = 0; std::uint64_t n = 0; for (int k = 0; k < kBins; ++k) { e += bEnergy_[static_cast<std::size_t>(k)]; n += bCount_[static_cast<std::size_t>(k)]; }
+    const double rel = lk(e / static_cast<double>(n)) - 10.0; const int from = std::max(0, binOf(rel) + 1);   // the bins wholly above the relative gate
+    double s = 0; std::uint64_t np = 0; for (int k = from; k < kBins; ++k) { s += bEnergy_[static_cast<std::size_t>(k)]; np += bCount_[static_cast<std::size_t>(k)]; }
     integrated_ = np ? lk(s / static_cast<double>(np)) : -kInf;
   }
-  std::vector<double> sa; double sum = 0;
-  for (double v : shorts_) if (v > -70.0) { sa.push_back(v); sum += std::pow(10.0, (v + 0.691) / 10.0); }
-  lra_ = 0;
-  if (sa.size() > 1) {                                                // loudness range: gates -70 / -20 LU, 10th..95th percentile
-    const double rel = -0.691 + 10.0 * std::log10(sum / static_cast<double>(sa.size())) - 20.0;
-    std::vector<double> v; for (double x : sa) if (x > rel) v.push_back(x);
-    std::sort(v.begin(), v.end());
-    if (v.size() > 1) {
-      const double m = static_cast<double>(v.size() - 1);
-      lra_ = std::max(0.0, v[static_cast<std::size_t>(std::min(m, std::floor(0.95 * m + 0.5)))] - v[static_cast<std::size_t>(std::floor(0.10 * m + 0.5))]);
+  lra_ = 0;   // loudness range (EBU 3342): short-term values above -70, relative gate -20 LU, then the 10th..95th percentile
+  if (sTotal_ > 1) {
+    static const std::vector<double> binEnergy = [] { std::vector<double> t(kBins); for (int k = 0; k < kBins; ++k) t[static_cast<std::size_t>(k)] = std::pow(10.0, (kLo + (k + 0.5) * kStep + 0.691) / 10.0); return t; }();   // once per program
+    double sum = 0; for (int k = 0; k < kBins; ++k) if (sCount_[static_cast<std::size_t>(k)]) sum += sCount_[static_cast<std::size_t>(k)] * binEnergy[static_cast<std::size_t>(k)];
+    const double rel = -0.691 + 10.0 * std::log10(sum / static_cast<double>(sTotal_)) - 20.0; const int from = std::max(0, binOf(rel) + 1);
+    std::uint64_t m = 0; for (int k = from; k < kBins; ++k) m += sCount_[static_cast<std::size_t>(k)];
+    if (m > 1) {
+      const double last = static_cast<double>(m - 1); const std::uint64_t i10 = static_cast<std::uint64_t>(std::floor(0.10 * last + 0.5)), i95 = static_cast<std::uint64_t>(std::min(last, std::floor(0.95 * last + 0.5)));
+      double v10 = 0, v95 = 0; std::uint64_t c = 0; bool got10 = false;
+      for (int k = from; k < kBins; ++k) { const std::uint64_t n = sCount_[static_cast<std::size_t>(k)]; if (!n) continue; const double v = kLo + (k + 0.5) * kStep;
+        if (!got10 && c + n > i10) { v10 = v; got10 = true; } if (c + n > i95) { v95 = v; break; } c += n; }
+      lra_ = std::max(0.0, v95 - v10);
     }
   }
 }
@@ -89,7 +91,8 @@ void Loudness::gate() {
 void Loudness::feed(const float* left, const float* right, std::size_t n) {
   const float* ch[2] = {left, right};
   double e = 0, pk = 0;
-  std::vector<float> buf(11 + n);
+  if (scratch_.size() < 11 + n) scratch_.resize(11 + n);   // only when a bigger block than ever arrives (a device change), never per block
+  std::vector<float>& buf = scratch_;
   for (int c = 0; c < 2; ++c) {
     const float* x = ch[c]; double* z = z_ + c * 4;
     std::memcpy(buf.data(), h_[c], 11 * sizeof(float)); std::memcpy(buf.data() + 11, x, n * sizeof(float));
@@ -118,10 +121,9 @@ void Loudness::feed(const float* left, const float* right, std::size_t n) {
     if (sub_.size() >= 4) {
       double m4 = 0; for (std::size_t i = sub_.size() - 4; i < sub_.size(); ++i) m4 += sub_[i];
       m4 /= 4.0; momentary_ = lk(m4);
-      if (blocks_.size() >= cap_) blocks_.erase(blocks_.begin());
-      blocks_.push_back(m4);
+      const double lm = lk(m4); if (lm > -70.0) { const int b = binOf(lm); ++bCount_[static_cast<std::size_t>(b)]; bEnergy_[static_cast<std::size_t>(b)] += m4; ++bTotal_; }   // absolute gate
     } else momentary_ = lk(ms);
-    if (sub_.size() >= 30) { double s = 0; for (double v : sub_) s += v; shortTerm_ = lk(s / 30.0); if (shorts_.size() >= cap_) shorts_.erase(shorts_.begin()); shorts_.push_back(shortTerm_); }
+    if (sub_.size() >= 30) { double s = 0; for (double v : sub_) s += v; shortTerm_ = lk(s / 30.0); if (shortTerm_ > -70.0) { ++sCount_[static_cast<std::size_t>(binOf(shortTerm_))]; ++sTotal_; } }
     else shortTerm_ = meanLoud(sub_.data(), sub_.size());
     gate();
   }
@@ -241,7 +243,7 @@ void Mixer::process5(const float* const* in, std::size_t frames, float* const* o
       if (audible) for (std::size_t i = 0; i < n; ++i) { outs[0][done + i] += static_cast<float>(tmp[i] * gL); outs[1][done + i] += static_cast<float>(tmp[i] * gR); outs[2][done + i] += static_cast<float>(tmp[i] * gC); outs[3][done + i] += static_cast<float>(tmp[i] * gLs); outs[4][done + i] += static_cast<float>(tmp[i] * gRs); }
     }
     for (std::size_t i = 0; i < n; ++i) {
-      double v[5]; double pk = 0; for (int c = 0; c < 5; ++c) { v[c] = static_cast<double>(outs[c][done + i]) * masterLin_; pk = std::max(pk, std::fabs(v[c])); }
+      double v[5]; double pk = 0; for (int c = 0; c < 5; ++c) { v[c] = static_cast<double>(outs[c][done + i]) * masterLin_; if (!std::isfinite(v[c])) { v[c] = 0; ++nonFinite_; } pk = std::max(pk, std::fabs(v[c])); }
       if (limOn_) { const double need = pk > limCeil_ ? limCeil_ / pk : 1.0; if (need < limGain_) limGain_ = need; else limGain_ += (1.0 - limGain_) * rel; if (limGain_ > need) limGain_ = need; for (double& x : v) x *= limGain_; }
       for (int c = 0; c < 5; ++c) outs[c][done + i] = static_cast<float>(v[c]);
     }
@@ -319,6 +321,12 @@ void Mixer::process(const float* const* in, std::size_t frames, float* outL, flo
     if (extL && extR) for (std::size_t i = 0; i < n; ++i) { outL[done + i] += extL[done + i]; outR[done + i] += extR[done + i]; }   // the arrangement player, pre master
     if (masterFx_) masterFx_->process(outL + done, outR + done, n);   // the master chain (program EQ, mastering)
     if (width_ != 1.0) for (std::size_t i = 0; i < n; ++i) { const float mid = 0.5f * (outL[done + i] + outR[done + i]), side = 0.5f * (outL[done + i] - outR[done + i]) * static_cast<float>(width_); outL[done + i] = mid + side; outR[done + i] = mid - side; }
+    // NaN / inf guard: one broken plug-in or a bad sample must not poison the DC blocker, the limiter's envelope and the device for
+    // good (a NaN never decays): a non-finite sample becomes silence here, before the master processing; counted for the diagnostics.
+    for (std::size_t i = 0; i < n; ++i) {
+      if (!std::isfinite(outL[done + i])) { outL[done + i] = 0.0f; ++nonFinite_; }
+      if (!std::isfinite(outR[done + i])) { outR[done + i] = 0.0f; ++nonFinite_; }
+    }
     if (dcOn_) {   // DC blocker before the auto level and the limiter: y[n] = x[n] - x[n-1] + R y[n-1], R for 5 Hz
       const double R = 1.0 - 2 * kPi * 5.0 / fs_; float* ch[2] = {outL + done, outR + done};
       for (int c = 0; c < 2; ++c) for (std::size_t i = 0; i < n; ++i) { const double x = ch[c][i]; const double y = x - dcX_[c] + R * dcY_[c]; dcX_[c] = x; dcY_[c] = y; ch[c][i] = static_cast<float>(y); }
