@@ -26,5 +26,10 @@ fun main(args: Array<String>) {
     check(latch.await(8, TimeUnit.SECONDS) && connected, "5 meter frames over the WebSocket")
     stream.stop()
     c.solo(5, false); c.mute(4, false); c.stop(); check(!c.status().running, "stopped")
-    println("ClientTest: JSON, fader law, 401 on a wrong token, status / devices / open / control / state / meters / WebSocket stream / stop OK")
+    val found = DaemonClient.discover("127.0.0.9", port); check(found.any { it.first == "127.0.0.1" }, "FIND sees the console: $found")
+    c.busLevel(2, -9.0); c.busMute(2, true); val b2 = c.state().buses[2]; check(Math.abs(b2.db + 9.0) < 1e-6 && b2.mute, "bus level and mute")
+    c.monitor(1, -6.0, true, false, false); c.name(7, "Kick"); check(c.state().strips[7].name == "Kick", "rename")
+    c.open("null", "", "", 48000.0, 256, 2, 2); c.trim(0, 3.0); c.polarity(0, true); c.delay(0, 12.5); c.send(0, 1, -6.0, true); c.limiter(true, -1.0)
+    check(Math.abs(c.state().ceilingDb + 1.0) < 1e-6, "limiter ceiling"); c.stop()
+    println("ClientTest: JSON, fader law, 401 on a wrong token, status / devices / open / control / state / meters / WebSocket stream / stop / PIN pairing / FIND / buses / monitor / rename / trim / polarity / delay / sends / limiter OK")
 }

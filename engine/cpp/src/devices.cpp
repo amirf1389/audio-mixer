@@ -221,12 +221,22 @@ void addAlsa(std::vector<DeviceInfo>& out) {
 
 }  // namespace
 
+// What is plugged in, cheaply: polled every few seconds on the interface thread, so it must not open a device. Only the ids of the
+// active WASAPI endpoints (no IAudioClient, no format probing, no property store) and the ASIO drivers in the registry; DirectSound
+// lists the same endpoints, so it is not asked here. The full scan (listDevices) runs only when this changes.
 std::string deviceFingerprint() {
   std::string f;
 #ifdef _WIN32
-  { std::vector<DeviceInfo> v; addWasapi(v); for (const auto& d : v) { f += d.id; f += d.inChannels > 0 ? 'i' : 'o'; f += '|'; } }
+  const HRESULT coInit = CoInitializeEx(nullptr, COINIT_MULTITHREADED); IMMDeviceEnumerator* en = nullptr;   // Qt's thread may already be in another mode: then COM is ready and is not ours to close
+  if (SUCCEEDED(CoCreateInstance(kClsidDeviceEnumerator, nullptr, CLSCTX_ALL, kIidDeviceEnumerator, reinterpret_cast<void**>(&en))) && en) {
+    for (EDataFlow flow : {eRender, eCapture}) { IMMDeviceCollection* col = nullptr; if (FAILED(en->EnumAudioEndpoints(flow, DEVICE_STATE_ACTIVE, &col)) || !col) continue;
+      UINT n = 0; col->GetCount(&n);
+      for (UINT i = 0; i < n; ++i) { IMMDevice* d = nullptr; if (FAILED(col->Item(i, &d)) || !d) continue; LPWSTR id = nullptr;
+        if (SUCCEEDED(d->GetId(&id)) && id) { for (const wchar_t* c = id; *c; ++c) f += static_cast<char>(*c & 0x7f); f += flow == eRender ? 'o' : 'i'; f += '|'; CoTaskMemFree(id); } d->Release(); }
+      col->Release(); }
+    en->Release(); }
+  if (SUCCEEDED(coInit)) CoUninitialize();
   for (const auto& d : listAsioDrivers()) { f += "asio:"; f += d.name; f += '|'; }   // registry only: the driver is not loaded
-  { std::vector<DeviceInfo> v; addDsound(v); for (const auto& d : v) { f += d.id; f += '|'; } }
 #endif
 #ifdef AM_HAVE_ALSA
   { void** hints = nullptr; if (snd_device_name_hint(-1, "pcm", &hints) >= 0) { for (void** h = hints; *h; ++h) { char* name = snd_device_name_get_hint(*h, "NAME"); if (name) { f += name; f += '|'; std::free(name); } } snd_device_name_free_hint(hints); } }
@@ -259,8 +269,16 @@ std::vector<DeviceInfo> listDevices(bool probeAsio) {
 #ifdef _WIN32
 namespace {
 const GUID kIidEndpointVolume = {0x5CDF2C82, 0x841E, 0x4546, {0x97, 0x22, 0x0C, 0xF7, 0x40, 0x78, 0x22, 0x9A}};   // IAudioEndpointVolume
+// The default output's volume control, kept between calls (the interface thread asks for the mute state twice a second): re-made every
+// 10 s so a new default device is followed, never on every call. Interface thread only.
+IAudioEndpointVolume* makeRenderVolume();
 IAudioEndpointVolume* defaultRenderVolume() {
-  CoInitializeEx(nullptr, COINIT_MULTITHREADED);   // already initialised by the caller: fine
+  static IAudioEndpointVolume* cached = nullptr; static ULONGLONG at = 0; const ULONGLONG now = GetTickCount64();
+  if (!cached || now - at > 10000) { if (cached) cached->Release(); cached = makeRenderVolume(); at = now; }
+  if (cached) cached->AddRef(); return cached;
+}
+IAudioEndpointVolume* makeRenderVolume() {
+  static bool com = SUCCEEDED(CoInitializeEx(nullptr, COINIT_MULTITHREADED)) || true; (void)com;   // once for this thread, not once per call
   IMMDeviceEnumerator* en = nullptr; IMMDevice* d = nullptr; IAudioEndpointVolume* v = nullptr;
   if (FAILED(CoCreateInstance(kClsidDeviceEnumerator, nullptr, CLSCTX_ALL, kIidDeviceEnumerator, reinterpret_cast<void**>(&en)))) return nullptr;
   if (SUCCEEDED(en->GetDefaultAudioEndpoint(eRender, eConsole, &d))) { d->Activate(kIidEndpointVolume, CLSCTX_ALL, nullptr, reinterpret_cast<void**>(&v)); d->Release(); }

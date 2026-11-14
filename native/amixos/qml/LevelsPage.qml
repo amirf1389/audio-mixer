@@ -15,7 +15,7 @@ Item {
                 Repeater {
                     model: engine.strips
                     delegate: ColumnLayout { Layout.fillWidth: true; Layout.fillHeight: true; spacing: 3
-                        property var mt: engine.meters[index]
+                        property var mt: (engine.meterTick, engine.meterAt(index))
                         MeterBar { Layout.fillHeight: true; Layout.fillWidth: true; Layout.topMargin: 10; peakDb: mt ? mt.peakDb : -120; rmsDb: mt ? mt.rmsDb : -120; holdDb: mt ? mt.holdDb : -120; clip: mt ? mt.clip : false }
                         Text { Layout.alignment: Qt.AlignHCenter; text: (index + 1); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
                         Text { Layout.alignment: Qt.AlignHCenter; text: mt && mt.peakDb > -60 ? mt.peakDb.toFixed(0) : ""; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7 } }

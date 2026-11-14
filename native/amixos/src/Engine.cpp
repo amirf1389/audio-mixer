@@ -80,7 +80,7 @@ Engine::~Engine() { closePluginWindows(); save(); stop(); }
 
 QStringList Engine::backends() const { QStringList l; for (const auto& b : am::availableBackends()) l << QString::fromStdString(b); return l; }
 
-void Engine::setHotplugWatch(bool on) { if (on) { if (!hotplug_.isActive()) { hotplug_.setInterval(1500); connect(&hotplug_, &QTimer::timeout, this, &Engine::checkHotplug, Qt::UniqueConnection); hotplug_.start(); } } else hotplug_.stop(); emit stateChanged(); }
+void Engine::setHotplugWatch(bool on) { if (on) { if (!hotplug_.isActive()) { hotplug_.setInterval(3000); connect(&hotplug_, &QTimer::timeout, this, &Engine::checkHotplug, Qt::UniqueConnection); hotplug_.start(); } } else hotplug_.stop(); emit stateChanged(); }
 void Engine::checkHotplug() {
   if (simulated_) return; const std::string f = am::deviceFingerprint(); if (f == fingerprint_) return;
   const bool first = fingerprint_.empty(); fingerprint_ = f; if (first) return;   // the first poll only learns the baseline
@@ -643,9 +643,9 @@ void Engine::factoryLayout() {
   st[0].name = QStringLiteral("DIGITAL AUDIO"); st[1].name = QStringLiteral("MIC"); st[2].name = QStringLiteral("LIVE L"); st[3].name = QStringLiteral("LIVE R");
   st[2].link = st[3].link = true; st[2].pan = -1; st[3].pan = 1;
   for (int i = 4; i < 7; ++i) st[static_cast<std::size_t>(i)].name = QStringLiteral("RESERVE %1").arg(i + 1);
-  // 360 AUDIO on for the four: MAIN at the front (±30°), LIVE wider (±60°), one metre away
+  // 360 AUDIO positions ready for the four (OFF: plain stereo until 360 is switched on): MAIN at the front (±30°), LIVE wider (±60°), one metre away
   const double az[4] = {0, 0, -60, 60};   // DIGITAL AUDIO and MIC in front, LIVE wide
-  for (int i = 0; i < 4; ++i) { StripUi& u = st[static_cast<std::size_t>(i)]; u.spOn = true; u.spAz = az[i]; u.spEl = 0; u.spDist = 1; u.spSpread = 0; }
+  for (int i = 0; i < 4; ++i) { StripUi& u = st[static_cast<std::size_t>(i)]; u.spOn = false; u.spAz = az[i]; u.spEl = 0; u.spDist = 1; u.spSpread = 0; }
   // the sends, after the fader: MAIN and LIVE to AUX 1, every other channel to AUX 2, at 0 dB
   for (int i = 0; i < kStrips; ++i) { SendUi& snd = st[static_cast<std::size_t>(i)].sends[i < 4 ? 0 : 1]; snd.db = 0; snd.pre = false; }
 }
@@ -1268,7 +1268,7 @@ void Engine::tick() {
     vuMaster_ = 0; t["masterVuDb"] = -120.0; t["monitorLDb"] = -120.0; t["monitorRDb"] = -120.0;
     t["masterPeakDb"] = -120.0; t["masterLDb"] = -120.0; t["masterRDb"] = -120.0; t["masterRmsDb"] = -120.0; t["masterClip"] = false; t["momentary"] = -120.0; t["shortTerm"] = -120.0; t["integrated"] = -120.0; t["lra"] = 0.0; t["truePeak"] = -120.0; t["correlation"] = 0.0; t["autoLevelDb"] = 0.0; t["blocks"] = 0; t["frames"] = 0; t["xruns"] = 0; t["loadPct"] = 0.0; t["blockUs"] = 0.0; t["maxBlockUs"] = 0.0; t["jitterUs"] = 0.0;
   }
-  meters_ = m; telemetry_ = t; emit metersChanged();
+  meters_ = m; telemetry_ = t; ++meterTick_; emit metersChanged();
 }
 
 // ── persistence: the console as one JSON document (strips, sends, groups, buses, master). The same document is a SCENE; a strip's DSP part

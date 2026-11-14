@@ -36,6 +36,7 @@ int run(int argc, char** argv, std::atomic<bool>& g_quit, std::function<void(con
     else if (a == "--list-tokens") doList = true;
     else if (a == "--revoke-token") { doRevoke = true; revokeId = next(); }
     else if (a == "--strips") o.strips = std::atoi(next().c_str());
+    else if (a == "--plan") o.plan = next();
     else if (a == "--open") openBackend = next();
     else if (a == "--version") o.version = next();
     else if (a == "--help" || a == "-h") { say(fmt("AmF X1 Network (amixos-daemon) [--port 8765] [--allow-lan] [--allow-any-address] [--bind ADDR] [--token-file PATH | --token T] [--strips 32] [--open BACKEND]\n  tokens: --new-token NAME [--role control|view] [--days N] | --list-tokens | --revoke-token ID  [--tokens-file PATH]\n  --allow-lan: phones on the same network may connect (local policy: private addresses only; the token is still needed; not encrypted).\n")); return 0; }
@@ -43,7 +44,7 @@ int run(int argc, char** argv, std::atomic<bool>& g_quit, std::function<void(con
   }
   if (lan) o.bind = "0.0.0.0";
   std::string err;
-  o.tokenStore = tokensFile;
+  o.tokenStore = tokensFile; o.consoleInfo = am::paths::file("remote-console.json");
   if (doNew || doList || doRevoke) {   // token management from the command line: no server is started
     am::TokenStore ts(tokensFile); if (!ts.load(err)) { say(fmt("amixos-daemon: %s\n", err.c_str())); return 1; }
     if (doNew) { std::string id; const std::string t = ts.issue(newName, newRole, newDays, id, err); if (t.empty()) { say(fmt("amixos-daemon: %s\n", err.c_str())); return 1; }

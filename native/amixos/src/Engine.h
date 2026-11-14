@@ -38,6 +38,7 @@ class Engine : public QObject {
   Q_PROPERTY(QStringList backends READ backends CONSTANT)
   Q_PROPERTY(QVariantList stripState READ stripState NOTIFY stripsChanged)
   Q_PROPERTY(QVariantList meters READ meters NOTIFY metersChanged)
+  Q_PROPERTY(int meterTick READ meterTick NOTIFY metersChanged)
   Q_PROPERTY(QVariantMap telemetry READ telemetry NOTIFY metersChanged)
   Q_PROPERTY(double masterDb READ masterDb WRITE setMaster NOTIFY stripsChanged)
   Q_PROPERTY(QVariantList pages READ pages CONSTANT)
@@ -75,6 +76,11 @@ class Engine : public QObject {
   QStringList backends() const;
   QVariantList stripState() const;
   QVariantList meters() const { return meters_; }
+  // ONE strip's meters: a delegate binding to engine.meters[i] converts all 32 strips to JavaScript on every tick (32 delegates x 32 maps,
+  // 30 times a second); bind to "engine.meterTick, engine.meterAt(i)" instead, which converts one map.
+  Q_INVOKABLE QVariantMap meterAt(int i) const { return i >= 0 && i < meters_.size() ? meters_[i].toMap() : QVariantMap{}; }
+  Q_INVOKABLE int clippedStrips() const { int n = 0; for (const QVariant& v : meters_) if (v.toMap().value("clip").toBool()) ++n; return n; }
+  int meterTick() const { return meterTick_; }
   QVariantMap telemetry() const { return telemetry_; }
   double masterDb() const { return masterDb_; }
   QVariantList pages() const;
@@ -552,6 +558,7 @@ class Engine : public QObject {
 
  private:
   static constexpr int kStrips = 32;
+  int meterTick_ = 0;
   static constexpr int kBuses = 16, kGroups = 8;   // buses 0-7 AUX, 8-15 FX
   struct SendUi { double db = -60; bool pre = false; };
   struct PluginUi { QString kind; bool bypass = false; std::shared_ptr<am::host::Plugin> vst; QString state, error; };   // vst: loaded instance (null = pending with error)

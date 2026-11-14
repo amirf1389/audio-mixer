@@ -15,6 +15,8 @@ extern "C" {
 #include <libavformat/avformat.h>
 #include <libavutil/channel_layout.h>
 #include <libswresample/swresample.h>
+#include <libavutil/opt.h>
+#include <libavutil/log.h>
 }
 #ifdef _WIN32
 #include <windows.h>
@@ -39,6 +41,7 @@ struct Lib {
   decltype(&av_packet_alloc) pkt_alloc = nullptr; decltype(&av_packet_unref) pkt_unref = nullptr; decltype(&av_packet_free) pkt_free = nullptr;
   decltype(&av_frame_alloc) frame_alloc = nullptr; decltype(&av_frame_free) frame_free = nullptr; decltype(&av_channel_layout_default) layout_default = nullptr; decltype(&av_channel_layout_uninit) layout_uninit = nullptr;
   decltype(&swr_alloc_set_opts2) swr_opts = nullptr; decltype(&swr_init) swr_init_ = nullptr; decltype(&swr_convert) swr_convert_ = nullptr; decltype(&swr_free) swr_free_ = nullptr;
+  decltype(&av_opt_set_double) opt_double = nullptr; decltype(&av_log_set_level) log_level = nullptr;
 };
 #ifdef _WIN32
 using Handle = HMODULE;
@@ -65,6 +68,8 @@ Lib& lib() {
   GET(send, c, "avcodec_send_packet") GET(receive, c, "avcodec_receive_frame") GET(free_ctx, c, "avcodec_free_context") GET(pkt_alloc, c, "av_packet_alloc") GET(pkt_unref, c, "av_packet_unref") GET(pkt_free, c, "av_packet_free")
   GET(frame_alloc, u, "av_frame_alloc") GET(frame_free, u, "av_frame_free") GET(layout_default, u, "av_channel_layout_default") GET(layout_uninit, u, "av_channel_layout_uninit")
   GET(swr_opts, r, "swr_alloc_set_opts2") GET(swr_init_, r, "swr_init") GET(swr_convert_, r, "swr_convert") GET(swr_free_, r, "swr_free")
+  GET(opt_double, u, "av_opt_set_double") GET(log_level, u, "av_log_set_level")
+  L.log_level(AV_LOG_ERROR);   // FFmpeg's own notices ("estimating duration from bitrate") are not the user's business; real errors still show
 #undef GET
   L.ok = true; return L;
 }
@@ -115,7 +120,7 @@ bool readFfmpegLib(const std::string& path, Audio& out, std::string& err) {
     const AVCodec* dec = F.find_decoder(par->codec_id); if (!dec) { err = "no decoder for this kind of audio"; break; }
     cc = F.alloc_ctx(dec); if (!cc || F.par_to_ctx(cc, par) < 0 || F.open2(cc, dec, nullptr) < 0) { err = "the decoder would not start"; break; }
     AVChannelLayout stereo; F.layout_default(&stereo, 2);
-    if (F.swr_opts(&swr, &stereo, AV_SAMPLE_FMT_FLT, cc->sample_rate, &cc->ch_layout, cc->sample_fmt, cc->sample_rate, 0, nullptr) < 0 || F.swr_init_(swr) < 0) { F.layout_uninit(&stereo); err = "cannot convert the samples"; break; }
+    if (F.swr_opts(&swr, &stereo, AV_SAMPLE_FMT_FLT, cc->sample_rate, &cc->ch_layout, cc->sample_fmt, cc->sample_rate, 0, nullptr) < 0 || F.opt_double(swr, "rematrix_maxval", 1.0, 0) < 0 || F.swr_init_(swr) < 0) { F.layout_uninit(&stereo); err = "cannot convert the samples"; break; }
     F.layout_uninit(&stereo);
     pkt = F.pkt_alloc(); fr = F.frame_alloc(); out = Audio{}; out.rate = cc->sample_rate > 0 ? cc->sample_rate : 48000; std::vector<float> tmp; bool bad = false;
     auto drain = [&]() { while (F.receive(cc, fr) == 0) { const int cap = fr->nb_samples + 256; tmp.resize(static_cast<std::size_t>(cap) * 2); std::uint8_t* o[1] = {reinterpret_cast<std::uint8_t*>(tmp.data())};

@@ -143,3 +143,4 @@ bindings/perl/Audio-AmixOS/*.bs
 build-win/
 screenshots-*/
 third_party/
+android/.robolectric/

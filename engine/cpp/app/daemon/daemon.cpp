@@ -184,6 +184,20 @@ httpd::Response Daemon::handle(const httpd::Request& r) {
     if (!err.empty()) { res.status = 400; json::Value e = json::Value::object(); e.set("ok", false); e.set("error", err); res.body = e.dump(); return res; }
     res.body = out.dump(); return res;
   }
+  if (r.method == "GET" && r.path == "/api/console-info") {   // the console's plug-ins, racks and extensions as it saved them when the service started (read-only)
+    if (roleOf(r).empty()) { res.status = noteRefused() ? 429 : 401; res.body = "{\"ok\":false,\"error\":\"X-Amix-Token missing or wrong\"}"; return res; }
+    std::ifstream f(opt_.consoleInfo, std::ios::binary); std::string s((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    bool ok = false; json::Value::parse(s, ok);   // only well-formed JSON goes out
+    res.body = ok && !s.empty() && s.size() < 4 * 1024 * 1024 ? s : std::string("{\"available\":false}"); return res;
+  }
+  if (r.method == "GET" && (r.path == "/remote" || r.path == "/remote/")) {   // THE BROWSER REMOTE: any phone, tablet or computer on the network pairs with the minute's PIN
+    static const char kPage[] =
+#include "remote_page.inc"
+      ;
+    res.type = "text/html; charset=utf-8";
+    res.headers.push_back({"Content-Security-Policy", "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self' ws: wss:; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"});
+    res.body = kPage; return res;
+  }
   if (r.method == "GET" && (r.path == "/" || r.path == "/api")) {
     res.body = "{\"name\":\"amixos-daemon\",\"api\":[\"GET /api/status\",\"GET /api/devices\",\"GET /api/state\",\"GET /api/meters\",\"POST /api/control (X-Amix-Token)\",\"POST /api/pair\",\"GET /api/tokens\",\"POST /api/tokens\",\"POST /api/tokens/revoke\",\"WS /ws/meters?token=\"]}"; return res;
   }
@@ -197,7 +211,7 @@ json::Value Daemon::status() const {
   o.set("backend", rt_ ? backend_ : ""); o.set("running", rt_ && rt_->running());
   if (rt_) { const Snapshot s = rt_->snapshot(); o.set("blocks", static_cast<double>(s.blocks)); o.set("frames", static_cast<double>(s.frames)); o.set("xruns", static_cast<double>(s.xruns)); }
   else { o.set("blocks", 0); o.set("frames", 0); o.set("xruns", 0); }
-  o.set("strips", opt_.strips); o.set("buses", kMaxBuses);
+  o.set("strips", opt_.strips); o.set("buses", kMaxBuses); o.set("plan", opt_.plan);
   o.set("uptimeS", std::chrono::duration<double>(std::chrono::steady_clock::now() - started_).count());
   if (!lastError_.empty()) o.set("lastError", lastError_);
   json::Value b = json::Value::array(); for (const auto& n : availableBackends()) b.push(n); o.set("backends", b);

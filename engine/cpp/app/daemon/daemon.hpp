@@ -32,7 +32,7 @@ namespace am {
 
 class Daemon {
  public:
-  struct Options { std::string bind = "127.0.0.1"; unsigned short port = 8765; std::string token; int strips = 32; std::string version = "0.1.0"; bool localOnly = true; std::string tokenStore; };   // tokenStore: the file of the named tokens ("" = only the master token)   // localOnly: the local policy (private-network peers only)
+  struct Options { std::string bind = "127.0.0.1"; unsigned short port = 8765; std::string token; int strips = 32; std::string version = "0.1.0"; bool localOnly = true; std::string tokenStore; std::string consoleInfo; std::string plan; };   // plan: the console's licence plan name (BASIC / PRO / ...), shown to the phone   // consoleInfo: the console's plug-in / rack snapshot (remote-console.json), served read-only   // tokenStore: the file of the named tokens ("" = only the master token)   // localOnly: the local policy (private-network peers only)
   explicit Daemon(Options o);
   ~Daemon();
   bool start(std::string& err);

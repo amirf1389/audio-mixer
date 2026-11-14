@@ -30,6 +30,7 @@ class Remote : public QObject {
   QStringList addresses() const; QString tokenFile() const;
   Q_INVOKABLE bool start(bool wifi);        // wifi false = this computer only (127.0.0.1)
   Q_INVOKABLE void stop();
+  void writeConsoleInfo() const;   // remote-console.json for the phone's PLUG-INS page
   Q_INVOKABLE QString pairPin() const;      // the pairing PIN of this minute (six digits; made from the master token and the clock, as the service makes it)
   Q_INVOKABLE int pairSecondsLeft() const;  // until the PIN changes
   Q_INVOKABLE void refreshTokens();

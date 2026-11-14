@@ -12,7 +12,7 @@ data class Endpoint(val host: String, val port: Int, val token: String, val secu
 }
 class DaemonException(message: String, val status: Int) : IOException(message)
 
-data class Status(val name: String, val version: String, val backend: String, val running: Boolean, val blocks: Long, val xruns: Long, val strips: Int, val buses: Int, val uptimeS: Double, val lastError: String, val backends: List<String>)
+data class Status(val name: String, val version: String, val backend: String, val running: Boolean, val blocks: Long, val xruns: Long, val strips: Int, val buses: Int, val uptimeS: Double, val lastError: String, val backends: List<String>, val plan: String = "")
 data class Device(val backend: String, val id: String, val name: String, val inputs: Int, val outputs: Int, val defaultRate: Double, val defaultIn: Boolean, val defaultOut: Boolean)
 data class StripState(val id: Int, val name: String, val db: Double, val pan: Double, val mute: Boolean, val solo: Boolean)
 data class BusState(val id: Int, val db: Double, val returnDb: Double, val mute: Boolean)
@@ -34,12 +34,42 @@ class DaemonClient(val ep: Endpoint) {
     @Suppress("UNCHECKED_CAST") private fun getObj(path: String): Map<String, Any?> = MiniJson.parse(request("GET", path)) as Map<String, Any?>
     @Suppress("UNCHECKED_CAST") private fun getList(path: String): List<Map<String, Any?>> = (MiniJson.parse(request("GET", path)) as List<Any?>).map { it as Map<String, Any?> }
 
-    fun status(): Status { val o = getObj("/api/status"); return Status(o.str("name"), o.str("version"), o.str("backend"), o.bool("running"), o.num("blocks").toLong(), o.num("xruns").toLong(), o.int("strips"), o.int("buses"), o.num("uptimeS"), o.str("lastError"), (o["backends"] as? List<*>)?.map { it.toString() } ?: emptyList()) }
+    fun status(): Status { val o = getObj("/api/status"); return Status(o.str("name"), o.str("version"), o.str("backend"), o.bool("running"), o.num("blocks").toLong(), o.num("xruns").toLong(), o.int("strips"), o.int("buses"), o.num("uptimeS"), o.str("lastError"), (o["backends"] as? List<*>)?.map { it.toString() } ?: emptyList(), o.str("plan")) }
     fun devices(): List<Device> = getList("/api/devices").map { Device(it.str("backend"), it.str("id"), it.str("name"), it.int("in"), it.int("out"), it.num("defaultRate", 48000.0), it.bool("defaultIn"), it.bool("defaultOut")) }
     fun state(): ConsoleState { val o = getObj("/api/state"); val m = o.obj("master")
         return ConsoleState(o.list("strips").map { StripState(it.int("id"), it.str("name"), it.num("db"), it.num("pan"), it.bool("mute"), it.bool("solo")) }, o.list("buses").map { BusState(it.int("id"), it.num("db"), it.num("returnDb", -60.0), it.bool("mute")) }, m.num("db"), m.bool("limiter", true), m.num("ceilingDb", -0.5)) }
+    /** The console's plug-in catalogue, racks and extensions as saved when the remote started ({available:false} when it never was). */
+    fun consoleInfo(): Map<String, Any?> = getObj("/api/console-info")
     fun meters(): Meters = parseMeters(getObj("/api/meters"))
     companion object {
+        /** FIND THE CONSOLE: ask every address of this phone's /24 network for /api/status on the port (in parallel, short timeouts).
+         *  Returns "address  name version" for each console that answers; nothing is sent but a GET of the public status. */
+        fun discover(localIp: String, port: Int = 8765, timeoutMs: Int = 350): List<Pair<String, String>> {
+            val parts = localIp.split('.'); if (parts.size != 4) return emptyList(); val base = parts.take(3).joinToString(".")
+            val pool = java.util.concurrent.Executors.newFixedThreadPool(48)
+            try {
+                val jobs = (1..254).map { n -> val host = "$base.$n"; pool.submit<Pair<String, String>?> {
+                    runCatching {
+                        val c = URL("http://$host:$port/api/status").openConnection() as HttpURLConnection
+                        c.connectTimeout = timeoutMs; c.readTimeout = 800
+                        if (c.responseCode != 200) null else { @Suppress("UNCHECKED_CAST") val o = MiniJson.parse(c.inputStream.bufferedReader().use { it.readText() }) as Map<String, Any?>
+                            if (o["daemon"] == "amixos-daemon") host to (o["name"]?.toString() ?: "") + " " + (o["version"]?.toString() ?: "") else null }
+                    }.getOrNull() } }
+                return jobs.mapNotNull { runCatching { it.get(3, java.util.concurrent.TimeUnit.SECONDS) }.getOrNull() }
+            } finally { pool.shutdownNow() }
+        }
+        /** PAIRING: trade the six-digit PIN the console shows this minute (NETWORK → PHONE REMOTE) for a token of this phone's own.
+         *  Needs no token; the service allows one pairing per PIN and five wrong tries a minute. Returns the token. */
+        fun pair(host: String, port: Int, pin: String, name: String, secure: Boolean = false): String {
+            val c = URL((if (secure) "https" else "http") + "://" + host + ":" + port + "/api/pair").openConnection() as HttpURLConnection
+            c.requestMethod = "POST"; c.connectTimeout = 4000; c.readTimeout = 6000; c.doOutput = true; c.setRequestProperty("Content-Type", "application/json")
+            c.outputStream.use { it.write(MiniJson.stringify(mapOf("pin" to pin, "name" to name)).toByteArray(Charsets.UTF_8)) }
+            val code = c.responseCode
+            val text = (if (code >= 400) c.errorStream else c.inputStream)?.bufferedReader()?.use { it.readText() } ?: ""
+            @Suppress("UNCHECKED_CAST") val o = runCatching { MiniJson.parse(text) as Map<String, Any?> }.getOrNull() ?: emptyMap()
+            if (code >= 400) throw DaemonException(o["error"]?.toString() ?: "HTTP $code", code)
+            return o["token"]?.toString()?.takeIf { it.isNotEmpty() } ?: throw DaemonException("the console sent no token", code)
+        }
         fun parseMeters(o: Map<String, Any?>): Meters { val m = o.obj("master")
             return Meters(o.bool("running"), o.list("strips").map { StripMeter(it.num("pk"), it.num("rms"), it.num("hold"), it.num("clip") > 0, it.num("gr"), it.num("gate"), it.num("in")) }, m.num("l"), m.num("r"), m.num("rms"), m.num("clip") > 0) }
         /** slider 0..1 <-> fader dB: the console's law (-inf at 0, -60 at 0.25, -20 at 0.5, 0 dB at 0.75, +10 at 1) */
@@ -57,6 +87,11 @@ class DaemonClient(val ep: Endpoint) {
     fun solo(strip: Int, on: Boolean) = control(mapOf("op" to "solo", "strip" to strip, "on" to on))
     fun name(strip: Int, name: String) = control(mapOf("op" to "name", "strip" to strip, "name" to name))
     fun master(db: Double) = control(mapOf("op" to "master", "db" to db))
+    fun trim(strip: Int, db: Double) = control(mapOf("op" to "trim", "strip" to strip, "db" to db))
+    fun polarity(strip: Int, on: Boolean) = control(mapOf("op" to "polarity", "strip" to strip, "on" to on))
+    fun delay(strip: Int, ms: Double) = control(mapOf("op" to "delay", "strip" to strip, "ms" to ms))
+    fun limiter(on: Boolean, ceilingDb: Double) = control(mapOf("op" to "limiter", "on" to on, "ceilingDb" to ceilingDb))
+    fun busMute(bus: Int, on: Boolean) = control(mapOf("op" to "busMute", "bus" to bus, "on" to on))
     fun busLevel(bus: Int, db: Double) = control(mapOf("op" to "busLevel", "bus" to bus, "db" to db))
     fun send(strip: Int, bus: Int, db: Double, pre: Boolean) = control(mapOf("op" to "send", "strip" to strip, "bus" to bus, "db" to db, "pre" to pre))
     fun eq(strip: Int, band: Int, type: String, freq: Double, q: Double, gainDb: Double) = control(mapOf("op" to "eq", "strip" to strip, "band" to band, "type" to type, "freq" to freq, "q" to q, "gainDb" to gainDb))

@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>AmF X1 Remote</title>
+<style>
+:root{--bg:#0b0f15;--card:#121821;--line:#232c38;--text:#e6edf3;--dim:#8b98a8;--accent:#ea580c;--cyan:#22d3ee;--red:#ef4444;--amber:#fbbf24}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:13px/1.35 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
+header{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:10px;padding:10px 16px;background:#0b0f15ee;border-bottom:1px solid var(--line);backdrop-filter:blur(6px)}
+h1{margin:0;font-size:15px;letter-spacing:.12em;color:var(--accent)}#st{margin-left:auto;font:11px ui-monospace,monospace;color:var(--amber)}
+main{padding:12px 16px 32px;max-width:1400px;margin:0 auto}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px}
+#pair{max-width:380px;margin:40px auto;display:grid;gap:10px}#pair p{margin:0;color:var(--dim)}
+input{width:100%;padding:12px;border-radius:8px;border:1px solid var(--line);background:#0b0f15;color:var(--text);font:20px ui-monospace,monospace;letter-spacing:.3em;text-align:center}
+button{padding:10px 12px;border-radius:8px;border:1px solid var(--line);background:#1a2230;color:var(--text);font-weight:700;font-size:12px;cursor:pointer;min-height:40px}
+button.on.m{background:var(--red);border-color:var(--red)}button.on.s{background:var(--amber);color:#111;border-color:var(--amber)}button.pri{background:var(--accent);border-color:var(--accent)}
+#mix{display:none}.bar{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap}.bar .sp{flex:1}
+#strips{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px}
+.ch{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 6px;display:flex;flex-direction:column;align-items:center;gap:6px}
+.ch.master{border-color:var(--accent)}.nm{font-weight:700;font-size:11px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fz{display:flex;gap:6px;height:220px;align-items:stretch}
+input[type=range].f{writing-mode:vertical-lr;direction:rtl;width:30px;height:100%;padding:0;letter-spacing:0;accent-color:var(--accent)}
+.mt{width:8px;background:#05080c;border-radius:3px;position:relative;overflow:hidden}.mt i{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(to top,#16a34a,#16a34a 70%,#eab308 85%,#ef4444)}
+.db{font:11px ui-monospace,monospace;color:var(--cyan)}.ms{display:flex;gap:4px;width:100%}.ms button{flex:1;padding:6px 0;min-height:34px}
+.err{color:var(--red)}
+</style></head><body>
+<header><h1>AMF X1 · REMOTE</h1><span id="st">not paired</span></header>
+<main>
+<section id="pair" class="card">
+<p>On the computer: <b>NETWORK → PHONE REMOTE</b> shows a six-digit PIN that changes every minute. Type it here.</p>
+<input id="pin" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="000000" aria-label="Pairing PIN">
+<input id="who" placeholder="this device's name" style="font:14px system-ui;letter-spacing:0" aria-label="Device name">
+<button class="pri" id="go">PAIR</button><p id="perr" class="err"></p>
+</section>
+<section id="mix">
+<div class="bar"><button id="p1">CH 1–16</button><button id="p2">CH 17–32</button><span class="sp"></span><button id="clip">CLEAR CLIPS</button><button id="out">FORGET THIS DEVICE</button></div>
+<div id="strips"></div>
+</section>
+</main>
+<script>
+"use strict";
+const $=s=>document.querySelector(s);let token=null,page=0,state=null,ws=null,poll=null;const els=[];
+try{token=localStorage.getItem("amfx1.token")}catch(e){}
+const posToDb=p=>p<=0?-120:p>=1?10:p>=.75?(p-.75)*40:p>=.5?-20+(p-.5)*80:p>=.25?-60+(p-.25)*160:-120+p*240;
+const dbToPos=d=>d<=-120?0:d>=10?1:d>=0?.75+d/40:d>=-20?.5+(d+20)/80:d>=-60?.25+(d+60)/160:(d+120)/240;
+const fmt=d=>d<=-119?"-∞":(d>0?"+":"")+d.toFixed(1);const lin=v=>v>1e-6?20*Math.log10(v):-120;const mpos=v=>Math.max(0,Math.min(1,(lin(v)+60)/60));
+async function api(path,body){const r=await fetch(path,{method:body?"POST":"GET",headers:Object.assign({"Content-Type":"application/json"},token?{"X-Amix-Token":token}:{}),body:body?JSON.stringify(body):undefined});
+ const j=await r.json().catch(()=>({}));if(r.status===401&&token&&path!=="/api/pair"){forget("this device was signed out on the computer");throw new Error("signed out")}if(!r.ok)throw new Error(j.error||("HTTP "+r.status));return j}
+function setSt(t,bad){const s=$("#st");s.textContent=t;s.style.color=bad?"var(--red)":"var(--cyan)"}
+let sendT={};function send(key,cmd){clearTimeout(sendT[key]);sendT[key]=setTimeout(()=>api("/api/control",cmd).catch(e=>setSt(e.message,true)),25)}   // a moving fader sends at most 40 times a second
+function build(){const box=$("#strips");box.textContent="";els.length=0;if(!state)return;const from=page*16,to=Math.min(state.strips.length,from+16);
+ const add=(name,db,mute,solo,onF,onM,onS,master)=>{const c=document.createElement("div");c.className="ch"+(master?" master":"");
+  c.innerHTML='<div class="nm"></div><div class="fz"><input type="range" class="f" min="0" max="1000"><div class="mt"><i></i></div></div><div class="db"></div><div class="ms"></div>';
+  c.querySelector(".nm").textContent=name;const f=c.querySelector(".f"),d=c.querySelector(".db");f.value=Math.round(dbToPos(db)*1000);d.textContent=fmt(db);f.setAttribute("aria-label",name+" fader");
+  f.oninput=()=>{const v=posToDb(f.value/1000);d.textContent=fmt(v);onF(v)};const ms=c.querySelector(".ms");
+  if(onM){const m=document.createElement("button");m.textContent="M";m.className="m"+(mute?" on":"");m.onclick=()=>{const on=!m.classList.contains("on");m.classList.toggle("on",on);onM(on)};ms.appendChild(m)}
+  if(onS){const s=document.createElement("button");s.textContent="S";s.className="s"+(solo?" on":"");s.onclick=()=>{const on=!s.classList.contains("on");s.classList.toggle("on",on);onS(on)};ms.appendChild(s)}
+  box.appendChild(c);return c.querySelector(".mt i")};
+ for(let i=from;i<to;++i){const s=state.strips[i];els.push({i,bar:add(s.name||("CH "+(i+1)),s.db,s.mute,s.solo,v=>{s.db=v;send("g"+i,{op:"gain",strip:i,db:v})},on=>{s.mute=on;send("m"+i,{op:"mute",strip:i,on})},on=>{s.solo=on;send("s"+i,{op:"solo",strip:i,on})})})}
+ els.push({i:-1,bar:add("MASTER",state.master.db,false,false,v=>{state.master.db=v;send("master",{op:"master",db:v})},null,null,true)});
+ $("#p1").classList.toggle("pri",page===0);$("#p2").classList.toggle("pri",page===1);$("#p2").style.display=state.strips.length>16?"":"none"}
+function meters(o){if(!o||!o.strips)return;for(const e of els){const v=e.i<0?Math.max(o.master.l,o.master.r):(o.strips[e.i]||{}).pk||0;e.bar.style.height=(mpos(v)*100).toFixed(1)+"%"}}
+function stream(){if(ws)ws.close();const u=(location.protocol==="https:"?"wss://":"ws://")+location.host+"/ws/meters?token="+encodeURIComponent(token);
+ try{ws=new WebSocket(u)}catch(e){return}ws.onmessage=ev=>{try{const o=JSON.parse(ev.data);if(o.error){setSt(o.error,true);return}meters(o)}catch(e){}};
+ ws.onopen=()=>setSt("connected");ws.onclose=()=>{if(token){setSt("reconnecting…",true);setTimeout(()=>token&&stream(),1500)}}}
+async function load(){try{state=await api("/api/state");build();stream();if(poll)clearInterval(poll);poll=setInterval(async()=>{if(document.hidden)return;try{const s=await api("/api/state");
+ const busy=document.activeElement&&document.activeElement.classList&&document.activeElement.classList.contains("f");if(!busy&&JSON.stringify(s)!==JSON.stringify(state)){state=s;build()}}catch(e){}},3000)}catch(e){setSt(e.message,true)}}   // another remote or the console moved something: follow it
+function show(){$("#pair").style.display=token?"none":"";$("#mix").style.display=token?"block":"none";if(token)load()}
+function forget(why){token=null;try{localStorage.removeItem("amfx1.token")}catch(e){}if(ws)ws.close();if(poll)clearInterval(poll);setSt(why||"not paired",!!why);show()}
+$("#go").onclick=async()=>{$("#perr").textContent="";const pin=$("#pin").value.replace(/\D/g,"");if(pin.length!==6){$("#perr").textContent="The PIN has six digits.";return}
+ try{const j=await api("/api/pair",{pin,name:$("#who").value.trim()||"Browser"});token=j.token;try{localStorage.setItem("amfx1.token",token)}catch(e){}$("#pin").value="";show()}catch(e){$("#perr").textContent=e.message}};
+$("#pin").onkeydown=e=>{if(e.key==="Enter")$("#go").click()};
+$("#p1").onclick=()=>{page=0;build()};$("#p2").onclick=()=>{page=1;build()};$("#out").onclick=()=>forget();$("#clip").onclick=()=>api("/api/control",{op:"clearClips"}).catch(e=>setSt(e.message,true));
+document.addEventListener("visibilitychange",()=>{if(!document.hidden&&token&&(!ws||ws.readyState>1))stream()});
+show();
+</script></body></html>
