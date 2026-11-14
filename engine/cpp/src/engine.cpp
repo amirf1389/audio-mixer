@@ -1,4 +1,5 @@
 // Audio Mixer engine (C++17): see include/audiomixer/engine.hpp.
+#include "audiomixer/frame.hpp"
 #include "audiomixer/engine.hpp"
 
 #include <algorithm>
@@ -341,6 +342,7 @@ void Mixer::process(const float* const* in, std::size_t frames, float* outL, flo
       float* ch[2] = {outL + done, outR + done}; const double q = 1.0 / static_cast<double>(1u << (outBits_ - 1));
       for (int c = 0; c < 2; ++c) for (std::size_t i = 0; i < n; ++i) { rng_ ^= rng_ << 13; rng_ ^= rng_ >> 17; rng_ ^= rng_ << 5; const double r1 = static_cast<double>(rng_) / 4294967296.0; rng_ ^= rng_ << 13; rng_ ^= rng_ >> 17; rng_ ^= rng_ << 5; const double r2 = static_cast<double>(rng_) / 4294967296.0; ch[c][i] = static_cast<float>(std::floor((ch[c][i] + (r1 - r2) * q) / q + 0.5) * q); }
     }
+    am::frame::refTap().write(outL + done, outR + done, n);   // the far-end reference for the echo cancellers (what the speakers / the phone line get)
     master_[0].add(outL + done, n); master_[1].add(outR + done, n);
     loudness_.feed(outL + done, outR + done, n);
     phase_ = phaseCorrelation(outL + done, outR + done, n);

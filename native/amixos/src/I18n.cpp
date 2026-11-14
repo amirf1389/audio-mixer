@@ -1,3 +1,5 @@
+#include <QSet>
+#include <QRegularExpression>
 #include "I18n.h"
 
 #include <QFile>
@@ -10,7 +12,7 @@ static QJsonDocument readJson(const QString& path) { QFile f(path); if (!f.open(
 I18n::I18n(QObject* parent) : QObject(parent) {
   loadVerified(); loadAuto(); loadUi();
   const QString saved = settings_.value("ui/lang", "en").toString();
-  lang_ = meta_.contains(saved) ? saved : "en";
+  lang_ = meta_.contains(saved) && offered(saved) ? saved : "en";   // a language no longer offered (no interface table) falls back to English
 }
 
 void I18n::loadVerified() {
@@ -47,17 +49,24 @@ void I18n::loadUi() {
   for (const QString& l : langs) { const QJsonObject o = readJson(":/qt/qml/AmixOS/i18n/ui/" + l + ".json").object(); if (o.isEmpty()) continue;
     for (auto it = o.begin(); it != o.end(); ++it) { if (!words_.contains(it.key())) { words_.insert(it.key(), {}); keys_ << it.key(); } words_[it.key()].insert(l, it.value().toString()); } }
 }
-void I18n::setLang(const QString& code) { if (!meta_.contains(code) || code == lang_) return; lang_ = code; settings_.setValue("ui/lang", code); emit langChanged(); }
+// OFFERED LANGUAGES: English and the ones whose interface is at least half translated (the 21 with full tables). The others only had
+// their page names, so picking one gave an English console with translated rail labels: they are no longer offered.
+bool I18n::offered(const QString& code) const { return code == "en" || coverage(code) * 2 >= keys_.size(); }
+void I18n::setLang(const QString& code) { if (!meta_.contains(code) || !offered(code) || code == lang_) return; lang_ = code; settings_.setValue("ui/lang", code); emit langChanged(); }
 
 QVariantList I18n::languages() const {
   QVariantList l;
-  for (const QString& c : order_) { const Meta& m = meta_.value(c); QVariantMap x; x["code"] = c; x["name"] = m.name; x["rtl"] = m.rtl; x["auto"] = m.autoTr; x["coverage"] = coverage(c); l << x; }
+  for (const QString& c : order_) { if (!offered(c)) continue; const Meta& m = meta_.value(c); QVariantMap x; x["code"] = c; x["name"] = m.name; x["rtl"] = m.rtl; x["auto"] = m.autoTr; x["coverage"] = coverage(c); l << x; }
   return l;
 }
 
 QString I18n::t(const QString& key, const QString& lang) const {
   const QString code = lang.isEmpty() ? lang_ : lang;
-  const auto it = words_.constFind(key); if (it == words_.constEnd()) return key;
+  const auto it = words_.constFind(key);
+  if (it == words_.constEnd() || it->value(code).isEmpty()) {   // AMIX_I18N_MISSING=<file>: every string shown untranslated in this language is written there once (a check tool)
+    static const QString miss = qEnvironmentVariable("AMIX_I18N_MISSING");
+    if (!miss.isEmpty() && code != "en" && key.contains(QRegularExpression("[A-Za-z]{2,}"))) { static QSet<QString> seen; if (!seen.contains(key)) { seen.insert(key); QFile f(miss); if (f.open(QIODevice::Append | QIODevice::Text)) f.write((key + "\u001e\n").toUtf8()); } }
+    if (it == words_.constEnd()) return key; }
   const QString w = it->value(code); return w.isEmpty() ? it->value("en", key) : w;
 }
 

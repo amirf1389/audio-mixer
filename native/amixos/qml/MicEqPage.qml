@@ -16,7 +16,7 @@ Item {
     property var spec: []
     property var curve: []
     property var ch: ({})
-    readonly property var st: engine.stripState[strip]
+    readonly property var st: engine.stripAt(strip, engine.stripTick)
     readonly property var meter: (engine.meterTick, engine.meterAt(strip))
     readonly property var centres: ["31", "63", "125", "250", "500", "1k", "2k", "4k", "8k", "16k"]
     readonly property var presets: [
@@ -41,7 +41,7 @@ Item {
                 anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 6
                 Text { text: i18n.t("MIC EQ:", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
                 Repeater { model: ["CH 01-16", "CH 17-32"]; delegate: Rectangle { implicitWidth: 66; implicitHeight: 20; radius: 4; color: page.bank === index ? Theme.ov(0.16) : Theme.ov(0.06); Text { anchors.centerIn: parent; text: modelData; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.bank = index } } }
-                Repeater { model: 16; delegate: Rectangle { readonly property int s: page.bank * 16 + index; readonly property var ss: engine.stripState[s]; implicitWidth: 30; implicitHeight: 20; radius: 4; color: page.strip === s ? Theme.amber : Theme.ov(0.06); border.color: ss && ss.dsp ? Theme.cyan : "transparent"
+                Repeater { model: 16; delegate: Rectangle { readonly property int s: page.bank * 16 + index; readonly property var ss: engine.stripAt(s, engine.stripTick); implicitWidth: 30; implicitHeight: 20; radius: 4; color: page.strip === s ? Theme.amber : Theme.ov(0.06); border.color: ss && ss.dsp ? Theme.cyan : "transparent"
                     Text { anchors.centerIn: parent; text: s + 1; color: page.strip === s ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: { page.strip = s; engine.selectedStrip = s } } } }
                 Item { Layout.fillWidth: true }
                 Text { text: page.st ? (i18n.t("CH ", i18n.lang) + (page.strip + 1) + "  " + page.st.name) : ""; color: Theme.stripColors[page.st ? page.st.color : 0]; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }

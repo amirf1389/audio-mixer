@@ -1,4 +1,5 @@
 #include "Osc.h"
+#include "Frame.h"
 
 #include <QDateTime>
 #include <QtEndian>
@@ -71,13 +72,15 @@ bool Osc::handle(const QByteArray& d) {
     else return false;
   }
   ++rx_; const double a0 = args.isEmpty() ? 0.0 : args[0].toDouble(); const QStringList p = addr.split('/', Qt::SkipEmptyParts); bool ok = false;
-  if (p.size() == 3 && p[0] == "ch") { const int n = p[1].toInt() - 1; if (n >= 0 && n < 32) { ok = true; if (p[2] == "fader") engine_->setGain(n, a0); else if (p[2] == "mute") engine_->setMute(n, a0 != 0); else if (p[2] == "solo") engine_->setSolo(n, a0 != 0); else if (p[2] == "pan") engine_->setPan(n, a0); else ok = false; } }
+  if (frame_ && frame_->handleOsc(addr, a0)) ok = true;   // the I/O FRAME: /gpio/in/N, /locate
+  else if (p.size() == 3 && p[0] == "ch") { const int n = p[1].toInt() - 1; if (n >= 0 && n < 32) { ok = true; if (p[2] == "fader") engine_->setGain(n, a0); else if (p[2] == "mute") engine_->setMute(n, a0 != 0); else if (p[2] == "solo") engine_->setSolo(n, a0 != 0); else if (p[2] == "pan") engine_->setPan(n, a0); else ok = false; } }
   else if (p.size() == 2 && p[0] == "master" && p[1] == "fader") { engine_->setMaster(a0); ok = true; }
   else if (p.size() == 3 && p[0] == "bus" && p[2] == "level") { const int k = p[1].toInt() - 1; if (k >= 0 && k < 16) { engine_->setBusLevel(k, a0); ok = true; } }
   else if (p.size() == 1 && p[0] == "ping") { if (sock_ && !client_.isNull()) { sock_->writeDatagram(pad4(QByteArray("/pong")) + pad4(QByteArray(",")), client_, static_cast<quint16>(txPort())); ++tx_; } ok = true; }
   note((ok ? "RX " : "RX (unknown) ") + addr + " " + (args.isEmpty() ? QString() : args[0].toString()));
   return ok;
 }
+void Osc::sendFloat(const QString& address, float v) { if (!sock_ || client_.isNull()) return; sock_->writeDatagram(oscFloat(address, v), client_, static_cast<quint16>(txPort())); ++tx_; emit statsChanged(); }
 void Osc::sendMeters() {
   if (!sock_ || !meters() || client_.isNull() || !engine_->running()) return;
   const QVariantList m = engine_->meters(); const quint16 tp = static_cast<quint16>(txPort());

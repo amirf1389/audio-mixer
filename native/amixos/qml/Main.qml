@@ -98,7 +98,10 @@ ApplicationWindow {
                 }
                 Item { Layout.fillWidth: true }
                 Rectangle { implicitWidth: statusText.implicitWidth + 20; implicitHeight: 24; radius: 12; color: engine.running ? Qt.rgba(0.063, 0.725, 0.506, 0.15) : Qt.rgba(0.984, 0.749, 0.141, 0.12); border.color: engine.running ? Theme.emerald : Theme.amber
-                    Text { id: statusText; anchors.centerIn: parent; text: engine.running ? i18n.t("ENGINE ON • ", i18n.lang) + engine.backend.toUpperCase() : i18n.t("ENGINE OFF", i18n.lang); color: engine.running ? Theme.emerald : Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } }
+                    Text { id: statusText; anchors.centerIn: parent; text: engine.running ? i18n.t("ENGINE ON • ", i18n.lang) + engine.backend.toUpperCase() : i18n.t("ENGINE OFF", i18n.lang); color: engine.running ? Theme.emerald : Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                    objectName: "enginePill"
+                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; enabled: !engine.busy; onClicked: { if (engine.running) engine.stop(); else settings.startLastDevice() } }   // ENGINE ON / OFF: one click
+                    ToolTip.visible: epH.hovered; ToolTip.text: engine.running ? i18n.t("Click to stop the engine (the sound card is released)", i18n.lang) : i18n.t("Click to start the engine on the remembered sound card (or AUTO DETECT)", i18n.lang); HoverHandler { id: epH } }
                 Rectangle { visible: engine.busy; implicitWidth: busyT.implicitWidth + 20; implicitHeight: 24; radius: 12; color: Qt.rgba(0.984, 0.749, 0.141, 0.14); border.color: Theme.amber   // a scan or a driver start is running: the console stays usable
                     Text { id: busyT; anchors.centerIn: parent; text: "⟳ " + i18n.t(engine.busyText(), i18n.lang) + " …"; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } }
                 Rectangle { implicitWidth: 26; implicitHeight: 26; radius: 13; color: Theme.cardRaised; border.color: Theme.line   // SOFT RESTART
@@ -111,7 +114,7 @@ ApplicationWindow {
                     Text { id: ioT; anchors.centerIn: parent; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true
                         text: Theme.kindIcon(parent.io.outKind) + " " + i18n.t(Theme.kindName(parent.io.outKind), i18n.lang) + " · " + (parent.io.outputs || 0) + " " + i18n.t("OUT", i18n.lang) + (parent.io.inputs > 0 ? "   " + Theme.kindIcon(parent.io.inKind) + " " + i18n.t(Theme.kindName(parent.io.inKind), i18n.lang) + " · " + parent.io.inputs + " " + i18n.t("IN", i18n.lang) : "   ⚠ " + i18n.t("NO INPUT", i18n.lang)) }
                     ToolTip.visible: ioH.hovered; ToolTip.text: (parent ? "" : "") + i18n.t("OUTPUT", i18n.lang) + ": " + (io.outName || "—") + "\n" + i18n.t("INPUT", i18n.lang) + ": " + (io.inName || "—") + "\n" + (io.blockMs ? io.blockMs.toFixed(1) + " ms / block" : ""); HoverHandler { id: ioH } }
-                Text { text: i18n.t("MASTER ", i18n.lang) + Theme.dbText(engine.telemetry.masterPeakDb) + i18n.t(" dBFS", i18n.lang); color: engine.telemetry.masterClip ? Theme.danger : Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
+                Text { text: i18n.t("MASTER ", i18n.lang) + Theme.dbText(engine.telv("masterPeakDb", engine.meterTick)) + i18n.t(" dBFS", i18n.lang); color: engine.telv("masterClip", engine.meterTick) ? Theme.danger : Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                 Rectangle {   // UPDATES: a NEW badge when the signed feature feed has entries newer than what was last looked at; click = what's new
                     visible: updater.newFeatures > 0 || updater.state === "available"; implicitWidth: newTxt.implicitWidth + 16; implicitHeight: 22; radius: 11; color: Theme.orange
                     Text { id: newTxt; anchors.centerIn: parent; text: (updater.state === "available" ? i18n.t("UPDATE ", i18n.lang) + updater.latest : i18n.t("NEW", i18n.lang)) + (updater.newFeatures > 0 ? " · " + updater.newFeatures : ""); color: "#000"; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
@@ -138,8 +141,8 @@ ApplicationWindow {
             RowLayout { anchors.fill: parent; anchors.leftMargin: 12; anchors.rightMargin: 12; spacing: 10
                 Text { text: "⚠"; color: Theme.amber; font.pixelSize: 13 }
                 Text { Layout.fillWidth: true; text: i18n.t("No sound card is set up yet: the faders show no input or output until one is. Run the FACTORY SETUP (AUDIO step) or pick a device on CONNECTIONS.", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; elide: Text.ElideRight }
-                Rectangle { implicitWidth: 110; implicitHeight: 20; radius: 4; color: Theme.amber; Text { anchors.centerIn: parent; text: i18n.t("FACTORY SETUP", i18n.lang); color: "#000"; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: root.forceSetup = true } }
-                Rectangle { implicitWidth: 100; implicitHeight: 20; radius: 4; color: Theme.ov(0.1); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: i18n.t("CONNECTIONS", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: root.current = "io" } } } }
+                Rectangle { implicitWidth: Math.max(110, children[0].implicitWidth + 12); implicitHeight: 20; radius: 4; color: Theme.amber; Text { anchors.centerIn: parent; text: i18n.t("FACTORY SETUP", i18n.lang); color: "#000"; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: root.forceSetup = true } }
+                Rectangle { implicitWidth: Math.max(100, children[0].implicitWidth + 12); implicitHeight: 20; radius: 4; color: Theme.ov(0.1); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: i18n.t("CONNECTIONS", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: root.current = "io" } } } }
         RowLayout {
             Layout.fillWidth: true; Layout.fillHeight: true; spacing: 0
             NavRail { Layout.fillHeight: true; pages: engine.pages; current: root.current; onPicked: function (id) { root.current = id } }
@@ -150,11 +153,13 @@ ApplicationWindow {
                     anchors.fill: parent
                     sourceComponent: {
                         switch (root.current) {
-                        case "home": return homeC; case "delay": return delayC; case "cloud": return cloudC; case "cascade": return cascadeC; case "mixer": return mixerC; case "dsp": return toneC; case "rtaeq": return rtaEqC; case "bluetooth": return bluetoothC; case "io": return connC;
+                        case "home": return homeC; case "frame": return frameC; case "builder": return builderC; case "delay": return delayC; case "cloud": return cloudC; case "cascade": return cascadeC; case "mixer": return mixerC; case "dsp": return toneC; case "rtaeq": return rtaEqC; case "bluetooth": return bluetoothC; case "io": return connC;
                         case "meter": return levelsC; case "lufs": return loudC; case "sys": return settingsC; case "dyn": return compC; case "gate": return gateC; case "bus": return sendC; case "dca": return dcaC; case "scenes": return scenesC; case "presets": return presetsC; case "routing": return routingC; case "renew": return licenseC; case "arrange": return arrangeC; case "fx": return fxC; case "osc": return oscC; case "phase": return phaseC; case "miceq": return miceqC; case "live": return liveC; case "tools": return toolsC; case "calib": return calibC; case "boot": return bootC; case "help": return helpC; case "acct": return acctC; case "access": return accessC; case "admin": return adminC; case "ai": return aiC; case "engctl": return engctlC; case "plugins": return pluginsC; case "network": return networkC; case "media": return mediaC; case "samples": return samplesC; case "asio": return soundC; case "acoustics": return acousticsC; case "master": return masteringC; case "surround": return spatialC; default: return comingC
                         }
                     }
                 }
+                Component { id: frameC; FramePage {} }
+                Component { id: builderC; BuilderPage {} }
                 Component { id: homeC; HomePage { onGo: function (id) { root.current = id } } }
                 Component { id: mixerC; MixerPage { onGo: function (id) { root.current = id } } }
                 Component { id: toneC; TonePage {} }
@@ -219,8 +224,8 @@ ApplicationWindow {
             else if (t.indexOf("Tooltips") >= 0) { const d = settings.tooltips; it.triggered(); if (settings.tooltips === d) bad.push(t); settings.tooltips = d }
             else if (t === "Volume Enhancer") { it.triggered(); if (!enhancer.opened && !enhancer.visible) bad.push(t) }
             else if (t === "Master Analyzer") { it.triggered(); if (!analyzer.opened && !analyzer.visible) bad.push(t) }
-            else if (t === "Mute all channels") { it.triggered(); if (!engine.stripState[3].mute) bad.push(t) }
-            else if (t === "Unmute all channels") { it.triggered(); if (engine.stripState[3].mute) bad.push(t) }
+            else if (t === "Mute all channels") { it.triggered(); if (!engine.stripAt(3, engine.stripTick).mute) bad.push(t) }
+            else if (t === "Unmute all channels") { it.triggered(); if (engine.stripAt(3, engine.stripTick).mute) bad.push(t) }
             else if (t === "Undo" || t === "Redo" || t === "Compare A / B" || t === "Clear solo" || t === "Clear clip lamps") { it.triggered() }   // must run without an error; their effect is checked in the engine's own tests
             else if (t === "About this console") { it.triggered(); if (!aboutPop.opened && !aboutPop.visible) bad.push(t) }
             else if (t === "What's new") { it.triggered(); if (!whatsNew.opened && !whatsNew.visible) bad.push(t) }
@@ -275,7 +280,7 @@ ApplicationWindow {
                 Rectangle { visible: updater.canInstall; implicitWidth: instT.implicitWidth + 24; implicitHeight: 24; radius: 5; color: Theme.emerald; Text { id: instT; anchors.centerIn: parent; text: i18n.t("INSTALL AND RESTART", i18n.lang); color: "#000"; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: updater.installAndRestart() } }
                 Rectangle { visible: updater.state === "downloaded" && !updater.canInstall; implicitWidth: 150; implicitHeight: 24; radius: 5; color: Theme.ov(0.1); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: i18n.t("OPEN DOWNLOAD FOLDER", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: updater.openDownloadFolder() } }
                 Rectangle { visible: updater.state === "available" && updater.file.url !== undefined; implicitWidth: 120; implicitHeight: 24; radius: 5; color: Theme.amber; Text { anchors.centerIn: parent; text: i18n.t("DOWNLOAD", i18n.lang); color: "#000"; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: updater.download() } }
-                Rectangle { implicitWidth: 80; implicitHeight: 24; radius: 5; color: Theme.ov(0.1); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: i18n.t("CLOSE", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: whatsNew.close() } } } } }
+                Rectangle { implicitWidth: Math.max(80, children[0].implicitWidth + 12); implicitHeight: 24; radius: 5; color: Theme.ov(0.1); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: i18n.t("CLOSE", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: whatsNew.close() } } } } }
     property bool bootOn: settings.bootAnimation && !noBoot   // noBoot: the smoke / shots run without it
     Loader { anchors.fill: parent; z: 200; active: root.bootOn; sourceComponent: BootSplash { onDone: root.bootOn = false } }
     Rectangle {   // UPDATING: the console is about to close; the setup installs and starts it again (like a mixer's firmware update)

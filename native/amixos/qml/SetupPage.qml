@@ -18,7 +18,7 @@ Rectangle {
     signal finished()
     color: Theme.obsidian
     component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(70, bl.implicitWidth + 24); implicitHeight: 30; radius: 6; color: on ? onColor : Theme.ov(0.08); border.color: Theme.lineSoft
-        Text { id: bl; anchors.centerIn: parent; text: label; color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
+        Text { id: bl; anchors.centerIn: parent; text: i18n.t(label, i18n.lang); color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
     component Head: Text { color: Theme.ink; font.family: Theme.sans; font.pixelSize: 24; font.weight: Font.DemiBold }
     component Body: Text { Layout.fillWidth: true; color: Theme.muted; font.family: Theme.sans; font.pixelSize: 12; wrapMode: Text.WordWrap; lineHeight: 1.25 }
     component Small: Text { Layout.fillWidth: true; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap }
@@ -129,6 +129,6 @@ Rectangle {
         RowLayout { spacing: 8
             Btn { label: i18n.t("BACK", i18n.lang); visible: wiz.step > 0; onClicked: wiz.step-- }
             Item { Layout.fillWidth: true }
-            Btn { label: wiz.step === 6 ? i18n.t("FINISH", i18n.lang) : i18n.t("NEXT", i18n.lang); on: wiz.step !== 1 || wiz.accepted; onColor: wiz.step === 6 ? Theme.emerald : Theme.amber; onClicked: { if (wiz.step === 1 && !wiz.accepted) { wiz.termsAlert = true; shake.restart(); return } wiz.termsAlert = false; if (wiz.step === 6) { const has = engine.mastering().preset === "AMFB SIGNATURE"; if (wiz.signature && !has) engine.applyMasteringPreset("AMFB SIGNATURE"); else if (!wiz.signature && has) engine.setMastering({ on: false, preset: "" }); wiz.finished() } else wiz.step++ } } }
+            Btn { label: wiz.step === 6 ? i18n.t("FINISH", i18n.lang) : i18n.t("NEXT", i18n.lang); on: wiz.step !== 1 || wiz.accepted; onColor: wiz.step === 6 ? Theme.emerald : Theme.amber; onClicked: { if (wiz.step === 1 && !wiz.accepted) { wiz.termsAlert = true; shake.restart(); return } wiz.termsAlert = false; if (wiz.step === 6) { const has = engine.mastering().preset === "AMFB SIGNATURE"; if (wiz.signature && !has) engine.applyMasteringPreset("AMFB SIGNATURE"); else if (!wiz.signature && has) engine.setMastering({ on: false, preset: "" }); if (!engine.running) settings.startLastDevice(); wiz.finished() } else wiz.step++ } } }
     }
 }

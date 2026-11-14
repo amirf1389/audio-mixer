@@ -59,7 +59,7 @@ Flickable {
                     id: row
                     required property int index
                     readonly property real ms: page.delays[index] !== undefined ? page.delays[index] : 0
-                    readonly property var st: engine.stripState[index]
+                    readonly property var st: engine.stripAt(index, engine.stripTick)
                     Layout.fillWidth: true; implicitHeight: 40; radius: 6; color: Theme.card; border.color: row.ms > 0 ? Theme.cyan : Theme.line
                     RowLayout {
                         anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 8

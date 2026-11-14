@@ -106,20 +106,20 @@ Flickable {
         Panel {
             Layout.fillWidth: true
             title: i18n.t("TONE (EQ) • MIC / CHANNEL EQ", i18n.lang)
-            subtitle: "Per channel: polarity → delay → crossover → 10-band parametric EQ → limiter. Double precision inside the engine; changes land at the next audio block."
+            subtitle: i18n.t("Per channel: polarity → delay → crossover → 10-band parametric EQ → limiter. Double precision inside the engine; changes land at the next audio block.", i18n.lang)
             RowLayout {
                 Layout.fillWidth: true; spacing: 8
                 Text { text: i18n.t("CHANNEL", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9 }
                 Combo {
                     implicitWidth: 150; model: engine.strips; currentIndex: page.strip
-                    displayText: engine.stripState[currentIndex] ? engine.stripState[currentIndex].name : ""
-                    delegate: ItemDelegate { width: parent.width; text: engine.stripState[index] ? engine.stripState[index].name : index; font.family: Theme.mono }
+                    displayText: engine.stripAt(currentIndex, engine.stripTick) ? engine.stripAt(currentIndex, engine.stripTick).name : ""
+                    delegate: ItemDelegate { width: parent.width; text: engine.stripAt(index, engine.stripTick) ? engine.stripAt(index, engine.stripTick).name : index; font.family: Theme.mono }
                     onActivated: page.strip = currentIndex
                 }
                 Item { Layout.fillWidth: true }
-                Rectangle { implicitWidth: 44; implicitHeight: 22; radius: 4; color: page.rta ? Theme.cyan : Theme.ov(0.08); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: i18n.t("RTA", i18n.lang); color: page.rta ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.rta = !page.rta } ToolTip.visible: rtaH.hovered; ToolTip.text: i18n.t("Real-time analyser under the curve: this strip after its DSP", i18n.lang); HoverHandler { id: rtaH } }
+                Rectangle { implicitWidth: Math.max(44, children[0].implicitWidth + 12); implicitHeight: 22; radius: 4; color: page.rta ? Theme.cyan : Theme.ov(0.08); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: i18n.t("RTA", i18n.lang); color: page.rta ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.rta = !page.rta } ToolTip.visible: rtaH.hovered; ToolTip.text: i18n.t("Real-time analyser under the curve: this strip after its DSP", i18n.lang); HoverHandler { id: rtaH } }
                 Rectangle { implicitWidth: 60; implicitHeight: 22; radius: 4; color: page.ch.polarityInvert ? Theme.violet : Theme.ov(0.08); Text { anchors.centerIn: parent; text: "Ø 180°"; color: page.ch.polarityInvert ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setPolarity(page.strip, !page.ch.polarityInvert) } }
-                Rectangle { readonly property bool on: engine.stripState[page.strip] !== undefined && !!engine.stripState[page.strip].autoPol
+                Rectangle { readonly property bool on: engine.stripAt(page.strip, engine.stripTick) !== undefined && !!engine.stripAt(page.strip, engine.stripTick).autoPol
                             implicitWidth: 70; implicitHeight: 22; radius: 4; color: on ? Theme.violet : Theme.ov(0.08); border.color: Theme.lineSoft
                             Text { anchors.centerIn: parent; text: i18n.t("Ø AUTO", i18n.lang); color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
                             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: engine.setAutoPolarity(page.strip, !parent.on) }
@@ -197,12 +197,12 @@ Flickable {
                 Rectangle { Layout.preferredWidth: 200; implicitHeight: 22; radius: 4; color: Theme.deep; border.color: nameIn.activeFocus ? Theme.cyan : Theme.lineSoft
                     TextInput { id: nameIn; anchors.fill: parent; anchors.margins: 5; text: page.presetName; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; selectByMouse: true; maximumLength: 24; onTextChanged: page.presetName = text
                         Text { visible: !parent.text.length; text: i18n.t("preset name", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 9 } } }
-                Rectangle { implicitWidth: 110; implicitHeight: 22; radius: 4; color: page.presetSel > 10 ? Theme.cyan : Theme.ov(0.06); Text { anchors.centerIn: parent; text: i18n.t("SAVE CH ", i18n.lang) + (page.strip + 1) + i18n.t(" EQ", i18n.lang); color: page.presetSel > 10 ? "#000" : Theme.dim; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                Rectangle { implicitWidth: Math.max(110, children[0].implicitWidth + 12); implicitHeight: 22; radius: 4; color: page.presetSel > 10 ? Theme.cyan : Theme.ov(0.06); Text { anchors.centerIn: parent; text: i18n.t("SAVE CH ", i18n.lang) + (page.strip + 1) + i18n.t(" EQ", i18n.lang); color: page.presetSel > 10 ? "#000" : Theme.dim; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                     MouseArea { anchors.fill: parent; enabled: page.presetSel > 10; onClicked: { engine.saveEqPreset(page.presetSel, page.presetName, page.strip); page.presetName = "" } } }
-                Rectangle { implicitWidth: 60; implicitHeight: 22; radius: 4; color: Theme.ov(0.06); border.color: Theme.lineSoft; visible: page.presetSel > 10; Text { anchors.centerIn: parent; text: i18n.t("CLEAR", i18n.lang); color: Theme.danger; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                Rectangle { implicitWidth: Math.max(60, children[0].implicitWidth + 12); implicitHeight: 22; radius: 4; color: Theme.ov(0.06); border.color: Theme.lineSoft; visible: page.presetSel > 10; Text { anchors.centerIn: parent; text: i18n.t("CLEAR", i18n.lang); color: Theme.danger; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                     MouseArea { anchors.fill: parent; onClicked: engine.clearEqPreset(page.presetSel) } }
                 Item { Layout.fillWidth: true }
-                Rectangle { implicitWidth: 90; implicitHeight: 22; radius: 4; color: Theme.ov(0.06); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: i18n.t("FLAT EQ", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                Rectangle { implicitWidth: Math.max(90, children[0].implicitWidth + 12); implicitHeight: 22; radius: 4; color: Theme.ov(0.06); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: i18n.t("FLAT EQ", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                     MouseArea { anchors.fill: parent; onClicked: { for (let b = 0; b < 10; ++b) engine.setEq(page.strip, b, 0, engine.eqBand(page.strip, b).freq, 1, 0) } } } }
         }
         RowLayout {
@@ -211,7 +211,7 @@ Flickable {
                 id: xo
                 Layout.fillWidth: true
                 title: i18n.t("CROSSOVER", i18n.lang)
-                subtitle: "Linkwitz-Riley, Butterworth or Bessel, 6 to 48 dB per octave"
+                subtitle: i18n.t("Linkwitz-Riley, Butterworth or Bessel, 6 to 48 dB per octave", i18n.lang)
                 readonly property var types: ["BUTTERWORTH", "LINKWITZ-RILEY", "BESSEL"]
                 readonly property var slopes: ["OFF", "6 dB", "12 dB", "18 dB", "24 dB", "30 dB", "36 dB", "42 dB", "48 dB"]
                 Combo { Layout.fillWidth: true; model: xo.types; currentIndex: page.ch.xoverType === undefined ? 1 : page.ch.xoverType; onActivated: engine.setCrossover(page.strip, currentIndex, page.ch.hpOrder, page.ch.hpFreq, page.ch.lpOrder, page.ch.lpFreq) }
@@ -225,11 +225,11 @@ Flickable {
             Panel {
                 Layout.fillWidth: true
                 title: i18n.t("TIME & PROTECTION", i18n.lang)
-                subtitle: "Delay for time alignment (sub-sample), channel peak limiter"
+                subtitle: i18n.t("Delay for time alignment (sub-sample), channel peak limiter", i18n.lang)
                 Text { text: i18n.t("DELAY  ", i18n.lang) + Number(page.ch.delayMs || 0).toFixed(2) + i18n.t(" ms  (", i18n.lang) + (Number(page.ch.delayMs || 0) * 34.3).toFixed(1) + i18n.t(" cm)", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                 Slider { Layout.fillWidth: true; from: 0; to: 50; stepSize: 0.01; value: page.ch.delayMs || 0; onMoved: engine.setDelay(page.strip, value) }
                 RowLayout { Layout.fillWidth: true
-                    Rectangle { implicitWidth: 70; implicitHeight: 22; radius: 4; color: page.ch.limiterOn ? Theme.emerald : Theme.ov(0.08); Text { anchors.centerIn: parent; text: i18n.t("LIMITER", i18n.lang); color: page.ch.limiterOn ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setChannelLimiter(page.strip, !page.ch.limiterOn, page.ch.limiterCeilDb || -1, page.ch.limiterReleaseMs || 80) } }
+                    Rectangle { implicitWidth: Math.max(70, children[0].implicitWidth + 12); implicitHeight: 22; radius: 4; color: page.ch.limiterOn ? Theme.emerald : Theme.ov(0.08); Text { anchors.centerIn: parent; text: i18n.t("LIMITER", i18n.lang); color: page.ch.limiterOn ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setChannelLimiter(page.strip, !page.ch.limiterOn, page.ch.limiterCeilDb || -1, page.ch.limiterReleaseMs || 80) } }
                     Text { text: i18n.t("CEILING ", i18n.lang) + Theme.dbText(page.ch.limiterCeilDb === undefined ? -1 : page.ch.limiterCeilDb) + i18n.t(" dBFS", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 } }
                 Slider { Layout.fillWidth: true; from: -30; to: 0; value: page.ch.limiterCeilDb === undefined ? -1 : page.ch.limiterCeilDb; onMoved: engine.setChannelLimiter(page.strip, page.ch.limiterOn, value, page.ch.limiterReleaseMs || 80) }
                 Text { text: i18n.t("RELEASE ", i18n.lang) + Math.round(page.ch.limiterReleaseMs || 80) + i18n.t(" ms", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }

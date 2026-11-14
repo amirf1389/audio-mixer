@@ -1,4 +1,5 @@
 #include "Net.h"
+#include "Frame.h"
 
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -117,6 +118,7 @@ void Net::clearLearned() { map_.clear(); s_.setValue("net/midiMap", QString()); 
 void Net::midiIn(int status, int d1, int d2) {
   const MidiMsg m{static_cast<std::uint8_t>(status), static_cast<std::uint8_t>(d1 & 0x7f), static_cast<std::uint8_t>(d2 & 0x7f)};
   ++midiCount_;
+  if (frame_ && frame_->handleMidi(status, d1, d2)) { midiLast_ = QStringLiteral("I/O FRAME %1 %2").arg(d1).arg(d2); emit statsChanged(); return; }   // notes 36..48: GPIO inputs and LOCATE
   const int type = m.type(); const char* tn = type == 0xb0 ? "CC" : type == 0x90 ? "NOTE ON" : type == 0x80 ? "NOTE OFF" : type == 0xe0 ? "BEND" : type == 0xc0 ? "PROGRAM" : "MIDI";
   midiLast_ = QStringLiteral("%1 %2 = %3 · ch %4").arg(QLatin1String(tn)).arg(m.d1).arg(m.d2).arg(m.channel() + 1);
   if (map_.offer(m)) { s_.setValue("net/midiMap", QString::fromStdString(map_.save())); emit statsChanged(); return; }

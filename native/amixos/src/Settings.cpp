@@ -1,3 +1,4 @@
+#include <algorithm>
 #include "Settings.h"
 #include "paths/paths.hpp"
 
@@ -66,8 +67,18 @@ void Settings::rememberDevice(const QString& backend, const QString& in, const Q
 }
 bool Settings::startLastDevice() {
   const QVariantMap d = lastDevice();
-  if (d.isEmpty() && engine_ && autoAsio()) { const bool ok = engine_->autoStart(defaultFrames()); note(ok ? engine_->lastRoute() : engine_->status()); return ok; }
-  if (d.isEmpty() || !engine_) { note(QStringLiteral("No device remembered yet: start one on CONNECTIONS once, or turn AUTO DETECT on.")); return false; }
+  // NO DEVICE YET (a new installation, or after a factory reset): AUTO DETECT the best sound card (ASIO first, else the system's default
+  // device), start it and remember it, so the console comes up working; MANUAL selection opens nothing by itself
+  if (d.isEmpty() && engine_) {
+    if (engine_->autoPrefer() == QLatin1String("manual")) { note(QStringLiteral("No device remembered yet: MANUAL selection is on, so pick one on CONNECTIONS.")); return false; }
+    const QVariantMap a = engine_->autoDetect(); const int fr = defaultFrames() > 0 ? defaultFrames() : 256;
+    const bool ok = !a.isEmpty() && engine_->autoStart(fr);
+    if (ok) rememberDevice(a.value("backend").toString(), a.value("in").toString() == "-" ? QString() : a.value("in").toString(), a.value("out").toString() == "-" ? QString() : a.value("out").toString(),
+                           a.value("rate").toDouble() > 0 ? a.value("rate").toDouble() : a.value("defaultRate").toDouble() > 0 ? a.value("defaultRate").toDouble() : 48000.0, fr, std::min(32, a.value("inChannels").toInt()), std::min(32, a.value("outChannels").toInt()));
+    note(ok ? engine_->lastRoute() : (a.isEmpty() ? QStringLiteral("No sound card found: plug one in, or pick one on CONNECTIONS.") : engine_->status()));
+    return ok;
+  }
+  if (!engine_) return false;
   const bool ok = smartStart() ? engine_->openSmart(d["backend"].toString(), d["in"].toString(), d["out"].toString(), d["rate"].toDouble(), d["frames"].toInt(), d["inChannels"].toInt(), d["outChannels"].toInt())
                                : engine_->open(d["backend"].toString(), d["in"].toString(), d["out"].toString(), d["rate"].toDouble(), d["frames"].toInt(), d["inChannels"].toInt(), d["outChannels"].toInt());
   note(ok ? QStringLiteral("Started the last device: %1").arg(engine_->status()) : QStringLiteral("Could not start the last device: %1").arg(engine_->status()));

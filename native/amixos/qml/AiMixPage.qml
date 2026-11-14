@@ -10,11 +10,11 @@ Item {
     objectName: "aiMixPage"
     property int bank: 0
     readonly property var tel: engine.telemetry
-    readonly property int members: { let n = 0; for (let i = 0; i < engine.stripState.length; ++i) if (engine.stripState[i].automix) ++n; return n }
+    readonly property int members: { let n = 0; for (let i = 0; i < engine.stripState.length; ++i) if (engine.stripAt(i, engine.stripTick).automix) ++n; return n }
     component Head: Text { color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
     component Note: Text { Layout.fillWidth: true; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap }
     component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(56, bl.implicitWidth + 16); implicitHeight: 22; radius: 4; color: on ? onColor : Theme.ov(0.08); border.color: Theme.lineSoft
-        Text { id: bl; anchors.centerIn: parent; text: label; color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
+        Text { id: bl; anchors.centerIn: parent; text: i18n.t(label, i18n.lang); color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
     ColumnLayout {
         anchors.fill: parent; anchors.margins: 10; spacing: 8
         Rectangle { Layout.fillWidth: true; implicitHeight: 34; radius: 8; color: Theme.card; border.color: Theme.line
@@ -23,7 +23,7 @@ Item {
                 Text { text: page.members + i18n.t(" strips in AUTOMIX · AUTO LEVEL ", i18n.lang) + (engine.autoLevelOn ? i18n.t("ON (", i18n.lang) + (page.tel.autoLevelDb >= 0 ? "+" : "") + page.tel.autoLevelDb.toFixed(1) + i18n.t(" dB)", i18n.lang) : i18n.t("off", i18n.lang)); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                 Repeater { model: ["CH 01-16", "CH 17-32"]; delegate: Rectangle { implicitWidth: 66; implicitHeight: 20; radius: 4; color: page.bank === index ? Theme.ov(0.16) : Theme.ov(0.06); Text { anchors.centerIn: parent; text: modelData; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.bank = index } } }
                 Item { Layout.fillWidth: true }
-                Btn { label: i18n.t("ALL ON (THIS BANK)", i18n.lang); onClicked: { for (let i = 0; i < 16; ++i) engine.setAutomix(page.bank * 16 + i, true, engine.stripState[page.bank * 16 + i].amWeight) } }
+                Btn { label: i18n.t("ALL ON (THIS BANK)", i18n.lang); onClicked: { for (let i = 0; i < 16; ++i) engine.setAutomix(page.bank * 16 + i, true, engine.stripAt(page.bank * 16 + i, engine.stripTick).amWeight) } }
                 Btn { label: i18n.t("ALL OFF", i18n.lang); onClicked: { for (let i = 0; i < engine.stripState.length; ++i) engine.setAutomix(i, false, 1) } } } }
         RowLayout { Layout.fillWidth: true; Layout.fillHeight: true; spacing: 8
             Rectangle { Layout.fillWidth: true; Layout.fillHeight: true; radius: Theme.radius; color: Theme.card; border.color: Theme.line
@@ -31,7 +31,7 @@ Item {
                     Head { text: i18n.t("AUTOMIX  (gain sharing, 10 ms attack / 300 ms release, -40 dB floor)", i18n.lang) }
                     GridLayout { columns: 2; columnSpacing: 10; rowSpacing: 4; Layout.fillWidth: true
                         Repeater { model: 16
-                            delegate: Rectangle { readonly property int s: page.bank * 16 + index; readonly property var st: engine.stripState[s]; readonly property var mt: (engine.meterTick, engine.meterAt(s)); Layout.fillWidth: true; implicitHeight: 34; radius: 6; color: st && st.automix ? Qt.rgba(0, 0.95, 1, 0.08) : Theme.ov(0.03); border.color: st && st.automix ? Theme.cyan : Theme.lineSoft
+                            delegate: Rectangle { readonly property int s: page.bank * 16 + index; readonly property var st: engine.stripAt(s, engine.stripTick); readonly property var mt: (engine.meterTick, engine.meterAt(s)); Layout.fillWidth: true; implicitHeight: 34; radius: 6; color: st && st.automix ? Qt.rgba(0, 0.95, 1, 0.08) : Theme.ov(0.03); border.color: st && st.automix ? Theme.cyan : Theme.lineSoft
                                 RowLayout { anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 8; spacing: 8
                                     Rectangle { width: 36; height: 20; radius: 10; color: st && st.automix ? Theme.cyan : Theme.ov(0.1); Rectangle { width: 14; height: 14; radius: 7; y: 3; x: st && st.automix ? 19 : 3; color: st && st.automix ? "#000" : Theme.dim } MouseArea { anchors.fill: parent; onClicked: engine.setAutomix(s, !(st && st.automix), st ? st.amWeight : 1) } }
                                     Text { Layout.preferredWidth: 80; text: i18n.t("CH ", i18n.lang) + (s + 1 < 10 ? "0" : "") + (s + 1) + " " + (st ? st.name : ""); color: Theme.stripColors[st ? st.color : 0]; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; elide: Text.ElideRight }

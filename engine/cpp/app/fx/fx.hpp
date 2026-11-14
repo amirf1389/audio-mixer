@@ -386,4 +386,34 @@ class ConvClip final : public Multi { public: explicit ConvClip(double fs); cons
  private: void design(); Biquad up_[2][2], down_[2][2], adc_[2], dac_[2]; double ap_[2] = {0, 0}, apIn_[2] = {0, 0}, drift_[2] = {1, 1}, driftT_[2] = {1, 1}, err_[2] = {0, 0};
   std::uint32_t rng_ = 0x9e3779b9u; int ovsDesigned_ = 0; std::atomic<double> gr_{0}; double rnd(); };
 
+
+// ── THE I/O FRAME's processing objects (fx_frame.cpp) ──────────────────────────────────────────────────────────────────────────────────
+// An adaptive echo canceller core: NLMS on the reference tap (the console's own output) with a bulk delay for the device's round trip,
+// a Geigel double-talk detector (adaptation freezes while the near end talks) and a residual echo suppressor.
+struct Nlms {
+  std::vector<float> w, x; std::size_t pos = 0; double px = 0; int taps = 0;
+  void resize(int n) { taps = n; w.assign(static_cast<std::size_t>(n), 0.f); x.assign(static_cast<std::size_t>(2 * n), 0.f); pos = 0; px = 0; }
+  float run(float ref, float mic, double mu, bool adapt);   // returns the error (the mic with the echo estimate taken out)
+};
+// AEC: for a microphone in a room with loudspeakers (conference, church, video call): takes out what the speakers put back into the mic.
+// BULK DELAY (0 .. 250 ms: the sound card's round trip and the distance), TAIL (16 .. 85 ms of room echo), ADAPT (speed), SUPPRESS (the
+// residual echo, 0 .. 30 dB), MIX (0 = off .. 1 = cancelled). Mono: the channel's left and right are summed, the result goes to both.
+class EchoCanceller final : public Simple { public: explicit EchoCanceller(double fs); const char* kind() const override { return "aec"; } const char* name() const override { return "ECHO CANCELLER (AEC)"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
+  double erleDb() const { return erle_.load(); } bool doubleTalk() const { return dt_.load(); }
+ protected: int count() const override { return 5; } const char* knobId(int i) const override; const char* knobTitle(int i) const override; double knobDef(int i) const override;
+ private: Nlms f_; int built_ = 0; double eD_ = 1e-9, eE_ = 1e-9, farPk_ = 0, nlpG_ = 1; long farHold_ = 0; std::atomic<double> erle_{0}; std::atomic<bool> dt_{false}; };
+// TELEPHONE HYBRID: the caller's channel of a phone-in (a phone interface, a USB phone line, a call app on a loopback): the caller hears the
+// console's output (the mix minus their own channel), and what they hear leaks back down the line; this takes it out (line echo canceller),
+// band-limits the caller (NARROW 300 .. 3400 Hz telephone, WIDE 50 .. 7000 Hz HD voice), levels them (AGC) and sets their level.
+class PhoneHybrid final : public Simple { public: explicit PhoneHybrid(double fs); const char* kind() const override { return "hybrid"; } const char* name() const override { return "TELEPHONE HYBRID"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
+ protected: int count() const override { return 5; } const char* knobId(int i) const override; const char* knobTitle(int i) const override; double knobDef(int i) const override;
+ private: Nlms f_; int built_ = 0; double hp_[2] = {0, 0}, lp_[4] = {0, 0, 0, 0}, env_ = 0, agc_ = 1; };
+// LOGIC OBJECT: ties a channel to the frame's GPIO. SIGNAL PRESENT lights a logic output while the channel is above the threshold (with a
+// hold); MUTE ON INPUT / OPEN ON INPUT / DUCK ON INPUT let a control input (a foot switch, a door contact, OSC, MIDI) mute, open or duck it.
+class LogicObject final : public Simple { public: explicit LogicObject(double fs); const char* kind() const override { return "logic"; } const char* name() const override { return "LOGIC / GPIO"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
+ protected: int count() const override { return 5; } const char* knobId(int i) const override; const char* knobTitle(int i) const override; double knobDef(int i) const override;
+ private: double env_ = 0, g_ = 1; long hold_ = 0; };
 }  // namespace am::fx

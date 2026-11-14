@@ -93,7 +93,10 @@ class Net : public QObject {
  signals:
   void changed();
   void statsChanged();
+  public:
+  void setFrame(class Frame* f) { frame_ = f; }
  private:
+  class Frame* frame_ = nullptr;
   void attach();                                         // the engine has a new runtime (or none): hook the sender and receiver into it
   void patch(bool on);
   void fail(const QString& m) { msg_ = m; emit changed(); }

@@ -52,7 +52,7 @@ Popup {
     background: Rectangle { radius: 12; color: Theme.card; border.color: Theme.cyan }
     contentItem: ColumnLayout { spacing: 8
         RowLayout { Layout.fillWidth: true; Layout.margins: 14; Layout.bottomMargin: 0; spacing: 8
-            Text { text: "AMFB"; color: Theme.orange; font.family: Theme.mono; font.pixelSize: 15; font.weight: Font.Black; font.letterSpacing: 4 }
+            Text { text: i18n.t("AMFB", i18n.lang); color: Theme.orange; font.family: Theme.mono; font.pixelSize: 15; font.weight: Font.Black; font.letterSpacing: 4 }
             Text { text: i18n.t("MASTER ANALYZER", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 13; font.bold: true; font.letterSpacing: 3 }
             Item { Layout.fillWidth: true }
             Small { text: i18n.t("TARGET", i18n.lang) }

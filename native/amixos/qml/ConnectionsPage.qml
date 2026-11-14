@@ -24,13 +24,13 @@ Flickable {
         Panel {
             Layout.fillWidth: true
             title: i18n.t("CONNECTIONS • SOUND CARD", i18n.lang)
-            subtitle: "The engine opens the card directly: ASIO (the device's own driver) and WASAPI on Windows, Core Audio on macOS, ALSA on Linux. \"null\" is a timed test device with no hardware."
+            subtitle: i18n.t("The engine opens the card directly: ASIO (the device's own driver) and WASAPI on Windows, Core Audio on macOS, ALSA on Linux. \"null\" is a timed test device with no hardware.", i18n.lang)
             RowLayout {
                 Layout.fillWidth: true; spacing: 6
                 Text { text: i18n.t("DRIVER", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9 }
                 Repeater { model: engine.backends; delegate: Rectangle { implicitWidth: lbl.implicitWidth + 18; implicitHeight: 24; radius: 4; color: page.backend === modelData ? Theme.amber : Theme.ov(0.08); Text { id: lbl; anchors.centerIn: parent; text: modelData.toUpperCase(); color: page.backend === modelData ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: { page.backend = modelData; page.inId = ""; page.outId = "" } } } }
                 Item { Layout.fillWidth: true }
-                Rectangle { implicitWidth: 80; implicitHeight: 24; radius: 4; color: Theme.ov(0.08); Text { anchors.centerIn: parent; text: i18n.t("RESCAN", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.refreshDevices() } }
+                Rectangle { implicitWidth: Math.max(80, children[0].implicitWidth + 12); implicitHeight: 24; radius: 4; color: Theme.ov(0.08); Text { anchors.centerIn: parent; text: i18n.t("RESCAN", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.refreshDevices() } }
             }
             RowLayout {
                 Layout.fillWidth: true; spacing: 10
@@ -60,7 +60,7 @@ Flickable {
                 Rectangle { implicitWidth: 110; implicitHeight: 30; radius: 6; color: engine.running ? Theme.ov(0.08) : Theme.emerald
                     Text { anchors.centerIn: parent; text: engine.running ? i18n.t("RESTART", i18n.lang) : i18n.t("START ENGINE", i18n.lang); color: engine.running ? Theme.ink : "#000"; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
                     MouseArea { anchors.fill: parent; onClicked: { var i = page.dev(page.inId), o = page.dev(page.outId); var ok = engine.open(page.backend, page.inId, page.outId, page.rate, page.frames, i ? Math.min(32, i.inChannels) : 2, o ? Math.min(2, o.outChannels) : 2); if (ok) settings.rememberDevice(page.backend, page.inId, page.outId, page.rate, page.frames, i ? Math.min(32, i.inChannels) : 2, o ? Math.min(2, o.outChannels) : 2) } } }
-                Rectangle { implicitWidth: 100; implicitHeight: 30; radius: 6; color: Qt.rgba(0.984, 0.749, 0.141, 0.2); border.color: Theme.amber
+                Rectangle { implicitWidth: Math.max(100, children[0].implicitWidth + 12); implicitHeight: 30; radius: 6; color: Qt.rgba(0.984, 0.749, 0.141, 0.2); border.color: Theme.amber
                     Text { anchors.centerIn: parent; text: i18n.t("AUTO DETECT", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
                     property var det: engine.autoDetect()
                     MouseArea { anchors.fill: parent; onClicked: engine.autoStart(page.frames) }
@@ -68,17 +68,17 @@ Flickable {
                 Rectangle { visible: page.backend === "asio"; implicitWidth: 110; implicitHeight: 30; radius: 6; color: Theme.cyan
                     Text { anchors.centerIn: parent; text: i18n.t("SMART START", i18n.lang); color: "#000"; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
                     MouseArea { anchors.fill: parent; onClicked: { var i = page.dev(page.inId), o = page.dev(page.outId); var ok = engine.openSmart(page.backend, page.inId, page.outId, page.rate, page.frames, i ? Math.min(32, i.inChannels) : 2, o ? Math.min(2, o.outChannels) : 2); if (ok) settings.rememberDevice(page.backend, page.inId, page.outId, page.rate, page.frames, i ? Math.min(32, i.inChannels) : 2, o ? Math.min(2, o.outChannels) : 2); page.planModel = engine.driverPlan(page.backend, page.inId, page.outId) } } }
-                Rectangle { implicitWidth: 80; implicitHeight: 30; radius: 6; color: engine.running ? Theme.danger : Theme.ov(0.05); Text { anchors.centerIn: parent; text: i18n.t("STOP", i18n.lang); color: engine.running ? "#000" : Theme.dim; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; enabled: engine.running; onClicked: engine.stop() } }
-                Text { text: engine.status; color: engine.running ? Theme.emerald : Theme.amber; font.family: Theme.mono; font.pixelSize: 9; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+                Rectangle { implicitWidth: Math.max(80, children[0].implicitWidth + 12); implicitHeight: 30; radius: 6; color: engine.running ? Theme.danger : Theme.ov(0.05); Text { anchors.centerIn: parent; text: i18n.t("STOP", i18n.lang); color: engine.running ? "#000" : Theme.dim; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; enabled: engine.running; onClicked: engine.stop() } }
+                Text { text: i18n.t(engine.status, i18n.lang); color: engine.running ? Theme.emerald : Theme.amber; font.family: Theme.mono; font.pixelSize: 9; Layout.fillWidth: true; wrapMode: Text.WordWrap }
             }
-            Text { visible: engine.running; text: i18n.t("Blocks ", i18n.lang) + engine.telemetry.blocks + i18n.t(" • frames ", i18n.lang) + engine.telemetry.frames + i18n.t(" • xruns ", i18n.lang) + engine.telemetry.xruns; color: engine.telemetry.xruns > 0 ? Theme.danger : Theme.dim; font.family: Theme.mono; font.pixelSize: 8 }
+            Text { visible: engine.running; text: i18n.t("Blocks ", i18n.lang) + engine.telv("blocks", engine.meterTick) + i18n.t(" • frames ", i18n.lang) + engine.telv("frames", engine.meterTick) + i18n.t(" • xruns ", i18n.lang) + engine.telv("xruns", engine.meterTick); color: engine.telv("xruns", engine.meterTick) > 0 ? Theme.danger : Theme.dim; font.family: Theme.mono; font.pixelSize: 8 }
             Text { visible: engine.lastRoute.length > 0; text: engine.lastRoute; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.WordWrap; Layout.fillWidth: true }
         }
         // DRIVER INTELLIGENCE: the ladder SMART START walks for the chosen ASIO device, the Realtek pin, the locks learned
         Panel {
             Layout.fillWidth: true
             title: i18n.t("DRIVER INTELLIGENCE", i18n.lang)
-            subtitle: "SMART START tries the best path first and falls back by itself: ASIO (the device's own driver; ASIO4ALL only when nothing here has its own) → WASAPI exclusive → WASAPI shared on the same hardware. The step that worked is locked for next time; a lower lock is retried after 6 hours. In-app routing only: no driver, registry or Windows setting is touched."
+            subtitle: i18n.t("SMART START tries the best path first and falls back by itself: ASIO (the device's own driver; ASIO4ALL only when nothing here has its own) → WASAPI exclusive → WASAPI shared on the same hardware. The step that worked is locked for next time; a lower lock is retried after 6 hours. In-app routing only: no driver, registry or Windows setting is touched.", i18n.lang)
             Text { text: i18n.t("PLAN FOR THE SELECTED DEVICE", i18n.lang) + (page.backend === "asio" ? "" : i18n.t(" (choose the ASIO driver to see a ladder)", i18n.lang)); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
             Repeater { model: page.planModel; delegate: RowLayout { Layout.fillWidth: true; spacing: 8
                 Rectangle { implicitWidth: 18; implicitHeight: 18; radius: 9; color: index === 0 ? Theme.cyan : Theme.ov(0.08); Text { anchors.centerIn: parent; text: index + 1; color: index === 0 ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } }
@@ -98,7 +98,7 @@ Flickable {
             Repeater { model: engine.driverLocks(); delegate: RowLayout { Layout.fillWidth: true; spacing: 8
                 Text { text: i18n.t(modelData.name ?? "", i18n.lang) + " → " + modelData.mode.toUpperCase() + (modelData.device && modelData.device !== i18n.t(modelData.name ?? "", i18n.lang) ? " (" + modelData.device + ")" : ""); color: Theme.emerald; font.family: Theme.mono; font.pixelSize: 8; Layout.preferredWidth: 320; elide: Text.ElideRight }
                 Text { text: modelData.reason + (modelData.retryAt > 0 ? i18n.t("  ·  retries ASIO ", i18n.lang) + new Date(modelData.retryAt).toISOString().slice(0, 16).replace("T", " ") : ""); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; Layout.fillWidth: true; elide: Text.ElideRight }
-                Rectangle { implicitWidth: 60; implicitHeight: 18; radius: 4; color: Theme.ov(0.08); Text { anchors.centerIn: parent; text: i18n.t("FORGET", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: { engine.forgetDriverLocks(modelData.name); page.planModel = engine.driverPlan(page.backend, page.inId, page.outId) } } } } }
+                Rectangle { implicitWidth: Math.max(60, children[0].implicitWidth + 12); implicitHeight: 18; radius: 4; color: Theme.ov(0.08); Text { anchors.centerIn: parent; text: i18n.t("FORGET", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: { engine.forgetDriverLocks(modelData.name); page.planModel = engine.driverPlan(page.backend, page.inId, page.outId) } } } } }
         }
     }
 }

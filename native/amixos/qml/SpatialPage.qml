@@ -16,9 +16,9 @@ Item {
     function t(s) { return i18n.t(s, i18n.lang) }
     function put(on, az, el, dist, spread) { engine.setSpatial(sel, on, az, el, dist, spread); rev++ }
     component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(56, bl.implicitWidth + 16); implicitHeight: 22; radius: 4; color: on ? onColor : Theme.ov(0.08); border.color: Theme.lineSoft
-        Text { id: bl; anchors.centerIn: parent; text: label; color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
+        Text { id: bl; anchors.centerIn: parent; text: i18n.t(label, i18n.lang); color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
     component Knob: RowLayout { property string label; property real from; property real to; property real value; property string unit; signal moved(real v); spacing: 8; Layout.fillWidth: true
-        Text { text: label; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; Layout.preferredWidth: 90 }
+        Text { text: i18n.t(label, i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; Layout.preferredWidth: 90 }
         Slider { Layout.fillWidth: true; from: parent.from; to: parent.to; value: parent.value; onMoved: parent.moved(value) }
         Text { text: parent.value.toFixed(parent.to > 30 ? 0 : 2) + " " + unit; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; Layout.preferredWidth: 60 } }
     ColumnLayout {

@@ -15,7 +15,7 @@ Item {
     property bool frozen: false
     property var frameL: ({ samples: [], vpp: 0, vrms: 0, freq: 0, crest: 0 })
     property var frameR: ({ samples: [] })
-    readonly property var stripSt: engine.stripState[strip]
+    readonly property var stripSt: engine.stripAt(strip, engine.stripTick)
     function refresh() {
         if (frozen) return
         if (source === 3) { engine.setScopeStrip(strip); frameL = engine.scopeFrame(2, windowMs, 512, trigger); frameR = { samples: [] } }
@@ -41,8 +41,8 @@ Item {
                 Text { text: i18n.t("TIME", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.letterSpacing: 2 }
                 Repeater { model: [1, 5, 20, 100, 500]; delegate: Rectangle { implicitWidth: 42; implicitHeight: 20; radius: 4; color: page.windowMs === modelData ? Theme.ov(0.16) : Theme.ov(0.06)
                     Text { anchors.centerIn: parent; text: modelData + i18n.t(" ms", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: { page.windowMs = modelData; page.refresh() } } } }
-                Rectangle { implicitWidth: 60; implicitHeight: 20; radius: 4; color: page.trigger ? Theme.cyan : Theme.ov(0.06); Text { anchors.centerIn: parent; text: i18n.t("TRIGGER", i18n.lang); color: page.trigger ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.trigger = !page.trigger } }
-                Rectangle { implicitWidth: 60; implicitHeight: 20; radius: 4; color: page.frozen ? Theme.danger : Theme.ov(0.06); Text { anchors.centerIn: parent; text: i18n.t("FREEZE", i18n.lang); color: page.frozen ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.frozen = !page.frozen } }
+                Rectangle { implicitWidth: Math.max(60, children[0].implicitWidth + 12); implicitHeight: 20; radius: 4; color: page.trigger ? Theme.cyan : Theme.ov(0.06); Text { anchors.centerIn: parent; text: i18n.t("TRIGGER", i18n.lang); color: page.trigger ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.trigger = !page.trigger } }
+                Rectangle { implicitWidth: Math.max(60, children[0].implicitWidth + 12); implicitHeight: 20; radius: 4; color: page.frozen ? Theme.danger : Theme.ov(0.06); Text { anchors.centerIn: parent; text: i18n.t("FREEZE", i18n.lang); color: page.frozen ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.frozen = !page.frozen } }
             }
         }
         Rectangle {

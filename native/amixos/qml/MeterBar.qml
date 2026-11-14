@@ -19,7 +19,7 @@ Item {
         radius: 2
         gradient: Gradient { GradientStop { position: 0.0; color: Theme.danger } GradientStop { position: 0.15; color: Theme.amber } GradientStop { position: 0.45; color: Theme.emerald } GradientStop { position: 1.0; color: "#047857" } }
         opacity: 0.95
-        Behavior on height { NumberAnimation { duration: 40 } }
+        // no height animation: the values arrive 30 times a second already smoothed (VU / RMS in the engine); an animation per meter kept 32+ animations running and the window redrawing at full rate
     }
     Rectangle {  // peak
         anchors.left: parent.left; anchors.right: parent.right; anchors.margins: 2

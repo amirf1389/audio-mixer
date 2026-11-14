@@ -64,7 +64,7 @@ Popup {
         Rectangle { Layout.fillWidth: true; implicitHeight: 54; color: Theme.ov(0.05); radius: 14
             Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 14; color: Theme.ov(0.0) }
             RowLayout { anchors.fill: parent; anchors.leftMargin: 18; anchors.rightMargin: 14; spacing: 10
-                Text { text: "AMFB"; color: Theme.orange; font.family: Theme.mono; font.pixelSize: 17; font.weight: Font.Black; font.letterSpacing: 4 }
+                Text { text: i18n.t("AMFB", i18n.lang); color: Theme.orange; font.family: Theme.mono; font.pixelSize: 17; font.weight: Font.Black; font.letterSpacing: 4 }
                 Text { text: i18n.t("VOLUME ENHANCER", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 14; font.bold: true; font.letterSpacing: 3 }
                 Item { Layout.fillWidth: true }
                 Pill { objectName: "vePrev"; label: "◀"; implicitWidth: 32; onClicked: pop.load(pop.presetIndex - 1) }
