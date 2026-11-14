@@ -1,0 +1,1 @@
+{ "name": "amfx1-brand3d", "private": true, "description": "AmF X1 3D brand film renderer", "dependencies": { "three": "0.170.0" } }
