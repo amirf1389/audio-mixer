@@ -53,7 +53,8 @@ class RemoteActivity : AppCompatActivity() {
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         val connect = Button(this).apply { text = getString(R.string.connect) }
         val devices = Button(this).apply { text = getString(R.string.devices); isEnabled = false }
-        row.addView(connect); row.addView(devices); root.addView(row)
+        val pair = Button(this).apply { text = getString(R.string.pair_pin) }
+        row.addView(pair); row.addView(connect); row.addView(devices); root.addView(row)
         status = TextView(this).apply { text = getString(R.string.not_connected); setTextColor(Color.parseColor("#FBBF24")); typeface = android.graphics.Typeface.MONOSPACE }
         root.addView(status)
         val masterRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
@@ -79,6 +80,21 @@ class RemoteActivity : AppCompatActivity() {
             }
         }
         devices.setOnClickListener { showDevices() }
+        pair.setOnClickListener {   // the PIN instead of typing the long token: the console shows it under NETWORK → PHONE REMOTE, new every minute
+            val h = host.text.toString().trim(); val pt = port.text.toString().trim().toIntOrNull() ?: 8765
+            if (h.isEmpty()) { status.text = getString(R.string.pair_need_host); return@setOnClickListener }
+            val pinBox = EditText(this).apply { hint = "000000"; inputType = android.text.InputType.TYPE_CLASS_NUMBER; filters = arrayOf(android.text.InputFilter.LengthFilter(6)) }
+            AlertDialog.Builder(this).setTitle(R.string.pair_pin).setMessage(R.string.pair_help).setView(pinBox)
+                .setPositiveButton(R.string.pair_go) { _, _ ->
+                    val pin = pinBox.text.toString().trim(); status.text = getString(R.string.connecting)
+                    io.execute {
+                        try {
+                            val t = DaemonClient.pair(h, pt, pin, android.os.Build.MANUFACTURER + " " + android.os.Build.MODEL)
+                            ui.post { token.setText(t); connect.performClick() }   // connect saves host, port and the new token
+                        } catch (e: Exception) { ui.post { status.text = getString(R.string.failed, e.message ?: e.javaClass.simpleName); status.setTextColor(Color.parseColor("#FF2A5F")) } }
+                    }
+                }.setNegativeButton(android.R.string.cancel, null).show()
+        }
     }
 
     private fun change(f: (Int) -> Unit) = object : SeekBar.OnSeekBarChangeListener {

@@ -40,6 +40,18 @@ class DaemonClient(val ep: Endpoint) {
         return ConsoleState(o.list("strips").map { StripState(it.int("id"), it.str("name"), it.num("db"), it.num("pan"), it.bool("mute"), it.bool("solo")) }, o.list("buses").map { BusState(it.int("id"), it.num("db"), it.num("returnDb", -60.0), it.bool("mute")) }, m.num("db"), m.bool("limiter", true), m.num("ceilingDb", -0.5)) }
     fun meters(): Meters = parseMeters(getObj("/api/meters"))
     companion object {
+        /** PAIRING: trade the six-digit PIN the console shows this minute (NETWORK → PHONE REMOTE) for a token of this phone's own.
+         *  Needs no token; the service allows one pairing per PIN and five wrong tries a minute. Returns the token. */
+        fun pair(host: String, port: Int, pin: String, name: String, secure: Boolean = false): String {
+            val c = URL((if (secure) "https" else "http") + "://" + host + ":" + port + "/api/pair").openConnection() as HttpURLConnection
+            c.requestMethod = "POST"; c.connectTimeout = 4000; c.readTimeout = 6000; c.doOutput = true; c.setRequestProperty("Content-Type", "application/json")
+            c.outputStream.use { it.write(MiniJson.stringify(mapOf("pin" to pin, "name" to name)).toByteArray(Charsets.UTF_8)) }
+            val code = c.responseCode
+            val text = (if (code >= 400) c.errorStream else c.inputStream)?.bufferedReader()?.use { it.readText() } ?: ""
+            @Suppress("UNCHECKED_CAST") val o = runCatching { MiniJson.parse(text) as Map<String, Any?> }.getOrNull() ?: emptyMap()
+            if (code >= 400) throw DaemonException(o["error"]?.toString() ?: "HTTP $code", code)
+            return o["token"]?.toString()?.takeIf { it.isNotEmpty() } ?: throw DaemonException("the console sent no token", code)
+        }
         fun parseMeters(o: Map<String, Any?>): Meters { val m = o.obj("master")
             return Meters(o.bool("running"), o.list("strips").map { StripMeter(it.num("pk"), it.num("rms"), it.num("hold"), it.num("clip") > 0, it.num("gr"), it.num("gate"), it.num("in")) }, m.num("l"), m.num("r"), m.num("rms"), m.num("clip") > 0) }
         /** slider 0..1 <-> fader dB: the console's law (-inf at 0, -60 at 0.25, -20 at 0.5, 0 dB at 0.75, +10 at 1) */

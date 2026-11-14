@@ -20,4 +20,8 @@
     <string name="failed">failed: %1$s</string>
     <string name="stop_engine">STOP ENGINE</string>
     <string name="stopped">engine stopped</string>
+    <string name="pair_pin">PAIR (PIN)</string>
+    <string name="pair_go">PAIR</string>
+    <string name="pair_help">On the computer: NETWORK → PHONE REMOTE → START. Type the six-digit PIN shown there (it changes every minute).</string>
+    <string name="pair_need_host">Type the console address first (shown on the computer under PHONE REMOTE).</string>
 </resources>

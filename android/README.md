@@ -3,6 +3,9 @@
 Two things in one app: a **local mixer** (the engine on the phone, microphone in) and the **remote control** of a console on the LAN
 (`RemoteActivity`: connect to `amixos-daemon` with host, port and the token from `~/.amixos/daemon.token`; 32 strips with fader, pan,
 mute, solo and meters from the WebSocket stream; master; devices open / stop; a channel page with EQ, compressor and gate). The
+**Pairing:** press PAIR (PIN), type the six-digit PIN the console shows under NETWORK → PHONE REMOTE (new every minute), and the phone
+gets a token of its own (30 days, revocable there); no long token to type. **No app needed:** any browser on the same Wi-Fi can open
+`http://<console address>:8765/remote` (shown on the same page) and pair with the same PIN. The
 remote client (`remote/DaemonClient.kt`, `MiniJson.kt`, `MiniWebSocket.kt`) is plain Kotlin with no dependencies and is tested on the
 JVM against the real daemon: `jvm-test/run.sh`. It replaced the earlier React Native / Expo remote.
 

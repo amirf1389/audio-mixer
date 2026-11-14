@@ -184,6 +184,14 @@ httpd::Response Daemon::handle(const httpd::Request& r) {
     if (!err.empty()) { res.status = 400; json::Value e = json::Value::object(); e.set("ok", false); e.set("error", err); res.body = e.dump(); return res; }
     res.body = out.dump(); return res;
   }
+  if (r.method == "GET" && (r.path == "/remote" || r.path == "/remote/")) {   // THE BROWSER REMOTE: any phone, tablet or computer on the network pairs with the minute's PIN
+    static const char kPage[] =
+#include "remote_page.inc"
+      ;
+    res.type = "text/html; charset=utf-8";
+    res.headers.push_back({"Content-Security-Policy", "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self' ws: wss:; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"});
+    res.body = kPage; return res;
+  }
   if (r.method == "GET" && (r.path == "/" || r.path == "/api")) {
     res.body = "{\"name\":\"amixos-daemon\",\"api\":[\"GET /api/status\",\"GET /api/devices\",\"GET /api/state\",\"GET /api/meters\",\"POST /api/control (X-Amix-Token)\",\"POST /api/pair\",\"GET /api/tokens\",\"POST /api/tokens\",\"POST /api/tokens/revoke\",\"WS /ws/meters?token=\"]}"; return res;
   }

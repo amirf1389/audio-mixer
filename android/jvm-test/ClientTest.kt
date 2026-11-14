@@ -26,5 +26,5 @@ fun main(args: Array<String>) {
     check(latch.await(8, TimeUnit.SECONDS) && connected, "5 meter frames over the WebSocket")
     stream.stop()
     c.solo(5, false); c.mute(4, false); c.stop(); check(!c.status().running, "stopped")
-    println("ClientTest: JSON, fader law, 401 on a wrong token, status / devices / open / control / state / meters / WebSocket stream / stop OK")
+    println("ClientTest: JSON, fader law, 401 on a wrong token, status / devices / open / control / state / meters / WebSocket stream / stop / PIN pairing OK")
 }

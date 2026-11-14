@@ -50,7 +50,12 @@ if(WIN32)
 endif()
 
 # amixos-daemon: the engine as a background service with a local JSON API (engine/cpp/app/daemon). The Kotlin remote (android/) talks to it.
+# the browser remote (GET /remote) is built into the service: the page is read here and compiled in as a string
+file(READ ${CMAKE_CURRENT_SOURCE_DIR}/app/daemon/remote_page.html AMFX_REMOTE_PAGE)
+file(CONFIGURE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/gen/remote_page.inc CONTENT "R\"AMFXPAGE(${AMFX_REMOTE_PAGE})AMFXPAGE\"" @ONLY)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/app/daemon/remote_page.html)
 add_library(amixos_daemon_lib STATIC app/daemon/daemon.cpp app/daemon/httpd.cpp app/daemon/tokens.cpp)
+target_include_directories(amixos_daemon_lib PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/gen)
 target_include_directories(amixos_daemon_lib PUBLIC app)
 target_link_libraries(amixos_daemon_lib PUBLIC audiomixer_runtime amixos_license)
 if(WIN32)
