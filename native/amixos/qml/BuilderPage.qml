@@ -79,7 +79,7 @@ Item {
                 Btn { label: "NEW"; onClicked: builder.newDesign() }
                 Btn { label: "SAVE"; onClicked: builder.save() }
                 Btn { objectName: "builderExport"; label: "EXPORT VST3"; on: true; onColor: Theme.emerald; onClicked: builder.exportPlugin() }
-                Btn { label: "TRY IN THE MIXER"; on: true; onColor: Theme.cyan; onClicked: builder.tryOnStrip(engine.selectedStrip) } }
+                Btn { visible: engine !== null; label: "TRY IN THE MIXER"; on: true; onColor: Theme.cyan; onClicked: builder.tryOnStrip(engine.selectedStrip) } }
             Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 9; color: builder.shellFound ? Theme.dim : Theme.danger
                 text: builder.shellFound ? i18n.t("Exports to ", i18n.lang) + builder.exportDir + i18n.t(": every DAW (and this console) finds VST3 plug-ins there.", i18n.lang) : i18n.t("The plug-in shell is not installed next to the console: reinstall AmF X1 to export.", i18n.lang) }
             Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; text: builder.note; color: Theme.emerald; font.pixelSize: 9; visible: builder.note !== "" }

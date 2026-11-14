@@ -1,3 +1,5 @@
+#include <QCoreApplication>
+#include <QProcess>
 #include <algorithm>
 #include "Settings.h"
 #include "paths/paths.hpp"
@@ -112,4 +114,15 @@ void Settings::factoryReset() {
   for (const QString& f : {dataFolder() + "/arrangement.json", dataFolder() + "/driver-lock.json", dataFolder() + "/daemon.token", dataFolder() + "/daemon.tokens.json"}) QFile::remove(f);   // the network tokens go too: every phone has to be let in again
   if (engine_) { engine_->setClipThreshold(clipDb()); engine_->setPeakHold(peakHoldMs()); }
   emit changed(); note(QStringLiteral("Factory reset done: everything is as it left the factory. Only the licence and the edition were kept."));
+}
+
+bool Settings::openPluginBuilder() {
+#ifdef _WIN32
+  const QString exe = QCoreApplication::applicationDirPath() + "/AmF X1 Plugin Builder.exe";
+#else
+  const QString exe = QCoreApplication::applicationDirPath() + "/AmF X1 Plugin Builder";
+#endif
+  if (!QFileInfo::exists(exe)) { note(QStringLiteral("The Plug-in Builder is not installed next to the console.")); return false; }
+  const bool ok = QProcess::startDetached(exe, {}); note(ok ? QStringLiteral("Plug-in Builder opened: export a plug-in there, then RESCAN on PLUGINS.") : QStringLiteral("The Plug-in Builder did not start."));
+  return ok;
 }

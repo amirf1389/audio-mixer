@@ -7,7 +7,6 @@
 #include <QVariantList>
 #include <QVariantMap>
 
-class Engine;
 
 class Builder : public QObject {
   Q_OBJECT
@@ -24,7 +23,7 @@ class Builder : public QObject {
   Q_PROPERTY(bool shellFound READ shellFound CONSTANT)
   Q_PROPERTY(QString color READ color WRITE setColor NOTIFY changed)   // the faceplate colour
  public:
-  explicit Builder(Engine* engine, QObject* parent = nullptr);
+  explicit Builder(QObject* engine, QObject* parent = nullptr);   // the console's Engine (called by name, so the standalone builder needs none), or nullptr
   QString name() const { return name_; } void setName(const QString& v) { name_ = v.left(60); emit changed(); }
   QString vendor() const { return vendor_; } void setVendor(const QString& v) { vendor_ = v.left(60); emit changed(); }
   QString category() const { return category_; } void setCategory(const QString& v) { category_ = v; emit changed(); }
@@ -52,6 +51,6 @@ class Builder : public QObject {
   struct Knob { QString id, title, label; double value = 0.5; bool exposed = false; double x = -1, y = -1; };
   struct Blk { QString kind, name; QList<Knob> knobs; };
   QString folder() const; QString shellPath() const;
-  Engine* engine_; QString name_, vendor_, category_ = QStringLiteral("Fx"), color_ = QStringLiteral("#EA580C"), uid_, note_, lastExport_, file_;
+  QObject* engine_; QString name_, vendor_, category_ = QStringLiteral("Fx"), color_ = QStringLiteral("#EA580C"), uid_, note_, lastExport_, file_;
   QList<Blk> blocks_;
 };

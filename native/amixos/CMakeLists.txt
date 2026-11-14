@@ -28,7 +28,7 @@ qt_add_executable(amixos
     src/Media.cpp src/Media.h
     src/Samples.cpp src/Samples.h
     src/Update.cpp src/Update.h
-    src/Scope.cpp src/Scope.h src/Measure.cpp src/Measure.h src/Remote.cpp src/Remote.h src/Extension.cpp src/Extension.h src/Net.cpp src/Net.h src/Frame.cpp src/Frame.h src/Builder.cpp src/Builder.h
+    src/Scope.cpp src/Scope.h src/Measure.cpp src/Measure.h src/Remote.cpp src/Remote.h src/Extension.cpp src/Extension.h src/Net.cpp src/Net.h src/Frame.cpp src/Frame.h
     src/Generator.cpp src/Generator.h
     src/I18n.cpp src/I18n.h)
 set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)   # before qt_add_qml_module, or Theme is a plain type and every Theme.* colour is undefined
@@ -76,7 +76,6 @@ qt_add_qml_module(amixos
         qml/PluginsPage.qml
         qml/NetworkPage.qml
         qml/FramePage.qml
-        qml/BuilderPage.qml
         qml/MediaPage.qml
         qml/SamplesPage.qml
         qml/SoundCardPage.qml
@@ -141,8 +140,8 @@ qt_add_qml_module(amixos
         i18n/ui/uk.json)
 target_compile_definitions(amixos PRIVATE AMIX_VERSION="${AMIX_VERSION}")
 target_compile_definitions(amixos PRIVATE AMIX_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
-target_link_libraries(amixos PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::QuickControls2 Qt6::Network audiomixer_runtime audiomixer_engine amixos_net amixos_license amixos_arrange amixos_vst3 amixos_vst2 amixos_record amixos_fx amixos_samples amixos_measure amixos_plugin_design)
-add_dependencies(amixos amfb_plugin_shell)   # the PLUG-IN BUILDER exports copies of this shell: built next to the console
+target_link_libraries(amixos PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::QuickControls2 Qt6::Network audiomixer_runtime audiomixer_engine amixos_net amixos_license amixos_arrange amixos_vst3 amixos_vst2 amixos_record amixos_fx amixos_samples amixos_measure)
+add_dependencies(amixos amfb_plugin_shell amfb_plugin_builder)   # the separate PLUG-IN BUILDER and the shell it exports: built next to the console
 
 if(WIN32)
     set_target_properties(amixos PROPERTIES WIN32_EXECUTABLE TRUE)
@@ -158,3 +157,20 @@ endif()
 enable_testing()
 add_test(NAME amixos_smoke COMMAND amixos --smoke)
 set_tests_properties(amixos_smoke PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software" TIMEOUT 60)
+
+# AmF X1 PLUG-IN BUILDER: the builder as its own program (shares the builder page, Theme, the language tables and the plug-in shell)
+file(GLOB AMIX_I18N_FILES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} i18n/verified-22.json i18n/auto-58.json i18n/ui/*.json)
+qt_add_executable(amfb_plugin_builder src/builder_main.cpp src/Builder.cpp src/Builder.h src/I18n.cpp src/I18n.h)
+set_target_properties(amfb_plugin_builder PROPERTIES OUTPUT_NAME "AmF X1 Plugin Builder" WIN32_EXECUTABLE TRUE)
+target_include_directories(amfb_plugin_builder PRIVATE src)
+qt_add_qml_module(amfb_plugin_builder
+    URI AmixOS
+    VERSION 1.0
+    RESOURCE_PREFIX /qt/qml
+    OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/builder_qml/AmixOS
+    NO_CACHEGEN
+    NO_PLUGIN
+    QML_FILES qml/BuilderApp.qml qml/BuilderPage.qml qml/Theme.qml
+    RESOURCES ${AMIX_I18N_FILES})
+target_link_libraries(amfb_plugin_builder PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::QuickControls2 amixos_plugin_design amixos_paths)
+add_dependencies(amfb_plugin_builder amfb_plugin_shell)
