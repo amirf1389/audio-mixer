@@ -74,7 +74,7 @@ class RemoteActivity : AppCompatActivity() {
         val row2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         val settingsBtn = Button(this).apply { text = getString(R.string.settings); setOnClickListener { startActivity(android.content.Intent(this@RemoteActivity, SettingsActivity::class.java)) } }
         row2.addView(find); row2.addView(busesBtn); row2.addView(monBtn); row2.addView(clipBtn); root.addView(android.widget.HorizontalScrollView(this).apply { addView(row2) })
-        row2.apply { addView(settingsBtn); addView(Button(this@RemoteActivity).apply { text = getString(R.string.plugins); setOnClickListener { startActivity(android.content.Intent(this@RemoteActivity, PluginsActivity::class.java)) } }); addView(Button(this@RemoteActivity).apply { text = getString(R.string.calculator); setOnClickListener { startActivity(android.content.Intent(this@RemoteActivity, CalculatorActivity::class.java)) } }) }
+        row2.apply { addView(Button(this@RemoteActivity).apply { text = getString(R.string.scenes); setOnClickListener { showScenes() } }); addView(Button(this@RemoteActivity).apply { text = getString(R.string.tools); setOnClickListener { startActivity(android.content.Intent(this@RemoteActivity, ToolsActivity::class.java)) } }); addView(settingsBtn); addView(Button(this@RemoteActivity).apply { text = getString(R.string.plugins); setOnClickListener { startActivity(android.content.Intent(this@RemoteActivity, PluginsActivity::class.java)) } }); addView(Button(this@RemoteActivity).apply { text = getString(R.string.calculator); setOnClickListener { startActivity(android.content.Intent(this@RemoteActivity, CalculatorActivity::class.java)) } }) }
         connectBtn = connect
         connected = listOf(busesBtn, monBtn, clipBtn)
         find.setOnClickListener {   // FIND: the consoles on this Wi-Fi that run the phone remote
@@ -240,6 +240,55 @@ class RemoteActivity : AppCompatActivity() {
             val pp = ToggleButton(this).apply { textOn = "PRE"; textOff = "POST"; text = "POST"; setOnCheckedChangeListener { _, v -> pre = v; io.execute { runCatching { c.send(strip, b, lvl, pre) } } } }
             line.addView(t); line.addView(sb); line.addView(pp); box.addView(line) }
         return box
+    }
+
+    /** SCENES on the phone: SAVE takes the console's mix as it is now (levels, pan, mute, solo, names, master, buses); RECALL sends it back.
+     *  Kept on this phone (SharedPreferences "scenes", one JSON per scene). */
+    private fun showScenes() {
+        val c = client; if (c == null) { status.text = getString(R.string.not_connected); return }
+        val dlg = AlertDialog.Builder(this).setTitle(R.string.scenes).setPositiveButton(android.R.string.ok, null).create()
+        dlg.setView(ScrollView(this).apply { addView(scenesPanel(c) { dlg.dismiss() }) }); dlg.show()
+    }
+    internal fun scenesPanel(c: DaemonClient, done: () -> Unit = {}): View {
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 16, 24, 16); setBackgroundColor(Color.parseColor("#141B26")) }
+        val store = getSharedPreferences("scenes", MODE_PRIVATE)
+        fun refresh() {
+            box.removeAllViews()
+            box.addView(Button(this).apply { text = getString(R.string.scene_save); setOnClickListener {
+                val e = EditText(this@RemoteActivity).apply { setText(String.format("Scene %d", store.all.size + 1)); setSingleLine() }
+                AlertDialog.Builder(this@RemoteActivity).setTitle(R.string.scene_save).setView(e).setPositiveButton(android.R.string.ok) { _, _ ->
+                    val name = e.text.toString().trim().ifEmpty { "Scene" }
+                    io.execute { runCatching { val st = c.state(); val o = mapOf("t" to System.currentTimeMillis(), "master" to st.masterDb,
+                            "strips" to st.strips.map { mapOf("id" to it.id, "name" to it.name, "db" to it.db, "pan" to it.pan, "mute" to it.mute, "solo" to it.solo) },
+                            "buses" to st.buses.map { mapOf("id" to it.id, "db" to it.db, "mute" to it.mute) })
+                        store.edit().putString(name, com.amfb.amixos.remote.MiniJson.stringify(o)).apply() }
+                        .onSuccess { ui.post { refresh() } }.onFailure { ui.post { status.text = getString(R.string.failed, it.message ?: "") } } } }
+                    .setNegativeButton(android.R.string.cancel, null).show() } })
+            val names = store.all.keys.sortedBy { n -> (com.amfb.amixos.remote.MiniJson.parse(store.getString(n, "{}")!!) as? Map<*, *>)?.get("t").toString() }
+            if (names.isEmpty()) box.addView(TextView(this).apply { text = getString(R.string.scene_none); setTextColor(Color.parseColor("#8B98A8")); setPadding(0, 16, 0, 0) })
+            for (n in names) {
+                @Suppress("UNCHECKED_CAST") val o = com.amfb.amixos.remote.MiniJson.parse(store.getString(n, "{}")!!) as Map<String, Any?>
+                val when_ = java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT).format(java.util.Date((o["t"] as? Number)?.toLong() ?: 0L))
+                val strips = (o["strips"] as? List<*>).orEmpty(); val muted = strips.count { (it as? Map<*, *>)?.get("mute") == true }
+                val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, 12, 0, 0) }
+                val t = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f) }
+                t.addView(TextView(this).apply { text = n; setTextColor(Color.WHITE); textSize = 16f })
+                t.addView(TextView(this).apply { text = getString(R.string.scene_info, when_, strips.size, muted); setTextColor(Color.parseColor("#8B98A8")); textSize = 11f })
+                row.addView(t)
+                row.addView(Button(this).apply { text = getString(R.string.scene_recall); setOnClickListener {
+                    AlertDialog.Builder(this@RemoteActivity).setMessage(getString(R.string.scene_recall_q, n)).setPositiveButton(R.string.scene_recall) { _, _ ->
+                        io.execute { runCatching {
+                            for (x in strips.mapNotNull { it as? Map<*, *> }) { val id = (x["id"] as Number).toInt(); if (id >= faders.size) continue   // a scene from a bigger plan: the extra channels are skipped
+                                c.gain(id, (x["db"] as Number).toDouble()); c.pan(id, (x["pan"] as Number).toDouble()); c.mute(id, x["mute"] == true); c.solo(id, x["solo"] == true); c.name(id, x["name"].toString()) }
+                            for (x in (o["buses"] as? List<*>).orEmpty().mapNotNull { it as? Map<*, *> }) { val id = (x["id"] as Number).toInt(); c.busLevel(id, (x["db"] as Number).toDouble()); c.busMute(id, x["mute"] == true) }
+                            c.master((o["master"] as? Number)?.toDouble() ?: 0.0); c.state() }
+                            .onSuccess { st -> ui.post { state = st; buildStrips(st); status.text = getString(R.string.scene_recalled, n); done() } }
+                            .onFailure { ui.post { status.text = getString(R.string.failed, it.message ?: "") } } } }.setNegativeButton(android.R.string.cancel, null).show() } })
+                row.addView(Button(this).apply { text = "✕"; setOnClickListener { store.edit().remove(n).apply(); refresh() } })
+                box.addView(row)
+            }
+        }
+        refresh(); return box
     }
 
     /** MASTER: the limiter (on / off, ceiling). */

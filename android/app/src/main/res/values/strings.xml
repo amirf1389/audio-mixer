@@ -94,4 +94,28 @@
     <string name="plugins_extensions">EXTENSIONS</string>
     <string name="plugins_effects">BUILT-IN EFFECTS</string>
     <string name="plugins_note">Read-only. While the phone remote runs, the remote service plays the audio, so racks and plug-ins are changed on the computer.</string>
+    <string name="scenes">SCENES</string>
+    <string name="scene_save">SAVE THE MIX AS A SCENE</string>
+    <string name="scene_none">No scenes on this phone yet. SAVE keeps the console\'s levels, pan, mute, solo, names, buses and master.</string>
+    <string name="scene_info">%1$s · %2$d ch · %3$d muted</string>
+    <string name="scene_recall">RECALL</string>
+    <string name="scene_recall_q">Recall \"%1$s\"? The console\'s faders, mutes, names and buses jump to it.</string>
+    <string name="scene_recalled">Scene \"%1$s\" recalled</string>
+    <string name="tools">TOOLS</string>
+    <string name="tools_title">TOOLS</string>
+    <string name="tools_tuner">TUNER</string>
+    <string name="tools_spl">SOUND LEVEL</string>
+    <string name="tools_gen">GENERATOR</string>
+    <string name="tools_tuner_note">Play one note near the phone. Green within 5 cents. Uses this phone\'s microphone; nothing is recorded or sent.</string>
+    <string name="tools_play_note">play a note…</string>
+    <string name="tools_cal">Calibration: 0 dBFS = %1$d dB SPL</string>
+    <string name="tools_reset_max">RESET MAX</string>
+    <string name="tools_spl_note">An estimate, not a calibrated meter: phone microphones differ by several dB. Set the calibration next to a real meter once (pink noise from GENERATOR works well).</string>
+    <string name="tools_freq">FREQUENCY (SINE)</string>
+    <string name="tools_level">LEVEL</string>
+    <string name="tools_play">PLAY</string>
+    <string name="tools_stop">STOP</string>
+    <string name="tools_gen_note">Through the phone\'s output (plug it into a channel, or Bluetooth to a speaker). Start low: noise and sweeps at high level can damage tweeters and ears.</string>
+    <string name="tools_need_mic">Allow the microphone to use this tool.</string>
+    <string name="tools_no_mic">The microphone could not be opened.</string>
 </resources>
