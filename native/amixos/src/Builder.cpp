@@ -8,12 +8,12 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 
-#include "Engine.h"
+#include <QMetaObject>
 #include "fx/fx.hpp"
 #include "paths/paths.hpp"
 #include "plugin_shell/design.hpp"
 
-Builder::Builder(Engine* engine, QObject* parent) : QObject(parent), engine_(engine) { newDesign(); }
+Builder::Builder(QObject* engine, QObject* parent) : QObject(parent), engine_(engine) { newDesign(); }
 
 QVariantList Builder::catalog() const {
   QVariantList l; for (const auto& [k, n] : am::fx::catalog()) { if (k == "sampler" || k == "iamfrender" || k == "logic") continue;   // need the console around them
@@ -121,10 +121,13 @@ QString Builder::exportPlugin() {
   lastExport_ = QString::fromStdString(out); note_ = tr("Exported: %1 (open your DAW's plug-in list, or rescan)").arg(lastExport_); save(); emit changed(); return lastExport_;
 }
 bool Builder::tryOnStrip(int strip) {
+  if (!engine_) { note_ = tr("TRY IN THE MIXER works inside the console: here, EXPORT and load the plug-in in your DAW."); emit changed(); return false; }
   const QString bundle = exportPlugin(); if (bundle.isEmpty()) return false;
-  engine_->rescanVst({exportDir()});
-  for (const QVariant& v : engine_->vstCatalog()) { const QVariantMap m = v.toMap(); if (!QDir::cleanPath(m.value("module").toString()).startsWith(QDir::cleanPath(bundle))) continue;
-    for (const QVariant& p : engine_->plugins(strip)) { const QVariantMap s = p.toMap(); if (s.value("kind").toString().isEmpty()) { engine_->setPlugin(strip, s.value("slot").toInt(), m.value("kind").toString());
+  int found = 0; QMetaObject::invokeMethod(engine_, "rescanVst", Q_RETURN_ARG(int, found), Q_ARG(QStringList, QStringList{exportDir()}));
+  QVariantList cat; QMetaObject::invokeMethod(engine_, "vstCatalog", Q_RETURN_ARG(QVariantList, cat));
+  QVariantList rack; QMetaObject::invokeMethod(engine_, "plugins", Q_RETURN_ARG(QVariantList, rack), Q_ARG(int, strip));
+  for (const QVariant& v : cat) { const QVariantMap m = v.toMap(); if (!QDir::cleanPath(m.value("module").toString()).startsWith(QDir::cleanPath(bundle))) continue;
+    for (const QVariant& p : rack) { const QVariantMap s = p.toMap(); if (s.value("kind").toString().isEmpty()) { QMetaObject::invokeMethod(engine_, "setPlugin", Q_ARG(int, strip), Q_ARG(int, s.value("slot").toInt()), Q_ARG(QString, m.value("kind").toString()));
         note_ = tr("%1 is on CH %2: play something through it").arg(name_).arg(strip + 1); emit changed(); return true; } }
     note_ = tr("The rack of CH %1 is full.").arg(strip + 1); emit changed(); return false; }
   note_ = tr("Exported, but the console did not find it on the rescan (%1)").arg(exportDir()); emit changed(); return false;

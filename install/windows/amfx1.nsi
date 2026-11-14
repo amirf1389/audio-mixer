@@ -81,6 +81,7 @@ Section "AmF X1" SecMain
   WriteUninstaller "$INSTDIR\Uninstall.exe"
   CreateDirectory "$SMPROGRAMS\AmF X1"
   CreateShortcut "$SMPROGRAMS\AmF X1\AmF X1.lnk" "$INSTDIR\amixos.exe"
+  CreateShortcut "$SMPROGRAMS\AmF X1\AmF X1 Plugin Builder.lnk" "$INSTDIR\AmF X1 Plugin Builder.exe"
   CreateShortcut "$SMPROGRAMS\AmF X1\Uninstall AmF X1.lnk" "$INSTDIR\Uninstall.exe"
   CreateShortcut "$DESKTOP\AmF X1.lnk" "$INSTDIR\amixos.exe"
 SectionEnd

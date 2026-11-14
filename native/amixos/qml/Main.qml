@@ -59,6 +59,7 @@ ApplicationWindow {
                         MItem { text: i18n.t("Clear clip lamps", i18n.lang); onTriggered: engine.clearClips() } }
                     Menu { id: toolsMenu; objectName: "toolsMenu"; width: 260
                         MItem { text: i18n.t("Plug-ins", i18n.lang); onTriggered: root.current = "plugins" }
+                        MItem { text: i18n.t("Plug-in Builder (separate app)…", i18n.lang); onTriggered: settings.openPluginBuilder() }
                         MItem { text: i18n.t("Sound card", i18n.lang); onTriggered: root.current = "asio" }
                         MItem { text: i18n.t("Effects", i18n.lang); onTriggered: root.current = "fx" }
                         MItem { text: i18n.t("Mastering", i18n.lang); onTriggered: root.current = "master" }
@@ -153,13 +154,12 @@ ApplicationWindow {
                     anchors.fill: parent
                     sourceComponent: {
                         switch (root.current) {
-                        case "home": return homeC; case "frame": return frameC; case "builder": return builderC; case "delay": return delayC; case "cloud": return cloudC; case "cascade": return cascadeC; case "mixer": return mixerC; case "dsp": return toneC; case "rtaeq": return rtaEqC; case "bluetooth": return bluetoothC; case "io": return connC;
+                        case "home": return homeC; case "frame": return frameC; case "delay": return delayC; case "cloud": return cloudC; case "cascade": return cascadeC; case "mixer": return mixerC; case "dsp": return toneC; case "rtaeq": return rtaEqC; case "bluetooth": return bluetoothC; case "io": return connC;
                         case "meter": return levelsC; case "lufs": return loudC; case "sys": return settingsC; case "dyn": return compC; case "gate": return gateC; case "bus": return sendC; case "dca": return dcaC; case "scenes": return scenesC; case "presets": return presetsC; case "routing": return routingC; case "renew": return licenseC; case "arrange": return arrangeC; case "fx": return fxC; case "osc": return oscC; case "phase": return phaseC; case "miceq": return miceqC; case "live": return liveC; case "tools": return toolsC; case "calib": return calibC; case "boot": return bootC; case "help": return helpC; case "acct": return acctC; case "access": return accessC; case "admin": return adminC; case "ai": return aiC; case "engctl": return engctlC; case "plugins": return pluginsC; case "network": return networkC; case "media": return mediaC; case "samples": return samplesC; case "asio": return soundC; case "acoustics": return acousticsC; case "master": return masteringC; case "surround": return spatialC; default: return comingC
                         }
                     }
                 }
                 Component { id: frameC; FramePage {} }
-                Component { id: builderC; BuilderPage {} }
                 Component { id: homeC; HomePage { onGo: function (id) { root.current = id } } }
                 Component { id: mixerC; MixerPage { onGo: function (id) { root.current = id } } }
                 Component { id: toneC; TonePage {} }
