@@ -90,11 +90,12 @@ class RemoteActivity : AppCompatActivity() {
         status = TextView(this).apply { text = getString(R.string.not_connected); setTextColor(Color.parseColor("#FBBF24")); typeface = android.graphics.Typeface.MONOSPACE }
         root.addView(status)
         val masterRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        masterLabel = TextView(this).apply { text = "MASTER"; setTextColor(Color.WHITE); typeface = android.graphics.Typeface.MONOSPACE }
+        masterLabel = TextView(this).apply { setOnClickListener { showMaster() }; text = "MASTER"; setTextColor(Color.WHITE); typeface = android.graphics.Typeface.MONOSPACE }
         masterMeter = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply { max = 1000; layoutParams = LinearLayout.LayoutParams(0, 20, 1f) }
         masterRow.addView(masterLabel); masterRow.addView(masterMeter); root.addView(masterRow)
         val masterFader = SeekBar(this).apply { masterFaderRef = this; max = 1000; progress = 750; setOnSeekBarChangeListener(change { p -> client?.master(DaemonClient.posToDb(p / 1000.0)) }) }
         root.addView(masterFader)
+        root.addView(TextView(this).apply { text = getString(R.string.tap_hint); setTextColor(Color.parseColor("#8B98A8")); textSize = 11f })
         strips = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val scroll = ScrollView(this).apply { addView(strips); layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f) }
         root.addView(scroll)
@@ -181,24 +182,66 @@ class RemoteActivity : AppCompatActivity() {
         }
     }
 
-    /** One channel: a peaking EQ band, the compressor and the gate, with the daemon's defaults. */
+    /** One channel: input trim, polarity, delay, an EQ band, compressor, gate and the sends to AUX 1-8. Every slider shows its value. */
     private fun showChannel(strip: Int, name: String) {
         val c = client ?: return
-        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 16, 24, 16) }
-        fun row(label: String, max: Int, start: Int, f: (Int) -> Unit): SeekBar { box.addView(TextView(this).apply { text = label }); val sb = SeekBar(this).apply { this.max = max; progress = start; setOnSeekBarChangeListener(change(f)) }; box.addView(sb); return sb }
+        AlertDialog.Builder(this).setTitle(String.format("CH %02d  %s", strip + 1, name)).setView(ScrollView(this).apply { addView(channelPanel(c, strip)) }).setPositiveButton(android.R.string.ok, null).show()
+    }
+    internal fun channelPanel(c: DaemonClient, strip: Int): View {
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 16, 24, 16); setBackgroundColor(Color.parseColor("#141B26")) }
+        val accent = Color.parseColor("#EA580C"); val cyan = Color.parseColor("#00F2FF")
+        fun head(t: String) = box.addView(TextView(this).apply { text = t; setTextColor(accent); typeface = android.graphics.Typeface.MONOSPACE; setPadding(0, 24, 0, 4) })
+        fun row(label: String, max: Int, start: Int, show: (Int) -> String, f: (Int) -> Unit): SeekBar {
+            val t = TextView(this).apply { text = label + "   " + show(start); setTextColor(Color.WHITE) }; box.addView(t)
+            val sb = SeekBar(this).apply { this.max = max; progress = start; setOnSeekBarChangeListener(change { p -> ui.post { t.text = label + "   " + show(p) }; f(p) }) }; box.addView(sb); return sb }
+        fun toggle(on: String, off: String, f: (Boolean) -> Unit) = ToggleButton(this).apply { textOn = on; textOff = off; text = off; setOnCheckedChangeListener { b, v -> buzz(b); io.execute { runCatching { f(v) } } } }.also { box.addView(it) }
+
+        head("INPUT")
+        row("TRIM", 480, 240, { String.format("%+.1f dB", (it - 240) / 10.0) }) { p -> c.trim(strip, (p - 240) / 10.0) }
+        toggle("POLARITY Ø INVERTED", "POLARITY Ø NORMAL") { c.polarity(strip, it) }
+        row("DELAY", 1000, 0, { String.format("%.1f ms", it / 10.0) }) { p -> c.delay(strip, p / 10.0) }
+
+        head("EQ")
         var eqFreq = 1000.0; var eqGain = 0.0
-        row("EQ band 1 frequency (20 Hz .. 20 kHz)", 1000, 566) { p -> eqFreq = 20 * Math.pow(1000.0, p / 1000.0); c.eq(strip, 0, "peaking", eqFreq, 1.0, eqGain) }
-        row("EQ band 1 gain (-24 .. +24 dB)", 480, 240) { p -> eqGain = (p - 240) / 10.0; c.eq(strip, 0, "peaking", eqFreq, 1.0, eqGain) }
-        val compOn = ToggleButton(this).apply { textOn = "COMPRESSOR ON"; textOff = "COMPRESSOR OFF" }; box.addView(compOn)
-        var thr = -18.0; var ratio = 3.0
-        row("threshold (-60 .. 0 dB)", 600, 420) { p -> thr = p / 10.0 - 60; if (compOn.isChecked) c.compressor(strip, true, thr, ratio, 6.0, 10.0, 100.0, 0.0) }
-        row("ratio (1 .. 20)", 190, 20) { p -> ratio = 1 + p / 10.0; if (compOn.isChecked) c.compressor(strip, true, thr, ratio, 6.0, 10.0, 100.0, 0.0) }
-        compOn.setOnCheckedChangeListener { _, on -> io.execute { runCatching { c.compressor(strip, on, thr, ratio, 6.0, 10.0, 100.0, 0.0) } } }
-        val gateOn = ToggleButton(this).apply { textOn = "GATE ON"; textOff = "GATE OFF" }; box.addView(gateOn)
-        var gthr = -40.0
-        row("gate threshold (-80 .. 0 dB)", 800, 400) { p -> gthr = p / 10.0 - 80; if (gateOn.isChecked) c.gate(strip, true, gthr, -80.0, 1.0, 50.0, 100.0) }
-        gateOn.setOnCheckedChangeListener { _, on -> io.execute { runCatching { c.gate(strip, on, gthr, -80.0, 1.0, 50.0, 100.0) } } }
-        AlertDialog.Builder(this).setTitle(String.format("CH %02d  %s", strip + 1, name)).setView(ScrollView(this).apply { addView(box) }).setPositiveButton(android.R.string.ok, null).show()
+        fun hz(p: Int) = 20 * Math.pow(1000.0, p / 1000.0)
+        row("BAND 1 FREQUENCY", 1000, 566, { val f = hz(it); if (f >= 1000) String.format("%.2f kHz", f / 1000) else String.format("%.0f Hz", f) }) { p -> eqFreq = hz(p); c.eq(strip, 0, "peaking", eqFreq, 1.0, eqGain) }
+        row("BAND 1 GAIN", 480, 240, { String.format("%+.1f dB", (it - 240) / 10.0) }) { p -> eqGain = (p - 240) / 10.0; c.eq(strip, 0, "peaking", eqFreq, 1.0, eqGain) }
+
+        head("DYNAMICS")
+        var thr = -18.0; var ratio = 3.0; var compOn = false
+        toggle("COMPRESSOR ON", "COMPRESSOR OFF") { compOn = it; c.compressor(strip, it, thr, ratio, 6.0, 10.0, 100.0, 0.0) }
+        row("THRESHOLD", 600, 420, { String.format("%.1f dB", it / 10.0 - 60) }) { p -> thr = p / 10.0 - 60; if (compOn) c.compressor(strip, true, thr, ratio, 6.0, 10.0, 100.0, 0.0) }
+        row("RATIO", 190, 20, { String.format("%.1f : 1", 1 + it / 10.0) }) { p -> ratio = 1 + p / 10.0; if (compOn) c.compressor(strip, true, thr, ratio, 6.0, 10.0, 100.0, 0.0) }
+        var gthr = -40.0; var gateOn = false
+        toggle("GATE ON", "GATE OFF") { gateOn = it; c.gate(strip, it, gthr, -80.0, 1.0, 50.0, 100.0) }
+        row("GATE THRESHOLD", 800, 400, { String.format("%.1f dB", it / 10.0 - 80) }) { p -> gthr = p / 10.0 - 80; if (gateOn) c.gate(strip, true, gthr, -80.0, 1.0, 50.0, 100.0) }
+
+        head("SENDS")
+        for (b in 0 until 8) { var pre = false; var lvl = -120.0
+            val line = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+            val t = TextView(this).apply { text = "AUX ${b + 1}  -∞"; setTextColor(cyan); typeface = android.graphics.Typeface.MONOSPACE; layoutParams = LinearLayout.LayoutParams(300, LinearLayout.LayoutParams.WRAP_CONTENT) }
+            val sb = SeekBar(this).apply { max = 1000; progress = 0; layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                setOnSeekBarChangeListener(change { p -> lvl = DaemonClient.posToDb(p / 1000.0); ui.post { t.text = "AUX ${b + 1}  " + DaemonClient.fmtDb(lvl) }; c.send(strip, b, lvl, pre) }) }
+            val pp = ToggleButton(this).apply { textOn = "PRE"; textOff = "POST"; text = "POST"; setOnCheckedChangeListener { _, v -> pre = v; io.execute { runCatching { c.send(strip, b, lvl, pre) } } } }
+            line.addView(t); line.addView(sb); line.addView(pp); box.addView(line) }
+        return box
+    }
+
+    /** MASTER: the limiter (on / off, ceiling). */
+    private fun showMaster() {
+        val c = client ?: return
+        AlertDialog.Builder(this).setTitle("MASTER").setView(masterPanel(c)).setPositiveButton(android.R.string.ok, null).show()
+    }
+    internal fun masterPanel(c: DaemonClient): View {
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 16, 24, 16); setBackgroundColor(Color.parseColor("#141B26")) }
+        val st = state; var on = st?.limiter ?: true; var ceil = st?.ceilingDb ?: -0.5
+        val t = TextView(this).apply { text = String.format("CEILING  %.1f dBFS", ceil); setTextColor(Color.WHITE) }
+        box.addView(ToggleButton(this).apply { textOn = "LIMITER ON"; textOff = "LIMITER OFF"; isChecked = on; setOnCheckedChangeListener { b, v -> buzz(b); on = v; io.execute { runCatching { c.limiter(on, ceil) } } } })
+        box.addView(t)
+        box.addView(SeekBar(this).apply { max = 200; progress = ((ceil + 20) * 10).toInt().coerceIn(0, 200)
+            setOnSeekBarChangeListener(change { p -> ceil = p / 10.0 - 20; ui.post { t.text = String.format("CEILING  %.1f dBFS", ceil) }; c.limiter(on, ceil) }) })
+        box.addView(TextView(this).apply { text = "The limiter keeps the master under the ceiling (no clipping on the output)."; setTextColor(Color.parseColor("#8B98A8")) })
+        return box
     }
 
     /** FOLLOW THE CONSOLE: every 3 s the state is read again; faders, mutes, solos and names that changed on the computer (or on another

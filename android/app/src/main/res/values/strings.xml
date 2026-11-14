@@ -65,4 +65,5 @@
     <string name="set_reset">RESET SETTINGS</string>
     <string name="set_reset_q">Put every setting back to its default? The saved console and pairing stay.</string>
     <string name="stop_q">Stop the console\'s engine? All sound stops until a device is opened again.</string>
+    <string name="tap_hint">Tap a channel name for trim, delay, EQ, dynamics and sends · tap MASTER for the limiter · long press a name to rename</string>
 </resources>
