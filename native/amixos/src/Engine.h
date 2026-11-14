@@ -269,11 +269,12 @@ class Engine : public QObject {
   double dacRate() const { return settings_.value("audio/dacRate", 0).toDouble(); } void setDacRate(double v) { settings_.setValue("audio/dacRate", std::clamp(v, 0.0, 1100000.0)); emit recordChanged(); }
   Q_PROPERTY(int dacBits READ dacBits WRITE setDacBits NOTIFY recordChanged)
   int dacBits() const { return settings_.value("audio/dacBits", 0).toInt(); } void setDacBits(int v) { settings_.setValue("audio/dacBits", v); emit recordChanged(); }
-  // DSP MODE: "digital" = the mix leaves the master exactly as computed; "analog" = a gentle soft saturation on the master (unity gain for quiet
+  // DSP MODE: "digital" = the mix leaves the master exactly as computed; "analog" = a gentle soft saturation on the master and a console
+  // channel stage on every strip (Mixer::setAnalogChannels: warmth, transformer roll-off, bus crosstalk) (unity gain for quiet
   // signals, peaks rounded off the way an analogue output stage does), independent of the MASTERING switch
   Q_PROPERTY(QString dspMode READ dspMode WRITE setDspMode NOTIFY masterChainChanged)
   QString dspMode() const { return mastering()["analog"].toBool() ? QStringLiteral("analog") : QStringLiteral("digital"); }
-  void setDspMode(const QString& m) { QVariantMap v; v["analog"] = (m == "analog"); setMastering(v); }
+  void setDspMode(const QString& m) { QVariantMap v; v["analog"] = (m == "analog"); setMastering(v); if (rt_) rt_->setAnalogChannels(m == "analog"); }   // ANALOG: the master and every channel
   Q_INVOKABLE QVariantList asioDrivers() const;                 // discovery only: every ASIO driver found {id, name, inChannels, outChannels, rate, kind, current}
   Q_INVOKABLE bool openAsioDriver(const QString& id, int frames);
   Q_INVOKABLE int readAsioChannels(const QString& id);   // input n of the running device -> strip n; returns how many (done by itself after an ASIO open)

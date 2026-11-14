@@ -118,7 +118,7 @@ class S16Meter {
 // HRTF data set, no licensed format. Off = the strip pans as before (bit-exact).
 struct Spatial { bool on = false; double az = 0, el = 0, dist = 1, spread = 0;   // degrees (0 front, +90 right, 180 behind), elevation -90..90, metres, 0..1 (1 = no direction)
   double tgtL = 0, tgtR = 0, dL = 0, dR = 0, gL = 0.7071, gR = 0.7071, aL = 1, aR = 1, aRear = 1, lpL = 0, lpR = 0, rrL = 0, rrR = 0; unsigned w = 0; float ring[512] = {}; };
-struct Strip { Spatial sp; double gainDb = 0, gainLin = 1, pan = 0, depth = 1; bool mute = false, solo = false; Meter meter; double inPk = 0; bool automix = false; double amWeight = 1, amLevel = 0, amGain = 1; };   // inPk: pre-fader input peak of the last block; automix: gain-sharing member, amGain its share (linear)
+struct Strip { double anLp = 0; Spatial sp; double gainDb = 0, gainLin = 1, pan = 0, depth = 1; bool mute = false, solo = false; Meter meter; double inPk = 0; bool automix = false; double amWeight = 1, amLevel = 0, amGain = 1; };   // inPk: pre-fader input peak of the last block; automix: gain-sharing member, amGain its share (linear)
 // AUX SENDS: kMaxBuses stereo buses. Each strip sends to each bus at its own level, pre-fader (the raw input: monitor mixes) or post-fader
 // (after gain, mute and solo: effects sends). A bus has a level, a mute, a meter and a RETURN level into the master (an effects return or a
 // way to hear a monitor mix); its own stereo output is handed to the caller through process()'s busOut (the runtime maps it to output channels).
@@ -160,7 +160,12 @@ class Mixer {
   // dither after the limiter when the device takes 16 or 24-bit integers (0 = float, no dither): the last thing before the converter.
   void setOutputBits(int bits) { outBits_ = bits == 16 || bits == 24 ? bits : 0; }
   int outputBits() const { return outBits_; }
-  void setDcBlock(bool on) { dcOn_ = on; if (!on) { dcX_[0] = dcX_[1] = dcY_[0] = dcY_[1] = 0; } }   // off by default: the reference vectors are bit-exact
+  void setDcBlock(bool on) { dcOn_ = on; if (!on) { dcX_[0] = dcX_[1] = dcY_[0] = dcY_[1] = 0; } }
+  // ANALOG CHANNELS (DSP MODE ANALOG): every strip passes a console channel's output stage before its fader: a gentle saturation,
+  // slightly asymmetric (a little 2nd harmonic: warmth), unity for quiet signals (-0.1 dB at -20 dBFS, about -0.6 dB at -6 dBFS), a
+  // transformer-like roll-off above ~20 kHz, and a whisper of L/R crosstalk on the mix bus (-46 dB). DIGITAL leaves all of it out.
+  void setAnalogChannels(bool on) { analog_ = on; if (!on) for (auto& st : strips_) st.anLp = 0; }
+  bool analogChannels() const { return analog_; }   // off by default: the reference vectors are bit-exact
   const Bus& bus(int k) const { return buses_[static_cast<std::size_t>(k)]; }
   const Send& send(int strip, int bus) const { return sends_[static_cast<std::size_t>(strip)][static_cast<std::size_t>(bus)]; }
   // inputs[strip] -> outL / outR (frames samples each). Meters, loudness and phase are updated once per call.
@@ -187,7 +192,7 @@ class Mixer {
   double masterDb_ = 0, masterLin_ = 1;
   double width_ = 1.0;   // master stereo width
   bool autoOn_ = false; double autoTarget_ = -16, autoMax_ = 12, autoDb_ = 0, autoSec_ = 0; int automixN_ = 0;
-  int outBits_ = 0; bool dcOn_ = false; double dcX_[2] = {0, 0}, dcY_[2] = {0, 0}; std::uint32_t rng_ = 0x2545F491u;
+  bool analog_ = false; int outBits_ = 0; bool dcOn_ = false; double dcX_[2] = {0, 0}, dcY_[2] = {0, 0}; std::uint32_t rng_ = 0x2545F491u;
   bool limOn_ = false; double limCeil_, limGain_ = 1, limReleaseMs_ = 100, limGrDb_ = 0;
   std::uint64_t nonFinite_ = 0;
   ClipConfig clip_; Meter master_[2]; Loudness loudness_; PhaseResult phase_{0, 0, 0, 0, true};

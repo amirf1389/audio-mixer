@@ -79,6 +79,7 @@ qt_add_qml_module(amixos
         qml/MediaPage.qml
         qml/SamplesPage.qml
         qml/SoundCardPage.qml
+        qml/DspModeSwitch.qml
         qml/SetupPage.qml
         qml/HomePage.qml
         qml/MixerPage.qml

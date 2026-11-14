@@ -176,7 +176,7 @@ void Engine::pushAll() {
   for (int k = 0; k < kBuses; ++k) { rt_->setBusLevel(k, buses_[k].db); rt_->setBusMute(k, buses_[k].mute); rt_->setBusReturn(k, buses_[k].returnDb); }
   for (int i = 0; i < kStrips; ++i) if (strips_[static_cast<std::size_t>(i)].automix) rt_->setAutomix(i, true, strips_[static_cast<std::size_t>(i)].amWeight);
   for (int i = 0; i < kStrips; ++i) if (strips_[static_cast<std::size_t>(i)].autoPol) rt_->setAutoPolarity(i, true);
-  pushAutoLevel(); rt_->setDcBlock(dcBlock()); rt_->setOutputBits(effectiveOutputBits());
+  pushAutoLevel(); rt_->setDcBlock(dcBlock()); rt_->setAnalogChannels(dspMode() == QLatin1String("analog")); rt_->setOutputBits(effectiveOutputBits());
   pushMaster(); rt_->setMasterProcessor(&master_);   // the master chain: program EQ (the RTA EQ rack) and mastering
   for (int i = 0; i < kStrips; ++i) {
     const StripUi& s = strips_[static_cast<std::size_t>(i)];

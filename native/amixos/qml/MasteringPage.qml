@@ -44,6 +44,8 @@ Item {
                 Btn { label: page.m.on ? page.t("RACK: ON") : page.t("RACK: BYPASSED"); on: page.m.on; onColor: Theme.emerald; onClicked: page.put("on", !page.m.on) }
                 Btn { label: page.m.eqOn ? page.t("PROGRAM EQ: ON") : page.t("PROGRAM EQ: BYPASSED"); on: page.m.eqOn; onColor: Theme.cyan; onClicked: page.put("eqOn", !page.m.eqOn) }
                 Rectangle { width: 1; height: 20; color: Theme.lineSoft }
+                DspModeSwitch { objectName: "masteringDspMode" }
+                Rectangle { width: 1; height: 20; color: Theme.lineSoft }
                 Text { text: page.t("PRESETS"); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.letterSpacing: 2 }
                 Repeater { model: engine.masteringPresets(); delegate: Btn { label: page.t(modelData); on: page.m.preset === modelData; onClicked: engine.applyMasteringPreset(modelData) } }
                 Item { Layout.fillWidth: true } } }

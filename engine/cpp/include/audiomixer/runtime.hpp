@@ -143,6 +143,7 @@ class Runtime {
   void setAutoLevel(bool on, double targetLufs, double maxGainDb);
   void setOutputBits(int bits);                       // 0 = float out (no dither); 16 / 24 = TPDF dither to that depth
   void setDcBlock(bool on);
+  void setAnalogChannels(bool on);   // DSP MODE ANALOG on every strip (Mixer::setAnalogChannels)
   void resetProfiler();
   // the monitor section (control room): what goes to output channels 0 / 1 after the master meters. source 0 = master, 1..kMaxBuses = that bus
   // (post level, pre return); level in dB, dim = -20 dB, mono sums L+R, mute = silence. The master meters and loudness are not affected.
