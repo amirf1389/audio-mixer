@@ -3,10 +3,11 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
-    <application android:label="@string/app_name" android:allowBackup="false" android:theme="@style/Theme.AppCompat.NoActionBar" android:supportsRtl="true" android:usesCleartextTraffic="true">
-        <activity android:name=".MainActivity" android:exported="true" android:screenOrientation="portrait">
+    <application android:label="@string/app_name" android:allowBackup="false" android:theme="@style/Theme.AmFX1" android:supportsRtl="true" android:usesCleartextTraffic="true">
+        <activity android:name=".HomeActivity" android:exported="true">
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
         </activity>
+        <activity android:name=".LocalMixerActivity" android:exported="false" />
         <activity android:name=".ToolsActivity" android:exported="false" />
         <activity android:name=".PluginsActivity" android:exported="false" />
         <activity android:name=".EqActivity" android:exported="false" />

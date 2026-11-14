@@ -33,7 +33,7 @@ class CalculatorActivity : AppCompatActivity() {
         root.addView(HorizontalScrollView(this).apply { addView(row) })
         body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0, 16, 0, 0) }
         root.addView(body)
-        setContentView(ScrollView(this).apply { setBackgroundColor(Color.parseColor("#0F141C")); addView(root) })
+        setContentView(Nav.wrap(this, ScrollView(this).apply { setBackgroundColor(Color.parseColor("#0F141C")); addView(root) }, null))
         show(intent.getIntExtra("tool", 0))
     }
 

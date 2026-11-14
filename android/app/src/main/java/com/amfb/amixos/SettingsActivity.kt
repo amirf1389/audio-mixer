@@ -41,7 +41,7 @@ class SettingsActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(32, 32, 32, 48) }
-        setContentView(ScrollView(this).apply { setBackgroundColor(Color.parseColor("#0F141C")); addView(box) })
+        setContentView(Nav.wrap(this, ScrollView(this).apply { setBackgroundColor(Color.parseColor("#0F141C")); addView(box) }, Nav.Tab.SETTINGS))
         title(getString(R.string.settings))
         val r = Prefs.remote(this); val l = Prefs.local(this)
 

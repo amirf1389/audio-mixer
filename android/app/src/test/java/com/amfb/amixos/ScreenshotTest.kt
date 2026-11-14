@@ -29,6 +29,13 @@ class ScreenshotTest {
     }
     private fun idle(ms: Long) { val end = System.currentTimeMillis() + ms; while (System.currentTimeMillis() < end) { shadowOf(Looper.getMainLooper()).idle(); Thread.sleep(50) } }
 
+    @Test fun home() {
+        Prefs.remote(org.robolectric.RuntimeEnvironment.getApplication()).edit().putString("host", "192.168.1.20").putString("port", "8765").putString("token", "x")
+            .putString("lastName", "A mix OS 1.23.0.1").putString("lastPlan", "PRO").putInt("lastStrips", 20).commit()
+        val a = Robolectric.buildActivity(HomeActivity::class.java).setup().resume().get()
+        shot(a.window.decorView.rootView, "home")
+    }
+
     @Test fun settings() {
         val a = Robolectric.buildActivity(SettingsActivity::class.java).setup().get()
         shot(a.window.decorView.rootView, "settings")

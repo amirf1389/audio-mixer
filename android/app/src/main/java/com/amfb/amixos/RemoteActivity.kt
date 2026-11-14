@@ -41,12 +41,14 @@ class RemoteActivity : AppCompatActivity() {
     private var connected: List<Button> = emptyList()
     private val nameLabels = ArrayList<TextView>(); private val mutes = ArrayList<ToggleButton>(); private val solos = ArrayList<ToggleButton>()
     private var touching = 0   // a finger on a fader: the sync does not move it under the finger
+    private var pendingOpen: String? = null   // "scenes": from the home screen's SCENES tile, opened as soon as the console answers
+    override fun onNewIntent(i: android.content.Intent) { super.onNewIntent(i); setIntent(i); val o = i.getStringExtra("open"); if (o == "scenes") { if (client != null) showScenes() else { pendingOpen = o; connectBtn?.performClick() } } }
     private val clipFlags = ArrayList<Boolean>(); private var connBox: LinearLayout? = null
     private var connectBtn: Button? = null; private var autoTried = false
     private fun buzz(v: View) { if (Prefs.haptics(this)) v.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP) }
     override fun onResume() {   // back from SETTINGS: the mixer is laid out again with the new choices
         super.onResume()
-        if (!autoTried) { autoTried = true; val p = Prefs.remote(this); if (Prefs.autoConnect(this) && !p.getString("host", "").isNullOrEmpty() && !p.getString("token", "").isNullOrEmpty()) connectBtn?.performClick() }
+        if (!autoTried) { autoTried = true; val p = Prefs.remote(this); if ((Prefs.autoConnect(this) || pendingOpen != null) && !p.getString("host", "").isNullOrEmpty() && !p.getString("token", "").isNullOrEmpty()) connectBtn?.performClick() }
         else state?.let { buildStrips(it) }
         if (client != null) { if (Prefs.keepScreenOn(this)) window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) else window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
     }
@@ -55,7 +57,7 @@ class RemoteActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         val prefs = getSharedPreferences("remote", Context.MODE_PRIVATE)
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.parseColor("#0F141C")); setPadding(24, 24, 24, 24) }
-        val title = TextView(this).apply { text = getString(R.string.remote_title); setTextColor(Color.parseColor("#EA580C")); textSize = 18f; setTypeface(null, android.graphics.Typeface.BOLD) }
+        val title = TextView(this).apply { text = getString(R.string.home_mixer).uppercase(); setTextColor(Color.parseColor("#EA580C")); textSize = 18f; setTypeface(null, android.graphics.Typeface.BOLD) }
         root.addView(title)
         val host = EditText(this).apply { hint = "console address (192.168.1.20)"; setText(prefs.getString("host", "")); setTextColor(Color.WHITE); setHintTextColor(Color.GRAY) }
         val port = EditText(this).apply { hint = "port"; setText(prefs.getString("port", Prefs.defaultPort(this@RemoteActivity).toString())); setTextColor(Color.WHITE); setHintTextColor(Color.GRAY) }
@@ -72,9 +74,8 @@ class RemoteActivity : AppCompatActivity() {
         val monBtn = Button(this).apply { text = getString(R.string.monitor); isEnabled = false }
         val clipBtn = Button(this).apply { text = getString(R.string.clear_clips); isEnabled = false }
         val row2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        val settingsBtn = Button(this).apply { text = getString(R.string.settings); setOnClickListener { startActivity(android.content.Intent(this@RemoteActivity, SettingsActivity::class.java)) } }
         row2.addView(find); row2.addView(busesBtn); row2.addView(monBtn); row2.addView(clipBtn); root.addView(android.widget.HorizontalScrollView(this).apply { addView(row2) })
-        row2.apply { addView(Button(this@RemoteActivity).apply { text = getString(R.string.scenes); setOnClickListener { showScenes() } }); addView(Button(this@RemoteActivity).apply { text = getString(R.string.tools); setOnClickListener { startActivity(android.content.Intent(this@RemoteActivity, ToolsActivity::class.java)) } }); addView(settingsBtn); addView(Button(this@RemoteActivity).apply { text = getString(R.string.plugins); setOnClickListener { startActivity(android.content.Intent(this@RemoteActivity, PluginsActivity::class.java)) } }); addView(Button(this@RemoteActivity).apply { text = getString(R.string.calculator); setOnClickListener { startActivity(android.content.Intent(this@RemoteActivity, CalculatorActivity::class.java)) } }) }
+        row2.apply { addView(Button(this@RemoteActivity).apply { text = getString(R.string.scenes); setOnClickListener { showScenes() } });  addView(Button(this@RemoteActivity).apply { text = getString(R.string.plugins); setOnClickListener { startActivity(android.content.Intent(this@RemoteActivity, PluginsActivity::class.java)) } }); addView(Button(this@RemoteActivity).apply { text = getString(R.string.calculator); setOnClickListener { startActivity(android.content.Intent(this@RemoteActivity, CalculatorActivity::class.java)) } }) }
         connectBtn = connect
         connected = listOf(busesBtn, monBtn, clipBtn)
         find.setOnClickListener {   // FIND: the consoles on this Wi-Fi that run the phone remote
@@ -105,7 +106,8 @@ class RemoteActivity : AppCompatActivity() {
         masterDb = TextView(this).apply { text = "0.0"; setTextColor(Color.parseColor("#00F2FF")); typeface = android.graphics.Typeface.MONOSPACE; gravity = Gravity.CENTER }
         master.addView(masterLabel); master.addView(planBadge); master.addView(masterFader); master.addView(masterDb)
         desk.addView(master); root.addView(desk)
-        setContentView(root)
+        setContentView(Nav.wrap(this, root, Nav.Tab.MIXER))
+        pendingOpen = intent.getStringExtra("open")
 
         connect.setOnClickListener {
             val ep = Endpoint(host.text.toString().trim(), port.text.toString().trim().toIntOrNull() ?: Prefs.defaultPort(this), token.text.toString().trim())
@@ -114,7 +116,7 @@ class RemoteActivity : AppCompatActivity() {
             io.execute {
                 try {
                     val c = DaemonClient(ep); val st = c.status(); val s = c.state()
-                    ui.post { client = c; state = s; devices.isEnabled = true; connected.forEach { it.isEnabled = true }; if (Prefs.keepScreenOn(this)) window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); startSync(c); connBox?.visibility = View.GONE; planBadge.text = (if (st.plan.isEmpty()) "" else st.plan + " · ") + st.strips + " CH"; status.text = st.name + " " + st.version + " · " + (if (st.running) st.backend else "engine stopped") + " · " + st.strips + " strips"; status.setTextColor(Color.parseColor("#10B981")); masterFader.progress = (DaemonClient.dbToPos(s.masterDb) * 1000).toInt(); buildStrips(s); startMeters(c) }
+                    ui.post { client = c; state = s; devices.isEnabled = true; connected.forEach { it.isEnabled = true }; if (Prefs.keepScreenOn(this)) window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); startSync(c); connBox?.visibility = View.GONE; Prefs.remote(this).edit().putString("lastName", st.name + " " + st.version).putString("lastPlan", st.plan).putInt("lastStrips", st.strips).apply(); if (pendingOpen == "scenes") { pendingOpen = null; showScenes() }; planBadge.text = (if (st.plan.isEmpty()) "" else st.plan + "\n") + st.strips + " CH"; status.text = st.name + " " + st.version + " · " + (if (st.running) st.backend else "engine stopped") + " · " + st.strips + " strips"; status.setTextColor(Color.parseColor("#10B981")); masterFader.progress = (DaemonClient.dbToPos(s.masterDb) * 1000).toInt(); buildStrips(s); startMeters(c) }
                 } catch (e: Exception) { ui.post { status.text = getString(R.string.failed, e.message ?: e.javaClass.simpleName); status.setTextColor(Color.parseColor("#FF2A5F")) } }
             }
         }
