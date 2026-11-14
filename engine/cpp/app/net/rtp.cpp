@@ -1,3 +1,4 @@
+#include "audiomixer/sample_format.hpp"
 #include "net/rtp.hpp"
 
 #include <algorithm>
@@ -33,9 +34,9 @@ bool rtpParse(const std::uint8_t* p, std::size_t n, RtpHeader& h, std::size_t& o
 void pcmEncode(const float* in, std::size_t frames, int channels, int bits, std::uint8_t* d) {
   const std::size_t n = frames * static_cast<std::size_t>(channels);
   if (bits == 16) {
-    for (std::size_t i = 0; i < n; ++i) { const long v = std::lround(std::clamp(in[i], -1.0f, 1.0f) * 32767.0f); *d++ = static_cast<std::uint8_t>(v >> 8); *d++ = static_cast<std::uint8_t>(v); }
+    for (std::size_t i = 0; i < n; ++i) { const long v = am::fmt::toI16(in[i]); *d++ = static_cast<std::uint8_t>(v >> 8); *d++ = static_cast<std::uint8_t>(v); }
   } else {
-    for (std::size_t i = 0; i < n; ++i) { const long v = std::lround(static_cast<double>(std::clamp(in[i], -1.0f, 1.0f)) * 8388607.0); *d++ = static_cast<std::uint8_t>(v >> 16); *d++ = static_cast<std::uint8_t>(v >> 8); *d++ = static_cast<std::uint8_t>(v); }
+    for (std::size_t i = 0; i < n; ++i) { const long v = am::fmt::toI24(in[i]); *d++ = static_cast<std::uint8_t>(v >> 16); *d++ = static_cast<std::uint8_t>(v >> 8); *d++ = static_cast<std::uint8_t>(v); }
   }
 }
 

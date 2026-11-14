@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cstring>
 
+#include "audiomixer/fpu.hpp"
 #include "backends.hpp"
 
 namespace am {
@@ -109,6 +110,13 @@ void Runtime::setDcBlock(bool on) { post({kDcBlock, on ? 1 : 0, 0, 0, 0}); }
 void Runtime::resetProfiler() { post({kProfReset, 0, 0, 0, 0}); }
 void Runtime::setAutomix(int s, bool on, double w) { post({kAutomix, s, on ? 1.0 : 0.0, w, 0}); }
 std::string Runtime::sampleFormat() const { return backend_ ? backend_->sampleFormat() : std::string(); }
+int Runtime::deviceOutputBits() const {
+  std::string f = sampleFormat(); const std::size_t o = f.find("out "); if (o != std::string::npos) f = f.substr(o);
+  if (f.find("shared") != std::string::npos) return 0;   // WASAPI shared: Windows mixes in float, the console's output is float
+  if (f.rfind("16-bit integer", 0) == 0 || f.find("out 16-bit integer") == 0) return 16;
+  if (f.rfind("24-bit integer", 0) == 0 || f.find("out 24-bit integer") == 0) return 24;
+  return 0;
+}
 void Runtime::setAutoPolarity(int s, bool on) { post({kAutoPol, s, on ? 1.0 : 0.0, 0, 0}); }
 void Runtime::setAutoLevel(bool on, double t, double m) { post({kAutoLevel, on ? 1 : 0, t, m, 0}); }
 void Runtime::setBusProcessor(int b, BusProcessor* p) { Cmd c{kBusFx, b, 0, 0, 0}; c.p = p; post(c); }
@@ -122,6 +130,7 @@ void Runtime::setMonitor(int source, double db, bool dim, bool mono, bool mute) 
 }
 
 void Runtime::onBlock(const float* const* in, float* const* out, std::size_t frames) {
+  am::denormalsOff();   // per thread; cheap, so every callback (a backend may move the callback to another thread)
   const std::int64_t t0 = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
   if (lastStartNs_) { const double period = static_cast<double>(frames) * 1e6 / mixer_.sampleRate(); const double gap = static_cast<double>(t0 - lastStartNs_) / 1000.0; jitterUs_ += (std::fabs(gap - period) - jitterUs_) * 0.1; }
   lastStartNs_ = t0;

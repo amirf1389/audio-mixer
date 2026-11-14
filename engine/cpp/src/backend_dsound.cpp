@@ -5,6 +5,7 @@
 // its name; "" = the Windows default. Latency is 2-3 periods plus the Bluetooth / codec path, so this is the fallback after ASIO and
 // WASAPI, and the path to use for Bluetooth. Cross-compiled with mingw-w64 (-Werror); run against real devices only on a Windows PC.
 #ifdef _WIN32
+#include "audiomixer/sample_format.hpp"
 #include <windows.h>
 #include <mmsystem.h>
 #include <dsound.h>
@@ -105,14 +106,14 @@ class DsoundBackend : public Backend {
       if (SUCCEEDED(in_->GetCurrentPosition(&cap, &rd)) && ((rd + total - readPos_) % total) >= need) {
         void* p1 = nullptr; void* p2 = nullptr; DWORD n1 = 0, n2 = 0;
         if (SUCCEEDED(in_->Lock(readPos_, need, &p1, &n1, &p2, &n2, 0))) { if (p1) std::memcpy(scratch_.data(), p1, n1); if (p2) std::memcpy(scratch_.data() + n1, p2, n2); in_->Unlock(p1, n1, p2, n2); readPos_ = (readPos_ + need) % total;
-          const std::int16_t* s = reinterpret_cast<const std::int16_t*>(scratch_.data()); for (unsigned i = 0; i < frames_; ++i) for (int c = 0; c < nIn_; ++c) inF_[static_cast<std::size_t>(c)][i] = static_cast<float>(s[i * nIn_ + c]) / 32768.0f; }
+          const std::int16_t* s = reinterpret_cast<const std::int16_t*>(scratch_.data()); for (unsigned i = 0; i < frames_; ++i) for (int c = 0; c < nIn_; ++c) inF_[static_cast<std::size_t>(c)][i] = am::fmt::fromI16(s[i * nIn_ + c]); }
       } else for (auto& v : inF_) std::fill(v.begin(), v.end(), 0.0f);
     }
     for (auto& v : outF_) std::fill(v.begin(), v.end(), 0.0f);
     cb_(inp_.data(), outp_.data(), frames_);
     if (out_) {
       const DWORD need = periodBytes(nOut_); std::int16_t* d = reinterpret_cast<std::int16_t*>(scratch_.data());
-      for (unsigned i = 0; i < frames_; ++i) for (int c = 0; c < nOut_; ++c) { const float x = outF_[static_cast<std::size_t>(c)][i]; d[i * nOut_ + c] = static_cast<std::int16_t>((x > 1.0f ? 1.0f : x < -1.0f ? -1.0f : x) * 32767.0f); }
+      for (unsigned i = 0; i < frames_; ++i) for (int c = 0; c < nOut_; ++c) { const float x = outF_[static_cast<std::size_t>(c)][i]; d[i * nOut_ + c] = am::fmt::toI16(x); }   // rounded, clamped (sample_format.hpp)
       void* p1 = nullptr; void* p2 = nullptr; DWORD n1 = 0, n2 = 0;
       if (SUCCEEDED(out_->Lock(writePos_, need, &p1, &n1, &p2, &n2, 0))) { if (p1) std::memcpy(p1, scratch_.data(), n1); if (p2) std::memcpy(p2, scratch_.data() + n1, n2); out_->Unlock(p1, n1, p2, n2); }
       writePos_ = (writePos_ + need) % outBytes();

@@ -92,7 +92,10 @@ class Runtime {
   void stop();
   bool running() const { return running_; }
   const std::string& backendName() const { return backendName_; }
-  std::string sampleFormat() const;   // the open device's own sample format ("" when nothing is open); the engine itself mixes in 64-bit float
+  std::string sampleFormat() const;
+  // the integer word length the device takes on its output: 16 or 24 (dither at that depth), 0 for 32-bit integer / float (no dither:
+  // a 32-bit converter's LSB is far below its own noise). From sampleFormat(): ASIO / WASAPI exclusive report the driver's own type.
+  int deviceOutputBits() const;   // the open device's own sample format ("" when nothing is open); the engine itself mixes in 64-bit float
   double sampleRate() const { return mixer_.sampleRate(); }   // the device rate after open()
   // control: any thread, takes effect at the start of the next block
   void setGainDb(int strip, double db);
@@ -121,6 +124,7 @@ class Runtime {
   void setBusReturn(int bus, double db);
   void setBusProcessor(int bus, BusProcessor* p);   // an effect on a bus (app/fx); keep it alive while set, detach with nullptr before deleting
   double limiterReductionDb() const { return mixer_.limiterReductionDb(); }   // read from the interface thread: a meter value, one block old at most
+  std::uint64_t nonFiniteSamples() const { return mixer_.nonFiniteSamples(); }   // NaN / inf the master guard silenced (diagnostics)
   void setMasterProcessor(BusProcessor* p);          // the master chain; the caller keeps it alive while set
   void setWidth(double w);                           // master stereo width 0..2
   void setAutomix(int strip, bool on, double weight);   // gain-sharing automixer membership

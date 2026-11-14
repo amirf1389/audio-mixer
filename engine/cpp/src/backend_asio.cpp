@@ -9,6 +9,7 @@
 // instead of refusing the driver (a USB DAC has no inputs). Cross-compiled with mingw-w64 (-Werror) in the tests; run against real drivers only
 // on a Windows PC.
 #ifdef _WIN32
+#include "audiomixer/sample_format.hpp"
 #include "asio_sdk.h"
 
 #include <algorithm>
@@ -218,22 +219,22 @@ class AsioBackend : public Backend {
     return (in.empty() ? "" : "in " + in) + (in.empty() || out.empty() ? "" : " · ") + (out.empty() ? "" : "out " + out) + " (ASIO)";
   }
   static bool supported(ASIOSampleType t) { return t == ASIOSTInt16LSB || t == ASIOSTInt24LSB || t == ASIOSTInt32LSB || t == ASIOSTFloat32LSB || t == ASIOSTFloat64LSB; }
+  // am::fmt (sample_format.hpp): the same scale both ways, rounding, clamping: an untouched integer sample comes out the same
   static void toFloat(ASIOSampleType t, const void* src, float* dst, long n) {
     switch (t) {
-      case ASIOSTInt16LSB: { auto p = static_cast<const std::int16_t*>(src); for (long i = 0; i < n; ++i) dst[i] = static_cast<float>(p[i]) / 32768.0f; break; }
-      case ASIOSTInt24LSB: { auto p = static_cast<const std::uint8_t*>(src); for (long i = 0; i < n; ++i) { std::int32_t v = (p[3 * i] << 8) | (p[3 * i + 1] << 16) | (static_cast<std::int32_t>(p[3 * i + 2]) << 24); dst[i] = static_cast<float>(v >> 8) / 8388608.0f; } break; }
-      case ASIOSTInt32LSB: { auto p = static_cast<const std::int32_t*>(src); for (long i = 0; i < n; ++i) dst[i] = static_cast<float>(static_cast<double>(p[i]) / 2147483648.0); break; }
+      case ASIOSTInt16LSB: { auto p = static_cast<const std::int16_t*>(src); for (long i = 0; i < n; ++i) dst[i] = am::fmt::fromI16(p[i]); break; }
+      case ASIOSTInt24LSB: { auto p = static_cast<const std::uint8_t*>(src); for (long i = 0; i < n; ++i) dst[i] = am::fmt::fromI24(am::fmt::unpack24(p + 3 * i)); break; }
+      case ASIOSTInt32LSB: { auto p = static_cast<const std::int32_t*>(src); for (long i = 0; i < n; ++i) dst[i] = am::fmt::fromI32(p[i]); break; }
       case ASIOSTFloat32LSB: std::memcpy(dst, src, static_cast<std::size_t>(n) * 4); break;
       case ASIOSTFloat64LSB: { auto p = static_cast<const double*>(src); for (long i = 0; i < n; ++i) dst[i] = static_cast<float>(p[i]); break; }
       default: std::memset(dst, 0, static_cast<std::size_t>(n) * 4);
     }
   }
-  static float clip1(float x) { return x > 1.0f ? 1.0f : (x < -1.0f ? -1.0f : x); }
   static void fromFloat(ASIOSampleType t, const float* src, void* dst, long n) {
     switch (t) {
-      case ASIOSTInt16LSB: { auto p = static_cast<std::int16_t*>(dst); for (long i = 0; i < n; ++i) p[i] = static_cast<std::int16_t>(std::lrintf(clip1(src[i]) * 32767.0f)); break; }
-      case ASIOSTInt24LSB: { auto p = static_cast<std::uint8_t*>(dst); for (long i = 0; i < n; ++i) { const std::int32_t v = static_cast<std::int32_t>(std::lrintf(clip1(src[i]) * 8388607.0f)); p[3 * i] = static_cast<std::uint8_t>(v); p[3 * i + 1] = static_cast<std::uint8_t>(v >> 8); p[3 * i + 2] = static_cast<std::uint8_t>(v >> 16); } break; }
-      case ASIOSTInt32LSB: { auto p = static_cast<std::int32_t*>(dst); for (long i = 0; i < n; ++i) p[i] = static_cast<std::int32_t>(std::llrint(static_cast<double>(clip1(src[i])) * 2147483647.0)); break; }
+      case ASIOSTInt16LSB: { auto p = static_cast<std::int16_t*>(dst); for (long i = 0; i < n; ++i) p[i] = am::fmt::toI16(src[i]); break; }
+      case ASIOSTInt24LSB: { auto p = static_cast<std::uint8_t*>(dst); for (long i = 0; i < n; ++i) am::fmt::pack24(p + 3 * i, am::fmt::toI24(src[i])); break; }
+      case ASIOSTInt32LSB: { auto p = static_cast<std::int32_t*>(dst); for (long i = 0; i < n; ++i) p[i] = am::fmt::toI32(src[i]); break; }
       case ASIOSTFloat32LSB: std::memcpy(dst, src, static_cast<std::size_t>(n) * 4); break;
       case ASIOSTFloat64LSB: { auto p = static_cast<double*>(dst); for (long i = 0; i < n; ++i) p[i] = src[i]; break; }
       default: break;

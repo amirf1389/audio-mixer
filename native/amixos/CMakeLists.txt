@@ -172,5 +172,5 @@ qt_add_qml_module(amfb_plugin_builder
     NO_PLUGIN
     QML_FILES qml/BuilderApp.qml qml/BuilderPage.qml qml/Theme.qml
     RESOURCES ${AMIX_I18N_FILES})
-target_link_libraries(amfb_plugin_builder PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::QuickControls2 amixos_plugin_design amixos_paths)
+target_link_libraries(amfb_plugin_builder PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::QuickControls2 amixos_plugin_design amixos_plugin_preview amixos_paths)
 add_dependencies(amfb_plugin_builder amfb_plugin_shell)

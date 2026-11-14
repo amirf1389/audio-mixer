@@ -6,6 +6,9 @@
 #include <QObject>
 #include <QVariantList>
 #include <QVariantMap>
+#include <QTimer>
+#include <memory>
+namespace am::shell { class Preview; }
 
 
 class Builder : public QObject {
@@ -22,8 +25,20 @@ class Builder : public QObject {
   Q_PROPERTY(QString lastExport READ lastExport NOTIFY changed)
   Q_PROPERTY(bool shellFound READ shellFound CONSTANT)
   Q_PROPERTY(QString color READ color WRITE setColor NOTIFY changed)   // the faceplate colour
+  // PREVIEW: hear the design live on the sound card (the program's own engine): a source through the same chain the plug-in will run
+  Q_PROPERTY(bool previewOn READ previewOn NOTIFY previewChanged)
+  Q_PROPERTY(int previewSource READ previewSource NOTIFY previewChanged)     // 0 sample, 1 pink noise, 2 sweep, 3 microphone, 4 file
+  Q_PROPERTY(int previewSample READ previewSample NOTIFY previewChanged)
+  Q_PROPERTY(bool previewBypass READ previewBypass NOTIFY previewChanged)
+  Q_PROPERTY(double previewGainDb READ previewGainDb NOTIFY previewChanged)
+  Q_PROPERTY(QString previewFile READ previewFile NOTIFY previewChanged)
+  Q_PROPERTY(QString previewNote READ previewNote NOTIFY previewChanged)
+  Q_PROPERTY(QVariantList samples READ samples CONSTANT)                      // [{id, name, category}] the 100 built-in samples
+  Q_PROPERTY(double previewInDb READ previewInDb NOTIFY metersChanged)
+  Q_PROPERTY(double previewOutDb READ previewOutDb NOTIFY metersChanged)
  public:
-  explicit Builder(QObject* engine, QObject* parent = nullptr);   // the console's Engine (called by name, so the standalone builder needs none), or nullptr
+  explicit Builder(QObject* engine, QObject* parent = nullptr);
+  ~Builder() override;   // the console's Engine (called by name, so the standalone builder needs none), or nullptr
   QString name() const { return name_; } void setName(const QString& v) { name_ = v.left(60); emit changed(); }
   QString vendor() const { return vendor_; } void setVendor(const QString& v) { vendor_ = v.left(60); emit changed(); }
   QString category() const { return category_; } void setCategory(const QString& v) { category_ = v; emit changed(); }
@@ -45,12 +60,24 @@ class Builder : public QObject {
   Q_INVOKABLE QString exportPlugin();                // the new bundle's path, "" on failure (note says why)
   Q_INVOKABLE bool tryOnStrip(int strip);            // export, rescan, insert it on that strip: hear it in the console
   QString designJson() const;                        // for the tests
+  bool previewOn() const; int previewSource() const { return pvSource_; } int previewSample() const { return pvSample_; } bool previewBypass() const { return pvBypass_; }
+  double previewGainDb() const { return pvGain_; } QString previewFile() const { return pvFile_; } QString previewNote() const { return pvNote_; }
+  QVariantList samples() const; double previewInDb() const { return inDb_; } double previewOutDb() const { return outDb_; }
+  Q_INVOKABLE bool previewPlay(bool on);
+  Q_INVOKABLE void setPreviewSource(int s);
+  Q_INVOKABLE void setPreviewSample(int id);
+  Q_INVOKABLE bool setPreviewFile(const QString& pathOrUrl);
+  Q_INVOKABLE void setPreviewBypass(bool b);
+  Q_INVOKABLE void setPreviewGainDb(double db);
+  void enablePreview(const QString& backend = QStringLiteral("auto"));   // the builder program turns it on (the console has its own mixer)
  signals:
-  void changed(); void designsChanged();
+  void changed(); void designsChanged(); void previewChanged(); void metersChanged();
  private:
   struct Knob { QString id, title, label; double value = 0.5; bool exposed = false; double x = -1, y = -1; };
   struct Blk { QString kind, name; QList<Knob> knobs; };
   QString folder() const; QString shellPath() const;
   QObject* engine_; QString name_, vendor_, category_ = QStringLiteral("Fx"), color_ = QStringLiteral("#EA580C"), uid_, note_, lastExport_, file_;
   QList<Blk> blocks_;
+  void pushDesign();
+  std::unique_ptr<am::shell::Preview> pv_; QString pvBackend_ = QStringLiteral("auto"), pvFile_, pvNote_; int pvSource_ = 0, pvSample_ = 1; bool pvBypass_ = false; double pvGain_ = 0, inDb_ = -120, outDb_ = -120; QTimer meters_;
 };

@@ -16,11 +16,22 @@ ApplicationWindow {
     property bool forceSetup: false   // the smoke / shots show the wizard on demand
     color: Theme.obsidian
     property string current: settings.startPage
+    property bool mixerEver: false   // the mixer has been opened once: from then on it stays built
+    Component.onCompleted: if (current === "mixer") mixerEver = true
+    // MEMORY: a closed page's items are freed, but its JavaScript objects wait for the QML garbage collector, which runs only under
+    // allocation pressure, so every page visit used to add ~5 MB that stayed. Collected once the user has settled on a page.
+    Timer { id: gcTimer; interval: 1200; onTriggered: gc() }
     LayoutMirroring.enabled: i18n.rtl
     Binding { target: Theme; property: "dark"; value: settings.darkTheme }
     LayoutMirroring.childrenInherit: true
     // SOFT RESTART: the console starts over without closing: engine off, sound cards scanned again, the remembered device (or the best one) started, the page rebuilt, the boot screen shown
-    function softRestart() { engine.stop(); engine.refreshDevices(); if (!settings.startLastDevice()) engine.autoStart(settings.defaultFrames); const c = root.current; root.current = "home"; root.current = c; pageLoader.active = false; pageLoader.active = true; root.bootOn = settings.bootAnimation && !noBoot }
+    property bool autoFailed: false
+    readonly property bool testRun: Qt.application.arguments.indexOf("--smoke") >= 0 || Qt.application.arguments.indexOf("--shots") >= 0 || Qt.application.arguments.indexOf("--bench") >= 0   // the checks drive the engine themselves
+    function autoAudio() { if (root.testRun || engine.running || engine.busy) return; root.autoFailed = !settings.startLastDevice() }   // the remembered card, else AUTO DETECT (default output + the default microphone)
+    onCurrentChanged: { gcTimer.restart(); if (current === "mixer" && !mixerEver) mixerEver = true; if ((current === "mixer" || current === "home") && !engine.running) autoAudio() }
+    Connections { target: engine; function onStateChanged() { if (engine.running) root.autoFailed = false } }
+    Timer { interval: 1500; running: true; onTriggered: if (!engine.running) root.autoAudio() }   // the first page: the start-up auto start (main.cpp) had its chance; if nothing runs, try once more and tell
+    function softRestart() { engine.stop(); engine.refreshDevices(); if (!settings.startLastDevice()) engine.autoStart(settings.defaultFrames); const c = root.current; root.current = "home"; root.current = c; pageLoader.active = false; pageLoader.active = true; if (mixerEver) { mixerKeep.active = false; mixerKeep.active = true } root.bootOn = settings.bootAnimation && !noBoot }
     Shortcut { sequence: "Ctrl+Shift+R"; context: Qt.ApplicationShortcut; onActivated: root.softRestart() }
     function pageOf(id) { for (var i = 0; i < engine.pages.length; i++) if (engine.pages[i].id === id) return engine.pages[i]; return engine.pages[0] }
 
@@ -137,12 +148,11 @@ ApplicationWindow {
                 }
             }
         }
-        // ALERT: no sound card remembered and the engine idle (the AUDIO step of the factory setup was skipped): say so, lead to SETUP / CONNECTIONS
-        Rectangle { Layout.fillWidth: true; implicitHeight: 30; visible: settings.setupDone && !engine.running && !(settings.lastDevice && settings.lastDevice.backend); color: Qt.rgba(0.984, 0.749, 0.141, 0.14); border.color: Theme.amber
+        // ALERT: only when the automatic start found / opened no sound card (entering the MIXER or HOME tries it first): lead to CONNECTIONS
+        Rectangle { Layout.fillWidth: true; implicitHeight: 30; visible: root.autoFailed && !engine.running && !engine.busy; color: Qt.rgba(0.984, 0.749, 0.141, 0.14); border.color: Theme.amber
             RowLayout { anchors.fill: parent; anchors.leftMargin: 12; anchors.rightMargin: 12; spacing: 10
                 Text { text: "⚠"; color: Theme.amber; font.pixelSize: 13 }
-                Text { Layout.fillWidth: true; text: i18n.t("No sound card is set up yet: the faders show no input or output until one is. Run the FACTORY SETUP (AUDIO step) or pick a device on CONNECTIONS.", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; elide: Text.ElideRight }
-                Rectangle { implicitWidth: Math.max(110, children[0].implicitWidth + 12); implicitHeight: 20; radius: 4; color: Theme.amber; Text { anchors.centerIn: parent; text: i18n.t("FACTORY SETUP", i18n.lang); color: "#000"; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: root.forceSetup = true } }
+                Text { Layout.fillWidth: true; text: i18n.t("No sound card could be opened automatically (none found, or all switched OFF): pick one on CONNECTIONS.", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; elide: Text.ElideRight }
                 Rectangle { implicitWidth: Math.max(100, children[0].implicitWidth + 12); implicitHeight: 20; radius: 4; color: Theme.ov(0.1); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: i18n.t("CONNECTIONS", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: root.current = "io" } } } }
         RowLayout {
             Layout.fillWidth: true; Layout.fillHeight: true; spacing: 0
@@ -154,11 +164,14 @@ ApplicationWindow {
                     anchors.fill: parent
                     sourceComponent: {
                         switch (root.current) {
-                        case "home": return homeC; case "frame": return frameC; case "delay": return delayC; case "cloud": return cloudC; case "cascade": return cascadeC; case "mixer": return mixerC; case "dsp": return toneC; case "rtaeq": return rtaEqC; case "bluetooth": return bluetoothC; case "io": return connC;
+                        case "home": return homeC; case "frame": return frameC; case "delay": return delayC; case "cloud": return cloudC; case "cascade": return cascadeC; case "mixer": return null; case "dsp": return toneC; case "rtaeq": return rtaEqC; case "bluetooth": return bluetoothC; case "io": return connC;
                         case "meter": return levelsC; case "lufs": return loudC; case "sys": return settingsC; case "dyn": return compC; case "gate": return gateC; case "bus": return sendC; case "dca": return dcaC; case "scenes": return scenesC; case "presets": return presetsC; case "routing": return routingC; case "renew": return licenseC; case "arrange": return arrangeC; case "fx": return fxC; case "osc": return oscC; case "phase": return phaseC; case "miceq": return miceqC; case "live": return liveC; case "tools": return toolsC; case "calib": return calibC; case "boot": return bootC; case "help": return helpC; case "acct": return acctC; case "access": return accessC; case "admin": return adminC; case "ai": return aiC; case "engctl": return engctlC; case "plugins": return pluginsC; case "network": return networkC; case "media": return mediaC; case "samples": return samplesC; case "asio": return soundC; case "acoustics": return acousticsC; case "master": return masteringC; case "surround": return spatialC; default: return comingC
                         }
                     }
                 }
+                // THE MIXER stays built once opened: coming back to it is instant (it took ~270 ms to rebuild 32 strips each visit).
+                // Hidden, its meters and timers stop (they follow the page's visibility). A soft restart rebuilds it.
+                Loader { id: mixerKeep; anchors.fill: parent; active: root.mixerEver; visible: root.current === "mixer"; sourceComponent: mixerC }
                 Component { id: frameC; FramePage {} }
                 Component { id: homeC; HomePage { onGo: function (id) { root.current = id } } }
                 Component { id: mixerC; MixerPage { onGo: function (id) { root.current = id } } }
@@ -232,6 +245,7 @@ ApplicationWindow {
             else if (t === "Save the console to a file") { sayText.text = ""; it.triggered(); if (sayText.text.indexOf("Saved: ") !== 0) bad.push(t + ": " + sayText.text) }
             else if (t === "Load the console from that file") { sayText.text = ""; it.triggered(); if (sayText.text.indexOf("was loaded") < 0) bad.push(t + ": " + sayText.text) }
             else if (t === "Sound card in use") { sayText.text = ""; it.triggered(); if (sayText.text === "") bad.push(t) }
+            else if (t.indexOf("Plug-in Builder") === 0) { if (typeof settings.openPluginBuilder !== "function") bad.push(t) }   // starts another program: only checked to be wired
             else bad.push("not covered: " + t)
         }
         shut(); root.current = keepPage

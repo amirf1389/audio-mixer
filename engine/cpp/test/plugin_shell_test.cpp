@@ -8,6 +8,9 @@
 
 #include "fx/fx.hpp"
 #include "plugin_shell/design.hpp"
+#include "plugin_shell/preview.hpp"
+#include <chrono>
+#include <thread>
 #include "vst3/vst3_host.hpp"
 
 using namespace am;
@@ -50,5 +53,17 @@ int main(int argc, char** argv) {
   p->setParam(params[0].id, 0.2); const auto st = p->state(); p->setParam(params[0].id, 0.9);
   CHECK(p->setState(st) && std::fabs(p->param(params[0].id) - 0.2) < 1e-4);
   std::printf("plugin_shell_test: design checked, exported as %s (%d ch), loaded by the host: name / vendor / id / knobs OK, changes the sound (%.4f), bypass, state OK\n", bundle.c_str(), ch, processed);
+  { // PREVIEW: the same design on a (null) sound card: it runs, the chain changes the sound, BYPASS gives the source back, knobs move live,
+    // a new block list swaps the chain in; every source plays
+    shell::Preview pv; pv.setDesign(d); pv.setSource(shell::Preview::PinkNoise);
+    std::vector<float> a(512), b(512), a2(512), b2(512); pv.setBypass(true); pv.renderForTest(a.data(), b.data(), 512);
+    shell::Preview pv2; pv2.setDesign(d); pv2.setSource(shell::Preview::PinkNoise); pv2.renderForTest(a2.data(), b2.data(), 512);
+    double dd = 0; for (int i = 0; i < 512; ++i) dd += std::fabs(a[i] - a2[i]); CHECK(dd / 512 > 1e-4);           // processed differs from the same noise bypassed
+    std::string e2; CHECK(pv.start(e2, "null", 48000, 256)); std::this_thread::sleep_for(std::chrono::milliseconds(200)); CHECK(pv.blocks() > 5 && pv.outPeak() > 0.f);
+    shell::Design d2 = d; d2.params[0].def = 0.1; pv.setDesign(d2);                                                    // a knob: live
+    d2.blocks.push_back({"room", {}}); pv.setDesign(d2);                                                                // a block: a new chain swapped in
+    for (int s = 0; s <= 2; ++s) { pv.setSource(static_cast<shell::Preview::Source>(s)); std::this_thread::sleep_for(std::chrono::milliseconds(60)); CHECK(pv.outPeak() > 0.f); }
+    CHECK(pv.setSample(42)); pv.stop(); CHECK(!pv.running());
+    std::printf("plugin_shell_test: preview on the null device, %llu blocks, A/B, live knobs, chain swap, sources OK\n", static_cast<unsigned long long>(pv.blocks())); }
   std::printf(fails ? "plugin_shell_test: %d failed\n" : "plugin_shell_test: all passed\n", fails); return fails ? 1 : 0;
 }

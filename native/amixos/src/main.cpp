@@ -57,7 +57,8 @@
 #include "I18n.h"
 
 // real time passes (processEvents alone returns at once when the queue is empty)
-static void waitMs(int ms) { QElapsedTimer t; t.start(); while (t.elapsed() < ms) { QCoreApplication::processEvents(QEventLoop::AllEvents, 10); QThread::msleep(5); } }
+// a real event loop (not processEvents): it also runs deferred deletes, as the running application does, so the tests see its memory
+static void waitMs(int ms) { QEventLoop l; QTimer::singleShot(ms, &l, &QEventLoop::quit); l.exec(); }
 
 // Every Qt / QML message also goes to <data>/console.log (the console has no terminal on Windows): QML errors, missing imports, the render
 // backend. The last 500 lines are kept; --software draws with the CPU raster renderer when the graphics driver refuses D3D11 / OpenGL.
@@ -137,6 +138,11 @@ int main(int argc, char* argv[]) {
     auto* win = qobject_cast<QQuickWindow*>(qml.rootObjects().first());
     engine.setNullTestInput(true); engine.open("null", "", "", 48000, 256, 2, 2); win->setProperty("current", qEnvironmentVariable("AMIX_BENCH_PAGE", "mixer")); waitMs(1500);
     auto cpuMs = [] { return 1000.0 * double(std::clock()) / CLOCKS_PER_SEC; };
+    if (qEnvironmentVariableIsSet("AMIX_BENCH_MEM")) {   // memory: every page opened in turn, five rounds; the resident size after each round (a leak grows)
+      auto rssMb = [] { QFile f("/proc/self/statm"); if (!f.open(QIODevice::ReadOnly)) return 0.0; const QList<QByteArray> v = f.readAll().split(' '); return v.size() > 1 ? v[1].toDouble() * 4096.0 / 1048576.0 : 0.0; };
+      std::printf("amixos --bench: memory at start %.0f MB\n", rssMb());
+      for (int r = 0; r < 5; ++r) { for (const QVariant& v : engine.pages()) { win->setProperty("current", v.toMap().value("id").toString()); waitMs(60); } win->setProperty("current", "mixer"); waitMs(1600); if (qEnvironmentVariableIsSet("AMIX_BENCH_GC")) { qml.collectGarbage(); QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete); waitMs(100); } std::printf("amixos --bench: memory after round %d of every page: %.0f MB\n", r + 1, rssMb()); }
+      engine.stop(); return 0; }
     if (qEnvironmentVariableIsSet("AMIX_BENCH_ALL")) {   // the opening time of every page, slowest first
       QList<QPair<double, QString>> t; for (const QVariant& v : engine.pages()) { const QString id = v.toMap().value("id").toString(); win->setProperty("current", "home"); waitMs(150);
         QElapsedTimer o; o.start(); win->setProperty("current", id); QCoreApplication::processEvents(); t << qMakePair(o.nsecsElapsed() / 1e6, id); waitMs(150); }
@@ -346,7 +352,7 @@ int main(int argc, char* argv[]) {
       if (media.position() < 0.2 || engine.telemetry()["masterPeakDb"].toDouble() < -40) { std::fprintf(stderr, "amixos --smoke: media not heard on the master (pos %.2f, master %.1f dBFS)\n", media.position(), engine.telemetry()["masterPeakDb"].toDouble()); return 112; }
       media.stop(); if (media.playing() || media.position() != 0) { std::fprintf(stderr, "amixos --smoke: media stop\n"); return 113; }
       const QVariantMap t = engine.telemetry(); if (!t.contains("loadPct") || t["blocks"].toULongLong() == 0 || t["maxBlockUs"].toDouble() <= 0) { std::fprintf(stderr, "amixos --smoke: profiler telemetry\n"); return 114; }
-      engine.setOutputBits(16); engine.setDcBlock(true); if (engine.outputBits() != 16 || !engine.dcBlock()) { std::fprintf(stderr, "amixos --smoke: output stage settings\n"); return 115; } engine.setOutputBits(0); media.clear(); }
+      engine.setOutputBits(16); engine.setDcBlock(true); if (engine.outputBits() != 16 || !engine.dcBlock()) { std::fprintf(stderr, "amixos --smoke: output stage settings\n"); return 115; } engine.setOutputBits(-1); if (engine.outputBits() != -1 || engine.effectiveOutputBits() != 0) { std::fprintf(stderr, "amixos --smoke: AUTO word length\n"); return 115; } media.clear(); }
     // SAMPLES: the bank is rendered, a pad plays into the master, stops; EXPORT writes 100 WAVs. FX PRESETS: 300 listed, one applied loads the kind.
     { if (!samples.ready() || samples.list().size() != 100) { std::fprintf(stderr, "amixos --smoke: samples bank\n"); return 120; }
       if (!samples.play(1) || !samples.play(7)) { std::fprintf(stderr, "amixos --smoke: sample trigger\n"); return 121; } waitMs(200);
@@ -394,6 +400,19 @@ int main(int argc, char* argv[]) {
           if (l["out"] != "{spk}" || l["in"] != "{mic}" || l["inChannels"].toInt() != 2 || l["inKind"] != "microphone" || l["outKind"] != "speakers") { std::fprintf(stderr, "amixos --smoke: laptop detection: out %s in %s (%d in, %s / %s)\n", qPrintable(l["out"].toString()), qPrintable(l["in"].toString()), l["inChannels"].toInt(), qPrintable(l["inKind"].toString()), qPrintable(l["outKind"].toString())); return 175; }
           if (kinds != QStringList({"speakers", "microphone", "headphones", "bluetooth", "speakers", "microphone"})) { std::fprintf(stderr, "amixos --smoke: device kinds: %s\n", qPrintable(kinds.join(", "))); return 176; }
           std::printf("amixos --smoke: laptop without ASIO: %s + %s (%d in / %d out); kinds %s\n", qPrintable(l["outName"].toString()), qPrintable(l["inName"].toString()), l["inChannels"].toInt(), l["outChannels"].toInt(), qPrintable(kinds.join(", "))); }
+        { // THE DEFAULT MICROPHONE and DEVICES OFF: a USB microphone set as the system default is paired (not the Realtek one by name);
+          // a device switched OFF is never auto-picked and is not opened by hand; switched ON again it is
+          const QVariantList lap2 = {dev("wasapi", "{spk}", "Speakers (Realtek High Definition Audio)", 0, 2, false, true), dev("wasapi", "{mic}", "Microphone Array (Realtek High Definition Audio)", 2, 0, false, false),
+                                     dev("wasapi", "{usbmic}", "Microphone (USB Audio CODEC)", 1, 0, true, false), dev("wasapi", "{hp}", "Headphones (Realtek High Definition Audio)", 0, 2)};
+          engine.simulateDevices(lap2); const QVariantMap a1 = engine.autoDetect();
+          engine.setDeviceEnabled("wasapi", "{spk}", false); const QVariantMap a2 = engine.autoDetect();
+          engine.setDeviceEnabled("wasapi", "{usbmic}", false); const QVariantMap a3 = engine.autoDetect();
+          const bool refused = !engine.open("wasapi", "-", "{spk}", 48000, 256, 0, 2);
+          engine.setDeviceEnabled("wasapi", "{spk}", true); engine.setDeviceEnabled("wasapi", "{usbmic}", true); const QVariantMap a4 = engine.autoDetect();
+          const bool ok = a1["in"] == "{usbmic}" && a2["out"] != "{spk}" && a3["in"] == "{mic}" && refused && a4["out"] == "{spk}" && a4["in"] == "{usbmic}";
+          std::printf("amixos --smoke: default microphone and devices ON / OFF %s (default mic %s; speakers OFF -> %s; USB mic OFF -> %s; open OFF refused %d)\n", ok ? "ok" : "FAILED",
+                      qPrintable(a1["in"].toString()), qPrintable(a2["out"].toString()), qPrintable(a3["in"].toString()), refused);
+          if (!ok) return 178; }
         { // MIC ACCESS OFF: on Windows audio no microphone of any kind is opened (the note says so); an ASIO interface keeps its inputs
           engine.setMicAccessOff(true); engine.open("wasapi", "{mic}", "{spk}", 48000, 256, 2, 2); const bool blocked = engine.micOffNote().contains("MIC ACCESS OFF");
           engine.open("asio", "{mic}", "{spk}", 48000, 256, 2, 2); const bool asioKept = !engine.micOffNote().contains("MIC ACCESS OFF"); engine.setMicAccessOff(false);
@@ -821,6 +840,12 @@ int main(int argc, char* argv[]) {
         }
       }
       if (!shots.isEmpty()) {   // the light theme on three pages
+        { // CONNECTIONS with devices ON / OFF: three simulated ALSA devices (the picture machine has none), the USB microphone switched OFF
+          auto* cw = qobject_cast<QQuickWindow*>(qml.rootObjects().first()); const QVariantList keep = engine.devices();
+          const auto d = [](const char* id, const char* name, int in, int out, bool defIn, bool defOut) { QVariantMap m; m["backend"] = "alsa"; m["id"] = id; m["name"] = name; m["inChannels"] = in; m["outChannels"] = out; m["defaultRate"] = 48000.0; m["defaultIn"] = defIn; m["defaultOut"] = defOut; m["kind"] = in ? "microphone" : "speakers"; return m; };
+          engine.simulateDevices({d("hw:0,0", "Speakers (Realtek High Definition Audio)", 0, 2, false, true), d("hw:0,1", "Microphone Array (Realtek High Definition Audio)", 2, 0, true, false), d("hw:1,0", "Microphone (USB Audio CODEC)", 1, 0, false, false), d("hw:1,1", "Speakers (USB Audio CODEC)", 0, 2, false, false)});
+          engine.setDeviceEnabled("alsa", "hw:1,0", false); cw->setProperty("current", "home"); waitMs(150); cw->setProperty("current", "io"); waitMs(500); cw->grabWindow().save(shots + "/connections-onoff.png");
+          engine.setDeviceEnabled("alsa", "hw:1,0", true); engine.simulateDevices(keep); }
         auto* lw = qobject_cast<QQuickWindow*>(qml.rootObjects().first()); settings.setDarkTheme(false); for (const char* id : {"home", "mixer", "dsp"}) { lw->setProperty("current", QString::fromLatin1(id)); waitMs(350); lw->grabWindow().save(shots + "/" + id + "-light.png"); } settings.setDarkTheme(true); waitMs(200); std::printf("amixos --shots: home-light, mixer-light, dsp-light\n"); }
       // the language tables: 80 languages, every one covers the page names
       int full = 0; for (const QVariant& l : i18n.languages()) if (l.toMap().value("coverage").toInt() >= 44) ++full;

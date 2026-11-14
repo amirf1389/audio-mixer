@@ -14,6 +14,7 @@
 #include <string>
 #include <vector>
 
+#include "audiomixer/fpu.hpp"
 #include "fx/fx.hpp"
 #include "plugin_shell/design.hpp"
 #include "pluginterfaces/base/ibstream.h"
@@ -98,6 +99,7 @@ class Shell : public IComponent, public IAudioProcessor, public IEditController 
   tresult PLUGIN_API setupProcessing(ProcessSetup& s) override { build(s.sampleRate); scratch_.assign(2 * static_cast<std::size_t>(std::max(1, s.maxSamplesPerBlock)), 0.f); return kResultOk; }   // allocation here, never in process()
   tresult PLUGIN_API setProcessing(TBool) override { return kResultOk; }
   tresult PLUGIN_API process(ProcessData& data) override {
+    am::ScopedNoDenormals noDenormals;   // the host's floating-point mode is restored when process() returns
     if (data.inputParameterChanges) for (int32 i = 0; i < data.inputParameterChanges->getParameterCount(); ++i) {
       IParamValueQueue* q = data.inputParameterChanges->getParameterData(i); if (!q || q->getPointCount() < 1) continue;
       int32 off = 0; ParamValue v = 0; q->getPoint(q->getPointCount() - 1, off, v); setParamNormalized(q->getParameterId(), v); }

@@ -1,3 +1,4 @@
+#include "audiomixer/sample_format.hpp"
 #include "arrange.hpp"
 
 #include <algorithm>
@@ -53,7 +54,7 @@ bool writeWav24(const std::string& path, const std::vector<float>& L, const std:
   auto w16 = [&](std::size_t at, std::uint16_t v) { p[at] = v & 255; p[at + 1] = (v >> 8) & 255; };
   std::memcpy(p, "RIFF", 4); w32(4, 36 + dataLen); std::memcpy(p + 8, "WAVEfmt ", 8); w32(16, 16); w16(20, 1); w16(22, 2); w32(24, sr); w32(28, sr * 6); w16(32, 6); w16(34, 24); std::memcpy(p + 36, "data", 4); w32(40, dataLen);
   std::size_t at = 44;
-  for (std::size_t i = 0; i < n; ++i) for (const float v : {L[i], R[i]}) { const std::int32_t s = static_cast<std::int32_t>(std::lrint(clampd(v, -1, 1) * 8388607.0)); p[at++] = s & 255; p[at++] = (s >> 8) & 255; p[at++] = (s >> 16) & 255; }
+  for (std::size_t i = 0; i < n; ++i) for (const float v : {L[i], R[i]}) { const std::int32_t s = am::fmt::toI24(v); p[at++] = s & 255; p[at++] = (s >> 8) & 255; p[at++] = (s >> 16) & 255; }
   FILE* f = std::fopen(path.c_str(), "wb"); if (!f) { err = "cannot write " + path; return false; }
   const bool ok = std::fwrite(o.data(), 1, o.size(), f) == o.size(); std::fclose(f); if (!ok) err = "short write to " + path; return ok;
 }

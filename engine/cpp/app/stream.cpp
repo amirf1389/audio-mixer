@@ -5,6 +5,7 @@
 //             {"type":"stopped",...} at the end (with the samples dropped because nobody read stdout, and the output underruns)
 // The audio thread only touches the two lock-free rings (pcm_ring.hpp) and preallocated scratch buffers: it never allocates, locks or waits.
 // The main thread copies stdin into the play ring; a second thread copies the capture ring to stdout. The stream ends when stdin ends.
+#include "audiomixer/sample_format.hpp"
 #include "stream.hpp"
 
 #include <algorithm>
@@ -38,10 +39,7 @@ std::string jsonText(const std::string& s) {
 
 void status(const std::string& json) { std::fprintf(stderr, "%s\n", json.c_str()); std::fflush(stderr); }
 
-std::int16_t toPcm(float x) {
-  const float c = x > 1.0f ? 1.0f : (x < -1.0f ? -1.0f : x);
-  return static_cast<std::int16_t>(c * 32767.0f);
-}
+std::int16_t toPcm(float x) { return am::fmt::toI16(x); }   // rounded and clamped like every backend (sample_format.hpp)
 
 constexpr std::size_t kChunkFrames = 1024;   // the callback is processed in chunks of this many frames, so any block size fits the scratch buffers
 

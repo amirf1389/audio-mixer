@@ -11,6 +11,8 @@ Item {
     objectName: "mixerPage"
     property int bank: 0      // 0 = 1-16, 1 = 17-32, 2 = all
     property bool sidePanel: settings.channelPanelDefault
+    // the meter clock while the page is on screen: kept alive but hidden, nothing here reads the meters
+    property int tick: visible ? engine.meterTick : -1
     property bool vuMode: settings.vuDefault        // bar meters or analogue VU faces on every strip and the master
     property bool monitorPanel: settings.monitorPanelDefault   // the control-room section next to the master
     property int rackBank: 0                           // which ten slots of the rack are shown (PRO and up have more than ten)
@@ -299,7 +301,7 @@ Item {
                                 height: strips.height
                                 readonly property int ver: engine.stripVer(index, engine.stripTick)
                                 property var st: { ver; return engine.stripLite(index) }
-                                property var mt: visible ? (engine.meterTick, engine.meterAt(index)) : undefined   // the other bank's strips are hidden: their meters are not read
+                                property var mt: visible ? (page.tick, engine.meterAt(index)) : undefined   // the other bank's strips are hidden: their meters are not read
                                 property color sc: Theme.stripColors[st ? st.color : 0]
                                 property bool selected: page.sel === index
                                 Rectangle { anchors.fill: parent; radius: 6; color: selected ? Theme.ov(0.06) : (index % 2 ? Theme.ov(0.025) : (Theme.dark ? Qt.rgba(0, 0, 0, 0.25) : Qt.rgba(0, 0, 0, 0.05))); border.color: selected ? Theme.ink : Theme.lineSoft; border.width: selected ? 1.5 : 1
@@ -513,7 +515,7 @@ Item {
                 ColumnLayout {
                     anchors.fill: parent; anchors.margins: 8; spacing: 6
                     Text { Layout.alignment: Qt.AlignHCenter; text: i18n.t("MASTER", i18n.lang); color: Theme.orange; font.family: Theme.mono; font.pixelSize: 10; font.bold: true; font.letterSpacing: 2 }
-                    VuMeter { objectName: "masterVu"; visible: page.vuMode; Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: 96; Layout.preferredHeight: 54; vuDb: engine.telv("masterVuDb", engine.meterTick) === undefined ? -120 : engine.telv("masterVuDb", engine.meterTick); refDb: engine.vuRefDb; peakLamp: engine.telv("masterClip", engine.meterTick) === true; label: i18n.t("VU  MASTER", i18n.lang) }
+                    VuMeter { objectName: "masterVu"; visible: page.vuMode; Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: 96; Layout.preferredHeight: 54; vuDb: engine.telv("masterVuDb", page.tick) === undefined ? -120 : engine.telv("masterVuDb", page.tick); refDb: engine.vuRefDb; peakLamp: engine.telv("masterClip", page.tick) === true; label: i18n.t("VU  MASTER", i18n.lang) }
                     Rectangle { objectName: "masterEqBtn"; Layout.alignment: Qt.AlignHCenter; implicitWidth: 64; implicitHeight: 18; radius: 4; color: engine.mastering().eqOn ? Theme.orange : Theme.ov(0.08); border.color: Theme.orange   // RTA EQ: the main (master) equaliser
                         Text { anchors.centerIn: parent; text: i18n.t("RTA EQ", i18n.lang); color: engine.mastering().eqOn ? "#000" : Theme.orange; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                         MouseArea { anchors.fill: parent; onClicked: page.go("rtaeq") } }
@@ -527,11 +529,11 @@ Item {
                         Text { anchors.centerIn: parent; text: i18n.t("ANALYZER", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                         MouseArea { anchors.fill: parent; onClicked: page.Window.window.openAnalyzer() } }
                     RowLayout { Layout.fillHeight: true; Layout.alignment: Qt.AlignHCenter; spacing: 8
-                        Fader { Layout.fillHeight: true; value: engine.masterDb; inDb: engine.telv("masterRmsDb", engine.meterTick) === undefined ? -120 : engine.telv("masterRmsDb", engine.meterTick); outDb: engine.telv("masterPeakDb", engine.meterTick) === undefined ? -120 : engine.telv("masterPeakDb", engine.meterTick); clip: engine.telv("masterClip", engine.meterTick) === true; onMoved: function (db) { engine.setMaster(db) } }
-                        MeterBar { Layout.fillHeight: true; Layout.topMargin: 8; peakDb: engine.telv("masterLDb", engine.meterTick); rmsDb: engine.telv("masterRmsDb", engine.meterTick); clip: engine.telv("masterClip", engine.meterTick) }
-                        MeterBar { Layout.fillHeight: true; Layout.topMargin: 8; peakDb: engine.telv("masterRDb", engine.meterTick); rmsDb: engine.telv("masterRmsDb", engine.meterTick); clip: engine.telv("masterClip", engine.meterTick) } }
+                        Fader { Layout.fillHeight: true; value: engine.masterDb; inDb: engine.telv("masterRmsDb", page.tick) === undefined ? -120 : engine.telv("masterRmsDb", page.tick); outDb: engine.telv("masterPeakDb", page.tick) === undefined ? -120 : engine.telv("masterPeakDb", page.tick); clip: engine.telv("masterClip", page.tick) === true; onMoved: function (db) { engine.setMaster(db) } }
+                        MeterBar { Layout.fillHeight: true; Layout.topMargin: 8; peakDb: engine.telv("masterLDb", page.tick); rmsDb: engine.telv("masterRmsDb", page.tick); clip: engine.telv("masterClip", page.tick) }
+                        MeterBar { Layout.fillHeight: true; Layout.topMargin: 8; peakDb: engine.telv("masterRDb", page.tick); rmsDb: engine.telv("masterRmsDb", page.tick); clip: engine.telv("masterClip", page.tick) } }
                     Text { Layout.alignment: Qt.AlignHCenter; text: Theme.dbText(engine.masterDb) + i18n.t(" dB", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9 }
-                    Text { Layout.alignment: Qt.AlignHCenter; text: (engine.telv("shortTerm", engine.meterTick) <= -119 ? i18n.t("-inf", i18n.lang) : engine.telv("shortTerm", engine.meterTick).toFixed(1)) + i18n.t(" LUFS", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8 }
+                    Text { Layout.alignment: Qt.AlignHCenter; text: (engine.telv("shortTerm", page.tick) <= -119 ? i18n.t("-inf", i18n.lang) : engine.telv("shortTerm", page.tick).toFixed(1)) + i18n.t(" LUFS", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8 }
                     Text { Layout.alignment: Qt.AlignHCenter; readonly property var lim: { engine.stripTick; return engine.masterLimiter() }
                         text: lim.on ? i18n.t("LIMITER ", i18n.lang) + Number(lim.ceiling).toFixed(1) + i18n.t(" dBFS", i18n.lang) : i18n.t("LIMITER OFF", i18n.lang); color: lim.on ? Theme.emerald : Theme.amber; font.family: Theme.mono; font.pixelSize: 7 }
                     Rectangle { Layout.fillWidth: true; implicitHeight: 16; radius: 3; visible: engine.windowsSoundAvailable && (engine.windowsMuted || engine.masterDb <= -60); color: Qt.rgba(1, 0.165, 0.373, 0.18); border.color: Theme.danger   // -inf = everything off, Windows' own sound included
@@ -555,9 +557,9 @@ Item {
                                 Text { anchors.centerIn: parent; text: index === 0 ? i18n.t("MASTER", i18n.lang) : "B" + index; color: page.mon.source === index ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 6; font.bold: true }
                                 MouseArea { anchors.fill: parent; onClicked: engine.setMonitor(index, page.mon.db, page.mon.dim, page.mon.mono, page.mon.mute) } } } }
                     RowLayout { Layout.fillHeight: true; Layout.alignment: Qt.AlignHCenter; spacing: 6
-                        Fader { Layout.fillHeight: true; value: page.mon.db; outDb: engine.telv("monitorLDb", engine.meterTick) === undefined ? -120 : Math.max(engine.telv("monitorLDb", engine.meterTick), engine.telv("monitorRDb", engine.meterTick)); onMoved: function (db) { engine.setMonitor(page.mon.source, db, page.mon.dim, page.mon.mono, page.mon.mute) } }
-                        MeterBar { Layout.fillHeight: true; Layout.topMargin: 8; implicitWidth: 7; peakDb: engine.telv("monitorLDb", engine.meterTick) === undefined ? -120 : engine.telv("monitorLDb", engine.meterTick); rmsDb: -120 }
-                        MeterBar { Layout.fillHeight: true; Layout.topMargin: 8; implicitWidth: 7; peakDb: engine.telv("monitorRDb", engine.meterTick) === undefined ? -120 : engine.telv("monitorRDb", engine.meterTick); rmsDb: -120 } }
+                        Fader { Layout.fillHeight: true; value: page.mon.db; outDb: engine.telv("monitorLDb", page.tick) === undefined ? -120 : Math.max(engine.telv("monitorLDb", page.tick), engine.telv("monitorRDb", page.tick)); onMoved: function (db) { engine.setMonitor(page.mon.source, db, page.mon.dim, page.mon.mono, page.mon.mute) } }
+                        MeterBar { Layout.fillHeight: true; Layout.topMargin: 8; implicitWidth: 7; peakDb: engine.telv("monitorLDb", page.tick) === undefined ? -120 : engine.telv("monitorLDb", page.tick); rmsDb: -120 }
+                        MeterBar { Layout.fillHeight: true; Layout.topMargin: 8; implicitWidth: 7; peakDb: engine.telv("monitorRDb", page.tick) === undefined ? -120 : engine.telv("monitorRDb", page.tick); rmsDb: -120 } }
                     Text { Layout.alignment: Qt.AlignHCenter; text: Theme.dbText(page.mon.db) + i18n.t(" dB", i18n.lang) + (page.mon.dim ? i18n.t("  DIM -20", i18n.lang) : ""); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8 }
                     RowLayout { Layout.fillWidth: true; spacing: 3
                         Rectangle { Layout.fillWidth: true; implicitHeight: 18; radius: 3; color: page.mon.dim ? Theme.amber : Theme.ov(0.08); Text { anchors.centerIn: parent; text: i18n.t("DIM", i18n.lang); color: page.mon.dim ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setMonitor(page.mon.source, page.mon.db, !page.mon.dim, page.mon.mono, page.mon.mute) } }

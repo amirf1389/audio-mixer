@@ -12,8 +12,47 @@
 #include "fx/fx.hpp"
 #include "paths/paths.hpp"
 #include "plugin_shell/design.hpp"
+#include "plugin_shell/preview.hpp"
+#include "samples/samples.hpp"
+#include <QUrl>
+#include <QFileInfo>
+#include <cmath>
 
-Builder::Builder(QObject* engine, QObject* parent) : QObject(parent), engine_(engine) { newDesign(); }
+Builder::Builder(QObject* engine, QObject* parent) : QObject(parent), engine_(engine) {
+  newDesign(); connect(this, &Builder::changed, this, &Builder::pushDesign);   // every edit reaches a running preview at once
+  meters_.setInterval(50); connect(&meters_, &QTimer::timeout, this, [this] { if (!pv_) return; auto db = [](float v) { return v > 1e-6f ? 20.0 * std::log10(v) : -120.0; };
+    const double i = db(pv_->inPeak()), o = db(pv_->outPeak()); inDb_ = std::max(i, inDb_ - 2.0); outDb_ = std::max(o, outDb_ - 2.0); emit metersChanged(); });
+}
+Builder::~Builder() = default;
+void Builder::enablePreview(const QString& backend) { pv_ = std::make_unique<am::shell::Preview>(); pvBackend_ = backend; pushDesign(); }
+bool Builder::previewOn() const { return pv_ && pv_->running(); }
+QVariantList Builder::samples() const { QVariantList l; for (const auto& s : am::samples::list()) { QVariantMap m; m["id"] = s.id; m["name"] = QString::fromStdString(s.name); m["category"] = QString::fromStdString(s.category); l << m; } return l; }
+void Builder::pushDesign() {
+  if (!pv_) return; am::shell::Design d; std::string err;
+  if (blocks_.isEmpty()) { d.name = "x"; d.uid = uid_.toStdString(); pv_->setDesign(d); return; }   // no blocks: the source as it is
+  if (am::shell::parse(designJson().toStdString(), d, err)) pv_->setDesign(d);
+}
+bool Builder::previewPlay(bool on) {
+  if (!pv_) { pvNote_ = tr("Preview runs in the Plug-in Builder program."); emit previewChanged(); return false; }
+  if (!on) { pv_->stop(); meters_.stop(); inDb_ = outDb_ = -120; pvNote_.clear(); emit previewChanged(); emit metersChanged(); return true; }
+  std::string err; pushDesign(); const bool ok = pv_->start(err, pvBackend_.toStdString(), 48000, 512);
+  pvNote_ = ok ? tr("Playing through the design: move the knobs, A/B with BYPASS") : tr("The sound card did not open: %1").arg(QString::fromStdString(err));
+  if (ok) meters_.start(); emit previewChanged(); return ok;
+}
+void Builder::setPreviewSource(int s) {
+  if (s < 0 || s > 4) return; const bool micChange = (s == 3) != (pvSource_ == 3); pvSource_ = s;
+  if (pv_) { pv_->setSource(static_cast<am::shell::Preview::Source>(s)); if (s == 0) pv_->setSample(pvSample_);
+    if (pv_->running() && micChange) { previewPlay(false); previewPlay(true); } }   // the microphone needs the sound card's input opened (or closed again)
+  emit previewChanged();
+}
+void Builder::setPreviewSample(int id) { pvSample_ = id; pvSource_ = 0; if (pv_) pv_->setSample(id); emit previewChanged(); }
+bool Builder::setPreviewFile(const QString& p) {
+  const QString path = p.startsWith("file:") ? QUrl(p).toLocalFile() : p; pvFile_ = path;
+  if (!pv_) return false; std::string err; const bool ok = pv_->setFile(path.toStdString(), err); if (ok) pvSource_ = 4;
+  pvNote_ = ok ? tr("Playing %1 on a loop").arg(QFileInfo(path).fileName()) : tr("Could not read the file: %1").arg(QString::fromStdString(err)); emit previewChanged(); return ok;
+}
+void Builder::setPreviewBypass(bool b) { pvBypass_ = b; if (pv_) pv_->setBypass(b); emit previewChanged(); }
+void Builder::setPreviewGainDb(double db) { pvGain_ = qBound(-30.0, db, 6.0); if (pv_) pv_->setGainDb(pvGain_); emit previewChanged(); }
 
 QVariantList Builder::catalog() const {
   QVariantList l; for (const auto& [k, n] : am::fx::catalog()) { if (k == "sampler" || k == "iamfrender" || k == "logic") continue;   // need the console around them
