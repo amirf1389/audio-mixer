@@ -67,6 +67,7 @@ struct DeviceInfo {
   std::vector<double> sampleRates;   // empty: not known without opening the device
   bool defaultIn = false, defaultOut = false;
   std::string kind;                  // what it is: headphones | headset | speakers | microphone | line | digital | interface | bluetooth | app | wrapper | unknown
+  std::string probeError;            // ASIO: why the driver could not be read just now (busy in another program, unplugged, other bitness); empty = read
 };
 // WINDOWS SOUND (the system's own volume of the default output, through the documented endpoint-volume interface: no driver, no registry):
 // read and set its mute. Used so that the master fader at -inf also silences what Windows itself plays. false on other systems or on failure.

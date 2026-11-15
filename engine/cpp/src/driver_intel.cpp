@@ -207,6 +207,76 @@ MixerProfile mixerProfile(const std::string& name) {
   for (const Row& r : rows) if (std::regex_search(name, std::regex(r.re, std::regex::icase))) { p.known = true; p.maker = r.maker; p.model = r.model; p.prefix = r.prefix; p.note = r.note; return p; }
   return p;
 }
+AsioIdentity identifyAsio(const std::string& name) {
+  struct Row { const char* re; const char* maker; const char* model; const char* type; const char* note; };
+  static const Row rows[] = {
+    // AMFB's own, then wrappers and virtual / network drivers: never a sound card of their own
+    {"^audio mixer$", "AMFB Audio", "AmF X1 ASIO driver", "virtual", "the console's own driver for other programs: no sound card behind it"},
+    {"asio4all", "ASIO4ALL", "ASIO4ALL", "wrapper", "drives Windows' devices through ASIO"},
+    {"flexasio", "FlexASIO", "FlexASIO", "wrapper", "drives Windows' devices through ASIO"},
+    {"asio2wasapi|asio2ks", "ASIO2WASAPI", "ASIO2WASAPI", "wrapper", "drives Windows' devices through ASIO"},
+    {"generic low latency|steinberg built-in|built-in asio", "Steinberg", "Generic Low Latency ASIO", "wrapper", "drives Windows' devices through ASIO"},
+    {"magix low latency|fl studio asio|image-line", "DAW", "a program's own ASIO driver", "wrapper", "made for one program; drives Windows' devices"},
+    {"voicemeeter|vb-audio|vb-cable", "VB-Audio", "Voicemeeter / VB-Cable", "virtual", "a virtual mixer / cable: routes programs, no sound card of its own"},
+    {"asio ?link|odeus", "Odeus", "ASIO Link Pro", "virtual", "routes between programs"},
+    {"jackrouter|\\bjack\\b", "JACK", "JackRouter", "virtual", "routes between programs"},
+    {"rearoute", "Cockos", "ReaRoute", "virtual", "routes REAPER to other programs"},
+    {"dante virtual|\\bdvs\\b|audinate", "Audinate", "Dante Virtual Soundcard", "network", "Dante audio over the network"},
+    {"soundgrid|waves", "Waves", "SoundGrid", "network", "SoundGrid audio over the network"},
+    {"\\bavb\\b|milan", "AVB", "AVB network audio", "network", "audio over an AVB network"},
+    {"ravenna|aes67|merging", "Merging", "RAVENNA / AES67", "network", "AES67 audio over the network"},
+    // onboard chips
+    {"realtek", "Realtek", "onboard audio (Realtek ASIO)", "onboard", "the computer's own sound chip"},
+    {"conexant|synaptics|cirrus|\\bidt\\b|sigmatel|\\bvia\\b", "onboard", "onboard audio", "onboard", "the computer's own sound chip"},
+    {"sound ?blaster|creative", "Creative", "Sound Blaster", "interface", "a sound card"},
+    {"xonar|\\basus\\b", "ASUS", "Xonar", "interface", "a sound card"},
+    // DJ controllers / mixers
+    {"\\bddj|pioneer|alphatheta|\\bdjm|\\bxdj|\\bxdj", "Pioneer DJ / AlphaTheta", "DDJ / DJM / XDJ", "dj", "a DJ controller or mixer"},
+    {"traktor|kontrol s[0-9]|\\bz[12]\\b", "Native Instruments", "Traktor", "dj", "a DJ controller"},
+    {"numark|denon dj|\\bprime ?[0-9go]|\\bmc ?[0-9]{4}|rane|reloop|hercules|\\bddm", "DJ", "DJ controller", "dj", "a DJ controller"},
+    // guitar processors / amps
+    {"line ?6|\\bpod\\b|helix|\\bhx stomp", "Line 6", "POD / Helix", "guitar", "a guitar processor with USB audio"},
+    {"\\bboss\\b|katana|\\bgt-?1000|\\bgx-?100", "BOSS", "Katana / GT", "guitar", "a guitar processor with USB audio"},
+    {"fractal|axe-?fx|\\bfm ?[39]", "Fractal Audio", "Axe-Fx / FM", "guitar", "a guitar processor with USB audio"},
+    {"kemper", "Kemper", "Profiler", "guitar", "a guitar processor with USB audio"},
+    {"neural ?dsp|quad ?cortex", "Neural DSP", "Quad Cortex", "guitar", "a guitar processor with USB audio"},
+    {"\\bik multimedia|axe ?i/?o|irig", "IK Multimedia", "AXE I/O / iRig", "interface", "an audio interface"},
+    // audio interfaces
+    {"focusrite|scarlett|clarett|vocaster|saffire|red ?[0-9]+", "Focusrite", "Scarlett / Clarett / Vocaster", "interface", "an audio interface"},
+    {"universal audio|\\buad\\b|apollo|\\bvolt\\b", "Universal Audio", "Apollo / Volt", "interface", "an audio interface"},
+    {"yamaha steinberg|steinberg|\\bur-?[0-9]{2}|\\bur ?rt", "Steinberg / Yamaha", "UR series", "interface", "an audio interface"},
+    {"\\brme\\b|fireface|babyface|madiface|digiface|hdsp", "RME", "Fireface / Babyface", "interface", "an audio interface"},
+    {"\\bmotu\\b|\\bm[246]\\b|ultralite|828", "MOTU", "M / UltraLite / 828", "interface", "an audio interface"},
+    {"audiobox|quantum|studio ?(24|26|68|1810|1824)c?", "PreSonus", "AudioBox / Studio / Quantum", "interface", "an audio interface"},
+    {"audient|\\bid ?(4|14|22|24|44)\\b|\\bevo\\b", "Audient", "iD / EVO", "interface", "an audio interface"},
+    {"solid state logic|\\bssl\\b", "Solid State Logic", "SSL 2 / 12", "interface", "an audio interface"},
+    {"arturia|audiofuse|minifuse", "Arturia", "AudioFuse / MiniFuse", "interface", "an audio interface"},
+    {"m-audio|m-track|air ?192", "M-Audio", "M-Track / AIR", "interface", "an audio interface"},
+    {"komplete audio|native instruments", "Native Instruments", "Komplete Audio", "interface", "an audio interface"},
+    {"roland|rubix|studio-capture|octa-capture|\\bbridge cast", "Roland", "Rubix / Capture", "interface", "an audio interface"},
+    {"tascam|\\bus-?[0-9]{2,4}|\\bsonicview", "TASCAM", "US series", "interface", "an audio interface"},
+    {"zoom|\\buac-?[0-9]|\\bams-?[0-9]{2}", "Zoom", "UAC / AMS", "interface", "an audio interface"},
+    {"antelope", "Antelope Audio", "Zen / Discrete / Orion", "interface", "an audio interface"},
+    {"apogee", "Apogee", "Symphony / Duet", "interface", "an audio interface"},
+    {"lynx", "Lynx Studio", "Aurora / Hilo", "interface", "an audio interface"},
+    {"\\besi\\b|maya ?44|juli@|gigaport", "ESI", "ESI interface", "interface", "an audio interface"},
+    {"\\bavid\\b|digidesign|mbox|pro tools", "Avid", "Mbox / Pro Tools", "interface", "an audio interface"},
+    {"tc ?electronic|tc ?helicon|go ?xlr|go ?twin", "TC Electronic / Helicon", "TC interface", "interface", "an audio interface"},
+    {"elgato|wave ?xlr|wave ?(1|3)", "Elgato", "Wave", "interface", "a USB microphone / interface"},
+    {"\\bshure\\b|\\bmvx?[0-9]", "Shure", "MV / MVX", "interface", "a USB microphone / interface"},
+    {"audio-technica|\\bat ?2020", "Audio-Technica", "USB microphone", "interface", "a USB microphone"},
+    {"\\bfifine|\\bmaono|\\btonor|\\bhyperx|\\bblue (yeti|snowball)", "USB microphone", "USB microphone", "interface", "a USB microphone"},
+    {"\\bemu\\b|e-mu|\\bmackie\\b|\\bonyx (producer|artist)|alesis|\\bio ?(2|4)\\b|lexicon|echo audio|presonus", "interface", "audio interface", "interface", "an audio interface"},
+    {"behringer|u-?phoria|\\bumc ?[0-9]|\\bum ?2\\b|\\buca ?2[0-9]{2}|xenyx|usb audio codec|burr[- ]?brown", "Behringer", "U-PHORIA / XENYX / UCA", "interface", "an audio interface"},
+  };
+  AsioIdentity id; if (name.empty()) return id;
+  const MixerProfile mp = mixerProfile(name);   // a desk first: its own rows know the channel layout
+  if (mp.known) { id.known = true; id.maker = mp.maker; id.model = mp.model; id.type = "mixer"; id.note = mp.note; return id; }
+  for (const Row& r : rows) if (std::regex_search(name, std::regex(r.re, std::regex::icase))) { id.known = true; id.maker = r.maker; id.model = r.model; id.type = r.type; id.note = r.note; break; }
+  if (!id.known) { id.type = isWrapper(name) ? "wrapper" : "interface"; id.note = id.type == "wrapper" ? "drives Windows' devices through ASIO" : "an ASIO device this console does not know by name"; }
+  id.own = std::regex_search(name, std::regex("^audio mixer$", std::regex::icase));
+  return id;
+}
 std::vector<const DeviceInfo*> mixers(const std::vector<DeviceInfo>& devices) {
   std::vector<const DeviceInfo*> out; for (const auto& d : devices) if (isAsio(d) && mixerProfile(d.name).known) out.push_back(&d); return out;
 }

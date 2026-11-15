@@ -88,6 +88,19 @@ int main(int argc, char** argv) {
     CHECK(drv::mixerProfile("X-USB ASIO Driver").known && drv::mixerProfile("X-USB ASIO Driver").maker == "Behringer" && drv::mixerProfile("X-USB ASIO Driver").prefix == "X32");
     CHECK(drv::mixerProfile("Yamaha Steinberg USB ASIO").maker == "Yamaha" && drv::mixerProfile("Allen&Heath Qu-16 ASIO").maker == "Allen & Heath" && drv::mixerProfile("ZOOM L-12 ASIO").maker == "Zoom" && drv::mixerProfile("PreSonus StudioLive 16.0.2").maker == "PreSonus" && drv::mixerProfile("Soundcraft USB Audio ASIO").maker == "Soundcraft" && drv::mixerProfile("TASCAM Model 16").maker == "Tascam" && drv::mixerProfile("X-AIR ASIO Driver").model.find("XR18") != std::string::npos);
     CHECK(!drv::mixerProfile("Realtek ASIO").known && !drv::mixerProfile("ASIO4ALL v2").known && !drv::mixerProfile("Focusrite USB ASIO").known && !drv::mixerProfile("").known);
+    // UNIVERSAL ASIO DETECTION: maker and type from the driver's name, for any brand
+    { struct T { const char* name; const char* type; const char* maker; };
+      const T cases[] = {{"BEHRINGER USB AUDIO", "interface", "Behringer"}, {"Focusrite USB ASIO", "interface", "Focusrite"}, {"Yamaha Steinberg USB ASIO", "mixer", "Yamaha"},
+        {"ASIO Fireface USB", "interface", "RME"}, {"MOTU M Series", "interface", "MOTU"}, {"Universal Audio Thunderbolt", "interface", "Universal Audio"},
+        {"Audient USB Audio ASIO Driver", "interface", "Audient"}, {"SSL USB ASIO Driver", "interface", "Solid State Logic"}, {"AudioBox ASIO Driver", "interface", "PreSonus"},
+        {"Pioneer DDJ-FLX4 ASIO", "dj", "Pioneer DJ / AlphaTheta"}, {"ASIO Driver for Line 6 Helix", "guitar", "Line 6"}, {"BOSS KATANA", "guitar", "BOSS"},
+        {"Realtek ASIO", "onboard", "Realtek"}, {"ASIO4ALL v2", "wrapper", "ASIO4ALL"}, {"FlexASIO", "wrapper", "FlexASIO"},
+        {"Voicemeeter AUX Virtual ASIO", "virtual", "VB-Audio"}, {"Dante Virtual Soundcard (x64)", "network", "Audinate"}, {"X-USB ASIO Driver", "mixer", "Behringer"},
+        {"Audio Mixer", "virtual", "AMFB Audio"}, {"Some Unknown Box ASIO", "interface", ""}};
+      for (const T& t : cases) { const drv::AsioIdentity a = drv::identifyAsio(t.name);
+        if (a.type != t.type || (t.maker[0] && a.maker != t.maker)) { std::fprintf(stderr, "identifyAsio(%s) = %s / %s, want %s / %s\n", t.name, a.type.c_str(), a.maker.c_str(), t.type, t.maker); return 1; } }
+      CHECK(drv::identifyAsio("Audio Mixer").own && !drv::identifyAsio("BEHRINGER USB AUDIO").own && !drv::identifyAsio("Some Unknown Box ASIO").known);
+      std::printf("driver_intel_test: universal ASIO detection: %d driver names identified\n", static_cast<int>(sizeof cases / sizeof cases[0])); }
     std::vector<DeviceInfo> rig = {dev("asio", "Realtek ASIO", "Realtek ASIO", 2, 2), dev("asio", "X-USB ASIO Driver", "X-USB ASIO Driver", 32, 32), dev("wasapi", "{x}", "Line (X-USB)", 2, 0), dev("null", "", "null", 32, 32)};
     const auto M = drv::mixers(rig); CHECK(M.size() == 1 && M[0]->name == "X-USB ASIO Driver" && M[0]->inChannels == 32); }
   { // RESCUE after every planned step failed: the Realtek ASIO driver, Realtek Windows shared (RWS), the default endpoints

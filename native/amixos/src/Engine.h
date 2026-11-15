@@ -256,6 +256,7 @@ class Engine : public QObject {
   QString autoPrefer() const { return settings_.value("audio/autoPrefer", "wasapi").toString(); }   // AUTO = the system's own WASAPI devices (default speakers + default microphone); ASIO only when picked
   void setAutoPrefer(const QString& p);
   QVariantMap autoDetectFor(const QString& prefer) const;
+  void annotateAsio(QVariantMap& m, bool probed);   // universal ASIO detection: identity, status, remembered channel counts
   // STEREO PAIR: strips 1+2, 3+4 ... as one stereo channel. matchStereoPair() gives the partner the same channel processing (EQ, gate, compressor,
   // limiter, crossover, delay) and the same rack (every plug-in with its settings and bypass), panned to the other side. While the two are
   // LINKED, a plug-in put in, taken out, bypassed or adjusted on one is done on the other too. Each side runs its own copy of a plug-in
@@ -279,7 +280,7 @@ class Engine : public QObject {
   Q_PROPERTY(QString dspMode READ dspMode WRITE setDspMode NOTIFY masterChainChanged)
   QString dspMode() const { return mastering()["analog"].toBool() ? QStringLiteral("analog") : QStringLiteral("digital"); }
   void setDspMode(const QString& m) { QVariantMap v; v["analog"] = (m == "analog"); setMastering(v); if (rt_) rt_->setAnalogChannels(m == "analog"); }   // ANALOG: the master and every channel
-  Q_INVOKABLE QVariantList asioDrivers() const;                 // discovery only: every ASIO driver found {id, name, inChannels, outChannels, rate, kind, current}
+  Q_INVOKABLE QVariantList asioDrivers() const;                 // discovery only: every ASIO driver found {id, name, inChannels, outChannels, rate, kind, current, maker, model, asioType, note, known, own, status, statusText, lastSeen, seenWhen}
   Q_INVOKABLE bool openAsioDriver(const QString& id, int frames);
   Q_INVOKABLE int readAsioChannels(const QString& id);   // input n of the running device -> strip n; returns how many (done by itself after an ASIO open)
   Q_PROPERTY(QString asioNote READ asioNote NOTIFY stateChanged)   // what was read from the device last

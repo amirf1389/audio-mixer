@@ -478,6 +478,17 @@ int main(int argc, char* argv[]) {
           for (const char* pf : {"best", "asio", "wasapi"}) { engine.setAutoPrefer(pf); const QVariantMap a = engine.autoDetect();
             if (a["name"].toString() == "Audio Mixer" || engine.bestAsioDriver() == "Audio Mixer") { std::fprintf(stderr, "amixos --smoke: AUTO (%s) picked AMFB's own virtual ASIO driver\n", pf); return 168; } }
           engine.simulateDevices(pc); }
+        { // UNIVERSAL ASIO DETECTION: any brand identified, a busy driver keeps its last channel counts, virtual drivers and wrappers rank last
+          QVariantList u = pc; u.prepend(dev("asio", "Focusrite USB ASIO", "Focusrite USB ASIO", 18, 20)); u << dev("asio", "Voicemeeter Virtual ASIO", "Voicemeeter Virtual ASIO", 8, 8) << dev("asio", "ASIO4ALL v2", "ASIO4ALL v2", 2, 2);
+          engine.simulateDevices(u);   // read once: the counts are remembered
+          QVariantMap busy = u[0].toMap(); busy["inChannels"] = 0; busy["outChannels"] = 0; busy["probeError"] = "did not start: the device is in use"; u[0] = busy; engine.simulateDevices(u);
+          QVariantMap fr, vm, a4; for (const QVariant& v : engine.asioDrivers()) { const QVariantMap m = v.toMap(); if (m["id"] == "Focusrite USB ASIO") fr = m; else if (m["id"] == "Voicemeeter Virtual ASIO") vm = m; else if (m["id"] == "ASIO4ALL v2") a4 = m; }
+          if (fr["maker"] != "Focusrite" || fr["status"] != "busy" || !fr["lastSeen"].toBool() || fr["inChannels"].toInt() != 18 || fr["outChannels"].toInt() != 20 || vm["asioType"] != "virtual" || vm["status"] != "virtual" || a4["asioType"] != "wrapper") {
+            std::fprintf(stderr, "amixos --smoke: universal ASIO detection: focusrite %s/%s/%d+%d, voicemeeter %s, asio4all %s\n", qPrintable(fr["maker"].toString()), qPrintable(fr["status"].toString()), fr["inChannels"].toInt(), fr["outChannels"].toInt(), qPrintable(vm["asioType"].toString()), qPrintable(a4["asioType"].toString())); return 167; }
+          if (engine.bestAsioDriver() != "Focusrite USB ASIO") { std::fprintf(stderr, "amixos --smoke: ASIO ranking picked %s over the busy Focusrite's own driver\n", qPrintable(engine.bestAsioDriver())); return 167; }
+          engine.setAutoPrefer("asio"); const QVariantMap a = engine.autoDetect(); engine.setAutoPrefer("best");
+          if (a["id"] != "Focusrite USB ASIO" || a["in"] == "-") { std::fprintf(stderr, "amixos --smoke: AUTO (asio) picked %s (in %s)\n", qPrintable(a["id"].toString()), qPrintable(a["in"].toString())); return 167; }
+          QSettings().remove("asio/seen/Focusrite USB ASIO"); engine.simulateDevices(pc); }
         engine.setAutoPrefer("best");   // the UM2 checks below are for BEST (an interface's own ASIO driver first)
         const QVariantMap d0 = engine.autoDetect();
         if (d0["backend"] != "wasapi" && d0["backend"] != "asio") { std::fprintf(stderr, "amixos --smoke: UM2 machine without the UM2: detection picked %s\n", qPrintable(d0["name"].toString())); return 170; }

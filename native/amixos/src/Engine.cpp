@@ -114,7 +114,30 @@ void Engine::applyFingerprint(const std::string& f) {
   if (rt_ && !gone.isEmpty() && (gone.contains(inDevName_) || gone.contains(outDevName_))) { stop(); status_ = QStringLiteral("The sound card was unplugged: %1").arg(gone.join(", ")); emit stateChanged(); }
   if (!added.isEmpty()) emit hotplug(true, added.join(", ")); else if (!gone.isEmpty()) emit hotplug(false, gone.join(", "));
 }
-void Engine::simulateDevices(const QVariantList& devices) { simulated_ = true; devices_.clear(); for (const QVariant& v : devices) { QVariantMap m = v.toMap(); if (!m.contains("kind")) m["kind"] = QString::fromStdString(am::classifyDevice(m["backend"].toString().toStdString(), m["name"].toString().toStdString(), -1, m["inChannels"].toInt() > 0 && m["outChannels"].toInt() == 0)); devices_ << m; } emit devicesChanged(); }
+// UNIVERSAL ASIO DETECTION: every ASIO driver, of any brand, gets who made it and what it is (interface, desk, DJ, guitar, onboard,
+// network, virtual, wrapper), a status from the live probe, and the channel counts it had the last time it was read. A driver held by
+// another program (or idle and not answering) reads 0 / 0; its remembered counts (asio/seen/<name>) are shown instead, marked as such.
+void Engine::annotateAsio(QVariantMap& m, bool probed) {
+  const QString name = m["name"].toString(); const am::drv::AsioIdentity a = am::drv::identifyAsio(name.toStdString());
+  m["maker"] = QString::fromStdString(a.maker); m["model"] = QString::fromStdString(a.model); m["asioType"] = QString::fromStdString(a.type);
+  m["note"] = QString::fromStdString(a.note); m["known"] = a.known; m["own"] = a.own;
+  const QString err = m.value("probeError").toString(); const int in = m["inChannels"].toInt(), out = m["outChannels"].toInt();
+  const QString key = QStringLiteral("asio/seen/") + QString(name).replace('/', '_').replace('\\', '_');
+  QString status;
+  if (a.own || a.type == "virtual" || a.type == "network") status = QStringLiteral("virtual");
+  else if (err.contains("bit")) status = QStringLiteral("other bitness");
+  else if (!err.isEmpty()) status = QStringLiteral("busy");
+  else if (in + out > 0) status = QStringLiteral("ready");
+  else status = QStringLiteral("no channels");
+  m["status"] = status; m["statusText"] = err;
+  if (probed && in + out > 0 && err.isEmpty()) {   // read just now: remember it
+    QVariantList rates = m.value("sampleRates").toList(); settings_.setValue(key, QVariantMap{{"in", in}, {"out", out}, {"rate", m["defaultRate"]}, {"rates", rates}, {"when", QDateTime::currentDateTime().toString(Qt::ISODate)}});
+    m["lastSeen"] = false; return; }
+  const QVariantMap seen = settings_.value(key).toMap();
+  if (in + out == 0 && !seen.isEmpty()) { m["lastSeen"] = true; m["seenIn"] = seen["in"]; m["seenOut"] = seen["out"]; m["seenRate"] = seen["rate"]; m["seenWhen"] = seen["when"]; }
+  else m["lastSeen"] = false;
+}
+void Engine::simulateDevices(const QVariantList& devices) { simulated_ = true; devices_.clear(); for (const QVariant& v : devices) { QVariantMap m = v.toMap(); if (!m.contains("kind")) m["kind"] = QString::fromStdString(am::classifyDevice(m["backend"].toString().toStdString(), m["name"].toString().toStdString(), -1, m["inChannels"].toInt() > 0 && m["outChannels"].toInt() == 0)); if (m["backend"].toString() == "asio") annotateAsio(m, true); devices_ << m; } emit devicesChanged(); }
 bool Engine::guarded(std::function<bool()> work, int timeoutMs) {
   struct St { std::atomic<bool> done{false}; bool ok = false; }; auto st = std::make_shared<St>();
   std::thread([st, work = std::move(work)] { st->ok = work(); st->done.store(true); }).detach();
@@ -135,6 +158,7 @@ void Engine::refreshDevices() {
     QVariantMap m; m["backend"] = QString::fromStdString(d.backend); m["id"] = QString::fromStdString(d.id); m["name"] = QString::fromStdString(d.name);
     m["inChannels"] = d.inChannels; m["outChannels"] = d.outChannels; m["defaultRate"] = d.defaultRate; m["defaultIn"] = d.defaultIn; m["defaultOut"] = d.defaultOut; m["bluetooth"] = looksBluetooth(m["name"].toString()); m["kind"] = QString::fromStdString(d.kind); m["enabled"] = deviceEnabled(m["backend"].toString(), m["id"].toString());
     QVariantList rates; for (double r : d.sampleRates) rates << r; m["sampleRates"] = rates;
+    if (d.backend == "asio") { m["probeError"] = QString::fromStdString(d.probeError); annotateAsio(m, !timedOut_); }
     if (!bluetoothAudio() && (m["bluetooth"].toBool() || d.kind == "bluetooth")) continue;   // BLUETOOTH AUDIO switched off
     devices_ << m;
   }
@@ -755,6 +779,8 @@ bool Engine::openDac(const QString& backendName, const QString& id, int frames, 
 QVariantList Engine::asioDrivers() const {
   QVariantList l; for (const QVariant& v : devices_) { const QVariantMap d = v.toMap(); if (d["backend"].toString() != "asio") continue;
     QVariantMap m; m["id"] = d["id"]; m["name"] = d["name"]; m["inChannels"] = d["inChannels"]; m["outChannels"] = d["outChannels"]; m["rate"] = d["defaultRate"]; m["kind"] = d["kind"];
+    for (const char* k : {"maker", "model", "asioType", "note", "known", "own", "status", "statusText", "lastSeen"}) m[k] = d.value(k);
+    if (d.value("lastSeen").toBool()) { m["inChannels"] = d["seenIn"]; m["outChannels"] = d["seenOut"]; if (d["seenRate"].toDouble() > 0) m["rate"] = d["seenRate"]; m["seenWhen"] = d["seenWhen"]; }
     m["current"] = running() && backend() == "asio" && asioOpenId_ == d["id"].toString(); l << m; }
   return l;
 }
@@ -791,7 +817,10 @@ static bool ownVirtualAsio(const QString& name) { return name.trimmed().compare(
 QString Engine::bestAsioDriver() const {
   QString best; int bestRank = -1;
   for (const QVariant& v : asioDrivers()) { const QVariantMap m = v.toMap(); const QString k = m["kind"].toString(); if (ownVirtualAsio(m["name"].toString()) || ownVirtualAsio(m["id"].toString())) continue;
-    const int rank = (k == "interface" ? 200 : k == "wrapper" ? 0 : 100) + std::min(64, m["inChannels"].toInt() + m["outChannels"].toInt());
+    const QString t = m["asioType"].toString(), st = m["status"].toString();
+    if (m["own"].toBool() || t == "virtual" || t == "network" || st == "other bitness") continue;   // not a sound card here, or cannot be loaded by this build
+    const int typeRank = (t == "interface" || t == "mixer" || t == "dj" || t == "guitar") ? 300 : t == "onboard" ? 150 : t == "wrapper" ? 0 : (k == "interface" ? 200 : k == "wrapper" ? 0 : 100);
+    const int rank = typeRank + (st == "ready" ? 40 : m["lastSeen"].toBool() ? 30 : 0) + (m["known"].toBool() ? 5 : 0) + std::min(64, m["inChannels"].toInt() + m["outChannels"].toInt());
     if (rank > bestRank) { bestRank = rank; best = m["id"].toString(); } }
   return best;
 }
@@ -809,11 +838,14 @@ QVariantMap Engine::autoDetect() const {
 QVariantMap Engine::autoDetectFor(const QString& prefer) const {
   QVariantMap best; int bestRank = -1;
   for (const QVariant& v : devices_) { const QVariantMap d = v.toMap(); const QString b = d["backend"].toString(), name = d["name"].toString(); if (b == "null" || d["id"].toString().startsWith("loopback:")) continue;
-    const bool in = d["inChannels"].toInt() > 0, out = d["outChannels"].toInt() > 0; if (!in && !out) continue; if (!d.value("enabled", true).toBool()) continue;   // switched OFF on CONNECTIONS
+    const bool seen = b == "asio" && d.value("lastSeen").toBool();
+    const bool in = d["inChannels"].toInt() > 0 || (seen && d["seenIn"].toInt() > 0), out = d["outChannels"].toInt() > 0 || (seen && d["seenOut"].toInt() > 0); if (!in && !out) continue;
+    if (b == "asio") { const QString t = d.value("asioType").toString(); if (t == "virtual" || t == "network" || d.value("status").toString() == "other bitness") continue; }   // virtual and network drivers: never automatic
+    if (!d.value("enabled", true).toBool()) continue;   // switched OFF on CONNECTIONS
     if (b == "asio" && ownVirtualAsio(name)) continue;   // our own virtual driver: never automatic
     if (prefer == "bluetooth") { if (d["kind"].toString() != "bluetooth" && !looksBluetooth(name)) continue; } else if (prefer != "best" && b != prefer) continue;
     int rank = 0; QString why;
-    if (b == "asio") { const bool wrapper = am::drv::isWrapper(name.toStdString()); const bool pinned = am::drv::pinOf(name.toStdString()).on; rank = wrapper ? 60 : pinned ? 50 : 100; why = wrapper ? "an ASIO wrapper (ASIO4ALL-style): used when nothing has its own driver" : pinned ? "Realtek onboard: pinned to its Windows endpoint, SMART START routes it" : "the device's own ASIO driver"; }
+    if (b == "asio") { const bool wrapper = am::drv::isWrapper(name.toStdString()); const bool pinned = am::drv::pinOf(name.toStdString()).on; rank = wrapper ? 60 : pinned ? 50 : 100 + (d.value("asioType").toString() == "onboard" ? -20 : 0) + (d.value("status").toString() == "ready" ? 5 : 0); why = wrapper ? "an ASIO wrapper (ASIO4ALL-style): used when nothing has its own driver" : pinned ? "Realtek onboard: pinned to its Windows endpoint, SMART START routes it" : "the device's own ASIO driver"; }
     else if (b == "wasapi" || b == "coreaudio") { rank = (d["defaultOut"].toBool() ? 40 : 30) + (in && out ? 2 : 0); why = "the system's " + QString(d["defaultOut"].toBool() ? "default " : "") + "endpoint"; }
     else if (b == "alsa") { rank = (name.contains("default") ? 25 : 20); why = "an ALSA device"; }
     else if (b == "dsound") { rank = (d["defaultOut"].toBool() ? 12 : 10) + (in && out ? 2 : 0); why = "DirectSound (no lock; the Bluetooth path)";
@@ -821,6 +853,7 @@ QVariantMap Engine::autoDetectFor(const QString& prefer) const {
     if (rank > bestRank) { bestRank = rank; best = d; best["why"] = why; }
   }
   if (best.isEmpty()) return best;
+  if (best["backend"].toString() == "asio" && best.value("lastSeen").toBool()) { best["inChannels"] = best["seenIn"]; best["outChannels"] = best["seenOut"]; best["why"] = best["why"].toString() + " (busy or idle when read: its last known channels are used)"; }
   const QString id = best["id"].toString(); best["in"] = best["inChannels"].toInt() > 0 ? id : "-"; best["out"] = best["outChannels"].toInt() > 0 ? id : "-";
   best["outName"] = best["outChannels"].toInt() > 0 ? best["name"] : QVariant(QString()); best["inName"] = best["inChannels"].toInt() > 0 ? best["name"] : QVariant(QString()); best["outKind"] = best["outChannels"].toInt() > 0 ? best["kind"] : QVariant(QString()); best["inKind"] = best["inChannels"].toInt() > 0 ? best["kind"] : QVariant(QString());
   // endpoint systems list each direction on its own (WASAPI, DirectSound): pair the pick with the other direction's endpoint of the same backend,
