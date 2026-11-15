@@ -163,6 +163,7 @@ set_tests_properties(amixos_smoke PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscr
 # AmF X1 PLUG-IN BUILDER: the builder as its own program (shares the builder page, Theme, the language tables and the plug-in shell)
 file(GLOB AMIX_I18N_FILES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} i18n/verified-22.json i18n/auto-58.json i18n/ui/*.json)
 qt_add_executable(amfb_plugin_builder src/builder_main.cpp src/Builder.cpp src/Builder.h src/I18n.cpp src/I18n.h)
+amfb_win_version(amfb_plugin_builder "AmF X1 Plugin Builder.exe" "AmF X1 Plugin Builder: design VST3 plug-ins from AMFB blocks" APP)
 set_target_properties(amfb_plugin_builder PROPERTIES OUTPUT_NAME "AmF X1 Plugin Builder" WIN32_EXECUTABLE TRUE)
 target_include_directories(amfb_plugin_builder PRIVATE src)
 qt_add_qml_module(amfb_plugin_builder
