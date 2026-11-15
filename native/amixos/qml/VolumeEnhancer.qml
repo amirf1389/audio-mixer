@@ -59,7 +59,7 @@ Popup {
         Hint { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.margins: 14; horizontalAlignment: Text.AlignHCenter; text: parent.note; visible: text !== "" }
         Item { id: inner; anchors.fill: parent; anchors.topMargin: 36; anchors.bottomMargin: parent.note !== "" ? 40 : 10; anchors.leftMargin: 10; anchors.rightMargin: 10 } }
 
-    background: Rectangle { radius: 14; color: Theme.card; border.color: pop.m.on ? Theme.orange : Theme.line; border.width: 1 }
+    background: Rectangle { radius: 14; color: Theme.cardSolid; border.color: pop.m.on ? Theme.orange : Theme.line; border.width: 1 }
     contentItem: ColumnLayout { spacing: 10
         // ---- title, presets, bypass
         Rectangle { Layout.fillWidth: true; implicitHeight: 54; color: Theme.ov(0.05); radius: 14

@@ -28,7 +28,7 @@ Popup {
     function load() { type = engine.running && types.indexOf(engine.backend) >= 0 ? engine.backend : (types.length ? types[0] : ""); rate = engine.sampleRate > 0 ? engine.sampleRate : 48000; frames = engine.blockFrames > 0 ? engine.blockFrames : settings.defaultFrames; note = ""; pickDefaults() }
     function apply() { const ok = engine.open(type, muteIn ? "" : inId, outId, rate, frames, muteIn ? 0 : inCh, outCh); note = ok ? i18n.t("Running.", i18n.lang) : i18n.t("This device did not open with these settings.", i18n.lang) }
     onAboutToShow: load()
-    background: Rectangle { radius: 8; color: Theme.card; border.color: Theme.line }
+    background: Rectangle { radius: 8; color: Theme.cardSolid; border.color: Theme.line }
 
     component Btn: Rectangle { id: bt; property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: btT.implicitWidth + 22; implicitHeight: 24; radius: 8
         color: bt.on ? Qt.rgba(bt.onColor.r, bt.onColor.g, bt.onColor.b, 0.22) : Theme.ov(0.06); border.color: bt.on ? bt.onColor : Theme.line
