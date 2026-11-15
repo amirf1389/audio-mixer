@@ -949,6 +949,14 @@ int main(int argc, char* argv[]) {
                 const auto dev = [](const char* b, const char* id, const char* name, int in, int out) { QVariantMap m; m["backend"] = b; m["id"] = id; m["name"] = name; m["inChannels"] = in; m["outChannels"] = out; m["defaultRate"] = 48000.0; return m; };
                 rig << dev("asio", "{a1}", "Focusrite USB ASIO", 18, 20) << dev("asio", "{a2}", "ASIO4ALL v2", 2, 2) << dev("asio", "{a3}", "Realtek ASIO", 2, 2) << dev("wasapi", "{w1}", "Speakers (Realtek(R) Audio)", 0, 2);
                 engine.simulateDevices(rig); engine.setAutoPrefer("manual"); win->setProperty("current", "asio"); waitMs(500); win->grabWindow().save(shots + "/asio-drivers.png");
+                { // UNIVERSAL ASIO DETECTION, every status on one page: ready, busy with remembered channels, virtual, other bitness, wrapper
+                  QVariantList all; all << dev("asio", "{u1}", "Focusrite USB ASIO", 18, 20) << dev("asio", "{u2}", "BEHRINGER UMC ASIO Driver", 4, 4) << dev("asio", "{u3}", "Pioneer DDJ-FLX10 ASIO", 4, 6) << dev("asio", "{u4}", "Line 6 Helix ASIO", 0, 0)
+                      << dev("asio", "{u5}", "Voicemeeter Virtual ASIO", 8, 8) << dev("asio", "{u6}", "Realtek ASIO", 2, 2) << dev("asio", "{u7}", "ASIO4ALL v2", 2, 2) << dev("asio", "{u8}", "Dante Virtual Soundcard", 64, 64);
+                  engine.simulateDevices(all);   // read once: the Focusrite's counts are remembered
+                  QVariantMap f = all[0].toMap(); f["inChannels"] = 0; f["outChannels"] = 0; f["probeError"] = "did not start: the device is in use by another program"; all[0] = f;
+                  QVariantMap h = all[3].toMap(); h["probeError"] = "a 32-bit driver: only the 32-bit AmF X1 can load it"; all[3] = h;
+                  engine.simulateDevices(all); waitMs(500); win->grabWindow().save(shots + "/asio-universal.png"); std::printf("amixos --shots: asio-universal (best %s)\n", qPrintable(engine.bestAsioDriver()));
+                  QSettings().remove("asio/seen/Focusrite USB ASIO"); engine.simulateDevices(rig); waitMs(200); }
                 const QVariantList l = engine.asioDrivers(); bool any = false; for (const QVariant& v : l) any = any || v.toMap()["current"].toBool();
                 if (l.size() != 3 || l[0].toMap()["name"].toString() != "Focusrite USB ASIO" || l[0].toMap()["inChannels"].toInt() != 18 || any || !engine.autoDetect().isEmpty()) { std::fprintf(stderr, "amixos --shots: the ASIO DRIVERS list is wrong\n"); std::exit(253); }
                 if (engine.bestAsioDriver() != "{a1}" || engine.asioFrames(48000) != 480 || engine.asioFrames(44100) != 441 || engine.asioFrames(96000) != 960) { std::fprintf(stderr, "amixos --shots: ASIO auto detect or the 10 ms buffer is wrong (%s, %d)\n", qPrintable(engine.bestAsioDriver()), engine.asioFrames(48000)); std::exit(212); }
