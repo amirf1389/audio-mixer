@@ -1,1 +1,2 @@
-9374ec9aebef59ac2ee0e66cadf017f42e15dc01ff2bd15aa2a3b8211f29479a  AmF-X1-1.23.0.1-android.apk
+28f0ae658df8cb77c0d532dc0ca17332244ce9faa875c682ffe3de5c43ef5fcd  AmF-X1-1.23.0.1-android.apk
+a9e53f68d18a484c6d53dcd9605e0ab39bd04f1dc3964ee1e73bc48ac80b063d  amfx1-sdk-1.23.0.1.aar

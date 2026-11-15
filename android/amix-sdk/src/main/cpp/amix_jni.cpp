@@ -99,7 +99,7 @@ void closeLoop() {
 extern "C" {
 // starts the native loop on mixer h at `rate` (the output may run at the device's own rate: it is returned), mic = open the microphone too.
 // Returns the rate in use, 0 = AAudio could not open (Java falls back to its AudioRecord / AudioTrack loop).
-JNIEXPORT jint JNICALL Java_com_amfb_amixos_Engine_aaudioStart(JNIEnv*, jclass, jlong h, jint rate, jboolean mic, jint outDev, jint inDev) {
+JNIEXPORT jint JNICALL Java_com_amfb_amixos_Engine_aaudioStart(JNIEnv*, jclass, jlong h, jint rate, jboolean mic, jint outDev, jint inDev, jint bursts) {
   closeLoop(); amix_mixer* m = mixerOf(h); if (!m) return 0;
   NativeLoop* l = new NativeLoop(); l->m = m; const std::size_t cap = 8192; l->mic.assign(cap, 0.f); l->L.assign(cap, 0.f); l->R.assign(cap, 0.f); l->ptrs.assign(static_cast<std::size_t>(amix_mixer_strips(m)), nullptr);
   l->out = openStream(AAUDIO_DIRECTION_OUTPUT, rate, 2, l, true, outDev);
@@ -107,7 +107,7 @@ JNIEXPORT jint JNICALL Java_com_amfb_amixos_Engine_aaudioStart(JNIEnv*, jclass, 
   if (!l->out) { delete l; return 0; }
   const int real = AAudioStream_getSampleRate(l->out);
   if (mic) { l->in = openStream(AAUDIO_DIRECTION_INPUT, real, 1, l, false, inDev); if (!l->in && inDev > 0) l->in = openStream(AAUDIO_DIRECTION_INPUT, real, 1, l, false, 0); }   // the same rate as the output: no resampling in the callback
-  AAudioStream_setBufferSizeInFrames(l->out, AAudioStream_getFramesPerBurst(l->out) * 2);   // two bursts: the guide's low-latency starting point
+  AAudioStream_setBufferSizeInFrames(l->out, AAudioStream_getFramesPerBurst(l->out) * (bursts >= 1 && bursts <= 8 ? bursts : 2));   // bursts of headroom (2 = the guide's low-latency start; the brand profile may ask for more)
   g_loop = l;
   if (l->in) AAudioStream_requestStart(l->in);
   if (AAudioStream_requestStart(l->out) != AAUDIO_OK) { closeLoop(); return 0; }
@@ -122,4 +122,25 @@ JNIEXPORT void JNICALL Java_com_amfb_amixos_Engine_aaudioState(JNIEnv* env, jcla
     v[6] = AAudioStream_getDeviceId(g_loop->out); v[7] = g_loop->in ? AAudioStream_getDeviceId(g_loop->in) : 0; v[8] = AAudioStream_getSampleRate(g_loop->out); }
   if (out && env->GetArrayLength(out) >= 9) env->SetIntArrayRegion(out, 0, 9, v);
 }
+}
+
+// ---- AUDIO HAL PROBE: what this phone's audio HAL really grants, through the public AAudio API only. Each direction is opened once
+// asking for the best (low latency, exclusive), the GRANTED values are read and the stream is closed at once: nothing is played or
+// recorded. out[16]: per direction (output 0..7, input 8..15): opened, performanceMode, sharingMode, framesPerBurst, sampleRate,
+// channelCount, bufferCapacity, format. performanceMode 12 = LOW_LATENCY, sharingMode 0 = EXCLUSIVE (the MMAP path) / 1 = SHARED.
+extern "C" JNIEXPORT void JNICALL Java_com_amfb_amixos_Engine_aaudioProbe(JNIEnv* env, jclass, jintArray out) {
+  jint v[16] = {0};
+  for (int k = 0; k < 2; ++k) {
+    AAudioStreamBuilder* b = nullptr; if (AAudio_createStreamBuilder(&b) != AAUDIO_OK) continue;
+    AAudioStreamBuilder_setDirection(b, k == 0 ? AAUDIO_DIRECTION_OUTPUT : AAUDIO_DIRECTION_INPUT);
+    AAudioStreamBuilder_setPerformanceMode(b, AAUDIO_PERFORMANCE_MODE_LOW_LATENCY); AAudioStreamBuilder_setSharingMode(b, AAUDIO_SHARING_MODE_EXCLUSIVE);
+    AAudioStreamBuilder_setFormat(b, AAUDIO_FORMAT_PCM_FLOAT);
+    AAudioStream* s = nullptr; const bool ok = AAudioStreamBuilder_openStream(b, &s) == AAUDIO_OK && s; AAudioStreamBuilder_delete(b);
+    if (!ok) continue;
+    jint* d = v + k * 8;
+    d[0] = 1; d[1] = AAudioStream_getPerformanceMode(s); d[2] = AAudioStream_getSharingMode(s); d[3] = AAudioStream_getFramesPerBurst(s);
+    d[4] = AAudioStream_getSampleRate(s); d[5] = AAudioStream_getChannelCount(s); d[6] = AAudioStream_getBufferCapacityInFrames(s); d[7] = AAudioStream_getFormat(s);
+    AAudioStream_close(s);
+  }
+  if (out && env->GetArrayLength(out) >= 16) env->SetIntArrayRegion(out, 0, 16, v);
 }

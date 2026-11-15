@@ -56,7 +56,24 @@ class DevicesActivity : AppCompatActivity() {
     private fun render() {
         box.removeAllViews()
         box.addView(TextView(this).apply { text = getString(R.string.dev_title); setTextColor(getColor(R.color.accent)); textSize = 22f; typeface = Typeface.DEFAULT_BOLD; letterSpacing = 0.12f })
-        audioSection(); networkSection()
+        audioSection(); halSection(); networkSection()
+    }
+
+    // ---- AUDIO HAL + BRAND PROFILE (from the AmF X1 SDK): read once, the probe opens and closes an AAudio stream
+    private val hal by lazy { AudioHal.read(this) }
+    private fun halSection() {
+        head(getString(R.string.dev_hal), getString(R.string.dev_hal_sub))
+        val c = card(); for (l in hal.lines()) line(c, l, Color.WHITE, 12f, mono = true); box.addView(c)
+        val p = BrandProfile.of(hal)
+        head(getString(R.string.dev_brand), getString(R.string.dev_brand_sub))
+        val b = card()
+        line(b, p.maker + " · " + p.family, Color.WHITE, 15f, bold = true)
+        line(b, getString(R.string.dev_brand_buffer, p.bursts), getColor(R.color.cyan), 12f, mono = true)
+        for (n in p.notes) line(b, "• " + n, getColor(R.color.dim), 12f)
+        line(b, getString(R.string.dev_brand_battery), getColor(R.color.accent), 12f, bold = true)
+        line(b, p.batteryTip, Color.WHITE, 12f)
+        b.addView(Button(this).apply { text = getString(R.string.dev_brand_open); setOnClickListener { runCatching { startActivity(BrandProfile.batterySettings(this@DevicesActivity)) } } })
+        box.addView(b)
     }
 
     // ---- AUDIO INTERFACES

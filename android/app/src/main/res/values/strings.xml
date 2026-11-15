@@ -182,4 +182,11 @@
     <string name="dev_found_none">No console answered. Is it on the same network, with the phone remote switched on (NETWORK → PHONE REMOTE)?</string>
     <string name="dev_found_n">%1$d console(s) found: tap one to use it for the remote.</string>
     <string name="dev_saved">Saved: the remote connects to %1$s.</string>
+    <string name="dev_hal">AUDIO HAL</string>
+    <string name="dev_hal_sub">What this phone\'s audio hardware layer offers, read through Android\'s public APIs and a short AAudio probe (nothing is played).</string>
+    <string name="dev_brand">BRAND PROFILE</string>
+    <string name="dev_brand_sub">Tuning for this maker: the buffer the mixer asks for, and what stops audio in the background.</string>
+    <string name="dev_brand_buffer">Mixer buffer: %1$d HAL bursts</string>
+    <string name="dev_brand_battery">Keep audio running in the background</string>
+    <string name="dev_brand_open">Battery settings</string>
 </resources>
