@@ -28,7 +28,8 @@ Flickable {
         { n: "FILL", d: "front / delay fill: 150 Hz high-pass", p: { on: true, hpOrder: 2, hpHz: 150, lpOrder: 0, type: 1, limitOn: true, limitDb: -3 } },
         { n: "BYPASS", d: "the output untouched", p: { on: false } } ]
     component Chip: Rectangle { property string label; property bool on: false; property color onColor: Theme.cyan; signal clicked()
-        implicitWidth: Math.max(34, cl.implicitWidth + 12); implicitHeight: 20; radius: 4; color: on ? onColor : Theme.ov(0.06); border.color: on ? "transparent" : Theme.lineSoft
+        implicitWidth: Math.max(34, cl.implicitWidth + 12); implicitHeight: 20; radius: 8; gradient: Gradient { GradientStop { position: 0; color: on ? Qt.lighter(onColor, 1.22) : Theme.ov(0.12) } GradientStop { position: 1; color: on ? Qt.darker(onColor, 1.15) : Theme.ov(0.035) } } color: on ? onColor : Theme.ov(0.06); border.color: on ? "transparent" : Theme.lineSoft
+        Rectangle { anchors.fill: parent; anchors.margins: 1; radius: Math.max(0, parent.radius - 1); color: "transparent"; border.width: 1; border.color: Qt.rgba(1, 1, 1, parent.on ? 0.28 : 0.07) }
         Text { id: cl; anchors.centerIn: parent; text: page.t(parent.label); color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
         MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: parent.clicked() } }
     component Param: RowLayout { property string label; property real value; property real from; property real to; property real step: 1; property string unit; property int decimals: 1; property bool log: false; signal moved(real v)

@@ -42,7 +42,7 @@ Flickable {
                     Item { Layout.fillWidth: true }
                     Text { visible: !!tgt.sug.ready; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; font.bold: true
                            text: tgt.sug.ratio > 1 ? i18n.t("Suggested: threshold ", i18n.lang) + Number(tgt.sug.thresholdDb).toFixed(1) + i18n.t(" dB, ratio ", i18n.lang) + Number(tgt.sug.ratio).toFixed(1) + ":1" : i18n.t("No compression needed", i18n.lang) }
-                    Rectangle { objectName: "compTargetApply"; visible: !!tgt.sug.ready && tgt.sug.ratio > 1; implicitWidth: apT.implicitWidth + 20; implicitHeight: 22; radius: 4; color: Qt.rgba(0, 0.95, 1, 0.15); border.color: Theme.cyan
+                    Rectangle { id: gb20; objectName: "compTargetApply"; visible: !!tgt.sug.ready && tgt.sug.ratio > 1; implicitWidth: apT.implicitWidth + 20; implicitHeight: 22; radius: 7; color: Qt.rgba(0, 0.95, 1, 0.15); gradient: Gradient { GradientStop { position: 0; color: Qt.lighter(gb20.color, 1.25) } GradientStop { position: 1; color: Qt.darker(gb20.color, 1.12) } } border.color: Theme.cyan
                         Text { id: apT; anchors.centerIn: parent; text: i18n.t("APPLY", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
                         MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { engine.applyCompSuggestion(page.strip); page.reload() } } }
                 }
@@ -57,7 +57,7 @@ Flickable {
                 Text { text: i18n.t("OVER-COMPRESSED", i18n.lang); color: Theme.danger; font.family: Theme.mono; font.pixelSize: 10; font.bold: true }
                 Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.ink; font.pixelSize: 10
                        text: i18n.t("This channel loses more than 12 dB to the compressor: raise the threshold or lower the ratio, or add DE-SQUASH to give the attacks back.", i18n.lang) }
-                Rectangle { implicitWidth: dsT.implicitWidth + 20; implicitHeight: 24; radius: 4; color: Theme.ov(0.06); border.color: Theme.danger
+                Rectangle { id: gb21; implicitWidth: dsT.implicitWidth + 20; implicitHeight: 24; radius: 7; color: Theme.ov(0.06); gradient: Gradient { GradientStop { position: 0; color: Qt.lighter(gb21.color, 1.25) } GradientStop { position: 1; color: Qt.darker(gb21.color, 1.12) } } border.color: Theme.danger
                     Text { id: dsT; anchors.centerIn: parent; text: i18n.t("ADD DE-SQUASH", i18n.lang); color: Theme.danger; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
                     MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: engine.addToRack(page.strip, "fx:desquash") } } }
         }
@@ -75,7 +75,7 @@ Flickable {
                     onActivated: page.strip = currentIndex
                 }
                 Item { Layout.fillWidth: true }
-                Rectangle { implicitWidth: 70; implicitHeight: 24; radius: 4; color: page.ch.compOn ? Theme.emerald : Theme.ov(0.08); Text { anchors.centerIn: parent; text: page.ch.compOn ? i18n.t("ON", i18n.lang) : i18n.t("OFF", i18n.lang); color: page.ch.compOn ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.apply("compOn", !page.ch.compOn) } }
+                Rectangle { id: gb22; implicitWidth: 70; implicitHeight: 24; radius: 7; color: page.ch.compOn ? Theme.emerald : Theme.ov(0.08); gradient: Gradient { GradientStop { position: 0; color: Qt.lighter(gb22.color, 1.25) } GradientStop { position: 1; color: Qt.darker(gb22.color, 1.12) } } Text { anchors.centerIn: parent; text: page.ch.compOn ? i18n.t("ON", i18n.lang) : i18n.t("OFF", i18n.lang); color: page.ch.compOn ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.apply("compOn", !page.ch.compOn) } }
             }
             RowLayout {
                 Layout.fillWidth: true; spacing: 10
@@ -102,7 +102,7 @@ Flickable {
             Flow { Layout.fillWidth: true; spacing: 4
                 Repeater {
                     model: [ { n: "VOCAL", p: [-18, 3, 6, 5, 80, 3] }, { n: "DRUM BUS", p: [-12, 4, 2, 1, 120, 2] }, { n: "GENTLE GLUE", p: [-24, 2, 12, 20, 300, 2] }, { n: "LIMIT", p: [-6, 20, 0, 0.1, 60, 0] }, { n: "BASS", p: [-20, 5, 4, 10, 150, 4] } ]
-                    delegate: Rectangle { implicitWidth: pl.implicitWidth + 14; implicitHeight: 20; radius: 4; color: Theme.ov(0.08); Text { id: pl; anchors.centerIn: parent; text: i18n.t(modelData.n ?? "", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setCompressor(page.strip, true, modelData.p[0], modelData.p[1], modelData.p[2], modelData.p[3], modelData.p[4], modelData.p[5]) } }
+                    delegate: Rectangle { id: gb23; implicitWidth: pl.implicitWidth + 14; implicitHeight: 20; radius: 7; color: Theme.ov(0.08); gradient: Gradient { GradientStop { position: 0; color: Qt.lighter(gb23.color, 1.25) } GradientStop { position: 1; color: Qt.darker(gb23.color, 1.12) } } Text { id: pl; anchors.centerIn: parent; text: i18n.t(modelData.n ?? "", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setCompressor(page.strip, true, modelData.p[0], modelData.p[1], modelData.p[2], modelData.p[3], modelData.p[4], modelData.p[5]) } }
                 }
             }
         }

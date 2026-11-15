@@ -20,7 +20,8 @@ Flickable {
     readonly property var dante: { const l = []; for (const d of engine.devices) { const n = (d.name || "").toLowerCase(); if (n.indexOf("dante") >= 0) l.push(d) } return l }
     readonly property var masters: net.ptpMasters
     component Chip: Rectangle { property string label; property bool lit: false; property color hue: Theme.cyan; signal clicked()
-        implicitWidth: Math.max(50, cl.implicitWidth + 16); implicitHeight: 24; radius: 5; color: lit ? hue : Theme.ov(0.06); border.color: lit ? "transparent" : hue
+        implicitWidth: Math.max(50, cl.implicitWidth + 16); implicitHeight: 24; radius: 8; gradient: Gradient { GradientStop { position: 0; color: lit ? Qt.lighter(hue, 1.22) : Qt.rgba(hue.r, hue.g, hue.b, 0.16) } GradientStop { position: 1; color: lit ? Qt.darker(hue, 1.15) : Qt.rgba(hue.r, hue.g, hue.b, 0.04) } } color: lit ? hue : Theme.ov(0.06); border.color: lit ? "transparent" : hue
+        Rectangle { anchors.fill: parent; anchors.margins: 1; radius: Math.max(0, parent.radius - 1); color: "transparent"; border.width: 1; border.color: Qt.rgba(1, 1, 1, parent.lit ? 0.28 : 0.07) }
         Text { id: cl; anchors.centerIn: parent; text: dp.t(parent.label); color: parent.lit ? "#000" : parent.hue; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
         MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: parent.clicked() } }
     component Card: Rectangle { default property alias body: inner.data; property color hue: Theme.cyan; property string title; property string sub

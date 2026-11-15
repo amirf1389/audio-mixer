@@ -14,7 +14,8 @@ Item {
     readonly property var shown: { const f = filter.toLowerCase(); let r = []; for (let i = 0; i < all.length; ++i) { const p = all[i]; if (format !== "" && p.format !== format) continue; if (f !== "" && (p.name + " " + p.vendor + " " + p.module).toLowerCase().indexOf(f) < 0) continue; r.push(p) } return r }
     readonly property var builtIns: engine.pluginCatalog().filter(function (p) { return p.builtIn })
     function insert(kind) { const s = engine.selectedStrip; const slots = engine.plugins(s); for (let k = 0; k < slots.length; ++k) if (slots[k].kind === "") { engine.setPlugin(s, k, kind); return true } return false }
-    component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(56, bl.implicitWidth + 16); implicitHeight: 22; radius: 4; color: on ? onColor : Theme.ov(0.08); border.color: Theme.lineSoft
+    component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(56, bl.implicitWidth + 16); implicitHeight: 22; radius: 8; gradient: Gradient { GradientStop { position: 0; color: on ? Qt.lighter(onColor, 1.22) : Theme.ov(0.12) } GradientStop { position: 1; color: on ? Qt.darker(onColor, 1.15) : Theme.ov(0.035) } } color: on ? onColor : Theme.ov(0.08); border.color: Theme.lineSoft
+        Rectangle { anchors.fill: parent; anchors.margins: 1; radius: Math.max(0, parent.radius - 1); color: "transparent"; border.width: 1; border.color: Qt.rgba(1, 1, 1, parent.on ? 0.30 : 0.07) }
         Text { id: bl; anchors.centerIn: parent; text: i18n.t(label, i18n.lang); color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
     ColumnLayout {
         anchors.fill: parent; anchors.margins: 10; spacing: 8
@@ -33,7 +34,7 @@ Item {
                 ListView { anchors.fill: parent; anchors.margins: 10; clip: true; spacing: 3; model: page.shown
                     delegate: Rectangle { width: ListView.view.width; height: 40; radius: 6; color: Theme.ov(0.03); border.color: Theme.lineSoft
                         RowLayout { anchors.fill: parent; anchors.margins: 8; spacing: 10
-                            Rectangle { implicitWidth: 44; implicitHeight: 18; radius: 3; color: modelData.format === "VST3" ? Theme.violet : Theme.amber; Text { anchors.centerIn: parent; text: modelData.format; color: "#000"; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } }
+                            Rectangle { id: gb120; implicitWidth: 44; implicitHeight: 18; radius: 7; color: modelData.format === "VST3" ? Theme.violet : Theme.amber; gradient: Gradient { GradientStop { position: 0; color: Qt.lighter(gb120.color, 1.25) } GradientStop { position: 1; color: Qt.darker(gb120.color, 1.12) } } Text { anchors.centerIn: parent; text: modelData.format; color: "#000"; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } }
                             ColumnLayout { Layout.fillWidth: true; spacing: 1
                                 Text { text: i18n.t(modelData.name ?? "", i18n.lang) + (modelData.vendor ? "  ·  " + modelData.vendor : ""); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; elide: Text.ElideRight; Layout.fillWidth: true }
                                 Text { text: modelData.module + (modelData.subCategories ? "   [" + modelData.subCategories + "]" : ""); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; elide: Text.ElideMiddle; Layout.fillWidth: true } }

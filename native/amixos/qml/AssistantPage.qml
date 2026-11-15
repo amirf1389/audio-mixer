@@ -88,7 +88,7 @@ Item {
         RowLayout { Layout.fillWidth: true; spacing: 10
             Text { text: page.t("AI ASSISTANT"); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 16; font.bold: true; font.letterSpacing: 3 }
             Text { text: page.t("reads the console live · runs on this computer · nothing is sent"); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 9; Layout.fillWidth: true; elide: Text.ElideRight }
-            Rectangle { implicitWidth: clT.implicitWidth + 16; implicitHeight: 22; radius: 4; color: Theme.ov(0.06); border.color: Theme.lineSoft
+            Rectangle { id: gb15; implicitWidth: clT.implicitWidth + 16; implicitHeight: 22; radius: 7; color: Theme.ov(0.06); gradient: Gradient { GradientStop { position: 0; color: Qt.lighter(gb15.color, 1.25) } GradientStop { position: 1; color: Qt.darker(gb15.color, 1.12) } } border.color: Theme.lineSoft
                 Text { id: clT; anchors.centerIn: parent; text: page.t("CLEAR"); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                 MouseArea { anchors.fill: parent; onClicked: { page.chat = []; page.greet() } } } }
         Rectangle { Layout.fillWidth: true; Layout.fillHeight: true; radius: Theme.radius; color: Theme.card; border.color: Theme.line
@@ -102,7 +102,7 @@ Item {
                             Text { id: bt; width: parent.width; text: modelData.text; color: Theme.ink; font.family: Theme.sans; font.pixelSize: 12; wrapMode: Text.WordWrap }
                             Flow { id: acts; width: parent.width; spacing: 6; visible: modelData.actions.length > 0
                                 Repeater { model: modelData.actions
-                                    delegate: Rectangle { implicitWidth: at.implicitWidth + 16; implicitHeight: 24; radius: 4; color: Theme.ov(0.06); border.color: Theme.orange
+                                    delegate: Rectangle { id: gb16; implicitWidth: at.implicitWidth + 16; implicitHeight: 24; radius: 7; color: Theme.ov(0.06); gradient: Gradient { GradientStop { position: 0; color: Qt.lighter(gb16.color, 1.25) } GradientStop { position: 1; color: Qt.darker(gb16.color, 1.12) } } border.color: Theme.orange
                                         Text { id: at; anchors.centerIn: parent; text: page.t(modelData.label); color: Theme.orange; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
                                         MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: modelData.run() } } } } } } } } }
         Flow { Layout.fillWidth: true; spacing: 6

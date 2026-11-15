@@ -45,7 +45,8 @@ Popup {
 
     component Head: Text { color: Theme.muted; font.family: Theme.mono; font.pixelSize: 10; font.bold: true; font.letterSpacing: 2 }
     component Hint: Text { color: Theme.dim; font.family: Theme.mono; font.pixelSize: 9; wrapMode: Text.WordWrap }
-    component Pill: Rectangle { property string label; property bool on: false; property color onColor: Theme.orange; signal clicked(); implicitWidth: Math.max(60, pl.implicitWidth + 20); implicitHeight: 26; radius: 6; color: on ? onColor : (ph.hovered ? Theme.ov(0.14) : Theme.ov(0.08)); border.color: on ? onColor : Theme.line
+    component Pill: Rectangle { property string label; property bool on: false; property color onColor: Theme.orange; signal clicked(); implicitWidth: Math.max(60, pl.implicitWidth + 20); implicitHeight: 26; radius: 8; gradient: Gradient { GradientStop { position: 0; color: on ? Qt.lighter(onColor, 1.22) : Theme.ov(0.12) } GradientStop { position: 1; color: on ? Qt.darker(onColor, 1.15) : Theme.ov(0.035) } } color: on ? onColor : (ph.hovered ? Theme.ov(0.14) : Theme.ov(0.08)); border.color: on ? onColor : Theme.line
+        Rectangle { anchors.fill: parent; anchors.margins: 1; radius: Math.max(0, parent.radius - 1); color: "transparent"; border.width: 1; border.color: Qt.rgba(1, 1, 1, parent.on ? 0.30 : 0.07) }
         Text { id: pl; anchors.centerIn: parent; text: i18n.t(parent.label, i18n.lang); color: parent.on ? "#000" : Theme.ink; font.family: Theme.mono; font.pixelSize: 10; font.bold: true } HoverHandler { id: ph } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
     // a level meter with its scale: green to -9, amber to -1, red above
     component LevelBar: Rectangle { property real level: -120; implicitWidth: 12; radius: 3; color: Theme.deep; border.color: Theme.lineSoft
@@ -68,7 +69,7 @@ Popup {
                 Text { text: i18n.t("VOLUME ENHANCER", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 14; font.bold: true; font.letterSpacing: 3 }
                 Item { Layout.fillWidth: true }
                 Pill { objectName: "vePrev"; label: "◀"; implicitWidth: 32; onClicked: pop.load(pop.presetIndex - 1) }
-                Rectangle { implicitWidth: 200; implicitHeight: 26; radius: 6; color: Theme.deep; border.color: Theme.line
+                Rectangle { id: gb161; implicitWidth: 200; implicitHeight: 26; radius: 7; color: Theme.deep; gradient: Gradient { GradientStop { position: 0; color: Qt.lighter(gb161.color, 1.25) } GradientStop { position: 1; color: Qt.darker(gb161.color, 1.12) } } border.color: Theme.line
                     Text { objectName: "vePresetName"; anchors.centerIn: parent; text: pop.presets[pop.presetIndex].n; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true } }
                 Pill { objectName: "veNext"; label: "▶"; implicitWidth: 32; onClicked: pop.load(pop.presetIndex + 1) }
                 Pill { objectName: "veInit"; label: i18n.t("INIT", i18n.lang); onClicked: pop.load(0) }

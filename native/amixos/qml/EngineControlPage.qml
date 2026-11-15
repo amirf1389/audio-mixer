@@ -20,8 +20,10 @@ Flickable {
     function insert(kind, name) { const slots = engine.plugins(ch); for (let k = 0; k < slots.length; ++k) if (slots[k].kind === kind) { note = name + i18n.t(" is already on CH ", i18n.lang) + (ch + 1); return }
         for (let k = 0; k < slots.length; ++k) if (slots[k].kind === "") { engine.setPlugin(ch, k, kind); note = name + i18n.t(" is now on CH ", i18n.lang) + (ch + 1) + i18n.t(": open the PLUGIN RACK on the MIXER to set it", i18n.lang); return }
         note = i18n.t("The rack of this channel is full.", i18n.lang) }
-    component Btn: Rectangle { id: bt; property string label; property bool on: false; property color tone: Theme.cyan; signal clicked(); implicitWidth: btT.implicitWidth + 22; implicitHeight: 26; radius: 5
+    component Btn: Rectangle { id: bt; property string label; property bool on: false; property color tone: Theme.cyan; signal clicked(); implicitWidth: btT.implicitWidth + 22; implicitHeight: 26; radius: 8
         color: bt.on ? Qt.rgba(bt.tone.r, bt.tone.g, bt.tone.b, 0.2) : Theme.ov(0.06); border.color: bt.on ? bt.tone : Theme.line
+        gradient: Gradient { GradientStop { position: 0; color: bt.on ? Qt.rgba(bt.tone.r, bt.tone.g, bt.tone.b, 0.34) : Theme.ov(0.11) } GradientStop { position: 1; color: bt.on ? Qt.rgba(bt.tone.r, bt.tone.g, bt.tone.b, 0.12) : Theme.ov(0.035) } }
+        Rectangle { anchors.fill: parent; anchors.margins: 1; radius: Math.max(0, parent.radius - 1); color: "transparent"; border.width: 1; border.color: Qt.rgba(1, 1, 1, bt.on ? 0.20 : 0.06) }
         Text { id: btT; anchors.centerIn: parent; text: bt.label; color: bt.on ? bt.tone : Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
         MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: bt.clicked() } }
     component Card: Rectangle { id: cd; property string title; property color tone: Theme.cyan; default property alias body: cdCol.data
