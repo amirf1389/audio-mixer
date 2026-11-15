@@ -13,7 +13,7 @@ double clamp01(double v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
 std::string fmt(const char* f, double v) { char b[32]; std::snprintf(b, sizeof b, f, v); return b; }
 }  // namespace
 
-std::vector<std::pair<std::string, std::string>> catalog() { return {{"reverb", "PLATE REVERB"}, {"aec", "ECHO CANCELLER (AEC)"}, {"hybrid", "TELEPHONE HYBRID"}, {"logic", "LOGIC / GPIO"}, {"delay", "TAPE DELAY"}, {"syncdelay", "SYNC DELAY"}, {"antifeedback", "FEEDBACK KILLER"}, {"analog", "ANALOG CHANNEL"}, {"barrier", "SOUND BARRIER"}, {"dualeq", "DUAL LISTEN EQ"}, {"pitch", "PITCH SHIFTER"}, {"sampler", "SAMPLE PLAYER"}, {"desquash", "DE-SQUASH"}, {"chorus", "STEREO CHORUS"}, {"drive", "TUBE DRIVE"}, {"flanger", "FLANGER"}, {"phaser", "PHASER"}, {"tremolo", "TREMOLO"}, {"wah", "AUTO WAH"}, {"crusher", "BIT CRUSHER"}, {"exciter", "EXCITER"}, {"tubeamp", "TUBE AMP"}, {"preamp", "PRE AMP"}, {"postamp", "POST AMP"}, {"hall", "HALL REVERB"}, {"room", "ROOM REVERB"}, {"mseq", "MS COLOUR EQ"}, {"isoeq", "ISO EQ 10"}, {"mod", "MOD MACHINE"}, {"opto", "OPTO LEVELER"}, {"glue", "GLUE COMP"}, {"tape", "TAPE MACHINE"}, {"transient", "TRANSIENT SHAPER"}, {"deesser", "DE-ESSER"}, {"maximizer", "MAXIMIZER"}, {"multiband", "MULTIBAND COMP"}, {"imager", "STEREO IMAGER"}, {"autopan", "AUTO PAN"}, {"doubler", "VOCAL DOUBLER"}, {"iamfelement", "IAMF ELEMENT"}, {"iamfrender", "IAMF RENDERER"}, {"wshape", "W-SHAPE TUNER"}, {"convclip", "CONVERTER CLIP"}}; }
+std::vector<std::pair<std::string, std::string>> catalog() { return {{"reverb", "PLATE REVERB"}, {"aec", "ECHO CANCELLER (AEC)"}, {"hybrid", "TELEPHONE HYBRID"}, {"logic", "LOGIC / GPIO"}, {"delay", "TAPE DELAY"}, {"syncdelay", "SYNC DELAY"}, {"antifeedback", "FEEDBACK KILLER"}, {"analog", "ANALOG CHANNEL"}, {"barrier", "SOUND BARRIER"}, {"dualeq", "DUAL LISTEN EQ"}, {"pitch", "PITCH SHIFTER"}, {"sampler", "SAMPLE PLAYER"}, {"desquash", "DE-SQUASH"}, {"chorus", "STEREO CHORUS"}, {"drive", "TUBE DRIVE"}, {"flanger", "FLANGER"}, {"phaser", "PHASER"}, {"tremolo", "TREMOLO"}, {"wah", "AUTO WAH"}, {"crusher", "BIT CRUSHER"}, {"exciter", "EXCITER"}, {"subsynth", "SUB SYNTH"}, {"tubeamp", "TUBE AMP"}, {"preamp", "PRE AMP"}, {"postamp", "POST AMP"}, {"hall", "HALL REVERB"}, {"room", "ROOM REVERB"}, {"mseq", "MS COLOUR EQ"}, {"isoeq", "ISO EQ 10"}, {"mod", "MOD MACHINE"}, {"opto", "OPTO LEVELER"}, {"glue", "GLUE COMP"}, {"tape", "TAPE MACHINE"}, {"transient", "TRANSIENT SHAPER"}, {"deesser", "DE-ESSER"}, {"maximizer", "MAXIMIZER"}, {"multiband", "MULTIBAND COMP"}, {"imager", "STEREO IMAGER"}, {"autopan", "AUTO PAN"}, {"doubler", "VOCAL DOUBLER"}, {"iamfelement", "IAMF ELEMENT"}, {"iamfrender", "IAMF RENDERER"}, {"wshape", "W-SHAPE TUNER"}, {"convclip", "CONVERTER CLIP"}}; }
 std::unique_ptr<Effect> make(const std::string& k, double fs) {
   if (k == "aec") return std::make_unique<EchoCanceller>(fs);
   if (k == "hybrid") return std::make_unique<PhoneHybrid>(fs);
@@ -35,6 +35,7 @@ std::unique_ptr<Effect> make(const std::string& k, double fs) {
   if (k == "wah") return std::make_unique<AutoWah>(fs);
   if (k == "crusher") return std::make_unique<Crusher>(fs);
   if (k == "exciter") return std::make_unique<Exciter>(fs);
+  if (k == "subsynth") return std::make_unique<SubSynth>(fs);
   if (k == "tubeamp") return std::make_unique<TubeAmp>(fs);
   if (k == "preamp") return std::make_unique<PreAmp>(fs);
   if (k == "postamp") return std::make_unique<PostAmp>(fs);
@@ -304,15 +305,21 @@ void Phaser::process(float* L, float* R, std::size_t n) {
     ph_ += inc; if (ph_ > 2 * kPi) ph_ -= 2 * kPi;
   }
 }
-FeedbackKiller::FeedbackKiller(double fs) : Simple(fs) { for (int i = 0; i < 4; ++i) k_[i] = knobDef(i); setSampleRate(fs); }
+FeedbackKiller::FeedbackKiller(double fs) : Simple(fs) { for (int i = 0; i < count(); ++i) k_[i] = knobDef(i); setSampleRate(fs); }
 void FeedbackKiller::setSampleRate(double fs) { fs_ = fs > 0 ? fs : 48000; frame_.assign(kN, 0.f); reset(); }
+int FeedbackKiller::fixedCount() const { return std::clamp(static_cast<int>(std::lround(clamp01(k_[6].load()) * 24.0)), 0, kNotches); }
 void FeedbackKiller::reset() { for (Notch& n : n_) n = Notch{}; fill_ = 0; lastBin_ = -1; streak_ = 0; active_ = 0; }
 std::string FeedbackKiller::text(const std::string& id, double v) const {
   v = clamp01(v); if (id == "sens") return fmt("%.0f dB", 24.0 - v * 15.0); if (id == "depth") return fmt("-%.0f dB", 6.0 + v * 24.0);
-  if (id == "width") return fmt("Q %.0f", 60.0 - v * 50.0); if (id == "mode") return v >= 0.5 ? "LIVE" : "HOLD"; return fmt("%.0f %%", v * 100);
+  if (id == "width") return fmt("Q %.0f", 60.0 - v * 50.0); if (id == "mode") return v >= 0.5 ? "LIVE" : "HOLD";
+  if (id == "lift") return fmt("%.0f s", 2.0 + v * 58.0);
+  if (id == "program") { static const char* p[] = {"SPEECH", "MUSIC LO", "MUSIC MID", "MUSIC HI"}; return p[std::min(3, static_cast<int>(v * 4.0))]; }
+  if (id == "fixed") return fmt("%.0f / 24", std::round(v * 24.0));
+  return fmt("%.0f %%", v * 100);
 }
 void FeedbackKiller::design(Notch& n) const {   // a peaking cut (RBJ): gain depthDb at hz, the band as narrow as WIDTH says
-  const double q = 60.0 - clamp01(k_[2].load()) * 50.0, A = std::pow(10.0, n.depthDb / 40.0), w = 2.0 * kPi * std::min(n.hz, fs_ * 0.45) / fs_, al = std::sin(w) / (2.0 * q), c = std::cos(w), a0 = 1.0 + al / A;
+  static const double progQ[] = {1.0, 1.6, 2.2, 3.0};   // MUSIC keeps the filters narrower than SPEECH: less of the programme is touched
+  const double q = (60.0 - clamp01(k_[2].load()) * 50.0) * progQ[std::min(3, static_cast<int>(clamp01(k_[5].load()) * 4.0))], A = std::pow(10.0, n.depthDb / 40.0), w = 2.0 * kPi * std::min(n.hz, fs_ * 0.45) / fs_, al = std::sin(w) / (2.0 * q), c = std::cos(w), a0 = 1.0 + al / A;
   n.b0 = (1.0 + al * A) / a0; n.b1 = -2.0 * c / a0; n.b2 = (1.0 - al * A) / a0; n.a1 = -2.0 * c / a0; n.a2 = (1.0 - al / A) / a0;
 }
 void FeedbackKiller::analyse() {
@@ -342,18 +349,18 @@ void FeedbackKiller::analyse() {
   const double hz = (pk + std::max(-0.5, std::min(0.5, off))) * fs_ / kN, maxDepth = -(6.0 + clamp01(k_[1].load()) * 24.0);
   Notch* use = nullptr;
   for (Notch& n : n_) if (n.on && std::fabs(n.hz - hz) < std::max(12.0, hz * 0.03)) use = &n;      // the same howl: deepen its notch
-  if (!use) { for (Notch& n : n_) if (!n.on) { use = &n; break; }
-    if (!use) { use = &n_[0]; for (Notch& n : n_) if (n.idle > use->idle) use = &n; *use = Notch{}; }   // all six in use: the one that was needed longest ago
+  if (!use) { for (Notch& n : n_) if (!n.on) { use = &n; break; }   // FIXED slots come first: the first howls found (the room's own) stay
+    if (!use) { const int f = fixedCount(); use = f < kNotches ? &n_[f] : &n_[0]; for (int i = f; i < kNotches; ++i) if (n_[i].idle > use->idle) use = &n_[i]; *use = Notch{}; }   // all in use: the LIVE one needed longest ago
     use->on = true; use->hz = hz; use->depthDb = 0; }
   use->hz = 0.7 * use->hz + 0.3 * hz; use->depthDb = std::max(maxDepth, use->depthDb - 6.0); use->idle = 0; design(*use);
 }
 void FeedbackKiller::process(float* L, float* R, std::size_t n) {
   if (bypass_.load() || frame_.empty()) return;
-  const bool live = k_[3].load() >= 0.5; const long giveBack = static_cast<long>(8.0 * fs_ / kN);
+  const bool live = k_[3].load() >= 0.5; const long giveBack = static_cast<long>((2.0 + clamp01(k_[4].load()) * 58.0) * fs_ / kN); const int fixedN = fixedCount();
   for (std::size_t i = 0; i < n; ++i) {
     frame_[fill_++] = 0.5f * (L[i] + R[i]);                           // what is analysed is the input: a notch does not hide the howl from the detector's own memory of where it was
     if (fill_ >= static_cast<std::size_t>(kN)) { fill_ = 0; analyse();
-      if (live) for (Notch& nt : n_) if (nt.on && nt.idle > giveBack) nt = Notch{};
+      if (live) for (int k = fixedN; k < kNotches; ++k) if (n_[k].on && n_[k].idle > giveBack) n_[k] = Notch{};   // LIVE filters lift after LIFT TIME without that howl; FIXED ones stay
       int on = 0; for (const Notch& nt : n_) on += nt.on ? 1 : 0; active_.store(on); }
     double x[2] = {L[i], R[i]};
     for (Notch& nt : n_) { if (!nt.on) continue;
@@ -417,6 +424,24 @@ void Crusher::process(float* L, float* R, std::size_t n) {
 Exciter::Exciter(double fs) : Simple(fs) { for (int i = 0; i < 3; ++i) k_[i] = knobDef(i); }
 void Exciter::reset() { lp_[0] = lp_[1] = 0; }
 std::string Exciter::text(const std::string& id, double v) const { v = clamp01(v); if (id == "freq") return fmt("%.0f Hz", 1000 + v * 7000); return fmt("%.0f %%", v * 100); }
+SubSynth::SubSynth(double fs) : Simple(fs) { for (int i = 0; i < 3; ++i) k_[i] = knobDef(i); }
+void SubSynth::reset() { lp1_ = lp2_ = env_ = o1_ = o2_ = last_ = 0; flip_ = false; }
+std::string SubSynth::text(const std::string& id, double v) const { v = clamp01(v); if (id == "range") return fmt("%.0f Hz", 60.0 + v * 90.0); if (id == "tight") return fmt("%.0f ms", 120.0 - v * 100.0); return fmt("%.0f %%", v * 100); }
+void SubSynth::process(float* L, float* R, std::size_t n) {
+  if (bypass_.load()) return;
+  const double fc = 60.0 + clamp01(k_[1].load()) * 90.0, a = 1.0 - std::exp(-2 * kPi * fc / fs_), ao = 1.0 - std::exp(-2 * kPi * (fc * 0.6) / fs_);
+  const double rel = 1.0 - std::exp(-1.0 / ((0.120 - clamp01(k_[2].load()) * 0.100) * fs_)), att = 1.0 - std::exp(-1.0 / (0.005 * fs_));
+  const double amt = clamp01(k_[0].load()) * mix_.load() * 2.0;
+  for (std::size_t i = 0; i < n; ++i) {
+    const double x = 0.5 * (static_cast<double>(L[i]) + R[i]);
+    lp1_ += (x - lp1_) * a; lp2_ += (lp1_ - lp2_) * a;                    // the bass, 12 dB/oct below RANGE
+    const double e = std::fabs(lp2_); env_ += (e - env_) * (e > env_ ? att : rel);
+    if (last_ <= 0 && lp2_ > 0) flip_ = !flip_; last_ = lp2_;             // half the frequency: one flip per cycle
+    const double sq = (flip_ ? 1.0 : -1.0) * env_;
+    o1_ += (sq - o1_) * ao; o2_ += (o1_ - o2_) * ao;                       // the square smoothed into a round sub
+    const float add = static_cast<float>(std::isfinite(o2_) ? o2_ * amt : 0.0); L[i] += add; R[i] += add;
+  }
+}
 void Exciter::process(float* L, float* R, std::size_t n) {
   if (bypass_.load()) return;
   const float a = static_cast<float>(1 - std::exp(-2 * kPi * (1000.0 + k_[1].load() * 7000.0) / fs_)), drive = static_cast<float>(2.0 + k_[2].load() * 10.0), amt = static_cast<float>(k_[0].load() * mix_.load()); float* ch[2] = {L, R};

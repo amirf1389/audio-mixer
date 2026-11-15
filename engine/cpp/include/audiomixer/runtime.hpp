@@ -156,6 +156,7 @@ class Runtime {
   // bus k on 2 + 2k / 3 + 2k. Several outputs may carry the same source; an input may feed several strips.
   static constexpr int kMaxOutputs = 64;
   static constexpr int kSrcOff = 0, kSrcMasterL = 1, kSrcMasterR = 2, kSrcMonL = 3, kSrcMonR = 4, kSrcBus0L = 5;
+  static constexpr int kSrcMasterMono = kSrcBus0L + 2 * 32;   // (L + R) / 2 of the master: a mono subwoofer or a mono fill (after the bus sources, so their numbers stay)
   void setInputRoute(int strip, int input);
   void setOutputRoute(int out, int source);
   // THE AMPLIFIER STAGE of output `out` (see amp.hpp): kept across open() / close(); off by default (the output passes bit-exact)
@@ -202,7 +203,7 @@ class Runtime {
 
   Mixer mixer_; std::unique_ptr<Backend> backend_; std::string backendName_;
   int nIn_ = 0, nOut_ = 0; bool running_ = false;
-  AmpChannel amp_[64]; AmpParams ampUi_[64];   // the audio thread's stage, and the UI's copy of what was set
+  AmpChannel amp_[64]; AmpParams ampUi_[64]; std::vector<float> mono_;   // the audio thread's stage, and the UI's copy of what was set
   std::vector<float> silence_, left_, right_;
   int monSrc_ = 0; double monGainTarget_ = 1, monGain_ = 1; bool monMono_ = false; double monPk_[2] = {0, 0};   // audio thread only
   std::atomic<long> toneLeft_{0}, toneTotal_{0}; double tonePhase_ = 0;

@@ -24,6 +24,8 @@ struct AmpParams {
   bool limitOn = false;
   double limitDb = -1;      // ceiling in dBFS, -30 .. 0
   double releaseMs = 200;   // 10 .. 2000
+  static constexpr int kBands = 8;
+  dsp::EqBand eq[kBands];   // SPEAKER TUNING: 8 parametric bands after the crossover (Off by default)
 };
 
 class AmpChannel {
@@ -45,6 +47,7 @@ class AmpChannel {
       if (n > 0 && delay_ > 0) { line_[pos_] = static_cast<float>(s); std::size_t rd = pos_ + n - delay_; if (rd >= n) rd -= n; s = line_[rd]; if (++pos_ >= n) pos_ = 0; }
       if (hp_.order() > 0) s = hp_.tick(s);
       if (lp_.order() > 0) s = lp_.tick(s);
+      for (int b = 0; b < nEq_; ++b) s = eq_[eqIdx_[b]].tick(s);
       s *= gain_;
       if (p_.limitOn) {   // peak limiter: instant attack to the ceiling, smooth release back to unity
         const double a = std::fabs(s), want = a > ceil_ ? ceil_ / a : 1.0;
@@ -60,7 +63,7 @@ class AmpChannel {
   double peak() const noexcept { return pk_; }
   double gainReductionDb() const noexcept { return gr_; }
   // the response of the crossover legs in dB (for the page's curve)
-  double responseDbAt(double f) const noexcept { return (hp_.order() > 0 ? hp_.gainDbAt(fs_, f) : 0.0) + (lp_.order() > 0 ? lp_.gainDbAt(fs_, f) : 0.0); }
+  double responseDbAt(double f) const noexcept { double g = (hp_.order() > 0 ? hp_.gainDbAt(fs_, f) : 0.0) + (lp_.order() > 0 ? lp_.gainDbAt(fs_, f) : 0.0); for (int b = 0; b < nEq_; ++b) g += eq_[eqIdx_[b]].gainDbAt(fs_, f); return g; }
 
  private:
   void apply() {
@@ -71,11 +74,13 @@ class AmpChannel {
     hp_.set(true, p_.type, p_.hpOrder, std::clamp(p_.hpHz, 10.0, 20000.0), fs_);
     lp_.set(false, p_.type, p_.lpOrder, std::clamp(p_.lpHz, 20.0, 24000.0), fs_);
     ceil_ = std::pow(10.0, std::clamp(p_.limitDb, -30.0, 0.0) / 20.0);
+    nEq_ = 0; for (int b = 0; b < AmpParams::kBands; ++b) { const dsp::EqBand& e = p_.eq[b]; if (e.type == dsp::FilterType::Off) continue;
+      eq_[b].design(e.type, fs_, std::clamp(e.freq, 20.0, 20000.0), std::clamp(e.q, 0.1, 20.0), std::clamp(e.gainDb, -18.0, 12.0)); eqIdx_[nEq_++] = b; }
     rel_ = 1.0 - std::exp(-1.0 / (std::clamp(p_.releaseMs, 10.0, 2000.0) * 0.001 * fs_));
   }
   AmpParams p_; double fs_ = 48000, gain_ = 1, ceil_ = 1, rel_ = 0.001, env_ = 1, pk_ = 0, gr_ = 0;
   std::vector<float> line_; std::size_t pos_ = 0, delay_ = 0;
-  dsp::Crossover hp_, lp_;
+  dsp::Crossover hp_, lp_; dsp::Biquad eq_[AmpParams::kBands]; int eqIdx_[AmpParams::kBands] = {}; int nEq_ = 0;
 };
 
 }  // namespace am

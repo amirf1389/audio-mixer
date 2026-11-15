@@ -21,6 +21,9 @@ int main() {
   { AmpChannel a; a.prepare(fs); AmpParams p; p.on = true; p.lpOrder = 4; p.lpHz = 100; a.set(p);   // a sub output: 40 Hz passes, 2 kHz is cut
     auto lo = sine(40, fs, 48000, 0.5); a.process(lo.data(), 48000); AmpChannel b; b.prepare(fs); b.set(p); auto hi = sine(2000, fs, 48000, 0.5); b.process(hi.data(), 48000);
     CHECK(peakTail(lo) > 0.4 && peakTail(hi) < 0.005, "low-pass leg: 40 Hz %f, 2 kHz %f", peakTail(lo), peakTail(hi)); }
-  std::printf("amplifier stage: bypass, gain, polarity, mute, delay, limiter and crossover OK\n");
+  { AmpChannel a; a.prepare(fs); AmpParams p; p.on = true; p.eq[3] = {am::dsp::FilterType::Peaking, 1000, 2.0, -6.0}; a.set(p);   // speaker tuning: a 6 dB cut at 1 kHz
+    auto x = sine(1000, fs, 48000, 0.5); a.process(x.data(), 48000); CHECK(std::fabs(20 * std::log10(peakTail(x) / 0.5) + 6.0) < 0.3, "EQ band: %.2f dB at 1 kHz", 20 * std::log10(peakTail(x) / 0.5));
+    CHECK(std::fabs(a.responseDbAt(1000) + 6.0) < 0.1, "EQ response %.2f", a.responseDbAt(1000)); }
+  std::printf("amplifier stage: speaker EQ OK; bypass, gain, polarity, mute, delay, limiter and crossover OK\n");
   return 0;
 }

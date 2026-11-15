@@ -89,7 +89,7 @@ class Simple : public Effect {
   void setSampleRate(double fs) override { fs_ = fs > 0 ? fs : 48000; reset(); }
  protected:
   virtual int count() const = 0; virtual const char* knobId(int i) const = 0; virtual const char* knobTitle(int i) const = 0; virtual double knobDef(int i) const = 0;
-  double fs_; std::atomic<double> k_[6]{{0.5}, {0.5}, {0.5}, {0.5}, {0.5}, {0.5}};
+  double fs_; std::atomic<double> k_[8]{{0.5}, {0.5}, {0.5}, {0.5}, {0.5}, {0.5}, {0.5}, {0.5}};   // up to 8 knobs (count() must stay <= 8)
 };
 // SYNC DELAY: an echo in time with the song: TEMPO (60 .. 200 BPM) and NOTE (1/2, 1/4, dotted 1/8, 1/8, 1/8 triplet, 1/16) give the delay
 // time; FEEDBACK, TONE (the echoes get darker) and WIDTH (0 = both sides together, 1 = the echoes bounce left / right)
@@ -108,10 +108,13 @@ class SyncDelay final : public Simple { public: explicit SyncDelay(double fs); c
 class FeedbackKiller final : public Simple { public: explicit FeedbackKiller(double fs); const char* kind() const override { return "antifeedback"; } const char* name() const override { return "FEEDBACK KILLER"; }
   std::string text(const std::string& id, double v) const override; void reset() override; void setSampleRate(double fs) override; void process(float* L, float* R, std::size_t n) override;
   int notches() const { return active_.load(); }                       // how many notches are set now
+  int fixedCount() const;                                              // how many of the 24 are FIXED (kept until reset); the rest are LIVE
+  bool notchFixed(int i) const { return i >= 0 && i < kNotches && i < fixedCount(); }
+  double notchDepth(int i) const { return i >= 0 && i < kNotches && n_[i].on ? n_[i].depthDb : 0.0; }
   double notchHz(int i) const { return i >= 0 && i < kNotches && n_[i].on ? n_[i].hz : 0.0; }
- protected: int count() const override { return 4; } const char* knobId(int i) const override { static const char* k[] = {"sens", "depth", "width", "mode"}; return k[i]; } const char* knobTitle(int i) const override { static const char* k[] = {"SENSITIVITY", "DEPTH", "WIDTH", "MODE"}; return k[i]; } double knobDef(int i) const override { static const double d[] = {0.5, 0.5, 0.5, 0.0}; return d[i]; }
+ protected: int count() const override { return 7; } const char* knobId(int i) const override { static const char* k[] = {"sens", "depth", "width", "mode", "lift", "program", "fixed"}; return k[i]; } const char* knobTitle(int i) const override { static const char* k[] = {"SENSITIVITY", "DEPTH", "WIDTH", "MODE", "LIFT TIME", "PROGRAM", "FIXED FILTERS"}; return k[i]; } double knobDef(int i) const override { static const double d[] = {0.5, 0.5, 0.5, 0.0, 0.25, 0.0, 0.25}; return d[i]; }
  private:
-  static constexpr int kNotches = 6, kN = 1024;
+  static constexpr int kNotches = 24, kN = 1024;
   struct Notch { bool on = false; double hz = 0, depthDb = 0, b0 = 1, b1 = 0, b2 = 0, a1 = 0, a2 = 0, z[2][2] = {{0, 0}, {0, 0}}; long idle = 0; };
   void design(Notch& n) const; void analyse();
   Notch n_[kNotches]; std::vector<float> frame_; std::size_t fill_ = 0; int lastBin_ = -1, streak_ = 0; std::atomic<int> active_{0}; };
@@ -205,6 +208,13 @@ class Crusher final : public Simple { public: explicit Crusher(double fs); const
  protected: int count() const override { return 3; } const char* knobId(int i) const override { static const char* k[] = {"bits", "down", "tone"}; return k[i]; } const char* knobTitle(int i) const override { static const char* k[] = {"BITS", "DOWNSAMPLE", "TONE"}; return k[i]; } double knobDef(int i) const override { static const double d[] = {0.6, 0.2, 0.8}; return d[i]; }
  private: float hold_[2] = {0, 0}, lp_[2] = {0, 0}; double cnt_ = 0; };
 // EXCITER: harmonics made from the band above a frequency, added to the signal: AMOUNT, FREQUENCY, HARMONICS
+// SUB SYNTH: adds the octave below the bass. The low end (below RANGE) is found, a flip-flop switches at every rising zero crossing so
+// it runs at half the frequency, it is shaped by the bass's own level (so it follows the note and is silent when the bass stops) and
+// smoothed into a sine-like sub. AMOUNT sets how much of it joins the programme; the original is untouched.
+class SubSynth final : public Simple { public: explicit SubSynth(double fs); const char* kind() const override { return "subsynth"; } const char* name() const override { return "SUB SYNTH"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
+ protected: int count() const override { return 3; } const char* knobId(int i) const override { static const char* k[] = {"amount", "range", "tight"}; return k[i]; } const char* knobTitle(int i) const override { static const char* k[] = {"AMOUNT", "RANGE", "TIGHTNESS"}; return k[i]; } double knobDef(int i) const override { static const double d[] = {0.4, 0.5, 0.5}; return d[i]; }
+ private: double lp1_ = 0, lp2_ = 0, env_ = 0, o1_ = 0, o2_ = 0, last_ = 0; bool flip_ = false; };
 class Exciter final : public Simple { public: explicit Exciter(double fs); const char* kind() const override { return "exciter"; } const char* name() const override { return "EXCITER"; }
   std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
  protected: int count() const override { return 3; } const char* knobId(int i) const override { static const char* k[] = {"amount", "freq", "harm"}; return k[i]; } const char* knobTitle(int i) const override { static const char* k[] = {"AMOUNT", "FREQUENCY", "HARMONICS"}; return k[i]; } double knobDef(int i) const override { static const double d[] = {0.4, 0.5, 0.5}; return d[i]; }
