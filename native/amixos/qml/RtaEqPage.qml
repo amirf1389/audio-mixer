@@ -57,7 +57,8 @@ Flickable {
     onBandChanged: bandNow = engine.eqBand(strip, band)
     Connections { target: engine; function onStripsChanged() { page.reload() } function onMasterChainChanged() { page.reload() } function onPresetsChanged() { page.slotTick++ } }   // the master's EQ reports through masterChainChanged: without it the sliders and diamonds snapped back after every move
     Timer { interval: 16; running: page.visible && page.rtaOn && !page.frozen; repeat: true; onTriggered: { page.spec = engine.spectrum(page.program ? 0 : 2); rta.requestPaint() } }
-    component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; property color offColor: Theme.ov(0.08); signal clicked(); implicitWidth: bl.implicitWidth + 16; implicitHeight: 22; radius: 4; color: on ? onColor : offColor; border.color: on ? onColor : Theme.lineSoft
+    component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; property color offColor: Theme.ov(0.08); signal clicked(); implicitWidth: bl.implicitWidth + 16; implicitHeight: 22; radius: 8; gradient: Gradient { GradientStop { position: 0; color: on ? Theme.btnTop(onColor) : Theme.ov(0.12) } GradientStop { position: 1; color: on ? Theme.btnBottom(onColor) : Theme.ov(0.035) } } color: on ? onColor : offColor; border.color: on ? onColor : Theme.lineSoft
+        Rectangle { anchors.fill: parent; anchors.margins: 1; radius: Math.max(0, parent.radius - 1); color: "transparent"; border.width: 1; border.color: Qt.rgba(1, 1, 1, parent.on ? 0.30 : 0.07) }
         Text { id: bl; anchors.centerIn: parent; text: i18n.t(label, i18n.lang); color: parent.on ? "#000" : Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
     ColumnLayout {
         id: col
@@ -69,12 +70,12 @@ Flickable {
             ColumnLayout { id: hdr; anchors.fill: parent; anchors.margins: 10; spacing: 6
                 RowLayout { Layout.fillWidth: true; spacing: 8
                     Text { text: i18n.t("◭ 10-BAND PROGRAM BUS EQ & DIAMOND RTA", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
-                    Rectangle { implicitWidth: rackT.implicitWidth + 16; implicitHeight: 20; radius: 4; color: page.program ? Theme.orange : Theme.ov(0.08); border.color: Theme.lineSoft
+                    Rectangle { id: gb127; implicitWidth: rackT.implicitWidth + 16; implicitHeight: 20; radius: 7; color: page.program ? Theme.orange : Theme.ov(0.08); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb127.color) } GradientStop { position: 1; color: Theme.btnBottom(gb127.color) } } border.color: Theme.lineSoft
                         Text { id: rackT; anchors.centerIn: parent; text: page.program ? i18n.t("MAIN EQ · MASTER", i18n.lang) : i18n.t("EQ RACK: CHANNEL", i18n.lang); color: page.program ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                         MouseArea { anchors.fill: parent; onClicked: page.program = !page.program } }
-                    Rectangle { implicitWidth: apoE.implicitWidth + 14; implicitHeight: 20; radius: 4; color: Theme.ov(0.08); border.color: Theme.lineSoft; Text { id: apoE; anchors.centerIn: parent; text: i18n.t("APO EXPORT", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                    Rectangle { id: gb128; implicitWidth: apoE.implicitWidth + 14; implicitHeight: 20; radius: 7; color: Theme.ov(0.08); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb128.color) } GradientStop { position: 1; color: Theme.btnBottom(gb128.color) } } border.color: Theme.lineSoft; Text { id: apoE; anchors.centerIn: parent; text: i18n.t("APO EXPORT", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                         MouseArea { anchors.fill: parent; onClicked: { const f = engine.exportApo(page.strip, ""); page.apoNote = f ? i18n.t("Equalizer APO file: ", i18n.lang) + f : i18n.t("could not write the file", i18n.lang) } } }
-                    Rectangle { implicitWidth: apoI.implicitWidth + 14; implicitHeight: 20; radius: 4; color: Theme.ov(0.08); border.color: Theme.lineSoft; Text { id: apoI; anchors.centerIn: parent; text: i18n.t("APO IMPORT", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                    Rectangle { id: gb129; implicitWidth: apoI.implicitWidth + 14; implicitHeight: 20; radius: 7; color: Theme.ov(0.08); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb129.color) } GradientStop { position: 1; color: Theme.btnBottom(gb129.color) } } border.color: Theme.lineSoft; Text { id: apoI; anchors.centerIn: parent; text: i18n.t("APO IMPORT", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                         MouseArea { anchors.fill: parent; onClicked: { const n = engine.importApo(page.strip, ""); page.apoNote = n ? n + i18n.t(" filters read from equalizer-apo.txt in the data folder", i18n.lang) : i18n.t("no equalizer-apo.txt with filters in the data folder", i18n.lang); page.reload() } } }
                     Text { visible: page.apoNote !== ""; text: page.apoNote; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; elide: Text.ElideMiddle; Layout.maximumWidth: 320 }
                     Text { visible: !page.program; text: i18n.t("CH ", i18n.lang) + (page.strip + 1); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
@@ -86,9 +87,9 @@ Flickable {
                 Flow { Layout.fillWidth: true; spacing: 6
                     Btn { label: i18n.t("★ GOLDEN EQ (AMIX BY AMFB TUNED)", i18n.lang); onColor: Theme.amber; offColor: Qt.rgba(0.984, 0.749, 0.141, 0.18); on: page.presetName === "Golden EQ (Amix by AMFB tuned)"; onClicked: page.loadPreset("Golden EQ (Amix by AMFB tuned)")
                         ToolTip.visible: gh.hovered; ToolTip.text: i18n.t("Amix by AMFB tuned (+1,+5,+3,+3,+4,+2,+2,+3,+3,+1 dB)", i18n.lang); HoverHandler { id: gh } }
-                    Btn { label: i18n.t("CUSTOM EQ", i18n.lang); onColor: Theme.cyan; offColor: Qt.rgba(0, 0.95, 1, 0.14); on: page.presetName === "Custom EQ"; onClicked: { const s = engine.geqSlots()[0]; page.apply(s.gains); page.presetName = "Custom EQ" }
+                    Btn { label: i18n.t("CUSTOM EQ", i18n.lang); onColor: Theme.cyan; offColor: Qt.rgba(0.235, 0.784, 0.859, 0.14); on: page.presetName === "Custom EQ"; onClicked: { const s = engine.geqSlots()[0]; page.apply(s.gains); page.presetName = "Custom EQ" }
                         ToolTip.visible: ch.hovered; ToolTip.text: i18n.t("Load custom slot 1 (the user profile)", i18n.lang); HoverHandler { id: ch } }
-                    Btn { label: i18n.t("💾 SAVE CUSTOM", i18n.lang); offColor: Qt.rgba(0, 0.95, 1, 0.14); onClicked: engine.saveGeqSlot(1, "Custom EQ", page.gains) }
+                    Btn { label: i18n.t("⇩ SAVE CUSTOM", i18n.lang); offColor: Qt.rgba(0.235, 0.784, 0.859, 0.14); onClicked: engine.saveGeqSlot(1, "Custom EQ", page.gains) }
                     Btn { label: i18n.t("ANIX W-SHAPE", i18n.lang); onColor: Theme.amber; offColor: Qt.rgba(0.984, 0.749, 0.141, 0.18); on: page.presetName === "Anix W Shape"; onClicked: page.loadPreset("Anix W Shape") }
                     // W-SHAPE TUNER: on a channel, the plug-in itself goes into its rack (continuous shelves and bells, level kept the same: the better
                     // choice); on the program bus, which has no rack, the same curve is laid on the ten bands (the tuner's W read at the ISO centres)
@@ -120,7 +121,7 @@ Flickable {
                     c.lineWidth = 1; c.font = "7px monospace"
                     for (const db of [-12, -6, 0, 6, 12]) { const y = midY - db / 12 * height * 0.42; c.strokeStyle = Theme.ov(0.08); c.beginPath(); c.moveTo(0, y); c.lineTo(width, y); c.stroke(); c.fillStyle = Theme.ov(0.3); c.fillText((db > 0 ? "+" : "") + db + "dB", 4, y - 2) }
                     const pts = []; for (let i = 0; i < 10; i++) { const x = step * (i + 1), y = midY - page.gains[i] / 12 * height * 0.42; pts.push({ x: x, y: y }); c.strokeStyle = Theme.ov(0.04); c.beginPath(); c.moveTo(x, 0); c.lineTo(x, height); c.stroke(); c.fillStyle = Theme.ov(0.35); c.fillText(page.bandText[i] + "Hz", x - 8, height - 6) }
-                    const grad = c.createLinearGradient(0, 0, width, 0); grad.addColorStop(0, "#00f2ff"); grad.addColorStop(0.5, "#ffb020"); grad.addColorStop(1, "#ff6a00")
+                    const grad = c.createLinearGradient(0, 0, width, 0); grad.addColorStop(0, "#3cc8db"); grad.addColorStop(0.5, "#ffb020"); grad.addColorStop(1, "#ff6a00")
                     c.strokeStyle = grad; c.lineWidth = 3; c.beginPath(); c.moveTo(0, midY)
                     for (let i = 0; i < pts.length; i++) { if (i === 0) c.quadraticCurveTo(pts[0].x / 2, midY, pts[0].x, pts[0].y); else { const p = pts[i - 1]; c.quadraticCurveTo(p.x, p.y, (p.x + pts[i].x) / 2, (p.y + pts[i].y) / 2) } }
                     const last = pts[9]; c.quadraticCurveTo(last.x, last.y, width, midY); c.stroke()
@@ -157,7 +158,7 @@ Flickable {
                 RowLayout { Layout.fillWidth: true; spacing: 6
                     Text { text: i18n.t("PARAMETRIC CONTROL", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 1 }
                     Text { text: i18n.t("band", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
-                    Repeater { model: 10; delegate: Rectangle { implicitWidth: 30; implicitHeight: 20; radius: 4; color: page.band === index ? Theme.amber : Theme.ov(0.08); border.color: page.gains[index] !== 0 ? Theme.cyan : "transparent"
+                    Repeater { model: 10; delegate: Rectangle { id: gb130; implicitWidth: 30; implicitHeight: 20; radius: 7; color: page.band === index ? Theme.amber : Theme.ov(0.08); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb130.color) } GradientStop { position: 1; color: Theme.btnBottom(gb130.color) } } border.color: page.gains[index] !== 0 ? Theme.cyan : "transparent"
                         Text { anchors.centerIn: parent; text: "B" + (index + 1); color: page.band === index ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.band = index } } }
                     Item { Layout.fillWidth: true }
                     Text { text: page.typeNames[page.bandNow.type] + " · " + Math.round(page.bandNow.freq) + i18n.t(" Hz · Q ", i18n.lang) + Number(page.bandNow.q).toFixed(2) + " · " + page.dbText(page.bandNow.gainDb); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8 } }
@@ -181,16 +182,16 @@ Flickable {
                 RowLayout { Layout.fillWidth: true; spacing: 8
                     Text { text: i18n.t("CUSTOM PRESET USER SLOTS: 10", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 1 }
                     Item { Layout.fillWidth: true }
-                    Rectangle { Layout.preferredWidth: 180; implicitHeight: 22; radius: 4; color: Theme.deep; border.color: nameIn.activeFocus ? Theme.cyan : Theme.lineSoft
+                    Rectangle { id: gb131; Layout.preferredWidth: 180; implicitHeight: 22; radius: 7; color: Theme.deep; gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb131.color) } GradientStop { position: 1; color: Theme.btnBottom(gb131.color) } } border.color: nameIn.activeFocus ? Theme.cyan : Theme.lineSoft
                         TextInput { id: nameIn; anchors.fill: parent; anchors.margins: 5; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; selectByMouse: true; maximumLength: 24
                             Text { visible: !parent.text.length; text: i18n.t("name for SAVE", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 9 } } }
                     Btn { label: "▲"; onClicked: page.contentY = 0 } Btn { label: "▼"; onClicked: page.contentY = Math.max(0, page.contentHeight - page.height) }
                     Text { text: i18n.t("LOAD • SAVE • DELETE • SCROLL THE LIST", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
                 GridLayout { Layout.fillWidth: true; columns: 5; columnSpacing: 6; rowSpacing: 6
                     Repeater { model: (page.slotTick, engine.geqSlots())
-                        delegate: Rectangle { Layout.fillWidth: true; implicitHeight: 78; radius: 6; color: page.slotSel === modelData.slot ? Qt.rgba(0, 0.95, 1, 0.12) : Theme.ov(0.04); border.color: page.slotSel === modelData.slot ? Theme.cyan : Theme.lineSoft
+                        delegate: Rectangle { Layout.fillWidth: true; implicitHeight: 78; radius: 6; color: page.slotSel === modelData.slot ? Qt.rgba(0.235, 0.784, 0.859, 0.12) : Theme.ov(0.04); border.color: page.slotSel === modelData.slot ? Theme.cyan : Theme.lineSoft
                             Canvas { anchors.fill: parent; anchors.margins: 4; opacity: 0.5; property var g: modelData.gains; onGChanged: requestPaint()
-                                onPaint: { const c = getContext("2d"); c.reset(); if (modelData.empty) return; c.strokeStyle = "#00f2ff"; c.lineWidth = 1.5; c.beginPath(); for (let i = 0; i < 10; i++) { const x = (i + 0.5) / 10 * width, y = height / 2 - g[i] / 12 * height * 0.4; if (i === 0) c.moveTo(x, y); else c.lineTo(x, y) } c.stroke() } }
+                                onPaint: { const c = getContext("2d"); c.reset(); if (modelData.empty) return; c.strokeStyle = "#3cc8db"; c.lineWidth = 1.5; c.beginPath(); for (let i = 0; i < 10; i++) { const x = (i + 0.5) / 10 * width, y = height / 2 - g[i] / 12 * height * 0.4; if (i === 0) c.moveTo(x, y); else c.lineTo(x, y) } c.stroke() } }
                             ColumnLayout { anchors.fill: parent; anchors.margins: 7; spacing: 2
                                 RowLayout { Layout.fillWidth: true; Text { text: i18n.t("SLOT ", i18n.lang) + modelData.slot; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } Item { Layout.fillWidth: true } Text { text: modelData.empty ? i18n.t("EMPTY", i18n.lang) : modelData.gains.map(function (v) { return (v > 0 ? "+" : "") + v }).join(" "); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 5; elide: Text.ElideRight; Layout.maximumWidth: 150 } }
                                 Text { Layout.fillWidth: true; elide: Text.ElideRight; text: i18n.t(modelData.name ?? "", i18n.lang); color: modelData.empty ? Theme.dim : Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }

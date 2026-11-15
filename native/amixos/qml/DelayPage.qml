@@ -25,8 +25,10 @@ Flickable {
     Component.onCompleted: { reload(); let mx = 0; for (let i = 0; i < delays.length; ++i) mx = Math.max(mx, delays[i]); limit = mx > 20 ? 50 : mx > 10 ? 20 : mx > 5 ? 10 : 20 }
     Connections { target: engine; function onStripsChanged() { page.reload() } }
 
-    component Btn: Rectangle { id: bt; property string label; property bool on: false; signal clicked(); implicitWidth: btT.implicitWidth + 20; implicitHeight: 24; radius: 4
-        color: bt.on ? Qt.rgba(0, 0.95, 1, 0.2) : Theme.ov(0.06); border.color: bt.on ? Theme.cyan : Theme.line
+    component Btn: Rectangle { id: bt; property string label; property bool on: false; signal clicked(); implicitWidth: btT.implicitWidth + 20; implicitHeight: 24; radius: 8
+        color: bt.on ? Qt.rgba(0.235, 0.784, 0.859, 0.2) : Theme.ov(0.06); border.color: bt.on ? Theme.cyan : Theme.line
+        gradient: Gradient { GradientStop { position: 0; color: bt.on ? Qt.rgba(Theme.cyan.r, Theme.cyan.g, Theme.cyan.b, 0.34) : Theme.ov(0.11) } GradientStop { position: 1; color: bt.on ? Qt.rgba(Theme.cyan.r, Theme.cyan.g, Theme.cyan.b, 0.12) : Theme.ov(0.035) } }
+        Rectangle { anchors.fill: parent; anchors.margins: 1; radius: Math.max(0, parent.radius - 1); color: "transparent"; border.width: 1; border.color: Qt.rgba(1, 1, 1, bt.on ? 0.20 : 0.06) }
         Text { id: btT; anchors.centerIn: parent; text: bt.label; color: bt.on ? Theme.cyan : Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
         MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: bt.clicked() } }
 

@@ -215,7 +215,7 @@ std::string transportsJson() {
     "{\"id\":\"rtpmidi\",\"name\":\"Network MIDI (RTP-MIDI, RFC 6295)\",\"available\":true,\"note\":\"A session other computers and tablets connect to by address.\"},"
     "{\"id\":\"midi\",\"name\":\"MIDI ports of this computer\",\"available\":true,\"note\":\"USB and DIN controllers through the system's own MIDI interface.\"},"
     "{\"id\":\"srt\",\"name\":\"SRT\",\"available\":false,\"note\":\"Needs the open-source SRT library built into the program; it is not in this build.\"},"
-    "{\"id\":\"dante\",\"name\":\"Dante\",\"available\":false,\"note\":\"A protocol owned by its maker and licensed to manufacturers; it is not implemented here. Dante devices are reached through their AES67 mode.\"},"
+    "{\"id\":\"dante\",\"name\":\"Dante\",\"available\":false,\"note\":\"A protocol owned by its maker and licensed to manufacturers; its protocol is not implemented here. Dante reaches this console through Audinate's Dante Virtual Soundcard or Dante Via (a sound card) or the device's AES67 mode: see DANTE + CLOCK.\"},"
     "{\"id\":\"ndi\",\"name\":\"NDI\",\"available\":false,\"note\":\"Needs its maker's SDK and runtime under their licence; not in this build.\"}"
     "]";
 }

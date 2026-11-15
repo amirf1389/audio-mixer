@@ -15,7 +15,8 @@ Item {
     readonly property var padColors: ({ "Drums": Theme.amber, "Percussion": "#fb7185", "Bass": Theme.emerald, "Lead": Theme.cyan, "Pad": "#a78bfa", "Keys": "#f472b6", "FX": "#38bdf8", "Test": Theme.muted })
     focus: true
     Keys.onPressed: function (e) { const k = e.key; const n = k === Qt.Key_0 ? 9 : k >= Qt.Key_1 && k <= Qt.Key_9 ? k - Qt.Key_1 : -1; if (n >= 0) { const l = shown(); if (n < l.length) samples.play(l[n].id); e.accepted = true } else if (k === Qt.Key_Escape) samples.stopAll() }
-    component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(56, bl.implicitWidth + 16); implicitHeight: 24; radius: 5; color: on ? onColor : Theme.ov(0.08); border.color: Theme.lineSoft
+    component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(56, bl.implicitWidth + 16); implicitHeight: 24; radius: 8; gradient: Gradient { GradientStop { position: 0; color: on ? Theme.btnTop(onColor) : Theme.ov(0.12) } GradientStop { position: 1; color: on ? Theme.btnBottom(onColor) : Theme.ov(0.035) } } color: on ? onColor : Theme.ov(0.08); border.color: Theme.lineSoft
+        Rectangle { anchors.fill: parent; anchors.margins: 1; radius: Math.max(0, parent.radius - 1); color: "transparent"; border.width: 1; border.color: Qt.rgba(1, 1, 1, parent.on ? 0.30 : 0.07) }
         Text { id: bl; anchors.centerIn: parent; text: i18n.t(label, i18n.lang); color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
     ColumnLayout {
         anchors.fill: parent; anchors.margins: 10; spacing: 8

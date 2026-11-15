@@ -14,7 +14,7 @@ Flickable {
             ColumnLayout { id: c1; anchors.fill: parent; anchors.margins: 14; spacing: 8
                 RowLayout { spacing: 10
                     Text { text: page.t("CASCADE"); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 13; font.bold: true; font.letterSpacing: 1.5 }
-                    Rectangle { implicitWidth: dv.implicitWidth + 14; implicitHeight: 18; radius: 3; color: Qt.rgba(1, 0.7, 0.2, 0.18); border.color: Theme.amber
+                    Rectangle { id: gb18; implicitWidth: dv.implicitWidth + 14; implicitHeight: 18; radius: 7; color: Qt.rgba(1, 0.7, 0.2, 0.18); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb18.color) } GradientStop { position: 1; color: Theme.btnBottom(gb18.color) } } border.color: Theme.amber
                         Text { id: dv; anchors.centerIn: parent; text: page.t("IN DEVELOPMENT"); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } } }
                 Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.muted; font.pixelSize: 11
                        text: page.t("Two AmF X1 consoles on one network working as one desk: the second console's master arrives on two strips of the first, and scenes, mutes and DCA groups follow the first console.") }

@@ -81,6 +81,12 @@ qt_add_qml_module(amixos
         qml/SoundCardPage.qml
         qml/DspModeSwitch.qml
         qml/ScorePage.qml
+        qml/AmpPage.qml
+        qml/Aurora.qml
+        qml/Icon.qml
+        qml/StorePage.qml
+        qml/DantePanel.qml
+        qml/AssistantPage.qml
         qml/SetupPage.qml
         qml/HomePage.qml
         qml/MixerPage.qml
@@ -162,6 +168,24 @@ set_tests_properties(amixos_smoke PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscr
 
 # AmF X1 PLUG-IN BUILDER: the builder as its own program (shares the builder page, Theme, the language tables and the plug-in shell)
 file(GLOB AMIX_I18N_FILES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} i18n/verified-22.json i18n/auto-58.json i18n/ui/*.json)
+# AmF X1 DIAGNOSTICS: the system check as its own program (devices, test tone, input meter, ASIO drivers, report)
+qt_add_executable(amfb_diagnostics src/diag_main.cpp src/Diag.cpp src/Diag.h)
+amfb_win_version(amfb_diagnostics "AmF X1 Diagnostics.exe" "AmF X1 Diagnostics: checks speakers, headphones, microphones and drivers" APP)
+set_target_properties(amfb_diagnostics PROPERTIES OUTPUT_NAME "AmF X1 Diagnostics" WIN32_EXECUTABLE TRUE)
+target_include_directories(amfb_diagnostics PRIVATE src)
+target_compile_definitions(amfb_diagnostics PRIVATE AMIX_VERSION="${AMIX_VERSION}")
+qt_add_qml_module(amfb_diagnostics
+    URI AmixOS
+    VERSION 1.0
+    RESOURCE_PREFIX /qt/qml
+    OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/diag_qml/AmixOS
+    NO_CACHEGEN
+    NO_PLUGIN
+    QML_FILES qml/DiagApp.qml qml/Theme.qml qml/Icon.qml qml/Aurora.qml
+    RESOURCES icons/amfx1.png)
+target_link_libraries(amfb_diagnostics PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::QuickControls2 audiomixer_runtime audiomixer_engine)
+add_dependencies(amixos amfb_diagnostics)
+
 qt_add_executable(amfb_plugin_builder src/builder_main.cpp src/Builder.cpp src/Builder.h src/I18n.cpp src/I18n.h)
 amfb_win_version(amfb_plugin_builder "AmF X1 Plugin Builder.exe" "AmF X1 Plugin Builder: design VST3 plug-ins from AMFB blocks" APP)
 set_target_properties(amfb_plugin_builder PROPERTIES OUTPUT_NAME "AmF X1 Plugin Builder" WIN32_EXECUTABLE TRUE)

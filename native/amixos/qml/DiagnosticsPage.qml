@@ -35,7 +35,8 @@ Item {
         rows = r
     }
     Component.onCompleted: audit()
-    component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(56, bl.implicitWidth + 16); implicitHeight: 24; radius: 4; color: on ? onColor : Theme.ov(0.08); border.color: Theme.lineSoft
+    component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(56, bl.implicitWidth + 16); implicitHeight: 24; radius: 8; gradient: Gradient { GradientStop { position: 0; color: on ? Theme.btnTop(onColor) : Theme.ov(0.12) } GradientStop { position: 1; color: on ? Theme.btnBottom(onColor) : Theme.ov(0.035) } } color: on ? onColor : Theme.ov(0.08); border.color: Theme.lineSoft
+        Rectangle { anchors.fill: parent; anchors.margins: 1; radius: Math.max(0, parent.radius - 1); color: "transparent"; border.width: 1; border.color: Qt.rgba(1, 1, 1, parent.on ? 0.30 : 0.07) }
         Text { id: bl; anchors.centerIn: parent; text: i18n.t(label, i18n.lang); color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
     ColumnLayout {
         anchors.fill: parent; anchors.margins: 10; spacing: 8
@@ -46,7 +47,8 @@ Item {
                 Text { text: i18n.t("power-on self test · safe mode · restart · factory reset", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                 Item { Layout.fillWidth: true }
                 Text { readonly property int bad: { let n = 0; for (let i = 0; i < page.rows.length; ++i) if (!page.rows[i].ok) ++n; return n } text: page.rows.length ? (bad === 0 ? i18n.t("ALL CHECKS OK", i18n.lang) : bad + i18n.t(" CHECK(S) NEED ATTENTION", i18n.lang)) : ""; color: bad === 0 ? Theme.emerald : Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-                Btn { label: i18n.t("RUN AUDIT", i18n.lang); on: true; onColor: Theme.cyan; onClicked: page.audit() } }
+                Btn { label: i18n.t("RUN AUDIT", i18n.lang); on: true; onColor: Theme.cyan; onClicked: page.audit() }
+                Btn { objectName: "openDiagAppBtn"; label: i18n.t("DIAGNOSTICS APP", i18n.lang); on: true; onColor: Theme.violet; onClicked: settings.openDiagnostics() } }
         }
         Rectangle {
             Layout.fillWidth: true; Layout.fillHeight: true; radius: Theme.radius; color: Theme.card; border.color: Theme.line; clip: true

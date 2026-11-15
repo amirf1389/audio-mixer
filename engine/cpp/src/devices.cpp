@@ -146,6 +146,37 @@ void addWasapi(std::vector<DeviceInfo>& out) {
 }
 
 
+std::vector<EndpointInfo> wasapiEndpoints() {
+  std::vector<EndpointInfo> v; CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+  IMMDeviceEnumerator* en = nullptr;
+  if (FAILED(CoCreateInstance(kClsidDeviceEnumerator, nullptr, CLSCTX_ALL, kIidDeviceEnumerator, reinterpret_cast<void**>(&en)))) return v;
+  for (const EDataFlow flow : {eRender, eCapture}) {
+    const std::string def = defaultEndpoint(en, flow);
+    IMMDeviceCollection* col = nullptr;
+    if (FAILED(en->EnumAudioEndpoints(flow, DEVICE_STATE_ACTIVE | DEVICE_STATE_UNPLUGGED | DEVICE_STATE_DISABLED, &col)) || !col) continue;
+    UINT n = 0; col->GetCount(&n);
+    for (UINT i = 0; i < n; ++i) {
+      IMMDevice* d = nullptr; if (FAILED(col->Item(i, &d)) || !d) continue;
+      EndpointInfo e; e.id = endpointId(d); e.flow = flow == eRender ? "out" : "in"; DWORD st = 0; d->GetState(&st);
+      e.state = st == DEVICE_STATE_ACTIVE ? "active" : st == DEVICE_STATE_UNPLUGGED ? "unplugged" : "disabled"; int form = -1;
+      IPropertyStore* ps = nullptr;
+      if (SUCCEEDED(d->OpenPropertyStore(STGM_READ, &ps))) { PROPVARIANT pv; PropVariantInit(&pv);
+        if (SUCCEEDED(ps->GetValue(kFriendlyName, &pv)) && pv.vt == VT_LPWSTR) e.name = utf8(pv.pwszVal);
+        PropVariantClear(&pv); PropVariantInit(&pv);
+        if (SUCCEEDED(ps->GetValue(kFormFactor, &pv)) && pv.vt == VT_UI4) form = static_cast<int>(pv.ulVal);
+        PropVariantClear(&pv); ps->Release(); }
+      if (st == DEVICE_STATE_ACTIVE) { IAudioClient* ac = nullptr;   // only an active endpoint can say its format
+        if (SUCCEEDED(d->Activate(kIidClient, CLSCTX_ALL, nullptr, reinterpret_cast<void**>(&ac)))) { WAVEFORMATEX* f = nullptr;
+          if (SUCCEEDED(ac->GetMixFormat(&f)) && f) { e.channels = f->nChannels; e.rate = f->nSamplesPerSec; CoTaskMemFree(f); } ac->Release(); } }
+      if (e.name.empty()) e.name = e.id;
+      e.kind = classifyDevice("wasapi", e.name, form, flow == eCapture); e.isDefault = e.id == def;
+      v.push_back(e); d->Release();
+    }
+    col->Release();
+  }
+  en->Release(); return v;
+}
+
 struct DsList { std::vector<DeviceInfo>* out; bool capture; };
 BOOL CALLBACK dsEnum(LPGUID guid, LPCSTR desc, LPCSTR, LPVOID ctx) {
   DsList* l = static_cast<DsList*>(ctx); DeviceInfo info; info.backend = "dsound";
@@ -246,6 +277,18 @@ std::string deviceFingerprint() {
   return f;
 }
 
+std::vector<EndpointInfo> listEndpoints() {
+#ifdef _WIN32
+  return wasapiEndpoints();
+#else
+  std::vector<EndpointInfo> v;
+  for (const DeviceInfo& d : listDevices(false)) {
+    if (d.backend == "null" || d.id.rfind("loopback:", 0) == 0) continue;
+    for (const bool out : {true, false}) { const int ch = out ? d.outChannels : d.inChannels; if (ch <= 0) continue;
+      EndpointInfo e; e.id = d.id; e.name = d.name; e.flow = out ? "out" : "in"; e.state = "active"; e.kind = d.kind; e.channels = ch; e.rate = d.defaultRate; e.isDefault = out ? d.defaultOut : d.defaultIn; v.push_back(e); } }
+  return v;
+#endif
+}
 std::vector<DeviceInfo> listDevices(bool probeAsio) {
   (void)probeAsio;
   std::vector<DeviceInfo> v;

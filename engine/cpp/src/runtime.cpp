@@ -45,7 +45,7 @@ std::unique_ptr<Backend> createBackend(const std::string& name) {
   return nullptr;
 }
 
-enum Op { kGain, kPan, kMute, kSolo, kMaster, kLimiter, kClipDb, kClear, kEq, kDelay, kPolarity, kXover, kChLimiter, kComp, kGate, kSend, kBusLevel, kBusMute, kBusReturn, kMonitor, kInRoute, kOutRoute, kTrim, kPeakHold, kBusFx, kWidth, kAutomix, kAutoLevel, kOutBits, kProfReset, kDcBlock, kAnalogCh, kSpatial, kMasterFx, kAutoPol };
+enum Op { kGain, kPan, kMute, kSolo, kMaster, kLimiter, kClipDb, kClear, kEq, kDelay, kPolarity, kXover, kChLimiter, kComp, kGate, kSend, kBusLevel, kBusMute, kBusReturn, kMonitor, kInRoute, kOutRoute, kTrim, kPeakHold, kBusFx, kWidth, kAutomix, kAutoLevel, kOutBits, kProfReset, kDcBlock, kAnalogCh, kSpatial, kMasterFx, kAutoPol, kAmp, kAmpEq };
 
 Runtime::Runtime(int strips) : mixer_(strips, 48000) { std::memset(&pub_, 0, sizeof pub_); }
 Runtime::~Runtime() { stop(); }
@@ -63,7 +63,8 @@ bool Runtime::open(const DeviceConfig& cfg, std::string& err) {
   for (int s = 0; s < kMaxStrips; ++s) { inRoute_[s] = s; trim_[s] = 1.0; }
   for (int o = 0; o < kMaxOutputs; ++o) outRoute_[o] = defaultOutputSource(o);
   ch_.assign(static_cast<std::size_t>(mixer_.strips()), dsp::Channel(cfg.sampleRate)); chBuf_.assign(ch_.size(), std::vector<float>(n, 0.0f)); sumBuf_.assign(n, 0.0f);
-  busBuf_.assign(2 * kMaxBuses, std::vector<float>(n, 0.0f));
+  busBuf_.assign(2 * kMaxBuses, std::vector<float>(n, 0.0f)); mono_.assign(n, 0.0f);
+  for (int o = 0; o < kMaxOutputs; ++o) { amp_[o].prepare(cfg.sampleRate); amp_[o].set(ampUi_[o]); }   // the delay lines sized at the device rate, the settings kept
   head_ = 0; tail_ = 0; blocks_ = 0; frames_ = 0; std::memset(&pub_, 0, sizeof pub_);
   return backend_->open(cfg, [this](const float* const* in, float* const* out, std::size_t frames) { onBlock(in, out, frames); }, err);
 }
@@ -104,7 +105,16 @@ void Runtime::setBusLevel(int b, double db) { post({kBusLevel, b, db, 0, 0}); }
 void Runtime::setBusMute(int b, bool on) { post({kBusMute, b, on ? 1.0 : 0.0, 0, 0}); }
 void Runtime::setBusReturn(int b, double db) { post({kBusReturn, b, db, 0, 0}); }
 void Runtime::setInputRoute(int strip, int input) { if (strip < 0 || strip >= kMaxStrips) return; post({kInRoute, strip, 0, 0, 0, (input >= kNetInBase && input < kNetInBase + kNetInputs) ? input : std::max(-1, std::min(kMaxStrips - 1, input))}); }
-void Runtime::setOutputRoute(int out, int source) { if (out < 0 || out >= kMaxOutputs) return; post({kOutRoute, out, 0, 0, 0, std::max(0, std::min(kSrcBus0L + 2 * kMaxBuses - 1, source))}); }
+void Runtime::setOutputRoute(int out, int source) { if (out < 0 || out >= kMaxOutputs) return; post({kOutRoute, out, 0, 0, 0, source == kSrcMasterMono ? source : std::max(0, std::min(kSrcBus0L + 2 * kMaxBuses - 1, source))}); }
+void Runtime::setAmp(int out, const AmpParams& p) {
+  if (out < 0 || out >= kMaxOutputs) return; ampUi_[out] = p;
+  const int flags = (p.on ? 1 : 0) | (p.mute ? 2 : 0) | (p.invert ? 4 : 0) | (p.limitOn ? 8 : 0) | (std::clamp(p.hpOrder, 0, 8) << 4) | (std::clamp(p.lpOrder, 0, 8) << 8) | (static_cast<int>(p.type) << 12);
+  if (!running_) { amp_[out].set(p); return; }   // nothing runs: set it directly
+  Cmd c{kAmp, out, p.gainDb, p.delayMs, p.hpHz, flags}; c.w = p.lpHz; c.v = p.limitDb; c.u = p.releaseMs; post(c);
+  for (int b = 0; b < AmpParams::kBands; ++b) { Cmd e{kAmpEq, out, p.eq[b].freq, p.eq[b].q, p.eq[b].gainDb, b}; e.w = static_cast<int>(p.eq[b].type); post(e); }
+}
+AmpParams Runtime::amp(int out) const { return out >= 0 && out < kMaxOutputs ? ampUi_[out] : AmpParams{}; }
+double Runtime::ampResponseDb(int out, double hz) const { if (out < 0 || out >= kMaxOutputs) return 0; AmpChannel a; a.prepare(mixer_.sampleRate() > 0 ? mixer_.sampleRate() : 48000.0); a.set(ampUi_[out]); return a.responseDbAt(hz); }
 void Runtime::setOutputBits(int bits) { post({kOutBits, bits, 0, 0, 0}); }
 void Runtime::setDcBlock(bool on) { post({kDcBlock, on ? 1 : 0, 0, 0, 0}); }
 void Runtime::setAnalogChannels(bool on) { post({kAnalogCh, on ? 1 : 0, 0, 0, 0}); }
@@ -163,6 +173,10 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
       case kMonitor: monSrc_ = c.a; monGainTarget_ = c.x; monMono_ = c.b != 0; break;
       case kInRoute: inRoute_[c.a] = c.b; break;
       case kOutRoute: outRoute_[c.a] = c.b; break;
+      case kAmp: if (c.a >= 0 && c.a < kMaxOutputs) { AmpParams p; p.on = c.b & 1; p.mute = c.b & 2; p.invert = c.b & 4; p.limitOn = c.b & 8; p.hpOrder = (c.b >> 4) & 15; p.lpOrder = (c.b >> 8) & 15;
+        p.type = static_cast<dsp::XoverType>((c.b >> 12) & 3); p.gainDb = c.x; p.delayMs = c.y; p.hpHz = c.z; p.lpHz = c.w; p.limitDb = c.v; p.releaseMs = c.u;
+        for (int b = 0; b < AmpParams::kBands; ++b) p.eq[b] = amp_[c.a].params().eq[b]; amp_[c.a].set(p); } break;   // the bands follow in their own commands
+      case kAmpEq: if (c.a >= 0 && c.a < kMaxOutputs && c.b >= 0 && c.b < AmpParams::kBands) { AmpParams p = amp_[c.a].params(); p.eq[c.b] = {static_cast<dsp::FilterType>(static_cast<int>(c.w)), c.x, c.y, c.z}; amp_[c.a].set(p); } break;
       case kTrim: trim_[c.a] = c.x; break;
       case kMasterFx: mixer_.setMasterProcessor(static_cast<BusProcessor*>(c.p)); break;
       case kBusFx: mixer_.setBusProcessor(c.a, static_cast<BusProcessor*>(c.p)); break;
@@ -252,7 +266,9 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
     if (src == kSrcMasterL) from = left_.data(); else if (src == kSrcMasterR) from = right_.data();
     else if (src == kSrcMonL) from = monL_.data(); else if (src == kSrcMonR) from = monR_.data();
     else if (src >= kSrcBus0L && src - kSrcBus0L < 2 * kMaxBuses) from = busOut[src - kSrcBus0L];
+    else if (src == kSrcMasterMono && mono_.size() >= frames) { for (std::size_t i = 0; i < frames; ++i) mono_[i] = 0.5f * (left_[i] + right_[i]); from = mono_.data(); }
     if (from) std::memcpy(out[c], from, frames * sizeof(float)); else std::memset(out[c], 0, frames * sizeof(float));
+    if (c < kMaxOutputs) amp_[c].process(out[c], static_cast<int>(frames));   // the amplifier stage (off = untouched)
   }
   ++blocks_; frames_ += frames;
   { const std::int64_t t1 = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count(); blockUs_ = static_cast<double>(t1 - t0) / 1000.0; if (blockUs_ > maxBlockUs_) maxBlockUs_ = blockUs_; loadPct_ = 100.0 * blockUs_ / (static_cast<double>(frames) * 1e6 / mixer_.sampleRate()); }
@@ -266,6 +282,7 @@ void Runtime::publish() {
   for (int k = 0; k < kMaxBuses; ++k) { const MeterState& m = mixer_.bus(k).meter.state(); s.buses[k] = {m.pk, m.rms, m.hold, m.clipN, 0.0, 0.0, 0.0, 0.0, 0.0, false}; }
   s.momentary = mixer_.loudness().momentary(); s.shortTerm = mixer_.loudness().shortTerm(); s.integrated = mixer_.loudness().integrated(); s.lra = mixer_.loudness().range(); s.truePeak = mixer_.loudness().truePeak(); s.autoLevelDb = mixer_.autoLevelGainDb();
   s.monitorPk[0] = monPk_[0]; s.monitorPk[1] = monPk_[1];
+  for (int o = 0; o < kMaxOutputs; ++o) { s.ampPk[o] = amp_[o].peak(); s.ampGrDb[o] = amp_[o].gainReductionDb(); }
   s.correlation = mixer_.phase().corr; s.blocks = blocks_; s.frames = frames_; s.loadPct = loadPct_; s.blockUs = blockUs_; s.maxBlockUs = maxBlockUs_; s.jitterUs = jitterUs_; s.xruns = backend_ ? backend_->xruns() : 0;
   const unsigned q = seq_.load(std::memory_order_relaxed);
   seq_.store(q + 1, std::memory_order_release);                                    // odd: being written

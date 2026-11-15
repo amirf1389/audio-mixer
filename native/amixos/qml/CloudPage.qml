@@ -34,7 +34,7 @@ Flickable {
                 Text { text: page.t("This version: ") + updater.current; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11 }
                 Text { text: page.t("On the server: ") + (updater.latest !== "" ? updater.latest : page.t("not checked yet")); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 11 }
                 Item { Layout.fillWidth: true }
-                Rectangle { implicitWidth: ck.implicitWidth + 22; implicitHeight: 26; radius: 4; color: Theme.ov(0.06); border.color: Theme.cyan
+                Rectangle { id: gb19; implicitWidth: ck.implicitWidth + 22; implicitHeight: 26; radius: 7; color: Theme.ov(0.06); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb19.color) } GradientStop { position: 1; color: Theme.btnBottom(gb19.color) } } border.color: Theme.cyan
                     Text { id: ck; anchors.centerIn: parent; text: page.t("CHECK NOW"); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
                     MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: updater.check() } }
             }
@@ -45,6 +45,9 @@ Flickable {
         Card {
             title: page.t("LOCAL STORE · ON THIS COMPUTER"); tone: Theme.cyan
             property int rev: 0
+            Rectangle { objectName: "openStoreBtn"; implicitWidth: osT.implicitWidth + 28; implicitHeight: 30; radius: 15; color: Theme.harm(Theme.accent)
+                Text { id: osT; anchors.centerIn: parent; text: page.t("OPEN THE STORE ›"); color: "#0b0f14"; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
+                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { if (typeof root !== "undefined") root.current = "store" } } }
             Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.muted; font.pixelSize: 10
                    text: page.t("Extensions and built-in effects installed with AmF X1. Switch one off to take it out of the console; switch it on to bring it back. Nothing is downloaded from here.") }
             GridLayout {
@@ -53,7 +56,7 @@ Flickable {
                     model: { storeGrid.parent.rev; return engine.storeItems() }
                     Rectangle {
                         required property var modelData
-                        Layout.fillWidth: true; implicitHeight: 46; radius: 6; color: Theme.card; border.color: modelData.on && modelData.installed ? Theme.cyan : Theme.line
+                        Layout.fillWidth: true; implicitHeight: 46; radius: 6; color: Theme.card; border.color: modelData.on && modelData.installed ? Qt.rgba(Theme.cyan.r, Theme.cyan.g, Theme.cyan.b, 0.35) : Theme.lineSoft
                         RowLayout { anchors.fill: parent; anchors.margins: 8; spacing: 8
                             Text { text: parent.parent.modelData.kind === "extension" ? "⬢" : "✦"; color: Theme.amber; font.pixelSize: 14 }
                             ColumnLayout { Layout.fillWidth: true; spacing: 1

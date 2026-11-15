@@ -21,7 +21,7 @@ Net::Net(Engine* engine, QObject* parent) : QObject(parent), engine_(engine) {
 Net::~Net() {
   patch(false);
   if (am::Runtime* rt = engine_->runtime()) { rt->setNetTap(nullptr); rt->setNetInput(nullptr); QThread::msleep(40); }
-  tx_.stop(); rx_.stop(); disc_.stop(); rtpMidi_.stop(); ports_.close();
+  tx_.stop(); rx_.stop(); disc_.stop(); ptp_.stop(); rtpMidi_.stop(); ports_.close();
 }
 
 QStringList Net::cards() const { QStringList l; for (const std::string& a : localAddresses()) l << QString::fromStdString(a); return l; }
@@ -78,6 +78,17 @@ bool Net::setDiscover(bool on) {
   if (!on) { disc_.stop(); emit changed(); return true; }
   std::string err; if (!disc_.start(card().toStdString(), err)) { fail(QString::fromStdString(err)); return false; }
   msg_.clear(); emit changed(); return true;
+}
+bool Net::setPtp(bool on) {
+  if (!on) { ptp_.stop(); emit changed(); return true; }
+  std::string err; if (!ptp_.start(card().toStdString(), err)) { fail(QString::fromStdString(err)); return false; }
+  msg_.clear(); emit changed(); return true;
+}
+QVariantList Net::ptpMasters() const {
+  QVariantList l;
+  for (const am::net::PtpMaster& m : ptp_.masters()) l << QVariantMap{{"id", QString::fromStdString(m.id)}, {"from", QString::fromStdString(m.from)}, {"domain", m.domain}, {"priority1", m.priority1}, {"priority2", m.priority2},
+      {"clockClass", m.clockClass}, {"clockName", QString::fromStdString(am::net::ptpClockName(m.clockClass))}, {"syncPerSec", m.syncPerSec}, {"age", m.lastSeenS}, {"steps", m.stepsRemoved}};
+  return l;
 }
 QVariantList Net::streams() const {
   QVariantList l;

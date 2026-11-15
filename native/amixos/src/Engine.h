@@ -76,7 +76,7 @@ class Engine : public QObject {
   ~Engine() override;
 
   bool running() const { return rt_ && rt_->running(); }
-  QString status() const { return status_; }
+  QString status() const { return startNote_.isEmpty() ? status_ : status_ + (status_.isEmpty() ? QString() : QStringLiteral(" · ")) + startNote_; }   // the start note rides along until the master is moved
   QString backend() const { return rt_ ? QString::fromStdString(rt_->backendName()) : QString(); }
   int strips() const { return kStrips; }
   QVariantList devices() const { return devices_; }
@@ -256,7 +256,11 @@ class Engine : public QObject {
   QString autoPrefer() const { return settings_.value("audio/autoPrefer", "wasapi").toString(); }   // AUTO = the system's own WASAPI devices (default speakers + default microphone); ASIO only when picked
   void setAutoPrefer(const QString& p);
   QVariantMap autoDetectFor(const QString& prefer) const;
-  void annotateAsio(QVariantMap& m, bool probed);   // universal ASIO detection: identity, status, remembered channel counts
+  void annotateAsio(QVariantMap& m, bool probed);
+  void freshInstallReset();   // install.id changed: clear the console state of an earlier install
+  QString startNote_;
+  QVariantList absent_;       // endpoints that exist but are not available now (unplugged / disabled)
+  QVariantMap ampUi_[64];     // the AMP page settings per output (with the name), saved with the console         // why the start state differs from what was saved (shown once in the status)   // universal ASIO detection: identity, status, remembered channel counts
   // STEREO PAIR: strips 1+2, 3+4 ... as one stereo channel. matchStereoPair() gives the partner the same channel processing (EQ, gate, compressor,
   // limiter, crossover, delay) and the same rack (every plug-in with its settings and bypass), panned to the other side. While the two are
   // LINKED, a plug-in put in, taken out, bypassed or adjusted on one is done on the other too. Each side runs its own copy of a plug-in
@@ -423,6 +427,15 @@ class Engine : public QObject {
   Q_INVOKABLE void setDeviceEnabled(const QString& backend, const QString& id, bool on);   // OFF: never auto-picked, not opened
   Q_INVOKABLE void setInputRoute(int strip, int input);
   Q_INVOKABLE void setOutputRoute(int out, int source);
+  Q_INVOKABLE QVariantList absentDevices() const { return absent_; }   // [{name, flow, state, kind}]: unplugged headphones, disabled microphones ...
+  // AMPLIFIER / SYSTEM PROCESSOR (the AMP page): one stage per device output, after the routing. Map keys: on, gainDb, mute, invert, delayMs,
+  // hpOrder, hpHz, lpOrder, lpHz, type (0 Butterworth, 1 Linkwitz-Riley, 2 Bessel), limitOn, limitDb, releaseMs, name
+  Q_INVOKABLE QVariantMap ampState(int out) const;
+  Q_INVOKABLE void setAmp(int out, const QVariantMap& p);
+  Q_INVOKABLE QVariantList ampResponse(int out) const;   // [{hz, db}] of the crossover legs, 20 Hz .. 20 kHz
+  Q_INVOKABLE QVariantList ampMeters() const;            // [{pk (dBFS), gr (dB)}] per output
+  Q_INVOKABLE int ampOutputs() const;
+  Q_INVOKABLE QString setupSystem(const QString& layout, const QString& sub, double xoverHz);   // SYSTEM SETUP wizard: full / 2way / 3way, sub none / stereo / mono                    // outputs shown: the device's, or 8 when nothing runs
   Q_INVOKABLE void resetRouting();                      // input s -> strip s, monitor on 1-2, bus k on 3+2k / 4+2k
   Q_INVOKABLE void setMonitor(int source, double db, bool dim, bool mono, bool mute);
   Q_INVOKABLE void setMonitorSync(bool on);   // SYNC: master and monitor faders move together by the same dB
@@ -565,6 +578,7 @@ class Engine : public QObject {
  signals:
   void compTargetChanged();
   void stateChanged();
+  void ampChanged();
   void devicesChanged();
   void hotplug(bool added, const QString& what);   // a device appeared (added) or went away
   void stripsChanged();

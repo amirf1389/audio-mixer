@@ -126,6 +126,15 @@ void Settings::factoryReset() {
   emit changed(); note(QStringLiteral("Factory reset done: everything is as it left the factory. Only the licence and the edition were kept."));
 }
 
+bool Settings::openDiagnostics() {
+#ifdef _WIN32
+  const QString exe = QCoreApplication::applicationDirPath() + "/AmF X1 Diagnostics.exe";
+#else
+  const QString exe = QCoreApplication::applicationDirPath() + "/AmF X1 Diagnostics";
+#endif
+  if (!QFileInfo::exists(exe)) { note(QStringLiteral("The Diagnostics app is not installed next to the console (run the setup again and tick it).")); return false; }
+  const bool ok = QProcess::startDetached(exe, {}); note(ok ? QStringLiteral("Diagnostics opened.") : QStringLiteral("The Diagnostics app did not start.")); return ok;
+}
 bool Settings::openPluginBuilder() {
 #ifdef _WIN32
   const QString exe = QCoreApplication::applicationDirPath() + "/AmF X1 Plugin Builder.exe";

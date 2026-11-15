@@ -16,6 +16,7 @@
 #include <string>
 #include <vector>
 
+#include "audiomixer/amp.hpp"
 #include "audiomixer/dsp.hpp"
 #include "audiomixer/engine.hpp"
 
@@ -76,6 +77,11 @@ bool systemMuteSet(bool muted);
 // WHAT A DEVICE IS, from the system's own form factor when it has one (WASAPI: 1 speakers, 2 line, 3 headphones, 4 microphone, 5 headset,
 // 6 handset, 8 S/PDIF, 9 display audio; -1 = not known) and otherwise from the name. capture: the entry is an input.
 std::string classifyDevice(const std::string& backend, const std::string& name, int formFactor, bool capture);
+// EVERY AUDIO ENDPOINT of the system, whatever its state: what listDevices leaves out because it cannot be opened now (headphones on an
+// empty jack, a microphone switched off in Windows' Sound settings) is listed here with the reason, for DIAGNOSTICS. Windows: WASAPI
+// active + unplugged + disabled (not-present ghosts are left out); other systems: the active devices of listDevices().
+struct EndpointInfo { std::string id, name, flow /* "out" | "in" */, state /* active | unplugged | disabled */, kind; int channels = 0; double rate = 0; bool isDefault = false; };
+std::vector<EndpointInfo> listEndpoints();
 std::vector<DeviceInfo> listDevices(bool probeAsio = true);   // probeAsio false: ASIO drivers are listed from the registry without loading them (2 in / 2 out assumed): the list a hung driver cannot block
                        // every device of every backend built in ("null" last)
 // A cheap signature of what is plugged in (WASAPI / DirectSound endpoint ids + ASIO driver names from the registry, ALSA card names): no driver
@@ -89,6 +95,7 @@ struct Snapshot {
   double monitorPk[2];                       // what the control room hears, after the monitor section
   double momentary, shortTerm, integrated, lra, truePeak, correlation, autoLevelDb;
   std::uint64_t blocks, frames, xruns;
+  double ampPk[64], ampGrDb[64];             // the amplifier stage of each output: its peak after processing and the limiter's gain reduction (dB)
   double loadPct, blockUs, maxBlockUs, jitterUs;   // DSP time of the last block as % of its duration, its microseconds, the worst since start, the period jitter
 };
 
@@ -154,8 +161,13 @@ class Runtime {
   // bus k on 2 + 2k / 3 + 2k. Several outputs may carry the same source; an input may feed several strips.
   static constexpr int kMaxOutputs = 64;
   static constexpr int kSrcOff = 0, kSrcMasterL = 1, kSrcMasterR = 2, kSrcMonL = 3, kSrcMonR = 4, kSrcBus0L = 5;
+  static constexpr int kSrcMasterMono = kSrcBus0L + 2 * 32;   // (L + R) / 2 of the master: a mono subwoofer or a mono fill (after the bus sources, so their numbers stay)
   void setInputRoute(int strip, int input);
   void setOutputRoute(int out, int source);
+  // THE AMPLIFIER STAGE of output `out` (see amp.hpp): kept across open() / close(); off by default (the output passes bit-exact)
+  void setAmp(int out, const AmpParams& p);
+  AmpParams amp(int out) const;
+  double ampResponseDb(int out, double hz) const;
   void setTrimDb(int strip, double db);
   // INSERTS: external processors (VST3 plug-ins) on a strip, after the built-in channel DSP and before the fader. The chain is swapped
   // whole from the UI thread; the audio thread keeps its own reference for the block, so a removed plug-in stays alive until the block ends.
@@ -196,6 +208,7 @@ class Runtime {
 
   Mixer mixer_; std::unique_ptr<Backend> backend_; std::string backendName_;
   int nIn_ = 0, nOut_ = 0; bool running_ = false;
+  AmpChannel amp_[64]; AmpParams ampUi_[64]; std::vector<float> mono_;   // the audio thread's stage, and the UI's copy of what was set
   std::vector<float> silence_, left_, right_;
   int monSrc_ = 0; double monGainTarget_ = 1, monGain_ = 1; bool monMono_ = false; double monPk_[2] = {0, 0};   // audio thread only
   std::atomic<long> toneLeft_{0}, toneTotal_{0}; double tonePhase_ = 0;

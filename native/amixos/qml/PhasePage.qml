@@ -24,7 +24,7 @@ Item {
                 Text { text: i18n.t("goniometer · correlation · stereo width", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                 Item { Layout.fillWidth: true }
                 Text { text: engine.running ? i18n.t("LIVE", i18n.lang) : i18n.t("NO DEVICE", i18n.lang); color: engine.running ? Theme.emerald : Theme.amber; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
-                Rectangle { implicitWidth: Math.max(60, children[0].implicitWidth + 12); implicitHeight: 20; radius: 4; color: page.frozen ? Theme.danger : Theme.ov(0.06); Text { anchors.centerIn: parent; text: i18n.t("FREEZE", i18n.lang); color: page.frozen ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.frozen = !page.frozen } }
+                Rectangle { id: gb118; implicitWidth: Math.max(60, children[0].implicitWidth + 12); implicitHeight: 20; radius: 7; color: page.frozen ? Theme.danger : Theme.ov(0.06); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb118.color) } GradientStop { position: 1; color: Theme.btnBottom(gb118.color) } } Text { anchors.centerIn: parent; text: i18n.t("FREEZE", i18n.lang); color: page.frozen ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.frozen = !page.frozen } }
             }
         }
         RowLayout {
@@ -76,7 +76,7 @@ Item {
                     }
                     RowLayout { spacing: 6
                         Repeater { model: [{ t: "MONO", v: 0 }, { t: "NARROW", v: 0.5 }, { t: "NORMAL", v: 1 }, { t: "WIDE", v: 1.5 }, { t: "MAX", v: 2 }]
-                            delegate: Rectangle { implicitWidth: Math.max(60, children[0].implicitWidth + 12); implicitHeight: 22; radius: 4; color: Math.abs(engine.width - modelData.v) < 0.005 ? Theme.amber : Theme.ov(0.06); border.color: Theme.lineSoft
+                            delegate: Rectangle { id: gb119; implicitWidth: Math.max(60, children[0].implicitWidth + 12); implicitHeight: 22; radius: 7; color: Math.abs(engine.width - modelData.v) < 0.005 ? Theme.amber : Theme.ov(0.06); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb119.color) } GradientStop { position: 1; color: Theme.btnBottom(gb119.color) } } border.color: Theme.lineSoft
                                 Text { anchors.centerIn: parent; text: i18n.t(modelData.t ?? "", i18n.lang); color: Math.abs(engine.width - modelData.v) < 0.005 ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.width = modelData.v } } } }
                     Text { Layout.fillWidth: true; text: i18n.t("Mid/side on the master before the fader: 100 % leaves the mix as it is, below narrows it toward mono, above lifts the side signal (watch the correlation).", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.WordWrap }
                     Item { Layout.fillHeight: true }

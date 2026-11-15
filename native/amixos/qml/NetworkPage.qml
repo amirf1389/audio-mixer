@@ -11,7 +11,8 @@ Item {
     property int view: 0   // 0 = remote control (OSC, phone remote), 1 = network audio and MIDI
     component Head: Text { color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
     component Note: Text { Layout.fillWidth: true; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap }
-    component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(56, bl.implicitWidth + 16); implicitHeight: 24; radius: 4; color: on ? onColor : Theme.ov(0.08); border.color: Theme.lineSoft
+    component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(56, bl.implicitWidth + 16); implicitHeight: 24; radius: 8; gradient: Gradient { GradientStop { position: 0; color: on ? Theme.btnTop(onColor) : Theme.ov(0.12) } GradientStop { position: 1; color: on ? Theme.btnBottom(onColor) : Theme.ov(0.035) } } color: on ? onColor : Theme.ov(0.08); border.color: Theme.lineSoft
+        Rectangle { anchors.fill: parent; anchors.margins: 1; radius: Math.max(0, parent.radius - 1); color: "transparent"; border.width: 1; border.color: Qt.rgba(1, 1, 1, parent.on ? 0.30 : 0.07) }
         Text { id: bl; anchors.centerIn: parent; text: i18n.t(label, i18n.lang); color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
     ColumnLayout {
         anchors.fill: parent; anchors.margins: 10; spacing: 8
@@ -20,13 +21,15 @@ Item {
                 Text { text: i18n.t("NETWORK:", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
                 Btn { objectName: "netViewControl"; label: i18n.t("REMOTE CONTROL", i18n.lang); on: page.view === 0; onClicked: page.view = 0 }
                 Btn { objectName: "netViewAudio"; label: i18n.t("AUDIO + MIDI", i18n.lang); on: page.view === 1; onColor: Theme.cyan; onClicked: page.view = 1 }
-                Rectangle { implicitWidth: devT.implicitWidth + 14; implicitHeight: 18; radius: 3; color: Qt.rgba(1, 0.7, 0.2, 0.18); border.color: Theme.amber
+                Btn { objectName: "netViewDante"; label: i18n.t("DANTE + CLOCK", i18n.lang); on: page.view === 2; onColor: "#ef4444"; onClicked: page.view = 2 }
+                Rectangle { id: gb116; implicitWidth: devT.implicitWidth + 14; implicitHeight: 18; radius: 7; color: Qt.rgba(1, 0.7, 0.2, 0.18); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb116.color) } GradientStop { position: 1; color: Theme.btnBottom(gb116.color) } } border.color: Theme.amber
                     Text { id: devT; anchors.centerIn: parent; text: i18n.t("IN DEVELOPMENT IN THIS VERSION", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } }
                 Text { text: i18n.t("OSC ", i18n.lang) + osc.status; color: osc.enabled ? Theme.emerald : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                 Item { Layout.fillWidth: true }
                 Text { text: i18n.t("RX ", i18n.lang) + osc.rx + i18n.t(" · TX ", i18n.lang) + osc.tx + (osc.lastClient ? i18n.t(" · client ", i18n.lang) + osc.lastClient : ""); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                 Btn { label: osc.enabled ? i18n.t("STOP SERVER", i18n.lang) : i18n.t("START SERVER", i18n.lang); on: !osc.enabled; onColor: Theme.emerald; onClicked: osc.enabled = !osc.enabled } } }
         AoipPanel { visible: page.view === 1; Layout.fillWidth: true; Layout.fillHeight: true }
+        DantePanel { visible: page.view === 2; Layout.fillWidth: true; Layout.fillHeight: true; onOpenAudio: page.view = 1 }
         RowLayout { visible: page.view === 0; Layout.fillWidth: true; Layout.fillHeight: true; spacing: 8
             Rectangle { Layout.preferredWidth: 400; Layout.fillHeight: true; radius: Theme.radius; color: Theme.card; border.color: Theme.line
                 ColumnLayout { anchors.fill: parent; anchors.margins: 12; spacing: 8
@@ -34,7 +37,7 @@ Item {
                     Note { text: i18n.t("The IPv4 cards of this computer. With REACH = LAN, pick the card the remote is on (or ANY to listen on all of them).", i18n.lang) }
                     Flow { Layout.fillWidth: true; spacing: 4
                         Btn { label: i18n.t("ANY CARD", i18n.lang); on: osc.allowLan && osc.bindAddress === ""; onColor: Theme.cyan; onClicked: osc.bindAddress = "" }
-                        Repeater { model: osc.interfaces; delegate: Btn { label: (modelData.kind === "wifi" ? "📶 " : modelData.kind === "ethernet" ? "🖧 " : modelData.kind === "loopback" ? "⟲ " : "") + i18n.t(modelData.name ?? "", i18n.lang) + "  " + modelData.ip; on: osc.bindAddress === modelData.ip; onColor: modelData.up ? Theme.emerald : Theme.amber; onClicked: osc.bindAddress = modelData.ip } } }
+                        Repeater { model: osc.interfaces; delegate: Btn { label: (modelData.kind === "wifi" ? "≋ " : modelData.kind === "ethernet" ? "⇄ " : modelData.kind === "loopback" ? "⟲ " : "") + i18n.t(modelData.name ?? "", i18n.lang) + "  " + modelData.ip; on: osc.bindAddress === modelData.ip; onColor: modelData.up ? Theme.emerald : Theme.amber; onClicked: osc.bindAddress = modelData.ip } } }
                     Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.lineSoft }
                     Head { text: i18n.t("OPEN SOUND CONTROL (UDP)", i18n.lang) }
                     RowLayout { spacing: 8; Text { Layout.preferredWidth: 110; text: i18n.t("RECEIVE PORT", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 } SpinBox { palette.base: Theme.deep; palette.text: Theme.ink; palette.button: Theme.cardRaised; palette.buttonText: Theme.ink; palette.highlight: Theme.orange; palette.mid: Theme.line; from: 1; to: 65535; value: osc.port; editable: true; onValueModified: osc.port = value; implicitWidth: 120 } }
@@ -42,7 +45,7 @@ Item {
                     RowLayout { spacing: 8; Text { Layout.preferredWidth: 110; text: i18n.t("REACH", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 } Btn { label: i18n.t("THIS COMPUTER", i18n.lang); on: !osc.allowLan; onColor: Theme.emerald; onClicked: osc.allowLan = false } Btn { label: i18n.t("LAN", i18n.lang); on: osc.allowLan; onColor: Theme.danger; onClicked: osc.allowLan = true } }
                     RowLayout { spacing: 8; Text { Layout.preferredWidth: 110; text: i18n.t("REMOTE ADDRESS", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 } Text { text: osc.remoteAddress; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 10; font.bold: true } Text { text: i18n.t("← type this into the remote (TouchOSC, Mixing Station, the Android app)", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
                     RowLayout { visible: osc.allowLan; spacing: 8; Text { Layout.preferredWidth: 110; text: i18n.t("ALLOWED IPs", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
-                        Rectangle { Layout.fillWidth: true; implicitHeight: 22; radius: 4; color: Theme.deep; border.color: Theme.lineSoft
+                        Rectangle { id: gb117; Layout.fillWidth: true; implicitHeight: 22; radius: 7; color: Theme.deep; gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb117.color) } GradientStop { position: 1; color: Theme.btnBottom(gb117.color) } } border.color: Theme.lineSoft
                             TextInput { anchors.fill: parent; anchors.margins: 5; text: osc.allowedIps; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; selectByMouse: true; onEditingFinished: osc.allowedIps = text
                                 Text { visible: !parent.text.length; text: i18n.t("empty = local policy: any private-network address, no public one · or list them: 192.168.1.20, 10.0.0.0/24", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 } } } }
                     Text { visible: osc.allowLan; Layout.fillWidth: true; text: i18n.t("LAN: anyone on the network can move the faders. OSC over UDP has no password and no encryption. Use it only on a network you own, and switch back to THIS COMPUTER afterwards.", i18n.lang); color: Theme.danger; font.family: Theme.mono; font.pixelSize: 7; font.bold: true; wrapMode: Text.WordWrap }
@@ -50,7 +53,7 @@ Item {
                     Head { text: i18n.t("ADDRESSES", i18n.lang) }
                     Repeater { model: osc.addresses; delegate: Text { text: modelData; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 7; Layout.fillWidth: true; wrapMode: Text.WordWrap } }
                     Item { Layout.fillHeight: true }
-                    Note { text: i18n.t("Works with TouchOSC, Mixing Station (OSC layout), Open Stage Control and anything that sends OSC 1.0. Faders take dB values. The phone remote (the Android app) and the daemon's HTTP API are the authenticated way in; OSC is for controllers on a closed network. Dante, AES67 and PTP clocking are not part of this build.", i18n.lang) } } }
+                    Note { text: i18n.t("Works with TouchOSC, Mixing Station (OSC layout), Open Stage Control and anything that sends OSC 1.0. Faders take dB values. The phone remote (the Android app) and the daemon's HTTP API are the authenticated way in; OSC is for controllers on a closed network. Network audio (AES67), Dante (through its sound card or AES67 mode) and the PTP clock are under AUDIO + MIDI and DANTE + CLOCK.", i18n.lang) } } }
             ColumnLayout { Layout.fillWidth: true; Layout.fillHeight: true; spacing: 8
             Rectangle { Layout.fillWidth: true; implicitHeight: remCol.implicitHeight + 24; radius: Theme.radius; color: Theme.card; border.color: remote.running ? Theme.emerald : Theme.line
                 property string shown: ""

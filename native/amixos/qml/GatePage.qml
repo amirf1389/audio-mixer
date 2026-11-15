@@ -33,7 +33,7 @@ Flickable {
                     delegate: ItemDelegate { width: parent.width; text: engine.stripAt(index, engine.stripTick) ? engine.stripAt(index, engine.stripTick).name : index; font.family: Theme.mono }
                     onActivated: page.strip = currentIndex
                 }
-                Rectangle { objectName: "closeNoiseBtn"; implicitWidth: cnT.implicitWidth + 20; implicitHeight: 24; radius: 4; color: Theme.ov(0.08); border.color: Theme.cyan   // CLOSE NOISE: gate set from the noise that is there now
+                Rectangle { id: gb36; objectName: "closeNoiseBtn"; implicitWidth: cnT.implicitWidth + 20; implicitHeight: 24; radius: 7; color: Theme.ov(0.08); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb36.color) } GradientStop { position: 1; color: Theme.btnBottom(gb36.color) } } border.color: Theme.cyan   // CLOSE NOISE: gate set from the noise that is there now
                     property string said: ""
                     Text { id: cnT; anchors.centerIn: parent; text: parent.said !== "" ? parent.said : i18n.t("CLOSE NOISE", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
                     MouseArea { anchors.fill: parent; onClicked: { const t = engine.closeNoise(page.strip); parent.said = t < 0 ? i18n.t("GATE AT ", i18n.lang) + t.toFixed(0) + " dB" : i18n.t("NO SIGNAL TO READ", i18n.lang); cnReset.restart() } }
@@ -42,7 +42,7 @@ Flickable {
                 Item { Layout.fillWidth: true }
                 Rectangle { implicitWidth: 90; implicitHeight: 24; radius: 12; color: page.ch.gateOn ? (page.open ? Qt.rgba(0.063, 0.725, 0.506, 0.2) : Qt.rgba(1, 0.165, 0.373, 0.2)) : Theme.ov(0.05); border.color: page.ch.gateOn ? (page.open ? Theme.emerald : Theme.danger) : Theme.lineSoft
                     Text { anchors.centerIn: parent; text: page.ch.gateOn ? (page.open ? i18n.t("OPEN", i18n.lang) : i18n.t("CLOSED", i18n.lang)) : i18n.t("BYPASS", i18n.lang); color: page.ch.gateOn ? (page.open ? Theme.emerald : Theme.danger) : Theme.dim; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } }
-                Rectangle { implicitWidth: 70; implicitHeight: 24; radius: 4; color: page.ch.gateOn ? Theme.pink : Theme.ov(0.08); Text { anchors.centerIn: parent; text: page.ch.gateOn ? i18n.t("ON", i18n.lang) : i18n.t("OFF", i18n.lang); color: page.ch.gateOn ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.apply("gateOn", !page.ch.gateOn) } }
+                Rectangle { id: gb37; implicitWidth: 70; implicitHeight: 24; radius: 7; color: page.ch.gateOn ? Theme.pink : Theme.ov(0.08); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb37.color) } GradientStop { position: 1; color: Theme.btnBottom(gb37.color) } } Text { anchors.centerIn: parent; text: page.ch.gateOn ? i18n.t("ON", i18n.lang) : i18n.t("OFF", i18n.lang); color: page.ch.gateOn ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.apply("gateOn", !page.ch.gateOn) } }
             }
             RowLayout {
                 Layout.fillWidth: true; spacing: 10
@@ -69,7 +69,7 @@ Flickable {
             Flow { Layout.fillWidth: true; spacing: 4
                 Repeater {
                     model: [ { n: "VOCAL MIC", p: [-45, -60, 1, 80, 150] }, { n: "DRUM CLOSE MIC", p: [-30, -80, 0.3, 30, 60] }, { n: "GUITAR AMP HUM", p: [-50, -40, 2, 120, 250] }, { n: "GENTLE EXPAND", p: [-55, -12, 5, 200, 400] } ]
-                    delegate: Rectangle { implicitWidth: pl.implicitWidth + 14; implicitHeight: 20; radius: 4; color: Theme.ov(0.08); Text { id: pl; anchors.centerIn: parent; text: i18n.t(modelData.n ?? "", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setGate(page.strip, true, modelData.p[0], modelData.p[1], modelData.p[2], modelData.p[3], modelData.p[4]) } }
+                    delegate: Rectangle { id: gb38; implicitWidth: pl.implicitWidth + 14; implicitHeight: 20; radius: 7; color: Theme.ov(0.08); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb38.color) } GradientStop { position: 1; color: Theme.btnBottom(gb38.color) } } Text { id: pl; anchors.centerIn: parent; text: i18n.t(modelData.n ?? "", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setGate(page.strip, true, modelData.p[0], modelData.p[1], modelData.p[2], modelData.p[3], modelData.p[4]) } }
                 }
             }
         }

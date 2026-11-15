@@ -12,7 +12,8 @@ Item {
     component Note: Text { Layout.fillWidth: true; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap }
     component Lab: Text { Layout.preferredWidth: 92; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
     component Val: Text { color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8 }
-    component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(34, bl.implicitWidth + 14); implicitHeight: 22; radius: 4; color: on ? onColor : Theme.ov(0.07); border.color: on ? onColor : Theme.line
+    component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(34, bl.implicitWidth + 14); implicitHeight: 22; radius: 8; gradient: Gradient { GradientStop { position: 0; color: on ? Theme.btnTop(onColor) : Theme.ov(0.12) } GradientStop { position: 1; color: on ? Theme.btnBottom(onColor) : Theme.ov(0.035) } } color: on ? onColor : Theme.ov(0.07); border.color: on ? onColor : Theme.line
+        Rectangle { anchors.fill: parent; anchors.margins: 1; radius: Math.max(0, parent.radius - 1); color: "transparent"; border.width: 1; border.color: Qt.rgba(1, 1, 1, parent.on ? 0.30 : 0.07) }
         Text { id: bl; anchors.centerIn: parent; text: i18n.t(parent.label, i18n.lang); color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
     component Card: Rectangle { Layout.fillWidth: true; Layout.fillHeight: true; radius: Theme.radius; color: Theme.card; border.color: Theme.line; clip: true }
     readonly property var st: net.stats
@@ -25,7 +26,7 @@ Item {
 
     ColumnLayout {
         anchors.fill: parent; spacing: 8
-        Rectangle { visible: net.message !== ""; Layout.fillWidth: true; implicitHeight: 26; radius: 6; color: Theme.ov(0.06); border.color: Theme.danger
+        Rectangle { id: gb2; visible: net.message !== ""; Layout.fillWidth: true; implicitHeight: 26; radius: 7; color: Theme.ov(0.06); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb2.color) } GradientStop { position: 1; color: Theme.btnBottom(gb2.color) } } border.color: Theme.danger
             Text { anchors.fill: parent; anchors.leftMargin: 10; verticalAlignment: Text.AlignVCenter; text: net.message; color: Theme.danger; font.family: Theme.mono; font.pixelSize: 8; elide: Text.ElideRight } }
         RowLayout { Layout.fillWidth: true; Layout.fillHeight: true; spacing: 8
             // ------------------------------------------------------------------ SEND

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Plain HTTP only where the console lives: this phone's own loopback and the local network the console is on (the remote talks to
+     http://<console-ip>:<port>). Android cannot list a whole private range here, so the base allows clear text for the remote's
+     LAN addresses while every public host must use HTTPS through the system's trusted certificates. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors><certificates src="system" /></trust-anchors>
+    </base-config>
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">amfb.audio</domain>
+        <domain includeSubdomains="true">github.com</domain>
+        <domain includeSubdomains="true">githubusercontent.com</domain>
+    </domain-config>
+</network-security-config>

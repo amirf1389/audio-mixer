@@ -12,7 +12,8 @@ Item {
     function permLine(row) { var a = [], d = []; for (var p = 0; p < access.perms.length; ++p) { if (row && row[access.perms[p]]) a.push(access.perms[p].toUpperCase()); else d.push(access.perms[p].toUpperCase()) } return (a.length ? "ALLOWED: " + a.join(" · ") : "") + (d.length ? "   LOCKED: " + d.join(" · ") : "") }
     function roleName(id) { for (let i = 0; i < access.roles.length; ++i) if (access.roles[i].id === id) return access.roles[i].name; return id }
     component Head: Text { color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
-    component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(56, bl.implicitWidth + 16); implicitHeight: 24; radius: 4; color: on ? onColor : Theme.ov(0.08); border.color: Theme.lineSoft
+    component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(56, bl.implicitWidth + 16); implicitHeight: 24; radius: 8; gradient: Gradient { GradientStop { position: 0; color: on ? Theme.btnTop(onColor) : Theme.ov(0.12) } GradientStop { position: 1; color: on ? Theme.btnBottom(onColor) : Theme.ov(0.035) } } color: on ? onColor : Theme.ov(0.08); border.color: Theme.lineSoft
+        Rectangle { anchors.fill: parent; anchors.margins: 1; radius: Math.max(0, parent.radius - 1); color: "transparent"; border.width: 1; border.color: Qt.rgba(1, 1, 1, parent.on ? 0.30 : 0.07) }
         Text { id: bl; anchors.centerIn: parent; text: i18n.t(label, i18n.lang); color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
     ColumnLayout {
         anchors.fill: parent; anchors.margins: 10; spacing: 8

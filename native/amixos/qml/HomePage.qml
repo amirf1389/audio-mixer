@@ -38,10 +38,10 @@ Flickable {
                 ColumnLayout { spacing: 6
                     DspModeSwitch {}
                     RowLayout { spacing: 6
-                        Rectangle { implicitWidth: fsT.implicitWidth + 16; implicitHeight: 24; radius: 4; color: Theme.ov(0.06); border.color: Theme.orange
+                        Rectangle { id: gb45; implicitWidth: fsT.implicitWidth + 16; implicitHeight: 24; radius: 7; color: Theme.ov(0.06); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb45.color) } GradientStop { position: 1; color: Theme.btnBottom(gb45.color) } } border.color: Theme.orange
                             Text { id: fsT; anchors.centerIn: parent; text: i18n.t("FULL SCORE", i18n.lang); color: Theme.orange; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
                             MouseArea { objectName: "homeFullScore"; anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: page.go("score") } }
-                        Rectangle { implicitWidth: anT.implicitWidth + 16; implicitHeight: 24; radius: 4; color: Theme.ov(0.06); border.color: Theme.cyan
+                        Rectangle { id: gb46; implicitWidth: anT.implicitWidth + 16; implicitHeight: 24; radius: 7; color: Theme.ov(0.06); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb46.color) } GradientStop { position: 1; color: Theme.btnBottom(gb46.color) } } border.color: Theme.cyan
                             Text { id: anT; anchors.centerIn: parent; text: i18n.t("MASTER ANALYZER", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
                             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { if (typeof root !== "undefined" && root.openAnalyzer) root.openAnalyzer() } } } } } } }
         GridLayout {
@@ -60,7 +60,12 @@ Flickable {
                     { id: "sys", t: "Settings", s: "Engine, saved console state, about." }
                 ]
                 delegate: Rectangle {
-                    Layout.fillWidth: true; implicitHeight: 92; radius: Theme.radius; color: tileArea.pressed ? Theme.ov(0.08) : Theme.card; border.color: tileArea.containsMouse ? Theme.orange : Theme.line
+                    id: tile
+                    readonly property color hue: Theme.stripColors[index % Theme.stripColors.length]   // every tile its own colour
+                    Layout.fillWidth: true; implicitHeight: 92; radius: Theme.radius; color: tileArea.pressed ? Theme.ov(0.08) : Theme.card; border.color: tileArea.containsMouse ? hue : Theme.line
+                    Rectangle { anchors.fill: parent; radius: parent.radius
+                        gradient: Gradient { orientation: Gradient.Horizontal; GradientStop { position: 0; color: Qt.rgba(tile.hue.r, tile.hue.g, tile.hue.b, tileArea.containsMouse ? 0.28 : 0.16) } GradientStop { position: 0.7; color: "transparent" } } }
+                    Rectangle { width: 3; radius: 2; height: parent.height - 24; anchors.verticalCenter: parent.verticalCenter; x: 0; color: tile.hue }
                     // top-aligned: every card's title sits on the same line, whatever the length of its description
                     ColumnLayout { anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 14; spacing: 4
                         Text { text: i18n.t(modelData.t ?? "", i18n.lang); color: Theme.ink; font.family: Theme.sans; font.pixelSize: 15; font.bold: true }
@@ -76,13 +81,14 @@ Flickable {
         Flow {
             Layout.fillWidth: true; spacing: 8
             Repeater {
-                model: { const want = ["mixer", "score", "asio", "scenes", "fx", "master", "media", "plugins", "help"]; const all = engine.pages; const out = [];
+                model: { const want = ["mixer", "assistant", "score", "amp", "store", "asio", "scenes", "fx", "master", "media", "plugins", "help"]; const all = engine.pages; const out = [];
                          for (const id of want) for (const p of all) if (p.id === id) out.push(p); return out }
                 delegate: Rectangle {
                     implicitWidth: qRow.implicitWidth + 24; implicitHeight: 36; radius: Theme.radius
                     color: qa.pressed ? Theme.ov(0.12) : (qa.containsMouse ? Theme.ov(0.07) : Theme.card); border.color: qa.containsMouse ? Theme.orange : Theme.line
                     Row { id: qRow; anchors.centerIn: parent; spacing: 8
-                        Text { text: modelData.icon; color: Theme.orange; font.pixelSize: 13; anchors.verticalCenter: parent.verticalCenter }
+                        Icon { width: 15; height: 15; anchors.verticalCenter: parent.verticalCenter; name: modelData.id; color: Theme.harm(Theme.groupColor(modelData.group)); visible: has }
+                        Text { visible: !parent.children[0].has; text: modelData.icon; color: Theme.orange; font.pixelSize: 13; anchors.verticalCenter: parent.verticalCenter }
                         Text { text: i18n.t(modelData.text ?? "", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 10; font.bold: true; anchors.verticalCenter: parent.verticalCenter } }
                     MouseArea { id: qa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: page.go(modelData.id) }
                 }

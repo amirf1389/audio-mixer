@@ -17,8 +17,20 @@ android {
         externalNativeBuild { cmake { cppFlags += listOf("-std=c++20", "-fexceptions", "-frtti"); arguments += listOf("-DANDROID_STL=c++_shared") } }
     }
     externalNativeBuild { cmake { path = file("src/main/cpp/CMakeLists.txt"); version = "3.22.1" } }
+    // RELEASE SIGNING: an APK signed with Android's public debug certificate is the main reason Play Protect warns about an app. A release
+    // is signed with AMFB Audio's own key, read at build time from the environment (never stored in the repository):
+    //   AMFX1_KEYSTORE (path to the .jks), AMFX1_KEYSTORE_PASSWORD, AMFX1_KEY_ALIAS, AMFX1_KEY_PASSWORD
+    // Without them a release still builds, debug-signed, for local testing only: never hand that one out. See docs/android-play-protect.md.
+    val releaseKeystore = System.getenv("AMFX1_KEYSTORE")?.takeIf { it.isNotBlank() && file(it).exists() }
+    signingConfigs {
+        if (releaseKeystore != null) create("release") {
+            storeFile = file(releaseKeystore); storePassword = System.getenv("AMFX1_KEYSTORE_PASSWORD")
+            keyAlias = System.getenv("AMFX1_KEY_ALIAS"); keyPassword = System.getenv("AMFX1_KEY_PASSWORD")
+            enableV2Signing = true; enableV3Signing = true
+        }
+    }
     buildTypes {
-        release { isMinifyEnabled = false; signingConfig = signingConfigs.getByName("debug") }   // replace with your own keystore for the Play Store / sideload builds
+        release { isMinifyEnabled = false; signingConfig = if (releaseKeystore != null) signingConfigs.getByName("release") else signingConfigs.getByName("debug") }
     }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = "17" }

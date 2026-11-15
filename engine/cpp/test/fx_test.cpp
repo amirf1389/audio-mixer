@@ -17,7 +17,7 @@ using namespace am;
 static float peak(const std::vector<float>& v, std::size_t a, std::size_t b) { float p = 0; for (std::size_t i = a; i < b && i < v.size(); ++i) p = std::max(p, std::fabs(v[i])); return p; }
 
 int main() {
-  CHECK(fx::catalog().size() == 43 && fx::make("nope", 48000) == nullptr);
+  CHECK(fx::catalog().size() == 44 && fx::make("nope", 48000) == nullptr);
   { auto r = fx::make("reverb", 48000); CHECK(r && std::string(r->kind()) == "reverb" && r->params().size() == 4 && r->text("decay", 0) == "0.3 s");
     std::vector<float> L(48000, 0.f), R(48000, 0.f); L[0] = R[0] = 1.f; r->set("decay", 0.2); r->process(L.data(), R.data(), L.size());
     CHECK(peak(L, 1000, 6000) > 0.02f && peak(L, 30000, 48000) < peak(L, 2000, 6000) * 0.5f);   // rings, then decays
@@ -39,7 +39,7 @@ int main() {
     rt.setBusProcessor(0, nullptr); for (int k = 0; k < 2; ++k) rt.onBlock(quiet, outs, n); }
   std::printf("fx_test: reverb rings and decays, delay repeats on time (ping-pong crosses), chorus modulates, drive saturates, bypass, bus return OK\n");
   { // the ten effects as rack plug-ins: each changes a tone, stays finite and below +12 dB, passes it untouched when bypassed, and keeps its state through a save / load
-    CHECK(am::fx::catalog().size() == 43); const std::size_t n = 4800; std::vector<float> src(n), l(n), r(n); for (std::size_t i = 0; i < n; ++i) src[i] = 0.4f * static_cast<float>(std::sin(2 * 3.14159265 * 440 * static_cast<double>(i) / 48000) + 0.5 * std::sin(2 * 3.14159265 * 5000 * static_cast<double>(i) / 48000));
+    CHECK(am::fx::catalog().size() == 44); const std::size_t n = 4800; std::vector<float> src(n), l(n), r(n); for (std::size_t i = 0; i < n; ++i) src[i] = 0.4f * static_cast<float>(std::sin(2 * 3.14159265 * 440 * static_cast<double>(i) / 48000) + 0.5 * std::sin(2 * 3.14159265 * 5000 * static_cast<double>(i) / 48000));
     for (const auto& [kind, name] : am::fx::catalog()) { auto p = am::fx::FxPlugin::make(kind, 48000); CHECK(p && p->info().format == "FX" && p->params().size() >= 3);
       if (kind == "postamp") p->setParam(0, 0.9); if (kind == "preamp") p->setParam(0, 0.4);   // these two are neutral (unity) until a knob is turned
       const float* in[2] = {src.data(), src.data()}; float* out[2] = {l.data(), r.data()}; for (int k = 0; k < 3; ++k) p->process(in, out, static_cast<int>(n));
@@ -138,7 +138,14 @@ int main() {
     run(1, b, a, n, hz); CHECK(n >= 1 && std::fabs(hz - 2137.0) < 25.0 && a < b * 0.25);       // the howl at 2137 Hz: found within 25 Hz and cut by more than 12 dB
     run(0, b, a, n, hz); CHECK(n == 0 && std::fabs(a / b - 1.0) < 0.1);                         // room noise only: nothing is touched
     run(2, b, a, n, hz); CHECK(n == 0 && a > b * 0.8);                                         // a tone that keeps moving (a melody, a sweep) is not feedback
-    auto fx = am::fx::make("antifeedback", 48000); CHECK(fx && fx->params().size() == 4 && fx->text("mode", 1.0) == "LIVE" && fx->text("mode", 0.0) == "HOLD" && fx->text("depth", 1.0) == "-30 dB"); }
+    auto fx = am::fx::make("antifeedback", 48000); CHECK(fx && fx->params().size() == 7 && fx->text("fixed", 0.25) == "6 / 24" && fx->params()[6].value == 0.25 && fx->text("program", 0.0) == "SPEECH" && fx->text("lift", 0.0) == "2 s" && fx->text("mode", 1.0) == "LIVE" && fx->text("mode", 0.0) == "HOLD" && fx->text("depth", 1.0) == "-30 dB"); }
+  { // SUB SYNTH: an 80 Hz bass gains a 40 Hz sub; silence stays silent
+    auto fx = am::fx::make("subsynth", 48000); const std::size_t N = 48000; std::vector<float> l(N), r(N);
+    for (std::size_t k = 0; k < N; ++k) l[k] = r[k] = static_cast<float>(0.5 * std::sin(2 * 3.141592653589793 * 80.0 * static_cast<double>(k) / 48000));
+    fx->set("amount", 1.0); fx->process(l.data(), r.data(), N);
+    auto goertzel = [&](double f) { double s1 = 0, s2 = 0; const double c = 2 * std::cos(2 * 3.141592653589793 * f / 48000); for (std::size_t k = N / 2; k < N; ++k) { const double s0 = l[k] + c * s1 - s2; s2 = s1; s1 = s0; } return std::sqrt(s1 * s1 + s2 * s2 - c * s1 * s2) / (N / 4); };
+    const double sub = goertzel(40.0), fund = goertzel(80.0); if (!(sub > 0.05 * fund)) std::fprintf(stderr, "SUB SYNTH: 40 Hz %.4f against 80 Hz %.4f\n", sub, fund); CHECK(sub > 0.05 * fund);
+    auto q = am::fx::make("subsynth", 48000); std::vector<float> z(4800, 0.f), z2(4800, 0.f); q->process(z.data(), z2.data(), 4800); for (float v : z) CHECK(v == 0.f); }
   {   // SAMPLE PLAYER: off = silence added; PLAY on = the chosen sample added from the top; it stops at its end without LOOP and goes round with it
     auto fx = am::fx::make("sampler", 48000); CHECK(fx && fx->params().size() == 4);
     CHECK(fx->text("sample", 0.0).rfind("1 ", 0) == 0 && fx->text("play", 1.0) == "ON" && fx->text("level", 0.0) == "-inf dB");
