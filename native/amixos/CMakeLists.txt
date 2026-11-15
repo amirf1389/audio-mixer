@@ -83,6 +83,8 @@ qt_add_qml_module(amixos
         qml/ScorePage.qml
         qml/AmpPage.qml
         qml/Aurora.qml
+        qml/Icon.qml
+        qml/StorePage.qml
         qml/DantePanel.qml
         qml/AssistantPage.qml
         qml/SetupPage.qml

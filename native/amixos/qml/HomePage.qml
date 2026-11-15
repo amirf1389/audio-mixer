@@ -81,13 +81,14 @@ Flickable {
         Flow {
             Layout.fillWidth: true; spacing: 8
             Repeater {
-                model: { const want = ["mixer", "assistant", "score", "amp", "asio", "scenes", "fx", "master", "media", "plugins", "help"]; const all = engine.pages; const out = [];
+                model: { const want = ["mixer", "assistant", "score", "amp", "store", "asio", "scenes", "fx", "master", "media", "plugins", "help"]; const all = engine.pages; const out = [];
                          for (const id of want) for (const p of all) if (p.id === id) out.push(p); return out }
                 delegate: Rectangle {
                     implicitWidth: qRow.implicitWidth + 24; implicitHeight: 36; radius: Theme.radius
                     color: qa.pressed ? Theme.ov(0.12) : (qa.containsMouse ? Theme.ov(0.07) : Theme.card); border.color: qa.containsMouse ? Theme.orange : Theme.line
                     Row { id: qRow; anchors.centerIn: parent; spacing: 8
-                        Text { text: modelData.icon; color: Theme.orange; font.pixelSize: 13; anchors.verticalCenter: parent.verticalCenter }
+                        Icon { width: 15; height: 15; anchors.verticalCenter: parent.verticalCenter; name: modelData.id; color: Theme.harm(Theme.groupColor(modelData.group)); visible: has }
+                        Text { visible: !parent.children[0].has; text: modelData.icon; color: Theme.orange; font.pixelSize: 13; anchors.verticalCenter: parent.verticalCenter }
                         Text { text: i18n.t(modelData.text ?? "", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 10; font.bold: true; anchors.verticalCenter: parent.verticalCenter } }
                     MouseArea { id: qa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: page.go(modelData.id) }
                 }

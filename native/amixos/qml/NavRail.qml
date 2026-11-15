@@ -43,7 +43,9 @@ Rectangle {
                         Rectangle { anchors.fill: parent; radius: parent.radius; visible: !parent.lit && ra.containsMouse; color: Qt.rgba(btn.tint.r, btn.tint.g, btn.tint.b, 0.10) }
                         Column {
                             anchors.centerIn: parent; spacing: 3
-                            Text { anchors.horizontalCenter: parent.horizontalCenter; text: p.icon; color: p.ready ? Theme.groupColor(p.group) : Theme.dim; font.pixelSize: 16; opacity: p.ready ? 1 : 0.55 }
+                            Item { anchors.horizontalCenter: parent.horizontalCenter; width: 20; height: 20; opacity: p.ready ? 1 : 0.55
+                                Icon { id: rIc; anchors.fill: parent; name: p.id; color: btn.lit ? Theme.harm(Theme.groupColor(p.group)) : (p.ready ? Qt.rgba(Theme.groupColor(p.group).r, Theme.groupColor(p.group).g, Theme.groupColor(p.group).b, 0.85) : Theme.dim) }
+                                Text { visible: !rIc.has; anchors.centerIn: parent; text: p.icon; color: p.ready ? Theme.groupColor(p.group) : Theme.dim; font.pixelSize: 16 } }
                             Text { anchors.horizontalCenter: parent.horizontalCenter; text: i18n.t(p.text, i18n.lang); color: rail.current === p.id ? Theme.ink : (p.ready ? Theme.muted : Theme.dim); font.family: Theme.mono; font.pixelSize: 7; font.bold: true; width: col.width - 14; horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight }
                         }
                         MouseArea { id: ra; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: rail.picked(p.id) }

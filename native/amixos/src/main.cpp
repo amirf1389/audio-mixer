@@ -832,7 +832,7 @@ int main(int argc, char* argv[]) {
         }
         frame.setCardType(0, "aec-in"); frame.setCardType(1, "digital-in"); frame.setCardType(2, "analog-out"); frame.setCardType(3, "hybrid");
         frame.setPhantom(0, 0, true); frame.setPhantom(0, 1, true); frame.setChannelStrip(0, 0, 0); frame.setChannelStrip(0, 1, 1); frame.setLogicIn(2, true); frame.setLogicIn(7, true);   // a populated frame for the I/O FRAME picture
-        for (const char* id : {"home", "frame", "engctl", "delay", "cloud", "cascade", "mixer", "dsp", "dyn", "gate", "bus", "dca", "scenes", "presets", "routing", "renew", "arrange", "io", "meter", "score", "amp", "assistant", "lufs", "sys", "fx", "osc", "phase", "acoustics", "surround", "master", "rtaeq", "miceq", "live", "tools", "calib", "boot", "help", "acct", "access", "admin", "ai", "plugins", "network", "media", "asio", "samples", "rtaeq", "bluetooth"}) {
+        for (const char* id : {"home", "frame", "engctl", "delay", "cloud", "cascade", "mixer", "dsp", "dyn", "gate", "bus", "dca", "scenes", "presets", "routing", "renew", "arrange", "io", "meter", "score", "amp", "assistant", "store", "lufs", "sys", "fx", "osc", "phase", "acoustics", "surround", "master", "rtaeq", "miceq", "live", "tools", "calib", "boot", "help", "acct", "access", "admin", "ai", "plugins", "network", "media", "asio", "samples", "rtaeq", "bluetooth"}) {
           if (QString::fromLatin1(id) == "rtaeq") { QVariantList golden; for (double g : {1.0, 5.0, 3.0, 3.0, 4.0, 2.0, 2.0, 3.0, 3.0, 1.0}) golden << g; engine.setGraphicEq(0, golden, true); }   // the beta's Golden EQ on the shot
           win->setProperty("current", QString::fromLatin1(id)); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
           const QImage img = win->grabWindow(); img.save(shots + "/" + id + ".png"); std::printf("amixos --shots: %s %dx%d\n", id, img.width(), img.height());
@@ -857,6 +857,11 @@ int main(int argc, char* argv[]) {
             win->setProperty("current", "network"); QList<QObject*> nps; for (int k = 0; k < 40 && nps.isEmpty(); ++k) { QCoreApplication::processEvents(QEventLoop::AllEvents, 50); nps = win->findChildren<QObject*>("networkPage"); } for (QObject* o : nps) o->setProperty("view", 2); for (int k = 0; k < 10; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); std::printf("amixos --shots: %d network page(s)\n", int(nps.size()));
             win->grabWindow().save(shots + "/network-dante.png"); std::printf("amixos --shots: network-dante (%d PTP clocks)\n", int(ms.size()));
             for (QObject* o : nps) o->setProperty("view", 0); engine.simulateDevices(real); }
+          if (QString::fromLatin1(id) == "store") {   // STORE: every effect and extension listed; ADD VST adds a folder to the scan
+            QObject* sp = win->findChild<QObject*>("storePage"); const int n = sp ? sp->property("items").toList().size() : 0;
+            const QString vdir = QDir::tempPath() + "/amixos-store-vst"; QDir().mkpath(vdir); settings.addVstDir(vdir); const bool added = settings.vstDirs().contains(vdir);
+            if (n < 46 || !added) { std::fprintf(stderr, "amixos --shots: the STORE is wrong (%d items, folder added %d)\n", n, added); std::exit(160); }
+            std::printf("amixos --shots: store (%d items, ADD VST folder ok)\n", n); }
           if (QString::fromLatin1(id) == "assistant") {   // the assistant answers three questions from the live console
             QObject* as = win->findChild<QObject*>("assistantPage");
             if (as) for (const char* q : {"Why is there no sound?", "How does my mix sound?", "Set up a sub and tops"}) QMetaObject::invokeMethod(as, "ask", Q_ARG(QVariant, QString::fromLatin1(q)));

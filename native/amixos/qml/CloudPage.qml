@@ -45,6 +45,9 @@ Flickable {
         Card {
             title: page.t("LOCAL STORE · ON THIS COMPUTER"); tone: Theme.cyan
             property int rev: 0
+            Rectangle { objectName: "openStoreBtn"; implicitWidth: osT.implicitWidth + 28; implicitHeight: 30; radius: 15; color: Theme.harm(Theme.accent)
+                Text { id: osT; anchors.centerIn: parent; text: page.t("OPEN THE STORE ›"); color: "#0b0f14"; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
+                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { if (typeof root !== "undefined") root.current = "store" } } }
             Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.muted; font.pixelSize: 10
                    text: page.t("Extensions and built-in effects installed with AmF X1. Switch one off to take it out of the console; switch it on to bring it back. Nothing is downloaded from here.") }
             GridLayout {
