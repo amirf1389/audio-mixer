@@ -258,7 +258,8 @@ class Engine : public QObject {
   QVariantMap autoDetectFor(const QString& prefer) const;
   void annotateAsio(QVariantMap& m, bool probed);
   void freshInstallReset();   // install.id changed: clear the console state of an earlier install
-  QString startNote_;         // why the start state differs from what was saved (shown once in the status)   // universal ASIO detection: identity, status, remembered channel counts
+  QString startNote_;
+  QVariantMap ampUi_[64];     // the AMP page settings per output (with the name), saved with the console         // why the start state differs from what was saved (shown once in the status)   // universal ASIO detection: identity, status, remembered channel counts
   // STEREO PAIR: strips 1+2, 3+4 ... as one stereo channel. matchStereoPair() gives the partner the same channel processing (EQ, gate, compressor,
   // limiter, crossover, delay) and the same rack (every plug-in with its settings and bypass), panned to the other side. While the two are
   // LINKED, a plug-in put in, taken out, bypassed or adjusted on one is done on the other too. Each side runs its own copy of a plug-in
@@ -425,6 +426,13 @@ class Engine : public QObject {
   Q_INVOKABLE void setDeviceEnabled(const QString& backend, const QString& id, bool on);   // OFF: never auto-picked, not opened
   Q_INVOKABLE void setInputRoute(int strip, int input);
   Q_INVOKABLE void setOutputRoute(int out, int source);
+  // AMPLIFIER / SYSTEM PROCESSOR (the AMP page): one stage per device output, after the routing. Map keys: on, gainDb, mute, invert, delayMs,
+  // hpOrder, hpHz, lpOrder, lpHz, type (0 Butterworth, 1 Linkwitz-Riley, 2 Bessel), limitOn, limitDb, releaseMs, name
+  Q_INVOKABLE QVariantMap ampState(int out) const;
+  Q_INVOKABLE void setAmp(int out, const QVariantMap& p);
+  Q_INVOKABLE QVariantList ampResponse(int out) const;   // [{hz, db}] of the crossover legs, 20 Hz .. 20 kHz
+  Q_INVOKABLE QVariantList ampMeters() const;            // [{pk (dBFS), gr (dB)}] per output
+  Q_INVOKABLE int ampOutputs() const;                    // outputs shown: the device's, or 8 when nothing runs
   Q_INVOKABLE void resetRouting();                      // input s -> strip s, monitor on 1-2, bus k on 3+2k / 4+2k
   Q_INVOKABLE void setMonitor(int source, double db, bool dim, bool mono, bool mute);
   Q_INVOKABLE void setMonitorSync(bool on);   // SYNC: master and monitor faders move together by the same dB
@@ -567,6 +575,7 @@ class Engine : public QObject {
  signals:
   void compTargetChanged();
   void stateChanged();
+  void ampChanged();
   void devicesChanged();
   void hotplug(bool added, const QString& what);   // a device appeared (added) or went away
   void stripsChanged();

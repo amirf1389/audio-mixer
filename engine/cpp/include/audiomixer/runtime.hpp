@@ -16,6 +16,7 @@
 #include <string>
 #include <vector>
 
+#include "audiomixer/amp.hpp"
 #include "audiomixer/dsp.hpp"
 #include "audiomixer/engine.hpp"
 
@@ -89,6 +90,7 @@ struct Snapshot {
   double monitorPk[2];                       // what the control room hears, after the monitor section
   double momentary, shortTerm, integrated, lra, truePeak, correlation, autoLevelDb;
   std::uint64_t blocks, frames, xruns;
+  double ampPk[64], ampGrDb[64];             // the amplifier stage of each output: its peak after processing and the limiter's gain reduction (dB)
   double loadPct, blockUs, maxBlockUs, jitterUs;   // DSP time of the last block as % of its duration, its microseconds, the worst since start, the period jitter
 };
 
@@ -156,6 +158,10 @@ class Runtime {
   static constexpr int kSrcOff = 0, kSrcMasterL = 1, kSrcMasterR = 2, kSrcMonL = 3, kSrcMonR = 4, kSrcBus0L = 5;
   void setInputRoute(int strip, int input);
   void setOutputRoute(int out, int source);
+  // THE AMPLIFIER STAGE of output `out` (see amp.hpp): kept across open() / close(); off by default (the output passes bit-exact)
+  void setAmp(int out, const AmpParams& p);
+  AmpParams amp(int out) const;
+  double ampResponseDb(int out, double hz) const;
   void setTrimDb(int strip, double db);
   // INSERTS: external processors (VST3 plug-ins) on a strip, after the built-in channel DSP and before the fader. The chain is swapped
   // whole from the UI thread; the audio thread keeps its own reference for the block, so a removed plug-in stays alive until the block ends.
@@ -196,6 +202,7 @@ class Runtime {
 
   Mixer mixer_; std::unique_ptr<Backend> backend_; std::string backendName_;
   int nIn_ = 0, nOut_ = 0; bool running_ = false;
+  AmpChannel amp_[64]; AmpParams ampUi_[64];   // the audio thread's stage, and the UI's copy of what was set
   std::vector<float> silence_, left_, right_;
   int monSrc_ = 0; double monGainTarget_ = 1, monGain_ = 1; bool monMono_ = false; double monPk_[2] = {0, 0};   // audio thread only
   std::atomic<long> toneLeft_{0}, toneTotal_{0}; double tonePhase_ = 0;

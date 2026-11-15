@@ -832,10 +832,23 @@ int main(int argc, char* argv[]) {
         }
         frame.setCardType(0, "aec-in"); frame.setCardType(1, "digital-in"); frame.setCardType(2, "analog-out"); frame.setCardType(3, "hybrid");
         frame.setPhantom(0, 0, true); frame.setPhantom(0, 1, true); frame.setChannelStrip(0, 0, 0); frame.setChannelStrip(0, 1, 1); frame.setLogicIn(2, true); frame.setLogicIn(7, true);   // a populated frame for the I/O FRAME picture
-        for (const char* id : {"home", "frame", "engctl", "delay", "cloud", "cascade", "mixer", "dsp", "dyn", "gate", "bus", "dca", "scenes", "presets", "routing", "renew", "arrange", "io", "meter", "score", "lufs", "sys", "fx", "osc", "phase", "acoustics", "surround", "master", "rtaeq", "miceq", "live", "tools", "calib", "boot", "help", "acct", "access", "admin", "ai", "plugins", "network", "media", "asio", "samples", "rtaeq", "bluetooth"}) {
+        for (const char* id : {"home", "frame", "engctl", "delay", "cloud", "cascade", "mixer", "dsp", "dyn", "gate", "bus", "dca", "scenes", "presets", "routing", "renew", "arrange", "io", "meter", "score", "amp", "assistant", "lufs", "sys", "fx", "osc", "phase", "acoustics", "surround", "master", "rtaeq", "miceq", "live", "tools", "calib", "boot", "help", "acct", "access", "admin", "ai", "plugins", "network", "media", "asio", "samples", "rtaeq", "bluetooth"}) {
           if (QString::fromLatin1(id) == "rtaeq") { QVariantList golden; for (double g : {1.0, 5.0, 3.0, 3.0, 4.0, 2.0, 2.0, 3.0, 3.0, 1.0}) golden << g; engine.setGraphicEq(0, golden, true); }   // the beta's Golden EQ on the shot
           win->setProperty("current", QString::fromLatin1(id)); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
           const QImage img = win->grabWindow(); img.save(shots + "/" + id + ".png"); std::printf("amixos --shots: %s %dx%d\n", id, img.width(), img.height());
+          if (QString::fromLatin1(id) == "amp") {   // AMP / SYSTEM: a sub on output 3, tops on 1-2, a delayed fill; the stage of output 1 is checked against the engine
+            engine.setAmp(0, {{"on", true}, {"name", "TOPS L"}, {"hpOrder", 4}, {"hpHz", 100.0}, {"limitOn", true}, {"limitDb", -2.0}}); engine.setAmp(1, {{"on", true}, {"name", "TOPS R"}, {"hpOrder", 4}, {"hpHz", 100.0}, {"limitOn", true}, {"limitDb", -2.0}});
+            engine.setAmp(2, {{"on", true}, {"name", "SUB"}, {"lpOrder", 4}, {"lpHz", 100.0}, {"hpOrder", 2}, {"hpHz", 30.0}, {"delayMs", 2.9}}); engine.setAmp(3, {{"on", true}, {"name", "FRONT FILL"}, {"hpOrder", 2}, {"hpHz", 150.0}, {"delayMs", 12.5}, {"gainDb", -4.0}});
+            const QVariantMap a0 = engine.ampState(0); const QVariantList r = engine.ampResponse(2); double at40 = 0, at2k = 0; for (const QVariant& v : r) { const QVariantMap m = v.toMap(); if (std::fabs(m["hz"].toDouble() - 40) < 4) at40 = m["db"].toDouble(); if (std::fabs(m["hz"].toDouble() - 2000) < 150) at2k = m["db"].toDouble(); }
+            if (!a0["on"].toBool() || a0["name"] != "TOPS L" || at40 < -6 || at2k > -40 || !QSettings().value("console/state").toString().contains("TOPS L")) { std::fprintf(stderr, "amixos --shots: the AMP stage is wrong (on %d, sub 40 Hz %.1f dB, 2 kHz %.1f dB)\n", a0["on"].toBool(), at40, at2k); std::exit(165); }
+            QObject* ap = win->findChild<QObject*>("ampPage"); if (ap) ap->setProperty("sel", 2); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+            win->grabWindow().save(shots + "/amp.png"); std::printf("amixos --shots: amp (sub 40 Hz %.1f dB, 2 kHz %.1f dB)\n", at40, at2k); }
+          if (QString::fromLatin1(id) == "assistant") {   // the assistant answers three questions from the live console
+            QObject* as = win->findChild<QObject*>("assistantPage");
+            if (as) for (const char* q : {"Why is there no sound?", "How does my mix sound?", "Set up a sub and tops"}) QMetaObject::invokeMethod(as, "ask", Q_ARG(QVariant, QString::fromLatin1(q)));
+            for (int k = 0; k < 8; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+            const int n = as ? as->property("chat").toList().size() : 0; if (n < 7) { std::fprintf(stderr, "amixos --shots: the assistant did not answer (%d messages)\n", n); std::exit(164); }
+            win->grabWindow().save(shots + "/assistant.png"); std::printf("amixos --shots: assistant (%d messages)\n", n); }
           if (QString::fromLatin1(id) == "admin") {   // the same page with the PIN entered
             access.enterAdmin("1234"); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + "/admin-open.png"); access.leaveAdmin(); std::printf("amixos --shots: admin-open\n"); }
           if (QString::fromLatin1(id) == "mixer") {   // FILE / VIEW / INFO and the About box

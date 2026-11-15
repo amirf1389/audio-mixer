@@ -26,7 +26,7 @@ ApplicationWindow {
     property var warmQueue: ["AccessPage", "AccountPage", "AcousticsPage", "AdminPage", "AiMixPage", "ArrangePage", "BluetoothPage", "CalibratePage", "CascadePage", "CloudPage",
         "CompressorPage", "ConnectionsPage", "DelayPage", "DiagnosticsPage", "EffectsPage", "EngineControlPage", "FramePage", "GatePage", "GroupFadersPage", "HelpPage",
         "LevelsPage", "LicensePage", "LiveSourcesPage", "LoudnessPage", "MasteringPage", "MediaPage", "MicEqPage", "MixerPage", "NetworkPage", "PhasePage", "PluginsPage",
-        "PresetsPage", "RoutingPage", "RtaEqPage", "SamplesPage", "ScenesPage", "ScorePage", "SendToPage", "SettingsPage", "SoundCardPage", "SpatialPage", "TonePage", "ToolsPage", "WaveformPage"]
+        "PresetsPage", "RoutingPage", "RtaEqPage", "SamplesPage", "ScenesPage", "ScorePage", "AmpPage", "AssistantPage", "SendToPage", "SettingsPage", "SoundCardPage", "SpatialPage", "TonePage", "ToolsPage", "WaveformPage"]
     property var warmKeep: []
     Timer { id: warmTimer; interval: 60; repeat: true; running: false
         onTriggered: { if (!root.warmQueue.length) { stop(); return }
@@ -199,7 +199,7 @@ ApplicationWindow {
                     sourceComponent: {
                         switch (root.current) {
                         case "home": return homeC; case "frame": return frameC; case "delay": return delayC; case "cloud": return cloudC; case "cascade": return cascadeC; case "mixer": return null; case "dsp": return toneC; case "rtaeq": return rtaEqC; case "bluetooth": return bluetoothC; case "io": return connC;
-                        case "meter": return levelsC; case "score": return scoreC; case "lufs": return loudC; case "sys": return settingsC; case "dyn": return compC; case "gate": return gateC; case "bus": return sendC; case "dca": return dcaC; case "scenes": return scenesC; case "presets": return presetsC; case "routing": return routingC; case "renew": return licenseC; case "arrange": return arrangeC; case "fx": return fxC; case "osc": return oscC; case "phase": return phaseC; case "miceq": return miceqC; case "live": return liveC; case "tools": return toolsC; case "calib": return calibC; case "boot": return bootC; case "help": return helpC; case "acct": return acctC; case "access": return accessC; case "admin": return adminC; case "ai": return aiC; case "engctl": return engctlC; case "plugins": return pluginsC; case "network": return networkC; case "media": return mediaC; case "samples": return samplesC; case "asio": return soundC; case "acoustics": return acousticsC; case "master": return masteringC; case "surround": return spatialC; default: return comingC
+                        case "meter": return levelsC; case "score": return scoreC; case "amp": return ampC; case "assistant": return assistantC; case "lufs": return loudC; case "sys": return settingsC; case "dyn": return compC; case "gate": return gateC; case "bus": return sendC; case "dca": return dcaC; case "scenes": return scenesC; case "presets": return presetsC; case "routing": return routingC; case "renew": return licenseC; case "arrange": return arrangeC; case "fx": return fxC; case "osc": return oscC; case "phase": return phaseC; case "miceq": return miceqC; case "live": return liveC; case "tools": return toolsC; case "calib": return calibC; case "boot": return bootC; case "help": return helpC; case "acct": return acctC; case "access": return accessC; case "admin": return adminC; case "ai": return aiC; case "engctl": return engctlC; case "plugins": return pluginsC; case "network": return networkC; case "media": return mediaC; case "samples": return samplesC; case "asio": return soundC; case "acoustics": return acousticsC; case "master": return masteringC; case "surround": return spatialC; default: return comingC
                         }
                     }
                 }
@@ -221,6 +221,8 @@ ApplicationWindow {
                 Component { id: connC; ConnectionsPage {} }
                 Component { id: levelsC; LevelsPage {} }
                 Component { id: scoreC; ScorePage { onGo: function (id) { root.current = id } } }
+                Component { id: ampC; AmpPage { onGo: function (id) { root.current = id } } }
+                Component { id: assistantC; AssistantPage { onGo: function (id) { root.current = id } } }
                 Component { id: loudC; LoudnessPage {} }
                 Component { id: settingsC; SettingsPage {} }
                 Component { id: compC; CompressorPage {} }

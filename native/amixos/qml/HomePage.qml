@@ -76,7 +76,7 @@ Flickable {
         Flow {
             Layout.fillWidth: true; spacing: 8
             Repeater {
-                model: { const want = ["mixer", "score", "asio", "scenes", "fx", "master", "media", "plugins", "help"]; const all = engine.pages; const out = [];
+                model: { const want = ["mixer", "assistant", "score", "amp", "asio", "scenes", "fx", "master", "media", "plugins", "help"]; const all = engine.pages; const out = [];
                          for (const id of want) for (const p of all) if (p.id === id) out.push(p); return out }
                 delegate: Rectangle {
                     implicitWidth: qRow.implicitWidth + 24; implicitHeight: 36; radius: Theme.radius
