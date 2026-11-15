@@ -57,7 +57,10 @@ Engine::Engine(QObject* parent) : QObject(parent) {
   factoryLayout();
   for (int k = 0; k < kBuses; ++k) buses_[k].name = k < 8 ? QStringLiteral("AUX %1").arg(k + 1) : QStringLiteral("FX %1").arg(k - 7);
   for (int g = 0; g < kGroups; ++g) { dcas_[g].name = QStringLiteral("DCA %1").arg(g + 1); muteGroups_[g].name = QStringLiteral("MUTE %1").arg(g + 1); }
-  load(); loadUserEq();
+  freshInstallReset(); load(); loadUserEq();
+  // NEVER START SILENT: a master (or control room) saved at -inf is brought back to 0 dB at start; -inf is a live decision, not a start state
+  if (masterDb_ <= -60.0) { masterDb_ = 0.0; masterMuted_ = false; startNote_ = QStringLiteral("The master was saved at -inf: it starts at 0 dB."); }
+  if (mon_.db <= -60.0) mon_.db = 0.0;
   refreshDevices();
   timer_.setInterval(33);
   vuRef_ = std::clamp(settings_.value("ui/vuRef", -18).toInt(), -24, -8);
@@ -436,6 +439,7 @@ void Engine::setSolo(int i, bool on) { if (i < 0 || i >= kStrips) return; strips
 void Engine::setName(int i, const QString& n) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].name = n.left(24); emit stripsChanged(); }
 void Engine::setColor(int i, int c) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].color = std::clamp(c, 0, 7); emit stripsChanged(); }
 void Engine::setMaster(double db) {
+  startNote_.clear();
   const double was = masterDb_; masterDb_ = std::clamp(db, -60.0, 10.0); if (rt_) rt_->setMasterDb(masterDb_);
   if (mon_.sync && masterDb_ != was) { mon_.db = std::clamp(mon_.db + (masterDb_ - was), -60.0, 10.0); if (rt_) rt_->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute); emit monitorChanged(); }
   emit stripsChanged(); syncSystemSound();
@@ -1447,6 +1451,17 @@ void Engine::save() {
   settings_.setValue("console/recallSafe", static_cast<qulonglong>(recallSafe_));
   QJsonArray pr; for (const PresetUi& x : userPresets_) { QJsonObject o; o["name"] = x.name; o["category"] = x.category; o["dsp"] = x.dsp; pr << o; }
   settings_.setValue("console/presets", QString::fromUtf8(QJsonDocument(pr).toJson(QJsonDocument::Compact)));
+}
+// A NEW INSTALL STARTS FROM THE FACTORY CONSOLE: the setup writes install.id next to the program once per fresh install (an update keeps it).
+// When it differs from the id last seen, the console state of an earlier install (left by an uninstall run as another account, or written
+// back by a console still open during the uninstall) is cleared. Scenes, presets and Windows' sound restore stay; licence is not touched.
+void Engine::freshInstallReset() {
+  QFile f(QCoreApplication::applicationDirPath() + QStringLiteral("/install.id")); if (!f.open(QIODevice::ReadOnly)) return;
+  const QString id = QString::fromUtf8(f.read(64)).trimmed(); if (id.isEmpty()) return;
+  const QString seen = settings_.value("install/id").toString();
+  if (seen == id) return;
+  if (!seen.isEmpty() || settings_.contains("console/state")) { settings_.remove("console/state"); startNote_ = QStringLiteral("New install: the console starts from its factory state."); }
+  settings_.setValue("install/id", id); settings_.sync();
 }
 void Engine::load() {
   const QJsonObject root = QJsonDocument::fromJson(settings_.value("console/state").toString().toUtf8()).object();

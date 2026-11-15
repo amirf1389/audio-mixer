@@ -246,6 +246,8 @@ int main(int argc, char* argv[]) {
     engine.stop(); return 0;
   }
   if (smoke) {
+    std::printf("amixos --smoke: start master %.1f dB, monitor %.1f dB; %s\n", engine.masterDb(), engine.monitor()["db"].toDouble(), qPrintable(engine.status()));
+    if (engine.masterDb() <= -60.0) { std::fprintf(stderr, "amixos --smoke: the console started with the master at -inf\n"); return 166; }
     // the null device: a timed "sound card" that needs no hardware; the strips read silence, the meters must publish blocks
     const bool opened = engine.open("null", "", "", 48000, 256, 2, 2);
     if (!opened) { std::fprintf(stderr, "amixos --smoke: %s\n", qPrintable(engine.status())); return 3; }
@@ -741,7 +743,7 @@ int main(int argc, char* argv[]) {
         if (kf.open(QIODevice::ReadOnly)) { const QJsonObject k = QJsonDocument::fromJson(kf.readAll()).object(); const std::vector<am::lic::Jwk> test{{k.value("x").toString().toStdString(), k.value("y").toString().toStdString()}};
           QTemporaryDir td; const QString nd = td.path() + "/new", od = td.path() + "/old"; QDir().mkpath(nd); QDir().mkpath(od);
           for (const auto& [from, to] : {std::pair<QString, QString>{fx + "/new", nd}, {fx + "/old", od}}) for (const QString& n : QDir(from).entryList(QDir::Files)) QFile::copy(from + "/" + n, to + "/" + n);
-          const bool good = update.loadLocalWith(nd, false, test) && update.state() == "downloaded" && update.latest() == "99.0.0.0" && QFileInfo::exists(update.downloaded());
+          const bool good = update.loadLocalWith(nd, false, test) && update.state() == "downloaded" && update.latest() == "99.0.0.0" && QFileInfo::exists(update.downloaded()) && !update.downloaded().startsWith(nd);   // the copy in its own folder is what runs, never the file on the stick
           const bool vendorRefuses = !update.loadLocal(nd) && update.message().contains("signature");   // the vendor key did not sign the test bundle: refused
           const bool olderRefused = !update.loadLocalWith(od, false, test) && update.message().contains("older"), olderAllowed = update.loadLocalWith(od, true, test);
           QString bin; for (const QString& n : QDir(nd).entryList({QStringLiteral("*.bin")}, QDir::Files)) { QFile b(nd + "/" + n); if (b.open(QIODevice::Append)) { b.write("x"); b.close(); } }

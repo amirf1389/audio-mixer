@@ -43,6 +43,28 @@ VIAddVersionKey "LegalCopyright" "Copyright AMFB Audio. MIT License."
 !insertmacro MUI_LANGUAGE "English"
 !include "FileFunc.nsh"
 Var Restart
+; CLOSE A RUNNING CONSOLE before files and settings are touched: asked to close first (it saves and gives Windows' sound back), forced after 10 s.
+; Without this an uninstall left the console running; on quit it wrote its state (a master at -inf with it) back after the reset.
+!macro CloseConsole UN
+Function ${UN}CloseConsole
+  nsExec::Exec 'taskkill /IM amixos.exe'
+  StrCpy $R2 0
+  closewait:
+    nsExec::ExecToStack 'cmd /c tasklist /FI "IMAGENAME eq amixos.exe" | find /I "amixos.exe"'
+    Pop $R3
+    StrCmp $R3 "0" 0 closed
+    IntOp $R2 $R2 + 1
+    IntCmp $R2 20 forced 0 forced
+    Sleep 500
+    Goto closewait
+  forced:
+    nsExec::Exec 'taskkill /F /IM amixos.exe'
+    Sleep 500
+  closed:
+FunctionEnd
+!macroend
+!insertmacro CloseConsole ""
+!insertmacro CloseConsole "un."
 Function .onInit
   ; AUTO UPDATE: the console starts this setup with  /S /RESTART  and quits; wait for it to let go of its files, install silently, start it again
   ${GetParameters} $R0
@@ -65,6 +87,17 @@ Section "AmF X1" SecMain
   closed:
     FileClose $R3
   nowait:
+  StrCmp $Restart "1" +2 0
+  Call CloseConsole   ; a setup started by hand: the console may be open
+  ; THE INSTALL ID: written once per fresh install (an update over an installed console keeps it). The console compares it with the one it
+  ; last saw; a new id means this is a new install, so it starts from the factory console (no master left at -inf from before).
+  IfFileExists "$INSTDIR\install.id" idDone 0
+  ${GetTime} "" "L" $0 $1 $2 $3 $4 $5 $6
+  CreateDirectory "$INSTDIR"
+  FileOpen $7 "$INSTDIR\install.id" w
+  FileWrite $7 "$2$1$0-$4$5$6"
+  FileClose $7
+  idDone:
   SetOutPath "$INSTDIR"
   File /r "${SRC}\*.*"
   CreateDirectory "$APPDATA\AMFB Audio\AmF X1"
@@ -95,6 +128,7 @@ Section "-Restart after an update"
   Exec '"$WINDIR\explorer.exe" "$INSTDIR\amixos.exe"'   ; through the shell: the console starts as the normal user, not elevated
 SectionEnd
 Section "Uninstall"
+  Call un.CloseConsole   ; before anything is removed: a console left running would write its settings back on quit
   ExecWait '"$INSTDIR\AmF X1.exe" --uninstall-driver'
   Delete "$DESKTOP\AmF X1.lnk"
   RMDir /r "$SMPROGRAMS\AmF X1"

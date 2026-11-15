@@ -76,7 +76,7 @@ class Engine : public QObject {
   ~Engine() override;
 
   bool running() const { return rt_ && rt_->running(); }
-  QString status() const { return status_; }
+  QString status() const { return startNote_.isEmpty() ? status_ : status_ + (status_.isEmpty() ? QString() : QStringLiteral(" · ")) + startNote_; }   // the start note rides along until the master is moved
   QString backend() const { return rt_ ? QString::fromStdString(rt_->backendName()) : QString(); }
   int strips() const { return kStrips; }
   QVariantList devices() const { return devices_; }
@@ -256,7 +256,9 @@ class Engine : public QObject {
   QString autoPrefer() const { return settings_.value("audio/autoPrefer", "wasapi").toString(); }   // AUTO = the system's own WASAPI devices (default speakers + default microphone); ASIO only when picked
   void setAutoPrefer(const QString& p);
   QVariantMap autoDetectFor(const QString& prefer) const;
-  void annotateAsio(QVariantMap& m, bool probed);   // universal ASIO detection: identity, status, remembered channel counts
+  void annotateAsio(QVariantMap& m, bool probed);
+  void freshInstallReset();   // install.id changed: clear the console state of an earlier install
+  QString startNote_;         // why the start state differs from what was saved (shown once in the status)   // universal ASIO detection: identity, status, remembered channel counts
   // STEREO PAIR: strips 1+2, 3+4 ... as one stereo channel. matchStereoPair() gives the partner the same channel processing (EQ, gate, compressor,
   // limiter, crossover, delay) and the same rack (every plug-in with its settings and bypass), panned to the other side. While the two are
   // LINKED, a plug-in put in, taken out, bypassed or adjusted on one is done on the other too. Each side runs its own copy of a plug-in

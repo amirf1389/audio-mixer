@@ -209,15 +209,21 @@ bool Update::loadLocalWith(const QString& path, bool allowOlder, const std::vect
   const QString name = QFileInfo(e.value("name").toString()).fileName(), sha = e.value("sha256").toString().toLower();
   if (name.isEmpty() || !am::upd::isHex64(sha.toStdString())) { set("error", QStringLiteral("this update has no file for this computer (%1)").arg(platformKey())); return false; }
   const QString file = QFileInfo(mf).absolutePath() + "/" + name;
-  QFile bin(file); if (!bin.open(QIODevice::ReadOnly)) { set("error", QStringLiteral("the signed update names %1, which is not next to update.json").arg(name)); return false; }
+  if (!QFileInfo::exists(file)) { set("error", QStringLiteral("the signed update names %1, which is not next to update.json").arg(name)); return false; }
+  // CHECKED WHERE IT RUNS: the setup is first copied into the console's own downloads folder and the COPY is hashed and installed. Checking
+  // it on the stick and running it from there later let the file be swapped in between (a removable or shared drive).
+  const QString dir = QString::fromStdString(am::paths::downloadsDir()); QDir().mkpath(dir);
+  const QString copy = dir + "/" + name; QFile::remove(copy);
+  if (!QFile::copy(file, copy)) { set("error", QStringLiteral("cannot copy %1 into %2").arg(name, dir)); return false; }
+  QFile bin(copy); if (!bin.open(QIODevice::ReadOnly)) { set("error", "cannot read " + copy); return false; }
   QCryptographicHash h(QCryptographicHash::Sha256); h.addData(&bin); bin.close();
-  if (QString::fromLatin1(h.result().toHex()) != sha) { set("error", QStringLiteral("%1 does not match the signed checksum: it was changed or damaged, do not install it").arg(name)); return false; }
+  if (QString::fromLatin1(h.result().toHex()) != sha) { QFile::remove(copy); set("error", QStringLiteral("%1 does not match the signed checksum: it was changed or damaged, do not install it").arg(name)); return false; }
   const QString ver = m.value("version").toString(); const int cmp = compareVersions(ver, current_);
   if (cmp < 0 && !allowOlder) { set("error", QStringLiteral("%1 is older than this %2: allow an older version to go back to it").arg(ver, current_)); return false; }
   latest_ = ver; channel_ = m.value("channel").toString("stable"); released_ = m.value("released").toString(); notes_.clear(); for (const QJsonValue& n : m.value("notes").toArray()) notes_ << n.toString();
-  file_.clear(); file_["key"] = platformKey(); file_["name"] = name; file_["url"] = QStringLiteral("file:") + file; file_["size"] = static_cast<qlonglong>(QFileInfo(file).size()); file_["sha256"] = sha;
-  downloaded_ = file; progress_ = 100;
-  set("downloaded", QStringLiteral("local update %1 verified (signed by the vendor, checksum matches)%2: %3").arg(ver, cmp == 0 ? QStringLiteral(", the same version as this one") : cmp < 0 ? QStringLiteral(", OLDER than this one") : QString(), file));
+  file_.clear(); file_["key"] = platformKey(); file_["name"] = name; file_["url"] = QStringLiteral("file:") + file; file_["size"] = static_cast<qlonglong>(QFileInfo(copy).size()); file_["sha256"] = sha;
+  downloaded_ = copy; progress_ = 100;
+  set("downloaded", QStringLiteral("local update %1 verified (signed by the vendor, checksum matches)%2: %3").arg(ver, cmp == 0 ? QStringLiteral(", the same version as this one") : cmp < 0 ? QStringLiteral(", OLDER than this one") : QString(), copy));
   return true;
 }
 QVariantList Update::scanLocal() {
