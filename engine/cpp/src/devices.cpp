@@ -275,7 +275,8 @@ IAudioEndpointVolume* makeRenderVolume();
 IAudioEndpointVolume* defaultRenderVolume() {
   static IAudioEndpointVolume* cached = nullptr; static ULONGLONG at = 0; const ULONGLONG now = GetTickCount64();
   if (!cached || now - at > 10000) { if (cached) cached->Release(); cached = makeRenderVolume(); at = now; }
-  if (cached) cached->AddRef(); return cached;
+  if (cached) { cached->AddRef(); }
+  return cached;
 }
 IAudioEndpointVolume* makeRenderVolume() {
   static bool com = SUCCEEDED(CoInitializeEx(nullptr, COINIT_MULTITHREADED)) || true; (void)com;   // once for this thread, not once per call
