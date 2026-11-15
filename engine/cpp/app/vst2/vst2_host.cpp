@@ -84,6 +84,7 @@ struct Plugin::Impl {
   struct Change { std::int32_t index; float v; }; static constexpr unsigned kRing = 256; Change ring[kRing]; std::atomic<unsigned> head{0}, tail{0};
   std::vector<float*> inPtrs, outPtrs; std::vector<std::vector<float>> scratch;   // extra channels the plug-in has beyond our mono / stereo
   std::mutex m;
+  std::mutex heavy;   // state recall and the bypass dispatcher: process() skips a block (passes the sound through) rather than run alongside them
   std::intptr_t call(std::int32_t op, std::int32_t idx = 0, std::intptr_t val = 0, void* ptr = nullptr, float opt = 0) { return fx ? fx->dispatcher(fx, op, idx, val, ptr, opt) : 0; }
   std::string str(std::int32_t op, std::int32_t idx = 0) { char b[kStringMax] = {0}; call(op, idx, 0, b); b[kStringMax - 1] = 0; return b; }
   bool canDo(const char* what) { return call(effCanDo, 0, 0, const_cast<char*>(what)) > 0; }
@@ -204,11 +205,15 @@ std::string Plugin::paramText(std::uint32_t id, double v) const {
   if (differs) I.fx->setParameter(I.fx, static_cast<std::int32_t>(id), cur);
   return s;
 }
-void Plugin::setBypass(bool on) { Impl& I = *impl_; bypassOn_ = on; if (pluginBypass_) { std::lock_guard<std::mutex> g(I.m); I.call(effSetBypass, 0, on ? 1 : 0); } }
+void Plugin::setBypass(bool on) { Impl& I = *impl_; bypassOn_ = on; if (pluginBypass_) { std::lock_guard<std::mutex> h(I.heavy); std::lock_guard<std::mutex> g(I.m); I.call(effSetBypass, 0, on ? 1 : 0); } }
 
 void Plugin::process(const float* const* in, float* const* out, int frames) {
   Impl& I = *impl_; if (frames <= 0) return; frames = std::min(frames, I.maxBlock);
-  if (bypassOn_.load() && !pluginBypass_) { for (int c = 0; c < outCh_; ++c) { const float* src = in && c < inCh_ ? in[c] : (in && inCh_ > 0 ? in[0] : nullptr); if (src) std::memcpy(out[c], src, static_cast<std::size_t>(frames) * 4); else std::memset(out[c], 0, static_cast<std::size_t>(frames) * 4); } return; }
+  const auto through = [&] { for (int c = 0; c < outCh_; ++c) { const float* src = in && c < inCh_ ? in[c] : (in && inCh_ > 0 ? in[0] : nullptr); if (src) std::memcpy(out[c], src, static_cast<std::size_t>(frames) * 4); else std::memset(out[c], 0, static_cast<std::size_t>(frames) * 4); } };
+  if (bypassOn_.load() && !pluginBypass_) { through(); return; }
+  // a state recall or the bypass call is running on the UI thread: VST2 plug-ins are not safe to process during effSetChunk / effGetChunk / effSetBypass,
+  // so this one block goes through untouched; the audio thread never waits for the lock
+  std::unique_lock<std::mutex> h(I.heavy, std::try_to_lock); if (!h.owns_lock()) { through(); return; }
   const std::int32_t nIn = I.fx->numInputs, nOut = I.fx->numOutputs;
   for (std::int32_t c = 0; c < nIn; ++c) I.inPtrs[static_cast<std::size_t>(c)] = (in && c < inCh_) ? const_cast<float*>(in[c]) : (in && inCh_ > 0 && c < 2 ? const_cast<float*>(in[0]) : I.scratch[static_cast<std::size_t>(c)].data());
   for (std::int32_t c = 0; c < nOut; ++c) I.outPtrs[static_cast<std::size_t>(c)] = c < outCh_ ? out[c] : I.scratch[static_cast<std::size_t>(nIn + c)].data();
@@ -216,13 +221,13 @@ void Plugin::process(const float* const* in, float* const* out, int frames) {
 }
 
 std::string Plugin::state() const {
-  Impl& I = *impl_; std::lock_guard<std::mutex> g(I.m); std::vector<char> blob;
+  Impl& I = *impl_; std::lock_guard<std::mutex> h(I.heavy); std::lock_guard<std::mutex> g(I.m); std::vector<char> blob;
   if (I.fx->flags & kProgramChunks) { void* data = nullptr; const std::intptr_t n = I.call(effGetChunk, 0, 0, &data); if (n > 0 && data) { blob.push_back('C'); blob.insert(blob.end(), static_cast<char*>(data), static_cast<char*>(data) + n); return b64(blob); } }
   blob.push_back('P'); for (std::int32_t i = 0; i < I.fx->numParams; ++i) { const float v = I.fx->getParameter(I.fx, i); const char* b = reinterpret_cast<const char*>(&v); blob.insert(blob.end(), b, b + 4); }
   return b64(blob);
 }
 bool Plugin::setState(const std::string& s) {
-  Impl& I = *impl_; const std::vector<char> blob = unb64(s); if (blob.empty()) return false; std::lock_guard<std::mutex> g(I.m);
+  Impl& I = *impl_; const std::vector<char> blob = unb64(s); if (blob.empty()) return false; std::lock_guard<std::mutex> h(I.heavy); std::lock_guard<std::mutex> g(I.m);
   if (blob[0] == 'C') { if (!(I.fx->flags & kProgramChunks)) return false; return I.call(effSetChunk, 0, static_cast<std::intptr_t>(blob.size() - 1), const_cast<char*>(blob.data() + 1)) != 0 || true; }
   if (blob[0] != 'P' || (blob.size() - 1) % 4) return false;
   const std::int32_t n = std::min<std::int32_t>(I.fx->numParams, static_cast<std::int32_t>((blob.size() - 1) / 4));

@@ -80,7 +80,7 @@ Engine::Engine(QObject* parent) : QObject(parent) {
   for (auto sig : {&Engine::stripsChanged, &Engine::busesChanged, &Engine::masterChainChanged, &Engine::routingChanged, &Engine::groupsChanged}) connect(this, sig, this, [this] { if (!saveTimer_.isActive()) saveTimer_.start(); });   // two seconds after the FIRST change: a stream of changes (a controller being moved for a minute) cannot keep pushing the save away
   graveTimer_.setSingleShot(true); graveTimer_.setInterval(1500); connect(&graveTimer_, &QTimer::timeout, this, [this] { graveyard_.clear(); fxGraveyard_.clear(); });
   taps_.b.store(&scope_); sources_.b.store(&gen_);   // removed plug-ins die on the UI thread, after the audio thread has let go
-  QTimer::singleShot(0, this, [this] { rescanVst(settings_.value("vst3/dirs").toStringList() + settings_.value("vst2/dirs").toStringList()); });   // after the window is up: the first scan never delays the start
+  QTimer::singleShot(0, this, [this] { startupScan(); });   // after the window is up: the first scan never delays the start
   connect(&timer_, &QTimer::timeout, this, &Engine::tick);
   tick();
   if (settings_.value("spatial/front10", false).toBool()) { spkOn_ = true; spkSaved_ = settings_.value("spatial/front10Saved").toMap(); }   // the speaker array was on when the program closed: the saved console already holds its feeds
@@ -179,6 +179,7 @@ void Engine::setDeviceEnabled(const QString& backend, const QString& id, bool on
   emit devicesChanged();
 }
 bool Engine::open(const QString& backend, const QString& inDevice, const QString& outDevice, double sampleRate, int frames, int inChannels, int outChannels) {
+  if (opening_) return false;   // a start is already under way (asked again from the interface while it waits): nothing is stopped or replaced under it
   for (const QString& dev : {inDevice, outDevice}) if (!dev.isEmpty() && dev != "-" && !deviceEnabled(backend, dev)) { status_ = QStringLiteral("That device is switched OFF on CONNECTIONS: switch it ON to use it."); emit stateChanged(); return false; }
   stop();
   // WASAPI: THE HEADSET'S MICROPHONE STAYS OFF, always. A capture device that is a headset or Bluetooth microphone is never opened on
@@ -203,7 +204,6 @@ bool Engine::open(const QString& backend, const QString& inDevice, const QString
   devIn_ = std::clamp(inCh, 0, kStrips); devOut_ = std::clamp(outChannels, 0, kOutputs);
   secureInputFor(cfg); inChannels = cfg.inChannels;
   std::string err; nullInputFor(cfg); rememberDeviceNames(cfg.backend, cfg.inDevice, cfg.outDevice);
-  if (opening_) return false;
   { opening_ = true; emit busyChanged(); auto pending = std::move(rt_); am::Runtime* raw = pending.get(); auto e = std::make_shared<std::string>();   // rt_ is empty while the driver starts: nothing in the interface can touch a half-open runtime
     const bool ok = guarded([raw, cfg, e] { return raw->open(cfg, *e) && raw->start(*e); }, 12000); opening_ = false; if (!timedOut_) rt_ = std::move(pending); emit busyChanged();
     if (timedOut_) { (void)pending.release();   // the driver is still inside open / start on its thread: the runtime is left to it, never destroyed under it
@@ -216,6 +216,8 @@ bool Engine::open(const QString& backend, const QString& inDevice, const QString
   status_ = QStringLiteral("%1 • %2 Hz • %3 frames • %4 in / %5 out").arg(QString::fromStdString(rt_->backendName())).arg(cfg.sampleRate).arg(cfg.frames).arg(inChannels).arg(outChannels);
   timer_.start(); emit stateChanged(); return true;
 }
+// the first plug-in scan: never inside a driver start that is still waiting (it would run nested in that start's wait loop, with the runtime half open)
+void Engine::startupScan() { if (opening_ || scanning_) { QTimer::singleShot(250, this, [this] { startupScan(); }); return; } rescanVst(settings_.value("vst3/dirs").toStringList() + settings_.value("vst2/dirs").toStringList()); }
 void Engine::stop() { if (recorder_.recording()) stopRecording(); if (rt_) { rt_->setExtraSource(nullptr); rt_->setTap(nullptr); for (int k = 0; k < kBuses; ++k) rt_->setBusProcessor(k, nullptr); rt_->stop(); rt_.reset(); status_ = QStringLiteral("Stopped"); timer_.stop(); emit stateChanged(); } }
 
 // ---- AMPLIFIER / SYSTEM PROCESSOR
