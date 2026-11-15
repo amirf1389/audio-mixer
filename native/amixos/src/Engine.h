@@ -15,6 +15,10 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <condition_variable>
+#include <deque>
+#include <mutex>
+#include <thread>
 #include "audiomixer/dynamics.hpp"
 #include <vector>
 
@@ -252,6 +256,7 @@ class Engine : public QObject {
   QString autoPrefer() const { return settings_.value("audio/autoPrefer", "wasapi").toString(); }   // AUTO = the system's own WASAPI devices (default speakers + default microphone); ASIO only when picked
   void setAutoPrefer(const QString& p);
   QVariantMap autoDetectFor(const QString& prefer) const;
+  void annotateAsio(QVariantMap& m, bool probed);   // universal ASIO detection: identity, status, remembered channel counts
   // STEREO PAIR: strips 1+2, 3+4 ... as one stereo channel. matchStereoPair() gives the partner the same channel processing (EQ, gate, compressor,
   // limiter, crossover, delay) and the same rack (every plug-in with its settings and bypass), panned to the other side. While the two are
   // LINKED, a plug-in put in, taken out, bypassed or adjusted on one is done on the other too. Each side runs its own copy of a plug-in
@@ -275,7 +280,7 @@ class Engine : public QObject {
   Q_PROPERTY(QString dspMode READ dspMode WRITE setDspMode NOTIFY masterChainChanged)
   QString dspMode() const { return mastering()["analog"].toBool() ? QStringLiteral("analog") : QStringLiteral("digital"); }
   void setDspMode(const QString& m) { QVariantMap v; v["analog"] = (m == "analog"); setMastering(v); if (rt_) rt_->setAnalogChannels(m == "analog"); }   // ANALOG: the master and every channel
-  Q_INVOKABLE QVariantList asioDrivers() const;                 // discovery only: every ASIO driver found {id, name, inChannels, outChannels, rate, kind, current}
+  Q_INVOKABLE QVariantList asioDrivers() const;                 // discovery only: every ASIO driver found {id, name, inChannels, outChannels, rate, kind, current, maker, model, asioType, note, known, own, status, statusText, lastSeen, seenWhen}
   Q_INVOKABLE bool openAsioDriver(const QString& id, int frames);
   Q_INVOKABLE int readAsioChannels(const QString& id);   // input n of the running device -> strip n; returns how many (done by itself after an ASIO open)
   Q_PROPERTY(QString asioNote READ asioNote NOTIFY stateChanged)   // what was read from the device last
@@ -397,7 +402,7 @@ class Engine : public QObject {
   Q_PROPERTY(bool windowsSoundAvailable READ windowsSoundAvailable NOTIFY systemSoundChanged)
   bool windowsMuteSync() const { return winSync_; } void setWindowsMuteSync(bool on);
   bool windowsMuted() const { return winMuted_; } bool windowsSoundAvailable() const { return winAvail_; }
-  void setSystemMuteBackend(std::function<bool(bool&)> get, std::function<bool(bool)> set) { sysGet_ = std::move(get); sysSet_ = std::move(set); }   // tests
+  void setSystemMuteBackend(std::function<bool(bool&)> get, std::function<bool(bool)> set) { sysGet_ = std::move(get); sysSet_ = std::move(set); sysAsync_ = false; }   // tests: synchronous   // tests
   void syncSystemSound();                 // applies the rule and reads the state (called on fader moves and twice a second)
   void restoreSystemSound();              // on exit: a mute the console set is taken back
   Q_INVOKABLE bool inputMutedBySystem() const;   // over 2 s of exact silence from the system on the input (WASAPI): muted or blocked by privacy
@@ -600,6 +605,15 @@ class Engine : public QObject {
   std::vector<QJsonObject> history_; int histPos_ = -1; bool restoring_ = false; QTimer histTimer_; QJsonObject abOther_; QString abSlot_ = "A";
   QString btNote_;
   bool scanning_ = false, opening_ = false, timedOut_ = false;
+  // THE AUDIO SERVICE WORKER: every call into the Windows audio service (the hot-plug fingerprint, the system mute) runs on this one thread.
+  // Those calls block while the service is busy (a Bluetooth headset connecting, an interface arriving, a driver holding the device); on
+  // the interface thread they froze the window until Windows called it "Not Responding". Results come back as queued events.
+  void svcPost(std::function<void()> job);
+  void applySystemSound(bool ok, bool now, const std::function<bool(bool)>& set);
+  void applyFingerprint(const std::string& f);
+  std::thread svcThread_; std::mutex svcM_; std::condition_variable svcCv_; std::deque<std::function<void()>> svcQ_; bool svcStop_ = false;
+  bool sysAsync_ = true, sysBusy_ = false, sysAgain_ = false, fpBusy_ = false;
+  double vstRate_ = 0;   // the sample rate the rack plug-ins were last made for (reloadAllVst)
   bool winSync_ = true, winMuted_ = false, winAvail_ = false, weMuted_ = false, winBefore_ = false; std::function<bool(bool&)> sysGet_; std::function<bool(bool)> sysSet_; QTimer sysTimer_;
   am::MasterChain master_; am::MasterChain::Params mp_; QString masterPreset_; void pushMaster();
   int partner(int i) const { return (i ^ 1) < kStrips ? (i ^ 1) : -1; }

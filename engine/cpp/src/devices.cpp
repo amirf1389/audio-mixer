@@ -8,6 +8,7 @@
 //   Core Audio  the system default device only (the backend does not choose another device yet)
 //   null     one timed device that needs no hardware
 // Probing an ASIO driver loads it: a caller must not list while one of its ASIO streams is open (ASIO drivers serve one client).
+#include "audiomixer/driver_intel.hpp"
 #ifdef _WIN32
 #include <endpointvolume.h>
 #include <cctype>
@@ -41,7 +42,7 @@ std::string classifyDevice(const std::string& backend, const std::string& name, 
   if (has({"bluetooth", "hands-free", "handsfree", "a2dp", "airpods", "buds", " bt ", "wh-1000", "wf-1000", "jbl tune", "jbl flip", "bose qc", "soundcore"})) return "bluetooth";
   // a DAC: a playback-only converter (a USB DAC, a headphone DAC / amp, a dongle). Told by its name; the capture side of a device is never one.
   if (!capture && backend != "asio" && has({"dac", "dragonfly", "topping", "fiio", "smsl", "schiit", "ifi ", "hidizs", "chord mojo", "hip-dac", "qudelix", "hi-res audio", "hifi"})) return "dac";
-  if (backend == "asio") return has({"asio4all", "flexasio", "asio2ks", "generic low latency", "voicemeeter"}) ? "wrapper" : "interface";
+  if (backend == "asio") { const drv::AsioIdentity a = drv::identifyAsio(name); return a.type == "wrapper" ? "wrapper" : (a.type == "virtual" || a.type == "network") ? "virtual" : "interface"; }   // see identifyAsio
   if (has({"behringer", "umc", "um2", "u-phoria", "focusrite", "scarlett", "motu", "presonus", "audiobox", "steinberg ur", "audient", "rme ", "fireface", "babyface", "zoom ", "tascam", "m-audio", "m-track", "yamaha ag", "universal audio", "apollo", "ssl 2", "komplete audio", "roland rubix", "usb audio codec", "audio interface"})) return "interface";
   switch (formFactor) { case 3: return "headphones"; case 5: case 6: return "headset"; case 1: return "speakers"; case 4: return "microphone"; case 2: return "line"; case 7: case 8: case 9: return "digital"; default: break; }
   if (has({"headset"})) return "headset";
@@ -161,6 +162,7 @@ void addAsio(std::vector<DeviceInfo>& out, bool probe) {
     AsioProbeInfo p; if (probe) p = probeAsioDriver(d); else { p.inChannels = 2; p.outChannels = 2; }   // a driver of the other bitness is not loaded: it comes back with error set and no channels
     DeviceInfo info; info.backend = "asio"; info.id = d.name; info.name = d.bits == static_cast<int>(sizeof(void*) * 8) ? d.name : d.name + " (" + std::to_string(d.bits) + "-bit driver)";
     info.inChannels = static_cast<int>(p.inChannels); info.outChannels = static_cast<int>(p.outChannels);
+    info.probeError = probe ? p.error : std::string();
     info.sampleRates = p.sampleRates;
     if (!p.sampleRates.empty()) {
       info.defaultRate = p.sampleRates.front();

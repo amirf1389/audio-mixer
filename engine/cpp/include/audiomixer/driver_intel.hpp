@@ -68,6 +68,13 @@ std::vector<Attempt> plan(const std::string& backend, const std::string& inId, c
 // channel counts used are the ones the driver itself reports. The names are their owners' trademarks, used here to say what is supported.
 struct MixerProfile { bool known = false; std::string maker, model, prefix, note; };   // prefix: a short label for the strips ("X32", "TF", "QU")
 MixerProfile mixerProfile(const std::string& deviceName);
+// UNIVERSAL ASIO DETECTION: what an ASIO driver is, from its name, for any maker. type: interface (an audio interface), mixer (a desk with
+// USB audio), dj (a DJ controller / mixer), guitar (an amp modeller / multi-effect), onboard (a computer's own chip, e.g. Realtek ASIO),
+// network (Dante, AVB, AES67 over the network), virtual (no sound card behind it: routing, loopback, a program's own driver),
+// wrapper (drives Windows' devices through ASIO: ASIO4ALL, FlexASIO). `own` = AMFB's own virtual driver. Recognition is by name only;
+// the channels come from the driver itself. Names are their owners' trademarks, used to say what is supported.
+struct AsioIdentity { bool known = false; std::string maker, model, type, note; bool own = false; };
+AsioIdentity identifyAsio(const std::string& driverName);
 // the ASIO devices of the list that are recognised mixers, in list order
 std::vector<const DeviceInfo*> mixers(const std::vector<DeviceInfo>& devices);
 

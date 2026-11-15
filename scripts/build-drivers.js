@@ -26,8 +26,14 @@ function buildAsio(arch, outDir) {
   try {
     run(cc, ['-std=gnu99', '-Wall', '-Wextra', '-Werror', '-O2', '-c', path.join(COMMON, 'am_link.c'), '-o', path.join(work, 'am_link.o')]);
     run(cxx, ['-std=gnu++14', '-Wall', '-Wextra', '-Werror', '-O2', '-c', path.join(dir, 'audiomixer_asio.cpp'), '-o', path.join(work, 'asio.o')]);
+    // version information (publisher, product, version, purpose): a named, described driver instead of an anonymous DLL (docs/windows-defender.md)
+    const ver = fs.readFileSync(path.join(__dirname, '..', 'native', 'amixos', 'version.txt'), 'utf8').trim(), v4 = (ver.split('.').concat(['0', '0', '0', '0'])).slice(0, 4).join(',');
+    const rc = fs.readFileSync(path.join(__dirname, '..', 'engine', 'cpp', 'cmake', 'version.rc.in'), 'utf8')
+      .replace(/@AMFB_MANIFEST_LINE@/g, '').replace(/@AMFB_V1@,@AMFB_V2@,@AMFB_V3@,@AMFB_V4@/g, v4).replace(/@AMFB_FILETYPE@/g, 'VFT_DLL').replace(/@AMFB_VERSION@/g, ver)
+      .replace(/@AMFB_FILE@/g, path.basename(out)).replace(/@AMFB_INTERNAL@/g, path.basename(out, '.dll')).replace(/@AMFB_DESC@/g, 'AmF X1 ASIO driver: other programs reach the console through it');
+    fs.writeFileSync(path.join(work, 'version.rc'), rc); run(which(t + '-windres') || (t + '-windres'), ['-i', path.join(work, 'version.rc'), '-o', path.join(work, 'version.o'), '-O', 'coff']);
     // static runtime: the DLL needs nothing but Windows' own DLLs, so it loads in any host
-    run(cxx, ['-shared', '-static', '-static-libgcc', '-static-libstdc++', '-o', out, path.join(work, 'asio.o'), path.join(work, 'am_link.o'), path.join(dir, 'audiomixer_asio.def'),
+    run(cxx, ['-shared', '-static', '-static-libgcc', '-static-libstdc++', '-o', out, path.join(work, 'asio.o'), path.join(work, 'am_link.o'), path.join(work, 'version.o'), path.join(dir, 'audiomixer_asio.def'),
       '-lws2_32', '-lole32', '-loleaut32', '-luuid', '-ladvapi32', '-lwinmm', '-lavrt', '-Wl,--kill-at', '-Wl,--enable-stdcall-fixup']);
     const strip = which(t + '-strip'); if (strip) spawnSync(strip, ['--strip-unneeded', out]);
   } finally { fs.rmSync(work, { recursive: true, force: true }); }

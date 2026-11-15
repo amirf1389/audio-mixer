@@ -478,6 +478,17 @@ int main(int argc, char* argv[]) {
           for (const char* pf : {"best", "asio", "wasapi"}) { engine.setAutoPrefer(pf); const QVariantMap a = engine.autoDetect();
             if (a["name"].toString() == "Audio Mixer" || engine.bestAsioDriver() == "Audio Mixer") { std::fprintf(stderr, "amixos --smoke: AUTO (%s) picked AMFB's own virtual ASIO driver\n", pf); return 168; } }
           engine.simulateDevices(pc); }
+        { // UNIVERSAL ASIO DETECTION: any brand identified, a busy driver keeps its last channel counts, virtual drivers and wrappers rank last
+          QVariantList u = pc; u.prepend(dev("asio", "Focusrite USB ASIO", "Focusrite USB ASIO", 18, 20)); u << dev("asio", "Voicemeeter Virtual ASIO", "Voicemeeter Virtual ASIO", 8, 8) << dev("asio", "ASIO4ALL v2", "ASIO4ALL v2", 2, 2);
+          engine.simulateDevices(u);   // read once: the counts are remembered
+          QVariantMap busy = u[0].toMap(); busy["inChannels"] = 0; busy["outChannels"] = 0; busy["probeError"] = "did not start: the device is in use"; u[0] = busy; engine.simulateDevices(u);
+          QVariantMap fr, vm, a4; for (const QVariant& v : engine.asioDrivers()) { const QVariantMap m = v.toMap(); if (m["id"] == "Focusrite USB ASIO") fr = m; else if (m["id"] == "Voicemeeter Virtual ASIO") vm = m; else if (m["id"] == "ASIO4ALL v2") a4 = m; }
+          if (fr["maker"] != "Focusrite" || fr["status"] != "busy" || !fr["lastSeen"].toBool() || fr["inChannels"].toInt() != 18 || fr["outChannels"].toInt() != 20 || vm["asioType"] != "virtual" || vm["status"] != "virtual" || a4["asioType"] != "wrapper") {
+            std::fprintf(stderr, "amixos --smoke: universal ASIO detection: focusrite %s/%s/%d+%d, voicemeeter %s, asio4all %s\n", qPrintable(fr["maker"].toString()), qPrintable(fr["status"].toString()), fr["inChannels"].toInt(), fr["outChannels"].toInt(), qPrintable(vm["asioType"].toString()), qPrintable(a4["asioType"].toString())); return 167; }
+          if (engine.bestAsioDriver() != "Focusrite USB ASIO") { std::fprintf(stderr, "amixos --smoke: ASIO ranking picked %s over the busy Focusrite's own driver\n", qPrintable(engine.bestAsioDriver())); return 167; }
+          engine.setAutoPrefer("asio"); const QVariantMap a = engine.autoDetect(); engine.setAutoPrefer("best");
+          if (a["id"] != "Focusrite USB ASIO" || a["in"] == "-") { std::fprintf(stderr, "amixos --smoke: AUTO (asio) picked %s (in %s)\n", qPrintable(a["id"].toString()), qPrintable(a["in"].toString())); return 167; }
+          QSettings().remove("asio/seen/Focusrite USB ASIO"); engine.simulateDevices(pc); }
         engine.setAutoPrefer("best");   // the UM2 checks below are for BEST (an interface's own ASIO driver first)
         const QVariantMap d0 = engine.autoDetect();
         if (d0["backend"] != "wasapi" && d0["backend"] != "asio") { std::fprintf(stderr, "amixos --smoke: UM2 machine without the UM2: detection picked %s\n", qPrintable(d0["name"].toString())); return 170; }
@@ -723,7 +734,22 @@ int main(int argc, char* argv[]) {
         std::printf("amixos --smoke: manifest %s (%s)\n", ok ? "verified" : "rejected", qPrintable(update.message()));
         QString bad = env; bad.replace("\"version\":\"", "\"version\":\"9"); if (update.applyManifest(bad) || update.state() != "error") { std::fprintf(stderr, "amixos --smoke: a tampered manifest was accepted\n"); return 121; }
         if (Update::compareVersions("1.2.10", "1.2.9") <= 0 || Update::compareVersions("0.1.0", "0.1.0") != 0) { std::fprintf(stderr, "amixos --smoke: version compare\n"); return 122; } }
+
       else std::printf("amixos --smoke: releases/update.json not found next to the build; manifest check skipped\n");
+      // LOCAL UPDATE (offline, like firmware from a USB stick): the same signature and checksum checks as an update from the internet
+      { const QString fx = QStringLiteral(AMIX_SOURCE_DIR) + "/test/local-update"; QFile kf(fx + "/test-key.json");
+        if (kf.open(QIODevice::ReadOnly)) { const QJsonObject k = QJsonDocument::fromJson(kf.readAll()).object(); const std::vector<am::lic::Jwk> test{{k.value("x").toString().toStdString(), k.value("y").toString().toStdString()}};
+          QTemporaryDir td; const QString nd = td.path() + "/new", od = td.path() + "/old"; QDir().mkpath(nd); QDir().mkpath(od);
+          for (const auto& [from, to] : {std::pair<QString, QString>{fx + "/new", nd}, {fx + "/old", od}}) for (const QString& n : QDir(from).entryList(QDir::Files)) QFile::copy(from + "/" + n, to + "/" + n);
+          const bool good = update.loadLocalWith(nd, false, test) && update.state() == "downloaded" && update.latest() == "99.0.0.0" && QFileInfo::exists(update.downloaded());
+          const bool vendorRefuses = !update.loadLocal(nd) && update.message().contains("signature");   // the vendor key did not sign the test bundle: refused
+          const bool olderRefused = !update.loadLocalWith(od, false, test) && update.message().contains("older"), olderAllowed = update.loadLocalWith(od, true, test);
+          QString bin; for (const QString& n : QDir(nd).entryList({QStringLiteral("*.bin")}, QDir::Files)) { QFile b(nd + "/" + n); if (b.open(QIODevice::Append)) { b.write("x"); b.close(); } }
+          const bool tamperRefused = !update.loadLocalWith(nd, false, test) && update.message().contains("checksum");
+          const bool viaManifest = update.loadLocalWith(od + "/update.json", true, test);
+          if (!good || !vendorRefuses || !olderRefused || !olderAllowed || !tamperRefused || !viaManifest) { std::fprintf(stderr, "amixos --smoke: local update (good %d, vendor key refuses %d, older refused %d / allowed %d, changed file refused %d, by manifest path %d): %s\n", good, vendorRefuses, olderRefused, olderAllowed, tamperRefused, viaManifest, qPrintable(update.message())); return 124; }
+          update.clearLocal(); if (update.canInstall() || !update.downloaded().isEmpty()) { std::fprintf(stderr, "amixos --smoke: CLEAR kept the local update\n"); return 125; }
+          std::printf("amixos --smoke: local update OK (signed bundle accepted, vendor-key / changed file / older version refused, older allowed on request)\n"); } }
       { // FACTORY RESET is complete: language, PIN-at-start, device choices and network tokens all go; only the licence stays; the factory setup is due again
         QSettings qs; qs.setValue("ui/lang", "de"); qs.setValue("audio/autoPrefer", "manual"); qs.setValue("vst3/dirs", QStringList{"C:/x"}); qs.sync();
         { QFile f(settings.dataFolder() + "/daemon.tokens.json"); if (f.open(QIODevice::WriteOnly)) f.write("{}"); } { QFile f(settings.dataFolder() + "/license.json"); if (f.open(QIODevice::WriteOnly)) f.write("{}"); }
@@ -804,7 +830,7 @@ int main(int argc, char* argv[]) {
         }
         frame.setCardType(0, "aec-in"); frame.setCardType(1, "digital-in"); frame.setCardType(2, "analog-out"); frame.setCardType(3, "hybrid");
         frame.setPhantom(0, 0, true); frame.setPhantom(0, 1, true); frame.setChannelStrip(0, 0, 0); frame.setChannelStrip(0, 1, 1); frame.setLogicIn(2, true); frame.setLogicIn(7, true);   // a populated frame for the I/O FRAME picture
-        for (const char* id : {"home", "frame", "engctl", "delay", "cloud", "cascade", "mixer", "dsp", "dyn", "gate", "bus", "dca", "scenes", "presets", "routing", "renew", "arrange", "io", "meter", "lufs", "sys", "fx", "osc", "phase", "acoustics", "surround", "master", "rtaeq", "miceq", "live", "tools", "calib", "boot", "help", "acct", "access", "admin", "ai", "plugins", "network", "media", "asio", "samples", "rtaeq", "bluetooth"}) {
+        for (const char* id : {"home", "frame", "engctl", "delay", "cloud", "cascade", "mixer", "dsp", "dyn", "gate", "bus", "dca", "scenes", "presets", "routing", "renew", "arrange", "io", "meter", "score", "lufs", "sys", "fx", "osc", "phase", "acoustics", "surround", "master", "rtaeq", "miceq", "live", "tools", "calib", "boot", "help", "acct", "access", "admin", "ai", "plugins", "network", "media", "asio", "samples", "rtaeq", "bluetooth"}) {
           if (QString::fromLatin1(id) == "rtaeq") { QVariantList golden; for (double g : {1.0, 5.0, 3.0, 3.0, 4.0, 2.0, 2.0, 3.0, 3.0, 1.0}) golden << g; engine.setGraphicEq(0, golden, true); }   // the beta's Golden EQ on the shot
           win->setProperty("current", QString::fromLatin1(id)); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
           const QImage img = win->grabWindow(); img.save(shots + "/" + id + ".png"); std::printf("amixos --shots: %s %dx%d\n", id, img.width(), img.height());
@@ -923,6 +949,14 @@ int main(int argc, char* argv[]) {
                 const auto dev = [](const char* b, const char* id, const char* name, int in, int out) { QVariantMap m; m["backend"] = b; m["id"] = id; m["name"] = name; m["inChannels"] = in; m["outChannels"] = out; m["defaultRate"] = 48000.0; return m; };
                 rig << dev("asio", "{a1}", "Focusrite USB ASIO", 18, 20) << dev("asio", "{a2}", "ASIO4ALL v2", 2, 2) << dev("asio", "{a3}", "Realtek ASIO", 2, 2) << dev("wasapi", "{w1}", "Speakers (Realtek(R) Audio)", 0, 2);
                 engine.simulateDevices(rig); engine.setAutoPrefer("manual"); win->setProperty("current", "asio"); waitMs(500); win->grabWindow().save(shots + "/asio-drivers.png");
+                { // UNIVERSAL ASIO DETECTION, every status on one page: ready, busy with remembered channels, virtual, other bitness, wrapper
+                  QVariantList all; all << dev("asio", "{u1}", "Focusrite USB ASIO", 18, 20) << dev("asio", "{u2}", "BEHRINGER UMC ASIO Driver", 4, 4) << dev("asio", "{u3}", "Pioneer DDJ-FLX10 ASIO", 4, 6) << dev("asio", "{u4}", "Line 6 Helix ASIO", 0, 0)
+                      << dev("asio", "{u5}", "Voicemeeter Virtual ASIO", 8, 8) << dev("asio", "{u6}", "Realtek ASIO", 2, 2) << dev("asio", "{u7}", "ASIO4ALL v2", 2, 2) << dev("asio", "{u8}", "Dante Virtual Soundcard", 64, 64);
+                  engine.simulateDevices(all);   // read once: the Focusrite's counts are remembered
+                  QVariantMap f = all[0].toMap(); f["inChannels"] = 0; f["outChannels"] = 0; f["probeError"] = "did not start: the device is in use by another program"; all[0] = f;
+                  QVariantMap h = all[3].toMap(); h["probeError"] = "a 32-bit driver: only the 32-bit AmF X1 can load it"; all[3] = h;
+                  engine.simulateDevices(all); waitMs(500); win->grabWindow().save(shots + "/asio-universal.png"); std::printf("amixos --shots: asio-universal (best %s)\n", qPrintable(engine.bestAsioDriver()));
+                  QSettings().remove("asio/seen/Focusrite USB ASIO"); engine.simulateDevices(rig); waitMs(200); }
                 const QVariantList l = engine.asioDrivers(); bool any = false; for (const QVariant& v : l) any = any || v.toMap()["current"].toBool();
                 if (l.size() != 3 || l[0].toMap()["name"].toString() != "Focusrite USB ASIO" || l[0].toMap()["inChannels"].toInt() != 18 || any || !engine.autoDetect().isEmpty()) { std::fprintf(stderr, "amixos --shots: the ASIO DRIVERS list is wrong\n"); std::exit(253); }
                 if (engine.bestAsioDriver() != "{a1}" || engine.asioFrames(48000) != 480 || engine.asioFrames(44100) != 441 || engine.asioFrames(96000) != 960) { std::fprintf(stderr, "amixos --shots: ASIO auto detect or the 10 ms buffer is wrong (%s, %d)\n", qPrintable(engine.bestAsioDriver()), engine.asioFrames(48000)); std::exit(212); }

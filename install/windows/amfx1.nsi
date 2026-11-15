@@ -32,6 +32,7 @@ VIAddVersionKey "LegalCopyright" "Copyright AMFB Audio. MIT License."
 !define MUI_ABORTWARNING
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_LICENSE "..\..\LICENSE"
+!insertmacro MUI_PAGE_COMPONENTS   ; what the setup installs is shown and can be chosen: the ASIO driver (a system-wide COM driver) is optional
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
 !define MUI_FINISHPAGE_RUN "$INSTDIR\amixos.exe"
@@ -85,7 +86,7 @@ Section "AmF X1" SecMain
   CreateShortcut "$SMPROGRAMS\AmF X1\Uninstall AmF X1.lnk" "$INSTDIR\Uninstall.exe"
   CreateShortcut "$DESKTOP\AmF X1.lnk" "$INSTDIR\amixos.exe"
 SectionEnd
-Section "ASIO driver (register AudioMixerASIO64.dll)" SecAsio
+Section "ASIO driver (lets other programs reach the console)" SecAsio
   ; the DLL stays in the program folder; it is registered in place (the program's --install-driver does the same)
   ExecWait '"$INSTDIR\AmF X1.exe" --install-driver'
 SectionEnd

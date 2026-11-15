@@ -16,6 +16,34 @@ Flickable {
         Text { text: Theme.product; color: Theme.ink; font.family: Theme.sans; font.pixelSize: 30; font.weight: Font.Black }
         Text { text: i18n.t("Native console, version ", i18n.lang) + appVersion + " • " + engine.edition + i18n.t(" tier • engine ", i18n.lang) + (engine.running ? engine.backend : i18n.t("idle", i18n.lang)); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 10 }
         Text { text: i18n.t(engine.status, i18n.lang); color: engine.running ? Theme.emerald : Theme.amber; font.family: Theme.mono; font.pixelSize: 10; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+        // LIVE: the SOUND SCORE of the master now, its weakest part with the fix, the DSP MODE, and the analyzer, one click each
+        Rectangle { objectName: "homeLive"; Layout.fillWidth: true; implicitHeight: liveRow.implicitHeight + 24; radius: Theme.radius; color: Theme.card; border.color: Theme.line
+            property var sc: ({ valid: false, total: 0, grade: "", parts: [] })
+            readonly property var weak: { let w = null; for (const p of (sc.parts || [])) if (p.max > 0 && p.points < p.max && (!w || p.points / p.max < w.points / w.max)) w = p; return w }
+            Timer { interval: 500; running: page.visible; repeat: true; triggeredOnStart: true; onTriggered: parent.sc = engine.soundScore() }
+            function col(v) { return v >= 85 ? Theme.emerald : v >= 70 ? Theme.cyan : v >= 50 ? Theme.amber : Theme.danger }
+            RowLayout { id: liveRow; anchors.left: parent.left; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; anchors.margins: 14; spacing: 16
+                Column { spacing: 0
+                    Text { text: i18n.t("SOUND SCORE", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
+                    Row { spacing: 8
+                        Text { objectName: "homeScore"; text: liveRow.parent.sc.valid ? Math.round(liveRow.parent.sc.total) : "—"; color: liveRow.parent.sc.valid ? liveRow.parent.col(liveRow.parent.sc.total) : Theme.dim; font.family: Theme.sans; font.pixelSize: 40; font.weight: Font.Black }
+                        Text { anchors.baseline: parent.children[0].baseline; text: liveRow.parent.sc.valid ? i18n.t("GRADE", i18n.lang) + " " + liveRow.parent.sc.grade : i18n.t("play something", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 11; font.bold: true } } }
+                ColumnLayout { Layout.fillWidth: true; spacing: 4
+                    Repeater { model: liveRow.parent.sc.parts || []
+                        delegate: RowLayout { Layout.fillWidth: true; spacing: 6
+                            Text { text: i18n.t(modelData.name, i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; Layout.preferredWidth: 80; elide: Text.ElideRight }
+                            Rectangle { Layout.fillWidth: true; height: 5; radius: 2; color: Theme.deep
+                                Rectangle { height: parent.height; radius: 2; width: parent.width * (modelData.max > 0 ? modelData.points / modelData.max : 0); color: liveRow.parent.col(modelData.max > 0 ? 100 * modelData.points / modelData.max : 0) } } } }
+                    Text { visible: !!liveRow.parent.weak && !!liveRow.parent.weak.tip; Layout.fillWidth: true; text: "→ " + i18n.t(liveRow.parent.weak ? liveRow.parent.weak.tip || "" : "", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; elide: Text.ElideRight } }
+                ColumnLayout { spacing: 6
+                    DspModeSwitch {}
+                    RowLayout { spacing: 6
+                        Rectangle { implicitWidth: fsT.implicitWidth + 16; implicitHeight: 24; radius: 4; color: Theme.ov(0.06); border.color: Theme.orange
+                            Text { id: fsT; anchors.centerIn: parent; text: i18n.t("FULL SCORE", i18n.lang); color: Theme.orange; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
+                            MouseArea { objectName: "homeFullScore"; anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: page.go("score") } }
+                        Rectangle { implicitWidth: anT.implicitWidth + 16; implicitHeight: 24; radius: 4; color: Theme.ov(0.06); border.color: Theme.cyan
+                            Text { id: anT; anchors.centerIn: parent; text: i18n.t("MASTER ANALYZER", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
+                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { if (typeof root !== "undefined" && root.openAnalyzer) root.openAnalyzer() } } } } } } }
         GridLayout {
             columns: page.width > 900 ? 3 : (page.width > 560 ? 2 : 1)
             columnSpacing: 12; rowSpacing: 12
@@ -27,6 +55,8 @@ Flickable {
                     { id: "dsp", t: "Tone", s: "10-band parametric EQ, crossover, delay and polarity per channel, with the live curve." },
                     { id: "meter", t: "Levels", s: "Peak, RMS, hold and clip on every strip and the master." },
                     { id: "lufs", t: "Loudness", s: "EBU R128: momentary, short-term, integrated, range, true peak." },
+                    { id: "score", t: "Sound score", s: "How good the master sounds, 0 to 100: six parts, each with its fix, history and the analyzer detail." },
+                    { id: "master", t: "Mastering", s: "DIGITAL or ANALOG, enhancer, limiter and the master analyzer." },
                     { id: "sys", t: "Settings", s: "Engine, saved console state, about." }
                 ]
                 delegate: Rectangle {
@@ -46,7 +76,7 @@ Flickable {
         Flow {
             Layout.fillWidth: true; spacing: 8
             Repeater {
-                model: { const want = ["mixer", "asio", "scenes", "fx", "master", "media", "plugins", "help"]; const all = engine.pages; const out = [];
+                model: { const want = ["mixer", "score", "asio", "scenes", "fx", "master", "media", "plugins", "help"]; const all = engine.pages; const out = [];
                          for (const id of want) for (const p of all) if (p.id === id) out.push(p); return out }
                 delegate: Rectangle {
                     implicitWidth: qRow.implicitWidth + 24; implicitHeight: 36; radius: Theme.radius

@@ -46,7 +46,7 @@ Engine::Engine(QObject* parent) : QObject(parent) {
   // A WINDOWS MUTE LEFT BEHIND: the fader at -inf mutes Windows too; if the console then crashed, was killed or the computer went off,
   // Windows stayed muted for every program (no sound anywhere) and the console no longer knew. The mute is written down when it is set
   // and given back here, at the next start.
-  if (QSettings().value("mixer/weMutedWindows", false).toBool()) { sysSet_(QSettings().value("mixer/winBefore", false).toBool()); QSettings().remove("mixer/weMutedWindows"); }
+  if (QSettings().value("mixer/weMutedWindows", false).toBool()) { const bool before = QSettings().value("mixer/winBefore", false).toBool(); const auto set = sysSet_; svcPost([set, before] { set(before); }); QSettings().remove("mixer/weMutedWindows"); }
   connect(this, &Engine::stripsChanged, this, [this] { stripDirty_ = true; ++stripTick_; });
   for (auto sig : {&Engine::groupsChanged, &Engine::busesChanged, &Engine::routingChanged, &Engine::recordChanged, &Engine::licenseChanged}) connect(this, sig, this, [this] { stripDirty_ = true; });   // DCA / mute groups, sends, arm and the plan feed the strip state too   // first receiver: the cache is stale before any binding reads it
   sysTimer_.setInterval(500); connect(&sysTimer_, &QTimer::timeout, this, &Engine::syncSystemSound); sysTimer_.start();
@@ -82,13 +82,30 @@ Engine::Engine(QObject* parent) : QObject(parent) {
   tick();
   if (settings_.value("spatial/front10", false).toBool()) { spkOn_ = true; spkSaved_ = settings_.value("spatial/front10Saved").toMap(); }   // the speaker array was on when the program closed: the saved console already holds its feeds
 }
-Engine::~Engine() { closePluginWindows(); save(); stop(); }
+Engine::~Engine() {
+  closePluginWindows(); save(); stop();
+  { std::lock_guard<std::mutex> l(svcM_); svcStop_ = true; svcQ_.clear(); } svcCv_.notify_all();
+  if (svcThread_.joinable()) svcThread_.detach();   // a call stuck in the audio service must not hold the exit; the process ends anyway
+}
+void Engine::svcPost(std::function<void()> job) {
+  { std::lock_guard<std::mutex> l(svcM_); if (svcStop_) return; svcQ_.push_back(std::move(job)); }
+  if (!svcThread_.joinable()) svcThread_ = std::thread([this] {
+#ifdef _WIN32
+    CoInitializeEx(nullptr, COINIT_MULTITHREADED);   // this thread's own COM apartment, once
+#endif
+    for (;;) { std::function<void()> j; { std::unique_lock<std::mutex> l(svcM_); svcCv_.wait(l, [this] { return svcStop_ || !svcQ_.empty(); }); if (svcStop_) return; j = std::move(svcQ_.front()); svcQ_.pop_front(); } j(); } });
+  svcCv_.notify_one();
+}
 
 QStringList Engine::backends() const { QStringList l; for (const auto& b : am::availableBackends()) l << QString::fromStdString(b); return l; }
 
 void Engine::setHotplugWatch(bool on) { if (on) { if (!hotplug_.isActive()) { hotplug_.setInterval(3000); connect(&hotplug_, &QTimer::timeout, this, &Engine::checkHotplug, Qt::UniqueConnection); hotplug_.start(); } } else hotplug_.stop(); emit stateChanged(); }
 void Engine::checkHotplug() {
-  if (simulated_) return; const std::string f = am::deviceFingerprint(); if (f == fingerprint_) return;
+  if (simulated_ || fpBusy_) return; fpBusy_ = true;   // on the audio service worker: enumerating endpoints can block (see svcPost)
+  svcPost([this] { const std::string f = am::deviceFingerprint(); QMetaObject::invokeMethod(this, [this, f] { fpBusy_ = false; applyFingerprint(f); }, Qt::QueuedConnection); });
+}
+void Engine::applyFingerprint(const std::string& f) {
+  if (simulated_ || f == fingerprint_) return;
   const bool first = fingerprint_.empty(); fingerprint_ = f; if (first) return;   // the first poll only learns the baseline
   const QStringList before = [&] { QStringList l; for (const QVariant& v : devices_) l << v.toMap()["name"].toString(); return l; }();
   refreshDevices();
@@ -97,7 +114,30 @@ void Engine::checkHotplug() {
   if (rt_ && !gone.isEmpty() && (gone.contains(inDevName_) || gone.contains(outDevName_))) { stop(); status_ = QStringLiteral("The sound card was unplugged: %1").arg(gone.join(", ")); emit stateChanged(); }
   if (!added.isEmpty()) emit hotplug(true, added.join(", ")); else if (!gone.isEmpty()) emit hotplug(false, gone.join(", "));
 }
-void Engine::simulateDevices(const QVariantList& devices) { simulated_ = true; devices_.clear(); for (const QVariant& v : devices) { QVariantMap m = v.toMap(); if (!m.contains("kind")) m["kind"] = QString::fromStdString(am::classifyDevice(m["backend"].toString().toStdString(), m["name"].toString().toStdString(), -1, m["inChannels"].toInt() > 0 && m["outChannels"].toInt() == 0)); devices_ << m; } emit devicesChanged(); }
+// UNIVERSAL ASIO DETECTION: every ASIO driver, of any brand, gets who made it and what it is (interface, desk, DJ, guitar, onboard,
+// network, virtual, wrapper), a status from the live probe, and the channel counts it had the last time it was read. A driver held by
+// another program (or idle and not answering) reads 0 / 0; its remembered counts (asio/seen/<name>) are shown instead, marked as such.
+void Engine::annotateAsio(QVariantMap& m, bool probed) {
+  const QString name = m["name"].toString(); const am::drv::AsioIdentity a = am::drv::identifyAsio(name.toStdString());
+  m["maker"] = QString::fromStdString(a.maker); m["model"] = QString::fromStdString(a.model); m["asioType"] = QString::fromStdString(a.type);
+  m["note"] = QString::fromStdString(a.note); m["known"] = a.known; m["own"] = a.own;
+  const QString err = m.value("probeError").toString(); const int in = m["inChannels"].toInt(), out = m["outChannels"].toInt();
+  const QString key = QStringLiteral("asio/seen/") + QString(name).replace('/', '_').replace('\\', '_');
+  QString status;
+  if (a.own || a.type == "virtual" || a.type == "network") status = QStringLiteral("virtual");
+  else if (err.contains("bit")) status = QStringLiteral("other bitness");
+  else if (!err.isEmpty()) status = QStringLiteral("busy");
+  else if (in + out > 0) status = QStringLiteral("ready");
+  else status = QStringLiteral("no channels");
+  m["status"] = status; m["statusText"] = err;
+  if (probed && in + out > 0 && err.isEmpty()) {   // read just now: remember it
+    QVariantList rates = m.value("sampleRates").toList(); settings_.setValue(key, QVariantMap{{"in", in}, {"out", out}, {"rate", m["defaultRate"]}, {"rates", rates}, {"when", QDateTime::currentDateTime().toString(Qt::ISODate)}});
+    m["lastSeen"] = false; return; }
+  const QVariantMap seen = settings_.value(key).toMap();
+  if (in + out == 0 && !seen.isEmpty()) { m["lastSeen"] = true; m["seenIn"] = seen["in"]; m["seenOut"] = seen["out"]; m["seenRate"] = seen["rate"]; m["seenWhen"] = seen["when"]; }
+  else m["lastSeen"] = false;
+}
+void Engine::simulateDevices(const QVariantList& devices) { simulated_ = true; devices_.clear(); for (const QVariant& v : devices) { QVariantMap m = v.toMap(); if (!m.contains("kind")) m["kind"] = QString::fromStdString(am::classifyDevice(m["backend"].toString().toStdString(), m["name"].toString().toStdString(), -1, m["inChannels"].toInt() > 0 && m["outChannels"].toInt() == 0)); if (m["backend"].toString() == "asio") annotateAsio(m, true); devices_ << m; } emit devicesChanged(); }
 bool Engine::guarded(std::function<bool()> work, int timeoutMs) {
   struct St { std::atomic<bool> done{false}; bool ok = false; }; auto st = std::make_shared<St>();
   std::thread([st, work = std::move(work)] { st->ok = work(); st->done.store(true); }).detach();
@@ -118,6 +158,7 @@ void Engine::refreshDevices() {
     QVariantMap m; m["backend"] = QString::fromStdString(d.backend); m["id"] = QString::fromStdString(d.id); m["name"] = QString::fromStdString(d.name);
     m["inChannels"] = d.inChannels; m["outChannels"] = d.outChannels; m["defaultRate"] = d.defaultRate; m["defaultIn"] = d.defaultIn; m["defaultOut"] = d.defaultOut; m["bluetooth"] = looksBluetooth(m["name"].toString()); m["kind"] = QString::fromStdString(d.kind); m["enabled"] = deviceEnabled(m["backend"].toString(), m["id"].toString());
     QVariantList rates; for (double r : d.sampleRates) rates << r; m["sampleRates"] = rates;
+    if (d.backend == "asio") { m["probeError"] = QString::fromStdString(d.probeError); annotateAsio(m, !timedOut_); }
     if (!bluetoothAudio() && (m["bluetooth"].toBool() || d.kind == "bluetooth")) continue;   // BLUETOOTH AUDIO switched off
     devices_ << m;
   }
@@ -402,10 +443,19 @@ void Engine::setMaster(double db) {
 void Engine::setWindowsMuteSync(bool on) { if (winSync_ == on) return; winSync_ = on; QSettings().setValue("mixer/windowsMuteSync", on); syncSystemSound(); emit systemSoundChanged(); }
 void Engine::syncSystemSound() {
   if (!sysGet_ || !sysSet_) return;
-  bool now = false; const bool ok = sysGet_(now); const bool want = winSync_ && masterDb_ <= -60.0; bool changed = ok != winAvail_; winAvail_ = ok;
+  if (!sysAsync_) { bool now = false; const bool ok = sysGet_(now); applySystemSound(ok, now, sysSet_); return; }   // the tests' backend
+  if (sysBusy_) { sysAgain_ = true; return; } sysBusy_ = true;   // one question at a time; a change meanwhile asks again when it is answered
+  const auto get = sysGet_; const auto set = sysSet_;
+  svcPost([this, get, set] { bool now = false; const bool ok = get(now);
+    QMetaObject::invokeMethod(this, [this, ok, now, set] { sysBusy_ = false;
+      applySystemSound(ok, now, [this, set](bool m) { svcPost([set, m] { set(m); }); return true; });   // the change is sent to the worker too
+      if (sysAgain_) { sysAgain_ = false; syncSystemSound(); } }, Qt::QueuedConnection); });
+}
+void Engine::applySystemSound(bool ok, bool now, const std::function<bool(bool)>& sysSet) {
+  const bool want = winSync_ && masterDb_ <= -60.0; bool changed = ok != winAvail_; winAvail_ = ok;
   const bool had = weMuted_;
-  if (ok && want && !weMuted_) { winBefore_ = now; if (sysSet_(true)) { weMuted_ = true; now = true; } }           // fader at -inf: Windows goes silent too
-  else if (ok && !want && weMuted_) { if (sysSet_(winBefore_)) now = winBefore_; weMuted_ = false; }               // fader up (or sync off): the mute goes back to what it was
+  if (ok && want && !weMuted_) { winBefore_ = now; if (sysSet(true)) { weMuted_ = true; now = true; } }           // fader at -inf: Windows goes silent too
+  else if (ok && !want && weMuted_) { if (sysSet(winBefore_)) now = winBefore_; weMuted_ = false; }               // fader up (or sync off): the mute goes back to what it was
   else if (ok && weMuted_ && !now) weMuted_ = false;                                                                // somebody un-muted Windows by hand: leave it to them
   if (weMuted_ != had) { QSettings q; if (weMuted_) { q.setValue("mixer/weMutedWindows", true); q.setValue("mixer/winBefore", winBefore_); } else q.remove("mixer/weMutedWindows"); q.sync(); }
   if (ok && now != winMuted_) { winMuted_ = now; changed = true; }
@@ -729,6 +779,8 @@ bool Engine::openDac(const QString& backendName, const QString& id, int frames, 
 QVariantList Engine::asioDrivers() const {
   QVariantList l; for (const QVariant& v : devices_) { const QVariantMap d = v.toMap(); if (d["backend"].toString() != "asio") continue;
     QVariantMap m; m["id"] = d["id"]; m["name"] = d["name"]; m["inChannels"] = d["inChannels"]; m["outChannels"] = d["outChannels"]; m["rate"] = d["defaultRate"]; m["kind"] = d["kind"];
+    for (const char* k : {"maker", "model", "asioType", "note", "known", "own", "status", "statusText", "lastSeen"}) m[k] = d.value(k);
+    if (d.value("lastSeen").toBool()) { m["inChannels"] = d["seenIn"]; m["outChannels"] = d["seenOut"]; if (d["seenRate"].toDouble() > 0) m["rate"] = d["seenRate"]; m["seenWhen"] = d["seenWhen"]; }
     m["current"] = running() && backend() == "asio" && asioOpenId_ == d["id"].toString(); l << m; }
   return l;
 }
@@ -765,7 +817,10 @@ static bool ownVirtualAsio(const QString& name) { return name.trimmed().compare(
 QString Engine::bestAsioDriver() const {
   QString best; int bestRank = -1;
   for (const QVariant& v : asioDrivers()) { const QVariantMap m = v.toMap(); const QString k = m["kind"].toString(); if (ownVirtualAsio(m["name"].toString()) || ownVirtualAsio(m["id"].toString())) continue;
-    const int rank = (k == "interface" ? 200 : k == "wrapper" ? 0 : 100) + std::min(64, m["inChannels"].toInt() + m["outChannels"].toInt());
+    const QString t = m["asioType"].toString(), st = m["status"].toString();
+    if (m["own"].toBool() || t == "virtual" || t == "network" || st == "other bitness") continue;   // not a sound card here, or cannot be loaded by this build
+    const int typeRank = (t == "interface" || t == "mixer" || t == "dj" || t == "guitar") ? 300 : t == "onboard" ? 150 : t == "wrapper" ? 0 : (k == "interface" ? 200 : k == "wrapper" ? 0 : 100);
+    const int rank = typeRank + (st == "ready" ? 40 : m["lastSeen"].toBool() ? 30 : 0) + (m["known"].toBool() ? 5 : 0) + std::min(64, m["inChannels"].toInt() + m["outChannels"].toInt());
     if (rank > bestRank) { bestRank = rank; best = m["id"].toString(); } }
   return best;
 }
@@ -783,11 +838,14 @@ QVariantMap Engine::autoDetect() const {
 QVariantMap Engine::autoDetectFor(const QString& prefer) const {
   QVariantMap best; int bestRank = -1;
   for (const QVariant& v : devices_) { const QVariantMap d = v.toMap(); const QString b = d["backend"].toString(), name = d["name"].toString(); if (b == "null" || d["id"].toString().startsWith("loopback:")) continue;
-    const bool in = d["inChannels"].toInt() > 0, out = d["outChannels"].toInt() > 0; if (!in && !out) continue; if (!d.value("enabled", true).toBool()) continue;   // switched OFF on CONNECTIONS
+    const bool seen = b == "asio" && d.value("lastSeen").toBool();
+    const bool in = d["inChannels"].toInt() > 0 || (seen && d["seenIn"].toInt() > 0), out = d["outChannels"].toInt() > 0 || (seen && d["seenOut"].toInt() > 0); if (!in && !out) continue;
+    if (b == "asio") { const QString t = d.value("asioType").toString(); if (t == "virtual" || t == "network" || d.value("status").toString() == "other bitness") continue; }   // virtual and network drivers: never automatic
+    if (!d.value("enabled", true).toBool()) continue;   // switched OFF on CONNECTIONS
     if (b == "asio" && ownVirtualAsio(name)) continue;   // our own virtual driver: never automatic
     if (prefer == "bluetooth") { if (d["kind"].toString() != "bluetooth" && !looksBluetooth(name)) continue; } else if (prefer != "best" && b != prefer) continue;
     int rank = 0; QString why;
-    if (b == "asio") { const bool wrapper = am::drv::isWrapper(name.toStdString()); const bool pinned = am::drv::pinOf(name.toStdString()).on; rank = wrapper ? 60 : pinned ? 50 : 100; why = wrapper ? "an ASIO wrapper (ASIO4ALL-style): used when nothing has its own driver" : pinned ? "Realtek onboard: pinned to its Windows endpoint, SMART START routes it" : "the device's own ASIO driver"; }
+    if (b == "asio") { const bool wrapper = am::drv::isWrapper(name.toStdString()); const bool pinned = am::drv::pinOf(name.toStdString()).on; rank = wrapper ? 60 : pinned ? 50 : 100 + (d.value("asioType").toString() == "onboard" ? -20 : 0) + (d.value("status").toString() == "ready" ? 5 : 0); why = wrapper ? "an ASIO wrapper (ASIO4ALL-style): used when nothing has its own driver" : pinned ? "Realtek onboard: pinned to its Windows endpoint, SMART START routes it" : "the device's own ASIO driver"; }
     else if (b == "wasapi" || b == "coreaudio") { rank = (d["defaultOut"].toBool() ? 40 : 30) + (in && out ? 2 : 0); why = "the system's " + QString(d["defaultOut"].toBool() ? "default " : "") + "endpoint"; }
     else if (b == "alsa") { rank = (name.contains("default") ? 25 : 20); why = "an ALSA device"; }
     else if (b == "dsound") { rank = (d["defaultOut"].toBool() ? 12 : 10) + (in && out ? 2 : 0); why = "DirectSound (no lock; the Bluetooth path)";
@@ -795,6 +853,7 @@ QVariantMap Engine::autoDetectFor(const QString& prefer) const {
     if (rank > bestRank) { bestRank = rank; best = d; best["why"] = why; }
   }
   if (best.isEmpty()) return best;
+  if (best["backend"].toString() == "asio" && best.value("lastSeen").toBool()) { best["inChannels"] = best["seenIn"]; best["outChannels"] = best["seenOut"]; best["why"] = best["why"].toString() + " (busy or idle when read: its last known channels are used)"; }
   const QString id = best["id"].toString(); best["in"] = best["inChannels"].toInt() > 0 ? id : "-"; best["out"] = best["outChannels"].toInt() > 0 ? id : "-";
   best["outName"] = best["outChannels"].toInt() > 0 ? best["name"] : QVariant(QString()); best["inName"] = best["inChannels"].toInt() > 0 ? best["name"] : QVariant(QString()); best["outKind"] = best["outChannels"].toInt() > 0 ? best["kind"] : QVariant(QString()); best["inKind"] = best["inChannels"].toInt() > 0 ? best["kind"] : QVariant(QString());
   // endpoint systems list each direction on its own (WASAPI, DirectSound): pair the pick with the other direction's endpoint of the same backend,
@@ -957,7 +1016,22 @@ void Engine::rebuildInserts(int i) {
   for (const PluginUi& p : strips_[static_cast<std::size_t>(i)].plugins) if (p.vst) chain->push_back(std::make_shared<am::host::MonoInsert>(p.vst, 1024));
   rt_->setInserts(i, chain->empty() ? nullptr : chain);
 }
-void Engine::reloadAllVst() { for (int i = 0; i < kStrips; ++i) { bool any = false; for (int k = 0; k < kPluginSlots; ++k) { PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[k]; if (isVstKind(p.kind)) { if (p.vst) p.state = QString::fromStdString(p.vst->state()); if (p.vst) graveyard_.push_back(p.vst); loadVst(i, k); any = true; } } if (any) rebuildInserts(i); } graveTimer_.start(); }
+// After the sound card (re)opens. Plug-ins are reloaded only when the sample rate changed (they were made for the old one): a reopen or soft
+// restart at the same rate keeps them. A reload runs on the interface thread (VST plug-ins must be created there), one plug-in at a time
+// with the window answering Windows in between (user input held back), so a rack of heavy plug-ins no longer reads as "Not Responding".
+void Engine::reloadAllVst() {
+  const double rate = rt_ ? rt_->sampleRate() : 48000;
+  bool allLoaded = true; for (int i = 0; i < kStrips && allLoaded; ++i) for (int k = 0; k < kPluginSlots; ++k) { const PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[k]; if (isVstKind(p.kind) && !p.vst) { allLoaded = false; break; } }
+  if (allLoaded && vstRate_ == rate) { for (int i = 0; i < kStrips; ++i) for (int k = 0; k < kPluginSlots; ++k) if (strips_[static_cast<std::size_t>(i)].plugins[k].vst) { rebuildInserts(i); break; } return; }
+  vstRate_ = rate;
+  for (int i = 0; i < kStrips; ++i) { bool any = false;
+    for (int k = 0; k < kPluginSlots; ++k) { PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[k]; if (!isVstKind(p.kind)) continue;
+      if (p.vst) { p.state = QString::fromStdString(p.vst->state()); graveyard_.push_back(p.vst); }
+      loadVst(i, k); any = true;
+      if (!p.kind.startsWith("fx:")) QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents, 20); }   // a hosted plug-in can take seconds: let the window answer
+    if (any) rebuildInserts(i); }
+  graveTimer_.start();
+}
 QString Engine::pluginParamText(int i, int slot, int id, double v) const { if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots) return {}; const PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[slot]; return p.vst ? QString::fromStdString(p.vst->paramText(static_cast<std::uint32_t>(id), std::clamp(v, 0.0, 1.0))) : QString(); }
 QVariantList Engine::pluginParams(int i, int slot) const {
   QVariantList l; if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots) return l; const PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[slot]; if (!p.vst) return l;

@@ -14,6 +14,8 @@
 #include <QProcess>
 #include <QNetworkRequest>
 #include <QUrl>
+#include <QStandardPaths>
+#include <QStorageInfo>
 
 #include "license/crypto.hpp"
 #include "license/license.hpp"
@@ -171,3 +173,64 @@ int Update::newFeatures() const {
   return n;
 }
 void Update::markFeaturesSeen() { QString top = current_; for (const QVariant& v : features_) { const QString ver = v.toMap().value("version").toString(); if (compareVersions(ver, top) > 0) top = ver; } s_.setValue("update/featuresSeen", top); emit changed(); }
+
+// ---- LOCAL UPDATE --------------------------------------------------------------------------------------------------------------------
+namespace {
+// the signed envelope {payload, signature}: the payload's object when one of the trusted keys signed it, else empty with the reason
+QJsonObject verifiedPayload(const QString& text, const std::vector<am::lic::Jwk>& trusted, QString& why) {
+  const std::string env = text.toStdString(); std::string payload, sigText;
+  if (!am::upd::getString(env, "payload", payload) || !am::upd::getString(env, "signature", sigText)) { why = QStringLiteral("not a signed update (payload + signature)"); return {}; }
+  std::vector<std::uint8_t> sig; if (!am::crypto::base64urlDecode(sigText, sig) || sig.size() != 64) { why = QStringLiteral("the signature is malformed"); return {}; }
+  bool ok = false;
+  for (const am::lic::Jwk& k : trusted) { std::vector<std::uint8_t> x, y; if (!am::crypto::base64urlDecode(k.x, x) || !am::crypto::base64urlDecode(k.y, y)) continue;
+    if (am::crypto::ecdsaP256Verify(x, y, reinterpret_cast<const std::uint8_t*>(payload.data()), payload.size(), sig)) { ok = true; break; } }
+  if (!ok) { why = QStringLiteral("the signature is not the vendor's: this update was changed or did not come from AMFB Audio"); return {}; }
+  const QJsonObject m = QJsonDocument::fromJson(QByteArray::fromStdString(payload)).object();
+  if (m.isEmpty() || !m.contains("version")) { why = QStringLiteral("the signed payload is not an update"); return {}; }
+  return m;
+}
+// a path the person gave: the folder, its update.json, or the setup beside it -> the update.json
+QString manifestFor(const QString& path) {
+  const QFileInfo fi(QDir::fromNativeSeparators(path.trimmed()).remove(QLatin1Char('"')));
+  if (fi.isDir()) { for (const QString& c : {QStringLiteral("update.json"), QStringLiteral("AmF-X1-update/update.json")}) if (QFileInfo::exists(fi.absoluteFilePath() + "/" + c)) return fi.absoluteFilePath() + "/" + c; return {}; }
+  if (fi.suffix().compare("json", Qt::CaseInsensitive) == 0) return fi.exists() ? fi.absoluteFilePath() : QString();
+  const QString side = fi.absolutePath() + "/update.json"; return QFileInfo::exists(side) ? side : QString();
+}
+}  // namespace
+
+bool Update::loadLocal(const QString& path, bool allowOlder) { return loadLocalWith(path, allowOlder, {am::lic::kVendorJwk}); }
+bool Update::loadLocalWith(const QString& path, bool allowOlder, const std::vector<am::lic::Jwk>& trusted) {
+  const QString mf = manifestFor(path);
+  if (mf.isEmpty()) { set("error", QStringLiteral("no update.json there: a local update is a folder with the signed update.json and the setup")); return false; }
+  QFile f(mf); if (!f.open(QIODevice::ReadOnly) || f.size() > 4 * 1024 * 1024) { set("error", "cannot read " + mf); return false; }
+  QString why; const QJsonObject m = verifiedPayload(QString::fromUtf8(f.readAll()), trusted, why); f.close();
+  if (m.isEmpty()) { set("error", "local update refused: " + why); return false; }
+  const QJsonObject e = m.value("files").toObject().value(platformKey()).toObject();
+  const QString name = QFileInfo(e.value("name").toString()).fileName(), sha = e.value("sha256").toString().toLower();
+  if (name.isEmpty() || !am::upd::isHex64(sha.toStdString())) { set("error", QStringLiteral("this update has no file for this computer (%1)").arg(platformKey())); return false; }
+  const QString file = QFileInfo(mf).absolutePath() + "/" + name;
+  QFile bin(file); if (!bin.open(QIODevice::ReadOnly)) { set("error", QStringLiteral("the signed update names %1, which is not next to update.json").arg(name)); return false; }
+  QCryptographicHash h(QCryptographicHash::Sha256); h.addData(&bin); bin.close();
+  if (QString::fromLatin1(h.result().toHex()) != sha) { set("error", QStringLiteral("%1 does not match the signed checksum: it was changed or damaged, do not install it").arg(name)); return false; }
+  const QString ver = m.value("version").toString(); const int cmp = compareVersions(ver, current_);
+  if (cmp < 0 && !allowOlder) { set("error", QStringLiteral("%1 is older than this %2: allow an older version to go back to it").arg(ver, current_)); return false; }
+  latest_ = ver; channel_ = m.value("channel").toString("stable"); released_ = m.value("released").toString(); notes_.clear(); for (const QJsonValue& n : m.value("notes").toArray()) notes_ << n.toString();
+  file_.clear(); file_["key"] = platformKey(); file_["name"] = name; file_["url"] = QStringLiteral("file:") + file; file_["size"] = static_cast<qlonglong>(QFileInfo(file).size()); file_["sha256"] = sha;
+  downloaded_ = file; progress_ = 100;
+  set("downloaded", QStringLiteral("local update %1 verified (signed by the vendor, checksum matches)%2: %3").arg(ver, cmp == 0 ? QStringLiteral(", the same version as this one") : cmp < 0 ? QStringLiteral(", OLDER than this one") : QString(), file));
+  return true;
+}
+QVariantList Update::scanLocal() {
+  QStringList roots{QString::fromStdString(am::paths::downloadsDir()), QStandardPaths::writableLocation(QStandardPaths::DownloadLocation), QStandardPaths::writableLocation(QStandardPaths::DesktopLocation)};
+  for (const QStorageInfo& v : QStorageInfo::mountedVolumes()) {   // every local drive's top level (a USB stick, a card, a DVD); network shares are left out (they can hang)
+    const QByteArray fs = v.fileSystemType().toLower(); const QString dev = QString::fromUtf8(v.device());
+    if (!v.isValid() || !v.isReady() || dev.startsWith("\\\\") || fs.contains("cifs") || fs.contains("smb") || fs.contains("nfs") || fs.contains("fuse.sshfs")) continue;
+    roots << v.rootPath(); }
+  QVariantList out; QStringList seen;
+  for (const QString& r : roots) { if (r.isEmpty()) continue;
+    for (const QString& dir : {r, r + "/AmF-X1-update"}) { const QString mf = manifestFor(dir); if (mf.isEmpty() || seen.contains(mf)) continue; seen << mf;
+      QFile f(mf); QVariantMap c; c["path"] = QFileInfo(mf).absolutePath(); if (!f.open(QIODevice::ReadOnly) || f.size() > 4 * 1024 * 1024) continue;
+      QString why; const QJsonObject m = verifiedPayload(QString::fromUtf8(f.readAll()), {am::lic::kVendorJwk}, why);
+      c["ok"] = !m.isEmpty(); c["why"] = why; c["version"] = m.value("version").toString(); c["older"] = !m.isEmpty() && compareVersions(m.value("version").toString(), current_) < 0; out << c; } }
+  return out;
+}

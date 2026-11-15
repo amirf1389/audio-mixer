@@ -16,6 +16,32 @@ heuristic scanners. AmF X1.exe is built so that none of those apply, and the res
 - **Network only when asked.** `--update` fetches the signed manifest from the project's hosts and verifies the ECDSA signature before
   anything is parsed; nothing is downloaded or run otherwise.
 
+## Every binary names itself (all builds)
+
+Every AmF X1 program and library carries a version resource: CompanyName AMFB Audio, ProductName AmF X1, a FileDescription that says
+what it is, the version and its OriginalFilename. That covers:
+- `amixos.exe`, `AmF X1.exe`, `AmF X1 Network.exe`, `AmF X1 Hybrid.exe` and `AmF X1 Plugin Builder.exe`;
+- the `AmF X1 Network.dll` and `AmF X1 Hybrid.dll` extensions;
+- `AMFB Plugin Shell.vst3` and the ASIO driver DLLs.
+
+Every program also carries an `asInvoker` manifest (no elevation, Windows 8.1 / 10 / 11, DPI aware). One CMake helper does it,
+`engine/cpp/cmake/winres.cmake` (`amfb_win_version`); `scripts/build-drivers.js` does the same for the ASIO DLLs. An anonymous binary
+with no publisher and no description is what heuristic scanners treat with the most suspicion; a described one is not.
+
+Every one of them also links its C++ runtime statically (`scripts/build-console-windows.sh` refuses a package where one does not), so
+nothing depends on whichever `libstdc++-6.dll` happens to be on the PATH.
+
+## The installer asks
+
+The setup (`install/windows/amfx1.nsi`) shows a COMPONENTS page: the ASIO driver, the one system-wide registration, is an option the
+person sees and can untick. Nothing is installed or registered without being listed. There is no service, no autorun entry, no firewall
+rule and no download during setup.
+
+## The console's own updates
+
+An update, from the internet or LOCAL UPDATE (a USB stick or folder), is installed only when its update.json carries the vendor's
+ECDSA signature and the setup matches the signed sha256. The console never runs an unsigned or changed file.
+
 ## What the vendor does before a release
 
 1. **Sign** every .exe and .dll with your code-signing certificate: `AMFX1_SIGN_PFX=... AMFX1_SIGN_PASS=... node scripts/sign-windows.js "dist/windows/AmF X1.exe" dist/windows/AudioMixerASIO64.dll`
