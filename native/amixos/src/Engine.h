@@ -142,6 +142,7 @@ class Engine : public QObject {
   // NEVER STUCK: device scans and driver starts run on a worker while the interface keeps painting; a driver that does not answer in time is
   // left behind (its thread is abandoned) and the console carries on: a scan falls back to the list without loading ASIO drivers, a start reports it.
   bool guarded(std::function<bool()> work, int timeoutMs);
+  void startupScan();
   Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
   bool busy() const { return scanning_ || opening_; }
   Q_INVOKABLE QString busyText() const { return opening_ ? QStringLiteral("starting the sound card") : scanning_ ? QStringLiteral("looking for sound cards") : QString(); }
