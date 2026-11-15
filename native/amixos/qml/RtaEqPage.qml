@@ -87,9 +87,9 @@ Flickable {
                 Flow { Layout.fillWidth: true; spacing: 6
                     Btn { label: i18n.t("★ GOLDEN EQ (AMIX BY AMFB TUNED)", i18n.lang); onColor: Theme.amber; offColor: Qt.rgba(0.984, 0.749, 0.141, 0.18); on: page.presetName === "Golden EQ (Amix by AMFB tuned)"; onClicked: page.loadPreset("Golden EQ (Amix by AMFB tuned)")
                         ToolTip.visible: gh.hovered; ToolTip.text: i18n.t("Amix by AMFB tuned (+1,+5,+3,+3,+4,+2,+2,+3,+3,+1 dB)", i18n.lang); HoverHandler { id: gh } }
-                    Btn { label: i18n.t("CUSTOM EQ", i18n.lang); onColor: Theme.cyan; offColor: Qt.rgba(0, 0.95, 1, 0.14); on: page.presetName === "Custom EQ"; onClicked: { const s = engine.geqSlots()[0]; page.apply(s.gains); page.presetName = "Custom EQ" }
+                    Btn { label: i18n.t("CUSTOM EQ", i18n.lang); onColor: Theme.cyan; offColor: Qt.rgba(0.235, 0.784, 0.859, 0.14); on: page.presetName === "Custom EQ"; onClicked: { const s = engine.geqSlots()[0]; page.apply(s.gains); page.presetName = "Custom EQ" }
                         ToolTip.visible: ch.hovered; ToolTip.text: i18n.t("Load custom slot 1 (the user profile)", i18n.lang); HoverHandler { id: ch } }
-                    Btn { label: i18n.t("💾 SAVE CUSTOM", i18n.lang); offColor: Qt.rgba(0, 0.95, 1, 0.14); onClicked: engine.saveGeqSlot(1, "Custom EQ", page.gains) }
+                    Btn { label: i18n.t("⇩ SAVE CUSTOM", i18n.lang); offColor: Qt.rgba(0.235, 0.784, 0.859, 0.14); onClicked: engine.saveGeqSlot(1, "Custom EQ", page.gains) }
                     Btn { label: i18n.t("ANIX W-SHAPE", i18n.lang); onColor: Theme.amber; offColor: Qt.rgba(0.984, 0.749, 0.141, 0.18); on: page.presetName === "Anix W Shape"; onClicked: page.loadPreset("Anix W Shape") }
                     // W-SHAPE TUNER: on a channel, the plug-in itself goes into its rack (continuous shelves and bells, level kept the same: the better
                     // choice); on the program bus, which has no rack, the same curve is laid on the ten bands (the tuner's W read at the ISO centres)
@@ -121,7 +121,7 @@ Flickable {
                     c.lineWidth = 1; c.font = "7px monospace"
                     for (const db of [-12, -6, 0, 6, 12]) { const y = midY - db / 12 * height * 0.42; c.strokeStyle = Theme.ov(0.08); c.beginPath(); c.moveTo(0, y); c.lineTo(width, y); c.stroke(); c.fillStyle = Theme.ov(0.3); c.fillText((db > 0 ? "+" : "") + db + "dB", 4, y - 2) }
                     const pts = []; for (let i = 0; i < 10; i++) { const x = step * (i + 1), y = midY - page.gains[i] / 12 * height * 0.42; pts.push({ x: x, y: y }); c.strokeStyle = Theme.ov(0.04); c.beginPath(); c.moveTo(x, 0); c.lineTo(x, height); c.stroke(); c.fillStyle = Theme.ov(0.35); c.fillText(page.bandText[i] + "Hz", x - 8, height - 6) }
-                    const grad = c.createLinearGradient(0, 0, width, 0); grad.addColorStop(0, "#00f2ff"); grad.addColorStop(0.5, "#ffb020"); grad.addColorStop(1, "#ff6a00")
+                    const grad = c.createLinearGradient(0, 0, width, 0); grad.addColorStop(0, "#3cc8db"); grad.addColorStop(0.5, "#ffb020"); grad.addColorStop(1, "#ff6a00")
                     c.strokeStyle = grad; c.lineWidth = 3; c.beginPath(); c.moveTo(0, midY)
                     for (let i = 0; i < pts.length; i++) { if (i === 0) c.quadraticCurveTo(pts[0].x / 2, midY, pts[0].x, pts[0].y); else { const p = pts[i - 1]; c.quadraticCurveTo(p.x, p.y, (p.x + pts[i].x) / 2, (p.y + pts[i].y) / 2) } }
                     const last = pts[9]; c.quadraticCurveTo(last.x, last.y, width, midY); c.stroke()
@@ -189,9 +189,9 @@ Flickable {
                     Text { text: i18n.t("LOAD • SAVE • DELETE • SCROLL THE LIST", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
                 GridLayout { Layout.fillWidth: true; columns: 5; columnSpacing: 6; rowSpacing: 6
                     Repeater { model: (page.slotTick, engine.geqSlots())
-                        delegate: Rectangle { Layout.fillWidth: true; implicitHeight: 78; radius: 6; color: page.slotSel === modelData.slot ? Qt.rgba(0, 0.95, 1, 0.12) : Theme.ov(0.04); border.color: page.slotSel === modelData.slot ? Theme.cyan : Theme.lineSoft
+                        delegate: Rectangle { Layout.fillWidth: true; implicitHeight: 78; radius: 6; color: page.slotSel === modelData.slot ? Qt.rgba(0.235, 0.784, 0.859, 0.12) : Theme.ov(0.04); border.color: page.slotSel === modelData.slot ? Theme.cyan : Theme.lineSoft
                             Canvas { anchors.fill: parent; anchors.margins: 4; opacity: 0.5; property var g: modelData.gains; onGChanged: requestPaint()
-                                onPaint: { const c = getContext("2d"); c.reset(); if (modelData.empty) return; c.strokeStyle = "#00f2ff"; c.lineWidth = 1.5; c.beginPath(); for (let i = 0; i < 10; i++) { const x = (i + 0.5) / 10 * width, y = height / 2 - g[i] / 12 * height * 0.4; if (i === 0) c.moveTo(x, y); else c.lineTo(x, y) } c.stroke() } }
+                                onPaint: { const c = getContext("2d"); c.reset(); if (modelData.empty) return; c.strokeStyle = "#3cc8db"; c.lineWidth = 1.5; c.beginPath(); for (let i = 0; i < 10; i++) { const x = (i + 0.5) / 10 * width, y = height / 2 - g[i] / 12 * height * 0.4; if (i === 0) c.moveTo(x, y); else c.lineTo(x, y) } c.stroke() } }
                             ColumnLayout { anchors.fill: parent; anchors.margins: 7; spacing: 2
                                 RowLayout { Layout.fillWidth: true; Text { text: i18n.t("SLOT ", i18n.lang) + modelData.slot; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } Item { Layout.fillWidth: true } Text { text: modelData.empty ? i18n.t("EMPTY", i18n.lang) : modelData.gains.map(function (v) { return (v > 0 ? "+" : "") + v }).join(" "); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 5; elide: Text.ElideRight; Layout.maximumWidth: 150 } }
                                 Text { Layout.fillWidth: true; elide: Text.ElideRight; text: i18n.t(modelData.name ?? "", i18n.lang); color: modelData.empty ? Theme.dim : Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }

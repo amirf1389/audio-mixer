@@ -143,7 +143,7 @@ Flickable {
                     [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000].forEach(function (f) { c.beginPath(); c.moveTo(fx(f), T); c.lineTo(fx(f), B); c.stroke(); c.fillText(f >= 1000 ? (f / 1000) + "k" : f, fx(f) - 8, height - 8) });
                     [-24, -12, -6, 0, 6, 12, 24].forEach(function (d) { c.strokeStyle = d === 0 ? "rgba(251,191,36,0.5)" : Theme.ov(0.08); c.beginPath(); c.moveTo(L, fy(d)); c.lineTo(R, fy(d)); c.stroke(); c.fillText((d > 0 ? "+" : "") + d, 6, fy(d) + 3) });
                     if (page.curve.length) {
-                        c.beginPath(); c.strokeStyle = "#00f2ff"; c.lineWidth = 2;
+                        c.beginPath(); c.strokeStyle = "#3cc8db"; c.lineWidth = 2;
                         for (var i = 0; i < page.curve.length; i++) { var p = page.curve[i], x = fx(p.f), y = fy(Math.max(dbBot - 2, Math.min(dbTop + 2, p.db))); if (i === 0) c.moveTo(x, y); else c.lineTo(x, y) }
                         c.stroke();
                         c.lineTo(fx(page.curve[page.curve.length - 1].f), fy(0)); c.lineTo(fx(page.curve[0].f), fy(0)); c.closePath(); c.fillStyle = "rgba(0,242,255,0.08)"; c.fill();
@@ -180,12 +180,12 @@ Flickable {
             Flow { Layout.fillWidth: true; spacing: 4
                 Repeater { model: (page.presetTick, engine.eqPresets())
                     delegate: Rectangle { property bool cur: (page.presetTick, engine.stripEqPreset(page.strip) === modelData.slot); property bool picked: page.presetSel === modelData.slot
-                        implicitWidth: 128; implicitHeight: 46; radius: 6; color: cur ? (modelData.locked ? Theme.amber : Theme.cyan) : Theme.ov(0.05); border.color: picked ? Theme.ink : cur ? "transparent" : (modelData.locked ? Qt.rgba(0.984, 0.749, 0.141, 0.35) : Qt.rgba(0, 0.95, 1, 0.3)); border.width: picked ? 1.5 : 1
+                        implicitWidth: 128; implicitHeight: 46; radius: 6; color: cur ? (modelData.locked ? Theme.amber : Theme.cyan) : Theme.ov(0.05); border.color: picked ? Theme.ink : cur ? "transparent" : (modelData.locked ? Qt.rgba(0.984, 0.749, 0.141, 0.35) : Qt.rgba(0.235, 0.784, 0.859, 0.3)); border.width: picked ? 1.5 : 1
                         Canvas { anchors.fill: parent; anchors.margins: 3; opacity: 0.55; property var cv: (page.presetTick, modelData.empty ? [] : engine.eqPresetCurve(modelData.slot, 40)); onCvChanged: requestPaint()
-                            onPaint: { const c = getContext("2d"); c.reset(); const v = cv; if (!v || v.length < 2) return; c.strokeStyle = cur ? "#000" : (modelData.locked ? "#fbbf24" : "#00f2ff"); c.lineWidth = 1.2; c.beginPath(); for (let i = 0; i < v.length; i++) { const x = i / (v.length - 1) * width, y = height / 2 - Math.max(-12, Math.min(12, v[i].db)) / 12 * (height / 2 - 2); if (i === 0) c.moveTo(x, y); else c.lineTo(x, y) } c.stroke() } }
+                            onPaint: { const c = getContext("2d"); c.reset(); const v = cv; if (!v || v.length < 2) return; c.strokeStyle = cur ? "#000" : (modelData.locked ? "#fbbf24" : "#3cc8db"); c.lineWidth = 1.2; c.beginPath(); for (let i = 0; i < v.length; i++) { const x = i / (v.length - 1) * width, y = height / 2 - Math.max(-12, Math.min(12, v[i].db)) / 12 * (height / 2 - 2); if (i === 0) c.moveTo(x, y); else c.lineTo(x, y) } c.stroke() } }
                         ColumnLayout { anchors.fill: parent; anchors.margins: 6; spacing: 1
                             RowLayout { Layout.fillWidth: true; spacing: 3
-                                Text { text: modelData.locked ? "🔒" : (modelData.empty ? "＋" : "✎"); color: cur ? "#000" : Theme.dim; font.pixelSize: 7 }
+                                Text { text: modelData.locked ? "⊘" : (modelData.empty ? "＋" : "✎"); color: cur ? "#000" : Theme.dim; font.pixelSize: 7 }
                                 Text { Layout.fillWidth: true; elide: Text.ElideRight; text: i18n.t(modelData.name ?? "", i18n.lang); color: cur ? "#000" : (modelData.empty ? Theme.dim : Theme.ink); font.family: Theme.mono; font.pixelSize: 8; font.bold: true } }
                             Item { Layout.fillHeight: true }
                             Text { text: (modelData.locked ? i18n.t("FACTORY ", i18n.lang) : i18n.t("CUSTOM ", i18n.lang)) + modelData.slot + (modelData.empty ? i18n.t(" · empty", i18n.lang) : " · " + modelData.bands + i18n.t(" bands", i18n.lang)); color: cur ? "#222" : Theme.dim; font.family: Theme.mono; font.pixelSize: 6 } }

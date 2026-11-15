@@ -53,7 +53,7 @@ Flickable {
                     model: { storeGrid.parent.rev; return engine.storeItems() }
                     Rectangle {
                         required property var modelData
-                        Layout.fillWidth: true; implicitHeight: 46; radius: 6; color: Theme.card; border.color: modelData.on && modelData.installed ? Theme.cyan : Theme.line
+                        Layout.fillWidth: true; implicitHeight: 46; radius: 6; color: Theme.card; border.color: modelData.on && modelData.installed ? Qt.rgba(Theme.cyan.r, Theme.cyan.g, Theme.cyan.b, 0.35) : Theme.lineSoft
                         RowLayout { anchors.fill: parent; anchors.margins: 8; spacing: 8
                             Text { text: parent.parent.modelData.kind === "extension" ? "⬢" : "✦"; color: Theme.amber; font.pixelSize: 14 }
                             ColumnLayout { Layout.fillWidth: true; spacing: 1

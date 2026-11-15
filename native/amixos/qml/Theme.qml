@@ -23,9 +23,9 @@ QtObject {
     readonly property color orange: "#ea580c"
     readonly property color orangeGlow: Qt.rgba(1, 0.416, 0, 0.45)
     readonly property color amber: dark ? "#fbbf24" : "#d97706"
-    readonly property color cyan: dark ? "#00f2ff" : "#0e7490"
+    readonly property color cyan: dark ? "#3cc8db" : "#0e7490"   // calmer than pure neon: the most used accent
     readonly property color emerald: dark ? "#10b981" : "#047857"
-    readonly property color danger: dark ? "#ff2a5f" : "#dc2626"
+    readonly property color danger: dark ? "#ef4466" : "#dc2626"
     readonly property color violet: dark ? "#8b5cf6" : "#6d28d9"
     readonly property color pink: dark ? "#f472b6" : "#db2777"
     readonly property string product: "AmF X1"
@@ -49,7 +49,7 @@ QtObject {
         }
     }
     // device kinds (engine: classifyDevice): a sign and a word for the lists and the header
-    function kindIcon(k) { switch (k) { case "headphones": return "🎧"; case "headset": return "🎧"; case "speakers": return "🔊"; case "microphone": return "🎤"; case "interface": return "🎛"; case "bluetooth": return "ᛒ"; case "digital": return "⎚"; case "line": return "⇄"; case "app": return "▶"; case "wrapper": return "◇"; default: return "◌" } }
+    function kindIcon(k) { switch (k) { case "headphones": return "◖◗"; case "headset": return "◖◗"; case "speakers": return "◢"; case "microphone": return "⏚"; case "interface": return "☷"; case "bluetooth": return "ᛒ"; case "digital": return "⎚"; case "line": return "⇄"; case "app": return "▶"; case "wrapper": return "◇"; default: return "◌" } }
     function kindName(k) { switch (k) { case "headphones": return "HEADPHONES"; case "headset": return "HEADSET"; case "speakers": return "SPEAKERS"; case "microphone": return "MICROPHONE"; case "interface": return "AUDIO INTERFACE"; case "bluetooth": return "BLUETOOTH"; case "digital": return "DIGITAL OUT"; case "line": return "LINE"; case "app": return "APP AUDIO"; case "wrapper": return "ASIO WRAPPER"; default: return "DEVICE" } }
     function dbText(v) { return v <= -119 ? "-inf" : (v > 0 ? "+" : "") + v.toFixed(1); }
 }

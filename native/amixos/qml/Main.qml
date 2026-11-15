@@ -177,14 +177,14 @@ ApplicationWindow {
         // NO SOUND, AND WHY: the two silent states a person cannot see at a glance, each with its one-click way out
         Rectangle { objectName: "masterSilentBanner"; Layout.fillWidth: true; implicitHeight: 30; visible: engine.running && engine.masterDb <= -60; color: Qt.rgba(0.94, 0.27, 0.27, 0.14); border.color: Theme.danger
             RowLayout { anchors.fill: parent; anchors.leftMargin: 12; anchors.rightMargin: 12; spacing: 10
-                Text { text: "🔇"; font.pixelSize: 12 }
+                Text { text: "⊘"; font.pixelSize: 12 }
                 Text { Layout.fillWidth: true; text: i18n.t("MASTER is at -inf: nothing is heard (and Windows' own sound is muted with it).", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; elide: Text.ElideRight }
                 Rectangle { objectName: "raiseMasterBtn"; implicitWidth: Math.max(110, rmT.implicitWidth + 14); implicitHeight: 20; radius: 4; color: Theme.danger
                     Text { id: rmT; anchors.centerIn: parent; text: i18n.t("RAISE TO 0 dB", i18n.lang); color: "#fff"; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                     MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: engine.setMaster(0) } } } }
         Rectangle { objectName: "inputSilentBanner"; Layout.fillWidth: true; implicitHeight: 30; visible: { engine.meterTick; return engine.inputMutedBySystem() } color: Qt.rgba(0.984, 0.749, 0.141, 0.14); border.color: Theme.amber
             RowLayout { anchors.fill: parent; anchors.leftMargin: 12; anchors.rightMargin: 12; spacing: 10
-                Text { text: "🎙"; font.pixelSize: 12 }
+                Text { text: "⏚"; font.pixelSize: 12 }
                 Text { Layout.fillWidth: true; text: i18n.t("The microphone gives exact silence: it is muted (mute key or Windows) or Windows microphone privacy blocks desktop apps.", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; elide: Text.ElideRight }
                 Rectangle { id: gb69; implicitWidth: Math.max(120, mpT2.implicitWidth + 14); implicitHeight: 20; radius: 7; color: Theme.ov(0.1); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb69.color) } GradientStop { position: 1; color: Theme.btnBottom(gb69.color) } } border.color: Theme.amber
                     Text { id: mpT2; anchors.centerIn: parent; text: i18n.t("WINDOWS MIC PRIVACY…", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }

@@ -42,7 +42,7 @@ Flickable {
                     Item { Layout.fillWidth: true }
                     Text { visible: !!tgt.sug.ready; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; font.bold: true
                            text: tgt.sug.ratio > 1 ? i18n.t("Suggested: threshold ", i18n.lang) + Number(tgt.sug.thresholdDb).toFixed(1) + i18n.t(" dB, ratio ", i18n.lang) + Number(tgt.sug.ratio).toFixed(1) + ":1" : i18n.t("No compression needed", i18n.lang) }
-                    Rectangle { id: gb20; objectName: "compTargetApply"; visible: !!tgt.sug.ready && tgt.sug.ratio > 1; implicitWidth: apT.implicitWidth + 20; implicitHeight: 22; radius: 7; color: Qt.rgba(0, 0.95, 1, 0.15); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb20.color) } GradientStop { position: 1; color: Theme.btnBottom(gb20.color) } } border.color: Theme.cyan
+                    Rectangle { id: gb20; objectName: "compTargetApply"; visible: !!tgt.sug.ready && tgt.sug.ratio > 1; implicitWidth: apT.implicitWidth + 20; implicitHeight: 22; radius: 7; color: Qt.rgba(0.235, 0.784, 0.859, 0.15); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb20.color) } GradientStop { position: 1; color: Theme.btnBottom(gb20.color) } } border.color: Theme.cyan
                         Text { id: apT; anchors.centerIn: parent; text: i18n.t("APPLY", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
                         MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { engine.applyCompSuggestion(page.strip); page.reload() } } }
                 }

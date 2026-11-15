@@ -39,7 +39,7 @@ Flickable {
                     model: engine.presets
                     delegate: Rectangle {
                         visible: page.category === "ALL" || modelData.category === page.category
-                        Layout.fillWidth: true; implicitHeight: visible ? 56 : 0; radius: 8; color: Qt.rgba(0, 0, 0, 0.25); border.color: modelData.factory ? Theme.lineSoft : Qt.rgba(0, 0.95, 1, 0.35)
+                        Layout.fillWidth: true; implicitHeight: visible ? 56 : 0; radius: 8; color: Qt.rgba(0, 0, 0, 0.25); border.color: modelData.factory ? Theme.lineSoft : Qt.rgba(0.235, 0.784, 0.859, 0.35)
                         RowLayout { anchors.fill: parent; anchors.margins: 8; spacing: 8
                             ColumnLayout { Layout.fillWidth: true; spacing: 2
                                 Text { text: i18n.t(modelData.name ?? "", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 10; font.bold: true; elide: Text.ElideRight; Layout.fillWidth: true }
