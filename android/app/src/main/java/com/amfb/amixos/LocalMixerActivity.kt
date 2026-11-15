@@ -44,9 +44,11 @@ class LocalMixerActivity : AppCompatActivity() {
         ui.post(object : Runnable { override fun run() { showMeters(); ui.postDelayed(this, 50) } })
     }
 
+    // the buffer headroom from the brand profile (what this phone's HAL reported), measured once
+    private val bursts by lazy { BrandProfile.of(AudioHal.read(this)).bursts }
     private fun startAudio() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) { ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), 1); return }
-        loop = AudioLoop(engine, Prefs.localRate(this), Prefs.localFrames(this)).also { it.start() }
+        loop = AudioLoop(engine, Prefs.localRate(this), Prefs.localFrames(this), Prefs.localOutDevice(this), Prefs.localInDevice(this), bursts).also { it.start() }
         findViewById<Button>(R.id.start).text = getString(R.string.stop)
     }
     private fun stopAudio() { loop?.stop(); loop = null; findViewById<Button>(R.id.start).text = getString(R.string.start) }

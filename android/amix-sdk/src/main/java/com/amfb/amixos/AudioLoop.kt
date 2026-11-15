@@ -8,15 +8,33 @@ import android.media.MediaRecorder
 import kotlin.concurrent.thread
 
 /** Microphone -> strip 0 of the engine -> speaker / headphones, in 256-frame blocks on a worker thread. Needs RECORD_AUDIO. */
-class AudioLoop(private val engine: Engine, private val sampleRate: Int = 48000, private val frames: Int = 256) {
+class AudioLoop(private val engine: Engine, private val sampleRate: Int = 48000, private val frames: Int = 256, private val outDevice: Int = 0, private val inDevice: Int = 0, private val bursts: Int = 2) {
     @Volatile private var running = false
     private var worker: Thread? = null
     @Volatile var lastPeaks: FloatArray = FloatArray(engine.strips + 2)
         private set
 
+    /** "aaudio" (native, low latency) or "java" (AudioRecord / AudioTrack fallback); "" = stopped */
+    @Volatile var path: String = ""
+        private set
+    private var watcher: Thread? = null
+
     fun start() {
         if (running) return
         running = true
+        // the NDK's recommended path first: AAudio in native code. A device change (headphones in / out) disconnects the stream: the watcher reopens it
+        if (engine.startNative(sampleRate, true, outDevice, inDevice, bursts) > 0) {
+            path = "aaudio"
+            watcher = thread(name = "amix-aaudio-watch") {
+                while (running) {
+                    lastPeaks = engine.peaks()
+                    if (engine.nativeState()[1] == 1) { Engine.aaudioStop(); if (running && engine.startNative(sampleRate, true, outDevice, inDevice, bursts) <= 0) { running = false; path = "" } }
+                    Thread.sleep(33)
+                }
+            }
+            return
+        }
+        path = "java"
         worker = thread(name = "amix-audio", priority = Thread.MAX_PRIORITY) {
             val inMin = AudioRecord.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_FLOAT)
             val outMin = AudioTrack.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_FLOAT)
@@ -43,5 +61,5 @@ class AudioLoop(private val engine: Engine, private val sampleRate: Int = 48000,
         }
     }
 
-    fun stop() { running = false; worker?.join(1000); worker = null }
+    fun stop() { running = false; if (path == "aaudio") Engine.aaudioStop(); watcher?.join(1000); watcher = null; worker?.join(1000); worker = null; path = "" }
 }
