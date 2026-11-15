@@ -9,11 +9,11 @@ Item {
     id: page
     objectName: "builderPage"
     component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked()
-        implicitWidth: Math.max(48, bl.implicitWidth + 16); implicitHeight: 24; radius: 8; gradient: Gradient { GradientStop { position: 0; color: on ? Qt.lighter(onColor, 1.22) : Theme.ov(0.12) } GradientStop { position: 1; color: on ? Qt.darker(onColor, 1.15) : Theme.ov(0.035) } } color: on ? onColor : Theme.ov(0.08); border.color: on ? onColor : Theme.line
+        implicitWidth: Math.max(48, bl.implicitWidth + 16); implicitHeight: 24; radius: 8; gradient: Gradient { GradientStop { position: 0; color: on ? Theme.btnTop(onColor) : Theme.ov(0.12) } GradientStop { position: 1; color: on ? Theme.btnBottom(onColor) : Theme.ov(0.035) } } color: on ? onColor : Theme.ov(0.08); border.color: on ? onColor : Theme.line
         Rectangle { anchors.fill: parent; anchors.margins: 1; radius: Math.max(0, parent.radius - 1); color: "transparent"; border.width: 1; border.color: Qt.rgba(1, 1, 1, parent.on ? 0.28 : 0.07) }
         Text { id: bl; anchors.centerIn: parent; text: i18n.t(label, i18n.lang); color: parent.on ? "#000" : Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
         MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: parent.clicked() } }
-    component Field: Rectangle { id: gb17; property alias text: ti.text; signal edited(string t); implicitHeight: 26; radius: 7; color: Theme.deep; gradient: Gradient { GradientStop { position: 0; color: Qt.lighter(gb17.color, 1.25) } GradientStop { position: 1; color: Qt.darker(gb17.color, 1.12) } } border.color: ti.activeFocus ? Theme.orange : Theme.line
+    component Field: Rectangle { id: gb17; property alias text: ti.text; signal edited(string t); implicitHeight: 26; radius: 7; color: Theme.deep; gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb17.color) } GradientStop { position: 1; color: Theme.btnBottom(gb17.color) } } border.color: ti.activeFocus ? Theme.orange : Theme.line
         TextInput { id: ti; anchors.fill: parent; anchors.margins: 6; color: Theme.ink; font.pixelSize: 11; clip: true; selectByMouse: true; onEditingFinished: parent.edited(text) } }
 
     DropArea { anchors.fill: parent; z: 50; keys: ["text/uri-list"]

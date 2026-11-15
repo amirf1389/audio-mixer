@@ -15,7 +15,7 @@ Flickable {
     Timer { interval: 300; running: frame.locating; repeat: true; onTriggered: page.blink = !page.blink; onRunningChanged: if (!running) page.blink = false }
     function lvl(strip) { if (strip < 0) return -120; const m = engine.meterAt(strip); return m.peakDb !== undefined ? m.peakDb : -120 }
     component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked()
-        implicitWidth: Math.max(56, bl.implicitWidth + 16); implicitHeight: 24; radius: 8; gradient: Gradient { GradientStop { position: 0; color: on ? Qt.lighter(onColor, 1.22) : Theme.ov(0.12) } GradientStop { position: 1; color: on ? Qt.darker(onColor, 1.15) : Theme.ov(0.035) } } color: on ? onColor : Theme.ov(0.08); border.color: on ? onColor : Theme.line
+        implicitWidth: Math.max(56, bl.implicitWidth + 16); implicitHeight: 24; radius: 8; gradient: Gradient { GradientStop { position: 0; color: on ? Theme.btnTop(onColor) : Theme.ov(0.12) } GradientStop { position: 1; color: on ? Theme.btnBottom(onColor) : Theme.ov(0.035) } } color: on ? onColor : Theme.ov(0.08); border.color: on ? onColor : Theme.line
         Rectangle { anchors.fill: parent; anchors.margins: 1; radius: Math.max(0, parent.radius - 1); color: "transparent"; border.width: 1; border.color: Qt.rgba(1, 1, 1, parent.on ? 0.28 : 0.07) }
         Text { id: bl; anchors.centerIn: parent; text: i18n.t(label, i18n.lang); color: parent.on ? "#000" : Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
         MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: parent.clicked() } }

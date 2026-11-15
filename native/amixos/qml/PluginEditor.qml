@@ -145,7 +145,7 @@ Popup {
     // a backlit square key: pale when off, lit from within when on
     component LitKey: Item { id: lk; property string label; property bool lit: false; property color litColor: "#e8f4ff"; signal clicked(); width: 32; height: 32; opacity: enabled ? 1 : 0.4; anchors.verticalCenter: parent ? parent.verticalCenter : undefined
         Rectangle { anchors.fill: parent; radius: 4; border.color: "#000"; border.width: 1.5
-            gradient: Gradient { GradientStop { position: 0; color: lk.lit ? Qt.lighter(lk.litColor, 1.1) : (lka.pressed ? "#9aa0a8" : "#d9dde2") } GradientStop { position: 1; color: lk.lit ? lk.litColor : (lka.pressed ? "#7d838b" : "#aeb3ba") } } }
+            gradient: Gradient { GradientStop { position: 0; color: lk.lit ? Theme.btnTop(lk.litColor) : (lka.pressed ? "#9aa0a8" : "#d9dde2") } GradientStop { position: 1; color: lk.lit ? lk.litColor : (lka.pressed ? "#7d838b" : "#aeb3ba") } } }
         Rectangle { anchors.fill: parent; anchors.margins: -4; radius: 7; color: "transparent"; border.color: lk.litColor; border.width: 2; opacity: lk.lit ? 0.45 : 0 }
         Text { anchors.centerIn: parent; text: lk.label; color: "#14171a"; font.pixelSize: 13; font.bold: true }
         MouseArea { id: lka; anchors.fill: parent; enabled: lk.enabled; cursorShape: Qt.PointingHandCursor; onClicked: lk.clicked() } }

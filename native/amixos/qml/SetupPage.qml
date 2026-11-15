@@ -17,7 +17,7 @@ Rectangle {
     readonly property var steps: ["WELCOME", "TERMS", "AUDIO", "CONSOLE", "OPERATOR", "UPDATES", "DONE"]
     signal finished()
     color: Theme.obsidian
-    component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(70, bl.implicitWidth + 24); implicitHeight: 30; radius: 8; gradient: Gradient { GradientStop { position: 0; color: on ? Qt.lighter(onColor, 1.22) : Theme.ov(0.12) } GradientStop { position: 1; color: on ? Qt.darker(onColor, 1.15) : Theme.ov(0.035) } } color: on ? onColor : Theme.ov(0.08); border.color: Theme.lineSoft
+    component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(70, bl.implicitWidth + 24); implicitHeight: 30; radius: 8; gradient: Gradient { GradientStop { position: 0; color: on ? Theme.btnTop(onColor) : Theme.ov(0.12) } GradientStop { position: 1; color: on ? Theme.btnBottom(onColor) : Theme.ov(0.035) } } color: on ? onColor : Theme.ov(0.08); border.color: Theme.lineSoft
         Rectangle { anchors.fill: parent; anchors.margins: 1; radius: Math.max(0, parent.radius - 1); color: "transparent"; border.width: 1; border.color: Qt.rgba(1, 1, 1, parent.on ? 0.30 : 0.07) }
         Text { id: bl; anchors.centerIn: parent; text: i18n.t(label, i18n.lang); color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
     component Head: Text { color: Theme.ink; font.family: Theme.sans; font.pixelSize: 24; font.weight: Font.DemiBold }

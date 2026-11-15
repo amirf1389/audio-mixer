@@ -28,7 +28,7 @@ Flickable {
             Text { text: page.t("of the master, live"); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 9 }
             Item { Layout.fillWidth: true }
             DspModeSwitch {}
-            Rectangle { id: gb135; implicitWidth: maT.implicitWidth + 16; implicitHeight: 22; radius: 7; color: Theme.ov(0.06); gradient: Gradient { GradientStop { position: 0; color: Qt.lighter(gb135.color, 1.25) } GradientStop { position: 1; color: Qt.darker(gb135.color, 1.12) } } border.color: Theme.cyan
+            Rectangle { id: gb135; implicitWidth: maT.implicitWidth + 16; implicitHeight: 22; radius: 7; color: Theme.ov(0.06); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb135.color) } GradientStop { position: 1; color: Theme.btnBottom(gb135.color) } } border.color: Theme.cyan
                 Text { id: maT; anchors.centerIn: parent; text: page.t("MASTER ANALYZER"); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { if (typeof root !== "undefined" && root.openAnalyzer) root.openAnalyzer() } } } }
 

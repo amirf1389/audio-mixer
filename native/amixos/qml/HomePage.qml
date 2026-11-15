@@ -38,10 +38,10 @@ Flickable {
                 ColumnLayout { spacing: 6
                     DspModeSwitch {}
                     RowLayout { spacing: 6
-                        Rectangle { id: gb45; implicitWidth: fsT.implicitWidth + 16; implicitHeight: 24; radius: 7; color: Theme.ov(0.06); gradient: Gradient { GradientStop { position: 0; color: Qt.lighter(gb45.color, 1.25) } GradientStop { position: 1; color: Qt.darker(gb45.color, 1.12) } } border.color: Theme.orange
+                        Rectangle { id: gb45; implicitWidth: fsT.implicitWidth + 16; implicitHeight: 24; radius: 7; color: Theme.ov(0.06); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb45.color) } GradientStop { position: 1; color: Theme.btnBottom(gb45.color) } } border.color: Theme.orange
                             Text { id: fsT; anchors.centerIn: parent; text: i18n.t("FULL SCORE", i18n.lang); color: Theme.orange; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
                             MouseArea { objectName: "homeFullScore"; anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: page.go("score") } }
-                        Rectangle { id: gb46; implicitWidth: anT.implicitWidth + 16; implicitHeight: 24; radius: 7; color: Theme.ov(0.06); gradient: Gradient { GradientStop { position: 0; color: Qt.lighter(gb46.color, 1.25) } GradientStop { position: 1; color: Qt.darker(gb46.color, 1.12) } } border.color: Theme.cyan
+                        Rectangle { id: gb46; implicitWidth: anT.implicitWidth + 16; implicitHeight: 24; radius: 7; color: Theme.ov(0.06); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb46.color) } GradientStop { position: 1; color: Theme.btnBottom(gb46.color) } } border.color: Theme.cyan
                             Text { id: anT; anchors.centerIn: parent; text: i18n.t("MASTER ANALYZER", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
                             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { if (typeof root !== "undefined" && root.openAnalyzer) root.openAnalyzer() } } } } } } }
         GridLayout {

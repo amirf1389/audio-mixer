@@ -23,7 +23,7 @@ Flickable {
                             TextInput { Layout.fillWidth: true; text: i18n.t(modelData.name ?? "", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; horizontalAlignment: Text.AlignHCenter; selectByMouse: true; onEditingFinished: engine.setDcaName(modelData.index, text) }
                             Fader { Layout.fillHeight: true; Layout.alignment: Qt.AlignHCenter; value: modelData.db; onMoved: function (db) { engine.setDcaLevel(modelData.index, db) } }
                             Text { Layout.alignment: Qt.AlignHCenter; text: Theme.dbText(modelData.db); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8 }
-                            Rectangle { id: gb39; Layout.fillWidth: true; implicitHeight: 18; radius: 7; color: modelData.mute ? Theme.danger : Theme.ov(0.08); gradient: Gradient { GradientStop { position: 0; color: Qt.lighter(gb39.color, 1.25) } GradientStop { position: 1; color: Qt.darker(gb39.color, 1.12) } } Text { anchors.centerIn: parent; text: "M"; color: modelData.mute ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setDcaMute(modelData.index, !modelData.mute) } }
+                            Rectangle { id: gb39; Layout.fillWidth: true; implicitHeight: 18; radius: 7; color: modelData.mute ? Theme.danger : Theme.ov(0.08); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb39.color) } GradientStop { position: 1; color: Theme.btnBottom(gb39.color) } } Text { anchors.centerIn: parent; text: "M"; color: modelData.mute ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setDcaMute(modelData.index, !modelData.mute) } }
                             Text { Layout.alignment: Qt.AlignHCenter; text: modelData.members.length + i18n.t(" ch", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
                         }
                     }
@@ -33,13 +33,13 @@ Flickable {
             RowLayout {
                 Layout.fillWidth: true; spacing: 4
                 Text { text: i18n.t("DCA", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 }
-                Repeater { model: 8; delegate: Rectangle { id: gb40; implicitWidth: 28; implicitHeight: 20; radius: 7; color: dcaPick.sel === index + 1 ? Theme.amber : Theme.ov(0.08); gradient: Gradient { GradientStop { position: 0; color: Qt.lighter(gb40.color, 1.25) } GradientStop { position: 1; color: Qt.darker(gb40.color, 1.12) } } Text { anchors.centerIn: parent; text: index + 1; color: dcaPick.sel === index + 1 ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: dcaPick.sel = index + 1 } } }
+                Repeater { model: 8; delegate: Rectangle { id: gb40; implicitWidth: 28; implicitHeight: 20; radius: 7; color: dcaPick.sel === index + 1 ? Theme.amber : Theme.ov(0.08); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb40.color) } GradientStop { position: 1; color: Theme.btnBottom(gb40.color) } } Text { anchors.centerIn: parent; text: index + 1; color: dcaPick.sel === index + 1 ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: dcaPick.sel = index + 1 } } }
                 Item { id: dcaPick; property int sel: 1 }
             }
             Flow { Layout.fillWidth: true; spacing: 3
                 Repeater { model: engine.stripState; delegate: Rectangle { id: gb41; implicitWidth: 46; implicitHeight: 22; radius: 7
                     color: modelData.dca === dcaPick.sel ? Theme.amber : (modelData.dca > 0 ? Qt.rgba(0.984, 0.749, 0.141, 0.15) : Theme.ov(0.06))
-                    gradient: Gradient { GradientStop { position: 0; color: Qt.lighter(gb41.color, 1.25) } GradientStop { position: 1; color: Qt.darker(gb41.color, 1.12) } }
+                    gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb41.color) } GradientStop { position: 1; color: Theme.btnBottom(gb41.color) } }
                     Text { anchors.centerIn: parent; text: (index + 1) + (modelData.dca > 0 && modelData.dca !== dcaPick.sel ? " ·" + modelData.dca : ""); color: modelData.dca === dcaPick.sel ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                     MouseArea { anchors.fill: parent; onClicked: engine.setDca(index, modelData.dca === dcaPick.sel ? 0 : dcaPick.sel) } } }
             }
@@ -65,7 +65,7 @@ Flickable {
             RowLayout {
                 Layout.fillWidth: true; spacing: 4
                 Text { text: i18n.t("MEMBERS OF MUTE GROUP", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 }
-                Repeater { model: 8; delegate: Rectangle { id: gb42; implicitWidth: 28; implicitHeight: 20; radius: 7; color: mgPick.sel === index + 1 ? Theme.pink : Theme.ov(0.08); gradient: Gradient { GradientStop { position: 0; color: Qt.lighter(gb42.color, 1.25) } GradientStop { position: 1; color: Qt.darker(gb42.color, 1.12) } } Text { anchors.centerIn: parent; text: index + 1; color: mgPick.sel === index + 1 ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: mgPick.sel = index + 1 } } }
+                Repeater { model: 8; delegate: Rectangle { id: gb42; implicitWidth: 28; implicitHeight: 20; radius: 7; color: mgPick.sel === index + 1 ? Theme.pink : Theme.ov(0.08); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb42.color) } GradientStop { position: 1; color: Theme.btnBottom(gb42.color) } } Text { anchors.centerIn: parent; text: index + 1; color: mgPick.sel === index + 1 ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: mgPick.sel = index + 1 } } }
             }
             Flow { Layout.fillWidth: true; spacing: 3
                 Repeater { model: engine.stripState; delegate: Rectangle { implicitWidth: 46; implicitHeight: 22; radius: 4

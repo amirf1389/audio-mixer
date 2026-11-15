@@ -35,6 +35,12 @@ QtObject {
     readonly property int radius: 10
     readonly property var stripColors: ["#f59e0b", "#22d3ee", "#a78bfa", "#34d399", "#f472b6", "#fb923c", "#60a5fa", "#facc15"]
     // an overlay a pages puts on a panel: white on the dark theme, black on the light one, the same strength
+    // BUTTON COLOUR HARMONY: every button colour passes through here, so that all of them share one saturation and lightness band
+    // (no neon next to pastel) and the gradient only shifts gently. Glass (translucent) colours stay glass.
+    function harm(c) { if (c.a < 0.6) return c; const h = c.hslHue < 0 ? 0 : c.hslHue, sat = c.hslHue < 0 ? 0 : Math.min(c.hslSaturation, dark ? 0.58 : 0.55);
+        return Qt.hsla(h, sat, Math.max(dark ? 0.46 : 0.40, Math.min(dark ? 0.58 : 0.52, c.hslLightness)), c.a) }
+    function btnTop(c) { if (c.a < 0.6) return Qt.rgba(c.r, c.g, c.b, Math.min(1, c.a * 1.35)); const h = harm(c); return Qt.hsla(Math.max(0, h.hslHue), Math.max(0, h.hslSaturation), Math.min(0.66, h.hslLightness + 0.05), h.a) }
+    function btnBottom(c) { if (c.a < 0.6) return Qt.rgba(c.r, c.g, c.b, c.a * 0.55); const h = harm(c); return Qt.hsla(Math.max(0, h.hslHue), Math.max(0, h.hslSaturation), Math.max(0.30, h.hslLightness - 0.06), h.a) }
     function ov(a) { return dark ? Qt.rgba(1, 1, 1, a) : Qt.rgba(0, 0, 0, a); }
     function groupColor(g) {
         switch (g) {

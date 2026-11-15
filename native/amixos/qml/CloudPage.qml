@@ -34,7 +34,7 @@ Flickable {
                 Text { text: page.t("This version: ") + updater.current; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11 }
                 Text { text: page.t("On the server: ") + (updater.latest !== "" ? updater.latest : page.t("not checked yet")); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 11 }
                 Item { Layout.fillWidth: true }
-                Rectangle { id: gb19; implicitWidth: ck.implicitWidth + 22; implicitHeight: 26; radius: 7; color: Theme.ov(0.06); gradient: Gradient { GradientStop { position: 0; color: Qt.lighter(gb19.color, 1.25) } GradientStop { position: 1; color: Qt.darker(gb19.color, 1.12) } } border.color: Theme.cyan
+                Rectangle { id: gb19; implicitWidth: ck.implicitWidth + 22; implicitHeight: 26; radius: 7; color: Theme.ov(0.06); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb19.color) } GradientStop { position: 1; color: Theme.btnBottom(gb19.color) } } border.color: Theme.cyan
                     Text { id: ck; anchors.centerIn: parent; text: page.t("CHECK NOW"); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
                     MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: updater.check() } }
             }
