@@ -79,6 +79,25 @@ Item {
                         Text { objectName: "pairPin"; text: pinRow.pin.substring(0, 3) + " " + pinRow.pin.substring(3); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 22; font.bold: true; font.letterSpacing: 3 }
                         Text { text: i18n.t("changes in ", i18n.lang) + pinRow.secs + " s"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9 }
                         Note { text: i18n.t("Type this PIN into the phone once. It gets its own token for 30 days, tied to that phone's address. A new PIN every minute; one phone per PIN; five wrong tries close pairing until the next PIN.", i18n.lang) } }
+                    // PAIRING QR CODE: scan it with the phone camera (opens the browser remote, which pairs by itself) or with SCAN QR in the
+                    // Android app. It carries this computer's address and the minute's PIN, so it is redrawn when the PIN changes.
+                    RowLayout { id: qrRow; objectName: "pairQrRow"; visible: remote.running && remote.addresses.length > 0; spacing: 14; Layout.fillWidth: true
+                        property int pick: 0; property string url: ""; property var mods: []
+                        function redraw() { const a = remote.addresses; if (qrRow.pick >= a.length) qrRow.pick = 0; qrRow.url = a.length ? remote.pairUrl(a[qrRow.pick]) : ""; qrRow.mods = qrRow.url ? remote.qr(qrRow.url) : []; qrCanvas.requestPaint() }
+                        Connections { target: pinRow; function onPinChanged() { qrRow.redraw() } }
+                        onVisibleChanged: if (visible) redraw()
+                        Rectangle { implicitWidth: 168; implicitHeight: 168; radius: 8; color: "#ffffff"   // dark on light with a quiet zone: what every camera reads
+                            Canvas { id: qrCanvas; objectName: "pairQr"; anchors.fill: parent; anchors.margins: 10
+                                onPaint: { const ctx = getContext("2d"); ctx.reset(); ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, width, height)
+                                    const m = qrRow.mods; if (!m || m.length < 2) return; const n = m[0]; const s = Math.floor(Math.min(width, height) / n); const o = Math.floor((Math.min(width, height) - s * n) / 2)
+                                    ctx.fillStyle = "#000000"; for (let y = 0; y < n; ++y) for (let x = 0; x < n; ++x) if (m[1 + y * n + x]) ctx.fillRect(o + x * s, o + y * s, s, s) } } }
+                        ColumnLayout { Layout.fillWidth: true; spacing: 5
+                            Head { text: i18n.t("SCAN TO CONNECT", i18n.lang) }
+                            Note { text: i18n.t("Phone camera: opens the browser remote on this computer and pairs by itself. AmF X1 app: REMOTE → SCAN QR. The code holds this computer's address and the PIN of this minute, so it changes with the PIN.", i18n.lang) }
+                            Text { objectName: "pairQrUrl"; text: qrRow.url.replace(/#pin=.*/, ""); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
+                            Flow { Layout.fillWidth: true; spacing: 4; visible: remote.addresses.length > 1
+                                Repeater { model: remote.addresses; delegate: Btn { label: modelData.replace("http://", "").replace(/:\d+$/, ""); on: qrRow.pick === index; onColor: Theme.cyan; onClicked: { qrRow.pick = index; qrRow.redraw() } } } }
+                            Note { visible: remote.addresses.length > 1; text: i18n.t("More than one network: pick the address of the Wi-Fi the phone is on.", i18n.lang) } } }
                     Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.lineSoft }
                     RowLayout { spacing: 8
                         Head { text: i18n.t("AMF X1 NETWORK · TOKENS", i18n.lang) }

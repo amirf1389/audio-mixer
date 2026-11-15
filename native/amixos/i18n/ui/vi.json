@@ -2019,5 +2019,18 @@
 "sample rate and block size": "tần số lấy mẫu và kích thước khối",
 "sixteen-strip hybrid mixer with captured programs": "Bộ trộn âm thanh lai 16 kênh có các chương trình được lưu sẵn",
 "strips and master": "dải âm thanh và bộ điều khiển chính",
-"the open interface": "giao diện mở"
+"the open interface": "giao diện mở",
+"AUDIO ACCESS": "TRUY CẬP ÂM THANH",
+"What the console may open. Each switch applies at once.": "Các tùy chọn mà bảng điều khiển có thể mở ra. Mỗi tùy chọn sẽ được áp dụng ngay lập tức.",
+"MICROPHONES (WINDOWS AUDIO)": "MICRO (ÂM THANH TRÊN WINDOWS)",
+"HEADSET MICROPHONE (WASAPI)": "MICRO TAI NGHE (WASAPI)",
+"BLUETOOTH AUDIO": "ÂM THANH BLUETOOTH",
+"Audio access": "Truy cập âm thanh",
+"Microphones, headset microphone and Bluetooth audio are switched ON / OFF on SOUND CARD, next to the devices.": "Các chức năng micrô, micrô tai nghe và âm thanh Bluetooth được bật/tắt trong phần “SOUND CARD”, ngay bên cạnh các thiết bị.",
+"GO TO SOUND CARD": "TRUY CẬP VÀO THẺ ÂM THANH",
+"SCAN TO CONNECT": "Quét để kết nối",
+"Phone camera: opens the browser remote on this computer and pairs by itself. AmF X1 app: REMOTE → SCAN QR. The code holds this computer's address and the PIN of this minute, so it changes with the PIN.": "Camera điện thoại: Mở trình duyệt từ xa trên máy tính này và tự động kết nối. Ứng dụng AmF X1: REMOTE → QUÉT MÃ QR. Mã này chứa địa chỉ của máy tính này và mã PIN tại thời điểm hiện tại, do đó nó sẽ thay đổi theo mã PIN.",
+"More than one network: pick the address of the Wi-Fi the phone is on.": "Có nhiều hơn một mạng: hãy chọn địa chỉ của mạng Wi-Fi mà điện thoại đang kết nối.",
+"MUSIC INPUT: DUAL LISTEN ON. Click to go back to the 3-band EQ.": "ĐẦU VÀO ÂM NHẠC: CHẾ ĐỘ NGHE KÉP ĐÃ BẬT. Nhấp để quay lại bộ cân bằng 3 dải tần.",
+"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "ĐẦU VÀO ÂM NHẠC: nhấp vào đây để bật chế độ DUAL LISTEN ON cho kênh này (âm nhạc từ thiết bị phát, ban nhạc hoặc bản nhạc đệm)."
 }

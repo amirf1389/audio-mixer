@@ -2021,5 +2021,18 @@
 "sample rate and block size": "bemonsteringsfrequentie en blokgrootte",
 "sixteen-strip hybrid mixer with captured programs": "hybride mixer met zestien kanalen en opgeslagen programma’s",
 "strips and master": "sporen en master",
-"the open interface": "de open interface"
+"the open interface": "de open interface",
+"AUDIO ACCESS": "AUDIO-TOEGANG",
+"What the console may open. Each switch applies at once.": "Wat de console kan openen. Elke schakelaar wordt in één keer geactiveerd.",
+"MICROPHONES (WINDOWS AUDIO)": "MICROFOONS (WINDOWS AUDIO)",
+"HEADSET MICROPHONE (WASAPI)": "HEADSETMICROFOON (WASAPI)",
+"BLUETOOTH AUDIO": "BLUETOOTH-AUDIO",
+"Audio access": "Toegang tot audio",
+"Microphones, headset microphone and Bluetooth audio are switched ON / OFF on SOUND CARD, next to the devices.": "Microfoons, headsetmicrofoons en Bluetooth-audio worden in- en uitgeschakeld onder ‘GELUIDSKAART’, naast de apparaten.",
+"GO TO SOUND CARD": "NAAR DE GELUIDSKAART",
+"SCAN TO CONNECT": "SCAN OM VERBINDING TE MAKEN",
+"Phone camera: opens the browser remote on this computer and pairs by itself. AmF X1 app: REMOTE → SCAN QR. The code holds this computer's address and the PIN of this minute, so it changes with the PIN.": "Telefooncamera: opent de browser op deze computer en maakt automatisch verbinding. AmF X1-app: REMOTE → QR-code scannen. De code bevat het adres van deze computer en de pincode van dit moment, dus deze verandert mee met de pincode.",
+"More than one network: pick the address of the Wi-Fi the phone is on.": "Meer dan één netwerk: kies het adres van het wifi-netwerk waarmee de telefoon is verbonden.",
+"MUSIC INPUT: DUAL LISTEN ON. Click to go back to the 3-band EQ.": "MUZIEKINGANG: DUAL LISTEN AAN. Klik om terug te gaan naar de 3-bands EQ.",
+"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "MUZIEKINGANG: klik om ‘DUAL LISTEN’ voor dit kanaal in te schakelen (muziek van een afspeelapparaat, een band of achtergrondmuziek)."
 }

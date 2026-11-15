@@ -2042,5 +2042,18 @@
 "sample rate and block size": "örnekleme hızı ve blok boyutu",
 "sixteen-strip hybrid mixer with captured programs": "kaydedilmiş programlara sahip on altı şeritli hibrit mikser",
 "strips and master": "şeritler ve ana kontrol",
-"the open interface": "açık arayüz"
+"the open interface": "açık arayüz",
+"AUDIO ACCESS": "SES ERİŞİMİ",
+"What the console may open. Each switch applies at once.": "Konsolun açabileceği öğeler. Her bir anahtar aynı anda geçerlidir.",
+"MICROPHONES (WINDOWS AUDIO)": "MİKROFONLAR (WINDOWS SES)",
+"HEADSET MICROPHONE (WASAPI)": "KULAKLIK MİKROFONU (WASAPI)",
+"BLUETOOTH AUDIO": "BLUETOOTH SES",
+"Audio access": "Ses erişimi",
+"Microphones, headset microphone and Bluetooth audio are switched ON / OFF on SOUND CARD, next to the devices.": "Mikrofonlar, kulaklıklı mikrofon ve Bluetooth ses, “SES KARTI” bölümünde, cihazların yanında AÇIK / KAPALI olarak ayarlanır.",
+"GO TO SOUND CARD": "SES KARTINA GİT",
+"SCAN TO CONNECT": "TARAYIN VE BAĞLANIN",
+"Phone camera: opens the browser remote on this computer and pairs by itself. AmF X1 app: REMOTE → SCAN QR. The code holds this computer's address and the PIN of this minute, so it changes with the PIN.": "Telefon kamerası: Bu bilgisayardaki tarayıcıyı uzaktan açar ve otomatik olarak eşleşir. AmF X1 uygulaması: UZAKTAN → QR KODUNU TARAYIN. Kod, bu bilgisayarın adresini ve o anki PIN kodunu içerir; dolayısıyla PIN koduyla birlikte değişir.",
+"More than one network: pick the address of the Wi-Fi the phone is on.": "Birden fazla ağ varsa: Telefonun bağlı olduğu Wi-Fi ağının adresini seçin.",
+"MUSIC INPUT: DUAL LISTEN ON. Click to go back to the 3-band EQ.": "MÜZİK GİRİŞİ: ÇİFT DİNLEME AÇIK. 3 bantlı EQ'ya geri dönmek için tıklayın.",
+"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "MÜZİK GİRİŞİ: Bu kanal için ÇİFT DİNLEME özelliğini etkinleştirmek üzere tıklayın (bir müzik çalarından, bir gruptan veya arka plan müziklerinden gelen müzik)."
 }

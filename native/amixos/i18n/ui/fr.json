@@ -2019,5 +2019,18 @@
 "sample rate and block size": "fréquence d'échantillonnage et taille de bloc",
 "sixteen-strip hybrid mixer with captured programs": "mixeur hybride à seize canaux avec programmes enregistrés",
 "strips and master": "pistes et console de mixage",
-"the open interface": "l'interface ouverte"
+"the open interface": "l'interface ouverte",
+"AUDIO ACCESS": "ACCÈS AUDIO",
+"What the console may open. Each switch applies at once.": "Ce que la console peut ouvrir. Chaque commutateur s'applique immédiatement.",
+"MICROPHONES (WINDOWS AUDIO)": "MICROPHONES (AUDIO WINDOWS)",
+"HEADSET MICROPHONE (WASAPI)": "MICROPHONE DE CASQUE (WASAPI)",
+"BLUETOOTH AUDIO": "AUDIO BLUETOOTH",
+"Audio access": "Accès audio",
+"Microphones, headset microphone and Bluetooth audio are switched ON / OFF on SOUND CARD, next to the devices.": "Les microphones, les micro-casques et l'audio Bluetooth peuvent être activés ou désactivés dans la section « Carte son », à côté des périphériques.",
+"GO TO SOUND CARD": "ALLER À LA CARTE SON",
+"SCAN TO CONNECT": "SCANNER POUR SE CONNECTER",
+"Phone camera: opens the browser remote on this computer and pairs by itself. AmF X1 app: REMOTE → SCAN QR. The code holds this computer's address and the PIN of this minute, so it changes with the PIN.": "Appareil photo du téléphone : ouvre la fonction « Remote » du navigateur sur cet ordinateur et établit automatiquement la connexion. Application AmF X1 : REMOTE → SCAN QR. Le code contient l'adresse de cet ordinateur et le code PIN du moment, il change donc en fonction du code PIN.",
+"More than one network: pick the address of the Wi-Fi the phone is on.": "Plus d'un réseau : sélectionnez l'adresse du réseau Wi-Fi auquel le téléphone est connecté.",
+"MUSIC INPUT: DUAL LISTEN ON. Click to go back to the 3-band EQ.": "ENTRÉE MUSIQUE : DUAL LISTEN ACTIVÉ. Cliquez pour revenir à l'égaliseur à 3 bandes.",
+"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "ENTRÉE MUSIQUE : cliquez pour activer la fonction « DUAL LISTEN » sur ce canal (musique provenant d'un lecteur, d'un groupe ou de pistes d'accompagnement)."
 }

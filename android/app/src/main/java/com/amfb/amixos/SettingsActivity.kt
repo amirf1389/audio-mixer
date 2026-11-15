@@ -30,8 +30,6 @@ object Prefs {
     fun stripCount(c: Context) = remote(c).getInt("stripCount", 32)                   // 8 / 16 / 32 strips on the mixer
     fun defaultPort(c: Context) = remote(c).getInt("defaultPort", 8765)
     fun meterFloor(c: Context) = remote(c).getInt("meterFloor", 60)                   // the meters show 0 to -N dBFS
-    fun localRate(c: Context) = local(c).getInt("rate", 48000)
-    fun localFrames(c: Context) = local(c).getInt("frames", 256)
     fun localOutDevice(c: Context) = local(c).getInt("outDevice", 0)                 // AudioDeviceInfo id the phone mixer plays to; 0 = the system route
     fun localInDevice(c: Context) = local(c).getInt("inDevice", 0)
 }
@@ -66,10 +64,8 @@ class SettingsActivity : AppCompatActivity() {
         toggle(r, "haptics", true, getString(R.string.set_haptics), null)
         toggle(r, "confirmStop", true, getString(R.string.set_confirm_stop), getString(R.string.set_confirm_stop_note))
 
-        section(getString(R.string.set_local))
-        choice(l, "rate", 48000, listOf(44100, 48000), getString(R.string.set_rate)) { "$it Hz" }
-        choice(l, "frames", 256, listOf(128, 256, 512, 1024), getString(R.string.set_frames)) { "$it (" + String.format("%.1f", it * 1000.0 / Prefs.localRate(this)) + " ms)" }
-        info("", getString(R.string.set_local_note))
+        // PHONE AUDIO is not chosen here any more: the phone mixer runs at what the phone's own audio HAL reports (rate, buffer, and the
+        // brand profile's headroom), and the interface is picked on DEVICES & NETWORK
 
         section(getString(R.string.set_about))
         info(getString(R.string.app_name), "AMFB Audio · " + runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrDefault("?"))

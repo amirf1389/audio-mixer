@@ -2019,5 +2019,18 @@
 "sample rate and block size": "Abtastrate und Blockgröße",
 "sixteen-strip hybrid mixer with captured programs": "Hybrid-Mischpult mit 16 Kanälen und gespeicherten Programmen",
 "strips and master": "Spuren und Master",
-"the open interface": "die offene Schnittstelle"
+"the open interface": "die offene Schnittstelle",
+"AUDIO ACCESS": "AUDIO-ZUGANG",
+"What the console may open. Each switch applies at once.": "Was die Konsole möglicherweise öffnet. Jede Einstellung wird sofort wirksam.",
+"MICROPHONES (WINDOWS AUDIO)": "MIKROFONE (WINDOWS AUDIO)",
+"HEADSET MICROPHONE (WASAPI)": "HEADSET-MIKROFON (WASAPI)",
+"BLUETOOTH AUDIO": "BLUETOOTH-AUDIO",
+"Audio access": "Zugriff auf Audiodateien",
+"Microphones, headset microphone and Bluetooth audio are switched ON / OFF on SOUND CARD, next to the devices.": "Mikrofone, Headset-Mikrofone und Bluetooth-Audio werden unter „SOUND CARD“ neben den jeweiligen Geräten ein- und ausgeschaltet.",
+"GO TO SOUND CARD": "ZUR SOUNDKARTE",
+"SCAN TO CONNECT": "SCANNEN, UM EINE VERBINDUNG HERZUSTELLEN",
+"Phone camera: opens the browser remote on this computer and pairs by itself. AmF X1 app: REMOTE → SCAN QR. The code holds this computer's address and the PIN of this minute, so it changes with the PIN.": "Handykamera: Öffnet die Fernsteuerung im Browser auf diesem Computer und stellt automatisch eine Verbindung her. AmF X1-App: FERNBEDIENUNG → QR-CODE SCANNEN. Der Code enthält die Adresse dieses Computers und die aktuelle PIN; er ändert sich daher mit der PIN.",
+"More than one network: pick the address of the Wi-Fi the phone is on.": "Mehr als ein Netzwerk: Wählen Sie die Adresse des WLAN-Netzwerks aus, mit dem das Smartphone verbunden ist.",
+"MUSIC INPUT: DUAL LISTEN ON. Click to go back to the 3-band EQ.": "MUSIK-EINGANG: DUAL LISTEN EINGESCHALTET. Klicken Sie hier, um zum 3-Band-EQ zurückzukehren.",
+"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "MUSIK-EINGANG: Klicken Sie hier, um „DUAL LISTEN“ für diesen Kanal zu aktivieren (Musik von einem Player, einer Band oder Begleitmusik)."
 }

@@ -77,12 +77,13 @@ Item {
                         function place(mx, my) { const dx = mx - width / 2, dy = height / 2 - my, r = Math.min(1, Math.hypot(dx, dy) / dial.rad), c = page.cur; page.put(true, Math.round(Math.atan2(dx, dy) * 180 / Math.PI), 0, Math.max(0.3, Math.pow(11, r) - 1), c.spread) }
                         onPressed: function (m) { place(m.x, m.y) } onPositionChanged: function (m) { if (pressed) place(m.x, m.y) } } } }
             ColumnLayout { Layout.fillWidth: true; Layout.fillHeight: true; spacing: 8
-                Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 92; Layout.maximumHeight: 92; clip: true; radius: Theme.radius; color: Theme.card; border.color: Theme.line
+                Rectangle { Layout.fillWidth: true; Layout.preferredHeight: chFlow.implicitHeight + 16; Layout.maximumHeight: 160; clip: true; radius: Theme.radius; color: Theme.card; border.color: Theme.line
                     Flow { id: chFlow; x: 8; y: 8; width: parent.width - 16; spacing: 4
-                        Repeater { model: 32; delegate: Rectangle { width: 42; height: 22; radius: 4; readonly property bool on: { page.rev; return engine.spatial(index).on }
+                        Repeater { model: 32; delegate: Rectangle { width: 74; height: 22; radius: 4; ToolTip.visible: chH.hovered; ToolTip.text: (index + 1) + "  " + ((page.strips[index] && page.strips[index].name) || ""); HoverHandler { id: chH } readonly property bool on: { page.rev; return engine.spatial(index).on }
                                 readonly property bool iamf: { page.rev; return engine.spatial(index).iamf === true }
                                 color: page.sel === index ? Theme.orange : on ? (iamf ? "#9b7bff" : Theme.cyan) : Theme.ov(0.08); border.color: Theme.lineSoft
-                                Text { anchors.centerIn: parent; text: (page.strips[index] && page.strips[index].name) ? page.strips[index].name.substring(0, 5) : "CH " + (index + 1); color: (page.sel === index || parent.on) ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
+                                Text { anchors.fill: parent; anchors.leftMargin: 4; anchors.rightMargin: 4; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight   // the channel number and as much of its name as fits (the full name on hover): "LIVE" twice told nothing
+                                    text: (index + 1) + " " + ((page.strips[index] && page.strips[index].name) ? page.strips[index].name : "CH " + (index + 1)); color: (page.sel === index || parent.on) ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
                                 MouseArea { anchors.fill: parent; onClicked: page.sel = index } } } } }
                 Rectangle { Layout.fillWidth: true; Layout.fillHeight: true; radius: Theme.radius; color: Theme.card; border.color: Theme.line
                     ColumnLayout { anchors.fill: parent; anchors.margins: 12; spacing: 10

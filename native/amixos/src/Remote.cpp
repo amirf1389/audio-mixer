@@ -12,6 +12,7 @@
 
 #include "Engine.h"
 #include "paths/paths.hpp"
+#include "qr/qrcodegen.hpp"
 
 Remote::Remote(Engine* engine, QObject* parent) : QObject(parent), engine_(engine) {
   proc_.setProcessChannelMode(QProcess::MergedChannels);
@@ -44,6 +45,15 @@ QString Remote::pairPin() const {
   const QByteArray h = QCryptographicHash::hash((t + "|pair|" + QString::number(QDateTime::currentSecsSinceEpoch() / 60)).toUtf8(), QCryptographicHash::Sha256).toHex();
   return QString::number(h.left(8).toULong(nullptr, 16) % 1000000UL).rightJustified(6, '0');
 }
+QString Remote::pairUrl(const QString& address) const { const QString pin = pairPin(); return pin.isEmpty() || address.isEmpty() ? QString() : address + QStringLiteral("/remote#pin=") + pin; }
+QVariantList Remote::qr(const QString& text) const {
+  QVariantList out; if (text.isEmpty() || text.size() > 200) return out;
+  try { const qrcodegen::QrCode q = qrcodegen::QrCode::encodeText(text.toUtf8().constData(), qrcodegen::QrCode::Ecc::MEDIUM);
+    const int n = q.getSize(); out.reserve(n * n + 1); out << n;
+    for (int y = 0; y < n; ++y) for (int x = 0; x < n; ++x) out << (q.getModule(x, y) ? 1 : 0);
+  } catch (...) { out.clear(); }
+  return out;
+}
 int Remote::pairSecondsLeft() const { return 60 - static_cast<int>(QDateTime::currentSecsSinceEpoch() % 60); }
 void Remote::refreshTokens() {
   tokens_.clear(); if (!available()) { emit changed(); return; }
@@ -70,11 +80,25 @@ bool Remote::revokeToken(const QString& id) {
 bool Remote::available() const { return ext_.available() || QFileInfo::exists(program()); }
 QString Remote::tokenFile() const { return QString::fromStdString(am::paths::file("daemon.token")); }
 QString Remote::token() const { QFile f(tokenFile()); if (!f.open(QIODevice::ReadOnly) || f.size() > 256) return {}; return QString::fromLatin1(f.readAll()).trimmed(); }
+// The private IPv4 addresses phones can reach: interfaces that are up and running, real ones (Wi-Fi, Ethernet) first. Virtual adapters
+// (VirtualBox, VMware, Hyper-V / WSL vEthernet, Docker, VPN tunnels) come last: a phone on the Wi-Fi cannot reach them, and putting
+// one first sent phones (and the QR code) to an address that never answers.
 QStringList Remote::addresses() const {
-  QStringList l;
-  for (const QHostAddress& a : QNetworkInterface::allAddresses()) { if (a.protocol() != QAbstractSocket::IPv4Protocol || a.isLoopback()) continue; const quint32 ip = a.toIPv4Address(); const unsigned x = ip >> 24, y = (ip >> 16) & 255;
-    if (x == 10 || (x == 172 && y >= 16 && y <= 31) || (x == 192 && y == 168)) l << QStringLiteral("http://%1:%2").arg(a.toString()).arg(port()); }
-  return l;
+  QStringList real, virt;
+  static const QStringList virtualNames{"virtualbox", "vmware", "vethernet", "hyper-v", "wsl", "docker", "vbox", "tap", "tun", "vpn", "zerotier", "tailscale", "hamachi", "loopback", "bluetooth"};
+  for (const QNetworkInterface& ni : QNetworkInterface::allInterfaces()) {
+    const auto f = ni.flags(); if (!(f & QNetworkInterface::IsUp) || !(f & QNetworkInterface::IsRunning) || (f & QNetworkInterface::IsLoopBack)) continue;
+    const QString nm = (ni.humanReadableName() + " " + ni.name()).toLower(); bool isVirt = ni.type() == QNetworkInterface::Virtual;
+    for (const QString& v : virtualNames) if (nm.contains(v)) isVirt = true;
+    for (const QNetworkAddressEntry& e : ni.addressEntries()) { const QHostAddress a = e.ip(); if (a.protocol() != QAbstractSocket::IPv4Protocol) continue;
+      const quint32 ip = a.toIPv4Address(); const unsigned x = ip >> 24, y = (ip >> 16) & 255;
+      if (!(x == 10 || (x == 172 && y >= 16 && y <= 31) || (x == 192 && y == 168))) continue;
+      if (x == 192 && y == 168 && ((ip >> 8) & 255) == 56) isVirt = true;   // VirtualBox host-only network
+      const QString u = QStringLiteral("http://%1:%2").arg(a.toString()).arg(port());
+      const bool wifi = ni.type() == QNetworkInterface::Wifi || ni.type() == QNetworkInterface::Ieee80211, eth = ni.type() == QNetworkInterface::Ethernet;
+      if (isVirt) virt << u; else if (wifi || eth) real.prepend(u); else real << u; } }
+  real.removeDuplicates(); for (const QString& v : virt) if (!real.contains(v)) real << v;
+  return real;
 }
 bool Remote::start(bool wifi) {
   if (running()) return true;
@@ -83,7 +107,8 @@ bool Remote::start(bool wifi) {
   engine_->stop();   // the service opens the sound card itself
   wifi_ = wifi;
   QStringList args{"--port", QString::number(port()), "--open", "auto", "--version", QCoreApplication::applicationVersion(),
-    "--strips", QString::number(qBound(1, engine_->licensedChannels(), 32)), "--plan", engine_->license().value("planName").toString()};   // the phone gets the channels of the licence plan, no more if (wifi) args << "--allow-lan";   // local policy stays on: private addresses only
+    "--strips", QString::number(qBound(1, engine_->licensedChannels(), 32)), "--plan", engine_->license().value("planName").toString()};   // the phone gets the channels of the licence plan, no more
+  if (wifi) args << "--allow-lan";   // phones on this network may connect (local policy stays on: private addresses only). This sat inside the comment above and was never passed: every phone was refused
   if (ext_.available() && !QSettings().value("store/off").toStringList().contains(QStringLiteral("ext:AmF X1 Network"))) {   // the extension runs inside the console (unless switched off in the LOCAL STORE): same process, same rights on the sound card
     const int rc = ext_.start(args);
     if (rc == 0 && ext_.running()) { status_ = wifi ? QStringLiteral("starting for the phones on this network (extension)") : QStringLiteral("starting for this computer only (extension)"); emit changed(); return true; }

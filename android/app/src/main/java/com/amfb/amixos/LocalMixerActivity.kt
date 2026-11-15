@@ -17,7 +17,12 @@ import androidx.core.content.ContextCompat
 
 /** THIS PHONE: a one-strip mixer on the phone itself: microphone in, fader, pan, mute, master limiter, peak meters. The engine is the same C++ as the desktop console. */
 class LocalMixerActivity : AppCompatActivity() {
-    private val engine by lazy { Engine(strips = 2, sampleRate = Prefs.localRate(this).toDouble()) }
+    // the phone's own audio HAL decides the rate and buffer (no audio choices in Settings): its native output rate and burst size,
+    // with the brand profile's headroom; plain defaults when the phone reports nothing
+    private val hal by lazy { AudioHal.read(this) }
+    private val rate by lazy { hal.nativeRate.takeIf { it in 8000..192000 } ?: 48000 }
+    private val frames by lazy { hal.nativeFrames.takeIf { it in 32..2048 } ?: 256 }
+    private val engine by lazy { Engine(strips = 2, sampleRate = rate.toDouble()) }
     private var loop: AudioLoop? = null
     private val ui = Handler(Looper.getMainLooper())
 
@@ -45,10 +50,10 @@ class LocalMixerActivity : AppCompatActivity() {
     }
 
     // the buffer headroom from the brand profile (what this phone's HAL reported), measured once
-    private val bursts by lazy { BrandProfile.of(AudioHal.read(this)).bursts }
+    private val bursts by lazy { BrandProfile.of(hal).bursts }
     private fun startAudio() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) { ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), 1); return }
-        loop = AudioLoop(engine, Prefs.localRate(this), Prefs.localFrames(this), Prefs.localOutDevice(this), Prefs.localInDevice(this), bursts).also { it.start() }
+        loop = AudioLoop(engine, rate, frames, Prefs.localOutDevice(this), Prefs.localInDevice(this), bursts).also { it.start() }
         findViewById<Button>(R.id.start).text = getString(R.string.stop)
     }
     private fun stopAudio() { loop?.stop(); loop = null; findViewById<Button>(R.id.start).text = getString(R.string.start) }

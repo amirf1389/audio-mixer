@@ -10,6 +10,7 @@ import android.view.Gravity
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
+import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.ScrollView
@@ -21,6 +22,10 @@ import com.amfb.amixos.remote.ConsoleState
 import com.amfb.amixos.remote.DaemonClient
 import com.amfb.amixos.remote.Endpoint
 import com.amfb.amixos.remote.Meters
+import com.amfb.amixos.remote.PairLink
+import com.google.mlkit.vision.barcode.common.Barcode
+import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import java.util.concurrent.Executors
 
 /** The remote: connect to amixos-daemon (host, port, token), then the mixer (32 strips: fader, pan, mute, solo, meter), the master,
@@ -68,7 +73,8 @@ class RemoteActivity : AppCompatActivity() {
         val connect = Button(this).apply { text = getString(R.string.connect) }
         val devices = Button(this).apply { text = getString(R.string.devices); isEnabled = false }
         val pair = Button(this).apply { text = getString(R.string.pair_pin) }
-        row.addView(pair); row.addView(connect); row.addView(devices); conn.addView(row)
+        val scan = Button(this).apply { text = getString(R.string.scan_qr) }
+        row.addView(scan); row.addView(pair); row.addView(connect); row.addView(devices); conn.addView(HorizontalScrollView(this).apply { addView(row) })
         val find = Button(this).apply { text = getString(R.string.find) }
         val busesBtn = Button(this).apply { text = getString(R.string.buses); isEnabled = false }
         val monBtn = Button(this).apply { text = getString(R.string.monitor); isEnabled = false }
@@ -121,19 +127,31 @@ class RemoteActivity : AppCompatActivity() {
             }
         }
         devices.setOnClickListener { showDevices() }
+        // SCAN QR: Google's code scanner (Play services) reads the console's pairing QR code. It needs no camera permission: the scanner
+        // runs in Play services and hands back only the text. Then the same pairing as the PIN dialog, without typing anything.
+        fun pairWith(h: String, pt: Int, pin: String) {
+            host.setText(h); port.setText(pt.toString()); status.text = getString(R.string.connecting); status.setTextColor(Color.parseColor("#FBBF24"))
+            io.execute {
+                try {
+                    val t = DaemonClient.pair(h, pt, pin, android.os.Build.MANUFACTURER + " " + android.os.Build.MODEL)
+                    ui.post { token.setText(t); connect.performClick() }   // connect saves host, port and the new token
+                } catch (e: Exception) { ui.post { status.text = getString(R.string.failed, e.message ?: e.javaClass.simpleName); status.setTextColor(Color.parseColor("#FF2A5F")) } }
+            }
+        }
+        scan.setOnClickListener {
+            val opts = GmsBarcodeScannerOptions.Builder().setBarcodeFormats(Barcode.FORMAT_QR_CODE).build()
+            runCatching { GmsBarcodeScanning.getClient(this, opts).startScan()
+                .addOnSuccessListener { b -> val l = PairLink.parse(b.rawValue); if (l == null) status.text = getString(R.string.scan_not_console) else pairWith(l.host, l.port, l.pin) }
+                .addOnFailureListener { status.text = getString(R.string.scan_unavailable); status.setTextColor(Color.parseColor("#FBBF24")) } }
+                .onFailure { status.text = getString(R.string.scan_unavailable) }
+        }
         pair.setOnClickListener {   // the PIN instead of typing the long token: the console shows it under NETWORK → PHONE REMOTE, new every minute
             val h = host.text.toString().trim(); val pt = port.text.toString().trim().toIntOrNull() ?: 8765
             if (h.isEmpty()) { status.text = getString(R.string.pair_need_host); return@setOnClickListener }
             val pinBox = EditText(this).apply { hint = "000000"; inputType = android.text.InputType.TYPE_CLASS_NUMBER; filters = arrayOf(android.text.InputFilter.LengthFilter(6)) }
             AlertDialog.Builder(this).setTitle(R.string.pair_pin).setMessage(R.string.pair_help).setView(pinBox)
                 .setPositiveButton(R.string.pair_go) { _, _ ->
-                    val pin = pinBox.text.toString().trim(); status.text = getString(R.string.connecting)
-                    io.execute {
-                        try {
-                            val t = DaemonClient.pair(h, pt, pin, android.os.Build.MANUFACTURER + " " + android.os.Build.MODEL)
-                            ui.post { token.setText(t); connect.performClick() }   // connect saves host, port and the new token
-                        } catch (e: Exception) { ui.post { status.text = getString(R.string.failed, e.message ?: e.javaClass.simpleName); status.setTextColor(Color.parseColor("#FF2A5F")) } }
-                    }
+                    pairWith(h, pt, pinBox.text.toString().trim())
                 }.setNegativeButton(android.R.string.cancel, null).show()
         }
     }

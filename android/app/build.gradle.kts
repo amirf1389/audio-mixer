@@ -48,6 +48,8 @@ dependencies {
     // MIXDOWN: Media3 Transformer (Apache 2.0) decodes the picked files, mixes them with its AudioMixer (DefaultAudioMixer) and writes AAC
     implementation("androidx.media3:media3-transformer:1.4.1")
     implementation("androidx.media3:media3-common:1.4.1")
+    // SCAN QR: Google's code scanner runs inside Play services and returns only the scanned text (no camera permission for this app)
+    implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.14.1")
     testImplementation("androidx.test:core:1.6.1")

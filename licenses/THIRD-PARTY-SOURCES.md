@@ -12,6 +12,7 @@ is installed, bundled, or linked separately, and its license has to be checked b
 | C | https://en.cppreference.com/w/c | Language of the Windows driver stub and native code | Reference only. |
 | C++ | https://en.cppreference.com/w/cpp | Language of the ASIO driver and native engine | Reference only. |
 | Rust | https://www.rust-lang.org | Systems language (candidate for native audio code) | Reference only. Not used yet. |
+| QR Code generator (Project Nayuki) | https://github.com/nayuki/QR-Code-generator | The pairing QR code on NETWORK → PHONE REMOTE | **Bundled** (v1.8.0, MIT): `engine/cpp/app/qr/`, licence in `engine/cpp/app/qr/LICENSE.txt`. |
 | RtAudio | https://www.music.mcgill.ca/~gary/rtaudio/ | Cross-platform audio I/O (the "RT" in the bridge's audio engine) | Reference only. Check the license before bundling. |
 
 ## Pending

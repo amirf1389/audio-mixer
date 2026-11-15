@@ -2161,5 +2161,18 @@
 "✓ INPUT",
 "✓ OUTPUT",
 "❄ FREEZE",
-"💾 SAVE CUSTOM"
+"💾 SAVE CUSTOM",
+"AUDIO ACCESS",
+"What the console may open. Each switch applies at once.",
+"MICROPHONES (WINDOWS AUDIO)",
+"HEADSET MICROPHONE (WASAPI)",
+"BLUETOOTH AUDIO",
+"Audio access",
+"Microphones, headset microphone and Bluetooth audio are switched ON / OFF on SOUND CARD, next to the devices.",
+"GO TO SOUND CARD",
+"SCAN TO CONNECT",
+"Phone camera: opens the browser remote on this computer and pairs by itself. AmF X1 app: REMOTE → SCAN QR. The code holds this computer's address and the PIN of this minute, so it changes with the PIN.",
+"More than one network: pick the address of the Wi-Fi the phone is on.",
+"MUSIC INPUT: DUAL LISTEN ON. Click to go back to the 3-band EQ.",
+"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks)."
 ]

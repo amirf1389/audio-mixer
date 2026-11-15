@@ -2106,5 +2106,18 @@
 "sample rate and block size": "नमूना दर और ब्लॉक आकार",
 "sixteen-strip hybrid mixer with captured programs": "कैप्चर किए गए प्रोग्रामों वाला सोलह-स्ट्रिप हाइब्रिड मिक्सर",
 "strips and master": "स्ट्रिप्स और मास्टर",
-"the open interface": "खुला इंटरफ़ेस"
+"the open interface": "खुला इंटरफ़ेस",
+"AUDIO ACCESS": "ऑडियो पहुँच",
+"What the console may open. Each switch applies at once.": "कंसोल क्या खोल सकता है। प्रत्येक स्विच एक साथ लागू होता है।",
+"MICROPHONES (WINDOWS AUDIO)": "माइक्रोफोन (विंडोज ऑडियो)",
+"HEADSET MICROPHONE (WASAPI)": "हेडसेट माइक्रोफ़ोन (WASAPI)",
+"BLUETOOTH AUDIO": "ब्लूटूथ ऑडियो",
+"Audio access": "ऑडियो पहुँच",
+"Microphones, headset microphone and Bluetooth audio are switched ON / OFF on SOUND CARD, next to the devices.": "माइक्रोफोन, हेडसेट माइक्रोफोन और ब्लूटूथ ऑडियो साउंड कार्ड पर, डिवाइसों के बगल में चालू/बंद किए जाते हैं।",
+"GO TO SOUND CARD": "साउंड कार्ड पर जाएँ",
+"SCAN TO CONNECT": "कनेक्ट करने के लिए स्कैन करें",
+"Phone camera: opens the browser remote on this computer and pairs by itself. AmF X1 app: REMOTE → SCAN QR. The code holds this computer's address and the PIN of this minute, so it changes with the PIN.": "फोन कैमरा: इस कंप्यूटर पर ब्राउज़र रिमोट खोलता है और अपने आप पेयर हो जाता है।   AmF X1 ऐप: रिमोट → QR स्कैन।   कोड में इस कंप्यूटर का पता और इस मिनट का PIN होता है, इसलिए यह PIN के साथ बदलता रहता है।",
+"More than one network: pick the address of the Wi-Fi the phone is on.": "एक से अधिक नेटवर्क: उस वाई-फाई का पता चुनें जिस पर फोन जुड़ा है।",
+"MUSIC INPUT: DUAL LISTEN ON. Click to go back to the 3-band EQ.": "संगीत इनपुट: डुअल लिसन चालू। 3-बैंड EQ पर वापस जाने के लिए क्लिक करें।",
+"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "संगीत इनपुट: इस चैनल के लिए डुअल लिसन ऑन स्विच करने के लिए क्लिक करें (प्लेयर, बैंड या बैकिंग ट्रैक्स से संगीत)।"
 }

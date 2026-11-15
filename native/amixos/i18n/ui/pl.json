@@ -2020,5 +2020,18 @@
 "sample rate and block size": "częstotliwość próbkowania i rozmiar bloku",
 "sixteen-strip hybrid mixer with captured programs": "szesnastościeżkowy mikser hybrydowy z zapamiętanymi programami",
 "strips and master": "ścieżki i master",
-"the open interface": "interfejs otwarty"
+"the open interface": "interfejs otwarty",
+"AUDIO ACCESS": "DOSTĘP DO PLIKÓW AUDIO",
+"What the console may open. Each switch applies at once.": "Co konsola może otworzyć. Każda opcja jest aktywowana natychmiast.",
+"MICROPHONES (WINDOWS AUDIO)": "MIKROFONY (AUDIO W SYSTEMIE WINDOWS)",
+"HEADSET MICROPHONE (WASAPI)": "MIKROFON W ZESTAWIE SŁUCHAWKOWYM (WASAPI)",
+"BLUETOOTH AUDIO": "AUDIO BLUETOOTH",
+"Audio access": "Dostęp do plików audio",
+"Microphones, headset microphone and Bluetooth audio are switched ON / OFF on SOUND CARD, next to the devices.": "Mikrofony, mikrofon w zestawie słuchawkowym oraz audio Bluetooth włącza się i wyłącza w sekcji „Karta dźwiękowa”, obok poszczególnych urządzeń.",
+"GO TO SOUND CARD": "PRZEJDŹ DO KARTY DŹWIĘKOWEJ",
+"SCAN TO CONNECT": "ZESKANUJ, ABY POŁĄCZYĆ SIĘ",
+"Phone camera: opens the browser remote on this computer and pairs by itself. AmF X1 app: REMOTE → SCAN QR. The code holds this computer's address and the PIN of this minute, so it changes with the PIN.": "Aparat w telefonie: otwiera aplikację Remote na tym komputerze i samoczynnie nawiązuje połączenie. Aplikacja AmF X1: REMOTE → ZESKANUJ KOD QR. Kod zawiera adres tego komputera oraz aktualny kod PIN, więc zmienia się wraz ze zmianą kodu PIN.",
+"More than one network: pick the address of the Wi-Fi the phone is on.": "Więcej niż jedna sieć: wybierz adres sieci Wi-Fi, z którą połączony jest telefon.",
+"MUSIC INPUT: DUAL LISTEN ON. Click to go back to the 3-band EQ.": "WEJŚCIE MUZYCZNE: FUNKCJA DUAL LISTEN WŁĄCZONA. Kliknij, aby powrócić do 3-pasmowego korektora.",
+"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "WEJŚCIE MUZYCZNE: kliknij, aby włączyć funkcję DUAL LISTEN dla tego kanału (muzyka z odtwarzacza, zespołu lub podkładów muzycznych)."
 }

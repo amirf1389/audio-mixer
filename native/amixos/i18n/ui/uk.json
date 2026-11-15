@@ -2034,5 +2034,18 @@
 "sample rate and block size": "частота дискретизації та розмір блоку",
 "sixteen-strip hybrid mixer with captured programs": "гібридний мікшер на шістнадцять доріжок із збереженими програмами",
 "strips and master": "доріжки та майстер",
-"the open interface": "відкритий інтерфейс"
+"the open interface": "відкритий інтерфейс",
+"AUDIO ACCESS": "АУДІОДОСТУП",
+"What the console may open. Each switch applies at once.": "Що може відкрити консоль. Кожен перемикач діє одразу.",
+"MICROPHONES (WINDOWS AUDIO)": "МІКРОФОНИ (АУДІО В СИСТЕМІ WINDOWS)",
+"HEADSET MICROPHONE (WASAPI)": "МІКРОФОН ГАРНІТУРИ (WASAPI)",
+"BLUETOOTH AUDIO": "АУДІО ЧЕРЕЗ BLUETOOTH",
+"Audio access": "Доступ до аудіо",
+"Microphones, headset microphone and Bluetooth audio are switched ON / OFF on SOUND CARD, next to the devices.": "Увімкнення та вимкнення мікрофонів, мікрофона в навушниках та аудіо через Bluetooth здійснюється у розділі «Звукова карта» поруч із відповідними пристроями.",
+"GO TO SOUND CARD": "ПЕРЕЙТИ ДО ЗВУКОВОЇ КАРТИ",
+"SCAN TO CONNECT": "Скануйте, щоб підключитися",
+"Phone camera: opens the browser remote on this computer and pairs by itself. AmF X1 app: REMOTE → SCAN QR. The code holds this computer's address and the PIN of this minute, so it changes with the PIN.": "Камера телефону: відкриває програму Remote на цьому комп’ютері та автоматично встановлює з’єднання. Додаток AmF X1: REMOTE → Сканувати QR-код. Код містить адресу цього комп’ютера та PIN-код на цю хвилину, тому він змінюється разом із PIN-кодом.",
+"More than one network: pick the address of the Wi-Fi the phone is on.": "Якщо є кілька мереж: виберіть адресу мережі Wi-Fi, до якої підключений телефон.",
+"MUSIC INPUT: DUAL LISTEN ON. Click to go back to the 3-band EQ.": "ВХІД ДЛЯ МУЗИКИ: ФУНКЦІЯ «DUAL LISTEN» УВІМКНЕНА. Натисніть, щоб повернутися до 3-смугового еквалайзера.",
+"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "ВХІД ДЛЯ МУЗИКИ: натисніть, щоб увімкнути режим «DUAL LISTEN» для цього каналу (музика з плеєра, групи або фонограми)."
 }

@@ -30,7 +30,8 @@ qt_add_executable(amixos
     src/Update.cpp src/Update.h
     src/Scope.cpp src/Scope.h src/Measure.cpp src/Measure.h src/Remote.cpp src/Remote.h src/Extension.cpp src/Extension.h src/Net.cpp src/Net.h src/Frame.cpp src/Frame.h
     src/Generator.cpp src/Generator.h
-    src/I18n.cpp src/I18n.h)
+    src/I18n.cpp src/I18n.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../engine/cpp/app/qr/qrcodegen.cpp)   # the pairing QR code (Project Nayuki, MIT)
 set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)   # before qt_add_qml_module, or Theme is a plain type and every Theme.* colour is undefined
 qt_add_qml_module(amixos
     URI AmixOS

@@ -673,6 +673,13 @@ int main(int argc, char* argv[]) {
         QSettings().remove("update/hosts"); QSettings().setValue("update/url", keepUrl); update.setLicenseServer(keepLic); }
       { const QString pin = remote.pairPin(); const int left = remote.pairSecondsLeft();   // the pairing PIN: six digits once the master token exists, 1..60 s to the next
         if ((!pin.isEmpty() && (pin.size() != 6 || pin.toInt() < 0)) || left < 1 || left > 60) { std::fprintf(stderr, "amixos --smoke: the pairing PIN is wrong (%s, %d s)\n", qPrintable(pin), left); return 206; } }
+      { // THE PAIRING QR CODE: a real QR (finder squares in three corners, a size of 21 + 4k), the PIN in the #fragment only
+        const QVariantList q = remote.qr("http://192.168.1.20:8765/remote#pin=123456"); const int n = q.isEmpty() ? 0 : q[0].toInt();
+        auto mod = [&](int x, int y) { return q.value(1 + y * n + x).toInt() == 1; };
+        if (n < 21 || (n - 21) % 4 || q.size() != n * n + 1 || !mod(0, 0) || !mod(6, 6) || mod(7, 7) || !mod(n - 1, 0) || !mod(0, n - 1) || !mod(3, 3) || mod(1, 1)) { std::fprintf(stderr, "amixos --smoke: the pairing QR code is wrong (size %d)\n", n); return 271; }
+        if (!remote.qr(QString(300, 'x')).isEmpty() || !remote.qr("").isEmpty()) return 272;
+        const QString u = remote.pairUrl("http://192.168.1.20:8765"); if (!remote.pairPin().isEmpty() && (!u.startsWith("http://192.168.1.20:8765/remote#pin=") || u.size() != 42)) { std::fprintf(stderr, "amixos --smoke: the pairing link is wrong (%s)\n", qPrintable(u)); return 273; }
+        for (const QString& a : remote.addresses()) if (!a.startsWith("http://10.") && !a.startsWith("http://172.") && !a.startsWith("http://192.168.")) return 274; }
       if (remote.available()) {   // AMF X1 NETWORK tokens from the console: made, listed without the secret, revoked; a nameless one is refused
         remote.refreshTokens(); const int n0 = remote.tokens().size();
         if (!remote.newToken("  ", "control", 0).isEmpty()) return 249;
@@ -923,6 +930,11 @@ int main(int argc, char* argv[]) {
             np->setProperty("view", 1); waitMs(900); win->grabWindow().save(shots + "/network-audio-midi.png"); std::printf("amixos --shots: network-audio-midi\n");
             if (!win->findChild<QObject*>("aoipPanel")) { std::fprintf(stderr, "amixos --shots: FAILED the AUDIO + MIDI panel is missing\n"); }
             net.stopSend(); net.stopReceive(); net.setRxFirstStrip(first); net.setRxAddress(rxA); net.setTxAddress(txA); net.setRxPort(rxP); net.setTxPort(txP); engine.setGain(1, 0); np->setProperty("view", 0); } }
+          if (QString::fromLatin1(id) == "network" && remote.available()) {   // PHONE REMOTE running: the pairing PIN and its QR code (scan to connect)
+            const bool wasRunning = engine.running(); const QString wb = engine.backend(); const double wr = engine.sampleRate(); const int wf = engine.blockFrames(), wi = engine.deviceInputs(), wo = engine.deviceOutputs();
+            remote.start(true); waitMs(1800); win->grabWindow().save(shots + "/network-remote-qr.png");
+            std::printf("amixos --shots: network-remote-qr (%d address(es))\n", int(remote.addresses().size()));
+            remote.stop(); waitMs(600); if (wasRunning && !engine.running()) engine.open(wb, "", "", wr, wf, wi, wo); waitMs(300); }   // the sound card back exactly as it was
           if (QString::fromLatin1(id) == "fx") { if (QObject* fp = win->findChild<QObject*>("effectsPage")) { fp->setProperty("browse", true); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + "/fx-presets.png"); fp->setProperty("browse", false); std::printf("amixos --shots: fx-presets\n"); } }
           if (QString::fromLatin1(id) == "dsp") { if (QObject* tp = win->findChild<QObject*>("tonePage")) { tp->setProperty("rta", true); waitMs(500); win->grabWindow().save(shots + "/tone-rta.png"); tp->setProperty("rta", false);
             engine.applyEqPreset(1, 0); tp->setProperty("contentY", 400); waitMs(300); win->grabWindow().save(shots + "/tone-presets.png"); tp->setProperty("contentY", 0); for (int b = 0; b < 10; ++b) engine.setEq(0, b, 0, 1000, 1, 0); engine.setCrossover(0, 0, 0, 80, 0, 16000); std::printf("amixos --shots: tone-rta, tone-presets\n"); } }
