@@ -58,7 +58,7 @@ Flickable {
                             Text { text: parent.parent.modelData.kind === "extension" ? "⬢" : "✦"; color: Theme.amber; font.pixelSize: 14 }
                             ColumnLayout { Layout.fillWidth: true; spacing: 1
                                 Text { text: parent.parent.parent.modelData.name; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 10; font.bold: true; elide: Text.ElideRight; Layout.fillWidth: true }
-                                Text { text: !parent.parent.parent.modelData.installed ? page.t("not installed next to the console") : page.t(parent.parent.parent.modelData.note); color: Theme.dim; font.pixelSize: 8; elide: Text.ElideRight; Layout.fillWidth: true } }
+                                Text { readonly property var md: parent.parent.parent.modelData; text: !md.installed ? page.t("not installed next to the console") : (md.kind === "extension" && md.loads === false ? page.t("cannot load: ") + md.error : page.t(md.note)); color: md.kind === "extension" && md.installed && md.loads === false ? Theme.danger : Theme.dim; font.pixelSize: 8; elide: Text.ElideRight; Layout.fillWidth: true } }
                             Rectangle { readonly property var it: parent.parent.modelData
                                 objectName: "store_" + it.id; enabled: it.installed; opacity: it.installed ? 1 : 0.4
                                 implicitWidth: 46; implicitHeight: 20; radius: 10; color: it.on ? Theme.cyan : Theme.ov(0.1)

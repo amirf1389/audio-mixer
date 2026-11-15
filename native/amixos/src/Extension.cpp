@@ -1,6 +1,7 @@
 #include "Extension.h"
 #include <QCoreApplication>
 #include <QFileInfo>
+#include <QLibrary>
 #include <vector>
 
 Extension::Extension(const QString& baseName, QObject* parent) : QObject(parent), base_(baseName) {
@@ -28,17 +29,25 @@ QString Extension::path(const QString& baseName) {
 
 bool Extension::load() {
   if (lib_.isLoaded()) return true;
-  const QString p = path(base_); if (p.isEmpty()) return false;
+  const QString p = path(base_); if (p.isEmpty()) { error_ = QStringLiteral("not installed next to the console"); return false; }
   lib_.setFileName(p);
-  if (!lib_.load()) return false;
+  if (!lib_.load()) { error_ = lib_.errorString(); return false; }
   name_ = reinterpret_cast<const char* (*)()>(lib_.resolve("amfb_ext_name"));
   start_ = reinterpret_cast<int (*)(int, const char* const*)>(lib_.resolve("amfb_ext_start"));
   running_ = reinterpret_cast<int (*)()>(lib_.resolve("amfb_ext_running"));
   status_ = reinterpret_cast<const char* (*)()>(lib_.resolve("amfb_ext_status"));
   output_ = reinterpret_cast<const char* (*)()>(lib_.resolve("amfb_ext_output"));
   stop_ = reinterpret_cast<void (*)()>(lib_.resolve("amfb_ext_stop"));
-  if (!name_ || !start_ || !running_ || !status_ || !output_ || !stop_) { lib_.unload(); name_ = nullptr; return false; }
-  return true;
+  if (!name_ || !start_ || !running_ || !status_ || !output_ || !stop_) { lib_.unload(); name_ = nullptr; error_ = QStringLiteral("the library is not an AmF X1 extension (entry points missing)"); return false; }
+  error_.clear(); return true;
+}
+bool Extension::probe(const QString& baseName, QString& why) {
+  const QString p = path(baseName); if (p.isEmpty()) { why = QStringLiteral("not installed next to the console"); return false; }
+  QLibrary lib(p);
+  if (!lib.load()) { why = lib.errorString(); return false; }   // e.g. a missing or wrong DLL beside it ("entry point not found")
+  for (const char* sym : {"amfb_ext_name", "amfb_ext_start", "amfb_ext_running", "amfb_ext_status", "amfb_ext_output", "amfb_ext_stop"})
+    if (!lib.resolve(sym)) { why = QStringLiteral("the library is not an AmF X1 extension (%1 missing)").arg(QString::fromLatin1(sym)); return false; }
+  why.clear(); return true;   // left loaded: the console loads it again when it starts the extension
 }
 
 int Extension::start(const QStringList& args) {

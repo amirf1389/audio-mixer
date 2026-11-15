@@ -249,7 +249,8 @@ class Engine : public QObject {
   // AUTO SELECT: which audio system AUTO DETECT may pick from: "best" (ASIO, then Windows audio, then DirectSound), or only "asio", "wasapi",
   // "dsound" or "bluetooth". When the chosen system has no device, the best of the others is taken and the note says so.
   Q_PROPERTY(QString autoPrefer READ autoPrefer WRITE setAutoPrefer NOTIFY devicesChanged)
-  QString autoPrefer() const { return settings_.value("audio/autoPrefer", "best").toString(); } void setAutoPrefer(const QString& p);
+  QString autoPrefer() const { return settings_.value("audio/autoPrefer", "wasapi").toString(); }   // AUTO = the system's own WASAPI devices (default speakers + default microphone); ASIO only when picked
+  void setAutoPrefer(const QString& p);
   QVariantMap autoDetectFor(const QString& prefer) const;
   // STEREO PAIR: strips 1+2, 3+4 ... as one stereo channel. matchStereoPair() gives the partner the same channel processing (EQ, gate, compressor,
   // limiter, crossover, delay) and the same rack (every plug-in with its settings and bypass), panned to the other side. While the two are
@@ -268,11 +269,12 @@ class Engine : public QObject {
   double dacRate() const { return settings_.value("audio/dacRate", 0).toDouble(); } void setDacRate(double v) { settings_.setValue("audio/dacRate", std::clamp(v, 0.0, 1100000.0)); emit recordChanged(); }
   Q_PROPERTY(int dacBits READ dacBits WRITE setDacBits NOTIFY recordChanged)
   int dacBits() const { return settings_.value("audio/dacBits", 0).toInt(); } void setDacBits(int v) { settings_.setValue("audio/dacBits", v); emit recordChanged(); }
-  // DSP MODE: "digital" = the mix leaves the master exactly as computed; "analog" = a gentle soft saturation on the master (unity gain for quiet
+  // DSP MODE: "digital" = the mix leaves the master exactly as computed; "analog" = a gentle soft saturation on the master and a console
+  // channel stage on every strip (Mixer::setAnalogChannels: warmth, transformer roll-off, bus crosstalk) (unity gain for quiet
   // signals, peaks rounded off the way an analogue output stage does), independent of the MASTERING switch
   Q_PROPERTY(QString dspMode READ dspMode WRITE setDspMode NOTIFY masterChainChanged)
   QString dspMode() const { return mastering()["analog"].toBool() ? QStringLiteral("analog") : QStringLiteral("digital"); }
-  void setDspMode(const QString& m) { QVariantMap v; v["analog"] = (m == "analog"); setMastering(v); }
+  void setDspMode(const QString& m) { QVariantMap v; v["analog"] = (m == "analog"); setMastering(v); if (rt_) rt_->setAnalogChannels(m == "analog"); }   // ANALOG: the master and every channel
   Q_INVOKABLE QVariantList asioDrivers() const;                 // discovery only: every ASIO driver found {id, name, inChannels, outChannels, rate, kind, current}
   Q_INVOKABLE bool openAsioDriver(const QString& id, int frames);
   Q_INVOKABLE int readAsioChannels(const QString& id);   // input n of the running device -> strip n; returns how many (done by itself after an ASIO open)
@@ -398,6 +400,7 @@ class Engine : public QObject {
   void setSystemMuteBackend(std::function<bool(bool&)> get, std::function<bool(bool)> set) { sysGet_ = std::move(get); sysSet_ = std::move(set); }   // tests
   void syncSystemSound();                 // applies the rule and reads the state (called on fader moves and twice a second)
   void restoreSystemSound();              // on exit: a mute the console set is taken back
+  Q_INVOKABLE bool inputMutedBySystem() const;   // over 2 s of exact silence from the system on the input (WASAPI): muted or blocked by privacy
   Q_SIGNAL void systemSoundChanged();
   Q_INVOKABLE void setColor(int strip, int color);           // 0..7 (Theme.stripColors)
   int selectedStrip() const { return selected_; }

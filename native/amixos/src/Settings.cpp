@@ -68,9 +68,19 @@ void Settings::rememberDevice(const QString& backend, const QString& in, const Q
   QVariantMap m; m["backend"] = backend; m["in"] = in; m["out"] = out; m["rate"] = rate; m["frames"] = frames; m["inChannels"] = inCh; m["outChannels"] = outCh; set("audio/lastDevice", m);
 }
 bool Settings::startLastDevice() {
+  // ONCE, ON THE FIRST START OF THIS BUILD: AUTO becomes WASAPI (the system's default speakers and microphone, which every Windows
+  // computer has and which carry sound), every WASAPI device is switched ON, and an ASIO driver that AUTO had remembered is forgotten.
+  // An ASIO driver that is not running reports no channels, so AUTO used to land on an empty one ("Audio Mixer": no input, no output).
+  // A device the person picks by hand afterwards, ASIO included, is remembered and opened as before.
+  if (!s_.value("audio/autoWasapiV2", false).toBool() && engine_) {
+    QSettings q; q.setValue("audio/autoPrefer", QStringLiteral("wasapi"));
+    QStringList off = q.value("audio/offDevices").toStringList(); off.erase(std::remove_if(off.begin(), off.end(), [](const QString& k) { return k.startsWith(QStringLiteral("wasapi|")); }), off.end()); q.setValue("audio/offDevices", off);
+    if (lastDevice().value("backend").toString() == QLatin1String("asio")) set("audio/lastDevice", QVariantMap());
+    set("audio/autoWasapiV2", true); engine_->refreshDevices();
+  }
   const QVariantMap d = lastDevice();
-  // NO DEVICE YET (a new installation, or after a factory reset): AUTO DETECT the best sound card (ASIO first, else the system's default
-  // device), start it and remember it, so the console comes up working; MANUAL selection opens nothing by itself
+  // NO DEVICE YET (a new installation, or after a factory reset): AUTO DETECT the sound card (the system's default WASAPI speakers and
+  // microphone; another preference on SOUND CARD), start it and remember it, so the console comes up working; MANUAL selection opens nothing by itself
   if (d.isEmpty() && engine_) {
     if (engine_->autoPrefer() == QLatin1String("manual")) { note(QStringLiteral("No device remembered yet: MANUAL selection is on, so pick one on CONNECTIONS.")); return false; }
     const QVariantMap a = engine_->autoDetect(); const int fr = defaultFrames() > 0 ? defaultFrames() : 256;

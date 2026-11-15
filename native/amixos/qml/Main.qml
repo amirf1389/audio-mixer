@@ -21,6 +21,17 @@ ApplicationWindow {
     // MEMORY: a closed page's items are freed, but its JavaScript objects wait for the QML garbage collector, which runs only under
     // allocation pressure, so every page visit used to add ~5 MB that stayed. Collected once the user has settled on a page.
     Timer { id: gcTimer; interval: 1200; onTriggered: gc() }
+    // WARM-UP: a few seconds after start, every page's QML is compiled in the background (nothing is created, so no page starts a scan
+    // or a service): the first click on any page then costs only building it, not compiling it too.
+    property var warmQueue: ["AccessPage", "AccountPage", "AcousticsPage", "AdminPage", "AiMixPage", "ArrangePage", "BluetoothPage", "CalibratePage", "CascadePage", "CloudPage",
+        "CompressorPage", "ConnectionsPage", "DelayPage", "DiagnosticsPage", "EffectsPage", "EngineControlPage", "FramePage", "GatePage", "GroupFadersPage", "HelpPage",
+        "LevelsPage", "LicensePage", "LiveSourcesPage", "LoudnessPage", "MasteringPage", "MediaPage", "MicEqPage", "MixerPage", "NetworkPage", "PhasePage", "PluginsPage",
+        "PresetsPage", "RoutingPage", "RtaEqPage", "SamplesPage", "ScenesPage", "ScorePage", "SendToPage", "SettingsPage", "SoundCardPage", "SpatialPage", "TonePage", "ToolsPage", "WaveformPage"]
+    property var warmKeep: []
+    Timer { id: warmTimer; interval: 60; repeat: true; running: false
+        onTriggered: { if (!root.warmQueue.length) { stop(); return }
+            const n = root.warmQueue.shift(); const c = Qt.createComponent("qrc:/qt/qml/AmixOS/qml/" + n + ".qml", Component.Asynchronous); root.warmKeep.push(c) } }
+    Timer { interval: 3000; running: asyncPages; onTriggered: warmTimer.start() }
     LayoutMirroring.enabled: i18n.rtl
     Binding { target: Theme; property: "dark"; value: settings.darkTheme }
     LayoutMirroring.childrenInherit: true
@@ -154,6 +165,24 @@ ApplicationWindow {
                 Text { text: "⚠"; color: Theme.amber; font.pixelSize: 13 }
                 Text { Layout.fillWidth: true; text: i18n.t("No sound card could be opened automatically (none found, or all switched OFF): pick one on CONNECTIONS.", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; elide: Text.ElideRight }
                 Rectangle { implicitWidth: Math.max(100, children[0].implicitWidth + 12); implicitHeight: 20; radius: 4; color: Theme.ov(0.1); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: i18n.t("CONNECTIONS", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: root.current = "io" } } } }
+        // NO SOUND, AND WHY: the two silent states a person cannot see at a glance, each with its one-click way out
+        Rectangle { objectName: "masterSilentBanner"; Layout.fillWidth: true; implicitHeight: 30; visible: engine.running && engine.masterDb <= -60; color: Qt.rgba(0.94, 0.27, 0.27, 0.14); border.color: Theme.danger
+            RowLayout { anchors.fill: parent; anchors.leftMargin: 12; anchors.rightMargin: 12; spacing: 10
+                Text { text: "🔇"; font.pixelSize: 12 }
+                Text { Layout.fillWidth: true; text: i18n.t("MASTER is at -inf: nothing is heard (and Windows' own sound is muted with it).", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; elide: Text.ElideRight }
+                Rectangle { objectName: "raiseMasterBtn"; implicitWidth: Math.max(110, rmT.implicitWidth + 14); implicitHeight: 20; radius: 4; color: Theme.danger
+                    Text { id: rmT; anchors.centerIn: parent; text: i18n.t("RAISE TO 0 dB", i18n.lang); color: "#fff"; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: engine.setMaster(0) } } } }
+        Rectangle { objectName: "inputSilentBanner"; Layout.fillWidth: true; implicitHeight: 30; visible: { engine.meterTick; return engine.inputMutedBySystem() } color: Qt.rgba(0.984, 0.749, 0.141, 0.14); border.color: Theme.amber
+            RowLayout { anchors.fill: parent; anchors.leftMargin: 12; anchors.rightMargin: 12; spacing: 10
+                Text { text: "🎙"; font.pixelSize: 12 }
+                Text { Layout.fillWidth: true; text: i18n.t("The microphone gives exact silence: it is muted (mute key or Windows) or Windows microphone privacy blocks desktop apps.", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; elide: Text.ElideRight }
+                Rectangle { implicitWidth: Math.max(120, mpT2.implicitWidth + 14); implicitHeight: 20; radius: 4; color: Theme.ov(0.1); border.color: Theme.amber
+                    Text { id: mpT2; anchors.centerIn: parent; text: i18n.t("WINDOWS MIC PRIVACY…", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: Qt.openUrlExternally("ms-settings:privacy-microphone") } }
+                Rectangle { implicitWidth: Math.max(110, ssT.implicitWidth + 14); implicitHeight: 20; radius: 4; color: Theme.ov(0.1); border.color: Theme.lineSoft
+                    Text { id: ssT; anchors.centerIn: parent; text: i18n.t("SOUND SETTINGS…", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: Qt.openUrlExternally("ms-settings:sound") } } } }
         RowLayout {
             Layout.fillWidth: true; Layout.fillHeight: true; spacing: 0
             NavRail { Layout.fillHeight: true; pages: engine.pages; current: root.current; onPicked: function (id) { root.current = id } }
@@ -162,16 +191,27 @@ ApplicationWindow {
                 Loader {
                     id: pageLoader
                     anchors.fill: parent
+                    // CLICK TO PAGE: the page is built over a few frames instead of in one blocking step, so the rail answers the click at
+                    // once; the new page fades in when ready. (The tests build synchronously unless they ask for this.)
+                    asynchronous: asyncPages
+                    opacity: status === Loader.Ready ? 1 : 0
+                    Behavior on opacity { enabled: asyncPages; NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
                     sourceComponent: {
                         switch (root.current) {
                         case "home": return homeC; case "frame": return frameC; case "delay": return delayC; case "cloud": return cloudC; case "cascade": return cascadeC; case "mixer": return null; case "dsp": return toneC; case "rtaeq": return rtaEqC; case "bluetooth": return bluetoothC; case "io": return connC;
-                        case "meter": return levelsC; case "lufs": return loudC; case "sys": return settingsC; case "dyn": return compC; case "gate": return gateC; case "bus": return sendC; case "dca": return dcaC; case "scenes": return scenesC; case "presets": return presetsC; case "routing": return routingC; case "renew": return licenseC; case "arrange": return arrangeC; case "fx": return fxC; case "osc": return oscC; case "phase": return phaseC; case "miceq": return miceqC; case "live": return liveC; case "tools": return toolsC; case "calib": return calibC; case "boot": return bootC; case "help": return helpC; case "acct": return acctC; case "access": return accessC; case "admin": return adminC; case "ai": return aiC; case "engctl": return engctlC; case "plugins": return pluginsC; case "network": return networkC; case "media": return mediaC; case "samples": return samplesC; case "asio": return soundC; case "acoustics": return acousticsC; case "master": return masteringC; case "surround": return spatialC; default: return comingC
+                        case "meter": return levelsC; case "score": return scoreC; case "lufs": return loudC; case "sys": return settingsC; case "dyn": return compC; case "gate": return gateC; case "bus": return sendC; case "dca": return dcaC; case "scenes": return scenesC; case "presets": return presetsC; case "routing": return routingC; case "renew": return licenseC; case "arrange": return arrangeC; case "fx": return fxC; case "osc": return oscC; case "phase": return phaseC; case "miceq": return miceqC; case "live": return liveC; case "tools": return toolsC; case "calib": return calibC; case "boot": return bootC; case "help": return helpC; case "acct": return acctC; case "access": return accessC; case "admin": return adminC; case "ai": return aiC; case "engctl": return engctlC; case "plugins": return pluginsC; case "network": return networkC; case "media": return mediaC; case "samples": return samplesC; case "asio": return soundC; case "acoustics": return acousticsC; case "master": return masteringC; case "surround": return spatialC; default: return comingC
                         }
                     }
                 }
+                Rectangle {   // building a page: a thin line runs along the top
+                    id: pageBusy; objectName: "pageBusy"; visible: pageLoader.status === Loader.Loading; z: 50; height: 2; color: Theme.orange
+                    width: parent.width * 0.3; y: 0
+                    SequentialAnimation on x { running: pageLoader.status === Loader.Loading; loops: Animation.Infinite
+                        NumberAnimation { from: -pageBusy.width; to: pageBusy.parent ? pageBusy.parent.width : 0; duration: 700; easing.type: Easing.InOutQuad } }
+                }
                 // THE MIXER stays built once opened: coming back to it is instant (it took ~270 ms to rebuild 32 strips each visit).
                 // Hidden, its meters and timers stop (they follow the page's visibility). A soft restart rebuilds it.
-                Loader { id: mixerKeep; anchors.fill: parent; active: root.mixerEver; visible: root.current === "mixer"; sourceComponent: mixerC }
+                Loader { id: mixerKeep; anchors.fill: parent; asynchronous: asyncPages; active: root.mixerEver; visible: root.current === "mixer"; sourceComponent: mixerC }
                 Component { id: frameC; FramePage {} }
                 Component { id: homeC; HomePage { onGo: function (id) { root.current = id } } }
                 Component { id: mixerC; MixerPage { onGo: function (id) { root.current = id } } }
@@ -180,6 +220,7 @@ ApplicationWindow {
                 Component { id: bluetoothC; BluetoothPage {} }
                 Component { id: connC; ConnectionsPage {} }
                 Component { id: levelsC; LevelsPage {} }
+                Component { id: scoreC; ScorePage { onGo: function (id) { root.current = id } } }
                 Component { id: loudC; LoudnessPage {} }
                 Component { id: settingsC; SettingsPage {} }
                 Component { id: compC; CompressorPage {} }

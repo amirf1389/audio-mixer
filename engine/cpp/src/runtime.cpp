@@ -45,7 +45,7 @@ std::unique_ptr<Backend> createBackend(const std::string& name) {
   return nullptr;
 }
 
-enum Op { kGain, kPan, kMute, kSolo, kMaster, kLimiter, kClipDb, kClear, kEq, kDelay, kPolarity, kXover, kChLimiter, kComp, kGate, kSend, kBusLevel, kBusMute, kBusReturn, kMonitor, kInRoute, kOutRoute, kTrim, kPeakHold, kBusFx, kWidth, kAutomix, kAutoLevel, kOutBits, kProfReset, kDcBlock, kSpatial, kMasterFx, kAutoPol };
+enum Op { kGain, kPan, kMute, kSolo, kMaster, kLimiter, kClipDb, kClear, kEq, kDelay, kPolarity, kXover, kChLimiter, kComp, kGate, kSend, kBusLevel, kBusMute, kBusReturn, kMonitor, kInRoute, kOutRoute, kTrim, kPeakHold, kBusFx, kWidth, kAutomix, kAutoLevel, kOutBits, kProfReset, kDcBlock, kAnalogCh, kSpatial, kMasterFx, kAutoPol };
 
 Runtime::Runtime(int strips) : mixer_(strips, 48000) { std::memset(&pub_, 0, sizeof pub_); }
 Runtime::~Runtime() { stop(); }
@@ -107,9 +107,11 @@ void Runtime::setInputRoute(int strip, int input) { if (strip < 0 || strip >= kM
 void Runtime::setOutputRoute(int out, int source) { if (out < 0 || out >= kMaxOutputs) return; post({kOutRoute, out, 0, 0, 0, std::max(0, std::min(kSrcBus0L + 2 * kMaxBuses - 1, source))}); }
 void Runtime::setOutputBits(int bits) { post({kOutBits, bits, 0, 0, 0}); }
 void Runtime::setDcBlock(bool on) { post({kDcBlock, on ? 1 : 0, 0, 0, 0}); }
+void Runtime::setAnalogChannels(bool on) { post({kAnalogCh, on ? 1 : 0, 0, 0, 0}); }
 void Runtime::resetProfiler() { post({kProfReset, 0, 0, 0, 0}); }
 void Runtime::setAutomix(int s, bool on, double w) { post({kAutomix, s, on ? 1.0 : 0.0, w, 0}); }
 std::string Runtime::sampleFormat() const { return backend_ ? backend_->sampleFormat() : std::string(); }
+double Runtime::inputSilentSeconds() const { return backend_ ? backend_->inputSilentSeconds() : 0.0; }
 int Runtime::deviceOutputBits() const {
   std::string f = sampleFormat(); const std::size_t o = f.find("out "); if (o != std::string::npos) f = f.substr(o);
   if (f.find("shared") != std::string::npos) return 0;   // WASAPI shared: Windows mixes in float, the console's output is float
@@ -170,6 +172,7 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
       case kAutoLevel: mixer_.setAutoLevel(c.a != 0, c.x, c.y); break;
       case kOutBits: mixer_.setOutputBits(c.a); break;
       case kDcBlock: mixer_.setDcBlock(c.a != 0); break;
+      case kAnalogCh: mixer_.setAnalogChannels(c.a != 0); break;
       case kProfReset: maxBlockUs_ = 0; jitterUs_ = 0; break;
       default: break;
     }

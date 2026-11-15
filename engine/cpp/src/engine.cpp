@@ -293,6 +293,11 @@ void Mixer::process(const float* const* in, std::size_t frames, float* outL, flo
       Strip& st = strips_[static_cast<std::size_t>(s)];
       const double ang = (st.pan + 1.0) * kPi * 0.25, gl = std::cos(ang), gr = std::sin(ang); const bool audible = !st.mute && (!anySolo || st.solo);
       double ipk = done == 0 ? 0.0 : st.inPk; const double g = st.gainLin * (st.automix ? st.amGain : 1.0);
+      if (analog_) {   // ANALOG: the channel's output stage (see setAnalogChannels), before the fader
+        const double a = 1.0 - std::exp(-2.0 * kPi * 20000.0 / fs_), k = 0.55, b = 0.04, tb = std::tanh(k * b), norm = 1.0 / (k * (1.0 - tb * tb));
+        for (std::size_t i = 0; i < n; ++i) { const double x = static_cast<double>(in[s][done + i]); if (std::fabs(x) > ipk) ipk = std::fabs(x);
+          const double sat = (std::tanh(k * (x + b)) - tb) * norm; st.anLp += a * (sat - st.anLp); tmp[i] = static_cast<float>(st.anLp * g); }
+      } else
       for (std::size_t i = 0; i < n; ++i) { const double x = static_cast<double>(in[s][done + i]); if (std::fabs(x) > ipk) ipk = std::fabs(x); tmp[i] = static_cast<float>(x * g); }   // post-fader signal: what the strip meter shows
       st.inPk = ipk; st.meter.add(tmp, n);
       if (st.sp.on) {   // 360 audio: the ring always runs (so un-muting does not click), the ears are summed when audible
@@ -321,6 +326,7 @@ void Mixer::process(const float* const* in, std::size_t frames, float* outL, flo
     if (extL && extR) for (std::size_t i = 0; i < n; ++i) { outL[done + i] += extL[done + i]; outR[done + i] += extR[done + i]; }   // the arrangement player, pre master
     if (masterFx_) masterFx_->process(outL + done, outR + done, n);   // the master chain (program EQ, mastering)
     if (width_ != 1.0) for (std::size_t i = 0; i < n; ++i) { const float mid = 0.5f * (outL[done + i] + outR[done + i]), side = 0.5f * (outL[done + i] - outR[done + i]) * static_cast<float>(width_); outL[done + i] = mid + side; outR[done + i] = mid - side; }
+    if (analog_) for (std::size_t i = 0; i < n; ++i) { const float l = outL[done + i], r = outR[done + i]; outL[done + i] = l + 0.005f * r; outR[done + i] = r + 0.005f * l; }   // ANALOG: bus crosstalk, -46 dB
     // NaN / inf guard: one broken plug-in or a bad sample must not poison the DC blocker, the limiter's envelope and the device for
     // good (a NaN never decays): a non-finite sample becomes silence here, before the master processing; counted for the diagnostics.
     for (std::size_t i = 0; i < n; ++i) {

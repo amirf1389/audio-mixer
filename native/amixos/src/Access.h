@@ -59,6 +59,7 @@ class Access : public QObject {
   bool checkPin(const QString& pin);
   static QString hashPin(const QString& pin);
   QString auditPath() const;
+  mutable QVariantList auditCache_; mutable bool auditDirty_ = true;
   void note(const QString& m) { msg_ = m; emit messageChanged(); }
   Engine* engine_; QSettings s_; bool locked_ = false; qint64 adminAt_ = 0; int failed_ = 0; QString msg_;
 };

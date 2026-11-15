@@ -14,6 +14,7 @@
 #include <QQmlContext>
 #include <QQuickStyle>
 #include <QQuickWindow>
+#include <QQuickItem>
 #include <QPalette>
 #include <QDir>
 #include "arrange/arrange.hpp"
@@ -128,6 +129,7 @@ int main(int argc, char* argv[]) {
   qml.rootContext()->setContextProperty("i18n", &i18n);
   qml.rootContext()->setContextProperty("appVersion", QStringLiteral(AMIX_VERSION));
   qml.rootContext()->setContextProperty("noBoot", smoke);
+  qml.rootContext()->setContextProperty("asyncPages", !smoke || qEnvironmentVariableIsSet("AMIX_ASYNC_PAGES"));   // pages build without blocking the click (the tests: synchronous, unless asked)
   QObject::connect(&qml, &QQmlApplicationEngine::objectCreationFailed, &app, [] { std::fprintf(stderr, "amixos: the interface could not be created\n"); QCoreApplication::exit(2); }, Qt::QueuedConnection);
   qml.addImportPath(QStringLiteral("qrc:/qt/qml"));   // the console's own module (AmixOS, with the Theme singleton) lives in the resources: Qt 6.4 on Windows does not search there by itself, and every Theme.* colour came out undefined (black on white)
   qml.load(QUrl(QStringLiteral("qrc:/qt/qml/AmixOS/qml/Main.qml")));   // Qt 6.4 (loadFromModule is 6.5+)
@@ -228,7 +230,9 @@ int main(int argc, char* argv[]) {
       engine.stop(); return 0; }
     if (qEnvironmentVariableIsSet("AMIX_BENCH_ALL")) {   // the opening time of every page, slowest first
       QList<QPair<double, QString>> t; for (const QVariant& v : engine.pages()) { const QString id = v.toMap().value("id").toString(); win->setProperty("current", "home"); waitMs(150);
-        QElapsedTimer o; o.start(); win->setProperty("current", id); QCoreApplication::processEvents(); t << qMakePair(o.nsecsElapsed() / 1e6, id); waitMs(150); }
+        QElapsedTimer o; o.start(); win->setProperty("current", id); QCoreApplication::processEvents(); double first = o.nsecsElapsed() / 1e6; waitMs(150);
+        if (qEnvironmentVariable("AMIX_BENCH_ALL") == "2") { win->setProperty("current", "home"); waitMs(150); o.restart(); win->setProperty("current", id); QCoreApplication::processEvents(); first = o.nsecsElapsed() / 1e6; waitMs(150); }   // the second open: the page's own cost, without compiling its QML
+        t << qMakePair(first, id); }
       std::sort(t.begin(), t.end(), [](auto& a, auto& b) { return a.first > b.first; });
       for (const auto& x : t) std::printf("amixos --bench: open %-12s %6.0f ms\n", qPrintable(x.second), x.first);
       engine.stop(); return 0; }
@@ -332,7 +336,9 @@ int main(int argc, char* argv[]) {
     { // WINDOWS SOUND SYNC on a stand-in for the system volume: -inf mutes it, raising the fader restores what it was, sync off leaves it alone, exit takes the mute back
       bool sysMute = false; int sets = 0; engine.setSystemMuteBackend([&](bool& m) { m = sysMute; return true; }, [&](bool m) { sysMute = m; ++sets; return true; });
       const double keep = engine.masterDb(); engine.setWindowsMuteSync(true); engine.setMaster(-60); if (!sysMute || !engine.windowsMuted()) { std::fprintf(stderr, "amixos --smoke: the fader at -inf did not mute the system sound\n"); return 78; }
+      if (!QSettings().value("mixer/weMutedWindows", false).toBool()) { std::fprintf(stderr, "amixos --smoke: the Windows mute was not written down (a crash would leave Windows silent)\n"); return 83; }
       engine.setMaster(-10); if (sysMute || engine.windowsMuted()) { std::fprintf(stderr, "amixos --smoke: raising the fader did not un-mute the system sound\n"); return 79; }
+      if (QSettings().value("mixer/weMutedWindows", false).toBool()) { std::fprintf(stderr, "amixos --smoke: the Windows mute note was not cleared when the sound came back\n"); return 84; }
       sysMute = true; engine.syncSystemSound(); engine.setMaster(-60); engine.setMaster(0); if (!sysMute) { std::fprintf(stderr, "amixos --smoke: a mute the person had set in Windows was not put back\n"); return 80; } sysMute = false; engine.syncSystemSound();
       engine.setWindowsMuteSync(false); engine.setMaster(-60); if (sysMute) { std::fprintf(stderr, "amixos --smoke: sync off still muted the system sound\n"); return 81; }
       engine.setWindowsMuteSync(true); if (!sysMute) { std::fprintf(stderr, "amixos --smoke: switching sync on at -inf did not mute\n"); return 82; } engine.restoreSystemSound(); if (sysMute) { std::fprintf(stderr, "amixos --smoke: exit did not take the mute back\n"); return 83; }
@@ -465,7 +471,15 @@ int main(int argc, char* argv[]) {
         const QVariantList pc = {dev("asio", "Realtek ASIO", "Realtek ASIO", 2, 2), dev("wasapi", "{r-out}", "Speakers (Realtek High Definition Audio)", 0, 2, false, true), dev("wasapi", "{r-in}", "Microphone (Realtek High Definition Audio)", 2, 0, true, false), dev("dsound", "{ds-r}", "Speakers (Realtek High Definition Audio)", 0, 2, false, true), dev("null", "null", "Null device (timed, no hardware)", 2, 2)};
         QVariantList um2 = pc; um2.prepend(dev("asio", "BEHRINGER USB AUDIO", "BEHRINGER USB AUDIO", 2, 2)); um2 << dev("wasapi", "{um2-in}", "Microphone (USB Audio CODEC)", 2, 0) << dev("wasapi", "{um2-out}", "Speakers (USB Audio CODEC)", 0, 2) << dev("dsound", "{ds-um2}", "Speakers (USB Audio CODEC)", 0, 2) << dev("dsound", "{ds-um2-in}", "Microphone (USB Audio CODEC)", 2, 0);
         const QVariantList realDevices = engine.devices();
-        engine.simulateDevices(pc); const QVariantMap d0 = engine.autoDetect();
+        const QString keepPref = engine.autoPrefer();
+        engine.simulateDevices(pc); { const QVariantMap w = engine.autoDetect();   // the default: AUTO is the system's WASAPI speakers with the default microphone
+          if (w["backend"] != "wasapi" || w["out"] != "{r-out}" || w["in"] != "{r-in}") { std::fprintf(stderr, "amixos --smoke: AUTO did not pick the WASAPI default speakers + microphone: %s %s / %s\n", qPrintable(w["backend"].toString()), qPrintable(w["out"].toString()), qPrintable(w["in"].toString())); return 169; } }
+        { QVariantList own = pc; own.prepend(dev("asio", "Audio Mixer", "Audio Mixer", 2, 2)); own.prepend(dev("asio", "BEHRINGER USB AUDIO", "BEHRINGER USB AUDIO", 0, 0)); engine.simulateDevices(own);   // AMFB's own virtual ASIO driver is never automatic
+          for (const char* pf : {"best", "asio", "wasapi"}) { engine.setAutoPrefer(pf); const QVariantMap a = engine.autoDetect();
+            if (a["name"].toString() == "Audio Mixer" || engine.bestAsioDriver() == "Audio Mixer") { std::fprintf(stderr, "amixos --smoke: AUTO (%s) picked AMFB's own virtual ASIO driver\n", pf); return 168; } }
+          engine.simulateDevices(pc); }
+        engine.setAutoPrefer("best");   // the UM2 checks below are for BEST (an interface's own ASIO driver first)
+        const QVariantMap d0 = engine.autoDetect();
         if (d0["backend"] != "wasapi" && d0["backend"] != "asio") { std::fprintf(stderr, "amixos --smoke: UM2 machine without the UM2: detection picked %s\n", qPrintable(d0["name"].toString())); return 170; }
         if (d0["name"].toString().contains("BEHRINGER")) { std::fprintf(stderr, "amixos --smoke: UM2 detected while unplugged\n"); return 170; }
         engine.simulateDevices(um2); const QVariantMap d1 = engine.autoDetect();
@@ -476,6 +490,7 @@ int main(int argc, char* argv[]) {
         if (plan2.size() != 2 || plan2[1].toMap()["mode"] != "dsound") { std::fprintf(stderr, "amixos --smoke: UM2 plan with DirectSound-only fallback has %d steps\n", int(plan2.size())); return 173; }
         int plugged = 0; QObject::connect(&engine, &Engine::hotplug, &app, [&](bool added, const QString& w) { if (added && w.contains("BEHRINGER")) ++plugged; });
         if (engine.inputLabel(0).isEmpty()) { std::fprintf(stderr, "amixos --smoke: input label\n"); return 174; }
+        engine.setAutoPrefer(keepPref);
         std::printf("amixos --smoke: UM2 machine OK: detect -> %s (%s); plan %s -> %s (%s / %s) -> %s -> %s (%s); DirectSound-only -> %d steps\n", qPrintable(d1["name"].toString()), qPrintable(d1["why"].toString()), qPrintable(plan[0].toMap()["mode"].toString()), qPrintable(plan[1].toMap()["mode"].toString()), qPrintable(plan[1].toMap()["in"].toString()), qPrintable(plan[1].toMap()["out"].toString()), qPrintable(plan[2].toMap()["mode"].toString()), qPrintable(plan[3].toMap()["mode"].toString()), qPrintable(plan[3].toMap()["out"].toString()), int(plan2.size()));
         { // a laptop with no ASIO: the pick is an output endpoint, and it must come with an input (it used to start with 0 inputs); a headset pairs with its own microphone; kinds are named
           const QVariantList lap = {dev("wasapi", "{spk}", "Speakers (Realtek High Definition Audio)", 0, 2, false, true), dev("wasapi", "{mic}", "Microphone Array (Realtek High Definition Audio)", 2, 0, true, false), dev("wasapi", "{hp}", "Headphones (Realtek High Definition Audio)", 0, 2), dev("wasapi", "{bt}", "Headphones (WH-1000XM4 Stereo)", 0, 2), dev("dsound", "{ds-spk}", "Speakers (Realtek High Definition Audio)", 0, 2, false, true), dev("dsound", "{ds-mic}", "Microphone Array (Realtek High Definition Audio)", 2, 0, true, false)};
@@ -949,6 +964,16 @@ int main(int argc, char* argv[]) {
         frame.setCardType(0, ""); frame.setCardType(1, ""); frame.setLogicIn(2, false); frame.setLogicIn(6, false); }
       { remote.writeConsoleInfo(); QFile f(QString::fromStdString(am::paths::file("remote-console.json"))); bool ok = f.open(QIODevice::ReadOnly); const QJsonObject o = ok ? QJsonDocument::fromJson(f.readAll()).object() : QJsonObject();
         std::printf("amixos --smoke: phone PLUG-INS snapshot %s (%d VST, %d store items, %d racks)\n", o.value("available").toBool() ? "written" : "MISSING", int(o.value("vst").toArray().size()), int(o.value("store").toArray().size()), int(o.value("racks").toArray().size())); }
+      if (auto* bw = qobject_cast<QQuickWindow*>(qml.rootObjects().first())) {   // NO SOUND, AND WHY: the master at -inf is shown, and its button gives the sound back
+        QObject* ban = bw->findChild<QObject*>("masterSilentBanner"); const double keepM = engine.masterDb(); engine.setMaster(-60); QCoreApplication::processEvents();
+        const bool shown = ban && ban->property("visible").toBool(); QObject* raise = bw->findChild<QObject*>("raiseMasterBtn");
+        if (auto* it = qobject_cast<QQuickItem*>(raise)) { const QPointF c = it->mapToScene(QPointF(it->width() / 2, it->height() / 2));   // a real click on the button
+          QMouseEvent p(QEvent::MouseButtonPress, c, bw->mapToGlobal(c.toPoint()), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier); QCoreApplication::sendEvent(bw, &p);
+          QMouseEvent r(QEvent::MouseButtonRelease, c, bw->mapToGlobal(c.toPoint()), Qt::LeftButton, Qt::NoButton, Qt::NoModifier); QCoreApplication::sendEvent(bw, &r); QCoreApplication::processEvents(); }
+        const bool raised = engine.masterDb() > -60; engine.setMaster(keepM); QCoreApplication::processEvents(); const bool hidden = ban && !ban->property("visible").toBool();
+        if (!shown || !hidden) { std::fprintf(stderr, "amixos --smoke: the MASTER -inf banner is wrong (shown %d, hidden after %d)\n", shown, hidden); std::exit(85); }
+        if (!raised) { std::fprintf(stderr, "amixos --smoke: RAISE TO 0 dB did not raise the master\n"); std::exit(86); }
+        std::printf("amixos --smoke: MASTER -inf banner shown, RAISE TO 0 dB works, cleared after\n"); }
       std::printf("amixos --smoke: interface loaded, %s backend, %llu blocks in 1.2 s, xruns %llu, master %.1f dBFS, %d pages\n", qPrintable(engine.backend()), blocks, m.value("xruns").toULongLong(), m.value("masterPeakDb").toDouble(), engine.pageCount());
       arrange.newProject(); QFile::remove(smokeWav); QFile::remove(smokeOut);   // the smoke's demo arrangement is not kept
       for (int k = 0; k < 6; ++k) engine.setPlugin(0, k, "");

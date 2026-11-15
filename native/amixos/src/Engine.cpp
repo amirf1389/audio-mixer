@@ -43,6 +43,10 @@ static constexpr double kIsoCentres[10] = {31.5, 63, 125, 250, 500, 1000, 2000, 
 Engine::Engine(QObject* parent) : QObject(parent) {
   am::drv::setOpenRouting(QSettings().value("audio/openRouting", true).toBool());
   winSync_ = QSettings().value("mixer/windowsMuteSync", true).toBool(); sysGet_ = [](bool& m) { return am::systemMuteGet(m); }; sysSet_ = [](bool m) { return am::systemMuteSet(m); };
+  // A WINDOWS MUTE LEFT BEHIND: the fader at -inf mutes Windows too; if the console then crashed, was killed or the computer went off,
+  // Windows stayed muted for every program (no sound anywhere) and the console no longer knew. The mute is written down when it is set
+  // and given back here, at the next start.
+  if (QSettings().value("mixer/weMutedWindows", false).toBool()) { sysSet_(QSettings().value("mixer/winBefore", false).toBool()); QSettings().remove("mixer/weMutedWindows"); }
   connect(this, &Engine::stripsChanged, this, [this] { stripDirty_ = true; ++stripTick_; });
   for (auto sig : {&Engine::groupsChanged, &Engine::busesChanged, &Engine::routingChanged, &Engine::recordChanged, &Engine::licenseChanged}) connect(this, sig, this, [this] { stripDirty_ = true; });   // DCA / mute groups, sends, arm and the plan feed the strip state too   // first receiver: the cache is stale before any binding reads it
   sysTimer_.setInterval(500); connect(&sysTimer_, &QTimer::timeout, this, &Engine::syncSystemSound); sysTimer_.start();
@@ -172,7 +176,7 @@ void Engine::pushAll() {
   for (int k = 0; k < kBuses; ++k) { rt_->setBusLevel(k, buses_[k].db); rt_->setBusMute(k, buses_[k].mute); rt_->setBusReturn(k, buses_[k].returnDb); }
   for (int i = 0; i < kStrips; ++i) if (strips_[static_cast<std::size_t>(i)].automix) rt_->setAutomix(i, true, strips_[static_cast<std::size_t>(i)].amWeight);
   for (int i = 0; i < kStrips; ++i) if (strips_[static_cast<std::size_t>(i)].autoPol) rt_->setAutoPolarity(i, true);
-  pushAutoLevel(); rt_->setDcBlock(dcBlock()); rt_->setOutputBits(effectiveOutputBits());
+  pushAutoLevel(); rt_->setDcBlock(dcBlock()); rt_->setAnalogChannels(dspMode() == QLatin1String("analog")); rt_->setOutputBits(effectiveOutputBits());
   pushMaster(); rt_->setMasterProcessor(&master_);   // the master chain: program EQ (the RTA EQ rack) and mastering
   for (int i = 0; i < kStrips; ++i) {
     const StripUi& s = strips_[static_cast<std::size_t>(i)];
@@ -399,13 +403,16 @@ void Engine::setWindowsMuteSync(bool on) { if (winSync_ == on) return; winSync_ 
 void Engine::syncSystemSound() {
   if (!sysGet_ || !sysSet_) return;
   bool now = false; const bool ok = sysGet_(now); const bool want = winSync_ && masterDb_ <= -60.0; bool changed = ok != winAvail_; winAvail_ = ok;
+  const bool had = weMuted_;
   if (ok && want && !weMuted_) { winBefore_ = now; if (sysSet_(true)) { weMuted_ = true; now = true; } }           // fader at -inf: Windows goes silent too
   else if (ok && !want && weMuted_) { if (sysSet_(winBefore_)) now = winBefore_; weMuted_ = false; }               // fader up (or sync off): the mute goes back to what it was
   else if (ok && weMuted_ && !now) weMuted_ = false;                                                                // somebody un-muted Windows by hand: leave it to them
+  if (weMuted_ != had) { QSettings q; if (weMuted_) { q.setValue("mixer/weMutedWindows", true); q.setValue("mixer/winBefore", winBefore_); } else q.remove("mixer/weMutedWindows"); q.sync(); }
   if (ok && now != winMuted_) { winMuted_ = now; changed = true; }
   if (changed) emit systemSoundChanged();
 }
-void Engine::restoreSystemSound() { if (weMuted_ && sysSet_) { sysSet_(winBefore_); weMuted_ = false; } }
+void Engine::restoreSystemSound() { if (weMuted_ && sysSet_) { sysSet_(winBefore_); weMuted_ = false; QSettings().remove("mixer/weMutedWindows"); } }
+bool Engine::inputMutedBySystem() const { return rt_ && running() && rt_->inputSilentSeconds() > 2.0; }
 void Engine::setMasterLimiter(bool on, double c, double rel) { masterLim_ = on; masterCeil_ = std::clamp(c, -24.0, 0.0); if (rel >= 0) masterRel_ = std::clamp(rel, 10.0, 2000.0); if (rt_) rt_->setLimiter(on, masterCeil_, masterRel_); emit stripsChanged(); emit masterChainChanged(); }
 QVariantMap Engine::masterLimiter() const { QVariantMap m; m["on"] = masterLim_; m["ceiling"] = masterCeil_; m["release"] = masterRel_; return m; }
 void Engine::clearClips() { if (rt_) rt_->clearClips(); }
@@ -751,9 +758,13 @@ bool Engine::openAsioDriver(const QString& id, int frames) {
 int Engine::asioFrames(double rate) const { return std::max(16, static_cast<int>((rate > 0 ? rate : 48000.0) * 0.010 + 0.5)); }
 // AUTO DETECT for ASIO: the interface's own driver before a wrapper (ASIO4ALL, FlexASIO), the one with more channels among equals.
 // It only picks; pressing the button is still the operator's decision.
+// AMFB's OWN VIRTUAL ASIO DRIVER ("Audio Mixer", drivers/asio): installed with the console so OTHER programs can reach it. It is not a sound
+// card and carries no signal of its own; while idle it still reports 2 in / 2 out, so ranking by channels picked it over the real interface
+// (whose driver, not running, reports none). It is never chosen automatically; it can still be opened by hand.
+static bool ownVirtualAsio(const QString& name) { return name.trimmed().compare(QStringLiteral("Audio Mixer"), Qt::CaseInsensitive) == 0; }
 QString Engine::bestAsioDriver() const {
   QString best; int bestRank = -1;
-  for (const QVariant& v : asioDrivers()) { const QVariantMap m = v.toMap(); const QString k = m["kind"].toString();
+  for (const QVariant& v : asioDrivers()) { const QVariantMap m = v.toMap(); const QString k = m["kind"].toString(); if (ownVirtualAsio(m["name"].toString()) || ownVirtualAsio(m["id"].toString())) continue;
     const int rank = (k == "interface" ? 200 : k == "wrapper" ? 0 : 100) + std::min(64, m["inChannels"].toInt() + m["outChannels"].toInt());
     if (rank > bestRank) { bestRank = rank; best = m["id"].toString(); } }
   return best;
@@ -773,6 +784,7 @@ QVariantMap Engine::autoDetectFor(const QString& prefer) const {
   QVariantMap best; int bestRank = -1;
   for (const QVariant& v : devices_) { const QVariantMap d = v.toMap(); const QString b = d["backend"].toString(), name = d["name"].toString(); if (b == "null" || d["id"].toString().startsWith("loopback:")) continue;
     const bool in = d["inChannels"].toInt() > 0, out = d["outChannels"].toInt() > 0; if (!in && !out) continue; if (!d.value("enabled", true).toBool()) continue;   // switched OFF on CONNECTIONS
+    if (b == "asio" && ownVirtualAsio(name)) continue;   // our own virtual driver: never automatic
     if (prefer == "bluetooth") { if (d["kind"].toString() != "bluetooth" && !looksBluetooth(name)) continue; } else if (prefer != "best" && b != prefer) continue;
     int rank = 0; QString why;
     if (b == "asio") { const bool wrapper = am::drv::isWrapper(name.toStdString()); const bool pinned = am::drv::pinOf(name.toStdString()).on; rank = wrapper ? 60 : pinned ? 50 : 100; why = wrapper ? "an ASIO wrapper (ASIO4ALL-style): used when nothing has its own driver" : pinned ? "Realtek onboard: pinned to its Windows endpoint, SMART START routes it" : "the device's own ASIO driver"; }
@@ -1077,6 +1089,9 @@ QVariantList Engine::storeItems() const {
   for (const auto& [id, name, note] : {std::tuple<const char*, const char*, const char*>{"ext:AmF X1 Network", "AmF X1 Network", "phone remote and network control, run inside the console"},
                                        {"ext:AmF X1 Hybrid", "AmF X1 Hybrid", "sixteen-strip hybrid mixer with captured programs"}}) {
     QVariantMap m; m["id"] = id; m["name"] = name; m["kind"] = "extension"; m["note"] = note; m["installed"] = !Extension::path(QString::fromLatin1(name)).isEmpty();
+    // installed is not enough: it must load (a wrong C++ runtime or a missing DLL beside it used to fail silently)
+    static QHash<QString, QString> probed; if (!probed.contains(QString::fromLatin1(name))) { QString why; Extension::probe(QString::fromLatin1(name), why); probed[QString::fromLatin1(name)] = why; }
+    m["loads"] = m["installed"].toBool() && probed[QString::fromLatin1(name)].isEmpty(); m["error"] = probed[QString::fromLatin1(name)];
     m["on"] = !off.contains(QString::fromLatin1(id)); l << m; }
   for (const auto& [k, n] : am::fx::catalog()) { const QString id = QStringLiteral("fx:") + QString::fromStdString(k);
     QVariantMap m; m["id"] = id; m["name"] = QString::fromStdString(n); m["kind"] = "effect"; m["note"] = "built-in rack effect"; m["installed"] = true; m["on"] = !off.contains(id); l << m; }
@@ -1250,7 +1265,7 @@ QVariantList Engine::pages() const {
     {"MIX", "mixer", "MIXER", "☰", true}, {"MIX", "arrange", "ARRANGE", "≡", true}, {"MIX", "dsp", "TONE (EQ)", "∿", true}, {"MIX", "rtaeq", "RTA EQ", "◭", true}, {"MIX", "master", "MASTERING", "◈", true}, {"MIX", "dyn", "COMPRESSOR", "⩏", true}, {"MIX", "gate", "NOISE GATE", "▣", true},
     {"MIX", "fx", "EFFECTS", "✨", true}, {"MIX", "delay", "DELAY", "⧗", true}, {"MIX", "surround", "360 AUDIO", "◍", true}, {"MIX", "bus", "SEND TO", "⇉", true}, {"MIX", "dca", "GROUP FADERS", "☷", true},
     {"ROUTE", "io", "CONNECTIONS", "⚡", true}, {"ROUTE", "routing", "ROUTING", "⎇", true}, {"ROUTE", "frame", "I/O FRAME", "▦", true},
-    {"METER", "meter", "LEVELS", "▓", true}, {"METER", "lufs", "LOUDNESS", "◎", true}, {"METER", "osc", "WAVEFORM", "∽", true}, {"METER", "phase", "PHASE", "☯", true}, {"METER", "acoustics", "ACOUSTICS", "⌇", true},
+    {"METER", "meter", "LEVELS", "▓", true}, {"METER", "score", "SOUND SCORE", "★", true}, {"METER", "lufs", "LOUDNESS", "◎", true}, {"METER", "osc", "WAVEFORM", "∽", true}, {"METER", "phase", "PHASE", "☯", true}, {"METER", "acoustics", "ACOUSTICS", "⌇", true},
     {"SOURCE", "media", "STREAM & MEDIA", "▶", true}, {"SOURCE", "live", "LIVE SOURCES", "☉", true}, {"SOURCE", "ai", "AI MIX", "🧠", true}, {"SOURCE", "engctl", "ENGINE CONTROL", "⚡", true}, {"SOURCE", "tools", "TOOLS", "⚒", true}, {"SOURCE", "plugins", "PLUGINS", "⬡", true}, {"SOURCE", "samples", "SAMPLES", "▦", true},
     {"DEVICE", "asio", "SOUND CARD", "◉", true}, {"DEVICE", "bluetooth", "BLUETOOTH", "⮁", true}, {"DEVICE", "network", "NETWORK", "⮞", true}, {"DEVICE", "cloud", "CLOUD", "☁", true}, {"DEVICE", "cascade", "CASCADE", "⚭", true},
     {"SYSTEM", "presets", "PRESETS", "⬇", true}, {"SYSTEM", "sys", "SETTINGS", "⚙", true}, {"SYSTEM", "acct", "ACCOUNT", "☺", true}, {"SYSTEM", "access", "ACCESS", "⚿", true}, {"SYSTEM", "renew", "LICENSE", "★", true}, {"SYSTEM", "admin", "ADMIN", "⚑", true}, {"SYSTEM", "calib", "CALIBRATE", "⌖", true},

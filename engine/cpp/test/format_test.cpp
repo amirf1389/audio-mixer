@@ -58,6 +58,19 @@ int main() {
     std::printf("format_test: NaN guard: %ld non-finite samples reached the output, %llu silenced, level after the burst %.3f\n", bad, static_cast<unsigned long long>(rt.nonFiniteSamples()), after);
     CHECK(bad == 0, "NaN / inf reached the device (%ld samples)", bad); CHECK(rt.nonFiniteSamples() > 0, "the guard did not count");
     CHECK(after > 0.05, "the master did not recover after the NaN burst (level %.3f)", after); }
+  // ANALOG CHANNELS (DSP MODE ANALOG): a quiet signal keeps its level, a 2nd harmonic appears (warmth); DIGITAL stays exact
+  { Runtime rt(2); DeviceConfig c; c.backend = "null"; c.frames = 256; std::string err; CHECK(rt.open(c, err), "open: %s", err.c_str());
+    rt.setGainDb(0, 0); rt.setPan(0, -1); rt.setGainDb(1, -120); rt.setMasterDb(0); rt.setLimiter(false); rt.setAnalogChannels(true);
+    const std::size_t n = 256; std::vector<float> in(n), q(n, 0.f), oL(n), oR(n); const float* ins[2] = {in.data(), q.data()}; float* outs[2] = {oL.data(), oR.data()};
+    const double f = 1000.0, amp = 0.1; double e1c = 0, e1s = 0, e2c = 0, e2s = 0, eo = 0, ei = 0; long k0 = 0;
+    for (int b = 0; b < 400; ++b) { for (std::size_t i = 0; i < n; ++i) in[i] = static_cast<float>(amp * std::sin(2 * 3.14159265358979 * f * static_cast<double>(k0 + static_cast<long>(i)) / 48000.0));
+      rt.onBlock(ins, outs, n);
+      if (b >= 200) for (std::size_t i = 0; i < n; ++i) { const double ph = 2 * 3.14159265358979 * f * static_cast<double>(k0 + static_cast<long>(i)) / 48000.0; const double y = oL[i];
+        e1c += y * std::cos(ph); e1s += y * std::sin(ph); e2c += y * std::cos(2 * ph); e2s += y * std::sin(2 * ph); eo += y * y; ei += static_cast<double>(in[i]) * in[i]; }
+      k0 += static_cast<long>(n); }
+    const double lvl = 10 * std::log10(eo / ei), h2 = 20 * std::log10(std::hypot(e2c, e2s) / std::hypot(e1c, e1s));
+    std::printf("format_test: ANALOG channel at -20 dBFS: level %+.2f dB, 2nd harmonic %.1f dB below the tone\n", lvl, -h2);
+    CHECK(std::fabs(lvl) < 0.3, "ANALOG changed a quiet level by %.2f dB", lvl); CHECK(h2 > -90 && h2 < -30, "ANALOG 2nd harmonic %.1f dB (want a little warmth)", h2); }
   // DENORMALS: flushed to zero on the audio thread
   { am::denormalsOff(); volatile float tiny = 1e-30f; volatile float d = tiny * 1e-10f;
 #ifdef AM_HAS_MXCSR
