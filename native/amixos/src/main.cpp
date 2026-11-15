@@ -939,6 +939,11 @@ int main(int argc, char* argv[]) {
             const QString rxA = net.rxAddress(), txA = net.txAddress(); const int rxP = net.rxPort(), txP = net.txPort(), first = net.rxFirstStrip();
             net.setRxAddress("127.0.0.1"); net.setRxPort(47422); net.setTxAddress("127.0.0.1"); net.setTxPort(47422); net.startReceive(); net.startSend(); net.setRxFirstStrip(7); net.midiIn(0xb1, 7, 96);
             np->setProperty("view", 1); waitMs(900); win->grabWindow().save(shots + "/network-audio-midi.png"); std::printf("amixos --shots: network-audio-midi\n");
+            { // PORT CLASH: network MIDI must not share the AES67 receiver's UDP port (both reuse addresses: packets would go to the wrong one)
+              const int keepMidi = net.midiNetPort(); net.setMidiNetPort(46421);   // MIDI on 46421 + 46422; the receiver listens on 47422: no clash
+              if (Net::portsClash(47422, 46421) || !Net::portsClash(47422, 47422) || !Net::portsClash(47422, 47421)) { std::fprintf(stderr, "amixos --shots: the UDP port clash rule is wrong\n"); std::exit(216); }
+              net.setMidiNetPort(47421); if (net.setMidiNet(true) || net.midiNetOn()) { std::fprintf(stderr, "amixos --shots: network MIDI opened on the AES67 receiver's port\n"); std::exit(217); }
+              net.setMidiNet(false); net.setMidiNetPort(keepMidi); std::printf("amixos --shots: UDP port clash refused\n"); }
             if (!win->findChild<QObject*>("aoipPanel")) { std::fprintf(stderr, "amixos --shots: FAILED the AUDIO + MIDI panel is missing\n"); }
             net.stopSend(); net.stopReceive(); net.setRxFirstStrip(first); net.setRxAddress(rxA); net.setTxAddress(txA); net.setRxPort(rxP); net.setTxPort(txP); engine.setGain(1, 0); np->setProperty("view", 0); } }
           if (QString::fromLatin1(id) == "network" && remote.available()) {   // PHONE REMOTE running: the pairing PIN and its QR code (scan to connect)
