@@ -99,7 +99,7 @@ Section "AmF X1" SecMain
   FileClose $7
   idDone:
   SetOutPath "$INSTDIR"
-  File /r "${SRC}\*.*"
+  File /r /x "AmF X1 Diagnostics.exe" /x "AmF X1 Plugin Builder.exe" "${SRC}\*.*"   ; the two tools come with their own sections below
   CreateDirectory "$APPDATA\AMFB Audio\AmF X1"
   CreateDirectory "$LOCALAPPDATA\AMFB Audio\AmF X1\cache"
   CreateDirectory "$LOCALAPPDATA\AMFB Audio\AmF X1\prefetch"
@@ -115,8 +115,21 @@ Section "AmF X1" SecMain
   WriteUninstaller "$INSTDIR\Uninstall.exe"
   CreateDirectory "$SMPROGRAMS\AmF X1"
   CreateShortcut "$SMPROGRAMS\AmF X1\AmF X1.lnk" "$INSTDIR\amixos.exe"
-  CreateShortcut "$SMPROGRAMS\AmF X1\AmF X1 Plugin Builder.lnk" "$INSTDIR\AmF X1 Plugin Builder.exe"
   CreateShortcut "$SMPROGRAMS\AmF X1\Uninstall AmF X1.lnk" "$INSTDIR\Uninstall.exe"
+SectionEnd
+Section "Diagnostics app (checks speakers, headphones, microphones and drivers)" SecDiag
+  SetOutPath "$INSTDIR"
+  File /nonfatal "${SRC}\AmF X1 Diagnostics.exe"
+  CreateDirectory "$SMPROGRAMS\AmF X1"
+  CreateShortcut "$SMPROGRAMS\AmF X1\AmF X1 Diagnostics.lnk" "$INSTDIR\AmF X1 Diagnostics.exe"
+SectionEnd
+Section "Plugin Builder (design your own VST3 plug-ins)" SecBuilder
+  SetOutPath "$INSTDIR"
+  File /nonfatal "${SRC}\AmF X1 Plugin Builder.exe"
+  CreateDirectory "$SMPROGRAMS\AmF X1"
+  CreateShortcut "$SMPROGRAMS\AmF X1\AmF X1 Plugin Builder.lnk" "$INSTDIR\AmF X1 Plugin Builder.exe"
+SectionEnd
+Section "Desktop shortcut" SecDesktop
   CreateShortcut "$DESKTOP\AmF X1.lnk" "$INSTDIR\amixos.exe"
 SectionEnd
 Section "ASIO driver (lets other programs reach the console)" SecAsio
@@ -131,6 +144,7 @@ Section "Uninstall"
   Call un.CloseConsole   ; before anything is removed: a console left running would write its settings back on quit
   ExecWait '"$INSTDIR\AmF X1.exe" --uninstall-driver'
   Delete "$DESKTOP\AmF X1.lnk"
+  Delete "$DESKTOP\AmF X1 Diagnostics.lnk"
   RMDir /r "$SMPROGRAMS\AmF X1"
   RMDir /r "$INSTDIR"
   ; EVERY UNINSTALL IS A FACTORY RESET: the settings (registry), the console, scenes, presets, caches and network tokens of this user

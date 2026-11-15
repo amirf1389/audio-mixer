@@ -77,6 +77,11 @@ bool systemMuteSet(bool muted);
 // WHAT A DEVICE IS, from the system's own form factor when it has one (WASAPI: 1 speakers, 2 line, 3 headphones, 4 microphone, 5 headset,
 // 6 handset, 8 S/PDIF, 9 display audio; -1 = not known) and otherwise from the name. capture: the entry is an input.
 std::string classifyDevice(const std::string& backend, const std::string& name, int formFactor, bool capture);
+// EVERY AUDIO ENDPOINT of the system, whatever its state: what listDevices leaves out because it cannot be opened now (headphones on an
+// empty jack, a microphone switched off in Windows' Sound settings) is listed here with the reason, for DIAGNOSTICS. Windows: WASAPI
+// active + unplugged + disabled (not-present ghosts are left out); other systems: the active devices of listDevices().
+struct EndpointInfo { std::string id, name, flow /* "out" | "in" */, state /* active | unplugged | disabled */, kind; int channels = 0; double rate = 0; bool isDefault = false; };
+std::vector<EndpointInfo> listEndpoints();
 std::vector<DeviceInfo> listDevices(bool probeAsio = true);   // probeAsio false: ASIO drivers are listed from the registry without loading them (2 in / 2 out assumed): the list a hung driver cannot block
                        // every device of every backend built in ("null" last)
 // A cheap signature of what is plugged in (WASAPI / DirectSound endpoint ids + ASIO driver names from the registry, ALSA card names): no driver

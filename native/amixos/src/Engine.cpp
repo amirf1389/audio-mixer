@@ -152,8 +152,10 @@ void Engine::refreshDevices() {
   if (simulated_) { emit devicesChanged(); return; }
   if (scanning_) return;   // a scan is already running (the interface stays live during it)
   scanning_ = true; emit busyChanged();
-  auto found = std::make_shared<std::vector<am::DeviceInfo>>();
-  guarded([found] { *found = am::listDevices(); return true; }, 8000);
+  auto found = std::make_shared<std::vector<am::DeviceInfo>>(); auto eps = std::make_shared<std::vector<am::EndpointInfo>>();
+  guarded([found, eps] { *eps = am::listEndpoints(); *found = am::listDevices(); return true; }, 8000);
+  absent_.clear();   // endpoints that exist but cannot be opened now: headphones on an empty jack, a device switched off in Windows
+  for (const am::EndpointInfo& ep : *eps) if (ep.state != "active") absent_ << QVariantMap{{"name", QString::fromStdString(ep.name)}, {"flow", QString::fromStdString(ep.flow)}, {"state", QString::fromStdString(ep.state)}, {"kind", QString::fromStdString(ep.kind)}};
   if (timedOut_) { found = std::make_shared<std::vector<am::DeviceInfo>>(am::listDevices(false)); status_ = QStringLiteral("A driver did not answer the scan in 8 s: the list is shown without loading ASIO drivers (channel counts assumed 2 / 2). SOFT RESTART scans again."); qWarning("device scan timed out: the list was built without probing ASIO drivers"); }
   scanning_ = false; emit busyChanged();
   devices_.clear();

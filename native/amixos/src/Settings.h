@@ -74,6 +74,7 @@ class Settings : public QObject {
   Q_INVOKABLE int removeVstDir(const QString& dir);
   Q_INVOKABLE int rescanVst();
   Q_INVOKABLE bool openPluginBuilder();   // starts "AmF X1 Plugin Builder" next to the console (a separate program); its exports show up here after RESCAN
+  Q_INVOKABLE bool openDiagnostics();     // the separate AmF X1 Diagnostics program (speakers, headphones, microphones, drivers)
   Q_INVOKABLE QString vstUserFolder();                // the console's own plug-in folder (<data>/vst): created, and saved among the scanned folders, the first time it is asked for
   Q_INVOKABLE bool openVstFolder(const QString& dir = QString());   // shows a plug-in folder in the system's file manager; "" = the console's own
   QString dataFolder() const; QVariantMap folders() const;

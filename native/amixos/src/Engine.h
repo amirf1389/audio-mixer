@@ -259,6 +259,7 @@ class Engine : public QObject {
   void annotateAsio(QVariantMap& m, bool probed);
   void freshInstallReset();   // install.id changed: clear the console state of an earlier install
   QString startNote_;
+  QVariantList absent_;       // endpoints that exist but are not available now (unplugged / disabled)
   QVariantMap ampUi_[64];     // the AMP page settings per output (with the name), saved with the console         // why the start state differs from what was saved (shown once in the status)   // universal ASIO detection: identity, status, remembered channel counts
   // STEREO PAIR: strips 1+2, 3+4 ... as one stereo channel. matchStereoPair() gives the partner the same channel processing (EQ, gate, compressor,
   // limiter, crossover, delay) and the same rack (every plug-in with its settings and bypass), panned to the other side. While the two are
@@ -426,6 +427,7 @@ class Engine : public QObject {
   Q_INVOKABLE void setDeviceEnabled(const QString& backend, const QString& id, bool on);   // OFF: never auto-picked, not opened
   Q_INVOKABLE void setInputRoute(int strip, int input);
   Q_INVOKABLE void setOutputRoute(int out, int source);
+  Q_INVOKABLE QVariantList absentDevices() const { return absent_; }   // [{name, flow, state, kind}]: unplugged headphones, disabled microphones ...
   // AMPLIFIER / SYSTEM PROCESSOR (the AMP page): one stage per device output, after the routing. Map keys: on, gainDb, mute, invert, delayMs,
   // hpOrder, hpHz, lpOrder, lpHz, type (0 Butterworth, 1 Linkwitz-Riley, 2 Bessel), limitOn, limitDb, releaseMs, name
   Q_INVOKABLE QVariantMap ampState(int out) const;

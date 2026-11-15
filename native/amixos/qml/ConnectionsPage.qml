@@ -47,6 +47,12 @@ Flickable {
                         MouseArea { anchors.fill: parent; onClicked: { page.outId = modelData.id; page.rate = modelData.defaultRate } } } }
                     Text { visible: page.devs("out").length === 0; text: i18n.t("No output of this driver", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 9 } }
             }
+            // NOT AVAILABLE NOW: devices Windows knows that cannot be opened at this moment, each with the reason (nothing is silently missing)
+            Repeater { model: { engine.devices; return engine.absentDevices() }
+                delegate: RowLayout { Layout.fillWidth: true; spacing: 8
+                    Rectangle { width: 8; height: 8; radius: 4; color: modelData.state === "unplugged" ? Theme.amber : Theme.dim }
+                    Text { Layout.fillWidth: true; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9; elide: Text.ElideRight
+                        text: (modelData.flow === "out" ? i18n.t("OUTPUT", i18n.lang) : i18n.t("INPUT", i18n.lang)) + " · " + modelData.name + " · " + (modelData.state === "unplugged" ? i18n.t("nothing plugged in: plug it in and it appears above", i18n.lang) : i18n.t("switched off in Windows Sound settings", i18n.lang)) } } }
             RowLayout {
                 Layout.fillWidth: true; spacing: 8
                 Text { text: i18n.t("RATE", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9 }

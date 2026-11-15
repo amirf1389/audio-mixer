@@ -47,7 +47,8 @@ Item {
                 Text { text: i18n.t("power-on self test · safe mode · restart · factory reset", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                 Item { Layout.fillWidth: true }
                 Text { readonly property int bad: { let n = 0; for (let i = 0; i < page.rows.length; ++i) if (!page.rows[i].ok) ++n; return n } text: page.rows.length ? (bad === 0 ? i18n.t("ALL CHECKS OK", i18n.lang) : bad + i18n.t(" CHECK(S) NEED ATTENTION", i18n.lang)) : ""; color: bad === 0 ? Theme.emerald : Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-                Btn { label: i18n.t("RUN AUDIT", i18n.lang); on: true; onColor: Theme.cyan; onClicked: page.audit() } }
+                Btn { label: i18n.t("RUN AUDIT", i18n.lang); on: true; onColor: Theme.cyan; onClicked: page.audit() }
+                Btn { objectName: "openDiagAppBtn"; label: i18n.t("DIAGNOSTICS APP", i18n.lang); on: true; onColor: Theme.violet; onClicked: settings.openDiagnostics() } }
         }
         Rectangle {
             Layout.fillWidth: true; Layout.fillHeight: true; radius: Theme.radius; color: Theme.card; border.color: Theme.line; clip: true
