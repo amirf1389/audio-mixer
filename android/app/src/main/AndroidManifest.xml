@@ -9,6 +9,7 @@
         </activity>
         <activity android:name=".LocalMixerActivity" android:exported="false" />
         <activity android:name=".ToolsActivity" android:exported="false" />
+        <activity android:name=".MixdownActivity" android:exported="false" />
         <activity android:name=".PluginsActivity" android:exported="false" />
         <activity android:name=".EqActivity" android:exported="false" />
         <activity android:name=".CalculatorActivity" android:exported="false" />

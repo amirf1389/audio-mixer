@@ -1,5 +1,5 @@
-# The engine's C SDK for Android: the same sources as engine/cpp, no device backend yet (the null backend clocks the mixer; an AAudio
-# backend is the next step), plus the JNI glue. Built by Gradle through the NDK.
+# The engine's C SDK for Android: the same sources as engine/cpp, the native AAudio low-latency path in amix_jni.cpp (its output callback
+# drives the mixer), plus the JNI glue. Built by Gradle through the NDK.
 cmake_minimum_required(VERSION 3.22)
 project(amixos_android CXX)
 set(CMAKE_CXX_STANDARD 20)
@@ -16,4 +16,4 @@ file(READ ${ROOT}/native/amixos/version.txt AMIX_SDK_VERSION)
 string(STRIP "${AMIX_SDK_VERSION}" AMIX_SDK_VERSION)
 target_compile_definitions(amix PRIVATE AMIX_VERSION_STRING="${AMIX_SDK_VERSION}" AMIX_BUILD_DLL)
 find_library(log-lib log)
-target_link_libraries(amix ${log-lib})
+target_link_libraries(amix ${log-lib} aaudio)   # AAudio: the native low-latency audio path (Android 8+)

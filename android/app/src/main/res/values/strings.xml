@@ -143,4 +143,18 @@
     <string name="home_plugins_sub">Racks, VST list, extensions</string>
     <string name="home_settings">Settings</string>
     <string name="home_settings_sub">Connection, display, behaviour</string>
+    <string name="home_mixdown">Mixdown</string>
+    <string name="home_mixdown_sub">Mix audio files into one</string>
+    <string name="mix_title">MIXDOWN</string>
+    <string name="mix_intro">Pick several audio files (MP3, M4A, WAV, FLAC, OGG …). They play together, each at its own volume, and are exported as one AAC file. Nothing leaves the phone.</string>
+    <string name="mix_add">ADD FILES</string>
+    <string name="mix_export">EXPORT</string>
+    <string name="mix_empty">No files yet: press ADD FILES.</string>
+    <string name="mix_volume">VOLUME</string>
+    <string name="mix_progress">Mixing… %1$d %%</string>
+    <string name="mix_done">Mixed: %1$d KB, %2$.1f s. Choose where to save it.</string>
+    <string name="mix_failed">The mix failed:</string>
+    <string name="mix_saved">Saved.</string>
+    <string name="mix_not_saved">Not saved (no place chosen). Press EXPORT again to save it.</string>
+    <string name="mix_save_failed">Could not save:</string>
 </resources>
