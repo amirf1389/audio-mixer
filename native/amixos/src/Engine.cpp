@@ -201,6 +201,7 @@ bool Engine::open(const QString& backend, const QString& inDevice, const QString
   am::DeviceConfig cfg; cfg.backend = backend.isEmpty() ? "auto" : backend.toStdString(); cfg.bits = openBits_; if (openExclusive_) cfg.exclusive = true; cfg.inDevice = inDev.toStdString(); cfg.outDevice = outDevice.toStdString();
   cfg.sampleRate = sampleRate > 0 ? sampleRate : 48000; cfg.frames = static_cast<unsigned>(frames > 0 ? frames : 256); blockFrames_ = static_cast<int>(cfg.frames); cfg.inChannels = inCh; cfg.outChannels = outChannels;
   devIn_ = std::clamp(inCh, 0, kStrips); devOut_ = std::clamp(outChannels, 0, kOutputs);
+  secureInputFor(cfg); inChannels = cfg.inChannels;
   std::string err; nullInputFor(cfg); rememberDeviceNames(cfg.backend, cfg.inDevice, cfg.outDevice);
   if (opening_) return false;
   { opening_ = true; emit busyChanged(); auto pending = std::move(rt_); am::Runtime* raw = pending.get(); auto e = std::make_shared<std::string>();   // rt_ is empty while the driver starts: nothing in the interface can touch a half-open runtime
@@ -598,6 +599,37 @@ QString Engine::inputLabel(int input) const {
   if (input < 0 || !rt_) return QStringLiteral("—"); QString n = inDevName_; n.remove(QRegularExpression("\\s*\\(.*\\)$")); if (n.size() > 14) n = n.left(14);
   return (n.isEmpty() ? QString() : n + " · ") + "IN " + QString::number(input + 1);
 }
+void Engine::setInputAllowed(const QString& backend, const QString& id, bool on) {
+  QStringList l = allowedInputs(); const QString k = backend + "|" + id; l.removeAll(k); if (on && !backend.isEmpty() && !id.isEmpty()) l << k; settings_.setValue("audio/allowedInputs", l); emit devicesChanged();
+}
+QVariantList Engine::inputCandidates() const {
+  QVariantList l; for (const QVariant& v : devices_) { const QVariantMap d = v.toMap(); const QString b = d["backend"].toString(), id = d["id"].toString();
+    if (b == "null" || d["inChannels"].toInt() <= 0 || id.startsWith("loopback:")) continue;
+    QVariantMap m; m["backend"] = b; m["id"] = id; m["name"] = d["name"]; m["kind"] = d["kind"]; m["defaultIn"] = d["defaultIn"]; m["allowed"] = inputAllowed(b, id); l << m; }
+  return l;
+}
+// SECURE INPUT, applied to every stream the console opens (open, SMART START and its fallbacks): the input device is resolved (the
+// default capture device when none is named; ASIO's input is the driver itself) and opened only if it is on the allowed list; an
+// allowed WASAPI input is opened exclusively. Anything else: no input at all (outputs keep working), never a silent fallback.
+void Engine::secureInputFor(am::DeviceConfig& cfg) {
+  if (!secureInput() || cfg.inChannels <= 0 || cfg.inDevice == "-" || cfg.backend == "null") return;
+  const QString b = QString::fromStdString(cfg.backend); QString id = QString::fromStdString(cfg.inDevice), name;
+  if (id.isEmpty() && b == "asio") id = QString::fromStdString(cfg.outDevice);
+  for (const QVariant& v : devices_) { const QVariantMap d = v.toMap(); if (d["backend"].toString() != b || d["inChannels"].toInt() <= 0) continue;
+    if (id.isEmpty() ? d["defaultIn"].toBool() : d["id"].toString() == id) { id = d["id"].toString(); name = d["name"].toString(); break; } }
+  if (id.isEmpty() || !inputAllowed(b, id)) {
+    cfg.inChannels = 0; cfg.inDevice = "-"; devIn_ = 0;
+    micOffNote_ = QStringLiteral("SECURE INPUT: %1 is not on the allowed list, so no input is opened (outputs only). Allow it on SOUND CARD → AUDIO ACCESS.").arg(name.isEmpty() ? QStringLiteral("the default input") : name);
+    return; }
+  cfg.inDevice = id.toStdString();   // the default resolved to the exact allowed device: a new default cannot slip in between
+  if (b == "wasapi") cfg.exclusive = true;   // exclusive: no other program shares, taps or mixes into the allowed microphone
+}
+QVariantMap Engine::secureInputPreview(const QString& backend, const QString& in, const QString& out, int inChannels) {
+  am::DeviceConfig cfg; cfg.backend = backend.toStdString(); cfg.inDevice = in.toStdString(); cfg.outDevice = out.toStdString(); cfg.inChannels = inChannels;
+  const QString keepNote = micOffNote_; const int keepIn = devIn_; micOffNote_.clear(); secureInputFor(cfg);
+  QVariantMap m; m["in"] = QString::fromStdString(cfg.inDevice); m["inChannels"] = cfg.inChannels; m["exclusive"] = cfg.exclusive; m["note"] = micOffNote_;
+  micOffNote_ = keepNote; devIn_ = keepIn; return m;
+}
 void Engine::nullInputFor(am::DeviceConfig& cfg) const {
   if (cfg.backend != "null" || !nullTone_) return; const double fs = cfg.sampleRate > 0 ? cfg.sampleRate : 48000; const int ch = cfg.inChannels;
   if (ch < 1) return;   // opened with no inputs: there is no channel to put the tone on
@@ -626,12 +658,14 @@ bool Engine::openSmart(const QString& backend, const QString& in, const QString&
   // driver (scanned from the device list, opened even when pinned), Realtek Windows shared (RWS) and the system's default endpoints.
   const std::size_t firstRescue = steps.size();
   if (backend != "null") { const auto more = am::drv::rescue(devInfos(devices_), in != "-", out != "-", steps); steps.insert(steps.end(), more.begin(), more.end()); }
+  micOffNote_.clear();   // SECURE INPUT may set it again for the step that opens
   QStringList tried; const QString asioName = backend == "asio" ? (out.isEmpty() || out == "-" ? in : out) : QString();
   for (std::size_t i = 0; i < steps.size(); ++i) {
     const auto& a = steps[i];
     stop(); rt_ = std::make_unique<am::Runtime>(kStrips);
     am::DeviceConfig cfg; cfg.backend = a.backend; cfg.inDevice = a.inDevice; cfg.outDevice = a.outDevice; cfg.sampleRate = rate > 0 ? rate : 48000; cfg.frames = static_cast<unsigned>(frames > 0 ? frames : 256); blockFrames_ = static_cast<int>(cfg.frames); cfg.inChannels = inCh; cfg.outChannels = outCh; cfg.exclusive = a.exclusive; cfg.preferInt32 = preferInt32();
     devIn_ = std::clamp(inCh, 0, kStrips); devOut_ = std::clamp(outCh, 0, kOutputs);
+    secureInputFor(cfg);
     std::string err; nullInputFor(cfg); rememberDeviceNames(cfg.backend, cfg.inDevice, cfg.outDevice);
     bool started = false;
     { opening_ = true; emit busyChanged(); auto pending = std::move(rt_); am::Runtime* raw = pending.get(); auto e = std::make_shared<std::string>(); started = guarded([raw, cfg, e] { return raw->open(cfg, *e) && raw->start(*e); }, 12000); opening_ = false; if (!timedOut_) rt_ = std::move(pending); emit busyChanged();
@@ -640,7 +674,7 @@ bool Engine::openSmart(const QString& backend, const QString& in, const QString&
       rt_->setExtraSource(&sources_);
       for (auto& st : strips_) st.dsp.setSampleRate(cfg.sampleRate);
       reloadAllVst(); pushAll();
-      status_ = QStringLiteral("%1 • %2 Hz • %3 frames • %4 in / %5 out").arg(QString::fromStdString(rt_->backendName())).arg(cfg.sampleRate).arg(cfg.frames).arg(inCh).arg(outCh);
+      status_ = QStringLiteral("%1 • %2 Hz • %3 frames • %4 in / %5 out").arg(QString::fromStdString(rt_->backendName())).arg(cfg.sampleRate).arg(cfg.frames).arg(cfg.inChannels).arg(outCh);
       const QString mode = QString::fromStdString(a.mode).toUpper();
       if (i >= firstRescue) lastRoute_ = QStringLiteral("RESCUE: %1 failed (%2) → %3 works (%4).").arg(tried.join("; "), QString::fromStdString(err), mode == "RWS" ? QStringLiteral("RWS · Realtek Windows shared") : mode, QString::fromStdString(a.outDevice != "-" ? a.outDevice : a.inDevice));
       else if (a.pinned) lastRoute_ = QStringLiteral("REALTEK PIN: %1 → %2 (%3). The ASIO driver was not opened.").arg(asioName, mode, QString::fromStdString(a.inDevice != "-" ? a.inDevice : a.outDevice));

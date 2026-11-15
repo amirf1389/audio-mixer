@@ -2032,5 +2032,11 @@
 "Phone camera: opens the browser remote on this computer and pairs by itself. AmF X1 app: REMOTE → SCAN QR. The code holds this computer's address and the PIN of this minute, so it changes with the PIN.": "Appareil photo du téléphone : ouvre la fonction « Remote » du navigateur sur cet ordinateur et établit automatiquement la connexion. Application AmF X1 : REMOTE → SCAN QR. Le code contient l'adresse de cet ordinateur et le code PIN du moment, il change donc en fonction du code PIN.",
 "More than one network: pick the address of the Wi-Fi the phone is on.": "Plus d'un réseau : sélectionnez l'adresse du réseau Wi-Fi auquel le téléphone est connecté.",
 "MUSIC INPUT: DUAL LISTEN ON. Click to go back to the 3-band EQ.": "ENTRÉE MUSIQUE : DUAL LISTEN ACTIVÉ. Cliquez pour revenir à l'égaliseur à 3 bandes.",
-"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "ENTRÉE MUSIQUE : cliquez pour activer la fonction « DUAL LISTEN » sur ce canal (musique provenant d'un lecteur, d'un groupe ou de pistes d'accompagnement)."
+"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "ENTRÉE MUSIQUE : cliquez pour activer la fonction « DUAL LISTEN » sur ce canal (musique provenant d'un lecteur, d'un groupe ou de pistes d'accompagnement).",
+"SECURE INPUT": "SAISIE SÉCURISÉE",
+"Only the input devices allowed below are opened, by hand or automatically. An allowed WASAPI input is opened in exclusive mode: no other program can listen to it or mix into it. Anything else runs outputs only.": "Seuls les périphériques d'entrée autorisés ci-dessous sont ouverts, manuellement ou automatiquement. Un périphérique d'entrée WASAPI autorisé est ouvert en mode exclusif : aucun autre programme ne peut l'écouter ni y ajouter de son. Tous les autres périphériques ne prennent en charge que les sorties.",
+" · default": " · par défaut",
+"ALLOWED": "AUTORISÉ",
+"ALLOW": "AUTORISER",
+"No input device found: plug one in, then RESCAN.": "Aucun périphérique d'entrée détecté : branchez-en un, puis relancez la recherche."
 }

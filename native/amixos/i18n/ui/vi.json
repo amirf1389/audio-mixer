@@ -2032,5 +2032,11 @@
 "Phone camera: opens the browser remote on this computer and pairs by itself. AmF X1 app: REMOTE → SCAN QR. The code holds this computer's address and the PIN of this minute, so it changes with the PIN.": "Camera điện thoại: Mở trình duyệt từ xa trên máy tính này và tự động kết nối. Ứng dụng AmF X1: REMOTE → QUÉT MÃ QR. Mã này chứa địa chỉ của máy tính này và mã PIN tại thời điểm hiện tại, do đó nó sẽ thay đổi theo mã PIN.",
 "More than one network: pick the address of the Wi-Fi the phone is on.": "Có nhiều hơn một mạng: hãy chọn địa chỉ của mạng Wi-Fi mà điện thoại đang kết nối.",
 "MUSIC INPUT: DUAL LISTEN ON. Click to go back to the 3-band EQ.": "ĐẦU VÀO ÂM NHẠC: CHẾ ĐỘ NGHE KÉP ĐÃ BẬT. Nhấp để quay lại bộ cân bằng 3 dải tần.",
-"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "ĐẦU VÀO ÂM NHẠC: nhấp vào đây để bật chế độ DUAL LISTEN ON cho kênh này (âm nhạc từ thiết bị phát, ban nhạc hoặc bản nhạc đệm)."
+"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "ĐẦU VÀO ÂM NHẠC: nhấp vào đây để bật chế độ DUAL LISTEN ON cho kênh này (âm nhạc từ thiết bị phát, ban nhạc hoặc bản nhạc đệm).",
+"SECURE INPUT": "NHẬP LIỆU AN TOÀN",
+"Only the input devices allowed below are opened, by hand or automatically. An allowed WASAPI input is opened in exclusive mode: no other program can listen to it or mix into it. Anything else runs outputs only.": "Chỉ các thiết bị đầu vào được phép dưới đây mới được mở, bằng tay hoặc tự động. Một thiết bị đầu vào WASAPI được phép sẽ được mở ở chế độ độc quyền: không có chương trình nào khác có thể lắng nghe hoặc trộn tín hiệu vào thiết bị đó. Tất cả các thiết bị còn lại chỉ chạy ở chế độ đầu ra.",
+" · default": " · mặc định",
+"ALLOWED": "ĐƯỢC PHÉP",
+"ALLOW": "CHO PHÉP",
+"No input device found: plug one in, then RESCAN.": "Không tìm thấy thiết bị nhập liệu: hãy cắm một thiết bị vào, sau đó nhấn RESCAN."
 }

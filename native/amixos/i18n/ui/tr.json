@@ -2055,5 +2055,11 @@
 "Phone camera: opens the browser remote on this computer and pairs by itself. AmF X1 app: REMOTE → SCAN QR. The code holds this computer's address and the PIN of this minute, so it changes with the PIN.": "Telefon kamerası: Bu bilgisayardaki tarayıcıyı uzaktan açar ve otomatik olarak eşleşir. AmF X1 uygulaması: UZAKTAN → QR KODUNU TARAYIN. Kod, bu bilgisayarın adresini ve o anki PIN kodunu içerir; dolayısıyla PIN koduyla birlikte değişir.",
 "More than one network: pick the address of the Wi-Fi the phone is on.": "Birden fazla ağ varsa: Telefonun bağlı olduğu Wi-Fi ağının adresini seçin.",
 "MUSIC INPUT: DUAL LISTEN ON. Click to go back to the 3-band EQ.": "MÜZİK GİRİŞİ: ÇİFT DİNLEME AÇIK. 3 bantlı EQ'ya geri dönmek için tıklayın.",
-"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "MÜZİK GİRİŞİ: Bu kanal için ÇİFT DİNLEME özelliğini etkinleştirmek üzere tıklayın (bir müzik çalarından, bir gruptan veya arka plan müziklerinden gelen müzik)."
+"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "MÜZİK GİRİŞİ: Bu kanal için ÇİFT DİNLEME özelliğini etkinleştirmek üzere tıklayın (bir müzik çalarından, bir gruptan veya arka plan müziklerinden gelen müzik).",
+"SECURE INPUT": "GÜVENLİ GİRİŞ",
+"Only the input devices allowed below are opened, by hand or automatically. An allowed WASAPI input is opened in exclusive mode: no other program can listen to it or mix into it. Anything else runs outputs only.": "Yalnızca aşağıda izin verilen giriş aygıtları, manuel olarak veya otomatik olarak açılır. İzin verilen bir WASAPI girişi, münhasır modda açılır: başka hiçbir program bu girişi dinleyemez veya bu girişe ses karıştıramaz. Diğer tüm durumlarda yalnızca çıkışlar çalıştırılır.",
+" · default": " · varsayılan",
+"ALLOWED": "İZİN VERİLİR",
+"ALLOW": "İZİN VER",
+"No input device found: plug one in, then RESCAN.": "Giriş aygıtı bulunamadı: Bir tane takın, ardından YENİDEN TARAMA yapın."
 }

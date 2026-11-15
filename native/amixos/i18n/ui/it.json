@@ -2040,5 +2040,11 @@
 "Phone camera: opens the browser remote on this computer and pairs by itself. AmF X1 app: REMOTE → SCAN QR. The code holds this computer's address and the PIN of this minute, so it changes with the PIN.": "Fotocamera del telefono: apre il browser in modalità remota su questo computer ed esegue l'accoppiamento automaticamente. App AmF X1: REMOTE → SCAN QR. Il codice contiene l'indirizzo di questo computer e il PIN di questo minuto, quindi cambia insieme al PIN.",
 "More than one network: pick the address of the Wi-Fi the phone is on.": "Più di una rete: seleziona l'indirizzo della rete Wi-Fi a cui è connesso il telefono.",
 "MUSIC INPUT: DUAL LISTEN ON. Click to go back to the 3-band EQ.": "INGRESSO MUSICALE: DUAL LISTEN ATTIVO. Clicca per tornare all'equalizzatore a 3 bande.",
-"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "INGRESSO MUSICA: clicca per attivare la modalità DUAL LISTEN su questo canale (musica proveniente da un lettore, una band o basi musicali)."
+"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "INGRESSO MUSICA: clicca per attivare la modalità DUAL LISTEN su questo canale (musica proveniente da un lettore, una band o basi musicali).",
+"SECURE INPUT": "IMMISSIONE SICURA",
+"Only the input devices allowed below are opened, by hand or automatically. An allowed WASAPI input is opened in exclusive mode: no other program can listen to it or mix into it. Anything else runs outputs only.": "Vengono aperti solo i dispositivi di input consentiti di seguito, manualmente o automaticamente. Un dispositivo di input WASAPI consentito viene aperto in modalità esclusiva: nessun altro programma può ascoltarne il segnale né mixarlo. Tutti gli altri dispositivi funzionano solo in modalità di output.",
+" · default": " · predefinito",
+"ALLOWED": "CONSENTITO",
+"ALLOW": "CONSENTIRE",
+"No input device found: plug one in, then RESCAN.": "Non è stato rilevato alcun dispositivo di input: collegarne uno, quindi eseguire una NUOVA SCANSIONE."
 }

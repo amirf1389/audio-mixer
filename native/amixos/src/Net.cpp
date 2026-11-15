@@ -49,6 +49,7 @@ void Net::stopSend() { txWanted_ = false; if (!tx_.running()) return; if (am::Ru
 
 bool Net::startReceive() {
   stopReceive();
+  if (rtpMidi_.running() && portsClash(rxPort(), midiNetPort())) { fail(QStringLiteral("UDP port %1 is already used by NETWORK MIDI (ports %2 and %3): pick another receive port, or move network MIDI.").arg(rxPort()).arg(midiNetPort()).arg(midiNetPort() + 1)); return false; }
   StreamDesc d; d.address = rxAddress().toStdString(); d.port = rxPort(); d.channels = rxChannels(); d.bits = rxBits(); d.rate = rxRate();
   std::string err; if (!rx_.start(d, card().toStdString(), rxLatency(), err)) { fail(QString::fromStdString(err)); return false; }
   if (am::Runtime* rt = engine_->runtime()) rt->setNetInput(&rx_);
@@ -111,6 +112,7 @@ am::net::MidiSink Net::sink() {   // called on a network or driver thread: hand 
 void Net::setMidiLan(bool v) { s_.setValue("net/midiLan", v); if (rtpMidi_.running()) setMidiNet(true); emit changed(); }
 bool Net::setMidiNet(bool on) {
   rtpMidi_.stop(); if (!on) { emit changed(); return true; }
+  if (rx_.running() && portsClash(rxPort(), midiNetPort())) { fail(QStringLiteral("NETWORK MIDI needs UDP ports %1 and %2, and the AES67 receiver already listens on %3: pick another MIDI port.").arg(midiNetPort()).arg(midiNetPort() + 1).arg(rxPort())); emit changed(); return false; }
   std::string err; if (!rtpMidi_.start(txName().toStdString(), midiLan() ? std::string() : std::string("127.0.0.1"), midiNetPort(), sink(), err)) { fail(QString::fromStdString(err)); return false; }
   msg_.clear(); emit changed(); return true;
 }

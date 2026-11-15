@@ -54,7 +54,22 @@ Item {
                             Text { anchors.verticalCenter: parent.verticalCenter; text: i18n.t(modelData.label, i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
                             Btn { objectName: "access_" + modelData.key + "_on"; label: i18n.t("ON", i18n.lang); on: parent.lit; onColor: Theme.emerald; onClicked: parent.set(true) }
                             Btn { objectName: "access_" + modelData.key + "_off"; label: i18n.t("OFF", i18n.lang); on: !parent.lit; onColor: Theme.danger; onClicked: parent.set(false) } } }
-                    Btn { objectName: "micPrivacyBtn"; label: i18n.t("WINDOWS MIC PRIVACY…", i18n.lang); onClicked: Qt.openUrlExternally("ms-settings:privacy-microphone") } } }
+                    Btn { objectName: "micPrivacyBtn"; label: i18n.t("WINDOWS MIC PRIVACY…", i18n.lang); onClicked: Qt.openUrlExternally("ms-settings:privacy-microphone") } }
+                // SECURE INPUT: only the inputs allowed below are ever opened, and an allowed WASAPI input is opened exclusively
+                Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.lineSoft }
+                RowLayout { spacing: 8; Layout.fillWidth: true
+                    Text { text: i18n.t("SECURE INPUT", i18n.lang); color: engine.secureInput ? Theme.emerald : Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
+                    Btn { objectName: "secureInputOn"; label: i18n.t("ON", i18n.lang); on: engine.secureInput; onColor: Theme.emerald; onClicked: if (!engine.secureInput) { engine.secureInput = true; page.applyAccess() } }
+                    Btn { objectName: "secureInputOff"; label: i18n.t("OFF", i18n.lang); on: !engine.secureInput; onColor: Theme.danger; onClicked: if (engine.secureInput) { engine.secureInput = false; page.applyAccess() } }
+                    Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; text: i18n.t("Only the input devices allowed below are opened, by hand or automatically. An allowed WASAPI input is opened in exclusive mode: no other program can listen to it or mix into it. Anything else runs outputs only.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 } }
+                Flow { objectName: "allowedInputs"; Layout.fillWidth: true; spacing: 6; visible: engine.secureInput
+                    Repeater { model: engine.secureInput ? engine.inputCandidates() : []
+                        delegate: Rectangle { implicitWidth: aiRow.implicitWidth + 12; implicitHeight: 24; radius: 6; color: modelData.allowed ? Qt.rgba(0.063, 0.725, 0.506, 0.14) : Theme.ov(0.04); border.color: modelData.allowed ? Theme.emerald : Theme.lineSoft
+                            Row { id: aiRow; anchors.centerIn: parent; spacing: 6
+                                Text { anchors.verticalCenter: parent.verticalCenter; text: modelData.backend.toUpperCase() + " · " + modelData.name + (modelData.defaultIn ? i18n.t(" · default", i18n.lang) : ""); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                                Btn { objectName: "allow_" + index; label: modelData.allowed ? i18n.t("ALLOWED", i18n.lang) : i18n.t("ALLOW", i18n.lang); on: modelData.allowed; onColor: Theme.emerald
+                                    onClicked: { engine.setInputAllowed(modelData.backend, modelData.id, !modelData.allowed); page.applyAccess() } } } } }
+                    Text { visible: engine.inputCandidates().length === 0; text: i18n.t("No input device found: plug one in, then RESCAN.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 } } }
             Card { Head { text: i18n.t("DEVICES", i18n.lang) }
                 Text { objectName: "micOffNote"; visible: engine.micOffNote !== ""; Layout.fillWidth: true; wrapMode: Text.WordWrap; text: i18n.t(engine.micOffNote, i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
                 Rectangle {   // INPUT / OUTPUT CHECK: every channel of the running interface or mixer, live, with the real-time verdict

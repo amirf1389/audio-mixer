@@ -2034,5 +2034,11 @@
 "Phone camera: opens the browser remote on this computer and pairs by itself. AmF X1 app: REMOTE → SCAN QR. The code holds this computer's address and the PIN of this minute, so it changes with the PIN.": "Telefooncamera: opent de browser op deze computer en maakt automatisch verbinding. AmF X1-app: REMOTE → QR-code scannen. De code bevat het adres van deze computer en de pincode van dit moment, dus deze verandert mee met de pincode.",
 "More than one network: pick the address of the Wi-Fi the phone is on.": "Meer dan één netwerk: kies het adres van het wifi-netwerk waarmee de telefoon is verbonden.",
 "MUSIC INPUT: DUAL LISTEN ON. Click to go back to the 3-band EQ.": "MUZIEKINGANG: DUAL LISTEN AAN. Klik om terug te gaan naar de 3-bands EQ.",
-"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "MUZIEKINGANG: klik om ‘DUAL LISTEN’ voor dit kanaal in te schakelen (muziek van een afspeelapparaat, een band of achtergrondmuziek)."
+"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "MUZIEKINGANG: klik om ‘DUAL LISTEN’ voor dit kanaal in te schakelen (muziek van een afspeelapparaat, een band of achtergrondmuziek).",
+"SECURE INPUT": "BEVEILIGDE INVOER",
+"Only the input devices allowed below are opened, by hand or automatically. An allowed WASAPI input is opened in exclusive mode: no other program can listen to it or mix into it. Anything else runs outputs only.": "Alleen de hieronder toegestane invoerapparaten worden geopend, handmatig of automatisch. Een toegestane WASAPI-invoer wordt in de exclusieve modus geopend: geen enkel ander programma kan hiernaar luisteren of er iets aan toevoegen. Alle andere apparaten werken uitsluitend als uitvoer.",
+" · default": " · standaard",
+"ALLOWED": "TOEGESTAAN",
+"ALLOW": "TOESTAAN",
+"No input device found: plug one in, then RESCAN.": "Er is geen invoerapparaat gevonden: sluit er een aan en klik vervolgens op ‘Opnieuw scannen’."
 }

@@ -114,7 +114,7 @@ Item {
                                 Btn { label: "⟳"; onClicked: net.rescanMidi() } } }
                         RowLayout { spacing: 4; Lab { Layout.preferredWidth: 78; text: i18n.t("NETWORK MIDI", i18n.lang) }
                             Btn { objectName: "midiNetBtn"; label: net.midiNetOn ? i18n.t("ON", i18n.lang) : i18n.t("OFF", i18n.lang); on: net.midiNetOn; onColor: Theme.emerald; onClicked: net.setMidiNet(!net.midiNetOn) }
-                            Field { implicitWidth: 56; enabled: !net.midiNetOn; text: net.midiNetPort; inputMethodHints: Qt.ImhDigitsOnly; onEditingFinished: net.midiNetPort = parseInt(text) || 5004 }
+                            Field { implicitWidth: 56; enabled: !net.midiNetOn; text: net.midiNetPort; inputMethodHints: Qt.ImhDigitsOnly; onEditingFinished: net.midiNetPort = parseInt(text) || 5006 }
                             Btn { label: i18n.t("THIS COMPUTER", i18n.lang); on: !net.midiLan; onClicked: net.midiLan = false } Btn { label: i18n.t("LAN", i18n.lang); on: net.midiLan; onColor: Theme.danger; onClicked: net.midiLan = true } }
                         Note { text: net.midiNetOn ? i18n.t("Connect from the other device's network MIDI set-up to this computer's address, port ", i18n.lang) + net.midiNetPort + (panel.st.midiPeers > 0 ? i18n.t(" · connected: ", i18n.lang) + panel.st.midiPeer : "") : i18n.t("A network MIDI (RTP-MIDI) session that tablets and computers connect to by address.", i18n.lang) }
                         Text { visible: net.midiLan; Layout.fillWidth: true; wrapMode: Text.WordWrap; text: i18n.t("LAN: any device on the network can connect and move the faders. Network MIDI has no password.", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 7 }

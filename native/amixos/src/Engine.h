@@ -209,6 +209,17 @@ class Engine : public QObject {
   Q_PROPERTY(bool micAccessOff READ micAccessOff WRITE setMicAccessOff NOTIFY recordChanged)
   bool micAccessOff() const { return settings_.value("audio/micAccessOff", false).toBool(); } void setMicAccessOff(bool v) { settings_.setValue("audio/micAccessOff", v); emit recordChanged(); }
   bool headsetMicOff() const { return settings_.value("audio/headsetMicOff", false).toBool(); } void setHeadsetMicOff(bool v) { settings_.setValue("audio/headsetMicOff", v); emit recordChanged(); }
+  // SECURE INPUT: only input devices on the allowed list are ever opened (by hand, AUTO DETECT, SMART START, Bluetooth, every driver),
+  // and an allowed WASAPI input is opened EXCLUSIVELY (no Windows mixer, no other program can capture or inject on it). A device that
+  // is not allowed runs outputs only, with a note saying why. Kept as "backend|id" in audio/allowedInputs.
+  Q_PROPERTY(bool secureInput READ secureInput WRITE setSecureInput NOTIFY devicesChanged)
+  Q_PROPERTY(QStringList allowedInputs READ allowedInputs NOTIFY devicesChanged)
+  bool secureInput() const { return settings_.value("audio/secureInput", false).toBool(); } void setSecureInput(bool v) { settings_.setValue("audio/secureInput", v); emit devicesChanged(); }
+  QStringList allowedInputs() const { return settings_.value("audio/allowedInputs").toStringList(); }
+  Q_INVOKABLE bool inputAllowed(const QString& backend, const QString& id) const { return allowedInputs().contains(backend + "|" + id); }
+  Q_INVOKABLE void setInputAllowed(const QString& backend, const QString& id, bool on);
+  Q_INVOKABLE QVariantList inputCandidates() const;
+  Q_INVOKABLE QVariantMap secureInputPreview(const QString& backend, const QString& in, const QString& out, int inChannels);   // what SECURE INPUT would open: {in, inChannels, exclusive, note}   // every device with inputs, [{backend, id, name, kind, allowed, defaultIn}]
   Q_PROPERTY(bool bluetoothAudio READ bluetoothAudio WRITE setBluetoothAudio NOTIFY devicesChanged)
   bool bluetoothAudio() const { return settings_.value("audio/bluetooth", true).toBool(); } void setBluetoothAudio(bool v) { settings_.setValue("audio/bluetooth", v); refreshDevices(); }
   // LOCAL STORE (CLOUD page): what is installed on this computer and can be switched on or off — the extension libraries next to the console and the
@@ -667,7 +678,7 @@ class Engine : public QObject {
   QVariantMap license_; int licensedChannels_ = 10;
   struct EqPresetUi { QString name; am::dsp::EqBand bands[10]; int hpOrder = 0; double hpFreq = 80; int lpOrder = 0; double lpFreq = 16000; bool used = false; };
   static const EqPresetUi* factoryEqPreset(int slot); EqPresetUi userEq_[10]; void loadUserEq(); void storeUserEq() const;
-  bool nullTone_ = false; void nullInputFor(am::DeviceConfig& cfg) const;
+  bool nullTone_ = false; void nullInputFor(am::DeviceConfig& cfg) const; void secureInputFor(am::DeviceConfig& cfg);
   QString autoStatus_ = "off"; class QFileSystemWatcher* keyWatch_ = nullptr; QTimer keyScan_;
   QString lastRoute_; am::Runtime::ExtraSource* extra_ = nullptr; am::rec::Recorder recorder_; unsigned armed_ = 0; QString recMsg_; double clipDb_ = -0.1; int peakHoldMs_ = 1400;
   struct MonitorUi { int source = 0; double db = 0; bool dim = false, mono = false, mute = false, sync = true; } mon_;   // sync: the monitor fader moves with the master fader (and back)

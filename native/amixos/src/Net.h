@@ -73,7 +73,10 @@ class Net : public QObject {
   QVariantList streams() const;
   QVariantList transports() const;
   bool midiNetOn() const { return rtpMidi_.running(); }
-  int midiNetPort() const { return s_.value("net/midiPort", 5004).toInt(); } void setMidiNetPort(int v) { s_.setValue("net/midiPort", std::clamp(v, 1024, 65534)); emit changed(); }
+  static bool portsClash(int rxPort, int midiPort) { return rxPort == midiPort || rxPort == midiPort + 1; }   // AES67 receive vs network MIDI
+  // network MIDI (RTP-MIDI) takes two UDP ports, PORT and PORT + 1; its default is 5006 / 5007 so it never shares 5004 with the AES67
+  // receiver (both sockets allow address reuse, so a shared port would hand MIDI packets to the audio receiver and the other way round)
+  int midiNetPort() const { return s_.value("net/midiPort", 5006).toInt(); } void setMidiNetPort(int v) { s_.setValue("net/midiPort", std::clamp(v, 1024, 65534)); emit changed(); }
   bool midiLan() const { return s_.value("net/midiLan", false).toBool(); } void setMidiLan(bool v);
   QVariantList midiInputs() const;
   QString midiPort() const { return ports_.isOpen() ? QString::fromStdString(ports_.id()) : QString(); }

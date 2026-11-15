@@ -2108,5 +2108,11 @@
 "Phone camera: opens the browser remote on this computer and pairs by itself. AmF X1 app: REMOTE → SCAN QR. The code holds this computer's address and the PIN of this minute, so it changes with the PIN.": "دوربین تلفن: مرورگر کنترل از راه دور را روی این رایانه باز می‌کند و به‌طور خودکار جفت می‌شود.   اپلیکیشن AmF X1: کنترل از راه دور → اسکن QR.   این کد شامل آدرس این رایانه و پین این دقیقه است، بنابراین با تغییر پین تغییر می‌کند.",
 "More than one network: pick the address of the Wi-Fi the phone is on.": "بیش از یک شبکه: آدرس وای‌فای را که تلفن به آن متصل است انتخاب کنید.",
 "MUSIC INPUT: DUAL LISTEN ON. Click to go back to the 3-band EQ.": "ورودی موسیقی: شنیدن دوگانه روشن است. برای بازگشت به اکولایزر سه‌باند کلیک کنید.",
-"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "ورودی موسیقی: برای فعال‌سازی حالت شنیدن دوگانه در این کانال کلیک کنید (موسیقی از پخش‌کننده، گروه یا ترک‌های پشتیبان)."
+"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "ورودی موسیقی: برای فعال‌سازی حالت شنیدن دوگانه در این کانال کلیک کنید (موسیقی از پخش‌کننده، گروه یا ترک‌های پشتیبان).",
+"SECURE INPUT": "ورودی امن",
+"Only the input devices allowed below are opened, by hand or automatically. An allowed WASAPI input is opened in exclusive mode: no other program can listen to it or mix into it. Anything else runs outputs only.": "فقط دستگاه‌های ورودی مجاز زیر، چه به‌صورت دستی و چه به‌صورت خودکار، باز می‌شوند. یک ورودی مجاز WASAPI در حالت انحصاری باز می‌شود: هیچ برنامهٔ دیگری نمی‌تواند به آن گوش دهد یا در آن میکس کند. هر چیز دیگری فقط خروجی اجرا می‌کند.",
+" · default": " · پیش‌فرض",
+"ALLOWED": "مجاز",
+"ALLOW": "اجازه دادن",
+"No input device found: plug one in, then RESCAN.": "هیچ دستگاه ورودی یافت نشد: یکی را وصل کنید، سپس دوباره اسکن کنید."
 }

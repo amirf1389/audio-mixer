@@ -2023,5 +2023,10 @@
 "Phone camera: opens the browser remote on this computer and pairs by itself. AmF X1 app: REMOTE → SCAN QR. The code holds this computer's address and the PIN of this minute, so it changes with the PIN.": "手机摄像头：打开此电脑上的浏览器远程功能，并自动配对。AmF X1 应用：远程 → 扫描二维码。该二维码包含此电脑的地址以及当前时刻的 PIN 码，因此会随 PIN 码的变化而变化。",
 "More than one network: pick the address of the Wi-Fi the phone is on.": "有多个网络：选择手机当前连接的Wi-Fi地址。",
 "MUSIC INPUT: DUAL LISTEN ON. Click to go back to the 3-band EQ.": "音乐输入：双声道监听开启。点击返回三段式均衡器。",
-"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "音乐输入：点击此处为该声道开启“双声道监听”功能（来自播放器、乐队或伴奏音轨的音乐）。"
+"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "音乐输入：点击此处为该声道开启“双声道监听”功能（来自播放器、乐队或伴奏音轨的音乐）。",
+"SECURE INPUT": "安全输入",
+"Only the input devices allowed below are opened, by hand or automatically. An allowed WASAPI input is opened in exclusive mode: no other program can listen to it or mix into it. Anything else runs outputs only.": "仅允许手动或自动打开以下列出的输入设备。允许的 WASAPI 输入设备以独占模式打开：其他程序无法监听该设备或对其进行混音。其余所有程序仅可进行输出操作。",
+" · default": " · 默认",
+"ALLOWED": "允许",
+"No input device found: plug one in, then RESCAN.": "未检测到输入设备：请连接一个输入设备，然后重新扫描。"
 }
