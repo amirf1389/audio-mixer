@@ -77,7 +77,30 @@ Flickable {
             RowLayout { spacing: 6
                 Field { id: linkIn; objectName: "ecLink"; Layout.fillWidth: true; implicitHeight: 26; text: updater.url; font.family: Theme.mono; font.pixelSize: 8; selectByMouse: true }
                 Btn { objectName: "ecLinkSave"; label: i18n.t("USE THIS LINK", i18n.lang); on: true; tone: Theme.amber; onClicked: page.note = updater.setServerLink(linkIn.text) ? i18n.t("Update link saved.", i18n.lang) : i18n.t("That link was not taken: it must be an https address.", i18n.lang) } }
-            Small { text: i18n.t("The link is open: any https server may hold the update list. What it offers is installed only if the list carries the vendor's signature and the file matches its checksum.", i18n.lang) } }
+            Small { text: i18n.t("The link is open: any https server may hold the update list. What it offers is installed only if the list carries the vendor's signature and the file matches its checksum.", i18n.lang) }
+            // LOCAL UPDATE: offline, like a firmware update from a USB stick. The same signature and checksum checks as the internet update.
+            Rectangle { Layout.fillWidth: true; height: 1; color: Theme.lineSoft; Layout.topMargin: 4 }
+            Text { text: i18n.t("LOCAL UPDATE · USB STICK OR FOLDER", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
+            Item { id: localDrop; Layout.fillWidth: true; implicitHeight: localCol.implicitHeight
+                property var found: []
+                property bool older: false
+                DropArea { anchors.fill: parent; onDropped: function (d) { if (d.hasUrls) { localIn.text = d.urls[0].toString().replace(/^file:\/{2,3}/, ""); updater.loadLocal(localIn.text, localDrop.older) } } }
+                ColumnLayout { id: localCol; width: parent.width; spacing: 6
+                    RowLayout { spacing: 6; Layout.fillWidth: true
+                        Field { id: localIn; objectName: "ecLocalPath"; Layout.fillWidth: true; implicitHeight: 26; placeholderText: i18n.t("folder with update.json and the setup (or drop it here)", i18n.lang); font.family: Theme.mono; font.pixelSize: 8; selectByMouse: true }
+                        Btn { objectName: "ecLocalVerify"; label: i18n.t("VERIFY", i18n.lang); on: localIn.text.length > 0; tone: Theme.amber; onClicked: updater.loadLocal(localIn.text, localDrop.older) }
+                        Btn { objectName: "ecLocalFind"; label: i18n.t("FIND ON DRIVES", i18n.lang); on: true; onClicked: localDrop.found = updater.scanLocal() } }
+                    Repeater { model: localDrop.found
+                        delegate: RowLayout { Layout.fillWidth: true; spacing: 6
+                            Text { text: modelData.ok ? "✓" : "✕"; color: modelData.ok ? Theme.emerald : Theme.danger; font.pixelSize: 11 }
+                            Text { Layout.fillWidth: true; text: (modelData.version ? modelData.version + (modelData.older ? i18n.t(" (older)", i18n.lang) : "") + "  ·  " : "") + modelData.path + (modelData.ok ? "" : "  ·  " + modelData.why); color: modelData.ok ? Theme.ink : Theme.dim; font.family: Theme.mono; font.pixelSize: 8; elide: Text.ElideMiddle }
+                            Btn { visible: modelData.ok; label: i18n.t("USE", i18n.lang); on: true; onClicked: { localIn.text = modelData.path; updater.loadLocal(modelData.path, localDrop.older) } } } }
+                    RowLayout { spacing: 8
+                        Btn { label: localDrop.older ? i18n.t("OLDER VERSION: ALLOWED", i18n.lang) : i18n.t("OLDER VERSION: REFUSED", i18n.lang); on: localDrop.older; tone: Theme.danger; onClicked: localDrop.older = !localDrop.older }
+                        Btn { objectName: "ecLocalInstall"; visible: updater.canInstall; label: i18n.t("INSTALL AND RESTART", i18n.lang); on: true; tone: Theme.emerald; onClicked: updater.installAndRestart() }
+                        Btn { visible: updater.state === "downloaded" || updater.state === "error"; label: i18n.t("CLEAR", i18n.lang); onClicked: updater.clearLocal() } }
+                    Text { Layout.fillWidth: true; visible: updater.message.length > 0; text: updater.message; wrapMode: Text.WordWrap; color: updater.state === "error" ? Theme.danger : updater.state === "downloaded" ? Theme.emerald : Theme.muted; font.family: Theme.mono; font.pixelSize: 8 } } }
+            Small { text: i18n.t("Copy the release's update.json and its setup into one folder (on a USB stick, at its top or in AmF-X1-update). Only a vendor-signed update whose file matches its checksum can be installed; nothing is downloaded.", i18n.lang) } }
 
         Card { title: i18n.t("UPGRADES", i18n.lang); tone: Theme.violet
             Big { text: (engine.license.planName || "BASIC") }

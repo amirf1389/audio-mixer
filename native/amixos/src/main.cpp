@@ -723,7 +723,22 @@ int main(int argc, char* argv[]) {
         std::printf("amixos --smoke: manifest %s (%s)\n", ok ? "verified" : "rejected", qPrintable(update.message()));
         QString bad = env; bad.replace("\"version\":\"", "\"version\":\"9"); if (update.applyManifest(bad) || update.state() != "error") { std::fprintf(stderr, "amixos --smoke: a tampered manifest was accepted\n"); return 121; }
         if (Update::compareVersions("1.2.10", "1.2.9") <= 0 || Update::compareVersions("0.1.0", "0.1.0") != 0) { std::fprintf(stderr, "amixos --smoke: version compare\n"); return 122; } }
+
       else std::printf("amixos --smoke: releases/update.json not found next to the build; manifest check skipped\n");
+      // LOCAL UPDATE (offline, like firmware from a USB stick): the same signature and checksum checks as an update from the internet
+      { const QString fx = QStringLiteral(AMIX_SOURCE_DIR) + "/test/local-update"; QFile kf(fx + "/test-key.json");
+        if (kf.open(QIODevice::ReadOnly)) { const QJsonObject k = QJsonDocument::fromJson(kf.readAll()).object(); const std::vector<am::lic::Jwk> test{{k.value("x").toString().toStdString(), k.value("y").toString().toStdString()}};
+          QTemporaryDir td; const QString nd = td.path() + "/new", od = td.path() + "/old"; QDir().mkpath(nd); QDir().mkpath(od);
+          for (const auto& [from, to] : {std::pair<QString, QString>{fx + "/new", nd}, {fx + "/old", od}}) for (const QString& n : QDir(from).entryList(QDir::Files)) QFile::copy(from + "/" + n, to + "/" + n);
+          const bool good = update.loadLocalWith(nd, false, test) && update.state() == "downloaded" && update.latest() == "99.0.0.0" && QFileInfo::exists(update.downloaded());
+          const bool vendorRefuses = !update.loadLocal(nd) && update.message().contains("signature");   // the vendor key did not sign the test bundle: refused
+          const bool olderRefused = !update.loadLocalWith(od, false, test) && update.message().contains("older"), olderAllowed = update.loadLocalWith(od, true, test);
+          QString bin; for (const QString& n : QDir(nd).entryList({QStringLiteral("*.bin")}, QDir::Files)) { QFile b(nd + "/" + n); if (b.open(QIODevice::Append)) { b.write("x"); b.close(); } }
+          const bool tamperRefused = !update.loadLocalWith(nd, false, test) && update.message().contains("checksum");
+          const bool viaManifest = update.loadLocalWith(od + "/update.json", true, test);
+          if (!good || !vendorRefuses || !olderRefused || !olderAllowed || !tamperRefused || !viaManifest) { std::fprintf(stderr, "amixos --smoke: local update (good %d, vendor key refuses %d, older refused %d / allowed %d, changed file refused %d, by manifest path %d): %s\n", good, vendorRefuses, olderRefused, olderAllowed, tamperRefused, viaManifest, qPrintable(update.message())); return 124; }
+          update.clearLocal(); if (update.canInstall() || !update.downloaded().isEmpty()) { std::fprintf(stderr, "amixos --smoke: CLEAR kept the local update\n"); return 125; }
+          std::printf("amixos --smoke: local update OK (signed bundle accepted, vendor-key / changed file / older version refused, older allowed on request)\n"); } }
       { // FACTORY RESET is complete: language, PIN-at-start, device choices and network tokens all go; only the licence stays; the factory setup is due again
         QSettings qs; qs.setValue("ui/lang", "de"); qs.setValue("audio/autoPrefer", "manual"); qs.setValue("vst3/dirs", QStringList{"C:/x"}); qs.sync();
         { QFile f(settings.dataFolder() + "/daemon.tokens.json"); if (f.open(QIODevice::WriteOnly)) f.write("{}"); } { QFile f(settings.dataFolder() + "/license.json"); if (f.open(QIODevice::WriteOnly)) f.write("{}"); }

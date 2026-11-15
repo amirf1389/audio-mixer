@@ -7,6 +7,8 @@
 #include <QObject>
 #include <QSettings>
 #include <QVariant>
+#include <vector>
+#include "license/license.hpp"
 
 class Update : public QObject {
   Q_OBJECT
@@ -50,6 +52,14 @@ class Update : public QObject {
   Q_INVOKABLE bool applyManifest(const QString& envelopeText);      // the same without the network (a file, the smoke test); false = rejected, with the reason in message
   Q_INVOKABLE void download();                                      // this platform's file into the data folder, sha256 checked
   Q_INVOKABLE void openDownloadFolder();
+  // LOCAL (OFFLINE) UPDATE, like a firmware update from a USB stick: a folder (or the update.json in it, or the setup beside it) that holds
+  // the vendor-signed update.json and this platform's setup. The signature and the setup's sha256 are checked exactly as for an update
+  // from the internet; nothing unsigned or changed is ever offered. Then INSTALL AND RESTART installs it. An older version than this one
+  // is refused unless allowOlder (going back on purpose).
+  Q_INVOKABLE bool loadLocal(const QString& path, bool allowOlder = false);
+  Q_INVOKABLE void clearLocal() { if (file_.value("url").toString().startsWith("file:")) { downloaded_.clear(); file_.clear(); latest_.clear(); notes_.clear(); progress_ = 0; } set("idle", QString()); }   // forget a verified local update
+  Q_INVOKABLE QVariantList scanLocal();   // update bundles in Downloads, on the Desktop and at the top of every drive (USB sticks): [{path, version, ok, why, older}]
+  bool loadLocalWith(const QString& path, bool allowOlder, const std::vector<am::lic::Jwk>& trusted);   // the same with other trusted keys (the tests)
   bool canInstall() const; QString justUpdated() const { return justUpdated_; } QString failedUpdate() const { return failed_; }
   bool autoDownload() const { return s_.value("update/autoDownload", true).toBool(); } void setAutoDownload(bool v) { s_.setValue("update/autoDownload", v); emit changed(); }
   Q_INVOKABLE bool installAndRestart();                             // re-checks the file's sha256, starts the setup silently with /RESTART and quits the console; the setup starts it again

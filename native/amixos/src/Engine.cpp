@@ -46,7 +46,7 @@ Engine::Engine(QObject* parent) : QObject(parent) {
   // A WINDOWS MUTE LEFT BEHIND: the fader at -inf mutes Windows too; if the console then crashed, was killed or the computer went off,
   // Windows stayed muted for every program (no sound anywhere) and the console no longer knew. The mute is written down when it is set
   // and given back here, at the next start.
-  if (QSettings().value("mixer/weMutedWindows", false).toBool()) { sysSet_(QSettings().value("mixer/winBefore", false).toBool()); QSettings().remove("mixer/weMutedWindows"); }
+  if (QSettings().value("mixer/weMutedWindows", false).toBool()) { const bool before = QSettings().value("mixer/winBefore", false).toBool(); const auto set = sysSet_; svcPost([set, before] { set(before); }); QSettings().remove("mixer/weMutedWindows"); }
   connect(this, &Engine::stripsChanged, this, [this] { stripDirty_ = true; ++stripTick_; });
   for (auto sig : {&Engine::groupsChanged, &Engine::busesChanged, &Engine::routingChanged, &Engine::recordChanged, &Engine::licenseChanged}) connect(this, sig, this, [this] { stripDirty_ = true; });   // DCA / mute groups, sends, arm and the plan feed the strip state too   // first receiver: the cache is stale before any binding reads it
   sysTimer_.setInterval(500); connect(&sysTimer_, &QTimer::timeout, this, &Engine::syncSystemSound); sysTimer_.start();
@@ -82,13 +82,30 @@ Engine::Engine(QObject* parent) : QObject(parent) {
   tick();
   if (settings_.value("spatial/front10", false).toBool()) { spkOn_ = true; spkSaved_ = settings_.value("spatial/front10Saved").toMap(); }   // the speaker array was on when the program closed: the saved console already holds its feeds
 }
-Engine::~Engine() { closePluginWindows(); save(); stop(); }
+Engine::~Engine() {
+  closePluginWindows(); save(); stop();
+  { std::lock_guard<std::mutex> l(svcM_); svcStop_ = true; svcQ_.clear(); } svcCv_.notify_all();
+  if (svcThread_.joinable()) svcThread_.detach();   // a call stuck in the audio service must not hold the exit; the process ends anyway
+}
+void Engine::svcPost(std::function<void()> job) {
+  { std::lock_guard<std::mutex> l(svcM_); if (svcStop_) return; svcQ_.push_back(std::move(job)); }
+  if (!svcThread_.joinable()) svcThread_ = std::thread([this] {
+#ifdef _WIN32
+    CoInitializeEx(nullptr, COINIT_MULTITHREADED);   // this thread's own COM apartment, once
+#endif
+    for (;;) { std::function<void()> j; { std::unique_lock<std::mutex> l(svcM_); svcCv_.wait(l, [this] { return svcStop_ || !svcQ_.empty(); }); if (svcStop_) return; j = std::move(svcQ_.front()); svcQ_.pop_front(); } j(); } });
+  svcCv_.notify_one();
+}
 
 QStringList Engine::backends() const { QStringList l; for (const auto& b : am::availableBackends()) l << QString::fromStdString(b); return l; }
 
 void Engine::setHotplugWatch(bool on) { if (on) { if (!hotplug_.isActive()) { hotplug_.setInterval(3000); connect(&hotplug_, &QTimer::timeout, this, &Engine::checkHotplug, Qt::UniqueConnection); hotplug_.start(); } } else hotplug_.stop(); emit stateChanged(); }
 void Engine::checkHotplug() {
-  if (simulated_) return; const std::string f = am::deviceFingerprint(); if (f == fingerprint_) return;
+  if (simulated_ || fpBusy_) return; fpBusy_ = true;   // on the audio service worker: enumerating endpoints can block (see svcPost)
+  svcPost([this] { const std::string f = am::deviceFingerprint(); QMetaObject::invokeMethod(this, [this, f] { fpBusy_ = false; applyFingerprint(f); }, Qt::QueuedConnection); });
+}
+void Engine::applyFingerprint(const std::string& f) {
+  if (simulated_ || f == fingerprint_) return;
   const bool first = fingerprint_.empty(); fingerprint_ = f; if (first) return;   // the first poll only learns the baseline
   const QStringList before = [&] { QStringList l; for (const QVariant& v : devices_) l << v.toMap()["name"].toString(); return l; }();
   refreshDevices();
@@ -402,10 +419,19 @@ void Engine::setMaster(double db) {
 void Engine::setWindowsMuteSync(bool on) { if (winSync_ == on) return; winSync_ = on; QSettings().setValue("mixer/windowsMuteSync", on); syncSystemSound(); emit systemSoundChanged(); }
 void Engine::syncSystemSound() {
   if (!sysGet_ || !sysSet_) return;
-  bool now = false; const bool ok = sysGet_(now); const bool want = winSync_ && masterDb_ <= -60.0; bool changed = ok != winAvail_; winAvail_ = ok;
+  if (!sysAsync_) { bool now = false; const bool ok = sysGet_(now); applySystemSound(ok, now, sysSet_); return; }   // the tests' backend
+  if (sysBusy_) { sysAgain_ = true; return; } sysBusy_ = true;   // one question at a time; a change meanwhile asks again when it is answered
+  const auto get = sysGet_; const auto set = sysSet_;
+  svcPost([this, get, set] { bool now = false; const bool ok = get(now);
+    QMetaObject::invokeMethod(this, [this, ok, now, set] { sysBusy_ = false;
+      applySystemSound(ok, now, [this, set](bool m) { svcPost([set, m] { set(m); }); return true; });   // the change is sent to the worker too
+      if (sysAgain_) { sysAgain_ = false; syncSystemSound(); } }, Qt::QueuedConnection); });
+}
+void Engine::applySystemSound(bool ok, bool now, const std::function<bool(bool)>& sysSet) {
+  const bool want = winSync_ && masterDb_ <= -60.0; bool changed = ok != winAvail_; winAvail_ = ok;
   const bool had = weMuted_;
-  if (ok && want && !weMuted_) { winBefore_ = now; if (sysSet_(true)) { weMuted_ = true; now = true; } }           // fader at -inf: Windows goes silent too
-  else if (ok && !want && weMuted_) { if (sysSet_(winBefore_)) now = winBefore_; weMuted_ = false; }               // fader up (or sync off): the mute goes back to what it was
+  if (ok && want && !weMuted_) { winBefore_ = now; if (sysSet(true)) { weMuted_ = true; now = true; } }           // fader at -inf: Windows goes silent too
+  else if (ok && !want && weMuted_) { if (sysSet(winBefore_)) now = winBefore_; weMuted_ = false; }               // fader up (or sync off): the mute goes back to what it was
   else if (ok && weMuted_ && !now) weMuted_ = false;                                                                // somebody un-muted Windows by hand: leave it to them
   if (weMuted_ != had) { QSettings q; if (weMuted_) { q.setValue("mixer/weMutedWindows", true); q.setValue("mixer/winBefore", winBefore_); } else q.remove("mixer/weMutedWindows"); q.sync(); }
   if (ok && now != winMuted_) { winMuted_ = now; changed = true; }
@@ -957,7 +983,22 @@ void Engine::rebuildInserts(int i) {
   for (const PluginUi& p : strips_[static_cast<std::size_t>(i)].plugins) if (p.vst) chain->push_back(std::make_shared<am::host::MonoInsert>(p.vst, 1024));
   rt_->setInserts(i, chain->empty() ? nullptr : chain);
 }
-void Engine::reloadAllVst() { for (int i = 0; i < kStrips; ++i) { bool any = false; for (int k = 0; k < kPluginSlots; ++k) { PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[k]; if (isVstKind(p.kind)) { if (p.vst) p.state = QString::fromStdString(p.vst->state()); if (p.vst) graveyard_.push_back(p.vst); loadVst(i, k); any = true; } } if (any) rebuildInserts(i); } graveTimer_.start(); }
+// After the sound card (re)opens. Plug-ins are reloaded only when the sample rate changed (they were made for the old one): a reopen or soft
+// restart at the same rate keeps them. A reload runs on the interface thread (VST plug-ins must be created there), one plug-in at a time
+// with the window answering Windows in between (user input held back), so a rack of heavy plug-ins no longer reads as "Not Responding".
+void Engine::reloadAllVst() {
+  const double rate = rt_ ? rt_->sampleRate() : 48000;
+  bool allLoaded = true; for (int i = 0; i < kStrips && allLoaded; ++i) for (int k = 0; k < kPluginSlots; ++k) { const PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[k]; if (isVstKind(p.kind) && !p.vst) { allLoaded = false; break; } }
+  if (allLoaded && vstRate_ == rate) { for (int i = 0; i < kStrips; ++i) for (int k = 0; k < kPluginSlots; ++k) if (strips_[static_cast<std::size_t>(i)].plugins[k].vst) { rebuildInserts(i); break; } return; }
+  vstRate_ = rate;
+  for (int i = 0; i < kStrips; ++i) { bool any = false;
+    for (int k = 0; k < kPluginSlots; ++k) { PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[k]; if (!isVstKind(p.kind)) continue;
+      if (p.vst) { p.state = QString::fromStdString(p.vst->state()); graveyard_.push_back(p.vst); }
+      loadVst(i, k); any = true;
+      if (!p.kind.startsWith("fx:")) QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents, 20); }   // a hosted plug-in can take seconds: let the window answer
+    if (any) rebuildInserts(i); }
+  graveTimer_.start();
+}
 QString Engine::pluginParamText(int i, int slot, int id, double v) const { if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots) return {}; const PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[slot]; return p.vst ? QString::fromStdString(p.vst->paramText(static_cast<std::uint32_t>(id), std::clamp(v, 0.0, 1.0))) : QString(); }
 QVariantList Engine::pluginParams(int i, int slot) const {
   QVariantList l; if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots) return l; const PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[slot]; if (!p.vst) return l;
