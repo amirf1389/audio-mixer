@@ -21,6 +21,9 @@
     <string name="stop_engine">STOP ENGINE</string>
     <string name="stopped">engine stopped</string>
     <string name="pair_pin">PAIR (PIN)</string>
+    <string name="scan_qr">SCAN QR</string>
+    <string name="scan_not_console">That QR code is not an AmF X1 pairing code. On the computer: NETWORK → PHONE REMOTE → START, then scan the code shown there.</string>
+    <string name="scan_unavailable">The QR scanner is not available on this phone (it needs Google Play services). Use PAIR (PIN) instead.</string>
     <string name="pair_go">PAIR</string>
     <string name="pair_help">On the computer: NETWORK → PHONE REMOTE → START. Type the six-digit PIN shown there (it changes every minute).</string>
     <string name="pair_need_host">Type the console address first (shown on the computer under PHONE REMOTE).</string>
@@ -55,10 +58,6 @@
     <string name="set_haptics">Vibrate on mute / solo</string>
     <string name="set_confirm_stop">Ask before STOP ENGINE</string>
     <string name="set_confirm_stop_note">Stopping the engine silences the whole console.</string>
-    <string name="set_local">THIS PHONE\'S MIXER</string>
-    <string name="set_rate">Sample rate</string>
-    <string name="set_frames">Block size</string>
-    <string name="set_local_note">Smaller blocks: less delay, more risk of clicks. Applies at the next START (sample rate: next app start).</string>
     <string name="set_about">ABOUT</string>
     <string name="set_privacy">Privacy</string>
     <string name="set_privacy_note">The app talks only to the console you pair with, on your own network. No accounts, no tracking, no cloud.</string>

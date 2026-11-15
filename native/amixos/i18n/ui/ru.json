@@ -2032,5 +2032,18 @@
 "sample rate and block size": "частота дискретизации и размер блока",
 "sixteen-strip hybrid mixer with captured programs": "гибридный микшер на шестнадцать каналов с возможностью сохранения программ",
 "strips and master": "дорожки и мастер",
-"the open interface": "открытый интерфейс"
+"the open interface": "открытый интерфейс",
+"AUDIO ACCESS": "ДОСТУП К АУДИО",
+"What the console may open. Each switch applies at once.": "Что может открыть консоль. Каждое переключение вступает в силу сразу.",
+"MICROPHONES (WINDOWS AUDIO)": "МИКРОФОНЫ (АУДИО В СИСТЕМЕ WINDOWS)",
+"HEADSET MICROPHONE (WASAPI)": "МИКРОФОН В НАУШНИКАХ (WASAPI)",
+"BLUETOOTH AUDIO": "АУДИО ПО BLUETOOTH",
+"Audio access": "Доступ к аудио",
+"Microphones, headset microphone and Bluetooth audio are switched ON / OFF on SOUND CARD, next to the devices.": "Включение и выключение микрофонов, микрофона гарнитуры и аудио по Bluetooth осуществляется в разделе «Звуковая карта» рядом с устройствами.",
+"GO TO SOUND CARD": "ПЕРЕЙТИ К ЗВУКОВОЙ КАРТЕ",
+"SCAN TO CONNECT": "Сканируйте, чтобы подключиться",
+"Phone camera: opens the browser remote on this computer and pairs by itself. AmF X1 app: REMOTE → SCAN QR. The code holds this computer's address and the PIN of this minute, so it changes with the PIN.": "Камера телефона: открывает приложение REMOTE на этом компьютере и автоматически устанавливает соединение. Приложение AmF X1: REMOTE → СКАНИРОВАТЬ QR-код. Код содержит адрес этого компьютера и PIN-код на данный момент, поэтому он меняется вместе с PIN-кодом.",
+"More than one network: pick the address of the Wi-Fi the phone is on.": "Если доступно несколько сетей: выберите адрес той сети Wi-Fi, к которой подключен телефон.",
+"MUSIC INPUT: DUAL LISTEN ON. Click to go back to the 3-band EQ.": "ВХОД МУЗЫКИ: РЕЖИМ «DUAL LISTEN» ВКЛЮЧЕН. Нажмите, чтобы вернуться к 3-полосному эквалайзеру.",
+"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "ВХОД ДЛЯ МУЗЫКИ: нажмите, чтобы включить режим «DUAL LISTEN» для этого канала (музыка с плеера, от группы или фонограммы)."
 }

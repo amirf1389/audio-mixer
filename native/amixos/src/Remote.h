@@ -33,6 +33,10 @@ class Remote : public QObject {
   void writeConsoleInfo() const;   // remote-console.json for the phone's PLUG-INS page
   Q_INVOKABLE QString pairPin() const;      // the pairing PIN of this minute (six digits; made from the master token and the clock, as the service makes it)
   Q_INVOKABLE int pairSecondsLeft() const;  // until the PIN changes
+  // THE PAIRING QR CODE: http://<address>:<port>/remote#pin=<this minute's PIN>. A phone camera opens it in the browser remote (which pairs
+  // by itself), the Android app's SCAN QR reads host, port and PIN from it. The PIN rides in the #fragment: browsers never send it in a request.
+  Q_INVOKABLE QString pairUrl(const QString& address) const;
+  Q_INVOKABLE QVariantList qr(const QString& text) const;   // [size, row-major 0/1 modules...] for a Canvas; empty when it does not fit
   Q_INVOKABLE void refreshTokens();
   Q_INVOKABLE QString newToken(const QString& name, const QString& role, int days);   // returns the token once ("" on failure); days 0 = no end
   Q_INVOKABLE bool revokeToken(const QString& id);

@@ -7,6 +7,8 @@ import QtQuick.Layouts
 
 Item {
     id: page
+    // AUDIO ACCESS changed: restart a running sound card under the new rule (what SOFT RESTART does); a stopped one is not started
+    function applyAccess() { if (engine.running) { const w = page.Window.window; if (w && w.softRestart) w.softRestart(); else { engine.stop(); settings.startLastDevice() } } else engine.refreshDevices() }
     objectName: "soundCardPage"
     readonly property var tel: engine.telemetry
     readonly property var last: settings.lastDevice
@@ -37,6 +39,22 @@ Item {
                     Item { Layout.fillWidth: true }
                     Btn { objectName: "audioSettingsBtn"; label: i18n.t("AUDIO / MIDI SETTINGS", i18n.lang); on: true; onColor: Theme.amber; onClicked: page.Window.window.openAudioSettings() }
                     Btn { label: engine.running ? i18n.t("STOP", i18n.lang) : i18n.t("START", i18n.lang); on: true; onColor: engine.running ? Theme.danger : Theme.emerald; onClicked: engine.running ? engine.stop() : settings.startLastDevice() } } }
+            // AUDIO ACCESS: what the console may open, each switch ON / OFF. Moved here from SETTINGS (next to the devices it acts on) and
+            // applied at once: a running sound card restarts with the new rule; a stopped one only refreshes the device list (nothing starts).
+            Card { Layout.columnSpan: 2; objectName: "audioAccessCard"
+                RowLayout { spacing: 10; Head { text: i18n.t("AUDIO ACCESS", i18n.lang) } Text { Layout.fillWidth: true; text: i18n.t("What the console may open. Each switch applies at once.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.WordWrap } }
+                Flow { Layout.fillWidth: true; spacing: 18
+                    Repeater {
+                        model: [{key: "mic", label: "MICROPHONES (WINDOWS AUDIO)"}, {key: "headset", label: "HEADSET MICROPHONE (WASAPI)"}, {key: "bt", label: "BLUETOOTH AUDIO"}]
+                        delegate: Row { spacing: 6
+                            readonly property bool lit: modelData.key === "mic" ? !engine.micAccessOff : modelData.key === "headset" ? !engine.headsetMicOff : engine.bluetoothAudio
+                            function set(v) { if (v === lit) return
+                                if (modelData.key === "mic") engine.micAccessOff = !v; else if (modelData.key === "headset") engine.headsetMicOff = !v; else engine.bluetoothAudio = v
+                                page.applyAccess() }
+                            Text { anchors.verticalCenter: parent.verticalCenter; text: i18n.t(modelData.label, i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
+                            Btn { objectName: "access_" + modelData.key + "_on"; label: i18n.t("ON", i18n.lang); on: parent.lit; onColor: Theme.emerald; onClicked: parent.set(true) }
+                            Btn { objectName: "access_" + modelData.key + "_off"; label: i18n.t("OFF", i18n.lang); on: !parent.lit; onColor: Theme.danger; onClicked: parent.set(false) } } }
+                    Btn { objectName: "micPrivacyBtn"; label: i18n.t("WINDOWS MIC PRIVACY…", i18n.lang); onClicked: Qt.openUrlExternally("ms-settings:privacy-microphone") } } }
             Card { Head { text: i18n.t("DEVICES", i18n.lang) }
                 Text { objectName: "micOffNote"; visible: engine.micOffNote !== ""; Layout.fillWidth: true; wrapMode: Text.WordWrap; text: i18n.t(engine.micOffNote, i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
                 Rectangle {   // INPUT / OUTPUT CHECK: every channel of the running interface or mixer, live, with the real-time verdict

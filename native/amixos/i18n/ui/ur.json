@@ -2106,5 +2106,18 @@
 "phone remote and network control, run inside the console": "فون ریموٹ اور نیٹ ورک کنٹرول، کنسول کے اندر چلتا ہے",
 "sixteen-strip hybrid mixer with captured programs": "سولہ-سٹرپ ہائبرڈ مکسر محفوظ شدہ پروگراموں کے ساتھ",
 "strips and master": "سٹرپس اور ماسٹر",
-"the open interface": "کھلا انٹرفیس"
+"the open interface": "کھلا انٹرفیس",
+"AUDIO ACCESS": "آڈیو رسائی",
+"What the console may open. Each switch applies at once.": "کنسول کیا کھول سکتا ہے۔ ہر سوئچ ایک ساتھ لاگو ہوتا ہے۔",
+"MICROPHONES (WINDOWS AUDIO)": "مائیکروفونز (ونڈوز آڈیو)",
+"HEADSET MICROPHONE (WASAPI)": "ہیڈسیٹ مائیکروفون (WASAPI)",
+"BLUETOOTH AUDIO": "بلوٹوتھ آڈیو",
+"Audio access": "آڈیو تک رسائی",
+"Microphones, headset microphone and Bluetooth audio are switched ON / OFF on SOUND CARD, next to the devices.": "مائیکروفونز، ہیڈسیٹ مائیکروفون اور بلوٹوتھ آڈیو ساؤنڈ کارڈ پر، ڈیوائسز کے پاس آن/آف کیے جاتے ہیں۔",
+"GO TO SOUND CARD": "ساؤنڈ کارڈ پر جائیں",
+"SCAN TO CONNECT": "جڑنے کے لیے اسکین کریں",
+"Phone camera: opens the browser remote on this computer and pairs by itself. AmF X1 app: REMOTE → SCAN QR. The code holds this computer's address and the PIN of this minute, so it changes with the PIN.": "فون کیمرہ: اس کمپیوٹر پر براؤزر ریموٹ کھولتا ہے اور خود بخود جوڑتا ہے۔   AmF X1 ایپ: ریموٹ → QR اسکین کریں۔   کوڈ میں اس کمپیوٹر کا پتہ اور اس منٹ کا پن شامل ہوتا ہے، لہٰذا یہ پن کے بدلنے پر تبدیل ہو جاتا ہے۔",
+"More than one network: pick the address of the Wi-Fi the phone is on.": "ایک سے زیادہ نیٹ ورک: اس وائی فائی کا پتہ منتخب کریں جس پر فون منسلک ہے۔",
+"MUSIC INPUT: DUAL LISTEN ON. Click to go back to the 3-band EQ.": "میوزک ان پٹ: ڈوئل لسٹن آن۔   3-بینڈ ایکولائزر پر واپس جانے کے لیے کلک کریں۔",
+"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "میوزک ان پٹ: اس چینل کے لیے DUAL LISTEN ON تبدیل کرنے کے لیے کلک کریں (پلیئر، بینڈ یا بیکنگ ٹریکس سے موسیقی)۔"
 }

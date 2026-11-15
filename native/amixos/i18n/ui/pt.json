@@ -2039,5 +2039,18 @@
 "sample rate and block size": "frequência de amostragem e tamanho do bloco",
 "sixteen-strip hybrid mixer with captured programs": "misturador híbrido de dezasseis faixas com programas gravados",
 "strips and master": "faixas e master",
-"the open interface": "a interface aberta"
+"the open interface": "a interface aberta",
+"AUDIO ACCESS": "ACESSO AO ÁUDIO",
+"What the console may open. Each switch applies at once.": "O que a consola pode abrir. Cada opção é aplicada de imediato.",
+"MICROPHONES (WINDOWS AUDIO)": "MICROFONES (ÁUDIO DO WINDOWS)",
+"HEADSET MICROPHONE (WASAPI)": "MICROFONE DE AURICULARES (WASAPI)",
+"BLUETOOTH AUDIO": "ÁUDIO BLUETOOTH",
+"Audio access": "Acesso ao áudio",
+"Microphones, headset microphone and Bluetooth audio are switched ON / OFF on SOUND CARD, next to the devices.": "Os microfones, o microfone do auricular e o áudio Bluetooth são ativados/desativados na secção «PLACA DE SOM», junto aos dispositivos.",
+"GO TO SOUND CARD": "IR PARA A PLACA DE SOM",
+"SCAN TO CONNECT": "DIGITALIZE PARA LIGAR",
+"Phone camera: opens the browser remote on this computer and pairs by itself. AmF X1 app: REMOTE → SCAN QR. The code holds this computer's address and the PIN of this minute, so it changes with the PIN.": "Câmara do telemóvel: abre o controlo remoto do navegador neste computador e estabelece a ligação automaticamente. Aplicação AmF X1: REMOTE → LER QR. O código contém o endereço deste computador e o PIN deste momento, pelo que muda juntamente com o PIN.",
+"More than one network: pick the address of the Wi-Fi the phone is on.": "Mais do que uma rede: selecione o endereço da rede Wi-Fi à qual o telemóvel está ligado.",
+"MUSIC INPUT: DUAL LISTEN ON. Click to go back to the 3-band EQ.": "ENTRADA DE MÚSICA: DUAL LISTEN ATIVADO. Clique para voltar ao equalizador de 3 bandas.",
+"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "ENTRADA DE MÚSICA: clique para ativar a função «DUAL LISTEN» neste canal (música proveniente de um leitor, de uma banda ou de faixas de acompanhamento)."
 }

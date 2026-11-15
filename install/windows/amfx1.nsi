@@ -136,6 +136,14 @@ Section "ASIO driver (lets other programs reach the console)" SecAsio
   ; the DLL stays in the program folder; it is registered in place (the program's --install-driver does the same)
   ExecWait '"$INSTDIR\AmF X1.exe" --install-driver'
 SectionEnd
+; PHONE REMOTE OVER WI-FI: without an inbound rule Windows Firewall drops the phones' connections to port 8765 (the console's NETWORK ->
+; PHONE REMOTE service), often without asking. The rules are as narrow as the service itself: TCP 8765 only, these two programs only,
+; PRIVATE networks only (home / studio Wi-Fi, never public), and only from the local subnet. The uninstaller removes them.
+Section "Phone remote over Wi-Fi (Windows Firewall rule: private network, port 8765)" SecFirewall
+  nsExec::Exec 'netsh advfirewall firewall delete rule name="AmF X1 Phone Remote"'
+  nsExec::Exec 'netsh advfirewall firewall add rule name="AmF X1 Phone Remote" dir=in action=allow protocol=TCP localport=8765 profile=private remoteip=localsubnet program="$INSTDIR\amixos.exe" description="AmF X1: phones and tablets on this network reach the console remote (token or PIN needed)"'
+  nsExec::Exec 'netsh advfirewall firewall add rule name="AmF X1 Phone Remote" dir=in action=allow protocol=TCP localport=8765 profile=private remoteip=localsubnet program="$INSTDIR\AmF X1 Network.exe" description="AmF X1: phones and tablets on this network reach the console remote (token or PIN needed)"'
+SectionEnd
 Section "-Restart after an update"
   StrCmp $Restart "1" 0 +2
   Exec '"$WINDIR\explorer.exe" "$INSTDIR\amixos.exe"'   ; through the shell: the console starts as the normal user, not elevated
@@ -143,6 +151,7 @@ SectionEnd
 Section "Uninstall"
   Call un.CloseConsole   ; before anything is removed: a console left running would write its settings back on quit
   ExecWait '"$INSTDIR\AmF X1.exe" --uninstall-driver'
+  nsExec::Exec 'netsh advfirewall firewall delete rule name="AmF X1 Phone Remote"'   ; the phone remote's firewall rules go with the program
   Delete "$DESKTOP\AmF X1.lnk"
   Delete "$DESKTOP\AmF X1 Diagnostics.lnk"
   RMDir /r "$SMPROGRAMS\AmF X1"

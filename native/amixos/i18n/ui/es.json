@@ -2047,5 +2047,18 @@
 "sample rate and block size": "frecuencia de muestreo y tamaño de bloque",
 "sixteen-strip hybrid mixer with captured programs": "mezclador híbrido de dieciséis canales con programas guardados",
 "strips and master": "bandas y master",
-"the open interface": "la interfaz abierta"
+"the open interface": "la interfaz abierta",
+"AUDIO ACCESS": "ACCESO AL AUDIO",
+"What the console may open. Each switch applies at once.": "Lo que puede abrir la consola. Cada comando se aplica de inmediato.",
+"MICROPHONES (WINDOWS AUDIO)": "MICRÓFONOS (AUDIO DE WINDOWS)",
+"HEADSET MICROPHONE (WASAPI)": "MICRÓFONO DE AURICULARES (WASAPI)",
+"BLUETOOTH AUDIO": "AUDIO BLUETOOTH",
+"Audio access": "Acceso al audio",
+"Microphones, headset microphone and Bluetooth audio are switched ON / OFF on SOUND CARD, next to the devices.": "Los micrófonos, el micrófono de los auriculares y el audio Bluetooth se activan y desactivan en «TARJETA DE SONIDO», junto a los dispositivos.",
+"GO TO SOUND CARD": "IR A LA TARJETA DE SONIDO",
+"SCAN TO CONNECT": "ESCANEA PARA CONECTARTE",
+"Phone camera: opens the browser remote on this computer and pairs by itself. AmF X1 app: REMOTE → SCAN QR. The code holds this computer's address and the PIN of this minute, so it changes with the PIN.": "Cámara del móvil: abre el navegador de control remoto en este ordenador y se empareja automáticamente. Aplicación AmF X1: REMOTE → ESCANEAR QR. El código contiene la dirección de este ordenador y el PIN de este momento, por lo que cambia con el PIN.",
+"More than one network: pick the address of the Wi-Fi the phone is on.": "Si hay más de una red: selecciona la dirección de la red Wi-Fi a la que está conectado el teléfono.",
+"MUSIC INPUT: DUAL LISTEN ON. Click to go back to the 3-band EQ.": "ENTRADA DE MÚSICA: ESCUCHA DOBLE ACTIVADA. Haz clic para volver al ecualizador de 3 bandas.",
+"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "ENTRADA DE MÚSICA: haz clic para activar la opción «DUAL LISTEN» en este canal (música de un reproductor, una banda o pistas de acompañamiento)."
 }

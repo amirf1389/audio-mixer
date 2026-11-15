@@ -2075,5 +2075,18 @@
 "sample rate and block size": "サンプリングレートとブロックサイズ",
 "sixteen-strip hybrid mixer with captured programs": "プログラム保存機能付き16ストリップ・ハイブリッド・ミキサー",
 "strips and master": "ストリップとマスター",
-"the open interface": "オープンインターフェース"
+"the open interface": "オープンインターフェース",
+"AUDIO ACCESS": "オーディオアクセス",
+"What the console may open. Each switch applies at once.": "コンソールで何が開く可能性があるか。各スイッチは一度に適用されます。",
+"MICROPHONES (WINDOWS AUDIO)": "マイク（Windows Audio）",
+"HEADSET MICROPHONE (WASAPI)": "ヘッドセットマイク（WASAPI）",
+"BLUETOOTH AUDIO": "Bluetoothオーディオ",
+"Audio access": "音声アクセス",
+"Microphones, headset microphone and Bluetooth audio are switched ON / OFF on SOUND CARD, next to the devices.": "マイク、ヘッドセットマイク、BluetoothオーディオのON/OFFは、「サウンドカード」の「デバイス」の横で切り替えます。",
+"GO TO SOUND CARD": "サウンドカードへ移動",
+"SCAN TO CONNECT": "スキャンして接続",
+"Phone camera: opens the browser remote on this computer and pairs by itself. AmF X1 app: REMOTE → SCAN QR. The code holds this computer's address and the PIN of this minute, so it changes with the PIN.": "スマホのカメラ：このコンピュータで「Remote」ブラウザを開くと、自動的にペアリングされます。AmF X1アプリ：「REMOTE」→「QRコードをスキャン」。このコードには、このコンピュータのアドレスと、その時点のPINが含まれているため、PINの変更に伴いコードも変わります。",
+"More than one network: pick the address of the Wi-Fi the phone is on.": "複数のネットワークがある場合：スマートフォンが接続しているWi-Fiのアドレスを選択してください。",
+"MUSIC INPUT: DUAL LISTEN ON. Click to go back to the 3-band EQ.": "音楽入力：デュアルリスニングON。クリックすると3バンドEQ画面に戻ります。",
+"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "音楽入力：クリックして、このチャンネルの「デュアルリスニング」をオンに切り替えます（プレーヤー、バンド、またはバッキングトラックからの音楽）。"
 }

@@ -2018,5 +2018,18 @@
 "sample rate and block size": "laju sampel dan ukuran blok",
 "sixteen-strip hybrid mixer with captured programs": "Mixer hibrida 16 saluran dengan program yang tersimpan",
 "strips and master": "strip dan master",
-"the open interface": "antarmuka terbuka"
+"the open interface": "antarmuka terbuka",
+"AUDIO ACCESS": "AKSES AUDIO",
+"What the console may open. Each switch applies at once.": "Fungsi apa saja yang dapat dijalankan oleh konsol. Setiap perintah akan langsung diterapkan.",
+"MICROPHONES (WINDOWS AUDIO)": "MIKROFON (AUDIO WINDOWS)",
+"HEADSET MICROPHONE (WASAPI)": "HEADSET DENGAN MIKROFON (WASAPI)",
+"BLUETOOTH AUDIO": "AUDIO BLUETOOTH",
+"Audio access": "Akses audio",
+"Microphones, headset microphone and Bluetooth audio are switched ON / OFF on SOUND CARD, next to the devices.": "Mikrofon, mikrofon headset, dan audio Bluetooth diaktifkan/dinonaktifkan di bagian SOUND CARD, di sebelah daftar perangkat.",
+"GO TO SOUND CARD": "PERGI KE KARTU SUARA",
+"SCAN TO CONNECT": "Pindai untuk Terhubung",
+"Phone camera: opens the browser remote on this computer and pairs by itself. AmF X1 app: REMOTE → SCAN QR. The code holds this computer's address and the PIN of this minute, so it changes with the PIN.": "Kamera ponsel: membuka fitur Remote di browser komputer ini dan akan terhubung secara otomatis. Aplikasi AmF X1: REMOTE → PINDai QR. Kode tersebut berisi alamat komputer ini dan PIN saat ini, sehingga akan berubah sesuai dengan PIN yang digunakan.",
+"More than one network: pick the address of the Wi-Fi the phone is on.": "Ada lebih dari satu jaringan: pilih alamat Wi-Fi yang sedang terhubung ke ponsel.",
+"MUSIC INPUT: DUAL LISTEN ON. Click to go back to the 3-band EQ.": "MASUKAN MUSIK: DUAL LISTEN AKTIF. Klik untuk kembali ke EQ 3-band.",
+"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "MASUKAN MUSIK: klik untuk mengaktifkan DUAL LISTEN pada saluran ini (musik dari pemutar, band, atau trek pengiring)."
 }

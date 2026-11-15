@@ -325,6 +325,7 @@ Item {
                             model: engine.strips
                             delegate: Item {
                                 id: stripItem
+                                clip: true   // nothing of a strip draws over its neighbour (popups and menus open in the overlay, not here)
                                 readonly property int stripIdx: index
                                 visible: page.bank === 2 || Math.floor(index / 16) === page.bank
                                 width: visible ? (page.sendView ? 118 : 74) : 0
@@ -372,8 +373,19 @@ Item {
                                     RowLayout { Layout.fillWidth: true; spacing: 2
                                         Rectangle { implicitWidth: 14; implicitHeight: 12; radius: 4; color: st && st.armed ? Qt.rgba(1, 0.165, 0.373, 0.85) : Theme.ov(0.05); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: "●"; color: st && st.armed ? "#0b0f14" : Theme.dim; font.pixelSize: 7 } MouseArea { anchors.fill: parent; onClicked: engine.setArmed(index, !(st && st.armed)) } ToolTip.visible: armHov.hovered; ToolTip.text: i18n.t("Arm CH ", i18n.lang) + (index + 1) + i18n.t(" for recording", i18n.lang); HoverHandler { id: armHov } }
                                         Rectangle { implicitWidth: 24; implicitHeight: 12; radius: 4; color: st && st.link ? Theme.harm(stripItem.sc) : Theme.ov(0.05); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: index % 2 ? "⟵L" : "L⟶"; color: st && st.link ? "#0b0f14" : Theme.muted; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setLink(index, !(st && st.link)) } ToolTip.visible: lnkHov.hovered; ToolTip.text: i18n.t("Stereo link with CH ", i18n.lang) + ((index ^ 1) + 1) + i18n.t(": gain, mute, solo follow, pan mirrors", i18n.lang); HoverHandler { id: lnkHov } }
-                                        Item { Layout.fillWidth: true }
-                                        Text { text: i18n.t("TRIM ", i18n.lang) + (st && st.trimDb > 0 ? "+" : "") + (st ? st.trimDb.toFixed(1) : "0.0"); color: st && st.trimDb !== 0 ? Theme.amber : Theme.dim; font.family: Theme.mono; font.pixelSize: 6; MouseArea { anchors.fill: parent; onClicked: { engine.selectedStrip = index; page.sidePanel = true } } } }
+                                        // ♪ MUSIC INPUT: this channel carries music (a player, a band, backing tracks): DUAL LISTEN ON, the DUAL LISTEN EQ in its rack
+                                        // in place of the 3-band channel EQ (the same switch as TONE (EQ) → DUAL LISTEN). Off: back to the 3-band EQ.
+                                        Rectangle { id: musB; objectName: "musicIn" + index; implicitWidth: 16; implicitHeight: 12; radius: 4
+                                            readonly property int slot: { st; const sl = engine.plugins(index); for (let k = 0; k < sl.length; ++k) if (sl[k].kind === "fx:dualeq") return k; return -1 }
+                                            color: slot >= 0 ? Theme.harm(stripItem.sc) : Theme.ov(0.05); border.color: Theme.lineSoft
+                                            Text { anchors.centerIn: parent; text: "♪"; color: musB.slot >= 0 ? "#0b0f14" : Theme.muted; font.pixelSize: 8; font.bold: true }
+                                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                                onClicked: { if (musB.slot >= 0) engine.setPlugin(index, musB.slot, ""); else if (engine.addToRack(index, "fx:dualeq") < 0) page.note = i18n.t("The rack of this channel is full.", i18n.lang) } }
+                                            ToolTip.visible: musH.hovered && settings.tooltips; ToolTip.text: musB.slot >= 0 ? i18n.t("MUSIC INPUT: DUAL LISTEN ON. Click to go back to the 3-band EQ.", i18n.lang) : i18n.t("MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).", i18n.lang); HoverHandler { id: musH } }
+                                        // TRIM fills what is left of the row and is cut short (…) there: its implicit width used to widen the whole strip column,
+                                        // so the DSP badges and this text ran into the next strip ("COMPGATE")
+                                        Text { Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.preferredWidth: 1; elide: Text.ElideRight; horizontalAlignment: Text.AlignRight
+                                            text: !page.sendView && !(st && st.trimDb !== 0) ? "" : (page.sendView ? i18n.t("TRIM ", i18n.lang) : "") + (st && st.trimDb > 0 ? "+" : "") + (st ? st.trimDb.toFixed(1) : "0.0"); color: st && st.trimDb !== 0 ? Theme.amber : Theme.dim; font.family: Theme.mono; font.pixelSize: 6; MouseArea { anchors.fill: parent; onClicked: { engine.selectedStrip = index; page.sidePanel = true } } } }
                                     // DSP badges: lit when on, click opens the page for this channel
                                     Flow { visible: page.showBadges; Layout.fillWidth: true; spacing: 2
                                         Repeater {
@@ -388,7 +400,12 @@ Item {
                                     }
                                     Dial { id: pan; visible: page.showPan; Layout.alignment: Qt.AlignHCenter; implicitWidth: 28; implicitHeight: 28; from: -1; to: 1; value: st ? st.pan : 0; onMoved: engine.setPan(index, value)
                                         background: Rectangle { radius: width / 2; color: Theme.deep; border.color: Theme.line }
-                                        handle: Rectangle { x: pan.background.x + pan.background.width / 2 - width / 2; y: pan.background.y + 3; width: 4; height: 8; radius: 2; color: Theme.cyan; transform: Rotation { angle: pan.angle; origin.x: 2; origin.y: pan.background.height / 2 - 3 } } }
+                                        handle: Rectangle { x: pan.background.x + pan.background.width / 2 - width / 2; y: pan.background.y + 3; width: 4; height: 8; radius: 2; color: Theme.cyan; transform: Rotation { angle: pan.angle; origin.x: 2; origin.y: pan.background.height / 2 - 3 } }
+                                        TapHandler { onDoubleTapped: engine.setPan(index, 0) } }   // double-click: back to the centre
+                                    // PAN POSITION: where the strip sits, L100 .. C .. R100 (the dial alone did not say how far)
+                                    Text { objectName: "panPos"; visible: page.showPan; Layout.alignment: Qt.AlignHCenter; Layout.topMargin: -3
+                                        readonly property int p: Math.round((st ? st.pan : 0) * 100)
+                                        text: p === 0 ? "C" : (p < 0 ? "L" + (-p) : "R" + p); color: p === 0 ? Theme.dim : Theme.cyan; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
                                     RowLayout { Layout.alignment: Qt.AlignHCenter; spacing: 3
                                         Rectangle { id: gb104; implicitWidth: 28; implicitHeight: 18; radius: 8; color: st && st.mute ? Qt.rgba(1, 0.165, 0.373, 0.85) : (st && st.effectiveMute ? Qt.rgba(1, 0.165, 0.373, 0.30) : Theme.ov(0.07)); border.width: 1; border.color: st && (st.mute || st.effectiveMute) ? Qt.rgba(1, 0.165, 0.373, 0.8) : Theme.lineSoft; gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb104.color) } GradientStop { position: 1; color: Theme.btnBottom(gb104.color) } } Text { anchors.centerIn: parent; text: "M"; color: st && st.mute ? "#0b0f14" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setMute(index, !(st && st.mute)) } }
                                         Rectangle { id: gb105; implicitWidth: 28; implicitHeight: 18; radius: 8; color: st && st.solo ? Qt.rgba(0.984, 0.749, 0.141, 0.85) : Theme.ov(0.07); border.width: 1; border.color: st && st.solo ? Qt.rgba(0.984, 0.749, 0.141, 0.8) : Theme.lineSoft; gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb105.color) } GradientStop { position: 1; color: Theme.btnBottom(gb105.color) } } Text { anchors.centerIn: parent; text: "S"; color: st && st.solo ? "#0b0f14" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setSolo(index, !(st && st.solo)) } } }

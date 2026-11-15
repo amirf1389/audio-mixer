@@ -2068,5 +2068,18 @@
 "sample rate and block size": "샘플링 주파수 및 블록 크기",
 "sixteen-strip hybrid mixer with captured programs": "저장된 프로그램이 탑재된 16채널 하이브리드 믹서",
 "strips and master": "스트립 및 마스터",
-"the open interface": "개방형 인터페이스"
+"the open interface": "개방형 인터페이스",
+"AUDIO ACCESS": "오디오 액세스",
+"What the console may open. Each switch applies at once.": "콘솔에서 열 수 있는 항목. 각 스위치는 한 번에 적용됩니다.",
+"MICROPHONES (WINDOWS AUDIO)": "마이크 (Windows 오디오)",
+"HEADSET MICROPHONE (WASAPI)": "헤드셋 마이크 (WASAPI)",
+"BLUETOOTH AUDIO": "블루투스 오디오",
+"Audio access": "오디오 접속",
+"Microphones, headset microphone and Bluetooth audio are switched ON / OFF on SOUND CARD, next to the devices.": "마이크, 헤드셋 마이크 및 블루투스 오디오는 ‘사운드 카드’의 ‘장치’ 옆에서 켜고 끌 수 있습니다.",
+"GO TO SOUND CARD": "사운드 카드로 이동",
+"SCAN TO CONNECT": "스캔하여 연결하기",
+"Phone camera: opens the browser remote on this computer and pairs by itself. AmF X1 app: REMOTE → SCAN QR. The code holds this computer's address and the PIN of this minute, so it changes with the PIN.": "휴대폰 카메라: 이 컴퓨터에서 브라우저의 ‘리모트’ 기능을 실행하면 자동으로 페어링됩니다. AmF X1 앱: 리모트 → QR 코드 스캔. 이 코드에는 이 컴퓨터의 주소와 현재 시점의 PIN이 포함되어 있으므로, PIN이 변경되면 코드도 함께 변경됩니다.",
+"More than one network: pick the address of the Wi-Fi the phone is on.": "여러 네트워크가 있는 경우: 휴대폰이 연결된 Wi-Fi의 주소를 선택하세요.",
+"MUSIC INPUT: DUAL LISTEN ON. Click to go back to the 3-band EQ.": "음악 입력: 듀얼 리스닝 켜기. 클릭하면 3밴드 이퀄라이저로 돌아갑니다.",
+"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "음악 입력: 클릭하여 이 채널의 ‘듀얼 리스닝’ 기능을 켜세요(플레이어, 밴드 또는 반주 트랙에서 나오는 음악)."
 }

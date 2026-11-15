@@ -2095,5 +2095,18 @@
 "sample rate and block size": "نرخ نمونه‌برداری و اندازه بلوک",
 "sixteen-strip hybrid mixer with captured programs": "میکسر هیبریدی شانزده‌باند با برنامه‌های ضبط‌شده",
 "strips and master": "استریپ‌ها و مستر",
-"the open interface": "رابط کاربری باز"
+"the open interface": "رابط کاربری باز",
+"AUDIO ACCESS": "دسترسی صوتی",
+"What the console may open. Each switch applies at once.": "آنچه کنسول ممکن است باز کند. هر کلید به‌طور هم‌زمان اعمال می‌شود.",
+"MICROPHONES (WINDOWS AUDIO)": "میکروفون‌ها (صدای ویندوز)",
+"HEADSET MICROPHONE (WASAPI)": "میکروفون هدست (WASAPI)",
+"BLUETOOTH AUDIO": "صوت بلوتوث",
+"Audio access": "دسترسی صوتی",
+"Microphones, headset microphone and Bluetooth audio are switched ON / OFF on SOUND CARD, next to the devices.": "میکروفون‌ها، میکروفون هدست و صدای بلوتوث روی کارت صدا، در کنار دستگاه‌ها، روشن/خاموش می‌شوند.",
+"GO TO SOUND CARD": "به کارت صدا بروید",
+"SCAN TO CONNECT": "اسکن کنید تا متصل شوید",
+"Phone camera: opens the browser remote on this computer and pairs by itself. AmF X1 app: REMOTE → SCAN QR. The code holds this computer's address and the PIN of this minute, so it changes with the PIN.": "دوربین تلفن: مرورگر کنترل از راه دور را روی این رایانه باز می‌کند و به‌طور خودکار جفت می‌شود.   اپلیکیشن AmF X1: کنترل از راه دور → اسکن QR.   این کد شامل آدرس این رایانه و پین این دقیقه است، بنابراین با تغییر پین تغییر می‌کند.",
+"More than one network: pick the address of the Wi-Fi the phone is on.": "بیش از یک شبکه: آدرس وای‌فای را که تلفن به آن متصل است انتخاب کنید.",
+"MUSIC INPUT: DUAL LISTEN ON. Click to go back to the 3-band EQ.": "ورودی موسیقی: شنیدن دوگانه روشن است. برای بازگشت به اکولایزر سه‌باند کلیک کنید.",
+"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "ورودی موسیقی: برای فعال‌سازی حالت شنیدن دوگانه در این کانال کلیک کنید (موسیقی از پخش‌کننده، گروه یا ترک‌های پشتیبان)."
 }

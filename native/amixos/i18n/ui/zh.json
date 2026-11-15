@@ -2010,5 +2010,18 @@
 "sample rate and block size": "采样率和块大小",
 "sixteen-strip hybrid mixer with captured programs": "带预设程序的16通道混合调音台",
 "strips and master": "音轨和主控",
-"the open interface": "开放接口"
+"the open interface": "开放接口",
+"AUDIO ACCESS": "音频访问",
+"What the console may open. Each switch applies at once.": "控制台可能打开的内容。每个开关都会立即生效。",
+"MICROPHONES (WINDOWS AUDIO)": "麦克风（Windows 音频）",
+"HEADSET MICROPHONE (WASAPI)": "耳机麦克风（WASAPI）",
+"BLUETOOTH AUDIO": "蓝牙音频",
+"Audio access": "音频访问",
+"Microphones, headset microphone and Bluetooth audio are switched ON / OFF on SOUND CARD, next to the devices.": "麦克风、头戴式麦克风和蓝牙音频的开启/关闭功能位于“声卡”选项卡中，设备列表旁边。",
+"GO TO SOUND CARD": "转到声卡",
+"SCAN TO CONNECT": "扫描以连接",
+"Phone camera: opens the browser remote on this computer and pairs by itself. AmF X1 app: REMOTE → SCAN QR. The code holds this computer's address and the PIN of this minute, so it changes with the PIN.": "手机摄像头：打开此电脑上的浏览器远程功能，并自动配对。AmF X1 应用：远程 → 扫描二维码。该二维码包含此电脑的地址以及当前时刻的 PIN 码，因此会随 PIN 码的变化而变化。",
+"More than one network: pick the address of the Wi-Fi the phone is on.": "有多个网络：选择手机当前连接的Wi-Fi地址。",
+"MUSIC INPUT: DUAL LISTEN ON. Click to go back to the 3-band EQ.": "音乐输入：双声道监听开启。点击返回三段式均衡器。",
+"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "音乐输入：点击此处为该声道开启“双声道监听”功能（来自播放器、乐队或伴奏音轨的音乐）。"
 }

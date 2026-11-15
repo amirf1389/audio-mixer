@@ -25,7 +25,7 @@ input[type=range].f{writing-mode:vertical-lr;direction:rtl;width:30px;height:100
 <header><h1>AMF X1 · REMOTE</h1><span id="st">not paired</span></header>
 <main>
 <section id="pair" class="card">
-<p>On the computer: <b>NETWORK → PHONE REMOTE</b> shows a six-digit PIN that changes every minute. Type it here.</p>
+<p>On the computer: <b>NETWORK → PHONE REMOTE</b> shows a six-digit PIN that changes every minute, and a QR code. Scan the code with this device's camera, or type the PIN here.</p>
 <input id="pin" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="000000" aria-label="Pairing PIN">
 <input id="who" placeholder="this device's name" style="font:14px system-ui;letter-spacing:0" aria-label="Device name">
 <button class="pri" id="go">PAIR</button><p id="perr" class="err"></p>
@@ -70,5 +70,9 @@ $("#go").onclick=async()=>{$("#perr").textContent="";const pin=$("#pin").value.r
 $("#pin").onkeydown=e=>{if(e.key==="Enter")$("#go").click()};
 $("#p1").onclick=()=>{page=0;build()};$("#p2").onclick=()=>{page=1;build()};$("#out").onclick=()=>forget();$("#clip").onclick=()=>api("/api/control",{op:"clearClips"}).catch(e=>setSt(e.message,true));
 document.addEventListener("visibilitychange",()=>{if(!document.hidden&&token&&(!ws||ws.readyState>1))stream()});
+// OPENED FROM THE QR CODE (…/remote#pin=123456): take the PIN, wipe it from the address bar and history, and pair straight away.
+// The PIN is in the #fragment, so the browser never sent it to the server in the page request; it is used once, here.
+(()=>{const m=/(?:^#|&)pin=(\d{6})(?:&|$)/.exec(location.hash||"");if(!m)return;try{history.replaceState(null,"",location.pathname+location.search)}catch(e){}
+ if(token)return;$("#pin").value=m[1];const ua=navigator.userAgent||"";$("#who").value=/iPhone|iPad/.test(ua)?"iPhone / iPad (browser)":/Android/.test(ua)?"Android (browser)":"Browser";setSt("pairing…");$("#go").click()})();
 show();
 </script></body></html>

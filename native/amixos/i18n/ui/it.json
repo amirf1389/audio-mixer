@@ -2027,5 +2027,18 @@
 "sample rate and block size": "frequenza di campionamento e dimensione del blocco",
 "sixteen-strip hybrid mixer with captured programs": "mixer ibrido a sedici canali con programmi memorizzati",
 "strips and master": "tracce e master",
-"the open interface": "l'interfaccia aperta"
+"the open interface": "l'interfaccia aperta",
+"AUDIO ACCESS": "ACCESSO AUDIO",
+"What the console may open. Each switch applies at once.": "Cosa può aprire la console. Ogni comando ha effetto immediato.",
+"MICROPHONES (WINDOWS AUDIO)": "MICROFONI (AUDIO DI WINDOWS)",
+"HEADSET MICROPHONE (WASAPI)": "MICROFONO PER CUFFIE (WASAPI)",
+"BLUETOOTH AUDIO": "AUDIO BLUETOOTH",
+"Audio access": "Accesso audio",
+"Microphones, headset microphone and Bluetooth audio are switched ON / OFF on SOUND CARD, next to the devices.": "I microfoni, il microfono delle cuffie e l'audio Bluetooth si attivano e disattivano nella scheda \"Scheda audio\", accanto ai dispositivi.",
+"GO TO SOUND CARD": "VAI ALLA SCHEDA AUDIO",
+"SCAN TO CONNECT": "SCANSIONA PER CONNETTERTI",
+"Phone camera: opens the browser remote on this computer and pairs by itself. AmF X1 app: REMOTE → SCAN QR. The code holds this computer's address and the PIN of this minute, so it changes with the PIN.": "Fotocamera del telefono: apre il browser in modalità remota su questo computer ed esegue l'accoppiamento automaticamente. App AmF X1: REMOTE → SCAN QR. Il codice contiene l'indirizzo di questo computer e il PIN di questo minuto, quindi cambia insieme al PIN.",
+"More than one network: pick the address of the Wi-Fi the phone is on.": "Più di una rete: seleziona l'indirizzo della rete Wi-Fi a cui è connesso il telefono.",
+"MUSIC INPUT: DUAL LISTEN ON. Click to go back to the 3-band EQ.": "INGRESSO MUSICALE: DUAL LISTEN ATTIVO. Clicca per tornare all'equalizzatore a 3 bande.",
+"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "INGRESSO MUSICA: clicca per attivare la modalità DUAL LISTEN su questo canale (musica proveniente da un lettore, una band o basi musicali)."
 }
