@@ -9,6 +9,7 @@
 
 #include "net/aoip.hpp"
 #include "net/midi.hpp"
+#include "net/ptp.hpp"
 
 using namespace am;
 using namespace am::net;
@@ -166,8 +167,25 @@ static void lossAndRuntime() {
     Receiver rx; d.channels = 2; d.bits = 20; CHECK(!rx.start(d, "", 20, err)); }
 }
 
+// PTP: an Announce names the grandmaster (priority, class, domain), Sync + Follow_Up from it are counted; the best master comes first
+static void ptp() {
+  auto hdr = [](std::vector<std::uint8_t>& p, int type, int len, int domain, std::uint8_t idLast, bool twoStep) {
+    p.assign(static_cast<std::size_t>(len), 0); p[0] = static_cast<std::uint8_t>(type); p[1] = 2; p[2] = static_cast<std::uint8_t>(len >> 8); p[3] = static_cast<std::uint8_t>(len); p[4] = static_cast<std::uint8_t>(domain);
+    p[6] = twoStep ? 0x02 : 0; for (int i = 0; i < 8; ++i) p[20 + i] = static_cast<std::uint8_t>(0x10 + i); p[27] = idLast; };
+  auto announce = [&](std::uint8_t idLast, int prio1, int cls) { std::vector<std::uint8_t> p; hdr(p, 11, 64, 0, idLast, false); p[47] = static_cast<std::uint8_t>(prio1); p[48] = static_cast<std::uint8_t>(cls); p[49] = 0x21; p[52] = 128;
+    for (int i = 0; i < 8; ++i) p[53 + i] = static_cast<std::uint8_t>(0x10 + i); p[60] = idLast; p[63] = 0x20; return p; };
+  am::net::PtpMonitor mon; std::vector<std::uint8_t> a = announce(0xAA, 128, 248), b = announce(0xBB, 100, 6);
+  mon.inject(a.data(), a.size(), "10.0.0.5"); mon.inject(b.data(), b.size(), "10.0.0.9");
+  std::vector<std::uint8_t> sy; hdr(sy, 0, 44, 0, 0xBB, true); std::vector<std::uint8_t> fu; hdr(fu, 8, 44, 0, 0xBB, false); fu[39] = 0x10;   // seconds = 16
+  for (int i = 0; i < 8; ++i) { mon.inject(sy.data(), sy.size(), "10.0.0.9"); mon.inject(fu.data(), fu.size(), "10.0.0.9"); }
+  const auto m = mon.masters();
+  CHECK(m.size() == 2); if (m.size() == 2) { CHECK(m[0].priority1 == 100 && m[0].clockClass == 6 && m[0].from == "10.0.0.9" && m[0].id == "10-11-12-13-14-15-16-bb" && m[0].ptpSeconds == 16); CHECK(m[1].clockClass == 248); }
+  am::net::PtpPacket k; std::vector<std::uint8_t> bad = a; bad[1] = 1; CHECK(!am::net::parsePtp(bad.data(), bad.size(), k));   // PTP v1 is refused
+  CHECK(!am::net::parsePtp(a.data(), 20, k)); CHECK(am::net::ptpClockName(6).find("GPS") != std::string::npos);
+}
+
 int main() {
-  wire(); midi();
+  wire(); midi(); ptp();
   stream(24, 48000, 48000, 2); stream(16, 48000, 48000, 1); stream(24, 48000, 48000, 4); stream(24, 44100, 48000, 2);
   lossAndRuntime();
   if (fails) { std::printf("net_test: %d FAILED\n", fails); return 1; }

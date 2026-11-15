@@ -848,6 +848,15 @@ int main(int argc, char* argv[]) {
             QObject* ap = win->findChild<QObject*>("ampPage"); if (ap) ap->setProperty("sel", 1); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
             win->grabWindow().save(shots + "/amp.png"); std::printf("amixos --shots: amp (%s; sub 40 Hz %.1f dB, 2 kHz %.1f dB)\n", qPrintable(setup), at40, at2k);
             for (int o = 0; o < 8; ++o) engine.setAmp(o, {{"on", false}}); engine.resetRouting(); }   // the pages after this one are checked with plain outputs
+          if (QString::fromLatin1(id) == "network") {   // DANTE + CLOCK: a simulated Dante Virtual Soundcard and two PTP grandmasters (injected packets, nothing sent)
+            const QVariantList real = engine.devices(); QVariantList rig = real; QVariantMap dvs; dvs["backend"] = "asio"; dvs["id"] = "Dante Virtual Soundcard"; dvs["name"] = "Dante Virtual Soundcard"; dvs["inChannels"] = 64; dvs["outChannels"] = 64; dvs["defaultRate"] = 48000.0; rig.prepend(dvs);
+            engine.simulateDevices(rig);
+            auto ann = [](unsigned char last, int prio, int cls) { QByteArray p(64, 0); p[0] = 11; p[1] = 2; p[3] = 64; p[47] = static_cast<char>(prio); p[48] = static_cast<char>(cls); p[49] = 0x21; p[52] = static_cast<char>(128); for (int i = 0; i < 8; ++i) { p[20 + i] = static_cast<char>(0x10 + i); p[53 + i] = static_cast<char>(0x10 + i); } p[27] = static_cast<char>(last); p[60] = static_cast<char>(last); p[63] = 0x20; return p; };
+            net.injectPtp(ann(0xA1, 100, 6), "192.168.10.21"); net.injectPtp(ann(0xB2, 128, 248), "192.168.10.40");
+            const QVariantList ms = net.ptpMasters(); if (ms.size() != 2 || ms[0].toMap()["priority1"].toInt() != 100) { std::fprintf(stderr, "amixos --shots: the PTP monitor is wrong (%d clocks)\n", int(ms.size())); std::exit(161); }
+            win->setProperty("current", "network"); QList<QObject*> nps; for (int k = 0; k < 40 && nps.isEmpty(); ++k) { QCoreApplication::processEvents(QEventLoop::AllEvents, 50); nps = win->findChildren<QObject*>("networkPage"); } for (QObject* o : nps) o->setProperty("view", 2); for (int k = 0; k < 10; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); std::printf("amixos --shots: %d network page(s)\n", int(nps.size()));
+            win->grabWindow().save(shots + "/network-dante.png"); std::printf("amixos --shots: network-dante (%d PTP clocks)\n", int(ms.size()));
+            for (QObject* o : nps) o->setProperty("view", 0); engine.simulateDevices(real); }
           if (QString::fromLatin1(id) == "assistant") {   // the assistant answers three questions from the live console
             QObject* as = win->findChild<QObject*>("assistantPage");
             if (as) for (const char* q : {"Why is there no sound?", "How does my mix sound?", "Set up a sub and tops"}) QMetaObject::invokeMethod(as, "ask", Q_ARG(QVariant, QString::fromLatin1(q)));

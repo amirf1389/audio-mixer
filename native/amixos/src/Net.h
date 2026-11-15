@@ -11,6 +11,7 @@
 
 #include "net/aoip.hpp"
 #include "net/midi.hpp"
+#include "net/ptp.hpp"
 
 class Engine;
 
@@ -37,6 +38,8 @@ class Net : public QObject {
   Q_PROPERTY(bool discoverOn READ discoverOn NOTIFY changed)
   Q_PROPERTY(QVariantList streams READ streams NOTIFY statsChanged)                // [{name, origin, address, port, channels, bits, rate, clock, age}]
   Q_PROPERTY(QVariantList transports READ transports CONSTANT)                    // [{id, name, available, note}]
+  Q_PROPERTY(bool ptpOn READ ptpOn NOTIFY changed)                                // the network clock monitor (PTP v2, listen only)
+  Q_PROPERTY(QVariantList ptpMasters READ ptpMasters NOTIFY statsChanged)          // [{id, from, domain, priority1, priority2, clockClass, clockName, syncPerSec, age, steps}], best first
   Q_PROPERTY(bool midiNetOn READ midiNetOn NOTIFY changed)
   Q_PROPERTY(int midiNetPort READ midiNetPort WRITE setMidiNetPort NOTIFY changed)
   Q_PROPERTY(bool midiLan READ midiLan WRITE setMidiLan NOTIFY changed)
@@ -82,7 +85,11 @@ class Net : public QObject {
   Q_INVOKABLE bool startReceive();
   Q_INVOKABLE void stopReceive();
   Q_INVOKABLE bool setDiscover(bool on);
-  Q_INVOKABLE void useStream(int index);                 // copy a discovered stream's address / port / format into the receiver
+  Q_INVOKABLE void useStream(int index);
+  Q_INVOKABLE bool setPtp(bool on);
+  Q_INVOKABLE void injectPtp(const QByteArray& packet, const QString& from) { ptp_.inject(reinterpret_cast<const std::uint8_t*>(packet.constData()), static_cast<std::size_t>(packet.size()), from.toStdString()); emit statsChanged(); }   // tests
+  bool ptpOn() const { return ptp_.running(); }
+  QVariantList ptpMasters() const;                 // copy a discovered stream's address / port / format into the receiver
   Q_INVOKABLE bool setMidiNet(bool on);
   Q_INVOKABLE bool openMidi(const QString& id);          // "" closes
   Q_INVOKABLE void rescanMidi() { emit changed(); }
@@ -101,6 +108,6 @@ class Net : public QObject {
   void patch(bool on);
   void fail(const QString& m) { msg_ = m; emit changed(); }
   am::net::MidiSink sink();
-  Engine* engine_; QSettings s_; am::net::Sender tx_; am::net::Receiver rx_; am::net::Discovery disc_; am::net::RtpMidi rtpMidi_; am::net::MidiPorts ports_; am::net::MidiMap map_;
+  Engine* engine_; QSettings s_; am::net::Sender tx_; am::net::Receiver rx_; am::net::Discovery disc_; am::net::PtpMonitor ptp_; am::net::RtpMidi rtpMidi_; am::net::MidiPorts ports_; am::net::MidiMap map_;
   am::Runtime* rt_ = nullptr; double rate_ = 0; bool txWanted_ = false; QTimer timer_; QString msg_, midiLast_; int midiCount_ = 0; QList<int> patched_;
 };

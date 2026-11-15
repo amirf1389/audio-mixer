@@ -8,8 +8,12 @@ QtObject {
     property bool dark: true
     readonly property color obsidian: dark ? "#040507" : "#f3f5f9"      // the window
     readonly property color deep: dark ? "#05070a" : "#e6eaf1"          // meters, canvases, fader tracks, text fields
-    readonly property color chrome: dark ? "#070a10" : "#ffffff"        // the header bar
-    readonly property color card: dark ? "#0f141c" : "#ffffff"
+    // GLASS: the header, the rail and the panels let the AURORA colour behind them through; cardSolid is for menus and popups over a page
+    property bool glass: true
+    property color accent: orange                                       // the colour of the section open now (Main.qml sets it)
+    readonly property color chrome: glass ? (dark ? Qt.rgba(0.027, 0.039, 0.063, 0.62) : Qt.rgba(1, 1, 1, 0.70)) : (dark ? "#070a10" : "#ffffff")        // the header bar
+    readonly property color card: glass ? (dark ? Qt.rgba(0.047, 0.063, 0.094, 0.64) : Qt.rgba(1, 1, 1, 0.78)) : (dark ? "#0f141c" : "#ffffff")
+    readonly property color cardSolid: dark ? "#0f141c" : "#ffffff"
     readonly property color cardRaised: dark ? "#141b26" : "#eef1f6"
     readonly property color line: dark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(0, 0, 0, 0.14)
     readonly property color lineSoft: dark ? Qt.rgba(1, 1, 1, 0.06) : Qt.rgba(0, 0, 0, 0.07)

@@ -27,18 +27,26 @@ Rectangle {
                     width: col.width
                     property var p: modelData
                     property bool newGroup: index === 0 || rail.pages[index - 1].group !== p.group
-                    Text { visible: newGroup; text: i18n.t(p.group, i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.bold: true; font.letterSpacing: 2; leftPadding: 10; topPadding: index === 0 ? 0 : 10; bottomPadding: 2 }
+                    Text { visible: newGroup; text: i18n.t(p.group, i18n.lang); color: Theme.groupColor(p.group); opacity: 0.85; font.family: Theme.mono; font.pixelSize: 7; font.bold: true; font.letterSpacing: 2; leftPadding: 10; topPadding: index === 0 ? 0 : 10; bottomPadding: 2 }
                     Rectangle {
+                        id: btn
                         readonly property bool allowed: access.canPage(p.id)
                         visible: allowed; width: col.width - 10; x: 5; height: allowed ? 50 : 0; radius: 8
-                        color: rail.current === p.id ? Qt.rgba(0.918, 0.345, 0.047, 0.16) : "transparent"
-                        border.color: rail.current === p.id ? Theme.orange : "transparent"
+                        readonly property color tint: Theme.groupColor(p.group)
+                        readonly property bool lit: rail.current === p.id
+                        color: "transparent"
+                        border.color: lit ? tint : "transparent"
+                        // the page open now: a glow in its section's colour, brighter at the top
+                        Rectangle { anchors.fill: parent; radius: parent.radius; visible: parent.lit
+                            gradient: Gradient { GradientStop { position: 0; color: Qt.rgba(btn.tint.r, btn.tint.g, btn.tint.b, 0.30) } GradientStop { position: 1; color: Qt.rgba(btn.tint.r, btn.tint.g, btn.tint.b, 0.08) } } }
+                        Rectangle { visible: parent.lit; width: 3; height: parent.height - 16; radius: 2; anchors.verticalCenter: parent.verticalCenter; x: -3; color: parent.tint }
+                        Rectangle { anchors.fill: parent; radius: parent.radius; visible: !parent.lit && ra.containsMouse; color: Qt.rgba(btn.tint.r, btn.tint.g, btn.tint.b, 0.10) }
                         Column {
                             anchors.centerIn: parent; spacing: 3
                             Text { anchors.horizontalCenter: parent.horizontalCenter; text: p.icon; color: p.ready ? Theme.groupColor(p.group) : Theme.dim; font.pixelSize: 16; opacity: p.ready ? 1 : 0.55 }
                             Text { anchors.horizontalCenter: parent.horizontalCenter; text: i18n.t(p.text, i18n.lang); color: rail.current === p.id ? Theme.ink : (p.ready ? Theme.muted : Theme.dim); font.family: Theme.mono; font.pixelSize: 7; font.bold: true; width: col.width - 14; horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight }
                         }
-                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: rail.picked(p.id) }
+                        MouseArea { id: ra; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: rail.picked(p.id) }
                     }
                 }
             }

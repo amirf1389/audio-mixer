@@ -34,6 +34,9 @@ ApplicationWindow {
     Timer { interval: 3000; running: asyncPages; onTriggered: warmTimer.start() }
     LayoutMirroring.enabled: i18n.rtl
     Binding { target: Theme; property: "dark"; value: settings.darkTheme }
+    // THE SECTION COLOUR: the open page's group (MIX, ROUTE, METER ...) tints the aurora, the header line and the rail
+    Binding { target: Theme; property: "accent"; value: { const ps = engine.pages; for (let i = 0; i < ps.length; ++i) if (ps[i].id === root.current) return Theme.groupColor(ps[i].group); return Theme.orange } }
+    Aurora { anchors.fill: parent; z: -1; motion: settings.colorMotion; accent: Theme.accent }
     LayoutMirroring.childrenInherit: true
     // SOFT RESTART: the console starts over without closing: engine off, sound cards scanned again, the remembered device (or the best one) started, the page rebuilt, the boot screen shown
     property bool autoFailed: false
@@ -51,7 +54,12 @@ ApplicationWindow {
         spacing: 0
         Rectangle {   // header
             Layout.fillWidth: true; implicitHeight: 48; color: Theme.chrome
-            Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Theme.lineSoft }
+            Rectangle { id: hdrLine; anchors.bottom: parent.bottom; width: parent.width; height: 2   // the colour line: orange, the section colour, violet, cyan, drifting
+                property real sh: 0
+                NumberAnimation on sh { from: 0; to: 1; duration: 9000; loops: Animation.Infinite; running: settings.colorMotion && root.visible }
+                gradient: Gradient { orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: Theme.orange } GradientStop { position: 0.15 + 0.25 * hdrLine.sh; color: Theme.accent }
+                    GradientStop { position: 0.55 + 0.2 * (1 - hdrLine.sh); color: Theme.violet } GradientStop { position: 1.0; color: Theme.cyan } } }
             RowLayout {
                 anchors.fill: parent; anchors.leftMargin: 14; anchors.rightMargin: 14; spacing: 12
                 Text { text: Theme.product.toUpperCase(); color: Theme.orange; font.family: Theme.mono; font.pixelSize: 15; font.weight: Font.Black; font.letterSpacing: 4 }
@@ -110,6 +118,7 @@ ApplicationWindow {
                         MItem { text: i18n.t("Acoustics", i18n.lang); onTriggered: root.current = "acoustics" }
                         MenuSeparator {}
                         MItem { text: settings.darkTheme ? i18n.t("Light look", i18n.lang) : i18n.t("Dark look", i18n.lang); onTriggered: settings.darkTheme = !settings.darkTheme }
+                        MItem { text: settings.colorMotion ? i18n.t("Colour motion: on", i18n.lang) : i18n.t("Colour motion: off", i18n.lang); onTriggered: settings.colorMotion = !settings.colorMotion }
                         MItem { text: (settings.tooltips ? "✓ " : "") + i18n.t("Tooltips", i18n.lang); onTriggered: settings.tooltips = !settings.tooltips }
                         MItem { text: root.visibility === Window.FullScreen ? i18n.t("Leave full screen", i18n.lang) : i18n.t("Full screen", i18n.lang); onTriggered: root.visibility = root.visibility === Window.FullScreen ? Window.Windowed : Window.FullScreen } }
                     Menu { id: infoMenu; objectName: "infoMenu"; width: 260
@@ -277,6 +286,7 @@ ApplicationWindow {
             ++pressed; shut()
             if (pages[t] !== undefined) { root.current = "home"; it.triggered(); if (root.current !== pages[t]) bad.push(t + " -> " + root.current) }
             else if (t === "Light look" || t === "Dark look") { const d = settings.darkTheme; it.triggered(); if (settings.darkTheme === d) bad.push(t); settings.darkTheme = d }
+            else if (t.indexOf("Colour motion") === 0) { const c = settings.colorMotion; it.triggered(); if (settings.colorMotion === c) bad.push(t); settings.colorMotion = c }
             else if (t.indexOf("Tooltips") >= 0) { const d = settings.tooltips; it.triggered(); if (settings.tooltips === d) bad.push(t); settings.tooltips = d }
             else if (t === "Volume Enhancer") { it.triggered(); if (!enhancer.opened && !enhancer.visible) bad.push(t) }
             else if (t === "Master Analyzer") { it.triggered(); if (!analyzer.opened && !analyzer.visible) bad.push(t) }
@@ -300,13 +310,13 @@ ApplicationWindow {
     AudioSettings { id: audioSettings }   // AUDIO / MIDI SETTINGS: opened from the SOUND CARD page
     VolumeEnhancer { id: enhancer }   // AMFB VOLUME ENHANCER: opened from the master strip's ENHANCER button
     Popup { id: sayPop; objectName: "sayPop"; modal: true; anchors.centerIn: parent; width: Math.min(560, root.width - 80); padding: 18
-        background: Rectangle { radius: 10; color: Theme.card; border.color: Theme.line }
+        background: Rectangle { radius: 10; color: Theme.cardSolid; border.color: Theme.line }
         contentItem: Column { spacing: 12
             Text { id: sayText; width: parent.width; wrapMode: Text.WordWrap; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 10 }
             Rectangle { width: 70; height: 24; radius: 4; color: Theme.amber; Text { anchors.centerIn: parent; text: i18n.t("OK", i18n.lang); color: "#000"; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: sayPop.close() } } } }
     Popup { id: aboutPop; objectName: "aboutPop"; modal: true; anchors.centerIn: parent; width: Math.min(520, root.width - 80); padding: 22
         readonly property var io: { engine.running; return engine.ioInfo() }
-        background: Rectangle { radius: 10; color: Theme.card; border.color: Theme.line }
+        background: Rectangle { radius: 10; color: Theme.cardSolid; border.color: Theme.line }
         contentItem: Column { spacing: 8
             Text { text: Theme.product.toUpperCase(); color: Theme.orange; font.family: Theme.mono; font.pixelSize: 20; font.weight: Font.Black; font.letterSpacing: 5 }
             Text { text: i18n.t("BY AMFB AUDIO", i18n.lang) + "  ·  " + i18n.t("version ", i18n.lang) + appVersion; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 10 }
@@ -320,7 +330,7 @@ ApplicationWindow {
             Rectangle { width: 70; height: 24; radius: 4; color: Theme.amber; Text { anchors.centerIn: parent; text: i18n.t("OK", i18n.lang); color: "#000"; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: aboutPop.close() } } } }
     Popup {   // WHAT'S NEW: the feature feed from the signed manifest, newest first
         id: whatsNew; modal: true; anchors.centerIn: parent; width: Math.min(640, root.width - 80); height: Math.min(520, root.height - 80); padding: 18
-        background: Rectangle { radius: 12; color: Theme.card; border.color: Theme.line }
+        background: Rectangle { radius: 12; color: Theme.cardSolid; border.color: Theme.line }
         onOpened: updater.markFeaturesSeen()
         ColumnLayout { anchors.fill: parent; spacing: 10
             RowLayout { Text { text: i18n.t("WHAT'S NEW", i18n.lang); color: Theme.orange; font.family: Theme.mono; font.pixelSize: 12; font.bold: true; font.letterSpacing: 2 } Item { Layout.fillWidth: true }

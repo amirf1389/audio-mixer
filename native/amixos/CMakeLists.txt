@@ -82,6 +82,8 @@ qt_add_qml_module(amixos
         qml/DspModeSwitch.qml
         qml/ScorePage.qml
         qml/AmpPage.qml
+        qml/Aurora.qml
+        qml/DantePanel.qml
         qml/AssistantPage.qml
         qml/SetupPage.qml
         qml/HomePage.qml

@@ -188,7 +188,7 @@ target_include_directories(amixos_fx PUBLIC app)
 target_link_libraries(amixos_fx PUBLIC audiomixer_engine)
 
 # NETWORK: AES67 audio over IP (RTP L16 / L24, SAP / SDP), network MIDI (RTP-MIDI) and the computer's MIDI ports (engine/cpp/app/net)
-add_library(amixos_net STATIC app/net/rtp.cpp app/net/sock.cpp app/net/aoip.cpp app/net/midi.cpp)
+add_library(amixos_net STATIC app/net/rtp.cpp app/net/sock.cpp app/net/aoip.cpp app/net/midi.cpp app/net/ptp.cpp)
 target_include_directories(amixos_net PUBLIC app)
 target_link_libraries(amixos_net PUBLIC audiomixer_runtime Threads::Threads)
 if(WIN32)

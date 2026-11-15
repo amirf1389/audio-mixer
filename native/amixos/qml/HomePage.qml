@@ -60,7 +60,12 @@ Flickable {
                     { id: "sys", t: "Settings", s: "Engine, saved console state, about." }
                 ]
                 delegate: Rectangle {
-                    Layout.fillWidth: true; implicitHeight: 92; radius: Theme.radius; color: tileArea.pressed ? Theme.ov(0.08) : Theme.card; border.color: tileArea.containsMouse ? Theme.orange : Theme.line
+                    id: tile
+                    readonly property color hue: Theme.stripColors[index % Theme.stripColors.length]   // every tile its own colour
+                    Layout.fillWidth: true; implicitHeight: 92; radius: Theme.radius; color: tileArea.pressed ? Theme.ov(0.08) : Theme.card; border.color: tileArea.containsMouse ? hue : Theme.line
+                    Rectangle { anchors.fill: parent; radius: parent.radius
+                        gradient: Gradient { orientation: Gradient.Horizontal; GradientStop { position: 0; color: Qt.rgba(tile.hue.r, tile.hue.g, tile.hue.b, tileArea.containsMouse ? 0.28 : 0.16) } GradientStop { position: 0.7; color: "transparent" } } }
+                    Rectangle { width: 3; radius: 2; height: parent.height - 24; anchors.verticalCenter: parent.verticalCenter; x: 0; color: tile.hue }
                     // top-aligned: every card's title sits on the same line, whatever the length of its description
                     ColumnLayout { anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 14; spacing: 4
                         Text { text: i18n.t(modelData.t ?? "", i18n.lang); color: Theme.ink; font.family: Theme.sans; font.pixelSize: 15; font.bold: true }
