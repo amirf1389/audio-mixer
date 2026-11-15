@@ -348,7 +348,8 @@ int main(int argc, char* argv[]) {
     { // the ten effects in the rack of any channel: listed, loaded into a slot, a knob moves, bypass, cleared; a late channel too
       { // 2 IN / 2 OUT at least on every driver: asking for none opens the first pair all the same (a device that reported 0 channels is not left silent)
         const double r0 = engine.sampleRate(); const int f0 = engine.blockFrames(); engine.stop();
-        engine.open("null", "", "", 48000, 256, 0, 0); const int in0 = engine.deviceInputs();   // 0 asked, not "-": the first pair opens engine.stop(); engine.open("null", "", "", r0 > 0 ? r0 : 48000, f0 > 0 ? f0 : 256, 2, 2);
+        engine.open("null", "", "", 48000, 256, 0, 0); const int in0 = engine.deviceInputs(); engine.stop();   // 0 asked, not "-": the first pair opens
+        engine.open("null", "", "", r0 > 0 ? r0 : 48000, f0 > 0 ? f0 : 256, 2, 2);
         const QVariantList st = engine.stripState(); const bool names = st.size() > 1 && st[0].toMap()["name"].toString() == "DIGITAL AUDIO" && st[1].toMap()["name"].toString() == "MIC" && !st[0].toMap()["link"].toBool();
         if (in0 < 2 || !names) { std::fprintf(stderr, "amixos --smoke: 2 in / 2 out (got %d in), CH 1-2 DIGITAL AUDIO / MIC %d\n", in0, names); return 160; } }
       { // YOUR FILE in the SAMPLE PLAYER: a file the user picks plays instead of the built-in sample; BUILT-IN goes back; a missing file is reported, not a crash
