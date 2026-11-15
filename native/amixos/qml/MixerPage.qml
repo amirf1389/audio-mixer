@@ -201,7 +201,7 @@ Item {
                         Text { text: scoreBadge.sc.valid ? Math.round(scoreBadge.sc.total) + "  " + scoreBadge.sc.grade : "—"; color: scoreBadge.tone; font.family: Theme.mono; font.pixelSize: 10; font.bold: true; anchors.verticalCenter: parent.verticalCenter } }
                     MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: scorePop.open() }
                     Popup { id: scorePop; objectName: "soundScorePop"; y: parent.height + 4; x: parent.width - width; width: 420; padding: 12
-                        background: Rectangle { radius: 8; color: Theme.card; border.color: scoreBadge.tone }
+                        background: Rectangle { radius: 8; color: Theme.cardSolid; border.color: scoreBadge.tone }
                         contentItem: Column { spacing: 8
                             Rectangle { id: gb100; objectName: "scoreFullView"; implicitWidth: fvT.implicitWidth + 16; implicitHeight: 20; radius: 7; color: Theme.ov(0.06); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb100.color) } GradientStop { position: 1; color: Theme.btnBottom(gb100.color) } } border.color: scoreBadge.tone   // the whole picture: gauge, parts, history, analyzer detail
                                 Text { id: fvT; anchors.centerIn: parent; text: i18n.t("FULL VIEW ›", i18n.lang); color: scoreBadge.tone; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }

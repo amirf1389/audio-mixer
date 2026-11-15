@@ -50,7 +50,7 @@ Popup {
             Rectangle { x: 1; width: parent.width - 2; y: parent.yOf(pop.target.peak); height: 1; color: Theme.danger; opacity: 0.6 } }
         Head { Layout.alignment: Qt.AlignHCenter; text: parent.name } }
 
-    background: Rectangle { radius: 12; color: Theme.card; border.color: Theme.cyan }
+    background: Rectangle { radius: 12; color: Theme.cardSolid; border.color: Theme.cyan }
     contentItem: ColumnLayout { spacing: 8
         RowLayout { Layout.fillWidth: true; Layout.margins: 14; Layout.bottomMargin: 0; spacing: 8
             Text { text: i18n.t("AMFB", i18n.lang); color: Theme.orange; font.family: Theme.mono; font.pixelSize: 15; font.weight: Font.Black; font.letterSpacing: 4 }
