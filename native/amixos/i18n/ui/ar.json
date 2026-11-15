@@ -2051,5 +2051,11 @@
 "Phone camera: opens the browser remote on this computer and pairs by itself. AmF X1 app: REMOTE → SCAN QR. The code holds this computer's address and the PIN of this minute, so it changes with the PIN.": "كاميرا الهاتف: تفتح المتصفح عن بُعد على هذا الكمبيوتر وتقوم بالإقران تلقائيًّا. تطبيق AmF X1: «REMOTE» → «SCAN QR». يحتوي الرمز على عنوان هذا الكمبيوتر ورقم التعريف الشخصي (PIN) الخاص بهذه اللحظة، لذا فإنه يتغير مع تغير رقم التعريف الشخصي.",
 "More than one network: pick the address of the Wi-Fi the phone is on.": "في حالة وجود أكثر من شبكة واحدة: اختر عنوان شبكة الواي فاي التي يتصل بها الهاتف.",
 "MUSIC INPUT: DUAL LISTEN ON. Click to go back to the 3-band EQ.": "مدخل الموسيقى: وضع الاستماع المزدوج قيد التشغيل. انقر للعودة إلى معادل الصوت ثلاثي النطاقات.",
-"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "مدخل الموسيقى: انقر لتشغيل ميزة «الاستماع المزدوج» لهذه القناة (موسيقى من مشغل أو فرقة موسيقية أو مسارات موسيقية مصاحبة)."
+"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "مدخل الموسيقى: انقر لتشغيل ميزة «الاستماع المزدوج» لهذه القناة (موسيقى من مشغل أو فرقة موسيقية أو مسارات موسيقية مصاحبة).",
+"SECURE INPUT": "إدخال آمن",
+"Only the input devices allowed below are opened, by hand or automatically. An allowed WASAPI input is opened in exclusive mode: no other program can listen to it or mix into it. Anything else runs outputs only.": "يتم فتح أجهزة الإدخال المسموح بها أدناه فقط، سواء يدويًّا أو تلقائيًّا. ويتم فتح جهاز الإدخال المسموح به الذي يعمل بنظام WASAPI في الوضع الحصري: فلا يمكن لأي برنامج آخر الاستماع إليه أو المزج معه. أما الأجهزة الأخرى، فتعمل على الإخراج فقط.",
+" · default": " · الافتراضي",
+"ALLOWED": "مسموح به",
+"ALLOW": "السماح",
+"No input device found: plug one in, then RESCAN.": "لم يتم العثور على جهاز إدخال: قم بتوصيل جهاز، ثم اضغط على «إعادة الفحص»."
 }

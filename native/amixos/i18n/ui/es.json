@@ -2060,5 +2060,11 @@
 "Phone camera: opens the browser remote on this computer and pairs by itself. AmF X1 app: REMOTE → SCAN QR. The code holds this computer's address and the PIN of this minute, so it changes with the PIN.": "Cámara del móvil: abre el navegador de control remoto en este ordenador y se empareja automáticamente. Aplicación AmF X1: REMOTE → ESCANEAR QR. El código contiene la dirección de este ordenador y el PIN de este momento, por lo que cambia con el PIN.",
 "More than one network: pick the address of the Wi-Fi the phone is on.": "Si hay más de una red: selecciona la dirección de la red Wi-Fi a la que está conectado el teléfono.",
 "MUSIC INPUT: DUAL LISTEN ON. Click to go back to the 3-band EQ.": "ENTRADA DE MÚSICA: ESCUCHA DOBLE ACTIVADA. Haz clic para volver al ecualizador de 3 bandas.",
-"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "ENTRADA DE MÚSICA: haz clic para activar la opción «DUAL LISTEN» en este canal (música de un reproductor, una banda o pistas de acompañamiento)."
+"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "ENTRADA DE MÚSICA: haz clic para activar la opción «DUAL LISTEN» en este canal (música de un reproductor, una banda o pistas de acompañamiento).",
+"SECURE INPUT": "ENTRADA SEGURA",
+"Only the input devices allowed below are opened, by hand or automatically. An allowed WASAPI input is opened in exclusive mode: no other program can listen to it or mix into it. Anything else runs outputs only.": "Solo se abren los dispositivos de entrada permitidos que se indican a continuación, ya sea de forma manual o automática. Un dispositivo de entrada WASAPI permitido se abre en modo exclusivo: ningún otro programa puede escuchar en él ni mezclar en él. El resto de dispositivos solo ejecutan salidas.",
+" · default": " · por defecto",
+"ALLOWED": "PERMITIDO",
+"ALLOW": "PERMITIR",
+"No input device found: plug one in, then RESCAN.": "No se ha encontrado ningún dispositivo de entrada: conecta uno y, a continuación, vuelve a escanear."
 }

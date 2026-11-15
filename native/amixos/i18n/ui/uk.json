@@ -2047,5 +2047,11 @@
 "Phone camera: opens the browser remote on this computer and pairs by itself. AmF X1 app: REMOTE → SCAN QR. The code holds this computer's address and the PIN of this minute, so it changes with the PIN.": "Камера телефону: відкриває програму Remote на цьому комп’ютері та автоматично встановлює з’єднання. Додаток AmF X1: REMOTE → Сканувати QR-код. Код містить адресу цього комп’ютера та PIN-код на цю хвилину, тому він змінюється разом із PIN-кодом.",
 "More than one network: pick the address of the Wi-Fi the phone is on.": "Якщо є кілька мереж: виберіть адресу мережі Wi-Fi, до якої підключений телефон.",
 "MUSIC INPUT: DUAL LISTEN ON. Click to go back to the 3-band EQ.": "ВХІД ДЛЯ МУЗИКИ: ФУНКЦІЯ «DUAL LISTEN» УВІМКНЕНА. Натисніть, щоб повернутися до 3-смугового еквалайзера.",
-"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "ВХІД ДЛЯ МУЗИКИ: натисніть, щоб увімкнути режим «DUAL LISTEN» для цього каналу (музика з плеєра, групи або фонограми)."
+"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "ВХІД ДЛЯ МУЗИКИ: натисніть, щоб увімкнути режим «DUAL LISTEN» для цього каналу (музика з плеєра, групи або фонограми).",
+"SECURE INPUT": "БЕЗПЕЧНЕ ВВЕДЕННЯ ДАНИХ",
+"Only the input devices allowed below are opened, by hand or automatically. An allowed WASAPI input is opened in exclusive mode: no other program can listen to it or mix into it. Anything else runs outputs only.": "Відкриваються лише перелічені нижче дозволені пристрої введення — вручну або автоматично. Дозволений пристрій введення WASAPI відкривається в ексклюзивному режимі: жодна інша програма не може його прослуховувати або змішувати з ним. Усі інші пристрої працюють лише у режимі виведення.",
+" · default": " · за замовчуванням",
+"ALLOWED": "ДОЗВОЛЕНО",
+"ALLOW": "ДОЗВОЛИТИ",
+"No input device found: plug one in, then RESCAN.": "Не знайдено пристрою введення: підключіть його, а потім натисніть RESCAN."
 }

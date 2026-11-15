@@ -2119,5 +2119,11 @@
 "Phone camera: opens the browser remote on this computer and pairs by itself. AmF X1 app: REMOTE → SCAN QR. The code holds this computer's address and the PIN of this minute, so it changes with the PIN.": "फोन कैमरा: इस कंप्यूटर पर ब्राउज़र रिमोट खोलता है और अपने आप पेयर हो जाता है।   AmF X1 ऐप: रिमोट → QR स्कैन।   कोड में इस कंप्यूटर का पता और इस मिनट का PIN होता है, इसलिए यह PIN के साथ बदलता रहता है।",
 "More than one network: pick the address of the Wi-Fi the phone is on.": "एक से अधिक नेटवर्क: उस वाई-फाई का पता चुनें जिस पर फोन जुड़ा है।",
 "MUSIC INPUT: DUAL LISTEN ON. Click to go back to the 3-band EQ.": "संगीत इनपुट: डुअल लिसन चालू। 3-बैंड EQ पर वापस जाने के लिए क्लिक करें।",
-"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "संगीत इनपुट: इस चैनल के लिए डुअल लिसन ऑन स्विच करने के लिए क्लिक करें (प्लेयर, बैंड या बैकिंग ट्रैक्स से संगीत)।"
+"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "संगीत इनपुट: इस चैनल के लिए डुअल लिसन ऑन स्विच करने के लिए क्लिक करें (प्लेयर, बैंड या बैकिंग ट्रैक्स से संगीत)।",
+"SECURE INPUT": "सुरक्षित इनपुट",
+"Only the input devices allowed below are opened, by hand or automatically. An allowed WASAPI input is opened in exclusive mode: no other program can listen to it or mix into it. Anything else runs outputs only.": "केवल नीचे अनुमत इनपुट डिवाइस ही खोले जाते हैं, चाहे हाथ से हों या स्वचालित रूप से। एक अनुमत WASAPI इनपुट को एक्सक्लूसिव मोड में खोला जाता है: कोई अन्य प्रोग्राम इसे सुन या इसमें मिक्स नहीं कर सकता। बाकी सब केवल आउटपुट ही चलाते हैं।",
+" · default": " · पूर्वनिर्धारित",
+"ALLOWED": "अनुमत",
+"ALLOW": "अनुमति दें",
+"No input device found: plug one in, then RESCAN.": "कोई इनपुट डिवाइस नहीं मिला: एक डिवाइस लगाएँ, फिर पुनः स्कैन करें।"
 }

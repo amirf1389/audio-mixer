@@ -673,6 +673,17 @@ int main(int argc, char* argv[]) {
         QSettings().remove("update/hosts"); QSettings().setValue("update/url", keepUrl); update.setLicenseServer(keepLic); }
       { const QString pin = remote.pairPin(); const int left = remote.pairSecondsLeft();   // the pairing PIN: six digits once the master token exists, 1..60 s to the next
         if ((!pin.isEmpty() && (pin.size() != 6 || pin.toInt() < 0)) || left < 1 || left > 60) { std::fprintf(stderr, "amixos --smoke: the pairing PIN is wrong (%s, %d s)\n", qPrintable(pin), left); return 206; } }
+      { // SECURE INPUT: an input not on the allowed list is never opened; an allowed WASAPI input opens exclusively; switched off, nothing changes
+        const bool keepOn = engine.secureInput(); const QStringList keepList = QSettings().value("audio/allowedInputs").toStringList();
+        engine.setSecureInput(true); engine.setInputAllowed("wasapi", "{mic-a}", false);
+        QVariantMap r = engine.secureInputPreview("wasapi", "{mic-a}", "", 2);
+        if (r["inChannels"].toInt() != 0 || r["in"].toString() != "-" || !r["note"].toString().startsWith("SECURE INPUT")) { std::fprintf(stderr, "amixos --smoke: SECURE INPUT opened a device that is not allowed\n"); return 275; }
+        engine.setInputAllowed("wasapi", "{mic-a}", true); r = engine.secureInputPreview("wasapi", "{mic-a}", "", 2);
+        if (r["inChannels"].toInt() != 2 || r["in"].toString() != "{mic-a}" || !r["exclusive"].toBool() || !r["note"].toString().isEmpty()) { std::fprintf(stderr, "amixos --smoke: SECURE INPUT did not open the allowed device exclusively\n"); return 276; }
+        r = engine.secureInputPreview("asio", "", "Other ASIO", 8); if (r["inChannels"].toInt() != 0) return 277;   // ASIO's input is the driver: not allowed, no input
+        r = engine.secureInputPreview("wasapi", "-", "", 0); if (!r["note"].toString().isEmpty() || r["exclusive"].toBool()) return 278;   // no input asked: nothing to secure
+        engine.setSecureInput(false); r = engine.secureInputPreview("wasapi", "{mic-b}", "", 2); if (r["inChannels"].toInt() != 2 || r["exclusive"].toBool()) return 279;
+        QSettings().setValue("audio/allowedInputs", keepList); engine.setSecureInput(keepOn); }
       { // THE PAIRING QR CODE: a real QR (finder squares in three corners, a size of 21 + 4k), the PIN in the #fragment only
         const QVariantList q = remote.qr("http://192.168.1.20:8765/remote#pin=123456"); const int n = q.isEmpty() ? 0 : q[0].toInt();
         auto mod = [&](int x, int y) { return q.value(1 + y * n + x).toInt() == 1; };
@@ -1008,6 +1019,14 @@ int main(int argc, char* argv[]) {
                 if (engine.bestAsioDriver() != "{a1}" || engine.asioFrames(48000) != 480 || engine.asioFrames(44100) != 441 || engine.asioFrames(96000) != 960) { std::fprintf(stderr, "amixos --shots: ASIO auto detect or the 10 ms buffer is wrong (%s, %d)\n", qPrintable(engine.bestAsioDriver()), engine.asioFrames(48000)); std::exit(212); }
                 { QVariantList only; only << dev("asio", "{w1}", "ASIO4ALL v2", 2, 2) << dev("asio", "{w2}", "FlexASIO", 0, 0); engine.simulateDevices(only); if (engine.bestAsioDriver() != "{w1}") std::exit(213); engine.simulateDevices(QVariantList{dev("wasapi", "{x}", "Speakers", 0, 2)}); if (!engine.bestAsioDriver().isEmpty() || engine.autoOpenAsio()) std::exit(214); engine.simulateDevices(rig); }
                 engine.openAsioDriver("{a2}", 256); for (const QVariant& v : engine.asioDrivers()) if (v.toMap()["current"].toBool() && engine.backend() != "asio") { std::fprintf(stderr, "amixos --shots: a driver that did not start is shown as running\n"); std::exit(254); }
+                { // SECURE INPUT on SOUND CARD: two microphones, one allowed. Opening the other by hand (the real open path) gives outputs only and says why
+                  const QStringList keepList = QSettings().value("audio/allowedInputs").toStringList(); const bool keepOn = engine.secureInput();
+                  QVariantList mics; QVariantMap m1 = dev("wasapi", "{m1}", "Microphone (USB Audio Interface)", 2, 0); m1["defaultIn"] = true; mics << m1 << dev("wasapi", "{m2}", "Microphone Array (Realtek(R) Audio)", 2, 0) << dev("wasapi", "{w1}", "Speakers (Realtek(R) Audio)", 0, 2);
+                  engine.simulateDevices(mics); engine.setSecureInput(true); engine.setInputAllowed("wasapi", "{m1}", true); engine.setInputAllowed("wasapi", "{m2}", false);
+                  engine.open("wasapi", "{m2}", "{w1}", 48000, 256, 2, 2); const bool blocked = engine.micOffNote().startsWith("SECURE INPUT");
+                  if (!blocked) { std::fprintf(stderr, "amixos --shots: SECURE INPUT let a device that is not allowed open (%s)\n", qPrintable(engine.micOffNote())); std::exit(214); }
+                  win->setProperty("current", "asio"); waitMs(500); win->grabWindow().save(shots + "/asio-secure-input.png"); std::printf("amixos --shots: asio-secure-input\n");
+                  QSettings().setValue("audio/allowedInputs", keepList); engine.setSecureInput(keepOn); }
                 engine.setAutoPrefer(keepPrefer); engine.simulateDevices(real); if (!engine.running()) engine.open("null", "", "", 48000, 256, 2, 2); win->setProperty("current", "mixer"); waitMs(300);
                 { // the channels are read by themselves: with a device of 2 inputs running, 2 are put on strips 1 and 2 and the note says so; with no inputs it says outputs only
                   const int got = engine.readAsioChannels("{a1}"); if (got != engine.deviceInputs() || got != 2 || !engine.asioNote().contains("2 input channel")) { std::fprintf(stderr, "amixos --shots: the device's channels were not read (%d of %d: %s)\n", got, engine.deviceInputs(), qPrintable(engine.asioNote())); std::exit(215); }

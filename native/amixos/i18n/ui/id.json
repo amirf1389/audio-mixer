@@ -2031,5 +2031,11 @@
 "Phone camera: opens the browser remote on this computer and pairs by itself. AmF X1 app: REMOTE → SCAN QR. The code holds this computer's address and the PIN of this minute, so it changes with the PIN.": "Kamera ponsel: membuka fitur Remote di browser komputer ini dan akan terhubung secara otomatis. Aplikasi AmF X1: REMOTE → PINDai QR. Kode tersebut berisi alamat komputer ini dan PIN saat ini, sehingga akan berubah sesuai dengan PIN yang digunakan.",
 "More than one network: pick the address of the Wi-Fi the phone is on.": "Ada lebih dari satu jaringan: pilih alamat Wi-Fi yang sedang terhubung ke ponsel.",
 "MUSIC INPUT: DUAL LISTEN ON. Click to go back to the 3-band EQ.": "MASUKAN MUSIK: DUAL LISTEN AKTIF. Klik untuk kembali ke EQ 3-band.",
-"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "MASUKAN MUSIK: klik untuk mengaktifkan DUAL LISTEN pada saluran ini (musik dari pemutar, band, atau trek pengiring)."
+"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "MASUKAN MUSIK: klik untuk mengaktifkan DUAL LISTEN pada saluran ini (musik dari pemutar, band, atau trek pengiring).",
+"SECURE INPUT": "MASUKAN YANG AMAN",
+"Only the input devices allowed below are opened, by hand or automatically. An allowed WASAPI input is opened in exclusive mode: no other program can listen to it or mix into it. Anything else runs outputs only.": "Hanya perangkat masukan yang diizinkan di bawah ini yang dapat dibuka, baik secara manual maupun otomatis. Perangkat masukan WASAPI yang diizinkan dibuka dalam mode eksklusif: tidak ada program lain yang dapat mendengarkan atau melakukan pencampuran ke dalamnya. Perangkat lainnya hanya menjalankan fungsi keluaran.",
+" · default": " · default",
+"ALLOWED": "DIIZINKAN",
+"ALLOW": "IZINKAN",
+"No input device found: plug one in, then RESCAN.": "Tidak ditemukan perangkat masukan: sambungkan salah satunya, lalu lakukan RESCAN."
 }

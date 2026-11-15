@@ -2045,5 +2045,11 @@
 "Phone camera: opens the browser remote on this computer and pairs by itself. AmF X1 app: REMOTE → SCAN QR. The code holds this computer's address and the PIN of this minute, so it changes with the PIN.": "Камера телефона: открывает приложение REMOTE на этом компьютере и автоматически устанавливает соединение. Приложение AmF X1: REMOTE → СКАНИРОВАТЬ QR-код. Код содержит адрес этого компьютера и PIN-код на данный момент, поэтому он меняется вместе с PIN-кодом.",
 "More than one network: pick the address of the Wi-Fi the phone is on.": "Если доступно несколько сетей: выберите адрес той сети Wi-Fi, к которой подключен телефон.",
 "MUSIC INPUT: DUAL LISTEN ON. Click to go back to the 3-band EQ.": "ВХОД МУЗЫКИ: РЕЖИМ «DUAL LISTEN» ВКЛЮЧЕН. Нажмите, чтобы вернуться к 3-полосному эквалайзеру.",
-"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "ВХОД ДЛЯ МУЗЫКИ: нажмите, чтобы включить режим «DUAL LISTEN» для этого канала (музыка с плеера, от группы или фонограммы)."
+"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "ВХОД ДЛЯ МУЗЫКИ: нажмите, чтобы включить режим «DUAL LISTEN» для этого канала (музыка с плеера, от группы или фонограммы).",
+"SECURE INPUT": "БЕЗОПАСНЫЙ ВВОД",
+"Only the input devices allowed below are opened, by hand or automatically. An allowed WASAPI input is opened in exclusive mode: no other program can listen to it or mix into it. Anything else runs outputs only.": "Открываются только перечисленные ниже разрешенные устройства ввода — вручную или автоматически. Разрешенное устройство ввода WASAPI открывается в эксклюзивном режиме: никакая другая программа не может прослушивать его или микшировать с ним. Все остальные устройства работают только в режиме вывода.",
+" · default": " · по умолчанию",
+"ALLOWED": "РАЗРЕШЕНО",
+"ALLOW": "РАЗРЕШИТЬ",
+"No input device found: plug one in, then RESCAN.": "Устройство ввода не обнаружено: подключите его, а затем нажмите «RESCAN»."
 }

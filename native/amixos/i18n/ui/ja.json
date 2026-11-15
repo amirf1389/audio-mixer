@@ -2088,5 +2088,10 @@
 "Phone camera: opens the browser remote on this computer and pairs by itself. AmF X1 app: REMOTE → SCAN QR. The code holds this computer's address and the PIN of this minute, so it changes with the PIN.": "スマホのカメラ：このコンピュータで「Remote」ブラウザを開くと、自動的にペアリングされます。AmF X1アプリ：「REMOTE」→「QRコードをスキャン」。このコードには、このコンピュータのアドレスと、その時点のPINが含まれているため、PINの変更に伴いコードも変わります。",
 "More than one network: pick the address of the Wi-Fi the phone is on.": "複数のネットワークがある場合：スマートフォンが接続しているWi-Fiのアドレスを選択してください。",
 "MUSIC INPUT: DUAL LISTEN ON. Click to go back to the 3-band EQ.": "音楽入力：デュアルリスニングON。クリックすると3バンドEQ画面に戻ります。",
-"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "音楽入力：クリックして、このチャンネルの「デュアルリスニング」をオンに切り替えます（プレーヤー、バンド、またはバッキングトラックからの音楽）。"
+"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "音楽入力：クリックして、このチャンネルの「デュアルリスニング」をオンに切り替えます（プレーヤー、バンド、またはバッキングトラックからの音楽）。",
+"SECURE INPUT": "安全な入力",
+"Only the input devices allowed below are opened, by hand or automatically. An allowed WASAPI input is opened in exclusive mode: no other program can listen to it or mix into it. Anything else runs outputs only.": "以下に許可されている入力デバイスのみが、手動または自動的に開かれます。許可されたWASAPI入力は排他モードで開かれます。つまり、他のプログラムはその入力をリッスンしたり、その出力にミックスインしたりすることはできません。それ以外のものは、出力のみを実行します。",
+" · default": " ・デフォルト",
+"ALLOWED": "許可",
+"No input device found: plug one in, then RESCAN.": "入力デバイスが検出されませんでした：入力デバイスを接続してから、「再スキャン」を行ってください。"
 }

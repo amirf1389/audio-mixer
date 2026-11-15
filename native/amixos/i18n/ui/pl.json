@@ -2033,5 +2033,11 @@
 "Phone camera: opens the browser remote on this computer and pairs by itself. AmF X1 app: REMOTE → SCAN QR. The code holds this computer's address and the PIN of this minute, so it changes with the PIN.": "Aparat w telefonie: otwiera aplikację Remote na tym komputerze i samoczynnie nawiązuje połączenie. Aplikacja AmF X1: REMOTE → ZESKANUJ KOD QR. Kod zawiera adres tego komputera oraz aktualny kod PIN, więc zmienia się wraz ze zmianą kodu PIN.",
 "More than one network: pick the address of the Wi-Fi the phone is on.": "Więcej niż jedna sieć: wybierz adres sieci Wi-Fi, z którą połączony jest telefon.",
 "MUSIC INPUT: DUAL LISTEN ON. Click to go back to the 3-band EQ.": "WEJŚCIE MUZYCZNE: FUNKCJA DUAL LISTEN WŁĄCZONA. Kliknij, aby powrócić do 3-pasmowego korektora.",
-"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "WEJŚCIE MUZYCZNE: kliknij, aby włączyć funkcję DUAL LISTEN dla tego kanału (muzyka z odtwarzacza, zespołu lub podkładów muzycznych)."
+"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "WEJŚCIE MUZYCZNE: kliknij, aby włączyć funkcję DUAL LISTEN dla tego kanału (muzyka z odtwarzacza, zespołu lub podkładów muzycznych).",
+"SECURE INPUT": "BEZPIECZNE WPROWADZANIE DANYCH",
+"Only the input devices allowed below are opened, by hand or automatically. An allowed WASAPI input is opened in exclusive mode: no other program can listen to it or mix into it. Anything else runs outputs only.": "Otwierane są wyłącznie wymienione poniżej dozwolone urządzenia wejściowe – ręcznie lub automatycznie. Dozwolone urządzenie wejściowe WASAPI jest otwierane w trybie wyłącznym: żaden inny program nie może go nasłuchiwać ani miksować z nim. Wszystkie pozostałe urządzenia obsługują wyłącznie wyjścia.",
+" · default": " · domyślnie",
+"ALLOWED": "DOZWOLONE",
+"ALLOW": "Zezwól",
+"No input device found: plug one in, then RESCAN.": "Nie znaleziono urządzenia wejściowego: podłącz je, a następnie wykonaj ponowne skanowanie."
 }

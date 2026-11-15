@@ -2032,5 +2032,11 @@
 "Phone camera: opens the browser remote on this computer and pairs by itself. AmF X1 app: REMOTE → SCAN QR. The code holds this computer's address and the PIN of this minute, so it changes with the PIN.": "Handykamera: Öffnet die Fernsteuerung im Browser auf diesem Computer und stellt automatisch eine Verbindung her. AmF X1-App: FERNBEDIENUNG → QR-CODE SCANNEN. Der Code enthält die Adresse dieses Computers und die aktuelle PIN; er ändert sich daher mit der PIN.",
 "More than one network: pick the address of the Wi-Fi the phone is on.": "Mehr als ein Netzwerk: Wählen Sie die Adresse des WLAN-Netzwerks aus, mit dem das Smartphone verbunden ist.",
 "MUSIC INPUT: DUAL LISTEN ON. Click to go back to the 3-band EQ.": "MUSIK-EINGANG: DUAL LISTEN EINGESCHALTET. Klicken Sie hier, um zum 3-Band-EQ zurückzukehren.",
-"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "MUSIK-EINGANG: Klicken Sie hier, um „DUAL LISTEN“ für diesen Kanal zu aktivieren (Musik von einem Player, einer Band oder Begleitmusik)."
+"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "MUSIK-EINGANG: Klicken Sie hier, um „DUAL LISTEN“ für diesen Kanal zu aktivieren (Musik von einem Player, einer Band oder Begleitmusik).",
+"SECURE INPUT": "SICHERE EINGABE",
+"Only the input devices allowed below are opened, by hand or automatically. An allowed WASAPI input is opened in exclusive mode: no other program can listen to it or mix into it. Anything else runs outputs only.": "Es werden ausschließlich die unten aufgeführten zulässigen Eingabegeräte geöffnet, entweder manuell oder automatisch. Ein zulässiges WASAPI-Eingabegerät wird im exklusiven Modus geöffnet: Kein anderes Programm kann darauf zugreifen oder Signale hineinmischen. Alle anderen Programme können nur Ausgabegeräte nutzen.",
+" · default": " · Standard",
+"ALLOWED": "ZULÄSSIG",
+"ALLOW": "ZULASSEN",
+"No input device found: plug one in, then RESCAN.": "Es wurde kein Eingabegerät gefunden: Schließen Sie eines an und führen Sie dann einen erneuten Suchlauf durch."
 }

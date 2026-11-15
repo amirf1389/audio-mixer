@@ -2119,5 +2119,11 @@
 "Phone camera: opens the browser remote on this computer and pairs by itself. AmF X1 app: REMOTE → SCAN QR. The code holds this computer's address and the PIN of this minute, so it changes with the PIN.": "فون کیمرہ: اس کمپیوٹر پر براؤزر ریموٹ کھولتا ہے اور خود بخود جوڑتا ہے۔   AmF X1 ایپ: ریموٹ → QR اسکین کریں۔   کوڈ میں اس کمپیوٹر کا پتہ اور اس منٹ کا پن شامل ہوتا ہے، لہٰذا یہ پن کے بدلنے پر تبدیل ہو جاتا ہے۔",
 "More than one network: pick the address of the Wi-Fi the phone is on.": "ایک سے زیادہ نیٹ ورک: اس وائی فائی کا پتہ منتخب کریں جس پر فون منسلک ہے۔",
 "MUSIC INPUT: DUAL LISTEN ON. Click to go back to the 3-band EQ.": "میوزک ان پٹ: ڈوئل لسٹن آن۔   3-بینڈ ایکولائزر پر واپس جانے کے لیے کلک کریں۔",
-"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "میوزک ان پٹ: اس چینل کے لیے DUAL LISTEN ON تبدیل کرنے کے لیے کلک کریں (پلیئر، بینڈ یا بیکنگ ٹریکس سے موسیقی)۔"
+"MUSIC INPUT: click to switch DUAL LISTEN ON for this channel (music from a player, a band or backing tracks).": "میوزک ان پٹ: اس چینل کے لیے DUAL LISTEN ON تبدیل کرنے کے لیے کلک کریں (پلیئر، بینڈ یا بیکنگ ٹریکس سے موسیقی)۔",
+"SECURE INPUT": "محفوظ ان پٹ",
+"Only the input devices allowed below are opened, by hand or automatically. An allowed WASAPI input is opened in exclusive mode: no other program can listen to it or mix into it. Anything else runs outputs only.": "صرف نیچے دیے گئے اجازت یافتہ ان پٹ ڈیوائسز کو دستی یا خودکار طور پر کھولا جاتا ہے۔ ایک اجازت یافتہ WASAPI ان پٹ خصوصی موڈ میں کھولا جاتا ہے: کوئی دوسرا پروگرام اسے سن یا اس میں مکس نہیں کر سکتا۔ باقی سب صرف آؤٹ پٹ چلاتے ہیں۔",
+" · default": " · ڈیفالٹ",
+"ALLOWED": "اجازت دی گئی",
+"ALLOW": "اجازت دیں",
+"No input device found: plug one in, then RESCAN.": "کوئی ان پٹ ڈیوائس نہیں ملا: ایک ان پٹ ڈیوائس لگا کر دوبارہ اسکین کریں۔"
 }
