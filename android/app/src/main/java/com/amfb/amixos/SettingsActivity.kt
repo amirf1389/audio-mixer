@@ -32,6 +32,8 @@ object Prefs {
     fun meterFloor(c: Context) = remote(c).getInt("meterFloor", 60)                   // the meters show 0 to -N dBFS
     fun localRate(c: Context) = local(c).getInt("rate", 48000)
     fun localFrames(c: Context) = local(c).getInt("frames", 256)
+    fun localOutDevice(c: Context) = local(c).getInt("outDevice", 0)                 // AudioDeviceInfo id the phone mixer plays to; 0 = the system route
+    fun localInDevice(c: Context) = local(c).getInt("inDevice", 0)
 }
 
 class SettingsActivity : AppCompatActivity() {

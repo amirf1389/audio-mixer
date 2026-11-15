@@ -39,6 +39,7 @@ class HomeActivity : AppCompatActivity() {
         tile("÷", R.string.home_calc, R.string.home_calc_sub, c) { Nav.go(this, CalculatorActivity::class.java) }
         tile("⧉", R.string.home_plugins, R.string.home_plugins_sub, v) { Nav.go(this, PluginsActivity::class.java) }
         tile("⊕", R.string.home_mixdown, R.string.home_mixdown_sub, o) { Nav.go(this, MixdownActivity::class.java) }
+        tile("⇄", R.string.home_devices, R.string.home_devices_sub, c) { Nav.go(this, DevicesActivity::class.java) }
         tile("⚙", R.string.home_settings, R.string.home_settings_sub, Color.parseColor("#94A3B8")) { Nav.go(this, SettingsActivity::class.java) }
         box.addView(grid)
         setContentView(Nav.wrap(this, ScrollView(this).apply { addView(box) }, Nav.Tab.HOME))

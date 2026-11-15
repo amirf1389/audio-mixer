@@ -40,6 +40,10 @@ class ScreenshotTest {
         val a = Robolectric.buildActivity(MixdownActivity::class.java).setup().get(); idle(300)
         shot(a.window.decorView.rootView, "mixdown")
     }
+    @Test fun devices() {   // the JVM's own audio devices and network interfaces (on a phone: the phone's)
+        val a = Robolectric.buildActivity(DevicesActivity::class.java).setup().resume().get(); idle(300)
+        shot(a.window.decorView.rootView, "devices")
+    }
     @Test fun settings() {
         val a = Robolectric.buildActivity(SettingsActivity::class.java).setup().get()
         shot(a.window.decorView.rootView, "settings")

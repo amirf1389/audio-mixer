@@ -75,9 +75,10 @@ aaudio_data_callback_result_t onOut(AAudioStream*, void* user, void* audio, int3
   return AAUDIO_CALLBACK_RESULT_CONTINUE;
 }
 void onErr(AAudioStream*, void* user, aaudio_result_t e) { if (e == AAUDIO_ERROR_DISCONNECTED) static_cast<NativeLoop*>(user)->disconnected = true; }
-AAudioStream* openStream(aaudio_direction_t dir, int rate, int ch, NativeLoop* l, bool callback) {
+AAudioStream* openStream(aaudio_direction_t dir, int rate, int ch, NativeLoop* l, bool callback, int deviceId) {
   AAudioStreamBuilder* b = nullptr; if (AAudio_createStreamBuilder(&b) != AAUDIO_OK) return nullptr;
-  AAudioStreamBuilder_setDirection(b, dir); AAudioStreamBuilder_setFormat(b, AAUDIO_FORMAT_PCM_FLOAT); AAudioStreamBuilder_setChannelCount(b, ch);
+  AAudioStreamBuilder_setDirection(b, dir); if (deviceId > 0) AAudioStreamBuilder_setDeviceId(b, deviceId);   // a chosen interface (USB, headset ...); 0 = the system's route
+  AAudioStreamBuilder_setFormat(b, AAUDIO_FORMAT_PCM_FLOAT); AAudioStreamBuilder_setChannelCount(b, ch);
   AAudioStreamBuilder_setSampleRate(b, rate); AAudioStreamBuilder_setPerformanceMode(b, AAUDIO_PERFORMANCE_MODE_LOW_LATENCY);
   AAudioStreamBuilder_setSharingMode(b, AAUDIO_SHARING_MODE_SHARED);   // shared: survives other apps and device changes; exclusive gains little and disconnects more
   if (dir == AAUDIO_DIRECTION_INPUT) {   // Android 9+: no voice processing on the mic (looked up at run time: the app also runs on Android 8)
@@ -98,12 +99,14 @@ void closeLoop() {
 extern "C" {
 // starts the native loop on mixer h at `rate` (the output may run at the device's own rate: it is returned), mic = open the microphone too.
 // Returns the rate in use, 0 = AAudio could not open (Java falls back to its AudioRecord / AudioTrack loop).
-JNIEXPORT jint JNICALL Java_com_amfb_amixos_Engine_aaudioStart(JNIEnv*, jclass, jlong h, jint rate, jboolean mic) {
+JNIEXPORT jint JNICALL Java_com_amfb_amixos_Engine_aaudioStart(JNIEnv*, jclass, jlong h, jint rate, jboolean mic, jint outDev, jint inDev) {
   closeLoop(); amix_mixer* m = mixerOf(h); if (!m) return 0;
   NativeLoop* l = new NativeLoop(); l->m = m; const std::size_t cap = 8192; l->mic.assign(cap, 0.f); l->L.assign(cap, 0.f); l->R.assign(cap, 0.f); l->ptrs.assign(static_cast<std::size_t>(amix_mixer_strips(m)), nullptr);
-  l->out = openStream(AAUDIO_DIRECTION_OUTPUT, rate, 2, l, true); if (!l->out) { delete l; return 0; }
+  l->out = openStream(AAUDIO_DIRECTION_OUTPUT, rate, 2, l, true, outDev);
+  if (!l->out && outDev > 0) l->out = openStream(AAUDIO_DIRECTION_OUTPUT, rate, 2, l, true, 0);   // the chosen output is gone: the system route
+  if (!l->out) { delete l; return 0; }
   const int real = AAudioStream_getSampleRate(l->out);
-  if (mic) l->in = openStream(AAUDIO_DIRECTION_INPUT, real, 1, l, false);   // the same rate as the output: no resampling in the callback
+  if (mic) { l->in = openStream(AAUDIO_DIRECTION_INPUT, real, 1, l, false, inDev); if (!l->in && inDev > 0) l->in = openStream(AAUDIO_DIRECTION_INPUT, real, 1, l, false, 0); }   // the same rate as the output: no resampling in the callback
   AAudioStream_setBufferSizeInFrames(l->out, AAudioStream_getFramesPerBurst(l->out) * 2);   // two bursts: the guide's low-latency starting point
   g_loop = l;
   if (l->in) AAudioStream_requestStart(l->in);
@@ -111,11 +114,12 @@ JNIEXPORT jint JNICALL Java_com_amfb_amixos_Engine_aaudioStart(JNIEnv*, jclass, 
   return real;
 }
 JNIEXPORT void JNICALL Java_com_amfb_amixos_Engine_aaudioStop(JNIEnv*, jclass) { closeLoop(); }
-// [running, disconnected, framesPerBurst, bufferFrames, xruns, inputOpen]
+// [running, disconnected, framesPerBurst, bufferFrames, xruns, inputOpen, outDeviceId, inDeviceId, sampleRate]
 JNIEXPORT void JNICALL Java_com_amfb_amixos_Engine_aaudioState(JNIEnv* env, jclass, jintArray out) {
-  jint v[6] = {0, 0, 0, 0, 0, 0};
+  jint v[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
   if (g_loop && g_loop->out) { v[0] = AAudioStream_getState(g_loop->out) == AAUDIO_STREAM_STATE_STARTED; v[1] = g_loop->disconnected.load(); v[2] = AAudioStream_getFramesPerBurst(g_loop->out);
-    v[3] = AAudioStream_getBufferSizeInFrames(g_loop->out); v[4] = AAudioStream_getXRunCount(g_loop->out); v[5] = g_loop->in != nullptr; }
-  if (out && env->GetArrayLength(out) >= 6) env->SetIntArrayRegion(out, 0, 6, v);
+    v[3] = AAudioStream_getBufferSizeInFrames(g_loop->out); v[4] = AAudioStream_getXRunCount(g_loop->out); v[5] = g_loop->in != nullptr;
+    v[6] = AAudioStream_getDeviceId(g_loop->out); v[7] = g_loop->in ? AAudioStream_getDeviceId(g_loop->in) : 0; v[8] = AAudioStream_getSampleRate(g_loop->out); }
+  if (out && env->GetArrayLength(out) >= 9) env->SetIntArrayRegion(out, 0, 9, v);
 }
 }

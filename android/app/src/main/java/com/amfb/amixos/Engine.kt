@@ -22,9 +22,9 @@ class Engine(strips: Int, val sampleRate: Double) : AutoCloseable {
     }
     /** Peak meters: strips 0..strips-1, then master L and R, linear 0..1+. */
     /** starts the native AAudio loop (microphone on strip 1 -> mixer -> speaker / headphones); the rate in use, 0 = not available */
-    fun startNative(rate: Int, mic: Boolean): Int = aaudioStart(handle, rate, mic)
-    /** [running, disconnected, framesPerBurst, bufferFrames, xruns, inputOpen] */
-    fun nativeState(): IntArray = IntArray(6).also { aaudioState(it) }
+    fun startNative(rate: Int, mic: Boolean, outDevice: Int = 0, inDevice: Int = 0): Int = aaudioStart(handle, rate, mic, outDevice, inDevice)
+    /** [running, disconnected, framesPerBurst, bufferFrames, xruns, inputOpen, outDeviceId, inDeviceId, sampleRate] */
+    fun nativeState(): IntArray = IntArray(9).also { aaudioState(it) }
     fun peaks(): FloatArray { peaks(handle, peakBuf); return peakBuf.copyOf() }
 
     override fun close() { if (handle != 0L) { destroy(handle); handle = 0L } }
@@ -49,7 +49,7 @@ class Engine(strips: Int, val sampleRate: Double) : AutoCloseable {
         @JvmStatic private external fun process(handle: Long, inputs: Array<FloatArray?>, frames: Int, out: FloatArray): Int
         @JvmStatic private external fun peaks(handle: Long, out: FloatArray)
         // AAUDIO: the native low-latency loop (amix_jni.cpp). aaudioStart returns the rate in use, 0 = not available (use AudioLoop's Java path)
-        @JvmStatic private external fun aaudioStart(handle: Long, rate: Int, mic: Boolean): Int
+        @JvmStatic private external fun aaudioStart(handle: Long, rate: Int, mic: Boolean, outDev: Int, inDev: Int): Int
         @JvmStatic external fun aaudioStop()
         @JvmStatic private external fun aaudioState(out: IntArray)
     }

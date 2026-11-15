@@ -46,7 +46,7 @@ class LocalMixerActivity : AppCompatActivity() {
 
     private fun startAudio() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) { ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), 1); return }
-        loop = AudioLoop(engine, Prefs.localRate(this), Prefs.localFrames(this)).also { it.start() }
+        loop = AudioLoop(engine, Prefs.localRate(this), Prefs.localFrames(this), Prefs.localOutDevice(this), Prefs.localInDevice(this)).also { it.start() }
         findViewById<Button>(R.id.start).text = getString(R.string.stop)
     }
     private fun stopAudio() { loop?.stop(); loop = null; findViewById<Button>(R.id.start).text = getString(R.string.start) }
