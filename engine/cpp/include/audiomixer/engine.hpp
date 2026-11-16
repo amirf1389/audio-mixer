@@ -137,6 +137,14 @@ class Mixer {
   void setMute(int strip, bool on);
   void setSolo(int strip, bool on);          // with any solo on, only the solo strips are heard
   void setMasterDb(double db);
+  // OUTPUT TRIM (GAIN MODE: the Windows volume as a trim after the master): a listening level. process() leaves it out, so the master
+  // meters, the loudness meter (AUTO LEVEL, the SOUND SCORE) and whatever taps the mix (recorder, RTA, network audio) keep the mix
+  // itself; the Runtime applies it with applyOutputTrim() on the master just before the device outputs. Turning the Windows volume
+  // down makes it quieter in the room, not "too quiet" to the score, and AUTO LEVEL no longer pushes back against it.
+  // Ramped over one block (no clicks); -120 dB or lower is silence.
+  void setOutputTrimDb(double db) { trimTarget_ = db <= -119.0 ? 0.0 : std::pow(10.0, (db > 0.0 ? 0.0 : db) / 20.0); }
+  void applyOutputTrim(float* const* ch, int nch, std::size_t n);
+  double outputTrimDb() const { return trimTarget_ <= 0 ? -120.0 : 20.0 * std::log10(trimTarget_); }
   void setLimiter(bool on, double ceilingDb = -0.5, double releaseMs = 100);   // brick-wall peak limiter: instant attack
   void setClipDb(double db);
   void setPeakHoldMs(double ms);              // how long the peak-hold line stays (all meters); 0 = no hold
@@ -190,6 +198,7 @@ class Mixer {
   int n_; double fs_, timeMs_ = 0;
   std::vector<Strip> strips_;
   double masterDb_ = 0, masterLin_ = 1;
+  double trimLin_ = 1, trimTarget_ = 1;   // the output trim now and where it ramps to
   double width_ = 1.0;   // master stereo width
   bool autoOn_ = false; double autoTarget_ = -16, autoMax_ = 12, autoDb_ = 0, autoSec_ = 0; int automixN_ = 0;
   bool analog_ = false; int outBits_ = 0; bool dcOn_ = false; double dcX_[2] = {0, 0}, dcY_[2] = {0, 0}; std::uint32_t rng_ = 0x2545F491u;

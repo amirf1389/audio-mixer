@@ -256,7 +256,7 @@ void Engine::pushAll() {
     rt_->setDelayMs(i, p.delayMs); rt_->setPolarity(i, p.polarityInvert); rt_->setCrossover(i, p.xoverType, p.hpOrder, p.hpFreq, p.lpOrder, p.lpFreq); rt_->setChannelLimiter(i, p.limiterOn, p.limiterCeilDb, p.limiterReleaseMs);
     rt_->setCompressor(i, p.compOn, p.compThresholdDb, p.compRatio, p.compKneeDb, p.compAttackMs, p.compReleaseMs, p.compMakeupDb); rt_->setGate(i, p.gateOn, p.gateThresholdDb, p.gateRangeDb, p.gateAttackMs, p.gateHoldMs, p.gateReleaseMs);
   }
-  rt_->setMasterDb(outMasterDb()); rt_->setLimiter(masterLim_, masterCeil_, masterRel_);
+  pushMasterLevel(); rt_->setLimiter(masterLim_, masterCeil_, masterRel_);
   rt_->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute); rt_->setClipDb(clipDb_); rt_->setPeakHoldMs(peakHoldMs_); rt_->setWidth(width_);
   scope_.setSampleRate(rt_->sampleRate()); rt_->setTap(&taps_);
   for (int k = 0; k < kBuses; ++k) makeBusFx(k);
@@ -473,7 +473,7 @@ void Engine::setName(int i, const QString& n) { if (i < 0 || i >= kStrips) retur
 void Engine::setColor(int i, int c) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].color = std::clamp(c, 0, 7); emit stripsChanged(); }
 void Engine::setMaster(double db) {
   startNote_.clear();
-  const double was = masterDb_; masterDb_ = std::clamp(db, -60.0, 10.0); if (rt_) rt_->setMasterDb(outMasterDb());
+  const double was = masterDb_; masterDb_ = std::clamp(db, -60.0, 10.0); pushMasterLevel();
   if (mon_.sync && masterDb_ != was) { mon_.db = std::clamp(mon_.db + (masterDb_ - was), -60.0, 10.0); if (rt_) rt_->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute); emit monitorChanged(); }
   emit stripsChanged(); syncSystemSound();
 }
@@ -510,8 +510,8 @@ QString Engine::windowsTrimNote() const {
 }
 // the level the engine gets: the fader plus the GAIN MODE trim. The mixer takes -60 dB and below as off, so a trimmed fader stays audible
 // down to -59.9 dB; it is off only when the fader is off or the Windows slider is at 0
-double Engine::outMasterDb() const { const double t = windowsTrimDb(); if (t == 0.0 || masterDb_ <= -60.0) return masterDb_; if (t <= -119.0) return -120.0; return std::max(-59.9, masterDb_ + t); }
-void Engine::pushMasterLevel() { if (rt_) rt_->setMasterDb(outMasterDb()); }
+double Engine::outMasterDb() const { return masterDb_; }   // the fader itself: GAIN MODE's trim is a separate stage after the meters (Mixer::setOutputTrimDb)
+void Engine::pushMasterLevel() { if (rt_) { rt_->setMasterDb(masterDb_); rt_->setOutputTrimDb(windowsTrimDb()); } }
 void Engine::setWindowsGainMode(bool on) { if (winGain_ == on) return; winGain_ = on; QSettings().setValue("mixer/windowsGainMode", on); pushMasterLevel(); emit systemSoundChanged(); }
 void Engine::setWindowsVolume(int v) {
   v = std::clamp(v, 0, 100); if (!volSet_ || v == winVol_) return; const double was = windowsTrimDb(); winVol_ = v;
@@ -817,7 +817,7 @@ void Engine::setMonitor(int source, double db, bool dim, bool mono, bool mute) {
   const double was = mon_.db;
   mon_.source = std::clamp(source, 0, kBuses); mon_.db = std::clamp(db, -60.0, 10.0); mon_.dim = dim; mon_.mono = mono; mon_.mute = mute;
   if (rt_) rt_->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute);
-  if (mon_.sync && mon_.db != was) { masterDb_ = std::clamp(masterDb_ + (mon_.db - was), -60.0, 10.0); if (rt_) rt_->setMasterDb(outMasterDb()); emit stripsChanged(); syncSystemSound(); }
+  if (mon_.sync && mon_.db != was) { masterDb_ = std::clamp(masterDb_ + (mon_.db - was), -60.0, 10.0); pushMasterLevel(); emit stripsChanged(); syncSystemSound(); }
   emit monitorChanged();
 }
 void Engine::setMonitorSync(bool on) { mon_.sync = on; emit monitorChanged(); }
@@ -1064,7 +1064,7 @@ void Engine::toggleMuteAll() {
   emit stripsChanged();
 }
 void Engine::clearSolo() { for (int i = 0; i < kStrips; ++i) { strips_[static_cast<std::size_t>(i)].solo = false; if (rt_) rt_->setSolo(i, false); } emit stripsChanged(); }
-void Engine::resetFaders() { for (int i = 0; i < kStrips; ++i) { StripUi& s = strips_[static_cast<std::size_t>(i)]; s.db = 0; s.pan = 0; pushStrip(i); if (rt_) rt_->setPan(i, 0); } masterDb_ = 0; if (rt_) rt_->setMasterDb(outMasterDb()); emit stripsChanged(); }
+void Engine::resetFaders() { for (int i = 0; i < kStrips; ++i) { StripUi& s = strips_[static_cast<std::size_t>(i)]; s.db = 0; s.pan = 0; pushStrip(i); if (rt_) rt_->setPan(i, 0); } masterDb_ = 0; pushMasterLevel(); emit stripsChanged(); }
 void Engine::flattenAllDsp() { for (int i = 0; i < kStrips; ++i) { strips_[static_cast<std::size_t>(i)].dsp.set(am::dsp::ChannelParams{}); for (PluginUi& p : strips_[static_cast<std::size_t>(i)].plugins) if (!isVstKind(p.kind)) p = PluginUi{}; } if (rt_) pushAll(); emit stripsChanged(); }
 
 static const struct { const char* kind; const char* name; } kBuiltIns[] = {{"gate", "NOISE GATE"}, {"eq", "CHANNEL EQ (3-BAND)"}, {"miceq", "MIC EQ (10-BAND)"}, {"xover", "X-OVER"}, {"comp", "COMPRESSOR"}, {"limiter", "LIMITER"}, {"delay", "DELAY"}, {"polarity", "POLARITY Ø"}};

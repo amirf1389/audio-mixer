@@ -133,6 +133,7 @@ class Runtime {
   void setMute(int strip, bool on);
   void setSolo(int strip, bool on);
   void setMasterDb(double db);
+  void setOutputTrimDb(double db);   // GAIN MODE: the listening level after the meters (Mixer::setOutputTrimDb)
   void setLimiter(bool on, double ceilingDb = -0.5, double releaseMs = 100);
   void setClipDb(double db);
   void setPeakHoldMs(double ms);

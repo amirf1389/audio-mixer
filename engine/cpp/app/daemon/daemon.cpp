@@ -371,13 +371,15 @@ json::Value Daemon::racks(int onlyStrip, bool params, bool states) const {
 }
 double Daemon::trimForLevel(double l) { return l <= 0.0005 ? -120.0 : std::max(-120.0, std::min(0.0, 30.0 * std::log10(l))); }
 bool Daemon::windowsSetsLevel() const { return rt_ && rt_->backendName() == "wasapi" && !rt_->exclusive() && (rt_->outDevice().empty() || rt_->outDevice() == "-"); }
-double Daemon::outMaster() const {   // the same rule as the console (Engine::outMasterDb): audible down to -59.9, off only with the fader off or Windows at 0
-  const int v = winVol_.load(); const double t = (set_.winGain && v >= 0 && !windowsSetsLevel()) ? trimForLevel(v / 100.0) : 0.0;
-  if (t == 0.0 || masterDb_ <= -60.0) return masterDb_; if (t <= -119.0) return -120.0; return std::max(-59.9, masterDb_ + t);
+double Daemon::outTrim() const {   // GAIN MODE's trim (the same rule as the console's Engine::windowsTrimDb)
+  const int v = winVol_.load(); return (set_.winGain && v >= 0 && !windowsSetsLevel()) ? trimForLevel(v / 100.0) : 0.0;
 }
+// the master fader and, separately, GAIN MODE's listening trim: the trim comes after the meters, the loudness meter and AUTO LEVEL
+// (Mixer::setOutputTrimDb), so turning Windows down does not make AUTO LEVEL turn the mix back up
+void Daemon::applyMaster(Runtime& rt) const { rt.setMasterDb(masterDb_); rt.setOutputTrimDb(outTrim()); }
 void Daemon::pushSettings(Runtime& rt) const {
   rt.setWidth(set_.width); rt.setOutputBits(set_.outputBits < 0 ? 0 : set_.outputBits); rt.setDcBlock(set_.dcBlock); rt.setAnalogChannels(set_.analog);
-  rt.setAutoLevel(set_.autoLevel, set_.autoTarget, set_.autoMax); rt.setClipDb(set_.clipDb); rt.setPeakHoldMs(set_.peakHoldMs); rt.setMasterDb(outMaster());
+  rt.setAutoLevel(set_.autoLevel, set_.autoTarget, set_.autoMax); rt.setClipDb(set_.clipDb); rt.setPeakHoldMs(set_.peakHoldMs); applyMaster(rt);
 }
 json::Value Daemon::settingsJson() const {
   json::Value s = json::Value::object(); s.set("width", set_.width); s.set("outputBits", set_.outputBits); s.set("dcBlock", set_.dcBlock); s.set("analog", set_.analog);
@@ -389,7 +391,7 @@ json::Value Daemon::settingsJson() const {
 void Daemon::pollVolume() {
   if (!volGet_) return; float f = 0; const int v = volGet_(f) ? static_cast<int>(std::lround(std::max(0.0f, std::min(1.0f, f)) * 100.0f)) : -1;
   if (v == winVol_.load()) return;
-  std::lock_guard<std::mutex> g(m_); winVol_ = v; if (rt_) rt_->setMasterDb(outMaster()); ++version_;   // a move of the Windows slider reaches every remote
+  std::lock_guard<std::mutex> g(m_); winVol_ = v; if (rt_) applyMaster(*rt_); ++version_;   // a move of the Windows slider reaches every remote
 }
 json::Value Daemon::state() const {
   std::lock_guard<std::mutex> g(m_);
@@ -506,7 +508,7 @@ json::Value Daemon::apply(const json::Value& cmd, std::string& err) {
     pushSettings(*rt); loadRacks(*rt); rt->setTap(&rta_);
     mp_.fs = rt->sampleRate(); master_.set(mp_); rt->setMasterProcessor(&master_);   // the console's RTA EQ and mastering, as handed over
     rt->setLimiter(limiter_, ceiling_); rt->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute);
-    rt_ = std::move(rt); rt_->setMasterDb(outMaster()); backend_ = rt_->backendName(); lastError_.clear(); rate_ = cfg.sampleRate;   // the trim knows the new output
+    rt_ = std::move(rt); applyMaster(*rt_); backend_ = rt_->backendName(); lastError_.clear(); rate_ = cfg.sampleRate;   // the trim knows the new output
     ok.set("backend", backend_); ok.set("rate", cfg.sampleRate); ok.set("frames", static_cast<int>(cfg.frames)); return ok;
   }
   if (op == "stop") { if (rt_) { rt_->setTap(nullptr); rta_.next.store(nullptr); rec_.stop(); rt_->stop(); rt_.reset(); } backend_.clear(); return ok; }
@@ -515,7 +517,7 @@ json::Value Daemon::apply(const json::Value& cmd, std::string& err) {
   if (op == "mute") { if (!strip(s)) return {}; const bool on = cmd["on"].asBool(); strips_[static_cast<std::size_t>(s)].mute = on; if (rt_) rt_->setMute(s, on); return ok; }
   if (op == "solo") { if (!strip(s)) return {}; const bool on = cmd["on"].asBool(); strips_[static_cast<std::size_t>(s)].solo = on; if (rt_) rt_->setSolo(s, on); return ok; }
   if (op == "name") { if (!strip(s)) return {}; std::string n = cmd["name"].asString(); if (n.size() > 24) n.resize(24); if (n.empty()) { err = "empty name"; return {}; } strips_[static_cast<std::size_t>(s)].name = n; return ok; }
-  if (op == "master") { masterDb_ = clampDb(cmd["db"].asNumber(0)); if (rt_) rt_->setMasterDb(outMaster()); return ok; }
+  if (op == "master") { masterDb_ = clampDb(cmd["db"].asNumber(0)); if (rt_) applyMaster(*rt_); return ok; }
   if (op == "rta") {   // the analyzer's source; a remote renews it while its page is open
     const json::Value& v = cmd["src"]; const int src = v.type() == json::Value::String ? Rta::kOff : std::max(-1, std::min(opt_.strips - 1, v.asInt(Rta::kOff)));
     rta_.source.store(src); rtaUntil_ = src == Rta::kOff ? 0 : static_cast<long long>(std::time(nullptr)) + 20; ok.set("src", src); return ok; }
@@ -547,11 +549,11 @@ json::Value Daemon::apply(const json::Value& cmd, std::string& err) {
       if (rt_) rt_->setAutoLevel(set_.autoLevel, set_.autoTarget, set_.autoMax); }
     else if (k == "clipDb") { set_.clipDb = std::max(-12.0, std::min(0.0, v.asNumber(-0.1))); if (rt_) rt_->setClipDb(set_.clipDb); }
     else if (k == "peakHoldMs") { set_.peakHoldMs = std::max(0.0, std::min(10000.0, v.asNumber(1500))); if (rt_) rt_->setPeakHoldMs(set_.peakHoldMs); }
-    else if (k == "winGain") { set_.winGain = v.asBool(false); if (rt_) rt_->setMasterDb(outMaster()); }
+    else if (k == "winGain") { set_.winGain = v.asBool(false); if (rt_) applyMaster(*rt_); }
     else if (k == "winMuteSync") set_.winMuteSync = v.asBool(true);   // the console applies this rule (it watches the master)
     else if (k == "winVolume") { const int lv = std::max(0, std::min(100, v.asInt(-1)));
       if (!volSet_ || v.asInt(-1) < 0 || !volSet_(static_cast<float>(lv / 100.0))) { err = "the Windows volume is not available on this computer"; return {}; }
-      winVol_ = lv; if (rt_) rt_->setMasterDb(outMaster()); }
+      winVol_ = lv; if (rt_) applyMaster(*rt_); }
     else { err = "unknown setting " + k; return {}; }
     return ok; }
   if (op == "limiter") { limiter_ = cmd["on"].asBool(true); ceiling_ = clampDb(cmd["ceilingDb"].asNumber(-0.5), -20, 0); if (rt_) rt_->setLimiter(limiter_, ceiling_); return ok; }

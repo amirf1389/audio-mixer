@@ -45,7 +45,7 @@ std::unique_ptr<Backend> createBackend(const std::string& name) {
   return nullptr;
 }
 
-enum Op { kGain, kPan, kMute, kSolo, kMaster, kLimiter, kClipDb, kClear, kEq, kDelay, kPolarity, kXover, kChLimiter, kComp, kGate, kSend, kBusLevel, kBusMute, kBusReturn, kMonitor, kInRoute, kOutRoute, kTrim, kPeakHold, kBusFx, kWidth, kAutomix, kAutoLevel, kOutBits, kProfReset, kDcBlock, kAnalogCh, kSpatial, kMasterFx, kAutoPol, kAmp, kAmpEq };
+enum Op { kGain, kPan, kMute, kSolo, kMaster, kLimiter, kClipDb, kClear, kEq, kDelay, kPolarity, kXover, kChLimiter, kComp, kGate, kSend, kBusLevel, kBusMute, kBusReturn, kMonitor, kInRoute, kOutRoute, kTrim, kPeakHold, kBusFx, kWidth, kAutomix, kAutoLevel, kOutBits, kProfReset, kDcBlock, kAnalogCh, kSpatial, kMasterFx, kAutoPol, kAmp, kAmpEq, kOutTrim };
 
 Runtime::Runtime(int strips) : mixer_(strips, 48000) { std::memset(&pub_, 0, sizeof pub_); }
 Runtime::~Runtime() { stop(); }
@@ -89,6 +89,7 @@ void Runtime::setSpatial(int s, bool on, double az, double el, double dist, doub
 void Runtime::setMute(int s, bool on) { post({kMute, s, on ? 1.0 : 0.0, 0, 0}); }
 void Runtime::setSolo(int s, bool on) { post({kSolo, s, on ? 1.0 : 0.0, 0, 0}); }
 void Runtime::setMasterDb(double db) { post({kMaster, 0, db, 0, 0}); }
+void Runtime::setOutputTrimDb(double db) { post({kOutTrim, 0, db, 0, 0}); }
 void Runtime::setLimiter(bool on, double c, double r) { post({kLimiter, on ? 1 : 0, c, r, 0}); }
 void Runtime::setClipDb(double db) { post({kClipDb, 0, db, 0, 0}); }
 void Runtime::setPeakHoldMs(double ms) { post({kPeakHold, 0, ms, 0, 0}); }
@@ -156,6 +157,7 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
       case kMute: mixer_.setMute(c.a, c.x != 0); break;
       case kSolo: mixer_.setSolo(c.a, c.x != 0); break;
       case kMaster: mixer_.setMasterDb(c.x); break;
+      case kOutTrim: mixer_.setOutputTrimDb(c.x); break;
       case kLimiter: mixer_.setLimiter(c.a != 0, c.x, c.y); break;
       case kClipDb: mixer_.setClipDb(c.x); break;
       case kPeakHold: mixer_.setPeakHoldMs(c.x); break;
@@ -245,6 +247,7 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
   if (rawIn) ins[tapRaw] = rawIn;   // from here on only the taps read ins: the measured strip as the device delivered it
   if (Tap* tap = tap_.load()) tap->onBlock(ins, mixer_.strips(), left_.data(), right_.data(), frames, mixer_.sampleRate());
   if (Tap* tap = netTap_.load()) tap->onBlock(ins, mixer_.strips(), left_.data(), right_.data(), frames, mixer_.sampleRate());
+  { float* ch[2] = {left_.data(), right_.data()}; mixer_.applyOutputTrim(ch, 2, frames); }   // GAIN MODE's listening level: after the meters and the taps
   // the monitor section: source, level (smoothed over the block, no clicks), mono, mute -> outputs 0 / 1, with its own peak
   { const float* ml = monSrc_ > 0 ? busOut[2 * (monSrc_ - 1)] : left_.data(); const float* mr = monSrc_ > 0 ? busOut[2 * (monSrc_ - 1) + 1] : right_.data();
     const double g0 = monGain_, g1 = monGainTarget_; monGain_ = g1; const double step = frames ? (g1 - g0) / static_cast<double>(frames) : 0; double pl = 0, pr = 0;

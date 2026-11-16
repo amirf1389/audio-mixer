@@ -125,7 +125,8 @@ class Daemon {
   void loadRacks(Runtime& rt);   // every slot made at the runtime's rate, the chains handed to it (m_ held)
   struct Prefs { double width = 1.0, autoTarget = -16, autoMax = 12, clipDb = -0.1, peakHoldMs = 1500; int outputBits = 0; bool dcBlock = true, analog = false, autoLevel = false, winGain = false, winMuteSync = true; } set_;
   std::atomic<int> winVol_{-1}; std::function<bool(float&)> volGet_; std::function<bool(float)> volSet_; std::thread volWatch_;
-  double outMaster() const;   // the master the engine gets: the fader plus the GAIN MODE trim (m_ held)
+  double outTrim() const;    // GAIN MODE's listening trim, dB (0 = none, -120 = silent)
+  void applyMaster(Runtime& rt) const;   // the master fader and the trim to the engine (m_ held)
   bool windowsSetsLevel() const;
   void pushSettings(Runtime& rt) const;
   json::Value settingsJson() const;
