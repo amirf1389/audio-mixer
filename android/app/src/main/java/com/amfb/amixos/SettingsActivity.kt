@@ -22,6 +22,7 @@ object Prefs {
     fun remote(c: Context): SharedPreferences = c.getSharedPreferences("remote", Context.MODE_PRIVATE)
     fun local(c: Context): SharedPreferences = c.getSharedPreferences("local", Context.MODE_PRIVATE)
     fun autoConnect(c: Context) = remote(c).getBoolean("autoConnect", false)
+    fun autoFind(c: Context) = remote(c).getBoolean("autoFind", true)               // AUTO-DETECT: search the Wi-Fi for the console by itself
     fun keepScreenOn(c: Context) = remote(c).getBoolean("keepScreenOn", true)
     fun showPan(c: Context) = remote(c).getBoolean("showPan", true)
     fun haptics(c: Context) = remote(c).getBoolean("haptics", true)
@@ -47,6 +48,7 @@ class SettingsActivity : AppCompatActivity() {
 
         section(getString(R.string.set_connection))
         toggle(r, "autoConnect", false, getString(R.string.set_auto_connect), getString(R.string.set_auto_connect_note))
+        toggle(r, "autoFind", true, getString(R.string.set_auto_find), getString(R.string.set_auto_find_note))
         number(r, "defaultPort", 8765, 1024, 65535, getString(R.string.set_port))
         val saved = r.getString("host", "").orEmpty()
         info(getString(R.string.set_saved_console), if (saved.isEmpty()) getString(R.string.set_none) else saved + (if (r.getString("token", "").isNullOrEmpty()) "" else "  · " + getString(R.string.set_paired)))

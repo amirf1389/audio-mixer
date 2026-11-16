@@ -41,6 +41,16 @@
     <string name="set_connection">CONNECTION</string>
     <string name="set_auto_connect">Connect when the remote opens</string>
     <string name="set_auto_connect_note">Uses the saved console and pairing.</string>
+    <string name="set_auto_find">Find the console on the Wi-Fi by itself</string>
+    <string name="set_auto_find_note">When the mixer opens and while it is not connected, it looks for the computer. A paired console connects at once, even at a new address; a new one asks for its PIN once.</string>
+    <string name="auto_searching">searching the Wi-Fi (%1$s.x)</string>
+    <string name="auto_none">no console answers yet · next search in %1$d s</string>
+    <string name="auto_found">found %1$s at %2$s</string>
+    <string name="auto_moved">%1$s moved to %2$s</string>
+    <string name="auto_new">%1$s is not paired yet: enter the PIN it shows</string>
+    <string name="auto_connected">connected · live sync</string>
+    <string name="auto_lost">link lost · %1$s</string>
+    <string name="link_timeline">LINK TIMELINE</string>
     <string name="set_port">Port</string>
     <string name="set_saved_console">Saved console</string>
     <string name="set_none">none</string>

@@ -1,5 +1,5 @@
 // amixos-daemon: the A mix OS engine as a background service with a local JSON API (for the React Native remote, scripts, other programs).
-//   GET  /api/status              name, version, engine state, blocks, xruns, uptime (no token)
+//   GET  /api/status              name, version, consoleId (stable, for phones that look for it), engine state, blocks, xruns, uptime (no token)
 //   GET  /api/devices             every device of every backend built in (no token)
 //   GET  /api/state               the console: strips (name, gain, pan, mute, solo), buses, master, monitor (no token)
 //   POST /api/control             {"op":..., ...} one change, X-Amix-Token required:

@@ -121,6 +121,19 @@ class ScreenshotTest {
         idle(1200); shot(a.window.decorView.rootView, "remote-live-sync")
         other.name(0, "CH 1"); other.gain(0, 0.0); other.name(1, "CH 2"); other.gain(1, 0.0); other.mute(2, false); other.name(3, "CH 4"); other.solo(3, false); other.master(0.0)
     }
+    @Test fun autoDetect() {   // AUTO-DETECT: the phone paired with the console at .50; the PC now has another address: the search follows it by its consoleId
+        val port = System.getProperty("amfx.daemon").orEmpty(); if (port.isEmpty()) return
+        val ctx = org.robolectric.RuntimeEnvironment.getApplication(); val tok = System.getenv("AMFX_TOKEN") ?: ""
+        val id = com.amfb.amixos.remote.DaemonClient.probe("127.0.0.1", port.toInt())!!.id
+        Prefs.remote(ctx).edit().clear().putString("port", port).putBoolean("autoFind", false).commit()
+        ctx.getSharedPreferences("consoles", 0).edit().putString("list", PairedConsoles.format(listOf(PairedConsoles.Console("127.0.0.50", port.toInt(), tok, "Studio PC", 1_763_200_000_000L, 1_763_200_000_000L, id)))).commit()
+        val a = Robolectric.buildActivity(RemoteActivity::class.java).setup().get()
+        Prefs.remote(ctx).edit().putBoolean("autoFind", true).commit(); a.autoFind("127.0.0.9"); idle(3500)
+        shot(a.window.decorView.rootView, "remote-auto-detect")
+        val moved = PairedConsoles.parse(ctx.getSharedPreferences("consoles", 0).getString("list", "[]"))
+        org.junit.Assert.assertEquals("the paired console follows the new address", "127.0.0.1", moved[0].host); org.junit.Assert.assertEquals(1, moved.size)
+        org.junit.Assert.assertEquals("127.0.0.1", Prefs.remote(ctx).getString("host", ""))
+    }
     @Test fun remote() {
         val port = System.getProperty("amfx.daemon").orEmpty()
         val ctx = org.robolectric.RuntimeEnvironment.getApplication()
