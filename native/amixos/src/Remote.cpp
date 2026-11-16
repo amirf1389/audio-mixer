@@ -41,7 +41,18 @@ void Remote::writeSeed() {
   base_ = consoleMix(); baseMaster_ = engine_->masterDb(); v_ = 0; posting_ = 0; stale_ = getting_ = false; token_.clear(); syncedChanges_ = 0; remotes_ = 0; touched_.clear();
   QVariantList l; for (const SyncStrip& s : base_) l << QVariantMap{{"name", s.name}, {"db", s.db}, {"pan", s.pan}, {"mute", s.mute}, {"solo", s.solo}};
   QFile f(QString::fromStdString(am::paths::file("remote-seed.json")));
-  if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) f.write(QJsonDocument::fromVariant(QVariantMap{{"strips", l}, {"master", QVariantMap{{"db", baseMaster_}}}}).toJson(QJsonDocument::Compact));
+  baseSet_ = consoleSettings();   // the service starts with the console's settings too
+  if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) f.write(QJsonDocument::fromVariant(QVariantMap{{"strips", l}, {"master", QVariantMap{{"db", baseMaster_}}}, {"settings", baseSet_}}).toJson(QJsonDocument::Compact));
+}
+QVariantMap Remote::consoleSettings() const {
+  return {{"width", engine_->width()}, {"outputBits", engine_->outputBits()}, {"dcBlock", engine_->dcBlock()}, {"analog", engine_->dspMode() == QLatin1String("analog")},
+          {"autoLevel", engine_->autoLevelOn()}, {"autoTarget", engine_->autoLevelTarget()}, {"autoMax", engine_->autoLevelMax()}, {"winGain", engine_->windowsGainMode()}, {"winMuteSync", engine_->windowsMuteSync()}};
+}
+void Remote::applySetting(const QString& k, const QVariant& v) {
+  if (k == "width") engine_->setWidth(v.toDouble()); else if (k == "outputBits") engine_->setOutputBits(v.toInt()); else if (k == "dcBlock") engine_->setDcBlock(v.toBool());
+  else if (k == "analog") engine_->setDspMode(v.toBool() ? QStringLiteral("analog") : QStringLiteral("digital"));
+  else if (k == "autoLevel") engine_->setAutoLevelOn(v.toBool()); else if (k == "autoTarget") engine_->setAutoLevelTarget(v.toDouble()); else if (k == "autoMax") engine_->setAutoLevelMax(v.toDouble());
+  else if (k == "winGain") engine_->setWindowsGainMode(v.toBool()); else if (k == "winMuteSync") engine_->setWindowsMuteSync(v.toBool());
 }
 void Remote::post(const QVariantMap& cmd) {
   QNetworkRequest q(QUrl(QStringLiteral("http://127.0.0.1:%1/api/control").arg(port()))); q.setHeader(QNetworkRequest::ContentTypeHeader, "application/json"); q.setRawHeader("X-Amix-Token", token_);
@@ -64,6 +75,10 @@ void Remote::syncTick() {
     if (x.solo != b.solo) { post({{"op", "solo"}, {"strip", i}, {"on", x.solo}}); b.solo = x.solo; }
     if (x.name != b.name) { post({{"op", "name"}, {"strip", i}, {"name", x.name}}); b.name = x.name; } }
   if (moved(engine_->masterDb(), baseMaster_)) { baseMaster_ = engine_->masterDb(); post({{"op", "master"}, {"db", baseMaster_}}); }
+  { const QVariantMap cs = consoleSettings();   // a setting changed on the console goes out (numbers compared with a small tolerance)
+    for (auto it = cs.constBegin(); it != cs.constEnd(); ++it) { const QVariant b = baseSet_.value(it.key());
+      const bool diff = it.value().typeId() == QMetaType::Double ? std::abs(it.value().toDouble() - b.toDouble()) > 0.005 : it.value() != b;
+      if (diff) { baseSet_[it.key()] = it.value(); post({{"op", "setting"}, {"key", it.key()}, {"value", it.value()}}); } } }
   // 2. what moved on the remotes comes in (only when nothing of ours is on the way, so an older answer never undoes a newer move here)
   if (getting_ || posting_ > 0) return;
   getting_ = true; stale_ = false; ++dGets_;
@@ -73,6 +88,10 @@ void Remote::syncTick() {
     const QVariantMap o = QJsonDocument::fromJson(r->readAll()).toVariant().toMap();
     if (o.contains("remotes") && o.value("remotes").toInt() != remotes_) { remotes_ = o.value("remotes").toInt(); emit synced(); }
     if (o.value("same").toBool() || !o.contains("strips")) return;
+    { const QVariantMap rs = o.value("settings").toMap();   // a setting changed on a remote lands on the console
+      for (auto it = baseSet_.begin(); it != baseSet_.end(); ++it) { if (!rs.contains(it.key())) continue; const QVariant r = rs.value(it.key());
+        const bool diff = it.value().typeId() == QMetaType::Double ? std::abs(r.toDouble() - it.value().toDouble()) > 0.005 : (it.value().typeId() == QMetaType::Bool ? r.toBool() != it.value().toBool() : r.toInt() != it.value().toInt());
+        if (diff) { it.value() = it.value().typeId() == QMetaType::Double ? QVariant(r.toDouble()) : it.value().typeId() == QMetaType::Bool ? QVariant(r.toBool()) : QVariant(r.toInt()); applySetting(it.key(), it.value()); } } }
     v_ = o.value("v").toULongLong(); const QVariantList l = o.value("strips").toList(); int n = 0;
     for (int i = 0; i < l.size() && i < base_.size(); ++i) { const QVariantMap m = l[i].toMap(); SyncStrip& b = base_[i];
       const double db = m.value("db").toDouble(), pan = m.value("pan").toDouble(); const bool mu = m.value("mute").toBool(), so = m.value("solo").toBool(); const QString nm = m.value("name").toString();

@@ -11,6 +11,8 @@
 //   null     one timed device that needs no hardware
 // Probing an ASIO driver loads it: a caller must not list while one of its ASIO streams is open (ASIO drivers serve one client).
 #include "audiomixer/driver_intel.hpp"
+#include <algorithm>
+#include <mutex>
 #ifdef _WIN32
 #include <endpointvolume.h>
 #include <cctype>
@@ -342,14 +344,18 @@ const GUID kIidEndpointVolume = {0x5CDF2C82, 0x841E, 0x4546, {0x97, 0x22, 0x0C, 
 // The default output's volume control, kept between calls (the interface thread asks for the mute state twice a second): re-made every
 // 10 s so a new default device is followed, never on every call. Interface thread only.
 IAudioEndpointVolume* makeRenderVolume();
+// several threads ask (the console's worker, the remote service's volume watcher): COM is set up on each calling thread, and the cached
+// endpoint is shared under a lock
+std::mutex g_volM;
 IAudioEndpointVolume* defaultRenderVolume() {
+  thread_local const bool com = SUCCEEDED(CoInitializeEx(nullptr, COINIT_MULTITHREADED)) || true; (void)com;   // once per thread (an STA thread keeps its own: harmless)
+  std::lock_guard<std::mutex> g(g_volM);
   static IAudioEndpointVolume* cached = nullptr; static ULONGLONG at = 0; const ULONGLONG now = GetTickCount64();
   if (!cached || now - at > 10000) { if (cached) cached->Release(); cached = makeRenderVolume(); at = now; }
   if (cached) { cached->AddRef(); }
   return cached;
 }
 IAudioEndpointVolume* makeRenderVolume() {
-  static bool com = SUCCEEDED(CoInitializeEx(nullptr, COINIT_MULTITHREADED)) || true; (void)com;   // once for this thread, not once per call
   IMMDeviceEnumerator* en = nullptr; IMMDevice* d = nullptr; IAudioEndpointVolume* v = nullptr;
   if (FAILED(CoCreateInstance(kClsidDeviceEnumerator, nullptr, CLSCTX_ALL, kIidDeviceEnumerator, reinterpret_cast<void**>(&en)))) return nullptr;
   if (SUCCEEDED(en->GetDefaultAudioEndpoint(eRender, eConsole, &d))) { d->Activate(kIidEndpointVolume, CLSCTX_ALL, nullptr, reinterpret_cast<void**>(&v)); d->Release(); }
@@ -358,8 +364,12 @@ IAudioEndpointVolume* makeRenderVolume() {
 }  // namespace
 bool systemMuteGet(bool& muted) { IAudioEndpointVolume* v = defaultRenderVolume(); if (!v) return false; BOOL m = FALSE; const bool ok = SUCCEEDED(v->GetMute(&m)); v->Release(); muted = m != FALSE; return ok; }
 bool systemMuteSet(bool muted) { IAudioEndpointVolume* v = defaultRenderVolume(); if (!v) return false; const HRESULT r = v->SetMute(muted ? TRUE : FALSE, nullptr); v->Release(); return SUCCEEDED(r); }
+bool systemVolumeGet(float& level) { IAudioEndpointVolume* v = defaultRenderVolume(); if (!v) return false; float f = 0; const bool ok = SUCCEEDED(v->GetMasterVolumeLevelScalar(&f)); v->Release(); level = f; return ok; }
+bool systemVolumeSet(float level) { IAudioEndpointVolume* v = defaultRenderVolume(); if (!v) return false; const HRESULT r = v->SetMasterVolumeLevelScalar(std::clamp(level, 0.0f, 1.0f), nullptr); v->Release(); return SUCCEEDED(r); }
 #else
 bool systemMuteGet(bool&) { return false; }
 bool systemMuteSet(bool) { return false; }
+bool systemVolumeGet(float&) { return false; }
+bool systemVolumeSet(float) { return false; }
 #endif
 }  // namespace am

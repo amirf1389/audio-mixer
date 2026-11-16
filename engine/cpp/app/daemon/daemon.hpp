@@ -18,7 +18,9 @@
 // Binds 127.0.0.1 by default. --allow-lan binds 0.0.0.0 for a phone on the same network: the token still protects control, but nothing is
 // encrypted on the wire; put the nginx TLS front (deploy/nginx) in front of it for anything beyond a trusted home / studio network.
 #pragma once
+#include <functional>
 #include <map>
+#include <thread>
 #include <memory>
 #include <atomic>
 #include <chrono>
@@ -64,6 +66,14 @@ class Daemon {
   // held for kHoldSeconds (its token is refused) so the phone does not come straight back. Revoking a pairing closes its links too.
   bool kick(int id); int kickToken(const std::string& tokenId, bool hold);
   static constexpr int kHoldSeconds = 120;
+  // CONSOLE SETTINGS over the remote (POST /api/control {"op":"setting","key":K,"value":V}), applied to the sound while the service runs
+  // it, reported in the state as "settings" (and kept in step with the console): width 0..2, outputBits 0 (float) / 16 / 24 (-1 auto =
+  // float here), dcBlock, analog (DSP MODE ANALOG on every channel), autoLevel / autoTarget (-30..-6 LUFS) / autoMax (0..24 dB), clipDb
+  // (-12..0), peakHoldMs (0..10000), winGain (GAIN MODE: the Windows volume trims the master), winMuteSync (the console's rule: fader at
+  // -inf mutes Windows), winVolume (0..100: the Windows output slider of this computer).
+  static double trimForLevel(double level01);   // GAIN MODE: 30*log10(level), 0 -> -120 (off); the console uses the same curve
+  void setVolumeBackend(std::function<bool(float&)> get, std::function<bool(float)> set) { volGet_ = std::move(get); volSet_ = std::move(set); }   // tests
+  void pollVolume();                            // reads the Windows slider once (the watcher does it twice a second)
   bool loadSeed(const std::string& file, std::string& err);   // {"strips":[{name,db,pan,mute,solo}],"master":{"db"}}
   json::Value meters() const;
   // SECURITY: which web pages may read the replies (only pages served from this computer), and which Host a request may name while the
@@ -88,6 +98,12 @@ class Daemon {
   struct Link { int id = 0; std::string tokenId, name, role, ip; long long since = 0; std::atomic<bool> kick{false}; };
   mutable std::mutex linksM_; std::map<int, std::shared_ptr<Link>> links_; int nextLink_ = 1; std::map<std::string, long long> held_;   // tokenId -> until (unix s)
   bool held(const std::string& tokenId) const;
+  struct Prefs { double width = 1.0, autoTarget = -16, autoMax = 12, clipDb = -0.1, peakHoldMs = 1500; int outputBits = 0; bool dcBlock = true, analog = false, autoLevel = false, winGain = false, winMuteSync = true; } set_;
+  std::atomic<int> winVol_{-1}; std::function<bool(float&)> volGet_; std::function<bool(float)> volSet_; std::thread volWatch_;
+  double outMaster() const;   // the master the engine gets: the fader plus the GAIN MODE trim (m_ held)
+  bool windowsSetsLevel() const;
+  void pushSettings(Runtime& rt) const;
+  json::Value settingsJson() const;
   bool authorised(const httpd::Request& r) const;
   Options opt_; mutable TokenStore tokens_; httpd::Server http_;
   bool noteRefused();   // a wrong token: counted and slowed down; true when there were too many in the last minute

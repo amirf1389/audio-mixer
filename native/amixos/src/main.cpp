@@ -397,6 +397,22 @@ int main(int argc, char* argv[]) {
       engine.setWindowsMuteSync(false); engine.setMaster(-60); if (sysMute) { std::fprintf(stderr, "amixos --smoke: sync off still muted the system sound\n"); return 81; }
       engine.setWindowsMuteSync(true); if (!sysMute) { std::fprintf(stderr, "amixos --smoke: switching sync on at -inf did not mute\n"); return 82; } engine.restoreSystemSound(); if (sysMute) { std::fprintf(stderr, "amixos --smoke: exit did not take the mute back\n"); return 83; }
       engine.setMaster(keep); engine.setSystemMuteBackend([](bool&) { return false; }, [](bool) { return false; }); engine.syncSystemSound(); }
+    { // WINDOWS VOLUME and GAIN MODE (a stand-in for the Windows slider): both ways, the trim curve, and never a double cut through Windows' own mixer
+      float winLevel = 0.5f; int sets = 0; const bool keepMode = engine.windowsGainMode(); const double keepMaster = engine.masterDb();
+      engine.setSystemVolumeBackend([&](float& f) { f = winLevel; return true; }, [&](float f) { winLevel = f; ++sets; return true; });
+      engine.setWindowsGainMode(false); engine.syncSystemVolume(); const bool offOk = engine.windowsVolume() == 50 && engine.windowsTrimDb() == 0.0;
+      engine.setWindowsGainMode(true); engine.setMaster(-6); const double t50 = engine.windowsTrimDb();
+      winLevel = 1.0f; engine.syncSystemVolume(); const double t100 = engine.windowsTrimDb();          // the keyboard's volume-up in Windows
+      engine.setWindowsVolume(25); const double t25 = engine.windowsTrimDb(); const bool wrote = sets == 1 && std::abs(winLevel - 0.25f) < 1e-6;   // the console's own fader moves Windows
+      winLevel = 0.0f; engine.syncSystemVolume(); const double t0 = engine.windowsTrimDb();
+      const bool fader = std::abs(engine.masterDb() + 6) < 1e-9;                                        // the master fader never moves for it
+      const bool curve = std::abs(Engine::trimForLevel(0.5) + 9.03) < 0.01 && std::abs(Engine::trimForLevel(0.1) + 30) < 1e-9 && Engine::trimForLevel(0) <= -119;
+      const bool shared = !engine.windowsSetsLevel();                                                   // the null device: not Windows' mixer, so the trim applies
+      std::printf("amixos --smoke: WINDOWS VOLUME gain mode trims 50%% %.1f, 100%% %.1f, 25%% %.1f, 0%% %.0f dB; console->Windows %d; master stays %d\n", t50, t100, t25, t0, wrote, fader);
+      engine.setSystemVolumeBackend([](float&) { return false; }, [](float) { return false; }); engine.syncSystemVolume(); const bool gone = engine.windowsVolume() == -1 && engine.windowsTrimDb() == 0.0;
+      engine.setWindowsGainMode(keepMode); engine.setMaster(keepMaster);
+      if (!(offOk && std::abs(t50 + 9.03) < 0.01 && t100 == 0.0 && std::abs(t25 + 18.06) < 0.01 && t0 <= -119 && wrote && fader && curve && shared && gone)) {
+        std::fprintf(stderr, "amixos --smoke: WINDOWS VOLUME failed (off %d, 50 %.2f, 100 %.2f, 25 %.2f, 0 %.0f, wrote %d, fader %d, curve %d, shared %d, gone %d)\n", offOk, t50, t100, t25, t0, wrote, fader, curve, shared, gone); return 288; } }
     { // the ten effects in the rack of any channel: listed, loaded into a slot, a knob moves, bypass, cleared; a late channel too
       { // 2 IN / 2 OUT at least on every driver: asking for none opens the first pair all the same (a device that reported 0 channels is not left silent)
         const double r0 = engine.sampleRate(); const int f0 = engine.blockFrames(); engine.stop();
@@ -764,6 +780,16 @@ int main(int argc, char* argv[]) {
         if (sw && qEnvironmentVariableIsSet("AMIX_SYNC_SHOT")) { http("/api/control", "{\"op\":\"gain\",\"strip\":1,\"db\":-16}"); wait(140); sw->grabWindow().save(qEnvironmentVariable("AMIX_SYNC_SHOT")); }
         engine.setGain(3, -21); QElapsedTimer t2; t2.start(); double out = 0; while (t2.elapsed() < 2000) { wait(40); out = http("/api/state", {})["strips"].toList().value(3).toMap()["db"].toDouble(); if (std::abs(out + 21) < 0.05) break; } const qint64 outMs = t2.elapsed();
         const bool ok = std::abs(seeded + 9) < 0.05 && std::abs(engine.stripAt(1)["db"].toDouble() + (qEnvironmentVariableIsSet("AMIX_SYNC_SHOT") ? 16 : 14)) < 0.05 && engine.stripAt(2)["mute"].toBool() && std::abs(out + 21) < 0.05 && lit && remotesSeen >= 1;
+        // SETTINGS SYNC: a remote changes the stereo width and GAIN MODE: the console follows; the console changes the width: the service follows
+        const double keepW = engine.width(); const bool keepG = engine.windowsGainMode(); bool setOk = false; qint64 setIn = -1, setOut = -1;
+        { http("/api/control", "{\"op\":\"setting\",\"key\":\"width\",\"value\":0.5}"); http("/api/control", "{\"op\":\"setting\",\"key\":\"winGain\",\"value\":" + QByteArray(keepG ? "false" : "true") + "}");
+          QElapsedTimer ts; ts.start(); while (ts.elapsed() < 3000 && !(std::abs(engine.width() - 0.5) < 1e-6 && engine.windowsGainMode() != keepG)) wait(20);
+          if (std::abs(engine.width() - 0.5) < 1e-6 && engine.windowsGainMode() != keepG) setIn = ts.elapsed();
+          engine.setWidth(1.25); ts.restart(); while (ts.elapsed() < 3000 && std::abs(http("/api/state", {})["settings"].toMap()["width"].toDouble() - 1.25) > 1e-6) wait(40);
+          if (std::abs(http("/api/state", {})["settings"].toMap()["width"].toDouble() - 1.25) < 1e-6) setOut = ts.elapsed();
+          setOk = setIn >= 0 && setOut >= 0; engine.setWidth(keepW); engine.setWindowsGainMode(keepG); wait(300); }
+        std::printf("amixos --smoke: SETTINGS SYNC remote->console %lld ms, console->remote %lld ms\n", static_cast<long long>(setIn), static_cast<long long>(setOut));
+        if (!setOk) { std::fprintf(stderr, "amixos --smoke: SETTINGS SYNC failed (width %.2f, gain mode %d)\n", engine.width(), engine.windowsGainMode()); remote.stop(); return 289; }
         // CONNECTED PHONES: a phone pairs with the PIN and links up: the NETWORK page lists it under its name; DISCONNECT drops it; FORGET revokes it
         int linkStep = 0; qint64 listedMs = -1, droppedMs = -1;
         { QNetworkRequest q(QUrl("http://127.0.0.1:8765/api/pair")); q.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");

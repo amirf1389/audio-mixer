@@ -74,6 +74,9 @@ class Remote : public QObject {
   struct SyncStrip { double db = 0, pan = 0; bool mute = false, solo = false; QString name; };
   static QString syncName(int i, const QString& n) { return n.isEmpty() ? QStringLiteral("CH %1").arg(i + 1) : n; }
   QVector<SyncStrip> consoleMix() const;   // the console's strips as the service names them (licensed channels only)
+  // SETTINGS SYNC: the console settings a remote may change (the service's "settings"), kept in step both ways like the faders
+  QVariantMap consoleSettings() const;                       // {width, outputBits, dcBlock, analog, autoLevel, autoTarget, autoMax, winGain, winMuteSync}
+  void applySetting(const QString& key, const QVariant& v);  // one setting from a remote onto the console
  signals:
   void synced();
   void pulseChanged();
@@ -86,6 +89,7 @@ class Remote : public QObject {
   Engine* engine_; QProcess proc_; Extension ext_{QStringLiteral("AmF X1 Network")}; QString status_ = "off";
   QString runTool(const QStringList& args, bool* ok) const; void restartIfRunning();
   QVariantList tokens_; QString tokenNote_; bool wifi_ = false;
+  QVariantMap baseSet_;   // the settings both sides last agreed on
   QVariantList links_; QString linkNote_; QTimer linkTimer_; bool linksGetting_ = false;
   void ensureToken(); QNetworkRequest api(const QString& path) const;
 };

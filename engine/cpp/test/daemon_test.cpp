@@ -3,6 +3,7 @@
 #include <fstream>
 #include <iterator>
 #include <cassert>
+#include <cmath>
 #include <chrono>
 #include <cstdio>
 #include <cstring>
@@ -176,6 +177,25 @@ int main() {
     CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/tokens/revoke", "{\"id\":\"" + qid + "\"}", auth, status, body) && status == 200 && Value::parse(body, ok)["closed"].asInt() == 1);
     bool closed = false; for (int i = 0; i < 60 && !closed; ++i) { if (!qws.read(t, op)) { closed = true; break; } closed = t.find("\"kicked\":true") != std::string::npos; } CHECK(closed); qws.close();
     mws.close(); bool none = false; for (int i = 0; i < 40 && !none; ++i) { std::this_thread::sleep_for(std::chrono::milliseconds(25)); none = d.links().size() == 0 && d.remotes() == 0; } CHECK(none); }
+  { // CONSOLE SETTINGS over the remote, and the WINDOWS VOLUME with GAIN MODE (a stand-in for the Windows slider)
+    const auto set = [&](const std::string& k, const std::string& v) { return am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"setting\",\"key\":\"" + k + "\",\"value\":" + v + "}", auth, status, body) ? status : -1; };
+    CHECK(set("width", "3") == 200 && d.state()["settings"]["width"].asNumber() == 2);                       // clamped to 0..2
+    CHECK(set("outputBits", "7") == 400 && set("outputBits", "24") == 200 && d.state()["settings"]["outputBits"].asInt() == 24);
+    CHECK(set("dcBlock", "false") == 200 && !d.state()["settings"]["dcBlock"].asBool());
+    CHECK(set("analog", "true") == 200 && set("autoLevel", "true") == 200 && set("autoTarget", "-40") == 200 && d.state()["settings"]["autoTarget"].asNumber() == -30);
+    CHECK(set("clipDb", "-3") == 200 && set("peakHoldMs", "99999") == 200 && d.state()["settings"]["peakHoldMs"].asNumber() == 10000);
+    CHECK(set("nonsense", "1") == 400);
+    CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"setting\",\"key\":\"width\",\"value\":1}", {}, status, body) && (status == 401 || status == 429));   // no token, no settings
+    float winLevel = 0.5f; d.setVolumeBackend([&](float& f) { f = winLevel; return true; }, [&](float f) { winLevel = f; return true; });
+    d.pollVolume(); CHECK(d.state()["settings"]["winVolume"].asInt() == 50 && d.state()["settings"]["winTrimDb"].asNumber() == 0);   // GAIN MODE off: no trim
+    CHECK(set("winGain", "true") == 200 && std::abs(d.state()["settings"]["winTrimDb"].asNumber() + 9.03) < 0.01);
+    CHECK(set("winVolume", "25") == 200 && std::abs(winLevel - 0.25f) < 1e-6 && std::abs(d.state()["settings"]["winTrimDb"].asNumber() + 18.06) < 0.01);   // a remote moves the Windows slider
+    const auto v0 = d.stateVersion(); winLevel = 1.0f; d.pollVolume();                                       // the keyboard's volume-up in Windows
+    CHECK(d.stateVersion() > v0 && d.state()["settings"]["winVolume"].asInt() == 100 && d.state()["settings"]["winTrimDb"].asNumber() == 0);
+    winLevel = 0.0f; d.pollVolume(); CHECK(d.state()["settings"]["winTrimDb"].asNumber() <= -119);
+    CHECK(std::abs(am::Daemon::trimForLevel(0.1) + 30) < 1e-9 && am::Daemon::trimForLevel(0) <= -119);
+    d.setVolumeBackend([](float&) { return false; }, [](float) { return false; }); CHECK(set("winVolume", "40") == 400);   // no Windows slider here: said so
+    CHECK(set("winGain", "false") == 200 && set("winMuteSync", "false") == 200 && !d.state()["settings"]["winMuteSync"].asBool()); }
   CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"stop\"}", auth, status, body) && status == 200);
   CHECK(!d.state()["running"].asBool());
   CHECK(am::httpd::Client::request("127.0.0.1", port, "GET", "/nothing", "", {}, status, body) && status == 404);
@@ -184,11 +204,12 @@ int main() {
     CHECK(S::localPeer(ip(127, 0, 0, 1)) && S::localPeer(ip(192, 168, 1, 20)) && S::localPeer(ip(10, 4, 5, 6)) && S::localPeer(ip(172, 16, 0, 9)) && S::localPeer(ip(172, 31, 255, 1)) && S::localPeer(ip(169, 254, 3, 3)));
     CHECK(!S::localPeer(ip(8, 8, 8, 8)) && !S::localPeer(ip(172, 32, 0, 1)) && !S::localPeer(ip(172, 15, 0, 1)) && !S::localPeer(ip(192, 169, 1, 1)) && !S::localPeer(ip(100, 64, 0, 1)) && !S::localPeer(ip(203, 0, 113, 7))); }
   { // SEED: the console's mixer, loaded when the service starts
-    const std::string sf = "daemon_test_seed.json"; { std::FILE* f = std::fopen(sf.c_str(), "wb"); std::fputs("{\"strips\":[{\"name\":\"Vocal\",\"db\":-4,\"pan\":0.25,\"mute\":false,\"solo\":true},{\"name\":\"Gtr\",\"db\":-12,\"mute\":true}],\"master\":{\"db\":-2}}", f); std::fclose(f); }
+    const std::string sf = "daemon_test_seed.json"; { std::FILE* f = std::fopen(sf.c_str(), "wb"); std::fputs("{\"settings\":{\"width\":1.5,\"winGain\":true,\"outputBits\":16},\"strips\":[{\"name\":\"Vocal\",\"db\":-4,\"pan\":0.25,\"mute\":false,\"solo\":true},{\"name\":\"Gtr\",\"db\":-12,\"mute\":true}],\"master\":{\"db\":-2}}", f); std::fclose(f); }
     am::Daemon::Options so = o; so.port = 0; so.seed = sf; so.tokenStore.clear(); am::Daemon sd(so); std::string e; CHECK(sd.start(e));
     const Value st = sd.state(); CHECK(st["strips"].at(0)["name"].asString() == "Vocal" && st["strips"].at(0)["db"].asNumber() == -4 && st["strips"].at(0)["solo"].asBool());
     CHECK(st["strips"].at(1)["mute"].asBool() && st["strips"].at(1)["db"].asNumber() == -12 && st["master"]["db"].asNumber() == -2);
+    CHECK(st["settings"]["width"].asNumber() == 1.5 && st["settings"]["winGain"].asBool() && st["settings"]["outputBits"].asInt() == 16);   // the console's settings came with the seed
     sd.stop(); std::remove(sf.c_str()); }
-  std::printf("daemon_test: live state push, seed, json, local policy, token gate, control/state, HTTP meters, WebSocket meters, connected phones (list, disconnect, hold, forget) OK on port %u\n", port);
+  std::printf("daemon_test: live state push, seed, json, local policy, token gate, control/state, HTTP meters, WebSocket meters, connected phones (list, disconnect, hold, forget), console settings, Windows volume / GAIN MODE OK on port %u\n", port);
   return 0;
 }

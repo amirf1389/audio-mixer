@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <chrono>
 #include <cstdlib>
 #include <iterator>
@@ -102,11 +103,15 @@ bool Daemon::start(std::string& err) {
   http_.setLocalOnly(opt_.localOnly);
   if (!http_.listen(opt_.bind, opt_.port, err)) return false;
   running_ = true; http_.start();
+  // WINDOWS VOLUME: this computer's output slider, watched twice a second (only where there is one: the first read must work)
+  if (!volGet_) volGet_ = [](float& f) { return systemVolumeGet(f); }; if (!volSet_) volSet_ = [](float f) { return systemVolumeSet(f); };
+  { float f = 0; if (volGet_(f)) { pollVolume(); volWatch_ = std::thread([this] { while (running_) { for (int i = 0; i < 10 && running_; ++i) std::this_thread::sleep_for(std::chrono::milliseconds(50)); if (running_) pollVolume(); } }); } }
   return true;
 }
 
 void Daemon::stop() {
   if (!running_.exchange(false)) return;
+  if (volWatch_.joinable()) volWatch_.join();
   http_.stop();
   std::lock_guard<std::mutex> g(m_);
   if (rt_) { rt_->setTap(nullptr); rec_.stop(); rt_->stop(); rt_.reset(); }
@@ -308,6 +313,28 @@ json::Value Daemon::devices() const {
   return a;
 }
 
+double Daemon::trimForLevel(double l) { return l <= 0.0005 ? -120.0 : std::max(-120.0, std::min(0.0, 30.0 * std::log10(l))); }
+bool Daemon::windowsSetsLevel() const { return rt_ && rt_->backendName() == "wasapi" && !rt_->exclusive() && (rt_->outDevice().empty() || rt_->outDevice() == "-"); }
+double Daemon::outMaster() const {   // the same rule as the console (Engine::outMasterDb): audible down to -59.9, off only with the fader off or Windows at 0
+  const int v = winVol_.load(); const double t = (set_.winGain && v >= 0 && !windowsSetsLevel()) ? trimForLevel(v / 100.0) : 0.0;
+  if (t == 0.0 || masterDb_ <= -60.0) return masterDb_; if (t <= -119.0) return -120.0; return std::max(-59.9, masterDb_ + t);
+}
+void Daemon::pushSettings(Runtime& rt) const {
+  rt.setWidth(set_.width); rt.setOutputBits(set_.outputBits < 0 ? 0 : set_.outputBits); rt.setDcBlock(set_.dcBlock); rt.setAnalogChannels(set_.analog);
+  rt.setAutoLevel(set_.autoLevel, set_.autoTarget, set_.autoMax); rt.setClipDb(set_.clipDb); rt.setPeakHoldMs(set_.peakHoldMs); rt.setMasterDb(outMaster());
+}
+json::Value Daemon::settingsJson() const {
+  json::Value s = json::Value::object(); s.set("width", set_.width); s.set("outputBits", set_.outputBits); s.set("dcBlock", set_.dcBlock); s.set("analog", set_.analog);
+  s.set("autoLevel", set_.autoLevel); s.set("autoTarget", set_.autoTarget); s.set("autoMax", set_.autoMax); s.set("clipDb", set_.clipDb); s.set("peakHoldMs", set_.peakHoldMs);
+  s.set("winGain", set_.winGain); s.set("winMuteSync", set_.winMuteSync); s.set("winVolume", winVol_.load());
+  const int v = winVol_.load(); s.set("winTrimDb", (set_.winGain && v >= 0 && !windowsSetsLevel()) ? trimForLevel(v / 100.0) : 0.0); s.set("winSetsLevel", windowsSetsLevel());
+  return s;
+}
+void Daemon::pollVolume() {
+  if (!volGet_) return; float f = 0; const int v = volGet_(f) ? static_cast<int>(std::lround(std::max(0.0f, std::min(1.0f, f)) * 100.0f)) : -1;
+  if (v == winVol_.load()) return;
+  std::lock_guard<std::mutex> g(m_); winVol_ = v; if (rt_) rt_->setMasterDb(outMaster()); ++version_;   // a move of the Windows slider reaches every remote
+}
 json::Value Daemon::state() const {
   std::lock_guard<std::mutex> g(m_);
   json::Value o = json::Value::object();
@@ -322,6 +349,7 @@ json::Value Daemon::state() const {
   for (int k = 0; k < kMaxBuses; ++k) { json::Value v = json::Value::object(); v.set("id", k); v.set("db", buses_[k].db); v.set("returnDb", buses_[k].returnDb); v.set("mute", buses_[k].mute); buses.push(v); }
   o.set("buses", buses);
   json::Value m = json::Value::object(); m.set("db", masterDb_); m.set("limiter", limiter_); m.set("ceilingDb", ceiling_); o.set("master", m);
+  o.set("settings", settingsJson());
   json::Value mo = json::Value::object(); mo.set("source", mon_.source); mo.set("db", mon_.db); mo.set("dim", mon_.dim); mo.set("mono", mon_.mono); mo.set("mute", mon_.mute); o.set("monitor", mo);
   o.set("backend", rt_ ? backend_ : ""); o.set("running", rt_ && rt_->running()); o.set("v", static_cast<double>(version_.load())); o.set("remotes", watchers_.load());
   return o;
@@ -365,6 +393,12 @@ bool Daemon::loadSeed(const std::string& file, std::string& err) {
     s.name = v["name"].asString(s.name).substr(0, 24); s.db = std::max(-120.0, std::min(10.0, v["db"].asNumber(s.db))); s.pan = std::max(-1.0, std::min(1.0, v["pan"].asNumber(s.pan)));
     s.mute = v["mute"].asBool(s.mute); s.solo = v["solo"].asBool(s.solo); }
   if (o["master"].isObject()) masterDb_ = std::max(-120.0, std::min(10.0, o["master"]["db"].asNumber(masterDb_)));
+  if (o["settings"].isObject()) { const json::Value& c = o["settings"];   // the console's settings: the service starts sounding like the console
+    set_.width = std::max(0.0, std::min(2.0, c["width"].asNumber(set_.width))); { const int b = c["outputBits"].asInt(set_.outputBits); if (b == 0 || b == 16 || b == 24 || b == -1) set_.outputBits = b; }
+    set_.dcBlock = c["dcBlock"].asBool(set_.dcBlock); set_.analog = c["analog"].asBool(set_.analog); set_.autoLevel = c["autoLevel"].asBool(set_.autoLevel);
+    set_.autoTarget = std::max(-30.0, std::min(-6.0, c["autoTarget"].asNumber(set_.autoTarget))); set_.autoMax = std::max(0.0, std::min(24.0, c["autoMax"].asNumber(set_.autoMax)));
+    set_.clipDb = std::max(-12.0, std::min(0.0, c["clipDb"].asNumber(set_.clipDb))); set_.peakHoldMs = std::max(0.0, std::min(10000.0, c["peakHoldMs"].asNumber(set_.peakHoldMs)));
+    set_.winGain = c["winGain"].asBool(set_.winGain); set_.winMuteSync = c["winMuteSync"].asBool(set_.winMuteSync); }
   ++version_; return true;
 }
 
@@ -395,8 +429,8 @@ json::Value Daemon::apply(const json::Value& cmd, std::string& err) {
     // replay the console onto the fresh runtime so that what the phone shows is what sounds
     for (int i = 0; i < opt_.strips; ++i) { const Strip& st = strips_[static_cast<std::size_t>(i)]; rt->setGainDb(i, st.db); rt->setPan(i, st.pan); rt->setMute(i, st.mute); rt->setSolo(i, st.solo); }
     for (int k = 0; k < kMaxBuses; ++k) { rt->setBusLevel(k, buses_[k].db); rt->setBusMute(k, buses_[k].mute); rt->setBusReturn(k, buses_[k].returnDb); }
-    rt->setMasterDb(masterDb_); rt->setLimiter(limiter_, ceiling_); rt->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute);
-    rt_ = std::move(rt); backend_ = rt_->backendName(); lastError_.clear(); rate_ = cfg.sampleRate;
+    pushSettings(*rt); rt->setLimiter(limiter_, ceiling_); rt->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute);
+    rt_ = std::move(rt); rt_->setMasterDb(outMaster()); backend_ = rt_->backendName(); lastError_.clear(); rate_ = cfg.sampleRate;   // the trim knows the new output
     ok.set("backend", backend_); ok.set("rate", cfg.sampleRate); ok.set("frames", static_cast<int>(cfg.frames)); return ok;
   }
   if (op == "stop") { if (rt_) { rt_->setTap(nullptr); rec_.stop(); rt_->stop(); rt_.reset(); } backend_.clear(); return ok; }
@@ -405,7 +439,25 @@ json::Value Daemon::apply(const json::Value& cmd, std::string& err) {
   if (op == "mute") { if (!strip(s)) return {}; const bool on = cmd["on"].asBool(); strips_[static_cast<std::size_t>(s)].mute = on; if (rt_) rt_->setMute(s, on); return ok; }
   if (op == "solo") { if (!strip(s)) return {}; const bool on = cmd["on"].asBool(); strips_[static_cast<std::size_t>(s)].solo = on; if (rt_) rt_->setSolo(s, on); return ok; }
   if (op == "name") { if (!strip(s)) return {}; std::string n = cmd["name"].asString(); if (n.size() > 24) n.resize(24); if (n.empty()) { err = "empty name"; return {}; } strips_[static_cast<std::size_t>(s)].name = n; return ok; }
-  if (op == "master") { masterDb_ = clampDb(cmd["db"].asNumber(0)); if (rt_) rt_->setMasterDb(masterDb_); return ok; }
+  if (op == "master") { masterDb_ = clampDb(cmd["db"].asNumber(0)); if (rt_) rt_->setMasterDb(outMaster()); return ok; }
+  if (op == "setting") {   // a console setting from a remote (see daemon.hpp); every value is checked here
+    const std::string k = cmd["key"].asString(); const json::Value& v = cmd["value"];
+    if (k == "width") { set_.width = std::max(0.0, std::min(2.0, v.asNumber(1))); if (rt_) rt_->setWidth(set_.width); }
+    else if (k == "outputBits") { const int b = v.asInt(0); if (b != 0 && b != 16 && b != 24 && b != -1) { err = "outputBits: 0, 16, 24 or -1"; return {}; } set_.outputBits = b; if (rt_) rt_->setOutputBits(b < 0 ? 0 : b); }
+    else if (k == "dcBlock") { set_.dcBlock = v.asBool(true); if (rt_) rt_->setDcBlock(set_.dcBlock); }
+    else if (k == "analog") { set_.analog = v.asBool(false); if (rt_) rt_->setAnalogChannels(set_.analog); }
+    else if (k == "autoLevel" || k == "autoTarget" || k == "autoMax") {
+      if (k == "autoLevel") set_.autoLevel = v.asBool(false); else if (k == "autoTarget") set_.autoTarget = std::max(-30.0, std::min(-6.0, v.asNumber(-16))); else set_.autoMax = std::max(0.0, std::min(24.0, v.asNumber(12)));
+      if (rt_) rt_->setAutoLevel(set_.autoLevel, set_.autoTarget, set_.autoMax); }
+    else if (k == "clipDb") { set_.clipDb = std::max(-12.0, std::min(0.0, v.asNumber(-0.1))); if (rt_) rt_->setClipDb(set_.clipDb); }
+    else if (k == "peakHoldMs") { set_.peakHoldMs = std::max(0.0, std::min(10000.0, v.asNumber(1500))); if (rt_) rt_->setPeakHoldMs(set_.peakHoldMs); }
+    else if (k == "winGain") { set_.winGain = v.asBool(false); if (rt_) rt_->setMasterDb(outMaster()); }
+    else if (k == "winMuteSync") set_.winMuteSync = v.asBool(true);   // the console applies this rule (it watches the master)
+    else if (k == "winVolume") { const int lv = std::max(0, std::min(100, v.asInt(-1)));
+      if (!volSet_ || v.asInt(-1) < 0 || !volSet_(static_cast<float>(lv / 100.0))) { err = "the Windows volume is not available on this computer"; return {}; }
+      winVol_ = lv; if (rt_) rt_->setMasterDb(outMaster()); }
+    else { err = "unknown setting " + k; return {}; }
+    return ok; }
   if (op == "limiter") { limiter_ = cmd["on"].asBool(true); ceiling_ = clampDb(cmd["ceilingDb"].asNumber(-0.5), -20, 0); if (rt_) rt_->setLimiter(limiter_, ceiling_); return ok; }
   if (op == "send") { if (!strip(s) || !bus(b)) return {}; if (!need()) return {}; rt_->setSend(s, b, clampDb(cmd["db"].asNumber(-120)), cmd["pre"].asBool(false)); return ok; }
   if (op == "busLevel") { if (!bus(b)) return {}; buses_[b].db = clampDb(cmd["db"].asNumber(0)); if (rt_) rt_->setBusLevel(b, buses_[b].db); return ok; }

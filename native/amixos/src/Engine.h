@@ -447,6 +447,22 @@ class Engine : public QObject {
   void restoreSystemSound();              // on exit: a mute the console set is taken back
   Q_INVOKABLE bool inputMutedBySystem() const;   // over 2 s of exact silence from the system on the input (WASAPI): muted or blocked by privacy
   Q_SIGNAL void systemSoundChanged();
+  // WINDOWS VOLUME: the Windows output slider (and the keyboard's volume keys) as a level on the console, both ways.
+  //   windowsVolume  0..100 (-1: not available here); setting it moves the Windows slider
+  //   GAIN MODE      the Windows level becomes a trim after the MASTER (the fader stays where it is): 100 = 0 dB, 50 = -9 dB, 25 = -18 dB,
+  //                  10 = -30 dB, 0 = off. Where Windows itself already turns this output down (WASAPI shared on the default output) the trim
+  //                  stays at 0 dB so the level is not cut twice; windowsTrimNote says why.
+  Q_PROPERTY(int windowsVolume READ windowsVolume WRITE setWindowsVolume NOTIFY systemSoundChanged)
+  Q_PROPERTY(bool windowsGainMode READ windowsGainMode WRITE setWindowsGainMode NOTIFY systemSoundChanged)
+  Q_PROPERTY(double windowsTrimDb READ windowsTrimDb NOTIFY systemSoundChanged)
+  Q_PROPERTY(QString windowsTrimNote READ windowsTrimNote NOTIFY systemSoundChanged)
+  int windowsVolume() const { return winVol_; } void setWindowsVolume(int v);
+  bool windowsGainMode() const { return winGain_; } void setWindowsGainMode(bool on);
+  double windowsTrimDb() const; QString windowsTrimNote() const;
+  static double trimForLevel(double level01);   // the GAIN MODE curve: 30*log10(level), 0 -> -120 (off)
+  bool windowsSetsLevel() const;                // this output goes through Windows' own mixer and volume (WASAPI shared, default output)
+  void setSystemVolumeBackend(std::function<bool(float&)> get, std::function<bool(float)> set) { volGet_ = std::move(get); volSet_ = std::move(set); volSync_ = true; }   // tests: synchronous
+  void syncSystemVolume();                      // reads the Windows slider (twice a second, and after a change); applies the trim
   Q_INVOKABLE void setColor(int strip, int color);           // 0..7 (Theme.stripColors)
   int selectedStrip() const { return selected_; }
   void setSelectedStrip(int i) { if (i < 0 || i >= kStrips || i == selected_) return; selected_ = i; emit selectedStripChanged(); }
@@ -664,6 +680,7 @@ class Engine : public QObject {
   std::thread svcThread_; std::mutex svcM_; std::condition_variable svcCv_; std::deque<std::function<void()>> svcQ_; bool svcStop_ = false;
   bool sysAsync_ = true, sysBusy_ = false, sysAgain_ = false, fpBusy_ = false;
   double vstRate_ = 0;   // the sample rate the rack plug-ins were last made for (reloadAllVst)
+  int winVol_ = -1; bool winGain_ = false, volBusy_ = false, volSync_ = false; std::function<bool(float&)> volGet_; std::function<bool(float)> volSet_; double outMasterDb() const; void pushMasterLevel();
   bool winSync_ = true, winMuted_ = false, winAvail_ = false, weMuted_ = false, winBefore_ = false; std::function<bool(bool&)> sysGet_; std::function<bool(bool)> sysSet_; QTimer sysTimer_;
   am::MasterChain master_; am::MasterChain::Params mp_; QString masterPreset_; void pushMaster();
   int partner(int i) const { return (i ^ 1) < kStrips ? (i ^ 1) : -1; }

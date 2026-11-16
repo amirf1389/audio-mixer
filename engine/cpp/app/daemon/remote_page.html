@@ -128,6 +128,22 @@ kbd{font:11px ui-monospace,monospace;border:1px solid var(--line);border-radius:
 <div class="card"><h2>CONSOLE</h2><div class="kv" id="sKv"></div></div>
 <div class="card"><h2>THIS CONNECTION</h2><div class="kv" id="cKv"></div></div></div></section>
 <section id="set" class="page"><div class="grid">
+<div class="card"><h2>CONSOLE SOUND<small style="display:block;font-weight:400;letter-spacing:0;color:var(--dim)">applies to the computer, as on its own SETTINGS page</small></h2>
+<div class="row"><span>Stereo width<small>0 mono · 100% as mixed · 200% wide</small></span><span style="flex:1;max-width:55%;display:flex;gap:8px;align-items:center"><input id="cWidth" class="h" type="range" min="0" max="200" step="5"><b id="cWidthV" style="min-width:48px;text-align:right">—</b></span></div>
+<div class="row"><span>DSP MODE<small>ANALOG: console-style colour on every channel</small></span><span class="seg" id="cDsp"></span></div>
+<div class="row"><span>Output word length<small>16 / 24 add dither; FLOAT sends it untouched</small></span><span class="seg" id="cBits"></span></div>
+<div class="row"><span>DC blocker<small>removes a DC offset before the output</small></span><button id="cDc"></button></div>
+<div class="row"><span>AUTO LEVEL<small>keeps the master near a loudness target</small></span><button id="cAuto"></button></div>
+<div class="row"><span>Target<small>LUFS</small></span><span class="seg" id="cAutoT"></span></div>
+<div class="row"><span>Lift at most</span><span class="seg" id="cAutoM"></span></div>
+<div class="row"><span>Clip lamp at<small>the meters' clip point</small></span><span class="seg" id="cClip"></span></div>
+<div class="row"><span>Meter peak hold<small>on the console's meters</small></span><span class="seg" id="cHold"></span></div></div>
+<div class="card"><h2>WINDOWS<small style="display:block;font-weight:400;letter-spacing:0;color:var(--dim)">the computer's own output volume</small></h2>
+<div class="row" id="cWinRow"><span>Windows volume<small>moves the Windows slider; its volume keys move this</small></span><span style="flex:1;max-width:55%;display:flex;gap:8px;align-items:center"><input id="cWin" class="h" type="range" min="0" max="100" step="1"><b id="cWinV" style="min-width:48px;text-align:right">—</b></span></div>
+<div class="row"><span>GAIN MODE<small>the Windows volume is an extra gain after the master (the fader stays put): 100% = 0 dB, 50% = −9 dB, 0% = off</small></span><button id="cGain"></button></div>
+<div class="row"><span>Trim now</span><b id="cTrim">—</b></div>
+<p class="note" id="cTrimN"></p>
+<div class="row"><span>Fader at −∞ mutes Windows<small>no sound from any program with the master at the bottom</small></span><button id="cWinMute"></button></div></div>
 <div class="card"><h2>MIXER</h2>
 <div class="row"><span>Strips per page</span><span class="seg" id="oPer"></span></div>
 <div class="row"><span>Fader size</span><span class="seg" id="oFh"></span></div>
@@ -228,7 +244,21 @@ function monitor(){if(!state||!state.monitor)return;const m=state.monitor,sel=$(
  const sendLim=()=>send("lim",{op:"limiter",on:M.limiter,ceilingDb:M.ceilingDb});lo.onclick=()=>{buzz();M.limiter=!M.limiter;lo.classList.toggle("on",M.limiter);lo.textContent=M.limiter?"ON":"OFF";sendLim()};
  if(free(ce)){ce.value=Math.round((M.ceilingDb??-.5)*10);$("#lCeT").textContent=(M.ceilingDb??-.5).toFixed(1)+" dBTP"}ce.oninput=()=>{M.ceilingDb=ce.value/10;$("#lCeT").textContent=M.ceilingDb.toFixed(1)+" dBTP";sendLim()};ce.onpointerdown=()=>{drag=ce};
  hslider("#mMa","#mMaT",M.db,v=>{M.db=v;send("master",{op:"master",db:v});const e=els.find(x=>x.i<0);if(e){e.f.value=Math.round(dbToPos(v)*1000);e.d.textContent=fmt(v)}})}
-function panels(){if(tab==="bus")buses();if(tab==="mon")monitor();if(tab==="ch")channel();if(tab==="grp")drawGroups()}
+// ---- CONSOLE SOUND and WINDOWS: the console's settings from the live state; a change goes to the computer at once (op "setting")
+function setting(key,value){buzz();return api("/api/control",{op:"setting",key,value}).catch(e=>setSt(e.message,true))}
+function segOf(id,list,cur,key,fmt){const h=$(id);if(h.dataset.cur===String(cur))return;h.dataset.cur=String(cur);h.innerHTML="";for(const v of list){const b=document.createElement("button");b.textContent=fmt?fmt(v):String(v);b.className=v===cur?"on acc":"";b.onclick=()=>{setting(key,v);h.dataset.cur=""}; h.appendChild(b)}}
+function onOff(id,on,key){const b=$(id);b.className="acc"+(on?" on":"");b.textContent=on?"ON":"OFF";b.onclick=()=>setting(key,!on)}
+function consoleSettings(){const S=state&&state.settings;if(!S)return;
+ const w=$("#cWidth");if(free(w)){w.value=Math.round(S.width*100);$("#cWidthV").textContent=Math.round(S.width*100)+"%"}w.oninput=()=>{$("#cWidthV").textContent=w.value+"%"};w.onchange=()=>setting("width",w.value/100);w.onpointerdown=()=>{drag=w};
+ segOf("#cDsp",[false,true],S.analog,"analog",v=>v?"ANALOG":"DIGITAL");segOf("#cBits",[0,16,24],S.outputBits<0?0:S.outputBits,"outputBits",v=>v?v+"-BIT":"FLOAT");
+ onOff("#cDc",S.dcBlock,"dcBlock");onOff("#cAuto",S.autoLevel,"autoLevel");segOf("#cAutoT",[-23,-18,-16,-14],Math.round(S.autoTarget),"autoTarget");segOf("#cAutoM",[6,12,18],Math.round(S.autoMax),"autoMax",v=>"+"+v+" dB");
+ segOf("#cClip",[-3,-1,-0.1,0],Math.round(S.clipDb*10)/10,"clipDb",v=>v+" dB");segOf("#cHold",[0,1500,3000,10000],Math.round(S.peakHoldMs),"peakHoldMs",v=>v?v/1000+" s":"OFF");
+ const has=S.winVolume>=0;$("#cWinRow").style.display=has?"":"none";const wv=$("#cWin");if(has&&free(wv)){wv.value=S.winVolume;$("#cWinV").textContent=S.winVolume+"%"}
+ wv.oninput=()=>{$("#cWinV").textContent=wv.value+"%"};wv.onchange=()=>setting("winVolume",+wv.value);wv.onpointerdown=()=>{drag=wv};
+ onOff("#cGain",S.winGain,"winGain");onOff("#cWinMute",S.winMuteSync,"winMuteSync");
+ $("#cTrim").textContent=!S.winGain?"—":S.winTrimDb<=-119?"OFF":S.winTrimDb===0?"0 dB":S.winTrimDb.toFixed(1)+" dB";
+ $("#cTrimN").textContent=!has?"This computer has no Windows volume the console can reach.":S.winGain&&S.winSetsLevel?"The console plays through Windows' own mixer here, which already sets the level with this slider: no extra trim (no double cut).":""}
+function panels(){consoleSettings();if(tab==="bus")buses();if(tab==="mon")monitor();if(tab==="ch")channel();if(tab==="grp")drawGroups()}
 // ---- RECORD and STATUS: the console's status, read every two seconds while one of these pages is open
 const base=f=>String(f||"").split(/[\\/]/).pop();   // the file name only: a remote does not need the computer's folders
 const hms=s=>{s=Math.floor(s||0);return [s/3600|0,(s/60|0)%60,s%60].map(x=>String(x).padStart(2,"0")).join(":")};
