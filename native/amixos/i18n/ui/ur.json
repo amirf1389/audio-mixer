@@ -1610,7 +1610,6 @@
 "Channels marked here are not changed when a scene is recalled (the lead vocal stays where you set it).": "یہاں نشان زدہ چینلز منظر دوبارہ بلائے جانے پر تبدیل نہیں ہوتے (اہم آواز وہاں ہی رہتی ہے جہاں آپ نے اسے مقرر کیا ہے)۔",
 "HOME": "ہوم",
 "MIXER": "مکسر",
-"● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV files, one per source, named by time.": "● مکسر پر REC ماسٹر اور ہر مسلح سٹرپ (پری-فیڈر، ٹرم/ڈی ایس پی/انسیرٹس کے بعد) کو WAV فائلوں میں لکھتا ہے، ہر ماخذ کے لیے ایک، جن کے نام وقت کے مطابق رکھے جاتے ہیں۔",
 "24-bit PCM": "24-بٹ پی سی ایم",
 "32-bit PCM": "32-بٹ پی سی ایم",
 "64-bit float": "64-بٹ فلوٹ",
@@ -2133,5 +2132,6 @@
 "The microphone (the default capture device) is the input.": "مائیکروفون (ڈیفالٹ کیپچر ڈیوائس) ان پٹ ہے۔",
 "FLAC 24-bit (lossless)": "FLAC 24-بٹ (بغیر نقصان کے)",
 "HI-RES AUDIO": "اعلیٰ معیار کی آواز",
-"resampling · FLAC · RF64": "دوبارہ نمونہ بندی · فلیک · آر ایف۶۴"
+"resampling · FLAC · RF64": "دوبارہ نمونہ بندی · فلیک · آر ایف۶۴",
+"● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV or FLAC files, one per source, named by time.": "● مکسر پر REC ماسٹر اور ہر مسلح سٹرپ (پری-فیڈر، ٹرم/ڈی ایس پی/انسیرٹس کے بعد) کو WAV یا FLAC فائلوں میں لکھتا ہے، ہر ماخذ کے لیے ایک، جن کے نام وقت کے مطابق رکھے جاتے ہیں۔"
 }

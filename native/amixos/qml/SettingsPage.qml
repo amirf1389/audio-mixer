@@ -48,7 +48,7 @@ Flickable {
         Panel {
             Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop
             title: i18n.t("RECORDING", i18n.lang)
-            subtitle: i18n.t("● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV files, one per source, named by time.", i18n.lang)
+            subtitle: i18n.t("● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV or FLAC files, one per source, named by time.", i18n.lang)
             Opt { label: i18n.t("Folder", i18n.lang); Field { Layout.fillWidth: true; text: engine.recordFolder; font.family: Theme.mono; font.pixelSize: 9; implicitHeight: 26; onEditingFinished: engine.recordFolder = text } }
             Opt { label: i18n.t("Record the master", i18n.lang); hint: i18n.t("Off = only the armed strips", i18n.lang); Toggle { on: engine.recordMaster; onToggled: function (v) { engine.recordMaster = v } } }
             Opt { label: i18n.t("Output word length", i18n.lang); Choice { objectName: "outputWordChoice"; options: [{t: "32-bit integer first", v: true}, {t: "32-bit float first", v: false}]; value: engine.preferInt32; onPicked: function (v) { engine.preferInt32 = v } } }

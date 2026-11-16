@@ -1477,7 +1477,6 @@
 "MIC • Guitar Amp (SM57 style)": "MIC • Amplificatore per chitarra (tipo SM57)",
 "MIC • Acoustic Guitar": "MIC • Chitarra acustica",
 "Channels marked here are not changed when a scene is recalled (the lead vocal stays where you set it).": "I canali qui contrassegnati non subiscono modifiche quando si richiama una scena (la voce solista rimane nella posizione in cui l'hai impostata).",
-"● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV files, one per source, named by time.": "● Il pulsante REC sul MIXER registra il master e ogni traccia attivata (pre-fader, dopo trim / DSP / inserti) in file WAV, uno per ogni sorgente, denominati in base al tempo.",
 "64-bit float": "Float a 64 bit",
 "FLOAT (none)": "FLOAT (nessuno)",
 "3-BAND": "3 BANDE",
@@ -2054,5 +2053,6 @@
 "The microphone (the default capture device) is the input.": "Il microfono (il dispositivo di acquisizione predefinito) è l'ingresso.",
 "FLAC 24-bit (lossless)": "FLAC a 24 bit (senza perdita di dati)",
 "HI-RES AUDIO": "AUDIO AD ALTA RISOLUZIONE",
-"resampling · FLAC · RF64": "ricampionamento · FLAC · RF64"
+"resampling · FLAC · RF64": "ricampionamento · FLAC · RF64",
+"● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV or FLAC files, one per source, named by time.": "● Il pulsante REC sul MIXER registra il master e ogni traccia attivata (pre-fader, dopo trim / DSP / inserti) in file WAV o FLAC, uno per ogni sorgente, denominati in base all'ora."
 }

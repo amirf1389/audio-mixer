@@ -2154,7 +2154,7 @@
 "○ BYPASSED",
 "● ACTIVE",
 "● REC",
-"● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV files, one per source, named by time.",
+"● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV or FLAC files, one per source, named by time.",
 "◭ 10-BAND PROGRAM BUS EQ & DIAMOND RTA",
 "★ GOLDEN EQ (AMIX BY AMFB TUNED)",
 "⚙ SETTINGS",

@@ -1518,7 +1518,6 @@
 "MIC • Acoustic Guitar": "MIC • Gitar Akustik",
 "Channels marked here are not changed when a scene is recalled (the lead vocal stays where you set it).": "Saluran yang ditandakan di sini tidak berubah apabila satu babak dipanggil semula (vokal utama kekal di tempat anda menetapkannya).",
 "MIXER": "MIKSER",
-"● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV files, one per source, named by time.": "● REC pada MIXER menulis master dan setiap jalur yang diaktifkan (sebelum fader, selepas trim / DSP / selit masuk) ke dalam fail WAV, satu bagi setiap sumber, dinamakan mengikut masa.",
 "64-bit float": "Apung titik 64-bit",
 "FLOAT (none)": "FLOAT (tiada)",
 "DUAL LISTEN": "DENGAR DUAL",
@@ -2056,5 +2055,6 @@
 "The microphone (the default capture device) is the input.": "Mikrofon (peranti tangkapan lalai) adalah input.",
 "FLAC 24-bit (lossless)": "FLAC 24-bit (tanpa kehilangan kualiti)",
 "HI-RES AUDIO": "AUDIO HI-RES",
-"resampling · FLAC · RF64": "pengesampelan semula · FLAC · RF64"
+"resampling · FLAC · RF64": "pengesampelan semula · FLAC · RF64",
+"● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV or FLAC files, one per source, named by time.": "● REC pada MIXER menulis master dan setiap jalur yang diaktifkan (pre-fader, selepas trim / DSP / insert) ke dalam fail WAV atau FLAC, satu bagi setiap sumber, dinamakan mengikut masa."
 }

@@ -1504,7 +1504,6 @@
 "MIC • Acoustic Guitar": "MIC • الغيتار الأكوستيكي",
 "Channels marked here are not changed when a scene is recalled (the lead vocal stays where you set it).": "لا تتغير القنوات المحددة هنا عند استدعاء المشهد (يظل الصوت الرئيسي في المكان الذي حددته).",
 "HOME": "الصفحة الرئيسية",
-"● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV files, one per source, named by time.": "● تقوم وظيفة REC في جهاز المزج (MIXER) بتسجيل الإشارة الرئيسية وكل مسار جاهز للتسجيل (قبل الفادر، وبعد الترييم / DSP / الإدخالات) في ملفات WAV، بواقع ملف واحد لكل مصدر، ويتم تسمية الملفات حسب الوقت.",
 "24-bit PCM": "PCM 24 بت",
 "32-bit PCM": "PCM 32 بت",
 "64-bit float": "رقم عائم 64 بت",
@@ -2064,5 +2063,6 @@
 "Needs Windows 10 version 2004 or later with the sound card on WASAPI.": "يتطلب نظام التشغيل Windows 10 الإصدار 2004 أو أحدث مع ضبط بطاقة الصوت على WASAPI.",
 "The microphone (the default capture device) is the input.": "الميكروفون (جهاز التسجيل الافتراضي) هو مصدر الإدخال.",
 "FLAC 24-bit (lossless)": "FLAC 24 بت (بدون فقدان للجودة)",
-"HI-RES AUDIO": "صوت عالي الدقة"
+"HI-RES AUDIO": "صوت عالي الدقة",
+"● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV or FLAC files, one per source, named by time.": "● تقوم وظيفة REC في جهاز المزج (MIXER) بتسجيل الإشارة الرئيسية وكل مسار جاهز للتسجيل (قبل الفادر، وبعد الترييم / DSP / الإدخالات) في ملفات WAV أو FLAC، بواقع ملف واحد لكل مصدر، ويتم تسمية الملفات حسب الوقت."
 }

@@ -1502,7 +1502,6 @@
 "MIC • Acoustic Guitar": "MIC • Guitarra acústica",
 "Channels marked here are not changed when a scene is recalled (the lead vocal stays where you set it).": "Los canales marcados aquí no se modifican al recuperar una escena (la voz principal se mantiene en la posición en la que la hayas establecido).",
 "HOME": "INICIO",
-"● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV files, one per source, named by time.": "● El botón REC del MIXER graba la señal maestra y cada canal activado (pre-fader, después del trim / DSP / insertos) en archivos WAV, uno por fuente, nombrados según la hora.",
 "FLOAT (none)": "FLOAT (ninguno)",
 "3-BAND": "3 BANDAS",
 "Linkwitz-Riley, Butterworth or Bessel, 6 to 48 dB per octave": "Linkwitz-Riley, Butterworth o Bessel, de 6 a 48 dB por octava",
@@ -2074,5 +2073,6 @@
 "The microphone (the default capture device) is the input.": "El micrófono (el dispositivo de captura predeterminado) es la entrada.",
 "FLAC 24-bit (lossless)": "FLAC de 24 bits (sin pérdida)",
 "HI-RES AUDIO": "AUDIO DE ALTA RESOLUCIÓN",
-"resampling · FLAC · RF64": "remuestreo · FLAC · RF64"
+"resampling · FLAC · RF64": "remuestreo · FLAC · RF64",
+"● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV or FLAC files, one per source, named by time.": "● El botón «REC» del MIXER graba la señal maestra y cada canal activado (pre-fader, después del trim / DSP / insertos) en archivos WAV o FLAC, uno por fuente, con nombres basados en el tiempo."
 }

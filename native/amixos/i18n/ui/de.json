@@ -1460,7 +1460,6 @@
 "MIC • Guitar Amp (SM57 style)": "Mikrofon • Gitarrenverstärker (Typ SM57)",
 "MIC • Acoustic Guitar": "MIC • Akustikgitarre",
 "Channels marked here are not changed when a scene is recalled (the lead vocal stays where you set it).": "Die hier markierten Kanäle werden beim Aufrufen einer Szene nicht verändert (die Lead-Stimme bleibt dort, wo Sie sie eingestellt haben).",
-"● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV files, one per source, named by time.": "● Die REC-Taste am MIXER zeichnet den Master und jeden aktivierten Kanal (vor dem Fader, nach Trim / DSP / Inserts) in WAV-Dateien auf, jeweils eine pro Quelle, benannt nach der Aufnahmezeit.",
 "FLOAT (none)": "FLOAT (keine)",
 "Linkwitz-Riley, Butterworth or Bessel, 6 to 48 dB per octave": "Linkwitz-Riley, Butterworth oder Bessel, 6 bis 48 dB pro Oktave",
 "CONSOLE: ": "KONSOLE: ",
@@ -2046,5 +2045,6 @@
 "The microphone (the default capture device) is the input.": "Das Mikrofon (das standardmäßige Aufnahmegerät) dient als Eingang.",
 "FLAC 24-bit (lossless)": "FLAC 24 Bit (verlustfrei)",
 "HI-RES AUDIO": "HI-RES-AUDIO",
-"resampling · FLAC · RF64": "Resampling · FLAC · RF64"
+"resampling · FLAC · RF64": "Resampling · FLAC · RF64",
+"● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV or FLAC files, one per source, named by time.": "● Die Taste „REC“ am MIXER zeichnet den Master und jeden aktivierten Kanal (vor dem Fader, nach Trim / DSP / Inserts) als WAV- oder FLAC-Datei auf, wobei pro Quelle eine Datei erstellt wird, deren Name sich nach der Zeit richtet."
 }

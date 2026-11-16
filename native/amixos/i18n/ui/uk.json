@@ -1479,7 +1479,6 @@
 "Channels marked here are not changed when a scene is recalled (the lead vocal stays where you set it).": "Канали, позначені тут, не змінюються під час завантаження сцени (головний вокал залишається там, де ви його встановили).",
 "HOME": "ГОЛОВНА",
 "MIXER": "МІКШЕР",
-"● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV files, one per source, named by time.": "● Кнопка REC на мікшері записує сигнал з головного виходу та кожного підготовленого до запису каналу (до фейдера, після регулювання рівня / DSP / вставних ефектів) у файли WAV — по одному файлу на кожне джерело, імена яких формуються за часом запису.",
 "24-bit PCM": "24-бітний PCM",
 "32-bit PCM": "32-бітний PCM",
 "64-bit float": "64-бітне число з плаваючою комою",
@@ -2061,5 +2060,6 @@
 "The microphone (the default capture device) is the input.": "Вхідним пристроєм є мікрофон (пристрій запису за замовчуванням).",
 "FLAC 24-bit (lossless)": "FLAC 24-бітний (без втрат)",
 "HI-RES AUDIO": "АУДІО ВИСОКОЇ ЯКОСТІ",
-"resampling · FLAC · RF64": "передискретизація · FLAC · RF64"
+"resampling · FLAC · RF64": "передискретизація · FLAC · RF64",
+"● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV or FLAC files, one per source, named by time.": "● Кнопка REC на мікшері записує сигнал мастер-каналу та кожного активованого каналу (до фейдера, після регулювання рівня / DSP / вставних ефектів) у файли формату WAV або FLAC — по одному файлу на кожне джерело, імена яких формуються за часом запису."
 }
