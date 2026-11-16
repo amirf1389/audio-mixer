@@ -1505,7 +1505,6 @@
 "MIC • Acoustic Guitar": "MIC • 어쿠스틱 기타",
 "Channels marked here are not changed when a scene is recalled (the lead vocal stays where you set it).": "여기에 표시된 채널은 장면을 불러올 때 변경되지 않습니다(리드 보컬은 설정한 위치에 그대로 유지됩니다).",
 "HOME": "홈",
-"● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV files, one per source, named by time.": "● 믹서의 REC 버튼을 누르면 마스터 및 모든 활성화된 스트립(프리페이더, 트림/DSP/인서트 후)의 신호가 WAV 파일로 기록되며, 소스마다 하나의 파일이 생성되고 파일명은 기록된 시간 순으로 지정됩니다.",
 "64-bit float": "64비트 부동소수점",
 "FLOAT (none)": "FLOAT (없음)",
 "DUAL LISTEN": "듀얼 리슨",
@@ -2095,5 +2094,6 @@
 "The microphone (the default capture device) is the input.": "마이크(기본 캡처 장치)가 입력 장치입니다.",
 "FLAC 24-bit (lossless)": "FLAC 24비트 (무손실)",
 "HI-RES AUDIO": "고해상도 오디오",
-"resampling · FLAC · RF64": "리샘플링 · FLAC · RF64"
+"resampling · FLAC · RF64": "리샘플링 · FLAC · RF64",
+"● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV or FLAC files, one per source, named by time.": "● 믹서의 REC 버튼은 마스터 및 모든 활성화된 스트립(프리페이더, 트림/DSP/인서트 후)의 신호를 WAV 또는 FLAC 파일로 기록하며, 소스당 하나의 파일이 생성되고 파일명은 시간 순으로 지정됩니다."
 }

@@ -1469,7 +1469,6 @@
 "MIC • Acoustic Guitar": "MIC • Gitar Akustik",
 "Channels marked here are not changed when a scene is recalled (the lead vocal stays where you set it).": "Saluran yang ditandai di sini tidak akan berubah saat sebuah adegan dipanggil kembali (vokal utama tetap berada di posisi yang Anda tentukan).",
 "HOME": "BERANDA",
-"● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV files, one per source, named by time.": "● Tombol REC pada MIXER merekam sinyal master dan setiap saluran yang diaktifkan (pra-fader, setelah trim / DSP / insert) ke dalam berkas WAV, satu berkas per sumber, dengan nama berdasarkan waktu.",
 "64-bit float": "Bilangan floating-point 64-bit",
 "FLOAT (none)": "FLOAT (tidak ada)",
 "Linkwitz-Riley, Butterworth or Bessel, 6 to 48 dB per octave": "Linkwitz-Riley, Butterworth, atau Bessel, 6 hingga 48 dB per oktaf",
@@ -2044,5 +2043,6 @@
 "Needs Windows 10 version 2004 or later with the sound card on WASAPI.": "Diperlukan Windows 10 versi 2004 atau yang lebih baru dengan kartu suara yang menggunakan WASAPI.",
 "The microphone (the default capture device) is the input.": "Mikrofon (perangkat perekaman bawaan) berfungsi sebagai input.",
 "FLAC 24-bit (lossless)": "FLAC 24-bit (tanpa kehilangan kualitas)",
-"HI-RES AUDIO": "AUDIO BERESOLUSI TINGGI"
+"HI-RES AUDIO": "AUDIO BERESOLUSI TINGGI",
+"● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV or FLAC files, one per source, named by time.": "● Tombol REC pada MIXER merekam saluran utama dan setiap saluran yang telah diaktifkan (pra-fader, setelah trim / DSP / insert) ke dalam berkas WAV atau FLAC, satu berkas per sumber, dengan nama berkas berdasarkan waktu."
 }

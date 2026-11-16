@@ -1473,7 +1473,6 @@
 "MIC • Acoustic Guitar": "MIC • Gitara akustyczna",
 "Channels marked here are not changed when a scene is recalled (the lead vocal stays where you set it).": "Kanały zaznaczone w tym miejscu nie ulegają zmianie po przywołaniu sceny (główny wokal pozostaje w miejscu, w którym go ustawiono).",
 "HOME": "STRONA GŁÓWNA",
-"● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV files, one per source, named by time.": "● Przycisk REC na mikserze zapisuje sygnał głównego kanału oraz każdego przygotowanego do nagrywania kanału (przed suwakiem, po regulacji poziomu / DSP / wstawkach) do plików WAV – po jednym pliku na źródło, nazywanych według czasu.",
 "64-bit float": "64-bitowa liczba zmiennoprzecinkowa typu float",
 "FLOAT (none)": "FLOAT (brak)",
 "3-BAND": "3 PASMA",
@@ -2047,5 +2046,6 @@
 "The microphone (the default capture device) is the input.": "Wejściem jest mikrofon (domyślne urządzenie do przechwytywania dźwięku).",
 "FLAC 24-bit (lossless)": "FLAC 24-bitowy (bezstratny)",
 "HI-RES AUDIO": "AUDIO W WYSOKIEJ ROZDZIELCZOŚCI",
-"resampling · FLAC · RF64": "próbkowanie · FLAC · RF64"
+"resampling · FLAC · RF64": "próbkowanie · FLAC · RF64",
+"● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV or FLAC files, one per source, named by time.": "● Przycisk REC na mikserze zapisuje sygnał główny oraz każdy przygotowany do nagrania kanał (przed suwakiem, po regulacji poziomu / DSP / wstawkach) do plików WAV lub FLAC – po jednym pliku na każde źródło, nazywanych według czasu."
 }

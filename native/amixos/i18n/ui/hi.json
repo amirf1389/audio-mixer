@@ -1602,7 +1602,6 @@
 "Channels marked here are not changed when a scene is recalled (the lead vocal stays where you set it).": "यहाँ चिह्नित चैनल तब नहीं बदलते जब कोई सीन रिकॉल किया जाता है (मुख्य वोकल वहीं रहता है जहाँ आपने इसे सेट किया है)।",
 "HOME": "होम",
 "MIXER": "मिक्सर",
-"● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV files, one per source, named by time.": "● मिक्सर पर REC मास्टर और प्रत्येक आर्म्ड स्ट्रिप (प्री-फेडर, ट्रिम / DSP / इन्सर्ट्स के बाद) को WAV फ़ाइलों में रिकॉर्ड करता है, प्रत्येक स्रोत के लिए एक, जिन्हें समय के अनुसार नाम दिया जाता है।",
 "24-bit PCM": "24-बिट पीसीएम",
 "32-bit PCM": "32-बिट पीसीएम",
 "64-bit float": "64-बिट फ्लोट",
@@ -2133,5 +2132,6 @@
 "The microphone (the default capture device) is the input.": "माइक्रोफ़ोन (डिफ़ॉल्ट कैप्चर डिवाइस) इनपुट है।",
 "FLAC 24-bit (lossless)": "FLAC 24-बिट (लोसलेस)",
 "HI-RES AUDIO": "उच्च-रिज़ॉल्यूशन ऑडियो",
-"resampling · FLAC · RF64": "पुनः नमूनाकरण · FLAC · RF64"
+"resampling · FLAC · RF64": "पुनः नमूनाकरण · FLAC · RF64",
+"● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV or FLAC files, one per source, named by time.": "● मिक्सर पर REC मास्टर और प्रत्येक आर्म्ड स्ट्रिप (प्री-फेडर, ट्रिम / DSP / इन्सर्ट्स के बाद) को WAV या FLAC फ़ाइलों में रिकॉर्ड करता है, प्रत्येक स्रोत के लिए एक, समय के अनुसार नामित।"
 }

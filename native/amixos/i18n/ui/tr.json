@@ -1495,7 +1495,6 @@
 "MIC • Acoustic Guitar": "MIC • Akustik Gitar",
 "Channels marked here are not changed when a scene is recalled (the lead vocal stays where you set it).": "Burada işaretlenen kanallar, bir sahne geri çağrıldığında değişmez (ana vokal, ayarladığınız yerde kalır).",
 "HOME": "ANA SAYFA",
-"● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV files, one per source, named by time.": "● MIXER üzerindeki REC düğmesi, master kanalı ve etkinleştirilmiş tüm kanalları (fader öncesi, trim / DSP / insert sonrası) WAV dosyalarına kaydeder; her kaynak için bir dosya oluşturulur ve dosyalar zamana göre adlandırılır.",
 "24-bit PCM": "24 bit PCM",
 "32-bit PCM": "32 bit PCM",
 "64-bit float": "64 bit kayan noktalı",
@@ -2069,5 +2068,6 @@
 "The microphone (the default capture device) is the input.": "Mikrofon (varsayılan kayıt aygıtı) giriş olarak kullanılır.",
 "FLAC 24-bit (lossless)": "FLAC 24 bit (kayıpsız)",
 "HI-RES AUDIO": "YÜKSEK ÇÖZÜNÜRLÜKLÜ SES",
-"resampling · FLAC · RF64": "yeniden örnekleme · FLAC · RF64"
+"resampling · FLAC · RF64": "yeniden örnekleme · FLAC · RF64",
+"● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV or FLAC files, one per source, named by time.": "● MIXER üzerindeki REC düğmesi, master kanalı ve etkinleştirilmiş tüm kanalları (fader öncesi, trim / DSP / insert sonrası) WAV veya FLAC dosyalarına kaydeder; her kaynak için ayrı bir dosya oluşturulur ve dosyalar zamana göre adlandırılır."
 }

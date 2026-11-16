@@ -1488,7 +1488,6 @@
 "MIC • De-Ess": "MIC • デエス",
 "Channels marked here are not changed when a scene is recalled (the lead vocal stays where you set it).": "ここにマークされたチャンネルは、シーンを呼び出した際にも変更されません（リードボーカルは設定した位置のままになります）。",
 "HOME": "ホーム",
-"● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV files, one per source, named by time.": "● ミキサーの「REC」ボタンを押すと、マスターおよびアームされたすべてのストリップ（プリフェーダー、トリム／DSP／インサート後）が、ソースごとに1つずつ、時刻をファイル名としたWAVファイルとして書き出されます。",
 "24-bit PCM": "24ビットPCM",
 "32-bit PCM": "32ビットPCM",
 "64-bit float": "64ビット浮動小数点数",
@@ -2101,5 +2100,6 @@
 "The microphone (the default capture device) is the input.": "マイク（デフォルトのキャプチャデバイス）が入力源となります。",
 "FLAC 24-bit (lossless)": "FLAC 24ビット（ロスレス）",
 "HI-RES AUDIO": "ハイレゾオーディオ",
-"resampling · FLAC · RF64": "リサンプリング · FLAC · RF64"
+"resampling · FLAC · RF64": "リサンプリング · FLAC · RF64",
+"● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV or FLAC files, one per source, named by time.": "● ミキサーの「REC」ボタンを押すと、マスターおよびアームされたすべてのストリップ（プリフェーダー、トリム／DSP／インサート後）が、ソースごとに1つずつ、時刻をファイル名としてWAVまたはFLACファイルに書き出されます。"
 }

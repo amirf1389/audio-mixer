@@ -1480,7 +1480,6 @@
 "MIC • Acoustic Guitar": "MIC • Акустическая гитара",
 "Channels marked here are not changed when a scene is recalled (the lead vocal stays where you set it).": "Каналы, отмеченные здесь, не изменяются при вызове сцены (ведущий вокал остается там, где вы его установили).",
 "HOME": "ГЛАВНАЯ",
-"● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV files, one per source, named by time.": "● Кнопка REC на микшере записывает сигнал мастер-канала и каждого подготовленного к записи канала (до фейдера, после регулировки уровня / DSP / вставок) в файлы WAV — по одному файлу на каждый источник, имена которых формируются на основе времени записи.",
 "24-bit PCM": "24-битный PCM",
 "32-bit PCM": "32-разрядный PCM",
 "64-bit float": "64-разрядное число с плавающей запятой",
@@ -2059,5 +2058,6 @@
 "The microphone (the default capture device) is the input.": "Входом служит микрофон (устройство записи по умолчанию).",
 "FLAC 24-bit (lossless)": "FLAC 24-бит (без потерь)",
 "HI-RES AUDIO": "АУДИО ВЫСОКОГО РАЗРЕШЕНИЯ",
-"resampling · FLAC · RF64": "передискретизация · FLAC · RF64"
+"resampling · FLAC · RF64": "передискретизация · FLAC · RF64",
+"● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV or FLAC files, one per source, named by time.": "● Кнопка REC на микшере записывает сигнал мастер-канала и каждого подготовленного к записи канала (до фейдера, после регулировки уровня / DSP / вставок) в файлы формата WAV или FLAC — по одному файлу на каждый источник, с именами, сформированными на основе времени записи."
 }

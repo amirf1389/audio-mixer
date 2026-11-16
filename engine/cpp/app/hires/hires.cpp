@@ -131,7 +131,7 @@ bool soxrAvailable() { return soxr().ok; }
 std::vector<LibInfo> libraries() {
   std::vector<LibInfo> l;
   l.push_back({"r8brain", "r8brain-free-src", R8B_VERSION, "MIT", true, "sample-rate conversion, 64-bit, built in"});
-  l.push_back({"soxr", "libsoxr", soxrAvailable() && soxr().version ? soxr().version() : "0.1.3", "LGPL-2.1", soxrAvailable(), soxrAvailable() ? "loaded at run time (replaceable)" : "amix_soxr library not next to the program: r8brain is used"});
+  l.push_back({"soxr", "libsoxr", soxrAvailable() && soxr().version ? std::string(soxr().version()).substr(std::string(soxr().version()).rfind("libsoxr-", 0) == 0 ? 8 : 0) : std::string("0.1.3"), "LGPL-2.1", soxrAvailable(), soxrAvailable() ? "loaded at run time (replaceable)" : "amix_soxr library not next to the program: r8brain is used"});
   l.push_back({"dr_wav", "dr_wav", "0.14.6", "public domain / MIT-0", true, "WAV, RF64, Wave64: PCM 8-64 bit, float 32/64"});
   l.push_back({"dr_flac", "dr_flac", "0.13.4", "public domain / MIT-0", true, "FLAC reading"});
   l.push_back({"libflac", "libFLAC", FLAC__VERSION_STRING, "BSD-3-Clause (Xiph)", true, "FLAC writing: 16 / 24 / 32-bit"});

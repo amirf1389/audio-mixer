@@ -1503,7 +1503,6 @@
 "MIC • De-Ess": "MIC • 去齿音",
 "Channels marked here are not changed when a scene is recalled (the lead vocal stays where you set it).": "在此处标记的通道在调用场景时不会发生变化（主唱声部将保持在您设置的位置）。",
 "HOME": "主页",
-"● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV files, one per source, named by time.": "● 混音台上的 REC 按钮会将主通道和所有已启用的通道（前推子、衰减/DSP/插入效果后）录制为 WAV 文件，每个音源对应一个文件，文件名按时间排序。",
 "24-bit PCM": "24位PCM",
 "32-bit PCM": "32位PCM",
 "64-bit float": "64位浮点数",
@@ -2036,5 +2035,6 @@
 "The microphone (the default capture device) is the input.": "麦克风（默认捕获设备）是输入源。",
 "FLAC 24-bit (lossless)": "FLAC 24位（无损）",
 "HI-RES AUDIO": "高解析度音频",
-"resampling · FLAC · RF64": "重采样 · FLAC · RF64"
+"resampling · FLAC · RF64": "重采样 · FLAC · RF64",
+"● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV or FLAC files, one per source, named by time.": "● 混音台上的 REC 按钮会将主通道和所有已启用的通道（前推子、衰减/DSP/插入效果后）录制为 WAV 或 FLAC 文件，每个音源生成一个文件，文件名按时间命名。"
 }

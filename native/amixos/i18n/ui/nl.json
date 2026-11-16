@@ -1454,7 +1454,6 @@
 "MIC • Guitar Amp (SM57 style)": "MIC • Gitaarversterker (type SM57)",
 "MIC • Acoustic Guitar": "MIC • Akoestische gitaar",
 "Channels marked here are not changed when a scene is recalled (the lead vocal stays where you set it).": "De hier gemarkeerde kanalen worden niet gewijzigd wanneer een scène wordt opgeroepen (de leadzang blijft op de plek waar je die hebt ingesteld).",
-"● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV files, one per source, named by time.": "● De REC-knop op de MIXER neemt de master en elke geactiveerde strip (pre-fader, na trim / DSP / inserts) op in WAV-bestanden, één per bron, met een naam op basis van de tijd.",
 "64-bit float": "64-bits float",
 "FLOAT (none)": "FLOAT (geen)",
 "Linkwitz-Riley, Butterworth or Bessel, 6 to 48 dB per octave": "Linkwitz-Riley, Butterworth of Bessel, 6 tot 48 dB per octaaf",
@@ -2046,5 +2045,6 @@
 "The music of every app on this computer (Spotify, YouTube, a player) becomes the input on CH 1-2. AmF X1's own output is left out, so it plays on the same headphones or speakers without a loop.": "De muziek van elke app op deze computer (Spotify, YouTube, een muziekspeler) wordt ingevoerd op kanaal 1-2. De eigen uitvoer van de AmF X1 wordt buiten beschouwing gelaten, zodat het geluid via dezelfde hoofdtelefoon of luidsprekers wordt afgespeeld zonder dat er een lus ontstaat.",
 "Needs Windows 10 version 2004 or later with the sound card on WASAPI.": "Vereist Windows 10 versie 2004 of hoger, waarbij de geluidskaart op WASAPI is ingesteld.",
 "The microphone (the default capture device) is the input.": "De microfoon (het standaardopnameapparaat) is de ingang.",
-"FLAC 24-bit (lossless)": "FLAC 24-bit (verliesvrij)"
+"FLAC 24-bit (lossless)": "FLAC 24-bit (verliesvrij)",
+"● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV or FLAC files, one per source, named by time.": "● De REC-knop op de MIXER neemt het master-signaal en elke geactiveerde strip (pre-fader, na trim / DSP / inserts) op in WAV- of FLAC-bestanden, één per bron, met een naam op basis van de tijd."
 }
