@@ -141,12 +141,12 @@ class AsioBackend : public Backend {
     if (a != ASE_OK) { err = msg("createBuffers", a); return false; }
     buffers_ = true;
 
-    types_.assign(infos_.size(), 0);
+    types_.assign(infos_.size(), 0); outNames_.clear();
     for (std::size_t i = 0; i < infos_.size(); ++i) {
       ASIOChannelInfo ci; std::memset(&ci, 0, sizeof ci); ci.channel = infos_[i].channelNum; ci.isInput = infos_[i].isInput;
       a = drv_->getChannelInfo(&ci); if (a != ASE_OK) { err = msg("getChannelInfo", a); return false; }
       if (!supported(ci.type)) { char b[128]; std::snprintf(b, sizeof b, "\"%s\" uses the sample type %ld, which this backend does not convert", driverName_.c_str(), static_cast<long>(ci.type)); err = b; return false; }
-      types_[i] = ci.type;
+      types_[i] = ci.type; if (!ci.isInput) outNames_.emplace_back(ci.name, strnlen(ci.name, sizeof ci.name));
     }
     const std::size_t n = static_cast<std::size_t>(frames_);
     inBuf_.assign(static_cast<std::size_t>(std::max<long>(1, nIn_)), std::vector<float>(n, 0.0f)); outBuf_.assign(static_cast<std::size_t>(std::max<long>(1, nOut_)), std::vector<float>(n, 0.0f));
@@ -212,6 +212,7 @@ class AsioBackend : public Backend {
     switch (t) { case ASIOSTInt16LSB: return "16-bit integer"; case ASIOSTInt24LSB: return "24-bit integer"; case ASIOSTInt32LSB: return "32-bit integer";
                  case ASIOSTFloat32LSB: return "32-bit float"; case ASIOSTFloat64LSB: return "64-bit float"; default: return "unknown"; }
   }
+  std::vector<std::string> outputNames() const override { return outNames_; }
   std::string sampleFormat() const override {
     if (types_.empty()) return std::string();
     const std::string in = nIn_ > 0 ? typeName(types_[0]) : "", out = nOut_ > 0 && static_cast<long>(types_.size()) > nIn_ ? typeName(types_[static_cast<std::size_t>(nIn_)]) : "";
@@ -277,7 +278,7 @@ class AsioBackend : public Backend {
 
   DeviceConfig cfg_; AudioCallback cb_; IASIO* drv_ = nullptr; std::string driverName_;
   long nIn_ = 0, nOut_ = 0, frames_ = 0; std::atomic<bool> buffers_{false}; bool mine_ = false;
-  std::vector<ASIOBufferInfo> infos_; std::vector<ASIOSampleType> types_; ASIOCallbacks callbacks_{};
+  std::vector<ASIOBufferInfo> infos_; std::vector<ASIOSampleType> types_; std::vector<std::string> outNames_; ASIOCallbacks callbacks_{};
   std::vector<std::vector<float>> inBuf_, outBuf_; std::vector<float> zeros_, sink_; std::vector<const float*> inp_; std::vector<float*> outp_;
   std::atomic<bool> running_{false}; std::atomic<int> inCallback_{0}; std::atomic<std::uint64_t> xruns_{0}, resets_{0}; std::atomic<long> inLatency_{0}, outLatency_{0};
   std::thread worker_; std::mutex wm_; std::condition_variable wcv_; bool resetPending_ = false, quit_ = false;

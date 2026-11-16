@@ -87,10 +87,14 @@ void Diag::runChecks() {
   else add("Recording (default)", activeIn.isEmpty() ? "warn" : "warn", activeIn.isEmpty() ? "no input is active (no microphone)" : "no default input is set", "Plug in a microphone or enable one in Sound settings");
   for (const QString& kind : {QStringLiteral("headphones"), QStringLiteral("speakers")}) {
     const QString title = kind == "headphones" ? "Headphones" : "Speakers";
-    const QVariantList all = find(outs_, [&](const QVariantMap& m) { return m["kind"] == kind || (kind == "headphones" && m["kind"] == "headset"); });
+    // speakers include the ones on a cable from the sound card: S/PDIF (optical / coaxial), HDMI to a soundbar or receiver, and line out to powered speakers
+    const QVariantList all = find(outs_, [&](const QVariantMap& m) { return m["kind"] == kind || (kind == "headphones" && m["kind"] == "headset") || (kind == "speakers" && (m["kind"] == "digital" || m["kind"] == "line")); });
     const QVariantList on = find(all, [](const QVariantMap& m) { return m["state"] == "active"; }), off = find(all, [](const QVariantMap& m) { return m["state"] == "unplugged"; });
-    if (!on.isEmpty()) add(title, "ok", on[0].toMap()["name"].toString() + (on.size() > 1 ? QStringLiteral(" (+%1 more)").arg(on.size() - 1) : QString()) + " · ready: press TEST to hear it");
-    else if (!off.isEmpty()) add(title, "warn", off[0].toMap()["name"].toString() + ": nothing plugged into the jack", kind == "headphones" ? "Plug the headphones in; the console sees them at once" : "Plug the speakers in");
+    const auto via = [](const QVariantMap& m) { return m["kind"] == "digital" ? QStringLiteral(" · on the digital cable (S/PDIF / HDMI)") : m["kind"] == "line" ? QStringLiteral(" · on the line output") : QString(); };
+    if (!on.isEmpty()) add(title, "ok", on[0].toMap()["name"].toString() + via(on[0].toMap()) + (on.size() > 1 ? QStringLiteral(" (+%1 more)").arg(on.size() - 1) : QString()) + " · ready: press TEST to hear it");
+    else if (!off.isEmpty()) { const QVariantMap o = off[0].toMap(); const bool dig = o["kind"] == "digital";
+      add(title, "warn", o["name"].toString() + (dig ? ": the TV, amplifier or soundbar on this cable is off or not connected" : ": nothing plugged into the jack"),
+          kind == "headphones" ? "Plug the headphones in; the console sees them at once" : dig ? "Switch the TV / amplifier / soundbar on and select this input on it; check the optical, coaxial or HDMI cable" : "Plug the speakers in"); }
     else add(title, "ok", kind == "headphones" ? "none found (fine when you listen on speakers; a headphone jack shared with the speakers shows as Speakers)" : "none found by that name (the default output may still be speakers)");
   }
   const QVariantList dis = find(outs_ + ins_, [](const QVariantMap& m) { return m["state"] == "disabled"; });

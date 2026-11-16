@@ -162,7 +162,9 @@ void Engine::refreshDevices() {
   devices_.clear();
   for (const am::DeviceInfo& d : *found) {
     QVariantMap m; m["backend"] = QString::fromStdString(d.backend); m["id"] = QString::fromStdString(d.id); m["name"] = QString::fromStdString(d.name);
-    m["inChannels"] = d.inChannels; m["outChannels"] = d.outChannels; m["defaultRate"] = d.defaultRate; m["defaultIn"] = d.defaultIn; m["defaultOut"] = d.defaultOut; m["bluetooth"] = looksBluetooth(m["name"].toString()); m["kind"] = QString::fromStdString(d.kind); m["enabled"] = deviceEnabled(m["backend"].toString(), m["id"].toString());
+    m["inChannels"] = d.inChannels; m["outChannels"] = d.outChannels; m["defaultRate"] = d.defaultRate; m["defaultIn"] = d.defaultIn; m["defaultOut"] = d.defaultOut; m["kind"] = QString::fromStdString(d.kind);
+    { static const QStringList wired{"digital", "line", "interface", "dac", "wrapper", "virtual", "app"};   // a cable or a converter: a brand in the name ("JBL", "Bose", "wireless") does not make it Bluetooth
+      m["bluetooth"] = d.kind == "bluetooth" || (!wired.contains(m["kind"].toString()) && looksBluetooth(m["name"].toString())); } m["enabled"] = deviceEnabled(m["backend"].toString(), m["id"].toString());
     QVariantList rates; for (double r : d.sampleRates) rates << r; m["sampleRates"] = rates;
     if (d.backend == "asio") { m["probeError"] = QString::fromStdString(d.probeError); annotateAsio(m, !timedOut_); }
     if (!bluetoothAudio() && (m["bluetooth"].toBool() || d.kind == "bluetooth")) continue;   // BLUETOOTH AUDIO switched off
@@ -256,6 +258,14 @@ void Engine::pushAll() {
   for (int i = 0; i < kStrips; ++i) rebuildInserts(i);
   for (int i = 0; i < kStrips; ++i) rt_->setInputRoute(i, inRoute_[i]);
   for (int o = 0; o < kOutputs; ++o) rt_->setOutputRoute(o, outRoute_[o]);
+  // SPEAKERS ON A DIGITAL CABLE: when the driver names an S/PDIF / optical / coaxial / AES pair beyond outputs 1-2 and that pair is still on
+  // its default routing, it plays what outputs 1-2 play (the monitor of the mix), so speakers or an amplifier on the digital cable are heard
+  // at once. A pair the user routed on purpose is left alone.
+  digitalOut_ = -1;
+  if (const int d = am::digitalOutputPair(rt_->outputNames()); d >= 2 && d + 1 < kOutputs) {
+    digitalOut_ = d;
+    if (outRoute_[d] == am::Runtime::defaultOutputSource(d) && outRoute_[d + 1] == am::Runtime::defaultOutputSource(d + 1)) {
+      outRoute_[d] = am::Runtime::kSrcMonL; outRoute_[d + 1] = am::Runtime::kSrcMonR; rt_->setOutputRoute(d, outRoute_[d]); rt_->setOutputRoute(d + 1, outRoute_[d + 1]); emit routingChanged(); } }
 }
 
 QVariantList Engine::stripState() const { return stripCache(); }
@@ -596,7 +606,7 @@ void Engine::rememberDeviceNames(const std::string& backend, const std::string& 
 QVariantMap Engine::ioInfo() const {
   QVariantMap m; if (!rt_ || !running()) return m; const QString b = backend();
   auto kindOf = [&](const QString& name, bool wantIn) { for (const QVariant& v : devices_) { const QVariantMap d = v.toMap(); if (d["backend"].toString() == b && d["name"].toString() == name && (wantIn ? d["inChannels"] : d["outChannels"]).toInt() > 0) return d["kind"].toString(); } return QString::fromStdString(am::classifyDevice(b.toStdString(), name.toStdString(), -1, wantIn)); };
-  m["backend"] = b; m["inName"] = inDevName_; m["outName"] = outDevName_; m["inKind"] = devIn_ > 0 ? kindOf(inDevName_, true) : QString(); m["outKind"] = kindOf(outDevName_, false); m["inputs"] = devIn_; m["outputs"] = devOut_;
+  m["digitalOut"] = digitalOut_ >= 0 ? digitalOut_ + 1 : 0; m["backend"] = b; m["inName"] = inDevName_; m["outName"] = outDevName_; m["inKind"] = devIn_ > 0 ? kindOf(inDevName_, true) : QString(); m["outKind"] = kindOf(outDevName_, false); m["inputs"] = devIn_; m["outputs"] = devOut_;
   m["blockMs"] = sampleRate() > 0 ? 1000.0 * blockFrames_ / sampleRate() : 0.0; return m;
 }
 QString Engine::inputLabel(int input) const {

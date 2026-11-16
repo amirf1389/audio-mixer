@@ -97,6 +97,24 @@ int main() {
     std::this_thread::sleep_for(std::chrono::milliseconds(80)); const long after = fx.n.load();
     std::this_thread::sleep_for(std::chrono::milliseconds(80)); expect(fx.n.load() == after, "burst: the detach at the end of 40 000 changes was not dropped");
     rt.stop(); }
+  { // SPEAKERS ON A DIGITAL CABLE: Windows' own word (S/PDIF 8, HDMI 9, passthrough 7) wins over a brand in the name; studio monitors are speakers
+    using am::classifyDevice;
+    expect(classifyDevice("wasapi", "JBL Bar 5.1 (HDMI)", 9, false) == "digital", "a JBL soundbar on HDMI is a digital output, not Bluetooth");
+    expect(classifyDevice("wasapi", "Bose Solo 5 (Optical)", 8, false) == "digital", "a Bose speaker on optical is a digital output");
+    expect(classifyDevice("wasapi", "SPDIF Out (USB Sound Device)", -1, false) == "digital", "S/PDIF by name");
+    expect(classifyDevice("dsound", "Realtek Digital Output (Optical)", -1, false) == "digital", "optical by name on DirectSound");
+    expect(classifyDevice("dsound", "Speakers (Studio Monitors)", -1, false) == "speakers", "studio monitors are speakers, not a display");
+    expect(classifyDevice("alsa", "Monitor of Built-in Audio", -1, true) == "app", "a PulseAudio monitor source is the app loopback");
+    expect(classifyDevice("wasapi", "Speaker (JBL Flip 5)", 1, false) == "bluetooth", "a Bluetooth JBL is still Bluetooth");
+    expect(classifyDevice("wasapi", "Speakers (Realtek(R) Audio)", 1, false) == "speakers", "onboard speakers");
+    expect(classifyDevice("wasapi", "SPDIF In (USB Audio)", -1, true) == "digital", "a digital input stays digital");
+    // the S/PDIF pair of an ASIO interface
+    expect(am::digitalOutputPair({"Out 1", "Out 2", "Out 3", "Out 4", "S/PDIF Out L", "S/PDIF Out R"}) == 4, "S/PDIF on outputs 5-6");
+    expect(am::digitalOutputPair({"Analog 1", "Analog 2", "SPDIF 1", "SPDIF 2", "ADAT 1", "ADAT 2"}) == 2, "SPDIF on 3-4, ADAT ignored");
+    expect(am::digitalOutputPair({"Out 1", "Out 2", "ADAT 1", "ADAT 2"}) == -1, "ADAT is not a speaker pair");
+    expect(am::digitalOutputPair({"S/PDIF L", "S/PDIF R"}) == -1, "outputs 1-2 already carry the mix");
+    expect(am::digitalOutputPair({"Line 1", "Line 2", "Line 3", "Optical L", "Optical R"}) == 3, "an optical pair starting on an odd output");
+    expect(am::digitalOutputPair({}) == -1, "no names: nothing"); }
   std::printf(failures ? "runtime: %d failed\n" : "runtime: all good\n", failures);
   return failures ? 1 : 0;
 }

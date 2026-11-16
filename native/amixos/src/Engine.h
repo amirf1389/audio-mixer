@@ -289,6 +289,7 @@ class Engine : public QObject {
   void annotateAsio(QVariantMap& m, bool probed);
   void freshInstallReset();   // install.id changed: clear the console state of an earlier install
   QString startNote_;
+  int digitalOut_ = -1;        // the first output of the S/PDIF / optical / coaxial pair the driver names (0-based), -1 none
   QVariantList absent_;       // endpoints that exist but are not available now (unplugged / disabled)
   QVariantMap ampUi_[64];     // the AMP page settings per output (with the name), saved with the console         // why the start state differs from what was saved (shown once in the status)   // universal ASIO detection: identity, status, remembered channel counts
   // STEREO PAIR: strips 1+2, 3+4 ... as one stereo channel. matchStereoPair() gives the partner the same channel processing (EQ, gate, compressor,

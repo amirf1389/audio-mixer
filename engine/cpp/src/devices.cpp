@@ -37,10 +37,23 @@
 #include "audiomixer/runtime.hpp"
 
 namespace am {
+int digitalOutputPair(const std::vector<std::string>& names) {
+  auto digital = [](const std::string& s) { std::string n; for (char c : s) n += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    if (n.find("adat") != std::string::npos) return false;
+    for (const char* w : {"spdif", "s/pdif", "s-pdif", "s pdif", "optical", "toslink", "coax", "aes", "digital", "dig out", "dig "}) if (n.find(w) != std::string::npos) return true;
+    return false; };
+  for (std::size_t i = 2; i + 1 < names.size(); i += 2) if (digital(names[i]) && digital(names[i + 1])) return static_cast<int>(i);
+  for (std::size_t i = 2; i + 1 < names.size(); ++i) if (digital(names[i]) && digital(names[i + 1])) return static_cast<int>(i);   // a pair that starts on an odd output
+  return -1;
+}
 std::string classifyDevice(const std::string& backend, const std::string& name, int formFactor, bool capture) {
   std::string n; for (char c : name) n += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
   auto has = [&n](std::initializer_list<const char*> w) { for (const char* x : w) if (n.find(x) != std::string::npos) return true; return false; };
   if (n.rfind("app audio", 0) == 0) return "app";
+  // A DIGITAL CABLE (Windows says so: S/PDIF, HDMI / DisplayPort, digital passthrough): never a Bluetooth link, whatever the brand in the
+  // name ("JBL Bar (HDMI)", "Bose Solo (Optical)"): told first, so a soundbar or an amplifier on optical / coaxial / HDMI is not hidden as Bluetooth
+  if (formFactor == 7 || formFactor == 8 || formFactor == 9) return "digital";
+  if (!capture && has({"optical", "toslink", "coaxial", "coax out", "spdif", "s/pdif", "hdmi", "displayport"})) return "digital";
   if (has({"bluetooth", "hands-free", "handsfree", "a2dp", "airpods", "buds", " bt ", "wh-1000", "wf-1000", "jbl tune", "jbl flip", "bose qc", "soundcore"})) return "bluetooth";
   // a DAC: a playback-only converter (a USB DAC, a headphone DAC / amp, a dongle). Told by its name; the capture side of a device is never one.
   if (!capture && backend != "asio" && has({"dac", "dragonfly", "topping", "fiio", "smsl", "schiit", "ifi ", "hidizs", "chord mojo", "hip-dac", "qudelix", "hi-res audio", "hifi"})) return "dac";
@@ -50,9 +63,9 @@ std::string classifyDevice(const std::string& backend, const std::string& name, 
   if (has({"headset"})) return "headset";
   if (has({"headphone", "earphone", "earbud", "kopfh"})) return "headphones";
   if (has({"microphone", "mic ", "mic)", "mikrofon", "webcam", "camera"}) || n == "mic") return "microphone";
-  if (has({"spdif", "s/pdif", "digital", "hdmi", "displayport", "nvidia high", "monitor"})) return "digital";
+  if (has({"spdif", "s/pdif", "optical", "toslink", "coax", "digital", "hdmi", "displayport", "nvidia high", "display audio", "amd high definition"})) return "digital";   // "monitor" alone is not one: studio monitors are speakers
   if (has({"line in", "line out", "line (", "stereo mix", "aux"})) return "line";
-  if (has({"speaker", "lautsprecher", "realtek", "high definition audio"})) return capture ? "microphone" : "speakers";
+  if (has({"speaker", "lautsprecher", "realtek", "high definition audio", "monitor", "soundbar", "sound bar", "amplifier", "receiver"})) return capture ? (n.find("monitor of") != std::string::npos ? "app" : "microphone") : "speakers";
   return "unknown";
 }
 namespace {

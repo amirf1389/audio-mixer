@@ -50,6 +50,10 @@ QtObject {
     }
     // device kinds (engine: classifyDevice): a sign and a word for the lists and the header
     function kindIcon(k) { switch (k) { case "headphones": return "◖◗"; case "headset": return "◖◗"; case "speakers": return "◢"; case "microphone": return "⏚"; case "interface": return "☷"; case "bluetooth": return "ᛒ"; case "digital": return "⎚"; case "line": return "⇄"; case "app": return "▶"; case "wrapper": return "◇"; default: return "◌" } }
+    // SPEAKERS ON A DIGITAL CABLE: an output Windows calls S/PDIF or HDMI is where the speakers / amplifier / soundbar are: shown as SPEAKERS,
+    // with the cable after it (kindNote); a digital INPUT stays DIGITAL
+    function outKindName(k) { return k === "digital" ? "SPEAKERS" : kindName(k) }
+    function kindNote(k, name) { if (k !== "digital") return ""; const n = (name || "").toLowerCase(); return /hdmi|displayport|display audio|nvidia|amd high|intel\(r\) display/.test(n) ? " · HDMI" : " · S/PDIF" }
     function kindName(k) { switch (k) { case "headphones": return "HEADPHONES"; case "headset": return "HEADSET"; case "speakers": return "SPEAKERS"; case "microphone": return "MICROPHONE"; case "interface": return "AUDIO INTERFACE"; case "bluetooth": return "BLUETOOTH"; case "digital": return "DIGITAL OUT"; case "line": return "LINE"; case "app": return "APP AUDIO"; case "wrapper": return "ASIO WRAPPER"; default: return "DEVICE" } }
     function dbText(v) { return v <= -119 ? "-inf" : (v > 0 ? "+" : "") + v.toFixed(1); }
 }

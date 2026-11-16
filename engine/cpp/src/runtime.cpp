@@ -121,6 +121,7 @@ void Runtime::setAnalogChannels(bool on) { post({kAnalogCh, on ? 1 : 0, 0, 0, 0}
 void Runtime::resetProfiler() { post({kProfReset, 0, 0, 0, 0}); }
 void Runtime::setAutomix(int s, bool on, double w) { post({kAutomix, s, on ? 1.0 : 0.0, w, 0}); }
 std::string Runtime::sampleFormat() const { return backend_ ? backend_->sampleFormat() : std::string(); }
+std::vector<std::string> Runtime::outputNames() const { return backend_ ? backend_->outputNames() : std::vector<std::string>(); }
 double Runtime::inputSilentSeconds() const { return backend_ ? backend_->inputSilentSeconds() : 0.0; }
 int Runtime::deviceOutputBits() const {
   std::string f = sampleFormat(); const std::size_t o = f.find("out "); if (o != std::string::npos) f = f.substr(o);
