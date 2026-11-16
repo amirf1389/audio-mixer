@@ -18,6 +18,7 @@ object Nav {
     }
     fun go(a: Activity, target: Class<out Activity>, extras: (Intent) -> Unit = {}) {
         if (a.javaClass == target) return
+        Home.noteRecent(a, target.simpleName)   // RECENT on HOME
         a.startActivity(Intent(a, target).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT).also(extras)); a.overridePendingTransition(0, 0)
     }
     /** content above, the bar below; current = the tab of this screen (null: a sub-screen such as the calculator, nothing lit). */

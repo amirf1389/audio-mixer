@@ -32,7 +32,7 @@ class ScreenshotTest {
     @Test fun home() {
         HomeActivity.bootShown = true   // the boot animation has its own test
         Prefs.remote(org.robolectric.RuntimeEnvironment.getApplication()).edit().putString("host", "192.168.1.20").putString("port", "8765").putString("token", "x")
-            .putString("lastName", "A mix OS 1.23.0.1").putString("lastPlan", "PRO").putInt("lastStrips", 20).commit()
+            .putString("lastName", "STUDIO-PC 1.24.0.0").putString("lastPlan", "PRO").putInt("lastStrips", 20).commit()
         val a = Robolectric.buildActivity(HomeActivity::class.java).setup().resume().get()
         shot(a.window.decorView.rootView, "home")
     }
@@ -53,6 +53,15 @@ class ScreenshotTest {
         org.junit.Assert.assertEquals("a tap skips it, once", 1, finished); org.junit.Assert.assertEquals(1f, tap.t, 1e-6f)
         Prefs.remote(ctx).edit().putBoolean("bootAnim", false).commit(); HomeActivity.bootShown = false
         Robolectric.buildActivity(HomeActivity::class.java).setup().get(); org.junit.Assert.assertFalse("switched off in SETTINGS: not shown", HomeActivity.bootShown)
+    }
+    @Test fun homeLive() {   // HOME with a real console: ONLINE, the engine, the master meter; Scenes and Tools pinned; recent pages; last scene
+        val port = System.getProperty("amfx.daemon").orEmpty(); if (port.isEmpty()) return
+        val ctx = org.robolectric.RuntimeEnvironment.getApplication(); HomeActivity.bootShown = true
+        Prefs.remote(ctx).edit().putString("host", "127.0.0.1").putString("port", port).putString("token", System.getenv("AMFX_TOKEN") ?: "").putString("lastName", "STUDIO-PC 1.24.0.0").putString("lastPlan", "PRO").putInt("lastStrips", 16).commit()
+        ctx.getSharedPreferences("home", 0).edit().putStringSet("pinned", setOf("Scenes", "ToolsActivity")).putString("recent", "RemoteActivity,EqActivity,PluginsActivity").putString("lastScene", "Sunday service").putString("newsSeen", "1.24.0.0").commit()
+        val a = Robolectric.buildActivity(HomeActivity::class.java).setup().resume().get(); idle(2500)
+        shot(a.window.decorView.rootView, "home-live")
+        val tiles = a.tiles().map { it.id }; org.junit.Assert.assertEquals(listOf("Scenes", "ToolsActivity"), Home.pinnedFirst(tiles, { it }, Home.pinned(ctx)).take(2))
     }
     @Test fun mixdown() {   // the empty screen (the file picker is not there on the JVM)
         val a = Robolectric.buildActivity(MixdownActivity::class.java).setup().get(); idle(300)

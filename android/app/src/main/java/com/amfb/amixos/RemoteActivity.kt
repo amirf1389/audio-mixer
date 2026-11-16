@@ -49,7 +49,9 @@ class RemoteActivity : AppCompatActivity() {
     private val nameLabels = ArrayList<TextView>(); private val mutes = ArrayList<ToggleButton>(); private val solos = ArrayList<ToggleButton>()
     private var touching = 0   // a finger on a fader: the sync does not move it under the finger
     private var pendingOpen: String? = null   // "scenes": from the home screen's SCENES tile, opened as soon as the console answers
-    override fun onNewIntent(i: android.content.Intent) { super.onNewIntent(i); setIntent(i); val o = i.getStringExtra("open"); if (o == "scenes") { if (client != null) showScenes() else { pendingOpen = o; connectBtn?.performClick() } } }
+    override fun onNewIntent(i: android.content.Intent) { super.onNewIntent(i); setIntent(i); val o = i.getStringExtra("open")
+        if (o == "recall") { client?.let { offerPendingScene(it) }; return }   // RECALL LAST SCENE from HOME: asked first; not linked yet: asked when it links
+        if (o == "scenes") { if (client != null) showScenes() else { pendingOpen = o; connectBtn?.performClick() } } }
     private val clipFlags = ArrayList<Boolean>(); private var connBox: LinearLayout? = null
     private var connectBtn: Button? = null; private var autoTried = false
     private fun buzz(v: View) { if (Prefs.haptics(this)) v.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP) }
@@ -522,7 +524,7 @@ class RemoteActivity : AppCompatActivity() {
                 c.gain(id, (x["db"] as Number).toDouble()); c.pan(id, (x["pan"] as? Number)?.toDouble() ?: 0.0); c.mute(id, x["mute"] == true); c.solo(id, x["solo"] == true); c.name(id, x["name"].toString()) }
             for (x in (o["buses"] as? List<*>).orEmpty().mapNotNull { it as? Map<*, *> }) { val id = (x["id"] as Number).toInt(); c.busLevel(id, (x["db"] as Number).toDouble()); c.busMute(id, x["mute"] == true) }
             c.master((o["master"] as? Number)?.toDouble() ?: 0.0); c.state() }
-            .onSuccess { st -> ui.post { state = st; buildStrips(st); status.text = getString(R.string.scene_recalled, n); note(getString(R.string.scene_recalled, n)); done() } }
+            .onSuccess { st -> ui.post { state = st; buildStrips(st); status.text = getString(R.string.scene_recalled, n); note(getString(R.string.scene_recalled, n)); Home.setLastScene(this, n); done() } }
             .onFailure { ui.post { status.text = getString(R.string.failed, it.message ?: "") } } }
     }
     /** SCENE EDITOR (works offline): each channel's name, level and mute, and the master; saved on the phone at once */
