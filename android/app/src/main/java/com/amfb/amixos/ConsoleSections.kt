@@ -129,15 +129,30 @@ class ConsoleStatusActivity : ConsoleSection() {
     internal lateinit var body: TextView
     override fun build() {
         body = TextView(this).apply { setTextColor(Color.WHITE); typeface = Typeface.MONOSPACE; textSize = 14f; setLineSpacing(8f, 1f) }
-        root.addView(body); root.addView(label(getString(R.string.cstat_help)).apply { setPadding(0, 16, 0, 0) })
+        root.addView(body)
+        // ENGINE CONTROL: stop / start the console's sound, and reopen the same sound card at another rate or buffer
+        val row1 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }; val row2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        row1.addView(Button(this).apply { text = getString(R.string.eng_stop); setOnClickListener { android.app.AlertDialog.Builder(this@ConsoleStatusActivity).setMessage(R.string.eng_stop_ask)
+            .setPositiveButton(R.string.eng_stop) { _, _ -> send { it.stop() } }.setNegativeButton(android.R.string.cancel, null).show() } })
+        row1.addView(Button(this).apply { text = getString(R.string.eng_start); setOnClickListener { reopen(null, null) } })
+        row2.addView(Button(this).apply { text = getString(R.string.eng_rate); setOnClickListener { val rates = listOf(44100, 48000, 88200, 96000)
+            android.app.AlertDialog.Builder(this@ConsoleStatusActivity).setItems(rates.map { "$it Hz" }.toTypedArray()) { _, w -> reopen(rates[w].toDouble(), null) }.show() } })
+        row2.addView(Button(this).apply { text = getString(R.string.eng_buffer); setOnClickListener { val bufs = listOf(64, 128, 256, 512, 1024)
+            android.app.AlertDialog.Builder(this@ConsoleStatusActivity).setItems(bufs.map { "$it" }.toTypedArray()) { _, w -> reopen(null, bufs[w]) }.show() } })
+        root.addView(label(getString(R.string.eng_title), accent, 13f).apply { setPadding(0, 18, 0, 4) }); root.addView(row1); root.addView(row2)
+        root.addView(label(getString(R.string.cstat_help)).apply { setPadding(0, 16, 0, 0) })
         ui.post(poll)
     }
-    internal fun render(s: com.amfb.amixos.remote.Status): String {
+    internal var last: com.amfb.amixos.remote.Status? = null
+    /** reopen the console's sound on the same device (as the console opened it), at [rate] / [frames] when given */
+    internal fun reopen(rate: Double?, frames: Int?) { val s = last; send { c -> val b = s?.backend?.ifBlank { null } ?: "auto"
+        c.open(b, s?.inDevice.orEmpty(), s?.outDevice.orEmpty(), rate ?: s?.rate?.takeIf { it > 0 } ?: 48000.0, frames ?: s?.bufferFrames?.takeIf { it > 0 } ?: 256, s?.inChannels ?: 2, s?.outChannels ?: 2) } }
+    internal fun render(s: com.amfb.amixos.remote.Status): String { last = s
         val up = s.uptimeS.toLong(); val bufMs = if (s.rate > 0 && s.frames > 0 && s.blocks > 0) 1000.0 * s.frames / s.blocks / s.rate else 0.0
         return listOf(
             getString(R.string.cstat_console) + "  " + s.computer.ifBlank { s.name } + "  " + s.version,
             getString(R.string.cstat_sound) + "  " + (if (s.running) "ON · " + s.backend.uppercase() else getString(R.string.cstat_off)),
-            getString(R.string.cstat_rate) + "  " + (if (s.rate > 0) String.format("%.0f Hz · %.1f ms", s.rate, bufMs) else "—"),
+            getString(R.string.cstat_rate) + "  " + (if (s.rate > 0) String.format("%.0f Hz · %d frames · %.1f ms", s.rate, s.bufferFrames, bufMs) else "—"),
             getString(R.string.cstat_load) + "  " + String.format("%.1f %%  (worst block %.0f µs)", s.loadPct, s.maxBlockUs),
             getString(R.string.cstat_xruns) + "  " + s.xruns,
             getString(R.string.cstat_up) + "  " + String.format("%d:%02d:%02d", up / 3600, up / 60 % 60, up % 60),
@@ -148,4 +163,124 @@ class ConsoleStatusActivity : ConsoleSection() {
     private val poll = object : Runnable { override fun run() { val c = client ?: return
         io.execute { val s = runCatching { c.status() }; ui.post { s.onSuccess { body.text = render(it); note.text = "" }.onFailure { e -> note.text = e.message } } }; ui.postDelayed(this, 1000) } }
     override fun onDestroy() { ui.removeCallbacks(poll); super.onDestroy() }
+}
+
+/** a row of level bars (peak, with the RMS inside), one per channel, then the master L / R; 0 dB at the top, -60 at the bottom */
+class LevelsView(ctx: Context) : View(ctx) {
+    var levels: List<Pair<Double, Double>> = emptyList(); set(v) { field = v; invalidate() }   // (peak, rms) linear, channels then master L, R
+    var clips: List<Boolean> = emptyList()
+    private val p = android.graphics.Paint()
+    override fun onMeasure(w: Int, h: Int) { setMeasuredDimension(MeasureSpec.getSize(w), 360) }
+    private fun pos(lin: Double): Float { if (lin <= 1e-6) return 0f; val db = 20 * kotlin.math.log10(lin); return ((db + 60) / 60).coerceIn(0.0, 1.0).toFloat() }
+    override fun onDraw(c: android.graphics.Canvas) {
+        c.drawColor(Color.parseColor("#0B0F15")); val n = levels.size; if (n == 0) return
+        val bw = width.toFloat() / n; val h = height - 24f
+        p.color = Color.parseColor("#233040"); for (db in listOf(-6, -12, -24, -48)) { val y = h * (-db / 60f); c.drawLine(0f, y, width.toFloat(), y, p) }
+        levels.forEachIndexed { i, (pk, rms) -> val x = i * bw + bw * 0.15f; val w = bw * 0.7f; val master = i >= n - 2
+            p.color = Color.parseColor("#1A2230"); c.drawRect(x, 0f, x + w, h, p)
+            val ypk = h * (1 - pos(pk)); val yr = h * (1 - pos(rms))
+            p.color = if (pos(pk) > 0.95f) Color.parseColor("#EF4444") else if (pos(pk) > 0.8f) Color.parseColor("#FBBF24") else if (master) Color.parseColor("#EA580C") else Color.parseColor("#22D3EE")
+            c.drawRect(x, ypk, x + w, h, p); p.color = Color.argb(140, 255, 255, 255); c.drawRect(x + w * 0.3f, yr, x + w * 0.7f, h, p)
+            if (clips.getOrElse(i) { false }) { p.color = Color.parseColor("#EF4444"); c.drawRect(x, 0f, x + w, 6f, p) }
+            p.color = Color.parseColor("#8B98A8"); p.textSize = 18f; p.textAlign = android.graphics.Paint.Align.CENTER
+            c.drawText(if (i == n - 2) "L" else if (i == n - 1) "R" else "${i + 1}", x + w / 2, height - 4f, p) }
+    }
+}
+
+/** METERS & LOUDNESS: every channel's level and the master, the master's loudness (LUFS momentary / short-term / integrated, range,
+ *  true peak), the phase correlation and dropouts; five times a second. */
+class MetersActivity : ConsoleSection() {
+    override val titleRes = R.string.meters_title
+    internal lateinit var levels: LevelsView; internal lateinit var loud: TextView
+    override fun build() {
+        levels = LevelsView(this); root.addView(levels)
+        loud = TextView(this).apply { setTextColor(Color.WHITE); typeface = Typeface.MONOSPACE; textSize = 14f; setPadding(0, 16, 0, 0); setLineSpacing(6f, 1f) }; root.addView(loud)
+        root.addView(label(getString(R.string.meters_help)).apply { setPadding(0, 16, 0, 0) })
+        ui.post(poll)
+    }
+    internal fun show(m: com.amfb.amixos.remote.Meters) {
+        val n = Prefs.stripCount(this).coerceAtMost(m.strips.size)
+        levels.clips = m.strips.take(n).map { it.clip } + listOf(m.masterClip, m.masterClip)
+        levels.levels = m.strips.take(n).map { it.pk to it.rms } + listOf(m.masterL to m.masterRms, m.masterR to m.masterRms)
+        fun db(v: Double) = if (v <= -119) "-inf" else String.format("%.1f", v)
+        val c = m.correlation; val silent = m.loudness.m <= -119 && maxOf(m.masterL, m.masterR) <= 1e-6
+        loud.text = listOf(getString(R.string.meters_lufs, db(m.loudness.m), db(m.loudness.s), db(m.loudness.i)),
+            getString(R.string.meters_range, String.format("%.1f", m.loudness.lra), db(m.loudness.tp)),
+            if (silent) getString(R.string.meters_phase, "—", getString(R.string.meters_phase_silent))   // no sound: nothing to judge
+            else getString(R.string.meters_phase, String.format("%+.2f", c), getString(if (c < 0) R.string.meters_phase_bad else if (c < 0.3) R.string.meters_phase_wide else R.string.meters_phase_ok)),
+            getString(R.string.meters_xruns, m.xruns)).joinToString("\n")
+    }
+    @Volatile private var busy = false
+    private val poll = object : Runnable { override fun run() { val cl = client ?: return
+        if (!busy) { busy = true; io.execute { val m = runCatching { cl.meters() }; busy = false; ui.post { m.onSuccess { show(it); note.text = "" }.onFailure { e -> note.text = e.message } } } }
+        ui.postDelayed(this, 200) } }
+    override fun onDestroy() { ui.removeCallbacks(poll); super.onDestroy() }
+}
+
+/** SOUND SCORE: the console's score of the master, live, with the six parts and what to do about each (SoundScore.kt, the console's rules).
+ *  The tone part reads the master's RTA, which this screen keeps running while it is open. */
+class SoundScoreActivity : ConsoleSection() {
+    override val titleRes = R.string.score_title
+    internal lateinit var big: TextView; internal lateinit var parts: LinearLayout; internal var last: SoundScore.Score? = null
+    private var target = -16.0; private var asked = 0L; @Volatile private var busy = false
+    override fun build() {
+        big = TextView(this).apply { textSize = 56f; setTypeface(null, Typeface.BOLD); gravity = Gravity.CENTER; setTextColor(dim); text = "—" }; root.addView(big)
+        parts = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }; root.addView(parts)
+        root.addView(label(getString(R.string.score_help)).apply { setPadding(0, 16, 0, 0) })
+        client?.let { c -> io.execute { runCatching { c.loudnessTarget() }.onSuccess { target = it } } }
+        ui.post(poll)
+    }
+    internal fun show(s: SoundScore.Score) {
+        last = s
+        if (!s.valid) { big.text = "—"; big.setTextColor(dim); parts.removeAllViews(); parts.addView(label(getString(R.string.score_silent))); return }
+        val col = Color.parseColor(if (s.total >= 85) "#34D399" else if (s.total >= 70) "#22D3EE" else if (s.total >= 50) "#FBBF24" else "#EF4444")
+        big.text = "${s.total.toInt()}  ${s.grade}"; big.setTextColor(col); parts.removeAllViews()
+        for (p in s.parts) { parts.addView(label("${p.name}   ${p.points.toInt()} / ${p.max.toInt()}", Color.WHITE, 14f).apply { setPadding(0, 12, 0, 0) })
+            parts.addView(android.widget.ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply { max = 100; progress = (100 * p.points / p.max).toInt() })
+            if (p.points < p.max) parts.addView(label("→ " + p.tip, Color.parseColor("#FBBF24"), 12f)) }
+    }
+    private val poll = object : Runnable { override fun run() { val cl = client ?: return
+        if (!busy) { busy = true; io.execute { val now = System.currentTimeMillis(); if (now - asked > 8000) { asked = now; runCatching { cl.rta(-1) } }
+            val m = runCatching { cl.meters() }.getOrNull(); val r = cl.rtaNow(); busy = false
+            if (m != null) { fun db(lin: Double) = if (lin <= 1e-6) -120.0 else 20 * kotlin.math.log10(lin)
+                val inp = SoundScore.Input(shortTerm = m.loudness.s, target = target, truePeak = m.loudness.tp, peakDb = db(maxOf(m.masterL, m.masterR)), rmsDb = db(m.masterRms),
+                    correlation = m.correlation, freqs = r?.f.orEmpty(), spectrum = r?.db.orEmpty(), clipStrips = m.strips.count { it.clip }, xruns = m.xruns, masterClip = m.masterClip)
+                val s = SoundScore.score(inp); ui.post { show(s) } } } }
+        ui.postDelayed(this, 500) } }
+    override fun onDestroy() { ui.removeCallbacks(poll); client?.let { c -> Thread { runCatching { c.rta(null) } }.start() }; super.onDestroy() }
+}
+
+/** ROUTING: INPUTS (which device input feeds each channel, or none) and OUTPUTS (what each device output carries: master, monitor, a bus).
+ *  Kept by the console's service and followed by the console at once. Tap a row to change it. */
+class RoutingActivity : ConsoleSection() {
+    override val titleRes = R.string.routing_title
+    internal var routing: com.amfb.amixos.remote.Routing? = null; private var tab = 0; internal lateinit var list: LinearLayout
+    override fun build() {
+        val tabs = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        listOf(R.string.routing_inputs, R.string.routing_outputs).forEachIndexed { k, r -> tabs.addView(Button(this).apply { text = getString(r); setOnClickListener { tab = k; render() } }) }
+        root.addView(tabs); list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }; root.addView(list)
+        root.addView(label(getString(R.string.routing_help)).apply { setPadding(0, 16, 0, 0) })
+        load()
+    }
+    private fun load() { val c = client ?: return; io.execute { val r = runCatching { c.routing() }; ui.post { r.onSuccess { routing = it; render() }.onFailure { e -> note.text = e.message } } } }
+    private fun srcName(id: Int) = routing?.sources?.firstOrNull { it.first == id }?.second ?: "#$id"
+    internal fun render() { val r = routing ?: return; list.removeAllViews()
+        if (tab == 0) {
+            note.text = getString(R.string.routing_device_in, r.deviceIn)
+            r.inputs.take(Prefs.stripCount(this)).forEachIndexed { s, inp -> list.addView(Button(this).apply {
+                text = String.format("CH %02d   ←   %s", s + 1, if (inp < 0) getString(R.string.routing_none) else "IN ${inp + 1}" + if (inp >= r.deviceIn) "  (" + getString(R.string.routing_unavailable) + ")" else "")
+                isAllCaps = false; gravity = Gravity.START or Gravity.CENTER_VERTICAL
+                setOnClickListener { val n = maxOf(r.deviceIn, 2, inp + 1); val names = listOf(getString(R.string.routing_none)) + (1..n).map { "IN $it" }
+                    android.app.AlertDialog.Builder(this@RoutingActivity).setTitle(String.format("CH %02d", s + 1)).setItems(names.toTypedArray()) { _, w ->
+                        val v = w - 1; send { it.inRoute(s, v) }; routing = r.copy(inputs = r.inputs.toMutableList().also { l -> l[s] = v }); render() }.show() } }) }
+        } else {
+            note.text = getString(R.string.routing_device_out, r.deviceOut)
+            r.outputs.take(maxOf(r.deviceOut, 8)).forEachIndexed { o, src -> list.addView(Button(this).apply {
+                text = String.format("OUT %02d   →   %s", o + 1, srcName(src)) + if (o >= r.deviceOut) "  (" + getString(R.string.routing_unavailable) + ")" else ""
+                isAllCaps = false; gravity = Gravity.START or Gravity.CENTER_VERTICAL
+                setOnClickListener { val names = r.sources.map { it.second }
+                    android.app.AlertDialog.Builder(this@RoutingActivity).setTitle(String.format("OUT %02d", o + 1)).setItems(names.toTypedArray()) { _, w ->
+                        val v = r.sources[w].first; send { it.outRoute(o, v) }; routing = r.copy(outputs = r.outputs.toMutableList().also { l -> l[o] = v }); render() }.show() } }) }
+        }
+    }
 }

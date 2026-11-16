@@ -937,6 +937,15 @@ int main(int argc, char* argv[]) {
             std::printf("amixos --smoke: MASTERING phone -> console %s in %lld ms; console -> phones %s in %lld ms\n", inOk ? "yes" : "NO", static_cast<long long>(inMs), outOk ? "yes" : "NO", static_cast<long long>(tm.elapsed()));
             engine.setMastering(keep);
             if (!(inOk && outOk)) { rackOk = false; rackWhy = QStringLiteral("MASTERING sync (in %1, out %2)").arg(inOk).arg(outOk); } }
+          // ROUTING both ways: a phone routes input 6 to CH 4 and MASTER L to OUT 3; the console's own change of CH 5 reaches the phones
+          { const QVariantList keepIn = engine.inputRoutes(), keepOut = engine.outputRoutes();
+            http("/api/control", "{\"op\":\"inRoute\",\"strip\":3,\"input\":5}"); http("/api/control", "{\"op\":\"outRoute\",\"out\":2,\"source\":1}");
+            QElapsedTimer tr; tr.start(); bool in = false; while (tr.elapsed() < 3000 && !in) { wait(40); in = engine.inputRoutes().value(3).toInt() == 5 && engine.outputRoutes().value(2).toInt() == 1; }
+            const qint64 inMs = tr.elapsed(); engine.setInputRoute(4, 6); tr.restart(); bool out = false;
+            while (tr.elapsed() < 3000 && !out) { wait(40); out = http("/api/state", {}).value("routing").toMap().value("in").toList().value(4).toInt() == 6; }
+            std::printf("amixos --smoke: ROUTING phone -> console %s in %lld ms; console -> phones %s in %lld ms\n", in ? "yes" : "NO", static_cast<long long>(inMs), out ? "yes" : "NO", static_cast<long long>(tr.elapsed()));
+            for (int i = 0; i < keepIn.size(); ++i) engine.setInputRoute(i, keepIn[i].toInt()); for (int o = 0; o < keepOut.size(); ++o) engine.setOutputRoute(o, keepOut[o].toInt());
+            if (!(in && out)) { rackOk = false; rackWhy = QStringLiteral("ROUTING sync (in %1, out %2)").arg(in).arg(out); } }
           // SAMPLE PADS while the phones are linked: the console's engine is stopped, a pad goes to the service and is heard on its master
           { double before = 0, during = 0; for (int k = 0; k < 5; ++k) { wait(40); before = std::max(before, get("/api/meters").value("master").toMap().value("l").toDouble()); }
             const bool sent = !engine.running() && samples.play(1); QElapsedTimer tp; tp.start();

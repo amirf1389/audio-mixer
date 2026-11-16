@@ -214,6 +214,13 @@ int main() {
       CHECK(am::httpd::Client::request("127.0.0.1", port, "GET", "/api/samples", "", auth, status, body) && status == 200);
       const Value sl = Value::parse(body, ok)["samples"]; CHECK(ok && sl.size() == 100 && sl.at(0)["id"].asInt() == 1 && !sl.at(0)["name"].asString().empty());
       CHECK(am::httpd::Client::request("127.0.0.1", port, "GET", "/api/samples", "", {}, status, body) && (status == 401 || status == 429)); }
+    // ROUTING: kept without a device, in the state and on /api/routing with the sources by name; out of range refused
+    { CHECK(ctl("{\"op\":\"inRoute\",\"strip\":3,\"input\":7}") == 200 && ctl("{\"op\":\"outRoute\",\"out\":2,\"source\":1}") == 200);
+      CHECK(ctl("{\"op\":\"outRoute\",\"out\":2,\"source\":9999}") == 400 && ctl("{\"op\":\"outRoute\",\"out\":-1,\"source\":1}") == 400);
+      const Value rt = d.state()["routing"]; CHECK(rt["in"].at(3).asInt() == 7 && rt["in"].at(4).asInt() == 4 && rt["out"].at(2).asInt() == 1);
+      CHECK(am::httpd::Client::request("127.0.0.1", port, "GET", "/api/routing", "", auth, status, body) && status == 200);
+      const Value r2 = Value::parse(body, ok); CHECK(ok && r2["sources"].size() > 6 && r2["sources"].at(1)["name"].asString() == "MASTER L");
+      CHECK(ctl("{\"op\":\"inRoute\",\"strip\":3,\"input\":3}") == 200 && ctl("{\"op\":\"outRoute\",\"out\":2,\"source\":5}") == 200); }
     CHECK(ctl("{\"op\":\"trim\",\"strip\":2,\"db\":0}") == 200 && ctl("{\"op\":\"tone\",\"strip\":2,\"low\":0,\"mid\":0,\"midHz\":1000,\"high\":0,\"on\":true}") == 200); }
   { // CONSOLE SETTINGS over the remote, and the WINDOWS VOLUME with GAIN MODE (a stand-in for the Windows slider)
     const auto set = [&](const std::string& k, const std::string& v) { return am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"setting\",\"key\":\"" + k + "\",\"value\":" + v + "}", auth, status, body) ? status : -1; };

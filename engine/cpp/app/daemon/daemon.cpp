@@ -221,6 +221,9 @@ httpd::Response Daemon::handle(const httpd::Request& r) {
     tokens_.roleFor(t, r.peer);   // it belongs to this phone's address from the start
     pairFails_ = 5;               // one pairing per PIN: the next phone waits for the next PIN
     json::Value out = json::Value::object(); out.set("ok", true); out.set("id", id); out.set("token", t); out.set("role", "control"); out.set("days", 30); res.body = out.dump(); return res; }
+  if (r.method == "GET" && r.path == "/api/routing") {   // ROUTING (any valid token)
+    const std::string role = roleOf(r, false); if (role.empty() || role == "held") { res.status = role == "held" ? 403 : (noteRefused() ? 429 : 401); res.body = "{\"ok\":false,\"error\":\"X-Amix-Token missing or wrong\"}"; return res; }
+    std::lock_guard<std::mutex> g(m_); res.body = routingJson().dump(); return res; }
   if (r.method == "GET" && r.path == "/api/samples") {   // the SAMPLE PADS: id, name, category, seconds (any valid token)
     const std::string role = roleOf(r, false); if (role.empty() || role == "held") { res.status = role == "held" ? 403 : (noteRefused() ? 429 : 401); res.body = "{\"ok\":false,\"error\":\"X-Amix-Token missing or wrong\"}"; return res; }
     json::Value a = json::Value::array(); for (const auto& s : samples::list()) { json::Value v = json::Value::object(); v.set("id", s.id); v.set("name", s.name); v.set("category", s.category); v.set("seconds", s.seconds); a.push(v); }
@@ -311,6 +314,7 @@ json::Value Daemon::status() const {
   o.set("backend", rt_ ? backend_ : ""); o.set("running", rt_ && rt_->running());
   if (rt_) { const Snapshot s = rt_->snapshot(); o.set("blocks", static_cast<double>(s.blocks)); o.set("frames", static_cast<double>(s.frames)); o.set("xruns", static_cast<double>(s.xruns));
     // CONSOLE STATUS on the remotes: the device's rate, the DSP load of the last block and its worst, the connected remotes
+    o.set("inDevice", lastCfg_.inDevice); o.set("outDevice", lastCfg_.outDevice); o.set("bufferFrames", static_cast<int>(lastCfg_.frames)); o.set("inChannels", lastCfg_.inChannels); o.set("outChannels", lastCfg_.outChannels);
     o.set("rate", rt_->sampleRate()); o.set("loadPct", std::round(s.loadPct * 10) / 10); o.set("maxBlockUs", std::round(s.maxBlockUs)); o.set("blockUs", std::round(s.blockUs)); }
   else { o.set("blocks", 0); o.set("frames", 0); o.set("xruns", 0); }
   o.set("remotes", watchers_.load());
@@ -382,6 +386,17 @@ json::Value Daemon::racks(int onlyStrip, bool params, bool states) const {
 }
 double Daemon::trimForLevel(double l) { return l <= 0.0005 ? -120.0 : std::max(-120.0, std::min(0.0, 30.0 * std::log10(l))); }
 bool Daemon::windowsSetsLevel() const { return rt_ && rt_->backendName() == "wasapi" && !rt_->exclusive() && (rt_->outDevice().empty() || rt_->outDevice() == "-"); }
+void Daemon::initRoutes() { if (routesInit_) return; routesInit_ = true; for (int i = 0; i < kMaxStrips; ++i) inRoute_[i] = i; for (int o = 0; o < Runtime::kMaxOutputs; ++o) outRoute_[o] = Runtime::defaultOutputSource(o); }
+json::Value Daemon::routingJson() const {   // ROUTING for the phones: what feeds each strip, what each output carries, and the sources by name
+  const_cast<Daemon*>(this)->initRoutes(); json::Value o = json::Value::object();
+  json::Value in = json::Value::array(); for (int i = 0; i < opt_.strips; ++i) in.push(inRoute_[i]); o.set("in", in);
+  json::Value out = json::Value::array(); for (int k = 0; k < 32; ++k) out.push(outRoute_[k]); o.set("out", out);
+  json::Value src = json::Value::array(); auto add = [&](int id, const std::string& name, const char* group) { json::Value v = json::Value::object(); v.set("id", id); v.set("name", name); v.set("group", group); src.push(v); };
+  add(Runtime::kSrcOff, "OFF", "off"); add(Runtime::kSrcMasterL, "MASTER L", "master"); add(Runtime::kSrcMasterR, "MASTER R", "master"); add(Runtime::kSrcMasterMono, "MASTER MONO", "master");
+  add(Runtime::kSrcMonL, "MONITOR L", "monitor"); add(Runtime::kSrcMonR, "MONITOR R", "monitor");
+  for (int k = 0; k < kMaxBuses; ++k) { const std::string b = k < 8 ? "AUX " + std::to_string(k + 1) : "FX " + std::to_string(k - 7); add(Runtime::kSrcBus0L + 2 * k, b + " L", "bus"); add(Runtime::kSrcBus0L + 2 * k + 1, b + " R", "bus"); }
+  o.set("sources", src); o.set("inputs", rt_ ? rt_->inputChannels() : 0); o.set("outputs", rt_ ? rt_->outputChannels() : 0); return o;
+}
 void Daemon::pushTone(Runtime& rt, int i) const {   // the same bands as the console's Engine::setChannelEq
   const Strip& st = strips_[static_cast<std::size_t>(i)]; const int f = dsp::kChannelEqFirst;
   auto put = [&](int b, dsp::FilterType t, double hz, double q, double g) { rt.setEqBand(i, b, st.toneOn && std::fabs(g) > 0.01 ? t : dsp::FilterType::Off, hz, q, g); };
@@ -428,7 +443,7 @@ json::Value Daemon::state() const {
   o.set("settings", settingsJson());
   json::Value mo = json::Value::object(); mo.set("source", mon_.source); mo.set("db", mon_.db); mo.set("dim", mon_.dim); mo.set("mono", mon_.mono); mo.set("mute", mon_.mute); o.set("monitor", mo);
   o.set("backend", rt_ ? backend_ : ""); o.set("running", rt_ && rt_->running()); o.set("v", static_cast<double>(version_.load())); o.set("remotes", watchers_.load()); o.set("racksV", static_cast<double>(racksV_.load())); o.set("racksBy", racksFromConsole_ ? "console" : "remote");
-  o.set("programEq", programEqJson()); o.set("masterV", static_cast<double>(masterV_.load()));
+  o.set("programEq", programEqJson()); o.set("masterV", static_cast<double>(masterV_.load())); o.set("routing", routingJson());
   { json::Value m = json::Value::object();   // MASTERING (the master chain), in the console's own words (Engine::mastering)
     m.set("on", mp_.on); m.set("low", mp_.lowDb); m.set("air", mp_.airDb); m.set("thr", mp_.thrDb); m.set("ratio", mp_.ratio); m.set("attack", mp_.attackMs); m.set("release", mp_.releaseMs);
     m.set("makeup", mp_.makeupDb); m.set("drive", mp_.drive); m.set("gain", mp_.gainDb); m.set("reductionDb", master_.reductionDb()); o.set("mastering", m); }
@@ -477,6 +492,10 @@ bool Daemon::loadSeed(const std::string& file, std::string& err) {
     const json::Value& eq = v["eq"]; for (std::size_t b = 0; b < eq.size() && b < 8; ++b) { const json::Value& e = eq.at(b); Strip::Band& d = s.eq[b];
       d.type = std::max(0, std::min(8, e.at(0).asInt(0))); d.freq = std::max(10.0, std::min(24000.0, e.at(1).asNumber(1000))); d.q = std::max(0.05, std::min(36.0, e.at(2).asNumber(0.707))); d.gain = std::max(-24.0, std::min(24.0, e.at(3).asNumber(0))); } }
   if (o["master"].isObject()) masterDb_ = std::max(-120.0, std::min(10.0, o["master"]["db"].asNumber(masterDb_)));
+  if (o["routes"].isObject()) {   // the console's ROUTING: what feeds each strip, what each output carries
+    initRoutes(); const json::Value& ri = o["routes"]["in"]; const json::Value& ro = o["routes"]["out"];
+    for (std::size_t i = 0; i < ri.size() && i < static_cast<std::size_t>(kMaxStrips); ++i) inRoute_[i] = std::max(-1, std::min(kMaxStrips - 1, ri.at(i).asInt(static_cast<int>(i))));
+    for (std::size_t k = 0; k < ro.size() && k < static_cast<std::size_t>(Runtime::kMaxOutputs); ++k) outRoute_[k] = std::max(Runtime::kSrcOff, std::min(Runtime::kSrcMasterMono, ro.at(k).asInt(0))); }
   if (o["masterChain"].isObject()) {   // the console's RTA EQ and mastering: they keep sounding while the service plays
     const json::Value& m = o["masterChain"]; mp_.eqOn = m["eqOn"].asBool(mp_.eqOn);
     const json::Value& eq = m["eq"]; for (std::size_t b = 0; b < eq.size() && b < static_cast<std::size_t>(MasterChain::kBands); ++b) { const json::Value& e = eq.at(b);
@@ -536,7 +555,8 @@ json::Value Daemon::apply(const json::Value& cmd, std::string& err) {
     mp_.fs = rt->sampleRate(); master_.set(mp_); rt->setMasterProcessor(&master_);   // the console's RTA EQ and mastering, as handed over
     rt->setLimiter(limiter_, ceiling_); rt->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute);
     pads_.prepare(rt->sampleRate()); rt->setExtraSource(&pads_);   // the SAMPLE PADS, at this device's rate
-    rt_ = std::move(rt); applyMaster(*rt_); backend_ = rt_->backendName(); lastError_.clear(); rate_ = cfg.sampleRate;   // the trim knows the new output
+    initRoutes(); for (int i = 0; i < opt_.strips; ++i) rt->setInputRoute(i, inRoute_[i]); for (int o = 0; o < Runtime::kMaxOutputs; ++o) rt->setOutputRoute(o, outRoute_[o]);   // the routing as kept
+    lastCfg_ = cfg; rt_ = std::move(rt); applyMaster(*rt_); backend_ = rt_->backendName(); lastError_.clear(); rate_ = cfg.sampleRate;   // the trim knows the new output
     ok.set("backend", backend_); ok.set("rate", cfg.sampleRate); ok.set("frames", static_cast<int>(cfg.frames)); return ok;
   }
   if (op == "stop") { if (rt_) { rt_->setTap(nullptr); rta_.next.store(nullptr); rec_.stop(); rt_->stop(); rt_.reset(); } backend_.clear(); return ok; }
@@ -643,8 +663,10 @@ json::Value Daemon::apply(const json::Value& cmd, std::string& err) {
     if (rt_) rt_->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute);
     return ok;
   }
-  if (op == "inRoute") { if (!strip(s) || !need()) return {}; rt_->setInputRoute(s, cmd["input"].asInt(-1)); return ok; }
-  if (op == "outRoute") { if (!need()) return {}; const int o = cmd["out"].asInt(-1); if (o < 0 || o >= Runtime::kMaxOutputs) { err = "out of range"; return {}; } rt_->setOutputRoute(o, cmd["source"].asInt(0)); return ok; }
+  if (op == "inRoute") { if (!strip(s)) return {}; initRoutes(); inRoute_[s] = std::max(-1, std::min(kMaxStrips - 1, cmd["input"].asInt(-1))); if (rt_) rt_->setInputRoute(s, inRoute_[s]); ++version_; return ok; }
+  if (op == "outRoute") { const int o = cmd["out"].asInt(-1); if (o < 0 || o >= Runtime::kMaxOutputs) { err = "out of range"; return {}; }
+    const int src = cmd["source"].asInt(0); if (src < Runtime::kSrcOff || src > Runtime::kSrcMasterMono) { err = "source out of range"; return {}; }
+    initRoutes(); outRoute_[o] = src; if (rt_) rt_->setOutputRoute(o, src); ++version_; return ok; }
   if (op == "trim") { if (!strip(s)) return {}; Strip& st = strips_[static_cast<std::size_t>(s)]; st.trim = clampDb(cmd["db"].asNumber(0), -24, 24); if (rt_) rt_->setTrimDb(s, st.trim); ++version_; return ok; }
   if (op == "tone") {   // the analog 3-band channel EQ: any of low / mid / midHz / high / on; the rest stays
     if (!strip(s)) return {}; Strip& st = strips_[static_cast<std::size_t>(s)]; auto g = [](double v) { return std::max(-15.0, std::min(15.0, v)); };
