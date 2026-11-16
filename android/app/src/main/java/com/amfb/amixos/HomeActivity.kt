@@ -44,7 +44,17 @@ class HomeActivity : AppCompatActivity() {
         tile("⚙", R.string.home_settings, R.string.home_settings_sub, Color.parseColor("#94A3B8")) { Nav.go(this, SettingsActivity::class.java) }
         box.addView(grid)
         setContentView(Nav.wrap(this, ScrollView(this).apply { addView(box) }, Nav.Tab.HOME))
+        // THE BOOT ANIMATION: once per app start (not when coming back to HOME), unless switched off in SETTINGS
+        if (savedInstanceState == null && !bootShown && Prefs.bootAnim(this)) { bootShown = true; showBoot() }
     }
+    internal fun showBoot(durationMs: Long = 1500): BootView {
+        val root = window.decorView as android.view.ViewGroup
+        lateinit var v: BootView
+        v = BootView(this) { v.animate().alpha(0f).setDuration(180).withEndAction { root.removeView(v) }.start() }
+        root.addView(v, android.view.ViewGroup.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT))
+        if (durationMs > 0) v.start(durationMs); return v
+    }
+    companion object { @JvmStatic internal var bootShown = false }
     override fun onResume() { super.onResume(); showCard() }
     /** The console card: from what the remote saved at its last connection (nothing is fetched here). */
     fun showCard() {

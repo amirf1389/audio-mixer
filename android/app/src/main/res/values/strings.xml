@@ -51,6 +51,8 @@
     <string name="auto_connected">connected · live sync</string>
     <string name="auto_lost">link lost · %1$s</string>
     <string name="link_timeline">LINK TIMELINE</string>
+    <string name="set_boot_anim">Boot animation</string>
+    <string name="set_boot_anim_note">The AmF X1 faders and meters when the app starts (about 1.5 s; a tap skips it).</string>
     <string name="win_title">WINDOWS (the computer\'s output)</string>
     <string name="win_volume">Windows volume  %1$d%%</string>
     <string name="win_none">This computer has no Windows volume the console can reach.</string>

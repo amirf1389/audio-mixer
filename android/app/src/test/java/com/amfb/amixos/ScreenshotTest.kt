@@ -30,12 +30,30 @@ class ScreenshotTest {
     private fun idle(ms: Long) { val end = System.currentTimeMillis() + ms; while (System.currentTimeMillis() < end) { shadowOf(Looper.getMainLooper()).idle(); Thread.sleep(50) } }
 
     @Test fun home() {
+        HomeActivity.bootShown = true   // the boot animation has its own test
         Prefs.remote(org.robolectric.RuntimeEnvironment.getApplication()).edit().putString("host", "192.168.1.20").putString("port", "8765").putString("token", "x")
             .putString("lastName", "A mix OS 1.23.0.1").putString("lastPlan", "PRO").putInt("lastStrips", 20).commit()
         val a = Robolectric.buildActivity(HomeActivity::class.java).setup().resume().get()
         shot(a.window.decorView.rootView, "home")
     }
 
+    @Test fun bootAnimation() {   // five moments of the boot animation side by side, then a tap skips it and HOME is left
+        val ctx = org.robolectric.RuntimeEnvironment.getApplication(); val w = 540; val h = 1170
+        val strip = android.graphics.Bitmap.createBitmap(w * 5, h, android.graphics.Bitmap.Config.ARGB_8888); val c = android.graphics.Canvas(strip)
+        val v = BootView(ctx); v.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY)); v.layout(0, 0, w, h)
+        floatArrayOf(0.12f, 0.30f, 0.50f, 0.70f, 0.88f).forEachIndexed { i, t -> v.t = t; c.save(); c.clipRect(i * w, 0, (i + 1) * w, h); c.translate((i * w).toFloat(), 0f); c.drawColor(android.graphics.Color.parseColor("#0B0F15")); v.draw(c); c.restore() }
+        java.io.File(System.getProperty("amfx.shots")).mkdirs(); java.io.FileOutputStream(java.io.File(System.getProperty("amfx.shots"), "boot-animation.png")).use { strip.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+        org.junit.Assert.assertEquals(1f, BootView.overshoot(1f), 1e-6f); org.junit.Assert.assertTrue((0..100).any { BootView.overshoot(it / 100f) > 1.02f })   // it lands past its place and settles back
+        org.junit.Assert.assertEquals(0f, BootView.alphaAt(1f), 1e-6f); org.junit.Assert.assertEquals(1f, BootView.alphaAt(0.5f), 1e-6f)
+        HomeActivity.bootShown = false; Prefs.remote(ctx).edit().putBoolean("bootAnim", true).commit()
+        Robolectric.buildActivity(HomeActivity::class.java).setup().get()
+        org.junit.Assert.assertTrue("the boot animation starts on a fresh app start", HomeActivity.bootShown)
+        var finished = 0; val tap = BootView(ctx) { finished++ }; tap.start(60_000)
+        tap.dispatchTouchEvent(android.view.MotionEvent.obtain(0, 0, android.view.MotionEvent.ACTION_DOWN, 10f, 10f, 0)); tap.dispatchTouchEvent(android.view.MotionEvent.obtain(0, 0, android.view.MotionEvent.ACTION_UP, 10f, 10f, 0))
+        org.junit.Assert.assertEquals("a tap skips it, once", 1, finished); org.junit.Assert.assertEquals(1f, tap.t, 1e-6f)
+        Prefs.remote(ctx).edit().putBoolean("bootAnim", false).commit(); HomeActivity.bootShown = false
+        Robolectric.buildActivity(HomeActivity::class.java).setup().get(); org.junit.Assert.assertFalse("switched off in SETTINGS: not shown", HomeActivity.bootShown)
+    }
     @Test fun mixdown() {   // the empty screen (the file picker is not there on the JVM)
         val a = Robolectric.buildActivity(MixdownActivity::class.java).setup().get(); idle(300)
         shot(a.window.decorView.rootView, "mixdown")
