@@ -2062,5 +2062,9 @@
 "● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV or FLAC files, one per source, named by time.": "● Кнопка REC на микшере записывает сигнал мастер-канала и каждого подготовленного к записи канала (до фейдера, после регулировки уровня / DSP / вставок) в файлы формата WAV или FLAC — по одному файлу на каждый источник, с именами, сформированными на основе времени записи.",
 "MICROPHONE ON AT START": "ВКЛЮЧЕНИЕ МИКРОФОНА ПРИ ЗАПУСКЕ",
 "OFF: ENGINE ON starts the speakers or headphones without the microphone, so the mic never feeds back at start. Turn the mic on with INPUT: MIC on the mixer. ASIO interfaces and COMPUTER SOUND are not affected.": "OFF: ENGINE ON включает динамики или наушники без микрофона, поэтому при запуске микрофон никогда не вызывает обратную связь. Включите микрофон с помощью параметра INPUT: MIC на микшере. Это не влияет на интерфейсы ASIO и COMPUTER SOUND.",
-"MY ACCOUNT ONLINE": "МОЯ УЧЕТНАЯ ЗАПИСЬ ОНЛАЙН"
+"MY ACCOUNT ONLINE": "МОЯ УЧЕТНАЯ ЗАПИСЬ ОНЛАЙН",
+"LIVE SYNC": "СИНХРОНИЗАЦИЯ В РЕЖИМЕ РЕАЛЬНОГО ВРЕМЕНИ",
+"CONNECTED": "ПОДКЛЮЧЕНО",
+"waiting for a phone or browser": "ожидание ответа от телефона или браузера",
+"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.": "Регуляторы громкости, функции отключения звука, соло и имена отображаются на телефонах и в браузерах, подключенных к этой консоли, и любое действие, выполняемое здесь, сразу же отображается на них. Если регулятор громкости перемещается с телефона, он загорается здесь."
 }

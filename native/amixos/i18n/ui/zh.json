@@ -2039,5 +2039,8 @@
 "● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV or FLAC files, one per source, named by time.": "● 混音台上的 REC 按钮会将主通道和所有已启用的通道（前推子、衰减/DSP/插入效果后）录制为 WAV 或 FLAC 文件，每个音源生成一个文件，文件名按时间命名。",
 "MICROPHONE ON AT START": "启动时麦克风开启",
 "OFF: ENGINE ON starts the speakers or headphones without the microphone, so the mic never feeds back at start. Turn the mic on with INPUT: MIC on the mixer. ASIO interfaces and COMPUTER SOUND are not affected.": "OFF：ENGINE ON 模式下，扬声器或耳机将开启，但麦克风保持关闭，因此启动时麦克风不会产生反馈。请通过调音台上的 INPUT: MIC 选项开启麦克风。ASIO 接口和 COMPUTER SOUND 不受此设置影响。",
-"MY ACCOUNT ONLINE": "我的在线账户"
+"MY ACCOUNT ONLINE": "我的在线账户",
+"LIVE SYNC": "实时同步",
+"waiting for a phone or browser": "等待手机或浏览器",
+"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.": "推子、静音、独奏和名称会同步显示在连接到该调音台的手机和浏览器上，这里的所有操作都会立即同步到这些设备上。当手机上的推子被移动时，此处会亮起相应指示灯。"
 }

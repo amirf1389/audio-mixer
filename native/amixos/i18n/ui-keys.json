@@ -2191,5 +2191,9 @@
 "HI-RES AUDIO",
 "resampling · FLAC · RF64",
 "MICROPHONE ON AT START",
-"OFF: ENGINE ON starts the speakers or headphones without the microphone, so the mic never feeds back at start. Turn the mic on with INPUT: MIC on the mixer. ASIO interfaces and COMPUTER SOUND are not affected."
+"OFF: ENGINE ON starts the speakers or headphones without the microphone, so the mic never feeds back at start. Turn the mic on with INPUT: MIC on the mixer. ASIO interfaces and COMPUTER SOUND are not affected.",
+"LIVE SYNC",
+"CONNECTED",
+"waiting for a phone or browser",
+"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here."
 ]

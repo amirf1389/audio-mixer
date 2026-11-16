@@ -77,6 +77,7 @@ bool Daemon::start(std::string& err) {
   http_.route([this](const httpd::Request& r) { return handle(r); });
   http_.websocket("/ws/meters", [this](const httpd::Request& r, httpd::WebSocket& ws) {
     if (roleOf(r).empty()) { ws.send("{\"error\":\"unauthorised\"}"); ws.close(); return; }   // any valid token may watch the meters
+    struct Count { std::atomic<int>& n; explicit Count(std::atomic<int>& c) : n(c) { ++n; } ~Count() { --n; } } watching(watchers_);   // how many remotes are live
     std::thread reader([&ws] { std::string t; int op = 0; while (ws.open() && ws.read(t, op)) {} });   // drains pings / close from the phone
     unsigned long long sent = 0;   // LIVE SYNC: the console state goes out on connect and whenever any remote changed it (at most 20 times a second)
     while (running_ && ws.open()) {
@@ -157,7 +158,7 @@ httpd::Response Daemon::handle(const httpd::Request& r) {
   }
   if (r.method == "GET" && r.path == "/api/state") {
     const std::string since = r.param("since");
-    if (!since.empty() && std::strtoull(since.c_str(), nullptr, 10) == version_.load()) { json::Value o = json::Value::object(); o.set("v", static_cast<double>(version_.load())); o.set("same", true); res.body = o.dump(); return res; }
+    if (!since.empty() && std::strtoull(since.c_str(), nullptr, 10) == version_.load()) { json::Value o = json::Value::object(); o.set("v", static_cast<double>(version_.load())); o.set("same", true); o.set("remotes", watchers_.load()); res.body = o.dump(); return res; }
     res.body = state().dump(); return res; }
   if (r.method == "GET" && r.path == "/api/meters") { res.body = meters().dump(); return res; }
   if (r.method == "POST" && r.path == "/api/pair") {   // a phone trades the minute's PIN for a token of its own
@@ -258,7 +259,7 @@ json::Value Daemon::state() const {
   o.set("buses", buses);
   json::Value m = json::Value::object(); m.set("db", masterDb_); m.set("limiter", limiter_); m.set("ceilingDb", ceiling_); o.set("master", m);
   json::Value mo = json::Value::object(); mo.set("source", mon_.source); mo.set("db", mon_.db); mo.set("dim", mon_.dim); mo.set("mono", mon_.mono); mo.set("mute", mon_.mute); o.set("monitor", mo);
-  o.set("backend", rt_ ? backend_ : ""); o.set("running", rt_ && rt_->running()); o.set("v", static_cast<double>(version_.load()));
+  o.set("backend", rt_ ? backend_ : ""); o.set("running", rt_ && rt_->running()); o.set("v", static_cast<double>(version_.load())); o.set("remotes", watchers_.load());
   return o;
 }
 
