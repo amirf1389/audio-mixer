@@ -15,14 +15,17 @@ ApplicationWindow {
     title: Theme.product + " " + appVersion + " · " + Theme.vendor + " · build " + buildStamp
     property bool forceSetup: false   // the smoke / shots show the wizard on demand
     color: Theme.obsidian
-    property string current: settings.startPage
+    // the page shown. Read from the START PAGE setting ONCE: a binding to it ran again on every settings change (the settings object has
+    // one change signal), so a setting saved before the first click (the audio starting, a device remembered) sent the window back to
+    // the start page and logged a binding loop on "current"
+    property string current: ""
     property bool mixerEver: false   // the mixer has been opened once: from then on it stays built
     // LOW-CPU INTERFACE: the meters redraw at 30 fps in front, 4 fps behind another app, 1 fps minimised (the sound is never throttled).
     // Not on the offscreen platform (--smoke, --shots, --film): there the window is never "active" and the film needs every frame.
     function uiActivity() { if (Qt.platform.pluginName === "offscreen") return; engine.setUiActivity(visibility === Window.Minimized || visibility === Window.Hidden || !visible ? 0 : active ? 2 : 1) }
     onActiveChanged: uiActivity()
     onVisibilityChanged: uiActivity()
-    Component.onCompleted: if (current === "mixer") mixerEver = true
+    Component.onCompleted: { if (current === "") current = settings.startPage; if (current === "mixer") mixerEver = true }
     // MEMORY: a closed page's items are freed, but its JavaScript objects wait for the QML garbage collector, which runs only under
     // allocation pressure, so every page visit used to add ~5 MB that stayed. Collected once the user has settled on a page.
     Timer { id: gcTimer; interval: 1200; onTriggered: gc() }

@@ -2,6 +2,20 @@
   "_": "The feature feed: newest first. scripts/make-update.js embeds it in the signed update.json; the console shows a NEW badge for entries newer than the version last looked at. Edit on the website's manage.html (Release manager) or by hand, then run node scripts/make-update.js.",
   "features": [
     {
+      "version": "1.24.0.1",
+      "date": "2026-11-16",
+      "title": "Release 1.24.0.1",
+      "items": [
+        "AUTO ZOOM: the console fits the screen by itself (a 14-inch laptop at 150 % is drawn as at about 130 %); INTERFACE ZOOM in SETTINGS",
+        "GAIN and the analog 3-band EQ (HI / MID / FREQ / LO) on every channel strip, on the console, the phone and the web remote, in sync",
+        "A plug-in's own window opens inside the console; it steps aside while a menu is open",
+        "Real-time sync of the channel EQ, MASTERING and the plug-ins between the console and the phones",
+        "Lower CPU: the interface rests while another app (Chrome) is in front; ECO interface setting",
+        "Sample pads are heard while phones are linked; SAMPLE PADS, MASTERING and CONSOLE STATUS on the phone",
+        "Fixes: SOUND SCORE and AUTO LEVEL with Windows volume GAIN MODE, mixer toolbar labels overlapping, the start page jumping back, the strip EQ key state"
+      ]
+    },
+    {
       "version": "1.24.0.0",
       "date": "2026-11-16",
       "title": "Release 1.24.0.0",

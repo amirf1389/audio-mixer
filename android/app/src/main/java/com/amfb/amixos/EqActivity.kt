@@ -187,7 +187,8 @@ class EqActivity : AppCompatActivity() {
     private var rtaOn = true; private var rtaAsked = 0L; @Volatile private var rtaBusy = false
     private val rtaTick = object : Runnable { override fun run() { val cl = client ?: return
         followConsoleEq(cl)
-        if (!rtaOn) { curve.spectrum = null; return }
+        // RTA off: no spectrum, but the console's EQ is still followed (once a second)
+        if (!rtaOn) { curve.spectrum = null; ui.postDelayed(this, 1000); return }
         // one request at a time: a slow network skips frames instead of queueing them
         if (!rtaBusy) { rtaBusy = true; io.execute { val now = System.currentTimeMillis()
             if (now - rtaAsked > 8000) { rtaAsked = now; runCatching { cl.rta(strip) } }

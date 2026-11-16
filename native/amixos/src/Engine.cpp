@@ -1115,6 +1115,8 @@ bool Engine::openPluginWindow(int i, int slot, bool evenHere) {
   int w = 640, h = 400;
   if (!win->handle()) { delete win; status_ = QStringLiteral("The plug-in's own window could not be created on this display."); emit stateChanged(); return false; }   // no native window (no display, a remote session that refuses one): asking for its id would fault
   if (!p.vst->openEditor(reinterpret_cast<void*>(win->winId()), w, h)) { delete win; return false; }
+  // the editor reports device pixels: the window is sized in its own units (on a 150 % display a 900 px editor is a 600-unit window)
+  { const qreal dpr = std::max<qreal>(1.0, win->devicePixelRatio()); w = static_cast<int>(std::lround(w / dpr)); h = static_cast<int>(std::lround(h / dpr)); }
   w = std::clamp(w, 120, 4000); h = std::clamp(h, 60, 3000); win->setMinimumSize(QSize(w, h)); win->setMaximumSize(QSize(w, h)); win->resize(w, h);
   win->installEventFilter(this); win->show(); pluginWins_.push_back({win, p.vst, i, slot});
   if (!pluginIdle_.isActive()) pluginIdle_.start(33);
@@ -1330,10 +1332,10 @@ QVariantMap Engine::channelEq(int i) const {
   const auto& lo = e[static_cast<std::size_t>(f)]; const auto& mid = e[static_cast<std::size_t>(f + 1)]; const auto& hi = e[static_cast<std::size_t>(f + 2)];
   const bool set = mid.freq >= 100 && mid.freq <= 8000 && lo.type != FilterType::Peaking;   // untouched bands hold the engine's defaults, not a 3-band setting
   m["low"] = set ? lo.gainDb : 0.0; m["mid"] = set ? mid.gainDb : 0.0; m["midFreq"] = set ? mid.freq : 1000.0; m["high"] = set ? hi.gainDb : 0.0;
-  m["on"] = lo.type != FilterType::Off || mid.type != FilterType::Off || hi.type != FilterType::Off; return m;
+  m["on"] = strips_[static_cast<std::size_t>(i)].toneOn; return m;   // the EQ key's own state, not guessed from the bands (flat bands are switched off to save CPU)
 }
 void Engine::setChannelEq(int i, double lowDb, double midDb, double midFreq, double highDb, bool on) {
-  if (i < 0 || i >= kStrips) return; const int f = am::dsp::kChannelEqFirst; const bool keep = restoring_; (void)keep;
+  if (i < 0 || i >= kStrips) return; const int f = am::dsp::kChannelEqFirst; const bool keep = restoring_; (void)keep; strips_[static_cast<std::size_t>(i)].toneOn = on;
   auto put = [&](int b, FilterType t, double freq, double q, double g) { g = std::clamp(g, -15.0, 15.0); setEq(i, b, static_cast<int>(on && std::fabs(g) > 0.01 ? t : FilterType::Off), freq, q, g); };
   put(f, FilterType::LowShelf, 100, 0.71, lowDb); put(f + 1, FilterType::Peaking, std::clamp(midFreq, 100.0, 8000.0), 0.9, midDb); put(f + 2, FilterType::HighShelf, 10000, 0.71, highDb);
 }
@@ -1567,7 +1569,7 @@ void Engine::tick() {
 // is a PRESET. QSettings keeps the current console, the 16 scenes and the user presets.
 QJsonObject Engine::stripJson(const StripUi& s) const {
   const auto& p = s.dsp.params(); QJsonObject o; o["name"] = s.name; o["db"] = s.db; o["pan"] = s.pan; if (s.spOn || s.spAz != 0 || s.spEl != 0 || s.spDist != 1 || s.spSpread != 0) { QJsonObject sp; sp["on"] = s.spOn; sp["az"] = s.spAz; sp["el"] = s.spEl; sp["dist"] = s.spDist; sp["spread"] = s.spSpread; o["spatial"] = sp; } o["mute"] = s.mute; o["solo"] = s.solo;
-  o["dsp"] = dspJson(p);
+  o["dsp"] = dspJson(p); if (!s.toneOn) o["toneOn"] = false;   // the 3-band EQ switched out (its bands are kept)
   QJsonArray sends; for (const SendUi& sd : s.sends) { QJsonObject e; e["db"] = sd.db; e["pre"] = sd.pre; sends << e; } o["sends"] = sends; o["dca"] = s.dca; o["muteGroups"] = static_cast<int>(s.muteGroups); o["color"] = s.color;
   QJsonArray pl; for (const PluginUi& p : s.plugins) { QJsonObject e; e["kind"] = p.kind; e["bypass"] = p.bypass; if (p.vst) e["state"] = QString::fromStdString(p.vst->state()); else if (!p.state.isEmpty()) e["state"] = p.state; pl << e; } o["plugins"] = pl; o["link"] = s.link; o["trimDb"] = s.trimDb; o["automix"] = s.automix; o["autoPol"] = s.autoPol; o["amWeight"] = s.amWeight;
   return o;
@@ -1598,7 +1600,7 @@ void Engine::stripFromJson(StripUi& s, const QJsonObject& o) {
   s.dsp.set(dspFromJson(o.value("dsp").toObject()));
   const QJsonArray sends = o.value("sends").toArray(); for (int k = 0; k < kBuses; ++k) { if (k < sends.size()) { const QJsonObject e = sends[k].toObject(); s.sends[k].db = std::clamp(e.value("db").toDouble(-60), -60.0, 10.0); s.sends[k].pre = e.value("pre").toBool(); } else s.sends[k] = SendUi{}; }
   s.dca = std::clamp(o.value("dca").toInt(0), 0, kGroups); s.muteGroups = static_cast<unsigned>(std::clamp(o.value("muteGroups").toInt(0), 0, 255)); s.color = std::clamp(o.value("color").toInt(0), 0, 7);
-  s.link = o.value("link").toBool(); s.trimDb = std::clamp(o.value("trimDb").toDouble(0), -24.0, 24.0); s.automix = o.value("automix").toBool(); s.autoPol = o.value("autoPol").toBool(); s.amWeight = std::clamp(o.value("amWeight").toDouble(1), 0.25, 4.0);
+  s.link = o.value("link").toBool(); s.trimDb = std::clamp(o.value("trimDb").toDouble(0), -24.0, 24.0); s.toneOn = o.value("toneOn").toBool(true); s.automix = o.value("automix").toBool(); s.autoPol = o.value("autoPol").toBool(); s.amWeight = std::clamp(o.value("amWeight").toDouble(1), 0.25, 4.0);
   const QJsonArray pl = o.value("plugins").toArray(); for (int k = 0; k < kPluginSlots; ++k) { if (k < pl.size()) { const QJsonObject e = pl[k].toObject(); const QString kind = e.value("kind").toString().left(1024); if (s.plugins[k].kind != kind) s.plugins[k].vst.reset(); s.plugins[k].kind = kind; s.plugins[k].bypass = e.value("bypass").toBool(); s.plugins[k].state = e.value("state").toString(); } else s.plugins[k] = PluginUi{}; }
 }
 QJsonObject Engine::consoleJson() const {
