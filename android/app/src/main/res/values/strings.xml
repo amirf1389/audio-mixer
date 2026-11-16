@@ -264,4 +264,11 @@
     <string name="dev_brand_buffer">Mixer buffer: %1$d HAL bursts</string>
     <string name="dev_brand_battery">Keep audio running in the background</string>
     <string name="dev_brand_open">Battery settings</string>
+    <string name="io_stopped">STOPPED · press START</string>
+    <string name="io_in_not_open">NOT OPEN · allow the microphone, or pick another input</string>
+    <string name="io_out_not_open">NOT OPEN · pick another output</string>
+    <string name="io_silent">OPEN · NO SIGNAL</string>
+    <string name="io_signal">LIVE · %1$s dBFS</string>
+    <string name="io_clip">CLIPPING · lower the level</string>
+    <string name="io_using">"  ·  now: %1$s"</string>
 </resources>

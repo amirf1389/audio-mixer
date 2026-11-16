@@ -49,6 +49,12 @@ JNIEXPORT void JNICALL Java_com_amfb_amixos_Engine_peaks(JNIEnv* env, jclass, jl
   std::vector<float> v(static_cast<std::size_t>(n) + 2); for (int s = 0; s < n; ++s) v[static_cast<std::size_t>(s)] = static_cast<float>(lv.strips[s].peak); v[static_cast<std::size_t>(n)] = static_cast<float>(lv.master[0].peak); v[static_cast<std::size_t>(n) + 1] = static_cast<float>(lv.master[1].peak);
   if (env->GetArrayLength(out) >= n + 2) env->SetFloatArrayRegion(out, 0, n + 2, v.data());
 }
+// INPUT INDICATOR: each strip's input before the fader, mute and effects (linear peak): what the microphone / interface really sends
+JNIEXPORT void JNICALL Java_com_amfb_amixos_Engine_inputPeaks(JNIEnv* env, jclass, jlong h, jfloatArray out) {
+  amix_mixer* m = mixerOf(h); if (!m || !out) return; amix_levels lv; amix_mixer_levels(m, &lv); const int n = amix_mixer_strips(m);
+  std::vector<float> v(static_cast<std::size_t>(n)); for (int s = 0; s < n; ++s) v[static_cast<std::size_t>(s)] = static_cast<float>(lv.strips[s].in_peak);
+  if (env->GetArrayLength(out) >= n) env->SetFloatArrayRegion(out, 0, n, v.data());
+}
 }
 
 // ---- AAUDIO: the native low-latency path (Android 8+, the NDK's recommended API; OpenSL ES is not used). One OUTPUT stream with a data

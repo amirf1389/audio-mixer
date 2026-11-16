@@ -2047,5 +2047,9 @@
 "● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV or FLAC files, one per source, named by time.": "● Tombol REC pada MIXER merekam saluran utama dan setiap saluran yang telah diaktifkan (pra-fader, setelah trim / DSP / insert) ke dalam berkas WAV atau FLAC, satu berkas per sumber, dengan nama berkas berdasarkan waktu.",
 "MICROPHONE ON AT START": "MIKROFON AKTIF SAAT MULAI",
 "OFF: ENGINE ON starts the speakers or headphones without the microphone, so the mic never feeds back at start. Turn the mic on with INPUT: MIC on the mixer. ASIO interfaces and COMPUTER SOUND are not affected.": "OFF: ENGINE ON akan mengaktifkan speaker atau headphone tanpa mikrofon, sehingga mikrofon tidak akan menimbulkan umpan balik saat dinyalakan. Aktifkan mikrofon dengan memilih INPUT: MIC pada mixer. Antarmuka ASIO dan COMPUTER SOUND tidak terpengaruh.",
-"MY ACCOUNT ONLINE": "AKUN SAYA ONLINE"
+"MY ACCOUNT ONLINE": "AKUN SAYA ONLINE",
+"LIVE SYNC": "SINKRONISASI LANGSUNG",
+"CONNECTED": "TERHUBUNG",
+"waiting for a phone or browser": "menunggu telepon atau browser",
+"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.": "Fader, mute, solo, dan nama-nama perangkat mengikuti ponsel dan browser yang terhubung ke konsol ini, dan setiap perubahan di sini langsung tersinkronisasi ke perangkat-perangkat tersebut. Fader yang digeser dari ponsel akan menyala di sini."
 }

@@ -19,7 +19,8 @@
 #include "qr/qrcodegen.hpp"
 
 Remote::Remote(Engine* engine, QObject* parent) : QObject(parent), engine_(engine) {
-  sync_.setInterval(150); connect(&sync_, &QTimer::timeout, this, &Remote::syncTick);
+  sync_.setInterval(60);   // LIVE SYNC: a remote's fader reaches this console within a frame or two
+  connect(&sync_, &QTimer::timeout, this, &Remote::syncTick);
   proc_.setProcessChannelMode(QProcess::MergedChannels);
   connect(&proc_, &QProcess::readyRead, this, [this] { const QString out = QString::fromLocal8Bit(proc_.readAll()).trimmed(); if (!out.isEmpty()) { status_ = out.section('\n', -1).left(200); emit changed(); } });
   connect(&proc_, &QProcess::finished, this, [this](int code, QProcess::ExitStatus) { status_ = code == 0 ? QStringLiteral("off") : QStringLiteral("stopped (%1): %2").arg(code).arg(status_); emit changed(); emit stopped(); });
@@ -35,7 +36,7 @@ QVector<Remote::SyncStrip> Remote::consoleMix() const {
   return v;
 }
 void Remote::writeSeed() {
-  base_ = consoleMix(); baseMaster_ = engine_->masterDb(); v_ = 0; posting_ = 0; stale_ = getting_ = false; token_.clear(); syncedChanges_ = 0;
+  base_ = consoleMix(); baseMaster_ = engine_->masterDb(); v_ = 0; posting_ = 0; stale_ = getting_ = false; token_.clear(); syncedChanges_ = 0; remotes_ = 0; touched_.clear();
   QVariantList l; for (const SyncStrip& s : base_) l << QVariantMap{{"name", s.name}, {"db", s.db}, {"pan", s.pan}, {"mute", s.mute}, {"solo", s.solo}};
   QFile f(QString::fromStdString(am::paths::file("remote-seed.json")));
   if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) f.write(QJsonDocument::fromVariant(QVariantMap{{"strips", l}, {"master", QVariantMap{{"db", baseMaster_}}}}).toJson(QJsonDocument::Compact));
@@ -46,8 +47,11 @@ void Remote::post(const QVariantMap& cmd) {
   QNetworkReply* r = net_.post(q, QJsonDocument::fromVariant(cmd).toJson(QJsonDocument::Compact));
   connect(r, &QNetworkReply::finished, this, [this, r] { r->deleteLater(); --posting_; emit synced(); });
 }
+bool Remote::touched(int strip, int) const { const auto it = touched_.constFind(strip); return running() && it != touched_.cend() && QDateTime::currentMSecsSinceEpoch() - it.value() < 800; }
 void Remote::syncTick() {
-  if (!running()) { sync_.stop(); return; }
+  ++dTicks_;
+  if (!running()) { sync_.stop(); if (lastTouch_) { lastTouch_ = 0; ++pulse_; emit pulseChanged(); } return; }
+  if (lastTouch_ && QDateTime::currentMSecsSinceEpoch() - lastTouch_ < 1000) { ++pulse_; emit pulseChanged(); }   // keeps the glow of a remote fader up to date, then lets it go
   if (token_.isEmpty()) { QFile f(tokenFile()); if (f.open(QIODevice::ReadOnly)) token_ = f.readLine().trimmed(); if (token_.isEmpty()) return; }
   // 1. what moved on the console since the last agreement goes out
   const QVector<SyncStrip> c = consoleMix(); const auto moved = [](double a, double b) { return std::abs(a - b) > 0.05; };
@@ -60,22 +64,24 @@ void Remote::syncTick() {
   if (moved(engine_->masterDb(), baseMaster_)) { baseMaster_ = engine_->masterDb(); post({{"op", "master"}, {"db", baseMaster_}}); }
   // 2. what moved on the remotes comes in (only when nothing of ours is on the way, so an older answer never undoes a newer move here)
   if (getting_ || posting_ > 0) return;
-  getting_ = true; stale_ = false;
+  getting_ = true; stale_ = false; ++dGets_;
   QNetworkReply* r = net_.get(QNetworkRequest(QUrl(QStringLiteral("http://127.0.0.1:%1/api/state?since=%2").arg(port()).arg(v_))));
   connect(r, &QNetworkReply::finished, this, [this, r] { r->deleteLater(); getting_ = false;
     if (r->error() != QNetworkReply::NoError || stale_ || !running()) return;
-    const QVariantMap o = QJsonDocument::fromJson(r->readAll()).toVariant().toMap(); if (o.value("same").toBool() || !o.contains("strips")) return;
+    const QVariantMap o = QJsonDocument::fromJson(r->readAll()).toVariant().toMap();
+    if (o.contains("remotes") && o.value("remotes").toInt() != remotes_) { remotes_ = o.value("remotes").toInt(); emit synced(); }
+    if (o.value("same").toBool() || !o.contains("strips")) return;
     v_ = o.value("v").toULongLong(); const QVariantList l = o.value("strips").toList(); int n = 0;
     for (int i = 0; i < l.size() && i < base_.size(); ++i) { const QVariantMap m = l[i].toMap(); SyncStrip& b = base_[i];
       const double db = m.value("db").toDouble(), pan = m.value("pan").toDouble(); const bool mu = m.value("mute").toBool(), so = m.value("solo").toBool(); const QString nm = m.value("name").toString();
-      if (std::abs(db - b.db) > 0.05) { b.db = db; engine_->setGain(i, db); ++n; }
+      if (std::abs(db - b.db) > 0.05) { b.db = db; engine_->setGain(i, db); touched_[i] = lastTouch_ = QDateTime::currentMSecsSinceEpoch(); ++n; }
       if (std::abs(pan - b.pan) > 0.005) { b.pan = pan; engine_->setPan(i, pan); ++n; }
       if (mu != b.mute) { b.mute = mu; engine_->setMute(i, mu); ++n; }
       if (so != b.solo) { b.solo = so; engine_->setSolo(i, so); ++n; }
       if (!nm.isEmpty() && nm != b.name) { b.name = nm; engine_->setName(i, nm == syncName(i, QString()) ? QString() : nm); ++n; } }
     const double md = o.value("master").toMap().value("db", baseMaster_).toDouble();
-    if (std::abs(md - baseMaster_) > 0.05) { baseMaster_ = md; engine_->setMaster(md); ++n; }
-    if (n) { syncedChanges_ += n; emit synced(); } });   // the console's own follow-ups (a stereo link moving the partner) go out on the next tick
+    if (std::abs(md - baseMaster_) > 0.05) { baseMaster_ = md; engine_->setMaster(md); touched_[-1] = lastTouch_ = QDateTime::currentMSecsSinceEpoch(); ++n; }
+    if (n) { syncedChanges_ += n; dApplied_ += n; emit synced(); } });   // the console's own follow-ups (a stereo link moving the partner) go out on the next tick
 }
 
 Remote::~Remote() { if (running()) { proc_.terminate(); if (!proc_.waitForFinished(1500)) proc_.kill(); } }

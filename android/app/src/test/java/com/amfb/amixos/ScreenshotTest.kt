@@ -92,6 +92,8 @@ class ScreenshotTest {
         Prefs.local(ctx).edit().putInt("inChannels", 2).putFloat("db0", -3f).putString(LocalMixerActivity.rackKey(0), "comp|plate||").putString(LocalMixerActivity.rackKey(-1), "maximizer|||").commit()
         val a = Robolectric.buildActivity(LocalMixerActivity::class.java).setup().get()
         shot(a.window.decorView.rootView, "phone-mixer")
+        a.paintIo(true, true, true, 0.12f, 0.35f, 0, 0); shot(a.window.decorView.rootView, "phone-mixer-io-live")        // the INPUT / OUTPUT indicator while it runs
+        a.paintIo(true, false, true, 0f, 0f, 0, 0); shot(a.window.decorView.rootView, "phone-mixer-io-no-input")         // no microphone: shown red
         val cat = listOf("comp" to "COMPRESSOR", "plate" to "PLATE REVERB", "delay" to "DELAY", "chorus" to "CHORUS")
         val js = mapOf(0 to "{\"kind\":\"comp\",\"name\":\"COMPRESSOR\",\"bypass\":false,\"mix\":1.0,\"params\":[{\"id\":\"thr\",\"title\":\"THRESHOLD\",\"value\":0.55,\"default\":0.5,\"text\":\"-18.0 dB\"},{\"id\":\"ratio\",\"title\":\"RATIO\",\"value\":0.3,\"default\":0.3,\"text\":\"4.0:1\"}]}",
             1 to "{\"kind\":\"plate\",\"name\":\"PLATE REVERB\",\"bypass\":true,\"mix\":0.25,\"params\":[{\"id\":\"decay\",\"title\":\"DECAY\",\"value\":0.4,\"default\":0.4,\"text\":\"1.8 s\"}]}")

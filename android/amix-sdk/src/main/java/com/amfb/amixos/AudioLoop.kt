@@ -13,6 +13,9 @@ class AudioLoop(private val engine: Engine, private val sampleRate: Int = 48000,
     private var worker: Thread? = null
     @Volatile var lastPeaks: FloatArray = FloatArray(engine.strips + 2)
         private set
+    /** each strip's input level before the fader (the INPUT indicator) */
+    @Volatile var lastInPeaks: FloatArray = FloatArray(engine.strips)
+        private set
 
     /** "aaudio" (native, low latency) or "java" (AudioRecord / AudioTrack fallback); "" = stopped */
     @Volatile var path: String = ""
@@ -27,7 +30,7 @@ class AudioLoop(private val engine: Engine, private val sampleRate: Int = 48000,
             path = "aaudio"
             watcher = thread(name = "amix-aaudio-watch") {
                 while (running) {
-                    lastPeaks = engine.peaks()
+                    lastPeaks = engine.peaks(); lastInPeaks = engine.inputPeaks()
                     if (engine.nativeState()[1] == 1) { Engine.aaudioStop(); if (running && engine.startNative(sampleRate, true, outDevice, inDevice, bursts, inChannels) <= 0) { running = false; path = "" } }
                     Thread.sleep(33)
                 }
@@ -53,7 +56,7 @@ class AudioLoop(private val engine: Engine, private val sampleRate: Int = 48000,
                     if (got <= 0) continue
                     val stereo = engine.process(inputs, got)
                     track.write(stereo, 0, stereo.size, AudioTrack.WRITE_BLOCKING)
-                    lastPeaks = engine.peaks()
+                    lastPeaks = engine.peaks(); lastInPeaks = engine.inputPeaks()
                 }
             } finally {
                 runCatching { rec.stop() }; rec.release(); runCatching { track.stop() }; track.release()

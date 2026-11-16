@@ -2057,5 +2057,8 @@
 "● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV or FLAC files, one per source, named by time.": "● Il pulsante REC sul MIXER registra il master e ogni traccia attivata (pre-fader, dopo trim / DSP / inserti) in file WAV o FLAC, uno per ogni sorgente, denominati in base all'ora.",
 "MICROPHONE ON AT START": "MICROFONO ATTIVO ALL'AVVIO",
 "OFF: ENGINE ON starts the speakers or headphones without the microphone, so the mic never feeds back at start. Turn the mic on with INPUT: MIC on the mixer. ASIO interfaces and COMPUTER SOUND are not affected.": "OFF: ENGINE ON attiva gli altoparlanti o le cuffie senza il microfono, in modo che il microfono non provochi mai un effetto feedback all'avvio. Attiva il microfono con INPUT: MIC sul mixer. Le interfacce ASIO e COMPUTER SOUND non sono interessate da questa impostazione.",
-"MY ACCOUNT ONLINE": "IL MIO ACCOUNT ONLINE"
+"MY ACCOUNT ONLINE": "IL MIO ACCOUNT ONLINE",
+"LIVE SYNC": "SINCRONIZZAZIONE IN DIRETTA",
+"CONNECTED": "CONNESSO",
+"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.": "I fader, i mute, i solo e i nomi seguono i telefoni e i browser collegati a questa console, e ogni azione qui effettuata viene trasmessa immediatamente a tutti loro. Quando si sposta un fader da un telefono, qui si accende una spia."
 }

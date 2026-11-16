@@ -2098,5 +2098,9 @@
 "● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV or FLAC files, one per source, named by time.": "● 믹서의 REC 버튼은 마스터 및 모든 활성화된 스트립(프리페이더, 트림/DSP/인서트 후)의 신호를 WAV 또는 FLAC 파일로 기록하며, 소스당 하나의 파일이 생성되고 파일명은 시간 순으로 지정됩니다.",
 "MICROPHONE ON AT START": "시작 시 마이크 켜기",
 "OFF: ENGINE ON starts the speakers or headphones without the microphone, so the mic never feeds back at start. Turn the mic on with INPUT: MIC on the mixer. ASIO interfaces and COMPUTER SOUND are not affected.": "OFF: ENGINE ON을 설정하면 마이크 없이 스피커나 헤드폰만 작동하므로, 시작 시 마이크에서 피드백이 발생하지 않습니다. 믹서의 INPUT: MIC를 켜서 마이크를 활성화하십시오. ASIO 인터페이스와 COMPUTER SOUND는 이 설정의 영향을 받지 않습니다.",
-"MY ACCOUNT ONLINE": "온라인 내 계정"
+"MY ACCOUNT ONLINE": "온라인 내 계정",
+"LIVE SYNC": "라이브 싱크",
+"CONNECTED": "연결됨",
+"waiting for a phone or browser": "휴대폰이나 브라우저를 기다리고 있습니다",
+"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.": "페이더, 뮤트, 솔로 및 이름은 이 콘솔에 연결된 휴대폰과 브라우저에 연동되며, 여기서 이루어지는 모든 조작이 해당 기기에 즉시 반영됩니다. 휴대폰에서 페이더를 조작하면 이곳에 해당 페이더가 점등됩니다."
 }

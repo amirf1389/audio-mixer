@@ -125,7 +125,7 @@ int main() {
   { am::httpd::WebSocket ws(fd); std::string t; int op = 0; CHECK(ws.read(t, op) && op == 1 && t.find("unauthorised") != std::string::npos); ws.close(); }
   fd = am::httpd::Client::connectWs("127.0.0.1", port, "/ws/meters?token=" + o.token, {}); CHECK(fd >= 0);
   { am::httpd::WebSocket ws(fd); std::string t; int op = 0; int frames = 0;
-    CHECK(ws.read(t, op) && op == 1); { Value f = Value::parse(t, ok); CHECK(ok && f["state"]["strips"].size() == 8 && f["state"]["v"].asNumber() > 0); }   // LIVE SYNC: the state first
+    CHECK(ws.read(t, op) && op == 1); { Value f = Value::parse(t, ok); CHECK(ok && f["state"]["strips"].size() == 8 && f["state"]["v"].asNumber() > 0 && f["state"]["remotes"].asNumber() == 1); }   // LIVE SYNC: the state first; this watcher is counted
     for (int i = 0; i < 3; ++i) { CHECK(ws.read(t, op) && op == 1); Value f = Value::parse(t, ok); CHECK(ok && f["strips"].size() == 8); ++frames; }
     CHECK(frames == 3);
     // another remote moves strip 3: this watcher gets the new state pushed, without asking

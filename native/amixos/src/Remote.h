@@ -4,6 +4,7 @@
 // The service runs its own engine, so the console hands the sound card over while it runs and takes it back when it stops.
 #pragma once
 #include <QObject>
+#include <QHash>
 #include <QNetworkAccessManager>
 #include <QProcess>
 #include <QTimer>
@@ -25,6 +26,8 @@ class Remote : public QObject {
   Q_PROPERTY(QVariantList tokens READ tokens NOTIFY changed)     // the named tokens [{id, name, role, state}]: never the tokens themselves
   Q_PROPERTY(QString tokenNote READ tokenNote NOTIFY changed)
   Q_PROPERTY(int syncedChanges READ syncedChanges NOTIFY synced)   // LIVE SYNC: changes carried between the console and the remotes since start
+  Q_PROPERTY(int remotes READ remotes NOTIFY synced)               // phones and browsers connected right now (their live streams)
+  Q_PROPERTY(int pulse READ pulse NOTIFY pulseChanged)             // moves on while a remote's fader glow is lit: bind touched(strip, remote.pulse)
  public:
   explicit Remote(Engine* engine, QObject* parent = nullptr);
   ~Remote() override;
@@ -52,6 +55,12 @@ class Remote : public QObject {
   void stopped();
  public:
   int syncedChanges() const { return syncedChanges_; }
+  int remotes() const { return running() ? remotes_ : 0; }
+  int pulse() const { return pulse_; }
+  QString syncDebug() const { return QStringLiteral("ticks %1, gets %2, applied %3, posts %4, v %5, token %6, timer %7").arg(dTicks_).arg(dGets_).arg(dApplied_).arg(syncedChanges_).arg(v_).arg(token_.isEmpty() ? "none" : "set").arg(sync_.isActive()); }
+  // the fader a phone or browser just moved (strip, or -1 for the MASTER): true for 0.8 s after its last remote move, so the mixer can
+  // light it while the remote holds it (tick: any value that changes, to re-read it from a binding)
+  Q_INVOKABLE bool touched(int strip, int tick = 0) const;
   // LIVE SYNC, the console side: the service starts from the console's mixer (remote-seed.json, --seed), and while it runs the console
   // follows it: a fader, mute, solo or name moved on a phone or in a browser moves here (about 150 ms), and one moved here goes out to
   // every phone and browser. Each side is compared with the last value both agreed on, so neither echoes the other back.
@@ -60,11 +69,12 @@ class Remote : public QObject {
   QVector<SyncStrip> consoleMix() const;   // the console's strips as the service names them (licensed channels only)
  signals:
   void synced();
+  void pulseChanged();
  private:
   void writeSeed();
   void syncTick();
   void post(const QVariantMap& cmd);
-  QTimer sync_; QNetworkAccessManager net_; QVector<SyncStrip> base_; double baseMaster_ = 0; quint64 v_ = 0; int posting_ = 0; bool stale_ = false, getting_ = false; QByteArray token_; int syncedChanges_ = 0;
+  QTimer sync_; QNetworkAccessManager net_; QVector<SyncStrip> base_; double baseMaster_ = 0; quint64 v_ = 0; int posting_ = 0; bool stale_ = false, getting_ = false; QByteArray token_; int syncedChanges_ = 0, remotes_ = 0, pulse_ = 0; qint64 lastTouch_ = 0; int dTicks_ = 0, dGets_ = 0, dApplied_ = 0; QHash<int, qint64> touched_;
   Engine* engine_; QProcess proc_; Extension ext_{QStringLiteral("AmF X1 Network")}; QString status_ = "off";
   QString runTool(const QStringList& args, bool* ok) const; void restartIfRunning();
   QVariantList tokens_; QString tokenNote_; bool wifi_ = false;

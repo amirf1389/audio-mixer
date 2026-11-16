@@ -2136,5 +2136,9 @@
 "● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV or FLAC files, one per source, named by time.": "● مکسر پر REC ماسٹر اور ہر مسلح سٹرپ (پری-فیڈر، ٹرم/ڈی ایس پی/انسیرٹس کے بعد) کو WAV یا FLAC فائلوں میں لکھتا ہے، ہر ماخذ کے لیے ایک، جن کے نام وقت کے مطابق رکھے جاتے ہیں۔",
 "MICROPHONE ON AT START": "شروع میں مائیکروفون آن",
 "OFF: ENGINE ON starts the speakers or headphones without the microphone, so the mic never feeds back at start. Turn the mic on with INPUT: MIC on the mixer. ASIO interfaces and COMPUTER SOUND are not affected.": "OFF: ENGINE ON اسپیکرز یا ہیڈفونز کو مائیکروفون کے بغیر چالو کرتا ہے، لہٰذا شروع میں مائیکروفون کا فیڈ بیک کبھی نہیں ہوتا۔ مکسر پر INPUT: MIC کے ذریعے مائیکروفون آن کریں۔ ASIO انٹرفیسز اور COMPUTER SOUND متاثر نہیں ہوتے۔",
-"MY ACCOUNT ONLINE": "میرا اکاؤنٹ آن لائن"
+"MY ACCOUNT ONLINE": "میرا اکاؤنٹ آن لائن",
+"LIVE SYNC": "براہِ راست ہم آہنگی",
+"CONNECTED": "منسلک",
+"waiting for a phone or browser": "فون یا براؤزر کا انتظار",
+"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.": "فیڈرز، مِیوٹز، سولو اور نام اس کنسول سے منسلک فونز اور براؤزرز کے ساتھ منسلک ہیں، اور یہاں کی ہر حرکت فوراً ان تک پہنچ جاتی ہے۔ فون سے فیڈر کو حرکت دینے پر یہاں روشنی ہو جاتی ہے۔"
 }

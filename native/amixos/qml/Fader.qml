@@ -14,6 +14,7 @@ Item {
     property real outDb: -120         // the output level (dBFS)
     property bool clip: false
     property bool showLevels: true    // false where the strip has its own IN / OUT meter column: the track is not drawn over twice
+    property bool remoteHot: false    // LIVE SYNC: a phone or browser is moving this fader now: the cap lights cyan and glides to each new value
     signal moved(real db)
     function lvl(db) { return Math.max(0, Math.min(1, (db - from) / (to - from))) }
     implicitWidth: 34
@@ -34,9 +35,11 @@ Item {
         id: knob
         anchors.horizontalCenter: parent.horizontalCenter
         y: fader.pos(fader.value)
+        Behavior on y { enabled: fader.remoteHot && !drag.pressed; NumberAnimation { duration: 70; easing.type: Easing.OutQuad } }   // smooth between remote updates
         width: 26; height: 40; radius: 4
         gradient: Gradient { GradientStop { position: 0; color: "#3a4150" } GradientStop { position: 0.5; color: "#1c222d" } GradientStop { position: 1; color: "#2a3140" } }
-        border.color: drag.pressed ? Theme.orange : Theme.line
+        border.color: drag.pressed ? Theme.orange : fader.remoteHot ? Theme.cyan : Theme.line; border.width: fader.remoteHot ? 2 : 1
+        Rectangle { visible: fader.remoteHot; anchors.centerIn: parent; width: parent.width + 10; height: parent.height + 10; radius: 7; color: "transparent"; border.color: Theme.cyan; border.width: 2; opacity: 0.45; z: -1 }   // the glow of a remote hand
         Rectangle { anchors.centerIn: parent; width: parent.width - 6; height: 2; color: Theme.orange }
     }
     MouseArea {

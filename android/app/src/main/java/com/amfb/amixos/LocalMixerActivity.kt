@@ -45,6 +45,8 @@ class LocalMixerActivity : AppCompatActivity() {
     private val accent by lazy { getColor(R.color.accent) }; private val cyan by lazy { getColor(R.color.cyan) }; private val dim by lazy { getColor(R.color.dim) }
     private lateinit var body: LinearLayout; private lateinit var status: TextView; private lateinit var startBtn: PadButton
     private val meters = HashMap<String, ProgressBar>(); private val fxBtns = HashMap<Int, PadButton>()
+    private class IoViews(val lamp: View, val name: TextView, val state: TextView, val meter: ProgressBar)
+    private val io = HashMap<Boolean, IoViews>()   // false = INPUT, true = OUTPUT
     private fun prefs() = Prefs.local(this)
     private fun inChannels() = prefs().getInt("inChannels", 1).coerceIn(1, 2)
 
@@ -67,14 +69,28 @@ class LocalMixerActivity : AppCompatActivity() {
         head.addView(startBtn); body.addView(head)
         status = TextView(this).apply { setTextColor(dim); textSize = 11f; typeface = Typeface.MONOSPACE; setPadding(0, 2, 0, 10) }; body.addView(status); showStatus()
         // ---- INPUT / OUTPUT: two keys that open the device lists, and MONO / STEREO
-        fun ioRow(tag: String, name: String, color: Int, click: () -> Unit) = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; isClickable = true; setOnClickListener { click() }
-            background = android.graphics.drawable.GradientDrawable().apply { setColor(0xFF141B26.toInt()); cornerRadius = 16f; setStroke(2, 0xFF263041.toInt()) }; setPadding(22, 16, 22, 16)
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(0, 0, 0, 8) }
-            addView(TextView(this@LocalMixerActivity).apply { text = tag; setTextColor(color); textSize = 10f; letterSpacing = 0.15f; typeface = Typeface.DEFAULT_BOLD; layoutParams = LinearLayout.LayoutParams(200, LinearLayout.LayoutParams.WRAP_CONTENT) })
-            addView(TextView(this@LocalMixerActivity).apply { text = name; setTextColor(Color.WHITE); textSize = 13f; maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END; layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f) })
-            addView(TextView(this@LocalMixerActivity).apply { text = "▾"; setTextColor(dim); textSize = 14f }) }
-        body.addView(ioRow(getString(R.string.lm_input), deviceName(Prefs.localInDevice(this), false), cyan) { pickDevice(false) })
-        body.addView(ioRow(getString(R.string.lm_output), deviceName(Prefs.localOutDevice(this), true), accent) { pickDevice(true) })
+        // each row: a LAMP (stopped / not open / no signal / live / clipping), the device, what it is doing and a level bar under it
+        fun ioRow(tag: String, name: String, color: Int, out: Boolean, click: () -> Unit): LinearLayout {
+            val lamp = View(this).apply { background = android.graphics.drawable.GradientDrawable().apply { shape = android.graphics.drawable.GradientDrawable.OVAL; setColor(IoLamp.color(IoLamp.State.STOPPED)) }
+                layoutParams = LinearLayout.LayoutParams(22, 22).apply { setMargins(0, 0, 16, 0) } }
+            val nameV = TextView(this).apply { text = name; setTextColor(Color.WHITE); textSize = 13f; maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }
+            val stateV = TextView(this).apply { setTextColor(dim); textSize = 10f; typeface = Typeface.MONOSPACE; maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }
+            val meter = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply { max = 1000; progress = 0; progressTintList = android.content.res.ColorStateList.valueOf(color)
+                progressBackgroundTintList = android.content.res.ColorStateList.valueOf(0xFF0B0F15.toInt()); layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 10).apply { setMargins(0, 10, 0, 0) } }
+            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                addView(lamp)
+                addView(TextView(this@LocalMixerActivity).apply { text = tag; setTextColor(color); textSize = 10f; letterSpacing = 0.15f; typeface = Typeface.DEFAULT_BOLD; layoutParams = LinearLayout.LayoutParams(170, LinearLayout.LayoutParams.WRAP_CONTENT) })
+                addView(LinearLayout(this@LocalMixerActivity).apply { orientation = LinearLayout.VERTICAL; layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f); addView(nameV); addView(stateV) })
+                addView(TextView(this@LocalMixerActivity).apply { text = "▾"; setTextColor(dim); textSize = 14f }) }
+            io[out] = IoViews(lamp, nameV, stateV, meter)
+            return LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; isClickable = true; setOnClickListener { click() }
+                background = android.graphics.drawable.GradientDrawable().apply { setColor(0xFF141B26.toInt()); cornerRadius = 16f; setStroke(2, 0xFF263041.toInt()) }; setPadding(22, 14, 22, 14)
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(0, 0, 0, 8) }
+                addView(row); addView(meter); contentDescription = tag }
+        }
+        body.addView(ioRow(getString(R.string.lm_input), deviceName(Prefs.localInDevice(this), false), cyan, false) { pickDevice(false) })
+        body.addView(ioRow(getString(R.string.lm_output), deviceName(Prefs.localOutDevice(this), true), accent, true) { pickDevice(true) })
+        showIo()
         val chRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 0, 0, 10) }
         listOf(1 to getString(R.string.lm_mono), 2 to getString(R.string.lm_stereo)).forEach { (n, t) ->
             chRow.addView(PadButton(this, t, cyan, 11f).apply { on = inChannels() == n; layoutParams = LinearLayout.LayoutParams(0, 80, 1f).apply { setMargins(0, 0, if (n == 1) 8 else 0, 0) }; setOnClickListener { setInChannels(n) } }) }
@@ -229,7 +245,37 @@ class LocalMixerActivity : AppCompatActivity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == 1 && grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) startAudio()
     }
+    /** THE INPUT / OUTPUT INDICATOR: is each side open, which device it really is, and the level going in and out. A side that did not
+     *  open (no microphone permission, a refused device) shows red; open but silent shows amber; sound shows green with its level. */
+    private fun showIo() {
+        val l = loop; val running = l != null && l.path.isNotEmpty()
+        val st = if (l?.path == "aaudio") runCatching { engine?.nativeState() }.getOrNull() else null
+        val inOpen = when (l?.path) { "aaudio" -> st?.get(5) == 1; "java" -> true; else -> false }
+        val outOpen = when (l?.path) { "aaudio" -> st?.get(0) == 1 && st[1] == 0; "java" -> true; else -> false }
+        val inPk = l?.lastInPeaks?.let { a -> (0 until minOf(inChannels(), a.size)).maxOfOrNull { a[it] } } ?: 0f
+        val outPk = l?.lastPeaks?.let { p -> maxOf(p.getOrElse(STRIPS) { 0f }, p.getOrElse(STRIPS + 1) { 0f }) } ?: 0f
+        paintIo(running, inOpen, outOpen, inPk, outPk, st?.get(7) ?: 0, st?.get(6) ?: 0)
+    }
+    /** draws both indicators; [inReal] / [outReal] are the device ids AAudio really opened (0 = not known) */
+    internal fun paintIo(running: Boolean, inOpen: Boolean, outOpen: Boolean, inPk: Float, outPk: Float, inReal: Int, outReal: Int) {
+        for ((out, open, pk) in listOf(Triple(false, inOpen, inPk), Triple(true, outOpen, outPk))) {
+            val v = io[out] ?: continue; val s = IoLamp.of(running, open, pk)
+            ((v.lamp.background) as? android.graphics.drawable.GradientDrawable)?.setColor(IoLamp.color(s))
+            v.meter.progress = if (s == IoLamp.State.SIGNAL || s == IoLamp.State.CLIP || s == IoLamp.State.SILENT) IoLamp.pos(pk) else 0
+            // "the phone's choice": name the device it really took (AAudio says which)
+            val chosen = if (out) Prefs.localOutDevice(this) else Prefs.localInDevice(this); val real = if (out) outReal else inReal
+            val using = if (chosen == 0 && real > 0) getString(R.string.io_using, deviceName(real, out)) else ""
+            v.state.text = when (s) {
+                IoLamp.State.STOPPED -> getString(R.string.io_stopped)
+                IoLamp.State.NOT_OPEN -> getString(if (out) R.string.io_out_not_open else R.string.io_in_not_open)
+                IoLamp.State.SILENT -> getString(R.string.io_silent) + using
+                IoLamp.State.SIGNAL -> getString(R.string.io_signal, String.format(java.util.Locale.ROOT, "%.0f", IoLamp.db(pk))) + using
+                IoLamp.State.CLIP -> getString(R.string.io_clip) + using }
+            v.state.setTextColor(if (s == IoLamp.State.STOPPED) dim else IoLamp.color(s))
+        }
+    }
     private fun showMeters() {
+        showIo()
         val p = loop?.lastPeaks ?: return
         fun lvl(v: Float) = (((if (v > 1e-6f) 20 * Math.log10(v.toDouble()) else -120.0) + 60) / 60 * 1000).toInt().coerceIn(0, 1000)
         for (s in 0 until STRIPS) faders[s]?.apply { level = lvl(p.getOrElse(s) { 0f }); clip = p.getOrElse(s) { 0f } >= 1f }

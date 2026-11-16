@@ -2049,5 +2049,8 @@
 "● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV or FLAC files, one per source, named by time.": "● De REC-knop op de MIXER neemt het master-signaal en elke geactiveerde strip (pre-fader, na trim / DSP / inserts) op in WAV- of FLAC-bestanden, één per bron, met een naam op basis van de tijd.",
 "MICROPHONE ON AT START": "MICROFOON AAN BIJ START",
 "OFF: ENGINE ON starts the speakers or headphones without the microphone, so the mic never feeds back at start. Turn the mic on with INPUT: MIC on the mixer. ASIO interfaces and COMPUTER SOUND are not affected.": "OFF: ENGINE ON zet de luidsprekers of hoofdtelefoon aan zonder de microfoon, zodat er bij het opstarten nooit terugkoppeling via de microfoon optreedt. Schakel de microfoon in met INPUT: MIC op de mixer. Dit heeft geen invloed op ASIO-interfaces en COMPUTER SOUND.",
-"MY ACCOUNT ONLINE": "MIJN ONLINE ACCOUNT"
+"MY ACCOUNT ONLINE": "MIJN ONLINE ACCOUNT",
+"CONNECTED": "VERBONDEN",
+"waiting for a phone or browser": "in afwachting van een telefoon of browser",
+"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.": "Faders, mute-functies, solo’s en namen worden weergegeven op de telefoons en browsers die op deze console zijn aangesloten, en elke handeling hier wordt direct naar hen doorgestuurd. Als een fader op een telefoon wordt verschoven, licht deze hier op."
 }

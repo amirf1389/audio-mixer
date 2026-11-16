@@ -52,6 +52,7 @@ class Daemon {
   // LIVE SYNC: every change from any remote (phone, browser, the console) moves this counter; /ws/meters sends {"state":{...}} to every
   // watcher as soon as it moves (and once on connect), and GET /api/state?since=N answers {"v":N,"same":true} while nothing changed
   unsigned long long stateVersion() const { return version_.load(); }
+  int remotes() const { return watchers_.load(); }   // phones and browsers watching now (open /ws/meters streams)
   bool loadSeed(const std::string& file, std::string& err);   // {"strips":[{name,db,pan,mute,solo}],"master":{"db"}}
   json::Value meters() const;
   // SECURITY: which web pages may read the replies (only pages served from this computer), and which Host a request may name while the
@@ -71,7 +72,7 @@ class Daemon {
   struct Monitor { int source = 0; double db = 0; bool dim = false, mono = false, mute = false; } mon_;
   httpd::Response handle(const httpd::Request& r);
   json::Value apply(const json::Value& cmd, std::string& err);
-  std::atomic<unsigned long long> version_{1};
+  std::atomic<unsigned long long> version_{1}; std::atomic<int> watchers_{0};
   bool authorised(const httpd::Request& r) const;
   Options opt_; mutable TokenStore tokens_; httpd::Server http_;
   bool noteRefused();   // a wrong token: counted and slowed down; true when there were too many in the last minute

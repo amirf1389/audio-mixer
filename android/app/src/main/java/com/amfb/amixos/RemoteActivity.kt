@@ -33,6 +33,7 @@ import java.util.concurrent.Executors
  *  arrives over the WebSocket. The token stays in SharedPreferences on this phone; nothing leaves it except to the daemon. */
 class RemoteActivity : AppCompatActivity() {
     private val io = Executors.newSingleThreadExecutor()
+    private val live = com.amfb.amixos.remote.LatestSender(io)   // REAL-TIME FADERS: only the newest move of each fader is sent, never a queue
     private val ui = Handler(Looper.getMainLooper())
     private var client: DaemonClient? = null
     private var stream: DaemonClient.MeterStream? = null
@@ -115,7 +116,7 @@ class RemoteActivity : AppCompatActivity() {
         planBadge = TextView(this).apply { text = ""; setTextColor(Color.parseColor("#FBBF24")); textSize = 10f; typeface = android.graphics.Typeface.MONOSPACE; gravity = Gravity.CENTER }
         masterFader = FaderView(this).apply { layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
             onTouchState = { t -> touching = maxOf(0, touching + if (t) 1 else -1); if (touching == 0) catchUp() }
-            onMove = { p -> val v = DaemonClient.posToDb(p / 1000.0); masterDb.text = DaemonClient.fmtDb(v); io.execute { runCatching { client?.master(v) } } } }
+            onMove = { p -> val v = DaemonClient.posToDb(p / 1000.0); masterDb.text = DaemonClient.fmtDb(v); live.submit("master") { client?.master(v) } } }
         masterDb = ConsoleUi.dbReadout(this).apply { text = "0.0" }
         master.addView(masterLabel); master.addView(planBadge); master.addView(masterFader); master.addView(masterDb)
         desk.addView(master); root.addView(desk)
@@ -182,7 +183,7 @@ class RemoteActivity : AppCompatActivity() {
             col.addView(name)
             if (Prefs.showPan(this)) col.addView(KnobView(this, tint).apply { value = st.pan.toFloat(); layoutParams = LinearLayout.LayoutParams(128, LinearLayout.LayoutParams.WRAP_CONTENT)
                 onTouchState = { t -> touching = maxOf(0, touching + if (t) 1 else -1); if (touching == 0) catchUp() }
-                onChange = { v -> io.execute { runCatching { client?.pan(st.id, v.toDouble()) } } } })
+                onChange = { v -> live.submit("pan${st.id}") { client?.pan(st.id, v.toDouble()) } } })
             val ms = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
             fun small(t: ToggleButton) = t.apply { textSize = 13f; minWidth = 0; minimumWidth = 0; minHeight = 0; minimumHeight = 0; setPadding(0, 0, 0, 0); layoutParams = LinearLayout.LayoutParams(0, 84, 1f).apply { setMargins(3, 4, 3, 4) } }
             val mute = small(ToggleButton(this).apply { textOn = "M"; textOff = "M"; isChecked = st.mute; setOnCheckedChangeListener { b, on -> b.setTextColor(if (on) Color.parseColor("#EF4444") else Color.WHITE); if (b.tag == null) { buzz(b); io.execute { runCatching { client?.mute(st.id, on) } } } } })
@@ -193,7 +194,7 @@ class RemoteActivity : AppCompatActivity() {
             val db = ConsoleUi.dbReadout(this).apply { text = DaemonClient.fmtDb(st.db) }
             val fader = FaderView(this, colors[(st.id / 8) % colors.size]).apply { progress = (DaemonClient.dbToPos(st.db) * 1000).toInt(); layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
                 onTouchState = { t -> touching = maxOf(0, touching + if (t) 1 else -1); if (touching == 0) catchUp() }
-                onMove = { p -> val v = DaemonClient.posToDb(p / 1000.0); db.text = DaemonClient.fmtDb(v); io.execute { runCatching { client?.gain(st.id, v) } } } }
+                onMove = { p -> val v = DaemonClient.posToDb(p / 1000.0); db.text = DaemonClient.fmtDb(v); live.submit("gain${st.id}") { client?.gain(st.id, v) } } }
             col.addView(fader); col.addView(db)
             strips.addView(col); faders.add(fader); dbLabels.add(db); nameLabels.add(name); mutes.add(mute); solos.add(solo); clipFlags.add(false)
         }
