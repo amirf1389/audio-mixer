@@ -233,52 +233,74 @@ std::int32_t Ditherer::next(double x, int c) {
 // ---- writing
 std::vector<std::string> writeFormats() { return {"wav16", "wav24", "wav32", "wavf32", "wavf64", "flac16", "flac24", "flac32"}; }
 
-bool write(const std::string& path, const std::vector<double>& x, int ch, double rate, const std::string& format, const std::string& dither, std::string& err, int flacLevel) {
-  if (ch < 1 || ch > 64 || x.size() % static_cast<std::size_t>(ch)) { err = "write: 1 .. 64 channels and whole frames"; return false; }
-  if (!(rate >= 1)) { err = "write: the sample rate must be at least 1 Hz"; return false; }
-  const auto& fm = writeFormats(); if (std::find(fm.begin(), fm.end(), format) == fm.end()) { err = "write: unknown format \"" + format + "\""; return false; }
-  if (dither != "none" && dither != "tpdf" && dither != "shaped") { err = "write: dither is none, tpdf or shaped"; return false; }
-  const std::size_t frames = x.size() / static_cast<std::size_t>(ch);
+// the streaming writer: one file, blocks of interleaved frames, the header finished on close()
+struct Writer::Impl {
+  int ch = 0; bool flac = false, isFloat = false, open = false; int bits = 0; std::string err;
+  FLAC__StreamEncoder* enc = nullptr; drwav w{}; std::unique_ptr<Ditherer> d; std::vector<FLAC__int32> ib; std::vector<unsigned char> bb; std::uint64_t frames = 0;
+};
+Writer::Writer() : i_(new Impl) {}
+Writer::~Writer() { close(); }
+std::uint64_t Writer::frames() const { return i_->frames; }
+std::unique_ptr<Writer> Writer::make(const std::string& path, int ch, double rate, const std::string& format, const std::string& dither, std::string& err, std::uint64_t expectedFrames, int flacLevel) {
+  if (ch < 1 || ch > 64) { err = "write: 1 .. 64 channels"; return nullptr; }
+  if (!(rate >= 1)) { err = "write: the sample rate must be at least 1 Hz"; return nullptr; }
+  const auto& fm = writeFormats(); if (std::find(fm.begin(), fm.end(), format) == fm.end()) { err = "write: unknown format \"" + format + "\""; return nullptr; }
+  if (dither != "none" && dither != "tpdf" && dither != "shaped") { err = "write: dither is none, tpdf or shaped"; return nullptr; }
+  std::unique_ptr<Writer> wr(new Writer); Impl& I = *wr->i_; I.ch = ch;
   if (format.rfind("flac", 0) == 0) {
-    const int bits = std::stoi(format.substr(4));
-    if (rate > 1048575 || ch > 8) { err = "FLAC takes up to 8 channels and 1,048,575 Hz"; return false; }
-    FLAC__StreamEncoder* enc = FLAC__stream_encoder_new(); if (!enc) { err = "FLAC: out of memory"; return false; }
-    FLAC__stream_encoder_set_channels(enc, static_cast<unsigned>(ch)); FLAC__stream_encoder_set_bits_per_sample(enc, static_cast<unsigned>(bits)); FLAC__stream_encoder_set_sample_rate(enc, static_cast<unsigned>(std::lround(rate)));
-    FLAC__stream_encoder_set_compression_level(enc, static_cast<unsigned>(std::clamp(flacLevel, 0, 8))); FLAC__stream_encoder_set_total_samples_estimate(enc, frames); FLAC__stream_encoder_set_verify(enc, true);
-    const FLAC__StreamEncoderInitStatus st = FLAC__stream_encoder_init_file(enc, path.c_str(), nullptr, nullptr);
-    if (st != FLAC__STREAM_ENCODER_INIT_STATUS_OK) { err = std::string("FLAC: ") + FLAC__StreamEncoderInitStatusString[st]; FLAC__stream_encoder_delete(enc); return false; }
-    Ditherer d(ch, bits, dither); std::vector<FLAC__int32> blk; bool ok = true;
-    for (std::size_t at = 0; at < frames && ok; at += 4096) {
-      const std::size_t n = std::min<std::size_t>(4096, frames - at); blk.resize(n * static_cast<std::size_t>(ch));
-      for (std::size_t i = 0; i < n * static_cast<std::size_t>(ch); ++i) blk[i] = d.next(x[at * static_cast<std::size_t>(ch) + i], static_cast<int>(i % static_cast<std::size_t>(ch)));
-      ok = FLAC__stream_encoder_process_interleaved(enc, blk.data(), static_cast<unsigned>(n)); }
-    if (!ok) err = std::string("FLAC: ") + FLAC__stream_encoder_get_resolved_state_string(enc);
-    if (!FLAC__stream_encoder_finish(enc) && ok) { ok = false; err = "FLAC: the encoder could not finish (verify failed or the disk is full)"; }
-    FLAC__stream_encoder_delete(enc); return ok;
-  }
-  const bool isFloat = format.rfind("wavf", 0) == 0; const int bits = std::stoi(format.substr(isFloat ? 4 : 3));
-  const std::uint64_t bytes = static_cast<std::uint64_t>(frames) * static_cast<std::uint64_t>(ch) * static_cast<std::uint64_t>(bits / 8);
-  drwav_data_format f{}; f.container = bytes > 0xFFFFFF00ull - 4096 ? drwav_container_rf64 : drwav_container_riff;   // over 4 GB: RF64 (EBU Tech 3306)
-  f.format = isFloat ? DR_WAVE_FORMAT_IEEE_FLOAT : DR_WAVE_FORMAT_PCM; f.channels = static_cast<drwav_uint32>(ch); f.sampleRate = static_cast<drwav_uint32>(std::lround(rate)); f.bitsPerSample = static_cast<drwav_uint32>(bits);
-  drwav w;
+    I.flac = true; I.bits = std::stoi(format.substr(4));
+    if (rate > 1048575 || ch > 8) { err = "FLAC takes up to 8 channels and 1,048,575 Hz"; return nullptr; }
+    I.enc = FLAC__stream_encoder_new(); if (!I.enc) { err = "FLAC: out of memory"; return nullptr; }
+    FLAC__stream_encoder_set_channels(I.enc, static_cast<unsigned>(ch)); FLAC__stream_encoder_set_bits_per_sample(I.enc, static_cast<unsigned>(I.bits)); FLAC__stream_encoder_set_sample_rate(I.enc, static_cast<unsigned>(std::lround(rate)));
+    FLAC__stream_encoder_set_compression_level(I.enc, static_cast<unsigned>(std::clamp(flacLevel, 0, 8))); if (expectedFrames) FLAC__stream_encoder_set_total_samples_estimate(I.enc, expectedFrames); FLAC__stream_encoder_set_verify(I.enc, true);
+    const FLAC__StreamEncoderInitStatus st = FLAC__stream_encoder_init_file(I.enc, path.c_str(), nullptr, nullptr);
+    if (st != FLAC__STREAM_ENCODER_INIT_STATUS_OK) { err = std::string("FLAC: ") + FLAC__StreamEncoderInitStatusString[st]; FLAC__stream_encoder_delete(I.enc); I.enc = nullptr; return nullptr; }
+  } else {
+    I.isFloat = format.rfind("wavf", 0) == 0; I.bits = std::stoi(format.substr(I.isFloat ? 4 : 3));
+    const std::uint64_t bytes = expectedFrames * static_cast<std::uint64_t>(ch) * static_cast<std::uint64_t>(I.bits / 8);
+    drwav_data_format f{}; f.container = bytes > 0xFFFFFF00ull - 4096 ? drwav_container_rf64 : drwav_container_riff;   // known to pass 4 GB: RF64 (EBU Tech 3306)
+    f.format = I.isFloat ? DR_WAVE_FORMAT_IEEE_FLOAT : DR_WAVE_FORMAT_PCM; f.channels = static_cast<drwav_uint32>(ch); f.sampleRate = static_cast<drwav_uint32>(std::lround(rate)); f.bitsPerSample = static_cast<drwav_uint32>(I.bits);
 #ifdef _WIN32
-  if (!drwav_init_file_write_w(&w, wide(path).c_str(), &f, nullptr)) { err = "cannot create " + path; return false; }
+    if (!drwav_init_file_write_w(&I.w, wide(path).c_str(), &f, nullptr)) { err = "cannot create " + path; return nullptr; }
 #else
-  if (!drwav_init_file_write(&w, path.c_str(), &f, nullptr)) { err = "cannot create " + path; return false; }
+    if (!drwav_init_file_write(&I.w, path.c_str(), &f, nullptr)) { err = "cannot create " + path; return nullptr; }
 #endif
-  const std::size_t bps = static_cast<std::size_t>(bits / 8); std::vector<unsigned char> blk; Ditherer d(ch, bits, dither); bool ok = true;
-  for (std::size_t at = 0; at < frames && ok; at += 4096) {
-    const std::size_t n = std::min<std::size_t>(4096, frames - at), m = n * static_cast<std::size_t>(ch); blk.resize(m * bps); unsigned char* p = blk.data();
-    for (std::size_t i = 0; i < m; ++i, p += bps) {
-      const double v = x[at * static_cast<std::size_t>(ch) + i];
-      if (isFloat && bits == 64) std::memcpy(p, &v, 8);
-      else if (isFloat) { const float s = static_cast<float>(v); std::memcpy(p, &s, 4); }
-      else { const std::int32_t s = d.next(v, static_cast<int>(i % static_cast<std::size_t>(ch))); for (std::size_t b = 0; b < bps; ++b) p[b] = static_cast<unsigned char>((static_cast<std::uint32_t>(s) >> (8 * b)) & 0xFF); }
+  }
+  I.d = std::make_unique<Ditherer>(ch, I.bits, dither); I.open = true; return wr;
+}
+bool Writer::write(const double* x, std::size_t frames) {
+  Impl& I = *i_; if (!I.open) return false; const std::size_t ch = static_cast<std::size_t>(I.ch);
+  for (std::size_t at = 0; at < frames; at += 4096) {
+    const std::size_t n = std::min<std::size_t>(4096, frames - at), m = n * ch; const double* src = x + at * ch;
+    if (I.flac) {
+      I.ib.resize(m); for (std::size_t k = 0; k < m; ++k) I.ib[k] = I.d->next(src[k], static_cast<int>(k % ch));
+      if (!FLAC__stream_encoder_process_interleaved(I.enc, I.ib.data(), static_cast<unsigned>(n))) { I.err = std::string("FLAC: ") + FLAC__stream_encoder_get_resolved_state_string(I.enc); return false; }
+    } else {
+      const std::size_t bps = static_cast<std::size_t>(I.bits / 8); I.bb.resize(m * bps); unsigned char* p = I.bb.data();
+      for (std::size_t k = 0; k < m; ++k, p += bps) { const double v = src[k];
+        if (I.isFloat && I.bits == 64) std::memcpy(p, &v, 8);
+        else if (I.isFloat) { const float s = static_cast<float>(v); std::memcpy(p, &s, 4); }
+        else { const std::int32_t s = I.d->next(v, static_cast<int>(k % ch)); for (std::size_t b = 0; b < bps; ++b) p[b] = static_cast<unsigned char>((static_cast<std::uint32_t>(s) >> (8 * b)) & 0xFF); } }
+      if (drwav_write_pcm_frames(&I.w, n, I.bb.data()) != n) { I.err = "write failed (the disk is full?)"; return false; }
     }
-    ok = drwav_write_pcm_frames(&w, n, blk.data()) == n; }
-  drwav_uninit(&w);
-  if (!ok) err = "write failed (the disk is full?)";
-  return ok;
+    I.frames += n;
+  }
+  return true;
+}
+bool Writer::close(std::string* err) {
+  Impl& I = *i_; if (!I.open) return I.err.empty(); I.open = false; bool ok = I.err.empty();
+  if (I.flac) { if (!FLAC__stream_encoder_finish(I.enc) && ok) { ok = false; I.err = "FLAC: the encoder could not finish (verify failed or the disk is full)"; } FLAC__stream_encoder_delete(I.enc); I.enc = nullptr; }
+  else drwav_uninit(&I.w);
+  if (err && !ok) *err = I.err; return ok;
+}
+
+bool write(const std::string& path, const std::vector<double>& x, int ch, double rate, const std::string& format, const std::string& dither, std::string& err, int flacLevel) {
+  if (ch < 1 || x.size() % static_cast<std::size_t>(ch)) { err = "write: 1 .. 64 channels and whole frames"; return false; }
+  const std::size_t frames = x.size() / static_cast<std::size_t>(ch);
+  auto w = Writer::make(path, ch, rate, format, dither, err, frames, flacLevel); if (!w) return false;
+  const bool wrote = w->write(x.data(), frames); std::string e; const bool closed = w->close(&e);
+  if (!wrote || !closed) { if (err.empty()) err = e.empty() ? "write failed (the disk is full?)" : e; return false; }
+  return true;
 }
 
 }  // namespace am::hr

@@ -2,6 +2,7 @@
 // to the audio thread; every change goes to the Runtime's lock-free control ring and is mirrored in the model under m_.
 #include "daemon.hpp"
 #include "audiomixer/bluetooth.hpp"
+#include "paths/paths.hpp"
 
 #include <chrono>
 #include <cstdio>
@@ -86,7 +87,7 @@ void Daemon::stop() {
   if (!running_.exchange(false)) return;
   http_.stop();
   std::lock_guard<std::mutex> g(m_);
-  if (rt_) { rt_->stop(); rt_.reset(); }
+  if (rt_) { rt_->setTap(nullptr); rec_.stop(); rt_->stop(); rt_.reset(); }
 }
 
 // SECURITY: a wrong token costs 100 ms and is counted; more than 20 in a minute and further wrong ones get 429 (a right token is never
@@ -212,6 +213,7 @@ json::Value Daemon::status() const {
   if (rt_) { const Snapshot s = rt_->snapshot(); o.set("blocks", static_cast<double>(s.blocks)); o.set("frames", static_cast<double>(s.frames)); o.set("xruns", static_cast<double>(s.xruns)); }
   else { o.set("blocks", 0); o.set("frames", 0); o.set("xruns", 0); }
   o.set("strips", opt_.strips); o.set("buses", kMaxBuses); o.set("plan", opt_.plan);
+  o.set("recording", rec_.recording()); o.set("recordSeconds", rec_.seconds()); o.set("recordFile", rec_.recording() && !rec_.files().empty() ? rec_.files()[0] : std::string());
   o.set("uptimeS", std::chrono::duration<double>(std::chrono::steady_clock::now() - started_).count());
   if (!lastError_.empty()) o.set("lastError", lastError_);
   json::Value b = json::Value::array(); for (const auto& n : availableBackends()) b.push(n); o.set("backends", b);
@@ -279,8 +281,16 @@ json::Value Daemon::control(const json::Value& cmd, std::string& err) {
   auto bus = [&](int& b) { b = cmd["bus"].asInt(-1); if (b < 0 || b >= kMaxBuses) { err = "bus out of range"; return false; } return true; };
   auto need = [&]() { if (!rt_) { err = "no device is open: send {\"op\":\"open\"} first"; return false; } return true; };
   int s = 0, b = 0;
+  // RECORD: {"op":"record","on":true,"format":"flac"|"wav24"|"wavf32"} writes the master to <data>/recordings/<time>-master.*; on:false stops
+  if (op == "record") {
+    if (!cmd["on"].asBool()) { if (rt_) rt_->setTap(nullptr); rec_.stop(); return ok; }
+    if (!need()) return {}; if (rec_.recording()) { err = "already recording"; return {}; }
+    const std::string f = cmd["format"].asString("flac"); rec::Options o; o.folder = paths::file("recordings"); o.master = true; o.format = f == "flac" ? 4 : f == "wavf32" ? 1 : 0;
+    if (!rec_.start(o, rate_, err)) return {}; rt_->setTap(&rec_);
+    ok.set("file", rec_.files().empty() ? std::string() : rec_.files()[0]); return ok;
+  }
   if (op == "open") {
-    if (rt_) { rt_->stop(); rt_.reset(); }
+    if (rt_) { rt_->setTap(nullptr); rec_.stop(); rt_->stop(); rt_.reset(); }
     DeviceConfig cfg; cfg.backend = cmd["backend"].asString("auto"); cfg.inDevice = cmd["in"].asString(""); cfg.outDevice = cmd["out"].asString("");
     cfg.sampleRate = cmd["rate"].asNumber(48000); cfg.frames = static_cast<unsigned>(std::max(16, cmd["frames"].asInt(256)));
     cfg.inChannels = std::max(0, std::min(kMaxStrips, cmd["inChannels"].asInt(2))); cfg.outChannels = std::max(0, std::min(32, cmd["outChannels"].asInt(2))); cfg.exclusive = cmd["exclusive"].asBool(false);
@@ -291,10 +301,10 @@ json::Value Daemon::control(const json::Value& cmd, std::string& err) {
     for (int i = 0; i < opt_.strips; ++i) { const Strip& st = strips_[static_cast<std::size_t>(i)]; rt->setGainDb(i, st.db); rt->setPan(i, st.pan); rt->setMute(i, st.mute); rt->setSolo(i, st.solo); }
     for (int k = 0; k < kMaxBuses; ++k) { rt->setBusLevel(k, buses_[k].db); rt->setBusMute(k, buses_[k].mute); rt->setBusReturn(k, buses_[k].returnDb); }
     rt->setMasterDb(masterDb_); rt->setLimiter(limiter_, ceiling_); rt->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute);
-    rt_ = std::move(rt); backend_ = rt_->backendName(); lastError_.clear();
+    rt_ = std::move(rt); backend_ = rt_->backendName(); lastError_.clear(); rate_ = cfg.sampleRate;
     ok.set("backend", backend_); ok.set("rate", cfg.sampleRate); ok.set("frames", static_cast<int>(cfg.frames)); return ok;
   }
-  if (op == "stop") { if (rt_) { rt_->stop(); rt_.reset(); } backend_.clear(); return ok; }
+  if (op == "stop") { if (rt_) { rt_->setTap(nullptr); rec_.stop(); rt_->stop(); rt_.reset(); } backend_.clear(); return ok; }
   if (op == "gain") { if (!strip(s)) return {}; strips_[static_cast<std::size_t>(s)].db = clampDb(cmd["db"].asNumber(0)); if (rt_) rt_->setGainDb(s, strips_[static_cast<std::size_t>(s)].db); return ok; }
   if (op == "pan") { if (!strip(s)) return {}; double p = cmd["pan"].asNumber(0); p = p < -1 ? -1 : p > 1 ? 1 : p; strips_[static_cast<std::size_t>(s)].pan = p; if (rt_) rt_->setPan(s, p); return ok; }
   if (op == "mute") { if (!strip(s)) return {}; const bool on = cmd["on"].asBool(); strips_[static_cast<std::size_t>(s)].mute = on; if (rt_) rt_->setMute(s, on); return ok; }
