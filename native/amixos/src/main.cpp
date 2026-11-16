@@ -57,6 +57,7 @@
 #include "Update.h"
 #include "Measure.h"
 #include "Remote.h"
+#include "fx/fx.hpp"
 #include "Net.h"
 #include "Frame.h"
 #include "measure/measure.hpp"
@@ -137,6 +138,9 @@ int main(int argc, char* argv[]) {
   if (smoke) std::setvbuf(stdout, nullptr, _IONBF, 0);   // the self-test prints as it goes: after a crash the last line is the step that was running
   if (!smoke) { QFile* lf = new QFile(QString::fromStdString(am::paths::file("console.log"))); if (lf->size() > 256 * 1024) lf->remove(); if (lf->open(QIODevice::Append | QIODevice::Text)) { g_log = lf; qInstallMessageHandler(logToFile); qInfo("AmF X1 %s starting: %s, Qt %s, render %s", AMIX_VERSION, am::paths::osName(), qVersion(), QQuickWindow::graphicsApi() == QSGRendererInterface::Software ? "software" : "auto"); } }
   Engine engine; I18n i18n; Arrange arrange(&engine); Settings settings(&engine); applyPalette(settings.darkTheme()); QObject::connect(&settings, &Settings::changed, &app, [&] { static bool last = settings.darkTheme(); if (last != settings.darkTheme()) { last = settings.darkTheme(); applyPalette(last); } }); if (smoke) settings.finishSetup(); Access access(&engine); Osc osc(&engine); Media media(&engine); Samples samples(&engine); Update update(QStringLiteral(AMIX_VERSION)); Measure measure(&engine); Remote remote(&engine); Net net(&engine); Frame frame(&engine); osc.setFrame(&frame); net.setFrame(&frame); frame.setOsc(&osc);
+  // SAMPLE PADS while phones are linked: the console's engine is stopped and the remote service plays, so the pads are sent there
+  samples.remotePlay = [&](int id, double gainDb) { return remote.send(QVariantMap{{"op", "sample"}, {"id", id}, {"gainDb", gainDb}}); };
+  samples.remoteStop = [&] { remote.send(QVariantMap{{"op", "sample"}, {"stop", true}}); };
   if (!lang.isEmpty()) i18n.setLang(lang);   // --lang fa: start in that language (also for --shots)
   QQmlApplicationEngine qml;
   qml.rootContext()->setContextProperty("engine", &engine);
@@ -416,6 +420,17 @@ int main(int argc, char* argv[]) {
       engine.setWindowsGainMode(keepMode); engine.setMaster(keepMaster);
       if (!(offOk && std::abs(t50 + 9.03) < 0.01 && t100 == 0.0 && std::abs(t25 + 18.06) < 0.01 && t0 <= -119 && wrote && fader && curve && shared && gone)) {
         std::fprintf(stderr, "amixos --smoke: WINDOWS VOLUME failed (off %d, 50 %.2f, 100 %.2f, 25 %.2f, 0 %.0f, wrote %d, fader %d, curve %d, shared %d, gone %d)\n", offOk, t50, t100, t25, t0, wrote, fader, curve, shared, gone); return 288; } }
+    { // LOW-CPU INTERFACE: the meter rate follows the window (front / behind another app / minimised) and ECO; the process CPU is measured
+      // in each state over 3 s of the live mixer (the interface itself, not the sound, is what is slowed)
+      const bool eco0 = engine.ecoUi(); engine.setEcoUi(false);
+      engine.setUiActivity(2); const int f2 = engine.uiFps(); engine.setEcoUi(true); const int fe = engine.uiFps(); engine.setEcoUi(false);
+      engine.setUiActivity(1); const int f1 = engine.uiFps(); engine.setUiActivity(0); const int f0 = engine.uiFps();
+      auto cpuPct = [&](int level) { engine.setUiActivity(level); const std::clock_t c0 = std::clock(); QElapsedTimer w; w.start();
+        while (w.elapsed() < 3000) { QCoreApplication::processEvents(QEventLoop::AllEvents, 20); std::this_thread::sleep_for(std::chrono::milliseconds(2)); }
+        return 100.0 * static_cast<double>(std::clock() - c0) / CLOCKS_PER_SEC / (w.elapsed() / 1000.0); };
+      const double cFront = cpuPct(2), cBack = cpuPct(1), cMin = cpuPct(0); engine.setUiActivity(2); engine.setEcoUi(eco0);
+      std::printf("amixos --smoke: LOW-CPU INTERFACE %d fps in front (ECO %d), %d behind another app, %d minimised; process CPU %.1f%% / %.1f%% / %.1f%% (one core, offscreen)\n", f2, fe, f1, f0, cFront, cBack, cMin);
+      if (!(f2 == 30 && fe == 15 && f1 == 4 && f0 == 1)) { std::fprintf(stderr, "amixos --smoke: LOW-CPU INTERFACE failed\n"); return 1; } }
     { // the ten effects in the rack of any channel: listed, loaded into a slot, a knob moves, bypass, cleared; a late channel too
       { // 2 IN / 2 OUT at least on every driver: asking for none opens the first pair all the same (a device that reported 0 channels is not left silent)
         const double r0 = engine.sampleRate(); const int f0 = engine.blockFrames(); engine.stop();
@@ -432,8 +447,15 @@ int main(int argc, char* argv[]) {
       { // the strip menu's PLAY A SAMPLE: the channel's SAMPLE PLAYER is set to that sample and playing
         const int k = engine.playSampleOnStrip(21, 7); const QVariantList p = k >= 0 ? engine.pluginParams(21, k) : QVariantList();
         const bool ok = k >= 0 && p.size() >= 2 && p[0].toMap()["text"].toString().startsWith("7 ") && p[1].toMap()["text"].toString() == "ON" && engine.playSampleOnStrip(21, 0) == -1;
+        // ... and it is HEARD: the channel's meter and the master move (a quiet channel that the engine lets rest still plays its rack),
+        // on a low channel and on the last one the plan allows
+        auto heard = [&](int strip) { engine.setGain(strip, 0); engine.setMute(strip, false); const int s = engine.playSampleOnStrip(strip, 1); double ch = -120, ms = -120; QElapsedTimer t; t.start();
+          while (t.elapsed() < 400) { QCoreApplication::processEvents(QEventLoop::AllEvents, 10); engine.tick(); ch = std::max(ch, engine.meterAt(strip)["peakDb"].toDouble()); ms = std::max(ms, engine.telemetry()["masterPeakDb"].toDouble()); }
+          if (s >= 0) engine.setPlugin(strip, s, ""); return std::make_pair(ch, ms); };
+        const int last = std::max(0, std::min(engine.licensedChannels(), 32) - 1); const auto h0 = heard(1), h1 = heard(last);
+        std::printf("amixos --smoke: SAMPLE PADS on a channel heard: CH 2 %.1f dBFS (master %.1f), CH %d %.1f dBFS (master %.1f)\n", h0.first, h0.second, last + 1, h1.first, h1.second);
         if (k >= 0) engine.setPlugin(21, k, "");
-        if (!ok) { std::fprintf(stderr, "amixos --smoke: play a sample on a strip (slot %d)\n", k); return 159; } }
+        if (!ok || h0.first < -40 || h0.second < -40 || h1.first < -40 || h1.second < -40) { std::fprintf(stderr, "amixos --smoke: play a sample on a strip (slot %d) / not heard\n", k); return 159; } }
       { // a custom rate as high as 1100 kHz opens on the null device and runs (the engine has no rate ceiling of its own)
         const double r0 = engine.sampleRate(); const int f0 = engine.blockFrames(); engine.stop();
         const bool ok = engine.open("null", "", "", 1100000, 1024, 2, 2); QElapsedTimer t; t.start(); while (t.elapsed() < 300) QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
@@ -730,6 +752,21 @@ int main(int argc, char* argv[]) {
         engine.setPlugin(26, 0, ""); t.restart(); while (t.elapsed() < 200) QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
         if (engine.pluginWindows() != 0) { std::fprintf(stderr, "amixos --smoke: the window stayed open after its plug-in was removed\n"); return 233; }
         engine.setPlugin(26, 0, k2); if (!engine.openPluginWindow(26, 0, true)) return 234; engine.closePluginWindows(); if (engine.pluginWindows() != 0) return 235;
+        { // ... and INSIDE THE CONSOLE: the editor docked into the main window (the PLUG-IN dock): it replaces the floating one, is idled, follows
+          // the dock, and closes when the plug-in leaves its slot; one without an editor says so instead
+          QQuickItem* body = qml.rootObjects().isEmpty() ? nullptr : qml.rootObjects().first()->findChild<QQuickItem*>("pluginDockBody");
+          QObject* dockObj = qml.rootObjects().isEmpty() ? nullptr : qml.rootObjects().first()->findChild<QObject*>("pluginDock");
+          if (!body || !dockObj) { std::fprintf(stderr, "amixos --smoke: the PLUG-IN dock is not in the window\n"); return 238; }
+          engine.openPluginWindow(26, 0, true); dockObj->setProperty("visible", true);
+          const QVariantMap r = engine.dockPluginEditor(26, 0, body, true);
+          QElapsedTimer t2; t2.start(); while (t2.elapsed() < 250) QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+          const bool docked = r.value("ok").toBool() && engine.pluginDocked() && engine.pluginWindows() == 0 && r.value("w").toInt() > 0 && r.value("h").toInt() > 0;
+          const QVariantMap none = engine.dockPluginEditor(26, 2, body, true);   // the built-in hall: no window of its own
+          const bool noted = !none.value("ok").toBool() && !none.value("note").toString().isEmpty() && engine.pluginDocked();   // and the docked one stays
+          engine.setPlugin(26, 0, ""); t2.restart(); while (t2.elapsed() < 250) QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+          const bool gone = !engine.pluginDocked(); dockObj->setProperty("visible", false);
+          std::printf("amixos --smoke: PLUG-IN INSIDE THE CONSOLE docked %d (%dx%d, floating closed), no-editor note %d, closed with its plug-in %d\n", docked, r.value("w").toInt(), r.value("h").toInt(), noted, gone);
+          if (!(docked && noted && gone)) { std::fprintf(stderr, "amixos --smoke: PLUG-IN dock failed: %s\n", qPrintable(r.value("note").toString())); return 239; } }
         for (int k = 0; k < 3; ++k) engine.setPlugin(26, k, ""); }
       { // VST FOLDER: the console's own plug-in folder is created and saved among the scanned folders, once
         const QStringList before = settings.vstDirs(); const QString vf = settings.vstUserFolder(); settings.vstUserFolder();
@@ -765,6 +802,7 @@ int main(int argc, char* argv[]) {
         const auto wait = [&](int ms) { QElapsedTimer t; t.start(); while (t.elapsed() < ms) { app.processEvents(QEventLoop::AllEvents, 20); QThread::msleep(5); } };
         const double g0 = engine.stripAt(0)["db"].toDouble(), g1 = engine.stripAt(1)["db"].toDouble();
         const bool wasRunning = engine.running(); const QString wb = engine.backend(); const double wr = engine.sampleRate(); const int wf = engine.blockFrames(), wi = engine.deviceInputs(), wo = engine.deviceOutputs();
+        const QString rackFx = QStringLiteral("fx:") + QString::fromStdString(am::fx::catalog().front().first); engine.setPlugin(5, 0, rackFx);   // a rack effect: the service must play it
         engine.setGain(1, 0); engine.setMute(2, false); engine.setGain(3, 0);   // a known start: a run stopped half-way never leaves its moves behind for the next one
         engine.setGain(0, -9); if (!remote.start(false)) { std::fprintf(stderr, "amixos --smoke: LIVE SYNC: the remote did not start: %s\n", qPrintable(remote.status())); return 284; }
         wait(1500); QNetworkAccessManager nam; QString lastHttpErr; const auto http = [&](const QString& path, const QByteArray& body) { QNetworkRequest q(QUrl("http://127.0.0.1:8765" + path)); q.setHeader(QNetworkRequest::ContentTypeHeader, "application/json"); q.setRawHeader("X-Amix-Token", remote.token().toUtf8());
@@ -783,6 +821,58 @@ int main(int argc, char* argv[]) {
         if (sw && qEnvironmentVariableIsSet("AMIX_SYNC_SHOT")) { http("/api/control", "{\"op\":\"gain\",\"strip\":1,\"db\":-16}"); wait(140); sw->grabWindow().save(qEnvironmentVariable("AMIX_SYNC_SHOT")); }
         engine.setGain(3, -21); QElapsedTimer t2; t2.start(); double out = 0; while (t2.elapsed() < 2000) { wait(40); out = http("/api/state", {})["strips"].toList().value(3).toMap()["db"].toDouble(); if (std::abs(out + 21) < 0.05) break; } const qint64 outMs = t2.elapsed();
         const bool ok = std::abs(seeded + 9) < 0.05 && std::abs(engine.stripAt(1)["db"].toDouble() + (qEnvironmentVariableIsSet("AMIX_SYNC_SHOT") ? 16 : 14)) < 0.05 && engine.stripAt(2)["mute"].toBool() && std::abs(out + 21) < 0.05 && lit && remotesSeen >= 1;
+        // THE CONSOLE'S PLUG-INS while phones are linked: the service plays the rack effect; a phone turns one of its knobs; the console's own
+        // instance follows (so it sounds the same when the console plays again)
+        bool rackOk = false; QString rackWhy;
+        { const auto get = [&](const QString& path) { QNetworkRequest q(QUrl("http://127.0.0.1:8765" + path)); q.setRawHeader("X-Amix-Token", remote.token().toUtf8()); QNetworkReply* r = nam.get(q);
+            QElapsedTimer t; t.start(); while (!r->isFinished() && t.elapsed() < 3000) app.processEvents(QEventLoop::AllEvents, 20); const QVariantMap m = QJsonDocument::fromJson(r->readAll()).toVariant().toMap(); r->deleteLater(); return m; };
+          if (!http("/api/status", {}).value("running").toBool()) { http("/api/control", "{\"op\":\"open\",\"backend\":\"null\",\"inChannels\":2,\"outChannels\":2}"); wait(300); }   // this test computer has no sound card: the timed one
+          const QVariantMap slot = get("/api/racks?strip=5").value("racks").toList().value(0).toMap().value("slots").toList().value(0).toMap();
+          const QVariantList ps = slot.value("params").toList();
+          if (!slot.value("loaded").toBool() || ps.isEmpty()) rackWhy = "not loaded by the service: " + slot.value("error").toString();
+          else { const int id = ps[0].toMap().value("id").toInt(); const double want = ps[0].toMap().value("value").toDouble() < 0.5 ? 0.9 : 0.1;
+            http("/api/control", QJsonDocument(QJsonObject{{"op", "plugin"}, {"strip", 5}, {"slot", 0}, {"param", id}, {"value", want}}).toJson(QJsonDocument::Compact));
+            QElapsedTimer t; t.start(); double now = -1;
+            while (t.elapsed() < 3000) { wait(40); for (const QVariant& v : engine.pluginParams(5, 0)) if (v.toMap().value("id").toInt() == id) now = v.toMap().value("value").toDouble(); if (std::abs(now - want) < 0.02) break; }
+            rackOk = std::abs(now - want) < 0.02; if (!rackOk) rackWhy = QStringLiteral("the console's instance did not follow (%1, wanted %2)").arg(now).arg(want);
+            std::printf("amixos --smoke: CONSOLE PLUG-INS %s played by the service, a phone set %s to %.2f, the console followed in %lld ms\n", qPrintable(slot.value("name").toString()), qPrintable(ps[0].toMap().value("title").toString()), want, static_cast<long long>(t.elapsed())); } }
+        // ... and the other way: a knob turned on the console (or in the plug-in's own window) reaches the service's instance; the console's
+        // 8-band channel EQ goes out to the remotes, and a remote's EQ band lands on the console, as they move
+        if (rackOk) { const auto get = [&](const QString& path) { QNetworkRequest q(QUrl("http://127.0.0.1:8765" + path)); q.setRawHeader("X-Amix-Token", remote.token().toUtf8()); QNetworkReply* r = nam.get(q);
+            QElapsedTimer t; t.start(); while (!r->isFinished() && t.elapsed() < 3000) app.processEvents(QEventLoop::AllEvents, 20); const QVariantMap m = QJsonDocument::fromJson(r->readAll()).toVariant().toMap(); r->deleteLater(); return m; };
+          const QVariantList cps = engine.pluginParams(5, 0); const int id = cps.value(0).toMap().value("id").toInt(); const double want = cps.value(0).toMap().value("value").toDouble() < 0.5 ? 0.8 : 0.2;
+          engine.setPluginParam(5, 0, id, want); QElapsedTimer t; t.start(); double there = -1;
+          while (t.elapsed() < 4000) { wait(60); for (const QVariant& v : get("/api/racks?strip=5").value("racks").toList().value(0).toMap().value("slots").toList().value(0).toMap().value("params").toList()) if (v.toMap().value("id").toInt() == id) there = v.toMap().value("value").toDouble(); if (std::abs(there - want) < 0.02) break; }
+          const qint64 plugMs = t.elapsed();
+          engine.setEq(4, 2, 1, 2000, 1.0, 5.0); QElapsedTimer te; te.start(); double eqOut = 0;
+          while (te.elapsed() < 3000) { wait(40); eqOut = http("/api/state", {})["strips"].toList().value(4).toMap()["eq"].toList().value(2).toList().value(3).toDouble(); if (std::abs(eqOut - 5) < 0.05) break; }
+          const qint64 eqOutMs = te.elapsed();
+          http("/api/control", "{\"op\":\"eq\",\"strip\":6,\"band\":1,\"type\":\"lowshelf\",\"freq\":150,\"q\":0.7,\"gainDb\":-3.5}"); QElapsedTimer ti; ti.start(); QVariantMap eb;
+          while (ti.elapsed() < 3000) { wait(40); eb = engine.eqBand(6, 1); if (std::abs(eb.value("gainDb").toDouble() + 3.5) < 0.05 && eb.value("type").toInt() == 2) break; }
+          const bool eqIn = std::abs(eb.value("gainDb").toDouble() + 3.5) < 0.05 && eb.value("type").toInt() == 2 && std::abs(eb.value("freq").toDouble() - 150) < 0.5;
+          std::printf("amixos --smoke: REAL-TIME SYNC console plug-in knob -> service %s in %lld ms; console EQ -> remotes %s in %lld ms; remote EQ -> console %s in %lld ms\n",
+                      std::abs(there - want) < 0.02 ? "yes" : "NO", static_cast<long long>(plugMs), std::abs(eqOut - 5) < 0.05 ? "yes" : "NO", static_cast<long long>(eqOutMs), eqIn ? "yes" : "NO", static_cast<long long>(ti.elapsed()));
+          engine.setEq(4, 2, 0, 2000, 1.0, 0.0); engine.setEq(6, 1, 0, 150, 0.7, 0.0);
+          // SAMPLE PADS while the phones are linked: the console's engine is stopped, a pad goes to the service and is heard on its master
+          { double before = 0, during = 0; for (int k = 0; k < 5; ++k) { wait(40); before = std::max(before, get("/api/meters").value("master").toMap().value("l").toDouble()); }
+            const bool sent = !engine.running() && samples.play(1); QElapsedTimer tp; tp.start();
+            while (tp.elapsed() < 1500) { wait(40); during = std::max(during, get("/api/meters").value("master").toMap().value("l").toDouble()); if (during > 0.05) break; }
+            samples.stopAll();
+            std::printf("amixos --smoke: SAMPLE PADS while phones are linked: sent to the service %d, its master %.3f -> %.3f (in %lld ms)\n", sent, before, during, static_cast<long long>(tp.elapsed()));
+            if (!(sent && during > 0.05 && during > before * 4)) { rackOk = false; rackWhy = QStringLiteral("SAMPLE PADS not heard through the service (%1 -> %2)").arg(before).arg(during); } }
+          if (!(std::abs(there - want) < 0.02 && std::abs(eqOut - 5) < 0.05 && eqIn)) { rackOk = false; rackWhy = QStringLiteral("REAL-TIME SYNC: plug-in %1 / EQ out %2 / EQ in %3").arg(there).arg(eqOut).arg(eqIn); } }
+        engine.setPlugin(5, 0, QString());
+        if (!rackOk) { std::fprintf(stderr, "amixos --smoke: CONSOLE PLUG-INS failed: %s\n", qPrintable(rackWhy)); remote.stop(); return 290; }
+        // RTA EQ and RTA: a remote sets the console's RTA EQ (the service plays it, the console takes it back); the analyzer answers
+        { const QVariantList keep = engine.programEqGains(); bool eqOk = false; qint64 eqMs = -1;
+          http("/api/control", "{\"op\":\"programEq\",\"gains\":[0,0,3,0,0,-2.5,0,0,0,0],\"on\":true}"); QElapsedTimer t; t.start();
+          while (t.elapsed() < 3000) { wait(40); const QVariantList g = engine.programEqGains(); if (g.size() == 10 && std::abs(g[2].toDouble() - 3) < 0.01 && std::abs(g[5].toDouble() + 2.5) < 0.01) { eqOk = true; eqMs = t.elapsed(); break; } }
+          http("/api/control", "{\"op\":\"rta\",\"src\":-1}"); wait(400);
+          QNetworkRequest q(QUrl("http://127.0.0.1:8765/api/rta")); q.setRawHeader("X-Amix-Token", remote.token().toUtf8()); QNetworkReply* r = nam.get(q); QElapsedTimer tr; tr.start(); while (!r->isFinished() && tr.elapsed() < 3000) app.processEvents(QEventLoop::AllEvents, 20);
+          const QVariantMap rta = QJsonDocument::fromJson(r->readAll()).toVariant().toMap(); r->deleteLater(); http("/api/control", "{\"op\":\"rta\",\"src\":\"off\"}");
+          engine.setGraphicEq(-1, keep, true); wait(200);
+          std::printf("amixos --smoke: RTA EQ remote->console %lld ms; RTA %d bands\n", static_cast<long long>(eqMs), static_cast<int>(rta.value("f").toList().size()));
+          if (!eqOk || rta.value("f").toList().size() < 50) { std::fprintf(stderr, "amixos --smoke: RTA EQ / RTA failed (eq %d, bands %d)\n", eqOk, static_cast<int>(rta.value("f").toList().size())); remote.stop(); return 291; } }
         // SETTINGS SYNC: a remote changes the stereo width and GAIN MODE: the console follows; the console changes the width: the service follows
         const double keepW = engine.width(); const bool keepG = engine.windowsGainMode(); bool setOk = false; qint64 setIn = -1, setOut = -1;
         { http("/api/control", "{\"op\":\"setting\",\"key\":\"width\",\"value\":0.5}"); http("/api/control", "{\"op\":\"setting\",\"key\":\"winGain\",\"value\":" + QByteArray(keepG ? "false" : "true") + "}");

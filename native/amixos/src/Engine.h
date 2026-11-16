@@ -3,6 +3,8 @@
 // Everything here runs on the GUI thread; the audio thread is inside am::Runtime and is never blocked by this object (control goes through
 // the runtime's lock-free ring, meters come out of its sequence-counted snapshot). Settings (strip names, levels, DSP) persist with QSettings.
 #pragma once
+#include <QQuickItem>
+#include <QPointer>
 #include <algorithm>
 #include <QObject>
 #include <functional>
@@ -107,6 +109,15 @@ class Engine : public QObject {
   QVariantMap license() const { return license_; }
   int licensedChannels() const { return licensedChannels_; }
   Q_INVOKABLE void tick();   // one meter poll now (the timer does this every 33 ms; the smoke test calls it directly)
+  // LOW-CPU INTERFACE: the meters and everything that follows them redraw at a rate that depends on whether anyone looks: 30 fps in
+  // front (15 with ECO), 4 fps behind another app (Chrome, a game), 1 fps minimised. The sound is never throttled: only the screen.
+  Q_INVOKABLE void setUiActivity(int level);   // 2 in front, 1 behind another window, 0 minimised / hidden
+  Q_PROPERTY(bool ecoUi READ ecoUi WRITE setEcoUi NOTIFY ecoUiChanged)
+  Q_PROPERTY(bool uiAwake READ uiAwake NOTIFY ecoUiChanged)   // the window is in front: animations and fast page polls run only then
+  bool uiAwake() const { return uiLevel_ >= 2; }
+  bool ecoUi() const { return ecoUi_; }
+  void setEcoUi(bool on);
+  Q_INVOKABLE int uiFps() const { return timer_.interval() > 0 ? 1000 / timer_.interval() : 0; }
   Q_INVOKABLE void refreshLicense();            // re-reads the stored key / edition (also after the date changes)
   // for the Settings system
   void setClipThreshold(double db);             // the meters' clip point in dBFS (default -0.1)
@@ -531,6 +542,12 @@ class Engine : public QObject {
   Q_INVOKABLE QString loadSampleFile(int strip, int slot, const QString& pathOrUrl);   // that slot's SAMPLE PLAYER plays the user's file ("" = back to the built-in samples); "" or the error
   Q_INVOKABLE QString sampleFileOf(int strip, int slot) const;   // the SAMPLE PLAYER of that channel (added if needed) set to that sample and started; the slot, or -1   // the slot that holds that kind (already there, or put in the first free slot); -1 = the rack is full
   Q_INVOKABLE void setPluginBypass(int strip, int slot, bool bypass);
+  // PHONES AND THE RACKS: the rack inserts (VST3, VST2, built-in fx) handed to the remote service while it plays, and what a phone changed
+  // taken back (state and bypass onto the console's own instance, so the plug-in sounds the same when the console plays again)
+  QVariantList remoteRack(int strip) const;
+  QVariantMap masterChainSeed() const;        // the RTA EQ (program EQ) and mastering, for the remote service to play while phones are linked
+  QVariantList programEqGains() const;        // the RTA EQ's 10 gains (ISO octaves) as the console has them   // [{slot, kind, name, bypass, state}] of the inserts the service can play
+  void takeRemotePlugin(int strip, int slot, bool bypass, const QString& state);
   Q_INVOKABLE QVariantList pluginCatalog() const;     // the built-in stages, for the chooser
   Q_INVOKABLE void movePlugin(int strip, int from, int to);   // reorder the rack (swap two slots)
   // VST3 (engine/cpp/app/vst3): plug-ins found in the VST3 folders (Settings adds more), loaded into a slot as "vst3:<module path>|<class id>"
@@ -551,6 +568,12 @@ class Engine : public QObject {
   // plug-in has an editor and it opened (Windows; a plug-in without one, or another system, gets the console's own knob view instead).
   Q_INVOKABLE bool openPluginWindow(int strip, int slot, bool evenHere = false);   // evenHere: also off Windows (the tests)
   Q_INVOKABLE void closePluginWindows();
+  // THE PLUG-IN'S OWN INTERFACE INSIDE THE APP: the editor goes into a native child window of the console's own window, kept over a
+  // QML item (the PLUG-IN dock): it moves, hides and shows with it. One at a time; POP OUT turns it into the floating window above.
+  // Returns {ok, w, h (the editor's size in the dock's units), note}.
+  Q_INVOKABLE QVariantMap dockPluginEditor(int strip, int slot, QQuickItem* area, bool evenHere = false);
+  Q_INVOKABLE void undockPluginEditor();
+  Q_INVOKABLE bool pluginDocked() const { return dock_.win != nullptr; }
   Q_INVOKABLE int pluginWindows() const { return static_cast<int>(pluginWins_.size()); }
   bool eventFilter(QObject* o, QEvent* e) override;
   Q_INVOKABLE int retryPlugins();   // tries again every plug-in slot that is waiting (its file was missing, busy or not scanned yet); returns how many came back
@@ -628,6 +651,8 @@ class Engine : public QObject {
   Q_INVOKABLE void save();
 
  signals:
+  void pluginDockChanged();   // the docked plug-in window closed (its plug-in left the slot, or UNDOCK)
+  void ecoUiChanged();
   void compTargetChanged();
   void stateChanged();
   void ampChanged();
@@ -726,6 +751,8 @@ class Engine : public QObject {
   struct MonitorUi { int source = 0; double db = 0; bool dim = false, mono = false, mute = false, sync = true; } mon_;   // sync: the monitor fader moves with the master fader (and back)
   int vuRef_ = -18; double vu_[kStrips] = {}; double vuMaster_ = 0;                     // VU ballistics (300 ms to 99 %), run on the UI timer
   std::optional<QJsonObject> clipboard_;
+  int uiLevel_ = 2; bool ecoUi_ = false; void applyUiRate();
+  struct Dock { QWindow* win = nullptr; std::shared_ptr<am::host::Plugin> pl; int strip = -1, slot = -1; QPointer<QQuickItem> area; } dock_; QTimer dockTimer_; void placeDock();
   QTimer timer_; QTimer hotplug_; std::string fingerprint_; bool simulated_ = false;
   mutable QSettings settings_;
 };

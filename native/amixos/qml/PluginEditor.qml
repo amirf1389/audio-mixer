@@ -118,7 +118,7 @@ Popup {
     readonly property var sectionRows: { if (rows < 2) return [sections]; const h = Math.ceil(sections.length / 2); return [sections.slice(0, h), sections.slice(h)] }
     modal: false; dim: true; closePolicy: Popup.CloseOnEscape; padding: 0
     Overlay.modeless: Rectangle { color: "#b3000000" }   // the console steps back while a plug-in is open: the unit is seen against dark, not against the mixer
-    Timer { interval: 40; running: ed.visible; repeat: true; onTriggered: { const m = engine.meterAt(ed.strip); const l = m ? (m.inDb !== undefined ? m.inDb : m.peakDb) : -120; ed.level = l; const tgt = ed.bypass ? -20 : Math.max(-20, Math.min(3, l + 12)); ed.needle += (tgt - ed.needle) * (tgt > ed.needle ? 0.35 : 0.12); vu.requestPaint()
+    Timer { interval: engine.uiAwake ? 40 : 500; running: ed.visible; repeat: true; onTriggered: { const m = engine.meterAt(ed.strip); const l = m ? (m.inDb !== undefined ? m.inDb : m.peakDb) : -120; ed.level = l; const tgt = ed.bypass ? -20 : Math.max(-20, Math.min(3, l + 12)); ed.needle += (tgt - ed.needle) * (tgt > ed.needle ? 0.35 : 0.12); vu.requestPaint()
         ed.inDb += ((m ? (m.inDb !== undefined ? m.inDb : -120) : -120) - ed.inDb) * 0.4; ed.outDb += ((m ? m.peakDb : -120) - ed.outDb) * 0.4
         if (++tick % 2 === 0) { engine.setScopeStrip(ed.strip); ed.spec = engine.spectrum(2); disp.requestPaint() } } property int tick: 0 }
     background: Item {}
@@ -309,7 +309,8 @@ Popup {
                     // a hosted VST opens in this AMFB panel (its parameters on our knobs); the plug-in's own window is one press away
                     Inset { visible: ed.kind.startsWith("vst3:") || ed.kind.startsWith("vst2:"); width: 168; Row { anchors.centerIn: parent; spacing: 8
                         Text { anchors.verticalCenter: parent.verticalCenter; text: i18n.t("PLUG-IN WINDOW", i18n.lang); color: ed.ink; font.family: ed.face1; font.pixelSize: 10; font.weight: Font.DemiBold; font.letterSpacing: 1 }
-                        LitKey { objectName: "nativeKey"; label: "⧉"; ToolTip.visible: ed.nativeNote !== ""; ToolTip.text: ed.nativeNote; onClicked: { if (!engine.openPluginWindow(ed.strip, ed.slot)) ed.nativeNote = i18n.t("This plug-in has no window of its own here: its controls are on this panel.", i18n.lang) } } } } } }
+                        LitKey { objectName: "nativeKey"; label: "⧉"; ToolTip.visible: ed.nativeNote !== ""; ToolTip.text: ed.nativeNote; onClicked: { const n = (typeof root !== "undefined" && root.openPluginDock) ? root.openPluginDock(ed.strip, ed.slot, ed.title) : (engine.openPluginWindow(ed.strip, ed.slot) ? "" : "x")
+                            if (n === "") ed.close(); else ed.nativeNote = i18n.t("This plug-in has no window of its own here: its controls are on this panel.", i18n.lang) } } } } } }   // inside the console; this panel steps aside
             // THE DISPLAY: what is playing (the spectrum of the channel), the curve the unit draws (EQs) and the levels in and out
             RackUnit { id: dispUnit; objectName: "displayUnit"; height: 214
                 Rectangle { x: 14; y: 12; width: parent.width - 28; height: parent.height - 24; radius: 10; color: "#06080b"; border.color: "#000"; border.width: 2; clip: true

@@ -12,6 +12,7 @@
 #include <QThread>
 #include <QElapsedTimer>
 #include "Engine.h"
+#include <QQuickWindow>
 #include "measure/score.hpp"
 #include "hires/hires.hpp"
 #include "fx/speakers.hpp"
@@ -64,7 +65,7 @@ Engine::Engine(QObject* parent) : QObject(parent) {
   if (masterDb_ <= -60.0) { masterDb_ = 0.0; masterMuted_ = false; startNote_ = QStringLiteral("The master was saved at -inf: it starts at 0 dB."); }
   if (mon_.db <= -60.0) mon_.db = 0.0;
   refreshDevices();
-  timer_.setInterval(33);
+  ecoUi_ = settings_.value("ui/eco", false).toBool(); applyUiRate();
   vuRef_ = std::clamp(settings_.value("ui/vuRef", -18).toInt(), -24, -8);
   for (int i = 0; i < kStrips; ++i) inRoute_[i] = i;
   for (int o = 0; o < kOutputs; ++o) outRoute_[o] = am::Runtime::defaultOutputSource(o);
@@ -256,7 +257,7 @@ void Engine::pushAll() {
     rt_->setDelayMs(i, p.delayMs); rt_->setPolarity(i, p.polarityInvert); rt_->setCrossover(i, p.xoverType, p.hpOrder, p.hpFreq, p.lpOrder, p.lpFreq); rt_->setChannelLimiter(i, p.limiterOn, p.limiterCeilDb, p.limiterReleaseMs);
     rt_->setCompressor(i, p.compOn, p.compThresholdDb, p.compRatio, p.compKneeDb, p.compAttackMs, p.compReleaseMs, p.compMakeupDb); rt_->setGate(i, p.gateOn, p.gateThresholdDb, p.gateRangeDb, p.gateAttackMs, p.gateHoldMs, p.gateReleaseMs);
   }
-  rt_->setMasterDb(outMasterDb()); rt_->setLimiter(masterLim_, masterCeil_, masterRel_);
+  pushMasterLevel(); rt_->setLimiter(masterLim_, masterCeil_, masterRel_);
   rt_->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute); rt_->setClipDb(clipDb_); rt_->setPeakHoldMs(peakHoldMs_); rt_->setWidth(width_);
   scope_.setSampleRate(rt_->sampleRate()); rt_->setTap(&taps_);
   for (int k = 0; k < kBuses; ++k) makeBusFx(k);
@@ -473,7 +474,7 @@ void Engine::setName(int i, const QString& n) { if (i < 0 || i >= kStrips) retur
 void Engine::setColor(int i, int c) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].color = std::clamp(c, 0, 7); emit stripsChanged(); }
 void Engine::setMaster(double db) {
   startNote_.clear();
-  const double was = masterDb_; masterDb_ = std::clamp(db, -60.0, 10.0); if (rt_) rt_->setMasterDb(outMasterDb());
+  const double was = masterDb_; masterDb_ = std::clamp(db, -60.0, 10.0); pushMasterLevel();
   if (mon_.sync && masterDb_ != was) { mon_.db = std::clamp(mon_.db + (masterDb_ - was), -60.0, 10.0); if (rt_) rt_->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute); emit monitorChanged(); }
   emit stripsChanged(); syncSystemSound();
 }
@@ -510,8 +511,8 @@ QString Engine::windowsTrimNote() const {
 }
 // the level the engine gets: the fader plus the GAIN MODE trim. The mixer takes -60 dB and below as off, so a trimmed fader stays audible
 // down to -59.9 dB; it is off only when the fader is off or the Windows slider is at 0
-double Engine::outMasterDb() const { const double t = windowsTrimDb(); if (t == 0.0 || masterDb_ <= -60.0) return masterDb_; if (t <= -119.0) return -120.0; return std::max(-59.9, masterDb_ + t); }
-void Engine::pushMasterLevel() { if (rt_) rt_->setMasterDb(outMasterDb()); }
+double Engine::outMasterDb() const { return masterDb_; }   // the fader itself: GAIN MODE's trim is a separate stage after the meters (Mixer::setOutputTrimDb)
+void Engine::pushMasterLevel() { if (rt_) { rt_->setMasterDb(masterDb_); rt_->setOutputTrimDb(windowsTrimDb()); } }
 void Engine::setWindowsGainMode(bool on) { if (winGain_ == on) return; winGain_ = on; QSettings().setValue("mixer/windowsGainMode", on); pushMasterLevel(); emit systemSoundChanged(); }
 void Engine::setWindowsVolume(int v) {
   v = std::clamp(v, 0, 100); if (!volSet_ || v == winVol_) return; const double was = windowsTrimDb(); winVol_ = v;
@@ -817,7 +818,7 @@ void Engine::setMonitor(int source, double db, bool dim, bool mono, bool mute) {
   const double was = mon_.db;
   mon_.source = std::clamp(source, 0, kBuses); mon_.db = std::clamp(db, -60.0, 10.0); mon_.dim = dim; mon_.mono = mono; mon_.mute = mute;
   if (rt_) rt_->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute);
-  if (mon_.sync && mon_.db != was) { masterDb_ = std::clamp(masterDb_ + (mon_.db - was), -60.0, 10.0); if (rt_) rt_->setMasterDb(outMasterDb()); emit stripsChanged(); syncSystemSound(); }
+  if (mon_.sync && mon_.db != was) { masterDb_ = std::clamp(masterDb_ + (mon_.db - was), -60.0, 10.0); pushMasterLevel(); emit stripsChanged(); syncSystemSound(); }
   emit monitorChanged();
 }
 void Engine::setMonitorSync(bool on) { mon_.sync = on; emit monitorChanged(); }
@@ -1064,7 +1065,7 @@ void Engine::toggleMuteAll() {
   emit stripsChanged();
 }
 void Engine::clearSolo() { for (int i = 0; i < kStrips; ++i) { strips_[static_cast<std::size_t>(i)].solo = false; if (rt_) rt_->setSolo(i, false); } emit stripsChanged(); }
-void Engine::resetFaders() { for (int i = 0; i < kStrips; ++i) { StripUi& s = strips_[static_cast<std::size_t>(i)]; s.db = 0; s.pan = 0; pushStrip(i); if (rt_) rt_->setPan(i, 0); } masterDb_ = 0; if (rt_) rt_->setMasterDb(outMasterDb()); emit stripsChanged(); }
+void Engine::resetFaders() { for (int i = 0; i < kStrips; ++i) { StripUi& s = strips_[static_cast<std::size_t>(i)]; s.db = 0; s.pan = 0; pushStrip(i); if (rt_) rt_->setPan(i, 0); } masterDb_ = 0; pushMasterLevel(); emit stripsChanged(); }
 void Engine::flattenAllDsp() { for (int i = 0; i < kStrips; ++i) { strips_[static_cast<std::size_t>(i)].dsp.set(am::dsp::ChannelParams{}); for (PluginUi& p : strips_[static_cast<std::size_t>(i)].plugins) if (!isVstKind(p.kind)) p = PluginUi{}; } if (rt_) pushAll(); emit stripsChanged(); }
 
 static const struct { const char* kind; const char* name; } kBuiltIns[] = {{"gate", "NOISE GATE"}, {"eq", "CHANNEL EQ (3-BAND)"}, {"miceq", "MIC EQ (10-BAND)"}, {"xover", "X-OVER"}, {"comp", "COMPRESSOR"}, {"limiter", "LIMITER"}, {"delay", "DELAY"}, {"polarity", "POLARITY Ø"}};
@@ -1124,7 +1125,44 @@ void Engine::closePluginWin(int k) {
   w.pl->closeEditor(); w.win->removeEventFilter(this); w.win->hide(); w.win->deleteLater();   // the editor leaves the window before the window goes
   if (pluginWins_.isEmpty()) pluginIdle_.stop();
 }
-void Engine::closePluginWindows() { while (!pluginWins_.isEmpty()) closePluginWin(0); }
+void Engine::closePluginWindows() { undockPluginEditor(); while (!pluginWins_.isEmpty()) closePluginWin(0); }
+QVariantMap Engine::dockPluginEditor(int i, int slot, QQuickItem* area, bool evenHere) {
+  QVariantMap r{{"ok", false}, {"w", 0}, {"h", 0}, {"note", QString()}};
+  if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots || !area || !area->window()) return r;
+#ifndef _WIN32
+  if (!evenHere) { r["note"] = QStringLiteral("The plug-in's own window opens inside the app on Windows."); return r; }
+#else
+  (void)evenHere;
+#endif
+  const PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[slot]; if (!p.vst || !p.vst->hasEditor()) { r["note"] = QStringLiteral("This plug-in has no window of its own: its knobs are on this panel."); return r; }
+  undockPluginEditor();
+  for (int k = pluginWins_.size() - 1; k >= 0; --k) if (pluginWins_[k].pl == p.vst) closePluginWin(k);   // an editor is shown once: the floating one closes
+  auto* win = new QWindow(area->window()); win->setFlags(Qt::Widget | Qt::FramelessWindowHint); win->resize(640, 400); win->create();
+  if (!win->handle()) { delete win; r["note"] = QStringLiteral("The plug-in's own window could not be created on this display."); return r; }
+  int w = 640, h = 400;
+  if (!p.vst->openEditor(reinterpret_cast<void*>(win->winId()), w, h)) { delete win; r["note"] = QStringLiteral("The plug-in did not open its window."); return r; }
+  // the editor reports its size in device pixels: the dock is laid out in the window's units
+  const qreal dpr = std::max<qreal>(1.0, win->devicePixelRatio()); w = std::clamp(static_cast<int>(std::lround(w / dpr)), 120, 4000); h = std::clamp(static_cast<int>(std::lround(h / dpr)), 60, 3000);
+  win->resize(w, h); dock_ = {win, p.vst, i, slot, area}; placeDock(); win->show();
+  if (!dockTimer_.isActive()) { dockTimer_.setInterval(50); connect(&dockTimer_, &QTimer::timeout, this, &Engine::placeDock, Qt::UniqueConnection); dockTimer_.start(); }
+  if (!pluginIdle_.isActive()) pluginIdle_.start(33);
+  r["ok"] = true; r["w"] = w; r["h"] = h; return r;
+}
+void Engine::placeDock() {
+  if (!dock_.win) { dockTimer_.stop(); return; }
+  // the plug-in was taken out of its slot (or replaced): its window goes with it
+  if (dock_.strip < 0 || strips_[static_cast<std::size_t>(dock_.strip)].plugins[dock_.slot].vst != dock_.pl || !dock_.area) { undockPluginEditor(); return; }
+  dock_.pl->editorIdle();
+  QQuickItem* a = dock_.area; const bool show = a->isVisible() && a->window() && a->window()->isVisible() && a->opacity() > 0.01;
+  const QPointF p = a->mapToScene(QPointF(0, 0)); const QRect g(QPoint(static_cast<int>(std::lround(p.x())), static_cast<int>(std::lround(p.y()))), dock_.win->size());
+  if (dock_.win->geometry().topLeft() != g.topLeft()) dock_.win->setPosition(g.topLeft());
+  if (show != dock_.win->isVisible()) dock_.win->setVisible(show);
+}
+void Engine::undockPluginEditor() {
+  if (!dock_.win) return; Dock d = dock_; dock_ = Dock{}; dockTimer_.stop();
+  if (d.pl) d.pl->closeEditor(); d.win->hide(); d.win->deleteLater();   // the editor leaves the window before the window goes
+  if (pluginWins_.isEmpty()) pluginIdle_.stop(); emit pluginDockChanged();
+}
 bool Engine::eventFilter(QObject* o, QEvent* e) {
   if (e->type() == QEvent::Close) for (int k = 0; k < pluginWins_.size(); ++k) if (pluginWins_[k].win == o) { closePluginWin(k); return true; }
   return QObject::eventFilter(o, e);
@@ -1219,6 +1257,28 @@ void Engine::setPlugin(int i, int slot, const QString& kind) {
   if (kind == QStringLiteral("fx:iamfelement") && p.vst) { if (had360) setSpatial(i, true, s.spAz, s.spEl, s.spDist, s.spSpread); else { s.spOn = false; pushSpatial(i); } }   // the plug-in takes over the strip's place
   else if (wasIamf && iamfSlot(i) < 0 && kind != QStringLiteral("fx:iamfelement")) { s.spOn = true; pushSpatial(i); }   // taken out: the 360 stage holds the same place
   emit stripsChanged(); emit spatialMoved();
+}
+QVariantMap Engine::masterChainSeed() const {
+  QVariantList eq; for (int b = 0; b < am::MasterChain::kBands; ++b) { const auto& e = mp_.eq[b]; eq << QVariantMap{{"type", static_cast<int>(e.type)}, {"freq", e.freq}, {"q", e.q}, {"gainDb", e.gainDb}}; }
+  return {{"eqOn", mp_.eqOn}, {"eq", eq}, {"on", mp_.on}, {"analog", mp_.analog}, {"toneOn", mp_.toneOn}, {"compOn", mp_.compOn}, {"satOn", mp_.satOn}, {"deessOn", mp_.deessOn}, {"exciterOn", mp_.exciterOn},
+          {"bassMonoOn", mp_.bassMonoOn}, {"lowDb", mp_.lowDb}, {"midDb", mp_.midDb}, {"airDb", mp_.airDb}, {"thrDb", mp_.thrDb}, {"ratio", mp_.ratio}, {"attackMs", mp_.attackMs}, {"releaseMs", mp_.releaseMs},
+          {"makeupDb", mp_.makeupDb}, {"drive", mp_.drive}, {"gainDb", mp_.gainDb}, {"compMix", mp_.compMix}, {"deessThrDb", mp_.deessThrDb}, {"deessMaxDb", mp_.deessMaxDb}, {"exciterAmt", mp_.exciterAmt}, {"bassMonoHz", mp_.bassMonoHz}};
+}
+QVariantList Engine::programEqGains() const {
+  QVariantList g; for (int b = 0; b < 10; ++b) g << (mp_.eq[b].type == FilterType::Peaking && std::fabs(mp_.eq[b].freq - kIsoCentres[b]) < 1 ? mp_.eq[b].gainDb : 0.0); return g;
+}
+QVariantList Engine::remoteRack(int i) const {
+  QVariantList l; if (i < 0 || i >= kStrips) return l; const StripUi& s = strips_[static_cast<std::size_t>(i)];
+  for (int k = 0; k < kPluginSlots; ++k) { const PluginUi& p = s.plugins[k]; if (!isVstKind(p.kind)) continue;
+    QString name; if (p.vst) name = QString::fromStdString(p.vst->info().name); else { QString mod, cid; splitVstKind(p.kind, mod, cid); name = QFileInfo(mod).completeBaseName(); }
+    l << QVariantMap{{"slot", k}, {"kind", p.kind}, {"name", name}, {"bypass", p.bypass}, {"state", p.vst ? QString::fromStdString(p.vst->state()) : p.state}}; }
+  return l;
+}
+void Engine::takeRemotePlugin(int i, int slot, bool bypass, const QString& state) {
+  if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots) return; PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[slot]; if (!isVstKind(p.kind)) return;
+  p.bypass = bypass; if (!state.isEmpty()) p.state = state;
+  if (p.vst) { if (!state.isEmpty()) p.vst->setState(state.toStdString()); p.vst->setBypass(bypass); }
+  emit stripsChanged();
 }
 void Engine::setPluginBypass(int i, int slot, bool bypass) {
   if (linked(i) && !mirror_ && partner(i) >= 0) { mirror_ = true; setPluginBypass(partner(i), slot, bypass); mirror_ = false; }
@@ -1475,6 +1535,9 @@ QVariantList Engine::pages() const {
   return l;
 }
 
+void Engine::applyUiRate() { timer_.setInterval(uiLevel_ >= 2 ? (ecoUi_ ? 66 : 33) : uiLevel_ == 1 ? 250 : 1000); }
+void Engine::setUiActivity(int level) { level = std::clamp(level, 0, 2); if (level == uiLevel_) return; uiLevel_ = level; applyUiRate(); emit ecoUiChanged(); if (level == 2) tick(); }   // back in front: fresh meters at once
+void Engine::setEcoUi(bool on) { if (on == ecoUi_) return; ecoUi_ = on; settings_.setValue("ui/eco", on); applyUiRate(); emit ecoUiChanged(); }
 void Engine::tick() {
   QVariantList m; QVariantMap t;
   if (rt_) {

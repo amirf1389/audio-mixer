@@ -40,8 +40,10 @@ void Samples::prepare(double rate) {
   for (int id = 1; id <= SamplePlayer::kCount; ++id) am::samples::render(id, rate, (*bank)[id - 1].L, (*bank)[id - 1].R);
   player_.setBank(bank); rate_ = rate; ready_ = true; msg_ = QStringLiteral("100 samples ready at %1 Hz").arg(rate); emit changed();
 }
-bool Samples::play(int id) { if (id < 1 || id > SamplePlayer::kCount || !ready_) return false; last_ = id; const bool ok = player_.trigger(id); emit changed(); return ok; }
-void Samples::stopAll() { player_.stopAll(); emit changed(); }
+bool Samples::play(int id) { if (id < 1 || id > SamplePlayer::kCount || !ready_) return false; last_ = id;
+  if (!engine_->running() && remotePlay && remotePlay(id, player_.gainDb.load())) { emit changed(); return true; }   // the remote service has the sound card now
+  const bool ok = player_.trigger(id); emit changed(); return ok; }
+void Samples::stopAll() { player_.stopAll(); if (remoteStop) remoteStop(); emit changed(); }
 int Samples::exportAll() {
   QDir().mkpath(folder()); std::string err; const bool ok = am::samples::writeAll(folder().toStdString(), rate_ > 0 ? rate_ : 48000, err);
   const int n = QDir(folder()).entryList({"*.wav"}, QDir::Files).size(); msg_ = ok ? QStringLiteral("%1 WAV files in %2").arg(n).arg(folder()) : QString::fromStdString(err); emit changed(); return n;

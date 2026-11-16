@@ -22,6 +22,7 @@ Flickable {
             subtitle: "AmF X1 " + appVersion + " • every change here is saved at once • file: " + settings.settingsFile()
             Opt { label: i18n.t("Start page", i18n.lang); hint: i18n.t("The page shown when the console opens", i18n.lang); Choice { options: [{t: "HOME", v: "home"}, {t: "MIXER", v: "mixer"}, {t: "CONNECTIONS", v: "io"}, {t: "ARRANGE", v: "arrange"}]; value: settings.startPage; onPicked: function (v) { settings.startPage = v } } }
             Opt { label: i18n.t("Confirm destructive actions", i18n.lang); hint: i18n.t("RESET FADERS, FLATTEN DSP, factory reset ask first", i18n.lang); Toggle { on: settings.confirmDestructive; onToggled: function (v) { settings.confirmDestructive = v } } }
+            Opt { label: i18n.t("ECO interface (low CPU)", i18n.lang); hint: i18n.t("Meters redraw at 15 fps instead of 30 in front. Behind another app (Chrome, a game) they always drop to 4 fps, minimised to 1 fps; the sound is never slowed.", i18n.lang); Toggle { on: engine.ecoUi; onToggled: function (v) { engine.ecoUi = v } } }
             Opt { label: i18n.t("Tooltips", i18n.lang); hint: i18n.t("Short help when the pointer rests on a control", i18n.lang); Toggle { on: settings.tooltips; onToggled: function (v) { settings.tooltips = v } } }
         }
         Panel {

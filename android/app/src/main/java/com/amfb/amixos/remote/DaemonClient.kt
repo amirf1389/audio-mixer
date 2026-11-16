@@ -14,10 +14,14 @@ class DaemonException(message: String, val status: Int) : IOException(message)
 
 data class Status(val name: String, val version: String, val backend: String, val running: Boolean, val blocks: Long, val xruns: Long, val strips: Int, val buses: Int, val uptimeS: Double, val lastError: String, val backends: List<String>, val plan: String = "", val consoleId: String = "", val computer: String = "")
 data class Device(val backend: String, val id: String, val name: String, val inputs: Int, val outputs: Int, val defaultRate: Double, val defaultIn: Boolean, val defaultOut: Boolean)
-data class StripState(val id: Int, val name: String, val db: Double, val pan: Double, val mute: Boolean, val solo: Boolean)
+/** the analog 3-band channel EQ of a strip: LOW shelf 100 Hz, MID bell [midHz] (100 Hz .. 8 kHz), HIGH shelf 10 kHz, ±15 dB each */
+data class Tone(val low: Double = 0.0, val mid: Double = 0.0, val midHz: Double = 1000.0, val high: Double = 0.0, val on: Boolean = true)
+data class StripState(val id: Int, val name: String, val db: Double, val pan: Double, val mute: Boolean, val solo: Boolean, val trim: Double = 0.0, val tone: Tone = Tone(), val eq: List<List<Double>> = emptyList())   // eq: bands 0..7 as [type (0 off, 1 peaking, 2 lowshelf, 3 highshelf, 4 lowpass, 5 highpass, 6 notch), freq, q, gainDb]
 data class BusState(val id: Int, val db: Double, val returnDb: Double, val mute: Boolean)
 /** the console's Windows output: its volume slider (-1: none here), GAIN MODE (the slider trims the master) and the trim it adds now */
 data class WindowsSound(val volume: Int = -1, val gainMode: Boolean = false, val trimDb: Double = 0.0, val windowsSetsLevel: Boolean = false)
+data class Rta(val src: Int, val f: List<Double>, val db: List<Double>)
+data class ProgramEq(val on: Boolean = false, val gains: List<Double> = List(10) { 0.0 })
 data class ConsoleState(val strips: List<StripState>, val buses: List<BusState>, val masterDb: Double, val limiter: Boolean, val ceilingDb: Double, val v: Long = 0, val windows: WindowsSound = WindowsSound())   // v: the console's change counter (LIVE SYNC)
 data class StripMeter(val pk: Double, val rms: Double, val hold: Double, val clip: Boolean, val gr: Double, val gate: Double, val input: Double)
 data class Meters(val running: Boolean, val strips: List<StripMeter>, val masterL: Double, val masterR: Double, val masterRms: Double, val masterClip: Boolean)
@@ -86,8 +90,11 @@ class DaemonClient(val ep: Endpoint) {
             return o["token"]?.toString()?.takeIf { it.isNotEmpty() } ?: throw DaemonException("the console sent no token", code)
         }
         fun parseState(o: Map<String, Any?>): ConsoleState { val m = o.obj("master")
-            return ConsoleState(o.list("strips").map { StripState(it.int("id"), it.str("name"), it.num("db"), it.num("pan"), it.bool("mute"), it.bool("solo")) }, o.list("buses").map { BusState(it.int("id"), it.num("db"), it.num("returnDb", -60.0), it.bool("mute")) }, m.num("db"), m.bool("limiter", true), m.num("ceilingDb", -0.5), o.num("v").toLong(), o.obj("settings").let { w -> WindowsSound((w["winVolume"] as? Number)?.toInt() ?: -1, w["winGain"] == true, (w["winTrimDb"] as? Number)?.toDouble() ?: 0.0, w["winSetsLevel"] == true) })
+            return ConsoleState(o.list("strips").map { StripState(it.int("id"), it.str("name"), it.num("db"), it.num("pan"), it.bool("mute"), it.bool("solo"), it.num("trim"), it.obj("tone").let { t -> Tone(t.num("low"), t.num("mid"), t.num("midHz", 1000.0), t.num("high"), t["on"] != false) }, (it["eq"] as? List<*>).orEmpty().map { b -> nums(b) }) }, o.list("buses").map { BusState(it.int("id"), it.num("db"), it.num("returnDb", -60.0), it.bool("mute")) }, m.num("db"), m.bool("limiter", true), m.num("ceilingDb", -0.5), o.num("v").toLong(), o.obj("settings").let { w -> WindowsSound((w["winVolume"] as? Number)?.toInt() ?: -1, w["winGain"] == true, (w["winTrimDb"] as? Number)?.toDouble() ?: 0.0, w["winSetsLevel"] == true) })
         }
+        fun nums(v: Any?): List<Double> = (v as? List<*>).orEmpty().map { (it as? Number)?.toDouble() ?: 0.0 }
+        fun parseProgramEq(o: Map<String, Any?>): ProgramEq { val p = o.obj("programEq"); val g = nums(p["gains"])
+            return ProgramEq(p["on"] == true, if (g.size == 10) g else List(10) { 0.0 }) }
         fun parseMeters(o: Map<String, Any?>): Meters { val m = o.obj("master")
             return Meters(o.bool("running"), o.list("strips").map { StripMeter(it.num("pk"), it.num("rms"), it.num("hold"), it.num("clip") > 0, it.num("gr"), it.num("gate"), it.num("in")) }, m.num("l"), m.num("r"), m.num("rms"), m.num("clip") > 0) }
         /** slider 0..1 <-> fader dB: the console's law (-inf at 0, -60 at 0.25, -20 at 0.5, 0 dB at 0.75, +10 at 1) */
@@ -106,8 +113,21 @@ class DaemonClient(val ep: Endpoint) {
     fun name(strip: Int, name: String) = control(mapOf("op" to "name", "strip" to strip, "name" to name))
     fun master(db: Double) = control(mapOf("op" to "master", "db" to db))
     /** a console setting (the service checks each): "winVolume" 0..100, "winGain" true/false, "width" 0..2 ... */
+    /** THE CONSOLE'S PLUG-INS while the service plays them: the racks (strip >= 0: with that strip's parameters), bypass, one parameter (0..1) */
+    fun racks(strip: Int = -1): Map<String, Any?> = getObj(if (strip < 0) "/api/racks" else "/api/racks?strip=$strip")
+    fun pluginBypass(strip: Int, slot: Int, on: Boolean) = control(mapOf("op" to "plugin", "strip" to strip, "slot" to slot, "bypass" to on))
+    fun pluginParam(strip: Int, slot: Int, id: Long, value: Double) = control(mapOf("op" to "plugin", "strip" to strip, "slot" to slot, "param" to id, "value" to value))
     fun setting(key: String, value: Any) = control(mapOf("op" to "setting", "key" to key, "value" to value))
+    /** the RTA: [src] -1 the master, 0.. a strip, null off. The console keeps it running for a while after each request. */
+    fun rta(src: Int?) = control(mapOf("op" to "rta", "src" to (src ?: "off")))
+    /** the RTA's latest spectrum (band centres and dBFS), or null while it has no sound yet */
+    fun rtaNow(): Rta? = runCatching { val o = getObj("/api/rta"); val f = nums(o["f"]); val d = nums(o["db"])
+        if (f.isEmpty() || f.size != d.size) null else Rta((o["src"] as? Number)?.toInt() ?: -1, f, d) }.getOrNull()
+    /** the master program EQ (RTA EQ): 10 gains at the ISO octave centres */
+    fun programEq(gains: List<Double>, on: Boolean) = control(mapOf("op" to "programEq", "gains" to gains, "on" to on))
+    fun programEqNow(): ProgramEq = parseProgramEq(getObj("/api/state"))
     fun trim(strip: Int, db: Double) = control(mapOf("op" to "trim", "strip" to strip, "db" to db))
+    fun tone(strip: Int, t: Tone) = control(mapOf("op" to "tone", "strip" to strip, "low" to t.low, "mid" to t.mid, "midHz" to t.midHz, "high" to t.high, "on" to t.on))
     fun polarity(strip: Int, on: Boolean) = control(mapOf("op" to "polarity", "strip" to strip, "on" to on))
     fun delay(strip: Int, ms: Double) = control(mapOf("op" to "delay", "strip" to strip, "ms" to ms))
     fun limiter(on: Boolean, ceilingDb: Double) = control(mapOf("op" to "limiter", "on" to on, "ceilingDb" to ceilingDb))

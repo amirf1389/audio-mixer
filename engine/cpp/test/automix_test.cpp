@@ -30,6 +30,16 @@ int main() {
   CHECK(a > 5.0 && a <= 12.0 + 1e-9);
   float pk = 0; for (float v : L) pk = std::max(pk, std::fabs(v)); CHECK(pk <= 0.8913f + 1e-3f);   // the limiter's -1 dBTP ceiling holds
   m.setAutoLevel(false, -16, 12); m.process(in, n, L.data(), R.data()); CHECK(std::fabs(m.autoLevelGainDb()) < 1e-9);
-  std::printf("automix_test: gain sharing, weights, auto level toward -16 LUFS under the limiter OK\n");
+  // GAIN MODE's output trim (the Windows volume as a trim after the master): it is left out of process(), so the loudness meter and
+  // AUTO LEVEL see the mix as before and AUTO LEVEL does not climb to undo it; applyOutputTrim() lowers what goes to the device
+  { std::vector<float> mid(n); for (std::size_t i = 0; i < n; ++i) mid[i] = 0.1f * std::sin(2 * 3.14159265 * 1000 * i / fs); in[2] = mid.data();
+    Mixer a1(4, fs), a2(4, fs); a1.setLimiter(true, -1.0, 100); a2.setLimiter(true, -1.0, 100); a1.setAutoLevel(true, -16, 12); a2.setAutoLevel(true, -16, 12);
+    a2.setOutputTrimDb(-12.0); std::vector<float> L2(n), R2(n);
+    for (int k = 0; k < 48000 * 8 / static_cast<int>(n); ++k) { a1.process(in, n, L.data(), R.data()); a2.process(in, n, L2.data(), R2.data()); float* ch[2] = {L2.data(), R2.data()}; a2.applyOutputTrim(ch, 2, n); }
+    std::printf("output trim -12 dB: auto level %+.2f dB (no trim %+.2f), short-term %.2f vs %.2f LUFS\n", a2.autoLevelGainDb(), a1.autoLevelGainDb(), a2.loudness().shortTerm(), a1.loudness().shortTerm());
+    CHECK(std::fabs(a2.autoLevelGainDb() - a1.autoLevelGainDb()) < 1e-9 && std::fabs(a2.loudness().shortTerm() - a1.loudness().shortTerm()) < 1e-9);
+    CHECK(std::fabs(L2[n / 2] - L[n / 2] * 0.25119f) < 1e-5f);   // the device gets the mix 12 dB down
+    CHECK(std::fabs(a2.outputTrimDb() + 12.0) < 1e-9); a2.setOutputTrimDb(-120); CHECK(a2.outputTrimDb() <= -119.0); }
+  std::printf("automix_test: gain sharing, weights, auto level toward -16 LUFS under the limiter, output trim after the meters OK\n");
   return 0;
 }

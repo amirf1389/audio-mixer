@@ -11,6 +11,27 @@
 #include <thread>
 
 #include "daemon/daemon.hpp"
+#include <atomic>
+
+namespace {
+// a stand-in plug-in: GAIN and TONE, counts its audio calls, keeps its state as "gain,tone"
+struct FakePlugin final : am::host::Plugin {
+  am::host::Info inf; std::string path = "fake"; double gain = 0.5, tone = 0.25; bool byp = false; std::atomic<int> calls{0};
+  FakePlugin() { inf.format = "VST3"; inf.name = "Fake Gain"; inf.vendor = "Test Labs"; }
+  const am::host::Info& info() const override { return inf; } const std::string& modulePath() const override { return path; }
+  int inputChannels() const override { return 1; } int outputChannels() const override { return 1; } std::uint32_t latencySamples() const override { return 0; }
+  std::vector<am::host::ParamInfo> params() const override { am::host::ParamInfo a; a.id = 7; a.title = "GAIN"; a.units = "dB"; a.normalized = gain; a.defaultNormalized = 0.5;
+    am::host::ParamInfo b; b.id = 9; b.title = "TONE"; b.normalized = tone; b.defaultNormalized = 0.25; am::host::ParamInfo h; h.id = 11; h.title = "HIDDEN"; h.hidden = true; return {a, b, h}; }
+  double param(std::uint32_t id) const override { return id == 7 ? gain : tone; }
+  void setParam(std::uint32_t id, double v) override { if (id == 7) gain = v; else tone = v; }
+  std::string paramText(std::uint32_t id, double v) const override { return id == 7 ? std::to_string(static_cast<int>(v * 24 - 12)) : std::to_string(static_cast<int>(v * 100)) + " %"; }
+  bool hasBypass() const override { return true; } void setBypass(bool on) override { byp = on; } bool bypass() const override { return byp; }
+  void process(const float* const* in, float* const* out, int frames) override { ++calls; for (int i = 0; i < frames; ++i) { out[0][i] = in ? in[0][i] : 0.f; out[1][i] = out[0][i]; } }
+  std::string state() const override { return std::to_string(gain) + "," + std::to_string(tone); }
+  bool setState(const std::string& s) override { const auto c = s.find(','); if (c == std::string::npos) return false; gain = std::atof(s.substr(0, c).c_str()); tone = std::atof(s.substr(c + 1).c_str()); return true; }
+};
+FakePlugin* g_fake = nullptr;
+}  // namespace
 
 using am::json::Value;
 #define CHECK(c) do { if (!(c)) { std::fprintf(stderr, "FAIL %s:%d %s\n", __FILE__, __LINE__, #c); return 1; } } while (0)
@@ -177,6 +198,15 @@ int main() {
     CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/tokens/revoke", "{\"id\":\"" + qid + "\"}", auth, status, body) && status == 200 && Value::parse(body, ok)["closed"].asInt() == 1);
     bool closed = false; for (int i = 0; i < 60 && !closed; ++i) { if (!qws.read(t, op)) { closed = true; break; } closed = t.find("\"kicked\":true") != std::string::npos; } CHECK(closed); qws.close();
     mws.close(); bool none = false; for (int i = 0; i < 40 && !none; ++i) { std::this_thread::sleep_for(std::chrono::milliseconds(25)); none = d.links().size() == 0 && d.remotes() == 0; } CHECK(none); }
+  { // CHANNEL GAIN and the analog 3-BAND channel EQ: kept in the state (every remote shows them), clamped, partial updates keep the rest
+    const auto ctl = [&](const std::string& j) { return am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", j, auth, status, body) ? status : -1; };
+    CHECK(ctl("{\"op\":\"trim\",\"strip\":2,\"db\":30}") == 200 && d.state()["strips"].at(2)["trim"].asNumber() == 24);
+    CHECK(ctl("{\"op\":\"tone\",\"strip\":2,\"low\":4,\"mid\":-20,\"midHz\":20000,\"high\":2.5}") == 200);
+    { const Value t = d.state()["strips"].at(2)["tone"]; CHECK(t["low"].asNumber() == 4 && t["mid"].asNumber() == -15 && t["midHz"].asNumber() == 8000 && t["high"].asNumber() == 2.5 && t["on"].asBool()); }
+    CHECK(ctl("{\"op\":\"tone\",\"strip\":2,\"high\":-3,\"on\":false}") == 200);
+    { const Value t = d.state()["strips"].at(2)["tone"]; CHECK(t["low"].asNumber() == 4 && t["high"].asNumber() == -3 && !t["on"].asBool()); }
+    CHECK(ctl("{\"op\":\"tone\",\"strip\":99,\"low\":1}") == 400);
+    CHECK(ctl("{\"op\":\"trim\",\"strip\":2,\"db\":0}") == 200 && ctl("{\"op\":\"tone\",\"strip\":2,\"low\":0,\"mid\":0,\"midHz\":1000,\"high\":0,\"on\":true}") == 200); }
   { // CONSOLE SETTINGS over the remote, and the WINDOWS VOLUME with GAIN MODE (a stand-in for the Windows slider)
     const auto set = [&](const std::string& k, const std::string& v) { return am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"setting\",\"key\":\"" + k + "\",\"value\":" + v + "}", auth, status, body) ? status : -1; };
     CHECK(set("width", "3") == 200 && d.state()["settings"]["width"].asNumber() == 2);                       // clamped to 0..2
@@ -210,6 +240,72 @@ int main() {
     CHECK(st["strips"].at(1)["mute"].asBool() && st["strips"].at(1)["db"].asNumber() == -12 && st["master"]["db"].asNumber() == -2);
     CHECK(st["settings"]["width"].asNumber() == 1.5 && st["settings"]["winGain"].asBool() && st["settings"]["outputBits"].asInt() == 16);   // the console's settings came with the seed
     sd.stop(); std::remove(sf.c_str()); }
-  std::printf("daemon_test: live state push, seed, json, local policy, token gate, control/state, HTTP meters, WebSocket meters, connected phones (list, disconnect, hold, forget), console settings, Windows volume / GAIN MODE OK on port %u\n", port);
+  { // THE CONSOLE'S PLUG-INS played by the service: racks from the seed, a plug-in that cannot load says why, parameters, bypass, states
+    const std::string sf = "daemon_test_racks.json"; { std::FILE* f = std::fopen(sf.c_str(), "wb");
+      std::fputs("{\"racks\":[{\"strip\":0,\"name\":\"VOCAL\",\"plugins\":[{\"slot\":2,\"kind\":\"vst3:C:/VST3/FakeGain.vst3|ABC\",\"name\":\"Fake Gain\",\"bypass\":false,\"state\":\"0.75,0.5\"}]},"
+                 "{\"strip\":1,\"name\":\"GTR\",\"plugins\":[{\"slot\":0,\"kind\":\"vst2:C:/missing.dll\",\"name\":\"Gone\"}]}]}", f); std::fclose(f); }
+    am::Daemon::Options po = o; po.port = 0; po.seed = sf; po.tokenStore.clear();
+    po.pluginFactory = [](const std::string& kind, double, int, std::string& err) -> std::unique_ptr<am::host::Plugin> {
+      if (kind.find("FakeGain") == std::string::npos) { err = "the module is not on this computer"; return nullptr; } auto p = std::make_unique<FakePlugin>(); g_fake = p.get(); return p; };
+    am::Daemon pd(po); std::string e; CHECK(pd.start(e)); const unsigned short pp = pd.port(); const std::vector<std::pair<std::string, std::string>> pa = {{"X-Amix-Token", po.token}};
+    CHECK(am::httpd::Client::request("127.0.0.1", pp, "POST", "/api/control", "{\"op\":\"open\",\"backend\":\"null\",\"inChannels\":2,\"outChannels\":2}", pa, status, body) && status == 200);
+    CHECK(g_fake && std::abs(g_fake->gain - 0.75) < 1e-9);   // loaded with the console's state
+    CHECK(am::httpd::Client::request("127.0.0.1", pp, "GET", "/api/racks", "", {}, status, body) && (status == 401 || status == 429));
+    CHECK(am::httpd::Client::request("127.0.0.1", pp, "GET", "/api/racks", "", pa, status, body) && status == 200);
+    Value rk = Value::parse(body, ok)["racks"]; CHECK(ok && rk.size() == 2);
+    CHECK(rk.at(0)["name"].asString() == "VOCAL" && rk.at(0)["slots"].at(0)["slot"].asInt() == 2 && rk.at(0)["slots"].at(0)["loaded"].asBool() && rk.at(0)["slots"].at(0)["vendor"].asString() == "Test Labs");
+    CHECK(!rk.at(1)["slots"].at(0)["loaded"].asBool() && rk.at(1)["slots"].at(0)["error"].asString() == "the module is not on this computer");
+    CHECK(am::httpd::Client::request("127.0.0.1", pp, "GET", "/api/racks?strip=0", "", pa, status, body) && status == 200);
+    Value ps = Value::parse(body, ok)["racks"].at(0)["slots"].at(0)["params"]; CHECK(ok && ps.size() == 2 && ps.at(0)["title"].asString() == "GAIN" && ps.at(0)["text"].asString() == "6 dB");   // the hidden one is not shown
+    const double rv = pd.state()["racksV"].asNumber();
+    CHECK(am::httpd::Client::request("127.0.0.1", pp, "POST", "/api/control", "{\"op\":\"plugin\",\"strip\":0,\"slot\":2,\"param\":7,\"value\":0.25}", pa, status, body) && status == 200 && Value::parse(body, ok)["text"].asString() == "-6");
+    CHECK(std::abs(g_fake->gain - 0.25) < 1e-9 && pd.state()["racksV"].asNumber() > rv);
+    CHECK(am::httpd::Client::request("127.0.0.1", pp, "POST", "/api/control", "{\"op\":\"plugin\",\"strip\":0,\"slot\":2,\"bypass\":true}", pa, status, body) && status == 200 && g_fake->byp);
+    CHECK(am::httpd::Client::request("127.0.0.1", pp, "POST", "/api/control", "{\"op\":\"plugin\",\"strip\":0,\"slot\":2,\"param\":99,\"value\":0.5}", pa, status, body) && status == 400);   // no such parameter
+    CHECK(am::httpd::Client::request("127.0.0.1", pp, "POST", "/api/control", "{\"op\":\"plugin\",\"strip\":0,\"slot\":2,\"param\":7,\"value\":3}", pa, status, body) && status == 400);    // out of 0..1
+    CHECK(am::httpd::Client::request("127.0.0.1", pp, "POST", "/api/control", "{\"op\":\"plugin\",\"strip\":1,\"slot\":0,\"param\":7,\"value\":0.5}", pa, status, body) && status == 400);    // not loaded here
+    CHECK(am::httpd::Client::request("127.0.0.1", pp, "GET", "/api/racks?states=1", "", pa, status, body) && status == 200 && Value::parse(body, ok)["racks"].at(0)["slots"].at(0)["state"].asString().rfind("0.25", 0) == 0);
+    { const int c0 = g_fake->calls.load(); std::this_thread::sleep_for(std::chrono::milliseconds(300)); CHECK(g_fake->calls.load() > c0); }   // the sound goes through it
+    // THE CONSOLE'S RACK as it changes (op rack): the same plug-in in the same slot keeps its instance and takes the new state; the
+    // version moves but says it came from the console (so the console does not take it back); a new slot is made; an empty list clears
+    { FakePlugin* same = g_fake; const double rv2 = pd.state()["racksV"].asNumber();
+      CHECK(am::httpd::Client::request("127.0.0.1", pp, "POST", "/api/control", "{\"op\":\"rack\",\"strip\":0,\"plugins\":[{\"slot\":2,\"kind\":\"vst3:C:/VST3/FakeGain.vst3|ABC\",\"name\":\"Fake Gain\",\"bypass\":false,\"state\":\"0.9,0.1\"}]}", pa, status, body) && status == 200);
+      CHECK(g_fake == same && std::abs(same->gain - 0.9) < 1e-9 && !same->byp && pd.state()["racksV"].asNumber() > rv2 && pd.state()["racksBy"].asString() == "console");
+      CHECK(am::httpd::Client::request("127.0.0.1", pp, "POST", "/api/control", "{\"op\":\"rack\",\"strip\":0,\"plugins\":[{\"slot\":2,\"kind\":\"vst3:C:/VST3/FakeGain.vst3|ABC\",\"state\":\"0.9,0.1\"},{\"slot\":3,\"kind\":\"vst3:C:/VST3/FakeGain.vst3|ABC\",\"state\":\"0.2,0.2\"}]}", pa, status, body) && status == 200);
+      CHECK(g_fake != same && std::abs(g_fake->gain - 0.2) < 1e-9);   // slot 3 made fresh
+      CHECK(am::httpd::Client::request("127.0.0.1", pp, "GET", "/api/racks?strip=0", "", pa, status, body) && Value::parse(body, ok)["racks"].at(0)["slots"].size() == 2);
+      CHECK(am::httpd::Client::request("127.0.0.1", pp, "POST", "/api/control", "{\"op\":\"plugin\",\"strip\":0,\"slot\":2,\"bypass\":true}", pa, status, body) && pd.state()["racksBy"].asString() == "remote");
+      CHECK(am::httpd::Client::request("127.0.0.1", pp, "POST", "/api/control", "{\"op\":\"rack\",\"strip\":0,\"plugins\":[]}", pa, status, body) && status == 200);
+      CHECK(am::httpd::Client::request("127.0.0.1", pp, "GET", "/api/racks", "", pa, status, body) && Value::parse(body, ok)["racks"].size() == 1); }
+    // THE CHANNEL EQ (bands 0..7) is kept in the state, so the console and every remote follow it
+    CHECK(am::httpd::Client::request("127.0.0.1", pp, "POST", "/api/control", "{\"op\":\"eq\",\"strip\":1,\"band\":3,\"type\":\"highshelf\",\"freq\":8000,\"q\":0.7,\"gainDb\":4.5}", pa, status, body) && status == 200);
+    { const Value e = pd.state()["strips"].at(1)["eq"].at(3); CHECK(e.at(0).asInt() == 3 && e.at(1).asNumber() == 8000 && e.at(3).asNumber() == 4.5); }
+    pd.stop(); std::remove(sf.c_str()); g_fake = nullptr; }
+  { // RTA: a 1 kHz sine at -6 dBFS reads about -6 dB in its band and nothing far from it; the master's RTA EQ from the seed and from a remote
+    am::Rta rta; rta.source.store(am::Rta::kMaster); std::vector<float> L(256), R(256); double ph = 0;
+    for (int b = 0; b < 40; ++b) { for (std::size_t i = 0; i < L.size(); ++i) { L[i] = R[i] = 0.5f * static_cast<float>(std::sin(ph)); ph += 2 * 3.14159265358979 * 1000.0 / 48000.0; } rta.onBlock(nullptr, 0, L.data(), R.data(), L.size(), 48000); }
+    std::vector<double> db; CHECK(rta.bands(db)); const auto& c = am::Rta::centres(); std::size_t k1 = 0; for (std::size_t i = 0; i < c.size(); ++i) if (std::abs(std::log2(c[i] / 1000.0)) < std::abs(std::log2(c[k1] / 1000.0))) k1 = i;
+    double far = -200; for (std::size_t i = 0; i < c.size(); ++i) if (c[i] < 250 || c[i] > 4000) far = std::max(far, db[i]);
+    std::printf("daemon_test: RTA %zu bands, 1 kHz sine at -6 dBFS reads %.1f dB at %.0f Hz, at most %.1f dB away from it\n", c.size(), db[k1], c[k1], far);
+    CHECK(std::abs(db[k1] + 6.0) < 1.5 && far < -60 && c.size() >= 59 && c.size() <= 61);
+    am::Rta off; std::vector<double> d2; CHECK(!off.bands(d2));   // off: nothing collected
+    // the master chain from the seed, the RTA EQ op, and the RTA on the live stream
+    const std::string sf = "daemon_test_master.json"; { std::FILE* f = std::fopen(sf.c_str(), "wb"); std::fputs("{\"masterChain\":{\"eqOn\":true,\"eq\":[{\"type\":1,\"freq\":31.5,\"q\":1.41,\"gainDb\":3}],\"on\":false}}", f); std::fclose(f); }
+    am::Daemon::Options mo = o; mo.port = 0; mo.seed = sf; mo.tokenStore.clear(); am::Daemon md(mo); std::string e; CHECK(md.start(e)); const unsigned short mp = md.port(); const std::vector<std::pair<std::string, std::string>> ma = {{"X-Amix-Token", mo.token}};
+    CHECK(md.state()["programEq"]["on"].asBool() && md.state()["programEq"]["gains"].at(0).asNumber() == 3);
+    CHECK(am::httpd::Client::request("127.0.0.1", mp, "POST", "/api/control", "{\"op\":\"open\",\"backend\":\"null\",\"inChannels\":2,\"outChannels\":2}", ma, status, body) && status == 200);
+    const double mv = md.state()["masterV"].asNumber();
+    CHECK(am::httpd::Client::request("127.0.0.1", mp, "POST", "/api/control", "{\"op\":\"programEq\",\"gains\":[0,0,0,0,-4,0,2.5,0,0,30],\"on\":true}", ma, status, body) && status == 200);
+    { const Value pe = md.state()["programEq"]; CHECK(pe["gains"].at(4).asNumber() == -4 && pe["gains"].at(6).asNumber() == 2.5 && pe["gains"].at(9).asNumber() == 24 && md.state()["masterV"].asNumber() > mv); }   // clamped to +24
+    CHECK(am::httpd::Client::request("127.0.0.1", mp, "POST", "/api/control", "{\"op\":\"programEq\",\"gains\":[1,2]}", ma, status, body) && status == 400);
+    CHECK(am::httpd::Client::request("127.0.0.1", mp, "POST", "/api/control", "{\"op\":\"rta\",\"src\":-1}", ma, status, body) && status == 200);
+    int wf = am::httpd::Client::connectWs("127.0.0.1", mp, "/ws/meters?token=" + mo.token, {}); CHECK(wf >= 0);
+    { am::httpd::WebSocket ws(wf); std::string t; int op = 0; bool got = false, centres = false;
+      for (int i = 0; i < 80 && !got; ++i) { if (!ws.read(t, op)) break; Value f = Value::parse(t, ok); if (ok && f.has("rta")) { centres = centres || f["rta"].has("f"); got = f["rta"]["db"].size() > 50 && f["rta"]["src"].asInt() == -1; } }
+      CHECK(got && centres); ws.close(); }
+    CHECK(am::httpd::Client::request("127.0.0.1", mp, "GET", "/api/rta", "", ma, status, body) && status == 200 && Value::parse(body, ok)["f"].size() > 50);
+    CHECK(am::httpd::Client::request("127.0.0.1", mp, "POST", "/api/control", "{\"op\":\"rta\",\"src\":\"off\"}", ma, status, body) && status == 200 && md.rtaJson(false)["src"].asInt() == am::Rta::kOff);
+    md.stop(); std::remove(sf.c_str()); }
+  std::printf("daemon_test: live state push, seed, json, local policy, token gate, control/state, HTTP meters, WebSocket meters, connected phones (list, disconnect, hold, forget), console settings, Windows volume / GAIN MODE, console plug-ins, RTA and RTA EQ OK on port %u\n", port);
   return 0;
 }

@@ -38,6 +38,10 @@ class EqCurveView(ctx: Context) : View(ctx) {
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x33EA580C; style = Paint.Style.FILL }
     private val dot = Paint(Paint.ANTI_ALIAS_FLAG)
     private val range = 18.0
+    /** the live RTA behind the curve (null: none) */
+    var spectrum: com.amfb.amixos.remote.Rta? = null; set(v) { field = v; invalidate() }
+    private val rtaFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x5522D3EE; style = Paint.Style.FILL }
+    private val rtaLine = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xAA22D3EE.toInt(); strokeWidth = 2.5f; style = Paint.Style.STROKE }
     private fun xOf(f: Double) = (ln(f / 20) / ln(1000.0) * width).toFloat()
     private fun fOf(x: Float) = 20 * 1000.0.pow((x / width).toDouble().coerceIn(0.0, 1.0))
     private fun yOf(db: Double) = (height / 2 - db / range * (height / 2 - 30)).toFloat()
@@ -49,6 +53,7 @@ class EqCurveView(ctx: Context) : View(ctx) {
         for (f in listOf(50.0, 100.0, 200.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0)) { val x = xOf(f); c.drawLine(x, 0f, x, height.toFloat(), grid)
             c.drawText(if (f >= 1000) "${(f / 1000).toInt()}k" else "${f.toInt()}", x + 6, height - 10f, label) }
         for (db in listOf(-12, -6, 0, 6, 12)) { val y = yOf(db.toDouble()); c.drawLine(0f, y, width.toFloat(), y, grid); c.drawText((if (db > 0) "+" else "") + db, 6f, y - 6, label) }
+        spectrum?.let { drawSpectrum(c, it, width.toFloat(), height.toFloat(), ::xOf, rtaFill, rtaLine) }
         val p = Path(); val area = Path(); area.moveTo(0f, yOf(0.0))
         for (i in 0..width step 3) { val y = yOf(AudioMath.totalDb(bands, fOf(i.toFloat())).coerceIn(-range * 1.4, range * 1.4)); if (i == 0) p.moveTo(0f, y) else p.lineTo(i.toFloat(), y); area.lineTo(i.toFloat(), y) }
         area.lineTo(width.toFloat(), yOf(0.0)); area.close(); c.drawPath(area, fill); c.drawPath(p, curve)
@@ -58,7 +63,7 @@ class EqCurveView(ctx: Context) : View(ctx) {
             if (i == selected) { dot.style = Paint.Style.STROKE; dot.strokeWidth = 4f; dot.color = Color.WHITE; c.drawCircle(x, y, 32f, dot) }
             label.color = Color.BLACK; c.drawText("${i + 1}", x - 8, y + 9, label); label.color = 0xFF8B98A8.toInt() }
     }
-    private var dragging = -1
+    var dragging = -1; private set
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(e: MotionEvent): Boolean {
         when (e.actionMasked) {
@@ -71,6 +76,17 @@ class EqCurveView(ctx: Context) : View(ctx) {
         }
         return super.onTouchEvent(e)
     }
+}
+
+/** draws an RTA spectrum: 0 dBFS at the top, -90 dBFS at the bottom, a filled outline through the band centres */
+fun drawSpectrum(c: Canvas, r: com.amfb.amixos.remote.Rta, w: Float, h: Float, xOf: (Double) -> Float, fill: Paint, line: Paint) {
+    if (r.f.isEmpty()) return
+    fun y(db: Double) = (h * (-db.coerceIn(-90.0, 0.0) / 90.0)).toFloat()
+    val p = Path(); val a = Path(); a.moveTo(xOf(r.f[0]), h)
+    r.f.forEachIndexed { i, f -> val x = xOf(f); val yy = y(r.db[i]); if (i == 0) p.moveTo(x, yy) else p.lineTo(x, yy); a.lineTo(x, yy) }
+    a.lineTo(xOf(r.f.last()), h); a.close(); c.drawPath(a, fill); c.drawPath(p, line)
+    val t = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = line.color; alpha = 200; textSize = 22f; typeface = android.graphics.Typeface.MONOSPACE; textAlign = Paint.Align.RIGHT }
+    for (d in listOf(0, -30, -60)) c.drawText("$d dBFS", w - 6, y(d.toDouble()) + 24f, t)
 }
 
 /** EQ CONTROLLER for one strip of the console: 8 bands (type, frequency, gain, Q) on a curve you drag, presets, flat, bypass.
@@ -133,6 +149,8 @@ class EqActivity : AppCompatActivity() {
             AlertDialog.Builder(this@EqActivity).setTitle(R.string.eq_presets).setItems(names) { _, w -> curve.bands = PRESETS[names[w]]!!.map { it.copy() }.toMutableList(); curve.invalidate(); showBand(); sendAll() }.show() } })
         row.addView(Button(this).apply { text = getString(R.string.eq_flat); setOnClickListener { curve.bands.forEach { it.gainDb = 0.0 }; curve.invalidate(); showBand(); sendAll() } })
         row.addView(Button(this).apply { text = getString(R.string.eq_bypass); setOnClickListener { bypass = !bypass; text = getString(if (bypass) R.string.eq_bypassed else R.string.eq_bypass); sendAll() } })
+        if (client != null) row.addView(Button(this).apply { text = getString(R.string.eq_rta_on); setOnClickListener { rtaOn = !rtaOn; text = getString(if (rtaOn) R.string.eq_rta_on else R.string.eq_rta_off)
+            if (rtaOn) { rtaAsked = 0; ui.removeCallbacks(rtaTick); ui.post(rtaTick) } else curve.spectrum = null } })
         root.addView(row)
         root.addView(TextView(this).apply { text = getString(if (client == null) R.string.eq_offline else R.string.eq_help); setTextColor(dim); textSize = 12f; setPadding(0, 12, 0, 0) })
         setContentView(Nav.wrap(this, ScrollView(this).apply { setBackgroundColor(Color.parseColor("#0F141C")); addView(root) }, null))
@@ -154,5 +172,28 @@ class EqActivity : AppCompatActivity() {
             val snap = list.map { it to curve.bands[it].copy() }
             io.execute { for ((k, b) in snap) runCatching { c.eq(strip, k, if (bypass) "off" else b.type, b.freq, b.q, b.gainDb) } } }, 40) }
     private fun sendAll() { for (i in 0 until 8) send(i) }
-    override fun onDestroy() { io.shutdown(); super.onDestroy() }
+    // ---- THE CONSOLE'S EQ: the bands as the console (or another remote) has them, on open and once a second while no finger is on the curve
+    private var eqAsked = 0L; @Volatile private var eqBusy = false
+    private fun takeConsoleEq(st: com.amfb.amixos.remote.StripState) {
+        val names = listOf("off", "peaking", "lowshelf", "highshelf", "lowpass", "highpass", "notch"); var changed = false
+        st.eq.take(curve.bands.size).forEachIndexed { k, e -> if (e.size < 4 || e[0].toInt() == 0 || e[0].toInt() >= names.size) return@forEachIndexed
+            val b = curve.bands[k]; val t = names[e[0].toInt()]
+            if (b.type != t || Math.abs(b.freq - e[1]) > 0.5 || Math.abs(b.q - e[2]) > 0.005 || Math.abs(b.gainDb - e[3]) > 0.05) { b.type = t; b.freq = e[1]; b.q = e[2]; b.gainDb = e[3]; changed = true } }
+        if (changed) { curve.invalidate(); showBand() }
+    }
+    private fun followConsoleEq(cl: DaemonClient) { val now = System.currentTimeMillis(); if (eqBusy || now - eqAsked < 1000 || curve.dragging >= 0 || flushQueued) return
+        eqAsked = now; eqBusy = true; io.execute { val st = runCatching { cl.state().strips.getOrNull(strip) }.getOrNull(); eqBusy = false; if (st != null) ui.post { if (!flushQueued) takeConsoleEq(st) } } }
+    // ---- the live RTA of this strip, behind the curve: asked for every 8 s, read 5 times a second while the screen is on top
+    private var rtaOn = true; private var rtaAsked = 0L; @Volatile private var rtaBusy = false
+    private val rtaTick = object : Runnable { override fun run() { val cl = client ?: return
+        followConsoleEq(cl)
+        if (!rtaOn) { curve.spectrum = null; return }
+        // one request at a time: a slow network skips frames instead of queueing them
+        if (!rtaBusy) { rtaBusy = true; io.execute { val now = System.currentTimeMillis()
+            if (now - rtaAsked > 8000) { rtaAsked = now; runCatching { cl.rta(strip) } }
+            val r = cl.rtaNow(); rtaBusy = false; ui.post { if (rtaOn) curve.spectrum = r?.takeIf { it.src == strip } } } }
+        ui.postDelayed(this, 200) } }
+    override fun onResume() { super.onResume(); rtaAsked = 0; ui.removeCallbacks(rtaTick); ui.post(rtaTick) }
+    override fun onPause() { ui.removeCallbacks(rtaTick); super.onPause() }
+    override fun onDestroy() { ui.removeCallbacks(rtaTick); io.shutdown(); super.onDestroy() }
 }

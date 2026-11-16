@@ -34,6 +34,8 @@ android {
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { viewBinding = true }
+    // WHAT'S NEW on HOME: the release feed (releases/features.json, the one the computer shows) is bundled into the APK at build time
+    sourceSets["main"].assets.srcDir(layout.buildDirectory.dir("generated/feed"))
     // SCREENSHOTS without a phone: Robolectric draws the real activities on the JVM (native graphics) into PNGs, see src/test
     testOptions { unitTests { isIncludeAndroidResources = true; all { it.systemProperty("robolectric.graphicsMode", "NATIVE"); it.systemProperty("amfx.shots", rootProject.file("../screenshots-android").absolutePath); it.systemProperty("amfx.daemon", System.getenv("AMFX_DAEMON") ?: ""); it.systemProperty("amfx.console", System.getenv("AMFX_CONSOLE") ?: "")
         // the Android runtime jar Robolectric needs: from android/.robolectric when it is there (git-ignored; fetched once by hand where Maven rate-limits), else downloaded
@@ -56,3 +58,7 @@ dependencies {
     testImplementation("org.robolectric:robolectric:4.14.1")
     testImplementation("androidx.test:core:1.6.1")
 }
+
+// the release feed into the APK's assets (WHAT'S NEW on HOME)
+val copyReleaseFeed = tasks.register<Copy>("copyReleaseFeed") { from(rootProject.file("../releases/features.json")); into(layout.buildDirectory.dir("generated/feed")) }
+tasks.named("preBuild") { dependsOn(copyReleaseFeed) }

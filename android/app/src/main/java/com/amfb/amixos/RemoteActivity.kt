@@ -49,7 +49,9 @@ class RemoteActivity : AppCompatActivity() {
     private val nameLabels = ArrayList<TextView>(); private val mutes = ArrayList<ToggleButton>(); private val solos = ArrayList<ToggleButton>()
     private var touching = 0   // a finger on a fader: the sync does not move it under the finger
     private var pendingOpen: String? = null   // "scenes": from the home screen's SCENES tile, opened as soon as the console answers
-    override fun onNewIntent(i: android.content.Intent) { super.onNewIntent(i); setIntent(i); val o = i.getStringExtra("open"); if (o == "scenes") { if (client != null) showScenes() else { pendingOpen = o; connectBtn?.performClick() } } }
+    override fun onNewIntent(i: android.content.Intent) { super.onNewIntent(i); setIntent(i); val o = i.getStringExtra("open")
+        if (o == "recall") { client?.let { offerPendingScene(it) }; return }   // RECALL LAST SCENE from HOME: asked first; not linked yet: asked when it links
+        if (o == "scenes") { if (client != null) showScenes() else { pendingOpen = o; connectBtn?.performClick() } } }
     private val clipFlags = ArrayList<Boolean>(); private var connBox: LinearLayout? = null
     private var connectBtn: Button? = null; private var autoTried = false
     private fun buzz(v: View) { if (Prefs.haptics(this)) v.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP) }
@@ -186,7 +188,7 @@ class RemoteActivity : AppCompatActivity() {
     /** One column per channel the console's plan allows (the service opens only those): name (tap: channel page, long press: rename),
      *  pan, MUTE / SOLO, the fader with its meter, and the level. */
     private fun buildStrips(s: ConsoleState) {
-        strips.removeAllViews(); faders.clear(); dbLabels.clear(); nameLabels.clear(); mutes.clear(); solos.clear(); clipFlags.clear()
+        strips.removeAllViews(); faders.clear(); dbLabels.clear(); nameLabels.clear(); mutes.clear(); solos.clear(); clipFlags.clear(); toneUi.clear()
         val colors = intArrayOf(0xFFEA580C.toInt(), 0xFF22D3EE.toInt(), 0xFFA78BFA.toInt(), 0xFF34D399.toInt())
         for (st in s.strips.take(Prefs.stripCount(this))) {
             val tint = colors[(st.id / 8) % colors.size]
@@ -197,6 +199,7 @@ class RemoteActivity : AppCompatActivity() {
             if (Prefs.showPan(this)) col.addView(KnobView(this, tint).apply { value = st.pan.toFloat(); layoutParams = LinearLayout.LayoutParams(128, LinearLayout.LayoutParams.WRAP_CONTENT)
                 onTouchState = { t -> touching = maxOf(0, touching + if (t) 1 else -1); if (touching == 0) catchUp() }
                 onChange = { v -> live.submit("pan${st.id}") { client?.pan(st.id, v.toDouble()) } } })
+            if (Prefs.showTone(this)) col.addView(toneBlock(st, tint))
             val ms = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
             fun small(t: ToggleButton) = t.apply { textSize = 13f; minWidth = 0; minimumWidth = 0; minHeight = 0; minimumHeight = 0; setPadding(0, 0, 0, 0); layoutParams = LinearLayout.LayoutParams(0, 84, 1f).apply { setMargins(3, 4, 3, 4) } }
             val mute = small(ToggleButton(this).apply { textOn = "M"; textOff = "M"; isChecked = st.mute; setOnCheckedChangeListener { b, on -> b.setTextColor(if (on) Color.parseColor("#EF4444") else Color.WHITE); if (b.tag == null) { buzz(b); io.execute { runCatching { client?.mute(st.id, on) } } } } })
@@ -522,7 +525,7 @@ class RemoteActivity : AppCompatActivity() {
                 c.gain(id, (x["db"] as Number).toDouble()); c.pan(id, (x["pan"] as? Number)?.toDouble() ?: 0.0); c.mute(id, x["mute"] == true); c.solo(id, x["solo"] == true); c.name(id, x["name"].toString()) }
             for (x in (o["buses"] as? List<*>).orEmpty().mapNotNull { it as? Map<*, *> }) { val id = (x["id"] as Number).toInt(); c.busLevel(id, (x["db"] as Number).toDouble()); c.busMute(id, x["mute"] == true) }
             c.master((o["master"] as? Number)?.toDouble() ?: 0.0); c.state() }
-            .onSuccess { st -> ui.post { state = st; buildStrips(st); status.text = getString(R.string.scene_recalled, n); note(getString(R.string.scene_recalled, n)); done() } }
+            .onSuccess { st -> ui.post { state = st; buildStrips(st); status.text = getString(R.string.scene_recalled, n); note(getString(R.string.scene_recalled, n)); Home.setLastScene(this, n); done() } }
             .onFailure { ui.post { status.text = getString(R.string.failed, it.message ?: "") } } }
     }
     /** SCENE EDITOR (works offline): each channel's name, level and mute, and the master; saved on the phone at once */
@@ -621,9 +624,41 @@ class RemoteActivity : AppCompatActivity() {
             val pos = (DaemonClient.dbToPos(st.db) * 1000).toInt(); if (Math.abs(faders[i].progress - pos) > 2) { faders[i].progress = pos; dbLabels[i].text = DaemonClient.fmtDb(st.db) }
             if (mutes[i].isChecked != st.mute) { mutes[i].tag = "sync"; mutes[i].isChecked = st.mute; mutes[i].tag = null }
             if (solos[i].isChecked != st.solo) { solos[i].tag = "sync"; solos[i].isChecked = st.solo; solos[i].tag = null }
-            val label = ConsoleUi.title(i, st.name); if (nameLabels[i].text.toString() != label) nameLabels[i].text = label }
+            val label = ConsoleUi.title(i, st.name); if (nameLabels[i].text.toString() != label) nameLabels[i].text = label
+            toneUi[i]?.show(st) }
         run { val p = (DaemonClient.dbToPos(s.masterDb) * 1000).toInt(); if (Math.abs(masterFader.progress - p) > 2) { masterFader.progress = p; masterDb.text = DaemonClient.fmtDb(s.masterDb) } }
         state = s
+    }
+    // ---- GAIN and the analog 3-band channel EQ on each strip (the console's own: HI 10 kHz shelf, MID bell + FREQ, LO 100 Hz shelf)
+    internal inner class ToneUi(val gain: KnobView, val eq: ToggleButton, val hi: KnobView, val mid: KnobView, val freq: KnobView, val lo: KnobView) {
+        var tone = com.amfb.amixos.remote.Tone()
+        fun show(st: com.amfb.amixos.remote.StripState) { gain.value = (st.trim / 24).toFloat(); hi.value = (st.tone.high / 15).toFloat(); mid.value = (st.tone.mid / 15).toFloat()
+            freq.value = hzToKnob(st.tone.midHz); lo.value = (st.tone.low / 15).toFloat(); tone = st.tone
+            if (eq.isChecked != st.tone.on) { eq.tag = "sync"; eq.isChecked = st.tone.on; eq.tag = null }; listOf(hi, mid, freq, lo).forEach { it.dim = !st.tone.on } }
+    }
+    internal val toneUi = HashMap<Int, ToneUi>()
+    private fun hzToKnob(hz: Double) = (2 * Math.log(hz / 100) / Math.log(80.0) - 1).toFloat()
+    private fun knobToHz(v: Float) = Math.round(100 * Math.pow(80.0, (v + 1) / 2.0)).toDouble()
+    private fun toneBlock(st: com.amfb.amixos.remote.StripState, tint: Int): View {
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL }
+        val dbF: (Float, Double) -> String = { v, r -> val d = Math.round(v * r * 2) / 2.0; (if (d > 0) "+" else "") + String.format("%.1f", d) }
+        fun k(title: String, color: Int, f: (Float) -> String) = KnobView(this, color).apply { this.title = title; fmt = f; layoutParams = LinearLayout.LayoutParams(112, LinearLayout.LayoutParams.WRAP_CONTENT)
+            onTouchState = { t -> touching = maxOf(0, touching + if (t) 1 else -1); if (touching == 0) catchUp() } }
+        val gain = k("GAIN", Color.parseColor("#FBBF24")) { dbF(it, 24.0) }
+        val hi = k("HI", tint) { dbF(it, 15.0) }; val mid = k("MID", tint) { dbF(it, 15.0) }; val lo = k("LO", tint) { dbF(it, 15.0) }
+        val freq = k("FREQ", Color.parseColor("#22D3EE")) { val hz = knobToHz(it); if (hz >= 1000) String.format("%.1fk", hz / 1000) else "${hz.toInt()}" }.apply { home = hzToKnob(1000.0) }
+        val eq = ToggleButton(this).apply { textOn = "EQ"; textOff = "EQ"; textSize = 11f; minWidth = 0; minimumWidth = 0; minHeight = 0; minimumHeight = 0; setPadding(0, 0, 0, 0); layoutParams = LinearLayout.LayoutParams(112, 64).apply { setMargins(0, 2, 0, 2) } }
+        ConsoleUi.styleToggle(eq, ConsoleUi.AMBER)
+        val ui = ToneUi(gain, eq, hi, mid, freq, lo); toneUi[st.id] = ui; ui.show(st)
+        val id = st.id; fun sendTone() { val t = ui.tone; live.submit("tone$id") { client?.tone(id, t) } }
+        gain.onChange = { v -> live.submit("trim$id") { client?.trim(id, Math.round(v * 48) / 2.0) } }
+        hi.onChange = { v -> ui.tone = ui.tone.copy(high = Math.round(v * 30) / 2.0, on = true); sendTone() }
+        mid.onChange = { v -> ui.tone = ui.tone.copy(mid = Math.round(v * 30) / 2.0, on = true); sendTone() }
+        lo.onChange = { v -> ui.tone = ui.tone.copy(low = Math.round(v * 30) / 2.0, on = true); sendTone() }
+        freq.onChange = { v -> ui.tone = ui.tone.copy(midHz = knobToHz(v)); sendTone() }
+        eq.setOnCheckedChangeListener { b, on -> if (b.tag == null) { buzz(b); ui.tone = ui.tone.copy(on = on); listOf(hi, mid, freq, lo).forEach { it.dim = !on }; sendTone() } }
+        listOf<View>(gain, eq, hi, mid, freq, lo).forEach { box.addView(it) }
+        return box
     }
     private fun catchUp() { val p = pendingState ?: return; ui.postDelayed({ if (touching == 0 && pendingState === p) applyState(p) }, 400) }   // the finger lifted: what changed elsewhere meanwhile
     private fun rename(strip: Int, label: TextView) {   // long press on a strip's name

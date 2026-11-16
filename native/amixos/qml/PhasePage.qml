@@ -12,7 +12,7 @@ Item {
     property bool frozen: false
     readonly property real corr: engine.telv("correlation", engine.meterTick)
     function refresh() { if (frozen) return; pairs = engine.lissajous(1024); gonio.requestPaint() }
-    Timer { interval: 50; running: page.visible; repeat: true; onTriggered: page.refresh() }
+    Timer { interval: engine.uiAwake ? 50 : 500; running: page.visible; repeat: true; onTriggered: page.refresh() }
     Component.onCompleted: refresh()
     ColumnLayout {
         anchors.fill: parent; anchors.margins: 10; spacing: 8

@@ -16,7 +16,7 @@ Flickable {
     property int rev: 0                      // bumped on every change so the bindings read the engine again
     property var meters: []
     Connections { target: engine; function onAmpChanged() { page.rev++ } }
-    Timer { interval: 100; running: page.visible; repeat: true; onTriggered: page.meters = engine.ampMeters() }
+    Timer { interval: engine.uiAwake ? 100 : 500; running: page.visible; repeat: true; onTriggered: page.meters = engine.ampMeters() }
     function st(o) { page.rev; return engine.ampState(o) }
     function setBand(o, b, k, v) { const eq = JSON.parse(JSON.stringify(page.st(o).eq)); eq[b][k] = v; if (k !== "type" && eq[b].type === 0) eq[b].type = 1; engine.setAmp(o, { eq: eq, on: true }) }
     function set(o, k, v) { const m = {}; m[k] = v; if (k !== "on" && k !== "name") m.on = true; engine.setAmp(o, m) }

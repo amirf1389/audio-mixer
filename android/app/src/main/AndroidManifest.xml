@@ -15,6 +15,7 @@
         <activity android:name=".DevicesActivity" android:exported="false" />
         <activity android:name=".PluginsActivity" android:exported="false" />
         <activity android:name=".EqActivity" android:exported="false" />
+        <activity android:name=".RtaEqActivity" android:exported="false" />
         <activity android:name=".CalculatorActivity" android:exported="false" />
         <activity android:name=".SettingsActivity" android:exported="false" android:label="@string/settings" />
         <activity android:name=".RemoteActivity" android:exported="false" android:label="@string/remote_title" />

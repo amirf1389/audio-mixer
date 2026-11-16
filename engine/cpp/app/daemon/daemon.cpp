@@ -92,12 +92,16 @@ bool Daemon::start(std::string& err) {
       std::lock_guard<std::mutex> g(linksM_); link->id = nextLink_++; links_[link->id] = link; }
     struct Drop { Daemon* d; int id; ~Drop() { std::lock_guard<std::mutex> g(d->linksM_); d->links_.erase(id); } } drop{this, link->id};
     std::thread reader([&ws] { std::string t; int op = 0; while (ws.open() && ws.read(t, op)) {} ws.close(); });   // drains pings / close from the phone; the phone hung up: the link ends now, not at the next failed send
-    unsigned long long sent = 0;   // LIVE SYNC: the console state goes out on connect and whenever any remote changed it (at most 20 times a second)
+    unsigned long long sent = 0; unsigned rtaTick = 0;   // LIVE SYNC: the console state goes out on connect and whenever any remote changed it (at most 20 times a second)
     while (running_ && ws.open()) {
       if (link->kick) { ws.send("{\"kicked\":true,\"holdSeconds\":" + std::to_string(link->tokenId == "master" ? 0 : kHoldSeconds) + "}"); break; }   // DISCONNECT from the console
       const unsigned long long v = version_.load();
       if (v != sent) { json::Value m = json::Value::object(); m.set("state", state()); if (!ws.send(m.dump())) break; sent = v; }
-      if (!ws.send(meters().dump())) break; std::this_thread::sleep_for(std::chrono::milliseconds(50)); }
+      if (!ws.send(meters().dump())) break;
+      if (rta_.source.load() != Rta::kOff) {   // RTA: ten times a second while a remote has it open; stops by itself when nobody renews it
+        if (static_cast<long long>(std::time(nullptr)) > rtaUntil_.load()) rta_.source.store(Rta::kOff);
+        else if (++rtaTick % 2 == 0) { json::Value m = json::Value::object(); m.set("rta", rtaJson(rtaTick == 2)); if (!ws.send(m.dump())) break; } }
+      std::this_thread::sleep_for(std::chrono::milliseconds(50)); }
     ws.close(); reader.join();
   });
   http_.setLocalOnly(opt_.localOnly);
@@ -114,7 +118,7 @@ void Daemon::stop() {
   if (volWatch_.joinable()) volWatch_.join();
   http_.stop();
   std::lock_guard<std::mutex> g(m_);
-  if (rt_) { rt_->setTap(nullptr); rec_.stop(); rt_->stop(); rt_.reset(); }
+  if (rt_) { rt_->setTap(nullptr); rta_.next.store(nullptr); rec_.stop(); rt_->stop(); rt_.reset(); }
 }
 
 // SECURITY: a wrong token costs 100 ms and is counted; more than 20 in a minute and further wrong ones get 429 (a right token is never
@@ -216,6 +220,15 @@ httpd::Response Daemon::handle(const httpd::Request& r) {
     tokens_.roleFor(t, r.peer);   // it belongs to this phone's address from the start
     pairFails_ = 5;               // one pairing per PIN: the next phone waits for the next PIN
     json::Value out = json::Value::object(); out.set("ok", true); out.set("id", id); out.set("token", t); out.set("role", "control"); out.set("days", 30); res.body = out.dump(); return res; }
+  if (r.method == "GET" && r.path == "/api/rta") {   // the analyzer now (any valid token)
+    const std::string role = roleOf(r, false); if (role.empty() || role == "held") { res.status = role == "held" ? 403 : (noteRefused() ? 429 : 401); res.body = "{\"ok\":false,\"error\":\"X-Amix-Token missing or wrong\"}"; return res; }
+    res.body = rtaJson(true).dump(); return res; }
+  if (r.method == "GET" && r.path == "/api/racks") {   // the console's plug-ins (any valid token; their states: the master token only)
+    const std::string role = roleOf(r, false);
+    if (role.empty() || role == "held") { res.status = role == "held" ? 403 : (noteRefused() ? 429 : 401); res.body = "{\"ok\":false,\"error\":\"X-Amix-Token missing or wrong\"}"; return res; }
+    const std::string sp = r.param("strip"); const bool states = r.param("states") == "1" && role == "admin";
+    json::Value out = json::Value::object(); out.set("ok", true); out.set("v", static_cast<double>(racksV_.load())); out.set("loader", static_cast<bool>(opt_.pluginFactory));
+    out.set("racks", racks(sp.empty() ? -1 : std::atoi(sp.c_str()), !sp.empty(), states)); res.body = out.dump(); return res; }
   if (r.path == "/api/links" || r.path == "/api/links/kick") {   // CONNECTED PHONES: only the master token (the console) sees and drops them
     if (roleOf(r, false) != "admin") { const bool known = !roleOf(r, false).empty(); res.status = known ? 403 : (noteRefused() ? 429 : 401); res.body = "{\"ok\":false,\"error\":\"the master token is needed\"}"; return res; }
     json::Value out = json::Value::object();
@@ -313,15 +326,68 @@ json::Value Daemon::devices() const {
   return a;
 }
 
+json::Value Daemon::rtaJson(bool withCentres) const {
+  json::Value o = json::Value::object(); o.set("src", rta_.source.load()); std::vector<double> db; json::Value a = json::Value::array();
+  if (rta_.bands(db)) for (double v : db) a.push(std::round(v * 10) / 10); o.set("db", a);
+  if (withCentres) { json::Value f = json::Value::array(); for (double c : Rta::centres()) f.push(std::round(c * 10) / 10); o.set("f", f); }
+  return o;
+}
+json::Value Daemon::programEqJson() const {
+  json::Value o = json::Value::object(); o.set("on", mp_.eqOn); json::Value g = json::Value::array();
+  for (int b = 0; b < 10; ++b) g.push(mp_.eq[b].type == dsp::FilterType::Peaking && std::fabs(mp_.eq[b].freq - kIso[b]) < 1 ? mp_.eq[b].gainDb : 0.0);
+  o.set("gains", g); o.set("mastering", mp_.on); return o;
+}
+void Daemon::loadRacks(Runtime& rt) { for (auto& r : racks_) loadRack(rt, r.first); }
+void Daemon::loadRack(Runtime& rt, int strip) {
+  auto rit = racks_.find(strip); if (rit == racks_.end()) { rt.setInserts(strip, nullptr); return; }
+  std::vector<PlugSlot>& slots = rit->second;
+  {
+    auto chain = std::make_shared<Runtime::InsertChain>();
+    for (PlugSlot& q : slots) {
+      if (!q.pl) { q.error.clear(); std::string e;
+        if (!opt_.pluginFactory) q.error = "no plug-in loader in this service";
+        else if (auto made = opt_.pluginFactory(q.kind, rt.sampleRate(), 1024, e)) { if (!q.state.empty()) made->setState(q.state); made->setBypass(q.bypass); q.pl = std::move(made); }
+        else q.error = e.empty() ? std::string("could not be loaded") : e; }
+      if (q.pl) chain->push_back(std::make_shared<host::MonoInsert>(q.pl, 1024)); }
+    rt.setInserts(strip, chain->empty() ? nullptr : chain); }
+}
+json::Value Daemon::racks(int onlyStrip, bool params, bool states) const {
+  std::lock_guard<std::mutex> g(m_); json::Value a = json::Value::array();
+  for (const auto& [strip, slots] : racks_) { if (onlyStrip >= 0 && strip != onlyStrip) continue;
+    json::Value r = json::Value::object(); r.set("strip", strip); auto n = rackNames_.find(strip); r.set("name", n != rackNames_.end() ? n->second : std::string());
+    json::Value ss = json::Value::array();
+    for (const PlugSlot& q : slots) { json::Value o = json::Value::object(); o.set("slot", q.slot); o.set("kind", q.kind); o.set("loaded", static_cast<bool>(q.pl)); o.set("error", !q.pl && q.error.empty() && !rt_ ? std::string("waiting for a sound card: the service loads plug-ins when it opens one") : q.error);
+      o.set("name", q.pl && !q.pl->info().name.empty() ? q.pl->info().name : q.name); o.set("bypass", q.pl ? q.pl->bypass() : q.bypass);
+      if (q.pl) { o.set("vendor", q.pl->info().vendor); o.set("format", q.pl->info().format); }
+      if (params && q.pl) { json::Value ps = json::Value::array(); int n2 = 0;
+        for (const auto& pi : q.pl->params()) { if (pi.hidden || pi.readOnly || pi.bypass || n2 >= 64) continue; ++n2; const double v = q.pl->param(pi.id);
+          json::Value x = json::Value::object(); x.set("id", static_cast<double>(pi.id)); x.set("title", pi.title.empty() ? std::string("Param ") + std::to_string(pi.id) : pi.title); x.set("value", v);
+          x.set("default", pi.defaultNormalized); x.set("steps", pi.stepCount); { std::string t = q.pl->paramText(pi.id, v); const bool hasUnit = pi.units.empty() || (t.size() >= pi.units.size() && t.compare(t.size() - pi.units.size(), pi.units.size(), pi.units) == 0);
+            // the plug-in's own text, its unit added only when it left it out
+            x.set("text", hasUnit ? t : t + " " + pi.units); }
+          ps.push(x); }
+        o.set("params", ps); }
+      if (states) o.set("state", q.pl ? q.pl->state() : q.state);
+      ss.push(o); }
+    r.set("slots", ss); a.push(r); }
+  return a;
+}
 double Daemon::trimForLevel(double l) { return l <= 0.0005 ? -120.0 : std::max(-120.0, std::min(0.0, 30.0 * std::log10(l))); }
 bool Daemon::windowsSetsLevel() const { return rt_ && rt_->backendName() == "wasapi" && !rt_->exclusive() && (rt_->outDevice().empty() || rt_->outDevice() == "-"); }
-double Daemon::outMaster() const {   // the same rule as the console (Engine::outMasterDb): audible down to -59.9, off only with the fader off or Windows at 0
-  const int v = winVol_.load(); const double t = (set_.winGain && v >= 0 && !windowsSetsLevel()) ? trimForLevel(v / 100.0) : 0.0;
-  if (t == 0.0 || masterDb_ <= -60.0) return masterDb_; if (t <= -119.0) return -120.0; return std::max(-59.9, masterDb_ + t);
+void Daemon::pushTone(Runtime& rt, int i) const {   // the same bands as the console's Engine::setChannelEq
+  const Strip& st = strips_[static_cast<std::size_t>(i)]; const int f = dsp::kChannelEqFirst;
+  auto put = [&](int b, dsp::FilterType t, double hz, double q, double g) { rt.setEqBand(i, b, st.toneOn && std::fabs(g) > 0.01 ? t : dsp::FilterType::Off, hz, q, g); };
+  put(f, dsp::FilterType::LowShelf, 100, 0.71, st.low); put(f + 1, dsp::FilterType::Peaking, st.midHz, 0.9, st.mid); put(f + 2, dsp::FilterType::HighShelf, 10000, 0.71, st.high);
 }
+double Daemon::outTrim() const {   // GAIN MODE's trim (the same rule as the console's Engine::windowsTrimDb)
+  const int v = winVol_.load(); return (set_.winGain && v >= 0 && !windowsSetsLevel()) ? trimForLevel(v / 100.0) : 0.0;
+}
+// the master fader and, separately, GAIN MODE's listening trim: the trim comes after the meters, the loudness meter and AUTO LEVEL
+// (Mixer::setOutputTrimDb), so turning Windows down does not make AUTO LEVEL turn the mix back up
+void Daemon::applyMaster(Runtime& rt) const { rt.setMasterDb(masterDb_); rt.setOutputTrimDb(outTrim()); }
 void Daemon::pushSettings(Runtime& rt) const {
   rt.setWidth(set_.width); rt.setOutputBits(set_.outputBits < 0 ? 0 : set_.outputBits); rt.setDcBlock(set_.dcBlock); rt.setAnalogChannels(set_.analog);
-  rt.setAutoLevel(set_.autoLevel, set_.autoTarget, set_.autoMax); rt.setClipDb(set_.clipDb); rt.setPeakHoldMs(set_.peakHoldMs); rt.setMasterDb(outMaster());
+  rt.setAutoLevel(set_.autoLevel, set_.autoTarget, set_.autoMax); rt.setClipDb(set_.clipDb); rt.setPeakHoldMs(set_.peakHoldMs); applyMaster(rt);
 }
 json::Value Daemon::settingsJson() const {
   json::Value s = json::Value::object(); s.set("width", set_.width); s.set("outputBits", set_.outputBits); s.set("dcBlock", set_.dcBlock); s.set("analog", set_.analog);
@@ -333,7 +399,7 @@ json::Value Daemon::settingsJson() const {
 void Daemon::pollVolume() {
   if (!volGet_) return; float f = 0; const int v = volGet_(f) ? static_cast<int>(std::lround(std::max(0.0f, std::min(1.0f, f)) * 100.0f)) : -1;
   if (v == winVol_.load()) return;
-  std::lock_guard<std::mutex> g(m_); winVol_ = v; if (rt_) rt_->setMasterDb(outMaster()); ++version_;   // a move of the Windows slider reaches every remote
+  std::lock_guard<std::mutex> g(m_); winVol_ = v; if (rt_) applyMaster(*rt_); ++version_;   // a move of the Windows slider reaches every remote
 }
 json::Value Daemon::state() const {
   std::lock_guard<std::mutex> g(m_);
@@ -342,6 +408,8 @@ json::Value Daemon::state() const {
   for (std::size_t i = 0; i < strips_.size(); ++i) {
     const Strip& s = strips_[i]; json::Value v = json::Value::object();
     v.set("id", static_cast<int>(i)); v.set("name", s.name); v.set("db", s.db); v.set("pan", s.pan); v.set("mute", s.mute); v.set("solo", s.solo);
+    v.set("trim", s.trim); json::Value t = json::Value::object(); t.set("low", s.low); t.set("mid", s.mid); t.set("midHz", s.midHz); t.set("high", s.high); t.set("on", s.toneOn); v.set("tone", t);
+    json::Value eq = json::Value::array(); for (const Strip::Band& e : s.eq) { json::Value b = json::Value::array(); b.push(e.type); b.push(e.freq); b.push(e.q); b.push(e.gain); eq.push(b); } v.set("eq", eq);   // [type, freq, q, gainDb]
     strips.push(v);
   }
   o.set("strips", strips);
@@ -351,7 +419,8 @@ json::Value Daemon::state() const {
   json::Value m = json::Value::object(); m.set("db", masterDb_); m.set("limiter", limiter_); m.set("ceilingDb", ceiling_); o.set("master", m);
   o.set("settings", settingsJson());
   json::Value mo = json::Value::object(); mo.set("source", mon_.source); mo.set("db", mon_.db); mo.set("dim", mon_.dim); mo.set("mono", mon_.mono); mo.set("mute", mon_.mute); o.set("monitor", mo);
-  o.set("backend", rt_ ? backend_ : ""); o.set("running", rt_ && rt_->running()); o.set("v", static_cast<double>(version_.load())); o.set("remotes", watchers_.load());
+  o.set("backend", rt_ ? backend_ : ""); o.set("running", rt_ && rt_->running()); o.set("v", static_cast<double>(version_.load())); o.set("remotes", watchers_.load()); o.set("racksV", static_cast<double>(racksV_.load())); o.set("racksBy", racksFromConsole_ ? "console" : "remote");
+  o.set("programEq", programEqJson()); o.set("masterV", static_cast<double>(masterV_.load()));
   return o;
 }
 
@@ -391,8 +460,29 @@ bool Daemon::loadSeed(const std::string& file, std::string& err) {
   const json::Value& l = o["strips"];
   for (std::size_t i = 0; i < strips_.size() && i < l.size(); ++i) { const json::Value& v = l.at(i); Strip& s = strips_[i];
     s.name = v["name"].asString(s.name).substr(0, 24); s.db = std::max(-120.0, std::min(10.0, v["db"].asNumber(s.db))); s.pan = std::max(-1.0, std::min(1.0, v["pan"].asNumber(s.pan)));
-    s.mute = v["mute"].asBool(s.mute); s.solo = v["solo"].asBool(s.solo); }
+    s.mute = v["mute"].asBool(s.mute); s.solo = v["solo"].asBool(s.solo); s.trim = std::max(-24.0, std::min(24.0, v["trim"].asNumber(s.trim)));
+    if (v["tone"].isObject()) { const json::Value& t = v["tone"]; auto g = [](double x) { return std::max(-15.0, std::min(15.0, x)); };
+      s.low = g(t["low"].asNumber(s.low)); s.mid = g(t["mid"].asNumber(s.mid)); s.high = g(t["high"].asNumber(s.high)); s.midHz = std::max(100.0, std::min(8000.0, t["midHz"].asNumber(s.midHz))); s.toneOn = t["on"].asBool(s.toneOn); }
+    const json::Value& eq = v["eq"]; for (std::size_t b = 0; b < eq.size() && b < 8; ++b) { const json::Value& e = eq.at(b); Strip::Band& d = s.eq[b];
+      d.type = std::max(0, std::min(8, e.at(0).asInt(0))); d.freq = std::max(10.0, std::min(24000.0, e.at(1).asNumber(1000))); d.q = std::max(0.05, std::min(36.0, e.at(2).asNumber(0.707))); d.gain = std::max(-24.0, std::min(24.0, e.at(3).asNumber(0))); } }
   if (o["master"].isObject()) masterDb_ = std::max(-120.0, std::min(10.0, o["master"]["db"].asNumber(masterDb_)));
+  if (o["masterChain"].isObject()) {   // the console's RTA EQ and mastering: they keep sounding while the service plays
+    const json::Value& m = o["masterChain"]; mp_.eqOn = m["eqOn"].asBool(mp_.eqOn);
+    const json::Value& eq = m["eq"]; for (std::size_t b = 0; b < eq.size() && b < static_cast<std::size_t>(MasterChain::kBands); ++b) { const json::Value& e = eq.at(b);
+      mp_.eq[b] = dsp::EqBand{static_cast<dsp::FilterType>(std::max(0, std::min(6, e["type"].asInt(0)))), std::max(10.0, std::min(24000.0, e["freq"].asNumber(1000))), std::max(0.1, std::min(36.0, e["q"].asNumber(1))), std::max(-24.0, std::min(24.0, e["gainDb"].asNumber(0)))}; }
+    auto num = [&](const char* k, double& v, double lo, double hi) { if (m.has(k)) v = std::max(lo, std::min(hi, m[k].asNumber(v))); };
+    auto flag = [&](const char* k, bool& v) { if (m.has(k)) v = m[k].asBool(v); };
+    flag("on", mp_.on); flag("analog", mp_.analog); flag("toneOn", mp_.toneOn); flag("compOn", mp_.compOn); flag("satOn", mp_.satOn); flag("deessOn", mp_.deessOn); flag("exciterOn", mp_.exciterOn); flag("bassMonoOn", mp_.bassMonoOn);
+    num("lowDb", mp_.lowDb, -24, 24); num("midDb", mp_.midDb, -24, 24); num("airDb", mp_.airDb, -24, 24); num("thrDb", mp_.thrDb, -60, 0); num("ratio", mp_.ratio, 1, 20); num("attackMs", mp_.attackMs, 0.1, 500);
+    num("releaseMs", mp_.releaseMs, 5, 5000); num("makeupDb", mp_.makeupDb, -24, 24); num("drive", mp_.drive, 0, 1); num("gainDb", mp_.gainDb, -24, 24); num("compMix", mp_.compMix, 0, 1);
+    num("deessThrDb", mp_.deessThrDb, -60, 0); num("deessMaxDb", mp_.deessMaxDb, 0, 24); num("exciterAmt", mp_.exciterAmt, 0, 1); num("bassMonoHz", mp_.bassMonoHz, 20, 500); ++masterV_; }
+  if (o["racks"].isArray()) {   // the console's plug-ins: played by the service while it runs the sound
+    racks_.clear(); rackNames_.clear(); const json::Value& rs = o["racks"];
+    for (std::size_t i = 0; i < rs.size(); ++i) { const json::Value& r = rs.at(i); const int strip = r["strip"].asInt(-1); if (strip < 0 || strip >= opt_.strips) continue;
+      rackNames_[strip] = r["name"].asString(); const json::Value& ps = r["plugins"];
+      for (std::size_t k = 0; k < ps.size() && k < 64; ++k) { const json::Value& q = ps.at(k); PlugSlot sl; sl.slot = q["slot"].asInt(static_cast<int>(k)); sl.kind = q["kind"].asString(); if (sl.kind.empty()) continue;
+        sl.name = q["name"].asString(sl.kind); sl.bypass = q["bypass"].asBool(false); sl.state = q["state"].asString(); racks_[strip].push_back(sl); } }
+    ++racksV_; }
   if (o["settings"].isObject()) { const json::Value& c = o["settings"];   // the console's settings: the service starts sounding like the console
     set_.width = std::max(0.0, std::min(2.0, c["width"].asNumber(set_.width))); { const int b = c["outputBits"].asInt(set_.outputBits); if (b == 0 || b == 16 || b == 24 || b == -1) set_.outputBits = b; }
     set_.dcBlock = c["dcBlock"].asBool(set_.dcBlock); set_.analog = c["analog"].asBool(set_.analog); set_.autoLevel = c["autoLevel"].asBool(set_.autoLevel);
@@ -412,14 +502,14 @@ json::Value Daemon::apply(const json::Value& cmd, std::string& err) {
   int s = 0, b = 0;
   // RECORD: {"op":"record","on":true,"format":"flac"|"wav24"|"wavf32"} writes the master to <data>/recordings/<time>-master.*; on:false stops
   if (op == "record") {
-    if (!cmd["on"].asBool()) { if (rt_) rt_->setTap(nullptr); rec_.stop(); return ok; }
+    if (!cmd["on"].asBool()) { rta_.next.store(nullptr); rec_.stop(); return ok; }
     if (!need()) return {}; if (rec_.recording()) { err = "already recording"; return {}; }
     const std::string f = cmd["format"].asString("flac"); rec::Options o; o.folder = paths::file("recordings"); o.master = true; o.format = f == "flac" ? 4 : f == "wavf32" ? 1 : 0;
-    if (!rec_.start(o, rate_, err)) return {}; rt_->setTap(&rec_);
+    if (!rec_.start(o, rate_, err)) return {}; rta_.next.store(&rec_);   // the recorder rides behind the RTA's tap
     ok.set("file", rec_.files().empty() ? std::string() : rec_.files()[0]); return ok;
   }
   if (op == "open") {
-    if (rt_) { rt_->setTap(nullptr); rec_.stop(); rt_->stop(); rt_.reset(); }
+    if (rt_) { rt_->setTap(nullptr); rta_.next.store(nullptr); rec_.stop(); rt_->stop(); rt_.reset(); }
     DeviceConfig cfg; cfg.backend = cmd["backend"].asString("auto"); cfg.inDevice = cmd["in"].asString(""); cfg.outDevice = cmd["out"].asString("");
     cfg.sampleRate = cmd["rate"].asNumber(48000); cfg.frames = static_cast<unsigned>(std::max(16, cmd["frames"].asInt(256)));
     cfg.inChannels = std::max(0, std::min(kMaxStrips, cmd["inChannels"].asInt(2))); cfg.outChannels = std::max(0, std::min(32, cmd["outChannels"].asInt(2))); cfg.exclusive = cmd["exclusive"].asBool(false);
@@ -427,19 +517,60 @@ json::Value Daemon::apply(const json::Value& cmd, std::string& err) {
     if (!rt->open(cfg, err)) { lastError_ = err; return {}; }
     if (!rt->start(err)) { lastError_ = err; return {}; }
     // replay the console onto the fresh runtime so that what the phone shows is what sounds
-    for (int i = 0; i < opt_.strips; ++i) { const Strip& st = strips_[static_cast<std::size_t>(i)]; rt->setGainDb(i, st.db); rt->setPan(i, st.pan); rt->setMute(i, st.mute); rt->setSolo(i, st.solo); }
+    for (int i = 0; i < opt_.strips; ++i) { const Strip& st = strips_[static_cast<std::size_t>(i)]; rt->setGainDb(i, st.db); rt->setPan(i, st.pan); rt->setMute(i, st.mute); rt->setSolo(i, st.solo);
+      rt->setTrimDb(i, st.trim); pushTone(*rt, i);
+      for (int b = 0; b < 8; ++b) { const Strip::Band& e = st.eq[b]; if (e.type) rt->setEqBand(i, b, static_cast<dsp::FilterType>(e.type), e.freq, e.q, e.gain); } }
     for (int k = 0; k < kMaxBuses; ++k) { rt->setBusLevel(k, buses_[k].db); rt->setBusMute(k, buses_[k].mute); rt->setBusReturn(k, buses_[k].returnDb); }
-    pushSettings(*rt); rt->setLimiter(limiter_, ceiling_); rt->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute);
-    rt_ = std::move(rt); rt_->setMasterDb(outMaster()); backend_ = rt_->backendName(); lastError_.clear(); rate_ = cfg.sampleRate;   // the trim knows the new output
+    pushSettings(*rt); loadRacks(*rt); rt->setTap(&rta_);
+    mp_.fs = rt->sampleRate(); master_.set(mp_); rt->setMasterProcessor(&master_);   // the console's RTA EQ and mastering, as handed over
+    rt->setLimiter(limiter_, ceiling_); rt->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute);
+    pads_.prepare(rt->sampleRate()); rt->setExtraSource(&pads_);   // the SAMPLE PADS, at this device's rate
+    rt_ = std::move(rt); applyMaster(*rt_); backend_ = rt_->backendName(); lastError_.clear(); rate_ = cfg.sampleRate;   // the trim knows the new output
     ok.set("backend", backend_); ok.set("rate", cfg.sampleRate); ok.set("frames", static_cast<int>(cfg.frames)); return ok;
   }
-  if (op == "stop") { if (rt_) { rt_->setTap(nullptr); rec_.stop(); rt_->stop(); rt_.reset(); } backend_.clear(); return ok; }
+  if (op == "stop") { if (rt_) { rt_->setTap(nullptr); rta_.next.store(nullptr); rec_.stop(); rt_->stop(); rt_.reset(); } backend_.clear(); return ok; }
   if (op == "gain") { if (!strip(s)) return {}; strips_[static_cast<std::size_t>(s)].db = clampDb(cmd["db"].asNumber(0)); if (rt_) rt_->setGainDb(s, strips_[static_cast<std::size_t>(s)].db); return ok; }
   if (op == "pan") { if (!strip(s)) return {}; double p = cmd["pan"].asNumber(0); p = p < -1 ? -1 : p > 1 ? 1 : p; strips_[static_cast<std::size_t>(s)].pan = p; if (rt_) rt_->setPan(s, p); return ok; }
   if (op == "mute") { if (!strip(s)) return {}; const bool on = cmd["on"].asBool(); strips_[static_cast<std::size_t>(s)].mute = on; if (rt_) rt_->setMute(s, on); return ok; }
   if (op == "solo") { if (!strip(s)) return {}; const bool on = cmd["on"].asBool(); strips_[static_cast<std::size_t>(s)].solo = on; if (rt_) rt_->setSolo(s, on); return ok; }
   if (op == "name") { if (!strip(s)) return {}; std::string n = cmd["name"].asString(); if (n.size() > 24) n.resize(24); if (n.empty()) { err = "empty name"; return {}; } strips_[static_cast<std::size_t>(s)].name = n; return ok; }
-  if (op == "master") { masterDb_ = clampDb(cmd["db"].asNumber(0)); if (rt_) rt_->setMasterDb(outMaster()); return ok; }
+  if (op == "master") { masterDb_ = clampDb(cmd["db"].asNumber(0)); if (rt_) applyMaster(*rt_); return ok; }
+  if (op == "rta") {   // the analyzer's source; a remote renews it while its page is open
+    const json::Value& v = cmd["src"]; const int src = v.type() == json::Value::String ? Rta::kOff : std::max(-1, std::min(opt_.strips - 1, v.asInt(Rta::kOff)));
+    rta_.source.store(src); rtaUntil_ = src == Rta::kOff ? 0 : static_cast<long long>(std::time(nullptr)) + 20; ok.set("src", src); return ok; }
+  if (op == "programEq") {   // the RTA EQ on the master: ten gains at the ISO octaves (a bell each, Q 1.41), on / off
+    const json::Value& g = cmd["gains"]; const bool on = cmd["on"].asBool(mp_.eqOn);
+    if (g.isArray()) { if (g.size() != 10) { err = "gains: 10 values"; return {}; }
+      for (int b = 0; b < 10; ++b) { const double db = std::max(-24.0, std::min(24.0, g.at(static_cast<std::size_t>(b)).asNumber(0)));
+        mp_.eq[b] = dsp::EqBand{std::fabs(db) > 0.01 ? dsp::FilterType::Peaking : dsp::FilterType::Off, kIso[b], 1.41, db}; } }
+    mp_.eqOn = on; master_.set(mp_); ++masterV_; return ok; }
+  if (op == "sample") {   // a SAMPLE PAD (the console's 100 one-shots) into the master: {id 1..100} or {stop: true}; gainDb sets the pads' level
+    if (cmd.has("gainDb")) pads_.gainDb.store(std::max(-40.0, std::min(12.0, cmd["gainDb"].asNumber(-6))));
+    if (cmd["stop"].asBool(false)) { pads_.stopAll(); return ok; }
+    if (cmd.has("id")) { if (!rt_) { err = "no sound card open"; return {}; } if (!pads_.trigger(cmd["id"].asInt(0))) { err = "id: 1..100"; return {}; } }
+    ok.set("voices", pads_.active.load()); return ok; }
+  if (op == "rack") {   // the console's rack of one strip, as it is now (a plug-in added, removed, a knob turned in its window, bypass):
+    // slots that keep their plug-in keep their instance and take the new state; the rest are made; the chain is handed over at once
+    if (!strip(s)) return {}; const json::Value& ps = cmd["plugins"]; if (!ps.isArray()) { err = "plugins: a list"; return {}; }
+    std::vector<PlugSlot> old = std::move(racks_[s]); std::vector<PlugSlot> now;
+    for (std::size_t k = 0; k < ps.size() && k < 64; ++k) { const json::Value& q = ps.at(k); PlugSlot sl; sl.slot = q["slot"].asInt(static_cast<int>(k)); sl.kind = q["kind"].asString(); if (sl.kind.empty()) continue;
+      sl.name = q["name"].asString(sl.kind); sl.bypass = q["bypass"].asBool(false); sl.state = q["state"].asString();
+      for (PlugSlot& o : old) if (o.slot == sl.slot && o.kind == sl.kind && o.pl) { sl.pl = o.pl; if (!sl.state.empty() && sl.state != o.state) sl.pl->setState(sl.state); sl.pl->setBypass(sl.bypass); }
+      now.push_back(std::move(sl)); }
+    if (now.empty()) racks_.erase(s); else racks_[s] = std::move(now);
+    if (cmd.has("name")) rackNames_[s] = cmd["name"].asString();
+    if (rt_) loadRack(*rt_, s); ++racksV_; racksFromConsole_ = true; return ok; }
+  if (op == "plugin") {   // a plug-in of the console's racks: bypass or one parameter (0..1)
+    const int st = cmd["strip"].asInt(-1), sl = cmd["slot"].asInt(-1); auto it = racks_.find(st); PlugSlot* p = nullptr;
+    if (it != racks_.end()) for (PlugSlot& q : it->second) if (q.slot == sl) p = &q;
+    if (!p) { err = "no plug-in in that slot"; return {}; }
+    if (cmd.has("bypass")) { p->bypass = cmd["bypass"].asBool(false); if (p->pl) p->pl->setBypass(p->bypass); }
+    else if (cmd.has("param")) { if (!p->pl) { err = "that plug-in is not loaded here: " + (p->error.empty() ? std::string("no loader") : p->error); return {}; }
+      const double v = cmd["value"].asNumber(-1); if (!(v >= 0 && v <= 1)) { err = "value: 0..1"; return {}; }
+      const auto id = static_cast<std::uint32_t>(cmd["param"].asNumber(-1)); bool known = false; for (const auto& q : p->pl->params()) if (q.id == id && !q.readOnly) known = true;
+      if (!known) { err = "no such parameter"; return {}; } p->pl->setParam(id, v); ok.set("text", p->pl->paramText(id, v)); }
+    else { err = "bypass or param"; return {}; }
+    ++racksV_; racksFromConsole_ = false; return ok; }
   if (op == "setting") {   // a console setting from a remote (see daemon.hpp); every value is checked here
     const std::string k = cmd["key"].asString(); const json::Value& v = cmd["value"];
     if (k == "width") { set_.width = std::max(0.0, std::min(2.0, v.asNumber(1))); if (rt_) rt_->setWidth(set_.width); }
@@ -451,11 +582,11 @@ json::Value Daemon::apply(const json::Value& cmd, std::string& err) {
       if (rt_) rt_->setAutoLevel(set_.autoLevel, set_.autoTarget, set_.autoMax); }
     else if (k == "clipDb") { set_.clipDb = std::max(-12.0, std::min(0.0, v.asNumber(-0.1))); if (rt_) rt_->setClipDb(set_.clipDb); }
     else if (k == "peakHoldMs") { set_.peakHoldMs = std::max(0.0, std::min(10000.0, v.asNumber(1500))); if (rt_) rt_->setPeakHoldMs(set_.peakHoldMs); }
-    else if (k == "winGain") { set_.winGain = v.asBool(false); if (rt_) rt_->setMasterDb(outMaster()); }
+    else if (k == "winGain") { set_.winGain = v.asBool(false); if (rt_) applyMaster(*rt_); }
     else if (k == "winMuteSync") set_.winMuteSync = v.asBool(true);   // the console applies this rule (it watches the master)
     else if (k == "winVolume") { const int lv = std::max(0, std::min(100, v.asInt(-1)));
       if (!volSet_ || v.asInt(-1) < 0 || !volSet_(static_cast<float>(lv / 100.0))) { err = "the Windows volume is not available on this computer"; return {}; }
-      winVol_ = lv; if (rt_) rt_->setMasterDb(outMaster()); }
+      winVol_ = lv; if (rt_) applyMaster(*rt_); }
     else { err = "unknown setting " + k; return {}; }
     return ok; }
   if (op == "limiter") { limiter_ = cmd["on"].asBool(true); ceiling_ = clampDb(cmd["ceilingDb"].asNumber(-0.5), -20, 0); if (rt_) rt_->setLimiter(limiter_, ceiling_); return ok; }
@@ -464,12 +595,15 @@ json::Value Daemon::apply(const json::Value& cmd, std::string& err) {
   if (op == "busMute") { if (!bus(b)) return {}; buses_[b].mute = cmd["on"].asBool(); if (rt_) rt_->setBusMute(b, buses_[b].mute); return ok; }
   if (op == "busReturn") { if (!bus(b)) return {}; buses_[b].returnDb = clampDb(cmd["db"].asNumber(-120)); if (rt_) rt_->setBusReturn(b, buses_[b].returnDb); return ok; }
   if (op == "eq") {
-    if (!strip(s) || !need()) return {};
+    if (!strip(s)) return {};
     const int band = cmd["band"].asInt(-1); if (band < 0 || band > 7) { err = "band out of range"; return {}; }
     static const char* names[] = {"off", "peaking", "lowshelf", "highshelf", "lowpass", "highpass", "notch", "allpass1", "allpass2"};
     const std::string t = cmd["type"].asString("peaking"); int ti = -1; for (int i = 0; i < 9; ++i) if (t == names[i]) ti = i;
     if (ti < 0) { err = "unknown filter type"; return {}; }
-    rt_->setEqBand(s, band, static_cast<dsp::FilterType>(ti), cmd["freq"].asNumber(1000), std::max(0.05, cmd["q"].asNumber(0.707)), clampDb(cmd["gainDb"].asNumber(0), -24, 24)); return ok;
+    // kept here (every remote and the console see it, LIVE SYNC), sounding at once when a device is open
+    Strip::Band& e = strips_[static_cast<std::size_t>(s)].eq[band]; e.type = ti; e.freq = std::max(10.0, std::min(24000.0, cmd["freq"].asNumber(1000)));
+    e.q = std::max(0.05, std::min(36.0, cmd["q"].asNumber(0.707))); e.gain = clampDb(cmd["gainDb"].asNumber(0), -24, 24);
+    if (rt_) rt_->setEqBand(s, band, static_cast<dsp::FilterType>(e.type), e.freq, e.q, e.gain); ++version_; return ok;
   }
   if (op == "delay") { if (!strip(s) || !need()) return {}; rt_->setDelayMs(s, std::max(0.0, std::min(500.0, cmd["ms"].asNumber(0)))); return ok; }
   if (op == "polarity") { if (!strip(s) || !need()) return {}; rt_->setPolarity(s, cmd["on"].asBool()); return ok; }
@@ -494,7 +628,12 @@ json::Value Daemon::apply(const json::Value& cmd, std::string& err) {
   }
   if (op == "inRoute") { if (!strip(s) || !need()) return {}; rt_->setInputRoute(s, cmd["input"].asInt(-1)); return ok; }
   if (op == "outRoute") { if (!need()) return {}; const int o = cmd["out"].asInt(-1); if (o < 0 || o >= Runtime::kMaxOutputs) { err = "out of range"; return {}; } rt_->setOutputRoute(o, cmd["source"].asInt(0)); return ok; }
-  if (op == "trim") { if (!strip(s) || !need()) return {}; rt_->setTrimDb(s, clampDb(cmd["db"].asNumber(0), -24, 24)); return ok; }
+  if (op == "trim") { if (!strip(s)) return {}; Strip& st = strips_[static_cast<std::size_t>(s)]; st.trim = clampDb(cmd["db"].asNumber(0), -24, 24); if (rt_) rt_->setTrimDb(s, st.trim); ++version_; return ok; }
+  if (op == "tone") {   // the analog 3-band channel EQ: any of low / mid / midHz / high / on; the rest stays
+    if (!strip(s)) return {}; Strip& st = strips_[static_cast<std::size_t>(s)]; auto g = [](double v) { return std::max(-15.0, std::min(15.0, v)); };
+    if (cmd.has("low")) st.low = g(cmd["low"].asNumber(st.low)); if (cmd.has("mid")) st.mid = g(cmd["mid"].asNumber(st.mid)); if (cmd.has("high")) st.high = g(cmd["high"].asNumber(st.high));
+    if (cmd.has("midHz")) st.midHz = std::max(100.0, std::min(8000.0, cmd["midHz"].asNumber(st.midHz))); if (cmd.has("on")) st.toneOn = cmd["on"].asBool(st.toneOn);
+    if (rt_) pushTone(*rt_, s); ++version_; return ok; }
   if (op == "clearClips") { if (rt_) rt_->clearClips(); return ok; }
   err = op.empty() ? "no op" : "unknown op \"" + op + "\""; return {};
 }

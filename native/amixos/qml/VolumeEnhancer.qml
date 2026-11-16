@@ -41,7 +41,7 @@ Popup {
     property real compRed: 0
     onOpened: tick++
     Connections { target: engine; function onMasterChainChanged() { pop.tick++ } function onStripsChanged() { pop.tick++ } }
-    Timer { interval: 60; running: pop.visible; repeat: true; onTriggered: { pop.compRed = engine.masteringReductionDb(); pop.limRed = engine.masterLimiterReductionDb() } }
+    Timer { interval: engine.uiAwake ? 60 : 500; running: pop.visible; repeat: true; onTriggered: { pop.compRed = engine.masteringReductionDb(); pop.limRed = engine.masterLimiterReductionDb() } }
 
     component Head: Text { color: Theme.muted; font.family: Theme.mono; font.pixelSize: 10; font.bold: true; font.letterSpacing: 2 }
     component Hint: Text { color: Theme.dim; font.family: Theme.mono; font.pixelSize: 9; wrapMode: Text.WordWrap }

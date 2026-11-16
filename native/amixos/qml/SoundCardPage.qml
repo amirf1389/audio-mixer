@@ -34,7 +34,7 @@ Item {
             Card { Layout.columnSpan: 2
                 RowLayout { spacing: 14
                     Rectangle { width: 14; height: 14; radius: 7; color: engine.running ? Theme.emerald : Theme.ov(0.2); border.color: engine.running ? Theme.emerald : Theme.line
-                        SequentialAnimation on opacity { running: engine.running; loops: Animation.Infinite; NumberAnimation { to: 0.45; duration: 900 } NumberAnimation { to: 1; duration: 900 } } }
+                        SequentialAnimation on opacity { running: engine.running && engine.uiAwake; loops: Animation.Infinite; NumberAnimation { to: 0.45; duration: 900 } NumberAnimation { to: 1; duration: 900 } } }
                     ColumnLayout { spacing: 2
                         Text { objectName: "cardState"; text: engine.running ? engine.backend.toUpperCase() + "  ·  " + engine.deviceInputs + " IN  /  " + engine.deviceOutputs + " OUT" : i18n.t("NO DEVICE RUNNING", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 20; font.bold: true; font.letterSpacing: 1.5 }
                         Text { text: engine.running ? (page.last && page.last.out ? page.last.out + "  ·  " : "") + (engine.sampleRate / 1000) + " kHz  ·  " + engine.blockFrames + i18n.t(" frames", i18n.lang) + "  ·  " + (engine.blockFrames * 1000 / engine.sampleRate).toFixed(1) + " ms" + (engine.deviceFormat !== "" ? "  ·  " + engine.deviceFormat : "") + i18n.t("  ·  engine 64-bit float", i18n.lang) : i18n.t("Pick a driver below and press OPEN, or use AUDIO / MIDI SETTINGS.", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 10; elide: Text.ElideRight; Layout.maximumWidth: 900 } }

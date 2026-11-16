@@ -2,6 +2,7 @@
 // <cache>/samples/NNN-name.wav (am::paths: the OS cache folder, Android clears it when space is short) on request, and played polyphonically (8 voices) into the master as a fourth Runtime::ExtraSource. The
 // trigger path is lock-free: the UI pushes ids into a small ring, the audio thread starts voices from it.
 #pragma once
+#include <functional>
 #include <QObject>
 #include <QSettings>
 #include <QTimer>
@@ -47,6 +48,8 @@ class Samples : public QObject {
   QVariantList list() const; QStringList categories() const;
   double gainDb() const { return player_.gainDb.load(); } void setGainDb(double db);
   int lastPlayed() const { return last_; } int voices() const { return player_.active.load(); } double peakDb() const; QString folder() const; QString message() const { return msg_; } bool ready() const { return ready_; }
+  // while phones are linked the console's engine is stopped and the remote service plays the sound: pads are sent there (op sample)
+  std::function<bool(int id, double gainDb)> remotePlay; std::function<void()> remoteStop;
   Q_INVOKABLE bool play(int id);                                        // 1..100
   Q_INVOKABLE void stopAll();
   Q_INVOKABLE int exportAll();                                          // writes every sample as WAV into folder(); returns how many files exist afterwards

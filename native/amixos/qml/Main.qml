@@ -17,6 +17,11 @@ ApplicationWindow {
     color: Theme.obsidian
     property string current: settings.startPage
     property bool mixerEver: false   // the mixer has been opened once: from then on it stays built
+    // LOW-CPU INTERFACE: the meters redraw at 30 fps in front, 4 fps behind another app, 1 fps minimised (the sound is never throttled).
+    // Not on the offscreen platform (--smoke, --shots, --film): there the window is never "active" and the film needs every frame.
+    function uiActivity() { if (Qt.platform.pluginName === "offscreen") return; engine.setUiActivity(visibility === Window.Minimized || visibility === Window.Hidden || !visible ? 0 : active ? 2 : 1) }
+    onActiveChanged: uiActivity()
+    onVisibilityChanged: uiActivity()
     Component.onCompleted: if (current === "mixer") mixerEver = true
     // MEMORY: a closed page's items are freed, but its JavaScript objects wait for the QML garbage collector, which runs only under
     // allocation pressure, so every page visit used to add ~5 MB that stayed. Collected once the user has settled on a page.
@@ -56,7 +61,7 @@ ApplicationWindow {
             Layout.fillWidth: true; implicitHeight: 48; color: Theme.chrome
             Rectangle { id: hdrLine; anchors.bottom: parent.bottom; width: parent.width; height: 2   // the colour line: orange, the section colour, violet, cyan, drifting
                 property real sh: 0
-                NumberAnimation on sh { from: 0; to: 1; duration: 9000; loops: Animation.Infinite; running: settings.colorMotion && root.visible }
+                NumberAnimation on sh { from: 0; to: 1; duration: 9000; loops: Animation.Infinite; running: settings.colorMotion && root.visible && engine.uiAwake }   // still when another app is in front: no full-window repaint 60 times a second
                 gradient: Gradient { orientation: Gradient.Horizontal
                     GradientStop { position: 0.0; color: Theme.orange } GradientStop { position: 0.15 + 0.25 * hdrLine.sh; color: Theme.accent }
                     GradientStop { position: 0.55 + 0.2 * (1 - hdrLine.sh); color: Theme.violet } GradientStop { position: 1.0; color: Theme.cyan } } }
@@ -307,6 +312,9 @@ ApplicationWindow {
         return bad
     }
     function openAnalyzer() { analyzer.open() }
+    // a VST's own interface inside the console (PluginDock); where that is not possible, its floating window
+    function openPluginDock(strip, slot, title) { const r = plugDock.openFor(strip, slot, title); if (r.ok) return ""; return engine.openPluginWindow(strip, slot) ? "" : (r.note || "") }
+    PluginDock { id: plugDock }
     MasterAnalyzer { id: analyzer }   // AMFB MASTER ANALYZER: opened from the master strip's ANALYZER button
     AudioSettings { id: audioSettings }   // AUDIO / MIDI SETTINGS: opened from the SOUND CARD page
     VolumeEnhancer { id: enhancer }   // AMFB VOLUME ENHANCER: opened from the master strip's ENHANCER button

@@ -27,9 +27,9 @@ Item {
             const g = c.createRadialGradient(r, r, 0, r, r, r);
             g.addColorStop(0.0, Qt.rgba(tint.r, tint.g, tint.b, a)); g.addColorStop(0.45, Qt.rgba(tint.r, tint.g, tint.b, a * 0.45)); g.addColorStop(1.0, Qt.rgba(tint.r, tint.g, tint.b, 0));
             c.fillStyle = g; c.fillRect(0, 0, size, size) }
-        SequentialAnimation on fx { running: au.motion && au.visible; loops: Animation.Infinite
+        SequentialAnimation on fx { running: au.motion && au.visible && (typeof engine === "undefined" || engine.uiAwake); loops: Animation.Infinite
             NumberAnimation { from: b.bx; to: b.bx + b.dx; duration: b.period; easing.type: Easing.InOutSine } NumberAnimation { from: b.bx + b.dx; to: b.bx; duration: b.period; easing.type: Easing.InOutSine } }
-        SequentialAnimation on fy { running: au.motion && au.visible; loops: Animation.Infinite
+        SequentialAnimation on fy { running: au.motion && au.visible && (typeof engine === "undefined" || engine.uiAwake); loops: Animation.Infinite
             NumberAnimation { from: b.by; to: b.by + b.dy; duration: b.period * 1.3; easing.type: Easing.InOutSine } NumberAnimation { from: b.by + b.dy; to: b.by; duration: b.period * 1.3; easing.type: Easing.InOutSine } }
     }
     Blob { tint: au.accent; size: au.s * 0.95; strength: 0.46; bx: 0.18; by: 0.22; dx: 0.22; dy: 0.18; period: 26000 }

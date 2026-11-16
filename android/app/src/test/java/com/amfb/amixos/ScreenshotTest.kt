@@ -30,12 +30,58 @@ class ScreenshotTest {
     private fun idle(ms: Long) { val end = System.currentTimeMillis() + ms; while (System.currentTimeMillis() < end) { shadowOf(Looper.getMainLooper()).idle(); Thread.sleep(50) } }
 
     @Test fun home() {
+        HomeActivity.bootShown = true   // the boot animation has its own test
         Prefs.remote(org.robolectric.RuntimeEnvironment.getApplication()).edit().putString("host", "192.168.1.20").putString("port", "8765").putString("token", "x")
-            .putString("lastName", "A mix OS 1.23.0.1").putString("lastPlan", "PRO").putInt("lastStrips", 20).commit()
+            .putString("lastName", "STUDIO-PC 1.24.0.0").putString("lastPlan", "PRO").putInt("lastStrips", 20).commit()
         val a = Robolectric.buildActivity(HomeActivity::class.java).setup().resume().get()
         shot(a.window.decorView.rootView, "home")
     }
 
+    @Test fun bootAnimation() {   // five moments of the boot animation side by side, then a tap skips it and HOME is left
+        val ctx = org.robolectric.RuntimeEnvironment.getApplication(); val w = 540; val h = 1170
+        val strip = android.graphics.Bitmap.createBitmap(w * 5, h, android.graphics.Bitmap.Config.ARGB_8888); val c = android.graphics.Canvas(strip)
+        val v = BootView(ctx); v.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY)); v.layout(0, 0, w, h)
+        floatArrayOf(0.12f, 0.30f, 0.50f, 0.70f, 0.88f).forEachIndexed { i, t -> v.t = t; c.save(); c.clipRect(i * w, 0, (i + 1) * w, h); c.translate((i * w).toFloat(), 0f); c.drawColor(android.graphics.Color.parseColor("#0B0F15")); v.draw(c); c.restore() }
+        java.io.File(System.getProperty("amfx.shots")).mkdirs(); java.io.FileOutputStream(java.io.File(System.getProperty("amfx.shots"), "boot-animation.png")).use { strip.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+        org.junit.Assert.assertEquals(1f, BootView.overshoot(1f), 1e-6f); org.junit.Assert.assertTrue((0..100).any { BootView.overshoot(it / 100f) > 1.02f })   // it lands past its place and settles back
+        org.junit.Assert.assertEquals(0f, BootView.alphaAt(1f), 1e-6f); org.junit.Assert.assertEquals(1f, BootView.alphaAt(0.5f), 1e-6f)
+        HomeActivity.bootShown = false; Prefs.remote(ctx).edit().putBoolean("bootAnim", true).commit()
+        Robolectric.buildActivity(HomeActivity::class.java).setup().get()
+        org.junit.Assert.assertTrue("the boot animation starts on a fresh app start", HomeActivity.bootShown)
+        var finished = 0; val tap = BootView(ctx) { finished++ }; tap.start(60_000)
+        tap.dispatchTouchEvent(android.view.MotionEvent.obtain(0, 0, android.view.MotionEvent.ACTION_DOWN, 10f, 10f, 0)); tap.dispatchTouchEvent(android.view.MotionEvent.obtain(0, 0, android.view.MotionEvent.ACTION_UP, 10f, 10f, 0))
+        org.junit.Assert.assertEquals("a tap skips it, once", 1, finished); org.junit.Assert.assertEquals(1f, tap.t, 1e-6f)
+        Prefs.remote(ctx).edit().putBoolean("bootAnim", false).commit(); HomeActivity.bootShown = false
+        Robolectric.buildActivity(HomeActivity::class.java).setup().get(); org.junit.Assert.assertFalse("switched off in SETTINGS: not shown", HomeActivity.bootShown)
+    }
+    @Test fun homeLive() {   // HOME with a real console: ONLINE, the engine, the master meter; Scenes and Tools pinned; recent pages; last scene
+        val port = System.getProperty("amfx.daemon").orEmpty(); if (port.isEmpty()) return
+        val ctx = org.robolectric.RuntimeEnvironment.getApplication(); HomeActivity.bootShown = true
+        Prefs.remote(ctx).edit().putString("host", "127.0.0.1").putString("port", port).putString("token", System.getenv("AMFX_TOKEN") ?: "").putString("lastName", "STUDIO-PC 1.24.0.0").putString("lastPlan", "PRO").putInt("lastStrips", 16).commit()
+        ctx.getSharedPreferences("home", 0).edit().putStringSet("pinned", setOf("Scenes", "ToolsActivity")).putString("recent", "RemoteActivity,EqActivity,PluginsActivity").putString("lastScene", "Sunday service").putString("newsSeen", "1.24.0.0").commit()
+        val a = Robolectric.buildActivity(HomeActivity::class.java).setup().resume().get(); idle(2500)
+        shot(a.window.decorView.rootView, "home-live")
+        val tiles = a.tiles().map { it.id }; org.junit.Assert.assertEquals(listOf("Scenes", "ToolsActivity"), Home.pinnedFirst(tiles, { it }, Home.pinned(ctx)).take(2))
+    }
+    @Test fun computerPlugins() {   // THE COMPUTER'S PLUG-INS from the phone (AMFX_RACKS=port,token: a service playing a rack with real test plug-ins)
+        val cfg = (System.getenv("AMFX_RACKS") ?: "").split(","); if (cfg.size != 2) return
+        val ctx = org.robolectric.RuntimeEnvironment.getApplication()
+        Prefs.remote(ctx).edit().putString("host", "127.0.0.1").putString("port", cfg[0]).putString("token", cfg[1]).commit()
+        val a = Robolectric.buildActivity(PluginsActivity::class.java).setup().get(); idle(2500)
+        shot(a.window.decorView.rootView, "phone-computer-racks")
+        @Suppress("UNCHECKED_CAST") val slots = ((a.liveRacks!!["racks"] as List<Map<String, Any?>>).first { (it["strip"] as Number).toInt() == 0 }["slots"] as List<Map<String, Any?>>)
+        println("COMPUTER RACK CH 1: " + slots.map { it["name"].toString() + " loaded=" + it["loaded"] + " " + it["error"] })
+        val vst3 = slots.first { it["format"] == "VST3" && it["loaded"] == true }; val slot = (vst3["slot"] as Number).toInt()
+        val c = com.amfb.amixos.remote.DaemonClient(com.amfb.amixos.remote.Endpoint("127.0.0.1", cfg[0].toInt(), cfg[1]))
+        @Suppress("UNCHECKED_CAST") val full = ((c.racks(0)["racks"] as List<Map<String, Any?>>)[0]["slots"] as List<Map<String, Any?>>).first { (it["slot"] as Number).toInt() == slot }
+        shot(a.faceView(c, 0, slot, full) {}, "phone-computer-plugin-face")
+        @Suppress("UNCHECKED_CAST") val p0 = (full["params"] as List<Map<String, Any?>>)[0]; val id = (p0["id"] as Number).toLong(); val want = if ((p0["value"] as Number).toDouble() < 0.5) 0.8 else 0.2
+        val r = c.pluginParam(0, slot, id, want); println("COMPUTER PLUG-IN " + vst3["name"] + ": " + p0["title"] + " -> " + r["text"])
+        @Suppress("UNCHECKED_CAST") val after = ((((c.racks(0)["racks"] as List<Map<String, Any?>>)[0]["slots"] as List<Map<String, Any?>>).first { (it["slot"] as Number).toInt() == slot })["params"] as List<Map<String, Any?>>)[0]
+        org.junit.Assert.assertEquals("the real VST3 on the computer took the phone's value", want, (after["value"] as Number).toDouble(), 0.01)
+        c.pluginBypass(0, slot, true); @Suppress("UNCHECKED_CAST") val byp = ((((c.racks(0)["racks"] as List<Map<String, Any?>>)[0]["slots"] as List<Map<String, Any?>>).first { (it["slot"] as Number).toInt() == slot })["bypass"])
+        org.junit.Assert.assertEquals(true, byp); c.pluginBypass(0, slot, false)
+    }
     @Test fun mixdown() {   // the empty screen (the file picker is not there on the JVM)
         val a = Robolectric.buildActivity(MixdownActivity::class.java).setup().get(); idle(300)
         shot(a.window.decorView.rootView, "mixdown")
@@ -49,6 +95,38 @@ class ScreenshotTest {
         shot(a.window.decorView.rootView, "settings")
     }
 
+    @Test fun eqFollowsConsole() {   // a band set on the console (or another remote) shows in the phone's EQ while it is open
+        val port = System.getProperty("amfx.daemon").orEmpty(); if (port.isEmpty()) return
+        val ctx = org.robolectric.RuntimeEnvironment.getApplication(); val tok = System.getenv("AMFX_TOKEN") ?: ""
+        Prefs.remote(ctx).edit().putString("host", "127.0.0.1").putString("port", port).putString("token", tok).commit(); Prefs.local(ctx).edit().remove("eq3").commit()
+        val c = com.amfb.amixos.remote.DaemonClient(com.amfb.amixos.remote.Endpoint("127.0.0.1", port.toInt(), tok))
+        c.eq(3, 2, "peaking", 2500.0, 1.4, 6.5)
+        val a = Robolectric.buildActivity(EqActivity::class.java, android.content.Intent(ctx, EqActivity::class.java).putExtra("strip", 3)).setup().resume().get(); idle(1800)
+        org.junit.Assert.assertEquals("peaking", a.curve.bands[2].type); org.junit.Assert.assertEquals(6.5, a.curve.bands[2].gainDb, 0.01); org.junit.Assert.assertEquals(2500.0, a.curve.bands[2].freq, 0.5)
+        c.eq(3, 2, "peaking", 1200.0, 1.0, -4.0)
+        repeat(12) { shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(250)); Thread.sleep(120) }   // the screen's own once-a-second check (the test clock moves only when told)
+        org.junit.Assert.assertEquals("followed while open", -4.0, a.curve.bands[2].gainDb, 0.01)
+        shot(a.window.decorView.rootView, "eq-follows-console"); c.eq(3, 2, "off", 1200.0, 1.0, 0.0)
+    }
+    @Test fun rtaEq() {   // RTA EQ against a real service: the RTA and the program EQ go through it; the test device is silent, so a
+        // programme-like spectrum is put on the graph for the picture, and AUTO EQ's proposal is drawn from it
+        val port = System.getProperty("amfx.daemon").orEmpty(); if (port.isEmpty()) return
+        val ctx = org.robolectric.RuntimeEnvironment.getApplication(); val tok = System.getenv("AMFX_TOKEN") ?: ""
+        Prefs.remote(ctx).edit().putString("host", "127.0.0.1").putString("port", port).putString("token", tok).commit()
+        val c = com.amfb.amixos.remote.DaemonClient(com.amfb.amixos.remote.Endpoint("127.0.0.1", port.toInt(), tok))
+        c.programEq(listOf(0.0, 0.0, 0.0, -2.0, 0.0, 0.0, 1.5, 0.0, 0.0, 0.0), true)
+        val a = Robolectric.buildActivity(RtaEqActivity::class.java).setup().resume().get(); idle(2500)
+        val r = c.rtaNow(); println("RTA from the service: " + (r?.f?.size ?: 0) + " bands, source " + r?.src)
+        org.junit.Assert.assertEquals("the phone asked for the master's RTA", -1, r?.src); org.junit.Assert.assertEquals(60, r!!.f.size)
+        org.junit.Assert.assertEquals("the program EQ came from the service", -2.0, a.graph.gains[3], 1e-9)
+        val db = r.f.map { f -> -38 - 4 * kotlin.math.log2(f / 1000) * (if (f > 1000) 1.6 else 0.4) + (if (kotlin.math.abs(kotlin.math.log2(f / 250)) < 0.6) 7 else 0) }
+        a.graph.spectrum = com.amfb.amixos.remote.Rta(-1, r.f, db); a.graph.proposal = RtaEq.autoEq(RtaEq.octaves(r.f, db), RtaEq.Target.FLAT)
+        println("AUTO EQ (FLAT): " + a.graph.proposal!!.joinToString())
+        shot(a.window.decorView.rootView, "rta-eq")
+        c.programEq(a.graph.proposal!!.toList(), true)
+        org.junit.Assert.assertEquals(a.graph.proposal!!.toList(), c.programEqNow().gains)
+        c.programEq(List(10) { 0.0 }, false); c.rta(null)
+    }
     @Test fun eq() {
         val i = android.content.Intent(org.robolectric.RuntimeEnvironment.getApplication(), EqActivity::class.java).putExtra("strip", 0).putExtra("name", "VOCAL")
         val a = Robolectric.buildActivity(EqActivity::class.java, i).setup().get()
@@ -89,14 +167,16 @@ class ScreenshotTest {
     }
     @Test fun phoneMixer() {   // no native engine on the JVM: the screen and a rack are drawn from saved choices and made-up engine JSON
         val ctx = org.robolectric.RuntimeEnvironment.getApplication()
-        Prefs.local(ctx).edit().putInt("inChannels", 2).putFloat("db0", -3f).putString(LocalMixerActivity.rackKey(0), "comp|plate||").putString(LocalMixerActivity.rackKey(-1), "maximizer|||").commit()
+        Prefs.local(ctx).edit().putInt("inChannels", 2).putFloat("db0", -3f).putString(LocalMixerActivity.rackKey(0), "comp|plate|delay|drive").putString(LocalMixerActivity.rackKey(-1), "maximizer|||").commit()
         val a = Robolectric.buildActivity(LocalMixerActivity::class.java).setup().get()
         shot(a.window.decorView.rootView, "phone-mixer")
         a.paintIo(true, true, true, 0.12f, 0.35f, 0, 0); shot(a.window.decorView.rootView, "phone-mixer-io-live")        // the INPUT / OUTPUT indicator while it runs
         a.paintIo(true, false, true, 0f, 0f, 0, 0); shot(a.window.decorView.rootView, "phone-mixer-io-no-input")         // no microphone: shown red
         val cat = listOf("comp" to "COMPRESSOR", "plate" to "PLATE REVERB", "delay" to "DELAY", "chorus" to "CHORUS")
         val js = mapOf(0 to "{\"kind\":\"comp\",\"name\":\"COMPRESSOR\",\"bypass\":false,\"mix\":1.0,\"params\":[{\"id\":\"thr\",\"title\":\"THRESHOLD\",\"value\":0.55,\"default\":0.5,\"text\":\"-18.0 dB\"},{\"id\":\"ratio\",\"title\":\"RATIO\",\"value\":0.3,\"default\":0.3,\"text\":\"4.0:1\"}]}",
-            1 to "{\"kind\":\"plate\",\"name\":\"PLATE REVERB\",\"bypass\":true,\"mix\":0.25,\"params\":[{\"id\":\"decay\",\"title\":\"DECAY\",\"value\":0.4,\"default\":0.4,\"text\":\"1.8 s\"}]}")
+            1 to "{\"kind\":\"plate\",\"name\":\"PLATE REVERB\",\"bypass\":true,\"mix\":0.25,\"params\":[{\"id\":\"decay\",\"title\":\"DECAY\",\"value\":0.4,\"default\":0.4,\"text\":\"1.8 s\"}]}",
+            2 to "{\"kind\":\"delay\",\"name\":\"TAPE DELAY\",\"bypass\":false,\"mix\":0.3,\"params\":[{\"id\":\"time\",\"title\":\"TIME\",\"value\":0.35,\"default\":0.3,\"text\":\"375 ms\"},{\"id\":\"fb\",\"title\":\"FEEDBACK\",\"value\":0.42,\"default\":0.3,\"text\":\"42 %\"},{\"id\":\"tone\",\"title\":\"TONE\",\"value\":0.6,\"default\":0.5,\"text\":\"4.8 kHz\"}]}",
+            3 to "{\"kind\":\"drive\",\"name\":\"ANALOG DRIVE\",\"bypass\":false,\"mix\":1.0,\"params\":[{\"id\":\"drive\",\"title\":\"DRIVE\",\"value\":0.7,\"default\":0.3,\"text\":\"+14 dB\"},{\"id\":\"out\",\"title\":\"OUTPUT\",\"value\":0.45,\"default\":0.5,\"text\":\"-1.5 dB\"}]}")
         shot(a.rackPanel(0, cat, { js[it] ?: "null" }, {}), "phone-mixer-rack")
     }
     @Test fun consoles() {   // the paired-consoles list, as the CONSOLES dialog shows it

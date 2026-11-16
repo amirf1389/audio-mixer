@@ -20,30 +20,33 @@ import android.widget.TextView
 class KnobView(ctx: Context, private val accent: Int = 0xFFEA580C.toInt()) : View(ctx) {
     var value = 0f; set(v) { field = v.coerceIn(-1f, 1f); invalidate() }
     var onChange: ((Float) -> Unit)? = null
+    /** a strip knob other than pan: its name above the cap, its value in its own words, where a double tap (and the snap) sends it */
+    var title: String? = null; var fmt: ((Float) -> String)? = null; var home = 0f; var dim = false; set(v) { field = v; invalidate() }
     var onTouchState: ((Boolean) -> Unit)? = null
     private val p = Paint(Paint.ANTI_ALIAS_FLAG); private val arc = RectF()
     private var downX = 0f; private var downY = 0f; private var downV = 0f; private var lastTap = 0L
     companion object { fun label(v: Float): String = if (Math.abs(v) < 0.02f) "C" else if (v < 0) "L" + Math.round(-v * 100) else "R" + Math.round(v * 100) }
-    override fun onMeasure(w: Int, h: Int) { val s = resolveSize(120, w); setMeasuredDimension(s, (s * 1.02f).toInt()) }
+    override fun onMeasure(w: Int, h: Int) { val s = resolveSize(120, w); setMeasuredDimension(s, (s * (if (title != null) 1.18f else 1.02f)).toInt()) }
     override fun onDraw(c: Canvas) {
-        val w = width.toFloat(); val r = w * 0.30f; val cx = w / 2; val cy = r + w * 0.10f
+        val w = width.toFloat(); val r = w * 0.30f; val cx = w / 2; val cy = r + w * 0.10f + (if (title != null) w * 0.16f else 0f)
         // the scale: 270 degrees, from 135 (left) through 270 (top = centre) to 45 (right)
         arc.set(cx - r - 9, cy - r - 9, cx + r + 9, cy + r + 9); p.style = Paint.Style.STROKE; p.strokeCap = Paint.Cap.ROUND; p.strokeWidth = 6f
         p.color = 0xFF2A3342.toInt(); c.drawArc(arc, 135f, 270f, false, p)
-        p.color = accent; if (value >= 0) c.drawArc(arc, 270f, 135f * value, false, p) else c.drawArc(arc, 270f + 135f * value, -135f * value, false, p)
+        title?.let { p.style = Paint.Style.FILL; p.color = 0xFF8B98A8.toInt(); p.textSize = w * 0.15f; p.typeface = Typeface.DEFAULT_BOLD; p.textAlign = Paint.Align.CENTER; c.drawText(it, cx, w * 0.12f, p); p.style = Paint.Style.STROKE }
+        p.color = if (dim) 0xFF5B6573.toInt() else accent; if (value >= 0) c.drawArc(arc, 270f, 135f * value, false, p) else c.drawArc(arc, 270f + 135f * value, -135f * value, false, p)
         p.style = Paint.Style.FILL; p.color = 0xFF10151D.toInt(); c.drawCircle(cx, cy + 3, r, p)          // the shadow under the cap
         p.color = 0xFF2B3443.toInt(); c.drawCircle(cx, cy, r, p); p.color = 0xFF3A4556.toInt(); c.drawCircle(cx, cy - r * 0.12f, r * 0.82f, p)
         val a = Math.toRadians((270 + 135.0 * value)); p.color = Color.WHITE; p.strokeWidth = 6f; p.style = Paint.Style.STROKE
         c.drawLine(cx + (Math.cos(a) * r * 0.35).toFloat(), cy + (Math.sin(a) * r * 0.35).toFloat(), cx + (Math.cos(a) * r * 0.9).toFloat(), cy + (Math.sin(a) * r * 0.9).toFloat(), p)
         p.style = Paint.Style.FILL; p.color = 0xFF8B98A8.toInt(); p.textSize = w * 0.19f; p.typeface = Typeface.MONOSPACE; p.textAlign = Paint.Align.CENTER
-        c.drawText(label(value), cx, height - w * 0.03f, p)
+        c.drawText(fmt?.invoke(value) ?: label(value), cx, height - w * 0.03f, p)
     }
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(e: MotionEvent): Boolean {
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> { parent?.requestDisallowInterceptTouchEvent(true); downX = e.x; downY = e.y; downV = value; onTouchState?.invoke(true)
-                val now = System.currentTimeMillis(); if (now - lastTap < 300) { value = 0f; onChange?.invoke(0f) }; lastTap = now }
-            MotionEvent.ACTION_MOVE -> { val v = (downV + ((downY - e.y) + (e.x - downX)) / 220f).coerceIn(-1f, 1f); val snapped = if (Math.abs(v) < 0.04f) 0f else v
+                val now = System.currentTimeMillis(); if (now - lastTap < 300) { value = home; onChange?.invoke(home) }; lastTap = now }
+            MotionEvent.ACTION_MOVE -> { val v = (downV + ((downY - e.y) + (e.x - downX)) / 220f).coerceIn(-1f, 1f); val snapped = if (Math.abs(v - home) < 0.04f) home else v
                 if (snapped != value) { value = snapped; onChange?.invoke(snapped) } }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> onTouchState?.invoke(false)
         }

@@ -251,6 +251,12 @@ void Mixer::process5(const float* const* in, std::size_t frames, float* const* o
   }
   timeMs_ += static_cast<double>(frames) * 1000.0 / fs_; for (auto& s : strips_) s.meter.end(timeMs_);
 }
+void Mixer::applyOutputTrim(float* const* ch, int nch, std::size_t n) {
+  if (trimLin_ == 1.0 && trimTarget_ == 1.0) return;
+  const double a = trimLin_, b = trimTarget_, step = n ? (b - a) / static_cast<double>(n) : 0.0;
+  for (int c = 0; c < nch; ++c) { double g = a; for (std::size_t i = 0; i < n; ++i) { g += step; ch[c][i] = static_cast<float>(ch[c][i] * g); } }
+  trimLin_ = b;
+}
 void Mixer::setMute(int s, bool on) { if (s >= 0 && s < n_) strips_[s].mute = on; }
 void Mixer::setSolo(int s, bool on) { if (s >= 0 && s < n_) strips_[s].solo = on; }
 void Mixer::setMasterDb(double db) { db = std::min(db, 10.0); masterDb_ = db; masterLin_ = db <= -60.0 ? 0.0 : linOf(db); }
@@ -352,14 +358,14 @@ void Mixer::process(const float* const* in, std::size_t frames, float* outL, flo
       }
       outL[done + i] = static_cast<float>(l); outR[done + i] = static_cast<float>(r);
     }
+    master_[0].add(outL + done, n); master_[1].add(outR + done, n);
+    loudness_.feed(outL + done, outR + done, n);
+    phase_ = phaseCorrelation(outL + done, outR + done, n);
     if (outBits_) {   // TPDF dither at the device depth: the last thing before the converter (after the limiter; adds at most one LSB)
       float* ch[2] = {outL + done, outR + done}; const double q = 1.0 / static_cast<double>(1u << (outBits_ - 1));
       for (int c = 0; c < 2; ++c) for (std::size_t i = 0; i < n; ++i) { rng_ ^= rng_ << 13; rng_ ^= rng_ >> 17; rng_ ^= rng_ << 5; const double r1 = static_cast<double>(rng_) / 4294967296.0; rng_ ^= rng_ << 13; rng_ ^= rng_ >> 17; rng_ ^= rng_ << 5; const double r2 = static_cast<double>(rng_) / 4294967296.0; ch[c][i] = static_cast<float>(std::floor((ch[c][i] + (r1 - r2) * q) / q + 0.5) * q); }
     }
     am::frame::refTap().write(outL + done, outR + done, n);   // the far-end reference for the echo cancellers (what the speakers / the phone line get)
-    master_[0].add(outL + done, n); master_[1].add(outR + done, n);
-    loudness_.feed(outL + done, outR + done, n);
-    phase_ = phaseCorrelation(outL + done, outR + done, n);
   }
   timeMs_ += static_cast<double>(frames) * 1000.0 / fs_;
   for (auto& s : strips_) s.meter.end(timeMs_);

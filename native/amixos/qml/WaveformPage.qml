@@ -22,7 +22,7 @@ Item {
         else { frameL = engine.scopeFrame(source === 1 ? 1 : 0, windowMs, 512, trigger); frameR = source === 2 ? engine.scopeFrame(1, windowMs, 512, trigger) : { samples: [] } }
         canvas.requestPaint()
     }
-    Timer { interval: 50; running: page.visible; repeat: true; onTriggered: page.refresh() }
+    Timer { interval: engine.uiAwake ? 50 : 500; running: page.visible; repeat: true; onTriggered: page.refresh() }
     Component.onCompleted: refresh()
     function dbOf(v) { return v > 1e-6 ? (20 * Math.log(v) / Math.LN10).toFixed(1) + " dBFS" : "-inf" }
     ColumnLayout {
