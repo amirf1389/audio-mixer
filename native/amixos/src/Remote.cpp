@@ -34,12 +34,16 @@ Remote::Remote(Engine* engine, QObject* parent) : QObject(parent), engine_(engin
 QVector<Remote::SyncStrip> Remote::consoleMix() const {
   QVector<SyncStrip> v; const QVariantList l = engine_->stripState(); const int n = qBound(1, engine_->licensedChannels(), 32);
   for (int i = 0; i < n && i < l.size(); ++i) { const QVariantMap m = l[i].toMap(); SyncStrip s; s.db = m.value("db").toDouble(); s.pan = m.value("pan").toDouble();
-    s.mute = m.value("mute").toBool(); s.solo = m.value("solo").toBool(); s.name = syncName(i, m.value("name").toString()); v << s; }
+    s.mute = m.value("mute").toBool(); s.solo = m.value("solo").toBool(); s.name = syncName(i, m.value("name").toString());
+    s.trim = engine_->trim(i); const QVariantMap t = engine_->channelEq(i); s.low = t.value("low").toDouble(); s.mid = t.value("mid").toDouble(); s.midHz = t.value("midFreq", 1000).toDouble(); s.high = t.value("high").toDouble();
+    s.toneOn = t.value("on", true).toBool() || (std::abs(s.low) < 0.01 && std::abs(s.mid) < 0.01 && std::abs(s.high) < 0.01);   // flat counts as on: the console reports flat bands as off
+    v << s; }
   return v;
 }
 void Remote::writeSeed() {
   base_ = consoleMix(); baseMaster_ = engine_->masterDb(); v_ = 0; posting_ = 0; stale_ = getting_ = false; token_.clear(); syncedChanges_ = 0; remotes_ = 0; touched_.clear();
-  QVariantList l; for (const SyncStrip& s : base_) l << QVariantMap{{"name", s.name}, {"db", s.db}, {"pan", s.pan}, {"mute", s.mute}, {"solo", s.solo}};
+  QVariantList l; for (const SyncStrip& s : base_) l << QVariantMap{{"name", s.name}, {"db", s.db}, {"pan", s.pan}, {"mute", s.mute}, {"solo", s.solo}, {"trim", s.trim},
+                                                    {"tone", QVariantMap{{"low", s.low}, {"mid", s.mid}, {"midHz", s.midHz}, {"high", s.high}, {"on", s.toneOn}}}};
   QFile f(QString::fromStdString(am::paths::file("remote-seed.json")));
   baseSet_ = consoleSettings();   // the service starts with the console's settings too
   QVariantList racks; const QVariantList ss = engine_->stripState();   // and with the console's plug-ins (with their state): they keep sounding
@@ -84,7 +88,10 @@ void Remote::syncTick() {
     if (moved(x.pan, b.pan)) { post({{"op", "pan"}, {"strip", i}, {"pan", x.pan}}); b.pan = x.pan; }
     if (x.mute != b.mute) { post({{"op", "mute"}, {"strip", i}, {"on", x.mute}}); b.mute = x.mute; }
     if (x.solo != b.solo) { post({{"op", "solo"}, {"strip", i}, {"on", x.solo}}); b.solo = x.solo; }
-    if (x.name != b.name) { post({{"op", "name"}, {"strip", i}, {"name", x.name}}); b.name = x.name; } }
+    if (x.name != b.name) { post({{"op", "name"}, {"strip", i}, {"name", x.name}}); b.name = x.name; }
+    if (moved(x.trim, b.trim)) { post({{"op", "trim"}, {"strip", i}, {"db", x.trim}}); b.trim = x.trim; }
+    if (moved(x.low, b.low) || moved(x.mid, b.mid) || std::abs(x.midHz - b.midHz) > 1 || moved(x.high, b.high) || x.toneOn != b.toneOn) {
+      post({{"op", "tone"}, {"strip", i}, {"low", x.low}, {"mid", x.mid}, {"midHz", x.midHz}, {"high", x.high}, {"on", x.toneOn}}); b.low = x.low; b.mid = x.mid; b.midHz = x.midHz; b.high = x.high; b.toneOn = x.toneOn; } }
   if (moved(engine_->masterDb(), baseMaster_)) { baseMaster_ = engine_->masterDb(); post({{"op", "master"}, {"db", baseMaster_}}); }
   { const QVariantMap cs = consoleSettings();   // a setting changed on the console goes out (numbers compared with a small tolerance)
     for (auto it = cs.constBegin(); it != cs.constEnd(); ++it) { const QVariant b = baseSet_.value(it.key());
@@ -113,7 +120,11 @@ void Remote::syncTick() {
       if (std::abs(pan - b.pan) > 0.005) { b.pan = pan; engine_->setPan(i, pan); ++n; }
       if (mu != b.mute) { b.mute = mu; engine_->setMute(i, mu); ++n; }
       if (so != b.solo) { b.solo = so; engine_->setSolo(i, so); ++n; }
-      if (!nm.isEmpty() && nm != b.name) { b.name = nm; engine_->setName(i, nm == syncName(i, QString()) ? QString() : nm); ++n; } }
+      if (!nm.isEmpty() && nm != b.name) { b.name = nm; engine_->setName(i, nm == syncName(i, QString()) ? QString() : nm); ++n; }
+      if (m.contains("trim") && std::abs(m.value("trim").toDouble() - b.trim) > 0.05) { b.trim = m.value("trim").toDouble(); engine_->setTrim(i, b.trim); ++n; }
+      if (m.contains("tone")) { const QVariantMap t = m.value("tone").toMap(); const double lo = t.value("low").toDouble(), mi = t.value("mid").toDouble(), hz = t.value("midHz", 1000).toDouble(), hi = t.value("high").toDouble(); const bool on = t.value("on", true).toBool();
+        if (std::abs(lo - b.low) > 0.05 || std::abs(mi - b.mid) > 0.05 || std::abs(hz - b.midHz) > 1 || std::abs(hi - b.high) > 0.05 || on != b.toneOn) {
+          b.low = lo; b.mid = mi; b.midHz = hz; b.high = hi; b.toneOn = on; engine_->setChannelEq(i, lo, mi, hz, hi, on); ++n; } } }
     const double md = o.value("master").toMap().value("db", baseMaster_).toDouble();
     if (std::abs(md - baseMaster_) > 0.05) { baseMaster_ = md; engine_->setMaster(md); touched_[-1] = lastTouch_ = QDateTime::currentMSecsSinceEpoch(); ++n; }
     if (n) { syncedChanges_ += n; dApplied_ += n; emit synced(); } });   // the console's own follow-ups (a stereo link moving the partner) go out on the next tick

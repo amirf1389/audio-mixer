@@ -371,6 +371,11 @@ json::Value Daemon::racks(int onlyStrip, bool params, bool states) const {
 }
 double Daemon::trimForLevel(double l) { return l <= 0.0005 ? -120.0 : std::max(-120.0, std::min(0.0, 30.0 * std::log10(l))); }
 bool Daemon::windowsSetsLevel() const { return rt_ && rt_->backendName() == "wasapi" && !rt_->exclusive() && (rt_->outDevice().empty() || rt_->outDevice() == "-"); }
+void Daemon::pushTone(Runtime& rt, int i) const {   // the same bands as the console's Engine::setChannelEq
+  const Strip& st = strips_[static_cast<std::size_t>(i)]; const int f = dsp::kChannelEqFirst;
+  auto put = [&](int b, dsp::FilterType t, double hz, double q, double g) { rt.setEqBand(i, b, st.toneOn && std::fabs(g) > 0.01 ? t : dsp::FilterType::Off, hz, q, g); };
+  put(f, dsp::FilterType::LowShelf, 100, 0.71, st.low); put(f + 1, dsp::FilterType::Peaking, st.midHz, 0.9, st.mid); put(f + 2, dsp::FilterType::HighShelf, 10000, 0.71, st.high);
+}
 double Daemon::outTrim() const {   // GAIN MODE's trim (the same rule as the console's Engine::windowsTrimDb)
   const int v = winVol_.load(); return (set_.winGain && v >= 0 && !windowsSetsLevel()) ? trimForLevel(v / 100.0) : 0.0;
 }
@@ -400,6 +405,7 @@ json::Value Daemon::state() const {
   for (std::size_t i = 0; i < strips_.size(); ++i) {
     const Strip& s = strips_[i]; json::Value v = json::Value::object();
     v.set("id", static_cast<int>(i)); v.set("name", s.name); v.set("db", s.db); v.set("pan", s.pan); v.set("mute", s.mute); v.set("solo", s.solo);
+    v.set("trim", s.trim); json::Value t = json::Value::object(); t.set("low", s.low); t.set("mid", s.mid); t.set("midHz", s.midHz); t.set("high", s.high); t.set("on", s.toneOn); v.set("tone", t);
     strips.push(v);
   }
   o.set("strips", strips);
@@ -450,7 +456,9 @@ bool Daemon::loadSeed(const std::string& file, std::string& err) {
   const json::Value& l = o["strips"];
   for (std::size_t i = 0; i < strips_.size() && i < l.size(); ++i) { const json::Value& v = l.at(i); Strip& s = strips_[i];
     s.name = v["name"].asString(s.name).substr(0, 24); s.db = std::max(-120.0, std::min(10.0, v["db"].asNumber(s.db))); s.pan = std::max(-1.0, std::min(1.0, v["pan"].asNumber(s.pan)));
-    s.mute = v["mute"].asBool(s.mute); s.solo = v["solo"].asBool(s.solo); }
+    s.mute = v["mute"].asBool(s.mute); s.solo = v["solo"].asBool(s.solo); s.trim = std::max(-24.0, std::min(24.0, v["trim"].asNumber(s.trim)));
+    if (v["tone"].isObject()) { const json::Value& t = v["tone"]; auto g = [](double x) { return std::max(-15.0, std::min(15.0, x)); };
+      s.low = g(t["low"].asNumber(s.low)); s.mid = g(t["mid"].asNumber(s.mid)); s.high = g(t["high"].asNumber(s.high)); s.midHz = std::max(100.0, std::min(8000.0, t["midHz"].asNumber(s.midHz))); s.toneOn = t["on"].asBool(s.toneOn); } }
   if (o["master"].isObject()) masterDb_ = std::max(-120.0, std::min(10.0, o["master"]["db"].asNumber(masterDb_)));
   if (o["masterChain"].isObject()) {   // the console's RTA EQ and mastering: they keep sounding while the service plays
     const json::Value& m = o["masterChain"]; mp_.eqOn = m["eqOn"].asBool(mp_.eqOn);
@@ -503,7 +511,8 @@ json::Value Daemon::apply(const json::Value& cmd, std::string& err) {
     if (!rt->open(cfg, err)) { lastError_ = err; return {}; }
     if (!rt->start(err)) { lastError_ = err; return {}; }
     // replay the console onto the fresh runtime so that what the phone shows is what sounds
-    for (int i = 0; i < opt_.strips; ++i) { const Strip& st = strips_[static_cast<std::size_t>(i)]; rt->setGainDb(i, st.db); rt->setPan(i, st.pan); rt->setMute(i, st.mute); rt->setSolo(i, st.solo); }
+    for (int i = 0; i < opt_.strips; ++i) { const Strip& st = strips_[static_cast<std::size_t>(i)]; rt->setGainDb(i, st.db); rt->setPan(i, st.pan); rt->setMute(i, st.mute); rt->setSolo(i, st.solo);
+      rt->setTrimDb(i, st.trim); pushTone(*rt, i); }
     for (int k = 0; k < kMaxBuses; ++k) { rt->setBusLevel(k, buses_[k].db); rt->setBusMute(k, buses_[k].mute); rt->setBusReturn(k, buses_[k].returnDb); }
     pushSettings(*rt); loadRacks(*rt); rt->setTap(&rta_);
     mp_.fs = rt->sampleRate(); master_.set(mp_); rt->setMasterProcessor(&master_);   // the console's RTA EQ and mastering, as handed over
@@ -592,7 +601,12 @@ json::Value Daemon::apply(const json::Value& cmd, std::string& err) {
   }
   if (op == "inRoute") { if (!strip(s) || !need()) return {}; rt_->setInputRoute(s, cmd["input"].asInt(-1)); return ok; }
   if (op == "outRoute") { if (!need()) return {}; const int o = cmd["out"].asInt(-1); if (o < 0 || o >= Runtime::kMaxOutputs) { err = "out of range"; return {}; } rt_->setOutputRoute(o, cmd["source"].asInt(0)); return ok; }
-  if (op == "trim") { if (!strip(s) || !need()) return {}; rt_->setTrimDb(s, clampDb(cmd["db"].asNumber(0), -24, 24)); return ok; }
+  if (op == "trim") { if (!strip(s)) return {}; Strip& st = strips_[static_cast<std::size_t>(s)]; st.trim = clampDb(cmd["db"].asNumber(0), -24, 24); if (rt_) rt_->setTrimDb(s, st.trim); ++version_; return ok; }
+  if (op == "tone") {   // the analog 3-band channel EQ: any of low / mid / midHz / high / on; the rest stays
+    if (!strip(s)) return {}; Strip& st = strips_[static_cast<std::size_t>(s)]; auto g = [](double v) { return std::max(-15.0, std::min(15.0, v)); };
+    if (cmd.has("low")) st.low = g(cmd["low"].asNumber(st.low)); if (cmd.has("mid")) st.mid = g(cmd["mid"].asNumber(st.mid)); if (cmd.has("high")) st.high = g(cmd["high"].asNumber(st.high));
+    if (cmd.has("midHz")) st.midHz = std::max(100.0, std::min(8000.0, cmd["midHz"].asNumber(st.midHz))); if (cmd.has("on")) st.toneOn = cmd["on"].asBool(st.toneOn);
+    if (rt_) pushTone(*rt_, s); ++version_; return ok; }
   if (op == "clearClips") { if (rt_) rt_->clearClips(); return ok; }
   err = op.empty() ? "no op" : "unknown op \"" + op + "\""; return {};
 }

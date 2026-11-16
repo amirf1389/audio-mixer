@@ -198,6 +198,15 @@ int main() {
     CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/tokens/revoke", "{\"id\":\"" + qid + "\"}", auth, status, body) && status == 200 && Value::parse(body, ok)["closed"].asInt() == 1);
     bool closed = false; for (int i = 0; i < 60 && !closed; ++i) { if (!qws.read(t, op)) { closed = true; break; } closed = t.find("\"kicked\":true") != std::string::npos; } CHECK(closed); qws.close();
     mws.close(); bool none = false; for (int i = 0; i < 40 && !none; ++i) { std::this_thread::sleep_for(std::chrono::milliseconds(25)); none = d.links().size() == 0 && d.remotes() == 0; } CHECK(none); }
+  { // CHANNEL GAIN and the analog 3-BAND channel EQ: kept in the state (every remote shows them), clamped, partial updates keep the rest
+    const auto ctl = [&](const std::string& j) { return am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", j, auth, status, body) ? status : -1; };
+    CHECK(ctl("{\"op\":\"trim\",\"strip\":2,\"db\":30}") == 200 && d.state()["strips"].at(2)["trim"].asNumber() == 24);
+    CHECK(ctl("{\"op\":\"tone\",\"strip\":2,\"low\":4,\"mid\":-20,\"midHz\":20000,\"high\":2.5}") == 200);
+    { const Value t = d.state()["strips"].at(2)["tone"]; CHECK(t["low"].asNumber() == 4 && t["mid"].asNumber() == -15 && t["midHz"].asNumber() == 8000 && t["high"].asNumber() == 2.5 && t["on"].asBool()); }
+    CHECK(ctl("{\"op\":\"tone\",\"strip\":2,\"high\":-3,\"on\":false}") == 200);
+    { const Value t = d.state()["strips"].at(2)["tone"]; CHECK(t["low"].asNumber() == 4 && t["high"].asNumber() == -3 && !t["on"].asBool()); }
+    CHECK(ctl("{\"op\":\"tone\",\"strip\":99,\"low\":1}") == 400);
+    CHECK(ctl("{\"op\":\"trim\",\"strip\":2,\"db\":0}") == 200 && ctl("{\"op\":\"tone\",\"strip\":2,\"low\":0,\"mid\":0,\"midHz\":1000,\"high\":0,\"on\":true}") == 200); }
   { // CONSOLE SETTINGS over the remote, and the WINDOWS VOLUME with GAIN MODE (a stand-in for the Windows slider)
     const auto set = [&](const std::string& k, const std::string& v) { return am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"setting\",\"key\":\"" + k + "\",\"value\":" + v + "}", auth, status, body) ? status : -1; };
     CHECK(set("width", "3") == 200 && d.state()["settings"]["width"].asNumber() == 2);                       // clamped to 0..2

@@ -357,4 +357,5 @@
     <string name="rta_help">The cyan spectrum is the live sound of the source you pick. Drag an orange dot up or down to shape the master program EQ (10 octave bands). AUTO EQ measures for 6 seconds and proposes a correction towards the target; nothing changes until you press APPLY.</string>
     <string name="home_rta">RTA EQ</string>
     <string name="home_rta_sub">Master EQ on the live spectrum, AUTO EQ</string>
+    <string name="set_tone">GAIN and 3-band EQ on every strip</string>
 </resources>

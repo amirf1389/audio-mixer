@@ -22,7 +22,15 @@ button.on.m,button.on.red{background:var(--red);border-color:var(--red)}button.o
 .page{display:none}.bar{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap}.bar .sp{flex:1}
 #strips{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--cw),1fr));gap:8px}
 .ch{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 6px;display:flex;flex-direction:column;align-items:center;gap:6px}
-.ch.master{border-color:var(--accent)}.nm{font-weight:700;font-size:11px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ch.master{border-color:var(--accent)}
+#strips.scroll{display:flex;overflow-x:auto;scroll-snap-type:x proximity;scroll-behavior:smooth;padding-bottom:6px}#strips.scroll .ch{flex:0 0 var(--cw);scroll-snap-align:start}
+.paddle{position:sticky;display:flex;gap:6px;align-items:center}.paddle button{min-width:44px;font-size:16px}
+.ks{display:flex;flex-direction:column;gap:2px;width:100%;align-items:center}.ks .eqb{width:100%;padding:3px 0;min-height:24px;font-size:10px}
+.kb{display:flex;flex-direction:column;align-items:center;cursor:ns-resize;touch-action:none;user-select:none}
+.kb i{display:block;width:34px;height:34px;border-radius:50%;background:radial-gradient(circle at 50% 40%,#2b3647,#0d121a 70%);border:1px solid var(--line);position:relative}
+.kb i::after{content:"";position:absolute;left:50%;top:3px;width:2px;height:12px;margin-left:-1px;border-radius:1px;background:var(--kc,var(--accent));transform-origin:50% 14px;transform:rotate(var(--a,0deg))}
+.kb b{font:700 8px ui-monospace,monospace;color:var(--dim);letter-spacing:.06em}.kb em{font:9px ui-monospace,monospace;color:var(--cyan);font-style:normal}
+.kb.off i::after{background:var(--dim)}.nm{font-weight:700;font-size:11px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .fz{display:flex;gap:6px;height:var(--fh);align-items:stretch}
 input[type=range].f{writing-mode:vertical-lr;direction:rtl;width:30px;height:100%;padding:0;letter-spacing:0;accent-color:var(--accent)}
 input[type=range].h{width:100%;padding:0;letter-spacing:0;accent-color:var(--accent);height:30px}
@@ -71,8 +79,8 @@ kbd{font:11px ui-monospace,monospace;border:1px solid var(--line);border-radius:
 <button class="pri" id="go">PAIR</button><p id="perr" class="err"></p>
 </section>
 <section id="mix" class="page">
-<div class="bar"><span id="pages" class="seg"></span><span class="sp"></span><button id="muteAll" class="sm">MUTE ALL</button><button id="unmuteAll" class="sm">UNMUTE ALL</button><button id="clearSolo" class="sm">CLEAR SOLO</button><button id="resetF" class="sm">RESET FADERS</button><button id="lockF" class="sm">LOCK FADERS</button><button id="clip" class="sm">CLEAR CLIPS</button></div>
-<p class="note" style="margin:-4px 0 10px">Tap a channel's name to open it on CHANNEL (EQ, dynamics, sends).</p>
+<div class="bar"><span id="pages" class="seg"></span><span class="paddle" id="paddle"><button id="padL" aria-label="scroll left">◀</button><button id="padR" aria-label="scroll right">▶</button></span><button id="knobsB" class="sm">GAIN + EQ</button><button id="scrollB" class="sm">SCROLL</button><span class="sp"></span><button id="muteAll" class="sm">MUTE ALL</button><button id="unmuteAll" class="sm">UNMUTE ALL</button><button id="clearSolo" class="sm">CLEAR SOLO</button><button id="resetF" class="sm">RESET FADERS</button><button id="lockF" class="sm">LOCK FADERS</button><button id="clip" class="sm">CLEAR CLIPS</button></div>
+<p class="note" style="margin:-4px 0 10px">Tap a channel's name to open it on CHANNEL (EQ, dynamics, sends). Each strip has its input GAIN and the console's analog 3-band EQ (HI 10 kHz shelf, MID bell with its FREQ, LO 100 Hz shelf): drag a knob up or down, turn the mouse wheel over it, double-tap to centre it. SCROLL shows every channel in one row; ◀ ▶ move it.</p>
 <div id="strips"></div>
 </section>
 <section id="rta" class="page"><div class="grid">
@@ -186,7 +194,7 @@ const $=s=>document.querySelector(s);let token=null,page=0,state=null,ws=null,po
 addEventListener("pointerup",()=>{drag=null});addEventListener("pointercancel",()=>{drag=null});
 const ls={get(k,d){try{const v=localStorage.getItem("amfx1."+k);return v===null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem("amfx1."+k,JSON.stringify(v))}catch(e){}}};
 try{token=localStorage.getItem("amfx1.token")}catch(e){}
-const DEF={per:16,fh:220,cw:84,meters:true,bridge:true,hold:2,sync:true,vib:false,wake:false,ask:true,num:false,lockStart:false,theme:"auto",start:"",keys:true};const opt=Object.assign({},DEF,ls.get("opts",{}));
+const DEF={knobs:true,scroll:true,per:16,fh:220,cw:84,meters:true,bridge:true,hold:2,sync:true,vib:false,wake:false,ask:true,num:false,lockStart:false,theme:"auto",start:"",keys:true};const opt=Object.assign({},DEF,ls.get("opts",{}));
 const posToDb=p=>p<=0?-120:p>=1?10:p>=.75?(p-.75)*40:p>=.5?-20+(p-.5)*80:p>=.25?-60+(p-.25)*160:-120+p*240;
 const dbToPos=d=>d<=-120?0:d>=10?1:d>=0?.75+d/40:d>=-20?.5+(d+20)/80:d>=-60?.25+(d+60)/160:(d+120)/240;
 const fmt=d=>d<=-119?"-∞":(d>0?"+":"")+d.toFixed(1);const lin=v=>v>1e-6?20*Math.log10(v):-120;const mpos=v=>Math.max(0,Math.min(1,(lin(v)+60)/60));
@@ -198,15 +206,39 @@ let sendT={};function send(key,cmd){clearTimeout(sendT[key]);sendT[key]=setTimeo
 const els=[];
 // ---- MIXER
 function pages(){const n=state?state.strips.length:0,per=Math.min(opt.per,n||opt.per),k=Math.max(1,Math.ceil(n/per));if(page>=k)page=k-1;const box=$("#pages");box.textContent="";
- for(let p=0;p<k;++p){const b=document.createElement("button");b.textContent="CH "+(p*per+1)+"–"+Math.min(n,(p+1)*per);b.className=p===page?"pri":"";b.onclick=()=>{page=p;build()};box.appendChild(b)}}
-function build(){const box=$("#strips");box.textContent="";els.length=0;if(!state)return;pages();const per=opt.per,from=page*per,to=Math.min(state.strips.length,from+per);
+ for(let p=0;p<k;++p){const b=document.createElement("button");b.textContent="CH "+(p*per+1)+"–"+Math.min(n,(p+1)*per);b.className=p===page?"pri":"";
+  // SCROLL: the bank buttons jump along the one row; pages: they switch the page
+  b.onclick=()=>{page=p;if(opt.scroll){const c=$("#strips").children[p*per];if(c)$("#strips").scrollTo({left:c.offsetLeft-$("#strips").offsetLeft});[...box.children].forEach((x,j)=>x.className=j===p?"pri":"")}else build()};box.appendChild(b)}}
+// rotary(): a strip knob: drag up / down (or the wheel) between lo and hi, double-tap back to the default; fmtK shows the value
+function rotary(label,lo,hi,val,def,fmtK,onV,log){const k=document.createElement("div");k.className="kb";k.innerHTML="<b></b><i></i><em></em>";k.querySelector("b").textContent=label;
+ const pos=v=>log?Math.log(v/lo)/Math.log(hi/lo):(v-lo)/(hi-lo),of=p=>log?lo*Math.pow(hi/lo,p):lo+p*(hi-lo);let v=val;
+ const show=()=>{k.style.setProperty("--a",(-135+270*Math.max(0,Math.min(1,pos(v))))+"deg");k.querySelector("em").textContent=fmtK(v)};
+ const set=(nv,send)=>{v=Math.max(lo,Math.min(hi,nv));if(!log)v=Math.round(v*2)/2;else v=Math.round(v);show();if(send)onV(v)};
+ let y0=null,p0=0;k.onpointerdown=e=>{y0=e.clientY;p0=pos(v);k.setPointerCapture(e.pointerId);drag=k;e.preventDefault()};
+ k.onpointermove=e=>{if(y0===null)return;set(of(Math.max(0,Math.min(1,p0+(y0-e.clientY)/(e.shiftKey?600:150)))),true)};
+ k.onpointerup=k.onpointercancel=()=>{y0=null;if(drag===k)drag=null};
+ k.onwheel=e=>{e.preventDefault();set(of(Math.max(0,Math.min(1,pos(v)-Math.sign(e.deltaY)*0.02))),true)};
+ k.ondblclick=()=>{buzz();set(def,true)};k.setAttribute("role","slider");k.setAttribute("aria-label",label);show();
+ k.update=nv=>{if(drag!==k&&Math.abs(nv-v)>0.01){v=nv;show()}};return k}
+const dbK=v=>(v>0?"+":"")+v.toFixed(1),hzK=v=>v>=1000?(v/1000).toFixed(v>=10000?0:1)+"k":Math.round(v)+"";
+function stripKnobs(i,s){const w=document.createElement("div");w.className="ks";const t=Object.assign({low:0,mid:0,midHz:1000,high:0,on:true},s.tone||{});s.tone=t;
+ const tone=()=>send("t"+i,{op:"tone",strip:i,low:t.low,mid:t.mid,midHz:t.midHz,high:t.high,on:t.on});
+ const g=rotary("GAIN",-24,24,s.trim||0,0,dbK,v=>{s.trim=v;send("tr"+i,{op:"trim",strip:i,db:v})});g.style.setProperty("--kc","var(--amber)");
+ const hi=rotary("HI",-15,15,t.high,0,dbK,v=>{t.high=v;t.on=true;tone()}),mi=rotary("MID",-15,15,t.mid,0,dbK,v=>{t.mid=v;t.on=true;tone()}),
+  fq=rotary("FREQ",100,8000,t.midHz,1000,hzK,v=>{t.midHz=v;tone()},true),lo=rotary("LO",-15,15,t.low,0,dbK,v=>{t.low=v;t.on=true;tone()});fq.style.setProperty("--kc","var(--cyan)");
+ const b=document.createElement("button");b.className="eqb"+(t.on?" on acc":"");b.textContent="EQ";b.onclick=()=>{buzz();t.on=!t.on;b.className="eqb"+(t.on?" on acc":"");tone();[hi,mi,fq,lo].forEach(k=>k.classList.toggle("off",!t.on))};
+ [hi,mi,fq,lo].forEach(k=>k.classList.toggle("off",!t.on));[g,b,hi,mi,fq,lo].forEach(x=>w.appendChild(x));
+ w.upd=x=>{const u=Object.assign({low:0,mid:0,midHz:1000,high:0,on:true},x.tone||{});g.update(x.trim||0);hi.update(u.high);mi.update(u.mid);fq.update(u.midHz);lo.update(u.low);if(!b.matches(":active")){t.on=u.on;b.className="eqb"+(t.on?" on acc":"");[hi,mi,fq,lo].forEach(k=>k.classList.toggle("off",!t.on))}Object.assign(t,u)};return w}
+function build(){const box=$("#strips");box.textContent="";els.length=0;if(!state)return;box.classList.toggle("scroll",!!opt.scroll);$("#paddle").style.display=opt.scroll?"":"none";
+ $("#knobsB").className="sm"+(opt.knobs?" on acc":"");$("#scrollB").className="sm"+(opt.scroll?" on acc":"");pages();const per=opt.scroll?state.strips.length:opt.per,from=opt.scroll?0:page*per,to=Math.min(state.strips.length,from+per);
  const add=(name,db,mute,solo,onF,onM,onS,master)=>{const c=document.createElement("div");c.className="ch"+(master?" master":"");
   c.innerHTML='<div class="nm"></div><div class="fz"><input type="range" class="f" min="0" max="1000"><div class="mt"><i></i></div></div><div class="db"></div><div class="ms"></div>';
-  c.querySelector(".nm").textContent=name;if(onM){const idx=els.length;c.querySelector(".nm").onclick=()=>openChannel(Math.max(0,page*opt.per+idx))}const f=c.querySelector(".f"),d=c.querySelector(".db");f.value=Math.round(dbToPos(db)*1000);d.textContent=fmt(db);f.setAttribute("aria-label",name+" fader");
+  c.querySelector(".nm").textContent=name;if(onM){const idx=els.length;c.querySelector(".nm").onclick=()=>openChannel(Math.max(0,(opt.scroll?0:page*opt.per)+idx))}const f=c.querySelector(".f"),d=c.querySelector(".db");f.value=Math.round(dbToPos(db)*1000);d.textContent=fmt(db);f.setAttribute("aria-label",name+" fader");
   f.oninput=()=>{const v=posToDb(f.value/1000);d.textContent=fmt(v);onF(v)};const ms=c.querySelector(".ms");
   if(onM){const m=document.createElement("button");m.textContent="M";m.className="m"+(mute?" on":"");m.onclick=()=>{buzz();const on=!m.classList.contains("on");m.classList.toggle("on",on);onM(on)};ms.appendChild(m)}
   if(onS){const s=document.createElement("button");s.textContent="S";s.className="s"+(solo?" on":"");s.onclick=()=>{buzz();const on=!s.classList.contains("on");s.classList.toggle("on",on);onS(on)};ms.appendChild(s)}
-  box.appendChild(c);f.onpointerdown=()=>{drag=f};return {bar:c.querySelector(".mt i"),f,d,nm:c.querySelector(".nm"),m:ms.querySelector(".m"),s:ms.querySelector(".s")}};
+  if(onM&&opt.knobs){c.ks=stripKnobs(from+els.length,state.strips[from+els.length]);c.insertBefore(c.ks,c.querySelector(".fz"))}
+  box.appendChild(c);f.onpointerdown=()=>{drag=f};return {ks:c.ks,bar:c.querySelector(".mt i"),f,d,nm:c.querySelector(".nm"),m:ms.querySelector(".m"),s:ms.querySelector(".s")}};
  for(let i=from;i<to;++i){const s=state.strips[i];els.push(Object.assign({i},add((opt.num?(i+1)+" · ":"")+(s.name||("CH "+(i+1))),s.db,s.mute,s.solo,v=>{s.db=v;send("g"+i,{op:"gain",strip:i,db:v})},on=>{s.mute=on;send("m"+i,{op:"mute",strip:i,on})},on=>{s.solo=on;send("s"+i,{op:"solo",strip:i,on})})))}
  els.push(Object.assign({i:-1},add("MASTER",state.master.db,false,false,v=>{state.master.db=v;send("master",{op:"master",db:v})},null,null,true)))}
 // LIVE SYNC: the service pushes {"state":...} the moment any remote or the console changes something: move what changed in place
@@ -215,7 +247,7 @@ const free=e=>e!==drag&&e!==document.activeElement;
 function apply(s){if(!s||!s.strips)return;if(!state||s.strips.length!==state.strips.length){state=s;build();panels();return}
  for(const e of els){const x=e.i<0?s.master:s.strips[e.i];if(!x)continue;
   if(free(e.f)){const p=Math.round(dbToPos(x.db)*1000);if(Math.abs(e.f.value-p)>2){e.f.value=p;e.d.textContent=fmt(x.db)}}
-  if(e.i>=0){const n=(opt.num?(e.i+1)+" · ":"")+(x.name||("CH "+(e.i+1)));if(e.nm.textContent!==n)e.nm.textContent=n;if(e.m)e.m.classList.toggle("on",!!x.mute);if(e.s)e.s.classList.toggle("on",!!x.solo)}}
+  if(e.i>=0){const n=(opt.num?(e.i+1)+" · ":"")+(x.name||("CH "+(e.i+1)));if(e.nm.textContent!==n)e.nm.textContent=n;if(e.m)e.m.classList.toggle("on",!!x.mute);if(e.s)e.s.classList.toggle("on",!!x.solo);if(e.ks)e.ks.upd(x)}}
  state=s;synced=Date.now();panels();setSt("connected · live sync")}
 // ---- METER BRIDGE: every channel (peak bar, RMS under it, a peak-hold line, a clip light that stays until reset) and the master L / R
 const BR={hold:[],holdT:[],clip:[],mHold:-120,mHoldT:0,mClip:false};
@@ -349,6 +381,8 @@ $("#clearSolo").onclick=()=>{if(!state)return;buzz();opsSeq(state.strips.filter(
 $("#resetF").onclick=()=>{if(!state)return;if(!confirm("Put every channel fader at 0 dB?"))return;buzz();opsSeq(state.strips.map(s=>({op:"gain",strip:s.id,db:0})),"faders at 0 dB")};
 let locked=!!opt.lockStart;function showLock(){document.body.classList.toggle("locked",locked);const b=$("#lockF");b.textContent=locked?"🔒 LOCKED":"LOCK FADERS";b.classList.toggle("on",locked);b.classList.add("amb")}
 $("#lockF").onclick=()=>{locked=!locked;buzz();showLock()};
+$("#knobsB").onclick=()=>{opt.knobs=!opt.knobs;ls.set("opts",opt);buzz();build()};$("#scrollB").onclick=()=>{opt.scroll=!opt.scroll;ls.set("opts",opt);buzz();build()};
+const padBy=d=>{const b=$("#strips");b.scrollBy({left:d*Math.max(b.clientWidth*0.8,120)})};$("#padL").onclick=()=>{buzz();padBy(-1)};$("#padR").onclick=()=>{buzz();padBy(1)};
 // ---- CHANNEL: one strip in full. The console's state has the fader, pan, mute, solo and name; what the service does not report
 // back (trim, delay, polarity, EQ, dynamics, sends) is remembered here, per console, as this browser last sent it
 let cur=0,sendSet=0;const chKey="ch."+location.host;const chp=ls.get(chKey,{});
@@ -368,7 +402,7 @@ function channel(){if(!state||!state.strips.length)return;cur=Math.max(0,Math.mi
  $("#chM").classList.toggle("on",!!s.mute);$("#chS").classList.toggle("on",!!s.solo);
  hslider("#chDb","#chDbT",s.db,v=>{s.db=v;send("g"+cur,{op:"gain",strip:cur,db:v})});
  const pan=$("#chPan");if(free(pan)){pan.value=Math.round((s.pan||0)*100)}const pt=v=>v===0?"C":(v<0?"L":"R")+Math.abs(v);$("#chPanT").textContent=pt(+pan.value);pan.oninput=()=>{$("#chPanT").textContent=pt(+pan.value);s.pan=pan.value/100;send("p"+cur,{op:"pan",strip:cur,pan:s.pan})};pan.onpointerdown=()=>{drag=pan};
- const tr=$("#chTrim");if(free(tr))tr.value=Math.round(p.trim*10);$("#chTrimT").textContent=(p.trim>0?"+":"")+p.trim.toFixed(1)+" dB";tr.oninput=()=>{p.trim=tr.value/10;$("#chTrimT").textContent=(p.trim>0?"+":"")+p.trim.toFixed(1)+" dB";keep();send("t"+cur,{op:"trim",strip:cur,db:p.trim})};
+ const tr=$("#chTrim");{const x=state&&state.strips[cur];if(x&&x.trim!=null&&free(tr))p.trim=x.trim}if(free(tr))tr.value=Math.round(p.trim*10);$("#chTrimT").textContent=(p.trim>0?"+":"")+p.trim.toFixed(1)+" dB";tr.oninput=()=>{p.trim=tr.value/10;$("#chTrimT").textContent=(p.trim>0?"+":"")+p.trim.toFixed(1)+" dB";keep();send("t"+cur,{op:"trim",strip:cur,db:p.trim})};
  const dl=$("#chDelay");if(free(dl))dl.value=p.delay;$("#chDelayT").textContent=p.delay+" ms";dl.oninput=()=>{p.delay=+dl.value;$("#chDelayT").textContent=p.delay+" ms";keep();send("d"+cur,{op:"delay",strip:cur,ms:p.delay})};
  const pol=$("#chPol");pol.classList.add("amb");pol.classList.toggle("on",!!p.pol);pol.onclick=()=>{p.pol=!p.pol;pol.classList.toggle("on",p.pol);keep();buzz();send("pol"+cur,{op:"polarity",strip:cur,on:p.pol})};
  if(chDrawn!==cur){chDrawn=cur;drawEqBands();drawDyn();drawSends()}drawEq()}

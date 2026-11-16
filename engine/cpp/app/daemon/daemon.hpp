@@ -109,7 +109,10 @@ class Daemon {
   static std::string loadOrCreateToken(const std::string& file, std::string& err);   // 0600; created when missing
 
  private:
-  struct Strip { std::string name; double db = 0, pan = 0; bool mute = false, solo = false; };
+  // a strip: fader, pan, mute, solo; its input GAIN (trim, dB) and the console's analog 3-band channel EQ (LOW shelf 100 Hz, MID bell
+  // 100 Hz .. 8 kHz, HIGH shelf 10 kHz, ±15 dB each, the engine's bands 10..12), kept here so every remote shows them
+  struct Strip { std::string name; double db = 0, pan = 0; bool mute = false, solo = false; double trim = 0, low = 0, mid = 0, midHz = 1000, high = 0; bool toneOn = true; };
+  void pushTone(Runtime& rt, int i) const;
   struct Bus { double db = 0, returnDb = -60; bool mute = false; };
   struct Monitor { int source = 0; double db = 0; bool dim = false, mono = false, mute = false; } mon_;
   httpd::Response handle(const httpd::Request& r);

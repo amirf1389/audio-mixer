@@ -71,7 +71,7 @@ class Remote : public QObject {
   // LIVE SYNC, the console side: the service starts from the console's mixer (remote-seed.json, --seed), and while it runs the console
   // follows it: a fader, mute, solo or name moved on a phone or in a browser moves here (about 150 ms), and one moved here goes out to
   // every phone and browser. Each side is compared with the last value both agreed on, so neither echoes the other back.
-  struct SyncStrip { double db = 0, pan = 0; bool mute = false, solo = false; QString name; };
+  struct SyncStrip { double db = 0, pan = 0; bool mute = false, solo = false; QString name; double trim = 0, low = 0, mid = 0, midHz = 1000, high = 0; bool toneOn = true; };   // + GAIN and the 3-band channel EQ
   static QString syncName(int i, const QString& n) { return n.isEmpty() ? QStringLiteral("CH %1").arg(i + 1) : n; }
   QVector<SyncStrip> consoleMix() const;   // the console's strips as the service names them (licensed channels only)
   // SETTINGS SYNC: the console settings a remote may change (the service's "settings"), kept in step both ways like the faders

@@ -26,6 +26,7 @@ object Prefs {
     fun bootAnim(c: Context) = remote(c).getBoolean("bootAnim", true)                  // the boot animation when the app starts               // AUTO-DETECT: search the Wi-Fi for the console by itself
     fun keepScreenOn(c: Context) = remote(c).getBoolean("keepScreenOn", true)
     fun showPan(c: Context) = remote(c).getBoolean("showPan", true)
+    fun showTone(c: Context) = remote(c).getBoolean("showTone", true)               // GAIN and the analog 3-band EQ on every strip
     fun haptics(c: Context) = remote(c).getBoolean("haptics", true)
     fun confirmStop(c: Context) = remote(c).getBoolean("confirmStop", true)
     fun syncSeconds(c: Context) = remote(c).getInt("syncSeconds", 3)                 // 0 = do not follow the console
@@ -60,6 +61,7 @@ class SettingsActivity : AppCompatActivity() {
         section(getString(R.string.set_mixer))
         choice(r, "stripCount", 32, listOf(8, 16, 32), getString(R.string.set_strips)) { "$it" }
         toggle(r, "showPan", true, getString(R.string.set_pan), null)
+        toggle(r, "showTone", true, getString(R.string.set_tone), null)
         choice(r, "meterFloor", 60, listOf(40, 60, 90), getString(R.string.set_meter_range)) { "0 … -$it dBFS" }
         choice(r, "syncSeconds", 3, listOf(0, 1, 3, 5, 10), getString(R.string.set_sync)) { if (it == 0) getString(R.string.set_off) else "$it s" }
 
