@@ -64,6 +64,17 @@ int main(void) {
     double* rs = NULL; int64_t rn = 0; CHECK(amix_hr_resample(tone, 4800, 2, 192000, 48000, "auto", 1, &rs, &rn, e, sizeof e) == 0 && rn == 1200); amix_free(rs);
     int32_t q[4]; const double qi[4] = {0.5, -0.5, 1.5, -1.5}; CHECK(amix_hr_quantize(qi, 4, 2, 16, "none", 1, q) == 0 && q[0] == 16384 && q[1] == -16384 && q[2] == 32767 && q[3] == -32768);
     char* hj = amix_hr_info_json(); CHECK(hj && strstr(hj, "r8brain") && strstr(hj, "libFLAC")); amix_free(hj); }
-  printf("sdk_c_test: C API version %s, offline mixer, null runtime, licence JSON, hi-res audio OK\n", amix_version());
+  { /* INSERTS: a delay on strip 0 and a limiter-like effect on the master change the sound; removed, the dry sound is back; a bad kind is refused */
+    amix_mixer* fm = amix_mixer_create(2, 48000); static float in0[512], oL[512], oR[512], dL[512]; const float* fin[2] = {in0, NULL};
+    in0[0] = 1.f; amix_mixer_process(fm, fin, 512, dL, oR);
+    char* cat = amix_fx_catalog_json(); CHECK(cat && strstr(cat, "\"kind\":\"delay\"")); amix_free(cat);
+    CHECK(amix_mixer_insert(fm, 0, 0, "nonsense") == -2 && amix_mixer_insert(fm, 0, 9, "delay") == -1);
+    CHECK(amix_mixer_insert(fm, 0, 0, "delay") == 0); char* ij = amix_mixer_insert_json(fm, 0, 0); CHECK(ij && strstr(ij, "\"kind\":\"delay\"") && strstr(ij, "\"params\":[{")); amix_free(ij);
+    CHECK(amix_mixer_insert_set(fm, 0, 0, "mix", 0.0) == 0); amix_mixer_process(fm, fin, 512, oL, oR); double d = 0; for (int i = 0; i < 512; ++i) d += fabs(oL[i] - dL[i]); CHECK(d < 1e-3);   /* fully dry: as without */
+    CHECK(amix_mixer_insert_set(fm, 0, 0, "mix", 1.0) == 0); in0[0] = 1.f; amix_mixer_process(fm, fin, 512, oL, oR); d = 0; for (int i = 0; i < 512; ++i) d += fabs(oL[i] - dL[i]); CHECK(d > 1e-3);
+    CHECK(amix_mixer_insert(fm, -1, 0, "drive") == 0 && amix_mixer_insert(fm, -1, 0, "") == 0 && amix_mixer_insert(fm, 0, 0, NULL) == 0);
+    CHECK(strcmp(ij = amix_mixer_insert_json(fm, 0, 0), "null") == 0); amix_free(ij);
+    amix_mixer_process(fm, fin, 512, oL, oR); d = 0; for (int i = 0; i < 512; ++i) d += fabs(oL[i] - dL[i]); CHECK(d < 1e-3); amix_mixer_destroy(fm); }
+  printf("sdk_c_test: C API version %s, offline mixer, null runtime, licence JSON, hi-res audio, inserts OK\n", amix_version());
   return 0;
 }

@@ -106,14 +106,6 @@ class DevicesActivity : AppCompatActivity() {
         }
         line(box, getString(R.string.dev_audio_note), getColor(R.color.dim), 11f)
     }
-    private fun typeName(t: Int): String = when (t) {
-        AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> "BUILT-IN SPEAKER"; AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> "EARPIECE"; AudioDeviceInfo.TYPE_BUILTIN_MIC -> "BUILT-IN MIC"
-        AudioDeviceInfo.TYPE_WIRED_HEADSET -> "WIRED HEADSET"; AudioDeviceInfo.TYPE_WIRED_HEADPHONES -> "WIRED HEADPHONES"; AudioDeviceInfo.TYPE_LINE_ANALOG -> "LINE (ANALOG)"
-        AudioDeviceInfo.TYPE_LINE_DIGITAL -> "LINE (DIGITAL)"; AudioDeviceInfo.TYPE_USB_DEVICE -> "USB AUDIO INTERFACE"; AudioDeviceInfo.TYPE_USB_HEADSET -> "USB HEADSET"
-        AudioDeviceInfo.TYPE_USB_ACCESSORY -> "USB ACCESSORY"; AudioDeviceInfo.TYPE_BLUETOOTH_A2DP -> "BLUETOOTH (MUSIC)"; AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> "BLUETOOTH (CALL)"
-        AudioDeviceInfo.TYPE_HDMI -> "HDMI"; AudioDeviceInfo.TYPE_HDMI_ARC -> "HDMI ARC"; AudioDeviceInfo.TYPE_DOCK -> "DOCK"; AudioDeviceInfo.TYPE_AUX_LINE -> "AUX LINE"
-        AudioDeviceInfo.TYPE_REMOTE_SUBMIX -> "REMOTE SUBMIX"; AudioDeviceInfo.TYPE_TELEPHONY -> "TELEPHONY"; AudioDeviceInfo.TYPE_FM_TUNER -> "FM TUNER"
-        else -> if (android.os.Build.VERSION.SDK_INT >= 31 && t == AudioDeviceInfo.TYPE_BLE_HEADSET) "BLUETOOTH LE" else "TYPE $t" }
 
     // ---- NETWORK
     private fun networkSection() {
@@ -170,5 +162,15 @@ class DevicesActivity : AppCompatActivity() {
                     setOnClickListener { Prefs.remote(this@DevicesActivity).edit().putString("host", host).putString("port", port.toString()).apply(); findStatus.text = getString(R.string.dev_saved, host) } })
             }
         }
+    }
+    companion object {
+        fun typeName(t: Int): String = when (t) {
+            AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> "BUILT-IN SPEAKER"; AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> "EARPIECE"; AudioDeviceInfo.TYPE_BUILTIN_MIC -> "BUILT-IN MIC"
+            AudioDeviceInfo.TYPE_WIRED_HEADSET -> "WIRED HEADSET"; AudioDeviceInfo.TYPE_WIRED_HEADPHONES -> "WIRED HEADPHONES"; AudioDeviceInfo.TYPE_LINE_ANALOG -> "LINE (ANALOG)"
+            AudioDeviceInfo.TYPE_LINE_DIGITAL -> "LINE (DIGITAL)"; AudioDeviceInfo.TYPE_USB_DEVICE -> "USB AUDIO INTERFACE"; AudioDeviceInfo.TYPE_USB_HEADSET -> "USB HEADSET"
+            AudioDeviceInfo.TYPE_USB_ACCESSORY -> "USB ACCESSORY"; AudioDeviceInfo.TYPE_BLUETOOTH_A2DP -> "BLUETOOTH (MUSIC)"; AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> "BLUETOOTH (CALL)"
+            AudioDeviceInfo.TYPE_HDMI -> "HDMI"; AudioDeviceInfo.TYPE_HDMI_ARC -> "HDMI ARC"; AudioDeviceInfo.TYPE_DOCK -> "DOCK"; AudioDeviceInfo.TYPE_AUX_LINE -> "AUX LINE"
+            AudioDeviceInfo.TYPE_REMOTE_SUBMIX -> "REMOTE SUBMIX"; AudioDeviceInfo.TYPE_TELEPHONY -> "TELEPHONY"; AudioDeviceInfo.TYPE_FM_TUNER -> "FM TUNER"
+            else -> if (android.os.Build.VERSION.SDK_INT >= 31 && t == AudioDeviceInfo.TYPE_BLE_HEADSET) "BLUETOOTH LE" else "TYPE $t" }
     }
 }
