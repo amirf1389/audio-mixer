@@ -2067,5 +2067,16 @@
 "MY ACCOUNT ONLINE": "МІЙ ОНЛАЙН-ОБЛІКОВИЙ ЗАПИС",
 "LIVE SYNC": "ПРЯМА СИНХРОНІЗАЦІЯ",
 "CONNECTED": "ПІДКЛЮЧЕНО",
-"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.": "Регулятори гучності, приглушення, соло та імена відображаються на телефонах і в браузерах, підключених до цієї консолі, і кожна дія тут одразу ж до них надходить. Якщо регулятор гучності переміщується на телефоні, він підсвічується тут."
+"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.": "Регулятори гучності, приглушення, соло та імена відображаються на телефонах і в браузерах, підключених до цієї консолі, і кожна дія тут одразу ж до них надходить. Якщо регулятор гучності переміщується на телефоні, він підсвічується тут.",
+"CONNECTED PHONES": "ПІДКЛЮЧЕНІ ТЕЛЕФОНИ",
+"Phones and browsers linked right now. DISCONNECT drops one (it may come back in 2 minutes); FORGET removes its pairing, so it needs the PIN again.": "Телефони та браузери наразі підключені. Команда DISCONNECT відключає один із пристроїв (він може знову підключитися через 2 хвилини); команда FORGET скасовує сполучення, тому для підключення знову знадобиться PIN-код.",
+"OWNER": "ВЛАСНИК",
+"DISCONNECT": "ВІДКЛЮЧИТИ",
+"No phone linked yet. Open AmF X1 on the phone: it finds this computer on the Wi-Fi by itself.": "Телефон ще не підключено. Відкрийте додаток AmF X1 на телефоні: він самостійно знайде цей комп’ютер у мережі Wi-Fi.",
+"The Windows output slider (the keyboard's volume keys move it too)": "Повзунок регулювання гучності в Windows (його також можна переміщати за допомогою клавіш гучності на клавіатурі)",
+"GAIN MODE: Windows volume trims the master": "РЕЖИМ ПІДСИЛЕННЯ: Гучність Windows регулює загальний рівень",
+"The Windows slider becomes an extra gain after the master (the fader stays where it is): 100% = 0 dB, 50% = -9 dB, 25% = -18 dB, 0% = off. Handy with ASIO or a USB interface, which Windows' own volume does not reach.": "Повзунок Windows стає додатковим регулятором гучності після головного регулятора (фейдер залишається на місці): 100% = 0 дБ, 50% = -9 дБ, 25% = -18 дБ, 0% = вимкнено. Це зручно при використанні ASIO або USB-інтерфейсу, до яких не досягає власний регулятор гучності Windows.",
+"It had already gone.": "Воно вже зникло.",
+"GAIN MODE off: the Windows volume does not change the console's level.": "Режим GAIN вимкнено: гучність Windows не впливає на рівень звуку консолі.",
+"This output plays through Windows' own mixer, which already sets its level with this slider: no extra trim (no double cut).": "Цей вихід відтворюється через вбудований мікшер Windows, який уже регулює рівень за допомогою цього повзунка: додаткове регулювання рівня не потрібне (без подвійного регулювання)."
 }

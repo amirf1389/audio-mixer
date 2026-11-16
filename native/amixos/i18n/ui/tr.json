@@ -2076,5 +2076,17 @@
 "LIVE SYNC": "CANLI SENKRONİZASYON",
 "CONNECTED": "BAĞLANTILI",
 "waiting for a phone or browser": "bir telefon veya tarayıcı bekliyor",
-"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.": "Fader’lar, sessize alma, solo ve isimler, bu konsola bağlı telefonlara ve tarayıcılara yansıtılır; buradaki her hareket anında onlara ulaşır. Bir telefondan hareket ettirilen bir fader, burada yanar."
+"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.": "Fader’lar, sessize alma, solo ve isimler, bu konsola bağlı telefonlara ve tarayıcılara yansıtılır; buradaki her hareket anında onlara ulaşır. Bir telefondan hareket ettirilen bir fader, burada yanar.",
+"CONNECTED PHONES": "BAĞLANTILI TELEFONLAR",
+"Phones and browsers linked right now. DISCONNECT drops one (it may come back in 2 minutes); FORGET removes its pairing, so it needs the PIN again.": "Telefonlar ve tarayıcılar şu anda eşleştirilmiş durumda. “BAĞLANTIYI KES” seçeneği birini bağlantısından ayırır (2 dakika içinde tekrar bağlanabilir); “SİL” seçeneği ise eşleştirmeyi kaldırır, bu durumda PIN kodunun yeniden girilmesi gerekir.",
+"OWNER": "SAHİBİ",
+"DISCONNECT": "BAĞLANTININ KESİLMESİ",
+"No phone linked yet. Open AmF X1 on the phone: it finds this computer on the Wi-Fi by itself.": "Henüz bir telefon bağlanmamış. Telefonda AmF X1 uygulamasını açın: Uygulama, Wi-Fi ağı üzerinden bu bilgisayarı kendiliğinden bulur.",
+"Windows volume": "Windows ses seviyesi",
+"The Windows output slider (the keyboard's volume keys move it too)": "Windows ses seviyesi kaydırıcısı (klavyedeki ses tuşları da bunu hareket ettirir)",
+"GAIN MODE: Windows volume trims the master": "GAIN MODU: Windows ses seviyesi, ana ses seviyesini azaltır",
+"The Windows slider becomes an extra gain after the master (the fader stays where it is): 100% = 0 dB, 50% = -9 dB, 25% = -18 dB, 0% = off. Handy with ASIO or a USB interface, which Windows' own volume does not reach.": "Windows kaydırma çubuğu, ana ses seviyesi ayarından sonra ek bir kazanç kaynağı haline gelir (fader olduğu yerde kalır): %100 = 0 dB, %50 = -9 dB, %25 = -18 dB, %0 = kapalı. Windows’un kendi ses seviyesi ayarının ulaşamadığı ASIO veya USB arabirimleriyle kullanışlıdır.",
+"It had already gone.": "O çoktan gitmişti.",
+"GAIN MODE off: the Windows volume does not change the console's level.": "GAIN MODE kapalı: Windows ses seviyesi, konsolun ses seviyesini etkilemez.",
+"This output plays through Windows' own mixer, which already sets its level with this slider: no extra trim (no double cut).": "Bu çıkış, Windows'un kendi mikseri üzerinden çalınır; ses seviyesi zaten bu kaydırıcıyla ayarlanır: ek ses ayarı yapılmaz (çift kesim olmaz)."
 }

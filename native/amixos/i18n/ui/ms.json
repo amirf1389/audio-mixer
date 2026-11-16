@@ -2063,5 +2063,12 @@
 "LIVE SYNC": "SINKRONISASI LANGSUNG",
 "CONNECTED": "TERHUBUNG",
 "waiting for a phone or browser": "menunggu telefon atau pelayar",
-"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.": "Fader, mute, solo dan nama-nama mengikuti telefon dan pelayar yang disambungkan ke konsol ini, dan setiap pergerakan di sini sampai kepada mereka serta-merta. Apabila fader dipindahkan dari telefon, ia akan menyala di sini."
+"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.": "Fader, mute, solo dan nama-nama mengikuti telefon dan pelayar yang disambungkan ke konsol ini, dan setiap pergerakan di sini sampai kepada mereka serta-merta. Apabila fader dipindahkan dari telefon, ia akan menyala di sini.",
+"CONNECTED PHONES": "Telefon Terhubung",
+"Phones and browsers linked right now. DISCONNECT drops one (it may come back in 2 minutes); FORGET removes its pairing, so it needs the PIN again.": "Telefon dan pelayar disambungkan sekarang. DISCONNECT memutuskan sambungan (ia mungkin kembali dalam 2 minit); FORGET membuang padanan, jadi ia perlu PIN semula.",
+"OWNER": "Pemilik",
+"DISCONNECT": "Putuskan sambungan",
+"No phone linked yet. Open AmF X1 on the phone: it finds this computer on the Wi-Fi by itself.": "Telefon belum dihubungkan lagi. Buka AmF X1 pada telefon: ia menemui komputer ini pada Wi-Fi dengan sendirinya.",
+"It had already gone.": "Ia sudah hilang.",
+"GAIN MODE off: the Windows volume does not change the console's level.": "Mod GAIN dimatikan: kelantangan Windows tidak menjejaskan tahap konsol."
 }

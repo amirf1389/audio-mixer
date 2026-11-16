@@ -2107,5 +2107,18 @@
 "MY ACCOUNT ONLINE": "マイアカウント（オンライン）",
 "LIVE SYNC": "ライブシンク",
 "waiting for a phone or browser": "電話またはブラウザからの連絡を待っています",
-"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.": "フェーダー、ミュート、ソロ、および名称は、このコンソールに接続されたスマートフォンやブラウザに連動しており、ここでの操作はすべて即座にそれらに反映されます。スマートフォンでフェーダーを操作すると、ここでもそのフェーダーが点灯します。"
+"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.": "フェーダー、ミュート、ソロ、および名称は、このコンソールに接続されたスマートフォンやブラウザに連動しており、ここでの操作はすべて即座にそれらに反映されます。スマートフォンでフェーダーを操作すると、ここでもそのフェーダーが点灯します。",
+"CONNECTED PHONES": "接続済みの携帯電話",
+"Phones and browsers linked right now. DISCONNECT drops one (it may come back in 2 minutes); FORGET removes its pairing, so it needs the PIN again.": "現在、スマートフォンとブラウザが接続されています。「DISCONNECT」を選択すると接続が切断されます（2分後に再接続される場合があります）。「FORGET」を選択するとペアリングが解除されるため、再度PINの入力が必要になります。",
+"OWNER": "所有者",
+"DISCONNECT": "切断",
+"No phone linked yet. Open AmF X1 on the phone: it finds this computer on the Wi-Fi by itself.": "まだスマートフォンが連携されていません。スマートフォンで「AmF X1」を開いてください。Wi-Fi経由でこのコンピュータが自動的に検出されます。",
+"Windows volume": "Windowsのボリューム",
+"The Windows output slider (the keyboard's volume keys move it too)": "Windows の出力スライダー（キーボードの音量キーでも操作できます）",
+"GAIN MODE: Windows volume trims the master": "ゲインモード：Windowsの音量でマスター音量を調整します",
+"The Windows slider becomes an extra gain after the master (the fader stays where it is): 100% = 0 dB, 50% = -9 dB, 25% = -18 dB, 0% = off. Handy with ASIO or a USB interface, which Windows' own volume does not reach.": "Windowsのスライダーは、マスターの後に追加のゲインとして機能します（フェーダーの位置は変わりません）：100% = 0 dB、50% = -9 dB、25% = -18 dB、0% = オフ。Windows標準の音量調整では対応できないASIOやUSBインターフェースを使用する際に便利です。",
+"It had already gone.": "それはもうなくなっていた。",
+"The Windows volume is not available on this computer.": "このコンピュータでは、Windows ボリュームが利用できません。",
+"GAIN MODE off: the Windows volume does not change the console's level.": "ゲインモードオフ：Windowsの音量調整によって、コンソールのレベルは変化しません。",
+"This output plays through Windows' own mixer, which already sets its level with this slider: no extra trim (no double cut).": "この出力はWindows標準のミキサーを経由して再生されます。このミキサーでは、すでにこのスライダーでレベルが設定されているため、追加のトリム（二重調整）は必要ありません。"
 }

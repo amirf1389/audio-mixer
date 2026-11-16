@@ -2129,5 +2129,16 @@
 "LIVE SYNC": "همگام‌سازی زنده",
 "CONNECTED": "متصل",
 "waiting for a phone or browser": "منتظر تلفن یا مرورگر",
-"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.": "فیدرها، میوت‌ها، سولوها و نام‌ها همراه با تلفن‌ها و مرورگرهای متصل به این کنسول نمایش داده می‌شوند و هر حرکتی در اینجا بلافاصله به آن‌ها منتقل می‌شود. وقتی یک فیدر روی تلفن حرکت داده می‌شود، اینجا روشن می‌شود."
+"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.": "فیدرها، میوت‌ها، سولوها و نام‌ها همراه با تلفن‌ها و مرورگرهای متصل به این کنسول نمایش داده می‌شوند و هر حرکتی در اینجا بلافاصله به آن‌ها منتقل می‌شود. وقتی یک فیدر روی تلفن حرکت داده می‌شود، اینجا روشن می‌شود.",
+"CONNECTED PHONES": "تلفن‌های متصل",
+"Phones and browsers linked right now. DISCONNECT drops one (it may come back in 2 minutes); FORGET removes its pairing, so it needs the PIN again.": "تلفن‌ها و مرورگرها در حال حاضر متصل هستند. DISCONNECT یکی را قطع می‌کند (ممکن است ظرف ۲ دقیقه دوباره برگردد)؛ FORGET جفت‌شدن آن را حذف می‌کند، بنابراین دوباره به پین نیاز دارد.",
+"OWNER": "مالک",
+"DISCONNECT": "قطع اتصال",
+"No phone linked yet. Open AmF X1 on the phone: it finds this computer on the Wi-Fi by itself.": "هنوز هیچ تلفنی متصل نشده است. اپلیکیشن AmF X1 را روی تلفن باز کنید: به‌طور خودکار این کامپیوتر را از طریق وای‌فای پیدا می‌کند.",
+"The Windows output slider (the keyboard's volume keys move it too)": "اسلایدر خروجی ویندوز (دکمه‌های صدا روی صفحه‌کلید نیز آن را حرکت می‌دهند)",
+"GAIN MODE: Windows volume trims the master": "حالت GAIN: ولوم ویندوز مستر را کاهش می‌دهد",
+"The Windows slider becomes an extra gain after the master (the fader stays where it is): 100% = 0 dB, 50% = -9 dB, 25% = -18 dB, 0% = off. Handy with ASIO or a USB interface, which Windows' own volume does not reach.": "اسلایدر ویندوز پس از مستر به یک تقویت اضافی تبدیل می‌شود (فییدر در جای خود باقی می‌ماند): 100٪ = 0 دسی‌بل، 50٪ = ‑9 دسی‌بل، 25٪ = ‑18 دسی‌بل، 0٪ = خاموش. مناسب برای استفاده با ASIO یا رابط USB که ولوم خود ویندوز به آن دسترسی ندارد.",
+"It had already gone.": "آن قبلاً رفته بود.",
+"GAIN MODE off: the Windows volume does not change the console's level.": "حالت GAIN خاموش: ولوم ویندوز سطح کنسول را تغییر نمی‌دهد.",
+"This output plays through Windows' own mixer, which already sets its level with this slider: no extra trim (no double cut).": "این خروجی از میکسر خود ویندوز پخش می‌شود که سطح آن را با این اسلایدر تنظیم می‌کند: بدون تنظیم اضافی (بدون کاهش دوبل)."
 }

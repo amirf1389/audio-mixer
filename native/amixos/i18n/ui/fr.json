@@ -2053,5 +2053,18 @@
 "LIVE SYNC": "SYNCHRONISATION EN DIRECT",
 "CONNECTED": "CONNECTÉ",
 "waiting for a phone or browser": "en attendant un téléphone ou un navigateur",
-"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.": "Les faders, les sourdines, les solos et les noms correspondent aux téléphones et aux navigateurs connectés à cette console, et chaque action effectuée ici leur est transmise instantanément. Lorsqu’un fader est actionné depuis un téléphone, il s’allume ici."
+"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.": "Les faders, les sourdines, les solos et les noms correspondent aux téléphones et aux navigateurs connectés à cette console, et chaque action effectuée ici leur est transmise instantanément. Lorsqu’un fader est actionné depuis un téléphone, il s’allume ici.",
+"CONNECTED PHONES": "TÉLÉPHONES CONNECTÉS",
+"Phones and browsers linked right now. DISCONNECT drops one (it may come back in 2 minutes); FORGET removes its pairing, so it needs the PIN again.": "Les téléphones et les navigateurs sont actuellement connectés. L'option « DÉCONNECTER » déconnecte l'un d'entre eux (il peut se reconnecter au bout de 2 minutes) ; l'option « OUBLIER » supprime son appairage, ce qui nécessite de saisir à nouveau le code PIN.",
+"OWNER": "PROPRIÉTAIRE",
+"DISCONNECT": "DÉCONNECTER",
+"No phone linked yet. Open AmF X1 on the phone: it finds this computer on the Wi-Fi by itself.": "Aucun téléphone n'est encore connecté. Ouvrez AmF X1 sur votre téléphone : l'application détectera automatiquement cet ordinateur via le Wi-Fi.",
+"Windows volume": "Volume Windows",
+"The Windows output slider (the keyboard's volume keys move it too)": "Le curseur de sortie Windows (les touches de volume du clavier permettent également de le déplacer)",
+"GAIN MODE: Windows volume trims the master": "MODE GAIN : le volume de Windows ajuste le volume principal",
+"The Windows slider becomes an extra gain after the master (the fader stays where it is): 100% = 0 dB, 50% = -9 dB, 25% = -18 dB, 0% = off. Handy with ASIO or a USB interface, which Windows' own volume does not reach.": "Le curseur Windows devient un gain supplémentaire après le master (le fader reste à sa position initiale) : 100 % = 0 dB, 50 % = -9 dB, 25 % = -18 dB, 0 % = désactivé. Pratique avec une interface ASIO ou USB, que le réglage de volume intégré à Windows ne parvient pas à atteindre.",
+"It had already gone.": "Il avait déjà disparu.",
+"The Windows volume is not available on this computer.": "Le volume Windows n'est pas disponible sur cet ordinateur.",
+"GAIN MODE off: the Windows volume does not change the console's level.": "Mode GAIN désactivé : le volume de Windows n'influe pas sur le niveau de la console.",
+"This output plays through Windows' own mixer, which already sets its level with this slider: no extra trim (no double cut).": "Ce signal est diffusé via le mixeur intégré à Windows, qui règle déjà son niveau à l'aide de ce curseur : aucun réglage supplémentaire n'est nécessaire (pas de double réglage)."
 }

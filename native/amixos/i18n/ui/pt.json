@@ -2073,5 +2073,18 @@
 "LIVE SYNC": "SINCRONIZAÇÃO AO VIVO",
 "CONNECTED": "LIGADO",
 "waiting for a phone or browser": "à espera de um telemóvel ou de um navegador",
-"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.": "Os faders, os silenciadores, os solos e os nomes acompanham os telemóveis e os navegadores ligados a esta consola, e cada ação aqui realizada chega-lhes instantaneamente. Quando se move um fader num telemóvel, acende-se aqui uma luz."
+"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.": "Os faders, os silenciadores, os solos e os nomes acompanham os telemóveis e os navegadores ligados a esta consola, e cada ação aqui realizada chega-lhes instantaneamente. Quando se move um fader num telemóvel, acende-se aqui uma luz.",
+"CONNECTED PHONES": "TELEFONES CONECTADOS",
+"Phones and browsers linked right now. DISCONNECT drops one (it may come back in 2 minutes); FORGET removes its pairing, so it needs the PIN again.": "Os celulares e navegadores estão conectados no momento. A opção DESCONECTAR desconecta um deles (ele pode voltar a se conectar em 2 minutos); a opção ESQUECER remove o emparelhamento, de modo que será necessário inserir o PIN novamente.",
+"OWNER": "PROPRIETÁRIO",
+"DISCONNECT": "DESCONECTAR",
+"No phone linked yet. Open AmF X1 on the phone: it finds this computer on the Wi-Fi by itself.": "Ainda não há nenhum celular conectado. Abra o AmF X1 no celular: ele encontra este computador na rede Wi-Fi automaticamente.",
+"Windows volume": "Volume do Windows",
+"The Windows output slider (the keyboard's volume keys move it too)": "O controle deslizante de saída do Windows (as teclas de volume do teclado também o ajustam)",
+"GAIN MODE: Windows volume trims the master": "MODO DE GANHO: O volume do Windows ajusta o volume principal",
+"The Windows slider becomes an extra gain after the master (the fader stays where it is): 100% = 0 dB, 50% = -9 dB, 25% = -18 dB, 0% = off. Handy with ASIO or a USB interface, which Windows' own volume does not reach.": "O controle deslizante do Windows passa a funcionar como um ganho adicional após o master (o fader permanece na mesma posição): 100% = 0 dB, 50% = -9 dB, 25% = -18 dB, 0% = desligado. É útil com ASIO ou uma interface USB, nos quais o controle de volume do próprio Windows não chega.",
+"It had already gone.": "Já tinha sumido.",
+"The Windows volume is not available on this computer.": "O volume do Windows não está disponível neste computador.",
+"GAIN MODE off: the Windows volume does not change the console's level.": "MODO DE GANHO desativado: o volume do Windows não altera o nível do console.",
+"This output plays through Windows' own mixer, which already sets its level with this slider: no extra trim (no double cut).": "Essa saída é reproduzida pelo mixer do próprio Windows, que já ajusta seu nível com este controle deslizante: sem ajuste adicional (sem duplo corte)."
 }

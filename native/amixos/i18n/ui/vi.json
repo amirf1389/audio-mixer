@@ -2053,5 +2053,17 @@
 "LIVE SYNC": "ĐỒNG BỘ TRỰC TIẾP",
 "CONNECTED": "KẾT NỐI",
 "waiting for a phone or browser": "đang chờ điện thoại hoặc trình duyệt",
-"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.": "Các nút điều chỉnh âm lượng, nút tắt tiếng, nút solo và tên các thiết bị sẽ hiển thị theo các điện thoại và trình duyệt được kết nối với bàn điều khiển này, và mọi thao tác tại đây đều được truyền đến chúng ngay lập tức. Khi một nút điều chỉnh âm lượng trên điện thoại được di chuyển, nút tương ứng tại đây sẽ sáng lên."
+"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.": "Các nút điều chỉnh âm lượng, nút tắt tiếng, nút solo và tên các thiết bị sẽ hiển thị theo các điện thoại và trình duyệt được kết nối với bàn điều khiển này, và mọi thao tác tại đây đều được truyền đến chúng ngay lập tức. Khi một nút điều chỉnh âm lượng trên điện thoại được di chuyển, nút tương ứng tại đây sẽ sáng lên.",
+"CONNECTED PHONES": "ĐIỆN THOẠI ĐƯỢC KẾT NỐI",
+"Phones and browsers linked right now. DISCONNECT drops one (it may come back in 2 minutes); FORGET removes its pairing, so it needs the PIN again.": "Điện thoại và trình duyệt hiện đang được kết nối. Lệnh “DISCONNECT” sẽ ngắt kết nối một trong hai thiết bị (thiết bị đó có thể kết nối lại sau 2 phút); lệnh “FORGET” sẽ xóa kết nối ghép đôi, do đó thiết bị đó sẽ cần nhập lại mã PIN.",
+"OWNER": "CHỦ SỞ HỮU",
+"DISCONNECT": "NGẮT KẾT NỐI",
+"No phone linked yet. Open AmF X1 on the phone: it finds this computer on the Wi-Fi by itself.": "Chưa có điện thoại nào được kết nối. Mở ứng dụng AmF X1 trên điện thoại: ứng dụng sẽ tự động phát hiện máy tính này qua mạng Wi-Fi.",
+"Windows volume": "Độ lớn âm lượng Windows",
+"The Windows output slider (the keyboard's volume keys move it too)": "Thanh trượt điều chỉnh âm lượng của Windows (các phím điều chỉnh âm lượng trên bàn phím cũng có thể điều chỉnh thanh trượt này)",
+"GAIN MODE: Windows volume trims the master": "CHẾ ĐỘ GAIN: Âm lượng của Windows điều chỉnh âm lượng tổng thể",
+"The Windows slider becomes an extra gain after the master (the fader stays where it is): 100% = 0 dB, 50% = -9 dB, 25% = -18 dB, 0% = off. Handy with ASIO or a USB interface, which Windows' own volume does not reach.": "Thanh trượt âm lượng của Windows sẽ trở thành một mức tăng âm bổ sung sau nút điều khiển chính (thanh trượt vẫn giữ nguyên vị trí): 100% = 0 dB, 50% = -9 dB, 25% = -18 dB, 0% = tắt. Tính năng này rất hữu ích khi sử dụng ASIO hoặc giao diện USB, những thiết bị mà thanh trượt âm lượng mặc định của Windows không thể điều chỉnh được.",
+"It had already gone.": "Nó đã biến mất rồi.",
+"GAIN MODE off: the Windows volume does not change the console's level.": "Chế độ GAIN MODE tắt: mức âm lượng của Windows không ảnh hưởng đến mức âm lượng của bàn điều khiển.",
+"This output plays through Windows' own mixer, which already sets its level with this slider: no extra trim (no double cut).": "Âm thanh đầu ra này được phát qua bộ trộn âm thanh tích hợp sẵn của Windows, vốn đã điều chỉnh mức âm lượng bằng thanh trượt này: không cần điều chỉnh thêm (không bị cắt hai lần)."
 }

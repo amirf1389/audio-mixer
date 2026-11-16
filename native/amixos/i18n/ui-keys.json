@@ -2195,5 +2195,18 @@
 "LIVE SYNC",
 "CONNECTED",
 "waiting for a phone or browser",
-"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here."
+"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.",
+"CONNECTED PHONES",
+"Phones and browsers linked right now. DISCONNECT drops one (it may come back in 2 minutes); FORGET removes its pairing, so it needs the PIN again.",
+"OWNER",
+"DISCONNECT",
+"No phone linked yet. Open AmF X1 on the phone: it finds this computer on the Wi-Fi by itself.",
+"Windows volume",
+"The Windows output slider (the keyboard's volume keys move it too)",
+"GAIN MODE: Windows volume trims the master",
+"The Windows slider becomes an extra gain after the master (the fader stays where it is): 100% = 0 dB, 50% = -9 dB, 25% = -18 dB, 0% = off. Handy with ASIO or a USB interface, which Windows' own volume does not reach.",
+"It had already gone.",
+"The Windows volume is not available on this computer.",
+"GAIN MODE off: the Windows volume does not change the console's level.",
+"This output plays through Windows' own mixer, which already sets its level with this slider: no extra trim (no double cut)."
 ]

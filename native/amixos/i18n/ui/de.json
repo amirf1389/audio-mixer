@@ -2053,5 +2053,15 @@
 "LIVE SYNC": "LIVE-SYNC",
 "CONNECTED": "VERBUNDEN",
 "waiting for a phone or browser": "Warten auf ein Smartphone oder einen Browser",
-"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.": "Fader, Stummschaltungen, Solo-Schaltungen und Namen werden an die an dieses Mischpult angeschlossenen Telefone und Browser weitergeleitet, und jede Änderung hier wird sofort an alle übertragen. Ein am Telefon bewegter Fader leuchtet hier auf."
+"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.": "Fader, Stummschaltungen, Solo-Schaltungen und Namen werden an die an dieses Mischpult angeschlossenen Telefone und Browser weitergeleitet, und jede Änderung hier wird sofort an alle übertragen. Ein am Telefon bewegter Fader leuchtet hier auf.",
+"CONNECTED PHONES": "VERBUNDENE TELEFONE",
+"Phones and browsers linked right now. DISCONNECT drops one (it may come back in 2 minutes); FORGET removes its pairing, so it needs the PIN again.": "Handys und Browser sind derzeit verbunden. Mit „DISCONNECT“ wird eine Verbindung getrennt (sie kann in 2 Minuten wiederhergestellt werden); mit „FORGET“ wird die Kopplung aufgehoben, sodass die PIN erneut eingegeben werden muss.",
+"OWNER": "EIGENTÜMER",
+"DISCONNECT": "TRENNEN",
+"No phone linked yet. Open AmF X1 on the phone: it finds this computer on the Wi-Fi by itself.": "Es ist noch kein Smartphone verbunden. Öffnen Sie AmF X1 auf dem Smartphone: Die App erkennt diesen Computer automatisch über das WLAN.",
+"The Windows output slider (the keyboard's volume keys move it too)": "Der Windows-Lautstärkeregler (auch die Lautstärketasten der Tastatur beeinflussen ihn)",
+"GAIN MODE: Windows volume trims the master": "VERSTÄRKUNGSMODUS: Die Windows-Lautstärke regelt die Master-Lautstärke",
+"It had already gone.": "Es war bereits verschwunden.",
+"GAIN MODE off: the Windows volume does not change the console's level.": "GAIN-MODUS aus: Die Windows-Lautstärke hat keinen Einfluss auf den Pegel der Konsole.",
+"This output plays through Windows' own mixer, which already sets its level with this slider: no extra trim (no double cut).": "Dieser Ausgang wird über den Windows-eigenen Mixer ausgegeben, der die Lautstärke bereits über diesen Schieberegler einstellt: keine zusätzliche Pegelanpassung (kein doppelter Schnitt)."
 }
