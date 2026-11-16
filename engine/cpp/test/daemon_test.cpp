@@ -206,6 +206,14 @@ int main() {
     CHECK(ctl("{\"op\":\"tone\",\"strip\":2,\"high\":-3,\"on\":false}") == 200);
     { const Value t = d.state()["strips"].at(2)["tone"]; CHECK(t["low"].asNumber() == 4 && t["high"].asNumber() == -3 && !t["on"].asBool()); }
     CHECK(ctl("{\"op\":\"tone\",\"strip\":99,\"low\":1}") == 400);
+    // MASTERING from a remote: clamped, kept in the state, the master version moves (the console takes it); the SAMPLE PADS list
+    { const double mv = d.state()["masterV"].asNumber();
+      CHECK(ctl("{\"op\":\"mastering\",\"on\":true,\"thr\":-60,\"low\":3,\"makeup\":40}") == 200);
+      const Value m = d.state()["mastering"]; CHECK(m["on"].asBool() && m["thr"].asNumber() == -40 && m["low"].asNumber() == 3 && m["makeup"].asNumber() == 18 && d.state()["masterV"].asNumber() > mv);
+      CHECK(ctl("{\"op\":\"mastering\",\"on\":false,\"low\":0,\"makeup\":0,\"thr\":-12}") == 200);
+      CHECK(am::httpd::Client::request("127.0.0.1", port, "GET", "/api/samples", "", auth, status, body) && status == 200);
+      const Value sl = Value::parse(body, ok)["samples"]; CHECK(ok && sl.size() == 100 && sl.at(0)["id"].asInt() == 1 && !sl.at(0)["name"].asString().empty());
+      CHECK(am::httpd::Client::request("127.0.0.1", port, "GET", "/api/samples", "", {}, status, body) && (status == 401 || status == 429)); }
     CHECK(ctl("{\"op\":\"trim\",\"strip\":2,\"db\":0}") == 200 && ctl("{\"op\":\"tone\",\"strip\":2,\"low\":0,\"mid\":0,\"midHz\":1000,\"high\":0,\"on\":true}") == 200); }
   { // CONSOLE SETTINGS over the remote, and the WINDOWS VOLUME with GAIN MODE (a stand-in for the Windows slider)
     const auto set = [&](const std::string& k, const std::string& v) { return am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"setting\",\"key\":\"" + k + "\",\"value\":" + v + "}", auth, status, body) ? status : -1; };

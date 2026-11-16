@@ -853,6 +853,17 @@ int main(int argc, char* argv[]) {
           std::printf("amixos --smoke: REAL-TIME SYNC console plug-in knob -> service %s in %lld ms; console EQ -> remotes %s in %lld ms; remote EQ -> console %s in %lld ms\n",
                       std::abs(there - want) < 0.02 ? "yes" : "NO", static_cast<long long>(plugMs), std::abs(eqOut - 5) < 0.05 ? "yes" : "NO", static_cast<long long>(eqOutMs), eqIn ? "yes" : "NO", static_cast<long long>(ti.elapsed()));
           engine.setEq(4, 2, 0, 2000, 1.0, 0.0); engine.setEq(6, 1, 0, 150, 0.7, 0.0);
+          // MASTERING both ways: a phone's move lands on the console; the console's own move reaches the service (and the phones)
+          { const QVariantMap keep = engine.mastering();
+            http("/api/control", "{\"op\":\"mastering\",\"on\":true,\"thr\":-22,\"low\":2.5}"); QElapsedTimer tm; tm.start(); QVariantMap cm;
+            while (tm.elapsed() < 3000) { wait(40); cm = engine.mastering(); if (cm.value("on").toBool() && std::abs(cm.value("thr").toDouble() + 22) < 0.05) break; }
+            const bool inOk = cm.value("on").toBool() && std::abs(cm.value("thr").toDouble() + 22) < 0.05 && std::abs(cm.value("low").toDouble() - 2.5) < 0.05; const qint64 inMs = tm.elapsed();
+            engine.setMastering(QVariantMap{{"makeup", 4.5}}); tm.restart(); double mk = 0;
+            while (tm.elapsed() < 3000) { wait(40); mk = http("/api/state", {}).value("mastering").toMap().value("makeup").toDouble(); if (std::abs(mk - 4.5) < 0.05) break; }
+            const bool outOk = std::abs(mk - 4.5) < 0.05;
+            std::printf("amixos --smoke: MASTERING phone -> console %s in %lld ms; console -> phones %s in %lld ms\n", inOk ? "yes" : "NO", static_cast<long long>(inMs), outOk ? "yes" : "NO", static_cast<long long>(tm.elapsed()));
+            engine.setMastering(keep);
+            if (!(inOk && outOk)) { rackOk = false; rackWhy = QStringLiteral("MASTERING sync (in %1, out %2)").arg(inOk).arg(outOk); } }
           // SAMPLE PADS while the phones are linked: the console's engine is stopped, a pad goes to the service and is heard on its master
           { double before = 0, during = 0; for (int k = 0; k < 5; ++k) { wait(40); before = std::max(before, get("/api/meters").value("master").toMap().value("l").toDouble()); }
             const bool sent = !engine.running() && samples.play(1); QElapsedTimer tp; tp.start();

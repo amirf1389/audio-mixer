@@ -678,7 +678,12 @@ class RemoteActivity : AppCompatActivity() {
                     val m = ToggleButton(this).apply { textOn = "MUTED"; textOff = "MUTE"; isChecked = b.mute; setOnCheckedChangeListener { _, on -> io.execute { runCatching { c.busMute(b.id, on) } } } }
                     head.addView(label); head.addView(m); box.addView(head)
                     box.addView(SeekBar(this).apply { max = 1000; progress = (DaemonClient.dbToPos(b.db) * 1000).toInt()
-                        setOnSeekBarChangeListener(change { p -> val v = DaemonClient.posToDb(p / 1000.0); c.busLevel(b.id, v); ui.post { label.text = busName(b.id) + "   " + DaemonClient.fmtDb(v) } }) }) }
+                        setOnSeekBarChangeListener(change { p -> val v = DaemonClient.posToDb(p / 1000.0); c.busLevel(b.id, v); ui.post { label.text = busName(b.id) + "   " + DaemonClient.fmtDb(v) } }) })
+                    // RETURN: how much of the bus comes back into the master (an FX return, or a monitor mix heard in the room)
+                    val ret = TextView(this).apply { text = getString(R.string.bus_return, DaemonClient.fmtDb(b.returnDb)); setTextColor(Color.parseColor("#8B98A8")); textSize = 12f }
+                    box.addView(ret)
+                    box.addView(SeekBar(this).apply { max = 1000; progress = (DaemonClient.dbToPos(b.returnDb) * 1000).toInt()
+                        setOnSeekBarChangeListener(change { p -> val v = DaemonClient.posToDb(p / 1000.0); c.busReturn(b.id, v); ui.post { ret.text = getString(R.string.bus_return, DaemonClient.fmtDb(v)) } }) }) }
                 AlertDialog.Builder(this).setTitle(R.string.buses).setView(ScrollView(this).apply { addView(box) }).setPositiveButton(android.R.string.ok, null).show() } }
     }
     private fun busName(k: Int) = if (k < 8) "AUX ${k + 1}" else "FX ${k - 7}"
