@@ -721,8 +721,10 @@ int main(int argc, char* argv[]) {
         const double g0 = engine.stripAt(0)["db"].toDouble(), g1 = engine.stripAt(1)["db"].toDouble();
         const bool wasRunning = engine.running(); const QString wb = engine.backend(); const double wr = engine.sampleRate(); const int wf = engine.blockFrames(), wi = engine.deviceInputs(), wo = engine.deviceOutputs();
         engine.setGain(0, -9); if (!remote.start(false)) { std::fprintf(stderr, "amixos --smoke: LIVE SYNC: the remote did not start: %s\n", qPrintable(remote.status())); return 284; }
-        wait(1500); QNetworkAccessManager nam; const auto http = [&](const QString& path, const QByteArray& body) { QNetworkRequest q(QUrl("http://127.0.0.1:8765" + path)); q.setHeader(QNetworkRequest::ContentTypeHeader, "application/json"); q.setRawHeader("X-Amix-Token", remote.token().toUtf8());
-          QNetworkReply* r = body.isEmpty() ? nam.get(q) : nam.post(q, body); QElapsedTimer t; t.start(); while (!r->isFinished() && t.elapsed() < 3000) app.processEvents(QEventLoop::AllEvents, 20); const QVariantMap m = QJsonDocument::fromJson(r->readAll()).toVariant().toMap(); r->deleteLater(); return m; };
+        wait(1500); QNetworkAccessManager nam; QString lastHttpErr; const auto http = [&](const QString& path, const QByteArray& body) { QNetworkRequest q(QUrl("http://127.0.0.1:8765" + path)); q.setHeader(QNetworkRequest::ContentTypeHeader, "application/json"); q.setRawHeader("X-Amix-Token", remote.token().toUtf8());
+          QNetworkReply* r = body.isEmpty() ? nam.get(q) : nam.post(q, body); QElapsedTimer t; t.start(); while (!r->isFinished() && t.elapsed() < 3000) app.processEvents(QEventLoop::AllEvents, 20);
+          if (!r->isFinished() || r->error() != QNetworkReply::NoError) lastHttpErr = path + ": " + (r->isFinished() ? r->errorString() : QStringLiteral("no answer in 3 s"));
+          const QVariantMap m = QJsonDocument::fromJson(r->readAll()).toVariant().toMap(); r->deleteLater(); return m; };
         const double seeded = http("/api/state", {})["strips"].toList().value(0).toMap()["db"].toDouble();
         // a "phone" watching the live stream (it counts as a connected remote), and the MIXER page on screen for AMIX_SYNC_SHOT
         QTcpSocket phone; phone.connectToHost("127.0.0.1", 8765); if (phone.waitForConnected(2000)) { phone.write(("GET /ws/meters?token=" + QUrl::toPercentEncoding(remote.token()) + " HTTP/1.1\r\nHost: 127.0.0.1:8765\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n")); phone.flush(); }
@@ -736,8 +738,9 @@ int main(int argc, char* argv[]) {
         const bool ok = std::abs(seeded + 9) < 0.05 && std::abs(engine.stripAt(1)["db"].toDouble() + (qEnvironmentVariableIsSet("AMIX_SYNC_SHOT") ? 16 : 14)) < 0.05 && engine.stripAt(2)["mute"].toBool() && std::abs(out + 21) < 0.05 && lit && remotesSeen >= 1;
         phone.abort();
         std::fprintf(stdout, "amixos --smoke: LIVE SYNC seed %.1f, phone->console %lld ms, console->phone %lld ms, changes %d, fader lit %d, remotes %d\n", seeded, static_cast<long long>(inMs), static_cast<long long>(outMs), remote.syncedChanges(), lit, remotesSeen);
+        const bool remoteWasRunning = remote.running(); const QString remoteStatus = remote.status();
         remote.stop(); wait(600); if (wasRunning && !engine.running()) engine.open(wb, "", "", wr, wf, wi, wo); wait(300); engine.setGain(0, g0); engine.setGain(1, g1); engine.setGain(3, 0); engine.setMute(2, false);
-        if (!ok) { std::fprintf(stderr, "amixos --smoke: LIVE SYNC failed (seed %.1f, strip 2 %.1f, mute %d, out %.1f)\n", seeded, engine.stripAt(1)["db"].toDouble(), engine.stripAt(2)["mute"].toBool(), out); return 285; } }
+        if (!ok) { std::fprintf(stderr, "amixos --smoke: LIVE SYNC failed (seed %.1f, strip 2 %.1f, mute %d, out %.1f; remote running %d, status %s; http %s)\n", seeded, engine.stripAt(1)["db"].toDouble(), engine.stripAt(2)["mute"].toBool(), out, remoteWasRunning, qPrintable(remoteStatus), qPrintable(lastHttpErr)); return 285; } }
       { // SECURE INPUT: an input not on the allowed list is never opened; an allowed WASAPI input opens exclusively; switched off, nothing changes
         const bool keepOn = engine.secureInput(); const QStringList keepList = QSettings().value("audio/allowedInputs").toStringList();
         engine.setSecureInput(true); engine.setInputAllowed("wasapi", "{mic-a}", false);
