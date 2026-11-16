@@ -279,6 +279,24 @@ int main(int argc, char* argv[]) {
     std::printf("amixos --bench: MIXER idle %.1f ms CPU per second, faders moving (%d moves) %.1f ms CPU per second\n", idle, moves, moving);
     engine.stop(); return 0;
   }
+  // REMOTE HOLD (tests with the real phone app, AMIX_REMOTE_HOLD=<seconds>, AMIX_REMOTE_DUMP=<file>): the phone remote starts for this
+  // network as the button does, the MIXER page is on screen, and every 100 ms the console's own state goes to the file (the pairing PIN,
+  // strips 1-4, master, remotes connected). Every 4 s the console moves strip 4 itself (-12 / -24 dB) so the phone's side can be checked.
+  if (qEnvironmentVariableIsSet("AMIX_REMOTE_HOLD")) {
+    auto* win = qobject_cast<QQuickWindow*>(qml.rootObjects().first()); if (win) win->setProperty("current", "mixer");
+    if (!remote.start(true)) { std::fprintf(stderr, "amixos: remote hold: the remote did not start: %s\n", qPrintable(remote.status())); return 3; }
+    const int secs = qEnvironmentVariableIntValue("AMIX_REMOTE_HOLD"); const QString dump = qEnvironmentVariable("AMIX_REMOTE_DUMP");
+    QElapsedTimer t; t.start(); qint64 lastMove = 0; int k = 0;
+    while (t.elapsed() < secs * 1000LL) {
+      QCoreApplication::processEvents(QEventLoop::AllEvents, 20); QThread::msleep(10);
+      if (t.elapsed() - lastMove > 4000) { lastMove = t.elapsed(); engine.setGain(3, (k++ % 2) ? -24.0 : -12.0); }
+      static qint64 lastDump = -1000; if (t.elapsed() - lastDump < 100 || dump.isEmpty()) continue; lastDump = t.elapsed();
+      QJsonArray st; for (int i = 0; i < 4; ++i) { const QVariantMap m = engine.stripAt(i); st.append(QJsonObject{{"db", m["db"].toDouble()}, {"mute", m["mute"].toBool()}, {"name", m["name"].toString()}}); }
+      QFile f(dump + ".tmp"); if (f.open(QIODevice::WriteOnly)) { f.write(QJsonDocument(QJsonObject{{"t", t.elapsed()}, {"pin", remote.pairPin()}, {"port", remote.port()}, {"running", remote.running()},
+          {"remotes", remote.remotes()}, {"master", engine.masterDb()}, {"strips", st}, {"status", remote.status()}}).toJson(QJsonDocument::Compact)); f.close(); QFile::remove(dump); QFile::rename(dump + ".tmp", dump); }
+    }
+    remote.stop(); waitMs(500); return 0;
+  }
   if (smoke) {
     std::printf("amixos --smoke: start master %.1f dB, monitor %.1f dB; %s\n", engine.masterDb(), engine.monitor()["db"].toDouble(), qPrintable(engine.status()));
     if (engine.masterDb() <= -60.0) { std::fprintf(stderr, "amixos --smoke: the console started with the master at -inf\n"); return 166; }
