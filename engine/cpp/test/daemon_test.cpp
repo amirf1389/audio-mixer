@@ -266,6 +266,20 @@ int main() {
     CHECK(am::httpd::Client::request("127.0.0.1", pp, "POST", "/api/control", "{\"op\":\"plugin\",\"strip\":1,\"slot\":0,\"param\":7,\"value\":0.5}", pa, status, body) && status == 400);    // not loaded here
     CHECK(am::httpd::Client::request("127.0.0.1", pp, "GET", "/api/racks?states=1", "", pa, status, body) && status == 200 && Value::parse(body, ok)["racks"].at(0)["slots"].at(0)["state"].asString().rfind("0.25", 0) == 0);
     { const int c0 = g_fake->calls.load(); std::this_thread::sleep_for(std::chrono::milliseconds(300)); CHECK(g_fake->calls.load() > c0); }   // the sound goes through it
+    // THE CONSOLE'S RACK as it changes (op rack): the same plug-in in the same slot keeps its instance and takes the new state; the
+    // version moves but says it came from the console (so the console does not take it back); a new slot is made; an empty list clears
+    { FakePlugin* same = g_fake; const double rv2 = pd.state()["racksV"].asNumber();
+      CHECK(am::httpd::Client::request("127.0.0.1", pp, "POST", "/api/control", "{\"op\":\"rack\",\"strip\":0,\"plugins\":[{\"slot\":2,\"kind\":\"vst3:C:/VST3/FakeGain.vst3|ABC\",\"name\":\"Fake Gain\",\"bypass\":false,\"state\":\"0.9,0.1\"}]}", pa, status, body) && status == 200);
+      CHECK(g_fake == same && std::abs(same->gain - 0.9) < 1e-9 && !same->byp && pd.state()["racksV"].asNumber() > rv2 && pd.state()["racksBy"].asString() == "console");
+      CHECK(am::httpd::Client::request("127.0.0.1", pp, "POST", "/api/control", "{\"op\":\"rack\",\"strip\":0,\"plugins\":[{\"slot\":2,\"kind\":\"vst3:C:/VST3/FakeGain.vst3|ABC\",\"state\":\"0.9,0.1\"},{\"slot\":3,\"kind\":\"vst3:C:/VST3/FakeGain.vst3|ABC\",\"state\":\"0.2,0.2\"}]}", pa, status, body) && status == 200);
+      CHECK(g_fake != same && std::abs(g_fake->gain - 0.2) < 1e-9);   // slot 3 made fresh
+      CHECK(am::httpd::Client::request("127.0.0.1", pp, "GET", "/api/racks?strip=0", "", pa, status, body) && Value::parse(body, ok)["racks"].at(0)["slots"].size() == 2);
+      CHECK(am::httpd::Client::request("127.0.0.1", pp, "POST", "/api/control", "{\"op\":\"plugin\",\"strip\":0,\"slot\":2,\"bypass\":true}", pa, status, body) && pd.state()["racksBy"].asString() == "remote");
+      CHECK(am::httpd::Client::request("127.0.0.1", pp, "POST", "/api/control", "{\"op\":\"rack\",\"strip\":0,\"plugins\":[]}", pa, status, body) && status == 200);
+      CHECK(am::httpd::Client::request("127.0.0.1", pp, "GET", "/api/racks", "", pa, status, body) && Value::parse(body, ok)["racks"].size() == 1); }
+    // THE CHANNEL EQ (bands 0..7) is kept in the state, so the console and every remote follow it
+    CHECK(am::httpd::Client::request("127.0.0.1", pp, "POST", "/api/control", "{\"op\":\"eq\",\"strip\":1,\"band\":3,\"type\":\"highshelf\",\"freq\":8000,\"q\":0.7,\"gainDb\":4.5}", pa, status, body) && status == 200);
+    { const Value e = pd.state()["strips"].at(1)["eq"].at(3); CHECK(e.at(0).asInt() == 3 && e.at(1).asNumber() == 8000 && e.at(3).asNumber() == 4.5); }
     pd.stop(); std::remove(sf.c_str()); g_fake = nullptr; }
   { // RTA: a 1 kHz sine at -6 dBFS reads about -6 dB in its band and nothing far from it; the master's RTA EQ from the seed and from a remote
     am::Rta rta; rta.source.store(am::Rta::kMaster); std::vector<float> L(256), R(256); double ph = 0;

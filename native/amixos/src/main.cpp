@@ -811,6 +811,24 @@ int main(int argc, char* argv[]) {
             while (t.elapsed() < 3000) { wait(40); for (const QVariant& v : engine.pluginParams(5, 0)) if (v.toMap().value("id").toInt() == id) now = v.toMap().value("value").toDouble(); if (std::abs(now - want) < 0.02) break; }
             rackOk = std::abs(now - want) < 0.02; if (!rackOk) rackWhy = QStringLiteral("the console's instance did not follow (%1, wanted %2)").arg(now).arg(want);
             std::printf("amixos --smoke: CONSOLE PLUG-INS %s played by the service, a phone set %s to %.2f, the console followed in %lld ms\n", qPrintable(slot.value("name").toString()), qPrintable(ps[0].toMap().value("title").toString()), want, static_cast<long long>(t.elapsed())); } }
+        // ... and the other way: a knob turned on the console (or in the plug-in's own window) reaches the service's instance; the console's
+        // 8-band channel EQ goes out to the remotes, and a remote's EQ band lands on the console, as they move
+        if (rackOk) { const auto get = [&](const QString& path) { QNetworkRequest q(QUrl("http://127.0.0.1:8765" + path)); q.setRawHeader("X-Amix-Token", remote.token().toUtf8()); QNetworkReply* r = nam.get(q);
+            QElapsedTimer t; t.start(); while (!r->isFinished() && t.elapsed() < 3000) app.processEvents(QEventLoop::AllEvents, 20); const QVariantMap m = QJsonDocument::fromJson(r->readAll()).toVariant().toMap(); r->deleteLater(); return m; };
+          const QVariantList cps = engine.pluginParams(5, 0); const int id = cps.value(0).toMap().value("id").toInt(); const double want = cps.value(0).toMap().value("value").toDouble() < 0.5 ? 0.8 : 0.2;
+          engine.setPluginParam(5, 0, id, want); QElapsedTimer t; t.start(); double there = -1;
+          while (t.elapsed() < 4000) { wait(60); for (const QVariant& v : get("/api/racks?strip=5").value("racks").toList().value(0).toMap().value("slots").toList().value(0).toMap().value("params").toList()) if (v.toMap().value("id").toInt() == id) there = v.toMap().value("value").toDouble(); if (std::abs(there - want) < 0.02) break; }
+          const qint64 plugMs = t.elapsed();
+          engine.setEq(4, 2, 1, 2000, 1.0, 5.0); QElapsedTimer te; te.start(); double eqOut = 0;
+          while (te.elapsed() < 3000) { wait(40); eqOut = http("/api/state", {})["strips"].toList().value(4).toMap()["eq"].toList().value(2).toList().value(3).toDouble(); if (std::abs(eqOut - 5) < 0.05) break; }
+          const qint64 eqOutMs = te.elapsed();
+          http("/api/control", "{\"op\":\"eq\",\"strip\":6,\"band\":1,\"type\":\"lowshelf\",\"freq\":150,\"q\":0.7,\"gainDb\":-3.5}"); QElapsedTimer ti; ti.start(); QVariantMap eb;
+          while (ti.elapsed() < 3000) { wait(40); eb = engine.eqBand(6, 1); if (std::abs(eb.value("gainDb").toDouble() + 3.5) < 0.05 && eb.value("type").toInt() == 2) break; }
+          const bool eqIn = std::abs(eb.value("gainDb").toDouble() + 3.5) < 0.05 && eb.value("type").toInt() == 2 && std::abs(eb.value("freq").toDouble() - 150) < 0.5;
+          std::printf("amixos --smoke: REAL-TIME SYNC console plug-in knob -> service %s in %lld ms; console EQ -> remotes %s in %lld ms; remote EQ -> console %s in %lld ms\n",
+                      std::abs(there - want) < 0.02 ? "yes" : "NO", static_cast<long long>(plugMs), std::abs(eqOut - 5) < 0.05 ? "yes" : "NO", static_cast<long long>(eqOutMs), eqIn ? "yes" : "NO", static_cast<long long>(ti.elapsed()));
+          engine.setEq(4, 2, 0, 2000, 1.0, 0.0); engine.setEq(6, 1, 0, 150, 0.7, 0.0);
+          if (!(std::abs(there - want) < 0.02 && std::abs(eqOut - 5) < 0.05 && eqIn)) { rackOk = false; rackWhy = QStringLiteral("REAL-TIME SYNC: plug-in %1 / EQ out %2 / EQ in %3").arg(there).arg(eqOut).arg(eqIn); } }
         engine.setPlugin(5, 0, QString());
         if (!rackOk) { std::fprintf(stderr, "amixos --smoke: CONSOLE PLUG-INS failed: %s\n", qPrintable(rackWhy)); remote.stop(); return 290; }
         // RTA EQ and RTA: a remote sets the console's RTA EQ (the service plays it, the console takes it back); the analyzer answers

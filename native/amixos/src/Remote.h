@@ -3,6 +3,7 @@
 // encrypted on the wire: for use on your own network; for anything else put the nginx TLS front (deploy/nginx) before it.
 // The service runs its own engine, so the console hands the sound card over while it runs and takes it back when it stops.
 #pragma once
+#include <cmath>
 #include <QObject>
 #include <QHash>
 #include <QNetworkAccessManager>
@@ -71,7 +72,11 @@ class Remote : public QObject {
   // LIVE SYNC, the console side: the service starts from the console's mixer (remote-seed.json, --seed), and while it runs the console
   // follows it: a fader, mute, solo or name moved on a phone or in a browser moves here (about 150 ms), and one moved here goes out to
   // every phone and browser. Each side is compared with the last value both agreed on, so neither echoes the other back.
-  struct SyncStrip { double db = 0, pan = 0; bool mute = false, solo = false; QString name; double trim = 0, low = 0, mid = 0, midHz = 1000, high = 0; bool toneOn = true; };   // + GAIN and the 3-band channel EQ
+  struct SyncStrip;
+  static QVariantList eqList(const SyncStrip& s);
+  struct SyncStrip { double db = 0, pan = 0; bool mute = false, solo = false; QString name; double trim = 0, low = 0, mid = 0, midHz = 1000, high = 0; bool toneOn = true;
+    struct Band { int type = 0; double freq = 1000, q = 0.707, gain = 0; bool operator!=(const Band& o) const { return type != o.type || std::abs(freq - o.freq) > 0.5 || std::abs(q - o.q) > 0.005 || std::abs(gain - o.gain) > 0.05; } };
+    Band eq[8]; };   // the channel's parametric EQ, bands 0..7   // + GAIN and the 3-band channel EQ
   static QString syncName(int i, const QString& n) { return n.isEmpty() ? QStringLiteral("CH %1").arg(i + 1) : n; }
   QVector<SyncStrip> consoleMix() const;   // the console's strips as the service names them (licensed channels only)
   // SETTINGS SYNC: the console settings a remote may change (the service's "settings"), kept in step both ways like the faders
@@ -90,7 +95,8 @@ class Remote : public QObject {
   QString runTool(const QStringList& args, bool* ok) const; void restartIfRunning();
   QVariantList tokens_; QString tokenNote_; bool wifi_ = false;
   QVariantMap baseSet_;   // the settings both sides last agreed on
-  quint64 racksV_ = 0; void takeRacks();
+  quint64 racksV_ = 0; QHash<int, QByteArray> baseRacks_; int rackTick_ = 0;   // the racks as the service last got them (strip -> JSON)
+  QByteArray rackJson(int strip) const; void takeRacks();
   quint64 masterV_ = 0;   // the RTA EQ changes a remote made, taken back   // the plug-ins a phone changed, taken back into the console's racks
   QVariantList links_; QString linkNote_; QTimer linkTimer_; bool linksGetting_ = false;
   void ensureToken(); QNetworkRequest api(const QString& path) const;

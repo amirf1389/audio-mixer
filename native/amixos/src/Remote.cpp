@@ -37,18 +37,21 @@ QVector<Remote::SyncStrip> Remote::consoleMix() const {
     s.mute = m.value("mute").toBool(); s.solo = m.value("solo").toBool(); s.name = syncName(i, m.value("name").toString());
     s.trim = engine_->trim(i); const QVariantMap t = engine_->channelEq(i); s.low = t.value("low").toDouble(); s.mid = t.value("mid").toDouble(); s.midHz = t.value("midFreq", 1000).toDouble(); s.high = t.value("high").toDouble();
     s.toneOn = t.value("on", true).toBool() || (std::abs(s.low) < 0.01 && std::abs(s.mid) < 0.01 && std::abs(s.high) < 0.01);   // flat counts as on: the console reports flat bands as off
+    for (int b = 0; b < 8; ++b) { const QVariantMap e = engine_->eqBand(i, b); s.eq[b] = {e.value("type").toInt(), e.value("freq", 1000).toDouble(), e.value("q", 0.707).toDouble(), e.value("gainDb").toDouble()}; }
     v << s; }
   return v;
 }
+QVariantList Remote::eqList(const SyncStrip& s) { QVariantList l; for (const auto& e : s.eq) l << QVariant(QVariantList{e.type, e.freq, e.q, e.gain}); return l; }
+QByteArray Remote::rackJson(int strip) const { return QJsonDocument::fromVariant(engine_->remoteRack(strip)).toJson(QJsonDocument::Compact); }
 void Remote::writeSeed() {
   base_ = consoleMix(); baseMaster_ = engine_->masterDb(); v_ = 0; posting_ = 0; stale_ = getting_ = false; token_.clear(); syncedChanges_ = 0; remotes_ = 0; touched_.clear();
   QVariantList l; for (const SyncStrip& s : base_) l << QVariantMap{{"name", s.name}, {"db", s.db}, {"pan", s.pan}, {"mute", s.mute}, {"solo", s.solo}, {"trim", s.trim},
-                                                    {"tone", QVariantMap{{"low", s.low}, {"mid", s.mid}, {"midHz", s.midHz}, {"high", s.high}, {"on", s.toneOn}}}};
+                                                    {"tone", QVariantMap{{"low", s.low}, {"mid", s.mid}, {"midHz", s.midHz}, {"high", s.high}, {"on", s.toneOn}}}, {"eq", eqList(s)}};
   QFile f(QString::fromStdString(am::paths::file("remote-seed.json")));
   baseSet_ = consoleSettings();   // the service starts with the console's settings too
   QVariantList racks; const QVariantList ss = engine_->stripState();   // and with the console's plug-ins (with their state): they keep sounding
   for (int i = 0; i < ss.size(); ++i) { const QVariantList r = engine_->remoteRack(i); if (r.isEmpty()) continue; racks << QVariantMap{{"strip", i}, {"name", ss[i].toMap().value("name")}, {"plugins", r}}; }
-  racksV_ = 0; masterV_ = 0;
+  racksV_ = 0; masterV_ = 0; baseRacks_.clear(); for (int i = 0; i < ss.size(); ++i) baseRacks_[i] = rackJson(i);
   if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) f.write(QJsonDocument::fromVariant(QVariantMap{{"strips", l}, {"master", QVariantMap{{"db", baseMaster_}}}, {"settings", baseSet_}, {"racks", racks}, {"masterChain", engine_->masterChainSeed()}}).toJson(QJsonDocument::Compact));
 }
 QVariantMap Remote::consoleSettings() const {
@@ -74,7 +77,8 @@ void Remote::takeRacks() {
   connect(r, &QNetworkReply::finished, this, [this, r] { r->deleteLater(); if (r->error() != QNetworkReply::NoError) return;
     for (const QVariant& rv : QJsonDocument::fromJson(r->readAll()).toVariant().toMap().value("racks").toList()) { const QVariantMap rk = rv.toMap();
       for (const QVariant& sv : rk.value("slots").toList()) { const QVariantMap s = sv.toMap(); if (!s.value("loaded").toBool()) continue;
-        engine_->takeRemotePlugin(rk.value("strip").toInt(), s.value("slot").toInt(), s.value("bypass").toBool(), s.value("state").toString()); } } });
+        engine_->takeRemotePlugin(rk.value("strip").toInt(), s.value("slot").toInt(), s.value("bypass").toBool(), s.value("state").toString()); }
+      baseRacks_[rk.value("strip").toInt()] = rackJson(rk.value("strip").toInt()); } });   // what came from a remote is not sent back
 }
 void Remote::syncTick() {
   ++dTicks_;
@@ -91,7 +95,12 @@ void Remote::syncTick() {
     if (x.name != b.name) { post({{"op", "name"}, {"strip", i}, {"name", x.name}}); b.name = x.name; }
     if (moved(x.trim, b.trim)) { post({{"op", "trim"}, {"strip", i}, {"db", x.trim}}); b.trim = x.trim; }
     if (moved(x.low, b.low) || moved(x.mid, b.mid) || std::abs(x.midHz - b.midHz) > 1 || moved(x.high, b.high) || x.toneOn != b.toneOn) {
-      post({{"op", "tone"}, {"strip", i}, {"low", x.low}, {"mid", x.mid}, {"midHz", x.midHz}, {"high", x.high}, {"on", x.toneOn}}); b.low = x.low; b.mid = x.mid; b.midHz = x.midHz; b.high = x.high; b.toneOn = x.toneOn; } }
+      post({{"op", "tone"}, {"strip", i}, {"low", x.low}, {"mid", x.mid}, {"midHz", x.midHz}, {"high", x.high}, {"on", x.toneOn}}); b.low = x.low; b.mid = x.mid; b.midHz = x.midHz; b.high = x.high; b.toneOn = x.toneOn; }
+    for (int k = 0; k < 8; ++k) if (x.eq[k] != b.eq[k]) { static const char* names[] = {"off", "peaking", "lowshelf", "highshelf", "lowpass", "highpass", "notch", "allpass1", "allpass2"};   // the console's EQ out to the remotes
+      post({{"op", "eq"}, {"strip", i}, {"band", k}, {"type", QString::fromLatin1(names[std::clamp(x.eq[k].type, 0, 8)])}, {"freq", x.eq[k].freq}, {"q", x.eq[k].q}, {"gainDb", x.eq[k].gain}}); b.eq[k] = x.eq[k]; } }
+  if (++rackTick_ >= 8) {   // about twice a second: a plug-in added, removed, bypassed or turned in its own window goes to the service
+    rackTick_ = 0; for (int i = 0; i < c.size(); ++i) { const QByteArray j = rackJson(i); if (j == baseRacks_.value(i, QByteArrayLiteral("[]"))) continue;
+      baseRacks_[i] = j; post({{"op", "rack"}, {"strip", i}, {"plugins", QJsonDocument::fromJson(j).toVariant()}}); } }
   if (moved(engine_->masterDb(), baseMaster_)) { baseMaster_ = engine_->masterDb(); post({{"op", "master"}, {"db", baseMaster_}}); }
   { const QVariantMap cs = consoleSettings();   // a setting changed on the console goes out (numbers compared with a small tolerance)
     for (auto it = cs.constBegin(); it != cs.constEnd(); ++it) { const QVariant b = baseSet_.value(it.key());
@@ -106,7 +115,7 @@ void Remote::syncTick() {
     const QVariantMap o = QJsonDocument::fromJson(r->readAll()).toVariant().toMap();
     if (o.contains("remotes") && o.value("remotes").toInt() != remotes_) { remotes_ = o.value("remotes").toInt(); emit synced(); }
     if (o.value("same").toBool() || !o.contains("strips")) return;
-    { const quint64 rv = o.value("racksV").toULongLong(); if (rv && rv != racksV_) { racksV_ = rv; takeRacks(); } }
+    { const quint64 rv = o.value("racksV").toULongLong(); if (rv && rv != racksV_) { racksV_ = rv; if (o.value("racksBy").toString() != QLatin1String("console")) takeRacks(); } }   // our own rack change is not taken back
     { const quint64 mv = o.value("masterV").toULongLong(); const QVariantMap pe = o.value("programEq").toMap();   // a remote's RTA EQ onto the console
       if (mv && mv != masterV_) { const bool first = masterV_ == 0; masterV_ = mv; if (!first && pe.contains("gains")) engine_->setGraphicEq(-1, pe.value("gains").toList(), pe.value("on").toBool()); } }   // a phone changed a plug-in: the console's instance follows
     { const QVariantMap rs = o.value("settings").toMap();   // a setting changed on a remote lands on the console
@@ -124,7 +133,10 @@ void Remote::syncTick() {
       if (m.contains("trim") && std::abs(m.value("trim").toDouble() - b.trim) > 0.05) { b.trim = m.value("trim").toDouble(); engine_->setTrim(i, b.trim); ++n; }
       if (m.contains("tone")) { const QVariantMap t = m.value("tone").toMap(); const double lo = t.value("low").toDouble(), mi = t.value("mid").toDouble(), hz = t.value("midHz", 1000).toDouble(), hi = t.value("high").toDouble(); const bool on = t.value("on", true).toBool();
         if (std::abs(lo - b.low) > 0.05 || std::abs(mi - b.mid) > 0.05 || std::abs(hz - b.midHz) > 1 || std::abs(hi - b.high) > 0.05 || on != b.toneOn) {
-          b.low = lo; b.mid = mi; b.midHz = hz; b.high = hi; b.toneOn = on; engine_->setChannelEq(i, lo, mi, hz, hi, on); ++n; } } }
+          b.low = lo; b.mid = mi; b.midHz = hz; b.high = hi; b.toneOn = on; engine_->setChannelEq(i, lo, mi, hz, hi, on); ++n; } }
+      { const QVariantList eq = m.value("eq").toList();   // a remote's EQ band onto the console, as it moves
+        for (int k = 0; k < 8 && k < eq.size(); ++k) { const QVariantList e = eq[k].toList(); if (e.size() < 4) continue; const SyncStrip::Band r{e[0].toInt(), e[1].toDouble(), e[2].toDouble(), e[3].toDouble()};
+          if (r != b.eq[k]) { b.eq[k] = r; engine_->setEq(i, k, r.type, r.freq, r.q, r.gain); ++n; } } } }
     const double md = o.value("master").toMap().value("db", baseMaster_).toDouble();
     if (std::abs(md - baseMaster_) > 0.05) { baseMaster_ = md; engine_->setMaster(md); touched_[-1] = lastTouch_ = QDateTime::currentMSecsSinceEpoch(); ++n; }
     if (n) { syncedChanges_ += n; dApplied_ += n; emit synced(); } });   // the console's own follow-ups (a stereo link moving the partner) go out on the next tick

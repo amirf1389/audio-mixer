@@ -111,7 +111,9 @@ class Daemon {
  private:
   // a strip: fader, pan, mute, solo; its input GAIN (trim, dB) and the console's analog 3-band channel EQ (LOW shelf 100 Hz, MID bell
   // 100 Hz .. 8 kHz, HIGH shelf 10 kHz, ±15 dB each, the engine's bands 10..12), kept here so every remote shows them
-  struct Strip { std::string name; double db = 0, pan = 0; bool mute = false, solo = false; double trim = 0, low = 0, mid = 0, midHz = 1000, high = 0; bool toneOn = true; };
+  struct Strip { std::string name; double db = 0, pan = 0; bool mute = false, solo = false; double trim = 0, low = 0, mid = 0, midHz = 1000, high = 0; bool toneOn = true;
+    struct Band { int type = 0; double freq = 1000, q = 0.707, gain = 0; };   // the channel's parametric EQ, bands 0..7 (type: dsp::FilterType)
+    Band eq[8]; };
   void pushTone(Runtime& rt, int i) const;
   struct Bus { double db = 0, returnDb = -60; bool mute = false; };
   struct Monitor { int source = 0; double db = 0; bool dim = false, mono = false, mute = false; } mon_;
@@ -126,6 +128,8 @@ class Daemon {
   struct PlugSlot { int slot = 0; std::string kind, name, state, error; bool bypass = false; std::shared_ptr<host::Plugin> pl; };
   std::map<int, std::vector<PlugSlot>> racks_; std::map<int, std::string> rackNames_; std::atomic<unsigned long long> racksV_{1};
   void loadRacks(Runtime& rt);   // every slot made at the runtime's rate, the chains handed to it (m_ held)
+  void loadRack(Runtime& rt, int strip);   // the same for one strip
+  bool racksFromConsole_ = false;          // the last rack change came from the console itself (op rack): it does not take it back
   struct Prefs { double width = 1.0, autoTarget = -16, autoMax = 12, clipDb = -0.1, peakHoldMs = 1500; int outputBits = 0; bool dcBlock = true, analog = false, autoLevel = false, winGain = false, winMuteSync = true; } set_;
   std::atomic<int> winVol_{-1}; std::function<bool(float&)> volGet_; std::function<bool(float)> volSet_; std::thread volWatch_;
   double outTrim() const;    // GAIN MODE's listening trim, dB (0 = none, -120 = silent)
