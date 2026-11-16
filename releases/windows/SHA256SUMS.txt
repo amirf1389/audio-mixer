@@ -1,6 +1,6 @@
 6b6db9e7236767e565f1feaa28dee02e797c54db136a33db4bb8ea8f0f7724bc  AmF X1 (32-bit).exe
 a07800c9e9fbaefafce15befd5f18dfb654db7ca2751068e9bedf08719cf7900  AmF X1.exe
-dda2408e4d7d875318285c1a93aa43a0ee6a1fce51608257f8565dd5d8aaeaf9  AmF-X1-1.23.0.1-setup.exe
-f18b36c62d7cc48ca6b677d1550fd977c4813dc85e4e5ec82b6b88b73f3fdc64  AmF-X1-1.23.0.1-windows-x64.zip
+0529eff04f201f8fe9ec24dd1b19fd7efe422ebb6d8c4f606fedd0c59e55379d  AmF-X1-1.23.0.1-setup.exe
+8c22bccc2e3c81f6d60eb572c01e40afbb47e66e1e0848627c4ac261aa5de8a6  AmF-X1-1.23.0.1-windows-x64.zip
 ee3107ab22a713cf9f3f06ec377fbcca501eb87e76d70867b2d8fb7fe6ee0abe  AudioMixerASIO32.dll
 d782bae6c38a07712a6b95dfe85199494a9007ec880bd529edec4147e1ecbd57  AudioMixerASIO64.dll

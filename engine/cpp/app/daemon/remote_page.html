@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>AmF X1 Remote</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="apple-touch-icon" href="/favicon.svg"><meta name="theme-color" content="#0b0f15">
 <style>
 :root{--bg:#0b0f15;--card:#121821;--line:#232c38;--text:#e6edf3;--dim:#8b98a8;--accent:#ea580c;--cyan:#22d3ee;--red:#ef4444;--amber:#fbbf24;--green:#34d399;--fh:220px;--cw:84px}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:13px/1.35 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
@@ -38,9 +39,26 @@ body.nometers .mt{display:none}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--dim);margin-right:6px}.dot.ok{background:var(--green)}.dot.bad{background:var(--red)}
 .note{color:var(--dim);font-size:11px;margin:8px 0 0}
 .err{color:var(--red)}
+/* LIGHT THEME (SETTINGS → THEME) */
+body.light{--bg:#f3f4f6;--card:#fff;--line:#d6dbe2;--text:#111827;--dim:#5b6573}body.light header{background:#ffffffee}body.light input,body.light select,body.light .lm div,body.light .mt{background:#f8fafc}
+body.light button{background:#eef1f5;color:var(--text)}body.light nav button.cur{background:#fff}
+/* more pages */
+button.sm{min-height:32px;padding:6px 10px;font-size:11px}.bar .seg button{min-height:34px}
+.nm{cursor:pointer}.nm:hover{color:var(--accent)}body.locked input[type=range].f{opacity:.45;pointer-events:none}
+.chip{display:inline-flex;align-items:center;gap:4px;padding:6px 10px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--dim);font-size:11px;min-height:30px}
+.chip.on{background:var(--accent);border-color:var(--accent);color:#fff}.chips{display:flex;flex-wrap:wrap;gap:6px}
+.kn{display:grid;grid-template-columns:88px 1fr 64px;align-items:center;gap:8px;padding:6px 0}.kn span{font-size:11px;color:var(--dim);letter-spacing:.06em}.kn em{font:11px ui-monospace,monospace;color:var(--cyan);text-align:right;font-style:normal}
+.kn input[type=range]{width:100%;padding:0;letter-spacing:0;accent-color:var(--accent);height:28px}
+input.t{font:14px system-ui;letter-spacing:0;text-align:left;padding:9px 10px}
+canvas.eq{width:100%;height:150px;background:#05080c;border:1px solid var(--line);border-radius:8px;display:block}body.light canvas.eq{background:#f8fafc}
+.band{border-top:1px solid var(--line);padding-top:8px;margin-top:8px}.band .hd{display:flex;align-items:center;gap:8px;margin-bottom:2px}.band .hd b{flex:1;font-size:11px;letter-spacing:.08em}
+.scn{display:flex;align-items:center;gap:8px;padding:10px 0;border-top:1px solid var(--line)}.scn:first-child{border-top:0}.scn b{flex:1}.scn small{color:var(--dim);display:block;font-weight:400}
+table.dv{width:100%;border-collapse:collapse;font-size:12px}table.dv td,table.dv th{padding:7px 6px;border-bottom:1px solid var(--line);text-align:left}table.dv th{color:var(--dim);font-size:10px;letter-spacing:.08em}
+.chsel{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.chsel select{flex:1;min-width:140px}
+kbd{font:11px ui-monospace,monospace;border:1px solid var(--line);border-radius:4px;padding:1px 5px}
 </style></head><body>
 <header><div class="top"><h1>AMF X1 · REMOTE</h1><span id="st">not paired</span></div>
-<nav id="nav"><button data-p="mix">MIXER</button><button data-p="bus">BUSES</button><button data-p="mon">MONITOR</button><button data-p="rec">RECORD</button><button data-p="sys">STATUS</button><button data-p="set">SETTINGS</button></nav></header>
+<nav id="nav"><button data-p="mix">MIXER</button><button data-p="ch">CHANNEL</button><button data-p="bus">BUSES</button><button data-p="mon">MONITOR</button><button data-p="scn">SCENES</button><button data-p="grp">GROUPS</button><button data-p="rec">RECORD</button><button data-p="dev">DEVICES</button><button data-p="sys">STATUS</button><button data-p="set">SETTINGS</button></nav></header>
 <main>
 <section id="pair" class="card">
 <p>On the computer: <b>NETWORK → PHONE REMOTE</b> shows a six-digit PIN that changes every minute, and a QR code. Scan the code with this device's camera, or type the PIN here.</p>
@@ -49,7 +67,8 @@ body.nometers .mt{display:none}
 <button class="pri" id="go">PAIR</button><p id="perr" class="err"></p>
 </section>
 <section id="mix" class="page">
-<div class="bar"><span id="pages" class="seg"></span><span class="sp"></span><button id="clip">CLEAR CLIPS</button></div>
+<div class="bar"><span id="pages" class="seg"></span><span class="sp"></span><button id="muteAll" class="sm">MUTE ALL</button><button id="unmuteAll" class="sm">UNMUTE ALL</button><button id="clearSolo" class="sm">CLEAR SOLO</button><button id="resetF" class="sm">RESET FADERS</button><button id="lockF" class="sm">LOCK FADERS</button><button id="clip" class="sm">CLEAR CLIPS</button></div>
+<p class="note" style="margin:-4px 0 10px">Tap a channel's name to open it on CHANNEL (EQ, dynamics, sends).</p>
 <div id="strips"></div>
 </section>
 <section id="bus" class="page"><div class="bar"><span class="seg"><button id="bAux" class="on acc">AUX 1–8</button><button id="bFx">FX 1–8</button></span><span class="sp"></span></div><div id="buses" class="grid"></div>
@@ -64,6 +83,37 @@ body.nometers .mt{display:none}
 <div class="row"><span>Ceiling <em id="lCeT" class="db"></em></span></div><input type="range" class="h" id="lCe" min="-200" max="0" step="5" aria-label="Limiter ceiling">
 <div class="row"><span>Master <em id="mMaT" class="db"></em></span></div><input type="range" class="h" id="mMa" min="0" max="1000" aria-label="Master level"></div>
 </div></section>
+<section id="ch" class="page">
+<div class="bar chsel"><button id="chPrev" class="sm">◀</button><select id="chSel" aria-label="Channel"></select><button id="chNext" class="sm">▶</button><button id="chM" class="sm m">MUTE</button><button id="chS" class="sm s">SOLO</button></div>
+<div class="grid">
+<div class="card"><h2>CHANNEL</h2>
+<div class="row"><span>Name</span><input id="chName" class="t" maxlength="24" style="width:150px"><button id="chNameOk" class="sm">SAVE</button></div>
+<div class="kn"><span>FADER</span><input type="range" id="chDb" min="0" max="1000"><em id="chDbT"></em></div>
+<div class="kn"><span>PAN</span><input type="range" id="chPan" min="-100" max="100"><em id="chPanT"></em></div>
+<div class="kn"><span>TRIM</span><input type="range" id="chTrim" min="-240" max="240"><em id="chTrimT"></em></div>
+<div class="kn"><span>DELAY</span><input type="range" id="chDelay" min="0" max="500"><em id="chDelayT"></em></div>
+<div class="row"><span>Polarity<small>flip the phase of this channel</small></span><button id="chPol" class="sm">Ø</button></div>
+<p class="note">Trim, delay, EQ, dynamics and sends need the sound card running on the computer. This page remembers what it last sent from this browser.</p></div>
+<div class="card"><h2>EQ · 4 BANDS</h2><canvas class="eq" id="eqC" width="600" height="150"></canvas><div id="eqB"></div><div class="bar" style="margin:10px 0 0"><button id="eqFlat" class="sm">FLAT</button></div></div>
+<div class="card"><h2>DYNAMICS</h2>
+<div class="band"><div class="hd"><b>GATE</b><button id="gOn" class="sm">OFF</button></div><div id="gK"></div></div>
+<div class="band"><div class="hd"><b>COMPRESSOR</b><button id="cOn" class="sm">OFF</button></div><div id="cK"></div></div></div>
+<div class="card"><h2>SENDS</h2><div class="bar"><span class="seg"><button id="sAux" class="sm on acc">AUX 1–8</button><button id="sFx" class="sm">FX 1–8</button></span></div><div id="sends"></div></div>
+</div></section>
+<section id="scn" class="page"><div class="grid">
+<div class="card"><h2>SAVE A SCENE</h2><div class="row"><input id="scName" class="t" placeholder="scene name (e.g. Sunday service)" maxlength="40"><button id="scSave" class="pri sm">SAVE</button></div>
+<p class="note">A scene keeps every fader, pan, mute, solo and name, the master, the buses, the monitor and what this browser set on CHANNEL. RECALL sends it all to the console.</p>
+<div class="bar" style="margin:10px 0 0"><button id="scExport" class="sm">EXPORT ALL</button><label class="chip" style="cursor:pointer">IMPORT<input id="scImport" type="file" accept="application/json" hidden></label></div><p id="scNote" class="note"></p></div>
+<div class="card"><h2>SCENES IN THIS BROWSER</h2><div id="scList"></div></div></div></section>
+<section id="grp" class="page"><div class="grid" id="groups"></div><p class="note">MUTE GROUPS: tap the channels that belong to a group, then MUTE / UNMUTE them together. Kept in this browser.</p></section>
+<section id="dev" class="page"><div class="grid">
+<div class="card"><h2>SOUND CARD ON THE COMPUTER</h2>
+<div class="row"><span>Output<small>speakers, headphones, interface</small></span><select id="dOut" style="max-width:60%"></select></div>
+<div class="row"><span>Input<small>none, the computer's sound, or a device</small></span><select id="dIn" style="max-width:60%"></select></div>
+<div class="row"><span>Sample rate</span><select id="dRate"><option>44100</option><option selected>48000</option><option>88200</option><option>96000</option><option>192000</option></select></div>
+<div class="row"><span>Buffer<small>smaller = less delay, more load</small></span><select id="dFr"><option>64</option><option>128</option><option selected>256</option><option>512</option><option>1024</option></select></div>
+<div class="bar" style="margin:10px 0 0"><button id="dOpen" class="pri" style="flex:1">OPEN</button><button id="dStop" style="flex:1">STOP</button><button id="dScan" class="sm">RESCAN</button></div><p id="dNote" class="note"></p></div>
+<div class="card"><h2>DEVICES FOUND</h2><table class="dv"><thead><tr><th>NAME</th><th>DRIVER</th><th>IN</th><th>OUT</th><th>RATE</th></tr></thead><tbody id="dList"></tbody></table></div></div></section>
 <section id="rec" class="page"><div class="grid">
 <div class="card"><h2>RECORD THE MASTER</h2><div id="rT" class="big">00:00:00</div><p id="rF" class="note">not recording</p>
 <div class="row"><span>Format<small>saved on the computer, in its recordings folder</small></span><select id="rFmt"><option value="flac">FLAC 24-bit</option><option value="wav24">WAV 24-bit</option><option value="wavf32">WAV 32-bit float</option></select></div>
@@ -78,7 +128,13 @@ body.nometers .mt{display:none}
 <div class="row"><span>Strips per page</span><span class="seg" id="oPer"></span></div>
 <div class="row"><span>Fader size</span><span class="seg" id="oFh"></span></div>
 <div class="row"><span>Strip width</span><span class="seg" id="oCw"></span></div>
-<div class="row"><span>Level meters<small>off saves battery and data on a slow network</small></span><button id="oMet"></button></div></div>
+<div class="row"><span>Level meters<small>off saves battery and data on a slow network</small></span><button id="oMet"></button></div>
+<div class="row"><span>Channel numbers<small>"3 · VOCAL" on the strips</small></span><button id="oNum"></button></div>
+<div class="row"><span>Faders locked at start<small>no accidental moves; LOCK FADERS on MIXER unlocks</small></span><button id="oLock"></button></div></div>
+<div class="card"><h2>LOOK</h2>
+<div class="row"><span>Theme</span><span class="seg" id="oTheme"></span></div>
+<div class="row"><span>Start page</span><select id="oStart"><option value="">the last one</option><option value="mix">MIXER</option><option value="ch">CHANNEL</option><option value="bus">BUSES</option><option value="mon">MONITOR</option><option value="scn">SCENES</option><option value="rec">RECORD</option></select></div>
+<div class="row"><span>Keyboard shortcuts<small><kbd>1</kbd>…<kbd>0</kbd> pages · <kbd>←</kbd> <kbd>→</kbd> channel · <kbd>M</kbd> mute · <kbd>S</kbd> solo · <kbd>L</kbd> lock</small></span><button id="oKeys"></button></div></div>
 <div class="card"><h2>BEHAVIOUR</h2>
 <div class="row"><span>Live sync<small>follow changes made on the console and on other remotes</small></span><button id="oSync"></button></div>
 <div class="row"><span>Vibrate on buttons<small>phones that support it</small></span><button id="oVib"></button></div>
@@ -86,6 +142,7 @@ body.nometers .mt{display:none}
 <div class="row"><span>Ask before stopping a recording</span><button id="oAsk"></button></div></div>
 <div class="card"><h2>THIS DEVICE</h2>
 <div class="row"><span>Paired<small id="oWho">—</small></span></div>
+<div class="row"><span>Back up this browser<small>settings, scenes, groups and channel memory as one file</small></span><button id="oBackup" class="sm">BACK UP</button><label class="chip" style="cursor:pointer">RESTORE<input id="oRestore" type="file" accept="application/json" hidden></label></div>
 <div class="row"><span>Reset these settings</span><button id="oReset">RESET</button></div>
 <div class="row"><span>Forget this device<small>it needs a new PIN to come back</small></span><button id="out" class="on red">FORGET</button></div>
 <p class="note">These settings are kept in this browser only. The console's own settings are on the computer.</p></div></div></section>
@@ -96,7 +153,7 @@ const $=s=>document.querySelector(s);let token=null,page=0,state=null,ws=null,po
 addEventListener("pointerup",()=>{drag=null});addEventListener("pointercancel",()=>{drag=null});
 const ls={get(k,d){try{const v=localStorage.getItem("amfx1."+k);return v===null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem("amfx1."+k,JSON.stringify(v))}catch(e){}}};
 try{token=localStorage.getItem("amfx1.token")}catch(e){}
-const DEF={per:16,fh:220,cw:84,meters:true,sync:true,vib:false,wake:false,ask:true};const opt=Object.assign({},DEF,ls.get("opts",{}));
+const DEF={per:16,fh:220,cw:84,meters:true,sync:true,vib:false,wake:false,ask:true,num:false,lockStart:false,theme:"auto",start:"",keys:true};const opt=Object.assign({},DEF,ls.get("opts",{}));
 const posToDb=p=>p<=0?-120:p>=1?10:p>=.75?(p-.75)*40:p>=.5?-20+(p-.5)*80:p>=.25?-60+(p-.25)*160:-120+p*240;
 const dbToPos=d=>d<=-120?0:d>=10?1:d>=0?.75+d/40:d>=-20?.5+(d+20)/80:d>=-60?.25+(d+60)/160:(d+120)/240;
 const fmt=d=>d<=-119?"-∞":(d>0?"+":"")+d.toFixed(1);const lin=v=>v>1e-6?20*Math.log10(v):-120;const mpos=v=>Math.max(0,Math.min(1,(lin(v)+60)/60));
@@ -112,12 +169,12 @@ function pages(){const n=state?state.strips.length:0,per=Math.min(opt.per,n||opt
 function build(){const box=$("#strips");box.textContent="";els.length=0;if(!state)return;pages();const per=opt.per,from=page*per,to=Math.min(state.strips.length,from+per);
  const add=(name,db,mute,solo,onF,onM,onS,master)=>{const c=document.createElement("div");c.className="ch"+(master?" master":"");
   c.innerHTML='<div class="nm"></div><div class="fz"><input type="range" class="f" min="0" max="1000"><div class="mt"><i></i></div></div><div class="db"></div><div class="ms"></div>';
-  c.querySelector(".nm").textContent=name;const f=c.querySelector(".f"),d=c.querySelector(".db");f.value=Math.round(dbToPos(db)*1000);d.textContent=fmt(db);f.setAttribute("aria-label",name+" fader");
+  c.querySelector(".nm").textContent=name;if(onM){const idx=els.length;c.querySelector(".nm").onclick=()=>openChannel(Math.max(0,page*opt.per+idx))}const f=c.querySelector(".f"),d=c.querySelector(".db");f.value=Math.round(dbToPos(db)*1000);d.textContent=fmt(db);f.setAttribute("aria-label",name+" fader");
   f.oninput=()=>{const v=posToDb(f.value/1000);d.textContent=fmt(v);onF(v)};const ms=c.querySelector(".ms");
   if(onM){const m=document.createElement("button");m.textContent="M";m.className="m"+(mute?" on":"");m.onclick=()=>{buzz();const on=!m.classList.contains("on");m.classList.toggle("on",on);onM(on)};ms.appendChild(m)}
   if(onS){const s=document.createElement("button");s.textContent="S";s.className="s"+(solo?" on":"");s.onclick=()=>{buzz();const on=!s.classList.contains("on");s.classList.toggle("on",on);onS(on)};ms.appendChild(s)}
   box.appendChild(c);f.onpointerdown=()=>{drag=f};return {bar:c.querySelector(".mt i"),f,d,nm:c.querySelector(".nm"),m:ms.querySelector(".m"),s:ms.querySelector(".s")}};
- for(let i=from;i<to;++i){const s=state.strips[i];els.push(Object.assign({i},add(s.name||("CH "+(i+1)),s.db,s.mute,s.solo,v=>{s.db=v;send("g"+i,{op:"gain",strip:i,db:v})},on=>{s.mute=on;send("m"+i,{op:"mute",strip:i,on})},on=>{s.solo=on;send("s"+i,{op:"solo",strip:i,on})})))}
+ for(let i=from;i<to;++i){const s=state.strips[i];els.push(Object.assign({i},add((opt.num?(i+1)+" · ":"")+(s.name||("CH "+(i+1))),s.db,s.mute,s.solo,v=>{s.db=v;send("g"+i,{op:"gain",strip:i,db:v})},on=>{s.mute=on;send("m"+i,{op:"mute",strip:i,on})},on=>{s.solo=on;send("s"+i,{op:"solo",strip:i,on})})))}
  els.push(Object.assign({i:-1},add("MASTER",state.master.db,false,false,v=>{state.master.db=v;send("master",{op:"master",db:v})},null,null,true)))}
 // LIVE SYNC: the service pushes {"state":...} the moment any remote or the console changes something: move what changed in place
 // (a control under a finger or the mouse is left alone; a different number of strips builds the page again)
@@ -125,7 +182,7 @@ const free=e=>e!==drag&&e!==document.activeElement;
 function apply(s){if(!s||!s.strips)return;if(!state||s.strips.length!==state.strips.length){state=s;build();panels();return}
  for(const e of els){const x=e.i<0?s.master:s.strips[e.i];if(!x)continue;
   if(free(e.f)){const p=Math.round(dbToPos(x.db)*1000);if(Math.abs(e.f.value-p)>2){e.f.value=p;e.d.textContent=fmt(x.db)}}
-  if(e.i>=0){const n=x.name||("CH "+(e.i+1));if(e.nm.textContent!==n)e.nm.textContent=n;if(e.m)e.m.classList.toggle("on",!!x.mute);if(e.s)e.s.classList.toggle("on",!!x.solo)}}
+  if(e.i>=0){const n=(opt.num?(e.i+1)+" · ":"")+(x.name||("CH "+(e.i+1)));if(e.nm.textContent!==n)e.nm.textContent=n;if(e.m)e.m.classList.toggle("on",!!x.mute);if(e.s)e.s.classList.toggle("on",!!x.solo)}}
  state=s;synced=Date.now();panels();setSt("connected · live sync")}
 function meters(o){if(!o||!o.strips)return;lastMeters=o;if(opt.meters)for(const e of els){const v=e.i<0?Math.max(o.master.l,o.master.r):(o.strips[e.i]||{}).pk||0;e.bar.style.height=(mpos(v)*100).toFixed(1)+"%"}
  if(tab==="rec"){const L=o.loudness||{},f=v=>typeof v==="number"&&v>-70?v.toFixed(1):"—";$("#lM").textContent=f(L.m);$("#lS").textContent=f(L.s);$("#lI").textContent=f(L.i);$("#lR").textContent=typeof L.lra==="number"&&L.lra>0?L.lra.toFixed(1):"—";$("#lT").textContent=f(L.tp);$("#lC").textContent=typeof o.correlation==="number"?o.correlation.toFixed(2):"—"}}
@@ -149,7 +206,7 @@ function monitor(){if(!state||!state.monitor)return;const m=state.monitor,sel=$(
  const sendLim=()=>send("lim",{op:"limiter",on:M.limiter,ceilingDb:M.ceilingDb});lo.onclick=()=>{buzz();M.limiter=!M.limiter;lo.classList.toggle("on",M.limiter);lo.textContent=M.limiter?"ON":"OFF";sendLim()};
  if(free(ce)){ce.value=Math.round((M.ceilingDb??-.5)*10);$("#lCeT").textContent=(M.ceilingDb??-.5).toFixed(1)+" dBTP"}ce.oninput=()=>{M.ceilingDb=ce.value/10;$("#lCeT").textContent=M.ceilingDb.toFixed(1)+" dBTP";sendLim()};ce.onpointerdown=()=>{drag=ce};
  hslider("#mMa","#mMaT",M.db,v=>{M.db=v;send("master",{op:"master",db:v});const e=els.find(x=>x.i<0);if(e){e.f.value=Math.round(dbToPos(v)*1000);e.d.textContent=fmt(v)}})}
-function panels(){if(tab==="bus")buses();if(tab==="mon")monitor()}
+function panels(){if(tab==="bus")buses();if(tab==="mon")monitor();if(tab==="ch")channel();if(tab==="grp")drawGroups()}
 // ---- RECORD and STATUS: the console's status, read every two seconds while one of these pages is open
 const base=f=>String(f||"").split(/[\\/]/).pop();   // the file name only: a remote does not need the computer's folders
 const hms=s=>{s=Math.floor(s||0);return [s/3600|0,(s/60|0)%60,s%60].map(x=>String(x).padStart(2,"0")).join(":")};
@@ -167,21 +224,154 @@ function applyOpts(){document.body.style.setProperty("--fh",opt.fh+"px");documen
  const seg=(id,vals,key,lab)=>{const box=$(id);box.textContent="";for(const v of vals){const b=document.createElement("button");b.textContent=lab(v);b.className=opt[key]===v?"on acc":"";b.onclick=()=>{buzz();opt[key]=v;page=0;save();build()};box.appendChild(b)}};
  seg("#oPer",[8,16,32],"per",v=>String(v));seg("#oFh",[160,220,300],"fh",v=>v===160?"S":v===220?"M":"L");seg("#oCw",[72,84,104],"cw",v=>v===72?"NARROW":v===84?"NORMAL":"WIDE");
  const tog=(id,key,after)=>{const b=$(id);b.className="acc"+(opt[key]?" on":"");b.textContent=opt[key]?"ON":"OFF";b.onclick=()=>{opt[key]=!opt[key];buzz();save();if(after)after()}};
- tog("#oMet","meters",()=>{if(!opt.meters)for(const e of els)e.bar.style.height="0"});tog("#oSync","sync",()=>{if(opt.sync)load()});tog("#oVib","vib");tog("#oWake","wake",wake);tog("#oAsk","ask");
+ tog("#oMet","meters",()=>{if(!opt.meters)for(const e of els)e.bar.style.height="0"});tog("#oSync","sync",()=>{if(opt.sync)load()});tog("#oVib","vib");tog("#oWake","wake",wake);tog("#oAsk","ask");tog("#oNum","num",()=>build());tog("#oLock","lockStart");tog("#oKeys","keys");
+ const th=$("#oTheme");th.textContent="";for(const [v,l] of [["auto","AUTO"],["dark","DARK"],["light","LIGHT"]]){const b=document.createElement("button");b.textContent=l;b.className=opt.theme===v?"on acc":"";b.onclick=()=>{opt.theme=v;buzz();save()};th.appendChild(b)}
+ const light=opt.theme==="light"||(opt.theme==="auto"&&matchMedia("(prefers-color-scheme: light)").matches);document.body.classList.toggle("light",light);
+ const st=$("#oStart");st.value=opt.start||"";st.onchange=()=>{opt.start=st.value;save()};
  $("#oWho").textContent=ls.get("who","this browser")}
 async function wake(){try{if(opt.wake&&!document.hidden&&"wakeLock" in navigator){if(!wakeLock)wakeLock=await navigator.wakeLock.request("screen");wakeLock.addEventListener("release",()=>{wakeLock=null})}else if(!opt.wake&&wakeLock){await wakeLock.release();wakeLock=null}}catch(e){wakeLock=null}
  $("#oWakeN").textContent="wakeLock" in navigator?"while this page is open":"this browser cannot (it needs https or a newer browser)"}
 $("#oReset").onclick=()=>{Object.assign(opt,DEF);page=0;save();build();wake()};
+// ---- QUICK ACTIONS on MIXER
+async function opsSeq(list,label){let n=0;for(const c of list){try{await api("/api/control",c);++n}catch(e){setSt(e.message,true);return n}}if(label)setSt(label);return n}
+$("#muteAll").onclick=()=>{if(!state)return;if(opt.ask&&!confirm("Mute every channel?"))return;buzz();opsSeq(state.strips.map(s=>({op:"mute",strip:s.id,on:true})),"all channels muted")};
+$("#unmuteAll").onclick=()=>{if(!state)return;buzz();opsSeq(state.strips.filter(s=>s.mute).map(s=>({op:"mute",strip:s.id,on:false})),"all channels unmuted")};
+$("#clearSolo").onclick=()=>{if(!state)return;buzz();opsSeq(state.strips.filter(s=>s.solo).map(s=>({op:"solo",strip:s.id,on:false})),"solo cleared")};
+$("#resetF").onclick=()=>{if(!state)return;if(!confirm("Put every channel fader at 0 dB?"))return;buzz();opsSeq(state.strips.map(s=>({op:"gain",strip:s.id,db:0})),"faders at 0 dB")};
+let locked=!!opt.lockStart;function showLock(){document.body.classList.toggle("locked",locked);const b=$("#lockF");b.textContent=locked?"🔒 LOCKED":"LOCK FADERS";b.classList.toggle("on",locked);b.classList.add("amb")}
+$("#lockF").onclick=()=>{locked=!locked;buzz();showLock()};
+// ---- CHANNEL: one strip in full. The console's state has the fader, pan, mute, solo and name; what the service does not report
+// back (trim, delay, polarity, EQ, dynamics, sends) is remembered here, per console, as this browser last sent it
+let cur=0,sendSet=0;const chKey="ch."+location.host;const chp=ls.get(chKey,{});
+const EQ_TYPES=[["off","OFF"],["peaking","BELL"],["lowshelf","LOW SHELF"],["highshelf","HIGH SHELF"],["lowpass","LOW CUT"],["highpass","HIGH CUT"],["notch","NOTCH"]];
+const EQ_DEF=[{type:"lowshelf",freq:100,q:.71,gainDb:0},{type:"peaking",freq:400,q:1,gainDb:0},{type:"peaking",freq:2500,q:1,gainDb:0},{type:"highshelf",freq:8000,q:.71,gainDb:0}];
+const COMP_DEF={on:false,thresholdDb:-18,ratio:3,kneeDb:6,attackMs:10,releaseMs:120,makeupDb:0},GATE_DEF={on:false,thresholdDb:-45,rangeDb:-60,attackMs:1,holdMs:50,releaseMs:120};
+function P(i){const k=String(i);if(!chp[k])chp[k]={};const p=chp[k];p.eq=p.eq||EQ_DEF.map(b=>Object.assign({},b));p.comp=Object.assign({},COMP_DEF,p.comp);p.gate=Object.assign({},GATE_DEF,p.gate);p.sends=p.sends||{};if(p.trim==null)p.trim=0;if(p.delay==null)p.delay=0;return p}
+function keep(){ls.set(chKey,chp)}
+function knob(box,label,min,max,step,val,fmtv,onV){const r=document.createElement("div");r.className="kn";r.innerHTML='<span></span><input type="range"><em></em>';r.querySelector("span").textContent=label;
+ const f=r.querySelector("input"),t=r.querySelector("em");f.min=min;f.max=max;f.step=step;f.value=val;t.textContent=fmtv(+val);f.oninput=()=>{t.textContent=fmtv(+f.value);onV(+f.value)};f.onpointerdown=()=>{drag=f};box.appendChild(r);return f}
+const hz=v=>v>=1000?(v/1000).toFixed(v>=10000?0:1)+"k":Math.round(v)+"";
+const logF=p=>20*Math.pow(1000,p/1000),posF=f=>Math.round(1000*Math.log(f/20)/Math.log(1000));
+function chOptions(){const sel=$("#chSel");if(!state)return;if(sel.options.length!==state.strips.length){sel.textContent="";for(const s of state.strips){const o=document.createElement("option");o.value=s.id;sel.appendChild(o)}}
+ for(const s of state.strips)sel.options[s.id].textContent=(s.id+1)+" · "+(s.name||("CH "+(s.id+1)));sel.value=cur}
+function channel(){if(!state||!state.strips.length)return;cur=Math.max(0,Math.min(state.strips.length-1,cur));chOptions();const s=state.strips[cur],p=P(cur);
+ if(free($("#chName")))$("#chName").value=s.name||"";
+ $("#chM").classList.toggle("on",!!s.mute);$("#chS").classList.toggle("on",!!s.solo);
+ hslider("#chDb","#chDbT",s.db,v=>{s.db=v;send("g"+cur,{op:"gain",strip:cur,db:v})});
+ const pan=$("#chPan");if(free(pan)){pan.value=Math.round((s.pan||0)*100)}const pt=v=>v===0?"C":(v<0?"L":"R")+Math.abs(v);$("#chPanT").textContent=pt(+pan.value);pan.oninput=()=>{$("#chPanT").textContent=pt(+pan.value);s.pan=pan.value/100;send("p"+cur,{op:"pan",strip:cur,pan:s.pan})};pan.onpointerdown=()=>{drag=pan};
+ const tr=$("#chTrim");if(free(tr))tr.value=Math.round(p.trim*10);$("#chTrimT").textContent=(p.trim>0?"+":"")+p.trim.toFixed(1)+" dB";tr.oninput=()=>{p.trim=tr.value/10;$("#chTrimT").textContent=(p.trim>0?"+":"")+p.trim.toFixed(1)+" dB";keep();send("t"+cur,{op:"trim",strip:cur,db:p.trim})};
+ const dl=$("#chDelay");if(free(dl))dl.value=p.delay;$("#chDelayT").textContent=p.delay+" ms";dl.oninput=()=>{p.delay=+dl.value;$("#chDelayT").textContent=p.delay+" ms";keep();send("d"+cur,{op:"delay",strip:cur,ms:p.delay})};
+ const pol=$("#chPol");pol.classList.add("amb");pol.classList.toggle("on",!!p.pol);pol.onclick=()=>{p.pol=!p.pol;pol.classList.toggle("on",p.pol);keep();buzz();send("pol"+cur,{op:"polarity",strip:cur,on:p.pol})};
+ if(chDrawn!==cur){chDrawn=cur;drawEqBands();drawDyn();drawSends()}drawEq()}
+let chDrawn=-1;
+$("#chSel").onchange=()=>{cur=+$("#chSel").value;chDrawn=-1;channel()};$("#chPrev").onclick=()=>{cur=Math.max(0,cur-1);chDrawn=-1;channel()};$("#chNext").onclick=()=>{cur=Math.min((state?state.strips.length:1)-1,cur+1);chDrawn=-1;channel()};
+$("#chM").onclick=()=>{const s=state&&state.strips[cur];if(!s)return;buzz();s.mute=!s.mute;$("#chM").classList.toggle("on",s.mute);send("m"+cur,{op:"mute",strip:cur,on:s.mute})};
+$("#chS").onclick=()=>{const s=state&&state.strips[cur];if(!s)return;buzz();s.solo=!s.solo;$("#chS").classList.toggle("on",s.solo);send("s"+cur,{op:"solo",strip:cur,on:s.solo})};
+$("#chNameOk").onclick=async()=>{const n=$("#chName").value.trim();if(!n)return;buzz();try{await api("/api/control",{op:"name",strip:cur,name:n});setSt("renamed CH "+(cur+1))}catch(e){setSt(e.message,true)}};
+// EQ: four bands, each sent as the service's "eq" op; the curve is the sum of the bands (RBJ biquads at 48 kHz)
+function sendBand(k){const b=P(cur).eq[k];keep();drawEq();send("eq"+cur+"_"+k,{op:"eq",strip:cur,band:k,type:b.type,freq:b.freq,q:b.q,gainDb:b.gainDb})}
+function drawEqBands(){const box=$("#eqB");box.textContent="";const p=P(cur);
+ p.eq.forEach((b,k)=>{const d=document.createElement("div");d.className="band";d.innerHTML='<div class="hd"><b>BAND '+(k+1)+'</b><select class="ty"></select></div>';const ty=d.querySelector(".ty");
+  for(const [v,l] of EQ_TYPES){const o=document.createElement("option");o.value=v;o.textContent=l;ty.appendChild(o)}ty.value=b.type;ty.onchange=()=>{b.type=ty.value;sendBand(k)};
+  knob(d,"FREQ",0,1000,1,posF(b.freq),v=>hz(logF(v))+" Hz",v=>{b.freq=Math.round(logF(v));sendBand(k)});
+  knob(d,"GAIN",-180,180,5,b.gainDb*10,v=>(v>0?"+":"")+(v/10).toFixed(1)+" dB",v=>{b.gainDb=v/10;sendBand(k)});
+  knob(d,"Q",10,100,1,Math.round(b.q*10),v=>(v/10).toFixed(1),v=>{b.q=v/10;sendBand(k)});box.appendChild(d)})}
+$("#eqFlat").onclick=()=>{const p=P(cur);p.eq=EQ_DEF.map(b=>Object.assign({},b));drawEqBands();for(let k=0;k<4;++k)sendBand(k);buzz()};
+function biq(b,fs){const A=Math.pow(10,b.gainDb/40),w=2*Math.PI*b.freq/fs,c=Math.cos(w),sn=Math.sin(w),al=sn/(2*Math.max(.05,b.q));let b0,b1,b2,a0,a1,a2;
+ switch(b.type){case"peaking":b0=1+al*A;b1=-2*c;b2=1-al*A;a0=1+al/A;a1=-2*c;a2=1-al/A;break;
+  case"lowshelf":{const s=2*Math.sqrt(A)*al;b0=A*((A+1)-(A-1)*c+s);b1=2*A*((A-1)-(A+1)*c);b2=A*((A+1)-(A-1)*c-s);a0=(A+1)+(A-1)*c+s;a1=-2*((A-1)+(A+1)*c);a2=(A+1)+(A-1)*c-s;break}
+  case"highshelf":{const s=2*Math.sqrt(A)*al;b0=A*((A+1)+(A-1)*c+s);b1=-2*A*((A-1)+(A+1)*c);b2=A*((A+1)+(A-1)*c-s);a0=(A+1)-(A-1)*c+s;a1=2*((A-1)-(A+1)*c);a2=(A+1)-(A-1)*c-s;break}
+  case"lowpass":b0=(1-c)/2;b1=1-c;b2=(1-c)/2;a0=1+al;a1=-2*c;a2=1-al;break;
+  case"highpass":b0=(1+c)/2;b1=-(1+c);b2=(1+c)/2;a0=1+al;a1=-2*c;a2=1-al;break;
+  case"notch":b0=1;b1=-2*c;b2=1;a0=1+al;a1=-2*c;a2=1-al;break;default:return null}
+ return [b0/a0,b1/a0,b2/a0,a1/a0,a2/a0]}
+function magDb(co,f,fs){const w=2*Math.PI*f/fs,c1=Math.cos(w),s1=Math.sin(w),c2=Math.cos(2*w),s2=Math.sin(2*w);const nr=co[0]+co[1]*c1+co[2]*c2,ni=-(co[1]*s1+co[2]*s2),dr=1+co[3]*c1+co[4]*c2,di=-(co[3]*s1+co[4]*s2);return 10*Math.log10((nr*nr+ni*ni)/(dr*dr+di*di)+1e-12)}
+function drawEq(){const cv=$("#eqC");if(!cv||tab!=="ch")return;const g=cv.getContext("2d"),W=cv.width,H=cv.height,dark=!document.body.classList.contains("light");g.clearRect(0,0,W,H);
+ g.strokeStyle=dark?"#1c2531":"#e2e8f0";g.lineWidth=1;g.font="10px monospace";g.fillStyle=dark?"#5b6573":"#94a3b8";
+ for(const f of [50,100,200,500,1000,2000,5000,10000]){const x=W*Math.log(f/20)/Math.log(1000);g.beginPath();g.moveTo(x,0);g.lineTo(x,H);g.stroke();g.fillText(hz(f),x+2,H-3)}
+ for(const d of [-12,-6,0,6,12]){const y=H/2-d*(H/2-8)/18;g.beginPath();g.moveTo(0,y);g.lineTo(W,y);g.stroke();g.fillText((d>0?"+":"")+d,2,y-2)}
+ const co=P(cur).eq.map(b=>b.type==="off"?null:biq(b,48000)).filter(Boolean);g.strokeStyle="#ea580c";g.lineWidth=2.5;g.beginPath();
+ for(let x=0;x<=W;x+=2){const f=20*Math.pow(1000,x/W);let d=0;for(const c of co)d+=magDb(c,f,48000);const y=H/2-Math.max(-18,Math.min(18,d))*(H/2-8)/18;x?g.lineTo(x,y):g.moveTo(x,y)}g.stroke()}
+// DYNAMICS
+function drawDyn(){const p=P(cur),G=p.gate,C=p.comp,sg=()=>{keep();send("gate"+cur,Object.assign({op:"gate",strip:cur},G))},sc=()=>{keep();send("comp"+cur,Object.assign({op:"compressor",strip:cur},C))};
+ const onB=(id,o,fn)=>{const b=$(id);b.classList.add("acc");b.classList.toggle("on",!!o.on);b.textContent=o.on?"ON":"OFF";b.onclick=()=>{o.on=!o.on;b.classList.toggle("on",o.on);b.textContent=o.on?"ON":"OFF";buzz();fn()}};
+ onB("#gOn",G,sg);onB("#cOn",C,sc);const gk=$("#gK"),ck=$("#cK");gk.textContent="";ck.textContent="";
+ knob(gk,"THRESHOLD",-80,0,1,G.thresholdDb,v=>v+" dB",v=>{G.thresholdDb=v;sg()});knob(gk,"RANGE",-120,0,1,G.rangeDb,v=>v+" dB",v=>{G.rangeDb=v;sg()});
+ knob(gk,"ATTACK",1,1000,1,Math.round(G.attackMs*10),v=>(v/10).toFixed(1)+" ms",v=>{G.attackMs=v/10;sg()});knob(gk,"HOLD",0,500,5,G.holdMs,v=>v+" ms",v=>{G.holdMs=v;sg()});knob(gk,"RELEASE",5,1000,5,G.releaseMs,v=>v+" ms",v=>{G.releaseMs=v;sg()});
+ knob(ck,"THRESHOLD",-60,0,1,C.thresholdDb,v=>v+" dB",v=>{C.thresholdDb=v;sc()});knob(ck,"RATIO",10,200,1,Math.round(C.ratio*10),v=>(v/10).toFixed(1)+":1",v=>{C.ratio=v/10;sc()});
+ knob(ck,"KNEE",0,24,1,C.kneeDb,v=>v+" dB",v=>{C.kneeDb=v;sc()});knob(ck,"ATTACK",1,2000,1,Math.round(C.attackMs*10),v=>(v/10).toFixed(1)+" ms",v=>{C.attackMs=v/10;sc()});
+ knob(ck,"RELEASE",5,2000,5,C.releaseMs,v=>v+" ms",v=>{C.releaseMs=v;sc()});knob(ck,"MAKE-UP",0,240,5,Math.round(C.makeupDb*10),v=>"+"+(v/10).toFixed(1)+" dB",v=>{C.makeupDb=v/10;sc()})}
+// SENDS: each strip to each AUX / FX bus, level and PRE (before the fader: monitor mixes)
+function drawSends(){const box=$("#sends");box.textContent="";const p=P(cur);for(let k=sendSet*8;k<sendSet*8+8;++k){const s=p.sends[k]||(p.sends[k]={db:-120,pre:k<8});
+ const r=document.createElement("div");r.className="kn";r.style.gridTemplateColumns="88px 1fr 64px 52px";r.innerHTML='<span></span><input type="range" min="0" max="1000"><em></em><button class="sm">PRE</button>';
+ r.querySelector("span").textContent=busName(k);const f=r.querySelector("input"),t=r.querySelector("em"),b=r.querySelector("button");f.value=Math.round(dbToPos(s.db)*1000);t.textContent=fmt(s.db);b.classList.add("acc");b.classList.toggle("on",!!s.pre);
+ const go=()=>{keep();send("snd"+cur+"_"+k,{op:"send",strip:cur,bus:k,db:s.db,pre:!!s.pre})};f.oninput=()=>{s.db=posToDb(f.value/1000);t.textContent=fmt(s.db);go()};f.onpointerdown=()=>{drag=f};b.onclick=()=>{s.pre=!s.pre;b.classList.toggle("on",s.pre);buzz();go()};box.appendChild(r)}}
+$("#sAux").onclick=()=>{sendSet=0;$("#sAux").classList.add("on","acc");$("#sFx").classList.remove("on");drawSends()};$("#sFx").onclick=()=>{sendSet=1;$("#sFx").classList.add("on","acc");$("#sAux").classList.remove("on");drawSends()};
+function openChannel(i){cur=i;chDrawn=-1;go("ch")}
+// ---- SCENES (this browser): a full snapshot, recalled op by op
+const scKey="scenes."+location.host;let scenes=ls.get(scKey,[]);
+function snapshot(name){return {name,t:Date.now(),strips:state.strips.map(s=>({id:s.id,name:s.name,db:s.db,pan:s.pan,mute:s.mute,solo:s.solo})),master:Object.assign({},state.master),buses:(state.buses||[]).map(b=>Object.assign({},b)),monitor:Object.assign({},state.monitor),ch:JSON.parse(JSON.stringify(chp))}}
+function sceneOps(sc){const o=[];for(const s of sc.strips){o.push({op:"gain",strip:s.id,db:s.db},{op:"pan",strip:s.id,pan:s.pan||0},{op:"mute",strip:s.id,on:!!s.mute},{op:"solo",strip:s.id,on:!!s.solo});if(s.name)o.push({op:"name",strip:s.id,name:s.name})}
+ o.push({op:"master",db:sc.master.db});if(sc.master.limiter!=null)o.push({op:"limiter",on:!!sc.master.limiter,ceilingDb:sc.master.ceilingDb??-.5});
+ for(const b of sc.buses||[])o.push({op:"busLevel",bus:b.id,db:b.db},{op:"busReturn",bus:b.id,db:b.returnDb},{op:"busMute",bus:b.id,on:!!b.mute});
+ if(sc.monitor)o.push(Object.assign({op:"monitor"},sc.monitor));
+ for(const [k,p] of Object.entries(sc.ch||{})){const i=+k;if(p.trim!=null)o.push({op:"trim",strip:i,db:p.trim});if(p.delay!=null)o.push({op:"delay",strip:i,ms:p.delay});if(p.pol!=null)o.push({op:"polarity",strip:i,on:!!p.pol});
+  (p.eq||[]).forEach((b,n)=>o.push({op:"eq",strip:i,band:n,type:b.type,freq:b.freq,q:b.q,gainDb:b.gainDb}));if(p.comp)o.push(Object.assign({op:"compressor",strip:i},p.comp));if(p.gate)o.push(Object.assign({op:"gate",strip:i},p.gate));
+  for(const [bk,s] of Object.entries(p.sends||{}))if(s.db>-120)o.push({op:"send",strip:i,bus:+bk,db:s.db,pre:!!s.pre})}
+ return o}
+function drawScenes(){const box=$("#scList");box.textContent="";if(!scenes.length){box.innerHTML='<p class="note">No scene yet: save one on the left.</p>';return}
+ scenes.forEach((sc,n)=>{const r=document.createElement("div");r.className="scn";const b=document.createElement("b");b.textContent=sc.name;const sm=document.createElement("small");sm.textContent=new Date(sc.t).toLocaleString()+" · "+sc.strips.length+" channels";b.appendChild(sm);r.appendChild(b);
+  const btn=(t,cls,fn)=>{const x=document.createElement("button");x.className="sm "+(cls||"");x.textContent=t;x.onclick=fn;r.appendChild(x)};
+  btn("RECALL","pri",async()=>{if(opt.ask&&!confirm('Recall "'+sc.name+'"? Every fader moves on the console.'))return;buzz();Object.assign(chp,JSON.parse(JSON.stringify(sc.ch||{})));keep();chDrawn=-1;
+   const ops=sceneOps(sc);$("#scNote").textContent="recalling… 0 / "+ops.length;let i=0;for(const c of ops){try{await api("/api/control",c)}catch(e){}if(++i%20===0)$("#scNote").textContent="recalling… "+i+" / "+ops.length}$("#scNote").textContent='"'+sc.name+'" recalled ('+ops.length+" changes)";setSt("scene recalled")});
+  btn("RENAME","",()=>{const v=prompt("Scene name",sc.name);if(v&&v.trim()){sc.name=v.trim().slice(0,40);ls.set(scKey,scenes);drawScenes()}});
+  btn("✕","red",()=>{if(confirm('Delete "'+sc.name+'"?')){scenes.splice(n,1);ls.set(scKey,scenes);drawScenes()}});box.appendChild(r)})}
+$("#scSave").onclick=()=>{if(!state)return;const n=$("#scName").value.trim()||("Scene "+(scenes.length+1));scenes.unshift(snapshot(n));ls.set(scKey,scenes);$("#scName").value="";buzz();drawScenes();$("#scNote").textContent='saved "'+n+'"'};
+function download(name,obj){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(obj,null,1)],{type:"application/json"}));a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500)}
+$("#scExport").onclick=()=>download("amfx1-scenes.json",{amfx1:"scenes",scenes});
+$("#scImport").onchange=async e=>{try{const j=JSON.parse(await e.target.files[0].text());const l=Array.isArray(j.scenes)?j.scenes.filter(s=>s&&s.name&&Array.isArray(s.strips)):[];scenes=l.concat(scenes);ls.set(scKey,scenes);drawScenes();$("#scNote").textContent=l.length+" scene(s) imported"}catch(x){$("#scNote").textContent="not a scenes file"}e.target.value=""};
+// ---- GROUPS: four mute groups
+const gKey="groups."+location.host;let groups=ls.get(gKey,[1,2,3,4].map(n=>({name:"GROUP "+n,members:[]})));
+function drawGroups(){const box=$("#groups");box.textContent="";if(!state)return;
+ groups.forEach((g,n)=>{const c=document.createElement("div");c.className="card";c.innerHTML='<div class="bar"><input class="t nm2" maxlength="20" style="flex:1"><button class="sm mu red">MUTE</button><button class="sm un">UNMUTE</button></div><div class="chips"></div>';
+  const nm=c.querySelector(".nm2");nm.value=g.name;nm.onchange=()=>{g.name=nm.value.trim()||("GROUP "+(n+1));ls.set(gKey,groups)};
+  const allMuted=g.members.length&&g.members.every(i=>state.strips[i]&&state.strips[i].mute);c.querySelector(".mu").classList.toggle("on",!!allMuted);
+  c.querySelector(".mu").onclick=()=>{if(!g.members.length)return;buzz();opsSeq(g.members.map(i=>({op:"mute",strip:i,on:true})),g.name+" muted")};
+  c.querySelector(".un").onclick=()=>{if(!g.members.length)return;buzz();opsSeq(g.members.map(i=>({op:"mute",strip:i,on:false})),g.name+" unmuted")};
+  const chips=c.querySelector(".chips");for(const s of state.strips){const b=document.createElement("button");b.className="chip"+(g.members.includes(s.id)?" on":"");b.textContent=(s.id+1)+" "+(s.name||"");
+   b.onclick=()=>{const i=g.members.indexOf(s.id);if(i>=0)g.members.splice(i,1);else g.members.push(s.id);b.classList.toggle("on");ls.set(gKey,groups)};chips.appendChild(b)}box.appendChild(c)})}
+// ---- DEVICES: the computer's sound card, opened from here
+let devs=[];async function loadDevices(){try{devs=await api("/api/devices")}catch(e){$("#dNote").textContent=e.message;return}
+ const outs=devs.filter(d=>d.out>0),ins=devs.filter(d=>d.in>0),opt2=(sel,list,extra)=>{sel.textContent="";for(const [v,t] of extra){const o=document.createElement("option");o.value=v;o.textContent=t;sel.appendChild(o)}for(const d of list){const o=document.createElement("option");o.value=d.backend+"|"+d.id;o.textContent=d.name+" · "+d.backend.toUpperCase()+(d.defaultOut||d.defaultIn?" (default)":"");sel.appendChild(o)}};
+ opt2($("#dOut"),outs,[["","the system's default output"]]);const loop=ins.find(d=>d.id==="loopback:system");opt2($("#dIn"),ins.filter(d=>d.id!=="loopback:system"&&!d.id.startsWith("loopback:")),[["-","no input"]].concat(loop?[["wasapi|loopback:system","COMPUTER SOUND (every app)"]]:[]));
+ if(loop)$("#dIn").value="wasapi|loopback:system";const tb=$("#dList");tb.textContent="";for(const d of devs.filter(d=>!d.id.startsWith("loopback:"))){const tr=document.createElement("tr");for(const v of [d.name,d.backend.toUpperCase(),d.in,d.out,d.defaultRate?Math.round(d.defaultRate):"—"]){const td=document.createElement("td");td.textContent=v;tr.appendChild(td)}tb.appendChild(tr)}
+ $("#dNote").textContent=devs.length+" devices · a microphone opens only when picked here"}
+$("#dScan").onclick=()=>{buzz();loadDevices()};
+$("#dOpen").onclick=async()=>{const o=$("#dOut").value,i=$("#dIn").value;const [ob,oid]=o?o.split("|"):["",""],[ib,iid]=i&&i!=="-"?i.split("|"):["",""];
+ const backend=ob||ib||"auto",c={op:"open",backend,out:oid||"",rate:+$("#dRate").value,frames:+$("#dFr").value,outChannels:2,inChannels:i==="-"?0:2};if(i!=="-")c.in=iid;
+ buzz();$("#dNote").textContent="opening…";try{await api("/api/control",c);$("#dNote").textContent="open: "+($("#dOut").selectedOptions[0]||{}).textContent;readStatus()}catch(e){$("#dNote").textContent=e.message}};
+$("#dStop").onclick=async()=>{if(!confirm("Stop the sound card on the computer? Everything goes silent."))return;buzz();try{await api("/api/control",{op:"stop"});$("#dNote").textContent="stopped";readStatus()}catch(e){$("#dNote").textContent=e.message}};
+// ---- KEYBOARD
+const TABS=["mix","ch","bus","mon","scn","grp","rec","dev","sys","set"];
+addEventListener("keydown",e=>{if(!opt.keys||!token||e.ctrlKey||e.metaKey||e.altKey)return;const t=e.target;if(t&&(t.tagName==="INPUT"&&t.type!=="range"||t.tagName==="TEXTAREA"||t.tagName==="SELECT"))return;
+ const k=e.key;if(/^[0-9]$/.test(k)){const i=k==="0"?9:+k-1;if(TABS[i]){go(TABS[i]);e.preventDefault()}return}
+ if(k==="l"||k==="L"){locked=!locked;showLock();return}
+ if(tab==="ch"&&state){if(k==="ArrowLeft"){$("#chPrev").click();e.preventDefault()}else if(k==="ArrowRight"){$("#chNext").click();e.preventDefault()}else if(k==="m"||k==="M")$("#chM").click();else if(k==="s"||k==="S")$("#chS").click()}});
+// ---- BACKUP of this browser
+$("#oBackup").onclick=()=>download("amfx1-remote-backup.json",{amfx1:"remote-backup",opts:opt,scenes,groups,channels:chp});
+$("#oRestore").onchange=async e=>{try{const j=JSON.parse(await e.target.files[0].text());if(j.amfx1!=="remote-backup")throw 0;Object.assign(opt,j.opts||{});save();scenes=j.scenes||[];ls.set(scKey,scenes);groups=j.groups||groups;ls.set(gKey,groups);
+  for(const k of Object.keys(chp))delete chp[k];Object.assign(chp,j.channels||{});keep();chDrawn=-1;setSt("backup restored")}catch(x){setSt("not a backup file",true)}e.target.value=""};
 // ---- pages
 function go(p){tab=p;for(const s of document.querySelectorAll(".page"))s.style.display=s.id===p?"block":"none";for(const b of document.querySelectorAll("#nav button"))b.classList.toggle("cur",b.dataset.p===p);ls.set("tab",p);
- clearInterval(statusT);if(p==="rec"||p==="sys"){readStatus();statusT=setInterval(()=>{if(!document.hidden)readStatus()},2000)}panels();if(p==="rec"&&lastMeters)meters(lastMeters)}
+ clearInterval(statusT);if(p==="rec"||p==="sys"){readStatus();statusT=setInterval(()=>{if(!document.hidden)readStatus()},2000)}panels();if(p==="rec"&&lastMeters)meters(lastMeters)
+ if(p==="scn")drawScenes();if(p==="dev"&&!devs.length)loadDevices();if(p==="ch")drawEq()}
 for(const b of document.querySelectorAll("#nav button"))b.onclick=()=>go(b.dataset.p);
 $("#bAux").onclick=()=>{busSet=0;$("#bAux").classList.add("on");$("#bFx").classList.remove("on");buses()};$("#bFx").onclick=()=>{busSet=1;$("#bFx").classList.add("on","acc");$("#bAux").classList.remove("on");buses()};
 function stream(){if(ws)ws.close();const u=(location.protocol==="https:"?"wss://":"ws://")+location.host+"/ws/meters?token="+encodeURIComponent(token);
  try{ws=new WebSocket(u)}catch(e){return}ws.onmessage=ev=>{try{const o=JSON.parse(ev.data);if(o.error){setSt(o.error,true);return}if(o.state){if(opt.sync||!state)apply(o.state);return}meters(o)}catch(e){}};
  ws.onopen=()=>setSt(opt.sync?"connected · live sync":"connected");ws.onclose=()=>{if(token){setSt("reconnecting…",true);setTimeout(()=>token&&stream(),1500)}}}
 async function load(){try{const s=await api("/api/state");state=null;apply(s);stream();if(poll)clearInterval(poll);poll=setInterval(async()=>{if(document.hidden||!opt.sync||(ws&&ws.readyState===1))return;try{apply(await api("/api/state"))}catch(e){}},5000)}catch(e){setSt(e.message,true)}}   // the push is the sync; this only covers a stream that is down
-function show(){$("#pair").style.display=token?"none":"";$("#nav").style.display=token?"flex":"none";if(token){go(ls.get("tab","mix"));load()}else for(const s of document.querySelectorAll(".page"))s.style.display="none"}
+function show(){$("#pair").style.display=token?"none":"";$("#nav").style.display=token?"flex":"none";if(token){go(opt.start||ls.get("tab","mix"));load()}else for(const s of document.querySelectorAll(".page"))s.style.display="none"}
 function forget(why){token=null;try{localStorage.removeItem("amfx1.token")}catch(e){}if(ws)ws.close();if(poll)clearInterval(poll);clearInterval(statusT);setSt(why||"not paired",!!why);show()}
 $("#go").onclick=async()=>{$("#perr").textContent="";const pin=$("#pin").value.replace(/\D/g,"");if(pin.length!==6){$("#perr").textContent="The PIN has six digits.";return}
  try{const who=$("#who").value.trim()||"Browser";const j=await api("/api/pair",{pin,name:who});token=j.token;try{localStorage.setItem("amfx1.token",token)}catch(e){}ls.set("who",who);$("#pin").value="";applyOpts();show()}catch(e){$("#perr").textContent=e.message}};
@@ -192,5 +382,5 @@ document.addEventListener("visibilitychange",()=>{if(!document.hidden){if(token&
 // The PIN is in the #fragment, so the browser never sent it to the server in the page request; it is used once, here.
 (()=>{const m=/(?:^#|&)pin=(\d{6})(?:&|$)/.exec(location.hash||"");if(!m)return;try{history.replaceState(null,"",location.pathname+location.search)}catch(e){}
  if(token)return;$("#pin").value=m[1];const ua=navigator.userAgent||"";$("#who").value=/iPhone|iPad/.test(ua)?"iPhone / iPad (browser)":/Android/.test(ua)?"Android (browser)":"Browser";setSt("pairing…");$("#go").click()})();
-applyOpts();wake();show();
+applyOpts();showLock();wake();show();
 </script></body></html>
