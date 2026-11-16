@@ -46,6 +46,14 @@ int main() {
   Value r = Value::parse(body, ok); CHECK(ok && r["ok"].asBool() && r["backend"].asString() == "null");
   CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"gain\",\"strip\":2,\"db\":-6.5}", auth, status, body) && status == 200);
   CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"name\",\"strip\":2,\"name\":\"Vox\"}", auth, status, body) && status == 200);
+  { // RECORD from the remote: the master to FLAC in the data folder, shown in the status, stopped again; a file is left behind
+    CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"record\",\"on\":true,\"format\":\"flac\"}", auth, status, body) && status == 200);
+    bool jok = false; const Value rr = Value::parse(body, jok); CHECK(jok); const std::string file = rr["file"].asString(); CHECK(file.find("-master.flac") != std::string::npos);
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    CHECK(am::httpd::Client::request("127.0.0.1", port, "GET", "/api/status", "", auth, status, body) && status == 200 && body.find("\"recording\":true") != std::string::npos);
+    CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"record\",\"on\":true}", auth, status, body) && status != 200);   // a second start is refused
+    CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"record\",\"on\":false}", auth, status, body) && status == 200);
+    FILE* f = std::fopen(file.c_str(), "rb"); char m[4] = {}; CHECK(f && std::fread(m, 1, 4, f) == 4 && !std::memcmp(m, "fLaC", 4)); if (f) std::fclose(f); std::remove(file.c_str()); }
   CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"mute\",\"strip\":3,\"on\":true}", auth, status, body) && status == 200);
   CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"busLevel\",\"bus\":1,\"db\":-3}", auth, status, body) && status == 200);
   CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"compressor\",\"strip\":2,\"on\":true,\"thresholdDb\":-20,\"ratio\":4}", auth, status, body) && status == 200);

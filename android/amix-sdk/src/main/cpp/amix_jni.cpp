@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "amix.h"
+#include "amix_hires.h"
 
 namespace {
 amix_mixer* mixerOf(jlong h) { return reinterpret_cast<amix_mixer*>(h); }
@@ -143,4 +144,25 @@ extern "C" JNIEXPORT void JNICALL Java_com_amfb_amixos_Engine_aaudioProbe(JNIEnv
     AAudioStream_close(s);
   }
   if (out && env->GetArrayLength(out) >= 16) env->SetIntArrayRegion(out, 0, 16, v);
+}
+
+// ---- HIGH-RESOLUTION AUDIO for com.amfb.amixos.HiRes: the streaming writer (FLAC / WAV), a file's header, the libraries in this build
+namespace { std::string hrErr; std::string utf(JNIEnv* env, jstring s) { if (!s) return {}; const char* c = env->GetStringUTFChars(s, nullptr); std::string r = c ? c : ""; if (c) env->ReleaseStringUTFChars(s, c); return r; } }
+extern "C" {
+JNIEXPORT jstring JNICALL Java_com_amfb_amixos_HiRes_infoJson(JNIEnv* env, jclass) { return str(env, amix_hr_info_json()); }
+JNIEXPORT jstring JNICALL Java_com_amfb_amixos_HiRes_lastError(JNIEnv* env, jclass) { return env->NewStringUTF(hrErr.c_str()); }
+JNIEXPORT jlong JNICALL Java_com_amfb_amixos_HiRes_writerOpen(JNIEnv* env, jclass, jstring path, jint ch, jdouble rate, jstring format, jstring dither) {
+  char e[256] = {0}; amix_hr_writer* w = amix_hr_writer_open(utf(env, path).c_str(), ch, rate, utf(env, format).c_str(), utf(env, dither).c_str(), e, sizeof e); hrErr = e; return reinterpret_cast<jlong>(w);
+}
+JNIEXPORT jint JNICALL Java_com_amfb_amixos_HiRes_writerWrite(JNIEnv* env, jclass, jlong h, jfloatArray data, jint frames, jint ch) {
+  if (!h || !data || frames <= 0 || ch < 1 || env->GetArrayLength(data) < frames * ch) return -1;
+  jfloat* p = env->GetFloatArrayElements(data, nullptr); const int r = amix_hr_writer_write_f32(reinterpret_cast<amix_hr_writer*>(h), p, frames, ch); env->ReleaseFloatArrayElements(data, p, JNI_ABORT); return r;
+}
+JNIEXPORT jboolean JNICALL Java_com_amfb_amixos_HiRes_writerClose(JNIEnv*, jclass, jlong h) { if (!h) return JNI_FALSE; char e[256] = {0}; const int r = amix_hr_writer_close(reinterpret_cast<amix_hr_writer*>(h), e, sizeof e); hrErr = e; return r == 0 ? JNI_TRUE : JNI_FALSE; }
+// out[5]: rate, channels, frames, bits, isFloat; false when the file cannot be read
+JNIEXPORT jboolean JNICALL Java_com_amfb_amixos_HiRes_probe(JNIEnv* env, jclass, jstring path, jdoubleArray out) {
+  amix_hr_info i{}; char e[256] = {0}; if (amix_hr_probe(utf(env, path).c_str(), &i, e, sizeof e) != 0) { hrErr = e; return JNI_FALSE; }
+  const jdouble v[5] = {i.rate, static_cast<jdouble>(i.channels), static_cast<jdouble>(i.frames), static_cast<jdouble>(i.bits), static_cast<jdouble>(i.is_float)};
+  if (out && env->GetArrayLength(out) >= 5) env->SetDoubleArrayRegion(out, 0, 5, v); return JNI_TRUE;
+}
 }

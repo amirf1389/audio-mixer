@@ -36,6 +36,7 @@ class HomeActivity : AppCompatActivity() {
         tile("∿", R.string.home_eq, R.string.home_eq_sub, v) { pickEqChannel() }
         tile("▤", R.string.home_scenes, R.string.home_scenes_sub, g) { Nav.go(this, RemoteActivity::class.java) { it.putExtra("open", "scenes") } }
         tile("♪", R.string.home_tools, R.string.home_tools_sub, y) { Nav.go(this, ToolsActivity::class.java) }
+        tile("●", R.string.home_recorder, R.string.home_recorder_sub, Color.parseColor("#EF4444")) { Nav.go(this, RecorderActivity::class.java) }
         tile("÷", R.string.home_calc, R.string.home_calc_sub, c) { Nav.go(this, CalculatorActivity::class.java) }
         tile("⧉", R.string.home_plugins, R.string.home_plugins_sub, v) { Nav.go(this, PluginsActivity::class.java) }
         tile("⊕", R.string.home_mixdown, R.string.home_mixdown_sub, o) { Nav.go(this, MixdownActivity::class.java) }

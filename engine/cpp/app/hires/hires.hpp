@@ -44,9 +44,21 @@ bool soxrAvailable();
 
 // ---- files
 bool read(const std::string& path, Audio& out, std::string& err);   // WAV / RF64 / W64 / FLAC
+bool probe(const std::string& path, AudioInfo& info, std::string& err);   // the header only (no audio decoded)
 // format: wav16 wav24 wav32 wavf32 wavf64 (RF64 by itself when the data passes 4 GB), flac16 flac24 flac32; dither: none tpdf shaped
 bool write(const std::string& path, const std::vector<double>& interleaved, int channels, double rate, const std::string& format, const std::string& dither, std::string& err, int flacLevel = 5);
 std::vector<std::string> writeFormats();
+// the same formats written block by block (a recording of any length): make, write blocks of interleaved frames, close
+class Writer {
+ public:
+  static std::unique_ptr<Writer> make(const std::string& path, int channels, double rate, const std::string& format, const std::string& dither, std::string& err, std::uint64_t expectedFrames = 0, int flacLevel = 5);
+  ~Writer();
+  bool write(const double* interleaved, std::size_t frames);
+  bool close(std::string* err = nullptr);   // finishes the header; false when a write or the close failed
+  std::uint64_t frames() const;
+ private:
+  Writer(); struct Impl; std::unique_ptr<Impl> i_;
+};
 
 // ---- dither: in (-1 .. 1) -> integers of `bits` (8 .. 32), one state per channel (interleaved)
 class Ditherer {

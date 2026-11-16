@@ -39,10 +39,18 @@ AMIX_API int  amix_hr_resampler_pending(const amix_hr_resampler*);   /* frames r
 AMIX_API int amix_hr_resample(const double* interleaved, int64_t frames, int channels, double src_rate, double dst_rate, const char* engine, int quality, double** out, int64_t* out_frames, char* err, size_t err_len);
 
 typedef struct amix_hr_info { double rate; int channels; int64_t frames; int bits; int is_float; char container[8]; } amix_hr_info;
+AMIX_API int amix_hr_probe(const char* path_utf8, amix_hr_info* info, char* err, size_t err_len);   /* the header only: nothing is decoded */
 /* returns the interleaved samples (free with amix_free) or NULL */
 AMIX_API double* amix_hr_read(const char* path_utf8, amix_hr_info* info, char* err, size_t err_len);
 /* format: "wav16" "wav24" "wav32" "wavf32" "wavf64" "flac16" "flac24" "flac32"; dither: "none" "tpdf" "shaped" */
 AMIX_API int amix_hr_write(const char* path_utf8, const double* interleaved, int64_t frames, int channels, double rate, const char* format, const char* dither, char* err, size_t err_len);
+/* the same formats block by block, for a recording of any length: open, write blocks of interleaved frames (double or float), close */
+typedef struct amix_hr_writer amix_hr_writer;
+AMIX_API amix_hr_writer* amix_hr_writer_open(const char* path_utf8, int channels, double rate, const char* format, const char* dither, char* err, size_t err_len);
+AMIX_API int     amix_hr_writer_write(amix_hr_writer*, const double* interleaved, int64_t frames);
+AMIX_API int     amix_hr_writer_write_f32(amix_hr_writer*, const float* interleaved, int64_t frames, int channels);
+AMIX_API int64_t amix_hr_writer_frames(const amix_hr_writer*);
+AMIX_API int     amix_hr_writer_close(amix_hr_writer*, char* err, size_t err_len);   /* finishes the file and frees the writer */
 /* n interleaved samples of `channels` to integers of `bits` (8..32), right aligned in int32 */
 AMIX_API int amix_hr_quantize(const double* in, int64_t n, int channels, int bits, const char* dither, uint32_t seed, int32_t* out);
 

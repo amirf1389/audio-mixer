@@ -21,6 +21,8 @@ struct amix_hr_resampler {
   void take(std::vector<std::vector<double>>& got) { for (std::size_t c = 0; c < ready.size() && c < got.size(); ++c) ready[c].insert(ready[c].end(), got[c].begin(), got[c].end()); }
 };
 
+struct amix_hr_writer { std::unique_ptr<am::hr::Writer> w; std::vector<double> tmp; };
+
 extern "C" {
 
 char* amix_hr_info_json(void) { return dupStr(am::hr::infoJson()); }
@@ -51,6 +53,11 @@ int amix_hr_resample(const double* x, int64_t frames, int ch, double src, double
   std::copy(o.begin(), o.end(), *out); *outFrames = static_cast<int64_t>(o.size() / static_cast<std::size_t>(ch)); return 0;
 }
 
+int amix_hr_probe(const char* path, amix_hr_info* info, char* err, size_t len) {
+  if (!path || !info) { fail(err, len, "amix_hr_probe: bad arguments"); return -1; }
+  am::hr::AudioInfo a; std::string e; if (!am::hr::probe(path, a, e)) { fail(err, len, e); return -2; }
+  info->rate = a.rate; info->channels = a.channels; info->frames = a.frames; info->bits = a.bits; info->is_float = a.isFloat ? 1 : 0; std::memset(info->container, 0, sizeof info->container); std::strncpy(info->container, a.container.c_str(), sizeof info->container - 1); return 0;
+}
 double* amix_hr_read(const char* path, amix_hr_info* info, char* err, size_t len) {
   if (!path) { fail(err, len, "amix_hr_read: no path"); return nullptr; }
   am::hr::Audio a; std::string e; if (!am::hr::read(path, a, e)) { fail(err, len, e); return nullptr; }
@@ -65,6 +72,18 @@ int amix_hr_write(const char* path, const double* x, int64_t frames, int ch, dou
   if (!am::hr::write(path, in, ch, rate, format ? format : "wav24", dither ? dither : "tpdf", e)) { fail(err, len, e); return -2; }
   return 0;
 }
+
+amix_hr_writer* amix_hr_writer_open(const char* path, int ch, double rate, const char* format, const char* dither, char* err, size_t len) {
+  if (!path) { fail(err, len, "amix_hr_writer_open: no path"); return nullptr; }
+  std::string e; auto w = am::hr::Writer::make(path, ch, rate, format ? format : "wav24", dither ? dither : "tpdf", e); if (!w) { fail(err, len, e); return nullptr; }
+  auto* h = new amix_hr_writer; h->w = std::move(w); return h;
+}
+int amix_hr_writer_write(amix_hr_writer* h, const double* x, int64_t frames) { if (!h || !x || frames < 0) return -1; return h->w->write(x, static_cast<std::size_t>(frames)) ? 0 : -2; }
+int amix_hr_writer_write_f32(amix_hr_writer* h, const float* x, int64_t frames, int channels) {
+  if (!h || !x || frames < 0 || channels < 1) return -1; h->tmp.assign(x, x + frames * channels); return h->w->write(h->tmp.data(), static_cast<std::size_t>(frames)) ? 0 : -2;
+}
+int64_t amix_hr_writer_frames(const amix_hr_writer* h) { return h ? static_cast<int64_t>(h->w->frames()) : 0; }
+int amix_hr_writer_close(amix_hr_writer* h, char* err, size_t len) { if (!h) return -1; std::string e; const bool ok = h->w->close(&e); if (!ok) fail(err, len, e); delete h; return ok ? 0 : -2; }
 
 int amix_hr_quantize(const double* in, int64_t n, int ch, int bits, const char* dither, uint32_t seed, int32_t* out) {
   if (!in || !out || ch < 1 || n < 0 || bits < 8 || bits > 32) return -1;

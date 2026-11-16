@@ -83,7 +83,12 @@ class RemoteActivity : AppCompatActivity() {
         row2.addView(find); row2.addView(busesBtn); row2.addView(monBtn); row2.addView(clipBtn); root.addView(android.widget.HorizontalScrollView(this).apply { addView(row2) })
         row2.apply { addView(Button(this@RemoteActivity).apply { text = getString(R.string.scenes); setOnClickListener { showScenes() } });  addView(Button(this@RemoteActivity).apply { text = getString(R.string.plugins); setOnClickListener { startActivity(android.content.Intent(this@RemoteActivity, PluginsActivity::class.java)) } }); addView(Button(this@RemoteActivity).apply { text = getString(R.string.calculator); setOnClickListener { startActivity(android.content.Intent(this@RemoteActivity, CalculatorActivity::class.java)) } }) }
         connectBtn = connect
-        connected = listOf(busesBtn, monBtn, clipBtn)
+        // RECORD on the console, MUTE GROUPS (kept on this phone) and the console's INPUT source
+        val recBtn = Button(this).apply { text = getString(R.string.remote_rec); isEnabled = false; setOnClickListener { toggleRecord(this) } }
+        val mgBtn = Button(this).apply { text = getString(R.string.mute_groups); isEnabled = false; setOnClickListener { showMuteGroups() } }
+        val inBtn = Button(this).apply { text = getString(R.string.remote_input); isEnabled = false; setOnClickListener { pickInput() } }
+        row2.addView(recBtn, 1); row2.addView(mgBtn, 2); row2.addView(inBtn, 3)
+        connected = listOf(busesBtn, monBtn, clipBtn, recBtn, mgBtn, inBtn)
         find.setOnClickListener {   // FIND: the consoles on this Wi-Fi that run the phone remote
             val ip = localIp(); if (ip == null) { status.text = getString(R.string.no_wifi); return@setOnClickListener }
             status.text = getString(R.string.searching)
@@ -260,6 +265,60 @@ class RemoteActivity : AppCompatActivity() {
             val pp = ToggleButton(this).apply { textOn = "PRE"; textOff = "POST"; text = "POST"; setOnCheckedChangeListener { _, v -> pre = v; io.execute { runCatching { c.send(strip, b, lvl, pre) } } } }
             line.addView(t); line.addView(sb); line.addView(pp); box.addView(line) }
         return box
+    }
+
+    /** RECORD: starts the console's own recording of its master (FLAC 24-bit, WAV 24-bit or 32-bit float, into the console's recordings
+     *  folder), or stops the one that is running. */
+    private fun toggleRecord(btn: Button) {
+        val c = client; if (c == null) { status.text = getString(R.string.not_connected); return }
+        io.execute { runCatching { c.recordState() }.onSuccess { (on, sec, _) -> ui.post {
+            if (on) io.execute { runCatching { c.record(false) }.onSuccess { ui.post { btn.setTextColor(Color.WHITE); status.text = getString(R.string.remote_rec_stopped, RecorderActivity.mmss(sec)) } }.onFailure { ui.post { status.text = getString(R.string.failed, it.message ?: "") } } }
+            else { val fm = listOf("flac" to "FLAC 24-BIT", "wav24" to "WAV 24-BIT", "wavf32" to "WAV 32-BIT FLOAT")
+                AlertDialog.Builder(this).setTitle(R.string.remote_rec).setItems(fm.map { it.second }.toTypedArray()) { _, w ->
+                    io.execute { runCatching { c.record(true, fm[w].first) }.onSuccess { f -> ui.post { btn.setTextColor(Color.parseColor("#EF4444")); status.text = getString(R.string.remote_rec_on, f.substringAfterLast('/').substringAfterLast('\\')) } }.onFailure { ui.post { status.text = getString(R.string.failed, it.message ?: "") } } } }.show() } } }
+            .onFailure { ui.post { status.text = getString(R.string.failed, it.message ?: "") } } }
+    }
+    /** INPUT: what the console listens to. MICROPHONE = its default capture device; COMPUTER SOUND = every program playing on that computer
+     *  (Windows 10 2004 and later: the console lists it as "loopback:system"). The console's stream is opened again with that input. */
+    private fun pickInput() {
+        val c = client; if (c == null) { status.text = getString(R.string.not_connected); return }
+        io.execute { runCatching { c.devices() }.onSuccess { devs -> ui.post {
+            val hasSystem = devs.any { it.id == "loopback:system" }
+            val items = arrayOf(getString(R.string.remote_input_mic), getString(R.string.remote_input_music) + if (hasSystem) "" else "  (" + getString(R.string.remote_input_none) + ")")
+            AlertDialog.Builder(this).setTitle(R.string.remote_input).setItems(items) { _, w ->
+                if (w == 1 && !hasSystem) { status.text = getString(R.string.remote_input_none); return@setItems }
+                io.execute { runCatching { c.open("wasapi", if (w == 1) "loopback:system" else "", "", 48000.0, 256, 2, 2) }
+                    .onSuccess { ui.post { status.text = getString(if (w == 1) R.string.remote_input_music_on else R.string.remote_input_mic_on) } }.onFailure { ui.post { status.text = getString(R.string.failed, it.message ?: "") } } } }.show() } }
+            .onFailure { ui.post { status.text = getString(R.string.failed, it.message ?: "") } } }
+    }
+    /** MUTE GROUPS: eight groups of strips, muted and un-muted together. Kept on this phone (SharedPreferences "muteGroups"). */
+    private fun showMuteGroups() {
+        val c = client; if (c == null) { status.text = getString(R.string.not_connected); return }
+        val dlg = AlertDialog.Builder(this).setTitle(R.string.mute_groups).setPositiveButton(android.R.string.ok, null).create()
+        dlg.setView(ScrollView(this).apply { addView(muteGroupsPanel(c)) }); dlg.show()
+    }
+    internal fun muteGroupsPanel(c: DaemonClient?): View {
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 16, 24, 16); setBackgroundColor(Color.parseColor("#141B26")) }
+        val store = getSharedPreferences("muteGroups", MODE_PRIVATE); val n = (state?.strips?.size ?: Prefs.stripCount(this)).coerceAtLeast(1)
+        fun refresh() {
+            box.removeAllViews()
+            box.addView(TextView(this).apply { text = getString(R.string.mute_groups_note); setTextColor(Color.parseColor("#8B98A8")); textSize = 12f; setPadding(0, 0, 0, 12) })
+            for (g in 0 until MuteGroups.COUNT) {
+                val m = MuteGroups.members(store, g); val on = MuteGroups.active(store, g)
+                val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
+                row.addView(Button(this).apply { text = getString(R.string.mute_group_n, g + 1); setTextColor(if (on) Color.parseColor("#EF4444") else Color.WHITE); isEnabled = m.isNotEmpty()
+                    setOnClickListener { val groups = (0 until MuteGroups.COUNT).map { MuteGroups.members(store, it) }; val act = (0 until MuteGroups.COUNT).map { MuteGroups.active(store, it) }
+                        val plan = MuteGroups.plan(groups, act, g, !on); MuteGroups.setActive(store, g, !on); refresh()
+                        if (c != null) io.execute { runCatching { plan.forEach { (s, mu) -> c.mute(s, mu) } }.onFailure { ui.post { status.text = getString(R.string.failed, it.message ?: "") } } } } })
+                row.addView(TextView(this).apply { text = MuteGroups.label(m); setTextColor(Color.parseColor("#00F2FF")); typeface = android.graphics.Typeface.MONOSPACE; textSize = 12f; setPadding(16, 0, 16, 0); layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f) })
+                row.addView(Button(this).apply { text = getString(R.string.mute_group_edit); textSize = 11f; setOnClickListener {
+                    val names = (0 until n).map { i -> String.format("CH %02d  %s", i + 1, state?.strips?.getOrNull(i)?.name.orEmpty()) }.toTypedArray(); val sel = BooleanArray(n) { it in m }
+                    AlertDialog.Builder(this@RemoteActivity).setTitle(getString(R.string.mute_group_n, g + 1)).setMultiChoiceItems(names, sel) { _, w, ch -> sel[w] = ch }
+                        .setPositiveButton(android.R.string.ok) { _, _ -> MuteGroups.setMembers(store, g, (0 until n).filter { sel[it] }.toSet()); refresh() }.setNegativeButton(android.R.string.cancel, null).show() } })
+                box.addView(row)
+            }
+        }
+        refresh(); return box
     }
 
     /** SCENES on the phone: SAVE takes the console's mix as it is now (levels, pan, mute, solo, names, master, buses); RECALL sends it back.

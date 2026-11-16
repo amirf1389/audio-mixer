@@ -79,6 +79,19 @@ class ScreenshotTest {
         a.show(0); a.showReading(-20.0, 441.6); shot(a.window.decorView.rootView, "tools-tuner")
         a.show(1); repeat(5) { a.showReading(-38.0, 0.0) }; shot(a.window.decorView.rootView, "tools-level")
         a.show(2); shot(a.window.decorView.rootView, "tools-generator")
+        // RTA: pink-ish noise with a bump at 2.5 kHz, as the microphone thread would deliver it
+        a.show(3); repeat(6) { a.showSpectrum(DoubleArray(31) { i -> -42.0 - i * 0.6 + (if (i in 20..22) 14.0 else 0.0) + ((i * 7) % 5) }) }; shot(a.window.decorView.rootView, "tools-rta")
+    }
+    @Test fun recorder() {   // no microphone and no native library on the JVM: the list is shown as the screen fills it after two takes
+        val a = Robolectric.buildActivity(RecorderActivity::class.java).setup().get()
+        a.showTakes(listOf(RecorderActivity.Take(File("2026-11-16_10-42-07.flac"), "96 kHz · 24-bit · stereo · 03:25 · 41.8 MB"), RecorderActivity.Take(File("2026-11-15_19-03-55.wav"), "48 kHz · 32-bit float · mono · 00:48 · 9.2 MB")))
+        shot(a.window.decorView.rootView, "recorder")
+    }
+    @Test fun muteGroups() {
+        val ctx = org.robolectric.RuntimeEnvironment.getApplication()
+        ctx.getSharedPreferences("muteGroups", 0).edit().putString("g0", "0,1,2,3").putBoolean("on0", true).putString("g1", "8,9").putString("g3", "4,5,6").commit()
+        val a = Robolectric.buildActivity(RemoteActivity::class.java).setup().get()
+        shot(a.muteGroupsPanel(null), "mute-groups")
     }
 
     @Test fun remote() {

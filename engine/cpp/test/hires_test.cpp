@@ -61,6 +61,11 @@ int main(int argc, char** argv) {
     std::printf("%s: bits %d, container %s, worst %.3g (allowed %.3g)\n", f.c_str(), a.info.bits, a.info.container.c_str(), worst, allowed);
     CHECK(a.info.bits == bits && a.info.isFloat == isF && worst <= allowed);
   }
+  { // the streaming writer in odd blocks gives the same file as the one-shot
+    const std::string p = dir + "/amix-hires-stream.flac"; auto w = Writer::make(p, 2, 384000, "flac24", "none", err); CHECK(w);
+    for (std::size_t at = 0; at < 38400; at += 1000) CHECK(w->write(x.data() + at * 2, std::min<std::size_t>(1000, 38400 - at)));
+    CHECK(w->frames() == 38400 && w->close()); Audio a; CHECK(read(p, a, err)); std::remove(p.c_str());
+    double worst = 0; for (std::size_t i = 0; i < x.size(); ++i) worst = std::max(worst, std::fabs(a.samples[i] - x[i])); CHECK(a.info.frames == 38400 && worst < 1.3e-7); }
   CHECK(!write(dir + "/x.wav", x, 2, 384000, "mp3", "none", err));
   { Audio a; CHECK(!read(dir + "/no-such-file.wav", a, err)); }
   // 5. dither: TPDF on silence has the textbook noise (1/6 LSB^2 + the rounding); noise shaping moves it out of the low band

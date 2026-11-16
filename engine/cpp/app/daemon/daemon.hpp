@@ -27,6 +27,7 @@
 #include "httpd.hpp"
 #include "json.hpp"
 #include "tokens.hpp"
+#include "record/recorder.hpp"
 
 namespace am {
 
@@ -70,6 +71,7 @@ class Daemon {
   bool noteRefused();   // a wrong token: counted and slowed down; true when there were too many in the last minute
   std::atomic<int> refused_{0}, refusedNow_{0}; std::atomic<long long> refusedSince_{0};
   std::atomic<int> pairFails_{0}; std::atomic<long long> pairMinute_{0};
+  rec::Recorder rec_; double rate_ = 48000;   // RECORD from the remote: the master to <data>/recordings (the folder is fixed: a remote never names a path)
   mutable std::mutex m_; std::unique_ptr<Runtime> rt_; std::string backend_, lastError_; std::vector<Strip> strips_; Bus buses_[kMaxBuses]; double masterDb_ = 0; bool limiter_ = true; double ceiling_ = -0.5;
   std::chrono::steady_clock::time_point started_ = std::chrono::steady_clock::now(); std::atomic<bool> running_{false};
 };

@@ -55,6 +55,10 @@ int main(void) {
     CHECK(amix_hr_resampler_create(48000, 44100, 2, "nope", 1, e, sizeof e) == NULL && strlen(e) > 5);
     static double tone[2 * 4800]; for (int i = 0; i < 4800; ++i) tone[2 * i] = tone[2 * i + 1] = 0.25 * sin(2 * M_PI * 440 * i / 192000.0);
     CHECK(amix_hr_write("/tmp/amix-sdk-hires.flac", tone, 4800, 2, 192000, "flac24", "tpdf", e, sizeof e) == 0);
+    { amix_hr_info pi; CHECK(amix_hr_probe("/tmp/amix-sdk-hires.flac", &pi, e, sizeof e) == 0 && pi.rate == 192000 && pi.frames == 4800 && pi.bits == 24); }
+    { amix_hr_writer* w = amix_hr_writer_open("/tmp/amix-sdk-stream.wav", 2, 96000, "wav24", "none", e, sizeof e); CHECK(w); static float fb[2 * 480]; for (int i = 0; i < 960; ++i) fb[i] = 0.1f;
+      for (int k = 0; k < 10; ++k) CHECK(amix_hr_writer_write_f32(w, fb, 480, 2) == 0); CHECK(amix_hr_writer_frames(w) == 4800 && amix_hr_writer_close(w, e, sizeof e) == 0);
+      amix_hr_info pi; CHECK(amix_hr_probe("/tmp/amix-sdk-stream.wav", &pi, e, sizeof e) == 0 && pi.frames == 4800 && pi.rate == 96000 && pi.bits == 24); remove("/tmp/amix-sdk-stream.wav"); }
     amix_hr_info inf; double* back = amix_hr_read("/tmp/amix-sdk-hires.flac", &inf, e, sizeof e); remove("/tmp/amix-sdk-hires.flac");
     CHECK(back && inf.rate == 192000 && inf.channels == 2 && inf.frames == 4800 && inf.bits == 24 && strcmp(inf.container, "flac") == 0 && fabs(back[2000] - tone[2000]) < 1e-6); amix_free(back);
     double* rs = NULL; int64_t rn = 0; CHECK(amix_hr_resample(tone, 4800, 2, 192000, 48000, "auto", 1, &rs, &rn, e, sizeof e) == 0 && rn == 1200); amix_free(rs);
