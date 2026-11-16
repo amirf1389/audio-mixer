@@ -524,6 +524,7 @@ json::Value Daemon::apply(const json::Value& cmd, std::string& err) {
     pushSettings(*rt); loadRacks(*rt); rt->setTap(&rta_);
     mp_.fs = rt->sampleRate(); master_.set(mp_); rt->setMasterProcessor(&master_);   // the console's RTA EQ and mastering, as handed over
     rt->setLimiter(limiter_, ceiling_); rt->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute);
+    pads_.prepare(rt->sampleRate()); rt->setExtraSource(&pads_);   // the SAMPLE PADS, at this device's rate
     rt_ = std::move(rt); applyMaster(*rt_); backend_ = rt_->backendName(); lastError_.clear(); rate_ = cfg.sampleRate;   // the trim knows the new output
     ok.set("backend", backend_); ok.set("rate", cfg.sampleRate); ok.set("frames", static_cast<int>(cfg.frames)); return ok;
   }
@@ -543,6 +544,11 @@ json::Value Daemon::apply(const json::Value& cmd, std::string& err) {
       for (int b = 0; b < 10; ++b) { const double db = std::max(-24.0, std::min(24.0, g.at(static_cast<std::size_t>(b)).asNumber(0)));
         mp_.eq[b] = dsp::EqBand{std::fabs(db) > 0.01 ? dsp::FilterType::Peaking : dsp::FilterType::Off, kIso[b], 1.41, db}; } }
     mp_.eqOn = on; master_.set(mp_); ++masterV_; return ok; }
+  if (op == "sample") {   // a SAMPLE PAD (the console's 100 one-shots) into the master: {id 1..100} or {stop: true}; gainDb sets the pads' level
+    if (cmd.has("gainDb")) pads_.gainDb.store(std::max(-40.0, std::min(12.0, cmd["gainDb"].asNumber(-6))));
+    if (cmd["stop"].asBool(false)) { pads_.stopAll(); return ok; }
+    if (cmd.has("id")) { if (!rt_) { err = "no sound card open"; return {}; } if (!pads_.trigger(cmd["id"].asInt(0))) { err = "id: 1..100"; return {}; } }
+    ok.set("voices", pads_.active.load()); return ok; }
   if (op == "rack") {   // the console's rack of one strip, as it is now (a plug-in added, removed, a knob turned in its window, bypass):
     // slots that keep their plug-in keep their instance and take the new state; the rest are made; the chain is handed over at once
     if (!strip(s)) return {}; const json::Value& ps = cmd["plugins"]; if (!ps.isArray()) { err = "plugins: a list"; return {}; }

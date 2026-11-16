@@ -32,6 +32,7 @@
 #include "audiomixer/runtime.hpp"
 #include "plugin/plugin.hpp"
 #include "rta.hpp"
+#include "pads.hpp"
 #include "audiomixer/master_chain.hpp"
 #include "httpd.hpp"
 #include "json.hpp"
@@ -123,6 +124,7 @@ class Daemon {
   struct Link { int id = 0; std::string tokenId, name, role, ip; long long since = 0; std::atomic<bool> kick{false}; };
   mutable std::mutex linksM_; std::map<int, std::shared_ptr<Link>> links_; int nextLink_ = 1; std::map<std::string, long long> held_;   // tokenId -> until (unix s)
   bool held(const std::string& tokenId) const;
+  Pads pads_;   // the console's SAMPLE PADS while the service plays (op sample)
   Rta rta_; std::atomic<long long> rtaUntil_{0}; MasterChain master_; MasterChain::Params mp_; std::atomic<unsigned long long> masterV_{1};
   json::Value programEqJson() const;
   struct PlugSlot { int slot = 0; std::string kind, name, state, error; bool bypass = false; std::shared_ptr<host::Plugin> pl; };

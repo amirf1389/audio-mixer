@@ -138,6 +138,9 @@ int main(int argc, char* argv[]) {
   if (smoke) std::setvbuf(stdout, nullptr, _IONBF, 0);   // the self-test prints as it goes: after a crash the last line is the step that was running
   if (!smoke) { QFile* lf = new QFile(QString::fromStdString(am::paths::file("console.log"))); if (lf->size() > 256 * 1024) lf->remove(); if (lf->open(QIODevice::Append | QIODevice::Text)) { g_log = lf; qInstallMessageHandler(logToFile); qInfo("AmF X1 %s starting: %s, Qt %s, render %s", AMIX_VERSION, am::paths::osName(), qVersion(), QQuickWindow::graphicsApi() == QSGRendererInterface::Software ? "software" : "auto"); } }
   Engine engine; I18n i18n; Arrange arrange(&engine); Settings settings(&engine); applyPalette(settings.darkTheme()); QObject::connect(&settings, &Settings::changed, &app, [&] { static bool last = settings.darkTheme(); if (last != settings.darkTheme()) { last = settings.darkTheme(); applyPalette(last); } }); if (smoke) settings.finishSetup(); Access access(&engine); Osc osc(&engine); Media media(&engine); Samples samples(&engine); Update update(QStringLiteral(AMIX_VERSION)); Measure measure(&engine); Remote remote(&engine); Net net(&engine); Frame frame(&engine); osc.setFrame(&frame); net.setFrame(&frame); frame.setOsc(&osc);
+  // SAMPLE PADS while phones are linked: the console's engine is stopped and the remote service plays, so the pads are sent there
+  samples.remotePlay = [&](int id, double gainDb) { return remote.send(QVariantMap{{"op", "sample"}, {"id", id}, {"gainDb", gainDb}}); };
+  samples.remoteStop = [&] { remote.send(QVariantMap{{"op", "sample"}, {"stop", true}}); };
   if (!lang.isEmpty()) i18n.setLang(lang);   // --lang fa: start in that language (also for --shots)
   QQmlApplicationEngine qml;
   qml.rootContext()->setContextProperty("engine", &engine);
@@ -444,8 +447,15 @@ int main(int argc, char* argv[]) {
       { // the strip menu's PLAY A SAMPLE: the channel's SAMPLE PLAYER is set to that sample and playing
         const int k = engine.playSampleOnStrip(21, 7); const QVariantList p = k >= 0 ? engine.pluginParams(21, k) : QVariantList();
         const bool ok = k >= 0 && p.size() >= 2 && p[0].toMap()["text"].toString().startsWith("7 ") && p[1].toMap()["text"].toString() == "ON" && engine.playSampleOnStrip(21, 0) == -1;
+        // ... and it is HEARD: the channel's meter and the master move (a quiet channel that the engine lets rest still plays its rack),
+        // on a low channel and on the last one the plan allows
+        auto heard = [&](int strip) { engine.setGain(strip, 0); engine.setMute(strip, false); const int s = engine.playSampleOnStrip(strip, 1); double ch = -120, ms = -120; QElapsedTimer t; t.start();
+          while (t.elapsed() < 400) { QCoreApplication::processEvents(QEventLoop::AllEvents, 10); engine.tick(); ch = std::max(ch, engine.meterAt(strip)["peakDb"].toDouble()); ms = std::max(ms, engine.telemetry()["masterPeakDb"].toDouble()); }
+          if (s >= 0) engine.setPlugin(strip, s, ""); return std::make_pair(ch, ms); };
+        const int last = std::max(0, std::min(engine.licensedChannels(), 32) - 1); const auto h0 = heard(1), h1 = heard(last);
+        std::printf("amixos --smoke: SAMPLE PADS on a channel heard: CH 2 %.1f dBFS (master %.1f), CH %d %.1f dBFS (master %.1f)\n", h0.first, h0.second, last + 1, h1.first, h1.second);
         if (k >= 0) engine.setPlugin(21, k, "");
-        if (!ok) { std::fprintf(stderr, "amixos --smoke: play a sample on a strip (slot %d)\n", k); return 159; } }
+        if (!ok || h0.first < -40 || h0.second < -40 || h1.first < -40 || h1.second < -40) { std::fprintf(stderr, "amixos --smoke: play a sample on a strip (slot %d) / not heard\n", k); return 159; } }
       { // a custom rate as high as 1100 kHz opens on the null device and runs (the engine has no rate ceiling of its own)
         const double r0 = engine.sampleRate(); const int f0 = engine.blockFrames(); engine.stop();
         const bool ok = engine.open("null", "", "", 1100000, 1024, 2, 2); QElapsedTimer t; t.start(); while (t.elapsed() < 300) QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
@@ -843,6 +853,13 @@ int main(int argc, char* argv[]) {
           std::printf("amixos --smoke: REAL-TIME SYNC console plug-in knob -> service %s in %lld ms; console EQ -> remotes %s in %lld ms; remote EQ -> console %s in %lld ms\n",
                       std::abs(there - want) < 0.02 ? "yes" : "NO", static_cast<long long>(plugMs), std::abs(eqOut - 5) < 0.05 ? "yes" : "NO", static_cast<long long>(eqOutMs), eqIn ? "yes" : "NO", static_cast<long long>(ti.elapsed()));
           engine.setEq(4, 2, 0, 2000, 1.0, 0.0); engine.setEq(6, 1, 0, 150, 0.7, 0.0);
+          // SAMPLE PADS while the phones are linked: the console's engine is stopped, a pad goes to the service and is heard on its master
+          { double before = 0, during = 0; for (int k = 0; k < 5; ++k) { wait(40); before = std::max(before, get("/api/meters").value("master").toMap().value("l").toDouble()); }
+            const bool sent = !engine.running() && samples.play(1); QElapsedTimer tp; tp.start();
+            while (tp.elapsed() < 1500) { wait(40); during = std::max(during, get("/api/meters").value("master").toMap().value("l").toDouble()); if (during > 0.05) break; }
+            samples.stopAll();
+            std::printf("amixos --smoke: SAMPLE PADS while phones are linked: sent to the service %d, its master %.3f -> %.3f (in %lld ms)\n", sent, before, during, static_cast<long long>(tp.elapsed()));
+            if (!(sent && during > 0.05 && during > before * 4)) { rackOk = false; rackWhy = QStringLiteral("SAMPLE PADS not heard through the service (%1 -> %2)").arg(before).arg(during); } }
           if (!(std::abs(there - want) < 0.02 && std::abs(eqOut - 5) < 0.05 && eqIn)) { rackOk = false; rackWhy = QStringLiteral("REAL-TIME SYNC: plug-in %1 / EQ out %2 / EQ in %3").arg(there).arg(eqOut).arg(eqIn); } }
         engine.setPlugin(5, 0, QString());
         if (!rackOk) { std::fprintf(stderr, "amixos --smoke: CONSOLE PLUG-INS failed: %s\n", qPrintable(rackWhy)); remote.stop(); return 290; }

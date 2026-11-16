@@ -58,7 +58,7 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_CURRENT_S
 add_library(amixos_daemon_lib STATIC app/daemon/daemon.cpp app/daemon/httpd.cpp app/daemon/tokens.cpp)
 target_include_directories(amixos_daemon_lib PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/gen)
 target_include_directories(amixos_daemon_lib PUBLIC app)
-target_link_libraries(amixos_daemon_lib PUBLIC audiomixer_runtime amixos_license amixos_record)
+target_link_libraries(amixos_daemon_lib PUBLIC audiomixer_runtime amixos_license amixos_record amixos_samples)
 if(WIN32)
   target_link_libraries(amixos_daemon_lib PUBLIC ws2_32)
 endif()
