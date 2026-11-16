@@ -10,7 +10,7 @@ Flickable {
     objectName: "tonePage"
     property bool rta: true       // real-time analyser: the strip's 1/3-octave spectrum after its DSP, under the EQ curve
     property var spec: []
-    Timer { interval: 60; running: page.visible && page.rta; repeat: true; onTriggered: { page.spec = engine.spectrum(2); canvas.requestPaint() } }
+    Timer { interval: engine.uiAwake ? 60 : 500; running: page.visible && page.rta; repeat: true; onTriggered: { page.spec = engine.spectrum(2); canvas.requestPaint() } }
     onRtaChanged: { if (rta) engine.setScopeStrip(strip); canvas.requestPaint() }
     property int strip: engine.selectedStrip
     property int ch3Tick: 0

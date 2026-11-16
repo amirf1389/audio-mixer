@@ -107,6 +107,15 @@ class Engine : public QObject {
   QVariantMap license() const { return license_; }
   int licensedChannels() const { return licensedChannels_; }
   Q_INVOKABLE void tick();   // one meter poll now (the timer does this every 33 ms; the smoke test calls it directly)
+  // LOW-CPU INTERFACE: the meters and everything that follows them redraw at a rate that depends on whether anyone looks: 30 fps in
+  // front (15 with ECO), 4 fps behind another app (Chrome, a game), 1 fps minimised. The sound is never throttled: only the screen.
+  Q_INVOKABLE void setUiActivity(int level);   // 2 in front, 1 behind another window, 0 minimised / hidden
+  Q_PROPERTY(bool ecoUi READ ecoUi WRITE setEcoUi NOTIFY ecoUiChanged)
+  Q_PROPERTY(bool uiAwake READ uiAwake NOTIFY ecoUiChanged)   // the window is in front: animations and fast page polls run only then
+  bool uiAwake() const { return uiLevel_ >= 2; }
+  bool ecoUi() const { return ecoUi_; }
+  void setEcoUi(bool on);
+  Q_INVOKABLE int uiFps() const { return timer_.interval() > 0 ? 1000 / timer_.interval() : 0; }
   Q_INVOKABLE void refreshLicense();            // re-reads the stored key / edition (also after the date changes)
   // for the Settings system
   void setClipThreshold(double db);             // the meters' clip point in dBFS (default -0.1)
@@ -634,6 +643,7 @@ class Engine : public QObject {
   Q_INVOKABLE void save();
 
  signals:
+  void ecoUiChanged();
   void compTargetChanged();
   void stateChanged();
   void ampChanged();
@@ -732,6 +742,7 @@ class Engine : public QObject {
   struct MonitorUi { int source = 0; double db = 0; bool dim = false, mono = false, mute = false, sync = true; } mon_;   // sync: the monitor fader moves with the master fader (and back)
   int vuRef_ = -18; double vu_[kStrips] = {}; double vuMaster_ = 0;                     // VU ballistics (300 ms to 99 %), run on the UI timer
   std::optional<QJsonObject> clipboard_;
+  int uiLevel_ = 2; bool ecoUi_ = false; void applyUiRate();
   QTimer timer_; QTimer hotplug_; std::string fingerprint_; bool simulated_ = false;
   mutable QSettings settings_;
 };

@@ -417,6 +417,17 @@ int main(int argc, char* argv[]) {
       engine.setWindowsGainMode(keepMode); engine.setMaster(keepMaster);
       if (!(offOk && std::abs(t50 + 9.03) < 0.01 && t100 == 0.0 && std::abs(t25 + 18.06) < 0.01 && t0 <= -119 && wrote && fader && curve && shared && gone)) {
         std::fprintf(stderr, "amixos --smoke: WINDOWS VOLUME failed (off %d, 50 %.2f, 100 %.2f, 25 %.2f, 0 %.0f, wrote %d, fader %d, curve %d, shared %d, gone %d)\n", offOk, t50, t100, t25, t0, wrote, fader, curve, shared, gone); return 288; } }
+    { // LOW-CPU INTERFACE: the meter rate follows the window (front / behind another app / minimised) and ECO; the process CPU is measured
+      // in each state over 3 s of the live mixer (the interface itself, not the sound, is what is slowed)
+      const bool eco0 = engine.ecoUi(); engine.setEcoUi(false);
+      engine.setUiActivity(2); const int f2 = engine.uiFps(); engine.setEcoUi(true); const int fe = engine.uiFps(); engine.setEcoUi(false);
+      engine.setUiActivity(1); const int f1 = engine.uiFps(); engine.setUiActivity(0); const int f0 = engine.uiFps();
+      auto cpuPct = [&](int level) { engine.setUiActivity(level); const std::clock_t c0 = std::clock(); QElapsedTimer w; w.start();
+        while (w.elapsed() < 3000) { QCoreApplication::processEvents(QEventLoop::AllEvents, 20); std::this_thread::sleep_for(std::chrono::milliseconds(2)); }
+        return 100.0 * static_cast<double>(std::clock() - c0) / CLOCKS_PER_SEC / (w.elapsed() / 1000.0); };
+      const double cFront = cpuPct(2), cBack = cpuPct(1), cMin = cpuPct(0); engine.setUiActivity(2); engine.setEcoUi(eco0);
+      std::printf("amixos --smoke: LOW-CPU INTERFACE %d fps in front (ECO %d), %d behind another app, %d minimised; process CPU %.1f%% / %.1f%% / %.1f%% (one core, offscreen)\n", f2, fe, f1, f0, cFront, cBack, cMin);
+      if (!(f2 == 30 && fe == 15 && f1 == 4 && f0 == 1)) { std::fprintf(stderr, "amixos --smoke: LOW-CPU INTERFACE failed\n"); return 1; } }
     { // the ten effects in the rack of any channel: listed, loaded into a slot, a knob moves, bypass, cleared; a late channel too
       { // 2 IN / 2 OUT at least on every driver: asking for none opens the first pair all the same (a device that reported 0 channels is not left silent)
         const double r0 = engine.sampleRate(); const int f0 = engine.blockFrames(); engine.stop();

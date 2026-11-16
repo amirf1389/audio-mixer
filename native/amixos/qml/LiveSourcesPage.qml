@@ -25,7 +25,7 @@ Item {
         if (ok) settings.rememberDevice(d.backend, inId, outId, d.defaultRate > 0 ? d.defaultRate : settings.defaultRate, settings.defaultFrames, useIn, outCh > 0 ? outCh : 2)
     }
     Timer { interval: 5000; running: page.visible && page.autoScan; repeat: true; onTriggered: engine.refreshDevices() }
-    Timer { interval: 60; running: page.visible; repeat: true; onTriggered: { engine.setScopeStrip(page.micStrip); page.specMusic = engine.spectrum(0); page.specMic = engine.spectrum(2); musicC.requestPaint(); micC.requestPaint() } }
+    Timer { interval: engine.uiAwake ? 60 : 500; running: page.visible; repeat: true; onTriggered: { engine.setScopeStrip(page.micStrip); page.specMusic = engine.spectrum(0); page.specMic = engine.spectrum(2); musicC.requestPaint(); micC.requestPaint() } }
     component Spectrum: Canvas {
         property var data: []
         property color col: Theme.cyan

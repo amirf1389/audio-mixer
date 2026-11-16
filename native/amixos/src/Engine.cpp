@@ -64,7 +64,7 @@ Engine::Engine(QObject* parent) : QObject(parent) {
   if (masterDb_ <= -60.0) { masterDb_ = 0.0; masterMuted_ = false; startNote_ = QStringLiteral("The master was saved at -inf: it starts at 0 dB."); }
   if (mon_.db <= -60.0) mon_.db = 0.0;
   refreshDevices();
-  timer_.setInterval(33);
+  ecoUi_ = settings_.value("ui/eco", false).toBool(); applyUiRate();
   vuRef_ = std::clamp(settings_.value("ui/vuRef", -18).toInt(), -24, -8);
   for (int i = 0; i < kStrips; ++i) inRoute_[i] = i;
   for (int o = 0; o < kOutputs; ++o) outRoute_[o] = am::Runtime::defaultOutputSource(o);
@@ -1497,6 +1497,9 @@ QVariantList Engine::pages() const {
   return l;
 }
 
+void Engine::applyUiRate() { timer_.setInterval(uiLevel_ >= 2 ? (ecoUi_ ? 66 : 33) : uiLevel_ == 1 ? 250 : 1000); }
+void Engine::setUiActivity(int level) { level = std::clamp(level, 0, 2); if (level == uiLevel_) return; uiLevel_ = level; applyUiRate(); emit ecoUiChanged(); if (level == 2) tick(); }   // back in front: fresh meters at once
+void Engine::setEcoUi(bool on) { if (on == ecoUi_) return; ecoUi_ = on; settings_.setValue("ui/eco", on); applyUiRate(); emit ecoUiChanged(); }
 void Engine::tick() {
   QVariantList m; QVariantMap t;
   if (rt_) {

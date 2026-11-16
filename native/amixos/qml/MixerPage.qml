@@ -74,9 +74,11 @@ Item {
         anchors.margins: 10
         spacing: 8
         Rectangle {
-            Layout.fillWidth: true; implicitHeight: 34; radius: 8; color: Theme.card; border.color: Theme.line
-            RowLayout {
-                anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 6
+            Layout.fillWidth: true; implicitHeight: barFlow.implicitHeight + 14; radius: 8; color: Theme.card; border.color: Theme.line
+            // a Flow, not a RowLayout: in a narrow window (or with large Windows scaling) the chips wrap onto a second line instead of
+            // being squeezed below their text, which drew the labels over each other
+            Flow {
+                id: barFlow; anchors.left: parent.left; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 6
                 Text { text: i18n.t("PAGES:", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
                 Repeater {
                     model: ["PAGE 1: CH 01-16", "PAGE 2: CH 17-32", "ALL 32 CH"]
@@ -102,7 +104,7 @@ Item {
                 }
                 Rectangle { implicitWidth: 1; implicitHeight: 16; color: Theme.lineSoft }
                 Rectangle { id: gb82; implicitWidth: Math.max(90, children[0].implicitWidth + 12); implicitHeight: 20; radius: 7; color: page.sidePanel ? Qt.rgba(0.235, 0.784, 0.859, 0.18) : Theme.ov(0.06); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb82.color) } GradientStop { position: 1; color: Theme.btnBottom(gb82.color) } } border.color: page.sidePanel ? Theme.cyan : "transparent"; Text { anchors.centerIn: parent; text: i18n.t("CHANNEL PANEL", i18n.lang); color: page.sidePanel ? Theme.cyan : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.sidePanel = !page.sidePanel } }
-                Rectangle { id: gb83; implicitWidth: 70; implicitHeight: 20; radius: 7; color: page.vuMode ? Qt.rgba(0.984, 0.749, 0.141, 0.2) : Theme.ov(0.06); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb83.color) } GradientStop { position: 1; color: Theme.btnBottom(gb83.color) } } border.color: page.vuMode ? Theme.amber : "transparent"; Text { anchors.centerIn: parent; text: page.vuMode ? i18n.t("VU METERS", i18n.lang) : i18n.t("BAR METERS", i18n.lang); color: page.vuMode ? Theme.amber : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.vuMode = !page.vuMode } }
+                Rectangle { id: gb83; implicitWidth: Math.max(70, children[0].implicitWidth + 14); implicitHeight: 20; radius: 7; color: page.vuMode ? Qt.rgba(0.984, 0.749, 0.141, 0.2) : Theme.ov(0.06); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb83.color) } GradientStop { position: 1; color: Theme.btnBottom(gb83.color) } } border.color: page.vuMode ? Theme.amber : "transparent"; Text { anchors.centerIn: parent; text: page.vuMode ? i18n.t("VU METERS", i18n.lang) : i18n.t("BAR METERS", i18n.lang); color: page.vuMode ? Theme.amber : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.vuMode = !page.vuMode } }
                 // INPUT SOURCE: the microphone, or the computer's own sound (every app but this one: music, a browser, a player) as CH 1-2,
                 // so the music is the input while the mix plays on the same headphones or speakers
                 Repeater { model: [{ src: "mic", label: "INPUT: MIC" }, { src: "music", label: "INPUT: COMPUTER SOUND" }]
@@ -115,20 +117,20 @@ Item {
                             ToolTip.visible: containsMouse; ToolTip.delay: 500
                             ToolTip.text: modelData.src === "music" ? (engine.computerSoundAvailable ? i18n.t("The music of every app on this computer (Spotify, YouTube, a player) becomes the input on CH 1-2. AmF X1's own output is left out, so it plays on the same headphones or speakers without a loop.", i18n.lang) : i18n.t("Needs Windows 10 version 2004 or later with the sound card on WASAPI.", i18n.lang)) : i18n.t("The microphone (the default capture device) is the input.", i18n.lang)
                             onClicked: { const m = engine.setInputSource(modelData.src); if (m && m.backend) settings.rememberDevice(m.backend, m.in, m.out, m.rate, m.frames, m.inChannels, m.outChannels) } } } }
-                Rectangle { id: gb84; visible: page.vuMode; implicitWidth: 86; implicitHeight: 20; radius: 7; color: Theme.ov(0.06); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb84.color) } GradientStop { position: 1; color: Theme.btnBottom(gb84.color) } } Text { anchors.centerIn: parent; text: i18n.t("0 VU = ", i18n.lang) + engine.vuRefDb + i18n.t(" dBFS", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 } MouseArea { anchors.fill: parent; onClicked: engine.vuRefDb = engine.vuRefDb === -18 ? -20 : engine.vuRefDb === -20 ? -14 : -18 } }
+                Rectangle { id: gb84; visible: page.vuMode; implicitWidth: Math.max(86, children[0].implicitWidth + 14); implicitHeight: 20; radius: 7; color: Theme.ov(0.06); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb84.color) } GradientStop { position: 1; color: Theme.btnBottom(gb84.color) } } Text { anchors.centerIn: parent; text: i18n.t("0 VU = ", i18n.lang) + engine.vuRefDb + i18n.t(" dBFS", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 } MouseArea { anchors.fill: parent; onClicked: engine.vuRefDb = engine.vuRefDb === -18 ? -20 : engine.vuRefDb === -20 ? -14 : -18 } }
                 Rectangle { id: gb85; implicitWidth: Math.max(64, children[0].implicitWidth + 12); implicitHeight: 20; radius: 7; color: page.monitorPanel ? Qt.rgba(0.2, 0.9, 0.5, 0.18) : Theme.ov(0.06); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb85.color) } GradientStop { position: 1; color: Theme.btnBottom(gb85.color) } } border.color: page.monitorPanel ? Theme.emerald : "transparent"; Text { anchors.centerIn: parent; text: i18n.t("MONITOR", i18n.lang); color: page.monitorPanel ? Theme.emerald : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.monitorPanel = !page.monitorPanel } }
                 // LIVE SYNC: with the phone remote on, how many phones / browsers follow this mixer (a fader they move lights up cyan here)
                 Rectangle { id: syncChip; objectName: "liveSyncChip"; visible: remote.running; implicitWidth: syncT.implicitWidth + 18; implicitHeight: 20; radius: 10
                     color: remote.remotes > 0 ? Qt.rgba(0.133, 0.827, 0.933, 0.16) : Qt.rgba(0.984, 0.749, 0.141, 0.14); border.color: remote.remotes > 0 ? Theme.cyan : Theme.amber
                     Row { anchors.centerIn: parent; spacing: 5
                         Rectangle { width: 7; height: 7; radius: 4; anchors.verticalCenter: parent.verticalCenter; color: remote.remotes > 0 ? Theme.cyan : Theme.amber
-                            SequentialAnimation on opacity { running: remote.remotes > 0; loops: Animation.Infinite; NumberAnimation { to: 0.35; duration: 700 } NumberAnimation { to: 1; duration: 700 } } }
+                            SequentialAnimation on opacity { running: remote.remotes > 0 && engine.uiAwake; loops: Animation.Infinite; NumberAnimation { to: 0.35; duration: 700 } NumberAnimation { to: 1; duration: 700 } } }
                         Text { id: syncT; text: "⇄ " + i18n.t("LIVE SYNC", i18n.lang) + " · " + (remote.remotes > 0 ? remote.remotes + " " + i18n.t("CONNECTED", i18n.lang) : i18n.t("waiting for a phone or browser", i18n.lang))
                             color: remote.remotes > 0 ? Theme.cyan : Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } }
                     HoverHandler { id: syncH } ToolTip.visible: syncH.hovered; ToolTip.delay: 400
                     ToolTip.text: i18n.t("Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.", i18n.lang) }
                 DspModeSwitch { objectName: "mixerDspMode" }   // DIGITAL / ANALOG for the master and every channel, right on the mixer
-                Text { Layout.fillWidth: true; Layout.minimumWidth: 0; horizontalAlignment: Text.AlignRight; elide: Text.ElideRight   // takes the room that is left; never pushes SETTINGS off the row
+                Text { width: Math.min(implicitWidth, 340); height: 20; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight   // the engine's status, at most 340 px (the full text is on STATUS)
                     text: engine.running ? engine.status : i18n.t("ENGINE IDLE: connect a sound card", i18n.lang); color: engine.running ? Theme.emerald : Theme.amber; font.family: Theme.mono; font.pixelSize: 8 }
                 // SETTINGS: a quick popover with the mixer's own options, and a link to the full SETTINGS page
                 Rectangle { id: gear; implicitWidth: gearT.implicitWidth + 16; implicitHeight: 20; radius: 7; color: quick.visible ? Theme.amber : Theme.ov(0.08); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gear.color) } GradientStop { position: 1; color: Theme.btnBottom(gear.color) } } border.color: Theme.lineSoft

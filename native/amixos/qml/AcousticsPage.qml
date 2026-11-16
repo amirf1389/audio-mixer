@@ -50,7 +50,7 @@ Item {
         for (let r = 0; r < g.rows.length; r++) for (let c = 0; c < n; c++) { const k = Math.max(0, Math.min(1, (g.rows[r][c] - (top - span)) / span)); const x0 = fx(g.freq[c], lo, hi, w), x1 = c + 1 < n ? fx(g.freq[c + 1], lo, hi, w) : w
             ctx.fillStyle = Qt.hsla(0.66 - 0.66 * k, 0.9, 0.12 + 0.45 * k, 1); ctx.fillRect(x0, r * rh, x1 - x0 + 1, rh + 1) }
     }
-    Timer { interval: 150; running: page.visible && page.tab === 1 && engine.running; repeat: true; onTriggered: { page.rtaData = measure.rta(page.strip, page.rtaBpo, page.rtaAvg); rtaPlot.requestPaint() } }
+    Timer { interval: engine.uiAwake ? 150 : 500; running: page.visible && page.tab === 1 && engine.running; repeat: true; onTriggered: { page.rtaData = measure.rta(page.strip, page.rtaBpo, page.rtaAvg); rtaPlot.requestPaint() } }
     Connections { target: measure; function onChanged() { respPlot.requestPaint(); etcPlot.requestPaint(); eqPlot.requestPaint(); if (measure.state === "done") { page.water = measure.waterfall(24); page.spec = measure.spectrogram(); waterPlot.requestPaint(); specPlot.requestPaint() } } }
     Component.onCompleted: { roomData = measure.room(rm[0], rm[1], rm[2], rm[3], rm[4], rm[5], rm[6], rm[7], rm[8], rm[9]) }
     component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(56, bl.implicitWidth + 16); implicitHeight: 22; radius: 8; gradient: Gradient { GradientStop { position: 0; color: on ? Theme.btnTop(onColor) : Theme.ov(0.12) } GradientStop { position: 1; color: on ? Theme.btnBottom(onColor) : Theme.ov(0.035) } } color: on ? onColor : Theme.ov(0.08); border.color: Theme.lineSoft

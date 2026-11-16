@@ -22,9 +22,9 @@ Popup {
     // against the target: within 1 LU = on target, above = too loud, more than 3 below = quiet
     function tone(v, t) { return v < -99 ? Theme.dim : v > t + 1 ? Theme.danger : v < t - 3 ? Theme.cyan : v < t - 1 ? Theme.amber : Theme.emerald }
     function clearAll() { history = []; columns = []; hist.requestPaint(); sgram.requestPaint() }
-    Timer { interval: 250; running: pop.visible && !pop.paused; repeat: true
+    Timer { interval: engine.uiAwake ? 250 : 500; running: pop.visible && !pop.paused; repeat: true
         onTriggered: { const h = pop.history; h.push({ m: pop.val("momentary"), s: pop.val("shortTerm") }); if (h.length > 720) h.shift(); pop.history = h; hist.requestPaint() } }
-    Timer { interval: 100; running: pop.visible && !pop.paused; repeat: true
+    Timer { interval: engine.uiAwake ? 100 : 500; running: pop.visible && !pop.paused; repeat: true
         onTriggered: { const s = engine.spectrum(0); if (!s || !s.length) return; const c = pop.columns; c.push(s); if (c.length > 150) c.shift(); pop.columns = c; sgram.requestPaint() } }
 
     component Head: Text { color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }

@@ -118,7 +118,7 @@ Popup {
     readonly property var sectionRows: { if (rows < 2) return [sections]; const h = Math.ceil(sections.length / 2); return [sections.slice(0, h), sections.slice(h)] }
     modal: false; dim: true; closePolicy: Popup.CloseOnEscape; padding: 0
     Overlay.modeless: Rectangle { color: "#b3000000" }   // the console steps back while a plug-in is open: the unit is seen against dark, not against the mixer
-    Timer { interval: 40; running: ed.visible; repeat: true; onTriggered: { const m = engine.meterAt(ed.strip); const l = m ? (m.inDb !== undefined ? m.inDb : m.peakDb) : -120; ed.level = l; const tgt = ed.bypass ? -20 : Math.max(-20, Math.min(3, l + 12)); ed.needle += (tgt - ed.needle) * (tgt > ed.needle ? 0.35 : 0.12); vu.requestPaint()
+    Timer { interval: engine.uiAwake ? 40 : 500; running: ed.visible; repeat: true; onTriggered: { const m = engine.meterAt(ed.strip); const l = m ? (m.inDb !== undefined ? m.inDb : m.peakDb) : -120; ed.level = l; const tgt = ed.bypass ? -20 : Math.max(-20, Math.min(3, l + 12)); ed.needle += (tgt - ed.needle) * (tgt > ed.needle ? 0.35 : 0.12); vu.requestPaint()
         ed.inDb += ((m ? (m.inDb !== undefined ? m.inDb : -120) : -120) - ed.inDb) * 0.4; ed.outDb += ((m ? m.peakDb : -120) - ed.outDb) * 0.4
         if (++tick % 2 === 0) { engine.setScopeStrip(ed.strip); ed.spec = engine.spectrum(2); disp.requestPaint() } } property int tick: 0 }
     background: Item {}
