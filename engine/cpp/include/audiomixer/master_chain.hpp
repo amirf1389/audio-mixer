@@ -45,13 +45,13 @@ class MasterChain : public BusProcessor {
         if (p_.toneOn) { l = airL_.tick(midL_.tick(lowL_.tick(l))); r = airR_.tick(midR_.tick(lowR_.tick(r))); }
         if (p_.bassMonoOn) { const double mid = 0.5 * (l + r), side = bmB_.tick(bmA_.tick(0.5 * (l - r))); l = mid + side; r = mid - side; }   // the side signal is high-passed (24 dB / octave): below the frequency the mix is mono
         if (p_.deessOn) { const double hl = dsL_.tick(l), hr = dsR_.tick(r), pk = std::max(std::fabs(hl), std::fabs(hr)); dsEnv_ += (pk - dsEnv_) * (pk > dsEnv_ ? dsAtt_ : dsRel_);
-          const double lvl = dsEnv_ > 1e-9 ? 20.0 * std::log10(dsEnv_) : -180.0, red = std::min(p_.deessMaxDb, std::max(0.0, lvl - p_.deessThrDb)); if (red > dsMax) dsMax = red;
-          dsLpL_ += (l - dsLpL_) * dsC_; dsLpR_ += (r - dsLpR_) * dsC_; const double g = std::pow(10.0, -red / 20.0);   // a first-order split sums back exactly: low + g * high
+          const double lvl = dsEnv_ > 1e-9 ? dsp::fastm::dbOf(dsEnv_) : -180.0, red = std::min(p_.deessMaxDb, std::max(0.0, lvl - p_.deessThrDb)); if (red > dsMax) dsMax = red;
+          dsLpL_ += (l - dsLpL_) * dsC_; dsLpR_ += (r - dsLpR_) * dsC_; const double g = red > 0 ? dsp::fastm::linOf(-red) : 1.0;   // a first-order split sums back exactly: low + g * high
           l = dsLpL_ + (l - dsLpL_) * g; r = dsLpR_ + (r - dsLpR_) * g; }
         if (p_.compOn) {
           const double pk = std::max(std::fabs(l), std::fabs(r)); env_ += (pk - env_) * (pk > env_ ? att_ : rel_);
-          const double lvl = env_ > 1e-9 ? 20.0 * std::log10(env_) : -180.0, over = lvl - p_.thrDb, red = over > 0 ? over * (1.0 - 1.0 / p_.ratio) : 0.0; if (red > grMax) grMax = red;
-          const double g = std::pow(10.0, (p_.makeupDb - red) / 20.0), m = mix_ * g + (1.0 - mix_); l *= m; r *= m; }
+          const double lvl = env_ > 1e-9 ? dsp::fastm::dbOf(env_) : -180.0, over = lvl - p_.thrDb, red = over > 0 ? over * (1.0 - 1.0 / p_.ratio) : 0.0; if (red > grMax) grMax = red;
+          const double g = dsp::fastm::linOf(p_.makeupDb - red), m = mix_ * g + (1.0 - mix_); l *= m; r *= m; }
         if (p_.exciterOn) { const double hl = exL_.tick(l), hr = exR_.tick(r); l += p_.exciterAmt * (std::tanh(4.0 * hl) * 0.25); r += p_.exciterAmt * (std::tanh(4.0 * hr) * 0.25); }
         if (p_.satOn) { if (k_ > 1.0) { l = std::tanh(k_ * l) * kNorm_; r = std::tanh(k_ * r) * kNorm_; } l *= out_; r *= out_; }
       }

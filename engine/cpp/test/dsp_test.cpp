@@ -84,6 +84,29 @@ int main() {
     Channel o(fs); o.setGate(true, -30, -60, 1, 10, 20); CHECK(near(sineGainDb(o, fs, 1000), 0, 0.1), "a full-scale sine passes"); CHECK(o.gate().isOpen(), "gate reports open");
     CHECK(near(o.gate().computeDb(-20), -20, 1e-9) && near(o.gate().computeDb(-40), -100, 1e-9), "static curve: closed below the threshold");
     Channel off(fs); CHECK(off.gate().isOpen(), "a gate that is off is open"); }
+  { // FAST dB MATH (the dynamics' per-sample level and gain): against the C library over the whole working range
+    double worstDb = 0, worstLin = 0;
+    for (double x = 1e-9; x < 20.0; x *= 1.0137) worstDb = std::max(worstDb, std::fabs(am::dsp::fastm::dbOf(x) - 20.0 * std::log10(x)));
+    for (double d = -200; d <= 40; d += 0.0371) worstLin = std::max(worstLin, std::fabs(am::dsp::fastm::linOf(d) / std::pow(10.0, d / 20.0) - 1.0));
+    std::printf("dsp_test: fast dB math, worst error %.2e dB in the level, %.2e (relative) in the gain\n", worstDb, worstLin);
+    CHECK(worstDb < 2e-6, "fast level within 2e-6 dB"); CHECK(worstLin < 2e-7, "fast gain within 2e-7 (about 2e-6 dB)");
+    CHECK(am::dsp::fastm::linOf(-50000) == 0.0 && am::dsp::fastm::linOf(0) == 1.0, "fast gain: off and unity exactly"); }
+  { // EQ BANDS THAT ARE RUN: off and 0 dB bands are skipped; a band switched on (alone, as the CHANNEL page does) is heard at once
+    am::dsp::Channel ch(48000); ch.setEqBand(3, {am::dsp::FilterType::Peaking, 1000, 1, 0});   // a bell at 0 dB: nothing to run
+    CHECK(near(sineGainDb(ch, 48000, 1000), 0, 0.01), "a 0 dB bell is flat");
+    am::dsp::Channel on(48000); on.setEqBand(3, {am::dsp::FilterType::Peaking, 1000, 1, 0}); on.setEqBand(3, {am::dsp::FilterType::Peaking, 1000, 1, 6});
+    CHECK(near(sineGainDb(on, 48000, 1000), 6, 0.05), "the same band raised to +6 dB is heard");
+    on.setEqBand(3, {am::dsp::FilterType::Off, 1000, 1, 6}); CHECK(near(sineGainDb(on, 48000, 1000), 0, 0.01), "switched off again: flat"); }
+  { // IDLE CHANNEL: silence in rests the DSP only once nothing more can come out, the delay line included; sound wakes it at once
+    am::dsp::Channel ch(48000); am::dsp::ChannelParams p = ch.params(); p.compOn = true; p.gateOn = true; p.delayMs = 50; p.eq[1] = {am::dsp::FilterType::Peaking, 1000, 1, 6}; ch.set(p);
+    std::vector<float> b(256);
+    for (std::size_t i = 0; i < b.size(); ++i) b[i] = 0.5f * static_cast<float>(std::sin(i * 0.1)); ch.process(b.data(), b.size());
+    int restedAt = -1; bool delayedCameOut = false;
+    for (int k = 0; k < 40; ++k) { std::fill(b.begin(), b.end(), 0.0f); ch.process(b.data(), b.size()); for (float v : b) if (std::fabs(v) > 1e-3f) delayedCameOut = true; if (ch.idle() && restedAt < 0) restedAt = k; }
+    CHECK(delayedCameOut, "the 50 ms delay still plays out after the input went silent");
+    CHECK(restedAt > 9, "not resting before the delay line (50 ms = 9.4 blocks) has emptied");
+    CHECK(restedAt >= 0, "an idle channel rests");
+    for (std::size_t i = 0; i < b.size(); ++i) b[i] = 0.5f; ch.process(b.data(), b.size()); CHECK(!ch.idle(), "sound wakes it in the same block"); }
   if (fails) { std::fprintf(stderr, "%d failure(s)\n", fails); return 1; }
   std::printf("dsp_test: ok\n"); return 0;
 }
