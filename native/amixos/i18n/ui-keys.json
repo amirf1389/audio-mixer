@@ -2188,5 +2188,7 @@
 "The microphone (the default capture device) is the input.",
 "FLAC 24-bit (lossless)",
 "HI-RES AUDIO",
-"resampling · FLAC · RF64"
+"resampling · FLAC · RF64",
+"MICROPHONE ON AT START",
+"OFF: ENGINE ON starts the speakers or headphones without the microphone, so the mic never feeds back at start. Turn the mic on with INPUT: MIC on the mixer. ASIO interfaces and COMPUTER SOUND are not affected."
 ]

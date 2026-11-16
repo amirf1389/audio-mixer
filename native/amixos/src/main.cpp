@@ -707,6 +707,11 @@ int main(int argc, char* argv[]) {
       { // HIGH-RESOLUTION AUDIO: r8brain, libFLAC, dr_wav / dr_flac built in; libsoxr loaded from beside the program
         const QString hs = engine.hiresSummary(); if (!hs.contains("r8brain-free-src 6.5") || !hs.contains("libFLAC") || !hs.contains("libsoxr") || hs.contains("not installed")) { std::fprintf(stderr, "amixos --smoke: hi-res libraries: %s\n", qPrintable(hs)); return 281; }
         engine.setRecordFormat(4); if (engine.recordFormat() != 4 || engine.recordFloat()) { std::fprintf(stderr, "amixos --smoke: FLAC recording format did not take\n"); return 282; } engine.setRecordFormat(0); }
+      { // MIC AT ENGINE ON (default off): a Windows microphone is not opened by itself at engine on; ASIO, COMPUTER SOUND and "no input" are
+        const bool keep = engine.micAtStart(); engine.setMicAtStart(false);
+        const bool wasapiMic = engine.keepInputAtStart("wasapi", ""), dsMic = engine.keepInputAtStart("dsound", "{mic}"), asio = engine.keepInputAtStart("asio", "UMC ASIO"), music = engine.keepInputAtStart("wasapi", "loopback:system"), none = engine.keepInputAtStart("wasapi", "-");
+        engine.setMicAtStart(true); const bool onKeeps = engine.keepInputAtStart("wasapi", ""); engine.setMicAtStart(keep);
+        if (wasapiMic || dsMic || !asio || !music || !none || !onKeeps) { std::fprintf(stderr, "amixos --smoke: MIC AT ENGINE ON (wasapi %d, dsound %d, asio %d, music %d, none %d, on %d)\n", wasapiMic, dsMic, asio, music, none, onKeeps); return 283; } }
       { // SECURE INPUT: an input not on the allowed list is never opened; an allowed WASAPI input opens exclusively; switched off, nothing changes
         const bool keepOn = engine.secureInput(); const QStringList keepList = QSettings().value("audio/allowedInputs").toStringList();
         engine.setSecureInput(true); engine.setInputAllowed("wasapi", "{mic-a}", false);

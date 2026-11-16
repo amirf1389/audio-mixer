@@ -2074,5 +2074,7 @@
 "FLAC 24-bit (lossless)": "FLAC de 24 bits (sin pérdida)",
 "HI-RES AUDIO": "AUDIO DE ALTA RESOLUCIÓN",
 "resampling · FLAC · RF64": "remuestreo · FLAC · RF64",
-"● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV or FLAC files, one per source, named by time.": "● El botón «REC» del MIXER graba la señal maestra y cada canal activado (pre-fader, después del trim / DSP / insertos) en archivos WAV o FLAC, uno por fuente, con nombres basados en el tiempo."
+"● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV or FLAC files, one per source, named by time.": "● El botón «REC» del MIXER graba la señal maestra y cada canal activado (pre-fader, después del trim / DSP / insertos) en archivos WAV o FLAC, uno por fuente, con nombres basados en el tiempo.",
+"MICROPHONE ON AT START": "MICRÓFONO ACTIVADO AL INICIO",
+"OFF: ENGINE ON starts the speakers or headphones without the microphone, so the mic never feeds back at start. Turn the mic on with INPUT: MIC on the mixer. ASIO interfaces and COMPUTER SOUND are not affected.": "OFF: ENGINE ON activa los altavoces o los auriculares sin el micrófono, por lo que el micrófono nunca produce retroalimentación al arrancar. Activa el micrófono con INPUT: MIC en el mezclador. Las interfaces ASIO y COMPUTER SOUND no se ven afectadas."
 }

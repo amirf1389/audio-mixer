@@ -981,10 +981,17 @@ bool Engine::connectMixer(const QString& id, int frames) {
     lastRoute_ = QStringLiteral("MIXER: %1 %2 · %3 channel(s) on strips 1-%3, master on its returns 1-2  ·  ").arg(m["maker"].toString(), m["model"].toString()).arg(n) + lastRoute_; emit stateChanged(); return true; }
   status_ = QStringLiteral("That mixer is not in the device list any more: RESCAN."); emit stateChanged(); return false;
 }
+bool Engine::keepInputAtStart(const QString& backend, const QString& in) const {
+  if (micAtStart() || in == "-") return true;
+  if (backend == "asio" || backend == "null" || in.startsWith("loopback:")) return true;
+  return backend != "wasapi" && backend != "dsound" && backend != "auto";   // Core Audio / ALSA on other systems: as before
+}
 bool Engine::autoStart(int frames) {
   if (autoPrefer() == "manual") { status_ = QStringLiteral("MANUAL selection is on: nothing is opened by itself. Pick the driver in the ASIO DRIVERS list."); emit stateChanged(); return false; }
   const QVariantMap d = autoDetect(); if (d.isEmpty()) { status_ = QStringLiteral("AUTO DETECT: no real sound card found (only the null test device)."); emit stateChanged(); return false; }
-  const bool ok = openSmart(d["backend"].toString(), d["in"].toString(), d["out"].toString(), d["rate"].toDouble(), frames > 0 ? frames : 256, std::min(32, std::max(0, d["inChannels"].toInt())), std::min(32, std::max(2, d["outChannels"].toInt())));
+  const bool keepIn = keepInputAtStart(d["backend"].toString(), d["in"].toString());   // MIC AT ENGINE ON off: the speakers start without the microphone
+  const bool ok = openSmart(d["backend"].toString(), keepIn ? d["in"].toString() : QStringLiteral("-"), d["out"].toString(), d["rate"].toDouble(), frames > 0 ? frames : 256, keepIn ? std::min(32, std::max(0, d["inChannels"].toInt())) : 0, std::min(32, std::max(2, d["outChannels"].toInt())));
+  if (ok && !keepIn) micOffNote_ = QStringLiteral("Started with outputs only: the microphone is not opened at engine on (no feedback from the speakers). Pick it with INPUT: MIC on the mixer, or switch MICROPHONE ON AT START on (SOUND CARD).");
   if (ok) lastRoute_ = QStringLiteral("AUTO DETECT picked %1 (%2): %3").arg(d["name"].toString(), d["backend"].toString().toUpper(), d["why"].toString()) + "  ·  " + lastRoute_;
   emit stateChanged(); return ok;
 }
