@@ -54,7 +54,7 @@ qt_add_qml_module(amixos
         qml/PhasePage.qml
         qml/Combo.qml
         qml/Knob.qml
-        qml/PluginEditor.qml
+        qml/PluginEditor.qml qml/PluginDock.qml
         qml/Field.qml
         qml/BootSplash.qml
         qml/AcousticsPage.qml

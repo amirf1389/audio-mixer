@@ -12,6 +12,7 @@
 #include <QThread>
 #include <QElapsedTimer>
 #include "Engine.h"
+#include <QQuickWindow>
 #include "measure/score.hpp"
 #include "hires/hires.hpp"
 #include "fx/speakers.hpp"
@@ -1124,7 +1125,44 @@ void Engine::closePluginWin(int k) {
   w.pl->closeEditor(); w.win->removeEventFilter(this); w.win->hide(); w.win->deleteLater();   // the editor leaves the window before the window goes
   if (pluginWins_.isEmpty()) pluginIdle_.stop();
 }
-void Engine::closePluginWindows() { while (!pluginWins_.isEmpty()) closePluginWin(0); }
+void Engine::closePluginWindows() { undockPluginEditor(); while (!pluginWins_.isEmpty()) closePluginWin(0); }
+QVariantMap Engine::dockPluginEditor(int i, int slot, QQuickItem* area, bool evenHere) {
+  QVariantMap r{{"ok", false}, {"w", 0}, {"h", 0}, {"note", QString()}};
+  if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots || !area || !area->window()) return r;
+#ifndef _WIN32
+  if (!evenHere) { r["note"] = QStringLiteral("The plug-in's own window opens inside the app on Windows."); return r; }
+#else
+  (void)evenHere;
+#endif
+  const PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[slot]; if (!p.vst || !p.vst->hasEditor()) { r["note"] = QStringLiteral("This plug-in has no window of its own: its knobs are on this panel."); return r; }
+  undockPluginEditor();
+  for (int k = pluginWins_.size() - 1; k >= 0; --k) if (pluginWins_[k].pl == p.vst) closePluginWin(k);   // an editor is shown once: the floating one closes
+  auto* win = new QWindow(area->window()); win->setFlags(Qt::Widget | Qt::FramelessWindowHint); win->resize(640, 400); win->create();
+  if (!win->handle()) { delete win; r["note"] = QStringLiteral("The plug-in's own window could not be created on this display."); return r; }
+  int w = 640, h = 400;
+  if (!p.vst->openEditor(reinterpret_cast<void*>(win->winId()), w, h)) { delete win; r["note"] = QStringLiteral("The plug-in did not open its window."); return r; }
+  // the editor reports its size in device pixels: the dock is laid out in the window's units
+  const qreal dpr = std::max<qreal>(1.0, win->devicePixelRatio()); w = std::clamp(static_cast<int>(std::lround(w / dpr)), 120, 4000); h = std::clamp(static_cast<int>(std::lround(h / dpr)), 60, 3000);
+  win->resize(w, h); dock_ = {win, p.vst, i, slot, area}; placeDock(); win->show();
+  if (!dockTimer_.isActive()) { dockTimer_.setInterval(50); connect(&dockTimer_, &QTimer::timeout, this, &Engine::placeDock, Qt::UniqueConnection); dockTimer_.start(); }
+  if (!pluginIdle_.isActive()) pluginIdle_.start(33);
+  r["ok"] = true; r["w"] = w; r["h"] = h; return r;
+}
+void Engine::placeDock() {
+  if (!dock_.win) { dockTimer_.stop(); return; }
+  // the plug-in was taken out of its slot (or replaced): its window goes with it
+  if (dock_.strip < 0 || strips_[static_cast<std::size_t>(dock_.strip)].plugins[dock_.slot].vst != dock_.pl || !dock_.area) { undockPluginEditor(); return; }
+  dock_.pl->editorIdle();
+  QQuickItem* a = dock_.area; const bool show = a->isVisible() && a->window() && a->window()->isVisible() && a->opacity() > 0.01;
+  const QPointF p = a->mapToScene(QPointF(0, 0)); const QRect g(QPoint(static_cast<int>(std::lround(p.x())), static_cast<int>(std::lround(p.y()))), dock_.win->size());
+  if (dock_.win->geometry().topLeft() != g.topLeft()) dock_.win->setPosition(g.topLeft());
+  if (show != dock_.win->isVisible()) dock_.win->setVisible(show);
+}
+void Engine::undockPluginEditor() {
+  if (!dock_.win) return; Dock d = dock_; dock_ = Dock{}; dockTimer_.stop();
+  if (d.pl) d.pl->closeEditor(); d.win->hide(); d.win->deleteLater();   // the editor leaves the window before the window goes
+  if (pluginWins_.isEmpty()) pluginIdle_.stop(); emit pluginDockChanged();
+}
 bool Engine::eventFilter(QObject* o, QEvent* e) {
   if (e->type() == QEvent::Close) for (int k = 0; k < pluginWins_.size(); ++k) if (pluginWins_[k].win == o) { closePluginWin(k); return true; }
   return QObject::eventFilter(o, e);

@@ -16,7 +16,7 @@ data class Status(val name: String, val version: String, val backend: String, va
 data class Device(val backend: String, val id: String, val name: String, val inputs: Int, val outputs: Int, val defaultRate: Double, val defaultIn: Boolean, val defaultOut: Boolean)
 /** the analog 3-band channel EQ of a strip: LOW shelf 100 Hz, MID bell [midHz] (100 Hz .. 8 kHz), HIGH shelf 10 kHz, ±15 dB each */
 data class Tone(val low: Double = 0.0, val mid: Double = 0.0, val midHz: Double = 1000.0, val high: Double = 0.0, val on: Boolean = true)
-data class StripState(val id: Int, val name: String, val db: Double, val pan: Double, val mute: Boolean, val solo: Boolean, val trim: Double = 0.0, val tone: Tone = Tone())
+data class StripState(val id: Int, val name: String, val db: Double, val pan: Double, val mute: Boolean, val solo: Boolean, val trim: Double = 0.0, val tone: Tone = Tone(), val eq: List<List<Double>> = emptyList())   // eq: bands 0..7 as [type (0 off, 1 peaking, 2 lowshelf, 3 highshelf, 4 lowpass, 5 highpass, 6 notch), freq, q, gainDb]
 data class BusState(val id: Int, val db: Double, val returnDb: Double, val mute: Boolean)
 /** the console's Windows output: its volume slider (-1: none here), GAIN MODE (the slider trims the master) and the trim it adds now */
 data class WindowsSound(val volume: Int = -1, val gainMode: Boolean = false, val trimDb: Double = 0.0, val windowsSetsLevel: Boolean = false)
@@ -90,7 +90,7 @@ class DaemonClient(val ep: Endpoint) {
             return o["token"]?.toString()?.takeIf { it.isNotEmpty() } ?: throw DaemonException("the console sent no token", code)
         }
         fun parseState(o: Map<String, Any?>): ConsoleState { val m = o.obj("master")
-            return ConsoleState(o.list("strips").map { StripState(it.int("id"), it.str("name"), it.num("db"), it.num("pan"), it.bool("mute"), it.bool("solo"), it.num("trim"), it.obj("tone").let { t -> Tone(t.num("low"), t.num("mid"), t.num("midHz", 1000.0), t.num("high"), t["on"] != false) }) }, o.list("buses").map { BusState(it.int("id"), it.num("db"), it.num("returnDb", -60.0), it.bool("mute")) }, m.num("db"), m.bool("limiter", true), m.num("ceilingDb", -0.5), o.num("v").toLong(), o.obj("settings").let { w -> WindowsSound((w["winVolume"] as? Number)?.toInt() ?: -1, w["winGain"] == true, (w["winTrimDb"] as? Number)?.toDouble() ?: 0.0, w["winSetsLevel"] == true) })
+            return ConsoleState(o.list("strips").map { StripState(it.int("id"), it.str("name"), it.num("db"), it.num("pan"), it.bool("mute"), it.bool("solo"), it.num("trim"), it.obj("tone").let { t -> Tone(t.num("low"), t.num("mid"), t.num("midHz", 1000.0), t.num("high"), t["on"] != false) }, (it["eq"] as? List<*>).orEmpty().map { b -> nums(b) }) }, o.list("buses").map { BusState(it.int("id"), it.num("db"), it.num("returnDb", -60.0), it.bool("mute")) }, m.num("db"), m.bool("limiter", true), m.num("ceilingDb", -0.5), o.num("v").toLong(), o.obj("settings").let { w -> WindowsSound((w["winVolume"] as? Number)?.toInt() ?: -1, w["winGain"] == true, (w["winTrimDb"] as? Number)?.toDouble() ?: 0.0, w["winSetsLevel"] == true) })
         }
         fun nums(v: Any?): List<Double> = (v as? List<*>).orEmpty().map { (it as? Number)?.toDouble() ?: 0.0 }
         fun parseProgramEq(o: Map<String, Any?>): ProgramEq { val p = o.obj("programEq"); val g = nums(p["gains"])

@@ -312,6 +312,9 @@ ApplicationWindow {
         return bad
     }
     function openAnalyzer() { analyzer.open() }
+    // a VST's own interface inside the console (PluginDock); where that is not possible, its floating window
+    function openPluginDock(strip, slot, title) { const r = plugDock.openFor(strip, slot, title); if (r.ok) return ""; return engine.openPluginWindow(strip, slot) ? "" : (r.note || "") }
+    PluginDock { id: plugDock }
     MasterAnalyzer { id: analyzer }   // AMFB MASTER ANALYZER: opened from the master strip's ANALYZER button
     AudioSettings { id: audioSettings }   // AUDIO / MIDI SETTINGS: opened from the SOUND CARD page
     VolumeEnhancer { id: enhancer }   // AMFB VOLUME ENHANCER: opened from the master strip's ENHANCER button

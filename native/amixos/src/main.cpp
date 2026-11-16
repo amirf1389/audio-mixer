@@ -742,6 +742,21 @@ int main(int argc, char* argv[]) {
         engine.setPlugin(26, 0, ""); t.restart(); while (t.elapsed() < 200) QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
         if (engine.pluginWindows() != 0) { std::fprintf(stderr, "amixos --smoke: the window stayed open after its plug-in was removed\n"); return 233; }
         engine.setPlugin(26, 0, k2); if (!engine.openPluginWindow(26, 0, true)) return 234; engine.closePluginWindows(); if (engine.pluginWindows() != 0) return 235;
+        { // ... and INSIDE THE CONSOLE: the editor docked into the main window (the PLUG-IN dock): it replaces the floating one, is idled, follows
+          // the dock, and closes when the plug-in leaves its slot; one without an editor says so instead
+          QQuickItem* body = qml.rootObjects().isEmpty() ? nullptr : qml.rootObjects().first()->findChild<QQuickItem*>("pluginDockBody");
+          QObject* dockObj = qml.rootObjects().isEmpty() ? nullptr : qml.rootObjects().first()->findChild<QObject*>("pluginDock");
+          if (!body || !dockObj) { std::fprintf(stderr, "amixos --smoke: the PLUG-IN dock is not in the window\n"); return 238; }
+          engine.openPluginWindow(26, 0, true); dockObj->setProperty("visible", true);
+          const QVariantMap r = engine.dockPluginEditor(26, 0, body, true);
+          QElapsedTimer t2; t2.start(); while (t2.elapsed() < 250) QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+          const bool docked = r.value("ok").toBool() && engine.pluginDocked() && engine.pluginWindows() == 0 && r.value("w").toInt() > 0 && r.value("h").toInt() > 0;
+          const QVariantMap none = engine.dockPluginEditor(26, 2, body, true);   // the built-in hall: no window of its own
+          const bool noted = !none.value("ok").toBool() && !none.value("note").toString().isEmpty() && engine.pluginDocked();   // and the docked one stays
+          engine.setPlugin(26, 0, ""); t2.restart(); while (t2.elapsed() < 250) QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+          const bool gone = !engine.pluginDocked(); dockObj->setProperty("visible", false);
+          std::printf("amixos --smoke: PLUG-IN INSIDE THE CONSOLE docked %d (%dx%d, floating closed), no-editor note %d, closed with its plug-in %d\n", docked, r.value("w").toInt(), r.value("h").toInt(), noted, gone);
+          if (!(docked && noted && gone)) { std::fprintf(stderr, "amixos --smoke: PLUG-IN dock failed: %s\n", qPrintable(r.value("note").toString())); return 239; } }
         for (int k = 0; k < 3; ++k) engine.setPlugin(26, k, ""); }
       { // VST FOLDER: the console's own plug-in folder is created and saved among the scanned folders, once
         const QStringList before = settings.vstDirs(); const QString vf = settings.vstUserFolder(); settings.vstUserFolder();

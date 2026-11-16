@@ -95,6 +95,19 @@ class ScreenshotTest {
         shot(a.window.decorView.rootView, "settings")
     }
 
+    @Test fun eqFollowsConsole() {   // a band set on the console (or another remote) shows in the phone's EQ while it is open
+        val port = System.getProperty("amfx.daemon").orEmpty(); if (port.isEmpty()) return
+        val ctx = org.robolectric.RuntimeEnvironment.getApplication(); val tok = System.getenv("AMFX_TOKEN") ?: ""
+        Prefs.remote(ctx).edit().putString("host", "127.0.0.1").putString("port", port).putString("token", tok).commit(); Prefs.local(ctx).edit().remove("eq3").commit()
+        val c = com.amfb.amixos.remote.DaemonClient(com.amfb.amixos.remote.Endpoint("127.0.0.1", port.toInt(), tok))
+        c.eq(3, 2, "peaking", 2500.0, 1.4, 6.5)
+        val a = Robolectric.buildActivity(EqActivity::class.java, android.content.Intent(ctx, EqActivity::class.java).putExtra("strip", 3)).setup().resume().get(); idle(1800)
+        org.junit.Assert.assertEquals("peaking", a.curve.bands[2].type); org.junit.Assert.assertEquals(6.5, a.curve.bands[2].gainDb, 0.01); org.junit.Assert.assertEquals(2500.0, a.curve.bands[2].freq, 0.5)
+        c.eq(3, 2, "peaking", 1200.0, 1.0, -4.0)
+        repeat(12) { shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(250)); Thread.sleep(120) }   // the screen's own once-a-second check (the test clock moves only when told)
+        org.junit.Assert.assertEquals("followed while open", -4.0, a.curve.bands[2].gainDb, 0.01)
+        shot(a.window.decorView.rootView, "eq-follows-console"); c.eq(3, 2, "off", 1200.0, 1.0, 0.0)
+    }
     @Test fun rtaEq() {   // RTA EQ against a real service: the RTA and the program EQ go through it; the test device is silent, so a
         // programme-like spectrum is put on the graph for the picture, and AUTO EQ's proposal is drawn from it
         val port = System.getProperty("amfx.daemon").orEmpty(); if (port.isEmpty()) return

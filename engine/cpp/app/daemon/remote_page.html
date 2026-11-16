@@ -397,7 +397,12 @@ const hz=v=>v>=1000?(v/1000).toFixed(v>=10000?0:1)+"k":Math.round(v)+"";
 const logF=p=>20*Math.pow(1000,p/1000),posF=f=>Math.round(1000*Math.log(f/20)/Math.log(1000));
 function chOptions(){const sel=$("#chSel");if(!state)return;if(sel.options.length!==state.strips.length){sel.textContent="";for(const s of state.strips){const o=document.createElement("option");o.value=s.id;sel.appendChild(o)}}
  for(const s of state.strips)sel.options[s.id].textContent=(s.id+1)+" · "+(s.name||("CH "+(s.id+1)));sel.value=cur}
-function channel(){if(!state||!state.strips.length)return;cur=Math.max(0,Math.min(state.strips.length-1,cur));chOptions();const s=state.strips[cur],p=P(cur);
+// the console's own EQ (kept by the service, LIVE SYNC) wins over what this browser remembered: a band set anywhere shows here
+const EQN=["off","peaking","lowshelf","highshelf","lowpass","highpass","notch","allpass1","allpass2"];
+function eqFromState(i){const x=state&&state.strips[i];if(!x||!Array.isArray(x.eq))return false;const p=P(i);let ch=false;
+ p.eq.forEach((b,k)=>{const e=x.eq[k];if(!e||e[0]===0)return;const nb={type:EQN[e[0]]||"peaking",freq:+e[1],q:+e[2],gainDb:+e[3]};
+  if(nb.type!==b.type||Math.abs(nb.freq-b.freq)>0.5||Math.abs(nb.q-b.q)>0.005||Math.abs(nb.gainDb-b.gainDb)>0.05){Object.assign(b,nb);ch=true}});return ch}
+function channel(){if(!state||!state.strips.length)return;cur=Math.max(0,Math.min(state.strips.length-1,cur));chOptions();if(!drag&&eqFromState(cur))chDrawn=-1;const s=state.strips[cur],p=P(cur);
  if(free($("#chName")))$("#chName").value=s.name||"";
  $("#chM").classList.toggle("on",!!s.mute);$("#chS").classList.toggle("on",!!s.solo);
  hslider("#chDb","#chDbT",s.db,v=>{s.db=v;send("g"+cur,{op:"gain",strip:cur,db:v})});

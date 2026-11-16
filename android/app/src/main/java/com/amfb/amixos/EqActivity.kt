@@ -63,7 +63,7 @@ class EqCurveView(ctx: Context) : View(ctx) {
             if (i == selected) { dot.style = Paint.Style.STROKE; dot.strokeWidth = 4f; dot.color = Color.WHITE; c.drawCircle(x, y, 32f, dot) }
             label.color = Color.BLACK; c.drawText("${i + 1}", x - 8, y + 9, label); label.color = 0xFF8B98A8.toInt() }
     }
-    private var dragging = -1
+    var dragging = -1; private set
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(e: MotionEvent): Boolean {
         when (e.actionMasked) {
@@ -172,9 +172,21 @@ class EqActivity : AppCompatActivity() {
             val snap = list.map { it to curve.bands[it].copy() }
             io.execute { for ((k, b) in snap) runCatching { c.eq(strip, k, if (bypass) "off" else b.type, b.freq, b.q, b.gainDb) } } }, 40) }
     private fun sendAll() { for (i in 0 until 8) send(i) }
+    // ---- THE CONSOLE'S EQ: the bands as the console (or another remote) has them, on open and once a second while no finger is on the curve
+    private var eqAsked = 0L; @Volatile private var eqBusy = false
+    private fun takeConsoleEq(st: com.amfb.amixos.remote.StripState) {
+        val names = listOf("off", "peaking", "lowshelf", "highshelf", "lowpass", "highpass", "notch"); var changed = false
+        st.eq.take(curve.bands.size).forEachIndexed { k, e -> if (e.size < 4 || e[0].toInt() == 0 || e[0].toInt() >= names.size) return@forEachIndexed
+            val b = curve.bands[k]; val t = names[e[0].toInt()]
+            if (b.type != t || Math.abs(b.freq - e[1]) > 0.5 || Math.abs(b.q - e[2]) > 0.005 || Math.abs(b.gainDb - e[3]) > 0.05) { b.type = t; b.freq = e[1]; b.q = e[2]; b.gainDb = e[3]; changed = true } }
+        if (changed) { curve.invalidate(); showBand() }
+    }
+    private fun followConsoleEq(cl: DaemonClient) { val now = System.currentTimeMillis(); if (eqBusy || now - eqAsked < 1000 || curve.dragging >= 0 || flushQueued) return
+        eqAsked = now; eqBusy = true; io.execute { val st = runCatching { cl.state().strips.getOrNull(strip) }.getOrNull(); eqBusy = false; if (st != null) ui.post { if (!flushQueued) takeConsoleEq(st) } } }
     // ---- the live RTA of this strip, behind the curve: asked for every 8 s, read 5 times a second while the screen is on top
     private var rtaOn = true; private var rtaAsked = 0L; @Volatile private var rtaBusy = false
     private val rtaTick = object : Runnable { override fun run() { val cl = client ?: return
+        followConsoleEq(cl)
         if (!rtaOn) { curve.spectrum = null; return }
         // one request at a time: a slow network skips frames instead of queueing them
         if (!rtaBusy) { rtaBusy = true; io.execute { val now = System.currentTimeMillis()

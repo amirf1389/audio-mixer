@@ -3,6 +3,8 @@
 // Everything here runs on the GUI thread; the audio thread is inside am::Runtime and is never blocked by this object (control goes through
 // the runtime's lock-free ring, meters come out of its sequence-counted snapshot). Settings (strip names, levels, DSP) persist with QSettings.
 #pragma once
+#include <QQuickItem>
+#include <QPointer>
 #include <algorithm>
 #include <QObject>
 #include <functional>
@@ -566,6 +568,12 @@ class Engine : public QObject {
   // plug-in has an editor and it opened (Windows; a plug-in without one, or another system, gets the console's own knob view instead).
   Q_INVOKABLE bool openPluginWindow(int strip, int slot, bool evenHere = false);   // evenHere: also off Windows (the tests)
   Q_INVOKABLE void closePluginWindows();
+  // THE PLUG-IN'S OWN INTERFACE INSIDE THE APP: the editor goes into a native child window of the console's own window, kept over a
+  // QML item (the PLUG-IN dock): it moves, hides and shows with it. One at a time; POP OUT turns it into the floating window above.
+  // Returns {ok, w, h (the editor's size in the dock's units), note}.
+  Q_INVOKABLE QVariantMap dockPluginEditor(int strip, int slot, QQuickItem* area, bool evenHere = false);
+  Q_INVOKABLE void undockPluginEditor();
+  Q_INVOKABLE bool pluginDocked() const { return dock_.win != nullptr; }
   Q_INVOKABLE int pluginWindows() const { return static_cast<int>(pluginWins_.size()); }
   bool eventFilter(QObject* o, QEvent* e) override;
   Q_INVOKABLE int retryPlugins();   // tries again every plug-in slot that is waiting (its file was missing, busy or not scanned yet); returns how many came back
@@ -643,6 +651,7 @@ class Engine : public QObject {
   Q_INVOKABLE void save();
 
  signals:
+  void pluginDockChanged();   // the docked plug-in window closed (its plug-in left the slot, or UNDOCK)
   void ecoUiChanged();
   void compTargetChanged();
   void stateChanged();
@@ -743,6 +752,7 @@ class Engine : public QObject {
   int vuRef_ = -18; double vu_[kStrips] = {}; double vuMaster_ = 0;                     // VU ballistics (300 ms to 99 %), run on the UI timer
   std::optional<QJsonObject> clipboard_;
   int uiLevel_ = 2; bool ecoUi_ = false; void applyUiRate();
+  struct Dock { QWindow* win = nullptr; std::shared_ptr<am::host::Plugin> pl; int strip = -1, slot = -1; QPointer<QQuickItem> area; } dock_; QTimer dockTimer_; void placeDock();
   QTimer timer_; QTimer hotplug_; std::string fingerprint_; bool simulated_ = false;
   mutable QSettings settings_;
 };

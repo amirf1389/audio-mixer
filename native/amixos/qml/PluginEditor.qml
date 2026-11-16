@@ -309,7 +309,8 @@ Popup {
                     // a hosted VST opens in this AMFB panel (its parameters on our knobs); the plug-in's own window is one press away
                     Inset { visible: ed.kind.startsWith("vst3:") || ed.kind.startsWith("vst2:"); width: 168; Row { anchors.centerIn: parent; spacing: 8
                         Text { anchors.verticalCenter: parent.verticalCenter; text: i18n.t("PLUG-IN WINDOW", i18n.lang); color: ed.ink; font.family: ed.face1; font.pixelSize: 10; font.weight: Font.DemiBold; font.letterSpacing: 1 }
-                        LitKey { objectName: "nativeKey"; label: "⧉"; ToolTip.visible: ed.nativeNote !== ""; ToolTip.text: ed.nativeNote; onClicked: { if (!engine.openPluginWindow(ed.strip, ed.slot)) ed.nativeNote = i18n.t("This plug-in has no window of its own here: its controls are on this panel.", i18n.lang) } } } } } }
+                        LitKey { objectName: "nativeKey"; label: "⧉"; ToolTip.visible: ed.nativeNote !== ""; ToolTip.text: ed.nativeNote; onClicked: { const n = (typeof root !== "undefined" && root.openPluginDock) ? root.openPluginDock(ed.strip, ed.slot, ed.title) : (engine.openPluginWindow(ed.strip, ed.slot) ? "" : "x")
+                            if (n === "") ed.close(); else ed.nativeNote = i18n.t("This plug-in has no window of its own here: its controls are on this panel.", i18n.lang) } } } } } }   // inside the console; this panel steps aside
             // THE DISPLAY: what is playing (the spectrum of the channel), the curve the unit draws (EQs) and the levels in and out
             RackUnit { id: dispUnit; objectName: "displayUnit"; height: 214
                 Rectangle { x: 14; y: 12; width: parent.width - 28; height: parent.height - 24; radius: 10; color: "#06080b"; border.color: "#000"; border.width: 2; clip: true
