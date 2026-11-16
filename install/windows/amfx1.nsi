@@ -43,28 +43,97 @@ VIAddVersionKey "LegalCopyright" "Copyright AMFB Audio. MIT License."
 !insertmacro MUI_LANGUAGE "English"
 !include "FileFunc.nsh"
 Var Restart
-; CLOSE A RUNNING CONSOLE before files and settings are touched: asked to close first (it saves and gives Windows' sound back), forced after 10 s.
-; Without this an uninstall left the console running; on quit it wrote its state (a master at -inf with it) back after the reset.
-!macro CloseConsole UN
-Function ${UN}CloseConsole
-  nsExec::Exec 'taskkill /IM amixos.exe'
+; CLOSE EVERY AmF X1 PROGRAM before files and settings are touched. Not only the console: the phone-remote service (AmF X1 Network.exe, a
+; child of the console that keeps running when the console is forced closed), AmF X1 Hybrid.exe, AmF X1.exe, the Diagnostics app and the
+; Plugin Builder. A copy of any of them still running locks its file, and the setup stopped with "Error opening file for writing:
+; ...\AmF X1 Network.exe". Each is asked to close first (the console saves and gives Windows' sound back), then forced with what it started.
+; Without this an uninstall also left the console running; on quit it wrote its state (a master at -inf with it) back after the reset.
+!macro CloseApps UN
+Function ${UN}CloseOne   ; $R9 = the program's file name, $R8 = how many half seconds to wait for it to close by itself
+  nsExec::Exec 'taskkill /IM "$R9"'
   StrCpy $R2 0
   closewait:
-    nsExec::ExecToStack 'cmd /c tasklist /FI "IMAGENAME eq amixos.exe" | find /I "amixos.exe"'
-    Pop $R3
+    nsExec::ExecToStack 'cmd /c tasklist /FI "IMAGENAME eq $R9" | find /I "$R9"'
+    Pop $R3   ; exit code: 0 = still running
+    Pop $R4   ; the output (not needed)
     StrCmp $R3 "0" 0 closed
     IntOp $R2 $R2 + 1
-    IntCmp $R2 20 forced 0 forced
+    IntCmp $R2 $R8 forced 0 forced
     Sleep 500
     Goto closewait
   forced:
-    nsExec::Exec 'taskkill /F /IM amixos.exe'
-    Sleep 500
+    nsExec::Exec 'taskkill /F /T /IM "$R9"'
+    Sleep 700
   closed:
 FunctionEnd
+Function ${UN}CloseConsole
+  StrCpy $R8 20
+  StrCpy $R9 "amixos.exe"
+  Call ${UN}CloseOne   ; the console first (up to 10 s: it saves), then what it may have left running
+  StrCpy $R8 4
+  StrCpy $R9 "AmF X1 Network.exe"
+  Call ${UN}CloseOne
+  StrCpy $R9 "AmF X1 Hybrid.exe"
+  Call ${UN}CloseOne
+  StrCpy $R9 "AmF X1.exe"
+  Call ${UN}CloseOne
+  StrCpy $R9 "AmF X1 Diagnostics.exe"
+  Call ${UN}CloseOne
+  StrCpy $R9 "AmF X1 Plugin Builder.exe"
+  Call ${UN}CloseOne
+FunctionEnd
+; A FILE STILL IN USE after that (the ASIO driver DLL loaded by a DAW, a program another user runs): Windows lets a file in use be renamed,
+; so it is moved aside to <name>.old<n> and removed at the next restart, and the new file goes in its place. The install never stops on it.
+Function ${UN}FreeFile   ; $R9 = a file name in $INSTDIR
+  IfFileExists "$INSTDIR\$R9" 0 free
+  ClearErrors
+  FileOpen $R3 "$INSTDIR\$R9" a
+  IfErrors locked
+  FileClose $R3
+  Goto free
+  locked:
+    StrCpy $R5 0
+    nextName:
+      IfFileExists "$INSTDIR\$R9.old$R5" 0 doRename
+      Delete "$INSTDIR\$R9.old$R5"
+      IfFileExists "$INSTDIR\$R9.old$R5" 0 doRename
+      IntOp $R5 $R5 + 1
+      IntCmp $R5 20 free nextName free
+    doRename:
+      ClearErrors
+      Rename "$INSTDIR\$R9" "$INSTDIR\$R9.old$R5"
+      IfErrors free
+      Delete /REBOOTOK "$INSTDIR\$R9.old$R5"
+      DetailPrint "In use, replaced at the next restart: $R9"
+  free:
+FunctionEnd
+Function ${UN}FreeAll
+  StrCpy $R9 "amixos.exe"
+  Call ${UN}FreeFile
+  StrCpy $R9 "AmF X1 Network.exe"
+  Call ${UN}FreeFile
+  StrCpy $R9 "AmF X1 Network.dll"
+  Call ${UN}FreeFile
+  StrCpy $R9 "AmF X1 Hybrid.exe"
+  Call ${UN}FreeFile
+  StrCpy $R9 "AmF X1 Hybrid.dll"
+  Call ${UN}FreeFile
+  StrCpy $R9 "AmF X1.exe"
+  Call ${UN}FreeFile
+  StrCpy $R9 "AmF X1 Diagnostics.exe"
+  Call ${UN}FreeFile
+  StrCpy $R9 "AmF X1 Plugin Builder.exe"
+  Call ${UN}FreeFile
+  StrCpy $R9 "AudioMixerASIO64.dll"
+  Call ${UN}FreeFile
+  StrCpy $R9 "AudioMixerASIO32.dll"
+  Call ${UN}FreeFile
+  StrCpy $R9 "amix_soxr.dll"
+  Call ${UN}FreeFile
+FunctionEnd
 !macroend
-!insertmacro CloseConsole ""
-!insertmacro CloseConsole "un."
+!insertmacro CloseApps ""
+!insertmacro CloseApps "un."
 Function .onInit
   ; AUTO UPDATE: the console starts this setup with  /S /RESTART  and quits; wait for it to let go of its files, install silently, start it again
   ${GetParameters} $R0
@@ -87,8 +156,8 @@ Section "AmF X1" SecMain
   closed:
     FileClose $R3
   nowait:
-  StrCmp $Restart "1" +2 0
-  Call CloseConsole   ; a setup started by hand: the console may be open
+  Call CloseConsole   ; by hand or after an update: whatever of AmF X1 is still running (the update's console has already quit)
+  Call FreeAll        ; and a file another program still holds is moved aside instead of stopping the install
   ; THE INSTALL ID: written once per fresh install (an update over an installed console keeps it). The console compares it with the one it
   ; last saw; a new id means this is a new install, so it starts from the factory console (no master left at -inf from before).
   IfFileExists "$INSTDIR\install.id" idDone 0
@@ -140,9 +209,12 @@ SectionEnd
 ; PHONE REMOTE service), often without asking. The rules are as narrow as the service itself: TCP 8765 only, these two programs only,
 ; PRIVATE networks only (home / studio Wi-Fi, never public), and only from the local subnet. The uninstaller removes them.
 Section "Phone remote over Wi-Fi (Windows Firewall rule: private network, port 8765)" SecFirewall
+  ; EVERY NETWORK PROFILE, THIS SUBNET ONLY: Windows marks many home Wi-Fi networks "Public"; a rule for "Private" alone then let no phone
+  ; in (the phone app found the console but never synced). Still only addresses of this network (localsubnet), and the service answers
+  ; private addresses only and wants the paired token or the minute's PIN.
   nsExec::Exec 'netsh advfirewall firewall delete rule name="AmF X1 Phone Remote"'
-  nsExec::Exec 'netsh advfirewall firewall add rule name="AmF X1 Phone Remote" dir=in action=allow protocol=TCP localport=8765 profile=private remoteip=localsubnet program="$INSTDIR\amixos.exe" description="AmF X1: phones and tablets on this network reach the console remote (token or PIN needed)"'
-  nsExec::Exec 'netsh advfirewall firewall add rule name="AmF X1 Phone Remote" dir=in action=allow protocol=TCP localport=8765 profile=private remoteip=localsubnet program="$INSTDIR\AmF X1 Network.exe" description="AmF X1: phones and tablets on this network reach the console remote (token or PIN needed)"'
+  nsExec::Exec 'netsh advfirewall firewall add rule name="AmF X1 Phone Remote" dir=in action=allow protocol=TCP localport=8765 profile=private,public,domain remoteip=localsubnet program="$INSTDIR\amixos.exe" description="AmF X1: phones and tablets on this network reach the console remote (token or PIN needed)"'
+  nsExec::Exec 'netsh advfirewall firewall add rule name="AmF X1 Phone Remote" dir=in action=allow protocol=TCP localport=8765 profile=private,public,domain remoteip=localsubnet program="$INSTDIR\AmF X1 Network.exe" description="AmF X1: phones and tablets on this network reach the console remote (token or PIN needed)"'
 SectionEnd
 Section "-Restart after an update"
   StrCmp $Restart "1" 0 +2
@@ -150,12 +222,13 @@ Section "-Restart after an update"
 SectionEnd
 Section "Uninstall"
   Call un.CloseConsole   ; before anything is removed: a console left running would write its settings back on quit
+  Call un.FreeAll
   ExecWait '"$INSTDIR\AmF X1.exe" --uninstall-driver'
   nsExec::Exec 'netsh advfirewall firewall delete rule name="AmF X1 Phone Remote"'   ; the phone remote's firewall rules go with the program
   Delete "$DESKTOP\AmF X1.lnk"
   Delete "$DESKTOP\AmF X1 Diagnostics.lnk"
   RMDir /r "$SMPROGRAMS\AmF X1"
-  RMDir /r "$INSTDIR"
+  RMDir /r /REBOOTOK "$INSTDIR"   ; a file still held by another program goes at the next restart
   ; EVERY UNINSTALL IS A FACTORY RESET: the settings (registry), the console, scenes, presets, caches and network tokens of this user
   ; are removed, so that a later install starts exactly as from the factory. Only the licence key is asked about.
   SetShellVarContext current

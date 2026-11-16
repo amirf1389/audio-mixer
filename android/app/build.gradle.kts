@@ -35,7 +35,7 @@ android {
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { viewBinding = true }
     // SCREENSHOTS without a phone: Robolectric draws the real activities on the JVM (native graphics) into PNGs, see src/test
-    testOptions { unitTests { isIncludeAndroidResources = true; all { it.systemProperty("robolectric.graphicsMode", "NATIVE"); it.systemProperty("amfx.shots", rootProject.file("../screenshots-android").absolutePath); it.systemProperty("amfx.daemon", System.getenv("AMFX_DAEMON") ?: "")
+    testOptions { unitTests { isIncludeAndroidResources = true; all { it.systemProperty("robolectric.graphicsMode", "NATIVE"); it.systemProperty("amfx.shots", rootProject.file("../screenshots-android").absolutePath); it.systemProperty("amfx.daemon", System.getenv("AMFX_DAEMON") ?: ""); it.systemProperty("amfx.console", System.getenv("AMFX_CONSOLE") ?: "")
         // the Android runtime jar Robolectric needs: from android/.robolectric when it is there (git-ignored; fetched once by hand where Maven rate-limits), else downloaded
         val rd = rootProject.file(".robolectric"); if (rd.isDirectory) { it.systemProperty("robolectric.offline", "true"); it.systemProperty("robolectric.dependency.dir", rd.absolutePath) } } } }
 }

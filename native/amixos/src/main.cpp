@@ -279,6 +279,24 @@ int main(int argc, char* argv[]) {
     std::printf("amixos --bench: MIXER idle %.1f ms CPU per second, faders moving (%d moves) %.1f ms CPU per second\n", idle, moves, moving);
     engine.stop(); return 0;
   }
+  // REMOTE HOLD (tests with the real phone app, AMIX_REMOTE_HOLD=<seconds>, AMIX_REMOTE_DUMP=<file>): the phone remote starts for this
+  // network as the button does, the MIXER page is on screen, and every 100 ms the console's own state goes to the file (the pairing PIN,
+  // strips 1-4, master, remotes connected). Every 4 s the console moves strip 4 itself (-12 / -24 dB) so the phone's side can be checked.
+  if (qEnvironmentVariableIsSet("AMIX_REMOTE_HOLD")) {
+    auto* win = qobject_cast<QQuickWindow*>(qml.rootObjects().first()); if (win) win->setProperty("current", "mixer");
+    if (!remote.start(true)) { std::fprintf(stderr, "amixos: remote hold: the remote did not start: %s\n", qPrintable(remote.status())); return 3; }
+    const int secs = qEnvironmentVariableIntValue("AMIX_REMOTE_HOLD"); const QString dump = qEnvironmentVariable("AMIX_REMOTE_DUMP");
+    QElapsedTimer t; t.start(); qint64 lastMove = 0; int k = 0;
+    while (t.elapsed() < secs * 1000LL) {
+      QCoreApplication::processEvents(QEventLoop::AllEvents, 20); QThread::msleep(10);
+      if (t.elapsed() - lastMove > 4000) { lastMove = t.elapsed(); engine.setGain(3, (k++ % 2) ? -24.0 : -12.0); }
+      static qint64 lastDump = -1000; if (t.elapsed() - lastDump < 100 || dump.isEmpty()) continue; lastDump = t.elapsed();
+      QJsonArray st; for (int i = 0; i < 4; ++i) { const QVariantMap m = engine.stripAt(i); st.append(QJsonObject{{"db", m["db"].toDouble()}, {"mute", m["mute"].toBool()}, {"name", m["name"].toString()}}); }
+      QFile f(dump + ".tmp"); if (f.open(QIODevice::WriteOnly)) { f.write(QJsonDocument(QJsonObject{{"t", t.elapsed()}, {"pin", remote.pairPin()}, {"port", remote.port()}, {"running", remote.running()},
+          {"remotes", remote.remotes()}, {"master", engine.masterDb()}, {"strips", st}, {"status", remote.status()}}).toJson(QJsonDocument::Compact)); f.close(); QFile::remove(dump); QFile::rename(dump + ".tmp", dump); }
+    }
+    remote.stop(); waitMs(500); return 0;
+  }
   if (smoke) {
     std::printf("amixos --smoke: start master %.1f dB, monitor %.1f dB; %s\n", engine.masterDb(), engine.monitor()["db"].toDouble(), qPrintable(engine.status()));
     if (engine.masterDb() <= -60.0) { std::fprintf(stderr, "amixos --smoke: the console started with the master at -inf\n"); return 166; }
@@ -382,7 +400,7 @@ int main(int argc, char* argv[]) {
     { // the ten effects in the rack of any channel: listed, loaded into a slot, a knob moves, bypass, cleared; a late channel too
       { // 2 IN / 2 OUT at least on every driver: asking for none opens the first pair all the same (a device that reported 0 channels is not left silent)
         const double r0 = engine.sampleRate(); const int f0 = engine.blockFrames(); engine.stop();
-        engine.open("null", "", "", 48000, 256, 0, 0); const int in0 = engine.deviceInputs(); engine.stop();   // 0 asked, not "-": the first pair opens
+        engine.open("null", "null-device", "", 48000, 256, 0, 0); const int in0 = engine.deviceInputs(); engine.stop();   // a NAMED device that reported 0 channels: the first pair opens (an unnamed input with 0 channels is "no input": see NO INPUT ASKED)
         engine.open("null", "", "", r0 > 0 ? r0 : 48000, f0 > 0 ? f0 : 256, 2, 2);
         const QVariantList st = engine.stripState(); const bool names = st.size() > 1 && st[0].toMap()["name"].toString() == "DIGITAL AUDIO" && st[1].toMap()["name"].toString() == "MIC" && !st[0].toMap()["link"].toBool();
         if (in0 < 2 || !names) { std::fprintf(stderr, "amixos --smoke: 2 in / 2 out (got %d in), CH 1-2 DIGITAL AUDIO / MIC %d\n", in0, names); return 160; } }
@@ -716,6 +734,14 @@ int main(int argc, char* argv[]) {
         const bool wasapiMic = engine.keepInputAtStart("wasapi", ""), dsMic = engine.keepInputAtStart("dsound", "{mic}"), asio = engine.keepInputAtStart("asio", "UMC ASIO"), music = engine.keepInputAtStart("wasapi", "loopback:system"), none = engine.keepInputAtStart("wasapi", "-");
         engine.setMicAtStart(true); const bool onKeeps = engine.keepInputAtStart("wasapi", ""); engine.setMicAtStart(keep);
         if (wasapiMic || dsMic || !asio || !music || !none || !onKeeps) { std::fprintf(stderr, "amixos --smoke: MIC AT ENGINE ON (wasapi %d, dsound %d, asio %d, music %d, none %d, on %d)\n", wasapiMic, dsMic, asio, music, none, onKeeps); return 283; } }
+      { // NO INPUT ASKED, NO MICROPHONE: no device named with 0 input channels opens no input (it used to become 2 channels of the default
+        // microphone: a remembered outputs-only start, CONNECTIONS with no input picked or a muted input opened the mic by itself)
+        const bool wasOn = engine.running(); const QString wb = engine.backend(); const double wr = engine.sampleRate(); const int wf = engine.blockFrames(), wi = engine.deviceInputs(), wo = engine.deviceOutputs();
+        const bool a = engine.open("null", "", "", 48000, 256, 0, 2); const int inA = engine.deviceInputs();
+        const bool b = engine.openSmart("null", "", "", 48000, 256, 0, 2); const int inB = engine.deviceInputs();
+        const bool c = engine.open("null", "", "", 48000, 256, 2, 2); const int inC = engine.deviceInputs();   // asked for inputs: still opened
+        engine.stop(); if (wasOn) engine.open(wb, "", "", wr, wf, wi, wo);
+        if (!a || !b || !c || inA != 0 || inB != 0 || inC < 2) { std::fprintf(stderr, "amixos --smoke: NO INPUT ASKED opened an input (open %d:%d, smart %d:%d, asked %d:%d)\n", a, inA, b, inB, c, inC); return 286; } }
       if (remote.available() && qEnvironmentVariableIsSet("AMIXOS_SMOKE_SYNC")) { // LIVE SYNC: with the remote service on, a move on a "phone" lands on the console and one on the console reaches the service
         const auto wait = [&](int ms) { QElapsedTimer t; t.start(); while (t.elapsed() < ms) { app.processEvents(QEventLoop::AllEvents, 20); QThread::msleep(5); } };
         const double g0 = engine.stripAt(0)["db"].toDouble(), g1 = engine.stripAt(1)["db"].toDouble();

@@ -40,7 +40,7 @@ Flickable {
                     Text { text: modelData.name; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 10; font.bold: true; Layout.fillWidth: true; elide: Text.ElideRight }
                     Text { text: modelData.backend.toUpperCase() + " · " + modelData.inChannels + " in / " + modelData.outChannels + " out"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9 }
                     Chip { objectName: "danteOpen_" + index; label: "OPEN"; hue: "#ef4444"
-                        onClicked: { if (modelData.backend === "asio") engine.openAsioDriver(modelData.id, 0); else engine.open(modelData.backend, modelData.inChannels > 0 ? modelData.id : "", modelData.outChannels > 0 ? modelData.id : "", 48000, 480, Math.min(32, Math.max(2, modelData.inChannels)), Math.min(32, Math.max(2, modelData.outChannels))) } } } }
+                        onClicked: { if (modelData.backend === "asio") engine.openAsioDriver(modelData.id, 0); else engine.open(modelData.backend, modelData.inChannels > 0 ? modelData.id : "-", modelData.outChannels > 0 ? modelData.id : "", 48000, 480, modelData.inChannels > 0 ? Math.min(32, Math.max(2, modelData.inChannels)) : 0, Math.min(32, Math.max(2, modelData.outChannels))) } } } }
             Text { visible: dp.dante.length === 0; Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9
                    text: dp.t("No Dante sound card on this computer. Install Dante Virtual Soundcard (or Dante Via) from Audinate, activate its licence, start it in ASIO or WDM mode, then press RESCAN. Patch its channels to the console in Dante Controller.") }
             RowLayout { spacing: 8

@@ -26,7 +26,8 @@ Popup {
     function pickDefaults() { const o = devs(true), i = devs(false); let od = o[0], idv = i[0]; for (const d of o) if (d.defaultOut) od = d; for (const d of i) if (d.defaultIn) idv = d
         outId = od ? od.id : ""; inId = idv ? idv.id : ""; outCh = Math.max(2, Math.min(outCh, od ? od.outChannels : 2)); inCh = Math.min(Math.max(inCh, 0), idv ? idv.inChannels : 0); if (idv && inCh === 0) inCh = Math.min(2, idv.inChannels) }
     function load() { type = engine.running && types.indexOf(engine.backend) >= 0 ? engine.backend : (types.length ? types[0] : ""); rate = engine.sampleRate > 0 ? engine.sampleRate : 48000; frames = engine.blockFrames > 0 ? engine.blockFrames : settings.defaultFrames; note = ""; pickDefaults() }
-    function apply() { const ok = engine.open(type, muteIn ? "" : inId, outId, rate, frames, muteIn ? 0 : inCh, outCh); note = ok ? i18n.t("Running.", i18n.lang) : i18n.t("This device did not open with these settings.", i18n.lang) }
+    // a muted input is "-": never the default microphone
+    function apply() { const ok = engine.open(type, muteIn ? "-" : inId, outId, rate, frames, muteIn ? 0 : inCh, outCh); note = ok ? i18n.t("Running.", i18n.lang) : i18n.t("This device did not open with these settings.", i18n.lang) }
     onAboutToShow: load()
     background: Rectangle { radius: 8; color: Theme.cardSolid; border.color: Theme.line }
 

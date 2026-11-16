@@ -20,8 +20,9 @@ Item {
     function read(d) {
         const inCh = Math.min(32, Math.max(0, d.inChannels)), outCh = Math.min(2, Math.max(0, d.outChannels))
         const outId = d.outChannels > 0 ? d.id : (page.last && page.last.out ? page.last.out : "")
-        const ok = engine.openSmart(d.backend, d.inChannels > 0 ? d.id : "", outId, d.defaultRate > 0 ? d.defaultRate : settings.defaultRate, settings.defaultFrames, inCh > 0 ? inCh : 2, outCh > 0 ? outCh : 2)
-        if (ok) settings.rememberDevice(d.backend, d.inChannels > 0 ? d.id : "", outId, d.defaultRate > 0 ? d.defaultRate : settings.defaultRate, settings.defaultFrames, inCh > 0 ? inCh : 2, outCh > 0 ? outCh : 2)
+        const inId = d.inChannels > 0 ? d.id : "-", useIn = d.inChannels > 0 ? inCh : 0   // a device with no inputs opens no input (never the default microphone)
+        const ok = engine.openSmart(d.backend, inId, outId, d.defaultRate > 0 ? d.defaultRate : settings.defaultRate, settings.defaultFrames, useIn, outCh > 0 ? outCh : 2)
+        if (ok) settings.rememberDevice(d.backend, inId, outId, d.defaultRate > 0 ? d.defaultRate : settings.defaultRate, settings.defaultFrames, useIn, outCh > 0 ? outCh : 2)
     }
     Timer { interval: 5000; running: page.visible && page.autoScan; repeat: true; onTriggered: engine.refreshDevices() }
     Timer { interval: 60; running: page.visible; repeat: true; onTriggered: { engine.setScopeStrip(page.micStrip); page.specMusic = engine.spectrum(0); page.specMic = engine.spectrum(2); musicC.requestPaint(); micC.requestPaint() } }

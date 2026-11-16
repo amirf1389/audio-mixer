@@ -229,6 +229,11 @@ class Engine : public QObject {
   // APP AUDIO (no microphone); a Windows microphone (WASAPI / DirectSound capture) only with MIC AT ENGINE ON
   Q_INVOKABLE bool keepInputAtStart(const QString& backend, const QString& in) const;
   void noteOutputsOnly() { micOffNote_ = QStringLiteral("Started with outputs only: the microphone is not opened at engine on (no feedback from the speakers). Pick it with INPUT: MIC on the mixer, or switch MICROPHONE ON AT START on (SOUND CARD)."); emit stateChanged(); }
+  // MICROPHONE BLOCKED AT START: what an automatic start (ENGINE ON, the remembered device, AUTO DETECT) takes as its input instead of a
+  // microphone: COMPUTER SOUND (every app's sound but AmF X1's, on CH 1-2) on WASAPI where Windows has it, else "-" (no input). A
+  // microphone opens only when picked on purpose (INPUT: MIC, CONNECTIONS) or with MICROPHONE ON AT START.
+  Q_INVOKABLE QString autoInput(const QString& backend) const { return backend == "wasapi" && computerSoundAvailable() ? QStringLiteral("loopback:system") : QStringLiteral("-"); }
+  void noteAutoInput(const QString& in) { if (in != "-") { micOffNote_ = QStringLiteral("INPUT: COMPUTER SOUND on CH 1-2 (every app but AmF X1). A microphone is never opened by itself: pick it with INPUT: MIC on the mixer, or switch MICROPHONE ON AT START on (SOUND CARD)."); emit stateChanged(); } else noteOutputsOnly(); }
   bool secureInput() const { return settings_.value("audio/secureInput", false).toBool(); } void setSecureInput(bool v) { settings_.setValue("audio/secureInput", v); emit devicesChanged(); }
   QStringList allowedInputs() const { return settings_.value("audio/allowedInputs").toStringList(); }
   Q_INVOKABLE bool inputAllowed(const QString& backend, const QString& id) const { return allowedInputs().contains(backend + "|" + id); }

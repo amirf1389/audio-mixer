@@ -189,9 +189,13 @@ bool Engine::open(const QString& backend, const QString& inDevice, const QString
   // WASAPI, and with headphones or a headset as the output the system's default microphone (which is the headset's own when one is
   // plugged in) is not opened either. A microphone picked by name that is not a headset's is opened as asked.
   QString inDev = inDevice; int inCh = inChannels; micOffNote_.clear();
+  // NO INPUT ASKED, NO MICROPHONE: an empty input means "the system's default" only when input channels are asked for. With 0 input
+  // channels and no device named it is "no input" ("-"). It used to become 2 channels of the default device here, so a start meant to be
+  // outputs only (the remembered device, CONNECTIONS with no input picked, a muted input) opened the microphone by itself.
+  if (inDev.isEmpty() && inCh <= 0 && backend != "asio") inDev = QStringLiteral("-");
   // 2 IN / 2 OUT at least, on every driver (ASIO, WASAPI, DirectSound, Bluetooth): a device that reported 0 channels (busy when the list was read, or a
   // driver that does not say) still opens its first pair; ASIO and DirectSound take only what the device has, so asking for two is safe
-  if (inDevice != "-" && inCh < 2) inCh = 2;
+  if (inDev != "-" && inCh < 2) inCh = 2;
   if (outChannels < 2 && outDevice != "-") outChannels = 2;
   if (backend == "wasapi" && inCh > 0 && headsetMicOff()) {
     const auto kindOf = [this](const QString& id, bool capture) { for (const QVariant& v : devices_) { const QVariantMap m = v.toMap(); if (m["backend"].toString() != "wasapi") continue;
@@ -679,8 +683,11 @@ QVariantList Engine::bluetoothDevices() const {
   return l;
 }
 int Engine::forgetDriverLocks(const QString& name) { const int n = am::drv::forget(name.toStdString()); emit devicesChanged(); return n; }
-bool Engine::openSmart(const QString& backend, const QString& in, const QString& out, double rate, int frames, int inCh, int outCh) {
+bool Engine::openSmart(const QString& backend, const QString& inAsked, const QString& out, double rate, int frames, int inCh, int outCh) {
   if (opening_) return false;   // a start is already under way (the interface stays live during it)
+  // NO INPUT ASKED, NO MICROPHONE (see open()): no device named and 0 input channels is "no input", never the default microphone; the
+  // RESCUE steps below then do not add a default microphone either
+  const QString in = inAsked.isEmpty() && inCh <= 0 && backend != "asio" ? QStringLiteral("-") : inAsked;
   const qint64 now = QDateTime::currentMSecsSinceEpoch();
   auto steps = am::drv::plan(backend.toStdString(), in.toStdString(), out.toStdString(), devInfos(devices_), now);
   // RESCUE: when the whole plan fails the console must not stay without input and output. After the planned steps come the Realtek ASIO
@@ -1000,8 +1007,9 @@ bool Engine::autoStart(int frames) {
   if (autoPrefer() == "manual") { status_ = QStringLiteral("MANUAL selection is on: nothing is opened by itself. Pick the driver in the ASIO DRIVERS list."); emit stateChanged(); return false; }
   const QVariantMap d = autoDetect(); if (d.isEmpty()) { status_ = QStringLiteral("AUTO DETECT: no real sound card found (only the null test device)."); emit stateChanged(); return false; }
   const bool keepIn = keepInputAtStart(d["backend"].toString(), d["in"].toString());   // MIC AT ENGINE ON off: the speakers start without the microphone
-  const bool ok = openSmart(d["backend"].toString(), keepIn ? d["in"].toString() : QStringLiteral("-"), d["out"].toString(), d["rate"].toDouble(), frames > 0 ? frames : 256, keepIn ? std::min(32, std::max(0, d["inChannels"].toInt())) : 0, std::min(32, std::max(2, d["outChannels"].toInt())));
-  if (ok && !keepIn) micOffNote_ = QStringLiteral("Started with outputs only: the microphone is not opened at engine on (no feedback from the speakers). Pick it with INPUT: MIC on the mixer, or switch MICROPHONE ON AT START on (SOUND CARD).");
+  const QString autoIn = keepIn ? d["in"].toString() : autoInput(d["backend"].toString());   // the microphone blocked: COMPUTER SOUND instead where Windows has it
+  const bool ok = openSmart(d["backend"].toString(), autoIn, d["out"].toString(), d["rate"].toDouble(), frames > 0 ? frames : 256, keepIn ? std::min(32, std::max(0, d["inChannels"].toInt())) : (autoIn == "-" ? 0 : 2), std::min(32, std::max(2, d["outChannels"].toInt())));
+  if (ok && !keepIn) noteAutoInput(autoIn);
   if (ok) lastRoute_ = QStringLiteral("AUTO DETECT picked %1 (%2): %3").arg(d["name"].toString(), d["backend"].toString().toUpper(), d["why"].toString()) + "  ·  " + lastRoute_;
   emit stateChanged(); return ok;
 }
