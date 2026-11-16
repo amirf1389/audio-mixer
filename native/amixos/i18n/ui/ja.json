@@ -2101,5 +2101,7 @@
 "FLAC 24-bit (lossless)": "FLAC 24ビット（ロスレス）",
 "HI-RES AUDIO": "ハイレゾオーディオ",
 "resampling · FLAC · RF64": "リサンプリング · FLAC · RF64",
-"● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV or FLAC files, one per source, named by time.": "● ミキサーの「REC」ボタンを押すと、マスターおよびアームされたすべてのストリップ（プリフェーダー、トリム／DSP／インサート後）が、ソースごとに1つずつ、時刻をファイル名としてWAVまたはFLACファイルに書き出されます。"
+"● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV or FLAC files, one per source, named by time.": "● ミキサーの「REC」ボタンを押すと、マスターおよびアームされたすべてのストリップ（プリフェーダー、トリム／DSP／インサート後）が、ソースごとに1つずつ、時刻をファイル名としてWAVまたはFLACファイルに書き出されます。",
+"MICROPHONE ON AT START": "起動時にマイクをオンにする",
+"OFF: ENGINE ON starts the speakers or headphones without the microphone, so the mic never feeds back at start. Turn the mic on with INPUT: MIC on the mixer. ASIO interfaces and COMPUTER SOUND are not affected.": "OFF: ENGINE ON を設定すると、マイクを除くスピーカーまたはヘッドホンが起動するため、起動時にマイクからのフィードバックが発生することはありません。マイクをオンにするには、ミキサーで INPUT: MIC をオンにしてください。ASIO インターフェースおよび COMPUTER SOUND には影響ありません。"
 }

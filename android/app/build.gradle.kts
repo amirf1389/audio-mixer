@@ -10,9 +10,11 @@ android {
         applicationId = "com.amfb.amixos"
         minSdk = 26
         targetSdk = 35
-        // from the version (a.b.c.d -> a * 1 000 000 + b * 10 000 + c * 100 + d): every release is an upgrade of the one before
-        versionCode = rootProject.file("../native/amixos/version.txt").readText().trim().split(".").map { it.toIntOrNull() ?: 0 }.let { v -> (v.getOrElse(0) { 0 }) * 1_000_000 + (v.getOrElse(1) { 0 }) * 10_000 + (v.getOrElse(2) { 0 }) * 100 + (v.getOrElse(3) { 0 }) }
-        versionName = rootProject.file("../native/amixos/version.txt").readText().trim()
+        // from the version (a.b.c.d -> a * 1 000 000 + b * 10 000 + c * 100 + d) and the BUILD NUMBER (android/build-number.txt, raised for
+        // every APK that is given out): the same product version built again is still an upgrade, and the app shows which build it is
+        val build = rootProject.file("build-number.txt").readText().trim().toIntOrNull() ?: 0
+        versionCode = rootProject.file("../native/amixos/version.txt").readText().trim().split(".").map { it.toIntOrNull() ?: 0 }.let { v -> (v.getOrElse(0) { 0 }) * 1_000_000 + (v.getOrElse(1) { 0 }) * 10_000 + (v.getOrElse(2) { 0 }) * 100 + (v.getOrElse(3) { 0 }) } * 100 + build
+        versionName = rootProject.file("../native/amixos/version.txt").readText().trim() + " (build " + build + ")"
     }
     // RELEASE SIGNING: an APK signed with Android's public debug certificate is the main reason Play Protect warns about an app. A release
     // is signed with AMFB Audio's own key, read at build time from the environment (never stored in the repository):

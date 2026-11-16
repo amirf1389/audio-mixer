@@ -2046,5 +2046,7 @@
 "Needs Windows 10 version 2004 or later with the sound card on WASAPI.": "Vereist Windows 10 versie 2004 of hoger, waarbij de geluidskaart op WASAPI is ingesteld.",
 "The microphone (the default capture device) is the input.": "De microfoon (het standaardopnameapparaat) is de ingang.",
 "FLAC 24-bit (lossless)": "FLAC 24-bit (verliesvrij)",
-"● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV or FLAC files, one per source, named by time.": "● De REC-knop op de MIXER neemt het master-signaal en elke geactiveerde strip (pre-fader, na trim / DSP / inserts) op in WAV- of FLAC-bestanden, één per bron, met een naam op basis van de tijd."
+"● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV or FLAC files, one per source, named by time.": "● De REC-knop op de MIXER neemt het master-signaal en elke geactiveerde strip (pre-fader, na trim / DSP / inserts) op in WAV- of FLAC-bestanden, één per bron, met een naam op basis van de tijd.",
+"MICROPHONE ON AT START": "MICROFOON AAN BIJ START",
+"OFF: ENGINE ON starts the speakers or headphones without the microphone, so the mic never feeds back at start. Turn the mic on with INPUT: MIC on the mixer. ASIO interfaces and COMPUTER SOUND are not affected.": "OFF: ENGINE ON zet de luidsprekers of hoofdtelefoon aan zonder de microfoon, zodat er bij het opstarten nooit terugkoppeling via de microfoon optreedt. Schakel de microfoon in met INPUT: MIC op de mixer. Dit heeft geen invloed op ASIO-interfaces en COMPUTER SOUND."
 }

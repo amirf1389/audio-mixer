@@ -4,7 +4,10 @@
 #include "audiomixer/bluetooth.hpp"
 #include "paths/paths.hpp"
 
+#include <algorithm>
 #include <chrono>
+#include <cstdlib>
+#include <iterator>
 #include <cstdio>
 #include <cstring>
 #include <ctime>
@@ -70,11 +73,16 @@ bool Daemon::start(std::string& err) {
   if (opt_.token.empty()) { err = "no token: pass --token or --token-file"; return false; }
   if (opt_.token.size() < 12) { err = "the token is too short: 12 characters at least (the daemon makes a 64-character one by itself)"; return false; }
   if (!opt_.tokenStore.empty()) { tokens_.setFile(opt_.tokenStore); if (!tokens_.load(err)) return false; }
+  if (!opt_.seed.empty()) { std::string e; if (!loadSeed(opt_.seed, e)) std::fprintf(stderr, "amixos-daemon: %s (the mixer starts flat)\n", e.c_str()); }
   http_.route([this](const httpd::Request& r) { return handle(r); });
   http_.websocket("/ws/meters", [this](const httpd::Request& r, httpd::WebSocket& ws) {
     if (roleOf(r).empty()) { ws.send("{\"error\":\"unauthorised\"}"); ws.close(); return; }   // any valid token may watch the meters
     std::thread reader([&ws] { std::string t; int op = 0; while (ws.open() && ws.read(t, op)) {} });   // drains pings / close from the phone
-    while (running_ && ws.open()) { if (!ws.send(meters().dump())) break; std::this_thread::sleep_for(std::chrono::milliseconds(50)); }
+    unsigned long long sent = 0;   // LIVE SYNC: the console state goes out on connect and whenever any remote changed it (at most 20 times a second)
+    while (running_ && ws.open()) {
+      const unsigned long long v = version_.load();
+      if (v != sent) { json::Value m = json::Value::object(); m.set("state", state()); if (!ws.send(m.dump())) break; sent = v; }
+      if (!ws.send(meters().dump())) break; std::this_thread::sleep_for(std::chrono::milliseconds(50)); }
     ws.close(); reader.join();
   });
   http_.setLocalOnly(opt_.localOnly);
@@ -147,7 +155,10 @@ httpd::Response Daemon::handle(const httpd::Request& r) {
     }
     o.set("devices", a); o.set("note", note); res.body = o.dump(); return res;
   }
-  if (r.method == "GET" && r.path == "/api/state") { res.body = state().dump(); return res; }
+  if (r.method == "GET" && r.path == "/api/state") {
+    const std::string since = r.param("since");
+    if (!since.empty() && std::strtoull(since.c_str(), nullptr, 10) == version_.load()) { json::Value o = json::Value::object(); o.set("v", static_cast<double>(version_.load())); o.set("same", true); res.body = o.dump(); return res; }
+    res.body = state().dump(); return res; }
   if (r.method == "GET" && r.path == "/api/meters") { res.body = meters().dump(); return res; }
   if (r.method == "POST" && r.path == "/api/pair") {   // a phone trades the minute's PIN for a token of its own
     if (opt_.tokenStore.empty()) { res.status = 400; res.body = "{\"ok\":false,\"error\":\"this service was started without a token file\"}"; return res; }
@@ -247,7 +258,7 @@ json::Value Daemon::state() const {
   o.set("buses", buses);
   json::Value m = json::Value::object(); m.set("db", masterDb_); m.set("limiter", limiter_); m.set("ceilingDb", ceiling_); o.set("master", m);
   json::Value mo = json::Value::object(); mo.set("source", mon_.source); mo.set("db", mon_.db); mo.set("dim", mon_.dim); mo.set("mono", mon_.mono); mo.set("mute", mon_.mute); o.set("monitor", mo);
-  o.set("backend", rt_ ? backend_ : ""); o.set("running", rt_ && rt_->running());
+  o.set("backend", rt_ ? backend_ : ""); o.set("running", rt_ && rt_->running()); o.set("v", static_cast<double>(version_.load()));
   return o;
 }
 
@@ -274,6 +285,25 @@ json::Value Daemon::meters() const {
 }
 
 json::Value Daemon::control(const json::Value& cmd, std::string& err) {
+  json::Value out = apply(cmd, err);
+  if (err.empty() && cmd["op"].asString() != "clearClips") ++version_;
+  return out;
+}
+
+bool Daemon::loadSeed(const std::string& file, std::string& err) {
+  std::ifstream f(file, std::ios::binary); if (!f) { err = "no seed " + file; return false; }
+  const std::string text((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+  bool ok = false; const json::Value o = json::Value::parse(text, ok); if (!ok || !o.isObject()) { err = "the seed is not a JSON object"; return false; }
+  std::lock_guard<std::mutex> g(m_);
+  const json::Value& l = o["strips"];
+  for (std::size_t i = 0; i < strips_.size() && i < l.size(); ++i) { const json::Value& v = l.at(i); Strip& s = strips_[i];
+    s.name = v["name"].asString(s.name).substr(0, 24); s.db = std::max(-120.0, std::min(10.0, v["db"].asNumber(s.db))); s.pan = std::max(-1.0, std::min(1.0, v["pan"].asNumber(s.pan)));
+    s.mute = v["mute"].asBool(s.mute); s.solo = v["solo"].asBool(s.solo); }
+  if (o["master"].isObject()) masterDb_ = std::max(-120.0, std::min(10.0, o["master"]["db"].asNumber(masterDb_)));
+  ++version_; return true;
+}
+
+json::Value Daemon::apply(const json::Value& cmd, std::string& err) {
   std::lock_guard<std::mutex> g(m_);
   json::Value ok = json::Value::object(); ok.set("ok", true);
   const std::string op = cmd["op"].asString();

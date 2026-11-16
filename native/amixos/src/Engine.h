@@ -217,10 +217,18 @@ class Engine : public QObject {
   // and an allowed WASAPI input is opened EXCLUSIVELY (no Windows mixer, no other program can capture or inject on it). A device that
   // is not allowed runs outputs only, with a note saying why. Kept as "backend|id" in audio/allowedInputs.
   Q_PROPERTY(bool secureInput READ secureInput WRITE setSecureInput NOTIFY devicesChanged)
+  // MIC AT ENGINE ON (default OFF): whether ENGINE ON / auto start / AUTO DETECT open a microphone by themselves. Off, the engine starts with
+  // outputs only and the microphone waits for the person (INPUT: MIC on the mixer, or this switch): no feedback from the speakers at start.
+  Q_PROPERTY(bool micAtStart READ micAtStart WRITE setMicAtStart NOTIFY devicesChanged)
   // INPUT SOURCE: "mic" (a capture device), "music" (COMPUTER SOUND: what every other program plays, or an output's loopback), "none"
   Q_PROPERTY(QString inputSource READ inputSource NOTIFY stateChanged)
   Q_PROPERTY(bool computerSoundAvailable READ computerSoundAvailable NOTIFY devicesChanged)
   Q_PROPERTY(QStringList allowedInputs READ allowedInputs NOTIFY devicesChanged)
+  bool micAtStart() const { return settings_.value("audio/micAtStart", false).toBool(); } void setMicAtStart(bool v) { settings_.setValue("audio/micAtStart", v); emit devicesChanged(); }
+  // whether an input opened BY ITSELF (engine on, auto start) is kept: always for ASIO (an interface's line inputs) and COMPUTER SOUND /
+  // APP AUDIO (no microphone); a Windows microphone (WASAPI / DirectSound capture) only with MIC AT ENGINE ON
+  Q_INVOKABLE bool keepInputAtStart(const QString& backend, const QString& in) const;
+  void noteOutputsOnly() { micOffNote_ = QStringLiteral("Started with outputs only: the microphone is not opened at engine on (no feedback from the speakers). Pick it with INPUT: MIC on the mixer, or switch MICROPHONE ON AT START on (SOUND CARD)."); emit stateChanged(); }
   bool secureInput() const { return settings_.value("audio/secureInput", false).toBool(); } void setSecureInput(bool v) { settings_.setValue("audio/secureInput", v); emit devicesChanged(); }
   QStringList allowedInputs() const { return settings_.value("audio/allowedInputs").toStringList(); }
   Q_INVOKABLE bool inputAllowed(const QString& backend, const QString& id) const { return allowedInputs().contains(backend + "|" + id); }

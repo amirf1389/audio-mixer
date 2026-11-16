@@ -48,6 +48,8 @@ cp "$KIT/plugins/platforms/qwindows.dll" "$D/platforms/"; mkdir -p "$D/tls"; cp 
  cp "$KIT/plugins/imageformats/"*.dll "$D/imageformats/"
 cp -r "$KIT/qml/QtQml" "$KIT/qml/QtQuick" "$KIT/qml/Qt" "$D/qml/" 2>/dev/null || true
 rm -rf "$D/qml/QtQuick/Controls/Imagine" "$D/qml/QtQuick/Controls/Material" "$D/qml/QtQuick/Controls/Universal" "$D/qml/QtQuick/Controls/Windows" "$D/qml/QtQuick/Controls/designer" "$D/qml/QtQuick/Particles"
+# QML modules the console never imports and whose Qt libraries are not shipped (they could not load anyway): left out of the package
+rm -rf "$D/qml/Qt/test" "$D/qml/Qt/labs" "$D/qml/QtQuick/Dialogs" "$D/qml/QtQuick/LocalStorage" "$D/qml/QtQml/XmlListModel"
 printf '[Paths]\nPrefix = .\nPlugins = .\nQml2Imports = qml\n' > "$D/qt.conf"; cp "$ROOT/LICENSE" "$D/" 2>/dev/null || true
 # the driver folder and its documents travel with the program: the 32-bit ASIO DLL, the Steinberg ASIO licence / usage guidelines / change list, third-party licences
 mkdir -p "$D/drivers/asio" "$D/licenses"

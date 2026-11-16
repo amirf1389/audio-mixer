@@ -97,6 +97,11 @@ class ScreenshotTest {
             1 to "{\"kind\":\"plate\",\"name\":\"PLATE REVERB\",\"bypass\":true,\"mix\":0.25,\"params\":[{\"id\":\"decay\",\"title\":\"DECAY\",\"value\":0.4,\"default\":0.4,\"text\":\"1.8 s\"}]}")
         shot(a.rackPanel(0, cat, { js[it] ?: "null" }, {}), "phone-mixer-rack")
     }
+    @Test fun consoles() {   // the paired-consoles list, as the CONSOLES dialog shows it
+        val a = Robolectric.buildActivity(RemoteActivity::class.java).setup().get(); val now = 1_763_300_000_000L
+        val l = listOf(PairedConsoles.Console("192.168.1.20", 8765, "t1", "Studio A", now - 86_400_000L * 9, now - 120_000L), PairedConsoles.Console("192.168.0.42", 8765, "t2", "FOH stage", now - 86_400_000L * 30, now - 86_400_000L * 3))
+        shot(a.consolesPanel(l, now, {}, {}), "consoles")
+    }
     @Test fun muteGroups() {
         val ctx = org.robolectric.RuntimeEnvironment.getApplication()
         ctx.getSharedPreferences("muteGroups", 0).edit().putString("g0", "0,1,2,3").putBoolean("on0", true).putString("g1", "8,9").putString("g3", "4,5,6").commit()
@@ -104,6 +109,16 @@ class ScreenshotTest {
         shot(a.muteGroupsPanel(null), "mute-groups")
     }
 
+    @Test fun liveSync() {   // LIVE SYNC: another remote (a browser, the console) moves strips while this phone is connected: they move here at once
+        val port = System.getProperty("amfx.daemon").orEmpty(); if (port.isEmpty()) return
+        val ctx = org.robolectric.RuntimeEnvironment.getApplication(); val tok = System.getenv("AMFX_TOKEN") ?: ""
+        Prefs.remote(ctx).edit().putString("host", "127.0.0.1").putString("port", port).putString("token", tok).putBoolean("autoConnect", true).commit()
+        val a = Robolectric.buildActivity(RemoteActivity::class.java).setup().get(); idle(2500)
+        val other = com.amfb.amixos.remote.DaemonClient(com.amfb.amixos.remote.Endpoint("127.0.0.1", port.toInt(), tok))
+        other.name(0, "VOCAL"); other.gain(0, -6.0); other.name(1, "GUITAR"); other.gain(1, -18.0); other.mute(2, true); other.name(3, "KEYS"); other.solo(3, true); other.master(-3.0)
+        idle(1200); shot(a.window.decorView.rootView, "remote-live-sync")
+        other.name(0, "CH 1"); other.gain(0, 0.0); other.name(1, "CH 2"); other.gain(1, 0.0); other.mute(2, false); other.name(3, "CH 4"); other.solo(3, false); other.master(0.0)
+    }
     @Test fun remote() {
         val port = System.getProperty("amfx.daemon").orEmpty()
         val ctx = org.robolectric.RuntimeEnvironment.getApplication()

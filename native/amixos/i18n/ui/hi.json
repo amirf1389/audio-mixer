@@ -2133,5 +2133,7 @@
 "FLAC 24-bit (lossless)": "FLAC 24-बिट (लोसलेस)",
 "HI-RES AUDIO": "उच्च-रिज़ॉल्यूशन ऑडियो",
 "resampling · FLAC · RF64": "पुनः नमूनाकरण · FLAC · RF64",
-"● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV or FLAC files, one per source, named by time.": "● मिक्सर पर REC मास्टर और प्रत्येक आर्म्ड स्ट्रिप (प्री-फेडर, ट्रिम / DSP / इन्सर्ट्स के बाद) को WAV या FLAC फ़ाइलों में रिकॉर्ड करता है, प्रत्येक स्रोत के लिए एक, समय के अनुसार नामित।"
+"● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV or FLAC files, one per source, named by time.": "● मिक्सर पर REC मास्टर और प्रत्येक आर्म्ड स्ट्रिप (प्री-फेडर, ट्रिम / DSP / इन्सर्ट्स के बाद) को WAV या FLAC फ़ाइलों में रिकॉर्ड करता है, प्रत्येक स्रोत के लिए एक, समय के अनुसार नामित।",
+"MICROPHONE ON AT START": "शुरुआत में माइक्रोफोन चालू",
+"OFF: ENGINE ON starts the speakers or headphones without the microphone, so the mic never feeds back at start. Turn the mic on with INPUT: MIC on the mixer. ASIO interfaces and COMPUTER SOUND are not affected.": "OFF: ENGINE ON स्पीकर या माइक्रोफोन के बिना हेडफोन चालू करता है, इसलिए शुरू में माइक्रोफोन कभी फीडबैक नहीं करता। मिक्सर पर INPUT: MIC से माइक्रोफोन चालू करें। ASIO इंटरफेस और COMPUTER SOUND प्रभावित नहीं होते।"
 }

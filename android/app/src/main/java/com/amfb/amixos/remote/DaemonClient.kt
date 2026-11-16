@@ -16,7 +16,7 @@ data class Status(val name: String, val version: String, val backend: String, va
 data class Device(val backend: String, val id: String, val name: String, val inputs: Int, val outputs: Int, val defaultRate: Double, val defaultIn: Boolean, val defaultOut: Boolean)
 data class StripState(val id: Int, val name: String, val db: Double, val pan: Double, val mute: Boolean, val solo: Boolean)
 data class BusState(val id: Int, val db: Double, val returnDb: Double, val mute: Boolean)
-data class ConsoleState(val strips: List<StripState>, val buses: List<BusState>, val masterDb: Double, val limiter: Boolean, val ceilingDb: Double)
+data class ConsoleState(val strips: List<StripState>, val buses: List<BusState>, val masterDb: Double, val limiter: Boolean, val ceilingDb: Double, val v: Long = 0)   // v: the console's change counter (LIVE SYNC)
 data class StripMeter(val pk: Double, val rms: Double, val hold: Double, val clip: Boolean, val gr: Double, val gate: Double, val input: Double)
 data class Meters(val running: Boolean, val strips: List<StripMeter>, val masterL: Double, val masterR: Double, val masterRms: Double, val masterClip: Boolean)
 
@@ -36,8 +36,9 @@ class DaemonClient(val ep: Endpoint) {
 
     fun status(): Status { val o = getObj("/api/status"); return Status(o.str("name"), o.str("version"), o.str("backend"), o.bool("running"), o.num("blocks").toLong(), o.num("xruns").toLong(), o.int("strips"), o.int("buses"), o.num("uptimeS"), o.str("lastError"), (o["backends"] as? List<*>)?.map { it.toString() } ?: emptyList(), o.str("plan")) }
     fun devices(): List<Device> = getList("/api/devices").map { Device(it.str("backend"), it.str("id"), it.str("name"), it.int("in"), it.int("out"), it.num("defaultRate", 48000.0), it.bool("defaultIn"), it.bool("defaultOut")) }
-    fun state(): ConsoleState { val o = getObj("/api/state"); val m = o.obj("master")
-        return ConsoleState(o.list("strips").map { StripState(it.int("id"), it.str("name"), it.num("db"), it.num("pan"), it.bool("mute"), it.bool("solo")) }, o.list("buses").map { BusState(it.int("id"), it.num("db"), it.num("returnDb", -60.0), it.bool("mute")) }, m.num("db"), m.bool("limiter", true), m.num("ceilingDb", -0.5)) }
+    fun state(): ConsoleState = parseState(getObj("/api/state"))
+    /** LIVE SYNC check: null while the console is still at change v (a few bytes), else the new state */
+    fun stateSince(v: Long): ConsoleState? { val o = getObj("/api/state?since=$v"); return if (o["same"] == true) null else parseState(o) }
     /** The console's plug-in catalogue, racks and extensions as saved when the remote started ({available:false} when it never was). */
     fun consoleInfo(): Map<String, Any?> = getObj("/api/console-info")
     fun meters(): Meters = parseMeters(getObj("/api/meters"))
@@ -69,6 +70,9 @@ class DaemonClient(val ep: Endpoint) {
             @Suppress("UNCHECKED_CAST") val o = runCatching { MiniJson.parse(text) as Map<String, Any?> }.getOrNull() ?: emptyMap()
             if (code >= 400) throw DaemonException(o["error"]?.toString() ?: "HTTP $code", code)
             return o["token"]?.toString()?.takeIf { it.isNotEmpty() } ?: throw DaemonException("the console sent no token", code)
+        }
+        fun parseState(o: Map<String, Any?>): ConsoleState { val m = o.obj("master")
+            return ConsoleState(o.list("strips").map { StripState(it.int("id"), it.str("name"), it.num("db"), it.num("pan"), it.bool("mute"), it.bool("solo")) }, o.list("buses").map { BusState(it.int("id"), it.num("db"), it.num("returnDb", -60.0), it.bool("mute")) }, m.num("db"), m.bool("limiter", true), m.num("ceilingDb", -0.5), o.num("v").toLong())
         }
         fun parseMeters(o: Map<String, Any?>): Meters { val m = o.obj("master")
             return Meters(o.bool("running"), o.list("strips").map { StripMeter(it.num("pk"), it.num("rms"), it.num("hold"), it.num("clip") > 0, it.num("gr"), it.num("gate"), it.num("in")) }, m.num("l"), m.num("r"), m.num("rms"), m.num("clip") > 0) }
@@ -106,8 +110,9 @@ class DaemonClient(val ep: Endpoint) {
     /** (recording, seconds so far, file) from the console's status */
     fun recordState(): Triple<Boolean, Double, String> { val o = getObj("/api/status"); return Triple(o["recording"] == true, (o["recordSeconds"] as? Number)?.toDouble() ?: 0.0, o["recordFile"]?.toString().orEmpty()) }
 
-    /** The meter stream on a worker thread: onFrame about 20 times a second; reconnects after a drop until the returned handle is stopped. */
-    fun meterStream(onFrame: (Meters) -> Unit, onState: ((Boolean, String?) -> Unit)? = null): MeterStream {
+    /** The meter stream on a worker thread: onFrame about 20 times a second; reconnects after a drop until the returned handle is stopped.
+     *  LIVE SYNC: onConsole gets the console state once on connect and again the moment any remote (or the console) changes it. */
+    fun meterStream(onFrame: (Meters) -> Unit, onState: ((Boolean, String?) -> Unit)? = null, onConsole: ((ConsoleState) -> Unit)? = null): MeterStream {
         val h = MeterStream()
         h.worker = thread(name = "amix-meters", isDaemon = true) {
             while (!h.stopped) {
@@ -117,6 +122,7 @@ class DaemonClient(val ep: Endpoint) {
                     while (!h.stopped) { val text = ws.receiveText() ?: break
                         @Suppress("UNCHECKED_CAST") val o = MiniJson.parse(text) as Map<String, Any?>
                         if (o.containsKey("error")) { onState?.invoke(false, o.str("error")); h.stopped = true; break }
+                        if (o.containsKey("state")) { onConsole?.invoke(parseState(o.obj("state"))); continue }
                         onFrame(parseMeters(o)) }
                 } catch (e: Exception) { if (!h.stopped) onState?.invoke(false, e.message ?: e.javaClass.simpleName) }
                 ws.close(); if (!h.stopped) { onState?.invoke(false, null); Thread.sleep(1000) }

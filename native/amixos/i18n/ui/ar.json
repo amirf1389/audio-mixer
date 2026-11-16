@@ -2064,5 +2064,7 @@
 "The microphone (the default capture device) is the input.": "الميكروفون (جهاز التسجيل الافتراضي) هو مصدر الإدخال.",
 "FLAC 24-bit (lossless)": "FLAC 24 بت (بدون فقدان للجودة)",
 "HI-RES AUDIO": "صوت عالي الدقة",
-"● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV or FLAC files, one per source, named by time.": "● تقوم وظيفة REC في جهاز المزج (MIXER) بتسجيل الإشارة الرئيسية وكل مسار جاهز للتسجيل (قبل الفادر، وبعد الترييم / DSP / الإدخالات) في ملفات WAV أو FLAC، بواقع ملف واحد لكل مصدر، ويتم تسمية الملفات حسب الوقت."
+"● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV or FLAC files, one per source, named by time.": "● تقوم وظيفة REC في جهاز المزج (MIXER) بتسجيل الإشارة الرئيسية وكل مسار جاهز للتسجيل (قبل الفادر، وبعد الترييم / DSP / الإدخالات) في ملفات WAV أو FLAC، بواقع ملف واحد لكل مصدر، ويتم تسمية الملفات حسب الوقت.",
+"MICROPHONE ON AT START": "تشغيل الميكروفون عند البدء",
+"OFF: ENGINE ON starts the speakers or headphones without the microphone, so the mic never feeds back at start. Turn the mic on with INPUT: MIC on the mixer. ASIO interfaces and COMPUTER SOUND are not affected.": "\"OFF: ENGINE ON\" تعمل على تشغيل السماعات أو سماعات الرأس دون الميكروفون، وبالتالي لا يحدث أي تغذية مرتدة من الميكروفون عند بدء التشغيل. قم بتشغيل الميكروفون من خلال خيار \"INPUT: MIC\" في جهاز المزج. لا تتأثر واجهات ASIO و\"COMPUTER SOUND\" بهذا الإعداد."
 }

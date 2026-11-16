@@ -2044,5 +2044,7 @@
 "The microphone (the default capture device) is the input.": "Mikrofon (perangkat perekaman bawaan) berfungsi sebagai input.",
 "FLAC 24-bit (lossless)": "FLAC 24-bit (tanpa kehilangan kualitas)",
 "HI-RES AUDIO": "AUDIO BERESOLUSI TINGGI",
-"● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV or FLAC files, one per source, named by time.": "● Tombol REC pada MIXER merekam saluran utama dan setiap saluran yang telah diaktifkan (pra-fader, setelah trim / DSP / insert) ke dalam berkas WAV atau FLAC, satu berkas per sumber, dengan nama berkas berdasarkan waktu."
+"● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV or FLAC files, one per source, named by time.": "● Tombol REC pada MIXER merekam saluran utama dan setiap saluran yang telah diaktifkan (pra-fader, setelah trim / DSP / insert) ke dalam berkas WAV atau FLAC, satu berkas per sumber, dengan nama berkas berdasarkan waktu.",
+"MICROPHONE ON AT START": "MIKROFON AKTIF SAAT MULAI",
+"OFF: ENGINE ON starts the speakers or headphones without the microphone, so the mic never feeds back at start. Turn the mic on with INPUT: MIC on the mixer. ASIO interfaces and COMPUTER SOUND are not affected.": "OFF: ENGINE ON akan mengaktifkan speaker atau headphone tanpa mikrofon, sehingga mikrofon tidak akan menimbulkan umpan balik saat dinyalakan. Aktifkan mikrofon dengan memilih INPUT: MIC pada mixer. Antarmuka ASIO dan COMPUTER SOUND tidak terpengaruh."
 }

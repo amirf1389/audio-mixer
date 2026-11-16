@@ -147,6 +147,15 @@
     <string name="remote_input_mic_on">Input: the console\'s microphone.</string>
     <string name="remote_input_music_on">Input: computer sound on CH 1-2.</string>
     <string name="mute_groups">MUTE GROUPS</string>
+    <string name="consoles">CONSOLES</string>
+    <string name="consoles_none">No console paired yet. PAIR NEW: the PIN or the QR code from the console (NETWORK → PHONE REMOTE).</string>
+    <string name="consoles_seen">last connected %1$s</string>
+    <string name="pair_new">PAIR NEW</string>
+    <string name="forget">FORGET</string>
+    <string name="forget_ask">Forget %1$s on this phone? Pairing again needs a new PIN.</string>
+    <string name="reconnecting">Connection lost: reconnecting (try %1$d, in %2$d s)</string>
+    <string name="link_up">● %1$s · %2$s · %3$s</string>
+    <string name="live_sync">LIVE SYNC</string>
     <string name="mute_groups_note">Eight groups kept on this phone. Tap a group to mute or un-mute all its channels; EDIT picks the channels.</string>
     <string name="mute_group_n">MUTE %1$d</string>
     <string name="mute_group_edit">EDIT</string>

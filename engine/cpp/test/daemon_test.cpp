@@ -125,8 +125,22 @@ int main() {
   { am::httpd::WebSocket ws(fd); std::string t; int op = 0; CHECK(ws.read(t, op) && op == 1 && t.find("unauthorised") != std::string::npos); ws.close(); }
   fd = am::httpd::Client::connectWs("127.0.0.1", port, "/ws/meters?token=" + o.token, {}); CHECK(fd >= 0);
   { am::httpd::WebSocket ws(fd); std::string t; int op = 0; int frames = 0;
+    CHECK(ws.read(t, op) && op == 1); { Value f = Value::parse(t, ok); CHECK(ok && f["state"]["strips"].size() == 8 && f["state"]["v"].asNumber() > 0); }   // LIVE SYNC: the state first
     for (int i = 0; i < 3; ++i) { CHECK(ws.read(t, op) && op == 1); Value f = Value::parse(t, ok); CHECK(ok && f["strips"].size() == 8); ++frames; }
-    CHECK(frames == 3); ws.close(); }
+    CHECK(frames == 3);
+    // another remote moves strip 3: this watcher gets the new state pushed, without asking
+    const double v0 = d.state()["v"].asNumber();
+    CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"gain\",\"strip\":3,\"db\":-7.5}", auth, status, body) && status == 200);
+    bool pushed = false;
+    for (int i = 0; i < 40 && !pushed; ++i) { CHECK(ws.read(t, op)); Value f = Value::parse(t, ok); if (ok && f.has("state")) { pushed = f["state"]["strips"].at(3)["db"].asNumber() == -7.5 && f["state"]["v"].asNumber() > v0; } }
+    CHECK(pushed);
+    ws.close(); }
+  { // GET /api/state?since=N: a short answer while nothing changed, the full state after a change
+    const std::string v = std::to_string(static_cast<unsigned long long>(d.stateVersion()));
+    CHECK(am::httpd::Client::request("127.0.0.1", port, "GET", "/api/state?since=" + v, "", {}, status, body) && status == 200 && Value::parse(body, ok)["same"].asBool());
+    CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"mute\",\"strip\":2,\"on\":true}", auth, status, body) && status == 200);
+    CHECK(am::httpd::Client::request("127.0.0.1", port, "GET", "/api/state?since=" + v, "", {}, status, body) && status == 200);
+    Value st = Value::parse(body, ok); CHECK(ok && !st["same"].asBool() && st["strips"].at(2)["mute"].asBool()); }
 
   CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"stop\"}", auth, status, body) && status == 200);
   CHECK(!d.state()["running"].asBool());
@@ -135,6 +149,12 @@ int main() {
   { using S = am::httpd::Server; auto ip = [](unsigned a, unsigned b, unsigned c, unsigned d) { return static_cast<unsigned long>((a << 24) | (b << 16) | (c << 8) | d); };   // the local policy
     CHECK(S::localPeer(ip(127, 0, 0, 1)) && S::localPeer(ip(192, 168, 1, 20)) && S::localPeer(ip(10, 4, 5, 6)) && S::localPeer(ip(172, 16, 0, 9)) && S::localPeer(ip(172, 31, 255, 1)) && S::localPeer(ip(169, 254, 3, 3)));
     CHECK(!S::localPeer(ip(8, 8, 8, 8)) && !S::localPeer(ip(172, 32, 0, 1)) && !S::localPeer(ip(172, 15, 0, 1)) && !S::localPeer(ip(192, 169, 1, 1)) && !S::localPeer(ip(100, 64, 0, 1)) && !S::localPeer(ip(203, 0, 113, 7))); }
-  std::printf("daemon_test: json, local policy, token gate, control/state, HTTP meters, WebSocket meters OK on port %u\n", port);
+  { // SEED: the console's mixer, loaded when the service starts
+    const std::string sf = "daemon_test_seed.json"; { std::FILE* f = std::fopen(sf.c_str(), "wb"); std::fputs("{\"strips\":[{\"name\":\"Vocal\",\"db\":-4,\"pan\":0.25,\"mute\":false,\"solo\":true},{\"name\":\"Gtr\",\"db\":-12,\"mute\":true}],\"master\":{\"db\":-2}}", f); std::fclose(f); }
+    am::Daemon::Options so = o; so.port = 0; so.seed = sf; so.tokenStore.clear(); am::Daemon sd(so); std::string e; CHECK(sd.start(e));
+    const Value st = sd.state(); CHECK(st["strips"].at(0)["name"].asString() == "Vocal" && st["strips"].at(0)["db"].asNumber() == -4 && st["strips"].at(0)["solo"].asBool());
+    CHECK(st["strips"].at(1)["mute"].asBool() && st["strips"].at(1)["db"].asNumber() == -12 && st["master"]["db"].asNumber() == -2);
+    sd.stop(); std::remove(sf.c_str()); }
+  std::printf("daemon_test: live state push, seed, json, local policy, token gate, control/state, HTTP meters, WebSocket meters OK on port %u\n", port);
   return 0;
 }
