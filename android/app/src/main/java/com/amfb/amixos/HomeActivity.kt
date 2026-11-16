@@ -20,7 +20,7 @@ class HomeActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(32, 40, 32, 32) }
         box.addView(TextView(this).apply { text = "AMF X1"; setTextColor(getColor(R.color.accent)); textSize = 28f; typeface = Typeface.DEFAULT_BOLD; letterSpacing = 0.18f })
-        box.addView(TextView(this).apply { text = getString(R.string.home_by); setTextColor(getColor(R.color.dim)); textSize = 12f; letterSpacing = 0.2f; setPadding(0, 0, 0, 24) })
+        box.addView(TextView(this).apply { text = getString(R.string.home_by) + "   ·   " + (runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrNull() ?: ""); setTextColor(getColor(R.color.dim)); textSize = 12f; letterSpacing = 0.2f; setPadding(0, 0, 0, 24) })
         card = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; background = getDrawable(R.drawable.card_bg); setPadding(32, 28, 32, 28) }
         box.addView(card)
         val grid = GridLayout(this).apply { columnCount = 2; setPadding(0, 24, 0, 0) }
