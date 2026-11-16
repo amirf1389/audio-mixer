@@ -533,7 +533,9 @@ class Engine : public QObject {
   Q_INVOKABLE void setPluginBypass(int strip, int slot, bool bypass);
   // PHONES AND THE RACKS: the rack inserts (VST3, VST2, built-in fx) handed to the remote service while it plays, and what a phone changed
   // taken back (state and bypass onto the console's own instance, so the plug-in sounds the same when the console plays again)
-  QVariantList remoteRack(int strip) const;   // [{slot, kind, name, bypass, state}] of the inserts the service can play
+  QVariantList remoteRack(int strip) const;
+  QVariantMap masterChainSeed() const;        // the RTA EQ (program EQ) and mastering, for the remote service to play while phones are linked
+  QVariantList programEqGains() const;        // the RTA EQ's 10 gains (ISO octaves) as the console has them   // [{slot, kind, name, bypass, state}] of the inserts the service can play
   void takeRemotePlugin(int strip, int slot, bool bypass, const QString& state);
   Q_INVOKABLE QVariantList pluginCatalog() const;     // the built-in stages, for the chooser
   Q_INVOKABLE void movePlugin(int strip, int from, int to);   // reorder the rack (swap two slots)

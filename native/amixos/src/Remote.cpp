@@ -44,8 +44,8 @@ void Remote::writeSeed() {
   baseSet_ = consoleSettings();   // the service starts with the console's settings too
   QVariantList racks; const QVariantList ss = engine_->stripState();   // and with the console's plug-ins (with their state): they keep sounding
   for (int i = 0; i < ss.size(); ++i) { const QVariantList r = engine_->remoteRack(i); if (r.isEmpty()) continue; racks << QVariantMap{{"strip", i}, {"name", ss[i].toMap().value("name")}, {"plugins", r}}; }
-  racksV_ = 0;
-  if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) f.write(QJsonDocument::fromVariant(QVariantMap{{"strips", l}, {"master", QVariantMap{{"db", baseMaster_}}}, {"settings", baseSet_}, {"racks", racks}}).toJson(QJsonDocument::Compact));
+  racksV_ = 0; masterV_ = 0;
+  if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) f.write(QJsonDocument::fromVariant(QVariantMap{{"strips", l}, {"master", QVariantMap{{"db", baseMaster_}}}, {"settings", baseSet_}, {"racks", racks}, {"masterChain", engine_->masterChainSeed()}}).toJson(QJsonDocument::Compact));
 }
 QVariantMap Remote::consoleSettings() const {
   return {{"width", engine_->width()}, {"outputBits", engine_->outputBits()}, {"dcBlock", engine_->dcBlock()}, {"analog", engine_->dspMode() == QLatin1String("analog")},
@@ -99,7 +99,9 @@ void Remote::syncTick() {
     const QVariantMap o = QJsonDocument::fromJson(r->readAll()).toVariant().toMap();
     if (o.contains("remotes") && o.value("remotes").toInt() != remotes_) { remotes_ = o.value("remotes").toInt(); emit synced(); }
     if (o.value("same").toBool() || !o.contains("strips")) return;
-    { const quint64 rv = o.value("racksV").toULongLong(); if (rv && rv != racksV_) { racksV_ = rv; takeRacks(); } }   // a phone changed a plug-in: the console's instance follows
+    { const quint64 rv = o.value("racksV").toULongLong(); if (rv && rv != racksV_) { racksV_ = rv; takeRacks(); } }
+    { const quint64 mv = o.value("masterV").toULongLong(); const QVariantMap pe = o.value("programEq").toMap();   // a remote's RTA EQ onto the console
+      if (mv && mv != masterV_) { const bool first = masterV_ == 0; masterV_ = mv; if (!first && pe.contains("gains")) engine_->setGraphicEq(-1, pe.value("gains").toList(), pe.value("on").toBool()); } }   // a phone changed a plug-in: the console's instance follows
     { const QVariantMap rs = o.value("settings").toMap();   // a setting changed on a remote lands on the console
       for (auto it = baseSet_.begin(); it != baseSet_.end(); ++it) { if (!rs.contains(it.key())) continue; const QVariant r = rs.value(it.key());
         const bool diff = it.value().typeId() == QMetaType::Double ? std::abs(r.toDouble() - it.value().toDouble()) > 0.005 : (it.value().typeId() == QMetaType::Bool ? r.toBool() != it.value().toBool() : r.toInt() != it.value().toInt());

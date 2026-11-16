@@ -258,6 +258,31 @@ int main() {
     CHECK(am::httpd::Client::request("127.0.0.1", pp, "GET", "/api/racks?states=1", "", pa, status, body) && status == 200 && Value::parse(body, ok)["racks"].at(0)["slots"].at(0)["state"].asString().rfind("0.25", 0) == 0);
     { const int c0 = g_fake->calls.load(); std::this_thread::sleep_for(std::chrono::milliseconds(300)); CHECK(g_fake->calls.load() > c0); }   // the sound goes through it
     pd.stop(); std::remove(sf.c_str()); g_fake = nullptr; }
-  std::printf("daemon_test: live state push, seed, json, local policy, token gate, control/state, HTTP meters, WebSocket meters, connected phones (list, disconnect, hold, forget), console settings, Windows volume / GAIN MODE, console plug-ins OK on port %u\n", port);
+  { // RTA: a 1 kHz sine at -6 dBFS reads about -6 dB in its band and nothing far from it; the master's RTA EQ from the seed and from a remote
+    am::Rta rta; rta.source.store(am::Rta::kMaster); std::vector<float> L(256), R(256); double ph = 0;
+    for (int b = 0; b < 40; ++b) { for (std::size_t i = 0; i < L.size(); ++i) { L[i] = R[i] = 0.5f * static_cast<float>(std::sin(ph)); ph += 2 * 3.14159265358979 * 1000.0 / 48000.0; } rta.onBlock(nullptr, 0, L.data(), R.data(), L.size(), 48000); }
+    std::vector<double> db; CHECK(rta.bands(db)); const auto& c = am::Rta::centres(); std::size_t k1 = 0; for (std::size_t i = 0; i < c.size(); ++i) if (std::abs(std::log2(c[i] / 1000.0)) < std::abs(std::log2(c[k1] / 1000.0))) k1 = i;
+    double far = -200; for (std::size_t i = 0; i < c.size(); ++i) if (c[i] < 250 || c[i] > 4000) far = std::max(far, db[i]);
+    std::printf("daemon_test: RTA %zu bands, 1 kHz sine at -6 dBFS reads %.1f dB at %.0f Hz, at most %.1f dB away from it\n", c.size(), db[k1], c[k1], far);
+    CHECK(std::abs(db[k1] + 6.0) < 1.5 && far < -60 && c.size() >= 59 && c.size() <= 61);
+    am::Rta off; std::vector<double> d2; CHECK(!off.bands(d2));   // off: nothing collected
+    // the master chain from the seed, the RTA EQ op, and the RTA on the live stream
+    const std::string sf = "daemon_test_master.json"; { std::FILE* f = std::fopen(sf.c_str(), "wb"); std::fputs("{\"masterChain\":{\"eqOn\":true,\"eq\":[{\"type\":1,\"freq\":31.5,\"q\":1.41,\"gainDb\":3}],\"on\":false}}", f); std::fclose(f); }
+    am::Daemon::Options mo = o; mo.port = 0; mo.seed = sf; mo.tokenStore.clear(); am::Daemon md(mo); std::string e; CHECK(md.start(e)); const unsigned short mp = md.port(); const std::vector<std::pair<std::string, std::string>> ma = {{"X-Amix-Token", mo.token}};
+    CHECK(md.state()["programEq"]["on"].asBool() && md.state()["programEq"]["gains"].at(0).asNumber() == 3);
+    CHECK(am::httpd::Client::request("127.0.0.1", mp, "POST", "/api/control", "{\"op\":\"open\",\"backend\":\"null\",\"inChannels\":2,\"outChannels\":2}", ma, status, body) && status == 200);
+    const double mv = md.state()["masterV"].asNumber();
+    CHECK(am::httpd::Client::request("127.0.0.1", mp, "POST", "/api/control", "{\"op\":\"programEq\",\"gains\":[0,0,0,0,-4,0,2.5,0,0,30],\"on\":true}", ma, status, body) && status == 200);
+    { const Value pe = md.state()["programEq"]; CHECK(pe["gains"].at(4).asNumber() == -4 && pe["gains"].at(6).asNumber() == 2.5 && pe["gains"].at(9).asNumber() == 24 && md.state()["masterV"].asNumber() > mv); }   // clamped to +24
+    CHECK(am::httpd::Client::request("127.0.0.1", mp, "POST", "/api/control", "{\"op\":\"programEq\",\"gains\":[1,2]}", ma, status, body) && status == 400);
+    CHECK(am::httpd::Client::request("127.0.0.1", mp, "POST", "/api/control", "{\"op\":\"rta\",\"src\":-1}", ma, status, body) && status == 200);
+    int wf = am::httpd::Client::connectWs("127.0.0.1", mp, "/ws/meters?token=" + mo.token, {}); CHECK(wf >= 0);
+    { am::httpd::WebSocket ws(wf); std::string t; int op = 0; bool got = false, centres = false;
+      for (int i = 0; i < 80 && !got; ++i) { if (!ws.read(t, op)) break; Value f = Value::parse(t, ok); if (ok && f.has("rta")) { centres = centres || f["rta"].has("f"); got = f["rta"]["db"].size() > 50 && f["rta"]["src"].asInt() == -1; } }
+      CHECK(got && centres); ws.close(); }
+    CHECK(am::httpd::Client::request("127.0.0.1", mp, "GET", "/api/rta", "", ma, status, body) && status == 200 && Value::parse(body, ok)["f"].size() > 50);
+    CHECK(am::httpd::Client::request("127.0.0.1", mp, "POST", "/api/control", "{\"op\":\"rta\",\"src\":\"off\"}", ma, status, body) && status == 200 && md.rtaJson(false)["src"].asInt() == am::Rta::kOff);
+    md.stop(); std::remove(sf.c_str()); }
+  std::printf("daemon_test: live state push, seed, json, local policy, token gate, control/state, HTTP meters, WebSocket meters, connected phones (list, disconnect, hold, forget), console settings, Windows volume / GAIN MODE, console plug-ins, RTA and RTA EQ OK on port %u\n", port);
   return 0;
 }

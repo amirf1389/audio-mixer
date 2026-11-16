@@ -1220,6 +1220,15 @@ void Engine::setPlugin(int i, int slot, const QString& kind) {
   else if (wasIamf && iamfSlot(i) < 0 && kind != QStringLiteral("fx:iamfelement")) { s.spOn = true; pushSpatial(i); }   // taken out: the 360 stage holds the same place
   emit stripsChanged(); emit spatialMoved();
 }
+QVariantMap Engine::masterChainSeed() const {
+  QVariantList eq; for (int b = 0; b < am::MasterChain::kBands; ++b) { const auto& e = mp_.eq[b]; eq << QVariantMap{{"type", static_cast<int>(e.type)}, {"freq", e.freq}, {"q", e.q}, {"gainDb", e.gainDb}}; }
+  return {{"eqOn", mp_.eqOn}, {"eq", eq}, {"on", mp_.on}, {"analog", mp_.analog}, {"toneOn", mp_.toneOn}, {"compOn", mp_.compOn}, {"satOn", mp_.satOn}, {"deessOn", mp_.deessOn}, {"exciterOn", mp_.exciterOn},
+          {"bassMonoOn", mp_.bassMonoOn}, {"lowDb", mp_.lowDb}, {"midDb", mp_.midDb}, {"airDb", mp_.airDb}, {"thrDb", mp_.thrDb}, {"ratio", mp_.ratio}, {"attackMs", mp_.attackMs}, {"releaseMs", mp_.releaseMs},
+          {"makeupDb", mp_.makeupDb}, {"drive", mp_.drive}, {"gainDb", mp_.gainDb}, {"compMix", mp_.compMix}, {"deessThrDb", mp_.deessThrDb}, {"deessMaxDb", mp_.deessMaxDb}, {"exciterAmt", mp_.exciterAmt}, {"bassMonoHz", mp_.bassMonoHz}};
+}
+QVariantList Engine::programEqGains() const {
+  QVariantList g; for (int b = 0; b < 10; ++b) g << (mp_.eq[b].type == FilterType::Peaking && std::fabs(mp_.eq[b].freq - kIsoCentres[b]) < 1 ? mp_.eq[b].gainDb : 0.0); return g;
+}
 QVariantList Engine::remoteRack(int i) const {
   QVariantList l; if (i < 0 || i >= kStrips) return l; const StripUi& s = strips_[static_cast<std::size_t>(i)];
   for (int k = 0; k < kPluginSlots; ++k) { const PluginUi& p = s.plugins[k]; if (!isVstKind(p.kind)) continue;

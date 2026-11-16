@@ -31,6 +31,8 @@
 
 #include "audiomixer/runtime.hpp"
 #include "plugin/plugin.hpp"
+#include "rta.hpp"
+#include "audiomixer/master_chain.hpp"
 #include "httpd.hpp"
 #include "json.hpp"
 #include "tokens.hpp"
@@ -77,6 +79,13 @@ class Daemon {
   //   POST /api/control {"op":"plugin","strip":N,"slot":K, "bypass":true|false | "param":ID,"value":0..1}
   json::Value racks(int strip = -1, bool params = false, bool states = false) const;
   unsigned long long racksVersion() const { return racksV_.load(); }
+  // RTA (the spectrum for the remotes' EQ pages): POST {"op":"rta","src":-1 (master) | strip | "off"}; while on (a remote renews it every
+  // few seconds, else it stops by itself after 20 s) /ws/meters also carries {"rta":{"src","db":[..]}} ten times a second, and GET /api/rta
+  // answers {"src","f":[band centres],"db":[..]}.
+  // RTA EQ (the console's program EQ on the master, 10 bands at the ISO octaves, and its mastering chain, handed over in the seed):
+  //   POST {"op":"programEq","gains":[10 dB] (-24..24),"on":true|false}; the state has "programEq":{"on","gains"} and "masterV".
+  json::Value rtaJson(bool withCentres) const;
+  static constexpr double kIso[10] = {31.5, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000};
   // CONSOLE SETTINGS over the remote (POST /api/control {"op":"setting","key":K,"value":V}), applied to the sound while the service runs
   // it, reported in the state as "settings" (and kept in step with the console): width 0..2, outputBits 0 (float) / 16 / 24 (-1 auto =
   // float here), dcBlock, analog (DSP MODE ANALOG on every channel), autoLevel / autoTarget (-30..-6 LUFS) / autoMax (0..24 dB), clipDb
@@ -109,6 +118,8 @@ class Daemon {
   struct Link { int id = 0; std::string tokenId, name, role, ip; long long since = 0; std::atomic<bool> kick{false}; };
   mutable std::mutex linksM_; std::map<int, std::shared_ptr<Link>> links_; int nextLink_ = 1; std::map<std::string, long long> held_;   // tokenId -> until (unix s)
   bool held(const std::string& tokenId) const;
+  Rta rta_; std::atomic<long long> rtaUntil_{0}; MasterChain master_; MasterChain::Params mp_; std::atomic<unsigned long long> masterV_{1};
+  json::Value programEqJson() const;
   struct PlugSlot { int slot = 0; std::string kind, name, state, error; bool bypass = false; std::shared_ptr<host::Plugin> pl; };
   std::map<int, std::vector<PlugSlot>> racks_; std::map<int, std::string> rackNames_; std::atomic<unsigned long long> racksV_{1};
   void loadRacks(Runtime& rt);   // every slot made at the runtime's rate, the chains handed to it (m_ held)

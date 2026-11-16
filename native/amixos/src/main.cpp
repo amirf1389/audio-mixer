@@ -802,6 +802,16 @@ int main(int argc, char* argv[]) {
             std::printf("amixos --smoke: CONSOLE PLUG-INS %s played by the service, a phone set %s to %.2f, the console followed in %lld ms\n", qPrintable(slot.value("name").toString()), qPrintable(ps[0].toMap().value("title").toString()), want, static_cast<long long>(t.elapsed())); } }
         engine.setPlugin(5, 0, QString());
         if (!rackOk) { std::fprintf(stderr, "amixos --smoke: CONSOLE PLUG-INS failed: %s\n", qPrintable(rackWhy)); remote.stop(); return 290; }
+        // RTA EQ and RTA: a remote sets the console's RTA EQ (the service plays it, the console takes it back); the analyzer answers
+        { const QVariantList keep = engine.programEqGains(); bool eqOk = false; qint64 eqMs = -1;
+          http("/api/control", "{\"op\":\"programEq\",\"gains\":[0,0,3,0,0,-2.5,0,0,0,0],\"on\":true}"); QElapsedTimer t; t.start();
+          while (t.elapsed() < 3000) { wait(40); const QVariantList g = engine.programEqGains(); if (g.size() == 10 && std::abs(g[2].toDouble() - 3) < 0.01 && std::abs(g[5].toDouble() + 2.5) < 0.01) { eqOk = true; eqMs = t.elapsed(); break; } }
+          http("/api/control", "{\"op\":\"rta\",\"src\":-1}"); wait(400);
+          QNetworkRequest q(QUrl("http://127.0.0.1:8765/api/rta")); q.setRawHeader("X-Amix-Token", remote.token().toUtf8()); QNetworkReply* r = nam.get(q); QElapsedTimer tr; tr.start(); while (!r->isFinished() && tr.elapsed() < 3000) app.processEvents(QEventLoop::AllEvents, 20);
+          const QVariantMap rta = QJsonDocument::fromJson(r->readAll()).toVariant().toMap(); r->deleteLater(); http("/api/control", "{\"op\":\"rta\",\"src\":\"off\"}");
+          engine.setGraphicEq(-1, keep, true); wait(200);
+          std::printf("amixos --smoke: RTA EQ remote->console %lld ms; RTA %d bands\n", static_cast<long long>(eqMs), static_cast<int>(rta.value("f").toList().size()));
+          if (!eqOk || rta.value("f").toList().size() < 50) { std::fprintf(stderr, "amixos --smoke: RTA EQ / RTA failed (eq %d, bands %d)\n", eqOk, static_cast<int>(rta.value("f").toList().size())); remote.stop(); return 291; } }
         // SETTINGS SYNC: a remote changes the stereo width and GAIN MODE: the console follows; the console changes the width: the service follows
         const double keepW = engine.width(); const bool keepG = engine.windowsGainMode(); bool setOk = false; qint64 setIn = -1, setOut = -1;
         { http("/api/control", "{\"op\":\"setting\",\"key\":\"width\",\"value\":0.5}"); http("/api/control", "{\"op\":\"setting\",\"key\":\"winGain\",\"value\":" + QByteArray(keepG ? "false" : "true") + "}");
