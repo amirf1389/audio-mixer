@@ -2,27 +2,45 @@
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>AmF X1 Remote</title>
 <style>
-:root{--bg:#0b0f15;--card:#121821;--line:#232c38;--text:#e6edf3;--dim:#8b98a8;--accent:#ea580c;--cyan:#22d3ee;--red:#ef4444;--amber:#fbbf24}
+:root{--bg:#0b0f15;--card:#121821;--line:#232c38;--text:#e6edf3;--dim:#8b98a8;--accent:#ea580c;--cyan:#22d3ee;--red:#ef4444;--amber:#fbbf24;--green:#34d399;--fh:220px;--cw:84px}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:13px/1.35 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
-header{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:10px;padding:10px 16px;background:#0b0f15ee;border-bottom:1px solid var(--line);backdrop-filter:blur(6px)}
-h1{margin:0;font-size:15px;letter-spacing:.12em;color:var(--accent)}#st{margin-left:auto;font:11px ui-monospace,monospace;color:var(--amber)}
+header{position:sticky;top:0;z-index:2;background:#0b0f15ee;border-bottom:1px solid var(--line);backdrop-filter:blur(6px)}
+.top{display:flex;align-items:center;gap:10px;padding:10px 16px}
+h1{margin:0;font-size:15px;letter-spacing:.12em;color:var(--accent);white-space:nowrap}#st{margin-left:auto;font:11px ui-monospace,monospace;color:var(--amber);text-align:right}
+nav{display:none;gap:4px;padding:0 12px 8px;overflow-x:auto;scrollbar-width:none}nav::-webkit-scrollbar{display:none}
+nav button{flex:0 0 auto;min-height:34px;padding:6px 12px;background:transparent;border-color:transparent;color:var(--dim);letter-spacing:.06em}
+nav button.cur{background:#1a2230;border-color:var(--line);color:var(--text);box-shadow:inset 0 -2px 0 var(--accent)}
 main{padding:12px 16px 32px;max-width:1400px;margin:0 auto}
 .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px}
+h2{margin:0 0 10px;font-size:12px;letter-spacing:.1em;color:var(--dim)}
 #pair{max-width:380px;margin:40px auto;display:grid;gap:10px}#pair p{margin:0;color:var(--dim)}
 input{width:100%;padding:12px;border-radius:8px;border:1px solid var(--line);background:#0b0f15;color:var(--text);font:20px ui-monospace,monospace;letter-spacing:.3em;text-align:center}
+select{padding:9px 10px;border-radius:8px;border:1px solid var(--line);background:#0b0f15;color:var(--text);font:13px system-ui;min-height:40px}
 button{padding:10px 12px;border-radius:8px;border:1px solid var(--line);background:#1a2230;color:var(--text);font-weight:700;font-size:12px;cursor:pointer;min-height:40px}
-button.on.m{background:var(--red);border-color:var(--red)}button.on.s{background:var(--amber);color:#111;border-color:var(--amber)}button.pri{background:var(--accent);border-color:var(--accent)}
-#mix{display:none}.bar{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap}.bar .sp{flex:1}
-#strips{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px}
+button.on.m,button.on.red{background:var(--red);border-color:var(--red)}button.on.s,button.on.amb{background:var(--amber);color:#111;border-color:var(--amber)}button.pri,button.on.acc{background:var(--accent);border-color:var(--accent)}
+.page{display:none}.bar{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap}.bar .sp{flex:1}
+#strips{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--cw),1fr));gap:8px}
 .ch{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 6px;display:flex;flex-direction:column;align-items:center;gap:6px}
 .ch.master{border-color:var(--accent)}.nm{font-weight:700;font-size:11px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.fz{display:flex;gap:6px;height:220px;align-items:stretch}
+.fz{display:flex;gap:6px;height:var(--fh);align-items:stretch}
 input[type=range].f{writing-mode:vertical-lr;direction:rtl;width:30px;height:100%;padding:0;letter-spacing:0;accent-color:var(--accent)}
+input[type=range].h{width:100%;padding:0;letter-spacing:0;accent-color:var(--accent);height:30px}
 .mt{width:8px;background:#05080c;border-radius:3px;position:relative;overflow:hidden}.mt i{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(to top,#16a34a,#16a34a 70%,#eab308 85%,#ef4444)}
+body.nometers .mt{display:none}
 .db{font:11px ui-monospace,monospace;color:var(--cyan)}.ms{display:flex;gap:4px;width:100%}.ms button{flex:1;padding:6px 0;min-height:34px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px}
+.row{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--line)}.row:first-of-type{border-top:0}.row>span:first-child{flex:1}.row small{display:block;color:var(--dim);font-size:11px}
+.bus .hd{display:flex;align-items:center;gap:8px;margin-bottom:6px}.bus .hd b{flex:1}.bus label{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--dim)}.bus label span{width:56px}.bus label em{font:11px ui-monospace,monospace;color:var(--cyan);width:52px;text-align:right;font-style:normal}
+.seg{display:flex;gap:4px;flex-wrap:wrap}.seg button{min-height:34px;padding:6px 10px}
+.big{font:600 34px ui-monospace,monospace;color:var(--text);letter-spacing:.04em}.big.rec{color:var(--red)}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font:12px ui-monospace,monospace}.kv b{color:var(--dim);font-weight:400}
+.lm{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px}.lm div{background:#0b0f15;border:1px solid var(--line);border-radius:8px;padding:10px}.lm small{color:var(--dim);font-size:10px;letter-spacing:.08em}.lm b{display:block;font:600 20px ui-monospace,monospace;color:var(--cyan)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--dim);margin-right:6px}.dot.ok{background:var(--green)}.dot.bad{background:var(--red)}
+.note{color:var(--dim);font-size:11px;margin:8px 0 0}
 .err{color:var(--red)}
 </style></head><body>
-<header><h1>AMF X1 · REMOTE</h1><span id="st">not paired</span></header>
+<header><div class="top"><h1>AMF X1 · REMOTE</h1><span id="st">not paired</span></div>
+<nav id="nav"><button data-p="mix">MIXER</button><button data-p="bus">BUSES</button><button data-p="mon">MONITOR</button><button data-p="rec">RECORD</button><button data-p="sys">STATUS</button><button data-p="set">SETTINGS</button></nav></header>
 <main>
 <section id="pair" class="card">
 <p>On the computer: <b>NETWORK → PHONE REMOTE</b> shows a six-digit PIN that changes every minute, and a QR code. Scan the code with this device's camera, or type the PIN here.</p>
@@ -30,55 +48,149 @@ input[type=range].f{writing-mode:vertical-lr;direction:rtl;width:30px;height:100
 <input id="who" placeholder="this device's name" style="font:14px system-ui;letter-spacing:0" aria-label="Device name">
 <button class="pri" id="go">PAIR</button><p id="perr" class="err"></p>
 </section>
-<section id="mix">
-<div class="bar"><button id="p1">CH 1–16</button><button id="p2">CH 17–32</button><span class="sp"></span><button id="clip">CLEAR CLIPS</button><button id="out">FORGET THIS DEVICE</button></div>
+<section id="mix" class="page">
+<div class="bar"><span id="pages" class="seg"></span><span class="sp"></span><button id="clip">CLEAR CLIPS</button></div>
 <div id="strips"></div>
 </section>
+<section id="bus" class="page"><div class="bar"><span class="seg"><button id="bAux" class="on acc">AUX 1–8</button><button id="bFx">FX 1–8</button></span><span class="sp"></span></div><div id="buses" class="grid"></div>
+<p class="note">AUX buses are the monitor mixes, FX buses the effect returns. LEVEL is the bus master, RETURN what comes back into the main mix.</p></section>
+<section id="mon" class="page"><div class="grid">
+<div class="card"><h2>MONITOR · CONTROL ROOM</h2>
+<div class="row"><span>Source<small>what the monitor outputs play</small></span><select id="mSrc"></select></div>
+<div class="row"><span>Level <em id="mDbT" class="db"></em></span></div><input type="range" class="h" id="mDb" min="0" max="1000" aria-label="Monitor level">
+<div class="row"><span>Switches</span><span class="seg"><button id="mDim">DIM</button><button id="mMono">MONO</button><button id="mMute">MUTE</button></span></div></div>
+<div class="card"><h2>MASTER LIMITER</h2>
+<div class="row"><span>Limiter<small>keeps the master under the ceiling</small></span><button id="lOn">ON</button></div>
+<div class="row"><span>Ceiling <em id="lCeT" class="db"></em></span></div><input type="range" class="h" id="lCe" min="-200" max="0" step="5" aria-label="Limiter ceiling">
+<div class="row"><span>Master <em id="mMaT" class="db"></em></span></div><input type="range" class="h" id="mMa" min="0" max="1000" aria-label="Master level"></div>
+</div></section>
+<section id="rec" class="page"><div class="grid">
+<div class="card"><h2>RECORD THE MASTER</h2><div id="rT" class="big">00:00:00</div><p id="rF" class="note">not recording</p>
+<div class="row"><span>Format<small>saved on the computer, in its recordings folder</small></span><select id="rFmt"><option value="flac">FLAC 24-bit</option><option value="wav24">WAV 24-bit</option><option value="wavf32">WAV 32-bit float</option></select></div>
+<div class="bar" style="margin:10px 0 0"><button id="rGo" class="pri" style="flex:1">● RECORD</button><button id="rStop" style="flex:1">■ STOP</button></div></div>
+<div class="card"><h2>LOUDNESS</h2><div class="lm"><div><small>MOMENTARY</small><b id="lM">—</b></div><div><small>SHORT-TERM</small><b id="lS">—</b></div><div><small>INTEGRATED</small><b id="lI">—</b></div><div><small>RANGE</small><b id="lR">—</b></div><div><small>TRUE PEAK</small><b id="lT">—</b></div><div><small>CORRELATION</small><b id="lC">—</b></div></div>
+<p class="note">LUFS (EBU R128) of the master, as the console measures it.</p></div></div></section>
+<section id="sys" class="page"><div class="grid">
+<div class="card"><h2>CONSOLE</h2><div class="kv" id="sKv"></div></div>
+<div class="card"><h2>THIS CONNECTION</h2><div class="kv" id="cKv"></div></div></div></section>
+<section id="set" class="page"><div class="grid">
+<div class="card"><h2>MIXER</h2>
+<div class="row"><span>Strips per page</span><span class="seg" id="oPer"></span></div>
+<div class="row"><span>Fader size</span><span class="seg" id="oFh"></span></div>
+<div class="row"><span>Strip width</span><span class="seg" id="oCw"></span></div>
+<div class="row"><span>Level meters<small>off saves battery and data on a slow network</small></span><button id="oMet"></button></div></div>
+<div class="card"><h2>BEHAVIOUR</h2>
+<div class="row"><span>Live sync<small>follow changes made on the console and on other remotes</small></span><button id="oSync"></button></div>
+<div class="row"><span>Vibrate on buttons<small>phones that support it</small></span><button id="oVib"></button></div>
+<div class="row"><span>Keep the screen on<small id="oWakeN">while this page is open</small></span><button id="oWake"></button></div>
+<div class="row"><span>Ask before stopping a recording</span><button id="oAsk"></button></div></div>
+<div class="card"><h2>THIS DEVICE</h2>
+<div class="row"><span>Paired<small id="oWho">—</small></span></div>
+<div class="row"><span>Reset these settings</span><button id="oReset">RESET</button></div>
+<div class="row"><span>Forget this device<small>it needs a new PIN to come back</small></span><button id="out" class="on red">FORGET</button></div>
+<p class="note">These settings are kept in this browser only. The console's own settings are on the computer.</p></div></div></section>
 </main>
 <script>
 "use strict";
-const $=s=>document.querySelector(s);let token=null,page=0,state=null,ws=null,poll=null,drag=null,synced=0;addEventListener("pointerup",()=>{drag=null});addEventListener("pointercancel",()=>{drag=null});const els=[];
+const $=s=>document.querySelector(s);let token=null,page=0,state=null,ws=null,poll=null,drag=null,synced=0,tab="mix",busSet=0,lastMeters=null,wakeLock=null,status=null,statusT=null;
+addEventListener("pointerup",()=>{drag=null});addEventListener("pointercancel",()=>{drag=null});
+const ls={get(k,d){try{const v=localStorage.getItem("amfx1."+k);return v===null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem("amfx1."+k,JSON.stringify(v))}catch(e){}}};
 try{token=localStorage.getItem("amfx1.token")}catch(e){}
+const DEF={per:16,fh:220,cw:84,meters:true,sync:true,vib:false,wake:false,ask:true};const opt=Object.assign({},DEF,ls.get("opts",{}));
 const posToDb=p=>p<=0?-120:p>=1?10:p>=.75?(p-.75)*40:p>=.5?-20+(p-.5)*80:p>=.25?-60+(p-.25)*160:-120+p*240;
 const dbToPos=d=>d<=-120?0:d>=10?1:d>=0?.75+d/40:d>=-20?.5+(d+20)/80:d>=-60?.25+(d+60)/160:(d+120)/240;
 const fmt=d=>d<=-119?"-∞":(d>0?"+":"")+d.toFixed(1);const lin=v=>v>1e-6?20*Math.log10(v):-120;const mpos=v=>Math.max(0,Math.min(1,(lin(v)+60)/60));
+const busName=k=>k<8?"AUX "+(k+1):"FX "+(k-7);const buzz=()=>{if(opt.vib&&navigator.vibrate)try{navigator.vibrate(12)}catch(e){}};
 async function api(path,body){const r=await fetch(path,{method:body?"POST":"GET",headers:Object.assign({"Content-Type":"application/json"},token?{"X-Amix-Token":token}:{}),body:body?JSON.stringify(body):undefined});
  const j=await r.json().catch(()=>({}));if(r.status===401&&token&&path!=="/api/pair"){forget("this device was signed out on the computer");throw new Error("signed out")}if(!r.ok)throw new Error(j.error||("HTTP "+r.status));return j}
 function setSt(t,bad){const s=$("#st");s.textContent=t;s.style.color=bad?"var(--red)":"var(--cyan)"}
 let sendT={};function send(key,cmd){clearTimeout(sendT[key]);sendT[key]=setTimeout(()=>api("/api/control",cmd).catch(e=>setSt(e.message,true)),25)}   // a moving fader sends at most 40 times a second
-function build(){const box=$("#strips");box.textContent="";els.length=0;if(!state)return;const from=page*16,to=Math.min(state.strips.length,from+16);
+const els=[];
+// ---- MIXER
+function pages(){const n=state?state.strips.length:0,per=Math.min(opt.per,n||opt.per),k=Math.max(1,Math.ceil(n/per));if(page>=k)page=k-1;const box=$("#pages");box.textContent="";
+ for(let p=0;p<k;++p){const b=document.createElement("button");b.textContent="CH "+(p*per+1)+"–"+Math.min(n,(p+1)*per);b.className=p===page?"pri":"";b.onclick=()=>{page=p;build()};box.appendChild(b)}}
+function build(){const box=$("#strips");box.textContent="";els.length=0;if(!state)return;pages();const per=opt.per,from=page*per,to=Math.min(state.strips.length,from+per);
  const add=(name,db,mute,solo,onF,onM,onS,master)=>{const c=document.createElement("div");c.className="ch"+(master?" master":"");
   c.innerHTML='<div class="nm"></div><div class="fz"><input type="range" class="f" min="0" max="1000"><div class="mt"><i></i></div></div><div class="db"></div><div class="ms"></div>';
   c.querySelector(".nm").textContent=name;const f=c.querySelector(".f"),d=c.querySelector(".db");f.value=Math.round(dbToPos(db)*1000);d.textContent=fmt(db);f.setAttribute("aria-label",name+" fader");
   f.oninput=()=>{const v=posToDb(f.value/1000);d.textContent=fmt(v);onF(v)};const ms=c.querySelector(".ms");
-  if(onM){const m=document.createElement("button");m.textContent="M";m.className="m"+(mute?" on":"");m.onclick=()=>{const on=!m.classList.contains("on");m.classList.toggle("on",on);onM(on)};ms.appendChild(m)}
-  if(onS){const s=document.createElement("button");s.textContent="S";s.className="s"+(solo?" on":"");s.onclick=()=>{const on=!s.classList.contains("on");s.classList.toggle("on",on);onS(on)};ms.appendChild(s)}
+  if(onM){const m=document.createElement("button");m.textContent="M";m.className="m"+(mute?" on":"");m.onclick=()=>{buzz();const on=!m.classList.contains("on");m.classList.toggle("on",on);onM(on)};ms.appendChild(m)}
+  if(onS){const s=document.createElement("button");s.textContent="S";s.className="s"+(solo?" on":"");s.onclick=()=>{buzz();const on=!s.classList.contains("on");s.classList.toggle("on",on);onS(on)};ms.appendChild(s)}
   box.appendChild(c);f.onpointerdown=()=>{drag=f};return {bar:c.querySelector(".mt i"),f,d,nm:c.querySelector(".nm"),m:ms.querySelector(".m"),s:ms.querySelector(".s")}};
  for(let i=from;i<to;++i){const s=state.strips[i];els.push(Object.assign({i},add(s.name||("CH "+(i+1)),s.db,s.mute,s.solo,v=>{s.db=v;send("g"+i,{op:"gain",strip:i,db:v})},on=>{s.mute=on;send("m"+i,{op:"mute",strip:i,on})},on=>{s.solo=on;send("s"+i,{op:"solo",strip:i,on})})))}
- els.push(Object.assign({i:-1},add("MASTER",state.master.db,false,false,v=>{state.master.db=v;send("master",{op:"master",db:v})},null,null,true)));
- $("#p1").classList.toggle("pri",page===0);$("#p2").classList.toggle("pri",page===1);$("#p2").style.display=state.strips.length>16?"":"none"}
+ els.push(Object.assign({i:-1},add("MASTER",state.master.db,false,false,v=>{state.master.db=v;send("master",{op:"master",db:v})},null,null,true)))}
 // LIVE SYNC: the service pushes {"state":...} the moment any remote or the console changes something: move what changed in place
-// (a fader under a finger or the mouse is left alone; a different number of strips builds the page again)
-function apply(s){if(!s||!s.strips)return;if(!state||s.strips.length!==state.strips.length){state=s;build();return}
+// (a control under a finger or the mouse is left alone; a different number of strips builds the page again)
+const free=e=>e!==drag&&e!==document.activeElement;
+function apply(s){if(!s||!s.strips)return;if(!state||s.strips.length!==state.strips.length){state=s;build();panels();return}
  for(const e of els){const x=e.i<0?s.master:s.strips[e.i];if(!x)continue;
-  if(e.f!==drag&&e.f!==document.activeElement){const p=Math.round(dbToPos(x.db)*1000);if(Math.abs(e.f.value-p)>2){e.f.value=p;e.d.textContent=fmt(x.db)}}
+  if(free(e.f)){const p=Math.round(dbToPos(x.db)*1000);if(Math.abs(e.f.value-p)>2){e.f.value=p;e.d.textContent=fmt(x.db)}}
   if(e.i>=0){const n=x.name||("CH "+(e.i+1));if(e.nm.textContent!==n)e.nm.textContent=n;if(e.m)e.m.classList.toggle("on",!!x.mute);if(e.s)e.s.classList.toggle("on",!!x.solo)}}
- state=s;synced=Date.now();setSt("connected · live sync")}
-function meters(o){if(!o||!o.strips)return;for(const e of els){const v=e.i<0?Math.max(o.master.l,o.master.r):(o.strips[e.i]||{}).pk||0;e.bar.style.height=(mpos(v)*100).toFixed(1)+"%"}}
+ state=s;synced=Date.now();panels();setSt("connected · live sync")}
+function meters(o){if(!o||!o.strips)return;lastMeters=o;if(opt.meters)for(const e of els){const v=e.i<0?Math.max(o.master.l,o.master.r):(o.strips[e.i]||{}).pk||0;e.bar.style.height=(mpos(v)*100).toFixed(1)+"%"}
+ if(tab==="rec"){const L=o.loudness||{},f=v=>typeof v==="number"&&v>-70?v.toFixed(1):"—";$("#lM").textContent=f(L.m);$("#lS").textContent=f(L.s);$("#lI").textContent=f(L.i);$("#lR").textContent=typeof L.lra==="number"&&L.lra>0?L.lra.toFixed(1):"—";$("#lT").textContent=f(L.tp);$("#lC").textContent=typeof o.correlation==="number"?o.correlation.toFixed(2):"—"}}
+// ---- BUSES, MONITOR, LIMITER: drawn from the state, kept up to date by the same push
+function hslider(id,lab,db,onV){const f=typeof id==="string"?$(id):id,t=typeof lab==="string"?$(lab):lab;if(free(f)){f.value=Math.round(dbToPos(db)*1000);t.textContent=fmt(db)}f.oninput=()=>{const v=posToDb(f.value/1000);t.textContent=fmt(v);onV(v)};f.onpointerdown=()=>{drag=f}}
+function buses(){const box=$("#buses");if(!state||!state.buses)return;const want=state.buses.filter(b=>busSet?b.id>=8:b.id<8);
+ if(box.childElementCount!==want.length||box.dataset.set!==String(busSet)){box.textContent="";box.dataset.set=busSet;
+  for(const b of want){const c=document.createElement("div");c.className="card bus";c.dataset.id=b.id;
+   c.innerHTML='<div class="hd"><b></b><button class="m">MUTE</button></div><label><span>LEVEL</span><input type="range" class="h lv" min="0" max="1000"><em class="lt"></em></label><label><span>RETURN</span><input type="range" class="h rt" min="0" max="1000"><em class="rtt"></em></label>';
+   c.querySelector("b").textContent=busName(b.id);box.appendChild(c)}}
+ for(const c of box.children){const id=+c.dataset.id,b=state.buses.find(x=>x.id===id);if(!b)continue;const m=c.querySelector(".m");m.classList.toggle("on",!!b.mute);
+  m.onclick=()=>{buzz();const on=!m.classList.contains("on");m.classList.toggle("on",on);b.mute=on;send("bm"+id,{op:"busMute",bus:id,on})};
+  hslider(c.querySelector(".lv"),c.querySelector(".lt"),b.db,v=>{b.db=v;send("bl"+id,{op:"busLevel",bus:id,db:v})});
+  hslider(c.querySelector(".rt"),c.querySelector(".rtt"),b.returnDb,v=>{b.returnDb=v;send("br"+id,{op:"busReturn",bus:id,db:v})})}}
+function monitor(){if(!state||!state.monitor)return;const m=state.monitor,sel=$("#mSrc");
+ if(sel.options.length!==1+(state.buses||[]).length){sel.textContent="";const o=document.createElement("option");o.value=0;o.textContent="MASTER";sel.appendChild(o);for(const b of state.buses||[]){const x=document.createElement("option");x.value=b.id+1;x.textContent=busName(b.id);sel.appendChild(x)}}
+ if(free(sel))sel.value=m.source;const sendMon=()=>send("mon",{op:"monitor",source:m.source,db:m.db,dim:m.dim,mono:m.mono,mute:m.mute});
+ sel.onchange=()=>{m.source=+sel.value;sendMon()};hslider("#mDb","#mDbT",m.db,v=>{m.db=v;sendMon()});
+ for(const [id,k,c] of [["#mDim","dim","amb"],["#mMono","mono","acc"],["#mMute","mute","red"]]){const b=$(id);b.classList.add(c);b.classList.toggle("on",!!m[k]);b.onclick=()=>{buzz();m[k]=!m[k];b.classList.toggle("on",m[k]);sendMon()}}
+ const M=state.master,ce=$("#lCe"),lo=$("#lOn");lo.classList.add("acc");lo.classList.toggle("on",!!M.limiter);lo.textContent=M.limiter?"ON":"OFF";
+ const sendLim=()=>send("lim",{op:"limiter",on:M.limiter,ceilingDb:M.ceilingDb});lo.onclick=()=>{buzz();M.limiter=!M.limiter;lo.classList.toggle("on",M.limiter);lo.textContent=M.limiter?"ON":"OFF";sendLim()};
+ if(free(ce)){ce.value=Math.round((M.ceilingDb??-.5)*10);$("#lCeT").textContent=(M.ceilingDb??-.5).toFixed(1)+" dBTP"}ce.oninput=()=>{M.ceilingDb=ce.value/10;$("#lCeT").textContent=M.ceilingDb.toFixed(1)+" dBTP";sendLim()};ce.onpointerdown=()=>{drag=ce};
+ hslider("#mMa","#mMaT",M.db,v=>{M.db=v;send("master",{op:"master",db:v});const e=els.find(x=>x.i<0);if(e){e.f.value=Math.round(dbToPos(v)*1000);e.d.textContent=fmt(v)}})}
+function panels(){if(tab==="bus")buses();if(tab==="mon")monitor()}
+// ---- RECORD and STATUS: the console's status, read every two seconds while one of these pages is open
+const base=f=>String(f||"").split(/[\\/]/).pop();   // the file name only: a remote does not need the computer's folders
+const hms=s=>{s=Math.floor(s||0);return [s/3600|0,(s/60|0)%60,s%60].map(x=>String(x).padStart(2,"0")).join(":")};
+async function readStatus(){try{status=await api("/api/status")}catch(e){status=null}showStatus()}
+function showStatus(){const s=status||{};const r=$("#rT");r.textContent=hms(s.recording?s.recordSeconds:0);r.classList.toggle("rec",!!s.recording);
+ $("#rF").textContent=s.recording?"recording "+(base(s.recordFile)||"")+" · in the recordings folder on the computer":"not recording";$("#rGo").disabled=!!s.recording;$("#rStop").disabled=!s.recording;
+ const kv=(box,rows)=>{box.textContent="";for(const [k,v,cls] of rows){const b=document.createElement("b");b.textContent=k;const d=document.createElement("span");if(cls){const i=document.createElement("i");i.className="dot "+cls;d.appendChild(i)}d.appendChild(document.createTextNode(v));box.append(b,d)}};
+ kv($("#sKv"),[["name",s.name||"—"],["version",s.version||"—"],["plan",s.plan||"—"],["engine",s.running?"running":"stopped",s.running?"ok":"bad"],["driver",s.backend||"—"],["channels",(s.strips||"—")+" strips · "+(s.buses||"—")+" buses"],["blocks",s.blocks!=null?String(s.blocks):"—"],["dropouts",s.xruns!=null?String(s.xruns):"—",s.xruns?"bad":"ok"],["up",hms(s.uptimeS)],["last error",s.lastError||"none"]]);
+ const live=ws&&ws.readyState===1;kv($("#cKv"),[["address",location.host],["stream",live?"open":"closed",live?"ok":"bad"],["live sync",opt.sync?(live?"on":"waiting"):"off",opt.sync&&live?"ok":""],["last change",synced?new Date(synced).toLocaleTimeString():"—"],["meters",opt.meters?"on":"off"],["paired as",ls.get("who","—")]])}
+$("#rGo").onclick=async()=>{buzz();try{const j=await api("/api/control",{op:"record",on:true,format:$("#rFmt").value});setSt("recording"+(j.file?": "+base(j.file):""));readStatus()}catch(e){setSt(e.message,true)}};
+$("#rStop").onclick=async()=>{if(opt.ask&&!confirm("Stop the recording?"))return;buzz();try{await api("/api/control",{op:"record",on:false});readStatus()}catch(e){setSt(e.message,true)}};
+// ---- SETTINGS (this browser only)
+function save(){ls.set("opts",opt);applyOpts()}
+function applyOpts(){document.body.style.setProperty("--fh",opt.fh+"px");document.body.style.setProperty("--cw",opt.cw+"px");document.body.classList.toggle("nometers",!opt.meters);
+ const seg=(id,vals,key,lab)=>{const box=$(id);box.textContent="";for(const v of vals){const b=document.createElement("button");b.textContent=lab(v);b.className=opt[key]===v?"on acc":"";b.onclick=()=>{buzz();opt[key]=v;page=0;save();build()};box.appendChild(b)}};
+ seg("#oPer",[8,16,32],"per",v=>String(v));seg("#oFh",[160,220,300],"fh",v=>v===160?"S":v===220?"M":"L");seg("#oCw",[72,84,104],"cw",v=>v===72?"NARROW":v===84?"NORMAL":"WIDE");
+ const tog=(id,key,after)=>{const b=$(id);b.className="acc"+(opt[key]?" on":"");b.textContent=opt[key]?"ON":"OFF";b.onclick=()=>{opt[key]=!opt[key];buzz();save();if(after)after()}};
+ tog("#oMet","meters",()=>{if(!opt.meters)for(const e of els)e.bar.style.height="0"});tog("#oSync","sync",()=>{if(opt.sync)load()});tog("#oVib","vib");tog("#oWake","wake",wake);tog("#oAsk","ask");
+ $("#oWho").textContent=ls.get("who","this browser")}
+async function wake(){try{if(opt.wake&&!document.hidden&&"wakeLock" in navigator){if(!wakeLock)wakeLock=await navigator.wakeLock.request("screen");wakeLock.addEventListener("release",()=>{wakeLock=null})}else if(!opt.wake&&wakeLock){await wakeLock.release();wakeLock=null}}catch(e){wakeLock=null}
+ $("#oWakeN").textContent="wakeLock" in navigator?"while this page is open":"this browser cannot (it needs https or a newer browser)"}
+$("#oReset").onclick=()=>{Object.assign(opt,DEF);page=0;save();build();wake()};
+// ---- pages
+function go(p){tab=p;for(const s of document.querySelectorAll(".page"))s.style.display=s.id===p?"block":"none";for(const b of document.querySelectorAll("#nav button"))b.classList.toggle("cur",b.dataset.p===p);ls.set("tab",p);
+ clearInterval(statusT);if(p==="rec"||p==="sys"){readStatus();statusT=setInterval(()=>{if(!document.hidden)readStatus()},2000)}panels();if(p==="rec"&&lastMeters)meters(lastMeters)}
+for(const b of document.querySelectorAll("#nav button"))b.onclick=()=>go(b.dataset.p);
+$("#bAux").onclick=()=>{busSet=0;$("#bAux").classList.add("on");$("#bFx").classList.remove("on");buses()};$("#bFx").onclick=()=>{busSet=1;$("#bFx").classList.add("on","acc");$("#bAux").classList.remove("on");buses()};
 function stream(){if(ws)ws.close();const u=(location.protocol==="https:"?"wss://":"ws://")+location.host+"/ws/meters?token="+encodeURIComponent(token);
- try{ws=new WebSocket(u)}catch(e){return}ws.onmessage=ev=>{try{const o=JSON.parse(ev.data);if(o.error){setSt(o.error,true);return}if(o.state){apply(o.state);return}meters(o)}catch(e){}};
- ws.onopen=()=>setSt("connected");ws.onclose=()=>{if(token){setSt("reconnecting…",true);setTimeout(()=>token&&stream(),1500)}}}
-async function load(){try{state=await api("/api/state");build();stream();if(poll)clearInterval(poll);poll=setInterval(async()=>{if(document.hidden||(ws&&ws.readyState===1))return;try{apply(await api("/api/state"))}catch(e){}},5000)}catch(e){setSt(e.message,true)}}   // the push is the sync; this only covers a stream that is down
-function show(){$("#pair").style.display=token?"none":"";$("#mix").style.display=token?"block":"none";if(token)load()}
-function forget(why){token=null;try{localStorage.removeItem("amfx1.token")}catch(e){}if(ws)ws.close();if(poll)clearInterval(poll);setSt(why||"not paired",!!why);show()}
+ try{ws=new WebSocket(u)}catch(e){return}ws.onmessage=ev=>{try{const o=JSON.parse(ev.data);if(o.error){setSt(o.error,true);return}if(o.state){if(opt.sync||!state)apply(o.state);return}meters(o)}catch(e){}};
+ ws.onopen=()=>setSt(opt.sync?"connected · live sync":"connected");ws.onclose=()=>{if(token){setSt("reconnecting…",true);setTimeout(()=>token&&stream(),1500)}}}
+async function load(){try{const s=await api("/api/state");state=null;apply(s);stream();if(poll)clearInterval(poll);poll=setInterval(async()=>{if(document.hidden||!opt.sync||(ws&&ws.readyState===1))return;try{apply(await api("/api/state"))}catch(e){}},5000)}catch(e){setSt(e.message,true)}}   // the push is the sync; this only covers a stream that is down
+function show(){$("#pair").style.display=token?"none":"";$("#nav").style.display=token?"flex":"none";if(token){go(ls.get("tab","mix"));load()}else for(const s of document.querySelectorAll(".page"))s.style.display="none"}
+function forget(why){token=null;try{localStorage.removeItem("amfx1.token")}catch(e){}if(ws)ws.close();if(poll)clearInterval(poll);clearInterval(statusT);setSt(why||"not paired",!!why);show()}
 $("#go").onclick=async()=>{$("#perr").textContent="";const pin=$("#pin").value.replace(/\D/g,"");if(pin.length!==6){$("#perr").textContent="The PIN has six digits.";return}
- try{const j=await api("/api/pair",{pin,name:$("#who").value.trim()||"Browser"});token=j.token;try{localStorage.setItem("amfx1.token",token)}catch(e){}$("#pin").value="";show()}catch(e){$("#perr").textContent=e.message}};
+ try{const who=$("#who").value.trim()||"Browser";const j=await api("/api/pair",{pin,name:who});token=j.token;try{localStorage.setItem("amfx1.token",token)}catch(e){}ls.set("who",who);$("#pin").value="";applyOpts();show()}catch(e){$("#perr").textContent=e.message}};
 $("#pin").onkeydown=e=>{if(e.key==="Enter")$("#go").click()};
-$("#p1").onclick=()=>{page=0;build()};$("#p2").onclick=()=>{page=1;build()};$("#out").onclick=()=>forget();$("#clip").onclick=()=>api("/api/control",{op:"clearClips"}).catch(e=>setSt(e.message,true));
-document.addEventListener("visibilitychange",()=>{if(!document.hidden&&token&&(!ws||ws.readyState>1))stream()});
+$("#out").onclick=()=>{if(confirm("Forget this device? It will need a new PIN from the computer."))forget()};$("#clip").onclick=()=>{buzz();api("/api/control",{op:"clearClips"}).catch(e=>setSt(e.message,true))};
+document.addEventListener("visibilitychange",()=>{if(!document.hidden){if(token&&(!ws||ws.readyState>1))stream();wake()}});
 // OPENED FROM THE QR CODE (…/remote#pin=123456): take the PIN, wipe it from the address bar and history, and pair straight away.
 // The PIN is in the #fragment, so the browser never sent it to the server in the page request; it is used once, here.
 (()=>{const m=/(?:^#|&)pin=(\d{6})(?:&|$)/.exec(location.hash||"");if(!m)return;try{history.replaceState(null,"",location.pathname+location.search)}catch(e){}
  if(token)return;$("#pin").value=m[1];const ua=navigator.userAgent||"";$("#who").value=/iPhone|iPad/.test(ua)?"iPhone / iPad (browser)":/Android/.test(ua)?"Android (browser)":"Browser";setSt("pairing…");$("#go").click()})();
-show();
+applyOpts();wake();show();
 </script></body></html>
