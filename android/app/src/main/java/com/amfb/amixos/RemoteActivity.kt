@@ -114,7 +114,7 @@ class RemoteActivity : AppCompatActivity() {
         masterLabel = TextView(this).apply { setOnClickListener { showMaster() }; text = "MASTER"; setTextColor(Color.parseColor("#EA580C")); typeface = android.graphics.Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER }
         planBadge = TextView(this).apply { text = ""; setTextColor(Color.parseColor("#FBBF24")); textSize = 10f; typeface = android.graphics.Typeface.MONOSPACE; gravity = Gravity.CENTER }
         masterFader = FaderView(this).apply { layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
-            onTouchState = { t -> touching = maxOf(0, touching + if (t) 1 else -1) }
+            onTouchState = { t -> touching = maxOf(0, touching + if (t) 1 else -1); if (touching == 0) catchUp() }
             onMove = { p -> val v = DaemonClient.posToDb(p / 1000.0); masterDb.text = DaemonClient.fmtDb(v); io.execute { runCatching { client?.master(v) } } } }
         masterDb = ConsoleUi.dbReadout(this).apply { text = "0.0" }
         master.addView(masterLabel); master.addView(planBadge); master.addView(masterFader); master.addView(masterDb)
@@ -181,7 +181,7 @@ class RemoteActivity : AppCompatActivity() {
                 setOnClickListener { showChannel(st.id, st.name) }; setOnLongClickListener { rename(st.id, this); true } }
             col.addView(name)
             if (Prefs.showPan(this)) col.addView(KnobView(this, tint).apply { value = st.pan.toFloat(); layoutParams = LinearLayout.LayoutParams(128, LinearLayout.LayoutParams.WRAP_CONTENT)
-                onTouchState = { t -> touching = maxOf(0, touching + if (t) 1 else -1) }
+                onTouchState = { t -> touching = maxOf(0, touching + if (t) 1 else -1); if (touching == 0) catchUp() }
                 onChange = { v -> io.execute { runCatching { client?.pan(st.id, v.toDouble()) } } } })
             val ms = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
             fun small(t: ToggleButton) = t.apply { textSize = 13f; minWidth = 0; minimumWidth = 0; minHeight = 0; minimumHeight = 0; setPadding(0, 0, 0, 0); layoutParams = LinearLayout.LayoutParams(0, 84, 1f).apply { setMargins(3, 4, 3, 4) } }
@@ -192,7 +192,7 @@ class RemoteActivity : AppCompatActivity() {
             ms.addView(mute); ms.addView(solo); col.addView(ms)
             val db = ConsoleUi.dbReadout(this).apply { text = DaemonClient.fmtDb(st.db) }
             val fader = FaderView(this, colors[(st.id / 8) % colors.size]).apply { progress = (DaemonClient.dbToPos(st.db) * 1000).toInt(); layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
-                onTouchState = { t -> touching = maxOf(0, touching + if (t) 1 else -1) }
+                onTouchState = { t -> touching = maxOf(0, touching + if (t) 1 else -1); if (touching == 0) catchUp() }
                 onMove = { p -> val v = DaemonClient.posToDb(p / 1000.0); db.text = DaemonClient.fmtDb(v); io.execute { runCatching { client?.gain(st.id, v) } } } }
             col.addView(fader); col.addView(db)
             strips.addView(col); faders.add(fader); dbLabels.add(db); nameLabels.add(name); mutes.add(mute); solos.add(solo); clipFlags.add(false)
@@ -202,7 +202,8 @@ class RemoteActivity : AppCompatActivity() {
 
     private fun startMeters(c: DaemonClient) {
         stream?.stop()
-        stream = c.meterStream({ m -> ui.post { lastOk = System.currentTimeMillis(); showMeters(m) } }, { ok, err -> ui.post { if (ok) { retries = 0; showLink() } else if (!closing) scheduleReconnect(err) } })
+        stream = c.meterStream({ m -> ui.post { lastOk = System.currentTimeMillis(); showMeters(m) } }, { ok, err -> ui.post { if (ok) { retries = 0; showLink() } else if (!closing) scheduleReconnect(err) } },
+            { s -> ui.post { if (closing || client !== c || Prefs.syncSeconds(this) == 0) return@post; lastPush = System.currentTimeMillis(); applyState(s); if (retries == 0) showLink() } })   // LIVE SYNC: pushed by the console
     }
     // ---- the link: remembered consoles, reconnect, its state on the status line
     private var pairBtn: Button? = null; @Volatile private var closing = false; private var retries = 0; private var lastOk = 0L; private var pingMs = -1L
@@ -217,7 +218,8 @@ class RemoteActivity : AppCompatActivity() {
             io.execute { val ok = runCatching { val t0 = System.currentTimeMillis(); c.status(); pingMs = System.currentTimeMillis() - t0 }.isSuccess
                 ui.post { if (closing || client !== c) return@post; if (ok) { retries = 0; lastOk = System.currentTimeMillis(); startMeters(c); showLink(); io.execute { runCatching { c.state() }.getOrNull()?.let { s -> ui.post { applyState(s) } } } } else scheduleReconnect(null) } } }, wait)
     }
-    private fun showLink() { val ep = Prefs.remote(this); status.text = getString(R.string.link_up, ep.getString("lastName", "").orEmpty(), ep.getString("host", "").orEmpty(), if (pingMs >= 0) "$pingMs ms" else "—"); status.setTextColor(Color.parseColor("#34D399")) }
+    private fun live() = stream != null && System.currentTimeMillis() - lastOk < 3000 && Prefs.syncSeconds(this) != 0   // the stream is up: changes arrive as they happen
+    private fun showLink() { val ep = Prefs.remote(this); status.text = getString(R.string.link_up, ep.getString("lastName", "").orEmpty(), ep.getString("host", "").orEmpty(), if (pingMs >= 0) "$pingMs ms" else "—") + (if (live()) "  ·  " + getString(R.string.live_sync) else ""); status.setTextColor(Color.parseColor("#34D399")) }
     /** CONSOLES: the consoles this phone is paired with. Tap = connect; FORGET = remove it from this phone (the console keeps a token list of its own, NETWORK → TOKENS) */
     private fun showConsoles(host: EditText, port: EditText, token: EditText, connect: Button) {
         val l = consoles(); val now = System.currentTimeMillis()
@@ -429,17 +431,22 @@ class RemoteActivity : AppCompatActivity() {
         return box
     }
 
-    /** FOLLOW THE CONSOLE: every 3 s the state is read again; faders, mutes, solos and names that changed on the computer (or on another
-     *  phone) move here too. A fader under a finger is left alone. Paused while the app is in the background. */
-    private var syncing = false
+    /** FOLLOW THE CONSOLE (LIVE SYNC): the console pushes its state over the meter stream the moment anything changes, on the computer, on
+     *  another phone or in a browser, and it lands here at once. This tick is the safety net: while the stream is up it only asks "still at
+     *  change v?" (a few bytes, which also measures the ping); without the stream it reads the whole state. A fader under a finger is left
+     *  alone and catches up when the finger lifts. Paused while the app is in the background. */
+    private var syncing = false; @Volatile private var lastPush = 0L; private var pendingState: ConsoleState? = null
     private fun startSync(c: DaemonClient) { if (syncing) return; syncing = true
         val tick = object : Runnable { override fun run() { if (!syncing) return
             val secs = Prefs.syncSeconds(this@RemoteActivity)
-            if (secs > 0 && !isFinishing && hasWindowFocus()) io.execute { val t0 = System.currentTimeMillis(); val s = runCatching { c.state() }.getOrNull(); if (s != null) { pingMs = System.currentTimeMillis() - t0; ui.post { applyState(s); if (retries == 0) showLink() } } }
+            if (secs > 0 && !isFinishing && hasWindowFocus()) { val isLive = live(); val v = state?.v ?: 0L
+                io.execute { val t0 = System.currentTimeMillis(); val r = runCatching { if (isLive) c.stateSince(v) else c.state() }
+                    if (r.isSuccess) { pingMs = System.currentTimeMillis() - t0; val s = r.getOrNull(); ui.post { if (s != null) applyState(s); if (retries == 0) showLink() } } } }
             ui.postDelayed(this, 1000L * maxOf(1, secs)) } }
         ui.postDelayed(tick, 1000L * maxOf(1, Prefs.syncSeconds(this))) }
     private fun applyState(s: ConsoleState) {
-        if (touching > 0) return
+        if (touching > 0) { pendingState = s; return }
+        pendingState = null
         for (st in s.strips) { val i = st.id; if (i >= faders.size || i >= mutes.size) continue
             val pos = (DaemonClient.dbToPos(st.db) * 1000).toInt(); if (Math.abs(faders[i].progress - pos) > 2) { faders[i].progress = pos; dbLabels[i].text = DaemonClient.fmtDb(st.db) }
             if (mutes[i].isChecked != st.mute) { mutes[i].tag = "sync"; mutes[i].isChecked = st.mute; mutes[i].tag = null }
@@ -448,6 +455,7 @@ class RemoteActivity : AppCompatActivity() {
         run { val p = (DaemonClient.dbToPos(s.masterDb) * 1000).toInt(); if (Math.abs(masterFader.progress - p) > 2) { masterFader.progress = p; masterDb.text = DaemonClient.fmtDb(s.masterDb) } }
         state = s
     }
+    private fun catchUp() { val p = pendingState ?: return; ui.postDelayed({ if (touching == 0 && pendingState === p) applyState(p) }, 400) }   // the finger lifted: what changed elsewhere meanwhile
     private fun rename(strip: Int, label: TextView) {   // long press on a strip's name
         val c = client ?: return; val box = EditText(this).apply { setText(state?.strips?.getOrNull(strip)?.name ?: ""); setSingleLine() }
         AlertDialog.Builder(this).setTitle(getString(R.string.rename, strip + 1)).setView(box).setPositiveButton(android.R.string.ok) { _, _ ->

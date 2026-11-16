@@ -37,7 +37,7 @@ input[type=range].f{writing-mode:vertical-lr;direction:rtl;width:30px;height:100
 </main>
 <script>
 "use strict";
-const $=s=>document.querySelector(s);let token=null,page=0,state=null,ws=null,poll=null;const els=[];
+const $=s=>document.querySelector(s);let token=null,page=0,state=null,ws=null,poll=null,drag=null,synced=0;addEventListener("pointerup",()=>{drag=null});addEventListener("pointercancel",()=>{drag=null});const els=[];
 try{token=localStorage.getItem("amfx1.token")}catch(e){}
 const posToDb=p=>p<=0?-120:p>=1?10:p>=.75?(p-.75)*40:p>=.5?-20+(p-.5)*80:p>=.25?-60+(p-.25)*160:-120+p*240;
 const dbToPos=d=>d<=-120?0:d>=10?1:d>=0?.75+d/40:d>=-20?.5+(d+20)/80:d>=-60?.25+(d+60)/160:(d+120)/240;
@@ -53,16 +53,22 @@ function build(){const box=$("#strips");box.textContent="";els.length=0;if(!stat
   f.oninput=()=>{const v=posToDb(f.value/1000);d.textContent=fmt(v);onF(v)};const ms=c.querySelector(".ms");
   if(onM){const m=document.createElement("button");m.textContent="M";m.className="m"+(mute?" on":"");m.onclick=()=>{const on=!m.classList.contains("on");m.classList.toggle("on",on);onM(on)};ms.appendChild(m)}
   if(onS){const s=document.createElement("button");s.textContent="S";s.className="s"+(solo?" on":"");s.onclick=()=>{const on=!s.classList.contains("on");s.classList.toggle("on",on);onS(on)};ms.appendChild(s)}
-  box.appendChild(c);return c.querySelector(".mt i")};
- for(let i=from;i<to;++i){const s=state.strips[i];els.push({i,bar:add(s.name||("CH "+(i+1)),s.db,s.mute,s.solo,v=>{s.db=v;send("g"+i,{op:"gain",strip:i,db:v})},on=>{s.mute=on;send("m"+i,{op:"mute",strip:i,on})},on=>{s.solo=on;send("s"+i,{op:"solo",strip:i,on})})})}
- els.push({i:-1,bar:add("MASTER",state.master.db,false,false,v=>{state.master.db=v;send("master",{op:"master",db:v})},null,null,true)});
+  box.appendChild(c);f.onpointerdown=()=>{drag=f};return {bar:c.querySelector(".mt i"),f,d,nm:c.querySelector(".nm"),m:ms.querySelector(".m"),s:ms.querySelector(".s")}};
+ for(let i=from;i<to;++i){const s=state.strips[i];els.push(Object.assign({i},add(s.name||("CH "+(i+1)),s.db,s.mute,s.solo,v=>{s.db=v;send("g"+i,{op:"gain",strip:i,db:v})},on=>{s.mute=on;send("m"+i,{op:"mute",strip:i,on})},on=>{s.solo=on;send("s"+i,{op:"solo",strip:i,on})})))}
+ els.push(Object.assign({i:-1},add("MASTER",state.master.db,false,false,v=>{state.master.db=v;send("master",{op:"master",db:v})},null,null,true)));
  $("#p1").classList.toggle("pri",page===0);$("#p2").classList.toggle("pri",page===1);$("#p2").style.display=state.strips.length>16?"":"none"}
+// LIVE SYNC: the service pushes {"state":...} the moment any remote or the console changes something: move what changed in place
+// (a fader under a finger or the mouse is left alone; a different number of strips builds the page again)
+function apply(s){if(!s||!s.strips)return;if(!state||s.strips.length!==state.strips.length){state=s;build();return}
+ for(const e of els){const x=e.i<0?s.master:s.strips[e.i];if(!x)continue;
+  if(e.f!==drag&&e.f!==document.activeElement){const p=Math.round(dbToPos(x.db)*1000);if(Math.abs(e.f.value-p)>2){e.f.value=p;e.d.textContent=fmt(x.db)}}
+  if(e.i>=0){const n=x.name||("CH "+(e.i+1));if(e.nm.textContent!==n)e.nm.textContent=n;if(e.m)e.m.classList.toggle("on",!!x.mute);if(e.s)e.s.classList.toggle("on",!!x.solo)}}
+ state=s;synced=Date.now();setSt("connected · live sync")}
 function meters(o){if(!o||!o.strips)return;for(const e of els){const v=e.i<0?Math.max(o.master.l,o.master.r):(o.strips[e.i]||{}).pk||0;e.bar.style.height=(mpos(v)*100).toFixed(1)+"%"}}
 function stream(){if(ws)ws.close();const u=(location.protocol==="https:"?"wss://":"ws://")+location.host+"/ws/meters?token="+encodeURIComponent(token);
- try{ws=new WebSocket(u)}catch(e){return}ws.onmessage=ev=>{try{const o=JSON.parse(ev.data);if(o.error){setSt(o.error,true);return}meters(o)}catch(e){}};
+ try{ws=new WebSocket(u)}catch(e){return}ws.onmessage=ev=>{try{const o=JSON.parse(ev.data);if(o.error){setSt(o.error,true);return}if(o.state){apply(o.state);return}meters(o)}catch(e){}};
  ws.onopen=()=>setSt("connected");ws.onclose=()=>{if(token){setSt("reconnecting…",true);setTimeout(()=>token&&stream(),1500)}}}
-async function load(){try{state=await api("/api/state");build();stream();if(poll)clearInterval(poll);poll=setInterval(async()=>{if(document.hidden)return;try{const s=await api("/api/state");
- const busy=document.activeElement&&document.activeElement.classList&&document.activeElement.classList.contains("f");if(!busy&&JSON.stringify(s)!==JSON.stringify(state)){state=s;build()}}catch(e){}},3000)}catch(e){setSt(e.message,true)}}   // another remote or the console moved something: follow it
+async function load(){try{state=await api("/api/state");build();stream();if(poll)clearInterval(poll);poll=setInterval(async()=>{if(document.hidden||(ws&&ws.readyState===1))return;try{apply(await api("/api/state"))}catch(e){}},5000)}catch(e){setSt(e.message,true)}}   // the push is the sync; this only covers a stream that is down
 function show(){$("#pair").style.display=token?"none":"";$("#mix").style.display=token?"block":"none";if(token)load()}
 function forget(why){token=null;try{localStorage.removeItem("amfx1.token")}catch(e){}if(ws)ws.close();if(poll)clearInterval(poll);setSt(why||"not paired",!!why);show()}
 $("#go").onclick=async()=>{$("#perr").textContent="";const pin=$("#pin").value.replace(/\D/g,"");if(pin.length!==6){$("#perr").textContent="The PIN has six digits.";return}

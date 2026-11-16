@@ -109,6 +109,16 @@ class ScreenshotTest {
         shot(a.muteGroupsPanel(null), "mute-groups")
     }
 
+    @Test fun liveSync() {   // LIVE SYNC: another remote (a browser, the console) moves strips while this phone is connected: they move here at once
+        val port = System.getProperty("amfx.daemon").orEmpty(); if (port.isEmpty()) return
+        val ctx = org.robolectric.RuntimeEnvironment.getApplication(); val tok = System.getenv("AMFX_TOKEN") ?: ""
+        Prefs.remote(ctx).edit().putString("host", "127.0.0.1").putString("port", port).putString("token", tok).putBoolean("autoConnect", true).commit()
+        val a = Robolectric.buildActivity(RemoteActivity::class.java).setup().get(); idle(2500)
+        val other = com.amfb.amixos.remote.DaemonClient(com.amfb.amixos.remote.Endpoint("127.0.0.1", port.toInt(), tok))
+        other.name(0, "VOCAL"); other.gain(0, -6.0); other.name(1, "GUITAR"); other.gain(1, -18.0); other.mute(2, true); other.name(3, "KEYS"); other.solo(3, true); other.master(-3.0)
+        idle(1200); shot(a.window.decorView.rootView, "remote-live-sync")
+        other.name(0, "CH 1"); other.gain(0, 0.0); other.name(1, "CH 2"); other.gain(1, 0.0); other.mute(2, false); other.name(3, "CH 4"); other.solo(3, false); other.master(0.0)
+    }
     @Test fun remote() {
         val port = System.getProperty("amfx.daemon").orEmpty()
         val ctx = org.robolectric.RuntimeEnvironment.getApplication()

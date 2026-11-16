@@ -36,6 +36,9 @@
 #include <QMouseEvent>
 #include <algorithm>
 #include <QJsonDocument>
+#include <QNetworkRequest>
+#include <QNetworkReply>
+#include <QNetworkAccessManager>
 #include <QJsonObject>
 #include <QProcess>
 #include <vector>
@@ -712,6 +715,19 @@ int main(int argc, char* argv[]) {
         const bool wasapiMic = engine.keepInputAtStart("wasapi", ""), dsMic = engine.keepInputAtStart("dsound", "{mic}"), asio = engine.keepInputAtStart("asio", "UMC ASIO"), music = engine.keepInputAtStart("wasapi", "loopback:system"), none = engine.keepInputAtStart("wasapi", "-");
         engine.setMicAtStart(true); const bool onKeeps = engine.keepInputAtStart("wasapi", ""); engine.setMicAtStart(keep);
         if (wasapiMic || dsMic || !asio || !music || !none || !onKeeps) { std::fprintf(stderr, "amixos --smoke: MIC AT ENGINE ON (wasapi %d, dsound %d, asio %d, music %d, none %d, on %d)\n", wasapiMic, dsMic, asio, music, none, onKeeps); return 283; } }
+      if (remote.available() && qEnvironmentVariableIsSet("AMIXOS_SMOKE_SYNC")) { // LIVE SYNC: with the remote service on, a move on a "phone" lands on the console and one on the console reaches the service
+        const auto wait = [&](int ms) { QElapsedTimer t; t.start(); while (t.elapsed() < ms) { app.processEvents(QEventLoop::AllEvents, 20); QThread::msleep(5); } };
+        const double g0 = engine.stripAt(0)["db"].toDouble(), g1 = engine.stripAt(1)["db"].toDouble();
+        engine.setGain(0, -9); if (!remote.start(false)) { std::fprintf(stderr, "amixos --smoke: LIVE SYNC: the remote did not start: %s\n", qPrintable(remote.status())); return 284; }
+        wait(1500); QNetworkAccessManager nam; const auto http = [&](const QString& path, const QByteArray& body) { QNetworkRequest q(QUrl("http://127.0.0.1:8765" + path)); q.setHeader(QNetworkRequest::ContentTypeHeader, "application/json"); q.setRawHeader("X-Amix-Token", remote.token().toUtf8());
+          QNetworkReply* r = body.isEmpty() ? nam.get(q) : nam.post(q, body); QElapsedTimer t; t.start(); while (!r->isFinished() && t.elapsed() < 3000) app.processEvents(QEventLoop::AllEvents, 20); const QVariantMap m = QJsonDocument::fromJson(r->readAll()).toVariant().toMap(); r->deleteLater(); return m; };
+        const double seeded = http("/api/state", {})["strips"].toList().value(0).toMap()["db"].toDouble();
+        http("/api/control", "{\"op\":\"gain\",\"strip\":1,\"db\":-14}"); http("/api/control", "{\"op\":\"mute\",\"strip\":2,\"on\":true}"); QElapsedTimer t1; t1.start(); while (t1.elapsed() < 2000 && std::abs(engine.stripAt(1)["db"].toDouble() + 14) > 0.05) wait(10); const qint64 inMs = t1.elapsed();
+        engine.setGain(3, -21); QElapsedTimer t2; t2.start(); double out = 0; while (t2.elapsed() < 2000) { wait(40); out = http("/api/state", {})["strips"].toList().value(3).toMap()["db"].toDouble(); if (std::abs(out + 21) < 0.05) break; } const qint64 outMs = t2.elapsed();
+        const bool ok = std::abs(seeded + 9) < 0.05 && std::abs(engine.stripAt(1)["db"].toDouble() + 14) < 0.05 && engine.stripAt(2)["mute"].toBool() && std::abs(out + 21) < 0.05;
+        std::fprintf(stdout, "amixos --smoke: LIVE SYNC seed %.1f, phone->console %lld ms, console->phone %lld ms, changes %d\n", seeded, static_cast<long long>(inMs), static_cast<long long>(outMs), remote.syncedChanges());
+        remote.stop(); wait(600); engine.setGain(0, g0); engine.setGain(1, g1); engine.setGain(3, 0); engine.setMute(2, false);
+        if (!ok) { std::fprintf(stderr, "amixos --smoke: LIVE SYNC failed (seed %.1f, strip 2 %.1f, mute %d, out %.1f)\n", seeded, engine.stripAt(1)["db"].toDouble(), engine.stripAt(2)["mute"].toBool(), out); return 285; } }
       { // SECURE INPUT: an input not on the allowed list is never opened; an allowed WASAPI input opens exclusively; switched off, nothing changes
         const bool keepOn = engine.secureInput(); const QStringList keepList = QSettings().value("audio/allowedInputs").toStringList();
         engine.setSecureInput(true); engine.setInputAllowed("wasapi", "{mic-a}", false);

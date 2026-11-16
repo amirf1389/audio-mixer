@@ -33,7 +33,7 @@ namespace am {
 
 class Daemon {
  public:
-  struct Options { std::string bind = "127.0.0.1"; unsigned short port = 8765; std::string token; int strips = 32; std::string version = "0.1.0"; bool localOnly = true; std::string tokenStore; std::string consoleInfo; std::string plan; };   // plan: the console's licence plan name (BASIC / PRO / ...), shown to the phone   // consoleInfo: the console's plug-in / rack snapshot (remote-console.json), served read-only   // tokenStore: the file of the named tokens ("" = only the master token)   // localOnly: the local policy (private-network peers only)
+  struct Options { std::string bind = "127.0.0.1"; unsigned short port = 8765; std::string token; int strips = 32; std::string version = "0.1.0"; bool localOnly = true; std::string tokenStore; std::string consoleInfo; std::string plan; std::string seed; };   // seed: the console's mixer (remote-seed.json) loaded at start, so the phones begin where the console was   // plan: the console's licence plan name (BASIC / PRO / ...), shown to the phone   // consoleInfo: the console's plug-in / rack snapshot (remote-console.json), served read-only   // tokenStore: the file of the named tokens ("" = only the master token)   // localOnly: the local policy (private-network peers only)
   explicit Daemon(Options o);
   ~Daemon();
   bool start(std::string& err);
@@ -48,7 +48,11 @@ class Daemon {
   json::Value status() const;
   json::Value devices() const;
   json::Value state() const;
-  json::Value control(const json::Value& cmd, std::string& err);
+  json::Value control(const json::Value& cmd, std::string& err);   // a change that worked moves stateVersion() on
+  // LIVE SYNC: every change from any remote (phone, browser, the console) moves this counter; /ws/meters sends {"state":{...}} to every
+  // watcher as soon as it moves (and once on connect), and GET /api/state?since=N answers {"v":N,"same":true} while nothing changed
+  unsigned long long stateVersion() const { return version_.load(); }
+  bool loadSeed(const std::string& file, std::string& err);   // {"strips":[{name,db,pan,mute,solo}],"master":{"db"}}
   json::Value meters() const;
   // SECURITY: which web pages may read the replies (only pages served from this computer), and which Host a request may name while the
   // local policy is on (an address or localhost: a made-up domain pointed at 127.0.0.1 by a hostile page is refused)
@@ -66,6 +70,8 @@ class Daemon {
   struct Bus { double db = 0, returnDb = -60; bool mute = false; };
   struct Monitor { int source = 0; double db = 0; bool dim = false, mono = false, mute = false; } mon_;
   httpd::Response handle(const httpd::Request& r);
+  json::Value apply(const json::Value& cmd, std::string& err);
+  std::atomic<unsigned long long> version_{1};
   bool authorised(const httpd::Request& r) const;
   Options opt_; mutable TokenStore tokens_; httpd::Server http_;
   bool noteRefused();   // a wrong token: counted and slowed down; true when there were too many in the last minute

@@ -4,7 +4,10 @@
 // The service runs its own engine, so the console hands the sound card over while it runs and takes it back when it stops.
 #pragma once
 #include <QObject>
+#include <QNetworkAccessManager>
 #include <QProcess>
+#include <QTimer>
+#include <QVector>
 #include <QStringList>
 #include <QVariantList>
 #include "Extension.h"
@@ -21,6 +24,7 @@ class Remote : public QObject {
   Q_PROPERTY(QString tokenFile READ tokenFile CONSTANT)
   Q_PROPERTY(QVariantList tokens READ tokens NOTIFY changed)     // the named tokens [{id, name, role, state}]: never the tokens themselves
   Q_PROPERTY(QString tokenNote READ tokenNote NOTIFY changed)
+  Q_PROPERTY(int syncedChanges READ syncedChanges NOTIFY synced)   // LIVE SYNC: changes carried between the console and the remotes since start
  public:
   explicit Remote(Engine* engine, QObject* parent = nullptr);
   ~Remote() override;
@@ -46,7 +50,21 @@ class Remote : public QObject {
  signals:
   void changed();
   void stopped();
+ public:
+  int syncedChanges() const { return syncedChanges_; }
+  // LIVE SYNC, the console side: the service starts from the console's mixer (remote-seed.json, --seed), and while it runs the console
+  // follows it: a fader, mute, solo or name moved on a phone or in a browser moves here (about 150 ms), and one moved here goes out to
+  // every phone and browser. Each side is compared with the last value both agreed on, so neither echoes the other back.
+  struct SyncStrip { double db = 0, pan = 0; bool mute = false, solo = false; QString name; };
+  static QString syncName(int i, const QString& n) { return n.isEmpty() ? QStringLiteral("CH %1").arg(i + 1) : n; }
+  QVector<SyncStrip> consoleMix() const;   // the console's strips as the service names them (licensed channels only)
+ signals:
+  void synced();
  private:
+  void writeSeed();
+  void syncTick();
+  void post(const QVariantMap& cmd);
+  QTimer sync_; QNetworkAccessManager net_; QVector<SyncStrip> base_; double baseMaster_ = 0; quint64 v_ = 0; int posting_ = 0; bool stale_ = false, getting_ = false; QByteArray token_; int syncedChanges_ = 0;
   Engine* engine_; QProcess proc_; Extension ext_{QStringLiteral("AmF X1 Network")}; QString status_ = "off";
   QString runTool(const QStringList& args, bool* ok) const; void restartIfRunning();
   QVariantList tokens_; QString tokenNote_; bool wifi_ = false;
