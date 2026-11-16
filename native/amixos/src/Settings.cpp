@@ -93,10 +93,11 @@ bool Settings::startLastDevice() {
   if (!engine_) return false;
   // ENGINE ON never opens a Windows microphone by itself (it fed the speakers at once): outputs only, unless MIC AT ENGINE ON is on
   const bool keepIn = engine_->keepInputAtStart(d["backend"].toString(), d["in"].toString().isEmpty() ? QStringLiteral("default") : d["in"].toString()) || d["inChannels"].toInt() == 0;
-  const QString in = keepIn ? d["in"].toString() : QStringLiteral("-"); const int inCh = keepIn ? d["inChannels"].toInt() : 0;
+  // the microphone blocked: COMPUTER SOUND instead where Windows has it (Engine::autoInput), else no input
+  const QString in = keepIn ? d["in"].toString() : engine_->autoInput(d["backend"].toString()); const int inCh = keepIn ? d["inChannels"].toInt() : (in == "-" ? 0 : 2);
   const bool ok = smartStart() ? engine_->openSmart(d["backend"].toString(), in, d["out"].toString(), d["rate"].toDouble(), d["frames"].toInt(), inCh, d["outChannels"].toInt())
                                : engine_->open(d["backend"].toString(), in, d["out"].toString(), d["rate"].toDouble(), d["frames"].toInt(), inCh, d["outChannels"].toInt());
-  if (ok && !keepIn) engine_->noteOutputsOnly();
+  if (ok && !keepIn) engine_->noteAutoInput(in);
   note(ok ? QStringLiteral("Started the last device: %1").arg(engine_->status()) : QStringLiteral("Could not start the last device: %1").arg(engine_->status()));
   return ok;
 }
