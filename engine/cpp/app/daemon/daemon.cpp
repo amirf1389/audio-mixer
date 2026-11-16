@@ -1,6 +1,7 @@
 // amixos-daemon: see daemon.hpp. The console model (names, gains, sends ...) lives here so that /api/state can answer without a round trip
 // to the audio thread; every change goes to the Runtime's lock-free control ring and is mirrored in the model under m_.
 #include "daemon.hpp"
+#include "samples/samples.hpp"
 #include "audiomixer/bluetooth.hpp"
 #include "paths/paths.hpp"
 
@@ -220,6 +221,10 @@ httpd::Response Daemon::handle(const httpd::Request& r) {
     tokens_.roleFor(t, r.peer);   // it belongs to this phone's address from the start
     pairFails_ = 5;               // one pairing per PIN: the next phone waits for the next PIN
     json::Value out = json::Value::object(); out.set("ok", true); out.set("id", id); out.set("token", t); out.set("role", "control"); out.set("days", 30); res.body = out.dump(); return res; }
+  if (r.method == "GET" && r.path == "/api/samples") {   // the SAMPLE PADS: id, name, category, seconds (any valid token)
+    const std::string role = roleOf(r, false); if (role.empty() || role == "held") { res.status = role == "held" ? 403 : (noteRefused() ? 429 : 401); res.body = "{\"ok\":false,\"error\":\"X-Amix-Token missing or wrong\"}"; return res; }
+    json::Value a = json::Value::array(); for (const auto& s : samples::list()) { json::Value v = json::Value::object(); v.set("id", s.id); v.set("name", s.name); v.set("category", s.category); v.set("seconds", s.seconds); a.push(v); }
+    json::Value o = json::Value::object(); o.set("samples", a); o.set("gainDb", pads_.gainDb.load()); o.set("voices", pads_.active.load()); res.body = o.dump(); return res; }
   if (r.method == "GET" && r.path == "/api/rta") {   // the analyzer now (any valid token)
     const std::string role = roleOf(r, false); if (role.empty() || role == "held") { res.status = role == "held" ? 403 : (noteRefused() ? 429 : 401); res.body = "{\"ok\":false,\"error\":\"X-Amix-Token missing or wrong\"}"; return res; }
     res.body = rtaJson(true).dump(); return res; }
@@ -304,8 +309,11 @@ json::Value Daemon::status() const {
   o.set("consoleId", TokenStore::hashOf("amfx1-console-id:" + opt_.token).substr(0, 12));
   o.set("computer", computerName());   // this PC's name: phones tell several consoles apart by it (STUDIO-PC, STAGE-PC)
   o.set("backend", rt_ ? backend_ : ""); o.set("running", rt_ && rt_->running());
-  if (rt_) { const Snapshot s = rt_->snapshot(); o.set("blocks", static_cast<double>(s.blocks)); o.set("frames", static_cast<double>(s.frames)); o.set("xruns", static_cast<double>(s.xruns)); }
+  if (rt_) { const Snapshot s = rt_->snapshot(); o.set("blocks", static_cast<double>(s.blocks)); o.set("frames", static_cast<double>(s.frames)); o.set("xruns", static_cast<double>(s.xruns));
+    // CONSOLE STATUS on the remotes: the device's rate, the DSP load of the last block and its worst, the connected remotes
+    o.set("rate", rt_->sampleRate()); o.set("loadPct", std::round(s.loadPct * 10) / 10); o.set("maxBlockUs", std::round(s.maxBlockUs)); o.set("blockUs", std::round(s.blockUs)); }
   else { o.set("blocks", 0); o.set("frames", 0); o.set("xruns", 0); }
+  o.set("remotes", watchers_.load());
   o.set("strips", opt_.strips); o.set("buses", kMaxBuses); o.set("plan", opt_.plan);
   o.set("recording", rec_.recording()); o.set("recordSeconds", rec_.seconds()); o.set("recordFile", rec_.recording() && !rec_.files().empty() ? rec_.files()[0] : std::string());
   o.set("uptimeS", std::chrono::duration<double>(std::chrono::steady_clock::now() - started_).count());
@@ -421,6 +429,9 @@ json::Value Daemon::state() const {
   json::Value mo = json::Value::object(); mo.set("source", mon_.source); mo.set("db", mon_.db); mo.set("dim", mon_.dim); mo.set("mono", mon_.mono); mo.set("mute", mon_.mute); o.set("monitor", mo);
   o.set("backend", rt_ ? backend_ : ""); o.set("running", rt_ && rt_->running()); o.set("v", static_cast<double>(version_.load())); o.set("remotes", watchers_.load()); o.set("racksV", static_cast<double>(racksV_.load())); o.set("racksBy", racksFromConsole_ ? "console" : "remote");
   o.set("programEq", programEqJson()); o.set("masterV", static_cast<double>(masterV_.load()));
+  { json::Value m = json::Value::object();   // MASTERING (the master chain), in the console's own words (Engine::mastering)
+    m.set("on", mp_.on); m.set("low", mp_.lowDb); m.set("air", mp_.airDb); m.set("thr", mp_.thrDb); m.set("ratio", mp_.ratio); m.set("attack", mp_.attackMs); m.set("release", mp_.releaseMs);
+    m.set("makeup", mp_.makeupDb); m.set("drive", mp_.drive); m.set("gain", mp_.gainDb); m.set("reductionDb", master_.reductionDb()); o.set("mastering", m); }
   return o;
 }
 
@@ -549,6 +560,12 @@ json::Value Daemon::apply(const json::Value& cmd, std::string& err) {
     if (cmd["stop"].asBool(false)) { pads_.stopAll(); return ok; }
     if (cmd.has("id")) { if (!rt_) { err = "no sound card open"; return {}; } if (!pads_.trigger(cmd["id"].asInt(0))) { err = "id: 1..100"; return {}; } }
     ok.set("voices", pads_.active.load()); return ok; }
+  if (op == "mastering") {   // the master chain from a remote: any of on, low, air (dB), thr (dB), ratio, attack, release (ms), makeup, drive (0..1), gain (dB)
+    auto num = [&](const char* k, double& v, double lo, double hi) { if (cmd.has(k)) v = std::max(lo, std::min(hi, cmd[k].asNumber(v))); };
+    if (cmd.has("on")) mp_.on = cmd["on"].asBool(mp_.on);
+    num("low", mp_.lowDb, -12, 12); num("air", mp_.airDb, -12, 12); num("thr", mp_.thrDb, -40, 0); num("ratio", mp_.ratio, 1, 20); num("attack", mp_.attackMs, 0.1, 200);
+    num("release", mp_.releaseMs, 10, 2000); num("makeup", mp_.makeupDb, 0, 18); num("drive", mp_.drive, 0, 1); num("gain", mp_.gainDb, -12, 12);
+    master_.set(mp_); ++masterV_; ++version_; return ok; }
   if (op == "rack") {   // the console's rack of one strip, as it is now (a plug-in added, removed, a knob turned in its window, bypass):
     // slots that keep their plug-in keep their instance and take the new state; the rest are made; the chain is handed over at once
     if (!strip(s)) return {}; const json::Value& ps = cmd["plugins"]; if (!ps.isArray()) { err = "plugins: a list"; return {}; }

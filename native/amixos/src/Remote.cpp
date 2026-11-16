@@ -42,6 +42,8 @@ QVector<Remote::SyncStrip> Remote::consoleMix() const {
   return v;
 }
 QVariantList Remote::eqList(const SyncStrip& s) { QVariantList l; for (const auto& e : s.eq) l << QVariant(QVariantList{e.type, e.freq, e.q, e.gain}); return l; }
+QVariantMap Remote::mastNow() const {   // MASTERING as LIVE SYNC carries it (the keys the service knows)
+  const QVariantMap m = engine_->mastering(); QVariantMap o; for (const char* k : {"on", "low", "air", "thr", "ratio", "attack", "release", "makeup", "drive", "gain"}) if (m.contains(k)) o[k] = m.value(k); return o; }
 QByteArray Remote::rackJson(int strip) const { return QJsonDocument::fromVariant(engine_->remoteRack(strip)).toJson(QJsonDocument::Compact); }
 void Remote::writeSeed() {
   base_ = consoleMix(); baseMaster_ = engine_->masterDb(); v_ = 0; posting_ = 0; stale_ = getting_ = false; token_.clear(); syncedChanges_ = 0; remotes_ = 0; touched_.clear();
@@ -51,7 +53,7 @@ void Remote::writeSeed() {
   baseSet_ = consoleSettings();   // the service starts with the console's settings too
   QVariantList racks; const QVariantList ss = engine_->stripState();   // and with the console's plug-ins (with their state): they keep sounding
   for (int i = 0; i < ss.size(); ++i) { const QVariantList r = engine_->remoteRack(i); if (r.isEmpty()) continue; racks << QVariantMap{{"strip", i}, {"name", ss[i].toMap().value("name")}, {"plugins", r}}; }
-  racksV_ = 0; masterV_ = 0; baseRacks_.clear(); for (int i = 0; i < ss.size(); ++i) baseRacks_[i] = rackJson(i);
+  racksV_ = 0; masterV_ = 0; baseMast_ = mastNow(); baseRacks_.clear(); for (int i = 0; i < ss.size(); ++i) baseRacks_[i] = rackJson(i);
   if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) f.write(QJsonDocument::fromVariant(QVariantMap{{"strips", l}, {"master", QVariantMap{{"db", baseMaster_}}}, {"settings", baseSet_}, {"racks", racks}, {"masterChain", engine_->masterChainSeed()}}).toJson(QJsonDocument::Compact));
 }
 QVariantMap Remote::consoleSettings() const {
@@ -101,6 +103,9 @@ void Remote::syncTick() {
   if (++rackTick_ >= 8) {   // about twice a second: a plug-in added, removed, bypassed or turned in its own window goes to the service
     rackTick_ = 0; for (int i = 0; i < c.size(); ++i) { const QByteArray j = rackJson(i); if (j == baseRacks_.value(i, QByteArrayLiteral("[]"))) continue;
       baseRacks_[i] = j; post({{"op", "rack"}, {"strip", i}, {"plugins", QJsonDocument::fromJson(j).toVariant()}}); } }
+  { const QVariantMap mn = mastNow(); QVariantMap diff;   // MASTERING moved on the console: out to the service and the remotes
+    for (auto it = mn.cbegin(); it != mn.cend(); ++it) { const QVariant b = baseMast_.value(it.key()); if (it.value().typeId() == QMetaType::Bool ? it.value().toBool() != b.toBool() : std::abs(it.value().toDouble() - b.toDouble()) > 0.005) diff[it.key()] = it.value(); }
+    if (!diff.isEmpty()) { baseMast_ = mn; diff["op"] = "mastering"; post(diff); } }
   if (moved(engine_->masterDb(), baseMaster_)) { baseMaster_ = engine_->masterDb(); post({{"op", "master"}, {"db", baseMaster_}}); }
   { const QVariantMap cs = consoleSettings();   // a setting changed on the console goes out (numbers compared with a small tolerance)
     for (auto it = cs.constBegin(); it != cs.constEnd(); ++it) { const QVariant b = baseSet_.value(it.key());
@@ -117,7 +122,9 @@ void Remote::syncTick() {
     if (o.value("same").toBool() || !o.contains("strips")) return;
     { const quint64 rv = o.value("racksV").toULongLong(); if (rv && rv != racksV_) { racksV_ = rv; if (o.value("racksBy").toString() != QLatin1String("console")) takeRacks(); } }   // our own rack change is not taken back
     { const quint64 mv = o.value("masterV").toULongLong(); const QVariantMap pe = o.value("programEq").toMap();   // a remote's RTA EQ onto the console
-      if (mv && mv != masterV_) { const bool first = masterV_ == 0; masterV_ = mv; if (!first && pe.contains("gains")) engine_->setGraphicEq(-1, pe.value("gains").toList(), pe.value("on").toBool()); } }   // a phone changed a plug-in: the console's instance follows
+      if (mv && mv != masterV_) { const bool first = masterV_ == 0; masterV_ = mv; if (!first && pe.contains("gains")) engine_->setGraphicEq(-1, pe.value("gains").toList(), pe.value("on").toBool());
+        const QVariantMap ms = o.value("mastering").toMap();   // a remote's MASTERING onto the console (what it already has is not sent back)
+        if (!first && !ms.isEmpty()) { QVariantMap in; for (auto it = ms.cbegin(); it != ms.cend(); ++it) if (it.key() != QLatin1String("reductionDb")) in[it.key()] = it.value(); engine_->setMastering(in); baseMast_ = mastNow(); } } }   // a phone changed a plug-in: the console's instance follows
     { const QVariantMap rs = o.value("settings").toMap();   // a setting changed on a remote lands on the console
       for (auto it = baseSet_.begin(); it != baseSet_.end(); ++it) { if (!rs.contains(it.key())) continue; const QVariant r = rs.value(it.key());
         const bool diff = it.value().typeId() == QMetaType::Double ? std::abs(r.toDouble() - it.value().toDouble()) > 0.005 : (it.value().typeId() == QMetaType::Bool ? r.toBool() != it.value().toBool() : r.toInt() != it.value().toInt());

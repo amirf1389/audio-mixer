@@ -95,6 +95,38 @@ class ScreenshotTest {
         shot(a.window.decorView.rootView, "settings")
     }
 
+    private fun findGrid(v: android.view.View): android.widget.GridLayout? = if (v is android.widget.GridLayout) v
+        else (v as? android.view.ViewGroup)?.let { g -> (0 until g.childCount).firstNotNullOfOrNull { findGrid(g.getChildAt(it)) } }
+    private fun liveClient(): com.amfb.amixos.remote.DaemonClient? { val port = System.getProperty("amfx.daemon").orEmpty(); if (port.isEmpty()) return null
+        val ctx = org.robolectric.RuntimeEnvironment.getApplication(); val tok = System.getenv("AMFX_TOKEN") ?: ""
+        Prefs.remote(ctx).edit().putString("host", "127.0.0.1").putString("port", port).putString("token", tok).commit()
+        return com.amfb.amixos.remote.DaemonClient(com.amfb.amixos.remote.Endpoint("127.0.0.1", port.toInt(), tok)) }
+    @Test fun samplePads() {   // the console's 100 pads on the phone; a tap plays one on the console
+        val c = liveClient() ?: return
+        val a = Robolectric.buildActivity(SamplePadsActivity::class.java).setup().resume().get(); idle(1500)
+        org.junit.Assert.assertEquals(100, a.samples.size)
+        val pad = findGrid(a.window.decorView.rootView)!!.getChildAt(2)
+        pad.performClick(); var voices = 0; repeat(20) { if (voices == 0) { Thread.sleep(50); voices = (c.control(mapOf("op" to "sample"))["voices"] as Number).toInt() } }
+        println("PADS: pad ${a.lastPlayed} tapped, the console plays $voices voice(s)")
+        org.junit.Assert.assertEquals(3, a.lastPlayed); org.junit.Assert.assertTrue("the console plays the pad", voices > 0)
+        shot(a.window.decorView.rootView, "phone-sample-pads"); c.samplesStop()
+    }
+    @Test fun mastering() {   // the console's master chain on the phone: what the console has shows; a move reaches it
+        val c = liveClient() ?: return
+        c.mastering(mapOf("on" to true, "thr" to -20.0, "low" to 2.0, "makeup" to 3.0))
+        val a = Robolectric.buildActivity(MasteringActivity::class.java).setup().resume().get(); idle(1500)
+        org.junit.Assert.assertTrue(a.onBtn.isChecked); org.junit.Assert.assertEquals(500, a.bars["thr"]!!.progress)
+        shot(a.window.decorView.rootView, "phone-mastering")
+        a.onBtn.isChecked = false; repeat(20) { Thread.sleep(50); shadowOf(Looper.getMainLooper()).idle() }
+        org.junit.Assert.assertEquals("the console took the phone's OFF", false, c.masteringNow()["on"])
+        c.mastering(mapOf("on" to false, "thr" to -12.0, "low" to 0.0, "makeup" to 0.0))
+    }
+    @Test fun consoleStatus() {   // the console's sound, rate, load, dropouts, remotes
+        liveClient() ?: return
+        val a = Robolectric.buildActivity(ConsoleStatusActivity::class.java).setup().resume().get(); idle(1500)
+        println("STATUS:\n" + a.body.text); org.junit.Assert.assertTrue(a.body.text.contains("Hz")); org.junit.Assert.assertTrue(a.body.text.contains("ON · NULL"))
+        shot(a.window.decorView.rootView, "phone-console-status")
+    }
     @Test fun eqFollowsConsole() {   // a band set on the console (or another remote) shows in the phone's EQ while it is open
         val port = System.getProperty("amfx.daemon").orEmpty(); if (port.isEmpty()) return
         val ctx = org.robolectric.RuntimeEnvironment.getApplication(); val tok = System.getenv("AMFX_TOKEN") ?: ""

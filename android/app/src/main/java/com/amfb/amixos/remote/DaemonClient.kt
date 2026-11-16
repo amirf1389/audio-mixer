@@ -12,7 +12,8 @@ data class Endpoint(val host: String, val port: Int, val token: String, val secu
 }
 class DaemonException(message: String, val status: Int) : IOException(message)
 
-data class Status(val name: String, val version: String, val backend: String, val running: Boolean, val blocks: Long, val xruns: Long, val strips: Int, val buses: Int, val uptimeS: Double, val lastError: String, val backends: List<String>, val plan: String = "", val consoleId: String = "", val computer: String = "")
+data class Status(val name: String, val version: String, val backend: String, val running: Boolean, val blocks: Long, val xruns: Long, val strips: Int, val buses: Int, val uptimeS: Double, val lastError: String, val backends: List<String>, val plan: String = "", val consoleId: String = "", val computer: String = "",
+                  val rate: Double = 0.0, val frames: Long = 0, val loadPct: Double = 0.0, val maxBlockUs: Double = 0.0, val remotes: Int = 0, val recording: Boolean = false)   // CONSOLE STATUS
 data class Device(val backend: String, val id: String, val name: String, val inputs: Int, val outputs: Int, val defaultRate: Double, val defaultIn: Boolean, val defaultOut: Boolean)
 /** the analog 3-band channel EQ of a strip: LOW shelf 100 Hz, MID bell [midHz] (100 Hz .. 8 kHz), HIGH shelf 10 kHz, ±15 dB each */
 data class Tone(val low: Double = 0.0, val mid: Double = 0.0, val midHz: Double = 1000.0, val high: Double = 0.0, val on: Boolean = true)
@@ -40,7 +41,7 @@ class DaemonClient(val ep: Endpoint) {
     @Suppress("UNCHECKED_CAST") private fun getObj(path: String): Map<String, Any?> = MiniJson.parse(request("GET", path)) as Map<String, Any?>
     @Suppress("UNCHECKED_CAST") private fun getList(path: String): List<Map<String, Any?>> = (MiniJson.parse(request("GET", path)) as List<Any?>).map { it as Map<String, Any?> }
 
-    fun status(): Status { val o = getObj("/api/status"); return Status(o.str("name"), o.str("version"), o.str("backend"), o.bool("running"), o.num("blocks").toLong(), o.num("xruns").toLong(), o.int("strips"), o.int("buses"), o.num("uptimeS"), o.str("lastError"), (o["backends"] as? List<*>)?.map { it.toString() } ?: emptyList(), o.str("plan"), o.str("consoleId"), o.str("computer")) }
+    fun status(): Status { val o = getObj("/api/status"); return Status(o.str("name"), o.str("version"), o.str("backend"), o.bool("running"), o.num("blocks").toLong(), o.num("xruns").toLong(), o.int("strips"), o.int("buses"), o.num("uptimeS"), o.str("lastError"), (o["backends"] as? List<*>)?.map { it.toString() } ?: emptyList(), o.str("plan"), o.str("consoleId"), o.str("computer"), o.num("rate"), o.num("frames").toLong(), o.num("loadPct"), o.num("maxBlockUs"), o.int("remotes"), o.bool("recording")) }
     fun devices(): List<Device> = getList("/api/devices").map { Device(it.str("backend"), it.str("id"), it.str("name"), it.int("in"), it.int("out"), it.num("defaultRate", 48000.0), it.bool("defaultIn"), it.bool("defaultOut")) }
     fun state(): ConsoleState = parseState(getObj("/api/state"))
     /** LIVE SYNC check: null while the console is still at change v (a few bytes), else the new state */
@@ -133,6 +134,16 @@ class DaemonClient(val ep: Endpoint) {
     fun limiter(on: Boolean, ceilingDb: Double) = control(mapOf("op" to "limiter", "on" to on, "ceilingDb" to ceilingDb))
     fun busMute(bus: Int, on: Boolean) = control(mapOf("op" to "busMute", "bus" to bus, "on" to on))
     fun busLevel(bus: Int, db: Double) = control(mapOf("op" to "busLevel", "bus" to bus, "db" to db))
+    fun busReturn(bus: Int, db: Double) = control(mapOf("op" to "busReturn", "bus" to bus, "db" to db))
+    // ---- SAMPLE PADS: the console's 100 one-shots, played into its master
+    data class Sample(val id: Int, val name: String, val category: String, val seconds: Double)
+    fun samples(): List<Sample> = (getObj("/api/samples")["samples"] as? List<*>).orEmpty().mapNotNull { @Suppress("UNCHECKED_CAST") (it as? Map<String, Any?>)?.let { m -> Sample(m.int("id"), m.str("name"), m.str("category"), m.num("seconds")) } }
+    fun sample(id: Int, gainDb: Double? = null) = control(buildMap { put("op", "sample"); put("id", id); if (gainDb != null) put("gainDb", gainDb) })
+    fun samplesStop() = control(mapOf("op" to "sample", "stop" to true))
+    fun samplesGain(db: Double) = control(mapOf("op" to "sample", "gainDb" to db))
+    // ---- MASTERING: the master chain (on, low, air, thr, ratio, attack, release, makeup, drive, gain)
+    fun mastering(values: Map<String, Any>) = control(mapOf("op" to "mastering") + values)
+    fun masteringNow(): Map<String, Any?> = getObj("/api/state").obj("mastering")
     fun send(strip: Int, bus: Int, db: Double, pre: Boolean) = control(mapOf("op" to "send", "strip" to strip, "bus" to bus, "db" to db, "pre" to pre))
     fun eq(strip: Int, band: Int, type: String, freq: Double, q: Double, gainDb: Double) = control(mapOf("op" to "eq", "strip" to strip, "band" to band, "type" to type, "freq" to freq, "q" to q, "gainDb" to gainDb))
     fun compressor(strip: Int, on: Boolean, thresholdDb: Double, ratio: Double, kneeDb: Double, attackMs: Double, releaseMs: Double, makeupDb: Double) = control(mapOf("op" to "compressor", "strip" to strip, "on" to on, "thresholdDb" to thresholdDb, "ratio" to ratio, "kneeDb" to kneeDb, "attackMs" to attackMs, "releaseMs" to releaseMs, "makeupDb" to makeupDb))
