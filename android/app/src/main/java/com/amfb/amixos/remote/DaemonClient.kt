@@ -55,7 +55,9 @@ class DaemonClient(val ep: Endpoint) {
             val pool = java.util.concurrent.Executors.newFixedThreadPool(48)
             try {
                 val jobs = hosts.map { host -> pool.submit<Found?> { probe(host, port, timeoutMs) } }
-                return jobs.mapNotNull { runCatching { it.get(3, java.util.concurrent.TimeUnit.SECONDS) }.getOrNull() }
+                // one entry per console: a PC on two networks (Wi-Fi and cable) answers at two addresses with the same id; the first
+                // (a known address, then the lowest) is kept
+                return jobs.mapNotNull { runCatching { it.get(3, java.util.concurrent.TimeUnit.SECONDS) }.getOrNull() }.distinctBy { if (it.id.isEmpty()) it.host else it.id }
             } finally { pool.shutdownNow() }
         }
         /** one address: the console there, or null (nothing answers, or not an AmF X1 console) */
