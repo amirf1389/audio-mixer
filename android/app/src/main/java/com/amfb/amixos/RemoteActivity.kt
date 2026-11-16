@@ -54,8 +54,10 @@ class RemoteActivity : AppCompatActivity() {
     private fun buzz(v: View) { if (Prefs.haptics(this)) v.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP) }
     override fun onResume() {   // back from SETTINGS: the mixer is laid out again with the new choices
         super.onResume()
-        if (!autoTried) { autoTried = true; val p = Prefs.remote(this); if ((Prefs.autoConnect(this) || pendingOpen != null) && !p.getString("host", "").isNullOrEmpty() && !p.getString("token", "").isNullOrEmpty()) connectBtn?.performClick() }
-        else state?.let { buildStrips(it) }
+        if (!autoTried) { autoTried = true; val p = Prefs.remote(this)
+            if ((Prefs.autoConnect(this) || pendingOpen != null) && !p.getString("host", "").isNullOrEmpty() && !p.getString("token", "").isNullOrEmpty()) { autoMode = Prefs.autoFind(this); connectBtn?.performClick() }   // a failure falls back to the search
+            else autoFind() }   // AUTO-DETECT: look for the console on the Wi-Fi
+        else { state?.let { buildStrips(it) }; if (client == null) autoFind() }   // back on this screen, still not connected: search again
         if (client != null) { if (Prefs.keepScreenOn(this)) window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) else window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
     }
 
@@ -68,6 +70,7 @@ class RemoteActivity : AppCompatActivity() {
         val host = EditText(this).apply { hint = "console address (192.168.1.20)"; setText(prefs.getString("host", "")); setTextColor(Color.WHITE); setHintTextColor(Color.GRAY) }
         val port = EditText(this).apply { hint = "port"; setText(prefs.getString("port", Prefs.defaultPort(this@RemoteActivity).toString())); setTextColor(Color.WHITE); setHintTextColor(Color.GRAY) }
         val token = EditText(this).apply { hint = "token (~/.amixos/daemon.token on the console)"; setText(prefs.getString("token", "")); setTextColor(Color.WHITE); setHintTextColor(Color.GRAY); inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD }
+        hostBox = host; portBox = port; tokenBox = token
         val conn = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }; connBox = conn; root.addView(conn)
         conn.addView(host); conn.addView(port); conn.addView(token)
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
@@ -94,9 +97,10 @@ class RemoteActivity : AppCompatActivity() {
         find.setOnClickListener {   // FIND: the consoles on this Wi-Fi that run the phone remote
             val ip = localIp(); if (ip == null) { status.text = getString(R.string.no_wifi); return@setOnClickListener }
             status.text = getString(R.string.searching)
-            io.execute { val found = DaemonClient.discover(ip, port.text.toString().trim().toIntOrNull() ?: 8765)
+            io.execute { val paired = consoles(); val found = DaemonClient.discoverConsoles(ip, port.text.toString().trim().toIntOrNull() ?: 8765, first = PairedConsoles.hints(paired))
                 ui.post { if (found.isEmpty()) status.text = getString(R.string.none_found)
-                    else AlertDialog.Builder(this).setTitle(R.string.find).setItems(found.map { it.first + "   " + it.second }.toTypedArray()) { _, w -> host.setText(found[w].first); val known = consoles().firstOrNull { it.host == found[w].first }
+                    else AlertDialog.Builder(this).setTitle(R.string.find).setItems(found.map { it.host + "   " + it.label }.toTypedArray()) { _, w -> host.setText(found[w].host)
+                        val known = (PairedConsoles.match(paired, listOf(found[w])) as? PairedConsoles.Match.Known)?.console   // by its consoleId: also after a new address
                         if (known != null) { token.setText(known.token); port.setText(known.port.toString()); connect.performClick() }   // paired before: straight in
                         else { status.text = getString(R.string.found_pair); pairBtn?.performClick() } }.show() } }   // new: the PIN, at once
         }
@@ -105,6 +109,8 @@ class RemoteActivity : AppCompatActivity() {
         clipBtn.setOnClickListener { val c = client ?: return@setOnClickListener; io.execute { runCatching { c.clearClips() } } }
         status = TextView(this).apply { text = getString(R.string.not_connected); setTextColor(Color.parseColor("#FBBF24")); typeface = android.graphics.Typeface.MONOSPACE }
         root.addView(status)
+        timelineView = TextView(this).apply { setTextColor(Color.parseColor("#8B98A8")); textSize = 10f; typeface = android.graphics.Typeface.MONOSPACE; visibility = View.GONE; setPadding(0, 4, 0, 4) }
+        root.addView(timelineView)
         status.setOnClickListener { connBox?.let { it.visibility = if (it.visibility == View.VISIBLE) View.GONE else View.VISIBLE } }   // tap the status line: show / hide the connection fields
         root.addView(TextView(this).apply { text = getString(R.string.tap_hint); setTextColor(Color.parseColor("#8B98A8")); textSize = 11f })
         // THE CONSOLE: channel strips side by side (scroll sideways), the master strip fixed on the right
@@ -130,8 +136,9 @@ class RemoteActivity : AppCompatActivity() {
             io.execute {
                 try {
                     val c = DaemonClient(ep); val st = c.status(); val s = c.state()
-                    ui.post { client = c; state = s; devices.isEnabled = true; connected.forEach { it.isEnabled = true }; if (Prefs.keepScreenOn(this)) window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); startSync(c); connBox?.visibility = View.GONE; rememberConsole(ep, st.name); lastOk = System.currentTimeMillis(); retries = 0; Prefs.remote(this).edit().putString("lastName", st.name + " " + st.version).putString("lastPlan", st.plan).putInt("lastStrips", st.strips).apply(); if (pendingOpen == "scenes") { pendingOpen = null; showScenes() }; planBadge.text = (if (st.plan.isEmpty()) "" else st.plan + "\n") + st.strips + " CH"; status.text = st.name + " " + st.version + " · " + (if (st.running) st.backend else "engine stopped") + " · " + st.strips + " strips"; status.setTextColor(Color.parseColor("#10B981")); masterFader.progress = (DaemonClient.dbToPos(s.masterDb) * 1000).toInt(); buildStrips(s); startMeters(c) }
-                } catch (e: Exception) { ui.post { status.text = getString(R.string.failed, e.message ?: e.javaClass.simpleName); status.setTextColor(Color.parseColor("#FF2A5F")) } }
+                    ui.post { client = c; state = s; devices.isEnabled = true; connected.forEach { it.isEnabled = true }; if (Prefs.keepScreenOn(this)) window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); startSync(c); connBox?.visibility = View.GONE; rememberConsole(ep, st.name, st.consoleId); consoleId = st.consoleId; autoMode = false; searchRound = 0; note(st.name + " " + ep.host + " · " + getString(R.string.auto_connected)); lastOk = System.currentTimeMillis(); retries = 0; Prefs.remote(this).edit().putString("lastName", st.name + " " + st.version).putString("lastPlan", st.plan).putInt("lastStrips", st.strips).apply(); if (pendingOpen == "scenes") { pendingOpen = null; showScenes() }; planBadge.text = (if (st.plan.isEmpty()) "" else st.plan + "\n") + st.strips + " CH"; status.text = st.name + " " + st.version + " · " + (if (st.running) st.backend else "engine stopped") + " · " + st.strips + " strips"; status.setTextColor(Color.parseColor("#10B981")); masterFader.progress = (DaemonClient.dbToPos(s.masterDb) * 1000).toInt(); buildStrips(s); startMeters(c) }
+                } catch (e: Exception) { ui.post { status.text = getString(R.string.failed, e.message ?: e.javaClass.simpleName); status.setTextColor(Color.parseColor("#FF2A5F"))
+                    if (autoMode) { autoMode = false; note(getString(R.string.auto_lost, e.message ?: e.javaClass.simpleName)); if ((e as? com.amfb.amixos.remote.DaemonException)?.status == 401) { pinAsked = true; pairBtn?.performClick() } else nextSearch() } } }   // not there: search the Wi-Fi; token refused: the PIN
             }
         }
         devices.setOnClickListener { showDevices() }
@@ -210,10 +217,49 @@ class RemoteActivity : AppCompatActivity() {
     private var pairBtn: Button? = null; @Volatile private var closing = false; private var retries = 0; private var lastOk = 0L; private var pingMs = -1L
     private fun consoles() = PairedConsoles.parse(getSharedPreferences("consoles", MODE_PRIVATE).getString("list", "[]"))
     private fun saveConsoles(l: List<PairedConsoles.Console>) = getSharedPreferences("consoles", MODE_PRIVATE).edit().putString("list", PairedConsoles.format(l)).apply()
-    private fun rememberConsole(ep: Endpoint, name: String) { val now = System.currentTimeMillis(); saveConsoles(PairedConsoles.upsert(consoles(), PairedConsoles.Console(ep.host, ep.port, ep.token, name, now, now))) }
+    private fun rememberConsole(ep: Endpoint, name: String, id: String = "") { val now = System.currentTimeMillis(); saveConsoles(PairedConsoles.upsert(consoles(), PairedConsoles.Console(ep.host, ep.port, ep.token, name, now, now, id))) }
+    // ---- AUTO-DETECT: find the console on the Wi-Fi by itself (the console's /api/status carries a stable consoleId)
+    private lateinit var hostBox: EditText; private lateinit var portBox: EditText; private lateinit var tokenBox: EditText; private lateinit var timelineView: TextView
+    private val timeline = LinkTimeline(); private var autoMode = false; private var searchRound = 0; private var searching = false; private var pinAsked = false; private var consoleId = ""
+    private fun note(text: String) { timeline.add(System.currentTimeMillis(), text)
+        timelineView.text = getString(R.string.link_timeline) + "\n" + timeline.render { t -> android.text.format.DateFormat.format("HH:mm:ss", t).toString() }; timelineView.visibility = View.VISIBLE }
+    private fun resumed() = lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)
+    /** one search: a paired console (by its consoleId, so also at a new address) connects at once; a new one asks for its PIN once;
+     *  nothing: search again in 3, 6, 12, then every 20 s while this screen is open and not connected (the computer may start its remote later) */
+    internal fun autoFind(net: String? = null) {   // net: the address to search from (tests); else this phone's Wi-Fi address
+        if (closing || client != null || searching || !Prefs.autoFind(this) || !resumed()) return
+        val ip = net ?: localIp(); searchRound++
+        if (ip == null) { status.text = getString(R.string.no_wifi); note(getString(R.string.no_wifi)); nextSearch(); return }
+        searching = true; val pt = portBox.text.toString().trim().toIntOrNull() ?: Prefs.defaultPort(this); val paired = consoles()
+        note(getString(R.string.auto_searching, ip.substringBeforeLast('.'))); status.text = getString(R.string.searching); status.setTextColor(Color.parseColor("#FBBF24"))
+        io.execute {
+            val found = runCatching { DaemonClient.discoverConsoles(ip, pt, first = PairedConsoles.hints(paired)) }.getOrDefault(emptyList())
+            ui.post { searching = false; if (closing || client != null) return@post
+                when (val m = PairedConsoles.match(paired, found)) {
+                    is PairedConsoles.Match.Known -> { val c = m.console; val label = c.name.ifBlank { found.firstOrNull { it.host == c.host }?.label ?: c.host }
+                        note(if (m.moved) getString(R.string.auto_moved, label, c.host) else getString(R.string.auto_found, label, c.host))
+                        if (m.moved) saveConsoles(PairedConsoles.upsert(consoles(), c))   // remember the new address
+                        hostBox.setText(c.host); portBox.setText(c.port.toString()); tokenBox.setText(c.token); autoMode = true; connectBtn?.performClick() }
+                    is PairedConsoles.Match.New -> { val f = m.found.first(); note(getString(R.string.auto_found, f.label, f.host)); note(getString(R.string.auto_new, f.label))
+                        hostBox.setText(f.host); portBox.setText(f.port.toString()); status.text = getString(R.string.found_pair)
+                        if (!pinAsked) { pinAsked = true; pairBtn?.performClick() }; nextSearch() }
+                    PairedConsoles.Match.None -> { val wait = PairedConsoles.searchDelayMs(searchRound); note(getString(R.string.auto_none, (wait / 1000).toInt())); status.text = getString(R.string.none_found); nextSearch() }
+                } } }
+    }
+    private fun nextSearch() { ui.postDelayed({ autoFind() }, PairedConsoles.searchDelayMs(searchRound)) }
+    /** the link is down for a while: is the same console up at another address (the router gave the PC a new IP)? Then follow it. */
+    private fun followMove(c: DaemonClient) {
+        val ip = localIp() ?: return; val me = consoles().firstOrNull { consoleId.isNotEmpty() && it.id == consoleId } ?: return
+        io.execute { val found = runCatching { DaemonClient.discoverConsoles(ip, me.port, first = listOf(me.host)) }.getOrDefault(emptyList())
+            val m = PairedConsoles.match(listOf(me), found) as? PairedConsoles.Match.Known ?: return@execute
+            if (!m.moved) return@execute
+            ui.post { if (closing || client !== c) return@post; note(getString(R.string.auto_moved, m.console.name.ifBlank { m.console.host }, m.console.host)); saveConsoles(PairedConsoles.upsert(consoles(), m.console))
+                stream?.stop(); stream = null; client = null; hostBox.setText(m.console.host); portBox.setText(m.console.port.toString()); tokenBox.setText(m.console.token); connectBtn?.performClick() } }
+    }
     /** the connection dropped (Wi-Fi gone, the console restarted): try again, 1 s, 2 s, 4 s, 8 s, then every 15 s, as long as this screen is open */
     private fun scheduleReconnect(err: String?) {
         val c = client ?: return; retries++; val wait = PairedConsoles.retryDelayMs(retries)
+        if (retries == 1) note(getString(R.string.auto_lost, err ?: "…")); if (retries >= 3 && retries % 3 == 0) followMove(c)   // down for a while: maybe a new address
         status.text = getString(R.string.reconnecting, retries, (wait / 1000).toInt()) + (if (err != null) "  ·  $err" else ""); status.setTextColor(Color.parseColor("#FBBF24"))
         ui.postDelayed({ if (closing || client !== c) return@postDelayed
             io.execute { val ok = runCatching { val t0 = System.currentTimeMillis(); c.status(); pingMs = System.currentTimeMillis() - t0 }.isSuccess

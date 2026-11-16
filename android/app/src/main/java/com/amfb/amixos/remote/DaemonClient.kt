@@ -12,7 +12,7 @@ data class Endpoint(val host: String, val port: Int, val token: String, val secu
 }
 class DaemonException(message: String, val status: Int) : IOException(message)
 
-data class Status(val name: String, val version: String, val backend: String, val running: Boolean, val blocks: Long, val xruns: Long, val strips: Int, val buses: Int, val uptimeS: Double, val lastError: String, val backends: List<String>, val plan: String = "")
+data class Status(val name: String, val version: String, val backend: String, val running: Boolean, val blocks: Long, val xruns: Long, val strips: Int, val buses: Int, val uptimeS: Double, val lastError: String, val backends: List<String>, val plan: String = "", val consoleId: String = "")
 data class Device(val backend: String, val id: String, val name: String, val inputs: Int, val outputs: Int, val defaultRate: Double, val defaultIn: Boolean, val defaultOut: Boolean)
 data class StripState(val id: Int, val name: String, val db: Double, val pan: Double, val mute: Boolean, val solo: Boolean)
 data class BusState(val id: Int, val db: Double, val returnDb: Double, val mute: Boolean)
@@ -34,7 +34,7 @@ class DaemonClient(val ep: Endpoint) {
     @Suppress("UNCHECKED_CAST") private fun getObj(path: String): Map<String, Any?> = MiniJson.parse(request("GET", path)) as Map<String, Any?>
     @Suppress("UNCHECKED_CAST") private fun getList(path: String): List<Map<String, Any?>> = (MiniJson.parse(request("GET", path)) as List<Any?>).map { it as Map<String, Any?> }
 
-    fun status(): Status { val o = getObj("/api/status"); return Status(o.str("name"), o.str("version"), o.str("backend"), o.bool("running"), o.num("blocks").toLong(), o.num("xruns").toLong(), o.int("strips"), o.int("buses"), o.num("uptimeS"), o.str("lastError"), (o["backends"] as? List<*>)?.map { it.toString() } ?: emptyList(), o.str("plan")) }
+    fun status(): Status { val o = getObj("/api/status"); return Status(o.str("name"), o.str("version"), o.str("backend"), o.bool("running"), o.num("blocks").toLong(), o.num("xruns").toLong(), o.int("strips"), o.int("buses"), o.num("uptimeS"), o.str("lastError"), (o["backends"] as? List<*>)?.map { it.toString() } ?: emptyList(), o.str("plan"), o.str("consoleId")) }
     fun devices(): List<Device> = getList("/api/devices").map { Device(it.str("backend"), it.str("id"), it.str("name"), it.int("in"), it.int("out"), it.num("defaultRate", 48000.0), it.bool("defaultIn"), it.bool("defaultOut")) }
     fun state(): ConsoleState = parseState(getObj("/api/state"))
     /** LIVE SYNC check: null while the console is still at change v (a few bytes), else the new state */
@@ -45,20 +45,29 @@ class DaemonClient(val ep: Endpoint) {
     companion object {
         /** FIND THE CONSOLE: ask every address of this phone's /24 network for /api/status on the port (in parallel, short timeouts).
          *  Returns "address  name version" for each console that answers; nothing is sent but a GET of the public status. */
-        fun discover(localIp: String, port: Int = 8765, timeoutMs: Int = 350): List<Pair<String, String>> {
+        /** A console found on the Wi-Fi: its address, its stable id (consoleId: the same after its address changes), name and version. */
+        data class Found(val host: String, val port: Int, val id: String, val name: String, val version: String) { val label: String get() = "$name $version".trim() }
+        /** FIND: every console on this phone's /24 network that answers /api/status as amixos-daemon. [first] are asked first (the
+         *  addresses this phone knew), so a console that kept its address is found at once; the whole network takes about a second. */
+        fun discoverConsoles(localIp: String, port: Int = 8765, timeoutMs: Int = 350, first: List<String> = emptyList()): List<Found> {
             val parts = localIp.split('.'); if (parts.size != 4) return emptyList(); val base = parts.take(3).joinToString(".")
+            val hosts = (first.filter { it.startsWith("$base.") } + (1..254).map { "$base.$it" }).distinct().filter { it != localIp }
             val pool = java.util.concurrent.Executors.newFixedThreadPool(48)
             try {
-                val jobs = (1..254).map { n -> val host = "$base.$n"; pool.submit<Pair<String, String>?> {
-                    runCatching {
-                        val c = URL("http://$host:$port/api/status").openConnection() as HttpURLConnection
-                        c.connectTimeout = timeoutMs; c.readTimeout = 800
-                        if (c.responseCode != 200) null else { @Suppress("UNCHECKED_CAST") val o = MiniJson.parse(c.inputStream.bufferedReader().use { it.readText() }) as Map<String, Any?>
-                            if (o["daemon"] == "amixos-daemon") host to (o["name"]?.toString() ?: "") + " " + (o["version"]?.toString() ?: "") else null }
-                    }.getOrNull() } }
-                return jobs.mapNotNull { runCatching { it.get(3, java.util.concurrent.TimeUnit.SECONDS) }.getOrNull() }
+                val jobs = hosts.map { host -> pool.submit<Found?> { probe(host, port, timeoutMs) } }
+                // one entry per console: a PC on two networks (Wi-Fi and cable) answers at two addresses with the same id; the first
+                // (a known address, then the lowest) is kept
+                return jobs.mapNotNull { runCatching { it.get(3, java.util.concurrent.TimeUnit.SECONDS) }.getOrNull() }.distinctBy { if (it.id.isEmpty()) it.host else it.id }
             } finally { pool.shutdownNow() }
         }
+        /** one address: the console there, or null (nothing answers, or not an AmF X1 console) */
+        fun probe(host: String, port: Int = 8765, timeoutMs: Int = 350): Found? = runCatching {
+            val c = URL("http://$host:$port/api/status").openConnection() as HttpURLConnection
+            c.connectTimeout = timeoutMs; c.readTimeout = 800
+            if (c.responseCode != 200) null else { @Suppress("UNCHECKED_CAST") val o = MiniJson.parse(c.inputStream.bufferedReader().use { it.readText() }) as Map<String, Any?>
+                if (o["daemon"] == "amixos-daemon") Found(host, port, o["consoleId"]?.toString().orEmpty(), o["name"]?.toString().orEmpty(), o["version"]?.toString().orEmpty()) else null }
+        }.getOrNull()
+        fun discover(localIp: String, port: Int = 8765, timeoutMs: Int = 350): List<Pair<String, String>> = discoverConsoles(localIp, port, timeoutMs).map { it.host to it.label }
         /** PAIRING: trade the six-digit PIN the console shows this minute (NETWORK → PHONE REMOTE) for a token of this phone's own.
          *  Needs no token; the service allows one pairing per PIN and five wrong tries a minute. Returns the token. */
         fun pair(host: String, port: Int, pin: String, name: String, secure: Boolean = false): String {

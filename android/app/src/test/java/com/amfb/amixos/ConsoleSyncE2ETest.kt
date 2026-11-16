@@ -25,8 +25,18 @@ class ConsoleSyncE2ETest {
         val path = System.getProperty("amfx.console").orEmpty(); assumeTrue("AMFX_CONSOLE not set", path.isNotEmpty())
         val f = File(path); assertTrue("the console never wrote its state", waitFor(30000) { console(f)?.get("running") == true } >= 0)
         val c0 = console(f)!!; val port = (c0["port"] as Number).toInt()
+        // AUTO-DETECT as the app does: search the network (127.0.0.x here, the Wi-Fi /24 on a phone); the console answers with its consoleId
+        val t0 = System.currentTimeMillis(); val found = DaemonClient.discoverConsoles("127.0.0.9", port, 300)
+        println("E2E auto-detect: ${found.map { it.host + " id " + it.id + " " + it.label }} in ${System.currentTimeMillis() - t0} ms")
+        assertTrue("the search did not find the console once: $found", found.size == 1 && found[0].host == "127.0.0.1" && Regex("^[0-9a-f]{12}$").matches(found[0].id))
+        assertTrue("a console never paired must ask for the PIN", PairedConsoles.match(emptyList(), found) is PairedConsoles.Match.New)
         // PAIR as the app does: the PIN the console shows (it changes every minute: read it fresh)
         val token = DaemonClient.pair("127.0.0.1", port, console(f)!!["pin"].toString(), "E2E phone")
+        // the phone saved the console at an address it no longer has (10.9.9.9, gone from the network): the next search follows it by its id, and the saved token still works
+        val m = PairedConsoles.match(listOf(PairedConsoles.Console("10.9.9.9", port, token, "Studio PC", 1, 1, found[0].id)), DaemonClient.discoverConsoles("127.0.0.9", port, 300, first = listOf("10.9.9.9")))
+        assertTrue("the paired console was not followed to its address: $m", m is PairedConsoles.Match.Known && m.moved && m.console.host == "127.0.0.1")
+        assertTrue("the moved console does not take the saved token", DaemonClient(Endpoint((m as PairedConsoles.Match.Known).console.host, port, m.console.token)).state().strips.isNotEmpty())
+        println("E2E auto-detect: paired console followed from 10.9.9.9 to 127.0.0.1 and connected with its saved token")
         val cl = DaemonClient(Endpoint("127.0.0.1", port, token))
         val pushed = AtomicReference<ConsoleState?>(null)
         val stream = cl.meterStream({ }, null, { s -> pushed.set(s) })
