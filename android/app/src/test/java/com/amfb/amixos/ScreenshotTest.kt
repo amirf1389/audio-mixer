@@ -97,6 +97,11 @@ class ScreenshotTest {
             1 to "{\"kind\":\"plate\",\"name\":\"PLATE REVERB\",\"bypass\":true,\"mix\":0.25,\"params\":[{\"id\":\"decay\",\"title\":\"DECAY\",\"value\":0.4,\"default\":0.4,\"text\":\"1.8 s\"}]}")
         shot(a.rackPanel(0, cat, { js[it] ?: "null" }, {}), "phone-mixer-rack")
     }
+    @Test fun consoles() {   // the paired-consoles list, as the CONSOLES dialog shows it
+        val a = Robolectric.buildActivity(RemoteActivity::class.java).setup().get(); val now = 1_763_300_000_000L
+        val l = listOf(PairedConsoles.Console("192.168.1.20", 8765, "t1", "Studio A", now - 86_400_000L * 9, now - 120_000L), PairedConsoles.Console("192.168.0.42", 8765, "t2", "FOH stage", now - 86_400_000L * 30, now - 86_400_000L * 3))
+        shot(a.consolesPanel(l, now, {}, {}), "consoles")
+    }
     @Test fun muteGroups() {
         val ctx = org.robolectric.RuntimeEnvironment.getApplication()
         ctx.getSharedPreferences("muteGroups", 0).edit().putString("g0", "0,1,2,3").putBoolean("on0", true).putString("g1", "8,9").putString("g3", "4,5,6").commit()
