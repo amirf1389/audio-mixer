@@ -2,7 +2,10 @@
 FROM node:22-alpine
 WORKDIR /app
 COPY bridge/license-server ./bridge/license-server
-COPY bridge/license.js bridge/license-public.json ./bridge/
+COPY management/customer ./management/customer
+COPY management/inline-page.js ./management/
+COPY bridge/portal-auth ./bridge/portal-auth
+COPY bridge/license.js bridge/edition.js bridge/license-public.json ./bridge/
 USER node
 EXPOSE 8787
 ENV LICENSE_HOST=0.0.0.0 LICENSE_PORT=8787 LICENSE_DATA_FILE=/data/licenses.json

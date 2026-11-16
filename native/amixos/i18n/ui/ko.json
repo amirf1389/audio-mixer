@@ -2097,5 +2097,6 @@
 "resampling · FLAC · RF64": "리샘플링 · FLAC · RF64",
 "● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV or FLAC files, one per source, named by time.": "● 믹서의 REC 버튼은 마스터 및 모든 활성화된 스트립(프리페이더, 트림/DSP/인서트 후)의 신호를 WAV 또는 FLAC 파일로 기록하며, 소스당 하나의 파일이 생성되고 파일명은 시간 순으로 지정됩니다.",
 "MICROPHONE ON AT START": "시작 시 마이크 켜기",
-"OFF: ENGINE ON starts the speakers or headphones without the microphone, so the mic never feeds back at start. Turn the mic on with INPUT: MIC on the mixer. ASIO interfaces and COMPUTER SOUND are not affected.": "OFF: ENGINE ON을 설정하면 마이크 없이 스피커나 헤드폰만 작동하므로, 시작 시 마이크에서 피드백이 발생하지 않습니다. 믹서의 INPUT: MIC를 켜서 마이크를 활성화하십시오. ASIO 인터페이스와 COMPUTER SOUND는 이 설정의 영향을 받지 않습니다."
+"OFF: ENGINE ON starts the speakers or headphones without the microphone, so the mic never feeds back at start. Turn the mic on with INPUT: MIC on the mixer. ASIO interfaces and COMPUTER SOUND are not affected.": "OFF: ENGINE ON을 설정하면 마이크 없이 스피커나 헤드폰만 작동하므로, 시작 시 마이크에서 피드백이 발생하지 않습니다. 믹서의 INPUT: MIC를 켜서 마이크를 활성화하십시오. ASIO 인터페이스와 COMPUTER SOUND는 이 설정의 영향을 받지 않습니다.",
+"MY ACCOUNT ONLINE": "온라인 내 계정"
 }

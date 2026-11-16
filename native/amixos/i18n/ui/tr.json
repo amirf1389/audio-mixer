@@ -2071,5 +2071,6 @@
 "resampling · FLAC · RF64": "yeniden örnekleme · FLAC · RF64",
 "● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV or FLAC files, one per source, named by time.": "● MIXER üzerindeki REC düğmesi, master kanalı ve etkinleştirilmiş tüm kanalları (fader öncesi, trim / DSP / insert sonrası) WAV veya FLAC dosyalarına kaydeder; her kaynak için ayrı bir dosya oluşturulur ve dosyalar zamana göre adlandırılır.",
 "MICROPHONE ON AT START": "BAŞLANGIÇTA MİKROFON AÇIK",
-"OFF: ENGINE ON starts the speakers or headphones without the microphone, so the mic never feeds back at start. Turn the mic on with INPUT: MIC on the mixer. ASIO interfaces and COMPUTER SOUND are not affected.": "OFF: ENGINE ON seçeneği, hoparlörleri veya kulaklıkları mikrofon olmadan çalıştırır; böylece başlangıçta mikrofondan geri besleme oluşmaz. Mikrofonu, mikserdeki INPUT: MIC seçeneğini etkinleştirerek açın. ASIO arabirimleri ve COMPUTER SOUND bu ayardan etkilenmez."
+"OFF: ENGINE ON starts the speakers or headphones without the microphone, so the mic never feeds back at start. Turn the mic on with INPUT: MIC on the mixer. ASIO interfaces and COMPUTER SOUND are not affected.": "OFF: ENGINE ON seçeneği, hoparlörleri veya kulaklıkları mikrofon olmadan çalıştırır; böylece başlangıçta mikrofondan geri besleme oluşmaz. Mikrofonu, mikserdeki INPUT: MIC seçeneğini etkinleştirerek açın. ASIO arabirimleri ve COMPUTER SOUND bu ayardan etkilenmez.",
+"MY ACCOUNT ONLINE": "ÇEVRİMİÇİ HESABIM"
 }

@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en" class="h-full"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
+<title>AmF X1 My Account</title><meta name="description" content="Your AmF X1 licence: plan, end date, the computers it runs on, and the downloads.">
+<!-- one file: Tailwind Play CDN (pinned) for the utilities, the components below, the script at the end (allowed by its hash) -->
+<script src="https://cdn.tailwindcss.com/3.4.16"></script>
+<style type="text/tailwindcss">
+@layer base { [hidden] { display: none !important; }   /* a display utility (grid, flex) must never show a hidden part */
+  body { @apply bg-slate-100 text-slate-900 dark:bg-[#0b0f15] dark:text-slate-100 antialiased; }
+  input, textarea { @apply w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#0b0f15] px-3 py-2.5 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-orange-500/60; }
+  button { @apply rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-xs font-bold tracking-wide hover:border-slate-500; } }
+@layer components { .card { @apply rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#121821] p-5; }
+  .h2 { @apply text-[11px] tracking-[.12em] font-semibold text-slate-500 dark:text-slate-400 mt-4 mb-2; }
+  .pri { @apply bg-orange-600 border-orange-600 text-white hover:bg-orange-500; } .ghost { @apply bg-transparent text-slate-500; }
+  .dim { @apply text-slate-500 dark:text-slate-400; } .small { @apply text-xs; } .err { @apply text-red-500 min-h-[1em] mt-2; } .ok { @apply text-emerald-500; } .bad { @apply text-red-500; } .mono { @apply font-mono; }
+  .stat { @apply rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#0b0f15] p-3; } .stat small { @apply block text-[10px] tracking-widest text-slate-500; } .stat b { @apply font-mono text-xl font-semibold; }
+  #comps li, #files li { @apply flex flex-wrap items-center gap-3 py-2.5 border-b border-slate-200 dark:border-slate-800; } #comps li { @apply justify-between; } #files a { @apply font-semibold text-orange-600; }
+  #notes li { @apply relative pl-4 py-0.5 text-slate-500 before:content-['•'] before:absolute before:left-0.5 before:text-orange-600; } }
+</style></head>
+<body class="min-h-full flex flex-col">
+<header class="flex items-center px-5 py-3.5 bg-white dark:bg-[#121821] border-b border-slate-200 dark:border-slate-800">
+<div class="tracking-[.16em] font-bold text-slate-500"><b class="text-orange-600">AMF X1</b> · MY ACCOUNT</div><a class="ml-auto text-xs tracking-widest text-slate-500 hover:text-orange-600" href="/portal/">PORTAL</a></header>
+<div id="notice" class="max-w-3xl w-full mx-auto mt-4 px-4 py-2.5 rounded-xl border border-orange-600 bg-orange-600/10" hidden></div>
+<main class="max-w-3xl w-full mx-auto px-4 py-5 grid gap-4 flex-1">
+<section class="card" id="keyCard">
+<h1 class="text-2xl font-semibold mb-1">Your licence</h1>
+<p class="dim mb-3">Paste the licence key from your e-mail or from the app (LICENSE → COPY KEY). It stays in this browser and is sent only to check it.</p>
+<textarea id="key" rows="3" placeholder="AMIX1.…" spellcheck="false" aria-label="Licence key"></textarea>
+<div class="flex flex-wrap items-center gap-3 mt-3"><label class="flex items-center gap-2 dim text-sm"><input type="checkbox" id="remember" class="!w-auto"> remember on this device</label><span class="flex-1"></span><button id="check" class="pri">SHOW MY LICENCE</button></div>
+<p id="kerr" class="err"></p>
+<details class="mt-3"><summary class="cursor-pointer dim">I have a 25-character product key instead</summary>
+<div class="flex flex-wrap gap-2 mt-3"><input id="pk" class="flex-1 min-w-[220px] !w-auto" placeholder="XXXXX-XXXXX-XXXXX-XXXXX-XXXXX" autocomplete="off" aria-label="Product key"><button id="redeem">GET MY LICENCE KEY</button></div>
+<p id="perr" class="err"></p></details>
+</section>
+
+<section class="card" id="lic" hidden>
+<div class="grid gap-3 grid-cols-2 sm:grid-cols-4"><div class="stat"><small>PLAN</small><b id="plan"></b></div><div class="stat"><small>STATE</small><b id="state"></b></div><div class="stat"><small>ENDS</small><b id="ends"></b></div><div class="stat"><small>COMPUTERS</small><b id="seats"></b></div></div>
+<div class="h2">COMPUTERS ON THIS LICENCE</div>
+<p class="dim small">Moving to a new computer? Free the old one here, then activate on the new one (LICENSE → ACTIVATE in the app).</p>
+<ul id="comps"></ul>
+<div class="flex flex-wrap gap-2 mt-3"><button id="copyKey">COPY KEY</button><button id="forget" class="ghost">FORGET THIS KEY HERE</button></div>
+</section>
+
+<section class="card" id="dl">
+<div class="h2 !mt-0">DOWNLOADS</div><div id="ver" class="dim">reading the latest version…</div>
+<ul id="files"></ul><ul id="notes" class="mt-2"></ul>
+</section>
+
+<section class="card"><div class="h2 !mt-0">HELP</div>
+<p class="text-sm">The app checks its licence by itself and works offline for long stretches; this page is only for looking and for moving a licence. Questions: <a id="mail" class="text-orange-600" href="#">support</a>.</p></section>
+</main>
+<footer class="text-center dim text-xs py-5">AmF X1 · AMFB Audio</footer>
+<script>
+'use strict';
+// MY ACCOUNT: everything here comes from the licence server's public routes (/status with list, /deactivate, /redeem, /portal/updates,
+// /portal/notice). The key is kept in this browser only when "remember" is ticked; it is sent to this server only.
+const $ = s => document.querySelector(s);
+const day = t => t ? new Date(t).toISOString().slice(0, 10) : 'no end';
+const size = n => n > 1e6 ? (n / 1e6).toFixed(1) + ' MB' : n > 1e3 ? (n / 1e3).toFixed(0) + ' kB' : (n || 0) + ' B';
+let key = ''; try { key = localStorage.getItem('amfx1.account.key') || ''; } catch (_) {}
+async function post(path, body) {
+  const r = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({ ok: false, error: 'HTTP ' + r.status }));
+  if (!r.ok || j.ok === false) throw new Error(r.status === 429 ? 'Too many tries: wait a minute.' : (j.error || 'HTTP ' + r.status));
+  return j;
+}
+function el(tag, text, cls) { const e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; }
+async function check() {
+  $('#kerr').textContent = ''; const k = $('#key').value.trim(); if (!k) { $('#kerr').textContent = 'Paste the licence key first.'; return; }
+  try {
+    const s = await post('/status', { key: k, list: true }); key = k;
+    if ($('#remember').checked) try { localStorage.setItem('amfx1.account.key', k); } catch (_) {}
+    $('#plan').textContent = String(s.plan || '').toUpperCase(); $('#ends').textContent = day(s.expires);
+    const st = s.revoked ? 'REVOKED' : s.expired ? 'ENDED' : 'ACTIVE'; $('#state').textContent = st; $('#state').className = st === 'ACTIVE' ? 'ok' : 'bad';
+    $('#seats').textContent = `${s.devices} of ${s.limit}`;
+    const ul = $('#comps'); ul.textContent = '';
+    if (!s.computers || !s.computers.length) ul.appendChild(el('li', 'No computer is using this licence yet.', 'dim'));
+    for (const m of s.computers || []) { const li = el('li'); li.appendChild(el('span', m, 'mono')); const b = el('button', 'FREE THIS COMPUTER');
+      b.onclick = async () => { if (!confirm('Free ' + m + '? The app on that computer stops using this licence the next time it checks.')) return;
+        try { await post('/deactivate', { key, machine: m }); check(); } catch (e) { $('#kerr').textContent = e.message; } };
+      li.appendChild(b); ul.appendChild(li); }
+    $('#lic').hidden = false;
+  } catch (e) { $('#lic').hidden = true; $('#kerr').textContent = e.message === 'bad-signature' || /signature|format/i.test(e.message) ? 'This is not an AmF X1 licence key (check that it was copied whole).' : e.message; }
+}
+$('#check').onclick = check;
+$('#redeem').onclick = async () => { $('#perr').textContent = '';
+  try { const r = await post('/redeem', { code: $('#pk').value }); $('#key').value = r.key; $('#pk').value = ''; check(); }
+  catch (e) { $('#perr').textContent = e.message; } };
+$('#copyKey').onclick = () => navigator.clipboard.writeText(key).catch(() => {});
+$('#forget').onclick = () => { try { localStorage.removeItem('amfx1.account.key'); } catch (_) {} key = ''; $('#key').value = ''; $('#lic').hidden = true; $('#remember').checked = false; };
+// what the vendor tells everyone, and the support address
+fetch('/portal/notice').then(r => r.json()).then(n => { if (n.notice) { $('#notice').textContent = n.notice; $('#notice').hidden = false; }
+  if (n.supportEmail) { $('#mail').textContent = n.supportEmail; $('#mail').href = 'mailto:' + encodeURIComponent(n.supportEmail).replace('%40', '@'); } }).catch(() => {});
+// the downloads of the published version
+fetch('/portal/updates').then(r => r.json()).then(u => {
+  if (!u.ok) { $('#ver').textContent = u.error || 'The downloads are not available right now.'; return; }
+  $('#ver').textContent = `Version ${u.version}${u.released ? ' · ' + String(u.released).slice(0, 10) : ''}${u.channel ? ' · ' + u.channel : ''}`;
+  const files = $('#files'); for (const f of u.files || []) { if (!/^https:\/\//.test(f.url || '')) continue;
+    const li = el('li'); const a = el('a', f.name); a.href = f.url; a.rel = 'noopener'; li.appendChild(a); li.appendChild(el('span', `${String(f.platform || '').toUpperCase()} · ${size(f.size)}`, 'dim small')); files.appendChild(li); }
+  for (const n of u.notes || []) $('#notes').appendChild(el('li', n));
+}).catch(() => { $('#ver').textContent = 'The downloads are not available right now.'; });
+if (key) { $('#key').value = key; $('#remember').checked = true; check(); }   // a remembered key: shown at once
+</script>
+</body></html>

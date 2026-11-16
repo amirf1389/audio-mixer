@@ -2124,5 +2124,6 @@
 "resampling · FLAC · RF64": "نمونه‌برداری مجدد · فلک · RF64",
 "● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV or FLAC files, one per source, named by time.": "● REC روی میکسر، مستر و هر ترک آماده ضبط (پیش از فیدر، پس از ترِیم/DSP/اینسرت‌ها) را به صورت فایل‌های WAV یا FLAC، یکی برای هر منبع، با نام‌گذاری بر اساس زمان ضبط می‌کند.",
 "MICROPHONE ON AT START": "میکروفون از ابتدا روشن است",
-"OFF: ENGINE ON starts the speakers or headphones without the microphone, so the mic never feeds back at start. Turn the mic on with INPUT: MIC on the mixer. ASIO interfaces and COMPUTER SOUND are not affected.": "OFF: ENGINE ON بلندگوها یا هدفون‌ها را بدون میکروفون روشن می‌کند، بنابراین هنگام راه‌اندازی هیچ بازخوردی از میکروفون دریافت نمی‌شود. میکروفون را با INPUT: MIC روی میکسر روشن کنید. رابط‌های ASIO و COMPUTER SOUND تحت تأثیر قرار نمی‌گیرند."
+"OFF: ENGINE ON starts the speakers or headphones without the microphone, so the mic never feeds back at start. Turn the mic on with INPUT: MIC on the mixer. ASIO interfaces and COMPUTER SOUND are not affected.": "OFF: ENGINE ON بلندگوها یا هدفون‌ها را بدون میکروفون روشن می‌کند، بنابراین هنگام راه‌اندازی هیچ بازخوردی از میکروفون دریافت نمی‌شود. میکروفون را با INPUT: MIC روی میکسر روشن کنید. رابط‌های ASIO و COMPUTER SOUND تحت تأثیر قرار نمی‌گیرند.",
+"MY ACCOUNT ONLINE": "حساب من آنلاین"
 }

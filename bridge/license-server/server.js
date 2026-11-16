@@ -254,14 +254,16 @@ function removeDevice({ id, machine, file = DATA_FILE }) {
   return { ok: true, status: 200, id, devices: rec.devices.length };
 }
 // What a key is worth right now: genuine, its plan and expiry, whether it was revoked, how many computers hold it. The app may ask at any time.
-function keyStatus({ key, machine, file = DATA_FILE, jwk, now = Date.now() }) {
+function keyStatus({ key, machine, file = DATA_FILE, jwk, now = Date.now(), list = false }) {
   const m = normMachine(machine);
   let issued = now; try { issued = JSON.parse(unb64u(String(key || '').trim().split('.')[1]).toString('utf8')).issued || now; } catch (_) { /* refused below */ }
   const v = verifyKey(String(key || '').trim(), { machine: m || undefined, jwk, now: issued });   // the signature; expiry and revocation are reported, not refused
   if (!v.ok) return { ok: false, status: 400, error: v.message || v.reason };
   const p = v.payload, rec = loadRegistry(file)[p.id] || {};
   return { ok: true, status: 200, id: p.id, plan: p.plan, expires: p.expires || null, expired: !!(p.expires && p.expires < now), revoked: !!rec.revoked,
-    devices: Array.isArray(rec.devices) ? rec.devices.length : 0, limit: Math.min(p.seats || 1, MAX_DEVICES), thisComputer: !!(m && Array.isArray(rec.devices) && rec.devices.includes(m)) };
+    devices: Array.isArray(rec.devices) ? rec.devices.length : 0, limit: Math.min(p.seats || 1, MAX_DEVICES), thisComputer: !!(m && Array.isArray(rec.devices) && rec.devices.includes(m)),
+    // MY ACCOUNT (/account/): whoever holds the signed key may see the machine codes on it, to free one with /deactivate
+    ...(list ? { computers: Array.isArray(rec.devices) ? rec.devices.slice(0, MAX_DEVICES) : [] } : {}) };
 }
 
 // ---- the audit trail: who did what, when, from where. One JSON line per action; each line carries the hash of the one before, so a line that
@@ -304,7 +306,7 @@ function createServer({ privateKey, token, dataFile = DATA_FILE, dataSecret, por
   // the app calls these with its key: no admin token, the key is the proof
   app.post('/activate', limit('pub', 30), async c => { const b = await c.body(); const r = activateDevice({ key: b.key, machine: b.machine, file: dataFile, jwk }); if (r.ok) audit.add('device.activate', r.id, c.ip); return out(c, r); });
   app.post('/deactivate', limit('pub', 30), async c => { const b = await c.body(); const r = deactivateDevice({ key: b.key, machine: b.machine, file: dataFile, jwk }); if (r.ok) audit.add('device.deactivate', r.id, c.ip); return out(c, r); });
-  app.post('/status', limit('pub', 30), async c => { const b = await c.body(); return out(c, keyStatus({ key: b.key, machine: b.machine, file: dataFile, jwk })); });
+  app.post('/status', limit('pub', 30), async c => { const b = await c.body(); return out(c, keyStatus({ key: b.key, machine: b.machine, file: dataFile, jwk, list: b.list === true })); });
 
   const issue = async c => {
     const body = await c.body(), built = buildPayload(body);
@@ -423,6 +425,13 @@ function createServer({ privateKey, token, dataFile = DATA_FILE, dataSecret, por
   const portal = path.join(__dirname, 'portal');
   app.get('/portal', c => c.send(301, '', { location: '/portal/' }));
   app.static({ '/portal/': [path.join(portal, 'index.html'), 'text/html; charset=utf-8'], '/portal/app.js': [path.join(portal, 'app.js'), 'text/javascript; charset=utf-8'], '/portal/portal.css': [path.join(portal, 'portal.css'), 'text/css; charset=utf-8'], '/portal/base.css': [path.join(__dirname, 'dashboard', 'style.css'), 'text/css; charset=utf-8'] });
+  // MY ACCOUNT: the customer self-service page (management/customer): a key's plan, end date and computers, free a computer, a product
+  // key traded for the licence key, the downloads. Public files; everything it shows comes from /status, /deactivate, /redeem and /portal/*
+  const account = path.join(__dirname, '..', '..', 'management', 'customer');
+  app.get('/account', c => c.send(301, '', { location: '/account/' }));
+  let accountPage = null;   // one inline file (Tailwind Play CDN + its script): the CSP allows that script by its hash only
+  app.get('/account/', c => { if (!accountPage) accountPage = require('../../management/inline-page').inlinePage(path.join(account, 'index.html'));
+    return c.send(200, accountPage.body, { 'content-type': 'text/html; charset=utf-8', 'content-security-policy': accountPage.csp }); });
   // the management page: three fixed files; it asks for the token itself, so the files carry nothing secret
   const dash = path.join(__dirname, 'dashboard');
   // the staff pages load pinned CDN files (Tailwind Play CDN, Bootstrap, Font Awesome) checked by their SRI hash; each page gets a CSP naming exactly those hosts

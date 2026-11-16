@@ -2048,5 +2048,6 @@
 "resampling · FLAC · RF64": "Resampling · FLAC · RF64",
 "● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV or FLAC files, one per source, named by time.": "● Die Taste „REC“ am MIXER zeichnet den Master und jeden aktivierten Kanal (vor dem Fader, nach Trim / DSP / Inserts) als WAV- oder FLAC-Datei auf, wobei pro Quelle eine Datei erstellt wird, deren Name sich nach der Zeit richtet.",
 "MICROPHONE ON AT START": "Mikrofon beim Start eingeschaltet",
-"OFF: ENGINE ON starts the speakers or headphones without the microphone, so the mic never feeds back at start. Turn the mic on with INPUT: MIC on the mixer. ASIO interfaces and COMPUTER SOUND are not affected.": "OFF: ENGINE ON schaltet die Lautsprecher oder Kopfhörer ohne Mikrofon ein, sodass es beim Start nie zu einer Rückkopplung des Mikrofons kommt. Schalten Sie das Mikrofon über „INPUT: MIC“ am Mischpult ein. ASIO-Schnittstellen und „COMPUTER SOUND“ sind davon nicht betroffen."
+"OFF: ENGINE ON starts the speakers or headphones without the microphone, so the mic never feeds back at start. Turn the mic on with INPUT: MIC on the mixer. ASIO interfaces and COMPUTER SOUND are not affected.": "OFF: ENGINE ON schaltet die Lautsprecher oder Kopfhörer ohne Mikrofon ein, sodass es beim Start nie zu einer Rückkopplung des Mikrofons kommt. Schalten Sie das Mikrofon über „INPUT: MIC“ am Mischpult ein. ASIO-Schnittstellen und „COMPUTER SOUND“ sind davon nicht betroffen.",
+"MY ACCOUNT ONLINE": "MEIN ONLINE-KONTO"
 }
