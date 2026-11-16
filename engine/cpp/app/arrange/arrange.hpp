@@ -23,7 +23,8 @@ namespace am::arr {
 struct Audio { double rate = 48000; std::vector<float> L, R; double duration() const { return rate > 0 ? static_cast<double>(L.size()) / rate : 0; } };
 bool readWav(const std::string& path, Audio& out, std::string& err);                 // PCM 8 / 16 / 24 / 32, float 32 / 64, any channel count (mono duplicated, > 2 takes the first two)
 bool writeWav24(const std::string& path, const std::vector<float>& L, const std::vector<float>& R, double rate, std::string& err);
-std::vector<float> resampleLinear(const std::vector<float>& x, double from, double to);
+std::vector<float> resampleLinear(const std::vector<float>& x, double from, double to);   // fast, for previews
+std::vector<float> resampleHq(const std::vector<float>& x, double from, double to);       // r8brain-free-src (24-bit grade): what is heard and exported
 
 // ---- the model
 struct AutoPoint { double t = 0, v = 0; };                                            // seconds, dB (-60 .. +6)

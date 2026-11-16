@@ -186,6 +186,7 @@ class Engine : public QObject {
   Q_PROPERTY(QString recordFolder READ recordFolder WRITE setRecordFolder NOTIFY recordChanged)
   Q_PROPERTY(bool recordFloat READ recordFloat WRITE setRecordFloat NOTIFY recordChanged)
   Q_PROPERTY(int recordFormat READ recordFormat WRITE setRecordFormat NOTIFY recordChanged)
+  Q_PROPERTY(QString hiresSummary READ hiresSummary CONSTANT)   // the hi-res libraries in this build: "r8brain 6.5 · soxr 0.1.3 · libFLAC 1.5.0 · dr_wav 0.14.6 · dr_flac 0.13.4"
   Q_PROPERTY(QString deviceFormat READ deviceFormat NOTIFY stateChanged)
   Q_PROPERTY(bool recordMaster READ recordMaster WRITE setRecordMaster NOTIFY recordChanged)
   Q_PROPERTY(QString recordMessage READ recordMessage NOTIFY recordChanged)
@@ -194,8 +195,10 @@ class Engine : public QObject {
   QStringList recordFiles() const { QStringList l; for (const auto& f : recorder_.files()) l << QString::fromStdString(f); return l; }
   QString recordFolder() const; void setRecordFolder(const QString& f) { settings_.setValue("record/folder", f); emit recordChanged(); }
   // record format: 0 = 24-bit PCM, 1 = 32-bit float, 2 = 64-bit float, 3 = 32-bit PCM (the old float32 switch still reads and writes 0 / 1)
-  int recordFormat() const { const int f = settings_.value("record/format", -1).toInt(); if (f >= 0 && f <= 3) return f; return settings_.contains("record/float32") ? (settings_.value("record/float32").toBool() ? 1 : 0) : 2; }   // new installs: 64-bit float
-  void setRecordFormat(int f) { f = std::clamp(f, 0, 3); settings_.setValue("record/format", f); settings_.setValue("record/float32", f == 1 || f == 2); emit recordChanged(); }
+  QString hiresSummary() const;
+  int recordFormat() const { const int f = settings_.value("record/format", -1).toInt(); if (f >= 0 && f <= 4) return f; return settings_.contains("record/float32") ? (settings_.value("record/float32").toBool() ? 1 : 0) : 2; }   // new installs: 64-bit float
+  void setRecordFormat(int f) { f = std::clamp(f, 0, 4);   // 4 = FLAC 24-bit
+    settings_.setValue("record/format", f); settings_.setValue("record/float32", f == 1 || f == 2); emit recordChanged(); }
   bool recordFloat() const { const int f = recordFormat(); return f == 1 || f == 2; } void setRecordFloat(bool v) { setRecordFormat(v ? 1 : 0); }
   QString deviceFormat() const;
   // OUTPUT word length (WASAPI exclusive): 32-bit integer first (the device's own word length) or 32-bit float first
@@ -214,12 +217,19 @@ class Engine : public QObject {
   // and an allowed WASAPI input is opened EXCLUSIVELY (no Windows mixer, no other program can capture or inject on it). A device that
   // is not allowed runs outputs only, with a note saying why. Kept as "backend|id" in audio/allowedInputs.
   Q_PROPERTY(bool secureInput READ secureInput WRITE setSecureInput NOTIFY devicesChanged)
+  // INPUT SOURCE: "mic" (a capture device), "music" (COMPUTER SOUND: what every other program plays, or an output's loopback), "none"
+  Q_PROPERTY(QString inputSource READ inputSource NOTIFY stateChanged)
+  Q_PROPERTY(bool computerSoundAvailable READ computerSoundAvailable NOTIFY devicesChanged)
   Q_PROPERTY(QStringList allowedInputs READ allowedInputs NOTIFY devicesChanged)
   bool secureInput() const { return settings_.value("audio/secureInput", false).toBool(); } void setSecureInput(bool v) { settings_.setValue("audio/secureInput", v); emit devicesChanged(); }
   QStringList allowedInputs() const { return settings_.value("audio/allowedInputs").toStringList(); }
   Q_INVOKABLE bool inputAllowed(const QString& backend, const QString& id) const { return allowedInputs().contains(backend + "|" + id); }
   Q_INVOKABLE void setInputAllowed(const QString& backend, const QString& id, bool on);
   Q_INVOKABLE QVariantList inputCandidates() const;
+  QString inputSource() const; bool computerSoundAvailable() const;
+  // the input of the running stream becomes the microphone ("mic") or the computer's sound ("music"); the output stays as it is. Returns
+  // the stream that opened as {backend, in, out, rate, frames, inChannels, outChannels} for SETTINGS to remember, or an empty map.
+  Q_INVOKABLE QVariantMap setInputSource(const QString& source);
   Q_INVOKABLE QVariantMap secureInputPreview(const QString& backend, const QString& in, const QString& out, int inChannels);   // what SECURE INPUT would open: {in, inChannels, exclusive, note}   // every device with inputs, [{backend, id, name, kind, allowed, defaultIn}]
   Q_PROPERTY(bool bluetoothAudio READ bluetoothAudio WRITE setBluetoothAudio NOTIFY devicesChanged)
   bool bluetoothAudio() const { return settings_.value("audio/bluetooth", true).toBool(); } void setBluetoothAudio(bool v) { settings_.setValue("audio/bluetooth", v); refreshDevices(); }
@@ -673,7 +683,7 @@ class Engine : public QObject {
   std::vector<StripUi> strips_;
   double masterDb_ = 0; bool masterLim_ = true; double masterCeil_ = -0.5, masterRel_ = 100;
   static constexpr int kOutputs = 32;
-  int inRoute_[kStrips] = {}; int outRoute_[kOutputs] = {}; int devIn_ = 0, devOut_ = 0; QString inDevName_, outDevName_; void rememberDeviceNames(const std::string& backend, const std::string& in, const std::string& out);
+  int inRoute_[kStrips] = {}; int outRoute_[kOutputs] = {}; int devIn_ = 0, devOut_ = 0; QString inDevName_, outDevName_; std::string curBackend_, curIn_, curOut_; void rememberDeviceNames(const std::string& backend, const std::string& in, const std::string& out);
   int openBits_ = 0; bool openExclusive_ = false;
   bool spkOn_ = false; QVariantMap spkSaved_; void feedSpeakers(int strip);
   QVariantMap license_; int licensedChannels_ = 10;

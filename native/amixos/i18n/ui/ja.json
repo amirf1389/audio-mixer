@@ -2093,5 +2093,13 @@
 "Only the input devices allowed below are opened, by hand or automatically. An allowed WASAPI input is opened in exclusive mode: no other program can listen to it or mix into it. Anything else runs outputs only.": "以下に許可されている入力デバイスのみが、手動または自動的に開かれます。許可されたWASAPI入力は排他モードで開かれます。つまり、他のプログラムはその入力をリッスンしたり、その出力にミックスインしたりすることはできません。それ以外のものは、出力のみを実行します。",
 " · default": " ・デフォルト",
 "ALLOWED": "許可",
-"No input device found: plug one in, then RESCAN.": "入力デバイスが検出されませんでした：入力デバイスを接続してから、「再スキャン」を行ってください。"
+"No input device found: plug one in, then RESCAN.": "入力デバイスが検出されませんでした：入力デバイスを接続してから、「再スキャン」を行ってください。",
+"INPUT: MIC": "入力：マイク",
+"INPUT: COMPUTER SOUND": "入力：コンピュータのサウンド",
+"The music of every app on this computer (Spotify, YouTube, a player) becomes the input on CH 1-2. AmF X1's own output is left out, so it plays on the same headphones or speakers without a loop.": "このコンピューター上のすべてのアプリ（Spotify、YouTube、音楽プレーヤーなど）からの音楽は、CH 1～2への入力となります。AmF X1自体の出力は除外されるため、ループを介さずに同じヘッドフォンやスピーカーで再生されます。",
+"Needs Windows 10 version 2004 or later with the sound card on WASAPI.": "Windows 10 バージョン 2004 以降が必要で、サウンドカードは WASAPI モードに設定されている必要があります。",
+"The microphone (the default capture device) is the input.": "マイク（デフォルトのキャプチャデバイス）が入力源となります。",
+"FLAC 24-bit (lossless)": "FLAC 24ビット（ロスレス）",
+"HI-RES AUDIO": "ハイレゾオーディオ",
+"resampling · FLAC · RF64": "リサンプリング · FLAC · RF64"
 }

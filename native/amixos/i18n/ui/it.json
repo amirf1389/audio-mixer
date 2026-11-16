@@ -2046,5 +2046,13 @@
 " · default": " · predefinito",
 "ALLOWED": "CONSENTITO",
 "ALLOW": "CONSENTIRE",
-"No input device found: plug one in, then RESCAN.": "Non è stato rilevato alcun dispositivo di input: collegarne uno, quindi eseguire una NUOVA SCANSIONE."
+"No input device found: plug one in, then RESCAN.": "Non è stato rilevato alcun dispositivo di input: collegarne uno, quindi eseguire una NUOVA SCANSIONE.",
+"INPUT: MIC": "INGRESSO: MICROFONO",
+"INPUT: COMPUTER SOUND": "INPUT: AUDIO DEL COMPUTER",
+"The music of every app on this computer (Spotify, YouTube, a player) becomes the input on CH 1-2. AmF X1's own output is left out, so it plays on the same headphones or speakers without a loop.": "La musica riprodotta da ogni app presente su questo computer (Spotify, YouTube, un lettore multimediale) viene inviata in ingresso ai canali 1-2. L'uscita dell'AmF X1 viene esclusa, quindi il suono viene riprodotto sulle stesse cuffie o altoparlanti senza creare un loop.",
+"Needs Windows 10 version 2004 or later with the sound card on WASAPI.": "Richiede Windows 10 versione 2004 o successive con la scheda audio configurata su WASAPI.",
+"The microphone (the default capture device) is the input.": "Il microfono (il dispositivo di acquisizione predefinito) è l'ingresso.",
+"FLAC 24-bit (lossless)": "FLAC a 24 bit (senza perdita di dati)",
+"HI-RES AUDIO": "AUDIO AD ALTA RISOLUZIONE",
+"resampling · FLAC · RF64": "ricampionamento · FLAC · RF64"
 }

@@ -2028,5 +2028,13 @@
 "Only the input devices allowed below are opened, by hand or automatically. An allowed WASAPI input is opened in exclusive mode: no other program can listen to it or mix into it. Anything else runs outputs only.": "仅允许手动或自动打开以下列出的输入设备。允许的 WASAPI 输入设备以独占模式打开：其他程序无法监听该设备或对其进行混音。其余所有程序仅可进行输出操作。",
 " · default": " · 默认",
 "ALLOWED": "允许",
-"No input device found: plug one in, then RESCAN.": "未检测到输入设备：请连接一个输入设备，然后重新扫描。"
+"No input device found: plug one in, then RESCAN.": "未检测到输入设备：请连接一个输入设备，然后重新扫描。",
+"INPUT: MIC": "输入：麦克风",
+"INPUT: COMPUTER SOUND": "输入：计算机声音",
+"The music of every app on this computer (Spotify, YouTube, a player) becomes the input on CH 1-2. AmF X1's own output is left out, so it plays on the same headphones or speakers without a loop.": "这台电脑上所有应用程序（Spotify、YouTube、播放器）的音乐都会作为输入信号传入CH 1-2。AmF X1自身的输出被排除在外，因此它可以在同一副耳机或扬声器上播放，无需环路连接。",
+"Needs Windows 10 version 2004 or later with the sound card on WASAPI.": "需要 Windows 10 2004 版或更高版本，且声卡需设置为 WASAPI 模式。",
+"The microphone (the default capture device) is the input.": "麦克风（默认捕获设备）是输入源。",
+"FLAC 24-bit (lossless)": "FLAC 24位（无损）",
+"HI-RES AUDIO": "高解析度音频",
+"resampling · FLAC · RF64": "重采样 · FLAC · RF64"
 }

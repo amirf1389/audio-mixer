@@ -376,7 +376,7 @@ int main(int argc, char* argv[]) {
       { // the device's own sample format is reported while it runs; the record format choice keeps the old 24 / float switch in step
         const QString df = engine.deviceFormat(); const int rf0 = engine.recordFormat();
         engine.setRecordFormat(2); const bool f64 = engine.recordFormat() == 2 && engine.recordFloat(); engine.setRecordFormat(3); const bool p32 = engine.recordFormat() == 3 && !engine.recordFloat();
-        engine.setRecordFormat(9); const bool clamp = engine.recordFormat() == 3; engine.setRecordFloat(false); const bool back = engine.recordFormat() == 0; engine.setRecordFormat(rf0);
+        engine.setRecordFormat(9); const bool clamp = engine.recordFormat() == 4; engine.setRecordFloat(false); const bool back = engine.recordFormat() == 0; engine.setRecordFormat(rf0);
         if ((engine.running() && df.isEmpty()) || !f64 || !p32 || !clamp || !back) { std::fprintf(stderr, "amixos --smoke: formats (device \"%s\", 64f %d, 32i %d, clamp %d, back %d)\n", qPrintable(df), f64, p32, clamp, back); return 156; } }
       { // COMPRESSION TARGET: listens first, then suggests; nothing is applied without the call; the apply sets the channel compressor
         const QVariantMap before = engine.compSuggestion(0); const QVariantMap ch0 = engine.channelParams(0);
@@ -674,6 +674,9 @@ int main(int argc, char* argv[]) {
         QSettings().remove("update/hosts"); QSettings().setValue("update/url", keepUrl); update.setLicenseServer(keepLic); }
       { const QString pin = remote.pairPin(); const int left = remote.pairSecondsLeft();   // the pairing PIN: six digits once the master token exists, 1..60 s to the next
         if ((!pin.isEmpty() && (pin.size() != 6 || pin.toInt() < 0)) || left < 1 || left > 60) { std::fprintf(stderr, "amixos --smoke: the pairing PIN is wrong (%s, %d s)\n", qPrintable(pin), left); return 206; } }
+      { // HIGH-RESOLUTION AUDIO: r8brain, libFLAC, dr_wav / dr_flac built in; libsoxr loaded from beside the program
+        const QString hs = engine.hiresSummary(); if (!hs.contains("r8brain-free-src 6.5") || !hs.contains("libFLAC") || !hs.contains("libsoxr") || hs.contains("not installed")) { std::fprintf(stderr, "amixos --smoke: hi-res libraries: %s\n", qPrintable(hs)); return 281; }
+        engine.setRecordFormat(4); if (engine.recordFormat() != 4 || engine.recordFloat()) { std::fprintf(stderr, "amixos --smoke: FLAC recording format did not take\n"); return 282; } engine.setRecordFormat(0); }
       { // SECURE INPUT: an input not on the allowed list is never opened; an allowed WASAPI input opens exclusively; switched off, nothing changes
         const bool keepOn = engine.secureInput(); const QStringList keepList = QSettings().value("audio/allowedInputs").toStringList();
         engine.setSecureInput(true); engine.setInputAllowed("wasapi", "{mic-a}", false);
@@ -683,6 +686,8 @@ int main(int argc, char* argv[]) {
         if (r["inChannels"].toInt() != 2 || r["in"].toString() != "{mic-a}" || !r["exclusive"].toBool() || !r["note"].toString().isEmpty()) { std::fprintf(stderr, "amixos --smoke: SECURE INPUT did not open the allowed device exclusively\n"); return 276; }
         r = engine.secureInputPreview("asio", "", "Other ASIO", 8); if (r["inChannels"].toInt() != 0) return 277;   // ASIO's input is the driver: not allowed, no input
         r = engine.secureInputPreview("wasapi", "-", "", 0); if (!r["note"].toString().isEmpty() || r["exclusive"].toBool()) return 278;   // no input asked: nothing to secure
+        engine.setInputAllowed("wasapi", "loopback:system", true); r = engine.secureInputPreview("wasapi", "loopback:system", "", 2);   // COMPUTER SOUND can be allowed; a loopback is never exclusive
+        if (r["inChannels"].toInt() != 2 || r["in"].toString() != "loopback:system" || r["exclusive"].toBool()) { std::fprintf(stderr, "amixos --smoke: SECURE INPUT and COMPUTER SOUND (in %s, exclusive %d)\n", qPrintable(r["in"].toString()), r["exclusive"].toBool()); return 280; }
         engine.setSecureInput(false); r = engine.secureInputPreview("wasapi", "{mic-b}", "", 2); if (r["inChannels"].toInt() != 2 || r["exclusive"].toBool()) return 279;
         QSettings().setValue("audio/allowedInputs", keepList); engine.setSecureInput(keepOn); }
       { // THE PAIRING QR CODE: a real QR (finder squares in three corners, a size of 21 + 4k), the PIN in the #fragment only
@@ -852,6 +857,7 @@ int main(int argc, char* argv[]) {
         frame.setCardType(0, "aec-in"); frame.setCardType(1, "digital-in"); frame.setCardType(2, "analog-out"); frame.setCardType(3, "hybrid");
         frame.setPhantom(0, 0, true); frame.setPhantom(0, 1, true); frame.setChannelStrip(0, 0, 0); frame.setChannelStrip(0, 1, 1); frame.setLogicIn(2, true); frame.setLogicIn(7, true);   // a populated frame for the I/O FRAME picture
         for (const char* id : {"home", "frame", "engctl", "delay", "cloud", "cascade", "mixer", "dsp", "dyn", "gate", "bus", "dca", "scenes", "presets", "routing", "renew", "arrange", "io", "meter", "score", "amp", "assistant", "store", "lufs", "sys", "fx", "osc", "phase", "acoustics", "surround", "master", "rtaeq", "miceq", "live", "tools", "calib", "boot", "help", "acct", "access", "admin", "ai", "plugins", "network", "media", "asio", "samples", "rtaeq", "bluetooth"}) {
+          if (const QStringList only = qEnvironmentVariable("AMIX_SHOTS_PAGES").split(',', Qt::SkipEmptyParts); !only.isEmpty() && !only.contains(QString::fromLatin1(id))) continue;   // AMIX_SHOTS_PAGES=mixer,asio: only those pages (a quick look at one page)
           if (QString::fromLatin1(id) == "rtaeq") { QVariantList golden; for (double g : {1.0, 5.0, 3.0, 3.0, 4.0, 2.0, 2.0, 3.0, 3.0, 1.0}) golden << g; engine.setGraphicEq(0, golden, true); }   // the beta's Golden EQ on the shot
           win->setProperty("current", QString::fromLatin1(id)); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
           const QImage img = win->grabWindow(); img.save(shots + "/" + id + ".png"); std::printf("amixos --shots: %s %dx%d\n", id, img.width(), img.height());

@@ -1,5 +1,6 @@
 #include "audiomixer/sample_format.hpp"
 #include "arrange.hpp"
+#include "hires/hires.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -15,7 +16,14 @@ std::uint16_t le16(const unsigned char* p) { return static_cast<std::uint16_t>(p
 constexpr double kPi = 3.14159265358979323846;
 }  // namespace
 
+// the hi-res reader first (dr_wav: RF64 and Wave64 too, files of any size, 32-bit integers kept whole until here); the parser below is the fallback
+static bool fromHires(const hr::Audio& h, Audio& out) {
+  if (h.info.channels < 1 || h.info.rate <= 0) return false; const std::size_t ch = static_cast<std::size_t>(h.info.channels), n = h.samples.size() / ch;
+  out.rate = h.info.rate; out.L.resize(n); out.R.resize(n); for (std::size_t i = 0; i < n; ++i) { out.L[i] = static_cast<float>(h.samples[i * ch]); out.R[i] = static_cast<float>(h.samples[i * ch + (ch > 1 ? 1 : 0)]); }
+  return true;
+}
 bool readWav(const std::string& path, Audio& out, std::string& err) {
+  { hr::Audio h; std::string e; if (hr::read(path, h, e) && fromHires(h, out)) return true; }
   FILE* f = std::fopen(path.c_str(), "rb"); if (!f) { err = "cannot open " + path; return false; }
   std::vector<unsigned char> d; unsigned char buf[65536]; std::size_t n;
   while ((n = std::fread(buf, 1, sizeof buf, f)) > 0) { d.insert(d.end(), buf, buf + n); if (d.size() > 2000u * 1024 * 1024) { std::fclose(f); err = "file larger than 2 GB"; return false; } }
@@ -59,6 +67,7 @@ bool writeWav24(const std::string& path, const std::vector<float>& L, const std:
   const bool ok = std::fwrite(o.data(), 1, o.size(), f) == o.size(); std::fclose(f); if (!ok) err = "short write to " + path; return ok;
 }
 
+std::vector<float> resampleHq(const std::vector<float>& x, double from, double to) { return hr::resampleMono(x, from, to, 1); }   // r8brain, 180 dB
 std::vector<float> resampleLinear(const std::vector<float>& x, double from, double to) {
   if (x.empty() || from <= 0 || to <= 0 || from == to) return x;
   const std::size_t n = static_cast<std::size_t>(std::floor(static_cast<double>(x.size()) * to / from)); std::vector<float> y(n);

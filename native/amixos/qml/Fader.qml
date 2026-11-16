@@ -13,6 +13,7 @@ Item {
     property real inDb: -120          // the input level (dBFS) shown in the track; -120 = no meter
     property real outDb: -120         // the output level (dBFS)
     property bool clip: false
+    property bool showLevels: true    // false where the strip has its own IN / OUT meter column: the track is not drawn over twice
     signal moved(real db)
     function lvl(db) { return Math.max(0, Math.min(1, (db - from) / (to - from))) }
     implicitWidth: 34
@@ -21,8 +22,8 @@ Item {
     function dbAt(y) { var t = 1 - Math.max(0, Math.min(1, (y - knob.height / 2) / (height - knob.height))); return from + t * (to - from) }
     Rectangle { anchors.horizontalCenter: parent.horizontalCenter; width: 10; height: parent.height; radius: 3; color: Theme.deep; border.color: Theme.lineSoft
         // IN (cyan, left) and OUT (orange, right) level columns, bottom up; the band above 0 dB turns red
-        Rectangle { x: 1; width: 4; anchors.bottom: parent.bottom; anchors.bottomMargin: 1; radius: 2; height: fader.lvl(fader.inDb) * (parent.height - 2); color: fader.inDb > 0 ? Theme.danger : Theme.cyan; opacity: fader.inDb > -119 ? 0.9 : 0 }
-        Rectangle { x: 5; width: 4; anchors.bottom: parent.bottom; anchors.bottomMargin: 1; radius: 2; height: fader.lvl(fader.outDb) * (parent.height - 2); color: fader.outDb > 0 || fader.clip ? Theme.danger : Theme.orange; opacity: fader.outDb > -119 ? 0.9 : 0 }
+        Rectangle { x: 1; width: 4; anchors.bottom: parent.bottom; anchors.bottomMargin: 1; radius: 2; height: fader.lvl(fader.inDb) * (parent.height - 2); color: fader.inDb > 0 ? Theme.danger : Theme.cyan; opacity: fader.showLevels && fader.inDb > -119 ? 0.9 : 0 }
+        Rectangle { x: 5; width: 4; anchors.bottom: parent.bottom; anchors.bottomMargin: 1; radius: 2; height: fader.lvl(fader.outDb) * (parent.height - 2); color: fader.outDb > 0 || fader.clip ? Theme.danger : Theme.orange; opacity: fader.showLevels && fader.outDb > -119 ? 0.9 : 0 }
         Rectangle { anchors.horizontalCenter: parent.horizontalCenter; y: fader.pos(0) + knob.height / 2; width: parent.width; height: 1; color: Theme.ov(0.35) }   // the 0 dB line across the track
     }
     Repeater {   // scale marks: +10, 0, -10, -20, -40, -60

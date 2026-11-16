@@ -31,6 +31,7 @@ cp -r "$(find "$B" -maxdepth 2 -type d -name "AMFB Plugin Shell.vst3" | head -1)
 cp "$(find "$B" -maxdepth 1 -name "AmF X1 Plugin Builder.exe" | head -1)" "$D/"
 cp "$(find "$B" -maxdepth 1 -name "AmF X1 Diagnostics.exe" | head -1)" "$D/"   # DIAGNOSTICS: its own program (speakers, headphones, microphones, drivers, report)   # the PLUG-IN BUILDER: its own program (TOOLS opens it from the console)
 cp "$(find "$B" -name "AmF X1 Network.dll" | head -1)" "$(find "$B" -name "AmF X1 Hybrid.dll" | head -1)" "$D/"   # the extensions the console loads into its own process   # the service program under the product's name
+cp "$(find "$B" -name "amix_soxr.dll" | head -1)" "$D/"   # libsoxr (LGPL 2.1): its own DLL, loaded at run time, replaceable; the r8brain path works without it
 # our own programs must not lean on the C++ runtime DLLs of the Qt kit (an older libstdc++-6.dll lacks symbols the compiler here uses)
 for p in amixos.exe "AmF X1 Network.exe" "AmF X1 Hybrid.exe" "AmF X1 Network.dll" "AmF X1 Hybrid.dll"; do if x86_64-w64-mingw32-objdump -p "$D/$p" | grep -qiE "DLL Name: (libstdc.*|libgcc_s.*|libwinpthread.*)"; then echo "$p needs a compiler runtime DLL: link it statically"; exit 1; fi; done
 if [ -f "$ROOT/releases/windows/AmF X1.exe" ]; then cp "$ROOT/releases/windows/AmF X1.exe" "$ROOT/releases/windows/AudioMixerASIO64.dll" "$D/"; else node "$ROOT/scripts/build-native.js" --out "$D" >/dev/null; rm -f "$D/AmF X1 (32-bit).exe" "$D/AudioMixerASIO32.dll"; fi

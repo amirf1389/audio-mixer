@@ -150,6 +150,11 @@ qt_add_qml_module(amixos
 target_compile_definitions(amixos PRIVATE AMIX_VERSION="${AMIX_VERSION}")
 target_compile_definitions(amixos PRIVATE AMIX_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(amixos PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::QuickControls2 Qt6::Network audiomixer_runtime audiomixer_engine amixos_net amixos_license amixos_arrange amixos_vst3 amixos_vst2 amixos_record amixos_fx amixos_samples amixos_measure)
+# libsoxr (LGPL 2.1) stays its own library next to the program, loaded at run time (app/hires): copied beside amixos on every build
+if(TARGET amix_soxr)
+  add_dependencies(amixos amix_soxr)
+  add_custom_command(TARGET amixos POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:amix_soxr> $<TARGET_FILE_DIR:amixos>)
+endif()
 add_dependencies(amixos amfb_plugin_shell amfb_plugin_builder)   # the separate PLUG-IN BUILDER and the shell it exports: built next to the console
 
 if(WIN32)

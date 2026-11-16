@@ -24,7 +24,7 @@ extern "C" {
 #define AMIX_API __attribute__((visibility("default")))
 #endif
 
-#define AMIX_API_VERSION 5   // 2: 16 buses (8 AUX + 8 FX); 4: 360 audio; 5: network audio (AES67) and MIDI
+#define AMIX_API_VERSION 6   // 2: 16 buses (8 AUX + 8 FX); 4: 360 audio; 5: network audio (AES67) and MIDI; 6: high-resolution audio (amix_hires.h)
 #define AMIX_MAX_STRIPS 32
 #define AMIX_MAX_BUSES 16
 
